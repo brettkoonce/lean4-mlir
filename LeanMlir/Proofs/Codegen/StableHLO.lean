@@ -733,6 +733,20 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedWeightGradB {N c h w kH kW : Nat} (xName : String)
       (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
                                                      : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
+  -- ══ The CONVNEXT family, un-fused the same way — the last five between ConvNeXt-T and a
+  --    certified AdamW render (§2f). Three of them are plain reductions; the two depthwise ones
+  --    are the PER-EXAMPLE peers of the `*GradB` pair above (ConvNeXt renders at the per-example
+  --    index, not `N := B`). `layerScaleChGammaGrad` is the per-channel layer-scale γ, which no
+  --    other net in the kit has. ══
+  | depthwiseWeightGrad {c h w kH kW : Nat} (xName : String)
+      (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW)
+                                                     : SHlo (c*h*w) → SHlo (c*kH*kW)
+  | depthwiseBiasGrad   {c h w kH kW : Nat}
+      (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w) (b : Vec c) : SHlo (c*h*w) → SHlo c
+  -- Scalar LayerNorm γ/β (the `bnF` sites: scalar LN over the whole `n = c·h·w`, `γ β : Vec 1`).
+  | lnGammaGrad {n : Nat} (xName epsStr : String) (ε : ℝ) (x : Vec n) : SHlo n → SHlo 1
+  | lnBetaGrad  {n : Nat}                                            : SHlo n → SHlo 1
+  | layerScaleChGammaGrad {c h w : Nat} (xName : String) (x : Vec (c*h*w)) : SHlo (c*h*w) → SHlo c
   -- ══ ADAM / ADAMW, shape-generic ══
   -- The child expression is the GRADIENT; θ/m/v ride as name+value fields exactly as the
   -- `*Sgd` ops carry their param. Three ops because `SHlo` is single-result while one AdamW
@@ -1102,6 +1116,16 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun idx => ∑ n : Fin N,
         Tensor3.flatten ((depthwise_weight_grad_has_vjp3 b (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward
           W (Tensor3.unflatten (batchSlice N (c*h*w) (den e) n))) idx
+  -- The ConvNeXt five. Each is exactly the gradient half of its `*Sgd` peer's `den`, so the
+  -- `*Sgd_eq_grad` theorems below are `rfl`.
+  | _, .depthwiseWeightGrad _ b x W e =>
+      fun idx => Tensor3.flatten
+        ((depthwise_weight_grad_has_vjp3 b x).backward W (Tensor3.unflatten (den e))) idx
+  | _, .depthwiseBiasGrad W x b e => fun o => (depthwise_bias_grad_has_vjp W x).backward b (den e) o
+  | _, .lnGammaGrad (n := n) _ _ ε x e => fun _ => bn_grad_gamma n ε x (den e)
+  | _, .lnBetaGrad (n := n) e => fun _ => bn_grad_beta n (den e)
+  | _, .layerScaleChGammaGrad (c := c) (h := h) (w := w) _ x e =>
+      fun cc => ∑ k : Fin (c*h*w), (if chanIdx c h w k = cc then x k * den e k else 0)
   | _, .depthwiseStridedWeightGradB (N := N) (c := c) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
         (depthwiseStride2_weight_grad_has_vjp b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
@@ -1721,6 +1745,38 @@ quietly change the gradient, and anything already proven about a `*Sgd` output t
     (e : SHlo (N*(c*h*w))) (idx : Fin (c*kH*kW)) :
     den (.depthwiseStridedWeightSgdB xN wN lrS b x W lr e) idx
       = Tensor3.flatten W idx - lr * den (.depthwiseStridedWeightGradB xN b x W e) idx := rfl
+
+/-! ## The ConvNeXt five — same statement, the last `*Sgd`/`*Grad` pairs the kit was missing (§2f)
+
+`den (xSgd …) = θ − lr · den (xGrad …)`, all `rfl`. Together with the emit-side byte-PREFIX checks
+in `tests/TestBatchedEmitTie.lean` this is what lets `convnext_adam_train_step` hand its gradients
+to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, never Adam (§2a). -/
+
+@[simp] theorem depthwiseWeightSgd_eq_grad {c h w kH kW : Nat} (xN wN lrS : String)
+    (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW) (lr : ℝ)
+    (e : SHlo (c*h*w)) (idx : Fin (c*kH*kW)) :
+    den (.depthwiseWeightSgd xN wN lrS b x W lr e) idx
+      = Tensor3.flatten W idx - lr * den (.depthwiseWeightGrad xN b x W e) idx := rfl
+
+@[simp] theorem depthwiseBiasSgd_eq_grad {c h w kH kW : Nat} (bN lrS : String)
+    (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w) (b : Vec c) (lr : ℝ)
+    (e : SHlo (c*h*w)) (o : Fin c) :
+    den (.depthwiseBiasSgd bN lrS W x b lr e) o
+      = b o - lr * den (.depthwiseBiasGrad W x b e) o := rfl
+
+@[simp] theorem lnGammaSgd_eq_grad {n : Nat} (gN xN es lrS : String) (ε : ℝ) (x : Vec n)
+    (γ : Vec 1) (lr : ℝ) (e : SHlo n) (c : Fin 1) :
+    den (.lnGammaSgd gN xN es lrS ε x γ lr e) c
+      = γ 0 - lr * den (.lnGammaGrad xN es ε x e) c := rfl
+
+@[simp] theorem lnBetaSgd_eq_grad {n : Nat} (bN lrS : String) (β : Vec 1) (lr : ℝ)
+    (e : SHlo n) (c : Fin 1) :
+    den (.lnBetaSgd bN lrS β lr e) c = β 0 - lr * den (.lnBetaGrad e) c := rfl
+
+@[simp] theorem layerScaleChGammaSgd_eq_grad {c h w : Nat} (gN xN lrS : String)
+    (x : Vec (c*h*w)) (γ : Vec c) (lr : ℝ) (e : SHlo (c*h*w)) (cc : Fin c) :
+    den (.layerScaleChGammaSgd gN xN lrS x γ lr e) cc
+      = γ cc - lr * den (.layerScaleChGammaGrad xN x e) cc := rfl
 
 @[simp] theorem posEmbedSgd_eq_grad {N D : Nat} (pN lrS : String) (pos : Mat (N+1) D) (lr : ℝ)
     (e : SHlo ((N+1)*D)) (i : Fin ((N+1)*D)) :
@@ -3063,6 +3119,22 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "depthwiseWeightGrad" [xN] [N, c, h, w, kH, kW] (skel e)
   | _, .depthwiseStridedWeightGradB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .batched "depthwiseStridedWeightGrad" [xN] [N, c, h, w, kH, kW] (skel e)
+  -- The ConvNeXt five ride the generic `.batched` Raw/Tok tag, so they need no new
+  -- `Raw`/`Tok`/`toToks`/`parseStack`/`parse_toToks` cases — the four-site route (§4).
+  --
+  -- `depthwiseWeightGrad` deliberately **aliases the batched op's tag**: its emitted text is
+  -- byte-identical (that emitter ignores its `N` and reads the width off the render batch `B`), so
+  -- only `den` differs — per-example here, a sum over `Fin N` there. Exactly the aliasing
+  -- `convStridedBiasGrad` already does against `convBiasGrad`. It is distinguished by ARITY: six
+  -- nats for the batched form, five for this one, so the two `emitTok` cases cannot collide.
+  | _, .depthwiseWeightGrad (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
+      .batched "depthwiseWeightGrad" [xN] [c, h, w, kH, kW] (skel e)
+  | _, .depthwiseBiasGrad (c := c) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
+      .batched "depthwiseBiasGrad" [] [c, h, w, kH, kW] (skel e)
+  | _, .lnGammaGrad (n := n) xN es _ _ e => .batched "lnGammaGrad" [xN, es] [n] (skel e)
+  | _, .lnBetaGrad (n := n) e => .batched "lnBetaGrad" [] [n] (skel e)
+  | _, .layerScaleChGammaGrad (c := c) (h := h) (w := w) xN _ e =>
+      .batched "layerScaleChGammaGrad" [xN] [c, h, w] (skel e)
   | _, .depthwiseStridedWeightSgdB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
       .batched "depthwiseStridedWeightSgd" [xN, wN, lrS] [N, c, h, w, kH, kW] (skel e)
 
@@ -5124,6 +5196,73 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [c,1,kH,kW]}\n" ++
             s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [c,1,kH,kW]}\n" ++
             s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [c,1,kH,kW]}\n", o :: st)
+      -- ── the ConvNeXt five. Each is its `*Sgd` peer's emit with the const-lr / multiply /
+      --    subtract tail cut off, so each render is a byte-PREFIX of the fused one. ──
+      | "depthwiseBiasGrad", [], [c, h, w, _kH, _kW] => do
+          -- depthwise bias grad: Σ_{batch,spatial} dy, per channel. Note the RESHAPE precedes the
+          -- zero constant — that is `depthwiseBiasSgd`'s order, and the emit-prefix test in
+          -- `tests/TestBatchedEmitTie.lean` fails if the two are emitted the other way round even
+          -- though the MLIR would be equivalent. (It caught exactly that here.)
+          let dr ← fresh; let z ← fresh; let db ← fresh
+          pure (
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {db} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [c]}\n", db :: st)
+      | "lnGammaGrad", [xN, epsStr], [n] => do
+          -- scalar-LN γ grad: recompute x̂ from the saved LN input, dγ = Σ_{b,k} dy·x̂ → tensor<f32>.
+          let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh; let sm ← fresh
+          let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vs ← fresh
+          let vr ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh; let p ← fresh
+          let dg ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,n]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,n]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xN} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,n]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xN}, {mu} : {ty [B,n]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,n]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,n]}\n" ++
+            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,n]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,n]}\n" ++
+            s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,n]}\n" ++
+            s!"    {p} = stablehlo.multiply {r}, {xh} : {ty [B,n]}\n" ++
+            s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,n]}, tensor<f32>) -> tensor<f32>\n", dg :: st)
+      | "lnBetaGrad", [], [n] => do
+          -- scalar-LN β grad: dβ = Σ_{b,k} dy → tensor<f32> (rank-0, the scalar-LN param shape).
+          let z ← fresh; let db ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {db} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,n]}, tensor<f32>) -> tensor<f32>\n", db :: st)
+      | "layerScaleChGammaGrad", [xN], [c, h, w] => do
+          -- per-channel layer-scale γ grad: dγ_c = reduce[0,2,3](x ⊙ dy).
+          let z ← fresh; let xr ← fresh; let dr ← fresh; let p ← fresh; let dg ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {p} = stablehlo.multiply {xr}, {dr} : {ty [B,c,h,w]}\n" ++
+            s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [c]}\n", dg :: st)
+      -- The PER-EXAMPLE depthwise weight grad — five nats, where the batched form below has six.
+      -- Same emitted text (that emitter ignores its `N`), so this shares the body by construction.
+      | "depthwiseWeightGrad", [xN], [c, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh
+          let raw ← fresh; let g ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,c,h,w]}) -> {ty [c,B,h,w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,c,h,w]}) -> {ty [c,B,h,w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = " ++ toString c ++ " : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [c,B,h,w]}, {ty [c,B,h,w]}) -> {ty [1,c,kH,kW]}\n" ++
+            s!"    {g} = stablehlo.reshape {raw} : ({ty [1,c,kH,kW]}) -> {ty [c,1,kH,kW]}\n", g :: st)
       | "depthwiseWeightGrad", [xN], [_N, c, h, w, kH, kW] => do
           let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
           let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh

@@ -117,51 +117,97 @@ private def bwdDown (pfx dy xin : String) (ci co h2 : Nat) :
   let (k2, cot_x) ← pretty cBS (.bnBack s!"%{pfx}ng" xin cEPS 0 0 (zV : Vec (ci*(2*h2)*(2*h2))) (.operand cot_n zV))
   pure (k1 ++ k2, cot_n, cot_x)
 
--- ── NEW: param-SGD via the SHlo ops (the updated param IS the op output) ──
-private def blockParamSgd (pfx : String) (b : FNames) (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) :
+-- ── param tails via the SHlo ops: the updated param at `adam := false` (the op output IS θ'),
+--    the un-fused GRADIENT at `adam := true` (§2f) ──
+
+/-! Every leaf below is one of the `*Sgd`/`*Grad` pairs whose `den`s differ by exactly `θ − lr · ·`
+(`*Sgd_eq_grad`, all `rfl`) and whose emits differ by exactly the const-lr/multiply/subtract tail
+(`tests/TestBatchedEmitTie.lean`, byte-PREFIX). So one traversal serves both renders.
+
+ConvNeXt is the cheapest of the five nets to thread, because its param tails were **already
+factored out** of the cotangent traversal — `bwdBlock` computes cotangents and nothing else, and is
+untouched by this. `lrStr` is threaded but unused in `adam` mode: AdamW's learning rate is the
+runtime `%lr` argument, not a baked literal. -/
+
+private def blockParamSgd (adam : Bool) (pfx : String) (b : FNames)
+    (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) :
     StateM Nat (String × List (String × String)) := do
-  let (cLg, nLg) ← pretty cBS (.layerScaleChGammaSgd s!"%{pfx}lg" b.p cLR (zV : Vec (c*h*h)) (zV : Vec c) 0 (.operand dy zV))
-  let (cPw, nPw) ← pretty cBS (.convWeightSgd b.g s!"%{pfx}pW" cLR (zV : Vec c) (zT : Tensor3 e h h) (zK : Kernel4 c e 1 1) 0 (.operand cot_p zV))
-  let (cPb, nPb) ← pretty cBS (.convBiasSgd s!"%{pfx}pb" cLR (zK : Kernel4 c e 1 1) (zT : Tensor3 e h h) (zV : Vec c) 0 (.operand cot_p zV))
-  let (cEw, nEw) ← pretty cBS (.convWeightSgd b.n s!"%{pfx}eW" cLR (zV : Vec e) (zT : Tensor3 c h h) (zK : Kernel4 e c 1 1) 0 (.operand cot_e zV))
-  let (cEb, nEb) ← pretty cBS (.convBiasSgd s!"%{pfx}eb" cLR (zK : Kernel4 e c 1 1) (zT : Tensor3 c h h) (zV : Vec e) 0 (.operand cot_e zV))
-  let (cNg, nNg) ← pretty cBS (.lnGammaSgd s!"%{pfx}ng" b.d cEPS cLR 0 (zV : Vec (c*h*h)) (zV : Vec 1) 0 (.operand cot_n zV))
-  let (cNb, nNb) ← pretty cBS (.lnBetaSgd s!"%{pfx}nbt" cLR (zV : Vec 1) 0 (.operand cot_n (zV : Vec (c*h*h))))
-  let (cDw, nDw) ← pretty cBS (.depthwiseWeightSgd b.xin s!"%{pfx}dW" cLR (zV : Vec c) (zT : Tensor3 c h h) (zD : DepthwiseKernel c 7 7) 0 (.operand cot_d zV))
-  let (cDb, nDb) ← pretty cBS (.depthwiseBiasSgd s!"%{pfx}db" cLR (zD : DepthwiseKernel c 7 7) (zT : Tensor3 c h h) (zV : Vec c) 0 (.operand cot_d zV))
+  let (cLg, nLg) ← if adam then
+      pretty cBS (.layerScaleChGammaGrad (c := c) (h := h) (w := h) b.p (zV : Vec (c*h*h)) (.operand dy zV))
+    else pretty cBS (.layerScaleChGammaSgd s!"%{pfx}lg" b.p cLR (zV : Vec (c*h*h)) (zV : Vec c) 0 (.operand dy zV))
+  let (cPw, nPw) ← if adam then
+      pretty cBS (.convWeightGrad b.g (zV : Vec c) (zT : Tensor3 e h h) (zK : Kernel4 c e 1 1) (.operand cot_p zV))
+    else pretty cBS (.convWeightSgd b.g s!"%{pfx}pW" cLR (zV : Vec c) (zT : Tensor3 e h h) (zK : Kernel4 c e 1 1) 0 (.operand cot_p zV))
+  let (cPb, nPb) ← if adam then
+      pretty cBS (.convBiasGrad (zK : Kernel4 c e 1 1) (zT : Tensor3 e h h) (zV : Vec c) (.operand cot_p zV))
+    else pretty cBS (.convBiasSgd s!"%{pfx}pb" cLR (zK : Kernel4 c e 1 1) (zT : Tensor3 e h h) (zV : Vec c) 0 (.operand cot_p zV))
+  let (cEw, nEw) ← if adam then
+      pretty cBS (.convWeightGrad b.n (zV : Vec e) (zT : Tensor3 c h h) (zK : Kernel4 e c 1 1) (.operand cot_e zV))
+    else pretty cBS (.convWeightSgd b.n s!"%{pfx}eW" cLR (zV : Vec e) (zT : Tensor3 c h h) (zK : Kernel4 e c 1 1) 0 (.operand cot_e zV))
+  let (cEb, nEb) ← if adam then
+      pretty cBS (.convBiasGrad (zK : Kernel4 e c 1 1) (zT : Tensor3 c h h) (zV : Vec e) (.operand cot_e zV))
+    else pretty cBS (.convBiasSgd s!"%{pfx}eb" cLR (zK : Kernel4 e c 1 1) (zT : Tensor3 c h h) (zV : Vec e) 0 (.operand cot_e zV))
+  let (cNg, nNg) ← if adam then
+      pretty cBS (.lnGammaGrad (n := c*h*h) b.d cEPS 0 (zV : Vec (c*h*h)) (.operand cot_n zV))
+    else pretty cBS (.lnGammaSgd s!"%{pfx}ng" b.d cEPS cLR 0 (zV : Vec (c*h*h)) (zV : Vec 1) 0 (.operand cot_n zV))
+  let (cNb, nNb) ← if adam then
+      pretty cBS (.lnBetaGrad (n := c*h*h) (.operand cot_n (zV : Vec (c*h*h))))
+    else pretty cBS (.lnBetaSgd s!"%{pfx}nbt" cLR (zV : Vec 1) 0 (.operand cot_n (zV : Vec (c*h*h))))
+  let (cDw, nDw) ← if adam then
+      pretty cBS (.depthwiseWeightGrad b.xin (zV : Vec c) (zT : Tensor3 c h h) (zD : DepthwiseKernel c 7 7) (.operand cot_d zV))
+    else pretty cBS (.depthwiseWeightSgd b.xin s!"%{pfx}dW" cLR (zV : Vec c) (zT : Tensor3 c h h) (zD : DepthwiseKernel c 7 7) 0 (.operand cot_d zV))
+  let (cDb, nDb) ← if adam then
+      pretty cBS (.depthwiseBiasGrad (zD : DepthwiseKernel c 7 7) (zT : Tensor3 c h h) (zV : Vec c) (.operand cot_d zV))
+    else pretty cBS (.depthwiseBiasSgd s!"%{pfx}db" cLR (zD : DepthwiseKernel c 7 7) (zT : Tensor3 c h h) (zV : Vec c) 0 (.operand cot_d zV))
   pure (cLg ++ cPw ++ cPb ++ cEw ++ cEb ++ cNg ++ cNb ++ cDw ++ cDb,
     [(s!"{pfx}dW", nDw), (s!"{pfx}db", nDb), (s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb),
      (s!"{pfx}eW", nEw), (s!"{pfx}eb", nEb), (s!"{pfx}pW", nPw), (s!"{pfx}pb", nPb), (s!"{pfx}lg", nLg)])
 
-private def downParamSgd (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat) :
+private def downParamSgd (adam : Bool) (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat) :
     StateM Nat (String × List (String × String)) := do
-  -- dXb (convStridedBiasSgd, channel-sum) + dXng/dXnbt (SHlo ln ops); dXW hand-written (even-kernel gap)
-  let (cB, nB) ← pretty cBS (.convStridedBiasSgd s!"%{pfx}b" cLR (zK : Kernel4 co ci 2 2) (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec co) 0 (.operand dy zV))
-  let (cNg, nNg) ← pretty cBS (.lnGammaSgd s!"%{pfx}ng" downIn cEPS cLR 0 (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec 1) 0 (.operand cot_n zV))
-  let (cNb, nNb) ← pretty cBS (.lnBetaSgd s!"%{pfx}nbt" cLR (zV : Vec 1) 0 (.operand cot_n (zV : Vec (ci*(2*h2)*(2*h2)))))
-  let wcode := downWGrad s!"%d{pfx}W" downLn dy ci co h2 ++ sgd s!"{pfx}W" (ty [co, ci, 2, 2])
+  -- dXb (channel-sum) + dXng/dXnbt (SHlo ln ops); dXW HAND-WRITTEN (the even-kernel gap).
+  -- That hand-written weight grad stays hand-written in both modes — but note that in `adam` mode
+  -- its SGD wrap is REPLACED by the proven AdamW triple, so the param it feeds moves from
+  -- "hand-written gradient + hand-written update" to "hand-written gradient + certified update".
+  let (cB, nB) ← if adam then
+      pretty cBS (.convStridedBiasGrad (zK : Kernel4 co ci 2 2) (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec co) (.operand dy zV))
+    else pretty cBS (.convStridedBiasSgd s!"%{pfx}b" cLR (zK : Kernel4 co ci 2 2) (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec co) 0 (.operand dy zV))
+  let (cNg, nNg) ← if adam then
+      pretty cBS (.lnGammaGrad (n := ci*(2*h2)*(2*h2)) downIn cEPS 0 (zV : Vec (ci*(2*h2)*(2*h2))) (.operand cot_n zV))
+    else pretty cBS (.lnGammaSgd s!"%{pfx}ng" downIn cEPS cLR 0 (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec 1) 0 (.operand cot_n zV))
+  let (cNb, nNb) ← if adam then
+      pretty cBS (.lnBetaGrad (n := ci*(2*h2)*(2*h2)) (.operand cot_n (zV : Vec (ci*(2*h2)*(2*h2)))))
+    else pretty cBS (.lnBetaSgd s!"%{pfx}nbt" cLR (zV : Vec 1) 0 (.operand cot_n (zV : Vec (ci*(2*h2)*(2*h2)))))
+  let wgrad := downWGrad s!"%d{pfx}W" downLn dy ci co h2
+  let wcode := if adam then wgrad else wgrad ++ sgd s!"{pfx}W" (ty [co, ci, 2, 2])
   pure (cB ++ cNg ++ cNb ++ wcode,
-    [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb), (s!"{pfx}W", s!"%{pfx}Wn"), (s!"{pfx}b", nB)])
+    [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb),
+     (s!"{pfx}W", if adam then s!"%d{pfx}W" else s!"%{pfx}Wn"), (s!"{pfx}b", nB)])
 
--- ── full param signature (committed forward order; LN params now tensor<1xf32>) ──
-private def blkParams (pfx : String) (c e : Nat) : List (String × String) :=
-  [(s!"{pfx}dW", ty [c,1,7,7]), (s!"{pfx}db", ty [c]),
-   (s!"{pfx}ng", "tensor<f32>"), (s!"{pfx}nbt", "tensor<f32>"),
-   (s!"{pfx}eW", ty [e,c,1,1]), (s!"{pfx}eb", ty [e]),
-   (s!"{pfx}pW", ty [c,e,1,1]), (s!"{pfx}pb", ty [c]),
-   (s!"{pfx}lg", ty [c])]
+-- ── full param signature (committed forward order), name + SHAPE ──
+/-! Shapes are `List Nat` rather than rendered `tensor<…>` strings because the AdamW render needs
+both forms: `%{nm}`/`%{nm}m`/`%{nm}v` for the moment slots and the raw dimensions for the emitted
+Adam ops. The scalar-LN γ/β are **rank 0**, i.e. `[]` — and `ty [] = "tensor<f32>"`, exactly the
+string that used to be hardcoded, so the SGD render's emitted text is unchanged. -/
 
-private def allParams : List (String × String) := Id.run do
-  let mut ps : List (String × String) := [("psW", ty [96,3,4,4]), ("psb", ty [96])]
+private def blkParams (pfx : String) (c e : Nat) : List (String × List Nat) :=
+  [(s!"{pfx}dW", [c,1,7,7]), (s!"{pfx}db", [c]),
+   (s!"{pfx}ng", []), (s!"{pfx}nbt", []),
+   (s!"{pfx}eW", [e,c,1,1]), (s!"{pfx}eb", [e]),
+   (s!"{pfx}pW", [c,e,1,1]), (s!"{pfx}pb", [c]),
+   (s!"{pfx}lg", [c])]
+
+private def allParams : List (String × List Nat) := Id.run do
+  let mut ps : List (String × List Nat) := [("psW", [96,3,4,4]), ("psb", [96])]
   for si in [0:4] do
     let c := cDims[si]!
     let e := 4 * c
     for j in [0:cDepths[si]!] do
       ps := ps ++ blkParams s!"s{si}b{j}" c e
     if si < 3 then
-      ps := ps ++ [(s!"d{si}ng", "tensor<f32>"), (s!"d{si}nbt", "tensor<f32>"),
-                   (s!"d{si}W", ty [cDims[si+1]!, c, 2, 2]), (s!"d{si}b", ty [cDims[si+1]!])]
-  ps := ps ++ [("hng", "tensor<f32>"), ("hnbt", "tensor<f32>"), ("Wd", ty [768,10]), ("bd", ty [10])]
+      ps := ps ++ [(s!"d{si}ng", []), (s!"d{si}nbt", []),
+                   (s!"d{si}W", [cDims[si+1]!, c, 2, 2]), (s!"d{si}b", [cDims[si+1]!])]
+  ps := ps ++ [("hng", []), ("hnbt", []), ("Wd", [768,10]), ("bd", [10])]
   return ps
 
 -- ════════════════════════════════════════════════════════════════
@@ -169,12 +215,23 @@ private def allParams : List (String × String) := Id.run do
 -- ════════════════════════════════════════════════════════════════
 
 set_option maxRecDepth 8000 in
-/-- **ConvNeXt-T (full [3,3,9,3]) train step rendered ENTIRELY from the verified AST** (except the
-    stem 4×4/s4 weight — the documented stride-4-weight-grad gap). Every other line is `pretty` of a
-    verified `SHlo` node: forward + backward cotangent chain + the param-SGD ops (the updated param is
-    each op's output). -/
-def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") : String := Id.run do
-  let go : StateM Nat (String × List (String × String)) := do
+/-- **The whole-net forward + cotangent + backward traversal, SHARED by the SGD and AdamW renders.**
+
+    Returns `(code, params, softmax)`: every emitted line; one SSA per parameter — the **updated
+    param** at `adam := false`, the **un-fused gradient** at `adam := true`; and the softmax SSA,
+    which the AdamW render's report-only `%loss` reads.
+
+    `smooth` is the cotangent recipe. `none` → the SGD render's `(softmax − onehot)/B`, unchanged
+    down to the hand-written `%dy` divide. `some (α, −α/K, B)` → the label-smoothed
+    `((softmax − onehot) + α·onehot − α/K)/B` composed from kit ops, which is what the AdamW recipe
+    trains on. ConvNeXt already spells the ÷B explicitly (unlike ViT/R34, which fold the mean into
+    lr), so here the smoothing is the *only* difference between the two cotangents.
+
+    Gate on the refactor: `convnext_train_step.mlir` must come back byte-identical. It does — the
+    softmax is now `pretty`d on its own line instead of nested inside the `.sub` so that `%loss` can
+    read it, but `.operand` is a leaf that emits nothing, so the fresh-name sequence is unchanged. -/
+private def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none) :
+    StateM Nat (String × List (String × String) × String) := do
     -- ═══ forward ═══
     let (cS, stem) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
       (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
@@ -197,19 +254,37 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") : St
     let (cG, gap) ← pretty cBS (.gapF (c := 768) (h := 7) (w := 7) (.operand cur zV))
     let (cHn, hn) ← pretty cBS (.bnF "%hng" "%hnbt" cEPS 0 0 0 (.operand gap (zV : Vec 768)))
     let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat 768 10) zV (.operand hn zV))
-    let (cSub, dyr) ← pretty cBS (.sub (.softmaxDiv (.expe (.operand logits (zV : Vec 10)))) (.operand "%onehot" zV))
-    fwd := fwd ++ cG ++ cHn ++ cLog ++ cSub
+    let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand logits (zV : Vec 10))))
+    let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (zV : Vec 10)) (.operand "%onehot" zV))
+    fwd := fwd ++ cG ++ cHn ++ cLog ++ cSm ++ cSub
+    -- ═══ the cotangent. `none` keeps the SGD render's hand-written `%dy` divide byte-for-byte;
+    --     `some` appends the label-smoothing chain, every line `pretty` of a verified node. ═══
+    let (cDyC, dyName) ← match smooth with
+      | none => pure (s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [cBS, 10]}\n", "%dy")
+      | some (aStr, negAK, bStr) => do
+          let (c1, n1) ← pretty cBS (.scaleF (n := 10) aStr 0 (.operand "%onehot" (zV : Vec 10)))
+          let (c2, n2) ← pretty cBS (.addV (.operand dyr (zV : Vec 10)) (.operand n1 (zV : Vec 10)))
+          let (c3, n3) ← pretty cBS (.shiftB (N := 1) (n := 10) negAK 0 (.operand n2 (zV : Vec 10)))
+          let (c4, n4) ← pretty cBS (.divConstB (N := 1) (n := 10) bStr 0 (.operand n3 (zV : Vec 10)))
+          pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ backward: head cotangent chain + param-SGD ═══
-    let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat 768 10) (.operand "%dy" zV))
+    let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat 768 10) (.operand dyName zV))
     let (cHnB, cot_gap) ← pretty cBS (.bnBack "%hng" gap cEPS 0 0 zV (.operand cot_hn (zV : Vec 768)))
-    let (cWd, nWd) ← pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec 768) (zM : Mat 768 10) 0 (.operand "%dy" zV))
-    let (cBd, nBd) ← pretty cBS (.biasSgd "%bd" cLR (zV : Vec 10) 0 (.operand "%dy" zV))
-    let (cHg, nHg) ← pretty cBS (.lnGammaSgd "%hng" gap cEPS cLR 0 (zV : Vec 768) (zV : Vec 1) 0 (.operand cot_hn zV))
-    let (cHb, nHb) ← pretty cBS (.lnBetaSgd "%hnbt" cLR (zV : Vec 1) 0 (.operand cot_hn (zV : Vec 768)))
+    let (cWd, nWd) ← if adam then
+        pretty cBS (.weightGrad (m := 768) (n := 10) hn (zV : Vec 768) (.operand dyName (zV : Vec 10)))
+      else pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec 768) (zM : Mat 768 10) 0 (.operand dyName zV))
+    let (cBd, nBd) ← if adam then
+        pretty cBS (.biasGrad (n := 10) (.operand dyName (zV : Vec 10)))
+      else pretty cBS (.biasSgd "%bd" cLR (zV : Vec 10) 0 (.operand dyName zV))
+    let (cHg, nHg) ← if adam then
+        pretty cBS (.lnGammaGrad (n := 768) gap cEPS 0 (zV : Vec 768) (.operand cot_hn zV))
+      else pretty cBS (.lnGammaSgd "%hng" gap cEPS cLR 0 (zV : Vec 768) (zV : Vec 1) 0 (.operand cot_hn zV))
+    let (cHb, nHb) ← if adam then
+        pretty cBS (.lnBetaGrad (n := 768) (.operand cot_hn (zV : Vec 768)))
+      else pretty cBS (.lnBetaSgd "%hnbt" cLR (zV : Vec 1) 0 (.operand cot_hn (zV : Vec 768)))
     let mut updMap : List (String × String) :=
       [("hng", nHg), ("hnbt", nHb), ("Wd", nWd), ("bd", nBd)]
-    let mut bwd :=
-      s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [cBS, 10]}\n" ++ cDd ++ cHnB ++
+    let mut bwd := cDyC ++ cDd ++ cHnB ++
       cWd ++ cBd ++ cHg ++ cHb ++
       s!"    %dgi = stablehlo.reshape {cot_gap} : ({ty [cBS,768]}) -> {ty [cBS,768,1,1]}\n" ++
       s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [cBS,768,1,1]}) -> {ty [cBS,768,7,7]}\n" ++
@@ -224,22 +299,35 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") : St
         let j := cDepths[si]! - 1 - j'
         let b := (blksAll[si]!)[j]!
         let (code, cot_xin, cot_p, cot_e, cot_n, cot_d) ← bwdBlock s!"s{si}b{j}" dy b c e h
-        let (pcode, pairs) ← blockParamSgd s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dy c e h
+        let (pcode, pairs) ← blockParamSgd adam s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dy c e h
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_xin
       if si > 0 then
         let ci := cDims[si-1]!; let h2 := cSpats[si]!
         let (code, cot_n, cot_x) ← bwdDown s!"d{si-1}" dy (downIn[si-1]!) ci c h2
-        let (pcode, pairs) ← downParamSgd s!"d{si-1}" (downLn[si-1]!) (downIn[si-1]!) cot_n dy ci c h2
+        let (pcode, pairs) ← downParamSgd adam s!"d{si-1}" (downLn[si-1]!) (downIn[si-1]!) cot_n dy ci c h2
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_x
     -- stem: psb via convBiasSgd (channel-sum, correct); psW hand-written (the stride-4 gap) + SGD
-    let (cPsb, nPsb) ← pretty cBS (.convBiasSgd "%psb" cLR (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) 0 (.operand dy zV))
-    bwd := bwd ++ patchWGrad "%dpsW" dy ++ sgd "psW" (ty [96,3,4,4]) ++ cPsb
-    updMap := updMap ++ [("psW", "%psWn"), ("psb", nPsb)]
-    pure (fwd ++ bwd, updMap)
-  let (body, updMap) := go.run' 0
+    let (cPsb, nPsb) ← if adam then
+        pretty cBS (.convBiasGrad (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) (.operand dy zV))
+      else pretty cBS (.convBiasSgd "%psb" cLR (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) 0 (.operand dy zV))
+    bwd := bwd ++ patchWGrad "%dpsW" dy ++ (if adam then "" else sgd "psW" (ty [96,3,4,4])) ++ cPsb
+    updMap := updMap ++ [("psW", if adam then "%dpsW" else "%psWn"), ("psb", nPsb)]
+    pure (fwd ++ bwd, updMap, nSm)
+
+set_option maxRecDepth 8000 in
+/-- **ConvNeXt-T (full [3,3,9,3]) SGD train step rendered from the verified AST** (except the two
+    documented weight-grad gaps — the stem 4×4/s4 patchify and the even-kernel 2×2/s2 downsample,
+    neither of which has a VJP-cert `SHlo` op). Every other line is `pretty` of a verified node:
+    forward + backward cotangent chain + the param-SGD ops, whose output IS the updated param.
+
+    The cotangent is plain CE with an **explicit** ÷B — unlike ViT/R34, which fold the batch mean
+    into `lr` — so the committed `cLR = 0.1` is an effective 0.1, the house convention spelled
+    differently (§2a-quinquies). -/
+def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") : String := Id.run do
+  let (body, updMap, _) := (convNextBackAll false).run' 0
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [cBS, 3*224*224]) :: allParams.map (fun (nm, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [cBS,10]])
-  let retTyL := String.intercalate ", " (allParams.map (fun (_, t) => t))
+    (("%x: " ++ ty [cBS, 3*224*224]) :: allParams.map (fun (nm, d) => s!"%{nm}: {ty d}") ++ ["%onehot: " ++ ty [cBS,10]])
+  let retTyL := String.intercalate ", " (allParams.map (fun p => ty p.2))
   let retVals := String.intercalate ", "
     (allParams.map (fun (nm, _) => (updMap.lookup nm).getD s!"%{nm}n"))
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
@@ -248,8 +336,124 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") : St
     body ++
     s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
+-- ════════════════════════════════════════════════════════════════
+-- § The AdamW tail — one proven triple per parameter, folded in signature order
+-- ════════════════════════════════════════════════════════════════
+
+/-- `(θ', m', v')` for one parameter from its un-fused gradient — the proven
+    `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
+    into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
+    runtime `tensor<f32>` args, so one render serves the whole schedule. Mirrors
+    `ResNet34RenderB.adamOne`; ConvNeXt has no data-parallel render, so no replica collective. -/
+private def convnextAdamOne (nm : String) (ds : List Nat) (gradSSA : String) :
+    StateM Nat (String × String × String × String) := do
+  let n := ds.foldl (· * ·) 1
+  let z : Vec n := fun _ => 0
+  let gr : SHlo n := .operand gradSSA z
+  let (cM, nM) ← pretty cBS (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
+  let (cV, nV) ← pretty cBS (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
+  let (cT, nT) ← pretty cBS (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
+                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
+  pure (cM ++ cV ++ cT, nT, nM, nV)
+
+/-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe. -/
+private def convnextAdamConsts : String :=
+  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+
+set_option maxRecDepth 8000 in
+/-- **ConvNeXt-T AdamW train step rendered from the verified AST.** The certified peer of the
+    hand-written render in `tests/TestConvNeXtTrain.lean` that `convnext-verified-adam` trains on.
+
+    Same backward as `convnext_train_step` (`convNextBackAll`, one traversal) but taking the
+    **un-fused gradients**, each fed to the proven AdamW triple. The cotangent adds label smoothing
+    (α = 0.1, K = 10); ConvNeXt already spelled the ÷B explicitly, so that is the only difference.
+
+    Interface: 545 in (`%x`, 180 θ, 180 m, 180 v, `%lr`/`%bc1`/`%bc2`, `%onehot`) / 543 out
+    (180 θ', 180 m', 180 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
+    render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged.
+
+    **What this does and does not certify.** ConvNeXt keeps two documented weight-grad gaps — the
+    stem 4×4/s4 patchify (`patchWGrad`) and the even-kernel 2×2/s2 downsample (`downWGrad`), neither
+    of which has a VJP-cert `SHlo` op — and those stay hand-written here. But the SGD render also
+    hand-wrote the *update* for exactly those two params (the `sgd` helper); this render replaces it
+    with the proven triple. So for `psW` and the three `d{i}W` the tier moves from *hand-written
+    gradient + hand-written update* to *hand-written gradient + certified update*, and for the other
+    176 params it is `pretty(AST)` end to end. That is a strict improvement, not a lateral move. -/
+def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
+    (funcName : String := "convnext_adam_train_step") : String := Id.run do
+  let (body, gradMap, nSm) := (convNextBackAll true (some (alphaStr, negAlphaKStr, bStr))).run' 0
+  let go : StateM Nat String := do
+    let mut adamCode := ""
+    let mut thetaN : List String := []
+    let mut mN : List String := []
+    let mut vN : List String := []
+    for (nm, ds) in allParams do
+      let g := (gradMap.lookup nm).getD s!"%d{nm}"
+      let (c, nT, nM, nV) ← convnextAdamOne nm ds g
+      adamCode := adamCode ++ c
+      thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
+    -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path, NOT `pretty` of an
+    -- AST node, and covered by no theorem — which is exactly the configuration in which §2b shipped
+    -- plain CE against a smoothed-CE cotangent and only the numeric tie caught it. Built from the
+    -- SAME smoothed recipe the cotangent implies, and gated by `convnext-adam-tie`. ConvNeXt has no
+    -- BN, so — as with ViT — this is the ONLY output that reads the forward directly.
+    let lossCode :=
+      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+      s!"    %llog = stablehlo.log {nSm} : {ty [cBS, 10]}\n" ++
+      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [cBS, 10]}\n" ++
+      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, 10]}, tensor<f32>) -> {ty [cBS]}\n" ++
+      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, 10]}, tensor<f32>) -> {ty [cBS]}\n" ++
+      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [cBS]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<0.010000> : {ty [cBS]}\n" ++
+      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [cBS]}\n" ++
+      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [cBS]}\n" ++
+      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [cBS]}\n" ++
+      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [cBS]}, tensor<f32>) -> tensor<f32>\n" ++
+      s!"    %lbfc = stablehlo.constant dense<{cBS}.0> : tensor<f32>\n" ++
+      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
+      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    let pTy := allParams.map (fun p => ty p.2)
+    let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"]
+    let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+    pure <|
+      "    // ── ConvNeXt-T AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
+      "    // EXCEPT the stem 4x4/s4 and the 2x2/s2 downsample WEIGHT GRADIENTS, which have no\n" ++
+      "    // VJP-cert SHlo op and stay hand-written (the two documented gaps). Their UPDATES are\n" ++
+      "    // certified here, which the SGD render's hand-written `sgd` wrap was not.\n" ++
+      body ++ convnextAdamConsts ++ adamCode ++ lossCode ++
+      s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
+  -- The AdamW body continues the SGD traversal's fresh-name counter. `convNextBackAll` consumed
+  -- names 0..k, so the Adam ops must start at k — otherwise they collide with the backward's SSAs.
+  let used := ((convNextBackAll true (some (alphaStr, negAlphaKStr, bStr))).run 0).2
+  let inner : String := go.run' used
+  let pSig := String.intercalate ", " (allParams.map (fun (nm, d) => s!"%{nm}: {ty d}"))
+  let mSig := String.intercalate ", " (allParams.map (fun (nm, d) => s!"%{nm}m: {ty d}"))
+  let vSig := String.intercalate ", " (allParams.map (fun (nm, d) => s!"%{nm}v: {ty d}"))
+  let argSig := ("%x: " ++ ty [cBS, 3*224*224]) ++ ", " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [cBS,10]
+  let pTy := allParams.map (fun p => ty p.2)
+  let retTyL := String.intercalate ", "
+    (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+  return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
+    "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,10]}\n" ++
+    inner ++ "  }\n}\n"
+
 end Proofs.StableHLO
 
 -- Regenerate verified_mlir/convnext_train_step.mlir from the faithful renderer (BS=32, ε=1e-6, lr=0.1).
 #eval IO.FS.writeFile "verified_mlir/convnext_train_step.mlir"
   (Proofs.StableHLO.convNextTrainStepFaithfulV "convnext_train_step")
+
+-- The **AdamW** train step. Renders to `…_b.mlir` while the hand-written emitter in
+-- `tests/TestConvNeXtTrain.lean` still owns the canonical path — two writers for one artifact is
+-- the last-writer-wins race §2a found. The swap happens after the numeric tie (§2e's playbook).
+-- Literals: α = 0.1, −α/K = −0.01 (K = 10), batch 32.
+#eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step_b.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0")

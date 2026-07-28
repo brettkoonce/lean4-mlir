@@ -1417,6 +1417,17 @@ lean_exe «efficientnet-adam-tie» where
   root := `tests.TestEfficientNetAdamTie
   moreLinkArgs := ireeLink
 
+/-- ConvNeXt-T AdamW gate (§2f): one AdamW step through two renders of `@convnext_adam_train_step`
+    — the hand-written emitter in `tests/TestConvNeXtTrain.lean` vs `pretty(provenGraph)` — same
+    packed `[θ|m|v|lr,bc1,bc2]`, every returned float compared.
+
+    **ViT-grade, not EfficientNet-grade**: ConvNeXt has no BatchNorm, so there is no `bnstat`
+    forward-only region and `%loss` is the only direct read of the forward — which is why it is
+    gated rather than reported. ireeLink, because `convnext-verified-adam` is an IREE binary. -/
+lean_exe «convnext-adam-tie» where
+  root := `tests.TestConvNeXtAdamTie
+  moreLinkArgs := ireeLink
+
 /-- §2d.1 gate on the bs256 re-render: feed it 8 identical copies of one bs32 batch. Batch-BN
     statistics and the mean-CE cotangent are then exactly the bs32 render's, so all 68M returned
     floats must AGREE — an exact known-answer check, not a tolerance argument. -/

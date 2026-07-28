@@ -224,7 +224,46 @@ private def gradPrefixCases : List (String × String × String) :=
      render (pretty BS (.patchEmbedWeightSgd (ic := pi) (H := pH) (W := pW) (P := pp)
                           (N := tk) (D := dm) "%W" "%img" "0.05" (fun _ => 0 : Vec (pi*pH*pW))
                           (fun _ _ _ _ => 0 : Kernel4 dm pi pp pp) 0
-                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm)))))) ]
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))))
+  -- ── the ConvNeXt five (§2f). These ride the generic `.batched` tag, where an unmatched name
+  --    falls through to `// MALFORMED` SILENTLY — these five cases are what catches that. ──
+  , ("depthwiseWeightGrad (per-example)",
+     render (pretty BS (.depthwiseWeightGrad (c := oc) (h := ch) (w := ch) (kH := kk) (kW := kk)
+                          "%a" zB (fun _ _ _ => 0 : Tensor3 oc ch ch)
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))),
+     render (pretty BS (.depthwiseWeightSgd (c := oc) (h := ch) (w := ch) (kH := kk) (kW := kk)
+                          "%a" "%W" "0.05" zB (fun _ _ _ => 0 : Tensor3 oc ch ch)
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk) 0
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))))
+  , ("depthwiseBiasGrad",
+     render (pretty BS (.depthwiseBiasGrad (c := oc) (h := ch) (w := ch) (kH := kk) (kW := kk)
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (fun _ _ _ => 0 : Tensor3 oc ch ch) zB
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))),
+     render (pretty BS (.depthwiseBiasSgd (c := oc) (h := ch) (w := ch) (kH := kk) (kW := kk)
+                          "%b" "0.05" (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (fun _ _ _ => 0 : Tensor3 oc ch ch) zB 0
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))))
+  , ("lnGammaGrad",
+     render (pretty BS (.lnGammaGrad (n := oc*ch*ch) "%a" "1.0e-6" 0
+                          (fun _ => 0 : Vec (oc*ch*ch))
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))),
+     render (pretty BS (.lnGammaSgd (n := oc*ch*ch) "%g" "%a" "1.0e-6" "0.05" 0
+                          (fun _ => 0 : Vec (oc*ch*ch)) (fun _ => 0 : Vec 1) 0
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))))
+  , ("lnBetaGrad",
+     render (pretty BS (.lnBetaGrad (n := oc*ch*ch)
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))),
+     render (pretty BS (.lnBetaSgd (n := oc*ch*ch) "%bt" "0.05" (fun _ => 0 : Vec 1) 0
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))))
+  , ("layerScaleChGammaGrad",
+     render (pretty BS (.layerScaleChGammaGrad (c := oc) (h := ch) (w := ch) "%a"
+                          (fun _ => 0 : Vec (oc*ch*ch))
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))),
+     render (pretty BS (.layerScaleChGammaSgd (c := oc) (h := ch) (w := ch) "%g" "%a" "0.05"
+                          (fun _ => 0 : Vec (oc*ch*ch)) (fun _ => 0 : Vec oc) 0
+                          (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch)))))) ]
 
 /-- Fail loudly. NOT `IO.Process.exit 1`: under `#eval` the elaborator buffers the eval's output
     and prints it only after the eval returns, so `exit` kills the process with **every diagnostic
