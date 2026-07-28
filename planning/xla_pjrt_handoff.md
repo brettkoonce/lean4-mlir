@@ -98,9 +98,15 @@ lake build resnet34-adam-bench
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-adam-bench \
   verified_mlir/resnet34_adam_train_step.mlir verified_mlir/resnet34_adam_train_step.mlir 20
 
-# the data-parallel semantics gate (§2b-quater). Needs TWO GPUs.
+# the data-parallel semantics gates. Need TWO GPUs.
 unset HIP_VISIBLE_DEVICES
-lake build cifar8-dp-check && PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check
+lake build cifar8-dp-check && PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check   # §2b-quater (proxy)
+lake build efficientnet-dp-check && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-check  # §2e-bis
+#   ^ the exact identity ON THE REAL NET (duplicated batch ⇒ all_reduce/2 is the identity, and BN
+#     does not spoil it because both replicas' groups are the same 32 examples). Pass a broken
+#     render as argv[1] to run the sum-not-mean control.
+LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
+  .lake/build/bin/efficientnet-verified-adam-xla data
 ```
 
 Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`,
@@ -600,9 +606,77 @@ with different arguments, which is precisely what running a negative control loo
 committed results are not in doubt (each compiled fresh into an empty `.lake/build`), but **check
 for `(cached vmfb)` in the output before believing any re-run.**
 
-**Not done, deliberately: there is no data-parallel EfficientNet render.** R34 (§2b-quater) and ViT
-have one; this does not. An ungated DP render is clobber surface without a claim behind it — ViT's
-is still unexecutable on this box.
+#### 2e-bis. Data-parallel EfficientNet ✅ DONE — and it is the **best-gated multi-GPU render here**
+
+`efficientnetAdamTrainStepFaithful` takes `(replicas : Nat := 1)` and
+`verified_mlir/efficientnet_adamdp_train_step.mlir` is its own artifact (`LEAN_MLIR_VARIANT=adamdp`,
+entry `@efficientnet_adamdp_train_step`), so producing a DP render can never clobber the one the
+trainer runs. Unlike R34's, this variant never had a hand-written emitter to migrate off — the
+certified renderer is the only writer of both EfficientNet AdamW artifacts from the start.
+
+**It runs on XLA/PJRT, which was not a given.** ViT's DP render is still unexecutable on this box
+(`miopenStatusUnknownError` in the patch-embed weight-grad convolution), so this was measured before
+anything was built: `efficientnet-verified-adam-xla` — a new target, the shared-body split
+`Resnet34AdamCommon` already uses — compiles in 20.5 s and reproduces the IREE run within fp noise
+(val 14.98/21.83/27.13% vs IREE's 15.11/21.58/27.97% over 3 epochs). EfficientNet is depthwise
+convolutions throughout; that MIOpen handles them and not ViT's 209×209 patch-embed weight-grad
+narrows the ViT blocker further.
+
+| gate | result |
+|---|---|
+| `replicas = 1` re-render vs the committed artifact | **byte-identical** — the insertion is provably inert ✅ |
+| collectives emitted | **262**, one per parameter ✅ |
+| syntax | `all_reduce(add)` over `[[0, 1]]`, **no `use_global_device_ids`** (§4), then `/2.0` ✅ |
+| carve-out declared in the emitted output | yes, at `replicas > 1` ✅ |
+| `// MALFORMED` | 0 ✅ |
+| single-device artifact contains a collective | **0** ✅ |
+| **2 GPUs, 2 replicas — the exact identity** | **PASSES** ✅ (below) |
+| 2-GPU descent | loss 2.317 → 2.278 → 2.246, val 14.3 → 17.5 → **21.5%** ✅ |
+
+**`tests/TestEfficientNetDpCheck.lean` → `lake build efficientnet-dp-check`.** Give both replicas the
+**same** 32 examples: each computes the same gradient `g`, so `all_reduce(add)/2 = (g+g)/2 = g` is
+the identity and the DP step must reproduce the single-device step.
+
+**BatchNorm does not spoil this, and that is worth being precise about.** The §10.3b caveat that
+blocked an exact gate for R34 is about **splitting** a batch — 2×32 genuinely is not 1×64, because
+the halves get different statistics. **Duplicating** a batch is the other case: BN normalises per
+replica, both replicas' groups are the same 32 examples, so their statistics are identical by
+construction. R34's collective had to be gated on cifar8 as a proxy; this one is gated **on the real
+net**.
+
+| region | result (2× 7900 XTX, `PJRT_REPLICAS=2`) |
+|---|---|
+| **`bnstat`** (forward, 49 BN layers) | **BIT-EXACT 42016/42016** ✅ |
+| **`%loss`** | **BIT-EXACT** ✅ |
+| `v` | **BIT-EXACT 4041366/4041366** ✅ |
+| **gradient (`m`)** | norm-rel **3.3e-8**; 14 of 4,041,366 coordinates differ, max abs **1.9e-9** ✅ |
+| θ | norm-rel 1e-12, 13 coordinates differ |
+
+That is ~3000× inside the 1e-4 gate. It is *not* bit-exact on `m`/θ and the harness says so —
+`Float.toString` gives six decimals, so a genuine 3e-8 prints as `0.000000` and reads as bit-exact.
+The gate now also reports nano-units and the exact-coordinate count. The residue is not the
+collective: `(g+g)/2 = g` holds to the bit in binary floating point. It is that the DP module is a
+**different HLO program**, so XLA orders the backward reductions differently. Consistent with that,
+the forward is untouched — `bnstat` is bit-exact — and the count varies run to run (4041310 then
+4041352 of 4041366 on identical inputs), which is §3's cross-process autotuning again.
+
+**Verified to fail.** `%arn` divisor 2.0 → 1.0 (sum, not mean; 262 lines changed) → gradient
+norm-rel **0.246** against a passing 3.3e-8, seven orders of separation. It also re-demonstrates §3
+on a real net: the same broken render moved **θ by only 7e-6** while `m` moved 0.246, and `bnstat`
+stayed bit-exact — a θ-based gate would have passed a 2× gradient error outright.
+
+**Throughput: ~1.23×, worse than R34's 1.46×, and that is the expected direction.** Synthetic data
+(so the §3 data-bound confound is removed), 3840 images each way, wall clock minus the shim's
+reported compile time: 1 GPU bs32 ×120 steps = **32.8 s**; 2 GPU global-64 ×60 steps = **26.7 s**.
+One run each, so treat it as ~1.2× rather than a precise figure. Same cause as §2c — parameters are
+host-resident, so every step pushes the full `[θ|m|v]` to *every* replica. EfficientNet's blob is
+only 48.5 MB against R34's 272 MB, but depthwise-separable nets are *designed* to minimise FLOPs, so
+the fixed per-step round-trip is a **larger** fraction of a smaller step. **Device-resident
+parameters (§2d.3) is the lever, and this is the second independent measurement pointing at it.**
+
+Claim ceiling is unchanged from §5: the graph is *certified gradient → trusted collective →
+certified AdamW*. What is new is that the collective's semantics are now pinned by an exact
+known-answer check **on the net itself**, not on a no-BN proxy.
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
@@ -867,7 +941,10 @@ one, so **re-measure before quoting these**. 3 epochs of Imagenette across both 
 **1.46×, not 2×** — cause identified in `xla_pjrt_ladder.md` §10.3a: parameters are still
 host-resident, so each step pushes the full 272 MB `[θ|m|v]` to *every* replica. Compute halves
 while transfer doubles. **Device-resident parameters is a prerequisite for multi-GPU scaling, not
-an independent optimisation** — this measurement is the evidence.
+an independent optimisation** — this measurement is the evidence, and §2e-bis is a second,
+independent one: EfficientNet scales *worse* (**1.23×**) despite a `[θ|m|v]` blob 5.6× smaller,
+because depthwise-separable nets minimise FLOPs and the fixed per-step round-trip is therefore a
+larger fraction of a smaller step.
 
 It learns: val 36.4 / 41.9 / **49.4%** over three epochs — but see §3, those numbers predate the
 BN fix. Lower per-epoch than the single-GPU run because global batch 64 with an **unscaled** LR
@@ -892,7 +969,8 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
 3. **Device-resident parameters.** Two rounds of transfer work are already done (batching:
    256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it
-   looks — see §3.
+   looks — see §3. **Two independent multi-GPU measurements now point here** (§2c 1.46× on R34,
+   §2e-bis 1.23× on EfficientNet), so it is the highest-value structural item left.
 4. **Executable cache** (`PJRT_Executable_Serialize` / `DeserializeAndLoad`). Worth **0.1%** on an
    R34 training run and **53%** on the MNIST-MLP demo: a dev-loop and CI win, not throughput.
 
@@ -1133,6 +1211,12 @@ honest statement is:
 
 Prefer **scaling** the global batch over **splitting** a fixed one: scaling keeps each replica's
 BatchNorm group at the size it was tied at, so the BN caveat never arises (§10.3b).
+
+The three DP renders are **not** equally evidenced, and the difference is worth stating whenever any
+of them is described: **EfficientNet** (§2e-bis) is gated by an exact known-answer check on the real
+net, run on two GPUs; **ResNet-34** (§2b-quater) by that same check on a cifar8 proxy plus a 2-GPU
+descent run; **ViT** by nothing numeric at all — its graph does not execute on this box. Only the
+first two should be called working.
 
 And on the renders: `pretty(provenGraph)` means the committed bytes are the certified render *of
 the graph that was proven* — it does not mean the emitter is verified. The `Tok → StableHLO-text`

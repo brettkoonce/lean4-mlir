@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.ViTRender      -- `emitGradAllReduce`, the data-parallel collective (a carve-out)
 
 /-! # EfficientNet-B0 train step rendered ENTIRELY from the verified AST (batched)
 
@@ -719,18 +720,29 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are runtime
     `tensor<f32>` args, so one render serves the whole cosine+warmup schedule.
 
-    Mirrors `ResNet34RenderB.adamOne` and `ViTRender.vitAdamOne`, minus the replica collective —
-    EfficientNet has no data-parallel render yet (see the note on the `#eval` below). -/
-private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String) :
-    StateM Nat (String × String × String × String) := do
+    At `replicas > 1` the gradient is first averaged across devices by
+    `ViTRender.emitGradAllReduce`. **That collective is a TRUSTED CARVE-OUT** — it is emitted text,
+    not `pretty` of an AST node, so it sits outside every faithfulness theorem here. What the proofs
+    still cover is the whole rest of the graph: the AdamW triple consumes the averaged gradient as
+    an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. What is
+    trusted is that `all_reduce(add)/N` computes the mean — handoff §5, *"the gradient averaging is
+    a proven identity; the collective implementing it is trusted, exactly like the lowerer."*
+
+    At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
+    render stays byte-identical — the cheap self-check that the insertion is inert.
+
+    Mirrors `ResNet34RenderB.adamOne` and `ViTRender.vitAdamOne`. -/
+private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
+    (replicas : Nat) : StateM Nat (String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let gr : SHlo n := .operand gradSSA z
+  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
+  let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty B (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
   let (cV, nV) ← pretty B (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
   let (cT, nT) ← pretty B (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
                     "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
-  pure (cM ++ cV ++ cT, nT, nM, nV)
+  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
 
 /-- β₁/β₂/ε/wd as graph constants — the committed EfficientNet-B0 AdamW recipe
     (`efficientNetB0Config`: lr 1e-3, wd 1e-4, cosine + 3-epoch warmup).
@@ -745,6 +757,17 @@ private def enetAdamConsts : String :=
   "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
   "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
   "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+
+/-- The driver's **variant slug** for a given replica count: the artifact is
+    `verified_mlir/efficientnet_<variant>_train_step.mlir`, the entry point is
+    `@efficientnet_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it.
+
+    All three must agree, or the shim refuses the call outright ("entry mismatch") rather than
+    running the wrong graph — which is exactly what it did the first time R34's DP render kept the
+    single-device name (§2b-quater). Deriving the name here is what stops it drifting from the
+    `#eval` paths below; the `#guard`s at the bottom pin those literal paths against this function. -/
+def enetAdamVariant (replicas : Nat) : String :=
+  if replicas ≤ 1 then "adam" else "adamdp"
 
 set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
@@ -771,8 +794,7 @@ set_option maxRecDepth 4000000 in
     Unlike ViT's, this tie can pin the **forward bit-exactly**: EfficientNet has BatchNorm, so the
     returned batch statistics are a whole-net forward fingerprint no gradient touches. -/
 def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
-    (alphaStr negAlphaKStr bStr : String)
-    (funcName : String := "efficientnet_adam_train_step") : String :=
+    (alphaStr negAlphaKStr bStr : String) (replicas : Nat := 1) : String :=
   let sigList := enetSig nClasses
   -- `go` hands back the BN channel counts alongside the body, so the argument signature is built
   -- from the SAME list the traversal walked. Deriving the 49 slots independently would be a second
@@ -801,7 +823,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     let mut vN : List String := []
     for i in [0:sigList.length] do
       let (nm, ds) := sigList[i]!
-      let (c, nT, nM, nV) ← enetAdamOne B nm ds (gradNames[i]!)
+      let (c, nT, nM, nV) ← enetAdamOne B nm ds (gradNames[i]!) replicas
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
@@ -831,7 +853,16 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"] ++ statNames
     let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
     pure (
-      "    // ── EfficientNet-B0 AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
+      (if replicas ≤ 1 then
+        "    // ── EfficientNet-B0 AdamW train step: gradients + optimizer are pretty(AST node) ──\n"
+       else
+        s!"    // ── EfficientNet-B0 AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
+        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
+        "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
+        "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
+        "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
+        "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
       code ++ statCode ++ enetAdamConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n",
       bnList.map (fun t => t.2.1))
@@ -853,8 +884,12 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   let outSig := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
      bnOc.flatMap (fun oc => [ty [oc], ty [oc]]))
+  -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
+  -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
+  -- artifact path and `LEAN_MLIR_VARIANT`.
+  let fname := s!"efficientnet_{enetAdamVariant replicas}_train_step"
   "module @m {\n" ++
-  s!"  func.func @{funcName}({inSig}) -> ({outSig}) " ++ "{\n" ++
+  s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
 
@@ -882,9 +917,30 @@ end Proofs.StableHLO
 --     verified_mlir/efficientnet_adam_train_step.mlir
 --
 -- Literals: α = 0.1, −α/K = −0.01 (K = 10), batch 32 — `efficientNetB0Config`'s label smoothing
--- and explicit mean, matching the retired `adamCot` term for term. There is **no data-parallel
--- variant**: R34 (§2b-quater) and ViT have one, EfficientNet does not, and an ungated DP render
--- is not worth the clobber surface.
+-- and explicit mean, matching the retired `adamCot` term for term.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adam_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
-    "0.100000" "-0.010000" "32.0" "efficientnet_adam_train_step")
+    "0.100000" "-0.010000" "32.0")
+
+-- The **DATA-PARALLEL** render (handoff §2e-bis), selected at run time by
+-- `LEAN_MLIR_VARIANT=adamdp`. Same graph, plus one `all_reduce(add)/N` per parameter gradient
+-- between the certified gradient and the certified AdamW triple: *certified gradient → trusted
+-- collective → certified AdamW*. The collective is a DECLARED carve-out and the render says so in
+-- its own output banner at `replicas > 1`, per the §5/§2b `%loss` lesson that an undeclared
+-- carve-out is how wrong things ship.
+--
+-- Unlike ResNet-34's, this variant never had a hand-written emitter to migrate off — the certified
+-- renderer is the only writer of both EfficientNet AdamW artifacts from the start.
+--
+-- It renders to its OWN path, which is what stops the §2a race where producing a DP render meant
+-- editing a knob and clobbering the artifact the trainer runs. `2` is the replica count these are
+-- rendered at and it must match `PJRT_REPLICAS` at run time, because the graph bakes
+-- `replica_groups`. Re-render here to change it.
+#eval IO.FS.writeFile "verified_mlir/efficientnet_adamdp_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+    "0.100000" "-0.010000" "32.0" 2)
+
+-- Pin the two literal artifact paths above against the name the renderer actually emits. If a
+-- variant is renamed this fails at `lake build` instead of at run time as an "entry mismatch".
+#guard Proofs.StableHLO.enetAdamVariant 1 == "adam"
+#guard Proofs.StableHLO.enetAdamVariant 2 == "adamdp"

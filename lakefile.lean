@@ -1431,6 +1431,18 @@ lean_exe «vit-dp-check» where
   root := `tests.TestViTDpCheck
   moreLinkArgs := xlaLink
 
+/-- EfficientNet DP gate. Giving both replicas the SAME batch makes `all_reduce(add)/2` the
+    identity, so the data-parallel step must reproduce the single-device one exactly. BatchNorm does
+    not spoil this: BN normalises per replica, and both replicas' groups are the same 32 examples,
+    so their statistics are identical by construction. (The §10.3b caveat that blocked this gate for
+    R34 is about SPLITTING a batch — 2×32 really is not 1×64 — not duplicating one.)
+
+    Stronger than `vit-dp-check`: EfficientNet returns 98 BN batch statistics, so it has a
+    forward-only region that must come back BIT-EXACT. Needs two GPUs and the XLA backend. -/
+lean_exe «efficientnet-dp-check» where
+  root := `tests.TestEfficientNetDpCheck
+  moreLinkArgs := xlaLink
+
 /-- §2b-quater gate: the collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
     2×128 + all_reduce must equal 1×256 to fp rounding. Needs two GPUs and the XLA backend. -/
 lean_exe «cifar8-dp-check» where
@@ -1471,9 +1483,21 @@ lean_exe «efficientnet-verified» where
 -- batch-norm) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed θ|m|v + runtime
 -- lr/bc threading via trainAdamSched. Recipe matches efficientnet-train (lr 1e-3, wd 1e-4,
 -- cosine+warmup 3, label-smoothing 0.1). Render: tests/TestEfficientNetTrain.lean.
+lean_lib «EfficientNetAdamCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.EfficientNetAdamCommon]
+
 lean_exe «efficientnet-verified-adam» where
   root := `apps.imagenette.MainEfficientNetVerifiedAdam
   moreLinkArgs := ireeLink
+
+/-- The XLA/PJRT peer of `efficientnet-verified-adam` — same program, same certified bytes, other
+    trusted lowerer. It exists for MULTI-GPU: collectives live only on the PJRT path, so the
+    `adamdp` variant cannot run under IREE at all (the shim refuses the DP entry point rather than
+    silently running single-device). -/
+lean_exe «efficientnet-verified-adam-xla» where
+  root := `apps.imagenette.MainEfficientNetVerifiedAdamXla
+  moreLinkArgs := xlaLink
 
 -- Chapter 9: ConvNeXt-T (Liu et al. 2022 — patchify stem + [3,3,9,3] depthwise-7×7
 -- blocks with LN + GELU + layerScale + 3 between-stage downsamples) trained on
