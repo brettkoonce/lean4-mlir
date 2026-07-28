@@ -423,13 +423,24 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
   (`scratchpad/miopen_repro.py`, jax 0.10.0 + rocm plugin, same box) **runs fine and returns the
   right shape**. So this is *not* a shape MIOpen cannot handle.
 
-  What that leaves, untested: something about the convolution **in the context of the full graph**
-  rather than in isolation. The leading candidate is memory — the 209×209 filter alone is
-  192·32·209²·4 B = **1.07 GB**, and in the full step it coexists with every ViT activation, three
-  copies of 5.5 M parameters, and 603 live output buffers; an allocation failure inside MIOpen could
-  plausibly surface as `miopenStatusUnknownError` rather than a clean OOM. **That is a hypothesis,
-  not a measurement.** Next probes: dump peak device memory for this executable, and try the same
-  graph at bs8.
+  **The memory hypothesis is REFUTED too** (`scripts/miopen_mem_probe.py`). Holding a ballast tensor
+  and re-running the same conv: it succeeds at 0, 4, 8 and **12 GiB** of ballast on top of its own
+  1.02 GiB of inputs. And when memory genuinely runs out (14 GiB ballast) XLA reports a **clean
+  `RESOURCE_EXHAUSTED: Out of memory while trying to allocate 14.00GiB`** — a completely different,
+  well-formed error. So `miopenStatusUnknownError` is not an allocation failure wearing a disguise.
+
+  **Strongest remaining lead: XLA fuses the dilation into the convolution, changing the descriptor.**
+  The render emits `stablehlo.pad` with `interior = [0,0,15,15]` and then a *stride-1* conv against
+  the materialised 209×209 filter — which is what both probes reproduce, successfully. XLA is free
+  to fuse that pad into the convolution instead, as `rhs_dilation = 16` over the original 14×14
+  cotangent, which is a **different MIOpen call** that the isolated repro never makes. That would
+  explain precisely why the op works alone and fails in the graph.
+
+  To confirm: dump post-optimisation HLO for this executable and read the actual `convolution`
+  descriptor. **`XLA_FLAGS` is inert on this path** — the compile-options blob overrides it; §4 has
+  the regenerate-a-throwaway-shim recipe, which §2b-bis already used successfully for exactly this
+  kind of question. If the fused descriptor is the culprit, that IS the filable bug, and the repro
+  is a two-op MLIR module rather than anything ViT-specific.
 
   `vit-adam-tie` links IREE for the same reason, and there the identical graph runs fine, which
   localises this to the XLA/MIOpen path rather than to the render.
