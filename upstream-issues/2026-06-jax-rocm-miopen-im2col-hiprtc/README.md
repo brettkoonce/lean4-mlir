@@ -88,8 +88,30 @@ likely why 06-24 could not reproduce it: an isolated kernel build is not the fai
    the rest of the file moved to HIP-mapped work-item builtins, so it only ever compiled
    under the OpenCL backend. That is consistent with 06-24's cold compile succeeding: that
    build had a *different* config and so a different set of defines, and never entered this
-   branch. **Not yet independently confirmed** — confirming it means reading MIOpen's source
-   around those lines, or finding a config that sets `EXTREME_LARGE` for a non-dilated conv.
+   branch.
+
+#### Ablation: `EXTREME_LARGE` correlates exactly with the failure
+
+`repro_extreme_large_ablation.py` — identical tensor shapes and channel count, varying **only**
+the filter and its dilation:
+
+| variant | im2col defines | result |
+|---|---|---|
+| filter 14×14, `rhs_dilation 16` (the failing case) | **`-DEXTREME_LARGE …`** | **FAILS** |
+| filter 14×14, `rhs_dilation 1` | `-DLOCAL_MEM_SIZE …` (no `EXTREME_LARGE`) | OK, out `(3,192,211,211)` |
+| filter 209×209, `rhs_dilation 1` | no im2col kernel built at all (different solver) | OK, out `(3,192,16,16)` |
+
+Every build carrying `EXTREME_LARGE` failed; every build without it succeeded. The third row
+matters: a **209×209 filter — far larger in raw terms — does not set the define and works**, so
+the trigger is not filter size but the *dilated receptive field* (16×(14−1)+1 = 209 effective),
+which is what blows the LDS budget and selects the branch.
+
+**What this does and does not establish.** It establishes that the `EXTREME_LARGE` path, as
+reached here, does not compile. It does **not** establish that the branch is broken for every
+config, because no probe produced a *non-dilated* conv that sets `EXTREME_LARGE` — so
+"`EXTREME_LARGE` is broken" and "dilated convs that select it are broken" are not yet
+separated. For a maintainer that distinction is probably moot (the builtins on lines 298/326
+are wrong regardless of how the branch is entered), but the report should not overstate it.
 
 Note also that no logged compile in this run carries a `MIOPEN_USE_HIP` / `MIOPEN_BACKEND_HIP`
 define, though that may simply be implicit in the HIPRTC path rather than passed as a flag.
@@ -116,6 +138,16 @@ status code**, which is why they were conflated. 06-24's `GemmFwdRest` "0 provid
 required" workspace refusal reproduces via the immediate API; this one is a source-compile
 failure reached through XLA. The 06-24 note attributed the ViT patch-embed symptom to the
 workspace refusal — on this evidence, at least this instance of it is the compile error.
+
+### Not a PJRT-vs-CUDA maturity issue
+
+Worth stating explicitly, because it is the natural assumption: this is **not** "the ROCm PJRT
+plugin is less baked than the CUDA one". PJRT is XLA's backend-agnostic plugin API and nothing
+about it is CUDA-specific. More to the point, the evidence rules that reading out — **IREE runs
+the identical graph on the same box against the same MIOpen library, fine.** The difference is
+purely which convolution algorithm gets selected: XLA's lowering produces a dilated descriptor
+that lands on im2col's `EXTREME_LARGE` path, and IREE never selects it. The defect is in
+MIOpen's kernel source, which both consumers share.
 
 ### Impact
 
