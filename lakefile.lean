@@ -56,6 +56,7 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ResNet34Render, `LeanMlir.Proofs.Codegen.ResNet34RenderB,
              `LeanMlir.Proofs.Codegen.AdamRender,
              `LeanMlir.Proofs.Codegen.MobileNetV2Render,
+             `LeanMlir.Proofs.Codegen.MobileNetV2RenderB,
              `LeanMlir.Proofs.Codegen.EfficientNetRender,
              `LeanMlir.Proofs.Codegen.ConvNeXtRender, `LeanMlir.Proofs.Codegen.ViTRender]
 
@@ -1415,6 +1416,17 @@ lean_exe «vit-adam-tie» where
     binary, and a tie must run on the backend the trainer actually uses. -/
 lean_exe «efficientnet-adam-tie» where
   root := `tests.TestEfficientNetAdamTie
+  moreLinkArgs := ireeLink
+
+/-- MobileNetV2 AdamW gate (§2f, the last net on the scorecard): one AdamW step through two renders
+    of `@mobilenetv2_adam_train_step` — the hand-written emitter in `tests/TestMobilenetV2TrainPC.lean`
+    against `Proofs/Codegen/MobileNetV2RenderB.lean`'s `pretty(provenGraph)` — comparing all
+    returned floats per region. 52 BN layers give a `bnstat` region that pins the forward
+    bit-exactly, and the gate covers SPREAD as well as magnitude (§2f-bis). IREE-linked, because
+    `mobilenetv2-verified-adam` is. Deletes its `.vmfb` before every compile (§2e's false-PASS
+    trap). -/
+lean_exe «mobilenetv2-adam-tie» where
+  root := `tests.TestMobilenetV2AdamTie
   moreLinkArgs := ireeLink
 
 /-- ConvNeXt-T AdamW gate (§2f): one AdamW step through two renders of `@convnext_adam_train_step`

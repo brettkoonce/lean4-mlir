@@ -1028,6 +1028,99 @@ Both new ones are checked against the *per-example* fused `depthwise{,Strided}Bi
 | A | `relu6` batched emit clamps to `5.0` instead of `6.0` | **`✖ relu6`** fires alone; all 14 other emit ties stay green |
 | B | `depthwiseStridedBiasGradB` skels to an unmatched tag | **`✖ … is NOT a prefix`** fires — i.e. the prefix check *does* catch the silent `// MALFORMED` fallthrough §4 warns about, and `depthwiseBiasGradB` stayed green beside it |
 
+#### ✅ Step 3 DONE 2026-07-28 — `MobileNetV2RenderB.lean` renders, and the interface is EXACT
+
+`LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` (added to the `Proofs` lib roots), AdamW-only at
+`N := B`, 17-block paper spec. **UNCOMMITTED.** `lake build Proofs Certs Codegen` green.
+
+**It renders to its own `verified_mlir/mobilenetv2_adam_train_step_b.mlir`**, deliberately — the
+canonical path is still owned by the hand-written emitter in `tests/TestMobilenetV2TrainPC.lean`,
+and a second writer would be the §2a last-writer-wins race. Same staging §2b-ter used for R34.
+
+| gate | result |
+|---|---|
+| entry name | `@mobilenetv2_adam_train_step` — matches ✅ |
+| arity | **739 in / 737 out**, matches the committed artifact ✅ |
+| arg + return TYPES, positionally | **identical** ✅ — and here even the arg NAMES agree, unlike ViT/enet |
+| `// MALFORMED` | **0** ✅ |
+| gate 1 (weakened, §2f) | `mobilenetv2_train_step.mlir` md5 unchanged `a79d2e8b…` ✅ |
+| `regen_verified_mlir.sh check` | 56 artifacts, **one writer each** ✅ |
+
+**Structural agreement with the committed render, where it must hold:**
+
+| op | committed | certified |
+|---|---|---|
+| convolution | 155 | **155** |
+| dot_general | 3 | **3** |
+| transpose / reverse / pad | 173 / 51 / 164 | **173 / 51 / 164** |
+| minimum, maximum, select, and (the 35 relu6 sites) | 35 each | **35 each** |
+| `rsqrt` | 52 | 156 = 52×3 |
+| total `stablehlo` ops | 8,844 | 13,701 (1.55×) |
+
+The `rsqrt` 3× and the 1.55× op ratio are the expected `pretty`-has-no-CSE story: `bnBatchF`,
+`bnBatchBack` and `bnGammaGradB` each rebuild x̂. §2b-bis measured XLA collapsing exactly this on
+R34 (108 → 36, 1.68× → 1.0004× after optimisation) at **no** run-time cost. Do not treat it as a
+problem without measuring — and note mnv2's driver is IREE, so re-measure rather than assume.
+
+**Structural choices worth knowing.** The two stride-1 block kinds (identity-skip and no-skip) are
+ONE function `irBackStride1GradB` with a `skip : Bool`, because the only difference is the `addVB`
+fan-in — duplicating the traversal would be the double-writer disease one level down, in code
+(§2a-quater). BN stat slots are derived from the same forward record that computes them
+(`f.ec`/`f.dc`/`f.pc`), never a parallel 52-entry table, per §2e — a misaligned slot is silent.
+
+#### ✅ Step 4 DONE 2026-07-28 — the tie is BIT-EXACT, and all three controls fire
+
+`tests/TestMobilenetV2AdamTie.lean` → `lake build mobilenetv2-adam-tie`, IREE-linked
+(`mobilenetv2-verified-adam` is an `ireeLink` binary). One AdamW step, all **6,795,329** returned
+floats. It deletes both `.vmfb` paths before every compile, and no run reported `(cached vmfb)`.
+
+| check | result |
+|---|---|
+| interface vs the hand-written render | 739 in / 737 out, arg+return types positionally identical ✅ |
+| A-vs-A determinism floor | **bit-exact 6795329/6795329** ✅ |
+| **forward** (`bnstat` = batch μ/var of all 52 BN inputs) | **BIT-EXACT 34112/34112** ✅ |
+| **`%loss`** | **BIT-EXACT 3/3** ✅ |
+| **gradient (`m`)** | **BIT-EXACT 2253738/2253738** ✅ |
+| θ, `v` | bit-exact ✅ |
+| **spread** (§2f-bis) | **0/210 params** ✅ |
+
+**Bit-exact, not 1e-6 — and the reason is the backend, so do not generalise it.** Same story as
+EfficientNet (§2e): IREE's pipeline is deterministic, while R34's ≤2e-6 spread is XLA autotuning
+picking different convolution algorithms across processes (§3). A bit-exact result here does not
+predict one on XLA.
+
+**Three negative controls, because a tie that reports bit-exact everywhere is indistinguishable
+from a harness comparing a buffer with itself.** Each was the certified render with ONE thing
+changed, compared against the certified render, and each fired **its own** gate while the others
+stayed clean:
+
+| control | perturbation | result |
+|---|---|---|
+| A | cotangent α 0.1 → 0.11 (1 line) | **gradient** gate fires at 1.17e-2, spread **111/210**; forward `bnstat` and `%loss` stay BIT-EXACT |
+| B | BN ε 1e-5 → 1e-4, **re-rendered** (156 lines) | **forward** gate fires — `bnstat` bit-exact only **80/34112**; gradient 0.121, spread 131/210 |
+| C | `%loss` constant 0.9 → 0.8 (1 line) | **loss** gate fires at 0.100; θ, `m`, `v` and `bnstat` ALL stay bit-exact, spread **0/210** |
+
+Control C is the sharpest: it isolates `%loss` completely, which is the direct evidence that the
+report-only scalar really is on no gradient path — and therefore that the loss gate is doing
+independent work rather than shadowing the gradient gate. Control A is also a clean
+re-demonstration of §3's rule on a fourth net: **θ moved only 1e-6 while `m` moved 1.17e-2**, so a
+θ-based gate would have passed a real cotangent bug outright. And A-vs-B is exactly §2f-bis's
+spread signature — a different function is GLOBAL (111 and 131 of 210) where the true tie disturbs 0.
+
+(On control B, ε enters the *normalisation* `rsqrt(var+ε)`, not the statistics themselves, so the
+stem BN's own μ/var — 64 of the 34112 slots — are structurally upstream of any ε effect. 80 stayed
+exact, so 16 further slots coincided numerically; that residue was not investigated.)
+
+#### ▶ What is left on mnv2
+
+1. **The swap** — take over the canonical name, retire `tests/TestMobilenetV2TrainPC.lean`'s AdamW
+   writer to smoke-only, delete `…_b.mlir`, re-run the audit and confirm
+   `git diff verified_mlir/mobilenetv2_train_step.mlir` is still empty (the weakened gate 1).
+   Post-swap, re-run `mobilenetv2-adam-tie` with the retired render (recover it from git) as argv[1]
+   against the new canonical bytes, exactly as §2b-ter did for R34.
+2. Optionally a **smoke-train** (`LEAN_MLIR_G2_STEPS`) to see the loss descend on the swapped
+   artifact, as R34's swap did.
+
 **Everything else already exists** — `bnBatchF`/`bnBatchBack`, `bnBatchMeanB`/`bnBatchVarB`, all four
 `*BackBatched` convs, `gapBackBatched`, `addVB`/`subB`, the `scaleB → addVB → shiftB → divConstB`
 smoothing chain, `depthwise{,Strided}WeightGradB`, and
