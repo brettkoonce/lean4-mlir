@@ -772,6 +772,51 @@ Claim ceiling is unchanged from §5: the graph is *certified gradient → truste
 certified AdamW*. What is new is that the collective's semantics are now pinned by an exact
 known-answer check **on the net itself**, not on a no-BN proxy.
 
+### 2f. ▶ The last two AdamW renders — scoped by measurement, and **ConvNeXt first**
+
+Scoped 2026-07-28 by enumerating every `*Sgd` op each renderer uses and checking for a `*Grad` peer,
+then checking two things that decide the order.
+
+| | ConvNeXt | MobileNetV2 |
+|---|---|---|
+| renderer size | **255 lines** | 583 lines |
+| interface | 545 in / 543 out (180 params) | 739 / 737 (212 params) |
+| `*Grad` peers present | 5 of 10 | 8 of 12 |
+| **missing ops** | `lnGammaGrad`, `lnBetaGrad`, `layerScaleChGammaGrad`, `depthwiseWeightGrad`, `depthwiseBiasGrad` | `depthwise{,Strided}{Weight,Bias}Grad` |
+| backward structure | **param-SGD already factored out** (`blockParamSgd`/`downParamSgd` are separate from `bwdBlock`) | enet's exact shape (`irBack{,Strided,NoExp,NoSkip}`) |
+| BatchNorm | **none** (LayerNorm) ⇒ ViT-grade tie | yes, 52 layers ⇒ enet-grade tie |
+| cotangent gap | label-smoothed + explicit ÷B (same shape as ViT/enet) | same |
+
+**The decider is a semantic fork in mnv2, not op count.** `MobileNetV2Render.lean` renders at the
+**per-example** index (`.bnGammaSgd`, `.relu6F`, `.addV`, `.gapF` — all non-`B` forms), while
+`verified_mlir/mobilenetv2_adam_train_step.mlir` — what `mobilenetv2-verified-adam` trains on — is
+**batch BN** (52 `rsqrt`, 364 `reduce[0,2,3]`, the saved-`%xh` spelling). **That is exactly the R34
+§2a two-worlds situation**, and resolving it is the §2b batched-index move, which was the single
+most expensive and most badly mis-estimated step in this whole thread (planned as "a one-line
+re-instantiation", actually 20 new codegen forms and 597 changed lines). Most of those forms now
+exist, but mnv2 additionally needs a batched `relu6` and `depthwise{,Strided}BiasGradB` — enet
+needed neither, because its depthwise convs are followed by BN so the bias is folded.
+
+**So the honest name for the mnv2 task is "MobileNetV2 at the batched index", not "MobileNetV2
+AdamW".** Scoping it as the latter is how the estimate goes wrong again.
+
+**ConvNeXt has no such fork**, and three further things make it the better next move:
+
+* its param-SGD is **already separate** from the cotangent traversal, so `adam` threads through one
+  site rather than needing the `enetBackAll`-style extraction enet and ViT both required;
+* three of its five missing ops (`lnGammaGrad`, `lnBetaGrad`, `layerScaleChGammaGrad`) are plain
+  reductions — the cheapest kind of `*Grad` peer;
+* its SGD tie (§2a-quinquies) came back **gradient BIT-EXACT** across two structurally different
+  emitters, so the emitter is known-good before any of this starts.
+
+**Two things to be honest about up front.** (1) ConvNeXt has **no BN**, so its tie is ViT-grade —
+gradient + `%loss`, with no `bnstat` region to pin the forward bit-exactly. (2) `ConvNeXtRender.lean`
+is **not fully `pretty(AST)` today**: `patchWGrad` (stride-4 stem weight grad) and `downWGrad`
+(even-kernel 2×2/s2 weight grad) are hand-written because neither has a VJP-cert `SHlo` op, and
+`sgd` is a hand-written update emitter. Those two gaps stay. But that third one is an *argument for*
+doing this: the param update is already outside the AST, so replacing it with the proven
+`adamMNextF`/`adamVNextF`/`adamWParamF` triple **raises** the tier rather than holding it.
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
