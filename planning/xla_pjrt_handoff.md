@@ -489,9 +489,39 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
     Render it from the *same* smoothed chain the cotangent implies.
   - ViT has **no BN**, so unlike R34 there is no `bnstat` region to pin the forward bit-exactly.
     Gate on the gradient (`m`) and the loss, and expect the same limitation the SGD ties have.
-- **EfficientNet is next** — it already renders at `N := B` and came back byte-identical through the
-  §2b move, but its AdamW render needs `depthwise{,Strided}WeightGradB` plus a depthwise bias peer
-  (real kit work, ~4 new forms × the 4-site `BatchableOp` recipe).
+- **EfficientNet is next, and its gradient blockers are now DONE.** It already renders at `N := B`
+  and came back byte-identical through the §2b move. Scoping corrected by measurement (enumerate
+  every `*Sgd` op each renderer uses, check for a `*Grad` peer — EfficientNet 2 missing, mnv2 4,
+  ConvNeXt 5):
+  - it needs **two** ops, not "`depthwise{,Strided}WeightGradB` plus a depthwise bias peer" — the
+    depthwise convs are followed by BN, so the bias is folded and has no update op. Both are
+    **built and gated** (`depthwiseWeightGradB`, `depthwiseStridedWeightGradB`;
+    `TestBatchedEmitTie` is now 13 emit ties + **16** grad-prefix checks).
+  - mnv2 does **not** come free after this: EfficientNet's are the batched `*SgdB`/`*GradB`
+    constructors, mnv2's are the per-example ones, plus mnv2 needs two bias peers. Near-identical
+    emit logic, so fast — not free.
+
+  **The cotangent gap is measured and is the SAME SHAPE as ViT's**, so the ViT machinery transfers
+  with no new ops:
+
+  | | certified SGD render | hand-written AdamW |
+  |---|---|---|
+  | cross-entropy | plain `softmax − onehot` | **label-smoothed** α = 0.1 (`%lsa` 0.1, `%lsaik` 0.01) |
+  | batch mean | folded into lr (0.05) | **explicit** `divide %dyr, dense<32.0>` |
+
+  Use `shiftB`/`divConstB` at `N := 1` exactly as `vitBackAll`'s `smooth` parameter does (they emit
+  at `ty [B,n]` and ignore `N`, and are pointwise so the §2b `N := 1` hazard does not apply).
+
+  **Remaining work, in ViT's order.** (1) Thread an `adam : Bool` through the backward — here that
+  is ~6 functions (`eBackBody`, `eBack`, `eBackNoSkip`, `eBackStrided`, `eBackNoExp`, `seBack`), all
+  of which already take `lrStr`; gate it by `efficientnet_train_step.mlir` coming back
+  byte-identical, as `vit_train_step.mlir` did at every step. (2) Assemble
+  `efficientnetAdamTrainStepFaithful` with `adamOne`/`adamConstsB` copied from `ResNet34RenderB`.
+  (3) Tie and swap.
+
+  **EfficientNet's tie will be STRONGER than ViT's**: it has BN, so the returned batch statistics
+  give a `bnstat` region that pins the forward **bit-exactly** — the gate ViT could not have, and
+  the one that makes `%loss` a cross-check rather than the only forward evidence.
 - **MobileNetV2** needs those same depthwise gradients, so it comes free-ish after EfficientNet.
 - **ConvNeXt** carries the 4 even-kernel gaps from its §1a tie; check whether they touch the
   backward before scoping.
