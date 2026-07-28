@@ -416,12 +416,26 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
     therefore the convolution, and **has nothing to do with the collective or the replica count** —
     two GPUs cannot help.
 
-  The suspect is the patch-embed weight-grad convolution: the dilated `interior = [0,0,15,15]`,
-  209×209 one, which is an unusual shape for MIOpen (this box is MIOpen-conv-weak; ROCm is the
-  *transformer* box for GEMMs, not for convs). That is a hypothesis about *which* conv — the
-  measured fact is only that a convolution fails to enqueue. `vit-adam-tie` links IREE for the same
-  reason, and there the identical graph runs fine, which is what localises this to the XLA/MIOpen
-  path rather than to the render.
+  **The obvious suspect was REFUTED — do not repeat it.** The graph contains exactly two
+  convolutions: the forward patch-embed `(32,3,224,224)×(192,3,16,16)/s16 → (32,192,14,14)`, and its
+  weight gradient `(3,32,224,224)×(192,32,209,209) → (3,192,16,16)` — a 209×209 filter, which looked
+  like an obvious MIOpen limitation. It is not: a minimal JAX repro of that exact convolution
+  (`scratchpad/miopen_repro.py`, jax 0.10.0 + rocm plugin, same box) **runs fine and returns the
+  right shape**. So this is *not* a shape MIOpen cannot handle.
+
+  What that leaves, untested: something about the convolution **in the context of the full graph**
+  rather than in isolation. The leading candidate is memory — the 209×209 filter alone is
+  192·32·209²·4 B = **1.07 GB**, and in the full step it coexists with every ViT activation, three
+  copies of 5.5 M parameters, and 603 live output buffers; an allocation failure inside MIOpen could
+  plausibly surface as `miopenStatusUnknownError` rather than a clean OOM. **That is a hypothesis,
+  not a measurement.** Next probes: dump peak device memory for this executable, and try the same
+  graph at bs8.
+
+  `vit-adam-tie` links IREE for the same reason, and there the identical graph runs fine, which
+  localises this to the XLA/MIOpen path rather than to the render.
+
+  **No bug has been filed and none should be until there is a self-contained repro.** The isolated
+  convolution does not reproduce it, so a report today would point maintainers at the wrong thing.
 
   `vit-verified-adam` is an IREE binary besides, where the shim refuses the DP entry point outright
   rather than silently running single-device.
