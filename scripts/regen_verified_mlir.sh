@@ -72,7 +72,27 @@ check_fwd_prefix() {
   echo "── forward ⊂ train-step prefix check ──"
   python3 - <<'PY'
 import sys
-PAIRS = [("resnet34_fwd.mlir", "resnet34_train_step.mlir")]
+# Every net whose forward AND train step come from Proofs/Codegen. All five were hand-written
+# until 2026-07-28; mobilenetv2_fwd was the second artifact this check would have caught —
+# it rendered BATCH BN against a PER-EXAMPLE train step (measured: logits rel 1.86).
+# ConvNeXt has no _fwd_eval and must not grow one: LayerNorm ⇒ train == eval.
+PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
+         ("convnext_fwd.mlir",     "convnext_train_step.mlir"),
+         ("efficientnet_fwd.mlir", "efficientnet_train_step.mlir"),
+         ("mobilenetv2_fwd.mlir",  "mobilenetv2_train_step.mlir")]
+
+def body(lines, what):
+    """The pretty(AST) body: everything from the first `%v0 = ` definition on.
+
+    Skipping a fixed line count instead (as this did) only worked for ResNet-34: ConvNeXt's train
+    step emits two header constants the forward does not need, so the two bodies start at different
+    offsets. Anchoring on `%v0` is what makes the check net-independent — every `pretty` render
+    starts its AST body there."""
+    for i, l in enumerate(lines):
+        if l.strip().startswith("%v0 = "):
+            return lines[i:]
+    raise ValueError(f"{what}: no `%v0 = ` line — not a pretty(AST) render?")
+
 rc = 0
 for fwd, ts in PAIRS:
     try:
@@ -80,10 +100,9 @@ for fwd, ts in PAIRS:
         tl = open(f"verified_mlir/{ts}").read().split("\n")
     except FileNotFoundError as e:
         print(f"  SKIP {fwd}: {e}"); continue
-    # body = past "module @m {", the func header, and the leading provenance comment
-    fb = fl[3:]
+    fb = body(fl, fwd)
     fb = fb[: next(i for i, l in enumerate(fb) if l.strip().startswith("return"))]
-    tb = tl[3 : 3 + len(fb)]
+    tb = body(tl, ts)[: len(fb)]
     if fb == tb:
         print(f"  OK — {fwd} is a byte-identical {len(fb)}-line prefix of {ts}")
     else:
@@ -146,7 +165,12 @@ fi
 # ── the hand-written renders (`#eval main` at file elaboration) ──
 if [ "$WHAT" = "all" ] || [ "$WHAT" = "tests" ]; then
   echo "── tests/ (hand-written emitters) ──"
-  export PATH="$PWD/.venv/bin:$PATH"   # tests/* also try iree-compile
+  # NOTE most of these no longer WRITE anything — they are `iree-compile` smokes over the committed
+  # bytes, kept here because that is the one step `lake build` cannot do (it needs the compiler on
+  # PATH) and they throw if an artifact is missing. As of 2026-07-28 the only files below that still
+  # emit an artifact are the two cifar8 ones; every `_fwd`/`_train_step` writer has moved to
+  # Proofs/Codegen. Running them is still the right smoke — it just no longer risks a clobber.
+  export PATH="$PWD/.venv/bin:$PATH"
   for f in \
     tests/TestResnet34Train.lean \
     tests/TestMobilenetV2Fwd.lean \

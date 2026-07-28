@@ -55,6 +55,9 @@ private def cases : List (String × String × String) :=
   let zr  : Vec (rows*c) := fun _ => 0
   let zrb : Vec (BS*(rows*c)) := fun _ => 0
   let zW  : Mat a c := fun _ _ => 0
+  let zc2  : Vec pc := fun _ => 0
+  let zq0  : Vec (pc*ph*ph) := fun _ => 0
+  let zq0b : Vec (BS*(pc*ph*ph)) := fun _ => 0
   [ ("swish",
      render (pretty BS (.swishF (.operand "%x" zv))),
      render (pretty BS (.batchOp (N := BS) (.swish (n := n)) (.operand "%x" zvb))))
@@ -79,6 +82,17 @@ private def cases : List (String × String × String) :=
   , ("selectMid",
      render (pretty BS (.selectMid "%s" zv (.operand "%x" zv))),
      render (pretty BS (.selectMidB "%s" zvb (.operand "%x" zvb))))
+  -- ── the eval forwards (§2a, the `_fwd_eval` move). INFERENCE BN is a descriptor because its
+  --    γ/β/μ/var are the driver's frozen running stats — graph inputs shared by the whole batch,
+  --    i.e. batch-INVARIANT data, the one thing a descriptor may carry. Contrast `bnBatch`, which
+  --    needs its own ctor precisely because it reduces ACROSS examples. ──
+  , ("bnEval",
+     render (pretty BS (.bnPerChannelEvalF (oc := pc) (h := ph) (w := ph)
+                          "%g" "%bt" "%mu" "%var" "1.0e-5" 0 zc2 zc2 zc2 zc2
+                          (.operand "%x" zq0))),
+     render (pretty BS (.batchOp (N := BS) (.bnEval (oc := pc) (h := ph) (w := ph)
+                          "%g" "%bt" "%mu" "%var" "1.0e-5" 0 zc2 zc2 zc2 zc2)
+                          (.operand "%x" zq0b))))
   , ("addV",
      render (pretty BS (.addV (.operand "%x" zv) (.operand "%y" zv))),
      render (pretty BS (.addVB (.operand "%x" zvb) (.operand "%y" zvb))))

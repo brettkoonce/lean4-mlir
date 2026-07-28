@@ -87,8 +87,14 @@ structure EFwd where
       Order is expand-BN → depthwise-BN → project-BN, with the expand entry ABSENT for the
       no-expand block (b1, t = 1), because that is the layout the driver's `bnChannels` metadata
       and `@efficientnet_fwd_eval` read positionally. Getting it wrong is silent: the arities still
-      match and the wrong layer's statistics simply flow into the wrong eval slot. -/
-  bns : List (String × Nat × Nat)
+      match and the wrong layer's statistics simply flow into the wrong eval slot.
+
+      The second component is the layer's **stat prefix** — `@efficientnet_fwd_eval` takes
+      `%{prefix}mu`/`%{prefix}var` there, and the AdamW train step hands the matching batch μ/var
+      back from the SAME entry. So the eval signature, the eval BN sites and the train step's stat
+      outputs all come off this one list; there is deliberately no parallel 49-entry table. -/
+  bns : List (String × String × Nat × Nat)
+  deriving Inhabited
 
 structure EBack where
   code : String
@@ -258,10 +264,28 @@ private def seBack (adam : Bool) (B c hh r : Nat)
 -- § MBConv forward emitters (stride-1 expand / no-skip expand / strided expand / no-expand b1)
 -- ════════════════════════════════════════════════════════════════
 
+/-- One BN site at the batched index. `statP` is the running-stat input prefix
+    (`%{statP}mu` / `%{statP}var`), used only in `.eval` mode; in `.train` mode the statistics are
+    reduced out of `xin` and `statP` names the slot the train step hands them back in.
+
+    This is the ONLY place the two BN worlds are chosen between, which is the point: `@efficientnet_fwd`
+    and `@efficientnet_fwd_eval` come from one traversal, so they cannot be the same net with
+    different normalisation the way `resnet34_fwd` and `resnet34_train_step` were (§2a). -/
+private def bnSiteB (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName statP xin : String) :
+    StateM Nat (String × String) := do
+  let zc  : Vec oc := fun _ => 0
+  let zin : Vec (B * (oc*hh*ww)) := fun _ => 0
+  match mode with
+  | .train => pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww)
+                          gName btName epsStr 0 zc zc (.operand xin zin))
+  | .eval  => pretty B (.batchOp (N := B) (.bnEval (oc := oc) (h := hh) (w := ww)
+                          gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc)
+                          (.operand xin zin))
+
 /-- Stride-1 expand MBConv forward body (shared by residual + no-skip): expand 1×1 conv-bn-swish →
     depthwise(kd) conv-bn-swish → SE → project 1×1 conv-bn. Returns the EFwd WITHOUT the final
     residual (caller adds the `addV` for residual blocks). -/
-private def eFwdBody (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd := do
+private def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat EFwd := do
   let ww := hh
   let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
   let zMid : Vec (B * (mid * hh * ww)) := fun _ => 0
@@ -272,33 +296,33 @@ private def eFwdBody (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : Sta
   let zVm  : Vec mid := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
   let (cEc, nEc) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}eW" s!"%{p}eb" zKe zVm) (.operand xName zIn))
-  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}eg" s!"%{p}ebt" epsStr 0 zVm zVm (.operand nEc zMid))
+  let (cEn, nEn) ← bnSiteB B mid hh ww mode epsStr s!"%{p}eg" s!"%{p}ebt" s!"{p}en" nEc
   let (cEr, nEr) ← pretty B (.batchOp (.swish) (.operand nEn zMid))
   let (cDc, nDc) ← pretty B (.batchOp (N := B) (.depthwise (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVm) (.operand nEr zMid))
-  let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVm zVm (.operand nDc zMid))
+  let (cDn, nDn) ← bnSiteB B mid hh ww mode epsStr s!"%{p}dg" s!"%{p}dbt" s!"{p}dn" nDc
   let (cDr, nDr) ← pretty B (.batchOp (.swish) (.operand nDn zMid))
   let (cSe, nS, nE1, nZ, nE2, nSe) ← seFwd B mid hh r p nDr
   let (cPc, nPc) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zMid))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
+  let (cPn, nPn) ← bnSiteB B oc hh ww mode epsStr s!"%{p}pg" s!"%{p}pbt" s!"{p}pn" nPc
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cSe ++ cPc ++ cPn,
          o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr,
          se := nSe, s := nS, e1 := nE1, z := nZ, e2 := nE2, pc := nPc,
-         bns := [(nEc, mid, hh), (nDc, mid, hh), (nPc, oc, hh)] }
+         bns := [(nEc, s!"{p}en", mid, hh), (nDc, s!"{p}dn", mid, hh), (nPc, s!"{p}pn", oc, hh)] }
 
 /-- **Residual stride-1 MBConv forward** (ic = oc): body + `addV` skip. -/
-private def eFwd (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd := do
-  let f ← eFwdBody B ic mid oc hh kd r epsStr p xName
+private def eFwd (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat EFwd := do
+  let f ← eFwdBody B ic mid oc hh kd r mode epsStr p xName
   let zOut : Vec (B * (oc * hh * hh)) := fun _ => 0
   let (cA, nA) ← pretty B (.addVB (.operand f.o zOut) (.operand xName zOut))
   pure { f with code := f.code ++ cA, o := nA }
 
 /-- **No-skip stride-1 MBConv forward** (ic ≠ oc, b9/b16): body, output = project-BN out. -/
-private def eFwdNoSkip (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd :=
-  eFwdBody B ic mid oc hh kd r epsStr p xName
+private def eFwdNoSkip (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat EFwd :=
+  eFwdBody B ic mid oc hh kd r mode epsStr p xName
 
 /-- **Strided MBConv forward** (b2/b4/b6/b12): expand at the input `2hh×2ww`, depthwise downsamples
     `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def eFwdStrided (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd := do
+private def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat EFwd := do
   let ww := hh
   let zIn  : Vec (B * (ic * (2*hh) * (2*ww))) := fun _ => 0
   let zMidH : Vec (B * (mid * (2*hh) * (2*ww))) := fun _ => 0
@@ -310,24 +334,24 @@ private def eFwdStrided (B ic mid oc hh kd r : Nat) (epsStr p xName : String) : 
   let zVm  : Vec mid := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
   let (cEc, nEc) ← pretty B (.batchOp (N := B) (.conv (h := 2*hh) (w := 2*ww) s!"%{p}eW" s!"%{p}eb" zKe zVm) (.operand xName zIn))
-  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}eg" s!"%{p}ebt" epsStr 0 zVm zVm (.operand nEc zMidH))
+  let (cEn, nEn) ← bnSiteB B mid (2*hh) (2*ww) mode epsStr s!"%{p}eg" s!"%{p}ebt" s!"{p}en" nEc
   let (cEr, nEr) ← pretty B (.batchOp (.swish) (.operand nEn zMidH))
   let (cDc, nDc) ← pretty B (.batchOp (N := B) (.depthwiseStrided (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVm) (.operand nEr zMidH))
-  let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVm zVm (.operand nDc zMid))
+  let (cDn, nDn) ← bnSiteB B mid hh ww mode epsStr s!"%{p}dg" s!"%{p}dbt" s!"{p}dn" nDc
   let (cDr, nDr) ← pretty B (.batchOp (.swish) (.operand nDn zMid))
   let (cSe, nS, nE1, nZ, nE2, nSe) ← seFwd B mid hh r p nDr
   let (cPc, nPc) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zMid))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
+  let (cPn, nPn) ← bnSiteB B oc hh ww mode epsStr s!"%{p}pg" s!"%{p}pbt" s!"{p}pn" nPc
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cSe ++ cPc ++ cPn,
          o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr,
          se := nSe, s := nS, e1 := nE1, z := nZ, e2 := nE2, pc := nPc,
          -- the expand stage runs at the block INPUT resolution, `2hh`; only the depthwise
          -- downsamples. That asymmetry is the one thing the stat layout gets wrong by default.
-         bns := [(nEc, mid, 2*hh), (nDc, mid, hh), (nPc, oc, hh)] }
+         bns := [(nEc, s!"{p}en", mid, 2*hh), (nDc, s!"{p}dn", mid, hh), (nPc, s!"{p}pn", oc, hh)] }
 
 /-- **No-expand MBConv forward** (b1, t=1): depthwise(kd, on `ic` channels)-bn-swish → SE → project
     1×1 (ic→oc)-bn. NO expand, NO skip. `ec/en` unused; `er` = block input (= depthwise input). -/
-private def eFwdNoExp (B ic oc hh kd r : Nat) (epsStr p xName : String) : StateM Nat EFwd := do
+private def eFwdNoExp (B ic oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat EFwd := do
   let ww := hh
   let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
   let zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
@@ -336,16 +360,16 @@ private def eFwdNoExp (B ic oc hh kd r : Nat) (epsStr p xName : String) : StateM
   let zVi  : Vec ic := fun _ => 0
   let zVo  : Vec oc := fun _ => 0
   let (cDc, nDc) ← pretty B (.batchOp (N := B) (.depthwise (h := hh) (w := ww) s!"%{p}dW" s!"%{p}db" zDk zVi) (.operand xName zIn))
-  let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := ic) (h := hh) (w := ww) s!"%{p}dg" s!"%{p}dbt" epsStr 0 zVi zVi (.operand nDc zIn))
+  let (cDn, nDn) ← bnSiteB B ic hh ww mode epsStr s!"%{p}dg" s!"%{p}dbt" s!"{p}dn" nDc
   let (cDr, nDr) ← pretty B (.batchOp (.swish) (.operand nDn zIn))
   let (cSe, nS, nE1, nZ, nE2, nSe) ← seFwd B ic hh r p nDr
   let (cPc, nPc) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}pW" s!"%{p}pb" zKp zVo) (.operand nSe zIn))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}pg" s!"%{p}pbt" epsStr 0 zVo zVo (.operand nPc zOut))
+  let (cPn, nPn) ← bnSiteB B oc hh ww mode epsStr s!"%{p}pg" s!"%{p}pbt" s!"{p}pn" nPc
   pure { code := cDc ++ cDn ++ cDr ++ cSe ++ cPc ++ cPn,
          o := nPn, ec := xName, en := xName, er := xName, dc := nDc, dn := nDn, dr := nDr,
          se := nSe, s := nS, e1 := nE1, z := nZ, e2 := nE2, pc := nPc,
          -- NO expand entry: `ec` is the block input here, not a BN input.
-         bns := [(nDc, ic, hh), (nPc, oc, hh)] }
+         bns := [(nDc, s!"{p}dn", ic, hh), (nPc, s!"{p}pn", oc, hh)] }
 
 -- ════════════════════════════════════════════════════════════════
 -- § MBConv backward emitters (project → SE → depthwise → expand; param-SGD in func-arg order)
@@ -530,6 +554,131 @@ def enetSig (nClasses : Nat) : List (String × List Nat) :=
 -- § The whole-net renderer
 -- ════════════════════════════════════════════════════════════════
 
+/-- Every SSA name the EfficientNet-B0 forward produces, plus the 49-entry BN stat layout.
+    `efficientnetFwd{,Eval}FaithfulV` return just `logits`; the train steps additionally consume the
+    stem/head names and the 16 block records on the way back. -/
+structure ENetFwd where
+  code   : String            -- stem → 16 MBConv blocks → head → GAP → dense, in emission order
+  stc    : String            -- stem conv out (= stem BN input)
+  stn    : String            -- stem BN out (= stem swish pre-act)
+  str    : String            -- stem swish out (= b1 input)
+  blocks : Array EFwd        -- the 16 MBConv forwards, in forward order
+  hc     : String            -- head 1×1 conv out (= head BN input)
+  hn     : String            -- head BN out (= head swish pre-act)
+  hr     : String            -- head swish out (= GAP input)
+  gap    : String            -- global-average-pool out (= dense input)
+  logits : String            -- dense out
+  /-- The 49 BN layers as `(BN-input SSA, stat prefix, channels, spatial side)`, stem → blocks in
+      forward order → head. Single source for the eval signature, the eval BN sites and the AdamW
+      train step's returned batch statistics — see `EFwd.bns`. -/
+  bns    : List (String × String × Nat × Nat)
+  deriving Inhabited
+
+set_option maxRecDepth 4000000 in
+/-- **The full EfficientNet-B0 forward as `pretty` of the verified AST**, at the batched index
+    `N := B`. 3×3/s2 stem (3→32, 224→112) → 16 MBConv blocks (the paper `[t,c,n,s]` table, SE in
+    every block) → 1×1 head (320→1280) → GAP(7×7) → dense(1280→`nClasses`).
+
+    `mode` picks the BN world and NOTHING else, which is the whole point of routing both forward
+    artifacts through one chain: at `.train` every BN reduces its own batch statistics (`bnBatchF`)
+    and this is exactly the prefix the train step differentiates; at `.eval` every BN consumes the
+    driver's frozen running stats (the `bnEval` descriptor) and the net becomes
+    class-batch-independent. -/
+private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) :
+    StateM Nat ENetFwd := do
+    -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → bn → swish ═══
+    let zx   : Vec (B * (3*224*224)) := fun _ => 0
+    let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+    let z32  : Vec 32 := fun _ => 0
+    let z112F : Vec (B * (32*112*112)) := fun _ => 0
+    let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := 112) (w := 112) "%sW" "%sb" zSk z32) (.operand "%x" zx))
+    let (cStn, nStn) ← bnSiteB B 32 112 112 mode epsStr "%sg" "%sbt" "stn" nStc
+    let (cStr, nStr) ← pretty B (.batchOp (.swish) (.operand nStn z112F))
+    -- ═══ forward: 16 MBConv blocks ═══
+    let f1  ← eFwdNoExp   B 32      16 112 3  8 mode epsStr "b1"  nStr
+    let f2  ← eFwdStrided B 16  96  24  56 3  4 mode epsStr "b2"  f1.o
+    let f3  ← eFwd        B 24 144  24  56 3  6 mode epsStr "b3"  f2.o
+    let f4  ← eFwdStrided B 24 144  40  28 5  6 mode epsStr "b4"  f3.o
+    let f5  ← eFwd        B 40 240  40  28 5 10 mode epsStr "b5"  f4.o
+    let f6  ← eFwdStrided B 40 240  80  14 3 10 mode epsStr "b6"  f5.o
+    let f7  ← eFwd        B 80 480  80  14 3 20 mode epsStr "b7"  f6.o
+    let f8  ← eFwd        B 80 480  80  14 3 20 mode epsStr "b8"  f7.o
+    let f9  ← eFwdNoSkip  B 80 480 112  14 5 20 mode epsStr "b9"  f8.o
+    let f10 ← eFwd        B 112 672 112 14 5 28 mode epsStr "b10" f9.o
+    let f11 ← eFwd        B 112 672 112 14 5 28 mode epsStr "b11" f10.o
+    let f12 ← eFwdStrided B 112 672 192  7 5 28 mode epsStr "b12" f11.o
+    let f13 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b13" f12.o
+    let f14 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b14" f13.o
+    let f15 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b15" f14.o
+    let f16 ← eFwdNoSkip  B 192 1152 320 7 3 48 mode epsStr "b16" f15.o
+    -- ═══ head: 1×1 conv (320→1280) → bn → swish → GAP → dense ═══
+    let z7F   : Vec (B * (320*7*7)) := fun _ => 0
+    let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
+    let z1280 : Vec 1280 := fun _ => 0
+    let zH7F  : Vec (B * (1280*7*7)) := fun _ => 0
+    let z1280c : Vec (B * 1280) := fun _ => 0
+    let zWd   : Mat 1280 nClasses := fun _ _ => 0
+    let zNC   : Vec nClasses := fun _ => 0
+    let (cHc, nHc) ← pretty B (.batchOp (N := B) (.conv (h := 7) (w := 7) "%hW" "%hb" zHk z1280) (.operand f16.o z7F))
+    let (cHn, nHn) ← bnSiteB B 1280 7 7 mode epsStr "%hg" "%hbt" "hn" nHc
+    let (cHr, nHr) ← pretty B (.batchOp (.swish) (.operand nHn zH7F))
+    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7)) (.operand nHr zH7F))
+    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z1280c))
+    pure { code := cStc ++ cStn ++ cStr ++
+             f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
+             f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
+             f15.code ++ f16.code ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+           stc := nStc, stn := nStn, str := nStr,
+           blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16],
+           hc := nHc, hn := nHn, hr := nHr, gap := nGap, logits := nLog,
+           bns := (nStc, "stn", 32, 112) ::
+             (f1.bns ++ f2.bns ++ f3.bns ++ f4.bns ++ f5.bns ++ f6.bns ++ f7.bns ++ f8.bns ++
+              f9.bns ++ f10.bns ++ f11.bns ++ f12.bns ++ f13.bns ++ f14.bns ++ f15.bns ++
+              f16.bns ++ [(nHc, "hn", 1280, 7)]) }
+
+/-- The 263-input `@efficientnet_fwd` / 361-input `@efficientnet_fwd_eval` argument signature.
+    The stat half is derived from the SAME `bns` the traversal built (never a parallel table), so
+    the eval forward's slots cannot drift out of the order the driver packs `runningBnStats` in. -/
+private def enetFwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses mode epsStr).run' 0
+  let params := (enetSig nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}")
+  let stats := if mode == .train then [] else
+    F.bns.flatMap (fun (_, sp, c, _) => [s!"%{sp}mu: {ty [c]}", s!"%{sp}var: {ty [c]}"])
+  String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats))
+
+set_option maxRecDepth 4000000 in
+/-- **`@efficientnet_fwd` rendered ENTIRELY from the verified AST** — 263 inputs (`%x` plus the 262
+    params in `enetSig` order), returning logits `[B, nClasses]`. Shares `enetFwdChain` with the
+    train step, so it is a byte-identical PREFIX of `efficientnet_train_step.mlir`, ending exactly
+    where the loss begins. Replaces the hand-written emitter in `tests/TestEfficientNetFwd.lean`. -/
+def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses .train epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @efficientnet_fwd({enetFwdSig B nClasses .train epsStr}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── EfficientNet-B0 forward: every line is pretty(verified AST node) ──\n" ++
+  F.code ++
+  s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
+set_option maxRecDepth 4000000 in
+/-- **`@efficientnet_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward,
+    every BN site consuming frozen per-channel running stats (the `bnEval` descriptor, `den` =
+    `batchMap N bnPerChannelEvalTensor3`) instead of reducing statistics out of its activation.
+    Same 262 params in the same order, plus the 98 stat inputs (49 BN layers × μ/var, interleaved
+    per layer in `bnChannels` order): **361 inputs**.
+
+    This is the eval partner of `efficientnet_adam_train_step`, whose returned batch μ/var the
+    driver EMAs into exactly these slots — and both sides of that contract now come off one
+    `bns` list rather than two independently-written ones. -/
+def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @efficientnet_fwd_eval({enetFwdSig B nClasses .eval epsStr}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── EfficientNet-B0 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
+  F.code ++
+  s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
 set_option maxRecDepth 4000000 in
 /-- **The whole-net forward + cotangent + backward traversal, SHARED by the SGD and AdamW renders.**
 
@@ -539,8 +688,9 @@ set_option maxRecDepth 4000000 in
     * `params` — one SSA per parameter in `enetSig` order: the **updated param** at `adam := false`,
       the **un-fused gradient** at `adam := true`;
     * `softmax` — the softmax SSA, which the AdamW render's report-only `%loss` reads;
-    * `bns` — the 49 BN layers as `(BN-input SSA, channels, spatial side)`, in the layout the
-      driver's `bnChannels` and `@efficientnet_fwd_eval` expect.
+    * `bns` — the 49 BN layers as `(BN-input SSA, stat prefix, channels, spatial side)`, taken
+      straight off `enetFwdChain` so the slots this step RETURNS are the slots
+      `@efficientnet_fwd_eval` READS.
 
     One traversal, two tails, for the reason `ViTRender.vitBackAll` has the same shape: duplicating
     the 16-MBConv backward for AdamW would be the double-writer disease one level down, in code
@@ -555,55 +705,38 @@ set_option maxRecDepth 4000000 in
     into `lrStr` (the SGD render, unchanged). `some (α, −α/K, B)` → the label-smoothed cotangent
     with an explicit ÷B, `((softmax − onehot) + α·onehot − α/K)/B`, which is what the AdamW recipe
     trains on. The two are **different functions**, so this is not an optional refinement: a render
-    built without it would fail the tie in a way that looks like a bug in the gradient ops. -/
+    built without it would fail the tie in a way that looks like a bug in the gradient ops.
+
+    The forward half is `enetFwdChain` at `.train`, which `@efficientnet_fwd` also renders — so the
+    forward this differentiates and the forward the driver evals with are one graph by
+    construction, not by inspection (§2a). -/
 private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) :
-    StateM Nat (String × List String × String × List (String × Nat × Nat)) := do
-    -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → bn → swish ═══
-    let zx   : Vec (B * (3*224*224)) := fun _ => 0
-    let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+    StateM Nat (String × List String × String × List (String × String × Nat × Nat)) := do
+    let F : ENetFwd ← enetFwdChain B nClasses .train epsStr
+    let f1 := F.blocks[0]!; let f2 := F.blocks[1]!; let f3 := F.blocks[2]!; let f4 := F.blocks[3]!
+    let f5 := F.blocks[4]!; let f6 := F.blocks[5]!; let f7 := F.blocks[6]!; let f8 := F.blocks[7]!
+    let f9 := F.blocks[8]!; let f10 := F.blocks[9]!; let f11 := F.blocks[10]!
+    let f12 := F.blocks[11]!; let f13 := F.blocks[12]!; let f14 := F.blocks[13]!
+    let f15 := F.blocks[14]!; let f16 := F.blocks[15]!
+    let nStc := F.stc; let nStn := F.stn; let nStr := F.str
+    let nHc := F.hc; let nHn := F.hn; let nGap := F.gap; let nLog := F.logits
     let z32  : Vec 32 := fun _ => 0
-    let z112F : Vec (B * (32*112*112)) := fun _ => 0
     let z112B : Vec (B * (32*(112*112))) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := 112) (w := 112) "%sW" "%sb" zSk z32) (.operand "%x" zx))
-    let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 32) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z32 z32 (.operand nStc z112F))
-    let (cStr, nStr) ← pretty B (.batchOp (.swish) (.operand nStn z112F))
-    -- ═══ forward: 16 MBConv blocks ═══
-    let f1  ← eFwdNoExp   B 32      16 112 3  8 epsStr "b1"  nStr
-    let f2  ← eFwdStrided B 16  96  24  56 3  4 epsStr "b2"  f1.o
-    let f3  ← eFwd        B 24 144  24  56 3  6 epsStr "b3"  f2.o
-    let f4  ← eFwdStrided B 24 144  40  28 5  6 epsStr "b4"  f3.o
-    let f5  ← eFwd        B 40 240  40  28 5 10 epsStr "b5"  f4.o
-    let f6  ← eFwdStrided B 40 240  80  14 3 10 epsStr "b6"  f5.o
-    let f7  ← eFwd        B 80 480  80  14 3 20 epsStr "b7"  f6.o
-    let f8  ← eFwd        B 80 480  80  14 3 20 epsStr "b8"  f7.o
-    let f9  ← eFwdNoSkip  B 80 480 112  14 5 20 epsStr "b9"  f8.o
-    let f10 ← eFwd        B 112 672 112 14 5 28 epsStr "b10" f9.o
-    let f11 ← eFwd        B 112 672 112 14 5 28 epsStr "b11" f10.o
-    let f12 ← eFwdStrided B 112 672 192  7 5 28 epsStr "b12" f11.o
-    let f13 ← eFwd        B 192 1152 192 7 5 48 epsStr "b13" f12.o
-    let f14 ← eFwd        B 192 1152 192 7 5 48 epsStr "b14" f13.o
-    let f15 ← eFwd        B 192 1152 192 7 5 48 epsStr "b15" f14.o
-    let f16 ← eFwdNoSkip  B 192 1152 320 7 3 48 epsStr "b16" f15.o
-    -- ═══ head: 1×1 conv (320→1280) → bn → swish → GAP → dense → softmax-CE cot ═══
-    let z7F   : Vec (B * (320*7*7)) := fun _ => 0
-    let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
+    let z112F : Vec (B * (32*112*112)) := fun _ => 0
+    let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+    let zx   : Vec (B * (3*224*224)) := fun _ => 0
     let z1280 : Vec 1280 := fun _ => 0
     let zH7F  : Vec (B * (1280*7*7)) := fun _ => 0
     let zH7B  : Vec (B * (1280*(7*7))) := fun _ => 0
+    let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
     let z1280c : Vec (B * 1280) := fun _ => 0
     let zWd   : Mat 1280 nClasses := fun _ _ => 0
-    let zNC   : Vec nClasses := fun _ => 0
     -- `zNCb` is the ROW-indexed logit leaf (`rows = 1`, so `B·(1·nClasses)`) that the softmax /
     -- row-back / sub / smoothing nodes all sit at. The two head-dense parameter tails want the
     -- PLAIN batched index `B·nClasses` instead — same vector, non-defeq type — so `dnW`/`dnB`
     -- build that leaf themselves. See `zCc1` for the same wrinkle inside the SE gate.
     let zNCb  : Vec (B * (1 * nClasses)) := fun _ => 0
-    let (cHc, nHc) ← pretty B (.batchOp (N := B) (.conv (h := 7) (w := 7) "%hW" "%hb" zHk z1280) (.operand f16.o z7F))
-    let (cHn, nHn) ← pretty B (.bnBatchF (N := B) (oc := 1280) (h := 7) (w := 7) "%hg" "%hbt" epsStr 0 z1280 z1280 (.operand nHc zH7F))
-    let (cHr, nHr) ← pretty B (.batchOp (.swish) (.operand nHn zH7F))
-    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7)) (.operand nHr zH7F))
-    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z1280c))
     let (cSm, nSm) ← pretty B (.batchOp (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
     let (cD0, nD0) ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
     -- ═══ the cotangent tail. `none` emits NOTHING (so the SGD render is byte-identical); `some`
@@ -661,10 +794,8 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     let (csg, nsg) ← bnG adam B 32 112 112 "%sg" nStc epsStr lrStr nDsr
     let (cst, nst) ← bnBt adam B 32 112 112 "%sbt" lrStr nDsr
     -- ═══ assemble (params in func-arg order: stem, blocks fwd-order, head, dense) ═══
-    let fwdCode := cStc ++ cStn ++ cStr ++
-      f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
-      f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++ f16.code ++
-      cHc ++ cHn ++ cHr ++ cGap ++ cLog ++ cSm ++ cDy
+    -- `F.code` is exactly what `@efficientnet_fwd` renders, so the artifact is its byte-prefix.
+    let fwdCode := F.code ++ cSm ++ cDy
     let bwdCode := cDgi ++ cWfc ++ cbfc ++ cDgp ++ cHsw ++ cHbn ++ cHxb ++ cgh ++ cth ++ cWh ++ cbh ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
       b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++
@@ -675,11 +806,9 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
       b9.names ++ b10.names ++ b11.names ++ b12.names ++ b13.names ++ b14.names ++ b15.names ++
       b16.names ++ [nWh, nbh, ngh, nth] ++ [nWfc, nbfc]
     -- BN layers in the driver's order: stem → each block's (expand?, depthwise, project) → head.
-    let bnList : List (String × Nat × Nat) := [(nStc, 32, 112)] ++
-      f1.bns ++ f2.bns ++ f3.bns ++ f4.bns ++ f5.bns ++ f6.bns ++ f7.bns ++ f8.bns ++
-      f9.bns ++ f10.bns ++ f11.bns ++ f12.bns ++ f13.bns ++ f14.bns ++ f15.bns ++ f16.bns ++
-      [(nHc, 1280, 7)]
-    pure (fwdCode ++ bwdCode, outNames, nSm, bnList)
+    -- Taken straight off the forward chain, so the stat slots this train step RETURNS and the slots
+    -- `@efficientnet_fwd_eval` READS are the same list — not two that happen to agree today.
+    pure (fwdCode ++ bwdCode, outNames, nSm, F.bns)
 
 set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 (full 16-MBConv) SGD train step rendered ENTIRELY from the verified AST**, at
@@ -812,7 +941,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     let mut statCode := ""
     let mut statNames : List String := []
     let mut statTypes : List String := []
-    for (xn, oc, hh) in bnList do
+    for (xn, _sp, oc, hh) in bnList do
       let zb : Vec (B * (oc * (hh * hh))) := fun _ => 0
       let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
       let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
@@ -868,7 +997,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
       code ++ statCode ++ enetAdamConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n",
-      bnList.map (fun t => t.2.1))
+      bnList.map (fun t => t.2.2.1))
   let (inner, bnOc) := go.run' 0
   -- The 49 BN layers each get a dummy `[oc]` input slot, unused by the graph — they exist so the
   -- driver's argument buffer keeps the shape the generic FFI hands it, and the hand-written render
@@ -902,6 +1031,22 @@ end Proofs.StableHLO
 -- from the faithful renderer: the FULL 16-MBConv B0 net (262 params). B=32, nClasses=10, ε=1e-5.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_train_step.mlir"
   (Proofs.StableHLO.efficientnetTrainStepFaithfulV 32 10 "1.0e-5" "0.05" "efficientnet_train_step")
+
+-- Regenerate `verified_mlir/efficientnet_fwd.mlir` (the SGD driver's eval forward) and
+-- `verified_mlir/efficientnet_fwd_eval.mlir` (what the AdamW driver evals with, once the running
+-- stats are threaded) from the SAME `enetFwdChain` the train steps differentiate. These replace the
+-- hand-written emitter in `tests/TestEfficientNetFwd.lean`; that copy is retired to an
+-- `iree-compile` smoke over the committed bytes.
+--
+-- The `.train` artifact is a byte-identical PREFIX of `efficientnet_train_step.mlir`, which
+-- `scripts/regen_verified_mlir.sh check` audits — the check that caught ResNet-34 training a
+-- per-example-BN net and scoring it with batch statistics (§2a). EfficientNet was never skewed that
+-- way (both sides were already batch-BN), and the prefix audit is what now keeps it that way.
+#eval IO.FS.writeFile "verified_mlir/efficientnet_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 32 10 "1.0e-5")
+
+#eval IO.FS.writeFile "verified_mlir/efficientnet_fwd_eval.mlir"
+  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5")
 
 -- The **AdamW** train step — **the artifact `efficientnet-verified-adam` trains on**, and from
 -- 2026-07-28 this `#eval` is its ONLY writer. The hand-written emitter in

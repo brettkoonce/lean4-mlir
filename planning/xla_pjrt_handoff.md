@@ -40,7 +40,11 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | — | *↓ the MobileNetV2 thread (§2f), 2026-07-28 — the last net* |
 | `205cd87` | the four batched-index ops: `BatchableOp.relu6`, `selectMidB`, `depthwiseBias{,Strided}GradB` |
 | `75a9f8e` | `MobileNetV2RenderB.lean` + the tie — **bit-exact**, three controls fire |
-| *(this)* | **the swap — the AdamW scorecard is 6 of 6** |
+| `5920848` | the swap — the AdamW scorecard is 6 of 6 |
+| `9bb00f5` | close ConvNeXt's two weight-gradient gaps — all 180 params `pretty(AST)` |
+| `17413f0` | docs(handoff): §0b per-net leftovers |
+| — | *↓ the forward-artifact thread (§2g), 2026-07-28 — the last five* |
+| *(this)* | **all five `_fwd` artifacts certified; `mobilenetv2_fwd` was the wrong BN world** |
 
 ---
 
@@ -55,10 +59,18 @@ rung 4 (the FPN detector), **device-resident parameters** (two independent multi
 point at it — §2c's 1.46× on R34 and §2e-ter's 13–16% per-step DP overhead on EfficientNet), and the
 executable cache. Read §2d before picking one.
 
-Two named gaps stay open and should be quoted whenever the DP renders are described: **ViT's DP
+**The five forward artifacts are certified too, as of 2026-07-28 — §2g.** `convnext_fwd`,
+`efficientnet_fwd{,_eval}` and `mobilenetv2_fwd{,_eval}` now render `pretty(provenGraph)` off the
+same forward chain their train step differentiates. **That found a live §2a skew**: `mobilenetv2_fwd`
+was batch-BN against a per-example-BN train step, so `mobilenetv2-verified` scored a different net
+than it trained (measured: logits rel **1.86**). Every `verified_mlir/` artifact is now
+`Proofs/`-rendered.
+
+**One named gap stays open** and should be quoted whenever the DP renders are described: **ViT's DP
 render does not execute on this box** (`miopenStatusUnknownError` in the patch-embed weight-grad
-convolution — refuted as a shape or memory problem, see §2a's ViT block), and **ConvNeXt keeps two
-weight-gradient carve-outs** (§5).
+convolution — refuted as a shape or memory problem, see §2a's ViT block). *ConvNeXt's two
+weight-gradient carve-outs were CLOSED on 2026-07-28 (`9bb00f5`, §2f-bis, §5) — an earlier version
+of this line still listed them as open.*
 
 *The MobileNetV2 write-up below (§2f) is kept because its scoping correction — that mnv2 was
 R34-shaped, not EfficientNet-shaped — is the reusable lesson, not because anything is owed.*
@@ -70,7 +82,7 @@ R34-shaped, not EfficientNet-shaped — is the reusable lesson, not because anyt
 Written 2026-07-28 at the end of the AdamW thread. **Nothing here blocks the scorecard**; it is what
 is *not* done on each of the four large nets, ordered by what would bite first.
 
-### ⚠ The two things to do before trusting a long run
+### ⚠ The three things to do before trusting a long run
 
 1. **MobileNetV2 and ConvNeXt have NO training run on their current artifacts.** Both were swapped
    today and the evidence for both is **graph-level only** — a bit-exact tie plus a successful
@@ -81,27 +93,34 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 2. **Only EfficientNet is validated end to end.** It has a 3-epoch XLA-vs-IREE agreement run, a
    2-GPU descent run, and measured wall clock (80 ep ≈ 1 h 35 m on XLA). If you want a long run to
    just work, start there.
+3. **`mobilenetv2-verified`'s published 86.89% is measured through the WRONG forward** and needs
+   re-running (§2g). Its eval artifact was batch-BN while it trained per-example BN — the §2a defect,
+   fixed 2026-07-28. Only the *scoring* was wrong, so the training log itself stands; the accuracy
+   number does not. This is the same footnote §3 already carries for `resnet34-verified`, and it now
+   applies to two nets.
 
 ### Per net
 
 | | AdamW certified | data-parallel | `-xla` trainer | forward artifact | run on current bytes |
 |---|---|---|---|---|---|
-| **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ⚠ `tests/`-rendered | ✅ 3 epochs + 2-GPU |
-| **MobileNetV2** | ✅ | ⚠ renderer supports `replicas`, **no artifact** | ❌ IREE only | ⚠ `tests/`-rendered | ❌ **none** |
-| **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ❌ IREE only | ⚠ `tests/`-rendered | ❌ **none** |
+| **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ✅ `Proofs/` (§2g) | ✅ 3 epochs + 2-GPU |
+| **MobileNetV2** | ✅ | ⚠ renderer supports `replicas`, **no artifact** | ❌ IREE only | ✅ `Proofs/` (§2g — **BN skew fixed**) | ❌ **none** |
+| **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ❌ IREE only | ✅ `Proofs/` (§2g) | ❌ **none** |
 | **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ❌ (and XLA is blocked) | ✅ `Proofs/` | IREE single-GPU |
 
 **MobileNetV2** — no smoke-train (above); no `mobilenetv2_adamdp_train_step.mlir` (the renderer takes
 `replicas` and `mnv2AdamVariant` returns `adamdp`, but no `#eval` writes it, and there is no
 `mobilenetv2-dp-check`); no `-xla` target, which matters because XLA was **4.6×** IREE on
-EfficientNet; `mobilenetv2_fwd{,_eval}` still `tests/`-rendered; and
+EfficientNet; (`mobilenetv2_fwd{,_eval}` were `tests/`-rendered — ✅ fixed, §2g, and the fix
+was a real bug); and
 `MainMobilenetV2Verified.lean:19` still documents itself as *"mean-loss SGD lr=0.3"* against a
 sum-loss graph (effective 9.6) — a docstring fix, the number is tuned and trains.
 
 **ConvNeXt** — no smoke-train on either changed artifact (above); **no DP path whatsoever**, the
-only large net with none; no `-xla` target; `convnext_fwd` still `tests/`-rendered (there is no
-`_fwd_eval` and should not be — LayerNorm means train == eval); and the scalar-LN γ/β render as
-`tensor<1xf32>` where the committed signature says `tensor<f32>`.
+only large net with none; no `-xla` target; (`convnext_fwd` was `tests/`-rendered — ✅ fixed, §2g;
+there is still no `_fwd_eval` and there should not be, LayerNorm means train == eval, and
+`fwd-tie convnext --eval` now refuses outright rather than looking for a missing file); and the
+scalar-LN γ/β render as `tensor<1xf32>` where the committed signature says `tensor<f32>`.
 
 **ViT** — the one with a *hard* blocker. Its DP render is numerically ungated because the graph will
 not execute on this box: `miopenStatusUnknownError` in the patch-embed weight-grad convolution. Both
@@ -120,9 +139,11 @@ forward artifacts are all `Proofs/`-rendered.
   `vit-adam-tie`, `cifar8-adam-tie`, `sgd-render-tie` (§4). `efficientnet`/`convnext`/`mobilenetv2`
   delete first. It only bites on a re-run with different arguments, which is exactly what running a
   control looks like. Grep for `(cached vmfb)`.
-* **Five forward artifacts are still hand-written** — `mobilenetv2_fwd{,_eval}`,
-  `efficientnet_fwd{,_eval}`, `convnext_fwd`. That is the §2a *provenance* axis, not the
-  double-writer axis (the audit is at one-writer-each). It is one class of work, not five.
+* ~~**Five forward artifacts are still hand-written**~~ ✅ **DONE 2026-07-28 — §2g.** All five now
+  render `pretty(provenGraph)`, each off the same forward chain its train step differentiates, each
+  swap licensed by a numeric tie that was verified to fail. The §2a *provenance* axis is closed:
+  **every** `verified_mlir/` artifact is `Proofs/`-rendered. It turned up one real bug —
+  `mobilenetv2_fwd` was the wrong BN world.
 
 ---
 
@@ -166,10 +187,13 @@ verified to fail. The writer audit reports **one writer per artifact**. Every wh
 render in the repo is now certified; the hand-written emitters are retired to `iree-compile`
 smokes that read the committed bytes.
 
-**Four artifacts moved from `tests/` into `Proofs/Codegen/`** and now render as
-`pretty(provenGraph)` — `resnet34_fwd`, `resnet34_fwd_eval`, `cifar8_adam_train_step`, and (already
-there) `resnet34_train_step`. The optimizer itself is now a proven op family rather than a
-hand-written string emitter. See §2a.
+**Every artifact is `Proofs/`-rendered.** Four moved out of `tests/` in §2a (`resnet34_fwd`,
+`resnet34_fwd_eval`, `cifar8_adam_train_step`, and — already there — `resnet34_train_step`); the
+last five followed on 2026-07-28 (§2g: `convnext_fwd`, `efficientnet_fwd{,_eval}`,
+`mobilenetv2_fwd{,_eval}`). The optimizer itself is a proven op family rather than a hand-written
+string emitter. `scripts/regen_verified_mlir.sh check` reports **55 artifacts, one writer each**,
+with **four** forward ⊂ train-step prefix pairs green — the check that caught ResNet-34 scoring a
+net it had not trained, and, in §2g, MobileNetV2 doing the same thing.
 
 **The batched renderers are honest** (§2b). EfficientNet and the new batch-BN ResNet-34 AdamW train
 step both sit at the batched index `N := B`, so the ten batch-*reducing* `den`s describe what the
@@ -195,8 +219,17 @@ LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
 # regenerate + audit verified_mlir/  (the canonical entry point; did not exist before §2a)
 scripts/regen_verified_mlir.sh          # or `check` to audit without writing
 
+# the FORWARD ties (§2g) — one harness, every net, XLA-linked so it compiles in seconds.
+#   fwd-tie <slug> [--eval] [<pathA> [<pathB>]]; defaults to the committed artifact vs itself.
+lake build fwd-tie
+git show 17413f0:verified_mlir/convnext_fwd.mlir > /tmp/retired.mlir
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/fwd-tie convnext /tmp/retired.mlir verified_mlir/convnext_fwd.mlir
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/fwd-tie efficientnet --eval   # self-tie smoke
+#   ^ `--eval` ties @<slug>_fwd_eval (params + 2 running-stat inputs per BN layer). ConvNeXt has no
+#     _fwd_eval and the harness refuses --eval for it: LayerNorm ⇒ train == eval.
+
 # the render ties (§2a, §2b, §2e). The AdamW ones need a GPU; TestBatchedEmitTie is CPU-only.
-lake env lean tests/TestBatchedEmitTie.lean            # 13 emit ties + 16 grad-prefix checks
+lake env lean tests/TestBatchedEmitTie.lean            # 16 emit ties + 23 grad-prefix checks
 lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie
 lake build cifar8-adam-tie   && .lake/build/bin/cifar8-adam-tie
 # EfficientNet (§2e) — IREE, not XLA, because efficientnet-verified-adam is an IREE binary
@@ -298,7 +331,8 @@ are measured against. Current state: the writer audit is at **0** (§2a-quinquie
 scorecard is **4 of 6** — cifar8 §2a, resnet34 §2b-ter, vit §2a-quinquies-follow-on, efficientnet
 §2e; `convnext` and `mobilenetv2` remain.*
 
-**Still `tests/`-rendered:** `mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}`, `convnext_fwd`,
+**Still `tests/`-rendered** *(as of when §2a closed — all five were moved on 2026-07-28, §2g)*:
+`mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}`, `convnext_fwd`,
 and every `_adam_train_step` except cifar8 **and resnet34** (§2b-ter). Counting writers across all
 50 artifacts: **21 `Proofs/`-only, 22 `tests/`-only, 4 contested.**
 
@@ -1308,6 +1342,114 @@ statistics give a `bnstat` region that pins the forward **bit-exactly**. Derive 
 the traversal that computes them, never from a parallel table (§2e — a misaligned slot is silent).
 And gate the **spread** as well as the magnitude (§2f-bis).
 
+### 2g. The five forward artifacts ✅ DONE 2026-07-28 — and it found a live §2a skew
+
+`convnext_fwd`, `efficientnet_fwd{,_eval}` and `mobilenetv2_fwd{,_eval}` were the last
+`tests/`-rendered artifacts. All five now render `pretty(provenGraph)` off the **same forward chain
+their train step differentiates**, and `scripts/regen_verified_mlir.sh check` reports **55 artifacts,
+one writer each** with the prefix audit green on four nets. The §2a provenance axis is closed.
+
+**The point is not provenance for its own sake.** A separately-written forward can silently be a
+different function from the one the trainer optimises — and one of these was:
+
+#### ▶ `mobilenetv2_fwd` was the WRONG BN WORLD — the §2a defect, still live
+
+| | BN reduce | n | |
+|---|---|---|---|
+| retired `mobilenetv2_fwd` (hand-written) | `[0,2,3]`, 104 sites | B·H·W | **batch** BN |
+| `mobilenetv2_train_step` (certified, `Proofs/`) | `[2,3]` | H·W | **per-example** BN |
+
+So `mobilenetv2-verified` *trained* a per-example-BN net and *scored* it with batch statistics —
+byte-for-byte the ResNet-34 bug §2a found on 2026-07-27, on a second net, uncaught for as long.
+The old emitter's own docstring said "matches the reference's batch-norm", which is what made it
+look deliberate.
+
+Measured on one shared (θ, x) with the driver's real He init, `lake build fwd-tie`:
+
+| | max rel | bit-exact logits |
+|---|---|---|
+| retired (batch BN) vs certified (per-example BN) | **1.857** | **0/320** |
+| certified vs ITSELF — the determinism floor | 0 | **320/320** |
+
+A relative difference above 1 means the logits disagree in *sign*. The bit-exact floor is what makes
+that graph-attributable rather than backend noise. **`runs/mobilenetv2_verified_crop_gpu0.log`'s
+86.89% therefore went through the wrong forward** and needs re-running (§0b).
+
+`mobilenetv2_fwd_eval` was NOT affected and ties **bit-exact**: it is frozen-stat affine BN, which
+performs no reduction, so it is the same graph in either BN world. EfficientNet was not skewed
+either — both its sides were already batch-BN — and ConvNeXt cannot be, being LayerNorm.
+
+#### The results
+
+| artifact | tie vs the retired render | prefix of its train step |
+|---|---|---|
+| `convnext_fwd` | **BIT-EXACT 320/320** | ✅ 1192 lines |
+| `efficientnet_fwd` | **BIT-EXACT 320/320** | ✅ 1935 lines |
+| `efficientnet_fwd_eval` | **BIT-EXACT 320/320** | n/a (frozen stats) |
+| `mobilenetv2_fwd` | ❌ **rel 1.857 — the bug above** | ✅ 1614 lines |
+| `mobilenetv2_fwd_eval` | **BIT-EXACT 320/320** | n/a (frozen stats) |
+
+Interfaces are positionally identical (arity, arg + return types) on all five; ConvNeXt and
+EfficientNet match down to the argument NAMES, mnv2's 210 params do not (`%Ws` vs `%sW`) — the
+104 stat names do.
+
+**Gate 1 held everywhere**: every train-step artifact re-rendered **byte-identical** through the
+refactor — ConvNeXt ×2, EfficientNet ×5, MobileNetV2 ×3 — which is what proves the chain extraction
+and the mode threading inert. The only bytes that moved in `verified_mlir/` are the five forwards.
+
+#### What got built
+
+- **`BnMode`** (`StableHLO.lean`) — `.train | .eval`, the batched-index peer of `R34Bn`, shared by
+  the EfficientNet and MobileNetV2 chains. One BN-site helper per renderer (`bnSiteB`, `bnSiteP`) is
+  the *only* place the two worlds are chosen between, so the two artifacts cannot drift apart.
+- **`BatchableOp.bnEval`** — inference BN at the batched index, the frozen-stats peer of the
+  own-ctor `bnBatchF`. **A descriptor is legal here and that is the content**: γ/β/μ/var are the
+  driver's running stats, graph inputs shared by the whole batch, i.e. batch-INVARIANT data (§4's
+  rule). `den_batchOp_bnEval` says `den = batchMap N (bnPerChannelEvalTensor3 …)` — every example
+  normalised by the SAME frozen stats, independently, which is the formal statement of
+  "eval is class-batch-independent". `bnBatchF` needs its own constructor precisely because it
+  *reduces* across the batch and `batchMap` cannot express that. Four sites, and it emits
+  byte-for-byte what `bnPerChannelEvalF` emits — `TestBatchedEmitTie` is now **16 emit ties + 23
+  grad-prefix checks**, and the new case was verified to go red.
+- **`tests/TestFwdTie.lean` → `lake build fwd-tie`** — one net-agnostic forward tie replacing
+  `resnet34-fwd-tie` (which was it with one net hardcoded; `fwd-tie resnet34` is the same check).
+  Two improvements: it **deletes its `.vmfb` before every compile** (§4's false-PASS hazard, which
+  bites exactly when running a control), and it **counts bit-exact coordinates**, because
+  `Float.toString` prints a genuine 3e-8 as `0.000000`.
+- **The prefix audit now covers four nets**, not one, and is anchored on the first `%v0 = ` line
+  rather than a fixed line count — ConvNeXt's train step emits two header constants its forward
+  does not, so the fixed offset only ever worked for R34. Verified to fail: flipping one `rsqrt` in
+  `mobilenetv2_fwd` reports the exact diverging body line.
+
+#### Controls — every green tie was shown capable of going red
+
+| net | control | result |
+|---|---|---|
+| ConvNeXt | 22 LayerNorm ε, 1e-6 → 1e-3 | **fires**, rel 5.9e-2, 0/320 |
+| ConvNeXt | GELU cubic coeff 0.044715 → 0.05 | **fires**, rel 3.7e-1, 0/320 |
+| EfficientNet | 49 BN ε, 1e-5 → 1e-3 | **fires**, rel 4.4e-1, 0/320 |
+| EfficientNet | **stat-slot misalignment** — `b13en` ↔ `b14en` reads swapped | **fires**, rel 5.6e-1 |
+| ConvNeXt | GAP divisor 49 → 48 | ⚠ **does NOT fire** — see below |
+
+The stat-slot control is the valuable one: §2e names "a misaligned stat slot is silent" as a hazard
+you have to be careful about, and it is now an executable check. Getting it right took two tries —
+renaming the parameter in the signature *and* at the use site is an alpha-rename and came back
+bit-identical. **The func-arg POSITION is what binds a statistic to a slot.**
+
+And the GAP control is a genuine finding rather than a gap in the gate: ConvNeXt's head LayerNorm
+immediately normalises the pooled features, and LN is scale-invariant up to ε, so rescaling the GAP
+divisor is absorbed before the dense layer (rel 5.1e-5). It is a near-identity perturbation of *that
+net*. Same lesson as §2d.1's reversed-bs32 control: **a control that produces no difference cannot
+calibrate one** — pick a different perturbation rather than loosening the gate.
+
+#### What is NOT established
+
+The ties compare **logits only** — 320 floats, not a whole-net fingerprint like the AdamW ties'
+`bnstat` region. A forward render has no other output to gate. That is strong (a mis-wiring at
+layer k perturbs every logit) but it is not the AdamW ties' 12M-float comparison, so say
+"the two renders compute the same logits", not "the same intermediates". The prefix audit is what
+covers the intermediates, and only for the `.train` artifacts.
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
@@ -1757,6 +1899,13 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   twin of the `*SgdB_eq_grad` theorems). **Add a case for every new batched form**; it is what
   catches an emitter that reads its width off the SHlo index again. It was verified to actually fail
   by deliberately breaking `relu`'s emit case.
+- **`lake env lean tests/X.lean` does NOT rebuild an edited IMPORT.** It links the committed
+  `.olean`s of everything `X` imports, so editing `StableHLO.lean` and re-running the test silently
+  exercises the OLD emitter. Found while running a negative control on the new `bnEval` emit tie:
+  the perturbation was in the file, the guard stayed green, and the guard was right — it had never
+  seen the change. `lake build LeanMlir.Proofs.Codegen.StableHLO` first, then run the test. This is
+  the `lake env lean` cousin of the exe-cache trap, and it makes "I broke it and the guard stayed
+  green" worthless as evidence unless you rebuilt.
 - **A `#eval`-based test must fail via `throw`, not `IO.Process.exit 1`.** Under `#eval` the
   elaborator buffers the eval's output and prints it only after the eval returns, so `exit` discards
   **every** diagnostic — you get a bare non-zero status and no idea what broke. Flushing does not
@@ -1884,6 +2033,12 @@ and the `resnet34`/`vit`/`efficientnet` AdamW renders' `%loss`. **The R34 one sh
 the smoothed CE its own cotangent implies — and only the numeric tie found it, because nothing on a
 gradient path touches it and no theorem covers it. Treat every such carve-out as unverified text
 that needs its own numeric check, not as a harmless annotation.
+
+On the forward artifacts (§2g): `pretty(provenGraph)` and the prefix audit together say the graph
+the driver *evals* with is the graph the train step *differentiates* — which is a structural claim,
+and the one that was false for `resnet34_fwd` and `mobilenetv2_fwd`. The numeric ties behind the
+five swaps compare **logits only** (320 floats), because a forward render returns nothing else; they
+are not the AdamW ties' whole-net fingerprint. Say "the same logits", not "the same intermediates".
 
 A note on what the §2b tie does and does not establish. It says the batched render computes what the
 hand-written render computes — forward to the bit, backward to norm-relative 1e-6. It does **not**

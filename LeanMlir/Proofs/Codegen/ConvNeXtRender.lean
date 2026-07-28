@@ -213,6 +213,77 @@ private def allParams : List (String × List Nat) := Id.run do
   return ps
 
 -- ════════════════════════════════════════════════════════════════
+-- § The shared forward chain (the forward render and both train steps emit this)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Every SSA name the ConvNeXt-T forward produces. `convNextFwdFaithfulV` returns just `logits`;
+    the train steps additionally consume the block records, the two downsample names and the
+    head's `gap`/`hn` on the way back. -/
+private structure CFwd where
+  code    : String                  -- stem → 4 stages → GAP → LN → dense, in emission order
+  blksAll : Array (Array FNames)    -- the [3,3,9,3] block forwards, stage-major, forward order
+  downLn  : Array String            -- the 3 downsample LN outputs (the strided conv's input)
+  downIn  : Array String            -- the 3 downsample inputs (the LN's input)
+  gap     : String                  -- global-average-pool output
+  hn      : String                  -- head LN output (= dense input)
+  logits  : String                  -- dense output
+  deriving Inhabited
+
+set_option maxRecDepth 8000 in
+/-- **The full ConvNeXt-T `[3,3,9,3]` forward as `pretty` of the verified AST.** 4×4/s4 patchify
+    stem (3→96, 224→56) → 4 stages at 56/28/14/7 with 2×2/s2 downsamples between them → GAP(7×7)
+    → head LN → dense(768→10). Every emitted line is `pretty` of a verified `SHlo` node.
+
+    **There is no train/eval mode here, and there should not be** — ConvNeXt normalises with
+    LayerNorm, which reduces over the channel/spatial axes of ONE example and never over the batch.
+    So the forward is already class-batch-independent: train == eval, and `@convnext_fwd` is the
+    only forward artifact this net needs (unlike the BN nets, which need a frozen-stats peer). -/
+private def convNextFwdChain : StateM Nat CFwd := do
+  let (cS, stem) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
+    (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
+  let mut fwd := cS
+  let mut cur := stem
+  let mut blksAll : Array (Array FNames) := #[]
+  let mut downLn : Array String := #[]
+  let mut downIn : Array String := #[]
+  for si in [0:4] do
+    let c := cDims[si]!; let e := 4 * c; let h := cSpats[si]!
+    let mut blks : Array FNames := #[]
+    for j in [0:cDepths[si]!] do
+      let (code, bn) ← fwdBlock s!"s{si}b{j}" cur c e h
+      fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
+    blksAll := blksAll.push blks
+    if si < 3 then
+      downIn := downIn.push cur
+      let (code, n, o) ← fwdDown s!"d{si}" cur c cDims[si+1]! cSpats[si+1]!
+      fwd := fwd ++ code; downLn := downLn.push n; cur := o
+  let (cG, gap) ← pretty cBS (.gapF (c := 768) (h := 7) (w := 7) (.operand cur zV))
+  let (cHn, hn) ← pretty cBS (.bnF "%hng" "%hnbt" cEPS 0 0 0 (.operand gap (zV : Vec 768)))
+  let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat 768 10) zV (.operand hn zV))
+  pure { code := fwd ++ cG ++ cHn ++ cLog,
+         blksAll := blksAll, downLn := downLn, downIn := downIn,
+         gap := gap, hn := hn, logits := logits }
+
+set_option maxRecDepth 8000 in
+/-- **`@convnext_fwd` rendered ENTIRELY from the verified AST** — the peer of the train-step
+    render, sharing its forward chain and its 180-parameter signature. Takes `%x` plus the 180
+    params in `allParams` (= func-arg) order (181 inputs) and returns logits `[32, 10]`.
+
+    This replaces the independent hand-written string emitter in `tests/TestConvNeXtFwd.lean`: the
+    forward the driver evals is now the same graph the train step differentiates, **by construction
+    rather than by inspection**. Because it shares the chain, the emitted body is a byte-identical
+    PREFIX of `convnext_train_step.mlir`'s, ending exactly where the loss begins — which is what
+    `scripts/regen_verified_mlir.sh check` audits. -/
+def convNextFwdFaithfulV (funcName : String := "convnext_fwd") : String := Id.run do
+  let F : CFwd := convNextFwdChain.run' 0
+  let argSig := String.intercalate ", "
+    (("%x: " ++ ty [cBS, 3*224*224]) :: allParams.map (fun (nm, d) => s!"%{nm}: {ty d}"))
+  return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [cBS,10]} " ++ "{\n" ++
+    "    // ── ConvNeXt-T forward: every line is pretty(verified AST node) ──\n" ++
+    F.code ++
+    s!"    return {F.logits} : {ty [cBS,10]}\n" ++ "  }\n}\n"
+
+-- ════════════════════════════════════════════════════════════════
 -- § The whole-net renderer
 -- ════════════════════════════════════════════════════════════════
 
@@ -234,31 +305,17 @@ set_option maxRecDepth 8000 in
     read it, but `.operand` is a leaf that emits nothing, so the fresh-name sequence is unchanged. -/
 private def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none) :
     StateM Nat (String × List (String × String) × String) := do
-    -- ═══ forward ═══
-    let (cS, stem) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
-      (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
-    let mut fwd := cS
-    let mut cur := stem
-    let mut blksAll : Array (Array FNames) := #[]
-    let mut downLn : Array String := #[]
-    let mut downIn : Array String := #[]
-    for si in [0:4] do
-      let c := cDims[si]!; let e := 4 * c; let h := cSpats[si]!
-      let mut blks : Array FNames := #[]
-      for j in [0:cDepths[si]!] do
-        let (code, bn) ← fwdBlock s!"s{si}b{j}" cur c e h
-        fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
-      blksAll := blksAll.push blks
-      if si < 3 then
-        downIn := downIn.push cur
-        let (code, n, o) ← fwdDown s!"d{si}" cur c cDims[si+1]! cSpats[si+1]!
-        fwd := fwd ++ code; downLn := downLn.push n; cur := o
-    let (cG, gap) ← pretty cBS (.gapF (c := 768) (h := 7) (w := 7) (.operand cur zV))
-    let (cHn, hn) ← pretty cBS (.bnF "%hng" "%hnbt" cEPS 0 0 0 (.operand gap (zV : Vec 768)))
-    let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat 768 10) zV (.operand hn zV))
-    let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand logits (zV : Vec 10))))
+    -- ═══ forward — the SAME chain `convNextFwdFaithfulV` emits, so `@convnext_fwd` and the two
+    --     train steps cannot drift into computing different functions (§2a) ═══
+    let F : CFwd ← convNextFwdChain
+    let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (zV : Vec 10))))
     let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (zV : Vec 10)) (.operand "%onehot" zV))
-    fwd := fwd ++ cG ++ cHn ++ cLog ++ cSm ++ cSub
+    let blksAll := F.blksAll
+    let downLn := F.downLn
+    let downIn := F.downIn
+    let gap := F.gap
+    let hn := F.hn
+    let fwd := F.code ++ cSm ++ cSub
     -- ═══ the cotangent. `none` keeps the SGD render's hand-written `%dy` divide byte-for-byte;
     --     `some` appends the label-smoothing chain, every line `pretty` of a verified node. ═══
     let (cDyC, dyName) ← match smooth with
@@ -463,6 +520,17 @@ end Proofs.StableHLO
 -- Regenerate verified_mlir/convnext_train_step.mlir from the faithful renderer (BS=32, ε=1e-6, lr=0.1).
 #eval IO.FS.writeFile "verified_mlir/convnext_train_step.mlir"
   (Proofs.StableHLO.convNextTrainStepFaithfulV "convnext_train_step")
+
+-- Regenerate `verified_mlir/convnext_fwd.mlir` — what `convnext-smooth` certifies through, and the
+-- eval forward for the ConvNeXt trainers — from the SAME `convNextFwdChain` the train steps
+-- differentiate. This replaces the independent hand-written emitter in `tests/TestConvNeXtFwd.lean`;
+-- that copy is retired to an `iree-compile` smoke over the committed bytes.
+--
+-- **ConvNeXt needs no `_fwd_eval` peer and must not grow one.** LayerNorm reduces within one
+-- example, never over the batch, so this forward is already class-batch-independent — the very
+-- property `@resnet34_fwd_eval` / `@efficientnet_fwd_eval` exist to recover for the BN nets.
+#eval IO.FS.writeFile "verified_mlir/convnext_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdFaithfulV "convnext_fwd")
 
 -- The **AdamW** train step — **the artifact `convnext-verified-adam` trains on**, and from
 -- 2026-07-28 this `#eval` is its ONLY writer. The hand-written emitter in

@@ -40,6 +40,15 @@ structure MBFwd where
   dn : String        -- depthwise BN output (= depthwise-relu6 pre-activation)
   dr : String        -- depthwise relu6 output (= project input)
   pc : String        -- project conv output (= project-BN input)
+  /-- The block's BN layers in forward order, `(stat prefix, channels, spatial side)`. The eval
+      forward turns each into a `%{prefix}mu`/`%{prefix}var` input pair; `MobileNetV2RenderB`'s
+      AdamW step hands the matching batch μ/var back in the SAME order (it walks the same block
+      list). Order is expand-BN → depthwise-BN → project-BN, with the expand entry ABSENT for the
+      no-expand block b1 — the layout `mobilenetv2Verified.bnChannels` is listed in, which is how
+      the driver packs `runningBnStats`. A misaligned slot is SILENT: the arities still match and
+      the wrong layer's statistics simply flow into the wrong site (§2e). -/
+  bns : List (String × Nat × Nat)
+  deriving Inhabited
 
 /-- Backward result: code, the dx cotangent to the previous block, and the block's param-update
     output SSA names in func-arg order. -/
@@ -53,9 +62,29 @@ structure MBBack where
 --   inverted residual: expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6 → project(1×1)→BN
 -- ════════════════════════════════════════════════════════════════
 
+/-- One BN site at the PER-EXAMPLE index — the `ResNet34Render.bnSite` peer. `statP` is the
+    running-stat input prefix (`%{statP}mu` / `%{statP}var`), used only in `.eval` mode; in
+    `.train` mode the statistics are reduced out of `xin` and `statP` only names the slot.
+
+    This is the ONLY place the two BN worlds are chosen between, and it is the fix for a live
+    instance of the §2a bug: until 2026-07-28 `verified_mlir/mobilenetv2_fwd.mlir` was a
+    hand-written **batch**-BN render (reduce `[0,2,3]`, n = B·H·W) while the
+    `mobilenetv2_train_step.mlir` it partners normalises **per example** (reduce `[2,3]`,
+    n = H·W) — so `mobilenetv2-verified` trained one function and scored another. -/
+private def bnSiteP (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName statP xin : String) :
+    StateM Nat (String × String) := do
+  let zc  : Vec oc := fun _ => 0
+  let zin : Vec (oc*hh*ww) := fun _ => 0
+  match mode with
+  | .train => pretty B (.bnPerChannelF (oc := oc) (h := hh) (w := ww)
+                          gName btName epsStr 0 zc zc (.operand xin zin))
+  | .eval  => pretty B (.bnPerChannelEvalF (oc := oc) (h := hh) (w := ww)
+                          gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc
+                          (.operand xin zin))
+
 /-- **STRIDED inverted-residual forward** (b1/b3/b5/b6): expand at the input `2hh×2ww`, depthwise
     downsamples `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM Nat MBFwd := do
+private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -67,19 +96,20 @@ private def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) : Stat
   let zdb  : Vec (mid*hh*ww) := fun _ => 0
   let zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%We{p}" s!"%be{p}" zke zmid (.operand xName zxin))
-  let (cEn, nEn) ← pretty B (.bnPerChannelF (oc := mid) (h := 2*hh) (w := 2*ww) s!"%ge{p}" s!"%bte{p}" epsStr 0 zmid zmid (.operand nEc zeb))
+  let (cEn, nEn) ← bnSiteP B mid (2*hh) (2*ww) mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
   let (cDc, nDc) ← pretty B (.depthwiseStridedF (h := hh) (w := ww) s!"%Wd{p}" s!"%bd{p}" zdk zmid (.operand nEr zeb))
-  let (cDn, nDn) ← pretty B (.bnPerChannelF (oc := mid) (h := hh) (w := ww) s!"%gd{p}" s!"%btd{p}" epsStr 0 zmid zmid (.operand nDc zdb))
+  let (cDn, nDn) ← bnSiteP B mid hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zdb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" s!"%bp{p}" zkp zoc (.operand nDr zdb))
-  let (cPn, nPn) ← pretty B (.bnPerChannelF (oc := oc) (h := hh) (w := ww) s!"%gp{p}" s!"%btp{p}" epsStr 0 zoc zoc (.operand nPc zob))
+  let (cPn, nPn) ← bnSiteP B oc hh ww mode epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc }
+         o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         bns := [(s!"b{p}en", mid, 2*hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
 /-- **STRIDE-1 inverted-residual forward** (b2/b4): everything at `hh×ww`, with an `addV` skip on the
     block input (ic = oc). -/
-private def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM Nat MBFwd := do
+private def irFwd (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -90,16 +120,17 @@ private def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM Nat 
   let zeb  : Vec (mid*hh*ww) := fun _ => 0
   let zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%We{p}" s!"%be{p}" zke zmid (.operand xName zxin))
-  let (cEn, nEn) ← pretty B (.bnPerChannelF (oc := mid) (h := hh) (w := ww) s!"%ge{p}" s!"%bte{p}" epsStr 0 zmid zmid (.operand nEc zeb))
+  let (cEn, nEn) ← bnSiteP B mid hh ww mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
   let (cDc, nDc) ← pretty B (.depthwiseF (h := hh) (w := ww) s!"%Wd{p}" s!"%bd{p}" zdk zmid (.operand nEr zeb))
-  let (cDn, nDn) ← pretty B (.bnPerChannelF (oc := mid) (h := hh) (w := ww) s!"%gd{p}" s!"%btd{p}" epsStr 0 zmid zmid (.operand nDc zeb))
+  let (cDn, nDn) ← bnSiteP B mid hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zeb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" s!"%bp{p}" zkp zoc (.operand nDr zeb))
-  let (cPn, nPn) ← pretty B (.bnPerChannelF (oc := oc) (h := hh) (w := ww) s!"%gp{p}" s!"%btp{p}" epsStr 0 zoc zoc (.operand nPc zob))
+  let (cPn, nPn) ← bnSiteP B oc hh ww mode epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   let (cA, nA) ← pretty B (.addV (.operand nPn zob) (.operand xName zob))
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn ++ cA,
-         o := nA, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc }
+         o := nA, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         bns := [(s!"b{p}en", mid, hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
 -- ════════════════════════════════════════════════════════════════
 -- § Block backward + param SGD (project → depthwise → expand; dyOut → project-BN out directly)
@@ -195,7 +226,7 @@ private def irBack (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
 /-- **NO-EXPAND inverted-residual forward** (b1): depthwise(stride-1, on `ic` channels)→BN→relu6
     → project(1×1 ic→oc)→BN. NO expand, NO skip. `f.er` = the depthwise INPUT (= block input
     `xName`), `f.dr` = the project input. (`ec`/`en` are unused for this block kind.) -/
-private def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) : StateM Nat MBFwd := do
+private def irFwdNoExp (B ic oc hh : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat MBFwd := do
   let ww := hh
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -204,12 +235,14 @@ private def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) : StateM Nat
   let zib  : Vec (ic*hh*ww) := fun _ => 0
   let zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cDc, nDc) ← pretty B (.depthwiseF (h := hh) (w := ww) s!"%Wd{p}" s!"%bd{p}" zdk zic (.operand xName zib))
-  let (cDn, nDn) ← pretty B (.bnPerChannelF (oc := ic) (h := hh) (w := ww) s!"%gd{p}" s!"%btd{p}" epsStr 0 zic zic (.operand nDc zib))
+  let (cDn, nDn) ← bnSiteP B ic hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zib))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := ic) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" s!"%bp{p}" zkp zoc (.operand nDr zib))
-  let (cPn, nPn) ← pretty B (.bnPerChannelF (oc := oc) (h := hh) (w := ww) s!"%gp{p}" s!"%btp{p}" epsStr 0 zoc zoc (.operand nPc zob))
+  let (cPn, nPn) ← bnSiteP B oc hh ww mode epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn, ec := xName, en := xName, er := xName, dc := nDc, dn := nDn, dr := nDr, pc := nPc }
+         o := nPn, ec := xName, en := xName, er := xName, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         -- NO expand entry: b1 has two BN layers, not three.
+         bns := [(s!"b{p}dn", ic, hh), (s!"b{p}pn", oc, hh)] }
 
 /-- **NO-EXPAND inverted-residual backward + 8 param SGD.** project-BN-back(dyOut) → project-conv-back
     → depthwise relu6 mask → depthwise-BN-back → depthwise-back → dx (= block input grad, `ic` ch).
@@ -250,7 +283,7 @@ private def irBackNoExp (B ic oc hh : Nat) (epsStr lrStr p xName : String)
 
 /-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6
     → project(1×1)→BN. Everything at `hh×ww`; `ic ≠ oc` so NO skip (block output = project-BN out). -/
-private def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM Nat MBFwd := do
+private def irFwdNoSkip (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) : StateM Nat MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -261,15 +294,16 @@ private def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) : State
   let zeb  : Vec (mid*hh*ww) := fun _ => 0
   let zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%We{p}" s!"%be{p}" zke zmid (.operand xName zxin))
-  let (cEn, nEn) ← pretty B (.bnPerChannelF (oc := mid) (h := hh) (w := ww) s!"%ge{p}" s!"%bte{p}" epsStr 0 zmid zmid (.operand nEc zeb))
+  let (cEn, nEn) ← bnSiteP B mid hh ww mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
   let (cDc, nDc) ← pretty B (.depthwiseF (h := hh) (w := ww) s!"%Wd{p}" s!"%bd{p}" zdk zmid (.operand nEr zeb))
-  let (cDn, nDn) ← pretty B (.bnPerChannelF (oc := mid) (h := hh) (w := ww) s!"%gd{p}" s!"%btd{p}" epsStr 0 zmid zmid (.operand nDc zeb))
+  let (cDn, nDn) ← bnSiteP B mid hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zeb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" s!"%bp{p}" zkp zoc (.operand nDr zeb))
-  let (cPn, nPn) ← pretty B (.bnPerChannelF (oc := oc) (h := hh) (w := ww) s!"%gp{p}" s!"%btp{p}" epsStr 0 zoc zoc (.operand nPc zob))
+  let (cPn, nPn) ← bnSiteP B oc hh ww mode epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc }
+         o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         bns := [(s!"b{p}en", mid, hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
 /-- **EXPAND-NO-SKIP stride-1 backward + 12 param SGD.** == `irBack` but NO skip fan-in: the dx to
     the previous block is the expand-conv-back directly (no `addV` with dyOut). -/
@@ -357,12 +391,12 @@ def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) : String :
     let (cStn, nStn) ← pretty B (.bnPerChannelF (oc := 16) (h := 112) (w := 112) "%gs" "%bts" epsStr 0 z16 z16 (.operand nStc z112))
     let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
     -- ═══ forward: 6 inverted-residual blocks (ic, mid, oc, outH) ═══
-    let f1 ← irFwdStrided B 16  64  24 56 epsStr "1" nStr
-    let f2 ← irFwd        B 24  96  24 56 epsStr "2" f1.o
-    let f3 ← irFwdStrided B 24  96  32 28 epsStr "3" f2.o
-    let f4 ← irFwd        B 32 128  32 28 epsStr "4" f3.o
-    let f5 ← irFwdStrided B 32 128  64 14 epsStr "5" f4.o
-    let f6 ← irFwdStrided B 64 256  64  7 epsStr "6" f5.o
+    let f1 ← irFwdStrided B 16  64  24 56 .train epsStr "1" nStr
+    let f2 ← irFwd        B 24  96  24 56 .train epsStr "2" f1.o
+    let f3 ← irFwdStrided B 24  96  32 28 .train epsStr "3" f2.o
+    let f4 ← irFwd        B 32 128  32 28 .train epsStr "4" f3.o
+    let f5 ← irFwdStrided B 32 128  64 14 .train epsStr "5" f4.o
+    let f6 ← irFwdStrided B 64 256  64  7 .train epsStr "6" f5.o
     -- ═══ head: 1×1 conv (64→128) → BN → relu6 → GAP(7×7) → dense(128→nClasses) → softmax-CE cot ═══
     let z7   : Vec (64*7*7) := fun _ => 0
     let zHk  : Kernel4 128 64 1 1 := fun _ _ _ _ => 0
@@ -447,6 +481,135 @@ def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) : String :
 -- § The FULL 17-block paper-spec renderer
 -- ════════════════════════════════════════════════════════════════
 
+/-- Every SSA name the 17-block MobileNetV2 forward produces, plus the 52-entry BN stat layout.
+    `mnv2Fwd{,Eval}FaithfulV` return just `logits`; the train step additionally consumes the stem,
+    head and per-block names on the way back. -/
+structure MNV2Fwd where
+  code   : String            -- stem -> 17 blocks -> head -> GAP -> dense, in emission order
+  stc    : String            -- stem conv out (= stem BN input)
+  stn    : String            -- stem BN out (= stem relu6 pre-act)
+  str    : String            -- stem relu6 out (= b1 input)
+  blocks : Array MBFwd       -- the 17 inverted-residual forwards, in forward order
+  hc     : String            -- head 1x1 conv out (= head BN input)
+  hn     : String            -- head BN out (= head relu6 pre-act)
+  hr     : String            -- head relu6 out (= GAP input)
+  gap    : String            -- global-average-pool out (= dense input)
+  logits : String            -- dense out
+  /-- The 52 BN layers as `(stat prefix, channels, spatial side)`, stem -> blocks in forward order
+      -> head. Single source for the eval signature and the eval BN sites. -/
+  bns    : List (String × Nat × Nat)
+  deriving Inhabited
+
+set_option maxRecDepth 4000000 in
+/-- **The full 17-block paper MobileNetV2 forward as `pretty` of the verified AST**, at the
+    PER-EXAMPLE index. 3x3/s2 stem (3->32, 224->112) -> the `[t,c,n,s]` inverted-residual stack
+    (112->56->28->14->7) -> 1x1 head (320->1280) -> GAP(7x7) -> dense(1280->`nClasses`).
+
+    `mode` picks the BN world and nothing else. Routing both forward artifacts and the train step
+    through one chain is the fix for a live §2a skew: the committed `mobilenetv2_fwd.mlir` was a
+    hand-written BATCH-BN render while this train step normalises PER EXAMPLE, so
+    `mobilenetv2-verified` trained one function and evaluated another. -/
+private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) :
+    StateM Nat MNV2Fwd := do
+    -- stem: 3x3/s2 conv (3->32, 224->112) -> BN -> relu6 (NO maxpool)
+    let zx   : Vec (3*224*224) := fun _ => 0
+    let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+    let z32  : Vec 32 := fun _ => 0
+    let z112 : Vec (32*112*112) := fun _ => 0
+    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" "%bs" zSk z32 (.operand "%x" zx))
+    let (cStn, nStn) ← bnSiteP B 32 112 112 mode epsStr "%gs" "%bts" "stn" nStc
+    let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
+    -- forward: 17 inverted-residual blocks
+    let f1  ← irFwdNoExp   B 32      16 112 mode epsStr "1"  nStr
+    let f2  ← irFwdStrided B 16  96  24  56 mode epsStr "2"  f1.o
+    let f3  ← irFwd        B 24 144  24  56 mode epsStr "3"  f2.o
+    let f4  ← irFwdStrided B 24 144  32  28 mode epsStr "4"  f3.o
+    let f5  ← irFwd        B 32 192  32  28 mode epsStr "5"  f4.o
+    let f6  ← irFwd        B 32 192  32  28 mode epsStr "6"  f5.o
+    let f7  ← irFwdStrided B 32 192  64  14 mode epsStr "7"  f6.o
+    let f8  ← irFwd        B 64 384  64  14 mode epsStr "8"  f7.o
+    let f9  ← irFwd        B 64 384  64  14 mode epsStr "9"  f8.o
+    let f10 ← irFwd        B 64 384  64  14 mode epsStr "10" f9.o
+    let f11 ← irFwdNoSkip  B 64 384  96  14 mode epsStr "11" f10.o
+    let f12 ← irFwd        B 96 576  96  14 mode epsStr "12" f11.o
+    let f13 ← irFwd        B 96 576  96  14 mode epsStr "13" f12.o
+    let f14 ← irFwdStrided B 96 576 160   7 mode epsStr "14" f13.o
+    let f15 ← irFwd        B 160 960 160   7 mode epsStr "15" f14.o
+    let f16 ← irFwd        B 160 960 160   7 mode epsStr "16" f15.o
+    let f17 ← irFwdNoSkip  B 160 960 320   7 mode epsStr "17" f16.o
+    -- head: 1x1 conv (320->1280) -> BN -> relu6 -> GAP(7x7) -> dense(1280->nClasses)
+    let z7    : Vec (320*7*7) := fun _ => 0
+    let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
+    let z1280 : Vec 1280 := fun _ => 0
+    let zH7   : Vec (1280*7*7) := fun _ => 0
+    let zWd   : Mat 1280 nClasses := fun _ _ => 0
+    let zNC   : Vec nClasses := fun _ => 0
+    let (cHc, nHc) ← pretty B (.flatConvF (ic := 320) (oc := 1280) (h := 7) (w := 7) "%Wh" "%bh" zHk z1280 (.operand f17.o z7))
+    let (cHn, nHn) ← bnSiteP B 1280 7 7 mode epsStr "%gh" "%bth" "hn" nHc
+    let (cHr, nHr) ← pretty B (.relu6F (.operand nHn zH7))
+    let (cGap, nGap) ← pretty B (.gapF (c := 1280) (h := 7) (w := 7) (.operand nHr zH7))
+    let (cLog, nLog) ← pretty B (denseF "%Wfc" "%bfc" zWd zNC (.operand nGap z1280))
+    pure { code := cStc ++ cStn ++ cStr ++
+             f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
+             f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
+             f15.code ++ f16.code ++ f17.code ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+           stc := nStc, stn := nStn, str := nStr,
+           blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17],
+           hc := nHc, hn := nHn, hr := nHr, gap := nGap, logits := nLog,
+           bns := ("stn", 32, 112) ::
+             (f1.bns ++ f2.bns ++ f3.bns ++ f4.bns ++ f5.bns ++ f6.bns ++ f7.bns ++ f8.bns ++
+              f9.bns ++ f10.bns ++ f11.bns ++ f12.bns ++ f13.bns ++ f14.bns ++ f15.bns ++
+              f16.bns ++ f17.bns ++ [("hn", 1280, 7)]) }
+
+/-- The `@mobilenetv2_fwd` / `@mobilenetv2_fwd_eval` argument signature. The 104 stat slots come off
+    the SAME `bns` the traversal built — never a parallel 52-entry table (§2e). -/
+private def mnv2FwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) : String :=
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses mode epsStr).run' 0
+  let params := (paperSig nClasses).map (fun (nm, t) => s!"{nm}: {t}")
+  let stats := if mode == .train then [] else
+    F.bns.flatMap (fun (sp, c, _) => [s!"%{sp}mu: {ty [c]}", s!"%{sp}var: {ty [c]}"])
+  String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats))
+
+set_option maxRecDepth 4000000 in
+/-- **`@mobilenetv2_fwd` rendered ENTIRELY from the verified AST** — 211 inputs (`%x` plus the 210
+    params in `paperSig` order), returning logits `[B, nClasses]`. Shares `mnv2FwdChain` with
+    `mobilenetv2_train_step`, so it is a byte-identical PREFIX of it.
+
+    ⚠ **This CHANGES what `@mobilenetv2_fwd` computes**, and that is the point. The retired
+    hand-written render normalised over the BATCH (reduce `[0,2,3]`, n = B·H·W); the train step it
+    partners normalises PER EXAMPLE (reduce `[2,3]`, n = H·W). `mobilenetv2-verified` was therefore
+    scoring, with batch statistics, a net it had trained with per-example ones — the identical
+    defect §2a found and fixed on ResNet-34, still live here until 2026-07-28. Accuracy measured
+    through the old artifact (`runs/mobilenetv2_verified_crop_gpu0.log`, 86.89%) went through the
+    wrong forward and needs re-running. -/
+def mnv2FwdFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses .train epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @mobilenetv2_fwd({mnv2FwdSig B nClasses .train epsStr}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // -- MobileNetV2 (17-block paper) forward: every line is pretty(verified AST node) --\n" ++
+  F.code ++
+  s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
+set_option maxRecDepth 4000000 in
+/-- **`@mobilenetv2_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward,
+    every BN site consuming frozen per-channel running stats (`bnPerChannelEvalF`) instead of
+    reducing statistics out of its activation. Same 210 params in the same order, plus the 104 stat
+    inputs (52 BN layers × μ/var, interleaved per layer in `bnChannels` order): **315 inputs**.
+
+    Its train-step partner is the batch-BN `mobilenetv2_adam_train_step` in `MobileNetV2RenderB`,
+    whose returned batch μ/var the driver EMAs into exactly these slots. Being frozen-stat affine,
+    this graph is the same in either BN world — which is why it can live beside the per-example
+    chain: `bnPerChannelEvalF` performs no reduction, so there is no batch to be honest about. -/
+def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @mobilenetv2_fwd_eval({mnv2FwdSig B nClasses .eval epsStr}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // -- MobileNetV2 eval forward (running-stats BN): every line is pretty(verified AST node) --\n" ++
+  F.code ++
+  s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
 set_option maxRecDepth 4000000 in
 /-- **FULL paper-spec (17-block) MobileNetV2 train step rendered ENTIRELY from the verified AST.**
     The whole-net peer of `mnv2TrainStepFaithfulV`, scaled to the real `[t,c,n,s]` table. Every
@@ -457,33 +620,21 @@ set_option maxRecDepth 4000000 in
 def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
     (funcName : String := "mobilenetv2_paper_train_step") : String :=
   let go : StateM Nat String := do
-    -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → BN → relu6 (NO maxpool) ═══
+    -- ═══ forward — the SAME chain `@mobilenetv2_fwd` renders, so the forward this differentiates
+    --     and the forward the driver evals with are one graph by construction (§2a) ═══
+    let F : MNV2Fwd ← mnv2FwdChain B nClasses .train epsStr
+    let f1 := F.blocks[0]!;  let f2 := F.blocks[1]!;  let f3 := F.blocks[2]!
+    let f4 := F.blocks[3]!;  let f5 := F.blocks[4]!;  let f6 := F.blocks[5]!
+    let f7 := F.blocks[6]!;  let f8 := F.blocks[7]!;  let f9 := F.blocks[8]!
+    let f10 := F.blocks[9]!; let f11 := F.blocks[10]!; let f12 := F.blocks[11]!
+    let f13 := F.blocks[12]!; let f14 := F.blocks[13]!; let f15 := F.blocks[14]!
+    let f16 := F.blocks[15]!; let f17 := F.blocks[16]!
+    let nStc := F.stc; let nStn := F.stn; let nStr := F.str
+    let nHc := F.hc; let nHn := F.hn; let nGap := F.gap; let nLog := F.logits
     let zx   : Vec (3*224*224) := fun _ => 0
     let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32  : Vec 32 := fun _ => 0
     let z112 : Vec (32*112*112) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" "%bs" zSk z32 (.operand "%x" zx))
-    let (cStn, nStn) ← pretty B (.bnPerChannelF (oc := 32) (h := 112) (w := 112) "%gs" "%bts" epsStr 0 z32 z32 (.operand nStc z112))
-    let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
-    -- ═══ forward: 17 inverted-residual blocks ═══
-    let f1  ← irFwdNoExp   B 32      16 112 epsStr "1"  nStr
-    let f2  ← irFwdStrided B 16  96  24  56 epsStr "2"  f1.o
-    let f3  ← irFwd        B 24 144  24  56 epsStr "3"  f2.o
-    let f4  ← irFwdStrided B 24 144  32  28 epsStr "4"  f3.o
-    let f5  ← irFwd        B 32 192  32  28 epsStr "5"  f4.o
-    let f6  ← irFwd        B 32 192  32  28 epsStr "6"  f5.o
-    let f7  ← irFwdStrided B 32 192  64  14 epsStr "7"  f6.o
-    let f8  ← irFwd        B 64 384  64  14 epsStr "8"  f7.o
-    let f9  ← irFwd        B 64 384  64  14 epsStr "9"  f8.o
-    let f10 ← irFwd        B 64 384  64  14 epsStr "10" f9.o
-    let f11 ← irFwdNoSkip  B 64 384  96  14 epsStr "11" f10.o
-    let f12 ← irFwd        B 96 576  96  14 epsStr "12" f11.o
-    let f13 ← irFwd        B 96 576  96  14 epsStr "13" f12.o
-    let f14 ← irFwdStrided B 96 576 160   7 epsStr "14" f13.o
-    let f15 ← irFwd        B 160 960 160   7 epsStr "15" f14.o
-    let f16 ← irFwd        B 160 960 160   7 epsStr "16" f15.o
-    let f17 ← irFwdNoSkip  B 160 960 320   7 epsStr "17" f16.o
-    -- ═══ head: 1×1 conv (320→1280) → BN → relu6 → GAP(7×7) → dense(1280→nClasses) → softmax-CE cot ═══
     let z7    : Vec (320*7*7) := fun _ => 0
     let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
     let z1280 : Vec 1280 := fun _ => 0
@@ -491,11 +642,6 @@ def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
     let zWd   : Mat 1280 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
     let zHxT  : Tensor3 320 7 7 := fun _ _ _ => 0
-    let (cHc, nHc) ← pretty B (.flatConvF (ic := 320) (oc := 1280) (h := 7) (w := 7) "%Wh" "%bh" zHk z1280 (.operand f17.o z7))
-    let (cHn, nHn) ← pretty B (.bnPerChannelF (oc := 1280) (h := 7) (w := 7) "%gh" "%bth" epsStr 0 z1280 z1280 (.operand nHc zH7))
-    let (cHr, nHr) ← pretty B (.relu6F (.operand nHn zH7))
-    let (cGap, nGap) ← pretty B (.gapF (c := 1280) (h := 7) (w := 7) (.operand nHr zH7))
-    let (cLog, nLog) ← pretty B (denseF "%Wfc" "%bfc" zWd zNC (.operand nGap z1280))
     let (cDy,  nDy)  ← pretty B (.sub (.softmaxDiv (.expe (.operand nLog zNC))) (.operand "%onehot" zNC))
     -- ═══ head backward: dense input-grad → GAP-back → relu6 mask → BN-back → 1×1 conv back ═══
     let (cDg,  nDg)  ← pretty B (.dotOut "%Wfc" zWd (.operand nDy zNC))
@@ -535,11 +681,8 @@ def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
     let (csg, nsg) ← pretty B (.bnGammaSgd "%gs" nStc epsStr lrStr 0 z32 z112 0 (.operand nDsr z112))
     let (cst, nst) ← pretty B (.bnBetaSgd "%bts" lrStr z32 0 (.operand nDsr z112))
     -- ═══ assemble body + return (params in func-arg order: stem, blocks fwd-order, head, dense) ═══
-    let fwdCode := cStc ++ cStn ++ cStr ++
-      f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
-      f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++
-      f16.code ++ f17.code ++
-      cHc ++ cHn ++ cHr ++ cGap ++ cLog ++ cDy
+    -- `F.code` is exactly what `@mobilenetv2_fwd` renders, so the artifact is its byte-prefix.
+    let fwdCode := F.code ++ cDy
     let bwdCode := cDg ++ cDgi ++ cWfc ++ cbfc ++
       cDhmask ++ cDhn ++ cDhx ++ cWh ++ cbh ++ cgh ++ cth ++
       b17.code ++ b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++
@@ -576,6 +719,26 @@ end Proofs.StableHLO
 -- b1, matching mobilenetv2Verified's 210-param spec). B=32, nClasses=10, ε=1e-5, lr=0.3.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_train_step.mlir"
   (Proofs.StableHLO.mnv2TrainStepFaithfulVPaper 32 10 "1.0e-5" "0.3" "mobilenetv2_train_step")
+
+-- Regenerate `verified_mlir/mobilenetv2_fwd.mlir` (what MainMobilenetV2Verified evals with) from
+-- the SAME `mnv2FwdChain` the train step above differentiates. Replaces the hand-written emitter in
+-- `tests/TestMobilenetV2Fwd.lean`; that copy is retired to an `iree-compile` smoke.
+--
+-- ⚠ **This artifact's FUNCTION changes here, and that is a bug fix, not a refactor.** The retired
+-- render normalised over the BATCH (reduce `[0,2,3]`, 104 sites) while the train step it partners
+-- normalises PER EXAMPLE (reduce `[2,3]`) — so the SGD trainer optimised one net and scored a
+-- different one. Identical to the ResNet-34 defect §2a fixed on 2026-07-27; it was still live here.
+-- Being a byte-prefix of the train step is now machine-checked by
+-- `scripts/regen_verified_mlir.sh check`.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2_fwd.mlir"
+  (Proofs.StableHLO.mnv2FwdFaithfulV 32 10 "1.0e-5")
+
+-- Regenerate `verified_mlir/mobilenetv2_fwd_eval.mlir` — what `mobilenetv2-verified-adam` evals
+-- with once the running stats are threaded (315 inputs = %x + 210 params + 104 stat slots). Its
+-- train-step partner is the batch-BN `mobilenetv2_adam_train_step` in `MobileNetV2RenderB`, whose
+-- returned batch μ/var the driver EMAs into these slots, in this order.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2_fwd_eval.mlir"
+  (Proofs.StableHLO.mnv2FwdEvalFaithfulV 32 10 "1.0e-5")
 
 -- The reduced 6-block render kept as a demo / stepping-stone (the worked foundation that built the
 -- depthwise SGD core ops); NOT what the trainer reads.

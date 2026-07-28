@@ -126,6 +126,19 @@ inductive BatchableOp : Nat → Nat → Type where
   | gap {c h w : Nat}                                      : BatchableOp (c*h*w) c
   | seBlock {c h w r : Nat} (w1Name b1Name w2Name b2Name : String)
       (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) : BatchableOp (c*h*w) (c*h*w)
+  -- INFERENCE per-channel BN at the batched index — the frozen-stats peer of the OWN-CTOR
+  -- `bnBatchF`, and the batched peer of `bnPerChannelEvalF`. A **descriptor is legal here and is
+  -- the point**: γ/β/μ/var are the driver's EMA'd running statistics, arriving as graph inputs
+  -- shared by the whole batch, so they are batch-INVARIANT data of exactly the kind the note above
+  -- permits (a shared weight, not a saved per-example activation). `den` is therefore
+  -- `batchMap N (bnPerChannelEvalTensor3 …)` — every example normalised by the SAME frozen stats,
+  -- independently — which is the formal content of "eval is class-batch-independent".
+  --
+  -- That it can be a descriptor at all is the whole difference from training BN: `bnBatchF` needs
+  -- its own constructor because it REDUCES over the batch (§2b's second kind), and `batchMap N`
+  -- cannot express a reduction across examples. Here there is no reduction.
+  | bnEval {oc h w : Nat} (gName bName muName varName epsStr : String) (ε : ℝ)
+      (γ β μ var : Vec oc)                                 : BatchableOp (oc*h*w) (oc*h*w)
   -- Pointwise activation, as a descriptor (see the note above). `n` is the
   -- per-example width the emit uses; `den` is `batchMap N (swish n)`, which for a
   -- pointwise map is the pointwise map itself — so `N` is denotationally free here
@@ -992,6 +1005,8 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .dense _ _ W bias => dense W bias
   | _, _, .gap (c := c) (h := h) (w := w) => globalAvgPoolFlat c h w
   | _, _, .seBlock (h := h) (w := w) _ _ _ _ W₁ b₁ W₂ b₂ => seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂
+  | _, _, .bnEval (oc := oc) (h := h) (w := w) _ _ _ _ _ ε γ β μ var =>
+      bnPerChannelEvalTensor3 oc h w ε γ β μ var
   | _, _, .swish (n := n) => swish n
   | _, _, .relu (n := n) => relu n
   | _, _, .relu6 (n := n) => relu6 n
@@ -1015,6 +1030,24 @@ noncomputable def bnBatchLA (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
     per-channel parameter (`Vec c`) to the flat per-element map. -/
 def chanIdx (c h w : Nat) (k : Fin (c * h * w)) : Fin c :=
   (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1
+
+/-- Which BatchNorm a forward chain emits — the batched-index peer of `ResNet34Render.R34Bn`,
+    shared by the EfficientNet and MobileNetV2 renders so one traversal can produce both the
+    training forward and its frozen-stats eval partner.
+
+    The distinction is not cosmetic and the §2a bug is what it exists to prevent: a `.train` chain
+    reduces its statistics out of the activation (`bnBatchF`, which couples the batch), a `.eval`
+    chain consumes frozen per-channel running stats as graph inputs (the `bnEval` descriptor, which
+    does not). A net trained on one and *scored* with the other is evaluating a different function
+    — which is exactly what `resnet34_fwd` did until 2026-07-27, at rel 1.13 on real logits. -/
+inductive BnMode where
+  /-- **Training**: batch statistics reduced out of the activation (`bnBatchF`, reduce `[0,2,3]`,
+      n = B·H·W). What the train step differentiates. -/
+  | train
+  /-- **Inference**: frozen per-channel running stats arriving as graph inputs `%{p}mu`/`%{p}var`
+      (the `bnEval` descriptor). Class-batch-independent. -/
+  | eval
+deriving DecidableEq, Repr
 
 /-- **AST denotation `⟦·⟧ₐ`** — our reading of each StableHLO op's spec, over
     `ℝ`, per-example, in primitive terms — independent of `dense`/`Mat.mulVec`.
@@ -1343,6 +1376,16 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
     (W : Mat a c) (bias : Vec c) (e : SHlo (N * a)) :
     den (.batchOp (N := N) (.dense wN bN W bias) e)
       = batchMap N (dense W bias) (den e) := rfl
+/-- **Batched inference-BN faithfulness.** The `bnEval` descriptor at the batched index denotes the
+    proven `bnPerChannelEvalTensor3` applied to **each example independently, with the same frozen
+    statistics**. That is the formal statement of "eval is class-batch-independent" at `N := B`: no
+    `N` appears on the right except as the number of independent applications, so an example's
+    logits cannot depend on which others share its batch — unlike `bnBatchF`, whose `den`
+    (`bnBatchLA`) genuinely couples the batch. Being affine in `x`, it needs no `0 < ε`. -/
+@[simp] theorem den_batchOp_bnEval {N oc h w : Nat} (gN bN muN varN es : String) (ε : ℝ)
+    (γ β μ var : Vec oc) (e : SHlo (N * (oc*h*w))) :
+    den (.batchOp (N := N) (.bnEval (h := h) (w := w) gN bN muN varN es ε γ β μ var) e)
+      = batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ var) (den e) := rfl
 @[simp] theorem den_batchOp_gap {N c h w : Nat} (e : SHlo (N * (c*h*w))) :
     den (.batchOp (N := N) (.gap (c := c) (h := h) (w := w)) e)
       = batchMap N (globalAvgPoolFlat c h w) (den e) := rfl
@@ -2994,6 +3037,8 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .gap (c := c) (h := h) (w := w) => ("gap", [], [N, c, h, w])
   | .seBlock (c := c) (h := h) (w := w) (r := r) w1 b1 w2 b2 _ _ _ _ =>
       ("seBlock", [w1, b1, w2, b2], [N, c, h, w, r])
+  | .bnEval (oc := oc) (h := h) (w := w) gN bN muN varN es _ _ _ _ _ =>
+      ("bnEval", [gN, bN, muN, varN, es], [N, oc, h, w])
   | .swish (n := n) => ("swish", [], [N, n])
   | .relu (n := n) => ("relu", [], [N, n])
   | .relu6 (n := n) => ("relu6", [], [N, n])
@@ -4696,6 +4741,29 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           let z ← fresh; let o ← fresh
           pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
                 s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
+      | "bnEval", [gN, bN, muN, varN, es], [_N, oc, h, w] => do
+          -- byte-for-byte `.bnPerChannelEvalF`'s emit, dims from the descriptor rather than off
+          -- the SHlo index (§2b). INFERENCE BN: reshape to [B,oc,h,w], then the affine map
+          -- γ·(x − μ)·rsqrt(var + ε) + β with μ/var/γ/β all rank-1 `[oc]` graph inputs. No reduce
+          -- and no normalizer constant — that is the whole difference from `bnBatch`, and why the
+          -- descriptor form is denotationally honest at any `N`.
+          let xn ← fresh; let mub ← fresh; let xc ← fresh; let vb ← fresh; let ep ← fresh
+          let ve ← fresh; let istd ← fresh; let xhat ← fresh; let gb ← fresh; let bb ← fresh
+          let gx ← fresh; let ob ← fresh; let o ← fresh
+          pure (
+            s!"    {xn} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {mub} = stablehlo.broadcast_in_dim {muN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xn}, {mub} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vb} = stablehlo.broadcast_in_dim {varN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vb}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+            s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
       | "relu6", [], [_N, n] => do
           -- byte-for-byte `.relu6F`'s emit, width from the descriptor's `n`.
           let z ← fresh; let six ← fresh; let mx ← fresh; let o ← fresh

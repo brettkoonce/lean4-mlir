@@ -1358,12 +1358,20 @@ lean_exe «resnet34-verified-adam-xla» where
   root := `apps.imagenette.MainResnet34VerifiedAdamXla
   moreLinkArgs := xlaLink
 
-/-- Migration guard for the §2a `_fwd` move: feeds two renders of `@resnet34_fwd` the same θ and x
-    and compares logits. The two emitters differ textually by construction, so a numeric tie is the
-    only meaningful check. XLA-linked — it compiles the module in-process, so this is seconds
-    rather than the multi-minute 224² `iree-compile`. -/
-lean_exe «resnet34-fwd-tie» where
-  root := `tests.TestResnet34FwdTie
+/-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
+    `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
+    textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it
+    compiles the module in-process, so this is seconds rather than the multi-minute 224²
+    `iree-compile`.
+
+        .lake/build/bin/fwd-tie <slug> [--eval] [<pathA> [<pathB>]]
+
+    Replaces `resnet34-fwd-tie`, which was this harness with one net hardcoded; `fwd-tie resnet34`
+    is the same check. Unlike it, this one DELETES its `.vmfb` before every compile (§4) — without
+    that, a second run with a different candidate silently reuses the first candidate's binary and
+    reports a perfect match, which is exactly what running a negative control looks like. -/
+lean_exe «fwd-tie» where
+  root := `tests.TestFwdTie
   moreLinkArgs := xlaLink
 
 /-- §2a-ter guard: one AdamW step through two renders of `@cifar8_adam_train_step`, same packed
