@@ -296,10 +296,32 @@ private def blkRetTys : List String :=
     and, in func-arg order, one SSA per parameter — the **updated param** at `adam := false`, the
     **un-fused gradient** at `adam := true`. One traversal, two tails: the alternative was a second
     copy of the depth-12 backward, which is the double-writer disease one level down. -/
-private def vitBackAll (lrStr : String) (adam : Bool) : StateM Nat (String × List String) := do
+private def vitBackAll (lrStr : String) (adam : Bool)
+    (smooth : Option (String × String × String) := none) :
+    StateM Nat (String × List String × String) := do
     let (fwd, sv) ← vitFwd12
-    -- loss cotangent dy = softmax(logits) − onehot  (lossCotGraph_isCEgrad; mean folded into lr)
-    let (cDy, nDy) ← pretty vBS (.sub (.softmaxDiv (.expe (.operand sv.logits (zVv : Vec 10)))) (.operand "%onehot" (zVv : Vec 10)))
+    -- loss cotangent. The softmax is `pretty`d on its own line rather than nested inside the
+    -- `.sub`, so its SSA can also feed the report-only `%loss`; `.operand` is a leaf that emits
+    -- nothing, so the fresh-name sequence — and therefore the text — is unchanged (checked: the
+    -- SGD artifact stays byte-identical).
+    let (cSm, nSm) ← pretty vBS (.softmaxDiv (.expe (.operand sv.logits (zVv : Vec 10))))
+    let (cD0, nD0) ← pretty vBS (.sub (.operand nSm (zVv : Vec 10)) (.operand "%onehot" (zVv : Vec 10)))
+    -- `none` → plain CE with the batch mean folded into `lrStr` (the SGD recipe, unchanged).
+    -- `some (α, −α/K, B)` → the LABEL-SMOOTHED cotangent with an explicit ÷B, which is what the
+    -- AdamW recipe uses: dy = ((softmax − onehot) + α·onehot − α/K) / B. `shiftB`/`divConstB` at
+    -- `N := 1` are the per-example forms — their emit reads the width off `n` and ignores `N`, and
+    -- both are POINTWISE (not batch-reducing), so the §2b `N := 1` hazard does not apply.
+    -- `shiftB` emits `add x, dense<−α/K>` where the hand-written render emits `subtract x, α/K`;
+    -- IEEE subtraction *is* addition of the exact negation, so the two are bit-identical.
+    let (cSmooth, nDy) ← match smooth with
+      | none => pure ("", nD0)
+      | some (aStr, negAK, bStr) => do
+          let (c1, n1) ← pretty vBS (.scaleF (n := 10) aStr 0 (.operand "%onehot" (zVv : Vec 10)))
+          let (c2, n2) ← pretty vBS (.addV (.operand nD0 (zVv : Vec 10)) (.operand n1 (zVv : Vec 10)))
+          let (c3, n3) ← pretty vBS (.shiftB (N := 1) (n := 10) negAK 0 (.operand n2 (zVv : Vec 10)))
+          let (c4, n4) ← pretty vBS (.divConstB (N := 1) (n := 10) bStr 0 (.operand n3 (zVv : Vec 10)))
+          pure (c1 ++ c2 ++ c3 ++ c4, n4)
+    let cDy := cSm ++ cD0 ++ cSmooth
     -- head: logits = denseF(Wc,bc)(clsTok)  [clsTok:192 → logits:10]
     let (cDc, dcls) ← pretty vBS (.dotOut (m := 192) (n := 10) "%Wc" (zMm : Mat 192 10) (.operand nDy (zVv : Vec 10)))
     let (cWc, nWc) ← if adam then
@@ -351,7 +373,7 @@ private def vitBackAll (lrStr : String) (adam : Bool) : StateM Nat (String × Li
     -- …, j=11 → block 0), so `blkNames[vDEPTH-1-i]` = block i's 16 SSAs.
     let blkOutOrdered := (List.range vDEPTH).flatMap (fun i => blkNames[vDEPTH - 1 - i]!)
     pure (code ++ cwC ++ cbC ++ cClSl ++ cCl ++ cPo,
-          [nwConv, nbConv, ncls, npos] ++ blkOutOrdered ++ [ngF, nbtF, nWc, nbc])
+          [nwConv, nbConv, ncls, npos] ++ blkOutOrdered ++ [ngF, nbtF, nWc, nbc], nSm)
 
 /-- The 200 parameter `(name, shape)` pairs in func-arg order — the single source for the argument
     signature, the return types, and (in the AdamW render) the `%<nm>m`/`%<nm>v` moment slots. -/
@@ -377,7 +399,7 @@ def vitParamSig : List (String × List Nat) :=
     The traversal itself is `vitBackAll false`, shared with the AdamW render. -/
 def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String := "0.003125") : String :=
   let go : StateM Nat String := do
-    let (code, retNames) ← vitBackAll lrStr false
+    let (code, retNames, _) ← vitBackAll lrStr false
     let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
       ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,10], ty [10]]
     pure <|
@@ -392,6 +414,103 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
   let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
     ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,10], ty [10]]
   "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({String.intercalate ", " retTys}) " ++ "{\n" ++
+  "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+  "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %ximg = stablehlo.reshape %x : ({ty [vBS, 3*224*224]}) -> {ty [vBS, 3, 224, 224]}\n" ++
+  body ++ "  }\n}\n"
+
+-- ════════════════════════════════════════════════════════════════
+-- § The certified AdamW train step (handoff §2a-quinquies follow-on, step 2b)
+-- ════════════════════════════════════════════════════════════════
+
+/-- `(θ', m', v')` for one parameter from its un-fused gradient — the proven
+    `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
+    into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
+    runtime `tensor<f32>` args, so one render serves the whole cosine+warmup schedule. Mirrors
+    `ResNet34RenderB.adamOne`, minus the replica collective (ViT has no DP render yet). -/
+private def vitAdamOne (nm : String) (ds : List Nat) (gradSSA : String) :
+    StateM Nat (String × String × String × String) := do
+  let n := ds.foldl (· * ·) 1
+  let z : Vec n := fun _ => 0
+  let gr : SHlo n := .operand gradSSA z
+  let (cM, nM) ← pretty vBS (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
+  let (cV, nV) ← pretty vBS (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
+  let (cT, nT) ← pretty vBS (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
+                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
+  pure (cM ++ cV ++ cT, nT, nM, nV)
+
+/-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4). -/
+private def vitAdamConsts : String :=
+  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+
+/-- **ViT-Tiny depth-12 AdamW train step, rendered from the verified AST.** The certified peer of
+    the hand-written `ViTRender.vitTrainStepModuleAdamSched` that `vit-verified-adam` has been
+    emitting at startup.
+
+    Same backward as `vit_train_step` (`vitBackAll`, one traversal) but taking the **un-fused
+    gradients**, each fed to the proven AdamW triple. The cotangent is the LABEL-SMOOTHED one with
+    an explicit ÷B, matching the AdamW recipe — the SGD render folds the mean into `lr` and does no
+    smoothing, so the two are different functions and this parameter is not optional.
+
+    Interface: 605 in (`%x`, 200 θ, 200 m, 200 v, `%lr`/`%bc1`/`%bc2`, `%onehot`) / 603 out
+    (200 θ', 200 m', 200 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
+    render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged. -/
+def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
+    (alphaStr negAlphaKStr : String := "0.100000") (bStr : String := "32.0") : String :=
+  let go : StateM Nat String := do
+    let (code, gradNames, nSm) ← vitBackAll "0.0" true (some (alphaStr, negAlphaKStr, bStr))
+    -- one triple per parameter, in func-arg order
+    let mut adamCode := ""
+    let mut thetaN : List String := []
+    let mut mN : List String := []
+    let mut vN : List String := []
+    for i in [0:vitParamSig.length] do
+      let (nm, ds) := vitParamSig[i]!
+      let (c, nT, nM, nV) ← vitAdamOne nm ds (gradNames[i]!)
+      adamCode := adamCode ++ c
+      thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
+    -- `%loss` is REPORT-ONLY and on no gradient path, so NO theorem covers it — §2b shipped plain
+    -- CE here against a smoothed-CE cotangent and only the numeric tie caught it. It is therefore
+    -- built from the SAME smoothed recipe the cotangent implies, and declared as a carve-out.
+    let lossCode :=
+      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+      s!"    %llog = stablehlo.log {nSm} : {ty [vBS, 10]}\n" ++
+      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [vBS, 10]}\n" ++
+      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [vBS, 10]}, tensor<f32>) -> {ty [vBS]}\n" ++
+      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [vBS, 10]}, tensor<f32>) -> {ty [vBS]}\n" ++
+      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [vBS]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<0.010000> : {ty [vBS]}\n" ++
+      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [vBS]}\n" ++
+      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [vBS]}\n" ++
+      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [vBS]}\n" ++
+      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [vBS]}, tensor<f32>) -> tensor<f32>\n" ++
+      s!"    %lbfc = stablehlo.constant dense<{vBS}.0> : tensor<f32>\n" ++
+      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
+      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    let pTy := vitParamSig.map (fun (_, ds) => ty ds)
+    let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"]
+    let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+    pure <|
+      "    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──\n" ++
+      code ++ vitAdamConsts ++ adamCode ++ lossCode ++
+      s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
+  let pSig := String.intercalate ", " (vitParamSig.map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
+  let mSig := String.intercalate ", " (vitParamSig.map (fun (nm, ds) => s!"%{nm}m: {ty ds}"))
+  let vSig := String.intercalate ", " (vitParamSig.map (fun (nm, ds) => s!"%{nm}v: {ty ds}"))
+  let argSig := s!"%x: {ty [vBS, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
+    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [vBS, 10]}"
+  let pTy := vitParamSig.map (fun (_, ds) => ty ds)
+  let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+  let body : String := go.run' 0
+  "module @m {\n" ++
+  s!"  func.func @{funcName}({argSig}) -> ({String.intercalate ", " retTys}) " ++ "{\n" ++
   "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
   "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
   "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++

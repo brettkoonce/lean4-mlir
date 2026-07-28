@@ -336,8 +336,38 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
   refactor inert. `vitParamSig` was added as the single source for the 200 `(name, shape)` pairs —
   the arg signature, the return types, and the `%<nm>m`/`%<nm>v` moment slots.
 
-  **▶ Step 2b — the cotangent gap, measured not assumed.** The two renders' loss cotangents are
-  **different functions**, so a certified render built on `vitBackAll` as-is would not tie:
+  **✅ Step 2b done — `vitAdamTrainStepFaithful` exists and its interface matches.** Not yet tied,
+  and deliberately **not yet wired to a `#eval`**: the driver still writes that artifact at startup,
+  so adding a writer now would create the very double-writer §2a-quinquies just removed. The swap is
+  step 3, after the tie.
+
+  | | hand-written | certified |
+  |---|---|---|
+  | entry / arity | `@vit_adam_train_step`, 605 in / 603 out | **same** |
+  | arg + return TYPES, in order | | **identical** ✅ (names differ: `%Wq_0` vs `%b0_Wq`) |
+  | emitted `stablehlo` ops | 7,700 | 14,881 (1.9×) |
+  | `// MALFORMED` markers | 0 | 0 ✅ |
+
+  The 1.9× is `pretty`'s missing CSE, the same story as R34's 1.68× which §2b-bis measured to cost
+  **nothing** after XLA optimisation — do not treat it as a problem without measuring.
+
+  **No new ops were needed for the smoothing after all.** `shiftB`/`divConstB` emit at `ty [B, n]`
+  and **ignore their `N`**, so at `N := 1` they are exactly the per-example forms; both are
+  POINTWISE, so the §2b `N := 1` hazard (which is about batch-*reducing* ops) does not apply. The
+  cotangent is now `vitBackAll`'s `smooth` parameter: `none` → plain CE, mean folded into lr (the
+  SGD path, byte-identical); `some (α, −α/K, B)` → `((softmax − onehot) + α·onehot − α/K)/B`.
+  One textual difference from the hand-written render, numerically inert: `shiftB` emits
+  `add x, dense<−0.01>` where the other emits `subtract x, 0.01` — IEEE subtraction *is* addition of
+  the exact negation, so bit-identical.
+
+  **▶ Step 3 — the tie, then the swap.** Copy `TestResnet34AdamTie.lean` (its packed `[θ|m|v]`
+  protocol is what `trainAdamSched` already uses; the interface check above means the same buffer
+  feeds both). Then delete the driver's `IO.FS.writeFile` and add the `#eval` here, so the `Proofs/`
+  render becomes the sole writer.
+
+  Why the gap below was worth recording — the two cotangents WERE different functions, so a render
+  built on `vitBackAll` without `smooth` would have failed the tie in a way that looks like a bug in
+  the new gradient ops:
 
   | | certified SGD render | hand-written AdamW (what `vit-verified-adam` trains on) |
   |---|---|---|
