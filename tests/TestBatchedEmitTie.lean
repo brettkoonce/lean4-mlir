@@ -194,6 +194,29 @@ private def gradPrefixCases : List (String × String × String) :=
      render (pretty BS (.posEmbedSgd (N := tk) (D := dm) "%p" "0.05"
                           (fun _ _ => 0 : Mat (tk+1) dm) 0
                           (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))))
+  -- the depthwise weight grads (EfficientNet's last blockers; mnv2/convnext reuse the shape)
+  , ("depthwiseWeightGradB",
+     render (pretty BS (.depthwiseWeightGradB (N := BS) (c := oc) (h := ch) (w := ch)
+                          (kH := kk) (kW := kk) "%a" zB
+                          (fun _ => 0 : Vec (BS*(oc*ch*ch)))
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(oc*ch*ch)))))),
+     render (pretty BS (.depthwiseWeightSgdB (N := BS) (c := oc) (h := ch) (w := ch)
+                          (kH := kk) (kW := kk) "%a" "%W" "0.05" zB
+                          (fun _ => 0 : Vec (BS*(oc*ch*ch)))
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk) 0
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(oc*ch*ch)))))))
+  , ("depthwiseStridedWeightGradB",
+     render (pretty BS (.depthwiseStridedWeightGradB (N := BS) (c := oc) (h := ch) (w := ch)
+                          (kH := kk) (kW := kk) "%a" zB
+                          (fun _ => 0 : Vec (BS*(oc*(2*ch)*(2*ch))))
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(oc*ch*ch)))))),
+     render (pretty BS (.depthwiseStridedWeightSgdB (N := BS) (c := oc) (h := ch) (w := ch)
+                          (kH := kk) (kW := kk) "%a" "%W" "0.05" zB
+                          (fun _ => 0 : Vec (BS*(oc*(2*ch)*(2*ch))))
+                          (fun _ _ _ => 0 : DepthwiseKernel oc kk kk) 0
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(oc*ch*ch)))))))
   , ("patchEmbedWeightGrad",
      render (pretty BS (.patchEmbedWeightGrad (ic := pi) (H := pH) (W := pW) (P := pp)
                           (N := tk) (D := dm) "%img" (fun _ => 0 : Vec (pi*pH*pW))

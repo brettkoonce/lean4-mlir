@@ -725,6 +725,14 @@ inductive SHlo : Nat → Type where
   -- pos KEEPS the (N+1) token axis (its Jacobian is the identity), so unlike the bias grads this
   -- one is shape-preserving — the same reason `posEmbedSgd` is 2D where the bias updates are 1D.
   | posEmbedGrad {N D : Nat}                         : SHlo ((N+1)*D) → SHlo ((N+1)*D)
+  -- The DEPTHWISE weight gradients — the last thing between EfficientNet and a certified AdamW
+  -- render (its depthwise convs are followed by BN, so the bias is folded and needs no peer).
+  | depthwiseWeightGradB {N c h w kH kW : Nat} (xName : String)
+      (b : Vec c) (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW)
+                                                     : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
+  | depthwiseStridedWeightGradB {N c h w kH kW : Nat} (xName : String)
+      (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+                                                     : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
   -- ══ ADAM / ADAMW, shape-generic ══
   -- The child expression is the GRADIENT; θ/m/v ride as name+value fields exactly as the
   -- `*Sgd` ops carry their param. Three ops because `SHlo` is single-result while one AdamW
@@ -1088,6 +1096,14 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
           W (Tensor3.unflatten (batchSlice N (c*h*w) (den e) n))) idx
   | _, .depthwiseStridedWeightSgdB (N := N) (c := c) (h := h) (w := w) _ _ _ b x W lr e =>
       fun idx => Tensor3.flatten W idx - lr * ∑ n : Fin N,
+        (depthwiseStride2_weight_grad_has_vjp b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
+          (Tensor3.flatten W) (batchSlice N (c*h*w) (den e) n) idx
+  | _, .depthwiseWeightGradB (N := N) (c := c) (h := h) (w := w) _ b x W e =>
+      fun idx => ∑ n : Fin N,
+        Tensor3.flatten ((depthwise_weight_grad_has_vjp3 b (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward
+          W (Tensor3.unflatten (batchSlice N (c*h*w) (den e) n))) idx
+  | _, .depthwiseStridedWeightGradB (N := N) (c := c) (h := h) (w := w) _ b x W e =>
+      fun idx => ∑ n : Fin N,
         (depthwiseStride2_weight_grad_has_vjp b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
           (Tensor3.flatten W) (batchSlice N (c*h*w) (den e) n) idx
   | _, .reluF e        => fun i => max (den e i) 0
@@ -1693,6 +1709,18 @@ quietly change the gradient, and anything already proven about a `*Sgd` output t
     (e : SHlo ((N+1)*c)) (i : Fin c) :
     den (.patchEmbedBiasSgd bN lrS b lr e) i
       = b i - lr * den (.patchEmbedBiasGrad (N := N) e) i := rfl
+
+@[simp] theorem depthwiseWeightSgdB_eq_grad {N c h w kH kW : Nat} (xN wN lrS : String)
+    (b : Vec c) (x : Vec (N*(c*h*w))) (W : DepthwiseKernel c kH kW) (lr : ℝ)
+    (e : SHlo (N*(c*h*w))) (idx : Fin (c*kH*kW)) :
+    den (.depthwiseWeightSgdB xN wN lrS b x W lr e) idx
+      = Tensor3.flatten W idx - lr * den (.depthwiseWeightGradB xN b x W e) idx := rfl
+
+@[simp] theorem depthwiseStridedWeightSgdB_eq_grad {N c h w kH kW : Nat} (xN wN lrS : String)
+    (b : Vec c) (x : Vec (N*(c*(2*h)*(2*w)))) (W : DepthwiseKernel c kH kW) (lr : ℝ)
+    (e : SHlo (N*(c*h*w))) (idx : Fin (c*kH*kW)) :
+    den (.depthwiseStridedWeightSgdB xN wN lrS b x W lr e) idx
+      = Tensor3.flatten W idx - lr * den (.depthwiseStridedWeightGradB xN b x W e) idx := rfl
 
 @[simp] theorem posEmbedSgd_eq_grad {N D : Nat} (pN lrS : String) (pos : Mat (N+1) D) (lr : ℝ)
     (e : SHlo ((N+1)*D)) (i : Fin ((N+1)*D)) :
@@ -3031,6 +3059,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convStridedWeightSgd" [xN, wN, lrS] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .depthwiseWeightSgdB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
       .batched "depthwiseWeightSgd" [xN, wN, lrS] [N, c, h, w, kH, kW] (skel e)
+  | _, .depthwiseWeightGradB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
+      .batched "depthwiseWeightGrad" [xN] [N, c, h, w, kH, kW] (skel e)
+  | _, .depthwiseStridedWeightGradB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
+      .batched "depthwiseStridedWeightGrad" [xN] [N, c, h, w, kH, kW] (skel e)
   | _, .depthwiseStridedWeightSgdB (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) xN wN lrS _ _ _ _ e =>
       .batched "depthwiseStridedWeightSgd" [xN, wN, lrS] [N, c, h, w, kH, kW] (skel e)
 
@@ -5092,6 +5124,38 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {lW} = stablehlo.constant dense<{lrS}> : {ty [c,1,kH,kW]}\n" ++
             s!"    {sW} = stablehlo.multiply {g}, {lW} : {ty [c,1,kH,kW]}\n" ++
             s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [c,1,kH,kW]}\n", o :: st)
+      | "depthwiseWeightGrad", [xN], [_N, c, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh
+          let raw ← fresh; let g ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,c,h,w]}) -> {ty [c,B,h,w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,c,h,w]}) -> {ty [c,B,h,w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = " ++ toString c ++ " : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [c,B,h,w]}, {ty [c,B,h,w]}) -> {ty [1,c,kH,kW]}\n" ++
+            s!"    {g} = stablehlo.reshape {raw} : ({ty [1,c,kH,kW]}) -> {ty [c,1,kH,kW]}\n", g :: st)
+      | "depthwiseStridedWeightGrad", [xN], [_N, c, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
+          let raw ← fresh; let g ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,c,2*h,2*w]}) -> {ty [c,B,2*h,2*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,c,2*h,2*w]}) -> {ty [c,B,2*h,2*w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = " ++ toString c ++ " : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [c,B,2*h,2*w]}, {ty [c,B,2*h,2*w]}) -> {ty [1,c,kH,kW]}\n" ++
+            s!"    {g} = stablehlo.reshape {raw} : ({ty [1,c,kH,kW]}) -> {ty [c,1,kH,kW]}\n", g :: st)
       | "seReduceB", [xN], [_N, c, h, w] => do
           -- SE gate cotangent: dgate = reduce[2,3](x ⊙ dy). `xN` = SE input, `r` = the
           -- SE-output cotangent dy. Output is the per-example per-channel gate cotangent
