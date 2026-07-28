@@ -68,9 +68,13 @@ gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build resnet34-verified-adam-xla
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-verified-adam-xla data
 
-# multi-GPU: render at REPLICAS=N first (tests/TestResnet34Train.lean), then
+# multi-GPU (§2b-quater): the DP render is certified-graph + trusted collective, written by the
+# same `lake build LeanMlir.Proofs.Codegen.ResNet34RenderB` as the single-device one. To change the
+# replica count, edit the `(replicas := 2)` #eval there and rebuild — `replica_groups` is baked, so
+# it must match PJRT_REPLICAS.
 unset HIP_VISIBLE_DEVICES
-LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 .lake/build/bin/resnet34-verified-adam-xla data
+LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
+  .lake/build/bin/resnet34-verified-adam-xla data
 
 # regenerate + audit verified_mlir/  (the canonical entry point; did not exist before §2a)
 scripts/regen_verified_mlir.sh          # or `check` to audit without writing
@@ -79,6 +83,12 @@ scripts/regen_verified_mlir.sh          # or `check` to audit without writing
 lake env lean tests/TestBatchedEmitTie.lean            # 13 emit ties + 8 grad-prefix checks
 lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie
 lake build cifar8-adam-tie   && .lake/build/bin/cifar8-adam-tie
+
+# the step-time bench (§2b-bis). Takes both paths so it can be run in either compile order,
+# which is the control for the ~2.1 s first-compile-in-process cost.
+lake build resnet34-adam-bench
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-adam-bench \
+  verified_mlir/resnet34_adam_train_step.mlir verified_mlir/resnet34_adam_train_step_b.mlir 20
 ```
 
 Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`,
@@ -139,12 +149,11 @@ preserving.
   all-zero/non-finite agreement rather than reporting a green tie.
 
 **Still `tests/`-rendered:** `mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}`, `convnext_fwd`,
-and every `_adam_train_step` except cifar8. Of the 7 remaining double-writers, three (`vit_fwd`,
-`vit_train_step`, `cifar8_train_step`) just *delegate* to the `Proofs/` renderer — verified
-byte-identical for `vit_fwd` — so they are redundant, not divergent. The four that own independent
-emitters (convnext, efficientnet, mobilenetv2, resnet34 train steps) can drift.
-
-`resnet34_adam_train_step` has a certified replacement ready but **not yet swapped in** — §2b.
+and every `_adam_train_step` except cifar8 **and resnet34** (§2b-ter). Of the 7 remaining
+double-writers, three (`vit_fwd`, `vit_train_step`, `cifar8_train_step`) just *delegate* to the
+`Proofs/` renderer — verified byte-identical for `vit_fwd` — so they are redundant, not divergent.
+The four that own independent emitters (convnext, efficientnet, mobilenetv2, resnet34 **SGD** train
+steps) can drift.
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
@@ -227,17 +236,142 @@ reference. It is exactly the hand-written non-AST carve-out §5 flags.
 
 #### ▶ What is left here
 
-1. **Measure a step.** The render is **1.7× the ops** (10005 vs 5971): `pretty` has no CSE (§4) and
-   the batched backward ops are *self-contained recomputes* — `bnBatchF`, `bnBatchBack` and
-   `bnGammaGradB` each rebuild x̂ from the saved BN input, so `rsqrt` is 108 = 36 layers × 3 where
-   the hand-written render saves `%{p}xh` once. Plus 621 reshapes from the `[B,c·h·w] ↔ [B,c,h,w]`
-   round-trips. **XLA CSE should collapse most of it — identical subgraphs on identical inputs —
-   but that is an assumption, nobody has measured it.** Do this before quoting a step time.
-2. **Then swap the driver**, and **retire `tests/TestResnet34Train.lean`'s AdamW writer in the same
-   change** — otherwise the §2a two-writers race just moves to the new file. The tie unblocks this;
-   it changes what actually trains, so it wants the measurement first.
+1. ~~**Measure a step.**~~ ✅ **DONE 2026-07-28 — the 1.68× op count costs nothing.** See §2b-bis
+   below. The render is free at run time and free in memory; the driver swap is unblocked.
+2. ~~**Then swap the driver**, and retire `tests/TestResnet34Train.lean`'s AdamW writer.~~
+   ✅ **DONE 2026-07-28 — see §2b-ter.**
 3. **EfficientNet's own Adam render** still needs `depthwise{,Strided}WeightGradB` and a depthwise
    bias peer. Out of R34's scope, so not built.
+
+#### 2b-bis. The step measurement — XLA CSE collapses the whole gap
+
+`tests/TestResnet34AdamBench.lean` → `lake build resnet34-adam-bench`. Both renders are compiled in
+**one process** and their steps **interleaved** (A,B,A,B…) so clock drift hits both equally; the
+statistic is the **min**, which is the robust one for a bench. Inputs are byte-identical to the tie,
+so the two harnesses measure the same two executables. Run in both compile orders, 20 rounds each:
+
+| | emitted `stablehlo` ops | min ms/step | median | peak device memory |
+|---|---|---|---|---|
+| A hand-written | 5,971 | 151–152 | 156 | 1.44 GiB |
+| B `pretty(proven)` | 10,014 | 151–152 | 156 | 1.44 GiB (4.8 MB **less**) |
+
+**No measurable difference — the delta is 0–1 ms either way, and its sign flips with run order.**
+
+And the mechanism is confirmed rather than inferred. Dumping post-optimisation HLO (see the gotcha
+in §4 — `XLA_FLAGS` alone does *not* work here) shows the two modules converge to the same program:
+
+| | A | B |
+|---|---|---|
+| HLO instrs, before optimisation | 5,901 | 8,768 |
+| **`ENTRY` instrs, after optimisation** | **2,690** | **2,691** |
+| fusions | 429 | 428 |
+| **`rsqrt`** | **36** | **36** |
+| triton / gemm / conv calls | 260 / 18 / 214 | 260 / 18 / 214 |
+| `dot`, `reduce-window`, `bitcast`, `copy` | 3, 1, 260, 3 | 3, 1, 260, 3 |
+
+The `rsqrt` row is the direct answer to the concern that raised this item: the batched render *emits*
+108 = 36 × 3 of them because `bnBatchF`, `bnBatchBack` and `bnGammaGradB` each rebuild x̂
+independently, and **XLA deduplicates them back to 36** — identical subgraphs on identical inputs,
+exactly as hypothesised. The 1.68× emitted-text ratio is already down to 1.49× at HLO import and to
+**1.0004×** after optimisation.
+
+**Conclusion: `pretty`'s lack of CSE (§4) is a codegen-readability problem, not a performance one**,
+at least for recomputes this regular. Do not spend effort on emit-side CSE for this net on that
+rationale. The one caveat worth carrying: this says XLA *can* undo a redundant recompute of a pure
+subgraph on unchanged operands; it is not a licence to assume any emitted redundancy is free.
+
+**Compile time is NOT a differentiator either, though it looks like one.** The first module compiled
+in a process takes ~5.8 s and the second ~3.6 s — *whichever render is which*. Swap the argument
+order and the numbers swap with it. The ~2.1 s gap is one-time per-process cost, not a property of
+the artifact. (This is why the bench takes both paths as arguments.)
+
+#### 2b-ter. The swap ✅ DONE — the trainer now runs the certified render
+
+`verified_mlir/resnet34_adam_train_step.mlir` is now written by
+`LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` as `pretty(provenGraph)`, and that `#eval` is its
+**only** writer. The driver needed **no change at all** — it resolves the path from the net slug, so
+taking over the canonical name *is* the swap. `…_b.mlir` is deleted; the bytes now at the canonical
+path are byte-identical to the `_b.mlir` render that passed the tie (checked before deleting).
+
+Gates run for the swap, in order:
+
+| gate | result |
+|---|---|
+| regenerated canonical == the tied `_b.mlir` | byte-identical ✅ |
+| `resnet34-adam-tie` retired-render vs new canonical | forward **bit-exact** 17024/17024, backward norm-rel **2e-6** ✅ |
+| `regen_verified_mlir.sh check` | `resnet34_adam_train_step` has **one** writer; no new duplicate ✅ |
+| smoke-train, `LEAN_MLIR_G2_STEPS=40` | loss 2.49 → 1.83, val **22.3 → 26.8 → 27.4 → 43.3%** over 4 epochs ✅ |
+
+**The retirement was not clean, and the reason matters.** `tests/TestResnet34Train.lean`'s AdamW
+writer was also the *only* producer of the **data-parallel** render — it calls `emitAdamVDP` under
+the `REPLICAS` knob (§2c), and **`ResNet34RenderB` has no replica support**. Deleting the writer
+outright would have silently removed the multi-GPU capability. So it is retired only at
+`REPLICAS = 1`; above that it still renders, to its **own path**
+`verified_mlir/resnet34_adam_train_step_dp.mlir`.
+
+That split also fixes a hazard that was live rather than hypothetical: producing a DP render meant
+editing `REPLICAS` and re-running the writer, which **overwrote the single-device artifact the
+trainer runs** — the §2a last-writer-wins race, on the one artifact that had been declared clean.
+The DP render now cannot touch it.
+
+**The sibling race is still live, and this change did not touch it.** `tests/TestResnet34Train.lean`
+also writes the **SGD** `resnet34_train_step.mlir`, against `Proofs/Codegen/ResNet34Render.lean`.
+Elaborating that file to produce a DP render therefore still clobbers the committed SGD artifact
+with the batch-BN spelling — observed while running these gates (md5 `3184522f` → `929074f6`),
+restored with `git checkout`. **After any `lake env lean tests/TestResnet34Train.lean`, check
+`git diff verified_mlir/`.** Closing it is §2a's remaining four-emitter cleanup, not this thread's.
+
+~~**New named gap: the certified batched renderer cannot emit collectives.**~~ ✅ **Closed the same
+day — §2b-quater.**
+
+#### 2b-quater. Multi-GPU brought over ✅ — the collective, as a declared carve-out
+
+Motivated by ImageNet: multi-GPU has to be a supported path, so the DP render was moved onto the
+certified renderer rather than retired. `resnet34AdamTrainStepFaithfulB` now takes
+`(replicas : Nat := 1)`, and `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` writes **both**
+artifacts — so it is the only writer of either:
+
+| artifact | variant | entry |
+|---|---|---|
+| `resnet34_adam_train_step.mlir` | `adam` (default) | `@resnet34_adam_train_step` |
+| `resnet34_adamdp_train_step.mlir` | `adamdp` | `@resnet34_adamdp_train_step` |
+
+The hand-written AdamW emitter in `tests/TestResnet34Train.lean` (`adamConsts`, `adamCot`,
+`trainStepAdamSched`, `bnLayers`, the `REPLICAS` knob — 87 lines) is **deleted**, not repointed: a
+second emitter that cannot write is still one more thing to drift. Recover from
+`git show b856deb:tests/TestResnet34Train.lean` if ever needed. The SGD `trainStep` is untouched.
+
+**What is and is not verified here.** The insertion is one call to `ViTRender.emitGradAllReduce`
+between the gradient SSA and the AdamW triple, so the graph is: *certified gradient →* **trusted
+collective** *→ certified AdamW*. The collective is emitted text, not `pretty` of an AST node —
+a **declared carve-out**, and the render says so in its own output banner at `replicas > 1`, per
+the §5/§2b `%loss` lesson that an undeclared carve-out is how wrong things ship. The `den` side is
+untouched: the AdamW ops consume the averaged gradient as an `.operand` exactly as they consumed
+the raw one. Claim ceiling is unchanged from §5 — *"the gradient averaging is a proven identity;
+the collective implementing it is trusted, exactly like the lowerer."*
+
+Gates run:
+
+| gate | result |
+|---|---|
+| `replicas = 1` re-render vs the committed artifact | **byte-identical** — the insertion is provably inert on the single-device path ✅ |
+| collectives emitted | **146**, one per parameter, matching §2c ✅ |
+| syntax | `all_reduce(add)` over `[[0,1]]`, **no `use_global_device_ids`** (§4), then `/2.0` ✅ |
+| 2 GPUs, 2 replicas | compiles at 2 replicas, runs, loss descends in both runs — **2.34 → 2.00** at 30 steps/epoch, **2.58 → 2.22** at 10 ✅ |
+
+**Still owed: the cifar8 exact decomposition check.** cifar8 has no BN, so 1×256 vs 2×128 must
+agree to ~1e-6 (§2c measured 1.015e-06 with the *hand-written* emitter). That is the only gate that
+pins the collective's *semantics* rather than its syntax and plumbing, and it has **not** been re-run
+against the certified insertion. It needs `cifar8AdamTrainStepFaithfulV` to take the same `replicas`
+parameter (`adamTail` in `CnnRender.lean`, 22 call sites) plus a B=256 render to compare against.
+Cheap, and it is the next thing to do in this thread. Until then the collective's correctness rests
+on `emitGradAllReduce` being the *same function* already validated end-to-end by
+`ffi/test_pjrt_allreduce.c` and by §2c's 2-GPU run — which is an argument, not a measurement.
+
+**A guard earned its keep:** the first DP render kept the entry name `@resnet34_adam_train_step`
+while the driver asked for `@resnet34_adamdp_train_step`, and the shim's entry-name check refused
+the call outright ("entry mismatch") instead of running the wrong graph. The name now follows the
+variant.
 
 The per-example route is *not* being taken, but if it is ever revisited: it needs no new ops
 (§2a's eight gradients cover it), and its consequences are that the AdamW trainer's BN semantics
@@ -246,8 +380,12 @@ train == eval — `bnChannels` goes empty and `@resnet34_fwd_eval` loses its cal
 
 ### 2c. R34 on 2 GPUs ✅ RUNS — 1.46×, and the shortfall is diagnosed
 
-`tests/TestResnet34Train.lean` has a `REPLICAS` knob (at 1 it re-renders byte-identical; at 2 it
-emits 146 collectives, one per parameter). Measured, 3 epochs of Imagenette across both 7900 XTXs:
+The DP render emits 146 collectives, one per parameter. Since §2b-quater it comes from the
+**certified** renderer (`ResNet34RenderB`, `replicas := 2`) to
+`verified_mlir/resnet34_adamdp_train_step.mlir`, selected with `LEAN_MLIR_VARIANT=adamdp`. The
+numbers below predate that and were measured with the retired hand-written emitter — the emitted
+collective text is the same `emitGradAllReduce` output, but the surrounding graph is not the same
+one, so **re-measure before quoting these**. 3 epochs of Imagenette across both 7900 XTXs:
 
 | | steps/epoch | s/epoch | ms/img |
 |---|---|---|---|
@@ -273,9 +411,10 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 
 ### 2d. Then, in value order
 
-0. **Finish §2b's tail first** — measure a step of `resnet34_adam_train_step_b.mlir`, then swap the
-   driver onto it and retire the `tests/` AdamW writer in the same change. It is the cheapest
-   remaining item, it is already tied, and leaving it half-done leaves two writers in the tree.
+0. ~~**Finish §2b's tail**~~ ✅ **DONE** — measured (§2b-bis: no cost) and swapped (§2b-ter: the
+   trainer runs the certified render). What it left behind: **decide the data-parallel render's
+   fate** (§2b-ter — certified R34 still cannot emit collectives, so multi-GPU runs an uncertified
+   emitter on its own `_dp.mlir` path). Cheap to decide, and it is the only loose end in this thread.
 1. **bs256 re-render + measure.** Batch is worth **1.8×** on this net (5.06 → 2.87 ms/img from
    bs32 → bs256, measured), it is a one-line `BS` edit, and bs256 **fits** on a 7900 XTX. Needed
    for ImageNet anyway. Note the batched renderer takes `B` as a parameter, so a bs256 render is a
@@ -390,12 +529,36 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   single-replica.
 - **Empty `compile_options` is not "defaults"** — proto3 zeros give `replica_count = 0` and XLA
   aborts. Hence the generated blob table.
+- **`XLA_FLAGS` is silently INERT on this path.** The generated blob embeds a fully-populated
+  `DebugOptions`, so it overrides the environment — `XLA_FLAGS=--xla_dump_to=…` produces no dump and
+  no warning. The blob captures whatever `XLA_FLAGS` was set when
+  `scripts/gen_pjrt_compile_options.py` ran, so to get a dump, regenerate the header with the flag
+  set and build a throwaway shim against it, leaving the committed one alone:
+
+  ```bash
+  XLA_FLAGS="--xla_dump_to=$D/hlo --xla_dump_hlo_as_text" \
+    $VENV/bin/python3 scripts/gen_pjrt_compile_options.py > $D/pjrt_compile_options.h
+  cp ffi/pjrt_ffi.c $D/                      # the quoted #include must resolve to $D first
+  gcc -fPIC -O2 -shared $D/pjrt_ffi.c -I$D -Iffi -ldl -o $D/libpjrt_ffi.so
+  LD_LIBRARY_PATH=$D .lake/build/bin/<binary>   # the shim's rpath is RUNPATH, so this wins
+  ```
+
+  Diff the generated header against the committed one to confirm the flag actually landed. Note the
+  dump-enabled blob is a *different* `DebugOptions`, so read its HLO for structure, not its timings.
 - **`.venv/bin/python3` must be a wrapper, not a symlink.** A symlinked interpreter derives
   `sys.prefix` from the symlink's location and cannot find jax. (Also: `python3 -c 'import jax'`
   from the repo root imports the local `jax/` *directory*.)
 - **Checkpoints and `.vmfb` paths are backend-scoped.** They were shared, so an XLA run could
   resume from, or reuse, an IREE artifact while looking normal. Any new driver with resume needs
-  the same treatment.
+  the same treatment. They are **variant-scoped too**, so `adam` and `adamdp` do not collide.
+- **Check the `.epoch` marker before a long run.** Once, after a run killed mid-epoch (SIGPIPE from
+  a `| head` in the invocation), `resnet34_adamdp_ckpt_xla.bin.epoch` held **`80`** — `cfg.epochs` —
+  so the next run "resumed" past the end and exited having done nothing, printing only
+  *"resuming from checkpoint at epoch 80"*. **Not reproduced**: a clean bounded run writes the
+  correct value (`2` after two epochs), and the only writer is `writeFile epPath (toString (ep+1))`
+  inside the epoch loop. Cause unknown, so treat it as a thing to *check* rather than a known bug:
+  a silent no-op run is an expensive way to discover it at ImageNet scale. `cat` the marker, or
+  delete both `ckpt` files, before starting something long.
 - **`git stash -u` here would write ~17 GB** (`runs/` 5 GB, `figures/` 12 GB) into `.git`. Stash
   tracked modifications only; use `.gitignore` for the rest.
 - Rendering at a non-default batch breaks eval unless the forward graph is re-rendered too — that

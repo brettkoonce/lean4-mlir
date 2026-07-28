@@ -3,10 +3,19 @@ import LeanMlir.VerifiedNets
 /-! # `@resnet34_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
 `planning/xla_pjrt_handoff.md` §2b step 5. The committed
-`verified_mlir/resnet34_adam_train_step.mlir` comes from the hand-written string emitter in
-`tests/TestResnet34Train.lean`; `verified_mlir/resnet34_adam_train_step_b.mlir` renders from
+`verified_mlir/resnet34_adam_train_step.mlir` **now** renders from
 `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` as `pretty(provenGraph)` at the batched index
-`N := B`, with the un-fused `*GradB` gradients feeding the proven AdamW ops.
+`N := B`, with the un-fused `*GradB` gradients feeding the proven AdamW ops. It used to come from
+the hand-written string emitter in `tests/TestResnet34Train.lean`; this harness is what licensed
+that swap, and the hand-written AdamW render is now retired (that emitter renders only the
+data-parallel variant, to `…_dp.mlir`).
+
+**Post-swap, the no-argument form compares the artifact against itself** — an A-vs-A run, which is
+still worth having (it re-establishes the determinism floor the gate depends on) but is not a
+migration check. To re-run the real tie, recover the retired render and pass it explicitly:
+
+    git show b856deb:verified_mlir/resnet34_adam_train_step.mlir > /tmp/retired.mlir
+    .lake/build/bin/resnet34-adam-tie /tmp/retired.mlir
 
 **Why this has to be a numeric tie and not a text diff.** The two are the same function but not the
 same graph. SSA names differ (tagged vs counter), and so does the op sequence: the hand-written
@@ -36,19 +45,21 @@ private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray 
     F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
 
 def main (args : List String) : IO Unit := do
-  let dfltA := "verified_mlir/resnet34_adam_train_step.mlir"
-  let dfltB := "verified_mlir/resnet34_adam_train_step_b.mlir"
+  let dflt := "verified_mlir/resnet34_adam_train_step.mlir"
   let (pathA, pathB) := match args with
     | a :: b :: _ => (a, b)
-    | [a]         => (a, dfltB)
-    | []          => (dfltA, dfltB)
+    | [a]         => (a, dflt)
+    | []          => (dflt, dflt)
   let net := resnet34Verified.toNet
   let bs  := 32                            -- the baked batch of both renders
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   IO.println s!"@resnet34_adam_train_step tie"
-  IO.println s!"  A (hand-written) = {pathA}"
-  IO.println s!"  B (pretty(proven)) = {pathB}"
+  IO.println s!"  A (reference) = {pathA}"
+  IO.println s!"  B (candidate) = {pathB}"
+  if pathA == pathB then
+    IO.println "  NOTE: both paths are the same file — this is an A-vs-A determinism run, NOT a \
+migration check. Pass the retired render as the first argument for that."
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers \
 ({nBnStats} stat floats), bs {bs}, backend {← IreeSession.backendName}"
 

@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.ResNet34Render
+import LeanMlir.ViTRender
 
 /-! # ResNet-34 AdamW train step rendered from the verified AST, at the BATCHED index
 
@@ -195,16 +196,31 @@ namespace Proofs.StableHLO
 /-- `(θ', m', v')` for one parameter, from its un-fused gradient. The three ops are the proven
     `adamMNextF`/`adamVNextF`/`adamWParamF` (`adamW_triple_faithful` bundles their `den`s into
     `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are runtime
-    `tensor<f32>` args, so one render serves a whole LR schedule. -/
-private def adamOne (B : Nat) (g : PGrad) : StateM Nat (String × String × String × String) := do
+    `tensor<f32>` args, so one render serves a whole LR schedule.
+
+    At `replicas > 1` the gradient is first averaged across devices by
+    `ViTRender.emitGradAllReduce`. **That collective is a TRUSTED CARVE-OUT** — it is emitted text,
+    not `pretty` of an AST node, so it is outside every faithfulness theorem here. What the proofs
+    still cover is unchanged and is the whole rest of the graph: the AdamW triple consumes the
+    averaged gradient as an `.operand`, exactly as it consumed the raw one, so the `den` side does
+    not shift. What is trusted is that `all_reduce(add)/N` computes the mean — handoff §5:
+    *"the gradient averaging is a proven identity; the collective implementing it is trusted,
+    exactly like the lowerer."* §2b's `%loss` bug is the standing reminder that a carve-out needs
+    its own numeric check; here that is the cifar8 exact decomposition gate (no BN ⇒ the identity
+    holds exactly), because at R34 scale BN makes N×b ≠ 1×(N·b) BY DESIGN and no exact tie exists.
+
+    At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
+    render stays byte-identical — which is the cheap self-check that this insertion is inert. -/
+private def adamOne (B : Nat) (replicas : Nat) (g : PGrad) : StateM Nat (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let gr : SHlo n := .operand g.grad z
+  let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+  let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
   let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
   let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                     "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
-  pure (cM ++ cV ++ cT, nT, nM, nV)
+  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
 
 /-- β₁/β₂/ε/wd as graph constants — the committed ResNet-34 AdamW recipe. -/
 private def adamConstsB : String :=
@@ -226,7 +242,8 @@ set_option maxRecDepth 4000000 in
     `tests/TestResnet34Train.lean`'s hand-written render already presents, so the driver is
     unchanged. Parameter ORDER comes from `r34SigList`, the same single source the per-example
     render and both forwards use, so the arity/order contract cannot drift between them. -/
-def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String) : String :=
+def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
+    (replicas : Nat := 1) : String :=
   let go : StateM Nat String := do
     -- ═══ stem: 7×7/s2 conv → batch BN → relu → 2×2 maxpool ═══
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
@@ -349,7 +366,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String) : String
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
-      let (c, nT, nM, nV) ← adamOne B g
+      let (c, nT, nM, nV) ← adamOne B replicas g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]
@@ -398,7 +415,16 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String) : String
     let retVals := thetaN ++ mNames ++ vNames ++ ["%loss", "%bc1", "%bc2"] ++ statNames
     let retTys  := pTypes ++ pTypes ++ pTypes ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
     pure <|
-      "    // ── ResNet-34 batch-BN AdamW train step: every line is pretty(verified AST node) ──\n" ++
+      (if replicas ≤ 1 then
+        "    // ── ResNet-34 batch-BN AdamW train step: every line is pretty(verified AST node) ──\n"
+       else
+        s!"    // ── ResNet-34 batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
+        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
+        "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
+        "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
+        "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
+        "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
       body ++ adamConstsB ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r34SigList nClasses
@@ -413,20 +439,41 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String) : String
   let outSig := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ (r34StatSigList.map (·.2)))
   let inner : String := go.run' 0
+  -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
+  -- refuses the call ("entry mismatch") — which is exactly what it did the first time this was
+  -- rendered. Single device is variant "adam"; data-parallel is "adamdp".
+  let fname := if replicas ≤ 1 then "resnet34_adam_train_step" else "resnet34_adamdp_train_step"
   "module @m {\n" ++
-  s!"  func.func @resnet34_adam_train_step({inSig}) -> ({outSig}) " ++ "{\n" ++
+  s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
 
 end Proofs.StableHLO
 
--- Regenerate `verified_mlir/resnet34_adam_train_step_b.mlir` — the BATCHED (`N := B`) AdamW train
--- step as `pretty(provenGraph)`. B=32, nClasses=10, ε=1e-5.
+-- Regenerate `verified_mlir/resnet34_adam_train_step.mlir` — the BATCHED (`N := B`) AdamW train
+-- step as `pretty(provenGraph)`. B=32, nClasses=10, ε=1e-5. **This is the artifact
+-- `resnet34-verified-adam{,-xla}` trains on**, and this `#eval` is its ONLY writer.
 --
--- Deliberately a SEPARATE path from `resnet34_adam_train_step.mlir`, which the AdamW driver runs
--- today off the hand-written emitter in `tests/TestResnet34Train.lean`. Same interface (515 in /
--- 513 out, types positionally identical) but NOT the same graph — the cotangent is composed from
--- kit ops rather than fused — so the two are swapped only once the numeric tie passes. Pointing
--- both writers at one path before then is precisely the last-writer-wins race §2a found.
-#eval IO.FS.writeFile "verified_mlir/resnet34_adam_train_step_b.mlir"
+-- It rendered to a separate `…_b.mlir` while the hand-written emitter in
+-- `tests/TestResnet34Train.lean` still owned this path — two writers for one artifact is the
+-- last-writer-wins race §2a found. The swap happened once both gates were in:
+--
+--   * the numeric tie (`resnet34-adam-tie`) — forward bit-exact, backward norm-rel ≤ 2e-6;
+--   * the step bench (`resnet34-adam-bench`) — no cost, despite 1.68× the emitted ops, because
+--     XLA's CSE collapses the recomputes (handoff §2b-bis).
+--
+-- The hand-written emitter now renders only the DATA-PARALLEL variant, to its own
+-- `…_dp.mlir` path. To re-run the tie against the retired render, recover it with
+-- `git show <rev>:verified_mlir/resnet34_adam_train_step.mlir` and pass it as the first argument.
+#eval IO.FS.writeFile "verified_mlir/resnet34_adam_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05")
+
+-- The DATA-PARALLEL render (handoff §2b-quater), selected at run time by `LEAN_MLIR_VARIANT=adamdp`.
+-- Same graph, plus one `all_reduce(add)/N` per parameter gradient before its AdamW triple. This
+-- replaces the hand-written `tests/TestResnet34Train.lean` DP emitter, so the certified renderer is
+-- now the ONLY writer of both R34 AdamW artifacts.
+--
+-- `2` is the replica count these are rendered at, and it must match `PJRT_REPLICAS` at run time —
+-- the graph bakes `replica_groups`. Re-render here to change it.
+#eval IO.FS.writeFile "verified_mlir/resnet34_adamdp_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" 2)

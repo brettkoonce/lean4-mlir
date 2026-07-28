@@ -1379,6 +1379,14 @@ lean_exe «resnet34-adam-tie» where
   root := `tests.TestResnet34AdamTie
   moreLinkArgs := xlaLink
 
+/-- §2b tail: step-time bench for the same two renders the tie compares. The batched render is
+    1.68× the emitted ops (10014 vs 5971) because `pretty` has no CSE and the batched backward ops
+    are self-contained recomputes; the open question is whether XLA's own CSE collapses that. Both
+    are compiled in one process and their steps interleaved, so the comparison is drift-free. -/
+lean_exe «resnet34-adam-bench» where
+  root := `tests.TestResnet34AdamBench
+  moreLinkArgs := xlaLink
+
 -- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
 -- per-channel BN) trained on VERIFIED-rendered StableHLO
 -- (tests/TestMobilenetV2{Train,Fwd}.lean); 30 params.

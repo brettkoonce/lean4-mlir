@@ -17,11 +17,9 @@ Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestResnet34Train.lean
 
 open Proofs Proofs.StableHLO
 
--- Data-parallel replica count for the AdamW render. 1 = single device, emitted
--- text byte-identical to before; N > 1 inserts a cross-replica all_reduce(add)/N
--- on every parameter gradient (planning/xla_pjrt_ladder.md §10-11).
-private def REPLICAS : Nat := 1
-
+-- The data-parallel `REPLICAS` knob that used to live here moved to
+-- `Proofs/Codegen/ResNet34RenderB.lean`'s `resnet34AdamTrainStepFaithfulB … (replicas := N)`,
+-- along with the whole AdamW render — see the retirement note below.
 private def BS : Nat := 32
 private def EPS : String := "1.0e-5"
 private def LR : String := "0.1"
@@ -362,92 +360,24 @@ private def trainStep : String :=
   "module @m {\n" ++ s!"  func.func @resnet34_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
     body ++ upd ++ s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
--- ════════════ AdamW scheduled train step (loss-curve parity with the resnet34 reference) ════════════
-
-/-- β₁/β₂/ε/wd baked (the r34 reference recipe); `%lr`/`%bc1`/`%bc2` arrive as runtime args. -/
-private def adamConsts : String :=
-  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
-
-/-- AdamW loss cotangent with label smoothing α=0.1 (off-class mass α/K, K=10) + the in-graph
-    smoothed-CE loss `%loss` for logging — same mechanism as the ViT/mnv2/enet sched renders.
-    Defines `%lsm` (softmax), `%dy` (smoothed cotangent), `%loss`. -/
-private def adamCot : String :=
-  let ls : Float := 0.1
-  let lsK : Float := ls / 10.0
-  s!"    %le = stablehlo.exponential %logits : {ty [BS,10]}\n"
-  ++ s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
-  ++ s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [BS]}) -> {ty [BS,10]}\n"
-  ++ s!"    %lsm = stablehlo.divide %le, %lsb : {ty [BS,10]}\n"
-  ++ s!"    %dyr0 = stablehlo.subtract %lsm, %onehot : {ty [BS,10]}\n"
-  ++ s!"    %lsa = stablehlo.constant dense<{ls}> : {ty [BS,10]}\n"
-  ++ s!"    %lsaoh = stablehlo.multiply %lsa, %onehot : {ty [BS,10]}\n"
-  ++ s!"    %dyr1 = stablehlo.add %dyr0, %lsaoh : {ty [BS,10]}\n"
-  ++ s!"    %lsaik = stablehlo.constant dense<{lsK}> : {ty [BS,10]}\n"
-  ++ s!"    %dyr = stablehlo.subtract %dyr1, %lsaik : {ty [BS,10]}\n"
-  ++ s!"    %bnc = stablehlo.constant dense<{BS}.0> : {ty [BS,10]}\n"
-  ++ s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [BS,10]}\n"
-  ++ s!"    %llog = stablehlo.log %lsm : {ty [BS,10]}\n"
-  ++ s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [BS,10]}\n"
-  ++ s!"    %t1s = stablehlo.reduce(%ohll init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
-  ++ s!"    %lls = stablehlo.reduce(%llog init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [BS,10]}, tensor<f32>) -> {ty [BS]}\n"
-  ++ s!"    %omac = stablehlo.constant dense<{1.0 - ls}> : {ty [BS]}\n"
-  ++ s!"    %aKc = stablehlo.constant dense<{lsK}> : {ty [BS]}\n"
-  ++ s!"    %lt1 = stablehlo.multiply %omac, %t1s : {ty [BS]}\n"
-  ++ s!"    %lt2 = stablehlo.multiply %aKc, %lls : {ty [BS]}\n"
-  ++ s!"    %lpe = stablehlo.add %lt1, %lt2 : {ty [BS]}\n"
-  ++ s!"    %lsum2 = stablehlo.reduce(%lpe init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS]}, tensor<f32>) -> tensor<f32>\n"
-  ++ s!"    %lbfc = stablehlo.constant dense<{BS}.0> : tensor<f32>\n"
-  ++ s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n"
-  ++ s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-
-/-- BN layers (prefix, channels, H·W) in forward order — the running-stats layout shared by the
-    train-step batch-stat outputs, the driver's `runningBnStats` buffer, and `@resnet34_fwd_eval`
-    inputs. The forward saves `%{prefix}smr`/`%{prefix}vsr` ([oc] batch sums over `[0,2,3]`). -/
-private def bnLayers : List (String × Nat × Nat) :=
-  ("stn", 64, 112*112) ::
-  blocks.flatMap (fun b => match b with
-    | .idB p c hh => [(s!"{p}n1", c, hh*hh), (s!"{p}n2", c, hh*hh)]
-    | .downB p _cin c hh => [(s!"{p}n1", c, hh*hh), (s!"{p}n2", c, hh*hh), (s!"{p}np", c, hh*hh)])
-
-/-- `@resnet34_adam_train_step` — the proof-rendered fwd/bwd/param-grads with the SGD update swapped
-    for `ViTRender.emitAdamV` and the `[θ|m|v]` + scalar-tail packed signature the generic
-    `VerifiedNet.trainAdamSched` driver expects, EXTENDED with per-BN-layer batch mean/var carried
-    out in passthrough slots (running-stats BN; the func also takes matching dummy `[oc]` inputs so
-    `#outputs = #inputs`). `lr`/`bc1`/`bc2` runtime; `bc1`/`bc2` + the stat-in slots pass through. -/
-private def trainStepAdamSched : String :=
-  let body := renderBody adamCot
-  let updParts := allParams.map (fun (nm, gr, ds) =>
-    ViTRender.emitAdamVDP ("%" ++ nm) gr ("%" ++ nm ++ "m") ("%" ++ nm ++ "v") ds nm REPLICAS)
-  let upd := String.join (updParts.map (·.1))
-  let thetaN := updParts.map (·.2.1)
-  let mN := updParts.map (·.2.2.1)
-  let vN := updParts.map (·.2.2.2)
-  let psig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}: {ty ds}"))
-  let msig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}m: {ty ds}"))
-  let vsig := String.intercalate ", " (allParams.map (fun (nm, _, ds) => s!"%{nm}v: {ty ds}"))
-  -- Per-BN-layer batch mean/var = smr/(BS·H·W), vsr/(BS·H·W). Carried out in passthrough slots
-  -- (the func also takes 2 dummy `[oc]` inputs per layer so #outputs = #inputs for the generic FFI).
-  let statIn := String.intercalate ", " (bnLayers.flatMap (fun (p, oc, _) =>
-    [s!"%{p}mui: {ty [oc]}", s!"%{p}vari: {ty [oc]}"]))
-  let statCode := String.join (bnLayers.map (fun (p, oc, hw) =>
-    s!"    %{p}bnnf = stablehlo.constant dense<{BS*hw}.0> : {ty [oc]}\n" ++
-    s!"    %{p}bnmu = stablehlo.divide %{p}smr, %{p}bnnf : {ty [oc]}\n" ++
-    s!"    %{p}bnvar = stablehlo.divide %{p}vsr, %{p}bnnf : {ty [oc]}\n"))
-  let statOutNames := bnLayers.flatMap (fun (p, _, _) => [s!"%{p}bnmu", s!"%{p}bnvar"])
-  let statOutTy := bnLayers.flatMap (fun (_, oc, _) => [ty [oc], ty [oc]])
-  let argSig := ("%x: " ++ ty [BS,150528]) ++ ", " ++ psig ++ ", " ++ msig ++ ", " ++ vsig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statIn ++ ", %onehot: " ++ ty [BS,10]
-  let dims := allParams.map (fun (_, _, ds) => ds)
-  let allDims := dims ++ dims ++ dims
-  let retTy := String.intercalate ", " ((allDims.map (fun ds => ty ds)) ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statOutTy)
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"] ++ statOutNames)
-  "module @m {\n" ++ s!"  func.func @resnet34_adam_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
-    body ++ adamConsts ++ upd ++ statCode ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
+-- ════════════ AdamW scheduled train step — RETIRED (handoff §2b-ter, §2b-quater) ════════════
+--
+-- Both R34 AdamW renders now come from `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` as
+-- `pretty(provenGraph)`, and it is their ONLY writer:
+--
+--   verified_mlir/resnet34_adam_train_step.mlir     single device
+--   verified_mlir/resnet34_adamdp_train_step.mlir   data-parallel (LEAN_MLIR_VARIANT=adamdp),
+--                                                   146 all_reduce'd gradients, one per parameter
+--
+-- What used to live here was a hand-written string emitter (`adamConsts`, `adamCot`,
+-- `trainStepAdamSched`, `bnLayers`) plus a `REPLICAS` knob. It was faithful per-op but NOT
+-- certified, and producing a DP render meant editing `REPLICAS` and silently overwriting the
+-- single-device artifact the trainer runs — the §2a last-writer-wins race, live. The certified
+-- renderer covers both cases (it re-renders byte-identical at 1 replica), so this is deleted
+-- rather than repointed: a second emitter that cannot write is still one more thing to drift.
+-- `git show b856deb:tests/TestResnet34Train.lean` has it if it is ever needed.
+--
+-- The SGD `trainStep` above is untouched and still writes resnet34_train_step.mlir.
 
 /-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH (the render +
     write already happened, so the artifact exists regardless). -/
@@ -462,17 +392,12 @@ private def tryCompile (src dst label : String) : IO Unit := do
 def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"
   IO.FS.createDirAll ".lake/build"
-  -- Render + write BOTH artifacts first, then compile (so a missing iree-compile can't abort
-  -- before the AdamW artifact is written).
   let mlir := trainStep
   IO.println s!"rendered full ResNet-34 train step (BS={BS}): {mlir.length} chars, {allParams.length} params"
   IO.FS.writeFile "verified_mlir/resnet34_train_step.mlir" mlir
-  let amlir := trainStepAdamSched
-  IO.println s!"rendered ResNet-34 AdamW-sched train step: {amlir.length} chars"
-  IO.FS.writeFile "verified_mlir/resnet34_adam_train_step.mlir" amlir
   -- SGD smoke (the committed train step; verifies the shared `renderBody`).
   tryCompile "verified_mlir/resnet34_train_step.mlir" ".lake/build/resnet34_train_step_v.vmfb" "SGD"
-  -- AdamW scheduled train step — the artifact `resnet34-verified-adam` trains on.
-  tryCompile "verified_mlir/resnet34_adam_train_step.mlir" "/tmp/resnet34_adam_ts.vmfb" "AdamW"
+  IO.println "AdamW renders SKIPPED — both now belong to Proofs/Codegen/ResNet34RenderB.lean \
+(single-device + adamdp); see the retirement note above"
 
 #eval main
