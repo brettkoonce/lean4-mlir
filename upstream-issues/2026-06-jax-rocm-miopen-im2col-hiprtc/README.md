@@ -57,6 +57,43 @@ likely why 06-24 could not reproduce it: an isolated kernel build is not the fai
 | the 209×209 filter is a shape MIOpen rejects | **refuted** — same conv succeeds standalone | `repro_control_standalone_conv.py` |
 | memory pressure / allocation failure in disguise | **refuted** — succeeds under 12 GiB ballast; a real OOM gives a clean `RESOURCE_EXHAUSTED: Out of memory while trying to allocate 14.00GiB` | `repro_control_memory.py` |
 
+### ⭐ The exact failing compile — `-DEXTREME_LARGE` (captured 2026-07-28)
+
+`MIOPEN_ENABLE_LOGGING=1 MIOPEN_LOG_LEVEL=6` on the repro; full log in
+`miopen_failing_compile.log`. The invocation MIOpen builds and then fails to compile:
+
+```
+[GetKernels] 0 kernels for key: miopenIm2d2Col "c32i224_224w14_14p0_0s1_1d16_16t1"
+[AddKernel]  Key: miopenIm2d2Col "c32i224_224w14_14p0_0s1_1d16_16t1
+    -DEXTREME_LARGE -DNUM_CH_TOTAL=32 -DLOCAL_MEM_SIZE=51840 -DSTRIDE_GT_1=0
+    -DNUM_IM_BLKS_EQ_1=0 -DUSE_IM_OFF_GUARD=1 -DMIOPEN_USE_FP32=1 ... -mcpu=gfx1100"
+[LoadBinary]  Unable to load binary for: "MIOpenIm2d2Col.cpp.o"     <- not in kern_db
+[Compile]     hiprtcCompileProgram ... HIPRTC_ERROR_COMPILATION (6)
+[BuildHip]    MIOpenIm2d2Col.cpp:298:19: use of undeclared identifier 'get_global_id'
+              MIOpenIm2d2Col.cpp:326:16: use of undeclared identifier 'get_global_size'
+```
+
+**Two things this pins down.**
+
+1. **The conv really is the fused, dilated form.** The config key decodes as
+   `c32` channels, `i224_224` image, `w14_14` filter, `p0_0` pad, `s1_1` stride,
+   **`d16_16` dilation**. So XLA did fuse the interior `pad` into `rhs_dilation = 16` over
+   the original 14×14 cotangent, rather than convolving against a materialised 209×209
+   filter. That is why the standalone control passes and this does not — they are not the
+   same MIOpen call.
+
+2. **The failing build carries `-DEXTREME_LARGE`.** Source lines 298 and 326 — the two that
+   reference the OpenCL builtins — are the ones this define selects. The straightforward
+   reading is that the `EXTREME_LARGE` branch of `MIOpenIm2d2Col.cpp` was not updated when
+   the rest of the file moved to HIP-mapped work-item builtins, so it only ever compiled
+   under the OpenCL backend. That is consistent with 06-24's cold compile succeeding: that
+   build had a *different* config and so a different set of defines, and never entered this
+   branch. **Not yet independently confirmed** — confirming it means reading MIOpen's source
+   around those lines, or finding a config that sets `EXTREME_LARGE` for a non-dilated conv.
+
+Note also that no logged compile in this run carries a `MIOPEN_USE_HIP` / `MIOPEN_BACKEND_HIP`
+define, though that may simply be implicit in the HIPRTC path rather than passed as a flag.
+
 ### Is this fixable by installing an OpenCL runtime?
 
 **No — and it is not an end-user library gap.** `get_global_id` / `get_global_size` are OpenCL
@@ -89,8 +126,9 @@ which leaves the project's data-parallel gate unrunnable on this box. See
 ### Where to file
 
 MIOpen (`ROCm/MIOpen`) — the failing source file is theirs; the XLA/ROCm lowering is only the
-trigger. Worth pinning the exact compile invocation first (see above) so the report names the
-flag rather than just the symptom.
+trigger. The exact compile invocation is captured above and in
+`miopen_failing_compile.log`, so the report can name the define (`-DEXTREME_LARGE`) and the
+config key (`c32i224_224w14_14p0_0s1_1d16_16t1`) rather than just the symptom.
 
 ---
 
