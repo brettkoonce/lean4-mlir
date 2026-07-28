@@ -23,11 +23,17 @@ def vitAdamConfig : VerifiedConfig where
   batchSize := 32
 
 def main (argv : List String) : IO Unit := do
-  -- Emit the scheduled AdamW train step (β₁ .9, β₂ .999, ε 1e-8, wd 1e-4 baked;
-  -- lr/bc₁/bc₂ are runtime scalar params the driver schedules).
-  let cfg := ViTRender.vitTinyConfig 32 12
-  let mlir := ViTRender.vitTrainStepModuleAdamSched cfg (ViTRender.vitTinyBlocks 12)
-                "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001" 0.1   -- label smoothing α=0.1
-  IO.FS.writeFile "verified_mlir/vit_adam_train_step.mlir" mlir
+  -- This driver no longer WRITES `verified_mlir/vit_adam_train_step.mlir`. Until 2026-07-28 it
+  -- re-emitted the hand-written `ViTRender.vitTrainStepModuleAdamSched` here on every startup,
+  -- which meant the committed bytes were never authoritative and the artifact writer audit could
+  -- not see the writer at all. The artifact now comes from `Proofs/Codegen/ViTRender.lean`'s
+  -- `vitAdamTrainStepFaithful` — `pretty(provenGraph)`, gradients + AdamW triple both proven —
+  -- and that `#eval` is its sole writer. Licensed by `lake build vit-adam-tie`: gradient norm-rel
+  -- 1e-6, %loss bit-exact, 0/200 params disagreeing, on all 16,579,041 returned floats.
+  -- Fail loudly if the artifact is missing rather than quietly recreating it.
+  let tsPath := "verified_mlir/vit_adam_train_step.mlir"
+  if !(← System.FilePath.pathExists tsPath) then
+    throw (IO.userError s!"{tsPath} missing — it is written by \
+LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.ViTRender` first")
   -- baseLR 3e-4, β₁ .9, β₂ .999, 5-epoch linear warmup then cosine decay (vitTinyConfig).
   vitVerified.toNet.trainAdamSched vitAdamConfig (argv.head?.getD "data") 0.0003 0.9 0.999 5

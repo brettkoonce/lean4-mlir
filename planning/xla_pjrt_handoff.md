@@ -159,7 +159,7 @@ and every `_adam_train_step` except cifar8 **and resnet34** (§2b-ter). Counting
 The `tests/`-only 22 include four whole-net AdamW renders with **live drivers** —
 `vit-verified-adam`, `convnext-verified-adam`, `efficientnet-verified-adam`,
 `mobilenetv2-verified-adam` all train on hand-written bytes. So the AdamW scorecard is
-**2 of 6 certified** (cifar8 §2a, resnet34 §2b-ter).
+**3 of 6 certified** (cifar8 §2a, resnet34 §2b-ter, vit §2a-quinquies-follow-on).
 
 **The double-writers were 7; they are now 4** — see §2a-quater. The four that remain
 (`convnext`/`efficientnet`/`mobilenetv2`/`resnet34` **SGD** train steps) each own an independent
@@ -360,10 +360,37 @@ Distinct job, much larger, and *not* a prerequisite for the above. `vit`, `convn
   `add x, dense<−0.01>` where the other emits `subtract x, 0.01` — IEEE subtraction *is* addition of
   the exact negation, so bit-identical.
 
-  **▶ Step 3 — the tie, then the swap.** Copy `TestResnet34AdamTie.lean` (its packed `[θ|m|v]`
-  protocol is what `trainAdamSched` already uses; the interface check above means the same buffer
-  feeds both). Then delete the driver's `IO.FS.writeFile` and add the `#eval` here, so the `Proofs/`
-  render becomes the sole writer.
+  **✅ Step 3 done — tied and swapped. The AdamW scorecard is 3 of 6.**
+  `verified_mlir/vit_adam_train_step.mlir` is now written by `Proofs/Codegen/ViTRender.lean`'s
+  `#eval`, and that is its **only** writer; `MainViTVerifiedAdam.lean`'s `IO.FS.writeFile` is gone
+  and the driver now throws if the artifact is missing instead of recreating it. The committed bytes
+  are byte-identical to the render that passed the tie (checked before and after the swap).
+
+  `tests/TestViTAdamTie.lean` → `lake build vit-adam-tie`, one AdamW step, all **16,579,041**
+  returned floats:
+
+  | check | result |
+  |---|---|
+  | interface vs the retired render | 605 in / 603 out, arg+return types positionally identical ✅ |
+  | A-vs-A determinism floor | **bit-exact 16579041/16579041** ✅ |
+  | θ | norm-rel 0, bit-exact 5512498/5526346 ✅ |
+  | **gradient (`m`)** | **norm-rel 1e-6**, 0/200 params above 1e-4 ✅ |
+  | `v` | norm-rel 1e-6 ✅ |
+  | **`%loss`** | **BIT-EXACT 3/3** ✅ |
+
+  **`%loss` is the load-bearing check here, not a footnote.** ViT has no BN, so unlike
+  `resnet34-adam-tie` there is no `bnstat` region and *nothing* in the output depends on the forward
+  alone — except `%loss`. It is report-only, on no gradient path, and covered by no theorem, which
+  is exactly the configuration in which §2b shipped plain CE against a smoothed-CE cotangent. So the
+  harness **gates** it rather than reporting it.
+
+  **`vit-adam-tie` links `ireeLink`, not `xlaLink`** — the only tie that does. `vit-verified-adam`
+  is an IREE binary, so this graph has never run under XLA/PJRT, and on XLA it dies in the
+  patch-embed weight-grad convolution with `miopenStatusUnknownError` (this box is MIOpen-conv-weak
+  — see the ROCm note). A tie should run on the backend the trainer actually uses regardless.
+
+  Remaining ViT gap: no data-parallel variant. `ResNet34RenderB` grew `replicas` in §2b-quater; the
+  same `emitGradAllReduce` insertion would work here, and `vitAdamOne` is the place for it.
 
   Why the gap below was worth recording — the two cotangents WERE different functions, so a render
   built on `vitBackAll` without `smooth` would have failed the tie in a way that looks like a bug in

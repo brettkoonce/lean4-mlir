@@ -526,3 +526,20 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/vit_fwd.mlir" (Proofs.StableHLO.vitFwdRenderV "vit_fwd")
 #eval IO.FS.writeFile "verified_mlir/vit_train_step.mlir"
   (Proofs.StableHLO.vitTrainStepRenderV "vit_train_step" "0.003125")
+
+-- The **AdamW** train step, `pretty(provenGraph)` — the artifact `vit-verified-adam` trains on, and
+-- from 2026-07-28 this `#eval` is its ONLY writer. It used to be written by the DRIVER
+-- (`apps/imagenette/MainViTVerifiedAdam.lean`) at every startup, from the hand-written
+-- `LeanMlir/ViTRender.vitTrainStepModuleAdamSched` — a writer pattern the artifact audit cannot
+-- see, and one where the committed bytes were never authoritative because each run overwrote them.
+--
+-- The swap was licensed by `lake build vit-adam-tie` (retired render vs this one, one AdamW step,
+-- all 16,579,041 returned floats): gradient norm-rel 1e-6, **%loss bit-exact**, 0/200 parameters
+-- disagreeing, against a bit-exact A-vs-A determinism floor. `%loss` carries real weight here — ViT
+-- has no BN, so it is the only output that reads the forward directly, and it is precisely what §2b
+-- got wrong elsewhere. To re-run the tie, recover the retired render:
+--   git show 2957188:verified_mlir/vit_adam_train_step.mlir > /tmp/retired.mlir
+--   .lake/build/bin/vit-adam-tie /tmp/retired.mlir verified_mlir/vit_adam_train_step.mlir
+-- Literal α = 0.1, −α/K = −0.01 (K = 10), batch 32 — `vitTinyConfig`'s label smoothing + mean.
+#eval IO.FS.writeFile "verified_mlir/vit_adam_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam_train_step" "0.100000" "-0.010000" "32.0")

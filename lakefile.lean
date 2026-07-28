@@ -1388,6 +1388,19 @@ lean_exe «sgd-render-tie» where
   root := `tests.TestSgdRenderTie
   moreLinkArgs := xlaLink
 
+/-- ViT AdamW step-3 gate: one AdamW step through two renders of `@vit_adam_train_step` — the
+    hand-written emitter the driver writes at startup vs `pretty(provenGraph)` — same packed
+    `[θ|m|v|lr,bc1,bc2]`, every returned float compared. ViT has no BN, so there is no forward-only
+    region: the gate is the gradient AND `%loss` (the only direct read of the forward).
+
+    **ireeLink, not xlaLink** — unlike the R34/cifar8 ties. `vit-verified-adam` is an IREE binary,
+    so the ViT AdamW graph has only ever run under IREE; on XLA/PJRT it dies in the patch-embed
+    weight-grad convolution with `miopenStatusUnknownError` (this box is MIOpen-conv-weak). A tie
+    must run on the backend the trainer actually uses anyway. -/
+lean_exe «vit-adam-tie» where
+  root := `tests.TestViTAdamTie
+  moreLinkArgs := ireeLink
+
 /-- §2d.1 gate on the bs256 re-render: feed it 8 identical copies of one bs32 batch. Batch-BN
     statistics and the mean-CE cotangent are then exactly the bs32 render's, so all 68M returned
     floats must AGREE — an exact known-answer check, not a tolerance argument. -/
