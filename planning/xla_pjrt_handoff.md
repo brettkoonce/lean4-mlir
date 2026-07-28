@@ -153,11 +153,42 @@ preserving.
   all-zero/non-finite agreement rather than reporting a green tie.
 
 **Still `tests/`-rendered:** `mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}`, `convnext_fwd`,
-and every `_adam_train_step` except cifar8 **and resnet34** (§2b-ter). Of the 7 remaining
-double-writers, three (`vit_fwd`, `vit_train_step`, `cifar8_train_step`) just *delegate* to the
-`Proofs/` renderer — verified byte-identical for `vit_fwd` — so they are redundant, not divergent.
-The four that own independent emitters (convnext, efficientnet, mobilenetv2, resnet34 **SGD** train
-steps) can drift.
+and every `_adam_train_step` except cifar8 **and resnet34** (§2b-ter). Counting writers across all
+50 artifacts: **21 `Proofs/`-only, 22 `tests/`-only, 4 contested.**
+
+The `tests/`-only 22 include four whole-net AdamW renders with **live drivers** —
+`vit-verified-adam`, `convnext-verified-adam`, `efficientnet-verified-adam`,
+`mobilenetv2-verified-adam` all train on hand-written bytes. So the AdamW scorecard is
+**2 of 6 certified** (cifar8 §2a, resnet34 §2b-ter).
+
+**The double-writers were 7; they are now 4** — see §2a-quater. The four that remain
+(`convnext`/`efficientnet`/`mobilenetv2`/`resnet34` **SGD** train steps) each own an independent
+emitter, so they can genuinely diverge; `resnet34_train_step` is *demonstrated* to flip
+(md5 `3184522f` ↔ `929074f6`) simply by elaborating its test file.
+
+### 2a-quater. The three delegators, retired ✅
+
+Three of the 7 contested artifacts had `tests/` writers that merely re-invoked the `Proofs/`
+renderer. Retired 2026-07-28, each only after being **proved** byte-redundant rather than assumed:
+
+- **`vit_fwd`, `vit_train_step`** — `tests/TestViT{Fwd,Train}.lean` called
+  `vitFwdRenderV "vit_fwd"` and `vitTrainStepRenderV "vit_train_step" "0.003125"`, the identical
+  arguments the `Proofs/` `#eval` uses. Ran both writers and diffed: md5 `626cc192…` / `f57aff00…`
+  unchanged. The write is gone; **the `iree-compile` smoke stays**, now reading the committed bytes
+  instead of re-rendering them — that is the part `lake build` genuinely cannot do, since it needs
+  the compiler on PATH. They now fail loudly if the artifact is missing rather than quietly
+  recreating it.
+- **`cifar8_train_step`** — `tests/RenderCifar8Sgd02.lean` was **not** a delegator, despite being
+  classified as one. It called the same certified renderer at a **different learning rate**
+  (`0.00015625` = 0.02/128, against the committed `0.00078125` = 0.1/128), so elaborating it
+  silently replaced a committed certified artifact with different hyperparameters — its own
+  docstring said "Temporary" and told you to `git checkout` afterwards. **Deleted.** It backed the
+  momentum/lr-0.02 column of `runs/ablation_cifar8/README.md`, so that README now records where to
+  recover it (`git show 57e7a12:tests/RenderCifar8Sgd02.lean`) and to restore the artifact after.
+
+The lesson worth keeping: *"currently byte-identical" is not a property that maintains itself.* A
+redundant writer costs nothing until someone edits one of the two — which is precisely how
+`resnet34_train_step` (§2a) and `resnet34_adam_train_step` (§2b-ter) went wrong.
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 

@@ -16,7 +16,12 @@ by B (mean gradients), no label smoothing.
   hflip + cosine-warmup(3) schedule, all via `trainAdamSched` (variants `sgd`/`mom`/`adam`)
 - Per-optimizer tuned lr: SGD 0.1, momentum μ=0.9/lr 0.02, AdamW lr 1e-3 (wd 1e-4)
 - Backend: IREE + ROCm/HIP on RX 7900 XTX (gfx1100)
-- Renders: `tests/TestCifar8AdamTrain.lean` (all six train steps); `tests/RenderCifar8Sgd02.lean` (lr sweep)
+- Renders: `tests/TestCifar8AdamTrain.lean` (all six train steps); `tests/RenderCifar8Sgd02.lean`
+  (lr sweep — **removed 2026-07-28**: it re-rendered the committed
+  `verified_mlir/cifar8_train_step.mlir` at lr 0.02 rather than the committed 0.1, i.e. it silently
+  overwrote a certified artifact with different hyperparameters. Recover with
+  `git show 57e7a12:tests/RenderCifar8Sgd02.lean` if this sweep is ever re-run, and `git checkout
+  verified_mlir/cifar8_train_step.mlir` afterwards.)
 
 ## Controlled results — modern pipeline, optimizer is the only variable (final % / best %)
 
