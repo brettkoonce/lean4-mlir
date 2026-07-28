@@ -269,14 +269,38 @@ number much later.
    divides by the batch, and `x * (1/B)` is only bit-equal to `x / B` when `B` is a power of two,
    so `scaleB (1/B)` would silently break the bs192 render §2d wants.
 
-   Status — **rendered, validated, not yet tied**:
+   Status — **TIED ✅** (`lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie`, XLA/
+   PJRT on a 7900 XTX, one step, all 68,040,737 returned floats compared):
 
    | check | result |
    |---|---|
    | interface vs the committed artifact | **515 in / 513 out, all types positionally identical** ✅ |
    | structural ops (conv/transpose/reverse/pad/reduce_window/select_and_scatter/sqrt/dot_general) | **exact match** ✅ |
    | `iree-compile` (llvm-cpu) | **exit 0**, 430 KB vmfb ✅ |
-   | numeric tie vs the committed artifact | ⛔ **NOT RUN** — needs a GPU |
+   | **forward** (`bnstat` = batch μ/var of all 36 BN inputs) | **BIT-EXACT, 17024/17024** ✅ |
+   | **loss** | **bit-exact 3/3** ✅ |
+   | **backward** (θ/m/v) | **norm-rel 1e-6** ✅ |
+
+   **The gate is not per-coordinate relative, and that matters.** §3 already establishes that R34's
+   gradient does not reproduce to better than ~6e-3 per-coordinate even XLA-vs-XLA under a sub-ULP
+   nudge; a 1e-4 per-coordinate gate fails a *correct* render by 60×, because it is dominated by
+   near-zero gradient entries where a sub-ULP absolute difference is a huge ratio. Here the
+   per-coordinate max rel is **0.32** while max|a−b| is below 1e-6 — that number is noise, not
+   signal. The two gates that mean something: the **forward must be bit-exact** (`bnstat` pins the
+   whole chain — stem, every block, every BN — so any real mis-wiring is a hard failure, not a
+   tolerance argument), and the backward must agree **norm-relative** (max|a−b| / max|a|).
+
+   Run A against itself first: **bit-exact on all 68M outputs**. So XLA is deterministic for a
+   single step (as §3 says), and any A-vs-B difference is attributable to the graph, never to the
+   backend. That baseline is what makes the 1e-6 meaningful.
+
+   **The tie caught a real bug.** The first render computed PLAIN cross-entropy for `%loss` instead
+   of the SMOOTHED one the cotangent implies
+   (`−(1/B)·Σ[(1−α)·Σ onehot·log sm + (α/K)·Σ log sm]`) — a 0.28% loss disagreement against an
+   otherwise bit-identical forward. It is on no gradient path, so no proof in the repo could have
+   seen it, and it would have shown up only as a training curve that quietly failed to match the
+   reference. `%loss` is exactly the hand-written, non-AST carve-out §5 flags; this is what that
+   warning is for.
 
    **It is ~1.7× the ops** (10005 vs 5971), and the reason is worth knowing before anyone reads
    that as a defect: `pretty` has no CSE (§4), and the batched backward ops are *self-contained
@@ -286,9 +310,11 @@ number much later.
    XLA's CSE should collapse most of it — the recomputes are identical subgraphs on identical
    inputs — but **that is an assumption, not a measurement**; measure before quoting a step time.
 
-   It writes a **separate path** from `resnet34_adam_train_step.mlir` on purpose. That file is what
-   the AdamW driver runs today off the hand-written emitter; pointing a second writer at it before
-   the numeric tie passes is exactly the last-writer-wins race §2a found. Swap only after the tie.
+   It still writes a **separate path** from `resnet34_adam_train_step.mlir`. The tie now passes, so
+   the swap is **unblocked but not done** — it changes what the AdamW trainer actually runs, and
+   two things should be settled first: (a) measure a step, since the render is 1.7× the ops and the
+   XLA-CSE assumption above is untested; (b) retire the `tests/` writer in the same change, or the
+   §2a two-writers race just moves to the new file.
 
 **`tests/TestBatchedEmitTie.lean`** has two sections: thirteen batched forms tied to their
 per-example peers byte-for-byte, and eight un-fused `*GradB` renders checked to be byte-PREFIXES of

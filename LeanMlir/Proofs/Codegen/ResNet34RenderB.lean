@@ -362,15 +362,29 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String) : String
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
     -- `pretty` of an AST node and says so in the emitted text — the same carve-out
     -- `cifar8_adam_train_step`'s `%loss` takes (§5 of the handoff).
+    -- The SMOOTHED cross-entropy, matching the cotangent's soft target:
+    --   loss = −(1/B)·Σ_b [ (1−α)·Σ_k onehot·log sm  +  (α/K)·Σ_k log sm ].
+    -- Getting this wrong is invisible to every proof in the repo — `%loss` is report-only and on
+    -- no gradient path — but the driver logs it and the epoch curve is how a run is judged against
+    -- the reference. A first cut here computed PLAIN CE (dropping the (1−α) factor and the α/K
+    -- term); the numeric tie caught it as a 0.28% loss disagreement against an otherwise
+    -- bit-identical forward. Hand-written emit is not verified emit (§5).
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
       s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
       s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
       s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [0, 1] : ({ty [B, nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbn = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %lmean = stablehlo.divide %lsum2, %lbn : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.negate %lmean : tensor<f32>\n"
+      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [B]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<0.010000> : {ty [B]}\n" ++
+      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
+      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
+      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
+      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
+      s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
+      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let body := cStc ++ cStn ++ cStr ++ cStp ++
       f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
       f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++ f16.code ++

@@ -1371,6 +1371,14 @@ lean_exe «cifar8-adam-tie» where
   root := `tests.TestCifar8AdamTie
   moreLinkArgs := xlaLink
 
+/-- §2b step-5 guard: one AdamW step through two renders of `@resnet34_adam_train_step` — the
+    hand-written emitter vs the batched `pretty(provenGraph)` — same packed
+    `[θ|m|v|lr,bc1,bc2|bn stats]`, every returned float compared. Numeric and not textual on
+    purpose: the two are the same function but not the same graph. -/
+lean_exe «resnet34-adam-tie» where
+  root := `tests.TestResnet34AdamTie
+  moreLinkArgs := xlaLink
+
 -- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
 -- per-channel BN) trained on VERIFIED-rendered StableHLO
 -- (tests/TestMobilenetV2{Train,Fwd}.lean); 30 params.
