@@ -1443,6 +1443,15 @@ lean_exe «efficientnet-dp-check» where
   root := `tests.TestEfficientNetDpCheck
   moreLinkArgs := xlaLink
 
+/-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
+    compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
+    SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and
+    the Amdahl-implied non-parallelisable share of a step, which is the measured argument for
+    device-resident parameters. Needs two GPUs and the XLA backend. -/
+lean_exe «efficientnet-dp-bench» where
+  root := `tests.TestEfficientNetDpBench
+  moreLinkArgs := xlaLink
+
 /-- §2b-quater gate: the collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
     2×128 + all_reduce must equal 1×256 to fp rounding. Needs two GPUs and the XLA backend. -/
 lean_exe «cifar8-dp-check» where
