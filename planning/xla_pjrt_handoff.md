@@ -223,15 +223,24 @@ number much later.
    **`batchMapAux`**, the "batchMap with per-example auxiliary data" combinator that `maxPoolBackB`
    needs and `seBackBatched` had inlined — it is the shape every saved-activation backward takes,
    and naming it makes the descriptor restriction legible.
-4. **▶ NEXT: un-fuse the `*SgdB` family into `*GradB`**, the way §2a did for the per-example ops.
-   That is what hands AdamW a gradient instead of a fused `θ − lr·g`; §2a's note applies verbatim
-   — the fusion, not Adam, was the blocker. Peers needed for R34: `conv{,Strided}WeightGradB`,
-   `conv{,Strided}BiasGradB`, `bnGammaGradB`, `bnBetaGradB`.
-5. Render `resnet34_adam_train_step` batched at `N := B := 32` and tie it numerically against the
-   committed artifact. It should be **exact** — the emitted text is what already runs.
+4. ~~Un-fuse the `*SgdB` family into `*GradB`~~ ✅ **DONE** — eight of them, the batched peers of
+   §2a's per-example eight: `conv{,Strided}WeightGradB`, `conv{,Strided}BiasGradB`, `bnGammaGradB`,
+   `bnBetaGradB`, `denseWeight/BiasGradB` (R34's head uses `weightSgd`/`biasSgd`, whose batched
+   peers are the `dense*SgdB` pair — same emitted text). All eight `*SgdB_eq_grad` theorems are
+   `rfl`. **AdamW now has a gradient to consume at the batched index**, which was the actual
+   blocker; §2a's note applies verbatim — the fusion, never Adam.
+   *Note `bnGammaGradB`'s emit recomputes x̂ over `[0,2,3]` (batch BN), NOT the per-example
+   `bnGammaGrad`'s `[2,3]` — the two are different functions, as §2a found at whole-net scale.*
+   **Still missing (not R34's, so out of step-4 scope): `depthwise{,Strided}WeightGradB` and a
+   depthwise bias peer** — EfficientNet needs those whenever its Adam render is done.
+5. **▶ NEXT: render `resnet34_adam_train_step` batched at `N := B := 32`** and tie it numerically
+   against the committed artifact. It should be **exact** — the emitted text is what already runs.
+   Every op it needs now exists; this step is renderer work, not kit work.
 
-**`tests/TestBatchedEmitTie.lean`** pins all thirteen batched forms against their per-example peers,
-byte-for-byte, one case each. Add a case with every new batched form in steps 3–4 — it is what
+**`tests/TestBatchedEmitTie.lean`** has two sections: thirteen batched forms tied to their
+per-example peers byte-for-byte, and eight un-fused `*GradB` renders checked to be byte-PREFIXES of
+their fused `*SgdB` peers (the tail being exactly the const-lr/multiply/subtract SGD update — the
+emit-side twin of the `*SgdB_eq_grad` theorems). Add a case for every new batched form — it is what
 catches an emitter that reads its width off the SHlo index again. The tie was verified to actually
 fail by deliberately breaking `relu`'s emit case. Note it fails via `throw`, not
 `IO.Process.exit 1`: under `#eval` the elaborator buffers output and prints it only after the eval

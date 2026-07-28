@@ -109,6 +109,53 @@ private def cases : List (String × String × String) :=
       render (pretty BS (.convStridedBiasSgdB (h := ch) (w := ch) "%b" "0.05" zK zSb zB 0
                            (.operand "%x" zdyb)))) ])
 
+/-- **The un-fused batched gradients** (`*GradB`) are their `*SgdB` peers with the SGD tail
+    (const lr / multiply / subtract) cut off, so each render must be a byte-PREFIX of the fused
+    one. Prefix rather than equality is the honest statement: the shared fresh-name counter means
+    the gradient's lines carry the *same* SSA names in the fused render, and the tail is pure
+    suffix. Denotationally this is the `*SgdB_eq_grad` set (`den (xSgdB …) = θ − lr·den (xGradB …)`,
+    all `rfl`); this is its emit-side twin. -/
+private def gradPrefixCases : List (String × String × String) :=
+  let zK   : Kernel4 oc ic kk kk := fun _ _ _ _ => 0
+  let zXb  : Vec (BS*(ic*ch*ch)) := fun _ => 0
+  let zSb  : Vec (BS*(ic*(2*ch)*(2*ch))) := fun _ => 0
+  let zB   : Vec oc := fun _ => 0
+  let zdyb : Vec (BS*(oc*ch*ch)) := fun _ => 0
+  let zbn  : Vec (BS*(oc*(ch*ch))) := fun _ => 0
+  let zG   : Vec oc := fun _ => 0
+  let zda  : Vec (BS*a) := fun _ => 0
+  let zdc  : Vec (BS*c) := fun _ => 0
+  let zWd  : Mat a c := fun _ _ => 0
+  [ ("convWeightGradB",
+     render (pretty BS (.convWeightGradB "%a" zB zXb zK (.operand "%x" zdyb))),
+     render (pretty BS (.convWeightSgdB "%a" "%W" "0.05" zB zXb zK 0 (.operand "%x" zdyb))))
+  , ("convStridedWeightGradB",
+     render (pretty BS (.convStridedWeightGradB "%a" zB zSb zK (.operand "%x" zdyb))),
+     render (pretty BS (.convStridedWeightSgdB "%a" "%W" "0.05" zB zSb zK 0 (.operand "%x" zdyb))))
+  , ("convBiasGradB",
+     render (pretty BS (.convBiasGradB (h := ch) (w := ch) zK zXb zB (.operand "%x" zdyb))),
+     render (pretty BS (.convBiasSgdB (h := ch) (w := ch) "%b" "0.05" zK zXb zB 0
+                          (.operand "%x" zdyb))))
+  , ("convStridedBiasGradB",
+     render (pretty BS (.convStridedBiasGradB (h := ch) (w := ch) zK zSb zB (.operand "%x" zdyb))),
+     render (pretty BS (.convStridedBiasSgdB (h := ch) (w := ch) "%b" "0.05" zK zSb zB 0
+                          (.operand "%x" zdyb))))
+  , ("bnGammaGradB",
+     render (pretty BS (.bnGammaGradB (oc := oc) (h := ch) (w := ch) "%v" "1.0e-5" 0 zbn
+                          (.operand "%x" zbn))),
+     render (pretty BS (.bnGammaSgdB (oc := oc) (h := ch) (w := ch) "%g" "%v" "1.0e-5" "0.05" 0 zG
+                          zbn 0 (.operand "%x" zbn))))
+  , ("bnBetaGradB",
+     render (pretty BS (.bnBetaGradB (N := BS) (oc := oc) (h := ch) (w := ch) (.operand "%x" zbn))),
+     render (pretty BS (.bnBetaSgdB (oc := oc) (h := ch) (w := ch) "%b" "0.05" zG 0
+                          (.operand "%x" zbn))))
+  , ("denseWeightGradB",
+     render (pretty BS (.denseWeightGradB (c := c) "%a" zda (.operand "%x" zdc))),
+     render (pretty BS (.denseWeightSgdB "%a" "%W" "0.05" zda zWd 0 (.operand "%x" zdc))))
+  , ("denseBiasGradB",
+     render (pretty BS (.denseBiasGradB (N := BS) (.operand "%x" zdc))),
+     render (pretty BS (.denseBiasSgdB "%b" "0.05" (fun _ => 0 : Vec c) 0 (.operand "%x" zdc)))) ]
+
 /-- Fail loudly. NOT `IO.Process.exit 1`: under `#eval` the elaborator buffers the eval's output
     and prints it only after the eval returns, so `exit` kills the process with **every diagnostic
     discarded** — you get a bare non-zero status and no idea which form broke. (Verified against a
@@ -132,5 +179,17 @@ def main : IO Unit := do
   if bad != 0 then
     die s!"MISMATCH: {bad} batched form(s) do not emit their per-example peer's text"
   IO.println s!"✓ all {cases.length} batched forms emit their per-example peer's text byte-for-byte"
+  IO.println "── un-fused gradients ⊂ their fused *SgdB peers ──"
+  for (name, grad, sgd) in gradPrefixCases do
+    if grad.isEmpty || grad.length >= sgd.length then
+      die s!"DEGENERATE: {name} gradient render is empty or not shorter than the fused op"
+    if sgd.startsWith grad then
+      IO.println s!"  ✓ {name}  ({grad.length} of {sgd.length} bytes, tail = the SGD update)"
+    else
+      bad := bad + 1
+      IO.eprintln s!"  ✖ {name} is NOT a prefix of its fused peer\n    grad:\n{grad}    sgd:\n{sgd}"
+  if bad != 0 then
+    die s!"MISMATCH: {bad} gradient render(s) are not a prefix of their fused peer"
+  IO.println s!"✓ all {gradPrefixCases.length} un-fused gradients are byte-prefixes of their *SgdB peers"
 
 #eval main

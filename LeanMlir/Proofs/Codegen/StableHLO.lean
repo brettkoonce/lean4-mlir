@@ -611,6 +611,32 @@ inductive SHlo : Nat → Type where
                                                           : SHlo (N * c) → SHlo (a * c)
   | denseBiasSgdB   {N c : Nat} (bName lrStr : String) (b : Vec c) (lr : ℝ)
                                                           : SHlo (N * c) → SHlo c
+  -- ══ The `*SgdB` family with the SGD tail cut off — the BATCHED peers of §2a's eight
+  --    per-example `*Grad` ops. Same reason: every `*SgdB` computes a gradient and immediately
+  --    spends it on `θ − lr·g`, and AdamW needs the gradient itself three times over (θ', m',
+  --    v'). `den (xSgdB …) = θ − lr · den (xGradB …)` is `rfl` — the `*SgdB_eq_grad` theorems.
+  --    Output is PARAM-shaped (unbatched), exactly like the fused ops: the Σ over the batch
+  --    lives in the emitter, and each emit is a byte-PREFIX of its `*SgdB` peer's. ══
+  | convWeightGradB {N ic oc h w kH kW : Nat} (xName : String)
+      (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW)
+                                                          : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
+  | convStridedWeightGradB {N ic oc h w kH kW : Nat} (xName : String)
+      (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
+                                                          : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
+  -- Stride-INDEPENDENT (`Σ_{batch,spatial} dy`), so both bias grads `skel` to ONE Raw and share
+  -- an emit case — the same aliasing `convStridedBiasSgd`/`convBiasSgd` already use.
+  | convBiasGradB {N ic oc h w kH kW : Nat}
+      (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * h * w))) (b : Vec oc)
+                                                          : SHlo (N * (oc * h * w)) → SHlo oc
+  | convStridedBiasGradB {N ic oc h w kH kW : Nat}
+      (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * (2*h) * (2*w)))) (b : Vec oc)
+                                                          : SHlo (N * (oc * h * w)) → SHlo oc
+  | bnGammaGradB {N oc h w : Nat} (vName epsStr : String) (ε : ℝ)
+      (v : Vec (N * (oc * (h * w))))                      : SHlo (N * (oc * (h * w))) → SHlo oc
+  | bnBetaGradB  {N oc h w : Nat}                         : SHlo (N * (oc * (h * w))) → SHlo oc
+  | denseWeightGradB {N a c : Nat} (xName : String) (x : Vec (N * a))
+                                                          : SHlo (N * c) → SHlo (a * c)
+  | denseBiasGradB   {N c : Nat}                          : SHlo (N * c) → SHlo c
   -- ViT per-token (rowwise) dense W/b SGD — the `denseRowF` partners. SAME `den` as
   -- `denseWeightSgdB`/`denseBiasSgdB` (Σ over the N rows), but a 3D `[B,N,·]` token-matrix EMIT
   -- (the weight grad contracts batch×tokens `[0,1]x[0,1]`; the bias reduces `[0,1]`), vs the enet
@@ -963,6 +989,31 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .denseBiasSgdB (N := N) (c := c) _ _ b lr e =>
       fun j => b j - lr * ∑ n : Fin N, batchSlice N c (den e) n j
+  | _, .convWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
+      fun idx => ∑ n : Fin N,
+        (conv2d_weight_grad_has_vjp b (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward
+          (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
+  | _, .convStridedWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
+      fun idx => ∑ n : Fin N,
+        (flatConvStride2_weight_grad_has_vjp b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
+          (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
+  | _, .convBiasGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) W x b e =>
+      fun o => ∑ n : Fin N,
+        (conv2d_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward b
+          (batchSlice N (oc*h*w) (den e) n) o
+  | _, .convStridedBiasGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) W x b e =>
+      fun o => ∑ n : Fin N,
+        (flatConvStride2_bias_grad_has_vjp W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
+          (batchSlice N (oc*h*w) (den e) n) o
+  | _, .bnGammaGradB (N := N) (oc := oc) (h := h) (w := w) _ _ ε v e =>
+      fun c =>
+        bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
+  | _, .bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) e =>
+      fun c => bnPerChannel_grad_beta oc (N*(h*w)) (bnchwFwd N oc h w (den e)) c
+  | _, .denseWeightGradB (N := N) (a := a) (c := c) _ x e =>
+      Mat.flatten (fun i j => ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
+  | _, .denseBiasGradB (N := N) (c := c) e =>
+      fun j => ∑ n : Fin N, batchSlice N c (den e) n j
   | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) _ _ _ x W lr e =>
       Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .rowDenseBiasSgd (N := N) (c := c) _ _ b lr e =>
@@ -1584,6 +1635,57 @@ quietly change the gradient, and anything already proven about a `*Sgd` output t
 @[simp] theorem bnBetaSgd_eq_grad {oc h w : Nat} (bN lrS : String) (β : Vec oc) (lr : ℝ)
     (e : SHlo (oc*h*w)) (c : Fin oc) :
     den (.bnBetaSgd bN lrS β lr e) c = β c - lr * den (.bnBetaGrad (h := h) (w := w) e) c := rfl
+
+/-! ## `den (xSgdB …) = θ − lr · den (xGradB …)` — the BATCHED peers of the `*Sgd_eq_grad` set
+
+All `rfl`, and all carrying the same content as §2a's per-example eight: the fused `*SgdB` op IS
+`θ − lr·` applied to the un-fused gradient, so handing the gradient to AdamW instead of to the SGD
+tail changes nothing about what is computed. This is what unblocks a batched `resnet34_adam_train_step`
+rendered from `Proofs/` — the blocker was the fusion, never Adam. -/
+
+@[simp] theorem convWeightSgdB_eq_grad {N ic oc h w kH kW : Nat} (xN wN lrS : String)
+    (b : Vec oc) (x : Vec (N*(ic*h*w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
+    (e : SHlo (N*(oc*h*w))) (idx : Fin (oc*ic*kH*kW)) :
+    den (.convWeightSgdB xN wN lrS b x W lr e) idx
+      = Kernel4.flatten W idx - lr * den (.convWeightGradB xN b x W e) idx := rfl
+
+@[simp] theorem convStridedWeightSgdB_eq_grad {N ic oc h w kH kW : Nat} (xN wN lrS : String)
+    (b : Vec oc) (x : Vec (N*(ic*(2*h)*(2*w)))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
+    (e : SHlo (N*(oc*h*w))) (idx : Fin (oc*ic*kH*kW)) :
+    den (.convStridedWeightSgdB xN wN lrS b x W lr e) idx
+      = Kernel4.flatten W idx - lr * den (.convStridedWeightGradB xN b x W e) idx := rfl
+
+@[simp] theorem convBiasSgdB_eq_grad {N ic oc h w kH kW : Nat} (bN lrS : String)
+    (W : Kernel4 oc ic kH kW) (x : Vec (N*(ic*h*w))) (b : Vec oc) (lr : ℝ)
+    (e : SHlo (N*(oc*h*w))) (o : Fin oc) :
+    den (.convBiasSgdB bN lrS W x b lr e) o
+      = b o - lr * den (.convBiasGradB (h := h) (w := w) W x b e) o := rfl
+
+@[simp] theorem convStridedBiasSgdB_eq_grad {N ic oc h w kH kW : Nat} (bN lrS : String)
+    (W : Kernel4 oc ic kH kW) (x : Vec (N*(ic*(2*h)*(2*w)))) (b : Vec oc) (lr : ℝ)
+    (e : SHlo (N*(oc*h*w))) (o : Fin oc) :
+    den (.convStridedBiasSgdB bN lrS W x b lr e) o
+      = b o - lr * den (.convStridedBiasGradB (h := h) (w := w) W x b e) o := rfl
+
+@[simp] theorem bnGammaSgdB_eq_grad {N oc h w : Nat} (gN vN es lrS : String) (ε : ℝ) (γ : Vec oc)
+    (v : Vec (N*(oc*(h*w)))) (lr : ℝ) (e : SHlo (N*(oc*(h*w)))) (c : Fin oc) :
+    den (.bnGammaSgdB gN vN es lrS ε γ v lr e) c
+      = γ c - lr * den (.bnGammaGradB vN es ε v e) c := rfl
+
+@[simp] theorem bnBetaSgdB_eq_grad {N oc h w : Nat} (bN lrS : String) (β : Vec oc) (lr : ℝ)
+    (e : SHlo (N*(oc*(h*w)))) (c : Fin oc) :
+    den (.bnBetaSgdB bN lrS β lr e) c
+      = β c - lr * den (.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) e) c := rfl
+
+@[simp] theorem denseWeightSgdB_eq_grad {N a c : Nat} (xN wN lrS : String) (x : Vec (N*a))
+    (W : Mat a c) (lr : ℝ) (e : SHlo (N*c)) (idx : Fin (a*c)) :
+    den (.denseWeightSgdB xN wN lrS x W lr e) idx
+      = Mat.flatten W idx - lr * den (.denseWeightGradB (c := c) xN x e) idx := rfl
+
+@[simp] theorem denseBiasSgdB_eq_grad {N c : Nat} (bN lrS : String) (b : Vec c) (lr : ℝ)
+    (e : SHlo (N*c)) (j : Fin c) :
+    den (.denseBiasSgdB bN lrS b lr e) j
+      = b j - lr * den (.denseBiasGradB (N := N) e) j := rfl
 
 /-- **AdamW first-moment faithfulness** — `m' = β₁·m + (1−β₁)·g`, the proven `adamMNext`. -/
 @[simp] theorem adamMNextF_faithful {n : Nat} (mN b1N ob1N : String) (ds : List Nat)
@@ -2775,6 +2877,22 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "denseWeightSgd" [xN, wN, lrS] [N, a, c] (skel e)
   | _, .denseBiasSgdB (N := N) (c := c) bN lrS _ _ e =>
       .batched "denseBiasSgd" [bN, lrS] [N, c] (skel e)
+  | _, .convWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
+      .batched "convWeightGrad" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convStridedWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
+      .batched "convStridedWeightGrad" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convBiasGradB (N := N) (oc := oc) (h := h) (w := w) _ _ _ e =>
+      .batched "convBiasGrad" [] [N, oc, h, w] (skel e)
+  | _, .convStridedBiasGradB (N := N) (oc := oc) (h := h) (w := w) _ _ _ e =>
+      .batched "convBiasGrad" [] [N, oc, h, w] (skel e)
+  | _, .bnGammaGradB (N := N) (oc := oc) (h := h) (w := w) vN es _ _ e =>
+      .batched "bnGammaGrad" [vN, es] [N, oc, h, w] (skel e)
+  | _, .bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) e =>
+      .batched "bnBetaGrad" [] [N, oc, h, w] (skel e)
+  | _, .denseWeightGradB (N := N) (a := a) (c := c) xN _ e =>
+      .batched "denseWeightGrad" [xN] [N, a, c] (skel e)
+  | _, .denseBiasGradB (N := N) (c := c) e =>
+      .batched "denseBiasGrad" [] [N, c] (skel e)
   | _, .rowDenseWeightSgd (N := N) (a := a) (c := c) xN wN lrS _ _ _ e =>
       .batched "rowDenseWeightSgd" [xN, wN, lrS] [N, a, c] (skel e)
   | _, .rowDenseBiasSgd (N := N) (c := c) bN lrS _ _ e =>
@@ -4292,6 +4410,84 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, rows*c]}) -> {ty [B,rows,c]}\n" ++
             s!"    {dg} = stablehlo.dot_general {dn}, {wN}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({ty [B,rows,c]}, {ty [a,c]}) -> {ty [B,rows,a]}\n" ++
             s!"    {o} = stablehlo.reshape {dg} : ({ty [B,rows,a]}) -> {ty [B, rows*a]}\n", o :: st)
+      -- ══ The un-fused BATCHED gradients: each is its `*SgdB` peer's emit with the SGD tail
+      --    (const lr / multiply / subtract) removed, so the text is a byte-PREFIX of it. ══
+      | "convWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh; let raw ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*h*w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,h,w]}) -> {ty [ic,B,h,w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,oc,h,w]}) -> {ty [oc,B,h,w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [ic,B,h,w]}, {ty [oc,B,h,w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
+      | "convStridedWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
+          let raw ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,2*h,2*w]}) -> {ty [oc,B,2*h,2*w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xt}, {dt})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,2*h,2*w]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
+      | "convBiasGrad", [], [_N, oc, h, w] => do
+          let dr ← fresh; let z ← fresh; let o ← fresh
+          pure (
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {o} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n", o :: st)
+      | "bnGammaGrad", [vN, es], [_N, oc, h, w] => do
+          -- x̂ recomputed with μ/var over [0,2,3] — BATCH BN, not `bnGammaGrad`'s per-example [2,3].
+          let xr ← fresh; let z ← fresh; let nf ← fresh; let smr ← fresh; let sm ← fresh
+          let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh; let vs ← fresh
+          let vr ← fresh; let ep ← fresh; let ve ← fresh; let istd ← fresh; let xh ← fresh
+          let dyr ← fresh; let dgp ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {vN} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{B*h*w}.0> : {ty [B,oc,h,w]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xr}, {mu} : {ty [B,oc,h,w]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,oc,h,w]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n" ++
+            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,oc,h,w]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{es}> : {ty [B,oc,h,w]}\n" ++
+            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,oc,h,w]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,oc,h,w]}\n" ++
+            s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,oc,h,w]}\n" ++
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {dgp} = stablehlo.multiply {dyr}, {xh} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o} = stablehlo.reduce({dgp} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n", o :: st)
+      | "bnBetaGrad", [], [_N, oc, h, w] => do
+          let dyr ← fresh; let z ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {o} = stablehlo.reduce({dyr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n", o :: st)
+      | "denseWeightGrad", [xN], [_N, a, c] => do
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.dot_general {xN}, {r}, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,a]}, {ty [B,c]}) -> {ty [a,c]}\n", o :: st)
+      | "denseBiasGrad", [], [_N, c] => do
+          let z ← fresh; let o ← fresh
+          pure (
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {o} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0] : ({ty [B,c]}, tensor<f32>) -> {ty [c]}\n", o :: st)
       | "bnBatch", [gN, bN, es], [_N, oc, h, w] => do
           let xr ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh; let smr ← fresh
           let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh; let vsr ← fresh
