@@ -235,6 +235,20 @@ private def adamConstsB : String :=
 -- § The whole-net batched AdamW train step
 -- ════════════════════════════════════════════════════════════════
 
+/-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
+    `verified_mlir/resnet34_<variant>_train_step.mlir`, the entry point is
+    `@resnet34_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it.
+
+    All three must agree. The shim checks the entry name and refuses a mismatch outright ("entry
+    mismatch") rather than running the wrong graph — which is exactly what it did the first time the
+    DP render kept the single-device name (§2b-quater). Deriving the name here, from the same two
+    numbers the render is built from, is what stops it drifting from the `#eval` paths below; the
+    `#guard`s at the bottom pin those literal paths against this function.
+
+    `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes. -/
+def r34AdamVariant (B replicas : Nat) : String :=
+  (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B)
+
 set_option maxRecDepth 4000000 in
 /-- **ResNet-34 `[3,4,6,3]` AdamW train step, batch-BN, rendered from the verified AST at `N := B`.**
     515 inputs (`%x`, 146 θ, 146 m, 146 v, `%lr`/`%bc1`/`%bc2`, 72 running-stat slots, `%onehot`)
@@ -441,8 +455,9 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let inner : String := go.run' 0
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch") — which is exactly what it did the first time this was
-  -- rendered. Single device is variant "adam"; data-parallel is "adamdp".
-  let fname := if replicas ≤ 1 then "resnet34_adam_train_step" else "resnet34_adamdp_train_step"
+  -- rendered. `r34AdamVariant` is the single source for the name, the artifact path, and
+  -- `LEAN_MLIR_VARIANT`.
+  let fname := s!"resnet34_{r34AdamVariant B replicas}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -477,3 +492,24 @@ end Proofs.StableHLO
 -- the graph bakes `replica_groups`. Re-render here to change it.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adamdp_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" 2)
+
+-- The **bs256** render (handoff §2d.1), selected at run time by `LEAN_MLIR_VARIANT=adam256` with
+-- `cfg.batchSize := 256`. Batch is worth ~1.8× img/s on this net and bs256 fits on a 7900 XTX;
+-- it is also the batch ImageNet wants. `B` is a true parameter of the renderer, so this is the
+-- whole change — the graph structure is identical and only the tensor dimensions move.
+--
+-- It renders to its OWN path rather than re-pointing `resnet34_adam_train_step.mlir`, so the
+-- artifact the trainer runs today is untouched and the §2b tie/bench baselines stay valid. Note
+-- the eval forwards are still bs32: train at 256 with `LEAN_MLIR_SKIP_EVAL=1`, or re-render them.
+--
+-- Gated by `resnet34-batch-check` (§2d.1): feeding 8 identical copies of one bs32 batch makes the
+-- batch-BN statistics and the mean-CE cotangent identical to the bs32 render's, so the two must
+-- produce the SAME step — an exact known-answer check on the re-render, not a tolerance argument.
+#eval IO.FS.writeFile "verified_mlir/resnet34_adam256_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 256 10 "1.0e-05")
+
+-- Pin the three literal artifact paths above against the name the renderer actually emits. If a
+-- variant is renamed, this fails at `lake build` instead of at run time as an "entry mismatch".
+#guard Proofs.StableHLO.r34AdamVariant 32 1 == "adam"
+#guard Proofs.StableHLO.r34AdamVariant 32 2 == "adamdp"
+#guard Proofs.StableHLO.r34AdamVariant 256 1 == "adam256"

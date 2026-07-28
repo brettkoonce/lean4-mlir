@@ -1388,6 +1388,13 @@ lean_exe «sgd-render-tie» where
   root := `tests.TestSgdRenderTie
   moreLinkArgs := xlaLink
 
+/-- §2d.1 gate on the bs256 re-render: feed it 8 identical copies of one bs32 batch. Batch-BN
+    statistics and the mean-CE cotangent are then exactly the bs32 render's, so all 68M returned
+    floats must AGREE — an exact known-answer check, not a tolerance argument. -/
+lean_exe «resnet34-batch-check» where
+  root := `tests.TestResnet34BatchCheck
+  moreLinkArgs := xlaLink
+
 /-- §2b-quater gate: the collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
     2×128 + all_reduce must equal 1×256 to fp rounding. Needs two GPUs and the XLA backend. -/
 lean_exe «cifar8-dp-check» where

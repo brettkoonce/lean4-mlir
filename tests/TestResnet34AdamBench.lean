@@ -56,6 +56,21 @@ private def opCount (path : String) : IO Nat := do
   let s ← IO.FS.readFile path
   pure ((s.splitOn "stablehlo.").length - 1)
 
+/-- Read the entry-point name and the baked batch off a render: `func.func @NAME(%x: tensor<BxD…`.
+
+    Both are properties of the artifact, so reading them beats assuming them — it lets one bench
+    compare renders at *different* `B` (§2d.1), and it removes the chance of invoking the wrong
+    entry (the shim refuses an entry mismatch, but failing here is a clearer message). -/
+private def entryAndBatch (path : String) : IO (String × Nat) := do
+  let s ← IO.FS.readFile path
+  let some i := (s.splitOn "func.func @")[1]? | throw (IO.userError s!"{path}: no `func.func @`")
+  -- `.toString` on both: `takeWhile`/`trim` yield `String.Slice` in this toolchain.
+  let name := (i.takeWhile (· != '(')).trim.toString
+  let some rest := (i.splitOn "%x: tensor<")[1]? | throw (IO.userError s!"{path}: no %x operand")
+  let bstr := (rest.takeWhile (· != 'x')).toString
+  let some b := bstr.toNat? | throw (IO.userError s!"{path}: batch {bstr} is not a number")
+  pure (name, b)
+
 /-- min / median / mean of a sample, in ms. -/
 private def stats (xs : Array Float) : Float × Float × Float :=
   let s := xs.qsort (· < ·)
@@ -73,16 +88,20 @@ def main (args : List String) : IO Unit := do
     | []               => (dfltA, dfltB, 20)
   let warmup := 3
   let net := resnet34Verified.toNet
-  let bs  := 32                            -- the baked batch of both renders
+  -- Entry name and batch are read OFF each artifact rather than assumed, so this bench also works
+  -- across renders at different `B` (§2d.1's bs32-vs-bs256 measurement) without a new argument —
+  -- and cannot silently invoke the wrong entry point, which the shim would refuse anyway.
+  let (fnA, bsA) ← entryAndBatch pathA
+  let (fnB, bsB) ← entryAndBatch pathB
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let opsA ← opCount pathA
   let opsB ← opCount pathB
-  IO.println s!"@resnet34_adam_train_step step-time bench"
-  IO.println s!"  A (first)  = {pathA}  ({opsA} stablehlo ops)"
-  IO.println s!"  B (second) = {pathB}  ({opsB} stablehlo ops)"
+  IO.println s!"resnet34 AdamW step-time bench"
+  IO.println s!"  A (first)  = {pathA}  (@{fnA}, bs {bsA}, {opsA} stablehlo ops)"
+  IO.println s!"  B (second) = {pathB}  (@{fnB}, bs {bsB}, {opsB} stablehlo ops)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers, \
-bs {bs}, backend {← IreeSession.backendName}"
+backend {← IreeSession.backendName}"
   IO.println s!"  {warmup} warmup + {rounds} timed rounds, interleaved A,B,A,B…"
 
   -- ── inputs: byte-identical to tests/TestResnet34AdamTie.lean ──────────────────────────────
@@ -100,10 +119,14 @@ bs {bs}, backend {← IreeSession.backendName}"
   let pbuf := F32.concat #[θ, m, v, tail, bnIn]
   let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
                             ++ #[#[], #[], #[]] ++ bnStatShapes)
-  let x ← F32.heInit 555 (bs * net.d0).toUSize 1.0
-  let mut y : ByteArray := .empty
-  for i in [0:bs] do
-    y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
+  let mkXY (b : Nat) : IO (ByteArray × ByteArray) := do
+    let x ← F32.heInit 555 (b * net.d0).toUSize 1.0
+    let mut y : ByteArray := .empty
+    for i in [0:b] do
+      y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
+    pure (x, y)
+  let (xA, yA) ← mkXY bsA
+  let (xB, yB) ← mkXY bsB
 
   -- ── compile both (timed — B is 1.68× the ops, so this is a dev-loop cost worth naming) ────
   IO.println "  compiling A…"; (← IO.getStdout).flush
@@ -116,35 +139,48 @@ bs {bs}, backend {← IreeSession.backendName}"
   let compB := (← IO.monoMsNow) - cb0
   IO.println s!"  compile: A {compA} ms, B {compB} ms  ({(compB.toFloat / compA.toFloat)}×)"
 
-  let step (sess : IreeSession) : IO Nat := do
+  let step (sess : IreeSession) (fn : String) (x y : ByteArray) (b : Nat) : IO Nat := do
     let t0 ← IO.monoMsNow
-    let out ← IreeSession.mlpTrainStepV sess "m.resnet34_adam_train_step" x pbuf shapes y
-      bs.toUSize net.d0.toUSize net.nClasses.toUSize
+    let out ← IreeSession.mlpTrainStepV sess s!"m.{fn}" x pbuf shapes y
+      b.toUSize net.d0.toUSize net.nClasses.toUSize
     let t1 ← IO.monoMsNow
     -- touch the result so nothing can be elided, and guard against a silently empty return
     if out.size == 0 then throw (IO.userError "empty step output")
     pure (t1 - t0)
+  let stepA : IO Nat := step sessA fnA xA yA bsA
+  let stepB : IO Nat := step sessB fnB xB yB bsB
 
   IO.println "  warmup…"; (← IO.getStdout).flush
   for _ in [0:warmup] do
-    let _ ← step sessA
-    let _ ← step sessB
+    let _ ← stepA
+    let _ ← stepB
 
   let mut msA : Array Float := #[]
   let mut msB : Array Float := #[]
   IO.println "  timing…"; (← IO.getStdout).flush
   for _ in [0:rounds] do
-    msA := msA.push (← step sessA).toFloat
-    msB := msB.push (← step sessB).toFloat
+    msA := msA.push (← stepA).toFloat
+    msB := msB.push (← stepB).toFloat
 
   let (minA, medA, meanA) := stats msA
   let (minB, medB, meanB) := stats msB
   IO.println "  ── ms/step ──"
-  IO.println s!"    A ({opsA} ops):  min {minA}  median {medA}  mean {meanA}"
-  IO.println s!"    B ({opsB} ops): min {minB}  median {medB}  mean {meanB}"
+  IO.println s!"    A (bs {bsA}, {opsA} ops): min {minA}  median {medA}  mean {meanA}"
+  IO.println s!"    B (bs {bsB}, {opsB} ops): min {minB}  median {medB}  mean {meanB}"
+  IO.println "  ── ms/image (min) ──"
+  let imgA := minA / bsA.toFloat
+  let imgB := minB / bsB.toFloat
+  IO.println s!"    A = {imgA}   B = {imgB}"
   IO.println s!"  ── verdict ──"
   IO.println s!"    op ratio (emitted text)  = {(opsB.toFloat / opsA.toFloat)}×"
   IO.println s!"    step ratio (min)         = {(minB / minA)}×"
-  IO.println s!"    step delta (min)         = {(minB - minA)} ms"
-  IO.println s!"    NOTE: both steps pay the same ~272 MB host↔device round-trip for [θ|m|v] \
+  if bsA == bsB then
+    IO.println s!"    step delta (min)         = {(minB - minA)} ms"
+    IO.println s!"    NOTE: both steps pay the same ~272 MB host↔device round-trip for [θ|m|v] \
 (§2c), so the DELTA is the compute difference; the ratio is diluted by that shared transfer."
+  else
+    IO.println s!"    THROUGHPUT (ms/img)      = {(imgA / imgB)}× for B over A"
+    IO.println s!"    NOTE: the batches differ ({bsA} vs {bsB}), so ms/step is not comparable — \
+ms/IMAGE is the figure. Each step still pays the same ~272 MB host↔device round-trip for [θ|m|v] \
+(§2c) regardless of batch, which is most of why the larger batch wins: the transfer is amortised \
+over more images, not made faster."

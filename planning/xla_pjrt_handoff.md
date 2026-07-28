@@ -596,17 +596,83 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 0b. **▶ The last four double-writers — §2a-quinquies.** Zero-behaviour-change cleanup: the committed
    bytes are *already* the certified render for all four, so this only removes clobber hazards.
    Cheapest remaining item by a wide margin, and it takes the audit to 0.
-1. **bs256 re-render + measure.** Batch is worth **1.8×** on this net (5.06 → 2.87 ms/img from
-   bs32 → bs256, measured), it is a one-line `BS` edit, and bs256 **fits** on a 7900 XTX. Needed
-   for ImageNet anyway. Note the batched renderer takes `B` as a parameter, so a bs256 render is a
-   one-line change there too — and `divConstB` already emits a real `divide`, so a non-power-of-two
-   batch is safe (bs192 would silently break under a `× 1/B` formulation).
+1. ~~**bs256 re-render + measure.**~~ ✅ **DONE 2026-07-28 — 1.78×, gated.** See §2d.1 below.
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
 3. **Device-resident parameters.** Two rounds of transfer work are already done (batching:
    256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it
    looks — see §3.
 4. **Executable cache** (`PJRT_Executable_Serialize` / `DeserializeAndLoad`). Worth **0.1%** on an
    R34 training run and **53%** on the MNIST-MLP demo: a dev-loop and CI win, not throughput.
+
+### 2d.1. bs256 ✅ DONE — 1.78× img/s, and the gate that licensed it
+
+`verified_mlir/resnet34_adam256_train_step.mlir`, written by a third `#eval` in
+`ResNet34RenderB.lean` at `B := 256`. It renders to its **own** path, so the artifact the trainer
+runs is untouched and the §2b tie/bench baselines stay valid; select it with
+`LEAN_MLIR_VARIANT=adam256` and `cfg.batchSize := 256`. The eval forwards are still bs32, so train
+with `LEAN_MLIR_SKIP_EVAL=1` or re-render them.
+
+`r34AdamVariant B replicas` is now the single source for the entry name, the artifact path and
+`LEAN_MLIR_VARIANT`; three `#guard`s pin the literal `#eval` paths against it, so a rename fails at
+`lake build` instead of at run time as an "entry mismatch". Note the audit greps for the **literal**
+string `IO.FS.writeFile "verified_mlir/`, so those paths must stay literals — do not interpolate them.
+
+**Structurally the re-render is a no-op:** identical to the bs32 artifact at 10014 ops / 9838 lines
+with the same op profile (conv 107, dot_general 3, rsqrt 108, reduce_window 1, select_and_scatter 1).
+Only tensor dimensions and the mean-CE divisor (32.0 → 256.0) move.
+
+| | ms/step (min) | **ms/image** | ops |
+|---|---|---|---|
+| bs32 | 150 | 4.69 | 10,014 |
+| **bs256** | 674 | **2.63** | 10,014 |
+
+**1.78×**, against the 1.8× the ladder predicted. 8× the batch for 4.49× the step, and it fits on a
+7900 XTX with no OOM. Most of the win is amortising the ~272 MB `[θ|m|v]` host↔device round-trip
+(§2c) over 8× more images — the transfer is not faster, it is paid less often per image, which is
+the same reason device-resident parameters (§2d.3) is the next structural lever.
+
+`tests/TestResnet34AdamBench.lean` now reads the entry name and batch **off each artifact**
+(`entryAndBatch`), so one bench compares renders at different `B` with no new argument, and reports
+ms/image when the batches differ.
+
+#### The gate — `lake build resnet34-batch-check`, and what it took to make it honest
+
+`tests/TestResnet34BatchCheck.lean`. Feed the bs256 render **8 identical copies** of one bs32 batch.
+Then batch-BN μ/σ² over 256 rows are exactly those over the 32, and the mean-CE cotangent divides by
+256 against 8× as many terms — so as real numbers the two renders produce the **same** step. All
+68,040,737 returned floats must agree.
+
+Measured, and the first two attempts at a gate were both wrong in instructive ways:
+
+| comparison | forward (`bnstat`) | gradient (`m`) |
+|---|---|---|
+| bs32 vs bs32, same input | **bit-exact** 68040737/68040737 | 0 |
+| bs32 vs bs32, batch **reversed** | **bit-exact** | 1e-6 |
+| **CONTROL** — bs256 duplicated vs bs256 **regrouped** | 1e-6 | **2.7e-3** |
+| **TEST** — bs32 vs bs256 duplicated | 1e-6 | **2.2e-3** |
+
+- *First wrong gate: absolute, at 1e-4.* It failed at 2.9e-3 in the gradient and looked like a
+  defect. It is not — §3 already says R34's gradient does not reproduce to better than ~6e-3 under a
+  sub-ULP forward nudge.
+- *Second wrong gate: calibrate against a reversed bs32 batch.* That control comes back **forward
+  bit-exact**, so it measures nothing — the ratio was 0/0 and the gate passed by accident. A control
+  that produces no difference cannot calibrate a difference.
+- *The control that works:* run the **same bs256 graph** on the **same 256 rows in a different
+  order** (each example repeated 8× consecutively, instead of the 32-batch repeated 8×). Same
+  multiset ⇒ provably the same real-number result, but the 256-wide reductions accumulate
+  differently. That is the same *class* of fp difference the bs32↔bs256 comparison has, measured
+  where correctness is not in question.
+
+The answer is then unambiguous: the bs32↔bs256 gradient difference (**2.2e-3**) is *smaller* than
+what the bs256 graph produces against **itself** under a semantics-preserving reordering
+(**2.7e-3**). So it is this net's conditioning at batch 256, not a defect in the re-render.
+
+The gate is therefore two-sided: **forward absolute ≤ 1e-4** (a plain symmetric mean/variance that
+amplifies nothing — a real mis-wiring lands here), and **gradient ≤ 4× the control**, never absolute.
+
+Worth carrying: **32-wide reductions on this net are order-insensitive (forward bit-exact) while
+256-wide ones are not** (2.7e-3 in the gradient). Do not assume a reordering control is free just
+because it was at bs32.
 
 ---
 
