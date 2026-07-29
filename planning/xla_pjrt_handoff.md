@@ -2471,6 +2471,36 @@ without the §10.3b reasoning the BN nets need. Its flip side is that it returns
 so `%loss` — report-only, outside the AST — is the *whole* of its forward evidence, which is why
 that gate is load-bearing there and merely confirmatory on mnv2/EfficientNet.
 
+#### ⚠ Named gap: a duplicated-batch gate does NOT test that sharding SHARDS
+
+Found 2026-07-29 while tracing the shard path. `efficientnet-`, `mobilenetv2-` and `convnext-dp-check`
+all hand both replicas the **same** rows (`x2 = concat #[x1, x1]`). That is what makes
+`all_reduce/2` an exact identity — and it is also why those gates are **blind to a shard-offset
+bug**: if the shim gave replica 1 rows `[0,b)` instead of `[b,2b)`, the two halves are identical and
+every one of those gates still passes, bit-exact.
+
+What they establish is *"the collective averages correctly"*, not *"the replicas saw different
+data"*. Do not quote them as the latter.
+
+**`cifar8-dp-check` is the one that tests sharding**, via the split identity `1×256` vs `2×128`, and
+its own `%loss` row is the evidence: the DP loss is replica 0's half-mean and *differs* from the
+single-device one by 1.6e-3, deliberately ungated — *"if both replicas saw the same data it would
+match exactly"*. A difference there is the proof the shard is real.
+
+**How worried to be: not very, and for a structural reason.** The split is `n_replicas`-generic C in
+`pjrt_ffi.c:555-566` (`src + rep * (elems / n_replicas)`, plus the divisibility refusal), shared by
+every net — cifar8 exercises the same lines. So the risk is "tested once, in shared code" rather
+than "untested". Still worth closing per net, because the *shard mask* is built per call site
+(`iree_lean_ffi.c:1022/1040` — `x` and onehot sharded, params replicated) and that is the part that
+could be wrong for one net's interface without cifar8 noticing.
+
+**Which nets could take the strong gate.** The split identity needs no BN, so it is available
+exactly to the LayerNorm/no-norm nets — **ConvNeXt and ViT** — and needs a `2b` render to compare
+against. ConvNeXt's is blocked on `cBS` being a *private constant* rather than a renderer parameter
+(unlike R34/mnv2/enet, which already take `B`); making it a parameter is the whole prerequisite.
+R34/mnv2/EfficientNet cannot take it at all — batch BN means `2×b ≠ 1×2b` by design — so for them
+the duplicated-batch gate plus cifar8's shared-code coverage is the ceiling.
+
 And on the renders: `pretty(provenGraph)` means the committed bytes are the certified render *of
 the graph that was proven* — it does not mean the emitter is verified. The `Tok → StableHLO-text`
 lexing stays audited-but-trusted, which is why every move in §2a and §2b is backed by a numeric tie

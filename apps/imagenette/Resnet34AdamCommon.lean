@@ -27,16 +27,32 @@ def resnet34AdamConfig : VerifiedConfig where
 
     `LEAN_MLIR_VARIANT` selects the rendered train step, i.e. which
     `verified_mlir/resnet34_<variant>_train_step.mlir` is loaded (and, with it, a distinct vmfb and
-    checkpoint). Two exist:
+    checkpoint). **All four are `pretty(provenGraph)` out of
+    `Proofs/Codegen/ResNet34RenderB.lean`, which is the sole writer of every one:**
 
-    * **`adam`** (default) — the certified single-device render,
-      `pretty(provenGraph)` out of `Proofs/Codegen/ResNet34RenderB.lean` (handoff §2b-ter).
-    * **`adamdp`** — the DATA-PARALLEL render, from the hand-written emitter in
-      `tests/TestResnet34Train.lean` at `REPLICAS > 1`. It all-reduces each gradient before the
-      optimizer (§2c). **Not certified** — the batched renderer cannot emit collectives yet — so
-      it is opt-in by name rather than something a plain run can land on by accident. Pair it with
-      `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and `HIP_VISIBLE_DEVICES` unset. -/
+    * **`adam`** (default) — the certified single-device render at bs32 (handoff §2b-ter).
+    * **`adamdp`** — the DATA-PARALLEL render at bs32: the same graph plus one `all_reduce(add)/N`
+      per parameter gradient before its AdamW triple, a **declared trusted carve-out** (§5) that the
+      render announces in its own output banner. *(An earlier version of this docstring called this
+      variant "not certified — the batched renderer cannot emit collectives yet" and pointed at a
+      hand-written emitter in `tests/TestResnet34Train.lean`. Both were true until §2b-quater, which
+      moved it onto the certified renderer and DELETED that emitter. Corrected 2026-07-29.)*
+    * **`adam256`** — bs256, single device (§2d.1), worth **1.78×** img/s over bs32.
+    * **`adamdp128`** — bs128 × N replicas, i.e. global 256 data-parallel.
+
+    `LEAN_MLIR_BATCH` overrides the batch and **must match the batch the selected variant was
+    rendered at** — batch is baked into the graph, not a runtime dimension, so a mismatch is a shape
+    error at the first invoke rather than something that silently limps. Pairs: `adam`/`adamdp` at
+    32, `adam256` at 256, `adamdp128` at 128.
+
+    ⚠ **The eval forwards are rendered at bs32**, so any other batch needs `LEAN_MLIR_SKIP_EVAL=1`
+    (or re-rendered forwards) and therefore reports no validation accuracy.
+
+    Pair a DP variant with `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and `HIP_VISIBLE_DEVICES` unset,
+    and use the XLA build — collectives exist only on the PJRT path, and the IREE shim refuses a DP
+    entry point outright rather than silently running single-device. -/
 def runResnet34Adam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
-  resnet34Verified.toNet.trainAdamSched resnet34AdamConfig
+  let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD resnet34AdamConfig.batchSize
+  resnet34Verified.toNet.trainAdamSched { resnet34AdamConfig with batchSize := bs }
     (argv.head?.getD "data") 0.001 0.9 0.999 3 variant

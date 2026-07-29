@@ -508,8 +508,23 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/resnet34_adam256_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 256 10 "1.0e-05")
 
--- Pin the three literal artifact paths above against the name the renderer actually emits. If a
+-- **bs128 × 2 replicas** — the data-parallel render at a real batch (global 256), the EfficientNet
+-- `adamdp128` shape (§2e-quater) brought to R34. `B` and `replicas` are both true parameters, so
+-- this composes the two `#eval`s above with no new renderer code.
+--
+-- Why this batch: §2d.1 measured bs256 at **1.78× img/s** over bs32 single-device, most of it
+-- amortising the ~272 MB `[θ|m|v]` host↔device round trip over 8× the images — and that transfer is
+-- exactly what the DP path pays per replica per step (§2c). So 2×128 is where the batch win and the
+-- replica win stack rather than fight.
+--
+-- ⚠ **The eval forwards are still bs32**, so this variant needs `LEAN_MLIR_SKIP_EVAL=1` — it yields
+-- descent and throughput, NOT a validation accuracy. Same caveat `adam256` carries.
+#eval IO.FS.writeFile "verified_mlir/resnet34_adamdp128_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 128 10 "1.0e-05" 2)
+
+-- Pin the four literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed, this fails at `lake build` instead of at run time as an "entry mismatch".
 #guard Proofs.StableHLO.r34AdamVariant 32 1 == "adam"
 #guard Proofs.StableHLO.r34AdamVariant 32 2 == "adamdp"
 #guard Proofs.StableHLO.r34AdamVariant 256 1 == "adam256"
+#guard Proofs.StableHLO.r34AdamVariant 128 2 == "adamdp128"

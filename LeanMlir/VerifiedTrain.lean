@@ -348,6 +348,29 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} with AdamW via packed θ|m|v threading)."
 
+/-- The batch a forward artifact was **rendered at**, read out of its own `%x:` signature.
+
+    Batch is baked into a render, not a runtime dimension, so the eval forward has a fixed width
+    that need not equal the training batch — `LEAN_MLIR_BATCH=128` trains at 128 while every
+    Imagenette `_fwd{,_eval}` is rendered at 32. Feeding a 128-wide slice to a 32-wide graph is a
+    shape error at the first invoke, which is why `LEAN_MLIR_SKIP_EVAL` existed as the only way out.
+
+    Reading the width off the artifact removes that trade-off, and it is **sound because eval is
+    class-batch-independent by construction**: the BN nets score through `@<slug>_fwd_eval`, which
+    is frozen-running-stat affine BN and performs *no* reduction over the batch (handoff §2g — the
+    very property that made `mobilenetv2_fwd_eval` immune to the skew that hit `mobilenetv2_fwd`),
+    and the others normalise per example (LayerNorm) or not at all. So the eval batch decides only
+    how many rows ride per invoke; it cannot move a per-example logit.
+
+    Returns `none` rather than guessing if the signature does not parse — the caller falls back to
+    the training batch, i.e. exactly the old behaviour. -/
+private def fwdRenderedBatch (path : String) : IO (Option Nat) := do
+  if !(← System.FilePath.pathExists path) then return none
+  let txt ← IO.FS.readFile path
+  match txt.splitOn "%x: tensor<" with
+  | _ :: rest :: _ => return (rest.takeWhile (· != 'x')).toNat?
+  | _ => return none
+
 /-- **Scheduled AdamW driver** (Phase 2) — `trainAdamPacked` with a runtime LR and
     bias correction. `lr`/`bc₁`/`bc₂` ride as three rank-0 scalar params in the blob
     tail (`[θ|m|v|lr|bc₁|bc₂]`, the FFI takes no scalar slot) and are returned
@@ -393,9 +416,9 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- PER-REPLICA batch (cfg.batchSize), so one step consumes `bs * replicas`
   -- images and the shim splits them. Eval stays single-device at `bs`, because
   -- the forward graph is rendered at that batch. See planning/xla_pjrt_ladder.md §10.
-  -- LEAN_MLIR_SKIP_EVAL: skip the per-epoch eval pass. Needed for G2 runs that
-  -- change the train batch, because the forward graph is rendered at its own
-  -- fixed batch and would reject a mismatched one.
+  -- LEAN_MLIR_SKIP_EVAL: skip the per-epoch eval pass. It used to be REQUIRED whenever the train
+  -- batch differed from the forward's baked one (bs256, bs128-DP); `evalBs` below removes that,
+  -- so it is now just "don't spend the time".
   let skipEval := (← IO.getEnv "LEAN_MLIR_SKIP_EVAL").isSome
   let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
   let gbs := bs * replicas
@@ -403,8 +426,17 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let nb := match (← IO.getEnv "LEAN_MLIR_G2_STEPS").bind (·.toNat?) with
     | some n => min n nbFull
     | none   => nbFull
-  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
+  -- The eval forward is rendered at ITS OWN batch, which need not be the training batch. Read it
+  -- off the artifact rather than assuming `bs` (see `fwdRenderedBatch`); when they agree — every
+  -- default run — this is `bs` and nothing below changes.
+  let evalBs := (← fwdRenderedBatch
+    (if hasBn then s!"verified_mlir/{net.slug}_fwd_eval.mlir"
+     else s!"verified_mlir/{net.slug}_fwd.mlir")).getD bs
+  let nbt := (nEval + evalBs - 1) / evalBs  -- ceil: the last partial batch is zero-padded, not dropped
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  if evalBs != bs then
+    IO.println s!"  eval batch {evalBs} (the batch @{net.slug}_fwd{if hasBn then "_eval" else ""} \
+was RENDERED at) != train batch {bs} — sound because eval is class-batch-independent"
   if hasBn then IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
   if replicas > 1 then
     IO.println s!"  DATA-PARALLEL: {replicas} replicas x bs {bs} = global batch {gbs}, {nb} steps/epoch"
@@ -413,7 +445,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
                                 ++ (if hasBn then bnStatShapes else #[]))
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
-  let xShape := net.xShape bs
+  let xShape := net.xShape evalBs      -- eval-only: the train step passes its dims directly
   let tsFn  := s!"m.{net.slug}_{variant}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut parts : Array ByteArray := #[]
@@ -574,12 +606,12 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
     let mut correct := 0
     for bi in [0:(if skipEval then 0 else nbt)] do
-      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
+      let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs d0 nEval
       let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
-                      xb xShape bs.toUSize nc.toUSize
-      for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
+                      xb xShape evalBs.toUSize nc.toUSize
+      for j in [0:min evalBs (nEval - bi * evalBs)] do   -- score real rows only, not the pad
         let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
-        let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
+        let lbl  := (evalLbl.get! (4 * (bi * evalBs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%"
