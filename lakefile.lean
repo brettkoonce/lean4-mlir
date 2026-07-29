@@ -473,6 +473,9 @@ lean_lib «Certs» where
              -- Faithfulness target + denominator well-definedness; NO descent
              -- claim (Adam isn't monotone).
              `LeanMlir.Proofs.Codegen.AdamStep,
+             -- The SGD / Nesterov peers of AdamStep (§2i). Same claim ceiling:
+             -- faithfulness, NOT descent — nothing here claims Nesterov descends.
+             `LeanMlir.Proofs.Codegen.SgdMomentumStep,
              -- Phase 3b: the AdamW render-close — emitted weight/bias update =
              -- adamWScalar of the certified gradient (sgdW_descends_certified_grad
              -- analogue, optimizer swapped for AdamW).

@@ -10,6 +10,7 @@ import LeanMlir.Proofs.Architectures.ConvNeXt
 -- The ℝ AdamW spec (`adamMNext`/`adamVNext`/`adamWParam`), so the optimizer ops can denote it.
 -- AdamStep only imports Foundation.Tensor + Mathlib, so this adds no cycle.
 import LeanMlir.Proofs.Codegen.AdamStep
+import LeanMlir.Proofs.Codegen.SgdMomentumStep
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 1: the linear classifier)
 
@@ -807,6 +808,16 @@ inductive SHlo : Nat → Type where
       (θName mName vName b1Name ob1Name b2Name ob2Name bc1Name bc2Name
         lrName epsName wdName : String) (ds : List Nat)
       (β₁ β₂ ε lr wd bc₁ bc₂ : ℝ) (θ m v : Vec n)               : SHlo n → SHlo n
+  -- ── The SGD / Nesterov peers (§2i). Same shape as the AdamW triple: each carries the emitted
+  --    NAME of every runtime `tensor<f32>` argument alongside the ℝ value `den` uses, which is how
+  --    a SCHEDULED optimizer works at all — the fused `*Sgd` family bakes `lr` as a literal, and
+  --    that fusion (not the optimizer) was the blocker, exactly as §2a found for Adam.
+  | sgdParamF {n : Nat} (θName lrName : String) (ds : List Nat)
+      (lr : ℝ) (θ : Vec n)                                      : SHlo n → SHlo n
+  | momVNextF {n : Nat} (vName muName : String) (ds : List Nat)
+      (μ : ℝ) (v : Vec n)                                       : SHlo n → SHlo n
+  | momParamF {n : Nat} (θName vName muName lrName : String) (ds : List Nat)
+      (μ lr : ℝ) (θ v : Vec n)                                  : SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -1087,6 +1098,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .adamVNextF _ _ _ _ β₂ v e => adamVNext β₂ v (den e)
   | _, .adamWParamF _ _ _ _ _ _ _ _ _ _ _ _ _ β₁ β₂ ε lr wd bc₁ bc₂ θ m v e =>
       adamWParam β₁ β₂ ε lr wd bc₁ bc₂ θ m v (den e)
+  -- SGD / Nesterov: the proven ℝ optimizers (SgdMomentumStep.lean) on the child's gradient.
+  | _, .sgdParamF _ _ _ lr θ e => sgdParam lr θ (den e)
+  | _, .momVNextF _ _ _ μ v e => momVNext μ v (den e)
+  | _, .momParamF _ _ _ _ _ μ lr θ v e => momParam μ lr θ v (den e)
   | _, .bnGammaSgd (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
@@ -2051,6 +2066,39 @@ theorem adamW_triple_faithful {n : Nat}
      den (.adamVNextF vN b2N ob2N ds β₂ v e))
       = adamWStep β₁ β₂ ε lr wd bc₁ bc₂ θ m v (den e) := rfl
 
+/-- **Rendered plain SGD is `Proofs.sgdParam`** — `θ − lr·g` with `lr` a runtime arg. -/
+@[simp] theorem sgdParamF_faithful {n : Nat} (θN lrN : String) (ds : List Nat)
+    (lr : ℝ) (θ : Vec n) (e : SHlo n) :
+    den (.sgdParamF θN lrN ds lr θ e) = sgdParam lr θ (den e) := rfl
+
+/-- **Rendered Nesterov velocity is `Proofs.momVNext`** — `v' = μ·v + g`. -/
+@[simp] theorem momVNextF_faithful {n : Nat} (vN muN : String) (ds : List Nat)
+    (μ : ℝ) (v : Vec n) (e : SHlo n) :
+    den (.momVNextF vN muN ds μ v e) = momVNext μ v (den e) := rfl
+
+/-- **Rendered Nesterov update is `Proofs.momParam`** — `θ' = θ − lr·(g + μ·v')`. -/
+@[simp] theorem momParamF_faithful {n : Nat} (θN vN muN lrN : String) (ds : List Nat)
+    (μ lr : ℝ) (θ v : Vec n) (e : SHlo n) :
+    den (.momParamF θN vN muN lrN ds μ lr θ v e) = momParam μ lr θ v (den e) := rfl
+
+/-- **The rendered Nesterov pair is `Proofs.momStep`.** The momentum analogue of
+    `adamW_triple_faithful`: the `(θ', v')` a momentum train step returns per parameter, denoted.
+    The `m` slot is a passthrough and so appears nowhere here — that is the packed-`[θ|m|v]`
+    signature being shared verbatim with the AdamW render, not an omission. -/
+theorem mom_pair_faithful {n : Nat} (θN vN muN lrN : String) (ds : List Nat)
+    (μ lr : ℝ) (θ v : Vec n) (e : SHlo n) :
+    (den (.momParamF θN vN muN lrN ds μ lr θ v e), den (.momVNextF vN muN ds μ v e))
+      = momStep μ lr θ v (den e) := rfl
+
+/-- **`μ = 0` makes the rendered Nesterov update the rendered SGD update.** Ties the two new op
+    families to each other at the denotation level, so the `mom` and `sgd` renders provably agree
+    in the limit rather than merely looking similar. -/
+theorem momParamF_mu_zero {n : Nat} (θN vN muN lrN : String) (ds : List Nat)
+    (lr : ℝ) (θ v : Vec n) (e : SHlo n) :
+    den (.momParamF θN vN muN lrN ds 0 lr θ v e) = den (.sgdParamF θN lrN ds lr θ e) := by
+  simp only [momParamF_faithful, sgdParamF_faithful]
+  exact momParam_mu_zero lr θ v (den e)
+
 /-- **Inference per-channel BN forward faithfulness.** The 4-D reshape + affine
     `γ·(x−μ)·rsqrt(var+ε)+β` with rank-1 μ/var/γ/β (`dims=[1]`) denotes the proven
     `bnPerChannelEvalTensor3` (PerChannelBN.lean). (`rfl`, so kept out of the axiom audit.) -/
@@ -2980,6 +3028,9 @@ inductive Raw where
   | adamMNextF (m b1 ob1 : String) (ds : List Nat) : Raw → Raw
   | adamVNextF (v b2 ob2 : String) (ds : List Nat) : Raw → Raw
   | adamWParamF (θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd : String) (ds : List Nat) : Raw → Raw
+  | sgdParamF (θ lr : String) (ds : List Nat) : Raw → Raw
+  | momVNextF (v mu : String) (ds : List Nat) : Raw → Raw
+  | momParamF (θ v mu lr : String) (ds : List Nat) : Raw → Raw
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
@@ -3149,6 +3200,9 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .adamWParamF θN mN vN b1N ob1N b2N ob2N bc1N bc2N lrN epsN wdN ds
         _ _ _ _ _ _ _ _ _ _ e =>
       .adamWParamF θN mN vN b1N ob1N b2N ob2N bc1N bc2N lrN epsN wdN ds (skel e)
+  | _, .sgdParamF θN lrN ds _ _ e => .sgdParamF θN lrN ds (skel e)
+  | _, .momVNextF vN muN ds _ _ e => .momVNextF vN muN ds (skel e)
+  | _, .momParamF θN vN muN lrN ds _ _ _ _ e => .momParamF θN vN muN lrN ds (skel e)
   | _, .depthwiseF (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .depthwiseF wN bN c h w kH kW (skel e)
   | _, .depthwiseBack (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
@@ -3350,6 +3404,9 @@ inductive Tok where
   | adamMNextF (m b1 ob1 : String) (ds : List Nat) : Tok
   | adamVNextF (v b2 ob2 : String) (ds : List Nat) : Tok
   | adamWParamF (θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd : String) (ds : List Nat) : Tok
+  | sgdParamF (θ lr : String) (ds : List Nat) : Tok
+  | momVNextF (v mu : String) (ds : List Nat) : Tok
+  | momParamF (θ v mu lr : String) (ds : List Nat) : Tok
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Tok
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Tok
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Tok
@@ -3436,6 +3493,9 @@ def toToks : Raw → List Tok
   | .adamVNextF v b2 ob2 ds e => toToks e ++ [.adamVNextF v b2 ob2 ds]
   | .adamWParamF θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd ds e =>
       toToks e ++ [.adamWParamF θ m v b1 ob1 b2 ob2 bc1 bc2 lr eps wd ds]
+  | .sgdParamF θ lr ds e => toToks e ++ [.sgdParamF θ lr ds]
+  | .momVNextF v mu ds e => toToks e ++ [.momVNextF v mu ds]
+  | .momParamF θ v mu lr ds e => toToks e ++ [.momParamF θ v mu lr ds]
   | .depthwiseF w b c h w' kH kW e => toToks e ++ [.depthwiseF w b c h w' kH kW]
   | .depthwiseBack w c h w' kH kW e => toToks e ++ [.depthwiseBack w c h w' kH kW]
   | .depthwiseStridedF w b c h w' kH kW e => toToks e ++ [.depthwiseStridedF w b c h w' kH kW]
@@ -4191,6 +4251,39 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {wdlr} = stablehlo.multiply {wdb}, {lrb} : {T}\n" ++
         s!"    {wdp} = stablehlo.multiply {wdlr}, {θN} : {T}\n" ++
         s!"    {o} = stablehlo.subtract {sub}, {wdp} : {T}\n", o :: st)
+  -- ══ SGD / NESTEROV (§2i): op-for-op `Proofs.sgdParam` / `momVNext` / `momParam`, matching the
+  --    retired `tests/TestCifar8AdamTrain.emit{Sgd,Momentum}` blocks byte-for-byte modulo SSA
+  --    freshness. `%lr` / `%mu` are runtime `tensor<f32>` args, broadcast to the param shape. ══
+  | .sgdParamF θN lrN ds, r :: st => do
+      let T := ty ds
+      let lrb ← fresh; let stp ← fresh; let o ← fresh
+      pure (
+        s!"    {lrb} = stablehlo.broadcast_in_dim {lrN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {stp} = stablehlo.multiply {lrb}, {r} : {T}\n" ++
+        s!"    {o} = stablehlo.subtract {θN}, {stp} : {T}\n", o :: st)
+  | .momVNextF vN muN ds, r :: st => do
+      let T := ty ds
+      let mub ← fresh; let vg ← fresh; let o ← fresh
+      pure (
+        s!"    {mub} = stablehlo.broadcast_in_dim {muN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {vg} = stablehlo.multiply {mub}, {vN} : {T}\n" ++
+        s!"    {o} = stablehlo.add {vg}, {r} : {T}\n", o :: st)
+  | .momParamF θN vN muN lrN ds, r :: st => do
+      let T := ty ds
+      -- v' is recomputed here rather than shared with `momVNextF`: SHlo is single-result, so each
+      -- output is its own node. XLA's CSE folds the duplicate (§2b-bis measured that on R34's
+      -- 108 → 36 rsqrt, at no run-time cost).
+      let mub ← fresh; let vg ← fresh; let vel ← fresh
+      let nv ← fresh; let lk ← fresh; let lrb ← fresh; let stp ← fresh; let o ← fresh
+      pure (
+        s!"    {mub} = stablehlo.broadcast_in_dim {muN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {vg} = stablehlo.multiply {mub}, {vN} : {T}\n" ++
+        s!"    {vel} = stablehlo.add {vg}, {r} : {T}\n" ++
+        s!"    {nv} = stablehlo.multiply {mub}, {vel} : {T}\n" ++
+        s!"    {lk} = stablehlo.add {nv}, {r} : {T}\n" ++
+        s!"    {lrb} = stablehlo.broadcast_in_dim {lrN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {stp} = stablehlo.multiply {lrb}, {lk} : {T}\n" ++
+        s!"    {o} = stablehlo.subtract {θN}, {stp} : {T}\n", o :: st)
   | .bnPerChannelEvalF gN bN muN varN epsStr oc h w, r :: st => do
       -- INFERENCE per-channel BatchNorm: reshape to [B,oc,h,w], then the affine map
       -- γ·(x − μ)·rsqrt(var + ε) + β with μ/var/γ/β all rank-1 `[oc]` graph inputs
