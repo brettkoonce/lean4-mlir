@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
+import LeanMlir.ViTRender      -- `emitGradAllReduce`, the data-parallel collective (a carve-out)
 
 /-! # ConvNeXt-T train step rendered ENTIRELY from the verified AST (the §1 render)
 
@@ -22,9 +23,11 @@ They were never the same kind of gap:
   `kH = 2` and emitted a 1×1 convolution against a declared 2×2 result, i.e. type-invalid MLIR.
   `StableHLO.sWGradGeom` splits odd/even (odd byte-for-byte unchanged) and the site is now certified.
 
-One documented residual remains:
-* the **scalar-LN γ/β** params render as `tensor<1xf32>` (since the ops output `SHlo 1`), a func-sig
-  change vs the committed `tensor<f32>` (the trainer regenerates against this sig).
+*(A note here used to claim the **scalar-LN γ/β** params render as `tensor<1xf32>` against a
+committed `tensor<f32>` signature. Checked 2026-07-29 and **retired: neither is true of any committed
+artifact.** `ty [] = "tensor<f32>"`, and `grep -c 'tensor<1xf32>'` is **0** in both
+`convnext_train_step.mlir` and `convnext_adam_train_step.mlir` — the scalar params are `tensor<f32>`
+on both sides. Handoff §0b repeats the stale claim.)*
 
 Every other param (depthwise-7×7 W/b, 1×1 expand/project W/b, per-channel layer-scale γ, scalar-LN
 γ/β, downsample 2×2 W/b, dense W/b) denotes the certified loss-descent step (`ConvNeXtFaithfulPoC` +
@@ -412,17 +415,42 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") : St
     `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
     into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
     runtime `tensor<f32>` args, so one render serves the whole schedule. Mirrors
-    `ResNet34RenderB.adamOne`; ConvNeXt has no data-parallel render, so no replica collective. -/
-private def convnextAdamOne (nm : String) (ds : List Nat) (gradSSA : String) :
+    `ResNet34RenderB.adamOne` / `MobileNetV2RenderB.adamOneM`.
+
+    At `replicas > 1` the gradient is first averaged by `ViTRender.emitGradAllReduce`. **That
+    collective is a TRUSTED CARVE-OUT** (handoff §5) — emitted text, not `pretty` of an AST node,
+    so outside every faithfulness theorem here. The AdamW triple consumes the averaged gradient as
+    an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
+    `replicas ≤ 1` this emits nothing and threads the raw gradient, so the single-device render
+    stays byte-identical — the cheap self-check that the insertion is inert.
+
+    **ConvNeXt is the first net whose collectives include RANK-0 operands.** Its 44 scalar
+    LayerNorm γ/β params have `ds = []`, i.e. `tensor<f32>`, where R34/enet/mnv2 have none below
+    rank 1 — so `stablehlo.all_reduce` is emitted on a scalar here. That is legal and it compiles
+    and executes (gated by `convnext-dp-check`), but it is the one thing about this render that had
+    never been exercised before. -/
+private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (gradSSA : String) :
     StateM Nat (String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
-  let gr : SHlo n := .operand gradSSA z
+  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
+  let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty cBS (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
   let (cV, nV) ← pretty cBS (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
   let (cT, nT) ← pretty cBS (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
                     "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
-  pure (cM ++ cV ++ cT, nT, nM, nV)
+  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+
+/-- The driver's **variant slug** for a given replica count: the artifact is
+    `verified_mlir/convnext_<variant>_train_step.mlir`, the entry point is
+    `@convnext_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it. All three must agree —
+    the shim checks the entry name and refuses a mismatch outright ("entry mismatch") rather than
+    running the wrong graph. The `#guard`s at the bottom pin the literal `#eval` paths against this.
+
+    ConvNeXt has only one batch (32), so unlike `mnv2AdamVariant`/`r34AdamVariant` there is no
+    batch suffix — rendering another batch would need `cBS` to stop being a private constant. -/
+def cnxAdamVariant (replicas : Nat) : String :=
+  if replicas ≤ 1 then "adam" else "adamdp"
 
 /-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe. -/
 private def convnextAdamConsts : String :=
@@ -452,10 +480,15 @@ set_option maxRecDepth 8000 in
     `convnext-adam-tie` against the previously committed hand-written render: **bit-exact on all
     83,434,629 returned floats**, spread 0/180, against a bit-exact A-vs-A floor.
 
-    Still outside the AST here, and unchanged: `%loss` (report-only, no gradient path) and the
-    scalar-LN `tensor<1xf32>` signature note above. -/
+    Still outside the AST here, and unchanged: `%loss` (report-only, no gradient path).
+
+    **`replicas > 1` renders the DATA-PARALLEL variant** (handoff §2h-quater) to its own entry name
+    and artifact path via `cnxAdamVariant`, so producing it can never clobber the one the trainer
+    runs. The only difference is one `all_reduce(add)/N` per parameter gradient, between the
+    certified gradient and the certified AdamW triple: *certified gradient → trusted collective →
+    certified AdamW*. See `convnextAdamOne` for the carve-out, and note the rank-0 collectives. -/
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
-    (funcName : String := "convnext_adam_train_step") : String := Id.run do
+    (replicas : Nat := 1) : String := Id.run do
   let (body, gradMap, nSm) := (convNextBackAll true (some (alphaStr, negAlphaKStr, bStr))).run' 0
   let go : StateM Nat String := do
     let mut adamCode := ""
@@ -464,7 +497,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let mut vN : List String := []
     for (nm, ds) in allParams do
       let g := (gradMap.lookup nm).getD s!"%d{nm}"
-      let (c, nT, nM, nV) ← convnextAdamOne nm ds g
+      let (c, nT, nM, nV) ← convnextAdamOne replicas nm ds g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path, NOT `pretty` of an
@@ -492,10 +525,23 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"]
     let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
     pure <|
-      "    // ── ConvNeXt-T AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
-      "    // EXCEPT the stem 4x4/s4 and the 2x2/s2 downsample WEIGHT GRADIENTS, which have no\n" ++
-      "    // VJP-cert SHlo op and stay hand-written (the two documented gaps). Their UPDATES are\n" ++
-      "    // certified here, which the SGD render's hand-written `sgd` wrap was not.\n" ++
+      (if replicas ≤ 1 then
+        -- Updated 2026-07-29. This banner used to carve out the stem 4x4/s4 and the 2x2/s2
+        -- downsample WEIGHT GRADIENTS as hand-written — true when it was written, false since
+        -- `9bb00f5` (§2f-bis) closed both, so the emitted artifact was UNDER-describing itself.
+        "    // ── ConvNeXt-T AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
+        "    // All 180 params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample\n" ++
+        "    // WEIGHT GRADIENTS — the two documented gaps, closed 2026-07-28 (new cert\n" ++
+        "    // flatConvStride4_weight_grad_has_vjp; emit-side odd/even split sWGradGeom).\n"
+       else
+        s!"    // ── ConvNeXt-T AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
+        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
+        "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
+        "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
+        "    // over disjoint equal batches. Unlike the BN nets, ConvNeXt normalises with LayerNorm\n" ++
+        "    // — within one example, never across the batch — so N x b IS 1 x (N.b) here and the\n" ++
+        "    // §10.3b caveat does not apply.\n") ++
       body ++ convnextAdamConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   -- The AdamW body continues the SGD traversal's fresh-name counter. `convNextBackAll` consumed
@@ -510,6 +556,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   let pTy := allParams.map (fun p => ty p.2)
   let retTyL := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+  let funcName := s!"convnext_{cnxAdamVariant replicas}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,10]}\n" ++
@@ -550,3 +597,37 @@ end Proofs.StableHLO
 --     verified_mlir/convnext_adam_train_step.mlir
 #eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0")
+
+-- The **DATA-PARALLEL** render (handoff §2h-quater), selected at run time by
+-- `LEAN_MLIR_VARIANT=adamdp`. ConvNeXt was the last large net with no DP path at all — its renderer
+-- took no `replicas` and emitted no collective, so unlike mnv2's (§2h-bis, one `#eval`) this needed
+-- the parameter threaded through `convnextAdamOne` first.
+--
+-- Same graph, plus one `all_reduce(add)/N` per parameter gradient between the certified gradient
+-- and the certified AdamW triple: *certified gradient → trusted collective → certified AdamW*. The
+-- collective is a DECLARED carve-out and the render says so in its own output banner at
+-- `replicas > 1`, per the §5/§2b `%loss` lesson that an undeclared carve-out is how wrong things
+-- ship. Claim ceiling is unchanged (§5): the gradient averaging is a proven identity; the collective
+-- implementing it is trusted, exactly like the lowerer.
+--
+-- **44 of the 180 collectives are RANK-0** — the scalar LayerNorm γ/β at `tensor<f32>`. No other
+-- net's DP render has an operand below rank 1, so that path was new here; `convnext-dp-check`
+-- executes it.
+--
+-- It renders to its OWN path, which is what stops the §2a race where producing a DP render meant
+-- editing a knob and clobbering the artifact the trainer runs. `2` is the replica count these are
+-- rendered at and it must match `PJRT_REPLICAS` at run time, because the graph bakes
+-- `replica_groups`. Re-render here to change it.
+--
+-- It needs the XLA build (`convnext-verified-adam-xla`, §2h): collectives exist only on the PJRT
+-- path, and the IREE shim refuses a DP entry point outright rather than silently running
+-- single-device.
+#eval IO.FS.writeFile "verified_mlir/convnext_adamdp_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 2)
+
+-- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
+-- call ("entry mismatch"). These pin the literal paths above against `cnxAdamVariant`, so a rename
+-- fails at `lake build` rather than at run time. (The audit greps for the LITERAL string
+-- `IO.FS.writeFile "verified_mlir/`, so those paths must stay literals — do not interpolate them.)
+#guard Proofs.StableHLO.cnxAdamVariant 1 == "adam"
+#guard Proofs.StableHLO.cnxAdamVariant 2 == "adamdp"

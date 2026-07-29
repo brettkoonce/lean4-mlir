@@ -47,7 +47,9 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `019e09d` | **all five `_fwd` artifacts certified; `mobilenetv2_fwd` was the wrong BN world** |
 | `4bbcb6e` | §2h: the `-xla` trainer plan, de-risked — mnv2/ConvNeXt backward graphs RUN on XLA, ViT's SGD one does not |
 | — | *↓ the `-xla` trainer thread (§2h), 2026-07-29* |
-| *(this)* | **`mobilenetv2-` and `convnext-verified-adam-xla` built, gated and MEASURED**; ViT plumbed, blocker reproduced |
+| `d4da271` | **`mobilenetv2-` and `convnext-verified-adam-xla` built, gated and MEASURED**; ViT plumbed, blocker reproduced |
+| `2a0aafd` | MobileNetV2 data-parallel — gated by the exact identity on the real net |
+| *(this)* | **ConvNeXt data-parallel** — the last net with no DP path; 1.68×, and the first rank-0 collectives |
 
 ---
 
@@ -58,9 +60,15 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 audit reports one writer per artifact. There is no "next AdamW render".
 
 **What is left in this file is §2d's value-ordered list**, none of it on the AdamW track: rung 4
-(the FPN detector), **device-resident parameters** (two independent multi-GPU measurements point at
-it — §2c's 1.46× on R34 and §2e-ter's 13–16% per-step DP overhead on EfficientNet), and the
-executable cache. Read §2d before picking one.
+(the FPN detector), **device-resident parameters** (now **four** independent multi-GPU measurements
+point at it — §2c's 1.46× on R34, §2e-ter's 13–16% per-step DP overhead on EfficientNet, and
+mnv2's and ConvNeXt's end-to-end 1.67×/1.68×), and the executable cache. Read §2d before picking one.
+
+**The DATA-PARALLEL scorecard is 4 of 5 as of 2026-07-29 — §2h-quater.** ConvNeXt was the last large
+net with no DP path at all (its renderer took no `replicas` and emitted no collective); it now has
+one, gated by the exact duplicated-batch identity on the real net and measured at **1.68×** on two
+GPUs. **ViT is the only net without a working DP path**, and for a reason nothing in this thread can
+fix from here — its graph does not execute on this box at all.
 
 **The `-xla` trainers are DONE for mnv2 and ConvNeXt as of 2026-07-29 — §2h.** Both now have an
 XLA/PJRT peer sharing one body with the IREE binary, both agree with IREE to fp noise, and both
@@ -99,10 +107,11 @@ is *not* done on each of the four large nets, ordered by what would bite first.
    **68.2%** over an 80-epoch capped-step run; **ConvNeXt** descends over 17 epochs on XLA and 1 on
    IREE, epoch-1 loss **identical on both backends**. The gap between "computes the same function"
    and "trains" is closed for both.
-2. **Only EfficientNet is validated end to end** *(and now mnv2 nearly is)*. EfficientNet has a
-   3-epoch XLA-vs-IREE agreement run, a **2-GPU** descent run, and measured wall clock. mnv2 and
-   ConvNeXt now have single-GPU agreement + descent + wall clock (§2h) but **no DP artifact at all**,
-   so for multi-GPU EfficientNet is still the only answer.
+2. ~~**Only EfficientNet is validated end to end.**~~ ✅ **CLOSED for three nets 2026-07-29.**
+   EfficientNet, MobileNetV2 (§2h-bis/ter) and ConvNeXt (§2h-quater) each now have single-GPU
+   XLA-vs-IREE agreement, a descent run, measured wall clock, a DP artifact gated by the exact
+   identity **on the real net**, and a 2-GPU descent run with a measured scaling ratio. **ViT is the
+   remaining answer to "not validated"**, and its blocker is execution, not evidence.
 3. **`mobilenetv2-verified`'s published 86.89% is measured through the WRONG forward** and needs
    re-running (§2g). Its eval artifact was batch-BN while it trained per-example BN — the §2a defect,
    fixed 2026-07-28. Only the *scoring* was wrong, so the training log itself stands; the accuracy
@@ -115,7 +124,7 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 |---|---|---|---|---|---|
 | **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ✅ `Proofs/` (§2g) | ✅ 3 epochs + 2-GPU |
 | **MobileNetV2** | ✅ | ✅ **§2h-bis** — exact identity on the real net, 2 GPUs, **1.67×** | ✅ **§2h** — 58.0 s/epoch | ✅ `Proofs/` (§2g — **BN skew fixed**) | ✅ **4 full epochs → val 59.9%**, + 2-GPU descent |
-| **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ✅ **§2h** — 84.5 s/epoch | ✅ `Proofs/` (§2g) | ✅ **4 full epochs → val 60.6%** |
+| **ConvNeXt** | ✅ (all 180) | ✅ **§2h-quater** — exact identity on the real net, 2 GPUs, **1.68×** | ✅ **§2h** — 84.5 s/epoch | ✅ `Proofs/` (§2g) | ✅ **4 full epochs → val 60.6%**, + 12-epoch 2-GPU descent |
 | **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ⛔ **plumbed but UNRUNNABLE** — MIOpen; hits SGD too (§2h) | ✅ `Proofs/` | IREE single-GPU |
 
 **MobileNetV2** — ~~no smoke-train~~ ✅ §2h; **no `mobilenetv2_adamdp_train_step.mlir`** (the
@@ -126,12 +135,19 @@ no `#eval` writes it, and there is no `mobilenetv2-dp-check`); ~~no `-xla` targe
 sum-loss graph (effective 9.6) — a docstring fix, the number is tuned and trains. **The one
 remaining gap is the DP artifact**, and it is now the only thing between mnv2 and multi-GPU.
 
-**ConvNeXt** — ~~no smoke-train on either changed artifact~~ ✅ §2h; **no DP path whatsoever**, the
-only large net with none (`grep -c replicas ConvNeXtRender.lean` = **0**, re-verified 2026-07-29);
-~~no `-xla` target~~ ✅ §2h; (`convnext_fwd` was `tests/`-rendered — ✅ fixed, §2g;
+**ConvNeXt** — ~~no smoke-train on either changed artifact~~ ✅ §2h; ~~no DP path whatsoever~~
+✅ **§2h-quater**; ~~no `-xla` target~~ ✅ §2h; (`convnext_fwd` was `tests/`-rendered — ✅ fixed, §2g;
 there is still no `_fwd_eval` and there should not be, LayerNorm means train == eval, and
-`fwd-tie convnext --eval` now refuses outright rather than looking for a missing file); and the
-scalar-LN γ/β render as `tensor<1xf32>` where the committed signature says `tensor<f32>`.
+`fwd-tie convnext --eval` now refuses outright rather than looking for a missing file).
+**Nothing is owed on ConvNeXt.**
+
+> ⚠ **A claim this file carried was FALSE and is retired** (2026-07-29): *"the scalar-LN γ/β render
+> as `tensor<1xf32>` where the committed signature says `tensor<f32>`"*. Measured — `ty [] =
+> "tensor<f32>"`, and `grep -c 'tensor<1xf32>'` is **0** in both `convnext_train_step.mlir` and
+> `convnext_adam_train_step.mlir`. The scalar params are `tensor<f32>` on both sides and always
+> were; there is no signature mismatch and nothing to fix. The same stale note in
+> `ConvNeXtRender.lean`'s module docstring is retired too. It cost time in this thread because it
+> reads like a live interface hazard for anyone touching the DP render.
 
 **ViT** — the one with a *hard* blocker. Its DP render is numerically ungated because the graph will
 not execute on this box: `miopenStatusUnknownError` in the patch-embed weight-grad convolution. Both
@@ -287,8 +303,14 @@ unset HIP_VISIBLE_DEVICES
 lake build cifar8-dp-check && PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check   # §2b-quater (proxy)
 lake build efficientnet-dp-check && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-check  # §2e-bis
 lake build mobilenetv2-dp-check  && PJRT_REPLICAS=2 .lake/build/bin/mobilenetv2-dp-check   # §2h-bis
-#   ^ both of these are the EXACT identity on the REAL net. Pass a broken render as argv[1] for the
-#     sum-not-mean control: mnv2 goes 8.7e-8 → 1.037 on the gradient while θ moves only 8.4e-5.
+lake build convnext-dp-check     && PJRT_REPLICAS=2 .lake/build/bin/convnext-dp-check      # §2h-quater
+#   ^ all three are the EXACT identity on the REAL net. Pass a broken render as argv[1] for the
+#     sum-not-mean control: mnv2 goes 8.7e-8 → 1.037 on the gradient while θ moves only 8.4e-5;
+#     ConvNeXt goes ≤1.1e-8 → 1.114 while θ moves 9.7e-5, i.e. UNDER a 1e-4 θ gate. Build it with:
+#       sed -E 's/^(    %arn[A-Za-z0-9_]+ = stablehlo\.constant dense<)2\.0(>)/\11.0\2/' \
+#         verified_mlir/convnext_adamdp_train_step.mlir > /tmp/cnx_dp_sum.mlir
+#   ConvNeXt gates %loss as well as the gradient: LayerNorm ⇒ no bnstat region, so %loss is the
+#   ONLY forward-only output. It is also the only DP render with RANK-0 collectives (44 scalar LN).
 LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
   .lake/build/bin/mobilenetv2-verified-adam-xla data
 #   ^ the exact identity ON THE REAL NET (duplicated batch ⇒ all_reduce/2 is the identity, and BN
@@ -296,6 +318,10 @@ LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
 #     render as argv[1] to run the sum-not-mean control.
 LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
   .lake/build/bin/efficientnet-verified-adam-xla data
+LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
+  .lake/build/bin/convnext-verified-adam-xla data
+#   ^ §2h-quater: 1.68× (marginal epoch, train-only, 77.5 s → 46.0 s). Measure with
+#     LEAN_MLIR_SKIP_EVAL=1 on BOTH sides — eval runs single-replica and is not part of the ratio.
 
 # the DP throughput bench (§2e-ter). Interleaved, min statistic, SYNTHETIC inputs so the loader is
 # out of it — an end-to-end run measures a DIFFERENT thing (1.67× vs 1.75×) and both are reported.
@@ -1629,10 +1655,10 @@ epoch 1.
 
 #### What is NOT done
 
-* ~~**The mnv2 DP render**~~ ✅ **DONE 2026-07-29 — §2h-bis below.** **ConvNeXt's is still open**:
-  `grep -c replicas ConvNeXtRender.lean` = **0** — no support at all, so it is a renderer change,
-  not an `#eval`, and it is now the only large net with no DP path. Its driver is ready
-  (`LEAN_MLIR_VARIANT` is threaded), so nothing outside the renderer needs editing.
+* ~~**The mnv2 DP render**~~ ✅ **DONE 2026-07-29 — §2h-bis.** ~~**ConvNeXt's is still open**~~
+  ✅ **DONE 2026-07-29 — §2h-quater.** The estimate held: it was a renderer change rather than an
+  `#eval` (`grep -c replicas ConvNeXtRender.lean` was 0), the driver needed nothing, and it came to
+  ~40 lines plus a harness. **Every large net except ViT now has a gated DP path.**
 * **Re-measuring the published accuracies** — mnv2 owes this anyway for an unrelated reason (§2g: it
   was scored through the wrong forward). The 4-epoch runs here are descent evidence, not accuracy.
 * **An XLA:IREE ratio for these two nets** — deliberately skipped, see above.
@@ -1725,6 +1751,137 @@ count is per-graph), and that costs a couple of seconds, not the order of magnit
 one process, synthetic inputs, min statistic). The numbers above are marginal epochs, which is the
 right measurement for planning a run but is not the same thing as an on-GPU throughput ratio —
 EfficientNet's on-GPU 1.75× and end-to-end 1.67× differ for exactly that reason.
+
+### 2h-quater. ConvNeXt data-parallel ✅ DONE 2026-07-29 — the last net, and the first rank-0 collectives
+
+`verified_mlir/convnext_adamdp_train_step.mlir`, written by a second `#eval` in
+`Proofs/Codegen/ConvNeXtRender.lean` at `replicas := 2`; `LEAN_MLIR_VARIANT=adamdp`, entry
+`@convnext_adamdp_train_step`. It renders to its **own** path, so the artifact the trainer runs is
+untouched. Needs `convnext-verified-adam-xla` (§2h) — collectives exist only on the PJRT path.
+
+**This was the expensive half of the DP work, as §2h predicted** — unlike mnv2 (§2h-bis, one `#eval`
+because its renderer already took `replicas` and already called `emitGradAllReduce`), ConvNeXt had
+**no `replicas` support at all**: `grep -c replicas ConvNeXtRender.lean` was 0. So the parameter had
+to be threaded through `convnextAdamOne` and the render, plus the import of `LeanMlir.ViTRender`
+that no ConvNeXt file had. Still small — ~40 lines of renderer, one `#eval`, two `#guard`s, and the
+harness. `cnxAdamVariant` is the single source for the entry name, the artifact path and
+`LEAN_MLIR_VARIANT`, pinned by `#guard`s per §2d.1.
+
+#### ▶ The one genuinely new thing: **44 of the 180 collectives are RANK-0**
+
+ConvNeXt's scalar LayerNorm γ/β params have `ds = []`, i.e. `tensor<f32>`. **No other net's DP render
+has an operand below rank 1** — R34, EfficientNet, mnv2 and ViT are all ≥1-D — so
+`stablehlo.all_reduce` on a scalar had never been emitted, let alone executed, anywhere in this repo.
+It compiles and runs:
+
+```mlir
+%arsums0b0ng = "stablehlo.all_reduce"(%v3399) ({
+^bb0(%aras0b0ng: tensor<f32>, %arbs0b0ng: tensor<f32>):
+  %aradds0b0ng = stablehlo.add %aras0b0ng, %arbs0b0ng : tensor<f32>
+  stablehlo.return %aradds0b0ng : tensor<f32>
+}) { replica_groups = dense<[[0, 1]]> : tensor<1x2xi64> } : (tensor<f32>) -> tensor<f32>
+```
+
+Worth knowing because it is the kind of thing that would have failed at *execution* rather than at
+render or compile, which is the ViT failure mode — so it was checked before anything was measured.
+
+| gate | result |
+|---|---|
+| `replicas = 1` re-render vs the committed artifact | **byte-identical** — the insertion is provably inert ✅ |
+| collectives emitted | **180**, one per parameter, each paired with a `/2.0` ✅ |
+| syntax | `all_reduce(add)` over `[[0, 1]]`, **no `use_global_device_ids`** (§4) ✅ |
+| carve-out declared in the emitted output | yes, at `replicas > 1` ✅ |
+| `// MALFORMED` | 0 ✅ |
+| single-device artifact contains a collective | **0** ✅ |
+| `regen_verified_mlir.sh check` | **58 artifacts, one writer each**, prefix audit green ✅ |
+| **2 GPUs, 2 replicas — the exact identity** | **PASSES** ✅ |
+| 2-GPU descent | loss 2.127 → **0.897** over 12 epochs ✅ |
+
+**`tests/TestConvNeXtDpCheck.lean` → `lake build convnext-dp-check`.** The §2e-bis duplicated-batch
+identity — and **ConvNeXt is the one net that needs no BatchNorm argument to justify it.** The
+§10.3b caveat is a statement about batch BN: 2×32 genuinely is not 1×64 because the halves get
+different statistics. EfficientNet and mnv2 have to argue that *duplicating* a batch keeps both
+replicas' BN groups identical. ConvNeXt normalises with **LayerNorm**, which reduces within one
+example and never across the batch, so nothing couples the replicas at all and there is nothing to
+argue.
+
+| region | run A | run B |
+|---|---|---|
+| **`%loss`** (the only forward-only output) | **BIT-EXACT 1/1** ✅ | **BIT-EXACT** ✅ |
+| `v` | **BIT-EXACT 27811542/27811542** ✅ | **BIT-EXACT** ✅ |
+| **gradient (`m`)** | norm-rel **1.07e-8**; **3** of 27,811,542 coords differ, max abs 9.3e-10 | **BIT-EXACT 27811542/27811542** |
+| θ | norm-rel 9.1e-13, 3 coords differ | **BIT-EXACT** |
+
+**Quote it as ≤ 1.1e-8, not as bit-exact.** Two runs of the same binary on the same artifacts gave
+different answers — one bit-exact on all **83,434,629** floats, one with three gradient coordinates
+off at ~1e-9. That is §3's cross-process autotuning again, and it is exactly why the rule is to gate
+with headroom and quote a bound. ~9000× inside the 1e-4 gate either way.
+
+It is nonetheless the **tightest DP agreement of any net here** — 3 coords against mnv2's 35 and
+EfficientNet's 14, and the only one that has ever come back bit-exact — which is the LayerNorm story
+again: with no batch statistics there is less for a reordered reduction to land in.
+
+**The forward gate is `%loss`, and that is a real difference from the BN nets.** ConvNeXt returns no
+batch statistics, so there is no `bnstat` region to pin the forward bit-exactly the way mnv2's 52 BN
+layers do. `%loss` is the only output that reads the forward alone — report-only, on no gradient
+path, covered by no theorem, i.e. precisely the configuration in which §2b shipped plain CE against
+a smoothed-CE cotangent. So the harness **gates** it at 1e-4, the same split `convnext-adam-tie`
+uses on this net.
+
+**Verified to fail.** `%arn` divisor 2.0 → 1.0 (sum, not mean; 180 lines changed) → gradient norm-rel
+**1.114** against a passing ≤1.1e-8, **eight orders of separation**, and the harness exits 1. Two
+things it re-demonstrates, both worth having on a sixth net:
+
+* **§3's rule, more sharply than anywhere else.** The broken render moved **θ by 9.7e-5** — *under*
+  a 1e-4 θ gate — while `m` moved 1.114. A θ-based gate would have passed a 2× gradient error by a
+  margin of 3%.
+* **The fault localises.** `%loss` stayed **BIT-EXACT** through the control, which is correct: the
+  collective sits downstream of the loss, so a broken divisor cannot touch it. The loss gate is
+  doing independent work rather than shadowing the gradient gate.
+
+#### It trains, and it scales at **1.68×**
+
+`LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2` on `convnext-verified-adam-xla`: the
+banner reports *"DATA-PARALLEL: 2 replicas x bs 32 = global batch 64, 147 steps/epoch"* and the loss
+descends **2.127 → 1.834 → 1.564 → … → 0.897** over 12 epochs.
+
+Marginal epoch (`scripts/marginal_epoch.sh`), **train-only on both sides** so the ratio is not
+contaminated by an eval pass that runs single-replica, measured solo on 2× 7900 XTX:
+
+| | marginal epoch | deltas |
+|---|---|---|
+| 1 GPU, bs 32 | **77.5 s** | 78, 77, 78, 78, 78 |
+| **2 GPU DP, global 64** | **46.0 s** | 46, 46, 45, 46, 46 |
+
+**1.68×** — within noise of the **1.67×** that EfficientNet (§2e-ter) and mnv2 (§2h-ter) both reach.
+Three architecturally unlike nets landing on the same ratio is the strongest evidence yet that the
+shortfall from 2× is **structural**: parameters are host-resident, so every step pushes the full
+`[θ|m|v]` to every replica (§2c). That is now **four** independent measurements pointing at
+device-resident parameters (§2d.3).
+
+Note the single-GPU 77.5 s here is **train-only** and so is not the 84.5 s in §2h, which is
+train + eval on the same net. Eval costs ConvNeXt ~7 s/epoch. Do not mix the two.
+
+**Still not done**, same two as mnv2: an interleaved ms/step DP bench of the §2e-ter kind (these are
+marginal epochs, not an on-GPU throughput ratio), and a re-measured published accuracy.
+
+#### ▶ A stale claim inside a committed artifact, found and fixed here
+
+`convnext_adam_train_step.mlir`'s own banner still said its stem 4×4/s4 and 2×2/s2 downsample weight
+gradients *"have no VJP-cert SHlo op and stay hand-written (the two documented gaps)"* — true when
+written, **false since `9bb00f5`** (§2f-bis) closed both. The artifact was **under**-describing its
+own certification level, which is the benign direction but is still a wrong statement in the one
+place a reader would trust it.
+
+Fixed, as a **separate** change from the DP threading and in that order deliberately: the DP work's
+cheapest gate is *"`replicas = 1` re-renders byte-identical"*, and editing the banner destroys it.
+So the threading landed first and was shown byte-inert, then the banner moved on its own, with the
+diff as the check — **3 changed lines, all comments, 0 non-comment lines changed**. MLIR discards
+comments lexically, so no re-tie is owed; the changed bytes were nonetheless compiled and executed
+by the dp-check re-run above.
+
+*(The same `git diff verified_mlir/` discipline §2a-quinquies asks for is what makes this checkable
+at a glance — it is the only tracked artifact this whole thread modified.)*
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
@@ -2019,15 +2176,20 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 1b. ~~**The `-xla` trainers for mnv2 / ConvNeXt / ViT — §2h.**~~ ✅ **DONE 2026-07-29.** mnv2 and
    ConvNeXt both have an XLA peer, agreeing with IREE to fp noise and descending on their certified
    bytes; ViT is plumbed and its MIOpen blocker was reproduced on the new binary. The estimate held
-   exactly — 3 small files + 2 lakefile entries per net, no driver change. **Next on this axis is
-   the DP artifacts**, which the `-xla` binaries were the prerequisite for: mnv2 needs one `#eval`
-   (its renderer already takes `replicas`), ConvNeXt needs `replicas` support built from scratch.
+   exactly — 3 small files + 2 lakefile entries per net, no driver change.
+1c. ~~**The DP artifacts the `-xla` binaries unlocked.**~~ ✅ **DONE 2026-07-29 — §2h-bis (mnv2, one
+   `#eval`) and §2h-quater (ConvNeXt, `replicas` built from scratch).** Both gated by the exact
+   duplicated-batch identity on the real net, both verified to fail, both measured (1.67× / 1.68×).
+   **This axis is closed except for ViT**, which cannot execute here at all. What it produced is the
+   fourth independent measurement pointing at item 3 below.
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
 3. **Device-resident parameters.** Two rounds of transfer work are already done (batching:
    256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it
-   looks — see §3. **Two independent multi-GPU measurements now point here** (§2c 1.46× on R34,
-   §2e-ter's measured 13–16% per-step DP overhead on EfficientNet, most of it the `[θ|m|v]` push to
-   the second replica), so it is the highest-value structural item left. (On EfficientNet the data loader is
+   looks — see §3. **FOUR independent multi-GPU measurements now point here** (§2c 1.46× on R34,
+   §2e-ter's measured 13–16% per-step DP overhead on EfficientNet, and mnv2's **1.67×** and
+   ConvNeXt's **1.68×** end-to-end — three architecturally unlike nets landing on the same ratio,
+   which is what makes the ceiling structural rather than net-specific), so it is the
+   highest-value structural item left. (On EfficientNet the data loader is
    NOT competitive with this: measured at only 6.3% of a 1-GPU epoch and 11.3% of a 2-GPU one,
    §2e-ter — an earlier claim here that it dominated was a measurement artefact.)
 4. **Executable cache** (`PJRT_Executable_Serialize` / `DeserializeAndLoad`). Worth **0.1%** on an
@@ -2295,12 +2457,19 @@ honest statement is:
 Prefer **scaling** the global batch over **splitting** a fixed one: scaling keeps each replica's
 BatchNorm group at the size it was tied at, so the BN caveat never arises (§10.3b).
 
-The four DP renders are **not** equally evidenced, and the difference is worth stating whenever any
-of them is described: **EfficientNet** (§2e-bis) and **MobileNetV2** (§2h-bis) are gated by an exact
-known-answer check on the real net, run on two GPUs, each with a 2-GPU descent run behind it;
-**ResNet-34** (§2b-quater) by that same check on a cifar8 proxy plus a 2-GPU descent run; **ViT** by
-nothing numeric at all — its graph does not execute on this box. Only the first three should be
-called working, and only the first two are gated on the net they actually run.
+The five DP renders are **not** equally evidenced, and the difference is worth stating whenever any
+of them is described: **EfficientNet** (§2e-bis), **MobileNetV2** (§2h-bis) and **ConvNeXt**
+(§2h-quater) are gated by an exact known-answer check on the real net, run on two GPUs, each with a
+2-GPU descent run and a measured scaling ratio behind it; **ResNet-34** (§2b-quater) by that same
+check on a cifar8 proxy plus a 2-GPU descent run; **ViT** by nothing numeric at all — its graph does
+not execute on this box. Only the first four should be called working, and only the first three are
+gated on the net they actually run.
+
+ConvNeXt's is the one whose identity needs **no BatchNorm argument**: LayerNorm reduces within an
+example, so the replicas are uncoupled by construction and the duplicated-batch identity is exact
+without the §10.3b reasoning the BN nets need. Its flip side is that it returns no batch statistics,
+so `%loss` — report-only, outside the AST — is the *whole* of its forward evidence, which is why
+that gate is load-bearing there and merely confirmatory on mnv2/EfficientNet.
 
 And on the renders: `pretty(provenGraph)` means the committed bytes are the certified render *of
 the graph that was proven* — it does not mean the emitter is verified. The `Tok → StableHLO-text`

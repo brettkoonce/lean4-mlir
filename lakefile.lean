@@ -1485,6 +1485,20 @@ lean_exe «mobilenetv2-dp-check» where
   root := `tests.TestMobilenetV2DpCheck
   moreLinkArgs := xlaLink
 
+/-- The ConvNeXt peer, gated by the same EXACT duplicated-batch identity — and the one net that
+    needs no BatchNorm caveat to justify it: LayerNorm reduces within an example, never across the
+    batch, so nothing couples the replicas at all.
+
+    The flip side is that ConvNeXt returns no batch statistics, so there is no `bnstat` region and
+    `%loss` is the whole of the forward evidence — this harness gates it as well as the gradient,
+    the same split `convnext-adam-tie` uses. It is also the first execution anywhere here of a
+    RANK-0 `all_reduce` (the 44 scalar LayerNorm γ/β). Needs two GPUs and the XLA backend —
+    collectives exist only on the PJRT path, which is why `convnext-verified-adam-xla` (§2h) had to
+    come first. -/
+lean_exe «convnext-dp-check» where
+  root := `tests.TestConvNeXtDpCheck
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and

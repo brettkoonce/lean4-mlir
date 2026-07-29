@@ -23,14 +23,18 @@ def convnextAdamConfig : VerifiedConfig where
 
     `LEAN_MLIR_VARIANT` selects the rendered train step, i.e. which
     `verified_mlir/convnext_<variant>_train_step.mlir` is loaded (and with it a distinct vmfb and
-    checkpoint). **Only `adam` exists today** — it is `pretty(provenGraph)` out of
-    `Proofs/Codegen/ConvNeXtRender.lean`, tied bit-exactly against the retired hand-written emitter
-    on all 83,434,629 returned floats (handoff §2f-bis, §5: all 180 params are `pretty(AST)` since
-    the two weight-gradient gaps were closed). The knob is threaded so that adding a DP variant
-    later is a renderer change only — **ConvNeXt's renderer has no `replicas` parameter at all**
-    today, the one large net with no DP path whatsoever. Pair a DP variant with
-    `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and `HIP_VISIBLE_DEVICES` unset, and use the XLA build:
-    collectives exist only on the PJRT path.
+    checkpoint). Two exist, both written by `Proofs/Codegen/ConvNeXtRender.lean`:
+
+    * **`adam`** (default) — `pretty(provenGraph)`, tied bit-exactly against the retired
+      hand-written emitter on all 83,434,629 returned floats (handoff §2f-bis, §5: all 180 params
+      are `pretty(AST)` since the two weight-gradient gaps were closed).
+    * **`adamdp`** — the same graph plus one `all_reduce(add)/N` per parameter gradient, a declared
+      trusted carve-out (§2h-quater). Gated by `convnext-dp-check`: on a duplicated batch the DP
+      step reproduces the single-device one, `%loss` bit-exact and gradient norm-rel 1.1e-8, with
+      the sum-not-mean control firing at 1.114. Pair it with `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N`
+      and `HIP_VISIBLE_DEVICES` unset, and use the **XLA** build — collectives exist only on the
+      PJRT path, and the IREE shim refuses a DP entry point outright rather than silently running
+      single-device.
 
     No `LEAN_MLIR_BATCH` here, unlike EfficientNet: the batch is baked into the graph and bs32 is
     the only ConvNeXt render that exists, so the knob could only ever produce a shape error. -/

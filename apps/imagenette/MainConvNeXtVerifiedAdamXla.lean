@@ -11,9 +11,18 @@ Two reasons it exists (handoff §2h):
   so every long run was paying that factor. Re-measure per net rather than assuming 4.6× — that is
   one net's number, on a depthwise-convolution-heavy net.
 * **Multi-GPU is only reachable this way.** Collectives live only on the PJRT path; the IREE shim
-  refuses a DP entry point outright. ConvNeXt has **no `replicas` support in its renderer at all**,
-  the only large net with none, so DP is a later step — but it is unreachable without this binary
-  first.
+  refuses a DP entry point outright. ConvNeXt was the last large net with **no `replicas` support in
+  its renderer at all**; that closed on 2026-07-29 (§2h-quater) and this binary is what runs it:
+
+  ```
+  unset HIP_VISIBLE_DEVICES
+  LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
+    .lake/build/bin/convnext-verified-adam-xla data
+  ```
+
+  Measured: **1.68×** on 2× 7900 XTX (marginal epoch, train-only, 77.5 s → 46.0 s), which is the
+  same figure EfficientNet and mnv2 reach — the shortfall from 2× is the host-resident `[θ|m|v]`
+  push, not anything about the net (§2d.3).
 
 The risk that ViT's `miopenStatusUnknownError` blocker generalised was real enough to measure first:
 ConvNeXt has a structurally similar op, the 4×4/s4 patchify weight gradient
