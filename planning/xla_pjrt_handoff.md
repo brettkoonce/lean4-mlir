@@ -1935,12 +1935,67 @@ mobilenetv2, resnet34}` (+`vit`).
 route, *not* the 4-site `.batched` descriptor). **Nothing momentum-shaped exists anywhere in
 `Proofs/`** — not emit-side, not denotation-side. So:
 
-| piece | cost |
-|---|---|
-| **`cifar8_bn_adam_train_step`** | **~free** — `CnnRender` already renders `cifar8_adam_train_step` (no BN) and `cifar8_bn_train_step` (SGD + BN); this is the intersection and the AdamW triple exists. **Do this first: it is the only REAL TRAINER in the hand-written set**, and finishing it leaves the remainder ablation-only. |
-| **scheduled SGD** (4 artifacts) | one new op, 10 sites — `θ − lr·g` with **lr as a runtime operand**. The existing fused `*Sgd` ops bake lr as a *literal*, which is why this is absent. Emits 3 ops (broadcast, multiply, subtract). |
-| **Nesterov momentum** (4 artifacts) | two new ops (moment + param update, mirroring the Adam split), 10 sites each. Emits 8 ops: `v' = μv + g`, `θ' = θ − lr(g + μv')`. **Also needs a denotation-side `momentumStep` to be faithful TO** — new math, not just emit. |
-| **`cifar8w*`** (8 artifacts) | all of the above **plus the wide net rendered at all**, including its own `_fwd`/`_bn_fwd`. 8 of the 13, and backs ablations only. |
+| piece | cost | status |
+|---|---|---|
+| **scheduled SGD**, no-BN | one new op, 10 sites — `θ − lr·g` with **lr as a runtime operand** (the fused `*Sgd` ops bake lr as a *literal*, which is why it was absent) | ✅ **DONE** `769d0ab` + `d5fbf32` |
+| **Nesterov momentum**, no-BN | two new ops + a denotation-side `momStep` — new *math*, not just emit | ✅ **DONE** `769d0ab` + `d5fbf32` |
+| **the three BN variants** | ⚠ **bigger than a tail swap** — see below | ▶ NEXT |
+| **`cifar8w*`** (8 artifacts) | all of the above **plus the wide net rendered at all**, including its own `_fwd`/`_bn_fwd`. 8 of the 13, ablation-only | open |
+
+#### ✅ Done 2026-07-29 — the two no-BN variants, and the shape that made them cheap
+
+`cifar8_sgd_train_step` and `cifar8_mom_train_step` are `pretty(provenGraph)` out of `CnnRender`,
+each `#eval` its artifact's only writer. **`CifarOpt = adamw | sgd | nesterov` threaded through ONE
+renderer** (`adamTail` → `optTail opt`, 22 call sites), so all three variants share one forward, one
+backward and all 22 un-fused gradients and only the tail differs — the ablation section is now
+genuinely "the same net with the optimizer swapped". `%mu` emits only for `nesterov`, which is what
+kept the three AdamW artifacts **byte-identical** (gate 1).
+
+Tie: `cifar8-opt-tie {sgd,mom}` — **BIT-EXACT 52858/52858** recovered-gradient coords, `%loss`
+identical, m/v passthrough bit-exact. Controls fire: ÷B 0.0078125→0.008 ⇒ 0.024; μ 0.9→0.91 ⇒
+1.6e-4 with **0/52858** exact. ⚠ That second control clears the 1e-4 gate by only **1.6×** (μ→0.91
+is a 1% perturbation entering as `0.01·v`, v≈0.05) — **the exact COUNT is the decisive
+discriminator there, not the magnitude.**
+
+**`cifar8-opt-tie` gates the RECOVERED GRADIENT, never θ′**, and for SGD that is the whole point:
+θ' = θ − lr·g is dominated by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient
+still looks like a match (§2a-quinquies). Recovery is exact per variant — adam from `m'`, sgd from
+`θ'`, mom from `v' = μv + g`. It also gates the m/v **passthrough** slots bit-exactly (a tail that
+silently dropped a moment would still yield a plausible θ'), counts bit-exact coordinates (the first
+run printed `0.000000`, which six decimals cannot distinguish from 3e-8 — §2e-bis), and **deletes its
+`.vmfb`** before every compile, which `cifar8-adam-tie` still does not.
+
+#### ▶ The three BN variants — why they are NOT a tail swap, measured 2026-07-29
+
+Target interface, all three identical and the arithmetic closes exactly:
+`1 + 3×38 + 3 + 1 = 119` in, `3×38 + 3 = 117` out (38 params: 8 conv W + 8 conv b + 8 BN γ +
+8 BN β + 3 dense W + 3 dense b).
+
+`cifar8BnTrainStepFaithfulV` is the **fused-SGD** renderer — 102 `pretty` calls, of which **38 are
+fused `*Sgd` ops** (8 `convWeightSgd`, 8 `convBiasSgd`, 8 `bnGammaSgd`, 8 `bnBetaSgd`, 3 `weightSgd`,
+3 `biasSgd`). All six un-fused peers already exist from §2a (`convWeightGrad`, `convBiasGrad`,
+`bnGammaGrad`, `bnBetaGrad`, `weightGrad`, `biasGrad`), so **no new ops are needed**. Three things
+make it more than the no-BN edit:
+
+1. **`optTail` needs each param's `(n, ds)` EXPLICITLY**, but the fused ops carry their shapes
+   implicitly through dependent types (`{ic oc h w kH kW}` inferred from the operand). So the BN
+   render needs a **38-entry shape table**, and a misaligned entry is the §2e "silent slot" hazard —
+   derive it from the traversal that computes the gradients, never a parallel hand-list.
+2. **The signature and return are conditional** — 40/38 fused versus 119/117 packed — so the
+   `func.func` line, the return list and the constants block all branch, not just the tail.
+3. **The cotangent differs**: the fused render folds the mean into `lrStr`; the packed variants need
+   an explicit `scaleF invB` plus a report-only `%loss`, exactly as the no-BN AdamW render does.
+   Splitting the currently-nested `.sub (.softmaxDiv (.expe …))` into separate `pretty` calls should
+   be byte-neutral (the fresh-name counter continues), but that is an assumption gate 1 must check.
+
+**Do it by threading `opt : Option CifarOpt` through the existing renderer, NOT by writing a twin** —
+duplicating 102 `pretty` calls is the double-writer disease one level down, in code, which is exactly
+what §2a-quater warns about and what `vitBackAll`/`enetBackAll` exist to avoid. Gate 1 then applies
+for free: at `none` the render must reproduce `cifar8_bn_train_step.mlir` byte-identically.
+
+**`cifar8_bn_adam` is still the highest-value one** — it is the only artifact in the whole set of 13
+backing a REAL trainer (`cifar8-bn-verified-adam{,-xla}`); the other 12 are ablations. Once the
+threading exists, all three BN variants fall out of it together.
 
 **Claim ceiling for this thread:** the goal is `pretty(provenGraph)` parity, **not** a descent
 theorem — Adam has none either (§2a: "Still no descent claim — Adam is not monotone"). Say "the
