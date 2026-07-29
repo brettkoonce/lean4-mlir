@@ -114,7 +114,7 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 | | AdamW certified | data-parallel | `-xla` trainer | forward artifact | run on current bytes |
 |---|---|---|---|---|---|
 | **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ✅ `Proofs/` (§2g) | ✅ 3 epochs + 2-GPU |
-| **MobileNetV2** | ✅ | ⚠ renderer supports `replicas`, **no artifact** | ✅ **§2h** — 58.0 s/epoch | ✅ `Proofs/` (§2g — **BN skew fixed**) | ✅ **4 full epochs → val 59.9%** |
+| **MobileNetV2** | ✅ | ✅ **§2h-bis** — exact identity on the real net, 2 GPUs, **1.67×** | ✅ **§2h** — 58.0 s/epoch | ✅ `Proofs/` (§2g — **BN skew fixed**) | ✅ **4 full epochs → val 59.9%**, + 2-GPU descent |
 | **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ✅ **§2h** — 84.5 s/epoch | ✅ `Proofs/` (§2g) | ✅ **4 full epochs → val 60.6%** |
 | **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ⛔ **plumbed but UNRUNNABLE** — MIOpen; hits SGD too (§2h) | ✅ `Proofs/` | IREE single-GPU |
 
@@ -286,6 +286,11 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-adam-bench \
 unset HIP_VISIBLE_DEVICES
 lake build cifar8-dp-check && PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check   # §2b-quater (proxy)
 lake build efficientnet-dp-check && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-check  # §2e-bis
+lake build mobilenetv2-dp-check  && PJRT_REPLICAS=2 .lake/build/bin/mobilenetv2-dp-check   # §2h-bis
+#   ^ both of these are the EXACT identity on the REAL net. Pass a broken render as argv[1] for the
+#     sum-not-mean control: mnv2 goes 8.7e-8 → 1.037 on the gradient while θ moves only 8.4e-5.
+LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
+  .lake/build/bin/mobilenetv2-verified-adam-xla data
 #   ^ the exact identity ON THE REAL NET (duplicated batch ⇒ all_reduce/2 is the identity, and BN
 #     does not spoil it because both replicas' groups are the same 32 examples). Pass a broken
 #     render as argv[1] to run the sum-not-mean control.
@@ -1624,18 +1629,102 @@ epoch 1.
 
 #### What is NOT done
 
-* **The DP renders** — and these are now the only thing between mnv2/ConvNeXt and multi-GPU, since
-  the `-xla` binaries they needed exist. **mnv2**: `MobileNetV2RenderB.lean` already takes
-  `replicas`, already calls `emitGradAllReduce`, and `mnv2AdamVariant` already returns `adamdp` — but
-  its **only** `#eval` writes the single-device artifact and no `mobilenetv2_adamdp_train_step.mlir`
-  exists (re-verified 2026-07-29). That is one `#eval` plus a `mobilenetv2-dp-check`. **ConvNeXt**:
+* ~~**The mnv2 DP render**~~ ✅ **DONE 2026-07-29 — §2h-bis below.** **ConvNeXt's is still open**:
   `grep -c replicas ConvNeXtRender.lean` = **0** — no support at all, so it is a renderer change,
-  not an `#eval`. Both drivers are ready: `LEAN_MLIR_VARIANT` is threaded now, so neither needs
-  editing again.
+  not an `#eval`, and it is now the only large net with no DP path. Its driver is ready
+  (`LEAN_MLIR_VARIANT` is threaded), so nothing outside the renderer needs editing.
 * **Re-measuring the published accuracies** — mnv2 owes this anyway for an unrelated reason (§2g: it
   was scored through the wrong forward). The 4-epoch runs here are descent evidence, not accuracy.
 * **An XLA:IREE ratio for these two nets** — deliberately skipped, see above.
 * **ViT on XLA anywhere.** Try the CUDA box with `sgd-render-tie vit` first (above).
+
+### 2h-bis. MobileNetV2 data-parallel ✅ DONE 2026-07-29 — gated by the EXACT identity on the real net
+
+`verified_mlir/mobilenetv2_adamdp_train_step.mlir`, written by a second `#eval` in
+`Proofs/Codegen/MobileNetV2RenderB.lean` at `replicas := 2`; `LEAN_MLIR_VARIANT=adamdp`, entry
+`@mobilenetv2_adamdp_train_step`. It renders to its **own** path, so the artifact the trainer runs
+is untouched. Needs `mobilenetv2-verified-adam-xla` (§2h) — collectives exist only on the PJRT path.
+
+This was the cheap half of the DP work, exactly as §2h predicted: the renderer already took
+`replicas`, already called `emitGradAllReduce`, and `mnv2AdamVariant` already returned the slug.
+**One `#eval` and one harness**; no renderer logic changed.
+
+| gate | result |
+|---|---|
+| `replicas = 1` re-render vs the committed artifact | **byte-identical** — the insertion is provably inert ✅ |
+| collectives emitted | **210**, one per parameter, each paired with a `/2.0` ✅ |
+| syntax | `all_reduce(add)` over `[[0, 1]]`, **no `use_global_device_ids`** (§4) ✅ |
+| carve-out declared in the emitted output | yes, at `replicas > 1` ✅ |
+| `// MALFORMED` | 0 ✅ |
+| single-device artifact contains a collective | **0** ✅ |
+| `regen_verified_mlir.sh check` | **56 artifacts, one writer each** ✅ |
+| **2 GPUs, 2 replicas — the exact identity** | **PASSES** ✅ |
+
+**`tests/TestMobilenetV2DpCheck.lean` → `lake build mobilenetv2-dp-check`.** The §2e-bis identity,
+which mnv2 can use for the same reason EfficientNet can: give both replicas the **same** 32
+examples, so their BN groups are identical by construction, `all_reduce(add)/2 = (g+g)/2 = g` is the
+identity, and the DP step must reproduce the single-device one. **Gated on the real net, not a
+proxy** — R34's collective still only has the cifar8 proxy (§2b-quater).
+
+| region | result (2× 7900 XTX, `PJRT_REPLICAS=2`) |
+|---|---|
+| **`bnstat`** (forward, 52 BN layers) | **BIT-EXACT 34112/34112** ✅ |
+| **`%loss`/bc** | **BIT-EXACT 3/3** ✅ |
+| `v` | **BIT-EXACT 2253738/2253738** ✅ |
+| **gradient (`m`)** | norm-rel **8.7e-8**; 35 of 2,253,738 coords differ, max abs 8.1e-9 ✅ |
+| θ | norm-rel 5.7e-12, 22 coords differ |
+
+~1150× inside the 1e-4 gate. As on EfficientNet it is **not** bit-exact on `m`/θ, and for the same
+reason — the DP module is a different HLO program so XLA orders the backward reductions differently;
+the collective itself is exact, `(g+g)/2 = g` holds to the bit. The forward being bit-exact is the
+evidence for that split. `Float.toString`'s six decimals print 8.7e-8 as `0.000000`, so the harness
+reports nano-units and the exact-coordinate count — without them this reads as bit-exact when it is
+not.
+
+**Verified to fail.** `%arn` divisor 2.0 → 1.0 (sum, not mean; 210 lines changed) → gradient
+norm-rel **1.037** against a passing 8.7e-8, **seven orders of separation**, and the harness exits 1.
+It is also the fifth net to re-demonstrate §3's rule: the same broken render moved **θ by only
+8.4e-5** — *under* a 1e-4 θ gate — while `m` moved 1.037. And `bnstat` stayed **bit-exact**, which
+correctly localises the fault to the backward rather than the forward.
+
+Claim ceiling unchanged (§5): *certified gradient → trusted collective → certified AdamW*. What is
+new is that mnv2 joins EfficientNet as a net whose collective semantics are pinned by an exact
+known-answer check **on the net itself**. The DP renders now rank: **EfficientNet and MobileNetV2**
+(exact identity, real net, 2 GPUs) > **ResNet-34** (cifar8 proxy + 2-GPU descent) > **ViT** (nothing
+numeric — will not execute here).
+
+#### 2h-ter. mnv2 DP end to end — it trains, and it scales at **1.67×**
+
+The identity gate says the DP step computes the right thing; these say what it costs and that the
+trainer actually drives it.
+
+**It trains.** `LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2` on
+`mobilenetv2-verified-adam-xla`: the banner reports *"DATA-PARALLEL: 2 replicas x bs 32 = global
+batch 64"*, loss descends 2.506 → 2.291 → 2.128 and val reaches 17.8% at epoch 1.
+
+**Marginal epoch, train-only, measured solo on 2× 7900 XTX** (`scripts/marginal_epoch.sh`):
+
+| | marginal epoch | deltas |
+|---|---|---|
+| 1 GPU, bs 32 | **55.0 s** | 55, 55 |
+| **2 GPU DP, global 64** | **33.0 s** | 33, 33 |
+
+**1.67× end-to-end** — the *same* figure EfficientNet's DP reaches (§2e-ter), which is a useful
+independent confirmation that the shortfall from 2× is structural rather than net-specific: params
+are host-resident, so each step pushes the full `[θ|m|v]` to every replica (§2c). That is the
+standing argument for device-resident parameters (§2d.3), now with a third measurement behind it.
+
+**Eval is NOT the bottleneck on either path**, which is worth stating because a single ad-hoc run
+suggested otherwise and did not reproduce. Single-device eval costs **3.0 s/epoch** (58.0 train+eval
+vs 55.0 train-only, §2h). Under a 2-replica process it costs **~5 s/epoch** — measured with a
+5-train-step cap so the epoch time *is* essentially the eval pass: stamps at 29/35/40/45 s, deltas
+6/5/5. Eval runs single-replica while the process holds a 2-replica executable (§2c: the replica
+count is per-graph), and that costs a couple of seconds, not the order of magnitude first suspected.
+
+**Still not done:** an interleaved ms/step DP bench of the §2e-ter kind (both executables compiled in
+one process, synthetic inputs, min statistic). The numbers above are marginal epochs, which is the
+right measurement for planning a run but is not the same thing as an on-GPU throughput ratio —
+EfficientNet's on-GPU 1.75× and end-to-end 1.67× differ for exactly that reason.
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
@@ -2206,11 +2295,12 @@ honest statement is:
 Prefer **scaling** the global batch over **splitting** a fixed one: scaling keeps each replica's
 BatchNorm group at the size it was tied at, so the BN caveat never arises (§10.3b).
 
-The three DP renders are **not** equally evidenced, and the difference is worth stating whenever any
-of them is described: **EfficientNet** (§2e-bis) is gated by an exact known-answer check on the real
-net, run on two GPUs; **ResNet-34** (§2b-quater) by that same check on a cifar8 proxy plus a 2-GPU
-descent run; **ViT** by nothing numeric at all — its graph does not execute on this box. Only the
-first two should be called working.
+The four DP renders are **not** equally evidenced, and the difference is worth stating whenever any
+of them is described: **EfficientNet** (§2e-bis) and **MobileNetV2** (§2h-bis) are gated by an exact
+known-answer check on the real net, run on two GPUs, each with a 2-GPU descent run behind it;
+**ResNet-34** (§2b-quater) by that same check on a cifar8 proxy plus a 2-GPU descent run; **ViT** by
+nothing numeric at all — its graph does not execute on this box. Only the first three should be
+called working, and only the first two are gated on the net they actually run.
 
 And on the renders: `pretty(provenGraph)` means the committed bytes are the certified render *of
 the graph that was proven* — it does not mean the emitter is verified. The `Tok → StableHLO-text`

@@ -1474,6 +1474,17 @@ lean_exe «efficientnet-dp-check» where
   root := `tests.TestEfficientNetDpCheck
   moreLinkArgs := xlaLink
 
+/-- The mnv2 peer of `efficientnet-dp-check`, gated by the same EXACT duplicated-batch identity:
+    both replicas get the same 32 examples, so their BN groups are identical by construction,
+    `all_reduce(add)/2 = (g+g)/2 = g`, and the DP step must reproduce the single-device one.
+
+    mnv2 returns 104 BN batch statistics (52 layers), so it has a forward-only `bnstat` region that
+    must come back BIT-EXACT. Needs two GPUs and the XLA backend — collectives exist only on the
+    PJRT path, which is why `mobilenetv2-verified-adam-xla` (§2h) had to come first. -/
+lean_exe «mobilenetv2-dp-check» where
+  root := `tests.TestMobilenetV2DpCheck
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and

@@ -790,6 +790,28 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_adam_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5")
 
+-- The **DATA-PARALLEL** render (handoff §2h-bis), selected at run time by
+-- `LEAN_MLIR_VARIANT=adamdp`. Same graph, plus one `all_reduce(add)/N` per parameter gradient
+-- between the certified gradient and the certified AdamW triple: *certified gradient → trusted
+-- collective → certified AdamW*. The collective is a DECLARED carve-out and the render says so in
+-- its own output banner at `replicas > 1`, per the §5/§2b `%loss` lesson that an undeclared
+-- carve-out is how wrong things ship. Claim ceiling is unchanged (§5): the gradient averaging is a
+-- proven identity; the collective implementing it is trusted, exactly like the lowerer.
+--
+-- Like EfficientNet's and unlike ResNet-34's, this variant never had a hand-written emitter to
+-- migrate off — this file has been the only writer of both mnv2 AdamW artifacts since the §2f swap.
+--
+-- It renders to its OWN path, which is what stops the §2a race where producing a DP render meant
+-- editing a knob and clobbering the artifact the trainer runs. `2` is the replica count these are
+-- rendered at and it must match `PJRT_REPLICAS` at run time, because the graph bakes
+-- `replica_groups`. Re-render here to change it.
+--
+-- It needs the XLA build (`mobilenetv2-verified-adam-xla`, §2h): collectives exist only on the PJRT
+-- path, and the IREE shim refuses a DP entry point outright rather than silently running
+-- single-device.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2_adamdp_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5" 2)
+
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
 -- call ("entry mismatch"). These pin the literal path above against `mnv2AdamVariant`, so a rename
 -- fails at `lake build` rather than at run time.
