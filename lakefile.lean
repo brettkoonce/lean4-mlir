@@ -1377,8 +1377,20 @@ lean_exe «fwd-tie» where
   root := `tests.TestFwdTie
   moreLinkArgs := xlaLink
 
+/-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
+    Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
+    by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a
+    match (§2a-quinquies). Each variant's gradient is exactly recoverable from its own outputs —
+    adam from m', sgd from θ', mom from v'. Also gates the m/v PASSTHROUGH slots bit-exactly, since
+    a tail that silently dropped a moment would still yield a plausible θ'. Deletes its .vmfb before
+    every compile (§4), unlike `cifar8-adam-tie`. -/
+lean_exe «cifar8-opt-tie» where
+  root := `tests.TestCifar8OptTie
+  moreLinkArgs := xlaLink
+
 /-- §2a-ter guard: one AdamW step through two renders of `@cifar8_adam_train_step`, same packed
-    `[θ|m|v|lr|bc1|bc2]`, every returned float compared. -/
+    `[θ|m|v|lr|bc1|bc2]`, every returned float compared. ⚠ Compares θ' among other things and does
+    NOT delete its `.vmfb`; prefer `cifar8-opt-tie`, which recovers the gradient and deletes. -/
 lean_exe «cifar8-adam-tie» where
   root := `tests.TestCifar8AdamTie
   moreLinkArgs := xlaLink

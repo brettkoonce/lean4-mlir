@@ -897,12 +897,32 @@ def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrS
 -- § cifar8 AdamW — the same forward/backward, optimizer swapped for the proven Adam ops
 -- ════════════════════════════════════════════════════════════════
 
-/-- One parameter's AdamW tail. The gradient is emitted **once** and the three optimizer
-    outputs read it back by SSA name (`.operand gradSSA`), so `θ'`/`m'`/`v'` share one
-    gradient subgraph rather than three copies of it. Returns `(code, θ', m', v')` — the
-    triple `Proofs.adamWStep` returns, and the triple `adamW_triple_faithful` denotes. -/
-private def adamTail (B replicas n : Nat) (pName : String) (ds : List Nat) (gradSSA : String) :
-    StateM Nat (String × String × String × String) := do
+/-- Which optimizer tail the cifar8 render emits (handoff §2i). All three share ONE forward,
+    backward and un-fused-gradient body, and one packed `[θ|m|v]` signature — 71 in / 69 out for
+    every variant — so the ablation section's "SGD several ways" is genuinely the same net with the
+    optimizer swapped, and a reader can diff the artifacts to see only the tail move. -/
+inductive CifarOpt
+  /-- `θ' = θ − lr·(m̂/(√v̂+ε)) − lr·wd·θ`, and both moments live. -/
+  | adamw
+  /-- `θ' = θ − lr·g`; `m`/`v` ride through untouched. -/
+  | sgd
+  /-- `v' = μ·v + g`, `θ' = θ − lr·(g + μ·v')`; velocity in the `v` slot, `m` untouched. -/
+  | nesterov
+deriving DecidableEq, Repr
+
+/-- One parameter's optimizer tail. The gradient is emitted **once** and every optimizer output
+    reads it back by SSA name (`.operand gradSSA`), so the outputs share one gradient subgraph
+    rather than a copy each. Returns `(code, θ', m', v')` — the slots the packed protocol returns.
+
+    * `.adamw` — the proven triple, denoting `Proofs.adamWStep` (`adamW_triple_faithful`).
+    * `.sgd` — `sgdParamF`, denoting `Proofs.sgdParam`. `m'`/`v'` are the INPUT names: a
+      passthrough, which is what keeps the signature identical to AdamW's.
+    * `.nesterov` — `momParamF` + `momVNextF`, together denoting `Proofs.momStep`
+      (`mom_pair_faithful`). Velocity occupies the `v` slot; `m` passes through.
+
+    `%mu` is a baked constant and `%lr` a runtime arg, matching the retired emitter exactly. -/
+private def optTail (opt : CifarOpt) (B replicas n : Nat) (pName : String) (ds : List Nat)
+    (gradSSA : String) : StateM Nat (String × String × String × String) := do
   let z : Vec n := fun _ => 0
   -- At `replicas > 1`, average the gradient across devices first. Trusted carve-out, same as
   -- ResNet34RenderB's (handoff §2b-quater, §5). cifar8 is where that carve-out gets its EXACT
@@ -913,12 +933,25 @@ private def adamTail (B replicas n : Nat) (pName : String) (ds : List Nat) (grad
   -- `pName` is "%W1"; the collective's SSA tag must not carry the '%'. `String.drop` returns a
   -- `String.Slice` on this toolchain (Lean 4.32), hence the explicit `.toString`.
   let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds (pName.drop 1).toString replicas
-  let (cT, nT) ← pretty B (SHlo.adamWParamF pName s!"{pName}m" s!"{pName}v"
-      "%b1" "%ob1" "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds
-      0 0 0 0 0 0 0 z z z (.operand gAvg z))
-  let (cM, nM) ← pretty B (SHlo.adamMNextF s!"{pName}m" "%b1" "%ob1" ds 0 z (.operand gAvg z))
-  let (cV, nV) ← pretty B (SHlo.adamVNextF s!"{pName}v" "%b2" "%ob2" ds 0 z (.operand gAvg z))
-  pure (arS ++ cT ++ cM ++ cV, nT, nM, nV)
+  match opt with
+  | .adamw =>
+    let (cT, nT) ← pretty B (SHlo.adamWParamF pName s!"{pName}m" s!"{pName}v"
+        "%b1" "%ob1" "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds
+        0 0 0 0 0 0 0 z z z (.operand gAvg z))
+    let (cM, nM) ← pretty B (SHlo.adamMNextF s!"{pName}m" "%b1" "%ob1" ds 0 z (.operand gAvg z))
+    let (cV, nV) ← pretty B (SHlo.adamVNextF s!"{pName}v" "%b2" "%ob2" ds 0 z (.operand gAvg z))
+    pure (arS ++ cT ++ cM ++ cV, nT, nM, nV)
+  | .sgd =>
+    let (cT, nT) ← pretty B (SHlo.sgdParamF pName "%lr" ds 0 z (.operand gAvg z))
+    -- m/v are returned UNCHANGED. That is not laziness: the packed signature is shared with
+    -- AdamW so the driver is byte-identical across variants, and a plain-SGD step genuinely
+    -- has no state to carry.
+    pure (arS ++ cT, nT, s!"{pName}m", s!"{pName}v")
+  | .nesterov =>
+    let (cT, nT) ← pretty B (SHlo.momParamF pName s!"{pName}v" "%mu" "%lr" ds 0 0 z z
+        (.operand gAvg z))
+    let (cV, nV) ← pretty B (SHlo.momVNextF s!"{pName}v" "%mu" ds 0 z (.operand gAvg z))
+    pure (arS ++ cT ++ cV, nT, s!"{pName}m", nV)
 
 set_option maxRecDepth 8000 in
 /-- **cifar8 AdamW train step rendered ENTIRELY from the verified AST** — the optimizer half of
@@ -947,7 +980,7 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
     (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))))
     -- Trailing + defaulted so every existing positional call site is unchanged.
-    (replicas : Nat := 1) : String :=
+    (replicas : Nat := 1) (opt : CifarOpt := .adamw) : String :=
   let s4h := 2*h; let s4w := 2*w
   let s3h := 2*s4h; let s3w := 2*s4w
   let s2h := 2*s3h; let s2w := 2*s3w
@@ -1027,49 +1060,49 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (cDhc1, nDhc1) ← pretty B (.selectPos nHc1 zS1c1 (.operand nDac1 zS1c1))
     -- ═══ per param: un-fused gradient, then the three proven AdamW outputs ═══
     let (gW1, sW1) ← pretty B (SHlo.convWeightGrad "%x" b₁ zTW1 W₁ (.operand nDhc1 zS1c1))
-    let (aW1, tW1, mW1, vW1) ← adamTail B replicas (c1*ic*kH*kW) "%W1" [c1,ic,kH,kW] sW1
+    let (aW1, tW1, mW1, vW1) ← optTail opt B replicas (c1*ic*kH*kW) "%W1" [c1,ic,kH,kW] sW1
     let (gb1, sb1) ← pretty B (SHlo.convBiasGrad W₁ zTW1 b₁ (.operand nDhc1 zS1c1))
-    let (ab1, tb1, mb1, vb1) ← adamTail B replicas c1 "%cb1" [c1] sb1
+    let (ab1, tb1, mb1, vb1) ← optTail opt B replicas c1 "%cb1" [c1] sb1
     let (gW2, sW2) ← pretty B (SHlo.convWeightGrad nAc1 b₂ zTW2 W₂ (.operand nDhc2 zS1c1))
-    let (aW2, tW2, mW2, vW2) ← adamTail B replicas (c1*c1*kH*kW) "%W2" [c1,c1,kH,kW] sW2
+    let (aW2, tW2, mW2, vW2) ← optTail opt B replicas (c1*c1*kH*kW) "%W2" [c1,c1,kH,kW] sW2
     let (gb2, sb2) ← pretty B (SHlo.convBiasGrad W₂ zTW2 b₂ (.operand nDhc2 zS1c1))
-    let (ab2, tb2, mb2, vb2) ← adamTail B replicas c1 "%cb2" [c1] sb2
+    let (ab2, tb2, mb2, vb2) ← optTail opt B replicas c1 "%cb2" [c1] sb2
     let (gW3, sW3) ← pretty B (SHlo.convWeightGrad nPool1 b₃ zTW3 W₃ (.operand nDhc3 zS2c2))
-    let (aW3, tW3, mW3, vW3) ← adamTail B replicas (c2*c1*kH*kW) "%W3" [c2,c1,kH,kW] sW3
+    let (aW3, tW3, mW3, vW3) ← optTail opt B replicas (c2*c1*kH*kW) "%W3" [c2,c1,kH,kW] sW3
     let (gb3, sb3) ← pretty B (SHlo.convBiasGrad W₃ zTW3 b₃ (.operand nDhc3 zS2c2))
-    let (ab3, tb3, mb3, vb3) ← adamTail B replicas c2 "%cb3" [c2] sb3
+    let (ab3, tb3, mb3, vb3) ← optTail opt B replicas c2 "%cb3" [c2] sb3
     let (gW4, sW4) ← pretty B (SHlo.convWeightGrad nAc3 b₄ zTW4 W₄ (.operand nDhc4 zS2c2))
-    let (aW4, tW4, mW4, vW4) ← adamTail B replicas (c2*c2*kH*kW) "%W4" [c2,c2,kH,kW] sW4
+    let (aW4, tW4, mW4, vW4) ← optTail opt B replicas (c2*c2*kH*kW) "%W4" [c2,c2,kH,kW] sW4
     let (gb4, sb4) ← pretty B (SHlo.convBiasGrad W₄ zTW4 b₄ (.operand nDhc4 zS2c2))
-    let (ab4, tb4, mb4, vb4) ← adamTail B replicas c2 "%cb4" [c2] sb4
+    let (ab4, tb4, mb4, vb4) ← optTail opt B replicas c2 "%cb4" [c2] sb4
     let (gW5, sW5) ← pretty B (SHlo.convWeightGrad nPool2 b₅ zTW5 W₅ (.operand nDhc5 zS3c3))
-    let (aW5, tW5, mW5, vW5) ← adamTail B replicas (c3*c2*kH*kW) "%W5" [c3,c2,kH,kW] sW5
+    let (aW5, tW5, mW5, vW5) ← optTail opt B replicas (c3*c2*kH*kW) "%W5" [c3,c2,kH,kW] sW5
     let (gb5, sb5) ← pretty B (SHlo.convBiasGrad W₅ zTW5 b₅ (.operand nDhc5 zS3c3))
-    let (ab5, tb5, mb5, vb5) ← adamTail B replicas c3 "%cb5" [c3] sb5
+    let (ab5, tb5, mb5, vb5) ← optTail opt B replicas c3 "%cb5" [c3] sb5
     let (gW6, sW6) ← pretty B (SHlo.convWeightGrad nAc5 b₆ zTW6 W₆ (.operand nDhc6 zS3c3))
-    let (aW6, tW6, mW6, vW6) ← adamTail B replicas (c3*c3*kH*kW) "%W6" [c3,c3,kH,kW] sW6
+    let (aW6, tW6, mW6, vW6) ← optTail opt B replicas (c3*c3*kH*kW) "%W6" [c3,c3,kH,kW] sW6
     let (gb6, sb6) ← pretty B (SHlo.convBiasGrad W₆ zTW6 b₆ (.operand nDhc6 zS3c3))
-    let (ab6, tb6, mb6, vb6) ← adamTail B replicas c3 "%cb6" [c3] sb6
+    let (ab6, tb6, mb6, vb6) ← optTail opt B replicas c3 "%cb6" [c3] sb6
     let (gW7, sW7) ← pretty B (SHlo.convWeightGrad nPool3 b₇ zTW7 W₇ (.operand nDhc7 zS4c4))
-    let (aW7, tW7, mW7, vW7) ← adamTail B replicas (c4*c3*kH*kW) "%W7" [c4,c3,kH,kW] sW7
+    let (aW7, tW7, mW7, vW7) ← optTail opt B replicas (c4*c3*kH*kW) "%W7" [c4,c3,kH,kW] sW7
     let (gb7, sb7) ← pretty B (SHlo.convBiasGrad W₇ zTW7 b₇ (.operand nDhc7 zS4c4))
-    let (ab7, tb7, mb7, vb7) ← adamTail B replicas c4 "%cb7" [c4] sb7
+    let (ab7, tb7, mb7, vb7) ← optTail opt B replicas c4 "%cb7" [c4] sb7
     let (gW8, sW8) ← pretty B (SHlo.convWeightGrad nAc7 b₈ zTW8 W₈ (.operand nDhc8 zS4c4))
-    let (aW8, tW8, mW8, vW8) ← adamTail B replicas (c4*c4*kH*kW) "%W8" [c4,c4,kH,kW] sW8
+    let (aW8, tW8, mW8, vW8) ← optTail opt B replicas (c4*c4*kH*kW) "%W8" [c4,c4,kH,kW] sW8
     let (gb8, sb8) ← pretty B (SHlo.convBiasGrad W₈ zTW8 b₈ (.operand nDhc8 zS4c4))
-    let (ab8, tb8, mb8, vb8) ← adamTail B replicas c4 "%cb8" [c4] sb8
+    let (ab8, tb8, mb8, vb8) ← optTail opt B replicas c4 "%cb8" [c4] sb8
     let (gW9, sW9) ← pretty B (SHlo.weightGrad nPool4 zPc4 (.operand nDy9 zD1))
-    let (aW9, tW9, mW9, vW9) ← adamTail B replicas (flat*d1) "%W9" [flat,d1] sW9
+    let (aW9, tW9, mW9, vW9) ← optTail opt B replicas (flat*d1) "%W9" [flat,d1] sW9
     let (gb9, sb9) ← pretty B (SHlo.biasGrad (n := d1) (.operand nDy9 zD1))
-    let (ab9, tb9, mb9, vb9) ← adamTail B replicas d1 "%b9" [d1] sb9
+    let (ab9, tb9, mb9, vb9) ← optTail opt B replicas d1 "%b9" [d1] sb9
     let (gWa, sWa) ← pretty B (SHlo.weightGrad nA9 zD1 (.operand nDyA zD1))
-    let (aWa, tWa, mWa, vWa) ← adamTail B replicas (d1*d1) "%Wa" [d1,d1] sWa
+    let (aWa, tWa, mWa, vWa) ← optTail opt B replicas (d1*d1) "%Wa" [d1,d1] sWa
     let (gba, sba) ← pretty B (SHlo.biasGrad (n := d1) (.operand nDyA zD1))
-    let (aba, tba, mba, vba) ← adamTail B replicas d1 "%ba" [d1] sba
+    let (aba, tba, mba, vba) ← optTail opt B replicas d1 "%ba" [d1] sba
     let (gWb, sWb) ← pretty B (SHlo.weightGrad nAa zD1 (.operand nDy zNC))
-    let (aWb, tWb, mWb, vWb) ← adamTail B replicas (d1*nClasses) "%Wb" [d1,nClasses] sWb
+    let (aWb, tWb, mWb, vWb) ← optTail opt B replicas (d1*nClasses) "%Wb" [d1,nClasses] sWb
     let (gbb, sbb) ← pretty B (SHlo.biasGrad (n := nClasses) (.operand nDy zNC))
-    let (abb, tbb, mbb, vbb) ← adamTail B replicas nClasses "%bb" [nClasses] sbb
+    let (abb, tbb, mbb, vbb) ← optTail opt B replicas nClasses "%bb" [nClasses] sbb
     -- ═══ report-only scalar loss — OUTSIDE the proven surface, does not feed the update ═══
     let lossCode :=
       "    // ── report-only scalar loss (NOT pretty(AST): the kit has no rank-0 loss op; it\n" ++
@@ -1115,6 +1148,9 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
       s!"    %ob2 = stablehlo.constant dense<{ob2Str}> : tensor<f32>\n" ++
       s!"    %eps = stablehlo.constant dense<{epsStr}> : tensor<f32>\n" ++
       s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
+      -- Emitted ONLY for Nesterov, so the AdamW render re-renders byte-identical after this
+      -- threading — the §0 gate-1 self-check that the generalisation is inert.
+      (if opt == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "") ++
       body ++
       s!"    return {String.intercalate ", " (ths ++ mns ++ vns)}, %loss, %bc1, %bc2 : " ++
       s!"{String.intercalate ", " (pTys ++ pTys ++ pTys)}, tensor<f32>, tensor<f32>, tensor<f32>\n"
@@ -1316,6 +1352,33 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
   inner ++
   "  }\n}\n"
 
+/-- The §2i **plain-SGD** cifar8 render: `cifar8AdamTrainStepFaithfulV` with `opt := .sgd`, so the
+    forward, backward and all 22 un-fused gradients are shared verbatim with the AdamW render and
+    only the tail differs. Entry `@cifar8_sgd_train_step`, 71 in / 69 out. -/
+def cifar8SgdTrainStepFaithful : String :=
+  cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+    "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) 1 .sgd
+    |>.replace "@cifar8_adam_train_step" "@cifar8_sgd_train_step"
+
+/-- The §2i **Nesterov** cifar8 render (`opt := .nesterov`), μ baked at 0.9.
+    Entry `@cifar8_mom_train_step`, 71 in / 69 out. -/
+def cifar8MomTrainStepFaithful : String :=
+  cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+    "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) 1 .nesterov
+    |>.replace "@cifar8_adam_train_step" "@cifar8_mom_train_step"
+
 end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/cnn_train_step.mlir` (what MainMnistCnnVerified trains on)
@@ -1369,6 +1432,26 @@ end Proofs.StableHLO
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0))
+
+-- ── §2i: the SGD and NESTEROV peers, staged to their OWN paths ──────────────────────────────
+-- ✅ SWAPPED 2026-07-29. These were staged beside the incumbents, tied, and swapped — the
+-- hand-written emitters in `tests/TestCifar8AdamTrain.lean` are retired, so each `#eval` below is
+-- now its artifact's ONLY writer. `cifar8-opt-tie {sgd,mom}` came back BIT-EXACT on all 52,858
+-- recovered gradient coordinates with the m/v passthrough slots bit-exact, and both negative
+-- controls fire (÷B 0.0078125→0.008 ⇒ 0.024; μ 0.9→0.91 ⇒ 1.6e-4 with 0/52858 exact).
+--
+-- The interfaces are IDENTICAL to the AdamW render (71 in / 69 out) because the packed `[θ|m|v]`
+-- signature is shared — only the tail moves. `%mu` is baked at 0.9 and `%lr` stays runtime, both
+-- matching the retired emitters.
+--
+-- ⚠ These will NOT be byte-identical to the incumbents: `momVNextF`/`momParamF` are separate SHlo
+-- nodes so `v'` is computed twice (SHlo is single-result — `adamWParamF` recomputes `m'`/`v'` the
+-- same way), where the retired `emitMomentum` emitted one fused block. XLA's CSE folds it, and
+-- §2b-bis measured exactly that pattern costing nothing on R34. Hence the tie is NUMERIC.
+#eval IO.FS.writeFile "verified_mlir/cifar8_sgd_train_step.mlir"
+  (Proofs.StableHLO.cifar8SgdTrainStepFaithful)
+#eval IO.FS.writeFile "verified_mlir/cifar8_mom_train_step.mlir"
+  (Proofs.StableHLO.cifar8MomTrainStepFaithful)
 
 -- ── the data-parallel exact gate (handoff §2b-quater) ────────────────────────────────────────
 -- cifar8 has NO BatchNorm, so the batch decomposition is an identity and 2 replicas × B=128 with
