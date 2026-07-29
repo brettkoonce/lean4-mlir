@@ -522,9 +522,31 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/resnet34_adamdp128_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 128 10 "1.0e-05" 2)
 
--- Pin the four literal artifact paths above against the name the renderer actually emits. If a
+-- **bs64, SINGLE device** — the controlled peer of `adamdp` (bs32 x 2 = global 64). Same global
+-- batch, same 147 steps/epoch, same schedule; the ONLY difference is where the BatchNorm statistics
+-- come from — 64 examples here, 32-per-replica there.
+--
+-- That is the §10.3b caveat as an experiment rather than an argument. The handoff asserts
+-- everywhere that `2 x 32 != 1 x 64` under batch BN and uses it to explain why R34's collective
+-- cannot be gated by splitting a batch (hence the cifar8 proxy). Nothing had ever measured how much
+-- it is worth in accuracy. Run both and subtract; with step count and global batch held fixed, the
+-- residual IS the BN-splitting effect.
+#eval IO.FS.writeFile "verified_mlir/resnet34_adam64_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 64 10 "1.0e-05")
+
+-- **bs128, SINGLE device** — the fourth point on the batch/step-count curve (global 128, 73
+-- steps/epoch), and the single-device peer of `adamdp128` (bs128 x 2 = global 256). Together with
+-- `adam`, `adam64` and `adamdp128` this brackets the step count 295 / 147 / 73 / 36 at a fixed
+-- 80-epoch budget and unscaled LR, which is what isolates "fewer optimizer steps" from every other
+-- moving part.
+#eval IO.FS.writeFile "verified_mlir/resnet34_adam128_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 128 10 "1.0e-05")
+
+-- Pin the six literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed, this fails at `lake build` instead of at run time as an "entry mismatch".
 #guard Proofs.StableHLO.r34AdamVariant 32 1 == "adam"
 #guard Proofs.StableHLO.r34AdamVariant 32 2 == "adamdp"
 #guard Proofs.StableHLO.r34AdamVariant 256 1 == "adam256"
 #guard Proofs.StableHLO.r34AdamVariant 128 2 == "adamdp128"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 == "adam64"
+#guard Proofs.StableHLO.r34AdamVariant 128 1 == "adam128"

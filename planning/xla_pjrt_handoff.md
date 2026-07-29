@@ -2265,6 +2265,51 @@ Worth carrying: **32-wide reductions on this net are order-insensitive (forward 
 256-wide ones are not** (2.7e-3 in the gradient). Do not assume a reordering control is free just
 because it was at bs32.
 
+### 2d.2. The batch / step-count study, and the FIRST measurement of the BN-split cost
+
+Run 2026-07-29. Five R34 configurations, **same certified renderer, same 80 epochs, same
+cosine+warmup schedule, unscaled LR**, so the only moving parts are global batch, how the batch is
+assembled, and the step count that follows:
+
+| config | variant | steps/epoch | final (ep 80) | best | marginal epoch | wall |
+|---|---|---|---|---|---|---|
+| 1 GPU, bs32 (global 32) | `adam` | 295 | **90.39%** | 90.39% | — | 71m27 |
+| **1 GPU, bs64** (global 64) | `adam64` | 147 | **89.40%** | 89.58% | 37.5 s | 50m20 |
+| 2 GPU, bs32×2 (global 64) | `adamdp` | 147 | **89.22%** | 89.40% | 33.5 s | 45m15 |
+| 2 GPU, bs128×2 (global 256) | `adamdp128` | 36 | **86.98%** | 87.11% | 21.0 s | 28m27 |
+| 1 GPU, bs128 (global 128) | `adam128` | 73 | *(pending)* | | | |
+
+**Accuracy tracks the STEP COUNT, and is indifferent to how the batch was assembled.** 295→147
+costs ~1.0 point, 147→36 costs ~2.3 more. That is the large-batch recipe cost at unscaled LR (§2c),
+not a defect — final train loss is 0.5016 / 0.5021 / 0.5023 / 0.5025 across the configs, i.e. they
+all fit the training set equally well and differ only in how well that generalises from fewer
+updates.
+
+#### ▶ The controlled pair: **splitting BatchNorm across 2 replicas costs nothing measurable**
+
+`adam64` and `adamdp` are the same global batch (64) at the same step count (147). The **only**
+difference is where BN gets its statistics:
+
+| | BN statistics over | final | best | train loss |
+|---|---|---|---|---|
+| bs64 × 1 GPU | **64 examples** | 89.40% | 89.58% | 0.5016 |
+| bs32 × 2 GPU | **32 per replica** | 89.22% | 89.40% | 0.5021 |
+
+**0.18 points**, with train losses 5e-4 apart — inside §3's documented epoch-scale nondeterminism
+(three same-seed runs spanning 43.21–47.29% at epoch 1). So the training consequence of the §10.3b
+split is below noise here.
+
+**Be careful what this licenses.** It does **not** weaken §10.3b: `2×32` still is not `1×64` as a
+*function*, which is why R34's collective cannot be gated by splitting and needs the cifar8 proxy
+(§2b-quater). It says the *accuracy* consequence is unmeasurable **at 32 per replica**. Per-replica
+batch is what shrinks as replicas are added at fixed global batch — at 8 replicas you would be at
+bs8 per replica, where BN statistics genuinely degrade. This measurement says 32 is fine and gives
+**no** comfort about 8.
+
+*(This run is also what the `evalBs` change bought: `adam64`/`adam128` train at a batch the eval
+forward was not rendered at, and before that they could only run under `LEAN_MLIR_SKIP_EVAL=1`,
+i.e. with no accuracy number at all.)*
+
 ---
 
 ## 3. Corrections a new session should not have to re-derive
