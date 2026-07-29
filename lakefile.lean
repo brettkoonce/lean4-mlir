@@ -1499,6 +1499,18 @@ lean_exe «convnext-dp-check» where
   root := `tests.TestConvNeXtDpCheck
   moreLinkArgs := xlaLink
 
+/-- The SHARDING gate — what `convnext-dp-check` cannot see. That gate hands both replicas the same
+    rows, so a shard-offset bug leaves the halves identical and it still passes bit-exact; it
+    establishes "the collective averages correctly", not "the replicas saw different data".
+
+    This one gives the replicas DIFFERENT data and checks `DP([xA|xB]) == mean(single(xA),
+    single(xB))`, with a built-in control that `DP vs single(xA)` — what a broken shard would
+    return — is a far larger number. Gates the first Adam moment with `m = 0` on input, because
+    `m' = (1-β₁)·g` is exactly linear in the gradient while θ' and v' are not. Needs two GPUs. -/
+lean_exe «convnext-shard-check» where
+  root := `tests.TestConvNeXtShardCheck
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and

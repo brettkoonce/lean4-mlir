@@ -70,6 +70,19 @@ one, gated by the exact duplicated-batch identity on the real net and measured a
 GPUs. **ViT is the only net without a working DP path**, and for a reason nothing in this thread can
 fix from here — its graph does not execute on this box at all.
 
+**▶ THE NEXT THREAD IS §2i — the last 13 `tests/`-rendered artifacts** (the cifar8 / cifar8w
+optimizer ablations). It is the §2a provenance axis finished, and it is scoped by measurement: one
+artifact is ~free, four need one new op, four need two new ops **plus new denotation-side math**
+(nothing momentum-shaped exists anywhere in `Proofs/`), and eight additionally need the wide net
+rendered. Start with `cifar8_bn_adam_train_step` — the only real trainer in the set, and it needs
+no new ops at all.
+
+Also queued, both small: port `convnext-shard-check` to the enet/mnv2 DP gates (§2h-quater, ~20
+lines each), and try relinking `resnet34-adam-tie`/`cifar8-adam-tie` to `ireeLink` — the four
+IREE-linked ties all report **bit-exact** while the XLA-linked ones report ≤2e-6 with run-to-run
+spread, which is the backend, not the net. **Rule worth adopting: ties link IREE (deterministic),
+DP checks link XLA (collectives only exist there), training runs XLA.**
+
 **The `-xla` trainers are DONE for mnv2 and ConvNeXt as of 2026-07-29 — §2h.** Both now have an
 XLA/PJRT peer sharing one body with the IREE binary, both agree with IREE to fp noise, and both
 **descend on their current certified bytes** — which closes §0b's first open item for the two nets
@@ -1883,6 +1896,59 @@ by the dp-check re-run above.
 *(The same `git diff verified_mlir/` discipline §2a-quinquies asks for is what makes this checkable
 at a glance — it is the only tracked artifact this whole thread modified.)*
 
+### 2i. ▶ NEXT THREAD — the last 13 `tests/`-rendered artifacts (the cifar8 / cifar8w port)
+
+Scoped 2026-07-29. **§1's "every artifact is `Proofs/`-rendered" is FALSE** and should be corrected
+whenever it is quoted: it holds for the five large nets and the demo ladder, but **two files in
+`tests/` still own independent emitters** (`emitMomentum`, `emitSgd` — not delegators) and write 13
+artifacts between them:
+
+| writer | artifacts |
+|---|---|
+| `tests/TestCifar8AdamTrain.lean` | `cifar8_{bn_adam, mom, bn_mom, sgd, bn_sgd}_train_step` — **5** |
+| `tests/TestCifar8WideTrain.lean` | `cifar8w_{adam, bn_adam, mom, bn_mom, sgd, bn_sgd}_train_step` + `cifar8w_fwd` + `cifar8w_bn_fwd` — **8** |
+
+**They are LIVE**, not dead ablation bytes: `cifar8-bn-verified-adam{,-xla}`,
+`cifar8-verified-momentum`, `cifar8-bn-verified-momentum`, `cifar8-verified-sgdsched`,
+`cifar8-bn-verified-sgdsched`, `cifar8w{,-bn}-ablation`. **The ablations are the POINT** — that
+section of the demo exists to show SGD several ways — so these get ported, not deleted.
+
+**The audit does not flag them.** `regen_verified_mlir.sh check` counts *duplicate* writers, not
+provenance; 13 hand-written artifacts with one writer each report green. And no automated tie covers
+any of them — `fwd-tie` and `sgd-render-tie` both hardcode `netBySlug ∈ {convnext, efficientnet,
+mobilenetv2, resnet34}` (+`vit`).
+
+**Two probes already run, both CLEAN** — so these are *unverified*, not *suspect*:
+* **BN semantics** — every cifar/cifar8/cifar8w artifact computes statistics per (example, channel);
+  the batch axis survives everywhere. `cifar8_bn_fwd` is a byte-identical **285-line prefix** of the
+  `Proofs/` `cifar8_bn_train_step`. ⚠ See §4's layout-trap note: an earlier version of this section
+  reported a two-worlds skew here that **does not exist** — the census had compared reduce-dimension
+  literals across two different tensor layouts.
+* **lr / cotangent** (the §2a-quinquies probe that caught EfficientNet's 16×) — all 13 are
+  **mean-CE ÷128 with a runtime `%lr`**, matching their certified siblings; they differ only in
+  SPELLING (`divide by 128.0` vs `multiply by 0.0078125`). The silent-hyperparameter failure mode
+  does **not** reproduce.
+
+#### The op gap, measured
+
+`adamWParamF` is an **own constructor** (`SHlo` case, `den` case, faithfulness theorem — the 10-site
+route, *not* the 4-site `.batched` descriptor). **Nothing momentum-shaped exists anywhere in
+`Proofs/`** — not emit-side, not denotation-side. So:
+
+| piece | cost |
+|---|---|
+| **`cifar8_bn_adam_train_step`** | **~free** — `CnnRender` already renders `cifar8_adam_train_step` (no BN) and `cifar8_bn_train_step` (SGD + BN); this is the intersection and the AdamW triple exists. **Do this first: it is the only REAL TRAINER in the hand-written set**, and finishing it leaves the remainder ablation-only. |
+| **scheduled SGD** (4 artifacts) | one new op, 10 sites — `θ − lr·g` with **lr as a runtime operand**. The existing fused `*Sgd` ops bake lr as a *literal*, which is why this is absent. Emits 3 ops (broadcast, multiply, subtract). |
+| **Nesterov momentum** (4 artifacts) | two new ops (moment + param update, mirroring the Adam split), 10 sites each. Emits 8 ops: `v' = μv + g`, `θ' = θ − lr(g + μv')`. **Also needs a denotation-side `momentumStep` to be faithful TO** — new math, not just emit. |
+| **`cifar8w*`** (8 artifacts) | all of the above **plus the wide net rendered at all**, including its own `_fwd`/`_bn_fwd`. 8 of the 13, and backs ablations only. |
+
+**Claim ceiling for this thread:** the goal is `pretty(provenGraph)` parity, **not** a descent
+theorem — Adam has none either (§2a: "Still no descent claim — Adam is not monotone"). Say "the
+momentum render is certified", never "momentum is proven to descend".
+
+**Worth asking before the last row:** `cifar8w` is 8 of the 13 and backs only ablations. Confirm the
+wide sweep still earns its keep before rendering a whole second net for it.
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
@@ -2408,6 +2474,16 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   **every** diagnostic — you get a bare non-zero status and no idea what broke. Flushing does not
   help. `tests/TestAdamOpTie.lean` and `tests/TestCifar8AdamTie.lean` still use the `exit` form and
   fail blind.
+- **⚠ A BN reduce-dim census is only valid WITHIN ONE TENSOR LAYOUT.** §2f's table (`reduce[2,3]` =
+  per-example, `reduce[0,2,3]` = batch) is the standard way to settle which BN world a render is in,
+  and on 2026-07-29 it produced a **false alarm**: the `Proofs/` CNN renders use 4-D `[B,C,H,W]`
+  where per-example BN is `reduce [2,3]`, while the hand-written cifar8/cifar8w emitters use 3-D
+  `[B,C,H*W]` where the IDENTICAL semantics is `reduce [2]`. Comparing the literals across the two
+  "found" a two-worlds skew in `cifar8_bn` that does not exist. **Ask the layout-independent
+  question instead: does the reduce that FEEDS the `rsqrt` contract axis 0?** (Equivalently: does
+  the broadcast after it keep the batch axis — `dims = [0,1]` does.) And note `reduce [0,2,3]` in a
+  train step is usually a conv-bias / BN-β **param gradient** legitimately contracting the batch
+  (§2b's "second kind"), not a BN statistic — check what it feeds before counting it.
 - **Fastest way to localise a render disagreement**: render the *whole net* both ways into temp
   files and `diff`; then `diff` again with all `tensor<…>` annotations stripped. Structure-identical
   + types-differ pins the breakage to one op family in a single pass. A single-node probe does not —
@@ -2524,7 +2600,38 @@ without the §10.3b reasoning the BN nets need. Its flip side is that it returns
 so `%loss` — report-only, outside the AST — is the *whole* of its forward evidence, which is why
 that gate is load-bearing there and merely confirmatory on mnv2/EfficientNet.
 
-#### ⚠ Named gap: a duplicated-batch gate does NOT test that sharding SHARDS
+#### ✅ CLOSED for ConvNeXt 2026-07-29 — `convnext-shard-check`, the asymmetric-batch known answer
+
+The gap below is real and the diagnosis stands; what follows is the gate that closes it, and the
+construction **transfers unchanged to `efficientnet-` and `mobilenetv2-dp-check`** (unlike the
+cifar8 split identity, it works on batch-BN nets too — each replica normalises over its own `b`
+rows either way, and the single-device reference runs are at that same `b`).
+
+`tests/TestConvNeXtShardCheck.lean` → `lake build convnext-shard-check`. Give the replicas
+**different** data and check against two single-device steps:
+
+> `DP( [xA | xB] )` must equal `mean( single(xA), single(xB) )`
+
+| | result |
+|---|---|
+| **TEST** — `\|DP − mean(A,B)\|` / max\|mean\| | **8.2e-8** ✅ (~1200× inside the 1e-4 gate) |
+| **CONTROL** — `\|DP − A\|` / max\|mean\| — where a broken shard lands | **0.137** |
+| separation | **1.7 × 10⁶** |
+
+**Two design points worth keeping.**
+
+*It gates `m`, not `θ'`, and that is forced.* AdamW's parameter update is NONLINEAR in the gradient
+(`m̂/(√v̂+ε)`), so `(θ'_A + θ'_B)/2 ≠ θ'(ḡ)` and a θ' comparison would be meaningless. Feeding
+**`m = 0`** makes `adamMNextF` give `m' = (1−β₁)·g = 0.1·g` — exactly linear in the gradient, hence
+exactly averagable. `v' = 0.001·g²` is quadratic and is reported but NOT gated. Same conclusion as
+§3's "gate the gradient, never θ", reached from the other direction.
+
+*The control is inside the same run.* `|DP − A|` is what a shard-offset bug returns, computed every
+time, and the harness **refuses as VACUOUS** if it is below 1e-3 — i.e. if the two shards were not
+actually distinguishable. So this gate cannot go vacuously green, which is the failure §2d.1 hit
+with a reversed-batch control that produced no difference at all.
+
+#### ⚠ The gap it closes: a duplicated-batch gate does NOT test that sharding SHARDS
 
 Found 2026-07-29 while tracing the shard path. `efficientnet-`, `mobilenetv2-` and `convnext-dp-check`
 all hand both replicas the **same** rows (`x2 = concat #[x1, x1]`). That is what makes
@@ -2551,8 +2658,15 @@ could be wrong for one net's interface without cifar8 noticing.
 exactly to the LayerNorm/no-norm nets — **ConvNeXt and ViT** — and needs a `2b` render to compare
 against. ConvNeXt's is blocked on `cBS` being a *private constant* rather than a renderer parameter
 (unlike R34/mnv2/enet, which already take `B`); making it a parameter is the whole prerequisite.
-R34/mnv2/EfficientNet cannot take it at all — batch BN means `2×b ≠ 1×2b` by design — so for them
-the duplicated-batch gate plus cifar8's shared-code coverage is the ceiling.
+R34/mnv2/EfficientNet cannot take it at all — batch BN means `2×b ≠ 1×2b` by design.
+
+*(That paragraph is why the **asymmetric-batch** construction above is the better answer: it needs
+no `2b` render, needs no absence of BN, and closes the same hole. The split identity remains
+strictly stronger where it applies, but nothing now depends on it.)*
+
+**Still open:** port `convnext-shard-check` to `efficientnet-` and `mobilenetv2-dp-check`. Same
+construction, ~20 lines each, and R34's DP would gain its first real-net sharding evidence
+(it currently has only the cifar8 proxy).
 
 And on the renders: `pretty(provenGraph)` means the committed bytes are the certified render *of
 the graph that was proven* — it does not mean the emitter is verified. The `Tok → StableHLO-text`
