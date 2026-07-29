@@ -1504,13 +1504,27 @@ lean_exe «mobilenetv2-verified» where
   root := `apps.imagenette.MainMobilenetV2Verified
   moreLinkArgs := ireeLink
 
--- mnv2 peer of vit-verified-adam: the proof-rendered train step with the SGD update swapped for
--- AdamW (ViTRender.emitAdamV) + packed θ|m|v + runtime lr/bc threading via trainAdamSched. Recipe
--- matches mobilenet-v2-train (lr 1e-3, wd 1e-4, cosine+warmup 3, label-smoothing 0.1). Loss-curve
--- parity; batch-BN eval (running-stats BN deferred). Render: tests/TestMobilenetV2TrainPC.lean.
+-- mnv2 peer of vit-verified-adam: the proof-rendered train step with the gradients un-fused and
+-- handed to the proven AdamW triple + packed θ|m|v + runtime lr/bc threading via trainAdamSched.
+-- Recipe matches mobilenet-v2-train (lr 1e-3, wd 1e-4, cosine+warmup 3, label-smoothing 0.1).
+-- Render: LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean (pretty(provenGraph) since 2026-07-28).
+/-- Shared body of the verified mnv2 + AdamW Imagenette trainer — imported by BOTH the IREE and
+    XLA executables so their schedule and seed cannot drift. -/
+lean_lib «MobilenetV2AdamCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.MobilenetV2AdamCommon]
+
 lean_exe «mobilenetv2-verified-adam» where
   root := `apps.imagenette.MainMobilenetV2VerifiedAdam
   moreLinkArgs := ireeLink
+
+/-- The XLA/PJRT peer of `mobilenetv2-verified-adam` — same program, same certified bytes, other
+    trusted lowerer. XLA measured 4.6× IREE on EfficientNet, and this net was IREE-only; it is also
+    the prerequisite for ever giving mnv2 a DP path, since collectives live only on the PJRT path.
+    Measured clear of ViT's MIOpen blocker before it was written (handoff §2h). -/
+lean_exe «mobilenetv2-verified-adam-xla» where
+  root := `apps.imagenette.MainMobilenetV2VerifiedAdamXla
+  moreLinkArgs := xlaLink
 
 -- ch8 E4/E5/E6: EfficientNet-B0 (faithful [t,c,n,s,k] config — 16 MBConv layers,
 -- inverted-residual + squeeze-excite + swish + BATCH norm, 3×3/5×5 depthwise) trained
@@ -1554,22 +1568,54 @@ lean_exe «convnext-smooth» where
   moreLinkArgs := ireeLink
 
 -- convnext peer of r34-verified-adam: the proof-rendered train step (all-smooth — LayerNorm +
--- GELU + layerScale, no BN) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed
--- θ|m|v + runtime lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3, wd
--- 1e-4, cosine+warmup 3, label-smoothing 0.1). Render: tests/TestConvNeXtTrain.lean.
+-- GELU + layerScale, no BN) with the gradients un-fused and handed to the proven AdamW triple +
+-- packed θ|m|v + runtime lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3,
+-- wd 1e-4, cosine+warmup 3, label-smoothing 0.1).
+-- Render: LeanMlir/Proofs/Codegen/ConvNeXtRender.lean (pretty(provenGraph) since 2026-07-28).
+/-- Shared body of the verified ConvNeXt-T + AdamW Imagenette trainer — imported by BOTH the IREE
+    and XLA executables so their schedule and seed cannot drift. -/
+lean_lib «ConvNeXtAdamCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.ConvNeXtAdamCommon]
+
 lean_exe «convnext-verified-adam» where
   root := `apps.imagenette.MainConvNeXtVerifiedAdam
   moreLinkArgs := ireeLink
+
+/-- The XLA/PJRT peer of `convnext-verified-adam` — same program, same certified bytes, other
+    trusted lowerer. ConvNeXt has NO `replicas` support in its renderer, so DP is a later step, but
+    it is unreachable without this binary. Measured clear of ViT's MIOpen blocker before it was
+    written: its 4×4/s4 patchify weight gradient runs on this box (handoff §2h). -/
+lean_exe «convnext-verified-adam-xla» where
+  root := `apps.imagenette.MainConvNeXtVerifiedAdamXla
+  moreLinkArgs := xlaLink
 
 lean_exe «vit-verified» where
   root := `apps.imagenette.MainViTVerified
   moreLinkArgs := ireeLink
 
--- Phase 3c: ViT-Tiny with the VERIFIED-rendered AdamW step (packed θ|m|v threading
--- through the generic FFI; ViTRender.vitTrainStepModuleAdamPacked / trainAdamPacked).
+-- Phase 3c: ViT-Tiny with the VERIFIED-rendered AdamW step (packed θ|m|v threading through the
+-- generic FFI). Render: LeanMlir/Proofs/Codegen/ViTRender.lean (pretty(provenGraph) since
+-- 2026-07-28 — this driver used to emit it at startup).
+/-- Shared body of the verified ViT-Tiny + AdamW Imagenette trainer — imported by BOTH the IREE and
+    XLA executables so their schedule and seed cannot drift. ViT's schedule is the odd one out
+    (baseLR 3e-4, 5-epoch warmup), which is exactly why it lives in one place. -/
+lean_lib «ViTAdamCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.ViTAdamCommon]
+
 lean_exe «vit-verified-adam» where
   root := `apps.imagenette.MainViTVerifiedAdam
   moreLinkArgs := ireeLink
+
+/-- The XLA/PJRT peer of `vit-verified-adam`. ⛔ **It does not run on this box** — every ViT graph
+    with a backward dies at EXECUTION in `miopenStatusUnknownError` (the patch-embed weight-grad
+    convolution), and it compiles fine, so a green `lake build` is not evidence it works. It exists
+    because the plumbing is 30 lines and the DP render is unreachable without it. Run on ares, or
+    after rerouting that convolution. Handoff §2h. -/
+lean_exe «vit-verified-adam-xla» where
+  root := `apps.imagenette.MainViTVerifiedAdamXla
+  moreLinkArgs := xlaLink
 
 lean_exe «cifar-cnn-train» where
   root := `apps.baselines.MainCifarCnnTrain

@@ -44,8 +44,10 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `9bb00f5` | close ConvNeXt's two weight-gradient gaps — all 180 params `pretty(AST)` |
 | `17413f0` | docs(handoff): §0b per-net leftovers |
 | — | *↓ the forward-artifact thread (§2g), 2026-07-28 — the last five* |
-| *(this)* | **all five `_fwd` artifacts certified; `mobilenetv2_fwd` was the wrong BN world** |
-| *(this)* | §2h: the `-xla` trainer plan, de-risked — mnv2/ConvNeXt backward graphs RUN on XLA, ViT's SGD one does not |
+| `019e09d` | **all five `_fwd` artifacts certified; `mobilenetv2_fwd` was the wrong BN world** |
+| `4bbcb6e` | §2h: the `-xla` trainer plan, de-risked — mnv2/ConvNeXt backward graphs RUN on XLA, ViT's SGD one does not |
+| — | *↓ the `-xla` trainer thread (§2h), 2026-07-29* |
+| *(this)* | **`mobilenetv2-` and `convnext-verified-adam-xla` built, gated and MEASURED**; ViT plumbed, blocker reproduced |
 
 ---
 
@@ -55,11 +57,16 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
-**What is left in this file is §2d's value-ordered list**, none of it on the AdamW track: the
-**`-xla` trainers for mnv2 / ConvNeXt / ViT** (§2h — scoped and de-risked 2026-07-28, and the
-cheapest real win on the list), rung 4 (the FPN detector), **device-resident parameters** (two
-independent multi-GPU measurements point at it — §2c's 1.46× on R34 and §2e-ter's 13–16% per-step DP
-overhead on EfficientNet), and the executable cache. Read §2d before picking one.
+**What is left in this file is §2d's value-ordered list**, none of it on the AdamW track: rung 4
+(the FPN detector), **device-resident parameters** (two independent multi-GPU measurements point at
+it — §2c's 1.46× on R34 and §2e-ter's 13–16% per-step DP overhead on EfficientNet), and the
+executable cache. Read §2d before picking one.
+
+**The `-xla` trainers are DONE for mnv2 and ConvNeXt as of 2026-07-29 — §2h.** Both now have an
+XLA/PJRT peer sharing one body with the IREE binary, both agree with IREE to fp noise, and both
+**descend on their current certified bytes** — which closes §0b's first open item for the two nets
+that had no training run at all. ViT is plumbed and its blocker was reproduced on the new binary;
+it still does not run here.
 
 **The five forward artifacts are certified too, as of 2026-07-28 — §2g.** `convnext_fwd`,
 `efficientnet_fwd{,_eval}` and `mobilenetv2_fwd{,_eval}` now render `pretty(provenGraph)` off the
@@ -86,15 +93,16 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 
 ### ⚠ The three things to do before trusting a long run
 
-1. **MobileNetV2 and ConvNeXt have NO training run on their current artifacts.** Both were swapped
-   today and the evidence for both is **graph-level only** — a bit-exact tie plus a successful
-   `iree-compile`. R34's swap (§2b-ter) included a `LEAN_MLIR_G2_STEPS=40` smoke showing the loss
-   descend; that was not done here. ConvNeXt is the larger unknown of the two, because **both** its
-   artifacts changed (`convnext_train_step` AND `convnext_adam_train_step`), not just the AdamW one.
-   A short smoke on each is cheap and is the gap between "computes the same function" and "trains".
-2. **Only EfficientNet is validated end to end.** It has a 3-epoch XLA-vs-IREE agreement run, a
-   2-GPU descent run, and measured wall clock (80 ep ≈ 1 h 35 m on XLA). If you want a long run to
-   just work, start there.
+1. ~~**MobileNetV2 and ConvNeXt have NO training run on their current artifacts.**~~ ✅ **CLOSED
+   2026-07-29 — §2h.** Both now descend on their current certified bytes, on both lowerers:
+   **mnv2** reaches val **59.9%** after 4 full epochs on XLA (26.7 → 38.0 → 52.3 → 59.9) and
+   **68.2%** over an 80-epoch capped-step run; **ConvNeXt** descends over 17 epochs on XLA and 1 on
+   IREE, epoch-1 loss **identical on both backends**. The gap between "computes the same function"
+   and "trains" is closed for both.
+2. **Only EfficientNet is validated end to end** *(and now mnv2 nearly is)*. EfficientNet has a
+   3-epoch XLA-vs-IREE agreement run, a **2-GPU** descent run, and measured wall clock. mnv2 and
+   ConvNeXt now have single-GPU agreement + descent + wall clock (§2h) but **no DP artifact at all**,
+   so for multi-GPU EfficientNet is still the only answer.
 3. **`mobilenetv2-verified`'s published 86.89% is measured through the WRONG forward** and needs
    re-running (§2g). Its eval artifact was batch-BN while it trained per-example BN — the §2a defect,
    fixed 2026-07-28. Only the *scoring* was wrong, so the training log itself stands; the accuracy
@@ -106,20 +114,21 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 | | AdamW certified | data-parallel | `-xla` trainer | forward artifact | run on current bytes |
 |---|---|---|---|---|---|
 | **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ✅ `Proofs/` (§2g) | ✅ 3 epochs + 2-GPU |
-| **MobileNetV2** | ✅ | ⚠ renderer supports `replicas`, **no artifact** | ❌ IREE only (**§2h — clear, measured**) | ✅ `Proofs/` (§2g — **BN skew fixed**) | ❌ **none** |
-| **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ❌ IREE only (**§2h — clear, measured**) | ✅ `Proofs/` (§2g) | ❌ **none** |
-| **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ⛔ **blocked** — MIOpen, and it hits SGD too (§2h) | ✅ `Proofs/` | IREE single-GPU |
+| **MobileNetV2** | ✅ | ⚠ renderer supports `replicas`, **no artifact** | ✅ **§2h** — 58.0 s/epoch | ✅ `Proofs/` (§2g — **BN skew fixed**) | ✅ **4 full epochs → val 59.9%** |
+| **ConvNeXt** | ✅ (all 180) | ❌ **no `replicas` support at all** | ✅ **§2h** — 84.5 s/epoch | ✅ `Proofs/` (§2g) | ✅ **4 full epochs → val 60.6%** |
+| **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ⛔ **plumbed but UNRUNNABLE** — MIOpen; hits SGD too (§2h) | ✅ `Proofs/` | IREE single-GPU |
 
-**MobileNetV2** — no smoke-train (above); no `mobilenetv2_adamdp_train_step.mlir` (the renderer takes
-`replicas` and `mnv2AdamVariant` returns `adamdp`, but no `#eval` writes it, and there is no
-`mobilenetv2-dp-check`); no `-xla` target, which matters because XLA was **4.6×** IREE on
-EfficientNet; (`mobilenetv2_fwd{,_eval}` were `tests/`-rendered — ✅ fixed, §2g, and the fix
-was a real bug); and
+**MobileNetV2** — ~~no smoke-train~~ ✅ §2h; **no `mobilenetv2_adamdp_train_step.mlir`** (the
+renderer takes `replicas` and `mnv2AdamVariant` returns `adamdp` — both re-verified 2026-07-29 — but
+no `#eval` writes it, and there is no `mobilenetv2-dp-check`); ~~no `-xla` target~~ ✅ §2h;
+(`mobilenetv2_fwd{,_eval}` were `tests/`-rendered — ✅ fixed, §2g, and the fix was a real bug); and
 `MainMobilenetV2Verified.lean:19` still documents itself as *"mean-loss SGD lr=0.3"* against a
-sum-loss graph (effective 9.6) — a docstring fix, the number is tuned and trains.
+sum-loss graph (effective 9.6) — a docstring fix, the number is tuned and trains. **The one
+remaining gap is the DP artifact**, and it is now the only thing between mnv2 and multi-GPU.
 
-**ConvNeXt** — no smoke-train on either changed artifact (above); **no DP path whatsoever**, the
-only large net with none; no `-xla` target; (`convnext_fwd` was `tests/`-rendered — ✅ fixed, §2g;
+**ConvNeXt** — ~~no smoke-train on either changed artifact~~ ✅ §2h; **no DP path whatsoever**, the
+only large net with none (`grep -c replicas ConvNeXtRender.lean` = **0**, re-verified 2026-07-29);
+~~no `-xla` target~~ ✅ §2h; (`convnext_fwd` was `tests/`-rendered — ✅ fixed, §2g;
 there is still no `_fwd_eval` and there should not be, LayerNorm means train == eval, and
 `fwd-tie convnext --eval` now refuses outright rather than looking for a missing file); and the
 scalar-LN γ/β render as `tensor<1xf32>` where the committed signature says `tensor<f32>`.
@@ -211,6 +220,21 @@ what the trainer runs — see §2b.
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build resnet34-verified-adam-xla
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-verified-adam-xla data
+
+# the other -xla trainers. r34 / efficientnet / mnv2 / convnext all work; vit BUILDS but does NOT
+# RUN on this box (§2h — miopenStatusUnknownError at execution, not at compile).
+lake build mobilenetv2-verified-adam-xla convnext-verified-adam-xla
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/mobilenetv2-verified-adam-xla data
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam-xla data
+#   ^ each shares ONE body with its IREE peer (apps/imagenette/<Net>AdamCommon.lean), so the
+#     schedule and seed cannot drift. The IREE peers need the venv on PATH for `iree-compile`:
+#     PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-verified-adam data
+#   ⚠ CHECK FOR A STALE CHECKPOINT FIRST (§4). `.lake/build/<slug>_adam_ckpt{,_xla}.bin.epoch`
+#     survives across artifact swaps, so a June checkpoint from a RETIRED render will silently be
+#     resumed — and one at `epoch=80` makes the run a silent no-op. Hit on 2026-07-29 on all three.
+
+# the honest wall-clock measurement — marginal epoch (T3-T1)/2, never wall-clock-minus-compile
+scripts/marginal_epoch.sh runs/mnv2_xla.log -- .lake/build/bin/mobilenetv2-verified-adam-xla data
 
 # multi-GPU (§2b-quater): the DP render is certified-graph + trusted collective, written by the
 # same `lake build LeanMlir.Proofs.Codegen.ResNet34RenderB` as the single-device one. To change the
@@ -1454,13 +1478,43 @@ layer k perturbs every logit) but it is not the AdamW ties' 12M-float comparison
 "the two renders compute the same logits", not "the same intermediates". The prefix audit is what
 covers the intermediates, and only for the `.train` artifacts.
 
-### 2h. ▶ NEXT SESSION — the `-xla` trainers for mnv2, ConvNeXt and ViT. Scoped by measurement
+### 2h. The `-xla` trainers for mnv2, ConvNeXt and ViT ✅ DONE 2026-07-29 (ViT: plumbed, unrunnable)
 
-**Two of the three are unblocked and mechanical; the third is not, and the difference was measured
-on 2026-07-28 rather than assumed.** Read this before starting: the whole point of scoping it was
-to find out which nets are ViT-shaped.
+**mnv2 and ConvNeXt now have working XLA/PJRT trainers; ViT is plumbed and still dies in MIOpen.**
+The 2026-07-28 scoping below held exactly — 3 files + 2 lakefile entries per net, no driver change,
+and the two nets predicted clear were clear.
 
-#### Why it is worth doing
+#### ▶ The result
+
+| | `-xla` binary | agreement with IREE | descends on certified bytes | marginal epoch (XLA) |
+|---|---|---|---|---|
+| **MobileNetV2** | ✅ `mobilenetv2-verified-adam-xla` | first step **4.9e-5**; epoch-1 loss 3.5e-5, val 594 vs 600 / 3925 | ✅ 26.7 → 38.0 → 52.3 → **59.9%** (4 full epochs); **68.2%** over 80 capped-step epochs | **58.0 s** → 80 ep ≈ **1 h 17 m** |
+| **ConvNeXt-T** | ✅ `convnext-verified-adam-xla` | first three steps ≤ **1.6e-5**; epoch-1 loss and val_acc **IDENTICAL** (2.903300, 502/3925) | ✅ 36.0 → 47.7 → 54.3 → **60.6%** (4 full epochs) | **84.5 s** → 80 ep ≈ **1 h 53 m** |
+| **ViT-Tiny** | ⛔ builds, **does not run** | — | — | — |
+
+Per-epoch deltas were **58/58/59 s** and **84/85/85 s**, so the marginal is stable, not a lucky pair.
+Both figures are train **+ eval**, matching §2e-quinquies' primary row, and both were measured solo.
+
+**The IREE side was deliberately NOT benchmarked** — the point of this work is that IREE is the slow
+path, and a ratio was not worth the wall clock. So **no XLA:IREE speedup is quoted for these two
+nets**; EfficientNet's 4.6× (§2e-quinquies) remains the only measured one and is still one net's
+number. The one incidental data point: mnv2's IREE epoch 1 stamped at 336 s against XLA's 75 s, both
+including startup — indicative of a ~5× gap, **not a marginal-epoch measurement**, do not quote it.
+
+**ConvNeXt reproduces epoch 1 EXACTLY across two independent lowerers** — same loss to all six
+printed decimals *and* the same 502/3925 val_acc, over a 20-step epoch plus a full 3925-image eval.
+mnv2 does not quite (6 images of 3925), and the difference tracks **BatchNorm**: ConvNeXt is
+LayerNorm, so it has no batch statistics for fp differences to land in. That is sharper than the
+"close but not bit-exact" this section predicted, and it is a *cross-lowerer* result, not a
+same-backend one. Re-measured independently at the full-epoch config (295 steps rather than 20):
+ConvNeXt's first three steps agree to 1.6e-5 / 2e-6 / 9e-6, mnv2's to 4.9e-5 / 6.3e-4 / 1.5e-4.
+
+**⚠ The trap this thread actually hit was not in the plan — a stale CHECKPOINT.** All three nets had
+a June `.lake/build/<slug>_adam_ckpt.bin` from the *retired* hand-written renders, and mnv2's was at
+`epoch=80`. Nothing fingerprints the graph, so the first gate run would have silently resumed June's
+optimizer state on the new certified bytes, and mnv2's would have been a silent no-op. See §4.
+
+#### Why it was worth doing
 
 * **Speed.** XLA is **4.6× IREE** on EfficientNet (§2e-quinquies: 71 s/epoch vs 354 s; 80 epochs
   1 h 35 m vs 7 h 50 m). `mobilenetv2-verified-adam` and `convnext-verified-adam` are IREE-only
@@ -1502,6 +1556,29 @@ start from `vit_train_step.mlir` (202 in / 200 out, 2 convolutions) and cut down
 (`sgd-render-tie` now accepts `vit` in its `netBySlug` so this probe is repeatable — one line, and
 ViT's train step is already the `(x, θ, onehot) → θ'` shape that harness drives.)
 
+##### ▶ Is it purely a ROCm/MIOpen thing? Probably — and the CUDA box settles it cheaply
+
+Raised 2026-07-29. **Everything known points at MIOpen rather than at the graph**, and three of the
+facts are already measured:
+
+* the failure is `miopenStatusUnknownError`, a **ROCm conv-library enqueue failure** with no cuDNN
+  analogue — it is not a shape rejection, an OOM, or an XLA verifier error;
+* the **identical graph runs under IREE on the same AMD GPU** (`vit-adam-tie` is `ireeLink`), so the
+  render is fine and the fault is in the XLA→MIOpen lowering;
+* the isolated convolution **succeeds** in JAX on this box, and ConvNeXt's structurally similar
+  stride-4 patchify weight-grad **succeeds** under XLA/ROCm — so MIOpen handles the shape when
+  called directly, and what fails is the *fused* call (the `rhs_dilation = 16` hypothesis above).
+
+A ViT-Tiny patch-embed backward is also about as ordinary as a convolution gets, and ViT trains
+under JAX/XLA on CUDA routinely. **But nobody has run it on CUDA**, so this is inference from the
+error surface, not a measurement — hold it to the same bar as the bug report itself.
+
+To settle it, do NOT carry the trainer over. `@vit_train_step` (202 in / 200 out, two convolutions)
+fails *identically* and is far smaller, so **`sgd-render-tie vit` is the probe**. One prerequisite:
+a **CUDA PJRT plugin** via `PJRT_PLUGIN` (the jax CUDA plugin ships one) — `ffi/pjrt_ffi.c` is
+plugin-agnostic but does not conjure one. If it runs there, the open ViT item converts from
+"unexplained" into a filable ROCm bug with a two-op repro, which is exactly the bar §2a set.
+
 #### The recipe — 3 files + 2 lakefile entries per net, and NO driver change
 
 `VerifiedNet.trainAdamSched` already takes `(variant : String := "adam")` and already picks its
@@ -1525,33 +1602,40 @@ select anything but `adam`. EfficientNet's common reads `LEAN_MLIR_VARIANT` (and
 copy that, or the DP step later needs the file edited again. ViT's main additionally throws if its
 artifact is missing — keep that.
 
-#### Gates
+#### The gates, as run
 
-| gate | why |
-|---|---|
-| `lake build <net>-verified-adam` still builds and its behaviour is unchanged | the refactor must be inert; the IREE binary is the reference |
-| a short `LEAN_MLIR_G2_STEPS=…` run on **both** binaries, same seed, agreeing to fp noise | this is the §2e-bis IREE-vs-XLA agreement check, and it is what makes "second trusted lowerer" mean something |
-| loss descends on the XLA binary | closes §0b item 1 for that net, which is owed anyway |
-| marginal-epoch wall clock, `(T₃ − T₁)/2` | **never** wall-clock-minus-compile — that has produced a wrong ratio twice in this thread (§2e-ter) |
+| gate | mnv2 | ConvNeXt | ViT |
+|---|---|---|---|
+| both binaries build; `ldd` shows the right `.so` per target | ✅ | ✅ | ✅ |
+| refactor inert — config values and hyperparameters moved **verbatim**, `variant` defaults to `adam` so the previously hardcoded path is reproduced | ✅ | ✅ | ✅ (`vit_{variant}_…` = the old literal at `adam`; the missing-artifact throw was re-verified by asking for a bogus variant) |
+| IREE-vs-XLA agreement, same seed | ✅ (above) | ✅ (above) | n/a — XLA cannot run |
+| loss descends on the XLA binary | ✅ 4 full epochs | ✅ 4 full epochs | ⛔ |
+| marginal-epoch wall clock `(T₃ − T₁)/2` | ✅ 58.0 s | ✅ 84.5 s | ⛔ |
+| the IREE peer still trains after the refactor | ✅ | ✅ | ✅ 3.505 → 3.284 → 2.836 |
+| `regen_verified_mlir.sh check` unchanged | ✅ 55 artifacts, one writer each, prefix audit green on four nets | | |
 
-Expect the IREE-vs-XLA agreement to be *close but not bit-exact*: §2e's ties are bit-exact **because
-IREE's pipeline is deterministic**, while XLA autotunes convolution algorithms across processes
-(§3). Quote a bound, not a value.
+None of this touched `verified_mlir/` — no tracked artifact changed, which is what makes the whole
+change a plumbing change rather than a re-render.
 
-#### Order, and what is NOT in scope
+**`scripts/marginal_epoch.sh` was added** to make the wall-clock gate hard to get wrong: it stamps
+each epoch line and prints `(T₃ − T₁)/2`, because wall-clock-minus-compile has produced a wrong
+number twice in this thread (§2e-ter) and the ~7.45 GiB one-time dataset load lands entirely in
+epoch 1.
 
-**mnv2 first** — it is the cheapest (its config is already the simplest), it is measured clear, and
-it has a loud failure mode (a wrong artifact has the wrong arity, so the driver refuses it —
-§2a-quinquies). **ConvNeXt second.** **ViT last and expect not to finish it**: the plumbing is 30
-lines and can be written and committed, but the binary cannot be *run* on this box until the MIOpen
-convolution is resolved (dump post-optimisation HLO via §4's throwaway-shim recipe — `XLA_FLAGS` is
-inert here — and read the `convolution` descriptor; or run on ares). **Do not describe a ViT `-xla`
-target as working on the strength of it compiling.**
+#### What is NOT done
 
-Not in scope, and each is its own step afterwards: the **DP renders** (ConvNeXt's renderer has no
-`replicas` parameter at all; mnv2's has one but no `#eval` writes the artifact and there is no
-`mobilenetv2-dp-check`), and re-measuring the published accuracies — which mnv2 owes anyway for an
-unrelated reason (§2g: it was scored through the wrong forward).
+* **The DP renders** — and these are now the only thing between mnv2/ConvNeXt and multi-GPU, since
+  the `-xla` binaries they needed exist. **mnv2**: `MobileNetV2RenderB.lean` already takes
+  `replicas`, already calls `emitGradAllReduce`, and `mnv2AdamVariant` already returns `adamdp` — but
+  its **only** `#eval` writes the single-device artifact and no `mobilenetv2_adamdp_train_step.mlir`
+  exists (re-verified 2026-07-29). That is one `#eval` plus a `mobilenetv2-dp-check`. **ConvNeXt**:
+  `grep -c replicas ConvNeXtRender.lean` = **0** — no support at all, so it is a renderer change,
+  not an `#eval`. Both drivers are ready: `LEAN_MLIR_VARIANT` is threaded now, so neither needs
+  editing again.
+* **Re-measuring the published accuracies** — mnv2 owes this anyway for an unrelated reason (§2g: it
+  was scored through the wrong forward). The 4-epoch runs here are descent evidence, not accuracy.
+* **An XLA:IREE ratio for these two nets** — deliberately skipped, see above.
+* **ViT on XLA anywhere.** Try the CUDA box with `sgd-render-tie vit` first (above).
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
@@ -1843,12 +1927,12 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
    bytes are *already* the certified render for all four, so this only removes clobber hazards.
    Cheapest remaining item by a wide margin, and it takes the audit to 0.
 1. ~~**bs256 re-render + measure.**~~ ✅ **DONE 2026-07-28 — 1.78×, gated.** See §2d.1 below.
-1b. **The `-xla` trainers for mnv2 / ConvNeXt / ViT — §2h.** Newly scoped by measurement: mnv2 and
-   ConvNeXt are **clear** (both backward graphs run on XLA, bit-exact A-vs-A), ViT is **blocked** on
-   the MIOpen patch-embed weight-grad — and that blocker is now known to hit its SGD graph too, so
-   it is not AdamW-specific. Worth ~4.6× wall clock on two nets that are IREE-only today, and it is
-   the prerequisite for ever giving them a DP path. Cheap: 3 small files + 2 lakefile entries per
-   net, no driver change.
+1b. ~~**The `-xla` trainers for mnv2 / ConvNeXt / ViT — §2h.**~~ ✅ **DONE 2026-07-29.** mnv2 and
+   ConvNeXt both have an XLA peer, agreeing with IREE to fp noise and descending on their certified
+   bytes; ViT is plumbed and its MIOpen blocker was reproduced on the new binary. The estimate held
+   exactly — 3 small files + 2 lakefile entries per net, no driver change. **Next on this axis is
+   the DP artifacts**, which the `-xla` binaries were the prerequisite for: mnv2 needs one `#eval`
+   (its renderer already takes `replicas`), ConvNeXt needs `replicas` support built from scratch.
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
 3. **Device-resident parameters.** Two rounds of transfer work are already done (batching:
    256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it
@@ -2084,6 +2168,16 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
 - **Checkpoints and `.vmfb` paths are backend-scoped.** They were shared, so an XLA run could
   resume from, or reuse, an IREE artifact while looking normal. Any new driver with resume needs
   the same treatment. They are **variant-scoped too**, so `adam` and `adamdp` do not collide.
+- **A checkpoint OUTLIVES the artifact it was trained on, and nothing notices.** Found 2026-07-29
+  while running §2h's gates: `mobilenetv2_adam_ckpt.bin` (epoch **80**), `convnext_adam_ckpt.bin`
+  and `vit_adam_ckpt.bin` were all still sitting in `.lake/build/` from mid-**June** — i.e. from the
+  *retired hand-written* renders, before the 2026-07-28 swaps. The checkpoint is keyed by slug +
+  variant + backend and carries no fingerprint of the graph, so a fresh run on the new certified
+  bytes silently resumes June's optimizer state; and mnv2's `epoch=80` would have made the run a
+  **silent no-op** (§4's next bullet). Neither is detectable from the output. **Delete or rename
+  `.lake/build/<slug>_<variant>_ckpt{,_xla}.bin{,.epoch}` after any artifact swap** — and note the
+  IREE and XLA peers have *separate* checkpoints, so a resumed IREE run against a fresh XLA one
+  quietly compares two different programs, which is exactly what a cross-backend gate must not do.
 - **Check the `.epoch` marker before a long run.** Once, after a run killed mid-epoch (SIGPIPE from
   a `| head` in the invocation), `resnet34_adamdp_ckpt_xla.bin.epoch` held **`80`** — `cfg.epochs` —
   so the next run "resumed" past the end and exited having done nothing, printing only
