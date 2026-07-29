@@ -2277,13 +2277,21 @@ assembled, and the step count that follows:
 | **1 GPU, bs64** (global 64) | `adam64` | 147 | **89.40%** | 89.58% | 37.5 s | 50m20 |
 | 2 GPU, bs32×2 (global 64) | `adamdp` | 147 | **89.22%** | 89.40% | 33.5 s | 45m15 |
 | 2 GPU, bs128×2 (global 256) | `adamdp128` | 36 | **86.98%** | 87.11% | 21.0 s | 28m27 |
-| 1 GPU, bs128 (global 128) | `adam128` | 73 | *(pending)* | | | |
+| 1 GPU, bs128 (global 128) | `adam128` | 73 | **88.64%** | 88.71% | 34.0 s | 45m20 |
 
-**Accuracy tracks the STEP COUNT, and is indifferent to how the batch was assembled.** 295→147
-costs ~1.0 point, 147→36 costs ~2.3 more. That is the large-batch recipe cost at unscaled LR (§2c),
-not a defect — final train loss is 0.5016 / 0.5021 / 0.5023 / 0.5025 across the configs, i.e. they
-all fit the training set equally well and differ only in how well that generalises from fewer
-updates.
+**Accuracy tracks the STEP COUNT, and is indifferent to how the batch was assembled.** Monotone
+across all five, at a cost of roughly one point per halving — 295→147→73→36 gives −0.99, −0.76,
+−1.66, accelerating at the bottom as 2,880 total updates starts being genuinely too few:
+
+| steps/epoch | 295 | 147 | 73 | 36 |
+|---|---|---|---|---|
+| total updates (×80 ep) | 23,600 | 11,760 | 5,840 | 2,880 |
+| final val | 90.39% | 89.40% | 88.64% | 86.98% |
+
+That is the large-batch recipe cost at unscaled LR (§2c), not a defect — **final train loss is
+0.5016 / 0.5016 / 0.5021 / 0.5019 / 0.5025**, a spread of 9e-4 across a 3.4-point accuracy range.
+Every config fits the training set identically; the whole difference is generalisation from fewer
+updates. The fix, if the wall clock is wanted, is LR scaling, not a graph change.
 
 #### ▶ The controlled pair: **splitting BatchNorm across 2 replicas costs nothing measurable**
 
