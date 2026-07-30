@@ -49,7 +49,15 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | — | *↓ the `-xla` trainer thread (§2h), 2026-07-29* |
 | `d4da271` | **`mobilenetv2-` and `convnext-verified-adam-xla` built, gated and MEASURED**; ViT plumbed, blocker reproduced |
 | `2a0aafd` | MobileNetV2 data-parallel — gated by the exact identity on the real net |
-| *(this)* | **ConvNeXt data-parallel** — the last net with no DP path; 1.68×, and the first rank-0 collectives |
+| `1a9a7a1` | **ConvNeXt data-parallel** — the last net with no DP path; 1.68×, and the first rank-0 collectives |
+| `772815f` | eval batch decoupled from train batch (`evalBs`); R34 bs128×2 DP render |
+| `068a494` | R34 bs64 + bs128 single-device renders; **the BN-split cost, measured** |
+| `9f7304f` | §2d.2 — the sweep is monotone in step count |
+| `9a78491` | **`convnext-shard-check`** — prove the replicas saw DIFFERENT data; §2i scoped |
+| — | *↓ the §2i cifar8 port, 2026-07-29/30* |
+| `769d0ab` | **plain-SGD + Nesterov optimizer ops** — `SgdMomentumStep.lean` + 3 `SHlo` ops, 10 sites each |
+| `d5fbf32` | **cifar8 `sgd` + `mom` certified and swapped** — bit-exact tie, controls fire. 2 of 13 |
+| `d0f87ac` | §2i — the three BN variants scoped by measurement |
 
 ---
 
@@ -70,12 +78,24 @@ one, gated by the exact duplicated-batch identity on the real net and measured a
 GPUs. **ViT is the only net without a working DP path**, and for a reason nothing in this thread can
 fix from here — its graph does not execute on this box at all.
 
-**▶ THE NEXT THREAD IS §2i — the last 13 `tests/`-rendered artifacts** (the cifar8 / cifar8w
-optimizer ablations). It is the §2a provenance axis finished, and it is scoped by measurement: one
-artifact is ~free, four need one new op, four need two new ops **plus new denotation-side math**
-(nothing momentum-shaped exists anywhere in `Proofs/`), and eight additionally need the wide net
-rendered. Start with `cifar8_bn_adam_train_step` — the only real trainer in the set, and it needs
-no new ops at all.
+**▶ THE ACTIVE THREAD IS §2i — the last 13 `tests/`-rendered artifacts, 2 of 13 DONE.** This is the
+§2a provenance axis being finished. State as of 2026-07-30:
+
+* ✅ **`cifar8_sgd` + `cifar8_mom`** are `pretty(provenGraph)`, swapped, sole-writer. Three new
+  proven ops (`sgdParamF`, `momVNextF`, `momParamF`) + `SgdMomentumStep.lean`, all 3-axiom clean;
+  `CifarOpt` threaded through ONE renderer so all three variants share one forward/backward and only
+  the tail differs. Tie **bit-exact 52858/52858**, both controls fire, gate 1 held.
+* ▶ **NEXT: the three BN variants** (`cifar8_bn_{adam,mom,sgd}`). **No new ops needed** — all six
+  un-fused peers exist from §2a. The cost is a **38-entry shape table** (`optTail` needs `(n, ds)`
+  explicitly where the fused ops infer them via dependent types), plus a conditional
+  signature/return (40/38 fused vs **119/117** packed) and an explicit `scaleF invB` cotangent.
+  **Thread `opt : Option CifarOpt` through the EXISTING renderer — do not write a twin**; 102
+  `pretty` calls duplicated is the double-writer disease in code (§2a-quater). Threading makes gate 1
+  free. `cifar8_bn_adam` is the only one of the 13 backing a **real trainer**; all three fall out of
+  the same threading.
+* open: the eight **`cifar8w*`**, which additionally need the wide net rendered at all.
+
+Read §2i before starting — it has the measurements, not guesses.
 
 Also queued, both small: port `convnext-shard-check` to the enet/mnv2 DP gates (§2h-quater, ~20
 lines each), and try relinking `resnet34-adam-tie`/`cifar8-adam-tie` to `ireeLink` — the four
@@ -120,7 +140,25 @@ is *not* done on each of the four large nets, ordered by what would bite first.
    **68.2%** over an 80-epoch capped-step run; **ConvNeXt** descends over 17 epochs on XLA and 1 on
    IREE, epoch-1 loss **identical on both backends**. The gap between "computes the same function"
    and "trains" is closed for both.
-2. ~~**Only EfficientNet is validated end to end.**~~ ✅ **CLOSED for three nets 2026-07-29.**
+2. ~~**Only EfficientNet is validated end to end.**~~ ✅ **CLOSED for three nets 2026-07-29 —
+   and all four now have an 80-EPOCH run on their certified bytes:**
+
+   | net | final (ep 80) | best | wall (XLA, 1 GPU) |
+   |---|---|---|---|
+   | **ResNet-34** | **90.39%** | 90.39% | 1h11m |
+   | **EfficientNet-B0** | **88.20%** | 88.46% | 1h34m |
+   | **MobileNetV2** | **86.73%** | 86.96% | 1h25m |
+   | **ConvNeXt-T** | **82.75%** | 82.98% | 1h56m |
+
+   All `rc=0` with the epoch marker on 80 (so genuinely to the end, not a resumed no-op), scored
+   through their `Proofs/`-rendered eval forwards. Logs: `runs/<net>_xla_80ep_jul29.log` (untracked).
+   **ConvNeXt is the outlier and it is NOT a plumbing problem** — it reaches the LOWEST val accuracy
+   while reaching the LOWEST train loss (0.500), which is overfitting: ~28M params against 9,469
+   images, curve flat from epoch 40, peak at 68. Read the ordering as a dataset-size story, not a
+   ranking of the renders.
+
+   ⚠ **The §2g wrong-forward number, 86.89%, is STILL owed** — it belongs to `mobilenetv2-verified`,
+   the **SGD** binary, and these were the AdamW trainers. Cheap now that the `-xla` path exists.
    EfficientNet, MobileNetV2 (§2h-bis/ter) and ConvNeXt (§2h-quater) each now have single-GPU
    XLA-vs-IREE agreement, a descent run, measured wall clock, a DP artifact gated by the exact
    identity **on the real net**, and a 2-GPU descent run with a measured scaling ratio. **ViT is the
