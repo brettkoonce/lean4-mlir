@@ -2784,12 +2784,17 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 1d. **`lake run benchmark-xla` — §2j.** ▶ the next thread. Small, but it has a silent-wrong-number
    trap in it (the reference constants are IREE's), so read §2j before writing any of it.
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
-3. **Device-resident parameters.** Two rounds of transfer work are already done (batching:
-   256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it
-   looks — see §3. **FOUR independent multi-GPU measurements now point here** (§2c 1.46× on R34,
-   §2e-ter's measured 13–16% per-step DP overhead on EfficientNet, and mnv2's **1.67×** and
-   ConvNeXt's **1.68×** end-to-end — three architecturally unlike nets landing on the same ratio,
-   which is what makes the ceiling structural rather than net-specific), so it is the
+3. **Device-resident parameters — ▶ NOW SCOPED IN §2d.3 (2026-07-30). Read that before starting:
+   it has the phase breakdown (~3-4 sessions), the design decision that protects every
+   cross-backend gate, and a one-hour measurement to run FIRST.** Two rounds of transfer work are
+   already done (batching: 256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains
+   is smaller than it looks — see §3 — but the payoff is **multi-GPU only**; at bs256 on one GPU it
+   is worth ~nothing (§2d.3). **FIVE independent multi-GPU measurements now point here** (§2c 1.46×
+   on R34,
+   §2e-ter's measured 13–16% per-step DP overhead on EfficientNet, mnv2's **1.67×**, ConvNeXt's
+   **1.68×** and **ViT's 1.62×** end-to-end — four architecturally unlike nets landing on the same
+   ratio, and the fourth is a TRANSFORMER WITH NO CONVOLUTIONAL BACKBONE, which is what makes the
+   ceiling structural rather than net-specific), so it is the
    highest-value structural item left. (On EfficientNet the data loader is
    NOT competitive with this: measured at only 6.3% of a 1-GPU epoch and 11.3% of a 2-GPU one,
    §2e-ter — an earlier claim here that it dominated was a measurement artefact.)
@@ -2918,6 +2923,86 @@ bs8 per replica, where BN statistics genuinely degrade. This measurement says 32
 *(This run is also what the `evalBs` change bought: `adam64`/`adam128` train at a batch the eval
 forward was not rendered at, and before that they could only run under `LEAN_MLIR_SKIP_EVAL=1`,
 i.e. with no accuracy number at all.)*
+
+### 2d.3. ▶ Device-resident parameters — scoped 2026-07-30, NOT started
+
+**This section did not exist until now, and five places in this file referenced it.** One of those
+references — *"a calibrated model says the case roughly quadruples at 4 GPUs"* — had **no written
+derivation anywhere**; treat it as an unverified intuition (see "payoff" below for what is actually
+measured). The nearest real prior content is `xla_pjrt_ladder.md` §10.3a, which is a diagnosis with
+no implementation scoping, and whose sequencing advice (*"device-resident params first, `all_reduce`
+second"*) was **overtaken by events** — DP landed first and works, at 1.6-1.7× on five nets.
+
+#### The problem, in one paragraph
+
+`iree_ffi_invoke_f32` (`ffi/pjrt_ffi.c:322`) is **fully stateless**: every input is
+`BufferFromHostBuffer`'d, `Execute` runs, every output is `ToHostBuffer`'d, and all buffers are
+deleted. So the whole `[θ|m|v]` blob crosses PCIe **twice per step** — 272 MB each way at R34 — and
+under DP it is pushed to *every* replica. That is §2c's diagnosed cause of the 1.46-1.68× ceiling.
+
+#### ▶ The insight that makes this much smaller than it looks
+
+**No buffer donation and no XLA-side aliasing are needed.** The train step's outputs *already are*
+device buffers (`PJRT_Buffer*`); the shim currently d2h-copies them and then deletes them. Device
+residency is: **retain the output buffers and pass them as the next call's parameter inputs.** A
+pointer swap. The hardest-sounding part of the job evaporates before it starts.
+
+#### The work, measured against the code
+
+| phase | what | size |
+|---|---|---|
+| **1. shim** | `resident_create` (one h2d at startup) / `invoke_f32_resident` (params from the handle, param-outputs *replace* the handle, only `%loss`/`bnstat` come to host) / `resident_read` (eval, checkpoint, param dump) / `resident_release`. The fiddly part is the DP path — per-replica buffer arrays, which is exactly where the money is | **~250-350 lines C** |
+| **2. Lean** | the bigger half. `params : ByteArray` is threaded functionally through **7 training loops / 11 call sites**. Convert **`trainAdamSched` only** — it drives all five Imagenette nets plus the cifar ablation. Touch points: loop carrier type, eval, checkpoint save/resume, `LEAN_MLIR_DUMP_PARAMS` | **~150 lines** |
+| **3. gate + measure** | see below | ~100 lines |
+
+**≈ 3-4 focused sessions.** Calibration for phase 1: `ladder.md` §10.2 estimated the DP shim change
+at "~150 lines" and that landed accurately.
+
+**Leave the E4M3 loops alone.** They quantise parameters on the host every step, so they cannot go
+resident without moving quantisation into the graph. `train` / `trainLinear` likewise stay on the
+copying path — they are the demo loops, not the throughput ones.
+
+#### ▶ The design decision that protects every existing gate
+
+**Make residency OPT-IN via env var, with the copying path staying the default.** The FFI surface is
+symbol-identical across `iree_ffi.c` and `pjrt_ffi.c` by design (`nm -D`), and **every §2h
+cross-backend gate depends on IREE and XLA running the same Lean code path**. An XLA-only residency
+with a backend branch inside the training loop would break the "one shared body, cannot drift"
+property those gates are built on.
+
+Opt-in also hands you the gate for free: **residency must be BIT-IDENTICAL to the copying path over
+N steps**, same seed, same data. That is the same known-answer shape as every other gate in this
+file, it is cheap, and it is trivially verified to fail (perturb one retained buffer).
+
+#### Payoff — and it is NOT uniform, which §10.6's "worth doing alone" oversells
+
+R34's `[θ|m|v]` is 272 MB ⇒ 544 MB per step. At ~25 GB/s real PCIe 4.0 x16 that is ~22 ms, and the
+shim is synchronous so it is serial, not overlapped:
+
+| case | step time | transfer share | expected gain |
+|---|---|---|---|
+| 1 GPU, bs32 | 162 ms | ~13% | ~1.15× |
+| 1 GPU, bs256 | 674 ms | ~3% | **~nothing** |
+| **2 GPU** | — | **13-16%, MEASURED** (§2e-ter) | **1.67× → ~1.95×** |
+
+**The prize is multi-GPU only.** The single-GPU large-batch case buys almost nothing, because
+§2d.1's bs256 win *already* amortised this same transfer 8× — that is the same fact seen from the
+other side. §2e-ter measured the per-step DP overhead directly and found it dominated by the
+`[θ|m|v]` push to replica 2, so removing it should recover most of the gap.
+
+The case does strengthen with replica count (each replica costs another full push against another
+slice of compute), which is the honest version of the retired "quadruples at 4 GPUs" claim — but
+**nobody has measured 4 replicas**, that needs ares, and §10.6 measured the whole 4×4060 Ti ares box
+at only **2.1×** one 7900 XTX for R34. So the absolute ceiling on the box where this matters most is
+modest. Also note the easy transfer wins are already taken: 256 → 205 → 162 ms.
+
+#### ▶ Do this ONE-HOUR measurement before writing any of it
+
+Instrument the existing shim to time the parameter h2d/d2h **specifically** (not the whole step), on
+1 and 2 GPUs, at bs32 and bs256. That converts the 13% / 3% / 15% arithmetic above from an estimate
+into a measurement and says whether the 3-4 sessions are justified. This is the `ladder.md` §10.5
+"measure before building" move, and **it has never been done for this item** — §10.5's own
+prescribed first measurement was the bs256 re-render, which §2d.1 completed.
 
 ---
 

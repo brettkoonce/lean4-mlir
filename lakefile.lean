@@ -2227,7 +2227,7 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
 script mnist do
   runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified", "mnist-cnn-verified"]
 
-/-- `lake run cifar` — the ch.5 verified cifar8 variants: SGD/momentum/adam ×
+/-- `lake run cifar` — the ch.4 verified cifar8 variants: SGD/momentum/adam ×
     bn/no-bn, ~1 hr. -/
 script cifar do
   runDemoGroup ["cifar8-verified", "cifar8-bn-verified",
@@ -2266,7 +2266,7 @@ script «mnist-xla» do
                 "mnist-cnn-verified-xla"] (xla := true)
 
 /-- `lake run cifar-xla` — the XLA peers of `lake run cifar`, and an EXACT mirror since
-    2026-07-30: all six of the Chapter-5 optimizer ablation (SGD / Nesterov-momentum / AdamW
+    2026-07-30: all six of the Chapter-4 optimizer ablation (SGD / Nesterov-momentum / AdamW
     × BN / no-BN) now have `-xla` targets. Each shares one body with its IREE peer
     (`apps/cifar/Cifar8*Common.lean`), so the two backends cannot drift on epochs, batch size,
     seed or learning rate — which is what makes a cross-backend difference attributable to the
@@ -2391,9 +2391,9 @@ script download do
 --
 -- ⚠ Two known staleness caveats in the IREE column, both MEASURED 2026-07-30 and
 -- left as-is rather than silently changed:
---   * ch4 (MNIST CNN) reads 23764 ms/epoch; re-measured on the same card, same
+--   * ch3 (MNIST CNN) reads 23764 ms/epoch; re-measured on the same card, same
 --     basis (real data + eval, steady state) it is **17659** — the row is ~1.35×
---     pessimistic. ch2/ch3/ch5 reproduce (535→539, 3200→3032, 8490→8782).
+--     pessimistic. ch1/ch2/ch4 reproduce (535→539, 3200→3032, 8490→8782).
 --   * the IREE Imagenette rows predate the 2026-07-28 codegen swaps, so they were
 --     measured on RETIRED hand-written renders (handoff §0b). The XLA Imagenette
 --     rows are the current certified bytes.
@@ -2415,7 +2415,7 @@ structure BenchItem where
       leaves it out of the totals rather than borrowing the IREE number (which would be
       the §2j mismatched-baseline trap). **Every chapter is now measured**; the mechanism
       is kept because it is what makes an unmeasured row honest rather than invented, and
-      ch.10 needed it until the MIOpen workaround landed on 2026-07-30. -/
+      ch.9 needed it until the MIOpen workaround landed on 2026-07-30. -/
   refSecXla : Option Nat
   tier    : String          -- "" | "mnist" | "cifar" | "imagenette"
 
@@ -2423,30 +2423,30 @@ structure BenchItem where
     SAME construction as the IREE ones — steady-state ms/epoch (real data + eval, last of
     3 epochs) × the trainer's own epoch count, so the two columns are directly comparable.
     **All five XLA Imagenette rows are now measured 80-epoch single-GPU runs on the current
-    certified bytes** — ch6-9 from handoff §0b (`runs/<net>_xla_80ep_jul29.log`) and ch10 from
+    certified bytes** — ch5-8 from handoff §0b (`runs/<net>_xla_80ep_jul29.log`) and ch9 from
     `runs/vit_xla_80ep_jul30.log` (wall **3491 s**, epoch marker 80).
 
-    ⚠ ch10 is also the **validation of the marginal-epoch method** the other rows lean on: before
+    ⚠ ch9 is also the **validation of the marginal-epoch method** the other rows lean on: before
     the run, this row held 3480 s extrapolated from a 43.5 s `(T₃−T₁)/2` measurement × 80. The real
     wall came in at 3491 s — **0.3% out**. So `scripts/marginal_epoch.sh` × epochs is trustworthy at
     this scale, which is worth knowing because it is far cheaper than an 80-epoch run.
-    ch5 mirrors the IREE row's
+    ch4 mirrors the IREE row's
     approximation — the BN arm's cost × 6 — so that the two columns stay comparable, even
     though the 3 no-BN arms are cheaper.
 
     ⚠ The XLA MNIST/CIFAR rows are each a SINGLE steady-state sample, so they inherit the
-    ±6% per-run spread documented on `probeConvRefMsXla`; the conv-family ones (ch4, ch5)
+    ±6% per-run spread documented on `probeConvRefMsXla`; the conv-family ones (ch3, ch4)
     are the affected pair. Treat them as ±6%, not as exact. -/
 def benchTable : List BenchItem :=
-  [ { chapter := "2  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist" },      -- IREE 535ms × 12   | XLA 239ms × 12
-    { chapter := "3  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist" },      -- IREE 3200ms × 12  | XLA 676ms × 12
-    { chapter := "4  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist" },      -- IREE 23764ms × 10 | XLA 4103ms × 10
-    { chapter := "5  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar" },      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
-    { chapter := "6  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 4260, tier := "imagenette" }, -- IREE 9.5h  | XLA 1h11m
-    { chapter := "7  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette" }, -- IREE 5.4h  | XLA 1h25m
-    { chapter := "8  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette" }, -- IREE 6.2h  | XLA 1h34m
-    { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6960, tier := "imagenette" }, -- IREE 13.3h | XLA 1h56m
-    { chapter := "10 ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
+  [ { chapter := "1  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist" },      -- IREE 535ms × 12   | XLA 239ms × 12
+    { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist" },      -- IREE 3200ms × 12  | XLA 676ms × 12
+    { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist" },      -- IREE 23764ms × 10 | XLA 4103ms × 10
+    { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar" },      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+    { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 4260, tier := "imagenette" }, -- IREE 9.5h  | XLA 1h11m
+    { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette" }, -- IREE 5.4h  | XLA 1h25m
+    { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette" }, -- IREE 6.2h  | XLA 1h34m
+    { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6960, tier := "imagenette" }, -- IREE 13.3h | XLA 1h56m
+    { chapter := "9  ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
 
 /-- This chapter's reference wall-clock on the selected lowerer. -/
 def BenchItem.refOn (it : BenchItem) (xla : Bool) : Option Nat :=
@@ -2554,8 +2554,18 @@ def xlaRef : BenchRef :=
 
 /-- Scale a chapter's reference seconds by the measured per-family factor, against `ref`'s
     OWN anchors. `aMs` is the attn ms/step probe (0 when there is no attn probe or it
-    failed → attn falls back to the conv factor, which is known ~3.5x low for ViT).
-    `none` when this chapter has no reference on `ref`'s lowerer. -/
+    failed → attn falls back to the conv factor). `none` when this chapter has no reference
+    on `ref`'s lowerer.
+
+    **The conv proxy for a transformer measured ~3.5× LOW**, which is why the attn family
+    exists at all (`7e0e6a1`): on a 4060 Ti the three factors came out dense 4.82× / conv
+    3.54× / **attn 11.98×**, so scaling ViT as conv estimated 7.9 h against a measured ~28 h.
+    That is the 7900 XTX → 4060 Ti (ROCm → CUDA) divergence specifically, not a constant —
+    on the reference card the proxy is harmless because every factor reads ~1.0, which is
+    exactly why it went unnoticed. An independent instance of the same principle, measured
+    2026-07-30 on one card across lowerers: XLA-vs-IREE is **2.24× for conv but 9.2× for
+    attn**. Attention and convolution do not track each other, whether you change the GPU or
+    the lowerer. -/
 def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat :=
   (it.refOn ref.xla).map fun refSec =>
     if it.family == "dense" then refSec * dMs / ref.denseRefMs
@@ -2689,7 +2699,7 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
   let convMs  ← runProbe ref.convProbe  "conv"  ref.convRefMs  backend gpu runEnv
   let attnMs ← if ref.attnProbe.isEmpty then do
       IO.println s!"\n  ▸ attn probe SKIPPED — no runnable ViT probe on {ref.lowerer}. \
-ch.10 has no {ref.lowerer} reference and prints n/a."
+ch.9 has no {ref.lowerer} reference and prints n/a."
       pure none
     else runProbe ref.attnProbe "attn" ref.attnRefMs backend gpu runEnv (stepProbe := some 100)
   match denseMs, convMs with
@@ -2733,8 +2743,9 @@ ch.10 has no {ref.lowerer} reference and prints n/a."
     IO.println "    other 224² convnets are extrapolated from the 32² conv probe — order-of-"
     IO.println "    magnitude."
     if !ref.attnProbe.isEmpty then
-      IO.println "    A `*proxy` ViT row means no imagenette, so it borrowed the conv"
-      IO.println "    factor (~3.5× low)."
+      IO.println "    A `*proxy` ViT row means the attn probe did not report — it failed to build,"
+      IO.println "    or it ran without emitting a PROBE line — so that row borrowed the conv"
+      IO.println "    factor, which measured ~3.5× low for a transformer on a 4060 Ti."
     IO.println "  * an on-reference factor of 0.94-1.06× is agreement, not signal: the conv probe"
     IO.println "    has ±6% run-to-run spread on the reference card (the anchors are medians)."
     IO.println s!"  * every number above is scaled from the {ref.lowerer} reference column and is an"
@@ -2773,9 +2784,9 @@ script benchmark do
     `vit-verified-adam-xla` did not execute on this box; it now does, with no workaround, though
     the MIOpen failure it used to hit is non-deterministic rather than fixed — see
     `probeAttnRefMsXla`. The `n/a` machinery is retained on purpose: it is what would keep an
-    unmeasured row honest, and it is what ch.10 needed for two days.
+    unmeasured row honest, and it is what ch.9 needed for two days.
 
-    All nine XLA references are measured; ch.10's is a real 80-epoch run as of 2026-07-30
+    All nine XLA references are measured; ch.9's is a real 80-epoch run as of 2026-07-30
     (3491 s, val 71.31%), which also confirmed the marginal-epoch extrapolation it replaced to
     within 0.3%. See `benchTable`.
 
