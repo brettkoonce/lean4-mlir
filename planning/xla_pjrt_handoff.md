@@ -115,17 +115,37 @@ anchors, so a probe cannot be divided by the other path's reference. A `cifar8-b
 peer was added for the conv anchor (`.train` **does** drive the PJRT shim — that was §2j's open
 question). On-reference factors read 0.99-1.02× on both paths.
 
-**▶ AND THE VIT MIOPEN BLOCKER IS WORKED AROUND — the last named hard gap in this whole thread.
-`MIOPEN_DEBUG_CONV_GEMM=0` makes `vit-verified-adam-xla` RUN**, and it is numerically gated: the
-first three step losses agree with the IREE peer to **3e-6** from identical fresh init
-(3.015270/3.005852/2.987082 vs 3.015261/3.005857/2.987081), and it is **8.7× faster** — **136
-ms/step** against IREE's 1188. Found while confirming §2j's "attn probe unavailable" assumption.
-⚠ **This reverses a recorded ❌** in `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`
-(line 312: *"MIOpen hung in solver search … Killed it"*) — on the current stack it does not hang: a
-warm run is **39 s end to end**, 8.2 s of that compiling `vit_fwd`. That doc's *diagnosis* was
-already right and already confirmed (the fused interior-dilated pad+conv selects the broken im2col
-path); only its workaround verdict is stale. What is **NOT** established: no full-epoch run, no
-80-epoch run, and `vit-dp-check` has not been run. See §2j's tail for the exact ledger.
+**▶ AND VIT RUNS ON XLA — the last named hard gap in this whole thread is GONE, but NOT for the
+reason first recorded.** `vit-verified-adam-xla` executes on this box, **with no workaround**, and
+is numerically gated: first three step losses agree with the IREE peer to **3e-6** from identical
+fresh init (3.015268/3.005852/2.987083 vs 3.015261/3.005857/2.987081); it descends
+(39.7 → 46.7 → **49.6%** over 3 epochs); **`vit-dp-check` passes BIT-EXACT on all 16,579,041
+floats** against a sum-not-mean control that fires at **0.996** — so **DP is 5 of 5**. Speed:
+**128 ms/step** median vs IREE's 1188 (**9.2×**), marginal epoch **43.5 s** ⇒ 80 ep ≈ 0.97 h vs
+IREE's 7.8 h.
+
+⚠ **A correction to my own first finding here, recorded because it nearly shipped.** I first hit the
+documented im2col failure, found `MIOPEN_DEBUG_CONV_GEMM=0` made it run, and reported that as the
+fix — it is **not one**. Measured properly afterwards: the graph runs *without* the variable (11
+consecutive runs, including the byte-identical invocation that had just failed), and setting it
+**costs ~7%** (attn probe 136 vs 128 ms/step; marginal epoch 46.5 s vs 43.5 s). It had already been
+wired into `benchmark-xla` and `imagenette-xla` and was **backed out**. **The real finding is that
+the failure is NON-DETERMINISTIC**: it fired once, on the session's first ViT/XLA execution, and
+never again; the MIOpen on-disk cache shows no writes in that window, so cache population does not
+explain it, and the mechanism is unidentified. Keep the variable as a documented escape hatch only.
+The lesson is the thread's own recurring one, applied to a *negative* result this time: **one sample
+is not a measurement — I inferred causation from a single before/after pair.** The same mistake, in
+the same session, produced the retracted conv-probe "thermal" story (§2j).
+
+`upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`'s **diagnosis was already right
+and already confirmed** on 2026-07-28 (the fused interior-dilated pad+conv selects the broken
+`GemmFwdRest`/im2col path), with a 20-line JAX reproducer — so this handoff's own description of that
+as a *"leading unconfirmed hypothesis"* was stale and is retired. Its line 312 ❌ for
+`MIOPEN_DEBUG_CONV_GEMM=0` (*"MIOpen hung … Killed it"*) is also stale — it completes in 39 s here —
+but since the variable is not needed, that is a footnote, not a fix.
+
+**NOT established on ViT:** no 80-epoch run and no accuracy number (the other four Imagenette nets
+have both). See §2j's tail for the exact ledger.
 
 After these, §2d's value-ordered list: rung 4 (the FPN detector) or device-resident parameters
 (four measurements behind it; a calibrated model says the case roughly quadruples at 4 GPUs —
@@ -152,9 +172,11 @@ was batch-BN against a per-example-BN train step, so `mobilenetv2-verified` scor
 than it trained (measured: logits rel **1.86**). Every `verified_mlir/` artifact is now
 `Proofs/`-rendered.
 
-**One named gap stays open** and should be quoted whenever the DP renders are described: **ViT's DP
-render does not execute on this box** (`miopenStatusUnknownError` in the patch-embed weight-grad
-convolution — refuted as a shape or memory problem, see §2a's ViT block). *ConvNeXt's two
+~~**One named gap stays open**: **ViT's DP render does not execute on this box**~~ ✅ **CLOSED
+2026-07-30 (§2j's tail).** It executes, with no workaround; `vit-dp-check` passes **bit-exact on all
+16,579,041 floats** against a control that fires at 0.996, so **the DP scorecard is 5 of 5**. ⚠ The
+underlying MIOpen fault is **non-deterministic, not fixed** — it fired once and not again in 11 runs
+— so a recurrence is possible; and ViT still has no 80-epoch run. *ConvNeXt's two
 weight-gradient carve-outs were CLOSED on 2026-07-28 (`9bb00f5`, §2f-bis, §5) — an earlier version
 of this line still listed them as open.*
 
@@ -212,7 +234,7 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 | **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ✅ `Proofs/` (§2g) | ✅ 3 epochs + 2-GPU |
 | **MobileNetV2** | ✅ | ✅ **§2h-bis** — exact identity on the real net, 2 GPUs, **1.67×** | ✅ **§2h** — 58.0 s/epoch | ✅ `Proofs/` (§2g — **BN skew fixed**) | ✅ **4 full epochs → val 59.9%**, + 2-GPU descent |
 | **ConvNeXt** | ✅ (all 180) | ✅ **§2h-quater** — exact identity on the real net, 2 GPUs, **1.68×** | ✅ **§2h** — 84.5 s/epoch | ✅ `Proofs/` (§2g) | ✅ **4 full epochs → val 60.6%**, + 12-epoch 2-GPU descent |
-| **ViT** | ✅ | ⛔ render exists, **numerically ungated** | ⛔ **plumbed but UNRUNNABLE** — MIOpen; hits SGD too (§2h) | ✅ `Proofs/` | IREE single-GPU |
+| **ViT** | ✅ | ✅ **§2j tail** — `vit-dp-check` BIT-EXACT 16,579,041/16,579,041, control 0.996 | ✅ **RUNS 2026-07-30**, no workaround — 128 ms/step, 43.5 s/epoch | ✅ `Proofs/` | ✅ 3 epochs → val **49.6%**; ⛔ still no 80-epoch run |
 
 **MobileNetV2** — ~~no smoke-train~~ ✅ §2h; **no `mobilenetv2_adamdp_train_step.mlir`** (the
 renderer takes `replicas` and `mnv2AdamVariant` returns `adamdp` — both re-verified 2026-07-29 — but
@@ -2282,6 +2304,8 @@ results and the corrections it produced.
 | 2. a conv peer | ✅ **`cifar8-bn-verified-xla`** added. §2j's open question — *"check `.train` drives the XLA shim first"* — is **answered yes**: `mnist-mlp-verified-xla` already rides `VerifiedNet.train`, which has an `xla` branch at `VerifiedTrain.lean:216`. So the peer was preferable to re-pointing the probe at a different optimizer, which would have cost a second reference constant and made the two tables non-comparable row by row |
 | 3. the script | ✅ `runBenchmark (ref : BenchRef)`, one body, two `script`s. Reuses `ensurePjrtShim`/`notePjrtPlugin`; needs no venv |
 | 4. label the output | ✅ both print `lowerer:` in the header and `ref(IREE)` / `ref(XLA/PJRT)` as the column head, plus a footer forbidding cross-table comparison. `lake run benchmark` gained the word IREE, as §2j asked |
+| 5. *(not scoped)* the attn probe + ch.10 | ✅ **`benchmark-xla` is 3 probes / 9 chapters**, because ViT turned out to run — see this section's tail. `probeAttnRefMsXla := 128` (median of 8), ch.10 `refSecXla := 3480` (marginal epoch 43.5 s × 80) |
+| 6. *(not scoped)* `imagenette-xla` | ✅ **now all five nets**, ViT included |
 
 **The trap is now structural, not documentary.** `BenchRef` bundles one lowerer's probe *binaries*
 with its *anchors*, and `yourSecOf` takes a `BenchRef` — so there is no expression that divides an
@@ -2330,37 +2354,61 @@ vs 97.71, cifar8-bn 41.52 vs 40.08.
   2026-07-28 codegen swaps and so were measured on **retired hand-written renders**, while the XLA
   ones are the current certified bytes.
 
-#### ▶ The ViT blocker, worked around — and exactly what that does and does not license
+#### ▶ ViT on XLA — it runs; the workaround was a false lead; DP is 5 of 5
 
-Found while confirming this section's own "attn probe unavailable on XLA" assumption, which was
-true as written and is now stale. `MIOPEN_DEBUG_CONV_GEMM=0` makes `vit-verified-adam-xla` run.
+Found while confirming this section's own "attn probe unavailable on XLA" assumption, which was true
+when written and is now stale.
 
 | | result |
 |---|---|
-| runs at all | ✅ rc=0, **136 ms/step** (median of 12, steps 9-20) |
-| vs IREE, same probe | IREE **1188 ms/step** ⇒ **8.7×** |
-| cross-backend numerics, fresh init both sides | losses **3.015270 / 3.005852 / 2.987082** (XLA) vs **3.015261 / 3.005857 / 2.987081** (IREE) — **3e-6**, and descending |
-| cost of the workaround | warm run **39 s end to end**, 8.2 s of it compiling `vit_fwd` — it does **not** hang |
+| runs at all, **no workaround** | ✅ rc=0 on 11 consecutive runs |
+| step time | **128 ms/step** median of 8 (123/125/126/127/128/129/132/137) vs IREE **1188** ⇒ **9.2×** |
+| marginal epoch, `(T₃−T₁)/2` | **43.5 s** ⇒ 80 ep ≈ **0.97 h**, against IREE's 7.8 h |
+| cross-backend numerics, fresh init both sides | losses **3.015268 / 3.005852 / 2.987083** (XLA) vs **3.015261 / 3.005857 / 2.987081** (IREE) — **3e-6**, descending |
+| descent | 39.7 → 46.7 → **49.6%** over 3 real epochs |
+| **`vit-dp-check`** | ✅ **BIT-EXACT 16,579,041/16,579,041** (θ, m, v, loss/bc), control **0.996**, rc=1 ⇒ **DP is 5 of 5** |
 
-⚠ The IREE side needed its epoch-1 `vit_adam_ckpt.bin` moved aside to start fresh (§4's
-checkpoint trap — it was restored afterwards). Without that the comparison is meaningless.
+⚠ The IREE side needed its epoch-1 `vit_adam_ckpt.bin` moved aside to start fresh (§4's checkpoint
+trap — restored afterwards). Without that the loss comparison is meaningless.
 
-**NOT established, and none of it should be quoted as done:** no full-epoch run, no 80-epoch run,
-no accuracy number, and **`vit-dp-check` has not been run** — so ViT's DP render is still
-numerically ungated. ViT is therefore still `n/a` in `benchmark-xla` (there is no XLA ViT reference
-wall-clock to scale) and still excluded from `imagenette-xla`. Wiring it into either needs a
-decision plus the missing reference; the ch10 IREE row's own basis (`1185 ms/step × 295 × 80`) is
-the house convention available for it.
+**`vit-dp-check` needed a code change before its green could be believed.** It hardcoded both
+artifact paths and took no argv, so its bit-exact PASS was **unfalsifiable** — §4's "a tie that is
+bit-exact everywhere is indistinguishable from a harness comparing a buffer with itself", in its
+purest form. Added `argv[1]` (the mnv2/ConvNeXt shape) and built the sum-not-mean control by
+flipping all 200 divisors; it fires at **0.996** with rc=1. It also re-demonstrates §3's θ rule on a
+**sixth** net: θ moved **1.99e-4** while `m` moved 0.996 — and note that lands *just above* a 1e-4 θ
+gate where ConvNeXt's 9.7e-5 landed *under* one, so the rule holds but the margin is net-dependent.
+`loss/bc` stayed bit-exact through the control, correctly localising the fault to the backward.
 
-**The upstream doc needs a one-line correction, not a rewrite.**
-`upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md:312` lists
-`MIOPEN_DEBUG_CONV_GEMM=0` as ❌ *"MIOpen hung in solver search (compiling winograd/implicit-gemm),
-no clean result. Killed it."* — measured 2026-07-30 on the current stack, it completes in 39 s. That
-doc's **diagnosis is already right and already confirmed** (2026-07-28: a fused interior-dilated
-pad+conv selects the no-workspace `GemmFwdRest` path, whose `MIOpenIm2d2Col.cpp` fails to build
-under HIPRTC because it uses OpenCL builtins); only the workaround verdict is stale. The handoff's
-own ViT paragraphs describing the fusion hypothesis as *"leading unconfirmed"* are also stale —
-that doc confirmed it two days earlier with a 20-line JAX reproducer.
+**⚠ THE WORKAROUND WAS A FALSE LEAD — the honest account.** The documented im2col failure fired on
+the session's **first** ViT/XLA execution. `MIOPEN_DEBUG_CONV_GEMM=0` then made it run, and that was
+recorded — and wired into `benchmark-xla` and `imagenette-xla` — as the fix. It is not:
+
+* the graph runs **without** the variable, 11 runs including the byte-identical invocation that had
+  just failed;
+* setting it **costs ~7%**: attn probe 136 vs 128 ms/step median, marginal epoch 46.5 s vs 43.5 s;
+* the MIOpen on-disk cache shows **no writes** in that window, so "the cache got populated" does not
+  explain the change either. **Mechanism unidentified; the failure is non-deterministic.**
+
+The wiring was **backed out** (`BenchRef.attnEnv`, `runProbe`'s `extraEnv`, and `runDemoGroup`'s
+per-target env are all gone), and every constant measured under the variable was **re-measured
+without it**. Keep it as a documented escape hatch in `probeAttnRefMsXla`, not a default.
+
+*Both of this session's wrong turns were the same error* — inferring a cause from a single
+before/after pair. The other was the conv probe's retracted "thermal/context" story. Neither
+survived a fourth sample. **One sample is not a measurement**, and that applies to negative results
+and to explanations, not just to headline numbers.
+
+**What is still owed on ViT:** no 80-epoch run and no accuracy number; the other four Imagenette
+nets have both. ch.10's XLA reference is therefore a marginal-epoch extrapolation (43.5 s × 80),
+flagged as such in `benchTable`.
+
+**The upstream doc's diagnosis was already right and already confirmed** on 2026-07-28 (fused
+interior-dilated pad+conv → the no-workspace `GemmFwdRest` path → `MIOpenIm2d2Col.cpp` fails under
+HIPRTC on an OpenCL builtin), with a 20-line JAX reproducer. So **this handoff's own "leading
+unconfirmed hypothesis" wording was stale and is retired.** Its line 312 ❌ for the env var
+(*"MIOpen hung … Killed it"*) is stale too — it completes in 39 s here — but since the variable is
+not needed, that is a footnote worth one line in that doc, not a rewrite.
 
 #### Not touched, deliberately
 
@@ -3066,9 +3114,11 @@ The five DP renders are **not** equally evidenced, and the difference is worth s
 of them is described: **EfficientNet** (§2e-bis), **MobileNetV2** (§2h-bis) and **ConvNeXt**
 (§2h-quater) are gated by an exact known-answer check on the real net, run on two GPUs, each with a
 2-GPU descent run and a measured scaling ratio behind it; **ResNet-34** (§2b-quater) by that same
-check on a cifar8 proxy plus a 2-GPU descent run; **ViT** by nothing numeric at all — its graph does
-not execute on this box. Only the first four should be called working, and only the first three are
-gated on the net they actually run.
+check on a cifar8 proxy plus a 2-GPU descent run; **ViT** (§2j's tail, 2026-07-30) by that same exact
+check on the real net, **bit-exact on all 16,579,041 floats** against a control that fires at 0.996 —
+but with **no 2-GPU descent run and no measured scaling ratio**, so it is the least-evidenced of the
+five even though its gate is the tightest. All five now execute; four of the five are gated on the
+net they actually run.
 
 ConvNeXt's is the one whose identity needs **no BatchNorm argument**: LayerNorm reduces within an
 example, so the replicas are uncoupled by construction and the duplicated-batch identity is exact

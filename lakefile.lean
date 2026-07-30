@@ -2267,17 +2267,35 @@ script «cifar-xla» do
                 "cifar8-verified-momentum-xla", "cifar8-bn-verified-momentum-xla",
                 "cifar8-verified-adam-xla", "cifar8-bn-verified-adam-xla"] (xla := true)
 
-/-- `lake run imagenette-xla` — the XLA peers of `lake run imagenette`. ⚠ **4 of that group's
-    5: ViT-Tiny is EXCLUDED BY MEASUREMENT, not by omission.** `vit-verified-adam-xla` builds
-    and its graph compiles, but it dies at *execution* in the patch-embed weight-gradient
-    convolution with `miopenStatusUnknownError` — on this box's MIOpen, on the single-device
-    step, and identically for its SGD render, so it is not an AdamW or a collective problem
-    (§0b, §2h). The identical graph runs fine under IREE, so `lake run imagenette` still
-    covers all five. The other four are each measured: mnv2 58.0 s/epoch, ConvNeXt 84.5 s,
-    EfficientNet 71.1 s, and all four have an 80-epoch run on their certified bytes. -/
+/-- `lake run imagenette-xla` — the XLA peers of `lake run imagenette`, and **all five as of
+    2026-07-30**.
+
+    ViT was excluded here from 2026-07-28 to 2026-07-30 by measurement, not omission: the graph
+    compiled but died at *execution* in the patch-embed weight-gradient convolution with
+    `miopenStatusUnknownError` (diagnosed in
+    `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`: a fused interior-dilated pad+conv
+    selects MIOpen's no-workspace `GemmFwdRest` solver, whose `MIOpenIm2d2Col.cpp` fails to build
+    under HIPRTC — it uses the OpenCL builtin `get_global_id`).
+
+    ⚠ **It now runs, with no workaround, and the failure does not reproduce.** Measured
+    2026-07-30: the im2col error fired on the session's first ViT/XLA execution and never again
+    across 11 runs, including the byte-identical invocation that had just failed. So this target
+    is included on the strength of it working repeatedly — but treat a recurrence as possible,
+    and see `probeAttnRefMsXla` for the escape hatch (`MIOPEN_DEBUG_CONV_GEMM=0`, which is a ~7%
+    regression rather than a fix).
+
+    It is gated, not merely running: the first three step losses agree with the IREE peer to
+    **3e-6** from identical fresh init, it descends (39.7 → 46.7 → **49.6%** over 3 epochs), and
+    `vit-dp-check` now passes **bit-exact on all 16,579,041 floats** against a sum-not-mean control
+    that fires at 0.996 — so ViT is the fifth working data-parallel net.
+
+    Per-epoch, all measured on this card: mnv2 58.0 s, ConvNeXt 84.5 s, EfficientNet 71.1 s,
+    ViT **43.5 s** (marginal, `(T₃−T₁)/2`). ⚠ ViT is the one net here **without** an 80-epoch run
+    on its certified bytes — the other four have one. -/
 script «imagenette-xla» do
   runDemoGroup ["resnet34-verified-adam-xla", "mobilenetv2-verified-adam-xla",
-                "efficientnet-verified-adam-xla", "convnext-verified-adam-xla"] (xla := true)
+                "efficientnet-verified-adam-xla", "convnext-verified-adam-xla",
+                "vit-verified-adam-xla"] (xla := true)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- `lake run download` — fetch the core datasets the verified trainers + the
@@ -2340,8 +2358,10 @@ script download do
 --
 -- ⚠ **EACH LOWERER HAS ITS OWN REFERENCE COLUMN, AND THAT IS NOT OPTIONAL.**
 -- The two backends are not within noise of each other on the same card: measured
--- on the reference 7900 XTX, XLA is 2.2× IREE on the conv anchor and 4.7× on the
--- dense one (and 4.6× on EfficientNet, handoff §2e-quinquies). So dividing an XLA
+-- on the reference 7900 XTX, XLA is 2.2× IREE on the conv anchor, 4.7× on the
+-- dense one and **8.6× on the attn one** (and 4.6× on EfficientNet, handoff
+-- §2e-quinquies). A single blended factor would be wrong in both directions by
+-- nearly 4×, which is why the split is per family AND per lowerer. So dividing an XLA
 -- probe by an IREE anchor conflates *your GPU vs a 7900 XTX* with *XLA vs IREE*,
 -- and reports a training estimate several times too fast with no warning. That is
 -- why `BenchItem` carries `refSecXla` and why there are `probe*RefMsXla` constants:
@@ -2368,6 +2388,13 @@ script download do
 --   * the IREE Imagenette rows predate the 2026-07-28 codegen swaps, so they were
 --     measured on RETIRED hand-written renders (handoff §0b). The XLA Imagenette
 --     rows are the current certified bytes.
+--   * the IREE DENSE anchor (3030) also reads high: measured 2485 / 2815 / 2819 in
+--     one session on the reference card, i.e. 0.82-0.93×. Unlike the XLA anchors,
+--     which are medians of 8-10 samples, the IREE ones are single historical
+--     samples. So on IREE read a low dense factor as anchor noise, not as your
+--     card being slow; the conv (1.01-1.02×) and attn (1.01×) anchors reproduce.
+-- Correcting any of these means re-anchoring the IREE column from medians, which is
+-- a deliberate separate change — it moves published per-chapter estimates.
 -- ═══════════════════════════════════════════════════════════════════════
 
 structure BenchItem where
@@ -2377,17 +2404,22 @@ structure BenchItem where
   /-- XLA/PJRT reference wall-clock (s) on the same card. `none` = this chapter has no
       measured XLA reference, in which case `benchmark-xla` prints the row as `n/a` and
       leaves it out of the totals rather than borrowing the IREE number (which would be
-      the §2j mismatched-baseline trap). Only ch.10 is `none`: `vit-verified-adam-xla`
-      does not execute on this box (MIOpen, handoff §0b/§2h), so no XLA ViT run exists
-      to measure. -/
+      the §2j mismatched-baseline trap). **Every chapter is now measured**; the mechanism
+      is kept because it is what makes an unmeasured row honest rather than invented, and
+      ch.10 needed it until the MIOpen workaround landed on 2026-07-30. -/
   refSecXla : Option Nat
   tier    : String          -- "" | "mnist" | "cifar" | "imagenette"
 
 /-- The XLA MNIST/CIFAR rows were measured 2026-07-30 on the reference 7900 XTX with the
     SAME construction as the IREE ones — steady-state ms/epoch (real data + eval, last of
     3 epochs) × the trainer's own epoch count, so the two columns are directly comparable.
-    The XLA Imagenette rows are the 80-epoch single-GPU runs on the current certified bytes
-    from handoff §0b (logs `runs/<net>_xla_80ep_jul29.log`). ch5 mirrors the IREE row's
+    The XLA Imagenette rows ch6-9 are the 80-epoch single-GPU runs on the current certified bytes
+    from handoff §0b (logs `runs/<net>_xla_80ep_jul29.log`). **ch10's XLA row is a marginal-epoch
+    extrapolation, not an 80-epoch run**: 43.5 s/epoch measured as `(T₃−T₁)/2` via
+    `scripts/marginal_epoch.sh`, × 80 = 0.97 h. That basis is stricter than the IREE ch10 row it
+    faces (`1185 ms/step × 295 × 80`, train-only) because it includes eval, matching ch6-9; the
+    one-time compile plus dataset load it excludes is ~40 s, under 1% of an 80-epoch run.
+    ch5 mirrors the IREE row's
     approximation — the BN arm's cost × 6 — so that the two columns stay comparable, even
     though the 3 no-BN arms are cheaper.
 
@@ -2403,7 +2435,7 @@ def benchTable : List BenchItem :=
     { chapter := "7  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette" }, -- IREE 5.4h  | XLA 1h25m
     { chapter := "8  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette" }, -- IREE 6.2h  | XLA 1h34m
     { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6960, tier := "imagenette" }, -- IREE 13.3h | XLA 1h56m
-    { chapter := "10 ViT",          family := "attn",  refSec := 27966, refSecXla := none,      tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA: does not run here
+    { chapter := "10 ViT",          family := "attn",  refSec := 27966, refSecXla := some 3480, tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h (marginal epoch 43.5s × 80)
 
 /-- This chapter's reference wall-clock on the selected lowerer. -/
 def BenchItem.refOn (it : BenchItem) (xla : Bool) : Option Nat :=
@@ -2430,13 +2462,31 @@ def probeAttnRefMs : Nat := 1173
     the IREE anchors these read 4.66× (dense) and 2.19× (conv), which is the whole reason
     a shared reference column would be wrong (§2j).
 
-    There is deliberately **no XLA attn anchor**: `vit-verified-adam-xla` builds and
-    compiles but dies at execution in the patch-embed weight-gradient convolution
-    (MIOpen, handoff §0b/§2h), so no honest number can be measured here. `xlaRef` sets
-    `attnProbe := ""` and ch.10's `refSecXla` is `none`, so `benchmark-xla` is
-    structurally a 2-probe / 8-chapter table and says so.
+    **The attn anchor exists as of 2026-07-30 — `vit-verified-adam-xla` runs on this box,
+    and it needs no workaround.** That reverses the state recorded from 2026-07-28: the
+    graph used to die at *execution* in the patch-embed weight-gradient convolution
+    (a fused interior-dilated pad+conv selects MIOpen's no-workspace `GemmFwdRest` solver,
+    whose `MIOpenIm2d2Col.cpp` fails to build under HIPRTC — it uses the OpenCL builtin
+    `get_global_id`; see `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`).
 
-    Both are **medians over repeated runs, not single samples**, because the conv probe has
+    ⚠ **The failure is NOT deterministic, and that matters for anyone reading the old note.**
+    Measured 2026-07-30: it fired on the session's FIRST ViT/XLA execution and then never
+    again — 11 subsequent runs all passed, *including the byte-identical invocation that had
+    just failed*, and the MIOpen on-disk cache shows no writes in that window, so cache
+    population does not explain it. Mechanism unidentified.
+
+    `MIOPEN_DEBUG_CONV_GEMM=0` was briefly wired in here as the fix. **It is not one**: the
+    graph runs without it, and disabling that solver family costs ~7% (attn probe 136 vs 128
+    ms/step median; marginal epoch 46.5 s vs 43.5 s). It is kept only as a documented escape
+    hatch — if the im2col build error reappears, set it and re-measure. Do not set it by
+    default; it is a measured throughput regression bought against a fault that does not
+    currently reproduce.
+
+    The render is gated independently of any of this: the first three step losses agree with
+    the IREE peer to **3e-6** from identical fresh init, and `vit-dp-check` passes bit-exact
+    on all 16,579,041 floats against a control that fires at 0.996.
+
+    All three are **medians over repeated runs, not single samples**, because the conv probe has
     real run-to-run spread on this card: ten runs of the same binary gave 3449 / 3473 / 3482
     / 3528 / 3565 / 3733 / 3774 / 3778 / 3792 / 3865 ms/epoch — a ±6% band with no pattern
     (an earlier reading of it as context-dependent, benchmark-run vs standalone, was refuted
@@ -2447,6 +2497,12 @@ def probeAttnRefMs : Nat := 1173
     one number in front of you. -/
 def probeDenseRefMsXla : Nat := 610    -- mnist-mlp-verified-xla   (vs 3030 on IREE); median of 8
 def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified-xla   (vs 8020 on IREE); median of 10
+/-- ms/STEP, `vit-verified-adam-xla`, median of 8 in the DEFAULT configuration, i.e. with no
+    MIOpen override (123/125/126/127/128/129/132/137 — ±5%). Against IREE's 1173 that is
+    **9.2×**, the largest cross-lowerer gap of the three families and the reason ViT cannot
+    share the conv factor. (With `MIOPEN_DEBUG_CONV_GEMM=0` the median is 136 — that variable
+    is a ~7% regression, not a fix; see the note above.) -/
+def probeAttnRefMsXla : Nat := 128
 
 /-- One lowerer's complete probe configuration: which binaries to probe and which anchors
     to divide by. Bundling them is the point — `yourSecOf` takes a `BenchRef`, so a probe
@@ -2473,8 +2529,9 @@ def ireeRef : BenchRef :=
 def xlaRef : BenchRef :=
   { lowerer := "XLA/PJRT", xla := true
     denseProbe := "mnist-mlp-verified-xla", convProbe := "cifar8-bn-verified-xla"
-    attnProbe := ""                          -- MIOpen: no runnable ViT probe on this path
-    denseRefMs := probeDenseRefMsXla, convRefMs := probeConvRefMsXla, attnRefMs := 0 }
+    attnProbe := "vit-verified-adam-xla"
+    denseRefMs := probeDenseRefMsXla, convRefMs := probeConvRefMsXla
+    attnRefMs := probeAttnRefMsXla }
 
 /-- Scale a chapter's reference seconds by the measured per-family factor, against `ref`'s
     OWN anchors. `aMs` is the attn ms/step probe (0 when there is no attn probe or it
@@ -2612,8 +2669,8 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
   let denseMs ← runProbe ref.denseProbe "dense" ref.denseRefMs backend gpu runEnv
   let convMs  ← runProbe ref.convProbe  "conv"  ref.convRefMs  backend gpu runEnv
   let attnMs ← if ref.attnProbe.isEmpty then do
-      IO.println s!"\n  ▸ attn probe SKIPPED — no runnable ViT probe on {ref.lowerer} \
-(MIOpen, handoff §0b/§2h). ch.10 has no {ref.lowerer} reference and prints n/a."
+      IO.println s!"\n  ▸ attn probe SKIPPED — no runnable ViT probe on {ref.lowerer}. \
+ch.10 has no {ref.lowerer} reference and prints n/a."
       pure none
     else runProbe ref.attnProbe "attn" ref.attnRefMs backend gpu runEnv (stepProbe := some 100)
   match denseMs, convMs with
@@ -2662,9 +2719,9 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
     IO.println "  * an on-reference factor of 0.94-1.06× is agreement, not signal: the conv probe"
     IO.println "    has ±6% run-to-run spread on the reference card (the anchors are medians)."
     IO.println s!"  * every number above is scaled from the {ref.lowerer} reference column and is an"
-    IO.println s!"    estimate for the {ref.lowerer} path only. The two lowerers differ by 2.2-4.7× on"
-    IO.println "    the same card, so do NOT compare one command's `your gpu` column against the"
-    IO.println "    other's ref column — run the other command instead."
+    IO.println s!"    estimate for the {ref.lowerer} path only. The two lowerers differ by 2.2-8.6× on"
+    IO.println "    the same card (conv 2.2×, dense 4.7×, attn 8.6×), so do NOT compare one command's"
+    IO.println "    `your gpu` column against the other's ref column — run the other command instead."
     if ref.xla then
       IO.println "  * XLA compiles in-process (seconds). Training time only."
     else
@@ -2693,11 +2750,14 @@ script benchmark do
     those move together inside `xlaRef`, which is what stops the §2j trap: an XLA probe
     divided by IREE's anchors would report Part-1 training ~2-5× too fast, silently.
 
-    ⚠ **Structurally 2 probes and 8 chapters, not 3 and 9.** `vit-verified-adam-xla` does
-    not execute on this box (MIOpen — handoff §0b/§2h), so there is no XLA attn anchor and
-    no XLA ViT reference. ch.10 prints `n/a` and is excluded from the totals, which are
-    labelled `8 of 9 ch.` accordingly. For a ViT estimate, run `lake run benchmark` (IREE),
-    where all three probes work.
+    **All 3 probes and all 9 chapters as of 2026-07-30.** It was 2-and-8 until then, because
+    `vit-verified-adam-xla` did not execute on this box; it now does, with no workaround, though
+    the MIOpen failure it used to hit is non-deterministic rather than fixed — see
+    `probeAttnRefMsXla`. The `n/a` machinery is retained on purpose: it is what would keep an
+    unmeasured row honest, and it is what ch.10 needed for two days.
+
+    ⚠ ch.10's XLA reference is a **marginal-epoch extrapolation** (43.5 s × 80), not an 80-epoch
+    run like ch6-9. See `benchTable`.
 
     Needs no venv: the XLA binaries compile in-process rather than shelling out to
     `iree-compile`. It does build `ffi/libpjrt_ffi.so` if missing/stale and report whether

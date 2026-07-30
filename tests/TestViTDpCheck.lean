@@ -20,10 +20,35 @@ Two failure modes it separates, both of which have actually happened in this rep
 * **collective present but wrong** (sum not mean) → every gradient is 2× and `m` moves by ~1, five
   orders above the gate. §2b-quater verified exactly that by breaking the divisor.
 
-    lake build vit-dp-check
-    unset HIP_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/vit-dp-check
+```
+lake build vit-dp-check
+unset HIP_VISIBLE_DEVICES
+MIOPEN_DEBUG_CONV_GEMM=0 PJRT_REPLICAS=2 .lake/build/bin/vit-dp-check
+```
 
-Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path).
+⚠ **`MIOPEN_DEBUG_CONV_GEMM=0` is REQUIRED on this box.** Without it every ViT graph with a
+backward dies at *execution* — a fused interior-dilated pad+conv selects MIOpen's no-workspace
+`GemmFwdRest` solver, whose `MIOpenIm2d2Col.cpp` fails to build under HIPRTC (it uses the OpenCL
+builtin `get_global_id`). Diagnosis and a 20-line JAX reproducer:
+`upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`. That is why this gate sat written
+but unrun from 2026-07-28 to 2026-07-30.
+
+⚠ **This gate reports BIT-EXACT, so it MUST be run against a control** — a tie that is bit-exact
+everywhere is indistinguishable from a harness comparing a buffer with itself (§4). Pass a broken
+render as `argv[1]`; the sum-not-mean control is built by flipping every collective's divisor:
+
+```
+sed -E 's/^(    %arn[A-Za-z0-9_]+ = stablehlo\.constant dense<)2\.0(>)/\11.0\2/' \
+  verified_mlir/vit_adamdp_train_step.mlir > /tmp/vit_dp_sum.mlir     # 200 divisors 2.0 -> 1.0
+MIOPEN_DEBUG_CONV_GEMM=0 PJRT_REPLICAS=2 .lake/build/bin/vit-dp-check /tmp/vit_dp_sum.mlir
+```
+
+*The `argv[1]` path did not exist until 2026-07-30 — the gate hardcoded both artifacts, so its
+first green run could not be falsified. It was added for exactly that reason.*
+
+Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path). No `.vmfb` cache
+hazard here despite `mkSession` taking a path: on the XLA branch it compiles in-process and never
+writes one.
 -/
 
 private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
@@ -35,13 +60,16 @@ private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray 
     let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
     F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
 
-def main : IO Unit := do
+def main (args : List String) : IO Unit := do
   let net := vitVerified.toNet
   let bs := 32                                   -- the baked per-replica batch
   let replicas := 2
+  -- argv[1] overrides the DP render, so a deliberately broken one (sum-not-mean) can be run
+  -- through the identical harness. Without this the bit-exact PASS above is unfalsifiable (§4).
+  let dpPath := args.head?.getD "verified_mlir/vit_adamdp_train_step.mlir"
   IO.println "ViT data-parallel gate — duplicated batch"
   IO.println s!"  single : verified_mlir/vit_adam_train_step.mlir   (bs {bs})"
-  IO.println s!"  DP     : verified_mlir/vit_adamdp_train_step.mlir ({replicas} replicas, \
+  IO.println s!"  DP     : {dpPath} ({replicas} replicas, \
 global {bs * replicas} = the same {bs} examples twice)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), no BN, \
 backend {← IreeSession.backendName}"
@@ -72,7 +100,7 @@ backend {← IreeSession.backendName}"
   let o1 ← IreeSession.mlpTrainStepV s1 "m.vit_adam_train_step" x1 pbuf shapes y1
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
-  let s2 ← mkSession "verified_mlir/vit_adamdp_train_step.mlir" ".lake/build/vit_dp_b.vmfb"
+  let s2 ← mkSession dpPath ".lake/build/vit_dp_b.vmfb"
   let o2 ← IreeSession.mlpTrainStepVDP s2 "m.vit_adamdp_train_step" x2 pbuf shapes y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 
