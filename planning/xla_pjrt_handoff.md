@@ -2640,15 +2640,57 @@ Lean reads batch 0 labels `[26, 948, 227, 24, 582, 614, 141, 155]` and batch 1
 ⚠ `jax/` is its own lake project, so `--shim` writes under **its** build dir; `spawnShim` looks in
 `jax/.lake/build/` then `.lake/build/`, and `$SHIM_SCRIPT` overrides. `$SHIM_PYTHON` picks the venv.
 
-#### ▶ What is left for an actual ImageNet run
+#### ✅ The ImageNet net — renders, spec and driver, 2026-07-30. IT RUNS.
 
-Three `#eval`s and a spec — **no renderer or loader change**:
+`lake build resnet34-imagenet-verified-xla`. Three artifacts under slug **`resnet34in`**
+(`mom256_train_step`, `fwd`, `fwd_eval`) at `B := 256, nClasses := 1000`, heavy-ball;
+`resnet34ImagenetVerified` in `VerifiedNets.lean`; `Resnet34ImagenetCommon` + a `-xla` main.
 
-1. `resnet34_{mom256,fwd,fwd_eval}` at `B := 256, nClasses := 1000` (`R34Opt.heavyBall`). Both are
-   true renderer parameters on the train step *and* both forwards.
-2. A `VerifiedNetSpec` with `nClasses := 1000, data := .imagenet`, plus a driver target.
-3. Then: `LEAN_MLIR_BASE_LR_U=100000` (0.1, the reference rate), 30 epochs ≈ **28 h on 1 GPU / ~17 h
-   on 2** at the measured bs256 rate.
+**No renderer change was needed** — `B`, `nClasses`, `opt` and `slug` are all parameters, so this is
+three `#eval`s. (`slug` was added here, defaulting to `"resnet34"`; all nine existing artifacts
+re-render byte-identical.)
+
+⚠ **The slug is load-bearing.** Forward artifacts carry no variant in their path
+(`<slug>_fwd.mlir`), so a 1000-class forward under the `resnet34` slug would have silently
+**overwritten** the 10-class Imagenette one that five committed runs and the prefix audit depend on.
+
+**End-to-end smoke:** all three compile on XLA, val drains to **49,920 images / 28,665 MB** (the
+count the reference scores), the train stream spawns, and it steps —
+loss **8.10 → 7.86 → 7.95**, `rc=0`.
+
+#### ⛔ AND IT FOUND A REAL BUG — the label smoothing was hardcoded for K = 10
+
+**`α/K` was the literal `0.010000`** (α = 0.1, K = 10) in **two** places: the report-only `%loss`
+*and* — the one that matters — **the COTANGENT** (`.shiftB "-0.010000"`). The docstring one line
+above it already said "K = nClasses"; the literal disagreed.
+
+At `nClasses = 1000` that is **100× too large**: the smoothing term removes **10.0** of probability
+mass instead of 0.1. It is on the gradient path, so the first ImageNet render was training on a
+**different objective**, silently.
+
+**What caught it: the number was implausible.** The first smoke reported loss ≈ **87** where
+1000-class CE at init must be ≈ ln(1000) = **6.9**. Nothing else would have — no proof covers it
+(`α` is a literal in emitted text, exactly §5's carve-out class), the render compiled, the graph ran,
+and the loss *descended*, so every structural check was green. §2b's `%loss` bug is the standing
+precedent and this is the same failure one level over: **a descending loss curve is not evidence the
+objective is right.**
+
+Fixed: `alphaOverK nClasses` + a `fmt6` fixed-decimal formatter, so the emitted form is identical at
+K = 10 (**all nine artifacts byte-identical** — the fix is inert there) and correct elsewhere. After:
+loss **8.10 → 7.86 → 7.95**, which is where it belongs.
+
+*The transferable bit: when a net is re-rendered at a new `nClasses`, every emitted constant that
+depends on K is suspect. Here there was exactly one, in two places, and only one of them was on a
+gradient path.*
+
+#### ▶ What is left
+
+* **The run itself** — 30 epochs ≈ **28 h on 1 GPU / ~17 h on 2** at the measured bs256 rate. The
+  driver defaults to `mom256` and `baseLR = 0.1` (the reference rate), so it is one command.
+* **The step-level tie against the JAX reference** — the tier-1 gate: identical init + identical
+  data order, compare the first N steps' losses. The shim makes the data half possible; the init
+  half needs the two sides seeded the same. Until that runs, the pair is *plumbed*, not *tied*.
+* **The `mom` numeric gate** (still owed, above) and the `NetSpec`/`VerifiedNetSpec` `#guard`.
 
 #### What this does NOT do
 

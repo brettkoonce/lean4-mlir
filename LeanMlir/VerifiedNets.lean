@@ -325,6 +325,52 @@ def resnet34Verified : VerifiedNetSpec where
 -- Derived layout (146 params) == the audited hand-list ResNet34Layout.specs.
 #guard resnet34Verified.toSpecs == ResNet34Layout.specs
 
+/-- **ResNet-34 on full 1000-class ImageNet** — the scale/reference tier (handoff §2k).
+
+    Identical architecture to `resnet34Verified`; only the head width, the class count and the data
+    source differ. It exists to be run as a **matched pair** with `jax/MainResnetImagenet.lean`
+    (same net, same heavy-ball + coupled-L2 recipe, same tfds augmentation via the generated shim),
+    with the JAX side as the external oracle.
+
+    ⚠ **Read the claim ceiling before quoting this.** The proof-carrying tier stops at Imagenette:
+    this net has no §1a tie, no `SpecVJP` witness, and no entry in the prefix audit's hand-lists.
+    What it has is *provenance* — `pretty(provenGraph)` off the same certified renderer, `nClasses`
+    and `B` being ordinary parameters of it — plus whatever the pair agreement shows. The honest
+    sentence is **"one architecture, two independent lowerings, agreeing"**, not "proven".
+
+    `slug` is `resnet34in` so its three artifacts cannot collide with the 10-class ones — the
+    forwards carry no variant in their path and would otherwise overwrite them. -/
+def resnet34ImagenetVerified : VerifiedNetSpec where
+  name     := "ResNet-34 (ImageNet-1k)"
+  slug     := "resnet34in"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  layers   := [
+    .convBn 3 64 7 2,            -- 7×7-s2 stem → BN → relu       224→112
+    .maxPool 2 2,                --                                112→56
+    .residualStage  64  64 3 1,  -- stage1: 3 identity            @56
+    .residualStage  64 128 4 2,  -- stage2: downsample + 3        56→28
+    .residualStage 128 256 6 2,  -- stage3: downsample + 5        28→14
+    .residualStage 256 512 3 2,  -- stage4: downsample + 2        14→7
+    .globalAvgPool,
+    .dense 512 1000 ]
+  blurb := "ResNet-34 on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  -- Same 36 BN layers, same order — the architecture is unchanged above the head.
+  bnChannels := #[64,
+    64,64, 64,64, 64,64,
+    128,128,128, 128,128, 128,128, 128,128,
+    256,256,256, 256,256, 256,256, 256,256, 256,256, 256,256,
+    512,512,512, 512,512, 512,512]
+
+-- The two nets differ in EXACTLY one parameter shape — the head. Anything else moving means the
+-- ImageNet spec drifted from the Imagenette one it is supposed to be the 1000-class twin of.
+#guard resnet34ImagenetVerified.toSpecs.size == resnet34Verified.toSpecs.size
+#guard resnet34ImagenetVerified.toSpecs.pop.pop == resnet34Verified.toSpecs.pop.pop
+#guard resnet34ImagenetVerified.toSpecs.back! == (#[1000], 2)
+
 /-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 17 inverted-residual
     blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
     relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense.

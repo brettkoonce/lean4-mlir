@@ -312,13 +312,14 @@ set_option maxRecDepth 1000000 in
     This replaces the independent hand-written string emitter in `tests/TestResnet34Fwd.lean`:
     the forward the driver evals is now the same graph the train step differentiates, by
     construction rather than by inspection. -/
-def resnet34FwdFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
+def resnet34FwdFaithfulV (B nClasses : Nat) (epsStr : String)
+    (slug : String := "resnet34") : String :=
   let sigList := r34SigList nClasses
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
   let F : R34Fwd := (r34FwdChain B nClasses .train epsStr).run' 0
   "module @m {\n" ++
-  s!"  func.func @resnet34_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-34 forward: every line is pretty(verified AST node) ──\n" ++
   F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -335,13 +336,14 @@ set_option maxRecDepth 1000000 in
     hand-written render in `tests/TestResnet34Train.lean`. So the eval forward is now certified
     while the train step it partners is not; that asymmetry is the remaining §2a work, not a
     property of this render. -/
-def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) : String :=
+def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
+    (slug : String := "resnet34") : String :=
   let sigList := r34SigList nClasses ++ r34StatSigList
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
   let F : R34Fwd := (r34FwdChain B nClasses .eval epsStr).run' 0
   "module @m {\n" ++
-  s!"  func.func @resnet34_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-34 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
   F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++

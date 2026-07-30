@@ -193,6 +193,28 @@ namespace Proofs.StableHLO
 -- § The optimizer tail — proven ops per parameter, folded in signature order
 -- ════════════════════════════════════════════════════════════════
 
+/-- Fixed-6-decimal float literal, so a computed smoothing constant emits in the SAME textual form
+    the hand-written literals used and `nClasses = 10` re-renders byte-identical. -/
+private def fmt6 (x : Float) : String :=
+  let neg := x < 0.0
+  let n := ((if neg then -x else x) * 1000000.0 + 0.5).toUInt64.toNat
+  let ip := n / 1000000
+  let fp := n % 1000000
+  let fs := (toString fp).leftpad 6 '0'
+  (if neg then "-" else "") ++ toString ip ++ "." ++ fs
+
+/-- **The label-smoothing mass per class, α/K.** α = 0.1 throughout; K is `nClasses`.
+
+    ⚠ **This was hardcoded `0.010000` — correct at K = 10 and WRONG at every other K**, and it sat
+    in the COTANGENT, not just in the report-only `%loss`. At `nClasses = 1000` it made the smoothing
+    term 100× too large: it removes 10.0 of probability mass instead of 0.1, i.e. a different
+    objective, silently. Caught 2026-07-30 by the first ImageNet smoke run reporting loss ≈ 87 where
+    1000-class CE at init must be ≈ ln(1000) = 6.9 — the number was implausible, and that is the only
+    reason it surfaced. Nothing in the repo's proofs covers it: `α` is a *literal in emitted text*,
+    which is exactly the carve-out class §5 says needs its own numeric check, and §2b's `%loss` bug
+    is the standing precedent for it going wrong unnoticed. -/
+private def alphaOverK (nClasses : Nat) : String := fmt6 (0.1 / nClasses.toFloat)
+
 /-- Which optimizer tail this render emits. The forward, the backward, the 146 un-fused parameter
     gradients and the whole packed signature are **shared** — only the per-parameter tail differs,
     the `CifarOpt` shape from `CnnRender` (handoff §2i) brought to R34.
@@ -312,7 +334,7 @@ set_option maxRecDepth 4000000 in
     unchanged. Parameter ORDER comes from `r34SigList`, the same single source the per-example
     render and both forwards use, so the arity/order contract cannot drift between them. -/
 def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
-    (replicas : Nat := 1) (opt : R34Opt := .adamw) : String :=
+    (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet34") : String :=
   let optLabel : String := match opt with
     | .adamw     => "AdamW"
     | .heavyBall => "heavy-ball momentum + coupled L2"
@@ -361,7 +383,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
     let (cLsa, nLsa) ← pretty B (.scaleB "0.100000" 0 (.operand "%onehot" zNCb))
     let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
-    let (cD2,  nD2)  ← pretty B (.shiftB "-0.010000" 0 (.operand nD1 zNCb))
+    let (cD2,  nD2)  ← pretty B (.shiftB s!"-{alphaOverK nClasses}" 0 (.operand nD1 zNCb))
     let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
     -- ═══ head backward + dense grads ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B) (.denseRowBack (rows := 1) (a := 512) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
@@ -466,7 +488,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
       s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
       s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<0.010000> : {ty [B]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses}> : {ty [B]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
       s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
       s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
@@ -517,7 +539,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   -- refuses the call ("entry mismatch") — which is exactly what it did the first time this was
   -- rendered. `r34AdamVariant` is the single source for the name, the artifact path, and
   -- `LEAN_MLIR_VARIANT`.
-  let fname := s!"resnet34_{r34AdamVariant B replicas opt}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -630,6 +652,31 @@ end Proofs.StableHLO
 -- construction, reused. Until it is run, say "rendered", not "certified".
 #eval IO.FS.writeFile "verified_mlir/resnet34_mom_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" 1 .heavyBall)
+
+-- ══ ImageNet-1k: the three artifacts the reference-pairing run needs (handoff §2k) ══
+--
+-- `B := 256, nClasses := 1000`, heavy-ball — i.e. the `jax/MainResnetImagenet.lean` recipe, on the
+-- certified renderer. **No renderer change was needed for any of this**: `B`, `nClasses`, `opt` and
+-- `slug` are all parameters, which is the whole reason this is three `#eval`s and not a project.
+--
+-- ⚠ **The slug is `resnet34in`, NOT `resnet34`, and that is load-bearing.** The forward artifacts
+-- carry no variant in their path (`<slug>_fwd.mlir`), so rendering a 1000-class forward under the
+-- `resnet34` slug would OVERWRITE the 10-class Imagenette one that five committed runs and the
+-- prefix audit depend on — silently, and with a graph of a different arity. A distinct slug is what
+-- keeps the two nets' artifacts disjoint; `slug` defaults to "resnet34" so every existing render is
+-- byte-identical (checked).
+--
+-- Batch 256 on the forwards too, matching the shim's val batch: 195 batches × 256 = 49,920 images
+-- after tfds `drop_remainder`, which is the count the JAX reference reports scoring.
+#eval IO.FS.writeFile "verified_mlir/resnet34in_mom256_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 256 1000 "1.0e-05" 1
+    Proofs.StableHLO.R34Opt.heavyBall "resnet34in")
+
+#eval IO.FS.writeFile "verified_mlir/resnet34in_fwd.mlir"
+  (Proofs.StableHLO.resnet34FwdFaithfulV 256 1000 "1.0e-05" "resnet34in")
+
+#eval IO.FS.writeFile "verified_mlir/resnet34in_fwd_eval.mlir"
+  (Proofs.StableHLO.resnet34FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet34in")
 
 -- Pin the seven literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed, this fails at `lake build` instead of at run time as an "entry mismatch".

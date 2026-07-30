@@ -1433,6 +1433,23 @@ lean_exe «resnet34-verified-adam-xla» where
   root := `apps.imagenette.MainResnet34VerifiedAdamXla
   moreLinkArgs := xlaLink
 
+/-- Shared body of the ResNet-34 / **full ImageNet-1k** trainer (handoff §2k). Its own `lean_lib`
+    for the same reason `Resnet34AdamCommon` has one: lake needs a module for a root shared by an
+    executable, and a `Common` without one silently fails to build for the second consumer. -/
+lean_lib «Resnet34ImagenetCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.Resnet34ImagenetCommon]
+
+/-- **ResNet-34 on full 1000-class ImageNet** — the scale/reference tier. Same certified renderer at
+    `nClasses := 1000, B := 256`, heavy-ball + coupled L2 (the `jax/MainResnetImagenet.lean` recipe),
+    fed by the generated tfds shim so both paths see identical augmented batches.
+
+    Needs the shim emitted first: `(cd jax && lake exe resnet34-imagenet default --shim)`.
+    ⚠ Does NOT move the verification tier — proofs stop at Imagenette (§2k). -/
+lean_exe «resnet34-imagenet-verified-xla» where
+  root := `apps.imagenette.MainResnet34ImagenetXla
+  moreLinkArgs := xlaLink
+
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
     textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it
