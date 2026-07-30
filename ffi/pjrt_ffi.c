@@ -99,6 +99,72 @@ static int timing_interval(void) {
   return n;
 }
 
+// ─── pinned d2h staging (§2d.3, the bandwidth leg) ─────────────────────────
+//
+// OPT-IN via $PJRT_FFI_PINNED=1. Measured: d2h moves bytes at ~11 GB/s while
+// h2d hits ~26 GB/s (PCIe 4.0 x16 line rate) on identical buffers. The standard
+// explanation is that a d2h into PAGEABLE host memory — and these destinations
+// are Lean-owned `ByteArray` slices — cannot be DMA'd into directly, so the
+// runtime bounces through a pinned staging buffer and then memcpys out. Serial,
+// that predicts 1/(1/26 + 1/15.5) = 9.7 GB/s against the 11.0 measured, where
+// 15.5 GB/s is this host's single-threaded memcpy at 260 MB.
+//
+// ⚠⚠ MEASURED 2026-07-30, AND THE HYPOTHESIS ABOVE IS **REFUTED**. Keep this
+// flag OFF. DMA-ing into an arena that is definitely pinned is **no faster**
+// than into Lean's pageable ByteArray — R34 bs32, three runs each: pageable
+// 62.3 / 60.7 / 61.6 ms against pinned 59.3 / 64.2 / 62.0 ms, overlapping
+// distributions. If a staging bounce were the mechanism, the pinned DMA should
+// have hit line rate (~10 ms for 260 MB) and it does not move at all. So d2h's
+// ~11 GB/s marginal bandwidth is simply what this path costs; it is NOT a
+// pageable-destination artefact, and pinning does not unlock it.
+//
+// Turning it on is a **17% REGRESSION** (161 -> 189 ms/step): the explicit
+// memcpy out of the arena costs ~30.5 ms and buys no DMA gain. The route to
+// d2h is therefore to have FEWER BUFFERS, not faster ones — i.e. device
+// residency (§2d.3), which deletes them.
+//
+// It is kept, opt-in and off by default, as the falsification instrument: this
+// is a hardware/driver-specific negative, and on a box with a different PCIe or
+// ROCm setup pinning might well help. Re-checking costs two minutes with
+// PJRT_FFI_PINNED=1 PJRT_FFI_TIMING=10 and beats re-deriving the argument.
+//
+// PJRT exposes no pinned-host allocator, so `hipHostMalloc` is dlsym'd out of
+// the ROCm runtime — the same dlopen-don't-link discipline the plugin uses.
+
+static void* (*g_hip_host_malloc)(void**, size_t, unsigned int) = NULL;
+static void* g_pin = NULL;
+static size_t g_pin_sz = 0;
+
+static int pinned_enabled(void) {
+  static int t = -1;
+  if (t < 0) { const char* e = getenv("PJRT_FFI_PINNED"); t = (e && atoi(e)) ? 1 : 0; }
+  return t;
+}
+
+// Returns a pinned arena of at least `n` bytes, or NULL if HIP is unavailable
+// (in which case the caller silently stays on the direct path — this is an
+// optimisation, never a correctness requirement).
+static void* pin_arena(size_t n) {
+  if (g_pin && g_pin_sz >= n) return g_pin;
+  if (!g_hip_host_malloc) {
+    void* h = dlopen("libamdhip64.so.7", RTLD_LAZY);
+    if (!h) h = dlopen("libamdhip64.so", RTLD_LAZY);
+    if (!h) { fprintf(stderr, "[pjrt_ffi] PJRT_FFI_PINNED: no libamdhip64\n"); return NULL; }
+    *(void**)&g_hip_host_malloc = dlsym(h, "hipHostMalloc");
+    if (!g_hip_host_malloc) {
+      fprintf(stderr, "[pjrt_ffi] PJRT_FFI_PINNED: no hipHostMalloc\n"); return NULL;
+    }
+  }
+  void* p = NULL;
+  if (g_hip_host_malloc(&p, n, 0u) != NULL || !p) {   // hipSuccess == 0
+    fprintf(stderr, "[pjrt_ffi] PJRT_FFI_PINNED: hipHostMalloc(%zu) failed\n", n);
+    return NULL;
+  }
+  g_pin = p; g_pin_sz = n;
+  fprintf(stderr, "[pjrt_ffi] pinned d2h arena: %.1f MB\n", n / 1048576.0);
+  return g_pin;
+}
+
 static double now_ms(void) {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -112,7 +178,7 @@ typedef struct {
   int window;
   double h2d_issue_param, h2d_issue_head, h2d_issue_tail, h2d_await;
   double exec, exec_await;
-  double d2h_issue, d2h_await;
+  double d2h_issue, d2h_await, d2h_copy;
   double h2d_param_mb, h2d_head_mb, h2d_tail_mb, d2h_mb;
 } tacct_t;
 
@@ -145,23 +211,29 @@ static void acct_report(tacct_t* a) {
   double param_frac = mb_total > 0 ? a->h2d_param_mb / mb_total : 0;
   double param_h2d = h2d_param + a->h2d_await * param_frac;
   double step = (h2d_issue + a->h2d_await + a->exec + a->exec_await
-                 + a->d2h_issue + a->d2h_await) / n;
-  double param_rt = (param_h2d + a->d2h_issue + a->d2h_await) / n;  // d2h is all params
+                 + a->d2h_issue + a->d2h_await + a->d2h_copy) / n;
+  double param_rt = (param_h2d + a->d2h_issue + a->d2h_await + a->d2h_copy) / n;
   fprintf(stderr,
       "[pjrt_ffi:timing] @%s  window %d, steps %lld..%lld  step=%.1f ms\n"
       "    h2d   issue param %.1f / head %.1f / tail %.1f ms   await %.1f ms   "
       "(%.0f + %.0f + %.0f MB)\n"
       "    COMPUTE %.1f ms (launch %.1f + device %.1f)\n"
-      "    d2h   issue %.1f ms  await %.1f ms   (%.0f MB)\n"
+      // ⚠ the GB/s here is bytes/await, so it CONFLATES the per-buffer term with
+      // the byte term and reads far below the marginal bandwidth. Effective, not
+      // marginal — separate the two by fitting across nets with different
+      // buffer-count/byte ratios, as §2d.3 does.
+      "    d2h   issue %.1f ms  await(DMA) %.1f ms = %.1f GB/s eff   memcpy %.1f ms   (%.0f MB)\n"
       "    >> PARAM round trip %.1f ms = %.1f%% of the step "
       "(h2d %.1f + d2h %.1f), link %.1f GB/s\n",
       a->entry, ++a->window, a->done + 1, a->done + a->calls, step,
       h2d_param / n, a->h2d_issue_head / n, a->h2d_issue_tail / n, a->h2d_await / n,
       a->h2d_param_mb / n, a->h2d_head_mb / n, a->h2d_tail_mb / n,
       (a->exec + a->exec_await) / n, a->exec / n, a->exec_await / n,
-      a->d2h_issue / n, a->d2h_await / n, a->d2h_mb / n,
+      a->d2h_issue / n, a->d2h_await / n,
+      a->d2h_await > 0 ? (a->d2h_mb / a->d2h_await) * 1.048576 : 0.0,
+      a->d2h_copy / n, a->d2h_mb / n,
       param_rt, step > 0 ? 100.0 * param_rt / step : 0.0,
-      param_h2d / n, (a->d2h_issue + a->d2h_await) / n,
+      param_h2d / n, (a->d2h_issue + a->d2h_await + a->d2h_copy) / n,
       // MiB per ms -> GB/s
       param_rt > 0 ? ((a->h2d_param_mb + a->d2h_mb) / n / param_rt) * 1.048576 : 0.0);
 
@@ -598,7 +670,20 @@ int iree_ffi_invoke_f32(
   {
     PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_outputs, sizeof(*d2h));
     int failed = 0;
+
+    // Optional pinned staging (§2d.3). One arena sized to the whole output set,
+    // allocated once; each output DMAs to its own offset, and the memcpy out
+    // happens after ALL the transfers are awaited so the two legs stay separable.
+    // If the arena cannot be had, `pin` stays NULL and this is the direct path.
+    char* pin = NULL;
+    size_t pin_need = 0;
+    if (pinned_enabled()) {
+      for (int i = 0; i < n_outputs; i++) pin_need += (size_t)output_totals[i] * sizeof(float);
+      pin = (char*)pin_arena(pin_need);
+    }
+
     double td = acct ? now_ms() : 0;
+    size_t pin_off = 0;
     for (int i = 0; i < n_outputs; i++) {
       size_t want = (size_t)output_totals[i] * sizeof(float);
       if (acct) acct->d2h_mb += want / 1048576.0;
@@ -620,15 +705,25 @@ int iree_ffi_invoke_f32(
       PJRT_Buffer_ToHostBuffer_Args a = {0};
       a.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
       a.src = out[i];
-      a.dst = output_data[i];
+      a.dst = pin ? (void*)(pin + pin_off) : (void*)output_data[i];
       a.dst_size = want;
       if (check(g_api->PJRT_Buffer_ToHostBuffer(&a), "ToHostBuffer")) { failed = 1; break; }
       d2h[i] = a.event;
+      pin_off += want;
     }
     if (acct) { acct->d2h_issue += now_ms() - td; td = now_ms(); }
     for (int i = 0; i < n_outputs; i++)
       if (d2h[i] && await_event(d2h[i], "d2h")) failed = 1;
-    if (acct) acct->d2h_await += now_ms() - td;
+    if (acct) { acct->d2h_await += now_ms() - td; td = now_ms(); }
+    if (pin && !failed) {
+      size_t off2 = 0;
+      for (int i = 0; i < n_outputs; i++) {
+        size_t want = (size_t)output_totals[i] * sizeof(float);
+        memcpy(output_data[i], pin + off2, want);
+        off2 += want;
+      }
+    }
+    if (acct && pin) acct->d2h_copy += now_ms() - td;
     free(d2h);
     if (failed) { rc = 4; goto cleanup; }
   }

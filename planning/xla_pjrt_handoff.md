@@ -476,7 +476,8 @@ lake build efficientnet-dp-bench && PJRT_REPLICAS=2 .lake/build/bin/efficientnet
 ```
 
 Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`, `PJRT_FFI_TIMING`
-(§2d.3 — per-phase transfer accounting, opt-in and inert when unset),
+(§2d.3 — per-phase transfer accounting, opt-in and inert when unset), `PJRT_FFI_PINNED`
+(§2d.3 — **measured and refuted; leave it off**, it is a 17% regression),
 `LEAN_MLIR_REPLICAS`, `LEAN_MLIR_SKIP_EVAL`, `LEAN_MLIR_G2_STEPS`, `LEAN_MLIR_DUMP_PARAMS`,
 `LEAN_MLIR_PERTURB_R`.
 
@@ -3102,13 +3103,52 @@ Imagenette-throughput item — it is a **`lake run mnist-xla` / `cifar-xla` inte
 those are the demo groups a reader actually sits and watches. Weigh that when deciding the 3-4
 sessions: the case is stronger than §2d.3 assumed *and* it points somewhere else.
 
-**A cheaper thing to try FIRST, which this measurement makes visible and which was not on the list:**
-since the cost is per-buffer, anything that cuts the buffer count cuts it, and **d2h is where 3/4 of
-the per-buffer cost is** (81 µs vs 26). Worth an hour before committing to phase 1: find out *why*
-d2h costs 3× h2d per buffer. Unpinned destination memory is the standard explanation (a d2h into
-pageable host memory bounces through a staging buffer), and the destinations here are Lean-owned
-`ByteArray` slices. If a pinned staging buffer recovers most of the 81 µs, that is ~50 lines against
-~500 and it helps the copying path everyone still uses.
+#### ⛔ The pinned-d2h idea — proposed here, then MEASURED AND REFUTED the same day
+
+**This section briefly recommended pinning as "a cheaper thing to try FIRST, ~50 lines against ~500."
+Do not do it.** The recommendation rested on a mechanism that turned out to be wrong, and the
+retraction is worth more than the proposal was.
+
+*The argument, as made.* d2h moves bytes at a fitted ~11 GB/s while h2d hits ~26 (PCIe 4.0 x16 line
+rate) on identical buffers. A d2h into **pageable** host memory — and these destinations are
+Lean-owned `ByteArray` slices — cannot be DMA'd into directly, so the runtime must bounce through a
+pinned staging buffer and then memcpy out. In series that predicts
+`1/(1/26 + 1/15.5) = 9.7 GB/s` against the 11.0 measured, where 15.5 GB/s is this host's
+single-threaded memcpy at 260 MB (measured). **Two independent numbers agreeing to 13% — and it was
+still wrong.**
+
+*The test.* `PJRT_FFI_PINNED=1` (`ffi/pjrt_ffi.c`) DMAs into an arena allocated with `hipHostMalloc`,
+i.e. one that is definitely pinned, then memcpys out — which separates the DMA leg from the copy leg.
+If the bounce were the mechanism, the DMA leg alone should reach line rate (~10 ms for 260 MB).
+
+| R34 bs32, d2h await (the DMA leg) | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| pageable destination (default) | 62.3 | 60.7 | 61.6 ms |
+| **pinned destination** | 59.3 | 64.2 | **62.0 ms** |
+
+**Overlapping distributions. Pinning does nothing.** So d2h's ~11 GB/s is simply what this path
+costs — not a pageable-destination artefact — and it is not addressable this way. Turning the flag on
+is a **17% regression** (161 → 189 ms/step): the explicit memcpy costs ~30.5 ms and buys no DMA gain.
+
+**⇒ The route to d2h is FEWER BUFFERS, not faster ones — which is device residency, and there is no
+cheaper partial win to take first.** The per-buffer term was always the larger leg anyway: of R34's
+64 ms d2h, 41.6 is per-buffer and 24.8 is bytes; for cifar8-bn it is 2.05 vs 0.05, i.e. **the two
+nets that gain most from residency are ~100% per-buffer**, where pinning could not have helped even
+if the mechanism had been right. Best case across the four nets was 12% (the MNIST MLP) and typically
+1-7%.
+
+The flag is kept, **off by default**, as the falsification instrument rather than as a feature: this
+is a hardware/driver-specific negative, and on a box with a different PCIe or ROCm setup pinning may
+well help. Re-checking is two minutes (`PJRT_FFI_PINNED=1 PJRT_FFI_TIMING=10`) and beats re-deriving
+the argument from scratch — which is exactly what this section did once already.
+
+⚠ **The lesson, and it is this thread's own, committed against me this time.** I inferred a mechanism
+from a single arithmetic coincidence (9.7 predicted vs 11.0 measured) and wrote it into the plan as
+a recommendation. That is the same error as §2j's retracted "thermal" story for the conv probe and
+the retracted `MIOPEN_DEBUG_CONV_GEMM=0` "fix" — **one agreement is not a mechanism**, and a
+prediction matching to 13% is *weaker* evidence than it feels, because plausible wrong models land
+there routinely. The measurement that refuted it took twenty minutes; acting on the proposal would
+have cost a session and shipped a regression.
 
 **How to re-run it** — the accounting is opt-in and costs nothing when off (control: `PROBE` 161 vs
 160 ms at bs32, 195 vs 197 DP, i.e. inside noise):
