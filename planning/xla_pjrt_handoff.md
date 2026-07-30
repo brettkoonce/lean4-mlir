@@ -72,9 +72,9 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 audit reports one writer per artifact. There is no "next AdamW render".
 
 **What is left in this file is §2d's value-ordered list**, none of it on the AdamW track: rung 4
-(the FPN detector), **device-resident parameters** (now **four** independent multi-GPU measurements
-point at it — §2c's 1.46× on R34, §2e-ter's 13–16% per-step DP overhead on EfficientNet, and
-mnv2's and ConvNeXt's end-to-end 1.67×/1.68×), and the executable cache. Read §2d before picking one.
+(the FPN detector), **device-resident parameters** — whose case is now **measured, not estimated**
+(§2d.3, 2026-07-30: the parameter round trip is **55% of a bs32 step**, projected **~2.2×**, and the
+cost is per-buffer rather than per-byte) — and the executable cache. Read §2d before picking one.
 
 **The DATA-PARALLEL scorecard is 4 of 5 as of 2026-07-29 — §2h-quater.** ConvNeXt was the last large
 net with no DP path at all (its renderer took no `replicas` and emitted no collective); it now has
@@ -475,7 +475,8 @@ LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
 lake build efficientnet-dp-bench && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-bench 30
 ```
 
-Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`,
+Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`, `PJRT_FFI_TIMING`
+(§2d.3 — per-phase transfer accounting, opt-in and inert when unset),
 `LEAN_MLIR_REPLICAS`, `LEAN_MLIR_SKIP_EVAL`, `LEAN_MLIR_G2_STEPS`, `LEAN_MLIR_DUMP_PARAMS`,
 `LEAN_MLIR_PERTURB_R`.
 
@@ -2784,13 +2785,16 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
 1d. **`lake run benchmark-xla` — §2j.** ▶ the next thread. Small, but it has a silent-wrong-number
    trap in it (the reference constants are IREE's), so read §2j before writing any of it.
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
-3. **Device-resident parameters — ▶ NOW SCOPED IN §2d.3 (2026-07-30). Read that before starting:
-   it has the phase breakdown (~3-4 sessions), the design decision that protects every
-   cross-backend gate, and a one-hour measurement to run FIRST.** Two rounds of transfer work are
+3. **Device-resident parameters — ▶ SCOPED IN §2d.3, and its prescribed first measurement is now
+   DONE (2026-07-30). Read §2d.3 before starting.** Two rounds of transfer work are
    already done (batching: 256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains
-   is smaller than it looks — see §3 — but the payoff is **multi-GPU only**; at bs256 on one GPU it
-   is worth ~nothing (§2d.3). **FIVE independent multi-GPU measurements now point here** (§2c 1.46×
-   on R34,
+   is smaller than it looks — see §3. ⚠ **"the payoff is multi-GPU only; at bs256 on one GPU it is
+   worth ~nothing" was this item's headline and it is REFUTED by measurement**: the param round trip
+   is **55% of a bs32 step on ONE GPU** (88 ms of 160) and the prize is *small-batch*, not
+   multi-GPU — ~2.2× at bs32 on one GPU and on two, 1.15× at bs256. The cost is dominated by
+   **per-buffer overhead** (513-887 param buffers/step), not bandwidth, so it scales with parameter
+   *count* and is roughly uniform across nets. **FIVE independent multi-GPU measurements also point
+   here** (§2c 1.46× on R34,
    §2e-ter's measured 13–16% per-step DP overhead on EfficientNet, mnv2's **1.67×**, ConvNeXt's
    **1.68×** and **ViT's 1.62×** end-to-end — four architecturally unlike nets landing on the same
    ratio, and the fourth is a TRANSFORMER WITH NO CONVOLUTIONAL BACKBONE, which is what makes the
@@ -2974,6 +2978,111 @@ Opt-in also hands you the gate for free: **residency must be BIT-IDENTICAL to th
 N steps**, same seed, same data. That is the same known-answer shape as every other gate in this
 file, it is cheap, and it is trivially verified to fail (perturb one retained buffer).
 
+#### ✅ THE MEASUREMENT IS DONE — 2026-07-30. The estimate below was **4× low, and low for the
+#### wrong reason.** Read this before the retired arithmetic that follows it.
+
+Run with `PJRT_FFI_TIMING=<report interval>`, which is the opt-in accounting added to
+`ffi/pjrt_ffi.c` for exactly this (see "how to re-run it" below). Steady-state windows, synthetic
+inputs so the loader is out of it, `LEAN_MLIR_SKIP_EVAL=1`:
+
+| config | step | h2d params | compute | d2h params | **param round trip** | **share** |
+|---|---|---|---|---|---|---|
+| **R34, 1 GPU, bs32** | 160 ms | 23.5 ms (260 MB) | 63 ms | 64.6 ms (260 MB) | **88 ms** | **55%** |
+| **R34, 1 GPU, bs256** | 709 ms | 27.0 ms | 569 ms | 66.1 ms | **93 ms** | **13%** |
+| **R34, 2 GPU, bs32×2** | 196 ms | 40.8 ms (519 MB) | 72 ms | 65.1 ms | **106 ms** | **54%** |
+| **R34, 2 GPU, bs128×2** | 460 ms | 43.8 ms (519 MB) | 296 ms | 71.4 ms | **116 ms** | **28%** |
+| **EfficientNet, 1 GPU, bs32** | 215 ms | 25.2 ms (**46 MB**) | 106 ms | 75.9 ms (46 MB) | **101 ms** | **49%** |
+
+*(`step` is the Lean-side `PROBE` median; the shim's own phase sum runs ~6% under it, the difference
+being host-side batch assembly. Shares are against the PROBE number, i.e. the conservative one.)*
+
+**▶ The cost is PER-BUFFER, not per-byte — that is the whole finding.** EfficientNet moves **5.6×
+less** parameter data than R34 (46 MB vs 260 MB) and pays **the same ~100 ms**. Two nets, two
+unknowns, solved exactly:
+
+> **h2d ≈ 26 µs/buffer + 26 GB/s.  d2h ≈ 81 µs/buffer + 11 GB/s.**
+
+§2d.3's assumed "~25 GB/s real PCIe 4.0 x16" was **right**. What the estimate missed is the fixed
+per-buffer term, and these graphs hand the shim **513 (R34) to 887 (EfficientNet) separate
+parameter buffers** every step, so 13-23 ms of pure per-call overhead lands on each direction before
+a byte moves. That is also why d2h costs **2.8× h2d for identical bytes** — 81 µs against 26 µs per
+buffer. ⚠ A two-point fit of two unknowns is *exactly determined, not validated*; the DP and bs256
+cells are consistent with it but were not used to fit it. A third net would test it.
+
+**What that changes, in order of how much it matters:**
+
+1. **The prize is NOT multi-GPU only** — that claim is retired. It is **small-batch**, on any
+   replica count: **~2.2× at bs32** on one GPU *and* on two, falling to 1.15× at bs256. The round
+   trip is near-constant (88-116 ms) because it is set by parameter *count* and replica count, not
+   by batch; the share therefore collapses as compute per step grows.
+2. **It compounds with §2d.2's accuracy finding.** Accuracy tracks step count (295 steps/epoch at
+   bs32 → 90.39%, 36 → 86.98%), so **bs32 is the configuration you actually want to run**, and bs32
+   is exactly where residency is worth 2.2×. The two findings point the same way, which the "large
+   batch is the answer" reading of §2d.1 did not.
+3. **The payoff scales with parameter COUNT, not parameter bytes.** So it is roughly uniform across
+   nets rather than concentrated in the param-heavy ones — EfficientNet, the *lightest* `[θ|m|v]` in
+   the set, gains **1.9×**.
+4. **DP efficiency barely moves.** Today 160→196 ms for 2× the images = **1.63×**; after residency
+   ~72→~83 ms = **~1.73×**. Both paths get ~2.2× faster, so the *ratio* is nearly unchanged. §2e-ter
+   was right that the replica-2 param push dominates the DP *overhead* (17 of the 27 ms added by
+   going to 2 GPUs at bs32) — but removing it mostly makes one GPU faster too.
+
+**Projected after residency** (param round trip → ~0; per-step host traffic left is x at ~1 buffer /
+18 MB, plus `%loss`/bnstat; eval and checkpoint become per-*epoch* reads):
+
+| config | now | projected | gain |
+|---|---|---|---|
+| R34 1 GPU bs32 | 160 ms | ~72 ms | **2.2×** |
+| R34 2 GPU bs32×2 | 196 ms | ~90 ms | **2.2×** |
+| R34 1 GPU bs256 | 709 ms | ~616 ms | 1.15× |
+| R34 2 GPU bs128×2 | 460 ms | ~344 ms | 1.34× |
+| EfficientNet 1 GPU bs32 | 215 ms | ~114 ms | **1.9×** |
+
+**Verdict: the 3-4 sessions are justified**, and on a stronger and broader case than the section was
+written on. ⚠ These are projections from a measured subtraction, not results — the gate in "the
+design decision" above (residency bit-identical to the copying path over N steps) is what turns them
+into results.
+
+**A cheaper thing to try FIRST, which this measurement makes visible and which was not on the list:**
+since the cost is per-buffer, anything that cuts the buffer count cuts it, and **d2h is where 3/4 of
+the per-buffer cost is** (81 µs vs 26). Worth an hour before committing to phase 1: find out *why*
+d2h costs 3× h2d per buffer. Unpinned destination memory is the standard explanation (a d2h into
+pageable host memory bounces through a staging buffer), and the destinations here are Lean-owned
+`ByteArray` slices. If a pinned staging buffer recovers most of the 81 µs, that is ~50 lines against
+~500 and it helps the copying path everyone still uses.
+
+**How to re-run it** — the accounting is opt-in and costs nothing when off (control: `PROBE` 161 vs
+160 ms at bs32, 195 vs 197 DP, i.e. inside noise):
+
+```bash
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+HIP_VISIBLE_DEVICES=0 LEAN_MLIR_BENCH_SYNTH=1 LEAN_MLIR_SKIP_EVAL=1 \
+  LEAN_MLIR_MAX_STEPS=48 PJRT_FFI_TIMING=10 \
+  .lake/build/bin/resnet34-verified-adam-xla data
+#   ^ windows of 10 steps, each RESET after reporting — never cumulative, or the ~2 s first compile
+#     and the cold warmup steps ride in every later number. Window 1 is warmup; read window 2+.
+#   ^ LEAN_MLIR_MAX_STEPS exits via `return ()` BEFORE any checkpoint write, so it cannot leave a
+#     stale marker. It also caps steps WITHIN an epoch, so keep it under nTrain/(bs*replicas)
+#     (bs256 → 36, bs128×2 → 36) or the probe never fires and you get an 80-epoch run.
+```
+
+⚠ **Two traps this run hit, both already documented in §4, both still worth the reminder**: the
+EfficientNet and `adamdp`/`adamdp128` checkpoints were at `epoch=80`, so the first attempt at each
+resumed past the end and did **nothing** while printing a clean `done` — and the timing report never
+appeared, which is the only reason it was caught. Move `.lake/build/<slug>_<variant>_ckpt_xla.bin{,.epoch}`
+aside first.
+
+⚠ **`Execute` is ASYNCHRONOUS, and ignoring that gives a 97% answer.** The first version of this
+measurement timed `Execute` at 4 ms and the d2h await at 123 ms, and read out "the param round trip
+is 94% of the step" — wrong, because the GPU compute was landing inside the d2h await. The shim now
+requests `device_complete_events` and waits on it **when timing only**, which splits compute from
+transfer and costs nothing (this step's d2h depends on this step's compute, so there was nothing to
+overlap). Any future phase timing on this path has to do the same.
+
+---
+
+*The original estimate follows, kept because the measurement is calibration against it.*
+
 #### Payoff — and it is NOT uniform, which §10.6's "worth doing alone" oversells
 
 R34's `[θ|m|v]` is 272 MB ⇒ 544 MB per step. At ~25 GB/s real PCIe 4.0 x16 that is ~22 ms, and the
@@ -2996,13 +3105,20 @@ slice of compute), which is the honest version of the retired "quadruples at 4 G
 at only **2.1×** one 7900 XTX for R34. So the absolute ceiling on the box where this matters most is
 modest. Also note the easy transfer wins are already taken: 256 → 205 → 162 ms.
 
-#### ▶ Do this ONE-HOUR measurement before writing any of it
+*(Everything in the three paragraphs above except "the easy transfer wins are already taken" is
+**superseded**: the bandwidth figure was right, the conclusion drawn from it was not.)*
+
+#### ▶ Do this ONE-HOUR measurement before writing any of it ✅ DONE 2026-07-30
 
 Instrument the existing shim to time the parameter h2d/d2h **specifically** (not the whole step), on
 1 and 2 GPUs, at bs32 and bs256. That converts the 13% / 3% / 15% arithmetic above from an estimate
 into a measurement and says whether the 3-4 sessions are justified. This is the `ladder.md` §10.5
 "measure before building" move, and **it has never been done for this item** — §10.5's own
 prescribed first measurement was the bs256 re-render, which §2d.1 completed.
+
+*It was worth the hour: it did not merely confirm the estimate at higher precision, it inverted the
+conclusion. The bs256 cell — the one the estimate called "~nothing" at 3% — is 13%, and the bs32
+cell it called 13% is 55%.*
 
 ---
 
@@ -3194,6 +3310,15 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   starting something long.
   (Also why `pgrep -f <binary>` reads 2 when nothing is running: it matches the invoking shell's own
   command line. Check `ps -eo comm` instead — the pkill self-kill trap, one level over.)
+- **`LEAN_MLIR_BENCH_SYNTH` was sized at the PER-REPLICA batch, so every DP run read past the end of
+  it.** Found 2026-07-30 (§2d.3) and fixed in `VerifiedTrain.lean`: `mkSynthData` allocated `bs`
+  images while a DP step consumes `bs * replicas`. At bs32×2 the overread was silent — it produced
+  plausible timings for months; at bs128×2 it aborted with `free(): invalid next size (normal)`
+  *before the first invoke*, which is what exposed it. The fix reads `replicas` before the data is
+  built and sizes it at `bs * replicas`. Re-measured after: the bs32×2 numbers moved by ~1 ms, so
+  nothing measured through it needs redoing — **but that is luck, not design**. The lesson is the
+  familiar one in a new place: the synthetic path exists to remove a variable from a measurement,
+  which makes it exactly the code least likely to be looked at when the measurement comes out clean.
 - **`git stash -u` here would write ~17 GB** (`runs/` 5 GB, `figures/` 12 GB) into `.git`. Stash
   tracked modifications only; use `.gitignore` for the rest.
 - Rendering at a non-default batch breaks eval unless the forward graph is re-rendered too — that

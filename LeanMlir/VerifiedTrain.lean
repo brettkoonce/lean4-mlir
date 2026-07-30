@@ -405,8 +405,15 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
                 s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
     else pure fwdSess
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
+  -- ⚠ `mkSynthData` must be sized at the GLOBAL batch, not `bs`. Under data
+  -- parallelism one step consumes `bs * replicas` images (the shim shards them),
+  -- so a `bs`-sized synthetic buffer is read past its end every step: silent at
+  -- bs32×2, a `free(): invalid next size` abort at bs128×2. Found 2026-07-30
+  -- while measuring the parameter transfer share (handoff §2d.3). This is why
+  -- `replicas` is read here and not with the other knobs below.
+  let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    if synth then mkSynthData net.data d0 bs else loadData net.data d0 dataDir
+    if synth then mkSynthData net.data d0 (bs * replicas) else loadData net.data d0 dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   -- LEAN_MLIR_G2_STEPS caps batches per epoch for gate G2. Deliberately NOT
   -- LEAN_MLIR_MAX_STEPS: that name already means "time a step window then exit"
@@ -420,7 +427,6 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- batch differed from the forward's baked one (bs256, bs128-DP); `evalBs` below removes that,
   -- so it is now just "don't spend the time".
   let skipEval := (← IO.getEnv "LEAN_MLIR_SKIP_EVAL").isSome
-  let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
   let gbs := bs * replicas
   let nbFull := nTrain / gbs
   let nb := match (← IO.getEnv "LEAN_MLIR_G2_STEPS").bind (·.toNat?) with

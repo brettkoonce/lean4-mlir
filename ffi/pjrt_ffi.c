@@ -68,6 +68,145 @@ static int trace_enabled(void) {
   return t;
 }
 
+// ─── transfer accounting (handoff §2d.3) ───────────────────────────────────
+//
+// OPT-IN via $PJRT_FFI_TIMING=<report interval in steps>; zero cost and zero
+// behaviour change when unset, which is the point — every cross-backend gate in
+// the repo depends on IREE and XLA running the same code path, so this must not
+// become a second path.
+//
+// What it answers: how much of a step is the `[theta|m|v]` host<->device round
+// trip, SPECIFICALLY, as opposed to the whole step. Device-resident parameters
+// remove exactly the param share and nothing else, so that share is the ceiling
+// on what the ~3-4 session job can buy.
+//
+// Both transfer phases issue every buffer before awaiting any (deliberately —
+// see the h2d comment in the invoke), so `issue` and `await` are timed
+// separately: if issue dominates, the per-input split is exact; if await
+// dominates, the split is by bytes over a shared link and is reported as such.
+//
+// Input classification. The train-step call sites in `iree_lean_ffi.c` lay the
+// inputs out as x, params..., onehot; the DP call site says so exactly via
+// `shard_mask` (replicated == parameter). Single-device has no mask, so the
+// first and last inputs are bucketed separately from the middle rather than
+// guessed at — the forward session has NO onehot, so folding its tail into
+// "data" would silently misreport one param tensor. Run with
+// LEAN_MLIR_SKIP_EVAL=1 and only the train step is timed at all.
+
+static int timing_interval(void) {
+  static int n = -1;
+  if (n < 0) { const char* e = getenv("PJRT_FFI_TIMING"); n = (e && atoi(e) > 0) ? atoi(e) : 0; }
+  return n;
+}
+
+static double now_ms(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6;
+}
+
+typedef struct {
+  char entry[64];
+  long long calls;      // calls in the CURRENT window (zeroed at each report)
+  long long done;       // calls before the current window started
+  int window;
+  double h2d_issue_param, h2d_issue_head, h2d_issue_tail, h2d_await;
+  double exec, exec_await;
+  double d2h_issue, d2h_await;
+  double h2d_param_mb, h2d_head_mb, h2d_tail_mb, d2h_mb;
+} tacct_t;
+
+static tacct_t g_acct[4];
+static int g_acct_n = 0;
+
+static tacct_t* acct_for(const char* entry) {
+  for (int i = 0; i < g_acct_n; i++)
+    if (strcmp(g_acct[i].entry, entry) == 0) return &g_acct[i];
+  if (g_acct_n == (int)(sizeof(g_acct) / sizeof(g_acct[0]))) return &g_acct[0];
+  tacct_t* a = &g_acct[g_acct_n++];
+  memset(a, 0, sizeof(*a));
+  snprintf(a->entry, sizeof(a->entry), "%s", entry);
+  return a;
+}
+
+// Windowed, NOT cumulative: each report covers only the steps since the last
+// one, then the window resets. A cumulative average would fold the ~2 s
+// first-compile and the cold-cache warmup steps into every later number, which
+// is the wall-clock-minus-compile mistake one level down.
+static void acct_report(tacct_t* a) {
+  double n = (double)a->calls;
+  if (n <= 0) return;
+  double h2d_param = a->h2d_issue_param, h2d_data = a->h2d_issue_head + a->h2d_issue_tail;
+  double h2d_issue = h2d_param + h2d_data;
+  // Attribute the batched await to the two buckets by bytes — the transfers
+  // share one link, so bytes is the right first-order split. Reported alongside
+  // the raw issue/await times so the attribution is visible, not implied.
+  double mb_total = a->h2d_param_mb + a->h2d_head_mb + a->h2d_tail_mb;
+  double param_frac = mb_total > 0 ? a->h2d_param_mb / mb_total : 0;
+  double param_h2d = h2d_param + a->h2d_await * param_frac;
+  double step = (h2d_issue + a->h2d_await + a->exec + a->exec_await
+                 + a->d2h_issue + a->d2h_await) / n;
+  double param_rt = (param_h2d + a->d2h_issue + a->d2h_await) / n;  // d2h is all params
+  fprintf(stderr,
+      "[pjrt_ffi:timing] @%s  window %d, steps %lld..%lld  step=%.1f ms\n"
+      "    h2d   issue param %.1f / head %.1f / tail %.1f ms   await %.1f ms   "
+      "(%.0f + %.0f + %.0f MB)\n"
+      "    COMPUTE %.1f ms (launch %.1f + device %.1f)\n"
+      "    d2h   issue %.1f ms  await %.1f ms   (%.0f MB)\n"
+      "    >> PARAM round trip %.1f ms = %.1f%% of the step "
+      "(h2d %.1f + d2h %.1f), link %.1f GB/s\n",
+      a->entry, ++a->window, a->done + 1, a->done + a->calls, step,
+      h2d_param / n, a->h2d_issue_head / n, a->h2d_issue_tail / n, a->h2d_await / n,
+      a->h2d_param_mb / n, a->h2d_head_mb / n, a->h2d_tail_mb / n,
+      (a->exec + a->exec_await) / n, a->exec / n, a->exec_await / n,
+      a->d2h_issue / n, a->d2h_await / n, a->d2h_mb / n,
+      param_rt, step > 0 ? 100.0 * param_rt / step : 0.0,
+      param_h2d / n, (a->d2h_issue + a->d2h_await) / n,
+      // MiB per ms -> GB/s
+      param_rt > 0 ? ((a->h2d_param_mb + a->d2h_mb) / n / param_rt) * 1.048576 : 0.0);
+
+  char keep[64];
+  memcpy(keep, a->entry, sizeof(keep));
+  int w = a->window;
+  long long d = a->done + a->calls;
+  memset(a, 0, sizeof(*a));
+  memcpy(a->entry, keep, sizeof(keep));
+  a->window = w;
+  a->done = d;
+}
+
+static void acct_report_all(void) {
+  for (int i = 0; i < g_acct_n; i++) acct_report(&g_acct[i]);
+}
+
+// One-shot dump of the per-buffer sizes, so the bucketing above is verifiable
+// against the graph rather than assumed.
+static void acct_layout_once(const char* entry, int n_inputs, const int64_t* dims,
+                             const int32_t* ranks, int n_outputs,
+                             const int64_t* out_totals) {
+  static int done = 0;
+  if (done) return;
+  done = 1;
+  fprintf(stderr, "[pjrt_ffi:timing] @%s buffer layout — %d in, %d out\n",
+          entry, n_inputs, n_outputs);
+  int off = 0;
+  for (int i = 0; i < n_inputs; i++) {
+    int64_t e = 1;
+    for (int k = 0; k < ranks[i]; k++) e *= dims[off + k];
+    off += ranks[i];
+    if (i < 3 || i >= n_inputs - 2)
+      fprintf(stderr, "    in[%d] rank %d  %lld elems  %.2f MB%s\n", i, ranks[i],
+              (long long)e, e * 4.0 / 1048576.0,
+              i == 0 ? "   <- head" : (i == n_inputs - 1 ? "   <- tail" : ""));
+    else if (i == 3)
+      fprintf(stderr, "    ... %d middle inputs (bucketed as params)\n", n_inputs - 5);
+  }
+  int64_t ot = 0;
+  for (int i = 0; i < n_outputs; i++) ot += out_totals[i];
+  fprintf(stderr, "    out: %d buffers, %lld elems, %.2f MB total\n",
+          n_outputs, (long long)ot, ot * 4.0 / 1048576.0);
+}
+
 // Report and consume a PJRT_Error. Returns 1 if `err` was non-NULL.
 static int check(PJRT_Error* err, const char* what) {
   if (!err) return 0;
@@ -298,6 +437,7 @@ void iree_ffi_session_release(iree_ffi_session_t* sess) {
   }
   free(sess->entry);
   free(sess);
+  if (timing_interval()) acct_report_all();
   if (--g_client_refs == 0 && g_client) {
     PJRT_Client_Destroy_Args a = {0};
     a.struct_size = PJRT_Client_Destroy_Args_STRUCT_SIZE;
@@ -359,6 +499,14 @@ int iree_ffi_invoke_f32(
   PJRT_Buffer** out = (PJRT_Buffer**)calloc((size_t)n_outputs, sizeof(*out));
   int rc = 0;
 
+  const int tint = timing_interval();
+  tacct_t* acct = NULL;
+  if (tint) {
+    acct = acct_for(sess->entry);
+    acct_layout_once(sess->entry, n_inputs, input_dims_flat, input_ranks,
+                     n_outputs, output_totals);
+  }
+
   // Host → device for every input.
   //
   // Issue ALL transfers first, then await them, rather than awaiting each in
@@ -382,15 +530,27 @@ int iree_ffi_invoke_f32(
       a.host_buffer_semantics =
           PJRT_HostBufferSemantics_kImmutableUntilTransferCompletes;
       a.device = g_device;
+      double t0 = acct ? now_ms() : 0;
       if (check(g_api->PJRT_Client_BufferFromHostBuffer(&a), "BufferFromHostBuffer")) {
         failed = 1; break;
+      }
+      if (acct) {
+        double dt = now_ms() - t0;
+        int64_t elems = 1;
+        for (int k = 0; k < input_ranks[i]; k++) elems *= input_dims_flat[off + k];
+        double mb = elems * 4.0 / 1048576.0;
+        if (i == 0)                  { acct->h2d_issue_head  += dt; acct->h2d_head_mb  += mb; }
+        else if (i == n_inputs - 1)  { acct->h2d_issue_tail  += dt; acct->h2d_tail_mb  += mb; }
+        else                         { acct->h2d_issue_param += dt; acct->h2d_param_mb += mb; }
       }
       in[i] = a.buffer;
       h2d[i] = a.done_with_host_buffer;
       off += input_ranks[i];
     }
+    double tw = acct ? now_ms() : 0;
     for (int i = 0; i < n_inputs; i++)
       if (h2d[i] && await_event(h2d[i], "h2d")) failed = 1;
+    if (acct) acct->h2d_await += now_ms() - tw;
     free(h2d);
     if (failed) { rc = 2; goto cleanup; }
   }
@@ -410,7 +570,22 @@ int iree_ffi_invoke_f32(
     ea.num_devices = 1;
     ea.num_args = (size_t)n_inputs;
     ea.output_lists = outlist;
+    // Execute is ASYNCHRONOUS: it returns as soon as the work is enqueued, so
+    // without a completion event the GPU compute lands inside the d2h await and
+    // the transfer share reads ~97% instead of the truth. Ask for the device
+    // event and wait on it here, but ONLY when timing — the default path must
+    // stay byte-identical. It costs no wall clock: this step's d2h depends on
+    // this step's compute, so there was nothing to overlap.
+    PJRT_Event* dce = NULL;
+    if (acct) ea.device_complete_events = &dce;
+    double t0 = acct ? now_ms() : 0;
     if (check(g_api->PJRT_LoadedExecutable_Execute(&ea), "Execute")) { rc = 3; goto cleanup; }
+    if (acct) {
+      acct->exec += now_ms() - t0;
+      double t1 = now_ms();
+      if (dce) await_event(dce, "device_complete");
+      acct->exec_await += now_ms() - t1;
+    }
   }
 
   // Device → host. Query the required size first and compare: a shape mismatch
@@ -423,8 +598,10 @@ int iree_ffi_invoke_f32(
   {
     PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_outputs, sizeof(*d2h));
     int failed = 0;
+    double td = acct ? now_ms() : 0;
     for (int i = 0; i < n_outputs; i++) {
       size_t want = (size_t)output_totals[i] * sizeof(float);
+      if (acct) acct->d2h_mb += want / 1048576.0;
 
       PJRT_Buffer_ToHostBuffer_Args q = {0};
       q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
@@ -448,11 +625,15 @@ int iree_ffi_invoke_f32(
       if (check(g_api->PJRT_Buffer_ToHostBuffer(&a), "ToHostBuffer")) { failed = 1; break; }
       d2h[i] = a.event;
     }
+    if (acct) { acct->d2h_issue += now_ms() - td; td = now_ms(); }
     for (int i = 0; i < n_outputs; i++)
       if (d2h[i] && await_event(d2h[i], "d2h")) failed = 1;
+    if (acct) acct->d2h_await += now_ms() - td;
     free(d2h);
     if (failed) { rc = 4; goto cleanup; }
   }
+
+  if (acct && ++acct->calls % tint == 0) acct_report(acct);
 
   if (trace_enabled())
     fprintf(stderr, "[pjrt_ffi] @%s ok (%d in, %d out)\n", sess->entry, n_inputs, n_outputs);
@@ -538,6 +719,19 @@ int pjrt_ffi_invoke_f32_dp(
   PJRT_Event** h2d = (PJRT_Event**)calloc((size_t)n_replicas * n_inputs, sizeof(*h2d));
   int64_t rdims[8];
 
+  // §2d.3 accounting. Here `shard_mask` gives the classification exactly:
+  // replicated == parameter. Note the param bytes are counted PER REPLICA,
+  // because that is what actually crosses the link — the whole [theta|m|v] blob
+  // is pushed to every device, every step, which is the diagnosed cause of the
+  // 1.6-1.7x ceiling.
+  const int tint = timing_interval();
+  tacct_t* acct = NULL;
+  if (tint) {
+    acct = acct_for(sess->entry);
+    acct_layout_once(sess->entry, n_inputs, input_dims_flat, input_ranks,
+                     n_outputs, output_totals);
+  }
+
   // Host -> device, per replica. All transfers issued before any is awaited.
   for (int rep = 0; rep < n_replicas && !rc; rep++) {
     int off = 0;
@@ -574,16 +768,29 @@ int pjrt_ffi_invoke_f32_dp(
       a.host_buffer_semantics =
           PJRT_HostBufferSemantics_kImmutableUntilTransferCompletes;
       a.device = g_devices[rep];
+      double t0 = acct ? now_ms() : 0;
       if (check(g_api->PJRT_Client_BufferFromHostBuffer(&a), "BufferFromHostBuffer(dp)")) {
         rc = 2; break;
+      }
+      if (acct) {
+        double dt = now_ms() - t0;
+        size_t relems = elems;
+        if (shard_mask && shard_mask[i]) relems = elems / (size_t)n_replicas;
+        double mb = relems * 4.0 / 1048576.0;
+        if (shard_mask && shard_mask[i]) { acct->h2d_issue_head  += dt; acct->h2d_head_mb  += mb; }
+        else                            { acct->h2d_issue_param += dt; acct->h2d_param_mb += mb; }
       }
       in[(size_t)rep * n_inputs + i] = a.buffer;
       h2d[(size_t)rep * n_inputs + i] = a.done_with_host_buffer;
       off += rank;
     }
   }
-  for (int k = 0; k < n_replicas * n_inputs; k++)
-    if (h2d[k] && await_event(h2d[k], "h2d(dp)")) rc = 2;
+  {
+    double tw = acct ? now_ms() : 0;
+    for (int k = 0; k < n_replicas * n_inputs; k++)
+      if (h2d[k] && await_event(h2d[k], "h2d(dp)")) rc = 2;
+    if (acct) acct->h2d_await += now_ms() - tw;
+  }
   if (rc) goto cleanup;
 
   for (int rep = 0; rep < n_replicas; rep++) {
@@ -602,14 +809,26 @@ int pjrt_ffi_invoke_f32_dp(
     ea.num_devices = (size_t)n_replicas;
     ea.num_args = (size_t)n_inputs;
     ea.output_lists = outlists;
+    PJRT_Event* dce[8] = {0};   // see the single-device comment
+    if (acct) ea.device_complete_events = dce;
+    double t0 = acct ? now_ms() : 0;
     if (check(g_api->PJRT_LoadedExecutable_Execute(&ea), "Execute(dp)")) { rc = 3; goto cleanup; }
+    if (acct) {
+      acct->exec += now_ms() - t0;
+      double t1 = now_ms();
+      for (int r = 0; r < n_replicas && r < 8; r++)
+        if (dce[r]) await_event(dce[r], "device_complete(dp)");
+      acct->exec_await += now_ms() - t1;
+    }
   }
 
   // Device -> host from replica 0 only (all replicas hold the same result).
   {
     PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_outputs, sizeof(*d2h));
+    double td = acct ? now_ms() : 0;
     for (int i = 0; i < n_outputs; i++) {
       size_t want = (size_t)output_totals[i] * sizeof(float);
+      if (acct) acct->d2h_mb += want / 1048576.0;
       PJRT_Buffer_ToHostBuffer_Args q = {0};
       q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
       q.src = out[i];
@@ -629,10 +848,14 @@ int pjrt_ffi_invoke_f32_dp(
       if (check(g_api->PJRT_Buffer_ToHostBuffer(&a), "ToHostBuffer(dp)")) { rc = 4; break; }
       d2h[i] = a.event;
     }
+    if (acct) { acct->d2h_issue += now_ms() - td; td = now_ms(); }
     for (int i = 0; i < n_outputs; i++)
       if (d2h[i] && await_event(d2h[i], "d2h(dp)")) rc = 4;
+    if (acct) acct->d2h_await += now_ms() - td;
     free(d2h);
   }
+
+  if (acct && ++acct->calls % tint == 0) acct_report(acct);
 
   if (trace_enabled())
     fprintf(stderr, "[pjrt_ffi] @%s ok (%d replicas, %d in, %d out)\n",
