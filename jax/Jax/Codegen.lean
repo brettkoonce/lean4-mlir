@@ -300,7 +300,15 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     (if cfg.trainRes > 0 then "_TRAIN_SIZE = " ++ toString cfg.trainRes ++
        "   # RSB-A3 train resolution; eval stays _IMG_SIZE (forward infers from flat len)\n" else "") ++
     "_MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float32)\n" ++
-    "_STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)\n\n" ++
+    "_STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)\n" ++
+    -- $AUG_SEED: op-level seed for the random crop/flip. Unset -> None -> the stateful global RNG,
+    -- i.e. EXACTLY the behaviour every run before this existed, so the reference trainers are
+    -- untouched by default. Set (with tf.config.experimental.enable_op_determinism) it makes the
+    -- stream reproducible, which the batch shim needs and TF refuses to provide otherwise:
+    -- "sample_distorted_bounding_box requires a non-zero seed when determinism is enabled".
+    -- Measured, not assumed: without this, two same-seed shim runs hash DIFFERENTLY.
+    "_AUG_SEED = os.environ.get('AUG_SEED')\n" ++
+    "_AUG_SEED = int(_AUG_SEED) if _AUG_SEED else None\n\n" ++
     -- The _aa_* op block (color + geometric) is shared by AutoAugment and the
     -- geometric RandAugment sampler; emit it if either is on.
     (if cfg.useAutoAugment || (cfg.useRandAugment && cfg.randAugmentGeometric)
@@ -314,6 +322,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "        shape, bounding_boxes=bbox,\n" ++
     "        min_object_covered=0.1, aspect_ratio_range=(3./4, 4./3.),\n" ++
     "        area_range=(0.08, 1.0), max_attempts=10,\n" ++
+    "        seed=_AUG_SEED,\n" ++
     "        use_image_if_no_bounding_boxes=True)\n" ++
     "    oy, ox, _ = tf.unstack(bbox_begin)\n" ++
     "    th, tw, _ = tf.unstack(bbox_size)\n" ++
@@ -322,7 +331,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    img = tf.image.resize([img], " ++
       (if cfg.trainRes > 0 then "[_TRAIN_SIZE, _TRAIN_SIZE]" else "[_IMG_SIZE, _IMG_SIZE]") ++ ",\n" ++
     "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
-    "    img = tf.image.random_flip_left_right(img)\n" ++
+    "    img = tf.image.random_flip_left_right(img, seed=_AUG_SEED)\n" ++
     (if cfg.useAutoAugment then "    img = _autoaugment(img)\n" else "") ++
     (if cfg.useRandAugment && cfg.randAugmentGeometric then
       -- Geometric RandAugment: N ops at magnitude M (mstd jitter via gap D) over the set.
@@ -3005,5 +3014,97 @@ def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : 
   emitForward spec cfg ++
   emitLossAndTraining spec cfg ++
   emitMain spec cfg ds dataDir
+
+/-- **The ImageNet data shim** — the same tfds pipeline the JAX reference trainer consumes, writing
+    raw batches to stdout so the *verified* Lean→StableHLO→XLA trainer can consume them too.
+
+    **Why this is generated and not hand-written.** The augmentation IS the pipeline: Inception
+    RandomResizedCrop (area 8-100%, aspect 3/4-4/3, bicubic), horizontal flip, and ImageNet mean/std
+    normalization. If the verified path got its own copy of that, there would be two definitions of
+    "how an ImageNet image becomes a tensor" — agreeing today, drifting the first time one is tuned.
+    That is exactly the double-writer disease §2a spent a thread eradicating for MLIR artifacts
+    (`resnet34_train_step` flipped md5 between two writers computing genuinely different functions).
+    So this reuses `emitDataLoading .imagenet cfg` **verbatim**, from the same `TrainConfig` the
+    reference trainer is generated from: one writer, and it cannot drift by construction.
+
+    Consequence worth stating: turning on RandAugment / AutoAugment / random-erasing in the config
+    moves BOTH paths at once, for free. The verified side owns no augmentation code at all.
+
+    **f32 on the wire, deliberately.** The pipeline already normalizes and flattens to
+    `(B, 3·224·224)` f32 — precisely the train step's `%x`. Sending uint8 would be 4× cheaper but
+    would put normalization on the Lean side, i.e. a second writer for part of the transform. At
+    bs256 this is ~154 MB/batch against a ~670 ms step = ~230 MB/s, and a pipe does GB/s, so the
+    bandwidth is not worth the seam.
+
+    **Determinism.** `tf.random.set_seed` fixes the unseeded crop/flip ops; the shuffle is already
+    `seed=42`, and `tf.data`'s `deterministic` option defaults to true, so a fixed seed should give a
+    byte-identical stream. "Should" is not "does" — hence `SHIM_HASH` below, which makes that
+    falsifiable in one command instead of assumed. Two runs must print the same digest. -/
+def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
+  "#!/usr/bin/env python3\n" ++
+  "# ═══════════════════════════════════════════════════════════════════════\n" ++
+  "#  GENERATED by JaxCodegen.generateShim — do not edit by hand.\n" ++
+  "#  ImageNet batch shim: the SAME tfds/tf.data pipeline `" ++ spec.name ++ "`'s JAX\n" ++
+  "#  reference trainer consumes, streamed to stdout for the verified XLA trainer.\n" ++
+  "#\n" ++
+  "#  Wire format — a 16-byte preamble once, then one record per batch:\n" ++
+  "#      preamble : b'LMSH' | int32 version=1 | int32 batch | int32 flat_len\n" ++
+  "#      record   : int32[batch] labels | float32[batch*flat_len] images (CHW, normalized)\n" ++
+  "#  The preamble exists so a shape mismatch fails LOUDLY at the reader instead of\n" ++
+  "#  silently misaligning every subsequent batch (the shim's G4).\n" ++
+  "#\n" ++
+  "#  env: SHIM_BATCH (default 256), SHIM_SPLIT (train|validation), SHIM_SEED (default 0),\n" ++
+  "#       SHIM_HASH=<n>  -> hash n batches to stderr and exit, streaming nothing\n" ++
+  "#       TFDS_DATA_DIR  -> the prepared tfds tree (default ~/tensorflow_datasets)\n" ++
+  "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
+  "import os, sys, hashlib\n" ++
+  "import numpy as np\n\n" ++
+  -- ⚠ ORDER MATTERS: the preprocessing block below reads `_AUG_SEED` from the environment at
+  -- MODULE level, so the default has to be installed before it is imported, not inside `_main`.
+  "_SHIM_SEED = int(os.environ.get('SHIM_SEED', '0'))\n" ++
+  "os.environ.setdefault('AUG_SEED', str(_SHIM_SEED + 1))  # non-zero: TF rejects 0 under determinism\n\n" ++
+  -- The whole preprocessing definition, verbatim from the reference trainer's emitter.
+  emitDataLoading .imagenet cfg ++
+  "\n" ++
+  "def _main():\n" ++
+  "    batch    = int(os.environ.get('SHIM_BATCH', '256'))\n" ++
+  "    split    = os.environ.get('SHIM_SPLIT', 'train')\n" ++
+  "    seed     = _SHIM_SEED\n" ++
+  "    hash_n   = int(os.environ.get('SHIM_HASH', '0'))\n" ++
+  "    training = (split == 'train')\n" ++
+  "    # Determinism, and it takes all three of these. MEASURED: with only set_seed, two runs at\n" ++
+  "    # the same seed hash DIFFERENTLY — the crop/flip ops draw from TF's global state and\n" ++
+  "    # num_parallel_calls=AUTOTUNE makes the draw order vary. enable_op_determinism then REFUSES\n" ++
+  "    # to run sample_distorted_bounding_box without a non-zero op-level seed, which is what\n" ++
+  "    # AUG_SEED supplies (installed above, at module scope). Verify with SHIM_HASH, do not assume.\n" ++
+  "    tf.config.experimental.enable_op_determinism()\n" ++
+  "    tf.random.set_seed(seed)\n" ++
+  "    it = iter(build_imagenet_iter(split, batch, training, training))\n" ++
+  "    flat = 3 * _IMG_SIZE * _IMG_SIZE\n" ++
+  "    if hash_n:\n" ++
+  "        h = hashlib.sha256()\n" ++
+  "        for i, (x, y) in enumerate(it):\n" ++
+  "            if i >= hash_n: break\n" ++
+  "            h.update(np.ascontiguousarray(y, dtype=np.int32).tobytes())\n" ++
+  "            h.update(np.ascontiguousarray(x, dtype=np.float32).tobytes())\n" ++
+  "        sys.stderr.write('SHIM_HASH %d batches seed=%d split=%s: %s\\n'\n" ++
+  "                         % (hash_n, seed, split, h.hexdigest()))\n" ++
+  "        return\n" ++
+  "    out = sys.stdout.buffer\n" ++
+  "    out.write(b'LMSH')\n" ++
+  "    out.write(np.array([1, batch, flat], dtype=np.int32).tobytes())\n" ++
+  "    out.flush()\n" ++
+  "    for x, y in it:\n" ++
+  "        out.write(np.ascontiguousarray(y, dtype=np.int32).tobytes())\n" ++
+  "        out.write(np.ascontiguousarray(x, dtype=np.float32).tobytes())\n" ++
+  "        out.flush()\n\n" ++
+  "if __name__ == '__main__':\n" ++
+  "    try:\n" ++
+  "        _main()\n" ++
+  "    except BrokenPipeError:\n" ++
+  "        # The consumer stopped (finished its epoch, or died). Exit quietly rather than\n" ++
+  "        # dumping a traceback that looks like a data-pipeline failure.\n" ++
+  "        try: sys.stdout.close()\n" ++
+  "        except Exception: pass\n"
 
 end JaxCodegen

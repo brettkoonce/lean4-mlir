@@ -2550,6 +2550,66 @@ It is effectively **required** for `mom`: 0.001 is an *AdamW* rate, the referenc
 running the momentum render at the Adam default under-steps by ~100× — which looks exactly like a
 broken render rather than a wrong knob.
 
+#### ✅ The tfds batch shim — landed 2026-07-30, and determinism was NOT free
+
+`JaxCodegen.generateShim` → `lake exe resnet34-imagenet default --shim` →
+`.lake/build/generated_resnet34_imagenet_shim.py`. Streams the **same** tfds pipeline the JAX
+reference trainer consumes to stdout, so the verified XLA trainer can eat identical bytes.
+
+**It is GENERATED, from the same `TrainConfig` the recipe trains on — that is the whole point.** The
+augmentation *is* the pipeline (Inception RandomResizedCrop area 8-100% / aspect 3/4-4/3 / bicubic,
+hflip, ImageNet mean-std). A hand-written `imagenet_stream.py` would be a **second definition** of
+"how an ImageNet image becomes a tensor" — agreeing today, drifting the first time one side is tuned.
+That is §2a's double-writer disease one level up, and `resnet34_train_step`'s md5 flipping between two
+writers computing genuinely different functions is the precedent. Reusing `emitDataLoading .imagenet`
+verbatim means it **cannot drift by construction**. Bonus: switching on RandAugment / AutoAugment /
+random-erasing in the config moves both paths at once, and the verified side owns no aug code at all.
+
+**Wire format** — 16-byte preamble once (`LMSH` | version | batch | flat_len), then per batch
+`int32[batch]` labels ++ `float32[batch*flat_len]` images. The preamble is the shim's G4: a shape
+mismatch fails loudly at the reader instead of silently misaligning every later batch.
+
+**f32 on the wire, deliberately** — reversing an earlier note in this file that said uint8. The
+pipeline already normalizes and flattens to `(B, 3·224·224)` f32, exactly the train step's `%x`;
+sending uint8 is 4× cheaper but moves normalization to the Lean side, i.e. a second writer for part
+of the transform. ~154 MB/batch against a ~670 ms step is ~230 MB/s and a pipe does GB/s, so the
+bandwidth is not worth the seam.
+
+**▶ DETERMINISM TOOK THREE THINGS, AND THE FIRST TWO WERE NOT ENOUGH.** Recorded because the
+"obvious" version is silently wrong:
+
+| attempt | result |
+|---|---|
+| `tf.random.set_seed(seed)` alone | ❌ **two same-seed runs hash DIFFERENTLY** (`6c005967…` vs `3b62deda…`) — the crop/flip ops draw from TF's global state and `num_parallel_calls=AUTOTUNE` varies the draw order |
+| + `enable_op_determinism()` | ❌ TF **refuses to run**: *"sample_distorted_bounding_box requires a non-zero seed when determinism is enabled"* |
+| + op-level `seed=_AUG_SEED` | ✅ three runs, one hash: `58e972d1…` |
+
+`_AUG_SEED` reads `$AUG_SEED` **at module scope** (so the shim must install the default *before*
+importing the block, not in `_main` — an ordering bug that costs one confusing run). Unset ⇒ `None`
+⇒ the pre-existing stateful behaviour, so **the reference trainers are byte-for-byte unaffected by
+default**; only the shim turns it on.
+
+**Verified to fail**: seeds 0/1/2 give three *distinct* hashes, so the determinism is not vacuous —
+without that control, a pipeline that ignored its seed entirely would look identical to a
+correctly-seeded one. The validation split is stable across runs too (no randomness there).
+
+**Throughput: 1679 img/s** with determinism on, marginal `(t₂₀−t₄)/16` at bs256 — and that *includes*
+sha256 over 154 MB/batch, so it is a lower bound. The GPU needs ~380 img/s to keep a 673 ms bs256
+step fed, so there is 4.4× of headroom; `enable_op_determinism` costs little against the reference
+run's 1840 img/s. **The decode-throughput worry this idea was gated on is settled, measured.**
+
+```bash
+lake exe resnet34-imagenet default --shim         # emit (from the recipe's own cfg)
+SHIM_BATCH=64 SHIM_HASH=3 python3 .lake/build/generated_resnet34_imagenet_shim.py
+#   ^ hash N batches to stderr and exit. RUN THIS TWICE after touching the pipeline —
+#     it is the whole determinism gate, and it is two commands.
+```
+
+**What is left: the Lean-side reader.** `VerifiedData` still has no `.imagenet` case and
+`trainAdamSched` still indexes a preloaded array. That is the streaming loop — read the preamble,
+validate it against the render's `B`, then one `read` per step. The `Jax/Codegen.lean:2454` shape
+(a *separate* streaming main, parallel to the in-RAM one) is the precedent for how to structure it.
+
 #### What this does NOT do
 
 It does not make R34/ImageNet runnable — that still needs the streaming loader (`VerifiedData` has no

@@ -72,5 +72,16 @@ def runRecipeMain (exe : String) (spec : NetSpec) (ds : DatasetKind)
     let dataDir := (args.filter (fun a => a != r.name && !a.startsWith "-")).head?
                      |>.getD "data/imagenet"
     IO.println s!"[{exe}] recipe '{r.name}': {r.desc}"
+    -- `--shim`: emit the ImageNet batch shim for THIS recipe instead of generating and running the
+    -- trainer. Same `spec`, same `r.cfg`, so the augmentation the verified path consumes is
+    -- provably the augmentation this recipe trains on — one writer, no drift. See
+    -- `JaxCodegen.generateShim`.
+    if args.any (fun a => a == "--shim") then
+      let out := (if r.out.endsWith ".py" then r.out.dropRight 3 else r.out) ++ "_shim.py"
+      let code := JaxCodegen.generateShim spec r.cfg
+      IO.FS.createDirAll ".lake/build"
+      IO.FS.writeFile (".lake/build/" ++ out) code
+      IO.println s!"[{exe}]   -> .lake/build/{out}  (SHIM, {code.length} chars; emits data only)"
+      return
     IO.println s!"[{exe}]   -> {r.out}  (data: {dataDir})"
     runJax spec r.cfg ds dataDir r.out
