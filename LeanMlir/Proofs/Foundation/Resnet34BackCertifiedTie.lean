@@ -157,23 +157,24 @@ theorem r34IdBlockBack_eq_rblkPC_vjp {c h w : Nat}
     IS the certified strided conv input-VJP `(flatConvStride2_has_vjp W b).backward x`, for odd
     kernels. Decomposes into the conv leaf tie (`convFlatBack_eq_vjp_backward`) and the decimate
     leaf (`decimateBack_eq_vjp`, `rfl`), matching `flatConvStride2 = decimateFlat ∘ flatConv`. -/
-theorem flatConvStride2Back_eq_vjp_backward {ic oc h w : Nat}
-    (W : Kernel4 oc ic 3 3) (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
+theorem flatConvStride2Back_eq_vjp_backward {ic oc h w kH kW : Nat}
+    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
     flatConvStride2Back (h := h) (w := w) W = (flatConvStride2_has_vjp W b).backward x := by
   funext dy
   show convFlatBack (h := 2*h) (w := 2*w) W (decimateBack oc h w dy) = _
-  rw [convFlatBack_eq_vjp_backward (by decide) (by decide) W b x]
+  rw [convFlatBack_eq_vjp_backward hkH hkW W b x]
   rfl
 
 /-- **Certified VJP of the per-channel-BN downsample block `rblkPStridedPC`** (non-batched).
-    `relu ∘ residualProj(proj, F_s)` — `proj = bnPC∘convStride2(Wp)` (the 3×3-stride-2 skip),
+    `relu ∘ residualProj(proj, F_s)` — `proj = bnPC∘convStride2(Wp)` (the `kHp×kWp`-stride-2 skip),
     `F_s = (bnPC₂∘conv₂) ∘ (relu∘bnPC₁∘convStride2(W₁))` (first conv strided). The same-vocabulary
     certified target for `r34DownBlockBack`. Mirrors the scalar-BN `resblockProj_has_vjp_at` with
     `bnPerChannelTensor3` + `flatConvStride2`; per-op VJPs assembled by `vjp_comp_at`. -/
-noncomputable def rblkPStridedPC_has_vjp_at {ic oc h w : Nat}
+noncomputable def rblkPStridedPC_has_vjp_at {ic oc h w kHp kWp : Nat}
     (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
     (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
     (v : Vec (ic * (2 * h) * (2 * w)))
     (h_smooth₁ : ∀ k, bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0)
@@ -239,10 +240,11 @@ noncomputable def rblkPStridedPC_has_vjp_at {ic oc h w : Nat}
     (`flatConvStride2Back_eq_vjp_backward`) and the one non-strided conv leaf
     (`convFlatBack_eq_vjp_backward`); the rest is definitional. Completes the r34 block set
     (identity + downsample). 3-axiom-clean. -/
-theorem r34DownBlockBack_eq_rblkPStridedPC_vjp {ic oc h w : Nat}
+theorem r34DownBlockBack_eq_rblkPStridedPC_vjp {ic oc h w kHp kWp : Nat}
+    (hkHp : 2 * ((kHp - 1) / 2) + 1 = kHp) (hkWp : 2 * ((kWp - 1) / 2) + 1 = kWp)
     (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
     (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (hεp : 0 < εp)
     (v : Vec (ic * (2 * h) * (2 * w)))
     (h_smooth₁ : ∀ k, bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ (flatConvStride2 W₁ b₁ v) k ≠ 0)
@@ -263,8 +265,8 @@ theorem r34DownBlockBack_eq_rblkPStridedPC_vjp {ic oc h w : Nat}
           hε₁ hε₂ hεp v h_smooth₁ h_smooth_out).backward := by
   funext dy
   unfold r34DownBlockBack
-  rw [flatConvStride2Back_eq_vjp_backward Wp bp v,
-      flatConvStride2Back_eq_vjp_backward W₁ b₁ v,
+  rw [flatConvStride2Back_eq_vjp_backward hkHp hkWp Wp bp v,
+      flatConvStride2Back_eq_vjp_backward (by decide) (by decide) W₁ b₁ v,
       convFlatBack_eq_vjp_backward (by decide) (by decide) W₂ b₂
         ((relu (oc*h*w) ∘ bnPerChannelTensor3 oc h w ε₁ γ₁ β₁ ∘ flatConvStride2 W₁ b₁) v)]
   rfl

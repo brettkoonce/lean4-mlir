@@ -141,20 +141,21 @@ theorem downBlock_render_convb1_chain_certified {ic c h w kH kW : Nat}
 /-- **Downsample-block strided projection `Wp` weight, chain-certified.** `Wpⁿ` (stride-2, `ic→c`)
     denotes `Wp − lr·(certified ∂(flatConvStride2)/∂Wp · bnₚ-back(relu'(a)⊙dyOut))`. The projection
     cotangent is `idBlockCotC2` with the projection's `(γₚ, cp)`. -/
-theorem downBlock_render_convWp_chain_certified {ic c h w : Nat}
+theorem downBlock_render_convWp_chain_certified {ic c h w kHp kWp : Nat}
     (bp : Vec c) (xin : Vec (ic * (2 * h) * (2 * w)))
     (ε : ℝ) (γp : Vec c) (a cp dyOut : Vec (c * h * w))
-    (v : Vec (c * ic * 3 * 3)) (lr : ℝ) (i : Fin (c * ic * 3 * 3)) :
+    (v : Vec (c * ic * kHp * kWp)) (lr : ℝ) (i : Fin (c * ic * kHp * kWp)) :
     v i - lr * (flatConvStride2_weight_grad_has_vjp bp xin).backward v
         (idBlockCotC2 ε γp a cp dyOut) i
       = v i - lr * ∑ j : Fin (c * h * w),
-          pdiv (fun v' : Vec (c * ic * 3 * 3) => flatConvStride2 (Kernel4.unflatten v') bp xin) v i j
+          pdiv (fun v' : Vec (c * ic * kHp * kWp) =>
+            flatConvStride2 (Kernel4.unflatten v') bp xin) v i j
             * idBlockCotC2 ε γp a cp dyOut j :=
   mnv2_render_stem_convW_certified bp xin v (idBlockCotC2 ε γp a cp dyOut) lr i
 
 /-- **Downsample-block strided projection `bp` bias, chain-certified.** -/
-theorem downBlock_render_convbp_chain_certified {ic c h w : Nat}
-    (Wp : Kernel4 c ic 3 3) (xin : Vec (ic * (2 * h) * (2 * w)))
+theorem downBlock_render_convbp_chain_certified {ic c h w kHp kWp : Nat}
+    (Wp : Kernel4 c ic kHp kWp) (xin : Vec (ic * (2 * h) * (2 * w)))
     (bp : Vec c) (ε : ℝ) (γp : Vec c) (a cp dyOut : Vec (c * h * w)) (lr : ℝ) (o : Fin c) :
     bp o - lr * (flatConvStride2_bias_grad_has_vjp Wp xin).backward bp
         (idBlockCotC2 ε γp a cp dyOut) o

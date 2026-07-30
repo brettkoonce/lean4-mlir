@@ -90,8 +90,8 @@ theorem FloatBridges.biPathSum {m n : Nat} (M : FloatModel) {f g : Vec m → Vec
     fan-in `bProj(dy') + bBody(dy')` (both branches non-trivial, summed). The strided convs reverse
     via `flatConvStride2Back`; the BN-backs `bnB₁`/`bnB₂`/`bnBp` are the per-channel BatchNorm
     backwards (supplied). -/
-noncomputable def r34DownBlockBack {ic oc h w : Nat}
-    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic 3 3)
+noncomputable def r34DownBlockBack {ic oc h w kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic kHp kWp)
     (bnB1 bnB2 bnBp : Vec (oc * h * w) → Vec (oc * h * w))
     (m_out m_mid : Fin (oc * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid] :
     Vec (oc * h * w) → Vec (ic * (2 * h) * (2 * w)) :=
@@ -107,8 +107,8 @@ noncomputable def r34DownBlockBack {ic oc h w : Nat}
     `flatConvStride2Back W₁ ∘ bnB₁ ∘ reluMaskBack ∘ convFlatBack W₂ ∘ bnB₂`. The BN-backs are
     supplied as `FloatBridges` facts (discharge with `floatBridges_bnPerChannelBack`). Completes the
     r34 block set (identity + downsample); closes under `[propext, Classical.choice, Quot.sound]`. -/
-theorem floatBridges_r34DownBlockBack {ic oc h w : Nat} (M : FloatModel)
-    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic 3 3)
+theorem floatBridges_r34DownBlockBack {ic oc h w kHp kWp : Nat} (M : FloatModel)
+    (W₁ : Kernel4 oc ic 3 3) (W₂ : Kernel4 oc oc 3 3) (Wp : Kernel4 oc ic kHp kWp)
     (bnB1 bnB2 bnBp : Vec (oc * h * w) → Vec (oc * h * w))
     (m_out m_mid : Fin (oc * h * w) → Prop) [DecidablePred m_out] [DecidablePred m_mid]
     {w₁ w₂ wp : ℝ} (hw₁ : 0 ≤ w₁) (hw₂ : 0 ≤ w₂) (hwp : 0 ≤ wp)

@@ -68,11 +68,16 @@ open scoped BigOperators
     (W₂ : Kernel4 c c 3 3) (b₂ : Vec c) (γ₂ β₂ : Vec c) : Vec (c*h*w) → Vec (c*h*w) :=
   rblkPC (h := h) (w := w) W₁ b₁ ε γ₁ β₁ W₂ b₂ ε γ₂ β₂
 
-/-- Downsample-block ℝ-forward at shared ε. -/
-@[reducible] noncomputable def downFwd {ic oc h w : Nat} (ε : ℝ)
+/-- Downsample-block ℝ-forward at shared ε.
+
+    `kHp kWp` is the **projection** kernel and is generic; the body convs stay 3×3, which is what
+    He et al. specify. It was pinned at 3×3 here until 2026-07-30, when §2k found the render's
+    projection is a 3×3 where the paper's option-B shortcut is 1×1 — the whole point of the binder
+    is that switching the two is an argument, not a proof edit. -/
+@[reducible] noncomputable def downFwd {ic oc h w kHp kWp : Nat} (ε : ℝ)
     (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (γp βp : Vec oc) :
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (γp βp : Vec oc) :
     Vec (ic*(2*h)*(2*w)) → Vec (oc*h*w) :=
   rblkPStridedPC (h := h) (w := w) W₁ b₁ ε γ₁ β₁ W₂ b₂ ε γ₂ β₂ Wp bp ε γp βp
 
@@ -137,11 +142,11 @@ def idBlockGraphPC (p epsStr : String) {c h w : Nat}
     e)
 
 /-- Downsample-block forward graph: `relu(addV(body, projection))`, body strided conv1 + conv2,
-    projection a 3×3 strided conv; both read the block-input subtree `e`. -/
-def downBlockGraphPC (p epsStr : String) {ic oc h w : Nat}
+    projection a `kHp×kWp` strided conv; both read the block-input subtree `e`. -/
+def downBlockGraphPC (p epsStr : String) {ic oc h w kHp kWp : Nat}
     (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
     (e : SHlo (ic * (2 * h) * (2 * w))) : SHlo (oc * h * w) :=
   -- `addV proj body` (proj first, matching `residualProj proj body`; `+` is commutative)
   .reluF (.addV
@@ -164,10 +169,10 @@ theorem idBlockGraphPC_faithful (p epsStr : String) {c h w : Nat}
   simp only [Function.comp_apply]
 
 /-- **Downsample block faithfulness.** `den (downBlockGraphPC … e) = rblkPStridedPC … (den e)`. -/
-theorem downBlockGraphPC_faithful (p epsStr : String) {ic oc h w : Nat}
+theorem downBlockGraphPC_faithful (p epsStr : String) {ic oc h w kHp kWp : Nat}
     (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
     (e : SHlo (ic * (2 * h) * (2 * w))) :
     den (downBlockGraphPC p epsStr W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp e)
       = rblkPStridedPC W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp (den e) := by

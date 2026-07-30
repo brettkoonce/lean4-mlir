@@ -605,8 +605,11 @@ structure R34BlockW (c : Nat) where
   g2 : Vec c
   t2 : Vec c
 
-/-- Downsample basic-block weights (strided conv-BN ×2 + projection conv-BN). -/
-structure R34DownW (ic oc : Nat) where
+/-- Downsample basic-block weights (strided conv-BN ×2 + projection conv-BN).
+
+    `kHp kWp` is the **projection** kernel: 3×3 as this repo renders it, 1×1 in He et al.'s
+    option-B shortcut (§2k/§2l). `R34Weights` below is the single place that picks it. -/
+structure R34DownW (ic oc kHp kWp : Nat) where
   W1 : Kernel4 oc ic 3 3
   b1 : Vec oc
   g1 : Vec oc
@@ -615,7 +618,7 @@ structure R34DownW (ic oc : Nat) where
   b2 : Vec oc
   g2 : Vec oc
   t2 : Vec oc
-  Wp : Kernel4 oc ic 3 3
+  Wp : Kernel4 oc ic kHp kWp
   bp : Vec oc
   gp : Vec oc
   tp : Vec oc
@@ -630,17 +633,17 @@ structure R34Weights where
   a0 : R34BlockW 64
   a1 : R34BlockW 64
   a2 : R34BlockW 64
-  d2 : R34DownW 64 128
+  d2 : R34DownW 64 128 3 3
   b0 : R34BlockW 128
   b1 : R34BlockW 128
   b2 : R34BlockW 128
-  d3 : R34DownW 128 256
+  d3 : R34DownW 128 256 3 3
   c0 : R34BlockW 256
   c1 : R34BlockW 256
   c2 : R34BlockW 256
   c3 : R34BlockW 256
   c4 : R34BlockW 256
-  d4 : R34DownW 256 512
+  d4 : R34DownW 256 512 3 3
   e0 : R34BlockW 512
   e1 : R34BlockW 512
   Wd : Mat 512 10

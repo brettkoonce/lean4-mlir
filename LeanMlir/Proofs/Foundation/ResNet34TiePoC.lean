@@ -133,11 +133,11 @@ share the masked block cotangent `m = relu'(a)⊙dyOut`. -/
 /-- **Downsample block, tied.** All 12 params (strided conv₁, stride-1 conv₂, strided projection convₚ,
     each with bias + per-channel BN γ/β) denote the certified step at the real forward + chain
     cotangent. -/
-def downblockTied {ic oc h w : Nat}
+def downblockTied {ic oc h w kHp kWp : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
     (ε : ℝ) (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (γp βp : Vec oc)
     (xin : Vec (ic*(2*h)*(2*w))) (r1v : Vec (oc*h*w))
     (c1 n1 c2 cp a : Vec (oc*h*w)) (dyOut : Vec (oc*h*w)) (lr : ℝ) : Prop :=
     let r1 : Tensor3 oc h w := Tensor3.unflatten r1v
@@ -190,10 +190,10 @@ def downblockTied {ic oc h w : Nat}
               pdiv (fun β' : Vec oc => bnPerChannelFlat oc (h*w) ε γ₁ β' (reassocFwd oc h w c1))
                    β₁ idx j * reassocFwd oc h w dyBn1 j)
     -- projection convₚ (STRIDED, ic→oc)
-  ∧ (∀ idx : Fin (oc*ic*3*3),
+  ∧ (∀ idx : Fin (oc*ic*kHp*kWp),
         den (SHlo.convStridedWeightSgd xN wN lrStr bp xin Wp lr (.operand cotN cotCp)) idx
           = Kernel4.flatten Wp idx - lr * ∑ j : Fin (oc*h*w),
-              pdiv (fun v' : Vec (oc*ic*3*3) => flatConvStride2 (Kernel4.unflatten v') bp xin)
+              pdiv (fun v' : Vec (oc*ic*kHp*kWp) => flatConvStride2 (Kernel4.unflatten v') bp xin)
                    (Kernel4.flatten Wp) idx j * cotCp j)
   ∧ (∀ o : Fin oc,
         den (SHlo.convStridedBiasSgd bN lrStr Wp xin bp lr (.operand cotN cotCp)) o
@@ -211,11 +211,11 @@ def downblockTied {ic oc h w : Nat}
               pdiv (fun β' : Vec oc => bnPerChannelFlat oc (h*w) ε γp β' (reassocFwd oc h w cp))
                    βp idx j * reassocFwd oc h w m j)
 
-theorem r34_downblock_tied {ic oc h w : Nat}
+theorem r34_downblock_tied {ic oc h w kHp kWp : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
     (ε : ℝ) (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc) (γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc) (γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (γp βp : Vec oc)
     (xin : Vec (ic*(2*h)*(2*w))) (r1v : Vec (oc*h*w))
     (c1 n1 c2 cp a : Vec (oc*h*w)) (dyOut : Vec (oc*h*w)) (lr : ℝ) :
     downblockTied xN wN bN gN vN epsStr lrStr cotN ε W₁ b₁ γ₁ β₁ W₂ b₂ γ₂ β₂ Wp bp γp βp
@@ -315,9 +315,9 @@ theorem idBlockCotIn_eq {c h w : Nat} (ε : ℝ) (γ₁ γ₂ : Vec c)
 /-- Downsample-block input cotangent = **projection branch** (strided `convₚ` input-VJP of `cotCp`)
     **+ body branch** (strided `conv₁ˢ` input-VJP of `idBlockCotC1`) — both at the higher resolution
     `2h×2w`. The projected-residual fan-in sum. -/
-noncomputable def downBlockCotIn {ic oc h w : Nat} (ε : ℝ) (γ₁ γ₂ γp : Vec oc)
+noncomputable def downBlockCotIn {ic oc h w kHp kWp : Nat} (ε : ℝ) (γ₁ γ₂ γp : Vec oc)
     (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
     (xin : Vec (ic*(2*h)*(2*w))) (r1v c1 n1 c2 cp a dyOut : Vec (oc*h*w)) :
     Vec (ic*(2*h)*(2*w)) :=
   fun i => (flatConvStride2_has_vjp W₁ b₁).backward xin
@@ -325,9 +325,9 @@ noncomputable def downBlockCotIn {ic oc h w : Nat} (ε : ℝ) (γ₁ γ₂ γp :
     + (flatConvStride2_has_vjp Wp bp).backward xin (idBlockCotC2 ε γp a cp dyOut) i
 
 /-- The downsample-block input cotangent is the explicit projected-residual fan-in sum. -/
-theorem downBlockCotIn_eq {ic oc h w : Nat} (ε : ℝ) (γ₁ γ₂ γp : Vec oc)
+theorem downBlockCotIn_eq {ic oc h w kHp kWp : Nat} (ε : ℝ) (γ₁ γ₂ γp : Vec oc)
     (W₁ : Kernel4 oc ic 3 3) (b₁ : Vec oc) (W₂ : Kernel4 oc oc 3 3) (b₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
     (xin : Vec (ic*(2*h)*(2*w))) (r1v c1 n1 c2 cp a dyOut : Vec (oc*h*w)) :
     downBlockCotIn ε γ₁ γ₂ γp W₁ b₁ W₂ b₂ Wp bp xin r1v c1 n1 c2 cp a dyOut
       = fun i => (flatConvStride2_has_vjp W₁ b₁).backward xin
@@ -413,9 +413,9 @@ theorem r34_idblock_tiedAt {c h w : Nat} (xN wN bN gN vN epsStr lrStr cotN : Str
     (Tensor3.unflatten xin) r1v c1 n1 c2 a dyOut lr
 
 /-- Downsample block input cotangent, computed from the block input (the projected-residual fan-in). -/
-@[irreducible] noncomputable def downBlockCotInAt {ic oc h w : Nat} (ε : ℝ)
+@[irreducible] noncomputable def downBlockCotInAt {ic oc h w kHp kWp : Nat} (ε : ℝ)
     (W₁ : Kernel4 oc ic 3 3) (b₁ γ₁ β₁ : Vec oc) (W₂ : Kernel4 oc oc 3 3) (b₂ γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp γp βp : Vec oc)
     (xin : Vec (ic*(2*h)*(2*w))) (dyOut : Vec (oc*h*w)) : Vec (ic*(2*h)*(2*w)) :=
   let c1 := flatConvStride2 W₁ b₁ xin
   let n1 := bnPerChannelTensor3 oc h w ε γ₁ β₁ c1
@@ -428,9 +428,9 @@ theorem r34_idblock_tiedAt {c h w : Nat} (xN wN bN gN vN epsStr lrStr cotN : Str
   downBlockCotIn ε γ₁ γ₂ γp W₁ b₁ W₂ b₂ Wp bp xin r1v c1 n1 c2 cp a dyOut
 
 /-- Downsample block tie, INPUT-only (12-param tie at the block's real forward activations). -/
-@[irreducible] def downblockTiedAt {ic oc h w : Nat} (xN wN bN gN vN epsStr lrStr cotN : String) (ε : ℝ)
+@[irreducible] def downblockTiedAt {ic oc h w kHp kWp : Nat} (xN wN bN gN vN epsStr lrStr cotN : String) (ε : ℝ)
     (W₁ : Kernel4 oc ic 3 3) (b₁ γ₁ β₁ : Vec oc) (W₂ : Kernel4 oc oc 3 3) (b₂ γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp γp βp : Vec oc)
     (xin : Vec (ic*(2*h)*(2*w))) (dyOut : Vec (oc*h*w)) (lr : ℝ) : Prop :=
   let c1 := flatConvStride2 W₁ b₁ xin
   let n1 := bnPerChannelTensor3 oc h w ε γ₁ β₁ c1
@@ -443,9 +443,9 @@ theorem r34_idblock_tiedAt {c h w : Nat} (xN wN bN gN vN epsStr lrStr cotN : Str
   downblockTied xN wN bN gN vN epsStr lrStr cotN ε W₁ b₁ γ₁ β₁ W₂ b₂ γ₂ β₂ Wp bp γp βp
     xin r1v c1 n1 c2 cp a dyOut lr
 
-theorem r34_downblock_tiedAt {ic oc h w : Nat} (xN wN bN gN vN epsStr lrStr cotN : String) (ε : ℝ)
+theorem r34_downblock_tiedAt {ic oc h w kHp kWp : Nat} (xN wN bN gN vN epsStr lrStr cotN : String) (ε : ℝ)
     (W₁ : Kernel4 oc ic 3 3) (b₁ γ₁ β₁ : Vec oc) (W₂ : Kernel4 oc oc 3 3) (b₂ γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp γp βp : Vec oc)
     (xin : Vec (ic*(2*h)*(2*w))) (dyOut : Vec (oc*h*w)) (lr : ℝ) :
     downblockTiedAt xN wN bN gN vN epsStr lrStr cotN ε W₁ b₁ γ₁ β₁ W₂ b₂ γ₂ β₂ Wp bp γp βp
       xin dyOut lr := by
@@ -489,9 +489,9 @@ dimension inference (the per-block tie lemmas are generic in the block input, so
     Vec (c*h*w) → Vec (c*h*w) :=
   idFwd (h := h) (w := w) ε W₁ b₁ γ₁ β₁ W₂ b₂ γ₂ β₂
 
-@[irreducible] noncomputable def downFwdO {ic oc h w : Nat} (ε : ℝ)
+@[irreducible] noncomputable def downFwdO {ic oc h w kHp kWp : Nat} (ε : ℝ)
     (W₁ : Kernel4 oc ic 3 3) (b₁ γ₁ β₁ : Vec oc) (W₂ : Kernel4 oc oc 3 3) (b₂ γ₂ β₂ : Vec oc)
-    (Wp : Kernel4 oc ic 3 3) (bp γp βp : Vec oc) : Vec (ic*(2*h)*(2*w)) → Vec (oc*h*w) :=
+    (Wp : Kernel4 oc ic kHp kWp) (bp γp βp : Vec oc) : Vec (ic*(2*h)*(2*w)) → Vec (oc*h*w) :=
   downFwd (h := h) (w := w) ε W₁ b₁ γ₁ β₁ W₂ b₂ γ₂ β₂ Wp bp γp βp
 
 @[irreducible] noncomputable def stemMpO {h w : Nat} (ε : ℝ)

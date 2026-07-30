@@ -1466,6 +1466,21 @@ lean_exe «fwd-tie» where
   root := `tests.TestFwdTie
   moreLinkArgs := xlaLink
 
+/-- §2l step 1: does the emitter spell a **1×1 strided** conv, and does it compute the right one?
+
+    The paper's ResNet-34 option-B shortcut is a 1×1 stride-2 projection where `downFwdB` builds a
+    3×3 one (§2k). This sizes that change before any of it is made: renders the four strided-conv
+    ops at `k = 1` (with the committed `k = 3` alongside as the control), `iree-compile`s both, then
+    drives each op on device against the **closed form** `den` implies — `flatConvStride2` is
+    `decimateFlat ∘ flatConv` and `decimateIdx` reads the even positions, so at `k = 1` all four
+    ops are writable in one line each. The `dx` odd-position zeros are the load-bearing check: they
+    distinguish `decimate ∘ conv` from a conv that read the wrong pixel, and no norm would show it.
+
+        lake build strided-1x1 && HIP_VISIBLE_DEVICES=0 .lake/build/bin/strided-1x1 -/
+lean_exe «strided-1x1» where
+  root := `tests.TestStrided1x1
+  moreLinkArgs := xlaLink
+
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a
