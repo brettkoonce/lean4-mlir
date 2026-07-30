@@ -141,6 +141,28 @@ static int pinned_enabled(void) {
   return t;
 }
 
+// ─── fault injection for the phase-3 gate ──────────────────────────────────
+//
+// $PJRT_FFI_FAULT=1 flips the low mantissa bit of ONE returned float — the
+// smallest possible transport fault, 1 ULP in 68 million values.
+//
+// This exists because `scripts/residency_gate.sh`'s other control (a perturbed
+// initialisation) proves only that the harness can see *a* difference; it does
+// not prove the harness can see a *transport* difference, which is the entire
+// thing the gate is for. Handoff §4: a tie that is bit-exact everywhere is
+// indistinguishable from a harness comparing a buffer with itself, and the way
+// out is a control that perturbs the specific mechanism under test.
+//
+// It is deliberately the WEAKEST fault that is still a fault. A gate that
+// catches one flipped mantissa bit will catch a dropped buffer, a stale
+// retained handle, or an off-by-one replica offset — the plausible ways device
+// residency goes wrong.
+static int fault_enabled(void) {
+  static int t = -1;
+  if (t < 0) { const char* e = getenv("PJRT_FFI_FAULT"); t = (e && atoi(e)) ? 1 : 0; }
+  return t;
+}
+
 // Returns a pinned arena of at least `n` bytes, or NULL if HIP is unavailable
 // (in which case the caller silently stays on the direct path — this is an
 // optimisation, never a correctness requirement).
@@ -724,6 +746,12 @@ int iree_ffi_invoke_f32(
       }
     }
     if (acct && pin) acct->d2h_copy += now_ms() - td;
+    if (fault_enabled() && !failed && n_outputs > 0 && output_totals[0] > 0) {
+      union { float f; uint32_t u; } v;
+      v.f = output_data[0][0];
+      v.u ^= 1u;                       // 1 ULP, the smallest fault that is one
+      output_data[0][0] = v.f;
+    }
     free(d2h);
     if (failed) { rc = 4; goto cleanup; }
   }

@@ -477,7 +477,9 @@ lake build efficientnet-dp-bench && PJRT_REPLICAS=2 .lake/build/bin/efficientnet
 
 Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`, `PJRT_FFI_TIMING`
 (§2d.3 — per-phase transfer accounting, opt-in and inert when unset), `PJRT_FFI_PINNED`
-(§2d.3 — **measured and refuted; leave it off**, it is a 17% regression),
+(§2d.3 — **measured and refuted as an optimisation; leave it off**, it is a 17% regression — but it
+is the second transport `scripts/residency_gate.sh` validates against), `PJRT_FFI_FAULT`
+(§2d.3 — 1-ULP fault injection, the phase-3 gate's transport control),
 `LEAN_MLIR_REPLICAS`, `LEAN_MLIR_SKIP_EVAL`, `LEAN_MLIR_G2_STEPS`, `LEAN_MLIR_DUMP_PARAMS`,
 `LEAN_MLIR_PERTURB_R`.
 
@@ -2958,7 +2960,7 @@ pointer swap. The hardest-sounding part of the job evaporates before it starts.
 |---|---|---|
 | **1. shim** | `resident_create` (one h2d at startup) / `invoke_f32_resident` (params from the handle, param-outputs *replace* the handle, only `%loss`/`bnstat` come to host) / `resident_read` (eval, checkpoint, param dump) / `resident_release`. The fiddly part is the DP path — per-replica buffer arrays, which is exactly where the money is | **~250-350 lines C** |
 | **2. Lean** | the bigger half. `params : ByteArray` is threaded functionally through **7 training loops / 11 call sites**. Convert **`trainAdamSched` only** — it drives all five Imagenette nets plus the cifar ablation. Touch points: loop carrier type, eval, checkpoint save/resume, `LEAN_MLIR_DUMP_PARAMS` | **~150 lines** |
-| **3. gate + measure** | see below | ~100 lines |
+| **3. gate + measure** | ✅ **DONE 2026-07-30, ahead of phases 1-2** — `scripts/residency_gate.sh` | ~110 lines |
 
 **≈ 3-4 focused sessions.** Calibration for phase 1: `ladder.md` §10.2 estimated the DP shim change
 at "~150 lines" and that landed accurately.
@@ -2978,6 +2980,63 @@ property those gates are built on.
 Opt-in also hands you the gate for free: **residency must be BIT-IDENTICAL to the copying path over
 N steps**, same seed, same data. That is the same known-answer shape as every other gate in this
 file, it is cheap, and it is trivially verified to fail (perturb one retained buffer).
+
+#### ✅ PHASE 3 IS DONE — 2026-07-30, written BEFORE phases 1-2 on purpose
+
+`scripts/residency_gate.sh`. Authoring the gate first is not tidiness: a gate written *after* the
+thing it gates tends to get written until it passes, and this one immediately earned its keep by
+settling two questions that would otherwise have been discovered mid-implementation.
+
+Four runs, each a fresh process from a **deleted** checkpoint (§4's most expensive trap), 10 steps,
+1 epoch, synthetic inputs, eval skipped, comparing the whole dumped `[θ|m|v]`:
+
+| | | R34, 272,094,840 bytes |
+|---|---|---|
+| **FLOOR** | default vs **itself**, two processes | **0 bytes differ** |
+| **TEST** | default vs the alternative transport | **0 bytes differ** |
+| **CONTROL** | default vs a perturbed init (`LEAN_MLIR_PERTURB_R`) | 193,307,970 differ |
+| **FAULT** | default vs a deliberate **1-ULP** hit on ONE float | **175,479,358 differ** |
+
+**Verified to fail**: point the alt path at the fault (`GATE_ALT=PJRT_FFI_FAULT=1`) and TEST goes to
+175,479,358 with **rc=1**.
+
+**▶ Finding 1 — the floor IS bit-exact across processes, so §2d.3's stated gate is buildable as
+written.** This was in genuine doubt: §3 says *"XLA is NOT deterministic at epoch scale"* and
+*"across processes it is not quite bit-stable"*. **That claim is narrower than it reads, and this
+refines it**: §3's cross-process instability was measured on the *difference between two different
+graphs* in a tie harness. The **same** graph run twice in two processes is bit-identical here — 272
+MB, 10 full AdamW steps, nothing. Autotuning does not perturb a fixed program.
+⚠ Scope it honestly: one net, 10 steps, constant synthetic inputs. It is not a claim about 80 epochs.
+
+**▶ Finding 2 — a tolerance gate would be USELESS here, so bit-identity is not merely available, it
+is required.** One flipped mantissa bit in one of 68 million floats becomes **64% of the blob** in
+ten steps. The system is chaotic, so a "small" transport error does not stay small and there is no
+tolerance that separates a 1-ULP bug from a 1-ULP nothing. Bit-identity or nothing — and the floor
+happens to support it.
+
+**▶ Why there are TWO controls.** The perturbed-init control (C) proves only that the harness can see
+*a* difference. It does **not** prove the harness can see a **transport** difference, which is the
+only thing this gate is for — precisely §4's *"a tie that is bit-exact everywhere is
+indistinguishable from a harness comparing a buffer with itself"*. So `PJRT_FFI_FAULT=1` was added to
+the shim: it flips the low mantissa bit of one returned float, the **weakest fault that is still a
+fault**. A gate that catches that will catch a dropped buffer, a stale retained handle, or an
+off-by-one replica offset — the plausible ways residency breaks.
+
+**▶ It is already validated against a REAL second path, not a stub.** `PJRT_FFI_PINNED=1` is a
+genuinely different way of getting outputs to the host, so TEST is a live comparison today rather
+than a self-tie waiting for phase 1. Side benefit: it establishes that the pinned path is
+**numerically inert**, which the previous commit asserted from a timing argument and never checked.
+
+```bash
+scripts/residency_gate.sh                       # default: r34, 10 steps, vs the pinned path
+GATE_ALT=PJRT_FFI_FAULT=1 scripts/residency_gate.sh    # the red run — expect rc=1
+GATE_ALT=PJRT_FFI_RESIDENT=1 scripts/residency_gate.sh # ▶ what phase 1 will run. ONE env var.
+scripts/residency_gate.sh efficientnet-verified-adam-xla efficientnet 10
+```
+
+**Pointing it at residency is a one-variable change** — nothing else in the harness knows what it is
+comparing, which is what makes it usable the day phase 1 has its first working invoke rather than
+after it is finished.
 
 #### ✅ THE MEASUREMENT IS DONE — 2026-07-30. The estimate below was **4× low, and low for the
 #### wrong reason.** Read this before the retired arithmetic that follows it.
