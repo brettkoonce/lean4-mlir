@@ -59,7 +59,9 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `d5fbf32` | **cifar8 `sgd` + `mom` certified and swapped** — bit-exact tie, controls fire. 2 of 13 |
 | `d0f87ac` | §2i — the three BN variants scoped by measurement |
 | `f107c47` | **cifar8 BN `{adam,mom,sgd}` certified and swapped** — `opt` threaded, one `bnSig` source, 4 controls; the `.epoch`/`head` trap solved (§4). **5 of 13** |
-| *(uncommitted)* | **the 8 `cifar8w*` certified** — `cifar8` at `d1 := 512`, not a second net; a Chapter-5 table, not an ablation. **§2i CLOSED, 13 of 13** |
+| `eab3ecf` | **the 8 `cifar8w*` certified** — `cifar8` at `d1 := 512`, not a second net; a Chapter-5 table, not an ablation. **§2i CLOSED, 13 of 13** |
+| `cf07259` | `lake run {mnist,cifar,imagenette}-xla` — the XLA demo groups, with a shim-build and plugin guard |
+| `eb3632c` | the four missing cifar `-xla` peers — **`lake run cifar-xla` is all six**; six stale writer docstrings corrected |
 
 ---
 
@@ -99,8 +101,17 @@ of 2026-07-30:
 
 **▶ §2i IS CLOSED — 13 of 13. `regen_verified_mlir.sh check`: 61 artifacts, one writer each, and
 "every artifact is `Proofs/`-rendered" is now true with NO carve-out.** The §2a provenance axis,
-open since 2026-07-27, is finished. Next is §2d's value-ordered list: rung 4 (the FPN detector) or
-device-resident parameters.
+open since 2026-07-27, is finished.
+
+**Also landed 2026-07-30: `lake run {mnist,cifar,imagenette}-xla`** (`cf07259`, `eb3632c`). mnist and
+cifar are EXACT mirrors of their IREE groups — the four missing cifar peers were built with the §2h
+recipe, so `lake run cifar-xla` now runs the whole six-way Chapter-5 optimizer ablation on the
+second lowerer. imagenette-xla is 4 of 5; ViT is excluded by measurement, not omission.
+
+**▶ NEXT THREAD = `lake run benchmark-xla` — scoped in §2j below. Read that first: the obvious
+implementation silently reports a ~4.6×-too-fast training estimate.** After it, §2d's value-ordered
+list: rung 4 (the FPN detector) or device-resident parameters (four measurements behind it; a
+calibrated model says the case roughly quadruples at 4 GPUs — §2d.3).
 
 Read §2i before starting — it has the measurements, not guesses.
 
@@ -2239,6 +2250,51 @@ selected `VerifiedNetSpec`). `fwd-tie` gained the four cifar8 slugs; its one net
 `bs := 32`, became per-family (**the cifar8 forwards are bs 128**), and it refuses `--eval` for them
 because per-channel BN keeps no running stats, so train == eval.
 
+### 2j. ▶ NEXT — `lake run benchmark-xla`, and the mismatched-baseline trap in it
+
+Scoped 2026-07-30, not started. `lake run benchmark` runs three **synthetic-input** probes, measures
+ms/step, and scales a per-chapter reference table to estimate full Part-1 training time on the
+user's GPU. The estimator is one line (`lakefile.lean`, `yourSecOf`):
+
+> `yourSec = refSec × yourMs / refMs`
+
+#### ⚠ The trap: `refMs` and `refSec` are IREE numbers, and nothing says so at the call site
+
+`probeDenseRefMs := 3030`, `probeConvRefMs := 8020`, `probeAttnRefMs := 1173` and every `refSec` in
+`benchTable` were measured **on IREE, on a 7900 XTX**. Run the probes on XLA and divide by those,
+and the ratio conflates *your GPU vs a 7900 XTX* with *XLA vs IREE* — and the second factor is
+**4.6× on EfficientNet** (§2e-quinquies). So the naive `benchmark-xla` would tell a user with an
+identical card that Part-1 trains ~4.6× faster than it does, with no warning. That is this thread's
+recurring failure mode exactly: a plausible number from a silently mismatched baseline, the same
+shape as the 1.23× and 1.43× DP ratios and the wall-clock-minus-compile epoch.
+
+**So `benchmark-xla` needs its own reference column, measured on XLA on the reference card.** Much
+of it already exists — §0b's 80-epoch table is XLA on a 7900 XTX (R34 1h11m, EfficientNet 1h34m,
+MobileNetV2 1h25m, ConvNeXt 1h56m) — so the imagenette rows are largely measured; what is missing is
+the three probe constants and the MNIST/CIFAR chapter rows.
+
+#### Probe coverage on the XLA side, measured
+
+| probe | IREE driver | XLA peer | state |
+|---|---|---|---|
+| **dense** | `mnist-mlp-verified` | `mnist-mlp-verified-xla` | ✅ exists |
+| **conv** | `cifar8-bn-verified` | — | ⛔ **no peer.** That driver is plain-SGD via `.train`, NOT `trainAdamSched`; every cifar `-xla` target goes through the latter. Either add the peer (check `.train` drives the XLA shim first) or move the probe to `cifar8-bn-verified-adam-xla` and re-measure its constant — do NOT reuse 8020 for a different optimizer |
+| **attn** | `vit-verified-adam` | builds, **will not run** | ⛔ MIOpen (§0b). The script already degrades to the conv proxy at `aMs == 0` and prints `*proxy`, so this is graceful — but it means benchmark-xla is structurally **2 of 3 probes** on this box |
+
+#### What it needs, in order
+
+1. **The reference constants, on XLA, on the 7900 XTX** — three synthetic probes, minutes each.
+   Without these the whole output is wrong, so do them first, not last.
+2. **A conv peer or a re-pointed conv probe** (above).
+3. **The script itself** — reuse `ensurePjrtShim` / `notePjrtPlugin` from `runDemoGroup (xla := true)`;
+   it does NOT need the venv on PATH, since the XLA binaries compile in-process rather than shelling
+   out to `iree-compile`.
+4. **Label the output.** Print which lowerer produced the estimate and which reference it scaled, in
+   the table header. The current one prints `ref = single AMD 7900 XTX` and does not say IREE.
+
+Worth doing at the same time: `lake run benchmark`'s own header should gain the word IREE, because
+today the two commands would print indistinguishable tables from different baselines.
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
@@ -2538,6 +2594,8 @@ invoke now also refuses a multi-replica executable rather than mis-executing it.
    duplicated-batch identity on the real net, both verified to fail, both measured (1.67× / 1.68×).
    **This axis is closed except for ViT**, which cannot execute here at all. What it produced is the
    fourth independent measurement pointing at item 3 below.
+1d. **`lake run benchmark-xla` — §2j.** ▶ the next thread. Small, but it has a silent-wrong-number
+   trap in it (the reference constants are IREE's), so read §2j before writing any of it.
 2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
 3. **Device-resident parameters.** Two rounds of transfer work are already done (batching:
    256→205 ms; killing the per-step host memcpys: 205→162 ms). What remains is smaller than it
