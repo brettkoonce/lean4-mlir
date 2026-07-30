@@ -56,8 +56,15 @@ private def netBySlug (slug : String) : IO VerifiedNetSpec :=
   | "efficientnet" => pure efficientnetVerified
   | "mobilenetv2"  => pure mobilenetv2Verified
   | "resnet34"     => pure resnet34Verified
+  -- §2i: the cifar8 family. `cifar8w` is `cifar8` at d1=512 (the Chapter-5 wide-head "bridge" net),
+  -- so all four ride the same two certified forward renderers at two widths.
+  | "cifar8"       => pure cifar8Verified
+  | "cifar8_bn"    => pure cifar8BnVerified
+  | "cifar8w"      => pure cifar8wVerified
+  | "cifar8w_bn"   => pure cifar8wBnVerified
   | _ => throw (IO.userError
-      s!"unknown net slug '{slug}' — expected convnext | efficientnet | mobilenetv2 | resnet34")
+      s!"unknown net slug '{slug}' — expected convnext | efficientnet | mobilenetv2 | resnet34 \
+| cifar8 | cifar8_bn | cifar8w | cifar8w_bn")
 
 def main (args : List String) : IO Unit := do
   let isEval := args.contains "--eval"
@@ -66,11 +73,15 @@ def main (args : List String) : IO Unit := do
     | s :: ps => pure (s, ps)
     | [] => throw (IO.userError
         ("usage: fwd-tie <slug> [--eval] [<pathA> [<pathB>]]\n" ++
-         "  slug ∈ convnext | efficientnet | mobilenetv2 | resnet34"))
+         "  slug ∈ convnext | efficientnet | mobilenetv2 | resnet34 | cifar8[w][_bn]"))
   if isEval && slug == "convnext" then
     throw (IO.userError
       "convnext has no @convnext_fwd_eval — LayerNorm makes its forward class-batch-independent, \
        so train == eval and the frozen-stats peer would be the SAME graph. Drop --eval.")
+  if isEval && slug.startsWith "cifar8" then
+    throw (IO.userError
+      "the cifar8 family has no @<slug>_fwd_eval — its BatchNorm is PER-CHANNEL PER-EXAMPLE, so it \
+       keeps no running statistics (`bnChannels` is empty) and train == eval. Drop --eval.")
   let fn    := if isEval then s!"{slug}_fwd_eval" else s!"{slug}_fwd"
   let dflt  := s!"verified_mlir/{fn}.mlir"
   let (pathA, pathB) := match paths with
@@ -78,7 +89,10 @@ def main (args : List String) : IO Unit := do
     | [a]         => (a, dflt)
     | []          => (dflt, dflt)
   let net := (← netBySlug slug).toNet
-  let bs  := 32                        -- the baked batch of every committed forward render
+  -- The batch is BAKED into each forward render, and the two families disagree: the four large nets
+  -- are bs 32, the whole cifar8 family is bs 128. A wrong value here is a shape error on the first
+  -- invoke, not a silent pass, but it is still a per-net fact rather than a constant.
+  let bs  := if slug.startsWith "cifar8" then 128 else 32
   IO.println s!"@{fn} tie: A={pathA}  B={pathB}"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, backend {← IreeSession.backendName}"
 

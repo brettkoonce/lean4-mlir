@@ -3,20 +3,23 @@ import LeanMlir.VerifiedNets
 /-! # cifar8 optimizer-render tie — six variants, one harness (handoff §2i)
 
     lake build cifar8-opt-tie
-    .lake/build/bin/cifar8-opt-tie <adam|sgd|mom|bn_adam|bn_sgd|bn_mom> \
+    .lake/build/bin/cifar8-opt-tie [w_][bn_]<adam|sgd|mom> \
       [<refRender.mlir> [<newRender.mlir>]]
 
 Each variant shares ONE forward, backward and un-fused-gradient body with its siblings and one
-packed `[θ|m|v|lr|bc1|bc2]` signature — **71 in / 69 out** for the no-BN three, **119 in / 117 out**
-for the BN three (38 params rather than 22: + 8 BN γ and 8 BN β). The slug decomposes into two
-independent choices, which is why one harness covers all six:
+packed `[θ|m|v|lr|bc1|bc2]` signature — **71 in / 69 out** with no BN, **119 in / 117 out** with it
+(38 params rather than 22: + 8 BN γ and 8 BN β). The slug decomposes into three independent choices,
+which is why one harness covers all **twelve** variants:
 
-* the `bn_` prefix picks the **net** (`cifar8BnVerified` vs `cifar8Verified`) — param count, shapes
-  and the He/ones/zeros init kinds all come from the `VerifiedNetSpec`, so nothing is hardcoded here;
-* the remainder picks the **gradient-recovery formula** below, since that depends only on the
-  optimizer tail.
+* an optional `w_` picks the **wide 2×512 dense head** — `cifar8w` is `cifar8` at `d1 = 512`, not a
+  second net (§2i: the specs agree layer-for-layer up to the head width, and the committed wide BN
+  AdamW artifact is byte-identical to the width sweep's `cifar8_bn_512` one);
+* an optional `bn_` picks per-channel BatchNorm;
+* the remainder picks the **gradient-recovery formula** below, which depends only on the optimizer.
 
-Both also give the entry point and the default artifact path, `@cifar8_<slug>_train_step`.
+Param count, shapes and the He/ones/zeros init kinds all come from the selected `VerifiedNetSpec`, so
+nothing about a net is hardcoded here. The three together give the entry point and the default
+artifact path, `@cifar8[w][_bn]_<opt>_train_step`.
 
 ## It gates the RECOVERED GRADIENT, never θ′ — and for SGD that is the whole ballgame
 
@@ -60,23 +63,30 @@ def main (args : List String) : IO Unit := do
   let (slug, rest) := match args with
     | s :: r => (s, r)
     | []     => ("adam", [])
-  if !["adam", "sgd", "mom", "bn_adam", "bn_sgd", "bn_mom"].contains slug then
-    IO.eprintln s!"unknown slug '{slug}' — expected adam | sgd | mom | bn_adam | bn_sgd | bn_mom"
+  -- The slug decomposes into THREE independent choices, which is why one harness covers all twelve:
+  -- an optional `w_` (the wide 2×512 head — `cifar8w` is `cifar8` at d1=512, §2i), an optional `bn_`,
+  -- and the optimizer. Net, artifact path and entry point all follow.
+  -- `String.drop` returns a `String.Slice` on this toolchain (Lean 4.32), hence the `.toString`.
+  let wide := slug.startsWith "w_"
+  let afterW := if wide then (slug.drop 2).toString else slug
+  let bn := afterW.startsWith "bn_"
+  let optName := if bn then (afterW.drop 3).toString else afterW
+  if !["adam", "sgd", "mom"].contains optName then
+    IO.eprintln s!"unknown slug '{slug}' — expected an optional w_ then an optional bn_ then \
+adam | sgd | mom (e.g. adam, bn_mom, w_sgd, w_bn_adam)"
     IO.Process.exit 1
-  let dflt := s!"verified_mlir/cifar8_{slug}_train_step.mlir"
+  let netSlug := "cifar8" ++ (if wide then "w" else "") ++ (if bn then "_bn" else "") ++ "_" ++ optName
+  let dflt := s!"verified_mlir/{netSlug}_train_step.mlir"
   let (pathA, pathB) := match rest with
     | a :: b :: _ => (a, b)
     | [a]         => (a, dflt)
     | []          => (dflt, dflt)
-  -- The two halves of the slug: the `bn_` prefix picks the net, the rest picks the recovery
-  -- formula. `String.drop` returns a `String.Slice` on this toolchain (Lean 4.32), hence `.toString`.
-  let bn := slug.startsWith "bn_"
-  let optName := if bn then (slug.drop 3).toString else slug
-  let net := if bn then cifar8BnVerified.toNet else cifar8Verified.toNet
+  let net := (if wide then (if bn then cifar8wBnVerified else cifar8wVerified)
+                      else (if bn then cifar8BnVerified else cifar8Verified)).toNet
   let bs  := 128
   let nP  := net.nParams
   let lr  := 0.001; let β₁ := 0.9; let μ := 0.9
-  IO.println s!"@cifar8_{slug}_train_step tie: A={pathA}  B={pathB}"
+  IO.println s!"@{netSlug}_train_step tie: A={pathA}  B={pathB}"
   IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, backend {← IreeSession.backendName}"
 
   let mut θparts : Array ByteArray := #[]
@@ -115,7 +125,7 @@ def main (args : List String) : IO Unit := do
               s!".lake/build/c8_opt_{slug}_{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession path s!".lake/build/c8_opt_{slug}_{tag}.vmfb"
-    IreeSession.mlpTrainStepV sess s!"m.cifar8_{slug}_train_step" xb pbuf shapes yb
+    IreeSession.mlpTrainStepV sess s!"m.{netSlug}_train_step" xb pbuf shapes yb
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oa ← runOne pathA "a" x y
   let ob ← runOne pathB "b" x y

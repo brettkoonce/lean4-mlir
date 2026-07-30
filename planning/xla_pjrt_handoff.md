@@ -58,7 +58,8 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `769d0ab` | **plain-SGD + Nesterov optimizer ops** — `SgdMomentumStep.lean` + 3 `SHlo` ops, 10 sites each |
 | `d5fbf32` | **cifar8 `sgd` + `mom` certified and swapped** — bit-exact tie, controls fire. 2 of 13 |
 | `d0f87ac` | §2i — the three BN variants scoped by measurement |
-| *(uncommitted)* | **cifar8 BN `{adam,mom,sgd}` certified and swapped** — `opt` threaded, one `bnSig` source, 4 controls; the `.epoch`/`head` trap solved (§4). **5 of 13** |
+| `f107c47` | **cifar8 BN `{adam,mom,sgd}` certified and swapped** — `opt` threaded, one `bnSig` source, 4 controls; the `.epoch`/`head` trap solved (§4). **5 of 13** |
+| *(uncommitted)* | **the 8 `cifar8w*` certified** — `cifar8` at `d1 := 512`, not a second net; a Chapter-5 table, not an ablation. **§2i CLOSED, 13 of 13** |
 
 ---
 
@@ -92,9 +93,14 @@ of 2026-07-30:
   ≤3.8e-5 against a reorder control they match or beat; four controls fire; **it descends on the
   swapped bytes** (test 13.2 → 30.1% over 4 epochs). **`cifar8_bn_adam` was the only one of the 13
   backing a real trainer**, so what is left is ablation-only.
-* open: the eight **`cifar8w*`**, which additionally need the wide net rendered at all. **Ask before
-  starting**: they back only the width-sweep ablation, and §2i's own last line says confirm that
-  sweep still earns its keep before rendering a second net for it.
+* ✅ **the eight `cifar8w*`** — done 2026-07-30. Both assumptions about them were wrong: `cifar8w` is
+  `cifar8` at `d1 := 512` (no second net), and they are not ablation-only, they are the **Chapter-5
+  "bridge" table**. Three ties BIT-EXACT, four controls fire, it descends.
+
+**▶ §2i IS CLOSED — 13 of 13. `regen_verified_mlir.sh check`: 61 artifacts, one writer each, and
+"every artifact is `Proofs/`-rendered" is now true with NO carve-out.** The §2a provenance axis,
+open since 2026-07-27, is finished. Next is §2d's value-ordered list: rung 4 (the FPN detector) or
+device-resident parameters.
 
 Read §2i before starting — it has the measurements, not guesses.
 
@@ -268,9 +274,11 @@ verified to fail. The writer audit reports **one writer per artifact**. Every wh
 render in the repo is now certified; the hand-written emitters are retired to `iree-compile`
 smokes that read the committed bytes.
 
-**Every artifact is `Proofs/`-rendered ⚠ EXCEPT the eight `cifar8w*` (§2i).** Do not quote this
-line without that carve-out — it was flatly false until 2026-07-29 (13 hand-written artifacts) and is
-now true of everything except the wide-net ablation family. Four moved out of `tests/` in §2a (`resnet34_fwd`,
+**Every artifact is `Proofs/`-rendered — TRUE with no carve-out as of 2026-07-30 (§2i).** This line
+was flatly FALSE from 2026-07-27 to 2026-07-29 (13 hand-written artifacts with live drivers), and it
+is worth knowing why it read as true anyway: the writer audit counts *duplicate* writers, not
+provenance, so 13 hand-written artifacts with one writer each reported green. Four moved out of
+`tests/` in §2a (`resnet34_fwd`,
 `resnet34_fwd_eval`, `cifar8_adam_train_step`, and — already there — `resnet34_train_step`); the
 last five followed on 2026-07-28 (§2g: `convnext_fwd`, `efficientnet_fwd{,_eval}`,
 `mobilenetv2_fwd{,_eval}`). The optimizer itself is a proven op family rather than a hand-written
@@ -1988,7 +1996,7 @@ route, *not* the 4-site `.batched` descriptor). **Nothing momentum-shaped exists
 | **scheduled SGD**, no-BN | one new op, 10 sites — `θ − lr·g` with **lr as a runtime operand** (the fused `*Sgd` ops bake lr as a *literal*, which is why it was absent) | ✅ **DONE** `769d0ab` + `d5fbf32` |
 | **Nesterov momentum**, no-BN | two new ops + a denotation-side `momStep` — new *math*, not just emit | ✅ **DONE** `769d0ab` + `d5fbf32` |
 | **the three BN variants** | ⚠ bigger than a tail swap (shape table, conditional signature, explicit cotangent) — and the shape table turned out to be **avoidable**: one `bnSig` list is the single source for the signature, the m/v blocks, the return types and every `optTail` call | ✅ **DONE** 2026-07-30 |
-| **`cifar8w*`** (8 artifacts) | all of the above **plus the wide net rendered at all**, including its own `_fwd`/`_bn_fwd`. 8 of the 13, ablation-only | open |
+| **`cifar8w*`** (8 artifacts) | ⚠ NOT a second net and NOT ablation-only — see below | ✅ **DONE** 2026-07-30 |
 
 #### ✅ Done 2026-07-29 — the two no-BN variants, and the shape that made them cheap
 
@@ -2127,8 +2135,64 @@ threading exists, all three BN variants fall out of it together.
 theorem — Adam has none either (§2a: "Still no descent claim — Adam is not monotone"). Say "the
 momentum render is certified", never "momentum is proven to descend".
 
-**Worth asking before the last row:** `cifar8w` is 8 of the 13 and backs only ablations. Confirm the
-wide sweep still earns its keep before rendering a whole second net for it.
+#### ✅ Done 2026-07-30 — the wide family. **§2i is 13 of 13; the provenance axis is CLOSED**
+
+`scripts/regen_verified_mlir.sh check` reports **61 artifacts, one writer each**, and for the first
+time **§1's "every artifact is `Proofs/`-rendered" is true with no carve-out.**
+
+**Both of this section's own assumptions about `cifar8w` were WRONG, and each in the expensive
+direction.** They are recorded because the checks that refuted them are cheap and general:
+
+* ~~"plus the wide net rendered at all"~~ — **`cifar8w` IS `cifar8` at `d1 := 512`.** The two
+  `VerifiedNetSpec` pairs agree layer-for-layer up to the head width, and the decisive check is a
+  byte one: the committed `cifar8w_bn_adam_train_step.mlir` is **byte-identical modulo the entry
+  name** to the width sweep's `cifar8_bn_512_adam_train_step.mlir`, which the same hand-written
+  emitter already wrote. So no renderer was needed — the six train steps are the two renderers this
+  thread had just threaded, at 512, and the two forwards are `cifar8{,Bn}FwdModuleV`, **certified
+  renderers that already existed** and that the `cifar8_bn_{d}` sweep already uses. The wide
+  `_fwd`s were the last two artifacts still written by hand-written *text* emitters
+  (`cifar8FwdText`, `cifar8BnFwdTextPC`).
+* ~~"ablation-only — confirm the sweep still earns its keep"~~ — **they are a BOOK table.**
+  `runs/ablation_cifar8w/README.md` is the **Chapter-5 "bridge" net**: a 6-cell table (no-BN and BN
+  × SGD/Nesterov/AdamW) whose claim — *"head width barely matters: 7.1× the params, accuracy within
+  a point, 1.36× wall clock; the depth, not the head, is the lever"* — exists only by comparing wide
+  against narrow. All six train steps and both forwards are load-bearing, and the `cifar8_bn_{d}`
+  sweep is **adam-only**, covering exactly 1 of the 6 cells. Deleting the family would have voided a
+  chapter. **Check what an "ablation" backs before pruning it** — `runs/ablation_<slug>/README.md`
+  is where that is written down.
+
+| | tie (incumbent vs certified@512) | reorder control | spread |
+|---|---|---|---|
+| `cifar8w_{adam,mom,sgd}` | **gradient BIT-EXACT** | bit-exact | **0/22** |
+| `cifar8w_bn_{adam,mom}` | 1.0e-6 | 1.3e-6 | 8/38 — the control's own 8 |
+| `cifar8w_bn_sgd` | 3.4e-5 | 3.3e-5 | 12/38 ⊂ the control's 14 |
+| `cifar8w_fwd`, `cifar8w_bn_fwd` | **logits BIT-EXACT 1280/1280** | — | — |
+
+Every number is the narrow net's, at 7.1× the parameters — the evidence that `d1` is the only thing
+that moved.
+
+**Four controls, because three of these ties are BIT-EXACT** and a bit-exact tie is indistinguishable
+from a harness comparing a buffer with itself (§4):
+
+| control | fires |
+|---|---|
+| cotangent `1/128 → 0.008` on `w_adam` (the bit-exact one) | **2.34e-2**, spread **22/22** vs the control's 0 |
+| same on `w_bn_sgd` (the thinnest) | **2.34e-2**, spread **38/38** vs the control's 13 |
+| BN ε `1e-5 → 1e-3` on `cifar8w_bn_fwd` | logits rel **0.728**, 0/1280 bit-exact |
+| max-pool `−inf` init → `0.5` on `cifar8w_fwd` | logits rel **1.977**, 0/1280 bit-exact |
+
+Swap gates as run: regenerated canonical byte-identical to the tied bytes on all 8 before deleting
+the staged `_cert` paths; post-swap ties against the retired renders all pass; audit 61/one-writer;
+elaborating the retired `tests/TestCifar8WideTrain.lean` rewrites **nothing** and all 8
+`iree-compile` smokes pass on the new bytes; and **it descends** — `cifar8w-bn-ablation` on the
+swapped bytes goes loss 2.99 → 1.79, test **13.7 → 34.2%** over 8 epochs at 15 steps/epoch.
+
+**Both tie harnesses grew a family rather than a special case.** `cifar8-opt-tie` decomposes its slug
+into three independent choices — optional `w_`, optional `bn_`, then the optimizer — so **twelve**
+variants share one harness and nothing about a net is hardcoded (shapes and init kinds come from the
+selected `VerifiedNetSpec`). `fwd-tie` gained the four cifar8 slugs; its one net-specific constant,
+`bs := 32`, became per-family (**the cifar8 forwards are bs 128**), and it refuses `--eval` for them
+because per-channel BN keeps no running stats, so train == eval.
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 

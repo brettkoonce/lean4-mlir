@@ -1747,3 +1747,52 @@ private def c8bnPacked (opt : Proofs.StableHLO.CifarOpt) : String :=
 #eval IO.FS.writeFile "verified_mlir/cifar8_bn_adam_train_step.mlir" (c8bnPacked .adamw)
 #eval IO.FS.writeFile "verified_mlir/cifar8_bn_mom_train_step.mlir" (c8bnPacked .nesterov)
 #eval IO.FS.writeFile "verified_mlir/cifar8_bn_sgd_train_step.mlir" (c8bnPacked .sgd)
+
+-- ── §2i: the cifar8-WIDE family — `cifar8` at `d1 := 512`, NOT a second net ─────────────────
+-- Measured 2026-07-30: `cifar8{,Bn}wVerified` agree with `cifar8{,Bn}Verified` layer-for-layer up to
+-- the head width, and the committed `cifar8w_bn_adam_train_step.mlir` is **byte-identical modulo the
+-- entry name** to the width-sweep's `cifar8_bn_512_adam_train_step.mlir`. So all six wide train steps
+-- are these same two renderers at 512, and the interfaces match the committed artifacts exactly —
+-- 71/69 and 119/117, arg + return types AND names positionally identical, 0 MALFORMED.
+--
+-- These back the Chapter-5 "bridge" table (`runs/ablation_cifar8w/README.md`): the wide-vs-narrow
+-- comparison behind *"head width barely matters — 7.1× the params, accuracy within a point; the
+-- depth, not the head, is the lever."* All six cells are load-bearing, and the `cifar8_bn_{d}` width
+-- sweep is adam-only so it covers just one of them.
+--
+-- ✅ SWAPPED 2026-07-30, all six tied (no-BN three BIT-EXACT; BN three at 1e-6/3.4e-5 against a
+-- reorder control they match or beat) and each `#eval` is now its artifact's ONLY writer. The entry rename is what the retired writer did too: both
+-- renderers emit the narrow slug, and the wide drivers ask for `m.cifar8w[_bn]_<opt>_train_step`.
+private def c8wPacked (opt : Proofs.StableHLO.CifarOpt) (entry : String) : String :=
+  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 512 10 3 3
+    "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) 1 opt).replace "@cifar8_adam_train_step" s!"@{entry}"
+
+private def c8wBnPacked (opt : Proofs.StableHLO.CifarOpt) (from_ entry : String) : String :=
+  (Proofs.StableHLO.cifar8BnTrainStepFaithfulV 128 3 16 16 32 32 2 2 512 10 3 3
+    "1.0e-05" "0.00078125"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) (some opt) "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+   ).replace s!"@{from_}" s!"@{entry}"
+
+#eval IO.FS.writeFile "verified_mlir/cifar8w_adam_train_step.mlir"
+  (c8wPacked .adamw "cifar8w_adam_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8w_mom_train_step.mlir"
+  (c8wPacked .nesterov "cifar8w_mom_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8w_sgd_train_step.mlir"
+  (c8wPacked .sgd "cifar8w_sgd_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8w_bn_adam_train_step.mlir"
+  (c8wBnPacked .adamw "cifar8_bn_adam_train_step" "cifar8w_bn_adam_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8w_bn_mom_train_step.mlir"
+  (c8wBnPacked .nesterov "cifar8_bn_mom_train_step" "cifar8w_bn_mom_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8w_bn_sgd_train_step.mlir"
+  (c8wBnPacked .sgd "cifar8_bn_sgd_train_step" "cifar8w_bn_sgd_train_step")

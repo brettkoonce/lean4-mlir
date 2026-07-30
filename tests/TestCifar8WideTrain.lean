@@ -591,30 +591,62 @@ def main : IO Unit := do
   IO.FS.createDirAll ".lake/build"
   let mlir := cifar8AdamTrainStep
   IO.println s!"rendered cifar8 AdamW train step: {mlir.length} chars, {params.length} params"
-  IO.FS.writeFile "verified_mlir/cifar8w_adam_train_step.mlir" mlir
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8w_adam_train_step.mlir` is now written by
+  -- `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph) at `d1 := 512`, and that `#eval` is its ONLY writer.
+  -- The render above STAYS as the tie reference; writing here would be the §2a
+  -- last-writer-wins race. Gate: `cifar8-opt-tie w_adam — gradient BIT-EXACT, spread 0/22`.
+  IO.println s!"  (cifar8w_adam_train_step: retained as the tie reference; NOT written — §2i)"
   let bmlir := cifar8BnAdamTrainStep
   IO.println s!"rendered cifar8_bn AdamW train step: {bmlir.length} chars, {paramsBn.length} params"
-  IO.FS.writeFile "verified_mlir/cifar8w_bn_adam_train_step.mlir" bmlir
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8w_bn_adam_train_step.mlir` is now written by
+  -- `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph) at `d1 := 512`, and that `#eval` is its ONLY writer.
+  -- The render above STAYS as the tie reference; writing here would be the §2a
+  -- last-writer-wins race. Gate: `cifar8-opt-tie w_bn_adam — 1.0e-6, spread 8/38 = the reorder control's 8`.
+  IO.println s!"  (cifar8w_bn_adam_train_step: retained as the tie reference; NOT written — §2i)"
   let mmlir := cifar8MomTrainStep
   IO.println s!"rendered cifar8 Nesterov-mom train step: {mmlir.length} chars, {params.length} params"
-  IO.FS.writeFile "verified_mlir/cifar8w_mom_train_step.mlir" mmlir
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8w_mom_train_step.mlir` is now written by
+  -- `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph) at `d1 := 512`, and that `#eval` is its ONLY writer.
+  -- The render above STAYS as the tie reference; writing here would be the §2a
+  -- last-writer-wins race. Gate: `cifar8-opt-tie w_mom — gradient BIT-EXACT, spread 0/22`.
+  IO.println s!"  (cifar8w_mom_train_step: retained as the tie reference; NOT written — §2i)"
   let bmmlir := cifar8BnMomTrainStep
   IO.println s!"rendered cifar8_bn Nesterov-mom train step: {bmmlir.length} chars, {paramsBn.length} params"
-  IO.FS.writeFile "verified_mlir/cifar8w_bn_mom_train_step.mlir" bmmlir
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8w_bn_mom_train_step.mlir` is now written by
+  -- `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph) at `d1 := 512`, and that `#eval` is its ONLY writer.
+  -- The render above STAYS as the tie reference; writing here would be the §2a
+  -- last-writer-wins race. Gate: `cifar8-opt-tie w_bn_mom — 1.0e-6, spread 8/38 = the control's 8`.
+  IO.println s!"  (cifar8w_bn_mom_train_step: retained as the tie reference; NOT written — §2i)"
   let smlir := cifar8SgdTrainStep
   IO.println s!"rendered cifar8 SGD-sched train step: {smlir.length} chars, {params.length} params"
-  IO.FS.writeFile "verified_mlir/cifar8w_sgd_train_step.mlir" smlir
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8w_sgd_train_step.mlir` is now written by
+  -- `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph) at `d1 := 512`, and that `#eval` is its ONLY writer.
+  -- The render above STAYS as the tie reference; writing here would be the §2a
+  -- last-writer-wins race. Gate: `cifar8-opt-tie w_sgd — gradient BIT-EXACT, spread 0/22`.
+  IO.println s!"  (cifar8w_sgd_train_step: retained as the tie reference; NOT written — §2i)"
   let bsmlir := cifar8BnSgdTrainStep
   IO.println s!"rendered cifar8_bn SGD-sched train step: {bsmlir.length} chars, {paramsBn.length} params"
-  IO.FS.writeFile "verified_mlir/cifar8w_bn_sgd_train_step.mlir" bsmlir
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8w_bn_sgd_train_step.mlir` is now written by
+  -- `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph) at `d1 := 512`, and that `#eval` is its ONLY writer.
+  -- The render above STAYS as the tie reference; writing here would be the §2a
+  -- last-writer-wins race. Gate: `cifar8-opt-tie w_bn_sgd — 3.4e-5 vs the control's 3.3e-5, spread 12/38 ⊂ 14`.
+  IO.println s!"  (cifar8w_bn_sgd_train_step: retained as the tie reference; NOT written — §2i)"
   -- eval-forward graphs at d1=512 (the StableHLO renderers emit @cifar8_fwd / @cifar8_bn_fwd;
   -- rename to the cifar8w slug so trainAdamSched's `m.cifar8w_fwd` eval call resolves).
   let fwd := (cifar8FwdText B IC C1 C2 C3 C4 IMH IMW KH KW D1 NC).replace "@cifar8_fwd" "@cifar8w_fwd"
   IO.println s!"rendered cifar8w fwd: {fwd.length} chars"
-  IO.FS.writeFile "verified_mlir/cifar8w_fwd.mlir" fwd
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8w_fwd.mlir` is now written by
+  -- `Proofs/Codegen/StableHLO.lean (cifar8FwdModuleV)` as pretty(provenGraph) at `d1 := 512`, and that `#eval` is its ONLY writer.
+  -- The render above STAYS as the tie reference; writing here would be the §2a
+  -- last-writer-wins race. Gate: `fwd-tie cifar8w — logits BIT-EXACT 1280/1280`.
+  IO.println s!"  (cifar8w_fwd: retained as the tie reference; NOT written — §2i)"
   let bnfwd := (cifar8BnFwdTextPC B IC C1 C2 C3 C4 IMH IMW KH KW D1 NC "1.0e-05").replace "@cifar8_bn_fwd" "@cifar8w_bn_fwd"
   IO.println s!"rendered cifar8w_bn fwd: {bnfwd.length} chars"
-  IO.FS.writeFile "verified_mlir/cifar8w_bn_fwd.mlir" bnfwd
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8w_bn_fwd.mlir` is now written by
+  -- `Proofs/Codegen/StableHLO.lean (cifar8BnFwdModuleV)` as pretty(provenGraph) at `d1 := 512`, and that `#eval` is its ONLY writer.
+  -- The render above STAYS as the tie reference; writing here would be the §2a
+  -- last-writer-wins race. Gate: `fwd-tie cifar8w_bn — logits BIT-EXACT 1280/1280`.
+  IO.println s!"  (cifar8w_bn_fwd: retained as the tie reference; NOT written — §2i)"
   tryCompile "verified_mlir/cifar8w_fwd.mlir" "/tmp/cifar8w_fwd.vmfb" "cifar8w fwd"
   tryCompile "verified_mlir/cifar8w_bn_fwd.mlir" "/tmp/cifar8w_bn_fwd.vmfb" "cifar8w_bn fwd"
   tryCompile "verified_mlir/cifar8w_adam_train_step.mlir" "/tmp/cifar8w_adam_ts.vmfb" "cifar8 AdamW"
