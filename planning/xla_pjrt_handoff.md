@@ -154,8 +154,8 @@ After these, §2d's value-ordered list: rung 4 (the FPN detector) or device-resi
 
 Read §2i before starting — it has the measurements, not guesses.
 
-Also queued, both small: port `convnext-shard-check` to the enet/mnv2 DP gates (§2h-quater, ~20
-lines each), and try relinking `resnet34-adam-tie`/`cifar8-adam-tie` to `ireeLink` — the four
+~~Also queued: port `convnext-shard-check` to the enet/mnv2 DP gates~~ ✅ **DONE 2026-07-30 —
+`lake build shard-check`, ONE harness for all three nets** (§5). Still queued: try relinking `resnet34-adam-tie`/`cifar8-adam-tie` to `ireeLink` — the four
 IREE-linked ties all report **bit-exact** while the XLA-linked ones report ≤2e-6 with run-to-run
 spread, which is the backend, not the net. **Rule worth adopting: ties link IREE (deterministic),
 DP checks link XLA (collectives only exist there), training runs XLA.**
@@ -3209,9 +3209,42 @@ R34/mnv2/EfficientNet cannot take it at all — batch BN means `2×b ≠ 1×2b` 
 no `2b` render, needs no absence of BN, and closes the same hole. The split identity remains
 strictly stronger where it applies, but nothing now depends on it.)*
 
-**Still open:** port `convnext-shard-check` to `efficientnet-` and `mobilenetv2-dp-check`. Same
-construction, ~20 lines each, and R34's DP would gain its first real-net sharding evidence
-(it currently has only the cifar8 proxy).
+✅ **DONE 2026-07-30 — and as ONE generic harness, not two more copies.**
+`tests/TestShardCheck.lean` → `lake build shard-check <convnext|efficientnet|mobilenetv2>
+[<dpPath>]`. Everything per-net derives from `net.slug`
+(`verified_mlir/<slug>_adam{,dp}_train_step.mlir` + the matching `m.<slug>_adam{,dp}_train_step`),
+so the only table in it is spec + batch. Writing it per net would have been the double-writer
+disease one level down, in code — the same reasoning that made `vitBackAll` one shared traversal.
+
+**All three nets now have real-net sharding evidence:**
+
+| net | BN layers | TEST `\|DP − mean(A,B)\|` | CONTROL `\|DP − A\|` | separation |
+|---|---|---|---|---|
+| **EfficientNet** | 49 | **9.7e-8** | 0.862 | 8.9e6 |
+| **MobileNetV2** | 52 | **1.2e-7** | 0.922 | 7.9e6 |
+| **ConvNeXt** | 0 | **8.2e-8** | 0.137 | 1.7e6 |
+
+**Verified to fail:** a sum-not-mean DP render (all 210 divisors 2.0 → 1.0) drives mnv2's TEST to
+**1.000000** with rc=1 — seven orders above the passing value. The built-in CONTROL only proves the
+two shards are distinguishable; this proves the TEST comparison itself is wired correctly.
+
+**The generalisation is gated by reproducing the specific harness it replaces:** ConvNeXt comes back
+at TEST **8.2e-8** / CONTROL **0.136877** against `convnext-shard-check`'s committed 8.2e-8 / 0.137.
+(§3's cross-process nondeterminism applies to the TEST value — quote the bound, not the digits.)
+
+⚠ **The BN nets needed one thing the ConvNeXt-only harness did not have**, and it is worth knowing
+because the failure mode was ideal: batch-BN nets carry running-stat **inputs** and return the batch
+statistics, so their arity is 2·(BN layers) wider on both sides. Omitting that is **not** a silent
+wrong answer — the shim's G4 guard refuses the call outright (*"returns 887 outputs, caller supplied
+789 destinations"*), which is exactly how it was caught. `bnChannels` is empty for ConvNeXt, so the
+added lines degrade to a no-op there, which is why its numbers are unchanged.
+
+*`tests/TestConvNeXtShardCheck.lean` and its `convnext-shard-check` target are now subsumed and
+could be retired to save a 152-line near-duplicate — deliberately NOT done here, since it is a
+working committed gate and removing it is a separate call.*
+
+R34 still has only the cifar8 proxy for sharding: it has no `adamdp` peer at a batch this
+construction can pair with, so it is out of scope for this harness rather than merely undone.
 
 And on the renders: `pretty(provenGraph)` means the committed bytes are the certified render *of
 the graph that was proven* — it does not mean the emitter is verified. The `Tok → StableHLO-text`

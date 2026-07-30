@@ -1598,6 +1598,15 @@ lean_exe «convnext-shard-check» where
   root := `tests.TestConvNeXtShardCheck
   moreLinkArgs := xlaLink
 
+/-- `shard-check <convnext|efficientnet|mobilenetv2> [<dpPath>]` — the asymmetric-batch SHARDING
+    gate for every net with a DP render, generalised from `convnext-shard-check` (handoff §5's
+    "still open" item). The `*-dp-check` gates hand both replicas the SAME rows, so they are
+    structurally blind to a shard-offset bug; this one gives them different data and checks
+    `DP([xA|xB]) == mean(single(xA), single(xB))`. Needs two GPUs and the XLA backend. -/
+lean_exe «shard-check» where
+  root := `tests.TestShardCheck
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and
