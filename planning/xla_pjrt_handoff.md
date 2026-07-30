@@ -2486,6 +2486,82 @@ the three probe constants and the MNIST/CIFAR chapter rows.
 Worth doing at the same time: `lake run benchmark`'s own header should gain the word IREE, because
 today the two commands would print indistinguishable tables from different baselines.
 
+### 2k. ▶ R34 heavy-ball momentum — the optimizer the ImageNet reference actually uses
+
+**Rendered 2026-07-30.** `verified_mlir/resnet34_mom_train_step.mlir`, selected by
+`LEAN_MLIR_VARIANT=mom`. Purpose: make the verified/XLA path and `jax/MainResnetImagenet.lean`
+runnable as a **matched pair** rather than as two different experiments — the two differed on
+optimizer, augmentation and precision, so no number from one said anything about the other.
+
+#### ⚠ The trap, and it would have been silent
+
+The JAX reference (`Jax/Codegen.lean`, `.sgd` branch at `hasMomentum`) is:
+
+```python
+grads    = g + WD * p          # COUPLED L2, wd = 1e-4, every param (no wdExclude)
+velocity = MOMENTUM * v + g    # μ = 0.9
+params   = p - lr * velocity   # HEAVY-BALL
+```
+
+The repo's existing momentum op is **Nesterov** — `momParam μ lr θ v g = θ − lr·(g + μ·v')`. Reaching
+for `momParamF`, which is what "add the momentum variant" obviously means, would have compiled,
+rendered, trained, descended, and produced **a different optimizer than the one it exists to match**.
+`Proofs.momParam_heavyBall_diff` states the exact difference and is what settled it.
+**Check which momentum a reference uses before rendering one.**
+
+#### Zero new `SHlo` ops — the whole rule composes from the existing family
+
+Worth knowing because "adding an op touches ten sites" (§4) is normally the cost of this kind of job:
+
+| step | op | why it works |
+|---|---|---|
+| `g + wd·θ` | **`momVNextF`** at `(μ := wd, v := θ)` | `momVNext μ v g = μ·v + g`, so this denotes `wd·θ + g` — the *same function*, just a different reading of the two slots. Faithfulness carries over untouched |
+| `v' = μ·v + g` | `momVNextF` | as intended |
+| `θ' = θ − lr·v'` | **`sgdParamF`** applied to `v'` | `sgdParam lr θ g = θ − lr·g`; feed it the velocity and it is heavy-ball |
+
+So no constructor, no `den`, no `rfl` theorem, no `Raw`/`skel`/`Tok`/`toToks`/`emitTok`, and — the one
+that actually bites — **no `StableHLOParse` roundtrip case**.
+
+#### Gates: two held, one is OWED
+
+* ✅ **Gate 1 — all six `adam*` artifacts re-render BYTE-IDENTICAL** through the `opt` threading
+  (`md5sum -c`, and `verified_mlir/` stays git-clean). This is the strong form §2f could not use, and
+  it is what says the threading is inert.
+* ✅ **Interface** — the `func.func` signature is **byte-identical to `adam`'s** apart from the entry
+  name: 515 in, 513 out, same names, types and order. `m` is a passthrough (the `CnnRender.optTail`
+  `.sgd` convention), so the packed `[θ|m|v]` protocol and the driver do not move. And the
+  forward+backward **body is byte-identical over all 4409 lines** — only the banner and the tail
+  differ, which is the structural version of the same claim.
+* ✅ **Descent, on the real net and real data**: loss **2.369 → 1.814 → 1.610** over 3 epochs, val
+  38.7 → 33.1 → **57.5%** (val bounces because LR is still warming: 0.033 → 0.067 → 0.100).
+* ⛔ **NOT numerically gated, and that is the next thing.** The exact known-answer check is
+  available and cheap: from `m = v = 0` the `adam` render's `m' = (1−β₁)·g` recovers the gradient
+  **exactly** (`g = 10·m'`), so on shared `(θ, x, onehot)` the momentum render must satisfy
+  `v' = g + wd·θ` and `θ' = θ − lr·v'` — a cross-render known answer, not a tolerance argument. It is
+  the `shard-check` construction reused. **Until it is run, say "rendered", not "certified".**
+
+#### A driver knob it needed, and why it is not optional
+
+`LEAN_MLIR_BASE_LR_U` — base LR in **micro-units** (`100000` = 0.1), integer-encoded because this
+toolchain has no `String.toFloat?` (the `LEAN_MLIR_PERTURB_R` dodge, 1e-9 there). Default 0.001 is
+unchanged so every existing run is unaffected.
+
+It is effectively **required** for `mom`: 0.001 is an *AdamW* rate, the reference uses **0.1**, and
+running the momentum render at the Adam default under-steps by ~100× — which looks exactly like a
+broken render rather than a wrong knob.
+
+#### What this does NOT do
+
+It does not make R34/ImageNet runnable — that still needs the streaming loader (`VerifiedData` has no
+`.imagenet` case, and `loadData` preloads f32 into host RAM: 938 GiB at 1.28M×256²). The momentum
+render is deliberately at **bs32 / 10 classes**, the shape the existing gates and the Imagenette
+trainer exercise *today*. The ImageNet shape is `B := 256, nClasses := 1000` — both are true renderer
+parameters, so it is one more `#eval` and **no renderer change** whenever the loader lands.
+
+Also not done: `momdp` (the DP peer — `r34AdamVariant` already names it, nothing renders it), and
+matching the remaining pair axes (precision: reference is bf16 on CUDA, this is fp32 — and §3
+measured bf16 at ×0.96 here, so fp32-both is the sane match).
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving

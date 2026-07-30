@@ -54,5 +54,17 @@ def resnet34AdamConfig : VerifiedConfig where
 def runResnet34Adam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD resnet34AdamConfig.batchSize
+  -- `LEAN_MLIR_BASE_LR_U` — base LR in MICRO-units (1e-6), so `100000` is 0.1. Integer-encoded
+  -- because this toolchain has no `String.toFloat?`; the same dodge `LEAN_MLIR_PERTURB_R` uses
+  -- (1e-9 there). The default 0.001 is unchanged, so every existing run is bit-for-bit unaffected.
+  --
+  -- ⚠ **Effectively REQUIRED for `LEAN_MLIR_VARIANT=mom`.** 0.001 is an *AdamW* rate; the
+  -- heavy-ball render (`R34Opt.heavyBall`) matches `jax/MainResnetImagenet.lean`, which uses
+  -- **0.1** at batch 256. Running `mom` at the default under-steps by ~100×, which looks exactly
+  -- like a broken render rather than a wrong knob — and "the optimizer render is fine, the LR was
+  -- an Adam one" is a debugging session nobody should have to repeat.
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.001
   resnet34Verified.toNet.trainAdamSched { resnet34AdamConfig with batchSize := bs }
-    (argv.head?.getD "data") 0.001 0.9 0.999 3 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 3 variant

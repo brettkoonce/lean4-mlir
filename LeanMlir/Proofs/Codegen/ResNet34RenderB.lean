@@ -190,18 +190,35 @@ end Proofs.StableHLO
 namespace Proofs.StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § The AdamW tail — one proven triple per parameter, folded in signature order
+-- § The optimizer tail — proven ops per parameter, folded in signature order
 -- ════════════════════════════════════════════════════════════════
 
-/-- `(θ', m', v')` for one parameter, from its un-fused gradient. The three ops are the proven
-    `adamMNextF`/`adamVNextF`/`adamWParamF` (`adamW_triple_faithful` bundles their `den`s into
-    `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are runtime
-    `tensor<f32>` args, so one render serves a whole LR schedule.
+/-- Which optimizer tail this render emits. The forward, the backward, the 146 un-fused parameter
+    gradients and the whole packed signature are **shared** — only the per-parameter tail differs,
+    the `CifarOpt` shape from `CnnRender` (handoff §2i) brought to R34.
+
+    * `.adamw` — the committed recipe. Byte-for-byte what this file emitted before the threading.
+    * `.heavyBall` — **the `jax/MainResnetImagenet.lean` reference rule**: coupled L2 decay, then
+      heavy-ball momentum. See `optOne` for why it needs no new `SHlo` op. -/
+inductive R34Opt
+  /-- `θ' = θ − lr·(m̂/(√v̂+ε)) − lr·wd·θ`; both moments live. -/
+  | adamw
+  /-- `g ← g + wd·θ`, `v' = μ·v + g`, `θ' = θ − lr·v'`; velocity in the `v` slot, `m` untouched. -/
+  | heavyBall
+deriving DecidableEq, Repr
+
+/-- `(θ', m', v')` for one parameter, from its un-fused gradient.
+
+    For `.adamw` the three ops are the proven `adamMNextF`/`adamVNextF`/`adamWParamF`
+    (`adamW_triple_faithful` bundles their `den`s into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are
+    baked literals; `%lr`/`%bc1`/`%bc2` are runtime `tensor<f32>` args, so one render serves a whole
+    LR schedule. For `.heavyBall` see the inline notes — same discipline, different three ops, and
+    `m` becomes a passthrough so the packed signature does not move.
 
     At `replicas > 1` the gradient is first averaged across devices by
     `ViTRender.emitGradAllReduce`. **That collective is a TRUSTED CARVE-OUT** — it is emitted text,
     not `pretty` of an AST node, so it is outside every faithfulness theorem here. What the proofs
-    still cover is unchanged and is the whole rest of the graph: the AdamW triple consumes the
+    still cover is unchanged and is the whole rest of the graph: the optimizer tail consumes the
     averaged gradient as an `.operand`, exactly as it consumed the raw one, so the `den` side does
     not shift. What is trusted is that `all_reduce(add)/N` computes the mean — handoff §5:
     *"the gradient averaging is a proven identity; the collective implementing it is trusted,
@@ -211,25 +228,60 @@ namespace Proofs.StableHLO
 
     At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
     render stays byte-identical — which is the cheap self-check that this insertion is inert. -/
-private def adamOne (B : Nat) (replicas : Nat) (g : PGrad) : StateM Nat (String × String × String × String) := do
+private def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
+    StateM Nat (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
   let gr : SHlo n := .operand gAvg z
-  let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
-  let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
-  let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
-  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+  match opt with
+  | .adamw =>
+    let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
+    let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
+    let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
+                      "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
+    pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+  | .heavyBall =>
+    -- ── Three applications of ops that ALREADY EXIST. No new `SHlo` constructor, so none of the
+    -- ten-site surgery (and none of the `StableHLOParse` roundtrip risk) an added op costs.
+    --
+    -- ① COUPLED L2 decay, `g ← g + wd·θ`. This reuses **`momVNextF`**, which is not a pun:
+    -- `Proofs.momVNext μ v g = μ·v + g`, so instantiating `(μ := wd, v := θ)` denotes exactly
+    -- `wd·θ + g`. Same function, so the faithfulness theorem carries over unchanged; only the
+    -- *reading* of the two slots differs. NOTE this is COUPLED (into the gradient, so it flows
+    -- through the velocity), not AdamW's DECOUPLED `−lr·wd·θ` — that difference is the whole
+    -- reason `.adamw` cannot stand in for the reference recipe.
+    let (cD, nD) ← pretty B (.momVNextF s!"%{g.nm}" "%wd" g.ds 0 z gr)
+    let gwd : SHlo n := .operand nD z
+    -- ② velocity, `v' = μ·v + g`.
+    let (cV, nV) ← pretty B (.momVNextF s!"%{g.nm}v" "%mu" g.ds 0 z gwd)
+    -- ③ HEAVY-BALL parameter step, `θ' = θ − lr·v'` — `sgdParamF` applied to the velocity rather
+    -- than to the gradient. ⚠ This is deliberately NOT `momParamF`: that op is **Nesterov**
+    -- (`θ − lr·(g + μ·v')`, see `Proofs.momParam_heavyBall_diff`), and the JAX reference this
+    -- render exists to match steps by `v'` alone. Using the momentum-named op here would have been
+    -- the obvious move and would have silently produced a different optimizer.
+    let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nV z))
+    -- `m` rides through untouched, so the packed `[θ|m|v]` signature is shared with `.adamw` and
+    -- the driver is byte-identical across variants (the `CnnRender.optTail` `.sgd` convention).
+    pure (arS ++ cD ++ cV ++ cT, nT, s!"%{g.nm}m", nV)
 
-/-- β₁/β₂/ε/wd as graph constants — the committed ResNet-34 AdamW recipe. -/
-private def adamConstsB : String :=
-  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
-  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
-  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
-  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+/-- The optimizer's baked constants. `.adamw` is byte-for-byte the committed block; `.heavyBall`
+    emits only what it reads, so there are no dead constants in the momentum artifact.
+
+    `%wd` is baked rather than a runtime arg because weight decay is not scheduled — unlike `%lr`,
+    which stays a `tensor<f32>` argument so one graph serves the whole cosine schedule. -/
+private def optConstsB (opt : R34Opt) : String :=
+  match opt with
+  | .adamw =>
+    "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+    "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+    "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+    "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+    "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+    "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+  | .heavyBall =>
+    "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+    "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net batched AdamW train step
@@ -246,8 +298,11 @@ private def adamConstsB : String :=
     `#guard`s at the bottom pin those literal paths against this function.
 
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes. -/
-def r34AdamVariant (B replicas : Nat) : String :=
-  (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B)
+def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw) : String :=
+  (match opt with
+   | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
+   | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp") ++
+  (if B == 32 then "" else toString B)
 
 set_option maxRecDepth 4000000 in
 /-- **ResNet-34 `[3,4,6,3]` AdamW train step, batch-BN, rendered from the verified AST at `N := B`.**
@@ -257,7 +312,10 @@ set_option maxRecDepth 4000000 in
     unchanged. Parameter ORDER comes from `r34SigList`, the same single source the per-example
     render and both forwards use, so the arity/order contract cannot drift between them. -/
 def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
-    (replicas : Nat := 1) : String :=
+    (replicas : Nat := 1) (opt : R34Opt := .adamw) : String :=
+  let optLabel : String := match opt with
+    | .adamw     => "AdamW"
+    | .heavyBall => "heavy-ball momentum + coupled L2"
   let go : StateM Nat String := do
     -- ═══ stem: 7×7/s2 conv → batch BN → relu → 2×2 maxpool ═══
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
@@ -380,7 +438,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
-      let (c, nT, nM, nV) ← adamOne B replicas g
+      let (c, nT, nM, nV) ← optOne opt B replicas g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]
@@ -429,17 +487,19 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let retVals := thetaN ++ mNames ++ vNames ++ ["%loss", "%bc1", "%bc2"] ++ statNames
     let retTys  := pTypes ++ pTypes ++ pTypes ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
     pure <|
+      -- With `optLabel = "AdamW"` these are the committed byte sequences character for character;
+      -- interpolating a constant changes the source, not the output (gate 1 checks exactly that).
       (if replicas ≤ 1 then
-        "    // ── ResNet-34 batch-BN AdamW train step: every line is pretty(verified AST node) ──\n"
+        s!"    // ── ResNet-34 batch-BN {optLabel} train step: every line is pretty(verified AST node) ──\n"
        else
-        s!"    // ── ResNet-34 batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        s!"    // ── ResNet-34 batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
         "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
         "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
-      body ++ adamConstsB ++ adamCode ++ lossCode ++
+      body ++ optConstsB opt ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r34SigList nClasses
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
@@ -457,7 +517,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   -- refuses the call ("entry mismatch") — which is exactly what it did the first time this was
   -- rendered. `r34AdamVariant` is the single source for the name, the artifact path, and
   -- `LEAN_MLIR_VARIANT`.
-  let fname := s!"resnet34_{r34AdamVariant B replicas}_train_step"
+  let fname := s!"resnet34_{r34AdamVariant B replicas opt}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -542,7 +602,36 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/resnet34_adam128_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 128 10 "1.0e-05")
 
--- Pin the six literal artifact paths above against the name the renderer actually emits. If a
+-- **HEAVY-BALL MOMENTUM + coupled L2** — the optimizer `jax/MainResnetImagenet.lean` actually uses,
+-- so the verified/XLA path and the Lean→JAX reference can be run as a matched pair rather than as
+-- two different experiments. Selected by `LEAN_MLIR_VARIANT=mom`.
+--
+-- The reference rule, from `Jax/Codegen.lean`'s `.sgd` branch at `hasMomentum`:
+--     grads    = g + WD * p          -- COUPLED L2, wd = 1e-4, every param (no wdExclude)
+--     velocity = MOMENTUM * v + g    -- μ = 0.9
+--     params   = p - lr * velocity   -- heavy-ball
+--
+-- ⚠ **This is NOT `momParamF`, and that trap is the reason to read `optOne` before editing here.**
+-- The `SgdMomentumStep` family is **Nesterov** (`θ − lr·(g + μ·v')`); the reference steps by `v'`
+-- alone. `Proofs.momParam_heavyBall_diff` states the exact difference. Reaching for the
+-- momentum-named op would have compiled, rendered, trained, and produced a *different optimizer*
+-- than the thing this artifact exists to be 1:1 with — silently.
+--
+-- Rendered at **bs32 / 10 classes**, i.e. the direct peer of `adam`, ON PURPOSE: that is the shape
+-- the existing gates and the Imagenette trainer can exercise today. The ImageNet shape is
+-- `B := 256, nClasses := 1000` and is one more `#eval` whenever the streaming loader lands — `B`
+-- and `nClasses` are both true renderer parameters, so no renderer change is involved.
+--
+-- ⚠ **Not yet numerically gated.** Gate 1 held (all six `adam*` artifacts re-render byte-identical
+-- through the `opt` threading) and the interface matches positionally, but the exact known-answer
+-- check is still owed: from `m = v = 0`, the `adam` render's `m' = (1−β₁)·g` recovers the gradient
+-- exactly (`g = 10·m'`), so `v'` here must equal `g + wd·θ` and `θ'` must equal `θ − lr·v'` on
+-- shared inputs. That is a cross-render known answer, not a tolerance argument — the `shard-check`
+-- construction, reused. Until it is run, say "rendered", not "certified".
+#eval IO.FS.writeFile "verified_mlir/resnet34_mom_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" 1 .heavyBall)
+
+-- Pin the seven literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed, this fails at `lake build` instead of at run time as an "entry mismatch".
 #guard Proofs.StableHLO.r34AdamVariant 32 1 == "adam"
 #guard Proofs.StableHLO.r34AdamVariant 32 2 == "adamdp"
@@ -550,3 +639,9 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 128 2 == "adamdp128"
 #guard Proofs.StableHLO.r34AdamVariant 64 1 == "adam64"
 #guard Proofs.StableHLO.r34AdamVariant 128 1 == "adam128"
+-- The optimizer axis. `.adamw` must keep every legacy name unchanged — that is what makes the
+-- threading a no-op for the six artifacts above — and `.heavyBall` gets its own.
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw == "adam"
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .heavyBall == "mom"
+#guard Proofs.StableHLO.r34AdamVariant 32 2 .heavyBall == "momdp"
+#guard Proofs.StableHLO.r34AdamVariant 256 1 .heavyBall == "mom256"
