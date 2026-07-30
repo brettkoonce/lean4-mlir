@@ -144,8 +144,9 @@ as a *"leading unconfirmed hypothesis"* was stale and is retired. Its line 312 �
 `MIOPEN_DEBUG_CONV_GEMM=0` (*"MIOpen hung … Killed it"*) is also stale — it completes in 39 s here —
 but since the variable is not needed, that is a footnote, not a fix.
 
-**NOT established on ViT:** no 80-epoch run and no accuracy number (the other four Imagenette nets
-have both). See §2j's tail for the exact ledger.
+**ViT's ledger is now CLOSED**: 80-epoch run done 2026-07-30 (**val 71.31%**, best 71.62%, 58m11s —
+§0b's table), DP gated bit-exact with a firing control, and a measured 2-GPU scaling ratio
+(**1.62×** at bs32, 1.59× at bs64). Nothing is owed on any of the five nets. See §2j's tail.
 
 After these, §2d's value-ordered list: rung 4 (the FPN detector) or device-resident parameters
 (four measurements behind it; a calibrated model says the case roughly quadruples at 4 GPUs —
@@ -207,6 +208,22 @@ is *not* done on each of the four large nets, ordered by what would bite first.
    | **EfficientNet-B0** | **88.20%** | 88.46% | 1h34m |
    | **MobileNetV2** | **86.73%** | 86.96% | 1h25m |
    | **ConvNeXt-T** | **82.75%** | 82.98% | 1h56m |
+   | **ViT-Tiny** *(2026-07-30)* | **71.31%** | 71.62% | **58m11s** |
+
+   **All five nets now have an 80-epoch run on their certified bytes.** ViT was added 2026-07-30
+   (`runs/vit_xla_80ep_jul30.log`, epoch marker 80, `rc=0`) once its graph would execute here at
+   all — same config as the other four (1 GPU, bs32, 80 ep), so the column is apples-to-apples.
+   **ViT is the lowest by a wide margin and that is the expected result, not a defect**: a ViT with
+   no pretraining, on 9,469 images, with label smoothing as its only strong regulariser, is the
+   most data-hungry architecture in the set against the smallest dataset in the book. Read the
+   whole ordering as a dataset-size story — it is ConvNeXt's overfitting note one step further.
+   It is also the **fastest** of the five, which is the `[[rocm-is-the-transformer-box]]` result:
+   gfx1100 is GEMM-strong and MIOpen-conv-weak.
+
+   ⚠ Its wall clock did double duty: the ch10 `benchmark-xla` reference was **3480 s extrapolated**
+   from a 43.5 s marginal epoch × 80, and the real run came in at **3491 s — 0.3% out**. So
+   `scripts/marginal_epoch.sh` × epochs is validated at this scale, which matters because the
+   ch6-9 rows and every DP ratio in this file rest on that method.
 
    All `rc=0` with the epoch marker on 80 (so genuinely to the end, not a resumed no-op), scored
    through their `Proofs/`-rendered eval forwards. Logs: `runs/<net>_xla_80ep_jul29.log` (untracked).
@@ -234,7 +251,7 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 | **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ✅ `Proofs/` (§2g) | ✅ 3 epochs + 2-GPU |
 | **MobileNetV2** | ✅ | ✅ **§2h-bis** — exact identity on the real net, 2 GPUs, **1.67×** | ✅ **§2h** — 58.0 s/epoch | ✅ `Proofs/` (§2g — **BN skew fixed**) | ✅ **4 full epochs → val 59.9%**, + 2-GPU descent |
 | **ConvNeXt** | ✅ (all 180) | ✅ **§2h-quater** — exact identity on the real net, 2 GPUs, **1.68×** | ✅ **§2h** — 84.5 s/epoch | ✅ `Proofs/` (§2g) | ✅ **4 full epochs → val 60.6%**, + 12-epoch 2-GPU descent |
-| **ViT** | ✅ | ✅ **§2j tail** — `vit-dp-check` BIT-EXACT 16,579,041/16,579,041, control 0.996 | ✅ **RUNS 2026-07-30**, no workaround — 128 ms/step, 43.5 s/epoch | ✅ `Proofs/` | ✅ 3 epochs → val **49.6%**; ⛔ still no 80-epoch run |
+| **ViT** | ✅ | ✅ **§2j tail** — `vit-dp-check` BIT-EXACT 16,579,041/16,579,041, control 0.996; **1.62×** on 2 GPUs | ✅ **RUNS 2026-07-30** — 128 ms/step, 43.0 s/epoch | ✅ `Proofs/` | ✅ **80 epochs → val 71.31%** (best 71.62%, 58m11s) |
 
 **MobileNetV2** — ~~no smoke-train~~ ✅ §2h; **no `mobilenetv2_adamdp_train_step.mlir`** (the
 renderer takes `replicas` and `mnv2AdamVariant` returns `adamdp` — both re-verified 2026-07-29 — but
@@ -2399,9 +2416,11 @@ before/after pair. The other was the conv probe's retracted "thermal/context" st
 survived a fourth sample. **One sample is not a measurement**, and that applies to negative results
 and to explanations, not just to headline numbers.
 
-**What is still owed on ViT:** no 80-epoch run and no accuracy number; the other four Imagenette
-nets have both. ch.10's XLA reference is therefore a marginal-epoch extrapolation (43.5 s × 80),
-flagged as such in `benchTable`.
+**Nothing is owed on ViT any more.** The 80-epoch run landed 2026-07-30 — **val 71.31%**, best
+71.62%, wall **3491 s**, epoch marker 80 (`runs/vit_xla_80ep_jul30.log`) — so ch.10's `benchmark-xla`
+reference is a MEASUREMENT, not the 43.5 s × 80 extrapolation it replaced. Those two agree to
+**0.3%** (3480 vs 3491), which validates `marginal_epoch.sh` × epochs at this scale and therefore
+the ch6-9 rows and every DP ratio in this file. Throughput at bs64 and the 2-GPU ratios: §2j tail.
 
 **The upstream doc's diagnosis was already right and already confirmed** on 2026-07-28 (fused
 interior-dilated pad+conv → the no-workspace `GemmFwdRest` path → `MIOpenIm2d2Col.cpp` fails under

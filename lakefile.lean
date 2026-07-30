@@ -2413,12 +2413,14 @@ structure BenchItem where
 /-- The XLA MNIST/CIFAR rows were measured 2026-07-30 on the reference 7900 XTX with the
     SAME construction as the IREE ones — steady-state ms/epoch (real data + eval, last of
     3 epochs) × the trainer's own epoch count, so the two columns are directly comparable.
-    The XLA Imagenette rows ch6-9 are the 80-epoch single-GPU runs on the current certified bytes
-    from handoff §0b (logs `runs/<net>_xla_80ep_jul29.log`). **ch10's XLA row is a marginal-epoch
-    extrapolation, not an 80-epoch run**: 43.5 s/epoch measured as `(T₃−T₁)/2` via
-    `scripts/marginal_epoch.sh`, × 80 = 0.97 h. That basis is stricter than the IREE ch10 row it
-    faces (`1185 ms/step × 295 × 80`, train-only) because it includes eval, matching ch6-9; the
-    one-time compile plus dataset load it excludes is ~40 s, under 1% of an 80-epoch run.
+    **All five XLA Imagenette rows are now measured 80-epoch single-GPU runs on the current
+    certified bytes** — ch6-9 from handoff §0b (`runs/<net>_xla_80ep_jul29.log`) and ch10 from
+    `runs/vit_xla_80ep_jul30.log` (wall **3491 s**, epoch marker 80).
+
+    ⚠ ch10 is also the **validation of the marginal-epoch method** the other rows lean on: before
+    the run, this row held 3480 s extrapolated from a 43.5 s `(T₃−T₁)/2` measurement × 80. The real
+    wall came in at 3491 s — **0.3% out**. So `scripts/marginal_epoch.sh` × epochs is trustworthy at
+    this scale, which is worth knowing because it is far cheaper than an 80-epoch run.
     ch5 mirrors the IREE row's
     approximation — the BN arm's cost × 6 — so that the two columns stay comparable, even
     though the 3 no-BN arms are cheaper.
@@ -2435,7 +2437,7 @@ def benchTable : List BenchItem :=
     { chapter := "7  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette" }, -- IREE 5.4h  | XLA 1h25m
     { chapter := "8  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette" }, -- IREE 6.2h  | XLA 1h34m
     { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6960, tier := "imagenette" }, -- IREE 13.3h | XLA 1h56m
-    { chapter := "10 ViT",          family := "attn",  refSec := 27966, refSecXla := some 3480, tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h (marginal epoch 43.5s × 80)
+    { chapter := "10 ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
 
 /-- This chapter's reference wall-clock on the selected lowerer. -/
 def BenchItem.refOn (it : BenchItem) (xla : Bool) : Option Nat :=
@@ -2764,8 +2766,9 @@ script benchmark do
     `probeAttnRefMsXla`. The `n/a` machinery is retained on purpose: it is what would keep an
     unmeasured row honest, and it is what ch.10 needed for two days.
 
-    ⚠ ch.10's XLA reference is a **marginal-epoch extrapolation** (43.5 s × 80), not an 80-epoch
-    run like ch6-9. See `benchTable`.
+    All nine XLA references are measured; ch.10's is a real 80-epoch run as of 2026-07-30
+    (3491 s, val 71.31%), which also confirmed the marginal-epoch extrapolation it replaced to
+    within 0.3%. See `benchTable`.
 
     Needs no venv: the XLA binaries compile in-process rather than shelling out to
     `iree-compile`. It does build `ffi/libpjrt_ffi.so` if missing/stale and report whether
