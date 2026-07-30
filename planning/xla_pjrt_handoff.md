@@ -58,6 +58,7 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `769d0ab` | **plain-SGD + Nesterov optimizer ops** — `SgdMomentumStep.lean` + 3 `SHlo` ops, 10 sites each |
 | `d5fbf32` | **cifar8 `sgd` + `mom` certified and swapped** — bit-exact tie, controls fire. 2 of 13 |
 | `d0f87ac` | §2i — the three BN variants scoped by measurement |
+| *(uncommitted)* | **cifar8 BN `{adam,mom,sgd}` certified and swapped** — `opt` threaded, one `bnSig` source, 4 controls; the `.epoch`/`head` trap solved (§4). **5 of 13** |
 
 ---
 
@@ -78,22 +79,22 @@ one, gated by the exact duplicated-batch identity on the real net and measured a
 GPUs. **ViT is the only net without a working DP path**, and for a reason nothing in this thread can
 fix from here — its graph does not execute on this box at all.
 
-**▶ THE ACTIVE THREAD IS §2i — the last 13 `tests/`-rendered artifacts, 2 of 13 DONE.** This is the
-§2a provenance axis being finished. State as of 2026-07-30:
+**▶ THE ACTIVE THREAD IS §2i — the last 13 `tests/`-rendered artifacts, 5 of 13 DONE, and every
+LIVE TRAINER in the set is now certified.** This is the §2a provenance axis being finished. State as
+of 2026-07-30:
 
 * ✅ **`cifar8_sgd` + `cifar8_mom`** are `pretty(provenGraph)`, swapped, sole-writer. Three new
   proven ops (`sgdParamF`, `momVNextF`, `momParamF`) + `SgdMomentumStep.lean`, all 3-axiom clean;
   `CifarOpt` threaded through ONE renderer so all three variants share one forward/backward and only
   the tail differs. Tie **bit-exact 52858/52858**, both controls fire, gate 1 held.
-* ▶ **NEXT: the three BN variants** (`cifar8_bn_{adam,mom,sgd}`). **No new ops needed** — all six
-  un-fused peers exist from §2a. The cost is a **38-entry shape table** (`optTail` needs `(n, ds)`
-  explicitly where the fused ops infer them via dependent types), plus a conditional
-  signature/return (40/38 fused vs **119/117** packed) and an explicit `scaleF invB` cotangent.
-  **Thread `opt : Option CifarOpt` through the EXISTING renderer — do not write a twin**; 102
-  `pretty` calls duplicated is the double-writer disease in code (§2a-quater). Threading makes gate 1
-  free. `cifar8_bn_adam` is the only one of the 13 backing a **real trainer**; all three fall out of
-  the same threading.
-* open: the eight **`cifar8w*`**, which additionally need the wide net rendered at all.
+* ✅ **`cifar8_bn_{adam,mom,sgd}`** — done 2026-07-30, no new ops, `opt : Option CifarOpt` threaded
+  through the existing renderer as scoped. Gate 1 held byte-identically on all four incumbents; ties
+  ≤3.8e-5 against a reorder control they match or beat; four controls fire; **it descends on the
+  swapped bytes** (test 13.2 → 30.1% over 4 epochs). **`cifar8_bn_adam` was the only one of the 13
+  backing a real trainer**, so what is left is ablation-only.
+* open: the eight **`cifar8w*`**, which additionally need the wide net rendered at all. **Ask before
+  starting**: they back only the width-sweep ablation, and §2i's own last line says confirm that
+  sweep still earns its keep before rendering a second net for it.
 
 Read §2i before starting — it has the measurements, not guesses.
 
@@ -267,7 +268,9 @@ verified to fail. The writer audit reports **one writer per artifact**. Every wh
 render in the repo is now certified; the hand-written emitters are retired to `iree-compile`
 smokes that read the committed bytes.
 
-**Every artifact is `Proofs/`-rendered.** Four moved out of `tests/` in §2a (`resnet34_fwd`,
+**Every artifact is `Proofs/`-rendered ⚠ EXCEPT the eight `cifar8w*` (§2i).** Do not quote this
+line without that carve-out — it was flatly false until 2026-07-29 (13 hand-written artifacts) and is
+now true of everything except the wide-net ablation family. Four moved out of `tests/` in §2a (`resnet34_fwd`,
 `resnet34_fwd_eval`, `cifar8_adam_train_step`, and — already there — `resnet34_train_step`); the
 last five followed on 2026-07-28 (§2g: `convnext_fwd`, `efficientnet_fwd{,_eval}`,
 `mobilenetv2_fwd{,_eval}`). The optimizer itself is a proven op family rather than a hand-written
@@ -327,6 +330,13 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/fwd-tie efficientnet --eval   # self-tie s
 lake env lean tests/TestBatchedEmitTie.lean            # 16 emit ties + 23 grad-prefix checks
 lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie
 lake build cifar8-adam-tie   && .lake/build/bin/cifar8-adam-tie
+# §2i — SIX cifar8 optimizer variants through one harness. Gates the RECOVERED GRADIENT (never θ'),
+# the m/v passthrough slots, %loss, and the per-param SPREAD against a reorder control it runs
+# itself (A vs A on the reversed batch). Deletes its .vmfb. TIE_SKIP_REORDER=1 skips the control run.
+lake build cifar8-opt-tie
+for v in adam sgd mom bn_adam bn_sgd bn_mom; do HIP_VISIBLE_DEVICES=0 .lake/build/bin/cifar8-opt-tie $v; done
+#   ^ no args = self-tie smoke. To tie a candidate against the committed bytes:
+#     .lake/build/bin/cifar8-opt-tie bn_adam /tmp/candidate.mlir
 # EfficientNet (§2e) — IREE, not XLA, because efficientnet-verified-adam is an IREE binary
 git show c96bd36:verified_mlir/efficientnet_adam_train_step.mlir > /tmp/retired.mlir
 lake build efficientnet-adam-tie && IREE_BACKEND=rocm .lake/build/bin/efficientnet-adam-tie \
@@ -1977,7 +1987,7 @@ route, *not* the 4-site `.batched` descriptor). **Nothing momentum-shaped exists
 |---|---|---|
 | **scheduled SGD**, no-BN | one new op, 10 sites — `θ − lr·g` with **lr as a runtime operand** (the fused `*Sgd` ops bake lr as a *literal*, which is why it was absent) | ✅ **DONE** `769d0ab` + `d5fbf32` |
 | **Nesterov momentum**, no-BN | two new ops + a denotation-side `momStep` — new *math*, not just emit | ✅ **DONE** `769d0ab` + `d5fbf32` |
-| **the three BN variants** | ⚠ **bigger than a tail swap** — see below | ▶ NEXT |
+| **the three BN variants** | ⚠ bigger than a tail swap (shape table, conditional signature, explicit cotangent) — and the shape table turned out to be **avoidable**: one `bnSig` list is the single source for the signature, the m/v blocks, the return types and every `optTail` call | ✅ **DONE** 2026-07-30 |
 | **`cifar8w*`** (8 artifacts) | all of the above **plus the wide net rendered at all**, including its own `_fwd`/`_bn_fwd`. 8 of the 13, ablation-only | open |
 
 #### ✅ Done 2026-07-29 — the two no-BN variants, and the shape that made them cheap
@@ -2003,7 +2013,85 @@ silently dropped a moment would still yield a plausible θ'), counts bit-exact c
 run printed `0.000000`, which six decimals cannot distinguish from 3e-8 — §2e-bis), and **deletes its
 `.vmfb`** before every compile, which `cifar8-adam-tie` still does not.
 
-#### ▶ The three BN variants — why they are NOT a tail swap, measured 2026-07-29
+#### ✅ Done 2026-07-30 — the three BN variants. **5 of 13**, and the ONE real trainer is certified
+
+`cifar8_bn_{adam,mom,sgd}_train_step.mlir` are `pretty(provenGraph)` out of
+`cifar8BnTrainStepFaithfulV`, each `#eval` its artifact's only writer; the three `IO.FS.writeFile`
+calls in `tests/TestCifar8AdamTrain.lean` are retired (the renders stay, as the ties' references —
+the §2a-quater shape). **`cifar8_bn_adam` was the only one of §2i's 13 backing a real trainer**
+(`cifar8-bn-verified-adam{,-xla}`), so the remaining 8 are ablation-only.
+
+**No new ops, exactly as scoped.** `opt : Option CifarOpt` threaded through the EXISTING renderer:
+`none` renders the fused 40/38 incumbent, `some o` the packed 119/117 variant. The three branch
+points the scoping predicted were the three that were needed — cotangent, conv-bias names
+(`%b1..%b8` → `%cb1..%cb8`, since AdamW bakes β₁/β₂ as `%b1`/`%b2`), and signature/return.
+
+**The 38-entry shape table was avoidable and that is the better answer.** One `bnSig : List (String
+× List Nat)` is the single source for the arg signature, the packed `m`/`v` blocks, the return types
+AND each `optTail`'s `(pName, n, ds)` — derived from one entry per param rather than a parallel
+hand-list, so a shape or slot cannot drift between signature and tail (§2e's silent-slot hazard).
+Gate 1 came for free and held: `cifar8_bn_train_step.mlir` re-renders **byte-identical** (md5
+`e877dfa1…`) — which also proves the rebuilt-from-`bnSig` signature reproduces the hand-written
+literal it replaced — and so do `cifar8_{adam,sgd,mom}_train_step`.
+
+| gate | result |
+|---|---|
+| gate 1 — fused artifact + the 3 no-BN packed artifacts re-render | **byte-identical**, all four ✅ |
+| interface vs the hand-written render | **119 in / 117 out**, arg + return types **and NAMES** positionally identical, all three ✅ |
+| `// MALFORMED` | 0 ✅ |
+| A-vs-A determinism floor | **bit-exact 53242/53242**, all three ✅ |
+| regenerated canonical == the tied bytes | **byte-identical** before deleting the staged `_cert` paths ✅ |
+| post-swap tie, retired render vs new canonical | passes, all three ✅ |
+| `regen_verified_mlir.sh check` | **61 artifacts, one writer each**, prefix audit green ✅ |
+| elaborating the retired `tests/TestCifar8AdamTrain.lean` | rewrites **nothing**; all six `iree-compile` smokes OK on the new bytes ✅ |
+| **descends on the swapped bytes** | ✅ loss 2.92 → 1.94, test **13.2 → 20.1 → 25.6 → 30.1%** (4 epochs, 40 steps/epoch, XLA) |
+
+#### ▶ The tie numbers, and why an ABSOLUTE per-param spread gate is WRONG on this net
+
+`cifar8-opt-tie` now drives **six** slugs: the `bn_` prefix picks the net (`cifar8BnVerified` — 38
+params, shapes and init kinds from the `VerifiedNetSpec`), the rest picks the recovery formula. All
+three BN ties, against a bit-exact A-vs-A floor:
+
+| | gradient norm-rel | reorder control | spread | control's spread |
+|---|---|---|---|---|
+| `bn_adam` | **1.02e-6** | 1.30e-6 | 8/38 | **8/38 — the same param indices** |
+| `bn_mom` | **1.02e-6** | 1.29e-6 | 8/38 | **8/38, same indices** |
+| `bn_sgd` | **3.81e-5** | 1.90e-5 | 11/38 | 12/38 — a strict **subset** |
+
+**The two emitters agree with each other as well as the reference agrees with ITSELF** under a
+semantics-preserving batch reversal — for adam/mom the test is *tighter* than the control. That is
+§2f-bis's ConvNeXt result on a second net, and it arrived the hard way: a first draft of this harness
+gated the spread at an **absolute** 1e-4 per parameter, and **that gate fails the REAL tie** (8/38
+and 11/38). The gate has to be control-relative, per §2d.1.
+
+**The 8 are the CONV BIASES** — indices 1, 5, 9, … 29 in `(W, cb, γ, β)×8` order — and the harness now
+prints the indices, because "the same 8 params in test and control" is much stronger evidence than
+"8 in each". Their gradient `Σ_{b,h,w} dy` is a cancelling reduce over 128·H·W terms, so it does not
+reproduce to 1e-4 against *any* reordering. Not the BN γ/β, which was the obvious guess.
+
+**`bn_sgd`'s 3.81e-5 is NOT a looser agreement, and the harness now says so in its own output.**
+sgd's gradient is recovered as `(θ − θ')/lr` at lr 1e-3, which **amplifies the output-level
+difference 1000×**; adam's `(m' − β₁m)/(1−β₁)` amplifies 10×. The new `raw slot` row measures the
+un-amplified quantity: **max|θ'A − θ'B| = 3.0e-8** on θ' ≈ 1.0, i.e. ~4 ULPs of binary32 — the same
+graph disagreement adam sees through a smaller lens. Without that row the number reads like a
+near-miss at 2.6× under the gate; with it, the gate is 234× *below* where the cotangent control lands.
+
+**Four negative controls, each firing its own gate:**
+
+| control | perturbation | result |
+|---|---|---|
+| A | cotangent `1/128 → 0.008` (1 line) | **magnitude** fires at **2.34e-2** (617× the sgd pass, 23000× the adam pass); spread goes **38/38** — GLOBAL, vs the control's 8–13 |
+| B | BN ε `1e-5 → 1e-4` (24 sites) | **`%loss`** fires at 1.52e-4, gradient 6.4e-3, spread 34/38 |
+| C | `%loss` divisor `128 → 130` (1 line) | **loss** fires at 4.8e-2 with the gradient **bit-exact 53242/53242** and spread **0/38** |
+| D | Nesterov μ `0.9 → 0.91` (1 line) | magnitude fires at 1.01e-3, **0/53242** bit-exact, spread 38/38 |
+
+Control C is the sharpest, as it was on mnv2: it isolates `%loss` completely, which is the direct
+evidence that the report-only scalar really is on no gradient path and that its gate does
+independent work. Control D lands **10× further above the gate than the no-BN μ control did**
+(1.01e-3 vs 1.6e-4), so this net does not have the "clears by only 1.6×" problem the no-BN thread
+recorded.
+
+#### ▶ The three BN variants — the 2026-07-29 scoping, kept because it held
 
 Target interface, all three identical and the arithmetic closes exactly:
 `1 + 3×38 + 3 + 1 = 119` in, `3×38 + 3 = 117` out (38 params: 8 conv W + 8 conv b + 8 BN γ +
@@ -2651,14 +2739,22 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   `.lake/build/<slug>_<variant>_ckpt{,_xla}.bin{,.epoch}` after any artifact swap** — and note the
   IREE and XLA peers have *separate* checkpoints, so a resumed IREE run against a fresh XLA one
   quietly compares two different programs, which is exactly what a cross-backend gate must not do.
-- **Check the `.epoch` marker before a long run.** Once, after a run killed mid-epoch (SIGPIPE from
-  a `| head` in the invocation), `resnet34_adamdp_ckpt_xla.bin.epoch` held **`80`** — `cfg.epochs` —
-  so the next run "resumed" past the end and exited having done nothing, printing only
-  *"resuming from checkpoint at epoch 80"*. **Not reproduced**: a clean bounded run writes the
-  correct value (`2` after two epochs), and the only writer is `writeFile epPath (toString (ep+1))`
-  inside the epoch loop. Cause unknown, so treat it as a thing to *check* rather than a known bug:
-  a silent no-op run is an expensive way to discover it at ImageNet scale. `cat` the marker, or
-  delete both `ckpt` files, before starting something long.
+- **✅ SOLVED 2026-07-30 — the `.epoch` marker mystery was `| head`, and the marker was never
+  wrong.** The symptom: after a run "killed mid-epoch" by a `| head` in the invocation,
+  `resnet34_adamdp_ckpt_xla.bin.epoch` held **`80`** = `cfg.epochs`, so the next run resumed past the
+  end and did nothing. Recorded here for a year as *"cause unknown, not reproduced"*. Reproduced
+  deliberately on `cifar8-bn-verified-adam-xla`: pipe it into `head -1`, and **the trainer is still
+  running 45 s later** — `pgrep` finds it alive long after `head` exited, and it goes on to complete
+  all 40 epochs and write `40` **correctly**. **SIGPIPE does not kill these trainers.** So there is
+  no marker bug and nothing to fix in the writer; what there is, is a trap:
+  *piping a training run into `head`/`grep -m1` does not stop it* — it detaches it, and it keeps a
+  GPU busy and finishes invisibly. Consequences: a later run silently no-ops on the completed
+  checkpoint (the original symptom); two "sequential" runs can overlap and contend for the GPU; and a
+  wall-clock measurement taken this way is meaningless. **Redirect to a file and read the file**, and
+  still `cat` the marker or delete `.lake/build/<slug>_<variant>_ckpt{,_xla}.bin{,.epoch}` before
+  starting something long.
+  (Also why `pgrep -f <binary>` reads 2 when nothing is running: it matches the invoking shell's own
+  command line. Check `ps -eo comm` instead — the pkill self-kill trap, one level over.)
 - **`git stash -u` here would write ~17 GB** (`runs/` 5 GB, `figures/` 12 GB) into `.git`. Stash
   tracked modifications only; use `.gitignore` for the rest.
 - Rendering at a non-default batch breaks eval unless the forward graph is re-rendered too — that

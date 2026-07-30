@@ -613,7 +613,14 @@ def main : IO Unit := do
   -- silent last-writer-wins clobber §2a is about.
   let bmlir := cifar8BnAdamTrainStep D1 "cifar8_bn_adam_train_step"
   IO.println s!"rendered cifar8_bn AdamW train step: {bmlir.length} chars, {(paramsBn D1).length} params"
-  IO.FS.writeFile "verified_mlir/cifar8_bn_adam_train_step.mlir" bmlir
+  -- ✅ RETIRED 2026-07-30 (§2i): `verified_mlir/cifar8_bn_adam_train_step.mlir` is now written by
+  -- `Proofs/Codegen/CnnRender.lean` (`cifar8BnTrainStepFaithfulV … (some .adamw)`) as
+  -- pretty(provenGraph), and that `#eval` is its ONLY writer. The render above STAYS as the tie's
+  -- reference — `cifar8-opt-tie bn_adam` drives it against the certified bytes: recovered gradient
+  -- norm-rel 1.0e-6, spread 8/38 params against a reorder control that disturbs the SAME 8 (the
+  -- conv biases, cancelling reduces), %loss bit-exact, against a bit-exact A-vs-A floor. Writing
+  -- here would be the §2a last-writer-wins race, so the write is gone and the render is not.
+  IO.println s!"  (cifar8_bn_adam: retained as the tie reference; NOT written — §2i)"
   let mmlir := cifar8MomTrainStep
   IO.println s!"rendered cifar8 Nesterov-mom train step: {mmlir.length} chars, {params.length} params"
   -- ✅ RETIRED 2026-07-29 (§2i): `verified_mlir/cifar8_mom_train_step.mlir` is now written by
@@ -624,7 +631,9 @@ def main : IO Unit := do
   IO.println s!"  (cifar8_mom: Nesterov-mom render retained as the tie reference; NOT written — §2i)"
   let bmmlir := cifar8BnMomTrainStep
   IO.println s!"rendered cifar8_bn Nesterov-mom train step: {bmmlir.length} chars, {(paramsBn D1).length} params"
-  IO.FS.writeFile "verified_mlir/cifar8_bn_mom_train_step.mlir" bmmlir
+  -- ✅ RETIRED 2026-07-30 (§2i) — see the cifar8_bn_adam note above. `cifar8-opt-tie bn_mom`:
+  -- norm-rel 1.0e-6, spread 8/38 = the control's 8, `m` passthrough bit-exact.
+  IO.println s!"  (cifar8_bn_mom: retained as the tie reference; NOT written — §2i)"
   let smlir := cifar8SgdTrainStep
   IO.println s!"rendered cifar8 SGD-sched train step: {smlir.length} chars, {params.length} params"
   -- ✅ RETIRED 2026-07-29 (§2i): `verified_mlir/cifar8_sgd_train_step.mlir` is now written by
@@ -635,7 +644,13 @@ def main : IO Unit := do
   IO.println s!"  (cifar8_sgd: SGD-sched render retained as the tie reference; NOT written — §2i)"
   let bsmlir := cifar8BnSgdTrainStep
   IO.println s!"rendered cifar8_bn SGD-sched train step: {bsmlir.length} chars, {(paramsBn D1).length} params"
-  IO.FS.writeFile "verified_mlir/cifar8_bn_sgd_train_step.mlir" bsmlir
+  -- ✅ RETIRED 2026-07-30 (§2i) — see the cifar8_bn_adam note above. `cifar8-opt-tie bn_sgd`:
+  -- norm-rel 3.8e-5 against a reorder control of 1.9e-5 (2.0×, inside the 4× rule) and spread
+  -- 11/38 against the control's 12 — a strict SUBSET. ⚠ That 3.8e-5 is NOT a looser agreement than
+  -- the other two: sgd's gradient is recovered as `(θ − θ')/lr` at lr 1e-3, which amplifies the
+  -- output-level difference 1000×. The raw θ' slots differ by max 3.0e-8 on θ' ≈ 1.0, i.e. ~4 ULPs
+  -- of binary32 — the same graph disagreement adam sees through a 10× lens.
+  IO.println s!"  (cifar8_bn_sgd: retained as the tie reference; NOT written — §2i)"
   tryCompile "verified_mlir/cifar8_adam_train_step.mlir" "/tmp/cifar8_adam_ts.vmfb" "cifar8 AdamW"
   tryCompile "verified_mlir/cifar8_bn_adam_train_step.mlir" "/tmp/cifar8_bn_adam_ts.vmfb" "cifar8_bn AdamW"
   tryCompile "verified_mlir/cifar8_mom_train_step.mlir" "/tmp/cifar8_mom_ts.vmfb" "cifar8 Nesterov-mom"
