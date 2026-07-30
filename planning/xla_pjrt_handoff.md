@@ -71,6 +71,14 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
+**▶ NEXT SESSION: §2l — re-render R34 with the paper's 1×1 projection shortcut.** Decided
+2026-07-30. §2k found that this repo's "ResNet-34" is **not** He et al.'s: the downsample projection
+is **3×3 strided** where the paper's option-B shortcut is **1×1**, which is +1,376,256 params
+(+6.3%), documented only in a codegen docstring while the spec blurb says *"Real ResNet-34"*. It was
+caught by the ImageNet reference-pairing attempt, where the two paths' param counts disagreed by
+exactly that plus the conv biases. **§2l has the plan, the blast radius (13 artifacts, the 90.39%
+run, §2d.2) and the ten-minute check to run first.** Start there, not here.
+
 **What is left in this file is §2d's value-ordered list**, none of it on the AdamW track: rung 4
 (the FPN detector), **device-resident parameters** — whose case is now **measured, not estimated**
 (§2d.3, 2026-07-30: the parameter round trip is **55% of a bs32 step**, projected **~2.2×**, and the
@@ -2683,14 +2691,123 @@ loss **8.10 → 7.86 → 7.95**, which is where it belongs.
 depends on K is suspect. Here there was exactly one, in two places, and only one of them was on a
 gradient path.*
 
-#### ▶ What is left
+#### ⛔ THE STEP-LEVEL TIE CANNOT RUN — the two "ResNet-34"s are DIFFERENT NETS
 
-* **The run itself** — 30 epochs ≈ **28 h on 1 GPU / ~17 h on 2** at the measured bs256 rate. The
-  driver defaults to `mom256` and `baseLR = 0.1` (the reference rate), so it is one command.
-* **The step-level tie against the JAX reference** — the tier-1 gate: identical init + identical
-  data order, compare the first N steps' losses. The shim makes the data half possible; the init
-  half needs the two sides seeded the same. Until that runs, the pair is *plumbed*, not *tied*.
-* **The `mom` numeric gate** (still owed, above) and the `NetSpec`/`VerifiedNetSpec` `#guard`.
+Attempted 2026-07-30, and it stopped at the first check, which is the cheapest one: **the param
+counts disagree.**
+
+| | params |
+|---|---|
+| verified (`resnet34ImagenetVerified`, from the dumped `[θ|m|v]`) | **23,182,440** |
+| JAX reference (`resnet34Imagenet.totalParams`) | **21,797,672** |
+| gap | **1,384,768** |
+
+The gap is not noise and it decomposes **exactly**:
+
+| cause | params |
+|---|---|
+| downsample projection is **3×3 strided** in the render, **1×1** in the JAX spec | 1,376,256 |
+| the render carries **conv biases**; `.convBn` does not | 8,512 |
+| **total** | **1,384,768** ✓ |
+
+Confirmed in the emitted artifact, not inferred: `%d2Wp: tensor<128x64x3x3xf32>`,
+`%d4Wp: tensor<512x256x3x3xf32>`. `ResNet34RenderB.downFwdB` builds the projection from
+`zk1 : Kernel4 c cin 3 3` — the *same* kernel as the block's first conv.
+
+**So the repo's "ResNet-34" is not He et al.'s ResNet-34.** The paper's option-B shortcut is a **1×1**
+projection; this is 3×3, which is **+6.3% params** over the standard 21.8M. It is **documented
+nowhere** — `grep` finds no mention of the shortcut kernel in any `.lean` or `.md`, and the render's
+own docstring says only "strided projection skip". Every R34 number in this repo (the 90.39%
+Imagenette run included) is for that net, and `resnet34Verified`'s blurb calls it "Real ResNet-34".
+
+**This is precisely the seam §2k's "structural" note predicted**, and it is the argument for the
+`#guard` in its sharpest form: `NetSpec` and `VerifiedNetSpec` are two independent descriptions of
+"ResNet-34" in two layer vocabularies, nothing forces them to agree, **and they don't**. A
+`toSpecs`-vs-`totalParams` guard would have failed at `lake build` the day the ImageNet spec was
+written, instead of after the renders, the driver and a smoke run.
+
+It also confirms the reason the tie was worth attempting *before* a 28-hour run: a JAX-vs-verified
+accuracy comparison would have been **uninterpretable**, and nothing else in the pipeline would have
+said so — both nets train, both descend, both are "ResNet-34".
+
+### 2l. ▶ DECIDED 2026-07-30: make the render the PAPER's ResNet-34 (1×1 projection)
+
+**Brett's call, and it is the expensive option deliberately** — the alternatives were to bend the
+JAX spec to match the render, or to keep two nets and give up the oracle. Correctness of the
+artifact wins: `resnet34Verified`'s blurb says *"Real ResNet-34"* and it should be true.
+
+**▶ THIS IS THE NEXT SESSION'S JOB. Read §2k's finding above first — it is the why.**
+
+#### The change is two things, and only ONE of them is functional
+
+| | change | functional? |
+|---|---|---|
+| **A. projection shortcut** | `downFwdB`'s `%{p}Wp` from **3×3 strided** to **1×1 strided** | ✅ **YES** — different net, −1,376,256 params |
+| **B. conv biases** | drop `%sbi`, `%{p}b1/b2/bp` (every conv is BN-followed) | ⛔ **NO** — see below, −8,512 params |
+
+**B is inert and that matters for sequencing.** Every conv here is immediately followed by BN, and
+BN subtracts the batch mean: `(x + b) − mean(x + b) = x − mean(x)`. So a conv bias cannot affect the
+BN output, its gradient is **exactly zero**, and — since biases are zero-initialised (`initKind 2`) —
+it stays 0 forever, with `m`/`v` at 0 too. **Dropping the conv biases changes the parameter layout
+but NOT the function.** ⚠ That is an argument, not a measurement: verify it in ten seconds by
+dumping `[θ|m|v]` after a few steps and checking the bias slots are ~0 before relying on it.
+
+Consequence: **A alone invalidates accuracy numbers; B alone invalidates only layouts.** They can be
+landed and gated separately, and B is the one that makes `init_params_from_file` line up.
+
+#### What makes this much cheaper than it looks
+
+Both sides are **already kernel-generic** — this is re-instantiation, not restructuring:
+
+* `SHlo.convStrided {ic oc h w kH kW}` and `convStridedBack {… kH kW}` take the kernel as
+  parameters.
+* `Proofs.rblkPStridedPC {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp}` — **the proof-side downsample block
+  already takes the projection kernel as `kHp kWp`**, instantiated at 3×3.
+
+⚠ **The one thing to check FIRST, before touching anything**: whether the emitter's symmetric-SAME
+padding formula can spell `kH = kW = 1`. §2f-bis's ConvNeXt work found that formula *could not*
+spell an **even** kernel (2×2) and needed emitter work; 1 is odd, so `pad = (k−1)/2 = 0` should fall
+out — but **measure it, do not assume**. Render one 1×1 strided conv and read the emitted
+`stablehlo.convolution` padding. That is a ten-minute check that decides whether this is a
+half-session or a two-session job.
+
+*(Also: `RenderPC.lean:13,49` DID document "3×3 strided projection skip" all along. The failure was
+that the spec blurb and README said "Real ResNet-34" while the deviation lived only in a codegen
+docstring. Whatever lands, put the shortcut kernel in `resnet34Verified`'s blurb.)*
+
+#### Blast radius — what this voids, and it is not small
+
+**13 artifacts re-render** (every `resnet34*` and `resnet34in*` in `verified_mlir/`).
+
+| what | status after |
+|---|---|
+| `ResNet34Layout.specs` (`IreeRuntime.lean:284`) + its `#guard` | **must be rewritten** — 146 params → fewer, and the hand-list is audited |
+| the §1a tie, `SpecVJP` witnesses, `ResNet34LiveSeal`, `Resnet34WholeFloatBridge` | **re-instantiate at `kHp = kWp = 1`** — parameterised, so this is arguments not proofs |
+| §2b's numeric tie vs the retired hand-written render | **gone** — that emitter is deleted; the tie was against the 3×3 net. Recover with `git show 75a9f8e:` if a comparison is wanted |
+| **the 90.39% Imagenette 80-epoch run** | **VOID** — different net. Re-run (~1h11m) |
+| §2d.2's five-config batch/step-count study | **VOID** — all five are the 3×3 net. Re-run if the finding is still wanted (it is a good finding: accuracy tracks step count) |
+| §2d.1 bs256 1.78×, §2c 1.46×, the §2d.3 transfer measurements | **shift slightly** — 6.3% fewer params moves the `[θ\|m\|v]` blob from 272 MB to ~256 MB. Directionally unchanged; re-measure before quoting |
+| `resnet34-adam-tie`, `resnet34-batch-check`, the DP artifacts + gates | **re-run**, unchanged in construction |
+| README's R34 row | **re-measure** |
+
+#### Suggested order
+
+1. **The 1×1-padding check** above. Ten minutes, and it sizes everything else.
+2. **B first (conv biases), alone.** Layout-only, so the *forward is unchanged* — which means you
+   can gate it the strongest possible way: the trained net must behave identically. Lands
+   `init_params_from_file` compatibility early.
+3. **Then A (1×1 projection)**, re-instantiate the proof side, rewrite `ResNet34Layout.specs`,
+   re-render all 13, re-run the ties.
+4. **Re-run the 80-epoch Imagenette** to restore the headline number, then §2d.2 if wanted.
+5. **Then the step-level tie** — the param counts should now match at **21,797,672** on both sides,
+   which is itself the first gate and is free to check.
+
+#### Still owed, independent of all this
+
+* **The `mom` numeric gate** (§2k) — the `m = v = 0` ⇒ `g = 10·m'` known answer.
+* **The `NetSpec`/`VerifiedNetSpec` `#guard`.** Write it regardless and write it FIRST: it has a
+  demonstrated catch, and after this change it is what stops the two specs drifting apart again.
+  A `totalParams` equality would have failed at `lake build` and saved this whole detour.
 
 #### What this does NOT do
 
