@@ -3043,6 +3043,65 @@ written on. ⚠ These are projections from a measured subtraction, not results �
 design decision" above (residency bit-identical to the copying path over N steps) is what turns them
 into results.
 
+#### ▶ The two probe nets — and what residency would do to `benchmark-xla`
+
+Same accounting, same recipe as the benchmark's own probes (3 epochs, `LEAN_MLIR_BENCH_SYNTH=1`,
+`LEAN_MLIR_MAX_EPOCHS=3`). Both reproduce their committed anchors, so these are comparable numbers:
+dense **614 ms/epoch** against `probeDenseRefMsXla := 610`, conv **3742** against
+`probeConvRefMsXla := 3650` (inside that constant's documented ±6% spread).
+
+| | step | param round trip | share | param buffers | param bytes |
+|---|---|---|---|---|---|
+| **dense probe** (`mnist-mlp-verified-xla`) | 1.3 ms | 1.0 ms | **75%** | 6 | 3 MB |
+| **conv probe** (`cifar8-bn-verified-xla`) | 9.5 ms | 3.2 ms | **33.5%** | 38 | **~0.5 MB** |
+| R34 bs32 | 160 ms | 88 ms | 55% | 513 | 260 MB |
+| EfficientNet bs32 | 215 ms | 101 ms | 49% | 887 | 46 MB |
+
+**cifar8-bn is the cleanest demonstration of the per-buffer story in the repo: 3.2 ms to move half a
+megabyte, an effective 0.15 GB/s.** Nothing about that is bandwidth.
+
+These are also the third and fourth points against the two-point fit, and they **split the verdict**:
+h2d holds (predicted 0.99 ms for cifar8-bn vs 1.1 measured; the MLP's whole round trip predicted at
+1.05 vs 1.0), while **d2h is looser than the fit implies** — 81 µs/buffer over-predicts cifar8-bn
+(3.08 predicted vs 2.1 measured), and the per-buffer d2h across the four nets ranges **55-100 µs**.
+Quote it as: **h2d ≈ 26 µs/buffer, solid on four nets; d2h is 2-4× h2d and NOT tightly pinned.**
+
+**▶ `benchmark-xla` would NOT become "automagically" right, and the failure is §2j's trap one axis
+over.** Two reasons, in order:
+
+1. **It would not move at all**, because residency is opt-in by design (see "the design decision"
+   above) and the benchmark does not set the variable. Nothing changes until someone wires it in or
+   makes residency the default.
+2. **Wired in naively, it reports wrong numbers.** The probes run the real trainers
+   (`lakefile.lean`'s `runProbe`), so `yourMs` genuinely drops — but `probe*RefMsXla` and every
+   `refSecXla` are constants measured on the copying path, and `yourSec = refSec × yourMs / refMs`
+   only self-corrects when the probe and the chapter it scales speed up by the **same** factor. They
+   do not, because the speedup tracks parameter count against compute per step:
+
+   | rows | probe | probe gain | chapter gain | estimate |
+   |---|---|---|---|---|
+   | ch1-2 MNIST linear/MLP | dense | ~4.0× | ~4.0× (the same nets) | ✅ right |
+   | ch3-4 MNIST CNN, CIFAR×6 | conv | 1.50× | ~1.50× (ch4 **is** cifar8-bn) | ✅ right |
+   | **ch5-8 R34/mnv2/ENet/ConvNeXt** | conv | **1.50×** | **~2.0-2.2×** | ⚠️ **~1.4× pessimistic** |
+   | ch9 ViT | attn | — | the same net | ✅ right |
+
+   The error is **pessimistic**, which is the safer direction — but ch5-8 are **90% of the XLA total**
+   (21,960 s of 24,391), so the headline Part-1 number reads ~1.4× too slow. The fix is what §2j did
+   when it added this column in the first place: **re-measure it** — 3 probe constants + 9 chapter
+   rows. Note ch9's `refSecXla := 3491` is a *measured* 80-epoch wall validated to 0.3%; that
+   validation goes void with it.
+
+   One real mitigation: on the reference card the on-reference factor (§2j's "0.94-1.06× is
+   agreement") would immediately read far outside the band, so this fails loudly rather than
+   silently — *if* anyone runs `benchmark-xla` on a 7900 XTX.
+
+**▶ And the surprise worth carrying: the SMALL demo nets benefit MOST.** The MNIST MLP is **75%**
+transfer against R34's 55%, so residency is worth ~4× there and ~2.2× on R34. That inverts the
+premise this whole section was written on. Device-resident parameters is not primarily an
+Imagenette-throughput item — it is a **`lake run mnist-xla` / `cifar-xla` interactivity** item, and
+those are the demo groups a reader actually sits and watches. Weigh that when deciding the 3-4
+sessions: the case is stronger than §2d.3 assumed *and* it points somewhere else.
+
 **A cheaper thing to try FIRST, which this measurement makes visible and which was not on the list:**
 since the cost is per-buffer, anything that cuts the buffer count cuts it, and **d2h is where 3/4 of
 the per-buffer cost is** (81 µs vs 26). Worth an hour before committing to phase 1: find out *why*
