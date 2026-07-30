@@ -295,6 +295,15 @@ what the trainer runs — see §2b.
 ### Running it
 
 ```bash
+# ── the one-command entry points (added 2026-07-30): the XLA peers of the three demo groups.
+# Each builds `ffi/libpjrt_ffi.so` if it is missing or older than `ffi/pjrt_ffi.c` (it is NOT a
+# lake target, just the gcc line below), reports whether $PJRT_PLUGIN resolves, then builds and
+# runs each trainer in sequence via run.sh. IREE_BACKEND is irrelevant on these — the backend is
+# whichever .so the target linked.
+lake run mnist-xla        # linear / MLP / CNN — an EXACT mirror of `lake run mnist`
+lake run cifar-xla        # ⚠ 2 of `lake run cifar`'s 6: only the AdamW pair has -xla targets
+lake run imagenette-xla   # ⚠ 4 of 5: ViT is excluded BY MEASUREMENT (MIOpen, §0b/§2h)
+
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build resnet34-verified-adam-xla
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-verified-adam-xla data

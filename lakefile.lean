@@ -2076,13 +2076,55 @@ private def detectBackend : IO String := do
     pure (if o.exitCode == 0 then "cuda" else "rocm")
   catch _ => pure "rocm"
 
-/-- Build then run each named trainer in sequence (streaming) via `run.sh`. -/
-private def runDemoGroup (names : List String) : IO UInt32 := do
+/-- `ffi/libpjrt_ffi.so` is **not** a lake target — it is the gcc one-liner documented above
+    `xlaLink`. Build it when it is missing or older than its source, so `lake run <group>-xla`
+    works from a fresh clone instead of failing at link time, and so an edited shim cannot be
+    silently run stale (the `.vmfb`-cache hazard's cousin — see planning/xla_pjrt_handoff.md §4). -/
+private def ensurePjrtShim : IO Bool := do
+  let src : System.FilePath := "ffi/pjrt_ffi.c"
+  let so  : System.FilePath := "ffi/libpjrt_ffi.so"
+  let stale ← if !(← so.pathExists) then pure true else do
+    let a ← src.metadata; let b ← so.metadata
+    pure (b.modified.sec < a.modified.sec)
+  if !stale then
+    IO.println s!"  ✓ {so} up to date"
+    return true
+  IO.println s!"  ▸ building {so} (gcc -fPIC -O2 -shared {src} -ldl)"
+  let r ← IO.Process.output
+    { cmd := "gcc", args := #["-fPIC", "-O2", "-shared", src.toString, "-ldl", "-o", so.toString] }
+  if r.exitCode != 0 then
+    IO.eprintln s!"    ✗ shim build failed:\n{r.stderr.take 2000}"
+    return false
+  IO.println s!"    ✓ built {so}"
+  return true
+
+/-- The XLA path `dlopen`s a PJRT plugin at run time (`$PJRT_PLUGIN`, else the path compiled
+    into the shim). Nothing links against it, so a missing plugin surfaces as a `dlopen` error
+    at the first step rather than at build time — say so up front. -/
+private def notePjrtPlugin : IO Unit := do
+  match ← IO.getEnv "PJRT_PLUGIN" with
+  | some p =>
+    if ← System.FilePath.pathExists p then IO.println s!"  ✓ PJRT_PLUGIN={p}"
+    else IO.println s!"  ⚠ PJRT_PLUGIN={p} does NOT exist — the first step will fail in dlopen"
+  | none =>
+    IO.println "  ▸ PJRT_PLUGIN unset — falling back to the path compiled into ffi/pjrt_ffi.c \
+(a jax rocm/cuda plugin .so). If the run dies in dlopen, set PJRT_PLUGIN to your plugin."
+
+/-- Build then run each named trainer in sequence (streaming) via `run.sh`.
+
+    `xla := true` selects the PJRT peers: it builds the shim first and reports the plugin, and
+    it does NOT need the venv, because those binaries compile in-process through PJRT instead of
+    shelling out to `iree-compile`. One loop serves both so the two paths cannot drift. -/
+private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32 := do
   let backend ← match ← IO.getEnv "IREE_BACKEND" with
     | some b => pure b
     | none   => detectBackend
   let gpu := (← IO.getEnv "LEAN_DEMO_GPU").getD "0"
-  -- The trainers shell out to `iree-compile`; put the project venv on PATH so
+  if xla then
+    IO.println "━━━ XLA/PJRT backend ━━━"
+    if !(← ensurePjrtShim) then return 1
+    notePjrtPlugin
+  -- The IREE trainers shell out to `iree-compile`; put the project venv on PATH so
   -- `lake run` works without pre-activating it (the usual one-click footgun).
   let venvBin := (← IO.currentDir) / ".venv" / "bin"
   let runEnv ← do
@@ -2120,6 +2162,48 @@ script imagenette do
   runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
                 "efficientnet-verified-adam", "convnext-verified-adam",
                 "vit-verified-adam"]
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- The XLA/PJRT peers of the three groups above. Same nets, same certified
+-- artifacts, same schedules and seeds — the ONLY difference is which trusted
+-- lowerer consumes the emitted StableHLO, which is the whole point of the
+-- second backend (planning/xla_pjrt_handoff.md §1).
+--
+-- Why you'd reach for these: XLA is **4.6× IREE** on EfficientNet — 80 epochs in
+-- 1 h 35 m against 7 h 50 m (§2e-quinquies) — and multi-GPU is reachable ONLY
+-- here, since collectives exist on the PJRT path and the IREE shim refuses a DP
+-- entry point outright. Re-measure per net rather than assuming 4.6×; it is one
+-- net's number, on a depthwise-convolution-heavy net.
+--
+-- ⚠ Two coverage gaps, both named rather than papered over — see each docstring.
+-- ═══════════════════════════════════════════════════════════════════════
+
+/-- `lake run mnist-xla` — the XLA peers of `lake run mnist`, and an EXACT mirror:
+    all three verified MNIST demos (linear/MLP/CNN) have a `-xla` target. -/
+script «mnist-xla» do
+  runDemoGroup ["mnist-linear-verified-xla", "mnist-mlp-verified-xla",
+                "mnist-cnn-verified-xla"] (xla := true)
+
+/-- `lake run cifar-xla` — the XLA peers of `lake run cifar`. ⚠ **2 of that group's 6**:
+    only the two AdamW variants have `-xla` targets today. The four SGD/momentum peers
+    (`cifar8{,-bn}-verified-{momentum,sgdsched}`) are IREE-only, so this does **not**
+    reproduce the Chapter-5 six-way optimizer ablation — use `lake run cifar` for that.
+    Adding them is the §2h recipe (extract a shared `<Net>Common.lean` so the two backends
+    cannot drift on epochs/batch/seed, then one root + one lakefile entry each). -/
+script «cifar-xla» do
+  runDemoGroup ["cifar8-verified-adam-xla", "cifar8-bn-verified-adam-xla"] (xla := true)
+
+/-- `lake run imagenette-xla` — the XLA peers of `lake run imagenette`. ⚠ **4 of that group's
+    5: ViT-Tiny is EXCLUDED BY MEASUREMENT, not by omission.** `vit-verified-adam-xla` builds
+    and its graph compiles, but it dies at *execution* in the patch-embed weight-gradient
+    convolution with `miopenStatusUnknownError` — on this box's MIOpen, on the single-device
+    step, and identically for its SGD render, so it is not an AdamW or a collective problem
+    (§0b, §2h). The identical graph runs fine under IREE, so `lake run imagenette` still
+    covers all five. The other four are each measured: mnv2 58.0 s/epoch, ConvNeXt 84.5 s,
+    EfficientNet 71.1 s, and all four have an 80-epoch run on their certified bytes. -/
+script «imagenette-xla» do
+  runDemoGroup ["resnet34-verified-adam-xla", "mobilenetv2-verified-adam-xla",
+                "efficientnet-verified-adam-xla", "convnext-verified-adam-xla"] (xla := true)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- `lake run download` — fetch the core datasets the verified trainers + the
