@@ -1247,9 +1247,24 @@ lean_exe «cifar8-verified» where
 
 -- Deeper 8-conv CIFAR-10 CNN + per-channel BN on the VERIFIED-rendered StableHLO
 -- (Proofs.StableHLO.cifar8BnTrainStepText). The pedagogical BN-acceleration demo.
+/-- Shared body of the verified CIFAR-8-BN (plain-SGD) trainer — imported by BOTH the
+    IREE and XLA executables so their config and He-init seed cannot drift. This net is
+    the **conv anchor** for `lake run benchmark` and `lake run benchmark-xla`, which is
+    why the XLA peer exists: both must probe the same net (handoff §2j). -/
+lean_lib «Cifar8BnCommon» where
+  srcDir := "."
+  roots := #[`apps.cifar.Cifar8BnCommon]
+
 lean_exe «cifar8-bn-verified» where
   root := `apps.cifar.MainCifar8BnVerified
   moreLinkArgs := ireeLink
+
+/-- The XLA/PJRT peer of `cifar8-bn-verified` — the conv anchor for
+    `lake run benchmark-xla`. Adds no rung: `VerifiedNet.train` rides
+    `iree_ffi_invoke_f32`, which `ffi/pjrt_ffi.c` already implements. -/
+lean_exe «cifar8-bn-verified-xla» where
+  root := `apps.cifar.MainCifar8BnVerifiedXla
+  moreLinkArgs := xlaLink
 
 -- cifar8 (no BN) Adam peer: the proof-rendered fwd/bwd/param-grads with the SGD update
 -- swapped for AdamW (ViTRender.emitAdamV) + packed [θ|m|v] + runtime lr/bc threading via
@@ -2314,7 +2329,8 @@ script download do
     return 1
 
 -- ═══════════════════════════════════════════════════════════════════════
--- `lake run benchmark` — estimate the book's training time on YOUR gpu.
+-- `lake run benchmark` (IREE) and `lake run benchmark-xla` (XLA/PJRT) —
+-- estimate the book's training time on YOUR gpu.
 -- Probes two fast verified nets for a few epochs (the only thing that runs),
 -- reads steady-state ms/epoch from the trainer's own per-epoch print, and
 -- scales the reference per-chapter wall-clock by the measured hardware factor.
@@ -2322,34 +2338,76 @@ script download do
 -- either vendor out of the box. A dense factor (MNIST-MLP) and a conv factor
 -- (CIFAR-8-BN) scale the dense- vs conv-dominated chapters independently.
 --
+-- ⚠ **EACH LOWERER HAS ITS OWN REFERENCE COLUMN, AND THAT IS NOT OPTIONAL.**
+-- The two backends are not within noise of each other on the same card: measured
+-- on the reference 7900 XTX, XLA is 2.2× IREE on the conv anchor and 4.7× on the
+-- dense one (and 4.6× on EfficientNet, handoff §2e-quinquies). So dividing an XLA
+-- probe by an IREE anchor conflates *your GPU vs a 7900 XTX* with *XLA vs IREE*,
+-- and reports a training estimate several times too fast with no warning. That is
+-- why `BenchItem` carries `refSecXla` and why there are `probe*RefMsXla` constants:
+-- a `BenchRef` bundles one lowerer's anchors so a probe can only ever be divided by
+-- a reference measured on the same path. See planning/xla_pjrt_handoff.md §2j.
+--
 -- REFERENCE NUMBERS below are per-chapter *training* wall-clock on a single AMD
--- 7900 XTX (gfx1100, ROCm 7.2), verified-IREE path. The MNIST/CIFAR rows and all
--- three probe anchors (dense/conv/attn) were MEASURED directly from these verified
--- trainers (steady-state ms/{epoch,step} × the trainer's epoch/step count); the
--- R34/MNv2/ENet/ConvNeXt Imagenette rows are the verified-adam tier runs (9.5h /
--- 5.4h / 6.2h / 13.3h) and the ViT row is measured here (7.8h warm — the 2.3h
--- figure elsewhere is the JAX bf16 path, not this verified trainer). All EXCLUDE the
--- one-time IREE compile (~10–15 min/arch, CPU-bound, ~hardware-independent).
--- Re-running this benchmark on a 7900 XTX reproduces all three anchors (every
--- factor reads ~1.0×); regenerate the other Imagenette rows from a clean full run.
+-- 7900 XTX (gfx1100, ROCm 7.2). The MNIST/CIFAR rows and all three IREE probe
+-- anchors (dense/conv/attn) were MEASURED directly from these verified trainers
+-- (steady-state ms/{epoch,step} × the trainer's epoch/step count); the
+-- R34/MNv2/ENet/ConvNeXt IREE Imagenette rows are the verified-adam tier runs
+-- (9.5h / 5.4h / 6.2h / 13.3h) and the IREE ViT row is measured here (7.8h warm —
+-- the 2.3h figure elsewhere is the JAX bf16 path, not this verified trainer). The
+-- IREE rows EXCLUDE the one-time IREE compile (~10–15 min/arch, CPU-bound,
+-- ~hardware-independent); the XLA rows need no such carve-out, since XLA compiles
+-- in-process in seconds. Re-running either benchmark on a 7900 XTX reproduces its
+-- own anchors (every factor reads ~1.0×).
+--
+-- ⚠ Two known staleness caveats in the IREE column, both MEASURED 2026-07-30 and
+-- left as-is rather than silently changed:
+--   * ch4 (MNIST CNN) reads 23764 ms/epoch; re-measured on the same card, same
+--     basis (real data + eval, steady state) it is **17659** — the row is ~1.35×
+--     pessimistic. ch2/ch3/ch5 reproduce (535→539, 3200→3032, 8490→8782).
+--   * the IREE Imagenette rows predate the 2026-07-28 codegen swaps, so they were
+--     measured on RETIRED hand-written renders (handoff §0b). The XLA Imagenette
+--     rows are the current certified bytes.
 -- ═══════════════════════════════════════════════════════════════════════
 
 structure BenchItem where
   chapter : String
-  family  : String          -- "dense" | "conv"
-  refSec  : Nat             -- reference training wall-clock (s) on the 7900 XTX
+  family  : String          -- "dense" | "conv" | "attn"
+  refSec  : Nat             -- IREE reference training wall-clock (s) on the 7900 XTX
+  /-- XLA/PJRT reference wall-clock (s) on the same card. `none` = this chapter has no
+      measured XLA reference, in which case `benchmark-xla` prints the row as `n/a` and
+      leaves it out of the totals rather than borrowing the IREE number (which would be
+      the §2j mismatched-baseline trap). Only ch.10 is `none`: `vit-verified-adam-xla`
+      does not execute on this box (MIOpen, handoff §0b/§2h), so no XLA ViT run exists
+      to measure. -/
+  refSecXla : Option Nat
   tier    : String          -- "" | "mnist" | "cifar" | "imagenette"
 
+/-- The XLA MNIST/CIFAR rows were measured 2026-07-30 on the reference 7900 XTX with the
+    SAME construction as the IREE ones — steady-state ms/epoch (real data + eval, last of
+    3 epochs) × the trainer's own epoch count, so the two columns are directly comparable.
+    The XLA Imagenette rows are the 80-epoch single-GPU runs on the current certified bytes
+    from handoff §0b (logs `runs/<net>_xla_80ep_jul29.log`). ch5 mirrors the IREE row's
+    approximation — the BN arm's cost × 6 — so that the two columns stay comparable, even
+    though the 3 no-BN arms are cheaper.
+
+    ⚠ The XLA MNIST/CIFAR rows are each a SINGLE steady-state sample, so they inherit the
+    ±6% per-run spread documented on `probeConvRefMsXla`; the conv-family ones (ch4, ch5)
+    are the affected pair. Treat them as ±6%, not as exact. -/
 def benchTable : List BenchItem :=
-  [ { chapter := "2  MNIST linear", family := "dense", refSec := 6,     tier := "mnist" },      -- 535ms × 12
-    { chapter := "3  MNIST MLP",    family := "dense", refSec := 38,    tier := "mnist" },      -- 3200ms × 12
-    { chapter := "4  MNIST CNN",    family := "conv",  refSec := 238,   tier := "mnist" },      -- 23764ms × 10
-    { chapter := "5  CIFAR x6",     family := "conv",  refSec := 2038,  tier := "cifar" },      -- 8490ms × 40 × 6
-    { chapter := "6  ResNet-34",    family := "conv",  refSec := 34200, tier := "imagenette" }, -- 9.5h
-    { chapter := "7  MobileNetV2",  family := "conv",  refSec := 19440, tier := "imagenette" }, -- 5.4h
-    { chapter := "8  EfficientNet", family := "conv",  refSec := 22320, tier := "imagenette" }, -- 6.2h
-    { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, tier := "imagenette" }, -- 13.3h
-    { chapter := "10 ViT",          family := "attn",  refSec := 27966, tier := "imagenette" } ]-- 7.8h (1185ms/step × 295 × 80, warm steady-state)
+  [ { chapter := "2  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist" },      -- IREE 535ms × 12   | XLA 239ms × 12
+    { chapter := "3  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist" },      -- IREE 3200ms × 12  | XLA 676ms × 12
+    { chapter := "4  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist" },      -- IREE 23764ms × 10 | XLA 4103ms × 10
+    { chapter := "5  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar" },      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+    { chapter := "6  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 4260, tier := "imagenette" }, -- IREE 9.5h  | XLA 1h11m
+    { chapter := "7  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette" }, -- IREE 5.4h  | XLA 1h25m
+    { chapter := "8  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette" }, -- IREE 6.2h  | XLA 1h34m
+    { chapter := "9  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6960, tier := "imagenette" }, -- IREE 13.3h | XLA 1h56m
+    { chapter := "10 ViT",          family := "attn",  refSec := 27966, refSecXla := none,      tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA: does not run here
+
+/-- This chapter's reference wall-clock on the selected lowerer. -/
+def BenchItem.refOn (it : BenchItem) (xla : Bool) : Option Nat :=
+  if xla then it.refSecXla else some it.refSec
 
 /-- Steady-state ms/epoch on the reference 7900 XTX for the two anchors, measured by
     the synthetic-input probe (`LEAN_MLIR_BENCH_SYNTH`): one constant batch reused at
@@ -2366,15 +2424,70 @@ def probeConvRefMs  : Nat := 8020   -- cifar8-bn-verified  (8-conv + BN, 512 hea
     verified-IREE trainer, which is ~7.8h here.) -/
 def probeAttnRefMs : Nat := 1173
 
-/-- Scale a chapter's reference seconds by the measured per-family factor. `aMs` is
-    the attn ms/step probe (0 when no imagenette → attn falls back to the conv
-    factor, which is known ~3.5x low for ViT). -/
-def yourSecOf (it : BenchItem) (dMs cMs aMs : Nat) : Nat :=
-  if it.family == "dense" then it.refSec * dMs / probeDenseRefMs
-  else if it.family == "attn" then
-    if aMs == 0 then it.refSec * cMs / probeConvRefMs        -- fallback: conv proxy
-    else it.refSec * aMs / probeAttnRefMs
-  else it.refSec * cMs / probeConvRefMs
+/-- The XLA/PJRT anchors, measured 2026-07-30 on the same reference 7900 XTX, with the
+    same synthetic-input probe and the same "last of 3 epochs" steady-state rule as the
+    IREE ones above — the only difference is which `.so` the probe binary linked. Against
+    the IREE anchors these read 4.66× (dense) and 2.19× (conv), which is the whole reason
+    a shared reference column would be wrong (§2j).
+
+    There is deliberately **no XLA attn anchor**: `vit-verified-adam-xla` builds and
+    compiles but dies at execution in the patch-embed weight-gradient convolution
+    (MIOpen, handoff §0b/§2h), so no honest number can be measured here. `xlaRef` sets
+    `attnProbe := ""` and ch.10's `refSecXla` is `none`, so `benchmark-xla` is
+    structurally a 2-probe / 8-chapter table and says so.
+
+    Both are **medians over repeated runs, not single samples**, because the conv probe has
+    real run-to-run spread on this card: ten runs of the same binary gave 3449 / 3473 / 3482
+    / 3528 / 3565 / 3733 / 3774 / 3778 / 3792 / 3865 ms/epoch — a ±6% band with no pattern
+    (an earlier reading of it as context-dependent, benchmark-run vs standalone, was refuted
+    by the 11th sample). So a single sample can read 0.94× against its own anchor and look
+    like a regression when nothing changed. The dense probe is stable to ±1.5% (601 / 605 /
+    607 / 610 / 610 / 610 / 615 / 619). Read an on-reference factor of 0.94-1.06× as
+    agreement, not as signal — and if you re-anchor, use a median of several runs, not the
+    one number in front of you. -/
+def probeDenseRefMsXla : Nat := 610    -- mnist-mlp-verified-xla   (vs 3030 on IREE); median of 8
+def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified-xla   (vs 8020 on IREE); median of 10
+
+/-- One lowerer's complete probe configuration: which binaries to probe and which anchors
+    to divide by. Bundling them is the point — `yourSecOf` takes a `BenchRef`, so a probe
+    measured on one path cannot be divided by the other path's anchor, which is the §2j
+    trap made unrepresentable rather than merely documented. -/
+structure BenchRef where
+  /-- Lowerer name for the table header — the label whose absence was §2j's complaint. -/
+  lowerer    : String
+  xla        : Bool
+  denseProbe : String
+  convProbe  : String
+  /-- `""` = this lowerer has no runnable attn probe. -/
+  attnProbe  : String
+  denseRefMs : Nat
+  convRefMs  : Nat
+  attnRefMs  : Nat
+
+def ireeRef : BenchRef :=
+  { lowerer := "IREE", xla := false
+    denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified"
+    attnProbe := "vit-verified-adam"
+    denseRefMs := probeDenseRefMs, convRefMs := probeConvRefMs, attnRefMs := probeAttnRefMs }
+
+def xlaRef : BenchRef :=
+  { lowerer := "XLA/PJRT", xla := true
+    denseProbe := "mnist-mlp-verified-xla", convProbe := "cifar8-bn-verified-xla"
+    attnProbe := ""                          -- MIOpen: no runnable ViT probe on this path
+    denseRefMs := probeDenseRefMsXla, convRefMs := probeConvRefMsXla, attnRefMs := 0 }
+
+/-- Scale a chapter's reference seconds by the measured per-family factor, against `ref`'s
+    OWN anchors. `aMs` is the attn ms/step probe (0 when there is no attn probe or it
+    failed → attn falls back to the conv factor, which is known ~3.5x low for ViT).
+    `none` when this chapter has no reference on `ref`'s lowerer. -/
+def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat :=
+  (it.refOn ref.xla).map fun refSec =>
+    if it.family == "dense" then refSec * dMs / ref.denseRefMs
+    else if it.family == "attn" then
+      if aMs == 0 then refSec * cMs / ref.convRefMs            -- fallback: conv proxy
+      else refSec * aMs / ref.attnRefMs
+    else refSec * cMs / ref.convRefMs
+
 
 /-- Human duration from whole seconds: `45s` / `12m` / `9.5h`. -/
 def fmtDur (sec : Nat) : String :=
@@ -2459,19 +2572,35 @@ def runProbe (bin family : String) (refMs : Nat) (backend gpu : String)
       IO.println s!"    {ms} {unit}   [ref {refMs}]   → {fmtFactor ms refMs}× the 7900 XTX"
       pure (some ms)
 
-/-- `lake run benchmark` — probe this GPU, print a per-chapter training-time estimate. -/
-script benchmark do
+/-- The shared body of `lake run benchmark` and `lake run benchmark-xla`. One printer, two
+    `BenchRef`s, so the two commands cannot drift on the probe recipe, the steady-state rule
+    or the table layout — and, more to the point, so neither can end up dividing by the other
+    lowerer's anchors (handoff §2j).
+
+    Rows with no reference on this lowerer print `n/a` and are excluded from the totals and
+    from the tier subtotals; the footer says how many chapters were covered, so a short total
+    can never read as a whole-Part-1 number. -/
+def runBenchmark (ref : BenchRef) : IO UInt32 := do
   let backend ← match ← IO.getEnv "IREE_BACKEND" with
     | some b => pure b
     | none   => detectBackend
   let gpu := (← IO.getEnv "LEAN_DEMO_GPU").getD "0"
-  let venvBin := (← IO.currentDir) / ".venv" / "bin"
-  let runEnv ← do
-    if ← System.FilePath.pathExists (venvBin / "iree-compile") then
-      pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
-    else pure #[]
-  IO.println "━━━ lake run benchmark ━━━ verified-NN training throughput on your GPU"
-  IO.println s!"  backend: {backend}   gpu: {gpu}   (synthetic-input probes — no dataset needed)"
+  -- The XLA binaries compile in-process through PJRT, so unlike the IREE ones they need
+  -- neither the venv on PATH nor `iree-compile` — but they DO need the shim built and a
+  -- resolvable plugin, the same two guards `runDemoGroup (xla := true)` applies.
+  let runEnv ← if ref.xla then do
+      IO.println "━━━ XLA/PJRT backend ━━━"
+      if !(← ensurePjrtShim) then return 1
+      notePjrtPlugin
+      pure #[]
+    else do
+      let venvBin := (← IO.currentDir) / ".venv" / "bin"
+      if ← System.FilePath.pathExists (venvBin / "iree-compile") then
+        pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
+      else pure #[]
+  let cmdName := if ref.xla then "benchmark-xla" else "benchmark"
+  IO.println s!"━━━ lake run {cmdName} ━━━ verified-NN training throughput on your GPU"
+  IO.println s!"  lowerer: {ref.lowerer}   backend: {backend}   gpu: {gpu}   (synthetic-input probes — no dataset needed)"
   -- Pre-flight: a busy GPU inflates every probe. Warn if the card isn't idle.
   match ← gpuBusyPct backend with
   | some u => IO.println (if u > 20 then
@@ -2480,39 +2609,98 @@ script benchmark do
   | none   => pure ()
   -- Synthetic input (LEAN_MLIR_BENCH_SYNTH, set in runProbe): one constant batch reused
   -- at the dataset's real step count, so no MNIST/CIFAR/Imagenette download is required.
-  let denseMs ← runProbe "mnist-mlp-verified" "dense" probeDenseRefMs backend gpu runEnv
-  let convMs  ← runProbe "cifar8-bn-verified" "conv"  probeConvRefMs  backend gpu runEnv
-  let attnMs ← runProbe "vit-verified-adam" "attn" probeAttnRefMs backend gpu runEnv (stepProbe := some 100)
+  let denseMs ← runProbe ref.denseProbe "dense" ref.denseRefMs backend gpu runEnv
+  let convMs  ← runProbe ref.convProbe  "conv"  ref.convRefMs  backend gpu runEnv
+  let attnMs ← if ref.attnProbe.isEmpty then do
+      IO.println s!"\n  ▸ attn probe SKIPPED — no runnable ViT probe on {ref.lowerer} \
+(MIOpen, handoff §0b/§2h). ch.10 has no {ref.lowerer} reference and prints n/a."
+      pure none
+    else runProbe ref.attnProbe "attn" ref.attnRefMs backend gpu runEnv (stepProbe := some 100)
   match denseMs, convMs with
   | some dMs, some cMs =>
     let aMs := attnMs.getD 0
-    IO.println "\n  ESTIMATED training time on YOUR gpu  (ref = single AMD 7900 XTX):\n"
+    IO.println s!"\n  ESTIMATED training time on YOUR gpu  (ref = single AMD 7900 XTX, {ref.lowerer}):\n"
     let rule := "  " ++ String.ofList (List.replicate 47 '-')
-    IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR "ref(7900 XTX)" 15}your gpu"
+    IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR s!"ref({ref.lowerer})" 15}your gpu"
     IO.println rule
     let mut yourTotal := 0
     let mut refTotal := 0
+    let mut covered := 0
     for it in benchTable do
-      let yourSec := yourSecOf it dMs cMs aMs
-      yourTotal := yourTotal + yourSec
-      refTotal := refTotal + it.refSec
-      let flag := if it.family == "attn" && aMs == 0 then " *proxy" else ""
-      IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur it.refSec) 15}{fmtDur yourSec}{flag}"
+      match it.refOn ref.xla, yourSecOf ref it dMs cMs aMs with
+      | some refSec, some yourSec =>
+        yourTotal := yourTotal + yourSec
+        refTotal := refTotal + refSec
+        covered := covered + 1
+        let flag := if it.family == "attn" && aMs == 0 then " *proxy" else ""
+        IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur refSec) 15}{fmtDur yourSec}{flag}"
+      | _, _ =>
+        IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR "n/a" 15}n/a  (no {ref.lowerer} reference)"
     IO.println rule
-    IO.println s!"  {padR "Full Part-1 training" 26}{padR (fmtDur refTotal) 15}{fmtDur yourTotal}"
+    let totalLabel := if covered == benchTable.length then "Full Part-1 training"
+                      else s!"Part-1 training ({covered} of {benchTable.length} ch.)"
+    IO.println s!"  {padR totalLabel 30}{padR (fmtDur refTotal) 15}{fmtDur yourTotal}"
     IO.println "\n  `lake run` tiers on your gpu (training time):"
     for (tier, label) in [("mnist", "lake run mnist"), ("cifar", "lake run cifar"),
                           ("imagenette", "lake run imagenette")] do
       let items := benchTable.filter (·.tier == tier)
-      let refS := (items.map (·.refSec)).foldl (· + ·) 0
-      let yourS := (items.map (fun it => yourSecOf it dMs cMs aMs)).foldl (· + ·) 0
-      IO.println s!"    {padR label 22}{padR (fmtDur refS) 9}→  {fmtDur yourS}"
-    IO.println "\n  * dense/conv/attn rows each use their own probe (mnist-mlp, cifar8-bn, ViT);"
+      let refS := (items.filterMap (·.refOn ref.xla)).foldl (· + ·) 0
+      let yourS := (items.filterMap (fun it => yourSecOf ref it dMs cMs aMs)).foldl (· + ·) 0
+      let miss := items.length - (items.filterMap (·.refOn ref.xla)).length
+      let note := if miss == 0 then "" else s!"   ({miss} ch. n/a)"
+      -- All three demo groups have an `-xla` peer, so name the command the user would
+      -- actually run on this path rather than its IREE sibling.
+      let suffix := if ref.xla then "-xla" else ""
+      IO.println s!"    {padR (label ++ suffix) 26}{padR (fmtDur refS) 9}→  {fmtDur yourS}{note}"
+    IO.println s!"\n  * each family uses its own probe ({ref.denseProbe}, {ref.convProbe}\
+{if ref.attnProbe.isEmpty then ", no attn probe" else s!", {ref.attnProbe}"});"
     IO.println "    other 224² convnets are extrapolated from the 32² conv probe — order-of-"
-    IO.println "    magnitude. A `*proxy` ViT row means no imagenette, so it borrowed the conv"
-    IO.println "    factor (~3.5× low). Training time only; first run adds ~10–15 min/arch compile."
+    IO.println "    magnitude."
+    if !ref.attnProbe.isEmpty then
+      IO.println "    A `*proxy` ViT row means no imagenette, so it borrowed the conv"
+      IO.println "    factor (~3.5× low)."
+    IO.println "  * an on-reference factor of 0.94-1.06× is agreement, not signal: the conv probe"
+    IO.println "    has ±6% run-to-run spread on the reference card (the anchors are medians)."
+    IO.println s!"  * every number above is scaled from the {ref.lowerer} reference column and is an"
+    IO.println s!"    estimate for the {ref.lowerer} path only. The two lowerers differ by 2.2-4.7× on"
+    IO.println "    the same card, so do NOT compare one command's `your gpu` column against the"
+    IO.println "    other's ref column — run the other command instead."
+    if ref.xla then
+      IO.println "  * XLA compiles in-process (seconds). Training time only."
+    else
+      IO.println "  * training time only; first run adds ~10–15 min/arch IREE compile."
     return 0
   | _, _ =>
-    IO.eprintln "\n  probe failed — need data (`lake run download`) and the IREE venv from"
-    IO.eprintln "  Track 2. No estimate produced."
+    if ref.xla then
+      IO.eprintln "\n  probe failed — check that ffi/libpjrt_ffi.so built and $PJRT_PLUGIN resolves"
+      IO.eprintln "  (reported above). No estimate produced."
+    else
+      IO.eprintln "\n  probe failed — need data (`lake run download`) and the IREE venv from"
+      IO.eprintln "  Track 2. No estimate produced."
     return 1
+
+/-- `lake run benchmark` — probe this GPU on the **IREE** path, print a per-chapter
+    training-time estimate. The XLA peer is `lake run benchmark-xla`; the two scale from
+    separate reference columns measured on separate lowerers and are not interchangeable
+    (handoff §2j). -/
+script benchmark do
+  runBenchmark ireeRef
+
+/-- `lake run benchmark-xla` — the XLA/PJRT peer of `lake run benchmark`.
+
+    Same probe recipe, same steady-state rule, same printer — the only difference is which
+    lowerer the probe binaries linked and which reference column they scale from. Both of
+    those move together inside `xlaRef`, which is what stops the §2j trap: an XLA probe
+    divided by IREE's anchors would report Part-1 training ~2-5× too fast, silently.
+
+    ⚠ **Structurally 2 probes and 8 chapters, not 3 and 9.** `vit-verified-adam-xla` does
+    not execute on this box (MIOpen — handoff §0b/§2h), so there is no XLA attn anchor and
+    no XLA ViT reference. ch.10 prints `n/a` and is excluded from the totals, which are
+    labelled `8 of 9 ch.` accordingly. For a ViT estimate, run `lake run benchmark` (IREE),
+    where all three probes work.
+
+    Needs no venv: the XLA binaries compile in-process rather than shelling out to
+    `iree-compile`. It does build `ffi/libpjrt_ffi.so` if missing/stale and report whether
+    `$PJRT_PLUGIN` resolves, exactly as `lake run {mnist,cifar,imagenette}-xla` do. -/
+script «benchmark-xla» do
+  runBenchmark xlaRef

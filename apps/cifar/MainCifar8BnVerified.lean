@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import apps.cifar.Cifar8BnCommon
 
 /-! # `cifar8-bn-verified` — train the deeper 8-conv CIFAR-10 CNN **with BatchNorm**
 
@@ -14,13 +14,11 @@ stats). Trains on `verified_mlir/cifar8_bn_train_step.mlir`
 The model is the `cifar8BnVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNets`); trains
 through `VerifiedNet.train` (He-init for conv/dense, γ=1/β=0 `[c]` for BN).
 
+The body is shared with the XLA build (`cifar8-bn-verified-xla`) — config, seed and
+entry point live in `apps/cifar/Cifar8BnCommon.lean` so the two backends cannot drift.
+
 Companion to `cifar8-verified` (no BN). Run both to compare BN's acceleration.
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8-bn-verified data`
 -/
 
-def cifar8BnConfig : VerifiedConfig where
-  epochs    := 40
-  batchSize := 128
-
-def main (argv : List String) : IO Unit :=
-  cifar8BnVerified.train cifar8BnConfig (argv.head?.getD "data")
+def main (argv : List String) : IO Unit := runCifar8Bn argv

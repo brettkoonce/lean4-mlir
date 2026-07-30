@@ -108,10 +108,28 @@ cifar are EXACT mirrors of their IREE groups — the four missing cifar peers we
 recipe, so `lake run cifar-xla` now runs the whole six-way Chapter-5 optimizer ablation on the
 second lowerer. imagenette-xla is 4 of 5; ViT is excluded by measurement, not omission.
 
-**▶ NEXT THREAD = `lake run benchmark-xla` — scoped in §2j below. Read that first: the obvious
-implementation silently reports a ~4.6×-too-fast training estimate.** After it, §2d's value-ordered
-list: rung 4 (the FPN detector) or device-resident parameters (four measurements behind it; a
-calibrated model says the case roughly quadruples at 4 GPUs — §2d.3).
+**▶ `lake run benchmark-xla` IS DONE — 2026-07-30, §2j below. UNCOMMITTED.** Both commands now
+label their lowerer, each scales from its own measured reference column, and the mismatched-baseline
+trap is structural rather than documented: `BenchRef` bundles a lowerer's probe binaries with its
+anchors, so a probe cannot be divided by the other path's reference. A `cifar8-bn-verified-xla`
+peer was added for the conv anchor (`.train` **does** drive the PJRT shim — that was §2j's open
+question). On-reference factors read 0.99-1.02× on both paths.
+
+**▶ AND THE VIT MIOPEN BLOCKER IS WORKED AROUND — the last named hard gap in this whole thread.
+`MIOPEN_DEBUG_CONV_GEMM=0` makes `vit-verified-adam-xla` RUN**, and it is numerically gated: the
+first three step losses agree with the IREE peer to **3e-6** from identical fresh init
+(3.015270/3.005852/2.987082 vs 3.015261/3.005857/2.987081), and it is **8.7× faster** — **136
+ms/step** against IREE's 1188. Found while confirming §2j's "attn probe unavailable" assumption.
+⚠ **This reverses a recorded ❌** in `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`
+(line 312: *"MIOpen hung in solver search … Killed it"*) — on the current stack it does not hang: a
+warm run is **39 s end to end**, 8.2 s of that compiling `vit_fwd`. That doc's *diagnosis* was
+already right and already confirmed (the fused interior-dilated pad+conv selects the broken im2col
+path); only its workaround verdict is stale. What is **NOT** established: no full-epoch run, no
+80-epoch run, and `vit-dp-check` has not been run. See §2j's tail for the exact ledger.
+
+After these, §2d's value-ordered list: rung 4 (the FPN detector) or device-resident parameters
+(four measurements behind it; a calibrated model says the case roughly quadruples at 4 GPUs —
+§2d.3) — plus the ViT follow-ups the line above unlocks.
 
 Read §2i before starting — it has the measurements, not guesses.
 
@@ -2250,9 +2268,111 @@ selected `VerifiedNetSpec`). `fwd-tie` gained the four cifar8 slugs; its one net
 `bs := 32`, became per-family (**the cifar8 forwards are bs 128**), and it refuses `--eval` for them
 because per-channel BN keeps no running stats, so train == eval.
 
-### 2j. ▶ NEXT — `lake run benchmark-xla`, and the mismatched-baseline trap in it
+### 2j. ✅ DONE 2026-07-30 — `lake run benchmark-xla`, and the mismatched-baseline trap in it
 
-Scoped 2026-07-30, not started. `lake run benchmark` runs three **synthetic-input** probes, measures
+**UNCOMMITTED.** All four scoped items landed, plus the conv peer. What follows is the original
+scoping (kept because its reasoning is what the implementation was measured against), then the
+results and the corrections it produced.
+
+#### ✅ What landed
+
+| item | state |
+|---|---|
+| 1. reference constants on XLA, on the 7900 XTX | ✅ `probeDenseRefMsXla := 610`, `probeConvRefMsXla := 3650` — **medians**, see the spread finding below |
+| 2. a conv peer | ✅ **`cifar8-bn-verified-xla`** added. §2j's open question — *"check `.train` drives the XLA shim first"* — is **answered yes**: `mnist-mlp-verified-xla` already rides `VerifiedNet.train`, which has an `xla` branch at `VerifiedTrain.lean:216`. So the peer was preferable to re-pointing the probe at a different optimizer, which would have cost a second reference constant and made the two tables non-comparable row by row |
+| 3. the script | ✅ `runBenchmark (ref : BenchRef)`, one body, two `script`s. Reuses `ensurePjrtShim`/`notePjrtPlugin`; needs no venv |
+| 4. label the output | ✅ both print `lowerer:` in the header and `ref(IREE)` / `ref(XLA/PJRT)` as the column head, plus a footer forbidding cross-table comparison. `lake run benchmark` gained the word IREE, as §2j asked |
+
+**The trap is now structural, not documentary.** `BenchRef` bundles one lowerer's probe *binaries*
+with its *anchors*, and `yourSecOf` takes a `BenchRef` — so there is no expression that divides an
+XLA probe by an IREE anchor. `BenchItem.refSecXla : Option Nat` carries the second column;
+`BenchItem.refOn xla` selects. A `none` row prints `n/a`, is excluded from the totals **and** from
+the tier subtotals, and flips the footer label to `Part-1 training (8 of 9 ch.)` — so a short total
+cannot read as a whole-Part-1 number.
+
+#### The measured XLA reference column
+
+All on the reference 7900 XTX, 2026-07-30, same construction as the IREE column (steady-state
+ms/epoch × the trainer's own epoch count), MNIST/CIFAR real-data-plus-eval, last of 3 epochs:
+
+| | IREE ms/ep | XLA ms/ep | XLA speedup |
+|---|---|---|---|
+| ch2 linear (×12) | 539 | **239** | 2.26× |
+| ch3 MLP (×12) | 3032 | **676** | 4.49× |
+| ch4 CNN (×10) | 17659 | **4103** | 4.30× |
+| ch5 cifar8-bn (×40×6) | 8782 | **3698** | 2.37× |
+| dense anchor (synth) | 2819 | **610** | 4.62× |
+| conv anchor (synth) | 8183 | **3650** | 2.24× |
+
+Imagenette rows come from §0b's 80-epoch XLA runs on the current certified bytes (R34 1h11m, mnv2
+1h25m, ENet 1h34m, ConvNeXt 1h56m). **The spread between 2.2× and 4.6× is the whole argument for a
+per-lowerer column** — a single blended factor would be wrong in both directions.
+
+Free sanity check while measuring: MNIST-MLP epoch-1 val is **92.43% on both backends**, CNN 97.77
+vs 97.71, cifar8-bn 41.52 vs 40.08.
+
+#### ⚠ Two corrections this produced
+
+* **The conv probe has ±6% run-to-run spread, and a single sample is not an anchor.** Ten runs of
+  the same binary: 3449 / 3473 / 3482 / 3528 / 3565 / 3733 / 3774 / 3778 / 3792 / 3865 ms/epoch.
+  Anchoring on one sample made the on-reference factor read **0.92×**, which looks like a
+  regression and is not. Both XLA anchors are now medians (dense is stable to ±1.5%: 601-619).
+  *A wrong inference worth recording because the check was cheap:* the first six samples split
+  cleanly by context — ~3465 inside `lake run benchmark-xla`, ~3780 standalone — and a thermal
+  story was written for it. The 11th sample (3865, in-benchmark) **refuted it**; it is plain noise.
+  The footer now says 0.94-1.06× is agreement, not signal.
+* **`lake run benchmark`'s ch4 (MNIST CNN) row is ~1.35× pessimistic.** It reads 23764 ms/epoch;
+  re-measured on the same card, same basis, it is **17659**. ch2/ch3/ch5 reproduce (535→539,
+  3200→3032, 8490→8782) and all three IREE probe anchors reproduce (0.92× / 1.02× / 1.01×), so this
+  is one stale row, not a drifted table. **Left as-is, not silently changed** — it is a
+  user-facing published estimate and the correction is Brett's call. Both caveats are recorded in
+  the lakefile header comment, along with the fact that the IREE Imagenette rows predate the
+  2026-07-28 codegen swaps and so were measured on **retired hand-written renders**, while the XLA
+  ones are the current certified bytes.
+
+#### ▶ The ViT blocker, worked around — and exactly what that does and does not license
+
+Found while confirming this section's own "attn probe unavailable on XLA" assumption, which was
+true as written and is now stale. `MIOPEN_DEBUG_CONV_GEMM=0` makes `vit-verified-adam-xla` run.
+
+| | result |
+|---|---|
+| runs at all | ✅ rc=0, **136 ms/step** (median of 12, steps 9-20) |
+| vs IREE, same probe | IREE **1188 ms/step** ⇒ **8.7×** |
+| cross-backend numerics, fresh init both sides | losses **3.015270 / 3.005852 / 2.987082** (XLA) vs **3.015261 / 3.005857 / 2.987081** (IREE) — **3e-6**, and descending |
+| cost of the workaround | warm run **39 s end to end**, 8.2 s of it compiling `vit_fwd` — it does **not** hang |
+
+⚠ The IREE side needed its epoch-1 `vit_adam_ckpt.bin` moved aside to start fresh (§4's
+checkpoint trap — it was restored afterwards). Without that the comparison is meaningless.
+
+**NOT established, and none of it should be quoted as done:** no full-epoch run, no 80-epoch run,
+no accuracy number, and **`vit-dp-check` has not been run** — so ViT's DP render is still
+numerically ungated. ViT is therefore still `n/a` in `benchmark-xla` (there is no XLA ViT reference
+wall-clock to scale) and still excluded from `imagenette-xla`. Wiring it into either needs a
+decision plus the missing reference; the ch10 IREE row's own basis (`1185 ms/step × 295 × 80`) is
+the house convention available for it.
+
+**The upstream doc needs a one-line correction, not a rewrite.**
+`upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md:312` lists
+`MIOPEN_DEBUG_CONV_GEMM=0` as ❌ *"MIOpen hung in solver search (compiling winograd/implicit-gemm),
+no clean result. Killed it."* — measured 2026-07-30 on the current stack, it completes in 39 s. That
+doc's **diagnosis is already right and already confirmed** (2026-07-28: a fused interior-dilated
+pad+conv selects the no-workspace `GemmFwdRest` path, whose `MIOpenIm2d2Col.cpp` fails to build
+under HIPRTC because it uses OpenCL builtins); only the workaround verdict is stale. The handoff's
+own ViT paragraphs describing the fusion hypothesis as *"leading unconfirmed"* are also stale —
+that doc confirmed it two days earlier with a 20-line JAX reproducer.
+
+#### Not touched, deliberately
+
+**README.** It documents no `-xla` target at all — not the three demo groups from `cf07259`/
+`eb3632c`, not this. The whole XLA track is absent from it because the branch is unmerged, so
+adding one command in isolation would be inconsistent; that is a merge-time decision.
+
+---
+
+*The original scoping follows.*
+
+`lake run benchmark` runs three **synthetic-input** probes, measures
 ms/step, and scales a per-chapter reference table to estimate full Part-1 training time on the
 user's GPU. The estimator is one line (`lakefile.lean`, `yourSecOf`):
 
