@@ -5,7 +5,8 @@ import LeanMlir.VerifiedNets
 BN peer of `cifar8w-ablation`: the `cifar8wBnVerified` net (8× conv→BN→relu, 128→512→512→10
 head) run SGD / Nesterov-momentum / AdamW in sequence on the same controlled pipeline
 (shuffle + hflip + cosine-warmup) via `trainAdamSched`. Per-channel BN is per-example ⇒
-train=eval (eval via `@cifar8w_bn_fwd`). Renders: `tests/TestCifar8WideTrain.lean`. 40 ep, bs 128.
+train=eval (eval via `@cifar8w_bn_fwd`). Renders: `LeanMlir/Proofs/Codegen/CnnRender.lean` at
+`d1 := 512`, the forward from `StableHLO.cifar8BnFwdModuleV` (§2i, 2026-07-30). 40 ep, bs 128.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8w-bn-ablation data`
 -/

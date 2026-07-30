@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import apps.cifar.Cifar8SgdSchedCommon
 
 /-! # `cifar8-verified-sgdsched` — plain SGD on the SAME pipeline as the momentum/Adam runs
 
@@ -15,10 +15,4 @@ baseLR 0.1 (no momentum amplification ⇒ same neighborhood as plain SGD's flat 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8-verified-sgdsched data`
 -/
 
-def cifar8SgdSchedConfig : VerifiedConfig where
-  epochs    := 40
-  batchSize := 128
-
-def main (argv : List String) : IO Unit :=
-  -- baseLR 0.1 (β args unused by the plain-SGD update), 3-epoch warmup + cosine.
-  cifar8Verified.toNet.trainAdamSched cifar8SgdSchedConfig (argv.head?.getD "data") 0.1 0.9 0.999 3 "sgd"
+def main (argv : List String) : IO Unit := runCifar8SgdSched argv

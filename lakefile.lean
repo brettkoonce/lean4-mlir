@@ -1289,9 +1289,23 @@ lean_exe «cifar8-bn-verified-adam-xla» where
 -- cifar8 Nesterov-momentum SGD peers (v←μv+∇, θ←θ−lr(μv+∇), μ=0.9): same proof-rendered body +
 -- emitMomentum, driven by trainAdamSched variant "mom" (reuses [θ|m|v] packing + cosine+warmup lr).
 -- Render: tests/TestCifar8AdamTrain.lean. Completes the optimizer ablation (SGD/momentum/Adam).
+-- Shared body of the no-BN Nesterov-momentum arm of the six-way optimizer ablation: one module for the IREE and
+-- XLA executables, so `epochs`, `batchSize`, the seed and the learning rate cannot drift
+-- between the two backends (§2h). Lake needs it as its own lib to build it for both roots.
+lean_lib «Cifar8MomCommon» where
+  srcDir := "."
+  roots := #[`apps.cifar.Cifar8MomCommon]
+
 lean_exe «cifar8-verified-momentum» where
   root := `apps.cifar.MainCifar8VerifiedMomentum
   moreLinkArgs := ireeLink
+
+/-- XLA/PJRT peer of `cifar8-verified-momentum` — the no-BN Nesterov-momentum arm of the six-way optimizer ablation. Shares its body via
+    `apps/cifar/Cifar8MomCommon.lean`, so the two backends cannot drift on epochs,
+    batch size, seed or learning rate (§2h). Completes `lake run cifar-xla` to all six. -/
+lean_exe «cifar8-verified-momentum-xla» where
+  root := `apps.cifar.MainCifar8VerifiedMomentumXla
+  moreLinkArgs := xlaLink
 
 -- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
 -- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
@@ -1308,20 +1322,63 @@ lean_exe «cifar8-e4m3-verified-adam» where
   root := `apps.cifar.MainCifar8E4M3VerifiedAdam
   moreLinkArgs := ireeLink
 
+-- Shared body of the BN Nesterov-momentum arm of the six-way optimizer ablation: one module for the IREE and
+-- XLA executables, so `epochs`, `batchSize`, the seed and the learning rate cannot drift
+-- between the two backends (§2h). Lake needs it as its own lib to build it for both roots.
+lean_lib «Cifar8BnMomCommon» where
+  srcDir := "."
+  roots := #[`apps.cifar.Cifar8BnMomCommon]
+
 lean_exe «cifar8-bn-verified-momentum» where
   root := `apps.cifar.MainCifar8BnVerifiedMomentum
   moreLinkArgs := ireeLink
 
+/-- XLA/PJRT peer of `cifar8-bn-verified-momentum` — the BN Nesterov-momentum arm. Shares its body via
+    `apps/cifar/Cifar8BnMomCommon.lean`, so the two backends cannot drift on epochs,
+    batch size, seed or learning rate (§2h). Completes `lake run cifar-xla` to all six. -/
+lean_exe «cifar8-bn-verified-momentum-xla» where
+  root := `apps.cifar.MainCifar8BnVerifiedMomentumXla
+  moreLinkArgs := xlaLink
+
 -- cifar8 plain-SGD CONTROL on the momentum/Adam pipeline (trainAdamSched variant "sgd": same
 -- per-epoch shuffle + hflip + cosine-warmup, update θ←θ−lr·∇). Makes the SGD/momentum/Adam
 -- comparison differ ONLY in the optimizer. Render: tests/TestCifar8AdamTrain.lean.
+-- Shared body of the no-BN plain-SGD arm of the six-way optimizer ablation: one module for the IREE and
+-- XLA executables, so `epochs`, `batchSize`, the seed and the learning rate cannot drift
+-- between the two backends (§2h). Lake needs it as its own lib to build it for both roots.
+lean_lib «Cifar8SgdSchedCommon» where
+  srcDir := "."
+  roots := #[`apps.cifar.Cifar8SgdSchedCommon]
+
 lean_exe «cifar8-verified-sgdsched» where
   root := `apps.cifar.MainCifar8VerifiedSgdSched
   moreLinkArgs := ireeLink
 
+/-- XLA/PJRT peer of `cifar8-verified-sgdsched` — the no-BN plain-SGD arm (SGD through the SAME shuffle/hflip/cosine pipeline, so the
+    optimizer is the only free variable). Shares its body via
+    `apps/cifar/Cifar8SgdSchedCommon.lean`, so the two backends cannot drift on epochs,
+    batch size, seed or learning rate (§2h). Completes `lake run cifar-xla` to all six. -/
+lean_exe «cifar8-verified-sgdsched-xla» where
+  root := `apps.cifar.MainCifar8VerifiedSgdSchedXla
+  moreLinkArgs := xlaLink
+
+-- Shared body of the BN plain-SGD arm of the six-way optimizer ablation: one module for the IREE and
+-- XLA executables, so `epochs`, `batchSize`, the seed and the learning rate cannot drift
+-- between the two backends (§2h). Lake needs it as its own lib to build it for both roots.
+lean_lib «Cifar8BnSgdSchedCommon» where
+  srcDir := "."
+  roots := #[`apps.cifar.Cifar8BnSgdSchedCommon]
+
 lean_exe «cifar8-bn-verified-sgdsched» where
   root := `apps.cifar.MainCifar8BnVerifiedSgdSched
   moreLinkArgs := ireeLink
+
+/-- XLA/PJRT peer of `cifar8-bn-verified-sgdsched` — the BN plain-SGD arm. Shares its body via
+    `apps/cifar/Cifar8BnSgdSchedCommon.lean`, so the two backends cannot drift on epochs,
+    batch size, seed or learning rate (§2h). Completes `lake run cifar-xla` to all six. -/
+lean_exe «cifar8-bn-verified-sgdsched-xla» where
+  root := `apps.cifar.MainCifar8BnVerifiedSgdSchedXla
+  moreLinkArgs := xlaLink
 
 -- Wide-head (MNIST-style 2×512 dense, d1=512) cifar8 optimizer ablation: each exe runs SGD /
 -- momentum / AdamW in sequence on the controlled pipeline. Render: tests/TestCifar8WideTrain.lean.
@@ -2184,14 +2241,16 @@ script «mnist-xla» do
   runDemoGroup ["mnist-linear-verified-xla", "mnist-mlp-verified-xla",
                 "mnist-cnn-verified-xla"] (xla := true)
 
-/-- `lake run cifar-xla` — the XLA peers of `lake run cifar`. ⚠ **2 of that group's 6**:
-    only the two AdamW variants have `-xla` targets today. The four SGD/momentum peers
-    (`cifar8{,-bn}-verified-{momentum,sgdsched}`) are IREE-only, so this does **not**
-    reproduce the Chapter-5 six-way optimizer ablation — use `lake run cifar` for that.
-    Adding them is the §2h recipe (extract a shared `<Net>Common.lean` so the two backends
-    cannot drift on epochs/batch/seed, then one root + one lakefile entry each). -/
+/-- `lake run cifar-xla` — the XLA peers of `lake run cifar`, and an EXACT mirror since
+    2026-07-30: all six of the Chapter-5 optimizer ablation (SGD / Nesterov-momentum / AdamW
+    × BN / no-BN) now have `-xla` targets. Each shares one body with its IREE peer
+    (`apps/cifar/Cifar8*Common.lean`), so the two backends cannot drift on epochs, batch size,
+    seed or learning rate — which is what makes a cross-backend difference attributable to the
+    lowerer rather than to the run. Same order as `lake run cifar`. -/
 script «cifar-xla» do
-  runDemoGroup ["cifar8-verified-adam-xla", "cifar8-bn-verified-adam-xla"] (xla := true)
+  runDemoGroup ["cifar8-verified-sgdsched-xla", "cifar8-bn-verified-sgdsched-xla",
+                "cifar8-verified-momentum-xla", "cifar8-bn-verified-momentum-xla",
+                "cifar8-verified-adam-xla", "cifar8-bn-verified-adam-xla"] (xla := true)
 
 /-- `lake run imagenette-xla` — the XLA peers of `lake run imagenette`. ⚠ **4 of that group's
     5: ViT-Tiny is EXCLUDED BY MEASUREMENT, not by omission.** `vit-verified-adam-xla` builds

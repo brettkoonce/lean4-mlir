@@ -6,7 +6,8 @@ The MNIST-style wide-head (2×512 dense) peer of the cifar8 optimizer ablation. 
 `cifar8wVerified` net (8-conv backbone + 128→512→512→10 head, 373,626 floats) three ways in
 sequence — SGD / Nesterov-momentum / AdamW — all on the identical controlled pipeline
 (per-epoch shuffle + hflip + cosine-warmup) via `trainAdamSched`, so only the optimizer
-varies. Renders: `tests/TestCifar8WideTrain.lean`. 40 epochs, bs 128.
+varies. Renders: `LeanMlir/Proofs/Codegen/CnnRender.lean` at `d1 := 512` (§2i, 2026-07-30 —
+`tests/TestCifar8WideTrain.lean` until then). 40 epochs, bs 128.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8w-ablation data`
 -/

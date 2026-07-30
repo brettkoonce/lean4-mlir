@@ -7,7 +7,9 @@ The CIFAR peer of `mnist-cnn-grid`: the conv feature extractor is held fixed
 swept — `flatten(128) → dense 128→d → relu → dense d→d → relu → dense d→10`. Reads the head
 width `d` from argv and trains `cifar8BnG d` on the width-slugged verified renders
 `verified_mlir/cifar8_bn_{d}_{adam_train_step,fwd}.mlir` (rendered offline by
-`tests/TestCifar8AdamTrain.lean`, whose `D1` is now parametric), via the packed-`[θ|m|v]`
+`tests/TestCifar8AdamTrain.lean`, whose `D1` is parametric — the width-slugged grid artifacts
+are the ONE thing that file still writes; the canonical `cifar8_bn_*` are `Proofs/`-rendered
+since §2i), via the packed-`[θ|m|v]`
 AdamW driver `VerifiedNet.trainAdamSched` (variant `"adam"`, the same one
 `cifar8-bn-verified-adam` uses). Per-channel BN ⇒ train=eval (no running stats).
 

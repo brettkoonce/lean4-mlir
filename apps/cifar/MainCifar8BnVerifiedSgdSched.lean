@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import apps.cifar.Cifar8BnSgdSchedCommon
 
 /-! # `cifar8-bn-verified-sgdsched` — plain SGD (BN net) on the momentum/Adam pipeline
 
@@ -12,9 +12,4 @@ baseLR 0.1, 3-epoch warmup + cosine decay.
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8-bn-verified-sgdsched data`
 -/
 
-def cifar8BnSgdSchedConfig : VerifiedConfig where
-  epochs    := 40
-  batchSize := 128
-
-def main (argv : List String) : IO Unit :=
-  cifar8BnVerified.toNet.trainAdamSched cifar8BnSgdSchedConfig (argv.head?.getD "data") 0.1 0.9 0.999 3 "sgd"
+def main (argv : List String) : IO Unit := runCifar8BnSgdSched argv

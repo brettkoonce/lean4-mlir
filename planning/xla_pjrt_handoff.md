@@ -296,12 +296,13 @@ what the trainer runs — see §2b.
 
 ```bash
 # ── the one-command entry points (added 2026-07-30): the XLA peers of the three demo groups.
+# mnist-xla and cifar-xla are EXACT mirrors of their IREE groups; imagenette-xla is 4 of 5.
 # Each builds `ffi/libpjrt_ffi.so` if it is missing or older than `ffi/pjrt_ffi.c` (it is NOT a
 # lake target, just the gcc line below), reports whether $PJRT_PLUGIN resolves, then builds and
 # runs each trainer in sequence via run.sh. IREE_BACKEND is irrelevant on these — the backend is
 # whichever .so the target linked.
 lake run mnist-xla        # linear / MLP / CNN — an EXACT mirror of `lake run mnist`
-lake run cifar-xla        # ⚠ 2 of `lake run cifar`'s 6: only the AdamW pair has -xla targets
+lake run cifar-xla        # all 6 of `lake run cifar` (SGD/momentum/AdamW × BN/no-BN)
 lake run imagenette-xla   # ⚠ 4 of 5: ViT is excluded BY MEASUREMENT (MIOpen, §0b/§2h)
 
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
@@ -2143,6 +2144,41 @@ threading exists, all three BN variants fall out of it together.
 **Claim ceiling for this thread:** the goal is `pretty(provenGraph)` parity, **not** a descent
 theorem — Adam has none either (§2a: "Still no descent claim — Adam is not monotone"). Say "the
 momentum render is certified", never "momentum is proven to descend".
+
+#### The `-xla` demo groups, and the six-way cifar ablation on both lowerers ✅ 2026-07-30
+
+`lake run {mnist,cifar,imagenette}-xla`. `runDemoGroup` grew an `xla : Bool` rather than a twin, so
+the two backends cannot drift on GPU selection, backend detection or the `run.sh` contract, and the
+XLA path gets two guards the IREE path does not need: `ffi/libpjrt_ffi.so` is **not a lake target**
+(it is the documented gcc one-liner), so it is built when missing *or older than* `ffi/pjrt_ffi.c`;
+and the PJRT plugin is `dlopen`'d at run time from `$PJRT_PLUGIN` or a path compiled into the shim,
+so a missing one is reported up front instead of surfacing as a `dlopen` failure at the first step.
+
+**`cifar-xla` is a complete mirror**: the four missing peers (`cifar8{,-bn}-verified-{momentum,
+sgdsched}`) were built with the §2h recipe — a shared `apps/cifar/Cifar8*Common.lean` per arm (plus
+a `lean_lib` each, which lake needs to build a module for two roots), the existing main reduced to
+one line, a new `…Xla` root, one lakefile entry. Config and hyperparameters moved **verbatim**
+(40 epochs, bs 128; momentum 0.02, sgdsched 0.1), and both peers still build.
+
+**Cross-backend agreement, measured on `cifar8-verified-sgdsched` — and CONTROLLED, which matters
+more than the headline here:**
+
+| | epoch-1 loss | epoch-1 val |
+|---|---|---|
+| XLA ×3, same seed | 2.199141 / 2.195176 / 2.199194 | 32.30 / 28.57 / **23.19%** |
+| IREE | 2.201572 | 17.92% |
+
+* the **first three steps are BIT-IDENTICAL across the two lowerers** (3.269639 / 2.662815 /
+  2.394230) — the strongest form of the §2h gate, matching ConvNeXt's result;
+* the cross-backend epoch-1 loss difference (**2.5e-3**) is **inside XLA's own run-to-run spread
+  (3.9e-3)**, so it is not backend-attributable;
+* epoch-1 **val is a high-variance statistic on this config** — 9.1 points of spread from the same
+  binary at the same seed — so the 14-point IREE-vs-XLA gap says nothing. This is §3's
+  "XLA is NOT deterministic at epoch scale" on a sixth net. **Do not gate on epoch-1 val here.**
+
+⚠ A capped run (`LEAN_MLIR_G2_STEPS`) is worse still: the warmup/cosine schedule is computed against
+the *full* 390-step epoch, so a 20-step epoch runs a mismatched schedule and both backends thrash
+near chance (10–19%). Fine for a descent smoke, useless for a comparison.
 
 #### ✅ Done 2026-07-30 — the wide family. **§2i is 13 of 13; the provenance axis is CLOSED**
 

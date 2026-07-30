@@ -7,7 +7,8 @@ gradients (`cifar8Verified`, whole-net VJP `Proofs.cifarCnn8_has_vjp_at`), with 
 update swapped for AdamW via `ViTRender.emitAdamV` and driven by the generic
 `VerifiedNet.trainAdamSched`: `[θ|m|v]` (22 params) packed as one blob + runtime
 `lr`/`bc₁`/`bc₂` (cosine + warmup + per-step bias correction). Trains on
-`verified_mlir/cifar8_adam_train_step.mlir` (rendered by `tests/TestCifar8AdamTrain.lean`).
+`verified_mlir/cifar8_adam_train_step.mlir`, rendered as `pretty(provenGraph)` by
+`LeanMlir/Proofs/Codegen/CnnRender.lean` (§2a — it was `tests/`-written until 2026-07-27).
 
 The optimizer is the *only* difference vs `cifar8-verified`: identical net, identical
 gradient, plain softmax-CE (no label smoothing), mean cotangent. AdamW lr 1e-3, β₁ .9,
