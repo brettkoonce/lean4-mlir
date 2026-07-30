@@ -26,12 +26,15 @@ unset HIP_VISIBLE_DEVICES
 MIOPEN_DEBUG_CONV_GEMM=0 PJRT_REPLICAS=2 .lake/build/bin/vit-dp-check
 ```
 
-⚠ **`MIOPEN_DEBUG_CONV_GEMM=0` is REQUIRED on this box.** Without it every ViT graph with a
-backward dies at *execution* — a fused interior-dilated pad+conv selects MIOpen's no-workspace
-`GemmFwdRest` solver, whose `MIOpenIm2d2Col.cpp` fails to build under HIPRTC (it uses the OpenCL
-builtin `get_global_id`). Diagnosis and a 20-line JAX reproducer:
-`upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`. That is why this gate sat written
-but unrun from 2026-07-28 to 2026-07-30.
+⚠ **`MIOPEN_DEBUG_CONV_GEMM=0` — needed at bs64, NOT needed at bs32.** A fused interior-dilated
+pad+conv (the patch-embed weight gradient) is requested by XLA with a zero-byte workspace, which
+confines MIOpen to no-workspace solvers; it lands on `GemmFwdRest`, whose `MIOpenIm2d2Col.cpp`
+fails to build under HIPRTC because it uses the OpenCL builtin `get_global_id`. The im2col
+workspace it wants is **linear in batch** (6,422,528 bytes at bs32, exactly 2× at bs64), so at bs64
+the fault is RELIABLE and the variable is required; at bs32 it fired once in 12 runs and the
+variable costs ~7%. Diagnosis and a 20-line JAX reproducer:
+`upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`. The bs32 flake is why this gate
+sat written but unrun from 2026-07-28 to 2026-07-30.
 
 ⚠ **This gate reports BIT-EXACT, so it MUST be run against a control** — a tie that is bit-exact
 everywhere is indistinguishable from a harness comparing a buffer with itself (§4). Pass a broken
@@ -60,15 +63,34 @@ private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray 
     let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
     F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
 
+/-- Entry symbol of a render, read out of the artifact's own `func.func @…` line. Derived rather
+    than hardcoded so the harness can gate any (single, DP) pair — the bs32 one and the bs64 one —
+    without a second copy of itself.
+
+    ⚠ Read from the CONTENTS, not the filename. Deriving it from the path (the first version of
+    this) means a control file has to be *named* after the entry it contains, and
+    `/tmp/vit_dp64_sum.mlir` then asks for `m.vit_dp64_sum` while the graph holds
+    `@vit_adamdp64_train_step`. The shim refuses that loudly — so it cost a run, not a wrong
+    answer — but a gate whose control is awkward to build is a gate that stops being run. -/
+private def entryOf (path : String) : IO String := do
+  let txt ← IO.FS.readFile path
+  match (txt.splitOn "func.func @")[1]? with
+  | none      => throw (IO.userError s!"{path}: no `func.func @` line — not a render?")
+  | some rest => pure ("m." ++ rest.takeWhile (· != '('))
+
 def main (args : List String) : IO Unit := do
   let net := vitVerified.toNet
-  let bs := 32                                   -- the baked per-replica batch
   let replicas := 2
   -- argv[1] overrides the DP render, so a deliberately broken one (sum-not-mean) can be run
   -- through the identical harness. Without this the bit-exact PASS above is unfalsifiable (§4).
-  let dpPath := args.head?.getD "verified_mlir/vit_adamdp_train_step.mlir"
+  -- argv[2] overrides the single-device side and argv[3] the batch, which is what lets the SAME
+  -- harness gate the bs64 pair (`adam64`/`adamdp64`). The batch must match what both renders were
+  -- rendered at — it is baked into the graph, so a mismatch is a shape error, not a wrong answer.
+  let dpPath := args[0]?.getD "verified_mlir/vit_adamdp_train_step.mlir"
+  let sgPath := args[1]?.getD "verified_mlir/vit_adam_train_step.mlir"
+  let bs := (args[2]?.bind (·.toNat?)).getD 32
   IO.println "ViT data-parallel gate — duplicated batch"
-  IO.println s!"  single : verified_mlir/vit_adam_train_step.mlir   (bs {bs})"
+  IO.println s!"  single : {sgPath}   (bs {bs})"
   IO.println s!"  DP     : {dpPath} ({replicas} replicas, \
 global {bs * replicas} = the same {bs} examples twice)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), no BN, \
@@ -96,12 +118,12 @@ backend {← IreeSession.backendName}"
   let y2 := y1 ++ y1
 
   IO.println "  running single-device…"; (← IO.getStdout).flush
-  let s1 ← mkSession "verified_mlir/vit_adam_train_step.mlir" ".lake/build/vit_dp_a.vmfb"
-  let o1 ← IreeSession.mlpTrainStepV s1 "m.vit_adam_train_step" x1 pbuf shapes y1
+  let s1 ← mkSession sgPath ".lake/build/vit_dp_a.vmfb"
+  let o1 ← IreeSession.mlpTrainStepV s1 (← entryOf sgPath) x1 pbuf shapes y1
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath ".lake/build/vit_dp_b.vmfb"
-  let o2 ← IreeSession.mlpTrainStepVDP s2 "m.vit_adamdp_train_step" x2 pbuf shapes y2
+  let o2 ← IreeSession.mlpTrainStepVDP s2 (← entryOf dpPath) x2 pbuf shapes y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 
   if o1.size != o2.size then

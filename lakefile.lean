@@ -2469,18 +2469,26 @@ def probeAttnRefMs : Nat := 1173
     whose `MIOpenIm2d2Col.cpp` fails to build under HIPRTC — it uses the OpenCL builtin
     `get_global_id`; see `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`).
 
-    ⚠ **The failure is NOT deterministic, and that matters for anyone reading the old note.**
-    Measured 2026-07-30: it fired on the session's FIRST ViT/XLA execution and then never
-    again — 11 subsequent runs all passed, *including the byte-identical invocation that had
-    just failed*, and the MIOpen on-disk cache shows no writes in that window, so cache
-    population does not explain it. Mechanism unidentified.
+    ⚠ **It is BATCH-DEPENDENT, and this anchor is the bs32 number.** Measured 2026-07-30:
+    * **bs32** — the fault fired on the session's FIRST ViT/XLA execution and then never again
+      across 11 runs, *including the byte-identical invocation that had just failed*. So here
+      `MIOPEN_DEBUG_CONV_GEMM=0` is **not needed**, and setting it costs ~7% (attn probe 136 vs
+      128 ms/step median; marginal epoch 46.5 s vs 43.5 s). Why it fired once is unexplained —
+      the MIOpen on-disk cache shows no writes in that window, so cache population is not it.
+    * **bs64** — the fault fires **reliably** and the variable is **REQUIRED** (see
+      `vit_adamdp64_train_step` in `ViTRender.lean`).
 
-    `MIOPEN_DEBUG_CONV_GEMM=0` was briefly wired in here as the fix. **It is not one**: the
-    graph runs without it, and disabling that solver family costs ~7% (attn probe 136 vs 128
-    ms/step median; marginal epoch 46.5 s vs 43.5 s). It is kept only as a documented escape
-    hatch — if the im2col build error reappears, set it and re-measure. Do not set it by
-    default; it is a measured throughput regression bought against a fault that does not
-    currently reproduce.
+    The mechanism, from these logs plus `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`:
+    XLA fuses the interior-dilated `pad` into the patch-embed weight-gradient convolution as
+    `rhs_dilation = 16` rather than materialising a 209×209 filter, and requests that conv with a
+    **zero-byte workspace** (`provided ptr: 0 size: 0`). That confines MIOpen to no-workspace
+    solvers; the one it lands on is `GemmFwdRest`, whose kernel source `MIOpenIm2d2Col.cpp` uses
+    the **OpenCL** builtins `get_global_id`/`get_global_size` while MIOpen JIT-compiles it through
+    **HIPRTC**, where those identifiers do not exist ⇒ code-object build failure ⇒
+    `miopenStatusUnknownError`. A MIOpen packaging bug, not anything about the graph. The im2col
+    workspace it wanted is **linear in batch** — 6,422,528 bytes at bs32, exactly **2×** that
+    (12,845,056) at bs64 — which is why the batch moves the outcome. The variable removes that
+    solver family from consideration, so the broken kernel is never built.
 
     The render is gated independently of any of this: the first three step losses agree with
     the IREE peer to **3e-6** from identical fresh init, and `vit-dp-check` passes bit-exact

@@ -51,4 +51,11 @@ def runViTAdam (argv : List String) : IO Unit := do
   if !(← System.FilePath.pathExists tsPath) then
     throw (IO.userError s!"{tsPath} missing — it is written by \
 LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.ViTRender` first")
-  vitVerified.toNet.trainAdamSched vitAdamConfig (argv.head?.getD "data") 0.0003 0.9 0.999 5 variant
+  -- `LEAN_MLIR_BATCH` must MATCH the batch the selected variant was rendered at, because the batch
+  -- is baked into the graph rather than being a runtime dimension. A mismatch is a shape error at
+  -- the first invoke — loud, not a silent limp. The pairs that exist: `adam`/`adamdp` at 32,
+  -- `adam64`/`adamdp64` at 64. Eval needs no flag: `trainAdamSched` reads the eval width off the
+  -- forward artifact (`evalBs`), so it scores at 32 whatever the train batch is.
+  let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD vitAdamConfig.batchSize
+  vitVerified.toNet.trainAdamSched { vitAdamConfig with batchSize := bs }
+    (argv.head?.getD "data") 0.0003 0.9 0.999 5 variant
