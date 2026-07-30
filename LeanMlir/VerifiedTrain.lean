@@ -36,6 +36,19 @@ inductive VerifiedData where
   /-- Imagenette under `dataDir/imagenette` — train stored at 256² (center-cropped
       to 224² per batch), val at 224². -/
   | imagenette
+  /-- **Full 1000-class ImageNet, streamed from the generated tfds shim** (handoff §2k).
+      1,281,167 train / 50,000 val at 224².
+
+      Unlike every case above, this one is NOT preloaded: at f32 the train split is ~938 GiB of host
+      RAM against a 188 GB box, so it cannot be. Batches arrive over a pipe from
+      `.lake/build/generated_resnet34_imagenet_shim.py`, already RandomResizedCrop'd, flipped,
+      mean/std-normalized and flattened to `(B, 3·224·224)` — **so the Lean side does no
+      augmentation at all** for this dataset, which is the point: there is exactly one definition of
+      the transform and it is the one the JAX reference trainer uses.
+
+      The VAL split IS preloaded (49,920 imgs after tfds `drop_remainder` ⇒ 30 GB, which fits), so
+      the eval loop is unchanged. 49,920 is the same count the reference run reported. -/
+  | imagenet
 deriving BEq, Repr
 
 /-- A verified trainer: a pinned codegen artifact (`slug`) + its param layout
@@ -158,6 +171,69 @@ private def loadCifarSplit (paths : List String) : IO (ByteArray × ByteArray ×
   let imgs ← F32.cifarBatch raw 0 nTotal.toUSize
   return (imgs, labels, nTotal)
 
+/-! ### The ImageNet batch shim (handoff §2k)
+
+Reads batches from `JaxCodegen.generateShim`'s stdout. The shim owns the whole transform; this side
+only frames bytes, which is why there is no augmentation code here. -/
+
+/-- Read EXACTLY `n` bytes, looping until they arrive. A pipe read returns what is *available*, not
+    what was asked for — at 154 MB per batch a short read is the normal case, not the edge case, and
+    treating one `read` as a batch silently misaligns the stream from then on. -/
+def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
+  let mut acc := ByteArray.empty
+  while acc.size < n do
+    let chunk ← h.read (USize.ofNat (n - acc.size))
+    if chunk.size == 0 then
+      throw <| IO.userError s!"imagenet shim closed the pipe after {acc.size} of {n} bytes \
+(did it crash? its stderr is not captured — run it standalone with SHIM_HASH=1 to see)"
+    acc := acc ++ chunk
+  pure acc
+
+/-- Spawn the shim for one split and consume its preamble.
+
+    The preamble (`LMSH` | version | batch | flat) is checked rather than skipped: a batch or
+    resolution mismatch between the render and the shim would otherwise read as garbage pixels and
+    look like a broken net. Same reasoning as the FFI's G4 arity guard. -/
+def spawnShim (split : String) (batch flat seed : Nat) : IO IO.FS.Handle := do
+  -- `jax/` is its own lake project, so `--shim` writes under ITS build dir; a run from the repo
+  -- root finds it there. $SHIM_SCRIPT overrides for a hand-placed or per-net shim.
+  let candidates := match ← IO.getEnv "SHIM_SCRIPT" with
+    | some p => [p]
+    | none   => ["jax/.lake/build/generated_resnet34_imagenet_shim.py",
+                 ".lake/build/generated_resnet34_imagenet_shim.py"]
+  let some script ← candidates.findM? (fun p => System.FilePath.pathExists p)
+    | throw <| IO.userError s!"imagenet shim not found (looked in {candidates}) — generate it with \
+`(cd jax && lake exe resnet34-imagenet default --shim)`, or set $SHIM_SCRIPT"
+  let py := (← IO.getEnv "SHIM_PYTHON").getD
+              "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/python3"
+  let child ← IO.Process.spawn {
+    cmd := py, args := #[script], stdout := .piped, stdin := .null,
+    env := #[("SHIM_BATCH", some (toString batch)), ("SHIM_SPLIT", some split),
+             ("SHIM_SEED", some (toString seed))] }
+  let h := child.stdout
+  let pre ← readExact h 16
+  let magic := String.ofList ((List.range 4).map (fun i => Char.ofNat (pre.get! i).toNat))
+  if magic != "LMSH" then
+    throw <| IO.userError s!"imagenet shim: bad preamble magic {magic.quote} (expected \"LMSH\")"
+  let rd32 (off : Nat) : Nat :=
+    (pre.get! off).toNat ||| ((pre.get! (off+1)).toNat <<< 8) |||
+    ((pre.get! (off+2)).toNat <<< 16) ||| ((pre.get! (off+3)).toNat <<< 24)
+  let ver := rd32 4; let sBatch := rd32 8; let sFlat := rd32 12
+  if ver != 1 then throw <| IO.userError s!"imagenet shim: wire version {ver}, expected 1"
+  if sBatch != batch || sFlat != flat then
+    throw <| IO.userError s!"imagenet shim MISMATCH: shim sends batch={sBatch} flat={sFlat}, \
+the render wants batch={batch} flat={flat} — refusing rather than reading misaligned pixels"
+  IO.println s!"  imagenet shim: {split} split, batch {sBatch}, {sFlat} floats/img (seed {seed})"
+  pure h
+
+/-- One batch off the wire: `int32[batch]` labels then `float32[batch*flat]` images, in that order
+    (the shim writes labels first so a partial record is detectable at the smaller read). -/
+def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) : IO (ByteArray × ByteArray) := do
+  let lbl ← readExact h (4 * batch)
+  let img ← readExact h (4 * batch * flat)
+  pure (img, lbl)
+
+
 /-- Load the train + eval splits for a dataset. Returns
     `(trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop?)` where
     `trainPix` is the stored per-example width of the *training* images (256² for
@@ -189,6 +265,30 @@ private def loadData (data : VerifiedData) (d0 : Nat) (dataDir : String) :
     let (trI, trL, nTr) ← loadCifarSplit trainPaths
     let (evI, evL, nEv) ← loadCifarSplit [s!"{cdir}/test_batch.bin"]
     return (trI, trL, nTr, evI, evL, nEv, d0, false)
+  | .imagenet =>
+    -- Train is NOT loaded here — it is streamed per step (`trainAdamSched`). Only `nTrain` matters
+    -- from this side, and it is the tfds count, which is what sets steps/epoch.
+    --
+    -- Val IS drained into RAM, once, so the eval loop below is untouched: 195 batches × 256 after
+    -- tfds `drop_remainder` = 49,920 images = 30.0 GB. That is the SAME count
+    -- `jax/runs/r34_imagenet_bf16_90ep/RESULTS.md` reports for its in-training val, so the two
+    -- paths score the identical set.
+    let flat := 3 * 224 * 224
+    let vb := 256
+    let h ← spawnShim "validation" vb flat 0
+    IO.println "  imagenet: draining the val split into RAM (~30 GB, one time)…"
+    let mut imgs : Array ByteArray := #[]
+    let mut lbls : Array ByteArray := #[]
+    let mut n := 0
+    -- The validation iterator neither shuffles nor repeats, so it ends; `readShimBatch` throws on
+    -- the closed pipe and that IS the terminator. 195 is what drop_remainder leaves of 50,000.
+    for _ in [0:195] do
+      let (i, l) ← readShimBatch h vb flat
+      imgs := imgs.push i; lbls := lbls.push l; n := n + vb
+    let evI := imgs.foldl (init := ByteArray.empty) (· ++ ·)
+    let evL := lbls.foldl (init := ByteArray.empty) (· ++ ·)
+    IO.println s!"  imagenet: val ready — {n} images, {evI.size / 1048576} MB"
+    return (ByteArray.empty, ByteArray.empty, 1281167, evI, evL, n, flat, false)
 
 /-- Synthetic-input data for the `lake run benchmark` probes (`LEAN_MLIR_BENCH_SYNTH`):
     ONE constant batch, reused every step, but with the dataset's *real* `nTrain` so the
@@ -511,6 +611,14 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- set (5.3 GiB) per epoch → OOM after ~30 epochs on a 188 GB box.
   let mut curImg := trainImg
   let mut curLbl := trainLbl
+  -- The ImageNet train stream: spawned ONCE, not per epoch. The shim's train iterator is
+  -- `.shuffle(seed=42, reshuffle_each_iteration=True).repeat()`, so it re-shuffles across the epoch
+  -- boundary by itself and never ends — the per-epoch `F32.shuffle` below is skipped for it.
+  let imgStream : Option IO.FS.Handle ←
+    if net.data == .imagenet then
+      some <$> spawnShim "train" gbs (3 * 224 * 224)
+                 (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1)
+    else pure none
   -- LEAN_MLIR_MAX_STEPS: run a short steady-state ms/step probe then exit. This is
   -- the benchmark's `attn` anchor — ViT is matmul/attention-bound, so its per-step
   -- cost scales very differently from conv across GPUs and can't borrow the conv
@@ -534,7 +642,9 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
     let mut lastLr := 0.0
     -- Per-epoch Fisher-Yates shuffle (the reference does this; the data is
     -- class-sorted, so without it every batch is a single class — degenerate).
-    if !synth then
+    -- Skipped when streaming: there is no resident array to shuffle, and tf.data already
+    -- re-shuffles each iteration inside the shim.
+    if !synth && imgStream.isNone then
       let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize
                            4 -- classification: one f32 class id per record
                            (ep + 42).toUSize
@@ -555,19 +665,26 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
       if hasBn then
         pbuf ← F32.blit pbuf (3 * net.nParams + 3).toUSize runningBnStats 0 nBnStats.toUSize
       let augSeed := (ep * nb + bi + 1).toUSize
-      let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * gbs) gbs trainPix
-      -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
-      -- lives in the data pipeline, not the network): Imagenette = random crop
-      -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
-      -- MNIST = none.
-      let xb ← match net.data with
-        | .imagenette =>
-            let c ← if crop then F32.randomCrop xbRaw gbs.toUSize 3 256 256 224 224 augSeed
-                    else pure xbRaw
-            F32.randomHFlip c gbs.toUSize 3 224 224 (augSeed + 7777)
-        | .cifar => F32.randomHFlip xbRaw gbs.toUSize 3 32 32 augSeed
-        | _ => pure xbRaw
-      let yb := if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs
+      -- ImageNet takes the whole batch off the wire, already augmented and normalized by the shim,
+      -- so it bypasses BOTH the slice and the augmentation below. That is deliberate: the transform
+      -- has exactly one definition (the generated shim, shared with the JAX reference), and a second
+      -- copy here is the double-writer failure this repo keeps paying for.
+      let (xb, yb) ← match imgStream with
+        | some h => readShimBatch h gbs (3 * 224 * 224)
+        | none => do
+          let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * gbs) gbs trainPix
+          -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
+          -- lives in the data pipeline, not the network): Imagenette = random crop
+          -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
+          -- MNIST = none.
+          let x ← match net.data with
+            | .imagenette =>
+                let c ← if crop then F32.randomCrop xbRaw gbs.toUSize 3 256 256 224 224 augSeed
+                        else pure xbRaw
+                F32.randomHFlip c gbs.toUSize 3 224 224 (augSeed + 7777)
+            | .cifar => F32.randomHFlip xbRaw gbs.toUSize 3 32 32 augSeed
+            | _ => pure xbRaw
+          pure (x, if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs)
       let out ← if replicas > 1
         then IreeSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
                gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize

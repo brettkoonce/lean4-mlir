@@ -2605,10 +2605,50 @@ SHIM_BATCH=64 SHIM_HASH=3 python3 .lake/build/generated_resnet34_imagenet_shim.p
 #     it is the whole determinism gate, and it is two commands.
 ```
 
-**What is left: the Lean-side reader.** `VerifiedData` still has no `.imagenet` case and
-`trainAdamSched` still indexes a preloaded array. That is the streaming loop — read the preamble,
-validate it against the render's `B`, then one `read` per step. The `Jax/Codegen.lean:2454` shape
-(a *separate* streaming main, parallel to the in-RAM one) is the precedent for how to structure it.
+#### ✅ The Lean-side reader — landed 2026-07-30, and VERIFIED against the producer
+
+`VerifiedData.imagenet` + `spawnShim` / `readShimBatch` / `readExact` in `VerifiedTrain.lean`.
+
+**Split strategy, and it is what keeps the change small:** the **train** split streams (1.28M images
+= ~938 GiB at f32, so preloading is not an option), while the **val** split is drained into RAM once
+(195 batches × 256 after tfds `drop_remainder` = **49,920 images, 30 GB**, which fits in the box's
+175 GB). So the eval loop is **completely unchanged** — and 49,920 is the same count
+`jax/runs/r34_imagenet_bf16_90ep/RESULTS.md` reports, so both paths score the identical set.
+
+**The Lean side does NO augmentation for `.imagenet`.** The batch arrives already RRC'd, flipped,
+normalized and flattened, so the `.imagenet` arm bypasses both the slice and the aug `match`. One
+definition of the transform, and it lives in the generated shim.
+
+Three things the reader has to get right, all of which fail silently if skipped:
+
+* **`readExact` loops.** A pipe read returns what is *available*, not what was asked for — at 154 MB
+  per batch a short read is the normal case, and treating one `read` as a batch misaligns the stream
+  from then on. It throws with a pointer to `SHIM_HASH` if the pipe closes early.
+* **The preamble is CHECKED, not skipped** (`LMSH` | version | batch | flat). A batch or resolution
+  mismatch between render and shim would otherwise read as garbage pixels and look like a broken
+  net. Same reasoning as the FFI's G4 arity guard.
+* **The stream is spawned ONCE, not per epoch**, and the per-epoch `F32.shuffle` is skipped for it —
+  tf.data's `.shuffle(seed=42, reshuffle_each_iteration=True).repeat()` already re-shuffles across
+  the epoch boundary, and there is no resident array to shuffle anyway.
+
+**Verified against the producer, which is the part that makes it evidence rather than "it ran":**
+Lean reads batch 0 labels `[26, 948, 227, 24, 582, 614, 141, 155]` and batch 1
+`[15, 34, 141, 671, 268, 988, 658, 350]`; driving `build_imagenet_iter` directly from Python yields
+**exactly those**, at `(8, 150528) float32`. Byte counts are exact on both batches
+(4,816,896 = 8 × 150,528 × 4), so the framing is right and two consecutive records stay aligned.
+
+⚠ `jax/` is its own lake project, so `--shim` writes under **its** build dir; `spawnShim` looks in
+`jax/.lake/build/` then `.lake/build/`, and `$SHIM_SCRIPT` overrides. `$SHIM_PYTHON` picks the venv.
+
+#### ▶ What is left for an actual ImageNet run
+
+Three `#eval`s and a spec — **no renderer or loader change**:
+
+1. `resnet34_{mom256,fwd,fwd_eval}` at `B := 256, nClasses := 1000` (`R34Opt.heavyBall`). Both are
+   true renderer parameters on the train step *and* both forwards.
+2. A `VerifiedNetSpec` with `nClasses := 1000, data := .imagenet`, plus a driver target.
+3. Then: `LEAN_MLIR_BASE_LR_U=100000` (0.1, the reference rate), 30 epochs ≈ **28 h on 1 GPU / ~17 h
+   on 2** at the measured bs256 rate.
 
 #### What this does NOT do
 
