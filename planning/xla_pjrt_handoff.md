@@ -2951,6 +2951,48 @@ per-channel LN makes them rank-1 and that novelty goes away.
 enet conv biases → ConvNeXt LN. The first two are a known recipe run twice; the third is a
 decision like §2l was.
 
+#### ▶ STATE 2026-07-31 — both renderers THREADED and INERT, the swap tail is what is left
+
+`5dbbbd2` (mnv2) and `44848af` (enet) thread `convBias` through the renderers and stop while the
+change provably emits nothing. **Gate 1 in its strong form holds on both: every artifact in
+`verified_mlir/` is byte-identical, across all nets** — which is also the check that the shared
+helpers moved into `StableHLO` (`biasName`, `zeroBiasPrelude`, `fmt6`, `alphaOverK`) are inert.
+
+`#guard`s pin BOTH arities on each net, so the drop cannot happen silently:
+
+| net | with biases | without | dropped | audit predicted |
+|---|---|---|---|---|
+| MobileNetV2 | 210 | **158** | **52** | 52 ✓ |
+| EfficientNet | 262 | **213** | **49** | 49 ✓ |
+
+Two independent routes — the renderer's signature list and the layout walk — landing on the same
+number is what makes these safe to proceed on.
+
+**The remaining tail, identical for both:** wire `zeroBiasPrelude` with the net's own channel
+widths → the `VLayer` spec (`invertedResidual` / `mbConvSE`, plus `.convBnNB` for stem and head) →
+the `*Layout.specs` hand-list → flip the default, re-render, tie, smoke. **Finish ONE end to end
+first** (mnv2 — no SE complication) so the tie harness and swap recipe are validated once before
+the second net reuses them.
+
+**Two things learned doing the threading, both of which cost time:**
+
+* ⚠ **enet trains its conv biases through `bnBt`** — the BN-β op — fed the BN *input* cotangent,
+  NOT through anything named `convBiasGrad`. Grepping the obvious name finds nothing. It is also
+  the same mathematical statement as R34's: BN's input cotangent sums to zero per channel in ℝ,
+  which is exactly why the conv-bias gradient is zero and the parameter is safe to drop. One
+  reason, three nets.
+* ⚠ **enet's SE biases must NOT be dropped** (`zb1`/`zb2`): those 1×1 convs are followed by an
+  ACTIVATION, not BN, so nothing absorbs them and the reference carries them. The audit's rule —
+  a rank-1 kind-2 param immediately after a **rank-4** kernel — excluded them automatically
+  because SE's params are rank-2, which is why the gap closed exactly on the first attempt rather
+  than by luck. Any net with non-BN-followed convs needs the same care.
+
+*Method note for whoever continues: thread these with a LINE-AWARE, paren-balanced pass, not
+blanket regexes. Two attempts with `re.sub` over these files split a multi-line `pretty B (...)`
+across an `else`, and backtracked `\d+` into `160` to produce `convBias0`. Also put `convBias`
+LAST in every public signature — inserted mid-list it captures an existing positional argument
+(`efficientnetTrainStepFaithfulV`'s `funcName`, `enetBackAll`'s optional `smooth`).*
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
