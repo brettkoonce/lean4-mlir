@@ -86,7 +86,7 @@ structure MBBackB where
 
 /-- **STRIDED inverted-residual forward**: expand at the input `2hh×2ww`, depthwise downsamples
     `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM Nat MBFwdB := do
+private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Nat MBFwdB := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -98,19 +98,19 @@ private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) : Sta
   let zdb  : Vec (B*(mid*hh*ww)) := fun _ => 0
   let zob  : Vec (B*(oc*hh*ww)) := fun _ => 0
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%b{p}eW" s!"%b{p}eb" zke zmid)
+    (.conv (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%b{p}eW" (biasName convBias s!"%b{p}eb" mid) zke zmid)
     (.operand xName zxin))
   let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := 2*hh) (w := 2*ww)
     s!"%b{p}eg" s!"%b{p}ebt" epsStr 0 zmid zmid (.operand nEc zeb))
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu6 (n := mid*(2*hh)*(2*ww))) (.operand nEn zeb))
   let (cDc, nDc) ← pretty B (.batchOp (N := B)
-    (.depthwiseStrided (c := mid) (h := hh) (w := ww) s!"%b{p}dW" s!"%b{p}db" zdk zmid)
+    (.depthwiseStrided (c := mid) (h := hh) (w := ww) s!"%b{p}dW" (biasName convBias s!"%b{p}db" mid) zdk zmid)
     (.operand nEr zeb))
   let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww)
     s!"%b{p}dg" s!"%b{p}dbt" epsStr 0 zmid zmid (.operand nDc zdb))
   let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu6 (n := mid*hh*ww)) (.operand nDn zdb))
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%b{p}pW" s!"%b{p}pb" zkp zoc)
+    (.conv (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%b{p}pW" (biasName convBias s!"%b{p}pb" oc) zkp zoc)
     (.operand nDr zdb))
   let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww)
     s!"%b{p}pg" s!"%b{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
@@ -120,7 +120,7 @@ private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) : Sta
 /-- **STRIDE-1 inverted-residual forward with the identity skip** (`ic = oc`): everything at
     `hh×ww`, block output = `addVB (project-BN out) (block input)`. The bottleneck is LINEAR — no
     relu6 after the add. -/
-private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM Nat MBFwdB := do
+private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Nat MBFwdB := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -131,18 +131,18 @@ private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM
   let zeb  : Vec (B*(mid*hh*ww)) := fun _ => 0
   let zob  : Vec (B*(oc*hh*ww)) := fun _ => 0
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%b{p}eW" s!"%b{p}eb" zke zmid)
+    (.conv (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%b{p}eW" (biasName convBias s!"%b{p}eb" mid) zke zmid)
     (.operand xName zxin))
   let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww)
     s!"%b{p}eg" s!"%b{p}ebt" epsStr 0 zmid zmid (.operand nEc zeb))
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu6 (n := mid*hh*ww)) (.operand nEn zeb))
   let (cDc, nDc) ← pretty B (.batchOp (N := B)
-    (.depthwise (c := mid) (h := hh) (w := ww) s!"%b{p}dW" s!"%b{p}db" zdk zmid) (.operand nEr zeb))
+    (.depthwise (c := mid) (h := hh) (w := ww) s!"%b{p}dW" (biasName convBias s!"%b{p}db" mid) zdk zmid) (.operand nEr zeb))
   let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww)
     s!"%b{p}dg" s!"%b{p}dbt" epsStr 0 zmid zmid (.operand nDc zeb))
   let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu6 (n := mid*hh*ww)) (.operand nDn zeb))
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%b{p}pW" s!"%b{p}pb" zkp zoc)
+    (.conv (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%b{p}pW" (biasName convBias s!"%b{p}pb" oc) zkp zoc)
     (.operand nDr zeb))
   let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww)
     s!"%b{p}pg" s!"%b{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
@@ -152,7 +152,7 @@ private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM
 
 /-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): as `irFwdSkipB` but `ic ≠ oc`, so the block
     output is the project-BN output directly. -/
-private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) : StateM Nat MBFwdB := do
+private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Nat MBFwdB := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -163,18 +163,18 @@ private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) : Stat
   let zeb  : Vec (B*(mid*hh*ww)) := fun _ => 0
   let zob  : Vec (B*(oc*hh*ww)) := fun _ => 0
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%b{p}eW" s!"%b{p}eb" zke zmid)
+    (.conv (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%b{p}eW" (biasName convBias s!"%b{p}eb" mid) zke zmid)
     (.operand xName zxin))
   let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww)
     s!"%b{p}eg" s!"%b{p}ebt" epsStr 0 zmid zmid (.operand nEc zeb))
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu6 (n := mid*hh*ww)) (.operand nEn zeb))
   let (cDc, nDc) ← pretty B (.batchOp (N := B)
-    (.depthwise (c := mid) (h := hh) (w := ww) s!"%b{p}dW" s!"%b{p}db" zdk zmid) (.operand nEr zeb))
+    (.depthwise (c := mid) (h := hh) (w := ww) s!"%b{p}dW" (biasName convBias s!"%b{p}db" mid) zdk zmid) (.operand nEr zeb))
   let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww)
     s!"%b{p}dg" s!"%b{p}dbt" epsStr 0 zmid zmid (.operand nDc zeb))
   let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu6 (n := mid*hh*ww)) (.operand nDn zeb))
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%b{p}pW" s!"%b{p}pb" zkp zoc)
+    (.conv (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%b{p}pW" (biasName convBias s!"%b{p}pb" oc) zkp zoc)
     (.operand nDr zeb))
   let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww)
     s!"%b{p}pg" s!"%b{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
@@ -184,7 +184,7 @@ private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) : Stat
 /-- **NO-EXPAND forward** (b1, the canonical `t = 1` block): depthwise(stride-1, on `ic` channels)
     → BN → relu6 → project(1×1 `ic→oc`) → BN. No expand conv, no skip. `er` is the depthwise INPUT
     (= the block input), which is what the depthwise weight gradient reads. -/
-private def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) : StateM Nat MBFwdB := do
+private def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Nat MBFwdB := do
   let ww := hh
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -193,12 +193,12 @@ private def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) : StateM Na
   let zib  : Vec (B*(ic*hh*ww)) := fun _ => 0
   let zob  : Vec (B*(oc*hh*ww)) := fun _ => 0
   let (cDc, nDc) ← pretty B (.batchOp (N := B)
-    (.depthwise (c := ic) (h := hh) (w := ww) s!"%b{p}dW" s!"%b{p}db" zdk zic) (.operand xName zib))
+    (.depthwise (c := ic) (h := hh) (w := ww) s!"%b{p}dW" (biasName convBias s!"%b{p}db" ic) zdk zic) (.operand xName zib))
   let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := ic) (h := hh) (w := ww)
     s!"%b{p}dg" s!"%b{p}dbt" epsStr 0 zic zic (.operand nDc zib))
   let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu6 (n := ic*hh*ww)) (.operand nDn zib))
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := ic) (oc := oc) (h := hh) (w := ww) s!"%b{p}pW" s!"%b{p}pb" zkp zoc)
+    (.conv (ic := ic) (oc := oc) (h := hh) (w := ww) s!"%b{p}pW" (biasName convBias s!"%b{p}pb" oc) zkp zoc)
     (.operand nDr zib))
   let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww)
     s!"%b{p}pg" s!"%b{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
@@ -214,7 +214,7 @@ private def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) : StateM Na
 /-- **STRIDED backward + 12 un-fused gradients.** The depthwise input gradient lands at `2hh×2ww`;
     no skip, so the dx handed to the previous block is the expand-conv backward directly. -/
 private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
-    (f : MBFwdB) (dyName : String) : StateM Nat MBBackB := do
+    (f : MBFwdB) (dyName : String) (convBias : Bool) : StateM Nat MBBackB := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -245,24 +245,30 @@ private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
   -- the 12 gradients, func-arg order: eW eb eg ebt | dW db dg dbt | pW pb pg pbt
   let (cEW, nEW) ← pretty B (.convWeightGradB (N := B) (ic := ic) (oc := mid)
     (h := 2*hh) (w := 2*ww) xName zmid zxin zke (.operand nDen zeb))
-  let (cEb, nEb) ← pretty B (.convBiasGradB (N := B) (ic := ic) (oc := mid)
-    (h := 2*hh) (w := 2*ww) zke zxin zmid (.operand nDen zeb))
+  let (cEb, nEb) ← if convBias then
+      pretty B (.convBiasGradB (N := B) (ic := ic) (oc := mid)
+        (h := 2*hh) (w := 2*ww) zke zxin zmid (.operand nDen zeb))
+    else pure ("", "")
   let (cEg, nEg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := 2*hh) (w := 2*ww)
     f.ec epsStr 0 zebp (.operand nDem zebp))
   let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := 2*hh) (w := 2*ww)
     (.operand nDem zebp))
   let (cDW, nDW) ← pretty B (.depthwiseStridedWeightGradB (N := B) (c := mid) (h := hh) (w := ww)
     f.er zmid zeb zdk (.operand nDdn zdb))
-  let (cDb, nDb) ← pretty B (.depthwiseStridedBiasGradB (N := B) (c := mid) (h := hh) (w := ww)
-    zdk zeb zmid (.operand nDdn zdb))
+  let (cDb, nDb) ← if convBias then
+      pretty B (.depthwiseStridedBiasGradB (N := B) (c := mid) (h := hh) (w := ww)
+        zdk zeb zmid (.operand nDdn zdb))
+    else pure ("", "")
   let (cDg, nDg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := hh) (w := ww)
     f.dc epsStr 0 zdbp (.operand nDdm zdbp))
   let (cDt, nDt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww)
     (.operand nDdm zdbp))
   let (cPW, nPW) ← pretty B (.convWeightGradB (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww)
     f.dr zoc zdb zkp (.operand nDpc zob))
-  let (cPb, nPb) ← pretty B (.convBiasGradB (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww)
-    zkp zdb zoc (.operand nDpc zob))
+  let (cPb, nPb) ← if convBias then
+      pretty B (.convBiasGradB (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww)
+        zkp zdb zoc (.operand nDpc zob))
+    else pure ("", "")
   let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := hh) (w := ww)
     f.pc epsStr 0 zobp (.operand dyName zobp))
   let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww)
@@ -282,7 +288,7 @@ private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
     they are one function with a flag rather than two near-copies (the double-writer disease one
     level down, §2a-quater). `ic = oc` whenever `skip` is true. -/
 private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xName : String)
-    (f : MBFwdB) (dyName : String) : StateM Nat MBBackB := do
+    (f : MBFwdB) (dyName : String) (convBias : Bool) : StateM Nat MBBackB := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -314,24 +320,30 @@ private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xN
     else pure ("", nDxb)
   let (cEW, nEW) ← pretty B (.convWeightGradB (N := B) (ic := ic) (oc := mid) (h := hh) (w := ww)
     xName zmid zxin zke (.operand nDen zeb))
-  let (cEb, nEb) ← pretty B (.convBiasGradB (N := B) (ic := ic) (oc := mid) (h := hh) (w := ww)
-    zke zxin zmid (.operand nDen zeb))
+  let (cEb, nEb) ← if convBias then
+      pretty B (.convBiasGradB (N := B) (ic := ic) (oc := mid) (h := hh) (w := ww)
+        zke zxin zmid (.operand nDen zeb))
+    else pure ("", "")
   let (cEg, nEg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := hh) (w := ww)
     f.ec epsStr 0 zebp (.operand nDem zebp))
   let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww)
     (.operand nDem zebp))
   let (cDW, nDW) ← pretty B (.depthwiseWeightGradB (N := B) (c := mid) (h := hh) (w := ww)
     f.er zmid zeb zdk (.operand nDdn zeb))
-  let (cDb, nDb) ← pretty B (.depthwiseBiasGradB (N := B) (c := mid) (h := hh) (w := ww)
-    zdk zeb zmid (.operand nDdn zeb))
+  let (cDb, nDb) ← if convBias then
+      pretty B (.depthwiseBiasGradB (N := B) (c := mid) (h := hh) (w := ww)
+        zdk zeb zmid (.operand nDdn zeb))
+    else pure ("", "")
   let (cDg, nDg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := hh) (w := ww)
     f.dc epsStr 0 zebp (.operand nDdm zebp))
   let (cDt, nDt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww)
     (.operand nDdm zebp))
   let (cPW, nPW) ← pretty B (.convWeightGradB (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww)
     f.dr zoc zeb zkp (.operand nDpc zob))
-  let (cPb, nPb) ← pretty B (.convBiasGradB (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww)
-    zkp zeb zoc (.operand nDpc zob))
+  let (cPb, nPb) ← if convBias then
+      pretty B (.convBiasGradB (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww)
+        zkp zeb zoc (.operand nDpc zob))
+    else pure ("", "")
   let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := hh) (w := ww)
     f.pc epsStr 0 zobp (.operand dyName zobp))
   let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww)
@@ -349,7 +361,7 @@ private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xN
 /-- **NO-EXPAND backward + 8 un-fused gradients** (b1). No expand conv and no skip, so the dx to
     the stem is the depthwise backward directly. -/
 private def irBackNoExpGradB (B ic oc hh : Nat) (epsStr p xName : String)
-    (f : MBFwdB) (dyName : String) : StateM Nat MBBackB := do
+    (f : MBFwdB) (dyName : String) (convBias : Bool) : StateM Nat MBBackB := do
   let ww := hh
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -370,16 +382,20 @@ private def irBackNoExpGradB (B ic oc hh : Nat) (epsStr p xName : String)
     s!"%b{p}dW" zdk zic (.operand nDdn zib))
   let (cDW, nDW) ← pretty B (.depthwiseWeightGradB (N := B) (c := ic) (h := hh) (w := ww)
     xName zic zib zdk (.operand nDdn zib))
-  let (cDb, nDb) ← pretty B (.depthwiseBiasGradB (N := B) (c := ic) (h := hh) (w := ww)
-    zdk zib zic (.operand nDdn zib))
+  let (cDb, nDb) ← if convBias then
+      pretty B (.depthwiseBiasGradB (N := B) (c := ic) (h := hh) (w := ww)
+        zdk zib zic (.operand nDdn zib))
+    else pure ("", "")
   let (cDg, nDg) ← pretty B (.bnGammaGradB (N := B) (oc := ic) (h := hh) (w := ww)
     f.dc epsStr 0 zibp (.operand nDdm zibp))
   let (cDt, nDt) ← pretty B (.bnBetaGradB (N := B) (oc := ic) (h := hh) (w := ww)
     (.operand nDdm zibp))
   let (cPW, nPW) ← pretty B (.convWeightGradB (N := B) (ic := ic) (oc := oc) (h := hh) (w := ww)
     f.dr zoc zib zkp (.operand nDpc zob))
-  let (cPb, nPb) ← pretty B (.convBiasGradB (N := B) (ic := ic) (oc := oc) (h := hh) (w := ww)
-    zkp zib zoc (.operand nDpc zob))
+  let (cPb, nPb) ← if convBias then
+      pretty B (.convBiasGradB (N := B) (ic := ic) (oc := oc) (h := hh) (w := ww)
+        zkp zib zoc (.operand nDpc zob))
+    else pure ("", "")
   let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := hh) (w := ww)
     f.pc epsStr 0 zobp (.operand dyName zobp))
   let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww)
@@ -397,36 +413,40 @@ private def irBackNoExpGradB (B ic oc hh : Nat) (epsStr p xName : String)
 -- ════════════════════════════════════════════════════════════════
 
 /-- A 12-param inverted-residual block's signature, func-arg order. -/
-private def mnv2BlockSig (i : String) (ic mid oc : Nat) : List (String × String) :=
-  [(s!"%b{i}eW", ty [mid,ic,1,1]), (s!"%b{i}eb", ty [mid]),
-   (s!"%b{i}eg", ty [mid]), (s!"%b{i}ebt", ty [mid]),
-   (s!"%b{i}dW", ty [mid,1,3,3]), (s!"%b{i}db", ty [mid]),
-   (s!"%b{i}dg", ty [mid]), (s!"%b{i}dbt", ty [mid]),
-   (s!"%b{i}pW", ty [oc,mid,1,1]), (s!"%b{i}pb", ty [oc]),
-   (s!"%b{i}pg", ty [oc]), (s!"%b{i}pbt", ty [oc])]
+private def mnv2BlockSig (i : String) (ic mid oc : Nat) (convBias : Bool) : List (String × String) :=
+  let b (nm : String) (c : Nat) : List (String × String) := if convBias then [(nm, ty [c])] else []
+  [(s!"%b{i}eW", ty [mid,ic,1,1])] ++ b s!"%b{i}eb" mid ++
+  [(s!"%b{i}eg", ty [mid]), (s!"%b{i}ebt", ty [mid]),
+   (s!"%b{i}dW", ty [mid,1,3,3])] ++ b s!"%b{i}db" mid ++
+  [(s!"%b{i}dg", ty [mid]), (s!"%b{i}dbt", ty [mid]),
+   (s!"%b{i}pW", ty [oc,mid,1,1])] ++ b s!"%b{i}pb" oc ++
+  [(s!"%b{i}pg", ty [oc]), (s!"%b{i}pbt", ty [oc])]
 
 /-- The no-expand block's signature (b1): depthwise on `ic` channels + project `ic→oc`. 8 params. -/
-private def mnv2NoExpSig (i : String) (ic oc : Nat) : List (String × String) :=
-  [(s!"%b{i}dW", ty [ic,1,3,3]), (s!"%b{i}db", ty [ic]),
-   (s!"%b{i}dg", ty [ic]), (s!"%b{i}dbt", ty [ic]),
-   (s!"%b{i}pW", ty [oc,ic,1,1]), (s!"%b{i}pb", ty [oc]),
-   (s!"%b{i}pg", ty [oc]), (s!"%b{i}pbt", ty [oc])]
+private def mnv2NoExpSig (i : String) (ic oc : Nat) (convBias : Bool) : List (String × String) :=
+  let b (nm : String) (c : Nat) : List (String × String) := if convBias then [(nm, ty [c])] else []
+  [(s!"%b{i}dW", ty [ic,1,3,3])] ++ b s!"%b{i}db" ic ++
+  [(s!"%b{i}dg", ty [ic]), (s!"%b{i}dbt", ty [ic]),
+   (s!"%b{i}pW", ty [oc,ic,1,1])] ++ b s!"%b{i}pb" oc ++
+  [(s!"%b{i}pg", ty [oc]), (s!"%b{i}pbt", ty [oc])]
 
 /-- **The 210 parameters of the 17-block paper-spec net, in func-arg order.** stem (4) + b1
     no-expand (8) + b2..b17 (16 × 12 = 192) + head (4) + dense (2) = 210 — the same decomposition
     `MobileNetV2Render.paperSig` uses, at the names the committed AdamW artifact presents. -/
-def mnv2SigList (nClasses : Nat) : List (String × String) :=
-  [("%sW", ty [32,3,3,3]), ("%sb", ty [32]), ("%sg", ty [32]), ("%sbt", ty [32])] ++
-  mnv2NoExpSig "1" 32 16 ++
-  mnv2BlockSig "2"  16  96  24 ++ mnv2BlockSig "3"  24 144  24 ++
-  mnv2BlockSig "4"  24 144  32 ++ mnv2BlockSig "5"  32 192  32 ++
-  mnv2BlockSig "6"  32 192  32 ++ mnv2BlockSig "7"  32 192  64 ++
-  mnv2BlockSig "8"  64 384  64 ++ mnv2BlockSig "9"  64 384  64 ++
-  mnv2BlockSig "10" 64 384  64 ++ mnv2BlockSig "11" 64 384  96 ++
-  mnv2BlockSig "12" 96 576  96 ++ mnv2BlockSig "13" 96 576  96 ++
-  mnv2BlockSig "14" 96 576 160 ++ mnv2BlockSig "15" 160 960 160 ++
-  mnv2BlockSig "16" 160 960 160 ++ mnv2BlockSig "17" 160 960 320 ++
-  [("%hW", ty [1280,320,1,1]), ("%hb", ty [1280]), ("%hg", ty [1280]), ("%hbt", ty [1280])] ++
+def mnv2SigList (nClasses : Nat) (convBias : Bool) : List (String × String) :=
+  [("%sW", ty [32,3,3,3])] ++ (if convBias then [("%sb", ty [32])] else []) ++
+  [("%sg", ty [32]), ("%sbt", ty [32])] ++
+  mnv2NoExpSig "1" 32 16 convBias ++
+  mnv2BlockSig "2"  16  96  24 convBias ++ mnv2BlockSig "3"  24 144  24 convBias ++
+  mnv2BlockSig "4"  24 144  32 convBias ++ mnv2BlockSig "5"  32 192  32 convBias ++
+  mnv2BlockSig "6"  32 192  32 convBias ++ mnv2BlockSig "7"  32 192  64 convBias ++
+  mnv2BlockSig "8"  64 384  64 convBias ++ mnv2BlockSig "9"  64 384  64 convBias ++
+  mnv2BlockSig "10" 64 384  64 convBias ++ mnv2BlockSig "11" 64 384  96 convBias ++
+  mnv2BlockSig "12" 96 576  96 convBias ++ mnv2BlockSig "13" 96 576  96 convBias ++
+  mnv2BlockSig "14" 96 576 160 convBias ++ mnv2BlockSig "15" 160 960 160 convBias ++
+  mnv2BlockSig "16" 160 960 160 convBias ++ mnv2BlockSig "17" 160 960 320 convBias ++
+  [("%hW", ty [1280,320,1,1])] ++ (if convBias then [("%hb", ty [1280])] else []) ++
+  [("%hg", ty [1280]), ("%hbt", ty [1280])] ++
   [("%Wd", ty [1280, nClasses]), ("%bd", ty [nClasses])]
 
 /-- The running-mean/var slots for one BN layer. -/
@@ -514,7 +534,7 @@ set_option maxRecDepth 4000000 in
     downsamples, 10 identity skips, 2 stage-first widenings) → 1×1 conv-BN-relu6 head (320→1280) →
     GAP → dense (1280→nClasses). -/
 def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
-    (replicas : Nat := 1) : String :=
+    (replicas : Nat := 1) (convBias : Bool := true) : String :=
   let go : StateM Nat String := do
     -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → batch BN → relu6 (NO maxpool) ═══
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
@@ -523,29 +543,29 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let z112  : Vec (B*(32*112*112)) := fun _ => 0
     let z112p : Vec (B*(32*(112*112))) := fun _ => 0
     let (cStc, nStc) ← pretty B (.batchOp (N := B)
-      (.convStrided (ic := 3) (oc := 32) (h := 112) (w := 112) "%sW" "%sb" zSk z32)
+      (.convStrided (ic := 3) (oc := 32) (h := 112) (w := 112) "%sW" (biasName convBias "%sb" 32) zSk z32)
       (.operand "%x" zx))
     let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 32) (h := 112) (w := 112)
       "%sg" "%sbt" epsStr 0 z32 z32 (.operand nStc z112))
     let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu6 (n := 32*112*112)) (.operand nStn z112))
     -- ═══ forward: the 17 inverted-residual blocks ═══
-    let f1  ← irFwdNoExpB   B 32      16 112 epsStr "1"  nStr
-    let f2  ← irFwdStridedB B 16  96  24  56 epsStr "2"  f1.o
-    let f3  ← irFwdSkipB    B 24 144  24  56 epsStr "3"  f2.o
-    let f4  ← irFwdStridedB B 24 144  32  28 epsStr "4"  f3.o
-    let f5  ← irFwdSkipB    B 32 192  32  28 epsStr "5"  f4.o
-    let f6  ← irFwdSkipB    B 32 192  32  28 epsStr "6"  f5.o
-    let f7  ← irFwdStridedB B 32 192  64  14 epsStr "7"  f6.o
-    let f8  ← irFwdSkipB    B 64 384  64  14 epsStr "8"  f7.o
-    let f9  ← irFwdSkipB    B 64 384  64  14 epsStr "9"  f8.o
-    let f10 ← irFwdSkipB    B 64 384  64  14 epsStr "10" f9.o
-    let f11 ← irFwdNoSkipB  B 64 384  96  14 epsStr "11" f10.o
-    let f12 ← irFwdSkipB    B 96 576  96  14 epsStr "12" f11.o
-    let f13 ← irFwdSkipB    B 96 576  96  14 epsStr "13" f12.o
-    let f14 ← irFwdStridedB B 96 576 160   7 epsStr "14" f13.o
-    let f15 ← irFwdSkipB    B 160 960 160  7 epsStr "15" f14.o
-    let f16 ← irFwdSkipB    B 160 960 160  7 epsStr "16" f15.o
-    let f17 ← irFwdNoSkipB  B 160 960 320  7 epsStr "17" f16.o
+    let f1  ← irFwdNoExpB   B 32      16 112 epsStr "1"  nStr convBias
+    let f2  ← irFwdStridedB B 16  96  24  56 epsStr "2"  f1.o convBias
+    let f3  ← irFwdSkipB    B 24 144  24  56 epsStr "3"  f2.o convBias
+    let f4  ← irFwdStridedB B 24 144  32  28 epsStr "4"  f3.o convBias
+    let f5  ← irFwdSkipB    B 32 192  32  28 epsStr "5"  f4.o convBias
+    let f6  ← irFwdSkipB    B 32 192  32  28 epsStr "6"  f5.o convBias
+    let f7  ← irFwdStridedB B 32 192  64  14 epsStr "7"  f6.o convBias
+    let f8  ← irFwdSkipB    B 64 384  64  14 epsStr "8"  f7.o convBias
+    let f9  ← irFwdSkipB    B 64 384  64  14 epsStr "9"  f8.o convBias
+    let f10 ← irFwdSkipB    B 64 384  64  14 epsStr "10" f9.o convBias
+    let f11 ← irFwdNoSkipB  B 64 384  96  14 epsStr "11" f10.o convBias
+    let f12 ← irFwdSkipB    B 96 576  96  14 epsStr "12" f11.o convBias
+    let f13 ← irFwdSkipB    B 96 576  96  14 epsStr "13" f12.o convBias
+    let f14 ← irFwdStridedB B 96 576 160   7 epsStr "14" f13.o convBias
+    let f15 ← irFwdSkipB    B 160 960 160  7 epsStr "15" f14.o convBias
+    let f16 ← irFwdSkipB    B 160 960 160  7 epsStr "16" f15.o convBias
+    let f17 ← irFwdNoSkipB  B 160 960 320  7 epsStr "17" f16.o convBias
     -- ═══ head: 1×1 conv (320→1280) → batch BN → relu6 → GAP(7×7) → dense ═══
     let z7     : Vec (B*(320*7*7)) := fun _ => 0
     let zHk    : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
@@ -558,7 +578,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let zNCb   : Vec (B*(1*nClasses)) := fun _ => 0
     let zNCp   : Vec (B*nClasses) := fun _ => 0
     let (cHc, nHc) ← pretty B (.batchOp (N := B)
-      (.conv (ic := 320) (oc := 1280) (h := 7) (w := 7) "%hW" "%hb" zHk z1280) (.operand f17.o z7))
+      (.conv (ic := 320) (oc := 1280) (h := 7) (w := 7) "%hW" (biasName convBias "%hb" 1280) zHk z1280) (.operand f17.o z7))
     let (cHn, nHn) ← pretty B (.bnBatchF (N := B) (oc := 1280) (h := 7) (w := 7)
       "%hg" "%hbt" epsStr 0 z1280 z1280 (.operand nHc zH7))
     let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu6 (n := 1280*7*7)) (.operand nHn zH7))
@@ -590,37 +610,41 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       "%hW" zHk z1280 (.operand nDhn zH7))
     let (cHW, nHW) ← pretty B (.convWeightGradB (N := B) (ic := 320) (oc := 1280) (h := 7) (w := 7)
       f17.o z1280 z7 zHk (.operand nDhn zH7))
-    let (cHb, nHb) ← pretty B (.convBiasGradB (N := B) (ic := 320) (oc := 1280) (h := 7) (w := 7)
-      zHk z7 z1280 (.operand nDhn zH7))
+    let (cHb, nHb) ← if convBias then
+        pretty B (.convBiasGradB (N := B) (ic := 320) (oc := 1280) (h := 7) (w := 7)
+            zHk z7 z1280 (.operand nDhn zH7))
+      else pure ("", "")
     let (cHg, nHg) ← pretty B (.bnGammaGradB (N := B) (oc := 1280) (h := 7) (w := 7)
       nHc epsStr 0 zH7p (.operand nDhm zH7p))
     let (cHt, nHt) ← pretty B (.bnBetaGradB (N := B) (oc := 1280) (h := 7) (w := 7)
       (.operand nDhm zH7p))
     -- ═══ backward: the 17 blocks reversed (the cotangent threads from nDhx) ═══
-    let b17 ← irBackStride1GradB B 160 960 320  7 false epsStr "17" f16.o f17 nDhx
-    let b16 ← irBackStride1GradB B 160 960 160  7 true  epsStr "16" f15.o f16 b17.dx
-    let b15 ← irBackStride1GradB B 160 960 160  7 true  epsStr "15" f14.o f15 b16.dx
-    let b14 ← irBackStridedGradB B 96 576 160   7       epsStr "14" f13.o f14 b15.dx
-    let b13 ← irBackStride1GradB B 96 576  96  14 true  epsStr "13" f12.o f13 b14.dx
-    let b12 ← irBackStride1GradB B 96 576  96  14 true  epsStr "12" f11.o f12 b13.dx
-    let b11 ← irBackStride1GradB B 64 384  96  14 false epsStr "11" f10.o f11 b12.dx
-    let b10 ← irBackStride1GradB B 64 384  64  14 true  epsStr "10" f9.o  f10 b11.dx
-    let b9  ← irBackStride1GradB B 64 384  64  14 true  epsStr "9"  f8.o  f9  b10.dx
-    let b8  ← irBackStride1GradB B 64 384  64  14 true  epsStr "8"  f7.o  f8  b9.dx
-    let b7  ← irBackStridedGradB B 32 192  64  14       epsStr "7"  f6.o  f7  b8.dx
-    let b6  ← irBackStride1GradB B 32 192  32  28 true  epsStr "6"  f5.o  f6  b7.dx
-    let b5  ← irBackStride1GradB B 32 192  32  28 true  epsStr "5"  f4.o  f5  b6.dx
-    let b4  ← irBackStridedGradB B 24 144  32  28       epsStr "4"  f3.o  f4  b5.dx
-    let b3  ← irBackStride1GradB B 24 144  24  56 true  epsStr "3"  f2.o  f3  b4.dx
-    let b2  ← irBackStridedGradB B 16  96  24  56       epsStr "2"  f1.o  f2  b3.dx
-    let b1  ← irBackNoExpGradB   B 32      16 112       epsStr "1"  nStr  f1  b2.dx
+    let b17 ← irBackStride1GradB B 160 960 320  7 false epsStr "17" f16.o f17 nDhx convBias
+    let b16 ← irBackStride1GradB B 160 960 160  7 true  epsStr "16" f15.o f16 b17.dx convBias
+    let b15 ← irBackStride1GradB B 160 960 160  7 true  epsStr "15" f14.o f15 b16.dx convBias
+    let b14 ← irBackStridedGradB B 96 576 160   7       epsStr "14" f13.o f14 b15.dx convBias
+    let b13 ← irBackStride1GradB B 96 576  96  14 true  epsStr "13" f12.o f13 b14.dx convBias
+    let b12 ← irBackStride1GradB B 96 576  96  14 true  epsStr "12" f11.o f12 b13.dx convBias
+    let b11 ← irBackStride1GradB B 64 384  96  14 false epsStr "11" f10.o f11 b12.dx convBias
+    let b10 ← irBackStride1GradB B 64 384  64  14 true  epsStr "10" f9.o  f10 b11.dx convBias
+    let b9  ← irBackStride1GradB B 64 384  64  14 true  epsStr "9"  f8.o  f9  b10.dx convBias
+    let b8  ← irBackStride1GradB B 64 384  64  14 true  epsStr "8"  f7.o  f8  b9.dx convBias
+    let b7  ← irBackStridedGradB B 32 192  64  14       epsStr "7"  f6.o  f7  b8.dx convBias
+    let b6  ← irBackStride1GradB B 32 192  32  28 true  epsStr "6"  f5.o  f6  b7.dx convBias
+    let b5  ← irBackStride1GradB B 32 192  32  28 true  epsStr "5"  f4.o  f5  b6.dx convBias
+    let b4  ← irBackStridedGradB B 24 144  32  28       epsStr "4"  f3.o  f4  b5.dx convBias
+    let b3  ← irBackStride1GradB B 24 144  24  56 true  epsStr "3"  f2.o  f3  b4.dx convBias
+    let b2  ← irBackStridedGradB B 16  96  24  56       epsStr "2"  f1.o  f2  b3.dx convBias
+    let b1  ← irBackNoExpGradB   B 32      16 112       epsStr "1"  nStr  f1  b2.dx convBias
     -- ═══ stem backward: relu6 mask → BN back, then the 4 stem gradients (NO conv-back past %x) ═══
     let (cDsm, nDsm) ← pretty B (.selectMidB nStn z112 (.operand b1.dx z112))
     let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 32) (h := 112) (w := 112)
       "%sg" nStc epsStr 0 z32 z112p (.operand nDsm z112p))
     let (csW, nsW) ← pretty B (.convStridedWeightGradB "%x" z32 zx zSk (.operand nDsn z112))
-    let (csb, nsb) ← pretty B (.convStridedBiasGradB (h := 112) (w := 112) zSk zx z32
-      (.operand nDsn z112))
+    let (csb, nsb) ← if convBias then
+        pretty B (.convStridedBiasGradB (h := 112) (w := 112) zSk zx z32
+            (.operand nDsn z112))
+      else pure ("", "")
     let (csg, nsg) ← pretty B (.bnGammaGradB (N := B) (oc := 32) (h := 112) (w := 112)
       nStc epsStr 0 z112p (.operand nDsm z112p))
     let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 32) (h := 112) (w := 112)
@@ -747,7 +771,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
       body ++ adamConstsM ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
-  let sigList : List (String × String) := mnv2SigList nClasses
+  let sigList : List (String × String) := mnv2SigList nClasses convBias
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
   let mSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}m: {t}"))
   let vSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}v: {t}"))
@@ -820,5 +844,8 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.mnv2AdamVariant 128 1 == "adam128"
 -- The interface contract, checked at elaboration: 210 parameters and 104 BN stat slots ⇒
 -- 1 + 3×210 + 3 + 104 + 1 = 739 inputs and 3×210 + 3 + 104 = 737 outputs.
-#guard (Proofs.StableHLO.mnv2SigList 10).length == 210
+#guard (Proofs.StableHLO.mnv2SigList 10 true).length == 210   -- with conv biases (pre-swap)
+-- 210 − 52 conv biases = 158. Both are pinned, so dropping the biases cannot silently
+-- change the arity of the render that ships (§2m).
+#guard (Proofs.StableHLO.mnv2SigList 10 false).length == 158
 #guard Proofs.StableHLO.mnv2StatSigList.length == 104

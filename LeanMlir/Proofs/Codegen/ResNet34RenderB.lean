@@ -515,7 +515,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
-      zeroBiasPrelude convBias ++ body ++ optConstsB opt ++ adamCode ++ lossCode ++
+      zeroBiasPrelude convBias [64, 128, 256, 512] ++ body ++ optConstsB opt ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r34SigList nClasses convBias
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))

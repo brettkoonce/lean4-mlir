@@ -5693,6 +5693,35 @@ def serializeToks (B : Nat) : List Tok → (String × List String) → StateM Na
       let (c, st') ← emitTok B t st
       serializeToks B ts (code ++ c, st')
 
+/-- **The conv-bias SSA name** — §2l step B. Every conv in ResNet-34 is immediately followed by
+    BatchNorm, and BN subtracts the batch mean, so in ℝ a conv bias cannot reach the BN output and
+    its gradient is identically zero. He et al.'s `.convBn` therefore carries no conv bias, and
+    this repo's render did — 8,512 parameters the reference does not have (§2k).
+
+    With `convBias := false` the bias operand becomes a zero CONSTANT rather than a function
+    argument: the op is the same proven `flatConvF`/`flatConvStridedF` at `bias = 0`, so `den` and
+    every faithfulness theorem are untouched, and `x + 0.0` is exact in IEEE, so the forward is
+    **bit-identical** to the biased render fed zeros. What changes is the signature.
+
+    ⚠ MEASURED, and it corrects §2l's stated reason: in f32 the gradient is NOT exactly zero — the
+    BN mean is a rounded sum, leaving a residue ~1e-6 of the conv-weight gradient — and under
+    AdamW's scale-free update that residue still moves θ by ~lr per step. In the 80-epoch run all
+    8,512 biases drifted to |θ|max 0.041. They are safe to drop because the FORWARD does not depend
+    on them (zeroing all of them moves the trained logits by rel 1e-6, against 0.79 for the same
+    ablation on BN β), not because they stay zero. See `tests/TestConvBiasZero.lean`. -/
+def biasName (convBias : Bool) (nm : String) (c : Nat) : String :=
+  if convBias then nm else s!"%zb{c}"
+
+/-- The zero-bias constants the `convBias := false` render consumes, one per channel width used as
+    a conv bias. Emitted once at the top of the body; XLA folds the resulting `add`. -/
+def zeroBiasPrelude (convBias : Bool) (widths : List Nat) : String :=
+  if convBias then "" else
+    "    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s\n" ++
+    "    // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a\n" ++
+    "    // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.\n" ++
+    String.join (widths.map (fun c =>
+      s!"    %zb{c} = stablehlo.constant dense<0.0> : {ty [c]}\n"))
+
 /-- Fixed-6-decimal float literal, so a computed smoothing constant emits in the SAME textual form
     the hand-written literals used and `nClasses = 10` re-renders byte-identical. -/
 def fmt6 (x : Float) : String :=

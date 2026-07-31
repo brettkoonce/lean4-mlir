@@ -81,35 +81,6 @@ private def bnSite (B oc hh : Nat) (mode : R34Bn) (epsStr gName btName statP xin
                           gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc
                           (.operand xin zin))
 
-/-- **The conv-bias SSA name** — §2l step B. Every conv in ResNet-34 is immediately followed by
-    BatchNorm, and BN subtracts the batch mean, so in ℝ a conv bias cannot reach the BN output and
-    its gradient is identically zero. He et al.'s `.convBn` therefore carries no conv bias, and
-    this repo's render did — 8,512 parameters the reference does not have (§2k).
-
-    With `convBias := false` the bias operand becomes a zero CONSTANT rather than a function
-    argument: the op is the same proven `flatConvF`/`flatConvStridedF` at `bias = 0`, so `den` and
-    every faithfulness theorem are untouched, and `x + 0.0` is exact in IEEE, so the forward is
-    **bit-identical** to the biased render fed zeros. What changes is the signature.
-
-    ⚠ MEASURED, and it corrects §2l's stated reason: in f32 the gradient is NOT exactly zero — the
-    BN mean is a rounded sum, leaving a residue ~1e-6 of the conv-weight gradient — and under
-    AdamW's scale-free update that residue still moves θ by ~lr per step. In the 80-epoch run all
-    8,512 biases drifted to |θ|max 0.041. They are safe to drop because the FORWARD does not depend
-    on them (zeroing all of them moves the trained logits by rel 1e-6, against 0.79 for the same
-    ablation on BN β), not because they stay zero. See `tests/TestConvBiasZero.lean`. -/
-def biasName (convBias : Bool) (nm : String) (c : Nat) : String :=
-  if convBias then nm else s!"%zb{c}"
-
-/-- The zero-bias constants the `convBias := false` render consumes, one per channel width used as
-    a conv bias. Emitted once at the top of the body; XLA folds the resulting `add`. -/
-def zeroBiasPrelude (convBias : Bool) : String :=
-  if convBias then "" else
-    "    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s\n" ++
-    "    // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a\n" ++
-    "    // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.\n" ++
-    String.join ([64, 128, 256, 512].map (fun c =>
-      s!"    %zb{c} = stablehlo.constant dense<0.0> : {ty [c]}\n"))
-
 /-- Identity block forward: `conv1→BN1→relu1→conv2→BN2→(+x)→relu`. `c` channels, `hh×ww` spatial. -/
 private def idFwd (B c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
     (convBias : Bool) : StateM Nat BFwd := do
@@ -365,7 +336,7 @@ def resnet34FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-34 forward: every line is pretty(verified AST node) ──\n" ++
-  zeroBiasPrelude convBias ++ F.code ++
+  zeroBiasPrelude convBias [64, 128, 256, 512] ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
@@ -389,7 +360,7 @@ def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-34 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
-  zeroBiasPrelude convBias ++ F.code ++
+  zeroBiasPrelude convBias [64, 128, 256, 512] ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
@@ -465,7 +436,7 @@ def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     let outTypes : List String := (r34SigList nClasses convBias).map (·.2)
     pure <|
       "    // ── ResNet-34 train step: every line is pretty(verified AST node) ──\n" ++
-      zeroBiasPrelude convBias ++ fwdCode ++ bwdCode ++
+      zeroBiasPrelude convBias [64, 128, 256, 512] ++ fwdCode ++ bwdCode ++
       s!"    return {String.intercalate ", " outNames} : {String.intercalate ", " outTypes}\n"
   -- func signature: %x, all 146 params, %onehot
   let sigList : List (String × String) := r34SigList nClasses convBias
