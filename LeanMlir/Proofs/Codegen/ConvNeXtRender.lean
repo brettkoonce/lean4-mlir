@@ -110,9 +110,11 @@ private def chLnPrelude (chLN : Bool) : String :=
     "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
     "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n"
 
-/-- One **LayerNorm forward** site. `chLN := false` is the committed scalar-global `.bnF`;
-    `true` is the real channel-LN. Both consume the same `%{gN}`/`%{btN}` names — what changes is
-    their SHAPE (rank-0 scalar vs `[c]`), which is why the layout moves with this flag. -/
+/-- One **LayerNorm forward** site. `chLN := true` — the DEFAULT and what every committed artifact
+    now spells (§2m) — is ConvNeXt's real channel-LN; `false` is the RETIRED scalar-global `.bnF`,
+    kept because the ch9 §1a tie (`ConvNeXtTiePoC`) is stated against it. Both consume the same
+    `%{gN}`/`%{btN}` names — what changes is their SHAPE (rank-0 scalar vs `[c]`), which is why the
+    layout moves with this flag. -/
 private def lnFwdSite (chLN : Bool) (gN btN xin : String) (c h : Nat) :
     StateM Nat (String × String) := do
   if !chLN then

@@ -6,12 +6,27 @@ import LeanMlir.Proofs.Foundation.MlpTrainStep
 
 /-! # PoC: the FULL [3,3,9,3] ConvNeXt-T §1a TIE — the whole net tied through the real forward
 
+> ⚠ **SCOPE (corrected 2026-07-31, §2n).** This file ties the **scalar-LN** ConvNeXt-T — the
+> `convNextTrainStepFaithfulV` render at **`chLN := false`**, plus a head LN. §2m flipped the
+> renderer's default to `chLN := true` (ConvNeXt's real per-channel `channel_layer_norm`, 22 sites =
+> 1 stem + 18 block + 3 downsample, **no head LN**), and `verified_mlir/convnext_train_step.mlir` is
+> that spelling: measured, 371 transposes and `tensor<96xf32>` LN affines, no head-LN parameter. So
+> **every theorem below is still TRUE, but it is no longer about the committed bytes.** Read it as
+> the ch9-representative §1a tie, exactly as `Architectures/ConvNeXt.lean` is the ch9-representative
+> forward.
+>
+> Re-pointing it at the channel LN is NOT a relabel: the 22 LN sites would need vector-γ/β param
+> certs (ViT has the shape — `vit_render_vecln{gamma,beta}_certified` — ConvNeXt does not), the head
+> LN tie would be deleted rather than ported, and the forward thread would have to be re-derived
+> through the transpose/reassoc conjugation. That is a chapter-sized job, and it is the reason this
+> carries a label rather than a port.
+
 The Chapter-7 §1a tie: mnv2's whole-net thread (`Mnv2TiePoC.mnv2_net_tied_certified`) for the
 ConvNeXt-T schedule. The §1 fold (`ConvNeXtFaithfulPoC` + `ConvNeXtClose`/M2/M3) already makes every
 rendered param op `den = certified ∀ cotangent`; this file feeds each consumer the **real forward
-activations** of the committed `convNextTrainStepFaithfulV` render and the **loss-driven
-backward-chain cotangent** the ConvNeXt net actually delivers — so the whole 18-block train step is
-den-composed forward→loss→backward, no free activations, no symbolic cotangent.
+activations** of the `convNextTrainStepFaithfulV` render *at `chLN := false`* and the **loss-driven
+backward-chain cotangent** that net delivers — so the whole 18-block train step is den-composed
+forward→loss→backward, no free activations, no symbolic cotangent.
 
 **What's new vs mnv2's tie:**
 * **GELU mask** (smooth, no kink) where mnv2 had the relu6 two-kink mask: the expand-output cotangent
@@ -381,7 +396,8 @@ theorem cnx_head_tiedAt {c h w : Nat}
 
 /-! ## The whole-net capstone — all 176 tied params through the REAL forward + composed cotangent
 
-The committed `convNextTrainStepFaithfulV` forward threaded: block inputs are the forward prefixes
+The `convNextTrainStepFaithfulV` forward at `chLN := false` threaded (see the ⚠ at the top of this
+file — that is the scalar-LN spelling, not the committed bytes): block inputs are the forward prefixes
 (`cnxStemFwdO` / `cnxBlockFwdO` / `cnxDownFwdO`), and the backward cotangents are composed from the
 loss `g = softmax(logits) − onehot` down through dense (`dense_has_vjp`) + the head LN + GAP
 (`globalAvgPoolFlat_has_vjp`) + every block's backward, with the residual fan-in `+ dyOut` at each of
