@@ -320,7 +320,9 @@ private def blkParams (chLN : Bool) (pfx : String) (c e : Nat) : List (String ×
    (s!"{pfx}lg", [c])]
 
 private def allParams (chLN : Bool) : List (String × List Nat) := Id.run do
-  let mut ps : List (String × List Nat) := [("psW", [96,3,4,4]), ("psb", [96])]
+  let mut ps : List (String × List Nat) :=
+    [("psW", [96,3,4,4]), ("psb", [96])] ++
+    (if chLN then [("psng", [96]), ("psnbt", [96])] else [])
   for si in [0:4] do
     let c := cDims[si]!
     let e := 4 * c
@@ -330,8 +332,8 @@ private def allParams (chLN : Bool) : List (String × List Nat) := Id.run do
       ps := ps ++ [(s!"d{si}ng", if chLN then [c] else []),
                    (s!"d{si}nbt", if chLN then [c] else []),
                    (s!"d{si}W", [cDims[si+1]!, c, 2, 2]), (s!"d{si}b", [cDims[si+1]!])]
-  ps := ps ++ [("hng", if chLN then [768] else []), ("hnbt", if chLN then [768] else []),
-               ("Wd", [768,10]), ("bd", [10])]
+  ps := ps ++ (if chLN then [] else [("hng", ([] : List Nat)), ("hnbt", [])]) ++
+              [("Wd", [768,10]), ("bd", [10])]
   return ps
 
 -- ════════════════════════════════════════════════════════════════
@@ -347,7 +349,8 @@ private structure CFwd where
   downLn  : Array String            -- the 3 downsample LN outputs (the strided conv's input)
   downIn  : Array String            -- the 3 downsample inputs (the LN's input)
   gap     : String                  -- global-average-pool output
-  hn      : String                  -- head LN output (= dense input)
+  stemC   : String                  -- stem conv output (= the §2m stem LN's input)
+  hn      : String                  -- dense input: the head LN's output, or `gap` itself under chLN
   logits  : String                  -- dense output
   deriving Inhabited
 
@@ -361,9 +364,14 @@ set_option maxRecDepth 8000 in
     So the forward is already class-batch-independent: train == eval, and `@convnext_fwd` is the
     only forward artifact this net needs (unlike the BN nets, which need a frozen-stats peer). -/
 private def convNextFwdChain (chLN : Bool) : StateM Nat CFwd := do
-  let (cS, stem) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
+  let (cS, stemC) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
     (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
-  let mut fwd := cS
+  -- §2m: the reference's `convnext_stem` is patchify conv → channel-LN. The committed render has
+  -- NO stem LN, and has a head LN the reference does not — the two nearly cancel in the parameter
+  -- count (+2×768 − 2×96 = +1,344 out of 28.6M), which is why the count alone never caught it.
+  let (cSln, stem) ← if chLN then lnFwdSite true "%psng" "%psnbt" stemC 96 56
+                     else pure ("", stemC)
+  let mut fwd := cS ++ cSln
   let mut cur := stem
   let mut blksAll : Array (Array FNames) := #[]
   let mut downLn : Array String := #[]
@@ -380,11 +388,13 @@ private def convNextFwdChain (chLN : Bool) : StateM Nat CFwd := do
       let (code, n, o) ← fwdDown chLN s!"d{si}" cur c cDims[si+1]! cSpats[si+1]!
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty cBS (.gapF (c := 768) (h := 7) (w := 7) (.operand cur zV))
-  let (cHn, hn) ← lnFwdSite chLN "%hng" "%hnbt" gap 768 1
+  -- §2m: the reference goes GAP → dense with no norm between. Under chLN the head LN is GONE
+  -- (its 2×768 params move to the stem, at 2×96).
+  let (cHn, hn) ← if chLN then pure ("", gap) else lnFwdSite false "%hng" "%hnbt" gap 768 1
   let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat 768 10) zV (.operand hn zV))
   pure { code := fwd ++ cG ++ cHn ++ cLog,
          blksAll := blksAll, downLn := downLn, downIn := downIn,
-         gap := gap, hn := hn, logits := logits }
+         gap := gap, stemC := stemC, hn := hn, logits := logits }
 
 set_option maxRecDepth 8000 in
 /-- **`@convnext_fwd` rendered ENTIRELY from the verified AST** — the peer of the train-step
@@ -451,21 +461,18 @@ private def convNextBackAll (adam : Bool) (smooth : Option (String × String × 
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ backward: head cotangent chain + param-SGD ═══
     let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat 768 10) (.operand dyName zV))
-    let (cHnB, cot_gap) ← lnBackSite chLN "%hng" gap cot_hn 768 1
+    let (cHnB, cot_gap) ← if chLN then pure ("", cot_hn)
+                          else lnBackSite false "%hng" gap cot_hn 768 1
     let (cWd, nWd) ← if adam then
         pretty cBS (.weightGrad (m := 768) (n := 10) hn (zV : Vec 768) (.operand dyName (zV : Vec 10)))
       else pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec 768) (zM : Mat 768 10) 0 (.operand dyName zV))
     let (cBd, nBd) ← if adam then
         pretty cBS (.biasGrad (n := 10) (.operand dyName (zV : Vec 10)))
       else pretty cBS (.biasSgd "%bd" cLR (zV : Vec 10) 0 (.operand dyName zV))
-    let (cHg, nHg) ← if adam then
-        lnGammaTail chLN true "%hng" gap cot_hn 768 1
-      else lnGammaTail chLN false "%hng" gap cot_hn 768 1
-    let (cHb, nHb) ← if adam then
-        lnBetaTail chLN true "%hnbt" cot_hn 768 1
-      else lnBetaTail chLN false "%hnbt" cot_hn 768 1
+    let (cHg, nHg) ← if chLN then pure ("", "") else lnGammaTail false adam "%hng" gap cot_hn 768 1
+    let (cHb, nHb) ← if chLN then pure ("", "") else lnBetaTail false adam "%hnbt" cot_hn 768 1
     let mut updMap : List (String × String) :=
-      [("hng", nHg), ("hnbt", nHb), ("Wd", nWd), ("bd", nBd)]
+      (if chLN then [] else [("hng", nHg), ("hnbt", nHb)]) ++ [("Wd", nWd), ("bd", nBd)]
     let mut bwd := cDyC ++ cDd ++ cHnB ++
       cWd ++ cBd ++ cHg ++ cHb ++
       s!"    %dgi = stablehlo.reshape {cot_gap} : ({ty [cBS,768]}) -> {ty [cBS,768,1,1]}\n" ++
@@ -495,6 +502,14 @@ private def convNextBackAll (adam : Bool) (smooth : Option (String × String × 
     -- downsample's (see `downParamSgd`). In `adam` mode the update is the proven AdamW triple; the
     -- SGD path still wraps it in the hand-written `sgd` helper, so SGD is certified-gradient +
     -- hand-written-update there.
+    -- §2m: back through the stem LN before the stem conv's own gradients see the cotangent.
+    if chLN then
+      let (cg, ng) ← lnGammaTail true adam "%psng" F.stemC dy 96 56
+      let (cb, nb) ← lnBetaTail true adam "%psnbt" dy 96 56
+      let (cx, dx) ← lnBackSite true "%psng" F.stemC dy 96 56
+      bwd := bwd ++ cg ++ cb ++ cx
+      updMap := updMap ++ [("psng", ng), ("psnbt", nb)]
+      dy := dx
     let (cPsb, nPsb) ← if adam then
         pretty cBS (.convBiasGrad (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) (.operand dy zV))
       else pretty cBS (.convBiasSgd "%psb" cLR (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) 0 (.operand dy zV))
