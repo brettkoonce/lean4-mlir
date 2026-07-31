@@ -3150,8 +3150,45 @@ the backward.
 * `ConvNeXtWholeFloatBridge` / `ConvNeXtBackB0` / `WholeNetForwardTies` still ride the SCALAR
   chain (`convNextForwardT`/`TC`), which is why the build stayed green. They are now describing a
   net the repo no longer ships — a documentation-scope question, not a broken proof.
-* the §1a tie (176/180) and §2f-bis's conditioning/spread findings were measured on the scalar-LN
-  render; re-read before quoting.
+* ~~the §1a tie (176/180)~~ — the **render capstone** (`tests/TestConvNeXtTTrainPC.lean`) is
+  ✅ **RE-ALIGNED 2026-07-31 and back at PARITY: 180 of 180 outputs BIT-IDENTICAL** against the
+  channel-LN artifact, control (EPS 1.0e-6 → 1.0e-3) fires at 0/180 with rc=1. It got **strictly
+  stronger**: the LN γ/β gradients are now proof-rendered (`veclnGammaGrad`/`rowDenseBiasGrad`
+  under the transposes) where the scalar LN needed ~16 hand-emitted lines of x̂ recomputation per
+  site, so **44 params moved from hand-emitted to `pretty`**. The dead scalar emitter is deleted.
+  ⚠ `render_parity.py` needs `iree-run-module`, which is **not** in this repo's `.venv/bin` (only
+  `iree-compile` is) — it lives in `../lean4-mlir/.venv/bin`; put both on PATH.
+* §2f-bis's conditioning/spread findings were measured on the scalar-LN render; re-read before
+  quoting.
+
+#### ▶ The remaining proof-alignment work, scoped by reading the files — 2026-07-31
+
+**Nothing is broken**: all 3,909 targets build and every scalar-LN theorem is still TRUE. The
+issue is SCOPE — they describe a net the repo no longer ships. And the job is much smaller than
+it looks, for a reason worth knowing:
+
+> **The ConvNeXt float story is ALREADY abstract in the LN.** `convnext_floatBridges` takes
+> `FloatBridges lnStem`, `FloatBridges lnHead` and every stage/downsample as *hypotheses*, and
+> its own docstring says the LNs enter abstractly "because `layerNormForward = bnForward` has the
+> rsqrt keystone". `floatBridges_convNextStageK` likewise takes `∀ i, FloatBridges (layerNorm…)`.
+
+So the whole-net float theorem needs **zero change** — the channel-LN net instantiates it at
+`lnHead := id` (`floatBridges_idVec` already exists in that file) with the Ch slots. What is left:
+
+| item | what it needs |
+|---|---|
+| `FloatBridges (chanLNTensor3 …)` | the transposes/reassoc are exact reindexes (cheap); the per-row normalise reuses `floatBridges_bn`'s rsqrt keystone rowwise |
+| `floatBridges_cnxBlockW` → Ch | ⚠ **restate it over `cnxBodyWith`** — the LN-abstract body already built for the VJP — so ONE theorem serves both worlds instead of two copies. Same generic-in-the-LN move that made the VJP cheap |
+| `floatBridges_convNextStageK` / `_cnxDownW` → Ch | mechanical mirrors |
+| `ConvNeXtBackFloatBridge` | the backward peer of the above |
+| `ConvNeXtBackB0.lean` (164 lines) | `cnxDownBackGraph` ties the emitted backward to `cnxDownW_has_vjp`'s backward; needs a Ch peer |
+| `WholeNetForwardTies.convNextForwardT_eq_skeleton` | the skeleton already has LN slots ⇒ `lnHead := id` + an `eq_chain` unfold |
+
+**And a decision, not a build: the scalar chain should STAY but be RELABELLED.**
+`convNextForwardT`/`TC` back `ConvNeXtChainClose`, the ch9 representative and the retired
+render's tie, so deleting is the bigger change. Every docstring calling them "ConvNeXt" should
+say *"the scalar-LN variant, retired from the shipped spec 2026-07-31"*. That is §2k's actual
+lesson: the sin was the blurb claiming "Real ResNet-34", not the deviation existing.
 
 #### ⛔⛔ AND THE LN PLACEMENT IS WRONG TOO — found 2026-07-31 by the count NOT matching
 
