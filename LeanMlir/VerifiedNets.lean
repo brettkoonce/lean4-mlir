@@ -313,7 +313,7 @@ def resnet34Verified : VerifiedNetSpec where
     .residualStage 256 512 3 2,  -- stage4: downsample + 2        14→7
     .globalAvgPool,
     .dense 512 10 ]
-  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→pool→[3,4,6,3] blocks w/ batch-norm + strided downsamples, 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU"
   -- 36 BN layers in forward order (stem; then per basic block 2, per downsample block 3) — the
   -- running-stats layout for trainAdamSched + @resnet34_fwd_eval. Matches TestResnet34Train.bnLayers.
   bnChannels := #[64,

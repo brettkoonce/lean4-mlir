@@ -302,7 +302,7 @@ private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,c,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2)]
 private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
-    (#[c,cin,3,3],0),(#[c],1),(#[c],2)]
+    (#[c,cin,1,1],0),(#[c],1),(#[c],2)]   -- §2l step A: option-B 1×1 projection
 /-- `(dims, initKind)` for every param, in func-arg order. -/
 def specs : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) := #[(#[64,3,7,7],0),(#[64],1),(#[64],2)]  -- 7×7-s2 stem

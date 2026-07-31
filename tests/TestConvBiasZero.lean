@@ -59,11 +59,29 @@ private inductive Slot | convW | convB | bnG | bnB | denseW | denseB
 private def Slot.idx : Slot → Nat
   | .convW => 0 | .convB => 1 | .bnG => 2 | .bnB => 3 | .denseW => 4 | .denseB => 5
 
-private def classify (nSpecs i : Nat) : Slot :=
-  if i == nSpecs - 2 then .denseW
-  else if i == nSpecs - 1 then .denseB
-  else match i % 4 with
-    | 0 => .convW | 1 => .convB | 2 => .bnG | _ => .bnB
+/-- Classify each param from the LAYOUT ITSELF rather than from a fixed stride: a rank-4 entry is
+    a conv weight, and the rank-1 entries following it are that conv's `[b, γ, β]` (pre-§2l-B) or
+    `[γ, β]` (post). The last two entries are always the dense head. Deriving it this way is what
+    lets one harness read both the biased and the bias-free layout — the earlier version hardcoded
+    groups of four and silently reported BN slots as conv biases once the biases were gone. -/
+private def classifyAll (specs : Array (Array Nat × Nat)) : Array Slot := Id.run do
+  let n := specs.size
+  let mut out : Array Slot := #[]
+  let mut sinceConv := 0
+  for i in [0:n] do
+    if i == n - 2 then out := out.push .denseW
+    else if i == n - 1 then out := out.push .denseB
+    else if specs[i]!.1.size == 4 then out := out.push .convW; sinceConv := 0
+    else
+      -- rank-1 after a conv: how many follow decides which is which. A group of three is
+      -- [b, γ, β]; a group of two is [γ, β]. `initKind` disambiguates γ (1) from β/bias (2).
+      let hasBias := i + 3 < n && specs[i+1]!.1.size == 1 && specs[i+2]!.1.size == 1
+                      && specs[i]!.2 == 2 && specs[i+1]!.2 == 1
+      sinceConv := sinceConv + 1
+      if hasBias && sinceConv == 1 then out := out.push .convB
+      else if specs[i]!.2 == 1 then out := out.push .bnG
+      else out := out.push .bnB
+  return out
 
 private def slotName : Slot → String
   | .convW => "conv W" | .convB => "conv b" | .bnG => "BN γ"
@@ -76,6 +94,7 @@ private def ckptMode (net : VerifiedNet) (path : String) : IO Unit := do
   let blob ← IO.FS.readBinFile path
   let nP := net.nParams
   let nS := net.specs.size
+  let cls := classifyAll net.specs
   if blob.size < 3 * nP * 4 then
     throw (IO.userError s!"{path}: {blob.size} bytes, expected ≥ {3*nP*4} for [θ|m|v]")
   IO.println s!"§2l step B — the TRAINED conv biases, from {path}"
@@ -86,7 +105,7 @@ private def ckptMode (net : VerifiedNet) (path : String) : IO Unit := do
   let mut nzBySlot : Array Nat := Array.replicate 6 0
   for i in [0:nS] do
     let sz := net.paramShapes[i]!.foldl (· * ·) 1
-    let k := (classify nS i).idx
+    let k := (cls[i]!).idx
     for j in [0:sz] do
       let θ := (F32.read blob (off + j).toUSize).abs      -- the θ region
       if θ != 0.0 then nzBySlot := nzBySlot.set! k (nzBySlot[k]! + 1)
@@ -119,6 +138,7 @@ private def ablateMode (net : VerifiedNet) (ckpt : String) : IO Unit := do
   let blob ← IO.FS.readBinFile ckpt
   let nP := net.nParams
   let nS := net.specs.size
+  let cls := classifyAll net.specs
   if blob.size < nP * 4 then throw (IO.userError s!"{ckpt}: too small for θ")
   IO.println s!"§2l step B — the FORWARD with the trained conv biases vs with them ZEROED"
   IO.println s!"  ckpt  {ckpt}"
@@ -128,7 +148,7 @@ private def ablateMode (net : VerifiedNet) (ckpt : String) : IO Unit := do
     let mut off := 0
     for i in [0:nS] do
       let sz := net.paramShapes[i]!.foldl (· * ·) 1
-      if classify nS i == kill then parts := parts.push (← F32.const sz.toUSize 0.0)
+      if cls[i]! == kill then parts := parts.push (← F32.const sz.toUSize 0.0)
       else parts := parts.push (blob.extract (off*4) ((off+sz)*4))
       off := off + sz
     pure (F32.concat parts)
@@ -188,6 +208,7 @@ is exactly zero, so they stay 0\") is false in f32 — see the one-step and --ck
 private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
   let bs := 32
   let nS := net.specs.size
+  let cls := classifyAll net.specs
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let ref := "verified_mlir/resnet34_adam_train_step.mlir"
@@ -205,7 +226,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
     let p ← mkParam sd dims kind
     sd := sd + 1
     θA := θA.push p; shA := shA.push dims
-    if classify nS i != .convB then θB := θB.push p; shB := shB.push dims
+    if cls[i]! != .convB then θB := θB.push p; shB := shB.push dims
   let nPA := net.nParams
   let nPB := (shB.map (fun d => d.foldl (· * ·) 1)).foldl (· + ·) 0
   IO.println s!"  A: {nS} params / {nPA} floats     B: {shB.size} params / {nPB} floats"
@@ -221,7 +242,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
     let mut off := 0
     for i in [0:nS] do
       let sz := net.paramShapes[i]!.foldl (· * ·) 1
-      if classify nS i != .convB then parts := parts.push (buf.extract (off*4) ((off+sz)*4))
+      if cls[i]! != .convB then parts := parts.push (buf.extract (off*4) ((off+sz)*4))
       off := off + sz
     F32.concat parts
   let tl ← F32.const 3 0.0
@@ -256,7 +277,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
     let mut exact := 0; let mut total := 0; let mut worst := ""
     for i in [0:nS] do
       let sz := net.paramShapes[i]!.foldl (· * ·) 1
-      if classify nS i == .convB && nPR != nPA then offA := offA + sz else
+      if cls[i]! == .convB && nPR != nPA then offA := offA + sz else
         for r in [0:3] do                                   -- θ', m', v'
           for j in [0:sz] do
             let a := F32.read oA (r * nPA + offA + j).toUSize
@@ -318,6 +339,12 @@ def main (args : List String) : IO Unit := do
   let bs  := 32
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
+  if !(Array.any (classifyAll net.specs) (fun sl => sl == Slot.convB)) then
+    IO.println "§2l step B is DONE: this layout has no conv biases, so there is no gradient to \
+measure. The measurement that licensed the change is historical — re-run it against the retired \
+render:  git show e9c2729~1:verified_mlir/resnet34_adam_train_step.mlir > /tmp/pre_b.mlir  (and \
+note the LAYOUT must match it too, so check out the pre-swap tree to do that properly)."
+    return
   IO.println s!"§2l step B — conv-bias gradients, from m = v = 0 (so m' = (1−β₁)·g)"
   IO.println s!"  render  {path}"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, \
@@ -357,6 +384,7 @@ backend {← IreeSession.backendName}"
   -- ── read the m' region: [θ' | m' | v' | loss,bc1,bc2 | bnstat] ──
   let nP := net.nParams
   let nS := net.specs.size
+  let cls := classifyAll net.specs
   let mut off := 0
   let mut maxBySlot : Array Float := Array.replicate 6 0.0
   let mut nzBySlot  : Array Nat   := Array.replicate 6 0
@@ -365,7 +393,7 @@ backend {← IreeSession.backendName}"
   let mut worstConvBIdx : Nat := 0
   for i in [0:nS] do
     let sz := net.paramShapes[i]!.foldl (· * ·) 1
-    let sl := classify nS i
+    let sl := cls[i]!
     let k  := sl.idx
     let mut mx := 0.0
     let mut nz := 0

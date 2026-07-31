@@ -135,6 +135,9 @@ private def downFwd (B cin c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
   let zk2  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
+  -- §2l step A: He et al.'s option-B shortcut is 1×1. A SEPARATE kernel from `zk1` — sharing that
+  -- binding is how the 3×3 deviation stayed invisible until §2k measured the param counts.
+  let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0
   let zinS : Vec (cin*(2*hh)*(2*ww)) := fun _ => 0
   let zout : Vec (c*hh*ww) := fun _ => 0
   let (cC1, nC1) ← pretty B (.flatConvStridedF (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}W1" (biasName convBias s!"%{p}b1" c) zk1 zc (.operand xName zinS))
@@ -142,7 +145,7 @@ private def downFwd (B cin c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
   let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zout))
   let (cC2, nC2) ← pretty B (.flatConvF (ic := c) (oc := c) (h := hh) (w := ww) s!"%{p}W2" (biasName convBias s!"%{p}b2" c) zk2 zc (.operand nR1 zout))
   let (cN2, nN2) ← bnSite B c hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
-  let (cCp, nCp) ← pretty B (.flatConvStridedF (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}Wp" (biasName convBias s!"%{p}bp" c) zk1 zc (.operand xName zinS))
+  let (cCp, nCp) ← pretty B (.flatConvStridedF (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}Wp" (biasName convBias s!"%{p}bp" c) zkp zc (.operand xName zinS))
   let (cNp, nNp) ← bnSite B c hh mode epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
   let (cA,  nA)  ← pretty B (.addV (.operand nN2 zout) (.operand nNp zout))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zout))
@@ -195,6 +198,7 @@ private def downBackSgd (B cin c hh : Nat) (epsStr lrStr p : String) (f : BFwd) 
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
   let zk2  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0      -- §2l step A: the 1×1 option-B shortcut
   let zT   : Tensor3 c hh ww := fun _ _ _ => 0
   let zinS : Vec (cin*(2*hh)*(2*ww)) := fun _ => 0
   let zout : Vec (c*hh*ww) := fun _ => 0
@@ -208,7 +212,7 @@ private def downBackSgd (B cin c hh : Nat) (epsStr lrStr p : String) (f : BFwd) 
   let (cDc1, nDc1) ← pretty B (.convStridedBack (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}W1" zk1 zc zinS (.operand nDn1 zout))
   -- projection skip
   let (cDnp, nDnp) ← pretty B (.bnPerChannelBack (oc := c) (h := hh) (w := ww) s!"%{p}gp" f.cp epsStr 0 zc zout (.operand nDa zout))
-  let (cDcp, nDcp) ← pretty B (.convStridedBack (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}Wp" zk1 zc zinS (.operand nDnp zout))
+  let (cDcp, nDcp) ← pretty B (.convStridedBack (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}Wp" zkp zc zinS (.operand nDnp zout))
   let (cDx,  nDx)  ← pretty B (.addV (.operand nDc1 zinS) (.operand nDcp zinS))
   -- param SGD (func-arg order: W1 b1 g1 bt1 W2 b2 g2 bt2 Wp bp gp btp)
   let (cW1, nW1) ← pretty B (.convStridedWeightSgd xName s!"%{p}W1" lrStr zc zinS zk1 0 (.operand nDn1 zout))
@@ -219,8 +223,8 @@ private def downBackSgd (B cin c hh : Nat) (epsStr lrStr p : String) (f : BFwd) 
   let (cb2, nb2) ← if convBias then pretty B (.convBiasSgd s!"%{p}b2" lrStr zk2 zT zc 0 (.operand nDn2 zout)) else pure ("", "")
   let (cg2, ng2) ← pretty B (.bnGammaSgd s!"%{p}g2" f.c2 epsStr lrStr 0 zc zout 0 (.operand nDa zout))
   let (ct2, nt2) ← pretty B (.bnBetaSgd s!"%{p}bt2" lrStr zc 0 (.operand nDa zout))
-  let (cWp, nWp) ← pretty B (.convStridedWeightSgd xName s!"%{p}Wp" lrStr zc zinS zk1 0 (.operand nDnp zout))
-  let (cbp, nbp) ← if convBias then pretty B (.convStridedBiasSgd s!"%{p}bp" lrStr zk1 zinS zc 0 (.operand nDnp zout)) else pure ("", "")
+  let (cWp, nWp) ← pretty B (.convStridedWeightSgd xName s!"%{p}Wp" lrStr zc zinS zkp 0 (.operand nDnp zout))
+  let (cbp, nbp) ← if convBias then pretty B (.convStridedBiasSgd s!"%{p}bp" lrStr zkp zinS zc 0 (.operand nDnp zout)) else pure ("", "")
   let (cgp, ngp) ← pretty B (.bnGammaSgd s!"%{p}gp" f.cp epsStr lrStr 0 zc zout 0 (.operand nDa zout))
   let (ctp, ntp) ← pretty B (.bnBetaSgd s!"%{p}btp" lrStr zc 0 (.operand nDa zout))
   pure { code := cDa ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++ cDnp ++ cDcp ++ cDx ++
@@ -243,7 +247,7 @@ private def downSig (p : String) (cin c : Nat) (convBias : Bool) : List (String 
   let b (nm : String) : List (String × String) := if convBias then [(nm, ty [c])] else []
   [(s!"%{p}W1", ty [c,cin,3,3])] ++ b s!"%{p}b1" ++ [(s!"%{p}g1", ty [c]), (s!"%{p}bt1", ty [c])] ++
   [(s!"%{p}W2", ty [c,c,3,3])] ++ b s!"%{p}b2" ++ [(s!"%{p}g2", ty [c]), (s!"%{p}bt2", ty [c])] ++
-  [(s!"%{p}Wp", ty [c,cin,3,3])] ++ b s!"%{p}bp" ++ [(s!"%{p}gp", ty [c]), (s!"%{p}btp", ty [c])]
+  [(s!"%{p}Wp", ty [c,cin,1,1])] ++ b s!"%{p}bp" ++ [(s!"%{p}gp", ty [c]), (s!"%{p}btp", ty [c])]
 
 /-- **The 146 ResNet-34 parameters in `net.paramShapes` (= func-arg) order**, names + types.
     The forward, the eval forward and the train step all take their signature from here, so the

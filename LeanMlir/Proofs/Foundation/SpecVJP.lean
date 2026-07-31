@@ -633,17 +633,17 @@ structure R34Weights where
   a0 : R34BlockW 64
   a1 : R34BlockW 64
   a2 : R34BlockW 64
-  d2 : R34DownW 64 128 3 3
+  d2 : R34DownW 64 128 1 1
   b0 : R34BlockW 128
   b1 : R34BlockW 128
   b2 : R34BlockW 128
-  d3 : R34DownW 128 256 3 3
+  d3 : R34DownW 128 256 1 1
   c0 : R34BlockW 256
   c1 : R34BlockW 256
   c2 : R34BlockW 256
   c3 : R34BlockW 256
   c4 : R34BlockW 256
-  d4 : R34DownW 256 512 3 3
+  d4 : R34DownW 256 512 1 1
   e0 : R34BlockW 512
   e1 : R34BlockW 512
   Wd : Mat 512 10

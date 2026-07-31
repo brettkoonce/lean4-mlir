@@ -85,7 +85,7 @@ theorem r34_render_blockConvb_certified {ic oc h w : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Downsample conv weight output, certified (3×3 stride-2).** The generic strided weight bridge
-    at `kH=kW=3`; covers the downsample blocks' `W1` and the 3×3 strided projection skip `Wp`. -/
+    at `kH=kW=3`; covers the downsample blocks' `W1` (the projection skip `Wp` is 1×1 since §2l). -/
 theorem r34_render_downConvW_certified {ic oc h w : Nat}
     (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w)))
     (v : Vec (oc * ic * 3 * 3)) (dy : Vec (oc * h * w)) (lr : ℝ) (i : Fin (oc * ic * 3 * 3)) :

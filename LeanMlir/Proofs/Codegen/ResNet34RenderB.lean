@@ -93,6 +93,10 @@ private def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
   let zk2  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
+  -- §2l step A: the projection shortcut is He et al.'s option-B **1×1**, not the 3×3 this repo
+  -- rendered until 2026-07-30. It is a SEPARATE kernel from the block's `zk1` — sharing that
+  -- binding is exactly how the deviation stayed invisible (§2k).
+  let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0
   let zinS : Vec (B*(cin*(2*hh)*(2*ww))) := fun _ => 0
   let zout : Vec (B*(c*hh*ww)) := fun _ => 0
   let (cC1, nC1) ← pretty B (.batchOp (N := B) (.convStrided (h := hh) (w := ww) s!"%{p}W1" (biasName convBias s!"%{p}b1" c) zk1 zc) (.operand xName zinS))
@@ -100,7 +104,7 @@ private def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
   let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := c*hh*ww)) (.operand nN1 zout))
   let (cC2, nC2) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}W2" (biasName convBias s!"%{p}b2" c) zk2 zc) (.operand nR1 zout))
   let (cN2, nN2) ← pretty B (.bnBatchF (N := B) (oc := c) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zc zc (.operand nC2 zout))
-  let (cCp, nCp) ← pretty B (.batchOp (N := B) (.convStrided (h := hh) (w := ww) s!"%{p}Wp" (biasName convBias s!"%{p}bp" c) zk1 zc) (.operand xName zinS))
+  let (cCp, nCp) ← pretty B (.batchOp (N := B) (.convStrided (h := hh) (w := ww) s!"%{p}Wp" (biasName convBias s!"%{p}bp" c) zkp zc) (.operand xName zinS))
   let (cNp, nNp) ← pretty B (.bnBatchF (N := B) (oc := c) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zc zc (.operand nCp zout))
   let (cA,  nA)  ← pretty B (.addVB (.operand nN2 zout) (.operand nNp zout))
   let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := c*hh*ww)) (.operand nA zout))
@@ -154,6 +158,7 @@ private def downBackGradB (B cin c hh : Nat) (epsStr p : String) (f : BFwdB) (dy
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
   let zk2  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0      -- §2l step A: the 1×1 option-B shortcut
   let zinS : Vec (B*(cin*(2*hh)*(2*ww))) := fun _ => 0
   let zout : Vec (B*(c*hh*ww)) := fun _ => 0
   let zbn  : Vec (B*(c*(hh*ww))) := fun _ => 0
@@ -164,7 +169,7 @@ private def downBackGradB (B cin c hh : Nat) (epsStr p : String) (f : BFwdB) (dy
   let (cDn1, nDn1) ← pretty B (.bnBatchBack (N := B) (oc := c) (h := hh) (w := ww) s!"%{p}g1" f.c1 epsStr 0 zc zbn (.operand nDr1 zbn))
   let (cDc1, nDc1) ← pretty B (.convStridedBackBatched (N := B) (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}W1" zk1 zc (.operand nDn1 zout))
   let (cDnp, nDnp) ← pretty B (.bnBatchBack (N := B) (oc := c) (h := hh) (w := ww) s!"%{p}gp" f.cp epsStr 0 zc zbn (.operand nDa zbn))
-  let (cDcp, nDcp) ← pretty B (.convStridedBackBatched (N := B) (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}Wp" zk1 zc (.operand nDnp zout))
+  let (cDcp, nDcp) ← pretty B (.convStridedBackBatched (N := B) (ic := cin) (oc := c) (h := hh) (w := ww) s!"%{p}Wp" zkp zc (.operand nDnp zout))
   let (cDx,  nDx)  ← pretty B (.addVB (.operand nDc1 zinS) (.operand nDcp zinS))
   -- parameter gradients, func-arg order: W1 b1 g1 bt1 W2 b2 g2 bt2 Wp bp gp btp
   let (cW1, nW1) ← pretty B (.convStridedWeightGradB xName zc zinS zk1 (.operand nDn1 zout))
@@ -175,8 +180,8 @@ private def downBackGradB (B cin c hh : Nat) (epsStr p : String) (f : BFwdB) (dy
   let (cb2, nb2) ← if convBias then pretty B (.convBiasGradB (h := hh) (w := ww) zk2 zout zc (.operand nDn2 zout)) else pure ("", "")
   let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbn (.operand nDa zbn))
   let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := c) (h := hh) (w := ww) (.operand nDa zbn))
-  let (cWp, nWp) ← pretty B (.convStridedWeightGradB xName zc zinS zk1 (.operand nDnp zout))
-  let (cbp, nbp) ← if convBias then pretty B (.convStridedBiasGradB (h := hh) (w := ww) zk1 zinS zc (.operand nDnp zout)) else pure ("", "")
+  let (cWp, nWp) ← pretty B (.convStridedWeightGradB xName zc zinS zkp (.operand nDnp zout))
+  let (cbp, nbp) ← if convBias then pretty B (.convStridedBiasGradB (h := hh) (w := ww) zkp zinS zc (.operand nDnp zout)) else pure ("", "")
   let (cgp, ngp) ← pretty B (.bnGammaGradB f.cp epsStr 0 zbn (.operand nDa zbn))
   let (ctp, ntp) ← pretty B (.bnBetaGradB (N := B) (oc := c) (h := hh) (w := ww) (.operand nDa zbn))
   pure { code := cDa ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++ cDnp ++ cDcp ++ cDx ++
@@ -188,7 +193,7 @@ private def downBackGradB (B cin c hh : Nat) (epsStr p : String) (f : BFwdB) (dy
                  ⟨s!"{p}W2", nW2, [c,c,3,3]⟩] ++
                 (if convBias then [⟨s!"{p}b2", nb2, [c]⟩] else []) ++
                 [⟨s!"{p}g2", ng2, [c]⟩, ⟨s!"{p}bt2", nt2, [c]⟩,
-                 ⟨s!"{p}Wp", nWp, [c,cin,3,3]⟩] ++
+                 ⟨s!"{p}Wp", nWp, [c,cin,1,1]⟩] ++
                 (if convBias then [⟨s!"{p}bp", nbp, [c]⟩] else []) ++
                 [⟨s!"{p}gp", ngp, [c]⟩, ⟨s!"{p}btp", ntp, [c]⟩] }
 

@@ -90,10 +90,11 @@ private def convBnNBSpec (ic oc k : Nat) : Array (Array Nat × Nat) :=
 /-- identity basic block @ `c`: two conv→BN→relu units, no projection. -/
 private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,c,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2)]
-/-- downsampling basic block `cin→c`: two conv→BN→relu + a 1-conv projection shortcut. -/
+/-- downsampling basic block `cin→c`: two conv→BN→relu + the **1×1** option-B projection
+    shortcut (He et al. §3.3). It was 3×3 here until 2026-07-30 — §2k/§2l. -/
 private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
-    (#[c,cin,3,3],0),(#[c],1),(#[c],2)]
+    (#[c,cin,1,1],0),(#[c],1),(#[c],2)]   -- §2l step A: option-B 1×1 projection
 private def stageSpec (ic oc count stride : Nat) : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) :=
     if stride != 1 || ic != oc then downBlk ic oc else idBlk oc
