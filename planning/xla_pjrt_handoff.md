@@ -71,13 +71,22 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
-**▶ START A NEW SESSION AT §2o — the channel-LN BACKWARD capstone, then ConvNeXt's 80-epoch
-re-run.** Part B is a ~2h GPU run and Part A is CPU proof work, so **launch the run first and prove
-while it burns**. Two things §2o has that you will not guess: the `den`-level backward gap is
-**wider than §2n's commit message says** (the channel-LN net has NO backward capstone at any level,
-not just the downsample — the survivors in `ConvNeXtBackB0` are over the ch9 scalar-LN net), and
-there is a **live checkpoint at epoch 12** from §2m's interrupted run — same artifact, same
-schedule, so it is a real fresh-vs-resume decision rather than the §4 stale trap.
+**▶ §2o Part A is ✅ DONE (2026-07-31) — the channel-LN backward capstone landed, and it covered
+the op, block body, residual block AND the downsample §2n dropped.** Six declarations in
+`ConvNeXtBackB0.lean`, all 3-axiom, audit 1503 → 1509, build 3,910 green, `verified_mlir/` 0 lines
+of diff. The gap was **wider than §2n's commit message said** — the channel-LN net had no `den`-level
+backward capstone at ANY level, because the survivors in `ConvNeXtBackB0` are over the ch9 scalar-LN
+net. Two traps it hit are written up in §2o (a stale-olean one and a `simp`-won't-fire one).
+
+**▶ §2o Part B is ✅ DONE (2026-07-31) — and with it §2o, and the last two things ConvNeXt owed.**
+The fresh 80-epoch channel-LN re-run scores **84.41% final / 84.82% best in 1h54m** (`rc=0`, epoch
+marker 80), replacing the VOID 82.75%; §0b's table is updated. The DP ratio re-measures at
+**1.70×** (78.0 s → 46.0 s marginal, train-only), within noise of the pre-flip 1.68×, so the
+channel LN costs nothing at the scaling level. **Nothing is owed on ConvNeXt.**
+
+**▶ THERE IS NO NEXT SECTION YET.** §2o was the last scoped thread; §2d.3 (device-resident
+parameters) is the only started-but-unfinished item in the file, and it is now backed by **five**
+independent measurements of the same structural shortfall.
 
 **▶ §2n IS CLOSED (2026-07-31) — bridges discharged, §B tied, scalar chain DROPPED (−852 lines).**
 Gates: build **3,910** green · `verified_mlir/` 0 lines of diff after a real re-render ·
@@ -86,9 +95,9 @@ Four things the drop taught are in §2n, and one is a **live trap worth knowing 
 renderer**: `lake build Codegen` does NOT build `LeanMlir/Proofs/Codegen/*.lean` (different lean_lib
 roots), so a green build + empty artifact diff after editing a renderer can be **vacuous** — the
 `#eval` writers never ran. Force them with `lake env lean` on the render file.
-⚠ Two things ConvNeXt still owes, unchanged by any of this: its **82.75% is VOID** (80-epoch re-run
-≈ 1h56m) and §2h-quater's **1.68×** DP ratio is not re-measured. **Both are §2o Part B**, with the
-epoch-12 checkpoint decision written up there. Below is the §2n history.
+~~⚠ Two things ConvNeXt still owes~~ ✅ **both CLOSED by §2o Part B (2026-07-31)**: the 82.75% is
+replaced by a measured **84.41%** (best 84.82%, 1h54m) and the DP ratio re-measures at **1.70×**.
+Below is the §2n history.
 
 **▶ §2n STEP 1 (2026-07-31) — the FloatBridges are discharged.** The channel-LN net now has a whole-net float story in both directions
 (`convnextCh_floatBridges` / `convnextCh_grad_floatBridges`), tied to the committed
@@ -115,8 +124,8 @@ Nothing is broken and the build is green at 3,909 jobs; what is left is that the
 and two smaller files still describe the scalar-LN net the repo stopped shipping**. §2n has the
 scope, the measured dependency table, the verified keystone (`convNextBlockBody = cnxBodyWith
 (layerNormForward …)` by `rfl`, so ONE generic bridge serves both worlds) and the gates.
-⚠ Two things are OWED on ConvNeXt regardless: its **82.75% is VOID** (the function genuinely
-changed — 80-epoch re-run ≈ 1h56m) and §2h-quater's **1.68×** scaling ratio is NOT re-measured.
+~~⚠ Two things are OWED on ConvNeXt regardless~~ ✅ **both CLOSED by §2o Part B (2026-07-31)** —
+**84.41%** final / 84.82% best / 1h54m, and the scaling ratio re-measured at **1.70×**.
 
 **▶ §2l IS DONE (2026-07-31) — the render is the paper's ResNet-34 and the param counts match the
 JAX reference at 21,797,672.** ▶ Then: the **80-epoch re-run** to restore the headline (done),
@@ -263,7 +272,7 @@ is *not* done on each of the four large nets, ordered by what would bite first.
    | **ResNet-34** *(re-run 2026-07-31 at the PAPER net — §2l)* | **90.06%** | 90.06% | **1h03m** |
    | **EfficientNet-B0** | **88.20%** | 88.46% | 1h34m |
    | **MobileNetV2** | **86.73%** | 86.96% | 1h25m |
-   | **ConvNeXt-T** ⚠ **VOID — §2m changed the function; re-run is §2o Part B** | ~~82.75%~~ | ~~82.98%~~ | ~~1h56m~~ |
+   | **ConvNeXt-T** *(re-run 2026-07-31 at the CHANNEL-LN net — §2o Part B)* | **84.41%** | 84.82% (ep 69) | **1h54m** |
    | **ViT-Tiny** *(2026-07-30)* | **71.31%** | 71.62% | **58m11s** |
 
    **All five nets now have an 80-epoch run on their certified bytes.** ViT was added 2026-07-30
@@ -283,10 +292,18 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 
    All `rc=0` with the epoch marker on 80 (so genuinely to the end, not a resumed no-op), scored
    through their `Proofs/`-rendered eval forwards. Logs: `runs/<net>_xla_80ep_jul29.log` (untracked).
-   **ConvNeXt is the outlier and it is NOT a plumbing problem** — it reaches the LOWEST val accuracy
-   while reaching the LOWEST train loss (0.500), which is overfitting: ~28M params against 9,469
-   images, curve flat from epoch 40, peak at 68. Read the ordering as a dataset-size story, not a
-   ranking of the renders.
+
+   ⚠ **The old "ConvNeXt is the outlier" reading is RETIRED** (2026-07-31, §2o Part B). It rested
+   on the 82.75% of the scalar-LN net. At the real channel LayerNorm ConvNeXt scores **84.41%**
+   final / **84.82%** best — **+1.66 / +1.84 points**, moving it from last of the four CNNs to
+   third, ahead of nothing it was behind before only in the sense that ViT was always below it.
+   The *overfitting* diagnosis survives and is the reason the gain is modest: train loss still
+   lands at **0.502** (the same floor the scalar net reached) with ~28M params against 9,469
+   images, and the val curve peaks at **epoch 69** and is flat over the last ten. What the channel
+   LN bought is a better-conditioned optimisation, not more data — it is much faster early
+   (**69.66% at epoch 7**, where the scalar-LN run was at 42.88% by epoch 12) and then hits the
+   same dataset-size ceiling. Read the whole ordering as a dataset-size story, not a ranking of
+   the renders.
 
    ⚠ **The §2g wrong-forward number, 86.89%, is STILL owed** — it belongs to `mobilenetv2-verified`,
    the **SGD** binary, and these were the AdamW trainers. Cheap now that the `-xla` path exists.
@@ -306,7 +323,7 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 |---|---|---|---|---|---|
 | **EfficientNet** | ✅ | ✅ **best-gated** (exact identity on the real net, 2 GPUs) | ✅ | ✅ `Proofs/` (§2g) | ✅ 3 epochs + 2-GPU |
 | **MobileNetV2** | ✅ | ✅ **§2h-bis** — exact identity on the real net, 2 GPUs, **1.67×** | ✅ **§2h** — 58.0 s/epoch | ✅ `Proofs/` (§2g — **BN skew fixed**) | ✅ **4 full epochs → val 59.9%**, + 2-GPU descent |
-| **ConvNeXt** | ✅ (all 180) | ✅ **§2h-quater** — exact identity on the real net, 2 GPUs, **1.68×** | ✅ **§2h** — 84.5 s/epoch | ✅ `Proofs/` (§2g) | ✅ **4 full epochs → val 60.6%**, + 12-epoch 2-GPU descent |
+| **ConvNeXt** | ✅ (all 180) | ✅ **§2h-quater** — exact identity on the real net, 2 GPUs, **1.70×** (re-measured on the channel-LN bytes, §2o) | ✅ **§2h** — 84.5 s/epoch | ✅ `Proofs/` (§2g) | ✅ **80 epochs → val 84.41%** (best 84.82%, 1h54m — §2o Part B) |
 | **ViT** | ✅ | ✅ **§2j tail** — `vit-dp-check` BIT-EXACT 16,579,041/16,579,041, control 0.996; **1.62×** on 2 GPUs | ✅ **RUNS 2026-07-30** — 128 ms/step, 43.0 s/epoch | ✅ `Proofs/` | ✅ **80 epochs → val 71.31%** (best 71.62%, 58m11s) |
 
 **MobileNetV2** — ~~no smoke-train~~ ✅ §2h; **no `mobilenetv2_adamdp_train_step.mlir`** (the
@@ -2060,6 +2077,9 @@ contaminated by an eval pass that runs single-replica, measured solo on 2× 7900
 | 1 GPU, bs 32 | **77.5 s** | 78, 77, 78, 78, 78 |
 | **2 GPU DP, global 64** | **46.0 s** | 46, 46, 45, 46, 46 |
 
+✅ **RE-MEASURED 2026-07-31 on the channel-LN bytes (§2o Part B): 78.0 s → 46.0 s = 1.70×**, within
+noise of the 1.68× below. The numbers in this table are the pre-§2m ones; the conclusion is unchanged.
+
 **1.68×** — within noise of the **1.67×** that EfficientNet (§2e-ter) and mnv2 (§2h-ter) both reach.
 Three architecturally unlike nets landing on the same ratio is the strongest evidence yet that the
 shortfall from 2× is **structural**: parameters are host-resident, so every step pushes the full
@@ -3188,15 +3208,17 @@ rely on. `%loss` stayed BIT-EXACT through the control on both, correctly localis
 the backward.
 
 **▶ STILL OWED — none of it blocks the build, and the first is the real one:**
-* **the 80-epoch re-run.** ConvNeXt's **82.75%** belonged to the scalar-LN net and is **VOID** —
-  unlike the conv-bias drops, the function genuinely changed. ~1h56m on XLA.
-* **the 2-GPU scaling ratio.** §2h-quater's **1.68×** was measured on the scalar-LN net and is
-  NOT re-measured; the channel LN adds 44 transposes per direction, which `channel-ln --bench`
-  measured free at the op level but which nobody has measured end to end. Re-measure with
-  `scripts/marginal_epoch.sh`, train-only on both sides, before quoting it.
-* `ConvNeXtWholeFloatBridge` / `ConvNeXtBackB0` / `WholeNetForwardTies` still ride the SCALAR
-  chain (`convNextForwardT`/`TC`), which is why the build stayed green. They are now describing a
-  net the repo no longer ships — a documentation-scope question, not a broken proof.
+* ~~**the 80-epoch re-run**~~ ✅ **DONE 2026-07-31 (§2o Part B)** — **84.41%** final / 84.82% best
+  / 1h54m, replacing the VOID 82.75%.
+* ~~**the 2-GPU scaling ratio**~~ ✅ **DONE 2026-07-31 (§2o Part B)** — **1.70×** (78.0 → 46.0 s
+  marginal, train-only). The worry was that the channel LN's 44 extra transposes per direction,
+  free at the op level per `channel-ln --bench`, might not be free end to end. **They are**: both
+  the single-GPU marginal (77.5 → 78.0 s) and the ratio (1.68 → 1.70×) are unchanged within noise.
+* ~~`ConvNeXtWholeFloatBridge` / `ConvNeXtBackB0` / `WholeNetForwardTies` still ride the SCALAR
+  chain~~ — `ConvNeXtWholeFloatBridge` was discharged by §2n and **`ConvNeXtBackB0` by §2o Part A**,
+  which added the channel-LN backward capstones alongside the scalar ones (the file now carries both
+  worlds, explicitly labelled). `WholeNetForwardTies` is the remainder, and `ConvNeXtTiePoC`'s §1a
+  tie carries a scope label rather than a port (§2n measured the port as chapter-sized).
 * ~~the §1a tie (176/180)~~ — the **render capstone** (`tests/TestConvNeXtTTrainPC.lean`) is
   ✅ **RE-ALIGNED 2026-07-31 and back at PARITY: 180 of 180 outputs BIT-IDENTICAL** against the
   channel-LN artifact, control (EPS 1.0e-6 → 1.0e-3) fires at 0/180 with rc=1. It got **strictly
@@ -3545,8 +3567,8 @@ params); `shard-check efficientnet` — TEST **8.5e-8** against a built-in CONTR
 are paired against: R34 21,797,672 (§2l), ViT 5,717,416 (always), MobileNetV2 3,504,872,
 EfficientNet-B0 5,288,548, and **ConvNeXt-T 28,587,592** — the last one closed by landing the
 channel-LN math forward and flipping the render, not by matching a count (see the warning above
-about why matching the count alone would have been the WORSE outcome). ⚠ ConvNeXt's **82.75%** is
-void with it; the 80-epoch re-run is owed.
+about why matching the count alone would have been the WORSE outcome). ConvNeXt's 82.75% was void
+with it; the re-run landed 2026-07-31 at **84.41%** (§2o Part B).
 
 ⚠ **What did NOT change on any of the three nets: the proof side.** `B0Weights` / `MNV2PaperWeights`
 still carry their bias fields, `den` and every faithfulness theorem are untouched, and no `SHlo` op
@@ -3846,15 +3868,47 @@ it burns**. They do not touch the same files.
 
 ---
 
-#### ▶ Part A — the backward capstone the §2n drop left uncovered
+#### ✅ Part A — DONE 2026-07-31. The channel-LN backward capstone, and it went one level further
+
+**Landed** in `ConvNeXtBackB0.lean` (+1 import, `ConvNeXtBackCertifiedTie`) — six new declarations,
+all **3-axiom clean**, `AuditAxioms` **1503 → 1509** directives and the coverage checker green:
+
+| new | what |
+|---|---|
+| `Proofs.rowLNBack_affine_eq` | the backward peer of `rowLN_affine_eq` — the emitted `rowScaleF γ` on the COTANGENT is the per-row `diagBack γ` that `rowLNVecFlatBack` folds in, so the LN gradient runs at `γ = 1`. β-free |
+| `chanLNBackGraph` + `_faithful` | **the keystone** — the `den`-level peer of §2m's `chanLNGraph_faithful` |
+| `chanLNBackGraph_eq_vjp` | chains it through §B onto `(chanLNTensor3_has_vjp …).backward` |
+| `cnxBlockBodyChBackGraph_faithful` | block body ↔ `cnxBodyWith_has_vjp` at the shipped LN |
+| `cnxResidBlockChBackGraph_faithful` | the residual block ↔ `cnxBlockChW_has_vjp` |
+| `cnxDownChBackGraph_faithful` | **the downsample §2n dropped, restored at the channel LN** |
+
+Gates: `lake build Proofs Certs Codegen` **3,910 green** · `git diff verified_mlir/` **0 lines** ·
+`regen_verified_mlir.sh check` **67 artifacts, one writer each** + all four content audits OK.
+Every capstone lands on the CERTIFIED VJP, not on a hand-composed chain — that is what tying §B
+first bought, and `chanLNBackGraph_eq_vjp` is the single place it is spent.
+
+⚠ **Two things that cost time and would cost it again:**
+
+1. **`lake env lean` typechecks but does NOT write the `.olean`.** `tests/AuditAxioms.lean` then
+   reads the STALE one and reports `unknown constant` for every new theorem — which reads exactly
+   like "my declaration doesn't exist". Run `lake build` before the audit, always. (Same family as
+   §2n's `lake build Codegen` trap and `[[lake-exe-cache-gotcha]]`.)
+2. **`simp only` will not fire `chanLNBackGraph_eq_vjp`; `rw` will.** The graph's `c h w` are
+   implicit and appear only inside `Vec (c * h * w)`, so simp gives up unifying them and silently
+   leaves the term alone — the whole rewrite chain below it then stalls and the failure surfaces as
+   a confusing `rfl` error about `id { backward := … }`. The **`unusedSimpArgs` linter names the
+   culprit outright**; read it. Fix: `unfold` the graph def, `rw` the LN step, then `simp only` the
+   rest. Both capstones needed this.
+
+Below is the original scoping, kept for the reasoning.
 
 **The measured state after §2n.** `regen`-level and math-level coverage of the shipped channel-LN
-net is complete; the `den`-level backward is empty:
+net was complete; the `den`-level backward was empty:
 
 | shipped (channel-LN) net | `den`-level coverage |
 |---|---|
 | **forward** | ✅ `chanLNGraph_faithful` → `cnxBlockChGraphW_faithful` → `cnxStageChGraphK_den` → `cnxDownChGraphW_faithful` → `convNextFwdGraphTCh_faithful` (all five, audited as of §2n) |
-| **backward** | ❌ **nothing, at any level** |
+| **backward** | ~~❌ **nothing, at any level**~~ ✅ **CLOSED above** — op, block body, residual block, downsample |
 
 ⚠ **This is wider than the §2n commit message says.** That message says "the channel-LN *downsample*
 has no graph-side backward capstone". Measured afterwards: the two capstones that SURVIVED in
@@ -3898,11 +3952,30 @@ week because nobody diffed audit coverage across a swap.
 
 ---
 
-#### ▶ Part B — the 80-epoch re-run ConvNeXt owes
+#### ✅ Part B — DONE 2026-07-31. The re-run landed, and the DP ratio survives
 
-**Why:** §2m changed the function at 21 of 22 LN sites, so the **82.75%** in §0b's table is VOID —
-it belongs to a net the repo no longer ships. The other four rows are clean 80-epoch runs on their
-certified bytes; ConvNeXt needs to rejoin them.
+```
+final (epoch 80)   84.41%  (3313/3925)      wall  1h54m01s (6841 s)
+best               84.82%  (epoch 69)       rc=0 · epoch marker 80 · 80 epochs logged
+runs/convnext_chln_80ep_jul31.log           ckpt kept as convnext_adam_ckpt_xla.bin.chln80-jul31
+```
+
+Ran **fresh** (the epoch-12 checkpoint moved aside), so the row is apples-to-apples with the other
+four. Against the VOID scalar-LN numbers — 82.75% / 82.98% / 1h56m — that is **+1.66 points final,
++1.84 best at the same wall clock**. §0b's table is updated and the VOID note is gone.
+
+**Read the gain correctly: the overfitting diagnosis SURVIVES, and is why it is only 1.7 points.**
+Train loss still lands at **0.502** — the same floor the scalar net reached — with ~28M params
+against 9,469 images, val peaking at epoch 69 and flat over the last ten. What the channel LN bought
+is a better-conditioned optimisation, not more data: **69.66% by epoch 7**, where the scalar-LN run
+needed 12 epochs to reach 42.88%, and then the same dataset-size ceiling. What IS retired is the old
+"ConvNeXt is the outlier" reading, which rested on a number belonging to a net the repo dropped.
+
+Below is the original scoping.
+
+**Why:** §2m changed the function at 21 of 22 LN sites, so the **82.75%** in §0b's table was VOID —
+it belonged to a net the repo no longer ships. The other four rows are clean 80-epoch runs on their
+certified bytes; ConvNeXt needed to rejoin them.
 
 ⚠ **THERE IS A LIVE CHECKPOINT AT EPOCH 12 RIGHT NOW, and it is not stale junk — read this first.**
 
@@ -3943,11 +4016,34 @@ and the §0b reading was *overfitting* (~28M params on 9,469 images, curve flat 
 channel LN is a better-conditioned normaliser, so up is plausible, but **do not predict a number in
 the doc — record the measured one**.
 
-**Companion, same session, ~10 min:** §2h-quater's **1.68×** two-GPU scaling ratio was measured on
-the pre-flip artifact and is NOT re-measured. `lake build convnext-dp-check && shard-check convnext`
-still pass on the new bytes (§2m ran both), so only the RATIO is owed:
-`scripts/marginal_epoch.sh` with **`LEAN_MLIR_SKIP_EVAL=1` on BOTH sides** (eval runs
-single-replica and is not part of the ratio — §2h-quater's own footnote).
+**Companion ✅ DONE 2026-07-31 — the DP ratio survives the flip at 1.70×.** Re-measured on the
+channel-LN bytes, train-only on both sides, solo on the box, 4 epochs each
+(`runs/convnext_chln_dp{1,2}_jul31.log`):
+
+| | marginal epoch | deltas | pre-flip (§2h-quater) |
+|---|---|---|---|
+| 1 GPU, bs 32 | **78.0 s** | 78, 78, 78 | 77.5 s |
+| **2 GPU DP, global 64** | **46.0 s** | 46, 46, 45 | 46.0 s |
+| **ratio** | **1.70×** | | 1.68× |
+
+Within noise of the pre-flip number and of the **1.67×** EfficientNet (§2e-ter) and mnv2 (§2h-ter)
+reach, so §2h-quater's conclusion is unchanged: the shortfall from 2× is **structural** (host-resident
+parameters, §2c/§2d.3), not LayerNorm-shaped. The channel LN costs nothing at the scaling level.
+
+⚠ **Two traps this 10-minute job hit, both worth knowing before any bench re-run:**
+
+1. **The checkpoint path is per-VARIANT** — `{slug}_{variant}_ckpt_xla.bin`, so the DP side reads
+   `convnext_adamdp_ckpt_xla.bin`, NOT the `_adam_` one. Clearing only the `adam` checkpoint left a
+   stale `adamdp` marker at **epoch 7**; with `LEAN_MLIR_MAX_EPOCHS=4` the loop is `[7:4]`, which
+   runs **zero epochs and exits `done` with rc=0**. That is §4's silent no-op wearing a new hat —
+   the only symptom was `▸ resuming from checkpoint at epoch 7` in the banner and an empty timing
+   table. Clear BOTH paths, and read the resume line.
+2. **`LEAN_MLIR_SKIP_EVAL=1` does NOT suppress the `  epoch N:` line** `marginal_epoch.sh` keys on
+   — the eval loop just iterates zero times and the line prints with `val_acc = 0/3925 = 0%`. So
+   train-only timing works, and a `0.000000%` in one of these logs is expected, not a broken run.
+
+`LEAN_MLIR_MAX_EPOCHS=4` is the clean way to bound these (≥3 epochs are needed for the marginal);
+no `timeout`/kill is required, and `| head` would not stop the trainer anyway.
 
 ---
 

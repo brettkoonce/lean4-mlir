@@ -2843,13 +2843,23 @@ open Proofs
 -- backward graph and the identity/residual block capstone, both over the ch9 representative's
 -- block. LayerNorm is per-example separable (= bnForward on the feature axis), so no batched
 -- machinery; the LN backward routes through bnBack_faithful_fn (layerNorm_has_vjp ≡ bn_has_vjp).
--- §2n dropped the third capstone here, the LN+2×2/s2 DOWNSAMPLE (cnxDownBackGraph_faithful): it
--- denoted the scalar cnxDownW_has_vjp and went with that chain. It is NOT ported — the shipped
--- downsample's channel-LN backward has no den-level tie (chanLNTensor3Back_eq_chanLN_vjp is the
--- math-side one), so the channel-LN downsample has no graph-side backward capstone. A gap the
--- drop EXPOSED rather than created: it was always the scalar net that had it.
 #print axioms StableHLO.cnxBlockBodyBackGraph_faithful
 #print axioms StableHLO.cnxResidBlockBackGraph_faithful
+-- §2o Part A (2026-07-31): the same three capstones over the SHIPPED channel-LN net, which after
+-- §2n's drop had no den-level backward capstone at ANY level (the two above are over the ch9
+-- representative's SCALAR LN — a gap the drop EXPOSED rather than created, since it was always
+-- the scalar net that had one). chanLNBackGraph_faithful is the backward peer of §2m's
+-- chanLNGraph_faithful; the emitted rowScaleF-then-lnRowBack pair collapses onto rowLNVecFlatBack
+-- by rowLNBack_affine_eq, the backward peer of rowLN_affine_eq. chanLNBackGraph_eq_vjp then
+-- chains through §B (chanLNTensor3Back_eq_chanLN_vjp), so all three capstones land on the
+-- CERTIFIED VJP rather than on a hand-composed reverse chain. Includes the LN+2×2/s2 DOWNSAMPLE
+-- that §2n dropped, restored at the LayerNorm the net actually uses.
+#print axioms Proofs.rowLNBack_affine_eq
+#print axioms StableHLO.chanLNBackGraph_faithful
+#print axioms StableHLO.chanLNBackGraph_eq_vjp
+#print axioms StableHLO.cnxBlockBodyChBackGraph_faithful
+#print axioms StableHLO.cnxResidBlockChBackGraph_faithful
+#print axioms StableHLO.cnxDownChBackGraph_faithful
 #print axioms StableHLO.bnBatchBack_faithful
 #print axioms StableHLO.convBackBatched_faithful
 #print axioms StableHLO.depthwiseBackBatched_faithful
