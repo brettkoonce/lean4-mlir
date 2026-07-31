@@ -672,7 +672,7 @@ set_option maxRecDepth 4000000 in
     params in `enetSig` order), returning logits `[B, nClasses]`. Shares `enetFwdChain` with the
     train step, so it is a byte-identical PREFIX of `efficientnet_train_step.mlir`, ending exactly
     where the loss begins. Replaces the hand-written emitter in `tests/TestEfficientNetFwd.lean`. -/
-def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := true) : String :=
+def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false) : String :=
   let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias).run' 0
   "module @m {\n" ++
   s!"  func.func @efficientnet_fwd({enetFwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
@@ -691,7 +691,7 @@ set_option maxRecDepth 4000000 in
     This is the eval partner of `efficientnet_adam_train_step`, whose returned batch μ/var the
     driver EMAs into exactly these slots — and both sides of that contract now come off one
     `bns` list rather than two independently-written ones. -/
-def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := true) : String :=
+def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false) : String :=
   let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias).run' 0
   "module @m {\n" ++
   s!"  func.func @efficientnet_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
@@ -732,7 +732,7 @@ set_option maxRecDepth 4000000 in
     forward this differentiates and the forward the driver evals with are one graph by
     construction, not by inspection (§2a). -/
 private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
-    (smooth : Option (String × String × String) := none) (convBias : Bool := true) :
+    (smooth : Option (String × String × String) := none) (convBias : Bool := false) :
     StateM Nat (String × List String × String × List (String × String × Nat × Nat)) := do
     let F : ENetFwd ← enetFwdChain B nClasses .train epsStr convBias
     let f1 := F.blocks[0]!; let f2 := F.blocks[1]!; let f3 := F.blocks[2]!; let f4 := F.blocks[3]!
@@ -845,7 +845,7 @@ set_option maxRecDepth 4000000 in
     slip (`runs/efficientnet_verified_crop_gpu1.log`: 40.6% → 87.81% over 80 epochs, matching
     README's 87.58%); the AdamW render below spells the mean explicitly instead. -/
 def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
-    (funcName : String := "efficientnet_train_step") (convBias : Bool := true) : String :=
+    (funcName : String := "efficientnet_train_step") (convBias : Bool := false) : String :=
   let go : StateM Nat String := do
     let (code, outNames, _, _) ← enetBackAll B nClasses epsStr lrStr false none convBias
     let outTypes : List String := (enetSig nClasses convBias).map (fun p => ty p.2)
@@ -951,7 +951,7 @@ set_option maxRecDepth 4000000 in
     returned batch statistics are a whole-net forward fingerprint no gradient touches. -/
 def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (alphaStr negAlphaKStr bStr : String) (replicas : Nat := 1)
-    (convBias : Bool := true) : String :=
+    (convBias : Bool := false) : String :=
   let sigList := enetSig nClasses convBias
   -- `go` hands back the BN channel counts alongside the body, so the argument signature is built
   -- from the SAME list the traversal walked. Deriving the 49 slots independently would be a second

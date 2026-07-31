@@ -747,16 +747,16 @@ theorem resnet34Verified_fwd_faithful (epsStr : String) (w : R34Weights)
 noncomputable def denoteEfficientnetB0 (N : Nat) (layers : List VLayer) (w : B0Weights) :
     Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
   match layers with
-  | [.convBn 3 32 3 2,
-     .mbConvSE 32 32 16 8 3,
-     .mbConvSE 16 96 24 4 3, .mbConvSE 24 144 24 6 3,
-     .mbConvSE 24 144 40 6 5, .mbConvSE 40 240 40 10 5,
-     .mbConvSE 40 240 80 10 3, .mbConvSE 80 480 80 20 3, .mbConvSE 80 480 80 20 3,
-     .mbConvSE 80 480 112 20 5, .mbConvSE 112 672 112 28 5, .mbConvSE 112 672 112 28 5,
-     .mbConvSE 112 672 192 28 5, .mbConvSE 192 1152 192 48 5, .mbConvSE 192 1152 192 48 5,
-     .mbConvSE 192 1152 192 48 5,
-     .mbConvSE 192 1152 320 48 3,
-     .convBn 320 1280 1 1, .globalAvgPool, .dense 1280 10] =>
+  | [.convBnNB 3 32 3 2,
+     .mbConvSENB 32 32 16 8 3,
+     .mbConvSENB 16 96 24 4 3, .mbConvSENB 24 144 24 6 3,
+     .mbConvSENB 24 144 40 6 5, .mbConvSENB 40 240 40 10 5,
+     .mbConvSENB 40 240 80 10 3, .mbConvSENB 80 480 80 20 3, .mbConvSENB 80 480 80 20 3,
+     .mbConvSENB 80 480 112 20 5, .mbConvSENB 112 672 112 28 5, .mbConvSENB 112 672 112 28 5,
+     .mbConvSENB 112 672 192 28 5, .mbConvSENB 192 1152 192 48 5, .mbConvSENB 192 1152 192 48 5,
+     .mbConvSENB 192 1152 192 48 5,
+     .mbConvSENB 192 1152 320 48 3,
+     .convBnNB 320 1280 1 1, .globalAvgPool, .dense 1280 10] =>
       efficientnetForwardB_full N w
   | _ => fun _ => 0
 

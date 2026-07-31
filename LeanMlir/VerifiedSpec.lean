@@ -70,6 +70,13 @@ inductive VLayer where
       (`Ws₁[mid,r]`,`bs₁[r]`,`Ws₂[r,mid]`,`bs₂[mid]`, sigmoid gate), project 1×1 → BN. Params:
       (expand{W,b,γ,β} if t≠1) ++ depthwise{W,b,γ,β} ++ SE{Ws₁,bs₁,Ws₂,bs₂} ++ project{W,b,γ,β}. -/
   | mbConvSE (ic mid oc r k : Nat)
+  /-- EfficientNet MBConv with **no conv biases on the BN-followed convs** — expand/depthwise/
+      project become `{W,γ,β}`. ⚠ **The squeeze-excite biases STAY.** SE's two 1×1 convs are
+      followed by an ACTIVATION (sigmoid gate), not BN, so nothing absorbs them and the reference
+      carries them; only a BN-followed conv can drop its bias. That distinction is what made the
+      +21,008 gap close exactly (§2m) — the audit's rule was "a rank-1 kind-2 param immediately
+      after a **rank-4** kernel", and SE's params are rank-2. -/
+  | mbConvSENB (ic mid oc r k : Nat)
   /-- ConvNeXt block @ `c` channels (expand ratio 4): depthwise 7×7 → scalar-LN → 1×1 expand
       c→4c → GELU → 1×1 project 4c→c → layerScale (per-channel γ). Params: depthwise{W,b};
       LN{γ,β scalar}; expand{W,b}; project{W,b}; layerScale{γ:[c]}. -/
@@ -135,6 +142,11 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
     #[(#[mid,1,k,k],0),(#[mid],2),(#[mid],1),(#[mid],2),
       (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),
       (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]
+  | mbConvSENB ic mid oc r k =>                      -- as above, minus the BN-followed convs' biases;
+    (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[]) ++  -- SE's two KEEP theirs
+    #[(#[mid,1,k,k],0),(#[mid],1),(#[mid],2),
+      (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),
+      (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
   | convNextBlock c =>                               -- depthwise 7×7 | LN(scalar) | expand | project | layerScale
     #[(#[c,1,7,7],0),(#[c],2),(#[],1),(#[],2),
       (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],1)]

@@ -2894,8 +2894,8 @@ count the reference itself trains.
 |---|---|---|---|---|
 | **ResNet-34** | 21,797,672 | 21,797,672 | **0** | ✅ fixed, §2l |
 | **ViT-Tiny** | 5,717,416 | 5,717,416 | **0** | ✅ architecture clean |
-| **MobileNetV2** | 3,521,928 | 3,504,872 | **+17,056** | ⛔ **52 conv biases = 17,056 exactly** |
-| **EfficientNet-B0** | 5,309,556 | 5,288,548 | **+21,008** | ⛔ **49 conv biases = 21,008 exactly** |
+| **MobileNetV2** | ~~3,521,928~~ **3,504,872** | 3,504,872 | ~~+17,056~~ **0** | ✅ fixed — 52 conv biases dropped, `6b48389` |
+| **EfficientNet-B0** | ~~5,309,556~~ **5,288,548** | 5,288,548 | ~~+21,008~~ **0** | ✅ fixed — 49 conv biases dropped (SE's KEPT) |
 | **ConvNeXt-T** | 28,572,852 | 28,587,592 | **−14,740** | ⛔ **scalar LayerNorm affine** (below) |
 
 **mnv2 and EfficientNet have R34's step-B defect and ONLY that.** Every conv is BN-followed, the
@@ -3134,10 +3134,61 @@ bit-exact 2,236,682/2,236,682, gradient norm-rel **6.0e-8** (was 8.7e-8 at 210 p
 Nothing about the collective or the shard offsets moved with the layout, which is what you would
 expect and is now measured rather than assumed.
 
-**▶ enet is next, and it is cheaper than this was**: its arity was always right (one `enetSig`
-source, 213), and both defects it did have are fixed. What is left there is layout work — an
-`mbConvSENB`, `.convBnNB` stem/head, `EfficientNetLayout.specs`, flip, re-render, and the same four
-gates. ⚠ **SE's biases must survive**: those 1×1 convs are activation-followed, not BN-followed.
+#### ✅ AND EfficientNet FOLLOWED THE SAME DAY — **213 params, 5,288,548 at K = 1000**
+
+The recipe transferred unchanged and the prediction held: enet was cheaper, because its arity was
+always right (one `enetSig` source) and the two render defects were already fixed. **The count
+matches `generated_efficientnet_b0_imagenet.py`'s `Parameters: 5288548` exactly**, closing §2m's
++21,008.
+
+| gate | result |
+|---|---|
+| `--fwd` (`@efficientnet_fwd`) | **BIT-EXACT 320/320**, 213 params vs A's 262 |
+| `--fwd --eval` (`@efficientnet_fwd_eval`) | **BIT-EXACT 320/320**, + 49 layers of frozen stats |
+| `--tie` (AdamW train step) | **BIT-EXACT on all 12,103,093 shared floats** — floor bit-exact on 12,166,117 |
+
+**enet's tie is bit-exact all the way through the BACKWARD**, where mnv2's left 2.5e-7 there. Not
+worth over-reading — it is XLA fusing a 49-chain-lighter graph the same way rather than differently
+— but it is the strongest of the three conv-bias ties in the repo.
+
+**⚠ The candidate had to be re-rendered before the tie would mean anything.** The first one used
+`bStr = "0.900000"` where the committed `#eval` bakes **`"32.0"`** (the explicit mean-CE divisor),
+so it differed from the reference in *two* ways and a failure would have been unattributable. A
+swap tie is only evidence if the candidate differs in **exactly** the thing being gated — check the
+committed `#eval`'s literals, do not reconstruct them from the signature.
+
+**`classifyAll` handled the SE params correctly with no change**, which is the one thing that could
+have gone wrong on this net: it walks the layout and treats a rank-1 kind-2 param as a conv bias
+only when it *immediately follows a rank-4 kernel*, and SE's are rank-2. Confirmed by the drop
+count — `--fwd` reports exactly **49** fewer, never 49+2×16. `VLayer` gained **`mbConvSENB`**
+(expand/depthwise/project lose their biases, SE keeps both of its).
+
+`SpecVJP.denoteEfficientnetB0` needed the NB spelling, same one-line change as mnv2 and R34.
+
+**It trains on the swapped bytes** (`runs/enet_nobias_swap_jul31.log`, fresh checkpoint): val
+**34.68% → 49.38%** over 2 epochs, checkpoint **48,244,296 B** = 3 × 4,020,358 × 4. ⚠ Do **not**
+read that against §2e-bis's 14.98/21.83/27.13 — that smoke ran a different schedule, so it is not
+an apples-to-apples pair. The evidence that the function is unchanged is the **bit-exact tie**, not
+the smoke; the smoke's job is only to show the swapped bytes train and that the driver and the
+graph agree on the layout.
+
+**Both multi-GPU gates re-run** on the re-rendered DP artifact (740 outputs, 2 replicas):
+`efficientnet-dp-check` — forward **BIT-EXACT** (all 42,016 bnstat), `%loss` bit-exact, `v`
+bit-exact 4,020,358/4,020,358, gradient norm-rel **3.3e-8** (the same figure it reported at 262
+params); `shard-check efficientnet` — TEST **8.5e-8** against a built-in CONTROL of **1.339**,
+1.6e7 apart. The `tests/`-side `iree-compile` smokes over the committed bytes still pass.
+
+**▶ §2m IS CLOSED — the audit table at the top of this section is all zeros.** All five verified
+nets now agree with the JAX reference they are paired against: R34 21,797,672 (§2l), ViT 5,717,416
+(always), MobileNetV2 3,504,872, EfficientNet-B0 5,288,548 — and ConvNeXt is the one remaining
+deviation, its **scalar LayerNorm**, which is a decision rather than a defect and is scoped above.
+
+⚠ **What did NOT change on any of the three nets: the proof side.** `B0Weights` / `MNV2PaperWeights`
+still carry their bias fields, `den` and every faithfulness theorem are untouched, and no `SHlo` op
+was added — the bias operand simply becomes a zero CONSTANT instead of a function argument, which
+is `e9c2729`'s spelling and why §4's ten-sites-per-op cost never came up. So comments like
+`AuditAxioms`'s *"covers all 262 params"* are describing the **math-level** param set and are still
+correct; the 213 is the render's signature. Do not "fix" them to match.
 
 **The lesson, and it is the thread's own:** the guards were real, fired, and pinned the WRONG HALF.
 Two arity routes agreeing was the check — and only one route was pinned, so the half that ships

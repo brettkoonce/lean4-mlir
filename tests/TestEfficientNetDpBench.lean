@@ -21,7 +21,7 @@ The batches differ by construction, so **ms/IMAGE is the figure** and ms/step is
 Perfect scaling would be an unchanged ms/step at twice the images, i.e. 2.00× on ms/image.
 
 **What limits it, and why the ratio is the wrong thing to blame.** Parameters are host-resident
-(§2c), so *every* step pushes the whole packed `[θ|m|v]` — 262 params, 4,041,366 floats, ~48.5 MB —
+(§2c), so *every* step pushes the whole packed `[θ|m|v]` — 213 params, 4,020,358 floats, ~48.2 MB (262 / 4,041,366 before §2m) —
 to *every* replica. Compute halves across two devices while that transfer doubles. This bench
 therefore also reports the implied per-step transfer share, because the interesting question is not
 "is it 2×" (it cannot be) but "how much of the step is already transfer", which is the number that

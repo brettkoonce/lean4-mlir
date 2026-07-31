@@ -433,24 +433,24 @@ def efficientnetVerified : VerifiedNetSpec where
   nClasses := 10
   data     := .imagenette
   layers   := [
-    .convBn 3 32 3 2,            -- stem 3×3-s2
-    .mbConvSE   32   32  16  8 3,  -- s1 t1 (no expand)
-    .mbConvSE   16   96  24  4 3,  -- s2
-    .mbConvSE   24  144  24  6 3,
-    .mbConvSE   24  144  40  6 5,  -- s3
-    .mbConvSE   40  240  40 10 5,
-    .mbConvSE   40  240  80 10 3,  -- s4
-    .mbConvSE   80  480  80 20 3,
-    .mbConvSE   80  480  80 20 3,
-    .mbConvSE   80  480 112 20 5,  -- s5
-    .mbConvSE  112  672 112 28 5,
-    .mbConvSE  112  672 112 28 5,
-    .mbConvSE  112  672 192 28 5,  -- s6
-    .mbConvSE  192 1152 192 48 5,
-    .mbConvSE  192 1152 192 48 5,
-    .mbConvSE  192 1152 192 48 5,
-    .mbConvSE  192 1152 320 48 3,  -- s7
-    .convBn 320 1280 1 1,         -- head 1×1 (320→1280)
+    .convBnNB 3 32 3 2,            -- stem 3×3-s2
+    .mbConvSENB  32   32  16  8 3,  -- s1 t1 (no expand)
+    .mbConvSENB  16   96  24  4 3,  -- s2
+    .mbConvSENB  24  144  24  6 3,
+    .mbConvSENB  24  144  40  6 5,  -- s3
+    .mbConvSENB  40  240  40 10 5,
+    .mbConvSENB  40  240  80 10 3,  -- s4
+    .mbConvSENB  80  480  80 20 3,
+    .mbConvSENB  80  480  80 20 3,
+    .mbConvSENB  80  480 112 20 5,  -- s5
+    .mbConvSENB 112  672 112 28 5,
+    .mbConvSENB 112  672 112 28 5,
+    .mbConvSENB 112  672 192 28 5,  -- s6
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 320 48 3,  -- s7
+    .convBnNB 320 1280 1 1,         -- head 1×1 (320→1280)
     .globalAvgPool,
     .dense 1280 10 ]
   blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"

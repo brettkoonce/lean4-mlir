@@ -369,13 +369,16 @@ end MobileNetV2Layout
 
 namespace EfficientNetLayout
 /-- Chapter-7 **EfficientNet-B0** params (CIFAR 3×32×32, E6 — faithful `[t,c,n,s,k]`
-    config, all-swish + BATCH norm): stem {W,b,γ,β} (3×3 stride-1 conv 3→32, CIFAR
+    config, all-swish + BATCH norm): stem {W,γ,β} (3×3 stride-1 conv 3→32, CIFAR
     adaptation), then 16 MBConv layers across 7 stages (channels [16,24,40,80,112,192,320],
     kernels [3,3,5,3,5,5,3], expand [1,6,6,6,6,6,6] — the MBConv1 stage-1 blocks have NO
-    expand conv) — each (when expanded) expand 1×1 {W,b,γ,β}, depthwise k×k {W,b,γ,β}
+    expand conv) — each (when expanded) expand 1×1 {W,γ,β}, depthwise k×k {W,γ,β}
     (`[mid,1,k,k]`, feature_group_count = mid), **squeeze-excite** {Ws₁`[mid,r]`,bs₁`[r]`,
-    Ws₂`[r,mid]`,bs₂`[mid]`} (r = ic/4), project 1×1 {W,b,γ,β} — then head 1×1 conv {W,b,γ,β}
-    (320→1280) and dense {W,b}. Batch-norm γ/β rank-1 `[c]`. 262 params. Spatial
+    Ws₂`[r,mid]`,bs₂`[mid]`} (r = ic/4), project 1×1 {W,γ,β} — then head 1×1 conv {W,γ,β}
+    (320→1280) and dense {W,b}. Batch-norm γ/β rank-1 `[c]`. **213 params** (§2m: the 49
+    BN-followed convs carry no bias; at K = 1000 this is 5,288,548 — the JAX reference's own
+    count). ⚠ **SE's two biases STAY**: those 1×1 convs are followed by the sigmoid gate, not by
+    BN, so nothing absorbs them and the reference carries them. Spatial
     32→16→8→4→2 (4 strided stages, stem stride 1). The `(dims, initKind)` order MUST match
     `@efficientnet_train_step`'s signature — both rendered from the same `stages`/`blocks`
     generator (tests/TestEfficientNet*.lean). `initKind`: 0 = He(fan-in) (depthwise fan-in
@@ -383,21 +386,21 @@ namespace EfficientNetLayout
 private def stages : Array (Nat × Nat × Nat × Nat × Nat) :=
   #[(1,16,1,1,3),(6,24,2,2,3),(6,40,2,2,5),(6,80,3,2,3),(6,112,3,1,5),(6,192,4,2,5),(6,320,1,1,3)]
 private def mbBlk (ic mid oc r k : Nat) : Array (Array Nat × Nat) :=
-  (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++  -- expand (skip if t=1)
-  #[(#[mid,1,k,k],0),(#[mid],2),(#[mid],1),(#[mid],2),    -- depthwise k×k (stride 1 or 2)
-    (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),        -- squeeze-excite dense₁/dense₂
-    (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]      -- project 1×1
+  (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[]) ++  -- expand (skip if t=1)
+  #[(#[mid,1,k,k],0),(#[mid],1),(#[mid],2),               -- depthwise k×k (stride 1 or 2)
+    (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),        -- squeeze-excite dense₁/dense₂ — biases KEPT
+    (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]                -- project 1×1
 /-- `(dims, initKind)` for every param, in func-arg order — generated from the B0 stage
     spec exactly as tests/TestEfficientNet*.lean `blocks` (stem out 32, prev threading). -/
 def specs : Array (Array Nat × Nat) := Id.run do
-  let mut a : Array (Array Nat × Nat) := #[(#[32,3,3,3],0),(#[32],2),(#[32],1),(#[32],2)]  -- stem 3→32
+  let mut a : Array (Array Nat × Nat) := #[(#[32,3,3,3],0),(#[32],1),(#[32],2)]             -- stem 3→32
   let mut prev := 32
   for (t, c, n, _s, k) in stages do
     for j in [0:n] do
       let ic := if j == 0 then prev else c
       a := a ++ mbBlk ic (t*ic) c (max 1 (ic/4)) k
     prev := c
-  a := a ++ #[(#[1280,320,1,1],0),(#[1280],2),(#[1280],1),(#[1280],2)]                     -- head 320→1280
+  a := a ++ #[(#[1280,320,1,1],0),(#[1280],1),(#[1280],2)]                                 -- head 320→1280
   a := a ++ #[(#[1280,10],0),(#[10],2)]                                                     -- dense
   return a
 def paramShapes : Array (Array Nat) := specs.map (·.1)

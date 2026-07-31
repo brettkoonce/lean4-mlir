@@ -6,7 +6,7 @@ The enet peer of `vit`/`mnv2-verified-adam`: the proof-rendered EfficientNet-B0 
 (`LeanMlir/Proofs/Codegen/EfficientNetRender.lean → verified_mlir/efficientnet_adam_train_step.mlir`,
 `@efficientnet_adam_train_step`) — all-swish + squeeze-excite + per-channel batch-norm, with the
 gradients un-fused and handed to the proven `adamMNextF`/`adamVNextF`/`adamWParamF` triple — driven
-by the generic `VerifiedNet.trainAdamSched`: `[θ|m|v]` (262 params) packed as one blob + runtime
+by the generic `VerifiedNet.trainAdamSched`: `[θ|m|v]` (213 params) packed as one blob + runtime
 `lr`/`bc₁`/`bc₂` scalars (cosine + warmup + per-step bias correction) through the unchanged FFI
 (`n_params = 3k`).
 
