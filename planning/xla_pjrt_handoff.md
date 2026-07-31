@@ -71,6 +71,14 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
+**▶ START A NEW SESSION AT §2o — the channel-LN BACKWARD capstone, then ConvNeXt's 80-epoch
+re-run.** Part B is a ~2h GPU run and Part A is CPU proof work, so **launch the run first and prove
+while it burns**. Two things §2o has that you will not guess: the `den`-level backward gap is
+**wider than §2n's commit message says** (the channel-LN net has NO backward capstone at any level,
+not just the downsample — the survivors in `ConvNeXtBackB0` are over the ch9 scalar-LN net), and
+there is a **live checkpoint at epoch 12** from §2m's interrupted run — same artifact, same
+schedule, so it is a real fresh-vs-resume decision rather than the §4 stale trap.
+
 **▶ §2n IS CLOSED (2026-07-31) — bridges discharged, §B tied, scalar chain DROPPED (−852 lines).**
 Gates: build **3,910** green · `verified_mlir/` 0 lines of diff after a real re-render ·
 `regen_verified_mlir.sh check` 67/one-writer · audit **1506/1506** · parity smoke `REF RUNS ✓`.
@@ -79,7 +87,8 @@ renderer**: `lake build Codegen` does NOT build `LeanMlir/Proofs/Codegen/*.lean`
 roots), so a green build + empty artifact diff after editing a renderer can be **vacuous** — the
 `#eval` writers never ran. Force them with `lake env lean` on the render file.
 ⚠ Two things ConvNeXt still owes, unchanged by any of this: its **82.75% is VOID** (80-epoch re-run
-≈ 1h56m) and §2h-quater's **1.68×** DP ratio is not re-measured. Below is the §2n history.
+≈ 1h56m) and §2h-quater's **1.68×** DP ratio is not re-measured. **Both are §2o Part B**, with the
+epoch-12 checkpoint decision written up there. Below is the §2n history.
 
 **▶ §2n STEP 1 (2026-07-31) — the FloatBridges are discharged.** The channel-LN net now has a whole-net float story in both directions
 (`convnextCh_floatBridges` / `convnextCh_grad_floatBridges`), tied to the committed
@@ -254,7 +263,7 @@ is *not* done on each of the four large nets, ordered by what would bite first.
    | **ResNet-34** *(re-run 2026-07-31 at the PAPER net — §2l)* | **90.06%** | 90.06% | **1h03m** |
    | **EfficientNet-B0** | **88.20%** | 88.46% | 1h34m |
    | **MobileNetV2** | **86.73%** | 86.96% | 1h25m |
-   | **ConvNeXt-T** | **82.75%** | 82.98% | 1h56m |
+   | **ConvNeXt-T** ⚠ **VOID — §2m changed the function; re-run is §2o Part B** | ~~82.75%~~ | ~~82.98%~~ | ~~1h56m~~ |
    | **ViT-Tiny** *(2026-07-30)* | **71.31%** | 71.62% | **58m11s** |
 
    **All five nets now have an 80-epoch run on their certified bytes.** ViT was added 2026-07-30
@@ -3826,6 +3835,119 @@ ships.
   see the memory note); budget for it when the sweep touches it.
 * A deleted `noncomputable def` that something references fails at `lake build`, loudly — but a
   stale **docstring** does not, and this section's own dependency table is mostly docstrings.
+
+---
+
+### 2o. ▶ NEXT SESSION — the channel-LN BACKWARD capstone, then ConvNeXt's 80-epoch re-run
+
+Two independent pieces of work, scoped 2026-07-31 by measurement. **Do them in the order below**:
+Part B is a ~2-hour GPU run and Part A is CPU proof work, so **start the run first and prove while
+it burns**. They do not touch the same files.
+
+---
+
+#### ▶ Part A — the backward capstone the §2n drop left uncovered
+
+**The measured state after §2n.** `regen`-level and math-level coverage of the shipped channel-LN
+net is complete; the `den`-level backward is empty:
+
+| shipped (channel-LN) net | `den`-level coverage |
+|---|---|
+| **forward** | ✅ `chanLNGraph_faithful` → `cnxBlockChGraphW_faithful` → `cnxStageChGraphK_den` → `cnxDownChGraphW_faithful` → `convNextFwdGraphTCh_faithful` (all five, audited as of §2n) |
+| **backward** | ❌ **nothing, at any level** |
+
+⚠ **This is wider than the §2n commit message says.** That message says "the channel-LN *downsample*
+has no graph-side backward capstone". Measured afterwards: the two capstones that SURVIVED in
+`ConvNeXtBackB0` (`cnxBlockBodyBackGraph_faithful`, `cnxResidBlockBackGraph_faithful`) are over
+`convNextBlockBody` — **the ch9 representative's SCALAR LN** — and `ConvNeXtChainClose` is scalar-LN
+too. The only `den`-level declarations touching `chanLNTensor3` anywhere are the five FORWARD graph
+theorems plus `den_reassocS`. So the correct statement is **the channel-LN net has no `den`-level
+backward capstone at all**. The drop did not cause that; it removed the scalar capstone that was
+making the column look populated.
+
+**The missing keystone is ONE definition + ONE theorem.** §2m built `chanLNGraph` +
+`chanLNGraph_faithful` (forward); its backward peer was never built. Everything above it — block,
+downsample — is assembly on top, exactly as `ConvNeXtBackB0` assembles the scalar ones.
+
+**Every piece it needs already exists**, which is why this is small:
+
+| piece | where | note |
+|---|---|---|
+| `lnRowBack_faithful` | `StableHLO.lean:2250` | `rfl`. Denotes `rowLNBackFlat m n ε γ x dy = Mat.flatten (fun i => bn_grad_input n ε γ (unflatten x i) (unflatten dy i))` — which is **literally `rowLNVecFlatBack`'s shape**, modulo folding `diagBack γ` in |
+| `transposeF_faithful`, `rowScaleF_faithful` | `StableHLO.lean` | the other three ops of the emitted subtree |
+| `den_reassocS` / `den_unassocS` | `ConvNeXtChannelLN.lean` | the `▸`-transport bridge (§2m's seam) |
+| `chanLNTensor3Back_eq_chanLN_vjp` | `ConvNeXtBackCertifiedTie.lean` | §B, landed 2026-07-31 — the certified target to chain onto |
+
+**The recipe.** Mirror `chanLNGraph_faithful`, whose whole proof is six `rw`s and an `rfl`:
+
+1. `chanLNBackGraph` — the subtree `ConvNeXtRender.lnBackSite` already emits: `transposeF(reassoc x)`,
+   `transposeF(reassoc cot)`, `rowScaleF γ`, `lnRowBack "%one" … 1`, `transposeF`, `unassoc`;
+2. a `rowLN_affine_eq` peer for the backward — `rowLNBackFlat s c ε 1 X (rowScaleFlat s c γ dy)
+   = rowLNVecFlatBack s c ε γ X dy` (per row: `rowScaleFlat` is `layerScale γ` = `diagBack γ`, so
+   this is the same fold `rowLN_affine_eq` does forward);
+3. `chanLNBackGraph_faithful : den (chanLNBackGraph …) = chanLNTensor3Back c h w ε γ x (den e)`;
+4. **then chain through §B** so the public statement lands on `(chanLNTensor3_has_vjp …).backward`
+   rather than on the hand-composed chain — that is the whole point of having tied it;
+5. the block + downsample Ch capstones in `ConvNeXtBackB0`, restoring what the drop removed at the
+   LN the net actually uses. `ConvNeXtBackB0` already imports `ConvNeXtFullT`.
+
+**Gates:** `lake build Proofs Certs Codegen` green (3,910 today) · `verified_mlir/` 0 lines of diff
+(this adds proof, emits nothing) · `#print axioms` 3-axiom on each new theorem · **add them to
+`AuditAxioms`** — §2n's own lesson was that §2m's five forward graph theorems sat unaudited for a
+week because nobody diffed audit coverage across a swap.
+
+---
+
+#### ▶ Part B — the 80-epoch re-run ConvNeXt owes
+
+**Why:** §2m changed the function at 21 of 22 LN sites, so the **82.75%** in §0b's table is VOID —
+it belongs to a net the repo no longer ships. The other four rows are clean 80-epoch runs on their
+certified bytes; ConvNeXt needs to rejoin them.
+
+⚠ **THERE IS A LIVE CHECKPOINT AT EPOCH 12 RIGHT NOW, and it is not stale junk — read this first.**
+
+```
+.lake/build/convnext_adam_ckpt_xla.bin        333,915,384 B   Jul 31 17:54
+.lake/build/convnext_adam_ckpt_xla.bin.epoch  = 12
+runs/convnext_chln_smoke_jul31.log            Epoch 12/80: loss=1.865542 lr=0.000967
+                                              epoch 12: val_acc = 1683/3925 = 42.878981%
+```
+
+This is §2m's channel-LN run, **interrupted at epoch 12** — same artifact, same 80-epoch cosine
+schedule (the `lr=0.000967` is consistent), params + Adam m/v all in the file. So it is a genuine
+choice, not the §4 stale-checkpoint trap:
+
+* **Fresh (recommended)** — move it aside, run all 80. Comparable with the other four rows, which
+  are uninterrupted. ~1h56m.
+* **Resume** — ~68 epochs, ~1h39m. Defensible (same bytes, same schedule) but the table does not
+  record "resumed", and nobody has checked whether the data-order seed depends on run start. If you
+  take it, **say so in the log line**.
+
+Either way, `cat .lake/build/convnext_adam_ckpt_xla.bin.epoch` BEFORE launching. The neighbouring
+`*.prechln-jul31` marker holds **80** — restore that by accident and the run is a silent no-op,
+which is exactly §4's trap and it has already bitten three nets once.
+
+```bash
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so   # if older than pjrt_ffi.c
+lake build convnext-verified-adam-xla
+mv .lake/build/convnext_adam_ckpt_xla.bin{,.epoch} /tmp/           # the FRESH option
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam-xla data \
+  2>&1 | tee runs/convnext_chln_80ep_<date>.log
+```
+
+**What to record when it lands:** final (epoch 80) and best val, wall clock, `rc=0`, and that the
+epoch marker really reads 80 (not a resumed no-op). Then update **§0b's five-net table** — replace
+`ConvNeXt-T | 82.75% | 82.98% | 1h56m` with the new row and drop the VOID note in §0/§2m/§2n.
+Expect the accuracy to move: the net genuinely changed. ConvNeXt was the lowest of the four CNNs
+and the §0b reading was *overfitting* (~28M params on 9,469 images, curve flat from epoch 40); the
+channel LN is a better-conditioned normaliser, so up is plausible, but **do not predict a number in
+the doc — record the measured one**.
+
+**Companion, same session, ~10 min:** §2h-quater's **1.68×** two-GPU scaling ratio was measured on
+the pre-flip artifact and is NOT re-measured. `lake build convnext-dp-check && shard-check convnext`
+still pass on the new bytes (§2m ran both), so only the RATIO is owed:
+`scripts/marginal_epoch.sh` with **`LEAN_MLIR_SKIP_EVAL=1` on BOTH sides** (eval runs
+single-replica and is not part of the ratio — §2h-quater's own footnote).
 
 ---
 
