@@ -1466,6 +1466,20 @@ lean_exe «fwd-tie» where
   root := `tests.TestFwdTie
   moreLinkArgs := xlaLink
 
+/-- §2m ConvNeXt step 1: can the existing ops spell a **channel** LayerNorm?
+
+    ConvNeXt's render normalises with `.bnF` (`bnForward` over the whole `C·H·W` map, scalar γ/β)
+    where the reference is `channel_layer_norm` (`H·W` statistics, each over `C`, per-channel
+    affine) — 21 of its 22 sites are on the wrong axis (§2m). Route A says the fix needs **no new
+    op**: channel-LN is ViT's row-LN under a transpose. This settles that on device before 21 sites
+    are restructured around it, and it carries its own control — the incumbent `.bnF` chain must
+    NOT match, or gate 2 is measuring something both paths satisfy.
+
+        lake build channel-ln && HIP_VISIBLE_DEVICES=0 .lake/build/bin/channel-ln -/
+lean_exe «channel-ln» where
+  root := `tests.TestChannelLN
+  moreLinkArgs := xlaLink
+
 /-- §2l step 1: does the emitter spell a **1×1 strided** conv, and does it compute the right one?
 
     The paper's ResNet-34 option-B shortcut is a 1×1 stride-2 projection where `downFwdB` builds a

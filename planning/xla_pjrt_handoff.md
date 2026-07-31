@@ -2923,24 +2923,139 @@ Count the reference, do not enumerate the architecture from memory.
 GELU"* while the deviation lives only in codegen docstrings (`VerifiedSpec.lean:66` "scalar-LN",
 `StableHLO.lean:2835` "Scalar LN (`layerNormForward = bnForward`)").
 
-**▶ What the survey found, and it changes the estimate.** Two things are already right:
+**⛔⛔ THE SURVEY'S CENTRAL CLAIM IS REFUTED — 2026-07-31, and it doubles the job.** The bullet
+below said *"the normalization AXIS is correct"*. **It is not.** The claim came from comparing the
+literal `across dimensions = [1]` in the artifact against `jnp.mean(x, axis=1)` in the reference —
+but **the artifact's tensor is rank-2 `[B, C·H·W]` and the reference's is rank-4 NCHW.** Same
+literal, different function. This is §4's own documented trap — *"a BN reduce-dim census is only
+valid WITHIN ONE TENSOR LAYOUT"* — hit a second time, one net over from where it was written.
 
-* **the normalization AXIS is correct.** The reference is `channel_layer_norm`, `jnp.mean(x,
-  axis=1)` over NCHW; the verified artifact emits **44 reduces `across dimensions = [1]`** = 22
-  sites × (mean, var), also over channels. This was the thing that would have made it expensive,
-  and it is not wrong.
+Measured, from the committed `convnext_fwd.mlir` and `generated_convnext_tiny_imagenet.py`:
+
+| | reduces over | statistics per example | affine |
+|---|---|---|---|
+| **the render** (`.bnF` ⇒ `bnForward`) | the **whole C·H·W map** | **1** | scalar γ, β |
+| **the reference** (`channel_layer_norm`) | **C only**, per (h,w) | **H·W** | per-channel γ,β `[C]` |
+
+`bnForward n ε γ β x = fun i => γ * bnXhat n ε x i + β` over the whole `Vec n` — one mean and one
+variance for all 301,056 values of a stage-1 site, where ConvNeXt wants 3,136 of them, one per
+spatial position over 96 channels. **21 of the 22 sites are on the wrong axis.** The 22nd is the
+**head LN, and it is correct**: it runs after GAP on a flat `[768]`, where there is no spatial
+extent left, so reducing "everything" *is* reducing over channels. (Site census from the artifact:
+flat lengths 768×1, 37632×3, 75264×10, 150528×4, 301056×4.)
+
+**▶ The consequence for the plan, and it is the sharp bit.** §2m scoped this as *"the scalar affine
+is the whole gap"* — and doing only that would make the parameter count match the reference
+**exactly**, at 28,587,592, **while the function stayed wrong.** The count is what the audit checks.
+A net that matches its reference's parameter count and computes a different function is a worse
+outcome than the honest deviation we have now, because the one cheap signal that something is off
+would go green. **Whatever is done here, do not land the affine alone.**
+
+*The original survey bullet follows, corrected:*
+
+* ~~the normalization AXIS is correct~~ ⛔ **the axis is WRONG on 21 of 22 sites** (above). The
+  reference is `channel_layer_norm`, `jnp.mean(x, axis=1)` over NCHW; the artifact reduces over the
+  flattened feature map.
 * **per-channel LN already exists in the kit and SHIPS** — ViT does `lnRowF` (pure normalize) →
   `rowScaleF` (per-channel γ) → `rowBiasF` (per-channel β), with `veclnGammaGrad`/`veclnGammaSgd`
   on the backward and `[192]` vector params. So this is not a new capability, it is a capability
   ConvNeXt does not use.
 
-**What is actually needed:** ViT's per-channel ops are shaped for a ROW layout `(m, n)`; ConvNeXt
-needs the same affine over `[B,C,H,W]` broadcasting on axis 1 — which is exactly what the BN
-family's per-channel γ/β already do. So the work is one op family (forward, input-VJP, γ-grad,
-β-grad) assembled from two existing pieces, at §4's ten-sites-per-op cost, plus the proof-side
-denotation. **Closer to §2l than to a new architecture**, but not free, and it is proof work rather
-than re-instantiation because `layerNormForward = bnForward` holds *definitionally* only for the
-scalar affine.
+**What is actually needed — RESCOPED 2026-07-31 after the refutation above.** Both the reduction
+axis and the affine have to change, so this is no longer "assemble one op family from two existing
+pieces". Two routes, and the choice is a real one:
+
+**Route A — transpose, and reuse ViT's row-LN family unchanged.** ConvNeXt's channel-LN *is* ViT's
+row-LN under an NCHW→NHWC transpose: view one example as `[C, H·W]`, transpose to `[H·W, C]`, and
+each row is then a spatial position with `C` features — exactly what `rowLNFlat m n ε γ β v =
+flatten (fun i => bnForward n ε γ β (unflatten v i))` computes. **Every op this needs already
+exists and is proven**: `transposeF {m n} : SHlo (m*n) → SHlo (n*m)` (den `Mat.flatten ∘
+Mat.transpose ∘ Mat.unflatten`), `lnRowF` at γ=1/β=0, `rowScaleF (γ : Vec n)`, `rowBiasF
+(β : Vec n)`, `lnRowBack`, `veclnGammaGrad`. **No new `SHlo` op, so §4's ten-sites cost never
+arises.** What it costs instead: restructuring 21 sites in both directions, the proof-side
+denotation (`convnextForward`'s LN is `bnForward` today), and **2 transposes per site per
+direction** on tensors up to 301,056 elements — a throughput question that must be measured, not
+assumed.
+
+**Route B — a new rank-4-aware channel-LN family** (forward, input-VJP, γ-grad, β-grad) reducing
+axis 1 of `[B,C,H,W]` with a per-channel affine. No transposes, so it is the faster graph; but it
+is four new ops at §4's ten sites each, plus their `den`, faithfulness theorems and parse cases.
+
+**Recommendation: A first.** It is strictly less *proof* work — it reuses ops whose VJP theorems
+are already discharged and shipping in ViT — and this repo trades throughput for provenance
+everywhere else. Measure the transposes before committing; fall back to B only if they cost enough
+to matter.
+
+#### ✅ ROUTE A STEP 1 IS DONE — `lake build channel-ln`, and it needs NO new op in EITHER direction
+
+The §2l-shaped check, run before touching any of the 21 sites: settle the primitive on device
+first. `tests/TestChannelLN.lean` renders the composition at `B 2, C 4, S 6` and drives it against
+the closed form recomputed from the inputs — a reference implementation, not a second render.
+
+| gate | result |
+|---|---|
+| forward: `transposeF ∘ lnRowF ∘ rowScaleF ∘ rowBiasF ∘ transposeF` vs closed-form channel-LN | **rel 0.000000** |
+| ⚠ **CONTROL** — the incumbent `.bnF` vs the same closed form | **rel 0.821** ✅ fires |
+| backward `dx` = `transposeF ∘ lnRowBack ∘ rowScaleF ∘ transposeF` | **rel 0.000000** |
+| backward `dγ` = `veclnGammaGrad` | **rel 0.000000** |
+| backward `dβ` = `rowDenseBiasGrad` | **rel 0.000000** |
+
+**The backward is the half that decided it.** A correct forward would still have left Route A
+needing new ops if the γ/β gradients or the input VJP had no row-layout peer. They do, and all
+three are generic in their dims — ViT merely instantiates them at 197×192. `rowDenseBiasGrad`
+even contracts the **batch** as well as the rows (`dims = [0,1]`), which is what a shared param
+gradient needs.
+
+**The control is the load-bearing gate**, and it does double duty: it says the probe is measuring
+the axis (not something both paths satisfy), and — at **rel 0.82** — it is an independent
+measurement that the deviation is real and large, from the op level rather than from reading the
+artifact.
+
+**▶ What is left, and it is all restructuring rather than op-kit work:** the 21 sites in
+`ConvNeXtRender` in both directions (the head LN at flat 768 stays as it is — it is already
+correct); the proof-side denotation (`convnextForward`'s LN is `bnForward` today, and
+`layerNormForward = bnForward` stops holding); `VLayer.convNextBlock` → an NB peer carrying
+`γ,β : [c]` instead of two rank-0 scalars; `ConvNeXtLayout.specs`; then re-render, tie, the DP and
+shard gates, and an 80-epoch re-run — ConvNeXt's **82.75%** does NOT survive this one, unlike the
+conv-bias drops, because the function genuinely changes.
+
+#### ✅ AND THE TRANSPOSES ARE FREE — measured 2026-07-31, `channel-ln --bench`
+
+The one number that could still have sent this to Route B. Every LN shape ConvNeXt-T actually has,
+**at its real site count**, so nothing is extrapolated — 4×(96,3136), 4×(192,784), 10×(384,196),
+3×(768,49), forward, B=32, median of 12 samples:
+
+| (C, S) | sites | Route A | `.bnF` | Δ |
+|---|---|---|---|---|
+| (96, 3136) | 4 | 8.30 ms | 8.35 ms | **−0.05** |
+| (192, 784) | 4 | 4.10 | 3.95 | +0.15 |
+| (384, 196) | 10 | 2.55 | 2.65 | −0.10 |
+| (768, 49) | 3 | 1.15 | 1.15 | 0.00 |
+| **whole-net forward LN** | **21** | **16.10 ms** | **16.10 ms** | **0.00** |
+
+**Δ = 0.0 ms on 16.1 ms of LN, against a ~286 ms step.** The per-stage deltas are ±0.15 ms and
+**signed in both directions**, which is the signature of noise rather than of a cost — the same
+spread-not-magnitude reasoning §2f-bis used on the gradient gate. XLA folds a transpose into the
+consumer's layout assignment rather than materialising it, which is the expected behaviour and is
+now measured rather than hoped for. **Route B's only advantage over A was throughput, and it is
+zero.**
+
+⚠ Three caveats, none of which move the conclusion: `.bnF` is a *proxy* for Route B (same
+reduce→normalize→affine shape, no transpose) because Route B does not exist to be timed; the sites
+are chained back-to-back here, so no transpose can fuse into a conv consumer — an **upper** bound
+on the delta, and the bound is already zero; and this is one box, one run each.
+
+⚠ **A resolution trap this hit first, worth keeping.** The first pass timed ONE invoke per sample
+with `IO.monoMsNow` — integer milliseconds — and the stage totals were 1-9 ms, so the tick was
+comparable to the quantity being measured. It reported "A is 1 ms faster", which is one tick and
+means nothing. Fixed by timing 20 invokes per sample (0.05 ms effective resolution). **§2j's rule
+in a new place: check that your instrument can resolve the thing you are measuring before reading
+the answer off it.**
+
+**Route C, and it is legitimate: fix the DOC, not the net.** Characterise the deviation precisely
+in `convnextVerified`'s blurb — the way §2l says R34's should have said "3×3 projection" — and
+leave the net alone. That is what §2k's whole finding was *about*: the sin was the blurb claiming
+"Real ResNet-34", not the deviation existing.
 
 **Blast radius:** ConvNeXt's **82.75%** run, the §1a tie (176/180), §2f-bis's AdamW tie +
 conditioning/spread findings, `convnext-dp-check`, `convnext-shard-check`, 5 artifacts. ⚠ And
