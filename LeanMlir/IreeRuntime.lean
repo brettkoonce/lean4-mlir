@@ -320,12 +320,20 @@ end ResNet34Layout
 
 namespace MobileNetV2Layout
 /-- Chapter-6 **MobileNetV2** params (IMAGENETTE 3×224×224 — paper-native ImageNet
-    resolution, full-paper downsampling `[t,c,n,s]`): stem {W,b,γ,β} (3×3 stride-2 conv
-    3→32), then 17 inverted-residual blocks — each expand 1×1 {W,b,γ,β}, depthwise 3×3
-    {W,b,γ,β} (a `[mid,1,3,3]` kernel, feature_group_count = mid; stride-2 for the
-    downsampling blocks), project 1×1 {W,b,γ,β} — then the head 1×1 conv
-    {W,b,γ,β} (320→1280, the MNv2 "features" layer: conv→BN→relu6 before GAP, so the
+    resolution, full-paper downsampling `[t,c,n,s]`): stem {W,γ,β} (3×3 stride-2 conv
+    3→32), then 17 inverted-residual blocks — each expand 1×1 {W,γ,β}, depthwise 3×3
+    {W,γ,β} (a `[mid,1,3,3]` kernel, feature_group_count = mid; stride-2 for the
+    downsampling blocks), project 1×1 {W,γ,β} — then the head 1×1 conv
+    {W,γ,β} (320→1280, the MNv2 "features" layer: conv→BN→relu6 before GAP, so the
     pooled tensor isn't the constant β of an instance-normed BN) and dense {W,b}.
+
+    **158 params** (§2m: no conv biases). Every conv here is BN-followed and BN removes a bias,
+    so the 52 this layout used to carry were parameters that could not affect the output — and
+    they were the whole of the +17,056 gap to the JAX reference (3,521,928 vs 3,504,872 at
+    K = 1000). Measured before the change, not argued: `conv-bias-zero --tie` puts every
+    forward-only output of the AdamW step BIT-EXACT (`%loss` 3/3, all 34,112 BN running stats)
+    with differences confined to the backward at 2.5e-7, and `--fwd`/`--fwd --eval` tie both
+    forward artifacts BIT-EXACT on all 320 logits.
     Per-channel BN ⇒ γ/β are **rank-1 `[c]`**. Spatial
     224→112(stem)→56→28→14→7 — the real MobileNetV2 /32
     flow. The `(dims, initKind)` order MUST match `@mobilenetv2_train_step`'s signature
@@ -334,9 +342,9 @@ namespace MobileNetV2Layout
     effect). `initKind`: 0 = He(fan-in) (depthwise fan-in = 1·3·3 = 9), 1 = ones (γ),
     2 = zeros. -/
 private def irBlk (ic mid oc : Nat) : Array (Array Nat × Nat) :=
-  (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++  -- expand 1×1 (skip if t=1, mid=ic)
-  #[(#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),     -- depthwise 3×3 (stride 1 or 2)
-    (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]       -- project 1×1
+  (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[]) ++  -- expand 1×1 (skip if t=1, mid=ic)
+  #[(#[mid,1,3,3],0),(#[mid],1),(#[mid],2),                -- depthwise 3×3 (stride 1 or 2)
+    (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]                 -- project 1×1
 /-- (ic, mid, oc) per block — MUST match tests/TestMobilenetV2*.lean `blocks`. Full paper net (17). -/
 private def blocks : Array (Nat × Nat × Nat) :=
   #[(32,32,16),
@@ -348,9 +356,9 @@ private def blocks : Array (Nat × Nat × Nat) :=
     (160,960,320)]
 /-- `(dims, initKind)` for every param, in func-arg order. -/
 def specs : Array (Array Nat × Nat) := Id.run do
-  let mut a : Array (Array Nat × Nat) := #[(#[32,3,3,3],0),(#[32],2),(#[32],1),(#[32],2)]  -- stem
+  let mut a : Array (Array Nat × Nat) := #[(#[32,3,3,3],0),(#[32],1),(#[32],2)]             -- stem
   for (ic, mid, oc) in blocks do a := a ++ irBlk ic mid oc                                 -- 17 IR blocks
-  a := a ++ #[(#[1280,320,1,1],0),(#[1280],2),(#[1280],1),(#[1280],2)]                     -- head 1×1 conv→BN→relu6
+  a := a ++ #[(#[1280,320,1,1],0),(#[1280],1),(#[1280],2)]                                 -- head 1×1 conv→BN→relu6
   a := a ++ #[(#[1280,10],0),(#[10],2)]                                                    -- dense
   return a
 def paramShapes : Array (Array Nat) := specs.map (·.1)

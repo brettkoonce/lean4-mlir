@@ -9,11 +9,11 @@ depthwise) on IMAGENETTE 3×224×224 (paper-native resolution):
   t=1 b1 32→16 NO-expand, then 16→24→32→64→96→160→320; 4 stride-2 depthwise downsamples
   112→56→28→14→7) → head 1×1 conv (320→1280) → BN → relu6 → GAP → dense 1280→10 + softmax-CE.
 
-The model is `mobilenetv2Verified` (in `LeanMlir.VerifiedNets`); its derived 210-param layout
+The model is `mobilenetv2Verified` (in `LeanMlir.VerifiedNets`); its derived 158-param layout
 (canonical torchvision t=1 no-expand b1) is kernel-`#guard`ed against the audited
 `MobileNetV2Layout`. Trains on `verified_mlir/mobilenetv2_train_step.mlir` — the PROOF-TIED
 `mnv2TrainStepFaithfulVPaper` render (`MobileNetV2Render.lean`): every line is `pretty` of a
-verified `SHlo` node, the whole 210-param train step is `render(provenGraph)`, every param
+verified `SHlo` node, the whole 158-param train step is `render(provenGraph)`, every param
 `den = certified`, and the whole net is den-tied through the real forward + loss-driven backward
 (`Proofs.Mnv2TiePoC.mnv2_net_tied_certified`, §1a tie) — plus `mobilenetv2_fwd.mlir` for eval,
 via the packed-params `VerifiedNet.train` driver (per-channel BN, He-init, mean-loss SGD lr=0.3).

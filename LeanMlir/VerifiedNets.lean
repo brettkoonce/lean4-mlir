@@ -389,15 +389,15 @@ def mobilenetv2Verified : VerifiedNetSpec where
   nClasses := 10
   data     := .imagenette
   layers   := [
-    .convBn 3 32 3 2,               -- stem
-    .invertedResidual 32  32  16 1,
-    .invertedResidual 16  96  24 2, .invertedResidual 24 144  24 1,
-    .invertedResidual 24 144  32 2, .invertedResidual 32 192  32 1, .invertedResidual 32 192  32 1,
-    .invertedResidual 32 192  64 2, .invertedResidual 64 384  64 1, .invertedResidual 64 384  64 1, .invertedResidual 64 384  64 1,
-    .invertedResidual 64 384  96 1, .invertedResidual 96 576  96 1, .invertedResidual 96 576  96 1,
-    .invertedResidual 96 576 160 2, .invertedResidual 160 960 160 1, .invertedResidual 160 960 160 1,
-    .invertedResidual 160 960 320 1,
-    .convBn 320 1280 1 1,           -- head
+    .convBnNB 3 32 3 2,             -- stem (no conv bias — §2m)
+    .invertedResidualNB 32  32  16 1,
+    .invertedResidualNB 16  96  24 2, .invertedResidualNB 24 144  24 1,
+    .invertedResidualNB 24 144  32 2, .invertedResidualNB 32 192  32 1, .invertedResidualNB 32 192  32 1,
+    .invertedResidualNB 32 192  64 2, .invertedResidualNB 64 384  64 1, .invertedResidualNB 64 384  64 1, .invertedResidualNB 64 384  64 1,
+    .invertedResidualNB 64 384  96 1, .invertedResidualNB 96 576  96 1, .invertedResidualNB 96 576  96 1,
+    .invertedResidualNB 96 576 160 2, .invertedResidualNB 160 960 160 1, .invertedResidualNB 160 960 160 1,
+    .invertedResidualNB 160 960 320 1,
+    .convBnNB 320 1280 1 1,         -- head (no conv bias — §2m)
     .globalAvgPool,
     .dense 1280 10 ]
   blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"

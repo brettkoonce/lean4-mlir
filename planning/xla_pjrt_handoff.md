@@ -3072,9 +3072,72 @@ AdamW/DP steps at **158** params (581 outputs), reduced 62, enet at **213** (740
 in its strong form still holds: `git diff verified_mlir/` is **0 lines** across all 67 artifacts,
 and `lake build Proofs Certs Codegen` is green at 3,908 jobs.
 
-**▶ The tail is unchanged and now unblocked:** the `VLayer` spec (`invertedResidual`, plus
-`.convBnNB` for stem and head) → `MobileNetV2Layout.specs` → flip the default → re-render → tie →
-smoke. ⚠ Delete `.lake/build/mobilenetv2_adam_ckpt{,_xla}.bin{,.epoch}` before the smoke (§4).
+#### ✅ AND THE mnv2 SWAP IS DONE — 2026-07-31. **158 params, 3,504,872 at K = 1000.**
+
+The tail ran as scoped, in this order. **The param count now matches the JAX reference exactly**
+(`jax/.lake/build/generated_mobilenet_v2_imagenet.py` header: `Parameters: 3504872`), which is what
+the whole §2m detour was for. At the shipped K = 10 it is 158 tensors / 2,236,682 floats.
+
+**▶ The gate the first attempt did not have, built FIRST and run BEFORE the swap.** `--tie` gates
+the AdamW *train step* and nothing else, which is precisely how a 160-param forward shipped past a
+green tie. `conv-bias-zero --fwd <candidate> [--eval]` now feeds a candidate forward **the same
+bias-free blob the driver will build**, so an arity or ordering skew is a hard failure in the gate
+rather than at run time:
+
+| gate | result |
+|---|---|
+| `--fwd` (`@mobilenetv2_fwd`) | **BIT-EXACT 320/320 logits**, 158 params vs A's 210 |
+| `--fwd --eval` (`@mobilenetv2_fwd_eval`) | **BIT-EXACT 320/320**, + 52 layers of frozen stats |
+| **negative control** — candidate = the committed 210-param render | `Execution supplied 263 buffers but compiled program expected 315`, rc=1 |
+
+The control is the point: it fails with the *same PJRT message* that killed the first swap, so the
+gate demonstrably catches that bug. Bit-exact is the right bar here because `mkParam` gives conv
+biases their real init (kind 2, **zeros**) and `x + 0.0` is exact — A and B differ only in whether
+the zero arrives as an argument or a constant. ⚠ Do **not** "strengthen" it with non-zero biases in
+`--eval`: the frozen `μ` was estimated on whatever net produced it, so `(x+b) − μ` with a biased
+`μ` is not `x − μ`, and a correct render would fail.
+
+**The train-step tie, re-run:** A (210, committed) vs B (158) over 6,744,161 shared floats —
+**every forward-only output BIT-EXACT** (`%loss` 3/3, all 34,112 BN running stats), differences
+confined to the backward at max **2.5e-7**, against an A-vs-A floor bit-exact on all 6,795,329
+outputs. 6,726,967 shared floats bit-exact.
+
+**The `#guard` earned its keep again.** `mobilenetv2Verified.toSpecs == MobileNetV2Layout.specs`
+FIRED when only one of the two routes was changed (verified deliberately: revert the layout's stem
+and `lake build` fails at `VerifiedNets.lean:418`), so the vocabulary had to grow rather than the
+hand-list being edited to match. `VLayer` gained **`invertedResidualNB`** beside `convBnNB`, for
+`convBnNB`'s reason — `invertedResidual` should still be sayable by a net whose blocks do ship
+biases.
+
+**One thing the R34 precedent predicted exactly:** `SpecVJP.denoteMobilenetPaper` pattern-matches
+the committed layer list, so it needed the NB spelling — the same one-line change `e9c2729` made to
+`denoteR34Full`. It fails loudly (`lake build`), which is the behaviour you want from a denotation
+that is deliberately drift-sensitive.
+
+**It trains on the swapped bytes** (`runs/mnv2_nobias_swap_jul31.log`, fresh checkpoint):
+val **30.93% → 43.77%** over 2 epochs, against the pre-swap XLA baseline's 26.7 → 38.0 (§2h) — same
+band, and §3's run-to-run spread is wider than the gap. The checkpoint is **26,840,184 B** =
+3 × 2,236,682 × 4, i.e. the bias-free size, which is its own confirmation that the driver and the
+graph agree. **And the eval forward runs** — the step that killed the first attempt.
+
+**Still owed on mnv2, and deliberately not done here:**
+* **the 80-epoch re-run.** `86.73%` was measured on the 210-param net. The forward is bit-exact at
+  `b = 0` and the two renders' forward-only outputs are bit-exact, so it should stand — but that is
+  an argument, and the *trained*-checkpoint ablation R34 ran (`--ablate`, which needs the biased
+  layout) was never run for mnv2 and now cannot be without reverting. Re-run before quoting; it is
+  1h25m.
+
+**The two multi-GPU gates were re-run on the re-rendered DP artifact and both hold**, at the new
+581-output arity: `mobilenetv2-dp-check` — forward **BIT-EXACT** (all 34,112 bnstat), `v`
+bit-exact 2,236,682/2,236,682, gradient norm-rel **6.0e-8** (was 8.7e-8 at 210 params);
+`shard-check mobilenetv2` — TEST **7.0e-8** against a built-in CONTROL of **0.953**, 1.4e7 apart.
+Nothing about the collective or the shard offsets moved with the layout, which is what you would
+expect and is now measured rather than assumed.
+
+**▶ enet is next, and it is cheaper than this was**: its arity was always right (one `enetSig`
+source, 213), and both defects it did have are fixed. What is left there is layout work — an
+`mbConvSENB`, `.convBnNB` stem/head, `EfficientNetLayout.specs`, flip, re-render, and the same four
+gates. ⚠ **SE's biases must survive**: those 1×1 convs are activation-followed, not BN-followed.
 
 **The lesson, and it is the thread's own:** the guards were real, fired, and pinned the WRONG HALF.
 Two arity routes agreeing was the check — and only one route was pinned, so the half that ships

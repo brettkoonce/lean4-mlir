@@ -417,7 +417,7 @@ set_option maxRecDepth 1000000 in
     `nClasses` outputs (=10 for the committed trainer). Every emitted line is `pretty` of a verified
     `SHlo` node. Strided stem 3×3/s2 (3→16, 224→112, NO maxpool), 6 inverted-residual blocks
     (b1/b3/b5/b6 stride-2 downsample, b2/b4 stride-1 skip), 1×1 conv-bn-relu6 head → GAP → dense. -/
-def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias : Bool := true) : String :=
+def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias : Bool := false) : String :=
   let go : StateM Nat String := do
     -- ═══ stem: 3×3/s2 conv (3→16, 224→112) → BN → relu6 (NO maxpool) ═══
     let zx   : Vec (3*224*224) := fun _ => 0
@@ -608,7 +608,7 @@ set_option maxRecDepth 4000000 in
     defect §2a found and fixed on ResNet-34, still live here until 2026-07-28. Accuracy measured
     through the old artifact (`runs/mobilenetv2_verified_crop_gpu0.log`, 86.89%) went through the
     wrong forward and needs re-running. -/
-def mnv2FwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := true) : String :=
+def mnv2FwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false) : String :=
   let F : MNV2Fwd := (mnv2FwdChain B nClasses .train epsStr convBias).run' 0
   "module @m {\n" ++
   s!"  func.func @mobilenetv2_fwd({mnv2FwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
@@ -627,7 +627,7 @@ set_option maxRecDepth 4000000 in
     whose returned batch μ/var the driver EMAs into exactly these slots. Being frozen-stat affine,
     this graph is the same in either BN world — which is why it can live beside the per-example
     chain: `bnPerChannelEvalF` performs no reduction, so there is no batch to be honest about. -/
-def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := true) : String :=
+def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false) : String :=
   let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias).run' 0
   "module @m {\n" ++
   s!"  func.func @mobilenetv2_fwd_eval({mnv2FwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
@@ -644,7 +644,7 @@ set_option maxRecDepth 4000000 in
     2 stage-first widenings) → 1×1 conv-bn-relu6 head (320→1280) → GAP → dense (1280→nClasses).
     Per-block prefixes are the block index (`1`..`17`), matching `irSig`/`irSigNoExp`. -/
 def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
-    (funcName : String := "mobilenetv2_paper_train_step") (convBias : Bool := true) : String :=
+    (funcName : String := "mobilenetv2_paper_train_step") (convBias : Bool := false) : String :=
   let go : StateM Nat String := do
     -- ═══ forward — the SAME chain `@mobilenetv2_fwd` renders, so the forward this differentiates
     --     and the forward the driver evals with are one graph by construction (§2a) ═══

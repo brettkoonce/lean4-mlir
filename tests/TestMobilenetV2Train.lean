@@ -5,7 +5,7 @@ import LeanMlir.Types
 **This file no longer writes `verified_mlir/mobilenetv2_train_step.mlir`.** Its only writer is the
 `#eval` in `LeanMlir/Proofs/Codegen/MobileNetV2Render.lean`:
 `mnv2TrainStepFaithfulVPaper 32 10 "1.0e-5" "0.3"` — `pretty(provenGraph)` at the **full paper
-[t,c,n,s] config**, 210 params. The bytes `mobilenetv2-verified` trains on ARE that render.
+[t,c,n,s] config**, 158 params (no conv biases — §2m). The bytes `mobilenetv2-verified` trains on ARE that render.
 
 Until 2026-07-28 this file *also* rendered that artifact, and the two writers did not even have the
 same **arity**: the emitter here was the **reduced 6-block** net (head 64→128, 84 in / 82 out)

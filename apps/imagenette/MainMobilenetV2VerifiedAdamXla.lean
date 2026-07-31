@@ -16,7 +16,7 @@ Two reasons it exists (handoff §2h):
 
 The risk that ViT's `miopenStatusUnknownError` blocker generalised was **measured, not assumed**:
 `@mobilenetv2_train_step` compiles in 3.0 s on XLA/PJRT and executes, A-vs-A gradient bit-exact
-2253738/2253738 (§2h). mnv2's depthwise weight gradients are EfficientNet's, which §2e-bis already
+2253738/2253738 (§2h, at the pre-§2m 210-param layout). mnv2's depthwise weight gradients are EfficientNet's, which §2e-bis already
 runs on XLA.
 
 **This does not move the verification tier** (§9).

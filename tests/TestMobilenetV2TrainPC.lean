@@ -20,7 +20,7 @@ away its proof-rendered-BN property: BN forward+backward become hand-emitted fla
 **The AdamW emitter that used to live here is RETIRED (§2f).** `verified_mlir/mobilenetv2_adam_train_step.mlir`
 is now written solely by `Proofs/Codegen/MobileNetV2RenderB.lean` as `pretty(provenGraph)`, licensed
 by a numeric tie against these very bytes (`mobilenetv2-adam-tie`: forward BIT-EXACT on all 52 BN
-layers' batch statistics, `%loss` bit-exact, gradient bit-exact, spread 0/210, over all 6,795,329
+layers' batch statistics, `%loss` bit-exact, gradient bit-exact, spread 0/210 (the pre-§2m layout), over all 6,795,329
 returned floats — and verified to fail on three perturbed renders). What remains here is the SGD
 render plus an `iree-compile` smoke that READS the committed AdamW bytes. Recover the retired
 emitter (`adamParams`, `adamConsts`, `adamCot`, `bnLayers`, `trainStepAdamSched` — the running-stats
@@ -28,7 +28,7 @@ BN passthrough layout included) from `git show 75a9f8e:tests/TestMobilenetV2Trai
 needed; do NOT repoint it at the artifact, since a second emitter that can write is exactly the
 last-writer-wins race §2a found.
 
-Full-paper MobileNetV2 (17 inverted-residual blocks, 210 param tensors / ~2.25M scalars) — the layout
+Full-paper MobileNetV2 (17 inverted-residual blocks, 158 param tensors / 2,236,682 scalars — 210/2,253,738 before §2m dropped the 52 conv biases) — the layout
 `mobilenetv2Verified.toSpecs` / `MobileNetV2Layout.specs` (#guard-locked) the verified-adam driver
 trains on (NOTE: `TestMobilenetV2Train.lean`, the committed SGD renderer, is still the reduced 6-block
 net — this PC/adam path is the full one).

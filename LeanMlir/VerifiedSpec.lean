@@ -58,6 +58,13 @@ inductive VLayer where
       conv→per-channel BN→relu6, depthwise 3×3→BN→relu6, project 1×1→BN (linear bottleneck),
       + residual when `stride=1 ∧ ic=oc`. Params `{W,b,γ,β}` ×3 (expand/depthwise/project). -/
   | invertedResidual (ic mid oc stride : Nat)
+  /-- MobileNetV2 inverted-residual block with **no conv biases** — `{W,γ,β}` ×3. Every conv in the
+      block is BN-followed, so a bias cannot reach the output (the `convBnNB` argument, three convs
+      at a time); the torchvision/JAX reference carries none, and ours carried 52 across the net
+      (§2m: the +17,056-param gap to the reference, closed exactly). Kept beside
+      `invertedResidual` rather than replacing it for `convBnNB`'s reason — a net whose blocks
+      genuinely ship biases should still be able to say so. -/
+  | invertedResidualNB (ic mid oc stride : Nat)
   /-- EfficientNet MBConv block (`ic→mid=t·ic→oc`, depthwise `k×k`, SE ratio `r`): expand 1×1
       (skipped when `mid=ic`, i.e. t=1) → BN → swish, depthwise k×k → BN → swish, squeeze-excite
       (`Ws₁[mid,r]`,`bs₁[r]`,`Ws₂[r,mid]`,`bs₂[mid]`, sigmoid gate), project 1×1 → BN. Params:
@@ -119,6 +126,10 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
     (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++
     #[(#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),
       (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]
+  | invertedResidualNB ic mid oc _ =>               -- as above, minus the three conv biases (§2m)
+    (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[]) ++
+    #[(#[mid,1,3,3],0),(#[mid],1),(#[mid],2),
+      (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
   | mbConvSE ic mid oc r k =>                        -- (expand if t≠1) | depthwise k×k | SE | project, +BN
     (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++
     #[(#[mid,1,k,k],0),(#[mid],2),(#[mid],1),(#[mid],2),

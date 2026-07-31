@@ -6,7 +6,7 @@ The mnv2 peer of `vit`/`enet-verified-adam`: the proof-rendered MobileNetV2 trai
 (`LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean → verified_mlir/mobilenetv2_adam_train_step.mlir`,
 `@mobilenetv2_adam_train_step`) — 17-block inverted-residual net with relu6 + per-channel batch-norm,
 with the gradients un-fused and handed to the proven `adamMNextF`/`adamVNextF`/`adamWParamF` triple —
-driven by the generic `VerifiedNet.trainAdamSched`: `[θ|m|v]` (210 params) packed as one blob +
+driven by the generic `VerifiedNet.trainAdamSched`: `[θ|m|v]` (158 params) packed as one blob +
 runtime `lr`/`bc₁`/`bc₂` scalars (cosine + warmup + per-step bias correction) through the unchanged
 FFI (`n_params = 3k`).
 

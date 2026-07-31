@@ -328,6 +328,105 @@ BN running stats {eS}/{nS'} bit-exact (max {dS * sc}e-9)"
   IO.println s!"  ✅ the candidate ties the committed render at rel {maxD / maxM} over \
 {total} shared floats ({exact} of them bit-exact), with {nS - shB.size} fewer parameters."
 
+/-- `--fwd <candidate> [--eval]`: **THE GATE THE FIRST SWAP ATTEMPT DID NOT HAVE.**
+
+    `--tie` above gates the AdamW *train step*, and that is the only thing it gates. The `_fwd` and
+    `_fwd_eval` artifacts come out of a DIFFERENT renderer (`MobileNetV2Render`, not `RenderB`), and
+    on 2026-07-31 that renderer dropped **50** of the 52 conv biases where the train step and the
+    layout dropped 52 — the stem and head were hardcoded outside the gate. The train-step tie came
+    back bit-exact, the audit was green, and the trainer then died at `f32 forward failed` because
+    the driver fed a 158-param layout to a 160-param eval graph. This mode closes that hole: it
+    feeds the candidate forward the SAME bias-free parameter blob the driver will build, so an
+    arity or ordering skew is a hard failure here rather than a run-time one later.
+
+    **The claim is BIT-EXACT, and the scope is deliberate.** `mkParam` gives every conv bias its
+    real init — kind 2, i.e. **zeros** — so A and B differ only in whether those zeros arrive as
+    arguments or as `stablehlo.constant dense<0.0>`, and `x + 0.0` is exact in IEEE. Anything other
+    than bit-exact means the candidate is reading its parameters differently, which is exactly the
+    failure being gated. What this does NOT test is a *trained* net's biases, which do drift off
+    zero (see `--ckpt`); that claim is `--ablate`'s, and for the train step it is the bit-exact
+    forward-only regions of `--tie`.
+
+    ⚠ **Do not "strengthen" this by feeding non-zero biases in `--eval` mode.** The frozen running
+    stats a real eval consumes were ESTIMATED on whatever net produced them, so `(x + b) − μ` with
+    a `μ` from a biased net is not `x − μ`. The bias-free render is consistent because the swap
+    retrains from scratch and re-estimates `μ` without biases; a non-zero-`b` comparison here would
+    fail for a correct render. -/
+private def fwdMode (net : VerifiedNet) (candidate : String) (isEval : Bool) : IO Unit := do
+  let bs := 32
+  let nS := net.specs.size
+  let cls := classifyAll net.specs
+  let fn := if isEval then s!"{net.slug}_fwd_eval" else s!"{net.slug}_fwd"
+  let ref := (← IO.getEnv "CBZ_REF").getD s!"verified_mlir/{fn}.mlir"
+  IO.println s!"§2l step B — the FORWARD tie (@{fn})"
+  IO.println s!"  A (committed, with conv biases) = {ref}"
+  IO.println s!"  B (candidate, no conv biases)   = {candidate}"
+  let mut θA : Array ByteArray := #[]
+  let mut θB : Array ByteArray := #[]
+  let mut shA : Array (Array Nat) := #[]
+  let mut shB : Array (Array Nat) := #[]
+  let mut sd := 1234
+  for i in [0:nS] do
+    let (dims, kind) := net.specs[i]!
+    let p ← mkParam sd dims kind
+    sd := sd + 1
+    θA := θA.push p; shA := shA.push dims
+    if cls[i]! != .convB then θB := θB.push p; shB := shB.push dims
+  if shB.size == nS then
+    throw (IO.userError "this layout has NO conv biases — nothing to drop, so the tie is vacuous. \
+Run it against the pre-swap layout (the point is to compare the two).")
+  -- eval consumes frozen per-channel stats after the params, μ then var per BN layer. var must be
+  -- POSITIVE (rsqrt) and must VARY — a constant would let a broadcast bug through unnoticed.
+  let mut statBuf : ByteArray := .empty
+  let mut statShapes : Array (Array Nat) := #[]
+  if isEval then
+    let mut stats : Array ByteArray := #[]
+    let mut ss := 5000
+    for c in net.bnChannels do
+      stats := stats.push (← F32.heInit ss.toUSize c.toUSize 0.30)
+      stats := stats.push (← F32.scaleShift (← F32.heInit (ss+1).toUSize c.toUSize 0.20) 1.0 1.0)
+      statShapes := statShapes ++ #[#[c], #[c]]
+      ss := ss + 2
+    statBuf := F32.concat stats
+  let bufA := F32.concat (#[F32.concat θA] ++ (if isEval then #[statBuf] else #[]))
+  let bufB := F32.concat (#[F32.concat θB] ++ (if isEval then #[statBuf] else #[]))
+  let shpA := packShapes (shA ++ statShapes)
+  let shpB := packShapes (shB ++ statShapes)
+  let nPB := (shB.map (fun d => d.foldl (· * ·) 1)).foldl (· + ·) 0
+  IO.println s!"  A: {nS} params / {net.nParams} floats     B: {shB.size} params / {nPB} floats\
+{if isEval then s!"   + {net.bnChannels.size} BN layers of frozen stats (both sides)" else ""}"
+  let x ← F32.heInit 987654 (bs * net.d0).toUSize 1.0
+  let xsh := net.xShape bs
+  let run (path tag : String) (buf shp : ByteArray) : IO ByteArray := do
+    let vmfb := s!".lake/build/cbz_fwd_{tag}.vmfb"
+    let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
+    for q in [vmfb, s!".lake/build/cbz_fwd_{tag}_{target}.vmfb"] do
+      if ← System.FilePath.pathExists q then IO.FS.removeFile q
+    let sess ← mkSession path vmfb
+    IreeSession.forwardF32 sess s!"m.{fn}" buf shp x xsh bs.toUSize net.nClasses.toUSize
+  let la ← run ref "a" bufA shpA
+  let lb ← run candidate "b" bufB shpB
+  let mut maxD := 0.0; let mut maxM := 0.0; let mut exact := 0; let mut nonFinite := 0
+  let n := bs * net.nClasses
+  for i in [0:n] do
+    let a := F32.read la i.toUSize
+    let b := F32.read lb i.toUSize
+    if !a.isFinite || !b.isFinite then nonFinite := nonFinite + 1
+    if a == b then exact := exact + 1
+    if (a-b).abs > maxD then maxD := (a-b).abs
+    if a.abs > maxM then maxM := a.abs
+  IO.println s!"  |logits|max = {maxM}   max abs diff = {maxD}   bit-exact {exact}/{n}"
+  if nonFinite > 0 then
+    throw (IO.userError s!"DEGENERATE: {nonFinite}/{n} non-finite logits — the tie proves nothing")
+  if maxM < 1e-6 then
+    throw (IO.userError s!"DEGENERATE: logits are all ~0 (|max| = {maxM}) — the tie proves nothing")
+  if exact != n then
+    IO.println s!"  ⛔ tie FAILED: only {exact}/{n} logits bit-exact (max abs {maxD}). The conv \
+biases are ZERO on both sides and `x + 0.0` is exact, so this is a wiring difference, not rounding."
+    throw (IO.userError "forward tie failed")
+  IO.println s!"  ✅ @{fn} is BIT-EXACT on all {n} logits with {nS - shB.size} fewer parameters — \
+the candidate reads the bias-free layout in the order the driver will hand it."
+
 def main (args : List String) : IO Unit := do
   let path := args.headD "verified_mlir/resnet34_adam_train_step.mlir"
   let net := match (← IO.getEnv "CBZ_NET").getD "resnet34" with
@@ -338,6 +437,7 @@ def main (args : List String) : IO Unit := do
   | "--ckpt" :: p :: _ => ckptMode net p; return
   | "--ablate" :: p :: _ => ablateMode net p; return
   | "--tie" :: p :: _ => tieMode net p; return
+  | "--fwd" :: p :: rest => fwdMode net p (rest.contains "--eval"); return
   | _ => pure ()
   let bs  := 32
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]

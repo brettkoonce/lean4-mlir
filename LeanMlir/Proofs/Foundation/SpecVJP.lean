@@ -538,16 +538,16 @@ rung E on top (`mobilenetv2FwdGraphPaper_faithful` composed with the tie). -/
 noncomputable def denoteMobilenetPaper (layers : List VLayer) (w : MNV2PaperWeights) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
-  | [.convBn 3 32 3 2,
-     .invertedResidual 32 32 16 1,
-     .invertedResidual 16 96 24 2, .invertedResidual 24 144 24 1,
-     .invertedResidual 24 144 32 2, .invertedResidual 32 192 32 1, .invertedResidual 32 192 32 1,
-     .invertedResidual 32 192 64 2, .invertedResidual 64 384 64 1, .invertedResidual 64 384 64 1,
-     .invertedResidual 64 384 64 1,
-     .invertedResidual 64 384 96 1, .invertedResidual 96 576 96 1, .invertedResidual 96 576 96 1,
-     .invertedResidual 96 576 160 2, .invertedResidual 160 960 160 1, .invertedResidual 160 960 160 1,
-     .invertedResidual 160 960 320 1,
-     .convBn 320 1280 1 1, .globalAvgPool, .dense 1280 10] =>
+  | [.convBnNB 3 32 3 2,
+     .invertedResidualNB 32 32 16 1,
+     .invertedResidualNB 16 96 24 2, .invertedResidualNB 24 144 24 1,
+     .invertedResidualNB 24 144 32 2, .invertedResidualNB 32 192 32 1, .invertedResidualNB 32 192 32 1,
+     .invertedResidualNB 32 192 64 2, .invertedResidualNB 64 384 64 1, .invertedResidualNB 64 384 64 1,
+     .invertedResidualNB 64 384 64 1,
+     .invertedResidualNB 64 384 96 1, .invertedResidualNB 96 576 96 1, .invertedResidualNB 96 576 96 1,
+     .invertedResidualNB 96 576 160 2, .invertedResidualNB 160 960 160 1, .invertedResidualNB 160 960 160 1,
+     .invertedResidualNB 160 960 320 1,
+     .convBnNB 320 1280 1 1, .globalAvgPool, .dense 1280 10] =>
       mobilenetv2ForwardPaper w
   | _ => fun _ => 0
 

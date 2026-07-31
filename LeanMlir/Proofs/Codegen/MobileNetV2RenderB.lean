@@ -537,7 +537,7 @@ set_option maxRecDepth 4000000 in
     downsamples, 10 identity skips, 2 stage-first widenings) → 1×1 conv-BN-relu6 head (320→1280) →
     GAP → dense (1280→nClasses). -/
 def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
-    (replicas : Nat := 1) (convBias : Bool := true) : String :=
+    (replicas : Nat := 1) (convBias : Bool := false) : String :=
   let go : StateM Nat String := do
     -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → batch BN → relu6 (NO maxpool) ═══
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
