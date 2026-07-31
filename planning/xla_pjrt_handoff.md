@@ -76,12 +76,17 @@ STEP 2, the DROP.** The channel-LN net now has a whole-net float story in both d
 (`convnextCh_floatBridges` / `convnextCh_grad_floatBridges`), tied to the committed
 `convNextForwardTCh` by `convNextForwardTCh_eq_skeleton`, on a new
 `Proofs/Float/ChannelLNFloatBridge.lean`. Build **3,910** jobs green, `verified_mlir/` 0 lines of
-diff, audit **1502/1502** three-axiom. The keystone paid off exactly as scoped: the block bridge is
-now one theorem over `cnxBodyWith` and the ch9 net instantiates it as a *term*. Two things step 1
-did NOT close, both written up there: the **§B tie** for `chanLNTensor3Back` (the Ch peer of
-`ConvNeXtBackCertifiedTie` does not exist), and a **third stale-scope file** the §2n table missed —
-`ConvNeXtTiePoC.lean`'s §1a whole-net tie is scalar-LN *with a head LN*, i.e. it describes
-`chLN := false`, the mode the repo stopped shipping.
+diff, audit **1509/1509** three-axiom. The keystone paid off exactly as scoped: the block bridge is
+now one theorem over `cnxBodyWith` and the ch9 net instantiates it as a *term*.
+
+**Both of step 1's leftovers are also closed (2026-07-31).** The **§B tie** landed —
+`chanLNTensor3Back_eq_chanLN_vjp` + the body/block peers, so the channel-LN net's §B coverage now
+matches the scalar net's and the float backward is tied to the CERTIFIED gradient (it is also
+**β-free**, proved not assumed). And the **third stale-scope file** the §2n table missed —
+`ConvNeXtTiePoC.lean`'s §1a whole-net tie, which is scalar-LN *with a head LN*, i.e. `chLN := false`
+— now carries an explicit scope label; porting it was measured as chapter-sized, so it is labelled,
+not ported. `ConvNeXtRender.lean`'s matching stale docstring (*"`chLN := false` is the committed …"*)
+is fixed.
 
 **▶ The original §2n plan — discharge ConvNeXt's FloatBridges, then DROP the scalar chain.**
 §2m is CLOSED as of 2026-07-31: **all five nets now match the JAX reference param count exactly**
@@ -3589,16 +3594,40 @@ paid nothing for it.** Build green at **3,910** jobs (3,909 + the new module), `
    `floatBridges_id` (`MhsaBackFloatBridge`); de-duplicating means editing `AuditAxioms`, which
    prints the other name — not worth the 11-minute rebuild, but it is drift and it is now recorded.
 
-#### ⚠ What step 1 does NOT close
+#### ✅ The §B tie — DONE 2026-07-31, right after step 1
 
-**The §B tie is owed.** `chanLNTensor3Back` is the *hand-composed* reverse chain, in exactly the
-sense `cnxBlockBodyBack` / `convnextInputGrad` are: every factor is the certified adjoint of its
-forward factor (a permutation's adjoint is its inverse permutation; the row map's is
-`bn_grad_input ∘ diagBack γ`), but nothing here proves it equals `chanLNTensor3_has_vjp.backward`.
-The scalar world HAS that tie (`ConvNeXtBackCertifiedTie.lean`, which ties `cnxBlockBodyBack` to
-`convNextBlockBody_has_vjp.backward`); **the channel-LN peer of that file does not exist**. It is
-stated in the new file's docstring so it cannot be read as claimed. This is the honest gap, and it
-is the same shape as the gap the scalar world closed in §B — so the recipe is known.
+The gap step 1 left: `chanLNTensor3Back` was the *hand-composed* reverse chain, with nothing proving
+it equals `chanLNTensor3_has_vjp.backward`. **Closed** — three theorems in
+`ConvNeXtBackCertifiedTie.lean`, so the float bridge's closeness is closeness to the **certified**
+gradient:
+
+* **`chanLNTensor3Back_eq_chanLN_vjp`** — the op tie. Piecewise: the two re-associations collapse by
+  the existing permutation-adjoint lemmas (`reassoc{Fwd,Back}_has_vjp_backward_eq`), the two
+  transposes by `rfl`, and the row map through `bn_grad_input`;
+* **`cnxBodyWithChanLNBack_eq_vjp`** / **`cnxBlockChBack_eq_vjp`** — the body and residual-wrapped
+  block, so the channel-LN net's §B coverage now MATCHES the scalar net's, with the LN op covered
+  on top.
+
+**Three things worth keeping from doing it.**
+
+1. **The block ties never had to look inside a LayerNorm; this one did.** `cnxBlockBodyBack` takes an
+   abstract `lnB`, so the scalar §B could pin it to any certified object it liked. `chanLNTensor3Back`
+   is concrete — it has to be, or `floatClose_bnBack` could not run in its middle — so it owed a tie
+   the scalar world never owed. That asymmetry is the reason this was a separate piece of work and
+   not a copy of `cnxBlockBodyBack_eq_convNextBlockBody_vjp`.
+2. **`bn_grad_input` is NOT `rfl`-equal to `(bn_has_vjp …).backward`** — the witness carries a
+   `rw [bnForward_eq_compose]` cast. `EfficientNetBackB0`'s `bnBack_faithful_fn` already documented
+   this trap at the *graph* level; the function-level peer (`bn_grad_input_eq_vjp_backward`) did not
+   exist and is added here. Both sides meet through the canonical `∑ pdiv` form.
+3. **`HasVJP.backward_unique`** — any two VJP witnesses for one map have the same backward (both
+   `.correct` to the same sum). That is what makes the tie robust to *how* `chanLNTensor3_has_vjp`
+   was built: it is tactic-assembled with a leading `unfold`, so its `.backward` does not reduce
+   syntactically. Build the same chain in term mode, compute THAT, and transfer. Reusable — any
+   future tie against a tactic-built witness can take the same route instead of fighting the term.
+
+**The tie is β-free**, and that is a content result rather than a convenience: the `+β` translation's
+VJP is the identity, so neither the float chain nor the certified backward depends on the LN bias.
+`chanLNTensor3Back` never took a `β`; now that is proved rather than assumed.
 
 **The decision (Brett's, 2026-07-31): once the bridges are discharged, the scalar full chain
 comes OUT.** Not relabelled — deleted. It is off the primary path, and §2a's whole lesson is
@@ -3689,7 +3718,26 @@ and `floatBridges_convNextBlock` / `floatBridges_cnxBodyWith` (the ch9 represent
 `_has_vjp_correct`, `convNextFwdGraphTC_faithful` — plus the three float bridges and
 `convNextForwardT_eq_skeleton`. Sweep them in the same commit or the audit stops elaborating.
 
-#### ▶ A THIRD stale-scope file, found while doing step 1 — NOT in the table above
+#### ✅ A THIRD stale-scope file, found while doing step 1 — LABELLED 2026-07-31, not ported
+
+**Decision: it carries a scope label, not a port** — and the reason is measured, not stylistic.
+Re-pointing the ch7 §1a tie at the channel LN is *not* a relabel: the 22 LN sites would need
+vector-γ/β param certs (ViT has that shape — `vit_render_vecln{gamma,beta}_certified` — ConvNeXt
+has only the `Vec 1` scalar embedding, `ConvNeXtClose` §C), the head-LN tie would be deleted rather
+than ported, and the whole forward thread would have to be re-derived through the transpose/reassoc
+conjugation. That is chapter-sized. So `ConvNeXtTiePoC.lean` now opens with a ⚠ that says exactly
+what it ties (`chLN := false`, plus a head LN), that every theorem in it is still TRUE, and that it
+should be read as the ch9-representative §1a tie — the same status
+`Architectures/ConvNeXt.lean` has as the ch9-representative forward. Its two other "the committed
+render" claims are corrected in place.
+
+⚠ **`ConvNeXtRender.lean:113` was stale in the same direction and is fixed**: it called
+`chLN := false` *"the committed scalar-global `.bnF`"* while the flag has defaulted to `true` since
+§2m. A reader auditing the LN world from the renderer down would have been told the wrong mode is
+the shipped one. Nothing in `ConvNeXtFaithfulPoC`/`ConvNeXtClose` needed touching — their
+"scalar-LN γ/β" lines describe the *ops*, which still exist and are still certified, not the net.
+
+The original finding, for the record:
 
 **`LeanMlir/Proofs/Architectures/ConvNeXtTiePoC.lean` — the ch7 §1a whole-net tie
 (`CnxTiePoC.cnx_net_tied_certified`, 6 audit lines) is written against the SCALAR LN, and it still
