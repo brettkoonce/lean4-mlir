@@ -3019,6 +3019,32 @@ correct); the proof-side denotation (`convnextForward`'s LN is `bnForward` today
 shard gates, and an 80-epoch re-run — ConvNeXt's **82.75%** does NOT survive this one, unlike the
 conv-bias drops, because the function genuinely changes.
 
+#### ⛔⛔ AND THE LN PLACEMENT IS WRONG TOO — found 2026-07-31 by the count NOT matching
+
+With the axis and the affine both fixed in the render, the parameter count came to **28,588,936
+against the reference's 28,587,592** — a residual of **+1,344**. It decomposes exactly, and into
+two more deviations:
+
+| | reference (`forward`, read directly) | our render |
+|---|---|---|
+| **stem** | patchify conv → **`channel_layer_norm`** | patchify conv → *(nothing)* ⛔ |
+| **head** | GAP → dense | GAP → **LN** → dense ⛔ |
+
+`+2×768 (our extra head LN) − 2×96 (our missing stem LN) = +1,344`, to the float. The reference's
+22 sites are **1 stem + 18 block + 3 downsample**, which is also exactly §2m's own measured width
+census (5×96 = stem + 3 blocks + down0; 4×192; 10×384; 3×768 = the three stage-4 blocks and
+nothing else). Ours are 18 block + 3 downsample + 1 head.
+
+⚠ **This is the sharpest argument yet against treating a matching parameter count as an
+architecture check, and it nearly went the other way.** The two deviations are in opposite
+directions and *nearly* cancel: 1,344 out of 28.6M is **0.005%**. Had the extra and the missing LN
+been at the same width they would have cancelled EXACTLY, the count would have matched, and a net
+with its final normalisation in the wrong place would have passed the audit clean. The count is a
+decomposition test — it is only evidence when the residual is explained, not when it is small.
+
+**So ConvNeXt has FOUR deviations, not one**: the reduction axis (21 sites), the scalar affine (22
+sites), the missing stem LN, and the extra head LN. §2m's original scope named only the second.
+
 #### ✅ AND THE TRANSPOSES ARE FREE — measured 2026-07-31, `channel-ln --bench`
 
 The one number that could still have sent this to Route B. Every LN shape ConvNeXt-T actually has,
