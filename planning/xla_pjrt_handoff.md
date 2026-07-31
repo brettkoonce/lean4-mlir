@@ -213,7 +213,7 @@ is *not* done on each of the four large nets, ordered by what would bite first.
 
    | net | final (ep 80) | best | wall (XLA, 1 GPU) |
    |---|---|---|---|
-   | **ResNet-34** | **90.39%** | 90.39% | 1h11m |
+   | **ResNet-34** *(re-run 2026-07-31 at the PAPER net — §2l)* | **90.06%** | 90.06% | **1h03m** |
    | **EfficientNet-B0** | **88.20%** | 88.46% | 1h34m |
    | **MobileNetV2** | **86.73%** | 86.96% | 1h25m |
    | **ConvNeXt-T** | **82.75%** | 82.98% | 1h56m |
@@ -2769,9 +2769,17 @@ multiply. **`iree-compile` rejected it** — a shape that disagrees with itself 
 found it; the type checker did.
 
 **▶ STILL OWED:**
-* **the 80-epoch Imagenette re-run** — started 2026-07-31, `runs/r34_1x1_smoke.log`. The **90.39%
-  headline is VOID** (different net). 4-epoch trajectory on the new bytes: 46.3 → 55.3 → 64.6 →
-  **68.3%**, i.e. indistinguishable from the old one, as a 6.3%-smaller net should be.
+* ✅ **the 80-epoch re-run is DONE** — 2026-07-31, `runs/r34_1x1_smoke.log`, 80 epochs, marker at
+  80, `done`. **val 90.06%** (best 90.06%, epoch 80), **1h03m** / 47.2 s marginal epoch. The old
+  **90.39% is retired**: it belonged to the 3×3 net. **−0.33 pp for −6.3% params, and that is
+  inside this setup's run-to-run spread** — §3 records three same-seed runs of one binary landing
+  at 43.2 / 46.8 / 47.3% epoch-1 val, so do not read the delta as a regression from the shortcut
+  change. It is also **8 minutes faster** (1h03m vs 1h11m), which is the param drop showing up
+  where you would expect it.
+  ⚠ A corroboration worth recording: README's *baseline* (non-verified) table already listed
+  ResNet-34 at **21.3M** params — i.e. the baselines were the paper net all along and the VERIFIED
+  render was the odd one out at 22.7M. Nobody compared the two columns. That is the same class of
+  miss as §2k itself, one table over.
 * **§2d.2's five-config batch/step-count study is VOID** and not re-run.
 * §2d.1's 1.78×, §2c's 1.46× and §2d.3's transfer numbers **shift** — the `[θ|m|v]` blob goes
   272 MB → ~255 MB. Directionally unchanged; re-measure before quoting.
@@ -2838,7 +2846,7 @@ docstring. Whatever lands, put the shortcut kernel in `resnet34Verified`'s blurb
 | `ResNet34Layout.specs` (`IreeRuntime.lean:284`) + its `#guard` | **must be rewritten** — 146 params → fewer, and the hand-list is audited |
 | the §1a tie, `SpecVJP` witnesses, `ResNet34LiveSeal`, `Resnet34WholeFloatBridge` | **re-instantiate at `kHp = kWp = 1`** — parameterised, so this is arguments not proofs |
 | §2b's numeric tie vs the retired hand-written render | **gone** — that emitter is deleted; the tie was against the 3×3 net. Recover with `git show 75a9f8e:` if a comparison is wanted |
-| **the 90.39% Imagenette 80-epoch run** | **VOID** — different net. Re-run (~1h11m) |
+| **the 90.39% Imagenette 80-epoch run** | ~~VOID~~ ✅ **RE-RUN 2026-07-31: 90.06%, 1h03m** |
 | §2d.2's five-config batch/step-count study | **VOID** — all five are the 3×3 net. Re-run if the finding is still wanted (it is a good finding: accuracy tracks step count) |
 | §2d.1 bs256 1.78×, §2c 1.46×, the §2d.3 transfer measurements | **shift slightly** — 6.3% fewer params moves the `[θ\|m\|v]` blob from 272 MB to ~256 MB. Directionally unchanged; re-measure before quoting |
 | `resnet34-adam-tie`, `resnet34-batch-check`, the DP artifacts + gates | **re-run**, unchanged in construction |
