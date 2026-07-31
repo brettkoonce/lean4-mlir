@@ -3117,11 +3117,36 @@ re-rendered DP artifact: the LN collectives are `tensor<96xf32>` … `tensor<768
 the render docstring and the `#eval` comment are corrected (byte-inert: the four artifact md5s
 are unchanged across that edit).
 
-**▶ STILL OWED — none of it blocks the build, and the first two are the real ones:**
+#### ✅ THE 2-GPU GATES, RE-RUN ON THE CHANNEL-LN ARTIFACT — 2026-07-31
+
+Both pass on the re-rendered DP artifact, each with a control that fires:
+
+| gate | TEST | CONTROL |
+|---|---|---|
+| **`convnext-dp-check`** (duplicated batch) | **BIT-EXACT on all 83,478,849 floats** — θ, `m`, `v` each 27,826,282/27,826,282, `%loss` 1/1, `bc` 2/2 | sum-not-mean (180 divisors 2.0 → 1.0): gradient **0.942569**, rc=1 |
+| **`shard-check convnext`** (asymmetric batch) | `\|DP − mean(A,B)\|` = **7.8e-8** | `\|DP − A\|` = **0.0416**, 5.3e5 apart |
+| 2-GPU descent | loss 13.97 → **2.15**, val 13.86 → **31.95%** over 6 epochs (25-step, XLA) | — |
+
+**The DP agreement got TIGHTER, not looser** — bit-exact where the scalar-LN render was ≤1.1e-8
+with 3 coordinates off. Consistent with §2h-quater's own LayerNorm reading: with no batch
+statistics there is less for a reordered reduction to land in, and the channel LN has *more*
+per-example structure than the scalar one, not less.
+
+⚠ **The θ rule flipped sign on this net and it is worth recording.** §2h-quater found the broken
+render moved **θ by 9.7e-5** — *under* a 1e-4 θ gate, its sharpest demonstration that a θ-based
+gate passes a 2× gradient error. On the channel-LN net the same control moves θ by **1.95e-4**,
+i.e. *just above* the same gate. The rule (gate the gradient, never θ — §3) is unchanged and is
+what saved it either way; what moved is the margin, which is net-dependent and not something to
+rely on. `%loss` stayed BIT-EXACT through the control on both, correctly localising the fault to
+the backward.
+
+**▶ STILL OWED — none of it blocks the build, and the first is the real one:**
 * **the 80-epoch re-run.** ConvNeXt's **82.75%** belonged to the scalar-LN net and is **VOID** —
   unlike the conv-bias drops, the function genuinely changed. ~1h56m on XLA.
-* **the DP + shard gates** (`convnext-dp-check`, `shard-check convnext`) — need 2 GPUs; the DP
-  artifact re-rendered but has not been executed since.
+* **the 2-GPU scaling ratio.** §2h-quater's **1.68×** was measured on the scalar-LN net and is
+  NOT re-measured; the channel LN adds 44 transposes per direction, which `channel-ln --bench`
+  measured free at the op level but which nobody has measured end to end. Re-measure with
+  `scripts/marginal_epoch.sh`, train-only on both sides, before quoting it.
 * `ConvNeXtWholeFloatBridge` / `ConvNeXtBackB0` / `WholeNetForwardTies` still ride the SCALAR
   chain (`convNextForwardT`/`TC`), which is why the build stayed green. They are now describing a
   net the repo no longer ships — a documentation-scope question, not a broken proof.
