@@ -15,7 +15,7 @@ is the FORWARD half of the §1 train-step render; the backward-cotangent chain (
 + the param-SGD tail (`veclnGammaSgd`/`patchEmbedWeightSgd`/`denseWeightSgdB`/`denseBiasSgdB`) follow.
 
 ViT-Tiny: ic=3, 224², patch 16×16/s16 (N=196 patches, 197 tokens), D=192 = 3 heads × 64, MLP 768,
-12 blocks, 10 classes, BS=32, ε=1e-5, SDPA scale = 1/√64 = 0.125. -/
+12 blocks, `nClasses` classes (10 as committed), BS=32, ε=1e-5, SDPA scale = 1/√64 = 0.125. -/
 
 open Proofs Proofs.StableHLO
 
@@ -116,7 +116,7 @@ private structure FwdSaves where
   deriving Inhabited
 
 /-- The depth-12 ViT-Tiny **forward**, node-by-node. Returns (body, saves). -/
-private def vitFwd12 (bs : Nat) : StateM Nat (String × FwdSaves) := do
+private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Nat (String × FwdSaves) := do
   let (ce, embed) ← pretty bs (.patchEmbedF "%wConv" "%bConv" "%cls" "%pos"
     (zKk : Kernel4 192 3 16 16) zVv zVv (zMm : Mat 197 192) (.operand "%x" (zVv : Vec (3*224*224))))
   let mut code := ce
@@ -127,7 +127,7 @@ private def vitFwd12 (bs : Nat) : StateM Nat (String × FwdSaves) := do
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
   let (cf, fl) ← vlnFwd bs "%gF" "%btF" cur
   let (cs, sl) ← pretty bs (.clsSliceF (N := 196) (D := 192) (.operand fl (zVv : Vec (197*192))))
-  let (cl, logits) ← pretty bs (denseF "%Wc" "%bc" (zMm : Mat 192 10) zVv (.operand sl (zVv : Vec 192)))
+  let (cl, logits) ← pretty bs (denseF "%Wc" "%bc" (zMm : Mat 192 nClasses) zVv (.operand sl (zVv : Vec 192)))
   pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, fln := fl, clsTok := sl, logits })
 
 /-- Per-block func-arg signature (committed forward order). -/
@@ -145,18 +145,19 @@ private def blkArgSig (i : Nat) : String :=
 /-- **ViT-Tiny depth-12 forward rendered ENTIRELY from the verified AST.** Every line is `pretty` of a
     verified `SHlo` node; `den(graph) = vitForward` by `vitFwdGraphMHV_faithful` (at depth-12). The
     output is the `[BS,10]` logits. (FORWARD half of the §1 train-step render.) -/
-def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32) : String :=
-  let (body, sv) := (vitFwd12 bs).run' 0
+def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32)
+    (nClasses : Nat := 10) : String :=
+  let (body, sv) := (vitFwd12 bs nClasses).run' 0
   let res := sv.logits
   let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
   let argSig := s!"%x: {ty [bs, 3*224*224]}, %wConv: {ty [192,3,16,16]}, %bConv: {ty [192]}, " ++
     s!"%cls: {ty [192]}, %pos: {ty [197,192]}, " ++ blkSigs ++
-    s!", %gF: {ty [192]}, %btF: {ty [192]}, %Wc: {ty [192,10]}, %bc: {ty [10]}"
-  "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [bs, 10]} " ++ "{\n" ++
+    s!", %gF: {ty [192]}, %btF: {ty [192]}, %Wc: {ty [192,nClasses]}, %bc: {ty [nClasses]}"
+  "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [bs, nClasses]} " ++ "{\n" ++
   "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
   "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
   "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-  body ++ s!"    return {res} : {ty [bs, 10]}\n" ++ "  }\n}\n"
+  body ++ s!"    return {res} : {ty [bs, nClasses]}\n" ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════════════════════════════
 -- § BACKWARD render — node-by-node reverse of `vBlockFwd`/`vitFwd12`, then the 200-param SGD tail
@@ -296,16 +297,16 @@ private def blkRetTys : List String :=
     and, in func-arg order, one SSA per parameter — the **updated param** at `adam := false`, the
     **un-fused gradient** at `adam := true`. One traversal, two tails: the alternative was a second
     copy of the depth-12 backward, which is the double-writer disease one level down. -/
-private def vitBackAll (bs : Nat) (lrStr : String) (adam : Bool)
+private def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) :
     StateM Nat (String × List String × String) := do
-    let (fwd, sv) ← vitFwd12 bs
+    let (fwd, sv) ← vitFwd12 bs nClasses
     -- loss cotangent. The softmax is `pretty`d on its own line rather than nested inside the
     -- `.sub`, so its SSA can also feed the report-only `%loss`; `.operand` is a leaf that emits
     -- nothing, so the fresh-name sequence — and therefore the text — is unchanged (checked: the
     -- SGD artifact stays byte-identical).
-    let (cSm, nSm) ← pretty bs (.softmaxDiv (.expe (.operand sv.logits (zVv : Vec 10))))
-    let (cD0, nD0) ← pretty bs (.sub (.operand nSm (zVv : Vec 10)) (.operand "%onehot" (zVv : Vec 10)))
+    let (cSm, nSm) ← pretty bs (.softmaxDiv (.expe (.operand sv.logits (zVv : Vec nClasses))))
+    let (cD0, nD0) ← pretty bs (.sub (.operand nSm (zVv : Vec nClasses)) (.operand "%onehot" (zVv : Vec nClasses)))
     -- `none` → plain CE with the batch mean folded into `lrStr` (the SGD recipe, unchanged).
     -- `some (α, −α/K, B)` → the LABEL-SMOOTHED cotangent with an explicit ÷B, which is what the
     -- AdamW recipe uses: dy = ((softmax − onehot) + α·onehot − α/K) / B. `shiftB`/`divConstB` at
@@ -316,22 +317,22 @@ private def vitBackAll (bs : Nat) (lrStr : String) (adam : Bool)
     let (cSmooth, nDy) ← match smooth with
       | none => pure ("", nD0)
       | some (aStr, negAK, bStr) => do
-          let (c1, n1) ← pretty bs (.scaleF (n := 10) aStr 0 (.operand "%onehot" (zVv : Vec 10)))
-          let (c2, n2) ← pretty bs (.addV (.operand nD0 (zVv : Vec 10)) (.operand n1 (zVv : Vec 10)))
-          let (c3, n3) ← pretty bs (.shiftB (N := 1) (n := 10) negAK 0 (.operand n2 (zVv : Vec 10)))
-          let (c4, n4) ← pretty bs (.divConstB (N := 1) (n := 10) bStr 0 (.operand n3 (zVv : Vec 10)))
+          let (c1, n1) ← pretty bs (.scaleF (n := nClasses) aStr 0 (.operand "%onehot" (zVv : Vec nClasses)))
+          let (c2, n2) ← pretty bs (.addV (.operand nD0 (zVv : Vec nClasses)) (.operand n1 (zVv : Vec nClasses)))
+          let (c3, n3) ← pretty bs (.shiftB (N := 1) (n := nClasses) negAK 0 (.operand n2 (zVv : Vec (1 * nClasses))))
+          let (c4, n4) ← pretty bs (.divConstB (N := 1) (n := nClasses) bStr 0 (.operand n3 (zVv : Vec (1 * nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     let cDy := cSm ++ cD0 ++ cSmooth
-    -- head: logits = denseF(Wc,bc)(clsTok)  [clsTok:192 → logits:10]
-    let (cDc, dcls) ← pretty bs (.dotOut (m := 192) (n := 10) "%Wc" (zMm : Mat 192 10) (.operand nDy (zVv : Vec 10)))
+    -- head: logits = denseF(Wc,bc)(clsTok)  [clsTok:192 → logits:nClasses]
+    let (cDc, dcls) ← pretty bs (.dotOut (m := 192) (n := nClasses) "%Wc" (zMm : Mat 192 nClasses) (.operand nDy (zVv : Vec nClasses)))
     let (cWc, nWc) ← if adam then
-        pretty bs (.weightGrad sv.clsTok (zVv : Vec 192) (.operand nDy (zVv : Vec 10)))
+        pretty bs (.weightGrad sv.clsTok (zVv : Vec 192) (.operand nDy (zVv : Vec nClasses)))
       else
-        pretty bs (.weightSgd sv.clsTok "%Wc" lrStr (zVv : Vec 192) (zMm : Mat 192 10) 0 (.operand nDy (zVv : Vec 10)))
+        pretty bs (.weightSgd sv.clsTok "%Wc" lrStr (zVv : Vec 192) (zMm : Mat 192 nClasses) 0 (.operand nDy (zVv : Vec nClasses)))
     let (cbc, nbc) ← if adam then
-        pretty bs (.biasGrad (.operand nDy (zVv : Vec 10)))
+        pretty bs (.biasGrad (.operand nDy (zVv : Vec nClasses)))
       else
-        pretty bs (.biasSgd "%bc" lrStr (zVv : Vec 10) 0 (.operand nDy (zVv : Vec 10)))
+        pretty bs (.biasSgd "%bc" lrStr (zVv : Vec nClasses) 0 (.operand nDy (zVv : Vec nClasses)))
     -- scatter the CLS-token cotangent back into the final-LN output (row 0), zero elsewhere
     let (cPad, dfln) ← pretty bs (.clsPadF (N := 196) (D := 192) (.operand dcls (zVv : Vec 192)))
     -- final LN back (input = flnIn = last block output)
@@ -376,8 +377,12 @@ private def vitBackAll (bs : Nat) (lrStr : String) (adam : Bool)
           [nwConv, nbConv, ncls, npos] ++ blkOutOrdered ++ [ngF, nbtF, nWc, nbc], nSm)
 
 /-- The 200 parameter `(name, shape)` pairs in func-arg order — the single source for the argument
-    signature, the return types, and (in the AdamW render) the `%<nm>m`/`%<nm>v` moment slots. -/
-def vitParamSig : List (String × List Nat) :=
+    signature, the return types, and (in the AdamW render) the `%<nm>m`/`%<nm>v` moment slots.
+
+    `nClasses` is a real parameter as of 2026-07-31: it was the literal 10 here and in ~28 other
+    places, which pinned the whole render to Imagenette and blocked the matched pair with
+    `jax/MainVitImagenet.lean` (a 1000-class ViT-Tiny that already exists). -/
+def vitParamSig (nClasses : Nat := 10) : List (String × List Nat) :=
   [("wConv", [192,3,16,16]), ("bConv", [192]), ("cls", [192]), ("pos", [197,192])] ++
   (List.range vDEPTH).flatMap (fun i =>
     [(s!"b{i}_g1", [192]), (s!"b{i}_bt1", [192]),
@@ -388,7 +393,7 @@ def vitParamSig : List (String × List Nat) :=
      (s!"b{i}_g2", [192]), (s!"b{i}_bt2", [192]),
      (s!"b{i}_Wfc1", [192,768]), (s!"b{i}_bfc1", [768]),
      (s!"b{i}_Wfc2", [768,192]), (s!"b{i}_bfc2", [192])]) ++
-  [("gF", [192]), ("btF", [192]), ("Wc", [192,10]), ("bc", [10])]
+  [("gF", [192]), ("btF", [192]), ("Wc", [192,nClasses]), ("bc", [nClasses])]
 
 /-- **ViT-Tiny depth-12 train step rendered ENTIRELY from the verified AST** — the §1 backward render.
     Forward (`vitFwd12`) → softmax-CE cotangent (`softmax(logits) − onehot`, the `lossCotGraph` form) →
@@ -398,11 +403,12 @@ def vitParamSig : List (String × List Nat) :=
     func-arg order. `lrStr` is the mean-loss-equiv literal (base/BS); cotangent has NO /B (folded into lr).
     The traversal itself is `vitBackAll false`, shared with the AdamW render. -/
 def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String := "0.003125")
+    (nClasses : Nat := 10)
     (bs : Nat := 32) : String :=
   let go : StateM Nat String := do
-    let (code, retNames, _) ← vitBackAll bs lrStr false
+    let (code, retNames, _) ← vitBackAll bs nClasses lrStr false
     let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
-      ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,10], ty [10]]
+      ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [10]]
     pure <|
       "    // ── ViT-Tiny depth-12 train step: every line is pretty(verified AST node) ──\n" ++
       code ++
@@ -411,9 +417,9 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
   let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
   let argSig := s!"%x: {ty [bs, 3*224*224]}, %wConv: {ty [192,3,16,16]}, %bConv: {ty [192]}, " ++
     s!"%cls: {ty [192]}, %pos: {ty [197,192]}, " ++ blkSigs ++
-    s!", %gF: {ty [192]}, %btF: {ty [192]}, %Wc: {ty [192,10]}, %bc: {ty [10]}, %onehot: {ty [bs, 10]}"
+    s!", %gF: {ty [192]}, %btF: {ty [192]}, %Wc: {ty [192,nClasses]}, %bc: {ty [nClasses]}, %onehot: {ty [bs, nClasses]}"
   let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
-    ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,10], ty [10]]
+    ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [10]]
   "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({String.intercalate ", " retTys}) " ++ "{\n" ++
   "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
   "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -471,17 +477,23 @@ private def vitAdamConsts : String :=
     (200 θ', 200 m', 200 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
     render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged. -/
 def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
-    (alphaStr negAlphaKStr : String := "0.100000") (bStr : String := "32.0")
-    (replicas : Nat := 1) (bs : Nat := 32) : String :=
+    (bStr : String := "32.0") (replicas : Nat := 1) (bs : Nat := 32)
+    (nClasses : Nat := 10) (alpha : Float := 0.1) : String :=
+  -- ⚠ α and K are the ONLY knobs; every emitted smoothing constant is derived from them here.
+  -- Passing the cotangent's `−α/K` as a separate string (which is what this took until
+  -- 2026-07-31) is the same two-writers-for-one-fact shape §2a spent a thread removing: the two
+  -- agree until someone changes K, and then the gradient and the loss disagree silently.
+  let alphaStr := fmt6 alpha
+  let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   let go : StateM Nat String := do
-    let (code, gradNames, nSm) ← vitBackAll bs "0.0" true (some (alphaStr, negAlphaKStr, bStr))
+    let (code, gradNames, nSm) ← vitBackAll bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr))
     -- one triple per parameter, in func-arg order
     let mut adamCode := ""
     let mut thetaN : List String := []
     let mut mN : List String := []
     let mut vN : List String := []
-    for i in [0:vitParamSig.length] do
-      let (nm, ds) := vitParamSig[i]!
+    for i in [0:(vitParamSig nClasses).length] do
+      let (nm, ds) := (vitParamSig nClasses)[i]!
       let (c, nT, nM, nV) ← vitAdamOne bs nm ds (gradNames[i]!) replicas
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
@@ -491,12 +503,18 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
       s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [bs, 10]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [bs, 10]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [bs, 10]}, tensor<f32>) -> {ty [bs]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [bs, 10]}, tensor<f32>) -> {ty [bs]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [bs]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<0.010000> : {ty [bs]}\n" ++
+      s!"    %llog = stablehlo.log {nSm} : {ty [bs, nClasses]}\n" ++
+      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [bs, nClasses]}\n" ++
+      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [bs, nClasses]}, tensor<f32>) -> {ty [bs]}\n" ++
+      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [bs, nClasses]}, tensor<f32>) -> {ty [bs]}\n" ++
+      -- ⚠ These were the literals `0.900000` / `0.010000` — i.e. (1−α) and α/K baked at K = 10.
+      -- That is EXACTLY the bug §2k found in the R34 ImageNet render, where the same hardcode sat
+      -- on the COTANGENT and made the objective 100× wrong at K = 1000, caught only because the
+      -- reported loss was implausible. Here it was confined to the report-only `%loss` (the ViT
+      -- cotangent takes its constant as an argument), so it would have produced a WRONG LOSS
+      -- NUMBER against a correct gradient — the same trap read backwards, and harder to notice.
+      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha}> : {ty [bs]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses}> : {ty [bs]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [bs]}\n" ++
       s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [bs]}\n" ++
       s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [bs]}\n" ++
@@ -504,7 +522,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       s!"    %lbfc = stablehlo.constant dense<{bs}.0> : tensor<f32>\n" ++
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-    let pTy := vitParamSig.map (fun (_, ds) => ty ds)
+    let pTy := (vitParamSig nClasses).map (fun (_, ds) => ty ds)
     let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"]
     let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
     pure <|
@@ -518,12 +536,12 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
         "    // outside every faithfulness theorem, exactly like the lowerer (handoff §5).\n") ++
       code ++ vitAdamConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
-  let pSig := String.intercalate ", " (vitParamSig.map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
-  let mSig := String.intercalate ", " (vitParamSig.map (fun (nm, ds) => s!"%{nm}m: {ty ds}"))
-  let vSig := String.intercalate ", " (vitParamSig.map (fun (nm, ds) => s!"%{nm}v: {ty ds}"))
+  let pSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
+  let mSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}m: {ty ds}"))
+  let vSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}v: {ty ds}"))
   let argSig := s!"%x: {ty [bs, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [bs, 10]}"
-  let pTy := vitParamSig.map (fun (_, ds) => ty ds)
+    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [bs, nClasses]}"
+  let pTy := (vitParamSig nClasses).map (fun (_, ds) => ty ds)
   let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
   let body : String := go.run' 0
   "module @m {\n" ++
@@ -557,9 +575,10 @@ end Proofs.StableHLO
 -- got wrong elsewhere. To re-run the tie, recover the retired render:
 --   git show 2957188:verified_mlir/vit_adam_train_step.mlir > /tmp/retired.mlir
 --   .lake/build/bin/vit-adam-tie /tmp/retired.mlir verified_mlir/vit_adam_train_step.mlir
--- Literal α = 0.1, −α/K = −0.01 (K = 10), batch 32 — `vitTinyConfig`'s label smoothing + mean.
+-- α = 0.1 and K = nClasses are the knobs; −α/K is DERIVED (2026-07-31), batch 32 —
+-- `vitTinyConfig`'s label smoothing + mean.
 #eval IO.FS.writeFile "verified_mlir/vit_adam_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam_train_step" "0.100000" "-0.010000" "32.0")
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam_train_step" "32.0")
 
 -- The DATA-PARALLEL render, the ViT peer of `resnet34_adamdp_train_step` (§2b-quater): the same
 -- graph plus one `all_reduce(add)/N` per parameter gradient before its AdamW triple. Selected at
@@ -579,7 +598,7 @@ end Proofs.StableHLO
 -- a sum-not-mean control that fires at 0.996. The paragraph above's "not runnable on this box"
 -- is retired: the graph executes (handoff §2j tail).
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp_train_step" "0.100000" "-0.010000" "32.0" 2)
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp_train_step" "32.0" 2)
 
 -- ── The LARGER-BATCH pair, added 2026-07-30 (bs 64 per device) ─────────────────────────────────
 -- `bs` is a renderer PARAMETER as of this change; it used to be a private constant `vBS := 32`,
@@ -615,6 +634,6 @@ end Proofs.StableHLO
 -- The eval forwards stay at bs 32 and that is fine: `trainAdamSched` reads the width off the
 -- forward artifact (`evalBs`), so eval runs at 32 while training runs at 64.
 #eval IO.FS.writeFile "verified_mlir/vit_adam64_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam64_train_step" "0.100000" "-0.010000" "64.0" 1 64)
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam64_train_step" "64.0" 1 64)
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp64_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp64_train_step" "0.100000" "-0.010000" "64.0" 2 64)
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp64_train_step" "64.0" 2 64)

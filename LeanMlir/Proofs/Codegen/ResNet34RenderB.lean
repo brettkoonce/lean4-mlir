@@ -205,28 +205,6 @@ namespace Proofs.StableHLO
 -- § The optimizer tail — proven ops per parameter, folded in signature order
 -- ════════════════════════════════════════════════════════════════
 
-/-- Fixed-6-decimal float literal, so a computed smoothing constant emits in the SAME textual form
-    the hand-written literals used and `nClasses = 10` re-renders byte-identical. -/
-private def fmt6 (x : Float) : String :=
-  let neg := x < 0.0
-  let n := ((if neg then -x else x) * 1000000.0 + 0.5).toUInt64.toNat
-  let ip := n / 1000000
-  let fp := n % 1000000
-  let fs := (toString fp).leftpad 6 '0'
-  (if neg then "-" else "") ++ toString ip ++ "." ++ fs
-
-/-- **The label-smoothing mass per class, α/K.** α = 0.1 throughout; K is `nClasses`.
-
-    ⚠ **This was hardcoded `0.010000` — correct at K = 10 and WRONG at every other K**, and it sat
-    in the COTANGENT, not just in the report-only `%loss`. At `nClasses = 1000` it made the smoothing
-    term 100× too large: it removes 10.0 of probability mass instead of 0.1, i.e. a different
-    objective, silently. Caught 2026-07-30 by the first ImageNet smoke run reporting loss ≈ 87 where
-    1000-class CE at init must be ≈ ln(1000) = 6.9 — the number was implausible, and that is the only
-    reason it surfaced. Nothing in the repo's proofs covers it: `α` is a *literal in emitted text*,
-    which is exactly the carve-out class §5 says needs its own numeric check, and §2b's `%loss` bug
-    is the standing precedent for it going wrong unnoticed. -/
-private def alphaOverK (nClasses : Nat) : String := fmt6 (0.1 / nClasses.toFloat)
-
 /-- Which optimizer tail this render emits. The forward, the backward, the 146 un-fused parameter
     gradients and the whole packed signature are **shared** — only the per-parameter tail differs,
     the `CifarOpt` shape from `CnnRender` (handoff §2i) brought to R34.
