@@ -2543,11 +2543,17 @@ that actually bites — **no `StableHLOParse` roundtrip case**.
   differ, which is the structural version of the same claim.
 * ✅ **Descent, on the real net and real data**: loss **2.369 → 1.814 → 1.610** over 3 epochs, val
   38.7 → 33.1 → **57.5%** (val bounces because LR is still warming: 0.033 → 0.067 → 0.100).
-* ⛔ **NOT numerically gated, and that is the next thing.** The exact known-answer check is
-  available and cheap: from `m = v = 0` the `adam` render's `m' = (1−β₁)·g` recovers the gradient
-  **exactly** (`g = 10·m'`), so on shared `(θ, x, onehot)` the momentum render must satisfy
-  `v' = g + wd·θ` and `θ' = θ − lr·v'` — a cross-render known answer, not a tolerance argument. It is
-  the `shard-check` construction reused. **Until it is run, say "rendered", not "certified".**
+* ✅ **CERTIFIED 2026-07-31 — `lake build r34-mom-tie`** (`c8cb9e0`). The known-answer check
+  below, run on the post-§2l net: **① `v' = g + wd·θ` rel 7.3e-8, ② `θ' = θ − lr·v'` rel 5.8e-8,
+  ③ `m` passthrough bit-exact 21,289,802/21,289,802.** The controls are what make it a gate: the
+  **NESTEROV** prediction (`θ − lr·(1+μ)·v'`, = 1.9× the step at `v = 0`) misses by **2.99e-2,
+  515,403× the tie**, and dropping `wd·θ` misses by 2.93e-4, 4,034× the tie. So the harness
+  demonstrably separates the two optimizers — which is the whole risk §2k identified, since
+  `momParamF` is Nesterov and is what "add the momentum variant" reaches for. *(Original note: the
+  exact known-answer check is available and cheap: from `m = v = 0` the `adam` render's
+  `m' = (1−β₁)·g` recovers the gradient exactly (`g = 10·m'`), so on shared `(θ, x, onehot)` the
+  momentum render must satisfy `v' = g + wd·θ` and `θ' = θ − lr·v'` — a cross-render known answer,
+  not a tolerance argument. It is the `shard-check` construction reused.)*
 
 #### A driver knob it needed, and why it is not optional
 
@@ -2770,7 +2776,8 @@ found it; the type checker did.
 * §2d.1's 1.78×, §2c's 1.46× and §2d.3's transfer numbers **shift** — the `[θ|m|v]` blob goes
   272 MB → ~255 MB. Directionally unchanged; re-measure before quoting.
 * `resnet34-adam-tie` against the retired 3×3 render is **meaningless by construction** now.
-* **the `mom` numeric gate** (§2k) and **the `NetSpec`/`VerifiedNetSpec` `#guard`** — the latter
+* ~~the `mom` numeric gate (§2k)~~ ✅ **DONE 2026-07-31** (`r34-mom-tie`, ≤7.3e-8, Nesterov control
+  fires at 515,403× the tie), and **the `NetSpec`/`VerifiedNetSpec` `#guard`** — the latter
   turned out to already exist (`resnet34Verified.toSpecs == ResNet34Layout.specs`) and **it FIRED
   on step B**, forcing `VLayer` to grow a bias-free `convBnNB` rather than the hand-list being
   quietly edited to match. It earned its keep on its first real test.
