@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Float.ChannelLNFloatBridge
 /-! # ℝ→Float32 bridge: the WHOLE ConvNeXt-T backward — the [3,3,9,3] input-gradient fold
 
 A3 (planning/a3_backward_deepnet_assembly.md Part 2): the per-example ConvNeXt-T backward (the forward
-`convNextForwardT` is `Vec (3·224²) → Vec 10`, per-example like r34/mnv2). The forward is
+`convNextForwardTCh` is `Vec (3·224²) → Vec 10`, per-example like r34/mnv2). The forward is
 `dense ∘ LN ∘ GAP ∘ stage₄ ∘ down₃ ∘ stage₃ ∘ down₂ ∘ stage₂ ∘ down₁ ∘ stage₁ ∘ LN ∘ stem`; the
 backward is its exact reverse, threaded through one `FloatBridges.comp` chain — the `r34InputGrad`
 blueprint at the ConvNeXt topology.
@@ -92,7 +92,7 @@ theorem floatBridges_cnxBlockBack {c cExp h w kHd kWd : Nat} (M : FloatModel)
 -- § The stage-boundary downsample backward
 -- ════════════════════════════════════════════════════════════════
 
-/-- The ConvNeXt downsample input-gradient VJP — the **reverse of `cnxDownW = flatConvStride2 W ∘ LN`**:
+/-- The ConvNeXt downsample input-gradient VJP — the **reverse of `cnxDownChW = flatConvStride2 W ∘ LN`**:
     `lnB ∘ flatConvStride2Back W` (run the strided-conv backward, then the LayerNorm back). -/
 noncomputable def cnxDownBack {cin cout h w : Nat} (W : Kernel4 cout cin 2 2)
     (lnB : Vec (cin * (2 * h) * (2 * w)) → Vec (cin * (2 * h) * (2 * w))) :
@@ -114,7 +114,7 @@ theorem floatBridges_cnxDownBack {cin cout h w : Nat} (M : FloatModel) (W : Kern
 -- ════════════════════════════════════════════════════════════════
 
 /-- The whole ConvNeXt-T input-gradient VJP at a smooth point — the **exact reverse of
-    `convNextForwardT`**: `dense ∘ LN ∘ GAP ∘ stage₄ ∘ down₃ ∘ stage₃ ∘ down₂ ∘ stage₂ ∘ down₁ ∘
+    `convNextForwardTCh`**: `dense ∘ LN ∘ GAP ∘ stage₄ ∘ down₃ ∘ stage₃ ∘ down₂ ∘ stage₂ ∘ down₁ ∘
     stage₁ ∘ LN ∘ stem` reversed. The stem (`flatConvStride4Back sW ∘ lnBstem`, the 4×4/s4 patchify
     backward), GAP and dense endpoints are concrete; the head-LN, stem-LN, 4 stage backwards and 3
     downsample backwards are supplied as `FloatBridges` (the stages discharged by folding
@@ -143,7 +143,7 @@ set_option maxRecDepth 100000 in
     `.comp` chain over `linBack` (dense), the head `lnBhead`, `gapBack`, the 4 supplied stage backwards,
     the 3 supplied downsample backwards, and the concrete stem `flatConvStride4Back sW ∘ lnBstem` (the
     4×4/s4 patchify backward). The deployed float backward of the whole net is within an explicit budget
-    of the certified `ℝ` backward — the backward peer of `convNextForwardT`. Closes under
+    of the certified `ℝ` backward — the backward peer of `convNextForwardTCh`. Closes under
     `[propext, Classical.choice, Quot.sound]`. -/
 theorem convnext_grad_floatBridges (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
     (lnBstem : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))

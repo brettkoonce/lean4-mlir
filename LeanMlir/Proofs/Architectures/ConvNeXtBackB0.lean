@@ -12,19 +12,26 @@ denotes the proven whole-block VJP.
 ConvNeXt's whole verified stack is **per-example / batch-1** — LayerNorm here is
 the per-example separable `layerNormForward` (= `bnForward` on the feature axis),
 so NONE of EfficientNet's `batchMap`/`bnBatchLA` batched machinery is needed
-(`ConvNeXtChainClose.lean:8`). So this file targets the per-example VJPs
-`convNextBlock_has_vjp` / `cnxDownW_has_vjp` directly, modeled on the per-example
-section of `EfficientNetBackB0.lean` (`residualBackGraph`, `convBnSwishBackGraph`,
+(`ConvNeXtChainClose.lean:8`). So this file targets the per-example VJP
+`convNextBlock_has_vjp` directly, modeled on the per-example section of
+`EfficientNetBackB0.lean` (`residualBackGraph`, `convBnSwishBackGraph`,
 `mbconvResidual_backGraph_faithful`).
 
-Two capstones:
+One capstone:
 
   * **Identity/residual block** — `cnxResidBlockBackGraph` denotes
     `convNextBlock_has_vjp`'s backward. The block is `residual (block body)` with an
     identity skip, so the brick is `residualBackGraph (bodyBack …) dy`, closed via
     `residualBackGraph_faithful`.
-  * **Downsample (LN + 2×2/s2 conv)** — `cnxDownBackGraph` denotes
-    `cnxDownW_has_vjp`'s backward.
+
+⚠ **§2n (2026-07-31) removed the second one.** `cnxDownBackGraph` denoted `cnxDownW_has_vjp`'s
+backward — the SCALAR-LN downsample — and went with the scalar chain. It is not ported: the
+shipped downsample normalises with `chanLNTensor3`, whose graph-side backward tie does not exist
+(§2m built the render and the math VJP; `ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`
+is the MATH-side tie, not a `den`-level one). **So the channel-LN downsample has no graph-side
+backward capstone.** That is a real gap, and it is one the drop EXPOSED rather than created: it was
+always the scalar net that had the capstone. What this block-level file still covers — the ch9
+representative's residual block — is unaffected, because that net has no downsample.
 
 The block body is `layerScale ∘ project(1×1) ∘ gelu ∘ expand(1×1) ∘ LN ∘
 depthwise(7×7)`; everything is smooth (GELU is smooth, conv/layerScale linear, LN
@@ -132,33 +139,5 @@ theorem cnxResidBlockBackGraph_faithful {c cExp h w kH kW : Nat}
     (cnxBlockBodyBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x (.operand "%dy" dy))
     (cnxBlockBodyBackGraph_faithful Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls x
       (.operand "%dy" dy))
-
--- ════════════════════════════════════════════════════════════════
--- § Downsample block capstone (LN + 2×2/s2 conv, per-example)
--- ════════════════════════════════════════════════════════════════
-
-/-- The ConvNeXt stage-boundary downsample backward graph. The downsample forward is
-    `flatConvStride2(2×2) ∘ LN` (`cin@2h×2w → cout@h×w`), so its VJP (reverse order) is
-    `bnBack(LN) ∘ convStridedBack`, each at its forward input: LN is the first/outer
-    forward op so `bnBack` is outermost at `x`, and the strided conv's input is `LN x`. -/
-noncomputable def cnxDownBackGraph (h w : Nat) {cin cout : Nat}
-    (p : CnxDownParams cin cout) (x : Vec (cin * (2 * h) * (2 * w)))
-    (e : SHlo (cout * h * w)) : SHlo (cin * (2 * h) * (2 * w)) :=
-  .bnBack "%cnxdG" "%cnxdX" "cnxdE" p.ε p.γ x
-    (.convStridedBack "%cnxdW" p.W p.b
-      (layerNormForward (cin * (2 * h) * (2 * w)) p.ε p.γ p.β x) e)
-
-/-- **The ConvNeXt downsample block: backward graph ↔ proven VJP** (downsample
-    capstone), under `0 < p.ε`. Assembles the strided-conv backward + the LN backward
-    into the proven `cnxDownW_has_vjp` backward. The LN backward is the one non-`rfl`
-    op (`bnBack_faithful_fn`); `convStridedBack` is `rfl`-faithful. -/
-theorem cnxDownBackGraph_faithful (h w : Nat) {cin cout : Nat}
-    (p : CnxDownParams cin cout) (hε : 0 < p.ε)
-    (x : Vec (cin * (2 * h) * (2 * w))) (e : SHlo (cout * h * w)) :
-    den (cnxDownBackGraph h w p x e)
-      = (cnxDownW_has_vjp h w p hε).backward x (den e) := by
-  simp only [cnxDownBackGraph, cnxDownW_has_vjp, vjp_comp,
-    bnBack_faithful_fn (β := p.β) (hε := hε), convStridedBack_faithful]
-  rfl
 
 end Proofs.StableHLO

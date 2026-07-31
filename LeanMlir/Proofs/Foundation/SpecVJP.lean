@@ -585,7 +585,7 @@ The mnv2 full-paper pattern applied to the remaining imagenette nets: each commi
 spec's ENTIRE layer list (literal dims, drift-sensitive) denotes the full proven
 forward, with weights riding a structure bundle so the ties stay readable. Existing
 bundles are reused where the Full module already has one (`B0Weights`,
-`CnxTWeights`); r34 and vit get bundles here (`R34Weights`, `ViTTinyWeights` —
+`CnxTWeightsCh`); r34 and vit get bundles here (`R34Weights`, `ViTTinyWeights` —
 SpecVJP-local so no proof module's signature changes). Rung E composes each net's
 full graph-faithfulness apex with the tie (vit's is `vitFwdGraphKMHV_faithful`,
 ViTDepthK §3 — the depth-`k` multi-head vector-LN graph). Rung C is the canonical
@@ -786,18 +786,19 @@ theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Wei
   (efficientnetFwdGraphB_full_faithful N epsStr w x).trans
     (congrFun (efficientnetVerified_denote_eq N w).symm x)
 
--- ── ConvNeXt-T (FULL): the committed 27-entry spec ↔ convNextForwardTC ──
+-- ── ConvNeXt-T (FULL): the committed 27-entry spec ↔ convNextForwardTCh ──
 
 /-- Math denotation of the committed ConvNeXt-T spec: the 28-entry `[3,3,9,3]` layer list
     denotes to `convNextForwardTCh` — the **channel**-LayerNorm net (§2m), whose 22 LN sites
     are 1 stem + 18 block + 3 downsample, each reducing over the `c` channels at one spatial
     position with a per-channel `[c]` affine.
 
-    ⚠ This used to match a `.convNextBlock`/`.bn` list and denote `convNextForwardTC`, the
-    SCALAR-LN net: one mean and one variance over the whole `c·h·w` map, two scalars, and no
-    stem LN but a head LN. Do NOT "fix" a mismatch here by re-pointing this at
-    `convNextForwardTC` — it typechecks by `rfl` and would assert that the channel-LN layer
-    list denotes the scalar-LN function, which is §2k's own sin one level down. -/
+    ⚠ This used to match a `.convNextBlock`/`.bn` list and denote the SCALAR-LN net: one mean and
+    one variance over the whole `c·h·w` map, two scalars, and no stem LN but a head LN. §2n
+    deleted that chain outright, so the trap it guarded against — silently re-pointing this at the
+    scalar function, which would typecheck by `rfl` and assert that the channel-LN layer list
+    denotes the scalar-LN one (§2k's own sin, one level down) — is no longer expressible. Keeping
+    the note because the SHAPE of that mistake is what §2k was about, not the specific symbol. -/
 noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with

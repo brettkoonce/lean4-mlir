@@ -56,7 +56,7 @@ open Proofs.StableHLO (transposeFlat)
 -- ════════════════════════════════════════════════════════════════
 
 /-- The identity float-bridges — the `FloatBridges` peer of `floatClose_id`. Magnitude and modulus
-    pass through. It is the `convNextStageK`/`convNextStageChK` depth-0 base case, and (§2n) the
+    pass through. It is the `convNextStageChK` depth-0 base case, and (§2n) the
     channel-LN net's HEAD LN slot: the reference has no head LN, so both the forward skeleton's
     `lnHead` and the backward's `lnBhead` are filled with `id`. Lives here rather than in
     `ConvNeXtWholeFloatBridge` because the forward and backward ConvNeXt bridge files both need it

@@ -11,8 +11,8 @@ lemmas tie each skeleton back to **the** committed real ℝ-forward def by plugg
 into the skeleton's abstract slots — so the bridges provably apply to the actual nets, not just
 look-alike skeletons.
 
-All three are pure definitional unfolds (`rfl`, modulo the nested-application `convNextForwardT` which
-goes through its `_eq_chain` to dodge the kernel blow-up). EfficientNet already ties directly (its
+All three are pure definitional unfolds (`rfl`, modulo the nested-application `convNextForwardTCh`
+which goes through its `_eq_chain` to dodge the kernel blow-up). EfficientNet already ties directly (its
 bridge is stated on the `∘`-form that IS `efficientnetForwardB`). ViT's tie is NOT a definitional
 unfold — it decomposes `vit_body = (per-token finalLN) ∘ transformerTower` into the flattened
 `perRowFlat finalLN ∘ towerBack blocks`, reconciling the tower's `Nat.rec` fold with the
@@ -26,30 +26,15 @@ namespace Proofs
 
 open scoped Real
 
-/-- **The ConvNeXt-T forward tie.** The committed `convNextForwardT` (nested-application form) equals
-    the `convnextForward` skeleton with the stem/head LayerNorms, the 4 stages (`convNextStageK`), and
-    the 3 downsamples (`cnxDownW`) plugged into its supplied slots. Through `convNextForwardT_eq_chain`
-    (the kernel-safe `∘`-form), then `rfl`. -/
-theorem convNextForwardT_eq_skeleton (w : CnxTWeights) :
-    convNextForwardT w = convnextForward w.sW w.sb w.Wd w.bd
-      (layerNormForward (96 * 56 * 56) w.sε w.sγ w.sβ)
-      (layerNormForward 768 w.hε w.hγ w.hβ)
-      (convNextStageK 3 w.s1) (cnxDownW 28 28 w.d1)
-      (convNextStageK 3 w.s2) (cnxDownW 14 14 w.d2)
-      (convNextStageK 9 w.s3) (cnxDownW 7 7 w.d3)
-      (convNextStageK 3 w.s4) := by
-  funext x
-  rw [convNextForwardT_eq_chain w x]
-  rfl
-
-/-- **The channel-LN ConvNeXt-T forward tie (§2n)** — the peer of the above for the net the repo
-    actually ships. `convNextForwardTCh` equals the SAME `convnextForward` skeleton with
-    `chanLNTensor3` in the stem slot, the `…Ch` stages and downsamples, and — because the
-    reference's 22 LN sites are 1 stem + 18 block + 3 downsample — **`id` in the head slot**.
+/-- **The ConvNeXt-T forward tie (§2n).** `convNextForwardTCh` — the committed channel-LN net —
+    equals the `convnextForward` skeleton with `chanLNTensor3` in the stem slot, the `…Ch` stages
+    and downsamples, and — because the reference's 22 LN sites are 1 stem + 18 block + 3 downsample
+    — **`id` in the head slot**.
 
     This is what makes `convnextCh_floatBridges` a statement about the committed net rather than
-    about a look-alike skeleton. Same proof shape as the scalar tie: through `…_eq_chain` (the
-    kernel-safe `∘`-form) and then `rfl`, with `id ∘ GAP` collapsing definitionally. -/
+    about a look-alike skeleton. Through `convNextForwardTCh_eq_chain` (the kernel-safe `∘`-form)
+    and then `rfl`, with `id ∘ GAP` collapsing definitionally. §2n deleted its scalar-LN
+    predecessor (`convNextForwardT_eq_skeleton`) along with the chain it tied. -/
 theorem convNextForwardTCh_eq_skeleton (w : CnxTWeightsCh) :
     convNextForwardTCh w = convnextForward w.sW w.sb w.Wd w.bd
       (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ)

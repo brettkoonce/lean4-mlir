@@ -402,17 +402,18 @@ lean_lib «Certs» where
              -- downsamples supplied.
              `LeanMlir.Proofs.Float.ConvNeXtBackFloatBridge,
              -- ConvNeXt-T WHOLE-NET FORWARD (forward peer of convnext_grad_floatBridges): the [3,3,9,3]
-             -- fold of convNextForwardT. Two new op-bridges: floatBridges_layerScale (γ⊙x = diagBack γ
+             -- fold of convNextForwardTCh. Two new op-bridges: floatBridges_layerScale (γ⊙x = diagBack γ
              -- definitionally, γ exact ⇒ es=0) + floatBridges_flatConvStride4 (the 4×4/s4 patchify stem
              -- = flatConv read at decimateOddIdx∘decimateIdx, two-decimation cousin of stride2). Named
-             -- bridges floatBridges_convNextBlock (residual body) + floatBridges_convNextStageK (the
-             -- depth-k stage fold, induction) + floatBridges_cnxDownW; convnextForward ∘-skeleton with
+             -- bridges floatBridges_cnxBlockWith (LN-abstract body; floatBridges_convNextBlock = its ch9
+             -- instantiation) + floatBridges_convNextStageChK (depth-k fold) + floatBridges_cnxDownChW;
+             -- convnextForward ∘-skeleton with
              -- stem-conv/GAP/dense concrete, stem/head LN + 4 stages + 3 downsamples supplied.
              `LeanMlir.Proofs.Float.ConvNeXtWholeFloatBridge,
              -- The skeleton↔real-net forward ties (item #5, cosmetic polish): each whole-net forward
              -- bridge is stated on a fresh skeleton (r34Forward/mnv2Forward/convnextForward) with abstract
              -- blocks; these rfl lemmas plug the concrete blocks (idFwd/downFwd, invresBody*PC,
-             -- convNextStageK/cnxDownW) into the slots ⇒ each skeleton = THE committed real ℝ-forward def.
+             -- convNextStageChK/cnxDownChW) into the slots ⇒ each skeleton = THE committed real ℝ-forward def.
              `LeanMlir.Proofs.Foundation.WholeNetForwardTies,
              -- §B shared prerequisite: the DEPTHWISE adjoint gate (the depthwise twin of
              -- IR.convBackDenote_eq_input_grad_formula) — depthwiseConv2d (dwReverse W) 0 =

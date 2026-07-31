@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Float.ChannelLNFloatBridge
 /-! # ℝ→Float32 bridge: the WHOLE ConvNeXt-T FORWARD — the [3,3,9,3] fold
 
 The forward peer of `convnext_grad_floatBridges` (`ConvNeXtBackFloatBridge.lean`). The repo had the
-ConvNeXt forward float story only at *op* level; this folds the whole `convNextForwardT` (the [3,3,9,3]
+ConvNeXt forward float story only at *op* level; this folds the whole `convNextForwardTCh` (the [3,3,9,3]
 ch9 render) in the SAME blueprint the backward uses.
 
 The ConvNeXt block body is `layerScale ∘ conv(proj) ∘ gelu ∘ conv(expand) ∘ LN ∘ depthwise`, wrapped
@@ -21,13 +21,16 @@ in `residual`. Two forward op-bridges were missing and are built here:
   coordinate, so its `FloatClose` is `floatClose_flatConv` (on the `4h×4w` grid) evaluated there — the
   two-decimation cousin of r34's `floatClose_flatConvStride2`.
 
-Then the named bridges discharge the fold: `floatBridges_convNextBlock` (the block, `residual(body)`),
-`floatBridges_convNextStageK` (the depth-`k` stage fold — the ConvNeXt analogue of ViT's
-`floatBridges_towerBack`, by induction on the stage depth), and `floatBridges_cnxDownW` (the
-stage-boundary downsample `flatConvStride2 ∘ LN`). `convnextForward` is the `∘` skeleton of
-`convNextForwardT` (concrete stem-conv/GAP/dense; stem-LN, head-LN, 4 stages, 3 downsamples supplied
-as `FloatBridges` — exactly as `convnextInputGrad` supplies its `s1B..s4B`/`d1B..d3B`/`lnB*`). The LNs
-enter abstractly because `layerNormForward = bnForward` has the rsqrt keystone.
+Then the named bridges discharge the fold: `floatBridges_cnxBlockWith` (the block, `residual(body)`,
+LN-abstract — §2n's keystone, with `floatBridges_convNextBlock` its ch9 instantiation),
+`floatBridges_convNextStageChK` (the depth-`k` stage fold — the ConvNeXt analogue of ViT's
+`floatBridges_towerBack`, by induction on the stage depth), and `floatBridges_cnxDownChW` (the
+stage-boundary downsample `flatConvStride2 ∘ channel-LN`). `convnextForward` is the `∘` skeleton of
+`convNextForwardTCh` (concrete stem-conv/GAP/dense; stem-LN, head-LN, 4 stages, 3 downsamples supplied
+as `FloatBridges` — exactly as `convnextInputGrad` supplies its `s1B..s4B`/`d1B..d3B`/`lnB*`; the
+shipped net fills the head slot with `id`). The LNs enter abstractly because
+`layerNormForward = bnForward` has the rsqrt keystone, which is why the §2m channel flip cost this
+file three peer theorems and no new analysis.
 -/
 
 namespace Proofs
@@ -169,78 +172,16 @@ theorem floatBridges_convNextBlock {c cExp h w kH kW : Nat} (M : FloatModel) (fg
     Wdw bdw Wex bex Wpr bpr γls hw' hbb hegelu hc hcExp hg
     hWdw hbdw hWex hbex hWpr hbpr hγls hln
 
-/-- The per-block weight/bias/layer-scale bound bundle (a single `w'` for weights+γls, `bb` for biases). -/
-abbrev CnxBlockBounded {c cExp h w kH kW : Nat} (p : CnxBlockParams c cExp h w kH kW)
-    (w' bb : ℝ) : Prop :=
-  (∀ ch kh kw, |p.Wdw ch kh kw| ≤ w') ∧ (∀ ch, |p.bdw ch| ≤ bb) ∧
-  (∀ o cc kh kw, |p.Wex o cc kh kw| ≤ w') ∧ (∀ o, |p.bex o| ≤ bb) ∧
-  (∀ o cc kh kw, |p.Wpr o cc kh kw| ≤ w') ∧ (∀ o, |p.bpr o| ≤ bb) ∧
-  (∀ ch, |p.γls ch| ≤ w')
-
-/-- **The packaged ConvNeXt block (`cnxBlockW`) float-bridges** — `floatBridges_convNextBlock` fed a
-    `CnxBlockParams`; the layer-scale bound rides through the `cnxGls` channel-reindex. -/
-theorem floatBridges_cnxBlockW {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
-    (p : CnxBlockParams c cExp h w kH kW)
-    {w' bb egelu : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
-    (hc : 0 < c * h * w) (hcExp : 0 < cExp * h * w)
-    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
-    (hb : CnxBlockBounded p w' bb)
-    (hln : FloatBridges (layerNormForward (c * h * w) p.εn p.γn p.βn)) :
-    FloatBridges (cnxBlockW p) := by
-  obtain ⟨hWdw, hbdw, hWex, hbex, hWpr, hbpr, hγls⟩ := hb
-  unfold cnxBlockW
-  exact floatBridges_convNextBlock M fgelu p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr
-    (cnxGls p) hw' hbb hegelu hc hcExp hg hWdw hbdw hWex hbex hWpr hbpr
-    (fun i => hγls (StableHLO.chanIdx c h w i)) hln
-
 -- ════════════════════════════════════════════════════════════════
--- § The depth-k stage fold (peer of ViT's floatBridges_towerBack)
+-- § The packaged block / stage fold / downsample, at the REAL channel LayerNorm
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The depth-`k` ConvNeXt stage float-bridges** — `convNextStageK k ps` is the head-recursive fold
-    of `k` blocks (block `0` first); its bridge is the `.comp` fold of `floatBridges_cnxBlockW`, by
-    induction on the stage depth. The ConvNeXt analogue of ViT's `floatBridges_towerBack` (blocks have
-    DISTINCT params, so the explicit depth fold, not a uniform iterate). Discharges each [3,3,9,3]
-    stage given uniform per-block bounds + per-block LayerNorm bridges. -/
-theorem floatBridges_convNextStageK {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
-    {w' bb egelu : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
-    (hc : 0 < c * h * w) (hcExp : 0 < cExp * h * w)
-    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu) :
-    ∀ (k : Nat) (ps : Fin k → CnxBlockParams c cExp h w kH kW),
-      (∀ i, CnxBlockBounded (ps i) w' bb) →
-      (∀ i, FloatBridges (layerNormForward (c * h * w) (ps i).εn (ps i).γn (ps i).βn)) →
-      FloatBridges (convNextStageK k ps)
-  | 0, _, _, _ => floatBridges_idVec
-  | _ + 1, ps, hb, hln =>
-      (floatBridges_cnxBlockW M fgelu (ps 0) hw' hbb hegelu hc hcExp hg (hb 0) (hln 0)).comp
-        (floatBridges_convNextStageK M fgelu hw' hbb hegelu hc hcExp hg _
-          (fun i => ps i.succ) (fun i => hb i.succ) (fun i => hln i.succ))
-
--- ════════════════════════════════════════════════════════════════
--- § The stage-boundary downsample bridge (peer of floatBridges_cnxDownBack)
--- ════════════════════════════════════════════════════════════════
-
-/-- **The ConvNeXt downsample float-bridges** — the forward peer of `floatBridges_cnxDownBack`.
-    `cnxDownW = flatConvStride2 W ∘ LN`: the supplied LayerNorm then the stride-2 widening conv. -/
-theorem floatBridges_cnxDownW {cin cout : Nat} (h w : Nat) (M : FloatModel)
-    (p : CnxDownParams cin cout)
-    {w' bb : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hn : 0 < cin * (2 * h) * (2 * w))
-    (hW : ∀ o c kh kw, |p.W o c kh kw| ≤ w') (hb : ∀ o, |p.b o| ≤ bb)
-    (hln : FloatBridges (layerNormForward (cin * (2 * h) * (2 * w)) p.ε p.γ p.β)) :
-    FloatBridges (cnxDownW h w p) := by
-  unfold cnxDownW
-  exact hln.comp (floatBridges_flatConvStride2 (h := h) (w := w) M p.W p.b hw' hbb hn hW hb)
-
--- ════════════════════════════════════════════════════════════════
--- § §2n — the SAME three bridges at ConvNeXt's REAL channel LayerNorm
--- ════════════════════════════════════════════════════════════════
-
-/-! Everything above normalises with `layerNormForward`: one mean and one variance over the whole
-`c·h·w` map, scalar γ/β. The shipped net (§2m) normalises with `chanLNTensor3`. The three bridges
-below are the peers of `floatBridges_cnxBlockW` / `floatBridges_convNextStageK` /
-`floatBridges_cnxDownW` at that LN, and they are *mechanical*: the block one is
-`floatBridges_cnxBlockWith` (the LN-abstract keystone above) fed `floatBridges_chanLNTensor3`, and
-the stage fold is the same induction on depth. The supplied fact is now the PURE-normalise
+/-! The three bridges the whole-net fold consumes. Until §2n each had a scalar-LN twin here
+(`floatBridges_cnxBlockW` / `_convNextStageK` / `_cnxDownW`, over `CnxBlockParams`/`CnxDownParams`);
+those were the scalar chain's last LIVE consumers, and they went with it once these existed. They
+are *mechanical*: the block one is `floatBridges_cnxBlockWith` (the LN-abstract keystone above) fed
+`floatBridges_chanLNTensor3`, and the stage fold is an induction on depth. The supplied fact is the
+PURE-normalise
 `FloatBridges (layerNormForward c ε 1 0)` over the `c` channels at one spatial position — the same
 rsqrt keystone, at a different reduction width; the γ/β affine has moved out of it and into the
 bridge (`floatBridges_layerNormVec`), which is why the two bounds `hγn`/`hβn` appear here. -/
@@ -296,7 +237,7 @@ abbrev CnxDownChBounded {cin cout : Nat} (p : CnxDownParamsCh cin cout) (w' bb :
   (∀ i, |p.γ i| ≤ w') ∧ (∀ i, |p.β i| ≤ bb)
 
 /-- **The channel-LN downsample float-bridges** — `cnxDownChW = flatConvStride2 W ∘ chanLN`: the
-    channel LayerNorm then the stride-2 widening conv. The peer of `floatBridges_cnxDownW`; note
+    channel LayerNorm then the stride-2 widening conv; note
     the LN runs at the PRE-downsample width `cin` over the `2h×2w` grid. -/
 theorem floatBridges_cnxDownChW {cin cout : Nat} (h w : Nat) (M : FloatModel)
     (p : CnxDownParamsCh cin cout)
@@ -314,11 +255,11 @@ theorem floatBridges_cnxDownChW {cin cout : Nat} (h w : Nat) (M : FloatModel)
 -- § The whole-net forward (the [3,3,9,3] fold)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The whole ConvNeXt-T forward — the structural skeleton of `convNextForwardT`:
+/-- The whole ConvNeXt-T forward — the structural skeleton of `convNextForwardTCh`:
     `dense ∘ lnHead ∘ GAP ∘ s4 ∘ d3 ∘ s3 ∘ d2 ∘ s2 ∘ d1 ∘ s1 ∘ lnStem ∘ stride-4-conv`. The stem conv,
     GAP, and dense endpoints are concrete; the stem/head LayerNorms `lnStem`/`lnHead` and the 4 stages
     `s1..s4` + 3 downsamples `d1..d3` are supplied (each `FloatBridges`, discharged by
-    `floatBridges_convNextStageK` / `floatBridges_cnxDownW` / `floatBridges_bn`). The `[3,3,9,3]` stage
+    `floatBridges_convNextStageChK` / `floatBridges_cnxDownChW` / `floatBridges_bn`). The `[3,3,9,3]` stage
     structure is in the stage maps' depths; the 96→192→384→768 / 56→28→14→7 schedule in their dims. The
     forward peer of `convnextInputGrad`. -/
 noncomputable def convnextForward (sW : Kernel4 96 3 4 4) (sb : Vec 96) (Wd : Mat 768 10) (bd : Vec 10)

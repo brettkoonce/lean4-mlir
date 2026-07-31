@@ -1305,7 +1305,7 @@ open Proofs
 #print axioms StableHLO.mobilenetv2FwdGraphPaper_faithful
 
 -- ============ Full ConvNeXt-T [3,3,9,3] (ConvNeXtFullT.lean) ============
--- The last flagship without a full-architecture close. Stage depth-k (CnxBlockParams +
+-- The last flagship without a full-architecture close. Stage depth-k (CnxBlockParamsCh +
 -- Fin k induction, convNextBlock_has_vjp as the chain step), LN + 2x2/s2 downsample
 -- boundaries (existing stride-2 VJPs), and the NEW 4x4/s4 patchify stem
 -- (flatConvStride4 = decimate . decimateOdd . stride-1 SAME conv — the LEFT-ALIGNED
@@ -1317,27 +1317,29 @@ open Proofs
 -- as the representative; faithful channel-LN stays the optional follow-up.
 #print axioms decimateOddFlat_has_vjp
 #print axioms flatConvStride4_has_vjp
-#print axioms convNextStageK_has_vjp
-#print axioms cnxDownW_has_vjp
-#print axioms convNextForwardT_has_vjp
+#print axioms convNextStageChK_has_vjp
+#print axioms cnxDownChW_has_vjp
+#print axioms convNextForwardTCh_has_vjp
 -- The nested↔∘-chain bridge: provable ONLY with the rw-shaped proof (equation-lemma
 -- rw + comp_apply peeling, syntactic close) — a simp/rfl close makes the kernel
 -- iota-unroll the recursive stage folds (no defeq cache) and deterministically
 -- time out. Closes the form-gap EfficientNet-B0 still carries.
-#print axioms convNextForwardT_eq_chain
-#print axioms convNextForwardT_has_vjp_correct
-#print axioms StableHLO.cnxBlockGraphW_faithful
-#print axioms StableHLO.cnxStageGraphK_den
-#print axioms StableHLO.cnxDownGraphW_faithful
-#print axioms StableHLO.convNextFwdGraphT_faithful
--- Committed-render config (no stem-LN — the committed convnext_train_step.mlir
--- omits the paper's stem-LN, 180 params): the graph tests/TestConvNeXtTTrainPC.lean
--- proof-renders at the committed signature. CAPSTONE: two-sided GPU parity vs the
--- committed trainer — 180/180 outputs, 179 bit-identical, worst rel-diff 1.05e-5.
-#print axioms convNextForwardTC_has_vjp
-#print axioms convNextForwardTC_eq_chain
-#print axioms convNextForwardTC_has_vjp_correct
-#print axioms StableHLO.convNextFwdGraphTC_faithful
+#print axioms convNextForwardTCh_eq_chain
+#print axioms convNextForwardTCh_has_vjp_correct
+-- The channel-LN GRAPH + faithfulness (rung E's apex): one LN site (chanLNGraph — transpose,
+-- rowwise normalise at %one/%zero, the real [c] affine, transpose back, mirroring
+-- ConvNeXtRender.lnFwdSite at chLN := true op-for-op), the block, the depth-k stage fold, the
+-- downsample, and the whole [3,3,9,3] forward. These were NOT audited when §2m added them; the
+-- §2n drop is what surfaced it, since the scalar graphs they replace WERE.
+#print axioms StableHLO.chanLNGraph_faithful
+#print axioms StableHLO.cnxBlockChGraphW_faithful
+#print axioms StableHLO.cnxStageChGraphK_den
+#print axioms StableHLO.cnxDownChGraphW_faithful
+#print axioms StableHLO.convNextFwdGraphTCh_faithful
+-- §2n: the SCALAR-LN twin of this chain (convNextStageK / cnxDownW / convNextForwardT / TC and
+-- their graph section — 13 audit lines) was DELETED once the float bridges, its last live
+-- consumers, had …Ch peers. The channel-LN chain above is what ships; the ch9 representative in
+-- Architectures/ConvNeXt.lean is a different thing and survived. Handoff §2n has the checklist.
 
 -- ℝ→Float32 bridge, Tier 1 (FloatBridge.lean): standard-model rounding
 -- (hypothesis-style `FloatModel`, NO project axioms — binary32 satisfies the
@@ -2006,25 +2008,22 @@ open Proofs
 -- ConvNeXt-T (per-example): block body backward = depthwiseBack ∘ lnBack ∘ convBack ∘ geluBack ∘
 -- convBack ∘ layerScaleBack (depthwiseFlatBack concrete; LN/GELU/layer-scale diagBacks supplied); full
 -- block = residual(body); the stage downsample = lnBack ∘ flatConvStride2Back. convnext_grad_floatBridges
--- = the WHOLE-NET [3,3,9,3] fold (reverse of convNextForwardT), concrete GAP/dense, stem/4 stages/3
+-- = the WHOLE-NET [3,3,9,3] fold (reverse of convNextForwardTCh), concrete GAP/dense, stem/4 stages/3
 -- downsamples/head-LN supplied as FloatBridges.
 #print axioms Proofs.floatBridges_cnxBlockBodyBack
 #print axioms Proofs.floatBridges_cnxBlockBack
 #print axioms Proofs.floatBridges_cnxDownBack
 #print axioms Proofs.convnext_grad_floatBridges
 -- ConvNeXt-T WHOLE-NET FORWARD (forward peer of convnext_grad_floatBridges, the [3,3,9,3] fold of
--- convNextForwardT). New op-bridges: floatBridges_layerScale (γ⊙x = diagBack γ, γ exact ⇒ es=0) +
+-- convNextForwardTCh). New op-bridges: floatBridges_layerScale (γ⊙x = diagBack γ, γ exact ⇒ es=0) +
 -- floatBridges_flatConvStride4 (4×4/s4 patchify stem = flatConv read at decimateOddIdx∘decimateIdx).
--- Named bridges floatBridges_convNextBlock (residual body) + floatBridges_convNextStageK (depth-k
--- stage fold, induction — the analogue of ViT's towerBack) + floatBridges_cnxDownW; convnext_
+-- Named bridge floatBridges_cnxBlockWith (LN-abstract residual body; floatBridges_convNextBlock is
+-- its ch9 instantiation, and §2n deleted the three scalar-LN packaged peers); convnext_
 -- floatBridges = the ∘-skeleton fold (stem-conv/GAP/dense concrete, stem/head LN + 4 stages + 3
 -- downsamples supplied). COMPLETES the 5-net forward whole-net sweep.
 #print axioms Proofs.floatBridges_layerScale
 #print axioms Proofs.floatBridges_flatConvStride4
 #print axioms Proofs.floatBridges_convNextBlock
-#print axioms Proofs.floatBridges_cnxBlockW
-#print axioms Proofs.floatBridges_convNextStageK
-#print axioms Proofs.floatBridges_cnxDownW
 #print axioms Proofs.convnext_floatBridges
 -- §2n — the SAME story at ConvNeXt's REAL channel LayerNorm (the §2m flip), forward AND backward.
 -- Route A's conjugation is four permutations around one row map, so floatBridges_chanLNTensor3 is
@@ -2049,12 +2048,10 @@ open Proofs
 #print axioms Proofs.convnextCh_grad_floatBridges
 -- The skeleton↔real-net forward ties (item #5, cosmetic): each whole-net forward skeleton, with the
 -- concrete blocks plugged into its abstract slots, IS the committed real ℝ-forward def (rfl, modulo
--- convNextForwardT's nested-app going through its _eq_chain). So the forward bridges provably apply to
--- the actual nets, not just look-alike skeletons. (efficientnet already ties via its ∘-form statement.)
-#print axioms Proofs.convNextForwardT_eq_skeleton
--- …and its §2n peer: the channel-LN net ties to the SAME skeleton with chanLNTensor3 in the stem
--- slot and `id` in the head slot, which is what makes convnextCh_floatBridges a statement about the
--- committed convNextForwardTCh rather than about a look-alike.
+-- convNextForwardTCh's nested-app going through its _eq_chain). So the forward bridges provably apply
+-- to the actual nets, not just look-alike skeletons. (efficientnet already ties via its ∘-form.)
+-- ConvNeXt ties at chanLNTensor3 in the stem slot and `id` in the head slot (no head LN); its
+-- scalar-LN predecessor convNextForwardT_eq_skeleton went with the §2n drop.
 #print axioms Proofs.convNextForwardTCh_eq_skeleton
 #print axioms Proofs.mobilenetv2Forward_full_pc_eq_skeleton
 #print axioms Proofs.resnet34Forward_full_pc_eq_skeleton
@@ -2842,14 +2839,17 @@ open Proofs
 #print axioms StableHLO.seBlockFullBackGraphE_faithful
 #print axioms StableHLO.mbconvBodyBackGraph_faithful
 #print axioms StableHLO.mbconvResidual_backGraph_faithful
--- ConvNeXt backward-graph faithfulness (den-level), per-example (batch-1): the
--- block-body backward graph, the identity/residual block capstone, and the
--- LN+2×2/s2 downsample capstone. LayerNorm is per-example separable (= bnForward
--- on the feature axis), so no batched machinery; the LN backward routes through
--- bnBack_faithful_fn (layerNorm_has_vjp ≡ bn_has_vjp).
+-- ConvNeXt backward-graph faithfulness (den-level), per-example (batch-1): the block-body
+-- backward graph and the identity/residual block capstone, both over the ch9 representative's
+-- block. LayerNorm is per-example separable (= bnForward on the feature axis), so no batched
+-- machinery; the LN backward routes through bnBack_faithful_fn (layerNorm_has_vjp ≡ bn_has_vjp).
+-- §2n dropped the third capstone here, the LN+2×2/s2 DOWNSAMPLE (cnxDownBackGraph_faithful): it
+-- denoted the scalar cnxDownW_has_vjp and went with that chain. It is NOT ported — the shipped
+-- downsample's channel-LN backward has no den-level tie (chanLNTensor3Back_eq_chanLN_vjp is the
+-- math-side one), so the channel-LN downsample has no graph-side backward capstone. A gap the
+-- drop EXPOSED rather than created: it was always the scalar net that had it.
 #print axioms StableHLO.cnxBlockBodyBackGraph_faithful
 #print axioms StableHLO.cnxResidBlockBackGraph_faithful
-#print axioms StableHLO.cnxDownBackGraph_faithful
 #print axioms StableHLO.bnBatchBack_faithful
 #print axioms StableHLO.convBackBatched_faithful
 #print axioms StableHLO.depthwiseBackBatched_faithful
@@ -3685,7 +3685,7 @@ open Proofs
 -- FULL committed-spec ties (unified weight bundles, 2026-07-07): every imagenette net's
 -- ENTIRE committed layer list (literal dims) now denotes its full proven forward —
 -- r34 (R34Weights → resnet34Forward_full_pc), enet (B0Weights → efficientnetForwardB_full,
--- batched ∀N), convnext (CnxTWeights → convNextForwardTC, committed 180-param config),
+-- batched ∀N), convnext (CnxTWeightsCh → convNextForwardTCh, the committed channel-LN config),
 -- vit (ViTTinyWeights → vitForwardKV depth-12 distinct-param vector-LN). Rung E composed
 -- from each net's full graph-faithfulness apex — vit's via vitFwdGraphKMHV_faithful
 -- (ViTDepthK §3), so ALL FIVE have the complete B/C/E ladder at their committed specs.

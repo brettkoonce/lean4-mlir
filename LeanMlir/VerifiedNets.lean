@@ -468,7 +468,7 @@ def efficientnetVerified : VerifiedNetSpec where
     [96,192,384,768] (depthwise 7×7 → scalar-LN → 1×1 expand → GELU → 1×1 project → layerScale)
     with 3 between-stage (LN + 2×2-s2) downsamples (56→28→14→7) → GAP → LN → dense. 180 params.
     Tied at the FULL spec in `Proofs/SpecVJP.lean` (`convnextVerified_denote_eq` →
-    `convNextForwardTC`, the committed 180-param config, + rung E
+    `convNextForwardTCh`, the committed channel-LN config, + rung E
     `convnextVerified_fwd_faithful`); the full-depth REAL VJP is
     `Proofs.convNextForwardTC_has_vjp_correct` (ConvNeXtFullT.lean). -/
 def convnextVerified : VerifiedNetSpec where
