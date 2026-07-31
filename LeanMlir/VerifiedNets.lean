@@ -480,18 +480,18 @@ def convnextVerified : VerifiedNetSpec where
   nClasses := 10
   data     := .imagenette
   layers   := [
-    .conv 3 96 4 4,                                              -- patchify 4×4/s4   224→56
-    .convNextBlock 96, .convNextBlock 96, .convNextBlock 96,     -- stage 1 (3) @56
-    .bn, .conv 96 192 2 2,                                       -- downsample 96→192  56→28
-    .convNextBlock 192, .convNextBlock 192, .convNextBlock 192,  -- stage 2 (3) @28
-    .bn, .conv 192 384 2 2,                                      -- downsample 192→384 28→14
-    .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,  -- stage 3 (9) @14
-    .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
-    .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
-    .bn, .conv 384 768 2 2,                                      -- downsample 384→768 14→7
-    .convNextBlock 768, .convNextBlock 768, .convNextBlock 768,  -- stage 4 (3) @7
-    .globalAvgPool, .bn, .dense 768 10 ]                         -- head: GAP → LN → dense
-  blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → IREE FFI → GPU"
+    .conv 3 96 4 4, .layerNorm 96,                                     -- patchify 4×4/s4 + stem LN
+    .convNextBlockCh 96, .convNextBlockCh 96, .convNextBlockCh 96,     -- stage 1 (3) @56
+    .layerNorm 96, .conv 96 192 2 2,                                   -- downsample 96→192  56→28
+    .convNextBlockCh 192, .convNextBlockCh 192, .convNextBlockCh 192,  -- stage 2 (3) @28
+    .layerNorm 192, .conv 192 384 2 2,                                 -- downsample 192→384 28→14
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,  -- stage 3 (9) @14
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+    .layerNorm 384, .conv 384 768 2 2,                                 -- downsample 384→768 14→7
+    .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,  -- stage 4 (3) @7
+    .globalAvgPool, .dense 768 10 ]                                    -- head: GAP → dense
+  blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 sites (§2m); the count matches the JAX reference at 28,587,592 for K=1000"
 
 -- Derived layout (180 params) == the audited hand-list ConvNeXtLayout.specs.
 #guard convnextVerified.toSpecs == ConvNeXtLayout.specs

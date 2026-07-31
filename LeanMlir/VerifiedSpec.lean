@@ -81,6 +81,11 @@ inductive VLayer where
       c→4c → GELU → 1×1 project 4c→c → layerScale (per-channel γ). Params: depthwise{W,b};
       LN{γ,β scalar}; expand{W,b}; project{W,b}; layerScale{γ:[c]}. -/
   | convNextBlock (c : Nat)
+  /-- ConvNeXt block with the **real channel LayerNorm** — `γ,β : [c]` instead of two rank-0
+      scalars (§2m). The normalisation axis changes with it (over `c` per spatial position, not
+      over the whole `c·h·w` map), but that is invisible to the LAYOUT; what the layout sees is the
+      affine going from 2 floats to 2c. Kept beside `convNextBlock` for `convBnNB`'s reason. -/
+  | convNextBlockCh (c : Nat)
   /-- Per-channel LayerNorm over `d` features (normalize ∘ `[d]` affine). Params `{γ:[d], β:[d]}`
       — the non-scalar form (cf. `bn`, which is scalar-global). -/
   | layerNorm (d : Nat)
@@ -149,6 +154,9 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
       (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
   | convNextBlock c =>                               -- depthwise 7×7 | LN(scalar) | expand | project | layerScale
     #[(#[c,1,7,7],0),(#[c],2),(#[],1),(#[],2),
+      (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],1)]
+  | convNextBlockCh c =>                             -- as above with a per-channel LN affine
+    #[(#[c,1,7,7],0),(#[c],2),(#[c],1),(#[c],2),
       (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],1)]
   | layerNorm d             => #[(#[d],1),(#[d],2)]   -- per-channel γ,β
   | transformerBlock d m =>                          -- LN1 | Wq/Wk/Wv/Wo | LN2 | MLP(d→m→d)

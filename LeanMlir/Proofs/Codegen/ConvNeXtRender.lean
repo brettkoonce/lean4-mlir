@@ -406,7 +406,7 @@ set_option maxRecDepth 8000 in
     rather than by inspection**. Because it shares the chain, the emitted body is a byte-identical
     PREFIX of `convnext_train_step.mlir`'s, ending exactly where the loss begins — which is what
     `scripts/regen_verified_mlir.sh check` audits. -/
-def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (chLN : Bool := false) : String := Id.run do
+def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (chLN : Bool := true) : String := Id.run do
   let F : CFwd := (convNextFwdChain chLN).run' 0
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams chLN).map (fun (nm, d) => s!"%{nm}: {ty d}"))
@@ -436,7 +436,7 @@ set_option maxRecDepth 8000 in
     softmax is now `pretty`d on its own line instead of nested inside the `.sub` so that `%loss` can
     read it, but `.operand` is a leaf that emits nothing, so the fresh-name sequence is unchanged. -/
 private def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none)
-    (chLN : Bool := false) :
+    (chLN : Bool := true) :
     StateM Nat (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain `convNextFwdFaithfulV` emits, so `@convnext_fwd` and the two
     --     train steps cannot drift into computing different functions (§2a) ═══
@@ -529,7 +529,7 @@ set_option maxRecDepth 8000 in
     The cotangent is plain CE with an **explicit** ÷B — unlike ViT/R34, which fold the batch mean
     into `lr` — so the committed `cLR = 0.1` is an effective 0.1, the house convention spelled
     differently (§2a-quinquies). -/
-def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") (chLN : Bool := false) : String := Id.run do
+def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") (chLN : Bool := true) : String := Id.run do
   let (body, updMap, _) := (convNextBackAll false none chLN).run' 0
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams chLN).map (fun (nm, d) => s!"%{nm}: {ty d}") ++ ["%onehot: " ++ ty [cBS,10]])
@@ -560,11 +560,12 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") (chL
     `replicas ≤ 1` this emits nothing and threads the raw gradient, so the single-device render
     stays byte-identical — the cheap self-check that the insertion is inert.
 
-    **ConvNeXt is the first net whose collectives include RANK-0 operands.** Its 44 scalar
-    LayerNorm γ/β params have `ds = []`, i.e. `tensor<f32>`, where R34/enet/mnv2 have none below
-    rank 1 — so `stablehlo.all_reduce` is emitted on a scalar here. That is legal and it compiles
-    and executes (gated by `convnext-dp-check`), but it is the one thing about this render that had
-    never been exercised before. -/
+    ⚠ **A claim this docstring carried is now FALSE and is retired.** It said *"ConvNeXt is the
+    first net whose collectives include RANK-0 operands — its 44 scalar LayerNorm γ/β params have
+    `ds = []`"*. That was true of the scalar-LN render; §2m's channel LN makes every LN γ/β a
+    `Vec c`, so **0 of the 180 collectives are rank-0** (measured on the re-rendered artifact:
+    the LN ones are `tensor<96xf32>` … `tensor<768xf32>`). The rank-0 `all_reduce` path this
+    render used to be the only exerciser of is no longer exercised anywhere in the repo. -/
 private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (gradSSA : String) :
     StateM Nat (String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
@@ -622,9 +623,9 @@ set_option maxRecDepth 8000 in
     and artifact path via `cnxAdamVariant`, so producing it can never clobber the one the trainer
     runs. The only difference is one `all_reduce(add)/N` per parameter gradient, between the
     certified gradient and the certified AdamW triple: *certified gradient → trusted collective →
-    certified AdamW*. See `convnextAdamOne` for the carve-out, and note the rank-0 collectives. -/
+    certified AdamW*. See `convnextAdamOne` for the carve-out. -/
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
-    (replicas : Nat := 1) (chLN : Bool := false) : String := Id.run do
+    (replicas : Nat := 1) (chLN : Bool := true) : String := Id.run do
   let (body, gradMap, nSm) := (convNextBackAll true (some (alphaStr, negAlphaKStr, bStr)) chLN).run' 0
   let go : StateM Nat String := do
     let mut adamCode := ""
@@ -747,9 +748,9 @@ end Proofs.StableHLO
 -- ship. Claim ceiling is unchanged (§5): the gradient averaging is a proven identity; the collective
 -- implementing it is trusted, exactly like the lowerer.
 --
--- **44 of the 180 collectives are RANK-0** — the scalar LayerNorm γ/β at `tensor<f32>`. No other
--- net's DP render has an operand below rank 1, so that path was new here; `convnext-dp-check`
--- executes it.
+-- ⚠ §2h-quater's headline — *"44 of the 180 collectives are RANK-0"* — WAS this net's scalar
+-- LayerNorm and is retired by §2m: per-channel γ/β makes them `tensor<{c}xf32>`, so no collective
+-- here is rank-0 any more. Nothing in the repo exercises a rank-0 `all_reduce` now.
 --
 -- It renders to its OWN path, which is what stops the §2a race where producing a DP render meant
 -- editing a knob and clobbering the artifact the trainer runs. `2` is the replica count these are

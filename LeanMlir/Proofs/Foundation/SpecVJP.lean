@@ -788,48 +788,55 @@ theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Wei
 
 -- ── ConvNeXt-T (FULL): the committed 27-entry spec ↔ convNextForwardTC ──
 
-/-- Math denotation of the committed ConvNeXt-T spec: the 27-entry `[3,3,9,3]` layer
-    list denotes to `convNextForwardTC` (the committed-render config: no stem-LN,
-    180 params — `ConvNeXtFullT.lean`). -/
-noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeights) :
+/-- Math denotation of the committed ConvNeXt-T spec: the 28-entry `[3,3,9,3]` layer list
+    denotes to `convNextForwardTCh` — the **channel**-LayerNorm net (§2m), whose 22 LN sites
+    are 1 stem + 18 block + 3 downsample, each reducing over the `c` channels at one spatial
+    position with a per-channel `[c]` affine.
+
+    ⚠ This used to match a `.convNextBlock`/`.bn` list and denote `convNextForwardTC`, the
+    SCALAR-LN net: one mean and one variance over the whole `c·h·w` map, two scalars, and no
+    stem LN but a head LN. Do NOT "fix" a mismatch here by re-pointing this at
+    `convNextForwardTC` — it typechecks by `rfl` and would assert that the channel-LN layer
+    list denotes the scalar-LN function, which is §2k's own sin one level down. -/
+noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
-  | [.conv 3 96 4 4,
-     .convNextBlock 96, .convNextBlock 96, .convNextBlock 96,
-     .bn, .conv 96 192 2 2,
-     .convNextBlock 192, .convNextBlock 192, .convNextBlock 192,
-     .bn, .conv 192 384 2 2,
-     .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
-     .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
-     .convNextBlock 384, .convNextBlock 384, .convNextBlock 384,
-     .bn, .conv 384 768 2 2,
-     .convNextBlock 768, .convNextBlock 768, .convNextBlock 768,
-     .globalAvgPool, .bn, .dense 768 10] => convNextForwardTC w
+  | [.conv 3 96 4 4, .layerNorm 96,
+     .convNextBlockCh 96, .convNextBlockCh 96, .convNextBlockCh 96,
+     .layerNorm 96, .conv 96 192 2 2,
+     .convNextBlockCh 192, .convNextBlockCh 192, .convNextBlockCh 192,
+     .layerNorm 192, .conv 192 384 2 2,
+     .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+     .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+     .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+     .layerNorm 384, .conv 384 768 2 2,
+     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
+     .globalAvgPool, .dense 768 10] => convNextForwardTCh w
   | _ => fun _ => 0
 
 /-- **Spec ≡ the full proven net.** `convnextVerified`'s denotation is exactly
-    `convNextForwardTC` ([3,3,9,3] @ [96,192,384,768], committed 180-param config)
-    — by `rfl`. -/
-theorem convnextVerified_denote_eq (w : CnxTWeights) :
-    denoteConvnextT convnextVerified.layers w = convNextForwardTC w := rfl
+    `convNextForwardTCh` ([3,3,9,3] @ [96,192,384,768], channel LN, 28,587,592 params at
+    K = 1000 — the JAX reference's own count) — by `rfl`. -/
+theorem convnextVerified_denote_eq (w : CnxTWeightsCh) :
+    denoteConvnextT convnextVerified.layers w = convNextForwardTCh w := rfl
 
 /-- **The committed spec carries the math** — canonical `pdiv` witness; the REAL
-    whole-net VJP exists at full depth (`convNextForwardTC_has_vjp_correct`,
-    all-smooth, LN positivities only) on the ∘-chain form. -/
-noncomputable def convnextVerified_has_vjp (w : CnxTWeights) :
+    whole-net VJP exists at full depth (`convNextForwardTCh_has_vjp_correct`,
+    all-smooth, the 22 LN positivities only) on the ∘-chain form. -/
+noncomputable def convnextVerified_has_vjp (w : CnxTWeightsCh) :
     HasVJP (denoteConvnextT convnextVerified.layers w) where
   backward x dy i :=
     ∑ j : Fin 10, pdiv (denoteConvnextT convnextVerified.layers w) x i j * dy j
   correct _ _ _ := rfl
 
 open Proofs.StableHLO in
-/-- **Rung E at the committed spec.** The committed-config [3,3,9,3] graph denotes the
-    committed spec's function: `convNextFwdGraphTC_faithful` ∘ the tie. -/
-theorem convnextVerified_fwd_faithful (epsStr : String) (w : CnxTWeights)
+/-- **Rung E at the committed spec.** The committed-config [3,3,9,3] channel-LN graph denotes
+    the committed spec's function: `convNextFwdGraphTCh_faithful` ∘ the tie. -/
+theorem convnextVerified_fwd_faithful (epsStr : String) (w : CnxTWeightsCh)
     (x : Vec (3 * 224 * 224)) :
-    den (convNextFwdGraphTC epsStr w x)
+    den (convNextFwdGraphTCh epsStr w x)
       = denoteConvnextT convnextVerified.layers w x :=
-  (convNextFwdGraphTC_faithful epsStr w x).trans
+  (convNextFwdGraphTCh_faithful epsStr w x).trans
     (congrFun (convnextVerified_denote_eq w).symm x)
 
 -- ── ViT-Tiny (FULL): the committed 17-entry spec ↔ vitForwardKV @ depth 12 ──

@@ -424,21 +424,31 @@ namespace ConvNeXtLayout
 private def depths : Array Nat := #[3, 3, 9, 3]
 private def dims   : Array Nat := #[96, 192, 384, 768]
 private def blockSpec (c e : Nat) : Array (Array Nat × Nat) :=
-  #[(#[c,1,7,7],0),(#[c],2),(#[],1),(#[],2),     -- depthwise W,b ; LN γ,β (scalar)
+  #[(#[c,1,7,7],0),(#[c],2),(#[c],1),(#[c],2),   -- depthwise W,b ; LN γ,β (PER-CHANNEL, §2m)
     (#[e,c,1,1],0),(#[e],2),                      -- expand W,b
     (#[c,e,1,1],0),(#[c],2),                      -- project W,b
     (#[c],1)]                                     -- layerScale γ (per-channel)
 private def downSpec (ci co : Nat) : Array (Array Nat × Nat) :=
-  #[(#[],1),(#[],2),(#[co,ci,2,2],0),(#[co],2)]   -- LN γ,β (scalar) ; 2×2/s2 conv W,b
-/-- `(dims, initKind)` for every param, in func-arg order. -/
+  #[(#[ci],1),(#[ci],2),(#[co,ci,2,2],0),(#[co],2)]  -- LN γ,β at the PRE-conv width ; conv W,b
+/-- `(dims, initKind)` for every param, in func-arg order.
+
+    ⚠ §2m moved three things at once, and they are the whole difference from the retired
+    180-param list: every LN affine went rank-0 `#[]` → per-channel `#[c]`, the **stem LN**
+    appeared, and the **head LN** went away (the reference's `forward` is
+    `patchify → channel_layer_norm → stages → GAP → dense`). The last two nearly cancel
+    — `+2·768 − 2·96 = +1,344` of 28.6M — so a matching parameter count is a decomposition
+    test, not an architecture check. The stem/head LN swap one-for-one, so this is still
+    **180 param tensors**; the floats go 27,826,282 at K = 10, i.e. **28,587,592 at K = 1000**,
+    which is the JAX reference's own reported count exactly. -/
 def specs : Array (Array Nat × Nat) := Id.run do
-  let mut a : Array (Array Nat × Nat) := #[(#[96,3,4,4],0),(#[96],2)]   -- patchify stem
+  let mut a : Array (Array Nat × Nat) :=
+    #[(#[96,3,4,4],0),(#[96],2),(#[96],1),(#[96],2)]   -- patchify stem + stem LN γ,β
   for si in [0:4] do
     let c := dims[si]!
     let e := 4 * c
     for _ in [0:depths[si]!] do a := a ++ blockSpec c e
     if si < 3 then a := a ++ downSpec c dims[si+1]!
-  a := a ++ #[(#[],1),(#[],2),(#[768,10],0),(#[10],2)]   -- head LN γ,β ; dense W,b
+  a := a ++ #[(#[768,10],0),(#[10],2)]   -- head: dense W,b (NO head LN — §2m)
   return a
 def paramShapes : Array (Array Nat) := specs.map (·.1)
 def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
