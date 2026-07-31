@@ -276,12 +276,13 @@ private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
   pure { code := cDpc ++ cDdr ++ cDdm ++ cDdn ++ cDer ++ cDem ++ cDen ++ cDxb ++
                  cEW ++ cEb ++ cEg ++ cEt ++ cDW ++ cDb ++ cDg ++ cDt ++ cPW ++ cPb ++ cPg ++ cPt,
          dx := nDxb,
-         ps := [⟨s!"b{p}eW", nEW, [mid,ic,1,1]⟩, ⟨s!"b{p}eb", nEb, [mid]⟩,
-                ⟨s!"b{p}eg", nEg, [mid]⟩, ⟨s!"b{p}ebt", nEt, [mid]⟩,
-                ⟨s!"b{p}dW", nDW, [mid,1,3,3]⟩, ⟨s!"b{p}db", nDb, [mid]⟩,
-                ⟨s!"b{p}dg", nDg, [mid]⟩, ⟨s!"b{p}dbt", nDt, [mid]⟩,
-                ⟨s!"b{p}pW", nPW, [oc,mid,1,1]⟩, ⟨s!"b{p}pb", nPb, [oc]⟩,
-                ⟨s!"b{p}pg", nPg, [oc]⟩, ⟨s!"b{p}pbt", nPt, [oc]⟩] }
+         ps := [⟨s!"b{p}eW", nEW, [mid,ic,1,1]⟩] ++
+                (if convBias then [⟨s!"b{p}eb", nEb, [mid]⟩] else []) ++
+                [⟨s!"b{p}eg", nEg, [mid]⟩, ⟨s!"b{p}ebt", nEt, [mid]⟩, ⟨s!"b{p}dW", nDW, [mid,1,3,3]⟩] ++
+                (if convBias then [⟨s!"b{p}db", nDb, [mid]⟩] else []) ++
+                [⟨s!"b{p}dg", nDg, [mid]⟩, ⟨s!"b{p}dbt", nDt, [mid]⟩, ⟨s!"b{p}pW", nPW, [oc,mid,1,1]⟩] ++
+                (if convBias then [⟨s!"b{p}pb", nPb, [oc]⟩] else []) ++
+                [⟨s!"b{p}pg", nPg, [oc]⟩, ⟨s!"b{p}pbt", nPt, [oc]⟩] }
 
 /-- **STRIDE-1 backward + 12 un-fused gradients**, shared by the skip (`skip := true`) and
     no-skip block kinds — the ONLY difference is the skip's `addVB` fan-in on the dx, which is why
@@ -351,12 +352,13 @@ private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xN
   pure { code := cDpc ++ cDdr ++ cDdm ++ cDdn ++ cDer ++ cDem ++ cDen ++ cDxb ++ cDx ++
                  cEW ++ cEb ++ cEg ++ cEt ++ cDW ++ cDb ++ cDg ++ cDt ++ cPW ++ cPb ++ cPg ++ cPt,
          dx := nDx,
-         ps := [⟨s!"b{p}eW", nEW, [mid,ic,1,1]⟩, ⟨s!"b{p}eb", nEb, [mid]⟩,
-                ⟨s!"b{p}eg", nEg, [mid]⟩, ⟨s!"b{p}ebt", nEt, [mid]⟩,
-                ⟨s!"b{p}dW", nDW, [mid,1,3,3]⟩, ⟨s!"b{p}db", nDb, [mid]⟩,
-                ⟨s!"b{p}dg", nDg, [mid]⟩, ⟨s!"b{p}dbt", nDt, [mid]⟩,
-                ⟨s!"b{p}pW", nPW, [oc,mid,1,1]⟩, ⟨s!"b{p}pb", nPb, [oc]⟩,
-                ⟨s!"b{p}pg", nPg, [oc]⟩, ⟨s!"b{p}pbt", nPt, [oc]⟩] }
+         ps := [⟨s!"b{p}eW", nEW, [mid,ic,1,1]⟩] ++
+                (if convBias then [⟨s!"b{p}eb", nEb, [mid]⟩] else []) ++
+                [⟨s!"b{p}eg", nEg, [mid]⟩, ⟨s!"b{p}ebt", nEt, [mid]⟩, ⟨s!"b{p}dW", nDW, [mid,1,3,3]⟩] ++
+                (if convBias then [⟨s!"b{p}db", nDb, [mid]⟩] else []) ++
+                [⟨s!"b{p}dg", nDg, [mid]⟩, ⟨s!"b{p}dbt", nDt, [mid]⟩, ⟨s!"b{p}pW", nPW, [oc,mid,1,1]⟩] ++
+                (if convBias then [⟨s!"b{p}pb", nPb, [oc]⟩] else []) ++
+                [⟨s!"b{p}pg", nPg, [oc]⟩, ⟨s!"b{p}pbt", nPt, [oc]⟩] }
 
 /-- **NO-EXPAND backward + 8 un-fused gradients** (b1). No expand conv and no skip, so the dx to
     the stem is the depthwise backward directly. -/
@@ -403,10 +405,11 @@ private def irBackNoExpGradB (B ic oc hh : Nat) (epsStr p xName : String)
   pure { code := cDpc ++ cDdr ++ cDdm ++ cDdn ++ cDxb ++
                  cDW ++ cDb ++ cDg ++ cDt ++ cPW ++ cPb ++ cPg ++ cPt,
          dx := nDxb,
-         ps := [⟨s!"b{p}dW", nDW, [ic,1,3,3]⟩, ⟨s!"b{p}db", nDb, [ic]⟩,
-                ⟨s!"b{p}dg", nDg, [ic]⟩, ⟨s!"b{p}dbt", nDt, [ic]⟩,
-                ⟨s!"b{p}pW", nPW, [oc,ic,1,1]⟩, ⟨s!"b{p}pb", nPb, [oc]⟩,
-                ⟨s!"b{p}pg", nPg, [oc]⟩, ⟨s!"b{p}pbt", nPt, [oc]⟩] }
+         ps := [⟨s!"b{p}dW", nDW, [ic,1,3,3]⟩] ++
+                (if convBias then [⟨s!"b{p}db", nDb, [ic]⟩] else []) ++
+                [⟨s!"b{p}dg", nDg, [ic]⟩, ⟨s!"b{p}dbt", nDt, [ic]⟩, ⟨s!"b{p}pW", nPW, [oc,ic,1,1]⟩] ++
+                (if convBias then [⟨s!"b{p}pb", nPb, [oc]⟩] else []) ++
+                [⟨s!"b{p}pg", nPg, [oc]⟩, ⟨s!"b{p}pbt", nPt, [oc]⟩] }
 
 -- ════════════════════════════════════════════════════════════════
 -- § Signatures — ONE source for the arg order, the return types and the AdamW slots
@@ -695,10 +698,11 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cQh, mh, vh) ← bnStat 1280 7 nHc
     -- ═══ the 210 parameter gradients in func-arg order ═══
     let stemPs : List PGradM :=
-      [⟨"sW", nsW, [32,3,3,3]⟩, ⟨"sb", nsb, [32]⟩, ⟨"sg", nsg, [32]⟩, ⟨"sbt", nst, [32]⟩]
+      [⟨"sW", nsW, [32,3,3,3]⟩] ++ (if convBias then [⟨"sb", nsb, [32]⟩] else []) ++
+      [⟨"sg", nsg, [32]⟩, ⟨"sbt", nst, [32]⟩]
     let headPs : List PGradM :=
-      [⟨"hW", nHW, [1280,320,1,1]⟩, ⟨"hb", nHb, [1280]⟩,
-       ⟨"hg", nHg, [1280]⟩, ⟨"hbt", nHt, [1280]⟩,
+      [⟨"hW", nHW, [1280,320,1,1]⟩] ++ (if convBias then [⟨"hb", nHb, [1280]⟩] else []) ++
+      [⟨"hg", nHg, [1280]⟩, ⟨"hbt", nHt, [1280]⟩,
        ⟨"Wd", nWdg, [1280, nClasses]⟩, ⟨"bd", nbdg, [nClasses]⟩]
     let allPs : List PGradM := stemPs ++
       b1.ps ++ b2.ps ++ b3.ps ++ b4.ps ++ b5.ps ++ b6.ps ++ b7.ps ++ b8.ps ++ b9.ps ++
@@ -769,7 +773,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
-      body ++ adamConstsM ++ adamCode ++ lossCode ++
+      zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ body ++ adamConstsM ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv2SigList nClasses convBias
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))

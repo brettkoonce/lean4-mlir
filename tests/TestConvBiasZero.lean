@@ -211,7 +211,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
   let cls := classifyAll net.specs
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
-  let ref := "verified_mlir/resnet34_adam_train_step.mlir"
+  let ref := (← IO.getEnv "CBZ_REF").getD "verified_mlir/resnet34_adam_train_step.mlir"
   IO.println s!"§2l step B — the swap tie"
   IO.println s!"  A (committed, with conv biases) = {ref}"
   IO.println s!"  B (candidate, no conv biases)   = {candidate}"
@@ -262,7 +262,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
     for q in [vmfb, s!".lake/build/cbz_tie_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists q then IO.FS.removeFile q
     let sess ← mkSession path vmfb
-    IreeSession.mlpTrainStepV sess "m.resnet34_adam_train_step" x buf shp y
+    IreeSession.mlpTrainStepV sess s!"m.{net.slug}_adam_train_step" x buf shp y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oA ← run ref "a" bufA shpA
   let oA2 ← run ref "a2" bufA shpA        -- the A-vs-A determinism floor (§4)
@@ -326,11 +326,14 @@ BN running stats {eS}/{nS'} bit-exact (max {dS * sc}e-9)"
     IO.println s!"  ⛔ tie FAILED: rel {maxD / maxM} > 1e-5 — the renders compute different functions"
     throw (IO.userError "tie failed")
   IO.println s!"  ✅ the candidate ties the committed render at rel {maxD / maxM} over \
-{total} shared floats ({exact} of them bit-exact), with 36 fewer parameters."
+{total} shared floats ({exact} of them bit-exact), with {nS - shB.size} fewer parameters."
 
 def main (args : List String) : IO Unit := do
   let path := args.headD "verified_mlir/resnet34_adam_train_step.mlir"
-  let net := resnet34Verified.toNet
+  let net := match (← IO.getEnv "CBZ_NET").getD "resnet34" with
+    | "mobilenetv2" => mobilenetv2Verified.toNet
+    | "efficientnet" => efficientnetVerified.toNet
+    | _ => resnet34Verified.toNet
   match args with
   | "--ckpt" :: p :: _ => ckptMode net p; return
   | "--ablate" :: p :: _ => ablateMode net p; return
