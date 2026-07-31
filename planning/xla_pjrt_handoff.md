@@ -71,7 +71,19 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
-**▶ START A NEW SESSION AT §2n — discharge ConvNeXt's FloatBridges, then DROP the scalar chain.**
+**▶ §2n STEP 1 IS DONE (2026-07-31, UNCOMMITTED) — the FloatBridges are discharged. START AT §2n's
+STEP 2, the DROP.** The channel-LN net now has a whole-net float story in both directions
+(`convnextCh_floatBridges` / `convnextCh_grad_floatBridges`), tied to the committed
+`convNextForwardTCh` by `convNextForwardTCh_eq_skeleton`, on a new
+`Proofs/Float/ChannelLNFloatBridge.lean`. Build **3,910** jobs green, `verified_mlir/` 0 lines of
+diff, audit **1502/1502** three-axiom. The keystone paid off exactly as scoped: the block bridge is
+now one theorem over `cnxBodyWith` and the ch9 net instantiates it as a *term*. Two things step 1
+did NOT close, both written up there: the **§B tie** for `chanLNTensor3Back` (the Ch peer of
+`ConvNeXtBackCertifiedTie` does not exist), and a **third stale-scope file** the §2n table missed —
+`ConvNeXtTiePoC.lean`'s §1a whole-net tie is scalar-LN *with a head LN*, i.e. it describes
+`chLN := false`, the mode the repo stopped shipping.
+
+**▶ The original §2n plan — discharge ConvNeXt's FloatBridges, then DROP the scalar chain.**
 §2m is CLOSED as of 2026-07-31: **all five nets now match the JAX reference param count exactly**
 (R34 21,797,672 · ViT 5,717,416 · mnv2 3,504,872 · enet 5,288,548 · **ConvNeXt 28,587,592**), the
 last one by landing ConvNeXt's REAL channel LayerNorm — math forward, whole-net VJP, rung E, the
@@ -3531,12 +3543,62 @@ emitted text cannot see an undefined name.** Three of the four things wrong here
 seconds, whatever the entry name, and prints the compiler's own complaint. **Compile the candidate
 before believing a count.**
 
-### 2n. ▶ NEXT SESSION — discharge ConvNeXt's FloatBridges, then DROP the scalar chain
+### 2n. ✅ STEP 1 DONE 2026-07-31 — the FloatBridges are discharged. ▶ NEXT = the DROP
 
 Scoped 2026-07-31 by reading the files, not by estimating. **Nothing is broken today**: all
 3,909 targets build and every scalar-LN theorem is still TRUE. What is wrong is SCOPE — the
 float story and two smaller files describe a net the repo stopped shipping when §2m flipped
 ConvNeXt to its real channel LayerNorm.
+
+#### ✅ What landed (step 1, 2026-07-31) — UNCOMMITTED
+
+**The channel-LN net now has a whole-net float story in BOTH directions, and the scalar ch9 net
+paid nothing for it.** Build green at **3,910** jobs (3,909 + the new module), `verified_mlir/` is
+**0 lines of `git diff`** (this touched no codegen), and every new theorem is 3-axiom clean.
+
+| what | where |
+|---|---|
+| **`LeanMlir/Proofs/Float/ChannelLNFloatBridge.lean`** (new, in `Certs` roots) | the LN op itself, fwd + bwd |
+| `floatBridges_transposeFlat` | the transpose **IS** a `gather` — `transposeFlat_eq_gather` is `rfl` |
+| `floatBridges_biasAdd` | the `+β` token; magnitude `(1+u)(A+Bb)`, modulus `e ↦ u(A+Bb)+e` |
+| `floatBridges_layerNormVec` | `layerNormVec = (+β) ∘ layerScale γ ∘ LN(1,0)` by `rfl` |
+| **`floatBridges_chanLNTensor3`** | four gathers around one `FloatBridges.perRow` — `floatBridges_bnPerChannelTensor3`'s blueprint with a transpose inserted |
+| **`floatBridges_chanLNTensor3Back`** | same conjugation, `rowLNVecFlatBack` = `perRowIdx(bn_grad_input ∘ diagBack γ)` in the middle |
+| **`floatBridges_cnxBodyWith`** / `floatBridges_cnxBlockWith` | the keystone in float form — the block bridge stated ONCE over `cnxBodyWith` |
+| `floatBridges_convNextBlock` | now the scalar **instantiation** of it. Same statement, same signature, `rfl`-level — no `unfold` needed |
+| `floatBridges_cnxBlockChW` / `floatBridges_convNextStageChK` / `floatBridges_cnxDownChW` | the Ch peers + the two bound bundles |
+| **`convnextCh_floatBridges`** | the whole [3,3,9,3] forward at the channel LN, `lnHead := id` |
+| **`convnextCh_grad_floatBridges`** | the whole-net backward peer, `lnBhead := id` |
+| **`convNextForwardTCh_eq_skeleton`** | ⚠ this was step 2's first bullet — done early, because without it the capstone is about a look-alike |
+| `tests/AuditAxioms.lean` | 13 new `#print axioms` lines + the coverage check |
+
+**Three findings worth keeping.**
+
+1. **The §2n keystone held exactly as scoped, and it is the whole reason this was cheap.**
+   `convNextBlockBody … = cnxBodyWith (layerNormForward …) …` is `rfl`, so `floatBridges_convNextBlock`
+   is now a *term* — `floatBridges_cnxBlockWith M fgelu (layerNormForward …) …` — with no tactic at
+   all. One theorem, two worlds, and the ch9 net's statement is byte-identical to what it was.
+2. **The backward needed ONE op, not a rewrite.** `ConvNeXtBackFloatBridge.lean` was already
+   LN-abstract at all three levels (`cnxBlockBodyBack`, `cnxDownBack`, `convnextInputGrad` each take
+   `lnB` as a supplied `FloatBridges`), so the §2m flip costs the whole-net gradient exactly
+   `chanLNTensor3Back` plus `id` in the head slot. §2n predicted "the backward peer of all of the
+   above"; the measured answer is smaller.
+3. **`floatBridges_idVec` moved** from `ConvNeXtWholeFloatBridge` to `ChannelLNFloatBridge` — both
+   ConvNeXt bridge files now need it (the head LN slot is `id` in the channel-LN world) and that is
+   the file they share. Name unchanged, so nothing downstream moved. ⚠ It is still a duplicate of
+   `floatBridges_id` (`MhsaBackFloatBridge`); de-duplicating means editing `AuditAxioms`, which
+   prints the other name — not worth the 11-minute rebuild, but it is drift and it is now recorded.
+
+#### ⚠ What step 1 does NOT close
+
+**The §B tie is owed.** `chanLNTensor3Back` is the *hand-composed* reverse chain, in exactly the
+sense `cnxBlockBodyBack` / `convnextInputGrad` are: every factor is the certified adjoint of its
+forward factor (a permutation's adjoint is its inverse permutation; the row map's is
+`bn_grad_input ∘ diagBack γ`), but nothing here proves it equals `chanLNTensor3_has_vjp.backward`.
+The scalar world HAS that tie (`ConvNeXtBackCertifiedTie.lean`, which ties `cnxBlockBodyBack` to
+`convNextBlockBody_has_vjp.backward`); **the channel-LN peer of that file does not exist**. It is
+stated in the new file's docstring so it cannot be read as claimed. This is the honest gap, and it
+is the same shape as the gap the scalar world closed in §B — so the recipe is known.
 
 **The decision (Brett's, 2026-07-31): once the bridges are discharged, the scalar full chain
 comes OUT.** Not relabelled — deleted. It is off the primary path, and §2a's whole lesson is
@@ -3565,14 +3627,14 @@ Checked on device 2026-07-31. `cnxBodyWith` (the LN-abstract body built for the 
 serves both the retained ch9 net and the shipped channel-LN net** — ch9's instantiation is free.
 Do that first; it is what makes the rest mechanical.
 
-#### ▶ Step 1 — discharge the bridges
+#### ✅ Step 1 — discharge the bridges (DONE — the original scope, for the record)
 
-| item | what it needs |
-|---|---|
-| `FloatBridges (chanLNTensor3 …)` | the transposes and the reassoc are exact reindexes (permutations — magnitude/modulus pass through); the per-row normalise reuses `floatBridges_bn`'s rsqrt keystone rowwise |
-| `floatBridges_convNextBlock` → generic over `cnxBodyWith` | the keystone above; instantiate at scalar (ch9, `rfl`) and at `chanLNTensor3` |
-| `floatBridges_convNextStageChK` / `floatBridges_cnxDownChW` | mechanical mirrors of the scalar peers |
-| `ConvNeXtBackFloatBridge` | the backward peer of all of the above |
+| item | what it needs | outcome |
+|---|---|---|
+| `FloatBridges (chanLNTensor3 …)` | the transposes and the reassoc are exact reindexes (permutations — magnitude/modulus pass through); the per-row normalise reuses `floatBridges_bn`'s rsqrt keystone rowwise | ✅ exactly this |
+| `floatBridges_convNextBlock` → generic over `cnxBodyWith` | the keystone above; instantiate at scalar (ch9, `rfl`) and at `chanLNTensor3` | ✅ and the scalar one is now a **term**, no tactic |
+| `floatBridges_convNextStageChK` / `floatBridges_cnxDownChW` | mechanical mirrors of the scalar peers | ✅ mechanical as predicted |
+| `ConvNeXtBackFloatBridge` | the backward peer of all of the above | ✅ **smaller than scoped** — the file was already `lnB`-abstract, so it needed ONE op + `id` |
 
 #### ▶ Step 2 — the drop, and EXACTLY what it does and does not mean
 
@@ -3602,14 +3664,49 @@ drop is a checklist rather than a search:
 | `CnxBlockParams` / `cnxBlockW` / `convNextStageK` | 5/3/9 | `ConvNeXtWholeFloatBridge`, `WholeNetForwardTies`, lakefile comments |
 | `CnxDownParams` / `cnxDownW` | 3/9 | + `ConvNeXtBackB0.lean` (164 lines — `cnxDownBackGraph` ties the emitted backward to `cnxDownW_has_vjp`'s backward; needs a Ch peer) |
 
-So the drop is: **step 1 first** (the bridges are the only *live* consumer), then
-`WholeNetForwardTies.convNextForwardT_eq_skeleton` → a Ch peer (the skeleton already has LN
-slots, so it is `lnHead := id` + an `eq_chain` unfold), then `ConvNeXtBackB0` → Ch, then delete,
-then sweep `AuditAxioms` / the lakefile comments / `VerifiedNets`'s and `SpecVJP`'s docstrings.
+So the drop is: ~~**step 1 first**~~ ✅ done, ~~then `WholeNetForwardTies.convNextForwardT_eq_skeleton`
+→ a Ch peer~~ ✅ **`convNextForwardTCh_eq_skeleton` landed with step 1** (`lnHead := id` + the
+`_eq_chain` unfold, exactly as scoped — 5 lines), then `ConvNeXtBackB0` → Ch, then delete, then
+sweep `AuditAxioms` / the lakefile comments / `VerifiedNets`'s and `SpecVJP`'s docstrings.
+
+**▶ The four float-side declarations that die WITH the scalar chain** — measured 2026-07-31 while
+building step 1, because the table above names files and the drop needs names:
+
+* `floatBridges_cnxBlockW` (takes a `CnxBlockParams`), `floatBridges_convNextStageK`
+  (`convNextStageK`), `floatBridges_cnxDownW` (`CnxDownParams`/`cnxDownW`) —
+  `ConvNeXtWholeFloatBridge.lean`; each has a live `…Ch` peer now, so deleting them loses nothing;
+* `convNextForwardT_eq_skeleton` — `WholeNetForwardTies.lean`; its Ch peer exists.
+
+⛔ **Three things in that file must SURVIVE the drop** and it is easy to get wrong: `convnextForward`
+(the skeleton takes its blocks abstractly — it is LN-world-neutral), `convnext_floatBridges` (same),
+and `floatBridges_convNextBlock` / `floatBridges_cnxBodyWith` (the ch9 representative's block, which
+§2n's own ⛔ keeps).
+
+**`AuditAxioms.lean` loses 17 `#print axioms` lines** (counted, not estimated): 13 in the
+`ConvNeXtFullT` block — `convNextStageK_has_vjp`, `cnxDownW_has_vjp`, `convNextForwardT_has_vjp`
+/`_eq_chain`/`_has_vjp_correct`, `cnxBlockGraphW_faithful`, `cnxStageGraphK_den`,
+`cnxDownGraphW_faithful`, `convNextFwdGraphT_faithful`, `convNextForwardTC_has_vjp`/`_eq_chain`/
+`_has_vjp_correct`, `convNextFwdGraphTC_faithful` — plus the three float bridges and
+`convNextForwardT_eq_skeleton`. Sweep them in the same commit or the audit stops elaborating.
+
+#### ▶ A THIRD stale-scope file, found while doing step 1 — NOT in the table above
+
+**`LeanMlir/Proofs/Architectures/ConvNeXtTiePoC.lean` — the ch7 §1a whole-net tie
+(`CnxTiePoC.cnx_net_tied_certified`, 6 audit lines) is written against the SCALAR LN, and it still
+has a HEAD LN** (`hng`/`hnbt` at the GAP output, line ~219) — the site §2m deleted. Its own
+docstring says it feeds "the **real forward activations** of the committed
+`convNextTrainStepFaithfulV` render"; that render now takes `chLN : Bool := true`
+(`ConvNeXtRender.lean:532`), so **the tie describes the `chLN := false` spelling — the mode the repo
+stopped shipping.** The theorem is still TRUE (it is stated over its own local forward defs) and
+`grep` says it references **none** of the dying symbols, so *the drop cannot break it* — which is
+exactly why it will be missed. Decide before the drop lands: re-point it at the Ch chain, or label
+it explicitly as a ch9-representative tie the way §2n's ⛔ labels `Architectures/ConvNeXt.lean`.
+This is §2a's lesson again — a thing that still elaborates is not a thing that still describes what
+ships.
 
 #### ▶ Gates for the drop
 
-* `lake build Proofs Certs Codegen` green — it is 3,909 jobs today;
+* `lake build Proofs Certs Codegen` green — **3,910 jobs** as of step 1 (was 3,909; +1 module);
 * **`verified_mlir/` is 0 lines of `git diff`** — this is a proof-side deletion and must move no
   artifact. If bytes move, something in the drop was not inert;
 * `regen_verified_mlir.sh check` still 67 artifacts / one writer each;
