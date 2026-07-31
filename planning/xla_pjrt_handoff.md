@@ -71,8 +71,20 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
+**▶ START A NEW SESSION AT §2n — discharge ConvNeXt's FloatBridges, then DROP the scalar chain.**
+§2m is CLOSED as of 2026-07-31: **all five nets now match the JAX reference param count exactly**
+(R34 21,797,672 · ViT 5,717,416 · mnv2 3,504,872 · enet 5,288,548 · **ConvNeXt 28,587,592**), the
+last one by landing ConvNeXt's REAL channel LayerNorm — math forward, whole-net VJP, rung E, the
+spec flip, both 2-GPU gates and the render capstone back at 180/180 bit-identical parity.
+Nothing is broken and the build is green at 3,909 jobs; what is left is that the **float story
+and two smaller files still describe the scalar-LN net the repo stopped shipping**. §2n has the
+scope, the measured dependency table, the verified keystone (`convNextBlockBody = cnxBodyWith
+(layerNormForward …)` by `rfl`, so ONE generic bridge serves both worlds) and the gates.
+⚠ Two things are OWED on ConvNeXt regardless: its **82.75% is VOID** (the function genuinely
+changed — 80-epoch re-run ≈ 1h56m) and §2h-quater's **1.68×** scaling ratio is NOT re-measured.
+
 **▶ §2l IS DONE (2026-07-31) — the render is the paper's ResNet-34 and the param counts match the
-JAX reference at 21,797,672.** ▶ NEXT: the **80-epoch re-run** to restore the headline (in flight),
+JAX reference at 21,797,672.** ▶ Then: the **80-epoch re-run** to restore the headline (done),
 then the `mom` numeric gate. Read §2l for the two things its own plan got wrong. Original note: §2k found that this repo's "ResNet-34" is **not** He et al.'s: the downsample projection
 is **3×3 strided** where the paper's option-B shortcut is **1×1**, which is +1,376,256 params
 (+6.3%), documented only in a codegen docstring while the spec blurb says *"Real ResNet-34"*. It was
@@ -3184,11 +3196,12 @@ So the whole-net float theorem needs **zero change** — the channel-LN net inst
 | `ConvNeXtBackB0.lean` (164 lines) | `cnxDownBackGraph` ties the emitted backward to `cnxDownW_has_vjp`'s backward; needs a Ch peer |
 | `WholeNetForwardTies.convNextForwardT_eq_skeleton` | the skeleton already has LN slots ⇒ `lnHead := id` + an `eq_chain` unfold |
 
-**And a decision, not a build: the scalar chain should STAY but be RELABELLED.**
-`convNextForwardT`/`TC` back `ConvNeXtChainClose`, the ch9 representative and the retired
-render's tie, so deleting is the bigger change. Every docstring calling them "ConvNeXt" should
-say *"the scalar-LN variant, retired from the shipped spec 2026-07-31"*. That is §2k's actual
-lesson: the sin was the blurb claiming "Real ResNet-34", not the deviation existing.
+**▶ THE DECISION IS TO DROP IT, NOT RELABEL IT — Brett's call, and it REVERSES the
+recommendation this section carried an hour earlier.** The full scalar-LN chain comes out once
+the FloatBridges are discharged; it is no longer on the primary path and a retired net that
+still elaborates is one more thing to drift. §2n has the scope, the order and the measured
+dependency table. *(The relabel argument — §2k's "the sin was the blurb" — still applies to
+anything that STAYS, which is the ch9 representative.)*
 
 #### ⛔⛔ AND THE LN PLACEMENT IS WRONG TOO — found 2026-07-31 by the count NOT matching
 
@@ -3517,6 +3530,106 @@ emitted text cannot see an undefined name.** Three of the four things wrong here
 `.lake/build/bin/fwd-tie <net> --eval <candidate>` — it XLA-compiles any path you hand it in
 seconds, whatever the entry name, and prints the compiler's own complaint. **Compile the candidate
 before believing a count.**
+
+### 2n. ▶ NEXT SESSION — discharge ConvNeXt's FloatBridges, then DROP the scalar chain
+
+Scoped 2026-07-31 by reading the files, not by estimating. **Nothing is broken today**: all
+3,909 targets build and every scalar-LN theorem is still TRUE. What is wrong is SCOPE — the
+float story and two smaller files describe a net the repo stopped shipping when §2m flipped
+ConvNeXt to its real channel LayerNorm.
+
+**The decision (Brett's, 2026-07-31): once the bridges are discharged, the scalar full chain
+comes OUT.** Not relabelled — deleted. It is off the primary path, and §2a's whole lesson is
+that a retired thing which still elaborates is one more thing to drift.
+
+#### ▶ Why this is much smaller than it looks — the float story is ALREADY LN-abstract
+
+`convnext_floatBridges` takes `FloatBridges lnStem`, `FloatBridges lnHead` and every stage and
+downsample as **hypotheses**; its own docstring says the LNs enter abstractly *"because
+`layerNormForward = bnForward` has the rsqrt keystone"*. `floatBridges_convNextStageK` likewise
+takes `∀ i, FloatBridges (layerNormForward …)`. So:
+
+> **`convnext_floatBridges` needs ZERO change.** The channel-LN net instantiates the existing
+> theorem at `lnHead := id` — `floatBridges_idVec` is already in that file — with the Ch slots.
+
+#### ▶ The keystone, VERIFIED not assumed
+
+```lean
+convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls
+  = cnxBodyWith (layerNormForward (c*h*w) εn γn βn) Wdw bdw Wex bex Wpr bpr γls   -- := rfl ✅
+```
+
+Checked on device 2026-07-31. `cnxBodyWith` (the LN-abstract body built for the §2m VJP) is
+**definitionally** the ch9 representative's body at the scalar LN. So generalising
+`floatBridges_convNextBlock` over `cnxBodyWith` + an abstract LN bridge gives **ONE theorem that
+serves both the retained ch9 net and the shipped channel-LN net** — ch9's instantiation is free.
+Do that first; it is what makes the rest mechanical.
+
+#### ▶ Step 1 — discharge the bridges
+
+| item | what it needs |
+|---|---|
+| `FloatBridges (chanLNTensor3 …)` | the transposes and the reassoc are exact reindexes (permutations — magnitude/modulus pass through); the per-row normalise reuses `floatBridges_bn`'s rsqrt keystone rowwise |
+| `floatBridges_convNextBlock` → generic over `cnxBodyWith` | the keystone above; instantiate at scalar (ch9, `rfl`) and at `chanLNTensor3` |
+| `floatBridges_convNextStageChK` / `floatBridges_cnxDownChW` | mechanical mirrors of the scalar peers |
+| `ConvNeXtBackFloatBridge` | the backward peer of all of the above |
+
+#### ▶ Step 2 — the drop, and EXACTLY what it does and does not mean
+
+**IT MEANS** the full `[3,3,9,3]` scalar-LN chain in `ConvNeXtFullT.lean`: `CnxBlockParams`,
+`cnxGls`, `cnxBlockW`, `convNextStageK` (+`_diff`/`_has_vjp`), `CnxDownParams`, `cnxDownW`
+(+`_diff`/`_has_vjp`), `CnxTWeights`, `convNextForwardT`/`TC` (+`_has_vjp`/`_eq_chain`/
+`_has_vjp_correct`), and the graph section `cnxBlockGraphW` / `cnxStageGraphK` / `cnxDownGraphW`
+/ `convNextFwdGraphT` / `convNextFwdGraphTC` + their faithfulness.
+
+⛔ **IT DOES NOT MEAN the ch9 representative** — `convNextForward`, `convNextBlock`,
+`convNextBlockBody`, `convnext_has_vjp` in `Architectures/ConvNeXt.lean`. Those are used by
+`tests/comparator/{Challenge,Solution}.lean` (**the Project Diderot FV model**),
+`apps/imagenette/MainConvNeXtVerified.lean`, `ConvNeXtClose`, `StableHLO`, `EfficientNet.lean`
+and `ViTFwdGraph.lean`. **Deleting them would void a book chapter and the comparator.** This is
+the `cifar8w` lesson (§2i) one net over: *check what a thing backs before pruning it.*
+
+**The measured dependency table** — every external reference to the scalar full chain, so the
+drop is a checklist rather than a search:
+
+| symbol | external refs | where |
+|---|---|---|
+| `convNextFwdGraphT`, `cnxStageGraphK` | **0** | already dead |
+| `convNextFwdGraphTC`, `cnxBlockGraphW`, `cnxDownGraphW` | docstrings only | `tests/TestConvNeXtTTrainPC.lean` ✅ already repointed to the `…Ch` names |
+| `convNextForwardTC` | 3 | `VerifiedNets` docstring, `AuditAxioms`, `SpecVJP`'s §2m warning — **no live consumer** |
+| `convNextForwardT` | 13 | `WholeNetForwardTies`, both Float bridges, `AuditAxioms`, lakefile **comments** |
+| `CnxTWeights` | 3 | `SpecVJP`, `WholeNetForwardTies`, `AuditAxioms` |
+| `CnxBlockParams` / `cnxBlockW` / `convNextStageK` | 5/3/9 | `ConvNeXtWholeFloatBridge`, `WholeNetForwardTies`, lakefile comments |
+| `CnxDownParams` / `cnxDownW` | 3/9 | + `ConvNeXtBackB0.lean` (164 lines — `cnxDownBackGraph` ties the emitted backward to `cnxDownW_has_vjp`'s backward; needs a Ch peer) |
+
+So the drop is: **step 1 first** (the bridges are the only *live* consumer), then
+`WholeNetForwardTies.convNextForwardT_eq_skeleton` → a Ch peer (the skeleton already has LN
+slots, so it is `lnHead := id` + an `eq_chain` unfold), then `ConvNeXtBackB0` → Ch, then delete,
+then sweep `AuditAxioms` / the lakefile comments / `VerifiedNets`'s and `SpecVJP`'s docstrings.
+
+#### ▶ Gates for the drop
+
+* `lake build Proofs Certs Codegen` green — it is 3,909 jobs today;
+* **`verified_mlir/` is 0 lines of `git diff`** — this is a proof-side deletion and must move no
+  artifact. If bytes move, something in the drop was not inert;
+* `regen_verified_mlir.sh check` still 67 artifacts / one writer each;
+* the **capstone parity** re-run (`render_parity.py`, 180/180 bit-identical) — it is the cheapest
+  end-to-end confirmation that nothing in the delete reached the shipped graph;
+* `#print axioms` on the surviving Ch theorems still 3-axiom clean.
+
+#### ▶ Traps, all already paid for elsewhere
+
+* **`lake env lean tests/X.lean` does NOT rebuild an edited import** (§4). Deleting declarations
+  in `ConvNeXtFullT.lean` and then running the capstone without a `lake build` first exercises
+  the OLD oleans and tells you nothing.
+* **`render_parity.py` needs `iree-run-module`**, which is NOT in this repo's `.venv/bin` (only
+  `iree-compile` is) — it is in `../lean4-mlir/.venv/bin`. Put both on PATH.
+* **`AuditAxioms.lean` is the heaviest module in the repo** (`vit-back-b0` ~11 min / ~14 GB —
+  see the memory note); budget for it when the sweep touches it.
+* A deleted `noncomputable def` that something references fails at `lake build`, loudly — but a
+  stale **docstring** does not, and this section's own dependency table is mostly docstrings.
+
+---
 
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 

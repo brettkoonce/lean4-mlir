@@ -200,8 +200,8 @@ private structure FNames where  -- all flat SSA names from `pretty`
   bout : String  -- block out (addV)
   deriving Inhabited
 
-/-- One ConvNeXt block forward via `pretty` — the `convNextFwdGraphTC` block tokens
-    (`cnxBlockGraphW`'s shape) at the committed param names. -/
+/-- One ConvNeXt block forward via `pretty` — the `convNextFwdGraphTCh` block tokens
+    (`cnxBlockChGraphW`'s shape) at the committed param names. -/
 private def fwdBlock (pfx xin : String) (c e h : Nat) : StateM Nat (String × FNames) := do
   let (k1, d) ← pretty BS (.depthwiseF (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (zD : DepthwiseKernel c 7 7) zV (.operand xin zV))
   let (k2, n) ← lnFwdSite s!"%{pfx}ng" s!"%{pfx}nbt" d c h
@@ -238,15 +238,15 @@ private def blockParamGrads (pfx : String) (b : FNames)
     ln ++
     dwWGrad s!"%d{pfx}dW" b.xin cot_d c h ++ biasGrad s!"%d{pfx}db" cot_d c h)
 
-/-- Downsample forward via `pretty`: scalar LN → 2×2/s2 widening conv
-    (`cnxDownGraphW`'s tokens). Returns (code, LN-out, out). -/
+/-- Downsample forward via `pretty`: channel LN → 2×2/s2 widening conv
+    (`cnxDownChGraphW`'s tokens). Returns (code, LN-out, out). -/
 private def fwdDown (pfx xin : String) (ci co h2 : Nat) : StateM Nat (String × String × String) := do
   let (k1, n) ← lnFwdSite s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
   let (k2, o) ← pretty BS (.flatConvStridedF (h := h2) (w := h2) s!"%{pfx}W" s!"%{pfx}b" (zK : Kernel4 co ci 2 2) zV (.operand n zV))
   pure (k1 ++ k2, n, o)
 
 /-- Downsample backward via `pretty`: strided conv input-VJP (`convStridedBack`,
-    even-kernel transpose pad) → scalar-LN input-VJP. Returns (code, cot-at-LN-out,
+    even-kernel transpose pad) → channel-LN input-VJP. Returns (code, cot-at-LN-out,
     cot-at-downsample-input). -/
 private def bwdDown (pfx dy xin : String) (ci co h2 : Nat) :
     StateM Nat (String × String × String) := do
@@ -282,7 +282,7 @@ private def allParams : List (String × String) := Id.run do
 
 private def trainStep : String := Id.run do
   let go : StateM Nat String := do
-    -- ═══ forward (proof-rendered; the convNextFwdGraphTC tokens in graph order) ═══
+    -- ═══ forward (proof-rendered; the convNextFwdGraphTCh tokens in graph order) ═══
     let (cS, stem) ← pretty BS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
       (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
     -- §2m: the stem channel-LN, which the scalar-LN render omitted entirely
