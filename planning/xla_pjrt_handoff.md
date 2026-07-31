@@ -2896,7 +2896,7 @@ count the reference itself trains.
 | **ViT-Tiny** | 5,717,416 | 5,717,416 | **0** | ✅ architecture clean |
 | **MobileNetV2** | ~~3,521,928~~ **3,504,872** | 3,504,872 | ~~+17,056~~ **0** | ✅ fixed — 52 conv biases dropped, `6b48389` |
 | **EfficientNet-B0** | ~~5,309,556~~ **5,288,548** | 5,288,548 | ~~+21,008~~ **0** | ✅ fixed — 49 conv biases dropped (SE's KEPT) |
-| **ConvNeXt-T** | 28,572,852 | 28,587,592 | **−14,740** | ⛔ **scalar LayerNorm affine** (below) |
+| **ConvNeXt-T** | ~~28,572,852~~ **28,587,592** | 28,587,592 | ~~−14,740~~ **0** | ✅ fixed — the REAL channel LN, all 22 sites, math forward + rung E landed 2026-07-31 (below) |
 
 **mnv2 and EfficientNet have R34's step-B defect and ONLY that.** Every conv is BN-followed, the
 reference's `.convBn` carries no bias, and ours does. The fix is `e9c2729` re-run on two more nets:
@@ -3011,13 +3011,122 @@ the axis (not something both paths satisfy), and — at **rel 0.82** — it is a
 measurement that the deviation is real and large, from the op level rather than from reading the
 artifact.
 
-**▶ What is left, and it is all restructuring rather than op-kit work:** the 21 sites in
-`ConvNeXtRender` in both directions (the head LN at flat 768 stays as it is — it is already
-correct); the proof-side denotation (`convnextForward`'s LN is `bnForward` today, and
-`layerNormForward = bnForward` stops holding); `VLayer.convNextBlock` → an NB peer carrying
-`γ,β : [c]` instead of two rank-0 scalars; `ConvNeXtLayout.specs`; then re-render, tie, the DP and
-shard gates, and an 80-epoch re-run — ConvNeXt's **82.75%** does NOT survive this one, unlike the
-conv-bias drops, because the function genuinely changes.
+#### ▶ THE FLIP IS BLOCKED ON EXACTLY ONE THEOREM — measured 2026-07-31, not estimated
+
+The flip was **attempted and reverted**, the §2l way: flip everything, let the build say what breaks,
+then decide with a number instead of a guess. Flipped `VLayer` (a new `convNextBlockCh`, `.layerNorm`
+for the stem/downsample sites), `convnextVerified.layers`, `ConvNeXtLayout.specs` and the render
+default; re-rendered; **`#guard convnextVerified.toSpecs == ConvNeXtLayout.specs` passed**, the four
+artifacts came out at the exact reference count, and then:
+
+> `lake build Proofs Certs Codegen` — **3,907 of 3,908 targets green.** The one failure is
+> `SpecVJP.lean:814`, `convnextVerified_denote_eq`.
+
+**That is the whole proof-side cost, and it is not small.** `denoteConvnextT` maps the layer list to
+`convNextForwardTC`, whose LN is scalar `layerNormForward` — so a channel-LN layer list must map to
+a channel-LN math forward, and behind that sits `ConvNeXtFullT.lean`'s chain: `cnxBlockW`,
+`convNextStageK`, `cnxDownW`, each with its own `_diff` and `_has_vjp`, all built on
+`layerNormForward`. Rung E (`convnextVerified_fwd_faithful`) additionally needs the proof-side
+graph `convNextFwdGraphTC` rebuilt. ⚠ **Do not "fix" this by re-pointing the pattern at
+`convNextForwardTC`** — it typechecks by `rfl` and would assert that the channel-LN architecture
+denotes the scalar-LN function, which is §2k's exact sin one level down.
+
+**What makes it tractable:** the math side can mirror Route A. `transpose_has_vjp` is proven
+(`Tensor.lean:1467`), ViT's row-LN math and its γ/β gradients are proven, and ConvNeXt's own
+`layerScale` is already a per-channel affine — so `channelLN = transpose ∘ rowLN ∘ per-channel
+affine ∘ transpose` composes through `vjp_comp` exactly as the render composes through `pretty`.
+
+**Reverted to inert rather than rushed or left red.** The render work is committed and green
+(`e4b7815`, `4628cc8`); the flip is a one-line change (`chLN : Bool := false` → `true` in four
+signatures) plus the `VLayer`/layout edits, and it lands the moment the math forward exists.
+
+#### ✅ THE MATH FORWARD EXISTS AND THE FLIP IS LANDED — 2026-07-31. **UNCOMMITTED.**
+
+`lake build Proofs Certs Codegen` is green at **3,909 jobs**; `SpecVJP.lean:814` — the one target
+that blocked this for a session — builds. Every new declaration is **3-axiom clean**.
+
+**▶ Route A cost no new `SHlo` op AND no new VJP**, exactly as scoped. `chanLNTensor3` is five
+already-proven pieces glued by `vjp_comp`:
+
+| piece | reused from |
+|---|---|
+| `reassocFwd`/`reassocBack` + VJPs | `PerChannelBN.lean` — the per-channel BN layout bridge |
+| `transposeFlat` VJP | `Tensor.lean`'s `transpose_has_vjp` through `hasVJPMat_to_hasVJP` (a re-typing, not a proof) |
+| the rowwise vector-LN | `ViTVecLN.lean`'s `layerNormVec_per_token_has_vjp_mat` — ViT's `[192]` LN, re-read with "token" = "spatial position" |
+
+The only hypothesis is `0 < ε`, exactly as the scalar `layerNorm_has_vjp` it replaces, so the
+22 LN positivities are the whole hypothesis set of `convNextForwardTCh_has_vjp` — same count as
+the scalar peer, since the stem LN it gains and the head LN it loses cancel.
+
+**▶ THE SEAM THAT NEARLY SHIPPED, and it is the reusable part.** The render transports its index
+with a `▸` cast (`ConvNeXtRender.reassoc`, because `c*h*w = (c*h)*w` is not defeq to `c*(h*w)`);
+the math uses `PerChannelBN`'s `finProdFinEquiv` re-association, whose "row `c` is channel `c`"
+reading is the *only* reason the composition is legibly a **channel** LN. **Nothing forced those
+two to be the same map** — and if they are not, the math and the artifact are different functions
+with no gate between them, which is §2k's own sin one level down.
+
+They are the same map. `reassocFwdIdx_val` proves it: row-major `finProdFinEquiv` sends both
+`((c,hi),wi)` and `(c,(hi,wi))` to the same linear offset, so the bridge preserves `Fin.val` and
+*is* the type cast. `den_cast`/`den_reassocS` lift that to the graph, which is what lets
+`chanLNGraph_faithful` close. **Ask this question of any layout bridge that gets spelled two
+ways** — it is §4's one-tensor-layout rule in the type system rather than in a reduce-dim census.
+
+**▶ What was built** (`LeanMlir/Proofs/Architectures/ConvNeXtChannelLN.lean`, new, + additions to
+`ConvNeXtFullT.lean`):
+
+* `chanLNTensor3 c h w ε γ β` + `_diff` + `_has_vjp` — channel LN at the conv activation layout;
+* `reassocFwdIdx_val` / `reassocBackIdx_val` / `den_cast` / `den_reassocS` / `den_unassocS` — the seam;
+* `rowLN_affine_eq` — the emitted three-op affine tail (`lnRowF(1,0) → rowScaleF → rowBiasF`) IS
+  ViT's per-token `layerNormVec`, which is what collapses the graph's five denotations onto three;
+* `cnxBodyWith` — the ConvNeXt block body abstracted over its normalisation, so the channel-LN
+  world costs one definition rather than a second copy of the six-piece `vjp_comp` chain;
+* `CnxBlockParamsCh` / `cnxBlockChW` / `convNextStageChK` / `CnxDownParamsCh` / `cnxDownChW` /
+  `CnxTWeightsCh` / **`convNextForwardTCh`** + `_has_vjp` + `_eq_chain` + `_has_vjp_correct`;
+* the graph side: `chanLNGraph`, `cnxBlockChGraphW`, `cnxStageChGraphK`, `cnxDownChGraphW`,
+  **`convNextFwdGraphTCh`** + `convNextFwdGraphTCh_faithful` — rung E's new apex.
+
+Built as a **parallel** chain, not by re-instantiating the scalar one, for `MobileNetV2RenderB`'s
+reason (§2f): `convNextForwardTC` backs the retired render's tie, `ConvNeXtChainClose` and
+`ConvNeXtWholeFloatBridge`. The scalar chain is untouched.
+
+**▶ The gates, as run.** Note there is **no A-vs-B tie across this flip and there cannot be** —
+the function AND the parameter shapes both change, so one param blob cannot feed both renders.
+That is the honest difference from the conv-bias drops (§2m), which were bit-exact.
+
+| gate | result |
+|---|---|
+| `lake build Proofs Certs Codegen` | ✅ **3,909 jobs**, `SpecVJP` green |
+| `#guard convnextVerified.toSpecs == ConvNeXtLayout.specs` | ✅ holds — both hand-lists rewritten INDEPENDENTLY from the render's `allParams chLN := true` |
+| parameter count | **27,826,282 at K = 10 ⇒ 28,587,592 at K = 1000** — the JAX reference's own reported count, EXACTLY. Still **180 param tensors** (stem/head LN swap one-for-one) |
+| `regen_verified_mlir.sh check` | ✅ **67 artifacts, one writer each**; prefix audit green (`convnext_fwd` is a 1544-line prefix); empty-slot and `%zb` audits clean |
+| **`fwd-tie convnext`** (XLA, GPU) | ✅ compiles and RUNS on the driver's 180-param blob, self-tie **bit-exact 320/320**, logits \|max\| 7.61 (non-degenerate) |
+| **`sgd-render-tie convnext`** A-vs-A (XLA, GPU) | ✅ the whole channel-LN BACKWARD at full depth — **bit-exact 27,826,282/27,826,282**, max\|g\| 4.15, 27,826,157 non-zero |
+| **`convnext-adam-tie`** A-vs-A (IREE) | ✅ **bit-exact 83,478,849/83,478,849**, reorder control 1e-6, spread 0/180 |
+| **`channel-ln`** op gate (XLA, GPU) | ✅ re-run after the flip: forward and all three backward pieces **rel 0.000000** vs the closed form, incumbent `.bnF` control fires at **0.820856** |
+| descent on the swapped bytes | ✅ loss 3.94 → 2.32, val **19.97 → 25.32 → 33.27%** (capped 25-step epochs, XLA) |
+
+`fwd-tie` and `sgd-render-tie` are the load-bearing ones: they are the instrument §2m named
+(*"compile the candidate before believing a count"*), and the forward one is exactly the check
+whose absence killed the first mnv2 swap — the driver builds the blob from the LAYOUT and the
+graph either accepts it or PJRT refuses the call.
+
+**▶ A claim this thread published is now FALSE and is retired.** §2h-quater's headline —
+*"44 of the 180 collectives are RANK-0"* — **was** ConvNeXt's scalar LayerNorm. Measured on the
+re-rendered DP artifact: the LN collectives are `tensor<96xf32>` … `tensor<768xf32>` and **0 of
+180 are rank-0**. Nothing in the repo exercises a rank-0 `stablehlo.all_reduce` any more. Both
+the render docstring and the `#eval` comment are corrected (byte-inert: the four artifact md5s
+are unchanged across that edit).
+
+**▶ STILL OWED — none of it blocks the build, and the first two are the real ones:**
+* **the 80-epoch re-run.** ConvNeXt's **82.75%** belonged to the scalar-LN net and is **VOID** —
+  unlike the conv-bias drops, the function genuinely changed. ~1h56m on XLA.
+* **the DP + shard gates** (`convnext-dp-check`, `shard-check convnext`) — need 2 GPUs; the DP
+  artifact re-rendered but has not been executed since.
+* `ConvNeXtWholeFloatBridge` / `ConvNeXtBackB0` / `WholeNetForwardTies` still ride the SCALAR
+  chain (`convNextForwardT`/`TC`), which is why the build stayed green. They are now describing a
+  net the repo no longer ships — a documentation-scope question, not a broken proof.
+* the §1a tie (176/180) and §2f-bis's conditioning/spread findings were measured on the scalar-LN
+  render; re-read before quoting.
 
 #### ⛔⛔ AND THE LN PLACEMENT IS WRONG TOO — found 2026-07-31 by the count NOT matching
 
@@ -3090,7 +3199,9 @@ per-channel LN makes them rank-1 and that novelty goes away.
 
 **Recommended order** (cheapest-first, and it front-loads the certain wins): mnv2 conv biases →
 enet conv biases → ConvNeXt LN. The first two are a known recipe run twice; the third is a
-decision like §2l was.
+decision like §2l was. ✅ **All three DONE 2026-07-31** — and the order held: the two conv-bias
+drops validated the swap recipe (bit-exact ties) before ConvNeXt spent it on a change no tie can
+license, because the function genuinely moves.
 
 #### ▶ STATE 2026-07-31 — both renderers THREADED and INERT, the swap tail is what is left
 
@@ -3319,10 +3430,13 @@ bit-exact 4,020,358/4,020,358, gradient norm-rel **3.3e-8** (the same figure it 
 params); `shard-check efficientnet` — TEST **8.5e-8** against a built-in CONTROL of **1.339**,
 1.6e7 apart. The `tests/`-side `iree-compile` smokes over the committed bytes still pass.
 
-**▶ §2m IS CLOSED — the audit table at the top of this section is all zeros.** All five verified
-nets now agree with the JAX reference they are paired against: R34 21,797,672 (§2l), ViT 5,717,416
-(always), MobileNetV2 3,504,872, EfficientNet-B0 5,288,548 — and ConvNeXt is the one remaining
-deviation, its **scalar LayerNorm**, which is a decision rather than a defect and is scoped above.
+**▶ §2m IS CLOSED — the audit table at the top of this section is all zeros, and as of
+2026-07-31 that is literally true.** All five verified nets now agree with the JAX reference they
+are paired against: R34 21,797,672 (§2l), ViT 5,717,416 (always), MobileNetV2 3,504,872,
+EfficientNet-B0 5,288,548, and **ConvNeXt-T 28,587,592** — the last one closed by landing the
+channel-LN math forward and flipping the render, not by matching a count (see the warning above
+about why matching the count alone would have been the WORSE outcome). ⚠ ConvNeXt's **82.75%** is
+void with it; the 80-epoch re-run is owed.
 
 ⚠ **What did NOT change on any of the three nets: the proof side.** `B0Weights` / `MNV2PaperWeights`
 still carry their bias fields, `den` and every faithfulness theorem are untouched, and no `SHlo` op
