@@ -134,6 +134,52 @@ check_no_malformed() {
   return 0
 }
 
+# ── the empty-SSA-slot audit ──
+# A renderer that gates an op (`if convBias then pretty … else pure ("", "")`) but NOT the
+# name list it feeds emits the empty string as an operand or a return value: `return %a, , %b`,
+# `stablehlo.multiply %v5793,  :`. Both are malformed text the LOWERER rejects, so nothing in
+# Lean catches them — and an arity `#guard` does not either, because the list keeps its full
+# length. Hit twice on the mnv2/enet conv-bias drop (§2m): once in the AdamW tail, once in the
+# SGD return list, where it rendered 210 names against 160 types.
+check_no_empty_slot() {
+  echo "── empty-SSA-slot audit (a gated op whose name list was not gated) ──"
+  local hits
+  hits="$(grep -rlE '(, ,|,  +[:=])|= [a-z_.]+ +,' verified_mlir/ 2>/dev/null || true)"
+  if [ -n "$hits" ]; then
+    echo "  ✖ an emitted operand or return slot is EMPTY in:"
+    echo "$hits" | sed 's/^/      /'
+    return 1
+  fi
+  echo "  OK — no artifact has an empty operand or return slot"
+  return 0
+}
+
+# ── the zero-bias prelude audit ──
+# A `convBias := false` render binds every dropped conv bias to a `%zb<c>` constant emitted by
+# `zeroBiasPrelude`. Wire the operand (`biasName`) and forget the prelude and the artifact uses
+# an SSA name nothing defines — `iree-compile`/XLA say "use of undeclared SSA value name" and
+# nothing before them says anything. Measured 2026-07-31: all FOUR EfficientNet renders were in
+# exactly that state (15 widths used, 0 declared). Vacuous while the committed bytes carry biases;
+# it goes live the moment a net is swapped, which is when it is needed.
+check_zero_bias_decls() {
+  echo "── zero-bias prelude audit (%zb used but not declared) ──"
+  python3 - <<'PY'
+import re, sys, glob, os
+rc = 0
+for p in sorted(glob.glob("verified_mlir/*.mlir")):
+    src = open(p).read()
+    used = set(re.findall(r"%zb\d+", src))
+    if not used: continue
+    decl = set(re.findall(r"(%zb\d+) = stablehlo\.constant", src))
+    miss = sorted(used - decl, key=lambda s: int(s[3:]))
+    if miss:
+        print(f"  ✖ {os.path.basename(p)}: {len(miss)} undeclared — {' '.join(miss)}")
+        rc = 1
+if rc == 0: print("  OK — every %zb an artifact uses is declared by its prelude")
+sys.exit(rc)
+PY
+}
+
 if [ "$WHAT" = "check" ]; then
   rc=0
   check_writers || rc=1
@@ -141,6 +187,10 @@ if [ "$WHAT" = "check" ]; then
   check_fwd_prefix || rc=1
   echo
   check_no_malformed || rc=1
+  echo
+  check_no_empty_slot || rc=1
+  echo
+  check_zero_bias_decls || rc=1
   exit $rc
 fi
 

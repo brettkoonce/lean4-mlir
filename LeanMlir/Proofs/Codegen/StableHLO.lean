@@ -5712,6 +5712,18 @@ def serializeToks (B : Nat) : List Tok → (String × List String) → StateM Na
 def biasName (convBias : Bool) (nm : String) (c : Nat) : String :=
   if convBias then nm else s!"%zb{c}"
 
+/-- The bias's slot in a **return-name list**, gated the way `biasName` gates the operand: with
+    `convBias := false` no bias SGD op is emitted, so the slot must LEAVE the list rather than carry
+    the empty string the `if convBias then … else pure ("", "")` idiom hands back.
+
+    ⚠ This exists because leaving it in is **silent twice over**. An empty name renders
+    `return %a, , %b` — malformed text, but only the lowerer ever sees it; and the name list keeps
+    its FULL length, so an arity `#guard` on the signature still passes. Measured on the first swap
+    attempt: `mobilenetv2_train_step` at `convBias := false` returned 210 names (52 of them empty)
+    against 160 types. Use this at every site where a `names := [...]` list is built from gated ops. -/
+def biasSlot (convBias : Bool) (nm : String) : List String :=
+  if convBias then [nm] else []
+
 /-- The zero-bias constants the `convBias := false` render consumes, one per channel width used as
     a conv bias. Emitted once at the top of the body; XLA folds the resulting `add`. -/
 def zeroBiasPrelude (convBias : Bool) (widths : List Nat) : String :=

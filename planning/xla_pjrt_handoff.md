@@ -2993,6 +2993,100 @@ across an `else`, and backtracked `\d+` into `160` to produce `convBias0`. Also 
 LAST in every public signature — inserted mid-list it captures an existing positional argument
 (`efficientnetTrainStepFaithfulV`'s `funcName`, `enetBackAll`'s optional `smooth`).*
 
+#### ⛔ The swap was attempted, BLOCKED and reverted (`b8971ce`) — ✅ then DIAGNOSED AND FIXED
+
+`b8971ce` flipped the default, re-rendered all 6 mnv2 artifacts, and the trainer died at
+`f32 forward failed` — **the EVAL forward, not the train step**, with the train step compiling, the
+tie passing (bit-exact on every forward-only output) and the audit green. It was reverted
+undiagnosed, with the BN running-stat inputs named as the suspect. **That was the wrong suspect:
+the stat slots tie exactly, 104 on both sides.**
+
+**The cause is a two-signature-sources skew, and it is §2a's own disease one level down — in code
+rather than in artifacts.** mnv2 has TWO renderers describing one net:
+
+| | writes | drops at `convBias := false` |
+|---|---|---|
+| `MobileNetV2RenderB.mnv2SigList` | the AdamW train step (+ DP) | **52** ✓ `#guard`ed 210/158 |
+| `MobileNetV2Render.paperSig` | `_fwd`, `_fwd_eval`, `_train_step` | **50** ⛔ not guarded |
+
+All 15 block conv sites threaded `biasName convBias …` correctly; **the stem `%bs` and the head
+`%bh` were hardcoded** in `paperSig` and in the two forward chains. So the driver walks a 158-param
+layout while the eval graph wants 160, and PJRT refuses to run it. **Measured, and the shim had
+already printed it — one stderr line above the Lean exception:**
+
+```
+[pjrt_ffi] Execute: Execution supplied 315 buffers but compiled program expected 265 buffers
+uncaught exception: f32 forward failed          ← 265 = 1 + 160 + 104, driver supplies 1 + 158 + 104
+```
+
+After the fix the same probe reads **`expected 263`** — exactly what the driver supplies. Before
+263, after 265: two numbers, one skew, and both come from XLA rather than from a reading of the
+source.
+
+**A SECOND defect it was hiding, found the same way and not yet hit.** The backward `names` lists
+were ungated while the ops filling them were gated, so a dropped bias sat in the return list as the
+empty string `pure ("", "")` hands back:
+
+| render | at `convBias := false` |
+|---|---|
+| `mobilenetv2_train_step` | `return %v5358, , %v5379 …` — **210 names, 52 EMPTY, against 160 types** |
+| `mobilenetv2_reduced_train_step` | 82 names, 20 empty, 64 types |
+| **`efficientnet_train_step`** | **262 names, 49 empty, 213 types** — enet has this one too |
+
+This is the same class as the AdamW-tail bug `b8971ce` describes fixing in RenderB (`stablehlo.multiply
+%v5793,  :`), still live in all three SGD renderers. ⚠ **An arity `#guard` cannot catch it** — the
+list keeps its full length; only the lowerer ever sees it.
+
+**A THIRD defect, found by compiling rather than counting.** With the arities right and the return
+lists clean, `iree-compile` still rejected enet: *"use of undeclared SSA value name"*. **None of
+EfficientNet's four renders emitted `zeroBiasPrelude`** — 15 `%zb` widths used, **0 declared**,
+across `_fwd`, `_fwd_eval`, `_train_step` and the AdamW step. It is the first item of §2m's own
+enet tail, so it was owed rather than broken; what is worth recording is that **two clean audits
+and a green `lake build` preceded it.** Counting arities and counting empty slots are both static
+checks over text, and neither knows whether a name is *defined*. The render is `enetBiasWidths`
+now, one list feeding all four calls — ⚠ **and it is the CONV widths only**: SE's 1×1 convs are
+followed by an activation, not BN, so their biases stay real parameters (§2m above).
+
+**What landed (gate 1 re-verified: every artifact in `verified_mlir/` byte-identical, 0 lines of
+`git diff`):**
+
+* `StableHLO.biasSlot` beside `biasName` — the return-list peer of the operand gate;
+* `paperSig`'s stem/head gated, the two forward chains take `biasName convBias "%bs" 32` /
+  `"%bh" 1280`, and the reduced renderer's signature — **written out twice, which is the same
+  two-lists-one-net shape** — collapsed to one `reducedSig`;
+* the four block `names` lists + both `outNames` in mnv2, and the three block lists + `outNames`
+  in enet;
+* **`enetBiasWidths` + `zeroBiasPrelude` wired into all four enet renders** — the first item of
+  enet's tail, done here because it is what makes "the bias-free renders are well-formed" true for
+  both nets rather than one;
+* **`#guard`s on `paperSig` (210/158) and `reducedSig` (82/62)** — the missing peer of RenderB's.
+  With both routes pinned the two lists are one contract;
+* **`regen_verified_mlir.sh check` grew TWO audits**: an empty-SSA-slot check, verified to fire on
+  both real shapes (`return %a, , %b` and `= stablehlo.multiply %v,  :`) and stay quiet on clean
+  text; and a `%zb`-used-but-not-declared check that reproduces the enet finding. The second is
+  vacuous while the committed bytes carry biases and goes live the moment a net is swapped.
+
+**Verified, and by compiling rather than by counting: all TEN bias-free renders now compile on
+XLA** with the output counts the signatures promise — mnv2 `_fwd`/`_fwd_eval`/`_train_step` and the
+AdamW/DP steps at **158** params (581 outputs), reduced 62, enet at **213** (740 outputs). Gate 1
+in its strong form still holds: `git diff verified_mlir/` is **0 lines** across all 67 artifacts,
+and `lake build Proofs Certs Codegen` is green at 3,908 jobs.
+
+**▶ The tail is unchanged and now unblocked:** the `VLayer` spec (`invertedResidual`, plus
+`.convBnNB` for stem and head) → `MobileNetV2Layout.specs` → flip the default → re-render → tie →
+smoke. ⚠ Delete `.lake/build/mobilenetv2_adam_ckpt{,_xla}.bin{,.epoch}` before the smoke (§4).
+
+**The lesson, and it is the thread's own:** the guards were real, fired, and pinned the WRONG HALF.
+Two arity routes agreeing was the check — and only one route was pinned, so the half that ships
+(RenderB, which the tie exercises) was gated and the half the driver *evals* through was not. A tie
+that never touches an artifact cannot license it: `fwd-tie mobilenetv2 --eval` existed the whole
+time and was not run. The second-order version, from the third defect: **static audits over
+emitted text cannot see an undefined name.** Three of the four things wrong here were invisible to
+`lake build`, and the cheapest instrument that found all of them was
+`.lake/build/bin/fwd-tie <net> --eval <candidate>` — it XLA-compiles any path you hand it in
+seconds, whatever the entry name, and prints the compiler's own complaint. **Compile the candidate
+before believing a count.**
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving

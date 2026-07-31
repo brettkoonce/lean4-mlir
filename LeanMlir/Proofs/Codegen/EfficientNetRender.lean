@@ -414,7 +414,8 @@ private def eBackBody (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p 
   let (cte, nte) ← bnBt adam B mid hh ww s!"%{p}ebt" lrStr nEsw
   let (cWe, nWe) ← convW1 adam B ic mid hh ww xName s!"%{p}eW" lrStr nEbn
   let (cbe, nbe) ← if convBias then bnBt adam B mid hh ww s!"%{p}eb" lrStr nEbn else pure ("", "")
-  let names := [nWe, nbe, nge, nte, nWd, nbd, ngd, ntd] ++ seNames ++ [nWp, nbp, ngp, ntp]
+  let names := [nWe] ++ biasSlot convBias nbe ++ [nge, nte, nWd] ++ biasSlot convBias nbd ++
+               [ngd, ntd] ++ seNames ++ [nWp] ++ biasSlot convBias nbp ++ [ngp, ntp]
   pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
                  cDsw ++ cDbn ++ cDer ++ cgd ++ ctd ++ cWd ++ cbd ++
                  cEsw ++ cEbn ++ cExb ++ cge ++ cte ++ cWe ++ cbe,
@@ -474,7 +475,8 @@ private def eBackStrided (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr
   let (cte, nte) ← bnBt adam B mid (2*hh) (2*ww) s!"%{p}ebt" lrStr nEsw
   let (cWe, nWe) ← convW1 adam B ic mid (2*hh) (2*ww) xName s!"%{p}eW" lrStr nEbn
   let (cbe, nbe) ← if convBias then bnBt adam B mid (2*hh) (2*ww) s!"%{p}eb" lrStr nEbn else pure ("", "")
-  let names := [nWe, nbe, nge, nte, nWd, nbd, ngd, ntd] ++ seNames ++ [nWp, nbp, ngp, ntp]
+  let names := [nWe] ++ biasSlot convBias nbe ++ [nge, nte, nWd] ++ biasSlot convBias nbd ++
+               [ngd, ntd] ++ seNames ++ [nWp] ++ biasSlot convBias nbp ++ [ngp, ntp]
   pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
                  cDsw ++ cDbn ++ cDer ++ cgd ++ ctd ++ cWd ++ cbd ++
                  cEsw ++ cEbn ++ cExb ++ cge ++ cte ++ cWe ++ cbe,
@@ -510,7 +512,8 @@ private def eBackNoExp (adam : Bool) (B ic oc hh kd r : Nat) (epsStr lrStr p xNa
   let (ctd, ntd) ← bnBt adam B ic hh ww s!"%{p}dbt" lrStr nDsw
   let (cWd, nWd) ← dwW adam B ic hh ww kd xName s!"%{p}dW" lrStr nDbn
   let (cbd, nbd) ← if convBias then bnBt adam B ic hh ww s!"%{p}db" lrStr nDbn else pure ("", "")
-  let names := [nWd, nbd, ngd, ntd] ++ seNames ++ [nWp, nbp, ngp, ntp]
+  let names := [nWd] ++ biasSlot convBias nbd ++ [ngd, ntd] ++ seNames ++
+               [nWp] ++ biasSlot convBias nbp ++ [ngp, ntp]
   pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
                  cDsw ++ cDbn ++ cDxb ++ cgd ++ ctd ++ cWd ++ cbd,
          dx := nDxb, names := names }
@@ -555,6 +558,18 @@ def enetSig (nClasses : Nat) (convBias : Bool) : List (String × List Nat) :=
   (if convBias then [("hW", [1280,320,1,1]), ("hb", [1280])] else [("hW", [1280,320,1,1])]) ++
   [("hg", [1280]), ("hbt", [1280])] ++
   [("Wd", [1280, nClasses]), ("bd", [nClasses])]
+
+/-- Every channel width EfficientNet-B0 uses as a **conv** bias — stem 32, each block's `mid` and
+    `oc` off the `[t,c,n,s,k]` table, head 1280. One list feeding all four `zeroBiasPrelude` calls,
+    so a `convBias := false` render cannot declare the constants in one artifact and not another.
+
+    ⚠ **NOT the SE widths.** SE's two 1×1 convs are followed by an ACTIVATION, not BN, so nothing
+    absorbs their biases and the reference carries them (§2m); they stay real parameters and are
+    never bound to a zero constant. The audit's rule — a rank-1 kind-2 param after a **rank-4**
+    kernel — excludes them because SE's params are rank-2, which is why enet's +21,008 gap closed
+    exactly on the first attempt. -/
+def enetBiasWidths : List Nat :=
+  [16, 24, 32, 40, 80, 96, 112, 144, 192, 240, 320, 480, 672, 1152, 1280]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net renderer
@@ -662,7 +677,7 @@ def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bo
   "module @m {\n" ++
   s!"  func.func @efficientnet_fwd({enetFwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 forward: every line is pretty(verified AST node) ──\n" ++
-  F.code ++
+  zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
@@ -681,7 +696,7 @@ def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias 
   "module @m {\n" ++
   s!"  func.func @efficientnet_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
-  F.code ++
+  zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
@@ -806,11 +821,14 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
       b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++
       cDsr ++ cDsn ++ csW ++ csb ++ csg ++ cst
+    -- Gated the same way `enetSig` is: a dropped bias must leave the list, not sit in it as the
+    -- empty string `pure ("", "")` handed back (which renders `return %a, , %b` — malformed text
+    -- that no arity `#guard` catches, because the list keeps its full length).
     let outNames : List String :=
-      [nsW, nsb, nsg, nst] ++
+      [nsW] ++ biasSlot convBias nsb ++ [nsg, nst] ++
       b1.names ++ b2.names ++ b3.names ++ b4.names ++ b5.names ++ b6.names ++ b7.names ++ b8.names ++
       b9.names ++ b10.names ++ b11.names ++ b12.names ++ b13.names ++ b14.names ++ b15.names ++
-      b16.names ++ [nWh, nbh, ngh, nth] ++ [nWfc, nbfc]
+      b16.names ++ [nWh] ++ biasSlot convBias nbh ++ [ngh, nth] ++ [nWfc, nbfc]
     -- BN layers in the driver's order: stem → each block's (expand?, depthwise, project) → head.
     -- Taken straight off the forward chain, so the stat slots this train step RETURNS and the slots
     -- `@efficientnet_fwd_eval` READS are the same list — not two that happen to agree today.
@@ -833,7 +851,7 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     let outTypes : List String := (enetSig nClasses convBias).map (fun p => ty p.2)
     pure <|
       "    // ── EfficientNet-B0 (16-MBConv) train step: every line is pretty(verified AST node) ──\n" ++
-      code ++
+      zeroBiasPrelude convBias enetBiasWidths ++ code ++
       s!"    return {String.intercalate ", " outNames} : {String.intercalate ", " outTypes}\n"
   let sigList := enetSig nClasses convBias
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
@@ -1002,7 +1020,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
-      code ++ statCode ++ enetAdamConsts ++ adamCode ++ lossCode ++
+      zeroBiasPrelude convBias enetBiasWidths ++ code ++ statCode ++ enetAdamConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n",
       bnList.map (fun t => t.2.2.1))
   let (inner, bnOc) := go.run' 0

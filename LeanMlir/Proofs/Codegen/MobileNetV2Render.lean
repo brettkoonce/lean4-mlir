@@ -176,7 +176,9 @@ private def irBackStrided (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
   let (ctp, ntp) ← pretty B (.bnBetaSgd s!"%btp{p}" lrStr zoc 0 (.operand dyName zob))
   pure { code := cDpc ++ cDdr ++ cDdmask ++ cDdn ++ cDer ++ cDemask ++ cDen ++ cDxb ++
                  cWe ++ cbe ++ cge ++ cte ++ cWd ++ cbd ++ cgd ++ ctd ++ cWp ++ cbp ++ cgp ++ ctp,
-         dx := nDxb, names := [nWe, nbe, nge, nte, nWd, nbd, ngd, ntd, nWp, nbp, ngp, ntp] }
+         dx := nDxb, names := [nWe] ++ biasSlot convBias nbe ++ [nge, nte, nWd] ++
+                              biasSlot convBias nbd ++ [ngd, ntd, nWp] ++
+                              biasSlot convBias nbp ++ [ngp, ntp] }
 
 /-- **STRIDE-1 inverted-residual backward + 12 param SGD ops.** Everything at `hh×ww`; the skip sums
     (body dx) + dyOut at the block input. -/
@@ -216,7 +218,9 @@ private def irBack (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
   let (ctp, ntp) ← pretty B (.bnBetaSgd s!"%btp{p}" lrStr zoc 0 (.operand dyName zob))
   pure { code := cDpc ++ cDdr ++ cDdmask ++ cDdn ++ cDer ++ cDemask ++ cDen ++ cDxb ++ cDx ++
                  cWe ++ cbe ++ cge ++ cte ++ cWd ++ cbd ++ cgd ++ ctd ++ cWp ++ cbp ++ cgp ++ ctp,
-         dx := nDx, names := [nWe, nbe, nge, nte, nWd, nbd, ngd, ntd, nWp, nbp, ngp, ntp] }
+         dx := nDx, names := [nWe] ++ biasSlot convBias nbe ++ [nge, nte, nWd] ++
+                             biasSlot convBias nbd ++ [ngd, ntd, nWp] ++
+                             biasSlot convBias nbp ++ [ngp, ntp] }
 
 -- ════════════════════════════════════════════════════════════════
 -- § NO-EXPAND block (b1): depthwise(stride-1, on `ic` ch)→BN→relu6 → project(1×1 ic→oc)→BN.
@@ -274,7 +278,8 @@ private def irBackNoExp (B ic oc hh : Nat) (epsStr lrStr p xName : String)
   let (ctp, ntp) ← pretty B (.bnBetaSgd s!"%btp{p}" lrStr zoc 0 (.operand dyName zob))
   pure { code := cDpc ++ cDdr ++ cDdmask ++ cDdn ++ cDxb ++
                  cWd ++ cbd ++ cgd ++ ctd ++ cWp ++ cbp ++ cgp ++ ctp,
-         dx := nDxb, names := [nWd, nbd, ngd, ntd, nWp, nbp, ngp, ntp] }
+         dx := nDxb, names := [nWd] ++ biasSlot convBias nbd ++ [ngd, ntd, nWp] ++
+                              biasSlot convBias nbp ++ [ngp, ntp] }
 
 -- ════════════════════════════════════════════════════════════════
 -- § EXPAND-NO-SKIP stride-1 block (b11, b17): == irFwd/irBack but NO addV skip.
@@ -341,7 +346,9 @@ private def irBackNoSkip (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
   let (ctp, ntp) ← pretty B (.bnBetaSgd s!"%btp{p}" lrStr zoc 0 (.operand dyName zob))
   pure { code := cDpc ++ cDdr ++ cDdmask ++ cDdn ++ cDer ++ cDemask ++ cDen ++ cDxb ++
                  cWe ++ cbe ++ cge ++ cte ++ cWd ++ cbd ++ cgd ++ ctd ++ cWp ++ cbp ++ cgp ++ ctp,
-         dx := nDxb, names := [nWe, nbe, nge, nte, nWd, nbd, ngd, ntd, nWp, nbp, ngp, ntp] }
+         dx := nDxb, names := [nWe] ++ biasSlot convBias nbe ++ [nge, nte, nWd] ++
+                              biasSlot convBias nbd ++ [ngd, ntd, nWp] ++
+                              biasSlot convBias nbp ++ [ngp, ntp] }
 
 -- ════════════════════════════════════════════════════════════════
 -- § Param signature lists (func-arg order — names + types, shared by sig + return types)
@@ -364,10 +371,32 @@ private def irSigNoExp (p : String) (ic oc : Nat) (convBias : Bool) : List (Stri
    (s!"%Wp{p}", ty [oc,ic,1,1])] ++ b s!"%bp{p}" oc ++
   [(s!"%gp{p}", ty [oc]), (s!"%btp{p}", ty [oc])]
 
+/-- **Reduced 6-block param signature** (the demo net), func-arg order: stem (4) + 6×12 + head (4)
+    + dense (2) = 82 tensors, or 64 at `convBias := false`. One source for the func signature, the
+    return types and the demo's own arity — it was written out twice, which is the same
+    two-lists-one-net shape that let the stem/head gate go missing in `paperSig`. -/
+private def reducedSig (nClasses : Nat) (convBias : Bool) : List (String × String) :=
+  [("%Ws", ty [16,3,3,3])] ++ (if convBias then [("%bs", ty [16])] else []) ++
+  [("%gs", ty [16]), ("%bts", ty [16])] ++
+  irSig "1" 16 64 24 convBias ++ irSig "2" 24 96 24 convBias ++ irSig "3" 24 96 32 convBias ++
+  irSig "4" 32 128 32 convBias ++ irSig "5" 32 128 64 convBias ++ irSig "6" 64 256 64 convBias ++
+  [("%Wh", ty [128,64,1,1])] ++ (if convBias then [("%bh", ty [128])] else []) ++
+  [("%gh", ty [128]), ("%bth", ty [128])] ++
+  [("%Wfc", ty [128, nClasses]), ("%bfc", ty [nClasses])]
+
 /-- **FULL 17-block paper param signature**, func-arg order: stem (4) + b1 no-exp (8) +
-    b2..b17 inverted-residual (16×12) + head (4) + dense (2) = 4+8+192+4+2 = 210 tensors. -/
+    b2..b17 inverted-residual (16×12) + head (4) + dense (2) = 4+8+192+4+2 = 210 tensors, or
+    **158** at `convBias := false` (52 conv biases: 50 in blocks + the stem + the head).
+
+    ⚠ The stem `%bs` and head `%bh` were HARDCODED here while the 15 block sites were gated, so
+    this list dropped 50 where `MobileNetV2RenderB.mnv2SigList` — and the layout — dropped 52.
+    The two renderers then disagreed by exactly two parameters, and since the eval forward is
+    rendered here while the AdamW train step and its tie live there, the skew surfaced only at
+    run time as `Execution supplied 263 buffers but compiled program expected 265`. The `#guard`s
+    at the bottom of this file pin BOTH arities, which is what makes the two lists one contract. -/
 private def paperSig (nClasses : Nat) (convBias : Bool) : List (String × String) :=
-  [("%Ws", ty [32,3,3,3]), ("%bs", ty [32]), ("%gs", ty [32]), ("%bts", ty [32])] ++
+  [("%Ws", ty [32,3,3,3])] ++ (if convBias then [("%bs", ty [32])] else []) ++
+  [("%gs", ty [32]), ("%bts", ty [32])] ++
   irSigNoExp "1" 32 16 convBias ++
   irSig "2"  16  96  24 convBias ++ irSig "3"  24 144  24 convBias ++ irSig "4"  24 144  32 convBias ++
   irSig "5"  32 192  32 convBias ++ irSig "6"  32 192  32 convBias ++ irSig "7"  32 192  64 convBias ++
@@ -375,7 +404,8 @@ private def paperSig (nClasses : Nat) (convBias : Bool) : List (String × String
   irSig "11" 64 384  96 convBias ++ irSig "12" 96 576  96 convBias ++ irSig "13" 96 576  96 convBias ++
   irSig "14" 96 576 160 convBias ++ irSig "15" 160 960 160 convBias ++ irSig "16" 160 960 160 convBias ++
   irSig "17" 160 960 320 convBias ++
-  [("%Wh", ty [1280,320,1,1]), ("%bh", ty [1280]), ("%gh", ty [1280]), ("%bth", ty [1280])] ++
+  [("%Wh", ty [1280,320,1,1])] ++ (if convBias then [("%bh", ty [1280])] else []) ++
+  [("%gh", ty [1280]), ("%bth", ty [1280])] ++
   [("%Wfc", ty [1280, nClasses]), ("%bfc", ty [nClasses])]
 
 -- ════════════════════════════════════════════════════════════════
@@ -394,7 +424,7 @@ def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias 
     let zSk  : Kernel4 16 3 3 3 := fun _ _ _ _ => 0
     let z16  : Vec 16 := fun _ => 0
     let z112 : Vec (16*112*112) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 16) (h := 112) (w := 112) "%Ws" "%bs" zSk z16 (.operand "%x" zx))
+    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 16) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 16) zSk z16 (.operand "%x" zx))
     let (cStn, nStn) ← pretty B (.bnPerChannelF (oc := 16) (h := 112) (w := 112) "%gs" "%bts" epsStr 0 z16 z16 (.operand nStc z112))
     let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
     -- ═══ forward: 6 inverted-residual blocks (ic, mid, oc, outH) ═══
@@ -412,7 +442,7 @@ def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias 
     let zWd  : Mat 128 nClasses := fun _ _ => 0
     let zNC  : Vec nClasses := fun _ => 0
     let zHxT : Tensor3 64 7 7 := fun _ _ _ => 0
-    let (cHc, nHc) ← pretty B (.flatConvF (ic := 64) (oc := 128) (h := 7) (w := 7) "%Wh" "%bh" zHk z128 (.operand f6.o z7))
+    let (cHc, nHc) ← pretty B (.flatConvF (ic := 64) (oc := 128) (h := 7) (w := 7) "%Wh" (biasName convBias "%bh" 128) zHk z128 (.operand f6.o z7))
     let (cHn, nHn) ← pretty B (.bnPerChannelF (oc := 128) (h := 7) (w := 7) "%gh" "%bth" epsStr 0 z128 z128 (.operand nHc zH7))
     let (cHr, nHr) ← pretty B (.relu6F (.operand nHn zH7))
     let (cGap, nGap) ← pretty B (.gapF (c := 128) (h := 7) (w := 7) (.operand nHr zH7))
@@ -453,27 +483,16 @@ def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias 
       b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++
       cDsr ++ cDsn ++ csW ++ csb ++ csg ++ cst
     let outNames : List String :=
-      [nsW, nsb, nsg, nst] ++
+      [nsW] ++ biasSlot convBias nsb ++ [nsg, nst] ++
       b1.names ++ b2.names ++ b3.names ++ b4.names ++ b5.names ++ b6.names ++
-      [nWh, nbh, ngh, nth] ++ [nWfc, nbfc]
-    let outTypes : List String :=
-      (([("%Ws", ty [16,3,3,3]), ("%bs", ty [16]), ("%gs", ty [16]), ("%bts", ty [16])] :
-          List (String × String)) ++
-        irSig "1" 16 64 24 convBias ++ irSig "2" 24 96 24 convBias ++ irSig "3" 24 96 32 convBias ++
-        irSig "4" 32 128 32 convBias ++ irSig "5" 32 128 64 convBias ++ irSig "6" 64 256 64 convBias ++
-        [("%Wh", ty [128,64,1,1]), ("%bh", ty [128]), ("%gh", ty [128]), ("%bth", ty [128])] ++
-        [("%Wfc", ty [128, nClasses]), ("%bfc", ty [nClasses])]).map (·.2)
+      [nWh] ++ biasSlot convBias nbh ++ [ngh, nth] ++ [nWfc, nbfc]
+    let outTypes : List String := (reducedSig nClasses convBias).map (·.2)
     pure <|
       "    // ── MobileNetV2 train step: every line is pretty(verified AST node) ──\n" ++
       zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ fwdCode ++ bwdCode ++
       s!"    return {String.intercalate ", " outNames} : {String.intercalate ", " outTypes}\n"
   -- func signature: %x, all params (forward-arg order), %onehot
-  let sigList : List (String × String) :=
-    [("%Ws", ty [16,3,3,3]), ("%bs", ty [16]), ("%gs", ty [16]), ("%bts", ty [16])] ++
-    irSig "1" 16 64 24 convBias ++ irSig "2" 24 96 24 convBias ++ irSig "3" 24 96 32 convBias ++
-    irSig "4" 32 128 32 convBias ++ irSig "5" 32 128 64 convBias ++ irSig "6" 64 256 64 convBias ++
-    [("%Wh", ty [128,64,1,1]), ("%bh", ty [128]), ("%gh", ty [128]), ("%bth", ty [128])] ++
-    [("%Wfc", ty [128, nClasses]), ("%bfc", ty [nClasses])]
+  let sigList : List (String × String) := reducedSig nClasses convBias
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}")) ++
     s!", %onehot: {ty [B, nClasses]}"
@@ -523,7 +542,7 @@ private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32  : Vec 32 := fun _ => 0
     let z112 : Vec (32*112*112) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" "%bs" zSk z32 (.operand "%x" zx))
+    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
     let (cStn, nStn) ← bnSiteP B 32 112 112 mode epsStr "%gs" "%bts" "stn" nStc
     let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
     -- forward: 17 inverted-residual blocks
@@ -551,7 +570,7 @@ private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     let zH7   : Vec (1280*7*7) := fun _ => 0
     let zWd   : Mat 1280 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
-    let (cHc, nHc) ← pretty B (.flatConvF (ic := 320) (oc := 1280) (h := 7) (w := 7) "%Wh" "%bh" zHk z1280 (.operand f17.o z7))
+    let (cHc, nHc) ← pretty B (.flatConvF (ic := 320) (oc := 1280) (h := 7) (w := 7) "%Wh" (biasName convBias "%bh" 1280) zHk z1280 (.operand f17.o z7))
     let (cHn, nHn) ← bnSiteP B 1280 7 7 mode epsStr "%gh" "%bth" "hn" nHc
     let (cHr, nHr) ← pretty B (.relu6F (.operand nHn zH7))
     let (cGap, nGap) ← pretty B (.gapF (c := 1280) (h := 7) (w := 7) (.operand nHr zH7))
@@ -696,12 +715,14 @@ def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
       b10.code ++ b9.code ++ b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++
       b2.code ++ b1.code ++
       cDsr ++ cDsn ++ csW ++ csb ++ csg ++ cst
+    -- Gated the same way `paperSig` is: a dropped bias must leave the list, not sit in it as the
+    -- empty string `pure ("", "")` handed back (which renders `return %a, , %b`).
     let outNames : List String :=
-      [nsW, nsb, nsg, nst] ++
+      [nsW] ++ biasSlot convBias nsb ++ [nsg, nst] ++
       b1.names ++ b2.names ++ b3.names ++ b4.names ++ b5.names ++ b6.names ++ b7.names ++
       b8.names ++ b9.names ++ b10.names ++ b11.names ++ b12.names ++ b13.names ++ b14.names ++
       b15.names ++ b16.names ++ b17.names ++
-      [nWh, nbh, ngh, nth] ++ [nWfc, nbfc]
+      [nWh] ++ biasSlot convBias nbh ++ [ngh, nth] ++ [nWfc, nbfc]
     let outTypes : List String := (paperSig nClasses convBias).map (·.2)
     pure <|
       "    // ── MobileNetV2 (17-block paper) train step: every line is pretty(verified AST node) ──\n" ++
@@ -718,6 +739,18 @@ def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
   s!"  func.func @{funcName}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
+
+-- ── the arity contract, checked at elaboration ──
+-- The peer of `MobileNetV2RenderB`'s `mnv2SigList` guards, and it is the one that was MISSING.
+-- Both renderers describe the same net: `paperSig` writes `@mobilenetv2_{fwd,fwd_eval,train_step}`
+-- while `mnv2SigList` writes the AdamW train step the tie and the shipping trainer use. RenderB's
+-- arities were pinned at 210/158 and these were not, so `paperSig` dropping only 50 of the 52
+-- conv biases (the stem and head were hardcoded outside the gate) was invisible until the eval
+-- forward refused to execute. Two lists for one net is only safe if BOTH are pinned.
+#guard (paperSig 10 true).length == 210
+#guard (paperSig 10 false).length == 158        -- 210 − 52 conv biases (50 in blocks + stem + head)
+#guard (reducedSig 10 true).length == 82
+#guard (reducedSig 10 false).length == 62       -- 82 − 20 (18 in blocks + stem + head)
 
 end Proofs.StableHLO
 
