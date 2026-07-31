@@ -35,12 +35,15 @@ The BACKWARD peer is the same conjugation with `rowLNVecFlatBack` in the middle 
 `diagBack γ` then the three-term `bn_grad_input` at `γ = 1`, `FloatClose.perRowIdx`-lifted exactly
 as `floatBridges_bnPerChannelFlatBack` lifts the per-channel BN backward.
 
-⚠ **What is NOT claimed here.** `chanLNTensor3Back` is the hand-composed reverse chain, in the same
-sense as `cnxBlockBodyBack` / `convnextInputGrad` (`ConvNeXtBackFloatBridge.lean`): each factor is
-the certified adjoint of its forward factor (a permutation's adjoint is its inverse permutation;
-the row map's is `bn_grad_input ∘ diagBack γ`), but the *tie* to `chanLNTensor3_has_vjp.backward`
-is the §B axis and is NOT proved here. The scalar world has that tie
-(`ConvNeXtBackCertifiedTie.lean`); the channel-LN peer of it is owed.
+**What the backward chain is tied to.** `chanLNTensor3Back` is *written* as a hand-composed reverse
+chain, in the same sense as `cnxBlockBodyBack` / `convnextInputGrad`
+(`ConvNeXtBackFloatBridge.lean`): each factor is the adjoint of its forward factor (a permutation's
+adjoint is its inverse permutation; the row map's is `bn_grad_input ∘ diagBack γ`). ✅ **That is now
+PROVED, not asserted** — `ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp` shows the chain
+equals `(chanLNTensor3_has_vjp …).backward`, so this file's closeness is closeness to the
+**certified** gradient. The §B block ties (`cnxBodyWithChanLNBack_eq_vjp`, `cnxBlockChBack_eq_vjp`)
+sit on top of it, and note where the LN slot's tie had to come from: the scalar block tie could pin
+an abstract `lnB` to whatever it liked, while the channel-LN one had to earn it.
 -/
 
 namespace Proofs
@@ -229,8 +232,10 @@ noncomputable def chanLNRows (c h w : Nat) (x : Vec (c * h * w)) : Vec ((h * w) 
     so the conjugation comes back unchanged and only the middle flips to `rowLNVecFlatBack`, read
     at the TRANSPOSED saved input (the row backward needs its own row's activation).
 
-    ⚠ Hand-composed, in the sense of `cnxBlockBodyBack` — the tie to
-    `chanLNTensor3_has_vjp.backward` is the §B axis and is not proved here. -/
+    Hand-composed in the sense of `cnxBlockBodyBack`, but **tied**: it equals
+    `(chanLNTensor3_has_vjp …).backward` by `ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`
+    (§B). Note it takes no `β` — the `+β` translation's VJP is the identity, and the tie proves the
+    certified backward is β-free too. -/
 noncomputable def chanLNTensor3Back (c h w : Nat) (ε : ℝ) (γ : Vec c) (x : Vec (c * h * w)) :
     Vec (c * h * w) → Vec (c * h * w) :=
   reassocBack c h w ∘

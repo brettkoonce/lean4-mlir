@@ -1851,6 +1851,23 @@ open Proofs
 -- backward (depthwise gate + 1×1 conv leaves + rfl); the residual-wrapped block tie on top. b1-free.
 #print axioms Proofs.cnxBlockBodyBack_eq_convNextBlockBody_vjp
 #print axioms Proofs.cnxBlockBack_eq_convNextBlock_vjp
+-- §2n §B at ConvNeXt's REAL channel LayerNorm. The block ties above never look inside an LN — they
+-- pin an ABSTRACT lnB slot — but chanLNTensor3Back is concrete (the float bridge runs floatClose_bnBack
+-- in its middle), so it owes the tie they do not: chanLNTensor3Back_eq_chanLN_vjp proves the
+-- five-factor chain IS chanLNTensor3_has_vjp's backward. Piecewise: the two reassocs collapse by their
+-- permutation-adjoint lemmas, the transposes by rfl, and the row map through bn_grad_input — which is
+-- NOT rfl-equal to bn_has_vjp's backward (the witness carries a bnForward_eq_compose cast), so it goes
+-- through the canonical ∑ pdiv form. Transfer to the tactic-built witness by HasVJP.backward_unique
+-- (any two witnesses for one map have one backward). The tie is β-FREE: the +β translation's VJP is
+-- the identity. Then the body/block ties on top, so the channel-LN net's §B coverage matches the
+-- scalar net's, with the LN op itself now covered too.
+#print axioms Proofs.HasVJP.backward_unique
+#print axioms Proofs.bn_grad_input_eq_vjp_backward
+#print axioms Proofs.transposeFlat_has_vjp_backward_eq
+#print axioms Proofs.rowLNVecFlat_has_vjp_backward_eq
+#print axioms Proofs.chanLNTensor3Back_eq_chanLN_vjp
+#print axioms Proofs.cnxBodyWithChanLNBack_eq_vjp
+#print axioms Proofs.cnxBlockChBack_eq_vjp
 -- §B integrity tie (mnv2): build the certified per-channel-BN body VJP invresBodyPC_has_vjp_at (fresh,
 -- like r34's rblkPC) then tie invresBodyBackPC (+ strided) — relu6 masks pinned to the 0<preact<6
 -- clamp-window signs, BN backs to bnPerChannelTensor3_has_vjp, depthwise via the gate. b1-free.
