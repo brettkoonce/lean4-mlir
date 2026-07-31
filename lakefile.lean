@@ -388,6 +388,14 @@ lean_lib «Certs» where
              -- conv/GAP/dense endpoints and supplied BN/swish/block backs; + the no-exp/strided block-back
              -- bridges (mbNoExpBodyBack/mbStridedBodyBack) so every supplied block back is dischargeable.
              `LeanMlir.Proofs.Float.EfficientNetWholeBackFloatBridge,
+             -- §2n: ConvNeXt's REAL channel LayerNorm (the §2m flip) in float, fwd AND bwd. Route A's
+             -- conjugation is four gathers around one row map, so floatBridges_chanLNTensor3 is
+             -- floatBridges_bnPerChannelTensor3's blueprint with a transpose inserted. Three new op
+             -- bridges: floatBridges_transposeFlat (the transpose IS a gather, by rfl), floatBridges_
+             -- biasAdd (the +β token), floatBridges_layerNormVec (= supplied LN(1,0) ∘ diagBack γ ∘ +β,
+             -- rfl). Backward: rowLNVecFlatBack (perRowIdx of bn_grad_input ∘ diagBack γ) conjugated
+             -- the same way — it discharges the LN-abstract lnB hyps ConvNeXtBackFloatBridge already has.
+             `LeanMlir.Proofs.Float.ChannelLNFloatBridge,
              -- ConvNeXt-T backward (per-example): block body backward (depthwiseBack∘lnBack∘convBack∘
              -- geluBack∘convBack∘layerScaleBack) + residual block + downsample (lnBack∘stride2Back);
              -- convnext_grad_floatBridges = whole-net [3,3,9,3] fold, concrete GAP/dense, stem/stages/

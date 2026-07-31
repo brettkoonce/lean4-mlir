@@ -2009,11 +2009,36 @@ open Proofs
 #print axioms Proofs.floatBridges_convNextStageK
 #print axioms Proofs.floatBridges_cnxDownW
 #print axioms Proofs.convnext_floatBridges
+-- §2n — the SAME story at ConvNeXt's REAL channel LayerNorm (the §2m flip), forward AND backward.
+-- Route A's conjugation is four permutations around one row map, so floatBridges_chanLNTensor3 is
+-- floatBridges_bnPerChannelTensor3's blueprint with a transpose inserted; the row map is ViT's
+-- vector-LN = (+β) ∘ layerScale γ ∘ LN(1,0) (rfl), i.e. the SAME rsqrt keystone at a different
+-- reduction width — the channel flip added no transcendental. Three new op-bridges: the transpose
+-- IS a gather (transposeFlat_eq_gather, rfl), the +β translation, the vector-LN. The block bridge
+-- is now stated once over cnxBodyWith (the LN-abstract body §2m built for the VJP) and the scalar
+-- ch9 net instantiates it for free — convNextBlockBody = cnxBodyWith (layerNormForward …) by rfl.
+-- Backward: everything in ConvNeXtBackFloatBridge was already lnB-abstract, so the flip costs the
+-- whole-net gradient exactly one op (chanLNTensor3Back) + id in the head slot (no head LN).
+#print axioms Proofs.floatBridges_transposeFlat
+#print axioms Proofs.floatBridges_biasAdd
+#print axioms Proofs.floatBridges_layerNormVec
+#print axioms Proofs.floatBridges_chanLNTensor3
+#print axioms Proofs.floatBridges_chanLNTensor3Back
+#print axioms Proofs.floatBridges_cnxBodyWith
+#print axioms Proofs.floatBridges_cnxBlockChW
+#print axioms Proofs.floatBridges_convNextStageChK
+#print axioms Proofs.floatBridges_cnxDownChW
+#print axioms Proofs.convnextCh_floatBridges
+#print axioms Proofs.convnextCh_grad_floatBridges
 -- The skeleton↔real-net forward ties (item #5, cosmetic): each whole-net forward skeleton, with the
 -- concrete blocks plugged into its abstract slots, IS the committed real ℝ-forward def (rfl, modulo
 -- convNextForwardT's nested-app going through its _eq_chain). So the forward bridges provably apply to
 -- the actual nets, not just look-alike skeletons. (efficientnet already ties via its ∘-form statement.)
 #print axioms Proofs.convNextForwardT_eq_skeleton
+-- …and its §2n peer: the channel-LN net ties to the SAME skeleton with chanLNTensor3 in the stem
+-- slot and `id` in the head slot, which is what makes convnextCh_floatBridges a statement about the
+-- committed convNextForwardTCh rather than about a look-alike.
+#print axioms Proofs.convNextForwardTCh_eq_skeleton
 #print axioms Proofs.mobilenetv2Forward_full_pc_eq_skeleton
 #print axioms Proofs.resnet34Forward_full_pc_eq_skeleton
 -- A3 §1g loss-head cotangent seed ("from the loss"): floatClose_lossSeed wraps the per-entry

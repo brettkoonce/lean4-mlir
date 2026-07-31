@@ -42,6 +42,26 @@ theorem convNextForwardT_eq_skeleton (w : CnxTWeights) :
   rw [convNextForwardT_eq_chain w x]
   rfl
 
+/-- **The channel-LN ConvNeXt-T forward tie (§2n)** — the peer of the above for the net the repo
+    actually ships. `convNextForwardTCh` equals the SAME `convnextForward` skeleton with
+    `chanLNTensor3` in the stem slot, the `…Ch` stages and downsamples, and — because the
+    reference's 22 LN sites are 1 stem + 18 block + 3 downsample — **`id` in the head slot**.
+
+    This is what makes `convnextCh_floatBridges` a statement about the committed net rather than
+    about a look-alike skeleton. Same proof shape as the scalar tie: through `…_eq_chain` (the
+    kernel-safe `∘`-form) and then `rfl`, with `id ∘ GAP` collapsing definitionally. -/
+theorem convNextForwardTCh_eq_skeleton (w : CnxTWeightsCh) :
+    convNextForwardTCh w = convnextForward w.sW w.sb w.Wd w.bd
+      (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ)
+      id
+      (convNextStageChK 3 w.s1) (cnxDownChW 28 28 w.d1)
+      (convNextStageChK 3 w.s2) (cnxDownChW 14 14 w.d2)
+      (convNextStageChK 9 w.s3) (cnxDownChW 7 7 w.d3)
+      (convNextStageChK 3 w.s4) := by
+  funext x
+  rw [convNextForwardTCh_eq_chain w x]
+  rfl
+
 /-- **The MobileNetV2 forward tie.** The committed `mobilenetv2Forward_full_pc` (the ch7 6-block
     per-channel render) equals the `mnv2Forward` skeleton with the stem/head per-channel BNs and the 6
     inverted-residual blocks (`invresBodyStridedPC` / `residual (invresBodyPC)`) plugged into its
