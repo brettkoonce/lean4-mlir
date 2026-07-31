@@ -2883,6 +2883,74 @@ Also not done: `momdp` (the DP peer — `r34AdamVariant` already names it, nothi
 matching the remaining pair axes (precision: reference is bf16 on CUDA, this is fp32 — and §3
 measured bf16 at ×0.96 here, so fp32-both is the sane match).
 
+### 2m. ▶ The other four nets, audited the §2k way — 2026-07-31
+
+`§2k`'s check (verified param count vs the JAX reference's own reported count) run on every
+remaining net. **Every gap decomposes exactly**, which is what makes these findings rather than
+suspicions. References are `jax/.lake/build/generated_*_imagenet.py`, whose headers report the
+count the reference itself trains.
+
+| net | verified @1000 | reference | gap | cause |
+|---|---|---|---|---|
+| **ResNet-34** | 21,797,672 | 21,797,672 | **0** | ✅ fixed, §2l |
+| **ViT-Tiny** | 5,717,416 | 5,717,416 | **0** | ✅ architecture clean |
+| **MobileNetV2** | 3,521,928 | 3,504,872 | **+17,056** | ⛔ **52 conv biases = 17,056 exactly** |
+| **EfficientNet-B0** | 5,309,556 | 5,288,548 | **+21,008** | ⛔ **49 conv biases = 21,008 exactly** |
+| **ConvNeXt-T** | 28,572,852 | 28,587,592 | **−14,740** | ⛔ **scalar LayerNorm affine** (below) |
+
+**mnv2 and EfficientNet have R34's step-B defect and ONLY that.** Every conv is BN-followed, the
+reference's `.convBn` carries no bias, and ours does. The fix is `e9c2729` re-run on two more nets:
+thread `convBias`, bind the operand to a zero constant, gate on all artifacts re-rendering
+byte-identical, tie (`x + 0.0` is exact ⇒ the forward comes out bit-exact), swap the layout.
+⚠ **Not verified**: whether the enet reference's SE convs *should* carry biases (the real
+EfficientNet's do). The gap closes exactly against THIS reference; whether the reference is itself
+paper-faithful there is a separate question nobody has asked.
+
+#### ConvNeXt — the scalar LayerNorm, and it is CHEAPER than it looks
+
+**The deviation.** All 22 LayerNorm sites carry **rank-0 scalar γ/β** where ConvNeXt specifies
+per-channel vectors. Per-channel γ+β over the reference's own site widths (5×96, 4×192, 10×384,
+3×768) is 14,784 floats; the render carries 44 scalars; **14,784 − 44 = 14,740**, the measured gap
+to the float. Site count matches (22 both sides), every other tensor shape matches, and the tensor
+count is 180 on both sides.
+
+⚠ A correction recorded because it nearly shipped: an intermediate hand inventory said ConvNeXt-T
+has 23 LN sites and therefore that one 768-wide site was *also* missing. Counting `jnp.ones(` in
+the reference directly gives **22**. There is no missing site; the scalar affine is the whole gap.
+Count the reference, do not enumerate the architecture from memory.
+
+**It is the §2k failure mode exactly**: `convnextVerified`'s blurb says *"depthwise-7×7 + LN +
+GELU"* while the deviation lives only in codegen docstrings (`VerifiedSpec.lean:66` "scalar-LN",
+`StableHLO.lean:2835` "Scalar LN (`layerNormForward = bnForward`)").
+
+**▶ What the survey found, and it changes the estimate.** Two things are already right:
+
+* **the normalization AXIS is correct.** The reference is `channel_layer_norm`, `jnp.mean(x,
+  axis=1)` over NCHW; the verified artifact emits **44 reduces `across dimensions = [1]`** = 22
+  sites × (mean, var), also over channels. This was the thing that would have made it expensive,
+  and it is not wrong.
+* **per-channel LN already exists in the kit and SHIPS** — ViT does `lnRowF` (pure normalize) →
+  `rowScaleF` (per-channel γ) → `rowBiasF` (per-channel β), with `veclnGammaGrad`/`veclnGammaSgd`
+  on the backward and `[192]` vector params. So this is not a new capability, it is a capability
+  ConvNeXt does not use.
+
+**What is actually needed:** ViT's per-channel ops are shaped for a ROW layout `(m, n)`; ConvNeXt
+needs the same affine over `[B,C,H,W]` broadcasting on axis 1 — which is exactly what the BN
+family's per-channel γ/β already do. So the work is one op family (forward, input-VJP, γ-grad,
+β-grad) assembled from two existing pieces, at §4's ten-sites-per-op cost, plus the proof-side
+denotation. **Closer to §2l than to a new architecture**, but not free, and it is proof work rather
+than re-instantiation because `layerNormForward = bnForward` holds *definitionally* only for the
+scalar affine.
+
+**Blast radius:** ConvNeXt's **82.75%** run, the §1a tie (176/180), §2f-bis's AdamW tie +
+conditioning/spread findings, `convnext-dp-check`, `convnext-shard-check`, 5 artifacts. ⚠ And
+**§2h-quater's headline evaporates**: *"44 of the 180 collectives are RANK-0"* IS this deviation —
+per-channel LN makes them rank-1 and that novelty goes away.
+
+**Recommended order** (cheapest-first, and it front-loads the certain wins): mnv2 conv biases →
+enet conv biases → ConvNeXt LN. The first two are a known recipe run twice; the third is a
+decision like §2l was.
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving
