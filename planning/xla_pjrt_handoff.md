@@ -71,8 +71,17 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
-**▶ §2n STEP 1 IS DONE (2026-07-31, UNCOMMITTED) — the FloatBridges are discharged. START AT §2n's
-STEP 2, the DROP.** The channel-LN net now has a whole-net float story in both directions
+**▶ §2n IS CLOSED (2026-07-31) — bridges discharged, §B tied, scalar chain DROPPED (−852 lines).**
+Gates: build **3,910** green · `verified_mlir/` 0 lines of diff after a real re-render ·
+`regen_verified_mlir.sh check` 67/one-writer · audit **1506/1506** · parity smoke `REF RUNS ✓`.
+Four things the drop taught are in §2n, and one is a **live trap worth knowing before you touch any
+renderer**: `lake build Codegen` does NOT build `LeanMlir/Proofs/Codegen/*.lean` (different lean_lib
+roots), so a green build + empty artifact diff after editing a renderer can be **vacuous** — the
+`#eval` writers never ran. Force them with `lake env lean` on the render file.
+⚠ Two things ConvNeXt still owes, unchanged by any of this: its **82.75% is VOID** (80-epoch re-run
+≈ 1h56m) and §2h-quater's **1.68×** DP ratio is not re-measured. Below is the §2n history.
+
+**▶ §2n STEP 1 (2026-07-31) — the FloatBridges are discharged.** The channel-LN net now has a whole-net float story in both directions
 (`convnextCh_floatBridges` / `convnextCh_grad_floatBridges`), tied to the committed
 `convNextForwardTCh` by `convNextForwardTCh_eq_skeleton`, on a new
 `Proofs/Float/ChannelLNFloatBridge.lean`. Build **3,910** jobs green, `verified_mlir/` 0 lines of
@@ -3548,7 +3557,51 @@ emitted text cannot see an undefined name.** Three of the four things wrong here
 seconds, whatever the entry name, and prints the compiler's own complaint. **Compile the candidate
 before believing a count.**
 
-### 2n. ✅ STEP 1 DONE 2026-07-31 — the FloatBridges are discharged. ▶ NEXT = the DROP
+### 2n. ✅ CLOSED 2026-07-31 — bridges discharged, §B tied, and the scalar chain DROPPED
+
+#### ✅ The drop, executed — 852 lines deleted, and the four things it taught
+
+`lake build Proofs Certs Codegen` green at **3,910** jobs · `verified_mlir/` **0 lines of `git
+diff`** after a real re-render · `regen_verified_mlir.sh check` **67 artifacts / one writer each**,
+all four prefix checks OK · `AuditAxioms` **1506/1506** three-axiom · `render_parity.py` smoke on
+gfx1100: **180/180 outputs finite and non-zero, REF RUNS ✓**.
+
+Deleted: the `[3,3,9,3]` scalar-LN chain and its graph section from `ConvNeXtFullT.lean`
+(979 → 473 lines), the three scalar float bridges + `CnxBlockBounded`, `convNextForwardT_eq_skeleton`,
+`ConvNeXtBackB0`'s downsample capstone, 18 `AuditAxioms` lines, and the renderer's `chLN` flag
+(76 sites). Net **−852 / +231** across 11 files.
+
+**1. `ConvNeXtBackB0` — the §2n plan said "port to Ch"; measured, the answer was "delete".** Three
+facts decided it: the capstone had no consumer but an audit line; the ch9 representative
+(`Architectures/ConvNeXt.lean`) is a **2-block net with NO downsample**, so `CnxDownParams`/`cnxDownW`
+were full-T scalar scope rather than shared; and porting needs a *graph-side* channel-LN backward
+faithfulness that does not exist (§2m built the render and the math VJP; today's
+`chanLNTensor3Back_eq_chanLN_vjp` is the MATH-side tie). ⚠ **So the channel-LN downsample now has
+no graph-side backward capstone.** Recorded in `ConvNeXtBackB0`'s docstring. It is a gap the drop
+**exposed rather than created** — it was always the scalar net that had the capstone.
+
+**2. The drop found an audit hole §2m left.** The channel-LN graph faithfulness theorems
+(`chanLNGraph_faithful`, `cnxBlockChGraphW_faithful`, `cnxStageChGraphK_den`,
+`cnxDownChGraphW_faithful`, `convNextFwdGraphTCh_faithful`) were **never in `AuditAxioms`**, while
+the scalar graphs they replaced were. Deleting the scalar lines is what surfaced it; all five are
+now audited and 3-axiom clean. Generalisable: *when you replace X with Y, diff the audit coverage of
+X against Y — a swap can silently drop a rung.*
+
+**3. ⚠ `lake build Codegen` does NOT build `LeanMlir/Proofs/Codegen/*.lean`.** The `Codegen`
+lean_lib's roots are `LeanMlir.MlirCodegen`/`Train`/`Spec`; `ConvNeXtRender.lean` lives under the
+`Proofs`/`Certs` roots. After the renderer refactor I ran `lake build Codegen`, got "Build completed
+successfully (11 jobs)" and an empty `git diff verified_mlir/` — and **both were vacuous**: the
+module never rebuilt, so the `#eval` writers never re-ran. The full build then failed on three real
+errors. **A byte-identical artifact check only means something if the writers actually ran** — force
+it with `lake env lean LeanMlir/Proofs/Codegen/<Render>.lean`, which elaborates the `#eval`s. This
+is §4's "`lake env lean` does not rebuild an edited import" trap wearing the opposite hat.
+
+**4. The renderer's `chLN` flag deletion was inert, as predicted** — bytes identical across all
+three artifacts it writes. Two residues the compiler caught: a dangling `else` where a two-line
+`if chLN then … else …` collapsed, and a signature line eaten with the flag (`convNextBackAll`'s
+`:`). Both loud; neither could have reached an artifact.
+
+#### ✅ Step 1 DONE 2026-07-31 — the FloatBridges are discharged
 
 Scoped 2026-07-31 by reading the files, not by estimating. **Nothing is broken today**: all
 3,909 targets build and every scalar-LN theorem is still TRUE. What is wrong is SCOPE — the
@@ -3665,7 +3718,7 @@ Do that first; it is what makes the rest mechanical.
 | `floatBridges_convNextStageChK` / `floatBridges_cnxDownChW` | mechanical mirrors of the scalar peers | ✅ mechanical as predicted |
 | `ConvNeXtBackFloatBridge` | the backward peer of all of the above | ✅ **smaller than scoped** — the file was already `lnB`-abstract, so it needed ONE op + `id` |
 
-#### ▶ Step 2 — the drop, and EXACTLY what it does and does not mean
+#### ✅ Step 2 — the drop, and EXACTLY what it did and did not mean (executed; scope below as planned)
 
 **IT MEANS** the full `[3,3,9,3]` scalar-LN chain in `ConvNeXtFullT.lean`: `CnxBlockParams`,
 `cnxGls`, `cnxBlockW`, `convNextStageK` (+`_diff`/`_has_vjp`), `CnxDownParams`, `cnxDownW`
