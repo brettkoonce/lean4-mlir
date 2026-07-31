@@ -1492,6 +1492,19 @@ lean_exe «conv-bias-zero» where
   root := `tests.TestConvBiasZero
   moreLinkArgs := xlaLink
 
+/-- §2k's owed numeric gate: is `resnet34_mom_train_step` really heavy-ball with COUPLED L2?
+
+    A cross-render known answer. AdamW's stored `m' = 0.1·g` at `m = v = 0` recovers the gradient
+    exactly, so on the same (θ, x, onehot) the momentum render must satisfy `v' = g + wd·θ` and
+    `θ' = θ − lr·v'`. The controls are the point: the repo's `momParamF` is NESTEROV, which at
+    `v = 0` differs by exactly 1.9×, and the harness requires that prediction to MISS — a gate that
+    cannot separate the two optimizers would pass the one §2k warned about.
+
+        lake build r34-mom-tie && HIP_VISIBLE_DEVICES=0 .lake/build/bin/r34-mom-tie -/
+lean_exe «r34-mom-tie» where
+  root := `tests.TestMomTie
+  moreLinkArgs := xlaLink
+
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a
