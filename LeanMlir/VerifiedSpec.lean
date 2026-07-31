@@ -27,6 +27,11 @@ audited render of this architecture.
 inductive VLayer where
   /-- conv (`oc←ic`, `k×k`, `stride`) → per-channel BN → relu. Params `{W,b,γ,β}`. -/
   | convBn (ic oc k stride : Nat)
+  /-- conv → per-channel BN → relu with **no conv bias** — `{W, γ, β}`. BN removes a conv bias
+      (`(x+b) − mean(x+b) = x − mean(x)`), so a BN-followed conv carries none in He et al.'s
+      `.convBn`; ResNet-34 uses this and the nets that genuinely ship a bias use `convBn`
+      (§2l step B, measured in `tests/TestConvBiasZero.lean`). -/
+  | convBnNB (ic oc k stride : Nat)
   /-- max pool `k×k` / `stride`. No params. -/
   | maxPool (k stride : Nat)
   /-- A basic-block residual stage: `nBlocks` blocks at `oc` channels. The first block
@@ -79,13 +84,16 @@ namespace VLayer
 /-- conv → per-channel BN → relu: `{W=[oc,ic,k,k], b=[oc], γ=[oc], β=[oc]}`. -/
 private def convBnSpec (ic oc k : Nat) : Array (Array Nat × Nat) :=
   #[(#[oc,ic,k,k],0),(#[oc],2),(#[oc],1),(#[oc],2)]
+/-- conv → per-channel BN → relu, **no conv bias**: `{W=[oc,ic,k,k], γ=[oc], β=[oc]}`. -/
+private def convBnNBSpec (ic oc k : Nat) : Array (Array Nat × Nat) :=
+  #[(#[oc,ic,k,k],0),(#[oc],1),(#[oc],2)]
 /-- identity basic block @ `c`: two conv→BN→relu units, no projection. -/
 private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
-  #[(#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2)]
+  #[(#[c,c,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2)]
 /-- downsampling basic block `cin→c`: two conv→BN→relu + a 1-conv projection shortcut. -/
 private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
-  #[(#[c,cin,3,3],0),(#[c],2),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2),
-    (#[c,cin,3,3],0),(#[c],2),(#[c],1),(#[c],2)]
+  #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
+    (#[c,cin,3,3],0),(#[c],1),(#[c],2)]
 private def stageSpec (ic oc count stride : Nat) : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) :=
     if stride != 1 || ic != oc then downBlk ic oc else idBlk oc
@@ -96,6 +104,7 @@ private def stageSpec (ic oc count stride : Nat) : Array (Array Nat × Nat) := I
     (`initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias)). -/
 def toSpecs : VLayer → Array (Array Nat × Nat)
   | convBn ic oc k _        => convBnSpec ic oc k
+  | convBnNB ic oc k _      => convBnNBSpec ic oc k
   | maxPool _ _             => #[]
   | residualStage ic oc n s => stageSpec ic oc n s
   | globalAvgPool           => #[]

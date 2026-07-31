@@ -1481,6 +1481,17 @@ lean_exe «strided-1x1» where
   root := `tests.TestStrided1x1
   moreLinkArgs := xlaLink
 
+/-- §2l step B: are the R34 conv biases inert? §2l argues dropping them is layout-only because
+    every conv is BN-followed and BN removes the bias — this MEASURES it. One step of the committed
+    AdamW render from `m = v = 0`, where `m' = (1−β₁)·g` recovers the gradient exactly (§2k), then
+    reads the 36 conv-bias slots. The DENSE bias is the control: same shape, same zero init, no BN
+    after it, so it must move — otherwise the reading is "the harness sees zeros".
+
+        lake build conv-bias-zero && HIP_VISIBLE_DEVICES=0 .lake/build/bin/conv-bias-zero -/
+lean_exe «conv-bias-zero» where
+  root := `tests.TestConvBiasZero
+  moreLinkArgs := xlaLink
+
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a

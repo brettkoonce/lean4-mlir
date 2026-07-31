@@ -283,22 +283,29 @@ end CifarBnLayout
 
 namespace ResNet34Layout
 /-- Chapter-5 **real ResNet-34** params (IMAGENETTE 3×224×224 — paper-native ImageNet
-    resolution): **7×7 stride-2 stem** {W=`[64,3,7,7]`,b,γ,β} (224→112), then the
-    16 basic blocks (3 strided downsample {W,b,γ,β}×2 + proj{W,b,γ,β}; 13 identity
-    {W,b,γ,β}×2) at channels 64/128/256/512 (spatial 56/28/14/7), then dense {W,b}.
-    Per-channel BN ⇒ γ/β are **rank-1 `[c]`** (not rank-0 scalars). 146 params. The
+    resolution): **7×7 stride-2 stem** {W=`[64,3,7,7]`,γ,β} (224→112), then the
+    16 basic blocks (3 strided downsample {W,γ,β}×2 + proj{W,γ,β}; 13 identity
+    {W,γ,β}×2) at channels 64/128/256/512 (spatial 56/28/14/7), then dense {W,b}.
+    Per-channel BN ⇒ γ/β are **rank-1 `[c]`** (not rank-0 scalars). **110 params** (§2l step B: no conv biases). The
     `(dims, initKind)` order MUST match `@resnet34_train_step`'s signature (and
     `@resnet34_fwd`'s) — both rendered from the same `Blk` list (tests/TestResnet34*.lean
     `allParams`). `initKind`: 0 = He(fan-in) (stem fan-in = 3·7·7 = 147), 1 = ones (γ),
     2 = zeros (β / bias). -/
+-- §2l step B (2026-07-30): the conv BIASES are gone — `{W, γ, β}` per conv, not `{W, b, γ, β}`.
+-- Every conv here is BN-followed and BN removes the bias, so it was 8,512 parameters that could
+-- not affect the output; He et al.'s `.convBn` has none, and carrying them put this layout
+-- 8,512 params away from the ImageNet reference it is supposed to be paired with (§2k).
+-- MEASURED before the change, not argued: zeroing all 8,512 in the TRAINED net moves the logits
+-- by rel 1e-6 (the same ablation on BN β moves them by 0.79), and the bias-free render ties the
+-- biased one with every forward-only output BIT-EXACT. `tests/TestConvBiasZero.lean`.
 private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
-  #[(#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2)]
+  #[(#[c,c,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2)]
 private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
-  #[(#[c,cin,3,3],0),(#[c],2),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],2),(#[c],1),(#[c],2),
-    (#[c,cin,3,3],0),(#[c],2),(#[c],1),(#[c],2)]
+  #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
+    (#[c,cin,3,3],0),(#[c],1),(#[c],2)]
 /-- `(dims, initKind)` for every param, in func-arg order. -/
 def specs : Array (Array Nat × Nat) := Id.run do
-  let mut a : Array (Array Nat × Nat) := #[(#[64,3,7,7],0),(#[64],2),(#[64],1),(#[64],2)]  -- 7×7-s2 stem
+  let mut a : Array (Array Nat × Nat) := #[(#[64,3,7,7],0),(#[64],1),(#[64],2)]  -- 7×7-s2 stem
   for _ in [0:3] do a := a ++ idBlk 64                                                     -- stage1
   a := a ++ downBlk 64 128;  for _ in [0:3] do a := a ++ idBlk 128                         -- stage2
   a := a ++ downBlk 128 256; for _ in [0:5] do a := a ++ idBlk 256                         -- stage3

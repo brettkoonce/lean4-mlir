@@ -292,7 +292,7 @@ def cifar8wBnVerified : VerifiedNetSpec where
 
 /-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →
     [3,4,6,3] basic-block stages (per-channel BN, strided downsample at the first block of
-    stages 2–4) → GAP → dense. 146 params. Tied at the FULL spec in `Proofs/SpecVJP.lean`
+    stages 2–4) → GAP → dense. **110 params** (§2l step B: no conv biases). Tied at the FULL spec in `Proofs/SpecVJP.lean`
     (`resnet34Verified_denote_eq` → `resnet34Forward_full_pc`, + rung E
     `resnet34Verified_fwd_faithful`); the honest pointwise VJP is the audited parametric
     skeleton `Proofs.resnet34_has_vjp_at`. -/
@@ -305,7 +305,7 @@ def resnet34Verified : VerifiedNetSpec where
   nClasses := 10
   data     := .imagenette
   layers   := [
-    .convBn 3 64 7 2,            -- 7×7-s2 stem → BN → relu       224→112
+    .convBnNB 3 64 7 2,          -- 7×7-s2 stem → BN → relu       224→112 (no conv bias)
     .maxPool 2 2,                --                                112→56
     .residualStage  64  64 3 1,  -- stage1: 3 identity            @56
     .residualStage  64 128 4 2,  -- stage2: downsample + 3        56→28
@@ -322,7 +322,9 @@ def resnet34Verified : VerifiedNetSpec where
     256,256,256, 256,256, 256,256, 256,256, 256,256, 256,256,  -- d3 + stage3: 5 id blocks
     512,512,512, 512,512, 512,512]                    -- d4 + stage4: 2 id blocks
 
--- Derived layout (146 params) == the audited hand-list ResNet34Layout.specs.
+-- Derived layout (110 params) == the audited hand-list ResNet34Layout.specs. This `#guard` is
+-- the one §2k said would have caught the spec/render drift; it fired on the §2l step-B change and
+-- is what forced `VLayer` to grow a bias-free conv rather than the layout being edited by hand.
 #guard resnet34Verified.toSpecs == ResNet34Layout.specs
 
 /-- **ResNet-34 on full 1000-class ImageNet** — the scale/reference tier (handoff §2k).
@@ -349,7 +351,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
   nClasses := 1000
   data     := .imagenet
   layers   := [
-    .convBn 3 64 7 2,            -- 7×7-s2 stem → BN → relu       224→112
+    .convBnNB 3 64 7 2,          -- 7×7-s2 stem → BN → relu       224→112 (no conv bias)
     .maxPool 2 2,                --                                112→56
     .residualStage  64  64 3 1,  -- stage1: 3 identity            @56
     .residualStage  64 128 4 2,  -- stage2: downsample + 3        56→28

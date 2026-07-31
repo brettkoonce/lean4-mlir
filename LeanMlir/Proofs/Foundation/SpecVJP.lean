@@ -675,7 +675,7 @@ noncomputable def resnet34ForwardW (w : R34Weights) : Vec (3 * 224 * 224) → Ve
 noncomputable def denoteR34Full (layers : List VLayer) (w : R34Weights) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
-  | [.convBn 3 64 7 2, .maxPool 2 2,
+  | [.convBnNB 3 64 7 2, .maxPool 2 2,
      .residualStage 64 64 3 1, .residualStage 64 128 4 2,
      .residualStage 128 256 6 2, .residualStage 256 512 3 2,
      .globalAvgPool, .dense 512 10] => resnet34ForwardW w
