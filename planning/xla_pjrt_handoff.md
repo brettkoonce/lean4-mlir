@@ -71,8 +71,9 @@ Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
 audit reports one writer per artifact. There is no "next AdamW render".
 
-**▶ NEXT SESSION: §2l — re-render R34 with the paper's 1×1 projection shortcut.** Decided
-2026-07-30. §2k found that this repo's "ResNet-34" is **not** He et al.'s: the downsample projection
+**▶ §2l IS DONE (2026-07-31) — the render is the paper's ResNet-34 and the param counts match the
+JAX reference at 21,797,672.** ▶ NEXT: the **80-epoch re-run** to restore the headline (in flight),
+then the `mom` numeric gate. Read §2l for the two things its own plan got wrong. Original note: §2k found that this repo's "ResNet-34" is **not** He et al.'s: the downsample projection
 is **3×3 strided** where the paper's option-B shortcut is **1×1**, which is +1,376,256 params
 (+6.3%), documented only in a codegen docstring while the spec blurb says *"Real ResNet-34"*. It was
 caught by the ImageNet reference-pairing attempt, where the two paths' param counts disagreed by
@@ -2730,7 +2731,53 @@ It also confirms the reason the tie was worth attempting *before* a 28-hour run:
 accuracy comparison would have been **uninterpretable**, and nothing else in the pipeline would have
 said so — both nets train, both descend, both are "ResNet-34".
 
-### 2l. ▶ DECIDED 2026-07-30: make the render the PAPER's ResNet-34 (1×1 projection)
+### 2l. ✅ DONE 2026-07-31 — the render IS the paper's ResNet-34 now
+
+**Landed in three commits: `a1414ef` (the check + the generalization), `e9c2729` (step B, the conv
+biases), `08f4800` (step A, the 1×1 projection).** The param counts now **match the JAX reference
+exactly at 21,797,672**, which was step 5's gate and the whole point of the detour.
+
+**What the plan below got right:** the ordering (B before A), the blast radius, and that the
+1×1-padding check was the thing to run first.
+
+**What it got wrong, both worth keeping:**
+
+1. ⛔ **"the conv-bias gradient is exactly zero, so they stay 0 forever" is FALSE in f32.** The BN
+   mean is a rounded sum, so the cancellation leaves a residue ~1e-6 of the conv-weight gradient on
+   ~93% of coordinates (two runs disagree on *which* — that is what identifies it as noise). And
+   under AdamW's **scale-free** update (§3's own warning) that residue still moves θ by ~lr per
+   step: in the 80-epoch checkpoint **all 8,512 conv biases had drifted off zero**, to |θ|max
+   0.041. What makes B safe is a claim about the FUNCTION — zeroing all of them moves the trained
+   logits by rel **1e-6**, against **0.786** for the same ablation on BN β — not about the
+   gradient. `tests/TestConvBiasZero.lean`.
+2. ⛔ **"parameterised, so this is arguments not proofs" was true of `rblkPStridedPC` and false of
+   everything stated about it.** ~20 declarations over 6 files pinned `Wp : Kernel4 oc ic 3 3`.
+   Generalizing them first is what made A cost **15 binder literals and 3 record fields** — and it
+   surfaced a hidden **odd-kernel side condition** (`2·((k−1)/2)+1 = k`) that
+   `flatConvStride2Back_eq_vjp_backward` was discharging with `by decide` at a pinned 3×3. It is an
+   explicit hypothesis now: true at 1 and 3, provably false at 2 (ConvNeXt's exclusion, §2f-bis).
+
+**The bug A produced, and how it was caught:** the AdamW tail carried its own hardcoded
+`[c,cin,3,3]` for the projection, so the signature said 1×1 while the optimizer emitted a 3×3
+multiply. **`iree-compile` rejected it** — a shape that disagrees with itself cannot run. No gate
+found it; the type checker did.
+
+**▶ STILL OWED:**
+* **the 80-epoch Imagenette re-run** — started 2026-07-31, `runs/r34_1x1_smoke.log`. The **90.39%
+  headline is VOID** (different net). 4-epoch trajectory on the new bytes: 46.3 → 55.3 → 64.6 →
+  **68.3%**, i.e. indistinguishable from the old one, as a 6.3%-smaller net should be.
+* **§2d.2's five-config batch/step-count study is VOID** and not re-run.
+* §2d.1's 1.78×, §2c's 1.46× and §2d.3's transfer numbers **shift** — the `[θ|m|v]` blob goes
+  272 MB → ~255 MB. Directionally unchanged; re-measure before quoting.
+* `resnet34-adam-tie` against the retired 3×3 render is **meaningless by construction** now.
+* **the `mom` numeric gate** (§2k) and **the `NetSpec`/`VerifiedNetSpec` `#guard`** — the latter
+  turned out to already exist (`resnet34Verified.toSpecs == ResNet34Layout.specs`) and **it FIRED
+  on step B**, forcing `VLayer` to grow a bias-free `convBnNB` rather than the hand-list being
+  quietly edited to match. It earned its keep on its first real test.
+
+*The plan as written on 2026-07-30 follows, for the record.*
+
+#### (the original plan) make the render the PAPER's ResNet-34 (1×1 projection)
 
 **Brett's call, and it is the expensive option deliberately** — the alternatives were to bend the
 JAX spec to match the render, or to keep two nets and give up the oracle. Correctness of the
