@@ -72,4 +72,51 @@ noncomputable def bf16Linear (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : 
 theorem bf16_render_faithful (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : Vec m) :
     den (bf16LinearGraph rnd W b x) = bf16Linear rnd W b x := rfl
 
+/-! ## Depth > 1 — closed with the `convertF` round node
+
+The header above says depth-1 needs no new op because the leaf cast is baked into the
+operand value, but that rounding *intermediate* activations "needs an in-graph
+`convertF` round node (`den (convertF rnd e) = rnd ∘ den e`)". That op now exists
+(`Proofs/Codegen/StableHLO.lean`), so this section closes the gap the header left open.
+
+The point is that the tie **composes**: a rounded activation feeding the next layer is
+still exactly `dense` of rounded operands, with no cross-layer error term to track,
+because the fp32 accumulate keeps every `∑` exact in ℝ. So the whole-net statement is
+the one-layer statement applied twice — which is what makes bf16 the easy twin of fp8.
+-/
+
+/-- A **depth-2** bf16-mixed graph: rounded operands at BOTH layers, and — the new
+    part — the intermediate activation rounded *in the graph* by `convertF`, exactly
+    where a bf16 kernel would hand its f32 accumulator back as bf16 bytes for the next
+    GEMM. -/
+noncomputable def bf16Depth2Graph (rnd : ℝ → ℝ) {p : Nat}
+    (W₀ : Mat m n) (b₀ : Vec n) (W₁ : Mat n p) (b₁ : Vec p) (x : Vec m) : SHlo p :=
+  .addBcast "%b1" b₁ (.dotIn "%W1b" (wBf16 rnd W₁)
+    (.convertF rnd
+      (.addBcast "%b0" b₀ (.dotIn "%W0b" (wBf16 rnd W₀) (.operand "%xb" (actBf16 rnd x))))))
+
+/-- The intended depth-2 algorithm: **`bf16Linear` applied to itself.** No explicit
+    `rnd ∘` between the layers — `bf16Linear` already rounds its input operand via
+    `actBf16`, and that is precisely the rounding the in-graph `convertF` performs. The
+    layer-1 leaf cast and the layer-0 output round are THE SAME CAST, seen from the two
+    sides, which is why the composition needs no glue. (Writing `rnd ∘ …` here instead
+    would round twice and the tie below would fail — it did, first try.) -/
+noncomputable def bf16Depth2 (rnd : ℝ → ℝ) {p : Nat}
+    (W₀ : Mat m n) (b₀ : Vec n) (W₁ : Mat n p) (b₁ : Vec p) (x : Vec m) : Vec p :=
+  bf16Linear rnd W₁ b₁ (bf16Linear rnd W₀ b₀ x)
+
+/-- **bf16 render-tie at depth 2.** The emitted graph — including the in-graph round —
+    denotes the rounded-operand two-layer linear, for any `rnd`. Still `rfl`: no
+    accuracy reasoning, no error propagation, purely denotational. This is the
+    statement the header flagged as needing `convertF`, and it discharges the same way
+    the depth-1 one does. -/
+theorem bf16_render_faithful_depth2 (rnd : ℝ → ℝ) {p : Nat}
+    (W₀ : Mat m n) (b₀ : Vec n) (W₁ : Mat n p) (b₁ : Vec p) (x : Vec m) :
+    den (bf16Depth2Graph rnd W₀ b₀ W₁ b₁ x) = bf16Depth2 rnd W₀ b₀ W₁ b₁ x := rfl
+
+/-! Depth `k` follows by iterating `bf16_render_faithful_depth2` — there is no
+depth-dependent constant to accumulate, which is the structural content of "bf16 has no
+block scale to factor through the sum". The round node in isolation is
+`Proofs.StableHLO.convertF_faithful`; it is not restated here. -/
+
 end Proofs.Bf16PoC

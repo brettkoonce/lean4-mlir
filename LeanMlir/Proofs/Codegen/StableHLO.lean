@@ -203,6 +203,21 @@ inductive SHlo : Nat → Type where
   -- `x≠0 ∧ x≠6`). `selectMid`'s `xName`/`x` is the saved pre-activation.
   | relu6F     {n : Nat}                                        : SHlo n → SHlo n
   | selectMid  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
+  -- Mixed precision (planning/bf16_renderer.md): the in-graph ROUND node. `den` is
+  -- literally `rnd ∘ den e`, so it is `den`-faithful for ANY rounding — bf16
+  -- round-to-nearest being the instance we emit. This is the op
+  -- `Proofs/Float/Bf16FaithfulPoC.lean` names as the depth > 1 ingredient
+  -- (`den (convertF rnd e) = rnd ∘ den e`), and it is ALSO what depth 1 needs on the
+  -- emitter side: the PoC folds the leaf cast into the operand *value*, which is
+  -- right for the proof but would leave the emitted graph pure `f32` and therefore
+  -- exactly as fast as fp32. One op serves both.
+  --
+  -- It emits a convert ROUND TRIP (`f32 → bf16 → f32`), which is the honest reading
+  -- of a `ℝ → ℝ` rounding: the value stays an f32 tensor and only its precision is
+  -- degraded. Feeding a bf16-typed `dot_general` directly is a separate, later change
+  -- (rung 2+), because that one changes the TYPE of the value and so cannot be a
+  -- `SHlo n → SHlo n` node.
+  | convertF   {n : Nat} (rnd : ℝ → ℝ)                          : SHlo n → SHlo n
   -- Chapter 3 (CNN): flattened conv forward (`stablehlo.convolution`) and
   -- 2×2 max-pool forward (`reduce_window`). Vec-indexed via the proofs'
   -- flattened forms `flatConv`/`maxPoolFlat`.
@@ -1227,6 +1242,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
   | _, .relu6F e       => fun i => min (max (den e i) 0) 6
   | _, .selectMid _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
+  | _, .convertF rnd e => fun i => rnd (den e i)
   | _, .flatConvF _ _ W b e => flatConv W b (den e)
   | _, .maxPoolF (c := c) (h := h) (w := w) e => maxPoolFlat c h w (den e)
   | _, .convBack _ W b v e => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v (den e)
@@ -1363,6 +1379,17 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
     den (.reluF e) = fun i => max (den e i) 0 := rfl
 @[simp] theorem den_selectPos {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
     den (.selectPos s x e) = fun i => if x i > 0 then den e i else 0 := rfl
+/-- **The round node is `den`-faithful for any rounding.** This is the equation
+    `Proofs/Float/Bf16FaithfulPoC.lean` asks for by name to lift its depth-1 tie to
+    depth > 1: rounding an *intermediate* activation is now an in-graph op whose
+    denotation is exactly post-composition with `rnd`. No bf16 specifics appear here —
+    bf16 round-to-nearest is one instance, and the accuracy half is supplied separately
+    by `FloatBridge.dense_close_mixed` at `u_leaf = 2⁻⁸`. -/
+@[simp] theorem den_convertF {n : Nat} (rnd : ℝ → ℝ) (e : SHlo n) :
+    den (.convertF rnd e) = fun i => rnd (den e i) := rfl
+/-- The round node composed with `den` as a function, the form the tie proofs want. -/
+theorem convertF_faithful {n : Nat} (rnd : ℝ → ℝ) (e : SHlo n) :
+    den (.convertF rnd e) = rnd ∘ den e := rfl
 @[simp] theorem den_relu6F {n : Nat} (e : SHlo n) :
     den (.relu6F e) = fun i => min (max (den e i) 0) 6 := rfl
 @[simp] theorem den_selectMid {n : Nat} (s : String) (x : Vec n) (e : SHlo n) :
@@ -2966,6 +2993,12 @@ def ty (dims : List Nat) : String :=
 def tyI1 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["i1"]) ++ ">"
 
+/-- bf16 tensor-type string, for the `convertF` round node (planning/bf16_renderer.md).
+    Only the round trip uses it today; when a bf16-operand `dot_general` lands (rung 2+)
+    this is the type its operands carry. -/
+def tyBf16 (dims : List Nat) : String :=
+  "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["bf16"]) ++ ">"
+
 /-- Fresh SSA name `%v{k}`. -/
 def fresh : StateM Nat String := do
   let k ← get; set (k + 1); pure s!"%v{k}"
@@ -2999,6 +3032,7 @@ inductive Raw where
   | selectPos  (x : String) (n : Nat)      : Raw → Raw
   | relu6F     (n : Nat)                   : Raw → Raw
   | selectMid  (x : String) (n : Nat)      : Raw → Raw
+  | convertF   (n : Nat)                   : Raw → Raw
   | flatConvF  (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | maxPoolF   (c h w : Nat)               : Raw → Raw
   | convBack   (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
@@ -3131,6 +3165,7 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .selectPos x _ e       => .selectPos x k (skel e)
   | k, .relu6F e              => .relu6F k (skel e)
   | k, .selectMid x _ e       => .selectMid x k (skel e)
+  | k, .convertF _ e          => .convertF k (skel e)
   | _, .flatConvF (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .flatConvF wN bN ic oc h w kH kW (skel e)
   | _, .maxPoolF (c := c) (h := h) (w := w) e => .maxPoolF c h w (skel e)
@@ -3375,6 +3410,7 @@ inductive Tok where
   | selectPos  (x : String) (n : Nat)      : Tok
   | relu6F     (n : Nat)                   : Tok
   | selectMid  (x : String) (n : Nat)      : Tok
+  | convertF   (n : Nat)                   : Tok
   | flatConvF  (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | maxPoolF   (c h w : Nat)               : Tok
   | convBack   (w : String) (ic oc h w' kH kW : Nat) : Tok
@@ -3463,6 +3499,7 @@ def toToks : Raw → List Tok
   | .selectPos x n e => toToks e ++ [.selectPos x n]
   | .relu6F n e      => toToks e ++ [.relu6F n]
   | .selectMid x n e => toToks e ++ [.selectMid x n]
+  | .convertF n e    => toToks e ++ [.convertF n]
   | .flatConvF w b ic oc h w' kH kW e => toToks e ++ [.flatConvF w b ic oc h w' kH kW]
   | .maxPoolF c h w e => toToks e ++ [.maxPoolF c h w]
   | .convBack w ic oc h w' kH kW e => toToks e ++ [.convBack w ic oc h w' kH kW]
@@ -3780,6 +3817,16 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       let z ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
+  -- The round node: down to bf16 and straight back. Two converts, not one, because
+  -- `den` is `ℝ → ℝ` — the VALUE stays f32 and only its precision is degraded, which
+  -- is what "round to bf16" means as a function on reals. XLA folds the pair into the
+  -- consumer where it can. ⚠ Whether that fold reaches a tensor-core bf16 GEMM is NOT
+  -- guaranteed by this node and must be MEASURED, not assumed — see the trap in
+  -- planning/bf16_renderer.md.
+  | .convertF n, r :: st => do
+      let b ← fresh; let o ← fresh
+      pure (s!"    {b} = stablehlo.convert {r} : ({ty [B,n]}) -> {tyBf16 [B,n]}\n" ++
+            s!"    {o} = stablehlo.convert {b} : ({tyBf16 [B,n]}) -> {ty [B,n]}\n", o :: st)
   | .selectPos x n, r :: st => do
       let z ← fresh; let msk ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
