@@ -977,6 +977,54 @@ LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
 // through the generic IREE invoke. The one-hot is built here from int32 labels
 // `y` (so the Lean caller passes the same labels the production path uses).
 // Returns a ByteArray of W0n (d0*d1 f32) ++ b0n (d1 f32).
+// ── Target construction: ONE definition, shared by all three train-step entry points ──────────
+//
+// Every render takes the target as a `[batch, nClasses]` FLOAT tensor (`%onehot`), never as
+// integer labels — so the graph has always been able to consume an arbitrary target
+// distribution. What forced hard labels was this C layer expanding int32s into a one-hot, in
+// three separate copies. This is that expansion, once, with a soft path beside it.
+//
+// **The buffer is SELF-DESCRIBING BY SIZE**, deliberately, rather than gated by a new flag
+// argument:
+//   * `batch * 4` bytes           → int32 hard labels, expanded to a one-hot (the old behaviour,
+//                                   bit-for-bit — every existing caller lands here unchanged);
+//   * `batch * nClasses * 4` bytes → float32 target distribution, copied through. This is what
+//                                   mixup/cutmix produce (`λ·y_a + (1−λ)·y_b`), and what BCE-style
+//                                   multi-hot targets would use.
+//   * anything else                → REFUSED, loudly.
+//
+// Why size and not a flag: a flag is a signature change on three `@[extern]` entry points, and
+// §2d.3 paid for exactly that lesson — a stale binary calling a changed signature shifts every
+// argument and produces garbage rather than a link error. Size dispatch cannot be stale: the two
+// sizes differ by a factor of `nClasses`, which is ≥ 2 for every classification net in the repo,
+// so they are never ambiguous. The `d3 > 1` guard makes that precondition explicit instead of
+// assumed, and the else-branch refuses rather than guessing.
+//
+// ⚠ Nothing here validates that a soft target is a DISTRIBUTION (non-negative, sums to 1). It is
+// not this layer's job — BCE targets are multi-hot and legitimately do not sum to 1 — but it does
+// mean a caller that ships garbage gets a silently wrong loss, so the producer needs its own gate.
+//
+// Returns 0 on success, -1 if the buffer size matches neither convention.
+static int lean_fill_targets(b_lean_obj_arg y_ba, size_t batch, size_t nclasses, float* out) {
+  const size_t nbytes = lean_sarray_size(y_ba);
+  const size_t hard_bytes = batch * sizeof(int32_t);
+  const size_t soft_bytes = batch * nclasses * sizeof(float);
+  if (nclasses > 1 && nbytes == soft_bytes) {
+    memcpy(out, lean_sarray_cptr(y_ba), soft_bytes);
+    return 0;
+  }
+  if (nbytes == hard_bytes) {
+    const int32_t* y = (const int32_t*)lean_sarray_cptr(y_ba);
+    memset(out, 0, batch * nclasses * sizeof(float));
+    for (size_t i = 0; i < batch; i++) {
+      int32_t l = y[i];
+      if (l >= 0 && (size_t)l < nclasses) out[i * nclasses + (size_t)l] = 1.0f;
+    }
+    return 0;
+  }
+  return -1;
+}
+
 LEAN_EXPORT lean_obj_res lean_iree_linear_train_step(
     b_lean_obj_arg sess_obj,
     b_lean_obj_arg fn_name_obj,
@@ -990,12 +1038,12 @@ LEAN_EXPORT lean_obj_res lean_iree_linear_train_step(
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
 
-  // Build one-hot [batch, d1] f32 from int32 labels [batch].
-  const int32_t* y = (const int32_t*)lean_sarray_cptr(y_ba);
+  // Target [batch, d1] f32 — int32 hard labels or a float32 distribution, see lean_fill_targets.
   float* onehot = (float*)calloc(batch * d1, sizeof(float));
-  for (size_t i = 0; i < batch; i++) {
-    int32_t lbl = y[i];
-    if (lbl >= 0 && (size_t)lbl < d1) onehot[i * d1 + (size_t)lbl] = 1.0f;
+  if (lean_fill_targets(y_ba, batch, d1, onehot) != 0) {
+    free(onehot);
+    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+        "linear train step: target buffer is neither int32[batch] nor float32[batch*nClasses]")));
   }
 
   // 4 inputs: x[B,d0], W0[d0,d1], b0[d1], onehot[B,d1].
@@ -1090,10 +1138,11 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v_dp(
   }
   int64_t n_total = off;
 
-  const int32_t* y = (const int32_t*)lean_sarray_cptr(y_ba);
   float* onehot = (float*)calloc(batch * d3, sizeof(float));
-  for (size_t i = 0; i < batch; i++) {
-    int32_t l = y[i]; if (l >= 0 && (size_t)l < d3) onehot[i * d3 + (size_t)l] = 1.0f;
+  if (lean_fill_targets(y_ba, batch, d3, onehot) != 0) {
+    free(onehot); free(input_ranks); free(dims); free(in_data); free(shard);
+    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+        "DP train step: target buffer is neither int32[batch] nor float32[batch*nClasses]")));
   }
   input_ranks[1 + n_params] = 2;
   dims[di++] = (int64_t)batch; dims[di++] = (int64_t)d3;
@@ -1172,11 +1221,12 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v(
   }
   int64_t n_total = off;
 
-  // last input: onehot [batch, d3] from int32 labels
-  const int32_t* y = (const int32_t*)lean_sarray_cptr(y_ba);
+  // last input: target [batch, d3] — int32 hard labels or a float32 distribution (mixup/cutmix)
   float* onehot = (float*)calloc(batch * d3, sizeof(float));
-  for (size_t i = 0; i < batch; i++) {
-    int32_t l = y[i]; if (l >= 0 && (size_t)l < d3) onehot[i * d3 + (size_t)l] = 1.0f;
+  if (lean_fill_targets(y_ba, batch, d3, onehot) != 0) {
+    free(onehot); free(input_ranks); free(dims); free(in_data);
+    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+        "train step: target buffer is neither int32[batch] nor float32[batch*nClasses]")));
   }
   input_ranks[1 + n_params] = 2; dims[di++] = (int64_t)batch; dims[di++] = (int64_t)d3;
   in_data[1 + n_params] = onehot;
@@ -1212,8 +1262,11 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v(
       if (fx) { fwrite(in_data[0], sizeof(float), (size_t)batch * d0, fx); fclose(fx); }
       FILE* fp = fopen("/tmp/dump_params.bin", "wb");
       if (fp) { fwrite(pf, sizeof(float), (size_t)n_total, fp); fclose(fp); }
+      // The RESOLVED target [batch, d3] f32, not the raw label buffer: since
+      // `lean_fill_targets` accepts either int32 labels or a float32 distribution, dumping the
+      // input would record two different formats under one filename. This is what the graph got.
       FILE* fy = fopen("/tmp/dump_y.bin", "wb");
-      if (fy) { fwrite(y, sizeof(int32_t), batch, fy); fclose(fy); }
+      if (fy) { fwrite(onehot, sizeof(float), (size_t)batch * d3, fy); fclose(fy); }
       fprintf(stderr, "[DUMP] wrote step %d inputs (batch=%zu n_total=%lld) to /tmp/dump_*\n",
               g_call_idx, batch, (long long)n_total); fflush(stderr);
     }

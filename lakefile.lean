@@ -1656,6 +1656,15 @@ lean_exe «vit-dp-check» where
   root := `tests.TestViTDpCheck
   moreLinkArgs := xlaLink
 
+/-- Soft-target gate: the committed renders are AFFINE in their `%onehot` input, so a mixed
+    target gives the mixed gradient and mixup/cutmix need **no new cotangent**. Measures
+    `grad(λ·y_a + (1−λ)·y_b) == λ·grad(y_a) + (1−λ)·grad(y_b)` on the committed bytes, gating
+    `m` (never θ', which is nonlinear in the gradient under AdamW), against a control that runs
+    every time and a vacuity refusal. Retires §2p's claim that a `softLabelCE` render was needed. -/
+lean_exe «soft-target-tie» where
+  root := `tests.TestSoftTargetTie
+  moreLinkArgs := xlaLink
+
 /-- EfficientNet DP gate. Giving both replicas the SAME batch makes `all_reduce(add)/2` the
     identity, so the data-parallel step must reproduce the single-device one exactly. BatchNorm does
     not spoil this: BN normalises per replica, and both replicas' groups are the same 32 examples,
