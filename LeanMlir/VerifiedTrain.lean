@@ -197,17 +197,32 @@ def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
 def spawnShim (split : String) (batch flat seed : Nat) : IO IO.FS.Handle := do
   -- `jax/` is its own lake project, so `--shim` writes under ITS build dir; a run from the repo
   -- root finds it there. $SHIM_SCRIPT overrides for a hand-placed or per-net shim.
-  let candidates := match ← IO.getEnv "SHIM_SCRIPT" with
+  let candidates : List System.FilePath := match ← IO.getEnv "SHIM_SCRIPT" with
     | some p => [p]
     | none   => ["jax/.lake/build/generated_resnet34_imagenet_shim.py",
                  ".lake/build/generated_resnet34_imagenet_shim.py"]
   let some script ← candidates.findM? (fun p => System.FilePath.pathExists p)
     | throw <| IO.userError s!"imagenet shim not found (looked in {candidates}) — generate it with \
 `(cd jax && lake exe resnet34-imagenet default --shim)`, or set $SHIM_SCRIPT"
-  let py := (← IO.getEnv "SHIM_PYTHON").getD
-              "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/python3"
+  -- The interpreter must be the PINNED env (jax + tfds), not whatever `python3` is on PATH:
+  -- the shim imports tensorflow_datasets and jax. $SHIM_PYTHON overrides; otherwise prefer the
+  -- repo-local `.venv` (built off requirements-cuda-lock.txt) over the historical absolute path,
+  -- which points into a checkout that no longer exists on any box.
+  --
+  -- ⚠ Checked for existence BEFORE spawning, on purpose. `IO.Process.spawn` on a missing cmd does
+  -- not fail here in a way this code can see, so a bad interpreter used to surface downstream as
+  -- `bad preamble magic "ResN"` — an error that blames the shim's wire format for a missing
+  -- Python. Naming the real cause is the whole point of this check.
+  let pyCandidates : List System.FilePath := match ← IO.getEnv "SHIM_PYTHON" with
+    | some p => [p]
+    | none   => [".venv/bin/python3",
+                 "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/python3"]
+  let some py ← pyCandidates.findM? (fun p => System.FilePath.pathExists p)
+    | throw <| IO.userError s!"imagenet shim: no python interpreter found (looked in \
+{pyCandidates}). The shim needs the PINNED env (jax + tensorflow_datasets), so point \
+$SHIM_PYTHON at it — a bare `python3` off PATH will not have tfds."
   let child ← IO.Process.spawn {
-    cmd := py, args := #[script], stdout := .piped, stdin := .null,
+    cmd := py.toString, args := #[script.toString], stdout := .piped, stdin := .null,
     env := #[("SHIM_BATCH", some (toString batch)), ("SHIM_SPLIT", some split),
              ("SHIM_SEED", some (toString seed))] }
   let h := child.stdout

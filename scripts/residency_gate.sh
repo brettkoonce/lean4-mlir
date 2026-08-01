@@ -60,8 +60,12 @@ echo "   scratch  $OUT"
 run () {
   local tag=$1; shift
   rm -f "$CKPT" "$CKPT.epoch"
+  # Both vendors' pinning vars, because each is inert on the other's runtime. With only
+  # the HIP one set, a CUDA box silently ignored the pin and took whatever device 0 was —
+  # which happens to be right by accident on an idle box and wrong the moment it is not.
   env "$@" \
     HIP_VISIBLE_DEVICES=0 \
+    CUDA_VISIBLE_DEVICES=0 \
     LEAN_MLIR_VARIANT="$VARIANT" \
     LEAN_MLIR_BENCH_SYNTH=1 \
     LEAN_MLIR_SKIP_EVAL=1 \

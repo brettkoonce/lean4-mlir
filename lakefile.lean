@@ -2655,7 +2655,17 @@ def xlaRef : BenchRef :=
     exactly why it went unnoticed. An independent instance of the same principle, measured
     2026-07-30 on one card across lowerers: XLA-vs-IREE is **2.24× for conv but 9.2× for
     attn**. Attention and convolution do not track each other, whether you change the GPU or
-    the lowerer. -/
+    the lowerer.
+
+    ⚠ **The 3.5×-low proxy figure is an IREE fact, not a 4060 Ti fact.** Measured 2026-08-01 on
+    ares (6× 4060 Ti, CUDA 12.9, jax 0.10.2 CUDA PJRT plugin), the SAME card on the XLA path
+    reads dense **1.29×** / conv **0.54×** / attn **0.70×** — i.e. it BEATS the reference 7900
+    XTX on both conv and attn, and the conv proxy for attn would have been off by only 1.3×
+    rather than 3.5×. Against the IREE column's 4.82/3.54/11.98 for this same card that is a
+    3.7× / 6.6× / **17×** improvement, which is a statement about IREE's CUDA backend rather
+    than about the GPU. Consequence for anyone re-anchoring: the attn family is still worth
+    keeping (it costs one probe and it is what makes ViT honest on IREE), but on XLA/CUDA a
+    `*proxy` row is a mild approximation, not the 3.5× trap it is on IREE. -/
 def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat :=
   (it.refOn ref.xla).map fun refSec =>
     if it.family == "dense" then refSec * dMs / ref.denseRefMs
@@ -2835,7 +2845,10 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
     if !ref.attnProbe.isEmpty then
       IO.println "    A `*proxy` ViT row means the attn probe did not report — it failed to build,"
       IO.println "    or it ran without emitting a PROBE line — so that row borrowed the conv"
-      IO.println "    factor, which measured ~3.5× low for a transformer on a 4060 Ti."
+      IO.println "    factor. How wrong that is depends on the LOWERER, not just the card: on IREE"
+      IO.println "    the proxy measured ~3.5× low for a transformer on a 4060 Ti, but on XLA the"
+      IO.println "    same card's attn (0.70×) and conv (0.54×) factors sit within 1.3× of each"
+      IO.println "    other, so the proxy would have been roughly right. Measured 2026-08-01 on ares."
     IO.println "  * an on-reference factor of 0.94-1.06× is agreement, not signal: the conv probe"
     IO.println "    has ±6% run-to-run spread on the reference card (the anchors are medians)."
     IO.println s!"  * every number above is scaled from the {ref.lowerer} reference column and is an"

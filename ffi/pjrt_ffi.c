@@ -29,9 +29,27 @@
 #include "pjrt_compile_options.h"
 #include "iree_ffi.h"
 
-#define DEFAULT_PLUGIN                                                        \
-  "/home/skoonce/lean/claude_max/lean4-jax/.venv/lib/python3.12/"             \
-  "site-packages/jax_plugins/xla_rocm7/xla_rocm_plugin.so"
+// ─── default plugin search path ────────────────────────────────────────────
+// $PJRT_PLUGIN always wins. Absent it, try each candidate in order and take the
+// first that dlopens. This used to be ONE hardcoded absolute path to a ROCm
+// plugin in a checkout that no longer exists, which meant every non-AMD box —
+// and, after the repo moved, the AMD one too — died in dlopen with a path that
+// told you nothing about what it wanted. The list is vendor-symmetric on
+// purpose: the shim is plugin-agnostic and there is no reason for the DEFAULT
+// to pick a side. Relative entries resolve against the CWD, which for every
+// `lake run`/`lake exe` path is the repo root, so the in-repo `.venv` is found
+// without anyone exporting anything.
+//
+// Ordering rationale: repo-local venv first (it is the pinned env — see
+// requirements-cuda-lock.txt), then the historical absolute paths, so a box
+// that was working before keeps working.
+static const char* const kDefaultPlugins[] = {
+  ".venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so",
+  ".venv/lib/python3.12/site-packages/jax_plugins/xla_rocm7/xla_rocm_plugin.so",
+  "/home/skoonce/lean/claude_max/lean4-jax/.venv/lib/python3.12/"
+  "site-packages/jax_plugins/xla_rocm7/xla_rocm_plugin.so",
+};
+#define N_DEFAULT_PLUGINS (sizeof(kDefaultPlugins)/sizeof(kDefaultPlugins[0]))
 
 // ─── process-global PJRT client ────────────────────────────────────────────
 // One client per process, refcounted across sessions. This is not an
@@ -169,12 +187,23 @@ static int fault_enabled(void) {
 static void* pin_arena(size_t n) {
   if (g_pin && g_pin_sz >= n) return g_pin;
   if (!g_hip_host_malloc) {
+    // Try ROCm first, then CUDA. `cudaHostAlloc` has the SAME (void**, size_t, unsigned)
+    // signature and the same success==0 convention as `hipHostMalloc`, so one function
+    // pointer serves both and the call site below needs no branch. Without the CUDA leg
+    // $PJRT_FFI_PINNED was a silent no-op on NVIDIA — it printed "no libamdhip64" and fell
+    // back to the direct path, so the flag looked supported and did nothing.
     void* h = dlopen("libamdhip64.so.7", RTLD_LAZY);
     if (!h) h = dlopen("libamdhip64.so", RTLD_LAZY);
-    if (!h) { fprintf(stderr, "[pjrt_ffi] PJRT_FFI_PINNED: no libamdhip64\n"); return NULL; }
-    *(void**)&g_hip_host_malloc = dlsym(h, "hipHostMalloc");
+    if (h) *(void**)&g_hip_host_malloc = dlsym(h, "hipHostMalloc");
     if (!g_hip_host_malloc) {
-      fprintf(stderr, "[pjrt_ffi] PJRT_FFI_PINNED: no hipHostMalloc\n"); return NULL;
+      void* c = dlopen("libcudart.so.12", RTLD_LAZY);
+      if (!c) c = dlopen("libcudart.so", RTLD_LAZY);
+      if (c) *(void**)&g_hip_host_malloc = dlsym(c, "cudaHostAlloc");
+    }
+    if (!g_hip_host_malloc) {
+      fprintf(stderr, "[pjrt_ffi] PJRT_FFI_PINNED: no hipHostMalloc (libamdhip64) and no "
+                      "cudaHostAlloc (libcudart) — staying on the direct path\n");
+      return NULL;
     }
   }
   void* p = NULL;
@@ -332,12 +361,33 @@ static int ensure_client(void) {
   if (g_client) { g_client_refs++; return 0; }
 
   const char* plugin = getenv("PJRT_PLUGIN");
-  if (!plugin) plugin = DEFAULT_PLUGIN;
-  void* h = dlopen(plugin, RTLD_LAZY | RTLD_LOCAL);
-  if (!h) {
-    fprintf(stderr, "[pjrt_ffi] dlopen(%s): %s\n", plugin, dlerror());
-    fprintf(stderr, "[pjrt_ffi] set $PJRT_PLUGIN to the PJRT plugin .so\n");
-    return 1;
+  void* h = NULL;
+  if (plugin) {
+    // Explicit request: one attempt, and report THAT path on failure. Silently
+    // falling back to a default here would be worse than failing — it would run
+    // the wrong backend under a name the user chose.
+    h = dlopen(plugin, RTLD_LAZY | RTLD_LOCAL);
+    if (!h) {
+      fprintf(stderr, "[pjrt_ffi] dlopen(%s): %s\n", plugin, dlerror());
+      fprintf(stderr, "[pjrt_ffi] $PJRT_PLUGIN is set but did not load.\n");
+      return 1;
+    }
+  } else {
+    for (size_t i = 0; i < N_DEFAULT_PLUGINS && !h; i++) {
+      h = dlopen(kDefaultPlugins[i], RTLD_LAZY | RTLD_LOCAL);
+      if (h) plugin = kDefaultPlugins[i];
+    }
+    if (!h) {
+      fprintf(stderr, "[pjrt_ffi] no PJRT plugin found. Tried, in order:\n");
+      for (size_t i = 0; i < N_DEFAULT_PLUGINS; i++)
+        fprintf(stderr, "[pjrt_ffi]   %s\n", kDefaultPlugins[i]);
+      fprintf(stderr,
+              "[pjrt_ffi] set $PJRT_PLUGIN to your plugin .so (the jax cuda/rocm\n"
+              "[pjrt_ffi] plugin ships one under site-packages/jax_plugins/).\n");
+      return 1;
+    }
+    if (trace_enabled())
+      fprintf(stderr, "[pjrt_ffi] plugin (default search): %s\n", plugin);
   }
   const PJRT_Api* (*GetPjrtApi)(void) =
       (const PJRT_Api* (*)(void))dlsym(h, "GetPjrtApi");
@@ -370,7 +420,7 @@ static int ensure_client(void) {
     if ((size_t)g_replicas > da.num_addressable_devices) {
       fprintf(stderr,
               "[pjrt_ffi] PJRT_REPLICAS=%d but only %zu device(s) are addressable "
-              "(is HIP_VISIBLE_DEVICES restricting them?)\n",
+              "(is CUDA_VISIBLE_DEVICES / HIP_VISIBLE_DEVICES restricting them?)\n",
               g_replicas, da.num_addressable_devices);
       return 1;
     }
