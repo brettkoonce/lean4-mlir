@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# residency_gate_all.sh — run the §2d.3 residency gate across every converted
+# training loop, as ONE command.
+#
+#   scripts/residency_gate_all.sh [<net>...]      # default: all of them
+#   scripts/residency_gate_all.sh mnist-mlp r34   # a subset, by short name
+#
+# ▶ WHY THIS EXISTS. `residency_gate.sh` gates ONE binary, and getting a readable
+# verdict out of it needs three things that are easy to get wrong and were being
+# retyped every time: a deterministic shim on `LD_LIBRARY_PATH` (or the floor is
+# noise and every verdict is meaningless — see `det_shim.sh`), the right
+# `GATE_FAULT` for the net (a 1-ULP fault is ABSORBED by nets whose updates
+# contract, so it is not a usable control on the SGD demo loops — §2d.3), and the
+# per-net slug. Encoding that once, here, is the same move `TestShardCheck.lean`
+# made for the three DP harnesses: one table, no copies.
+#
+# Everything per-net lives in the table below and nothing else in this script
+# knows a net's name.
+set -uo pipefail
+
+# name | binary | slug | steps | fault mode | extra env
+#
+# ▶ FAULT MODE, and it is the entry most likely to be wrong for a NEW net:
+#   1 = 1 ULP on one float. Correct for a CHAOTIC net — R34 under AdamW
+#       amplifies it into ~70% of the blob within ten steps.
+#   2 = drop one step's retained parameters (a stale handle). Required for a
+#       CONTRACTIVE net: measured 2026-08-01, the MNIST MLP under plain SGD
+#       absorbs a 1-ULP hit completely (1 byte at 3 steps, 0 at 10, on real data
+#       as well as synthetic), so mode 1 there leaves the gate with NO transport
+#       control and it correctly refuses as VACUOUS.
+# If a new net's gate reports VACUOUS on the fault, try 2 before suspecting the
+# implementation — and read §2d.3, because which one applies is a fact about the
+# net's optimizer, not about residency.
+NETS=(
+  "mnist-linear|mnist-linear-verified-xla|linear|10|2|"
+  "mnist-mlp|mnist-mlp-verified-xla|mlp|10|2|"
+  "mnist-cnn|mnist-cnn-verified-xla|cnn|10|2|"
+  "cifar8-bn-sgd|cifar8-bn-verified-xla|cifar8_bn|10|2|"
+  "cifar8-bn-adam|cifar8-bn-verified-adam-xla|cifar8_bn|10|1|"
+  "r34|resnet34-verified-adam-xla|resnet34|10|1|"
+  "efficientnet|efficientnet-verified-adam-xla|efficientnet|10|1|"
+)
+
+DET=${DET_SHIM:-/tmp/residency_detshim}
+OUT=${GATE_OUT:-$(mktemp -d)}
+mkdir -p "$OUT"
+
+[ -f scripts/residency_gate.sh ] || { echo "run from the repo root"; exit 2; }
+
+echo "── §2d.3 residency gate — all converted training loops ──"
+echo "   scratch $OUT"
+
+# The deterministic shim is a PREREQUISITE, not an option: without it the A-vs-A
+# floor is autotuning noise and no verdict below can be read. Built once, reused.
+if [ ! -f "$DET/libpjrt_ffi.so" ] || [ ffi/pjrt_ffi.c -nt "$DET/libpjrt_ffi.so" ]; then
+  echo "   building the deterministic shim in $DET ..."
+  scripts/det_shim.sh "$DET" > "$OUT/det_shim.log" 2>&1 || {
+    echo "   ✗ det_shim.sh failed:"; cat "$OUT/det_shim.log"; exit 2; }
+fi
+echo "   shim    $DET/libpjrt_ffi.so"
+echo
+
+WANT=("$@")
+declare -a NAMES VERDICTS
+FAILED=0
+
+for row in "${NETS[@]}"; do
+  IFS='|' read -r name bin slug steps fault extra <<< "$row"
+  if [ ${#WANT[@]} -gt 0 ]; then
+    match=0; for w in "${WANT[@]}"; do [ "$w" = "$name" ] && match=1; done
+    [ $match -eq 1 ] || continue
+  fi
+  if [ ! -x ".lake/build/bin/$bin" ]; then
+    printf "  %-15s ⚠ SKIP — not built (lake build %s)\n" "$name" "$bin"
+    NAMES+=("$name"); VERDICTS+=("SKIP (not built)"); continue
+  fi
+  printf "  %-15s gating (%s, fault mode %s) ... " "$name" "$bin" "$fault"
+  # shellcheck disable=SC2086
+  env $extra LD_LIBRARY_PATH="$DET" \
+      GATE_OUT="$OUT/$name" \
+      GATE_ALT=PJRT_FFI_RESIDENT=1 \
+      GATE_FAULT="PJRT_FFI_FAULT=$fault" \
+      scripts/residency_gate.sh "$bin" "$slug" "$steps" > "$OUT/$name.log" 2>&1
+  rc=$?
+  line=$(grep -E "^(✓|✗|⚠)" "$OUT/$name.log" | head -1)
+  bytes=$(grep -oE "over [0-9]+ bytes" "$OUT/$name.log" | head -1 | tr -d 'a-z ')
+  if [ $rc -eq 0 ]; then
+    printf "✓ PASS (%s bytes bit-identical)\n" "${bytes:-?}"
+    NAMES+=("$name"); VERDICTS+=("PASS  ${bytes:-?} bytes")
+  else
+    printf "✗ %s\n" "${line:-rc=$rc}"
+    NAMES+=("$name"); VERDICTS+=("FAIL  ${line:-rc=$rc}")
+    FAILED=1
+  fi
+done
+
+echo
+echo "── scoreboard ──"
+for i in "${!NAMES[@]}"; do printf "   %-15s %s\n" "${NAMES[$i]}" "${VERDICTS[$i]}"; done
+echo
+if [ $FAILED -eq 0 ]; then
+  echo "✓ every gated loop is bit-identical to the copying path, against a bit-exact"
+  echo "  A-vs-A floor, with both controls firing. Logs in $OUT."
+  exit 0
+fi
+echo "✗ at least one loop did not pass — read its log in $OUT before anything else."
+echo "  A VACUOUS verdict is a HARNESS problem, not a residency one: check the"
+echo "  fault mode in this script's table (see the comment above it)."
+exit 1
