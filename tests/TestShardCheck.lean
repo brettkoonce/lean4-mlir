@@ -64,6 +64,8 @@ private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
     is tracked separately (§2b-quater) and it has no `adamdp` peer at this batch to pair with. -/
 private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "convnext"     => some (convnextVerified,     32)
+  -- the 1000-class ImageNet twin, rendered at the same batch (§2p)
+  | "cnxin"        => some (convnextImagenetVerified, 32)
   | "efficientnet" => some (efficientnetVerified, 32)
   | "mobilenetv2"  => some (mobilenetv2Verified,  32)
   | _              => none

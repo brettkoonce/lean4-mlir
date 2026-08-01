@@ -1487,6 +1487,21 @@ lean_exe «vit-imagenet-verified-xla» where
   root := `apps.imagenette.MainViTImagenetXla
   moreLinkArgs := xlaLink
 
+/-- Shared body of the ConvNeXt-T / **full ImageNet-1k** trainer (handoff §2p). -/
+lean_lib «ConvNeXtImagenetCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.ConvNeXtImagenetCommon]
+
+/-- **ConvNeXt-T on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000`;
+    batch stays 32 per device (`cBS` is still private), so four replicas is global 128 and 10,009
+    steps/epoch — more optimizer steps than the reference's 5,004 at batch 256.
+
+    Needs the shim emitted first: `(cd jax && lake exe resnet34-imagenet default --shim)`.
+    ⚠ Does NOT move the verification tier, and is NOT the ConvNeXt paper recipe (§2p). -/
+lean_exe «convnext-imagenet-verified-xla» where
+  root := `apps.imagenette.MainConvNeXtImagenetXla
+  moreLinkArgs := xlaLink
+
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
     textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it

@@ -493,6 +493,50 @@ def convnextVerified : VerifiedNetSpec where
     .globalAvgPool, .dense 768 10 ]                                    -- head: GAP → dense
   blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 sites (§2m); the count matches the JAX reference at 28,587,592 for K=1000"
 
+/-- **ConvNeXt-T on full 1000-class ImageNet** — the ConvNeXt peer of `resnet34ImagenetVerified`
+    and `vitImagenetVerified` (handoff §2p). Identical architecture to `convnextVerified`; only the
+    head moves (768→1000), which is what takes the count to the JAX reference's 28,587,592.
+
+    Data comes from the generated tfds shim, so this side does no augmentation at all.
+
+    ⚠ **Batch is 32 per device**, because `cBS` is still a private constant in the renderer while
+    `nClasses` is now a parameter. At four replicas that is global 128 and 10,009 steps/epoch —
+    more steps than the reference's 5,004 at batch 256, which §2d.2 says is the axis accuracy
+    actually tracks. Threading `cBS` is a separate refactor, not a prerequisite.
+
+    ⚠ **Claim ceiling**: the proof-carrying tier stops at Imagenette; what carries here is
+    provenance plus whatever the pair comparison shows (§5). And this is **not** the ConvNeXt paper
+    recipe — `convNeXtTinyImagenetConfig` also has mixup 0.8, cutmix 1.0, stochastic depth 0.1,
+    EMA 0.9999, grad clip 1.0 and `wdExcludeNormBias`, none of which exist on the verified path.
+    The pipeline augs (RandAugment geometric, random erasing) do come across free via the shim. -/
+def convnextImagenetVerified : VerifiedNetSpec where
+  name     := "ConvNeXt-T (ImageNet-1k)"
+  slug     := "cnxin"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  layers   := [
+    .conv 3 96 4 4, .layerNorm 96,
+    .convNextBlockCh 96, .convNextBlockCh 96, .convNextBlockCh 96,
+    .layerNorm 96, .conv 96 192 2 2,
+    .convNextBlockCh 192, .convNextBlockCh 192, .convNextBlockCh 192,
+    .layerNorm 192, .conv 192 384 2 2,
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+    .layerNorm 384, .conv 384 768 2 2,
+    .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
+    .globalAvgPool, .dense 768 1000 ]
+  blurb := "ConvNeXt-T on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+
+-- The two ConvNeXt specs must differ in EXACTLY one parameter shape — the head. Anything else
+-- moving means the ImageNet spec drifted from the Imagenette one it is the 1000-class twin of.
+#guard convnextImagenetVerified.toSpecs.size == convnextVerified.toSpecs.size
+#guard convnextImagenetVerified.toSpecs.pop.pop == convnextVerified.toSpecs.pop.pop
+#guard convnextImagenetVerified.toSpecs.back! == (#[1000], 2)
+
 -- Derived layout (180 params) == the audited hand-list ConvNeXtLayout.specs.
 #guard convnextVerified.toSpecs == ConvNeXtLayout.specs
 

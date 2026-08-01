@@ -305,7 +305,9 @@ private def blkParams (pfx : String) (c e : Nat) : List (String × List Nat) :=
    (s!"{pfx}pW", [c,e,1,1]), (s!"{pfx}pb", [c]),
    (s!"{pfx}lg", [c])]
 
-private def allParams : List (String × List Nat) := Id.run do
+/-- `nClasses` defaults to 10 (Imagenette) so every existing call site is unchanged; the ImageNet
+    renders pass 1000. Only the head moves — 180 of the 182 entries are class-independent. -/
+private def allParams (nClasses : Nat := 10) : List (String × List Nat) := Id.run do
   let mut ps : List (String × List Nat) :=
     [("psW", [96,3,4,4]), ("psb", [96]), ("psng", [96]), ("psnbt", [96])]
   for si in [0:4] do
@@ -316,7 +318,7 @@ private def allParams : List (String × List Nat) := Id.run do
     if si < 3 then
       ps := ps ++ [(s!"d{si}ng", [c]), (s!"d{si}nbt", [c]),
                    (s!"d{si}W", [cDims[si+1]!, c, 2, 2]), (s!"d{si}b", [cDims[si+1]!])]
-  ps := ps ++ [("Wd", [768,10]), ("bd", [10])]
+  ps := ps ++ [("Wd", [768,nClasses]), ("bd", [nClasses])]
   return ps
 
 -- ════════════════════════════════════════════════════════════════
@@ -346,7 +348,7 @@ set_option maxRecDepth 8000 in
     LayerNorm, which reduces over the channel/spatial axes of ONE example and never over the batch.
     So the forward is already class-batch-independent: train == eval, and `@convnext_fwd` is the
     only forward artifact this net needs (unlike the BN nets, which need a frozen-stats peer). -/
-private def convNextFwdChain : StateM Nat CFwd := do
+private def convNextFwdChain (nClasses : Nat := 10) : StateM Nat CFwd := do
   let (cS, stemC) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
     (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
   -- §2m: the reference's `convnext_stem` is patchify conv → channel-LN. The PRE-§2m render had
@@ -373,7 +375,7 @@ private def convNextFwdChain : StateM Nat CFwd := do
   -- §2m: the reference goes GAP → dense with no norm between — the head LN is GONE
   -- (its 2×768 params move to the stem, at 2×96).
   let (cHn, hn) := ("", gap)
-  let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat 768 10) zV (.operand hn zV))
+  let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat 768 nClasses) zV (.operand hn zV))
   pure { code := fwd ++ cG ++ cHn ++ cLog,
          blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := hn, logits := logits }
@@ -388,14 +390,15 @@ set_option maxRecDepth 8000 in
     rather than by inspection**. Because it shares the chain, the emitted body is a byte-identical
     PREFIX of `convnext_train_step.mlir`'s, ending exactly where the loss begins — which is what
     `scripts/regen_verified_mlir.sh check` audits. -/
-def convNextFwdFaithfulV (funcName : String := "convnext_fwd") : String := Id.run do
-  let F : CFwd := convNextFwdChain.run' 0
+def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
+    : String := Id.run do
+  let F : CFwd := (convNextFwdChain nClasses).run' 0
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams).map (fun (nm, d) => s!"%{nm}: {ty d}"))
-  return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [cBS,10]} " ++ "{\n" ++
+    (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}"))
+  return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [cBS,nClasses]} " ++ "{\n" ++
     "    // ── ConvNeXt-T forward: every line is pretty(verified AST node) ──\n" ++
     chLnPrelude ++ F.code ++
-    s!"    return {F.logits} : {ty [cBS,10]}\n" ++ "  }\n}\n"
+    s!"    return {F.logits} : {ty [cBS,nClasses]}\n" ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net renderer
@@ -417,13 +420,14 @@ set_option maxRecDepth 8000 in
     Gate on the refactor: `convnext_train_step.mlir` must come back byte-identical. It does — the
     softmax is now `pretty`d on its own line instead of nested inside the `.sub` so that `%loss` can
     read it, but `.operand` is a leaf that emits nothing, so the fresh-name sequence is unchanged. -/
-private def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none) :
+private def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none)
+    (nClasses : Nat := 10) :
     StateM Nat (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain `convNextFwdFaithfulV` emits, so `@convnext_fwd` and the two
     --     train steps cannot drift into computing different functions (§2a) ═══
-    let F : CFwd ← convNextFwdChain
-    let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (zV : Vec 10))))
-    let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (zV : Vec 10)) (.operand "%onehot" zV))
+    let F : CFwd ← convNextFwdChain nClasses
+    let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (zV : Vec nClasses))))
+    let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (zV : Vec nClasses)) (.operand "%onehot" zV))
     let blksAll := F.blksAll
     let downLn := F.downLn
     let downIn := F.downIn
@@ -432,22 +436,26 @@ private def convNextBackAll (adam : Bool) (smooth : Option (String × String × 
     -- ═══ the cotangent. `none` keeps the SGD render's hand-written `%dy` divide byte-for-byte;
     --     `some` appends the label-smoothing chain, every line `pretty` of a verified node. ═══
     let (cDyC, dyName) ← match smooth with
-      | none => pure (s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [cBS, 10]}\n", "%dy")
+      | none => pure (s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [cBS, nClasses]}\n", "%dy")
       | some (aStr, negAK, bStr) => do
-          let (c1, n1) ← pretty cBS (.scaleF (n := 10) aStr 0 (.operand "%onehot" (zV : Vec 10)))
-          let (c2, n2) ← pretty cBS (.addV (.operand dyr (zV : Vec 10)) (.operand n1 (zV : Vec 10)))
-          let (c3, n3) ← pretty cBS (.shiftB (N := 1) (n := 10) negAK 0 (.operand n2 (zV : Vec 10)))
-          let (c4, n4) ← pretty cBS (.divConstB (N := 1) (n := 10) bStr 0 (.operand n3 (zV : Vec 10)))
+          let (c1, n1) ← pretty cBS (.scaleF (n := nClasses) aStr 0 (.operand "%onehot" (zV : Vec nClasses)))
+          let (c2, n2) ← pretty cBS (.addV (.operand dyr (zV : Vec nClasses)) (.operand n1 (zV : Vec nClasses)))
+          -- ⚠ the operands are annotated at `Vec (1 * nClasses)`, not `Vec nClasses`: `shiftB`/
+          -- `divConstB` are indexed `SHlo (N*n)`, and `1 * n` reduces definitionally only when `n`
+          -- is a literal. It did while this render was pinned at 10; it stops the moment `nClasses`
+          -- is a variable. `ViTRender` carries the same annotation for the same reason.
+          let (c3, n3) ← pretty cBS (.shiftB (N := 1) (n := nClasses) negAK 0 (.operand n2 (zV : Vec (1 * nClasses))))
+          let (c4, n4) ← pretty cBS (.divConstB (N := 1) (n := nClasses) bStr 0 (.operand n3 (zV : Vec (1 * nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ backward: head cotangent chain + param-SGD ═══
-    let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat 768 10) (.operand dyName zV))
+    let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat 768 nClasses) (.operand dyName zV))
     let (cHnB, cot_gap) := ("", cot_hn)
     let (cWd, nWd) ← if adam then
-        pretty cBS (.weightGrad (m := 768) (n := 10) hn (zV : Vec 768) (.operand dyName (zV : Vec 10)))
-      else pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec 768) (zM : Mat 768 10) 0 (.operand dyName zV))
+        pretty cBS (.weightGrad (m := 768) (n := nClasses) hn (zV : Vec 768) (.operand dyName (zV : Vec nClasses)))
+      else pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec 768) (zM : Mat 768 nClasses) 0 (.operand dyName zV))
     let (cBd, nBd) ← if adam then
-        pretty cBS (.biasGrad (n := 10) (.operand dyName (zV : Vec 10)))
-      else pretty cBS (.biasSgd "%bd" cLR (zV : Vec 10) 0 (.operand dyName zV))
+        pretty cBS (.biasGrad (n := nClasses) (.operand dyName (zV : Vec nClasses)))
+      else pretty cBS (.biasSgd "%bd" cLR (zV : Vec nClasses) 0 (.operand dyName zV))
     let mut updMap : List (String × String) := [("Wd", nWd), ("bd", nBd)]
     let mut bwd := cDyC ++ cDd ++ cHnB ++
       cWd ++ cBd ++
@@ -504,16 +512,17 @@ set_option maxRecDepth 8000 in
     The cotangent is plain CE with an **explicit** ÷B — unlike ViT/R34, which fold the batch mean
     into `lr` — so the committed `cLR = 0.1` is an effective 0.1, the house convention spelled
     differently (§2a-quinquies). -/
-def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step") : String := Id.run do
-  let (body, updMap, _) := (convNextBackAll false none).run' 0
+def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
+    (nClasses : Nat := 10) : String := Id.run do
+  let (body, updMap, _) := (convNextBackAll false none nClasses).run' 0
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams).map (fun (nm, d) => s!"%{nm}: {ty d}") ++ ["%onehot: " ++ ty [cBS,10]])
-  let retTyL := String.intercalate ", " ((allParams).map (fun p => ty p.2))
+    (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}") ++ ["%onehot: " ++ ty [cBS,nClasses]])
+  let retTyL := String.intercalate ", " ((allParams nClasses).map (fun p => ty p.2))
   let retVals := String.intercalate ", "
-    ((allParams).map (fun (nm, _) => (updMap.lookup nm).getD s!"%{nm}n"))
+    ((allParams nClasses).map (fun (nm, _) => (updMap.lookup nm).getD s!"%{nm}n"))
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,10]}\n" ++
+    s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
     chLnPrelude ++
     body ++
     s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
@@ -600,14 +609,22 @@ set_option maxRecDepth 8000 in
     certified gradient and the certified AdamW triple: *certified gradient → trusted collective →
     certified AdamW*. See `convnextAdamOne` for the carve-out. -/
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
-    (replicas : Nat := 1) : String := Id.run do
-  let (body, gradMap, nSm) := (convNextBackAll true (some (alphaStr, negAlphaKStr, bStr))).run' 0
+    (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
+    : String := Id.run do
+  -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
+  -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
+  -- shape §2k removed from ViT on 2026-07-31, and it is not academic: the R34 ImageNet render
+  -- shipped `α/K` hardcoded at the K=10 value, ON THE GRADIENT PATH, and only an implausible loss
+  -- (≈87 against ln(1000)=6.9) caught it. The empty-string default keeps every existing call site
+  -- byte-identical while making the K=1000 spelling impossible to get wrong.
+  let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
+  let (body, gradMap, nSm) := (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses).run' 0
   let go : StateM Nat String := do
     let mut adamCode := ""
     let mut thetaN : List String := []
     let mut mN : List String := []
     let mut vN : List String := []
-    for (nm, ds) in allParams do
+    for (nm, ds) in allParams nClasses do
       let g := (gradMap.lookup nm).getD s!"%d{nm}"
       let (c, nT, nM, nV) ← convnextAdamOne replicas nm ds g
       adamCode := adamCode ++ c
@@ -620,12 +637,20 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
       s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [cBS, 10]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [cBS, 10]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, 10]}, tensor<f32>) -> {ty [cBS]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, 10]}, tensor<f32>) -> {ty [cBS]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [cBS]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<0.010000> : {ty [cBS]}\n" ++
+      s!"    %llog = stablehlo.log {nSm} : {ty [cBS, nClasses]}\n" ++
+      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [cBS, nClasses]}\n" ++
+      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, nClasses]}, tensor<f32>) -> {ty [cBS]}\n" ++
+      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, nClasses]}, tensor<f32>) -> {ty [cBS]}\n" ++
+      -- ⚠ BOTH constants are DERIVED. `%laKc` is α/K and was hardcoded at the K=10 value
+      -- (0.010000) until 2026-08-01, which made the ImageNet render report a loss of ~101 where
+      -- 1000-class CE at init must be ≈ ln(1000) = 6.9 — §2k's bug, in a SECOND place. It hid from
+      -- the check that caught the cotangent because that one greps for the NEGATIVE spelling
+      -- `-0.010000`, and this copy is positive. `%lomac` is (1−α) and is K-independent, but it is
+      -- derived too so that α has one spelling here rather than two.
+      -- At K=10 both render byte-identically to the literals they replace, so the fix is inert on
+      -- every committed Imagenette artifact — gated, not assumed.
+      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [cBS]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [cBS]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [cBS]}\n" ++
       s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [cBS]}\n" ++
       s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [cBS]}\n" ++
@@ -633,7 +658,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       s!"    %lbfc = stablehlo.constant dense<{cBS}.0> : tensor<f32>\n" ++
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-    let pTy := (allParams).map (fun p => ty p.2)
+    let pTy := (allParams nClasses).map (fun p => ty p.2)
     let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"]
     let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
     pure <|
@@ -660,18 +685,21 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- names 0..k, so the Adam ops must start at k — otherwise they collide with the backward's SSAs.
   let used := ((convNextBackAll true (some (alphaStr, negAlphaKStr, bStr))).run 0).2
   let inner : String := go.run' used
-  let pSig := String.intercalate ", " ((allParams).map (fun (nm, d) => s!"%{nm}: {ty d}"))
-  let mSig := String.intercalate ", " ((allParams).map (fun (nm, d) => s!"%{nm}m: {ty d}"))
-  let vSig := String.intercalate ", " ((allParams).map (fun (nm, d) => s!"%{nm}v: {ty d}"))
+  let pSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}"))
+  let mSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}m: {ty d}"))
+  let vSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}v: {ty d}"))
   let argSig := ("%x: " ++ ty [cBS, 3*224*224]) ++ ", " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [cBS,10]
-  let pTy := (allParams).map (fun p => ty p.2)
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [cBS,nClasses]
+  let pTy := (allParams nClasses).map (fun p => ty p.2)
   let retTyL := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
-  let funcName := s!"convnext_{cnxAdamVariant replicas}_train_step"
+  -- ⚠ The slug is load-bearing exactly as it is on R34 (§2k) and ViT (§2p): a 1000-class render
+  -- emitted under the `convnext` slug would collide with the artifacts the 84.41% Imagenette run,
+  -- the prefix audit and every `convnext-adam-tie` invocation depend on.
+  let funcName := s!"{slug}_{cnxAdamVariant replicas}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,10]}\n" ++
+    s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
     chLnPrelude ++
     inner ++ "  }\n}\n"
 
@@ -737,6 +765,27 @@ end Proofs.StableHLO
 -- single-device.
 #eval IO.FS.writeFile "verified_mlir/convnext_adamdp_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 2)
+
+-- ── ConvNeXt-T on FULL 1000-class ImageNet, slug `cnxin` — 2026-08-01 ──────────────────────────
+-- The ConvNeXt peer of `resnet34in_*` (§2k) and `vitin_*` (§2p). `nClasses` is a renderer
+-- parameter as of this change; `cBS` is NOT, so these render at the committed batch of 32 and the
+-- four-replica variant is global batch 128.
+--
+-- That is a deliberate scope cut, not an oversight. `cBS` is a private constant in 96 places and
+-- threading it is a separate refactor; global 128 is meanwhile a perfectly good ImageNet config —
+-- §2d.2 measured accuracy tracking STEP COUNT, and at 1,281,167 images global 128 gives 10,009
+-- steps/epoch against the reference's 5,004 at batch 256. Fewer images per step, more steps.
+--
+-- ⚠ `-α/K` is DERIVED here (empty string ⇒ `alphaOverK nClasses`), so the emitted constant is
+-- -0.000100 at K=1000 rather than the K=10 literal the Imagenette renders carry. That hardcoding
+-- was a REAL BUG on R34's first ImageNet render, on the gradient path, caught only because the
+-- loss was implausible (§2k). Gated below by the artifact check, not assumed.
+#eval IO.FS.writeFile "verified_mlir/cnxin_adam_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin")
+#eval IO.FS.writeFile "verified_mlir/cnxin_adamdp_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "cnxin")
+#eval IO.FS.writeFile "verified_mlir/cnxin_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdFaithfulV "cnxin_fwd" 1000)
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
 -- call ("entry mismatch"). These pin the literal paths above against `cnxAdamVariant`, so a rename

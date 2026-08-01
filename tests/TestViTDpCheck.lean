@@ -95,11 +95,16 @@ def main (args : List String) : IO Unit := do
   -- one (default) or the 1000-class ImageNet one. It is NOT cosmetic — `net.specs` drives the
   -- generated θ and the packed shapes, so gating the `vitin` renders against the `vit` layout
   -- would build a θ 191,070 floats short and the shim would refuse the call on arity.
+  -- ConvNeXt is admissible here for the same reason ViT is: no BatchNorm, so nothing couples the
+  -- replicas and `all_reduce(add)/N` on a duplicated batch is EXACTLY the identity rather than
+  -- approximately (§5). A batch-BN net would need the running-stat region this harness omits.
   let netName := (← IO.getEnv "VIT_DP_NET").getD "vit"
   let net ← match netName with
-    | "vit"   => pure vitVerified.toNet
-    | "vitin" => pure vitImagenetVerified.toNet
-    | s       => throw <| IO.userError s!"VIT_DP_NET={s}: expected `vit` or `vitin`"
+    | "vit"      => pure vitVerified.toNet
+    | "vitin"    => pure vitImagenetVerified.toNet
+    | "convnext" => pure convnextVerified.toNet
+    | "cnxin"    => pure convnextImagenetVerified.toNet
+    | other      => throw <| IO.userError s!"VIT_DP_NET={other}: expected `vit`, `vitin`, `convnext` or `cnxin`"
   -- The replica count must match what the DP render BAKED into `replica_groups`; a mismatch is
   -- refused by the shim rather than answered wrongly. Env rather than argv because argv[0..2] are
   -- already the (dp, single, batch) triple and a fourth positional would be unreadable.
