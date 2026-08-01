@@ -1834,6 +1834,38 @@ a **CUDA PJRT plugin** via `PJRT_PLUGIN` (the jax CUDA plugin ships one) — `ff
 plugin-agnostic but does not conjure one. If it runs there, the open ViT item converts from
 "unexplained" into a filable ROCm bug with a two-op repro, which is exactly the bar §2a set.
 
+##### ✅ 2h-cuda. SETTLED 2026-08-01 — it IS MIOpen. The probe ran clean on CUDA.
+
+The section above says the CUDA box settles this cheaply and names the exact probe. It did.
+`PJRT_PLUGIN=<jax cuda plugin> sgd-render-tie vit verified_mlir/vit_train_step.mlir 0.003125 ×2`
+on ares (RTX 4060 Ti, CUDA 12.9, jax 0.10.2 plugin):
+
+```
+compiled verified_mlir/vit_train_step.mlir (@vit_train_step, 200 outputs, 1 replica) in 4949 ms
+  A-vs-A floor: max|a−a'| = 0.000000, bit-exact 5526346/5526346
+  5526346 gradient coordinates; 5526254 non-zero; max|g| = 1503.883514
+  params whose gradient disagrees (>1e-4 norm-rel): 0/200
+✓ renders TIE
+```
+
+**No workaround, no MIOPEN_* variable, no failure.** The graph that dies on ROCm with
+`miopenStatusUnknownError` — same file, same two convolutions, same backward — compiles in 4.9 s
+and produces a live gradient on NVIDIA. Every remaining hypothesis that blamed the *render* is
+therefore dead; the fault is in the XLA→MIOpen lowering, exactly where the error surface pointed.
+
+That clears §2a's bar: the open item converts from "unexplained" into a **filable ROCm bug with a
+minimal repro** — `vit_train_step.mlir` is 202 in / 200 out with two convolutions, and it is now
+known-good on another backend, which is the control a bug report wants.
+
+⚠ Scope it honestly: this shows the graph is fine and CUDA runs it. It does NOT identify which
+MIOpen solver is picked on the AMD side — the `rhs_dilation = 16` hypothesis above is still a
+hypothesis, and cutting the repro down to the single offending convolution is still unstarted.
+
+**Second, unplanned finding:** the A-vs-A determinism floor is **bit-exact over 5,526,346 floats**
+here. §2d.3's Finding 1 established that floor on R34/ROCm and flagged it as "one net, 10 steps" —
+it now also holds on a different vendor, a different net, and a graph with two convolutions. That
+strengthens the case that `scripts/residency_gate.sh`'s bit-identity gate is buildable as written.
+
 #### The recipe — 3 files + 2 lakefile entries per net, and NO driver change
 
 `VerifiedNet.trainAdamSched` already takes `(variant : String := "adam")` and already picks its
@@ -1886,7 +1918,8 @@ epoch 1.
 * **Re-measuring the published accuracies** — mnv2 owes this anyway for an unrelated reason (§2g: it
   was scored through the wrong forward). The 4-epoch runs here are descent evidence, not accuracy.
 * **An XLA:IREE ratio for these two nets** — deliberately skipped, see above.
-* **ViT on XLA anywhere.** Try the CUDA box with `sgd-render-tie vit` first (above).
+* ~~**ViT on XLA anywhere.** Try the CUDA box with `sgd-render-tie vit` first (above).~~
+  ✅ **DONE 2026-08-01 — the probe ran on ares and it is a ROCm/MIOpen fault.** See §2h-cuda below.
 
 ### 2h-bis. MobileNetV2 data-parallel ✅ DONE 2026-07-29 — gated by the EXACT identity on the real net
 
