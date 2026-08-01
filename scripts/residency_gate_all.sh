@@ -31,6 +31,15 @@ set -uo pipefail
 # If a new net's gate reports VACUOUS on the fault, try 2 before suspecting the
 # implementation — and read §2d.3, because which one applies is a fact about the
 # net's optimizer, not about residency.
+#
+# ⚠ AND "AdamW ⇒ chaotic ⇒ mode 1" IS NOT THE RULE. Measured 2026-08-01 when ViT
+# was added: ViT-Tiny under the SAME AdamW schedule as R34 absorbs a 1-ULP fault
+# down to **1 byte of 66,316,152** at 10 steps, single-device and at 4 replicas
+# alike, where R34 amplifies one into ~184M of 255M. It passes on mode 1 only
+# because 1 > 0 — one more step of contraction and it would report VACUOUS, which
+# is a gate that could rot into a false green. So mode 2 (42,938,702 bytes) is the
+# honest control for it. The transferable form of §2d.3's Finding 2: chaos is a
+# property of the net, and the optimizer alone does not predict it.
 NETS=(
   "mnist-linear|mnist-linear-verified-xla|linear|10|2|"
   "mnist-mlp|mnist-mlp-verified-xla|mlp|10|2|"
@@ -39,7 +48,18 @@ NETS=(
   "cifar8-bn-adam|cifar8-bn-verified-adam-xla|cifar8_bn|10|1|"
   "r34|resnet34-verified-adam-xla|resnet34|10|1|"
   "efficientnet|efficientnet-verified-adam-xla|efficientnet|10|1|"
+  "vit|vit-verified-adam-xla|vit|10|2|"
 )
+
+# The DATA-PARALLEL rows are NOT in the table above, because it is a single-device
+# harness by construction (`residency_gate.sh` pins to $GATE_DEVICES, default "0")
+# and a DP render bakes its replica count into `replica_groups`. Run them by hand
+# on a box with the devices; both passed 2026-08-01:
+#
+#   GATE_DEVICES=0,1,2,3 LD_LIBRARY_PATH=$DET GATE_ALT=PJRT_FFI_RESIDENT=1 \
+#     GATE_FAULT=PJRT_FFI_FAULT=2 LEAN_MLIR_VARIANT=adamdp32x4 LEAN_MLIR_BATCH=32 \
+#     LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
+#     scripts/residency_gate.sh vit-verified-adam-xla vit 10
 
 DET=${DET_SHIM:-/tmp/residency_detshim}
 OUT=${GATE_OUT:-$(mktemp -d)}

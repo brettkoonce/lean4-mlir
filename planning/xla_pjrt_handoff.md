@@ -124,6 +124,49 @@ stays §5's: *"one architecture, two independent lowerings, agreeing"*, never "p
 3. **Executable cache** — 0.1% on a training run, 53% on the MNIST-MLP demo. Dev-loop only, and
    note residency already took the demo groups 2.8-5.2×, so re-measure the case before starting.
 
+### ▶ ViT on FOUR replicas — ✅ RENDERED, GATED AND MEASURED 2026-08-01, not yet run long
+
+Built as a code/test pass; **no training run yet, deliberately.** `verified_mlir/vit_adamdp32x4_train_step.mlir`
+(bs32 × 4 = global 128), one `#eval` in `ViTRender.lean` — no renderer change, `replicas` was
+already a parameter.
+
+| gate | result |
+|---|---|
+| **gate 1** — the six existing `vit_*` artifacts re-render | byte-identical (`md5sum -c`), only the new path appears |
+| **structure** vs the committed 2-replica render | the ONLY diff is the banner + 200 × `tensor<1x2xi64>` → `tensor<1x4xi64>`; forward and backward bodies byte-identical |
+| **`vit-dp-check` at `VIT_DP_REPLICAS=4`** | **bit-exact 16,579,041 / 16,579,041**, control (200 divisors 4.0 → 1.0) fires at **2.99** |
+| **residency**, 4 replicas | **0 bytes differ of 66,316,152**, floor 0, both controls fire |
+
+**Speed — ms/step probe, `LEAN_MLIR_SKIP_EVAL=1`, median of 22 steps:**
+
+| config | copying | resident | residency gain | ms/image (resident) |
+|---|---|---|---|---|
+| 1 GPU, bs32 | 95 | **52** | 1.83× | 1.63 |
+| 2 GPU, bs32×2 | — | **59** | — | 0.92 |
+| **4 GPU, bs32×4** | 168 | **76** | **2.21×** | **0.59** |
+
+So **4 GPUs is 2.74× on images/s with residency (68% parallel efficiency), against 2.26× (57%)
+copying** — better than R34/ImageNet's 54%, and the reason is structural: ViT-Tiny pushes 63.2 MB of
+`[θ|m|v]` where R34 pushes ~255 MB, so the O(N−1) term §2d.3a identifies is far smaller relative to
+compute. 73 steps/epoch, loss descends 3.441 → 3.056 → 2.902.
+
+**⚠ Three things to know before running it long:**
+
+1. **This box stores Imagenette train at 224², not 256² — every Imagenette run here needs
+   `LEAN_MLIR_IMAGENETTE_TRAIN=224` or it dies with `uncaught exception: short read`.** `train.bin`
+   is 1,425,359,105 bytes = exactly 9469 × 150,529 (224² records). It is a **pre-existing box
+   condition, not a DP one** — the single-device `adam` variant fails identically. ⚠ And it is not
+   only a loader flag: `crop := (px == 256)`, so at 224 the run trains with **no random crop**, i.e.
+   a weaker augmentation than the 71.31% 80-epoch run in §0b. Do not compare accuracy across the two
+   without saying so.
+2. **Global batch 128 is a DIFFERENT EXPERIMENT from the 71.31% run**, which was global 32. §2d.2
+   measured accuracy tracking *step count*: 295 → 73 steps/epoch is two halvings, worth roughly
+   −1.5 to −2.5 points at unscaled LR. To reproduce the single-device number on four cards, render
+   bs8×4; to measure *scaling*, bs32×4 is the right config. Pick one on purpose.
+3. **NCCL logs `ncclCommRegister … unhandled cuda error` at 4 replicas** and the run is correct
+   anyway (bit-exact against single-device). It is a memory-registration fast-path failing, not the
+   collective. Not diagnosed — worth a look only if 4-GPU throughput needs to improve.
+
 ### ▶ What is DONE and needs nothing
 
 The AdamW scorecard is **6 of 6**, DP is **5 of 5**, the provenance axis is closed (67 artifacts,
@@ -4909,7 +4952,21 @@ Total: ~330 lines of C, ~10 lines of Lean, no renderer change, no artifact moved
 | **MNIST linear** (`trainLinear`) | **0** | **0** on all 31,400 bytes | both fire |
 | **cifar8-bn AdamW**, **EfficientNet** | **0** | **0** (638,904 / 48,244,296 bytes) | both fire |
 
-▶ **`scripts/residency_gate_all.sh` runs all seven as ONE command** and prints a scoreboard. It
+**▶ ViT was added to the gate 2026-08-01, and it REFUTES "AdamW ⇒ chaotic ⇒ fault mode 1".**
+ViT-Tiny on the same AdamW schedule as R34 absorbs a 1-ULP fault down to **1 byte of 66,316,152** at
+10 steps — single-device and at 4 replicas alike — where R34 amplifies one into ~184M of 255M. It
+passes mode 1 only because 1 > 0; one more step of contraction and it reports VACUOUS, so the row is
+**mode 2** (42,938,702 bytes). Finding 2's real content is therefore narrower than §2d.3 wrote it:
+chaos is a property of the **net**, and the optimizer alone does not predict it — two nets under the
+same optimizer land on opposite sides.
+
+**▶ And the gate is single-device by construction, which made every DP render ungatable.**
+`residency_gate.sh` hardcoded `HIP_/CUDA_VISIBLE_DEVICES=0`, so a DP variant died at session create
+(*"PJRT_REPLICAS=4 but only 1 device(s) are addressable"* — the good failure mode, but a dead end).
+Now `$GATE_DEVICES`, default `"0"`, so every pre-existing row is byte-for-byte the run it was.
+The 4-replica ViT DP row passes with it: **0 of 66,316,152 bytes**, floor 0, both controls firing.
+
+▶ **`scripts/residency_gate_all.sh` runs all eight as ONE command** and prints a scoreboard. It
 exists because a readable verdict needs three things that were being retyped every time and are
 each easy to get wrong: the deterministic shim on `LD_LIBRARY_PATH` (or the floor is noise), the
 right `GATE_FAULT` for the net, and the slug. They live in one table there and nowhere else —

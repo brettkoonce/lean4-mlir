@@ -76,6 +76,10 @@ GATE_ALT=${GATE_ALT:-PJRT_FFI_PINNED=1}
 #
 # The SATURATION check below is what stops you reading a verdict either way.
 GATE_FAULT=${GATE_FAULT:-PJRT_FFI_FAULT=1}
+# Devices every run is pinned to. "0" reproduces every pre-2026-08-01 row exactly;
+# widen it (e.g. "0,1,2,3") to gate a DATA-PARALLEL variant, whose replica count is
+# baked into the graph. See the pin in `run` below.
+GATE_DEVICES=${GATE_DEVICES:-0}
 OUT=${GATE_OUT:-$(mktemp -d)}
 mkdir -p "$OUT"
 
@@ -99,9 +103,16 @@ run () {
   # Both vendors' pinning vars, because each is inert on the other's runtime. With only
   # the HIP one set, a CUDA box silently ignored the pin and took whatever device 0 was —
   # which happens to be right by accident on an idle box and wrong the moment it is not.
+  #
+  # $GATE_DEVICES widens the pin for a DATA-PARALLEL variant, whose graph bakes a replica
+  # count and cannot run on one device — with the pin hardcoded to 0 the run dies at
+  # session create ("PJRT_REPLICAS=4 but only 1 device(s) are addressable"), which is the
+  # good failure mode but leaves every DP render ungatable. It stays "0" by default, so
+  # every single-device row is byte-for-byte the run it was before this knob existed.
+  # ⚠ It must list at least as many devices as the render's replica count.
   env "$@" \
-    HIP_VISIBLE_DEVICES=0 \
-    CUDA_VISIBLE_DEVICES=0 \
+    HIP_VISIBLE_DEVICES="$GATE_DEVICES" \
+    CUDA_VISIBLE_DEVICES="$GATE_DEVICES" \
     LEAN_MLIR_VARIANT="$VARIANT" \
     LEAN_MLIR_BENCH_SYNTH=1 \
     LEAN_MLIR_SKIP_EVAL=1 \

@@ -7,12 +7,24 @@ one `all_reduce(add)/N` per parameter between the certified gradient and the cer
 (handoff §2b-quater's pattern). That collective is a **trusted carve-out** — emitted text, outside
 every faithfulness theorem — so it needs its own numeric check.
 
-**The exact identity used here.** Give both replicas the **same** 32 examples. Each computes the
-same gradient `g`, so `all_reduce(add)/2` returns `(g + g)/2 = g` — the mean is an identity on a
+**The exact identity used here.** Give every replica the **same** 32 examples. Each computes the
+same gradient `g`, so `all_reduce(add)/N` returns `N·g/N = g` — the mean is an identity on a
 duplicated batch. The data-parallel step must therefore reproduce the **single-device** step on that
 batch, output for output, and ViT has **no BatchNorm**, so nothing else couples the replicas and
 this holds exactly rather than approximately. (R34 could not do this: batch BN makes N×b ≠ 1×(N·b)
 by design, §10.3b, which is why its collective is gated on cifar8 instead.)
+
+**`VIT_DP_REPLICAS` selects N** (default 2) and must match both `PJRT_REPLICAS` and the count the
+chosen render baked into `replica_groups` — the shim refuses a mismatch rather than answering it.
+The identity above is N-generic, which is the whole reason the 4-replica gate needed no new harness:
+
+```
+lake build vit-dp-check && unset HIP_VISIBLE_DEVICES
+VIT_DP_REPLICAS=4 PJRT_REPLICAS=4 .lake/build/bin/vit-dp-check \
+  verified_mlir/vit_adamdp32x4_train_step.mlir
+sed -E 's/^(    %arn[A-Za-z0-9_]+ = stablehlo\.constant dense<)4\.0(>)/\11.0\2/' \
+  verified_mlir/vit_adamdp32x4_train_step.mlir > /tmp/vit_dp4_sum.mlir   # the control
+```
 
 Two failure modes it separates, both of which have actually happened in this repo:
 
@@ -80,7 +92,15 @@ private def entryOf (path : String) : IO String := do
 
 def main (args : List String) : IO Unit := do
   let net := vitVerified.toNet
-  let replicas := 2
+  -- The replica count must match what the DP render BAKED into `replica_groups`; a mismatch is
+  -- refused by the shim rather than answered wrongly. Env rather than argv because argv[0..2] are
+  -- already the (dp, single, batch) triple and a fourth positional would be unreadable.
+  -- `all_reduce(add)/N` is the identity on an N-way duplicated batch for any N, so the whole
+  -- construction generalises with the count — 2 stays the default.
+  let replicas := ((← IO.getEnv "VIT_DP_REPLICAS").bind (·.toNat?)).getD 2
+  if replicas < 2 then
+    IO.eprintln s!"VIT_DP_REPLICAS={replicas}: this gate needs at least 2 replicas"
+    IO.Process.exit 1
   -- argv[1] overrides the DP render, so a deliberately broken one (sum-not-mean) can be run
   -- through the identical harness. Without this the bit-exact PASS above is unfalsifiable (§4).
   -- argv[2] overrides the single-device side and argv[3] the batch, which is what lets the SAME
@@ -92,7 +112,7 @@ def main (args : List String) : IO Unit := do
   IO.println "ViT data-parallel gate — duplicated batch"
   IO.println s!"  single : {sgPath}   (bs {bs})"
   IO.println s!"  DP     : {dpPath} ({replicas} replicas, \
-global {bs * replicas} = the same {bs} examples twice)"
+global {bs * replicas} = the same {bs} examples {replicas}×)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), no BN, \
 backend {← IreeSession.backendName}"
 
@@ -110,12 +130,14 @@ backend {← IreeSession.backendName}"
   let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
                             ++ #[#[], #[], #[]])
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
-  let x2 := F32.concat #[x1, x1]                 -- the SAME batch on both replicas
+  let x2 := F32.concat (Array.replicate replicas x1)   -- the SAME batch on every replica
   let mut y1 : ByteArray := .empty
   for i in [0:bs] do
     y1 := y1.push (UInt8.ofNat (i % net.nClasses)); y1 := y1.push 0
     y1 := y1.push 0; y1 := y1.push 0
-  let y2 := y1 ++ y1
+  let mut y2 : ByteArray := .empty
+  for _ in [0:replicas] do
+    y2 := y2 ++ y1
 
   IO.println "  running single-device…"; (← IO.getStdout).flush
   let s1 ← mkSession sgPath ".lake/build/vit_dp_a.vmfb"
@@ -163,8 +185,9 @@ bit-exact {exact}/{hi-lo}"
   -- wrong (§3). §2b-quater measured this directly — a 2× gradient error moved θ by 2.7e-4 and `m`
   -- by 0.96.
   if gradRel > 1e-4 then
-    IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-4. On a duplicated batch \
-all_reduce(add)/2 is the identity, so the data-parallel step must reproduce the single-device one."
+    IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-4. On a {replicas}-way \
+duplicated batch all_reduce(add)/{replicas} is the identity, so the data-parallel step must \
+reproduce the single-device one."
     IO.Process.exit 1
   IO.println s!"✓ DP step reproduces the single-device step on a duplicated batch: gradient \
 norm-rel {gradRel} ≤ 1e-4, over all {n} returned floats"

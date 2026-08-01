@@ -637,3 +637,25 @@ end Proofs.StableHLO
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam64_train_step" "64.0" 1 64)
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp64_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp64_train_step" "64.0" 2 64)
+
+-- ── The FOUR-REPLICA render, added 2026-08-01 ──────────────────────────────────────────────────
+-- Same graph as `vit_adamdp_train_step` at the same per-device batch (32); only `replicas` moves,
+-- so `replica_groups` becomes `[[0,1,2,3]]` and every collective's divisor becomes 4.0. Global
+-- batch 128.
+--
+-- ⚠ **The name encodes BATCH×REPLICAS, deliberately breaking the `adamdp64` convention.** Elsewhere
+-- the number in a variant name is the per-device batch and the replica count is absent —
+-- `r34AdamVariant 64 2` and `r34AdamVariant 64 4` both return `"momdp64"`. That is fine for R34
+-- only because nothing renders the 2-replica bs64 peer; here it is not, because
+-- `vit_adamdp_train_step.mlir` is a COMMITTED 2-replica artifact at bs32, so reusing `adamdp`
+-- would give one path two writers computing different graphs — §2a's exact disease, and the
+-- failure mode is a silent clobber rather than an error. `32x4` cannot collide with anything.
+--
+-- Gated by `vit-dp-check` at `VIT_DP_REPLICAS=4`: on a batch duplicated FOUR ways,
+-- `all_reduce(add)/4` is again the identity, so this must reproduce the single-device bs32 step
+-- output-for-output. Control: the 200 divisors 4.0 → 1.0.
+--
+-- ⚠ The `MIOPEN_DEBUG_CONV_GEMM=0` warnings on the bs64 pair above are **ROCm-only** — MIOpen is
+-- AMD's library and there is no analogue on the CUDA path this render was gated on.
+#eval IO.FS.writeFile "verified_mlir/vit_adamdp32x4_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp32x4_train_step" "32.0" 4 32)
