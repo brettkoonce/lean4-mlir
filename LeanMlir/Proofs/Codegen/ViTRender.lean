@@ -659,3 +659,25 @@ end Proofs.StableHLO
 -- AMD's library and there is no analogue on the CUDA path this render was gated on.
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp32x4_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp32x4_train_step" "32.0" 4 32)
+
+-- ── bs128, single-device and 4-replica ────────────────────────────────────────────────────────
+-- Rendered to answer "do these 16 GB cards hold bs128, i.e. global 512 on four?" — they do, with
+-- room (measured 2026-08-01: 3.2 GiB peak per device at bs128×4, 20% of the card).
+--
+-- The single-device `adam128` is NOT optional scaffolding: `vit-dp-check` gates a DP render against
+-- the single-device render AT THE SAME PER-DEVICE BATCH, so without this the 4-replica one could
+-- not be gated at all. Same pairing as `adam64`/`adamdp64`.
+--
+-- ⚠ `bStr` MUST track the per-device batch (the render means over its own device's batch, and the
+-- `all_reduce(add)/N` then averages across devices ⇒ global mean). Left at "32.0" here every
+-- gradient would be 4× and nothing but a numeric gate would say so.
+--
+-- ⚠⚠ **Global 512 is a THROUGHPUT config, not a training one.** Imagenette is 9,469 images, so
+-- global 512 is **18 steps/epoch** — 1,480 updates over 80 epochs against the 23,600 the 71.31%
+-- run took. §2d.2 measured accuracy tracking step count at ~1 point per halving, accelerating at
+-- the bottom (R34 lost 3.4 points going 295 → 36). Use it to measure scaling; do not read an
+-- accuracy off it and compare.
+#eval IO.FS.writeFile "verified_mlir/vit_adam128_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam128_train_step" "128.0" 1 128)
+#eval IO.FS.writeFile "verified_mlir/vit_adamdp128x4_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp128x4_train_step" "128.0" 4 128)

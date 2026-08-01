@@ -150,6 +150,29 @@ copying** — better than R34/ImageNet's 54%, and the reason is structural: ViT-
 `[θ|m|v]` where R34 pushes ~255 MB, so the O(N−1) term §2d.3a identifies is far smaller relative to
 compute. 73 steps/epoch, loss descends 3.441 → 3.056 → 2.902.
 
+**▶ bs128 per device FITS, and global 512 is where the scaling looks best.** Added the same day:
+`vit_adam128` + `vit_adamdp128x4` (the single-device peer is not scaffolding — `vit-dp-check` gates
+a DP render against the single-device one *at the same per-device batch*). Gated identically:
+**bit-exact 16,579,041/16,579,041** at 4 replicas, control fires at **2.98**.
+
+| config | ms/step | **ms/image** | scaling vs 1 GPU at the same batch |
+|---|---|---|---|
+| 1 GPU bs32 | 52 | 1.625 | — |
+| 4 GPU bs32×4 (global 128) | 76 | 0.594 | 2.74× (68%) |
+| 1 GPU bs128 | 217 | 1.695 | — |
+| **4 GPU bs128×4 (global 512)** | 264 | **0.516** | **3.29× (82%)** |
+
+Two readings, and the second is the useful one. **On ONE card a bigger batch buys nothing here**
+(1.695 vs 1.625 ms/image — slightly worse). **On four it buys 15%**, and parallel efficiency goes
+68% → 82%, because the per-step collective is amortised over 4× the images while the `all_reduce`
+payload is fixed at the parameter count. That is the same O(N−1)-vs-O(1) argument as §2d.3a, read in
+the batch direction instead of the replica direction.
+
+⚠ **What "fits" does and does not rest on.** It ran to completion at bs128×4, which is the
+operational answer. It is **not** backed by a memory measurement: `nvidia-smi memory.used` reads
+~12,228 MiB/device, but XLA's BFC allocator pre-reserves 11,962 MiB regardless of the net, so that
+number is the *pool* and says nothing about headroom. Whether bs256 fits is **untested**.
+
 **⚠ Three things to know before running it long:**
 
 1. **This box stores Imagenette train at 224², not 256² — every Imagenette run here needs
@@ -166,6 +189,19 @@ compute. 73 steps/epoch, loss descends 3.441 → 3.056 → 2.902.
 3. **NCCL logs `ncclCommRegister … unhandled cuda error` at 4 replicas** and the run is correct
    anyway (bit-exact against single-device). It is a memory-registration fast-path failing, not the
    collective. Not diagnosed — worth a look only if 4-GPU throughput needs to improve.
+
+**⚠ And two traps this session walked into, both worth the ink because both LOOK like results:**
+
+* **`LEAN_MLIR_MAX_STEPS=20` at 18 steps/epoch silently became a full 80-EPOCH RUN.** §2d.3-scope
+  already documents it (*"keep it under nTrain/(bs·replicas) or the probe never fires and you get an
+  80-epoch run"*) and it still bit, because at global 512 the epoch is only 18 steps and 20 looks
+  like a small number. It also left an `epoch=80` checkpoint, i.e. §4's silent-no-op trap armed for
+  the next run. **At global 512 the ceiling is 18; the probe warms 8, so the usable window is 9-18.**
+* **A SKIPPED eval prints `val_acc = 0/3925 = 0.000000%`.** `VerifiedTrain.lean:810` runs the eval
+  loop over `[0:0]` under `LEAN_MLIR_SKIP_EVAL`, then prints `correct/total` regardless — so the
+  output of a *deliberately* eval-free probe is indistinguishable at a glance from a net that
+  collapsed to below chance. Nothing is wrong with the training; the print is. Worth fixing to say
+  `skipped` if anyone is in there.
 
 ### ▶ What is DONE and needs nothing
 
