@@ -195,7 +195,7 @@ def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
     resolution mismatch between the render and the shim would otherwise read as garbage pixels and
     look like a broken net. Same reasoning as the FFI's G4 arity guard. -/
 def spawnShim (split : String) (batch flat seed : Nat)
-    (shard : Option (Nat × Nat) := none) : IO IO.FS.Handle := do
+    (shard : Option (Nat × Nat) := none) (nclasses : Nat := 0) : IO IO.FS.Handle := do
   -- `jax/` is its own lake project, so `--shim` writes under ITS build dir; a run from the repo
   -- root finds it there. $SHIM_SCRIPT overrides for a hand-placed or per-net shim.
   let candidates : List System.FilePath := match ← IO.getEnv "SHIM_SCRIPT" with
@@ -228,10 +228,15 @@ $SHIM_PYTHON at it — a bare `python3` off PATH will not have tfds."
   let shardEnv : Array (String × Option String) := match shard with
     | some (i, n) => #[("SHIM_SHARD", some s!"{i}/{n}")]
     | none        => #[]
+  -- `nclasses > 0` requests WIRE v2: the label section becomes `float32[batch*nclasses]` target
+  -- distributions instead of `int32[batch]` hard labels. 0 (the default) leaves the variable unset
+  -- and the shim emits v1 byte-for-byte, which is why every existing run is untouched.
+  let softEnv : Array (String × Option String) :=
+    if nclasses > 0 then #[("SHIM_NCLASSES", some (toString nclasses))] else #[]
   let child ← IO.Process.spawn {
     cmd := py.toString, args := #[script.toString], stdout := .piped, stdin := .null,
     env := #[("SHIM_BATCH", some (toString batch)), ("SHIM_SPLIT", some split),
-             ("SHIM_SEED", some (toString seed))] ++ shardEnv }
+             ("SHIM_SEED", some (toString seed))] ++ shardEnv ++ softEnv }
   let h := child.stdout
   let pre ← readExact h 16
   let magic := String.ofList ((List.range 4).map (fun i => Char.ofNat (pre.get! i).toNat))
@@ -241,17 +246,35 @@ $SHIM_PYTHON at it — a bare `python3` off PATH will not have tfds."
     (pre.get! off).toNat ||| ((pre.get! (off+1)).toNat <<< 8) |||
     ((pre.get! (off+2)).toNat <<< 16) ||| ((pre.get! (off+3)).toNat <<< 24)
   let ver := rd32 4; let sBatch := rd32 8; let sFlat := rd32 12
-  if ver != 1 then throw <| IO.userError s!"imagenet shim: wire version {ver}, expected 1"
+  let wantVer := if nclasses > 0 then 2 else 1
+  if ver != wantVer then
+    throw <| IO.userError s!"imagenet shim: wire version {ver}, expected {wantVer} \
+(nclasses={nclasses} ⇒ v{wantVer}). A v1 shim cannot serve soft targets and a v2 record read as v1 \
+slides off by a factor of nClasses on every batch, so this refuses rather than reading garbage."
+  -- v2 appends `nclasses` to the preamble, so it is 20 bytes rather than 16. Read the tail HERE,
+  -- not at the first record: the alignment error a missed field causes is silent and cumulative.
+  if ver == 2 then
+    let pre2 ← readExact h 4
+    let sNC := (pre2.get! 0).toNat ||| ((pre2.get! 1).toNat <<< 8) |||
+               ((pre2.get! 2).toNat <<< 16) ||| ((pre2.get! 3).toNat <<< 24)
+    if sNC != nclasses then
+      throw <| IO.userError s!"imagenet shim MISMATCH: shim sends nclasses={sNC}, the render wants \
+{nclasses} — refusing rather than reading misaligned targets"
   if sBatch != batch || sFlat != flat then
     throw <| IO.userError s!"imagenet shim MISMATCH: shim sends batch={sBatch} flat={sFlat}, \
 the render wants batch={batch} flat={flat} — refusing rather than reading misaligned pixels"
-  IO.println s!"  imagenet shim: {split} split, batch {sBatch}, {sFlat} floats/img (seed {seed})"
+  IO.println s!"  imagenet shim: {split} split, batch {sBatch}, {sFlat} floats/img (seed {seed})\
+{if nclasses > 0 then s!", wire v2 soft targets [{batch}x{nclasses}]" else ""}"
   pure h
 
 /-- One batch off the wire: `int32[batch]` labels then `float32[batch*flat]` images, in that order
     (the shim writes labels first so a partial record is detectable at the smaller read). -/
-def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) : IO (ByteArray × ByteArray) := do
-  let lbl ← readExact h (4 * batch)
+def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
+    : IO (ByteArray × ByteArray) := do
+  -- `nclasses = 0` ⇒ v1: `int32[batch]`. Otherwise v2: `float32[batch*nclasses]`. The FFI accepts
+  -- either without a flag — `lean_fill_targets` dispatches on the buffer's SIZE — so nothing
+  -- downstream of here changes shape.
+  let lbl ← readExact h (if nclasses > 0 then 4 * batch * nclasses else 4 * batch)
   let img ← readExact h (4 * batch * flat)
   pure (img, lbl)
 
@@ -279,21 +302,23 @@ def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) : IO (ByteArray × ByteA
     ⚠ Each worker gets a DISTINCT seed (`seed + i`). With one shared seed every worker draws the
     same augmentation sequence, and since the shards hold different images that is not a
     correctness bug — but it needlessly correlates the crops across workers. -/
-def spawnShimSharded (split : String) (batch flat seed n : Nat) : IO (Array IO.FS.Handle) := do
+def spawnShimSharded (split : String) (batch flat seed n : Nat) (nclasses : Nat := 0)
+    : IO (Array IO.FS.Handle) := do
   if n <= 1 then
-    pure #[← spawnShim split batch flat seed]
+    pure #[← spawnShim split batch flat seed none nclasses]
   else
     let mut hs : Array IO.FS.Handle := #[]
     for i in [0:n] do
-      hs := hs.push (← spawnShim split batch flat (seed + i) (some (i, n)))
+      hs := hs.push (← spawnShim split batch flat (seed + i) (some (i, n)) nclasses)
     IO.println s!"  imagenet shim: {n} sharded producers (round-robin over batches)"
     pure hs
 
 /-- Round-robin read: batch `k` comes from worker `k % n`. `readExact` already blocks until a whole
     record has arrived, so a slow worker throttles rather than corrupting — the framing cannot slip. -/
-def readShimBatchRR (hs : Array IO.FS.Handle) (k batch flat : Nat) : IO (ByteArray × ByteArray) := do
+def readShimBatchRR (hs : Array IO.FS.Handle) (k batch flat : Nat) (nclasses : Nat := 0)
+    : IO (ByteArray × ByteArray) := do
   match hs[k % hs.size]? with
-  | some h => readShimBatch h batch flat
+  | some h => readShimBatch h batch flat nclasses
   | none   => throw <| IO.userError "readShimBatchRR: no shim producers were spawned"
 
 
@@ -740,10 +765,20 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- byte-identical to before this knob existed). Needed once the step rate outruns one producer's
   -- ~1,530 img/s: a 4-replica ViT step wants ~1,940. See `spawnShimSharded`.
   let shimWorkers := ((← IO.getEnv "SHIM_WORKERS").bind (·.toNat?)).getD 1
+  -- $SHIM_SOFT=1 asks the shim for WIRE v2 — `float32[batch*nClasses]` target distributions rather
+  -- than `int32[batch]` labels. Today those are one-hots, i.e. the same information in the shape
+  -- the graph already consumes, which is exactly what makes the transport gateable on its own:
+  -- a one-hot sent as a soft target must train BIT-IDENTICALLY to the hard-label path. What it
+  -- unlocks is mixup/cutmix, which need a target the label alphabet cannot express.
+  --
+  -- No render change is required for any of this: the committed renders are AFFINE in `%onehot`
+  -- (measured, `lake build soft-target-tie`), so a mixed target yields the mixed gradient.
+  let softTargets := (← IO.getEnv "SHIM_SOFT").isSome
+  let shimNC := if softTargets then net.nClasses else 0
   let imgStreams : Array IO.FS.Handle ←
     if net.data == .imagenet then
       spawnShimSharded "train" gbs (3 * 224 * 224)
-        (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1) shimWorkers
+        (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1) shimWorkers shimNC
     else pure #[]
   -- LEAN_MLIR_MAX_STEPS: run a short steady-state ms/step probe then exit. This is
   -- the benchmark's `attn` anchor — ViT is matmul/attention-bound, so its per-step
@@ -798,7 +833,7 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
       let (xb, yb) ← if !imgStreams.isEmpty then
           -- Round-robin across the sharded producers; with SHIM_WORKERS=1 (the default) this is
           -- `imgStreams[0]` every step, i.e. exactly the single-producer path.
-          readShimBatchRR imgStreams (ep * nb + bi) gbs (3 * 224 * 224)
+          readShimBatchRR imgStreams (ep * nb + bi) gbs (3 * 224 * 224) shimNC
         else do
           let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * gbs) gbs trainPix
           -- Data-pipeline augmentation (the same FFI the unverified trainer uses;

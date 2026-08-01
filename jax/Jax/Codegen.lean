@@ -3196,21 +3196,46 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "            raise SystemExit('SHIM_SHARD=%s: need 0 <= i < N' % _sh)\n" ++
   "    it = iter(build_imagenet_iter(split, batch, training, training, shard))\n" ++
   "    flat = 3 * _IMG_SIZE * _IMG_SIZE\n" ++
+  -- ── WIRE v2: soft targets. `SHIM_NCLASSES=K` (K>0) switches the label section from
+  --    `int32[batch]` hard labels to `float32[batch*K]` target distributions, and bumps the
+  --    preamble version 1 -> 2 with K appended so the reader can size the read and REFUSE a
+  --    mismatch rather than sliding off by a factor of K on every later batch.
+  --
+  --    Unset (the default) emits wire v1 byte-for-byte, which is what keeps every existing run
+  --    and the committed SHIM_HASH digest valid.
+  --
+  --    ⚠ What v2 carries today is a plain ONE-HOT — the same information as v1, in the shape the
+  --    graph already consumes (`%onehot : [batch, nClasses]`). That is deliberate: it makes the
+  --    transport gateable on its own, because a one-hot sent as a soft target must train
+  --    BIT-IDENTICALLY to the hard-label path. Mixup/CutMix are what put something interesting in
+  --    these slots, and they are a separate change to the PRODUCER, not to the wire.
+  "    nclasses = int(os.environ.get('SHIM_NCLASSES', '0'))\n" ++
+  "    def _targets(y):\n" ++
+  "        if nclasses <= 0:\n" ++
+  "            return np.ascontiguousarray(y, dtype=np.int32)\n" ++
+  "        yi = np.asarray(y, dtype=np.int64).reshape(-1)\n" ++
+  "        t = np.zeros((yi.shape[0], nclasses), dtype=np.float32)\n" ++
+  "        ok = (yi >= 0) & (yi < nclasses)\n" ++
+  "        t[np.arange(yi.shape[0])[ok], yi[ok]] = 1.0\n" ++
+  "        return np.ascontiguousarray(t, dtype=np.float32)\n" ++
   "    if hash_n:\n" ++
   "        h = hashlib.sha256()\n" ++
   "        for i, (x, y) in enumerate(it):\n" ++
   "            if i >= hash_n: break\n" ++
-  "            h.update(np.ascontiguousarray(y, dtype=np.int32).tobytes())\n" ++
+  "            h.update(_targets(y).tobytes())\n" ++
   "            h.update(np.ascontiguousarray(x, dtype=np.float32).tobytes())\n" ++
   "        sys.stderr.write('SHIM_HASH %d batches seed=%d split=%s: %s\\n'\n" ++
   "                         % (hash_n, seed, split, h.hexdigest()))\n" ++
   "        return\n" ++
   "    out = sys.stdout.buffer\n" ++
   "    out.write(b'LMSH')\n" ++
-  "    out.write(np.array([1, batch, flat], dtype=np.int32).tobytes())\n" ++
+  "    if nclasses > 0:\n" ++
+  "        out.write(np.array([2, batch, flat, nclasses], dtype=np.int32).tobytes())\n" ++
+  "    else:\n" ++
+  "        out.write(np.array([1, batch, flat], dtype=np.int32).tobytes())\n" ++
   "    out.flush()\n" ++
   "    for x, y in it:\n" ++
-  "        out.write(np.ascontiguousarray(y, dtype=np.int32).tobytes())\n" ++
+  "        out.write(_targets(y).tobytes())\n" ++
   "        out.write(np.ascontiguousarray(x, dtype=np.float32).tobytes())\n" ++
   "        out.flush()\n\n" ++
   "if __name__ == '__main__':\n" ++
