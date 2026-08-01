@@ -290,18 +290,24 @@ private def loadData (data : VerifiedData) (d0 : Nat) (dataDir : String) :
     -- paths score the identical set.
     let flat := 3 * 224 * 224
     let vb := 256
+    let nB := 195
     let h ← spawnShim "validation" vb flat 0
     IO.println "  imagenet: draining the val split into RAM (~30 GB, one time)…"
-    let mut imgs : Array ByteArray := #[]
-    let mut lbls : Array ByteArray := #[]
+    -- Reserve the exact final size and append each batch as it lands, rather than collecting all
+    -- 195 chunks and folding `(· ++ ·)` over them at the end. The fold cost ~45 GB of pure
+    -- overhead on a 28 GiB result: the chunk array stayed live for the whole fold (30 GB) WHILE
+    -- the accumulator grew beside it, and `++` is `copySlice … (exact := false)`, i.e. it DOUBLES
+    -- capacity when it grows — so the last few appends allocated a 2× buffer before freeing the
+    -- old one. Measured peak RSS was 75.5 GB. Pre-sizing removes both: `++` into a buffer that
+    -- already has the capacity never reallocates, so peak is the result plus one 154 MB batch.
+    let mut evI := ByteArray.emptyWithCapacity (nB * vb * flat * 4)
+    let mut evL := ByteArray.emptyWithCapacity (nB * vb * 4)
     let mut n := 0
     -- The validation iterator neither shuffles nor repeats, so it ends; `readShimBatch` throws on
     -- the closed pipe and that IS the terminator. 195 is what drop_remainder leaves of 50,000.
-    for _ in [0:195] do
+    for _ in [0:nB] do
       let (i, l) ← readShimBatch h vb flat
-      imgs := imgs.push i; lbls := lbls.push l; n := n + vb
-    let evI := imgs.foldl (init := ByteArray.empty) (· ++ ·)
-    let evL := lbls.foldl (init := ByteArray.empty) (· ++ ·)
+      evI := evI ++ i; evL := evL ++ l; n := n + vb
     IO.println s!"  imagenet: val ready — {n} images, {evI.size / 1048576} MB"
     return (ByteArray.empty, ByteArray.empty, 1281167, evI, evL, n, flat, false)
 
