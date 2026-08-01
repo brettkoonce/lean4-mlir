@@ -21,6 +21,16 @@ jobs:
         # dev .oleans, so CI is the only place it surfaces (see 5f27766).
         run: python3 scripts/check_audit_coverage.py
 
+      - name: Render coverage check (artifact renderers built + drift-guarded)
+        # Fail fast (no Lean needed). Same class of bug as the step above, on
+        # the render half: a leaf `#eval` renderer that NOTHING imports is
+        # built only as a `lean_lib` root, so a missing root means a missing
+        # .olean on a fresh runner — the "object file … does not exist" crash.
+        # `Certs`'s docstring claimed it subsumed the `Proofs` roots; it did
+        # not, for ResNet34RenderB and MobileNetV2RenderB. Also pins the
+        # drift-guard debt at its baseline so it can shrink but never grow.
+        run: python3 scripts/check_render_coverage.py
+
       - name: Install elan
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y

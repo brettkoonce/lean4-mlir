@@ -870,7 +870,18 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.SpecVJP,
              -- The canonical-MLP surface (784→512→512→10): the generic MLP chain
              -- instantiated at the ch2 reference dims (see MlpCanonical.lean).
-             `LeanMlir.Proofs.Foundation.MlpCanonical]
+             `LeanMlir.Proofs.Foundation.MlpCanonical,
+             -- The two batched (`N := B`) AdamW renderers. NOTHING imports
+             -- either — they are leaf `#eval` writers — so the "Certs subsumes
+             -- Proofs" claim above was false for exactly these two and
+             -- `lake build Certs` never produced their oleans, failing any job
+             -- that needs them with "object file ... does not exist". They are
+             -- also the SOLE writers of the artifacts
+             -- `resnet34-verified-adam{,-xla}` and `mobilenetv2-verified-adam`
+             -- actually train on, so their oleans must exist wherever the
+             -- corpus is built. Guarded by scripts/check_render_coverage.py.
+             `LeanMlir.Proofs.Codegen.ResNet34RenderB,
+             `LeanMlir.Proofs.Codegen.MobileNetV2RenderB]
 
 /-- **`lake build CertsHeavy`** — the GENERATED full-input certificate
     instances (784-dim scorecard + per-pair LipSDP + IBP L∞: ~90k lines of

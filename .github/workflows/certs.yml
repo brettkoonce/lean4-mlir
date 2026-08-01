@@ -50,6 +50,13 @@ jobs:
         # `lake build Certs` won't build — see scripts/check_audit_coverage.py.
         run: python3 scripts/check_audit_coverage.py
 
+      - name: Render coverage check (artifact renderers built + drift-guarded)
+        # This job is the one that actually broke: `lake build Certs` does not
+        # build a leaf renderer nothing imports, so ResNet34RenderB's .olean
+        # was absent on a fresh runner. Pure text analysis, no Lean — runs
+        # before elan so a root gap fails in seconds, not after the build.
+        run: python3 scripts/check_render_coverage.py
+
       - name: Install elan
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
