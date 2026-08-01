@@ -91,7 +91,15 @@ private def entryOf (path : String) : IO String := do
   | some rest => pure ("m." ++ rest.takeWhile (· != '('))
 
 def main (args : List String) : IO Unit := do
-  let net := vitVerified.toNet
+  -- $VIT_DP_NET selects which ViT spec the parameter layout comes from: the 10-class Imagenette
+  -- one (default) or the 1000-class ImageNet one. It is NOT cosmetic — `net.specs` drives the
+  -- generated θ and the packed shapes, so gating the `vitin` renders against the `vit` layout
+  -- would build a θ 191,070 floats short and the shim would refuse the call on arity.
+  let netName := (← IO.getEnv "VIT_DP_NET").getD "vit"
+  let net ← match netName with
+    | "vit"   => pure vitVerified.toNet
+    | "vitin" => pure vitImagenetVerified.toNet
+    | s       => throw <| IO.userError s!"VIT_DP_NET={s}: expected `vit` or `vitin`"
   -- The replica count must match what the DP render BAKED into `replica_groups`; a mismatch is
   -- refused by the shim rather than answered wrongly. Env rather than argv because argv[0..2] are
   -- already the (dp, single, batch) triple and a fourth positional would be unreadable.

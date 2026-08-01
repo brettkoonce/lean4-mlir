@@ -382,10 +382,26 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
       "        return img * (1.0 - mask)\n" ++
       "    return tf.cond(tf.random.uniform([]) < " ++ toString cfg.randomErasingProb ++ ", erase, lambda: img)\n\n"
      else "") ++
-    "def build_imagenet_iter(split, batch_size, training, augment):\n" ++
+    "def build_imagenet_iter(split, batch_size, training, augment, shard=None):\n" ++
     "    ds = tfds.load('imagenet2012', split=split,\n" ++
     "                   decoders={'image': tfds.decode.SkipDecoding()},\n" ++
     "                   data_dir=os.environ.get('TFDS_DATA_DIR'))\n" ++
+    -- `shard` is (index, count), and it is INERT unless passed — the reference trainers never
+    -- pass it, so their pipeline is unchanged. It exists for the batch shim, whose single process
+    -- tops out at ~1,530 img/s while a 4-replica ViT step wants ~1,940 (handoff §2k).
+    --
+    -- ⚠ It shards the RAW dataset, before `_pp`: the cost being parallelised is JPEG decode +
+    -- RandomResizedCrop, so a shard taken after the map would decode everything and discard
+    -- (N-1)/N of it. `.shard` is also placed before `.shuffle`, so each worker shuffles only its
+    -- own slice — the stream differs from the unsharded one by construction, which is why the
+    -- determinism gate has to be re-run PER SHARD rather than inherited.
+    --
+    -- It changes WHICH examples a worker emits, never HOW an image becomes a tensor: `_pp` below
+    -- is the same code the reference consumes. That is the whole reason this is a parameter here
+    -- instead of a second loader — a hand-written one would be a second definition of the
+    -- augmentation, i.e. §2a's double-writer disease applied to the data path.
+    "    if shard is not None:\n" ++
+    "        ds = ds.shard(num_shards=shard[1], index=shard[0])\n" ++
     "    def _pp(ex):\n" ++
     "        b = ex['image']\n" ++
     "        img = (_imagenet_decode_random_crop_flip(b)\n" ++
@@ -3167,7 +3183,18 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    # AUG_SEED supplies (installed above, at module scope). Verify with SHIM_HASH, do not assume.\n" ++
   "    tf.config.experimental.enable_op_determinism()\n" ++
   "    tf.random.set_seed(seed)\n" ++
-  "    it = iter(build_imagenet_iter(split, batch, training, training))\n" ++
+  -- SHIM_SHARD='i/N' streams only shard i of N. The transform is untouched; only which examples
+  -- this process emits changes. Measured 2026-08-01 (bs128, marginal): 1 process 1,527 img/s,
+  -- 2 processes 1.71x, 4 processes 2.36x on a 32-core box — so two clear the ~1,940 img/s a
+  -- 4-replica ViT step wants, and no C loader is needed.
+  "    shard = None\n" ++
+  "    _sh = os.environ.get('SHIM_SHARD')\n" ++
+  "    if _sh:\n" ++
+  "        _i, _n = _sh.split('/')\n" ++
+  "        shard = (int(_i), int(_n))\n" ++
+  "        if not (0 <= shard[0] < shard[1]):\n" ++
+  "            raise SystemExit('SHIM_SHARD=%s: need 0 <= i < N' % _sh)\n" ++
+  "    it = iter(build_imagenet_iter(split, batch, training, training, shard))\n" ++
   "    flat = 3 * _IMG_SIZE * _IMG_SIZE\n" ++
   "    if hash_n:\n" ++
   "        h = hashlib.sha256()\n" ++

@@ -681,3 +681,36 @@ end Proofs.StableHLO
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adam128_train_step" "128.0" 1 128)
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp128x4_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamdp128x4_train_step" "128.0" 4 128)
+
+-- ── ViT-Tiny on FULL 1000-class ImageNet, slug `vitin` — the scale tier, added 2026-08-01 ───────
+-- The ViT peer of `resnet34in_*` (§2k). No renderer change: `nClasses`, `bs` and `replicas` are
+-- all ordinary parameters, so this is three `#eval`s.
+--
+-- ⚠⚠ **THE SLUG IS LOAD-BEARING AND IT IS THE ONE TRAP THAT MATTERS HERE.** Forward artifacts
+-- carry no variant in their path (`<slug>_fwd.mlir`), so rendering a 1000-class ViT forward under
+-- the `vit` slug would silently OVERWRITE `verified_mlir/vit_fwd.mlir` — the 10-class Imagenette
+-- forward that the 71.31% run, the prefix audit and every `fwd-tie vit` invocation depend on.
+-- §2k hit exactly this on R34 and it is why `slug` exists there. Distinct paths, distinct entries.
+--
+-- Batch: **128 per device × 4 replicas = global 512**, which is `jax/MainVitImagenet.lean`'s
+-- `vitTinyImagenetConfig.batchSize` — matching the reference's global batch is what keeps the two
+-- runs a comparable pair rather than two experiments (the §2k argument, and R34's `momdp64` was
+-- chosen the same way). The single-device `adam128` peer exists so `vit-dp-check` has a
+-- same-per-device-batch reference to gate against; it is not scaffolding.
+--
+-- ⚠ Label smoothing at K = 1000: `alphaOverK` derives the cotangent constant from `nClasses`, so
+-- the emitted `-α/K` must be **-0.000100**, not the K=10 literal `-0.010000`. That hardcoding was
+-- a REAL BUG on the R34 ImageNet render (§2k — the first smoke reported loss ≈ 87 where 1000-class
+-- CE at init must be ≈ ln(1000) = 6.9, and it was on the GRADIENT path). Fixed for ViT on
+-- 2026-07-31; `TestVitInSmoke` re-checks the emitted constant rather than trusting that.
+--
+-- ⚠ Not matched to the reference yet, and deliberately: `vitTinyImagenetConfig` also carries
+-- mixup + cutmix (soft labels — this render's cotangent is smoothed-CE over a ONE-HOT and cannot
+-- express them), stochastic depth, EMA and grad clipping. The pipeline-level augs (RandAugment,
+-- random erasing, repeated aug) DO come across for free via the shim. See the handoff §2p.
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adam128_train_step" "128.0" 1 128 1000)
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adamdp128x4_train_step" "128.0" 4 128 1000)
+#eval IO.FS.writeFile "verified_mlir/vitin_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderV "vitin_fwd" 256 1000)

@@ -1470,6 +1470,23 @@ lean_exe «resnet34-imagenet-verified-xla» where
   root := `apps.imagenette.MainResnet34ImagenetXla
   moreLinkArgs := xlaLink
 
+/-- Shared body of the ViT-Tiny / **full ImageNet-1k** trainer (handoff §2p). Its own `lean_lib`
+    for the same reason `Resnet34ImagenetCommon` has one. -/
+lean_lib «ViTImagenetCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.ViTImagenetCommon]
+
+/-- **ViT-Tiny on full 1000-class ImageNet** — the ViT peer of the R34 scale tier. Same certified
+    renderer at `nClasses := 1000, bs := 128`; at four replicas that is global batch 512, the
+    reference's (`jax/MainVitImagenet.lean`). Fed by the generated tfds shim.
+
+    Needs the shim emitted first: `(cd jax && lake exe resnet34-imagenet default --shim)`.
+    ⚠ Set `SHIM_WORKERS=2` — one producer cannot feed a 4×128 ViT step (§2p).
+    ⚠ Does NOT move the verification tier, and is NOT the DeiT recipe (§2p). -/
+lean_exe «vit-imagenet-verified-xla» where
+  root := `apps.imagenette.MainViTImagenetXla
+  moreLinkArgs := xlaLink
+
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
     textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it

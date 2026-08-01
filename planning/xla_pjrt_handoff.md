@@ -4262,6 +4262,137 @@ no `timeout`/kill is required, and `| head` would not stop the trainer anyway.
 
 ---
 
+### 2p. ✅ ViT-Tiny / full ImageNet-1k — BUILT AND GATED 2026-08-01, NOT RUN
+
+The ViT peer of §2k, stood up as a code/test pass. **No long run yet, deliberately.** Everything
+below is measured on ares (4 × RTX 4060 Ti of the box's 6).
+
+`lake build vit-imagenet-verified-xla`. Three artifacts under slug **`vitin`**
+(`adam128_train_step`, `adamdp128x4_train_step`, `fwd`) at `nClasses := 1000`, `bs := 128`;
+`vitImagenetVerified` in `VerifiedNets.lean`; `ViTImagenetCommon` + a `-xla` main.
+**No renderer change** — `nClasses`, `bs` and `replicas` were already parameters, so it is three
+`#eval`s, exactly as §2k found for R34.
+
+Batch is **128 per device × 4 = global 512**, which is `vitTinyImagenetConfig.batchSize`. Matching
+the reference's global batch is what makes the pair comparable rather than two experiments.
+
+#### The gates — all four pass
+
+| gate | result |
+|---|---|
+| **param count vs the JAX reference** | **5,717,416 == 5,717,416**, exact (`vitTinyImagenet.totalParams`) — the check §2k built after R34's two "ResNet-34"s turned out to be different nets |
+| **gate 1** — the ten `vit_*` artifacts re-render | byte-identical; only the three `vitin_*` paths appear |
+| **`vit-dp-check`** at `VIT_DP_NET=vitin VIT_DP_REPLICAS=4` | **bit-exact 17,152,251 / 17,152,251**; sum-not-mean control fires at **2.96** |
+| **residency**, 4 replicas | **0 of 68,608,992 bytes**, floor 0, both controls fire (init 32,416,743 · staleness 49,332,018) |
+| **end-to-end** | 4 GPUs, real ImageNet over the shim, `rc=0`, 2502 steps/epoch, loss 7.84/7.96/7.79 |
+
+⚠ The **label-smoothing constant is right at K = 1000** — `-0.000100`, and `-0.010000` occurs zero
+times. That is §2k's real bug (`α/K` hardcoded for K=10, *on the gradient path*, caught only
+because loss ≈ 87 was implausible against ln(1000) = 6.9) checked rather than assumed. `%loss`
+reads **7.99** at init here, which is where it belongs.
+
+#### ⛔ THE PROJECTION WAS WRONG, AND THE CAUSE IS UNEXPLAINED
+
+This section first estimated 264 ms/step by carrying the Imagenette ViT's measured rate over,
+on the reasoning that 224² ViT-Tiny costs the same per step regardless of class count. **Measured,
+it does not:**
+
+| net | classes | ms/step (4×bs128, synthetic) |
+|---|---|---|
+| `vit_adamdp128x4` | 10 | **274** |
+| `vitin_adamdp128x4` | 1000 | **424** |
+
+**+150 ms, 1.55×, for a head that is 3.4% of the parameters** (5,526,346 → 5,717,416). The two
+renders are *structurally identical* — 15,859 lines each, 435 `dot_general`, 2 `convolution`, 438
+`reduce` — so it is not an op-count explosion; only tensor dimensions move. **The cause is not
+identified.** Before committing multi-day wall clock, dump post-optimisation HLO (the §4
+throwaway-shim recipe, since `$XLA_FLAGS` is inert here) and read what the head's `dot_general` and
+the CE reduce lower to. A candidate worth checking first: `pretty` has **no CSE** (§4), so a
+cotangent subtree consumed more than once is emitted more than once, and at `[128, 1000]` the
+intermediates are 100× the Imagenette ones.
+
+**ETA on the measured number**: 424 ms × 2,502 steps = 17.7 min/epoch train-only ⇒ 300 epochs ≈
+**88 h ≈ 3.7 days**, plus eval. (The reference sets `valEveryEpochs := 5` for exactly this reason;
+this driver evals every epoch and does not have that knob.) If the 1.55× is recovered it is ~2.4
+days.
+
+#### ⛔ AND THE LOADER IS **NOT** THE BOTTLENECK — a second refuted prediction
+
+This section also predicted ViT would be the first loader-bound config (~1,940 img/s wanted against
+~1,530 delivered). **Refuted by the synthetic control**, which is the measurement that settles it:
+
+| | ms/step |
+|---|---|
+| synthetic inputs (no loader at all) | **424** |
+| real ImageNet, `SHIM_WORKERS=1` | 427 |
+| real ImageNet, `SHIM_WORKERS=2` | 432 |
+| real ImageNet, `SHIM_WORKERS=4` | 436 |
+
+Within noise of each other, and *slightly worse* with more workers — so at 424 ms/step the demand
+is only ~1,200 img/s, which one producer already covers. The arithmetic that predicted otherwise
+used the 264 ms/step that turned out to be wrong; **the loader ceiling was an artefact of the bad
+compute estimate**, which is the same "one number carried into a new regime" mistake this file
+records for the 1.04×-vs-JAX claim (§3). Sharding is built, gated and inert at `SHIM_WORKERS=1` —
+keep it for when a faster render or bf16 changes the balance, but **do not set it today**.
+
+#### The shim sharding, since it exists now
+
+`SHIM_SHARD=i/N` in the generated shim (`ds.shard` on the RAW dataset, before the map, so JPEG
+decode is what parallelises), plus `spawnShimSharded` / `readShimBatchRR` behind `$SHIM_WORKERS`
+(default 1). Gated three ways:
+
+* **inert when unsharded** — `SHIM_HASH` returns `3da05cb8…`, byte-identical to pre-change;
+* **shards are disjoint, covering and order-preserving** — `interleave(shard 0/2, shard 1/2)`
+  reproduces the unsharded stream element-for-element over 240 elements, same at N = 4, against a
+  control that the shards differ from each other. That is the check that a "shards hash
+  differently" gate would pass while silently dropping half the data;
+* **`SHIM_WORKERS=1` is the old path end to end** — R34/ImageNet steps normally at 926 ms.
+
+⚠ Round-robin over **batches** is not the unsharded stream: `ds.shard` interleaves *elements*, so
+batch composition differs. Both are valid shuffled streams; they are not byte-comparable, so a
+determinism hash does not carry across a shard-count change.
+
+⚠ Measured throughput, for the record (bs128, marginal so TF startup is out): **1,527 img/s**
+single producer, 2 processes **1.71×**, 4 processes **2.36×** on 32 cores. And
+`enable_op_determinism()` is **free** — 1,527 with it against 1,463 without, i.e. ON is marginally
+*faster*. That refutes the obvious "determinism is throttling AUTOTUNE" hypothesis and confirms
+§2k's "costs little".
+
+#### ⚠ What this is NOT: the DeiT recipe
+
+`jax/MainVitImagenet.lean`'s `vitTinyImagenetConfig` targets DeiT-Ti's ~72.0% with a suite the
+verified path does not have. The split is clean:
+
+| | verified path | why |
+|---|---|---|
+| RandAugment (geometric, m9/mstd0.5/inc1), random erasing, repeated aug 3×, RRC+hflip | ✅ **free** | they live inside `build_imagenet_iter`, which the shim reuses verbatim — flipping them in the config moves both paths |
+| **mixup + cutmix** | ❌ | applied in the JAX *train step* (`_mixup`/`_cutmix`), not the pipeline, and they emit **soft labels `float[B,NC]`** where the shim wire is `int32[B]` **and** this render's cotangent is smoothed-CE over a one-hot. Needs a wire v2 **and** a `softLabelCE` cotangent |
+| **stochastic depth** (`dropPath := 0.1`) | ❌ | architectural — needs the renderer |
+| **EMA** (`emaDecay := 0.99996`) | ❌ | driver-level |
+| **grad clip 1.0** | ❌ | which the reference config calls *"the unlock for the 5e-4 LR"* |
+
+The reference's own **grad-clip-only 80-epoch ancestor reached 65.6%**, and this has less than that.
+**Do not compare a number from this run to 72.0%.** `softLabelCE` already exists as a worked design
+in the *unverified* track (`LeanMlir/Types.lean:349`, `LeanMlir/Train.lean`), so the mixup/cutmix
+half is a port with a precedent rather than a research problem — but note that track is a different
+one, and `grep -rn 'softLabel|mixup|cutmix' LeanMlir/Proofs/ VerifiedTrain.lean VerifiedNets.lean`
+returns **nothing**.
+
+#### Traps hit while building this
+
+* **The `MAX_STEPS` probe trap fired TWICE in one session**, both times because the step ceiling is
+  tiny at large global batch: 18 steps/epoch at global 512 on Imagenette, so `MAX_STEPS=20` and
+  `=40` both silently became full 80-epoch runs (and the first left an `epoch=80` checkpoint, i.e.
+  §4's silent-no-op armed). **Compute `nTrain/(bs·replicas)` before choosing the cap**; the probe
+  warms 8, so the usable window at global 512 on Imagenette is 9-18.
+* **A skipped eval prints `val_acc = 0/N = 0.000000%`** (`VerifiedTrain.lean:810` loops over
+  `[0:0]` and prints `correct/total` anyway) — indistinguishable at a glance from a collapsed net.
+* **§2k's recorded "batch 0 labels" `[26, 948, 227, 24, 582, 614, 141, 155]` are the VALIDATION
+  split's**, not the train split's (train unshuffled starts `[196, 40, 522, …]`, shuffled
+  `[633, 304, …]`). No bug — `trainAdamSched` does spawn `"train"` (`VerifiedTrain.lean:693`) and
+  the val drain is separate — but §2k reads as if the *train* stream had been verified against the
+  producer, and it has not been. The framing/preamble/`readExact` evidence does carry.
+
 ### 2b. Batch-BN at R34 scale ✅ DONE — the batched index, and a certified R34 AdamW render
 
 Decision taken and carried out: keep the AdamW trainer's **batch-BN** semantics rather than moving

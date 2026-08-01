@@ -534,3 +534,58 @@ def vitVerified : VerifiedNetSpec where
 
 -- Derived layout (200 params) == the audited hand-list ViTLayout.specs.
 #guard vitVerified.toSpecs == ViTLayout.specs
+
+/-- **ViT-Tiny on full 1000-class ImageNet** — the ViT peer of `resnet34ImagenetVerified`, and the
+    scale tier of handoff §2p. Identical architecture to `vitVerified` above; the head is the only
+    thing that moves (192→1000), exactly as the two ResNet-34 specs differ only in theirs.
+
+    Data comes from the generated tfds shim (`VerifiedData.imagenet`), so **this side does no
+    augmentation at all** — one definition of the transform, and it is the reference's.
+
+    ⚠ **Claim ceiling, and it is lower here than the name suggests.** The proof-carrying tier stops
+    at Imagenette: `vitVerified_denote_eq` / `vitVerified_has_vjp` / rung E are stated about the
+    10-class net. What carries to this one is *provenance* — the artifacts are `pretty(provenGraph)`
+    off the same renderer, since `nClasses`, `bs` and `replicas` are ordinary parameters of it —
+    plus whatever a matched-pair comparison against `jax/MainVitImagenet.lean` shows. Say "one
+    architecture, two independent lowerings, agreeing", never "proven" (§5).
+
+    ⚠ It is **not** the DeiT recipe. `vitTinyImagenetConfig` carries mixup, cutmix, stochastic
+    depth, EMA and grad clipping; none of those exist on the verified path (mixup/cutmix would need
+    soft labels on the shim wire AND a `softLabelCE` cotangent — this render's is smoothed-CE over
+    a one-hot). The pipeline-level augs do come across free. Do not compare a number from this to
+    DeiT-Ti's 72.0%. -/
+def vitImagenetVerified : VerifiedNetSpec where
+  name     := "ViT-Tiny (ImageNet-1k)"
+  slug     := "vitin"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  layers   := [
+    .conv 3 192 16 16,            -- patch embed 16×16/s16 (3→192)   224→14×14=196
+    .param #[192] 2,              -- CLS token  [192]
+    .param #[197, 192] 2,         -- positional embedding  [197,192]
+    .transformerBlock 192 768,    -- 12 pre-norm blocks @ dim 192, MLP 768
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .transformerBlock 192 768,
+    .layerNorm 192,               -- final LayerNorm (per-channel [192])
+    .dense 192 1000 ]             -- CLS-head 192→1000
+  blurb := "ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+
+-- The two ViT specs must differ in EXACTLY one parameter shape — the head. Anything else moving
+-- means the ImageNet spec drifted from the Imagenette one it is supposed to be the 1000-class twin
+-- of. This is the guard §2l wished it had had on R34: `resnet34Verified.toSpecs == specs` FIRED on
+-- the conv-bias change and forced the hand-list to be fixed properly instead of edited to match.
+#guard vitImagenetVerified.toSpecs.size == vitVerified.toSpecs.size
+#guard vitImagenetVerified.toSpecs.pop.pop == vitVerified.toSpecs.pop.pop
+#guard vitImagenetVerified.toSpecs.back! == (#[1000], 2)

@@ -194,7 +194,8 @@ def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
     The preamble (`LMSH` | version | batch | flat) is checked rather than skipped: a batch or
     resolution mismatch between the render and the shim would otherwise read as garbage pixels and
     look like a broken net. Same reasoning as the FFI's G4 arity guard. -/
-def spawnShim (split : String) (batch flat seed : Nat) : IO IO.FS.Handle := do
+def spawnShim (split : String) (batch flat seed : Nat)
+    (shard : Option (Nat × Nat) := none) : IO IO.FS.Handle := do
   -- `jax/` is its own lake project, so `--shim` writes under ITS build dir; a run from the repo
   -- root finds it there. $SHIM_SCRIPT overrides for a hand-placed or per-net shim.
   let candidates : List System.FilePath := match ← IO.getEnv "SHIM_SCRIPT" with
@@ -221,10 +222,16 @@ def spawnShim (split : String) (batch flat seed : Nat) : IO IO.FS.Handle := do
     | throw <| IO.userError s!"imagenet shim: no python interpreter found (looked in \
 {pyCandidates}). The shim needs the PINNED env (jax + tensorflow_datasets), so point \
 $SHIM_PYTHON at it — a bare `python3` off PATH will not have tfds."
+  -- `shard = some (i, n)` sets SHIM_SHARD=i/n, i.e. this worker emits only elements ≡ i (mod n).
+  -- Absent ⇒ the variable is not set at all and the shim takes its unsharded path, which is why
+  -- the single-producer stream is byte-identical to before sharding existed (gated by SHIM_HASH).
+  let shardEnv : Array (String × Option String) := match shard with
+    | some (i, n) => #[("SHIM_SHARD", some s!"{i}/{n}")]
+    | none        => #[]
   let child ← IO.Process.spawn {
     cmd := py.toString, args := #[script.toString], stdout := .piped, stdin := .null,
     env := #[("SHIM_BATCH", some (toString batch)), ("SHIM_SPLIT", some split),
-             ("SHIM_SEED", some (toString seed))] }
+             ("SHIM_SEED", some (toString seed))] ++ shardEnv }
   let h := child.stdout
   let pre ← readExact h 16
   let magic := String.ofList ((List.range 4).map (fun i => Char.ofNat (pre.get! i).toNat))
@@ -247,6 +254,47 @@ def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) : IO (ByteArray × ByteA
   let lbl ← readExact h (4 * batch)
   let img ← readExact h (4 * batch * flat)
   pure (img, lbl)
+
+/-- Spawn `n` shim processes over disjoint shards of one split, and read them round-robin.
+
+    **Why this exists.** One shim process tops out at ~1,530 img/s (measured 2026-08-01, bs128,
+    marginal so TF startup is out of it). A 4-replica ViT step consumes 512 images in 264 ms, i.e.
+    ~1,940 img/s, so a single producer would make the GPUs wait — the first config in this repo
+    where the loader, not the device, is the ceiling (R34/ImageNet at bs256 needs only ~380).
+    Measured aggregate: 2 processes **1.71×**, 4 processes **2.36×** on this 32-core box, so two
+    clear the requirement with margin.
+
+    **What it does NOT do is add a second definition of the transform.** Each worker runs the same
+    generated shim with `SHIM_SHARD=i/n`, which selects *which examples* it emits (`ds.shard`,
+    before the map) and leaves `_pp` — the crop, flip and normalization — untouched. A hand-written
+    loader here would be §2a's double-writer disease applied to the data path.
+
+    ⚠ **Round-robin over BATCHES is not the unsharded stream.** `ds.shard` interleaves elements, so
+    taking whole batches from each worker in turn gives a different batch *composition* than one
+    producer would. Both are valid shuffled streams over the same epoch of data, and each worker
+    shuffles its own slice with the pipeline's own seed — but the two are not byte-comparable, so a
+    determinism hash from the unsharded config does not carry to a sharded one. Re-run `SHIM_HASH`
+    per shard if you need that property.
+
+    ⚠ Each worker gets a DISTINCT seed (`seed + i`). With one shared seed every worker draws the
+    same augmentation sequence, and since the shards hold different images that is not a
+    correctness bug — but it needlessly correlates the crops across workers. -/
+def spawnShimSharded (split : String) (batch flat seed n : Nat) : IO (Array IO.FS.Handle) := do
+  if n <= 1 then
+    pure #[← spawnShim split batch flat seed]
+  else
+    let mut hs : Array IO.FS.Handle := #[]
+    for i in [0:n] do
+      hs := hs.push (← spawnShim split batch flat (seed + i) (some (i, n)))
+    IO.println s!"  imagenet shim: {n} sharded producers (round-robin over batches)"
+    pure hs
+
+/-- Round-robin read: batch `k` comes from worker `k % n`. `readExact` already blocks until a whole
+    record has arrived, so a slow worker throttles rather than corrupting — the framing cannot slip. -/
+def readShimBatchRR (hs : Array IO.FS.Handle) (k batch flat : Nat) : IO (ByteArray × ByteArray) := do
+  match hs[k % hs.size]? with
+  | some h => readShimBatch h batch flat
+  | none   => throw <| IO.userError "readShimBatchRR: no shim producers were spawned"
 
 
 /-- Load the train + eval splits for a dataset. Returns
@@ -688,11 +736,15 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- The ImageNet train stream: spawned ONCE, not per epoch. The shim's train iterator is
   -- `.shuffle(seed=42, reshuffle_each_iteration=True).repeat()`, so it re-shuffles across the epoch
   -- boundary by itself and never ends — the per-epoch `F32.shuffle` below is skipped for it.
-  let imgStream : Option IO.FS.Handle ←
+  -- $SHIM_WORKERS > 1 shards the stream across that many producer processes (default 1, i.e.
+  -- byte-identical to before this knob existed). Needed once the step rate outruns one producer's
+  -- ~1,530 img/s: a 4-replica ViT step wants ~1,940. See `spawnShimSharded`.
+  let shimWorkers := ((← IO.getEnv "SHIM_WORKERS").bind (·.toNat?)).getD 1
+  let imgStreams : Array IO.FS.Handle ←
     if net.data == .imagenet then
-      some <$> spawnShim "train" gbs (3 * 224 * 224)
-                 (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1)
-    else pure none
+      spawnShimSharded "train" gbs (3 * 224 * 224)
+        (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1) shimWorkers
+    else pure #[]
   -- LEAN_MLIR_MAX_STEPS: run a short steady-state ms/step probe then exit. This is
   -- the benchmark's `attn` anchor — ViT is matmul/attention-bound, so its per-step
   -- cost scales very differently from conv across GPUs and can't borrow the conv
@@ -718,7 +770,7 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
     -- class-sorted, so without it every batch is a single class — degenerate).
     -- Skipped when streaming: there is no resident array to shuffle, and tf.data already
     -- re-shuffles each iteration inside the shim.
-    if !synth && imgStream.isNone then
+    if !synth && imgStreams.isEmpty then
       let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize
                            4 -- classification: one f32 class id per record
                            (ep + 42).toUSize
@@ -743,9 +795,11 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
       -- so it bypasses BOTH the slice and the augmentation below. That is deliberate: the transform
       -- has exactly one definition (the generated shim, shared with the JAX reference), and a second
       -- copy here is the double-writer failure this repo keeps paying for.
-      let (xb, yb) ← match imgStream with
-        | some h => readShimBatch h gbs (3 * 224 * 224)
-        | none => do
+      let (xb, yb) ← if !imgStreams.isEmpty then
+          -- Round-robin across the sharded producers; with SHIM_WORKERS=1 (the default) this is
+          -- `imgStreams[0]` every step, i.e. exactly the single-producer path.
+          readShimBatchRR imgStreams (ep * nb + bi) gbs (3 * 224 * 224)
+        else do
           let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * gbs) gbs trainPix
           -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
           -- lives in the data pipeline, not the network): Imagenette = random crop
