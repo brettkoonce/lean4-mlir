@@ -15,6 +15,7 @@ Reference (single-/multi-7900-XTX, bf16, from jax/runs/*/RESULTS.md):
 
 Run:  /path/to/jax-venv/bin/python scripts/jax_imagenet_bench.py
 """
+import os
 import time
 import numpy as np
 import jax
@@ -22,7 +23,14 @@ import jax.numpy as jnp
 from jax import random, jit, value_and_grad
 from jax.sharding import Mesh, NamedSharding, PartitionSpec as P
 
-DT = jnp.bfloat16            # match the bf16 reference runs
+# bf16 by default, to match the real runs. $BENCH_DTYPE=f32 switches the whole bench to
+# fp32 so the two can be A/B'd without editing this file — which is the only way to
+# re-measure the "bf16 is 1.60x faster than fp32" claim in
+# jax/runs/r34_imagenet_bf16_90ep/RESULTS.md on a given box. That number is CUDA/cuDNN
+# specific (on AMD/MIOpen bf16 conv is SLOWER, hence `bf16Conv := false` there), so it
+# is exactly the kind of thing that wants re-measuring per box rather than inheriting.
+DT = jnp.float32 if os.environ.get("BENCH_DTYPE", "").lower() in ("f32", "fp32", "float32") \
+     else jnp.bfloat16
 N_TRAIN = 1_281_167          # ImageNet-1k train images
 WARMUP, MEASURE = 3, 40      # steps
 
@@ -183,7 +191,11 @@ def main():
     devs = jax.devices()
     n = len(devs)
     print(f"━━━ ImageNet (phase-2 Lean→JAX) training-time estimate ━━━")
-    print(f"  backend: {jax.default_backend()}   devices: {n}   dtype: bf16   (synthetic input)")
+    # Report the dtype actually in use, not a literal. It was hardcoded "bf16" back when
+    # that was the only option; with $BENCH_DTYPE it would have labelled an fp32 run bf16,
+    # which is the one way a throughput A/B can be silently wrong.
+    print(f"  backend: {jax.default_backend()}   devices: {n}   "
+          f"dtype: {jnp.dtype(DT).name}   (synthetic input)")
     mesh = Mesh(np.array(devs), ("batch",))
     ds, rep = NamedSharding(mesh, P("batch")), NamedSharding(mesh, P())
     rows = []
