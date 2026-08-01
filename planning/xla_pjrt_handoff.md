@@ -4576,6 +4576,49 @@ P2P between any pair** (`nvidia-smi topo -p2p r` is `CNS` across the whole matri
 at 4. The JAX reference on the same four cards gets ~4.10× because its parameters are
 device-resident and only gradients cross. That gap IS this work item.
 
+##### ▶ 4 GPUs is now MEASURED on the real net, and it is worse than the projection
+
+The projection above said ~60-69% at 4 replicas. The real R34/ImageNet number, 2026-08-01, on the
+new `resnet34in_momdp64` render (4 × bs64 = global 256, so the same global batch and 5004
+steps/epoch as the single-device peer):
+
+| config | ms/step | min/epoch | 30 ep |
+|---|---|---|---|
+| 1 GPU, bs256 | 914 | 76.2 | 38 h |
+| **4 GPU, 4×64** | **625** | **52.1** | **26 h** |
+
+**4 GPUs buys 1.46× — 36.6% parallel efficiency.** Per-replica compute fell 4× while the push rose
+3×: R34 is 21.3M params, so ≈170 MiB per extra replica per step, ≈510 MiB/step of pure overhead,
+all of it through host because there is no P2P.
+
+⚠ That 36.6% conflates DP transfer overhead with the lower arithmetic intensity of bs64 vs bs256
+per replica. Separating them needs a single-GPU bs64 render, which does not exist. Treat it as the
+end-to-end figure, not a pure transfer measurement — but note that either way it is what residency
+is buying back.
+
+**This makes §2d.3 the top lever, ahead of bf16** (`planning/bf16_renderer.md`, which is 4-6
+sessions for ~2× and needs a new `conv_close_mixed` theorem to reach the convnets). Roughly
+two-thirds of a 26-hour verified ImageNet run is currently the parameter round trip. The two
+compose — bf16 is arithmetic, residency is transport — but residency is cheaper and its gate is
+already written.
+
+##### Practical notes for whoever picks this up
+
+* **`LEAN_MLIR_REPLICAS` and `PJRT_REPLICAS` are BOTH required and are not the same knob.**
+  `PJRT_REPLICAS` configures the shim's client and compile options; `LEAN_MLIR_REPLICAS` makes the
+  Lean driver call the data-parallel invoke. Setting only the former fails at the first step with
+  `@… was compiled for N replicas; use the data-parallel invoke` — which reads like a missing
+  feature and is not one. Cost me a wrong conclusion in-session.
+* **Compile options for 1/2/4/8 replicas already exist** (`kPjrtCompileOptions{1,2,4,8}` in
+  `ffi/pjrt_compile_options.h`), so no regeneration is needed to go to 4.
+* **A long run is now supervisable**: `scripts/supervise.sh r34-imagenet-4gpu` (engine +
+  `scripts/jobs/*.conf`) has AER restart, temperature-driven resting for the fanless box, a stall
+  guard, and a precheck. `scripts/supervise.sh selftest` exercises it in ~90 s with no GPU.
+* **The residency gate is unchanged and still the right one**: `GATE_ALT=PJRT_FFI_RESIDENT=1
+  scripts/residency_gate.sh`. Its bit-exact floor was re-confirmed this session on a *different
+  vendor and net* — `sgd-render-tie vit` on CUDA gave 5,526,346/5,526,346 bit-exact — which is
+  further evidence the gate is buildable as written.
+
 ### 2d.3. ▶ Device-resident parameters — scoped 2026-07-30, NOT started
 
 **This section did not exist until now, and five places in this file referenced it.** One of those
