@@ -1170,6 +1170,15 @@ private def emitLNToBuf (comment : String) : String :=
   s!"    f.write(np.asarray(gamma).astype(np.float32).flatten().tobytes())\n" ++
   s!"    f.write(np.asarray(beta).astype(np.float32).flatten().tobytes())\n"
 
+-- Squeeze-and-excite (W, b) pair — the save mirror of the SE blocks that the
+-- loader emits inline for mbConv / mbConvV3 / fusedMbConv. W is a 1×1 conv, so
+-- (unlike a transformer dense) it flattens without a transpose.
+private def emitSEToBuf (comment : String) : String :=
+  s!"    # {comment} (W, b)\n" ++
+  s!"    W, b = params[idx]; idx += 1\n" ++
+  s!"    f.write(np.asarray(W).astype(np.float32).flatten().tobytes())\n" ++
+  s!"    f.write(np.asarray(b).astype(np.float32).flatten().tobytes())\n"
+
 -- Helper: emit init code for dense layer (weight, bias) with Xavier uniform
 -- timm `init_weights_vit_timm`: every nn.Linear gets trunc_normal_(std=0.02),
 -- bias zeroed. The default bounds a=-2/b=2 are absolute (±100σ at this std), so
@@ -1791,6 +1800,38 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
         code := code ++ emitConvBnToBuf s!"bneck[{bi}] 1x1 expand {mid}→{oc}"
         if bi == 0 && needsProj then
           code := code ++ emitConvBnToBuf s!"bneck[{bi}] proj {ic}→{oc}"
+    -- The three MobileNet-V3/V4 block families below mirror their loader cases
+    -- exactly (same order, same tuples). They were missing until 2026-07-30,
+    -- which made `params_to_file` raise for every MNv3/EfficientNetV2/MNv4 net —
+    -- i.e. those trainers could train but could not write a single .bin
+    -- checkpoint, crashing at the first save.
+    | .mbConvV3 ic oc expandCh kSize _stride useSE _useHSwish =>
+      let mid := expandCh
+      if expandCh != ic then
+        code := code ++ emitConvBnToBuf s!"mbConvV3 expand {ic}→{mid}"
+      code := code ++ emitConvBnToBuf s!"mbConvV3 depthwise {mid} k={kSize}"
+      if useSE then
+        code := code ++ emitSEToBuf "mbConvV3 SE squeeze"
+        code := code ++ emitSEToBuf "mbConvV3 SE excite"
+      code := code ++ emitConvBnToBuf s!"mbConvV3 project {mid}→{oc}"
+    | .fusedMbConv ic oc expand kSize _stride n useSE =>
+      for bi in [:n] do
+        let blockIc := if bi == 0 then ic else oc
+        let mid := if expand == 1 then oc else blockIc * expand
+        code := code ++ emitConvBnToBuf s!"fusedMb[{bi}] fused {blockIc}→{mid} k={kSize}"
+        if useSE then
+          code := code ++ emitSEToBuf s!"fusedMb[{bi}] SE squeeze"
+          code := code ++ emitSEToBuf s!"fusedMb[{bi}] SE excite"
+        if expand != 1 then
+          code := code ++ emitConvBnToBuf s!"fusedMb[{bi}] project {mid}→{oc}"
+    | .uib ic oc expand _stride preDWk postDWk =>
+      let mid := ic * expand
+      if preDWk > 0 then
+        code := code ++ emitConvBnToBuf s!"uib preDW {ic} k={preDWk}"
+      code := code ++ emitConvBnToBuf s!"uib expand {ic}→{mid}"
+      if postDWk > 0 then
+        code := code ++ emitConvBnToBuf s!"uib postDW {mid} k={postDWk}"
+      code := code ++ emitConvBnToBuf s!"uib project {mid}→{oc}"
     | .patchEmbed _ _ _ _ =>
       -- Mirror of the loader: conv W,b (flatten, no .T) + cls token + pos embed.
       code := code ++ "    # patchEmbed conv W, b\n"
