@@ -72,6 +72,31 @@ noncomputable def bf16Linear (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : 
 theorem bf16_render_faithful (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : Vec m) :
     den (bf16LinearGraph rnd W b x) = bf16Linear rnd W b x := rfl
 
+/-! ## The EMITTABLE graph — same tie, one `dotInBf16` node
+
+`bf16LinearGraph` above pre-rounds its operands (`wBf16`/`actBf16`), which is right for the
+proof and unemittable in practice: expressing "round, then multiply" as separate nodes
+means a convert PAIR, and XLA deletes those (measured — see `convertF`'s comment). The
+`dotInBf16` node bundles the casts into the matmul so the value stays bf16 *across* the
+op, which is the only shape that survives the optimizer and reaches tensor cores.
+
+The point of this section is that bundling costs no proof: the tie is the SAME `rfl`. -/
+
+/-- The bf16 linear graph as actually emitted: raw operands, one `dotInBf16`. -/
+noncomputable def bf16LinearGraphEmit (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : Vec m) :
+    SHlo n :=
+  .addBcast "%b0" b (.dotInBf16 rnd "%W" W (.operand "%x" x))
+
+/-- **The emittable graph denotes the same thing as the pre-rounded one.** So
+    `bf16_render_faithful` transfers to the node that can actually be lowered, and the
+    render-tie covers the graph we ship rather than an idealisation of it. -/
+theorem bf16_render_faithful_emit (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : Vec m) :
+    den (bf16LinearGraphEmit rnd W b x) = bf16Linear rnd W b x := rfl
+
+/-- Stated directly: the two graphs are denotationally interchangeable. -/
+theorem bf16_emit_eq_prerounded (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : Vec m) :
+    den (bf16LinearGraphEmit rnd W b x) = den (bf16LinearGraph rnd W b x) := rfl
+
 /-! ## Depth > 1 — closed with the `convertF` round node
 
 The header above says depth-1 needs no new op because the leaf cast is baked into the

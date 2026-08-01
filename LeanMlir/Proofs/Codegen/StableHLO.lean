@@ -181,6 +181,18 @@ inductive BatchableOp : Nat → Nat → Type where
 inductive SHlo : Nat → Type where
   | operand    {n : Nat} (name : String) (v : Vec n)            : SHlo n
   | dotIn      {m n : Nat} (wName : String) (W : Mat m n)       : SHlo m → SHlo n
+  -- Mixed-precision matmul (planning/bf16_renderer.md): BOTH operands rounded by `rnd`,
+  -- accumulate exact. This is `dotIn` with the leaf casts pulled INSIDE the op, and it
+  -- exists because the casts cannot live outside it: a separate round node emits a
+  -- convert PAIR, which XLA deletes (`xla_allow_excess_precision`, measured — see the
+  -- `convertF` comment). Bundling is also what lets the emit be a single bf16-operand /
+  -- f32-result `dot_general`, i.e. the only form that reaches tensor cores.
+  --
+  -- Why it is a new constructor rather than a dtype index on `SHlo`: `SHlo n` is indexed
+  -- by WIDTH only and has no element type, so "the value is bf16 here" is unsayable. The
+  -- op keeps its result f32 (the accumulate), so the index stays honest — the same
+  -- bundling `flatConvF` already uses for conv+bias.
+  | dotInBf16  {m n : Nat} (rnd : ℝ → ℝ) (wName : String) (W : Mat m n) : SHlo m → SHlo n
   | dotOut     {m n : Nat} (wName : String) (W : Mat m n)       : SHlo n → SHlo m
   | addBcast   {n : Nat} (bName : String) (b : Vec n)           : SHlo n → SHlo n
   | expe       {n : Nat}                                        : SHlo n → SHlo n
@@ -1081,6 +1093,7 @@ deriving DecidableEq, Repr
 noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .operand _ v    => v
   | _, .dotIn _ W e    => fun j => ∑ i, den e i * W i j
+  | _, .dotInBf16 rnd _ W e => fun j => ∑ i, rnd (den e i) * rnd (W i j)
   | _, .dotOut _ W e   => fun i => ∑ j, W i j * den e j
   | _, .addBcast _ b e => fun j => den e j + b j
   | _, .expe e         => fun j => Real.exp (den e j)
@@ -1363,6 +1376,21 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
     den (.operand s v) = v := rfl
 @[simp] theorem den_dotIn {m n : Nat} (s : String) (W : Mat m n) (e : SHlo m) :
     den (.dotIn s W e) = fun j => ∑ i, den e i * W i j := rfl
+/-- The mixed-precision matmul denotes the EXACT sum over ROUNDED operands. The fp32
+    accumulate is why the `∑` carries no rounding of its own — the whole deviation from
+    `dotIn` sits in the two `rnd`s, which is the structural reason bf16 is the easy twin
+    of fp8 (no block scale to factor through the sum). -/
+@[simp] theorem den_dotInBf16 {m n : Nat} (rnd : ℝ → ℝ) (s : String) (W : Mat m n)
+    (e : SHlo m) :
+    den (.dotInBf16 rnd s W e) = fun j => ∑ i, rnd (den e i) * rnd (W i j) := rfl
+/-- **The bundling is inert.** `dotInBf16` on raw operands denotes exactly what `dotIn`
+    denotes on PRE-rounded ones — so every tie already proven in the `dotIn` vocabulary
+    (e.g. `Bf16PoC.bf16_render_faithful`) transfers to the emittable node by rewriting
+    with this, rather than being reproved. -/
+theorem dotInBf16_eq_dotIn_rounded {m n : Nat} (rnd : ℝ → ℝ) (s : String) (W : Mat m n)
+    (e : SHlo m) :
+    den (.dotInBf16 rnd s W e)
+      = den (.dotIn s (fun i j => rnd (W i j)) (.convertF rnd e)) := rfl
 @[simp] theorem den_dotOut {m n : Nat} (s : String) (W : Mat m n) (e : SHlo n) :
     den (.dotOut s W e) = fun i => ∑ j, W i j * den e j := rfl
 @[simp] theorem den_addBcast {n : Nat} (s : String) (b : Vec n) (e : SHlo n) :
@@ -3012,6 +3040,7 @@ def fresh : StateM Nat String := do
 inductive Raw where
   | operand    (name : String) (n : Nat)  : Raw
   | dotIn      (w : String) (m n : Nat)    : Raw → Raw
+  | dotInBf16  (w : String) (m n : Nat)    : Raw → Raw
   | dotOut     (w : String) (m n : Nat)    : Raw → Raw
   | addBcast   (b : String) (n : Nat)      : Raw → Raw
   | expe       (n : Nat)                   : Raw → Raw
@@ -3136,6 +3165,7 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
 def skel : {k : Nat} → SHlo k → Raw
   | k, .operand name _        => .operand name k
   | k, .dotIn (m := m) w _ e  => .dotIn w m k (skel e)
+  | k, .dotInBf16 (m := m) _ w _ e => .dotInBf16 w m k (skel e)
   | k, .dotOut (n := n) w _ e => .dotOut w k n (skel e)
   | k, .addBcast b _ e        => .addBcast b k (skel e)
   | k, .expe e                => .expe k (skel e)
@@ -3390,6 +3420,7 @@ def skel : {k : Nat} → SHlo k → Raw
 inductive Tok where
   | operand    (name : String) (n : Nat)  : Tok
   | dotIn      (w : String) (m n : Nat)    : Tok
+  | dotInBf16  (w : String) (m n : Nat)    : Tok
   | dotOut     (w : String) (m n : Nat)    : Tok
   | addBcast   (b : String) (n : Nat)      : Tok
   | expe       (n : Nat)                   : Tok
@@ -3479,6 +3510,7 @@ deriving DecidableEq, Repr
 def toToks : Raw → List Tok
   | .operand nm n    => [.operand nm n]
   | .dotIn w m n e   => toToks e ++ [.dotIn w m n]
+  | .dotInBf16 w m n e => toToks e ++ [.dotInBf16 w m n]
   | .dotOut w m n e  => toToks e ++ [.dotOut w m n]
   | .addBcast b n e  => toToks e ++ [.addBcast b n]
   | .expe n e        => toToks e ++ [.expe n]
@@ -3600,6 +3632,15 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       let o ← fresh
       pure (s!"    {o} = stablehlo.dot_general {r}, {w}, contracting_dims = [1] x [0], " ++
             s!"precision = [DEFAULT, DEFAULT] : ({ty [B,m]}, {ty [m,n]}) -> {ty [B,n]}\n", o :: st)
+  -- The ONLY emit shape that reaches tensor cores: both operands bf16, result f32.
+  -- The f32 result type IS the "fp32 accumulate" — it is not a convert of a bf16 product.
+  | .dotInBf16 w m n, r :: st => do
+      let a ← fresh; let bw ← fresh; let o ← fresh
+      pure (s!"    {a} = stablehlo.convert {r} : ({ty [B,m]}) -> {tyBf16 [B,m]}\n" ++
+            s!"    {bw} = stablehlo.convert {w} : ({ty [m,n]}) -> {tyBf16 [m,n]}\n" ++
+            s!"    {o} = stablehlo.dot_general {a}, {bw}, contracting_dims = [1] x [0], " ++
+            s!"precision = [DEFAULT, DEFAULT] : ({tyBf16 [B,m]}, {tyBf16 [m,n]}) -> {ty [B,n]}\n",
+            o :: st)
   | .dotOut w m n, r :: st => do
       let o ← fresh
       pure (s!"    {o} = stablehlo.dot_general {r}, {w}, contracting_dims = [1] x [1], " ++
