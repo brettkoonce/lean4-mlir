@@ -113,6 +113,37 @@ discovering it at rung 3.
 Its 1.57× is nearly the R34 number and it may be reachable *without* `conv_close_mixed` — worth
 checking before committing to the conv proof. The patch embed is a conv, but it is one layer.)
 
+## ▶ Per-op-class measurements — which rungs are even worth building
+
+Measured 2026-08-01 on one 4060 Ti, 30 reps. **A** = plain f32; **B** = the `convertF` round
+trip; **C** = true bf16 operands with f32 accumulate (the `dotInBf16` target).
+
+| case | A f32 | B round trip | C true bf16 | C vs A |
+|---|---|---|---|---|
+| gemm 4096³ | 6.29 ms | 6.31 ms | 4.22 ms | **1.49×** |
+| conv 256c 28² | 3.15 ms | 3.12 ms | 1.97 ms | **1.61×** |
+| **depthwise 256c** | 0.41 ms | 0.41 ms | 0.81 ms | **0.50×** |
+
+Three conclusions, and the third reorders the ladder:
+
+1. **The round trip never buys speed.** With `xla_allow_excess_precision=true` (the default) B ≡ A
+   because the pair is folded; with it `=false` the converts become real and B goes *slower* than
+   f32 (conv 3.17 → 3.55, depthwise 0.41 → 0.80). So the flag recovers bf16 NUMERICS at a cost and
+   never performance. Useful for an accuracy gate, useless as an optimisation.
+2. **True bf16 pays on dense and standard conv** — 1.49× / 1.61×, consistent with the whole-net
+   1.88× (R34) and 1.57× (ViT-Tiny) measured the same day.
+3. **⚠ bf16 DEPTHWISE conv is 0.50× — twice as SLOW.** MobileNetV2, EfficientNet, MNv4 and ConvNeXt
+   are all depthwise-dominated, so they capture far less of the win than R34, which is all standard
+   convs and is therefore the best case rather than a typical one.
+
+Point 3 independently confirms a decision already in the code: `LeanMlir/Types.lean` on `bf16Conv`
+says *"Depthwise/separable convs (MobileNet/EfficientNet) still stay fp32."* That was asserted
+without a number; it now has one, on CUDA. (The AMD note that bf16 conv is slower on MIOpen is a
+*separate* effect — this is depthwise-specific and it is on NVIDIA.)
+
+**Consequence: prioritise R34/dense/ViT, and do NOT expect the depthwise nets to pay.** Any bf16
+renderer must keep depthwise on the fp32 path, exactly as the JAX side already does.
+
 ## The ladder
 
 Mirrors the fp8 ladder, which went exactly this route and whose `lean_exe` targets are the naming
