@@ -65,7 +65,74 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — the AdamW scorecard is **6 of 6**. This thread is CLOSED.
+## 0. ▶ START HERE — **the next thread is the R34/ImageNet 30-epoch run on 4 GPUs.**
+
+**Written 2026-08-01 at the end of the residency session. Everything below §0a is committed and
+green; this section is the only thing you need to read before starting.**
+
+### ▶ THE JOB: get R34/ImageNet over the line
+
+§2d.3 (device-resident parameters) landed today and made this **feasible for the first time** —
+4-GPU R34/ImageNet went **596 → 386 ms/step**, so a 30-epoch run is **~16 h** where it was ~25 h.
+The 4-GPU rig was smoke-tested end to end: 6 epochs × 400 steps, `rc=0`, loss **7.03 → 5.65**
+monotone, all four cards 47-57 °C at ~80 W. Nothing structural is in the way.
+
+```bash
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+lake build resnet34-imagenet-verified-xla
+(cd jax && lake exe resnet34-imagenet default --shim)     # the tfds data shim, if absent
+cat .lake/build/resnet34in_momdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
+
+PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 \
+  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 LEAN_MLIR_BASE_LR_U=100000 \
+  LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
+  .lake/build/bin/resnet34-imagenet-verified-xla data 2>&1 | tee runs/r34in_4gpu_30ep_<date>.log
+#   ⚠ do NOT pipe a long run into `head`/`grep -m1` — §4: SIGPIPE does not kill these trainers,
+#     it DETACHES them. Redirect to a file and read the file. `scripts/supervise.sh` has AER
+#     restart, thermal resting and a stall guard for exactly this (§2d.3a).
+```
+
+**Five things that will bite, in the order they will bite:**
+
+1. **`PJRT_FFI_RESIDENT=1` is opt-in and there is no warning if you forget it** — the run just
+   takes ~25 h instead of ~16. The banner `[pjrt_ffi] RESIDENT: … holds 330 parameter tensors` is
+   the confirmation; if it is absent, residency is off.
+2. **The checkpoint is per-variant** (`resnet34in_momdp64_ckpt_xla.bin`) and a marker at the epoch
+   budget makes the run a **silent no-op that exits `done` with rc=0** (§4, §2o). `cat` the
+   `.epoch` file before launching, every time.
+3. **Do not rebuild `ffi/libpjrt_ffi.so` while a run is live.** It is `dlopen`'d and overwriting it
+   in place can corrupt the mapping. (Got away with it once today; do not rely on that.)
+4. **`pjrt_ffi_invoke_f32_resident_v2` — bump the suffix on ANY signature change**, and rebuild
+   **every** `-xla` binary after one. A stale binary calls the new shim with the old argument list
+   and every argument shifts; it is not a link error, it is garbage (§2d.3).
+5. **ares has no P2P between any pair** (`nvidia-smi topo -p2p r` is `CNS` everywhere), so every
+   `all_reduce` stages through host. That is the remaining 4-GPU shortfall and residency cannot
+   remove it — it is real work.
+
+**What the run is FOR** (§2k): a matched pair against `jax/MainResnetImagenet.lean`, same net, same
+optimizer, same augmentation via the generated shim. The param counts already agree exactly at
+**21,797,672** (§2l/§2m), which is the precondition that made the pair meaningful. Claim ceiling
+stays §5's: *"one architecture, two independent lowerings, agreeing"*, never "proven".
+
+### ▶ Then, in value order
+
+1. **bf16** — and its case just got much stronger, twice: measured **×1.76 on ares** (three runs;
+   §3's ×0.96 is an RDNA3 result and does not carry), and residency raised what it is worth on the
+   verified R34 step from **1.21× to 1.56×** because transport was masking the arithmetic. 4-6
+   sessions, needs `conv_close_mixed`; `planning/bf16_renderer.md`.
+2. **Rung 4** — the FPN detector, and the 35.5× headline nobody has verified end to end.
+3. **Executable cache** — 0.1% on a training run, 53% on the MNIST-MLP demo. Dev-loop only, and
+   note residency already took the demo groups 2.8-5.2×, so re-measure the case before starting.
+
+### ▶ What is DONE and needs nothing
+
+The AdamW scorecard is **6 of 6**, DP is **5 of 5**, the provenance axis is closed (67 artifacts,
+one writer each), all five nets match their JAX reference param count, and §2d.3 is built, gated
+and measured. Details below; none of it is a live thread.
+
+---
+
+## 0a. The AdamW scorecard is **6 of 6**. This thread is CLOSED.
 
 Done 2026-07-28. **cifar8, resnet34, vit, efficientnet, convnext and mobilenetv2** all train on
 `pretty(provenGraph)`, each swap licensed by a numeric tie that was verified to fail, and the writer
@@ -84,8 +151,8 @@ marker 80), replacing the VOID 82.75%; §0b's table is updated. The DP ratio re-
 **1.70×** (78.0 s → 46.0 s marginal, train-only), within noise of the pre-flip 1.68×, so the
 channel LN costs nothing at the scaling level. **Nothing is owed on ConvNeXt.**
 
-**▶ §2d.3 — DEVICE-RESIDENT PARAMETERS — IS ✅ BUILT, GATED AND MEASURED (2026-08-01).
-UNCOMMITTED.** The last structural item in the file, done in one session rather than the scoped
+**▶ §2d.3 — DEVICE-RESIDENT PARAMETERS — IS ✅ BUILT, GATED, MEASURED AND COMMITTED
+(2026-08-01).** The last structural item in the file, done in one session rather than the scoped
 3-4. Opt-in behind `PJRT_FFI_RESIDENT=1`; the `[θ|m|v]` blob stops crossing PCIe. Measured on ares
 (RTX 4060 Ti — **not** the 7900 XTX the rest of §2d.3 was measured on):
 **cifar8-bn 3.1× · ResNet-34 bs32 2.03× · EfficientNet 1.62× · R34 2-GPU 2.09×**, and on
@@ -493,6 +560,15 @@ scripts/marginal_epoch.sh runs/mnv2_xla.log -- .lake/build/bin/mobilenetv2-verif
 unset HIP_VISIBLE_DEVICES
 LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
   .lake/build/bin/resnet34-verified-adam-xla data
+
+# ── device-resident parameters (§2d.3, 2026-08-01). Opt-in; the copying path is the default
+#    and is byte-identical to pre-change, so nothing else in this file is affected by it.
+PJRT_FFI_RESIDENT=1 .lake/build/bin/resnet34-verified-adam-xla data     # 2.0x at bs32
+scripts/residency_gate_all.sh           # ALL seven converted loops, bit-identity, one command
+scripts/eval_residency_gate.sh          # the eval forward's hold mode — a DIFFERENT property
+scripts/det_shim.sh /tmp/detshim        # ⚠ both gates need this on CUDA, or the floor is noise
+#   ^ eval_residency_gate needs GATE_CKPTS for any net that checkpoints (trainAdamSched does):
+#     GATE_CKPTS='.lake/build/cifar8*_ckpt_xla.bin*' scripts/eval_residency_gate.sh <bins...>
 
 # regenerate + audit verified_mlir/  (the canonical entry point; did not exist before §2a)
 scripts/regen_verified_mlir.sh          # or `check` to audit without writing
@@ -4646,7 +4722,7 @@ already written.
   vendor and net* — `sgd-render-tie vit` on CUDA gave 5,526,346/5,526,346 bit-exact — which is
   further evidence the gate is buildable as written.
 
-### 2d.3. ✅ Device-resident parameters — **BUILT, GATED AND MEASURED 2026-08-01. UNCOMMITTED.**
+### 2d.3. ✅ Device-resident parameters — **BUILT, GATED, MEASURED AND COMMITTED 2026-08-01.**
 
 Phases 1 and 2 landed in one session, not the scoped 3-4. **The projections below are now
 results**, and the headline is that the parameter round trip is gone: 55-75% of a step becomes
