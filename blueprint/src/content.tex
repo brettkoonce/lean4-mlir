@@ -11589,7 +11589,17 @@ char-level transformer (\texttt{tinygpt-shakespeare}) trains on; and
 \textbf{TinyStories} --- Eldan \& Li's synthetic short-story corpus,
 $\sim$2\,GB --- is its scaled-up sibling, byte-level-BPE tokenized to a
 deliberately small 4096-token vocabulary for the $\sim$8.5\,M-parameter
-decoder-only GPT (\texttt{tinystories}). Same fetch-and-unpack story as
+decoder-only GPT (\texttt{tinystories}). Detection then leaves the
+household frame entirely: \textbf{VisDrone-DET2019} is drone-altitude
+imagery where the objects are the problem --- a median box is $20 \times
+25$\,px in the source frame, some 70 of them per image, so the single
+$7\times7$ grid that suffices for Pets head boxes collapses outright and
+the multi-scale FPN head of Definition~\ref{layer:fpnModule} becomes
+necessary rather than decorative. \textbf{MS-COCO 2017} is the standard
+detection benchmark alongside it, at the opposite end of the same axis
+(photographic scale, 80 classes, 118k training images); the repository
+ships its loader and the two standard subsets described below, though no
+trainer in this book consumes it yet. Same fetch-and-unpack story as
 the table above, with one extra step: each is tokenized or tiled into the
 trainer's input format by the matching \texttt{preprocess\_*.py} script
 before the first \texttt{lake exe} run.
@@ -11611,7 +11621,13 @@ tiny Shakespeare & TShk & Karpathy, 2015 &
   \texttt{download\_shakespeare.sh} $\to$ \texttt{data/shakespeare/} \\[2pt]
 TinyStories & TS & Eldan \& Li, 2023 &
   \href{https://huggingface.co/datasets/roneneldan/TinyStories}{\nolinkurl{huggingface.co/datasets/roneneldan/TinyStories}} &
-  \texttt{download\_tinystories.sh} $\to$ \texttt{data/tinystories/} \\
+  \texttt{download\_tinystories.sh} $\to$ \texttt{data/tinystories/} \\[2pt]
+VisDrone-DET2019 & VisD & Zhu et al., 2021 &
+  \href{https://github.com/VisDrone/VisDrone-Dataset}{\nolinkurl{github.com/VisDrone/VisDrone-Dataset}} &
+  \texttt{download\_visdrone.sh} $\to$ \texttt{data/visdrone/} \\[2pt]
+MS-COCO 2017 & COCO & Lin et al., 2014 &
+  \href{https://cocodataset.org/}{\nolinkurl{cocodataset.org}} &
+  \texttt{download\_coco.sh} $\to$ \texttt{data/coco/} \\
 \hline
 \end{tabular}
 \end{center}
@@ -11629,7 +11645,14 @@ slice of the corpus and emits it in HuggingFace format
 (\texttt{vocab.json}/\texttt{merges.txt}) alongside the flat int32-LE
 token streams (\texttt{train.bin}/\texttt{val.bin}); the small vocabulary
 keeps the in-graph one-hot embedding and head matmuls cheap and the
-tokenizer auditable.
+tokenizer auditable. The two detection sets follow the same pattern:
+\texttt{preprocess\_visdrone.py} and \texttt{preprocess\_coco.py} write
+\emph{the same three record formats} --- single-grid, single-scale anchor,
+and multi-scale FPN --- so one set of Lean loaders and one codegen serve
+both. VisDrone's official Google-Drive/Baidu links are large-file-flaky, so
+\texttt{download\_visdrone.sh} pulls the byte-identical Ultralytics
+release-asset mirror over plain HTTPS; COCO's own hosting needs no such
+workaround.
 \normalsize
 
 \medskip\noindent\textbf{Building the BraTS dataset.}
@@ -11671,6 +11694,50 @@ contains no brain voxels, these volumes being skull-stripped and centred.
 \emph{Reference:} Antonelli et al., \emph{The Medical Segmentation
 Decathlon}, Nature Communications~13, 4128 (2022), atop the underlying
 BraTS work (Menze et al.\ 2015, Bakas et al.\ 2017).
+
+\medskip\noindent\textbf{Building the COCO dataset.} COCO is fetched from
+its own hosting --- plain HTTPS, no account --- as three zips: 19\,GB of
+\texttt{train2017} (118{,}287 images), 1\,GB of \texttt{val2017} (5{,}000),
+and 241\,MB of annotations. Budget $\sim$45\,GB to build in one pass; the
+zips and extracted trees can be deleted once the \texttt{.bin} files exist.
+
+\smallskip\noindent Two preprocessing details matter more than they look.
+First, \textbf{COCO's category ids are not contiguous}: they run 1--90 with
+ten gaps (12, 26, 29, 30, 45, 66, 68, 69, 71, 83) around 80 real classes, so
+the obvious \texttt{id\,-\,1} remap silently shifts every class above the
+first gap --- a relabelling that trains and evaluates without ever raising
+an error. \texttt{preprocess\_coco.py} therefore derives the map from the
+annotation file's own \texttt{categories} list rather than hardcoding it.
+Second, \texttt{iscrowd} regions are skipped, exactly as VisDrone's
+\texttt{score\,=\,0} ignored regions are, because COCO's own evaluation
+ignores them.
+
+\smallskip\noindent\textbf{The class-count ceiling.} Of the three C loaders
+these formats share, two bake the class count into their record stride ---
+\texttt{lean\_f32\_load\_voc\_dims} computes \texttt{30 * gridH * gridW}
+($2\cdot5+20$) and \texttt{lean\_f32\_load\_voc\_anchor} computes
+\texttt{A * 15} ($5+10$) --- while \texttt{lean\_f32\_load\_voc\_fpn} takes
+the target length \texttt{ntot} as a parameter and is class-agnostic. So
+\textbf{full 80-class COCO is FPN-only} on today's C code, and the
+preprocessor refuses the other two formats at 80 classes rather than
+writing a file that would be misparsed stride-wise and trained on as
+garbage. Two standard subsets fit the narrower loaders: \texttt{--classes
+voc20} (the 20 PASCAL-VOC categories, all present in COCO under slightly
+different names) for the single-grid format, and \texttt{--classes vdmap},
+which emits COCO directly into \emph{VisDrone's} 10-class index space so a
+COCO-pretrained head transfers unchanged --- six of VisDrone's ten classes
+have a COCO counterpart (person, bicycle, car, truck, bus, motorcycle) and
+the remaining four stay empty.
+
+\smallskip\noindent Both detection preprocessors write an \emph{uncapped}
+ground-truth sidecar (\texttt{val.full\_gt.bin}) next to \texttt{val.bin},
+in the same loop and therefore in the same record order. The training
+record caps boxes at \texttt{MAX\_BBOXES}\,=\,56, which is harmless for
+training --- a $14\times14$ grid encodes far fewer --- but scoring mAP
+against a truncated ground truth is not the protocol of either benchmark,
+so the scorer reads the sidecar instead. \emph{References:} Lin et al.,
+\emph{Microsoft COCO: Common Objects in Context}, ECCV (2014); Zhu et al.,
+\emph{Detection and Tracking Meet Drones Challenge}, IEEE TPAMI~43 (2021).
 
 \chapter{Getting started}
 \label{app:getting_started}
