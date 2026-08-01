@@ -5245,8 +5245,25 @@ better than ~6e-3 against the *same backend* under a sub-ULP nudge, so a 1e-4 ga
 by 60×. Correctness comes from the layer-level oracle instead: all six R34 layer families tie to
 JAX autodiff at ≤ 6.4e-06 (`tests/vjp_oracle/run.sh`).
 
-**bf16 is worse than fp32 on this box** — measured ×0.96 for R34. Do not reach for it here. It
-matters on ares only if someone measures it there.
+**bf16 is worse than fp32 on the 7900 XTX** — measured ×0.96 for R34 — but that is an **RDNA3**
+result and it does NOT carry. This line used to say "on this box … it matters on ares only if
+someone measures it there"; measured there 2026-08-01, `jax/scripts/jax_r34_bf16_bench.py 32`,
+three runs: **×1.79 / ×1.73 / ×1.77** (fp32 94.1-94.5 ms/step, bf16 52.7-54.4). Ada has bf16
+tensor cores and gfx1100 effectively does not. **Quote the vendor with the number.**
+
+⚠ **And residency roughly DOUBLED what bf16 is worth**, which is the compounding §2d.3a predicted
+("bf16 is arithmetic, residency is transport"). On the verified R34 bs32 step, ares:
+
+| | step | compute | share | with bf16 at ×1.76 |
+|---|---|---|---|---|
+| copying (pre-§2d.3) | 199 ms | 81.5 | 41% | 199 → 164 = **1.21×** |
+| **resident** | 98 ms | 81.2 | **83%** | 98 → 63 = **1.56×** |
+
+Transport was masking the arithmetic; removing it is what makes the *next* lever pay. Together
+199 → ~63 ms/step, **3.2×**. ⚠ The bf16 column is a **projection** — it applies the JAX bench's
+hardware ratio to the verified render's measured compute, and there is no bf16 verified render to
+check it against (`planning/bf16_renderer.md`, 4-6 sessions, needs `conv_close_mixed`). The
+committed R34 artifact contains **0** bf16 ops today.
 
 **For Adam nets, gate G2 on the gradient (`m` after one step), never on θ.** Adam's update is
 scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference and moves a full
