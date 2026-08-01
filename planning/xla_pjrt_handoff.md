@@ -84,9 +84,30 @@ marker 80), replacing the VOID 82.75%; §0b's table is updated. The DP ratio re-
 **1.70×** (78.0 s → 46.0 s marginal, train-only), within noise of the pre-flip 1.68×, so the
 channel LN costs nothing at the scaling level. **Nothing is owed on ConvNeXt.**
 
-**▶ THERE IS NO NEXT SECTION YET.** §2o was the last scoped thread; §2d.3 (device-resident
-parameters) is the only started-but-unfinished item in the file, and it is now backed by **five**
-independent measurements of the same structural shortfall.
+**▶ §2d.3 — DEVICE-RESIDENT PARAMETERS — IS ✅ BUILT, GATED AND MEASURED (2026-08-01).
+UNCOMMITTED.** The last structural item in the file, done in one session rather than the scoped
+3-4. Opt-in behind `PJRT_FFI_RESIDENT=1`; the `[θ|m|v]` blob stops crossing PCIe. Measured on ares
+(RTX 4060 Ti — **not** the 7900 XTX the rest of §2d.3 was measured on):
+**cifar8-bn 3.1× · ResNet-34 bs32 2.03× · EfficientNet 1.62× · R34 2-GPU 2.09×**, and on
+R34/ImageNet at a fixed global batch of 256, **4-GPU parallel efficiency 38% → 54%** (596 → 386
+ms/step), i.e. a 30-epoch verified ImageNet run goes **~25 h → ~16 h**. Gated bit-identical on 1,
+2 and 4 GPUs with the fault control firing on the resident path itself.
+
+Four of §2d.3's five predictions held; the fifth — *"DP efficiency barely moves"* — is **refuted at
+4 replicas** (1.52 → 2.16×) for the reason §2d.3a had already written down one section up: the push
+is O(N−1) against O(1) compute. Two new instrument findings are in §2d.3, and one is a live trap:
+**§2d.3's Finding 1 ("the floor IS bit-exact across processes") is ROCm-specific** — on CUDA the
+gate saturates completely, to the point where a deliberate 1-ULP fault scored *cleaner than the
+noise*, and `scripts/det_shim.sh` exists now because of it.
+
+**▶ `VerifiedNet.train` IS CONVERTED TOO** — and it is where the gains are largest, because that
+loop reads *nothing* out of a step, so every parameter is resident and the round trip goes to a
+literal zero: **MNIST CNN 6.49× · MNIST MLP 4.39× · cifar8-bn SGD 2.03× · MNIST linear 1.21×**. `lake run
+mnist-xla` is the headline, and `trainLinear` came over with it, so **every training loop behind an
+`-xla` target is converted**; `scripts/residency_gate_all.sh` gates all seven in one command. A second generalisation broke on the way: **§2d.3's Finding 2 ("the system is
+chaotic, bit-identity or nothing") is R34/AdamW-specific** — MLP+SGD *absorbs* a 1-ULP fault, which
+left that gate with no working control until `PJRT_FFI_FAULT=2` (drop a step's retained params) was
+added. Left to do: `trainLinear`, and a long run.
 
 **▶ §2n IS CLOSED (2026-07-31) — bridges discharged, §B tied, scalar chain DROPPED (−852 lines).**
 Gates: build **3,910** green · `verified_mlir/` 0 lines of diff after a real re-render ·
@@ -552,7 +573,13 @@ Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`, 
 (§2d.3 — per-phase transfer accounting, opt-in and inert when unset), `PJRT_FFI_PINNED`
 (**vendor-dependent — see §2d.3a. A 17% regression on ROCm, a ~17% WIN on CUDA.** It is also the
 second transport `scripts/residency_gate.sh` validates against), `PJRT_FFI_FAULT`
-(§2d.3 — 1-ULP fault injection, the phase-3 gate's transport control),
+(§2d.3 — 1-ULP fault injection, the phase-3 gate's transport control; on the resident path it hits
+the parameter SEED, since there is no returned float left to flip; **`=2` is a STALENESS fault** —
+drop one step's retained parameters — because a 1-ULP one is *absorbed* by nets whose updates
+contract, e.g. MLP+SGD),
+**`PJRT_FFI_RESIDENT`** (§2d.3, 2026-08-01 — **device-resident `[θ|m|v]`**: 2.0× on R34 bs32, 3.1×
+on cifar8-bn, and 4-GPU parallel efficiency 38% → 54%. Opt-in, and deliberately so — the copying
+path stays the default and is byte-identical to pre-change, so every existing gate is untouched),
 `LEAN_MLIR_REPLICAS`, `LEAN_MLIR_SKIP_EVAL`, `LEAN_MLIR_G2_STEPS`, `LEAN_MLIR_DUMP_PARAMS`,
 `LEAN_MLIR_PERTURB_R`.
 
@@ -4619,7 +4646,229 @@ already written.
   vendor and net* — `sgd-render-tie vit` on CUDA gave 5,526,346/5,526,346 bit-exact — which is
   further evidence the gate is buildable as written.
 
-### 2d.3. ▶ Device-resident parameters — scoped 2026-07-30, NOT started
+### 2d.3. ✅ Device-resident parameters — **BUILT, GATED AND MEASURED 2026-08-01. UNCOMMITTED.**
+
+Phases 1 and 2 landed in one session, not the scoped 3-4. **The projections below are now
+results**, and the headline is that the parameter round trip is gone: 55-75% of a step becomes
+1-7%, and a 30-epoch verified ImageNet run goes from ~25 h to **~16 h** on four cards.
+
+⚠ **Every number in this block is from ares — RTX 4060 Ti, PCIe Gen3 x8, CUDA 12.9 — NOT the
+7900 XTX the rest of §2d.3 was measured on.** They are not row-for-row comparable with the table
+further down; what transfers is the shape of the result, and it transfers well (R34 bs32 read 55%
+transfer there, 59.4% here).
+
+```bash
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+PJRT_FFI_RESIDENT=1 .lake/build/bin/resnet34-verified-adam-xla data   # ONE env var, opt-in
+scripts/det_shim.sh /tmp/detshim                                      # ⚠ REQUIRED on CUDA, below
+LD_LIBRARY_PATH=/tmp/detshim GATE_ALT=PJRT_FFI_RESIDENT=1 scripts/residency_gate.sh
+```
+
+#### ▶ The measurement — PROBE median ms/step, shim-side `step=` in parentheses
+
+| config | copying | resident | **gain** | param share |
+|---|---|---|---|---|
+| **cifar8-bn**, bs128, 1 GPU | 10 (7.7) | 3 (2.5) | **3.1×** | 75.5% → 6.9% |
+| **EfficientNet-B0**, bs32, 1 GPU | 144 (133.8) | 89 (80.8) | **1.62×** | 46.7% → 5.3% |
+| **ResNet-34**, bs32, 1 GPU | 199 (202.7) | 98 (90.1) | **2.03×** | 59.4% → 3.9% |
+| **ResNet-34**, 2×bs32, 2 GPU | 269 (253.8) | 129 (117.2) | **2.09×** | 58.1% → 2.9% |
+| **R34/ImageNet**, bs256, 1 GPU | 905 | 832 | 1.09× | 16.0% → 0.4% |
+| **R34/ImageNet**, 4×bs64, 4 GPU | 596 | 386 | **1.54×** | 55.5% → 1.2% |
+
+*(cifar8-bn's PROBE is integer-ms at 3 ms/step — one tick of resolution, §2m's own trap — so quote
+the shim's float-precision 7.7 → 2.5 there, not 10 → 3.)*
+
+**COMPUTE IS UNCHANGED, and that is the control that makes the rest readable**: R34 81.5 → 81.2 ms,
+DP 105.6 → 104.8. The transport moved; the arithmetic did not. Consistent with the gate.
+
+**▶ 4 GPUs: parallel efficiency 38% → 54%, at a fixed global batch of 256.**
+
+| | 1 GPU bs256 | 4 GPU 4×64 | scaling |
+|---|---|---|---|
+| copying | 905 ms | 596 ms | **1.52×** (38% of 4) |
+| **resident** | 832 ms | **386 ms** | **2.16×** (54% of 4) |
+
+§2d.3a measured 1.46× and this reproduces it at 1.52×. At 5004 steps/epoch that is **24.9 h → 16.1 h**
+for the 30-epoch run. §2d.3a's *"roughly two-thirds of a 26-hour verified ImageNet run is currently
+the parameter round trip"* is confirmed as the right order and slightly over-stated: it was 55.5%.
+
+#### ▶ AND THE DEMO LOOP TOO — `VerifiedNet.train`, where the gains are LARGEST
+
+Converted the same day, and it was **~4 lines** because this loop is simpler than `trainAdamSched`:
+the step is `params ← trainStep(x, params, y)` and the host reads **nothing** out of the result per
+step — no loss slot, no BN stats. So **every** parameter is resident, not a prefix, and the param
+round trip goes to a literal **0.0 ms**: no parameter buffer moves in either direction, ever.
+
+| probe | copying | resident | **gain** | param share |
+|---|---|---|---|---|
+| **MNIST CNN** (ch4) | 6753 ms/ep | **1040** | **6.49×** | 84.6% → **0%** |
+| **MNIST MLP** (ch2-3, the *dense* anchor) | 899 | **205** | **4.39×** | 80.6% → **0%** |
+| **cifar8-bn SGD** (ch5, the *conv* anchor) | 1898 | **937** | **2.03×** | 59.4% → **0%** |
+| **MNIST linear** (ch2, `trainLinear`) | 261 | **216** | **1.21×** | *unresolvable — see below* |
+
+This loop was explicitly OUT of §2d.3's scope — *"`train`/`trainLinear` stay on the copying path,
+they are the demo loops, not the throughput ones"*. That was written before §2d.3's own later
+finding that the demo nets are the most transfer-bound in the set, and the finding wins: **the two
+biggest gains in this entire work item are `lake run mnist-xla`'s two nets.** §2d.3 predicted "~4×"
+for the MLP and got **4.39×**. It is an *interactivity* item, exactly as it said.
+
+**`trainLinear` came over too** — a different FFI entry point (`linearTrainStepV`, `(x, W0, b0,
+onehot) → (W0n, b0n)`), so `nResident := 2` is the whole parameter set and the same input-`i+1` /
+output-`i` correspondence holds. One wrinkle worth knowing: `W0`/`b0` are **separate** FFI
+arguments, so the copying path must re-slice them from the packed result every step; under
+residency that slices an unwritten buffer, which is harmless because the epoch boundary re-derives
+both from `readParams` before anything reads them. It is called out at the call site.
+
+⚠ **The linear net is where this stops paying, and the reason is worth recording.** At 1.21× it is
+the smallest gain in the set: 2 parameter buffers totalling 31 KB against a **0.3 ms** step. Do NOT
+quote its `PARAM round trip` row — the shim reports 33.9% → 35.1%, which is *not* a measurement of
+anything: with residency there is no parameter transfer at all, so that 0.1 ms is the timer's own
+overhead against a step of the same order. §2m's resolution trap in a third place; the epoch number
+is the only readable one.
+
+**▶ AND IT EXPOSED THE NEXT TARGET: the EVAL pass still pushes parameters every batch.**
+`forwardF32` is untouched by all of this, so each eval batch h2d's the whole parameter set. On the
+linear net that is now roughly **half the epoch** — visible only because training got fast enough
+for it to dominate. It is a different shape from the training loops (the forward session's params
+change once per epoch, so it wants a seed-per-epoch rather than a retain-per-step) and is not
+attempted here.
+
+**▶ FOUR of §2d.3's five predictions held; one is REFUTED and it is the interesting one.**
+
+| predicted | measured |
+|---|---|
+| ~2.2× at R34 bs32 | **2.03×** ✅ |
+| 1.15× at bs256 | **1.09×** ✅ |
+| 1.9× on EfficientNet | **1.62×** — right direction, under |
+| *"the SMALL demo nets benefit MOST"* | ✅ **strongly** — the two biggest gains in the set are `mnist-xla`'s, at **6.49×** (CNN) and **4.39×** (MLP, predicted "~4×") |
+| *"DP efficiency barely moves… the ratio is nearly unchanged"* | ⛔ **true at 2 replicas (1.48 → 1.52×), FALSE at 4 (1.52 → 2.16×)** |
+
+The refutation has a clean cause and §2d.3a had already written it down one section up: the
+`[θ|m|v]` push is **O(N−1)** while compute is O(1) per replica, so removing it cannot leave the
+*ratio* alone once N is big enough for the push to dominate. Two replicas is not big enough; four
+is. **The DP argument for this work was right for a reason the DP section itself got wrong.**
+
+**▶ AND THE REMAINING DP SHORTFALL IS NOW A DIFFERENT THING.** With the push gone, 2-GPU compute is
+105.6 ms against single-device 81.5 at the same per-replica batch — so the +24 ms is the
+`all_reduce`, staged through host because ares has no P2P (§2d.3a). That is real work, not
+transport, and residency neither can nor should remove it. §2c's diagnosis of the 1.46-1.7× ceiling
+was correct *and* is now spent; anything further is a collective/interconnect question.
+
+#### ▶ How it is built — and why the Lean side has no backend branch
+
+The insight §2d.3 opens with held exactly: **no buffer donation, no XLA-side aliasing.** The train
+step's outputs already *are* device buffers; the copying path d2h'd them and destroyed them.
+Residency is the pointer swap that keeps them instead.
+
+* **`pjrt_ffi_invoke_f32_resident`** — ONE function for 1 and N replicas (a single-device copy beside
+  a DP copy would be the double-writer disease one level down, in code). Inputs
+  `[res_in, res_in+n)` and outputs `[res_out, res_out+n)` are the same tensors one step apart; the
+  caller states both offsets and the shim **refuses unless the element counts agree tensor for
+  tensor**, which is the structural check that replaces the copying path's per-output size query.
+  Each replica keeps its own set on its own device.
+* **`pjrt_ffi_resident_read`** — the per-epoch read-back for eval and the checkpoint. That call site
+  (`thetamv := pbuf.extract 0 mvBytes`) was *already* once-per-epoch, which is why phase 2 came in
+  far under the scoped ~150 lines: §2d.3a read the call path correctly.
+* **The switch lives in C** (`iree_lean_ffi.c` reads `$PJRT_FFI_RESIDENT` and picks an entry point,
+  behind the same weak-symbol pattern `pjrt_ffi_invoke_f32_dp` already uses). The Lean driver calls
+  the same function with the same arguments on both backends, so the "one shared body, cannot drift"
+  property every §2h cross-backend gate rests on is untouched.
+* **`nResident` is an OPTIONAL argument defaulting to 0**, so not one existing call site changed —
+  and the tie / DP-check harnesses, which read the whole returned blob, keep the copying path by
+  construction rather than by anyone remembering to exclude them.
+
+Total: ~330 lines of C, ~10 lines of Lean, no renderer change, no artifact moved.
+
+#### ▶ THE GATE PASSES — and getting it to *mean* anything was most of the work
+
+| gate | FLOOR | TEST | controls |
+|---|---|---|---|
+| **1 GPU**, R34, 10 steps | **0** | **0** on all 255,477,624 bytes | init 192,845,715 · 1-ULP fault 184,034,575 |
+| **2 GPU DP**, 10 and 30 steps | **0** | **0** at both | resident-path fault 184,034,575 / 196,284,711 |
+| **4 GPU DP**, 10 steps | **0** | **0** on all 261,572,064 bytes | resident-path fault 134,879,565 |
+| **MNIST MLP** (`train` loop) | **0** | **0** on all 2,678,824 bytes | init 679,055 · staleness fault 267,983 |
+| **MNIST CNN** | **0** | **0** on all 13,956,520 bytes | init 3,579,613 · staleness 4,401 |
+| **cifar8-bn SGD** | **0** | **0** on all 212,968 bytes | init 60,064 · staleness 1,528 |
+| **MNIST linear** (`trainLinear`) | **0** | **0** on all 31,400 bytes | both fire |
+| **cifar8-bn AdamW**, **EfficientNet** | **0** | **0** (638,904 / 48,244,296 bytes) | both fire |
+
+▶ **`scripts/residency_gate_all.sh` runs all seven as ONE command** and prints a scoreboard. It
+exists because a readable verdict needs three things that were being retyped every time and are
+each easy to get wrong: the deterministic shim on `LD_LIBRARY_PATH` (or the floor is noise), the
+right `GATE_FAULT` for the net, and the slug. They live in one table there and nowhere else —
+`TestShardCheck.lean`'s move, applied to the gate. A **new net whose gate reports VACUOUS on the
+fault should have its mode flipped to 2 before anyone suspects the implementation**; which mode
+applies is a fact about the net's optimizer, not about residency.
+
+The 30-step DP run is the one that matters beyond the obvious: the copying path *force-resyncs* the
+replicas from replica 0 every step, and residency does not, so replicas that drifted would show up
+there and nowhere else. They do not.
+
+**⚠ §2d.3's Finding 1 — "the floor IS bit-exact across processes" — is ROCm-SPECIFIC and does not
+carry to CUDA.** With the committed compile options the R34 floor on ares is **191,094,739 of
+255,477,624 bytes at 10 steps**, and **2,647,005 at ONE step**. The cause is XLA autotuning picking
+different convolution algorithms per process; AdamW then amplifies one differing bit into most of
+the blob within a few steps, which is Finding 2 seen from the other side. It IS suppressible —
+`--xla_gpu_autotune_level=0 --xla_gpu_deterministic_ops=true`, captured at generation time because
+`$XLA_FLAGS` is inert on this path (§4) — and then the floor is **0** and the gate reads as
+designed. `scripts/det_shim.sh` is that recipe as one command.
+
+**⚠⚠ §2d.3's Finding 2 DOES NOT GENERALISE EITHER, and it cost the `train`-loop gate a control.**
+Finding 2 says *"the system is chaotic, so a 'small' transport error does not stay small — one
+flipped mantissa bit becomes 64% of the blob in ten steps; bit-identity or nothing."* Measured on
+**MNIST MLP under plain SGD, the opposite holds**: the 1-ULP fault moves **1 byte at 3 steps and
+0 at 10**, on real data as well as synthetic. Read directly out of the dumps, the mechanism is
+plain — `W0[0]` is byte-identical at step 3 and step 10, so the update has reached a fixed point and
+`(w ⊕ 1) − lr·g` rounds straight back to `w`. **The perturbation is absorbed, not amplified.** A
+macroscopic change to the same net (a different init seed) still moves 2,528,413 of 2,678,824 bytes,
+so the harness is fine; it is the *fault* that is powerless there. Chaos is a property of the
+net/optimizer/data, not of training — R34+AdamW is chaotic, MLP+SGD is contractive.
+
+So `PJRT_FFI_FAULT=2` was added: **drop one step's retained parameters**, i.e. a stale retained
+handle, injected deliberately. It is macroscopic, no contraction can absorb it, and unlike mode 1 it
+is a defect residency *actually has* — the fault comment already named "a stale retained handle" as
+one of the three plausible ways this breaks. `GATE_FAULT` selects it. Run D also now faults **the
+alt path** rather than the default one, which is the path the control is supposed to be about.
+
+**⚠ AND THE GATE'S OWN STATISTIC SATURATES, which nearly produced a false FAIL.** On the committed
+shim, across two consecutive runs of the script:
+
+| | FLOOR | FAULT (a deliberate 1-ULP corruption) |
+|---|---|---|
+| run 1 | 191,094,739 | **190,642,729** — the fault scored *cleaner than the noise* |
+| run 2 | 189,531,906 | 191,037,525 — 0.8% apart |
+
+At that point a real transport defect and run-to-run nondeterminism are the same number. The script
+now refuses rather than reporting: it requires the fault to reach **2× the floor** before either
+verdict branch is allowed to run. ⚠ A first version of that check tested the *ordering* instead and
+**passed run 2 while calling a 0.9%-above-floor TEST a real regression** — the ordering is a coin
+flip in a saturated band. The bar has to be a margin, which is what every tie in this file already
+demands; verified both ways (saturates red on the committed shim, passes green on the deterministic
+one).
+
+#### ▶ What is NOT done
+
+* ~~**`VerifiedNet.train` is still on the copying path**~~ ✅ **DONE the same day** — see the demo
+  table above; it turned out to be the biggest win in the item (MLP 4.39×, CNN 6.49×).
+  ✅ **`trainLinear` too**, so every training loop that drives an `-xla` target is converted. The
+  E4M3 loops stay on the copying path for §2d.3's original reason — they quantise on the host every
+  step, so they cannot go resident without moving quantisation into the graph.
+* **The EVAL pass (`forwardF32`) still pushes parameters every batch**, and on the linear net that
+  is now about half the epoch. Next target; see the demo section above for why its shape differs.
+* **`benchmark-xla` is untouched and would report wrong numbers if residency were wired in
+  naively** — §2d.3's own analysis below still stands, and residency being opt-in is what keeps it
+  correct today.
+* **No 80-epoch run on the resident path.** The gate is 30 steps; bit-identity over 30 steps is a
+  transport claim, not an endurance one. Device memory is unchanged by construction (the retained
+  set replaces buffers the copying path already held live), but nothing has run for hours yet.
+* **The IREE peer could not be link-checked on this box** — `resnet34-verified-adam` fails at
+  `ld.lld` on four `iree_ffi_train_step_adam_*` symbols, and that reproduces at **pristine HEAD**,
+  so it is a pre-existing ares condition and not this change. The weak-symbol pattern used here is
+  the one `pjrt_ffi_invoke_f32_dp` already ships, but *verify the IREE build on the AMD box*.
+
+*The original scoping follows, kept because the measurement is calibration against it.*
+
+### 2d.3-scope. ▶ Device-resident parameters — scoped 2026-07-30
 
 **This section did not exist until now, and five places in this file referenced it.** One of those
 references — *"a calibrated model says the case roughly quadruples at 4 GPUs"* — had **no written
