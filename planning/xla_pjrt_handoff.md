@@ -550,8 +550,8 @@ lake build efficientnet-dp-bench && PJRT_REPLICAS=2 .lake/build/bin/efficientnet
 
 Env knobs added by this work: `PJRT_REPLICAS`, `PJRT_PLUGIN`, `PJRT_FFI_TRACE`, `PJRT_FFI_TIMING`
 (§2d.3 — per-phase transfer accounting, opt-in and inert when unset), `PJRT_FFI_PINNED`
-(§2d.3 — **measured and refuted as an optimisation; leave it off**, it is a 17% regression — but it
-is the second transport `scripts/residency_gate.sh` validates against), `PJRT_FFI_FAULT`
+(**vendor-dependent — see §2d.3a. A 17% regression on ROCm, a ~17% WIN on CUDA.** It is also the
+second transport `scripts/residency_gate.sh` validates against), `PJRT_FFI_FAULT`
 (§2d.3 — 1-ULP fault injection, the phase-3 gate's transport control),
 `LEAN_MLIR_REPLICAS`, `LEAN_MLIR_SKIP_EVAL`, `LEAN_MLIR_G2_STEPS`, `LEAN_MLIR_DUMP_PARAMS`,
 `LEAN_MLIR_PERTURB_R`.
@@ -4491,6 +4491,57 @@ bs8 per replica, where BN statistics genuinely degrade. This measurement says 32
 *(This run is also what the `evalBs` change bought: `adam64`/`adam128` train at a batch the eval
 forward was not rendered at, and before that they could only run under `LEAN_MLIR_SKIP_EVAL=1`,
 i.e. with no accuracy number at all.)*
+
+### 2d.3a. ⚠ CORRECTIONS from the CUDA box — measured 2026-08-01 on ares
+
+Two claims below were measured on the 7900 XTX and written as if they were properties of the
+*code*. Both are properties of the **vendor**. Read them before planning off §2d.3.
+
+**1. `PJRT_FFI_PINNED` is NOT refuted — it was untestable on CUDA until 2026-08-01.** The pinned
+arena only ever `dlopen`'d `libamdhip64`/`hipHostMalloc`, so on NVIDIA the flag printed
+"no libamdhip64", fell back to the direct path, and *looked* supported while doing nothing. With the
+`libcudart`/`cudaHostAlloc` leg added, on the 2-replica EfficientNet DP bench:
+
+| | DP overhead | parallel efficiency | effective |
+|---|---|---|---|
+| unpinned | 27 ms/step | 81.88% | 2.22 GiB/s |
+| **pinned** | **19 ms/step** | **86.81%** | **3.15 GiB/s** |
+
+So the standing advice "leave it off, it is a 17% regression" is a **ROCm** result. On CUDA it is
+roughly a 17% win in the other direction. ⚠ Single A/B pair — indicative, not anchored; the ROCm
+refutation was the more careful measurement. Anyone re-anchoring should take medians on both boxes.
+This does not weaken its role as the gate's second transport: it stays numerically inert either way.
+
+**2. The Lean half of phase 2 is SMALLER than "~150 lines / 7 loops / 11 call sites" for the path
+that matters.** Reading the actual call path (`trainAdamSched` → `IreeSession.mlpTrainStepV` →
+`lean_iree_mlp_train_step_v` → `iree_ffi_invoke_f32`) settles the shape:
+
+* inputs are `[x, params×n, onehot]`; outputs are `[θ'|m'|v'|loss|bc1|bc2|bn…]`, and the **param
+  inputs correspond 1:1 to the leading param outputs**. §2d.3's "retain the outputs, pass them as the
+  next call's inputs" is therefore literally an index mapping, not a search.
+* **per step the host reads only two small things**: `F32.read out (3*nParams)` for the loss, and,
+  when `hasBn`, an `nBnStats`-float slice. Everything else it does with `out` is `pbuf := out`, i.e.
+  hand it straight back. The 272 MB `[θ|m|v]` prefix crosses PCIe twice per step *solely to be
+  re-uploaded*.
+* the epoch boundary ALREADY isolates the host's real need — `thetamv := pbuf.extract 0 mvBytes`,
+  commented "One 272 MB copy per EPOCH (for eval + checkpoint), not per step". That is exactly
+  `resident_read`'s call site, already written and already once-per-epoch.
+
+So for `trainAdamSched` the change is: keep the handle, copy back only the tail outputs per step,
+and point the existing per-epoch extract at `resident_read`. The "7 loops / 11 call sites" figure
+counts loops that §2d.3 itself then tells you to leave alone (E4M3, `train`, `trainLinear`).
+
+**Sequencing consequence:** do single-replica end-to-end FIRST. It is gate-testable on its own, and
+§2d.3's own measurement (the parameter round trip is 55% of a bs32 step) says it is most of the
+win on one GPU. The DP path — where the 4-GPU money is — lands second, since that is the part
+§2d.3 correctly calls "the fiddly part".
+
+**Why 4 GPUs needs this more than the doc assumes** (measured on ares 2026-08-01): the box has **no
+P2P between any pair** (`nvidia-smi topo -p2p r` is `CNS` across the whole matrix), so every
+`all_reduce` already stages through host memory, and PCIe is Gen3 x8. The `[θ|m|v]` push is
+**O(N−1)** while compute is O(1) per replica, so measured 81.9% at 2 replicas projects to ~60-69%
+at 4. The JAX reference on the same four cards gets ~4.10× because its parameters are
+device-resident and only gradients cross. That gap IS this work item.
 
 ### 2d.3. ▶ Device-resident parameters — scoped 2026-07-30, NOT started
 
