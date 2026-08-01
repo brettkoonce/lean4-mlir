@@ -3819,10 +3819,22 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
   -- The round node: down to bf16 and straight back. Two converts, not one, because
   -- `den` is `ℝ → ℝ` — the VALUE stays f32 and only its precision is degraded, which
-  -- is what "round to bf16" means as a function on reals. XLA folds the pair into the
-  -- consumer where it can. ⚠ Whether that fold reaches a tensor-core bf16 GEMM is NOT
-  -- guaranteed by this node and must be MEASURED, not assumed — see the trap in
-  -- planning/bf16_renderer.md.
+  -- is what "round to bf16" means as a function on reals.
+  --
+  -- ⚠⚠ **MEASURED 2026-08-01 ON ares: XLA DELETES THIS PAIR, SO THIS EMIT IS A NO-OP
+  -- ON HARDWARE.** jax 0.10.2 / CUDA 12.9, `.astype(bf16).astype(f32)` under `jit`:
+  -- eager rounds 1.7640524 → 1.765625, but the jitted result is 1.7640524 unchanged and
+  -- the optimized HLO contains no `convert` at all — the algebraic simplifier treats the
+  -- round trip as removable. So a graph carrying this node computes in FULL f32: no
+  -- speedup and, worse, not even the bf16 numerics.
+  --
+  -- The `den` equation is still correct and the ties built on it still hold — what is
+  -- refuted is this EMIT STRATEGY, not the op. To make bf16 real the value has to stay
+  -- bf16 ACROSS an operation, i.e. a `dot_general` whose operands are bf16-typed with
+  -- `preferred_element_type = f32`. That changes the value's type and so cannot be a
+  -- `SHlo n → SHlo n` node; it is the rung-2 emitter change in
+  -- planning/bf16_renderer.md. Keep this node — it is the proof-side round and the
+  -- depth > 1 ingredient — but do NOT read a graph containing it as running bf16.
   | .convertF n, r :: st => do
       let b ← fresh; let o ← fresh
       pure (s!"    {b} = stablehlo.convert {r} : ({ty [B,n]}) -> {tyBf16 [B,n]}\n" ++

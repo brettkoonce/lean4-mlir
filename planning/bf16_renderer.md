@@ -53,6 +53,52 @@ and the depth > 1 proof ingredient comes free.
 **Gate this explicitly.** Every rung's perf check must show a wall-clock move OR state that the rung
 is too small to show one (see rung 0). A rung that reads ~1.00× has almost certainly emitted fp32.
 
+### ⚠⚠ The trap is WORSE than written above — measured 2026-08-01, and it already bit
+
+The paragraph above predicts "emit f32, get f32 speed". The reality on ares (jax 0.10.2, CUDA 12.9)
+is that **XLA deletes the rounding**, so you get neither the speed nor the numerics:
+
+```
+.astype(bfloat16).astype(float32)   on  1.7640524
+  eager   → 1.765625      (rounds correctly)
+  jitted  → 1.7640524     (UNCHANGED — and the optimized HLO has no `convert` at all)
+```
+
+The algebraic simplifier treats a `convert(f32→bf16) → convert(bf16→f32)` **pair** as removable.
+Confirmed a second way: a `bf16`-rounded 784×10 matmul scored error `3.8e-5` against a float64
+reference — *identical* to true f32, where genuine bf16 rounding would give ~`1e-1`.
+
+**This refuted the first emit strategy for `convertF`** (`5dc1df0`), which emitted exactly that pair.
+The op, its `den`, and every tie built on it remain correct — what is refuted is the *emit*. The
+node is kept because it is the proof-side round and the depth > 1 ingredient; it just must not be
+read as "this graph runs bf16".
+
+**Consequence for the ladder: the type-changing emitter is required at rung 0, not rung 2.** A
+round trip cannot survive the optimizer, so the value has to stay bf16 *across an operation* — a
+`dot_general` with bf16-typed operands and `preferred_element_type = f32`. Because that changes the
+value's type, it cannot be an `SHlo n → SHlo n` node, which is the real design constraint this
+whole discovery surfaces:
+
+> `SHlo n` is indexed by WIDTH ONLY. It has no element type. Every existing op is implicitly f32
+> (`ty` hardcodes `xf32`). Mixed precision needs the IR to carry a dtype — either a second index on
+> `SHlo`, or a dtype field on the ops that consume/produce tensors.
+
+That is the actual scoping question for this work, and it is bigger than "add a flag to the
+renderer". Options, cheapest first:
+1. **A bf16 `dotIn` variant** (`dotInBf16`) that emits bf16 operands + f32 accumulate as ONE node.
+   No dtype in the type system; the cast lives inside the op. Matches how `flatConvF` already bundles
+   conv+bias. Probably the right first move — it is rung 0-through-3 for dense with no IR redesign.
+2. **A dtype index on `SHlo`.** Principled, and what a general mixed-precision story wants, but it
+   touches every op and every existing proof.
+
+Option 1 is strongly preferred to start. It also keeps the `den` story trivial: `den (dotInBf16 W e)
+= dense (rnd∘W) (rnd∘den e)`, which is `bf16_render_faithful` with the rounding moved inside — the
+tie already proven in `Bf16FaithfulPoC`.
+
+**And this is why gate 2 is non-negotiable.** A numerical check alone would have passed: the
+denotation says "rounded", the proof says "rounded", and the hardware quietly says "not rounded".
+Only running it caught this.
+
 ## ▶ The proof gap that gates the money
 
 `FloatBridge` has `dot_close_mixed` / `dense_close_mixed`. It has **no `conv_close_mixed`.** The
