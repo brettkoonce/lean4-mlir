@@ -34,6 +34,28 @@ FULLLOG="${FULLLOG:-${CKPT_BASE}_full.log}"
 mkdir -p "$(dirname "$CKPT_BASE")" "$JAX_CACHE"
 MAX_ATTEMPTS=60
 
+# ── preflight ────────────────────────────────────────────────────────────────
+# Fail loudly here rather than hours in. On 2026-07-28 the repo .venv was found
+# holding an unrelated April IREE stack (CPU-only jaxlib, no tfds); substituting a
+# conda jax 0.4.26 / cuDNN 8.9.7 env instead crashed MNv2 on the first train_step
+# (CUDNN_STATUS_EXECUTION_FAILED on the bf16 1x1 convBackwardFilter). The lock
+# pins jax 0.10.x — see jax/requirements-cuda-lock.txt.
+PY_BIN="${PY_BIN:-../.venv/bin/python}"
+[ -f "$PY" ] || { echo "[sup] MISSING $PY — run: .lake/build/bin/mobilenet-v4-imagenet"; exit 1; }
+[ -d "${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}/imagenet2012" ] || { echo "[sup] no imagenet2012 dataset"; exit 1; }
+if ! CUDA_VISIBLE_DEVICES=$DEVS "$PY_BIN" -c "
+import sys, jax, tensorflow_datasets
+g = [d for d in jax.devices() if d.platform == 'gpu']
+print('[preflight] jax', jax.__version__, len(g), 'gpu devices; tfds', tensorflow_datasets.__version__)
+if not g: print('[preflight] no GPU devices'); sys.exit(1)
+if not jax.__version__.startswith('0.10.'):
+    print('[preflight] WRONG JAX:', jax.__version__, '- expected 0.10.x per requirements-cuda-lock.txt'); sys.exit(1)
+"; then
+  echo "[sup] PREFLIGHT FAILED: $PY_BIN is not the pinned stack (need jax 0.10.x + GPU + tfds)." | tee -a "$MASTER"
+  echo "[sup]   rebuild: python3.12 -m venv .venv && .venv/bin/pip install -r jax/requirements-cuda-lock.txt" | tee -a "$MASTER"
+  exit 1
+fi
+
 # Next rest epoch strictly ahead of the last completed epoch (999 = none left).
 next_rest() {
   for e in $REST_EPOCHS; do
@@ -76,7 +98,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
       LEAN_MLIR_CKPT_EVERY=1 \
       TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
       "${RESUME_ENV[@]}" \
-      ../.venv/bin/python -u "$PY" > >(tee -a "$FULLLOG" > "$RUNLOG") 2>&1 &
+      "$PY_BIN" -u "$PY" > >(tee -a "$FULLLOG" > "$RUNLOG") 2>&1 &
   PYPID=$!
   echo "[sup] $(date '+%T') launched PID=$PYPID (next rest after epoch $REST_AT)" | tee -a "$MASTER"
 

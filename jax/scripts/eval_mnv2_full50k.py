@@ -16,9 +16,14 @@ import jax, jax.numpy as jnp
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-GEN = ".lake/build/generated_mobilenet_v2_imagenet.py"
+GEN = os.environ.get("GEN", ".lake/build/generated_mobilenet_v2_imagenet.py")
 CKPT = os.environ.get("CKPT", "/home/skoonce/mnv2_imagenet_bf16.bin")
 BATCH = int(os.environ.get("BATCH", "250"))   # 50000 % 250 == 0, but we don't rely on it
+# Running-BN eval (gap A) needs the trained BN mean/var, which live in the
+# companion `.state.npz`, NOT in the params-only `.bin`. Defaults to the sibling
+# state file; set STATE= explicitly to override, or STATE=none to eval with
+# freshly-initialised BN stats (wrong — only for debugging).
+STATE = os.environ.get("STATE", CKPT[:-4] + ".state.npz" if CKPT.endswith(".bin") else "")
 
 # Import the generated module (defines forward, eval_batch, init_params_from_file,
 # the preprocess helpers, DT/CONV_DT, etc.). It guards train under __main__.
@@ -29,7 +34,21 @@ spec.loader.exec_module(m)
 print(f"backend={jax.default_backend()} devices={len(jax.devices())}")
 print(f"loading {CKPT}")
 params = m.init_params_from_file(CKPT)
+
+# BN running stats. `forward`/`eval_batch` gained `bn`/`training` args when
+# running-BN landed (gap A), so this script must supply them or it TypeErrors.
+bn = m.init_bn_state()
+if STATE and STATE != "none" and os.path.exists(STATE):
+    print(f"loading BN running stats from {STATE}")
+    opt_state = (jax.tree.map(jnp.ones_like, params), jax.tree.map(jnp.zeros_like, params))
+    (params, _opt, bn), _step = m.load_train_state(STATE, (params, opt_state, bn))
+    print(f"  state step={_step}")
+else:
+    print(f"WARNING: no state file at {STATE!r} — evaluating with FRESH BN stats "
+          f"(this will be badly wrong for a running-BN net)")
+
 params = jax.device_put(params, m.replicated_sharding)
+bn = jax.device_put(bn, m.replicated_sharding)
 
 # Build a full-val iterator WITHOUT drop_remainder, reusing the module's
 # center-crop + normalize + CHW-flatten preprocessing exactly.
@@ -51,11 +70,12 @@ c1 = c5 = total = 0
 for x, y in tfds.as_numpy(ds):
     x = jax.device_put(jnp.asarray(x))
     y = jax.device_put(jnp.asarray(y))
-    logits = m.forward(params, x)
-    preds = jnp.argmax(logits, axis=-1)
-    _, top5 = jax.lax.top_k(logits, 5)
-    c1 += int(jnp.sum(preds == y))
-    c5 += int(jnp.sum(jnp.any(top5 == y[:, None], axis=-1)))
+    # Use the trainer's own eval_batch so numerics match the run exactly —
+    # including its top-5 (it ranks the true class rather than calling
+    # jax.lax.top_k, whose indices are broken on ROCm/gfx1100).
+    b1, b5, _loss = m.eval_batch(params, bn, x, y)
+    c1 += int(b1)
+    c5 += int(b5)
     total += int(y.shape[0])
 
 print(f"\n=== FULL VAL ({total} images) ===")
