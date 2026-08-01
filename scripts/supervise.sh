@@ -96,6 +96,21 @@ temp_max=${TEMP_MAX:-off} stall=${STALL_SECS}s logs=$RUNDIR"
 say "cmd: ${CMD[*]}"
 if [ "${DRY_RUN:-0}" != "0" ]; then say "DRY_RUN — nothing launched"; exit 0; fi
 
+# Take the run down with us. `setsid` gives the run its own SESSION, which is what makes
+# the process-group kill precise — but it also means the run does NOT die when this script
+# does. Measured: kill the supervisor and the trainer keeps going, still holding ~12 GB on
+# all four GPUs, where it would then fight the next attempt for memory. So Ctrl-C, SIGTERM
+# and any exit path must explicitly take the group with them.
+cleanup() {
+  if [ -n "${PID:-}" ] && kill -0 "$PID" 2>/dev/null; then
+    say "supervisor exiting — taking the run down (PID=$PID PGID=${PGID:-?})"
+    kill_run "$PID"
+  fi
+}
+trap cleanup EXIT
+# Disarm EXIT first, or `exit` here re-enters `cleanup` and logs the takedown twice.
+trap 'trap - EXIT; cleanup; exit 130' INT TERM
+
 next_rest() {  # first rest epoch strictly ahead of $1; 999 = none left
   for e in $REST_EPOCHS; do [ "$1" -lt "$e" ] && { echo "$e"; return; }; done
   echo 999
