@@ -157,12 +157,16 @@ opaque forwardF32
     (`StableHLO.linearTrainStepModuleV`) through the generic IREE invoke.
     Inputs are raw f32 ByteArrays: `x` is `batch×d₀`, `W0` is `d₀×d₁`, `b0`
     is `d₁`; `y` is int32 `[batch]` (the one-hot is built in the C shim).
-    Returns `W0n (d₀·d₁ f32) ++ b0n (d₁ f32)`. -/
+    Returns `W0n (d₀·d₁ f32) ++ b0n (d₁ f32)`.
+
+    `nResident`: see `mlpTrainStepV`. Here it is **2** — `W0` and `b0`, i.e. the
+    whole parameter set, since this graph returns exactly its two param inputs. -/
 @[extern "lean_iree_linear_train_step"]
 opaque linearTrainStepV
   (sess : @& IreeSession) (fnName : @& String)
   (x : @& ByteArray) (W0 : @& ByteArray) (b0 : @& ByteArray) (y : @& ByteArray)
-  (batch : USize) (d0 : USize) (d1 : USize) : IO ByteArray
+  (batch : USize) (d0 : USize) (d1 : USize)
+  (nResident : USize := 0) : IO ByteArray
 
 /-- Data-parallel `@<slug>_train_step`: same packed-params protocol as
     `mlpTrainStepV`, but `batch` is the GLOBAL batch and the XLA shim splits x and
@@ -172,23 +176,59 @@ opaque linearTrainStepV
     the result is read back from replica 0.
 
     Only the XLA shim exports the underlying entry point; on the IREE build this
-    raises rather than silently running single-device. -/
+    raises rather than silently running single-device.
+
+    `nResident`: see `mlpTrainStepV`. Each replica keeps its own retained set on
+    its own device, which is where the bigger half of the win is — today the full
+    `[θ|m|v]` is pushed to *every* replica every step, an O(N−1) cost against
+    O(1) compute (§2d.3a: 4 GPUs currently buy 1.46×). -/
 @[extern "lean_iree_mlp_train_step_v_dp"]
 opaque mlpTrainStepVDP
   (sess : @& IreeSession) (fnName : @& String)
   (x : @& ByteArray) (params : @& ByteArray) (shapes : @& ByteArray) (y : @& ByteArray)
-  (batch : USize) (d0 : USize) (d3 : USize) (replicas : USize) : IO ByteArray
+  (batch : USize) (d0 : USize) (d3 : USize) (replicas : USize)
+  (nResident : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@mlp_train_step`
     (`StableHLO.mlpTrainStepText`) through the generic IREE invoke. `params` is
     the packed f32 weights (sliced per `shapes`, same layout as `forwardF32`);
     `x` is `batch×d₀`; `y` is int32 `[batch]` (one-hot built in the C shim with
-    `d₃` classes). Returns the updated params, packed in the same layout. -/
+    `d₃` classes). Returns the updated params, packed in the same layout.
+
+    `nResident` — how many LEADING param tensors may stay on the device between
+    steps (handoff §2d.3). The driver is the only place that knows the packed
+    layout is `[θ|m|v | lr,bc₁,bc₂ | bn stats]`, and hence that the first `3×P`
+    tensors are exactly the ones the host writes once and thereafter only feeds
+    straight back; so it states the count and the shim checks that input `i+1`
+    and output `i` really are the same tensor before retaining anything.
+
+    **It is a request, not a mode.** The transport is chosen in C — residency
+    engages only under `$PJRT_FFI_RESIDENT=1` on the XLA build, and is inert
+    everywhere else — precisely so that this driver keeps no backend branch to
+    drift (§2d.3, "the design decision that protects every existing gate").
+    Default `0` = the copying path, which is what every tie and DP-check harness
+    wants: those read the whole returned blob, and a retained prefix would leave
+    it unwritten. -/
 @[extern "lean_iree_mlp_train_step_v"]
 opaque mlpTrainStepV
   (sess : @& IreeSession) (fnName : @& String)
   (x : @& ByteArray) (params : @& ByteArray) (shapes : @& ByteArray) (y : @& ByteArray)
-  (batch : USize) (d0 : USize) (d3 : USize) : IO ByteArray
+  (batch : USize) (d0 : USize) (d3 : USize)
+  (nResident : USize := 0) : IO ByteArray
+
+/-- Read the **authoritative** leading `nBytes` of the packed parameter blob.
+
+    Without residency this is `packed.extract 0 nBytes` and nothing more — which
+    is what it must be on IREE, where the weak read-back symbol does not exist.
+    With residency live the `[θ|m|v]` prefix of `packed` is unwritten (it never
+    came back from the device), and this performs the one d2h that still happens.
+
+    Either way it is a **per-epoch** call: the eval pass and the checkpoint are
+    the only things that want the whole blob, and that call site was already
+    once-per-epoch before any of this. -/
+@[extern "lean_iree_read_params"]
+opaque readParams
+  (sess : @& IreeSession) (packed : @& ByteArray) (nBytes : USize) : IO ByteArray
 
 end IreeSession
 

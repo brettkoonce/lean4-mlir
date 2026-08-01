@@ -359,6 +359,24 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
+  -- Device-resident parameters (handoff §2d.3). **Every** param is resident here,
+  -- not a prefix: this loop's step is `params ← trainStep(x, params, y)` and the
+  -- host reads NOTHING out of the result per step — no loss slot, no BN stats, the
+  -- whole blob is handed straight back. So the resident block is the entire tensor
+  -- list, and `@<slug>_train_step` returns exactly those tensors in exactly that
+  -- order (the packed-output walk in the shim already assumes it).
+  --
+  -- ⚠ This loop was explicitly OUT of §2d.3's original scope — *"`train`/`trainLinear`
+  -- stay on the copying path, they are the demo loops, not the throughput ones"*.
+  -- That was written before §2d.3's own measurement found the demo nets to be the
+  -- MOST transfer-bound in the set (the dense probe at **75%**, against R34's 55%)
+  -- and before residency measured **3.1×** on cifar8-bn. These loops are what a
+  -- reader sits and watches, so this is an interactivity win rather than a
+  -- throughput one — §2d.3's "the surprise worth carrying".
+  --
+  -- A REQUEST, not a mode: honoured only under `$PJRT_FFI_RESIDENT=1`, and the
+  -- copying path stays the default and byte-identical.
+  let nResident := net.paramShapes.size.toUSize
   -- init params in func-arg order from the layout specs (one seed per slot).
   -- Seed base is overridable via LEAN_MLIR_SEED (default 1) to probe how
   -- sensitive convergence is to the specific He-init draw.
@@ -367,7 +385,18 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   for spec in net.specs do
     parts := parts.push (← mkParam seed spec.1 spec.2)
     seed := seed + 1
-  let mut params := F32.concat parts
+  -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit vector of exact L2
+  -- norm r, in units of 1e-9 (no `String.toFloat?` in this toolchain), before any training. Same
+  -- knob and same spelling as `trainAdamSched`; it was implemented ONLY there, which made
+  -- `scripts/residency_gate.sh`'s init CONTROL a silent no-op for every net on this loop —
+  -- the gate caught that itself and refused as VACUOUS rather than reporting a green.
+  let params0 := F32.concat parts
+  let mut params ← match (← IO.getEnv "LEAN_MLIR_PERTURB_R").bind (·.toNat?) with
+    | some n => do
+        let r := n.toFloat * 1e-9
+        IO.println s!"  ▸ PERTURBED init: theta += r*u with ||r*u||_2 = {r}"
+        F32.perturbUnit params0 0 net.nParams.toUSize r 12345
+    | none   => pure params0
   -- LEAN_MLIR_MAX_EPOCHS caps the epoch count (opt-in; absent → full cfg.epochs).
   -- Used by `lake run benchmark` to probe steady-state per-epoch wall-clock with
   -- only a few epochs; harmless otherwise (timing per epoch is LR-independent).
@@ -381,7 +410,12 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
       let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
       let yb := if synth then trainLbl else F32.sliceLabels trainLbl (bi * bs) bs
       params ← IreeSession.mlpTrainStepV tsSess tsFn
-                  xb params shapes yb bs.toUSize d0.toUSize nc.toUSize
+                  xb params shapes yb bs.toUSize d0.toUSize nc.toUSize nResident
+    -- Bring the parameters back to host for eval and for the G2 dump. Without
+    -- residency this is the copy `params` already was, so the line is inert;
+    -- with it, this is the ONE d2h per epoch that remains. It is placed outside
+    -- the `if !synth` because the dump below reads `params` whether or not eval ran.
+    params ← IreeSession.readParams tsSess params (net.nParams * 4).toUSize
     let mut correct := 0
     if !synth then          -- synth probe: skip eval (no eval split on disk)
       for bi in [0:nbt] do
@@ -570,6 +604,21 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   (← IO.getStdout).flush
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]]
                                 ++ (if hasBn then bnStatShapes else #[]))
+  -- Device-resident parameters (handoff §2d.3). The leading `3×P` tensors of
+  -- `adamShapes` are `[θ|m|v]`, and they are exactly the part of the blob this
+  -- loop writes ONCE and thereafter only hands straight back: below, the host
+  -- touches the tail (`write3` the three scalars, `blit` the BN stats) and reads
+  -- the tail (`read` the loss, `extract` the batch stats) — never the prefix,
+  -- which is why `pbuf := out` is already a no-copy handover. So that prefix can
+  -- live on the device across steps, and at R34 that is 260 MB each way per step
+  -- that stops crossing PCIe (55% of a bs32 step, measured).
+  --
+  -- ⚠ This is a REQUEST, and nothing here selects a transport. The C boundary
+  -- honours it only under `$PJRT_FFI_RESIDENT=1` on the XLA build, so IREE and
+  -- XLA still run this identical body — the property every §2h cross-backend
+  -- gate rests on. The gate is `scripts/residency_gate.sh`: bit-identical
+  -- parameters, or it did not land.
+  let nResident := (3 * net.paramShapes.size).toUSize
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
   let xShape := net.xShape evalBs      -- eval-only: the train step passes its dims directly
@@ -708,9 +757,9 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
           pure (x, if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs)
       let out ← if replicas > 1
         then IreeSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
-               gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize
+               gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize nResident
         else IreeSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
-               bs.toUSize d0.toUSize nc.toUSize
+               bs.toUSize d0.toUSize nc.toUSize nResident
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
       let stepLoss := F32.read out (3 * net.nParams).toUSize
       epochLossSum := epochLossSum + stepLoss
@@ -740,8 +789,12 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
             return ()
       | none => pure ()
     IO.println s!"Epoch {ep + 1}/{cfg.epochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
-    -- One 272 MB copy per EPOCH (for eval + checkpoint), not per step.
-    thetamv := pbuf.extract 0 mvBytes
+    -- One 272 MB copy per EPOCH (for eval + checkpoint), not per step. Under
+    -- device residency (§2d.3) this is also the one d2h of `[θ|m|v]` that still
+    -- happens at all — `readParams` is `pbuf.extract 0 mvBytes` whenever the
+    -- parameters are host-resident, and the read-back otherwise, so the
+    -- frequency is unchanged either way and this line reads the same.
+    thetamv ← IreeSession.readParams tsSess pbuf mvBytes.toUSize
     let thetaCur := thetamv.extract 0 pBytes
     -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.
     let evalSess := if hasBn then fwdEvalSess else fwdSess
@@ -803,6 +856,23 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut W0 ← F32.const (d0 * d1).toUSize 0.0
   let mut b0 ← F32.const d1.toUSize 0.0
+  -- LEAN_MLIR_PERTURB_R, as in `train`/`trainAdamSched`. Without it this loop is
+  -- the third for which `scripts/residency_gate.sh`'s init CONTROL is a silent
+  -- no-op. Weights are ZERO-initialised here rather than He, so the displacement
+  -- is off zero — if anything a cleaner control.
+  match (← IO.getEnv "LEAN_MLIR_PERTURB_R").bind (·.toNat?) with
+  | some n => do
+      let r := n.toFloat * 1e-9
+      IO.println s!"  ▸ PERTURBED init: theta += r*u with ||r*u||_2 = {r}"
+      W0 ← F32.perturbUnit W0 0 (d0 * d1).toUSize r 12345
+  | none   => pure ()
+  -- Device-resident parameters (§2d.3): `W0` and `b0` — the WHOLE parameter set,
+  -- since this graph is `(x, W0, b0, onehot) → (W0n, b0n)`.
+  let nResident : USize := 2
+  let pBytes := (d0 * d1 + d1) * 4
+  -- The packed `[W0|b0]` the step returns, carried so the epoch boundary has ONE
+  -- thing to make authoritative — the role `pbuf` plays in `trainAdamSched`.
+  let mut packed := W0 ++ b0
   -- LEAN_MLIR_MAX_EPOCHS cap + per-epoch (Nms) timing, matching `train` (used by
   -- `lake run benchmark`); opt-in, full cfg.epochs otherwise.
   let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
@@ -814,10 +884,21 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
       let out ← IreeSession.linearTrainStepV tsSess tsFn
-                  xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize
+                  xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize nResident
+      packed := out
+      -- The per-step split is what the COPYING path needs: `W0`/`b0` are separate
+      -- FFI arguments, so they have to be re-sliced every step. Under residency
+      -- the shim ignores both operands and this slices an unwritten buffer — 31 KB
+      -- of wasted memcpy on a net this size, and harmless, because the epoch
+      -- boundary below makes `packed` authoritative before anything reads it.
       W0 := out.extract 0 (d0 * d1 * 4)
-      b0 := out.extract (d0 * d1 * 4) ((d0 * d1 + d1) * 4)
-    let params := W0 ++ b0
+      b0 := out.extract (d0 * d1 * 4) pBytes
+    -- Bring the parameters back for eval and the G2 dump. Inert without residency
+    -- (it is the copy `packed` already was); with it, the one d2h per epoch.
+    packed ← IreeSession.readParams tsSess packed pBytes.toUSize
+    W0 := packed.extract 0 (d0 * d1 * 4)
+    b0 := packed.extract (d0 * d1 * 4) pBytes
+    let params := packed
     let mut correct := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -836,9 +917,11 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   -- summary statistic, not a tie — this is the actual comparison.
   match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
   | some path =>
-      let final := W0 ++ b0
-      IO.FS.writeBinFile path final
-      IO.println s!"  wrote final params ({final.size} bytes) → {path}"
+      -- `packed` and not `W0 ++ b0`: under residency the two slices are only
+      -- authoritative because the epoch boundary re-derived them from it, and if
+      -- the loop ran zero epochs they never were.
+      IO.FS.writeBinFile path packed
+      IO.println s!"  wrote final params ({packed.size} bytes) → {path}"
   | none => pure ()
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 

@@ -67,11 +67,27 @@ static int g_client_refs = 0;
 static int g_replicas = 1;
 static PJRT_Device* g_devices[8];
 
+// ─── device-resident parameters (handoff §2d.3) ────────────────────────────
+//
+// A contiguous run of input tensors whose device buffers SURVIVE the call: the
+// train step's `[theta|m|v]` prefix, which the host writes once and thereafter
+// only feeds straight back. See `pjrt_ffi_invoke_f32_resident` for the contract
+// and for why no buffer donation is needed.
+typedef struct {
+  int n;                // retained tensors; 0 = not seeded yet
+  int replicas;         // one buffer set per replica (each device needs its own)
+  PJRT_Buffer** buf;    // [replicas * n], replica-major
+  int64_t* elems;       // [n] element counts — the read-back layout AND the guard
+  int64_t total;        // sum of elems, for resident_read's size check
+  long long calls;      // steps taken; only PJRT_FFI_FAULT=2 reads it
+} resident_t;
+
 struct iree_ffi_session_t {
   PJRT_LoadedExecutable* exe;
   char* entry;      // original func name, before the @main rename
   int num_outputs;  // from the compiled executable — used by the G4 guard
   int replicas;     // what THIS graph was compiled for (see session_create)
+  resident_t res;   // §2d.3; all-zero unless PJRT_FFI_RESIDENT engaged
 };
 
 // Presence marker. `lean_iree_backend_name` in iree_lean_ffi.c dlsym()s this to
@@ -175,10 +191,79 @@ static int pinned_enabled(void) {
 // catches one flipped mantissa bit will catch a dropped buffer, a stale
 // retained handle, or an off-by-one replica offset — the plausible ways device
 // residency goes wrong.
-static int fault_enabled(void) {
+//
+// ⚠ ON THE RESIDENT PATH THERE IS NO RETURNED FLOAT TO FLIP — that is the whole
+// point of it. The analogue there is to flip one bit of the parameter state as
+// it is SEEDED onto the device (see `resident_seed`), which is the same 1-ULP
+// corruption of the same transported quantity and propagates through training
+// identically. Without that, `PJRT_FFI_FAULT=1 PJRT_FFI_RESIDENT=1` would be a
+// silent no-op and the resident path would be unfalsifiable — exactly the
+// "bit-exact everywhere is indistinguishable from comparing a buffer with
+// itself" trap this flag exists to escape.
+// ⚠⚠ AND A 1-ULP FAULT HAS NO POWER ON EVERY NET — measured 2026-08-01, and it
+// is why mode 2 exists. §2d.3's Finding 2 says "the system is chaotic, so a
+// small transport error does not stay small"; that was measured on R34 + AdamW
+// and **does not generalise**. On the MNIST MLP under plain SGD a flipped
+// mantissa bit is ABSORBED, not amplified: the fault moves 1 byte at 3 steps and
+// **0 bytes at 10**, on synthetic AND on real data, because the next update
+// rounds `(w XOR 1) - lr*g` straight back to `w`. A macroscopic change to the
+// same net (a different init seed) still moves 2,528,413 of 2,678,824 bytes, so
+// the harness is fine — it is the FAULT that is powerless there.
+//
+//   mode 1  1 ULP on one float. The weakest fault that is one; right for a
+//           chaotic net (R34/AdamW), useless on a contractive one.
+//   mode 2  STALENESS: drop one step's retained parameters, so the next step
+//           re-runs from the previous ones. Macroscopic, and it is the actual
+//           failure mode residency introduces — "a stale retained handle" is one
+//           of the three this comment already names, and unlike mode 1 it is a
+//           defect no amount of contraction can absorb.
+static int fault_mode(void) {
   static int t = -1;
-  if (t < 0) { const char* e = getenv("PJRT_FFI_FAULT"); t = (e && atoi(e)) ? 1 : 0; }
+  if (t < 0) { const char* e = getenv("PJRT_FFI_FAULT"); t = e ? atoi(e) : 0; }
   return t;
+}
+static int fault_enabled(void) { return fault_mode() == 1; }
+
+// ─── device residency, opt-in (§2d.3) ──────────────────────────────────────
+//
+// $PJRT_FFI_RESIDENT=1. OFF by default, and that is a design decision rather
+// than caution: the FFI surface is symbol-identical across `iree_ffi.c` and
+// `pjrt_ffi.c` (`nm -D`), and every cross-backend gate in the repo depends on
+// IREE and XLA running the SAME Lean code path. The switch therefore lives in C
+// — `iree_lean_ffi.c` reads it and picks an entry point — so the training loop
+// above has no backend branch to drift.
+//
+// The gate is `scripts/residency_gate.sh` with GATE_ALT=PJRT_FFI_RESIDENT=1:
+// residency must be BIT-IDENTICAL to the copying path over N steps. That bar is
+// achievable because nothing about the arithmetic changes — the same graph
+// consumes the same bits; all that is removed is a d2h followed by an h2d of
+// those bits back again.
+static int resident_enabled(void) {
+  static int t = -1;
+  if (t < 0) { const char* e = getenv("PJRT_FFI_RESIDENT"); t = (e && atoi(e)) ? 1 : 0; }
+  return t;
+}
+
+// Exported so `iree_lean_ffi.c` can decide WITHOUT duplicating the env-var
+// reading, and so the IREE build (where this symbol does not exist) can never
+// accidentally report residency as available.
+int pjrt_ffi_resident_available(void) { return resident_enabled(); }
+
+static void buffer_destroy(PJRT_Buffer* b) {
+  if (!b) return;
+  PJRT_Buffer_Destroy_Args d = {0};
+  d.struct_size = PJRT_Buffer_Destroy_Args_STRUCT_SIZE;
+  d.buffer = b;
+  g_api->PJRT_Buffer_Destroy(&d);
+}
+
+static void resident_free(resident_t* r) {
+  if (r->buf) {
+    for (int k = 0; k < r->replicas * r->n; k++) buffer_destroy(r->buf[k]);
+    free(r->buf);
+  }
+  free(r->elems);
+  memset(r, 0, sizeof(*r));
 }
 
 // Returns a pinned arena of at least `n` bytes, or NULL if HIP is unavailable
@@ -573,6 +658,9 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
 
 void iree_ffi_session_release(iree_ffi_session_t* sess) {
   if (!sess) return;
+  // Retained parameter buffers first: they are owned by this session and would
+  // otherwise outlive the executable that produced them.
+  resident_free(&sess->res);
   if (sess->exe) {
     PJRT_LoadedExecutable_Destroy_Args a = {0};
     a.struct_size = PJRT_LoadedExecutable_Destroy_Args_STRUCT_SIZE;
@@ -1051,6 +1139,424 @@ cleanup:
     }
   free(in); free(out); free(arglists); free(outlists); free(h2d);
   return rc;
+}
+
+// ─── device-resident invoke (§2d.3) ────────────────────────────────────────
+//
+// Exported ONLY by this shim and reached through a WEAK reference from
+// `iree_lean_ffi.c`, exactly as `pjrt_ffi_invoke_f32_dp` is — so the IREE build
+// links fine and can never take this path.
+//
+// ▶ THE CONTRACT. Inputs `[res_in, res_in + n_resident)` and outputs
+// `[res_out, res_out + n_resident)` are the SAME tensors one step apart: the
+// train step's packed `[theta|m|v]`, which the host hands in and gets back
+// updated. The caller states both offsets rather than having them inferred, and
+// this function refuses unless the element counts agree tensor for tensor.
+//
+// On the FIRST call the block is seeded from `input_data`, so a checkpoint
+// resume, a perturbed init and a fresh He init all arrive by the ordinary route.
+// On every later call:
+//
+//   * resident inputs are NOT transferred — the retained device buffers go
+//     straight to Execute, and `input_data` in that range is ignored;
+//   * resident outputs are NOT copied back — the new device buffers REPLACE the
+//     retained ones, and `output_data` in that range is left untouched.
+//
+// So `[theta|m|v]` stops crossing PCIe: 260 MB each way per step at R34, which
+// §2d.3 measured at 55% of a bs32 step and 49% of an EfficientNet one.
+//
+// ▶ NO BUFFER DONATION AND NO XLA-SIDE ALIASING IS INVOLVED — that is what makes
+// this small, and it is the insight §2d.3 opens with. The train step's outputs
+// already ARE device buffers; the copying path d2h's them and then destroys
+// them. Residency is the pointer swap that keeps them instead. XLA writes its
+// outputs to fresh allocations either way, so device peak memory is unchanged:
+// retained + this step's outputs is the same two live sets the copying path
+// already held between Execute and cleanup.
+//
+// ▶ ONE FUNCTION SERVES 1 AND N REPLICAS. Writing a single-device copy beside a
+// DP copy would be the double-writer disease one level down, in code — the thing
+// `vitBackAll` and `TestShardCheck` exist to avoid. `n_replicas == 1` with a NULL
+// `shard_mask` is the single-device case and nothing branches on it. Each replica
+// keeps its OWN retained set on its own device, which is not merely allowed but
+// is the point: today the copying path reads replica 0 back and re-pushes it to
+// every replica each step, and that push is O(N-1) against O(1) compute.
+int pjrt_ffi_invoke_f32_resident(
+    iree_ffi_session_t* sess,
+    const char* fn_name,
+    int n_replicas,
+    int res_in, int res_out, int n_resident,
+    int n_inputs,
+    const int32_t* input_ranks,
+    const int64_t* input_dims_flat,
+    const float* const* input_data,
+    const unsigned char* shard_mask,
+    int n_outputs,
+    const int64_t* output_totals,
+    float* const* output_data) {
+
+  if (!sess || !sess->exe) return 1;
+  if (n_replicas < 1) return 1;
+
+  if (n_replicas != sess->replicas) {
+    fprintf(stderr,
+            "[pjrt_ffi] resident invoke asked for %d replicas but @%s was compiled "
+            "for %d (is PJRT_REPLICAS set? does the graph all_reduce?)\n",
+            n_replicas, sess->entry, sess->replicas);
+    return 1;
+  }
+  if (!entry_matches(fn_name, sess->entry)) {
+    fprintf(stderr, "[pjrt_ffi] entry mismatch: session holds @%s, caller asked '%s'\n",
+            sess->entry, fn_name);
+    return 1;
+  }
+  // G4 — no dropped state, unchanged by residency. It is if anything more
+  // load-bearing here: an output the caller forgot about would now be silently
+  // RETAINED rather than silently discarded.
+  if (sess->num_outputs >= 0 && sess->num_outputs != n_outputs) {
+    fprintf(stderr,
+            "[pjrt_ffi] G4 VIOLATION: @%s returns %d outputs, caller supplied %d "
+            "destinations — refusing to run\n",
+            sess->entry, sess->num_outputs, n_outputs);
+    return 1;
+  }
+  if (n_resident <= 0 || res_in < 0 || res_out < 0 ||
+      res_in + n_resident > n_inputs || res_out + n_resident > n_outputs) {
+    fprintf(stderr,
+            "[pjrt_ffi] resident range in[%d,%d) / out[%d,%d) does not fit a graph "
+            "with %d inputs and %d outputs\n",
+            res_in, res_in + n_resident, res_out, res_out + n_resident,
+            n_inputs, n_outputs);
+    return 1;
+  }
+
+  resident_t* res = &sess->res;
+  if (res->n && (res->n != n_resident || res->replicas != n_replicas)) {
+    fprintf(stderr,
+            "[pjrt_ffi] @%s holds %d resident tensors x %d replicas; caller now asks "
+            "for %d x %d — refusing rather than reseeding silently\n",
+            sess->entry, res->n, res->replicas, n_resident, n_replicas);
+    return 1;
+  }
+
+  int rc = 0;
+  // Offsets into the flattened dims array, once — the copying paths recompute
+  // this inline, but here it is needed twice (seed and per-step arg build).
+  int* dim_off = (int*)malloc((size_t)n_inputs * sizeof(int));
+  PJRT_Buffer** in = (PJRT_Buffer**)calloc((size_t)n_replicas * n_inputs, sizeof(*in));
+  PJRT_Buffer** out = (PJRT_Buffer**)calloc((size_t)n_replicas * n_outputs, sizeof(*out));
+  PJRT_Buffer* const** arglists = (PJRT_Buffer* const**)calloc((size_t)n_replicas, sizeof(*arglists));
+  PJRT_Buffer*** outlists = (PJRT_Buffer***)calloc((size_t)n_replicas, sizeof(*outlists));
+  PJRT_Event** h2d = (PJRT_Event**)calloc((size_t)n_replicas * n_inputs, sizeof(*h2d));
+  float* faulted = NULL;
+  int64_t rdims[8];
+  {
+    int o = 0;
+    for (int i = 0; i < n_inputs; i++) { dim_off[i] = o; o += input_ranks[i]; }
+  }
+
+  const int tint = timing_interval();
+  tacct_t* acct = NULL;
+  if (tint) {
+    acct = acct_for(sess->entry);
+    acct_layout_once(sess->entry, n_inputs, input_dims_flat, input_ranks,
+                     n_outputs, output_totals);
+  }
+
+  // ── seed, once ───────────────────────────────────────────────────────────
+  if (!res->n) {
+    res->elems = (int64_t*)malloc((size_t)n_resident * sizeof(int64_t));
+    for (int j = 0; j < n_resident; j++) {
+      int i = res_in + j;
+      int64_t e = 1;
+      for (int k = 0; k < input_ranks[i]; k++) e *= input_dims_flat[dim_off[i] + k];
+      // The structural check that replaces the copying path's per-output size
+      // query: input j and output j must be the same tensor, or "feed the output
+      // back as the input" is not the identity the whole scheme rests on.
+      if (e != output_totals[res_out + j]) {
+        fprintf(stderr,
+                "[pjrt_ffi] resident slot %d: input %d has %lld elements but output "
+                "%d has %lld — they are not the same tensor, refusing to retain\n",
+                j, i, (long long)e, res_out + j, (long long)output_totals[res_out + j]);
+        free(res->elems); res->elems = NULL;
+        rc = 1; goto cleanup;
+      }
+      res->elems[j] = e;
+      res->total += e;
+    }
+    res->buf = (PJRT_Buffer**)calloc((size_t)n_replicas * n_resident, sizeof(*res->buf));
+    res->n = n_resident;
+    res->replicas = n_replicas;
+
+    // §4's fault control, in the only form this path can carry one: 1 ULP on the
+    // first float of the parameter state as it lands on the device. See
+    // `fault_enabled` — without this, PJRT_FFI_RESIDENT + PJRT_FFI_FAULT is a
+    // no-op and the resident path cannot be shown capable of going red.
+    const float* seed0 = input_data[res_in];
+    if (fault_enabled() && res->elems[0] > 0) {
+      faulted = (float*)malloc((size_t)res->elems[0] * sizeof(float));
+      memcpy(faulted, seed0, (size_t)res->elems[0] * sizeof(float));
+      union { float f; uint32_t u; } v;
+      v.f = faulted[0];
+      v.u ^= 1u;
+      faulted[0] = v.f;
+      seed0 = faulted;
+      fprintf(stderr, "[pjrt_ffi] PJRT_FFI_FAULT: 1-ULP hit on the resident seed\n");
+    }
+
+    PJRT_Event** sev = (PJRT_Event**)calloc((size_t)n_replicas * n_resident, sizeof(*sev));
+    int failed = 0;
+    for (int rep = 0; rep < n_replicas && !failed; rep++) {
+      for (int j = 0; j < n_resident; j++) {
+        int i = res_in + j;
+        PJRT_Client_BufferFromHostBuffer_Args a = {0};
+        a.struct_size = PJRT_Client_BufferFromHostBuffer_Args_STRUCT_SIZE;
+        a.client = g_client;
+        a.data = (j == 0 && faulted) ? (const void*)faulted : (const void*)input_data[i];
+        a.type = PJRT_Buffer_Type_F32;
+        a.dims = &input_dims_flat[dim_off[i]];
+        a.num_dims = (size_t)input_ranks[i];
+        // Parameters are REPLICATED, never sharded — the shard mask is about x
+        // and the labels. Seeding every replica from the same host bytes is what
+        // makes the retained sets start identical, which the graph's all_reduce
+        // then keeps identical.
+        a.host_buffer_semantics =
+            PJRT_HostBufferSemantics_kImmutableUntilTransferCompletes;
+        a.device = g_devices[rep];
+        if (check(g_api->PJRT_Client_BufferFromHostBuffer(&a), "BufferFromHostBuffer(seed)")) {
+          failed = 1; break;
+        }
+        res->buf[(size_t)rep * n_resident + j] = a.buffer;
+        sev[(size_t)rep * n_resident + j] = a.done_with_host_buffer;
+      }
+    }
+    for (int k = 0; k < n_replicas * n_resident; k++)
+      if (sev[k] && await_event(sev[k], "h2d(seed)")) failed = 1;
+    free(sev);
+    if (failed) { rc = 2; goto cleanup; }
+
+    fprintf(stderr,
+            "[pjrt_ffi] RESIDENT: @%s holds %d parameter tensors (%.1f MB) on %d "
+            "device%s; they stop crossing PCIe from here\n",
+            sess->entry, n_resident, res->total * 4.0 / 1048576.0, n_replicas,
+            n_replicas == 1 ? "" : "s");
+  }
+
+  // ── host → device for the NON-resident inputs only ───────────────────────
+  //
+  // Same issue-all-then-await-all discipline as the copying paths, and for the
+  // same reason: awaiting inside the loop serialises the transfers into one
+  // round-trip latency each.
+  for (int rep = 0; rep < n_replicas && !rc; rep++) {
+    for (int i = 0; i < n_inputs; i++) {
+      if (i >= res_in && i < res_in + n_resident) {
+        // The retained buffer IS the argument. No transfer, no allocation.
+        in[(size_t)rep * n_inputs + i] = res->buf[(size_t)rep * n_resident + (i - res_in)];
+        continue;
+      }
+      int rank = input_ranks[i];
+      const int64_t* d = &input_dims_flat[dim_off[i]];
+      if (rank > (int)(sizeof(rdims)/sizeof(rdims[0]))) {
+        fprintf(stderr, "[pjrt_ffi] input %d rank %d exceeds max\n", i, rank);
+        rc = 2; break;
+      }
+      size_t elems = 1;
+      for (int k = 0; k < rank; k++) { rdims[k] = d[k]; elems *= (size_t)d[k]; }
+
+      const float* src = input_data[i];
+      if (shard_mask && shard_mask[i]) {
+        if (rank == 0 || d[0] % n_replicas != 0) {
+          fprintf(stderr,
+                  "[pjrt_ffi] input %d marked sharded but outer dim %lld is not "
+                  "divisible by %d replicas\n",
+                  i, rank ? (long long)d[0] : -1LL, n_replicas);
+          rc = 2; break;
+        }
+        rdims[0] = d[0] / n_replicas;
+        src = input_data[i] + (size_t)rep * (elems / (size_t)n_replicas);
+      }
+
+      PJRT_Client_BufferFromHostBuffer_Args a = {0};
+      a.struct_size = PJRT_Client_BufferFromHostBuffer_Args_STRUCT_SIZE;
+      a.client = g_client;
+      a.data = src;
+      a.type = PJRT_Buffer_Type_F32;
+      a.dims = rdims;
+      a.num_dims = (size_t)rank;
+      a.host_buffer_semantics =
+          PJRT_HostBufferSemantics_kImmutableUntilTransferCompletes;
+      a.device = g_devices[rep];
+      double t0 = acct ? now_ms() : 0;
+      if (check(g_api->PJRT_Client_BufferFromHostBuffer(&a), "BufferFromHostBuffer(res)")) {
+        rc = 2; break;
+      }
+      if (acct) {
+        double dt = now_ms() - t0;
+        size_t relems = (shard_mask && shard_mask[i]) ? elems / (size_t)n_replicas : elems;
+        double mb = relems * 4.0 / 1048576.0;
+        // Everything left here is data or a scalar — by construction, since the
+        // parameters are the part that no longer moves. Bucketed as head/tail so
+        // the report's PARAM row goes to ~0, which is the measurement.
+        if (i == 0) { acct->h2d_issue_head += dt; acct->h2d_head_mb += mb; }
+        else        { acct->h2d_issue_tail += dt; acct->h2d_tail_mb += mb; }
+      }
+      in[(size_t)rep * n_inputs + i] = a.buffer;
+      h2d[(size_t)rep * n_inputs + i] = a.done_with_host_buffer;
+    }
+  }
+  {
+    double tw = acct ? now_ms() : 0;
+    for (int k = 0; k < n_replicas * n_inputs; k++)
+      if (h2d[k] && await_event(h2d[k], "h2d(res)")) rc = 2;
+    if (acct) acct->h2d_await += now_ms() - tw;
+  }
+  if (rc) goto cleanup;
+
+  for (int rep = 0; rep < n_replicas; rep++) {
+    arglists[rep] = &in[(size_t)rep * n_inputs];
+    outlists[rep] = &out[(size_t)rep * n_outputs];
+  }
+
+  {
+    PJRT_ExecuteOptions eo = {0};
+    eo.struct_size = PJRT_ExecuteOptions_STRUCT_SIZE;
+    PJRT_LoadedExecutable_Execute_Args ea = {0};
+    ea.struct_size = PJRT_LoadedExecutable_Execute_Args_STRUCT_SIZE;
+    ea.executable = sess->exe;
+    ea.options = &eo;
+    ea.argument_lists = arglists;
+    ea.num_devices = (size_t)n_replicas;
+    ea.num_args = (size_t)n_inputs;
+    ea.output_lists = outlists;
+    PJRT_Event* dce[8] = {0};   // see the single-device comment on Execute
+    if (acct) ea.device_complete_events = dce;
+    double t0 = acct ? now_ms() : 0;
+    if (check(g_api->PJRT_LoadedExecutable_Execute(&ea), "Execute(res)")) { rc = 3; goto cleanup; }
+    if (acct) {
+      acct->exec += now_ms() - t0;
+      double t1 = now_ms();
+      for (int r = 0; r < n_replicas && r < 8; r++)
+        if (dce[r]) await_event(dce[r], "device_complete(res)");
+      acct->exec_await += now_ms() - t1;
+    }
+  }
+
+  // ── retain the resident outputs; they become the next step's arguments ────
+  //
+  // Done BEFORE the d2h below so that a failure there still leaves the session
+  // holding a coherent parameter state — the step really did happen on device,
+  // and losing the loss readback should not silently roll the parameters back.
+  //
+  // PJRT_FFI_FAULT=2 skips the adoption on ONE step, leaving the previous
+  // parameters in place: a stale retained handle, injected deliberately. See
+  // `fault_mode` for why mode 1 is not a usable control on every net.
+  res->calls++;
+  if (fault_mode() == 2 && res->calls == 5) {
+    fprintf(stderr, "[pjrt_ffi] PJRT_FFI_FAULT=2: dropping step %lld's parameters "
+                    "(stale retained handle)\n", res->calls);
+  } else {
+    for (int rep = 0; rep < n_replicas; rep++) {
+      for (int j = 0; j < n_resident; j++) {
+        PJRT_Buffer** slot = &res->buf[(size_t)rep * n_resident + j];
+        PJRT_Buffer** fresh = &out[(size_t)rep * n_outputs + res_out + j];
+        buffer_destroy(*slot);           // last step's; it was this step's argument
+        *slot = *fresh;
+        *fresh = NULL;                   // adopted — keep cleanup from destroying it
+      }
+    }
+  }
+
+  // ── device → host for the NON-resident outputs, replica 0 only ────────────
+  {
+    PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_outputs, sizeof(*d2h));
+    double td = acct ? now_ms() : 0;
+    for (int i = 0; i < n_outputs; i++) {
+      if (i >= res_out && i < res_out + n_resident) continue;   // stays on device
+      size_t want = (size_t)output_totals[i] * sizeof(float);
+      if (acct) acct->d2h_mb += want / 1048576.0;
+      PJRT_Buffer_ToHostBuffer_Args q = {0};
+      q.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+      q.src = out[i];
+      q.dst = NULL;
+      if (check(g_api->PJRT_Buffer_ToHostBuffer(&q), "ToHostBuffer(res size)")) { rc = 4; break; }
+      if (q.dst_size != want) {
+        fprintf(stderr,
+                "[pjrt_ffi] output %d size mismatch: graph %zu bytes, caller %zu\n",
+                i, q.dst_size, want);
+        rc = 4; break;
+      }
+      PJRT_Buffer_ToHostBuffer_Args a = {0};
+      a.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+      a.src = out[i];
+      a.dst = output_data[i];
+      a.dst_size = want;
+      if (check(g_api->PJRT_Buffer_ToHostBuffer(&a), "ToHostBuffer(res)")) { rc = 4; break; }
+      d2h[i] = a.event;
+    }
+    if (acct) { acct->d2h_issue += now_ms() - td; td = now_ms(); }
+    for (int i = 0; i < n_outputs; i++)
+      if (d2h[i] && await_event(d2h[i], "d2h(res)")) rc = 4;
+    if (acct) acct->d2h_await += now_ms() - td;
+    free(d2h);
+  }
+
+  if (acct && ++acct->calls % tint == 0) acct_report(acct);
+
+  if (trace_enabled())
+    fprintf(stderr, "[pjrt_ffi] @%s ok RESIDENT (%d replicas, %d in [%d resident], %d out)\n",
+            sess->entry, n_replicas, n_inputs, n_resident, n_outputs);
+
+cleanup:
+  // Resident input slots ALIAS the retained buffers — destroying them here would
+  // free the parameter state out from under the next step. Skip that range.
+  for (int rep = 0; rep < n_replicas; rep++)
+    for (int i = 0; i < n_inputs; i++) {
+      if (i >= res_in && i < res_in + n_resident) continue;
+      buffer_destroy(in[(size_t)rep * n_inputs + i]);
+    }
+  for (int k = 0; k < n_replicas * n_outputs; k++) buffer_destroy(out[k]);
+  free(dim_off); free(in); free(out); free(arglists); free(outlists); free(h2d);
+  free(faulted);
+  return rc;
+}
+
+// Read the retained `[theta|m|v]` back to host. This is the per-EPOCH call the
+// eval pass and the checkpoint need — the one place the host still wants the
+// whole blob, and the call site (`thetamv := pbuf.extract 0 mvBytes`) was
+// already once-per-epoch before residency existed.
+//
+// Returns 0 on success; 1 when this session holds no resident state, which the
+// caller must treat as "use your own host copy" rather than as an error — that
+// is what keeps the Lean side branch-free across backends.
+int pjrt_ffi_resident_read(iree_ffi_session_t* sess, int64_t n_floats, float* dst) {
+  if (!sess || !sess->res.n || !dst) return 1;
+  resident_t* r = &sess->res;
+  if (n_floats != r->total) {
+    fprintf(stderr,
+            "[pjrt_ffi] resident_read wants %lld floats but @%s retains %lld — "
+            "refusing rather than returning a partial parameter state\n",
+            (long long)n_floats, sess->entry, (long long)r->total);
+    return 2;
+  }
+  PJRT_Event** ev = (PJRT_Event**)calloc((size_t)r->n, sizeof(*ev));
+  int failed = 0;
+  int64_t off = 0;
+  for (int j = 0; j < r->n; j++) {
+    size_t want = (size_t)r->elems[j] * sizeof(float);
+    PJRT_Buffer_ToHostBuffer_Args a = {0};
+    a.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+    a.src = r->buf[j];                 // replica 0: the graph all-reduces, so all agree
+    a.dst = dst + off;
+    a.dst_size = want;
+    if (check(g_api->PJRT_Buffer_ToHostBuffer(&a), "ToHostBuffer(resident_read)")) {
+      failed = 1; break;
+    }
+    ev[j] = a.event;
+    off += r->elems[j];
+  }
+  for (int j = 0; j < r->n; j++)
+    if (ev[j] && await_event(ev[j], "d2h(resident_read)")) failed = 1;
+  free(ev);
+  return failed ? 2 : 0;
 }
 
 // ─── not yet ported ────────────────────────────────────────────────────────
