@@ -2422,9 +2422,27 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   -- untouched.
   (if cfg.useEMA then
     "EMA_DECAY = " ++ toString cfg.emaDecay ++ "\n" ++
+    "# Warmup-corrected decay, matching TF's tf.train.ExponentialMovingAverage(decay,\n" ++
+    "# num_updates) — the EMA this net family (MobileNet/EfficientNet, TF lineage) is\n" ++
+    "# defined against. Without it the shadow starts AT THE RANDOM INIT and decays that\n" ++
+    "# init away only as decay^t, so a run shorter than ~10 time constants evaluates a\n" ++
+    "# weighted average of init and trained weights. Those two are not linearly\n" ++
+    "# connected (there is a loss barrier between them), so the result is not merely\n" ++
+    "# degraded — it sits at chance.\n" ++
+    "#\n" ++
+    "# Measured on MNv4-Conv-M 100ep (2026-07-31): decay 0.9999 = tau 10k steps, but\n" ++
+    "# gradAccum 8 leaves only 312 optimizer steps/epoch = 31.2k total = 3.1 tau. At\n" ++
+    "# epoch 66 the shadow still held 12.8% init and scored 0.00% top-1, while the LIVE\n" ++
+    "# weights scored 70.48% on full 50k. Eval and .bin checkpoints both read the EMA,\n" ++
+    "# so the run looked like a total failure when only the shadow was broken.\n" ++
+    "#\n" ++
+    "# min(decay, (1+t)/(10+t)) ramps from 0.09 at t=0, so the shadow tracks the live\n" ++
+    "# weights from the first step and reaches the nominal decay once t >> 10. Long runs\n" ++
+    "# (ENet-B0 350ep = 175 tau) are unaffected either way; short/grad-accum tiers need it.\n" ++
     "@jit\n" ++
-    "def ema_update(ema, params):\n" ++
-    "    return jax.tree.map(lambda e, p: EMA_DECAY * e + (1.0 - EMA_DECAY) * p, ema, params)\n\n"
+    "def ema_update(ema, params, step):\n" ++
+    "    d = jnp.minimum(EMA_DECAY, (1.0 + step) / (10.0 + step))\n" ++
+    "    return jax.tree.map(lambda e, p: d * e + (1.0 - d) * p, ema, params)\n\n"
    else "") ++
   -- Mixup (on-device, soft labels). Partner = batch-reverse (jnp.flip) to avoid
   -- a cross-shard gather under multi-GPU sharding. λ ~ Beta(α,α) per step.
@@ -2776,8 +2794,8 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "            params" ++ bnOut ++ ", loss = train_step(params" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n") ++
   "            epoch_loss += loss  # jax scalar: defer the device sync to epoch end\n" ++
   "            n_batches += 1\n" ++
-  (if cfg.useEMA then "            ema_params = ema_update(ema_params, params)\n" else "") ++
-  (if cfg.useEMA && cfg.runningBN then "            ema_bn = ema_update(ema_bn, bn_state)\n" else "") ++
+  (if cfg.useEMA then "            ema_params = ema_update(ema_params, params, _global_step)\n" else "") ++
+  (if cfg.useEMA && cfg.runningBN then "            ema_bn = ema_update(ema_bn, bn_state, _global_step)\n" else "") ++
   "            _global_step += 1\n" ++
   "            if _trace_f:\n" ++
   "                _trace_f.write(json.dumps({\n" ++
