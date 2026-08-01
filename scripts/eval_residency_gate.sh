@@ -22,6 +22,19 @@
 # an equality check would be noise. det_shim.sh is built automatically below.
 set -uo pipefail
 
+# ⚠ CHECKPOINTS. `trainAdamSched` writes one per epoch, so the copying run leaves
+# the resident run a checkpoint to RESUME from -- and with LEAN_MLIR_MAX_EPOCHS
+# capped the second run then does nothing and exits `done` with rc=0, producing no
+# accuracy line at all. Handoff §4's silent no-op, hit here on the six cifar
+# variants; the demo loops did not show it only because `train`/`trainLinear` do
+# not checkpoint.
+#
+# There is NO safe default glob -- blindly deleting `.lake/build/*_ckpt*` would
+# destroy somebody's long run -- so this is opt-in, and the resume DETECTOR below
+# is what makes forgetting it loud instead of misleading:
+#
+#   GATE_CKPTS='.lake/build/cifar8*_ckpt_xla.bin*' scripts/eval_residency_gate.sh ...
+GATE_CKPTS=${GATE_CKPTS:-}
 DET=${DET_SHIM:-/tmp/residency_detshim}
 OUT=${GATE_OUT:-$(mktemp -d)}
 EPOCHS=${EPOCHS:-3}
@@ -47,20 +60,35 @@ echo
 FAILED=0
 for bin in "${BINS[@]}"; do
   [ -x ".lake/build/bin/$bin" ] || { printf "  %-28s ⚠ SKIP — not built\n" "$bin"; continue; }
+  resumed=0
   for tag in copy res; do
     extra=""; [ "$tag" = res ] && extra="PJRT_FFI_RESIDENT=1"
+    # shellcheck disable=SC2086
+    [ -n "$GATE_CKPTS" ] && rm -f $GATE_CKPTS
     # shellcheck disable=SC2086
     env $extra LD_LIBRARY_PATH="$DET" CUDA_VISIBLE_DEVICES="$DEV" HIP_VISIBLE_DEVICES="$DEV" \
       LEAN_MLIR_MAX_EPOCHS="$EPOCHS" \
       ".lake/build/bin/$bin" data > "$OUT/${bin}_$tag.log" 2>&1
+    grep -q "resuming from checkpoint" "$OUT/${bin}_$tag.log" && resumed=1
   done
+  # Diagnose this BEFORE comparing anything: a resumed run is not a shorter run,
+  # it is a DIFFERENT run, and reporting it as a residency difference sends the
+  # reader to the generation token when the fault is a leftover file.
+  if [ "$resumed" = 1 ]; then
+    printf "  %-28s ✗ FAIL — a run RESUMED FROM A CHECKPOINT, so the two runs are not\n" "$bin"
+    printf "  %-28s   comparable (handoff §4). This is NOT a residency result. Set:\n" ""
+    printf "  %-28s     GATE_CKPTS='.lake/build/<slug>*_ckpt_xla.bin*'\n" ""
+    FAILED=1; continue
+  fi
   a=$(grep -oE "test_acc = [0-9]+/[0-9]+" "$OUT/${bin}_copy.log" | tr '\n' ' ')
   b=$(grep -oE "test_acc = [0-9]+/[0-9]+" "$OUT/${bin}_res.log"  | tr '\n' ' ')
   uniq_a=$(echo "$a" | tr ' ' '\n' | grep -c "test_acc" )
   distinct=$(echo "$a" | tr ' ' '\n' | grep "/" | sort -u | wc -l)
 
   if [ -z "$a" ] || [ -z "$b" ]; then
-    printf "  %-28s ✗ FAIL — a run produced no accuracy line\n" "$bin"; FAILED=1; continue
+    printf "  %-28s ✗ FAIL — a run produced no accuracy line (see its log; a capped\n" "$bin"
+    printf "  %-28s   run that resumed past its epoch budget is the usual cause)\n" ""
+    FAILED=1; continue
   fi
   # A gate that cannot fail is not a gate: if every epoch reports the SAME
   # accuracy then a stale held set is indistinguishable from a correct one.

@@ -4759,6 +4759,16 @@ as VACUOUS if the accuracy never moves across the run — without that, a net th
 make a stale set indistinguishable from a correct one. All three demo nets PASS with 3 distinct
 values each.
 
+**▶ AND IT BUYS NOTHING ON THE CIFAR GROUP — measured, and worth knowing as a BOUND.**
+All six `cifar-xla` variants pass the eval gate (3 epochs, 3 distinct values each), so hold mode
+engages there; it just does not pay. `lake run cifar-xla` is **335 s train-only residency → 333 s
+with eval held**, i.e. nothing outside noise, against 937 s copying. The reason is the one the
+demo table shows from the other side: **eval only benefits where eval is TRANSPORT-bound.**
+cifar8's eval is a conv forward over 10,000 images against ~38 small parameter tensors, so it is
+compute-bound and there is nothing to remove; the MNIST linear net's eval is almost pure transport,
+which is why its epoch went 1.21× → 1.82×. Expect this to hold for every larger net — R34's eval
+param push is ~1.6% of its epoch. **Do not quote the demo-net eval numbers as general.**
+
 ⚠ On the **committed** shim the CNN's final accuracy reads 9838 against the copying path's 9833 —
 and that is autotuning, not residency: three copying runs give **9833 / 9846 / 9847**, so the
 resident number sits inside the A-vs-A spread, and under the deterministic shim all three epochs
@@ -4908,7 +4918,8 @@ one).
   | | max | mean |
   |---|---|---|
   | **A-vs-A** — copying vs copying, two runs | **1.88 pp** | 0.59 pp |
-  | copying vs **resident** | **1.22 pp** | 0.49 pp |
+  | copying vs **resident** (train only) | **1.22 pp** | 0.49 pp |
+  | copying vs **resident** (train + eval) | **0.87 pp** | 0.39 pp |
 
   **Residency agrees with the copying path better than the copying path agrees with itself**, and
   the net that looked worst (`bn-momentum`, 1.22 pp) is exactly the one whose own A-vs-A spread is
