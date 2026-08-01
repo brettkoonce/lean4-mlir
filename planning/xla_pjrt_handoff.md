@@ -4726,12 +4726,43 @@ anything: with residency there is no parameter transfer at all, so that 0.1 ms i
 overhead against a step of the same order. §2m's resolution trap in a third place; the epoch number
 is the only readable one.
 
-**▶ AND IT EXPOSED THE NEXT TARGET: the EVAL pass still pushes parameters every batch.**
-`forwardF32` is untouched by all of this, so each eval batch h2d's the whole parameter set. On the
-linear net that is now roughly **half the epoch** — visible only because training got fast enough
-for it to dominate. It is a different shape from the training loops (the forward session's params
-change once per epoch, so it wants a seed-per-epoch rather than a retain-per-step) and is not
-attempted here.
+#### ▶ THE EVAL PASS TOO — hold mode, and it roughly doubles the demo gains again
+
+Done the same session. `forwardF32` was pushing the whole parameter set on **every eval batch**;
+measured on the MNIST MLP, **73% of an eval step was the param push** (0.6 ms of 0.8 — compute is
+0.1). It needs a different mechanism from the training loops and that is the content: that graph
+returns **logits, not parameters**, so there is nothing to retain from the output. `res_out < 0`
+selects **HOLD** mode — seed once, reuse across every batch — and `res_gen`, a generation token the
+caller advances (the epoch number), is what re-seeds it.
+
+⚠ **The token is not bookkeeping, it is the safety property.** A held set that went stale would
+score the *previous* epoch's weights **silently**, which reads as a training plateau rather than as
+an error — a nastier failure than anything the update mode has, and one the `[θ|m|v]` gate is
+structurally blind to (eval does not feed training, so the trained parameters stay bit-identical
+either way). Hence a second gate, below.
+
+Full epochs, real data, train **+ eval**, committed shim:
+
+| | copying | resident | **gain** | was, train-only |
+|---|---|---|---|---|
+| **MNIST CNN** | 5286 ms/ep | **1016** | **5.20×** | 6.49× |
+| **MNIST MLP** | 930 | **187** | **4.97×** | 4.39× |
+| **MNIST linear** | 206 | **113** | **1.82×** | 1.21× |
+
+The linear net is the tell: **1.21× → 1.82×**, because eval was about half its epoch. Holding the
+eval parameters is worth roughly as much again as the training loop was, on the nets small enough
+for transport to dominate.
+
+**`scripts/eval_residency_gate.sh`** is the gate the param one cannot be: it compares the reported
+accuracy **epoch by epoch**, since a stale held set repeats an earlier epoch's number. It refuses
+as VACUOUS if the accuracy never moves across the run — without that, a net that plateaus would
+make a stale set indistinguishable from a correct one. All three demo nets PASS with 3 distinct
+values each.
+
+⚠ On the **committed** shim the CNN's final accuracy reads 9838 against the copying path's 9833 —
+and that is autotuning, not residency: three copying runs give **9833 / 9846 / 9847**, so the
+resident number sits inside the A-vs-A spread, and under the deterministic shim all three epochs
+match exactly. Same discipline as the cifar group above; the gate is the det-shim run.
 
 **▶ FOUR of §2d.3's five predictions held; one is REFUTED and it is the interesting one.**
 
@@ -4853,8 +4884,16 @@ one).
   ✅ **`trainLinear` too**, so every training loop that drives an `-xla` target is converted. The
   E4M3 loops stay on the copying path for §2d.3's original reason — they quantise on the host every
   step, so they cannot go resident without moving quantisation into the graph.
-* **The EVAL pass (`forwardF32`) still pushes parameters every batch**, and on the linear net that
-  is now about half the epoch. Next target; see the demo section above for why its shape differs.
+* ~~**The EVAL pass still pushes parameters every batch**~~ ✅ **DONE** — hold mode, above.
+* **A 4-GPU run is done**: R34/ImageNet `momdp64`, 4 × bs64, residency on, 6 epochs × 400 steps,
+  `rc=0`, loss **7.03 → 5.65** monotone, all four cards at 47-57 °C and ~80 W. The rig holds.
+* ⚠ **`pjrt_ffi_invoke_f32_resident_v2` — BUMP THE SUFFIX ON ANY SIGNATURE CHANGE.** The reference
+  is weak and resolved at RUN time, so a binary linked before a signature change calls the new shim
+  with the old argument list and every argument shifts. That is not a link error, it is garbage:
+  caught here as *"returns 740 outputs, caller supplied -886575312 destinations"* from the one
+  binary that had not been rebuilt after `res_gen` was inserted. With a versioned name a stale weak
+  reference resolves to NULL and the caller falls back to the copying path instead — slower and
+  correct, which is the right way round for a mismatch nothing else can detect.
 * **`benchmark-xla` is untouched and would report wrong numbers if residency were wired in
   naively** — §2d.3's own analysis below still stands, and residency being opt-in is what keeps it
   correct today.

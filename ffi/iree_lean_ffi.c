@@ -37,8 +37,8 @@ LEAN_EXPORT lean_obj_res lean_iree_backend_name(lean_obj_arg world) {
 // design decision that protects every existing gate"). So the Lean driver
 // always calls the same function with the same arguments; this file decides
 // which transport serves it, and on IREE the question never arises.
-extern int pjrt_ffi_invoke_f32_resident(
-    iree_ffi_session_t*, const char*, int, int, int, int, int,
+extern int pjrt_ffi_invoke_f32_resident_v2(
+    iree_ffi_session_t*, const char*, int, int, int, int, long long, int,
     const int32_t*, const int64_t*, const float* const*,
     const unsigned char*, int, const int64_t*, float* const*) __attribute__((weak));
 extern int pjrt_ffi_resident_read(iree_ffi_session_t*, int64_t, float*) __attribute__((weak));
@@ -56,7 +56,7 @@ static int resident_wanted(void) {
 // path", so the tie and DP-check harnesses, which DO read the whole output, are
 // unaffected by construction.
 static int use_resident(size_t n_resident) {
-  return n_resident > 0 && resident_wanted() && pjrt_ffi_invoke_f32_resident != NULL;
+  return n_resident > 0 && resident_wanted() && pjrt_ffi_invoke_f32_resident_v2 != NULL;
 }
 
 // ---- External class for IreeSession ----
@@ -888,7 +888,8 @@ LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
     b_lean_obj_arg shapes_ba,
     b_lean_obj_arg x_ba,
     b_lean_obj_arg x_shape_ba,
-    size_t batch, size_t n_classes, lean_obj_arg world) {
+    size_t batch, size_t n_classes, size_t n_resident, size_t res_gen,
+    lean_obj_arg world) {
   (void)world;
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
@@ -942,9 +943,24 @@ LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
   int64_t out_totals[1] = {logits_total};
   float* outputs[1] = {logits};
 
-  int rc = iree_ffi_invoke_f32(sess, fn_name,
-      n_inputs, input_ranks, input_dims_flat, input_data,
-      1, out_totals, outputs);
+  // Residency, HOLD mode (§2d.3). `res_out = -1`: this graph returns logits, not
+  // parameters, so there is nothing to retain from the output — the parameters are
+  // seeded once and reused across every eval batch instead of being pushed 79-123
+  // times per epoch. Measured on the MNIST MLP: **73% of an eval step** was the
+  // param push (0.6 ms of 0.8; compute is 0.1).
+  //
+  // `res_gen` is the caller's generation token and is what makes this safe: the
+  // parameters change once per epoch, the caller changes the token, and the shim
+  // re-seeds. A held set that went stale silently would score last epoch's weights
+  // and read as a training plateau rather than as an error.
+  int rc = use_resident(n_resident)
+    ? pjrt_ffi_invoke_f32_resident_v2(sess, fn_name, 1,
+        /*res_in=*/1, /*res_out=*/-1, (int)n_resident, (long long)res_gen,
+        n_inputs, input_ranks, input_dims_flat, input_data, NULL,
+        1, out_totals, outputs)
+    : iree_ffi_invoke_f32(sess, fn_name,
+        n_inputs, input_ranks, input_dims_flat, input_data,
+        1, out_totals, outputs);
 
   free(input_ranks); free(input_dims_flat); free(input_data);
   if (rc != 0) {
@@ -1006,8 +1022,8 @@ LEAN_EXPORT lean_obj_res lean_iree_linear_train_step(
   // — the whole parameter set, and the same input-i+1 / output-i correspondence
   // the packed path has, for the same reason (input 0 is x and has no output).
   int rc = use_resident(n_resident)
-    ? pjrt_ffi_invoke_f32_resident(sess, fn_name, 1,
-        /*res_in=*/1, /*res_out=*/0, (int)n_resident,
+    ? pjrt_ffi_invoke_f32_resident_v2(sess, fn_name, 1,
+        /*res_in=*/1, /*res_out=*/0, (int)n_resident, /*res_gen=*/0,
         4, input_ranks, input_dims_flat, input_data, NULL,
         2, out_totals, outputs)
     : iree_ffi_invoke_f32(sess, fn_name,
@@ -1098,8 +1114,8 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v_dp(
   // Resident inputs start at 1 (input 0 is x) and the matching outputs start at
   // 0 — the graph returns no counterpart for x, so output i is input i+1.
   int rc = use_resident(n_resident)
-    ? pjrt_ffi_invoke_f32_resident(sess, fn_name, (int)replicas,
-        /*res_in=*/1, /*res_out=*/0, (int)n_resident,
+    ? pjrt_ffi_invoke_f32_resident_v2(sess, fn_name, (int)replicas,
+        /*res_in=*/1, /*res_out=*/0, (int)n_resident, /*res_gen=*/0,
         n_inputs, input_ranks, dims, in_data, shard,
         n_params, out_totals, outputs)
     : pjrt_ffi_invoke_f32_dp(sess, fn_name, (int)replicas,
@@ -1205,8 +1221,8 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v(
 
   // See the DP peer for the offsets: input 0 is x, so output i is input i+1.
   int rc = use_resident(n_resident)
-    ? pjrt_ffi_invoke_f32_resident(sess, fn_name, 1,
-        /*res_in=*/1, /*res_out=*/0, (int)n_resident,
+    ? pjrt_ffi_invoke_f32_resident_v2(sess, fn_name, 1,
+        /*res_in=*/1, /*res_out=*/0, (int)n_resident, /*res_gen=*/0,
         n_inputs, input_ranks, dims, in_data, NULL,
         n_params, out_totals, outputs)
     : iree_ffi_invoke_f32(sess, fn_name,

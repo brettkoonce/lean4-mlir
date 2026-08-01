@@ -145,13 +145,30 @@ opaque trainStepAdamF32Yolov1
   (batch : USize) (gridH : USize) (gridW : USize) (perCell : USize) : IO ByteArray
 
 /-- Zero-copy f32 forward pass. Pushes x then param tensors, returns logits.
-    For inference/eval — no y, lr, or velocity inputs. -/
+    For inference/eval — no y, lr, or velocity inputs.
+
+    `nResident` / `gen` — device residency in **HOLD** mode (§2d.3), and it is a
+    different mechanism from the train step's. This graph returns *logits*, not
+    parameters, so there is nothing to retain from the output; instead the whole
+    parameter set is seeded once and reused across every eval batch, rather than
+    pushed 79-123 times per epoch. Measured on the MNIST MLP, **73% of an eval
+    step was the parameter push** (0.6 ms of 0.8 — compute is 0.1).
+
+    ⚠ **`gen` is what makes holding safe, and it must change whenever `params`
+    does.** Pass the epoch number. A held set that went stale would score the
+    previous epoch's weights *silently*, which reads as a training plateau rather
+    than as an error — a nastier failure than anything the update mode has. The
+    shim re-seeds the moment the token differs.
+
+    Defaults (`0`, `0`) = the copying path, so every inference demo that calls
+    this is unaffected. -/
 @[extern "lean_iree_forward_f32"]
 opaque forwardF32
   (sess : @& IreeSession) (fnName : @& String)
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
-  (batch : USize) (nClasses : USize) : IO ByteArray
+  (batch : USize) (nClasses : USize)
+  (nResident : USize := 0) (gen : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@linear_train_step`
     (`StableHLO.linearTrainStepModuleV`) through the generic IREE invoke.

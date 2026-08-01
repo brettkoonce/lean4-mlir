@@ -420,8 +420,12 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     if !synth then          -- synth probe: skip eval (no eval split on disk)
       for bi in [0:nbt] do
         let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
+        -- Hold the parameters on device across the eval batches (§2d.3). `ep+1` is
+        -- the generation token: `params` changes exactly once per epoch and this
+        -- says so, so the held set cannot go stale.
         let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
                         xb xShape bs.toUSize nc.toUSize
+                        nResident (ep + 1).toUSize
         for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
           let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
           let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
@@ -801,11 +805,17 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
     let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval" else fwdFn
     let evalParams := if hasBn then F32.concat #[thetaCur, runningBnStats] else thetaCur
     let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
+    let evalResident := (net.paramShapes.size + (if hasBn then 2 * net.bnChannels.size else 0)).toUSize
     let mut correct := 0
     for bi in [0:(if skipEval then 0 else nbt)] do
       let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs d0 nEval
+      -- Hold the eval parameters on device across the eval batches (§2d.3). The
+      -- count is the tensor count of `evalShapes`, which for a BN net is the
+      -- params PLUS the two running-stat slots per layer — all of them are inputs
+      -- with no output counterpart, so all of them can be held.
       let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
                       xb xShape evalBs.toUSize nc.toUSize
+                      evalResident (ep + 1).toUSize
       for j in [0:min evalBs (nEval - bi * evalBs)] do   -- score real rows only, not the pad
         let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * evalBs + j))).toNat
@@ -904,6 +914,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
       let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
                       xb xShape bs.toUSize d1.toUSize
+                      nResident (ep + 1).toUSize
       for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
         let pred := (F32.argmax10 logits (j * d1).toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat

@@ -80,6 +80,12 @@ typedef struct {
   int64_t* elems;       // [n] element counts — the read-back layout AND the guard
   int64_t total;        // sum of elems, for resident_read's size check
   long long calls;      // steps taken; only PJRT_FFI_FAULT=2 reads it
+  int hold;             // 1 = seed-and-HOLD (the eval forward): the retained set is
+                        // reused as input and never replaced, because this graph
+                        // returns logits, not parameters. See `res_out < 0`.
+  long long gen;        // hold mode only: the caller's generation token. A change
+                        // re-seeds. This is what stops a held set going stale
+                        // silently when the host's parameters move.
 } resident_t;
 
 struct iree_ffi_session_t {
@@ -1173,6 +1179,17 @@ cleanup:
 // retained + this step's outputs is the same two live sets the copying path
 // already held between Execute and cleanup.
 //
+// ▶ THE `_v2` SUFFIX IS LOAD-BEARING — BUMP IT ON ANY SIGNATURE CHANGE. The
+// reference from `iree_lean_ffi.c` is WEAK and resolved at RUN time against
+// whichever shim is on the path, so a binary linked before a signature change
+// calls the new shim with the old argument list and every argument shifts. That
+// is not a link error, it is GARBAGE: caught 2026-08-01 as
+// "@efficientnet_adam_train_step returns 740 outputs, caller supplied
+// -886575312 destinations" from the one binary that had not been rebuilt after
+// `res_gen` was inserted. With a versioned name the stale weak reference instead
+// resolves to NULL and the caller falls back to the copying path — slower, and
+// correct, which is the right way round for a mismatch nothing else can detect.
+//
 // ▶ ONE FUNCTION SERVES 1 AND N REPLICAS. Writing a single-device copy beside a
 // DP copy would be the double-writer disease one level down, in code — the thing
 // `vitBackAll` and `TestShardCheck` exist to avoid. `n_replicas == 1` with a NULL
@@ -1180,11 +1197,11 @@ cleanup:
 // keeps its OWN retained set on its own device, which is not merely allowed but
 // is the point: today the copying path reads replica 0 back and re-pushes it to
 // every replica each step, and that push is O(N-1) against O(1) compute.
-int pjrt_ffi_invoke_f32_resident(
+int pjrt_ffi_invoke_f32_resident_v2(
     iree_ffi_session_t* sess,
     const char* fn_name,
     int n_replicas,
-    int res_in, int res_out, int n_resident,
+    int res_in, int res_out, int n_resident, long long res_gen,
     int n_inputs,
     const int32_t* input_ranks,
     const int64_t* input_dims_flat,
@@ -1219,17 +1236,34 @@ int pjrt_ffi_invoke_f32_resident(
             sess->entry, sess->num_outputs, n_outputs);
     return 1;
   }
-  if (n_resident <= 0 || res_in < 0 || res_out < 0 ||
-      res_in + n_resident > n_inputs || res_out + n_resident > n_outputs) {
+  // ▶ `res_out < 0` selects HOLD mode (the eval forward) — see the resident_t
+  // comment. The output-range half of this guard does not apply there, because
+  // the point of hold mode is that there IS no output counterpart.
+  const int hold = (res_out < 0);
+  if (n_resident <= 0 || res_in < 0 || res_in + n_resident > n_inputs ||
+      (!hold && res_out + n_resident > n_outputs)) {
     fprintf(stderr,
-            "[pjrt_ffi] resident range in[%d,%d) / out[%d,%d) does not fit a graph "
+            "[pjrt_ffi] resident range in[%d,%d) / out[%s] does not fit a graph "
             "with %d inputs and %d outputs\n",
-            res_in, res_in + n_resident, res_out, res_out + n_resident,
+            res_in, res_in + n_resident, hold ? "hold" : "see res_out",
             n_inputs, n_outputs);
     return 1;
   }
 
   resident_t* res = &sess->res;
+  // ▶ HOLD MODE (`res_out < 0`) — the eval forward. That graph returns LOGITS, not
+  // parameters, so there is no output to retain and the seeded set is simply
+  // reused call after call. `res_gen` is the caller's generation token: the
+  // parameters change once per epoch and the caller says so by changing it, which
+  // re-seeds. Without that a held set would go stale SILENTLY and eval would score
+  // last epoch's weights — a worse failure than anything the update mode can have,
+  // because it looks like a plateau rather than an error.
+  if (hold && res->n && res->gen != res_gen) {
+    if (trace_enabled())
+      fprintf(stderr, "[pjrt_ffi] RESIDENT hold: generation %lld -> %lld, reseeding\n",
+              res->gen, res_gen);
+    resident_free(res);
+  }
   if (res->n && (res->n != n_resident || res->replicas != n_replicas)) {
     fprintf(stderr,
             "[pjrt_ffi] @%s holds %d resident tensors x %d replicas; caller now asks "
@@ -1271,8 +1305,10 @@ int pjrt_ffi_invoke_f32_resident(
       for (int k = 0; k < input_ranks[i]; k++) e *= input_dims_flat[dim_off[i] + k];
       // The structural check that replaces the copying path's per-output size
       // query: input j and output j must be the same tensor, or "feed the output
-      // back as the input" is not the identity the whole scheme rests on.
-      if (e != output_totals[res_out + j]) {
+      // back as the input" is not the identity the whole scheme rests on. In hold
+      // mode there IS no counterpart, so there is nothing to check here — what
+      // stands in its place is `res_gen`.
+      if (!hold && e != output_totals[res_out + j]) {
         fprintf(stderr,
                 "[pjrt_ffi] resident slot %d: input %d has %lld elements but output "
                 "%d has %lld — they are not the same tensor, refusing to retain\n",
@@ -1286,6 +1322,8 @@ int pjrt_ffi_invoke_f32_resident(
     res->buf = (PJRT_Buffer**)calloc((size_t)n_replicas * n_resident, sizeof(*res->buf));
     res->n = n_resident;
     res->replicas = n_replicas;
+    res->hold = hold;
+    res->gen = res_gen;
 
     // §4's fault control, in the only form this path can carry one: 1 ULP on the
     // first float of the parameter state as it lands on the device. See
@@ -1450,7 +1488,10 @@ int pjrt_ffi_invoke_f32_resident(
   // parameters in place: a stale retained handle, injected deliberately. See
   // `fault_mode` for why mode 1 is not a usable control on every net.
   res->calls++;
-  if (fault_mode() == 2 && res->calls == 5) {
+  if (hold) {
+    // Nothing to adopt: the held set IS the parameters and this graph produced
+    // none. Every output goes to the host below.
+  } else if (fault_mode() == 2 && res->calls == 5) {
     fprintf(stderr, "[pjrt_ffi] PJRT_FFI_FAULT=2: dropping step %lld's parameters "
                     "(stale retained handle)\n", res->calls);
   } else {
@@ -1470,7 +1511,7 @@ int pjrt_ffi_invoke_f32_resident(
     PJRT_Event** d2h = (PJRT_Event**)calloc((size_t)n_outputs, sizeof(*d2h));
     double td = acct ? now_ms() : 0;
     for (int i = 0; i < n_outputs; i++) {
-      if (i >= res_out && i < res_out + n_resident) continue;   // stays on device
+      if (!hold && i >= res_out && i < res_out + n_resident) continue;  // stays on device
       size_t want = (size_t)output_totals[i] * sizeof(float);
       if (acct) acct->d2h_mb += want / 1048576.0;
       PJRT_Buffer_ToHostBuffer_Args q = {0};
