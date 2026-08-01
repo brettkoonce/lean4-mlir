@@ -4858,9 +4858,28 @@ one).
 * **`benchmark-xla` is untouched and would report wrong numbers if residency were wired in
   naively** — §2d.3's own analysis below still stands, and residency being opt-in is what keeps it
   correct today.
-* **No 80-epoch run on the resident path.** The gate is 30 steps; bit-identity over 30 steps is a
-  transport claim, not an endurance one. Device memory is unchanged by construction (the retained
-  set replaces buffers the copying path already held live), but nothing has run for hours yet.
+* ~~**No long run on the resident path**~~ — partially closed 2026-08-01 by running the WHOLE
+  `lake run cifar-xla` group both ways: six nets × 40 epochs, **937 s → 335 s = 2.80×**
+  (~15.6 min → ~5.6 min), `rc=0` on all twelve trainers.
+
+  ⚠ **Final accuracies are NOT identical between the two passes, and that is the expected result,
+  not a defect** — the committed shim autotunes, so this had to be read against an A-vs-A control
+  rather than against equality. A second copying pass gives it:
+
+  | | max | mean |
+  |---|---|---|
+  | **A-vs-A** — copying vs copying, two runs | **1.88 pp** | 0.59 pp |
+  | copying vs **resident** | **1.22 pp** | 0.49 pp |
+
+  **Residency agrees with the copying path better than the copying path agrees with itself**, and
+  the net that looked worst (`bn-momentum`, 1.22 pp) is exactly the one whose own A-vs-A spread is
+  the largest at 1.88 pp. Same shape as §2f-bis's ConvNeXt result. Bit-identity is separately
+  established by the gate under the deterministic shim; this is the end-to-end confirmation that it
+  survives 40 epochs, which the 10-step gate cannot say.
+
+  Still owed: an 80-epoch Imagenette run on a large net. Device memory is unchanged by construction
+  (the retained set replaces buffers the copying path already held live), but nothing large has run
+  for hours yet.
 * **The IREE peer could not be link-checked on this box** — `resnet34-verified-adam` fails at
   `ld.lld` on four `iree_ffi_train_step_adam_*` symbols, and that reproduces at **pristine HEAD**,
   so it is a pre-existing ares condition and not this change. The weak-symbol pattern used here is
