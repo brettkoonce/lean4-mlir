@@ -666,6 +666,20 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 256 1000 "1.0e-05" 1
     Proofs.StableHLO.R34Opt.heavyBall "resnet34in")
 
+-- **The 4-GPU data-parallel peer**, at `B := 64` PER REPLICA so the GLOBAL batch is 64×4 = 256 —
+-- the same global batch, the same 5004 steps/epoch and the same recipe as the single-device
+-- `mom256` render above, and the same batch the JAX reference trains at (4×64, see
+-- `jax/runs/r34_imagenet_bf16_90ep/RESULTS.md`). That is deliberate: rendering 256 per replica
+-- would make the global batch 1024 and silently change the recipe, so the run would no longer be
+-- comparable to either peer without an LR rescale. Matching the reference is what makes the
+-- resulting wall-clock a like-for-like number rather than a new experiment.
+--
+-- Nothing in the renderer changed for this: `optOne` already takes `replicas` and already calls
+-- `emitGradAllReduce`, exactly as §2h-bis found for mnv2. This is one `#eval`.
+#eval IO.FS.writeFile "verified_mlir/resnet34in_momdp64_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 64 1000 "1.0e-05" 4
+    Proofs.StableHLO.R34Opt.heavyBall "resnet34in")
+
 #eval IO.FS.writeFile "verified_mlir/resnet34in_fwd.mlir"
   (Proofs.StableHLO.resnet34FwdFaithfulV 256 1000 "1.0e-05" "resnet34in")
 
@@ -686,3 +700,7 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .heavyBall == "mom"
 #guard Proofs.StableHLO.r34AdamVariant 32 2 .heavyBall == "momdp"
 #guard Proofs.StableHLO.r34AdamVariant 256 1 .heavyBall == "mom256"
+-- The 4-GPU ImageNet render: per-replica 64, so the slug carries 64 and NOT the 256 global batch.
+-- Pinned because the driver derives `LEAN_MLIR_VARIANT` from `(B, replicas)` while the `#eval`
+-- above hardcodes the path, and an "entry mismatch" at run time is the failure they drift into.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 .heavyBall == "momdp64"
