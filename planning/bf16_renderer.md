@@ -161,9 +161,34 @@ template: `mnist-linear-e4m3-verified` → `mnist-mlp-e4m3-verified` → `mnist-
 **Backward is a separate axis and is NOT in the table.** Every rung above is the *forward*. The
 train step also carries the VJPs (`convBack`, `bnBack`, `denseRowBack`, the `*Sgd` tail folds). JAX
 keeps master weights in fp32 and only casts the GEMM operands; the verified path must decide the
-same question explicitly, and the `*Sgd` ops must stay fp32 or the optimizer state degrades. Scope
-the forward rungs first and keep the backward fp32 — that alone is most of the win, since the
-forward GEMMs dominate.
+same question explicitly, and the `*Sgd` ops must stay fp32 or the optimizer state degrades.
+
+⚠ **CORRECTION 2026-08-01 — an earlier draft of this paragraph said "keep the backward fp32, that
+alone is most of the win, since the forward GEMMs dominate". That is FALSE and it inverts the
+plan.** Measured on ares, a 4-layer 256ch 28² conv stack at batch 64:
+
+```
+fp32: fwd 12.91 ms   fwd+bwd 41.66 ms   bwd share 69.0%
+bf16: fwd  5.85 ms   fwd+bwd 17.35 ms   bwd share 66.3%
+```
+
+**The backward is ~69% of a training step**, so:
+
+| bf16 covers | step | speedup |
+|---|---|---|
+| nothing | 41.66 ms | 1.00× |
+| forward only | 34.6 ms | **1.20×** |
+| forward + backward | 17.35 ms | **2.40×** |
+
+Forward-only captures about a SIXTH of the available win. So the conv **dgrad** and **wgrad** nodes
+are not a follow-on — they are where the money is, and any plan that ships forward-only should
+expect ~1.2× and say so.
+
+**This is also the whole reason JAX gets this in one line and we do not.** JAX autodiffs the
+backward *from* the forward, so casting the forward's operands propagates to the backward for free.
+This repo's VJPs are hand-written (`convBack`, `convWeightSgd`, …) and inherit nothing — every
+backward op needs its own bundled bf16 twin. The cost difference is structural, not incidental, and
+it is the honest answer to "why not just flip a flag".
 
 ## Where the code changes
 
