@@ -7038,7 +7038,7 @@ module @m {
     %b2 = stablehlo.constant dense<0.999> : tensor<f32>
     %ob2 = stablehlo.constant dense<0.001> : tensor<f32>
     %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>
-    %wd = stablehlo.constant dense<0.0001> : tensor<f32>
+    %wd = stablehlo.constant dense<0.05> : tensor<f32>
     %arsumwConv = "stablehlo.all_reduce"(%v7006) ({
     ^bb0(%arawConv: tensor<f32>, %arbwConv: tensor<f32>):
       %araddwConv = stablehlo.add %arawConv, %arbwConv : tensor<f32>

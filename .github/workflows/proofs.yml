@@ -144,6 +144,7 @@ jobs:
               verified_mlir/cnxin_adamwx_train_step.mlir \
               verified_mlir/convnext_adamclip_train_step.mlir \
               verified_mlir/cnxin_adamwxclip_train_step.mlir \
+              verified_mlir/cnxin_adamdpwxclip_train_step.mlir \
 
             || { echo "::error::committed verified_mlir/{convnext,cnxin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
@@ -187,6 +188,7 @@ jobs:
               verified_mlir/vitin_adam128wx_train_step.mlir \
               verified_mlir/vit_adamclip_train_step.mlir \
               verified_mlir/vitin_adam128wxclip_train_step.mlir \
+              verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir \
               verified_mlir/vitin_fwd.mlir \
               verified_mlir/vitin_adam128_train_step.mlir \
               verified_mlir/vitin_adamdp128x4_train_step.mlir \

@@ -78,6 +78,13 @@ that does not exist yet.
 | **bf16 / bf16Conv** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | batch / epochs | ✅ | ✅ | ✅ | ✅ | ✅ | all matched at 4 replicas |
 
+⚠ **A ✅ on this matrix means the RENDER exists — check it is the render a RUN would load.** Until
+2026-08-02 every ViT/ConvNeXt ✅ above was true of the single-device artifact and false of the
+data-parallel one, which is the artifact an ImageNet run actually loads: the DP renders were three
+features behind (`wd` 500× off, no `wx`, no clip). Closed by `vitin_adamdp128x4wxclip` /
+`cnxin_adamdpwxclip` (handoff §0.5). The check that found it was listing what each artifact BAKES,
+not reading this table.
+
 **Distance to parity, per net:**
 
 | net | gaps | verdict |

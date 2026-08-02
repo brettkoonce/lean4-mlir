@@ -90,6 +90,7 @@ a live thread unless §0.3 says it is owed.
 | **§0.1** | ⚠ the box constraint — it re-orders everything |
 | **§0.2** | ✅ grad clip — DONE; what it cost, and the three traps it found |
 | **§0.3** | ⚠ what is OWED, collected in one place |
+| **§0.5** | ✅ DP ImageNet recipe parity — and the DP control it broke |
 | **§0.4** | ✅ what landed 2026-08-02, with the findings worth keeping |
 
 ### §0.1 ⚠⚠ THE THING THAT CHANGES WHAT "NEXT" MEANS: **this box cannot do long runs**
@@ -158,11 +159,11 @@ at ~960,000 ppm **while passing ①**, because ‖g‖² is still one shared sca
    ported to ConvNeXt inherits ViT's conditioning (§0.4 finding 1, now in a **fourth** place). ④ is
    run FIRST now, because it is also ①'s floor, and it refuses with the det-shim recipe.
 
-⛔ **Owed: the DP clip artifact and its numeric gate.** The ordering is closed *structurally* — at
-`replicas := 2` all **200** collectives (not 400) precede the fold and every sum-of-squares consumes
-`%armean*` — but nothing is committed or numerically gated, deliberately: the DP ImageNet renders
-already carry §0.3's 500× `wd` gap, and stacking a variant on a known-wrong one is not a pair
-either. ⚠ `shard-check` cannot gate it (the clip makes `m'` nonlinear in `g`); use `*-dp-check`.
+✅ **The DP artifact and its gate landed the same day — §0.5.** `vitin_adamdp128x4wxclip` /
+`cnxin_adamdpwxclip`, bit-exact at 4 replicas on 17,152,251 / 85,762,779 floats. ⚠ And running its
+control turned up a **new hole in a gate every DP render uses**: the sum-not-mean control is
+structurally blind on any clipped render, because grad clip is scale-invariant where it saturates.
+§0.5 has the mechanism and the composed control that replaces it.
 
 ---
 
@@ -261,15 +262,60 @@ does not help here; the norm is a property of the *data*, so drive it with a sca
 
 | owed | why it matters | where |
 |---|---|---|
-| ⛔ **`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam`, `cnxin_adamdp` bake `wd = 1e-4`** where their references use **0.05** | a 500× wrong hyperparameter. **Must be closed before any ViT or ConvNeXt ImageNet pair run** — a matched pair at the wrong decay is not a matched pair. Only the `*wx` renders were fixed | §2c |
+| ~~⛔ the four ImageNet renders bake `wd = 1e-4`~~ ✅ **CLOSED 2026-08-02** | all four bake **0.05** now; the re-render diff was exactly 4 lines, all `%wd`, every other artifact byte-identical, and both pairs re-gate bit-exact at 4 replicas | §0.5 |
 | ⛔ stochastic depth's **asymmetric-batch DP gate** | the duplicated-batch `*-dp-check` harnesses are structurally blind to a mask that is replicated instead of sharded, and `shard-check` needs the gated slot linear in the gradient — **false for RMSProp's buffer**, which is the net that wants both. The construction does not exist | `stochastic_depth.md` §5b |
-| ⛔ the **DP clip artifact + its numeric gate** on ViT/ConvNeXt | the ordering is right structurally (200 collectives before the fold, all folds on `%armean*`) but nothing is committed or measured. ⚠ `shard-check` cannot gate it — the clip makes `m'` nonlinear in `g`; use `*-dp-check`. Blocked behind the `wd` row above | `grad_clip.md` §11 |
+| ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
+| ⚠⚠ **every DP render's sum-not-mean control is BLIND once a clip is on** | a NEW hole, found by running it: grad clip is scale-invariant where it saturates, so the standard control passes bit-exact on a deliberately broken collective. The composed control (`perturb_clip.py hi` + sum-not-mean) is documented in `TestViTDpCheck.lean`. ⚠ **Any future clipped render must use it** | §0.5 |
 | ⚠ the **`emadp` DP peers** on ViT and EfficientNet | `vitAdamVariant 32 2 true` names ViT's; nothing renders either | §0.4 |
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
 | ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
 
 ---
+
+### §0.5 ✅ DP IMAGENET RECIPE PARITY (2026-08-02) — and the control it broke
+
+**The DP ImageNet renders were THREE features behind their single-device peers**: `wd = 1e-4`
+(500× off), no `wdExcludeNormBias`, no grad clip. An ImageNet run loads the DP render, so *the
+artifact a real ViT/ConvNeXt pair run would have used matched none of its reference's optimizer
+recipe*, while the corrected single-device renders sat beside it unused. Found by **listing what
+each artifact bakes** — §0.4 finding 5 one axis over (there Imagenette-vs-ImageNet, here
+single-device-vs-DP).
+
+* **decay fixed on all four** (`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam`, `cnxin_adamdp`).
+  The re-render diff is **exactly 4 lines, all `%wd`**; every other committed artifact is
+  byte-identical. ⚠ They stay short of the reference in the ways their docstrings list (no `wx`, no
+  clip, one-hot targets) — **the decay was never on that list, it was a typo**, and no config
+  anywhere says "ImageNet ViT at 1e-4".
+* **the shipping renders exist**: `vitin_adamdp128x4wxclip` (global 512) and `cnxin_adamdpwxclip`,
+  `wd = 0.05`, decay partitions 126/74 and 121/59 matching their single-device peers,
+  **200 / 180 all_reduces (not 400 / 360)**, every one before the norm fold.
+* **gated at 4 replicas, bit-exact** under the det shim: ViT **17,152,251/17,152,251** floats,
+  ConvNeXt **85,762,779/85,762,779**. The wd-fixed no-clip pair re-gates bit-exact too, so the
+  committed DP numbers survive the change.
+
+#### ⚠⚠ AND THE STANDARD DP CONTROL IS BLIND ON A CLIPPED RENDER — a new hole in a gate every DP render uses
+
+The sum-not-mean control (200 divisors 4.0 → 1.0) **passes bit-exact, rc=0**, on
+`vitin_adamdp128x4wxclip`. Not a harness fault:
+
+> **Global-norm clipping is SCALE-INVARIANT where it saturates.** `g · min(1, c/‖g‖) = c·g/‖g‖`
+> whenever `‖g‖ ≥ c`, and that is invariant under `g → λg`. A collective wrong by ANY scalar —
+> sum-not-mean, a wrong replica count, a doubled gradient — is **exactly** normalised away.
+
+Pinned to the clip rather than to anything else that changed, by two runs: the same control on the
+**no-clip** DP render fires at norm-rel **2.965**, and composed with `perturb_clip.py hi` (threshold
+above the norm ⇒ clip inert) it fires on the **clipped** render at **identically 2.965**.
+
+⚠ **The composed control is the RIGHT control, not a workaround.** Where the clip saturates a scale
+error is *both* invisible to the gate *and* harmless to training — the update is `c·g/‖g‖` either
+way. Where it does not (late training, ‖g‖ < c) the clip is the identity and the error is fully live
+*and* fully visible. Raising the threshold moves the control to the only regime in which the defect
+it hunts has consequences. Generalised: **a gate whose downstream NORMALISES the perturbation away
+cannot test for it** — §0.4 finding 1 one level over. The recipe is in `TestViTDpCheck.lean`.
+
+⚠ **This binds every clipped render anyone adds from here.** The saturated regime is the default:
+the reference measured the init norm at 10×+ the threshold, and `clip-tie` measures 26-45×.
 
 ### §0.4 ✅ WHAT LANDED 2026-08-02 — the day's threads, and the findings that outlive them
 

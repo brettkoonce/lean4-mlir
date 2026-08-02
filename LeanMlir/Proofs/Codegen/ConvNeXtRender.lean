@@ -978,10 +978,19 @@ end Proofs.StableHLO
 -- -0.000100 at K=1000 rather than the K=10 literal the Imagenette renders carry. That hardcoding
 -- was a REAL BUG on R34's first ImageNet render, on the gradient path, caught only because the
 -- loss was implausible (§2k). Gated below by the artifact check, not assumed.
+-- ⚠⚠ `wdStr := "0.05"` ON BOTH, AND IT IS A FIX. These baked the 1e-4 default until 2026-08-02 —
+-- `convnextTinyConfig`'s IMAGENETTE value — where `convnextTinyImagenetConfig.weightDecay := 0.05`.
+-- **No config says "ImageNet ConvNeXt at wd 1e-4"**, so these were at 1/500th of their reference's
+-- decay: §2a-quater's silently-wrong-hyperparameter shape, found while gating `wdExcludeNormBias`
+-- rather than by reading the configs. They stay short of the reference in the ways the docstring
+-- above lists (no `wx`, no clip, one-hot targets); the decay was never one of those ways.
+-- The variant that MATCHES the reference is `cnxin_adamdpwxclip` below.
 #eval IO.FS.writeFile "verified_mlir/cnxin_adam_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin")
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin"
+    (wdStr := "0.05"))
 #eval IO.FS.writeFile "verified_mlir/cnxin_adamdp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "cnxin")
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "cnxin"
+    (wdStr := "0.05"))
 #eval IO.FS.writeFile "verified_mlir/cnxin_fwd.mlir"
   (Proofs.StableHLO.convNextFwdFaithfulV "cnxin_fwd" 1000)
 
@@ -1023,6 +1032,13 @@ end Proofs.StableHLO
 -- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`.
 #eval IO.FS.writeFile "verified_mlir/cnxin_adamwxclip_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
+-- ▶ **THE DATA-PARALLEL PEER — the artifact an ImageNet run actually loads.** Until this landed the
+-- DP ImageNet render was three features behind its single-device peer (wrong decay, no `wx`, no
+-- clip), so the shipping recipe existed only in the variant nothing would run. ⚠ The clip sits
+-- AFTER the collective: 180 all_reduces, not 360, all before the norm fold.
+#eval IO.FS.writeFile "verified_mlir/cnxin_adamdpwxclip_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "cnxin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the

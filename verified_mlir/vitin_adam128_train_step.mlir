@@ -7035,7 +7035,7 @@ module @m {
     %b2 = stablehlo.constant dense<0.999> : tensor<f32>
     %ob2 = stablehlo.constant dense<0.001> : tensor<f32>
     %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>
-    %wd = stablehlo.constant dense<0.0001> : tensor<f32>
+    %wd = stablehlo.constant dense<0.05> : tensor<f32>
     %v7019 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x3x16x16xf32>
     %v7020 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x3x16x16xf32>
     %v7021 = stablehlo.multiply %v7019, %wConvm : tensor<192x3x16x16xf32>

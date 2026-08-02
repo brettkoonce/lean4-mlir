@@ -114,6 +114,30 @@ def main (args : List String) : IO Unit := do
   if replicas < 2 then
     IO.eprintln s!"VIT_DP_REPLICAS={replicas}: this gate needs at least 2 replicas"
     IO.Process.exit 1
+  -- ⚠⚠ **THE SUM-NOT-MEAN CONTROL IS STRUCTURALLY BLIND ON A CLIPPED RENDER.** Measured
+  -- 2026-08-02 on `vitin_adamdp128x4wxclip`: the 200 divisors 4.0 → 1.0 and the gate stays
+  -- **BIT-EXACT, rc=0**. It is not a harness fault — global-norm clipping is SCALE-INVARIANT where
+  -- it saturates: `g · min(1, c/‖g‖) = c·g/‖g‖` whenever `‖g‖ ≥ c`, which is invariant under
+  -- `g → λg`, so a collective off by any scalar is EXACTLY normalised away.
+  --
+  -- The same control on the no-clip DP render fires at norm-rel **2.965**, and composing it with
+  -- `scripts/perturb_clip.py hi` (threshold above the norm ⇒ the clip is inert) fires at
+  -- **identically 2.965** on the clipped render — which is what pins the cause to the clip rather
+  -- than to anything else that changed:
+  --
+  --     python3 scripts/perturb_clip.py verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir /tmp/hi.mlir hi
+  --     sed -E 's/^(    %arn[A-Za-z0-9_]+ = stablehlo\.constant dense<)4\.0(>)/\11.0\2/' /tmp/hi.mlir > /tmp/hi_sum.mlir
+  --     python3 scripts/perturb_clip.py verified_mlir/vitin_adam128wxclip_train_step.mlir /tmp/sg_hi.mlir hi
+  --     … vit-dp-check /tmp/hi_sum.mlir /tmp/sg_hi.mlir 128        # rc=1
+  --
+  -- ⚠ **THIS IS THE RIGHT CONTROL, NOT A WORKAROUND**, and the reason is worth keeping: where the
+  -- clip saturates, a scale error in the collective is BOTH invisible to the gate AND harmless to
+  -- training — the update is `c·g/‖g‖` either way. Where it does not saturate (late training,
+  -- ‖g‖ < c) the clip is the identity, and the error is fully live AND fully visible. So raising
+  -- the threshold does not weaken the control; it moves it to the only regime in which the defect
+  -- it hunts has consequences. Generalised: *a gate whose downstream NORMALISES the perturbation
+  -- away cannot test for it* — §0.4's "an identity gate at the neutral value cannot see WHERE the
+  -- value is applied", one level over.
   -- argv[1] overrides the DP render, so a deliberately broken one (sum-not-mean) can be run
   -- through the identical harness. Without this the bit-exact PASS above is unfalsifiable (§4).
   -- argv[2] overrides the single-device side and argv[3] the batch, which is what lets the SAME

@@ -943,10 +943,25 @@ end Proofs.StableHLO
 -- mixup + cutmix (soft labels — this render's cotangent is smoothed-CE over a ONE-HOT and cannot
 -- express them), stochastic depth, EMA and grad clipping. The pipeline-level augs (RandAugment,
 -- random erasing, repeated aug) DO come across for free via the shim. See the handoff §2p.
+-- ⚠⚠ `wdStr := "0.05"` ON BOTH, AND IT IS A FIX, NOT A NEW KNOB. These baked `vitAdamConsts`'
+-- 1e-4 default until 2026-08-02 — which is `vitTinyConfig`'s IMAGENETTE value. **No config
+-- anywhere says "ImageNet ViT at wd 1e-4"**: `vitTinyImagenetConfig.weightDecay := 0.05`, the DeiT
+-- value, so these two were training at 1/500th of their reference's decay. It is the
+-- `RenderCifar8Sgd02` / EfficientNet-16× shape (§2a-quater) — a silently wrong hyperparameter that
+-- compiles, runs and descends — and it was found while gating `wdExcludeNormBias`, i.e. by
+-- building the NEXT feature, not by reading the configs.
+--
+-- ⚠ These two remain SHORT of the reference recipe deliberately (no `wx`, no clip, no EMA, no
+-- stochastic depth, one-hot targets) and that is what the docstring above says. The decay was
+-- never on that list — it was a typo, and 0.05 is now the reference's number with the mask and the
+-- clip legitimately absent, which is an honest ablation point rather than an unlabelled mistake.
+-- The variant that MATCHES the reference is `vitin_adamdp128x4wxclip` below.
 #eval IO.FS.writeFile "verified_mlir/vitin_adam128_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adam128_train_step" "128.0" 1 128 1000)
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adam128_train_step" "128.0" 1 128 1000
+    (wdStr := "0.05"))
 #eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adamdp128x4_train_step" "128.0" 4 128 1000)
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adamdp128x4_train_step" "128.0" 4 128 1000
+    (wdStr := "0.05"))
 #eval IO.FS.writeFile "verified_mlir/vitin_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderV "vitin_fwd" 256 1000)
 
@@ -1008,6 +1023,22 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/vitin_adam128wxclip_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adam128wxclip_train_step" "128.0" 1 128 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
+-- ▶ **THE DATA-PARALLEL PEER, AND IT IS THE ONE AN IMAGENET RUN ACTUALLY LOADS.** 128 per device ×
+-- 4 = the reference's global 512. Until this landed the DP ImageNet renders were THREE features
+-- behind their single-device peers — wrong decay, no `wx`, no clip — so the artifact a real ViT
+-- pair run would have loaded matched none of its reference's optimizer recipe, while the corrected
+-- single-device ones sat beside it unused. ⚠ A feature is not done when its single-device artifact
+-- renders (§0.4 finding 5, one axis over: there it was Imagenette-vs-ImageNet, here it is
+-- single-vs-DP), and the way this was found was by LISTING what each artifact bakes.
+--
+-- ⚠ THE CLIP IS AFTER THE COLLECTIVE, and that is the whole DP question for this feature: the
+-- reference clips the already-combined gradient, so clipping per replica would clip 200 PARTIAL
+-- gradients — a different function that trains and descends. `vitAdamTrainStepFaithful` hoists both
+-- the collective and the clip above the optimizer loop at `clip := true` and passes `preAvg`, so
+-- this render emits **200 all_reduces, not 400**, all of them before the norm fold.
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adamdp128x4wxclip_train_step" "128.0" 4 128 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
 
 -- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ─────────────────
 -- ViT is the last of the three nets whose reference uses EMA (`vitTinyImagenetConfig.emaDecay :=
