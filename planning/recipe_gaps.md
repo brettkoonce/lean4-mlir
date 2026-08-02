@@ -219,8 +219,22 @@ otherwise. The alternative — no mixup on the verified path — is worse.
   θ′, not g. ⚠ It also must happen *before* the optimizer update, so it cannot be bolted onto the
   tail. Non-trivial, and it is a hard blocker for ViT's 5e-4 LR — the reference config calls grad
   clip *"the unlock"* for that rate.
-* **stochastic depth** is architectural: a per-block Bernoulli mask plus its VJP, and a train/eval
-  divergence. This is a new layer family, not a knob.
+* ~~**stochastic depth** is architectural: a per-block Bernoulli mask plus its VJP, and a train/eval
+  divergence. This is a new layer family, not a knob.~~ ⚠ **SCOPED 2026-08-02 —
+  `planning/stochastic_depth.md`, and this tiering is wrong in BOTH directions.** The math is
+  smaller than Tier E implies: the reference's drop-path is a **per-example scale**
+  (`branch · keep / keep_prob`, mask `(B,1,…,1)`), not a new layer family, and its VJP is **itself**
+  — one `selectMidB`-shaped constructor. What actually costs is the plumbing: it is the first
+  **per-step random graph INPUT** in the repo, which touches the driver, the shim's shard mask and
+  every arity-sensitive harness on three nets (26 train steps + 8 forwards).
+  Two findings from that doc worth having here:
+  * the mask must be **host-drawn and passed in**, never `stablehlo.rng` — in-graph randomness would
+    void every bit-exactness and known-answer gate in the repo at once;
+  * ⚠ **the duplicated-batch `*-dp-check` gates are structurally BLIND to a mis-sharded mask** (both
+    replicas get the same rows, so sharded and replicated are indistinguishable), and `shard-check`
+    — the gate that exists for exactly that hole — **cannot be used on EfficientNet**, because its
+    construction needs linearity in the gradient and that net wants stochastic depth *and* RMSProp.
+    That is an open design question, and it is a prerequisite, not a follow-up.
 
 ### Tier F — render + a new theorem.
 **bf16 / bf16Conv.** 4-6 sessions, needs `conv_close_mixed`, and `planning/bf16_renderer.md`
