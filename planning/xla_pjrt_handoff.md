@@ -67,15 +67,59 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ## 0. ▶ START HERE — **the next thread is the R34/ImageNet 30-epoch run on 4 GPUs.**
 
-**Written 2026-08-01 at the end of the residency session. Everything below §0a is committed and
-green; this section is the only thing you need to read before starting.**
+**Rewritten 2026-08-02 at the end of the ImageNet-scaffolding session.** Everything below §0a is
+committed and green. Read this section and `planning/recipe_gaps.md`; nothing else is required
+before starting.
+
+### ▶ WHAT LANDED 2026-08-01/02 (7 commits) — read this before assuming anything below is current
+
+* **All five nets now have a gated ImageNet trainer** — `resnet34in`, `vitin`, `cnxin`, `enetin`,
+  `mnv2in` (§2p). **Every one matches its JAX reference param count exactly**: 21,797,672 ·
+  5,717,416 · 28,587,592 · 5,288,548 · 3,504,872. Each is gated on DP, residency and an
+  end-to-end run on real ImageNet over the shim. **None has a descent run** — the smokes are 40
+  steps, which shows they RUN, not that they LEARN.
+* **`planning/recipe_gaps.md` is new and is the plan.** Its headline: **ResNet-34 is already at
+  feature parity with its JAX reference except bf16**, so v1 for R34 is a run, not a build.
+* **Soft targets need NO render change** — the committed renders are AFFINE in `%onehot`
+  (`lake build soft-target-tie`; ViT 492× / ConvNeXt 309× separation). §2p's earlier claim that
+  mixup needs a `softLabelCE` cotangent is **retired**. `lean_fill_targets` in the C shim takes
+  either int32 labels or a float32 distribution, dispatched on buffer size.
+* **Shim wire v2** carries `float32[batch·nClasses]` soft targets (`SHIM_NCLASSES` / `SHIM_SOFT`),
+  gated bit-identical against v1 with a refusal control. **Shim sharding** (`SHIM_SHARD`,
+  `SHIM_WORKERS`) exists and is inert at the default — ⚠ and is NOT needed: the loader was measured
+  and is **not** the bottleneck (synthetic 424 ms/step vs real-data 427).
+* **⛔ FIVE COPIES OF ONE BUG were found across FOUR nets** — a label-smoothing constant hardcoded
+  at the K=10 value: R34's cotangent (§2k), ConvNeXt's loss, EfficientNet's loss, and mnv2's
+  cotangent **and** loss. All derived now. **It survives the obvious check** because that greps the
+  cotangent's negative spelling `-0.010000` and the loss copy is positive-signed and on no gradient
+  path. Any new emitted constant depending on `nClasses`/`alpha`/batch must be derived and gated by
+  a byte-identical re-render — which is how a wrong `α` was caught mid-edit on mnv2.
+* **`shard-check` is N-replica now** (`SHARD_REPLICAS`, `SHARD_VARIANT{,_DP}`), gated by
+  reproducing the 2-replica harness it replaces to the digit. ⚠ That run **retired a stale number**:
+  §5 records ConvNeXt's shard CONTROL as 0.137; both harnesses agree on **0.041645** today — 0.137
+  predates §2o's channel-LN flip.
+* **`residency_gate.sh` takes `$GATE_DEVICES`** (default "0"), which is what makes DP renders
+  gatable at all; and **ViT is in `residency_gate_all.sh` at fault mode 2**, because ViT+AdamW is
+  CONTRACTIVE — it absorbs a 1-ULP fault to 1 byte of 66M where R34 amplifies to ~184M of 255M.
+  "AdamW ⇒ chaotic ⇒ mode 1" is refuted.
 
 ### ▶ THE JOB: get R34/ImageNet over the line
 
-§2d.3 (device-resident parameters) landed today and made this **feasible for the first time** —
-4-GPU R34/ImageNet went **596 → 386 ms/step**, so a 30-epoch run is **~16 h** where it was ~25 h.
-The 4-GPU rig was smoke-tested end to end: 6 epochs × 400 steps, `rc=0`, loss **7.03 → 5.65**
-monotone, all four cards 47-57 °C at ~80 W. Nothing structural is in the way.
+§2d.3 (device-resident parameters) made this **feasible for the first time** — 4-GPU R34/ImageNet
+went **596 → 386 ms/step**, so a 30-epoch run is **~16 h** where it was ~25 h. The 4-GPU rig was
+smoke-tested end to end: 6 epochs × 400 steps, `rc=0`, loss **7.03 → 5.65** monotone, all four cards
+47-57 °C at ~80 W. Nothing structural is in the way.
+
+**Preflight run 2026-08-02 and it is GREEN**: binary rebuilt against today's `spawnShim` /
+`readShimBatch` signature changes, shim carries both new features with v1 output byte-identical,
+artifact untouched, all 6 GPUs idle, `scripts/jobs/r34-imagenet-4gpu.conf` correct.
+⚠ **The epoch-6 checkpoint from the 08-01 smoke WAS ARMED and has been moved aside** (to the
+session scratchpad, not deleted) — it came from a 400-capped-step run, so resuming it would have
+carried 8%-of-an-epoch momentum into epoch 7 and done 24 epochs, `rc=0`, silently.
+⚠ Note `r34-imagenet-4gpu.conf` uses `DEVS="0,2,3,4"`, **not** 0-3 — it excludes the AER-unclean
+cards. The smokes in this file used 0,1,2,3, which is less conservative.
+⚠ 30 epochs is the `resnet34ImagenetConfigShort` tier; the JAX **72.02%** is a **90-epoch** number,
+and no JAX 30-epoch run exists to compare against.
 
 ```bash
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
@@ -114,7 +158,19 @@ optimizer, same augmentation via the generated shim. The param counts already ag
 **21,797,672** (§2l/§2m), which is the precondition that made the pair meaningful. Claim ceiling
 stays §5's: *"one architecture, two independent lowerings, agreeing"*, never "proven".
 
-### ▶ Then, in value order
+### ▶ Then, in value order — **superseded by `planning/recipe_gaps.md`, read that first**
+
+`recipe_gaps.md` enumerates every difference between the five verified ImageNet trainers and their
+JAX references, classified by which LAYER each gap lives in (pipeline / producer / driver / render /
+render+theorem), with the measured wall-clock budget: **~203 h ≈ 8.5 days** of 4-GPU time for all
+five at reference epochs. Its ordering, in brief:
+
+**v1.0 run R34** (zero build) · **v1.1** exponential LR decay + EMA (driver only) · **v1.2**
+RMSProp (the ONLY thing between mnv2 and parity) · **v1.3** mixup+cutmix (wire is done) · **v1.4**
+`wdExcludeNormBias`, grad clip · **v2** stochastic depth, bf16.
+
+The list below is the pre-ImageNet ordering and is kept because the bf16 measurements are still the
+best ones on file.
 
 1. **bf16** — and its case just got much stronger, twice: measured **×1.76 on ares** (three runs;
    §3's ×0.96 is an RDNA3 result and does not carry), and residency raised what it is worth on the
@@ -4334,6 +4390,36 @@ used the 264 ms/step that turned out to be wrong; **the loader ceiling was an ar
 compute estimate**, which is the same "one number carried into a new regime" mistake this file
 records for the 1.04×-vs-JAX claim (§3). Sharding is built, gated and inert at `SHIM_WORKERS=1` —
 keep it for when a faster render or bf16 changes the balance, but **do not set it today**.
+
+#### ▶ ALL FIVE ImageNet trainers — the scoreboard (2026-08-02)
+
+`vitin` is written up in detail above; the other three followed the same recipe. **No descent runs
+yet** — every smoke is 40 steps.
+
+| net | target | params (verified == JAX) | DP gate | residency | ms/step (4 GPU) | steps/ep |
+|---|---|---|---|---|---|---|
+| `resnet34in` | `mom256`/`momdp64` | **21,797,672** | ✅ (cifar8 proxy, §2b-quater) | ✅ | 386 (4×64) | 5004 |
+| `vitin` | `adam128`/`adamdp128x4` | **5,717,416** | ✅ bit-exact 17,152,251 | ✅ | 424 (4×128) | 2502 |
+| `cnxin` | `adam`/`adamdp` | **28,587,592** | ✅ bit-exact 85,762,779 | ✅ | 270 (4×32) | 10009 |
+| `enetin` | `adam64`/`adamdp64` | **5,288,548** | ✅ **sharding** 2.06e6 sep | ✅ | 310 (4×64) | 5004 |
+| `mnv2in` | `adam64`/`adamdp64` | **3,504,872** | ✅ **sharding** 2.18e6 sep | ✅ | 294 (4×64) | 5004 |
+
+**What each needed, and it varied a lot:**
+
+* **ViT** — nothing but `#eval`s; `nClasses`/`bs`/`replicas` were already parameters.
+* **ConvNeXt** — `nClasses` was a hardcoded literal in ~20 places and `−α/K` was a string
+  independent of it. `cBS` is STILL a private constant in 96 places, which is why `cnxin` renders at
+  batch 32 (global 128, 10,009 steps/epoch). **Threading `cBS` would roughly halve its 60-hour run**
+  and is the single best pre-run optimisation available.
+* **EfficientNet / mnv2** — `B` and `nClasses` were already parameters; both needed a `slug`
+  (entry names were baked, and mnv2's forwards live in a DIFFERENT file from its train step), and
+  both carried the K=10 constant. These two are the batch-BN nets, so they have `_fwd_eval` peers
+  and are gated by `shard-check` rather than the duplicated-batch harness.
+
+⚠ **The variant names encode the PER-DEVICE BATCH, not the replica count** (`enetAdamVariant`,
+`mnv2AdamVariant`, `r34AdamVariant` all do this), so `adamdp64` would name both a 2- and a
+4-replica render at B=64. Only the 4-replica ones exist. Anyone adding a 2-replica peer must rename
+first or it is a silent clobber.
 
 #### The shim sharding, since it exists now
 
