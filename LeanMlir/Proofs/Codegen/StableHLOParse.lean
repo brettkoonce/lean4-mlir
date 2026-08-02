@@ -121,6 +121,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .sgdParamF θ lr ds :: ts, e :: st => parseStack ts (.sgdParamF θ lr ds e :: st)
   | .momVNextF v mu ds :: ts, e :: st => parseStack ts (.momVNextF v mu ds e :: st)
   | .momParamF θ v mu lr ds :: ts, e :: st => parseStack ts (.momParamF θ v mu lr ds e :: st)
+  | .rmsBufNextF sq buf rho orho mu eps ds :: ts, e :: st =>
+      parseStack ts (.rmsBufNextF sq buf rho orho mu eps ds e :: st)
   | .depthwiseF w b c h w' kH kW :: ts, e :: st =>
       parseStack ts (.depthwiseF w b c h w' kH kW e :: st)
   | .depthwiseBack w c h w' kH kW :: ts, e :: st =>
@@ -232,6 +234,8 @@ theorem parseStack_toToks (r : Raw) :
   | sgdParamF θ lr ds e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | momVNextF v mu ds e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | momParamF θ v mu lr ds e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | rmsBufNextF sq buf rho orho mu eps ds e ih =>
+      intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

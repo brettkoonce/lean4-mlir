@@ -11,6 +11,8 @@ import LeanMlir.Proofs.Architectures.ConvNeXt
 -- AdamStep only imports Foundation.Tensor + Mathlib, so this adds no cycle.
 import LeanMlir.Proofs.Codegen.AdamStep
 import LeanMlir.Proofs.Codegen.SgdMomentumStep
+-- RmsPropStep imports only the two above, so this adds no cycle either.
+import LeanMlir.Proofs.Codegen.RmsPropStep
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 1: the linear classifier)
 
@@ -845,6 +847,15 @@ inductive SHlo : Nat → Type where
       (μ : ℝ) (v : Vec n)                                       : SHlo n → SHlo n
   | momParamF {n : Nat} (θName vName muName lrName : String) (ds : List Nat)
       (μ lr : ℝ) (θ v : Vec n)                                  : SHlo n → SHlo n
+  -- ── RMSProp with momentum (`RmsPropStep.lean`), the optimizer the MobileNetV2 and
+  --    EfficientNet ImageNet references use. Only ONE op is new: the mean-square slot is
+  --    `adamVNextF` at `β₂ := ρ` (`rmsSqNext_eq_adamVNext`, by `rfl`), the coupled-L2 gradient is
+  --    `momVNextF` at `(μ := wd, v := θ)` (`momVNext_as_coupled_l2`), and the parameter update is
+  --    `sgdParamF` applied to this op's output. ⚠ TENSORFLOW's placement — ε goes INSIDE the
+  --    square root; the textbook `g/(√s' + ε)` is a DIFFERENT optimizer (see the ε-placement
+  --    theorem). `sqName`/`bufName` ride as name+value like every other optimizer op here.
+  | rmsBufNextF {n : Nat} (sqName bufName rhoName orhoName muName epsName : String)
+      (ds : List Nat) (ρ μ ε : ℝ) (sq buf : Vec n)              : SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -1130,6 +1141,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .sgdParamF _ _ _ lr θ e => sgdParam lr θ (den e)
   | _, .momVNextF _ _ _ μ v e => momVNext μ v (den e)
   | _, .momParamF _ _ _ _ _ μ lr θ v e => momParam μ lr θ v (den e)
+  -- RMSProp: the proven ℝ optimizer (RmsPropStep.lean) on the child's gradient.
+  | _, .rmsBufNextF _ _ _ _ _ _ _ ρ μ ε sq buf e => rmsBufNext ρ μ ε sq buf (den e)
   | _, .bnGammaSgd (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
@@ -2154,6 +2167,46 @@ theorem momParamF_mu_zero {n : Nat} (θN vN muN lrN : String) (ds : List Nat)
   simp only [momParamF_faithful, sgdParamF_faithful]
   exact momParam_mu_zero lr θ v (den e)
 
+/-- **Rendered RMSProp buffer is `Proofs.rmsBufNext`** — `b' = μ·b + g/√(ρ·s + (1−ρ)·g² + ε)`,
+    TensorFlow's ε placement. -/
+@[simp] theorem rmsBufNextF_faithful {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
+    (ds : List Nat) (ρ μ ε : ℝ) (sq buf : Vec n) (e : SHlo n) :
+    den (.rmsBufNextF sqN bufN rhoN orhoN muN epsN ds ρ μ ε sq buf e)
+      = rmsBufNext ρ μ ε sq buf (den e) := rfl
+
+/-- **The rendered RMSProp triple is `Proofs.rmsPropStep`.** The RMSProp analogue of
+    `adamW_triple_faithful` / `mom_pair_faithful`: `(θ', b', s')` as the three ops the render
+    actually emits, denoted together.
+
+    ▶ **Read the composition off this statement** — it is the whole "one new op" claim, checked:
+    the parameter slot is `sgdParamF` applied to *this op's SSA output* (`.operand`, so the buffer
+    is emitted once and threaded, per §4's no-CSE rule), and the mean-square slot is the EXISTING
+    `adamVNextF` at `β₂ := ρ`. Only `rmsBufNextF` is new. -/
+theorem rmsProp_triple_faithful {n : Nat} (θN sqN bufN rhoN orhoN muN epsN lrN : String)
+    (ds : List Nat) (ρ μ ε lr : ℝ) (θ sq buf : Vec n) (e : SHlo n) (b' : Vec n)
+    (hb : b' = rmsBufNext ρ μ ε sq buf (den e)) :
+    (den (.sgdParamF θN lrN ds lr θ (.operand "%buf" b')),
+     den (.rmsBufNextF sqN bufN rhoN orhoN muN epsN ds ρ μ ε sq buf e),
+     den (.adamVNextF sqN rhoN orhoN ds ρ sq e))
+      = rmsPropStep ρ μ ε lr θ sq buf (den e) := by
+  subst hb; rfl
+
+/-- **The mean-square slot really is the Adam op.** `adamVNextF` at `β₂ := ρ` denotes RMSProp's
+    `s'`, so reusing it is licensed rather than assumed — the emit-side twin of
+    `Proofs.rmsSqNext_eq_adamVNext`, and the reason this optimizer cost ONE op and not three. -/
+theorem adamVNextF_as_rmsSqNext {n : Nat} (sqN rhoN orhoN : String) (ds : List Nat)
+    (ρ : ℝ) (sq : Vec n) (e : SHlo n) :
+    den (.adamVNextF sqN rhoN orhoN ds ρ sq e) = rmsSqNext ρ sq (den e) := rfl
+
+/-- **`μ = 0` makes the rendered RMSProp buffer the bare normalised gradient.** The `mu_zero`
+    bridge `momParamF_mu_zero` provides for Nesterov, at the denotation level. -/
+theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
+    (ds : List Nat) (ρ ε : ℝ) (sq buf : Vec n) (e : SHlo n) :
+    den (.rmsBufNextF sqN bufN rhoN orhoN muN epsN ds ρ 0 ε sq buf e)
+      = fun i => (den e) i / Real.sqrt (rmsSqNext ρ sq (den e) i + ε) := by
+  simp only [rmsBufNextF_faithful]
+  exact rmsBufNext_mu_zero ρ ε sq buf (den e)
+
 /-- **Inference per-channel BN forward faithfulness.** The 4-D reshape + affine
     `γ·(x−μ)·rsqrt(var+ε)+β` with rank-1 μ/var/γ/β (`dims=[1]`) denotes the proven
     `bnPerChannelEvalTensor3` (PerChannelBN.lean). (`rfl`, so kept out of the axiom audit.) -/
@@ -3094,6 +3147,7 @@ inductive Raw where
   | sgdParamF (θ lr : String) (ds : List Nat) : Raw → Raw
   | momVNextF (v mu : String) (ds : List Nat) : Raw → Raw
   | momParamF (θ v mu lr : String) (ds : List Nat) : Raw → Raw
+  | rmsBufNextF (sq buf rho orho mu eps : String) (ds : List Nat) : Raw → Raw
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
@@ -3268,6 +3322,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .sgdParamF θN lrN ds _ _ e => .sgdParamF θN lrN ds (skel e)
   | _, .momVNextF vN muN ds _ _ e => .momVNextF vN muN ds (skel e)
   | _, .momParamF θN vN muN lrN ds _ _ _ _ e => .momParamF θN vN muN lrN ds (skel e)
+  | _, .rmsBufNextF sqN bufN rhoN orhoN muN epsN ds _ _ _ _ _ e =>
+      .rmsBufNextF sqN bufN rhoN orhoN muN epsN ds (skel e)
   | _, .depthwiseF (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .depthwiseF wN bN c h w kH kW (skel e)
   | _, .depthwiseBack (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
@@ -3474,6 +3530,7 @@ inductive Tok where
   | sgdParamF (θ lr : String) (ds : List Nat) : Tok
   | momVNextF (v mu : String) (ds : List Nat) : Tok
   | momParamF (θ v mu lr : String) (ds : List Nat) : Tok
+  | rmsBufNextF (sq buf rho orho mu eps : String) (ds : List Nat) : Tok
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Tok
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Tok
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Tok
@@ -3565,6 +3622,8 @@ def toToks : Raw → List Tok
   | .sgdParamF θ lr ds e => toToks e ++ [.sgdParamF θ lr ds]
   | .momVNextF v mu ds e => toToks e ++ [.momVNextF v mu ds]
   | .momParamF θ v mu lr ds e => toToks e ++ [.momParamF θ v mu lr ds]
+  | .rmsBufNextF sq buf rho orho mu eps ds e =>
+      toToks e ++ [.rmsBufNextF sq buf rho orho mu eps ds]
   | .depthwiseF w b c h w' kH kW e => toToks e ++ [.depthwiseF w b c h w' kH kW]
   | .depthwiseBack w c h w' kH kW e => toToks e ++ [.depthwiseBack w c h w' kH kW]
   | .depthwiseStridedF w b c h w' kH kW e => toToks e ++ [.depthwiseStridedF w b c h w' kH kW]
@@ -4384,6 +4443,34 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {lrb} = stablehlo.broadcast_in_dim {lrN}, dims = [] : (tensor<f32>) -> {T}\n" ++
         s!"    {stp} = stablehlo.multiply {lrb}, {lk} : {T}\n" ++
         s!"    {o} = stablehlo.subtract {θN}, {stp} : {T}\n", o :: st)
+  -- ══ RMSPROP (TensorFlow flavour): op-for-op `Proofs.rmsBufNext`, matching the JAX reference's
+  --    `MOMENTUM * b + g / jnp.sqrt(s + EPS)` where `s = RHO*s + (1-RHO)*g*g`. `%rho`/`%orho`/
+  --    `%mu`/`%eps` are runtime `tensor<f32>` args, broadcast to the param shape.
+  --    ⚠ `{ep}` is added to the mean-square BEFORE the `sqrt`, not to the root after it. That one
+  --    line is the entire difference from textbook RMSProp and it is a different optimizer —
+  --    `Proofs.rmsBufNext_eps_placement_at_zero` states the gap (1/√ε against 1/ε).
+  --    s' is recomputed here rather than shared with `adamVNextF`: SHlo is single-result, so each
+  --    output is its own node. XLA's CSE folds the duplicate (§2b-bis measured that on R34's
+  --    108 → 36 rsqrt, at no run-time cost). ══
+  | .rmsBufNextF sqN bufN rhoN orhoN muN epsN ds, r :: st => do
+      let T := ty ds
+      let rhob ← fresh; let orhob ← fresh; let ss ← fresh; let g2 ← fresh; let sg ← fresh
+      let sn ← fresh; let ep ← fresh; let da ← fresh; let dn ← fresh; let nrm ← fresh
+      let mub ← fresh; let bs ← fresh; let o ← fresh
+      pure (
+        s!"    {rhob} = stablehlo.broadcast_in_dim {rhoN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {orhob} = stablehlo.broadcast_in_dim {orhoN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {ss} = stablehlo.multiply {rhob}, {sqN} : {T}\n" ++
+        s!"    {g2} = stablehlo.multiply {r}, {r} : {T}\n" ++
+        s!"    {sg} = stablehlo.multiply {orhob}, {g2} : {T}\n" ++
+        s!"    {sn} = stablehlo.add {ss}, {sg} : {T}\n" ++
+        s!"    {ep} = stablehlo.broadcast_in_dim {epsN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {da} = stablehlo.add {sn}, {ep} : {T}\n" ++
+        s!"    {dn} = stablehlo.sqrt {da} : {T}\n" ++
+        s!"    {nrm} = stablehlo.divide {r}, {dn} : {T}\n" ++
+        s!"    {mub} = stablehlo.broadcast_in_dim {muN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {bs} = stablehlo.multiply {mub}, {bufN} : {T}\n" ++
+        s!"    {o} = stablehlo.add {bs}, {nrm} : {T}\n", o :: st)
   | .bnPerChannelEvalF gN bN muN varN epsStr oc h w, r :: st => do
       -- INFERENCE per-channel BatchNorm: reshape to [B,oc,h,w], then the affine map
       -- γ·(x − μ)·rsqrt(var + ε) + β with μ/var/γ/β all rank-1 `[oc]` graph inputs
@@ -5860,6 +5947,67 @@ def alphaOverK (nClasses : Nat) (alpha : Float := 0.1) : String :=
 /-- `1 − α`, the ON-class weight of label-smoothed CE. Emitted beside `alphaOverK`, because the two
     always move together and splitting them is how one of them gets updated alone. -/
 def oneMinusAlpha (alpha : Float := 0.1) : String := fmt6 (1.0 - alpha)
+
+/-- **`1 − ρ`, the RMSProp mean-square mixing weight.** Derived from ρ, never written as a second
+    literal beside it — the `oneMinusAlpha` precedent, and the K-constant lesson (§2k): *any
+    emitted constant that depends on a hyperparameter must be DERIVED*, because the copy is what
+    gets left behind when the original moves. Five copies of one label-smoothing constant were
+    found across four nets in a single session for exactly this reason. -/
+def oneMinusRho (rho : Float) : String := fmt6 (1.0 - rho)
+
+/-- Which optimizer tail a whole-net render emits. `.adamw` is every net's committed default and
+    reproduces the existing artifacts byte-identically; `.rmsprop` is what the MobileNetV2 and
+    EfficientNet ImageNet references actually use (`planning/recipe_gaps.md` v1.2).
+
+    Lives here rather than in either renderer because **both** need it: a per-net copy of a
+    two-constructor choice is the double-writer disease one level down, in code — the same argument
+    `vitBackAll`/`enetBackAll` exist for (§2a-quater). Each renderer threads it through ONE
+    traversal, so gate 1 applies for free: at `.adamw` every committed artifact must re-render
+    byte-identical. -/
+inductive OptKind where
+  | adamw
+  | rmsprop
+deriving DecidableEq, Repr
+
+/-- The RMSProp hyperparameters, as the JAX reference configs state them. `ρ`/`μ` are 0.9 on both
+    nets that use this optimizer; **ε and wd are what differ**, and ε differs in the way that
+    matters most (see `Proofs.rmsBufNext_eps_placement_at_zero`). -/
+structure RmsHyper where
+  /-- `rmspropDecay` — the running mean-square decay. -/
+  rho : Float := 0.9
+  /-- `momentum` — μ for the buffer on the normalised gradient. -/
+  mu  : Float := 0.9
+  /-- `rmspropEps` — ⚠ emitted INSIDE the square root (TensorFlow), not added to the root. -/
+  eps : Float
+  /-- COUPLED L2 (folded into the gradient), not AdamW's decoupled decay. -/
+  wd  : Float
+
+/-- ρ / (1−ρ) / μ / ε / wd as graph constants — the RMSProp peer of each renderer's `adamConsts`
+    block. `%lr` stays a runtime `tensor<f32>` arg so one graph serves a whole LR schedule. -/
+def rmsConstsBlock (h : RmsHyper) : String :=
+  s!"    %rho = stablehlo.constant dense<{fmt6 h.rho}> : tensor<f32>\n" ++
+  s!"    %orho = stablehlo.constant dense<{oneMinusRho h.rho}> : tensor<f32>\n" ++
+  s!"    %mu = stablehlo.constant dense<{fmt6 h.mu}> : tensor<f32>\n" ++
+  s!"    %eps = stablehlo.constant dense<{fmt6 h.eps}> : tensor<f32>\n" ++
+  s!"    %wd = stablehlo.constant dense<{fmt6 h.wd}> : tensor<f32>\n"
+
+/-- **MobileNetV2's RMSProp knobs** (`jax/MainMobilenetV2Imagenet.lean`): ε = **1.0**. -/
+def mnv2RmsHyper : RmsHyper := { eps := 1.0, wd := 4.0e-5 }
+
+/-- **EfficientNet-B0's RMSProp knobs** (`jax/MainEfficientNetImagenet.lean`): ε = **1e-3**. -/
+def enetRmsHyper : RmsHyper := { eps := 1.0e-3, wd := 1.0e-5 }
+
+-- ⚠ `fmt6` is a SIX-DECIMAL fixed-point formatter, so any hyperparameter below 5e-7 silently
+-- renders as `0.000000` — a graph constant of zero, which for `wd` is "no weight decay" and for
+-- `eps` is a divide-by-zero at a dead coordinate. Neither is a compile error and neither is
+-- visible in a green build. These pin every constant these two nets actually emit; add a line
+-- here before adding a third net's knobs.
+#guard fmt6 mnv2RmsHyper.eps == "1.000000"
+#guard fmt6 mnv2RmsHyper.wd  == "0.000040"
+#guard fmt6 enetRmsHyper.eps == "0.001000"
+#guard fmt6 enetRmsHyper.wd  == "0.000010"
+#guard oneMinusRho 0.9 == "0.100000"
+#guard fmt6 (0.9 : Float) == "0.900000"
 
 /-- **`pretty`** — render an `SHlo` graph to StableHLO, now defined as
     `serialize ∘ toToks ∘ skel`: tokenize the graph (postorder), then print the
