@@ -194,16 +194,115 @@ how the mnv2 swap shipped a 160-param forward past a green tie.**
 
 ## 7. Gates this needs (all cheap, all in the house style)
 
-| gate | what it establishes |
+| gate | what it establishes | state |
+|---|---|---|
+| **`dropPath = 0` re-renders all ~34 artifacts byte-identically** | the threading is inert (gate 1, strong form) | ✅ 2026-08-02 |
+| **`fwd-tie <net>` BIT-EXACT vs the committed forward, ones mask** | §3's identity: eval really is the identity, on the *same* graph | ✅ **B1** below — ⚠ and it is BLIND TO PLACEMENT, see the finding |
+| **known-answer tie**: emitted output vs host-computed `branch · mask / keep` | the keep ramp and the inversion are right — the ONE thing no self-tie can see | ✅ **gate A**, bit-exact 40/40 |
+| **control**: perturb one `keep_i` | the known-answer gate fires; verify it goes red | ✅ `--break`, 35/40 |
+| **control**: all-zero mask on one site | that branch's contribution vanishes ⇒ the site is where it is claimed to be | ✅ **gate B**, + a misplaced render that goes red |
+| **prefix audit unchanged** | §3 held | ✅ 1953-line prefix, both scales |
+| **asymmetric-batch DP gate** (§5b) | the mask is SHARDED, not replicated — ⚠ needs a construction that does not exist yet for the RMSProp nets | ⛔ **still open** — single-device only so far |
+| **residency gate unchanged** | masks stayed off the resident path | ✅ 2026-08-02 |
+
+### ✅ 7a. The interior gates — DONE 2026-08-02, `lake build droppath-tie`
+
+The six gates run when the feature landed all pin an **endpoint**: `dropPath = 0` is inert, keep = 1
+is bit-identical to AdamW, and `TestDropPathRamp` pins the ramp across the driver/renderer seam.
+None of them says what a scale strictly *between* those endpoints does, and none of them can —
+every existing tie compares the render against itself or against a peer built from the SAME
+constants (§6.5). `tests/TestDropPathTie.lean` closes both, and the split is deliberate: **gate A is
+site-local, gate B is whole-net, and neither subsumes the other.**
+
+Run under `scripts/det_shim.sh` (gate B compares two HLO programs; §2d.3's Finding 1 is
+ROCm-specific). The A-vs-A floor is measured first and read out, per the 2026-08-02 finding.
+
+**▶ Gate A — the known answer.** `dropPathB` through the *same* `pretty` emitter at `B 8 × n 5`
+(`n ≠ B` on purpose, so a wrong broadcast axis is a type error rather than a different function),
+against a host-computed `s[j]·x[j,i]`:
+
+| check | result |
 |---|---|
-| **`dropPath = 0` re-renders all ~34 artifacts byte-identically** | the threading is inert (gate 1, strong form) |
-| **`fwd-tie <net>` BIT-EXACT vs the committed forward, ones mask** | §3's identity: eval really is the identity, on the *same* graph |
-| **known-answer tie**: emitted output vs host-computed `branch · mask / keep` | the keep ramp and the inversion are right — the ONE thing no self-tie can see |
-| **control**: perturb one `keep_i` | the known-answer gate fires; verify it goes red |
-| **control**: all-zero mask on one site | that branch's contribution vanishes ⇒ the site is where it is claimed to be |
-| **prefix audit unchanged** | §3 held |
-| **asymmetric-batch DP gate** (§5b) | the mask is SHARDED, not replicated — ⚠ needs a construction that does not exist yet for the RMSProp nets |
-| **residency gate unchanged** | masks stayed off the resident path |
+| emitted vs host closed form | **BIT-EXACT 40/40**, `\|ref\|max` 1.452 |
+| `dropPath_ones_id` on device | the `s = 1` row equals `x`, **5/5** |
+| `dropPath_zeros_zero` on device | the `s = 0` row is zero, **5/5** |
+| ⚠ CONTROL — the descriptor bug (every example gets `s[0]`) | **fires**, rel 1.29, only 5/40 exact (row 0, correctly) |
+| ⚠ CONTROL `--break` — one scale perturbed 1% | **fires**, 35/40 exact — exactly that row's 5 coordinates |
+
+**Bit-exact is the bar rather than a tolerance, and that is an argument**: both operands are f32, so
+their exact product needs ≤48 mantissa bits and is EXACT in the f64 the host multiplies in; rounding
+that to f32 is by definition what f32 multiplication returns. No double rounding, so any difference
+at all is a different function. The mask is read back out of the buffer the device receives, never
+from the literal, so both sides see the identical f32.
+
+⚠ **The mask spans the values the driver ACTUALLY supplies.** `F32.dropScales` emits
+`bernoulli(keep_i)/keep_i`, i.e. `0` or `1/keep_i` — and every `1/keep_i` is **greater than 1**
+(1.027397 / 1.136364 / 1.229508 at sites 0/4/8). A gate written only over `(0,1)`, which is how §6.5
+and the handoff both phrase it, would test a range the feature never uses. The mask carries those
+three, both endpoints, and three interior values.
+
+**▶ Gate B — the all-zero-mask control**, at `@efficientnet_drop_fwd` and `@…_fwd_eval`:
+
+| | train | eval |
+|---|---|---|
+| FLOOR — same artifact, two compiles | **bit-exact 320/320** | **320/320** |
+| **B1** ones mask vs the drop-free `@efficientnet_fwd` | **BIT-EXACT 320/320** | **320/320** |
+| **B2** zero at site 0 (block 2) vs ones | rel 0.661 | rel 0.153 |
+| **B3** with site 0 zeroed, ALSO zero site 8 (block 14) | rel 0.305, 0/320 exact | rel 0.448, 0/320 |
+| **B4** all 9 zeroed, two different `x` | rel 0.631, \|logits\|max 0.874 | rel 0.0131, \|max\| 0.744 |
+
+B3 and B4 are the load-bearing pair and B2 is not: **B2 is satisfied by both placements.** Under
+`out = s ⊙ (branch + x)` the activation is already identically zero at the upstream site, so no
+later mask can matter (B3 would be bit-exact) and every later layer is a function of zero, so the
+logits stop depending on `x` (B4 would collapse). Under the correct `out = s ⊙ branch + x` a zeroed
+site leaves the block an **identity** and the net intact.
+
+**▶ The control that makes gate B mean anything: a misplaced render.** `--cand` takes a candidate,
+the `vit-dp-check` lesson (§2j — that harness hardcoded both paths, so its bit-exact PASS was
+unfalsifiable until an argument was added). The control moves all 9 drop sites from the residual
+branch onto the block output — two lines swapped per site, **same SSA names, same order, same types,
+same line count**, so arity, op counts and the prefix audit are all unchanged:
+
+```
+correct     %B = multiply %mask, %branch ; %C = add %B, %skip        s·branch + x
+misplaced   %B = add %branch, %skip      ; %C = multiply %mask, %B   s·(branch + x)
+```
+
+It goes red at B2's collapse check, `|logits|max 0.000000`, rc=1. The rewrite is
+`scripts/misplace_drop_sites.py` — committed rather than ad-hoc, because a control that has to be
+retyped is a control nobody re-runs.
+
+### ⚠⚠ 7b. THE FINDING: the ones-mask identity gate is STRUCTURALLY BLIND TO PLACEMENT
+
+**§7's own second row — *"`fwd-tie <net>` BIT-EXACT vs the committed forward, ones mask"* — passes
+BIT-EXACT on the misplaced render.** 320 of 320, against a bit-exact floor. And it must:
+`1 ⊙ (branch + x) = branch + x`, exactly, so at an all-ones mask the two placements are the *same
+function*. §3 proposes that gate as *"a free, strong gate that costs nothing to write"* and it is —
+but it gates the **identity at keep = 1**, not the wiring, and this doc read it as covering both.
+
+The keep = 1 train-step gate the feature shipped with (bit-identical to AdamW, 0 of 4,020,358) is
+the same statement one level up and inherits the same blindness. So **every endpoint gate in the
+original set is blind to the placement**, which is exactly why the interior ones were owed:
+
+> An identity gate at `s = 1` cannot see where `s` is applied. Only a gate at `s ≠ 1` can, and
+> the sharpest one is `s = 0` — the other endpoint, where the two placements differ maximally.
+
+Generalisable, and it is §5b's shape one axis over: *a gate whose input makes the intervention
+inert cannot test the intervention.* The duplicated-batch DP gates are blind to sharding for the
+same reason; this is that, at `keep = 1` instead of at a replicated batch.
+
+### ⚠ 7c. A control proves the gate goes red FOR THE REASON IT CLAIMS, not merely that it goes red
+
+The first misplaced-render run fired — at the wrong check, with a message naming the wrong cause.
+`cmpBufs` normalised by the *first* buffer's magnitude, the misplacement drove that buffer to
+identically zero, the denominator went to zero, and `rel` returned `0.0`. A **total collapse of the
+logits** was therefore reported as *"zeroing site 0 barely moves the logits — the mask input is not
+reaching that site"*: right verdict, wrong diagnosis, and one that would have sent the next reader
+to the driver's mask wiring instead of to the render. Fixed by normalising over both buffers (what
+`fwd-tie` already does) and by checking the collapse explicitly, first, so it reports itself.
+
+Worth the ink because the harness was green on the real artifact throughout — the defect existed
+only on the failure path, which is the half a passing run never exercises.
 
 ---
 

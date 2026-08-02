@@ -1614,6 +1614,33 @@ lean_exe «rms-tie» where
   root := `tests.TestRmsTie
   moreLinkArgs := xlaLink
 
+/-- **Stochastic depth — the two gates that cover the op's INTERIOR** (`stochastic_depth.md` §7).
+    Everything gated when the feature landed pins an ENDPOINT: `dropPath = 0` re-renders every
+    artifact byte-identically, keep = 1 is bit-identical to AdamW, and `TestDropPathRamp` pins the
+    keep ramp across the driver/renderer seam. Neither says what a scale strictly between those
+    endpoints does, and neither can — every existing tie compares the render against a peer built
+    from the SAME constants.
+
+    **A — the known answer**: drive `dropPathB` through the same `pretty` emitter and compare
+    against a host-computed `s[j]·x[j,i]`. Bit-exact is the bar, not tolerance: an f32 product is
+    exact in the f64 the host multiplies in, so any difference is a different function.
+    **B — the all-zero-mask control**: `s ⊙ (branch + x)` compiles, trains and descends, and no
+    structural check distinguishes it from the correct `s ⊙ branch + x`. A zeroed site separates
+    them — it must leave the block an IDENTITY, not annihilate the signal.
+
+    ⚠ Run gate B under `scripts/det_shim.sh`: it compares two different HLO programs and the
+    committed compile options autotune on CUDA (§2d.3 Finding 1 is ROCm-specific). The harness
+    measures its own A-vs-A floor first and degrades B1 to a bound if the floor is not bit-exact.
+
+        lake build droppath-tie
+        scripts/det_shim.sh /tmp/detshim
+        LD_LIBRARY_PATH=/tmp/detshim CUDA_VISIBLE_DEVICES=0 .lake/build/bin/droppath-tie
+        .lake/build/bin/droppath-tie --op --break     # gate A: a 1% wrong scale is caught
+        .lake/build/bin/droppath-tie --net --cand <misplaced.mlir>   # gate B goes red, rc=1 -/
+lean_exe «droppath-tie» where
+  root := `tests.TestDropPathTie
+  moreLinkArgs := xlaLink
+
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a

@@ -65,11 +65,13 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: mixup + cutmix (`recipe_gaps.md` v1.3), after a ~1 h stochastic-depth tail.**
+## 0. ▶ START HERE — **next: mixup + cutmix (`recipe_gaps.md` v1.3). The SD tail is closed.**
 
-**Rewritten 2026-08-02 at the end of the fourth session that day** (ViT's EMA peer; stochastic
-depth end-to-end on EfficientNet; `recipe_gaps` v1.2c). Everything below §0a is committed and green
-at **3,912** build jobs / **107** artifacts, one writer each. Read this section, then
+**Rewritten 2026-08-02 at the end of the fifth session that day** (ViT's EMA peer; stochastic depth
+end-to-end on EfficientNet; `recipe_gaps` v1.2c; then §0's ~1 h tail — the two stochastic-depth
+interior gates, `lake build droppath-tie`). Everything below §0a is green at **3,912**
+`Proofs Certs Codegen` jobs — unchanged by the tail, which adds a test and no proof — with **107**
+artifacts, one writer each, and `verified_mlir/` 0 lines of diff. Read this section, then
 `planning/recipe_gaps.md`; the two feature specs are `planning/ema.md` and
 `planning/stochastic_depth.md`.
 
@@ -127,23 +129,59 @@ audit **96 artifacts, one writer each** · build 3,911 green. Full write-up in `
 ⚠ Still owed: the `emadp` DP peers on **both** ViT and EfficientNet (`vitAdamVariant 32 2 true`
 names ViT's; nothing renders either), and any long run.
 
-### ▶ 2. THE NEXT THREAD — **mixup + cutmix (`recipe_gaps.md` v1.3)**, and a short tail first
+### ✅ 2a. The stochastic-depth tail — **DONE 2026-08-02. `lake build droppath-tie`.**
 
-**▶ FIRST, THE TAIL: two stochastic-depth gates, ~1 h.** The feature TRAINS and its exact endpoint
-is gated (below), but two checks from `stochastic_depth.md` §7 are still owed, and they are the two
-that cover the *interior* of the op rather than its endpoints:
+Both interior gates landed, and the tail cost what it was scoped at. Full write-up in
+`stochastic_depth.md` §7a-c; the headline is that **it found the endpoint gates were blind to the
+thing they were assumed to cover.**
 
-* **the known-answer tie** — feed a chosen scale and check the emitted output is `branch · scale`,
-  host-computed. Everything gated so far pins `scale = 1` (bit-identical to AdamW) and the RAMP
-  (`tests/TestDropPathRamp.lean`, a third restatement of the reference formula). Nothing yet checks
-  that a scale strictly between 0 and 1 multiplies the branch by exactly that;
-* **the all-zero-mask control** — a zero scale on ONE site must make that branch contribute nothing,
-  which is what pins the site to the residual branch rather than to the block output.
+* **Gate A, the known answer** — `dropPathB` through the same `pretty` emitter at `B 8 × n 5`
+  (`n ≠ B` so a wrong broadcast axis is a type error, not a different function), against a
+  host-computed `s[j]·x[j,i]`: **BIT-EXACT 40/40**, with `dropPath_ones_id` and
+  `dropPath_zeros_zero` read out on device (5/5 each). Two controls fire — the descriptor bug
+  (every example gets `s[0]`) at rel 1.29, and `--break`'s 1% wrong scale at 35/40, exactly that
+  row's five coordinates. **Bit-exact is the bar by argument, not by luck**: an f32 product needs
+  ≤48 mantissa bits, so it is exact in the host's f64 and rounds to what f32 multiplication returns.
+* **Gate B, the all-zero-mask control** — at `@efficientnet_drop_fwd` and `@…_fwd_eval`, floor
+  bit-exact 320/320 under the det shim. B1 ones-mask vs the drop-free `efficientnet_fwd`
+  **BIT-EXACT 320/320** on both. Then the placement pair: with site 0 zeroed, zeroing site 8 still
+  moves the logits (rel 0.305 / 0.448, 0/320 exact), and with all nine zeroed the net still depends
+  on its input (rel 0.631 / 0.0131, non-degenerate). Both are impossible if the scale sat on the
+  block output.
+* **The control that licenses gate B**: a render with all 9 sites moved onto the block output — two
+  lines swapped per site, **same SSA names, order, types and line count**, so arity, op counts and
+  the prefix audit are all unchanged. `--cand` drives it (`scripts/misplace_drop_sites.py`) and it goes red, rc=1.
 
-Both need a harness, not a driver change — `fwd-tie`'s shape, driven at `efficientnet_drop_fwd`.
-⚠ Run any cross-graph numeric comparison under `scripts/det_shim.sh`; see the trap below.
+Gates held: `verified_mlir/` **0 lines of diff**, writer audit **107 artifacts, one writer each**,
+all four content audits OK, render coverage unchanged at 64/95, `TestDropPathRamp` green, `lake
+build Proofs Certs Codegen` **3,912** jobs (unchanged — this adds a test, not a proof).
 
-**▶ THEN: mixup + cutmix.** `recipe_gaps.md` calls it *"the largest remaining accuracy gap for ViT
+**Two findings that outlive the feature:**
+
+1. ⚠⚠ **AN IDENTITY GATE AT `s = 1` CANNOT SEE WHERE `s` IS APPLIED.** `stochastic_depth.md` §7's
+   own row — *"`fwd-tie` BIT-EXACT vs the committed forward, ones mask"* — **passes bit-exact on the
+   misplaced render**, and must: `1 ⊙ (branch + x) = branch + x` exactly, so at keep = 1 the two
+   placements are the SAME FUNCTION. The keep = 1 train-step gate the feature shipped with (0 of
+   4,020,358 against AdamW) is that statement one level up and inherits the blindness. So **every
+   endpoint gate in the original set was blind to the placement** — which is precisely why the
+   interior ones were owed. It is §5's duplicated-batch hole one axis over: *a gate whose input
+   makes the intervention inert cannot test the intervention.*
+2. ⚠ **A CONTROL PROVES THE GATE GOES RED FOR THE REASON IT CLAIMS, not merely that it goes red.**
+   The first misplaced-render run fired — at the wrong check, with the wrong cause. The comparator
+   normalised by the *first* buffer's magnitude; the misplacement drove that buffer to identically
+   zero, so the denominator went to zero and `rel` returned `0.0`. A **total collapse** was reported
+   as *"the logits did not move — the mask is not reaching that site"*, which would have sent the
+   next reader to the driver instead of to the render. The harness was green on the real artifact
+   the whole time: the defect lived only on the failure path, the half a passing run never runs.
+
+⚠ **Still open on stochastic depth**: the **asymmetric-batch DP gate** (§5b of that doc). The
+duplicated-batch `*-dp-check` harnesses are structurally blind to a mask that is replicated instead
+of sharded, and `shard-check`'s construction needs the gated slot linear in the gradient — false for
+RMSProp's buffer, which is the net that wants both. Everything above is single-device.
+
+### ▶ 2b. THE NEXT THREAD — **mixup + cutmix (`recipe_gaps.md` v1.3)**
+
+`recipe_gaps.md` calls it *"the largest remaining accuracy gap for ViT
 and ConvNeXt"*, and it is the cheapest big item left because two things already landed:
 
 * **shim wire v2** carries `float32[batch·nClasses]` soft targets, gated bit-identical against v1;
@@ -1001,6 +1039,19 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/fwd-tie convnext /tmp/retired.mlir verifie
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/fwd-tie efficientnet --eval   # self-tie smoke
 #   ^ `--eval` ties @<slug>_fwd_eval (params + 2 running-stat inputs per BN layer). ConvNeXt has no
 #     _fwd_eval and the harness refuses --eval for it: LayerNorm ⇒ train == eval.
+
+# STOCHASTIC DEPTH — the two gates covering the op's INTERIOR (§0's tail, `stochastic_depth.md`
+# §7a-c). Every other SD gate pins an ENDPOINT, and an identity gate at s = 1 cannot see WHERE s is
+# applied — measured: the ones-mask gate passes bit-exact on a deliberately misplaced render.
+lake build droppath-tie
+scripts/det_shim.sh /tmp/detshim          # ⚠ REQUIRED: gate B compares two HLO programs
+LD_LIBRARY_PATH=/tmp/detshim CUDA_VISIBLE_DEVICES=0 .lake/build/bin/droppath-tie
+.lake/build/bin/droppath-tie --op --break            # gate A falsifiable: a 1% wrong scale
+.lake/build/bin/droppath-tie --net --eval            # at @efficientnet_drop_fwd_eval
+#   ^ the control that licenses gate B — move all 9 sites onto the BLOCK OUTPUT (2 lines per site,
+#     same SSA names/order/types/line count, so no structural check moves) and it goes red, rc=1:
+#     python3 scripts/misplace_drop_sites.py verified_mlir/efficientnet_drop_fwd.mlir /tmp/mis.mlir
+#     .lake/build/bin/droppath-tie --net --cand /tmp/mis.mlir
 
 # the render ties (§2a, §2b, §2e). The AdamW ones need a GPU; TestBatchedEmitTie is CPU-only.
 lake env lean tests/TestBatchedEmitTie.lean            # 16 emit ties + 23 grad-prefix checks
