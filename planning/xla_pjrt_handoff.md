@@ -103,6 +103,32 @@ before starting.
   CONTRACTIVE — it absorbs a 1-ULP fault to 1 byte of 66M where R34 amplifies to ~184M of 255M.
   "AdamW ⇒ chaotic ⇒ mode 1" is refuted.
 
+### ▶ ALSO LANDED 2026-08-02 (branch `rmsprop-render`, 2 commits) — **RMSProp, both nets**
+
+`recipe_gaps.md` v1.2's render half is **done and certified**, and its own cost estimate was wrong
+by a tier: filed as Tier D *"a new proven `SHlo` op family, ten sites each"*, it is **ONE op**.
+Three of the four steps are existing certified ops read differently — `momVNextF` at
+`(μ := wd, v := θ)` is the coupled L2, and **`adamVNextF` at `β₂ := ρ` IS the running mean-square**
+(`rmsSqNext_eq_adamVNext`, by `rfl`). Only the ε-inside-the-root normalise had to be built.
+
+* **`Proofs/Codegen/RmsPropStep.lean`** + `rmsBufNextF` at all ten sites + 13 theorems, 3-axiom clean.
+* **Six artifacts**: `{mobilenetv2,efficientnet}_rms`, `{mnv2in,enetin}_rms64`, `…_rmsdp64`.
+  `[θ|m|v]` reused with `m` = buffer, `v` = mean-square ⇒ **signature byte-identical to each net's
+  AdamW render apart from the entry name**; no driver change.
+* **`lake build rms-tie && rms-tie [mobilenetv2|efficientnet]`** — ①②③ ≤ 1.1e-6 on both, with the
+  **textbook-ε control missing by 365,412× (mnv2) and 774,497× (enet)**.
+* ⚠ **The two nets sit on opposite sides of the ε placement** and it is now measured, not argued:
+  the control fires ~4× harder on enet (ε = 1e-3) than on mnv2 (ε = 1.0), exactly as
+  `rmsBufNext_eps_placement_at_zero` predicts. **Neither net's green run licenses the other.**
+* **Gate 1 held at 0 diff lines** through both threadings; writer audit 91/one-writer-each.
+* The **CI drift guard was widened** because the coverage check demanded it: `MobileNetV2RenderB`
+  had no step at all and `EfficientNetRender` diffed 1 of the 14 artifacts it writes. Coverage
+  **13/74 → 33/80**, `render_guard_baseline.txt` **61 → 47** — that file may only shrink.
+* ⛔ **NOT a matched pair yet.** Two DRIVER lines are owed, neither a render change: the
+  mean-square slot must init to **1.0, not 0** (TF's RMSProp is not bias-corrected, so a zero init
+  is a much larger first step with nothing to absorb it), and the LR schedule must be exponential.
+  The four DP variants are rendered and structurally checked but **not compiled**; no descent run.
+
 ### ▶ THE JOB: get R34/ImageNet over the line
 
 §2d.3 (device-resident parameters) made this **feasible for the first time** — 4-GPU R34/ImageNet

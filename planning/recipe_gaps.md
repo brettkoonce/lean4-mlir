@@ -61,8 +61,8 @@ that does not exist yet.
 
 | feature | R34 | ViT | ConvNeXt | EfficientNet | mnv2 | verified path |
 |---|---|---|---|---|---|---|
-| optimizer | SGD+mom | AdamW | AdamW | **RMSProp** | **RMSProp** | AdamW / SGD / Nesterov / heavy-ball |
-| | ✅ | ✅ | ✅ | ❌ | ❌ | |
+| optimizer | SGD+mom | AdamW | AdamW | **RMSProp** | **RMSProp** | AdamW / SGD / Nesterov / heavy-ball / **RMSProp** |
+| | ✅ | ✅ | ✅ | ✅ **render** | ✅ **render** | ⚠ the two RMSProp nets still owe the DRIVER — see §3 Tier C |
 | weight decay | 1e-4 coupled ✅ | 0.05 ✅ | 0.05 ✅ | 1e-5 ❌ | 4e-5 ❌ | decoupled in AdamW, coupled in heavy-ball |
 | `wdExcludeNormBias` | — | ✅→❌ | ✅→❌ | — | — | ❌ |
 | LR schedule | cosine ✅ | cosine ✅ | cosine ✅ | **exp 0.97** ❌ | **exp 0.98** ❌ | cosine + warmup only |
@@ -83,10 +83,16 @@ that does not exist yet.
 | net | gaps | verdict |
 |---|---|---|
 | **R34** | bf16 | **at parity — run it** |
-| **mnv2** | RMSProp, exp decay, bf16 | one optimizer away |
-| **EfficientNet** | RMSProp, exp decay, dropPath, EMA, bf16 | one optimizer + two driver items |
+| **mnv2** | ~~RMSProp~~ ✅, **ms-init 1.0 + exp decay**, bf16 | **two driver lines away** (was "one optimizer") |
+| **EfficientNet** | ~~RMSProp~~ ✅, **ms-init 1.0 + exp decay**, dropPath, EMA, bf16 | the same two driver lines, + two more |
 | **ConvNeXt** | mixup, cutmix, dropPath, EMA, grad clip, wdExclude, bf16 | the aug/regulariser pack |
 | **ViT** | same as ConvNeXt | same |
+
+⚠ **"RMSProp" split into a render half and a driver half, and only the render half is done**
+(2026-08-02). The renders are certified — see §3 Tier D — but a driver that initialises the
+mean-square slot to **0** instead of **1.0** runs a *different and much larger first step*, and
+this optimizer is not bias-corrected, so there is nothing to absorb it. **Do not read the ✅ in the
+matrix above as "mnv2 can be run against 68.33% today."**
 
 ---
 
@@ -124,6 +130,11 @@ otherwise. The alternative — no mixup on the verified path — is worse.
 * **exponential LR decay** is nearly free: `lrt` is computed host-side in `VerifiedTrain.lean:815`
   and passed in as `%lr`. Add a schedule kind; ~10 lines. Unblocks the *schedule* half of
   EfficientNet and mnv2.
+* ⚠ **the RMSProp mean-square init (1.0, not 0)** — added here 2026-08-02 when the render landed.
+  It is ~one line in the driver's optimizer-state setup, and it is a **correctness** item, not a
+  tuning one: TF's RMSProp is not bias-corrected, so `s = 0` makes the first step
+  `g/√((1−ρ)g²+ε)` instead of `g/√(ρ + (1−ρ)g²+ε)` — much larger, and nothing downstream absorbs
+  it. Together with exponential decay this is ALL that stands between mnv2 and its 68.33%.
 * **EMA** needs a shadow buffer and an update per step, plus eval reading the shadow. Also ~a day.
   ⚠ There is a known EMA warmup failure mode recorded in this project's memory — a shadow
   initialised at random init and evaluated too early scores at chance. Whatever lands must gate
@@ -132,12 +143,34 @@ otherwise. The alternative — no mixup on the verified path — is worse.
 ### Tier D — the render (a new proven `SHlo` op family; §4's "ten sites" each).
 **RMSProp, `wdExcludeNormBias`.**
 
-* **RMSProp** is the single highest-value render item: it is the *only* thing between mnv2 and
-  parity, and one of two for EfficientNet. Shape is the same as the existing Adam family — a
-  running mean-square slot plus a parameter update — so `adamMNextF`/`adamParamF` are the template.
-  ⚠ The reference is **TF-flavoured RMSProp** (ε inside the sqrt, mean-square initialised to 1.0),
-  which the JAX side calls out explicitly as what made it paper-faithful. Match that spelling, not
-  the textbook one — this is §2k's "check which momentum the reference uses" lesson in a new place.
+* ~~**RMSProp** is the single highest-value render item~~ ✅ **DONE 2026-08-02** — and **this
+  section's cost estimate was wrong by a factor of the whole tier.** It is filed here as "a new
+  proven `SHlo` op family, §4's ten sites each". Measured, it is **ONE op**, because three of the
+  four steps are already-certified ops given their RMSProp reading — the same discovery §2k made
+  for heavy-ball, one optimizer over:
+
+  | reference | verified path |
+  |---|---|
+  | `grads = g + WD*p` | `momVNextF` at `(μ := wd, v := θ)` — `momVNext_as_coupled_l2` |
+  | `sq = RHO*s + (1-RHO)*g*g` | **`adamVNextF` at `β₂ := ρ` IS this** — `rmsSqNext_eq_adamVNext`, by `rfl` |
+  | `buf = MOMENTUM*b + g/sqrt(sq+EPS)` | ⛔ `rmsBufNextF` — the only new op |
+  | `params = p - lr*buf` | `sgdParamF` |
+
+  `[θ|m|v]` is reused with `m` = buffer, `v` = mean-square, so the **signature is byte-identical to
+  each net's AdamW render apart from the entry name** and no driver or interface change is implied.
+  Certified on both nets by `rms-tie` (①②③ ≤ 1.1e-6) with the textbook-ε control missing by
+  **365,412× (mnv2) / 774,497× (enet)**. Six artifacts; gate 1 held at 0 diff lines.
+
+  ⚠ **The ε placement is not cosmetic and the two nets sit on opposite sides of it.** The reference
+  is **TF-flavoured** — ε inside the sqrt, mean-square initialised to 1.0. `timm` ships `RMSpropTF`
+  for exactly this. `Proofs.rmsBufNext_eps_placement_at_zero` makes it a theorem: the textbook form
+  steps `1/√ε` vs `1/ε`, i.e. **31.6× at EfficientNet's ε = 1e-3 and 1× at MobileNetV2's ε = 1.0**.
+  Measured, the controls fire 4× harder on enet, so **a green mnv2 gate does not license the enet
+  render** — which is why `rms-tie` takes a net argument and both were run.
+
+  ▶ **What is left is the DRIVER, and it moved to Tier C**: the mean-square slot must init to
+  **1.0, not 0**, and the LR schedule must be exponential. Neither is a render change. Until both
+  land these are correct renders of the right optimizer, **not a matched pair**.
 * **`wdExcludeNormBias`** is cheap: the AdamW render already emits a per-parameter tail, so 1-D
   parameters just get the no-decay tail. The risk is picking the wrong predicate — timm excludes
   norm γ/β, biases, pos-embed, CLS **and** ConvNeXt's LayerScale γ, all of which are 1-D.
@@ -174,8 +207,11 @@ the whole §2k/§2p line of work was pointed at, and nothing blocks it.
 Exponential LR decay, then EMA. Both are Lean-side, both are gateable the usual way (an existing
 run must be byte-identical with the feature off).
 
-### v1.2 — **RMSProp** (Tier D). Then mnv2 is at parity and can be run against **68.33%**;
-EfficientNet needs dropPath + EMA on top for **72.31%**.
+### v1.2 — ~~**RMSProp** (Tier D)~~ ✅ **RENDER DONE 2026-08-02**, driver half outstanding.
+The op, both renderers, six artifacts and a two-net numeric gate landed in one session (it was one
+op, not a family — see Tier D). **What is left is two driver lines** — mean-square init 1.0 and
+exponential decay — after which mnv2 is at parity and can be run against **68.33%**; EfficientNet
+needs dropPath + EMA on top for **72.31%**.
 
 ### v1.3 — mixup + cutmix (Tier B). The wire is already there. Closes the largest remaining
 accuracy gap for ViT and ConvNeXt.
@@ -218,6 +254,14 @@ would halve its step count and is worth doing before a 60-hour run.
 * **Sharding is proven on the BN nets** (`shard-check`, N-replica) and the collective is bit-exact
   on the LayerNorm ones.
 * **Residency is bit-identical on all five** at 4 replicas.
+* **RMSProp renders exist and are certified on both nets** (2026-08-02) — `rms-tie
+  [mobilenetv2|efficientnet]`, both controls firing. Do not re-derive the op: three of its four
+  steps are existing certified ops, and `Proofs/Codegen/RmsPropStep.lean` says which.
+* **An estimate in THIS document was wrong by a tier** — Tier D's "a new op family, ten sites
+  each" for RMSProp was one op. The transferable check is the one §2k used and this repeated:
+  before scoping a new optimizer, enumerate the reference's update line by line against the
+  existing `SHlo` ops **at their other readings** (`momVNextF` at `(μ:=wd, v:=θ)` is a coupled L2;
+  `adamVNextF` at `β₂:=ρ` is a running mean-square). Two of four steps hid there.
 
 ---
 
