@@ -64,8 +64,9 @@ private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
     is tracked separately (§2b-quater) and it has no `adamdp` peer at this batch to pair with. -/
 private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "convnext"     => some (convnextVerified,     32)
-  -- the 1000-class ImageNet twin, rendered at the same batch (§2p)
+  -- the 1000-class ImageNet twins (§2p)
   | "cnxin"        => some (convnextImagenetVerified, 32)
+  | "enetin"       => some (efficientnetImagenetVerified, 64)
   | "efficientnet" => some (efficientnetVerified, 32)
   | "mobilenetv2"  => some (mobilenetv2Verified,  32)
   | _              => none
@@ -76,13 +77,23 @@ def main (args : List String) : IO Unit := do
     | do IO.eprintln s!"usage: shard-check <convnext|efficientnet|mobilenetv2> [<dpPath>]\n\
 got: '{slug}'"; IO.Process.exit 1
   let net := spec.toNet
-  let replicas := 2
+  -- $SHARD_REPLICAS generalises the construction: `ds.shard`-style, N shards each with genuinely
+  -- different data, checked against the mean of N single-device steps. The identity
+  -- `DP([x0|..|xN-1]) == mean(single(x0),..,single(xN-1))` holds for any N — 2 was never special,
+  -- it was just the only DP render that existed when this was written. The ImageNet renders are
+  -- 4-replica, which is what forced the generalisation.
+  let replicas := ((← IO.getEnv "SHARD_REPLICAS").bind (·.toNat?)).getD 2
+  -- $SHARD_VARIANT names the single-device and DP variants when they are not the bare
+  -- `adam`/`adamdp` (EfficientNet's ImageNet pair is `adam64`/`adamdp64`, since `enetAdamVariant`
+  -- appends the per-device batch).
+  let vSg := (← IO.getEnv "SHARD_VARIANT").getD "adam"
+  let vDp := (← IO.getEnv "SHARD_VARIANT_DP").getD "adamdp"
   -- argv[2] overrides the DP render so a deliberately broken one can be run through the identical
   -- harness (e.g. the sum-not-mean control: flip every `%arn… dense<2.0>` to 1.0).
-  let dpPath := args[1]?.getD s!"verified_mlir/{net.slug}_adamdp_train_step.mlir"
-  let sgPath := s!"verified_mlir/{net.slug}_adam_train_step.mlir"
+  let dpPath := args[1]?.getD s!"verified_mlir/{net.slug}_{vDp}_train_step.mlir"
+  let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   IO.println s!"{net.name} SHARDING gate — asymmetric batch"
-  IO.println s!"  DP( [xA | xB] )  ==  mean( single(xA), single(xB) )   ({replicas} replicas x bs {bs})"
+  IO.println s!"  DP( [x0|..|x{replicas-1}] )  ==  mean of {replicas} single-device steps   ({replicas} replicas x bs {bs})"
   IO.println s!"  single   : {sgPath}"
   IO.println s!"  DP render: {dpPath}"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers, \
@@ -115,12 +126,14 @@ backend {← IreeSession.backendName}"
                             ++ #[#[], #[], #[]] ++ bnStatShapes)
   -- Two genuinely DIFFERENT shards — different pixels AND different labels, so a replica reading
   -- the wrong rows cannot coincidentally agree.
-  let xA ← F32.heInit 555 (bs * net.d0).toUSize 1.0
-  let xB ← F32.heInit 999 (bs * net.d0).toUSize 1.0
-  let yA := mkLabels bs 0 net.nClasses
-  let yB := mkLabels bs 5 net.nClasses
-  let xAB := F32.concat #[xA, xB]
-  let yAB := yA ++ yB
+  let mut xs : Array ByteArray := #[]
+  let mut ys : Array ByteArray := #[]
+  for i in [0:replicas] do
+    xs := xs.push (← F32.heInit (555 + 444 * i).toUSize (bs * net.d0).toUSize 1.0)
+    ys := ys.push (mkLabels bs (5 * i) net.nClasses)
+  let xAB := F32.concat xs
+  let mut yAB : ByteArray := .empty
+  for y in ys do yAB := yAB ++ y
 
   -- Delete both the bare and the backend-scoped .vmfb first (§4): `compileVmfb` keys its cache on
   -- the OUTPUT path plus an mtime, never the source, so a re-run with a different candidate under
@@ -130,20 +143,21 @@ backend {← IreeSession.backendName}"
               s!".lake/build/{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
   let s1 ← mkSession sgPath s!".lake/build/{net.slug}_shard_a.vmfb"
-  IO.println "  single-device on shard A…"; (← IO.getStdout).flush
-  let oA ← IreeSession.mlpTrainStepV s1 s!"m.{net.slug}_adam_train_step" xA pbuf shapes yA
-             bs.toUSize net.d0.toUSize net.nClasses.toUSize
-  IO.println "  single-device on shard B…"; (← IO.getStdout).flush
-  let oB ← IreeSession.mlpTrainStepV s1 s!"m.{net.slug}_adam_train_step" xB pbuf shapes yB
-             bs.toUSize net.d0.toUSize net.nClasses.toUSize
-  IO.println "  data-parallel on [A | B]…"; (← IO.getStdout).flush
+  let mut outs : Array ByteArray := #[]
+  for i in [0:replicas] do
+    IO.println s!"  single-device on shard {i}…"; (← IO.getStdout).flush
+    outs := outs.push (← IreeSession.mlpTrainStepV s1 s!"m.{net.slug}_{vSg}_train_step"
+      xs[i]! pbuf shapes ys[i]! bs.toUSize net.d0.toUSize net.nClasses.toUSize)
+  let oA := outs[0]!
+  IO.println s!"  data-parallel on the {replicas}-way shard…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath s!".lake/build/{net.slug}_shard_b.vmfb"
-  let oD ← IreeSession.mlpTrainStepVDP s2 s!"m.{net.slug}_adamdp_train_step" xAB pbuf shapes yAB
+  let oD ← IreeSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" xAB pbuf shapes yAB
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 
   let nP := net.nParams
-  if oA.size != oD.size || oB.size != oD.size then
-    IO.eprintln s!"SIZE MISMATCH: {oA.size} / {oB.size} / {oD.size}"; IO.Process.exit 1
+  for (o, i) in outs.zipIdx do
+    if o.size != oD.size then
+      IO.eprintln s!"SIZE MISMATCH: shard {i} gives {o.size}, DP gives {oD.size}"; IO.Process.exit 1
   -- `m` occupies [nP, 2nP) in the `[θ | m | v | loss/bc | bnstat]` layout every one of these nets
   -- returns. m' = 0.1·g, so mean(mA, mB) is 0.1·mean(gA, gB) = what a correct shard must produce.
   let mut relMean : Float := 0.0            -- TEST:    DP vs mean(A,B)
@@ -151,13 +165,20 @@ backend {← IreeSession.backendName}"
   let mut denom   : Float := 0.0
   let mut nonFinite : Nat := 0
   let mut moved : Nat := 0
+  let invN := 1.0 / replicas.toFloat
   for i in [nP:2*nP] do
     let a := F32.read oA i.toUSize
-    let b := F32.read oB i.toUSize
     let d := F32.read oD i.toUSize
-    if !a.isFinite || !b.isFinite || !d.isFinite then nonFinite := nonFinite + 1
+    -- the mean over ALL N shards, not just two
+    let mut acc : Float := 0.0
+    let mut fin := true
+    for o in outs do
+      let vi := F32.read o i.toUSize
+      if !vi.isFinite then fin := false
+      acc := acc + vi
+    if !fin || !d.isFinite then nonFinite := nonFinite + 1
     if d.abs > 1e-12 then moved := moved + 1
-    let avg := 0.5 * (a + b)
+    let avg := invN * acc
     let e1 := (d - avg).abs
     let e2 := (d - a).abs
     if e1 > relMean then relMean := e1
@@ -166,8 +187,8 @@ backend {← IreeSession.backendName}"
   let nrMean := if denom > 1e-30 then relMean / denom else 0.0
   let nrA    := if denom > 1e-30 then relA / denom else 0.0
   IO.println s!"  ── gradient proxy m' = 0.1·g, over {nP} coords ──"
-  IO.println s!"    TEST    |DP − mean(A,B)| / max|mean| = {nrMean} ({nrMean * 1e9} e-9)"
-  IO.println s!"    CONTROL |DP − A|        / max|mean| = {nrA}  ← a broken shard would land HERE"
+  IO.println s!"    TEST    |DP − mean of {replicas}| / max|mean| = {nrMean} ({nrMean * 1e9} e-9)"
+  IO.println s!"    CONTROL |DP − shard0|     / max|mean| = {nrA}  ← a broken shard would land HERE"
 
   if nonFinite > 0 then
     IO.eprintln s!"DEGENERATE: {nonFinite} non-finite outputs"; IO.Process.exit 1

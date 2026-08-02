@@ -672,10 +672,11 @@ set_option maxRecDepth 4000000 in
     params in `enetSig` order), returning logits `[B, nClasses]`. Shares `enetFwdChain` with the
     train step, so it is a byte-identical PREFIX of `efficientnet_train_step.mlir`, ending exactly
     where the loss begins. Replaces the hand-written emitter in `tests/TestEfficientNetFwd.lean`. -/
-def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false) : String :=
+def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
+    (slug : String := "efficientnet") : String :=
   let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias).run' 0
   "module @m {\n" ++
-  s!"  func.func @efficientnet_fwd({enetFwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd({enetFwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 forward: every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -691,10 +692,11 @@ set_option maxRecDepth 4000000 in
     This is the eval partner of `efficientnet_adam_train_step`, whose returned batch μ/var the
     driver EMAs into exactly these slots — and both sides of that contract now come off one
     `bns` list rather than two independently-written ones. -/
-def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false) : String :=
+def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
+    (slug : String := "efficientnet") : String :=
   let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias).run' 0
   "module @m {\n" ++
-  s!"  func.func @efficientnet_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -951,7 +953,14 @@ set_option maxRecDepth 4000000 in
     returned batch statistics are a whole-net forward fingerprint no gradient touches. -/
 def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (alphaStr negAlphaKStr bStr : String) (replicas : Nat := 1)
-    (convBias : Bool := false) : String :=
+    (convBias : Bool := false) (slug : String := "efficientnet") : String :=
+  -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when empty. Passing −α/K as a string independent
+  -- of K is the two-writers-for-one-fact shape that shipped a K=10 constant into R34's first
+  -- ImageNet render ON THE GRADIENT PATH (§2k), and again into ConvNeXt's report-only loss
+  -- (§2p, 2026-08-01) where a positive-signed copy hid from the grep that caught the cotangent.
+  -- Empty ⇒ derived, so the K=1000 spelling cannot be got wrong; non-empty ⇒ honoured verbatim,
+  -- which keeps every committed Imagenette artifact byte-identical.
+  let negAlphaKStr := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
   let sigList := enetSig nClasses convBias
   -- `go` hands back the BN channel counts alongside the body, so the argument signature is built
   -- from the SAME list the traversal walked. Deriving the 49 slots independently would be a second
@@ -997,8 +1006,13 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
       s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
       s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
       s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<0.010000> : {ty [B]}\n" ++
+      -- ⚠ DERIVED, both of them. `%laKc` is α/K and was hardcoded at the K=10 value until
+      -- 2026-08-02 — the THIRD copy of §2k's bug (R34's cotangent, ConvNeXt's loss, this). It
+      -- survives a grep for the cotangent's `-0.010000` because this copy is positive-signed, and
+      -- it is on no gradient path, so nothing but an implausible reported loss would show it.
+      -- `%lomac` is (1−α), K-independent, derived anyway so α has one spelling here.
+      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [B]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [B]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
       s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
       s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
@@ -1044,7 +1058,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
   -- artifact path and `LEAN_MLIR_VARIANT`.
-  let fname := s!"efficientnet_{enetAdamVariant B replicas}_train_step"
+  let fname := s!"{slug}_{enetAdamVariant B replicas}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1129,6 +1143,35 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adamdp128_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 128 10 "1.0e-5"
     "0.100000" "-0.010000" "128.0" 2)
+
+-- ── EfficientNet-B0 on FULL 1000-class ImageNet, slug `enetin` — 2026-08-02 ────────────────────
+-- The EfficientNet peer of `resnet34in_*` (§2k), `vitin_*` and `cnxin_*` (§2p). No renderer
+-- restructuring was needed — `B` and `nClasses` were already parameters; what this change added is
+-- a `slug` (the three entry names were baked) and the derived −α/K above.
+--
+-- ⚠ **The slug is load-bearing and EfficientNet is the case where it bites hardest**: it is the
+-- only net here with BOTH a `_fwd` and a `_fwd_eval` artifact, and neither carries a variant in its
+-- path. A 1000-class forward emitted under the `efficientnet` slug would silently overwrite the
+-- 10-class pair that the 88.20% Imagenette run, the §2g prefix audit and `fwd-tie efficientnet
+-- --eval` all depend on.
+--
+-- Batch **64 per device × 4 replicas = global 256**, which is
+-- `efficientNetB0ImagenetConfig.batchSize`. Matching the reference's global batch is what makes the
+-- two runs a comparable pair rather than two experiments — the same reasoning as R34's `momdp64`.
+--
+-- ⚠ `enetAdamVariant B replicas` encodes the PER-DEVICE batch and NOT the replica count, so
+-- `adamdp64` would name both a 2-replica and a 4-replica render at B=64. Only the 4-replica one is
+-- emitted here, so nothing collides today; anyone adding the 2-replica peer must rename first.
+#eval IO.FS.writeFile "verified_mlir/enetin_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "enetin")
+#eval IO.FS.writeFile "verified_mlir/enetin_fwd_eval.mlir"
+  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 64 1000 "1.0e-5" false "enetin")
+#eval IO.FS.writeFile "verified_mlir/enetin_adam64_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 1 false "enetin")
+#eval IO.FS.writeFile "verified_mlir/enetin_adamdp64_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 4 false "enetin")
 
 -- Pin the two literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed this fails at `lake build` instead of at run time as an "entry mismatch".

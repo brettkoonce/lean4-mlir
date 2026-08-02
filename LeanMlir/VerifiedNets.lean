@@ -461,6 +461,61 @@ def efficientnetVerified : VerifiedNetSpec where
     480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
     1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
 
+/-- **EfficientNet-B0 on full 1000-class ImageNet** — the EfficientNet peer of the R34, ViT and
+    ConvNeXt ImageNet specs (§2p). Identical architecture to `efficientnetVerified`; only the head
+    moves (1280→1000), which takes the count to the JAX reference's 5,288,548.
+
+    ⚠ **This is the first ImageNet net here with BatchNorm**, and that has two consequences the
+    LayerNorm ones did not have: it needs a `_fwd_eval` artifact (frozen running stats — batch-BN
+    eval is degenerate on a sorted validation split), and its data-parallel evidence cannot come
+    from the plain duplicated-batch harness without the running-stat region, which is 2×49 extra
+    tensors on both sides (§5 — omitting it is refused by the shim's G4 guard, not answered wrongly).
+
+    ⚠ **Claim ceiling** (§5): proofs stop at Imagenette; provenance carries. And the recipe does
+    not match — `efficientNetB0ImagenetConfig` trains with **RMSProp and exponential LR decay**
+    (×0.97 every 2.4 epochs), where the verified path has AdamW + cosine. That is a bigger optimizer
+    gap than ConvNeXt's or ViT's, and it is on top of the usual missing mixup/cutmix/EMA. -/
+def efficientnetImagenetVerified : VerifiedNetSpec where
+  name     := "EfficientNet-B0 (ImageNet-1k)"
+  slug     := "enetin"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  layers   := [
+    .convBnNB 3 32 3 2,
+    .mbConvSENB  32   32  16  8 3,
+    .mbConvSENB  16   96  24  4 3,
+    .mbConvSENB  24  144  24  6 3,
+    .mbConvSENB  24  144  40  6 5,
+    .mbConvSENB  40  240  40 10 5,
+    .mbConvSENB  40  240  80 10 3,
+    .mbConvSENB  80  480  80 20 3,
+    .mbConvSENB  80  480  80 20 3,
+    .mbConvSENB  80  480 112 20 5,
+    .mbConvSENB 112  672 112 28 5,
+    .mbConvSENB 112  672 112 28 5,
+    .mbConvSENB 112  672 192 28 5,
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 320 48 3,
+    .convBnNB 320 1280 1 1,
+    .globalAvgPool,
+    .dense 1280 1000 ]
+  blurb := "EfficientNet-B0 on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
+    480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
+    1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
+
+-- Exactly one parameter shape may differ — the head. And the BN layout must be IDENTICAL, since
+-- the running-stat region is positional: a drift there misaligns every frozen statistic at eval.
+#guard efficientnetImagenetVerified.toSpecs.size == efficientnetVerified.toSpecs.size
+#guard efficientnetImagenetVerified.toSpecs.pop.pop == efficientnetVerified.toSpecs.pop.pop
+#guard efficientnetImagenetVerified.toSpecs.back! == (#[1000], 2)
+#guard efficientnetImagenetVerified.bnChannels == efficientnetVerified.bnChannels
+
 -- Derived layout (262 params) == the audited hand-list EfficientNetLayout.specs.
 #guard efficientnetVerified.toSpecs == EfficientNetLayout.specs
 

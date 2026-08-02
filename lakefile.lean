@@ -1502,6 +1502,21 @@ lean_exe «convnext-imagenet-verified-xla» where
   root := `apps.imagenette.MainConvNeXtImagenetXla
   moreLinkArgs := xlaLink
 
+/-- Shared body of the EfficientNet-B0 / **full ImageNet-1k** trainer (handoff §2p). -/
+lean_lib «EfficientNetImagenetCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.EfficientNetImagenetCommon]
+
+/-- **EfficientNet-B0 on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000,
+    B := 64`; four replicas is global 256, the reference's batch. The first ImageNet net here with
+    BatchNorm, so it has a `_fwd_eval` peer and a running-stat region.
+
+    Needs the shim emitted first: `(cd jax && lake exe resnet34-imagenet default --shim)`.
+    ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
+lean_exe «efficientnet-imagenet-verified-xla» where
+  root := `apps.imagenette.MainEfficientNetImagenetXla
+  moreLinkArgs := xlaLink
+
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
     textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it
