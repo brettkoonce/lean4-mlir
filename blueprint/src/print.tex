@@ -45,6 +45,10 @@
 
 \begin{document}
 \maketitle
+% Chapters and numbered sections only. The subsection and \paragraph
+% headings are chapter-internal signposts; in a 100-section book they
+% triple the TOC's length without helping anyone navigate it.
+\setcounter{tocdepth}{1}
 \tableofcontents
 \input{content}
 \end{document}

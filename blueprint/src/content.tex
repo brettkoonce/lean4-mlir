@@ -382,8 +382,8 @@ Adds one theorem on top of CNN+BN: the residual additive-fan-in VJP.
 \emph{This is a great stopping point.} ResNet-34 was state of the
 art for years and still routinely gets 90\% on Imagenette; its
 bigger brother ResNet-50 is the standard benchmark (🐐) for
-production image classification on consumer hardware. If your
-destination is a real image classifier that works, Ch
+production image classification. If your destination is a real
+image classifier that works, Ch
 2--\ref{chap:residual} is a complete reading list; Chs
 \ref{chap:depthwise}--\ref{chap:attention} are strictly skippable.
 
@@ -514,8 +514,7 @@ shows how that claim is independently audited.
 
 \subsection*{What about non-smooth points?}
 
-A reader who has met ReLU will have spotted a gap. ReLU is
-$\max(0, x)$, which has no derivative at $x=0$; absolute value
+ReLU is $\max(0, x)$, which has no derivative at $x=0$; absolute value
 flunks the same test for the same reason; maxPool over a window
 has no derivative when two entries tie. Mathlib's \(\fderiv\)
 correctly declines to return a value at these points, but ML
@@ -9112,6 +9111,11 @@ that recur.
 \chapter{Bestiary of Architectures}
 \label{chap:bestiary}
 
+% The bestiary is a catalogue, not a narrative: its subsection headings are
+% the entries a reader looks up by name, so this chapter alone shows them in
+% the TOC. Restored to depth 1 before the appendices below.
+\addtocontents{toc}{\protect\setcounter{tocdepth}{2}}
+
 Part 1 introduced a small set of \texttt{NetSpec} primitives across
 chapters 1--9 and proved each one's backward pass:
 
@@ -9544,7 +9548,7 @@ Subsequent blocks step out to detection, segmentation, reinforcement
 learning, and the non-vision outliers (language, audio, 3D,
 multimodal, science).
 
-\subsection{Vision classifiers --- Part 1's primitives at scale}
+\subsection{Vision classifiers}
 
 Image-classification backbones built out of conv / pool / batch-norm /
 residual / attention / patch-embed --- the exact layer kit VJP'd in
@@ -10368,7 +10372,7 @@ def detrR50 : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Semantic segmentation}
+\subsection{Semantic segmentation --- demo: UNet on BraTS}
 \label{sec:bestiary_segmentation}
 
 Pixel-level labeling. Symmetric encoder/decoder with skip connections
@@ -10925,7 +10929,7 @@ def muZeroGoPredictionValue : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Natural language processing}
+\subsection{Natural language processing --- demo: TinyGPT}
 
 The architectures here all consume a sequence of token IDs and emit
 either a sequence of next-token logits (decoder-only: GPT) or a single
@@ -11483,6 +11487,8 @@ The bundled-primitive shortcut means Lean sees one \texttt{NetSpec}
 with two layers; the actual graph is a much larger DAG with the dual
 representation and the cross-stage handoff. \S~\ref{layer:evoformerBlock}
 and \S~\ref{layer:structureModule} document the bundling explicitly.
+
+\addtocontents{toc}{\protect\setcounter{tocdepth}{1}}
 
 \chapter{Data availability}
 \label{app:data}
@@ -12488,7 +12494,7 @@ derivative --- that arrow is machine-checked. Because both arrows start from
 one concrete datatype rather than from a string, ``the emitted code computes
 the proven gradient'' is a theorem about a value, not a hope about a comment.
 
-\section{Cross-checked: the hardware agrees}
+\section{Cross-checked}
 
 Because IREE cannot itself be proven, and GPU transcendentals have no
 IEEE specification, the last stretch --- from proven math to executed
@@ -12602,14 +12608,14 @@ of the kinds: its bridge is structural, its oracle empirical. The
 budgets are deductive, its interface constants (\(u\), \(e_{\exp}\),
 \(\delta\)) empirical.
 
-\section{Float32: closeness, composition, and whether it still trains}
+\section{Float32}
 \label{sec:float32}
 
 Every theorem in this book is over exact reals; the GPU computes in
 binary32. Until recently that gap lived entirely in the empirical layer
---- the oracles agree to 1--2 ULP, and you were asked to find that
-persuasive. It is now a theorem layer, and it has two halves of different
-reach --- keeping them apart is the honest part. The \emph{closeness} half
+--- the oracles agree to 1--2 ULP. It is now a theorem layer, and it has
+two halves of different reach --- keeping them apart is the honest part.
+The \emph{closeness} half
 (\(|\,\text{float op} - \text{real op}\,| \le\) budget) is
 architecture-complete: \texttt{FloatBridge.lean} and the per-net
 \texttt{*FloatBridge} files budget every operator of every network, forward
@@ -12622,7 +12628,7 @@ closes only for the shallow nets
 (\texttt{SgdDescent\{Linear,Mlp,Cnn,Cifar\}.lean}). The way the chain avoids
 new axioms is the part worth explaining.
 
-\paragraph{The model is a hypothesis, not an axiom.}
+\paragraph{The model is a hypothesis.}
 A \texttt{FloatModel} is \emph{any} rounding operator \(\mathrm{rnd}\)
 with relative error \(u\): \(|\mathrm{rnd}(x) - x| \le u\,|x|\).
 Binary32 round-to-nearest satisfies this with \(u = 2^{-24}\) on the
@@ -12680,7 +12686,7 @@ The admissible \(\mathrm{lr}\) is a product of per-layer operator-norm
 factors, so each added layer shrinks it geometrically; full-depth CIFAR and
 all five deep nets stay closeness-only, by design, not for want of effort.
 
-\paragraph{The kink, quantitatively.}
+\paragraph{The kink.}
 Over \(\mathbb{R}\), ReLU forced the hypotheses \(x_k \ne 0\). In
 float the same op inverts its role twice. The forward mask is
 \emph{exact} --- compare-and-select rounds nothing, so the op that
