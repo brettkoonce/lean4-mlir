@@ -830,6 +830,19 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/convnext_adamdp_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 2)
 
+-- The DATA-PARALLEL peer of the EMA render. One `#eval`: `replicas` and `ema` are both already
+-- renderer parameters, so this is the cheap half exactly as `mnv2in_rmsdp64` was (§2h-bis).
+--
+-- ⚠ The collective and the shadow do not interact, and that is worth stating because it is what
+-- makes the gate meaningful rather than circular: `all_reduce` sits on the GRADIENT, upstream of
+-- the AdamW triple, while the EMA reads θ' — the triple's OUTPUT. So the shadow inherits whatever
+-- the collective produced and adds no new cross-replica coupling. What the duplicated-batch gate
+-- then checks is that the 4th region is threaded identically on both paths, which an arity check
+-- cannot see (both renders have the region; the question is whether it carries the same values).
+#eval IO.FS.writeFile "verified_mlir/convnext_emadp_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 2
+    (ema := true))
+
 -- ── ConvNeXt-T on FULL 1000-class ImageNet, slug `cnxin` — 2026-08-01 ──────────────────────────
 -- The ConvNeXt peer of `resnet34in_*` (§2k) and `vitin_*` (§2p). `nClasses` is a renderer
 -- parameter as of this change; `cBS` is NOT, so these render at the committed batch of 32 and the

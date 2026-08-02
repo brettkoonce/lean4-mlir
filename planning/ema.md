@@ -17,9 +17,41 @@
 > | ⭐ **the shadow TRACKS THEN EXCEEDS**, 4 epochs | 48.25/57.35/63.03/**67.77%** vs live 39.95/46.75/56.23/**58.29%** — never near chance |
 > | train loss vs the AdamW peer | 2.83/2.05/1.62/1.35 vs 2.89/2.05/1.61/1.37 — the EMA op does not perturb the optimizer |
 >
-> ⚠ **Not done**: the DP peer (`emadp` renders but is uncompiled), ViT and EfficientNet (the latter
-> also needs `ema_bn` — §5c, nearly free), and any long run. The 4-epoch smoke is descent evidence,
-> not an accuracy number.
+> ### ✅ AND THE DP PEER, same day — `convnext_emadp_train_step.mlir`, 2 replicas
+>
+> One `#eval` (both `replicas` and `ema` were already renderer parameters). 727 in / 725 out — the
+> collective adds no arguments — 180 collectives, 0 MALFORMED. `convnext-dp-check` generalised the
+> way the mnv2/enet peers were (`DP_VARIANT{,_DP}`/`DP_REPLICAS`, plus 4-region blob support), and
+> it still reproduces its committed AdamW result with no arguments.
+>
+> | | result |
+> |---|---|
+> | duplicated-batch identity, 2 replicas | **shadow region BIT-EXACT 27,826,282/27,826,282**; `%loss` bit-exact; gradient norm-rel **9.1e-9**; all 111,305,133 floats |
+> | sum-not-mean control | **0.942685**, rc=1 |
+>
+> ⚠ **The collective and the shadow do not interact** — `all_reduce` is on the gradient, upstream of
+> the AdamW triple; the EMA reads θ', the triple's output. So the gate is not circular: what it
+> checks is that the 4th region is threaded identically on both paths, which an arity check cannot
+> see (both renders *have* the region; the question is whether it carries the same values).
+>
+> ### ⚠⚠ AND A GATING LESSON THE CONTROL HANDED OVER: NEVER GATE ON THE SHADOW
+>
+> The sum-not-mean control moves the regions by wildly different amounts:
+>
+> | region | control moves it by |
+> |---|---|
+> | `m` (the gradient) | **0.942685** |
+> | θ | 1.95e-4 |
+> | **`ema` (the shadow)** | **1.00e-4** — sitting exactly ON a 1e-4 gate |
+>
+> §3's standing rule is *gate the gradient, never θ*, because Adam's update is scale-free and θ
+> lands near 1e-4 whether or not anything is wrong. **The shadow is θ's low-pass filter, so it is
+> that failure one level worse** — ~9,400× attenuated against the gradient here, and it would have
+> waved a 2× gradient error through by landing at the gate boundary. Any future EMA gate on any net
+> must read `m`. The harness does; this is a note for whoever adds the next one.
+>
+> ⚠ **Still not done**: ViT and EfficientNet (the latter also needs `ema_bn` — §5c, nearly free),
+> and any long run. The 4-epoch smoke is descent evidence, not an accuracy number.
 >
 > The scoping below is kept as written; the measurement calibrates against it.
 

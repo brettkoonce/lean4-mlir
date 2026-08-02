@@ -134,6 +134,7 @@ jobs:
               verified_mlir/convnext_adam_train_step.mlir \
               verified_mlir/convnext_adamdp_train_step.mlir \
               verified_mlir/convnext_ema_train_step.mlir \
+              verified_mlir/convnext_emadp_train_step.mlir \
               verified_mlir/cnxin_adam_train_step.mlir \
               verified_mlir/cnxin_adamdp_train_step.mlir \
               verified_mlir/cnxin_fwd.mlir \

@@ -56,17 +56,31 @@ private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray 
     F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
 
 def main (args : List String) : IO Unit := do
+  -- ▶ Env-selected variant pair / replica count, defaulting to EXACTLY the AdamW 2-replica
+  -- configuration this harness was written for, so the committed result reproduces with no
+  -- arguments — the gate on the generalisation itself. Mirrors the mnv2/enet peers.
+  --
+  -- ⚠ `ema`/`emadp` carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail, so the harness
+  -- has to build the blob it is going to feed rather than assuming three regions. Getting that
+  -- wrong is not a tolerance question: PJRT refuses the call on the buffer count, which is the
+  -- loud failure mode (§2m's `expected 265 buffers` is the same shape).
   let net := convnextVerified.toNet
   let bs := 32                                   -- the baked per-replica batch
-  let replicas := 2
+  let replicas := ((← IO.getEnv "DP_REPLICAS").bind (·.toNat?)).getD 2
+  let vSg := (← IO.getEnv "DP_VARIANT").getD "adam"
+  let vDp := (← IO.getEnv "DP_VARIANT_DP").getD "adamdp"
+  let emaOn := vSg.startsWith "ema"
+  let nRegions := if emaOn then 4 else 3
+  let nScalars := if emaOn then 5 else 3
+  let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   -- The DP render is overridable so a deliberately-broken one can be fed in. That is not a
   -- convenience: a gate nobody has seen go red is an assertion. §2b-quater's control — the `%arn`
   -- divisor 2.0 → 1.0, i.e. sum instead of mean — is the one to run.
-  let dpPath := args.head?.getD "verified_mlir/convnext_adamdp_train_step.mlir"
+  let dpPath := args.head?.getD s!"verified_mlir/{net.slug}_{vDp}_train_step.mlir"
   IO.println "ConvNeXt-T data-parallel gate — duplicated batch"
-  IO.println s!"  single : verified_mlir/convnext_adam_train_step.mlir   (bs {bs})"
+  IO.println s!"  single : {sgPath}   (bs {bs})"
   IO.println s!"  DP     : {dpPath} ({replicas} replicas, \
-global {bs * replicas} = the same {bs} examples twice)"
+global {bs * replicas} = the same {bs} examples {replicas} times)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), no BatchNorm (LayerNorm), \
 backend {← IreeSession.backendName}"
 
@@ -78,18 +92,30 @@ backend {← IreeSession.backendName}"
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 net.nParams.toUSize 0.02
   let v ← F32.scaleShift (← F32.heInit 8484 net.nParams.toUSize 0.01) 1.0 0.05
-  let tail ← F32.const 3 0.0
+  let tail ← F32.const nScalars.toUSize 0.0
   let tail ← F32.write3 tail 0 0.001 0.19 0.002
-  let pbuf := F32.concat #[θ, m, v, tail]
+  -- The EMA decay pair, at a value that is neither 0 nor 1 so the shadow is a genuine blend of the
+  -- old shadow and θ' — a degenerate d would let a mis-threaded region agree by accident.
+  let tail ← if emaOn then do
+      let dPair ← F32.const 3 0.0
+      let dPair ← F32.write3 dPair 0 0.9 0.1 0.0
+      F32.blit tail 3 dPair 0 2
+    else pure tail
+  -- The shadow starts from an arbitrary NON-θ state, deliberately: seeding it at θ would make
+  -- `ema' = d·θ + (1−d)·θ'` agree with a harness that had wired the region to the wrong slot.
+  let e ← F32.scaleShift (← F32.heInit 9999 net.nParams.toUSize 0.03) 1.0 0.02
+  let pbuf := F32.concat (#[θ, m, v] ++ (if emaOn then #[e] else #[]) ++ #[tail])
   let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
-                            ++ #[#[], #[], #[]])
+                            ++ (if emaOn then net.paramShapes else #[])
+                            ++ Array.replicate nScalars #[])
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
-  let x2 := F32.concat #[x1, x1]                 -- the SAME batch on both replicas
+  -- the SAME batch on EVERY replica — `replicas` copies, not two
+  let x2 := F32.concat (Array.replicate replicas x1)
   let mut y1 : ByteArray := .empty
   for i in [0:bs] do
     y1 := y1.push (UInt8.ofNat (i % net.nClasses)); y1 := y1.push 0
     y1 := y1.push 0; y1 := y1.push 0
-  let y2 := y1 ++ y1
+  let y2 := (Array.replicate replicas y1).foldl (· ++ ·) ByteArray.empty
 
   IO.println "  running single-device…"; (← IO.getStdout).flush
   -- Delete first on BOTH sides: `compileVmfb` keys on the OUTPUT path and an mtime, never the
@@ -99,12 +125,12 @@ backend {← IreeSession.backendName}"
     for p in [s!".lake/build/{tag}.vmfb",
               s!".lake/build/{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  let s1 ← mkSession "verified_mlir/convnext_adam_train_step.mlir" ".lake/build/cnx_dp_a.vmfb"
-  let o1 ← IreeSession.mlpTrainStepV s1 "m.convnext_adam_train_step" x1 pbuf shapes y1
+  let s1 ← mkSession sgPath ".lake/build/cnx_dp_a.vmfb"
+  let o1 ← IreeSession.mlpTrainStepV s1 s!"m.{net.slug}_{vSg}_train_step" x1 pbuf shapes y1
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath ".lake/build/cnx_dp_b.vmfb"
-  let o2 ← IreeSession.mlpTrainStepVDP s2 "m.convnext_adamdp_train_step" x2 pbuf shapes y2
+  let o2 ← IreeSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" x2 pbuf shapes y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 
   if o1.size != o2.size then
@@ -115,8 +141,9 @@ backend {← IreeSession.backendName}"
   -- in with `%bc1`/`%bc2` (constant passthroughs, which agree trivially) would let a forward
   -- disagreement hide behind two exact values.
   let regions : List (String × Nat × Nat) :=
-    [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP),
-     ("loss", 3*nP, 3*nP+1), ("bc", 3*nP+1, n)]
+    [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP)]
+    ++ (if emaOn then [("ema", 3*nP, 4*nP)] else [])
+    ++ [("loss", nRegions*nP, nRegions*nP+1), ("bc", nRegions*nP+1, n)]
   let mut gradRel : Float := 0.0
   let mut lossRel : Float := 0.0
   let mut lossAbs : Float := 0.0
