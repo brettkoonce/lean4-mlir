@@ -487,10 +487,18 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     runtime `tensor<f32>` args, so one render serves the whole cosine+warmup schedule. Mirrors
     `ResNet34RenderB.adamOne`, minus the replica collective (ViT has no DP render yet). -/
 private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : String) (replicas : Nat)
-    (ema : Bool := false) (wdName : String := "%wd") :
+    (ema : Bool := false) (wdName : String := "%wd") (preAvg : Bool := false) :
     StateM Nat (String × String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
+  -- ⚠ `preAvg` says the caller has ALREADY averaged (and clipped) this gradient, so the collective
+  -- must not be emitted a second time. It exists because **under data parallelism the clip has to
+  -- come AFTER the `all_reduce`**: the reference clips the whole, already-combined gradient, so
+  -- clipping per replica clips 200 PARTIAL gradients — a different function that compiles, trains,
+  -- descends, and that no structural check sees (`planning/grad_clip.md` §4). The clip needs every
+  -- gradient at once, and this op is per parameter, so at `clip := true` the caller hoists both the
+  -- collective and the clip above the loop and passes the result here.
+  let replicas := if preAvg then 1 else replicas
   -- At `replicas > 1` the gradient is averaged across devices first. **That collective is a TRUSTED
   -- CARVE-OUT** — emitted text, not `pretty` of an AST node, so it sits outside every faithfulness
   -- theorem here, exactly as in §2b-quater. The `den` side does not shift: the AdamW triple consumes
@@ -551,7 +559,7 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
     have initialised to 0 through a prefix test. ViT is AdamW-only, so there is no second axis here
     today; if one is ever added, make both predicates substring tests first. -/
 def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
-    (wdExclude : Bool := false) : String :=
+    (wdExclude : Bool := false) (clip : Bool := false) : String :=
   (if ema then "ema" else "adam")
     ++ (if replicas ≤ 1 then "" else "dp")
     ++ (if bs == 32 && replicas ≤ 2 then "" else toString bs)
@@ -565,7 +573,14 @@ def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
     -- param from decay binds a different CONSTANT to `%wd` and changes no arity, no type and no
     -- region. It is a pure render variant. The name exists so the artifact says which recipe it is,
     -- not so anything switches on it.
+    --
+    -- ▶ `clip` = global-norm gradient clipping (`planning/grad_clip.md`), TRAILING and AFTER `wx`,
+    -- because the ViT/ConvNeXt reference sets BOTH (`gradClipNorm := 1.0` and
+    -- `wdExcludeNormBias := true`) — so `wx` ++ `clip` is the shipping spelling, not either alone,
+    -- and a feature that is fine alone and wrong composed is the `emarms` failure. Like `wx` it
+    -- needs no driver predicate: the clip changes no arity, no type and no region.
     ++ (if wdExclude then "wx" else "")
+    ++ (if clip then "clip" else "")
 
 /-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4).
 
@@ -616,7 +631,8 @@ private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001
 def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     (bStr : String := "32.0") (replicas : Nat := 1) (bs : Nat := 32)
     (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false)
-    (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
+    (wdExclude : Bool := false) (wdStr : String := "0.0001")
+    (clip : Bool := false) (clipStr : String := "1.0") : String :=
   -- ⚠ α and K are the ONLY knobs; every emitted smoothing constant is derived from them here.
   -- Passing the cotangent's `−α/K` as a separate string (which is what this took until
   -- 2026-07-31) is the same two-writers-for-one-fact shape §2a spent a thread removing: the two
@@ -625,8 +641,58 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   let go : StateM Nat String := do
     let (code, gradNames, nSm) ← vitBackAll bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr))
+    -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`, `recipe_gaps.md` v1.4b) — the
+    -- reference's `gn = sqrt(sum(jnp.sum(g*g) for g in tree.leaves(grads)))` then
+    -- `g * min(1, CLIP/(gn + 1e-6))`, applied to ALL 200 gradients before the optimizer sees them.
+    --
+    -- ⚠⚠ THE ORDER IS THE SEMANTICS, TWICE OVER:
+    --   1. the norm is GLOBAL — one scalar folded from every parameter, so the fold must run to
+    --      completion before any parameter is scaled. That is why it is hoisted out of the loop.
+    --   2. under DP the clip goes AFTER the `all_reduce`. `vitAdamOne` normally emits the collective
+    --      per parameter, which is downstream of where the clip has to be, so at `clip := true`
+    --      the collective is hoisted here too and the loop is told (`preAvg`) not to repeat it.
+    --
+    -- ⚠ At `clip := false` NOT ONE `pretty` CALL HAPPENS BELOW, so the fresh-name counter does not
+    -- move and every committed `vit*`/`vitin*` artifact re-renders byte-identically — gate 1's
+    -- strong form, free. That is the `ema := false` route, and taking it is deliberate: splitting
+    -- the loop unconditionally would shift the all_reduce text relative to the adam blocks and
+    -- re-render every `*dp*` artifact differently with the feature OFF.
+    let zero1 : Vec 1 := fun _ => 0
+    let mut avgNames := gradNames
+    let mut clipCode := ""
+    let mut clipped : List String := []
+    if clip then
+      -- 1. the collective, hoisted — emits NOTHING at `replicas ≤ 1`, so the single-device clip
+      --    render is unaffected by this branch existing.
+      let mut avg : List String := []
+      for i in [0:(vitParamSig nClasses).length] do
+        let (nm, ds) := (vitParamSig nClasses)[i]!
+        let (arS, gAvg) := ViTRender.emitGradAllReduce (gradNames[i]!) ds nm replicas
+        clipCode := clipCode ++ arS
+        avg := avg ++ [gAvg]
+      avgNames := avg
+      -- 2. the fold, seeded at `%zero` (already in this render's preamble). Left-nested
+      --    `gradSumSqAccF`, one leaf per parameter — an ordinary `SHlo` TREE, not a shared DAG
+      --    node, because every gradient is already an `.operand` leaf and nothing is recomputed.
+      let mut total : SHlo 1 := .operand "%zero" zero1
+      for i in [0:(vitParamSig nClasses).length] do
+        let (_, ds) := (vitParamSig nClasses)[i]!
+        let n := ds.foldl (· * ·) 1
+        total := .gradSumSqAccF (n := n) ds total (.operand (avgNames[i]!) (fun _ => 0))
+      let (cN, normSSA) ← pretty bs total
+      clipCode := clipCode ++ cN
+      -- 3. the rescale, one per parameter, every site reading the SAME `normSSA` and the same
+      --    `clipStr`/`epsStr` — which is what makes the factor shared (`clipShared_faithful`).
+      for i in [0:(vitParamSig nClasses).length] do
+        let (_, ds) := (vitParamSig nClasses)[i]!
+        let n := ds.foldl (· * ·) 1
+        let z : Vec n := fun _ => 0
+        let (cS, sSSA) ← pretty bs (.clipScaleF (n := n) clipStr "0.000001" 0 0 ds
+                            (.operand normSSA zero1) (.operand (avgNames[i]!) z))
+        clipCode := clipCode ++ cS
+        clipped := clipped ++ [sSSA]
     -- one triple per parameter, in func-arg order
-    let mut adamCode := ""
+    let mut adamCode := clipCode
     let mut thetaN : List String := []
     let mut mN : List String := []
     let mut vN : List String := []
@@ -637,7 +703,8 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       -- parallel list — §2e's silent-slot rule: a misaligned mask would decay the wrong 126 params
       -- and nothing in the arity, the types or the prefix audit would notice.
       let wdN := if wdExclude && !vitWdDecays nm ds then "%wdz" else "%wd"
-      let (c, nT, nM, nV, nE) ← vitAdamOne bs nm ds (gradNames[i]!) replicas ema wdN
+      let gSSA := if clip then clipped[i]! else gradNames[i]!
+      let (c, nT, nM, nV, nE) ← vitAdamOne bs nm ds gSSA replicas ema wdN clip
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]
@@ -906,6 +973,42 @@ end Proofs.StableHLO
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adam128wx_train_step" "128.0" 1 128 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05"))
 
+-- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) ───────────────────────────
+-- `vitTinyImagenetConfig.gradClipNorm := 1.0` — the DeiT default, and the reference's own comment
+-- calls it *"the unlock for the 5e-4 LR"*. `vitTinyConfig` sets NOTHING, so (like `wx` and `ema`)
+-- the Imagenette artifacts keep their bytes and this is a variant, not a flipped default.
+--
+-- ⚠ The Imagenette `clip` render is therefore a **GATE VEHICLE, NOT A MATCHED PAIR**: no Imagenette
+-- reference run uses clipping, so its accuracy is not comparable to anything. It exists because
+-- `clip-tie` drives it against `vit_adam` at bs32/K=10, where the two renders differ in EXACTLY the
+-- thing being gated and the compile is seconds rather than a minute. Same role `vit_adamwx` plays.
+--
+-- The committed threshold is the reference's 1.0, and that is the CLIPPING regime: the reference
+-- measured the pre-clip global grad norm at init at 14.28 (timm init) / 44.09 (Xavier), i.e. 10x+
+-- over the threshold (`jax/MainVitImagenet.lean:89`), so a real run spends its early steps there.
+--
+-- ⚠⚠ THE BELOW-THRESHOLD RENDER IS **NOT COMMITTED**, AND THAT IS DELIBERATE — it is generated by
+-- `scripts/perturb_clip.py hi`, the `perturb_wd_mask.py` / `misplace_drop_sites.py` pattern.
+-- Two reasons, and the second was found the hard way:
+--   1. an artifact baking a threshold NO CONFIG SETS is a silent-hyperparameter artifact — the
+--      `RenderCifar8Sgd02` / EfficientNet-16× / ViT-500× shape (§2a-quater), and there is no
+--      reference to say whether it is right;
+--   2. ⚠ **A BOOL-DERIVED VARIANT NAME CANNOT DISTINGUISH TWO RENDERS THAT DIFFER ONLY IN A BAKED
+--      CONSTANT.** Rendering a second threshold under `cnxAdamVariant`'s `clip : Bool` produced
+--      `convnext_adamcliphi_train_step.mlir` declaring `@convnext_adamclip_train_step` — an entry
+--      disagreeing with its own path, caught only because the paths were compared. ViT's explicit
+--      `funcName` hid it here; ConvNeXt derives its name and did not. That is §0.4's
+--      derived-vs-explicit finding meeting §2a-quater's silent-hyperparameter one.
+#eval IO.FS.writeFile "verified_mlir/vit_adamclip_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamclip_train_step" "32.0" 1 32 10 0.1
+    (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := true) (clipStr := "1.0"))
+-- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`, because
+-- `vitTinyImagenetConfig` sets `wdExcludeNormBias := true` AND `gradClipNorm := 1.0`. ⚠ wd = 0.05
+-- for the same 500× reason `vitin_adam128wx` carries it.
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128wxclip_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adam128wxclip_train_step" "128.0" 1 128 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
+
 -- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ─────────────────
 -- ViT is the last of the three nets whose reference uses EMA (`vitTinyImagenetConfig.emaDecay :=
 -- 0.99996`; ConvNeXt landed first, then EfficientNet's `emarms`), and it is the CHEAPEST of the
@@ -969,6 +1072,13 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.vitAdamVariant 128 1 false true == "adam128wx"
 #guard Proofs.StableHLO.vitAdamVariant 128 4 false true == "adamdp128x4wx"
 #guard Proofs.StableHLO.vitAdamVariant 32 1 true true == "emawx"
+-- ▶ the `clip` spellings, and the COMPOSED one is the point: the reference sets `wx` AND `clip`,
+-- so `adamwxclip` is what ships and `adamclip` alone is the gate vehicle.
+#guard Proofs.StableHLO.vitAdamVariant 32 1 false false true == "adamclip"
+#guard Proofs.StableHLO.vitAdamVariant 32 1 false true true == "adamwxclip"
+#guard Proofs.StableHLO.vitAdamVariant 128 1 false true true == "adam128wxclip"
+#guard Proofs.StableHLO.vitAdamVariant 128 4 false true true == "adamdp128x4wxclip"
+#guard Proofs.StableHLO.vitAdamVariant 32 1 true false true == "emaclip"
 
 -- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
 -- `vitTinyImagenetConfig.emaDecay := 0.99996` (the DeiT default), so this is the render an ImageNet

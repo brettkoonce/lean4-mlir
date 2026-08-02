@@ -594,10 +594,16 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     the LN ones are `tensor<96xf32>` … `tensor<768xf32>`). The rank-0 `all_reduce` path this
     render used to be the only exerciser of is no longer exercised anywhere in the repo. -/
 private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
-    (ema : Bool := false) (wdName : String := "%wd") :
+    (ema : Bool := false) (wdName : String := "%wd") (preAvg : Bool := false) :
     StateM Nat (String × String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
+  -- ⚠ `preAvg` — the caller has already averaged AND clipped this gradient, so the collective must
+  -- not be emitted twice. Under DP the clip must come AFTER the `all_reduce` (the reference clips
+  -- the combined gradient; clipping per replica clips 180 PARTIAL gradients, a different function
+  -- that trains and descends), and the clip needs every gradient at once while this op is per
+  -- parameter — so at `clip := true` the caller hoists both. `planning/grad_clip.md` §4.
+  let replicas := if preAvg then 1 else replicas
   let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
   let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty cBS (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
@@ -636,12 +642,22 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
     render carrying a fourth `[θ|m|v|ema]` region must never be able to overwrite the artifact the
     AdamW trainer runs, whose blob has three. That is §2a's last-writer-wins race, and here it would
     also be an arity mismatch the driver could not survive. -/
-def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := false) : String :=
+def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := false)
+    (clip : Bool := false) : String :=
   (if ema then "ema" else "adam") ++ (if replicas ≤ 1 then "" else "dp")
     -- `wx` = timm no_weight_decay; TRAILING, and checked against every CONCATENATION in
     -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
     -- It needs no driver predicate: excluding a param changes no arity, type or region.
     ++ (if wdExclude then "wx" else "")
+    -- ▶ `clip` = global-norm gradient clipping (`planning/grad_clip.md`), AFTER `wx` because
+    -- `convnextTinyImagenetConfig` sets BOTH — `wx` ++ `clip` is the shipping spelling.
+    --
+    -- ⚠⚠ THIS FUNCTION IS WHERE ConvNeXt DIFFERS FROM ViT AND WHERE THE `wx` THREAD SHIPPED A
+    -- DEFECT: ConvNeXt DERIVES its entry name from the variant (`{slug}_{cnxAdamVariant …}`) where
+    -- `vitAdamTrainStepFaithful` takes `funcName` explicitly. So a new flag that reaches the
+    -- renderer but not this function produces an artifact whose declared entry disagrees with its
+    -- own path — caught only because the shim refuses the call. The `#guard`s below pin it.
+    ++ (if clip then "clip" else "")
 
 /-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe.
 
@@ -693,6 +709,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument
     -- at every call site, which is how the mnv2 `convBias` threading went wrong.
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
+    (clip : Bool := false) (clipStr : String := "1.0")
     : String := Id.run do
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
   -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
@@ -703,16 +720,51 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
   let (body, gradMap, nSm) := (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses).run' 0
   let go : StateM Nat String := do
-    let mut adamCode := ""
+    -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) — ConvNeXt's half. Structurally the
+    -- ViT block, and it has to be a second copy only because the two renderers thread their
+    -- gradients differently (a `gradMap` lookup here, an indexed list there).
+    --
+    -- ⚠⚠ THE ORDER IS THE SEMANTICS: the norm is GLOBAL, so the fold runs to completion before any
+    -- parameter is scaled; and under DP the clip goes AFTER the `all_reduce`, so the collective is
+    -- hoisted here too and the loop is told (`preAvg`) not to repeat it.
+    -- ⚠ At `clip := false` NOT ONE `pretty` CALL HAPPENS in this block, so the fresh-name counter
+    -- does not move and every committed `convnext*`/`cnxin*` artifact re-renders byte-identically.
+    let zero1 : Vec 1 := fun _ => 0
+    let mut clipCode := ""
+    let mut clipped : List (String × String) := []
+    if clip then
+      let mut avg : List (String × String) := []
+      for (nm, ds) in allParams nClasses do
+        let g := (gradMap.lookup nm).getD s!"%d{nm}"
+        let (arS, gAvg) := ViTRender.emitGradAllReduce g ds nm replicas
+        clipCode := clipCode ++ arS
+        avg := avg ++ [(nm, gAvg)]
+      let mut total : SHlo 1 := .operand "%zero" zero1
+      for (nm, ds) in allParams nClasses do
+        let n := ds.foldl (· * ·) 1
+        let g := (avg.lookup nm).getD s!"%d{nm}"
+        total := .gradSumSqAccF (n := n) ds total (.operand g (fun _ => 0))
+      let (cN, normSSA) ← pretty cBS total
+      clipCode := clipCode ++ cN
+      for (nm, ds) in allParams nClasses do
+        let n := ds.foldl (· * ·) 1
+        let z : Vec n := fun _ => 0
+        let g := (avg.lookup nm).getD s!"%d{nm}"
+        let (cS, sSSA) ← pretty cBS (.clipScaleF (n := n) clipStr "0.000001" 0 0 ds
+                            (.operand normSSA zero1) (.operand g z))
+        clipCode := clipCode ++ cS
+        clipped := clipped ++ [(nm, sSSA)]
+    let mut adamCode := clipCode
     let mut thetaN : List String := []
     let mut mN : List String := []
     let mut vN : List String := []
     let mut eN : List String := []
     for (nm, ds) in allParams nClasses do
-      let g := (gradMap.lookup nm).getD s!"%d{nm}"
+      let g0 := (gradMap.lookup nm).getD s!"%d{nm}"
+      let g := if clip then (clipped.lookup nm).getD g0 else g0
       -- The wd operand comes from the SAME `allParams` entry that names the site (§2e's slot rule).
       let wdN := if wdExclude && !cnxWdDecays nm ds then "%wdz" else "%wd"
-      let (c, nT, nM, nV, nE) ← convnextAdamOne replicas nm ds g ema wdN
+      let (c, nT, nM, nV, nE) ← convnextAdamOne replicas nm ds g ema wdN clip
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]
@@ -805,7 +857,9 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- The shim's entry check refuses that outright ("mlp train step failed") rather than running
   -- the wrong graph, which is §2b-quater's guard earning its keep a second time; the `#guard`s
   -- below are what stop it recurring silently.
-  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude}_train_step"
+  -- ⚠ `clip` MUST reach the variant here for the SAME reason `wdExclude` must, and this is the
+  -- second time that exact hazard has been live on this line. `planning/grad_clip.md` §6.
+  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
@@ -948,6 +1002,29 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin"
     (ema := false) (wdExclude := true) (wdStr := "0.05"))
 
+-- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) ───────────────────────────
+-- `convnextTinyImagenetConfig.gradClipNorm := 1.0`. `convnextTinyConfig` sets nothing, so the
+-- Imagenette artifacts keep their bytes and this is a variant, not a flipped default.
+--
+-- ⚠ The Imagenette `clip` render is a GATE VEHICLE, not a matched pair — no Imagenette reference
+-- run clips, so its accuracy is comparable to nothing. It exists so `clip-tie` can drive it at
+-- bs32/K=10, where the compile is seconds.
+--
+-- ⚠⚠ THE BELOW-THRESHOLD RENDER IS NOT COMMITTED — `scripts/perturb_clip.py hi` generates it, and
+-- the reason is a defect this file produced and then had reverted: `cnxAdamVariant`'s `clip` is a
+-- **Bool**, so a second render at a different threshold spelled the SAME variant, and
+-- `convnext_adamcliphi_train_step.mlir` came out declaring `@convnext_adamclip_train_step` — an
+-- entry disagreeing with its own path. **A Bool-derived name cannot distinguish two renders that
+-- differ only in a baked constant, and those two ARE different functions.** ViT's explicit
+-- `funcName` hides this class of mistake; this net derives its name and does not.
+#eval IO.FS.writeFile "verified_mlir/convnext_adamclip_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 1 10 "convnext"
+    (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := true) (clipStr := "1.0"))
+-- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`.
+#eval IO.FS.writeFile "verified_mlir/cnxin_adamwxclip_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
+
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
 -- call ("entry mismatch"). These pin the literal paths above against `cnxAdamVariant`, so a rename
 -- fails at `lake build` rather than at run time. (The audit greps for the LITERAL string
@@ -966,6 +1043,12 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.cnxAdamVariant 1 false true == "adamwx"
 #guard Proofs.StableHLO.cnxAdamVariant 4 false true == "adamdpwx"
 #guard Proofs.StableHLO.cnxAdamVariant 1 true true == "emawx"
+-- ▶ the `clip` spellings. `adamwxclip` is the shipping one — `convnextTinyImagenetConfig` sets
+-- `wdExcludeNormBias := true` AND `gradClipNorm := 1.0`, so neither marker alone is the recipe.
+#guard Proofs.StableHLO.cnxAdamVariant 1 false false true == "adamclip"
+#guard Proofs.StableHLO.cnxAdamVariant 1 false true true == "adamwxclip"
+#guard Proofs.StableHLO.cnxAdamVariant 4 false true true == "adamdpwxclip"
+#guard Proofs.StableHLO.cnxAdamVariant 1 true false true == "emaclip"
 
 -- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
 -- ConvNeXt's reference number IS the EMA shadow's — **75.93%**, against a live best of 76.28% — so

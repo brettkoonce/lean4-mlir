@@ -10,6 +10,9 @@ import LeanMlir.Proofs.Architectures.ConvNeXt
 -- The ℝ AdamW spec (`adamMNext`/`adamVNext`/`adamWParam`), so the optimizer ops can denote it.
 -- AdamStep only imports Foundation.Tensor + Mathlib, so this adds no cycle.
 import LeanMlir.Proofs.Codegen.AdamStep
+-- The ℝ global-norm clip spec (`gradSumSq`/`clipFactor`/`clipScale`), so the four clip ops can
+-- denote it. GradClip imports only AdamStep, so this adds no cycle either.
+import LeanMlir.Proofs.Codegen.GradClip
 import LeanMlir.Proofs.Codegen.SgdMomentumStep
 -- RmsPropStep imports only the two above, so this adds no cycle either.
 import LeanMlir.Proofs.Codegen.RmsPropStep
@@ -873,6 +876,36 @@ inductive SHlo : Nat → Type where
   --    theorem). `sqName`/`bufName` ride as name+value like every other optimizer op here.
   | rmsBufNextF {n : Nat} (sqName bufName rhoName orhoName muName epsName : String)
       (ds : List Nat) (ρ μ ε : ℝ) (sq buf : Vec n)              : SHlo n → SHlo n
+  -- ── ▶ GLOBAL-NORM GRADIENT CLIPPING (`GradClip.lean`, `planning/grad_clip.md`), the ViT /
+  --    ConvNeXt recipe's `gradClipNorm`. FOUR ops, all in this `ds : List Nat` parameter-shape
+  --    family rather than the `n : Nat` batched-activation one — the distinction matters, because
+  --    `addV` at `n = 1` emits `tensor<Bx1xf32>` and cannot fold a rank-0 scalar.
+  --
+  --    ⚠⚠ THE NORM IS GLOBAL: one scalar folded from every parameter's gradient and consumed by
+  --    every site. That reads like a shared DAG node where `SHlo` is a tree, and it is not one:
+  --    `SHlo` is single-OUTPUT, not single-INPUT (`sub`/`addV`/`matmulF` are already binary), and
+  --    every gradient the fold consumes is ALREADY an `.operand` leaf, so the 200-way fold is an
+  --    ordinary tree with 200 leaves and nothing is recomputed. No carve-out is needed.
+  --
+  --    ⚠ `clipScaleF` takes the factor as a CHILD, not as a `facName`+ℝ field pair (the `%lr`
+  --    shape). As a child its `den` is exactly `factor · g` with no ℝ of its own to disagree with
+  --    the norm. It costs nothing in the emit because the renderer hands it an `.operand` leaf at
+  --    the norm tree's SSA name — `pretty` prints nothing for a leaf. ⚠ Handing it the norm
+  --    SUBTREE instead would emit ~80,000 lines: `pretty` has no CSE (§4 of the handoff), so the
+  --    tree would be duplicated at all 200 sites. Emit once, thread the name — `resnetFwdGraph`'s
+  --    "tree-safe via operand leaves" trick used for its other purpose.
+  --
+  --    ⚠⚠ TWO ops, and the earlier four-op split (a separate `addScalarF : SHlo 1 → SHlo 1 →
+  --    SHlo 1` and `gradClipFacF : SHlo 1 → SHlo 1`) was RETRACTED for a reason worth knowing
+  --    before adding any op here: **a constructor with NO `{n : Nat}` binder is a shape this AST
+  --    does not otherwise have**, and adding two of them made NINE unrelated `simp only [… den …]`
+  --    proofs elsewhere in this file die with a `whnf` timeout — `den` is a ~200-case dependent
+  --    match, and fully-index-fixed arms make unfolding it markedly more expensive. **4× the
+  --    heartbeat budget did not fix it.** Both ops below are parametric in `n`, like every other
+  --    constructor here. See `planning/grad_clip.md` §3.
+  | gradSumSqAccF {n : Nat} (ds : List Nat)                     : SHlo 1 → SHlo n → SHlo 1
+  | clipScaleF   {n : Nat} (clipStr epsStr : String) (c ε : ℝ)
+      (ds : List Nat)                                           : SHlo 1 → SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -1160,6 +1193,15 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .momParamF _ _ _ _ _ μ lr θ v e => momParam μ lr θ v (den e)
   -- RMSProp: the proven ℝ optimizer (RmsPropStep.lean) on the child's gradient.
   | _, .rmsBufNextF _ _ _ _ _ _ _ ρ μ ε sq buf e => rmsBufNext ρ μ ε sq buf (den e)
+  -- Global-norm gradient clipping (GradClip.lean). `gradSumSqF` collapses one parameter's gradient
+  -- to its ∑g² as a rank-0 scalar (`SHlo 1`, the `lnBetaGrad` reading); `addScalarF` folds those
+  -- across parameters; `gradClipFacF` roots the total and forms `min(1, c/(√s+ε))`; `clipScaleF`
+  -- multiplies a gradient by that factor, which it takes as its FIRST CHILD — so `den` is exactly
+  -- `factor · g` and there is no ℝ field here whose agreement with the norm has to be assumed.
+  -- ⚠ `scalarOf` rather than `den acc 0`: `den` must never APPLY a recursive call to an index —
+  -- every other arm of this match passes `den e` along whole. See `Proofs.scalarOf`.
+  | _, .gradSumSqAccF _ acc e      => fun _ => scalarOf (den acc) + gradSumSq (den e)
+  | _, .clipScaleF _ _ c ε _ s e   => clipScale (clipFactor c ε (scalarOf (den s))) (den e)
   | _, .bnGammaSgd (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
@@ -2246,6 +2288,77 @@ theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
   simp only [rmsBufNextF_faithful]
   exact rmsBufNext_mu_zero ρ ε sq buf (den e)
 
+-- ════════════════════════════════════════════════════════════════
+-- § Global-norm gradient clipping — faithfulness (`GradClip.lean`, `planning/grad_clip.md`)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The scalar fold is `Proofs.gradSumSq` accumulated** — `acc + ∑ᵢ gᵢ²` for one parameter,
+    reduced to a rank-0 scalar. `SHlo 1` denoting a rank-0 `tensor<f32>` is `lnBetaGrad`'s
+    established reading, not a new convention.
+
+    ▶ **This op is what makes the global reduction an ordinary `SHlo` TREE.** The norm reads like a
+    shared DAG node — one scalar consumed by 200 sites — and `SHlo` is a tree; the resolution is
+    that `SHlo` is single-OUTPUT, not single-INPUT, so folding 200 subtrees into one scalar is just
+    a left-nested chain of this constructor, seeded at `%zero`. Nothing is recomputed, because every
+    gradient it consumes is already an `.operand` leaf. -/
+@[simp] theorem gradSumSqAccF_faithful {n : Nat} (ds : List Nat) (acc : SHlo 1) (e : SHlo n) :
+    den (.gradSumSqAccF ds acc e) = fun _ => scalarOf (den acc) + gradSumSq (den e) := rfl
+
+/-- **The rescale is `Proofs.clipScale` at `Proofs.clipFactor` of the summed total** — the
+    reference's `g * jnp.minimum(1.0, CLIP / (gn + 1e-6))` with `gn = sqrt(total)`.
+
+    ⚠ The factor is derived from the op's FIRST CHILD, the already-summed global total, so this
+    constructor cannot express a per-parameter clip: it never receives enough to compute one. The
+    `c`/`ε` ℝ fields pair with `clipStr`/`epsStr` exactly as `bnF`'s `ε`/`epsStr` do.
+    ⚠ The factor is recomputed at every site rather than emitted once and threaded, for
+    `adamWParamF`'s reason — `SHlo` is single-result, so each output is its own node, and XLA's CSE
+    folds the duplicates (§2b-bis measured that on R34's 108 → 36 rsqrt at no run-time cost). -/
+@[simp] theorem clipScaleF_faithful {n : Nat} (clipS epsS : String) (c ε : ℝ) (ds : List Nat)
+    (s : SHlo 1) (e : SHlo n) :
+    den (.clipScaleF clipS epsS c ε ds s e)
+      = clipScale (clipFactor c ε (scalarOf (den s))) (den e) := rfl
+
+/-- ▶ **THE WHOLE CLIP, END TO END, FOR TWO PARAMETERS — this is the transcription check.**
+
+    Read the reference's two lines off the right-hand side: `gn = √(Σ_leaves Σ g²)` folded from
+    `%zero`, then `g * min(1, CLIP/(gn + 1e-6))`. Stated at TWO parameters because one cannot
+    exhibit the property that matters — see `clipShared_faithful`. Holds by `rfl`. -/
+theorem clipGrad_faithful {n m : Nat} (dsN dsM : List Nat) (clipS epsS : String) (c ε : ℝ)
+    (gN : SHlo n) (gM : SHlo m) :
+    den (.clipScaleF clipS epsS c ε dsN
+          (.gradSumSqAccF dsM (.gradSumSqAccF dsN (.operand "%zero" (fun _ => 0)) gN) gM) gN)
+      = clipGrad c ε (0 + gradSumSq (den gN) + gradSumSq (den gM)) (den gN) := rfl
+
+/-- ▶⚠ **THE FACTOR IS SHARED ACROSS PARAMETERS — the statement the numeric gate drives.**
+
+    Two parameters clipped off the SAME total (and the same `c`/`ε`) satisfy
+    `g'₁ᵢ · g₂ⱼ = g'₂ⱼ · g₁ᵢ`, i.e. the ratio `g'/g` is one constant across every coordinate of
+    every parameter.
+
+    ⚠ **This is the ONLY property that separates the reference from a per-parameter clip.** A
+    per-parameter clip scales, never amplifies, and is the identity below the threshold — it
+    satisfies everything else in `GradClip.lean`. It differs here and nowhere else, which is why
+    `clip-tie` measures the ratio's CONSTANCY across all 200/180 parameters instead of checking
+    that any one parameter got smaller (`wdx-tie`'s *gate the partition, not the count*). -/
+theorem clipShared_faithful {n m : Nat} (dsN dsM : List Nat) (clipS epsS : String) (c ε : ℝ)
+    (s : SHlo 1) (gN : SHlo n) (gM : SHlo m) (i : Fin n) (j : Fin m) :
+    den (.clipScaleF clipS epsS c ε dsN s gN) i * den gM j
+      = den (.clipScaleF clipS epsS c ε dsM s gM) j * den gN i := by
+  simp only [clipScaleF_faithful]
+  exact clipFactor_shared (clipFactor c ε (scalarOf (den s))) (den gN) (den gM) i j
+
+/-- **Below the threshold the rendered clip is the EXACT identity**, so a clip-on render at a large
+    `c` must agree with the clip-off render on every byte (`x * 1.0` is exact in binary32). The
+    emit-side reading of `Proofs.clipGrad_id_below`, and the licence for `clip-tie`'s gate 3.
+    ⚠ It is also why gate 3 alone is not evidence: at factor 1 a per-parameter clip and a global one
+    are the SAME FUNCTION, so an identity gate cannot see which was rendered. -/
+theorem clipScaleF_id_below {n : Nat} (clipS epsS : String) (c ε : ℝ) (ds : List Nat)
+    (s : SHlo 1) (e : SHlo n) (hε : 0 < ε)
+    (h : Real.sqrt (scalarOf (den s)) + ε ≤ c) :
+    den (.clipScaleF clipS epsS c ε ds s e) = den e := by
+  simp only [clipScaleF_faithful, clipFactor_eq_one_below c ε (scalarOf (den s)) h hε,
+             clipScale_one]
+
 /-- **Inference per-channel BN forward faithfulness.** The 4-D reshape + affine
     `γ·(x−μ)·rsqrt(var+ε)+β` with rank-1 μ/var/γ/β (`dims=[1]`) denotes the proven
     `bnPerChannelEvalTensor3` (PerChannelBN.lean). (`rfl`, so kept out of the axiom audit.) -/
@@ -3187,6 +3300,10 @@ inductive Raw where
   | momVNextF (v mu : String) (ds : List Nat) : Raw → Raw
   | momParamF (θ v mu lr : String) (ds : List Nat) : Raw → Raw
   | rmsBufNextF (sq buf rho orho mu eps : String) (ds : List Nat) : Raw → Raw
+  -- Global-norm grad clip. `gradClipFacF` keeps only its two literal strings (the ℝs are
+  -- denotation-only, as everywhere in `Raw`); `clipScaleF`/`addScalarF` are BINARY.
+  | gradSumSqAccF (ds : List Nat)                            : Raw → Raw → Raw
+  | clipScaleF    (clipStr epsStr : String) (ds : List Nat)  : Raw → Raw → Raw
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
@@ -3366,6 +3483,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .momParamF θN vN muN lrN ds _ _ _ _ e => .momParamF θN vN muN lrN ds (skel e)
   | _, .rmsBufNextF sqN bufN rhoN orhoN muN epsN ds _ _ _ _ _ e =>
       .rmsBufNextF sqN bufN rhoN orhoN muN epsN ds (skel e)
+  | _, .gradSumSqAccF ds acc e         => .gradSumSqAccF ds (skel acc) (skel e)
+  | _, .clipScaleF cS eS _ _ ds s e    => .clipScaleF cS eS ds (skel s) (skel e)
   | _, .depthwiseF (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .depthwiseF wN bN c h w kH kW (skel e)
   | _, .depthwiseBack (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
@@ -3573,6 +3692,8 @@ inductive Tok where
   | momVNextF (v mu : String) (ds : List Nat) : Tok
   | momParamF (θ v mu lr : String) (ds : List Nat) : Tok
   | rmsBufNextF (sq buf rho orho mu eps : String) (ds : List Nat) : Tok
+  | gradSumSqAccF (ds : List Nat)                           : Tok
+  | clipScaleF    (clipStr epsStr : String) (ds : List Nat) : Tok
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Tok
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Tok
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Tok
@@ -3666,6 +3787,10 @@ def toToks : Raw → List Tok
   | .momParamF θ v mu lr ds e => toToks e ++ [.momParamF θ v mu lr ds]
   | .rmsBufNextF sq buf rho orho mu eps ds e =>
       toToks e ++ [.rmsBufNextF sq buf rho orho mu eps ds]
+  -- ⚠ Both push LEFT then RIGHT, so `parseStack` pops right-then-left (`.addV`'s shape). The
+  -- LEFT child is the scalar in both cases — the accumulator, and the summed global total.
+  | .gradSumSqAccF ds acc e  => toToks acc ++ toToks e ++ [.gradSumSqAccF ds]
+  | .clipScaleF cS eS ds s e => toToks s ++ toToks e ++ [.clipScaleF cS eS ds]
   | .depthwiseF w b c h w' kH kW e => toToks e ++ [.depthwiseF w b c h w' kH kW]
   | .depthwiseBack w c h w' kH kW e => toToks e ++ [.depthwiseBack w c h w' kH kW]
   | .depthwiseStridedF w b c h w' kH kW e => toToks e ++ [.depthwiseStridedF w b c h w' kH kW]
@@ -4513,6 +4638,47 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {mub} = stablehlo.broadcast_in_dim {muN}, dims = [] : (tensor<f32>) -> {T}\n" ++
         s!"    {bs} = stablehlo.multiply {mub}, {bufN} : {T}\n" ++
         s!"    {o} = stablehlo.add {bs}, {nrm} : {T}\n", o :: st)
+  -- ══ GLOBAL-NORM GRADIENT CLIPPING: op-for-op the reference's two lines
+  --      gn    = sqrt(sum(jnp.sum(g*g) for g in tree.leaves(grads)))
+  --      grads = tree.map(lambda g: g * minimum(1.0, CLIP/(gn + 1e-6)), grads)
+  --    `jax/Jax/Codegen.lean:2262`. All four emit at the PARAMETER shape `ty ds`, not at
+  --    `ty [B,n]` — the clip runs on parameter gradients, after the batch has been contracted. ══
+  | .gradSumSqAccF ds, g :: acc :: st => do
+      -- One leaf's `jnp.sum(g*g)`, reduced over EVERY axis to rank 0, added to the running total.
+      -- The dims list is `List.range ds.length` rather than a literal, so it is right at rank 1 and
+      -- rank 4 alike; ViT and ConvNeXt have no rank-0 parameters, so it is never empty
+      -- (`vitParamSig`, ConvNeXt's `allParams` — both checked, minimum rank 1).
+      -- ⚠ Emits at the PARAMETER shape `ty ds`, not `ty [B,n]`: the clip runs on parameter
+      -- gradients, after the batch has been contracted.
+      let T := ty ds
+      let dims := String.intercalate ", " ((List.range ds.length).map toString)
+      let z ← fresh; let sq ← fresh; let red ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {sq} = stablehlo.multiply {g}, {g} : {T}\n" ++
+        s!"    {red} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [{dims}] : ({T}, tensor<f32>) -> tensor<f32>\n" ++
+        s!"    {o} = stablehlo.add {acc}, {red} : tensor<f32>\n", o :: st)
+  | .clipScaleF clipS epsS ds, g :: sN :: st => do
+      -- `g * min(1, CLIP/(sqrt(total) + 1e-6))` — the reference's second line.
+      -- ⚠ ε is added to the ROOT, not under it: the opposite of `rmsBufNextF`'s TF placement, and
+      -- this one follows the reference literally (`CLIP / (gn + 1e-6)`).
+      -- ⚠ The `minimum` against 1.0 is not decoration — without it a SMALL gradient is AMPLIFIED
+      -- by `c/gn`, which compiles, trains and descends (`Proofs.clipFactor_le_one`).
+      -- The broadcast-then-multiply is `adamWParamF`'s `%lr` shape verbatim; it is the
+      -- scale-by-a-RUNTIME-scalar the kit lacked (`scaleF` bakes a `constant dense<…>` instead).
+      let T := ty ds
+      let gn ← fresh; let ep ← fresh; let dn ← fresh; let cc ← fresh
+      let rat ← fresh; let one ← fresh; let fac ← fresh; let fb ← fresh; let o ← fresh
+      pure (
+        s!"    {gn} = stablehlo.sqrt {sN} : tensor<f32>\n" ++
+        s!"    {ep} = stablehlo.constant dense<{epsS}> : tensor<f32>\n" ++
+        s!"    {dn} = stablehlo.add {gn}, {ep} : tensor<f32>\n" ++
+        s!"    {cc} = stablehlo.constant dense<{clipS}> : tensor<f32>\n" ++
+        s!"    {rat} = stablehlo.divide {cc}, {dn} : tensor<f32>\n" ++
+        s!"    {one} = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+        s!"    {fac} = stablehlo.minimum {one}, {rat} : tensor<f32>\n" ++
+        s!"    {fb} = stablehlo.broadcast_in_dim {fac}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {o} = stablehlo.multiply {fb}, {g} : {T}\n", o :: st)
   | .bnPerChannelEvalF gN bN muN varN epsStr oc h w, r :: st => do
       -- INFERENCE per-channel BatchNorm: reshape to [B,oc,h,w], then the affine map
       -- γ·(x − μ)·rsqrt(var + ε) + β with μ/var/γ/β all rank-1 `[oc]` graph inputs

@@ -1662,6 +1662,26 @@ lean_exe «wdx-tie» where
   root := `tests.TestWdExcludeTie
   moreLinkArgs := xlaLink
 
+/-- v1.4b: **global-norm gradient clipping**, ONE harness for ViT and ConvNeXt (`clip-tie <net>`).
+    The reference's `g * min(1, CLIP/(‖g‖+1e-6))` with ‖g‖ taken across EVERY parameter.
+
+    At `m = v = 0` the moment slot recovers the factor exactly — `m' = (1−β₁)·g` — so
+    `m'_clip/m'_adam` is ONE number at all ~5.5M coordinates. **That constancy is the gate**, and
+    it is the only property a per-parameter clip gets wrong: a per-parameter clip scales, never
+    amplifies, and is the identity below the threshold, so it satisfies every other check here.
+    `scripts/perturb_clip.py perparam` builds it and it must fire.
+
+    ⚠ Needs the below-threshold render, which is GENERATED rather than committed (an artifact
+    baking a threshold no config sets is a silent hyperparameter — handoff §2a-quater):
+
+        lake build clip-tie
+        python3 scripts/perturb_clip.py verified_mlir/vit_adamclip_train_step.mlir \
+          .lake/build/clip_hi_vit.mlir hi
+        CUDA_VISIBLE_DEVICES=0 .lake/build/bin/clip-tie vit -/
+lean_exe «clip-tie» where
+  root := `tests.TestGradClipTie
+  moreLinkArgs := xlaLink
+
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a

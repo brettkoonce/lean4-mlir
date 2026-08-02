@@ -71,11 +71,12 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: GRAD CLIP (`recipe_gaps.md` v1.4b). It is scoped in §0.2 below.**
+## 0. ▶ START HERE — **grad clip is DONE (2026-08-02). `recipe_gaps.md` v1.4 is CLOSED.**
 
-**Rewritten 2026-08-02 for a fresh session.** State: `lake build Proofs Certs Codegen` **3,912**
-green · **111** artifacts, one writer each · `verified_mlir/` clean · drift-guard coverage **68/99**
-with `render_guard_baseline.txt` unchanged (that file may only shrink).
+**Rewritten 2026-08-02 for a fresh session; updated the same day when grad clip landed.** State:
+`lake build Proofs Certs Codegen` **3,913** green · **115** artifacts, one writer each ·
+`verified_mlir/` clean · drift-guard coverage **72/103** with `render_guard_baseline.txt` unchanged
+(that file may only shrink).
 
 **Read in this order:** this section (§0), then `planning/recipe_gaps.md` — which is the plan and
 supersedes every ordering further down this file. The feature specs are `planning/ema.md` and
@@ -87,7 +88,7 @@ a live thread unless §0.3 says it is owed.
 | | |
 |---|---|
 | **§0.1** | ⚠ the box constraint — it re-orders everything |
-| **§0.2** | ▶ **the next thread: grad clip**, scoped by measurement |
+| **§0.2** | ✅ grad clip — DONE; what it cost, and the three traps it found |
 | **§0.3** | ⚠ what is OWED, collected in one place |
 | **§0.4** | ✅ what landed 2026-08-02, with the findings worth keeping |
 
@@ -109,7 +110,71 @@ runs this box will crash."* Sustained multi-GPU load destabilises ares. That is 
 * ⚠ **Ask before starting anything long**, and use `scripts/supervise.sh` (AER restart, thermal
   resting, stall guard) if a long run is ever sanctioned.
 
-### §0.2 ▶ THE NEXT THREAD — **grad clip (`recipe_gaps.md` v1.4b)**, SCOPED BY MEASUREMENT
+### §0.2 ✅ **GRAD CLIP — BUILT AND GATED 2026-08-02.** `planning/grad_clip.md` §11 is the record
+
+**Two `SHlo` ops, no new proof machinery, no driver change** — `recipe_gaps`' Tier E was wrong by a
+tier, the second time an estimate there was (RMSProp's "op family" was one op). Four artifacts
+(`vit_adamclip`, `vitin_adam128wxclip`, `convnext_adamclip`, `cnxin_adamwxclip`), `lake build
+clip-tie {vit,convnext}`, **all six controls firing**, 17 new declarations 3-axiom clean.
+
+| gate | ViT (200 params) | ConvNeXt (180) |
+|---|---|---|
+| ⓪ clip ACTIVE | factor **0.038283**, ‖g‖ = 26.12 | **0.022005**, ‖g‖ = 45.44 |
+| ① **the factor is ONE SHARED SCALAR** | **1.120 ULPs** of spread | **1.149 ULPs** |
+| ② = `min(1, c/(‖g‖+ε))` | **0.105 ppm** | **0.0070 ppm** |
+| ③ `%loss` bit-exact | ✅ | ✅ |
+| ④ inert above the threshold | **16,579,039/16,579,039** | **83,478,847/83,478,847** |
+
+Controls: `perparam` (per-parameter norm) fires ① at **7.6M / 30.4M ULPs** against an 8-ULP bar —
+**while passing ⓪, ③ and ④**, because it is a working clip, just not a global one; `nosqrt` fires ②
+at ~960,000 ppm **while passing ①**, because ‖g‖² is still one shared scalar; `epsout` fires ② at
+**26.28 / 45.46 ppm** against the analytically predicted `ε/fac` of 26.1 / 45.5.
+
+**Three findings that outlive the feature:**
+
+1. ⚠⚠ **A NEW `SHlo` CONSTRUCTOR MUST BE PARAMETRIC IN `n`.** The first design had two ops with no
+   `{n : Nat}` binder (`SHlo 1 → SHlo 1`), a shape the AST does not otherwise have, and **nine
+   unrelated `simp only [… den …]` proofs elsewhere in `StableHLO.lean` died with a `whnf`
+   timeout** — `den` is a ~200-case dependent match and fully-index-fixed arms make unfolding it
+   markedly more expensive. **4× the heartbeat budget did not fix it**; fusing to two parametric ops
+   cleared it first try, and is 20 sites instead of 40. The constraint pushed toward the better
+   design. (Smaller cousin: `den` must never APPLY a recursive `den` call to an index — hence
+   `Proofs.scalarOf`.)
+2. ⚠⚠ **A BOOL-DERIVED VARIANT NAME CANNOT DISTINGUISH TWO RENDERS THAT DIFFER ONLY IN A BAKED
+   CONSTANT.** A second render at a different threshold spelled the same `cnxAdamVariant`, so
+   `convnext_adamcliphi_train_step.mlir` declared `@convnext_adamclip_train_step` — an entry
+   disagreeing with its own path. ViT takes `funcName` explicitly and hid it. §0.4's
+   derived-vs-explicit finding meeting §2a-quater's silent-hyperparameter one, and the fix is better
+   than the bug: the below-threshold render is **generated** by `scripts/perturb_clip.py hi`, never
+   committed, because an artifact baking a threshold no config sets *is* a silent-hyperparameter
+   artifact.
+3. ⚠⚠ **MEASURE THE FLOOR WITH AN INSTRUMENT THAT HAS THE INTERVENTION'S STRUCTURE BUT NOT ITS
+   EFFECT — and the det shim is mandatory, for the THIRD recorded time.** Without
+   `scripts/det_shim.sh`, ConvNeXt's ④ read **137,229 of 83,478,847 differing at a 24,149-ULP
+   floor**, ①'s spread sat *below* that floor, and the number **moved between runs**. The floor was
+   carried by **exactly ONE parameter of 180** — `d0W`, the even-kernel 2×2/s2 downsample weight
+   gradient. Under the det shim: bit-identical, ① at 1.15 ULPs. *Nothing about the render changed.*
+   ⚠ **ViT is clean either way**, which is how the trap stays hidden — a gate developed on ViT and
+   ported to ConvNeXt inherits ViT's conditioning (§0.4 finding 1, now in a **fourth** place). ④ is
+   run FIRST now, because it is also ①'s floor, and it refuses with the det-shim recipe.
+
+⛔ **Owed: the DP clip artifact and its numeric gate.** The ordering is closed *structurally* — at
+`replicas := 2` all **200** collectives (not 400) precede the fold and every sum-of-squares consumes
+`%armean*` — but nothing is committed or numerically gated, deliberately: the DP ImageNet renders
+already carry §0.3's 500× `wd` gap, and stacking a variant on a known-wrong one is not a pair
+either. ⚠ `shard-check` cannot gate it (the clip makes `m'` nonlinear in `g`); use `*-dp-check`.
+
+---
+
+#### The scoping that produced it, kept for the method (written before the code)
+
+⚠⚠ **FULLY SCOPED 2026-08-02 — `planning/grad_clip.md` is the spec and SUPERSEDES this section.**
+The sketch below is right about the op shapes and wrong about the two things that matter most:
+**the shared-DAG worry dissolves** (`SHlo` is single-OUTPUT, not single-INPUT — `sub`/`addV`/
+`matmulF` are already binary, and every gradient is already an `.operand` leaf, so the 200-way fold
+is an ordinary tree and **no carve-out is needed on the norm**), and **the "breaks four gates" list
+is one gate**, not four. It also missed that the shipping variant is `wx` *composed with* clip.
+Measured cost: **four small ops, no new proof machinery, no driver change** — Tier D, not Tier E.
 
 `recipe_gaps` calls it *"the unlock for the 5e-4 LR"* on ViT, and it is the last v1.4 item. **It is
 the first feature in this file whose shape the op kit genuinely does not have**, so it was scoped
@@ -198,6 +263,7 @@ does not help here; the norm is a property of the *data*, so drive it with a sca
 |---|---|---|
 | ⛔ **`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam`, `cnxin_adamdp` bake `wd = 1e-4`** where their references use **0.05** | a 500× wrong hyperparameter. **Must be closed before any ViT or ConvNeXt ImageNet pair run** — a matched pair at the wrong decay is not a matched pair. Only the `*wx` renders were fixed | §2c |
 | ⛔ stochastic depth's **asymmetric-batch DP gate** | the duplicated-batch `*-dp-check` harnesses are structurally blind to a mask that is replicated instead of sharded, and `shard-check` needs the gated slot linear in the gradient — **false for RMSProp's buffer**, which is the net that wants both. The construction does not exist | `stochastic_depth.md` §5b |
+| ⛔ the **DP clip artifact + its numeric gate** on ViT/ConvNeXt | the ordering is right structurally (200 collectives before the fold, all folds on `%armean*`) but nothing is committed or measured. ⚠ `shard-check` cannot gate it — the clip makes `m'` nonlinear in `g`; use `*-dp-check`. Blocked behind the `wd` row above | `grad_clip.md` §11 |
 | ⚠ the **`emadp` DP peers** on ViT and EfficientNet | `vitAdamVariant 32 2 true` names ViT's; nothing renders either | §0.4 |
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
@@ -1359,6 +1425,24 @@ lake build wdx-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie {vit|convne
 #     python3 scripts/perturb_wd_mask.py verified_mlir/vit_adamwx_train_step.mlir /tmp/w.mlir swap1
 #     .lake/build/bin/wdx-tie --cand /tmp/w.mlir          # rc=1, fires on exactly 2 params
 #     (`swap1` keeps the counts at 74/126 — a count-only gate passes it. `invert` is the blunt one.)
+
+# GRAD CLIP — global-norm clipping (`recipe_gaps.md` v1.4b, `planning/grad_clip.md`). Two SHlo ops,
+# no driver change. ⚠⚠ RUN IT UNDER THE DET SHIM — without it ConvNeXt's gate 4 reads 137,229 of
+# 83,478,847 outputs differing at a 24,149-ULP floor carried by ONE parameter (`d0W`), the number
+# MOVES between runs, and gate 1's spread sits BELOW that floor. ViT is clean either way, which is
+# exactly how the trap stays hidden.
+  lake build clip-tie
+  scripts/det_shim.sh /tmp/detshim
+  python3 scripts/perturb_clip.py verified_mlir/vit_adamclip_train_step.mlir \
+    .lake/build/clip_hi_vit.mlir hi        # gate 4's vehicle — GENERATED, never committed
+  CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/tmp/detshim .lake/build/bin/clip-tie vit
+  CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/tmp/detshim .lake/build/bin/clip-tie convnext
+#   ^ the gate is the CONSTANCY of `m'_clip/m'_adam` across params (1.12 / 1.15 ULPs), because a
+#     per-parameter clip gets nothing else wrong — it scales, never amplifies, and is the identity
+#     below the threshold, so it passes gates 0, 3 and 4. Its control fires at 7.6M / 30.4M ULPs:
+#     python3 scripts/perturb_clip.py verified_mlir/vit_adamclip_train_step.mlir /tmp/c.mlir perparam
+#     LD_LIBRARY_PATH=/tmp/detshim .lake/build/bin/clip-tie vit --cand /tmp/c.mlir    # rc=1
+#     (also `nosqrt` and `epsout`; all six control runs are red across the two nets.)
 
 # STOCHASTIC DEPTH — the two gates covering the op's INTERIOR (§0's tail, `stochastic_depth.md`
 # §7a-c). Every other SD gate pins an ENDPOINT, and an identity gate at s = 1 cannot see WHERE s is

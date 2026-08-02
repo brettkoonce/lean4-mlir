@@ -123,6 +123,10 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .momParamF θ v mu lr ds :: ts, e :: st => parseStack ts (.momParamF θ v mu lr ds e :: st)
   | .rmsBufNextF sq buf rho orho mu eps ds :: ts, e :: st =>
       parseStack ts (.rmsBufNextF sq buf rho orho mu eps ds e :: st)
+  -- Global-norm grad clip. ⚠ The two BINARY ones pop right-then-left (`.addV`'s shape), and for
+  -- `clipScaleF` the deeper element is the FACTOR — `toToks` emits factor-then-gradient.
+  | .gradSumSqAccF ds :: ts, g :: acc :: st => parseStack ts (.gradSumSqAccF ds acc g :: st)
+  | .clipScaleF cS eS ds :: ts, g :: sN :: st => parseStack ts (.clipScaleF cS eS ds sN g :: st)
   | .depthwiseF w b c h w' kH kW :: ts, e :: st =>
       parseStack ts (.depthwiseF w b c h w' kH kW e :: st)
   | .depthwiseBack w c h w' kH kW :: ts, e :: st =>
@@ -236,6 +240,10 @@ theorem parseStack_toToks (r : Raw) :
   | momParamF θ v mu lr ds e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | rmsBufNextF sq buf rho orho mu eps ds e ih =>
       intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | gradSumSqAccF ds acc e iha ihe =>
+      intro ts st; simp only [toToks, List.append_assoc, iha, ihe]; rfl
+  | clipScaleF cS eS ds sN e ihs ihe =>
+      intro ts st; simp only [toToks, List.append_assoc, ihs, ihe]; rfl
   | depthwiseF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseStridedF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

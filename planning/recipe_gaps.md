@@ -68,7 +68,7 @@ that does not exist yet.
 | LR schedule | cosine ✅ | cosine ✅ | cosine ✅ | **exp 0.97** ✅ | **exp 0.98** ✅ | cosine **or exponential** + warmup |
 | warmup | 5 ✅ | 5 ✅ | 20 ✅ | 5 ✅ | 5 ✅ | driver arg |
 | label smoothing | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.0 ✅ | derived from `nClasses` |
-| grad clip | — | 1.0 ❌ | 1.0 ❌ | — | — | ❌ |
+| grad clip | — | 1.0 ✅ | 1.0 ✅ | — | — | ✅ **BOTH nets, 2026-08-02** — `clip` variant, `lake build clip-tie {vit,convnext}` |
 | **mixup / cutmix** | — | 0.8/1.0 ⚠ | 0.8/1.0 ⚠ | — | — | wire ✅, **producer ✅** (2026-08-02; no run yet) |
 | RandAugment (geo) | — | ✅ | ✅ | — | — | ✅ **free via shim** |
 | random erasing | — | ✅ | ✅ | — | — | ✅ **free via shim** |
@@ -85,7 +85,7 @@ that does not exist yet.
 | **R34** | bf16 | **at parity — run it** |
 | **mnv2** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, bf16 | **at parity — run it** |
 | **EfficientNet** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, ~~EMA~~ ✅, dropPath ⚠ (render ✅, driver owed), bf16 | **one regulariser short**, and it is half-built |
-| **ConvNeXt** | mixup, cutmix, dropPath (+ the §2b index move), ~~EMA~~ ✅, grad clip, wdExclude, bf16 | the aug/regulariser pack, minus EMA |
+| **ConvNeXt** | mixup, cutmix, dropPath (+ the §2b index move), ~~EMA~~ ✅, ~~grad clip~~ ✅, ~~wdExclude~~ ✅, bf16 | the aug/regulariser pack, minus EMA |
 | **ViT** | same as ConvNeXt | same |
 
 ✅ **BOTH HALVES OF RMSProp ARE DONE as of 2026-08-02** — the render (v1.2, §3 Tier D) and now the
@@ -350,7 +350,14 @@ stream.
 ### Tier E — the render, structurally.
 **Gradient clipping, stochastic depth.**
 
-* **grad clip** needs the **global** norm across every parameter gradient, then a rescale — a
+* ~~**grad clip** needs the **global** norm across every parameter gradient, then a rescale — a
+  cross-parameter reduction the render has never had.~~ ✅ **DONE 2026-08-02, and THIS TIERING WAS
+  WRONG BY A TIER** — the second time an estimate in this document was (RMSProp's Tier D "op family"
+  was one op). It is **two ops and no new proof machinery**: the "cross-parameter reduction" reads
+  like a shared DAG node where `SHlo` is a tree, and that dissolves because **`SHlo` is
+  single-OUTPUT, not single-INPUT** and every gradient is already an `.operand` leaf, so the 200-way
+  fold is an ordinary tree. `planning/grad_clip.md`. The original note follows.
+  **grad clip** needs the **global** norm across every parameter gradient, then a rescale — a
   cross-parameter reduction the render has never had. It cannot be done in the driver: under
   residency the gradients never leave the device, and even on the copying path the driver receives
   θ′, not g. ⚠ It also must happen *before* the optimizer update, so it cannot be bolted onto the
@@ -585,7 +592,27 @@ graph (§2b-quater's entry check earning its keep a second time), so it surfaced
 `wx` spellings pin it now. ViT never showed this because it takes `funcName` explicitly — *the same
 edit behaves differently on the two renderers, and only running both found it.*
 
-### v1.4b — ▶ **grad clip. THIS IS NEXT**, and it is scoped in `xla_pjrt_handoff.md` §0.2.
+### v1.4b — ✅ **grad clip: DONE, BOTH NETS, 2026-08-02.** ⚠ **SCOPED 2026-08-02, `planning/grad_clip.md`, and the Tier E entry below is WRONG BY A TIER.**
+
+`planning/grad_clip.md` §11 is the record: **two `SHlo` ops, no new proof machinery, no driver
+change**, four artifacts (`vit_adamclip`, `vitin_adam128wxclip`, `convnext_adamclip`,
+`cnxin_adamwxclip`), and `lake build clip-tie` green on both nets with **all six controls firing**.
+The gate is the CONSTANCY of `m'_clip/m'_adam` across parameters (**1.12 / 1.15 ULPs**), because
+that is the only property a per-parameter clip gets wrong — and its control fires at **7.6M /
+30.4M ULPs** while passing every other gate. ⛔ Owed: the DP artifact and its numeric gate.
+
+**The scoping below was written before the code and is kept for the method**; `xla_pjrt_handoff.md` §0.2 is the earlier sketch and this
+paragraph supersedes both. Measured, it is **four small ops in the parameter-shape family, no new
+proof machinery, and no driver change** — Tier D, not Tier E. Tier E's framing (*"a cross-parameter
+reduction the render has never had"*) rests on the norm being a shared DAG node where `SHlo` is a
+tree; that dissolves because **`SHlo` is single-OUTPUT, not single-INPUT** (`sub`/`addV`/`matmulF`
+are already binary) and every gradient is already an `.operand` leaf, so the 200-way fold is an
+ordinary tree with 200 leaves and nothing is recomputed. **No carve-out is needed on the norm.**
+Three other corrections in that doc: the reference already measured the init grad norm at
+**14.28–44.09 against a threshold of 1.0**, so the clipping regime is the default and the
+*un*clipped one is what needs conditioning; §0.2's "breaks four gates" is **one** (`shard-check` —
+the RMSProp-nonlinearity finding one optimizer over); and the shipping ViT/ConvNeXt variant is
+`wx` **composed with** clip, which is the `emarms` composition trap.
 
 `recipe_gaps` calls it *"the unlock for the 5e-4 LR"* on ViT. Used by **ViT 1.0** and **ConvNeXt
 1.0**; EfficientNet sets it to **0.0 deliberately** (its own comment: the TF-RMSProp fix removed the

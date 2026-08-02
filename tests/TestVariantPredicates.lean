@@ -70,7 +70,17 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("adamdp128x4wx", false, false, false), ("emawx", true, false, false)
     -- and `wx` composed with each of the three axes, since that is where a collision would be
   , ("emarmswx", true, true, false), ("adamdropwx", false, false, true)
-  , ("emarmsdrop64wx", true, true, true) ]
+  , ("emarmsdrop64wx", true, true, true)
+    -- ▶ v1.4b `clip` = global-norm gradient clipping (`planning/grad_clip.md`). Like `wx` it needs
+    -- NO driver predicate — the clip changes no arity, no type and no region — so it is here to
+    -- prove it disturbs none of the three, in every CONCATENATION it can appear in. It TRAILS `wx`
+    -- because the ViT/ConvNeXt reference sets both, so `wxclip` is the shipping spelling.
+  , ("adamclip", false, false, false), ("adamwxclip", false, false, false)
+  , ("adam128wxclip", false, false, false), ("adamdp128x4wxclip", false, false, false)
+  , ("adamdpwxclip", false, false, false), ("emaclip", true, false, false)
+    -- and composed with each of the three axes
+  , ("emarmsclip", true, true, false), ("adamdropclip", false, false, true)
+  , ("emarmsdrop64wxclip", true, true, true) ]
 
 #guard table.all (fun (v, e, r, s) => emaOn v == e && rmsOn v == r && sdOn v == s)
 
@@ -93,6 +103,20 @@ private def table : List (String × Bool × Bool × Bool) :=
 #guard rmsOn "adamdp128x4wx" == false
 -- and `wx` must not create an "ema" prefix where there was none
 #guard emaOn "adamwx" == false
+
+-- ⚠ The `clip` marker against every CONCATENATION. Same question as `wx`: can any PAIR of existing
+-- markers spell it? No marker ends in `c`, `cl` or `cli`, and none begins with `lip`, `ip` or `p` —
+-- but "no marker begins with p" is exactly the kind of reasoning `rms` ++ `dp` ⊇ "sd" falsified, so
+-- these run it instead. Note `clip` contains no substring of "ema"/"rms"/"drop" either way round.
+#guard (("emarmsdrop64wxclip".splitOn "rms").length > 1)     -- still finds the REAL rms
+#guard (("emarmsdrop64wxclip".splitOn "drop").length > 1)    -- still finds the REAL drop
+#guard emaOn "emarmsdrop64wxclip" == true                    -- still finds the REAL ema
+#guard rmsOn "adamdp128x4wxclip" == false                    -- and invents none of them
+#guard sdOn  "adamdp128x4wxclip" == false
+#guard emaOn "adamdp128x4wxclip" == false
+-- ⚠ and the one that would bite if `clip` ever LED rather than trailed, the `dropema` shape:
+#guard emaOn "clipema" == false
+#guard emaOn "emaclip" == true
 
 #eval do
   IO.println "── variant predicates ──"
