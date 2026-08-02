@@ -1775,7 +1775,7 @@ Chapter~1 except the chain rule fires exactly once.}
   \lean{Proofs.pdiv_dense_W}
   \leanok
   \uses{ax:pdiv, ax:pdiv_add, ax:pdiv_mul, ax:pdiv_const, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  Phase 7; the symmetric counterpart of
+  The symmetric counterpart of
   Theorem~\ref{ax:pdiv_dense}, differentiating in \(W\) instead of
   \(x\). Since \(\pdiv\) works on vectors, view the layer as a function
   of the \emph{flattened} weights: for \(v \in \Vect{m \cdot n}\), let
@@ -1957,8 +1957,7 @@ inner derivative; the \(1/p_\ell\) from \(\log\) cancels the
   \lean{Proofs.dense_weight_grad_correct}
   \leanok
   \uses{ax:pdiv_dense_W}
-  \(dW = x \otimes dy\). Phase 7 promoted from vacuous \texttt{rfl} to
-  theorem: with \(F\) and \(\varphi\) as in
+  \(dW = x \otimes dy\), with \(F\) and \(\varphi\) as in
   Theorem~\ref{ax:pdiv_dense_W},
   \Prove{} for all \(i, j\):
   \[
@@ -1986,7 +1985,7 @@ inner derivative; the \(1/p_\ell\) from \(\log\) cancels the
   \lean{Proofs.dense_bias_grad_correct}
   \leanok
   \uses{ax:pdiv_add, ax:pdiv_const, ax:pdiv_id}
-  \(db = dy\). Phase 7: derived, no new axiom.
+  \(db = dy\).
   \Prove{} for all \(i\):
   \[
     dy_i = \sum_j \pdiv\bigl(b' \mapsto \mathrm{dense}(W, b')\, x\bigr)\, b\, i\, j \cdot dy_j.
@@ -2551,7 +2550,7 @@ respects the image's 2-D structure.
   \label{ax:conv2d}
   \lean{Proofs.conv2d}
   \leanok
-  Concrete \(\sum_{c,kh,kw}\) cross-correlation with SAME padding (Phase 7).
+  Concrete \(\sum_{c,kh,kw}\) cross-correlation with SAME padding.
   Codegen emits \texttt{stablehlo.convolution}; proofs reason about it
   via the explicit definition.
 \end{definition}
@@ -2585,7 +2584,7 @@ respects the image's 2-D structure.
   \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
   \(\HasVJPthree\, \bigl(\mathrm{conv2d}(W, b)\bigr)\): the input
   backward of a convolution is the reversed-kernel convolution.
-  Phase 1 (Apr 2026). No hypotheses: conv2d is affine in its input.
+  No hypotheses: conv2d is affine in its input.
 \end{theorem}
 
 \begin{proof}
@@ -2653,7 +2652,7 @@ coordinate projection and the zero function.}
   \lean{Proofs.conv2d_weight_grad_has_vjp}
   \leanok
   \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp}
-  Phase 7: the transpose-trick formula. As with the dense weight
+  The transpose-trick formula. As with the dense weight
   Jacobian (Theorem~\ref{ax:pdiv_dense_W}), differentiate in the
   \emph{flattened} kernel: let
   \(F(v) := \mathrm{flatten}\bigl(\mathrm{conv2d}
@@ -2719,7 +2718,7 @@ reindex factor and the saved input \(x\) is the constant.}
   \lean{Proofs.conv2d_bias_grad_has_vjp}
   \leanok
   \uses{ax:conv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_reindex, def:hasvjp}
-  Phase 9: sum the cotangent over spatial dims per channel.
+  Sum the cotangent over spatial dims per channel.
   \Prove{} \(\HasVJP\, \bigl(b \mapsto \mathrm{flatten}
     (\mathrm{conv2d}(W, b)\, x)\bigr)\), with backward
   \(db_o = \sum_{h_i, w_i} dy_{\mathrm{flat}(o, h_i, w_i)}\).
@@ -2756,7 +2755,7 @@ reindex factor and the saved input \(x\) is the constant.}
   \label{ax:maxPool2}
   \lean{Proofs.maxPool2}
   \leanok
-  Concrete four-way max over 2x2 windows (Phase 7).
+  Concrete four-way max over 2x2 windows.
 \end{definition}
 
 \begin{definition}[MaxPool input VJP]
@@ -5143,7 +5142,7 @@ deployment that trade is the whole reason MobileNet exists.
   \label{ax:depthwiseConv2d}
   \lean{Proofs.depthwiseConv2d}
   \leanok
-  Concrete per-channel cross-correlation (Phase 7).
+  Concrete per-channel cross-correlation.
 \end{definition}
 
 \begin{theorem}[Depthwise input VJP]
@@ -5151,7 +5150,6 @@ deployment that trade is the whole reason MobileNet exists.
   \lean{Proofs.depthwise_has_vjp3}
   \leanok
   \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
-  Phase 2 (Apr 2026).
   \Prove{} \(\HasVJPthree\, \bigl(\mathrm{depthwiseConv2d}(W, b)\bigr)\),
   with the per-channel reversed-kernel backward
   \(dx_{c, h, w} = \sum_{k_h, k_w}
@@ -5201,7 +5199,7 @@ depthwise has no cross-channel mixing, so the channel of every
   \lean{Proofs.depthwise_weight_grad_has_vjp3}
   \leanok
   \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex, def:hasvjp3}
-  Phase 7. \texttt{DepthwiseKernel} is definitionally
+  \texttt{DepthwiseKernel} is definitionally
   \(\mathsf{Tensor3}\), so \(\HasVJPthree\) applies to the kernel
   directly --- no flatten bijection needed, unlike the conv2d weight
   VJP (Theorem~\ref{ax:conv2d_weight_grad_has_vjp}).
@@ -5241,7 +5239,6 @@ depthwise has no cross-channel mixing, so the channel of every
   \lean{Proofs.depthwise_bias_grad_has_vjp}
   \leanok
   \uses{ax:depthwiseConv2d, ax:pdiv_add, ax:pdiv_const, ax:pdiv_reindex, def:hasvjp}
-  Phase 9.
   \Prove{} \(\HasVJP\, \bigl(b \mapsto \mathrm{flatten}
     (\mathrm{depthwiseConv2d}(W, b)\, x)\bigr)\), with backward
   \(db_c = \sum_{h_i, w_i} dy_{\mathrm{flat}(c, h_i, w_i)}\).
@@ -7777,7 +7774,6 @@ sums where the rank-1 proof had single sums.}
   \lean{Proofs.pdivMat_scalarScale}
   \leanok
   \uses{ax:pdiv_mul, ax:pdiv_const, ax:pdiv_id}
-  Phase 6 derivation.
   \Prove{} \(\pdivMat(M \mapsto s \cdot M)\, A\, (i,j)\, (k,l)
     = [i = k \wedge j = l] \cdot s\).
 \end{theorem}
@@ -7829,7 +7825,6 @@ sums where the rank-1 proof had single sums.}
   \lean{Proofs.pdivMat_matmul_left_const}
   \leanok
   \uses{ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, thm:pdiv_finset_sum}
-  Phase 6: derived, not axiomatized.
   \Prove{} \(\pdivMat(B' \mapsto C \cdot B')\, B\, (i,j)\, (k,l)
     = [l = j] \cdot C_{ki}\).
 \end{theorem}
@@ -7963,7 +7958,6 @@ Jacobian (Theorem~\ref{thm:pdivMat_transpose}) with \(dY\):
   \lean{Proofs.rowwise_has_vjp_mat}
   \leanok
   \uses{ax:pdivMat_rowIndep, def:hasvjp, def:hasvjpmat}
-  Phase 8 generic helper.
   \Assume{}
   \begin{enumerate}
     \item \(B_g\) is a correct backward for
@@ -8250,7 +8244,6 @@ transpose link:
   \lean{Proofs.mhsa_has_vjp_mat}
   \leanok
   \uses{thm:sdpa_back_Q_correct, thm:sdpa_back_K_correct, thm:sdpa_back_V_correct, thm:dense_per_token_has_vjp_mat, thm:vjpMat_comp, ax:pdivMat_rowIndep, def:hasvjpmat}
-  Phase 3 (Apr 2026), de-axiomatized Phase 8.
   \Prove{} \(\HasVJPMat\, (\mathrm{mhsa\_layer})\).
 \end{theorem}
 
@@ -8304,8 +8297,8 @@ differentiability. \Qed{}
   \lean{Proofs.patchEmbed_flat_has_vjp}
   \leanok
   \uses{def:hasvjp, ax:pdiv_add, ax:pdiv_const, ax:pdiv_mul, thm:pdiv_finset_sum, ax:pdiv_reindex}
-  Phase 6b (Apr 2026): de-opaqued in 6a --- the concrete \texttt{def}
-  unfolds to conv-with-stride + CLS prepend + positional embed.
+  The concrete \texttt{def} unfolds to conv-with-stride + CLS prepend +
+  positional embed.
   \Prove{} \(\HasVJP\, (\mathrm{patchEmbed\_flat})\), with backward
   the deconvolution formula: a sum over patches with reconstructed
   kernel offsets, the CLS row contributing nothing to the image
