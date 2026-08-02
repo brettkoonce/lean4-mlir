@@ -150,10 +150,26 @@ otherwise. The alternative — no mixup on the verified path — is worse.
   **20,929,404 of 26,840,184 bytes** of `[θ|m|v]` — 78%. It is one line and it is not cosmetic.
   ⚠ It lives in the DRIVER because it is the initial value of a graph *input*; the step graph
   never sees step 0. `Proofs.rmsBufNext` was correct either way.
-* **EMA** needs a shadow buffer and an update per step, plus eval reading the shadow. Also ~a day.
-  ⚠ There is a known EMA warmup failure mode recorded in this project's memory — a shadow
-  initialised at random init and evaluated too early scores at chance. Whatever lands must gate
-  that: EMA accuracy must **track then exceed** the raw weights, never start at 0.1%.
+* **EMA** — ⚠ **SCOPED 2026-08-02, `planning/ema.md`, and the "~a day, driver-only" estimate here
+  is STALE BY ONE COMMIT: §2d.3.** It was written before device residency, and under residency θ
+  never reaches the host between epochs, so a host-side per-step shadow reintroduces the 260 MB
+  round trip §2d.3 removed. *Where the update runs* is now the whole design question. Three findings:
+  * ✅ **zero new ops.** `adamMNext β₁ m g = β₁·m + (1−β₁)·g` **IS** the EMA update at
+    `(β₁ := d, m := ema, g := θ')`, and `adamMNextF` takes β₁/(1−β₁) **by SSA name**, so it carries
+    the reference's *time-varying* decay as runtime scalars. Third time this check has paid
+    (§2k, v1.2, here).
+  * ▶ **recommended design: in-graph, a 4th `[θ|m|v|ema]` region** — the resident shim's "n tensors
+    in, n out, counts must agree" contract supports it *by construction*, so residency costs
+    nothing. ⚠ It changes the CHECKPOINT FORMAT by 33%, and checkpoints carry no header — a size
+    guard is mandatory.
+  * ⚠⚠ **the warmup correction is REQUIRED at our scale, not optional.** The reference already hit
+    this and measured it: decay 0.9999 at 31.2k steps left **12.8% of the random init** in the
+    shadow and scored **0.00% top-1** while the live weights scored 70.48%. An 80-epoch Imagenette
+    run is 23,600 steps = 2.4τ, i.e. **squarely inside that regime** — `d = min(decay, (1+t)/(10+t))`
+    from the start, or the run scores at chance and looks like a broken feature.
+  The gate the memory asks for stands — EMA accuracy must **track then exceed** the raw weights,
+  never start at 0.1% — and there is now a free exact one beside it: at `decay = 0` the shadow must
+  be **bit-identical** to the live weights.
 
 ### Tier D — the render (a new proven `SHlo` op family; §4's "ten sites" each).
 **RMSProp, `wdExcludeNormBias`.**
