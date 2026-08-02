@@ -608,10 +608,11 @@ set_option maxRecDepth 4000000 in
     defect §2a found and fixed on ResNet-34, still live here until 2026-07-28. Accuracy measured
     through the old artifact (`runs/mobilenetv2_verified_crop_gpu0.log`, 86.89%) went through the
     wrong forward and needs re-running. -/
-def mnv2FwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false) : String :=
+def mnv2FwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
+    (slug : String := "mobilenetv2") : String :=
   let F : MNV2Fwd := (mnv2FwdChain B nClasses .train epsStr convBias).run' 0
   "module @m {\n" ++
-  s!"  func.func @mobilenetv2_fwd({mnv2FwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd({mnv2FwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // -- MobileNetV2 (17-block paper) forward: every line is pretty(verified AST node) --\n" ++
   zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -627,10 +628,11 @@ set_option maxRecDepth 4000000 in
     whose returned batch μ/var the driver EMAs into exactly these slots. Being frozen-stat affine,
     this graph is the same in either BN world — which is why it can live beside the per-example
     chain: `bnPerChannelEvalF` performs no reduction, so there is no batch to be honest about. -/
-def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false) : String :=
+def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
+    (slug : String := "mobilenetv2") : String :=
   let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias).run' 0
   "module @m {\n" ++
-  s!"  func.func @mobilenetv2_fwd_eval({mnv2FwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd_eval({mnv2FwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // -- MobileNetV2 eval forward (running-stats BN): every line is pretty(verified AST node) --\n" ++
   zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -779,6 +781,17 @@ end Proofs.StableHLO
 -- returned batch μ/var the driver EMAs into these slots, in this order.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_fwd_eval.mlir"
   (Proofs.StableHLO.mnv2FwdEvalFaithfulV 32 10 "1.0e-5")
+
+-- ── MobileNetV2 on FULL 1000-class ImageNet, slug `mnv2in` — 2026-08-02 ───────────────────────
+-- The forward pair for the fifth and last scale-tier trainer (§2p). `B`/`nClasses` were already
+-- parameters; the `slug` is new, and it is what stops these overwriting the 10-class pair the
+-- 86.73% Imagenette run and the §2g prefix audit depend on. §2g is the reason to be careful here
+-- specifically: `mobilenetv2_fwd` is the artifact that was found to be the WRONG BN WORLD, so this
+-- net has already been burned once by a forward that did not match its train step.
+#eval IO.FS.writeFile "verified_mlir/mnv2in_fwd.mlir"
+  (Proofs.StableHLO.mnv2FwdFaithfulV 64 1000 "1.0e-5" false "mnv2in")
+#eval IO.FS.writeFile "verified_mlir/mnv2in_fwd_eval.mlir"
+  (Proofs.StableHLO.mnv2FwdEvalFaithfulV 64 1000 "1.0e-5" false "mnv2in")
 
 -- The reduced 6-block render kept as a demo / stepping-stone (the worked foundation that built the
 -- depthwise SGD core ops); NOT what the trainer reads.

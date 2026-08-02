@@ -537,7 +537,15 @@ set_option maxRecDepth 4000000 in
     downsamples, 10 identity skips, 2 stage-first widenings) → 1×1 conv-BN-relu6 head (320→1280) →
     GAP → dense (1280→nClasses). -/
 def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
-    (replicas : Nat := 1) (convBias : Bool := false) : String :=
+    (replicas : Nat := 1) (convBias : Bool := false) (slug : String := "mobilenetv2") : String :=
+  -- ⚠ α and K are spelled ONCE here. Until 2026-08-02 this render carried `0.100000` and
+  -- `-0.010000` as inline literals in the cotangent AND a third copy, `0.010000`, in the
+  -- report-only loss — the K=10 values. mnv2 is the WORST of the four ImageNet ports on this axis
+  -- because one of them is on the GRADIENT path, which is §2k's original bug rather than the
+  -- report-only variant found in ConvNeXt and EfficientNet. At K=10 all three render byte-identical
+  -- to the literals they replace, so the fix is inert on every committed artifact.
+  let alphaStr    := fmt6 0.1                 -- α itself ("0.100000")
+  let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
   let go : StateM Nat String := do
     -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → batch BN → relu6 (NO maxpool) ═══
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
@@ -595,9 +603,9 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses))
       (.operand nLog zNCb))
     let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
-    let (cLsa, nLsa) ← pretty B (.scaleB "0.100000" 0 (.operand "%onehot" zNCb))
+    let (cLsa, nLsa) ← pretty B (.scaleB alphaStr 0 (.operand "%onehot" zNCb))
     let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
-    let (cD2,  nD2)  ← pretty B (.shiftB "-0.010000" 0 (.operand nD1 zNCb))
+    let (cD2,  nD2)  ← pretty B (.shiftB negAlphaKStr 0 (.operand nD1 zNCb))
     let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
     -- ═══ head backward + the 6 head/dense gradients ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
@@ -738,8 +746,8 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
       s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
       s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<0.010000> : {ty [B]}\n" ++
+      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [B]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [B]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
       s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
       s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
@@ -788,7 +796,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
      (mnv2StatSigList.map (·.2)))
   let inner : String := go.run' 0
-  let fname := s!"mobilenetv2_{mnv2AdamVariant B replicas}_train_step"
+  let fname := s!"{slug}_{mnv2AdamVariant B replicas}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -839,6 +847,19 @@ end Proofs.StableHLO
 -- single-device.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_adamdp_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5" 2)
+
+-- ── MobileNetV2 / ImageNet-1k train steps, slug `mnv2in` ──────────────────────────────────────
+-- Batch 64 x 4 replicas = global 256 = `mobilenetV2ImagenetConfig.batchSize`, so the step count
+-- per epoch (5004) matches the reference exactly. All three label-smoothing constants are derived
+-- from `nClasses` as of this change; at K=1000 the cotangent shift is -0.000100 and the loss's
+-- α/K is 0.000100, where both were the K=10 value before.
+--
+-- ⚠ `mnv2AdamVariant B replicas` encodes the PER-DEVICE batch, not the replica count, so
+-- `adamdp64` would name both a 2- and a 4-replica render at B=64. Only the 4-replica one exists.
+#eval IO.FS.writeFile "verified_mlir/mnv2in_adam64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mnv2in")
+#eval IO.FS.writeFile "verified_mlir/mnv2in_adamdp64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mnv2in")
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
 -- call ("entry mismatch"). These pin the literal path above against `mnv2AdamVariant`, so a rename

@@ -417,6 +417,57 @@ def mobilenetv2Verified : VerifiedNetSpec where
 -- b1 is t=1 so its expand 1×1 is skipped) == the audited hand-list MobileNetV2Layout.specs.
 #guard mobilenetv2Verified.toSpecs == MobileNetV2Layout.specs
 
+/-- **MobileNetV2 on full 1000-class ImageNet** — the fifth and last scale-tier spec (§2p).
+    Identical architecture to `mobilenetv2Verified`; only the head moves (1280→1000), which takes
+    the count to the JAX reference's 3,504,872.
+
+    ⚠ A batch-BN net, so it needs `@mnv2in_fwd_eval` with frozen running stats, and its DP evidence
+    comes from `shard-check` (which carries the 2×52-tensor stat region) rather than the plain
+    duplicated-batch harness.
+
+    ⚠ **§2g's warning applies to this net by name.** `mobilenetv2_fwd` is the artifact that was
+    found to be the WRONG BN WORLD — batch-BN against a per-example-BN train step, so the trainer
+    scored a different net than it trained (logits rel 1.86). That is why the forward pair here is
+    rendered from the same chain the train step differentiates, under its own slug.
+
+    ⚠ **Claim ceiling** (§5): proofs stop at Imagenette. And the recipe does not match — the
+    reference uses **RMSProp at LR 0.045**, where this path is AdamW + cosine. -/
+def mobilenetv2ImagenetVerified : VerifiedNetSpec where
+  name     := "MobileNetV2 (ImageNet-1k)"
+  slug     := "mnv2in"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  layers   := [
+    .convBnNB 3 32 3 2,
+    .invertedResidualNB 32  32  16 1,
+    .invertedResidualNB 16  96  24 2, .invertedResidualNB 24 144  24 1,
+    .invertedResidualNB 24 144  32 2, .invertedResidualNB 32 192  32 1, .invertedResidualNB 32 192  32 1,
+    .invertedResidualNB 32 192  64 2, .invertedResidualNB 64 384  64 1, .invertedResidualNB 64 384  64 1, .invertedResidualNB 64 384  64 1,
+    .invertedResidualNB 64 384  96 1, .invertedResidualNB 96 576  96 1, .invertedResidualNB 96 576  96 1,
+    .invertedResidualNB 96 576 160 2, .invertedResidualNB 160 960 160 1, .invertedResidualNB 160 960 160 1,
+    .invertedResidualNB 160 960 320 1,
+    .convBnNB 320 1280 1 1,
+    .globalAvgPool,
+    .dense 1280 1000 ]
+  blurb := "MobileNetV2 on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  bnChannels := #[32,
+    32,16,  96,96,24, 144,144,24,  144,144,32, 192,192,32, 192,192,32,
+    192,192,64, 384,384,64, 384,384,64, 384,384,64,
+    384,384,96, 576,576,96, 576,576,96,
+    576,576,160, 960,960,160, 960,960,160,
+    960,960,320,
+    1280]
+
+-- Exactly one parameter shape may differ (the head), and the BN layout must be IDENTICAL — the
+-- running-stat region is positional, so a drift there misaligns every frozen statistic at eval.
+#guard mobilenetv2ImagenetVerified.toSpecs.size == mobilenetv2Verified.toSpecs.size
+#guard mobilenetv2ImagenetVerified.toSpecs.pop.pop == mobilenetv2Verified.toSpecs.pop.pop
+#guard mobilenetv2ImagenetVerified.toSpecs.back! == (#[1000], 2)
+#guard mobilenetv2ImagenetVerified.bnChannels == mobilenetv2Verified.bnChannels
+
 /-- ch8 **EfficientNet-B0** on Imagenette 224²: 3×3-s2 stem → 16 MBConv blocks (`[t,c,n,s,k]`
     B0 config; expand 1×1 [skip when t=1] → depthwise k×k → squeeze-excite → project 1×1, all
     BN + swish) → 1×1 head (320→1280) → GAP → dense. 262 params. The 16 `mbConvSE ic mid oc r k`

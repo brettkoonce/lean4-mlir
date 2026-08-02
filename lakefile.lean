@@ -1517,6 +1517,20 @@ lean_exe «efficientnet-imagenet-verified-xla» where
   root := `apps.imagenette.MainEfficientNetImagenetXla
   moreLinkArgs := xlaLink
 
+/-- Shared body of the MobileNetV2 / **full ImageNet-1k** trainer (handoff §2p). -/
+lean_lib «MobileNetV2ImagenetCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.MobileNetV2ImagenetCommon]
+
+/-- **MobileNetV2 on full 1000-class ImageNet** — the fifth scale-tier trainer. `nClasses := 1000,
+    B := 64`; four replicas is global 256, the reference's batch. Batch-BN, so it has a `_fwd_eval`
+    peer and a running-stat region.
+
+    ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
+lean_exe «mobilenetv2-imagenet-verified-xla» where
+  root := `apps.imagenette.MainMobileNetV2ImagenetXla
+  moreLinkArgs := xlaLink
+
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
     textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it
