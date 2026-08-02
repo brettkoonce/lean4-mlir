@@ -73,8 +73,8 @@ that does not exist yet.
 | RandAugment (geo) | — | ✅ | ✅ | — | — | ✅ **free via shim** |
 | random erasing | — | ✅ | ✅ | — | — | ✅ **free via shim** |
 | repeated aug | — | 3 ✅ | — | — | — | ✅ **free via shim** |
-| stochastic depth | — | 0.1 ❌ | 0.1 ❌ | 0.2 ❌ | — | ❌ |
-| EMA | — | ✅→❌ | ✅→**✅** | ✅→**✅** | — | ✅ **ConvNeXt + EfficientNet 2026-08-02** (incl. `ema_bn`); ViT owed |
+| stochastic depth | — | 0.1 ❌ | 0.1 ❌ | 0.2 ⚠ | — | ⚠ **op + cert + EfficientNet render done 2026-08-02**, driver owed. ConvNeXt/ViT need the §2b batched-index move first — they render at the PER-EXAMPLE index, where a per-example mask is §4's descriptor trap |
+| EMA | — | ✅→**✅** | ✅→**✅** | ✅→**✅** | — | ✅ **all three, 2026-08-02** (ConvNeXt + DP peer, EfficientNet incl. `ema_bn`, ViT). ⚠ Imagenette slugs only — no `*in_ema*` render exists |
 | **bf16 / bf16Conv** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | batch / epochs | ✅ | ✅ | ✅ | ✅ | ✅ | all matched at 4 replicas |
 
@@ -84,8 +84,8 @@ that does not exist yet.
 |---|---|---|
 | **R34** | bf16 | **at parity — run it** |
 | **mnv2** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, bf16 | **at parity — run it** |
-| **EfficientNet** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, ~~EMA~~ ✅, dropPath, bf16 | **one regulariser short** (stochastic depth) |
-| **ConvNeXt** | mixup, cutmix, dropPath, ~~EMA~~ ✅, grad clip, wdExclude, bf16 | the aug/regulariser pack, minus EMA |
+| **EfficientNet** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, ~~EMA~~ ✅, dropPath ⚠ (render ✅, driver owed), bf16 | **one regulariser short**, and it is half-built |
+| **ConvNeXt** | mixup, cutmix, dropPath (+ the §2b index move), ~~EMA~~ ✅, grad clip, wdExclude, bf16 | the aug/regulariser pack, minus EMA |
 | **ViT** | same as ConvNeXt | same |
 
 ✅ **BOTH HALVES OF RMSProp ARE DONE as of 2026-08-02** — the render (v1.2, §3 Tier D) and now the
@@ -318,20 +318,48 @@ and **0 of 48,244,296** (enet) bytes against bit-exact floors, both controls fir
 counterexample to "AdamW ⇒ chaotic ⇒ mode 1" and the first where the property tracks the optimizer
 rather than the net.
 
-### v1.2b — **EMA. ✅ ConvNeXt (+ its DP peer) and EfficientNet, 2026-08-02. ▶ ViT IS NEXT.**
+### v1.2b — **EMA. ✅ ALL THREE NETS, 2026-08-02 — ConvNeXt (+ DP peer), EfficientNet, ViT.**
 `planning/ema.md` — scoped, then built. **Zero new `SHlo` ops**: `adamMNext β₁ m g = β₁·m + (1−β₁)·g`
 IS the reference's `ema_update` at `(β₁ := d, m := ema, g := θ')`. The blob gains a 4th
 `[θ|m|v|ema]` region; residency supports that **by construction** (its "n in, n out, counts must
 agree" contract), so it cost no C change.
 
-**ViT is the last of the three and the cheapest** — LayerNorm, so no `ema_bn`; copy
-`EfficientNetRender.lean`'s call-site emission. Gates are minutes: `decay = 0` ⇒ shadow
-**bit-identical** to the live weights, the ratio known answer against a no-warmup-correction
-control, and shadow **tracks-then-exceeds** over 3-4 epochs.
+**ViT was the last of the three and the cheapest, as predicted** — LayerNorm, so no `ema_bn`;
+807 in / 805 out, zero new ops, and the driver needed nothing. Gates: `decay = 0` ⇒ shadow
+**BIT-IDENTICAL** (0 of 5,526,346), ratio known answer **5.96e-5** against a no-warmup-correction
+control at **150,995×**, residency at 4 regions **0 of 88,421,536 bytes**, and the shadow **exceeds
+from epoch 1** (42.37/50.65/54.34/56.61% vs live 40.64/42.93/48.41/51.64%).
+
+⚠⚠ **A GATE PORTED BETWEEN NETS INHERITS THE SOURCE NET'S CONDITIONING.** The ratio gate is a
+difference of two nearly-equal f32 numbers; at ViT's step 1 the warmup LR is ~2e-7, which put
+`ema − θ` at roughly ONE ULP of θ and made the gate read 1.96e-2 with its control only 455× away —
+*with nothing wrong with the render*. ConvNeXt never saw it because its baseLR/warmup give a 50×
+larger step 1. Fixed by conditioning the instrument (`LEAN_MLIR_BASE_LR_U`, the `r34-mom-tie` move).
+
+⚠ **All EMA renders are on the IMAGENETTE slugs.** No `*in_ema*` artifact exists, so none of this
+is in an ImageNet trainer yet — see §4's note on the scale gap.
 
 ⚠ **The warmup-corrected decay `d = min(decay, (1+t)/(10+t))` is required at our scale**, not
 optional — an 80-epoch Imagenette run is 2.4 τ at decay 0.9999, inside the regime where the
 reference measured a shadow holding 12.8% of the random init and scoring **0.00% top-1**.
+
+### ⚠⚠ v1.2c — **THE SCALE GAP: every feature since RMSProp is on the IMAGENETTE slug only.**
+Discovered 2026-08-02 by listing the artifacts rather than reasoning about them:
+
+| feature | Imagenette slug | ImageNet slug (`*in_*`) |
+|---|---|---|
+| RMSProp | ✅ `efficientnet_rms`, `mobilenetv2_rms` | ✅ `enetin_rms64`/`rmsdp64`, `mnv2in_rms64`/`rmsdp64` |
+| **EMA** | ✅ `convnext_ema{,dp}`, `efficientnet_emarms`, `vit_ema` | ❌ **none** |
+| **stochastic depth** | ⚠ `efficientnet_adamsd` (render only) | ❌ **none** |
+
+So `enetin`'s trainer is still AdamW-or-RMSProp with no EMA and no dropPath — i.e. **the ImageNet
+trainers do not yet carry the features their references need**, and the 72.31% pair is not
+reachable through them today. RMSProp is the only feature that was carried to both scales.
+
+**It is cheap**: every renderer takes `nClasses`/`B`/`slug` as ordinary parameters (§2p's finding
+for ViT — *"no renderer change, three `#eval`s"*), so each missing variant is one more `#eval` plus
+its drift-guard line. Do this BEFORE any v1.x reference-epoch run on enet or ConvNeXt, or the run
+measures a net that is missing the regularisers its target number depends on.
 
 ### v1.3 — mixup + cutmix (Tier B). The wire is already there. Closes the largest remaining
 accuracy gap for ViT and ConvNeXt.
