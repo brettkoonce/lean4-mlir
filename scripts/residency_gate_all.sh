@@ -40,6 +40,16 @@ set -uo pipefail
 # is a gate that could rot into a false green. So mode 2 (42,938,702 bytes) is the
 # honest control for it. The transferable form of §2d.3's Finding 2: chaos is a
 # property of the net, and the optimizer alone does not predict it.
+#
+# ⚠ THIRD DATA POINT, 2026-08-02: **RMSProp is CONTRACTIVE on both nets that use
+# it**, which is a fact about the OPTIMIZER this time rather than the net — and it
+# is the same optimizer whose ε placement the two nets sit on opposite sides of, so
+# it was not a given. On mnv2 the 1-ULP fault lands at **2 bytes of 26,840,184** at
+# 10 steps (measured uncontended; mode 2 gives 19,311,310), i.e. ViT's situation
+# exactly: passing on mode 1 only because 2 > 0. Both rms rows below are mode 2.
+# That is unsurprising in hindsight — the update normalises by √(mean-square + ε)
+# and then damps through a momentum buffer — but "unsurprising in hindsight" is
+# what §2d.3's Finding 2 also was.
 NETS=(
   "mnist-linear|mnist-linear-verified-xla|linear|10|2|"
   "mnist-mlp|mnist-mlp-verified-xla|mlp|10|2|"
@@ -49,7 +59,17 @@ NETS=(
   "r34|resnet34-verified-adam-xla|resnet34|10|1|"
   "efficientnet|efficientnet-verified-adam-xla|efficientnet|10|1|"
   "vit|vit-verified-adam-xla|vit|10|2|"
+  "mnv2-rms|mobilenetv2-verified-adam-xla|mobilenetv2|10|2|LEAN_MLIR_VARIANT=rms"
+  "enet-rms|efficientnet-verified-adam-xla|efficientnet|10|2|LEAN_MLIR_VARIANT=rms"
 )
+
+# ⚠ A COLLISION THAT VOIDED THIS GATE ONCE (2026-08-02), and it costs a re-run to
+# notice: `residency_gate.sh` deletes `<slug>_<variant>_ckpt_xla.bin` between each
+# of its four passes, so running it while a TRAINER is live on the same slug AND
+# variant lets that trainer's per-epoch checkpoint write land mid-gate. The
+# symptom is not a crash — mnv2 reported a clean PASS and enet reported a
+# saturated floor, and only the second was obviously wrong. Run this on an idle
+# box, or at least `ps -eo comm | grep verified` first.
 
 # The DATA-PARALLEL rows are NOT in the table above, because it is a single-device
 # harness by construction (`residency_gate.sh` pins to $GATE_DEVICES, default "0")

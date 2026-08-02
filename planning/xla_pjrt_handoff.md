@@ -185,14 +185,28 @@ train at 224² — §0's ViT note), and stopped early. The AdamW columns are the
 RMSProp ones have a same-box, same-augmentation peer; they are the only fair comparison available,
 and even they are interrupted at different epochs.
 
-⚠ **What is NOT done, and it is small**: the residency gate on the `rms` variant. It was attempted
-and is **VOID** — both attempts ran concurrently with the training runs above, which rewrite the
-very `<slug>_rms_ckpt_xla.bin` the gate deletes between its own four passes. mnv2 reported PASS
-(0 bytes, staleness control 19,311,310) and enet reported a saturated floor; **neither should be
-quoted.** Re-run both uncontended — it is four 10-step synthetic passes per net, ~2 minutes, single
-GPU. One real datum did survive: **RMSProp is CONTRACTIVE**, absorbing a 1-ULP fault to 2 bytes of
-26.8M in 10 steps, so it needs `GATE_FAULT=PJRT_FFI_FAULT=2` like ViT (§2d.3) — mode 1 is
-effectively vacuous on it.
+✅ **The residency gate on the `rms` variant PASSES on both nets** — re-run uncontended
+2026-08-02, and **`scripts/residency_gate_all.sh` carries them now** (`mnv2-rms`, `enet-rms`), so
+they run by default rather than by anyone remembering:
+
+| | bytes | FLOOR | TEST | init control | staleness fault |
+|---|---|---|---|---|---|
+| **mnv2 `rms`** | 26,840,184 | 0 | **0** | 16,197,508 | 19,311,310 |
+| **EfficientNet `rms`** | 48,244,296 | 0 | **0** | 11,920,572 | 29,233,518 |
+
+⚠ **RMSProp is CONTRACTIVE, so these rows are fault mode 2** — measured uncontended on mnv2, the
+1-ULP fault lands at **2 bytes of 26,840,184** at ten steps, i.e. ViT's situation exactly: it
+passes mode 1 only because 2 > 0, and one more step of contraction would report VACUOUS. This is
+the **third** data point against "AdamW ⇒ chaotic ⇒ mode 1" and the first where the property tracks
+the *optimizer* rather than the net — both nets contract, despite sitting on opposite sides of the
+ε placement.
+
+⚠ **And the first two attempts at this gate were VOID for a reason worth knowing before reusing
+it**: `residency_gate.sh` deletes `<slug>_<variant>_ckpt_xla.bin` between each of its four passes,
+so running it while a trainer is live on the same slug **and variant** lets that trainer's
+per-epoch checkpoint write land mid-gate. It does not crash — mnv2 reported a clean **PASS** and
+enet a saturated floor, and only the second looked wrong. Run it on an idle box; the runner now
+says so in its own header.
 
 ### ▶ THE JOB: get R34/ImageNet over the line
 

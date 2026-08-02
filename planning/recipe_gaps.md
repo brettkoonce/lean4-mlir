@@ -268,10 +268,12 @@ augmentation, with the peak LR batch-scaled from the reference's 256. And do not
 the handoff's §0b 80-epoch table either: that was a different box at 256² **with** random crop.
 The AdamW columns exist so the RMSProp ones have a same-box, same-augmentation peer at all.
 
-⚠ **Still owed, and it is ~2 minutes of single-GPU time**: the residency gate on the `rms` variant.
-Both attempts are VOID — they ran concurrently with the training runs, which rewrite the same
-`<slug>_rms_ckpt_xla.bin` the gate deletes between passes. One datum survived: **RMSProp is
-contractive**, absorbing a 1-ULP fault to 2 bytes of 26.8M, so it needs `GATE_FAULT=2`.
+✅ **Residency is gated on the `rms` variant too** — bit-identical on **0 of 26,840,184** (mnv2)
+and **0 of 48,244,296** (enet) bytes against bit-exact floors, both controls firing, and
+`scripts/residency_gate_all.sh` carries the two rows so they run by default. ⚠ At **fault mode 2**:
+**RMSProp is contractive** — the 1-ULP fault lands at 2 bytes of 26.8M — which makes it the third
+counterexample to "AdamW ⇒ chaotic ⇒ mode 1" and the first where the property tracks the optimizer
+rather than the net.
 
 ### v1.3 — mixup + cutmix (Tier B). The wire is already there. Closes the largest remaining
 accuracy gap for ViT and ConvNeXt.
