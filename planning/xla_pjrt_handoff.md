@@ -124,10 +124,75 @@ Three of the four steps are existing certified ops read differently — `momVNex
 * The **CI drift guard was widened** because the coverage check demanded it: `MobileNetV2RenderB`
   had no step at all and `EfficientNetRender` diffed 1 of the 14 artifacts it writes. Coverage
   **13/74 → 33/80**, `render_guard_baseline.txt` **61 → 47** — that file may only shrink.
-* ⛔ **NOT a matched pair yet.** Two DRIVER lines are owed, neither a render change: the
-  mean-square slot must init to **1.0, not 0** (TF's RMSProp is not bias-corrected, so a zero init
-  is a much larger first step with nothing to absorb it), and the LR schedule must be exponential.
-  The four DP variants are rendered and structurally checked but **not compiled**; no descent run.
+* ~~⛔ **NOT a matched pair yet.**~~ ✅ **THE DRIVER HALF LANDED 2026-08-02 — see the next
+  section.** All four things that block were owed are done: the mean-square init, the exponential
+  schedule, the DP renders compiled and numerically gated at 4 replicas, and descent runs on both
+  nets.
+
+### ▶ AND THE DRIVER HALF LANDED 2026-08-02 — all four owed items, ⚠ but see the run caveat
+
+* **`trainAdamSched` gained `expDecayRate`/`expDecayEpochs`** (trailing, optional, default 0.0 =
+  cosine) and **initialises the mean-square slot `v` to 1.0** on any `rms*` variant. Six functional
+  lines. The reference's peak LR + decay live in ONE record — `RmsSchedule` in `VerifiedNets.lean`,
+  read by all four mnv2/enet entry points — while the **emitted** half (ρ/μ/ε/wd) stays in
+  `Proofs.StableHLO.RmsHyper`. Two modules deliberately: `%lr` is a runtime operand precisely so one
+  graph serves a whole schedule, and a learning rate that becomes a graph constant is the
+  `RenderCifar8Sgd02` / enet-16× silent-hyperparameter failure (§2a-quater) waiting to recur.
+* **INERT when off, measured**: cifar8-bn AdamW is bit-identical across the change — **0 bytes of
+  638,904** — against a cross-process FLOOR of **0** under `scripts/det_shim.sh`. ⚠ That floor is
+  NOT free on CUDA (§2d.3's Finding 1 is ROCm-specific); without the det shim the comparison has no
+  resolution and neither verdict means anything.
+* **Each half fires, and separately.** The ms-init alone moves **20,929,404 of 26,840,184 bytes** —
+  pre- vs post-change driver on the same mnv2 render, same LR, entirely inside warmup so the
+  schedule is identical, i.e. a genuine single-variable control. The schedule is gated as a **known
+  answer**: the six per-epoch LRs across the warmup boundary match the reference formula recomputed
+  in Python to **≤3.5e-7**, the rounding of the driver's own six-decimal print.
+  ⚠ **`_global_step` in the emitted reference is 0-BASED** where this driver's `gstep` is 1-based,
+  so the epoch is `(gstep−1)/nb`. One step of offset is invisible in a 5004-step epoch — read
+  `jax/Jax/Codegen.lean`'s generator, not the prose.
+* **Both DP renders compile and RUN at 4 replicas**, the third owed item. `mnv2in_rmsdp64` /
+  `enetin_rmsdp64` pass the duplicated-batch identity: forward **BIT-EXACT** (34,112 / 42,016 BN
+  statistics), buffer norm-rel **7.8e-7 / 8.1e-7**, against sum-not-mean controls firing at
+  **2.22 / 2.39** with rc=1 — six orders of separation.
+* ⚠ **`shard-check` CANNOT gate these, and that is a general finding about that harness.** Its known
+  answer `DP([A|B]) = mean(single(A), single(B))` requires the gated slot to be **linear in the
+  gradient** — true of AdamW's `m` at `m = 0` (`m' = (1−β₁)·g`, which is *why* it gates `m` and not
+  `θ'`) and **false of RMSProp's buffer** `b' = μ·b + gw/√(ρ·s + (1−ρ)·gw² + ε)`. The
+  duplicated-batch identity in `*-dp-check` is optimizer-AGNOSTIC — both sides get the identical
+  gradient — so that is the construction that transfers. Both dp-check harnesses were generalised
+  (`DP_NET` / `DP_VARIANT{,_DP}` / `DP_REPLICAS` / `DP_BATCH`, the `TestShardCheck` shape) instead of
+  a third being written, and each still reproduces its committed 2-replica result with **no
+  arguments** — the gate on the generalisation itself.
+* **Gate 1 held**: `verified_mlir/` **0 lines of diff** after FORCING both renderers' `#eval`s with
+  `lake env lean` (§2n's vacuous-green trap — a plain build can leave the writers unrun); writer
+  audit **91 artifacts, one writer each**; `lake build Proofs Certs Codegen` **3,911** green;
+  `rms-tie` still certifies both nets (textbook-ε controls at 255,266× / 858,014× the tie).
+
+⛔ **IT DESCENDS — BUT THESE ARE NOT 80-EPOCH NUMBERS. The runs were KILLED mid-flight**, at
+Brett's instruction, because sustained 4-GPU load destabilises this box. Read the table as descent
+evidence and nothing more:
+
+| run | stopped at | first val | best val |
+|---|---|---|---|
+| **mnv2 `rms`** | ep 60 of 80 | 19.80% | **76.48%** |
+| mnv2 `adam` (control) | ep 61 of 80 | 28.66% | 82.42% |
+| **EfficientNet `rms`** | ep 50 of 80 | 38.78% | **85.50%** |
+| EfficientNet `adam` (control) | ep 50 of 80 | 37.58% | 80.36% |
+
+⚠ **Not comparable to §0b's 80-epoch table** (mnv2 86.73%, enet 88.20%) on three axes at once: a
+different box, **224² with NO random crop** (`crop := (px == 256)`, and this box stores Imagenette
+train at 224² — §0's ViT note), and stopped early. The AdamW columns are there precisely so the
+RMSProp ones have a same-box, same-augmentation peer; they are the only fair comparison available,
+and even they are interrupted at different epochs.
+
+⚠ **What is NOT done, and it is small**: the residency gate on the `rms` variant. It was attempted
+and is **VOID** — both attempts ran concurrently with the training runs above, which rewrite the
+very `<slug>_rms_ckpt_xla.bin` the gate deletes between its own four passes. mnv2 reported PASS
+(0 bytes, staleness control 19,311,310) and enet reported a saturated floor; **neither should be
+quoted.** Re-run both uncontended — it is four 10-step synthetic passes per net, ~2 minutes, single
+GPU. One real datum did survive: **RMSProp is CONTRACTIVE**, absorbing a 1-ULP fault to 2 bytes of
+26.8M in 10 steps, so it needs `GATE_FAULT=PJRT_FFI_FAULT=2` like ViT (§2d.3) — mode 1 is
+effectively vacuous on it.
 
 ### ▶ THE JOB: get R34/ImageNet over the line
 

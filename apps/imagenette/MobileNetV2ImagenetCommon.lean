@@ -42,9 +42,19 @@ def mobilenetv2ImagenetConfig : VerifiedConfig where
 def runMobileNetV2Imagenet (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam64"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD mobilenetv2ImagenetConfig.batchSize
+  -- ▶ `rms*` selects the reference's OWN optimizer, so it also selects the reference's own schedule.
+  -- At `rms64`/`rmsdp64` this driver is the MobileNetV2 recipe: RMSProp (ρ .9, μ .9, ε 1.0, coupled
+  -- wd 4e-5 — all baked by `rmsConstsBlock mnv2RmsHyper`) at peak LR 0.045 with 5-epoch warmup and
+  -- ×0.98 per epoch after it, mean-square initialised to 1.0 by the driver. Every one of those is
+  -- `mobilenetV2ImagenetConfig`'s value, and the LR/schedule half comes off `mnv2RmsSchedule` so
+  -- the Imagenette peer cannot carry a different 0.98.
+  let sched := mnv2RmsSchedule
+  let rms := variant.startsWith "rms"
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
-    | none   => 0.001   -- ⚠ NOT the reference's 0.045: that is an RMSProp rate and this is AdamW.
+    | none   => if rms then sched.lr
+                else 0.001   -- ⚠ NOT the reference's 0.045: that is an RMSProp rate, this is AdamW.
   mobilenetv2ImagenetVerified.toNet.trainAdamSched
     { mobilenetv2ImagenetConfig with batchSize := bs }
-    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 (if rms then sched.warmup else 5) variant
+    (if rms then sched.decayRate else 0.0) sched.decayEpochs

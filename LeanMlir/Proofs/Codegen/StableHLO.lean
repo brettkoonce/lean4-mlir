@@ -5997,6 +5997,13 @@ def mnv2RmsHyper : RmsHyper := { eps := 1.0, wd := 4.0e-5 }
 /-- **EfficientNet-B0's RMSProp knobs** (`jax/MainEfficientNetImagenet.lean`): ε = **1e-3**. -/
 def enetRmsHyper : RmsHyper := { eps := 1.0e-3, wd := 1.0e-5 }
 
+-- ▶ The DRIVER-side half of the same two recipes — peak LR, exponential decay, warmup — is
+-- `RmsSchedule` in `LeanMlir/VerifiedNets.lean`, deliberately NOT here. Two reasons, and the second
+-- is the load-bearing one: the four trainer entry points that read it would otherwise have to
+-- import this whole proof module, and nothing that lives in this file can reach `rmsConstsBlock`
+-- by accident. `%lr` is a runtime `tensor<f32>` argument precisely so one graph serves a whole
+-- schedule; a learning rate must never become a graph constant.
+
 -- ⚠ `fmt6` is a SIX-DECIMAL fixed-point formatter, so any hyperparameter below 5e-7 silently
 -- renders as `0.000000` — a graph constant of zero, which for `wd` is "no weight decay" and for
 -- `eps` is a divide-by-zero at a dead coordinate. Neither is a compile error and neither is

@@ -36,5 +36,21 @@ def mobilenetv2AdamConfig : VerifiedConfig where
     the only mnv2 render that exists, so the knob could only ever produce a shape error. -/
 def runMobilenetV2Adam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  -- ▶ `rms` = the RMSProp render (`recipe_gaps.md` v1.2), rendered at THIS shape deliberately so
+  -- the optimizer has a runnable descent check that needs neither ImageNet nor the tfds shim.
+  --
+  -- ⚠ **This is not the reference's recipe and must not be quoted as one.** MobileNetV2's is
+  -- ImageNet at global batch 256; this is Imagenette at 32. What carries over is the OPTIMIZER and
+  -- the SHAPE of the schedule (warmup → ×0.98/epoch, mean-square init 1.0); the peak LR is
+  -- `mnv2RmsSchedule.lr` **linearly scaled by batch**, which is the standard rule and is stated here
+  -- rather than being a second hardcoded number. `LEAN_MLIR_BASE_LR_U` overrides it in micro-units
+  -- (`5625` = 0.005625), since this toolchain has no `String.toFloat?`.
+  let sched := mnv2RmsSchedule
+  let rms := variant.startsWith "rms"
+  let bs := mobilenetv2AdamConfig.batchSize
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => if rms then sched.lr * bs.toFloat / 256.0 else 0.001
   mobilenetv2Verified.toNet.trainAdamSched mobilenetv2AdamConfig
-    (argv.head?.getD "data") 0.001 0.9 0.999 3 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 3 variant
+    (if rms then sched.decayRate else 0.0) sched.decayEpochs

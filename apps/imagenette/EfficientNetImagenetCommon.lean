@@ -42,11 +42,23 @@ def efficientnetImagenetConfig : VerifiedConfig where
 def runEfficientNetImagenet (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam64"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD efficientnetImagenetConfig.batchSize
+  -- ▶ `rms*` selects the reference's OWN optimizer, so it also selects the reference's own schedule:
+  -- RMSProp (ρ .9, μ .9, ε **1e-3**, coupled wd 1e-5 — baked by `rmsConstsBlock enetRmsHyper`) at
+  -- peak 0.016 with 5-epoch warmup and ×0.97 every **2.4** epochs, mean-square init 1.0. ⚠ Note the
+  -- decay period is not 1 epoch here and mnv2's is; that difference is the whole reason
+  -- `RmsSchedule` carries `decayEpochs` rather than the two nets sharing one constant.
+  --
+  -- ⚠ RMSProp is one of TWO gaps to the reference's 72.31% on this net (`recipe_gaps.md` §2) —
+  -- stochastic depth and EMA are still missing — so this is not yet a matched pair the way mnv2 is.
+  let sched := enetRmsSchedule
+  let rms := variant.startsWith "rms"
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
-    | none   => 0.001   -- ⚠ NOT the reference's 0.016: that is an RMSProp rate and this path is
-                        -- AdamW. 1e-3 is the AdamW default the other verified nets train at, and
-                        -- it is the first knob to tune if this under- or over-steps.
+    | none   => if rms then sched.lr
+                else 0.001   -- ⚠ NOT the reference's 0.016: that is an RMSProp rate and this path
+                             -- is AdamW. 1e-3 is the AdamW default the other verified nets train
+                             -- at, and it is the first knob to tune if this under- or over-steps.
   efficientnetImagenetVerified.toNet.trainAdamSched
     { efficientnetImagenetConfig with batchSize := bs }
-    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 (if rms then sched.warmup else 5) variant
+    (if rms then sched.decayRate else 0.0) sched.decayEpochs

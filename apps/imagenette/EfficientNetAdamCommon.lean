@@ -44,5 +44,16 @@ def efficientnetAdamConfig : VerifiedConfig where
 def runEfficientNetAdam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD efficientnetAdamConfig.batchSize
+  -- ▶ `rms` = the RMSProp render, at this shape for the same reason mnv2's is: a descent check that
+  -- needs neither ImageNet nor the shim. ⚠ **Not the reference's recipe** — that is ImageNet at
+  -- global 256 — so the peak is `enetRmsSchedule.lr` linearly scaled by batch, and only the
+  -- optimizer and the schedule SHAPE (warmup → ×0.97 every 2.4 epochs, mean-square init 1.0) carry
+  -- over. `LEAN_MLIR_BASE_LR_U` overrides in micro-units (`2000` = 0.002).
+  let sched := enetRmsSchedule
+  let rms := variant.startsWith "rms"
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => if rms then sched.lr * bs.toFloat / 256.0 else 0.001
   efficientnetVerified.toNet.trainAdamSched { efficientnetAdamConfig with batchSize := bs }
-    (argv.head?.getD "data") 0.001 0.9 0.999 3 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 3 variant
+    (if rms then sched.decayRate else 0.0) sched.decayEpochs

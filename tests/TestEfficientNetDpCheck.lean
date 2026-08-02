@@ -47,19 +47,32 @@ private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray 
     F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
 
 def main (args : List String) : IO Unit := do
-  let net := efficientnetVerified.toNet
-  let bs := 32                                   -- the baked per-replica batch
-  let replicas := 2
+  -- ▶ Env-selected (net, batch, replicas, variant pair), defaulting to EXACTLY the Imagenette /
+  -- AdamW / 2-replica configuration this harness was written for, so the committed result
+  -- reproduces with no arguments — which is the gate on the generalisation itself. Added for the
+  -- RMSProp DP render, which exists only at the ImageNet shape (`enetin`, B=64 × 4 replicas).
+  -- ⚠ `shard-check` cannot substitute: its `DP([A|B]) = mean(single(A), single(B))` needs the gated
+  -- slot LINEAR in the gradient, which RMSProp's buffer is not. The duplicated-batch identity here
+  -- is optimizer-agnostic — both sides see the identical gradient. Mirrors `TestMobilenetV2DpCheck`.
+  let netSel := (← IO.getEnv "DP_NET").getD "imagenette"
+  let (net, bsDefault, repDefault) := match netSel with
+    | "imagenet" => (efficientnetImagenetVerified.toNet, 64, 4)
+    | _          => (efficientnetVerified.toNet, 32, 2)
+  let bs := ((← IO.getEnv "DP_BATCH").bind (·.toNat?)).getD bsDefault   -- the BAKED per-replica batch
+  let replicas := ((← IO.getEnv "DP_REPLICAS").bind (·.toNat?)).getD repDefault
+  let vSg := (← IO.getEnv "DP_VARIANT").getD "adam"
+  let vDp := (← IO.getEnv "DP_VARIANT_DP").getD "adamdp"
+  let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   -- The DP render is overridable so a deliberately-broken one can be fed in. That is not a
   -- convenience: a gate nobody has seen go red is an assertion. §2b-quater's control — the `%arn`
   -- divisor 2.0 → 1.0, i.e. sum instead of mean — is the one to run.
-  let dpPath := args.head?.getD "verified_mlir/efficientnet_adamdp_train_step.mlir"
+  let dpPath := args.head?.getD s!"verified_mlir/{net.slug}_{vDp}_train_step.mlir"
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   IO.println "EfficientNet-B0 data-parallel gate — duplicated batch"
-  IO.println s!"  single : verified_mlir/efficientnet_adam_train_step.mlir   (bs {bs})"
+  IO.println s!"  single : {sgPath}   (bs {bs})"
   IO.println s!"  DP     : {dpPath} ({replicas} replicas, \
-global {bs * replicas} = the same {bs} examples twice)"
+global {bs * replicas} = the same {bs} examples {replicas} times)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers \
 ({nBnStats} stat floats), backend {← IreeSession.backendName}"
 
@@ -78,16 +91,18 @@ global {bs * replicas} = the same {bs} examples twice)"
   let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
                             ++ #[#[], #[], #[]] ++ bnStatShapes)
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
-  let x2 := F32.concat #[x1, x1]                 -- the SAME batch on both replicas
+  -- The SAME batch on EVERY replica — `replicas` copies, not two: `all_reduce(add)/N` over N
+  -- identical gradients is the identity at any N, so only this concatenation was 2-specific.
+  let x2 := F32.concat (Array.replicate replicas x1)
   let mut y1 : ByteArray := .empty
   for i in [0:bs] do
     y1 := y1.push (UInt8.ofNat (i % net.nClasses)); y1 := y1.push 0
     y1 := y1.push 0; y1 := y1.push 0
-  let y2 := y1 ++ y1
+  let y2 := (Array.replicate replicas y1).foldl (· ++ ·) ByteArray.empty
 
   IO.println "  running single-device…"; (← IO.getStdout).flush
-  let s1 ← mkSession "verified_mlir/efficientnet_adam_train_step.mlir" ".lake/build/enet_dp_a.vmfb"
-  let o1 ← IreeSession.mlpTrainStepV s1 "m.efficientnet_adam_train_step" x1 pbuf shapes y1
+  let s1 ← mkSession sgPath ".lake/build/enet_dp_a.vmfb"
+  let o1 ← IreeSession.mlpTrainStepV s1 s!"m.{net.slug}_{vSg}_train_step" x1 pbuf shapes y1
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
   -- Delete first: `compileVmfb` keys on the OUTPUT path and an mtime, never the source, so a
@@ -96,7 +111,7 @@ global {bs * replicas} = the same {bs} examples twice)"
             s!".lake/build/enet_dp_b_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
   let s2 ← mkSession dpPath ".lake/build/enet_dp_b.vmfb"
-  let o2 ← IreeSession.mlpTrainStepVDP s2 "m.efficientnet_adamdp_train_step" x2 pbuf shapes y2
+  let o2 ← IreeSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" x2 pbuf shapes y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 
   if o1.size != o2.size then

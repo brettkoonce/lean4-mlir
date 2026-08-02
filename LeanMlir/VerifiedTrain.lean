@@ -608,14 +608,34 @@ private def fwdRenderedBatch (path : String) : IO (Option Nat) := do
     tail (`[θ|m|v|lr|bc₁|bc₂]`, the FFI takes no scalar slot) and are returned
     unchanged; the host recomputes them each step: cosine decay + linear warmup for
     `lr`, and `bc₁=1−β₁ᵗ`, `bc₂=1−β₂ᵗ` (proper bias correction). Drives
-    `ViTRender.vitTrainStepModuleAdamSched`. -/
+    `ViTRender.vitTrainStepModuleAdamSched`.
+
+    **`expDecayRate > 0` selects the EfficientNet/MobileNetV2 exponential schedule**
+    over cosine: after warmup, `lr = baseLR · rate^((epoch − warmupEpochs)/decayEpochs)`.
+    Both references use it (mnv2 ×0.98 per epoch, EfficientNet ×0.97 every 2.4), and it
+    is `recipe_gaps.md` Tier C — a driver item, not a render one, because `lr` is already
+    a runtime operand. Default 0.0 keeps cosine, so every existing call site is unchanged.
+
+    **RMSProp variants also need a different INITIAL STATE**, which is the other half of
+    that gap and is handled below — see `rmsprop`. -/
 def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
-    (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam") : IO Unit := do
+    (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam")
+    (expDecayRate : Float := 0.0) (expDecayEpochs : Float := 1.0) : IO Unit := do
   -- `variant` selects the rendered train step `@<slug>_<variant>_train_step` (and its artifact /
   -- vmfb / checkpoint names). Default "adam" = the AdamW render; "mom" = the Nesterov-momentum SGD
   -- render (same packed [θ|m|v]+lr/bc1/bc2 signature; the momentum step ignores the m/bc slots and
   -- reads only lr + v, so this driver is shared verbatim). β1/β2 still drive the (unused-by-mom)
   -- bias-correction scalars; the cosine+warmup lr schedule is identical.
+  --
+  -- "rms" = the RMSProp-with-momentum render (`Proofs/Codegen/RmsPropStep.lean`), which reuses the
+  -- SAME packed slots with `m` = the momentum BUFFER and `v` = the running MEAN-SQUARE — the
+  -- signature is byte-identical to the net's AdamW peer apart from the entry name, and `%bc1`/`%bc2`
+  -- ride through unread. So the only thing this driver owes it is the INITIAL STATE, below.
+  --
+  -- ⚠ The prefix test is the reverse of `{mnv2,enet}AdamVariant`, whose `.rmsprop` branch returns
+  -- "rms"/"rmsdp" (+ the per-device batch): "rms", "rms64", "rmsdp64". That direction is pinned by
+  -- the `#guard`s beside each renderer's `#eval`, so the two cannot drift apart silently.
+  let rmsprop := variant.startsWith "rms"
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
@@ -671,7 +691,15 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     (if hasBn then s!"verified_mlir/{net.slug}_fwd_eval.mlir"
      else s!"verified_mlir/{net.slug}_fwd.mlir")).getD bs
   let nbt := (nEval + evalBs - 1) / evalBs  -- ceil: the last partial batch is zero-padded, not dropped
-  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  -- The schedule label is part of the run's evidence, not decoration: an exponential-decay run and
+  -- a cosine one are different experiments and the log has to say which it was. Spelled so the
+  -- string is UNCHANGED at the default (`expDecayRate = 0`), i.e. every existing log line still reads
+  -- "(cosine+warmup Nep, baseLR L)".
+  let schedName := if expDecayRate > 0.0 then s!"exp x{expDecayRate}/{expDecayEpochs}ep" else "cosine"
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} ({schedName}+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  if rmsprop then
+    IO.println s!"  ▸ RMSPROP: m = momentum buffer (init 0), v = running MEAN-SQUARE (init 1.0, \
+TF convention — this optimizer is not bias-corrected)"
   if evalBs != bs then
     IO.println s!"  eval batch {evalBs} (the batch @{net.slug}_fwd{if hasBn then "_eval" else ""} \
 was RENDERED at) != train batch {bs} — sound because eval is class-batch-independent"
@@ -722,7 +750,21 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
         F32.perturbUnit theta0 0 net.nParams.toUSize r 12345
     | none   => pure theta0
   let zeros ← F32.const net.nParams.toUSize 0.0
-  let mut thetamv := F32.concat #[theta, zeros, zeros]
+  -- ▶ THE MEAN-SQUARE SLOT, and it is a CORRECTNESS item rather than a tuning one.
+  --
+  -- AdamW/momentum start both moment slots at 0 and AdamW then bias-corrects, so its first step is
+  -- scale-free. **TensorFlow's RMSProp — the one both these references train with — does neither:
+  -- it starts the running mean-square at 1.0 and applies no bias correction.** At `s = 0` the first
+  -- update is `gw/√((1−ρ)·gw² + ε)` where the reference computes `gw/√(ρ·1 + (1−ρ)·gw² + ε)`, i.e.
+  -- a much larger first step with nothing downstream to absorb it. Both are "RMSProp"; only one is
+  -- the optimizer `jax/MainMobilenetV2Imagenet.lean` and `jax/MainEfficientNetImagenet.lean` use,
+  -- and `timm` ships a whole `RMSpropTF` class for exactly this distinction.
+  --
+  -- It lands in the DRIVER and not in the render for the same reason `lr` does: it is the initial
+  -- value of a graph INPUT, and the graph is a step function that never sees step 0.
+  -- `Proofs.rmsBufNext` is correct either way — this is what it gets fed.
+  let msInit ← if rmsprop then F32.const net.nParams.toUSize 1.0 else pure zeros
+  let mut thetamv := F32.concat #[theta, zeros, msInit]
   let mvBytes := 3 * net.nParams * 4
   let pBytes := net.nParams * 4
   -- Running BN stats (EMA of per-layer batch mean/var; mom 1.0 on the first step to seed,
@@ -812,7 +854,23 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
       curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
       let gstep := (ep * nb + bi + 1).toFloat
+      -- Post-warmup decay: exponential when `expDecayRate > 0` (the EfficientNet/MobileNetV2
+      -- schedule), cosine otherwise. The exponential branch reproduces the formula
+      -- `jax/Jax/Codegen.lean` EMITS for these two references, line for line:
+      --
+      --     _ep = _global_step / steps_per_epoch
+      --     lr  = LR * (rate ** ((_ep - warmup) / decayEpochs))
+      --
+      -- ⚠ `_global_step` there is 0-BASED at the point the LR is computed — its own warmup branch
+      -- reads `(_global_step + 1) / warmup_steps`, which is this driver's `gstep / warmSteps` — so
+      -- the epoch is `(gstep − 1) / nb`, NOT `gstep / nb`. One step of offset is invisible in a
+      -- 5004-step epoch, which is exactly why it has to come off the reference rather than a guess.
+      --
+      -- Spelled `exp ∘ log` rather than with `^` because that is what the next two lines already do.
       let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
+                 else if expDecayRate > 0.0 then
+                   baseLR * Float.exp (((gstep - 1.0) / nb.toFloat - warmupEpochs.toFloat)
+                                       / expDecayEpochs * Float.log expDecayRate)
                  else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
       let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
       let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
@@ -922,7 +980,7 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
       IO.FS.writeBinFile path thetamv
       IO.println s!"  wrote final [θ|m|v] ({thetamv.size} bytes) → {path}"
   | none => pure ()
-  IO.println s!"done (trained {net.name} with AdamW + cosine/warmup via packed threading)."
+  IO.println s!"done (trained {net.name} {variant} + {schedName}/warmup via packed threading)."
 
 /-- Train driver for the **2-parameter linear** path (Chapter 1). The verified
     `@<slug>_train_step` takes `W0`/`b0` as *separate* arguments (`linearTrainStepV`),

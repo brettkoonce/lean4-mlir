@@ -62,10 +62,10 @@ that does not exist yet.
 | feature | R34 | ViT | ConvNeXt | EfficientNet | mnv2 | verified path |
 |---|---|---|---|---|---|---|
 | optimizer | SGD+mom | AdamW | AdamW | **RMSProp** | **RMSProp** | AdamW / SGD / Nesterov / heavy-ball / **RMSProp** |
-| | ✅ | ✅ | ✅ | ✅ **render** | ✅ **render** | ⚠ the two RMSProp nets still owe the DRIVER — see §3 Tier C |
-| weight decay | 1e-4 coupled ✅ | 0.05 ✅ | 0.05 ✅ | 1e-5 ❌ | 4e-5 ❌ | decoupled in AdamW, coupled in heavy-ball |
+| | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ **render + driver, 2026-08-02** |
+| weight decay | 1e-4 coupled ✅ | 0.05 ✅ | 0.05 ✅ | 1e-5 ✅* | 4e-5 ✅* | decoupled in AdamW, coupled in heavy-ball **and RMSProp** |
 | `wdExcludeNormBias` | — | ✅→❌ | ✅→❌ | — | — | ❌ |
-| LR schedule | cosine ✅ | cosine ✅ | cosine ✅ | **exp 0.97** ❌ | **exp 0.98** ❌ | cosine + warmup only |
+| LR schedule | cosine ✅ | cosine ✅ | cosine ✅ | **exp 0.97** ✅ | **exp 0.98** ✅ | cosine **or exponential** + warmup |
 | warmup | 5 ✅ | 5 ✅ | 20 ✅ | 5 ✅ | 5 ✅ | driver arg |
 | label smoothing | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.0 ✅ | derived from `nClasses` |
 | grad clip | — | 1.0 ❌ | 1.0 ❌ | — | — | ❌ |
@@ -83,16 +83,20 @@ that does not exist yet.
 | net | gaps | verdict |
 |---|---|---|
 | **R34** | bf16 | **at parity — run it** |
-| **mnv2** | ~~RMSProp~~ ✅, **ms-init 1.0 + exp decay**, bf16 | **two driver lines away** (was "one optimizer") |
-| **EfficientNet** | ~~RMSProp~~ ✅, **ms-init 1.0 + exp decay**, dropPath, EMA, bf16 | the same two driver lines, + two more |
+| **mnv2** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, bf16 | **at parity — run it** |
+| **EfficientNet** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, dropPath, EMA, bf16 | two regularisers short |
 | **ConvNeXt** | mixup, cutmix, dropPath, EMA, grad clip, wdExclude, bf16 | the aug/regulariser pack |
 | **ViT** | same as ConvNeXt | same |
 
-⚠ **"RMSProp" split into a render half and a driver half, and only the render half is done**
-(2026-08-02). The renders are certified — see §3 Tier D — but a driver that initialises the
-mean-square slot to **0** instead of **1.0** runs a *different and much larger first step*, and
-this optimizer is not bias-corrected, so there is nothing to absorb it. **Do not read the ✅ in the
-matrix above as "mnv2 can be run against 68.33% today."**
+✅ **BOTH HALVES OF RMSProp ARE DONE as of 2026-08-02** — the render (v1.2, §3 Tier D) and now the
+driver: the mean-square slot initialises to **1.0** and the exponential schedule is threaded
+(§3 Tier C). `\*` on the weight-decay row means "on the `rms*` variants", which is where the
+reference's coupled 4e-5 / 1e-5 lives; the AdamW variants of those two nets are unchanged.
+
+⚠ **`\*` also on "at parity" for mnv2: it means every FEATURE matches, not that the number has been
+reproduced.** The 68.33% run has not been done. What has been measured is that the optimizer is the
+reference's, that it descends (§3 Tier C), and that its DP render passes a numeric gate at four
+replicas.
 
 ---
 
@@ -127,14 +131,25 @@ otherwise. The alternative — no mixup on the verified path — is worse.
 ### Tier C — the driver (Lean, no render change).
 **EMA, exponential LR decay.**
 
-* **exponential LR decay** is nearly free: `lrt` is computed host-side in `VerifiedTrain.lean:815`
-  and passed in as `%lr`. Add a schedule kind; ~10 lines. Unblocks the *schedule* half of
-  EfficientNet and mnv2.
-* ⚠ **the RMSProp mean-square init (1.0, not 0)** — added here 2026-08-02 when the render landed.
-  It is ~one line in the driver's optimizer-state setup, and it is a **correctness** item, not a
-  tuning one: TF's RMSProp is not bias-corrected, so `s = 0` makes the first step
-  `g/√((1−ρ)g²+ε)` instead of `g/√(ρ + (1−ρ)g²+ε)` — much larger, and nothing downstream absorbs
-  it. Together with exponential decay this is ALL that stands between mnv2 and its 68.33%.
+* ✅ **exponential LR decay — DONE 2026-08-02.** It was as cheap as scoped: `expDecayRate` /
+  `expDecayEpochs` as trailing optional arguments on `trainAdamSched`, defaulting to 0.0 = cosine,
+  so every existing call site is untouched. The formula is transcribed from the one
+  `jax/Jax/Codegen.lean` **emits** for these two references rather than from the prose:
+  `lr = LR · rate^((_ep − warmup)/decayEpochs)` with `_ep = _global_step / steps_per_epoch`.
+  ⚠ **`_global_step` there is 0-based at the point the LR is computed** — its own warmup branch
+  reads `(_global_step + 1)/warmup_steps` — so the epoch is `(gstep − 1)/nb`, not `gstep/nb`. One
+  step of offset is invisible in a 5004-step epoch, which is why it had to be read off the
+  generator. Gated as a **known answer**: the six printed per-epoch LRs across the warmup boundary
+  match the reference formula recomputed in Python to ≤3.5e-7, i.e. to the rounding of the
+  driver's own six-decimal print.
+* ✅ **the RMSProp mean-square init (1.0, not 0) — DONE 2026-08-02**, and the correctness argument
+  below is now also a measurement. TF's RMSProp is not bias-corrected, so `s = 0` makes the first
+  step `gw/√((1−ρ)gw²+ε)` instead of `gw/√(ρ + (1−ρ)gw²+ε)` — much larger, with nothing downstream
+  to absorb it. **Measured as a single-variable control**: pre-change vs post-change driver on the
+  same mnv2 RMSProp render, same LR, entirely inside warmup so the schedule is identical, moves
+  **20,929,404 of 26,840,184 bytes** of `[θ|m|v]` — 78%. It is one line and it is not cosmetic.
+  ⚠ It lives in the DRIVER because it is the initial value of a graph *input*; the step graph
+  never sees step 0. `Proofs.rmsBufNext` was correct either way.
 * **EMA** needs a shadow buffer and an update per step, plus eval reading the shadow. Also ~a day.
   ⚠ There is a known EMA warmup failure mode recorded in this project's memory — a shadow
   initialised at random init and evaluated too early scores at chance. Whatever lands must gate
@@ -168,9 +183,29 @@ otherwise. The alternative — no mixup on the verified path — is worse.
   Measured, the controls fire 4× harder on enet, so **a green mnv2 gate does not license the enet
   render** — which is why `rms-tie` takes a net argument and both were run.
 
-  ▶ **What is left is the DRIVER, and it moved to Tier C**: the mean-square slot must init to
-  **1.0, not 0**, and the LR schedule must be exponential. Neither is a render change. Until both
-  land these are correct renders of the right optimizer, **not a matched pair**.
+  ▶ ~~**What is left is the DRIVER, and it moved to Tier C**~~ ✅ **BOTH LANDED 2026-08-02** — see
+  Tier C. The mean-square slot inits to 1.0 and the exponential schedule is threaded, each with its
+  own control, and the AdamW path is bit-identical across the change (0 bytes of 638,904 on
+  cifar8-bn, against a cross-process floor of 0 under `scripts/det_shim.sh`). **It descends on both
+  nets** — §4 v1.2 has the runs.
+
+  ▶ **The DP renders are compiled and gated too**, which was the third thing this section owed.
+  `mnv2in_rmsdp64` and `enetin_rmsdp64` now compile and execute at **4 replicas** and pass the
+  duplicated-batch identity: forward **BIT-EXACT** (34,112 / 42,016 BN statistics), buffer norm-rel
+  **7.8e-7 / 8.1e-7**, against sum-not-mean controls that fire at **2.22 / 2.39** with rc=1 — six
+  orders of separation.
+
+  ⚠ **And a limitation of an existing gate, found here and worth knowing before reusing it:
+  `shard-check` CANNOT gate a nonlinear-tail optimizer.** Its known answer is
+  `DP([A|B]) = mean(single(A), single(B))`, which requires the gated slot to be **linear in the
+  gradient** — true of AdamW's `m` at `m = 0` (`m' = (1−β₁)·g`, which is exactly why that harness
+  gates `m` and not `θ'`) and **false of RMSProp's buffer**,
+  `b' = μ·b + gw/√(ρ·s + (1−ρ)·gw² + ε)`. The duplicated-batch identity in `*-dp-check` is
+  optimizer-AGNOSTIC — both sides receive the identical gradient, so any tail must agree — so that
+  is the construction that transfers, and the two `dp-check` harnesses were generalised
+  (`DP_NET` / `DP_VARIANT{,_DP}` / `DP_REPLICAS` / `DP_BATCH`, the `TestShardCheck` shape) rather
+  than a third one being written. Each still reproduces its committed 2-replica result with no
+  arguments, which is the gate on the generalisation itself.
 * **`wdExcludeNormBias`** is cheap: the AdamW render already emits a per-parameter tail, so 1-D
   parameters just get the no-decay tail. The risk is picking the wrong predicate — timm excludes
   norm γ/β, biases, pos-embed, CLS **and** ConvNeXt's LayerScale γ, all of which are 1-D.
@@ -203,15 +238,40 @@ JAX on accuracy.
 reference's **72.02%**. ~48 h train-only at the measured 386 ms/step × 5004 × 90. This is the pair
 the whole §2k/§2p line of work was pointed at, and nothing blocks it.
 
-### v1.1 — the driver tier (Tier C). Unblocks two nets' schedules and ConvNeXt's headline metric.
-Exponential LR decay, then EMA. Both are Lean-side, both are gateable the usual way (an existing
-run must be byte-identical with the feature off).
+### v1.1 — the driver tier (Tier C). ✅ **HALF DONE 2026-08-02 — exponential LR decay landed; EMA is what remains.**
+Both are Lean-side and both are gateable the usual way, which is exactly how the schedule was
+gated: an existing run must be **bit-identical** with the feature off (measured — 0 bytes of
+638,904 on cifar8-bn AdamW, against a cross-process floor of 0 under `scripts/det_shim.sh`; note
+the floor is NOT free on CUDA, §2d.3's Finding 1 is ROCm-specific). **EMA is now the only Tier C
+item left**, and it is the one ConvNeXt's headline metric depends on — its 75.93% is the EMA
+shadow's, not the raw weights'.
 
-### v1.2 — ~~**RMSProp** (Tier D)~~ ✅ **RENDER DONE 2026-08-02**, driver half outstanding.
+### v1.2 — ~~**RMSProp** (Tier D)~~ ✅ **DONE 2026-08-02, BOTH HALVES.**
 The op, both renderers, six artifacts and a two-net numeric gate landed in one session (it was one
-op, not a family — see Tier D). **What is left is two driver lines** — mean-square init 1.0 and
-exponential decay — after which mnv2 is at parity and can be run against **68.33%**; EfficientNet
-needs dropPath + EMA on top for **72.31%**.
+op, not a family — see Tier D); the driver half — mean-square init 1.0, exponential decay, the DP
+renders compiled and gated at 4 replicas — landed in the next. **mnv2 is now at feature parity**
+and is the second net after R34 where v1 is a run rather than a build; EfficientNet still needs
+dropPath + EMA for **72.31%**.
+
+**It descends on both nets** — ⛔ but the runs were **killed mid-flight** (sustained 4-GPU load
+destabilises this box), so these are descent evidence and NOT accuracy numbers:
+
+| Imagenette, bs32, 224² no-crop | stopped at | best val |
+|---|---|---|
+| **mnv2 `rms`** | ep 60 of 80 | **76.48%** |
+| mnv2 `adam` (same-box control) | ep 61 of 80 | 82.42% |
+| **EfficientNet `rms`** | ep 50 of 80 | **85.50%** |
+| EfficientNet `adam` (same-box control) | ep 50 of 80 | 80.36% |
+
+⚠ **Do not read these against 68.33% / 72.31%** — different dataset, batch, epoch count and
+augmentation, with the peak LR batch-scaled from the reference's 256. And do not read them against
+the handoff's §0b 80-epoch table either: that was a different box at 256² **with** random crop.
+The AdamW columns exist so the RMSProp ones have a same-box, same-augmentation peer at all.
+
+⚠ **Still owed, and it is ~2 minutes of single-GPU time**: the residency gate on the `rms` variant.
+Both attempts are VOID — they ran concurrently with the training runs, which rewrite the same
+`<slug>_rms_ckpt_xla.bin` the gate deletes between passes. One datum survived: **RMSProp is
+contractive**, absorbing a 1-ULP fault to 2 bytes of 26.8M, so it needs `GATE_FAULT=2`.
 
 ### v1.3 — mixup + cutmix (Tier B). The wire is already there. Closes the largest remaining
 accuracy gap for ViT and ConvNeXt.
@@ -257,6 +317,17 @@ would halve its step count and is worth doing before a 60-hour run.
 * **RMSProp renders exist and are certified on both nets** (2026-08-02) — `rms-tie
   [mobilenetv2|efficientnet]`, both controls firing. Do not re-derive the op: three of its four
   steps are existing certified ops, and `Proofs/Codegen/RmsPropStep.lean` says which.
+* **RMSProp's DRIVER half is done too** (2026-08-02) — mean-square init 1.0, exponential decay,
+  the DP renders compiled and gated at 4 replicas, descent on both nets. The reference's peak LR
+  and decay live in ONE place, `RmsSchedule` in `LeanMlir/VerifiedNets.lean`, read by all four
+  entry points; the *emitted* half (ρ/μ/ε/wd) stays in `Proofs.StableHLO.RmsHyper`. They are
+  deliberately in different modules — a learning rate that became a graph constant is the
+  `RenderCifar8Sgd02` / EfficientNet-16× failure this repo has already paid for twice.
+* ⚠ **`shard-check` cannot gate an optimizer whose tail is nonlinear in the gradient** — its known
+  answer is `DP([A|B]) = mean(single(A), single(B))`. Use the duplicated-batch identity in
+  `*-dp-check`, which is optimizer-agnostic. Both dp-check harnesses now take
+  `DP_NET`/`DP_VARIANT{,_DP}`/`DP_REPLICAS`/`DP_BATCH` and still reproduce their committed
+  2-replica results with no arguments.
 * **An estimate in THIS document was wrong by a tier** — Tier D's "a new op family, ten sites
   each" for RMSProp was one op. The transferable check is the one §2k used and this repeated:
   before scoping a new optimizer, enumerate the reference's update line by line against the

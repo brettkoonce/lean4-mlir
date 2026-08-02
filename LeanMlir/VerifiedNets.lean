@@ -10,6 +10,40 @@ truth, and "the spec the trainer runs is the proven one" is literally true, not 
 Specs with no proof importing them yet (e.g. `resnet34Verified`) stay in their own
 `Main*Verified.lean`; a spec moves here the moment a proof needs to name it. -/
 
+/-- **The driver-side half of the MobileNetV2 / EfficientNet RMSProp recipe** — peak LR, the
+    exponential decay `VerifiedNet.trainAdamSched` runs, and the warmup length.
+
+    The *emitted* half (ρ, μ, ε, coupled wd) is `Proofs.StableHLO.RmsHyper`, which the renderers
+    bake into each graph via `rmsConstsBlock`. These three do NOT belong there: `%lr` is a runtime
+    `tensor<f32>` argument exactly so one render serves a whole schedule, and a learning rate that
+    became a graph constant would be a silent, uncheckable hyperparameter — the
+    `RenderCifar8Sgd02` / EfficientNet-16× failure this repo has already paid for twice
+    (handoff §2a-quater, §2a-quinquies). Keeping the two halves in two modules makes that
+    impossible rather than merely discouraged.
+
+    It lives here, in the light shared-spec module, for this file's own stated reason: four entry
+    points read it (Imagenette and ImageNet × two nets) and a per-site copy of `0.98` is the
+    double-writer disease at its smallest and most plausible.
+
+    ⚠ These are the **reference's** values at the reference's **batch 256**. Anything else is a
+    different experiment; the Imagenette callers scale `lr` by batch and say so. -/
+structure RmsSchedule where
+  /-- `learningRate` — the peak, at batch 256. -/
+  lr : Float
+  /-- `expLRDecayRate` — the multiplier applied once per `decayEpochs`, after warmup. -/
+  decayRate : Float
+  /-- `expLRDecayEpochs` — how many epochs one multiplication spans. ⚠ Not 1 on both nets. -/
+  decayEpochs : Float := 1.0
+  /-- `warmupEpochs` — the linear ramp to `lr`. 5 on both. -/
+  warmup : Nat := 5
+
+/-- **MobileNetV2**: 0.045 peak, ×0.98 **per epoch** (`jax/MainMobilenetV2Imagenet.lean`). -/
+def mnv2RmsSchedule : RmsSchedule := { lr := 0.045, decayRate := 0.98 }
+
+/-- **EfficientNet-B0**: 0.016 peak, ×0.97 **every 2.4 epochs** — the paper's schedule, and the
+    linear scaling of 0.256@4096 down to batch 256 (`jax/MainEfficientNetImagenet.lean`). -/
+def enetRmsSchedule : RmsSchedule := { lr := 0.016, decayRate := 0.97, decayEpochs := 2.4 }
+
 /-- The Chapter-1 linear classifier: a single dense 784→10. Trained by
     `MainMnistLinearVerified`; its math VJP is proven in `Proofs/SpecVJP.lean`
     (`linearVerified_has_vjp`) — both over *this* object. -/
