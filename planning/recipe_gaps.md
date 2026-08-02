@@ -181,13 +181,68 @@ pass it. Hence the images are gated too.
    matters is that the off path is byte-for-byte the shim as it was *before mixing existed*, and
    nothing computable at run time substitutes for having measured that.
 
-⛔ **What is NOT done: an end-to-end smoke.** The evidence above is producer-side. That the trainer
-consumes a mixed stream is inferred from three separately-gated pieces (the affine-in-`%onehot`
-measurement, wire v2's bit-identity, and this) rather than observed. Every ImageNet smoke costs the
-**unconditional 28 GB validation drain** (195 × 256 images, ~3-4 min, and `LEAN_MLIR_SKIP_EVAL` does
-NOT skip it) before its first train step, so it is a per-config cost on a box that cannot do long
-runs. ⚠ And note the step cap for `trainAdamSched` is **`LEAN_MLIR_G2_STEPS`**, not
-`LEAN_MLIR_MAX_STEPS` — the latter means "time a step window then exit" and does not bound the run.
+#### ✅ The end-to-end smoke, after the fix — mnv2/ImageNet, 1 GPU, 6 steps, fresh checkpoint each
+
+The trio was run TWICE, which is what gives the floors rather than a single before/after pair
+(§2j: *one sample is not a measurement*):
+
+| run | step 0 | step 1 | step 2 | epoch 1 |
+|---|---|---|---|---|
+| **A** v1 hard labels, trio 1 | 7.019591 | 7.017135 | 7.069839 | 7.057056 |
+| **A** v1 hard labels, trio 2 | 7.019591 | 7.017126 | 7.069849 | 7.057081 |
+| **B** v2 one-hot, trio 1 | 7.019591 | 7.017126 | 7.069456 | 7.056798 |
+| **B** v2 one-hot, trio 2 | 7.020040 | 7.016245 | 7.068997 | 7.056218 |
+| **C** v2 **MIXED** (`SHIM_MIX=both`) | **7.029974** | 7.026065 | 7.063550 | 7.052764 |
+
+* **C is ~1.0e-2 above the unmixed band, ≈20× the B-vs-B run-to-run floor of 4.5e-4** — and it is
+  *higher*, which is what a higher-entropy target must do. So the mixed stream reaches the trainer
+  and changes the objective, which is what the smoke existed to establish.
+* **A-vs-B sits INSIDE that floor** (0 to 4.5e-4, against a B-vs-B floor of 4.5e-4) — the two wires
+  agree as well as one wire agrees with itself, §2f-bis's shape again.
+* ⚠ **2 samples per config, and NOT run under `det_shim.sh`** — my own miss, since the 2026-08-02
+  finding says the det shim is mandatory for any cross-process numeric comparison on CUDA. Quote
+  the C separation as ≈20× a measured floor, not as a bound on anything. The *stream*-level v1/v2
+  bit-identity is wire v2's own gate (`SHIM_HASH`, and re-confirmed here at the trainer's exact
+  seed and batch: byte-identical pre-mixing vs current on both wires).
+
+#### ⛔⛔ AND THE END-TO-END SMOKE FOUND A DEFECT ALL THREE GATES MISSED — 2026-08-02
+
+The smoke was nearly skipped as confirmatory. It was not: `SHIM_MIX=both` **killed the trainer
+before its first step.**
+
+`SHIM_MIX` is an ordinary environment variable, so **every shim the driver spawns inherits it — and
+it spawns two**: the train stream at `nclasses = K`, and the **validation drain at `nclasses = 0`**
+(wire v1, hard labels, because eval scores against a label, not a distribution). Gating the mixing
+on the variable alone made the "needs `SHIM_NCLASSES>0`" refusal fire on the *val* shim, which died
+before writing its preamble. The trainer then reported
+
+```
+uncaught exception: imagenet shim closed the pipe after 0 of 16 bytes (did it crash? …)
+```
+
+**Silencing the refusal would have been the wrong fix.** Mixup/CutMix are TRAIN-time augmentations —
+the reference applies them inside the train loop only, and a mixed validation target would score the
+net against a convex combination of two labels, which is not the metric. So the rule is *mix the
+train split, never the eval one*, and `_MIX_ON = (_MIX_MODE != 'off') and training` is it.
+
+> ⚠⚠ **A GATE THAT EXERCISES ONE SPLIT CANNOT SEE A SPLIT-DEPENDENT DEFECT.** Gates 1-3 were green
+> throughout, and they always will be: every one of them drives the **train** split. Nothing
+> producer-side would have found this. It is §5's duplicated-batch hole in a third place — *a gate
+> whose input makes the failure impossible cannot test for it* — and it is the argument for running
+> the cheap end-to-end check even when the component gates are green.
+
+`mixup_gate.py` grew **gate 1b** for it: at every mode, the validation split must (a) survive
+`SHIM_MIX` at wire v1, the driver's own spawn, and (b) hash **identically to the unmixed** validation
+stream.
+
+⚠ Two ImageNet-smoke traps found on the way, both worth knowing before the next one:
+* the step cap for `trainAdamSched` is **`LEAN_MLIR_G2_STEPS`**, not `LEAN_MLIR_MAX_STEPS` — the
+  latter means *"time a step window then exit"* and does not bound the run (a smoke set with it ran
+  past step 300);
+* the **28 GB validation drain is unconditional** (195 × 256 images) and `LEAN_MLIR_SKIP_EVAL` does
+  NOT skip it — it gates the eval *pass*, not `loadData`'s drain. Budget ~4-5 min per config.
+* ⚠ all configs share slug+variant, so **delete `.lake/build/<slug>_<variant>_ckpt_xla.bin{,.epoch}`
+  between them** or run B silently resumes run A (§4).
 
 ### Tier C — the driver (Lean, no render change).
 **EMA, exponential LR decay.**

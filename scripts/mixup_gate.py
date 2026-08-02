@@ -58,12 +58,14 @@ def run_env(**kw):
     return e
 
 
-def digest(mix, seed, n=None):
+def digest(mix, seed, n=None, split=None, nclasses=...):
     """`SHIM_HASH` over n batches -> the hex digest the shim prints to stderr."""
     n = n or A.batches
+    if nclasses is ...:
+        nclasses = A.nclasses if mix != "v1" else None
     p = subprocess.run([A.python, A.script], capture_output=True, env=run_env(
-        SHIM_BATCH=A.batch, SHIM_HASH=n, SHIM_SEED=seed,
-        SHIM_NCLASSES=(A.nclasses if mix != "v1" else None),
+        SHIM_BATCH=A.batch, SHIM_HASH=n, SHIM_SEED=seed, SHIM_SPLIT=split,
+        SHIM_NCLASSES=nclasses,
         SHIM_MIX=(mix if mix != "v1" else None)))
     for line in p.stderr.decode().splitlines():
         if line.startswith("SHIM_HASH"):
@@ -164,6 +166,28 @@ if base is None:
 else:
     check("v1 digest unchanged since before mixing existed", d_v1 == base["v1"])
     check("v2 digest unchanged since before mixing existed", d_v2 == base["off"])
+
+# ── gate 1b: the VALIDATION split is never mixed, whatever SHIM_MIX says ───────────────────────
+#
+# ⚠ This gate exists because its absence broke a run. `SHIM_MIX` is an ordinary environment
+#   variable, so EVERY shim the driver spawns inherits it — and it spawns two: the train stream at
+#   nclasses=K and the validation drain at nclasses=0 (hard labels; eval scores against a label,
+#   not a distribution). Gating the mixing on the variable alone made the "needs SHIM_NCLASSES>0"
+#   refusal fire on the VAL shim, killing it before the preamble; the trainer died with
+#   `imagenet shim closed the pipe after 0 of 16 bytes`.
+#
+#   Gates 1-3 all passed throughout, because every one of them drives the TRAIN split. **A gate
+#   that exercises one split cannot see a split-dependent defect** — the end-to-end smoke found
+#   this, and nothing producer-side would have.
+print("── gate 1b: THE VALIDATION SPLIT IS NEVER MIXED (SHIM_MIX must not reach eval data)")
+v_off = digest("off", A.seed, n=1, split="validation")
+for mode in ("mixup", "cutmix", "both"):
+    # v1 on the val split, exactly as the driver spawns it: nclasses unset AND SHIM_MIX set.
+    v_v1 = digest(mode, A.seed, n=1, split="validation", nclasses=None)
+    check(f"validation survives SHIM_MIX={mode} at wire v1 (the driver's own spawn)",
+          v_v1 is not None and len(v_v1) == 64, v_v1[:16] if v_v1 else "")
+    v_on = digest(mode, A.seed, n=1, split="validation")
+    check(f"validation at SHIM_MIX={mode} is UNMIXED", v_on == v_off, v_on[:16])
 
 # ── gate 2: determinism, and the control that stops a seed-ignoring producer ───────────────────
 print("── gate 2: DETERMINISM")

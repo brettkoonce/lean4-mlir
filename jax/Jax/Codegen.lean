@@ -3249,16 +3249,31 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    _CUT_A = float(os.environ.get('SHIM_CUTMIX_ALPHA', '" ++ toString cfg.cutmixAlpha ++ "'))\n" ++
   "    if _MIX_MODE not in ('off', 'mixup', 'cutmix', 'both'):\n" ++
   "        raise SystemExit('SHIM_MIX=%s: expected off|mixup|cutmix|both' % _MIX_MODE)\n" ++
+  -- ⚠⚠ MIXING IS GATED ON THE SPLIT, NOT JUST ON THE VARIABLE — and this is not a nicety, it is
+  --    the difference between running and not. `SHIM_MIX` is an ORDINARY environment variable, so
+  --    every shim the driver spawns inherits it, and the driver spawns TWO: the train stream at
+  --    `nclasses = K` and the VALIDATION drain at `nclasses = 0` (v1, hard labels, since eval
+  --    scores against a label not a distribution). Gating on the variable alone made the refusal
+  --    below fire on the val shim, which killed it before the preamble — the trainer then died
+  --    with `imagenet shim closed the pipe after 0 of 16 bytes`.
+  --
+  --    Silencing the refusal would have been the wrong fix. Mixup/CutMix are TRAIN-time
+  --    augmentations: the reference applies them inside the train loop only, and a mixed
+  --    validation target would score the net against a convex combination of two labels, which is
+  --    not the metric. So the correct statement is "mix the train split, never the eval one", and
+  --    that is what `training` carries here.
+  "    _MIX_ON = (_MIX_MODE != 'off') and training\n" ++
   -- A mixed label is a DISTRIBUTION; int32 cannot carry one. Refusing here is the difference
   -- between a loud startup failure and a run that silently trains on hard labels while its log
   -- says mixup is on — the §2k class of defect (it compiles, it runs, it descends).
-  "    if _MIX_MODE != 'off' and nclasses <= 0:\n" ++
+  "    if _MIX_ON and nclasses <= 0:\n" ++
   "        raise SystemExit('SHIM_MIX=%s needs SHIM_NCLASSES>0: a mixed target is a distribution '\n" ++
   "                         'and wire v1 carries int32 hard labels' % _MIX_MODE)\n" ++
   "    def _mix(x, t, step):\n" ++
   "        # Returns (x, t) UNTOUCHED when off — the identity, not a copy, so the v1/v2 digests\n" ++
-  "        # are byte-for-byte what they were before mixing existed.\n" ++
-  "        if _MIX_MODE == 'off':\n" ++
+  "        # are byte-for-byte what they were before mixing existed. Also the path the VALIDATION\n" ++
+  "        # split always takes, whatever SHIM_MIX says.\n" ++
+  "        if not _MIX_ON:\n" ++
   "            return x, t\n" ++
   "        B = t.shape[0]\n" ++
   "        # ⚠ Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded\n" ++
@@ -3299,7 +3314,8 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "            h.update(to.tobytes())\n" ++
   "            h.update(xo.tobytes())\n" ++
   "        sys.stderr.write('SHIM_HASH %d batches seed=%d split=%s mix=%s: %s\\n'\n" ++
-  "                         % (hash_n, seed, split, _MIX_MODE, h.hexdigest()))\n" ++
+  "                         % (hash_n, seed, split, _MIX_MODE if _MIX_ON else 'off',\n" ++
+  "                            h.hexdigest()))\n" ++
   "        return\n" ++
   "    out = sys.stdout.buffer\n" ++
   "    out.write(b'LMSH')\n" ++
