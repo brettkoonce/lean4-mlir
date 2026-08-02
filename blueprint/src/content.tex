@@ -6,14 +6,13 @@
 % lists upstream dependencies via \uses{...}.
 
 % Standard lead-in before every ImageNet recipe section: ImageNet runs on
-% the phase-2 (Lean->JAX) trainer to validate the framework's logic; whether
-% phase-3 verified-IREE codegen can reach this scale is an open question.
+% the phase-2 (Lean->JAX) trainer to validate the framework's logic; phase-3
+% verified-IREE codegen led to phase 4 (PJRT), the eventual destination.
 \newcommand{\imagenetphasenote}{\emph{Why the phase-2 trainer?} The
 ImageNet runs in this book use the phase-2 (Lean$\to$JAX) trainer: at this
-scale its job is to validate the framework's logic end to end. Whether the
-phase-3 verified-IREE codegen can reach ImageNet under its own codegen rules
-is an open question --- phase-2 is how we establish these baselines in the
-meantime.}
+scale its job is to validate the framework's logic end to end. Phase-3
+verified-IREE codegen led to phase 4 --- PJRT, which these demos will be
+ported to. Phase-2 is how we establish these baselines in the meantime.}
 
 \chapter*{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
@@ -4847,9 +4846,9 @@ warmup; the steady late climb is the cosine anneal.
 Every ImageNet recipe in this book opens with the same caveat --- the
 numbers come from the phase-2 (Lean$\to$JAX) trainer, and whether the
 verified codegen path can reach this scale is an open question. Phase 4
-is that question being answered. It is a second trusted lowerer,
-\texttt{ffi/pjrt\_ffi.c}, implementing the same C surface as the IREE
-(phase 3) shim and handing the graph to XLA through the PJRT C API. Nothing above the shim changes --- the
+is a second trusted lowerer, \texttt{ffi/pjrt\_ffi.c}, implementing the
+same C surface as the IREE (phase 3) shim and handing the graph to XLA
+through the PJRT C API. Nothing above the shim changes --- the
 backend is whichever \texttt{.so} the binary linked, and backend
 detection is a weak symbol, so a binary cannot disagree with the library
 it linked --- and there is no Python at run time. What the trainer
@@ -4863,7 +4862,7 @@ At ImageNet scale, on the same four-card box as the bf16 run above:
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-2$\times$ 7900 XTX (ROCm) & fp32 & ---           & 30 & ---          & --- & --- \\
+2$\times$ 7900 XTX (ROCm) & fp32 & ---           & 30 & $\sim$20 hr  & --- & --- \\
 4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$32 min  & 30 & $\sim$16 hr  & --- & --- \\
 \hline
 \end{tabular}
@@ -4909,6 +4908,8 @@ reinforcement learning with a large residual network of
 convolutions.
 
 \section{Side quest: ResNet-50, RSB-A3 (100 epochs)}
+
+\imagenetphasenote
 
 The basic block ResNet-34 is built from generalizes to the
 \emph{bottleneck} block of ResNet-50, and the \texttt{jax/} folder
@@ -5821,6 +5822,8 @@ but the core depthwise-separable scaffolding is exactly what this
 chapter formalized.
 
 \section{Side quest: MobileNet V4}
+
+\imagenetphasenote
 
 Six years on, MobileNetV4 (Qin et al.\ 2024,
 \href{https://arxiv.org/abs/2404.10518}{arXiv:2404.10518}) revisits
