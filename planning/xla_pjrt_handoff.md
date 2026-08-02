@@ -62,21 +62,36 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `eab3ecf` | **the 8 `cifar8w*` certified** — `cifar8` at `d1 := 512`, not a second net; a Chapter-5 table, not an ablation. **§2i CLOSED, 13 of 13** |
 | `cf07259` | `lake run {mnist,cifar,imagenette}-xla` — the XLA demo groups, with a shim-build and plugin guard |
 | `eb3632c` | the four missing cifar `-xla` peers — **`lake run cifar-xla` is all six**; six stale writer docstrings corrected |
+| — | *↓ the v1.3/v1.4 recipe threads, 2026-08-02 (§0.4)* |
+| `969c21c` | **stochastic depth's two INTERIOR gates** (`droppath-tie`) — and the endpoint gates were blind to PLACEMENT |
+| `bfa4ea2` | **mixup + cutmix, the producer half** (`scripts/mixup_gate.py`) — and the second definition's cost made precise |
+| `bc4bf7d` | the val shim inherited `SHIM_MIX` and died — **mixing is gated on the SPLIT**; found by the end-to-end smoke, not by any of the three gates |
+| `c54b408` | **`wdExcludeNormBias` on ViT** (`wdx-tie`) — and the ViT renders were baking a **500× wrong** weight decay |
+| `ed79c99` | **`wdExcludeNormBias` on ConvNeXt** — and the same edit behaved differently on the two renderers |
 
 ---
 
-## 0. ▶ START HERE — **next: grad clip (v1.4b). `wdExcludeNormBias` is done on both nets.**
+## 0. ▶ START HERE — **next: GRAD CLIP (`recipe_gaps.md` v1.4b). It is scoped in §0.2 below.**
 
-**Rewritten 2026-08-02 at the end of the fifth session that day** (ViT's EMA peer; stochastic depth
-end-to-end on EfficientNet; `recipe_gaps` v1.2c; then §0's ~1 h tail — the two stochastic-depth
-interior gates, `lake build droppath-tie`; then mixup + cutmix's producer half,
-`scripts/mixup_gate.py`; then `wdExcludeNormBias` on ViT AND ConvNeXt, `lake build wdx-tie`). Everything below
-§0a is green at **3,912** `Proofs Certs Codegen` jobs — unchanged, since none of the three adds a
-proof — with **111** artifacts, one writer each, and every pre-existing one byte-identical. Read this section, then
-`planning/recipe_gaps.md`; the two feature specs are `planning/ema.md` and
-`planning/stochastic_depth.md`.
+**Rewritten 2026-08-02 for a fresh session.** State: `lake build Proofs Certs Codegen` **3,912**
+green · **111** artifacts, one writer each · `verified_mlir/` clean · drift-guard coverage **68/99**
+with `render_guard_baseline.txt` unchanged (that file may only shrink).
 
-### ⚠⚠ FIRST, THE THING THAT CHANGES WHAT "NEXT" MEANS: **this box cannot do long runs**
+**Read in this order:** this section (§0), then `planning/recipe_gaps.md` — which is the plan and
+supersedes every ordering further down this file. The feature specs are `planning/ema.md` and
+`planning/stochastic_depth.md`. Everything from §0a onward is HISTORY and context; nothing there is
+a live thread unless §0.3 says it is owed.
+
+**§0 is laid out for someone starting cold:**
+
+| | |
+|---|---|
+| **§0.1** | ⚠ the box constraint — it re-orders everything |
+| **§0.2** | ▶ **the next thread: grad clip**, scoped by measurement |
+| **§0.3** | ⚠ what is OWED, collected in one place |
+| **§0.4** | ✅ what landed 2026-08-02, with the findings worth keeping |
+
+### §0.1 ⚠⚠ THE THING THAT CHANGES WHAT "NEXT" MEANS: **this box cannot do long runs**
 
 Brett, 2026-08-02, stopping four concurrent 80-epoch Imagenette trainers mid-flight: *"um no long
 runs this box will crash."* Sustained multi-GPU load destabilises ares. That is not a footnote — it
@@ -85,8 +100,8 @@ runs this box will crash."* Sustained multi-GPU load destabilises ares. That is 
 * **§0's former headline, the R34/ImageNet 30-epoch run, is ~16 h on 4 GPUs and is NOT currently
   runnable here.** Nothing about it is wrong; it is blocked on hardware, not on code. Same for
   `recipe_gaps.md` §4's ~203 h budget for all five nets at reference epochs.
-* **What IS available is build-and-gate work**, and this session is the evidence that it goes fine:
-  every gate below is a 1-6 step known answer, a bit-identity check or a 3-4 epoch smoke, all
+* **What IS available is build-and-gate work**, and 2026-08-02 is six threads of evidence that it
+  goes fine: every gate in §0.4 is a known answer, a bit-identity check or a few-step smoke, all
   single-GPU and all minutes.
 * **So prefer threads whose deliverable is a certified render + a numeric gate**, and bank the runs
   for a box that can sustain them. State any accuracy number as what it is — a 3-4 epoch smoke is
@@ -94,7 +109,126 @@ runs this box will crash."* Sustained multi-GPU load destabilises ares. That is 
 * ⚠ **Ask before starting anything long**, and use `scripts/supervise.sh` (AER restart, thermal
   resting, stall guard) if a long run is ever sanctioned.
 
-### ✅ 1. ViT's EMA peer — **DONE 2026-08-02. The EMA scorecard is 3 of 3.**
+### §0.2 ▶ THE NEXT THREAD — **grad clip (`recipe_gaps.md` v1.4b)**, SCOPED BY MEASUREMENT
+
+`recipe_gaps` calls it *"the unlock for the 5e-4 LR"* on ViT, and it is the last v1.4 item. **It is
+the first feature in this file whose shape the op kit genuinely does not have**, so it was scoped
+the §2l/§2m way — by reading the reference and grepping the kit, not by estimating.
+
+**The reference** (`jax/Jax/Codegen.lean:2262`, emitted verbatim into every trainer that sets it):
+
+```python
+gn    = jnp.sqrt(sum(jnp.sum(g * g) for g in jax.tree.leaves(grads)))
+grads = jax.tree.map(lambda g: g * jnp.minimum(1.0, CLIP / (gn + 1e-6)), grads)
+```
+
+⚠ **A GLOBAL norm across ALL parameters**, then one scalar factor applied to every gradient. Who
+uses it: **ViT 1.0**, **ConvNeXt 1.0**. EfficientNet sets it to **0.0 deliberately** — its comment
+says the TF-RMSProp fix (ε-inside-sqrt + ms-init 1.0) removed the blow-up it was compensating for —
+so do **not** add it there.
+
+#### What the kit ALREADY has (measured today)
+
+| piece | evidence |
+|---|---|
+| reduce a whole gradient tensor to **rank-0** | `lnBetaGrad : SHlo n → SHlo 1` emits a real `reduce … -> tensor<f32>`. The shape is certified, not new |
+| **rank-0 broadcast then multiply** | emitted **200×** in `vit_adam_train_step` already — `broadcast_in_dim %lr, dims = []` inside `adamWParamF` |
+| `stablehlo.sqrt` | 200× in the same artifact (AdamW's √v̂) |
+| `stablehlo.minimum` | 35× in `mobilenetv2_adam` (relu6). New to ViT/ConvNeXt's renders, **not** new to the repo |
+| **the insertion point** | `vitBackAll` returns `gradNames` (all 200) and `convNextBackAll` returns `gradMap`, both **before** the optimizer loop — every gradient SSA coexists exactly where the clip goes |
+
+#### What it does NOT have — one primitive, and it is small
+
+⚠ **There is no "scale a tensor by a RUNTIME scalar" op.** `scaleF`/`scaleB` look like they take
+one (they carry `sStr : String` beside the ℝ), but they **emit `stablehlo.constant dense<{sStr}>`**
+— they bake a literal. Checked in the emitter, because the constructor signature reads the other
+way and that is exactly the sort of thing this file keeps paying for.
+
+What is needed is `dropPathB`'s emit at **`dims = []`** instead of `dims = [0]`:
+
+```mlir
+%b = stablehlo.broadcast_in_dim %gn, dims = [] : (tensor<f32>) -> tensor<Bxn>
+%o = stablehlo.multiply %g, %b : tensor<Bxn>
+```
+
+So the inventory is roughly: **`sumSqF : SHlo n → SHlo 1`** (`lnBetaGrad` with a multiply first) and
+**`scaleByScalarF`** (the op above) — plus the scalar tail (add N scalars → sqrt → `min(1, c/(gn+ε))`),
+which is a handful of rank-0 ops. Check each against an existing reading before building one:
+that check has collapsed a scoped op family to **zero** four times now (§2k heavy-ball, RMSProp,
+EMA ×3, dropPath's VJP).
+
+#### ⚠⚠ THE REAL QUESTION, and it is not the op count: the norm is a SHARED DAG NODE
+
+`SHlo` is a single-output expression **tree**. The global norm is one scalar **consumed by all 200
+sites**, and produced by folding 200 subtrees together. `.operand <ssa>` expresses the sharing in
+the *emit* (that is how gradients are already threaded), but **`den` of "one scalar 200 subtrees
+depend on" is not a tree**, so decide what is certified and what is a DECLARED CARVE-OUT *before*
+building. §2b-quater's collective is the template — emitted text, outside every faithfulness
+theorem, said so in the artifact's own banner.
+
+#### ⚠ Two ordering traps, both of which change the function
+
+1. **UNDER DATA PARALLELISM, THE CLIP MUST GO AFTER THE `all_reduce`.** The reference clips inside
+   the train step on the whole (already-combined) gradient. In our DP renders the collective sits
+   between the gradient and the optimizer, so clipping *before* it makes every replica clip its own
+   partial gradient — a different function that trains, descends, and no structural check sees.
+   `emitGradAllReduce` is called inside `vitAdamOne`/`convnextAdamOne`, i.e. **per-param, after the
+   point where the clip would be computed** — so this is a real restructuring question, not a
+   line-ordering one.
+2. **IT CHANGES THE GRADIENT THE OPTIMIZER SEES, so it breaks every gate that recovers `g` from
+   `m'`.** `r34-mom-tie`, `rms-tie`, `wdx-tie` and `shard-check` all use `m' = (1−β₁)·g` at `m = 0`
+   as an oracle. With clipping on, that recovers the *clipped* gradient. Either keep the clip off in
+   those harnesses (a new variant, as `wx` is) or account for the factor explicitly.
+
+#### The gates it should have
+
+**Known answer**, the `r34-mom-tie`/`wdx-tie` construction: at `m = v = 0`, recover `g` per param
+from the unclipped render's `m'`, compute `gn` and the factor on the host, and require the clipped
+render's `m'` to be `(1−β₁)·factor·g` — **exactly**. Then the controls that matter: a gradient whose
+norm is BELOW the threshold must come back **bit-identical** to the unclipped render (the factor is
+exactly 1.0, so this is a bit-exactness claim, not a tolerance), and one above it must be scaled by
+the predicted factor. ⚠ Condition the instrument so both regimes are reachable — `LEAN_MLIR_BASE_LR_U`
+does not help here; the norm is a property of the *data*, so drive it with a scaled input.
+
+---
+
+### §0.3 ⚠ WHAT IS OWED — collected here so it is not spread over 6,000 lines
+
+| owed | why it matters | where |
+|---|---|---|
+| ⛔ **`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam`, `cnxin_adamdp` bake `wd = 1e-4`** where their references use **0.05** | a 500× wrong hyperparameter. **Must be closed before any ViT or ConvNeXt ImageNet pair run** — a matched pair at the wrong decay is not a matched pair. Only the `*wx` renders were fixed | §2c |
+| ⛔ stochastic depth's **asymmetric-batch DP gate** | the duplicated-batch `*-dp-check` harnesses are structurally blind to a mask that is replicated instead of sharded, and `shard-check` needs the gated slot linear in the gradient — **false for RMSProp's buffer**, which is the net that wants both. The construction does not exist | `stochastic_depth.md` §5b |
+| ⚠ the **`emadp` DP peers** on ViT and EfficientNet | `vitAdamVariant 32 2 true` names ViT's; nothing renders either | §0.4 |
+| ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
+| ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
+| ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
+
+---
+
+### §0.4 ✅ WHAT LANDED 2026-08-02 — the day's threads, and the findings that outlive them
+
+*Everything below this line is DONE. It is kept for the FINDINGS, not because anything is live —
+§0.3 is the complete list of what is owed. In order: ViT's EMA peer · stochastic depth's two
+interior gates · mixup + cutmix (producer + the smoke that caught a defect) · `wdExcludeNormBias`
+on ViT then ConvNeXt. The `▶ WHAT LANDED` blocks further down are earlier sessions.*
+
+**The five findings from these threads that generalise past their features:**
+
+1. **An identity gate at the neutral value cannot see WHERE that value is applied.** The ones-mask
+   forward gate passes bit-exact on a deliberately MISPLACED drop site — `1·(branch+x) = branch+x`.
+   Every endpoint gate in the original stochastic-depth set was blind to the placement.
+2. **A gate that exercises one split/mode cannot see a split-dependent defect.** All three
+   producer-side mixup gates were green while `SHIM_MIX` was killing the validation shim; only the
+   end-to-end smoke saw it. Same shape as the duplicated-batch DP hole.
+3. **Recover a constant by READING it, not by FITTING it.** A least-squares λ recovery was ~1 ULP
+   off and produced a phantom failure in a correct producer feeding a bit-exact assertion.
+4. **A tolerance must be in the unit the instrument has.** The `wdx-tie` offset gate failed a
+   correct render at 1.39e-2 against an absolute 1e-3 bound; in ULPs of θ' it reads **0.49**.
+5. **Gate the PARTITION, not the count** — and, one level up, *the same edit can behave differently
+   on two renderers* (ConvNeXt derives its entry name from the variant, ViT takes it explicitly;
+   only running both found it).
+
+#### ✅ ViT's EMA peer — the EMA scorecard is 3 of 3
 
 `verified_mlir/vit_ema_train_step.mlir`, `LEAN_MLIR_VARIANT=ema`. **807 in / 805 out** =
 605/603 + 200 + 2, zero new `SHlo` ops (fourth time). It was the cheapest of the three exactly as
@@ -130,7 +264,7 @@ audit **96 artifacts, one writer each** · build 3,911 green. Full write-up in `
 ⚠ Still owed: the `emadp` DP peers on **both** ViT and EfficientNet (`vitAdamVariant 32 2 true`
 names ViT's; nothing renders either), and any long run.
 
-### ✅ 2a. The stochastic-depth tail — **DONE 2026-08-02. `lake build droppath-tie`.**
+#### ✅ Stochastic depth — the two INTERIOR gates (`lake build droppath-tie`)
 
 Both interior gates landed, and the tail cost what it was scoped at. Full write-up in
 `stochastic_depth.md` §7a-c; the headline is that **it found the endpoint gates were blind to the
@@ -180,7 +314,7 @@ duplicated-batch `*-dp-check` harnesses are structurally blind to a mask that is
 of sharded, and `shard-check`'s construction needs the gated slot linear in the gradient — false for
 RMSProp's buffer, which is the net that wants both. Everything above is single-device.
 
-### ✅ 2b. mixup + cutmix — **the PRODUCER landed 2026-08-02. `scripts/mixup_gate.py`.**
+#### ✅ mixup + cutmix — the producer half (`scripts/mixup_gate.py`)
 
 `recipe_gaps.md` v1.3, and it cost what it was scoped at: **producer-side Python only, no render
 change, no new op, and — verified rather than assumed — no Lean change either.** `generateShim`'s
@@ -225,7 +359,7 @@ label is a distribution; int32 cannot carry one) and an unknown mode.
    streams, trains and descends — it is simply a worse objective. Control A is exactly that, and it
    fires at 1.15 against a bit-exact pass.
 
-### ✅ 2b-bis. The end-to-end smoke — and it FOUND A DEFECT ALL THREE GATES MISSED
+#### ✅ …and its end-to-end smoke FOUND A DEFECT ALL THREE GATES MISSED
 
 **After the fix** (mnv2/ImageNet, 1 GPU, 6 steps, fresh checkpoint per config; the trio run TWICE so
 the floors are measured rather than assumed):
@@ -278,7 +412,7 @@ v1 — the driver's own spawn — and hash **identically to the unmixed** valida
 * ⚠ Configs sharing slug+variant **must clear `.lake/build/<slug>_<variant>_ckpt_xla.bin{,.epoch}`
   between runs**, or the second silently resumes the first and the comparison is meaningless (§4).
 
-### ✅ 2c. `wdExcludeNormBias` — **BOTH NETS, 2026-08-02. `lake build wdx-tie {vit,convnext}`.**
+#### ✅ `wdExcludeNormBias` — BOTH NETS (`lake build wdx-tie {vit,convnext}`)
 
 The timm/DeiT `no_weight_decay` rule: decay only ≥2-D weight matrices, skip every 1-D param
 (biases, LayerNorm γ/β, the CLS token) **and the positional embedding**. Run over the reference's
@@ -372,36 +506,8 @@ rules genuinely differ, the `rms-tie` ε-placement lesson one knob over.
 Audits after both: **111 artifacts / one writer each**, drift-guard coverage **64/95 → 68/99** with
 `render_guard_baseline.txt` unchanged, prefix audit green, `TestVariantPredicates` 30 spellings.
 
-### ▶ 2d. THE NEXT THREAD — **grad clip (`recipe_gaps.md` v1.4b)**
 
-⚠ **A correction worth keeping from doing v1.3**: this section used to scope the mixup known-answer
-gate as *"for λ and a permutation, the target must be exactly `λ·y_a + (1−λ)·y_b`"*. The reference
-does **not** use a permutation — the partner is `jnp.flip(x, 0)`, a batch REVERSE, chosen
-deliberately *"to avoid a cross-shard gather under multi-GPU sharding"* (its own comment). A
-permutation would have been a different producer, and the gate would have been written around a
-partner the reference does not use. **Read the reference's own code before scoping a gate against
-it** — the same rule §2k applied to Nesterov-vs-heavy-ball, one layer over.
-
-**`wdExcludeNormBias` first** — it is the cheaper of the two and it is a driver/render question,
-not a new op: exclude norm γ/β and biases from weight decay. Both ViT and ConvNeXt use it.
-
-**Then grad clip**, which `recipe_gaps` calls *"the unlock for the 5e-4 LR"* on ViT. ⚠ It needs a
-**global norm ACROSS ALL PARAMETERS**, which is a shape this kit does not have: every optimizer op
-here is per-parameter, and a global reduction over 200+ tensors then a broadcast back is a new
-graph shape rather than a new op. Scope it before starting.
-
-**After those**: bf16 (the ONLY gap left on R34 and mnv2, ×1.76 measured on ares, and residency
-doubled what it is worth — 1.21× → 1.56× — but it needs `conv_close_mixed`, 4-6 sessions;
-`planning/bf16_renderer.md`).
-
-**▶ AFTER THAT, in value order:** `wdExcludeNormBias` then grad clip (v1.4 — grad clip is *"the
-unlock for the 5e-4 LR"* on ViT, and it needs a global norm ACROSS all parameters, which is a shape
-this kit does not have yet); then bf16 (the ONLY gap left on R34 and mnv2, ×1.76 measured on ares,
-and residency doubled what it is worth — 1.21× → 1.56× — but it needs `conv_close_mixed`, 4-6
-sessions). **Stochastic depth on ConvNeXt/ViT is NOT next**: it needs the §2b batched-index move
-first (see below), which is chapter-sized and worth doing on its own merits, not as a prerequisite.
-
-### ▶ WHAT LANDED 2026-08-02, sessions three and four (4 commits)
+#### ▶ Earlier that day, sessions three and four (4 commits)
 
 * **ViT's EMA peer** — the section above. EMA is **3 of 3**; zero new ops on all three nets.
 * **Stochastic depth, end to end on EfficientNet single-device** — the op (`dropPathB`), its cert,

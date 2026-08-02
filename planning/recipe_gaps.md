@@ -585,7 +585,24 @@ graph (§2b-quater's entry check earning its keep a second time), so it surfaced
 `wx` spellings pin it now. ViT never showed this because it takes `funcName` explicitly — *the same
 edit behaves differently on the two renderers, and only running both found it.*
 
-### v1.4b — grad clip. The gate on ViT's LR.
+### v1.4b — ▶ **grad clip. THIS IS NEXT**, and it is scoped in `xla_pjrt_handoff.md` §0.2.
+
+`recipe_gaps` calls it *"the unlock for the 5e-4 LR"* on ViT. Used by **ViT 1.0** and **ConvNeXt
+1.0**; EfficientNet sets it to **0.0 deliberately** (its own comment: the TF-RMSProp fix removed the
+blow-up it compensated for) — do not add it there.
+
+**It is the first feature here whose SHAPE the kit does not have.** The reference takes a GLOBAL L2
+norm across all parameters, then scales every gradient by `min(1, clip/(gn+1e-6))`. Measured, the
+kit already has the reduce-to-rank-0 shape (`lnBetaGrad`), rank-0 broadcast-multiply (200× per ViT
+render, inside `adamWParamF`), `sqrt` and `minimum`; what it lacks is a **scale-by-a-RUNTIME-scalar**
+op — `scaleF`/`scaleB` look like they take one but emit `constant dense<…>`, i.e. they bake a
+literal.
+
+⚠ The real question is not the op count: the norm is **one scalar consumed by all N sites**, a
+shared DAG node, where `SHlo` is a single-output tree. Decide certified-vs-carve-out first.
+⚠ And two ordering traps: under DP the clip must go **after** the `all_reduce` (clipping per-replica
+partial gradients is a different function), and it **breaks every gate that recovers `g` from `m'`**
+— `r34-mom-tie`, `rms-tie`, `wdx-tie`, `shard-check`. §0.2 has the detail and the gate design.
 
 ### v1.5 — ✅ **stochastic depth: DONE on EfficientNet single-device, 2026-08-02.**
 `planning/stochastic_depth.md`. One `SHlo` op whose **VJP is `layerScale_has_vjp` verbatim** (no new
