@@ -1497,8 +1497,13 @@ gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build resnet34-verified-adam-xla
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-verified-adam-xla data
 
-# the other -xla trainers. r34 / efficientnet / mnv2 / convnext all work; vit BUILDS but does NOT
-# RUN on this box (§2h — miopenStatusUnknownError at execution, not at compile).
+# the other -xla trainers. ⚠ This line used to say "vit BUILDS but does NOT RUN on this box" and
+# that is STALE — §2j's tail records ViT executing on XLA with NO workaround (128 ms/step, 9.2x
+# IREE) and §0b's table has its 80-epoch run at 71.31%. **All five nets run on PJRT, at both
+# scales**: `<net>-verified-adam-xla` (Imagenette) and `<net>-imagenet-verified-xla` (ImageNet),
+# for r34 / vit / convnext / efficientnet / mobilenetv2 — plus cifar8's six and mnist's three.
+# ⚠ The underlying MIOpen fault was NON-DETERMINISTIC rather than fixed (it fired once and not
+# again in 11 runs), so a recurrence is possible; it is a ROCm-box hazard, not a ViT one.
 lake build mobilenetv2-verified-adam-xla convnext-verified-adam-xla
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/mobilenetv2-verified-adam-xla data
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam-xla data
