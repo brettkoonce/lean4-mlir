@@ -502,6 +502,40 @@ private def adamOneM (B : Nat) (replicas : Nat) (g : PGradM) :
                     "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
   pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
 
+/-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `adamOneM` peer.
+
+    Only ONE of the four ops is new. Reading the reference
+    (`jax/Jax/Codegen.lean`, the `.rmsprop` branch) top to bottom:
+
+    | reference line | emitted here |
+    |---|---|
+    | `grads = g + WD * p` | `momVNextF` at `(μ := wd, v := θ)` — `Proofs.momVNext_as_coupled_l2` |
+    | `sq = RHO*s + (1-RHO)*g*g` | **`adamVNextF` at `β₂ := ρ`** — `Proofs.rmsSqNext_eq_adamVNext` |
+    | `buf = MOMENTUM*b + g/sqrt(sq+EPS)` | `rmsBufNextF` — the new op, ε INSIDE the root |
+    | `params = p - lr*buf` | `sgdParamF` on the buffer's SSA |
+
+    ⚠ **The weight decay is COUPLED and goes FIRST**, so the accumulator sees the decayed gradient.
+    Reversing that order — decaying after the accumulator, AdamW-style — is a different optimizer
+    and would not show up as an arity or type error anywhere.
+
+    Slot mapping: the packed `[θ|m|v]` signature is reused verbatim with **`m` carrying the
+    momentum buffer and `v` the running mean-square**, the same slot reinterpretation the Nesterov
+    render does for its velocity. That is why the driver and the interface do not move. -/
+private def rmsOneM (B : Nat) (replicas : Nat) (g : PGradM) :
+    StateM Nat (String × String × String × String) := do
+  let n := g.ds.foldl (· * ·) 1
+  let z : Vec n := fun _ => 0
+  let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+  let (cW, nW) ← pretty B (.momVNextF s!"%{g.nm}" "%wd" g.ds 0 z (.operand gAvg z))
+  let gr : SHlo n := .operand nW z
+  let (cS, nS) ← pretty B (.adamVNextF s!"%{g.nm}v" "%rho" "%orho" g.ds 0 z gr)
+  let (cB, nB) ← pretty B (.rmsBufNextF s!"%{g.nm}v" s!"%{g.nm}m" "%rho" "%orho" "%mu" "%eps"
+                    g.ds 0 0 0 z z gr)
+  -- θ' threads b' by SSA NAME, not by re-nesting `rmsBufNextF` inside `sgdParamF`: `pretty` has no
+  -- CSE (§4), so re-nesting would emit the whole 13-op buffer block a second time.
+  let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nB z))
+  pure (arS ++ cW ++ cS ++ cB ++ cT, nT, nB, nS)
+
 /-- β₁/β₂/ε/wd as graph constants — the committed MobileNetV2 AdamW recipe, identical to
     ResNet-34's and read off `verified_mlir/mobilenetv2_adam_train_step.mlir`. -/
 private def adamConstsM : String :=
@@ -518,8 +552,11 @@ private def adamConstsM : String :=
     the shim checks the entry name and refuses a mismatch outright ("entry mismatch") rather than
     running the wrong graph. `B = 32` is deliberately unsuffixed so the committed artifact keeps its
     name. The `#guard`s at the bottom pin the literal `#eval` paths against this. -/
-def mnv2AdamVariant (B replicas : Nat) : String :=
-  (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B)
+def mnv2AdamVariant (B replicas : Nat) (opt : OptKind := .adamw) : String :=
+  (match opt with
+   | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
+   | .rmsprop => if replicas ≤ 1 then "rms"  else "rmsdp") ++
+  (if B == 32 then "" else toString B)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net batched AdamW train step
@@ -537,7 +574,8 @@ set_option maxRecDepth 4000000 in
     downsamples, 10 identity skips, 2 stage-first widenings) → 1×1 conv-BN-relu6 head (320→1280) →
     GAP → dense (1280→nClasses). -/
 def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
-    (replicas : Nat := 1) (convBias : Bool := false) (slug : String := "mobilenetv2") : String :=
+    (replicas : Nat := 1) (convBias : Bool := false) (slug : String := "mobilenetv2")
+    (opt : OptKind := .adamw) : String :=
   -- ⚠ α and K are spelled ONCE here. Until 2026-08-02 this render carried `0.100000` and
   -- `-0.010000` as inline literals in the cotangent AND a third copy, `0.010000`, in the
   -- report-only loss — the K=10 values. mnv2 is the WORST of the four ImageNet ports on this axis
@@ -721,7 +759,9 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
-      let (c, nT, nM, nV) ← adamOneM B replicas g
+      let (c, nT, nM, nV) ← match opt with
+        | .adamw   => adamOneM B replicas g
+        | .rmsprop => rmsOneM  B replicas g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]
@@ -771,6 +811,20 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let retTys  := pTypes ++ pTypes ++ pTypes ++
       ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
     pure <|
+      (match opt with
+       | .adamw => ""
+       | .rmsprop =>
+         "    // ── OPTIMIZER: RMSProp + momentum, TENSORFLOW flavour (the MobileNetV2 reference's\n" ++
+         "    //    own: jax/MainMobilenetV2Imagenet.lean). Per parameter, in this order:\n" ++
+         "    //      g  <- g + wd*θ        COUPLED L2, BEFORE the accumulator  (momVNextF)\n" ++
+         "    //      s' <- ρ*s + (1-ρ)*g²                                      (adamVNextF at ρ)\n" ++
+         "    //      b' <- μ*b + g/sqrt(s' + ε)   ⚠ ε INSIDE the sqrt          (rmsBufNextF)\n" ++
+         "    //      θ' <- θ - lr*b'                                           (sgdParamF)\n" ++
+         "    //    Packed [θ|m|v] is reused with m = momentum buffer, v = mean-square, so the\n" ++
+         "    //    interface is byte-identical to the AdamW render's apart from the entry name.\n" ++
+         "    //    %bc1/%bc2 are Adam bias corrections: unused here, passed through unchanged.\n" ++
+         "    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not\n" ++
+         "    //    an implementation detail, since this optimizer is not bias-corrected.\n") ++
       (if replicas ≤ 1 then
         "    // ── MobileNetV2 batch-BN AdamW train step: every line is pretty(verified AST node) ──\n"
        else
@@ -781,7 +835,9 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
-      zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ body ++ adamConstsM ++ adamCode ++ lossCode ++
+      zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ body ++
+      (match opt with | .adamw => adamConstsM | .rmsprop => rmsConstsBlock mnv2RmsHyper) ++
+      adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv2SigList nClasses convBias
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
@@ -796,7 +852,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
      (mnv2StatSigList.map (·.2)))
   let inner : String := go.run' 0
-  let fname := s!"{slug}_{mnv2AdamVariant B replicas}_train_step"
+  let fname := s!"{slug}_{mnv2AdamVariant B replicas opt}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -848,6 +904,17 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_adamdp_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5" 2)
 
+-- ── RMSProp at the IMAGENETTE shape (B=32, K=10) ──────────────────────────────────────────────
+-- Rendered deliberately at the shape the existing gates and trainer exercise TODAY, exactly as
+-- §2k did for ResNet-34's heavy-ball `mom` variant before the ImageNet one existed. The ImageNet
+-- renders below are the same renderer at `B := 64, nClasses := 1000` — both are true renderer
+-- parameters — so anything this shape establishes about the OPTIMIZER carries, and this is the one
+-- that `mobilenetv2-adam-tie` and the Imagenette trainer can compile and run without the shim.
+--
+-- It renders to its OWN path, so the artifact `mobilenetv2-verified-adam` runs is untouched.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2_rms_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5" 1 false "mobilenetv2" .rmsprop)
+
 -- ── MobileNetV2 / ImageNet-1k train steps, slug `mnv2in` ──────────────────────────────────────
 -- Batch 64 x 4 replicas = global 256 = `mobilenetV2ImagenetConfig.batchSize`, so the step count
 -- per epoch (5004) matches the reference exactly. All three label-smoothing constants are derived
@@ -861,12 +928,41 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mnv2in_adamdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mnv2in")
 
+-- ── ▶ RMSProp: the optimizer the MobileNetV2 reference ACTUALLY USES ──────────────────────────
+-- `planning/recipe_gaps.md` §2: RMSProp is the ONLY gap between this net and the JAX reference's
+-- **68.33%** (everything else — batch 256, 90 epochs, 5-epoch warmup, no label smoothing — already
+-- matches). recipe_gaps files this as Tier D, "a new proven `SHlo` op family, ten sites each";
+-- measured, it is **one** op: `momVNextF` already spells the coupled L2 and `adamVNextF` at
+-- `β₂ := ρ` already IS the running mean-square (`Proofs.rmsSqNext_eq_adamVNext`, by `rfl`), so only
+-- the ε-inside-the-root normalise had to be built.
+--
+-- Same shape/batch/replicas as the `adam64` peer above, so the two are comparable row for row: the
+-- signature is byte-identical apart from the entry name, and `%bc1`/`%bc2` ride through unused.
+--
+-- ⚠ THE DRIVER OWES TWO THINGS BEFORE THIS TRAINS CORRECTLY, and neither is a render change:
+--   1. the mean-square slot (`v`) must be **initialised to 1.0, not 0** — TF's convention, and the
+--      reason this optimizer trains stably at the paper LR. A zero init is not a crash, it is a
+--      different and much larger first step;
+--   2. exponential LR decay (0.98/epoch), which is recipe_gaps' Tier C and still open.
+-- Until both land this artifact is a correct render of the right optimizer, not a matched pair.
+#eval IO.FS.writeFile "verified_mlir/mnv2in_rms64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mnv2in" .rmsprop)
+#eval IO.FS.writeFile "verified_mlir/mnv2in_rmsdp64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mnv2in" .rmsprop)
+
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
 -- call ("entry mismatch"). These pin the literal path above against `mnv2AdamVariant`, so a rename
 -- fails at `lake build` rather than at run time.
 #guard Proofs.StableHLO.mnv2AdamVariant 32 1 == "adam"
 #guard Proofs.StableHLO.mnv2AdamVariant 32 2 == "adamdp"
 #guard Proofs.StableHLO.mnv2AdamVariant 128 1 == "adam128"
+-- The RMSProp peers. Distinct slugs from the AdamW ones is the whole point: rendering the other
+-- optimizer must never be able to overwrite the artifact the AdamW trainer runs (§2a's
+-- last-writer-wins race, which is how `resnet34_train_step` ended up with two writers computing
+-- genuinely different functions).
+#guard Proofs.StableHLO.mnv2AdamVariant 64 1 .rmsprop == "rms64"
+#guard Proofs.StableHLO.mnv2AdamVariant 64 4 .rmsprop == "rmsdp64"
+#guard Proofs.StableHLO.mnv2AdamVariant 64 1 .adamw   == "adam64"
 -- The interface contract, checked at elaboration: 210 parameters and 104 BN stat slots ⇒
 -- 1 + 3×210 + 3 + 104 + 1 = 739 inputs and 3×210 + 3 + 104 = 737 outputs.
 #guard (Proofs.StableHLO.mnv2SigList 10 true).length == 210   -- with conv biases (pre-swap)

@@ -899,6 +899,40 @@ private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
                     "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
   pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
 
+/-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `enetAdamOne` peer, and
+    the same four-op composition `MobileNetV2RenderB.rmsOneM` uses:
+
+    | reference (`jax/Jax/Codegen.lean`, `.rmsprop`) | emitted here |
+    |---|---|
+    | `grads = g + WD * p` | `momVNextF` at `(μ := wd, v := θ)` — `Proofs.momVNext_as_coupled_l2` |
+    | `sq = RHO*s + (1-RHO)*g*g` | **`adamVNextF` at `β₂ := ρ`** — `Proofs.rmsSqNext_eq_adamVNext` |
+    | `buf = MOMENTUM*b + g/sqrt(sq+EPS)` | `rmsBufNextF` — ε INSIDE the root |
+    | `params = p - lr*buf` | `sgdParamF` on the buffer's SSA |
+
+    ⚠ **EfficientNet's ε is 1e-3, where MobileNetV2's is 1.0** — and that is the placement's
+    sensitive end: at a collapsed mean-square the textbook spelling takes a step **31.6×** larger
+    (`Proofs.rmsBufNext_eps_placement_at_zero`). The JAX config says this in as many words —
+    *"vanilla diverges/erodes at the paper LR, the TF form trains stably"* — and it is why the
+    reference could drop its gradient clipping. **A green mnv2 tie does not license this render**;
+    `rms-tie efficientnet` is its own gate.
+
+    Slots: packed `[θ|m|v]` reused with `m` = momentum buffer, `v` = mean-square, so the interface
+    is byte-identical to the AdamW render's apart from the entry name and `%bc1`/`%bc2` ride
+    through unread. -/
+private def enetRmsOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
+    (replicas : Nat) : StateM Nat (String × String × String × String) := do
+  let n := ds.foldl (· * ·) 1
+  let z : Vec n := fun _ => 0
+  let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
+  let (cW, nW) ← pretty B (.momVNextF s!"%{nm}" "%wd" ds 0 z (.operand gAvg z))
+  let gr : SHlo n := .operand nW z
+  let (cS, nS) ← pretty B (.adamVNextF s!"%{nm}v" "%rho" "%orho" ds 0 z gr)
+  let (cB, nB) ← pretty B (.rmsBufNextF s!"%{nm}v" s!"%{nm}m" "%rho" "%orho" "%mu" "%eps"
+                    ds 0 0 0 z z gr)
+  -- θ' threads b' by SSA NAME, not by re-nesting: `pretty` has no CSE (§4).
+  let (cT, nT) ← pretty B (.sgdParamF s!"%{nm}" "%lr" ds 0 z (.operand nB z))
+  pure (arS ++ cW ++ cS ++ cB ++ cT, nT, nB, nS)
+
 /-- β₁/β₂/ε/wd as graph constants — the committed EfficientNet-B0 AdamW recipe
     (`efficientNetB0Config`: lr 1e-3, wd 1e-4, cosine + 3-epoch warmup).
 
@@ -924,8 +958,11 @@ private def enetAdamConsts : String :=
 
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes.
     Same convention as `r34AdamVariant`. -/
-def enetAdamVariant (B replicas : Nat) : String :=
-  (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B)
+def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) : String :=
+  (match opt with
+   | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
+   | .rmsprop => if replicas ≤ 1 then "rms"  else "rmsdp") ++
+  (if B == 32 then "" else toString B)
 
 set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
@@ -953,7 +990,8 @@ set_option maxRecDepth 4000000 in
     returned batch statistics are a whole-net forward fingerprint no gradient touches. -/
 def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (alphaStr negAlphaKStr bStr : String) (replicas : Nat := 1)
-    (convBias : Bool := false) (slug : String := "efficientnet") : String :=
+    (convBias : Bool := false) (slug : String := "efficientnet")
+    (opt : OptKind := .adamw) : String :=
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when empty. Passing −α/K as a string independent
   -- of K is the two-writers-for-one-fact shape that shipped a K=10 constant into R34's first
   -- ImageNet render ON THE GRADIENT PATH (§2k), and again into ConvNeXt's report-only loss
@@ -989,7 +1027,9 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     let mut vN : List String := []
     for i in [0:sigList.length] do
       let (nm, ds) := sigList[i]!
-      let (c, nT, nM, nV) ← enetAdamOne B nm ds (gradNames[i]!) replicas
+      let (c, nT, nM, nV) ← match opt with
+        | .adamw   => enetAdamOne B nm ds (gradNames[i]!) replicas
+        | .rmsprop => enetRmsOne  B nm ds (gradNames[i]!) replicas
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
@@ -1034,7 +1074,25 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
-      zeroBiasPrelude convBias enetBiasWidths ++ code ++ statCode ++ enetAdamConsts ++ adamCode ++ lossCode ++
+      (match opt with
+       | .adamw => ""
+       | .rmsprop =>
+         "    // ── OPTIMIZER: RMSProp + momentum, TENSORFLOW flavour (EfficientNet's own:\n" ++
+         "    //    jax/MainEfficientNetImagenet.lean). Per parameter, in this order:\n" ++
+         "    //      g  <- g + wd*θ        COUPLED L2, BEFORE the accumulator  (momVNextF)\n" ++
+         "    //      s' <- ρ*s + (1-ρ)*g²                                      (adamVNextF at ρ)\n" ++
+         "    //      b' <- μ*b + g/sqrt(s' + ε)   ⚠ ε INSIDE the sqrt          (rmsBufNextF)\n" ++
+         "    //      θ' <- θ - lr*b'                                           (sgdParamF)\n" ++
+         "    //    ⚠ ε = 1e-3 here, against MobileNetV2's 1.0 — this is the SENSITIVE end of the\n" ++
+         "    //    placement: textbook g/(sqrt(s')+ε) takes a ~31.6x larger step at a collapsed\n" ++
+         "    //    mean-square, which is what the reference means by \"vanilla diverges at the\n" ++
+         "    //    paper LR\" and why it carries no gradient clipping.\n" ++
+         "    //    Packed [θ|m|v] reused with m = momentum buffer, v = mean-square; %bc1/%bc2 are\n" ++
+         "    //    Adam bias corrections, unread here and passed through unchanged.\n" ++
+         "    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.\n") ++
+      zeroBiasPrelude convBias enetBiasWidths ++ code ++ statCode ++
+      (match opt with | .adamw => enetAdamConsts | .rmsprop => rmsConstsBlock enetRmsHyper) ++
+      adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n",
       bnList.map (fun t => t.2.2.1))
   let (inner, bnOc) := go.run' 0
@@ -1058,7 +1116,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
   -- artifact path and `LEAN_MLIR_VARIANT`.
-  let fname := s!"{slug}_{enetAdamVariant B replicas}_train_step"
+  let fname := s!"{slug}_{enetAdamVariant B replicas opt}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1173,12 +1231,50 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "enetin")
 
+-- ── ▶ RMSProp: the optimizer the EfficientNet reference ACTUALLY USES ─────────────────────────
+-- `planning/recipe_gaps.md` §2: RMSProp is one of TWO gaps between this net and the reference's
+-- **72.31%** (the other being dropPath + EMA, both driver/architectural). ρ = μ = 0.9,
+-- **ε = 1e-3**, wd = 1e-5 — `Proofs.StableHLO.enetRmsHyper`.
+--
+-- ⚠ **ε = 1e-3 is the SENSITIVE end of the ε-placement difference**, unlike MobileNetV2's ε = 1.0.
+-- At a collapsed mean-square the textbook spelling steps 31.6× larger, which is exactly what the
+-- reference config means by *"vanilla diverges/erodes at the paper LR, the TF form trains stably"*
+-- and why its `gradClipNorm` is 0. So this net is where the placement is load-bearing, and it gets
+-- its own numeric gate — `rms-tie efficientnet` — rather than inheriting mnv2's.
+--
+-- The Imagenette-shape render below differs from `efficientnet_adam_train_step` in EXACTLY ONE
+-- thing, the optimizer: same B, K, ε, α, −α/K and ÷B literals. That is what makes a tie against it
+-- attributable (§2m — a candidate that differs in two ways cannot license either).
+#eval IO.FS.writeFile "verified_mlir/efficientnet_rms_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+    "0.100000" "-0.010000" "32.0" 1 false "efficientnet" .rmsprop)
+
+-- The ImageNet peers: batch 64 × 4 replicas = global 256 = `efficientNetB0ImagenetConfig.batchSize`,
+-- and −α/K DERIVED from nClasses (empty string), so the emitted shift is -0.000100 at K = 1000.
+--
+-- ⚠ THE DRIVER STILL OWES TWO THINGS, neither a render change: the mean-square slot must be
+-- INITIALISED TO 1.0 (TF's convention — a zero init is not a crash, it is a different and much
+-- larger first step), and the LR schedule must be exponential 0.97/epoch rather than cosine.
+-- Until both land these are correct renders of the right optimizer, not a matched pair.
+#eval IO.FS.writeFile "verified_mlir/enetin_rms64_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 1 false "enetin" .rmsprop)
+#eval IO.FS.writeFile "verified_mlir/enetin_rmsdp64_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 4 false "enetin" .rmsprop)
+
 -- Pin the two literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed this fails at `lake build` instead of at run time as an "entry mismatch".
 #guard Proofs.StableHLO.enetAdamVariant 32 1 == "adam"
 #guard Proofs.StableHLO.enetAdamVariant 32 2 == "adamdp"
 #guard Proofs.StableHLO.enetAdamVariant 128 1 == "adam128"
 #guard Proofs.StableHLO.enetAdamVariant 128 2 == "adamdp128"
+-- The RMSProp peers. Distinct slugs from the AdamW ones is the point: rendering the other
+-- optimizer must never overwrite the artifact the AdamW trainer runs (§2a's last-writer-wins race).
+#guard Proofs.StableHLO.enetAdamVariant 32 1 .rmsprop == "rms"
+#guard Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop == "rms64"
+#guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop == "rmsdp64"
+#guard Proofs.StableHLO.enetAdamVariant 64 1 .adamw   == "adam64"
 
 -- §2m: both arities pinned, so dropping the conv biases cannot silently change the render that
 -- ships. 262 − 49 = 213; the SE biases (`zb1`/`zb2`) are NOT among the 49, because those convs are

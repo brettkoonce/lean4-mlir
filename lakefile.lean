@@ -1600,6 +1600,20 @@ lean_exe «r34-mom-tie» where
   root := `tests.TestMomTie
   moreLinkArgs := xlaLink
 
+/-- **recipe_gaps v1.2's gate — the RMSProp render, numerically certified.** The `r34-mom-tie`
+    construction (§2k) pointed at MobileNetV2's RMSProp tail: recover the gradient from the AdamW
+    render's `m'` at `m = v = 0`, then require the RMSProp render to satisfy `s' = (1-rho)*gw^2`,
+    `b' = gw/sqrt(s'+eps)` and `theta' = theta - lr*b'` where `gw = g + wd*theta`.
+
+    Two controls it requires to FIRE: the TEXTBOOK epsilon placement `gw/(sqrt(s')+eps)`, and the
+    decay dropped. The first is the whole point — TensorFlow's RMSProp puts epsilon INSIDE the
+    root and that is a different optimizer.
+
+        lake build rms-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/rms-tie -/
+lean_exe «rms-tie» where
+  root := `tests.TestRmsTie
+  moreLinkArgs := xlaLink
+
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a
