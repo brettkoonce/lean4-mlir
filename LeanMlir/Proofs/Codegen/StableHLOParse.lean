@@ -43,6 +43,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | [], st                       => some st
   | .operand nm n :: ts, st      => parseStack ts (.operand nm n :: st)
   | .dotIn w m n :: ts, e :: st  => parseStack ts (.dotIn w m n e :: st)
+  | .dotInBf16 w m n :: ts, e :: st => parseStack ts (.dotInBf16 w m n e :: st)
+  | .convertF n :: ts, e :: st   => parseStack ts (.convertF n e :: st)
   | .dotOut w m n :: ts, e :: st => parseStack ts (.dotOut w m n e :: st)
   | .addBcast b n :: ts, e :: st => parseStack ts (.addBcast b n e :: st)
   | .expe n :: ts, e :: st       => parseStack ts (.expe n e :: st)
@@ -175,6 +177,8 @@ theorem parseStack_toToks (r : Raw) :
   induction r with
   | operand nm n => intro ts st; rfl
   | dotIn w m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | dotInBf16 w m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | convertF n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | dotOut w m n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | addBcast b n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | expe n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
