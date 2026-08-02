@@ -69,7 +69,7 @@ that does not exist yet.
 | warmup | 5 ✅ | 5 ✅ | 20 ✅ | 5 ✅ | 5 ✅ | driver arg |
 | label smoothing | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.0 ✅ | derived from `nClasses` |
 | grad clip | — | 1.0 ❌ | 1.0 ❌ | — | — | ❌ |
-| **mixup / cutmix** | — | 0.8/1.0 ❌ | 0.8/1.0 ❌ | — | — | wire ✅, **producer ❌** |
+| **mixup / cutmix** | — | 0.8/1.0 ⚠ | 0.8/1.0 ⚠ | — | — | wire ✅, **producer ✅** (2026-08-02; no run yet) |
 | RandAugment (geo) | — | ✅ | ✅ | — | — | ✅ **free via shim** |
 | random erasing | — | ✅ | ✅ | — | — | ✅ **free via shim** |
 | repeated aug | — | 3 ✅ | — | — | — | ✅ **free via shim** |
@@ -112,21 +112,82 @@ These live inside `build_imagenet_iter`, which `generateShim` reuses **verbatim*
 them on in the JAX config moves both paths at once, and the verified side owns no augmentation code
 at all. **Nothing to build. Verify by flipping the config and re-running `SHIM_HASH`.**
 
-### Tier B — the producer (shim-side Python). **Wire is done; the mixing is not.**
+### Tier B — the producer (shim-side Python). ✅ **DONE 2026-08-02 — wire AND mixing.**
 **mixup, cutmix.**
 
-Two things already landed that make this the next-cheapest real item:
+Two things had already landed, and they are why this was the next-cheapest real item:
 * **wire v2** carries `float32[batch·nClasses]` soft targets, gated bit-identical against v1
   (commit `4755317`);
 * **the renders are AFFINE in `%onehot`** — measured, `lake build soft-target-tie`, ViT 492× /
   ConvNeXt 309× separation — so a mixed target yields the mixed gradient **with no render change**.
 
-What is left is filling those slots. ⚠ **This is the one place where a second definition of
-something is unavoidable**: the JAX reference applies `_mixup`/`_cutmix` in the *train step* with
-`jax.random`, not in `tf.data`, so a shim-side implementation is a genuinely new copy of the mixing
-rule. It is much smaller and more self-contained than the augmentation pipeline (a Beta draw, a
-convex combination, a box), but it is a second writer and the doc should say so rather than pretend
-otherwise. The alternative — no mixup on the verified path — is worse.
+✅ **The producer now fills those slots.** `generateShim`'s `_mix` is a line-for-line numpy
+transcription of the reference's `_mixup`/`_cutmix`, selected by `SHIM_MIX=off|mixup|cutmix|both`
+(`both` alternates per step, as the reference does), with the config's own alphas as defaults and
+`SHIM_MIXUP_ALPHA` / `SHIM_CUTMIX_ALPHA` as overrides. **No render change, no new op, and no Lean
+change** — `IO.Process.spawn`'s `env` array EXTENDS the inherited environment, so `SHIM_MIX` set on
+the trainer's command line reaches the shim child. That was *checked, not assumed*.
+
+Two refusals, both at startup: `SHIM_MIX` without `SHIM_NCLASSES` (a mixed label is a distribution;
+int32 cannot carry one) and an unknown mode. Loud beats a run whose log says mixup while it trains
+on hard labels.
+
+⚠ **This is the one place where a second definition of something is unavoidable**: the JAX reference
+applies `_mixup`/`_cutmix` in the *train step* with `jax.random`, not in `tf.data`, so a shim-side
+implementation is a genuinely new copy of the mixing rule. It is much smaller and more
+self-contained than the augmentation pipeline (a Beta draw, a convex combination, a box), but it is
+a second writer and the doc should say so rather than pretend otherwise. The alternative — no mixup
+on the verified path — is worse.
+
+⚠⚠ **AND THE COST OF THAT SECOND DEFINITION IS NOW PRECISE, WHICH IT WAS NOT BEFORE.** The reference
+draws `jax.random.beta(fold_in(PRNGKey(seed), step), α, α)`; the shim draws from numpy's
+`Generator`. Both are Beta(α, α); **they are not the same numbers, and no seeding makes them so.**
+So a verified-vs-JAX pair under mixup agrees **in distribution, not per step** — strictly weaker
+than the augmentation pipeline's byte-identity, which is reused verbatim and therefore cannot drift
+at all. Never quote the two as the same kind of agreement. It is also why the gates below are
+known-answer and determinism gates rather than a cross-path byte comparison: **that comparison does
+not exist to be made.**
+
+#### The gates — `scripts/mixup_gate.py`, all three green with controls firing
+
+| gate | result |
+|---|---|
+| **1. inert when off** | v1 `c375ad0f…`, v2 `f3a4b2a0…` — **byte-identical to the pre-mixing shim**, measured on the pre-change generated script at the same config |
+| **2. determinism** | same seed ⇒ same digest on all three modes; **different seed ⇒ DIFFERENT digest** on all three |
+| **3. known answer** | the mixed stream vs the OFF stream at one seed: `t' = λ·t + (1−λ)·flip(t)` and `x' = λ·x + (1−λ)·flip(x)` **BIT-EXACT**, on images and labels alike |
+| 3b. cutmix structure | the pasted region recovered **from the pixels** is a RECTANGLE, and λ equals `1 − area/(H·W)` to 1e-6 — i.e. the label follows the CLIPPED box, not the drawn λ |
+| ⚠ control A | unmixed images against a mixed target — **rejected**, 1.15 |
+| ⚠ control B | λ wrong by 1% — **rejected**, 7.5e-3 |
+
+**Control A is the one that earns its keep**: a mixed label with unmixed pixels compiles, streams,
+trains and descends — it is simply a worse objective — so a gate that checked only the target would
+pass it. Hence the images are gated too.
+
+**Three findings from building it:**
+
+1. ⚠⚠ **RECOVER A CONSTANT BY READING IT, NOT BY FITTING IT.** The first λ recovery solved
+   `tm = λ·t + (1−λ)·flip(t)` by least squares in float64 and cast to float32. That reconstructs λ
+   to about a ULP — fine for a tolerance check, and **useless feeding a bit-exact assertion**: mixup
+   batch 0 passed and batch 1 failed at 1.5e-08, a phantom defect in a correct producer. `t` is
+   one-hot, so λ is *literally stored* at `tm[i, y_i]` for any row whose partner carries a different
+   label. Reading it is exact and needs no tolerance — and it gates a real property for free, since
+   λ is a per-STEP scalar and every identified row must agree.
+2. ⚠ **A GATE THAT ONLY PRINTS CANNOT FAIL.** Gate 1 first printed the two digests with "compare
+   against the doc" — unfalsifiable, the `vit-dp-check` defect in its purest form. It now checks
+   against baselines measured on the pre-change shim, and **SKIPS LOUDLY** at any other
+   batch/batch-count rather than silently comparing incomparable numbers.
+3. ⚠ **"Inert when off" is a CROSS-VERSION claim and needs a recorded constant.** That the new
+   shim's two modes agree with each other is trivial — one calls the other's code path. What
+   matters is that the off path is byte-for-byte the shim as it was *before mixing existed*, and
+   nothing computable at run time substitutes for having measured that.
+
+⛔ **What is NOT done: an end-to-end smoke.** The evidence above is producer-side. That the trainer
+consumes a mixed stream is inferred from three separately-gated pieces (the affine-in-`%onehot`
+measurement, wire v2's bit-identity, and this) rather than observed. Every ImageNet smoke costs the
+**unconditional 28 GB validation drain** (195 × 256 images, ~3-4 min, and `LEAN_MLIR_SKIP_EVAL` does
+NOT skip it) before its first train step, so it is a per-config cost on a box that cannot do long
+runs. ⚠ And note the step cap for `trainAdamSched` is **`LEAN_MLIR_G2_STEPS`**, not
+`LEAN_MLIR_MAX_STEPS` — the latter means "time a step window then exit" and does not bound the run.
 
 ### Tier C — the driver (Lean, no render change).
 **EMA, exponential LR decay.**
@@ -361,8 +422,8 @@ for ViT — *"no renderer change, three `#eval`s"*), so each missing variant is 
 its drift-guard line. Do this BEFORE any v1.x reference-epoch run on enet or ConvNeXt, or the run
 measures a net that is missing the regularisers its target number depends on.
 
-### v1.3 — ▶ **mixup + cutmix (Tier B). THIS IS NEXT.** The wire is already there, and it closes
-the largest remaining accuracy gap for ViT and ConvNeXt.
+### v1.3 — ✅ **mixup + cutmix (Tier B) — the PRODUCER landed 2026-08-02.** See Tier B above for
+the gates, the controls and the three findings. What is left on this item is a run, not a build.
 
 Producer-side Python only: **no render change and no new op**, because the renders are AFFINE in
 `%onehot` (measured — `lake build soft-target-tie`, ViT 492× / ConvNeXt 309× separation) and shim

@@ -65,11 +65,12 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: mixup + cutmix (`recipe_gaps.md` v1.3). The SD tail is closed.**
+## 0. ▶ START HERE — **next: `wdExcludeNormBias` then grad clip (v1.4). SD tail + mixup are closed.**
 
 **Rewritten 2026-08-02 at the end of the fifth session that day** (ViT's EMA peer; stochastic depth
 end-to-end on EfficientNet; `recipe_gaps` v1.2c; then §0's ~1 h tail — the two stochastic-depth
-interior gates, `lake build droppath-tie`). Everything below §0a is green at **3,912**
+interior gates, `lake build droppath-tie`; then mixup + cutmix's producer half,
+`scripts/mixup_gate.py`). Everything below §0a is green at **3,912**
 `Proofs Certs Codegen` jobs — unchanged by the tail, which adds a test and no proof — with **107**
 artifacts, one writer each, and `verified_mlir/` 0 lines of diff. Read this section, then
 `planning/recipe_gaps.md`; the two feature specs are `planning/ema.md` and
@@ -179,29 +180,84 @@ duplicated-batch `*-dp-check` harnesses are structurally blind to a mask that is
 of sharded, and `shard-check`'s construction needs the gated slot linear in the gradient — false for
 RMSProp's buffer, which is the net that wants both. Everything above is single-device.
 
-### ▶ 2b. THE NEXT THREAD — **mixup + cutmix (`recipe_gaps.md` v1.3)**
+### ✅ 2b. mixup + cutmix — **the PRODUCER landed 2026-08-02. `scripts/mixup_gate.py`.**
 
-`recipe_gaps.md` calls it *"the largest remaining accuracy gap for ViT
-and ConvNeXt"*, and it is the cheapest big item left because two things already landed:
+`recipe_gaps.md` v1.3, and it cost what it was scoped at: **producer-side Python only, no render
+change, no new op, and — verified rather than assumed — no Lean change either.** `generateShim`'s
+`_mix` is a line-for-line numpy transcription of the reference's `_mixup`/`_cutmix`, selected by
+`SHIM_MIX=off|mixup|cutmix|both` (`both` alternates per step, as the reference does), alphas from
+the config with env overrides. Two startup refusals: `SHIM_MIX` without `SHIM_NCLASSES` (a mixed
+label is a distribution; int32 cannot carry one) and an unknown mode.
 
-* **shim wire v2** carries `float32[batch·nClasses]` soft targets, gated bit-identical against v1;
-* **the renders are AFFINE in `%onehot`** — measured, `lake build soft-target-tie`, ViT 492× /
-  ConvNeXt 309× separation — so a mixed target yields the mixed gradient with **no render change and
-  no new op.** §2p's earlier claim that this needs a `softLabelCE` cotangent is retired.
+**The gates, all three green, controls firing:**
 
-So it is **Tier B, producer-side Python only**: a Beta draw, a convex combination, a box. It fits
-this box exactly — every gate is a determinism hash or a known answer, all of it minutes.
+| gate | result |
+|---|---|
+| **inert when off** | v1 `c375ad0f…`, v2 `f3a4b2a0…` — **byte-identical to the pre-mixing shim**, measured on the pre-change script |
+| **determinism** | same seed ⇒ same digest on all three modes; **different seed ⇒ DIFFERENT** on all three |
+| **known answer** | mixed stream vs the OFF stream at one seed: `t' = λ·t + (1−λ)·flip(t)` and `x' = λ·x + (1−λ)·flip(x)` **BIT-EXACT**, images and labels alike |
+| cutmix structure | the box recovered **from the pixels** is a RECTANGLE, and λ = `1 − area/(H·W)` to 1e-6 — the label follows the CLIPPED box, not the drawn λ |
+| ⚠ control A | unmixed images against a mixed target — **rejected**, 1.15 |
+| ⚠ control B | λ wrong by 1% — **rejected**, 7.5e-3 |
 
-⚠ **It is the one place a SECOND DEFINITION is unavoidable, and the doc should keep saying so.** The
-reference applies `_mixup`/`_cutmix` in the *train step* with `jax.random`, not in `tf.data`, so a
-shim-side implementation is a genuinely new copy of the mixing rule — unlike the augmentation
-pipeline, which the shim reuses verbatim and therefore cannot drift. It is small and self-contained,
-but it is a second writer; the alternative (no mixup on the verified path) is worse.
+**Four findings that outlive the feature:**
 
-Gates to write with it: **inert when off** (the `SHIM_HASH` byte-identity that gated wire v2),
-**determinism** (same seed ⇒ same hash, different seeds ⇒ different — the control that stops a
-pipeline ignoring its seed from looking correct), and a **known answer on the mixed labels** (for
-λ and a permutation, the target must be exactly `λ·y_a + (1−λ)·y_b`).
+1. ⚠⚠ **RECOVER A CONSTANT BY READING IT, NOT BY FITTING IT.** The first λ recovery solved
+   `tm = λ·t + (1−λ)·flip(t)` by least squares in float64 and cast to float32 — about a ULP off,
+   which is fine for a tolerance check and **useless feeding a bit-exact assertion**. It produced a
+   phantom failure (mixup batch 1 at 1.5e-08, batch 0 clean) in a correct producer. `t` is one-hot,
+   so λ is *literally stored* at `tm[i, y_i]`; reading it is exact, needs no tolerance, and gates a
+   real property for free — λ is a per-STEP scalar, so every identified row must agree.
+2. ⚠ **A GATE THAT ONLY PRINTS CANNOT FAIL.** The inertness gate first printed its two digests with
+   "compare against the doc" — the `vit-dp-check` defect in its purest form. It now checks pinned
+   baselines and **SKIPS LOUDLY** at any other batch/batch-count instead of comparing incomparable
+   numbers. Note "inert when off" is a **cross-version** claim: that the new shim's two modes agree
+   with each other is trivial (one calls the other's code path), so it needs a constant measured on
+   the shim as it was *before* mixing existed.
+3. ⚠⚠ **THE SECOND DEFINITION'S COST IS NOW PRECISE.** The reference draws
+   `jax.random.beta(fold_in(PRNGKey(seed), step), α, α)`; the shim draws from numpy's `Generator`.
+   Same distribution, **different numbers, and no seeding makes them the same.** So a verified-vs-JAX
+   pair under mixup agrees **in distribution, not per step** — strictly weaker than the augmentation
+   pipeline, which is reused verbatim and cannot drift at all. Never quote the two as the same kind
+   of agreement; and it is why the gates are known-answer rather than cross-path byte comparisons —
+   *that comparison does not exist to be made.*
+4. ⚠ **Gate the IMAGES, not just the labels.** A mixed label against unmixed pixels compiles,
+   streams, trains and descends — it is simply a worse objective. Control A is exactly that, and it
+   fires at 1.15 against a bit-exact pass.
+
+⛔ **What is NOT done: an end-to-end smoke.** The evidence is producer-side; that the *trainer*
+consumes a mixed stream is inferred from three separately-gated pieces (`soft-target-tie`'s
+affine-in-`%onehot` measurement, wire v2's bit-identity, and this) rather than observed.
+
+⚠ **Two things that cost time and will cost it again**, both about ImageNet smokes:
+* **`LEAN_MLIR_MAX_STEPS` is NOT the step cap for `trainAdamSched`** — that is `LEAN_MLIR_G2_STEPS`.
+  `MAX_STEPS` means *"time a step window then exit"*, so it does not bound the run; a smoke set with
+  it ran past step 300.
+* **The ImageNet validation drain is UNCONDITIONAL** — 195 × 256 = 49,920 images, ~28 GB into host
+  RAM, before the first train step, and **`LEAN_MLIR_SKIP_EVAL` does not skip it** (it gates the
+  eval *pass*, not `loadData`'s drain). Budget ~3-4 min and 30 GB per ImageNet smoke config.
+
+### ▶ 2c. THE NEXT THREAD — **`wdExcludeNormBias`, then grad clip (`recipe_gaps.md` v1.4)**
+
+⚠ **A correction worth keeping from doing v1.3**: this section used to scope the mixup known-answer
+gate as *"for λ and a permutation, the target must be exactly `λ·y_a + (1−λ)·y_b`"*. The reference
+does **not** use a permutation — the partner is `jnp.flip(x, 0)`, a batch REVERSE, chosen
+deliberately *"to avoid a cross-shard gather under multi-GPU sharding"* (its own comment). A
+permutation would have been a different producer, and the gate would have been written around a
+partner the reference does not use. **Read the reference's own code before scoping a gate against
+it** — the same rule §2k applied to Nesterov-vs-heavy-ball, one layer over.
+
+**`wdExcludeNormBias` first** — it is the cheaper of the two and it is a driver/render question,
+not a new op: exclude norm γ/β and biases from weight decay. Both ViT and ConvNeXt use it.
+
+**Then grad clip**, which `recipe_gaps` calls *"the unlock for the 5e-4 LR"* on ViT. ⚠ It needs a
+**global norm ACROSS ALL PARAMETERS**, which is a shape this kit does not have: every optimizer op
+here is per-parameter, and a global reduction over 200+ tensors then a broadcast back is a new
+graph shape rather than a new op. Scope it before starting.
+
+**After those**: bf16 (the ONLY gap left on R34 and mnv2, ×1.76 measured on ares, and residency
+doubled what it is worth — 1.21× → 1.56× — but it needs `conv_close_mixed`, 4-6 sessions;
+`planning/bf16_renderer.md`).
 
 **▶ AFTER THAT, in value order:** `wdExcludeNormBias` then grad clip (v1.4 — grad clip is *"the
 unlock for the 5e-4 LR"* on ViT, and it needs a global norm ACROSS all parameters, which is a shape
@@ -1039,6 +1095,18 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/fwd-tie convnext /tmp/retired.mlir verifie
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/fwd-tie efficientnet --eval   # self-tie smoke
 #   ^ `--eval` ties @<slug>_fwd_eval (params + 2 running-stat inputs per BN layer). ConvNeXt has no
 #     _fwd_eval and the harness refuses --eval for it: LayerNorm ⇒ train == eval.
+
+# MIXUP / CUTMIX — the producer half of wire v2 (`recipe_gaps.md` v1.3). Shim-side Python only;
+# no render, no op, no Lean change. `SHIM_MIX` reaches the shim child because IO.Process.spawn's
+# env array EXTENDS the inherited environment (checked, not assumed).
+(cd jax && lake exe resnet34-imagenet default --shim)   # regenerate after touching generateShim
+scripts/mixup_gate.py                     # inert-when-off + determinism + the known answer
+scripts/mixup_gate.py --break             # + the two negative controls
+#   ^ to stream mixed batches into a trainer: SHIM_SOFT=1 (wire v2) and SHIM_MIX=both.
+#     ⚠ SHIM_MIX without SHIM_NCLASSES is REFUSED — a mixed label is a distribution.
+#     ⚠ the step cap for trainAdamSched is LEAN_MLIR_G2_STEPS, NOT LEAN_MLIR_MAX_STEPS (which
+#       means "time a step window then exit"), and the 28 GB ImageNet val drain is UNCONDITIONAL
+#       — LEAN_MLIR_SKIP_EVAL does not skip it. Budget ~3-4 min per ImageNet smoke config.
 
 # STOCHASTIC DEPTH — the two gates covering the op's INTERIOR (§0's tail, `stochastic_depth.md`
 # §7a-c). Every other SD gate pins an ENDPOINT, and an identity gate at s = 1 cannot see WHERE s is

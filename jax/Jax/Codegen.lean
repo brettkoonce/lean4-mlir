@@ -3159,6 +3159,12 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "#\n" ++
   "#  env: SHIM_BATCH (default 256), SHIM_SPLIT (train|validation), SHIM_SEED (default 0),\n" ++
   "#       SHIM_HASH=<n>  -> hash n batches to stderr and exit, streaming nothing\n" ++
+  "#       SHIM_NCLASSES=K -> wire v2: float32[B,K] target distributions instead of int32[B]\n" ++
+  "#       SHIM_MIX=off|mixup|cutmix|both  -> mixup/cutmix on the PRODUCER side (needs v2).\n" ++
+  "#                       'both' alternates per step, as the reference does. Default is this\n" ++
+  "#                       config's own useMixup/useCutmix. SHIM_MIXUP_ALPHA / SHIM_CUTMIX_ALPHA\n" ++
+  "#                       override the Beta shapes. ⚠ The lambda stream is numpy's, NOT the\n" ++
+  "#                       reference's jax.random one — same distribution, different numbers.\n" ++
   "#       TFDS_DATA_DIR  -> the prepared tfds tree (default ~/tensorflow_datasets)\n" ++
   "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
   "import os, sys, hashlib\n" ++
@@ -3218,14 +3224,82 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        ok = (yi >= 0) & (yi < nclasses)\n" ++
   "        t[np.arange(yi.shape[0])[ok], yi[ok]] = 1.0\n" ++
   "        return np.ascontiguousarray(t, dtype=np.float32)\n" ++
+  -- ── MIXUP / CUTMIX — the PRODUCER half of wire v2 (`recipe_gaps.md` v1.3).
+  --
+  -- ⚠⚠ THIS IS THE ONE PLACE A SECOND DEFINITION IS UNAVOIDABLE, and the doc says so rather than
+  --    pretending otherwise. Everything else the shim does is `emitDataLoading` reused VERBATIM,
+  --    so it cannot drift from the reference by construction (§2k). Mixing cannot be: the
+  --    reference applies `_mixup`/`_cutmix` inside the jitted TRAIN STEP with `jax.random`, not in
+  --    `tf.data`, so there is nothing to reuse and this is a genuinely new copy of the rule.
+  --    The alternative — no mixup on the verified path — is worse. What follows is a
+  --    line-for-line transcription of `_mixup`/`_cutmix` above; keep them side by side.
+  --
+  -- ⚠ AND THE λ STREAM IS NOT THE REFERENCE'S, WHICH IS A FACT ABOUT WHAT A PAIRED RUN MEANS.
+  --    The reference draws from `jax.random.beta(fold_in(PRNGKey(seed), step), α, α)`; this draws
+  --    from numpy's Generator. Both are Beta(α,α); they are not the same NUMBERS and no seeding
+  --    makes them so. So a verified-vs-JAX pair under mixup agrees in DISTRIBUTION, not per step —
+  --    weaker than the augmentation pipeline's byte-identity, and it should never be quoted as
+  --    that. It is also why the gates below are known-answer and determinism gates rather than a
+  --    cross-path byte comparison: that comparison does not exist to be made.
+  "    _MIX_MODE = os.environ.get('SHIM_MIX', '" ++
+    (if cfg.useMixup && cfg.useCutmix then "both"
+     else if cfg.useMixup then "mixup"
+     else if cfg.useCutmix then "cutmix" else "off") ++ "').strip().lower()\n" ++
+  "    _MIX_A = float(os.environ.get('SHIM_MIXUP_ALPHA', '" ++ toString cfg.mixupAlpha ++ "'))\n" ++
+  "    _CUT_A = float(os.environ.get('SHIM_CUTMIX_ALPHA', '" ++ toString cfg.cutmixAlpha ++ "'))\n" ++
+  "    if _MIX_MODE not in ('off', 'mixup', 'cutmix', 'both'):\n" ++
+  "        raise SystemExit('SHIM_MIX=%s: expected off|mixup|cutmix|both' % _MIX_MODE)\n" ++
+  -- A mixed label is a DISTRIBUTION; int32 cannot carry one. Refusing here is the difference
+  -- between a loud startup failure and a run that silently trains on hard labels while its log
+  -- says mixup is on — the §2k class of defect (it compiles, it runs, it descends).
+  "    if _MIX_MODE != 'off' and nclasses <= 0:\n" ++
+  "        raise SystemExit('SHIM_MIX=%s needs SHIM_NCLASSES>0: a mixed target is a distribution '\n" ++
+  "                         'and wire v1 carries int32 hard labels' % _MIX_MODE)\n" ++
+  "    def _mix(x, t, step):\n" ++
+  "        # Returns (x, t) UNTOUCHED when off — the identity, not a copy, so the v1/v2 digests\n" ++
+  "        # are byte-for-byte what they were before mixing existed.\n" ++
+  "        if _MIX_MODE == 'off':\n" ++
+  "            return x, t\n" ++
+  "        B = t.shape[0]\n" ++
+  "        # ⚠ Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded\n" ++
+  "        # draw makes the run unreproducible and breaks every gate that replays a batch.\n" ++
+  "        rng = np.random.default_rng([_SHIM_SEED, step])\n" ++
+  "        # `both` alternates per step, matching the reference's `if _global_step % 2 == 0`.\n" ++
+  "        cut = (_MIX_MODE == 'cutmix') or (_MIX_MODE == 'both' and (step % 2) == 1)\n" ++
+  "        if not cut:\n" ++
+  "            lam = np.float32(rng.beta(_MIX_A, _MIX_A))\n" ++
+  "            xm = lam * x + (np.float32(1.0) - lam) * np.flip(x, 0)\n" ++
+  "            tm = lam * t + (np.float32(1.0) - lam) * np.flip(t, 0)\n" ++
+  "            return (np.ascontiguousarray(xm, dtype=np.float32),\n" ++
+  "                    np.ascontiguousarray(tm, dtype=np.float32))\n" ++
+  "        H = W = _IMG_SIZE\n" ++
+  "        lam = float(rng.beta(_CUT_A, _CUT_A))\n" ++
+  "        x4 = x.reshape(B, 3, H, W)\n" ++
+  "        c = np.sqrt(1.0 - lam)\n" ++
+  "        cw = int(c * W); ch = int(c * H)\n" ++
+  "        cx = int(rng.integers(0, W)); cy = int(rng.integers(0, H))\n" ++
+  "        x1 = int(np.clip(cx - cw // 2, 0, W)); x2 = int(np.clip(cx + cw // 2, 0, W))\n" ++
+  "        y1c = int(np.clip(cy - ch // 2, 0, H)); y2c = int(np.clip(cy + ch // 2, 0, H))\n" ++
+  "        mask = np.zeros((H, W), dtype=np.float32)\n" ++
+  "        mask[y1c:y2c, x1:x2] = np.float32(1.0)\n" ++
+  "        x4m = x4 * (np.float32(1.0) - mask) + np.flip(x4, 0) * mask\n" ++
+  "        # ⚠ λ is re-derived from the ACTUAL pasted area, not from the draw — the box is clipped\n" ++
+  "        # at the border, so the two differ and the label must follow the pixels.\n" ++
+  "        lam_adj = np.float32(1.0 - float(mask.sum()) / float(H * W))\n" ++
+  "        tm = lam_adj * t + (np.float32(1.0) - lam_adj) * np.flip(t, 0)\n" ++
+  "        return (np.ascontiguousarray(x4m.reshape(B, -1), dtype=np.float32),\n" ++
+  "                np.ascontiguousarray(tm, dtype=np.float32))\n" ++
+  "    def _emit(x, y, step):\n" ++
+  "        return _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)\n" ++
   "    if hash_n:\n" ++
   "        h = hashlib.sha256()\n" ++
   "        for i, (x, y) in enumerate(it):\n" ++
   "            if i >= hash_n: break\n" ++
-  "            h.update(_targets(y).tobytes())\n" ++
-  "            h.update(np.ascontiguousarray(x, dtype=np.float32).tobytes())\n" ++
-  "        sys.stderr.write('SHIM_HASH %d batches seed=%d split=%s: %s\\n'\n" ++
-  "                         % (hash_n, seed, split, h.hexdigest()))\n" ++
+  "            xo, to = _emit(x, y, i)\n" ++
+  "            h.update(to.tobytes())\n" ++
+  "            h.update(xo.tobytes())\n" ++
+  "        sys.stderr.write('SHIM_HASH %d batches seed=%d split=%s mix=%s: %s\\n'\n" ++
+  "                         % (hash_n, seed, split, _MIX_MODE, h.hexdigest()))\n" ++
   "        return\n" ++
   "    out = sys.stdout.buffer\n" ++
   "    out.write(b'LMSH')\n" ++
@@ -3234,9 +3308,10 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    else:\n" ++
   "        out.write(np.array([1, batch, flat], dtype=np.int32).tobytes())\n" ++
   "    out.flush()\n" ++
-  "    for x, y in it:\n" ++
-  "        out.write(_targets(y).tobytes())\n" ++
-  "        out.write(np.ascontiguousarray(x, dtype=np.float32).tobytes())\n" ++
+  "    for i, (x, y) in enumerate(it):\n" ++
+  "        xo, to = _emit(x, y, i)\n" ++
+  "        out.write(to.tobytes())\n" ++
+  "        out.write(xo.tobytes())\n" ++
   "        out.flush()\n\n" ++
   "if __name__ == '__main__':\n" ++
   "    try:\n" ++
