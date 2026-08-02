@@ -1682,6 +1682,25 @@ lean_exe «clip-tie» where
   root := `tests.TestGradClipTie
   moreLinkArgs := xlaLink
 
+/-- `stochastic_depth.md` §5b, the gate that document left open: **the drop mask is SHARDED, not
+    replicated.** The mask is per-EXAMPLE and rides in the PARAMETER blob, where the DP shim's rule
+    ("x and the labels shard, everything between replicates") copied it to every replica.
+
+    ⚠ The duplicated-batch `*-dp-check` gates are structurally blind to this — same rows on both
+    replicas means sharded and replicated agree bit-exact — and `shard-check` needs the gated slot
+    linear in the gradient, false for the RMSProp variant this net wants. So: duplicate the DATA,
+    make only the MASK asymmetric, and **swap the halves**. A sharded mask is swap-invariant TO THE
+    BIT (f32 addition is commutative, so the 2-replica mean is order-free); a replicated one is not.
+    Optimizer-agnostic — it compares two runs of the same graph, never a device answer to a host one.
+
+        lake build drop-shard-check && scripts/det_shim.sh /tmp/detshim
+        CUDA_VISIBLE_DEVICES=0,1 PJRT_REPLICAS=2 LD_LIBRARY_PATH=/tmp/detshim \
+          .lake/build/bin/drop-shard-check
+        PJRT_DP_NO_MASK_SHARD=1 … .lake/build/bin/drop-shard-check    # the control, rc=1 -/
+lean_exe «drop-shard-check» where
+  root := `tests.TestDropShardCheck
+  moreLinkArgs := xlaLink
+
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a

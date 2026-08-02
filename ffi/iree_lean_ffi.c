@@ -1101,11 +1101,26 @@ extern int pjrt_ffi_invoke_f32_dp(
     const int32_t*, const int64_t*, const float* const*,
     const unsigned char*, int, const int64_t*, float* const*) __attribute__((weak));
 
-LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v_dp(
+// ▶ `_dp2` — the `_dp` entry plus `n_shard_tail`. RENAMED rather than extended in place, per §4's
+// rule for `pjrt_ffi_invoke_f32_resident_v2`: a stale `.so` paired with a new binary would shift
+// every argument, and that is not a link error, it is garbage. A rename makes it a link error.
+//
+// ⚠⚠ WHY IT EXISTS. `n_shard_tail` is the number of TRAILING param-list inputs that are
+// per-example and must therefore be SHARDED like `x`, not replicated like the parameters. Today
+// that is exactly the stochastic-depth drop masks (`VerifiedTrain`'s `dropShapes`, `tensor<Bxf32>`
+// each), which ride in the parameter blob and so were swept up by "everything between x and the
+// labels is replicated". Every replica received replica 0's mask and applied it to its OWN rows —
+// `planning/stochastic_depth.md` §5b's predicted defect, sitting in the shim before any DP drop
+// render existed to expose it.
+//
+// ⚠ `PJRT_DP_NO_MASK_SHARD=1` forces the OLD behaviour. It is a deliberate fault-injection knob in
+// the `PJRT_FFI_FAULT` tradition, and it exists because a gate nobody has watched go red is not
+// evidence: `lake build drop-shard-check` must pass without it and FAIL with it.
+LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v_dp2(
     b_lean_obj_arg sess_obj, b_lean_obj_arg fn_name_obj,
     b_lean_obj_arg x_ba, b_lean_obj_arg params_ba, b_lean_obj_arg shapes_ba,
     b_lean_obj_arg y_ba, size_t batch, size_t d0, size_t d3, size_t replicas,
-    size_t n_resident,
+    size_t n_resident, size_t n_shard_tail,
     lean_obj_arg world) {
   (void)world;
   if (!pjrt_ffi_invoke_f32_dp) {
@@ -1149,6 +1164,26 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v_dp(
   in_data[1 + n_params] = onehot;
   shard[1 + n_params] = 1;                        // labels are sharded
 
+  // ▶ The per-example TAIL of the param list — the drop masks. Marked by COUNT, not by index or by
+  // shape: an index would be per-net (it depends on nParams/nScalars/nBnStats) and a shape test
+  // ("outer dim == batch") would sweep up any parameter that happens to be `batch`-sized. The
+  // count comes from the driver, which is the one place that knows how many mask slots it packed.
+  {
+    const char* off_env = getenv("PJRT_DP_NO_MASK_SHARD");
+    int faulted = (off_env && off_env[0] == '1');
+    if (n_shard_tail > (size_t)n_params) {
+      free(onehot); free(input_ranks); free(dims); free(in_data); free(shard);
+      return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+          "DP train step: n_shard_tail exceeds the parameter count")));
+    }
+    if (!faulted)
+      for (size_t k = 0; k < n_shard_tail; k++)
+        shard[1 + n_params - 1 - (int)k] = 1;
+    else if (n_shard_tail)
+      fprintf(stderr, "[pjrt_ffi] ⚠ PJRT_DP_NO_MASK_SHARD=1 — %zu per-example tail input(s) "
+                      "REPLICATED instead of sharded (fault injection)\n", n_shard_tail);
+  }
+
   lean_object* result = lean_alloc_sarray(1, (size_t)n_total * 4, (size_t)n_total * 4);
   float* out = (float*)lean_sarray_cptr(result);
   int64_t* out_totals = (int64_t*)malloc(n_params * sizeof(int64_t));
@@ -1157,6 +1192,14 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v_dp(
   for (int i = 0; i < n_params; i++) {
     int rank = sp[sp_idx++]; int64_t sz = 1;
     for (int d = 0; d < rank; d++) sz *= sp[sp_idx++];
+    // ⚠⚠ A SHARDED param-list input that is ALSO an output takes the PER-REPLICA size.
+    // Outputs are read from replica 0 only, so it returns its OWN `elems/replicas` rows, not
+    // the global buffer it was handed a slice of. Until the drop masks arrived NO sharded
+    // input was ever an output (`x` and the labels are inputs only), so this walk could take
+    // the declared size for granted. It caught itself rather than reading past the end:
+    // `output 740 size mismatch: graph 128 bytes, caller 256` — the same G4 guard that caught
+    // the missing BN arity when `shard-check` was generalised to the batch-BN nets.
+    if (shard[1 + i] && replicas > 1) sz /= (int64_t)replicas;
     out_totals[i] = sz; outputs[i] = out + off; off += sz;
   }
 

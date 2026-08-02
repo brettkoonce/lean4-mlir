@@ -91,6 +91,7 @@ a live thread unless §0.3 says it is owed.
 | **§0.2** | ✅ grad clip — DONE; what it cost, and the three traps it found |
 | **§0.3** | ⚠ what is OWED, collected in one place |
 | **§0.5** | ✅ DP ImageNet recipe parity — and the DP control it broke |
+| **§0.6** | ✅ stochastic depth's DP shard gate — §5b's predicted defect, found |
 | **§0.4** | ✅ what landed 2026-08-02, with the findings worth keeping |
 
 ### §0.1 ⚠⚠ THE THING THAT CHANGES WHAT "NEXT" MEANS: **this box cannot do long runs**
@@ -263,7 +264,7 @@ does not help here; the norm is a property of the *data*, so drive it with a sca
 | owed | why it matters | where |
 |---|---|---|
 | ~~⛔ the four ImageNet renders bake `wd = 1e-4`~~ ✅ **CLOSED 2026-08-02** | all four bake **0.05** now; the re-render diff was exactly 4 lines, all `%wd`, every other artifact byte-identical, and both pairs re-gate bit-exact at 4 replicas | §0.5 |
-| ⛔ stochastic depth's **asymmetric-batch DP gate** | the duplicated-batch `*-dp-check` harnesses are structurally blind to a mask that is replicated instead of sharded, and `shard-check` needs the gated slot linear in the gradient — **false for RMSProp's buffer**, which is the net that wants both. The construction does not exist | `stochastic_depth.md` §5b |
+| ~~⛔ stochastic depth's **asymmetric-batch DP gate**~~ ✅ **CLOSED 2026-08-02** | `lake build drop-shard-check` — and §5b's prediction was right: the masks WERE being replicated, in the shim, before any DP drop render existed. Both existing constructions were unusable and the answer was neither of them | §0.6 |
 | ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
 | ⚠⚠ **every DP render's sum-not-mean control is BLIND once a clip is on** | a NEW hole, found by running it: grad clip is scale-invariant where it saturates, so the standard control passes bit-exact on a deliberately broken collective. The composed control (`perturb_clip.py hi` + sum-not-mean) is documented in `TestViTDpCheck.lean`. ⚠ **Any future clipped render must use it** | §0.5 |
 | ⚠ the **`emadp` DP peers** on ViT and EfficientNet | `vitAdamVariant 32 2 true` names ViT's; nothing renders either | §0.4 |
@@ -272,6 +273,58 @@ does not help here; the norm is a property of the *data*, so drive it with a sca
 | ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
 
 ---
+
+### §0.6 ✅ STOCHASTIC DEPTH'S DP SHARD GATE (2026-08-02) — §5b was right, and the defect was real
+
+`stochastic_depth.md` §5b left this as *"an open design question [that] should be settled before the
+render lands, not after"*. Settled, and the prediction held: **the drop masks were being
+REPLICATED, not sharded** — in the shim, before any DP drop render existed to expose it.
+
+The masks ride in the PARAMETER blob, and the DP shim's rule is *"`x` and the labels shard,
+everything between replicates"*. **Two halves, both needed for it to be silent**: the shard flag was
+never set, and the buffer was sized at the PER-DEVICE batch so it type-checked as a replicated
+input. Fixed by `pjrt_ffi_invoke_f32_dp2` (renamed, taking `n_shard_tail` — §4's rule) plus global
+sizing. ⚠ Once the buffer is global, **replication is not expressible**: the shim refuses on arity,
+so the sizing fix is what turns the flag from a correctness question into a type-checked one.
+
+**▶ The construction, and it is optimizer-agnostic — which §5b said did not exist.** Duplicate the
+DATA, make only the MASK asymmetric, and SWAP the halves. A sharded mask is swap-invariant TO THE
+BIT (the 2-replica collective is `(a+b)/2` and f32 addition is COMMUTATIVE); a replicated one is
+not. ⚠ Commutativity, *not* associativity — above two replicas the reduction order changes under a
+permutation, so the harness refuses there. It compares two runs of the SAME graph rather than a
+device answer against a host one, so **no linearity is required** and it transfers to `emarmsdrop`.
+
+⚠⚠ **And it needs a second check pulling the other way.** Swap-invariance alone is satisfied by a
+mask that reaches NOTHING — §7b's ones-mask blindness one level up. What witnesses that replica 0
+actually received a different mask is the replica-0-LOCAL output: the batch statistics and `%loss`,
+which must MOVE.
+
+| | measured |
+|---|---|
+| ① all-reduced `θ'/m'/v'` BIT-IDENTICAL under the swap | **12,061,074 / 12,061,074** |
+| ② `%loss` + batch stats MOVED (replica-0-local) | 2.430799 → 2.428901 · **38,966 / 42,016** |
+| ⚠ CONTROL `DROP_FAULT=replicate` (the pre-fix world) | ① fires, **12,044,574** move, rel 0.691, rc=1 |
+| ⚠ CONTROL `PJRT_DP_NO_MASK_SHARD=1` (flag off, buffer global) | the shim REFUSES on arity, rc=1 |
+
+Both controls pass ②, so **① discriminates and ② is anti-vacuity.** Neither is evidence alone.
+
+**Three findings:**
+
+1. ⚠⚠ **A SHARDED INPUT THAT IS ALSO AN OUTPUT NEEDS THE PER-REPLICA SIZE ON THE WAY BACK.** The
+   drop masks are the first — `x` and the labels are inputs only — so the DP output walk had always
+   taken the declared size for granted. It **caught itself** (`output 740 size mismatch: graph 128
+   bytes, caller 256`) rather than reading past the end: the shim's G4 guard, third time.
+2. ⚠ **`%loss` IS REPLICA-LOCAL AND THE RETURN LAYOUT HIDES IT.** `θ' ++ m' ++ v' ++ [%loss, %bc1,
+   %bc2] ++ bnstats`, so any range reaching the scalars sweeps `%loss` in. Counting it as
+   all-reduced made ① read **one** differing output of 12,061,077 — and *one* is the tell, because a
+   wiring defect moves millions.
+3. ⚠ **§5b'S FRAMING WAS THE OBSTACLE.** It asked which of two EXISTING constructions to use, and
+   both answers were "neither". Dropping the requirement that the gate compare against a
+   host-computable or single-device answer removes the linearity constraint entirely. **When two
+   known constructions both fail, check whether the property they share is actually required.**
+
+⚠ Still single-device for the FEATURE: this gates the DP render's mask plumbing, it is not a DP
+stochastic-depth training run, and ConvNeXt/ViT still need the §2b batched-index move first.
 
 ### §0.5 ✅ DP IMAGENET RECIPE PARITY (2026-08-02) — and the control it broke
 

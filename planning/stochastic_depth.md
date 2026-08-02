@@ -202,7 +202,7 @@ how the mnv2 swap shipped a 160-param forward past a green tie.**
 | **control**: perturb one `keep_i` | the known-answer gate fires; verify it goes red | ✅ `--break`, 35/40 |
 | **control**: all-zero mask on one site | that branch's contribution vanishes ⇒ the site is where it is claimed to be | ✅ **gate B**, + a misplaced render that goes red |
 | **prefix audit unchanged** | §3 held | ✅ 1953-line prefix, both scales |
-| **asymmetric-batch DP gate** (§5b) | the mask is SHARDED, not replicated — ⚠ needs a construction that does not exist yet for the RMSProp nets | ⛔ **still open** — single-device only so far |
+| **asymmetric-batch DP gate** (§5b) | the mask is SHARDED, not replicated | ✅ **DONE 2026-08-02** — `lake build drop-shard-check`, and it found the defect §5b predicted. §7d |
 | **residency gate unchanged** | masks stayed off the resident path | ✅ 2026-08-02 |
 
 ### ✅ 7a. The interior gates — DONE 2026-08-02, `lake build droppath-tie`
@@ -331,3 +331,85 @@ required for the headline. On the verified side ConvNeXt's Imagenette run is *ov
 regulariser is directionally right there and its effect should be *measurable* at Imagenette scale,
 which makes it cheap to evaluate. That is the argument for doing it; it is not an argument that it
 closes the ImageNet gap on its own.
+
+
+---
+
+### ✅ 7d. THE DP SHARD GATE — DONE 2026-08-02, and §5b's prediction was CORRECT
+
+§5b left this as *"an open design question [that] should be settled before the render lands, not
+after"*, on the grounds that the duplicated-batch gates are blind to it and `shard-check` needs a
+linearity EfficientNet's RMSProp variant does not have. Both halves of that turned out right, and
+the answer was a construction neither gate uses.
+
+#### ⛔ The defect was REAL and it was in the shim, before any DP drop render existed
+
+The masks ride in the **parameter blob** (`dropShapes` is appended to `adamShapes`), and the DP
+shim's rule is *"`x` and the labels shard, everything between them replicates"*. So every replica
+would have received replica 0's mask and applied it to its own rows. **Two halves, and both were
+needed for it to be silent:**
+
+1. the shard flag was never set on the mask inputs;
+2. `dropShapes` and `dropScales` were sized at the **per-device** batch, so the buffer type-checked
+   as a replicated input and nothing complained.
+
+Fixed by `pjrt_ffi_invoke_f32_dp2` (a **renamed** entry taking `n_shard_tail`, per §4's rule — a
+stale `.so` against a new binary shifts every argument, which is garbage rather than a link error)
+plus sizing the mask buffer at the **global** batch. ⚠ Once the buffer is global, replication is not
+expressible: the shim refuses on arity. **The sizing fix is what turns the flag from a correctness
+question into a type-checked one.**
+
+#### ▶ The construction — optimizer-agnostic, which is what §5b said did not exist
+
+Duplicate the **data** and make only the **mask** asymmetric, then **swap the halves**:
+
+> run 1: `[x|x]` with `[m₀|m₁]`  ·  run 2: `[x|x]` with `[m₁|m₀]`
+
+| | run 1 | run 2 | swap-invariant? |
+|---|---|---|---|
+| sharded (correct) | `mean(g(x,m₀), g(x,m₁))` | `mean(g(x,m₁), g(x,m₀))` | **YES, bit-identical** |
+| replicated (defect) | `g(x,m₀)` | `g(x,m₁)` | no |
+
+Bit-identity is an **argument**: at two replicas the collective is `(a+b)/2` and IEEE-754 addition
+is **commutative**. ⚠ Commutativity, *not* associativity — above two replicas the reduction is a
+tree whose order a permutation changes, so the harness refuses at `DROP_REPLICAS ≠ 2`.
+**No linearity is required anywhere**, because it compares two runs of the SAME graph rather than a
+device answer against a host one — so it transfers to `emarmsdrop` unchanged.
+
+#### ⚠⚠ AND IT NEEDS A SECOND CHECK PULLING THE OTHER WAY
+
+Swap-invariance alone is satisfied by a mask that **reaches nothing** — the ones-mask blindness of
+§7b one level up. What witnesses that replica 0 really received a *different* mask is the output
+that is **replica-0-LOCAL**: the batch statistics (never all-reduced, read from replica 0 only) and
+`%loss` (report-only, computed per replica). Those must **MOVE**.
+
+| | measured |
+|---|---|
+| ① all-reduced `θ'/m'/v'` BIT-IDENTICAL under the swap | **12,061,074 / 12,061,074** |
+| ②a `%loss` MOVED (replica-0-local) | 2.430799 → 2.428901 |
+| ② batch statistics MOVED | **38,966 / 42,016** |
+| mask halves distinguishable (anti-vacuity refusal) | 50 of 288 slots differ |
+| ⚠ CONTROL `DROP_FAULT=replicate` — the pre-fix world reconstructed | ① fires, **12,044,574 / 12,061,074** move, rel 0.691, rc=1 |
+| ⚠ CONTROL `PJRT_DP_NO_MASK_SHARD=1` — flag off, buffer global | the shim **REFUSES on arity**, rc=1 |
+
+⚠ Both controls pass ② — replica 0 still sees a different mask between the two runs — so **① is the
+discriminating gate and ② is the anti-vacuity one.** Neither is evidence alone.
+
+#### Three findings
+
+1. ⚠⚠ **A SHARDED INPUT THAT IS ALSO AN OUTPUT NEEDS THE PER-REPLICA SIZE ON THE WAY BACK.** The
+   drop masks are the first: `x` and the labels are inputs only, so the DP output walk had always
+   been able to take the declared size for granted. It **caught itself** —
+   `output 740 size mismatch: graph 128 bytes, caller 256` — rather than reading past the end. That
+   is the shim's G4 guard earning its keep a third time (it also caught the missing BN arity when
+   `shard-check` was generalised).
+2. ⚠ **`%loss` IS REPLICA-LOCAL, NOT ALL-REDUCED, AND THE RETURN LAYOUT HIDES IT.** The layout is
+   `θ' ++ m' ++ v' ++ [%loss, %bc1, %bc2] ++ bnstats`, so any range reaching the scalars sweeps
+   `%loss` up with them. Counting it as all-reduced made ① read **one** differing output of
+   12,061,077 — and *one* is the tell, because a wiring defect moves millions. It belongs with the
+   batch statistics, and it is extra evidence rather than noise.
+3. ⚠ **§5b'S FRAMING WAS THE OBSTACLE.** It asked which of the two EXISTING constructions to use,
+   and both answers were "neither". Dropping the requirement that the gate compare against a
+   host-computable or single-device answer — comparing two DP runs of the same graph instead —
+   removes the linearity constraint entirely. *When two known constructions both fail, check
+   whether the property they share is actually required.*

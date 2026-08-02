@@ -60,6 +60,12 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("emarmsdp64", true, true, false)
     -- stochastic depth, and all three axes at once
   , ("adamdrop", false, false, true)
+    -- ⚠ `adamdpdrop` — the DP drop render (`stochastic_depth.md` §5b's gate vehicle). It is the
+    -- `dp` and `drop` markers MEETING, which is the shape that broke `sd`: `rms` ++ `dp` spelled
+    -- `rmsdp` ⊇ "sd". `dp` ++ `drop` spells `dpdrop`, which contains neither "sd" nor "rms" nor
+    -- an "ema" prefix — but that is the reasoning the earlier collision falsified, so it is run.
+  , ("adamdpdrop", false, false, true)
+  , ("rmsdpdrop64", false, true, true)
   , ("emarmsdrop64", true, true, true)
     -- ▶ v1.4 `wx` = timm no_weight_decay (`vitWdDecays`). ⚠ It needs NO driver predicate of its
     -- own — excluding a param binds a different CONSTANT to `%wd` and changes no arity, no type
@@ -115,6 +121,12 @@ private def table : List (String × Bool × Bool × Bool) :=
 #guard sdOn  "adamdp128x4wxclip" == false
 #guard emaOn "adamdp128x4wxclip" == false
 -- ⚠ and the one that would bite if `clip` ever LED rather than trailed, the `dropema` shape:
+-- ⚠ the DP drop spelling: `dp` ++ `drop` must not resurrect the `sd` collision, and must not
+-- invent an rms/ema axis that is not there.
+#guard sdOn  "adamdpdrop" == true
+#guard rmsOn "adamdpdrop" == false
+#guard emaOn "adamdpdrop" == false
+#guard (("adamdpdrop".splitOn "sd").length == 1)      -- the OLD marker does not fire either
 #guard emaOn "clipema" == false
 #guard emaOn "emaclip" == true
 

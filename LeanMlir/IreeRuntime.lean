@@ -198,13 +198,23 @@ opaque linearTrainStepV
     `nResident`: see `mlpTrainStepV`. Each replica keeps its own retained set on
     its own device, which is where the bigger half of the win is — today the full
     `[θ|m|v]` is pushed to *every* replica every step, an O(N−1) cost against
-    O(1) compute (§2d.3a: 4 GPUs currently buy 1.46×). -/
-@[extern "lean_iree_mlp_train_step_v_dp"]
+    O(1) compute (§2d.3a: 4 GPUs currently buy 1.46×).
+
+    `nShardTail`: how many TRAILING entries of the param list are PER-EXAMPLE and must be sharded
+    like `x` rather than replicated like the parameters. Today that is exactly the stochastic-depth
+    drop masks. ⚠ It is a COUNT supplied by the driver rather than something the shim infers: an
+    index would be per-net and a shape test ("outer dim == batch") would sweep up any parameter
+    that happens to be batch-sized. Default 0, so every existing call site is unchanged.
+
+    ⚠ The extern is `_dp2`, not `_dp`, because this ADDED AN ARGUMENT — §4's rule for
+    `pjrt_ffi_invoke_f32_resident_v2`: a stale `.so` against a new binary shifts every argument,
+    which is garbage rather than a link error. A rename makes it a link error. -/
+@[extern "lean_iree_mlp_train_step_v_dp2"]
 opaque mlpTrainStepVDP
   (sess : @& IreeSession) (fnName : @& String)
   (x : @& ByteArray) (params : @& ByteArray) (shapes : @& ByteArray) (y : @& ByteArray)
   (batch : USize) (d0 : USize) (d3 : USize) (replicas : USize)
-  (nResident : USize := 0) : IO ByteArray
+  (nResident : USize := 0) (nShardTail : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@mlp_train_step`
     (`StableHLO.mlpTrainStepText`) through the generic IREE invoke. `params` is

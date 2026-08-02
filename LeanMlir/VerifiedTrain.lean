@@ -759,7 +759,13 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- ⚠ The drop scales go LAST, after the BN stats, matching `enetFwdSig`/`inSig`'s placement.
   -- Anywhere else and they capture an existing positional slot — the mnv2 `convBias` failure
   -- (§2m), which is silent until the driver mis-walks the blob.
-  let dropShapes : Array (Array Nat) := Array.replicate nDrop #[bs]
+  -- ⚠⚠ `gbs`, NOT `bs`, AND THAT IS THE OTHER HALF OF §5b'S DEFECT. The mask is per-EXAMPLE, so
+  -- the buffer the shim splits has to hold the GLOBAL batch: replica r takes rows
+  -- [r*bs, (r+1)*bs) of each `tensor<gbs xf32>` mask, exactly as it does of `x`. Sized at `bs` the
+  -- shim would have nothing to split — it would refuse on the outer dim, or (worse, before the
+  -- shard flag existed) hand every replica the same `bs` rows. At `replicas = 1` this IS `bs`, so
+  -- every existing run and every committed artifact is untouched.
+  let dropShapes : Array (Array Nat) := Array.replicate nDrop #[gbs]
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
                                 ++ (if emaOn then net.paramShapes else #[])
                                 ++ Array.replicate nScalars #[]
@@ -913,7 +919,7 @@ it and its .epoch marker aside and start fresh."
   -- The drop-scale slots are reserved here and refilled per step, exactly like the scalar and BN
   -- regions — a fresh `F32.concat` per step would cost two whole-blob host memcpys (the mistake
   -- `planning/xla_pjrt_ladder.md` §8 measured at 272 MB/step on R34).
-  let dropSlots ← F32.const (nDrop * bs).toUSize 1.0
+  let dropSlots ← F32.const (nDrop * gbs).toUSize 1.0
   pbuf := if hasBn
           then F32.concat #[thetamv, scalarSlots, runningBnStats, dropSlots]
           else F32.concat #[thetamv, scalarSlots, dropSlots]
@@ -979,9 +985,15 @@ it and its .epoch marker aside and start fresh."
       -- covers only the leading `nRegions * P` tensors): they change every step, so retaining them
       -- would be wrong rather than merely wasteful.
       if sdOn then
-        let sc ← F32.dropScales net.dropKeeps bs (ep * nb + bi + 1).toUSize
+        -- ⚠ drawn at the GLOBAL batch: `dropScales` is site-major (`bs` consecutive values per
+        -- site), so a `gbs`-wide draw gives each mask input a contiguous global row block that the
+        -- shim splits per replica. Drawing at `bs` and letting the shim replicate would give
+        -- example i on replica 0 and example bs+i on replica 1 the SAME Bernoulli draw — masks
+        -- correlated across the global batch, which is a weaker regulariser and is not what the
+        -- reference computes.
+        let sc ← F32.dropScales net.dropKeeps gbs (ep * nb + bi + 1).toUSize
         pbuf ← F32.blit pbuf (nRegions * net.nParams + nScalars + nBnStats).toUSize sc 0
-                 (nDrop * bs).toUSize
+                 (nDrop * gbs).toUSize
       let augSeed := (ep * nb + bi + 1).toUSize
       -- ImageNet takes the whole batch off the wire, already augmented and normalized by the shim,
       -- so it bypasses BOTH the slice and the augmentation below. That is deliberate: the transform
@@ -1006,8 +1018,15 @@ it and its .epoch marker aside and start fresh."
             | _ => pure xbRaw
           pure (x, if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs)
       let out ← if replicas > 1
+        -- ⚠ `nDrop` is the SHARDED TAIL. The drop masks are per-EXAMPLE, so under data parallelism
+        -- replica r must get mask rows [r*bs, (r+1)*bs) — the same split `x` gets — not a copy of
+        -- replica 0's. They ride in the parameter blob (`dropShapes` above), which is exactly why
+        -- they were being replicated: the DP shim's rule was "x and the labels shard, everything
+        -- between them replicates". `planning/stochastic_depth.md` §5b predicted this; it was true
+        -- of the shim before any DP drop render existed to expose it. At `nDrop = 0` the argument
+        -- is inert and every non-SD DP run is byte-identical to before.
         then IreeSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
-               gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize nResident
+               gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize nResident nDrop.toUSize
         else IreeSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
                bs.toUSize d0.toUSize nc.toUSize nResident
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']

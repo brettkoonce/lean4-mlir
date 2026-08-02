@@ -162,6 +162,7 @@ jobs:
               verified_mlir/efficientnet_rms_train_step.mlir \
               verified_mlir/efficientnet_emarms_train_step.mlir \
               verified_mlir/efficientnet_adamdrop_train_step.mlir \
+              verified_mlir/efficientnet_adamdpdrop_train_step.mlir \
               verified_mlir/efficientnet_drop_fwd.mlir \
               verified_mlir/efficientnet_drop_fwd_eval.mlir \
               verified_mlir/enetin_emarms64_train_step.mlir \

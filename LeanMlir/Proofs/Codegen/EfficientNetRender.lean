@@ -1471,6 +1471,28 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" (sd := true))
 
+-- ▶ **THE DATA-PARALLEL PEER — and it exists to be GATED, not (yet) to be run.**
+-- `stochastic_depth.md` §5b left the DP question open with the words *"this is an open design
+-- question and it should be settled before the render lands, not after"*. This render is that
+-- settlement's other half: the mask is a PER-EXAMPLE input, so under data parallelism it must be
+-- **SHARDED like `x`**, not replicated like the parameters.
+--
+-- ⚠⚠ AND IT WAS REPLICATED. The masks ride in the parameter blob (`VerifiedTrain`'s `dropShapes`
+-- are appended to `adamShapes`), and the DP shim marks exactly `x` and the labels sharded and
+-- everything between them replicated (`iree_lean_ffi.c`). So every replica would have received
+-- replica 0's mask and applied it to its OWN rows — the defect §5b predicted, present in the shim
+-- before any DP drop render existed to expose it. `pjrt_ffi_invoke_f32_dp2` takes a sharded-tail
+-- count now, and `lake build drop-shard-check` is the gate.
+--
+-- ⚠ 2 replicas, deliberately: the gate's known answer is that swapping the two mask halves leaves
+-- a correctly-sharded DP step BIT-IDENTICAL, which rests on f32 addition being COMMUTATIVE
+-- (`a+b == b+a` exactly). At more than two replicas the reduction is a tree whose ORDER changes
+-- under a permutation, and associativity does not hold — so the known answer is exact at 2 and
+-- only approximate above it.
+#eval IO.FS.writeFile "verified_mlir/efficientnet_adamdpdrop_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+    "0.100000" "-0.010000" "32.0" (replicas := 2) (sd := true))
+
 -- The forward peers. ⚠ These exist so the SD variant has its OWN `forward ⊂ train-step` pair —
 -- `stochastic_depth.md` §3's design, and the reason is that the prefix audit is one of the two
 -- load-bearing structural gates in the repo (it caught `resnet34_fwd` and `mobilenetv2_fwd`
