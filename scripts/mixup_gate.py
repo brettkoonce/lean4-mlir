@@ -36,6 +36,11 @@ import argparse, os, subprocess, sys
 import numpy as np
 
 AP = argparse.ArgumentParser()
+# ⚠ R34's shim by default, and that is deliberate rather than left over: the mixing code is
+# `generateShim`'s and is identical in all five, so the CHEAPEST shim (no AutoAugment/RandAugment
+# to run per image) is the right instrument for gating the producer. Point --script at another
+# net's to re-run it there. ⚠ Note those nets bake `SHIM_MIX=both` as their default, so the
+# "inert when off" gate must pass SHIM_MIX=off explicitly on them, not rely on the default.
 AP.add_argument("--script", default=os.environ.get(
     "SHIM_SCRIPT", "jax/.lake/build/generated_resnet34_imagenet_shim.py"))
 AP.add_argument("--python", default=os.environ.get("SHIM_PY", ".venv/bin/python3"))

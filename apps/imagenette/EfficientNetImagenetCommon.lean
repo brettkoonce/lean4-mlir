@@ -18,7 +18,7 @@ top of the usual missing mixup/cutmix/EMA. Do not read a number from this as an 
 reproduction — read it as the verified renderer training the same architecture.
 
 ```bash
-(cd jax && lake exe resnet34-imagenet default --shim)
+scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build efficientnet-imagenet-verified-xla
 cat .lake/build/enetin_adamdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)

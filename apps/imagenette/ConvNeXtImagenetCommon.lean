@@ -23,7 +23,7 @@ pipeline-level augs (RandAugment geometric, random erasing) DO come across free 
 reference's own 80-epoch no-RandAugment run reached 75.93%; do not compare this to ConvNeXt-T's ~82%.
 
 ```bash
-(cd jax && lake exe resnet34-imagenet default --shim)   # the shim is net-independent
+scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build convnext-imagenet-verified-xla
 cat .lake/build/cnxin_adamdp_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)

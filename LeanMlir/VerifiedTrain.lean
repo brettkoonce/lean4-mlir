@@ -40,11 +40,16 @@ inductive VerifiedData where
       1,281,167 train / 50,000 val at 224².
 
       Unlike every case above, this one is NOT preloaded: at f32 the train split is ~938 GiB of host
-      RAM against a 188 GB box, so it cannot be. Batches arrive over a pipe from
-      `.lake/build/generated_resnet34_imagenet_shim.py`, already RandomResizedCrop'd, flipped,
-      mean/std-normalized and flattened to `(B, 3·224·224)` — **so the Lean side does no
+      RAM against a 188 GB box, so it cannot be. Batches arrive over a pipe from **that net's own**
+      `jax/.lake/build/generated_*_imagenet_shim.py` (`VerifiedNet.shimScript`), already
+      augmented, mean/std-normalized and flattened to `(B, 3·224·224)` — **so the Lean side does no
       augmentation at all** for this dataset, which is the point: there is exactly one definition of
       the transform and it is the one the JAX reference trainer uses.
+
+      ⚠ *Per net*, and that is the part that was wrong until 2026-08-02: the script was hardcoded to
+      ResNet-34's, so every net got RRC+hflip regardless of what its reference asked for. The
+      transform is still single-definition — it is generated from the same `TrainConfig` the
+      reference trainer runs — but WHICH definition is now a property of the net.
 
       The VAL split IS preloaded (49,920 imgs after tfds `drop_remainder` ⇒ 30 GB, which fits), so
       the eval loop is unchanged. 49,920 is the same count the reference run reported. -/
@@ -90,6 +95,24 @@ structure VerifiedNet where
       `VerifiedSpec` sits downstream of this file, so the renderer cannot share the definition by
       import without inverting the dependency. -/
   dropKeeps : Array Float := #[]
+  /-- **The generated ImageNet batch shim this net streams**, as a bare filename under
+      `jax/.lake/build/` — e.g. `"generated_vit_tiny_imagenet_shim.py"`. Required on every
+      `.imagenet` net; ignored (and empty) on every other dataset, which loads from disk.
+
+      ⚠⚠ **THIS FIELD EXISTS BECAUSE ITS DEFAULT USED TO BE R34's, FOR EVERY NET.** `spawnShim`
+      hardcoded `generated_resnet34_imagenet_shim.py` and `$SHIM_SCRIPT` was set nowhere, so a
+      "verified EfficientNet / ViT / ConvNeXt ImageNet run" streamed **ResNet-34's** augmentation —
+      RandomResizedCrop + hflip and nothing else. Their references do not: EfficientNet's sets
+      `useAutoAugment`, ViT's sets RandAugment m9/mstd0.5/inc1 + random erasing + repeated aug ×3,
+      ConvNeXt's sets RandAugment + random erasing. The capability was there all along
+      (`JaxCodegen.generateShim` honours every one of those flags); what was missing was the
+      wiring, so the recipe matrix read ✅ on a capability rather than on the state.
+
+      **There is deliberately no fallback.** An empty value on an `.imagenet` net REFUSES at spawn
+      rather than substituting anything, because the failure this replaces was silent: the wrong
+      augmentation compiles, streams, trains and descends. `scripts/gen_shims.sh` writes all five;
+      `$SHIM_SCRIPT` still overrides with an explicit path, for a hand-placed or probe shim. -/
+  shimScript : String := ""
 
 /-- Training hyperparameters — the `TrainConfig` of the verified path. Mirrors the
     reference `TrainConfig`; kept as its own object so a net is a (spec, config) pair. -/
@@ -209,17 +232,26 @@ def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
     The preamble (`LMSH` | version | batch | flat) is checked rather than skipped: a batch or
     resolution mismatch between the render and the shim would otherwise read as garbage pixels and
     look like a broken net. Same reasoning as the FFI's G4 arity guard. -/
-def spawnShim (split : String) (batch flat seed : Nat)
+def spawnShim (shimScript : String) (split : String) (batch flat seed : Nat)
     (shard : Option (Nat × Nat) := none) (nclasses : Nat := 0) : IO IO.FS.Handle := do
+  -- `shimScript` is the NET'S OWN generated shim (`VerifiedNet.shimScript`), not a shared default.
+  -- An empty one refuses here rather than falling back: R34's shim was the fallback for years and
+  -- it silently gave every other net R34's augmentation. See that field's docstring.
+  if shimScript.isEmpty && (← IO.getEnv "SHIM_SCRIPT").isNone then
+    throw <| IO.userError "imagenet shim: this net has no `shimScript`. Every .imagenet net must \
+name the shim generated from ITS OWN reference recipe — there is no default, because the default \
+used to be ResNet-34's and it silently streamed RRC+hflip to nets whose references use \
+AutoAugment / RandAugment / random erasing / repeated augmentation. Set it on the VerifiedNetSpec \
+(see `VerifiedNet.shimScript`), or point $SHIM_SCRIPT at an explicit path."
   -- `jax/` is its own lake project, so `--shim` writes under ITS build dir; a run from the repo
-  -- root finds it there. $SHIM_SCRIPT overrides for a hand-placed or per-net shim.
+  -- root finds it there. $SHIM_SCRIPT overrides with a full path, for a hand-placed or probe shim.
   let candidates : List System.FilePath := match ← IO.getEnv "SHIM_SCRIPT" with
     | some p => [p]
-    | none   => ["jax/.lake/build/generated_resnet34_imagenet_shim.py",
-                 ".lake/build/generated_resnet34_imagenet_shim.py"]
+    | none   => [s!"jax/.lake/build/{shimScript}", s!".lake/build/{shimScript}"]
   let some script ← candidates.findM? (fun p => System.FilePath.pathExists p)
-    | throw <| IO.userError s!"imagenet shim not found (looked in {candidates}) — generate it with \
-`(cd jax && lake exe resnet34-imagenet default --shim)`, or set $SHIM_SCRIPT"
+    | throw <| IO.userError s!"imagenet shim not found (looked in {candidates}) — generate ALL \
+five with `scripts/gen_shims.sh`, or one with `(cd jax && lake exe <net>-imagenet default \
+--shim)`, or set $SHIM_SCRIPT"
   -- The interpreter must be the PINNED env (jax + tfds), not whatever `python3` is on PATH:
   -- the shim imports tensorflow_datasets and jax. $SHIM_PYTHON overrides; otherwise prefer the
   -- repo-local `.venv` (built off requirements-cuda-lock.txt) over the historical absolute path,
@@ -248,10 +280,46 @@ $SHIM_PYTHON at it — a bare `python3` off PATH will not have tfds."
   -- and the shim emits v1 byte-for-byte, which is why every existing run is untouched.
   let softEnv : Array (String × Option String) :=
     if nclasses > 0 then #[("SHIM_NCLASSES", some (toString nclasses))] else #[]
+  -- ── SHIM_MIX, and this only became load-bearing when the shims went per-net ──────────────────
+  --
+  -- A shim BAKES its config's mixing as the `SHIM_MIX` default: `off` for R34/mnv2/EfficientNet,
+  -- **`both`** for ViT and ConvNeXt, whose references run mixup+cutmix. And a mixed target is a
+  -- distribution, so the shim REFUSES it on wire v1 (`int32[batch]` cannot carry one) — on the
+  -- TRAIN split only, since `_MIX_ON` is `and training`.
+  --
+  -- ⚠ Before the per-net wiring every net ran R34's shim and this could not arise. With it, a
+  -- plain (wire v1) ViT/ConvNeXt ImageNet run would die at spawn — and the symptom is the useless
+  -- `shim closed the pipe after 0 of 16 bytes`, because the child's stderr is not captured. Found
+  -- by `scripts/shim_wiring_gate.py --stream`, before any trainer ran.
+  --
+  -- So: at v1, pass `SHIM_MIX=off` explicitly and SAY SO when the net's own default was not off.
+  -- At v2 pass nothing — the shim's baked default is that net's reference recipe, which is the
+  -- state we want. ⚠ Announced rather than silent: dropping a declared augmentation without
+  -- saying so is the same "matrix reads capability, not state" defect this whole thread fixes.
+  let mixDefault ←
+    if nclasses > 0 then pure "" else do
+      -- Read the producer rather than restate it (the mixup-λ lesson: recover, don't fit).
+      let txt ← IO.FS.readFile script
+      let key := "os.environ.get('SHIM_MIX', '"
+      match txt.splitOn key with
+      | _ :: rest :: _ => pure ((rest.splitOn "'").headD "")
+      | _              => pure ""
+  let mixEnv : Array (String × Option String) :=
+    if nclasses > 0 then #[] else #[("SHIM_MIX", some "off")]
+  if nclasses == 0 && split == "train" && mixDefault != "" && mixDefault != "off" then
+    match ← IO.getEnv "SHIM_MIX" with
+    | some m =>
+      if m.toLower != "off" then
+        throw <| IO.userError s!"SHIM_MIX={m} needs wire v2: a mixed target is a distribution and \
+this stream is int32 hard labels. Set SHIM_SOFT=1 (and the shim mixes by this net's own recipe), \
+or SHIM_MIX=off."
+    | none =>
+      IO.println s!"  ⚠ this net's recipe declares SHIM_MIX={mixDefault}; wire v1 cannot carry a \
+mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND its mixing."
   let child ← IO.Process.spawn {
     cmd := py.toString, args := #[script.toString], stdout := .piped, stdin := .null,
     env := #[("SHIM_BATCH", some (toString batch)), ("SHIM_SPLIT", some split),
-             ("SHIM_SEED", some (toString seed))] ++ shardEnv ++ softEnv }
+             ("SHIM_SEED", some (toString seed))] ++ shardEnv ++ softEnv ++ mixEnv }
   let h := child.stdout
   let pre ← readExact h 16
   let magic := String.ofList ((List.range 4).map (fun i => Char.ofNat (pre.get! i).toNat))
@@ -278,8 +346,11 @@ slides off by a factor of nClasses on every batch, so this refuses rather than r
   if sBatch != batch || sFlat != flat then
     throw <| IO.userError s!"imagenet shim MISMATCH: shim sends batch={sBatch} flat={sFlat}, \
 the render wants batch={batch} flat={flat} — refusing rather than reading misaligned pixels"
-  IO.println s!"  imagenet shim: {split} split, batch {sBatch}, {sFlat} floats/img (seed {seed})\
-{if nclasses > 0 then s!", wire v2 soft targets [{batch}x{nclasses}]" else ""}"
+  -- ⚠ The SCRIPT is printed, not just the shape. Every net used to resolve to R34's shim and the
+  -- banner said nothing about which one — so a run streaming the wrong augmentation looked exactly
+  -- like a run streaming the right one. This line is what makes the wiring readable from a log.
+  IO.println s!"  imagenet shim: {script} — {split} split, batch {sBatch}, {sFlat} floats/img \
+(seed {seed}){if nclasses > 0 then s!", wire v2 soft targets [{batch}x{nclasses}]" else ""}"
   pure h
 
 /-- One batch off the wire: `int32[batch]` labels then `float32[batch*flat]` images, in that order
@@ -317,14 +388,14 @@ def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
     ⚠ Each worker gets a DISTINCT seed (`seed + i`). With one shared seed every worker draws the
     same augmentation sequence, and since the shards hold different images that is not a
     correctness bug — but it needlessly correlates the crops across workers. -/
-def spawnShimSharded (split : String) (batch flat seed n : Nat) (nclasses : Nat := 0)
-    : IO (Array IO.FS.Handle) := do
+def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n : Nat)
+    (nclasses : Nat := 0) : IO (Array IO.FS.Handle) := do
   if n <= 1 then
-    pure #[← spawnShim split batch flat seed none nclasses]
+    pure #[← spawnShim shimScript split batch flat seed none nclasses]
   else
     let mut hs : Array IO.FS.Handle := #[]
     for i in [0:n] do
-      hs := hs.push (← spawnShim split batch flat (seed + i) (some (i, n)) nclasses)
+      hs := hs.push (← spawnShim shimScript split batch flat (seed + i) (some (i, n)) nclasses)
     IO.println s!"  imagenet shim: {n} sharded producers (round-robin over batches)"
     pure hs
 
@@ -341,9 +412,10 @@ def readShimBatchRR (hs : Array IO.FS.Handle) (k batch flat : Nat) (nclasses : N
     `(trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop?)` where
     `trainPix` is the stored per-example width of the *training* images (256² for
     Imagenette, `d0` otherwise) and `crop?` requests the 256²→224² center-crop. -/
-private def loadData (data : VerifiedData) (d0 : Nat) (dataDir : String) :
+private def loadData (net : VerifiedNet) (dataDir : String) :
     IO (ByteArray × ByteArray × Nat × ByteArray × ByteArray × Nat × Nat × Bool) := do
-  match data with
+  let d0 := net.d0
+  match net.data with
   | .imagenette =>
     let idir := dataDir ++ "/imagenette"
     -- Train split ships at 256² → randomCrop 256→224 + hflip (the training recipe);
@@ -379,7 +451,11 @@ private def loadData (data : VerifiedData) (d0 : Nat) (dataDir : String) :
     let flat := 3 * 224 * 224
     let vb := 256
     let nB := 195
-    let h ← spawnShim "validation" vb flat 0
+    -- ⚠ The VAL split takes the same per-net shim as train. It streams the center-crop path
+    -- (`training=False` ⇒ no RRC, no AutoAugment/RandAugment, no erasing), so the two nets whose
+    -- pipelines differ only in TRAIN augmentation drain an identical val set — but the crop rule
+    -- itself is per-config (`testCropRatio`), so the script still has to be the net's own.
+    let h ← spawnShim net.shimScript "validation" vb flat 0
     IO.println "  imagenet: draining the val split into RAM (~30 GB, one time)…"
     -- Reserve the exact final size and append each batch as it lands, rather than collecting all
     -- 195 chunks and folding `(· ++ ·)` over them at the end. The fold cost ~45 GB of pure
@@ -430,7 +506,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
                           s!".lake/build/{net.slug}_fwd_v.vmfb"
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    if synth then mkSynthData net.data d0 bs else loadData net.data d0 dataDir
+    if synth then mkSynthData net.data d0 bs else loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), mean-loss SGD lr={cfg.lr}, He init{if synth then " [SYNTH]" else ""}"
   (← IO.getStdout).flush
@@ -551,7 +627,7 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    loadData net.data d0 dataDir
+    loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} AdamW (packed θ|m|v), He init"
   (← IO.getStdout).flush
@@ -709,7 +785,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- `replicas` is read here and not with the other knobs below.
   let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    if synth then mkSynthData net.data d0 (bs * replicas) else loadData net.data d0 dataDir
+    if synth then mkSynthData net.data d0 (bs * replicas) else loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   -- LEAN_MLIR_G2_STEPS caps batches per epoch for gate G2. Deliberately NOT
   -- LEAN_MLIR_MAX_STEPS: that name already means "time a step window then exit"
@@ -898,7 +974,7 @@ it and its .epoch marker aside and start fresh."
   let shimNC := if softTargets then net.nClasses else 0
   let imgStreams : Array IO.FS.Handle ←
     if net.data == .imagenet then
-      spawnShimSharded "train" gbs (3 * 224 * 224)
+      spawnShimSharded net.shimScript "train" gbs (3 * 224 * 224)
         (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1) shimWorkers shimNC
     else pure #[]
   -- LEAN_MLIR_MAX_STEPS: run a short steady-state ms/step probe then exit. This is
@@ -1147,7 +1223,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let fwdSess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
                           s!".lake/build/{net.slug}_fwd_v.vmfb"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
-    loadData net.data d0 dataDir
+    loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   IO.println s!"  train {nTrain}, {evalName} {nEval}; dense {d0}->{d1}, bs {bs}, SGD"
   (← IO.getStdout).flush
@@ -2111,7 +2187,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
@@ -2225,7 +2301,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
@@ -2338,7 +2414,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
@@ -2490,7 +2566,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
@@ -2750,7 +2826,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   -- `trainPix`/`crop`: Imagenette train ships at 256² and is center-cropped to 224² per batch
   -- (the val/eval split is already 224² = d0, so certify reads it directly). For MNIST/CIFAR
   -- crop=false and trainPix=d0, so the crop below is a no-op.
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ← loadData net.data d0 dataDir
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := nEval / bs
   let shapes := net.shapesBA
@@ -2947,7 +3023,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net.data d0 dataDir
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
@@ -3070,7 +3146,7 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
-    loadData net.data d0 dataDir
+    loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   IO.println s!"  train {nTrain}, {evalName} {nEval}; dense {d0}->{d1}, bs {bs}, fp8-SGD (E4M3 leaf / fp32 acc)"
   (← IO.getStdout).flush
@@ -3142,7 +3218,7 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    loadData net.data d0 dataDir
+    loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), fp8-SGD (E4M3 leaf / fp32 acc), He init"
   (← IO.getStdout).flush
@@ -3216,7 +3292,7 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
       IreeSession.create fwdEvalVmfb
     else pure fwdSess
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    loadData net.data d0 dataDir
+    loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped

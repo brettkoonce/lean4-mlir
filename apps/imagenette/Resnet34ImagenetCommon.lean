@@ -21,7 +21,7 @@ the point: one definition of the transform, and it is the reference's.
 Prerequisites, in order:
 
 ```bash
-(cd jax && lake exe resnet34-imagenet default --shim)   # emit the data shim
+scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 lake build resnet34-imagenet-verified-xla
 HIP_VISIBLE_DEVICES=0 LEAN_MLIR_VARIANT=mom256 LEAN_MLIR_BATCH=256 \
   LEAN_MLIR_BASE_LR_U=100000 \

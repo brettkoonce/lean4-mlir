@@ -19,10 +19,24 @@ on:
     paths:
       - 'jax/**'
       - '.github/workflows/jax.yml'
+      # The shim-wiring gate reads the VERIFIED side too — which net names which generated shim.
+      # Without these, the most likely regression (a sixth .imagenet net added with no
+      # `shimScript`) touches nothing this workflow watches. See handoff §0.9.
+      - 'LeanMlir/VerifiedNets.lean'
+      - 'LeanMlir/VerifiedSpec.lean'
+      - 'scripts/gen_shims.sh'
+      - 'scripts/shim_wiring_gate.py'
   pull_request:
     paths:
       - 'jax/**'
       - '.github/workflows/jax.yml'
+      # The shim-wiring gate reads the VERIFIED side too — which net names which generated shim.
+      # Without these, the most likely regression (a sixth .imagenet net added with no
+      # `shimScript`) touches nothing this workflow watches. See handoff §0.9.
+      - 'LeanMlir/VerifiedNets.lean'
+      - 'LeanMlir/VerifiedSpec.lean'
+      - 'scripts/gen_shims.sh'
+      - 'scripts/shim_wiring_gate.py'
   workflow_dispatch:
 
 jobs:
@@ -137,6 +151,23 @@ jobs:
             echo ""
             echo "✅ emitter + $(echo $EXES | wc -w) exes built on \`$(cat lean-toolchain)\`"
           } >> $GITHUB_STEP_SUMMARY
+
+      - name: Per-net ImageNet shim wiring (handoff §0.9)
+        # Every .imagenet net must stream the shim generated from ITS OWN reference recipe. This
+        # was hardcoded to ResNet-34's for every net until 2026-08-02, and nothing failed — the
+        # three affected nets simply trained on the wrong augmentation. The gate that holds it
+        # closed compares each net's config flags to its generated Python's CALL SITES (a
+        # definition census mis-reads 2 of 5), and it is what catches a sixth net added without a
+        # `shimScript`, or a recipe `out` renamed out from under the wiring.
+        #
+        # Static tiers only here: `--stream` needs tfds imagenet2012, which CI does not have.
+        run: |
+          set -e
+          scripts/gen_shims.sh
+          python3 scripts/shim_wiring_gate.py --break
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ per-net shim wiring: 5 nets, 5 distinct shims, partition matches config" \
+            >> $GITHUB_STEP_SUMMARY
 
   oracle:
     # The CI-runnable slice of the VJP oracle: emit each of the 14 layer-family

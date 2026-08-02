@@ -114,7 +114,7 @@ replicas.
 The useful axis is not "how important" but "which layer does it touch", because the layers have
 wildly different costs in this repo.
 
-### Tier A — the pipeline. ⚠⚠ **AVAILABLE, BUT NOT WIRED — this heading was WRONG as state.**
+### Tier A — the pipeline. ✅ **AVAILABLE *AND WIRED*, 2026-08-02** (it was wrong as state for months)
 RandAugment (full geometric, m9/mstd0.5/inc1), random erasing, repeated augmentation, RRC + hflip.
 
 These live inside `build_imagenet_iter`, which `generateShim` reuses **verbatim** (§2k). Turning
@@ -136,10 +136,16 @@ at all. ~~**Nothing to build.**~~
 > `Codegen.lean:335`, `randomErasing` :368, `repeatedAug` :425) — nothing is missing but the
 > generation and the per-net default.
 >
-> **The fix**: `lake exe <net>-imagenet default --shim` per net, and a per-net default in the
-> driver instead of R34's. ⚠ It also unblocks **mixup/cutmix**, which needs `SHIM_NCLASSES` and so
-> needs the right script. This is `recipe_gaps` v1.5a and it goes FIRST — every accuracy comparison
-> for those three nets currently rests on it.
+> ✅ **CLOSED THE SAME DAY — handoff §0.9.** `VerifiedNet.shimScript` (no default, no fallback —
+> an empty one refuses at spawn), `scripts/gen_shims.sh` as the one writer, and
+> `scripts/shim_wiring_gate.py` holding it closed. **Measured**: ViT / EfficientNet / ConvNeXt each
+> stream a different train digest from R34's now; **mnv2 ≡ R34 to the bit**, which is a prediction
+> (its config *is* R34's crop/flip) and is the inertness half this plan did not anticipate; all
+> five validation streams are identical. Two things it turned up: **a definition is not a call
+> site** (`_autoaugment` is *defined* in ViT's and ConvNeXt's shims and never called, so a
+> definition census mis-reads 2 of 5 nets), and **the right shim breaks the default path** —
+> ViT/ConvNeXt bake `SHIM_MIX=both`, which wire v1 cannot carry, so the driver passes `off` and
+> announces it. So the ✅ marks in §2 now read as state for this tier.
 
 ### Tier B — the producer (shim-side Python). ✅ **DONE 2026-08-02 — wire AND mixing.**
 **mixup, cutmix.**
@@ -660,18 +666,24 @@ shared DAG node, where `SHlo` is a single-output tree. Decide certified-vs-carve
 partial gradients is a different function), and it **breaks every gate that recovers `g` from `m'`**
 — `r34-mom-tie`, `rms-tie`, `wdx-tie`, `shard-check`. §0.2 has the detail and the gate design.
 
-### v1.5a — ▶ **THE SHIM WIRING. THIS IS NEXT, and it is a wiring bug rather than a build.**
+### v1.5a — ✅ **THE SHIM WIRING — DONE 2026-08-02.** Handoff §0.9 is the record
 
-Tier A's box has the measurement. In one line: **every net streams R34's augmentation**, because
-`spawnShim` defaults to R34's generated shim, `SHIM_SCRIPT` is set nowhere, and no other shim has
-ever been generated. Cheap to fix, and it unblocks mixup/cutmix as a side effect. It goes first
-because **every accuracy comparison for ViT / ConvNeXt / EfficientNet currently rests on it** — a
-pair run at the wrong augmentation is not a pair, exactly as a pair at the wrong weight decay was
-not (§0.5).
+**Every net streamed R34's augmentation**; each now streams its own, with no fallback anywhere in
+the path. It cost what it was scoped at — wiring, not a build: one field, one generator script, one
+gate, no render change and no new op.
 
-Gate it the way the shim has always been gated: `SHIM_HASH` twice per net (determinism), and a
-DIFFERENT digest between two nets whose configs differ — which is the check that would have caught
-this, and which nothing runs today.
+⚠ **This plan's proposed gate was half of the right one.** It said: `SHIM_HASH` twice per net
+(determinism), plus a DIFFERENT digest between two nets whose configs differ. Both landed — but the
+*other* direction turned out to be the sharper check: **two nets whose configs AGREE must produce
+the SAME digest**, and mnv2 vs R34 is exactly that pair (mnv2 sets `useAutoAugment := false` and
+nothing else, so its shim differs from R34's in one comment line). Discrimination without an
+inertness peer cannot tell "the streams differ" from "the streams are noisy". Same shape as every
+A-vs-A determinism floor in this repo, in the data path.
+
+⚠ And the digest gate would **not** have caught the pre-fix defect on its own: five nets pointed at
+one file hash identically, which is indistinguishable from five identical configs. What discriminates
+is the **partition** — each net's call sites against its own config's flags — with the digest as the
+measured consequence. Gate the partition, not the count, one layer over again.
 
 ### v1.5b — ▶ **THE BATCHED-INDEX MOVE, then stochastic depth on ViT/ConvNeXt**
 

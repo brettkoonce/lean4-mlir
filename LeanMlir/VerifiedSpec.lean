@@ -193,6 +193,10 @@ structure VerifiedNetSpec where
       without inverting the dependency. `tests/TestDropPathRamp.lean` is the `#guard` that pins
       them, and it is what stops the ramp drifting the way §2k's `α/K` did. -/
   dropKeeps : Array Float := #[]
+  /-- The generated ImageNet batch shim this net streams — see `VerifiedNet.shimScript` for why
+      there is no default and why an empty one refuses instead of falling back. Required on every
+      `.imagenet` spec; meaningless on the others. -/
+  shimScript : String := ""
 
 namespace VerifiedNetSpec
 
@@ -207,7 +211,7 @@ def d0 (s : VerifiedNetSpec) : Nat := s.inC * s.imageH * s.imageW
 def toNet (s : VerifiedNetSpec) : VerifiedNet :=
   { name := s.name, slug := s.slug, specs := s.toSpecs, d0 := s.d0,
     nClasses := s.nClasses, data := s.data, blurb := s.blurb, bnChannels := s.bnChannels,
-    dropKeeps := s.dropKeeps }
+    dropKeeps := s.dropKeeps, shimScript := s.shimScript }
 
 /-- Train end-to-end (delegates to the shared `VerifiedNet.train` driver). -/
 def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=

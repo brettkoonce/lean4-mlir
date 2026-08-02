@@ -18,7 +18,7 @@ has. On top of the usual missing mixup/cutmix/EMA. Read a result as the verified
 this architecture, not as a MobileNetV2 reproduction.
 
 ```bash
-(cd jax && lake exe resnet34-imagenet default --shim)
+scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build mobilenetv2-imagenet-verified-xla
 cat .lake/build/mnv2in_adamdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)

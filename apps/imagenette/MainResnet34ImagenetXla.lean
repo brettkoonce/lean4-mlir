@@ -17,7 +17,7 @@ ImageNet-scale number here to compare against.
 `Resnet34ImagenetCommon`'s claim-ceiling note before quoting a result from it.
 
 ```bash
-(cd jax && lake exe resnet34-imagenet default --shim)
+scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build resnet34-imagenet-verified-xla
 HIP_VISIBLE_DEVICES=0 LEAN_MLIR_BASE_LR_U=100000 \

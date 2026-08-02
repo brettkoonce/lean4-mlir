@@ -71,7 +71,7 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: the SHIM WIRING, then the BATCHED-INDEX MOVE. §0.2 has the order.**
+## 0. ▶ START HERE — **next: the BATCHED-INDEX MOVE. §0.2 has the order.**
 
 **Rewritten 2026-08-02 for a fresh session; updated the same day when grad clip landed.** State:
 `lake build Proofs Certs Codegen` **3,913** green · **115** artifacts, one writer each ·
@@ -88,8 +88,9 @@ a live thread unless §0.3 says it is owed.
 | | |
 |---|---|
 | **§0.1** | ⚠ the box constraint — it re-orders everything |
-| **§0.2** | ▶ **THE NEXT THREE THREADS, in order** — shim wiring → batched index → the rest |
+| **§0.2** | ▶ **THE NEXT THREADS, in order** — batched index → the rest |
 | **§0.3** | ⚠ what is OWED, collected in one place |
+| **§0.9** | ✅ the per-net data shims — wired, gated, and the streams measured apart |
 | **§0.5** | ✅ DP ImageNet recipe parity — and the DP control it broke |
 | **§0.6** | ✅ stochastic depth's DP shard gate — §5b's predicted defect, found |
 | **§0.7** | ✅ the ViT / EfficientNet EMA DP peers, gated — and the shadow re-measured |
@@ -114,7 +115,7 @@ runs this box will crash."* Sustained multi-GPU load destabilises ares. That is 
 * ⚠ **Ask before starting anything long**, and use `scripts/supervise.sh` (AER restart, thermal
   resting, stall guard) if a long run is ever sanctioned.
 
-### §0.2 ▶ THE NEXT THREE THREADS, IN ORDER — and the first one is a WIRING bug, not a build
+### §0.2 ▶ THE NEXT THREADS, IN ORDER — ▶1 (the shim wiring) is DONE; **▶2 is the live one**
 
 **All five nets are at PJRT parity** (`<net>-verified-adam-xla` + `<net>-imagenet-verified-xla`, both
 scales, all five execute). R34 and mnv2 are feature-complete against their references except bf16.
@@ -122,30 +123,12 @@ What is left is concentrated on **EfficientNet, ViT and ConvNeXt**, and it goes 
 
 ---
 
-#### ▶ 1. THE SHIM WIRING — cheap, and it silently invalidates four rows of `recipe_gaps`' matrix
+#### ▶ 1. ✅ THE SHIM WIRING — **DONE 2026-08-02.** §0.9 is the record
 
-⚠⚠ **`spawnShim` defaults to `generated_resnet34_imagenet_shim.py` FOR EVERY NET**
-(`VerifiedTrain.lean:216`), `SHIM_SCRIPT` is set **nowhere** in any job conf, script or doc, and
-R34's is the **only generated shim on disk**. Verified by grepping that file:
-
-| in the default shim | |
-|---|---|
-| `_autoaugment` · `_randaugment` · `_random_erase` · repeated aug | **not defined, not called** |
-| RRC + hflip (`_imagenet_decode_random_crop_flip`) | ✅ |
-
-So **a verified EfficientNet / ViT / ConvNeXt ImageNet run as documented streams R34's
-augmentation.** EfficientNet's reference sets `useAutoAugment := true`; ViT's sets RandAugment
-m9/mstd0.5/inc1 + random erasing + repeated aug ×3; R34's sets only `augment := true`.
-
-⚠ **`recipe_gaps` Tier A says these are *"already free, already flowing … nothing to build"*. That
-is a CAPABILITY claim and it is true — `generateShim` honours `useAutoAugment` (`Codegen.lean:335`),
-`randomErasing` (:368) and `repeatedAug` (:425). It is NOT a STATE claim, and the matrix's ✅ marks
-read as state.** Four rows across three nets are affected.
-
-**The work**: generate the per-net shims (`lake exe <net>-imagenet default --shim`) and give the
-driver a per-net default rather than R34's. ⚠ It also unblocks **mixup/cutmix**, which needs
-`SHIM_NCLASSES` and therefore the right script. Cheap, and every accuracy comparison for those three
-nets currently rests on it.
+Was: `spawnShim` hardcoded `generated_resnet34_imagenet_shim.py` for every net, so a verified
+EfficientNet / ViT / ConvNeXt ImageNet run streamed **R34's** augmentation. Now each net names its
+own (`VerifiedNet.shimScript`), there is **no fallback**, and the streams are measured apart. The
+finding that outlives it: **a definition is not a call site** — see §0.9.
 
 ---
 
@@ -206,11 +189,90 @@ none for dropout — they are different regularisers, and `StableHLO.lean:5329`'
 | ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
 | ⚠⚠ **every DP render's sum-not-mean control is BLIND once a clip is on** | a NEW hole, found by running it: grad clip is scale-invariant where it saturates, so the standard control passes bit-exact on a deliberately broken collective. The composed control (`perturb_clip.py hi` + sum-not-mean) is documented in `TestViTDpCheck.lean`. ⚠ **Any future clipped render must use it** | §0.5 |
 | ~~⚠ the ViT / EfficientNet EMA DP peers are RENDERED BUT UNGATED~~ ✅ **CLOSED 2026-08-02** | both gated at **4 replicas, every region BIT-EXACT** — ViT 22,869,669 floats, EfficientNet 21,196,213 (incl. the 4th region and 49 BN layers), sum-not-mean controls at **2.96 / 2.39**. The EMA scorecard is 3 of 3 on DP as well as single-device | §0.7 |
-| ⛔ **the per-net data SHIMS are not wired** — every net streams R34's augmentation | `spawnShim` defaults to `generated_resnet34_imagenet_shim.py`, `SHIM_SCRIPT` is set nowhere, and R34's is the only generated shim on disk. It has no AutoAugment / RandAugment / random erasing / repeated aug. **Four rows of `recipe_gaps`' matrix read ✅ on a capability, not on the state**, and every ViT/ConvNeXt/EfficientNet accuracy comparison rests on it | §0.2 ▶1 |
+| ~~⛔ **the per-net data SHIMS are not wired**~~ ✅ **CLOSED 2026-08-02** | `VerifiedNet.shimScript`, no fallback, `scripts/gen_shims.sh` + `scripts/shim_wiring_gate.py`. Measured: ViT / ConvNeXt / EfficientNet each stream a **different** train digest from R34's now, mnv2 ≡ R34 to the bit (predicted — its config is R34's), and all five validation streams stay identical | §0.9 |
+| ⚠ **ViT/ConvNeXt at wire v1 now run WITHOUT their reference's mixup/cutmix, announced** | their shims bake `SHIM_MIX=both`; a mixed target cannot ride int32 labels, so the driver passes `off` and prints that it did. `SHIM_SOFT=1` gets soft targets **and** that net's own mixing — which is the reference recipe and has never had a long run | §0.9 |
 | ⚠ **EfficientNet's classifier dropout 0.2 is missing and UNLISTED** | `MainEfficientNetImagenet.lean:68` sets it; there are **zero dropout sites in any verified enet render**. The matrix has a stochastic-depth row and no dropout row — different regularisers | §0.2 ▶3 |
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
 | ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
+
+---
+
+### §0.9 ✅ THE PER-NET DATA SHIMS — WIRED AND GATED (2026-08-02), and the streams measured apart
+
+**The defect**: `spawnShim` hardcoded `generated_resnet34_imagenet_shim.py`, `$SHIM_SCRIPT` was set
+nowhere, and R34's was the only generated shim on disk — so *every* verified ImageNet trainer
+streamed RandomResizedCrop + hflip, whatever its reference asked for. Nothing failed; the recipe
+matrix read ✅ on a **capability** (`generateShim` honours every flag) rather than on the **state**.
+
+**What landed** — no render change, no new op, no proof:
+
+* **`VerifiedNet.shimScript`** (threaded through `VerifiedNetSpec.toNet`), set on all five nets.
+  ⚠ **No fallback and no default**: an empty value REFUSES at spawn, because the failure it
+  replaces was silent. `spawnShim` also **prints the script it resolved** — the old banner named
+  only the shape, so a run streaming the wrong augmentation read exactly like a right one.
+* **`scripts/gen_shims.sh`** — the ONE writer of the five files (the double-writer rule applied to
+  the data path). It verifies each exe wrote the file the wiring names, rather than assuming the
+  recipe's `out` still matches its exe name.
+* **`scripts/shim_wiring_gate.py`** — four gates, three controls. Static run is instant;
+  `--stream` measures the actual bytes; `--break` runs the negatives.
+
+| gate | result |
+|---|---|
+| ⓪ the wiring is a **bijection** | five `.imagenet` nets, five **distinct** shims, all present |
+| ① each shim is the right net's | `shimScript` == that Main file's `default` recipe `out`, derived not restated; banner names the reference |
+| ② the augmentation **partition** | config flags vs generated **call sites**, 5 features × 5 nets, all match |
+| ③ the baked `SHIM_MIX` default | == the config's `useMixup`/`useCutmix` on all five |
+| ⚠ control A — the pre-fix wiring | REJECTED, and on **exactly the 3** affected nets |
+| ⚠ control B — swap ViT↔ConvNeXt | five distinct shims still, **partition fires on 2** |
+| ⚠ control C1 — count definitions | **mis-classifies 2 of 5** (see finding 1) |
+
+**Measured** (`--stream`, `SHIM_HASH`, 2 batches × 8, seed 7):
+
+| | train digest | |
+|---|---|---|
+| resnet34in | `f6dca723f5e9e535` | — |
+| **mnv2in** | `f6dca723f5e9e535` | ⚠ **known answer: ≡ R34 to the bit** |
+| **vitin** | `98712d1e21443405` | ≠ R34 |
+| **enetin** | `0e3a0c4c84a10707` | ≠ R34 |
+| **cnxin** | `fa85309026d0ee36` | ≠ R34 |
+| all five, **validation** | `0431fa5caacb8c74` | identical — eval is untouched |
+
+mnv2 is the **inertness** half and it is a prediction, not a coincidence: its config sets
+`useAutoAugment := false` and nothing else, so its generated shim differs from R34's in **exactly
+one line** — the banner. The other three are the **discrimination** half: they did not differ from
+R34 yesterday. Determinism re-measured per net (same seed twice ⇒ same digest).
+
+**End to end**: ViT/ImageNet, 1 GPU, 3 steps — both spawns name
+`generated_vit_tiny_imagenet_shim.py`, loss 8.0399 → 7.8709 → 7.6713, `rc=0`. ⚠ Three steps is
+*"it runs and the loss moves"*, nothing more.
+
+**Three findings that outlive the feature:**
+
+1. ⚠⚠ **A DEFINITION IS NOT A CALL SITE, and a census cannot tell them apart.** `generateShim`
+   emits the shared `_aa_*` op block whenever AutoAugment **or** geometric RandAugment is on, so
+   **ViT and ConvNeXt contain `def _autoaugment` and never call it**. A gate grepping
+   `_autoaugment` reports AutoAugment on three nets when it is on one. Gate ② reads `img =
+   _autoaugment(` instead, and control C1 measures the census being wrong on 2 of 5 rather than
+   arguing it. This is `wdx-tie`'s *"gate the partition, not the count"* one layer down — the
+   count is right and the meaning is wrong.
+2. ⚠⚠ **WIRING THE RIGHT ARTIFACT CAN BREAK THE DEFAULT PATH, and the gate found it before any
+   trainer ran.** ViT's and ConvNeXt's shims bake `SHIM_MIX=both` (their references mix), and a
+   mixed target is a distribution that **wire v1's int32 labels cannot carry** — so the shim exits
+   before its preamble. Through the driver that surfaces as `shim closed the pipe after 0 of 16
+   bytes`, since the child's stderr is not captured: the §0.4 mixup split defect's symptom exactly,
+   one layer up. The driver now passes `SHIM_MIX=off` at v1 **and prints that it did and what it
+   dropped** — silence there would be this thread's own defect recommitted. It is inert on the
+   other three (their default is already `off`; R34's digest is `f6dca723f5e9e535` with the
+   variable unset *and* set to `off`).
+3. ⚠ **"Free via the shim" was a claim about the EMITTER, and two docstrings stated it as state.**
+   `VerifiedNets.lean` told a reader that ConvNeXt's and ViT's pipeline augs *"do come across free"*
+   — true of `generateShim`, false of every run. When a capability and a state have the same
+   sentence, the doc will drift to the flattering one. Both are corrected and dated.
+
+⚠ **Still owed**: the mixup/cutmix **run** (`SHIM_SOFT=1` now gets ViT/ConvNeXt their reference's
+mixing with no extra flag, and its λ stream is still numpy's — §0.3), and EfficientNet's classifier
+dropout 0.2, which is a RENDER gap and unaffected by any of this.
 
 ---
 
@@ -1034,7 +1096,7 @@ and no JAX 30-epoch run exists to compare against.
 ```bash
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build resnet34-imagenet-verified-xla
-(cd jax && lake exe resnet34-imagenet default --shim)     # the tfds data shim, if absent
+scripts/gen_shims.sh                                      # the five per-net data shims (§0.9)
 cat .lake/build/resnet34in_momdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
 
 PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 \
@@ -1080,7 +1142,7 @@ RMSProp (the ONLY thing between mnv2 and parity) · **v1.3** mixup+cutmix (wire 
 `wdExcludeNormBias`, grad clip · **v2** stochastic depth, bf16.
 
 ⚠ **Read that as HISTORY.** As of 2026-08-02 v1.0-v1.4 are done or hardware-blocked, and the live
-order is **§0.2's**: v1.5a the SHIM WIRING → v1.5b the BATCHED-INDEX MOVE (then SD on ViT/ConvNeXt)
+order is **§0.2's**: ~~v1.5a the SHIM WIRING~~ (done, §0.9) → v1.5b the BATCHED-INDEX MOVE (then SD on ViT/ConvNeXt)
 → the mixup/cutmix run → bf16.
 
 The list below is the pre-ImageNet ordering and is kept because the bf16 measurements are still the
@@ -1639,9 +1701,17 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/fwd-tie efficientnet --eval   # self-tie s
 # MIXUP / CUTMIX — the producer half of wire v2 (`recipe_gaps.md` v1.3). Shim-side Python only;
 # no render, no op, no Lean change. `SHIM_MIX` reaches the shim child because IO.Process.spawn's
 # env array EXTENDS the inherited environment (checked, not assumed).
-(cd jax && lake exe resnet34-imagenet default --shim)   # regenerate after touching generateShim
+scripts/gen_shims.sh                      # regenerate ALL FIVE after touching generateShim
 scripts/mixup_gate.py                     # inert-when-off, the split gate, determinism, known answer
 scripts/mixup_gate.py --break             # + the two negative controls
+
+# THE PER-NET SHIMS (§0.9). `VerifiedNet.shimScript` names each net's own; there is NO fallback,
+# and `spawnShim` prints the script it resolved. ⚠ ViT's and ConvNeXt's bake SHIM_MIX=both, so the
+# driver passes `off` at wire v1 and says so — SHIM_SOFT=1 is what turns their mixing back on.
+scripts/gen_shims.sh                      # the ONE writer of the five files
+scripts/shim_wiring_gate.py               # gates 0-3 + the definition-vs-call-site control: instant
+scripts/shim_wiring_gate.py --stream      # + SHIM_HASH: mnv2 ≡ R34, the other three ≠ R34, val equal
+scripts/shim_wiring_gate.py --break       # + the pre-fix wiring and a ViT↔ConvNeXt swap, both red
 #   ^ to stream mixed batches into a trainer: SHIM_SOFT=1 (wire v2) and SHIM_MIX=both.
 #     ⚠ SHIM_MIX without SHIM_NCLASSES is REFUSED on the TRAIN split — a mixed label is a
 #       distribution. The VALIDATION split ignores SHIM_MIX entirely (gate 1b): the driver spawns
@@ -3878,8 +3948,9 @@ broken render rather than a wrong knob.
 
 #### ✅ The tfds batch shim — landed 2026-07-30, and determinism was NOT free
 
-`JaxCodegen.generateShim` → `lake exe resnet34-imagenet default --shim` →
-`.lake/build/generated_resnet34_imagenet_shim.py`. Streams the **same** tfds pipeline the JAX
+`JaxCodegen.generateShim` → `scripts/gen_shims.sh` → one
+`jax/.lake/build/generated_*_imagenet_shim.py` **per net** (§0.9 — it was R34's for every net until
+2026-08-02). Streams the **same** tfds pipeline the JAX
 reference trainer consumes to stdout, so the verified XLA trainer can eat identical bytes.
 
 **It is GENERATED, from the same `TrainConfig` the recipe trains on — that is the whole point.** The
@@ -3925,8 +3996,8 @@ step fed, so there is 4.4× of headroom; `enable_op_determinism` costs little ag
 run's 1840 img/s. **The decode-throughput worry this idea was gated on is settled, measured.**
 
 ```bash
-lake exe resnet34-imagenet default --shim         # emit (from the recipe's own cfg)
-SHIM_BATCH=64 SHIM_HASH=3 python3 .lake/build/generated_resnet34_imagenet_shim.py
+scripts/gen_shims.sh                              # emit all five (each from its recipe's own cfg)
+SHIM_BATCH=64 SHIM_HASH=3 python3 jax/.lake/build/generated_resnet34_imagenet_shim.py
 #   ^ hash N batches to stderr and exit. RUN THIS TWICE after touching the pipeline —
 #     it is the whole determinism gate, and it is two commands.
 ```

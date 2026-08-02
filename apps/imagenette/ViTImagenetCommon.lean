@@ -27,7 +27,7 @@ the DeiT recipe — mixup, cutmix, stochastic depth, EMA and grad clipping are a
 Prerequisites, in order:
 
 ```bash
-(cd jax && lake exe resnet34-imagenet default --shim)   # emit the data shim (net-independent)
+scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build vit-imagenet-verified-xla
 cat .lake/build/vitin_adamdp128x4_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)

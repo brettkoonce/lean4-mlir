@@ -384,6 +384,9 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
   imageW   := 224
   nClasses := 1000
   data     := .imagenet
+  -- `resnet34ImagenetConfig` sets only `augment := true` ⇒ RandomResizedCrop + hflip, nothing else.
+  -- This is the shim every OTHER net was streaming too, until `shimScript` existed.
+  shimScript := "generated_resnet34_imagenet_shim.py"
   layers   := [
     .convBnNB 3 64 7 2,          -- 7×7-s2 stem → BN → relu       224→112 (no conv bias)
     .maxPool 2 2,                --                                112→56
@@ -474,6 +477,11 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
   imageW   := 224
   nClasses := 1000
   data     := .imagenet
+  -- ⚠ `mobilenetV2ImagenetConfig` sets `useAutoAugment := false` explicitly ("MNv2 paper used
+  -- crop/flip only"), so this shim is R34's pipeline — MEASURED: the two generated files differ in
+  -- exactly one line, the banner naming the reference. mnv2 is therefore the one net whose data
+  -- stream this whole thread does not change, which is what makes it the inert control.
+  shimScript := "generated_mobilenet_v2_imagenet_shim.py"
   layers   := [
     .convBnNB 3 32 3 2,
     .invertedResidualNB 32  32  16 1,
@@ -579,6 +587,9 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
   imageW   := 224
   nClasses := 1000
   data     := .imagenet
+  -- `efficientNetB0ImagenetConfig` sets `useAutoAugment := true` — the full ImageNet policy,
+  -- geometric ops included. Streaming R34's shim here dropped it entirely.
+  shimScript := "generated_efficientnet_b0_imagenet_shim.py"
   layers   := [
     .convBnNB 3 32 3 2,
     .mbConvSENB  32   32  16  8 3,
@@ -664,7 +675,10 @@ def convnextVerified : VerifiedNetSpec where
     provenance plus whatever the pair comparison shows (§5). And this is **not** the ConvNeXt paper
     recipe — `convNeXtTinyImagenetConfig` also has mixup 0.8, cutmix 1.0, stochastic depth 0.1,
     EMA 0.9999, grad clip 1.0 and `wdExcludeNormBias`, none of which exist on the verified path.
-    The pipeline augs (RandAugment geometric, random erasing) do come across free via the shim. -/
+    ⚠ The pipeline augs (RandAugment geometric, random erasing) come across via the shim — **as of
+    2026-08-02**. This line used to say "do come across free" and it was a statement about the
+    CAPABILITY: `generateShim` honoured the flags, but the driver spawned R34's shim for every net,
+    so what this trainer actually streamed was RandomResizedCrop + hflip. See `shimScript`. -/
 def convnextImagenetVerified : VerifiedNetSpec where
   name     := "ConvNeXt-T (ImageNet-1k)"
   slug     := "cnxin"
@@ -673,6 +687,9 @@ def convnextImagenetVerified : VerifiedNetSpec where
   imageW   := 224
   nClasses := 1000
   data     := .imagenet
+  -- `convNeXtTinyImagenetConfig`: RandAugment m9/mstd0.5/inc1 (geometric) + random erasing p0.25.
+  -- Mixup/CutMix are in that config too but ride the PRODUCER's `SHIM_MIX`, not the pipeline.
+  shimScript := "generated_convnext_tiny_imagenet_shim.py"
   layers   := [
     .conv 3 96 4 4, .layerNorm 96,
     .convNextBlockCh 96, .convNextBlockCh 96, .convNextBlockCh 96,
@@ -752,7 +769,9 @@ def vitVerified : VerifiedNetSpec where
     ⚠ It is **not** the DeiT recipe. `vitTinyImagenetConfig` carries mixup, cutmix, stochastic
     depth, EMA and grad clipping; none of those exist on the verified path (mixup/cutmix would need
     soft labels on the shim wire AND a `softLabelCE` cotangent — this render's is smoothed-CE over
-    a one-hot). The pipeline-level augs do come across free. Do not compare a number from this to
+    a one-hot). ⚠ The pipeline-level augs come across **as of 2026-08-02** — RandAugment, random
+    erasing and repeated aug ×3 were all absent in practice until `shimScript` existed, because the
+    driver spawned R34's shim here. Do not compare a number from this to
     DeiT-Ti's 72.0%. -/
 def vitImagenetVerified : VerifiedNetSpec where
   name     := "ViT-Tiny (ImageNet-1k)"
@@ -762,6 +781,11 @@ def vitImagenetVerified : VerifiedNetSpec where
   imageW   := 224
   nClasses := 1000
   data     := .imagenet
+  -- `vitTinyImagenetConfig` is the DeiT suite: RandAugment m9/mstd0.5/inc1 (geometric) + random
+  -- erasing p0.25 + **repeated augmentation ×3**. The last one changes the STREAM, not just the
+  -- transform — an epoch sees ~1/3 the unique images at 3 views each — so it is the one gap here
+  -- that a per-image comparison would not have shown.
+  shimScript := "generated_vit_tiny_imagenet_shim.py"
   layers   := [
     .conv 3 192 16 16,            -- patch embed 16×16/s16 (3→192)   224→14×14=196
     .param #[192] 2,              -- CLS token  [192]

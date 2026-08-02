@@ -1464,7 +1464,9 @@ lean_lib «Resnet34ImagenetCommon» where
     `nClasses := 1000, B := 256`, heavy-ball + coupled L2 (the `jax/MainResnetImagenet.lean` recipe),
     fed by the generated tfds shim so both paths see identical augmented batches.
 
-    Needs the shim emitted first: `(cd jax && lake exe resnet34-imagenet default --shim)`.
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
+    say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
+    how every net came to stream R34's augmentation.
     ⚠ Does NOT move the verification tier — proofs stop at Imagenette (§2k). -/
 lean_exe «resnet34-imagenet-verified-xla» where
   root := `apps.imagenette.MainResnet34ImagenetXla
@@ -1480,7 +1482,9 @@ lean_lib «ViTImagenetCommon» where
     renderer at `nClasses := 1000, bs := 128`; at four replicas that is global batch 512, the
     reference's (`jax/MainVitImagenet.lean`). Fed by the generated tfds shim.
 
-    Needs the shim emitted first: `(cd jax && lake exe resnet34-imagenet default --shim)`.
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
+    say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
+    how every net came to stream R34's augmentation.
     ⚠ Set `SHIM_WORKERS=2` — one producer cannot feed a 4×128 ViT step (§2p).
     ⚠ Does NOT move the verification tier, and is NOT the DeiT recipe (§2p). -/
 lean_exe «vit-imagenet-verified-xla» where
@@ -1496,7 +1500,9 @@ lean_lib «ConvNeXtImagenetCommon» where
     batch stays 32 per device (`cBS` is still private), so four replicas is global 128 and 10,009
     steps/epoch — more optimizer steps than the reference's 5,004 at batch 256.
 
-    Needs the shim emitted first: `(cd jax && lake exe resnet34-imagenet default --shim)`.
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
+    say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
+    how every net came to stream R34's augmentation.
     ⚠ Does NOT move the verification tier, and is NOT the ConvNeXt paper recipe (§2p). -/
 lean_exe «convnext-imagenet-verified-xla» where
   root := `apps.imagenette.MainConvNeXtImagenetXla
@@ -1511,7 +1517,9 @@ lean_lib «EfficientNetImagenetCommon» where
     B := 64`; four replicas is global 256, the reference's batch. The first ImageNet net here with
     BatchNorm, so it has a `_fwd_eval` peer and a running-stat region.
 
-    Needs the shim emitted first: `(cd jax && lake exe resnet34-imagenet default --shim)`.
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
+    say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
+    how every net came to stream R34's augmentation.
     ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
 lean_exe «efficientnet-imagenet-verified-xla» where
   root := `apps.imagenette.MainEfficientNetImagenetXla
