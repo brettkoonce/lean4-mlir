@@ -65,11 +65,13 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: stochastic depth (`planning/stochastic_depth.md`). ViT's EMA peer is DONE.**
+## 0. ▶ START HERE — **next: mixup + cutmix (`recipe_gaps.md` v1.3), after a ~1 h stochastic-depth tail.**
 
-**Rewritten 2026-08-02 at the end of the recipe-gaps session** (RMSProp's driver half, then EMA on
-two nets). Everything below §0a is committed and green. Read this section, `planning/recipe_gaps.md`
-and — for the two named threads — `planning/ema.md` and `planning/stochastic_depth.md`.
+**Rewritten 2026-08-02 at the end of the fourth session that day** (ViT's EMA peer; stochastic
+depth end-to-end on EfficientNet; `recipe_gaps` v1.2c). Everything below §0a is committed and green
+at **3,912** build jobs / **107** artifacts, one writer each. Read this section, then
+`planning/recipe_gaps.md`; the two feature specs are `planning/ema.md` and
+`planning/stochastic_depth.md`.
 
 ### ⚠⚠ FIRST, THE THING THAT CHANGES WHAT "NEXT" MEANS: **this box cannot do long runs**
 
@@ -125,29 +127,92 @@ audit **96 artifacts, one writer each** · build 3,911 green. Full write-up in `
 ⚠ Still owed: the `emadp` DP peers on **both** ViT and EfficientNet (`vitAdamVariant 32 2 true`
 names ViT's; nothing renders either), and any long run.
 
-### ▶ 2. THE NEXT THREAD
+### ▶ 2. THE NEXT THREAD — **mixup + cutmix (`recipe_gaps.md` v1.3)**, and a short tail first
 
-**Stochastic depth — `planning/stochastic_depth.md`, and read it before scoping.** It re-tiers
-the job in BOTH directions: the math is one `selectMidB`-shaped op whose VJP is itself, while the
-plumbing is the repo's first per-step *random graph input*. Two things to settle first, and the
-second is a prerequisite rather than a follow-up:
+**▶ FIRST, THE TAIL: two stochastic-depth gates, ~1 h.** The feature TRAINS and its exact endpoint
+is gated (below), but two checks from `stochastic_depth.md` §7 are still owed, and they are the two
+that cover the *interior* of the op rather than its endpoints:
 
-* the mask must be **host-drawn and passed in**, never `stablehlo.rng` — in-graph randomness voids
-  every bit-exactness and known-answer gate at once;
-* ⚠ **the duplicated-batch `*-dp-check` gates are structurally BLIND to a mis-sharded mask**, and
-  `shard-check` — the gate that exists for that hole — **cannot be used on EfficientNet**, because
-  its construction needs linearity in the gradient and that net wants stochastic depth *and*
-  RMSProp. **No working DP construction exists there yet.** The doc recommends ConvNeXt-only,
-  single-device, as a decision point precisely to defer this.
+* **the known-answer tie** — feed a chosen scale and check the emitted output is `branch · scale`,
+  host-computed. Everything gated so far pins `scale = 1` (bit-identical to AdamW) and the RAMP
+  (`tests/TestDropPathRamp.lean`, a third restatement of the reference formula). Nothing yet checks
+  that a scale strictly between 0 and 1 multiplies the branch by exactly that;
+* **the all-zero-mask control** — a zero scale on ONE site must make that branch contribute nothing,
+  which is what pins the site to the residual branch rather than to the block output.
 
-### ▶ WHAT LANDED 2026-08-02, third session (1 commit)
+Both need a harness, not a driver change — `fwd-tie`'s shape, driven at `efficientnet_drop_fwd`.
+⚠ Run any cross-graph numeric comparison under `scripts/det_shim.sh`; see the trap below.
+
+**▶ THEN: mixup + cutmix.** `recipe_gaps.md` calls it *"the largest remaining accuracy gap for ViT
+and ConvNeXt"*, and it is the cheapest big item left because two things already landed:
+
+* **shim wire v2** carries `float32[batch·nClasses]` soft targets, gated bit-identical against v1;
+* **the renders are AFFINE in `%onehot`** — measured, `lake build soft-target-tie`, ViT 492× /
+  ConvNeXt 309× separation — so a mixed target yields the mixed gradient with **no render change and
+  no new op.** §2p's earlier claim that this needs a `softLabelCE` cotangent is retired.
+
+So it is **Tier B, producer-side Python only**: a Beta draw, a convex combination, a box. It fits
+this box exactly — every gate is a determinism hash or a known answer, all of it minutes.
+
+⚠ **It is the one place a SECOND DEFINITION is unavoidable, and the doc should keep saying so.** The
+reference applies `_mixup`/`_cutmix` in the *train step* with `jax.random`, not in `tf.data`, so a
+shim-side implementation is a genuinely new copy of the mixing rule — unlike the augmentation
+pipeline, which the shim reuses verbatim and therefore cannot drift. It is small and self-contained,
+but it is a second writer; the alternative (no mixup on the verified path) is worse.
+
+Gates to write with it: **inert when off** (the `SHIM_HASH` byte-identity that gated wire v2),
+**determinism** (same seed ⇒ same hash, different seeds ⇒ different — the control that stops a
+pipeline ignoring its seed from looking correct), and a **known answer on the mixed labels** (for
+λ and a permutation, the target must be exactly `λ·y_a + (1−λ)·y_b`).
+
+**▶ AFTER THAT, in value order:** `wdExcludeNormBias` then grad clip (v1.4 — grad clip is *"the
+unlock for the 5e-4 LR"* on ViT, and it needs a global norm ACROSS all parameters, which is a shape
+this kit does not have yet); then bf16 (the ONLY gap left on R34 and mnv2, ×1.76 measured on ares,
+and residency doubled what it is worth — 1.21× → 1.56× — but it needs `conv_close_mixed`, 4-6
+sessions). **Stochastic depth on ConvNeXt/ViT is NOT next**: it needs the §2b batched-index move
+first (see below), which is chapter-sized and worth doing on its own merits, not as a prerequisite.
+
+### ▶ WHAT LANDED 2026-08-02, sessions three and four (4 commits)
 
 * **ViT's EMA peer** — the section above. EMA is **3 of 3**; zero new ops on all three nets.
-* The **CI drift guard widened again** because the coverage check demanded it: ViT diffed **2 of
-  the 13** artifacts `ViTRender` writes. Now all 13, so coverage goes **40/81 → 53/84** and
-  `render_guard_baseline.txt` **46 → 36** — that file may only shrink.
-* `LEAN_MLIR_BASE_LR_U` added to `ViTAdamCommon` (the `Resnet34AdamCommon` knob), as a gate
-  instrument rather than a training knob. Default unchanged, so every existing run is unaffected.
+* **Stochastic depth, end to end on EfficientNet single-device** — the op (`dropPathB`), its cert,
+  the render, the driver, and an exact endpoint gate. `LEAN_MLIR_VARIANT=adamdrop` trains.
+* **`recipe_gaps` v1.2c** — EMA and dropPath carried to the ImageNet slugs (8 renders).
+* The **CI drift guard widened twice more**: coverage **40/81 → 64/95**, baseline **46 → 36**.
+  That file may only shrink.
+
+**▶ Stochastic depth, where it stands.** One `SHlo` op whose **VJP is `layerScale_has_vjp`
+verbatim** — no new certificate, and the backward emits the SAME constructor on the cotangent. The
+exact gate, under `det_shim.sh` over 3 steps: at every keep = 1 the drop op is the identity, so
+`adamdrop` must train what `adam` trains — **0 of 4,020,358** against a **0** floor, with the real
+recipe firing at norm-rel **1.89**. That pins the wiring: a site on the wrong side of the skip add,
+a scale reaching the identity path, or a backward that dropped the SKIP cotangent each fail it.
+
+**Five findings from those two sessions that outlive the features:**
+
+1. ⚠⚠ **`sd` COLLIDED WITH `rmsdp`, AND THE COLLISION WAS BETWEEN TWO *OTHER* MARKERS MEETING.**
+   `rms` ++ `dp` spells `rmsdp`, which contains "sd" — so the stochastic-depth predicate fired on
+   every RMSProp data-parallel variant, including the committed and gated `enetin_rmsdp64`. This is
+   `ema.md`'s `emarms` defect a second time, one axis on, and *reading names one at a time cannot
+   find it*. **With N markers, check every CONCATENATION, not every marker.** Renamed to `drop`;
+   `tests/TestVariantPredicates.lean` now runs all 23 spellings × 3 axes.
+2. ⚠⚠ **A GATE PORTED BETWEEN NETS INHERITS THE SOURCE NET'S CONDITIONING.** ViT's EMA ratio gate
+   read **1.96e-2 with nothing wrong**, because ViT's step-1 warmup LR (~2e-7) puts `ema − θ` at one
+   ULP of θ. ConvNeXt never saw it — its baseLR/warmup give a 50× larger step 1. Conditioning the
+   instrument (`LEAN_MLIR_BASE_LR_U`) took the same gate to 5.96e-5 against a 150,995× control.
+3. ⚠⚠ **THE DET SHIM IS MANDATORY FOR ANY CROSS-GRAPH NUMERIC COMPARISON ON CUDA.** The keep = 1
+   gate first read as a **2.5e-2 failure**; it is bit-identical under `scripts/det_shim.sh`. §2d.3's
+   Finding 1 ("the floor IS bit-exact across processes") is ROCm-specific. **Measure the A-vs-A
+   floor before reading any cross-graph number** — twice now that has been the difference between a
+   green feature and a phantom defect.
+4. ⚠ **SCOPE BY THE INDEX CONVENTION, NOT BY OP COUNT.** `stochastic_depth.md` recommends ConvNeXt
+   as "the cheapest"; measured, ConvNeXt and ViT render at the **per-example** index (10 and 13
+   per-example forms against ~2 batched), where a per-example mask is §4's descriptor trap. Only
+   EfficientNet/R34/mnv2 sit at `N := B`. §2f's lesson one net over.
+5. ⚠ **A FEATURE IS NOT DONE WHEN ITS IMAGENETTE ARTIFACT RENDERS.** Found by *listing* artifacts:
+   RMSProp had been carried to both scales, EMA and dropPath had not — so the ImageNet trainers did
+   not carry the features their reference numbers depend on. Both scales are one `#eval` apart,
+   which is exactly why it is easy to stop at one. Closed as v1.2c.
 
 ### ▶ WHAT LANDED 2026-08-02, second session (5 commits)
 

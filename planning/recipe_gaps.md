@@ -361,15 +361,49 @@ for ViT — *"no renderer change, three `#eval`s"*), so each missing variant is 
 its drift-guard line. Do this BEFORE any v1.x reference-epoch run on enet or ConvNeXt, or the run
 measures a net that is missing the regularisers its target number depends on.
 
-### v1.3 — mixup + cutmix (Tier B). The wire is already there. Closes the largest remaining
-accuracy gap for ViT and ConvNeXt.
+### v1.3 — ▶ **mixup + cutmix (Tier B). THIS IS NEXT.** The wire is already there, and it closes
+the largest remaining accuracy gap for ViT and ConvNeXt.
+
+Producer-side Python only: **no render change and no new op**, because the renders are AFFINE in
+`%onehot` (measured — `lake build soft-target-tie`, ViT 492× / ConvNeXt 309× separation) and shim
+wire v2 already carries `float32[batch·nClasses]` soft targets, gated bit-identical against v1. So
+it is a Beta draw, a convex combination and a box, and every gate is minutes — which is what makes
+it the right item for a box that cannot do long runs.
+
+Gates to write with it: **inert when off** (the `SHIM_HASH` byte-identity that gated wire v2);
+**determinism** (same seed ⇒ same hash, AND different seeds ⇒ different hashes — the control that
+stops a pipeline silently ignoring its seed from looking correct, which is the failure §2k's shim
+work actually hit); and a **known answer on the mixed labels** — for a chosen λ and permutation the
+target must be exactly `λ·y_a + (1−λ)·y_b`.
+
+⚠ Keep saying that this is the one place a SECOND DEFINITION is unavoidable (Tier B above has the
+argument): the reference mixes in the *train step* with `jax.random`, not in `tf.data`.
 
 ### v1.4 — `wdExcludeNormBias`, then grad clip. Grad clip is the gate on ViT's LR.
 
-### v2 — **stochastic depth** (▶ the thread after ViT's EMA — `planning/stochastic_depth.md`, which
-re-tiers it in BOTH directions: one op whose VJP is itself, but the repo's first per-step RANDOM
-GRAPH INPUT, and an **open DP prerequisite** — neither existing DP construction works on
-EfficientNet, which wants stochastic depth *and* RMSProp), bf16.
+### v1.5 — ✅ **stochastic depth: DONE on EfficientNet single-device, 2026-08-02.**
+`planning/stochastic_depth.md`. One `SHlo` op whose **VJP is `layerScale_has_vjp` verbatim** (no new
+certificate; the backward emits the same constructor), a host-drawn per-example scale as an ordinary
+non-resident input, and `LEAN_MLIR_VARIANT=adamdrop` trains. The exact gate, under the det shim:
+at keep = 1 the op is the identity, so `adamdrop` must train what `adam` trains — **0 of 4,020,358**
+against a **0** floor, control at norm-rel **1.89**.
+
+⚠ **Two gates still owed**, and they cover the op's INTERIOR rather than its endpoints: the
+known-answer tie (`branch · scale` at a chosen scale, host-computed) and the all-zero-mask control
+(a zero scale on one site must kill that branch, which pins the site to the residual branch). ~1 h,
+harness work, no driver change.
+
+⚠ **ConvNeXt and ViT need the §2b batched-index move FIRST** — they render at the per-example index,
+where a per-example mask is §4's descriptor trap. That move is chapter-sized and worth doing on its
+own merits; it is not a stochastic-depth prerequisite to be rushed.
+
+⚠ §5b's DP question is **deferred, not solved**: the duplicated-batch gates are blind to a
+mis-sharded mask and `shard-check` needs linearity in the gradient, which RMSProp does not have.
+Single-device defers it exactly as ConvNeXt-single-device would have.
+
+### v2 — **bf16.** The ONLY gap left on R34 and mnv2. ×1.76 measured on ares, and residency doubled
+what it is worth (1.21× → 1.56×, because transport was masking the arithmetic). Needs
+`conv_close_mixed`; `planning/bf16_renderer.md`; 4-6 sessions.
 
 ---
 
