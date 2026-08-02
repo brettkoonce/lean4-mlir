@@ -6785,10 +6785,8 @@ The bigger pedagogical point---and the one the example section
 below makes concrete---is that with a modernized convnet
 backbone, the dominant axis of variation between runs becomes the
 \emph{training recipe}, not the architecture. The chapter
-measures that claim directly --- a CutMix-vs-bare-vs-RandAugment
-ablation lifts ConvNeXt-T's Imagenette accuracy by 2.9 points
-without touching a single weight --- and finishes by putting the
-full recipe side-by-side with the 2018 ResNet-34 recipe of
+closes by putting the full recipe side-by-side with the 2018
+ResNet-34 recipe of
 Chapter~\ref{chap:residual}, knob by knob: the four-year jump in
 how convnets are trained, on one page.
 
@@ -7154,67 +7152,6 @@ $\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
 \mathrm{gelu} \circ \mathrm{expand} \circ \mathrm{LN} \circ
 \mathrm{depthwise})$, composed by \texttt{convNextBlock\_has\_vjp}.
 
-\section{Data Augmentation}
-\label{sec:convnext_aug_ablation}
-
-ConvNeXt's headline accuracy depends on a heavy augmentation pack
-inherited from DeiT: Mixup (Zhang et al.\ 2017,
-\href{https://arxiv.org/abs/1710.09412}{arXiv:1710.09412}), CutMix
-(Yun et al.\ 2019, \href{https://arxiv.org/abs/1905.04899}{arXiv:1905.04899}),
-Random Erasing (Zhong et al.\ 2017,
-\href{https://arxiv.org/abs/1708.04896}{arXiv:1708.04896}), and
-RandAugment (Cubuk et al.\ 2019,
-\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}). All four
-are implemented as data-only kernels that mutate the input tensor
-before the graph sees it --- tier 1 in our codegen scope, no MLIR
-plumbing required. Mixup and CutMix route through a soft-label
-train-step variant since they produce fractional labels; Random
-Erasing and RandAugment leave labels alone.
-
-Holding architecture and base optimizer fixed, we can measure the
-marginal effect of each augmentation knob layered on top of the
-bare config, on the same Imagenette data and 80-epoch budget.
-
-\begin{center}
-\begin{tabular}{l r r}
-\hline
-Cell                                          & Val acc & $\Delta$ vs bare \\
-\hline
-\texttt{convnext-tiny-gelu-cutmix}            & 87.81\% & $+2.9$ \\
-\texttt{convnext-tiny-gelu-erase}             & 85.63\% & $+0.7$ \\
-\texttt{convnext-tiny-gelu-randaug} (M=9)     & 85.48\% & $+0.5$ \\
-\texttt{convnext-tiny-gelu} (bare)            & 84.94\% & ---     \\
-\texttt{convnext-tiny-gelu-mixup}             & 83.45\% & $-1.5$ \\
-\hline
-\end{tabular}
-\end{center}
-
-\begin{itemize}
-  \item \textbf{CutMix is the load-bearing knob.} $+2.9\%$ over
-    bare, a single config change. The ViT-Tiny ablation in
-    Ch~\ref{chap:attention} reaches the same conclusion at a
-    different architecture: CutMix alone is the biggest single lift.
-  \item \textbf{Random Erasing and RandAugment at M=9 are in the
-    same tier.} $+0.7\%$ and $+0.5\%$ respectively; both at the
-    edge of seed noise. M=9 is too aggressive for our 9.5K-image
-    scale (the paper trained on 1.2M images), and erasing 25\% of
-    pixels is in the same noise band.
-  \item \textbf{Mixup actively hurts at this scale.} $-1.5\%$
-    below bare. The blended-label gradient signal is too aggressive
-    at $\sim$475 images per class; the model can't extract a clean
-    target from a Beta(0.8, 0.8) mix of two images when each class
-    has so few exemplars. A Mixup ablation on full ImageNet
-    (1.28M images, $\sim$1280 per class) typically lifts $+0.5$ to
-    $+1.0$; here we're 100$\times$ below that data scale.
-\end{itemize}
-
-One seed per cell. The $+0.5\%$ and $+0.7\%$ deltas on RandAugment
-and Random Erasing are within noise; the $+2.9\%$ delta from CutMix
-and the $-1.5\%$ delta from Mixup are well above. The cross-
-architecture confirmation with Ch 9's ViT-Tiny ablation (CutMix
-$\gg$ RandAug at the same data scale) suggests the ranking is
-data-regime-driven, not architecture-driven.
-
 \section{ImageNet recipe}
 
 \imagenetphasenote
@@ -7460,7 +7397,7 @@ Warmup        & 5 epochs               & 20 epochs                     & heavy a
 Epochs        & 90                     & 300 (80 = validation tier)    & heavy regularization converts the extra schedule straight into accuracy ($+2.97$ top-1 from 80$\to$300) \\
 Loss          & softmax cross-entropy  & CE over soft targets          & unlike A3's BCE switch, ConvNeXt keeps CE --- the softening comes from the Mixup/CutMix labels \\
 Weight decay  & $10^{-4}$, all params  & $0.05$, skip 1-D params       & $500\times$ stronger, never on norm/bias/LayerScale (timm's \texttt{no\_weight\_decay}) \\
-Augmentation  & RRC + hflip            & full DeiT pack                & RandAugment + Mixup + CutMix + Random Erasing --- where the modernization actually lives (Section~\ref{sec:convnext_aug_ablation}) \\
+Augmentation  & RRC + hflip            & full DeiT pack                & RandAugment + Mixup + CutMix + Random Erasing --- where the modernization actually lives \\
 Stochastic depth & none                & drop-path $0.1$               & randomly drops whole residual branches per step --- the depth regularizer \\
 EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights; with drop-path, together ${<}5\%$ per epoch \\
 Grad clip     & none                   & global-norm $1.0$             & cheap insurance that made the peak LR a non-event \\
@@ -7473,10 +7410,18 @@ warmup-then-anneal structure, random-resized-crop + horizontal flip
 as the base augmentation, label smoothing $0.1$, batch 256, train
 and eval both at $224$ (no FixRes), and bf16 matmul and convolution.
 
-The augmentation row is the full DeiT pack that
-Section~\ref{sec:convnext_aug_ablation} measured knob by knob at
-Imagenette scale. A small-data practitioner cloning this recipe
-should reach for CutMix first and treat the rest as optional.
+The augmentation row is the full DeiT pack: Mixup (Zhang et al.\ 2017,
+\href{https://arxiv.org/abs/1710.09412}{arXiv:1710.09412}), CutMix
+(Yun et al.\ 2019, \href{https://arxiv.org/abs/1905.04899}{arXiv:1905.04899}),
+Random Erasing (Zhong et al.\ 2017,
+\href{https://arxiv.org/abs/1708.04896}{arXiv:1708.04896}), and
+RandAugment (Cubuk et al.\ 2019,
+\href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}). All four
+are implemented as data-only kernels that mutate the input tensor
+before the graph sees it --- tier 1 in our codegen scope, no MLIR
+plumbing required. Mixup and CutMix route through a soft-label
+train-step variant since they produce fractional labels; Random
+Erasing and RandAugment leave labels alone.
 
 The through-line is the same \emph{regularize harder, train bigger}
 as RSB-A3, arrived at from the transformer side: keep cross-entropy
@@ -7599,9 +7544,8 @@ The empirical-side payoff comes after the theorems, in the Example
 section: ViT-Tiny trained on Imagenette underperforms the
 ConvNets, fairly dramatically, because 9{,}469 training images is
 too small for a transformer's lack of inductive bias. That's
-informative on its own terms (the data-hungry-transformer story
-made concrete) and sets up the augmentation ablation that closes
-the chapter.
+informative on its own terms --- the data-hungry-transformer story
+made concrete.
 
 \section{Matrix-level machinery}
 \label{sec:matrix_machinery}
@@ -8837,67 +8781,6 @@ pieces: denoted IR, bridge theorem, printer.
     linear projections are smooth everywhere, with no smooth-point clause.
   \item \textbf{Representative scale} (two tokens, $d = 4$, one head).
 \end{itemize}
-
-\section{Data Augmentation}
-\label{sec:vit_aug_ablation}
-
-The ViT-Tiny config we just trained uses a bare base recipe ---
-random crop + hflip on the data side, no Mixup / CutMix /
-RandAugment / heavy weight decay. Holding architecture and base
-optimizer fixed, we can measure the marginal effect of each
-modern augmentation knob layered on top, on the same Imagenette
-data and 80-epoch budget.
-
-\begin{center}
-\begin{tabular}{l r r}
-\hline
-Cell                                & Val acc & $\Delta$ vs bare \\
-\hline
-\texttt{vit-tiny-cutmix-wd05}       & 77.43\% & $+5.7$ \\
-\texttt{vit-tiny-cutmix}            & 77.10\% & $+5.4$ \\
-\texttt{vit-tiny-mixup}             & 74.69\% & $+3.0$ \\
-\texttt{vit-tiny-recipe2}           & 74.41\% & $+2.7$ \\
-\texttt{vit-tiny-full}              & 74.23\% & $+2.5$ \\
-\texttt{vit-tiny-randaug} (M=9)     & 74.03\% & $+2.3$ \\
-\texttt{vit-tiny-randaug-m4} (M=4)  & 71.98\% & $+0.3$ \\
-\texttt{vit-tiny-bare}              & 71.70\% & ---     \\
-\texttt{vit-tiny-erase}             & 70.62\% & $-1.1$ \\
-\hline
-\end{tabular}
-\end{center}
-
-(\texttt{recipe2} = CutMix + Random Erasing + RandAugment-M9;
-\texttt{full} = Mixup + Random Erasing.)
-
-\begin{itemize}
-  \item \textbf{CutMix is the load-bearing knob.} +5.4\% over
-    bare. No close substitute; Mixup is a partial second at
-    +3.0\%.
-  \item \textbf{Stacking on top of CutMix gives near-zero
-    return.} CutMix + heavy WD adds $+0.3\%$, well within seed
-    noise. CutMix + RA + RE (\texttt{recipe2}) is \emph{negative}
-    ($-2.7\%$ vs CutMix alone): at 9.5K training images, piling
-    on more aug erodes the per-image class signal faster than
-    the diversity helps.
-  \item \textbf{Random Erasing alone hurts} ($-1.1\%$) at this
-    scale. Removing 2--33\% of pixels per image needs more
-    redundant signal elsewhere than a 9.5K-image dataset has.
-  \item \textbf{RandAugment magnitude matters.} M=9 (paper
-    default) works ($+2.3\%$). M=4 is essentially identity
-    ($+0.3\%$); too gentle to bite.
-\end{itemize}
-
-The reading for a small-data practitioner: pick one strong knob
-(CutMix) and stop. The reading for a large-data practitioner: the
-same table at 1.2M images would lift different rows --- the
-marginal effect of each knob is scale-dependent. The framing
-worth keeping is "marginal effect on top of what you already
-have," not the "stack everything" framing implicit in published
-paper recipes.
-
-One seed per cell. The 0.3\% delta between CutMix and
-CutMix+WD is below noise; the 5.4\% delta from CutMix is
-well above.
 
 \section{ImageNet recipe}
 
