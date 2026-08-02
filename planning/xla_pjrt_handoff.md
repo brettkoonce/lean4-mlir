@@ -65,11 +65,98 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **the next thread is the R34/ImageNet 30-epoch run on 4 GPUs.**
+## 0. ▶ START HERE — **next: ViT's EMA peer, then stochastic depth (`planning/stochastic_depth.md`).**
 
-**Rewritten 2026-08-02 at the end of the ImageNet-scaffolding session.** Everything below §0a is
-committed and green. Read this section and `planning/recipe_gaps.md`; nothing else is required
-before starting.
+**Rewritten 2026-08-02 at the end of the recipe-gaps session** (RMSProp's driver half, then EMA on
+two nets). Everything below §0a is committed and green. Read this section, `planning/recipe_gaps.md`
+and — for the two named threads — `planning/ema.md` and `planning/stochastic_depth.md`.
+
+### ⚠⚠ FIRST, THE THING THAT CHANGES WHAT "NEXT" MEANS: **this box cannot do long runs**
+
+Brett, 2026-08-02, stopping four concurrent 80-epoch Imagenette trainers mid-flight: *"um no long
+runs this box will crash."* Sustained multi-GPU load destabilises ares. That is not a footnote — it
+**re-orders this whole file**, because:
+
+* **§0's former headline, the R34/ImageNet 30-epoch run, is ~16 h on 4 GPUs and is NOT currently
+  runnable here.** Nothing about it is wrong; it is blocked on hardware, not on code. Same for
+  `recipe_gaps.md` §4's ~203 h budget for all five nets at reference epochs.
+* **What IS available is build-and-gate work**, and this session is the evidence that it goes fine:
+  every gate below is a 1-6 step known answer, a bit-identity check or a 3-4 epoch smoke, all
+  single-GPU and all minutes.
+* **So prefer threads whose deliverable is a certified render + a numeric gate**, and bank the runs
+  for a box that can sustain them. State any accuracy number as what it is — a 3-4 epoch smoke is
+  descent evidence, never an accuracy claim.
+* ⚠ **Ask before starting anything long**, and use `scripts/supervise.sh` (AER restart, thermal
+  resting, stall guard) if a long run is ever sanctioned.
+
+### ▶ THE NEXT TWO THREADS, in order
+
+**1. ViT's EMA peer — small, and the recipe is fully worked out.** ConvNeXt (single + DP) and
+EfficientNet are done (below); ViT is the last of the three nets whose reference uses EMA, and it is
+the *cheapest* of the three: LayerNorm, so there is **no `ema_bn`** to carry — the parameter shadow
+alone. Follow `EfficientNetRender.lean`'s shape exactly:
+
+* thread `(ema : Bool := false)` through the renderer, and emit
+  `adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z)` **at the call site** where the
+  per-parameter tail returns the updated `nT`. **No new op** — `adamMNext β₁ m g = β₁·m + (1−β₁)·g`
+  IS the EMA update at `(β₁ := d, m := ema, g := θ')`;
+* signature gains 200 `%<nm>e` inputs + `%emad`/`%oemad`; the **return layout must mirror the input
+  layout region-for-region and scalar-for-scalar** (`pbuf := out` hands each step's output back);
+* new variant via `vitAdamVariant`, with the `ema` marker **LEADING** — the driver keys its
+  4-region blob off `variant.startsWith "ema"`;
+* ⚠ **check the other predicates in the same breath.** EfficientNet's `emarms` broke
+  `startsWith "rms"` and would have silently initialised RMSProp's mean-square to 0 (see below).
+  ViT is AdamW-only so there is no second axis today — but `vit-adam-tie`, `vit-dp-check` and the
+  residency gate all key off the variant string;
+* driver: **nothing to do.** `nRegions`/`nScalars` are already generic and the checkpoint size guard
+  is in. Only the caller needs the `LEAN_MLIR_EMA_DECAY_U` knob (copy `ConvNeXtAdamCommon.lean`).
+
+Gates, all short: gate 1 byte-identical at `ema := false` · **`decay = 0` ⇒ shadow BIT-IDENTICAL to
+the live weights** (the free exact endpoint) · the ratio known answer with the no-warmup-correction
+control · shadow **tracks then exceeds** over 3-4 epochs. ⚠ ViT's Imagenette run is the weakest of
+the five (71.31% at 80 epochs), so read a 3-epoch shadow-vs-live delta, not an absolute.
+
+**2. Stochastic depth — `planning/stochastic_depth.md`, and read it before scoping.** It re-tiers
+the job in BOTH directions: the math is one `selectMidB`-shaped op whose VJP is itself, while the
+plumbing is the repo's first per-step *random graph input*. Two things to settle first, and the
+second is a prerequisite rather than a follow-up:
+
+* the mask must be **host-drawn and passed in**, never `stablehlo.rng` — in-graph randomness voids
+  every bit-exactness and known-answer gate at once;
+* ⚠ **the duplicated-batch `*-dp-check` gates are structurally BLIND to a mis-sharded mask**, and
+  `shard-check` — the gate that exists for that hole — **cannot be used on EfficientNet**, because
+  its construction needs linearity in the gradient and that net wants stochastic depth *and*
+  RMSProp. **No working DP construction exists there yet.** The doc recommends ConvNeXt-only,
+  single-device, as a decision point precisely to defer this.
+
+### ▶ WHAT LANDED 2026-08-02, second session (5 commits)
+
+* **RMSProp's DRIVER half** — mean-square init 1.0, exponential LR decay, both DP renders compiled
+  and gated at 4 replicas. mnv2 is now at feature parity with its reference except bf16.
+* **EMA on ConvNeXt** (single-device + DP peer) **and EfficientNet** (`emarms` = the reference's own
+  RMSProp + exp-decay + EMA recipe, plus the `ema_bn` BN-buffer shadow). **Zero new `SHlo` ops** on
+  either — the third time reading a reference update against existing ops at their other readings
+  has collapsed a scoped op family to nothing.
+* **Two specs**, `planning/ema.md` and `planning/stochastic_depth.md`, both written before building
+  and both re-tiering their `recipe_gaps` entry.
+
+**Four findings from it that outlive the features:**
+
+1. ⚠ **`shard-check` cannot gate an optimizer whose tail is NONLINEAR in the gradient.** Its known
+   answer `DP([A|B]) = mean(single(A), single(B))` needs the gated slot linear — true of AdamW's `m`
+   at `m = 0`, false of RMSProp's buffer. Use the duplicated-batch identity in `*-dp-check`, which
+   is optimizer-agnostic. All three `dp-check` harnesses now take `DP_NET`/`DP_VARIANT{,_DP}`/
+   `DP_REPLICAS`/`DP_BATCH` and still reproduce their committed 2-replica results with no arguments.
+2. ⚠ **NEVER GATE ON THE EMA SHADOW.** §3 says gate the gradient, never θ; the shadow is θ's
+   low-pass filter, so it is that failure one level worse — measured, a sum-not-mean control moved
+   `m` by 0.94, θ by 1.95e-4 and the **shadow by 1.00e-4, exactly ON a 1e-4 gate**.
+3. ⚠ **A prefix test on a variant name that encodes TWO axes fails quietly.** `emarms` does not
+   start with `"rms"`, so the RMSProp mean-square would have initialised to 0 — the exact defect
+   that thread existed to fix, reintroduced through a name. Substring tests now, eight spellings
+   checked.
+4. ⚠ **`residency_gate.sh` deletes `<slug>_<variant>_ckpt_xla.bin` between its four passes**, so
+   running it against a live trainer on the same slug AND variant produces a **false green**. Run it
+   on an idle box; `ps -eo comm | grep verified` first.
 
 ### ▶ WHAT LANDED 2026-08-01/02 (7 commits) — read this before assuming anything below is current
 
@@ -207,6 +294,14 @@ so running it while a trainer is live on the same slug **and variant** lets that
 per-epoch checkpoint write land mid-gate. It does not crash — mnv2 reported a clean **PASS** and
 enet a saturated floor, and only the second looked wrong. Run it on an idle box; the runner now
 says so in its own header.
+
+### ▶ R34/ImageNet — ⛔ BLOCKED ON HARDWARE, NOT ON CODE (2026-08-02)
+
+⚠ **This was §0's headline until 2026-08-02 and it is still the right run — but it cannot be done on
+this box.** It is ~16 h on 4 GPUs, and sustained multi-GPU load destabilises ares (see the top of
+§0). Nothing below is stale; the preflight was green and the rig smoke-tested. **Everything here
+stands for the day a box can sustain it.** Do not re-derive it, and do not start it here without
+asking.
 
 ### ▶ THE JOB: get R34/ImageNet over the line
 

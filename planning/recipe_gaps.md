@@ -268,7 +268,15 @@ JAX on accuracy.
 
 ## 4. The plan
 
-### v1.0 — **run R34.** Zero build.
+⚠⚠ **READ THIS BEFORE PLANNING OFF §4: THE RUNS BELOW ARE NOT AVAILABLE ON THIS BOX.** Brett,
+2026-08-02: *"no long runs this box will crash"* — sustained multi-GPU load destabilises ares. §5's
+~203 h budget is a budget for hardware we do not currently have. So the ORDERING below still holds
+as a statement of what closes each gap, but the *sequencing* in practice is: **do the build-and-gate
+half of every item now** (certified render + numeric gate + a 3-4 epoch descent smoke, all
+single-GPU and all minutes), and bank the reference-epoch runs. v1.0 is the one item that is
+*purely* a run, which is why it is the one item currently blocked outright.
+
+### v1.0 — **run R34.** Zero build. ⛔ **BLOCKED: hardware, not code.**
 `resnet34-imagenet-verified-xla`, `momdp64`, 4 GPUs, residency on, 90 epochs against the
 reference's **72.02%**. ~48 h train-only at the measured 386 ms/step × 5004 × 90. This is the pair
 the whole §2k/§2p line of work was pointed at, and nothing blocks it.
@@ -310,12 +318,30 @@ and **0 of 48,244,296** (enet) bytes against bit-exact floors, both controls fir
 counterexample to "AdamW ⇒ chaotic ⇒ mode 1" and the first where the property tracks the optimizer
 rather than the net.
 
+### v1.2b — **EMA. ✅ ConvNeXt (+ its DP peer) and EfficientNet, 2026-08-02. ▶ ViT IS NEXT.**
+`planning/ema.md` — scoped, then built. **Zero new `SHlo` ops**: `adamMNext β₁ m g = β₁·m + (1−β₁)·g`
+IS the reference's `ema_update` at `(β₁ := d, m := ema, g := θ')`. The blob gains a 4th
+`[θ|m|v|ema]` region; residency supports that **by construction** (its "n in, n out, counts must
+agree" contract), so it cost no C change.
+
+**ViT is the last of the three and the cheapest** — LayerNorm, so no `ema_bn`; copy
+`EfficientNetRender.lean`'s call-site emission. Gates are minutes: `decay = 0` ⇒ shadow
+**bit-identical** to the live weights, the ratio known answer against a no-warmup-correction
+control, and shadow **tracks-then-exceeds** over 3-4 epochs.
+
+⚠ **The warmup-corrected decay `d = min(decay, (1+t)/(10+t))` is required at our scale**, not
+optional — an 80-epoch Imagenette run is 2.4 τ at decay 0.9999, inside the regime where the
+reference measured a shadow holding 12.8% of the random init and scoring **0.00% top-1**.
+
 ### v1.3 — mixup + cutmix (Tier B). The wire is already there. Closes the largest remaining
 accuracy gap for ViT and ConvNeXt.
 
 ### v1.4 — `wdExcludeNormBias`, then grad clip. Grad clip is the gate on ViT's LR.
 
-### v2 — stochastic depth, bf16.
+### v2 — **stochastic depth** (▶ the thread after ViT's EMA — `planning/stochastic_depth.md`, which
+re-tiers it in BOTH directions: one op whose VJP is itself, but the repo's first per-step RANDOM
+GRAPH INPUT, and an **open DP prerequisite** — neither existing DP construction works on
+EfficientNet, which wants stochastic depth *and* RMSProp), bf16.
 
 ---
 
