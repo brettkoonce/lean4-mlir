@@ -60,7 +60,17 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("emarmsdp64", true, true, false)
     -- stochastic depth, and all three axes at once
   , ("adamdrop", false, false, true)
-  , ("emarmsdrop64", true, true, true) ]
+  , ("emarmsdrop64", true, true, true)
+    -- ▶ v1.4 `wx` = timm no_weight_decay (`vitWdDecays`). ⚠ It needs NO driver predicate of its
+    -- own — excluding a param binds a different CONSTANT to `%wd` and changes no arity, no type
+    -- and no region — so it appears here for the OPPOSITE reason to the other three: to prove the
+    -- new marker does not disturb any of them. That is the check the `sd`/`rmsdp` collision
+    -- showed reading names one at a time cannot do, since a collision lives in a CONCATENATION.
+  , ("adamwx", false, false, false), ("adam128wx", false, false, false)
+  , ("adamdp128x4wx", false, false, false), ("emawx", true, false, false)
+    -- and `wx` composed with each of the three axes, since that is where a collision would be
+  , ("emarmswx", true, true, false), ("adamdropwx", false, false, true)
+  , ("emarmsdrop64wx", true, true, true) ]
 
 #guard table.all (fun (v, e, r, s) => emaOn v == e && rmsOn v == r && sdOn v == s)
 
@@ -72,6 +82,17 @@ private def table : List (String × Bool × Bool × Bool) :=
 -- shape. `dropema` is not a name anything produces today — that is the point of checking it here.
 #guard emaOn "dropema" == false
 #guard emaOn "emadrop" == true
+
+-- ⚠ The `wx` marker against every CONCATENATION, not against the other markers one at a time.
+-- The failure that produced this file was `rms` ++ `dp` spelling `rmsdp` ⊇ "sd"; the analogous
+-- question for `wx` is whether any pair of markers can spell it. None can — no marker ends in `w`
+-- and none begins with `x` — and these are the checks that say so rather than the reasoning.
+#guard (("adamdp128x4wx".splitOn "rms").length == 1)
+#guard (("adamdp128x4wx".splitOn "drop").length == 1)
+#guard sdOn "adamdp128x4wx" == false
+#guard rmsOn "adamdp128x4wx" == false
+-- and `wx` must not create an "ema" prefix where there was none
+#guard emaOn "adamwx" == false
 
 #eval do
   IO.println "── variant predicates ──"

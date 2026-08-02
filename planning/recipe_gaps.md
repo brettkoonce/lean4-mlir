@@ -64,7 +64,7 @@ that does not exist yet.
 | optimizer | SGD+mom | AdamW | AdamW | **RMSProp** | **RMSProp** | AdamW / SGD / Nesterov / heavy-ball / **RMSProp** |
 | | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ **render + driver, 2026-08-02** |
 | weight decay | 1e-4 coupled ✅ | 0.05 ✅ | 0.05 ✅ | 1e-5 ✅* | 4e-5 ✅* | decoupled in AdamW, coupled in heavy-ball **and RMSProp** |
-| `wdExcludeNormBias` | — | ✅→❌ | ✅→❌ | — | — | ❌ |
+| `wdExcludeNormBias` | — | ✅→**✅** | ✅→❌ | — | — | ⚠ **ViT done 2026-08-02** (`wx` variant, gated); ConvNeXt owed |
 | LR schedule | cosine ✅ | cosine ✅ | cosine ✅ | **exp 0.97** ✅ | **exp 0.98** ✅ | cosine **or exponential** + warmup |
 | warmup | 5 ✅ | 5 ✅ | 20 ✅ | 5 ✅ | 5 ✅ | driver arg |
 | label smoothing | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.0 ✅ | derived from `nClasses` |
@@ -495,7 +495,64 @@ target must be exactly `λ·y_a + (1−λ)·y_b`.
 ⚠ Keep saying that this is the one place a SECOND DEFINITION is unavoidable (Tier B above has the
 argument): the reference mixes in the *train step* with `jax.random`, not in `tf.data`.
 
-### v1.4 — `wdExcludeNormBias`, then grad clip. Grad clip is the gate on ViT's LR.
+### v1.4 — ✅ **`wdExcludeNormBias` on ViT (2026-08-02)**; ConvNeXt owed, then grad clip.
+
+`lake build wdx-tie`. The reference rule (`jax/Jax/Codegen.lean`'s `_wd_mask`) decays only ≥2-D
+weight matrices: every 1-D param (biases, LayerNorm γ/β, the CLS token) and the **positional
+embedding** are excluded. Run over the reference's own `init_params`, that is **74 decayed / 126
+excluded of 200**, every mask leaf uniform — so the decision is per-TENSOR.
+
+**It needed no new op, no interface change and no driver change**, which is what made it an
+evening: `adamWParamF` already takes `wd` as a runtime OPERAND NAME (the `%lr` shape, for the `%lr`
+reason), so "exclude" is binding that operand to a zero constant. 126 of 200 operand strings move;
+arity, types and regions do not. `vitWdDecays` derives the mask from `vitParamSig`, the same list
+that names the sites, and `#guard`s pin the 74/126 against the reference's own count.
+
+⚠ It keys the positional embedding by NAME where the reference keys it by SHAPE. Deliberate: the
+reference walks an unnamed pytree, while a shape test here would also exclude any *other* param
+that happened to be 197×192. And the rule reads the RANK, which is the one thing that survives the
+layout difference — the render carries `Wfc1` as `[192,768]` where the reference has `(768,192)`.
+
+| gate | result |
+|---|---|
+| gate 1 | every committed artifact **byte-identical**; only the two new `wx` paths appear |
+| ① decayed params | θ' **BIT-EXACT** between `adam` and `adamwx`, 74/74 |
+| ② excluded params | `θ'_wx − θ'_adam` = `lr·wd·θ` to **0.49 ULPs of θ'**, 126/126 |
+| ③ `m'`, `v'` | **bit-exact on all 11,052,692** moment coordinates — decoupled decay touches neither |
+| ④ `%loss` | bit-exact — a forward-only output cannot see the optimizer tail |
+| ⚠ control `invert` | swap every `%wd`↔`%wdz` → **fires**, 200 params misclassified, rc=1 |
+| ⚠ control `swap1` | flip ONE param each way → **fires on exactly 2**, rc=1 |
+
+**▶ `swap1` is the control that justifies the design.** It leaves the counts at 74/126, so a gate
+checking *how many* params moved passes it. The gate instead recovers, per parameter, which bucket
+it EMPIRICALLY falls in and requires that partition to equal `vitWdDecays`' **name for name** —
+which is the only thing that catches a mask excluding the wrong 126. That failure is otherwise
+silent in the arity, the types and the prefix audit (§2e's slot rule).
+
+`scripts/perturb_wd_mask.py` builds both controls; `wdx-tie --cand <path>` drives them.
+
+#### ⛔ AND IT TURNED UP A SEPARATE 500× GAP: the ViT renders bake the WRONG weight decay
+
+Found while conditioning the gate, not by reading the configs. `vitAdamConsts` baked
+`%wd = 1e-4` for **every** ViT render — that is `vitTinyConfig`'s (Imagenette) value, but
+**`vitTinyImagenetConfig.weightDecay := 0.05`**, the DeiT one. So an ImageNet ViT render was
+training at **1/500th of its reference's decay**. It is the `RenderCifar8Sgd02` / EfficientNet-16×
+shape (§2a-quater): a silently wrong hyperparameter in a committed artifact that compiles, runs and
+descends.
+
+`wdStr` is a parameter now (default unchanged, so gate 1 stayed free) and **`vitin_adam128wx`
+renders at 0.05** — both halves of the reference's decay recipe, the magnitude and the mask.
+
+⚠ **`vitin_adam128` and `vitin_adamdp128x4` are STILL at 1e-4 and were NOT touched.** Changing them
+is a separate call with its own blast radius (the DP peer, the residency-gate row, the committed
+`vit-dp-check` numbers). **Owed**, and it should be done before any ViT/ImageNet pair run — a
+matched pair at the wrong decay is not a matched pair.
+
+⚠ **ConvNeXt still owes the same feature.** Its reference sets `wdExcludeNormBias` too; the shape
+of the change is identical (its LN γ/β and layer-scale γ are 1-D), but it has no positional
+embedding, so the rule there is the plain rank test.
+
+### v1.4b — grad clip. The gate on ViT's LR.
 
 ### v1.5 — ✅ **stochastic depth: DONE on EfficientNet single-device, 2026-08-02.**
 `planning/stochastic_depth.md`. One `SHlo` op whose **VJP is `layerScale_has_vjp` verbatim** (no new

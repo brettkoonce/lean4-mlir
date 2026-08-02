@@ -1641,6 +1641,27 @@ lean_exe «droppath-tie» where
   root := `tests.TestDropPathTie
   moreLinkArgs := xlaLink
 
+/-- **recipe_gaps v1.4's gate — `wdExcludeNormBias`, the timm/DeiT `no_weight_decay` render.**
+    `vit_adamwx` is `vit_adam` with decoupled decay switched off for the 126 params timm excludes
+    (every 1-D param plus the positional embedding). The change moves NO arity, NO type and NO
+    region — only which constant feeds `%wd` at 126 of 200 sites — so every structural check
+    passes on both renders and only a numeric known answer can tell them apart:
+
+      adam:  θ' = θ − lr·( m̂/(√v̂+ε) + wd·θ )
+      wx:    θ' = θ − lr·( m̂/(√v̂+ε) + wd·msk·θ )
+
+    ▶ THE PARTITION IS THE CONTROL. It does not check that 74 params match and 126 differ — a
+    count is satisfied by any 74. It recovers per parameter which bucket that param EMPIRICALLY
+    falls in and requires the partition to equal `vitWdDecays`' name for name, which is what
+    catches a mask that excluded the wrong 126 (silent in arity, types and the prefix audit).
+    m'/v' bit-exact on all 400 moment regions is the other half: AdamW's decay is DECOUPLED, so
+    reaching a moment would mean coupled L2 — a different optimizer.
+
+        lake build wdx-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie -/
+lean_exe «wdx-tie» where
+  root := `tests.TestWdExcludeTie
+  moreLinkArgs := xlaLink
+
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a

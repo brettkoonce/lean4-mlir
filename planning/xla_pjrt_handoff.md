@@ -65,14 +65,14 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: `wdExcludeNormBias` then grad clip (v1.4). SD tail + mixup are closed.**
+## 0. ▶ START HERE — **next: ConvNeXt's `wdExcludeNormBias`, then grad clip (v1.4b).**
 
 **Rewritten 2026-08-02 at the end of the fifth session that day** (ViT's EMA peer; stochastic depth
 end-to-end on EfficientNet; `recipe_gaps` v1.2c; then §0's ~1 h tail — the two stochastic-depth
 interior gates, `lake build droppath-tie`; then mixup + cutmix's producer half,
-`scripts/mixup_gate.py`). Everything below §0a is green at **3,912**
-`Proofs Certs Codegen` jobs — unchanged by the tail, which adds a test and no proof — with **107**
-artifacts, one writer each, and `verified_mlir/` 0 lines of diff. Read this section, then
+`scripts/mixup_gate.py`; then ViT's `wdExcludeNormBias`, `lake build wdx-tie`). Everything below
+§0a is green at **3,912** `Proofs Certs Codegen` jobs — unchanged, since none of the three adds a
+proof — with **109** artifacts, one writer each, and every pre-existing one byte-identical. Read this section, then
 `planning/recipe_gaps.md`; the two feature specs are `planning/ema.md` and
 `planning/stochastic_depth.md`.
 
@@ -278,7 +278,71 @@ v1 — the driver's own spawn — and hash **identically to the unmixed** valida
 * ⚠ Configs sharing slug+variant **must clear `.lake/build/<slug>_<variant>_ckpt_xla.bin{,.epoch}`
   between runs**, or the second silently resumes the first and the comparison is meaningless (§4).
 
-### ▶ 2c. THE NEXT THREAD — **`wdExcludeNormBias`, then grad clip (`recipe_gaps.md` v1.4)**
+### ✅ 2c. `wdExcludeNormBias` on ViT — **DONE 2026-08-02. `lake build wdx-tie`.**
+
+The timm/DeiT `no_weight_decay` rule: decay only ≥2-D weight matrices, skip every 1-D param
+(biases, LayerNorm γ/β, the CLS token) **and the positional embedding**. Run over the reference's
+own `init_params`, that is **74 decayed / 126 excluded of 200**, every mask leaf uniform — so the
+decision is per-TENSOR, which is what licenses a scalar operand.
+
+**No new op, no interface change, no driver change.** `adamWParamF` already takes `wd` as a runtime
+OPERAND NAME (the `%lr` shape, for the `%lr` reason), so "exclude" is binding it to a zero constant:
+126 of 200 operand strings move and arity, types and regions do not. That is also why — unlike
+`ema` (a 4th region) or `drop` (extra inputs) — the `wx` marker needs no driver predicate at all.
+
+| gate | result |
+|---|---|
+| gate 1 | every committed artifact **byte-identical**; only the two new `wx` paths appear |
+| ① decayed | θ' **BIT-EXACT** between `adam` and `adamwx`, 74/74 |
+| ② excluded | `θ'_wx − θ'_adam` = `lr·wd·θ` to **0.49 ULPs of θ'**, 126/126 |
+| ③ `m'`,`v'` | **bit-exact on all 11,052,692** coords — decoupled decay touches neither |
+| ④ `%loss` | bit-exact |
+| ⚠ control `invert` | **fires**, 200 misclassified, rc=1 |
+| ⚠ control `swap1` | **fires on exactly 2**, rc=1 |
+
+Audit **109 artifacts / one writer each**; drift-guard coverage **64/95 → 66/97** with
+`render_guard_baseline.txt` **unchanged** (that file may only shrink); `TestVariantPredicates`
+**30 spellings**, `wx` composed with all three axes.
+
+**Three findings:**
+
+1. ⚠⚠ **GATE THE PARTITION, NOT THE COUNT.** `swap1` flips one param each way, so the counts still
+   read 74/126 — a gate checking *how many* params moved passes it. The gate instead recovers per
+   parameter which bucket it EMPIRICALLY falls in (bit-exact ⇒ decayed; offset by `lr·wd·θ` ⇒
+   excluded) and requires that partition to equal `vitWdDecays`' **name for name**. A mask
+   excluding the wrong 126 is otherwise silent in the arity, the types and the prefix audit.
+2. ⚠ **A TOLERANCE MUST BE IN THE UNIT THE INSTRUMENT HAS.** ② first gated at an absolute 1e-3 and
+   **failed a correct render at 1.39e-2**. `θ'_wx − θ'_adam` is a difference of two nearly-equal
+   f32s, so its best achievable relative accuracy is `ulp(θ')/(lr·wd·|θ|)` ≈ 6e-2 here — and
+   **independent of `lr`**, because both the difference and `|θ'|` scale with it. (Turning `%lr` up
+   is what conditioned the EMA ratio gate; it does nothing for this one — the same trap, immune to
+   the same fix.) Restated in **ULPs of θ'** it reads **0.49**, i.e. sub-ULP.
+3. ⚠ **A "non-degenerate" input can be worse than a degenerate one.** The driver's init zeroes every
+   kind-2 param — which is most of the 126 — making `lr·wd·θ = 0` and ② vacuous on the half it
+   exists to test. My first fix gave *every* param a value centred at 0.6, which overflowed the ViT
+   forward: `%loss NaN`, `0/5,526,346` bit-exact, `max abs 0.000000`. That combination is the tell
+   (NaN ≠ NaN makes every coord "differ" while every `>` stays false) and it now refuses up front.
+   Keep the driver's He scaling; move only the zeros.
+
+#### ⛔ AND IT TURNED UP A SEPARATE 500× GAP — the ViT renders bake the WRONG weight decay
+
+`vitAdamConsts` baked `%wd = 1e-4` for **every** ViT render. That is `vitTinyConfig`'s (Imagenette)
+value — but **`vitTinyImagenetConfig.weightDecay := 0.05`**, the DeiT one. An ImageNet ViT render
+was training at **1/500th of its reference's decay**: the `RenderCifar8Sgd02` / EfficientNet-16×
+shape (§2a-quater), a silently wrong hyperparameter that compiles, runs and descends.
+
+`wdStr` is a parameter now (default unchanged ⇒ gate 1 stayed free) and `vitin_adam128wx` renders at
+**0.05** — both halves of the recipe, the magnitude and the mask.
+
+⚠ **`vitin_adam128` and `vitin_adamdp128x4` are STILL at 1e-4 and were NOT touched** — a separate
+call with its own blast radius (the DP peer, the residency row, the committed `vit-dp-check`
+numbers). **Owed, and it must be closed before any ViT/ImageNet pair run**: a matched pair at the
+wrong decay is not a matched pair.
+
+⚠ **ConvNeXt owes the same feature.** Same shape (its LN γ/β and layer-scale γ are 1-D), and
+simpler — no positional embedding, so the rule there is the plain rank test.
+
+### ▶ 2d. THE NEXT THREAD — **ConvNeXt's `wdExcludeNormBias`, then grad clip (v1.4b)**
 
 ⚠ **A correction worth keeping from doing v1.3**: this section used to scope the mixup known-answer
 gate as *"for λ and a permutation, the target must be exactly `λ·y_a + (1−λ)·y_b`"*. The reference
@@ -1150,6 +1214,15 @@ scripts/mixup_gate.py --break             # + the two negative controls
 #     ⚠ the step cap for trainAdamSched is LEAN_MLIR_G2_STEPS, NOT LEAN_MLIR_MAX_STEPS (which
 #       means "time a step window then exit"), and the 28 GB ImageNet val drain is UNCONDITIONAL
 #       — LEAN_MLIR_SKIP_EVAL does not skip it. Budget ~3-4 min per ImageNet smoke config.
+
+# wdExcludeNormBias — timm/DeiT no_weight_decay on ViT (`recipe_gaps.md` v1.4). No new op, no
+# interface change, no driver change: `adamWParamF` takes `wd` as a runtime OPERAND NAME, so
+# "exclude" binds a zero constant at 126 of 200 sites.
+lake build wdx-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie
+#   ^ the controls — the partition, not the count, is what is gated:
+#     python3 scripts/perturb_wd_mask.py verified_mlir/vit_adamwx_train_step.mlir /tmp/w.mlir swap1
+#     .lake/build/bin/wdx-tie --cand /tmp/w.mlir          # rc=1, fires on exactly 2 params
+#     (`swap1` keeps the counts at 74/126 — a count-only gate passes it. `invert` is the blunt one.)
 
 # STOCHASTIC DEPTH — the two gates covering the op's INTERIOR (§0's tail, `stochastic_depth.md`
 # §7a-c). Every other SD gate pins an ENDPOINT, and an identity gate at s = 1 cannot see WHERE s is

@@ -395,6 +395,56 @@ def vitParamSig (nClasses : Nat := 10) : List (String × List Nat) :=
      (s!"b{i}_Wfc2", [768,192]), (s!"b{i}_bfc2", [192])]) ++
   [("gF", [192]), ("btF", [192]), ("Wc", [192,nClasses]), ("bc", [nClasses])]
 
+-- ════════════════════════════════════════════════════════════════
+-- ── ▶ `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ────────────────
+--
+-- The reference (`jax/Jax/Codegen.lean`'s `_wd_mask`) decays only ≥2-D weight matrices: every 1-D
+-- param (biases, LayerNorm γ/β, the CLS token) and the POSITIONAL EMBEDDING (2-D, and the reason
+-- the rule is not just "ndim ≥ 2") are excluded. `vitTinyImagenetConfig` sets it; `vitTinyConfig`
+-- does not, which is why this is a variant rather than a default.
+--
+-- ⚠ IT NEEDS NO NEW OP AND NO INTERFACE CHANGE, which is what makes it a one-evening item.
+-- `adamWParamF` already takes `wd` as a runtime OPERAND NAME (`wdName`) beside the ℝ `den` uses —
+-- the `%lr` shape, for the `%lr` reason. So "exclude" is: bind that operand to a ZERO constant and
+-- pass `wd := 0` to `den`. Same arity, same types, same everything; only 126 of 200 operand
+-- strings move. That is `e9c2729`'s conv-bias spelling (§2m) one op over, and it is why the
+-- DRIVER needs nothing at all — unlike EMA (a 4th region) or dropPath (extra inputs).
+-- `adamWParamF_faithful` then denotes `Proofs.adamWStep … (wd := 0) …`, i.e. the no-decay update,
+-- so the proof side is untouched too.
+
+/-- **Does this parameter get weight decay?** The renderer's half of the timm rule.
+
+    ⚠ It keys the positional embedding by NAME where the reference keys it by SHAPE
+    (`p.shape == _WD_POS_SHAPE`), and that is deliberate rather than a transcription slip: the
+    reference walks an unnamed pytree and has nothing else to key on, while a shape test here
+    would also exclude any *other* param that happened to be 197×192. The name is the more precise
+    identifier when you have one. `#guard`s below pin the resulting counts against the reference's
+    own, which is what stops the two readings drifting.
+
+    ⚠ The rule reads the RANK, and rank is the one thing that survives the layout difference
+    between the two sides — the render carries `Wfc1` as `[192,768]` where the reference has
+    `(768,192)`. Both are 2-D, so both decay. Measured, not assumed (§4's one-layout rule). -/
+def vitWdDecays (nm : String) (ds : List Nat) : Bool := ds.length ≥ 2 && nm != "pos"
+
+/-- The decayed / excluded split, as the renderer computes it. -/
+def vitWdCounts (nClasses : Nat := 10) : Nat × Nat :=
+  let d := ((vitParamSig nClasses).filter (fun (nm, ds) => vitWdDecays nm ds)).length
+  (d, (vitParamSig nClasses).length - d)
+
+-- ⭐ The reference's OWN `_wd_mask`, run over its OWN `init_params` for
+-- `generated_vit_tiny_imagenet.py`, reports **200 tensors: 74 decayed, 126 excluded**, with every
+-- mask leaf uniform (the decision is per-TENSOR, which is what licenses a scalar zero operand).
+-- Two independent routes — that pytree walk and this signature list — must agree, and the count
+-- is the cheapest thing that can disagree. §2m's `toSpecs == Layout.specs` move, one recipe knob
+-- over. ⚠ nClasses does not move it: `Wc` is 2-D and `bc` 1-D at every K.
+#guard vitWdCounts 10 == (74, 126)
+#guard vitWdCounts 1000 == (74, 126)
+-- The four that are NOT 1-D biases, spelled out, so a reader can check the interesting cases by eye.
+#guard vitWdDecays "pos" [197,192] == false      -- 2-D, and excluded ANYWAY — the whole point
+#guard vitWdDecays "cls" [192] == false          -- the CLS token
+#guard vitWdDecays "wConv" [192,3,16,16] == true -- patch embed, 4-D
+#guard vitWdDecays "Wq" [192,192] == true
+
 /-- **ViT-Tiny depth-12 train step rendered ENTIRELY from the verified AST** — the §1 backward render.
     Forward (`vitFwd12`) → softmax-CE cotangent (`softmax(logits) − onehot`, the `lossCotGraph` form) →
     head-dense back (`dotOut` + `weightSgd`/`biasSgd`) → `clsPadF` → final-LN back (`vlnBack`) → 12×
@@ -437,7 +487,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     runtime `tensor<f32>` args, so one render serves the whole cosine+warmup schedule. Mirrors
     `ResNet34RenderB.adamOne`, minus the replica collective (ViT has no DP render yet). -/
 private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : String) (replicas : Nat)
-    (ema : Bool := false) :
+    (ema : Bool := false) (wdName : String := "%wd") :
     StateM Nat (String × String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
@@ -452,8 +502,12 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
   let gr : SHlo n := .operand gAvg z
   let (cM, nM) ← pretty bs (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
   let (cV, nV) ← pretty bs (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
+  -- ⚠ `wdName` and `den`'s `wd` must move TOGETHER. They are both 0 here only because every
+  -- literal in this constructor is already 0 (the ℝ slots are placeholders the emit ignores); if
+  -- that ever changes, an excluded site must pass `wd := 0` as well as `%wdz`, or the artifact and
+  -- the denotation describe different optimizers — §2a's two-writers disease inside one op.
   let (cT, nT) ← pretty bs (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
-                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
+                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName ds 0 0 0 0 0 0 0 z z z gr)
   -- ▶ THE EMA SHADOW, and as on ConvNeXt/EfficientNet it needs NO new op:
   -- `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the reference's `ema_update`
   -- (`jax/Jax/Codegen.lean:2459`) at `(β₁ := d, m := ema, g := θ')`, so `adamMNextF` renders it and
@@ -496,20 +550,50 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
     RMSProp+EMA variant is `emarms`, which does **not** start with `"rms"`, so the mean-square would
     have initialised to 0 through a prefix test. ViT is AdamW-only, so there is no second axis here
     today; if one is ever added, make both predicates substring tests first. -/
-def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false) : String :=
+def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
+    (wdExclude : Bool := false) : String :=
   (if ema then "ema" else "adam")
     ++ (if replicas ≤ 1 then "" else "dp")
     ++ (if bs == 32 && replicas ≤ 2 then "" else toString bs)
     ++ (if replicas > 2 then s!"x{replicas}" else "")
+    -- ▶ `wx` = timm no_weight_decay. TRAILING, and checked against every CONCATENATION rather than
+    -- against the other markers one at a time — that is §0's `sd`/`rmsdp` finding, where the
+    -- collision was between two OTHER markers meeting. `tests/TestVariantPredicates.lean` runs the
+    -- `wx` spellings through all three driver predicates.
+    --
+    -- ⚠ Unlike `ema`, `rms` and `drop`, this marker needs NO driver predicate at all: excluding a
+    -- param from decay binds a different CONSTANT to `%wd` and changes no arity, no type and no
+    -- region. It is a pure render variant. The name exists so the artifact says which recipe it is,
+    -- not so anything switches on it.
+    ++ (if wdExclude then "wx" else "")
 
-/-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4). -/
-private def vitAdamConsts : String :=
+/-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4).
+
+    ⚠ **`wdStr` is a parameter because the two ViT configs DISAGREE ON IT BY 500×**, and that was
+    found while gating `wdExcludeNormBias` rather than by reading the configs: `vitTinyConfig`
+    (Imagenette) sets `weightDecay := 1e-4`, which is the literal this file baked for every ViT
+    render — but **`vitTinyImagenetConfig` sets 0.05**, the DeiT value. So an ImageNet render at
+    the baked default trains at 1/500th of its reference's decay. It is the `RenderCifar8Sgd02` /
+    EfficientNet-16× shape (§2a-quater): a silently wrong hyperparameter in a committed artifact,
+    which compiles, runs and descends. The default is unchanged, so every existing artifact keeps
+    its bytes; only the ImageNet `wx` render passes 0.05.
+
+    ⚠ **`vitin_adam128` and `vitin_adamdp128x4` are STILL at 1e-4** and are not touched here —
+    changing them is a separate call with its own blast radius (the DP peer, the residency-gate
+    row). Recorded as owed in `recipe_gaps.md` rather than fixed in passing. -/
+private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
+  (if wdExclude then
+    -- The no-decay operand. Declared ONLY when the variant is on, so every committed artifact
+    -- re-renders byte-identically at the default — gate 1 in its strong form, for free.
+    "    // ── timm no_weight_decay (wdExcludeNormBias): 126 of 200 params take %wdz, not %wd ──\n" ++
+    "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
+   else "") ++
   "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
   "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
   "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
   "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
   "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+  s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n"
 
 /-- **ViT-Tiny depth-12 AdamW train step, rendered from the verified AST.** The certified peer of
     the hand-written `ViTRender.vitTrainStepModuleAdamSched` that `vit-verified-adam` has been
@@ -531,7 +615,8 @@ private def vitAdamConsts : String :=
     lesson (§2m). -/
 def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     (bStr : String := "32.0") (replicas : Nat := 1) (bs : Nat := 32)
-    (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false) : String :=
+    (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false)
+    (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
   -- ⚠ α and K are the ONLY knobs; every emitted smoothing constant is derived from them here.
   -- Passing the cotangent's `−α/K` as a separate string (which is what this took until
   -- 2026-07-31) is the same two-writers-for-one-fact shape §2a spent a thread removing: the two
@@ -548,7 +633,11 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     let mut eN : List String := []
     for i in [0:(vitParamSig nClasses).length] do
       let (nm, ds) := (vitParamSig nClasses)[i]!
-      let (c, nT, nM, nV, nE) ← vitAdamOne bs nm ds (gradNames[i]!) replicas ema
+      -- The wd operand is chosen from the SAME `vitParamSig` entry that names the site, never a
+      -- parallel list — §2e's silent-slot rule: a misaligned mask would decay the wrong 126 params
+      -- and nothing in the arity, the types or the prefix audit would notice.
+      let wdN := if wdExclude && !vitWdDecays nm ds then "%wdz" else "%wd"
+      let (c, nT, nM, nV, nE) ← vitAdamOne bs nm ds (gradNames[i]!) replicas ema wdN
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]
@@ -607,7 +696,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
         "    // per parameter at (β₁ := %emad) on the UPDATED weight. It is pretty(verified AST)\n" ++
         "    // like the rest of the optimizer — NOT a carve-out. EVAL AND CHECKPOINTS SCORE IT.\n"
        else "") ++
-      code ++ vitAdamConsts ++ adamCode ++ lossCode ++
+      code ++ vitAdamConsts wdExclude wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let pSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
   let mSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}m: {ty ds}"))
@@ -794,6 +883,29 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/vitin_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderV "vitin_fwd" 256 1000)
 
+-- ── ▶ v1.4: `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ──────────
+-- `vitTinyImagenetConfig.wdExcludeNormBias := true`, so the ImageNet pair needs this render, not
+-- the plain `adam128` one; `vitTinyConfig` does NOT set it, which is why the Imagenette artifacts
+-- keep their bytes and this is a variant rather than a flipped default.
+--
+-- 126 of the 200 params take `%wdz` (a zero constant) instead of `%wd`: every 1-D param plus the
+-- positional embedding. **Same arity, same types, same regions** — the only thing that moves is
+-- 126 operand strings, so the driver, the checkpoint layout and every harness are untouched.
+--
+-- `vit_adamwx` is the Imagenette-shaped peer, and it is NOT scaffolding: `vit-wdx-tie` drives it
+-- against `vit_adam` at bs32/K=10, where the two renders differ in EXACTLY the thing being gated
+-- and the compile is seconds rather than a minute.
+#eval IO.FS.writeFile "verified_mlir/vit_adamwx_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_adamwx_train_step" "32.0" 1 32 10 0.1
+    (ema := false) (wdExclude := true))
+-- ⚠ wd = **0.05**, not the file's 1e-4 default: `vitTinyImagenetConfig.weightDecay := 0.05` (the
+-- DeiT value) where `vitTinyConfig` uses 1e-4. Both halves of the reference's decay recipe — the
+-- MAGNITUDE and the MASK — have to be right for this render to be the pair's, and only the mask
+-- was in scope when this variant was named. See `vitAdamConsts`.
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128wx_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adam128wx_train_step" "128.0" 1 128 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05"))
+
 -- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ─────────────────
 -- ViT is the last of the three nets whose reference uses EMA (`vitTinyImagenetConfig.emaDecay :=
 -- 0.99996`; ConvNeXt landed first, then EfficientNet's `emarms`), and it is the CHEAPEST of the
@@ -849,6 +961,14 @@ end Proofs.StableHLO
 -- `variant.startsWith "ema"`, and on EfficientNet a *prefix* test on a two-axis name (`emarms`)
 -- already misclassified a variant once and would have initialised RMSProp's mean-square to 0.
 #guard Proofs.StableHLO.vitAdamVariant 32 1 true == "ema"
+-- ▶ The `wx` (timm no_weight_decay) spellings. TRAILING, so it composes with every other axis
+-- without displacing one — and every combination below is run through the driver's three
+-- predicates in `tests/TestVariantPredicates.lean`, because with N markers the collisions are
+-- between PAIRS and reading a name at a time cannot find them (§0's `sd`/`rmsdp` finding).
+#guard Proofs.StableHLO.vitAdamVariant 32 1 false true == "adamwx"
+#guard Proofs.StableHLO.vitAdamVariant 128 1 false true == "adam128wx"
+#guard Proofs.StableHLO.vitAdamVariant 128 4 false true == "adamdp128x4wx"
+#guard Proofs.StableHLO.vitAdamVariant 32 1 true true == "emawx"
 
 -- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
 -- `vitTinyImagenetConfig.emaDecay := 0.99996` (the DeiT default), so this is the render an ImageNet

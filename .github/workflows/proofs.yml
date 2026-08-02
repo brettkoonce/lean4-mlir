@@ -178,6 +178,8 @@ jobs:
               verified_mlir/vit_adam128_train_step.mlir \
               verified_mlir/vit_adamdp128x4_train_step.mlir \
               verified_mlir/vit_ema_train_step.mlir \
+              verified_mlir/vit_adamwx_train_step.mlir \
+              verified_mlir/vitin_adam128wx_train_step.mlir \
               verified_mlir/vitin_fwd.mlir \
               verified_mlir/vitin_adam128_train_step.mlir \
               verified_mlir/vitin_adamdp128x4_train_step.mlir \
