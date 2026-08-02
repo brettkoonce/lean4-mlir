@@ -140,6 +140,9 @@ jobs:
               verified_mlir/cnxin_ema_train_step.mlir \
               verified_mlir/cnxin_emadp_train_step.mlir \
               verified_mlir/cnxin_fwd.mlir \
+              verified_mlir/convnext_adamwx_train_step.mlir \
+              verified_mlir/cnxin_adamwx_train_step.mlir \
+
             || { echo "::error::committed verified_mlir/{convnext,cnxin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set

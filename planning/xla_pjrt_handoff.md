@@ -65,14 +65,14 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: ConvNeXt's `wdExcludeNormBias`, then grad clip (v1.4b).**
+## 0. ▶ START HERE — **next: grad clip (v1.4b). `wdExcludeNormBias` is done on both nets.**
 
 **Rewritten 2026-08-02 at the end of the fifth session that day** (ViT's EMA peer; stochastic depth
 end-to-end on EfficientNet; `recipe_gaps` v1.2c; then §0's ~1 h tail — the two stochastic-depth
 interior gates, `lake build droppath-tie`; then mixup + cutmix's producer half,
-`scripts/mixup_gate.py`; then ViT's `wdExcludeNormBias`, `lake build wdx-tie`). Everything below
+`scripts/mixup_gate.py`; then `wdExcludeNormBias` on ViT AND ConvNeXt, `lake build wdx-tie`). Everything below
 §0a is green at **3,912** `Proofs Certs Codegen` jobs — unchanged, since none of the three adds a
-proof — with **109** artifacts, one writer each, and every pre-existing one byte-identical. Read this section, then
+proof — with **111** artifacts, one writer each, and every pre-existing one byte-identical. Read this section, then
 `planning/recipe_gaps.md`; the two feature specs are `planning/ema.md` and
 `planning/stochastic_depth.md`.
 
@@ -278,7 +278,7 @@ v1 — the driver's own spawn — and hash **identically to the unmixed** valida
 * ⚠ Configs sharing slug+variant **must clear `.lake/build/<slug>_<variant>_ckpt_xla.bin{,.epoch}`
   between runs**, or the second silently resumes the first and the comparison is meaningless (§4).
 
-### ✅ 2c. `wdExcludeNormBias` on ViT — **DONE 2026-08-02. `lake build wdx-tie`.**
+### ✅ 2c. `wdExcludeNormBias` — **BOTH NETS, 2026-08-02. `lake build wdx-tie {vit,convnext}`.**
 
 The timm/DeiT `no_weight_decay` rule: decay only ≥2-D weight matrices, skip every 1-D param
 (biases, LayerNorm γ/β, the CLS token) **and the positional embedding**. Run over the reference's
@@ -334,15 +334,45 @@ shape (§2a-quater), a silently wrong hyperparameter that compiles, runs and des
 `wdStr` is a parameter now (default unchanged ⇒ gate 1 stayed free) and `vitin_adam128wx` renders at
 **0.05** — both halves of the recipe, the magnitude and the mask.
 
-⚠ **`vitin_adam128` and `vitin_adamdp128x4` are STILL at 1e-4 and were NOT touched** — a separate
-call with its own blast radius (the DP peer, the residency row, the committed `vit-dp-check`
-numbers). **Owed, and it must be closed before any ViT/ImageNet pair run**: a matched pair at the
-wrong decay is not a matched pair.
+⚠ **The same 500× gap is on ConvNeXt** (`convnextTinyImagenetConfig.weightDecay := 0.05`), and
+`cnxin_adamwx` renders at 0.05 for the same reason `vitin_adam128wx` does.
 
-⚠ **ConvNeXt owes the same feature.** Same shape (its LN γ/β and layer-scale γ are 1-D), and
-simpler — no positional embedding, so the rule there is the plain rank test.
+⚠ **`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam` and `cnxin_adamdp` are STILL at 1e-4 and
+were NOT touched** — a separate call with its own blast radius (the DP peers, the residency rows,
+the committed `vit-dp-check`/`convnext-dp-check` numbers). **Owed, and it must be closed before any
+ViT or ConvNeXt ImageNet pair run**: a matched pair at the wrong decay is not a matched pair.
 
-### ▶ 2d. THE NEXT THREAD — **ConvNeXt's `wdExcludeNormBias`, then grad clip (v1.4b)**
+#### ✅ ConvNeXt followed the same day — 59 decayed / 121 excluded of 180
+
+The prediction held: **the plain rank test, no name carve-out.** ConvNeXt's generated reference sets
+`_WD_POS_SHAPE = None`, so ViT's `nm != "pos"` has no analogue — carrying it over would have
+transcribed a rule this net does not have. Excluded: every LN γ/β, every conv bias, and LayerScale
+γ (1-D, so structurally rather than as a special case).
+
+| | ViT | ConvNeXt |
+|---|---|---|
+| params (decayed / excluded) | 200 (74/126) | 180 (**59/121**) |
+| ① decayed θ' bit-exact | 74/74 | **59/59** |
+| ② excluded offset = `lr·wd·θ` | 0.49 ULPs | **0.48 ULPs** |
+| ③ `m'`,`v'` bit-exact | 11,052,692 | **55,652,564** |
+| controls `invert`/`swap1` | 200 / 2 | **180 / 2** |
+
+**ONE harness for both** (`wdx-tie <net>`), per `rms-tie`/`shard-check` — a second copy is the
+double-writer disease one level down, in code. ⚠ A green ViT run does not license ConvNeXt: the two
+rules genuinely differ, the `rms-tie` ε-placement lesson one knob over.
+
+⚠⚠ **AND THE SAME EDIT BEHAVED DIFFERENTLY ON THE TWO RENDERERS.** ConvNeXt DERIVES its entry name
+(`{slug}_{cnxAdamVariant …}`) where ViT takes `funcName` explicitly, so the flag had to reach the
+*variant* too. It did not, and `convnext_adamwx_train_step.mlir` came out declaring
+`@convnext_adam_train_step` — an entry disagreeing with its own path. **The shim refused the call**
+(`mlp train step failed` at the first invoke) rather than running the wrong graph, which is
+§2b-quater's entry check earning its keep a second time. `#guard`s pin the `wx` spellings now.
+*Only running both nets found it.*
+
+Audits after both: **111 artifacts / one writer each**, drift-guard coverage **64/95 → 68/99** with
+`render_guard_baseline.txt` unchanged, prefix audit green, `TestVariantPredicates` 30 spellings.
+
+### ▶ 2d. THE NEXT THREAD — **grad clip (`recipe_gaps.md` v1.4b)**
 
 ⚠ **A correction worth keeping from doing v1.3**: this section used to scope the mixup known-answer
 gate as *"for λ and a permutation, the target must be exactly `λ·y_a + (1−λ)·y_b`"*. The reference
@@ -1218,7 +1248,7 @@ scripts/mixup_gate.py --break             # + the two negative controls
 # wdExcludeNormBias — timm/DeiT no_weight_decay on ViT (`recipe_gaps.md` v1.4). No new op, no
 # interface change, no driver change: `adamWParamF` takes `wd` as a runtime OPERAND NAME, so
 # "exclude" binds a zero constant at 126 of 200 sites.
-lake build wdx-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie
+lake build wdx-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie {vit|convnext}
 #   ^ the controls — the partition, not the count, is what is gated:
 #     python3 scripts/perturb_wd_mask.py verified_mlir/vit_adamwx_train_step.mlir /tmp/w.mlir swap1
 #     .lake/build/bin/wdx-tie --cand /tmp/w.mlir          # rc=1, fires on exactly 2 params

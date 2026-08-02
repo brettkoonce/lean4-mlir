@@ -321,6 +321,49 @@ private def allParams (nClasses : Nat := 10) : List (String × List Nat) := Id.r
   ps := ps ++ [("Wd", [768,nClasses]), ("bd", [nClasses])]
   return ps
 
+-- ── ▶ `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ────────────────
+-- `convnextTinyImagenetConfig` sets it (its own comment: *"skip norm γ/β, biases, LayerScale γ
+-- (1-D params)"*). Same mechanism as ViT's (`ViTRender.vitWdDecays`): `adamWParamF` takes `wd` as
+-- a runtime OPERAND NAME, so excluding a param binds it to a zero constant — no new op, no
+-- interface change, no driver change.
+
+/-- **Does this parameter get weight decay?** ConvNeXt's half of the timm rule.
+
+    ⚠ **It is the PLAIN RANK TEST, with no name carve-out, and that is the difference from ViT.**
+    The reference's `_wd_mask` also excludes anything matching `_WD_POS_SHAPE`, but ConvNeXt has no
+    patch-embedding *positional* parameter, so its generated reference sets `_WD_POS_SHAPE = None`
+    and that branch can never fire. Checked in the generated file rather than assumed — carrying
+    ViT's `nm != "pos"` over would have been a transcription of a rule this net does not have.
+
+    What that leaves excluded here: every LN γ/β (`[c]`), every conv bias, and **LayerScale γ**
+    (`lg`, `[c]`) — which is 1-D and therefore excluded for the same structural reason, not as a
+    special case. -/
+def cnxWdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
+
+/-- The decayed / excluded split, as the renderer computes it. -/
+def cnxWdCounts (nClasses : Nat := 10) : Nat × Nat :=
+  let d := ((allParams nClasses).filter (fun (nm, ds) => cnxWdDecays nm ds)).length
+  (d, (allParams nClasses).length - d)
+
+-- ⭐ The reference's OWN `_wd_mask` over its OWN `init_params` for
+-- `generated_convnext_tiny_imagenet.py` reports **180 tensors: 59 decayed, 121 excluded**, every
+-- mask leaf uniform. Two independent routes, and the count is the cheapest thing that can
+-- disagree — §2m's `toSpecs == Layout.specs` move applied to a recipe knob.
+#guard cnxWdCounts 10 == (59, 121)
+#guard cnxWdCounts 1000 == (59, 121)
+-- 18 blocks × (dW, eW, pW decayed; db, ng, nbt, eb, pb, lg excluded) = 54/108, + stem 1/3,
+-- + 3 downsamples 1/3 each, + head 1/1.
+#guard cnxWdDecays "s0b0dW" [96,1,7,7] == true    -- depthwise 7×7
+#guard cnxWdDecays "s0b0lg" [96] == false         -- LayerScale γ — 1-D, so excluded
+#guard cnxWdDecays "psng" [96] == false           -- stem LN γ
+#guard cnxWdDecays "d0W" [192,96,2,2] == true     -- downsample conv
+
+/-- `allParams` is `private` (it is this file's internal signature source); this is the one thing
+    outside it that legitimately needs the list — `tests/TestWdExcludeTie.lean`, which must read
+    the SAME names and shapes the renderer chose `%wd`/`%wdz` from. Exposing an alias rather than
+    dropping `private` keeps the surface one definition wide. -/
+def cnxAllParams (nClasses : Nat := 10) : List (String × List Nat) := allParams nClasses
+
 -- ════════════════════════════════════════════════════════════════
 -- § The shared forward chain (the forward render and both train steps emit this)
 -- ════════════════════════════════════════════════════════════════
@@ -551,7 +594,7 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     the LN ones are `tensor<96xf32>` … `tensor<768xf32>`). The rank-0 `all_reduce` path this
     render used to be the only exerciser of is no longer exercised anywhere in the repo. -/
 private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
-    (ema : Bool := false) :
+    (ema : Bool := false) (wdName : String := "%wd") :
     StateM Nat (String × String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
@@ -560,7 +603,7 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
   let (cM, nM) ← pretty cBS (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
   let (cV, nV) ← pretty cBS (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
   let (cT, nT) ← pretty cBS (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
-                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
+                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName ds 0 0 0 0 0 0 0 z z z gr)
   -- ▶ THE EMA SHADOW, and it needs NO new op: `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the
   -- reference's `ema_update` (`jax/Jax/Codegen.lean:2459`) at `(β₁ := d, m := ema, g := θ')`, so
   -- `adamMNextF` renders it and `adamMNextF_faithful` closes the denotation side by `rfl`. Third
@@ -593,17 +636,30 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
     render carrying a fourth `[θ|m|v|ema]` region must never be able to overwrite the artifact the
     AdamW trainer runs, whose blob has three. That is §2a's last-writer-wins race, and here it would
     also be an arity mismatch the driver could not survive. -/
-def cnxAdamVariant (replicas : Nat) (ema : Bool := false) : String :=
+def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := false) : String :=
   (if ema then "ema" else "adam") ++ (if replicas ≤ 1 then "" else "dp")
+    -- `wx` = timm no_weight_decay; TRAILING, and checked against every CONCATENATION in
+    -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
+    -- It needs no driver predicate: excluding a param changes no arity, type or region.
+    ++ (if wdExclude then "wx" else "")
 
-/-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe. -/
-private def convnextAdamConsts : String :=
+/-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe.
+
+    ⚠ **`wdStr` is a parameter for the reason `ViTRender.vitAdamConsts`' is**: the Imagenette and
+    ImageNet configs disagree on it by **500×**. `convnextVerified`'s recipe is the baked 1e-4;
+    `convnextTinyImagenetConfig.weightDecay := 0.05`. The default is unchanged, so every committed
+    artifact keeps its bytes; only the ImageNet `wx` render passes 0.05. -/
+private def convnextAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
+  (if wdExclude then
+    "    // ── timm no_weight_decay (wdExcludeNormBias): 121 of 180 params take %wdz, not %wd ──\n" ++
+    "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
+   else "") ++
   "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
   "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
   "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
   "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
   "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+  s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n"
 
 set_option maxRecDepth 8000 in
 /-- **ConvNeXt-T AdamW train step rendered from the verified AST.** The certified peer of the
@@ -634,6 +690,9 @@ set_option maxRecDepth 8000 in
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false)
+    -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument
+    -- at every call site, which is how the mnv2 `convBias` threading went wrong.
+    (wdExclude : Bool := false) (wdStr : String := "0.0001")
     : String := Id.run do
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
   -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
@@ -651,7 +710,9 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let mut eN : List String := []
     for (nm, ds) in allParams nClasses do
       let g := (gradMap.lookup nm).getD s!"%d{nm}"
-      let (c, nT, nM, nV, nE) ← convnextAdamOne replicas nm ds g ema
+      -- The wd operand comes from the SAME `allParams` entry that names the site (§2e's slot rule).
+      let wdN := if wdExclude && !cnxWdDecays nm ds then "%wdz" else "%wd"
+      let (c, nT, nM, nV, nE) ← convnextAdamOne replicas nm ds g ema wdN
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]
@@ -715,7 +776,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
         "    // over disjoint equal batches. Unlike the BN nets, ConvNeXt normalises with LayerNorm\n" ++
         "    // — within one example, never across the batch — so N x b IS 1 x (N.b) here and the\n" ++
         "    // §10.3b caveat does not apply.\n") ++
-      body ++ convnextAdamConsts ++ adamCode ++ lossCode ++
+      body ++ convnextAdamConsts wdExclude wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   -- The AdamW body continues the SGD traversal's fresh-name counter. `convNextBackAll` consumed
   -- names 0..k, so the Adam ops must start at k — otherwise they collide with the backward's SSAs.
@@ -738,7 +799,13 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- ⚠ The slug is load-bearing exactly as it is on R34 (§2k) and ViT (§2p): a 1000-class render
   -- emitted under the `convnext` slug would collide with the artifacts the 84.41% Imagenette run,
   -- the prefix audit and every `convnext-adam-tie` invocation depend on.
-  let funcName := s!"{slug}_{cnxAdamVariant replicas ema}_train_step"
+  -- ⚠ `wdExclude` MUST reach the variant here. ConvNeXt DERIVES its entry name from the variant
+  -- where ViT takes `funcName` explicitly, so omitting it renders `@convnext_adam_train_step`
+  -- into `convnext_adamwx_train_step.mlir` — an artifact whose entry disagrees with its path.
+  -- The shim's entry check refuses that outright ("mlp train step failed") rather than running
+  -- the wrong graph, which is §2b-quater's guard earning its keep a second time; the `#guard`s
+  -- below are what stop it recurring silently.
+  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
@@ -864,6 +931,23 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/cnxin_fwd.mlir"
   (Proofs.StableHLO.convNextFwdFaithfulV "cnxin_fwd" 1000)
 
+-- ── ▶ v1.4: `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ──────────
+-- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 121 of the 180 params take `%wdz`: every
+-- LN γ/β, every conv bias, and LayerScale γ — all 1-D, so the PLAIN RANK TEST covers them and
+-- ConvNeXt needs no name carve-out (ViT's `pos` has no analogue here; the generated reference sets
+-- `_WD_POS_SHAPE = None`). Same arity, same types, same regions.
+--
+-- ⚠ The ImageNet render also takes wd = **0.05**, not the file's 1e-4 default: BOTH halves of the
+-- reference's decay recipe — the magnitude and the mask — have to be right for the pair, and only
+-- the mask was in scope when this variant was named. `convnext_adamwx` is the Imagenette-shaped
+-- peer that `wdx-tie convnext` drives, where the compile is seconds.
+#eval IO.FS.writeFile "verified_mlir/convnext_adamwx_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 1 10 "convnext"
+    (ema := false) (wdExclude := true))
+#eval IO.FS.writeFile "verified_mlir/cnxin_adamwx_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05"))
+
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
 -- call ("entry mismatch"). These pin the literal paths above against `cnxAdamVariant`, so a rename
 -- fails at `lake build` rather than at run time. (The audit greps for the LITERAL string
@@ -876,6 +960,12 @@ end Proofs.StableHLO
 -- the same `"ema"` prefix, exactly as it keys RMSProp's mean-square init off `"rms"`.
 #guard Proofs.StableHLO.cnxAdamVariant 1 true == "ema"
 #guard Proofs.StableHLO.cnxAdamVariant 2 true == "emadp"
+-- ▶ v1.4 `wx` spellings, and they are load-bearing here in a way ViT's are not: this net builds
+-- its ENTRY NAME from the variant, so a `wx` render whose variant forgot the flag produces an
+-- artifact whose entry disagrees with its own path.
+#guard Proofs.StableHLO.cnxAdamVariant 1 false true == "adamwx"
+#guard Proofs.StableHLO.cnxAdamVariant 4 false true == "adamdpwx"
+#guard Proofs.StableHLO.cnxAdamVariant 1 true true == "emawx"
 
 -- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
 -- ConvNeXt's reference number IS the EMA shadow's — **75.93%**, against a live best of 76.28% — so

@@ -1,5 +1,6 @@
 import LeanMlir.VerifiedNets
 import LeanMlir.Proofs.Codegen.ViTRender
+import LeanMlir.Proofs.Codegen.ConvNeXtRender
 
 /-! # `wdExcludeNormBias` — the timm `no_weight_decay` render, numerically certified (v1.4)
 
@@ -39,10 +40,39 @@ it is readable but not generously so, and it is INDEPENDENT of `lr` (both the di
 `|θ'|` scale with it, which is why turning `%lr` up does not help here the way it did for EMA).
 That is why ① and ③ carry the weight: they are bit-exact and need no resolution argument at all.
 
-    lake build wdx-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie
+    lake build wdx-tie
+    CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie vit         # 200 params, 74/126
+    CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie convnext    # 180 params, 59/121
+
+**ONE harness, both nets**, for the reason `TestShardCheck.lean` and `rms-tie` are families: a
+second copy is the double-writer disease one level down, in code. Everything per-net comes from the
+selected net's own signature list and mask predicate — `vitParamSig`/`vitWdDecays` and
+`allParams`/`cnxWdDecays` — i.e. from the SAME sources the renderers choose `%wd`/`%wdz` from, so
+the gate cannot drift from the render it gates.
+
+⚠ **The two nets' rules are NOT the same, and that is the point of running both.** ViT excludes the
+positional embedding by NAME on top of the rank test; ConvNeXt has no such param (its generated
+reference sets `_WD_POS_SHAPE = None`), so it is the plain rank test. A green ViT run does not
+license ConvNeXt — the `rms-tie` ε-placement lesson, one knob over.
 -/
 
 open Proofs.StableHLO
+
+/-- Everything per-net: the slug, the signature list (names + shapes, in func-arg order) and the
+    mask predicate. Both entries read the RENDERER's own definitions, never a copy. -/
+private structure WdNet where
+  slug : String
+  sig  : List (String × List Nat)
+  mask : String → List Nat → Bool
+  spec : VerifiedNetSpec
+
+private def netBySlug (s : String) : IO WdNet :=
+  match s with
+  | "vit"      => pure { slug := "vit", sig := vitParamSig 10, mask := vitWdDecays,
+                         spec := vitVerified }
+  | "convnext" => pure { slug := "convnext", sig := cnxAllParams 10, mask := cnxWdDecays,
+                         spec := convnextVerified }
+  | _ => throw (IO.userError s!"unknown net '{s}' — expected vit | convnext")
 
 /-- The driver's init (`VerifiedTrain.mkParam`, private) with **exactly one deliberate change**.
 
@@ -84,15 +114,17 @@ def main (argv : List String) : IO Unit := do
   let cand := match argv.dropWhile (· != "--cand") with
     | _ :: p :: _ => some p
     | _ => none
-  let net := vitVerified.toNet
-  let sig := vitParamSig 10
+  let wn ← netBySlug ((argv.filter (fun a => a != "--cand" && !a.startsWith "/")).head?.getD "vit")
+  let net := wn.spec.toNet
+  let sig := wn.sig
   let bs  := 32
-  let (nDec, nExc) := vitWdCounts 10
-  IO.println "wdExcludeNormBias — the timm no_weight_decay render, numerically certified (v1.4)"
+  let nDec := (sig.filter (fun (nm, ds) => wn.mask nm ds)).length
+  let nExc := sig.length - nDec
+  IO.println s!"wdExcludeNormBias — {wn.slug}, the timm no_weight_decay render (v1.4)"
   IO.println s!"  {sig.length} params, {nDec} decayed / {nExc} excluded, bs {bs}, \
 backend {← IreeSession.backendName}"
 
-  -- ⚠ TWO ROUTES TO THE SAME LAYOUT, checked. `vitParamSig` names the params and drives the
+  -- ⚠ TWO ROUTES TO THE SAME LAYOUT, checked. the signature list names the params and drives the
   -- render's `%wd`/`%wdz` choice; `net.specs` is the LAYOUT the driver packs a blob from. They are
   -- independent hand-lists, and this gate reads offsets from one while the mask came from the
   -- other — §2m's whole lesson (mnv2 shipped a 160-param forward past a green tie because only one
@@ -105,7 +137,7 @@ backend {← IreeSession.backendName}"
     let (dims, _) := net.specs[i]!
     if dims.toList != ds then
       throw (IO.userError s!"LAYOUT SKEW at {i} ({nm}): net.specs says {dims.toList}, \
-vitParamSig says {ds}")
+the signature list says {ds}")
 
   -- ── one shared (θ, x, onehot); m = v = 0 so the moments are the same on both sides ──
   let mut parts : Array ByteArray := #[]
@@ -128,14 +160,14 @@ vitParamSig says {ds}")
   let buf := F32.concat #[θ, z, z, tl]
 
   let run (variant : String) : IO ByteArray := do
-    let vmfb := s!".lake/build/wdx_tie_{variant}.vmfb"
+    let vmfb := s!".lake/build/wdx_tie_{wn.slug}_{variant}.vmfb"
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
-    for p in [vmfb, s!".lake/build/wdx_tie_{variant}_{target}.vmfb"] do
+    for p in [vmfb, s!".lake/build/wdx_tie_{wn.slug}_{variant}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let path := if variant == "adamwx" then cand.getD s!"verified_mlir/vit_{variant}_train_step.mlir"
-                else s!"verified_mlir/vit_{variant}_train_step.mlir"
+    let dflt := s!"verified_mlir/{wn.slug}_{variant}_train_step.mlir"
+    let path := if variant == "adamwx" then cand.getD dflt else dflt
     let sess ← mkSession path vmfb
-    IreeSession.mlpTrainStepV sess s!"m.vit_{variant}_train_step" x buf shapes y
+    IreeSession.mlpTrainStepV sess s!"m.{wn.slug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   if cand.isSome then IO.println s!"  ⚠ CANDIDATE wx render: {cand.get!}"
   let oA ← run "adam"
@@ -202,9 +234,9 @@ vitParamSig says {ds}")
     -- deliberately does not use the driver's zeros for the 1-D params.)
     if predMax < 1e-12 then degenerate := degenerate ++ [nm]
     let empiricalDecayed := bitExact
-    if empiricalDecayed != vitWdDecays nm ds then
+    if empiricalDecayed != wn.mask nm ds then
       wrong := wrong ++ [s!"{nm}{ds} render={if bitExact then "decayed" else "excluded"} \
-expected={if vitWdDecays nm ds then "decayed" else "excluded"}"]
+expected={if wn.mask nm ds then "decayed" else "excluded"}"]
     if !bitExact && ulpMax > 0.0 then
       let r := relErr / ulpMax          -- the error in ULPs of θ' — the unit the f32 output has
       if r > worstOffRel then worstOffRel := r
@@ -229,7 +261,7 @@ different optimizer (Loshchilov & Hutter).")
 and cannot see a change to the optimizer tail. That localises the difference to the wrong half.")
   if !wrong.isEmpty then
     throw (IO.userError s!"①/② FAILED — THE MASK IS WRONG on {wrong.length} params. The empirical \
-partition must EQUAL vitWdDecays', name for name; a count alone is satisfied by any {nDec}. \
+partition must EQUAL the renderer's mask, name for name; a count alone is satisfied by any {nDec}. \
 First few: {wrong.take 4}")
   if nExactSeen != nDec || nOffsetSeen != nExc then
     throw (IO.userError s!"①/② FAILED: {nExactSeen}/{nOffsetSeen} decayed/excluded, expected \
@@ -239,6 +271,6 @@ First few: {wrong.take 4}")
   if worstOffRel > 4.0 then
     throw (IO.userError s!"② FAILED: the offset at excluded params is not lr·wd·θ \
 ({worstOffRel} ULPs of θ', over a 4-ULP bar)")
-  IO.println s!"✓ wdExcludeNormBias: the empirical partition EQUALS vitWdDecays' on all \
+  IO.println s!"✓ wdExcludeNormBias: the empirical partition EQUALS the renderer's mask on all \
 {sig.length} params ({nDec} decayed bit-exact, {nExc} excluded offset by lr·wd·θ to \
 {worstOffRel} ULPs), with m'/v' bit-exact on all {2*P} moment coordinates and %loss bit-exact"

@@ -64,7 +64,7 @@ that does not exist yet.
 | optimizer | SGD+mom | AdamW | AdamW | **RMSProp** | **RMSProp** | AdamW / SGD / Nesterov / heavy-ball / **RMSProp** |
 | | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ **render + driver, 2026-08-02** |
 | weight decay | 1e-4 coupled ✅ | 0.05 ✅ | 0.05 ✅ | 1e-5 ✅* | 4e-5 ✅* | decoupled in AdamW, coupled in heavy-ball **and RMSProp** |
-| `wdExcludeNormBias` | — | ✅→**✅** | ✅→❌ | — | — | ⚠ **ViT done 2026-08-02** (`wx` variant, gated); ConvNeXt owed |
+| `wdExcludeNormBias` | — | ✅→**✅** | ✅→**✅** | — | — | ✅ **BOTH nets, 2026-08-02** — `wx` variant, `lake build wdx-tie {vit,convnext}` |
 | LR schedule | cosine ✅ | cosine ✅ | cosine ✅ | **exp 0.97** ✅ | **exp 0.98** ✅ | cosine **or exponential** + warmup |
 | warmup | 5 ✅ | 5 ✅ | 20 ✅ | 5 ✅ | 5 ✅ | driver arg |
 | label smoothing | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.0 ✅ | derived from `nClasses` |
@@ -495,7 +495,7 @@ target must be exactly `λ·y_a + (1−λ)·y_b`.
 ⚠ Keep saying that this is the one place a SECOND DEFINITION is unavoidable (Tier B above has the
 argument): the reference mixes in the *train step* with `jax.random`, not in `tf.data`.
 
-### v1.4 — ✅ **`wdExcludeNormBias` on ViT (2026-08-02)**; ConvNeXt owed, then grad clip.
+### v1.4 — ✅ **`wdExcludeNormBias` — BOTH nets (2026-08-02).** Then grad clip.
 
 `lake build wdx-tie`. The reference rule (`jax/Jax/Codegen.lean`'s `_wd_mask`) decays only ≥2-D
 weight matrices: every 1-D param (biases, LayerNorm γ/β, the CLS token) and the **positional
@@ -543,14 +543,47 @@ descends.
 `wdStr` is a parameter now (default unchanged, so gate 1 stayed free) and **`vitin_adam128wx`
 renders at 0.05** — both halves of the reference's decay recipe, the magnitude and the mask.
 
-⚠ **`vitin_adam128` and `vitin_adamdp128x4` are STILL at 1e-4 and were NOT touched.** Changing them
+⚠ **The same 500× gap is on ConvNeXt** (`convnextTinyImagenetConfig.weightDecay := 0.05` against a
+baked 1e-4), and `cnxin_adamwx` renders at 0.05 for the same reason `vitin_adam128wx` does.
+
+⚠ **`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam` and `cnxin_adamdp` are STILL at 1e-4 and
+were NOT touched.** Changing them
 is a separate call with its own blast radius (the DP peer, the residency-gate row, the committed
 `vit-dp-check` numbers). **Owed**, and it should be done before any ViT/ImageNet pair run — a
 matched pair at the wrong decay is not a matched pair.
 
-⚠ **ConvNeXt still owes the same feature.** Its reference sets `wdExcludeNormBias` too; the shape
-of the change is identical (its LN γ/β and layer-scale γ are 1-D), but it has no positional
-embedding, so the rule there is the plain rank test.
+#### ✅ ConvNeXt followed the same day — **59 decayed / 121 excluded of 180**
+
+The recipe transferred, and the prediction held: it is the **plain rank test**, no name carve-out.
+Its generated reference sets `_WD_POS_SHAPE = None` (ConvNeXt has no positional parameter), so
+ViT's `nm != "pos"` has no analogue — carrying it over would have transcribed a rule this net does
+not have. Checked in the generated file, not assumed. What that leaves excluded: every LN γ/β,
+every conv bias, and **LayerScale γ** — 1-D, so excluded structurally rather than as a special case.
+
+| gate | ViT | ConvNeXt |
+|---|---|---|
+| params (decayed / excluded) | 200 (74 / 126) | 180 (**59 / 121**) |
+| ① decayed θ' bit-exact | 74/74 | **59/59** |
+| ② excluded offset = `lr·wd·θ` | 0.49 ULPs | **0.48 ULPs** |
+| ③ `m'`,`v'` bit-exact | 11,052,692 | **55,652,564** |
+| ④ `%loss` bit-exact | ✅ | ✅ |
+| ⚠ `invert` / `swap1` controls | fire on 200 / 2 | fire on **180 / 2** |
+
+**ONE harness for both** (`wdx-tie <net>`), per `rms-tie`/`shard-check`: a second copy is the
+double-writer disease one level down, in code. Everything per-net comes from the renderer's own
+signature list and mask predicate. ⚠ And a green ViT run does not license ConvNeXt — the two rules
+genuinely differ, which is the `rms-tie` ε-placement lesson one knob over.
+
+#### ⚠ And ConvNeXt's entry name is DERIVED, where ViT's is passed — the same change, two behaviours
+
+`convNextAdamTrainStepFaithful` builds `funcName` from `{slug}_{cnxAdamVariant …}`, so the flag has
+to reach the *variant* as well as the render. It did not, and the artifact
+`convnext_adamwx_train_step.mlir` came out declaring `@convnext_adam_train_step` — an entry that
+disagrees with its own path. **The shim refused the call outright** rather than running the wrong
+graph (§2b-quater's entry check earning its keep a second time), so it surfaced as
+`mlp train step failed` at the first invoke instead of as a silent wrong answer. `#guard`s on the
+`wx` spellings pin it now. ViT never showed this because it takes `funcName` explicitly — *the same
+edit behaves differently on the two renderers, and only running both found it.*
 
 ### v1.4b — grad clip. The gate on ViT's LR.
 
