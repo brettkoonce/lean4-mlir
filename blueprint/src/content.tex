@@ -11615,43 +11615,14 @@ its own hosting --- plain HTTPS, no account --- as three zips: 19\,GB of
 and 241\,MB of annotations. Budget $\sim$45\,GB to build in one pass; the
 zips and extracted trees can be deleted once the \texttt{.bin} files exist.
 
-\smallskip\noindent Two preprocessing details matter more than they look.
-First, \textbf{COCO's category ids are not contiguous}: they run 1--90 with
-ten gaps (12, 26, 29, 30, 45, 66, 68, 69, 71, 83) around 80 real classes, so
-the obvious \texttt{id\,-\,1} remap silently shifts every class above the
-first gap --- a relabelling that trains and evaluates without ever raising
-an error. \texttt{preprocess\_coco.py} therefore derives the map from the
-annotation file's own \texttt{categories} list rather than hardcoding it.
-Second, \texttt{iscrowd} regions are skipped, exactly as VisDrone's
-\texttt{score\,=\,0} ignored regions are, because COCO's own evaluation
-ignores them.
-
-\smallskip\noindent\textbf{The class-count ceiling.} Of the three C loaders
-these formats share, two bake the class count into their record stride ---
-\texttt{lean\_f32\_load\_voc\_dims} computes \texttt{30 * gridH * gridW}
-($2\cdot5+20$) and \texttt{lean\_f32\_load\_voc\_anchor} computes
-\texttt{A * 15} ($5+10$) --- while \texttt{lean\_f32\_load\_voc\_fpn} takes
-the target length \texttt{ntot} as a parameter and is class-agnostic. So
-\textbf{full 80-class COCO is FPN-only} on today's C code, and the
-preprocessor refuses the other two formats at 80 classes rather than
-writing a file that would be misparsed stride-wise and trained on as
-garbage. Two standard subsets fit the narrower loaders: \texttt{--classes
-voc20} (the 20 PASCAL-VOC categories, all present in COCO under slightly
-different names) for the single-grid format, and \texttt{--classes vdmap},
-which emits COCO directly into \emph{VisDrone's} 10-class index space so a
-COCO-pretrained head transfers unchanged --- six of VisDrone's ten classes
-have a COCO counterpart (person, bicycle, car, truck, bus, motorcycle) and
-the remaining four stay empty.
-
-\smallskip\noindent Both detection preprocessors write an \emph{uncapped}
-ground-truth sidecar (\texttt{val.full\_gt.bin}) next to \texttt{val.bin},
-in the same loop and therefore in the same record order. The training
-record caps boxes at \texttt{MAX\_BBOXES}\,=\,56, which is harmless for
-training --- a $14\times14$ grid encodes far fewer --- but scoring mAP
-against a truncated ground truth is not the protocol of either benchmark,
-so the scorer reads the sidecar instead. \emph{References:} Lin et al.,
-\emph{Microsoft COCO: Common Objects in Context}, ECCV (2014); Zhu et al.,
-\emph{Detection and Tracking Meet Drones Challenge}, IEEE TPAMI~43 (2021).
+\texttt{preprocess\_coco.py} derives its class map from the annotation
+file's own \texttt{categories} list --- COCO's ids are not contiguous, and
+the obvious \texttt{id\,-\,1} remap mislabels 69 of the 80 classes (id 13 is
+`stop sign'; \texttt{id\,-\,1} calls it `parking meter') without ever raising
+an error --- and skips \texttt{iscrowd} regions, as COCO's own evaluation
+does. \emph{References:} Lin et al., \emph{Microsoft COCO:
+Common Objects in Context}, ECCV (2014); Zhu et al., \emph{Detection and
+Tracking Meet Drones Challenge}, IEEE TPAMI~43 (2021).
 
 \chapter{Getting started}
 \label{app:getting_started}
