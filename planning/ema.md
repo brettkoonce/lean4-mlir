@@ -50,8 +50,39 @@
 > waved a 2× gradient error through by landing at the gate boundary. Any future EMA gate on any net
 > must read `m`. The harness does; this is a note for whoever adds the next one.
 >
-> ⚠ **Still not done**: ViT and EfficientNet (the latter also needs `ema_bn` — §5c, nearly free),
-> and any long run. The 4-epoch smoke is descent evidence, not an accuracy number.
+> ### ✅ AND EFFICIENTNET, 2026-08-02 — `emarms`, the reference's ACTUAL recipe
+>
+> `verified_mlir/efficientnet_emarms_train_step.mlir` — **RMSProp + exp decay + EMA**, which with
+> stochastic depth is `efficientNetB0ImagenetConfig` entire. 742 → **957 in / 955 out** (+213 shadow
+> +2 scalars); gate 1 at 0 diff lines; **`decay = 0` ⇒ shadow BIT-IDENTICAL, 0 of 4,020,358**.
+> The EMA op is emitted at the CALL SITE, so one insertion serves both `enetAdamOne` and
+> `enetRmsOne` — a copy in each would be the double-writer disease across an optimizer axis that
+> already exists.
+>
+> **§5c's `ema_bn` is real, and now measured rather than quoted.** 3 epochs, Imagenette 224:
+>
+> | | epoch 1 | 2 | 3 |
+> |---|---|---|---|
+> | live weights (`rms`) | 38.50% | 53.30% | 64.99% |
+> | **EMA shadow + EMA-lagged BN stats** | **44.13%** | **61.35%** | **69.25%** |
+> | EMA shadow + LIVE BN stats *(control, `LEAN_MLIR_EMA_BN=0`)* | 37.04% | 44.03% | 56.87% |
+>
+> The shadow **tracks then exceeds** from epoch 1 (+5.6/+8.1/+4.3), and pairing it with live stats
+> costs **7.1/17.3/12.4 points** — worse than not using EMA at all at epochs 2-3. ⚠ Scope the
+> reference's wording honestly though: it says this pairing *"blows up early eval"*, and at this
+> scale it **degrades** rather than collapses. The mismatch is real and large; "blows up" belongs to
+> a more extreme regime than Imagenette-3-epochs.
+>
+> ⚠⚠ **A BUG CAUGHT BEFORE IT SHIPPED, and it is a naming interaction worth remembering.** The
+> RMSProp predicate was `variant.startsWith "rms"` — and the RMSProp+EMA variant is **`emarms`**,
+> which does not start with `"rms"`. A prefix test silently classifies it as non-RMSProp, so the
+> mean-square would have initialised to **0 instead of 1.0** — precisely the defect the RMSProp
+> driver work exists to fix, reintroduced through a variant name. Both predicates are substring
+> tests now. **When one string encodes two independent axes, prefix tests stop working and fail
+> quietly.**
+>
+> ⚠ **Still not done**: ViT, EfficientNet's DP peer, and any long run. The 3-4 epoch smokes are
+> descent evidence, not accuracy numbers.
 >
 > The scoping below is kept as written; the measurement calibrates against it.
 

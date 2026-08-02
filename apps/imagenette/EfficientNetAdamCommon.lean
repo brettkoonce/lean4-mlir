@@ -50,10 +50,21 @@ def runEfficientNetAdam (argv : List String) : IO Unit := do
   -- optimizer and the schedule SHAPE (warmup → ×0.97 every 2.4 epochs, mean-square init 1.0) carry
   -- over. `LEAN_MLIR_BASE_LR_U` overrides in micro-units (`2000` = 0.002).
   let sched := enetRmsSchedule
-  let rms := variant.startsWith "rms"
+  -- ⚠ SUBSTRING, not prefix: `emarms` (RMSProp + EMA) does not START with "rms", so a prefix test
+  -- would quietly hand this net the AdamW LR and a cosine schedule. Same trap as the driver's.
+  let rms := (variant.splitOn "rms").length > 1
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => if rms then sched.lr * bs.toFloat / 256.0 else 0.001
+  -- ▶ `ema*` variants carry the 4th `[θ|m|v|ema]` blob region. `emarms` is RMSProp + EMA, which is
+  -- this net's REFERENCE recipe (`efficientNetB0ImagenetConfig`) — and its 72.31% is the shadow's
+  -- number, not the live weights'. ⚠ On this net EMA also shadows the BN running buffers
+  -- (driver-side, `ema_bn`), because eval must pair EMA weights with EMA-lagged statistics.
+  -- `LEAN_MLIR_EMA_DECAY_U` is micro-units (`999900` = 0.9999, the reference's value); ⚠ `0` is
+  -- meaningful and is the gate — at decay 0 the shadow must be BIT-IDENTICAL to the live weights.
+  let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.9999
   efficientnetVerified.toNet.trainAdamSched { efficientnetAdamConfig with batchSize := bs }
     (argv.head?.getD "data") baseLR 0.9 0.999 3 variant
-    (if rms then sched.decayRate else 0.0) sched.decayEpochs
+    (if rms then sched.decayRate else 0.0) sched.decayEpochs emaDecay

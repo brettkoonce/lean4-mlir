@@ -74,7 +74,7 @@ that does not exist yet.
 | random erasing | — | ✅ | ✅ | — | — | ✅ **free via shim** |
 | repeated aug | — | 3 ✅ | — | — | — | ✅ **free via shim** |
 | stochastic depth | — | 0.1 ❌ | 0.1 ❌ | 0.2 ❌ | — | ❌ |
-| EMA | — | ✅→❌ | ✅→**✅** | ✅→❌ | — | ✅ **ConvNeXt 2026-08-02**; ViT + enet owed (enet also needs `ema_bn`) |
+| EMA | — | ✅→❌ | ✅→**✅** | ✅→**✅** | — | ✅ **ConvNeXt + EfficientNet 2026-08-02** (incl. `ema_bn`); ViT owed |
 | **bf16 / bf16Conv** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | batch / epochs | ✅ | ✅ | ✅ | ✅ | ✅ | all matched at 4 replicas |
 
@@ -84,7 +84,7 @@ that does not exist yet.
 |---|---|---|
 | **R34** | bf16 | **at parity — run it** |
 | **mnv2** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, bf16 | **at parity — run it** |
-| **EfficientNet** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, dropPath, EMA, bf16 | two regularisers short |
+| **EfficientNet** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, ~~EMA~~ ✅, dropPath, bf16 | **one regulariser short** (stochastic depth) |
 | **ConvNeXt** | mixup, cutmix, dropPath, ~~EMA~~ ✅, grad clip, wdExclude, bf16 | the aug/regulariser pack, minus EMA |
 | **ViT** | same as ConvNeXt | same |
 

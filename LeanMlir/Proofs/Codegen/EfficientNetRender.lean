@@ -958,7 +958,12 @@ private def enetAdamConsts : String :=
 
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes.
     Same convention as `r34AdamVariant`. -/
-def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) : String :=
+def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := false) : String :=
+  -- ⚠ The `ema` marker LEADS, because the driver keys its 4-region `[θ|m|v|ema]` blob layout off
+  -- `variant.startsWith "ema"` — the same reverse-of-this-function reading it uses for `"rms"`.
+  -- Optimizer and EMA are independent axes here (unlike ConvNeXt, which has only AdamW), so the
+  -- name carries both: `emarms` is RMSProp + EMA, which IS the EfficientNet reference's recipe.
+  (if ema then "ema" else "") ++
   (match opt with
    | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
    | .rmsprop => if replicas ≤ 1 then "rms"  else "rmsdp") ++
@@ -991,7 +996,7 @@ set_option maxRecDepth 4000000 in
 def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (alphaStr negAlphaKStr bStr : String) (replicas : Nat := 1)
     (convBias : Bool := false) (slug : String := "efficientnet")
-    (opt : OptKind := .adamw) : String :=
+    (opt : OptKind := .adamw) (ema : Bool := false) : String :=
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when empty. Passing −α/K as a string independent
   -- of K is the two-writers-for-one-fact shape that shipped a K=10 constant into R34's first
   -- ImageNet render ON THE GRADIENT PATH (§2k), and again into ConvNeXt's report-only loss
@@ -1025,6 +1030,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     let mut thetaN : List String := []
     let mut mN : List String := []
     let mut vN : List String := []
+    let mut eN : List String := []
     for i in [0:sigList.length] do
       let (nm, ds) := sigList[i]!
       let (c, nT, nM, nV) ← match opt with
@@ -1032,6 +1038,24 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         | .rmsprop => enetRmsOne  B nm ds (gradNames[i]!) replicas
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
+      -- ▶ THE EMA SHADOW (`planning/ema.md`), emitted HERE rather than inside the two `*One`
+      -- helpers, because it reads `nT` — the UPDATED parameter — and both tails produce one. A copy
+      -- in each helper would be the double-writer disease one level down, in code (§2a-quater), and
+      -- it would have to be kept in step across an optimizer axis that already exists.
+      --
+      -- `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the reference's `ema_update` at
+      -- `(β₁ := d, m := ema, g := θ')`, so this is **no new op** — `adamMNextF_faithful` closes the
+      -- denotation side by `rfl`. `%emad`/`%oemad` are ARGS, not constants: the reference's decay is
+      -- time-varying, `d = min(decay, (1+t)/(10+t))`.
+      --
+      -- At `ema := false` no `pretty` call happens, so the fresh-name counter does not move and
+      -- every committed artifact re-renders byte-identically — gate 1, for free.
+      if ema then
+        let n := ds.foldl (· * ·) 1
+        let z : Vec n := fun _ => 0
+        let (cE, nE) ← pretty B (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
+        adamCode := adamCode ++ cE
+        eN := eN ++ [nE]
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
     -- `pretty` of an AST node and says so in the emitted text — the carve-out `resnet34_`/
     -- `cifar8_adam_train_step` also take (handoff §5).
@@ -1061,8 +1085,11 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let pTy := sigList.map (fun p => ty p.2)
-    let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"] ++ statNames
-    let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
+    let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
+                     ++ (if ema then ["%emad", "%oemad"] else []) ++ statNames
+    let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
+                     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []) ++ statTypes
     pure (
       (if replicas ≤ 1 then
         "    // ── EfficientNet-B0 AdamW train step: gradients + optimizer are pretty(AST node) ──\n"
@@ -1106,17 +1133,22 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   let pSig := String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}: {ty ds}"))
   let mSig := String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}m: {ty ds}"))
   let vSig := String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}v: {ty ds}"))
+  let eSig := String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}e: {ty ds}"))
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statSig ++
+    (if ema then ", " ++ eSig else "") ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
+    (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++ ", " ++ statSig ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (fun p => ty p.2)
   let outSig := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
-     bnOc.flatMap (fun oc => [ty [oc], ty [oc]]))
+    (pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
+     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
+     ++ bnOc.flatMap (fun oc => [ty [oc], ty [oc]]))
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
   -- artifact path and `LEAN_MLIR_VARIANT`.
-  let fname := s!"{slug}_{enetAdamVariant B replicas opt}_train_step"
+  let fname := s!"{slug}_{enetAdamVariant B replicas opt ema}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1249,6 +1281,25 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" 1 false "efficientnet" .rmsprop)
 
+-- ── ▶ RMSProp **+ EMA** — this net's ACTUAL reference recipe (`planning/ema.md`) ────────────────
+-- `efficientNetB0ImagenetConfig` is RMSProp + exp-decay + **EMA (decay 0.9999)** + dropPath, and
+-- its 72.31% is the EMA shadow's number. RMSProp and its schedule landed in recipe_gaps v1.2 and
+-- its driver half; this is the third of the four, leaving only stochastic depth.
+--
+-- ⚠ The variant is `emarms`, not `ema`: optimizer and EMA are INDEPENDENT axes on this net (unlike
+-- ConvNeXt, which has only AdamW), so the name carries both — and the `ema` marker LEADS because
+-- the driver keys its 4-region `[θ|m|v|ema]` layout off the prefix.
+--
+-- ⚠ EfficientNet is the first EMA net with **BatchNorm**, and the reference shadows the BN running
+-- buffers too (`ema_bn`): eval pairs EMA weights with EMA-LAGGED statistics, because pairing them
+-- with LIVE stats is the mismatch its own comment says "blows up early eval". That half is
+-- driver-side and nearly free — `runningBnStats` already lives on the host and is already EMA'd
+-- there — so it is NOT in this render. Nothing here emits a BN shadow; the graph's stat slots are
+-- unchanged.
+#eval IO.FS.writeFile "verified_mlir/efficientnet_emarms_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+    "0.100000" "-0.010000" "32.0" 1 false "efficientnet" .rmsprop (ema := true))
+
 -- The ImageNet peers: batch 64 × 4 replicas = global 256 = `efficientNetB0ImagenetConfig.batchSize`,
 -- and −α/K DERIVED from nClasses (empty string), so the emitted shift is -0.000100 at K = 1000.
 --
@@ -1275,6 +1326,13 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop == "rms64"
 #guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop == "rmsdp64"
 #guard Proofs.StableHLO.enetAdamVariant 64 1 .adamw   == "adam64"
+-- The EMA peers. The marker LEADS so the driver's `startsWith "ema"` finds it whichever
+-- optimizer it is paired with, and `emarms` — RMSProp + EMA — is this net's reference recipe.
+#guard Proofs.StableHLO.enetAdamVariant 32 1 .rmsprop true == "emarms"
+#guard Proofs.StableHLO.enetAdamVariant 32 1 .adamw   true == "emaadam"
+#guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop true == "emarmsdp64"
+-- ...and OFF it is byte-identical to what it always was, which is what keeps gate 1 free.
+#guard Proofs.StableHLO.enetAdamVariant 32 1 .rmsprop false == "rms"
 
 -- §2m: both arities pinned, so dropping the conv biases cannot silently change the render that
 -- ships. 262 − 49 = 213; the SE biases (`zb1`/`zb2`) are NOT among the 49, because those convs are

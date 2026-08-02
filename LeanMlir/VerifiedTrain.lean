@@ -636,7 +636,13 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- ⚠ The prefix test is the reverse of `{mnv2,enet}AdamVariant`, whose `.rmsprop` branch returns
   -- "rms"/"rmsdp" (+ the per-device batch): "rms", "rms64", "rmsdp64". That direction is pinned by
   -- the `#guard`s beside each renderer's `#eval`, so the two cannot drift apart silently.
-  let rmsprop := variant.startsWith "rms"
+  -- ⚠ SUBSTRING, not prefix, and this is a bug caught before it shipped. Optimizer and EMA are
+  -- INDEPENDENT axes in EfficientNet's variant name, so the RMSProp+EMA spelling is `emarms` —
+  -- which does NOT start with "rms". A prefix test silently classifies it as non-RMSProp, and the
+  -- failure is not loud: the mean-square would initialise to 0 instead of 1.0, i.e. exactly the
+  -- much-larger-first-step defect the RMSProp driver work exists to fix, reintroduced by a naming
+  -- interaction. The variant strings are pinned by `#guard`s beside each renderer's `#eval`s.
+  let rmsprop := (variant.splitOn "rms").length > 1
   -- "ema"/"emadp" = the EMA-shadow render (`planning/ema.md`), whose blob carries a FOURTH region:
   -- `[θ|m|v|ema]`, with the scalar tail 3 → 5 (`%emad`, `%oemad`). Everything below that indexes the
   -- blob is written against `nRegions`/`nScalars` rather than a literal 3, because a 4-region graph
@@ -789,6 +795,10 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- Running BN stats (EMA of per-layer batch mean/var; mom 1.0 on the first step to seed,
   -- then 0.1). Reset per process — washed out well before the per-epoch eval (mom 0.1).
   let mut runningBnStats ← F32.const nBnStats.toUSize 0.0
+  -- The EMA shadow of those buffers (`ema_bn`). Starts where they start, as the reference does
+  -- (`ema_bn = bn_state`). ⚠ Like `runningBnStats` it is NOT checkpointed — both are reset per
+  -- process and rebuilt within an epoch, which is the pre-existing behaviour this does not change.
+  let mut emaBnStats ← F32.const nBnStats.toUSize 0.0
   let mut bnFirst := true
   -- The reusable step buffer: [theta|m|v | lr,bc1,bc2 | bn stats]. Built once here
   -- and thereafter carried forward from each step's output (see the inner loop).
@@ -917,9 +927,8 @@ it and its .epoch marker aside and start fresh."
       -- 3.1 tau, scoring 0.00% top-1 while the live weights scored 70.48%. An 80-epoch Imagenette
       -- run is 23,600 steps = 2.4 tau at decay 0.9999 — squarely inside that regime.
       -- `t` is the reference's 0-BASED `_global_step`, i.e. `gstep - 1` here.
+      let emaD := min emaDecay ((gstep - 1.0 + 1.0) / (gstep - 1.0 + 10.0))
       if emaOn then
-        let t := gstep - 1.0
-        let emaD := min emaDecay ((1.0 + t) / (10.0 + t))
         let emaPair ← F32.const 3 0.0
         let emaPair ← F32.write3 emaPair 0 emaD (1.0 - emaD) 0.0
         pbuf ← F32.blit pbuf (nRegions * net.nParams + 3).toUSize emaPair 0 2
@@ -966,6 +975,15 @@ it and its .epoch marker aside and start fresh."
         let batchBn := out.extract ((nRegions * net.nParams + nScalars) * 4)
                                    ((nRegions * net.nParams + nScalars + nBnStats) * 4)
         runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.1)
+        -- ▶ `ema_bn` — the BN running buffers get their OWN shadow, and on a batch-BN net this is
+        -- not optional decoration. The reference's own words: eval pairs EMA weights with
+        -- EMA-LAGGED stats, "avoiding the weights/stats mismatch that blows up early eval". EMA
+        -- weights are a average of many steps' parameters; the LIVE running stats describe only the
+        -- most recent steps' activations, and the two do not describe the same network.
+        -- ⚠ Same `emaD` as the parameter shadow — one definition of the decay per step. `F32.ema`
+        -- takes the NEW-value weight, so it is `1 − d`.
+        if emaOn then
+          emaBnStats ← F32.ema emaBnStats runningBnStats (1.0 - emaD)
         bnFirst := false
       pbuf := out   -- no copy: the output buffer becomes the next step's input
       -- ms/step probe: start the clock past warmup, report + exit at the cap.
@@ -1001,7 +1019,17 @@ it and its .epoch marker aside and start fresh."
     -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.
     let evalSess := if hasBn then fwdEvalSess else fwdSess
     let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval" else fwdFn
-    let evalParams := if hasBn then F32.concat #[thetaCur, runningBnStats] else thetaCur
+    -- ⚠ EMA weights MUST be scored against the EMA-lagged stats, never the live ones — that
+    -- pairing is the one the reference calls out as blowing up early eval.
+    -- $LEAN_MLIR_EMA_BN=0 is a CONTROL, not a feature: it pairs the EMA weights with the LIVE
+    -- running statistics, which is the configuration the reference says "blows up early eval". A
+    -- claim like that should be measurable rather than asserted — the same reason every tie here
+    -- ships with a control that makes it go red. Leave it unset.
+    let emaLiveBn := (← IO.getEnv "LEAN_MLIR_EMA_BN") == some "0"
+    let evalParams := if hasBn
+                      then F32.concat #[thetaCur,
+                             if emaOn && !emaLiveBn then emaBnStats else runningBnStats]
+                      else thetaCur
     let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
     let evalResident := (net.paramShapes.size + (if hasBn then 2 * net.bnChannels.size else 0)).toUSize
     let mut correct := 0

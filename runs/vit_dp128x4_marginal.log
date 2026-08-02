@@ -1,0 +1,106 @@
+I0801 20:59:22.185390 3206920 service.cc:178] XLA service 0x76e330489560 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0801 20:59:22.185434 3206920 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0801 20:59:22.185440 3206920 service.cc:194]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0801 20:59:22.185444 3206920 service.cc:194]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0801 20:59:22.185447 3206920 service.cc:194]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0801 20:59:22.188078 3206920 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0801 20:59:22.188106 3206920 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0801 20:59:22.188142 3206920 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0801 20:59:22.188155 3206920 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0801 20:59:22.188178 3206920 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0801 20:59:22.188192 3206920 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0801 20:59:22.188208 3206920 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 1 for CollectiveBFCAllocator.
+I0801 20:59:22.188220 3206920 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 2 for CollectiveBFCAllocator.
+I0801 20:59:22.188232 3206920 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 3 for CollectiveBFCAllocator.
+I0801 20:59:22.198143 3206920 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 4 device(s)
+I0801 20:59:24.800117 3206977 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 72 bytes spill stores, 40 bytes spill loads
+
+I0801 20:59:25.041101 3206994 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_216', 12 bytes spill stores, 12 bytes spill loads
+
+I0801 20:59:25.123603 3206982 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 92 bytes spill stores, 56 bytes spill loads
+
+I0801 20:59:25.124860 3206990 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0801 20:59:25.246924 3206970 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9108 bytes spill stores, 9020 bytes spill loads
+
+I0801 20:59:25.304013 3206994 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 72 bytes spill stores, 72 bytes spill loads
+
+I0801 20:59:25.445754 3206983 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 64 bytes spill stores, 32 bytes spill loads
+
+I0801 20:59:25.549952 3206976 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 72 bytes spill stores, 72 bytes spill loads
+
+I0801 20:59:25.623195 3206966 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 8556 bytes spill stores, 8448 bytes spill loads
+
+I0801 20:59:25.939116 3206964 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_589', 12 bytes spill stores, 12 bytes spill loads
+
+I0801 20:59:26.605253 3206972 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_438', 8 bytes spill stores, 8 bytes spill loads
+
+I0801 20:59:27.005315 3206990 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_978', 112 bytes spill stores, 80 bytes spill loads
+
+I0801 20:59:27.039345 3206983 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_580', 16 bytes spill stores, 16 bytes spill loads
+
+I0801 20:59:27.303798 3206984 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_977', 40 bytes spill stores, 40 bytes spill loads
+
+I0801 20:59:27.720599 3206969 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_976', 96 bytes spill stores, 64 bytes spill loads
+
+I0801 20:59:27.936088 3206981 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_975', 244 bytes spill stores, 164 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vit_adamdp128x4_train_step.mlir (@vit_adamdp128x4_train_step, 603 outputs, 4 replicas) in 6912 ms
+I0801 20:59:30.597486 3206979 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0801 20:59:30.624394 3206972 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_148', 8 bytes spill stores, 8 bytes spill loads
+
+I0801 20:59:30.727200 3206970 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 4 bytes spill stores, 4 bytes spill loads
+
+I0801 20:59:30.781198 3206977 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 12 bytes spill stores, 4 bytes spill loads
+
+I0801 20:59:30.798220 3206967 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 804 bytes spill stores, 548 bytes spill loads
+
+I0801 20:59:30.811920 3206971 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+I0801 20:59:30.821685 3206980 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+
+I0801 20:59:30.861794 3206974 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 100 bytes spill stores, 64 bytes spill loads
+
+I0801 20:59:30.892455 3206985 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 100 bytes spill stores, 64 bytes spill loads
+
+I0801 20:59:31.087871 3206981 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9884 bytes spill stores, 9800 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 2354 ms
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_adamdp128x4_train_step.mlir
+  xla/pjrt verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 128, ViT-Tiny adamdp128x4 (cosine+warmup 5ep, baseLR 0.000300), He init
+  eval batch 32 (the batch @vit_fwd was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 18 steps/epoch
+[pjrt_ffi] RESIDENT: @vit_adamdp128x4_train_step holds 600 parameter tensors (63.2 MB) on 4 devices; they stop crossing PCIe from here
+W0801 20:59:38.531676 3206951 allocator_memory_registration.cc:63] Failed to register GPU memory with clique devices=4:[0,1,2,3]; local_participants=4; communication_id=0; incarnations=[]: INTERNAL: NCCL operation ncclCommRegister(comm, addr.opaque(), addr.size(), &handle) failed: unhandled cuda error (run with NCCL_DEBUG=INFO for details). Last NCCL warning(error) log entry (may be unrelated) 'Cuda failure 500 'named symbol not found''.
+I0801 20:59:38.876385 3206954 cuda_dnn.cc:436] Loaded cuDNN version 92302
+I0801 20:59:38.876471 3206960 cuda_dnn.cc:436] Loaded cuDNN version 92302
+I0801 20:59:38.876548 3206957 cuda_dnn.cc:436] Loaded cuDNN version 92302
+  step 0/18: loss=3.138140
+  step 1/18: loss=3.398389
+  step 2/18: loss=2.920321
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.518204 lr=0.000060
+[t=    25s]   epoch 1: val_acc = 1032/3925 = 26.292994%
+  step 0/18: loss=2.296878
+  step 1/18: loss=2.189720
+  step 2/18: loss=2.088266
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=2.025248 lr=0.000120
+[t=    33s]   epoch 2: val_acc = 1482/3925 = 37.757962%
+  step 0/18: loss=2.080373
+  step 1/18: loss=1.849427
+  step 2/18: loss=1.960124
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.847431 lr=0.000180
+[t=    41s]   epoch 3: val_acc = 1672/3925 = 42.598726%
+  step 0/18: loss=1.887137
+  step 1/18: loss=1.778553
+  step 2/18: loss=1.820909
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.779476 lr=0.000240
+[t=    49s]   epoch 4: val_acc = 1831/3925 = 46.649682%
+done (trained ViT-Tiny with AdamW + cosine/warmup via packed threading).

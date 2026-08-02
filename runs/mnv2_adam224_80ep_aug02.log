@@ -1,0 +1,510 @@
+I0802 03:04:18.180509 3499412 service.cc:178] XLA service 0x777fc8489560 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0802 03:04:18.180562 3499412 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0802 03:04:18.182519 3499412 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0802 03:04:18.182556 3499412 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0802 03:04:18.182605 3499412 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0802 03:04:18.205251 3499412 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+E0802 03:04:25.217580 3499471 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0802 03:04:25.898400 3499451 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_adam_train_step.mlir (@mobilenetv2_adam_train_step, 581 outputs, 1 replica) in 10940 ms
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd.mlir (@mobilenetv2_fwd, 1 outputs, 1 replica) in 447 ms
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd_eval.mlir (@mobilenetv2_fwd_eval, 1 outputs, 1 replica) in 249 ms
+MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mobilenetv2_adam_train_step.mlir
+  xla/pjrt verified_mlir/mobilenetv2_fwd.mlir
+  xla/pjrt verified_mlir/mobilenetv2_fwd_eval.mlir
+  train 9469, val 3925; bs 32, MobileNetV2 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
+[pjrt_ffi] RESIDENT: @mobilenetv2_adam_train_step holds 474 parameter tensors (25.6 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=2.542632
+  step 1/295: loss=2.606797
+  step 2/295: loss=2.786849
+  step 100/295: loss=2.181502
+  step 200/295: loss=2.018523
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.150679 lr=0.000333
+  epoch 1: val_acc = 1125/3925 = 28.662420%
+  step 0/295: loss=1.974015
+  step 1/295: loss=1.880178
+  step 2/295: loss=1.663680
+  step 100/295: loss=1.719550
+  step 200/295: loss=1.499062
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.828392 lr=0.000667
+  epoch 2: val_acc = 1734/3925 = 44.178344%
+  step 0/295: loss=1.783294
+  step 1/295: loss=2.359931
+  step 2/295: loss=1.808802
+  step 100/295: loss=1.428756
+  step 200/295: loss=1.335464
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.637126 lr=0.001000
+  epoch 3: val_acc = 2153/3925 = 54.853503%
+  step 0/295: loss=1.644573
+  step 1/295: loss=1.337069
+  step 2/295: loss=1.449296
+  step 100/295: loss=1.411096
+  step 200/295: loss=1.412364
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.481244 lr=0.001000
+  epoch 4: val_acc = 2437/3925 = 62.089172%
+  step 0/295: loss=1.276581
+  step 1/295: loss=1.388368
+  step 2/295: loss=1.354366
+  step 100/295: loss=1.372459
+  step 200/295: loss=1.146493
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.357151 lr=0.000998
+  epoch 5: val_acc = 2423/3925 = 61.732484%
+  step 0/295: loss=1.154945
+  step 1/295: loss=1.126218
+  step 2/295: loss=1.250517
+  step 100/295: loss=1.265263
+  step 200/295: loss=1.415577
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.239732 lr=0.000996
+  epoch 6: val_acc = 2514/3925 = 64.050955%
+  step 0/295: loss=1.369096
+  step 1/295: loss=1.256417
+  step 2/295: loss=1.177802
+  step 100/295: loss=1.428050
+  step 200/295: loss=1.341984
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.197041 lr=0.000993
+  epoch 7: val_acc = 2585/3925 = 65.859873%
+  step 0/295: loss=1.014309
+  step 1/295: loss=1.134242
+  step 2/295: loss=1.339892
+  step 100/295: loss=1.261158
+  step 200/295: loss=1.221075
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.130245 lr=0.000990
+  epoch 8: val_acc = 2731/3925 = 69.579618%
+  step 0/295: loss=0.986027
+  step 1/295: loss=0.923957
+  step 2/295: loss=1.036684
+  step 100/295: loss=0.738366
+  step 200/295: loss=1.112643
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=1.085464 lr=0.000985
+  epoch 9: val_acc = 2832/3925 = 72.152866%
+  step 0/295: loss=1.177363
+  step 1/295: loss=0.840780
+  step 2/295: loss=0.871042
+  step 100/295: loss=1.090643
+  step 200/295: loss=0.871527
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=1.055050 lr=0.000980
+  epoch 10: val_acc = 2846/3925 = 72.509554%
+  step 0/295: loss=1.050311
+  step 1/295: loss=0.720391
+  step 2/295: loss=0.938361
+  step 100/295: loss=1.316221
+  step 200/295: loss=0.819051
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=1.014484 lr=0.000974
+  epoch 11: val_acc = 2821/3925 = 71.872611%
+  step 0/295: loss=0.958689
+  step 1/295: loss=0.835030
+  step 2/295: loss=0.942266
+  step 100/295: loss=1.003074
+  step 200/295: loss=0.957188
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=0.972437 lr=0.000967
+  epoch 12: val_acc = 2809/3925 = 71.566879%
+  step 0/295: loss=1.282482
+  step 1/295: loss=1.134617
+  step 2/295: loss=1.016009
+  step 100/295: loss=0.983975
+  step 200/295: loss=0.982489
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=0.941388 lr=0.000959
+  epoch 13: val_acc = 2949/3925 = 75.133758%
+  step 0/295: loss=0.849650
+  step 1/295: loss=0.731357
+  step 2/295: loss=0.798051
+  step 100/295: loss=0.877278
+  step 200/295: loss=0.866271
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.908128 lr=0.000950
+  epoch 14: val_acc = 2926/3925 = 74.547771%
+  step 0/295: loss=1.053091
+  step 1/295: loss=0.898162
+  step 2/295: loss=0.764124
+  step 100/295: loss=0.843597
+  step 200/295: loss=0.832168
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.874860 lr=0.000941
+  epoch 15: val_acc = 2953/3925 = 75.235669%
+  step 0/295: loss=1.088650
+  step 1/295: loss=0.778287
+  step 2/295: loss=0.724593
+  step 100/295: loss=0.799429
+  step 200/295: loss=0.732853
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.847262 lr=0.000931
+  epoch 16: val_acc = 2973/3925 = 75.745223%
+  step 0/295: loss=0.802641
+  step 1/295: loss=0.945367
+  step 2/295: loss=0.817788
+  step 100/295: loss=0.738156
+  step 200/295: loss=0.843298
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.817416 lr=0.000921
+  epoch 17: val_acc = 2853/3925 = 72.687898%
+  step 0/295: loss=0.713751
+  step 1/295: loss=0.641556
+  step 2/295: loss=0.821558
+  step 100/295: loss=0.759772
+  step 200/295: loss=0.835744
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.800809 lr=0.000909
+  epoch 18: val_acc = 3024/3925 = 77.044586%
+  step 0/295: loss=0.719211
+  step 1/295: loss=0.630292
+  step 2/295: loss=0.661146
+  step 100/295: loss=0.721047
+  step 200/295: loss=0.804132
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.768157 lr=0.000897
+  epoch 19: val_acc = 2966/3925 = 75.566879%
+  step 0/295: loss=0.694783
+  step 1/295: loss=0.779186
+  step 2/295: loss=0.897541
+  step 100/295: loss=0.723126
+  step 200/295: loss=0.658563
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.741388 lr=0.000884
+  epoch 20: val_acc = 2896/3925 = 73.783439%
+  step 0/295: loss=0.746780
+  step 1/295: loss=0.648156
+  step 2/295: loss=0.735301
+  step 100/295: loss=0.682182
+  step 200/295: loss=0.599869
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.726104 lr=0.000871
+  epoch 21: val_acc = 3039/3925 = 77.426752%
+  step 0/295: loss=0.738194
+  step 1/295: loss=0.732494
+  step 2/295: loss=0.704608
+  step 100/295: loss=0.843530
+  step 200/295: loss=0.680919
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.708750 lr=0.000857
+  epoch 22: val_acc = 2967/3925 = 75.592357%
+  step 0/295: loss=0.771443
+  step 1/295: loss=0.635707
+  step 2/295: loss=0.617685
+  step 100/295: loss=0.778131
+  step 200/295: loss=0.793196
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.693123 lr=0.000843
+  epoch 23: val_acc = 2996/3925 = 76.331210%
+  step 0/295: loss=0.800934
+  step 1/295: loss=0.713845
+  step 2/295: loss=0.583398
+  step 100/295: loss=0.679586
+  step 200/295: loss=0.770361
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.665890 lr=0.000827
+  epoch 24: val_acc = 3058/3925 = 77.910828%
+  step 0/295: loss=0.615105
+  step 1/295: loss=0.707499
+  step 2/295: loss=0.725461
+  step 100/295: loss=0.690609
+  step 200/295: loss=0.627618
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.655260 lr=0.000812
+  epoch 25: val_acc = 3026/3925 = 77.095541%
+  step 0/295: loss=0.696234
+  step 1/295: loss=0.644659
+  step 2/295: loss=0.578248
+  step 100/295: loss=0.615196
+  step 200/295: loss=0.635805
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.645000 lr=0.000796
+  epoch 26: val_acc = 2958/3925 = 75.363057%
+  step 0/295: loss=0.681983
+  step 1/295: loss=0.572466
+  step 2/295: loss=0.608045
+  step 100/295: loss=0.618030
+  step 200/295: loss=0.657334
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.638632 lr=0.000779
+  epoch 27: val_acc = 3059/3925 = 77.936306%
+  step 0/295: loss=0.596206
+  step 1/295: loss=0.589359
+  step 2/295: loss=0.631871
+  step 100/295: loss=0.637440
+  step 200/295: loss=0.605838
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.621334 lr=0.000762
+  epoch 28: val_acc = 3083/3925 = 78.547771%
+  step 0/295: loss=0.573849
+  step 1/295: loss=0.622309
+  step 2/295: loss=0.582048
+  step 100/295: loss=0.662199
+  step 200/295: loss=0.583369
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.614848 lr=0.000744
+  epoch 29: val_acc = 3078/3925 = 78.420382%
+  step 0/295: loss=0.591058
+  step 1/295: loss=0.660783
+  step 2/295: loss=0.595145
+  step 100/295: loss=0.581861
+  step 200/295: loss=0.664718
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.614066 lr=0.000726
+  epoch 30: val_acc = 3036/3925 = 77.350318%
+  step 0/295: loss=0.627683
+  step 1/295: loss=0.703103
+  step 2/295: loss=0.577203
+  step 100/295: loss=0.775100
+  step 200/295: loss=0.644082
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.605051 lr=0.000708
+  epoch 31: val_acc = 3113/3925 = 79.312102%
+  step 0/295: loss=0.551739
+  step 1/295: loss=0.660060
+  step 2/295: loss=0.579934
+  step 100/295: loss=0.561193
+  step 200/295: loss=0.599398
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.592007 lr=0.000689
+  epoch 32: val_acc = 3122/3925 = 79.541401%
+  step 0/295: loss=0.581410
+  step 1/295: loss=0.647276
+  step 2/295: loss=0.576157
+  step 100/295: loss=0.612445
+  step 200/295: loss=0.598153
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.593369 lr=0.000670
+  epoch 33: val_acc = 3099/3925 = 78.955414%
+  step 0/295: loss=0.565254
+  step 1/295: loss=0.602704
+  step 2/295: loss=0.563021
+  step 100/295: loss=0.577747
+  step 200/295: loss=0.549602
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.580898 lr=0.000651
+  epoch 34: val_acc = 3128/3925 = 79.694268%
+  step 0/295: loss=0.611587
+  step 1/295: loss=0.555831
+  step 2/295: loss=0.549122
+  step 100/295: loss=0.619086
+  step 200/295: loss=0.543958
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.577811 lr=0.000631
+  epoch 35: val_acc = 3107/3925 = 79.159236%
+  step 0/295: loss=0.567422
+  step 1/295: loss=0.574193
+  step 2/295: loss=0.568548
+  step 100/295: loss=0.542549
+  step 200/295: loss=0.588287
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.573739 lr=0.000611
+  epoch 36: val_acc = 3144/3925 = 80.101911%
+  step 0/295: loss=0.575978
+  step 1/295: loss=0.550543
+  step 2/295: loss=0.558520
+  step 100/295: loss=0.556765
+  step 200/295: loss=0.560954
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.569383 lr=0.000591
+  epoch 37: val_acc = 3110/3925 = 79.235669%
+  step 0/295: loss=0.563550
+  step 1/295: loss=0.555663
+  step 2/295: loss=0.543184
+  step 100/295: loss=0.560874
+  step 200/295: loss=0.570841
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.565399 lr=0.000571
+  epoch 38: val_acc = 3171/3925 = 80.789809%
+  step 0/295: loss=0.554650
+  step 1/295: loss=0.568684
+  step 2/295: loss=0.541872
+  step 100/295: loss=0.558697
+  step 200/295: loss=0.558639
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.562713 lr=0.000551
+  epoch 39: val_acc = 3143/3925 = 80.076433%
+  step 0/295: loss=0.585925
+  step 1/295: loss=0.543073
+  step 2/295: loss=0.549483
+  step 100/295: loss=0.584837
+  step 200/295: loss=0.541590
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.559016 lr=0.000531
+  epoch 40: val_acc = 3160/3925 = 80.509554%
+  step 0/295: loss=0.540941
+  step 1/295: loss=0.538024
+  step 2/295: loss=0.555605
+  step 100/295: loss=0.562713
+  step 200/295: loss=0.550651
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.553841 lr=0.000510
+  epoch 41: val_acc = 3162/3925 = 80.560510%
+  step 0/295: loss=0.558433
+  step 1/295: loss=0.544699
+  step 2/295: loss=0.557612
+  step 100/295: loss=0.548803
+  step 200/295: loss=0.547800
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.552291 lr=0.000490
+  epoch 42: val_acc = 3149/3925 = 80.229299%
+  step 0/295: loss=0.568903
+  step 1/295: loss=0.555153
+  step 2/295: loss=0.546639
+  step 100/295: loss=0.545894
+  step 200/295: loss=0.533907
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.550459 lr=0.000469
+  epoch 43: val_acc = 3192/3925 = 81.324841%
+  step 0/295: loss=0.529451
+  step 1/295: loss=0.524618
+  step 2/295: loss=0.541919
+  step 100/295: loss=0.551499
+  step 200/295: loss=0.533792
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.547136 lr=0.000449
+  epoch 44: val_acc = 3170/3925 = 80.764331%
+  step 0/295: loss=0.544955
+  step 1/295: loss=0.530073
+  step 2/295: loss=0.547527
+  step 100/295: loss=0.539466
+  step 200/295: loss=0.536387
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.542589 lr=0.000429
+  epoch 45: val_acc = 3174/3925 = 80.866242%
+  step 0/295: loss=0.538618
+  step 1/295: loss=0.552878
+  step 2/295: loss=0.532804
+  step 100/295: loss=0.556853
+  step 200/295: loss=0.544827
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.541596 lr=0.000409
+  epoch 46: val_acc = 3180/3925 = 81.019108%
+  step 0/295: loss=0.547659
+  step 1/295: loss=0.537072
+  step 2/295: loss=0.532622
+  step 100/295: loss=0.529203
+  step 200/295: loss=0.534284
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.537847 lr=0.000389
+  epoch 47: val_acc = 3177/3925 = 80.942675%
+  step 0/295: loss=0.537633
+  step 1/295: loss=0.529674
+  step 2/295: loss=0.526690
+  step 100/295: loss=0.527367
+  step 200/295: loss=0.578500
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.536722 lr=0.000369
+  epoch 48: val_acc = 3190/3925 = 81.273885%
+  step 0/295: loss=0.534656
+  step 1/295: loss=0.527418
+  step 2/295: loss=0.526528
+  step 100/295: loss=0.534179
+  step 200/295: loss=0.522430
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.536085 lr=0.000349
+  epoch 49: val_acc = 3211/3925 = 81.808917%
+  step 0/295: loss=0.527361
+  step 1/295: loss=0.544135
+  step 2/295: loss=0.550745
+  step 100/295: loss=0.526548
+  step 200/295: loss=0.531928
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.534188 lr=0.000330
+  epoch 50: val_acc = 3210/3925 = 81.783439%
+  step 0/295: loss=0.524780
+  step 1/295: loss=0.520084
+  step 2/295: loss=0.523436
+  step 100/295: loss=0.521331
+  step 200/295: loss=0.558353
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.532212 lr=0.000311
+  epoch 51: val_acc = 3204/3925 = 81.630573%
+  step 0/295: loss=0.534856
+  step 1/295: loss=0.527498
+  step 2/295: loss=0.528907
+  step 100/295: loss=0.519098
+  step 200/295: loss=0.519651
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.531827 lr=0.000292
+  epoch 52: val_acc = 3214/3925 = 81.885350%
+  step 0/295: loss=0.539600
+  step 1/295: loss=0.537954
+  step 2/295: loss=0.522291
+  step 100/295: loss=0.532513
+  step 200/295: loss=0.518378
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.529028 lr=0.000274
+  epoch 53: val_acc = 3195/3925 = 81.401274%
+  step 0/295: loss=0.524656
+  step 1/295: loss=0.531389
+  step 2/295: loss=0.529250
+  step 100/295: loss=0.518555
+  step 200/295: loss=0.525657
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.526503 lr=0.000256
+  epoch 54: val_acc = 3196/3925 = 81.426752%
+  step 0/295: loss=0.526477
+  step 1/295: loss=0.528265
+  step 2/295: loss=0.520707
+  step 100/295: loss=0.539949
+  step 200/295: loss=0.525920
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.524821 lr=0.000238
+  epoch 55: val_acc = 3226/3925 = 82.191083%
+  step 0/295: loss=0.518827
+  step 1/295: loss=0.525020
+  step 2/295: loss=0.516871
+  step 100/295: loss=0.523589
+  step 200/295: loss=0.518880
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.524486 lr=0.000221
+  epoch 56: val_acc = 3225/3925 = 82.165605%
+  step 0/295: loss=0.519444
+  step 1/295: loss=0.516970
+  step 2/295: loss=0.521691
+  step 100/295: loss=0.557845
+  step 200/295: loss=0.516324
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.523486 lr=0.000204
+  epoch 57: val_acc = 3220/3925 = 82.038217%
+  step 0/295: loss=0.545304
+  step 1/295: loss=0.518647
+  step 2/295: loss=0.524198
+  step 100/295: loss=0.519491
+  step 200/295: loss=0.517203
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.523750 lr=0.000188
+  epoch 58: val_acc = 3224/3925 = 82.140127%
+  step 0/295: loss=0.513561
+  step 1/295: loss=0.521049
+  step 2/295: loss=0.531790
+  step 100/295: loss=0.519790
+  step 200/295: loss=0.537174
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.521874 lr=0.000173
+  epoch 59: val_acc = 3228/3925 = 82.242038%
+  step 0/295: loss=0.521541
+  step 1/295: loss=0.535533
+  step 2/295: loss=0.542740
+  step 100/295: loss=0.513952
+  step 200/295: loss=0.533536
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.521154 lr=0.000157
+  epoch 60: val_acc = 3216/3925 = 81.936306%
+  step 0/295: loss=0.521378
+  step 1/295: loss=0.518228
+  step 2/295: loss=0.528454
+  step 100/295: loss=0.516243
+  step 200/295: loss=0.524142
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.518947 lr=0.000143
+  epoch 61: val_acc = 3235/3925 = 82.420382%
+  step 0/295: loss=0.519030
+  step 1/295: loss=0.515094
+  step 2/295: loss=0.515908
