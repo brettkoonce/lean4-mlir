@@ -1,4 +1,31 @@
-# ema.md — scoping the EMA weight shadow for the verified trainers
+# ema.md — the EMA weight shadow for the verified trainers
+
+> ## ✅ BUILT FOR CONVNEXT, SINGLE-DEVICE, 2026-08-02 — design A, as recommended below
+>
+> `verified_mlir/convnext_ema_train_step.mlir`, `LEAN_MLIR_VARIANT=ema`. **Zero new `SHlo` ops**, as
+> §3 predicted. Interface arithmetic closes exactly: **727 in / 725 out** = 545/543 + 180 (the
+> shadow region) + 2 (`%emad`/`%oemad`).
+>
+> | gate | result |
+> |---|---|
+> | gate 1 — every committed artifact re-renders | **0 lines of diff** (writers FORCED via `lake env lean`) |
+> | ⭐ **`decay = 0` ⇒ shadow ≡ live weights** | **BIT-IDENTICAL, 0 of 27,826,282 params differ** |
+> | ⭐ **known answer**, `(ema@.05 − θ)/(ema@.9999 − θ) = d_A/d_B = 0.5` | **8.7e-7** at well-conditioned coords; residue tracks f32 cancellation decade-for-decade |
+> | **control** — no warmup correction (`d` = 0.9999 not 0.1) | **0.90**, i.e. 252× the tie. This gate tests the correction DIRECTLY |
+> | **checkpoint size guard** on a forged 3-region file | throws, rc=1, with the fix in the message |
+> | **residency**, 4 regions | ✅ free, as predicted — `holds 720 parameter tensors (424.6 MB)` = 4×180 |
+> | ⭐ **the shadow TRACKS THEN EXCEEDS**, 4 epochs | 48.25/57.35/63.03/**67.77%** vs live 39.95/46.75/56.23/**58.29%** — never near chance |
+> | train loss vs the AdamW peer | 2.83/2.05/1.62/1.35 vs 2.89/2.05/1.61/1.37 — the EMA op does not perturb the optimizer |
+>
+> ⚠ **Not done**: the DP peer (`emadp` renders but is uncompiled), ViT and EfficientNet (the latter
+> also needs `ema_bn` — §5c, nearly free), and any long run. The 4-epoch smoke is descent evidence,
+> not an accuracy number.
+>
+> The scoping below is kept as written; the measurement calibrates against it.
+
+---
+
+## 0. The original scope (2026-08-02)
 
 **Written 2026-08-02**, as the peer of `planning/stochastic_depth.md` so the two can be compared
 before either is built. `planning/recipe_gaps.md` files EMA as **Tier C**, *"needs a shadow buffer

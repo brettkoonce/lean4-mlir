@@ -40,5 +40,18 @@ def convnextAdamConfig : VerifiedConfig where
     the only ConvNeXt render that exists, so the knob could only ever produce a shape error. -/
 def runConvNeXtAdam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  -- ▶ `ema`/`emadp` select the EMA-shadow render (`planning/ema.md`): same AdamW graph plus a 4th
+  -- `[θ|m|v|ema]` blob region updated by `adamMNextF` at `(β₁ := d)`, with EVAL AND THE CHECKPOINT
+  -- scoring the shadow. ConvNeXt is the right first net for it — LayerNorm means there is no
+  -- `ema_bn` peer to carry, so it is the parameter shadow alone.
+  --
+  -- `LEAN_MLIR_EMA_DECAY_U` sets the decay in MICRO-units (`999900` = 0.9999, the reference's
+  -- value), because this toolchain has no `String.toFloat?` — the `LEAN_MLIR_BASE_LR_U` dodge.
+  -- ⚠ **`0` is meaningful and is the gate**: at decay 0 the shadow must be BIT-IDENTICAL to the
+  -- live weights, since `d = min(0, ·) = 0 ⇒ ema' = θ'`. That is a free exact endpoint and it is
+  -- what pins the wiring — a shadow reading the wrong slot fails it immediately.
+  let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.9999
   convnextVerified.toNet.trainAdamSched convnextAdamConfig
-    (argv.head?.getD "data") 0.001 0.9 0.999 3 variant
+    (argv.head?.getD "data") 0.001 0.9 0.999 3 variant 0.0 1.0 emaDecay

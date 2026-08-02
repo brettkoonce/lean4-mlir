@@ -620,7 +620,8 @@ private def fwdRenderedBatch (path : String) : IO (Option Nat) := do
     that gap and is handled below — see `rmsprop`. -/
 def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
     (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam")
-    (expDecayRate : Float := 0.0) (expDecayEpochs : Float := 1.0) : IO Unit := do
+    (expDecayRate : Float := 0.0) (expDecayEpochs : Float := 1.0)
+    (emaDecay : Float := 0.9999) : IO Unit := do
   -- `variant` selects the rendered train step `@<slug>_<variant>_train_step` (and its artifact /
   -- vmfb / checkpoint names). Default "adam" = the AdamW render; "mom" = the Nesterov-momentum SGD
   -- render (same packed [θ|m|v]+lr/bc1/bc2 signature; the momentum step ignores the m/bc slots and
@@ -636,6 +637,16 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- "rms"/"rmsdp" (+ the per-device batch): "rms", "rms64", "rmsdp64". That direction is pinned by
   -- the `#guard`s beside each renderer's `#eval`, so the two cannot drift apart silently.
   let rmsprop := variant.startsWith "rms"
+  -- "ema"/"emadp" = the EMA-shadow render (`planning/ema.md`), whose blob carries a FOURTH region:
+  -- `[θ|m|v|ema]`, with the scalar tail 3 → 5 (`%emad`, `%oemad`). Everything below that indexes the
+  -- blob is written against `nRegions`/`nScalars` rather than a literal 3, because a 4-region graph
+  -- fed a 3-region blob is not a subtle numeric error — it is every parameter misaligned.
+  --
+  -- ⚠ Keyed off the variant PREFIX, the same reverse-of-`cnxAdamVariant` reading `rmsprop` uses,
+  -- and pinned upstream by the `#guard`s beside that renderer's `#eval`s.
+  let emaOn := variant.startsWith "ema"
+  let nRegions := if emaOn then 4 else 3
+  let nScalars := if emaOn then 5 else 3
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
@@ -700,6 +711,9 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   if rmsprop then
     IO.println s!"  ▸ RMSPROP: m = momentum buffer (init 0), v = running MEAN-SQUARE (init 1.0, \
 TF convention — this optimizer is not bias-corrected)"
+  if emaOn then
+    IO.println s!"  ▸ EMA: 4th blob region [θ|m|v|ema], shadow starts AT the weights, decay \
+min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW."
   if evalBs != bs then
     IO.println s!"  eval batch {evalBs} (the batch @{net.slug}_fwd{if hasBn then "_eval" else ""} \
 was RENDERED at) != train batch {bs} — sound because eval is class-batch-independent"
@@ -707,7 +721,9 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   if replicas > 1 then
     IO.println s!"  DATA-PARALLEL: {replicas} replicas x bs {bs} = global batch {gbs}, {nb} steps/epoch"
   (← IO.getStdout).flush
-  let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]]
+  let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
+                                ++ (if emaOn then net.paramShapes else #[])
+                                ++ Array.replicate nScalars #[]
                                 ++ (if hasBn then bnStatShapes else #[]))
   -- Device-resident parameters (handoff §2d.3). The leading `3×P` tensors of
   -- `adamShapes` are `[θ|m|v]`, and they are exactly the part of the blob this
@@ -723,7 +739,7 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- XLA still run this identical body — the property every §2h cross-backend
   -- gate rests on. The gate is `scripts/residency_gate.sh`: bit-identical
   -- parameters, or it did not land.
-  let nResident := (3 * net.paramShapes.size).toUSize
+  let nResident := (nRegions * net.paramShapes.size).toUSize
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
   let xShape := net.xShape evalBs      -- eval-only: the train step passes its dims directly
@@ -764,8 +780,11 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- value of a graph INPUT, and the graph is a step function that never sees step 0.
   -- `Proofs.rmsBufNext` is correct either way — this is what it gets fed.
   let msInit ← if rmsprop then F32.const net.nParams.toUSize 1.0 else pure zeros
-  let mut thetamv := F32.concat #[theta, zeros, msInit]
-  let mvBytes := 3 * net.nParams * 4
+  -- ⚠ THE EMA SHADOW STARTS AT THE WEIGHTS (`ema_params = params`, jax/Jax/Codegen.lean:2739), not
+  -- at zeros. A zero-init shadow is a different filter; and it is the warmup-corrected decay below
+  -- that stops even THIS init from poisoning the average early — see the `emaD` note.
+  let mut thetamv := F32.concat (#[theta, zeros, msInit] ++ (if emaOn then #[theta] else #[]))
+  let mvBytes := nRegions * net.nParams * 4
   let pBytes := net.nParams * 4
   -- Running BN stats (EMA of per-layer batch mean/var; mom 1.0 on the first step to seed,
   -- then 0.1). Reset per process — washed out well before the per-epoch eval (mom 0.1).
@@ -789,6 +808,16 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   let mut startEpoch := 0
   if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
     thetamv ← IO.FS.readBinFile ckptPath
+    -- ⚠ SIZE GUARD. The checkpoint is the raw `[θ|m|v(|ema)]` blob — no header, no fingerprint, no
+    -- region count — so a 3-region file loaded by the 4-region EMA driver (or the reverse) does not
+    -- fail: it misaligns EVERY parameter and resumes silent garbage. §4 already records that a
+    -- checkpoint outlives the artifact it was trained on; a layout change makes that one turn
+    -- worse, and this is the two lines that make it loud.
+    if thetamv.size != mvBytes then
+      throw <| IO.userError s!"checkpoint {ckptPath} is {thetamv.size} bytes but this run wants \
+{mvBytes} ({nRegions} regions x {net.nParams} params x 4). It was written by a different blob \
+layout — most likely across the EMA boundary, since the `ema*` variants carry a 4th region. Move \
+it and its .epoch marker aside and start fresh."
     startEpoch := ((← IO.FS.readFile epPath).toNat?).getD 0
     IO.println s!"  ▸ resuming from checkpoint at epoch {startEpoch}"
     (← IO.getStdout).flush
@@ -836,7 +865,7 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
     | none   => cfg.epochs
   -- Build the reusable step buffer once, AFTER any checkpoint resume has settled
   -- `thetamv`. The scalar slots are filled per step; the BN region per step too.
-  let scalarSlots ← F32.const 3 0.0
+  let scalarSlots ← F32.const nScalars.toUSize 0.0
   pbuf := if hasBn
           then F32.concat #[thetamv, scalarSlots, runningBnStats]
           else F32.concat #[thetamv, scalarSlots]
@@ -880,9 +909,22 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
       -- scalars and the BN region are refreshed. Rebuilding it with F32.concat
       -- (and slicing [theta|m|v] back out afterwards) cost two 272 MB host
       -- memcpys per step at R34 scale — see planning/xla_pjrt_ladder.md §8.
-      pbuf ← F32.write3 pbuf (3 * net.nParams).toUSize lrt bc1 bc2
+      pbuf ← F32.write3 pbuf (nRegions * net.nParams).toUSize lrt bc1 bc2
+      -- ⚠ THE WARMUP-CORRECTED DECAY, required at our scale rather than optional.
+      -- `d = min(decay, (1+t)/(10+t))` is TF's `ExponentialMovingAverage(decay, num_updates)`, the
+      -- form the reference emits (`jax/Jax/Codegen.lean:2460`). Without it the shadow decays its own
+      -- init away only as `decay^t`: the reference MEASURED a shadow still holding 12.8% init at
+      -- 3.1 tau, scoring 0.00% top-1 while the live weights scored 70.48%. An 80-epoch Imagenette
+      -- run is 23,600 steps = 2.4 tau at decay 0.9999 — squarely inside that regime.
+      -- `t` is the reference's 0-BASED `_global_step`, i.e. `gstep - 1` here.
+      if emaOn then
+        let t := gstep - 1.0
+        let emaD := min emaDecay ((1.0 + t) / (10.0 + t))
+        let emaPair ← F32.const 3 0.0
+        let emaPair ← F32.write3 emaPair 0 emaD (1.0 - emaD) 0.0
+        pbuf ← F32.blit pbuf (nRegions * net.nParams + 3).toUSize emaPair 0 2
       if hasBn then
-        pbuf ← F32.blit pbuf (3 * net.nParams + 3).toUSize runningBnStats 0 nBnStats.toUSize
+        pbuf ← F32.blit pbuf (nRegions * net.nParams + nScalars).toUSize runningBnStats 0 nBnStats.toUSize
       let augSeed := (ep * nb + bi + 1).toUSize
       -- ImageNet takes the whole batch off the wire, already augmented and normalized by the shim,
       -- so it bypasses BOTH the slice and the augmentation below. That is deliberate: the transform
@@ -912,7 +954,7 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
         else IreeSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
                bs.toUSize d0.toUSize nc.toUSize nResident
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
-      let stepLoss := F32.read out (3 * net.nParams).toUSize
+      let stepLoss := F32.read out (nRegions * net.nParams).toUSize
       epochLossSum := epochLossSum + stepLoss
       lastLr := lrt
       if bi < 3 || bi % 100 == 0 then
@@ -921,7 +963,8 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
       -- EMA the batch BN stats (in the passthrough slots after [θ'|m'|v'|loss|bc1|bc2]).
       -- This slice is small (nBnStats floats), unlike the [θ|m|v] prefix.
       if hasBn then
-        let batchBn := out.extract ((3 * net.nParams + 3) * 4) ((3 * net.nParams + 3 + nBnStats) * 4)
+        let batchBn := out.extract ((nRegions * net.nParams + nScalars) * 4)
+                                   ((nRegions * net.nParams + nScalars + nBnStats) * 4)
         runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.1)
         bnFirst := false
       pbuf := out   -- no copy: the output buffer becomes the next step's input
@@ -946,7 +989,15 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
     -- parameters are host-resident, and the read-back otherwise, so the
     -- frequency is unchanged either way and this line reads the same.
     thetamv ← IreeSession.readParams tsSess pbuf mvBytes.toUSize
-    let thetaCur := thetamv.extract 0 pBytes
+    -- ▶ EVAL AND THE CHECKPOINT SCORE THE SHADOW, not the live weights — which is what the
+    -- reference does (`evalArgs`/`params_to_file` read `ema_params`) and the whole point of the
+    -- feature: ConvNeXt's 75.93% IS the shadow's number. The shadow is region 4, so it starts at
+    -- `3 * pBytes`.
+    -- ⚠ Nothing in the `[θ|m|v]` residency gate can see this slice — eval-only state is
+    -- structurally invisible to it, exactly as hold-mode is (§2d.3). Its gate is the accuracy
+    -- trajectory: the shadow must TRACK THEN EXCEED the live weights, never start near chance.
+    let thetaCur := thetamv.extract (if emaOn then 3 * pBytes else 0)
+                                    (if emaOn then 4 * pBytes else pBytes)
     -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.
     let evalSess := if hasBn then fwdEvalSess else fwdSess
     let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval" else fwdFn

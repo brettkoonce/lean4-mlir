@@ -17,12 +17,6 @@ verified_mlir/cifar8w_bn_mom_train_step.mlir
 verified_mlir/cifar8w_bn_sgd_train_step.mlir
 verified_mlir/cifar8w_mom_train_step.mlir
 verified_mlir/cifar8w_sgd_train_step.mlir
-verified_mlir/cnxin_adam_train_step.mlir
-verified_mlir/cnxin_adamdp_train_step.mlir
-verified_mlir/cnxin_fwd.mlir
-verified_mlir/convnext_adam_train_step.mlir
-verified_mlir/convnext_adamdp_train_step.mlir
-verified_mlir/convnext_fwd.mlir
 verified_mlir/mnv2in_fwd.mlir
 verified_mlir/mnv2in_fwd_eval.mlir
 verified_mlir/mobilenetv2_fwd.mlir

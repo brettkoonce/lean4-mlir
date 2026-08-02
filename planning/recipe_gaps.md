@@ -74,7 +74,7 @@ that does not exist yet.
 | random erasing | — | ✅ | ✅ | — | — | ✅ **free via shim** |
 | repeated aug | — | 3 ✅ | — | — | — | ✅ **free via shim** |
 | stochastic depth | — | 0.1 ❌ | 0.1 ❌ | 0.2 ❌ | — | ❌ |
-| EMA | — | ✅→❌ | ✅→❌ | ✅→❌ | — | ❌ |
+| EMA | — | ✅→❌ | ✅→**✅** | ✅→❌ | — | ✅ **ConvNeXt 2026-08-02**; ViT + enet owed (enet also needs `ema_bn`) |
 | **bf16 / bf16Conv** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | batch / epochs | ✅ | ✅ | ✅ | ✅ | ✅ | all matched at 4 replicas |
 
@@ -85,7 +85,7 @@ that does not exist yet.
 | **R34** | bf16 | **at parity — run it** |
 | **mnv2** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, bf16 | **at parity — run it** |
 | **EfficientNet** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, dropPath, EMA, bf16 | two regularisers short |
-| **ConvNeXt** | mixup, cutmix, dropPath, EMA, grad clip, wdExclude, bf16 | the aug/regulariser pack |
+| **ConvNeXt** | mixup, cutmix, dropPath, ~~EMA~~ ✅, grad clip, wdExclude, bf16 | the aug/regulariser pack, minus EMA |
 | **ViT** | same as ConvNeXt | same |
 
 ✅ **BOTH HALVES OF RMSProp ARE DONE as of 2026-08-02** — the render (v1.2, §3 Tier D) and now the
@@ -167,9 +167,14 @@ otherwise. The alternative — no mixup on the verified path — is worse.
     shadow and scored **0.00% top-1** while the live weights scored 70.48%. An 80-epoch Imagenette
     run is 23,600 steps = 2.4τ, i.e. **squarely inside that regime** — `d = min(decay, (1+t)/(10+t))`
     from the start, or the run scores at chance and looks like a broken feature.
-  The gate the memory asks for stands — EMA accuracy must **track then exceed** the raw weights,
-  never start at 0.1% — and there is now a free exact one beside it: at `decay = 0` the shadow must
-  be **bit-identical** to the live weights.
+  ✅ **BUILT FOR CONVNEXT 2026-08-02** (`LEAN_MLIR_VARIANT=ema`, design A). Zero new ops as
+  predicted; 727 in / 725 out; gate 1 at 0 diff lines; **`decay = 0` ⇒ shadow BIT-IDENTICAL to the
+  live weights** (0 of 27,826,282); the ratio known-answer at **8.7e-7** against a
+  no-warmup-correction control at **0.90**; the checkpoint size guard fires rc=1; residency holds
+  the 4th region free (720 = 4×180 tensors). And the gate the memory asks for **passes** — the
+  shadow TRACKS THEN EXCEEDS from epoch 1: **48.25/57.35/63.03/67.77%** against the live weights'
+  39.95/46.75/56.23/58.29%, never near chance. ⚠ Still owed: the DP peer, ViT/EfficientNet
+  (the latter needs `ema_bn`, which §5c measures as nearly free), and a long run.
 
 ### Tier D — the render (a new proven `SHlo` op family; §4's "ten sites" each).
 **RMSProp, `wdExcludeNormBias`.**

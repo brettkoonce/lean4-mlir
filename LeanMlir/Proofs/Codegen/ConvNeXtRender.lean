@@ -550,8 +550,9 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     `Vec c`, so **0 of the 180 collectives are rank-0** (measured on the re-rendered artifact:
     the LN ones are `tensor<96xf32>` … `tensor<768xf32>`). The rank-0 `all_reduce` path this
     render used to be the only exerciser of is no longer exercised anywhere in the repo. -/
-private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (gradSSA : String) :
-    StateM Nat (String × String × String × String) := do
+private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
+    (ema : Bool := false) :
+    StateM Nat (String × String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
@@ -560,7 +561,24 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
   let (cV, nV) ← pretty cBS (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
   let (cT, nT) ← pretty cBS (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
                     "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
-  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+  -- ▶ THE EMA SHADOW, and it needs NO new op: `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the
+  -- reference's `ema_update` (`jax/Jax/Codegen.lean:2459`) at `(β₁ := d, m := ema, g := θ')`, so
+  -- `adamMNextF` renders it and `adamMNextF_faithful` closes the denotation side by `rfl`. Third
+  -- time this reading has paid — `momVNextF` at `(μ := wd, v := θ)` is the coupled L2 (§2k) and
+  -- `adamVNextF` at `β₂ := ρ` is RMSProp's mean-square (recipe_gaps v1.2).
+  --
+  -- ⚠ It consumes `nT`, the UPDATED parameter, not the gradient — the shadow averages weights.
+  -- ⚠ `%emad`/`%oemad` are function ARGS, not constants, because the reference's decay is
+  -- TIME-VARYING: `d = min(decay, (1+t)/(10+t))`, TF's warmup-corrected form. That correction is
+  -- required at our scale rather than optional — see `planning/ema.md` §2, where the reference's
+  -- own measurement has a shadow holding 12.8% of the random init and scoring 0.00% top-1.
+  --
+  -- At `ema := false` NO `pretty` call happens, so the fresh-name counter does not move and every
+  -- committed artifact re-renders byte-identically. That is gate 1 in its strong form, for free.
+  let (cE, nE) ← if ema then
+      pretty cBS (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
+    else pure ("", "")
+  pure (arS ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, nE)
 
 /-- The driver's **variant slug** for a given replica count: the artifact is
     `verified_mlir/convnext_<variant>_train_step.mlir`, the entry point is
@@ -569,9 +587,14 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
     running the wrong graph. The `#guard`s at the bottom pin the literal `#eval` paths against this.
 
     ConvNeXt has only one batch (32), so unlike `mnv2AdamVariant`/`r34AdamVariant` there is no
-    batch suffix — rendering another batch would need `cBS` to stop being a private constant. -/
-def cnxAdamVariant (replicas : Nat) : String :=
-  if replicas ≤ 1 then "adam" else "adamdp"
+    batch suffix — rendering another batch would need `cBS` to stop being a private constant.
+
+    ⚠ The EMA renders get their OWN slugs (`ema`/`emadp`), for the reason the RMSProp ones do: a
+    render carrying a fourth `[θ|m|v|ema]` region must never be able to overwrite the artifact the
+    AdamW trainer runs, whose blob has three. That is §2a's last-writer-wins race, and here it would
+    also be an arity mismatch the driver could not survive. -/
+def cnxAdamVariant (replicas : Nat) (ema : Bool := false) : String :=
+  (if ema then "ema" else "adam") ++ (if replicas ≤ 1 then "" else "dp")
 
 /-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe. -/
 private def convnextAdamConsts : String :=
@@ -610,6 +633,7 @@ set_option maxRecDepth 8000 in
     certified AdamW*. See `convnextAdamOne` for the carve-out. -/
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
+    (ema : Bool := false)
     : String := Id.run do
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
   -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
@@ -624,11 +648,13 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let mut thetaN : List String := []
     let mut mN : List String := []
     let mut vN : List String := []
+    let mut eN : List String := []
     for (nm, ds) in allParams nClasses do
       let g := (gradMap.lookup nm).getD s!"%d{nm}"
-      let (c, nT, nM, nV) ← convnextAdamOne replicas nm ds g
+      let (c, nT, nM, nV, nE) ← convnextAdamOne replicas nm ds g ema
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
+      if ema then eN := eN ++ [nE]
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path, NOT `pretty` of an
     -- AST node, and covered by no theorem — which is exactly the configuration in which §2b shipped
     -- plain CE against a smoothed-CE cotangent and only the numeric tie caught it. Built from the
@@ -659,8 +685,18 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let pTy := (allParams nClasses).map (fun p => ty p.2)
-    let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"]
-    let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+    -- ⚠ THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
+    -- The driver does `pbuf := out` — each step's output IS the next step's input (§2d.3's no-copy
+    -- handover) — so a return list that dropped the shadow, or carried fewer scalars than the
+    -- signature takes, would silently re-interpret the blob from step 2 onward. It is also exactly
+    -- what the resident shim checks: inputs `[res_in, res_in+n)` and outputs `[res_out, res_out+n)`
+    -- must agree tensor for tensor, which is why a 4th region needs no C change at all.
+    -- `%emad`/`%oemad` ride through unread, as `%bc1`/`%bc2` already do.
+    let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
+                     ++ (if ema then ["%emad", "%oemad"] else [])
+    let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
+                     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
     pure <|
       (if replicas ≤ 1 then
         -- Updated 2026-07-29. This banner used to carve out the stem 4x4/s4 and the 2x2/s2
@@ -688,15 +724,21 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   let pSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}"))
   let mSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}m: {ty d}"))
   let vSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}v: {ty d}"))
+  let eSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}e: {ty d}"))
   let argSig := ("%x: " ++ ty [cBS, 3*224*224]) ++ ", " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: " ++ ty [cBS,nClasses]
+    (if ema then ", " ++ eSig else "") ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
+    (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++
+    ", %onehot: " ++ ty [cBS,nClasses]
   let pTy := (allParams nClasses).map (fun p => ty p.2)
   let retTyL := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"])
+    (pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
+       ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+       ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []))
   -- ⚠ The slug is load-bearing exactly as it is on R34 (§2k) and ViT (§2p): a 1000-class render
   -- emitted under the `convnext` slug would collide with the artifacts the 84.41% Imagenette run,
   -- the prefix audit and every `convnext-adam-tie` invocation depend on.
-  let funcName := s!"{slug}_{cnxAdamVariant replicas}_train_step"
+  let funcName := s!"{slug}_{cnxAdamVariant replicas ema}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
@@ -738,6 +780,28 @@ end Proofs.StableHLO
 --     verified_mlir/convnext_adam_train_step.mlir
 #eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0")
+
+-- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ────────────────
+-- Same graph plus one `adamMNextF` per parameter on the UPDATED weight — `d·ema + (1−d)·θ'`, which
+-- is `Proofs.adamMNext` at `(β₁ := d, m := ema, g := θ')`, so this costs **no new op, no new `den`,
+-- no new faithfulness theorem and no new VJP**. It is the third time enumerating the reference's
+-- update against existing ops AT THEIR OTHER READINGS has collapsed a scoped op family to zero
+-- (§2k heavy-ball, recipe_gaps v1.2 RMSProp, here).
+--
+-- ⚠ THE BLOB GAINS A FOURTH REGION: `[θ|m|v|ema]`, and the scalar tail goes 3 → 5 (`%emad`,
+-- `%oemad`). That is why it renders to its OWN slug — a 4-region graph fed a 3-region blob is not a
+-- subtle numeric wrong answer, it is every parameter misaligned, and the AdamW artifact must stay
+-- exactly what it is. The driver's checkpoint SIZE GUARD is the other half of that (`ema.md` §5b):
+-- checkpoints carry no header, so a 3-region file read as 4 resumes silent garbage.
+--
+-- ⚠ `%emad`/`%oemad` are ARGS rather than constants because the reference's decay is time-varying,
+-- `d = min(decay, (1+t)/(10+t))` — TF's warmup-corrected `ExponentialMovingAverage`. `ema.md` §2
+-- has the reference's own measurement of what dropping that correction costs: a shadow still
+-- holding 12.8% of the random init at epoch 66, scoring **0.00% top-1** while the live weights
+-- scored 70.48%. An 80-epoch Imagenette run is 2.4 τ, i.e. inside that regime.
+#eval IO.FS.writeFile "verified_mlir/convnext_ema_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0"
+    (ema := true))
 
 -- The **DATA-PARALLEL** render (handoff §2h-quater), selected at run time by
 -- `LEAN_MLIR_VARIANT=adamdp`. ConvNeXt was the last large net with no DP path at all — its renderer
@@ -793,3 +857,9 @@ end Proofs.StableHLO
 -- `IO.FS.writeFile "verified_mlir/`, so those paths must stay literals — do not interpolate them.)
 #guard Proofs.StableHLO.cnxAdamVariant 1 == "adam"
 #guard Proofs.StableHLO.cnxAdamVariant 2 == "adamdp"
+-- The EMA peers. Distinct slugs from the AdamW ones is the point: the EMA render carries a FOURTH
+-- `[θ|m|v|ema]` region, so it and the AdamW render cannot share an artifact path, a checkpoint or a
+-- driver invocation. `LEAN_MLIR_VARIANT=ema` selects it and the driver keys its 4-region layout off
+-- the same `"ema"` prefix, exactly as it keys RMSProp's mean-square init off `"rms"`.
+#guard Proofs.StableHLO.cnxAdamVariant 1 true == "ema"
+#guard Proofs.StableHLO.cnxAdamVariant 2 true == "emadp"
