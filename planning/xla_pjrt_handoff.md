@@ -71,7 +71,7 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **grad clip is DONE (2026-08-02). `recipe_gaps.md` v1.4 is CLOSED.**
+## 0. ▶ START HERE — **next: the SHIM WIRING, then the BATCHED-INDEX MOVE. §0.2 has the order.**
 
 **Rewritten 2026-08-02 for a fresh session; updated the same day when grad clip landed.** State:
 `lake build Proofs Certs Codegen` **3,913** green · **115** artifacts, one writer each ·
@@ -88,11 +88,12 @@ a live thread unless §0.3 says it is owed.
 | | |
 |---|---|
 | **§0.1** | ⚠ the box constraint — it re-orders everything |
-| **§0.2** | ✅ grad clip — DONE; what it cost, and the three traps it found |
+| **§0.2** | ▶ **THE NEXT THREE THREADS, in order** — shim wiring → batched index → the rest |
 | **§0.3** | ⚠ what is OWED, collected in one place |
 | **§0.5** | ✅ DP ImageNet recipe parity — and the DP control it broke |
 | **§0.6** | ✅ stochastic depth's DP shard gate — §5b's predicted defect, found |
 | **§0.7** | ✅ the ViT / EfficientNet EMA DP peers, gated — and the shadow re-measured |
+| **§0.8** | ✅ grad clip — what it cost, and the three traps it found |
 | **§0.4** | ✅ what landed 2026-08-02, with the findings worth keeping |
 
 ### §0.1 ⚠⚠ THE THING THAT CHANGES WHAT "NEXT" MEANS: **this box cannot do long runs**
@@ -113,7 +114,107 @@ runs this box will crash."* Sustained multi-GPU load destabilises ares. That is 
 * ⚠ **Ask before starting anything long**, and use `scripts/supervise.sh` (AER restart, thermal
   resting, stall guard) if a long run is ever sanctioned.
 
-### §0.2 ✅ **GRAD CLIP — BUILT AND GATED 2026-08-02.** `planning/grad_clip.md` §11 is the record
+### §0.2 ▶ THE NEXT THREE THREADS, IN ORDER — and the first one is a WIRING bug, not a build
+
+**All five nets are at PJRT parity** (`<net>-verified-adam-xla` + `<net>-imagenet-verified-xla`, both
+scales, all five execute). R34 and mnv2 are feature-complete against their references except bf16.
+What is left is concentrated on **EfficientNet, ViT and ConvNeXt**, and it goes in this order.
+
+---
+
+#### ▶ 1. THE SHIM WIRING — cheap, and it silently invalidates four rows of `recipe_gaps`' matrix
+
+⚠⚠ **`spawnShim` defaults to `generated_resnet34_imagenet_shim.py` FOR EVERY NET**
+(`VerifiedTrain.lean:216`), `SHIM_SCRIPT` is set **nowhere** in any job conf, script or doc, and
+R34's is the **only generated shim on disk**. Verified by grepping that file:
+
+| in the default shim | |
+|---|---|
+| `_autoaugment` · `_randaugment` · `_random_erase` · repeated aug | **not defined, not called** |
+| RRC + hflip (`_imagenet_decode_random_crop_flip`) | ✅ |
+
+So **a verified EfficientNet / ViT / ConvNeXt ImageNet run as documented streams R34's
+augmentation.** EfficientNet's reference sets `useAutoAugment := true`; ViT's sets RandAugment
+m9/mstd0.5/inc1 + random erasing + repeated aug ×3; R34's sets only `augment := true`.
+
+⚠ **`recipe_gaps` Tier A says these are *"already free, already flowing … nothing to build"*. That
+is a CAPABILITY claim and it is true — `generateShim` honours `useAutoAugment` (`Codegen.lean:335`),
+`randomErasing` (:368) and `repeatedAug` (:425). It is NOT a STATE claim, and the matrix's ✅ marks
+read as state.** Four rows across three nets are affected.
+
+**The work**: generate the per-net shims (`lake exe <net>-imagenet default --shim`) and give the
+driver a per-net default rather than R34's. ⚠ It also unblocks **mixup/cutmix**, which needs
+`SHIM_NCLASSES` and therefore the right script. Cheap, and every accuracy comparison for those three
+nets currently rests on it.
+
+---
+
+#### ▶ 2. THE BATCHED-INDEX MOVE — the real prerequisite for stochastic depth on ViT/ConvNeXt
+
+**Measured, not recalled** — distinct AST forms per renderer:
+
+| renderer | batched | per-example |
+|---|---|---|
+| EfficientNet · MobileNetV2 · ResNet-34 | **28 · 21 · 18** | 1 each |
+| **ViT** | 4 | **14** |
+| **ConvNeXt** | 2 | **8** |
+
+Every net that HAS stochastic depth is in the batched world; ViT and ConvNeXt are not.
+
+⚠⚠ **AND THE REQUIREMENT IS STRUCTURAL, not a convention.** The drop mask is per-EXAMPLE (example
+`j` gets `sⱼ`). In a per-example-indexed AST a node denotes ONE example (`Vec n`) and `pretty B`
+lifts it across the batch — **the node cannot see `j`**. §4's descriptor rule is exactly this: `den`
+is `batchMap N (denOp op)`, one FIXED function across the batch.
+
+⚠ **The trap is that the emit would typecheck.** `pretty B` already emits `tensor<Bxn>`, so a
+`broadcast_in_dim %mask, dims = [0]` + multiply against a per-example node compiles, trains and
+descends — with no faithful `den` behind it. Same shape as `swishBack`/`selectPos`, which needed
+their own constructors holding the whole-batch `x`.
+
+So: **14 forms on ViT, 8 on ConvNeXt**, each needing a batched peer + cert + emit tie. §2b did this
+for R34 and is the single largest thread in this file. ⚠ The form COUNTS are measured; the per-form
+effort is not — cost it before committing to a session count.
+
+**Once it lands, stochastic depth is nearly free**: `dropPathB`, its cert (`layerScale_has_vjp`
+verbatim), the driver, and the DP mask-shard gate (§0.6) all already exist.
+
+---
+
+#### ▶ 3. THE REST — exactly two items after that
+
+* **mixup / cutmix run** — producer done (`scripts/mixup_gate.py`, 3 gates + the end-to-end smoke
+  that caught the split defect). ⚠ Its λ agreement is **permanently distribution-only**: the
+  reference draws `jax.random.beta(fold_in(...))`, the shim draws from numpy's `Generator`, and no
+  seeding makes them equal. Never quote it as per-step agreement.
+* **bf16 / bf16Conv** — the only gap left on R34 and mnv2 too. ⚠ Worth much less on the depthwise
+  nets: `bf16_renderer.md` measured **bf16 depthwise conv at 0.50×, twice as SLOW**. Throughput,
+  not accuracy.
+
+⚠ **And one unlisted RENDER gap found the same day**: EfficientNet's reference sets
+`dropout := 0.2` (classifier dropout, `MainEfficientNetImagenet.lean:68`) and there are **ZERO
+dropout sites in any verified EfficientNet render**. The matrix has a row for stochastic depth and
+none for dropout — they are different regularisers, and `StableHLO.lean:5329`'s own comment says so.
+
+---
+
+### §0.3 ⚠ WHAT IS OWED — collected here so it is not spread over 6,000 lines
+
+| owed | why it matters | where |
+|---|---|---|
+| ~~⛔ the four ImageNet renders bake `wd = 1e-4`~~ ✅ **CLOSED 2026-08-02** | all four bake **0.05** now; the re-render diff was exactly 4 lines, all `%wd`, every other artifact byte-identical, and both pairs re-gate bit-exact at 4 replicas | §0.5 |
+| ~~⛔ stochastic depth's **asymmetric-batch DP gate**~~ ✅ **CLOSED 2026-08-02** | `lake build drop-shard-check` — and §5b's prediction was right: the masks WERE being replicated, in the shim, before any DP drop render existed. Both existing constructions were unusable and the answer was neither of them | §0.6 |
+| ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
+| ⚠⚠ **every DP render's sum-not-mean control is BLIND once a clip is on** | a NEW hole, found by running it: grad clip is scale-invariant where it saturates, so the standard control passes bit-exact on a deliberately broken collective. The composed control (`perturb_clip.py hi` + sum-not-mean) is documented in `TestViTDpCheck.lean`. ⚠ **Any future clipped render must use it** | §0.5 |
+| ~~⚠ the ViT / EfficientNet EMA DP peers are RENDERED BUT UNGATED~~ ✅ **CLOSED 2026-08-02** | both gated at **4 replicas, every region BIT-EXACT** — ViT 22,869,669 floats, EfficientNet 21,196,213 (incl. the 4th region and 49 BN layers), sum-not-mean controls at **2.96 / 2.39**. The EMA scorecard is 3 of 3 on DP as well as single-device | §0.7 |
+| ⛔ **the per-net data SHIMS are not wired** — every net streams R34's augmentation | `spawnShim` defaults to `generated_resnet34_imagenet_shim.py`, `SHIM_SCRIPT` is set nowhere, and R34's is the only generated shim on disk. It has no AutoAugment / RandAugment / random erasing / repeated aug. **Four rows of `recipe_gaps`' matrix read ✅ on a capability, not on the state**, and every ViT/ConvNeXt/EfficientNet accuracy comparison rests on it | §0.2 ▶1 |
+| ⚠ **EfficientNet's classifier dropout 0.2 is missing and UNLISTED** | `MainEfficientNetImagenet.lean:68` sets it; there are **zero dropout sites in any verified enet render**. The matrix has a stochastic-depth row and no dropout row — different regularisers | §0.2 ▶3 |
+| ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
+| ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
+| ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
+
+---
+
+### §0.8 ✅ **GRAD CLIP — BUILT AND GATED 2026-08-02.** `planning/grad_clip.md` §11 is the record
 
 **Two `SHlo` ops, no new proof machinery, no driver change** — `recipe_gaps`' Tier E was wrong by a
 tier, the second time an estimate there was (RMSProp's "op family" was one op). Four artifacts
@@ -257,21 +358,6 @@ norm is BELOW the threshold must come back **bit-identical** to the unclipped re
 exactly 1.0, so this is a bit-exactness claim, not a tolerance), and one above it must be scaled by
 the predicted factor. ⚠ Condition the instrument so both regimes are reachable — `LEAN_MLIR_BASE_LR_U`
 does not help here; the norm is a property of the *data*, so drive it with a scaled input.
-
----
-
-### §0.3 ⚠ WHAT IS OWED — collected here so it is not spread over 6,000 lines
-
-| owed | why it matters | where |
-|---|---|---|
-| ~~⛔ the four ImageNet renders bake `wd = 1e-4`~~ ✅ **CLOSED 2026-08-02** | all four bake **0.05** now; the re-render diff was exactly 4 lines, all `%wd`, every other artifact byte-identical, and both pairs re-gate bit-exact at 4 replicas | §0.5 |
-| ~~⛔ stochastic depth's **asymmetric-batch DP gate**~~ ✅ **CLOSED 2026-08-02** | `lake build drop-shard-check` — and §5b's prediction was right: the masks WERE being replicated, in the shim, before any DP drop render existed. Both existing constructions were unusable and the answer was neither of them | §0.6 |
-| ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
-| ⚠⚠ **every DP render's sum-not-mean control is BLIND once a clip is on** | a NEW hole, found by running it: grad clip is scale-invariant where it saturates, so the standard control passes bit-exact on a deliberately broken collective. The composed control (`perturb_clip.py hi` + sum-not-mean) is documented in `TestViTDpCheck.lean`. ⚠ **Any future clipped render must use it** | §0.5 |
-| ~~⚠ the ViT / EfficientNet EMA DP peers are RENDERED BUT UNGATED~~ ✅ **CLOSED 2026-08-02** | both gated at **4 replicas, every region BIT-EXACT** — ViT 22,869,669 floats, EfficientNet 21,196,213 (incl. the 4th region and 49 BN layers), sum-not-mean controls at **2.96 / 2.39**. The EMA scorecard is 3 of 3 on DP as well as single-device | §0.7 |
-| ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
-| ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
-| ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
 
 ---
 
@@ -992,6 +1078,10 @@ five at reference epochs. Its ordering, in brief:
 **v1.0 run R34** (zero build) · **v1.1** exponential LR decay + EMA (driver only) · **v1.2**
 RMSProp (the ONLY thing between mnv2 and parity) · **v1.3** mixup+cutmix (wire is done) · **v1.4**
 `wdExcludeNormBias`, grad clip · **v2** stochastic depth, bf16.
+
+⚠ **Read that as HISTORY.** As of 2026-08-02 v1.0-v1.4 are done or hardware-blocked, and the live
+order is **§0.2's**: v1.5a the SHIM WIRING → v1.5b the BATCHED-INDEX MOVE (then SD on ViT/ConvNeXt)
+→ the mixup/cutmix run → bf16.
 
 The list below is the pre-ImageNet ordering and is kept because the bf16 measurements are still the
 best ones on file.

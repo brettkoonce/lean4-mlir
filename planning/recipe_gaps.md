@@ -70,9 +70,11 @@ that does not exist yet.
 | label smoothing | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.0 ✅ | derived from `nClasses` |
 | grad clip | — | 1.0 ✅ | 1.0 ✅ | — | — | ✅ **BOTH nets, 2026-08-02** — `clip` variant, `lake build clip-tie {vit,convnext}` |
 | **mixup / cutmix** | — | 0.8/1.0 ⚠ | 0.8/1.0 ⚠ | — | — | wire ✅, **producer ✅** (2026-08-02; no run yet) |
-| RandAugment (geo) | — | ✅ | ✅ | — | — | ✅ **free via shim** |
-| random erasing | — | ✅ | ✅ | — | — | ✅ **free via shim** |
-| repeated aug | — | 3 ✅ | — | — | — | ✅ **free via shim** |
+| RandAugment (geo) | — | ⚠ | ⚠ | — | — | ⚠ **supported, NOT WIRED** — the default shim is R34's (Tier A) |
+| random erasing | — | ⚠ | ⚠ | — | — | ⚠ **supported, NOT WIRED** (Tier A) |
+| repeated aug | — | 3 ⚠ | — | — | — | ⚠ **supported, NOT WIRED** (Tier A) |
+| **AutoAugment** | — | — | — | ✅ ⚠ | — | ⚠ **supported, NOT WIRED** — enet's reference sets `useAutoAugment`; the default shim has none (Tier A) |
+| **classifier dropout** | — | — | — | **0.2 ❌** | — | ❌ **MISSING AND WAS UNLISTED** — zero dropout sites in any verified enet render. NOT the same thing as the stochastic-depth row below |
 | stochastic depth | — | 0.1 ❌ | 0.1 ❌ | 0.2 ⚠ | — | ⚠ **op + cert + EfficientNet render done 2026-08-02**, driver owed. ConvNeXt/ViT need the §2b batched-index move first — they render at the PER-EXAMPLE index, where a per-example mask is §4's descriptor trap |
 | EMA | — | ✅→**✅** | ✅→**✅** | ✅→**✅** | — | ✅ **all three, 2026-08-02** (ConvNeXt + DP peer, EfficientNet incl. `ema_bn`, ViT). ⚠ Imagenette slugs only — no `*in_ema*` render exists |
 | **bf16 / bf16Conv** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -112,12 +114,32 @@ replicas.
 The useful axis is not "how important" but "which layer does it touch", because the layers have
 wildly different costs in this repo.
 
-### Tier A — the pipeline. **Already free, already flowing.**
+### Tier A — the pipeline. ⚠⚠ **AVAILABLE, BUT NOT WIRED — this heading was WRONG as state.**
 RandAugment (full geometric, m9/mstd0.5/inc1), random erasing, repeated augmentation, RRC + hflip.
 
 These live inside `build_imagenet_iter`, which `generateShim` reuses **verbatim** (§2k). Turning
 them on in the JAX config moves both paths at once, and the verified side owns no augmentation code
-at all. **Nothing to build. Verify by flipping the config and re-running `SHIM_HASH`.**
+at all. ~~**Nothing to build.**~~
+
+> ⚠⚠ **CORRECTED 2026-08-02. The mechanism is free; the WIRING is not, and this tier's ✅ marks in
+> §2 were reading as state when they were only a capability.**
+>
+> `spawnShim` defaults to **`generated_resnet34_imagenet_shim.py` for every net**
+> (`VerifiedTrain.lean:216`), `SHIM_SCRIPT` is set **nowhere** in any job conf, script or doc, and
+> R34's is the **only generated shim on disk**. Grepped inside that file: `_autoaugment`,
+> `_randaugment`, `_random_erase` and repeated aug are **not defined and not called**; it applies
+> RRC + hflip only, because R34's config sets just `augment := true`.
+>
+> So **a verified EfficientNet / ViT / ConvNeXt ImageNet run as documented streams R34's
+> augmentation** — not AutoAugment (enet), not RandAugment m9/mstd0.5/inc1 + random erasing +
+> repeated aug ×3 (ViT). `generateShim` *does* honour all of them (`useAutoAugment` at
+> `Codegen.lean:335`, `randomErasing` :368, `repeatedAug` :425) — nothing is missing but the
+> generation and the per-net default.
+>
+> **The fix**: `lake exe <net>-imagenet default --shim` per net, and a per-net default in the
+> driver instead of R34's. ⚠ It also unblocks **mixup/cutmix**, which needs `SHIM_NCLASSES` and so
+> needs the right script. This is `recipe_gaps` v1.5a and it goes FIRST — every accuracy comparison
+> for those three nets currently rests on it.
 
 ### Tier B — the producer (shim-side Python). ✅ **DONE 2026-08-02 — wire AND mixing.**
 **mixup, cutmix.**
@@ -637,6 +659,48 @@ shared DAG node, where `SHlo` is a single-output tree. Decide certified-vs-carve
 ⚠ And two ordering traps: under DP the clip must go **after** the `all_reduce` (clipping per-replica
 partial gradients is a different function), and it **breaks every gate that recovers `g` from `m'`**
 — `r34-mom-tie`, `rms-tie`, `wdx-tie`, `shard-check`. §0.2 has the detail and the gate design.
+
+### v1.5a — ▶ **THE SHIM WIRING. THIS IS NEXT, and it is a wiring bug rather than a build.**
+
+Tier A's box has the measurement. In one line: **every net streams R34's augmentation**, because
+`spawnShim` defaults to R34's generated shim, `SHIM_SCRIPT` is set nowhere, and no other shim has
+ever been generated. Cheap to fix, and it unblocks mixup/cutmix as a side effect. It goes first
+because **every accuracy comparison for ViT / ConvNeXt / EfficientNet currently rests on it** — a
+pair run at the wrong augmentation is not a pair, exactly as a pair at the wrong weight decay was
+not (§0.5).
+
+Gate it the way the shim has always been gated: `SHIM_HASH` twice per net (determinism), and a
+DIFFERENT digest between two nets whose configs differ — which is the check that would have caught
+this, and which nothing runs today.
+
+### v1.5b — ▶ **THE BATCHED-INDEX MOVE, then stochastic depth on ViT/ConvNeXt**
+
+⚠ **This tiering used to read "ConvNeXt/ViT need the §2b batched-index move first" as a footnote on
+the stochastic-depth row. It is not a footnote, it is the whole cost.** Measured, distinct AST forms
+per renderer:
+
+| renderer | batched | per-example |
+|---|---|---|
+| EfficientNet · MobileNetV2 · ResNet-34 | **28 · 21 · 18** | 1 each |
+| **ViT** | 4 | **14** |
+| **ConvNeXt** | 2 | **8** |
+
+Every net that HAS stochastic depth is in the batched world; these two are not.
+
+⚠⚠ **The requirement is STRUCTURAL.** The mask is per-EXAMPLE (`sⱼ` for example `j`); in a
+per-example-indexed AST a node denotes ONE example (`Vec n`) and `pretty B` lifts it — the node
+cannot see `j`. §4's descriptor rule is exactly that: `den` is `batchMap N (denOp op)`, one FIXED
+function across the batch. ⚠ And **the emit would typecheck** — `pretty B` already emits
+`tensor<Bxn>`, so a `broadcast_in_dim %mask, dims = [0]` + multiply compiles, trains and descends
+with no faithful `den` behind it. That is `swishBack`/`selectPos`'s shape, and those needed their
+own constructors holding the whole-batch `x`.
+
+So: 14 forms on ViT, 8 on ConvNeXt, each a batched peer + cert + emit tie. §2b did this for R34 and
+is the largest single thread in the handoff. ⚠ The COUNTS are measured; the per-form effort is not —
+cost it before committing to a session count.
+
+**Once it lands SD is nearly free**: `dropPathB`, its cert (`layerScale_has_vjp` verbatim), the
+driver and the DP mask-shard gate all exist already.
 
 ### v1.5 — ✅ **stochastic depth: DONE on EfficientNet single-device, 2026-08-02.**
 `planning/stochastic_depth.md`. One `SHlo` op whose **VJP is `layerScale_has_vjp` verbatim** (no new
