@@ -849,3 +849,15 @@ end Proofs.StableHLO
 -- `variant.startsWith "ema"`, and on EfficientNet a *prefix* test on a two-axis name (`emarms`)
 -- already misclassified a variant once and would have initialised RMSProp's mean-square to 0.
 #guard Proofs.StableHLO.vitAdamVariant 32 1 true == "ema"
+
+-- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
+-- `vitTinyImagenetConfig.emaDecay := 0.99996` (the DeiT default), so this is the render an ImageNet
+-- ViT pair actually needs — `vit_ema` is Imagenette-scale and, as `ViTAdamCommon` records, a GATE
+-- VEHICLE rather than a matched pair (`vitTinyConfig` sets no EMA at all). Batch 128 × 4 replicas
+-- = global 512, matching the reference, exactly as the `vitin_adam128` pair does.
+#eval IO.FS.writeFile "verified_mlir/vitin_ema128_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_ema128_train_step" "128.0" 1 128 1000 0.1
+    (ema := true))
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_emadp128x4_train_step" "128.0" 4 128 1000 0.1
+    (ema := true))

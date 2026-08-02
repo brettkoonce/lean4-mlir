@@ -84,7 +84,8 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
          # rather than reusing efficientnet_fwd, which is the whole point of §3's design: the drop
          # sites are emitted in the forward too (at an all-ones scale, exactly the identity), so
          # the SD train step keeps a prefix partner instead of the audit quietly not covering it.
-         ("efficientnet_sd_fwd.mlir", "efficientnet_adamsd_train_step.mlir")]
+         ("efficientnet_drop_fwd.mlir", "efficientnet_adamdrop_train_step.mlir"),
+         ("enetin_drop_fwd.mlir",       "enetin_emarmsdrop64_train_step.mlir")]
 
 def body(lines, what):
     """The pretty(AST) body: everything from the first `%v0 = ` definition on.

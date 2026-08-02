@@ -604,6 +604,11 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
   bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
     480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
     1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
+  -- ▶ v1.2c: the ImageNet peer of `efficientnetVerified.dropKeeps`. IDENTICAL, and that is the
+  -- content: `enetDropIdxs` is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips), not
+  -- of the class count or the batch, so the ramp does not move between scales.
+  dropKeeps := (#[2, 4, 6, 7, 9, 10, 12, 13, 14] : Array Nat).map
+    (fun i => 1.0 - 0.2 * i.toFloat / 15.0)
 
 -- Exactly one parameter shape may differ — the head. And the BN layout must be IDENTICAL, since
 -- the running-stat region is positional: a drift there misaligns every frozen statistic at eval.

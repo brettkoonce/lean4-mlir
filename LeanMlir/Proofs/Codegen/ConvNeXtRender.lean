@@ -876,3 +876,12 @@ end Proofs.StableHLO
 -- the same `"ema"` prefix, exactly as it keys RMSProp's mean-square init off `"rms"`.
 #guard Proofs.StableHLO.cnxAdamVariant 1 true == "ema"
 #guard Proofs.StableHLO.cnxAdamVariant 2 true == "emadp"
+
+-- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
+-- ConvNeXt's reference number IS the EMA shadow's — **75.93%**, against a live best of 76.28% — so
+-- without this render the `cnxin` pair is not comparable at all, whatever else it carries. The EMA
+-- work landed on `convnext_ema` (Imagenette) and stopped there; found by listing artifacts.
+#eval IO.FS.writeFile "verified_mlir/cnxin_ema_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin" (ema := true))
+#eval IO.FS.writeFile "verified_mlir/cnxin_emadp_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "cnxin" (ema := true))

@@ -668,14 +668,17 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let emaOn := variant.startsWith "ema"
   let nRegions := if emaOn then 4 else 3
   let nScalars := if emaOn then 5 else 3
-  -- "…sd" = the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the graph takes one
+  -- "…drop" = the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the graph takes one
   -- extra `tensor<Bxf32>` per drop site, carrying `bernoulli(keep_i)/keep_i` per example.
   --
-  -- ⚠ A SUBSTRING test, not a prefix one — the marker TRAILS (`adamsd`), and three axes now share
-  -- this string. `emarms` already cost one prefix test (`planning/ema.md`): a name encoding two
-  -- independent axes breaks `startsWith` QUIETLY, and there it would have initialised RMSProp's
-  -- mean-square to 0. Check all three predicates together before adding a fourth axis.
-  let sdOn := (variant.splitOn "sd").length > 1 && !net.dropKeeps.isEmpty
+  -- ⚠⚠ THE MARKER IS `"drop"` BECAUSE `"sd"` COLLIDES, and the collision is between two OTHER
+  -- markers meeting: `rms` ++ `dp` spells **`rmsdp`**, which contains "sd". A `"sd"` substring test
+  -- therefore fires on `rmsdp64` and `emarmsdp64` — every RMSProp data-parallel variant, including
+  -- the committed and gated `enetin_rmsdp64` — and would have appended 9 drop scales to a graph
+  -- that takes none. Caught by running the predicate table (`tests/TestVariantPredicates.lean`)
+  -- rather than reading names one at a time; with three markers the collisions are between PAIRS.
+  -- This is `planning/ema.md`'s `emarms` defect a second time, one axis further on.
+  let sdOn := (variant.splitOn "drop").length > 1 && !net.dropKeeps.isEmpty
   let nDrop := if sdOn then net.dropKeeps.size else 0
   let bs := cfg.batchSize
   let d0 := net.d0

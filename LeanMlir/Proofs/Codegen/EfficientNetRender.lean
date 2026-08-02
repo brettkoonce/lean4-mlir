@@ -1034,12 +1034,19 @@ private def enetAdamConsts : String :=
     Same convention as `r34AdamVariant`. -/
 def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := false)
     (sd : Bool := false) : String :=
-  -- ⚠ The `sd` marker TRAILS, and that is checked rather than assumed. The driver's two live
-  -- predicates are `variant.startsWith "ema"` (4-region blob) and a `"rms"` SUBSTRING (mean-square
-  -- init 1.0); a leading `sd` would break the first — `sdema` does not start with "ema", which is
-  -- the `emarms` defect (`planning/ema.md`) reintroduced through a third axis. Trailing collides
-  -- with neither. Three axes now share this string, so add the fourth only after re-running the
-  -- predicate check.
+  -- ⚠⚠ THE STOCHASTIC-DEPTH MARKER IS `"drop"`, NOT `"sd"`, AND THAT IS A BUG FIX.
+  -- `"sd"` collides: `rms` ++ `dp` spells **`rmsdp`**, which CONTAINS "sd", so a `"sd"` substring
+  -- test fires on `rmsdp64` and `emarmsdp64` — every RMSProp DATA-PARALLEL variant, including the
+  -- committed and gated `enetin_rmsdp64`. No placement of an `sd` marker avoids that; the collision
+  -- is between two OTHER markers meeting. Only renaming fixes it, and `drop` collides with nothing.
+  --
+  -- This is the `emarms` defect (`planning/ema.md`) a second time, one axis further on, and it is
+  -- why the predicate table in `tests/TestVariantPredicates.lean` is now run rather than reasoned
+  -- about: with three markers the collisions are between PAIRS, which is not something you see by
+  -- reading one name at a time.
+  --
+  -- ⚠ The marker still TRAILS: a leading one would break `variant.startsWith "ema"` (the 4-region
+  -- blob test) — `dropema` does not start with "ema".
   -- ⚠ The `ema` marker LEADS, because the driver keys its 4-region `[θ|m|v|ema]` blob layout off
   -- `variant.startsWith "ema"` — the same reverse-of-this-function reading it uses for `"rms"`.
   -- Optimizer and EMA are independent axes here (unlike ConvNeXt, which has only AdamW), so the
@@ -1049,7 +1056,7 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
    | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
    | .rmsprop => if replicas ≤ 1 then "rms"  else "rmsdp") ++
   (if B == 32 then "" else toString B) ++
-  (if sd then "sd" else "")
+  (if sd then "drop" else "")
 
 set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
@@ -1460,7 +1467,7 @@ end Proofs.StableHLO
 -- baked `1/keep_i` and §3's "the forward emits the sites too" cannot both hold, because a ones
 -- mask would then compute `x/keep_i` rather than `x`, and the reference is explicit that eval
 -- returns the branch untouched.
-#eval IO.FS.writeFile "verified_mlir/efficientnet_adamsd_train_step.mlir"
+#eval IO.FS.writeFile "verified_mlir/efficientnet_adamdrop_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" (sd := true))
 
@@ -1472,8 +1479,36 @@ end Proofs.StableHLO
 -- train step with no prefix partner at all, i.e. spend the gate rather than pay 9 dead multiplies.
 -- At eval the driver supplies an all-ones scale, so these compute the identity EXACTLY
 -- (`Proofs.dropPath_ones_id`, and `1 * x = x` is exact in IEEE).
-#eval IO.FS.writeFile "verified_mlir/efficientnet_sd_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 32 10 "1.0e-5" false "efficientnet_sd" (sd := true))
+#eval IO.FS.writeFile "verified_mlir/efficientnet_drop_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 32 10 "1.0e-5" false "efficientnet_drop" (sd := true))
 
-#eval IO.FS.writeFile "verified_mlir/efficientnet_sd_fwd_eval.mlir"
-  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5" false "efficientnet_sd" (sd := true))
+#eval IO.FS.writeFile "verified_mlir/efficientnet_drop_fwd_eval.mlir"
+  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5" false "efficientnet_drop" (sd := true))
+
+-- ── ▶ v1.2c: THE IMAGENET PEERS of the EMA and stochastic-depth renders ────────────────────────
+-- `planning/recipe_gaps.md` v1.2c. Found 2026-08-02 by LISTING the artifacts rather than reasoning
+-- about them: RMSProp was carried to both scales (`enetin_rms64`), **EMA and stochastic depth were
+-- not** — so `enetin`'s trainer had neither, and EfficientNet's 72.31% reference pair was not
+-- reachable through it at all. The features existed only at Imagenette scale.
+--
+-- ⚠ The lesson is the cheap one: a feature is not "done" when its Imagenette artifact renders. Both
+-- scales are one `#eval` apart (§2p — `nClasses`/`B`/`slug` are ordinary parameters), which is
+-- exactly why it is easy to stop at one and not notice.
+--
+-- `emarms64` is the reference's ACTUAL recipe at ImageNet scale — RMSProp + exponential decay +
+-- EMA — and with stochastic depth it is `efficientNetB0ImagenetConfig` entire.
+#eval IO.FS.writeFile "verified_mlir/enetin_emarms64_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true))
+#eval IO.FS.writeFile "verified_mlir/enetin_emarmsdp64_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 4 false "enetin" .rmsprop (ema := true))
+
+-- Stochastic depth at ImageNet scale. ⚠ Same 9 sites and the same block-index ramp — `enetDropIdxs`
+-- is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips), not of the class count or the
+-- batch, so `enetin` reuses it unchanged and `tests/TestDropPathRamp.lean` covers both.
+#eval IO.FS.writeFile "verified_mlir/enetin_emarmsdrop64_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/enetin_drop_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "enetin_drop" (sd := true))
