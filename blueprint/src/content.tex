@@ -14,6 +14,16 @@ scale its job is to validate the framework's logic end to end. Phase-3
 verified-IREE codegen led to phase 4 --- PJRT, which these demos will be
 ported to. Phase-2 is how we establish these baselines in the meantime.}
 
+% The companion marker on every worked example: these run on phase-3
+% verified-IREE codegen. Between this and \imagenetphasenote, every demo in
+% the book states its execution path -- i.e. the set of them is the map of
+% what phase 4 still has to absorb.
+\newcommand{\phasethreenote}{\emph{Which trainer is this?} This demo runs
+on the phase-3 verified-IREE path --- the proven graph, compiled by IREE
+and executed on the GPU --- which is what the numbers below were measured
+on. It has a phase-4 (PJRT) peer already built, and phase 4 is where it is
+headed.}
+
 \chapter*{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 \label{chap:introduction}
@@ -1071,6 +1081,8 @@ Mechanical; see \leandocref{Proofs.identity\_has\_vjp}.
 
 \section{Example: MNIST linear classifier}
 
+\phasethreenote
+
 The smallest network that learns: a single dense layer mapping
 784-dim images to 10-dim logits, trained with softmax cross-entropy
 and plain SGD. About 7,850 parameters. \(\sim\)92\% test accuracy
@@ -2034,6 +2046,8 @@ inner derivative; the \(1/p_\ell\) from \(\log\) cancels the
 \section{Example: MNIST MLP}
 \label{sec:mlp_mnist_example}
 
+\phasethreenote
+
 The theorems above are the calculus. Here is a concrete architecture
 built from those pieces: a three-layer fully-connected classifier for
 28$\times$28 MNIST digits.
@@ -2769,6 +2783,8 @@ reindex factor and the saved input \(x\) is the constant.}
 
 \section{Example: MNIST 2D CNN}
 \label{sec:cnn_mnist_example}
+
+\phasethreenote
 
 The MLP in Chapter~\ref{chap:mlp} crushed MNIST by flattening the
 image into a 784-dim vector and throwing dense layers at it. That
@@ -3601,6 +3617,8 @@ the two elementary Jacobians into one formula; contracting with
 \section{Example: training dynamics on CIFAR}
 \label{sec:bn_cifar_example}
 
+\phasethreenote
+
 Chapter~\ref{chap:cnn} did MNIST with two convolutions and a
 2$\times$512 dense head. This chapter keeps that \emph{exact} head and
 the same conv/ReLU/max-pool machinery, but --- CIFAR-10 being a
@@ -4270,6 +4288,8 @@ fan-in pattern, persist.
 
 \section{Example: ResNet-34 on Imagenette}
 \label{sec:residual_r34_example}
+
+\phasethreenote
 
 Same template as the MNIST and CIFAR chapters, but at the scale the
 architecture was designed for. ResNet-34 on 224$\times$224
@@ -5300,6 +5320,8 @@ Same three steps as the conv2d bias VJP
 \section{Example: MobileNet V2 on Imagenette}
 \label{sec:depthwise_mnv2_example}
 
+\phasethreenote
+
 Depthwise convolution on its own is rarely used directly --- you
 almost always see it wrapped in a \emph{depthwise-separable}
 sandwich: $1 \times 1$ expand, $3 \times 3$ depthwise, $1 \times 1$
@@ -6123,6 +6145,8 @@ return-on-scaling to show up.
 \section{Example: EfficientNet-B0 on Imagenette}
 \label{sec:se_efficientnet_example}
 
+\phasethreenote
+
 Squeeze-and-Excitation by itself is one of the smallest architectural
 contributions in deep learning. Take a feature map, compute a
 per-channel scalar by global-average-pooling it, pass those scalars
@@ -6943,6 +6967,8 @@ through a projection, convert back to the scalar derivative.}
 
 \section{Example: ConvNeXt-T on Imagenette}
 \label{sec:convnext_example}
+
+\phasethreenote
 
 ConvNeXt (Liu et al.\ 2022,
 \href{https://arxiv.org/abs/2201.03545}{arXiv:2201.03545}) was the
@@ -8560,6 +8586,8 @@ link. \Qed{}
 
 \section{Example: ViT-Tiny on Imagenette}
 \label{sec:attention_vit_example}
+
+\phasethreenote
 
 This is the capstone. Every layer proved in the preceding chapters
 --- dense, ReLU, softmax cross-entropy, convolution, maxPool,
