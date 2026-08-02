@@ -26,8 +26,13 @@ Three class maps (--classes), one per loader capacity:
   all     the standard 80 COCO categories, contiguous 0..79. The remap is read
           from the JSON's own `categories` list sorted by id — NOT hardcoded —
           because COCO's file ids run 1..90 with ten gaps (12, 26, 29, 30, 45,
-          66, 68, 69, 71, 83). Hardcoding `id - 1` is the classic COCO bug: it
-          silently shifts every class above the first gap. FPN format only.
+          66, 68, 69, 71, 83; verified against instances_val2017.json).
+          Hardcoding `id - 1` is the classic COCO bug, and it is not a small
+          one: measured against the real category list, **69 of the 80 classes
+          come out mislabelled** — id 13 is 'stop sign' but `id - 1` calls it
+          'parking meter', and everything above the first gap shifts from
+          there. Nothing errors; the net just learns the wrong names.
+          FPN format only.
 
   voc20   the 20 PASCAL-VOC categories, all of which exist in COCO under
           slightly different names (aeroplane→airplane, motorbike→motorcycle,
@@ -85,6 +90,14 @@ MAX_BBOXES = 56
 # per-scale histogram either way, so a lopsided split is visible, not assumed.
 FPN_GRIDS = (56, 28, 14)          # P3 / P4 / P5 at 448px input
 FPN_T_LO, FPN_T_HI = 24.0, 64.0   # max(w,h)px scale thresholds
+# Measured on instances_val2017.json at these (VisDrone-tuned) thresholds, the
+# COCO GT splits P3 17.2% / P4 28.5% / P5 54.3%. Worth recording because the
+# obvious worry about a COCO→VisDrone transfer pretrain — that photographic
+# objects all land on P5 and the small scales never train — does NOT hold:
+# 46% of COCO GT lands on P3+P4. Keeping VisDrone's thresholds (so both builds
+# share one assignment rule, which is what makes a head transferable) costs
+# less than expected. Re-measure with --fpn-thresh before trusting it at other
+# input sizes.
 
 # COCO name -> VisDrone class index (see --classes vdmap in the docstring).
 VDMAP = {"person": 0, "bicycle": 2, "car": 3, "truck": 5, "bus": 8,
