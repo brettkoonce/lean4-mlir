@@ -79,7 +79,12 @@ import sys
 PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
          ("convnext_fwd.mlir",     "convnext_train_step.mlir"),
          ("efficientnet_fwd.mlir", "efficientnet_train_step.mlir"),
-         ("mobilenetv2_fwd.mlir",  "mobilenetv2_train_step.mlir")]
+         ("mobilenetv2_fwd.mlir",  "mobilenetv2_train_step.mlir"),
+         # Stochastic depth (planning/stochastic_depth.md). The SD variant gets its OWN pair
+         # rather than reusing efficientnet_fwd, which is the whole point of §3's design: the drop
+         # sites are emitted in the forward too (at an all-ones scale, exactly the identity), so
+         # the SD train step keeps a prefix partner instead of the audit quietly not covering it.
+         ("efficientnet_sd_fwd.mlir", "efficientnet_adamsd_train_step.mlir")]
 
 def body(lines, what):
     """The pretty(AST) body: everything from the first `%v0 = ` definition on.

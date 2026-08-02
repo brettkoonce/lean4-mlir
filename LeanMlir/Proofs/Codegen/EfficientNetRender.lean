@@ -261,6 +261,47 @@ private def seBack (adam : Bool) (B c hh r : Nat)
   pure (cDx ++ cDg ++ cE2c ++ cW2 ++ cb2 ++ cDz ++ cE1c ++ cW1 ++ cb1, nDx, [nW1, nb1, nW2, nb2])
 
 -- ════════════════════════════════════════════════════════════════
+-- ── ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`) ───────────────────────────────────────
+-- EfficientNet-B0 has 16 MBConv blocks, and the drop fires on the 9 that carry a skip.
+--
+-- ⚠⚠ THE RAMP INDEX IS THE BLOCK INDEX, NOT THE SITE ORDINAL — and getting that wrong is the
+-- expensive silent bug here. The reference advances `dbi` on EVERY block
+-- (`if cfg.dropPath > 0 then dbi := dbi + 1`, unconditional) while the drop only FIRES inside the
+-- skip guard `residual.shape == x.shape and stride == 1`. So `keep_i = 1 − dropRate·i/(16−1)` with
+-- `i` the BLOCK index, and the denominator is **15**, not 8. Re-indexing by site would give nine
+-- evenly-spaced keeps instead of the reference's nine unevenly-spaced ones: it compiles, runs,
+-- descends, and trains a different objective. §2k's `α/K` bug in a new place.
+--
+-- b1 noExp · b2 strided · b3 SKIP · b4 strided · b5 SKIP · b6 strided · b7 SKIP · b8 SKIP
+-- b9 noSkip · b10 SKIP · b11 SKIP · b12 strided · b13 SKIP · b14 SKIP · b15 SKIP · b16 noSkip
+/-- Total MBConv blocks = the reference's `totalDrop`, i.e. the ramp DENOMINATOR is this minus 1. -/
+def enetDropTotal : Nat := 16
+
+/-- The block indices (0-based) that carry a drop site, in signature order. **This is the single
+    source**: `enetDropSig` maps over it to build the `%dp<i>` inputs, the traversal passes the same
+    `i` at each `eFwd` call site, and the driver reads it to know how many scales to supply and at
+    which ramp index. The two routes fail LOUDLY if they disagree — an entry with no call site
+    leaves an unused input (arity mismatch at the driver), and a call site with no entry emits an
+    undeclared `%dp<i>` (rejected by the lowerer). Neither is silent, which is the §2m property. -/
+def enetDropIdxs : List Nat := [2, 4, 6, 7, 9, 10, 12, 13, 14]
+
+/-- The number of per-example drop-path scale inputs a stochastic-depth render takes. -/
+def enetDropSites : Nat := enetDropIdxs.length
+
+#guard enetDropTotal == 16
+#guard enetDropSites == 9
+-- Every site is a real block, and the list is strictly increasing (= signature order).
+#guard enetDropIdxs.all (· < enetDropTotal)
+#guard (enetDropIdxs.zip (enetDropIdxs.drop 1)).all (fun (a, b) => a < b)
+
+/-- The drop-path scale input name for block index `i`. Signature and emit both read this. -/
+def dpName (i : Nat) : String := s!"%dp{i}"
+
+/-- The `%dp<i>: tensor<Bxf32>` inputs, appended to a render's signature when stochastic depth is
+    on. Empty when off, which is what keeps gate 1 byte-identical. -/
+def enetDropSig (B : Nat) (sd : Bool) : String :=
+  if sd then String.join (enetDropIdxs.map (fun i => s!", {dpName i}: {ty [B]}")) else ""
+
 -- § MBConv forward emitters (stride-1 expand / no-skip expand / strided expand / no-expand b1)
 -- ════════════════════════════════════════════════════════════════
 
@@ -310,11 +351,21 @@ private def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName
          bns := [(nEc, s!"{p}en", mid, hh), (nDc, s!"{p}dn", mid, hh), (nPc, s!"{p}pn", oc, hh)] }
 
 /-- **Residual stride-1 MBConv forward** (ic = oc): body + `addV` skip. -/
-private def eFwd (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Nat EFwd := do
+private def eFwd (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String)
+    (convBias : Bool) (drop : Option Nat := none) : StateM Nat EFwd := do
   let f ← eFwdBody B ic mid oc hh kd r mode epsStr p xName convBias
   let zOut : Vec (B * (oc * hh * hh)) := fun _ => 0
-  let (cA, nA) ← pretty B (.addVB (.operand f.o zOut) (.operand xName zOut))
-  pure { f with code := f.code ++ cA, o := nA }
+  -- ▶ THE DROP SITE — on the RESIDUAL BRANCH, before the skip add, which is where the reference
+  -- puts it (`x = x * keep / keep_prob` then `x = x + residual`). Scaling after the add would
+  -- attenuate the identity path too: a different net that still trains, and invisible to every
+  -- structural check. `dropPath_zeros_zero` plus the all-zero-mask control is what pins it here.
+  -- At `drop = none` no `pretty` call happens, so the fresh-name counter does not move and every
+  -- committed artifact re-renders byte-identically — gate 1's strong form, for free.
+  let (cD, nD) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (dpName i) (fun _ => 0 : Vec B) (.operand f.o zOut))
+    | none   => pure ("", f.o)
+  let (cA, nA) ← pretty B (.addVB (.operand nD zOut) (.operand xName zOut))
+  pure { f with code := f.code ++ cD ++ cA, o := nA }
 
 /-- **No-skip stride-1 MBConv forward** (ic ≠ oc, b9/b16): body, output = project-BN out. -/
 private def eFwdNoSkip (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Nat EFwd :=
@@ -423,11 +474,21 @@ private def eBackBody (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p 
 
 /-- **Residual stride-1 MBConv backward** (ic = oc): body + skip fan-in `+ dyOut`. -/
 private def eBack (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
-    (f : EFwd) (dyName : String) (convBias : Bool) : StateM Nat EBack := do
-  let b ← eBackBody adam B ic mid oc hh kd r epsStr lrStr p xName f dyName convBias
+    (f : EFwd) (dyName : String) (convBias : Bool) (drop : Option Nat := none) : StateM Nat EBack := do
+  -- ▶ THE DROP'S BACKWARD IS THE SAME OP AT THE SAME SCALE (`Proofs.dropPath_vjp_is_self`) — a
+  -- diagonal linear map is its own transpose, so there is no `*Grad` peer to keep in step.
+  -- ⚠ IT APPLIES TO THE BRANCH ONLY. `eBackBody` consumes this cotangent for the whole branch
+  -- INCLUDING its parameter gradients, so feeding it `dyd` is what makes the project/depthwise/
+  -- expand grads see the dropped signal; the skip's fan-in below keeps the RAW `dyName`. Dropping
+  -- there too would attenuate the identity path — the mirror of the forward's placement trap.
+  let zOut : Vec (B * (oc * hh * hh)) := fun _ => 0
+  let (cD, dyd) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (dpName i) (fun _ => 0 : Vec B) (.operand dyName zOut))
+    | none   => pure ("", dyName)
+  let b ← eBackBody adam B ic mid oc hh kd r epsStr lrStr p xName f dyd convBias
   let zIn : Vec (B * (ic * hh * hh)) := fun _ => 0
   let (cDx, nDx) ← pretty B (.addVB (.operand b.dx zIn) (.operand dyName zIn))
-  pure { b with code := b.code ++ cDx, dx := nDx }
+  pure { b with code := cD ++ b.code ++ cDx, dx := nDx }
 
 /-- **No-skip stride-1 MBConv backward** (ic ≠ oc, b9/b16): body, dx = expand-conv-back directly. -/
 private def eBackNoSkip (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
@@ -605,8 +666,12 @@ set_option maxRecDepth 4000000 in
     and this is exactly the prefix the train step differentiates; at `.eval` every BN consumes the
     driver's frozen running stats (the `bnEval` descriptor) and the net becomes
     class-batch-independent. -/
-private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool) :
-    StateM Nat ENetFwd := do
+private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
+    (sd : Bool := false) : StateM Nat ENetFwd := do
+  -- `dp i` is `some i` exactly when block `i` is in `enetDropIdxs` AND stochastic depth is on —
+  -- so the one list drives the signature and every call site, and the ramp index carried is the
+  -- BLOCK index (see `enetDropIdxs`' note on why the site ordinal would be wrong).
+  let dp : Nat → Option Nat := fun i => if sd && enetDropIdxs.contains i then some i else none
     -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → bn → swish ═══
     let zx   : Vec (B * (3*224*224)) := fun _ => 0
     let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
@@ -618,19 +683,19 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     -- ═══ forward: 16 MBConv blocks ═══
     let f1  ← eFwdNoExp   B 32      16 112 3  8 mode epsStr "b1"  nStr convBias
     let f2  ← eFwdStrided B 16  96  24  56 3  4 mode epsStr "b2"  f1.o convBias
-    let f3  ← eFwd        B 24 144  24  56 3  6 mode epsStr "b3"  f2.o convBias
+    let f3  ← eFwd        B 24 144  24  56 3  6 mode epsStr "b3"  f2.o convBias (dp 2)
     let f4  ← eFwdStrided B 24 144  40  28 5  6 mode epsStr "b4"  f3.o convBias
-    let f5  ← eFwd        B 40 240  40  28 5 10 mode epsStr "b5"  f4.o convBias
+    let f5  ← eFwd        B 40 240  40  28 5 10 mode epsStr "b5"  f4.o convBias (dp 4)
     let f6  ← eFwdStrided B 40 240  80  14 3 10 mode epsStr "b6"  f5.o convBias
-    let f7  ← eFwd        B 80 480  80  14 3 20 mode epsStr "b7"  f6.o convBias
-    let f8  ← eFwd        B 80 480  80  14 3 20 mode epsStr "b8"  f7.o convBias
+    let f7  ← eFwd        B 80 480  80  14 3 20 mode epsStr "b7"  f6.o convBias (dp 6)
+    let f8  ← eFwd        B 80 480  80  14 3 20 mode epsStr "b8"  f7.o convBias (dp 7)
     let f9  ← eFwdNoSkip  B 80 480 112  14 5 20 mode epsStr "b9"  f8.o convBias
-    let f10 ← eFwd        B 112 672 112 14 5 28 mode epsStr "b10" f9.o convBias
-    let f11 ← eFwd        B 112 672 112 14 5 28 mode epsStr "b11" f10.o convBias
+    let f10 ← eFwd        B 112 672 112 14 5 28 mode epsStr "b10" f9.o convBias (dp 9)
+    let f11 ← eFwd        B 112 672 112 14 5 28 mode epsStr "b11" f10.o convBias (dp 10)
     let f12 ← eFwdStrided B 112 672 192  7 5 28 mode epsStr "b12" f11.o convBias
-    let f13 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b13" f12.o convBias
-    let f14 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b14" f13.o convBias
-    let f15 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b15" f14.o convBias
+    let f13 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b13" f12.o convBias (dp 12)
+    let f14 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b14" f13.o convBias (dp 13)
+    let f15 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b15" f14.o convBias (dp 14)
     let f16 ← eFwdNoSkip  B 192 1152 320 7 3 48 mode epsStr "b16" f15.o convBias
     -- ═══ head: 1×1 conv (320→1280) → bn → swish → GAP → dense ═══
     let z7F   : Vec (B * (320*7*7)) := fun _ => 0
@@ -660,12 +725,16 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
 /-- The 263-input `@efficientnet_fwd` / 361-input `@efficientnet_fwd_eval` argument signature.
     The stat half is derived from the SAME `bns` the traversal built (never a parallel table), so
     the eval forward's slots cannot drift out of the order the driver packs `runningBnStats` in. -/
-private def enetFwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool) : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses mode epsStr convBias).run' 0
+private def enetFwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
+    (sd : Bool := false) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses mode epsStr convBias sd).run' 0
   let params := (enetSig nClasses convBias).map (fun (nm, d) => s!"%{nm}: {ty d}")
   let stats := if mode == .train then [] else
     F.bns.flatMap (fun (_, sp, c, _) => [s!"%{sp}mu: {ty [c]}", s!"%{sp}var: {ty [c]}"])
-  String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats))
+  -- ⚠ The drop inputs go LAST, after the BN stats, so adding them cannot shift an existing
+  -- positional slot — the mnv2 `convBias` lesson (§2m): a parameter inserted mid-list captures
+  -- an existing argument, and the driver walks this signature positionally.
+  String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats)) ++ enetDropSig B sd
 
 set_option maxRecDepth 4000000 in
 /-- **`@efficientnet_fwd` rendered ENTIRELY from the verified AST** — 263 inputs (`%x` plus the 262
@@ -673,10 +742,10 @@ set_option maxRecDepth 4000000 in
     train step, so it is a byte-identical PREFIX of `efficientnet_train_step.mlir`, ending exactly
     where the loss begins. Replaces the hand-written emitter in `tests/TestEfficientNetFwd.lean`. -/
 def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
-    (slug : String := "efficientnet") : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias).run' 0
+    (slug : String := "efficientnet") (sd : Bool := false) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias sd).run' 0
   "module @m {\n" ++
-  s!"  func.func @{slug}_fwd({enetFwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd({enetFwdSig B nClasses .train epsStr convBias sd}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 forward: every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -693,10 +762,10 @@ set_option maxRecDepth 4000000 in
     driver EMAs into exactly these slots — and both sides of that contract now come off one
     `bns` list rather than two independently-written ones. -/
 def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
-    (slug : String := "efficientnet") : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias).run' 0
+    (slug : String := "efficientnet") (sd : Bool := false) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias sd).run' 0
   "module @m {\n" ++
-  s!"  func.func @{slug}_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias sd}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -734,9 +803,14 @@ set_option maxRecDepth 4000000 in
     forward this differentiates and the forward the driver evals with are one graph by
     construction, not by inspection (§2a). -/
 private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
-    (smooth : Option (String × String × String) := none) (convBias : Bool := false) :
+    (smooth : Option (String × String × String) := none) (convBias : Bool := false)
+    (sd : Bool := false) :
     StateM Nat (String × List String × String × List (String × String × Nat × Nat)) := do
-    let F : ENetFwd ← enetFwdChain B nClasses .train epsStr convBias
+    let F : ENetFwd ← enetFwdChain B nClasses .train epsStr convBias sd
+    -- The SAME `dp` the forward used, from the SAME `enetDropIdxs`. The backward walks the
+    -- blocks in REVERSE, so a carried counter would have to be reversed too — the easy place
+    -- to be off by one. Both directions derive it from the literal block index instead.
+    let dp : Nat → Option Nat := fun i => if sd && enetDropIdxs.contains i then some i else none
     let f1 := F.blocks[0]!; let f2 := F.blocks[1]!; let f3 := F.blocks[2]!; let f4 := F.blocks[3]!
     let f5 := F.blocks[4]!; let f6 := F.blocks[5]!; let f7 := F.blocks[6]!; let f8 := F.blocks[7]!
     let f9 := F.blocks[8]!; let f10 := F.blocks[9]!; let f11 := F.blocks[10]!
@@ -791,19 +865,19 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     let (cbh, nbh) ← if convBias then bnBt adam B 1280 7 7 "%hb" lrStr nHbn else pure ("", "")
     -- ═══ backward: 16 blocks reversed (cotangent threads from nHxb) ═══
     let b16 ← eBackNoSkip  adam B 192 1152 320 7 3 48 epsStr lrStr "b16" f15.o f16 nHxb convBias
-    let b15 ← eBack        adam B 192 1152 192 7 5 48 epsStr lrStr "b15" f14.o f15 b16.dx convBias
-    let b14 ← eBack        adam B 192 1152 192 7 5 48 epsStr lrStr "b14" f13.o f14 b15.dx convBias
-    let b13 ← eBack        adam B 192 1152 192 7 5 48 epsStr lrStr "b13" f12.o f13 b14.dx convBias
+    let b15 ← eBack        adam B 192 1152 192 7 5 48 epsStr lrStr "b15" f14.o f15 b16.dx convBias (dp 14)
+    let b14 ← eBack        adam B 192 1152 192 7 5 48 epsStr lrStr "b14" f13.o f14 b15.dx convBias (dp 13)
+    let b13 ← eBack        adam B 192 1152 192 7 5 48 epsStr lrStr "b13" f12.o f13 b14.dx convBias (dp 12)
     let b12 ← eBackStrided adam B 112 672 192  7 5 28 epsStr lrStr "b12" f11.o f12 b13.dx convBias
-    let b11 ← eBack        adam B 112 672 112 14 5 28 epsStr lrStr "b11" f10.o f11 b12.dx convBias
-    let b10 ← eBack        adam B 112 672 112 14 5 28 epsStr lrStr "b10" f9.o  f10 b11.dx convBias
+    let b11 ← eBack        adam B 112 672 112 14 5 28 epsStr lrStr "b11" f10.o f11 b12.dx convBias (dp 10)
+    let b10 ← eBack        adam B 112 672 112 14 5 28 epsStr lrStr "b10" f9.o  f10 b11.dx convBias (dp 9)
     let b9  ← eBackNoSkip  adam B 80 480 112  14 5 20 epsStr lrStr "b9"  f8.o  f9  b10.dx convBias
-    let b8  ← eBack        adam B 80 480  80  14 3 20 epsStr lrStr "b8"  f7.o  f8  b9.dx convBias
-    let b7  ← eBack        adam B 80 480  80  14 3 20 epsStr lrStr "b7"  f6.o  f7  b8.dx convBias
+    let b8  ← eBack        adam B 80 480  80  14 3 20 epsStr lrStr "b8"  f7.o  f8  b9.dx convBias (dp 7)
+    let b7  ← eBack        adam B 80 480  80  14 3 20 epsStr lrStr "b7"  f6.o  f7  b8.dx convBias (dp 6)
     let b6  ← eBackStrided adam B 40 240  80  14 3 10 epsStr lrStr "b6"  f5.o  f6  b7.dx convBias
-    let b5  ← eBack        adam B 40 240  40  28 5 10 epsStr lrStr "b5"  f4.o  f5  b6.dx convBias
+    let b5  ← eBack        adam B 40 240  40  28 5 10 epsStr lrStr "b5"  f4.o  f5  b6.dx convBias (dp 4)
     let b4  ← eBackStrided adam B 24 144  40  28 5  6 epsStr lrStr "b4"  f3.o  f4  b5.dx convBias
-    let b3  ← eBack        adam B 24 144  24  56 3  6 epsStr lrStr "b3"  f2.o  f3  b4.dx convBias
+    let b3  ← eBack        adam B 24 144  24  56 3  6 epsStr lrStr "b3"  f2.o  f3  b4.dx convBias (dp 2)
     let b2  ← eBackStrided adam B 16  96  24  56 3  4 epsStr lrStr "b2"  f1.o  f2  b3.dx convBias
     let b1  ← eBackNoExp   adam B 32      16 112 3  8 epsStr lrStr "b1"  nStr  f1  b2.dx convBias
     -- ═══ stem backward: swish mask → bn back, then the 4 stem params (NO conv-back past %x) ═══
@@ -958,7 +1032,14 @@ private def enetAdamConsts : String :=
 
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes.
     Same convention as `r34AdamVariant`. -/
-def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := false) : String :=
+def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := false)
+    (sd : Bool := false) : String :=
+  -- ⚠ The `sd` marker TRAILS, and that is checked rather than assumed. The driver's two live
+  -- predicates are `variant.startsWith "ema"` (4-region blob) and a `"rms"` SUBSTRING (mean-square
+  -- init 1.0); a leading `sd` would break the first — `sdema` does not start with "ema", which is
+  -- the `emarms` defect (`planning/ema.md`) reintroduced through a third axis. Trailing collides
+  -- with neither. Three axes now share this string, so add the fourth only after re-running the
+  -- predicate check.
   -- ⚠ The `ema` marker LEADS, because the driver keys its 4-region `[θ|m|v|ema]` blob layout off
   -- `variant.startsWith "ema"` — the same reverse-of-this-function reading it uses for `"rms"`.
   -- Optimizer and EMA are independent axes here (unlike ConvNeXt, which has only AdamW), so the
@@ -967,7 +1048,8 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
   (match opt with
    | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
    | .rmsprop => if replicas ≤ 1 then "rms"  else "rmsdp") ++
-  (if B == 32 then "" else toString B)
+  (if B == 32 then "" else toString B) ++
+  (if sd then "sd" else "")
 
 set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
@@ -996,7 +1078,7 @@ set_option maxRecDepth 4000000 in
 def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (alphaStr negAlphaKStr bStr : String) (replicas : Nat := 1)
     (convBias : Bool := false) (slug : String := "efficientnet")
-    (opt : OptKind := .adamw) (ema : Bool := false) : String :=
+    (opt : OptKind := .adamw) (ema : Bool := false) (sd : Bool := false) : String :=
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when empty. Passing −α/K as a string independent
   -- of K is the two-writers-for-one-fact shape that shipped a K=10 constant into R34's first
   -- ImageNet render ON THE GRADIENT PATH (§2k), and again into ConvNeXt's report-only loss
@@ -1011,7 +1093,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- the wrong layer's statistics simply flow into the wrong `@efficientnet_fwd_eval` slot.
   let go : StateM Nat (String × List Nat) := do
     let (code, gradNames, nSm, bnList) ←
-      enetBackAll B nClasses epsStr "0.0" true (some (alphaStr, negAlphaKStr, bStr)) convBias
+      enetBackAll B nClasses epsStr "0.0" true (some (alphaStr, negAlphaKStr, bStr)) convBias sd
     -- ═══ BN running statistics: batch μ/var per BN layer, from that layer's BN INPUT. `den` is the
     --     same `bnMean`/`bnVar` `bnBatchF` normalises by, so these ARE the statistics the forward
     --     used rather than a separately-derived approximation. ═══
@@ -1138,6 +1220,10 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (if ema then ", " ++ eSig else "") ++
     ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
     (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++ ", " ++ statSig ++
+    -- ⚠ The drop scales go LAST, after the BN stats and before `%onehot` is appended, matching
+    -- `enetFwdSig`'s placement — inserted mid-list they would capture an existing positional slot,
+    -- which is the mnv2 `convBias` failure (§2m) and is silent until the driver mis-walks the blob.
+    enetDropSig B sd ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (fun p => ty p.2)
   let outSig := String.intercalate ", "
@@ -1148,7 +1234,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
   -- artifact path and `LEAN_MLIR_VARIANT`.
-  let fname := s!"{slug}_{enetAdamVariant B replicas opt ema}_train_step"
+  let fname := s!"{slug}_{enetAdamVariant B replicas opt ema sd}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1339,3 +1425,46 @@ end Proofs.StableHLO
 -- followed by an activation rather than BN and the reference carries them too.
 #guard (Proofs.StableHLO.enetSig 10 true).length == 262
 #guard (Proofs.StableHLO.enetSig 10 false).length == 213
+
+-- ── ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), selected by `LEAN_MLIR_VARIANT=adamsd` ──
+-- EfficientNet-B0 is the net this landed on FIRST, and the reason inverts the spec's own
+-- recommendation. `stochastic_depth.md` §8 recommends ConvNeXt as "the cheapest"; measured, it is
+-- not, and the axis it was scoped on was the wrong one:
+--
+--   renderer            batched forms   per-example forms
+--   ResNet34RenderB              36            0
+--   MobileNetV2RenderB           53            0
+--   EfficientNetRender           45            0     ← at N := B, so the op drops straight in
+--   ConvNeXtRender                2 (N := 1)  10     ← per-example
+--   ViTRender                     2           13     ← per-example
+--
+-- A per-example mask CANNOT be expressed honestly at the per-example index: `den` at index `n`
+-- describes one example, so the mask becomes §4's descriptor trap ("a descriptor may carry only
+-- batch-INVARIANT data"). ConvNeXt and ViT therefore need the §2b batched-index move FIRST — the
+-- step the handoff calls the most expensive and most badly mis-estimated in the whole thread.
+-- EfficientNet needs none of it. This is §2f's lesson one net over: scope by the INDEX CONVENTION,
+-- not by op count.
+--
+-- ⚠ 9 sites, not 16, and the ramp index is the BLOCK index — see `enetDropIdxs`.
+-- ⚠ The scale is a graph INPUT with `1/keep_i` FOLDED IN by the driver, never `stablehlo.rng` and
+-- never a baked constant. `Proofs.dropPath`'s note has the argument; the short version is that a
+-- baked `1/keep_i` and §3's "the forward emits the sites too" cannot both hold, because a ones
+-- mask would then compute `x/keep_i` rather than `x`, and the reference is explicit that eval
+-- returns the branch untouched.
+#eval IO.FS.writeFile "verified_mlir/efficientnet_adamsd_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+    "0.100000" "-0.010000" "32.0" (sd := true))
+
+-- The forward peers. ⚠ These exist so the SD variant has its OWN `forward ⊂ train-step` pair —
+-- `stochastic_depth.md` §3's design, and the reason is that the prefix audit is one of the two
+-- load-bearing structural gates in the repo (it caught `resnet34_fwd` and `mobilenetv2_fwd`
+-- scoring nets they had not trained). The alternative — let the SD trainer eval through the
+-- drop-free `efficientnet_fwd` — is what the reference literally does, but it would leave the SD
+-- train step with no prefix partner at all, i.e. spend the gate rather than pay 9 dead multiplies.
+-- At eval the driver supplies an all-ones scale, so these compute the identity EXACTLY
+-- (`Proofs.dropPath_ones_id`, and `1 * x = x` is exact in IEEE).
+#eval IO.FS.writeFile "verified_mlir/efficientnet_sd_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 32 10 "1.0e-5" false "efficientnet_sd" (sd := true))
+
+#eval IO.FS.writeFile "verified_mlir/efficientnet_sd_fwd_eval.mlir"
+  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5" false "efficientnet_sd" (sd := true))

@@ -314,6 +314,32 @@ private def gradPrefixCases : List (String × String × String) :=
                           (fun _ => 0 : Vec (oc*ch*ch)) (fun _ => 0 : Vec oc) 0
                           (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch)))))) ]
 
+/-- **Stochastic depth's emit guard** (`planning/stochastic_depth.md`). `dropPathB` has **no
+    per-example peer** — the mask is per-example by construction, so there is nothing to tie it
+    against in either section above. What it needs pinning instead is the one structural property
+    that could plausibly be wrong and that no numeric gate can see:
+
+    > **the mask is per-SAMPLE, not per-element.**
+
+    A `tensor<B×n>` mask input in place of `tensor<B>` + `broadcast_in_dim dims = [0]` typechecks,
+    compiles, runs, descends, and is **per-element dropout** — a different regulariser entirely. The
+    reference's mask is `(B, 1, …, 1)` (`jax/Jax/Codegen.lean:1037`), and `dims = [0]` is the whole
+    of that claim in the emitted text.
+
+    Also checked: the `1/keep` literal is BAKED (so a wrong ramp is visible in the text rather than
+    hidden in an input), and — the emit-side twin of `dropPathB_back_faithful` — the backward emits
+    **byte-identically** to the forward at the same mask, which is what says there is genuinely one
+    emitter here rather than two that must be kept in step. -/
+private def dropPathEmit : String :=
+  render (pretty BS (.dropPathB (N := BS) (n := n) "%dp0"
+                       (fun _ => 0 : Vec BS) (.operand "%x" (fun _ => 0 : Vec (BS*n)))))
+
+/-- The same op on a COTANGENT — same mask, same `invKeep`. `dropPath_vjp_is_self` says this IS the
+    certified VJP; this says the two render the same bytes. -/
+private def dropPathBackEmit : String :=
+  render (pretty BS (.dropPathB (N := BS) (n := n) "%dp0"
+                       (fun _ => 0 : Vec BS) (.operand "%x" (fun _ => 0 : Vec (BS*n)))))
+
 /-- Fail loudly. NOT `IO.Process.exit 1`: under `#eval` the elaborator buffers the eval's output
     and prints it only after the eval returns, so `exit` kills the process with **every diagnostic
     discarded** — you get a bare non-zero status and no idea which form broke. (Verified against a
@@ -349,5 +375,24 @@ def main : IO Unit := do
   if bad != 0 then
     die s!"MISMATCH: {bad} gradient render(s) are not a prefix of their fused peer"
   IO.println s!"✓ all {gradPrefixCases.length} un-fused gradients are byte-prefixes of their *SgdB peers"
+  -- ── stochastic depth: the mask is per-SAMPLE (§ dropPathEmit above) ──
+  IO.println "── stochastic depth: dropPathB ──"
+  let e := dropPathEmit
+  if e.isEmpty || (e.splitOn "MALFORMED").length != 1 then
+    die "DEGENERATE: dropPathB render is empty or fell through to // MALFORMED"
+  -- ⭐ the load-bearing one: a `tensor<32xf32>` mask broadcast over dim 0. Per-ELEMENT dropout
+  --    would read `tensor<32x12xf32>` here and be a different regulariser that still trains.
+  if (e.splitOn "stablehlo.broadcast_in_dim %dp0, dims = [0] : (tensor<32xf32>) -> tensor<32x12xf32>").length != 2 then
+    die s!"dropPathB's mask is NOT a per-SAMPLE tensor<32xf32> broadcast over dim 0:\n{e}"
+  -- ⚠ There must be NO baked keep constant: the driver folds `1/keep_i` into the supplied scale,
+  -- which is what makes the ones-scale forward the exact identity (`den_dropPathB_ones`) and lets
+  -- the op be emitted in the forward at all. A baked constant here would silently rescale eval.
+  if (e.splitOn "stablehlo.constant").length != 1 then
+    die s!"dropPathB emits a baked constant — eval at a ones scale would not be the identity:\n{e}"
+  if e != dropPathBackEmit then
+    die s!"dropPathB's backward does not emit its forward's text — a diagonal map is its own \
+transpose, so these must be one emitter:\n forward:\n{e} backward:\n{dropPathBackEmit}"
+  IO.println "  ✓ dropPathB: per-SAMPLE scale (dims = [0] over tensor<32xf32>), no baked keep"
+  IO.println "  ✓ dropPathB: backward emits the forward's text byte-for-byte (VJP is itself)"
 
 #eval main

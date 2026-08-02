@@ -13,6 +13,9 @@ import LeanMlir.Proofs.Codegen.AdamStep
 import LeanMlir.Proofs.Codegen.SgdMomentumStep
 -- RmsPropStep imports only the two above, so this adds no cycle either.
 import LeanMlir.Proofs.Codegen.RmsPropStep
+-- DropPath imports only Architectures.ConvNeXt (for `layerScale`, which this file already has in
+-- scope), so it adds no cycle either. `planning/stochastic_depth.md`.
+import LeanMlir.Proofs.Codegen.DropPath
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 1: the linear classifier)
 
@@ -466,6 +469,20 @@ inductive SHlo : Nat → Type where
   -- WHOLE-BATCH `x`, not a `BatchableOp` descriptor beside `relu6`. A descriptor here would
   -- denote "every example shares example 0's mask", which is not what the emit computes.
   | selectMidB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
+  -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`): `branch * keep / keep_prob`, the
+  -- per-SAMPLE branch scale. `mName` is a graph INPUT of type `tensor<Nxf32>` — the mask is drawn
+  -- on the HOST, never by `stablehlo.rng`, because every numeric gate in this repo is a
+  -- bit-exactness or known-answer argument over a deterministic graph (§2, that doc).
+  --
+  -- ⚠ It is an own constructor for `selectMidB`'s reason, one axis over: a `BatchableOp` descriptor
+  -- may carry only batch-INVARIANT data (§4), and this mask is per-EXAMPLE. A descriptor would
+  -- denote "every example shares example 0's mask" — which is exactly what stochastic depth is not.
+  -- ⚠ `invKeep` is 1/keep_prob, the reference's INVERTED form, so eval at a ones mask is the exact
+  -- identity (`Proofs.dropPath_ones_id`) and the forward render can emit the sites too — which is
+  -- what keeps the `forward ⊂ train-step` prefix audit alive (§3, that doc).
+  -- ⚠ THE BACKWARD IS THIS SAME OP at the same mask (`Proofs.dropPath_vjp_is_self`): a diagonal
+  -- linear map is its own transpose, so there is no `*Grad` peer to build or to keep in step.
+  | dropPathB    {N n : Nat} (mName : String) (s : Vec N)        : SHlo (N*n) → SHlo (N*n)
   | swishBackB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   -- Chapter 8 (ConvNeXt): GELU forward (tanh approximation,
@@ -1321,6 +1338,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
           (batchSlice N (oc*h*w) (den e) n) o
   | _, .selectPosB _ x e => fun i => if x i > 0 then den e i else 0
   | _, .selectMidB _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
+  | _, .dropPathB (N := N) (n := n) _ s e => Proofs.dropPath N n s (den e)
   | _, .swishBackB (N := N) (n := n) _ x e => (swish_has_vjp (N*n)).backward x (den e)
   | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoid_has_vjp (N*n)).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
@@ -1528,6 +1546,9 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
     den (.selectPosB xN x e) = fun i => if x i > 0 then den e i else 0 := rfl
 @[simp] theorem den_selectMidB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.selectMidB xN x e) = fun i => if 0 < x i ∧ x i < 6 then den e i else 0 := rfl
+
+@[simp] theorem den_dropPathB {N n : Nat} (mN : String) (s : Vec N) (e : SHlo (N*n)) :
+    den (.dropPathB mN s e) = Proofs.dropPath N n s (den e) := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.swishBackB xN x e) = (swish_has_vjp (N*n)).backward x (den e) := rfl
 @[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
@@ -1725,6 +1746,24 @@ theorem den_batchOp_relu6_eq_relu6F {N n : Nat} (e : SHlo (N * n)) :
 theorem selectMidB_faithful {N n : Nat} (s : String) (x : Vec (N*n))
     (h_smooth : ∀ i, x i ≠ 0 ∧ x i ≠ 6) (e : SHlo (N*n)) :
     den (.selectMidB s x e) = (relu6_has_vjp_at (N*n) x h_smooth).backward (den e) := rfl
+
+/-- **Stochastic-depth forward faithfulness.** `dropPathB` denotes `Proofs.dropPath`, the per-sample
+    residual-branch scale. `rfl`, because `dropPath` is `layerScale` at a per-example-broadcast
+    scale and this op is that multiply. -/
+theorem dropPathB_faithful {N n : Nat} (mN : String) (s : Vec N) (e : SHlo (N*n)) :
+    den (.dropPathB mN s e) = Proofs.dropPath N n s (den e) := rfl
+
+/-- ⭐ **Stochastic-depth BACKWARD faithfulness — and it is the SAME constructor.** A diagonal
+    linear map is its own transpose, so the renderer emits `dropPathB` on the cotangent at the same
+    scale, and that IS the certified VJP. No `*Grad` peer exists to drift out of step with this one,
+    which is the whole reason this feature costs one op rather than two. -/
+theorem dropPathB_back_faithful {N n : Nat} (mN : String) (s : Vec N)
+    (x : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.dropPathB mN s e) = (Proofs.dropPath_has_vjp N n s).backward x (den e) := rfl
+
+@[simp] theorem den_dropPathB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
+    den (.dropPathB mN (fun _ => 1) e) = den e := by
+  simp [den_dropPathB]
 
 /-- A dense forward layer graph: `broadcast(bias) + dot_general(·, W)`. -/
 def denseF {a c : Nat} (wN bN : String) (W : Mat a c) (bias : Vec c) (e : SHlo a) : SHlo c :=
@@ -3267,6 +3306,9 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convBiasSgd" [bN, lrS] [N, oc, h, w] (skel e)
   | _, .selectPosB (N := N) (n := n) xN _ e => .batched "selectPosP" [xN] [N, n] (skel e)
   | _, .selectMidB (N := N) (n := n) xN _ e => .batched "selectMidP" [xN] [N, n] (skel e)
+  -- Two name slots: the mask INPUT and the baked `1/keep` literal. Same two-string shape
+  -- `convStridedWeightSgd` uses for `xN`/`lrS`, so the generic `.batched` tag needs no widening.
+  | _, .dropPathB (N := N) (n := n) mN _ e => .batched "dropPathP" [mN] [N, n] (skel e)
   | _, .swishBackB (N := N) (n := n) xN _ e => .batched "swishBackP" [xN] [N, n] (skel e)
   | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
   | _, .addVB (N := N) (n := n) a b => .batched2 "addV" [] [N, n] (skel a) (skel b)
@@ -5112,6 +5154,21 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {l6} = stablehlo.compare LT, {x}, {six} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
             s!"    {msk} = stablehlo.and {g0}, {l6} : {tyI1 [B,n]}\n" ++
             s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+      | "dropPathP", [mN], [_N, n] => do
+          -- ▶ STOCHASTIC DEPTH: the per-SAMPLE residual-branch scale
+          -- (`planning/stochastic_depth.md`). `mN` is a graph INPUT of type `tensor<Bxf32>` — one
+          -- value per EXAMPLE, computed on the host — and `dims = [0]` is what makes it the
+          -- reference's `(B, 1, …, 1)` mask: every position within an example is scaled
+          -- identically, every example independently. Emitting a `tensor<B×n>` scale instead
+          -- typechecks, compiles and trains, and is per-ELEMENT dropout — a different regulariser.
+          -- ⚠ NO BAKED `1/keep`. The driver folds the inversion into the supplied value
+          -- (`bernoulli(keep_i)/keep_i` at train, `1.0` at eval), which is what makes the ones-scale
+          -- forward the EXACT identity and lets this op be emitted in the forward too — keeping the
+          -- `forward ⊂ train-step` prefix audit alive. See `Proofs.dropPath`'s note on why a baked
+          -- constant and that audit cannot both hold.
+          let mb ← fresh; let o ← fresh
+          pure (s!"    {mb} = stablehlo.broadcast_in_dim {mN}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.multiply {mb}, {r} : {ty [B,n]}\n", o :: st)
       | "swishBackP", [x], [_N, n] => do
           -- byte-for-byte `.swishBack`'s emit, width from the descriptor's `n`.
           let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
