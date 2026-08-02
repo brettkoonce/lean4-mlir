@@ -62,6 +62,15 @@ def main (args : List String) : IO Unit := do
   let replicas := ((← IO.getEnv "DP_REPLICAS").bind (·.toNat?)).getD repDefault
   let vSg := (← IO.getEnv "DP_VARIANT").getD "adam"
   let vDp := (← IO.getEnv "DP_VARIANT_DP").getD "adamdp"
+  -- ⚠ `ema*` variants carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail. The harness has
+  -- to BUILD the blob it feeds rather than assume three regions — getting it wrong is not a
+  -- tolerance question, PJRT refuses on the buffer count (§2m's `expected 265 buffers`).
+  -- ⚠ Substring, not `startsWith`: the reference's EfficientNet recipe is **`emarms`** (RMSProp +
+  -- EMA), and this is the axis where a prefix test already failed once — `emarms` does not start
+  -- with `"rms"`, which is how the mean-square nearly initialised to 0 (`planning/ema.md`).
+  let emaOn := (vSg.splitOn "ema").length > 1
+  let nRegions := if emaOn then 4 else 3
+  let nScalars := if emaOn then 5 else 3
   let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   -- The DP render is overridable so a deliberately-broken one can be fed in. That is not a
   -- convenience: a gate nobody has seen go red is an assertion. §2b-quater's control — the `%arn`
@@ -84,12 +93,23 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 net.nParams.toUSize 0.02
   let v ← F32.scaleShift (← F32.heInit 8484 net.nParams.toUSize 0.01) 1.0 0.05
-  let tail ← F32.const 3 0.0
+  let tail ← F32.const nScalars.toUSize 0.0
   let tail ← F32.write3 tail 0 0.001 0.19 0.002
+  -- The EMA decay pair, at a value that is neither 0 nor 1 so the shadow is a genuine blend of the
+  -- old shadow and θ' — a degenerate `d` lets a region wired to the wrong slot agree by accident.
+  let tail ← if emaOn then do
+      let dPair ← F32.const 3 0.0
+      let dPair ← F32.write3 dPair 0 0.9 0.1 0.0
+      F32.blit tail 3 dPair 0 2
+    else pure tail
+  -- ⚠ The shadow starts from an arbitrary NON-θ state, deliberately: seeded at θ,
+  -- `ema' = d·θ + (1−d)·θ'` would agree with a harness that had wired the region to the wrong slot.
+  let e ← F32.scaleShift (← F32.heInit 9999 net.nParams.toUSize 0.03) 1.0 0.02
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3
-  let pbuf := F32.concat #[θ, m, v, tail, bnIn]
+  let pbuf := F32.concat (#[θ, m, v] ++ (if emaOn then #[e] else #[]) ++ #[tail, bnIn])
   let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
-                            ++ #[#[], #[], #[]] ++ bnStatShapes)
+                            ++ (if emaOn then net.paramShapes else #[])
+                            ++ Array.replicate nScalars #[] ++ bnStatShapes)
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
   -- The SAME batch on EVERY replica — `replicas` copies, not two: `all_reduce(add)/N` over N
   -- identical gradients is the identity at any N, so only this concatenation was 2-specific.
@@ -118,9 +138,15 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
     IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size}"; IO.Process.exit 1
   let n := o1.size / 4
   let nP := net.nParams
+  -- ⚠ The EMA shadow is REPORTED, never GATED. `planning/ema.md`: the shadow is θ's low-pass
+  -- filter, so gating it is §3's "gate the gradient, never θ" one step WORSE — measured, a
+  -- sum-not-mean control moved `m` by 0.94, θ by 1.95e-4 and the shadow by 1.00e-4, i.e. exactly
+  -- ON a 1e-4 gate. It is here so a mis-threaded 4th region is visible, not so it decides anything.
   let regions : List (String × Nat × Nat) :=
-    [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP),
-     ("loss/bc", 3*nP, 3*nP+3), ("bnstat", 3*nP+3, n)]
+    [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP)]
+    ++ (if emaOn then [("ema", 3*nP, 4*nP)] else [])
+    ++ [("loss/bc", nRegions*nP, nRegions*nP+nScalars),
+        ("bnstat", nRegions*nP+nScalars, n)]
   let mut gradRel : Float := 0.0
   let mut fwdExact := true
   let mut fwdRel : Float := 0.0

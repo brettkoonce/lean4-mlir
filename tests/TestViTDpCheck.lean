@@ -143,6 +143,15 @@ def main (args : List String) : IO Unit := do
   -- argv[2] overrides the single-device side and argv[3] the batch, which is what lets the SAME
   -- harness gate the bs64 pair (`adam64`/`adamdp64`). The batch must match what both renders were
   -- rendered at — it is baked into the graph, so a mismatch is a shape error, not a wrong answer.
+  -- ⚠ `ema*` renders carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail, so the harness
+  -- must BUILD the blob it feeds rather than assume three regions. Wrong is not a tolerance
+  -- question: PJRT refuses on the buffer count (§2m's `expected 265 buffers`). Selected from the
+  -- SINGLE-device path, which is the one whose bytes name the layout both sides share.
+  -- ⚠ Substring, not `startsWith` — the `emarms` lesson (`planning/ema.md`): a prefix test on a
+  -- name that encodes two axes fails quietly.
+  let emaOn := ((args[1]?.getD "").splitOn "ema").length > 1
+  let nRegions := if emaOn then 4 else 3
+  let nScalars := if emaOn then 5 else 3
   let dpPath := args[0]?.getD "verified_mlir/vit_adamdp_train_step.mlir"
   let sgPath := args[1]?.getD "verified_mlir/vit_adam_train_step.mlir"
   let bs := (args[2]?.bind (·.toNat?)).getD 32
@@ -161,11 +170,22 @@ backend {← IreeSession.backendName}"
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 net.nParams.toUSize 0.02
   let v ← F32.scaleShift (← F32.heInit 8484 net.nParams.toUSize 0.01) 1.0 0.05
-  let tail ← F32.const 3 0.0
+  let tail ← F32.const nScalars.toUSize 0.0
   let tail ← F32.write3 tail 0 0.001 0.19 0.002
-  let pbuf := F32.concat #[θ, m, v, tail]
+  -- The EMA decay pair at a value that is neither 0 nor 1, so the shadow is a genuine blend of the
+  -- old shadow and θ' — a degenerate `d` lets a region wired to the wrong slot agree by accident.
+  let tail ← if emaOn then do
+      let dPair ← F32.const 3 0.0
+      let dPair ← F32.write3 dPair 0 0.9 0.1 0.0
+      F32.blit tail 3 dPair 0 2
+    else pure tail
+  -- ⚠ The shadow starts from an arbitrary NON-θ state: seeded at θ, `ema' = d·θ + (1−d)·θ'` would
+  -- agree with a harness that had wired the region to the wrong slot.
+  let e ← F32.scaleShift (← F32.heInit 9999 net.nParams.toUSize 0.03) 1.0 0.02
+  let pbuf := F32.concat (#[θ, m, v] ++ (if emaOn then #[e] else #[]) ++ #[tail])
   let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
-                            ++ #[#[], #[], #[]])
+                            ++ (if emaOn then net.paramShapes else #[])
+                            ++ Array.replicate nScalars #[])
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
   let x2 := F32.concat (Array.replicate replicas x1)   -- the SAME batch on every replica
   let mut y1 : ByteArray := .empty
@@ -183,14 +203,20 @@ backend {← IreeSession.backendName}"
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath ".lake/build/vit_dp_b.vmfb"
   let o2 ← IreeSession.mlpTrainStepVDP s2 (← entryOf dpPath) x2 pbuf shapes y2
-             (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
+             (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize 0 0
 
   if o1.size != o2.size then
     IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size}"; IO.Process.exit 1
   let n := o1.size / 4
   let nP := net.nParams
+  -- ⚠ The EMA shadow is REPORTED, never GATED — `planning/ema.md`: it is θ's low-pass filter, so
+  -- gating it is §3's "gate the gradient, never θ" one step WORSE. Measured on EfficientNet's peer
+  -- the same day: a sum-not-mean control moved `m` by 2.39 and the shadow by 5.4e-4, a 4,400×
+  -- difference in sensitivity. It is here so a mis-threaded 4th region is VISIBLE, not so it decides.
   let regions : List (String × Nat × Nat) :=
-    [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP), ("loss/bc", 3*nP, n)]
+    [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP)]
+    ++ (if emaOn then [("ema", 3*nP, 4*nP)] else [])
+    ++ [("loss/bc", nRegions*nP, n)]
   let mut gradRel : Float := 0.0
   let mut nonFinite : Nat := 0
   let mut moved : Nat := 0

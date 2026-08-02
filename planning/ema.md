@@ -353,3 +353,35 @@ both be written before the feature, which is §2d.3's phase-3 move that paid off
 
 ⚠ **The one thing that will bite**: §5b's checkpoint format. Write the size guard first, and move
 every existing `<slug>_*_ckpt_xla.bin` aside before the first run.
+
+
+---
+
+## ✅ THE DP PEERS ARE GATED (2026-08-02) — and "never gate on the shadow" now has three nets
+
+`convnext_emadp` was gated when it landed; `vitin_emadp128x4` and `enetin_emarmsdp64` shipped in
+v1.2c as a carry-forward and were never checked. Both now are, at **4 replicas**, every region
+bit-exact on the duplicated-batch identity — **22,869,669** floats on ViT and **21,196,213** on
+EfficientNet (the latter including the 4th region *and* 49 BN layers). Sum-not-mean controls fire at
+**2.9647 / 2.3915**. No new renders were needed; the single-device peers already existed at the
+matching per-device batch.
+
+⚠ Both `dp-check` harnesses had to learn the **4-region blob and 5-slot scalar tail** — only
+ConvNeXt's knew it. The predicate is a **substring**, not `startsWith`, because EfficientNet's
+recipe is `emarms` and that is the exact axis where a prefix test already failed here.
+
+### ⚠⚠ The rule, re-measured on two more nets and SHARPER than when it was written
+
+*Never gate on the EMA shadow.* In the same control runs:
+
+| | gradient `m` | θ | **shadow** | ratio |
+|---|---|---|---|---|
+| ViT | 2.9647 | 3.73e-4 | **1.94e-4** | **15,000×** |
+| EfficientNet | 2.3915 | 6.94e-4 | **5.42e-4** | **4,400×** |
+| ConvNeXt (2026-08-02, earlier) | 0.94 | 1.95e-4 | **1.00e-4** | 9,400× |
+
+On all three the shadow is the most damped region — **below θ**, which §3 already says never to
+gate. ConvNeXt's landed exactly ON a 1e-4 gate; ViT's at 1.94× it, i.e. it would have *barely*
+fired. A gate on the shadow is not merely weaker than one on the gradient, it is weaker than the one
+this repo already forbids. Both harnesses REPORT the shadow — a mis-threaded 4th region must be
+visible — and neither lets it decide.

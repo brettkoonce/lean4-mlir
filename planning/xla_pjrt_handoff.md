@@ -92,6 +92,7 @@ a live thread unless §0.3 says it is owed.
 | **§0.3** | ⚠ what is OWED, collected in one place |
 | **§0.5** | ✅ DP ImageNet recipe parity — and the DP control it broke |
 | **§0.6** | ✅ stochastic depth's DP shard gate — §5b's predicted defect, found |
+| **§0.7** | ✅ the ViT / EfficientNet EMA DP peers, gated — and the shadow re-measured |
 | **§0.4** | ✅ what landed 2026-08-02, with the findings worth keeping |
 
 ### §0.1 ⚠⚠ THE THING THAT CHANGES WHAT "NEXT" MEANS: **this box cannot do long runs**
@@ -267,12 +268,50 @@ does not help here; the norm is a property of the *data*, so drive it with a sca
 | ~~⛔ stochastic depth's **asymmetric-batch DP gate**~~ ✅ **CLOSED 2026-08-02** | `lake build drop-shard-check` — and §5b's prediction was right: the masks WERE being replicated, in the shim, before any DP drop render existed. Both existing constructions were unusable and the answer was neither of them | §0.6 |
 | ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
 | ⚠⚠ **every DP render's sum-not-mean control is BLIND once a clip is on** | a NEW hole, found by running it: grad clip is scale-invariant where it saturates, so the standard control passes bit-exact on a deliberately broken collective. The composed control (`perturb_clip.py hi` + sum-not-mean) is documented in `TestViTDpCheck.lean`. ⚠ **Any future clipped render must use it** | §0.5 |
-| ⚠ the ViT / EfficientNet EMA DP peers are **RENDERED BUT UNGATED** | ⚠ *this row said "nothing renders either" and that was STALE* — v1.2c (`e5f0c9bc`) rendered both `vitin_emadp128x4` and `enetin_emarmsdp64`. What is missing is the NUMERIC gate: ConvNeXt's `convnext_emadp` was gated when it landed, these two came across as a carry-forward and never were. Also no Imagenette `emadp` gate vehicle exists, which is what would make the check seconds rather than minutes | §0.4 |
+| ~~⚠ the ViT / EfficientNet EMA DP peers are RENDERED BUT UNGATED~~ ✅ **CLOSED 2026-08-02** | both gated at **4 replicas, every region BIT-EXACT** — ViT 22,869,669 floats, EfficientNet 21,196,213 (incl. the 4th region and 49 BN layers), sum-not-mean controls at **2.96 / 2.39**. The EMA scorecard is 3 of 3 on DP as well as single-device | §0.7 |
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
 | ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
 
 ---
+
+### §0.7 ✅ THE ViT / EfficientNet EMA DP PEERS, GATED (2026-08-02) — and the shadow re-measured
+
+⚠ **§0.3's row said "nothing renders either" and that was STALE**: v1.2c (`e5f0c9bc`) rendered both
+`vitin_emadp128x4` and `enetin_emarmsdp64`. What was actually owed was the NUMERIC GATE — ConvNeXt's
+`convnext_emadp` was gated when it landed, these two came across as a carry-forward and no check had
+ever run on them. **No new renders were needed**; the single-device peers at the matching per-device
+batch (`vitin_ema128`, `enetin_emarms64`) already existed.
+
+The two `dp-check` harnesses could not feed them: an `ema*` render carries a **fourth
+`[θ|m|v|ema]` region and a 5-slot scalar tail**, and only ConvNeXt's harness knew that. Both now
+build the blob they feed. ⚠ The predicate is a **substring**, not `startsWith` — EfficientNet's
+recipe is `emarms`, and this is the exact axis where a prefix test already failed once
+(`planning/ema.md`: `emarms` does not start with `"rms"`).
+
+| duplicated-batch identity, 4 replicas | ViT (`vitin_ema*`) | EfficientNet (`enetin_emarms*`) |
+|---|---|---|
+| θ / m / v / **ema** | **bit-exact 5,717,416 each** | **bit-exact 5,288,548 each** |
+| `%loss` + scalars · BN stats | 5/5 · — | 5/5 · **42,016/42,016** |
+| total | **22,869,669 floats** | **21,196,213** |
+| ⚠ sum-not-mean CONTROL, on `m` | **2.9647**, rc=1 | **2.3915**, rc=1 |
+
+⚠⚠ **AND THE CONTROLS RE-MEASURED `ema.md`'s RULE ON TWO MORE NETS, more sharply than before.**
+*Never gate on the EMA shadow.* In the same runs that fire at 2.96 / 2.39 on the gradient:
+
+| | gradient `m` | θ | **the shadow** | sensitivity ratio |
+|---|---|---|---|---|
+| ViT | 2.9647 | 3.73e-4 | **1.94e-4** | **15,000×** |
+| EfficientNet | 2.3915 | 6.94e-4 | **5.42e-4** | **4,400×** |
+
+The shadow is the most damped region of the three on **both** nets — below θ, which §3 already says
+never to gate. ⚠ ViT's shadow lands at **1.94× a 1e-4 gate**, i.e. it would have *barely* fired;
+ConvNeXt's earlier measurement was 1.00e-4, exactly ON it. Three nets, same conclusion: the shadow
+is θ's low-pass filter, so gating it is §3's rule one step worse. It is REPORTED in both harnesses —
+a mis-threaded 4th region has to be visible — and it decides nothing.
+
+⚠ Not a training run: this gates the collective's semantics on a duplicated batch. Neither net has a
+long EMA DP run, and §0.4's caveat stands — an Imagenette `ema` run is a gate vehicle, not a pair.
 
 ### §0.6 ✅ STOCHASTIC DEPTH'S DP SHARD GATE (2026-08-02) — §5b was right, and the defect was real
 
