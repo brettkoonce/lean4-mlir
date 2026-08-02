@@ -55,6 +55,54 @@ opaque write3 (ba : ByteArray) (idx : USize) (a b c : Float) : IO ByteArray
 opaque blit (dst : ByteArray) (dstOff : USize) (src : @& ByteArray)
   (srcOff count : USize) : IO ByteArray
 
+/-- **Per-site, per-example stochastic-depth scales** — `bernoulli(keep_i)/keep_i` for each of
+    `keeps.size` drop sites × `bs` examples, laid out site-major to match the render's
+    `%dp<i>: tensor<Bxf32>` inputs in signature order. Returns `keeps.size * bs` float32.
+
+    **Pure Lean on purpose, in two ways.**
+
+    *Not in the graph.* `stablehlo.rng` is disqualified: every numeric gate in this repo is a
+    bit-exactness or known-answer argument over a DETERMINISTIC graph — the tie harnesses' A-vs-A
+    floor, `residency_gate.sh`'s bit-identity, the duplicated-batch DP identity, the cross-lowerer
+    IREE-vs-XLA agreement. A graph that draws its own randomness makes each of those either
+    impossible or contingent on seeding an XLA RNG identically across two lowerers and two vendors.
+
+    *Not in C either.* This is `keeps.size * bs` floats per step — 288 at EfficientNet's 9 sites and
+    batch 32, against a ~310 ms step — so the C round trip buys nothing measurable, and keeping the
+    draw in Lean keeps the one piece of genuine randomness in the training loop readable and seeded
+    where it can be audited. `heInit` is extern because it fills millions of values; this does not.
+
+    ⚠ **`seed` must be derived from the GLOBAL STEP**, like `augSeed`, or no run is reproducible and
+    every gate that replays a step breaks. ⚠ `1/keep` is folded in HERE rather than baked into the
+    graph — see `VerifiedNet.dropKeeps`. At `keep = 1` the scale is exactly `1.0` for every example,
+    so a site with `keep = 1` is the identity in IEEE, not merely close. -/
+def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray := do
+  let n := keeps.size * bs
+  let mut out ← const n.toUSize 1.0
+  -- xorshift64*, the same family `heInit` uses. Seeded per call from the global step, and
+  -- advanced once per (site, example) so the draw order is fixed by the layout rather than by
+  -- evaluation order.
+  let mut st : UInt64 := (seed.toUInt64 * 2654435761) ||| 1
+  let mut buf : Array Float := #[]
+  for si in [0:keeps.size] do
+    let k := keeps[si]!
+    for _ in [0:bs] do
+      st := st ^^^ (st <<< 13); st := st ^^^ (st >>> 7); st := st ^^^ (st <<< 17)
+      -- u ∈ [0,1) from the top 24 bits, which is exactly float32's mantissa width.
+      let u := (st >>> 40).toNat.toFloat / 16777216.0
+      -- keep w.p. `k`, then scale survivors by 1/k so the expectation is preserved and eval
+      -- (all-ones, k = 1) is the identity. `k ≥ 1` ⇒ always keep, scale 1.0.
+      buf := buf.push (if k ≥ 1.0 then 1.0 else if u < k then 1.0 / k else 0.0)
+  -- `write3` is the only in-place float writer; `keeps.size * bs` is divisible by 3 whenever the
+  -- site count is (9 on EfficientNet-B0), so this tiles exactly with no tail.
+  let mut i := 0
+  while i + 3 ≤ buf.size do
+    out ← write3 out i.toUSize buf[i]! buf[i+1]! buf[i+2]!
+    i := i + 3
+  for j in [i:buf.size] do
+    out ← write3 out (j - 2).toUSize buf[j-2]! buf[j-1]! buf[j]!
+  pure out
+
 /-- Concatenate multiple ByteArrays. Fast (memcpy per chunk). -/
 def concat (arrays : Array ByteArray) : ByteArray := Id.run do
   let mut out : ByteArray := .empty

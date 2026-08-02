@@ -184,6 +184,15 @@ structure VerifiedNetSpec where
   /-- Per-BN-layer channel counts in forward order (empty = LayerNorm / no-BN). Drives running-stats
       BN threading in `trainAdamSched` — see `VerifiedNet.bnChannels`. -/
   bnChannels : Array Nat := #[]
+  /-- **Stochastic-depth keep probabilities**, one per drop site, in the render's signature order
+      (`planning/stochastic_depth.md`). Empty on every net without a `*sd` render.
+
+      ⚠ A SECOND hand-list against the renderer's `enetDropIdxs`/`enetDropTotal` — the same
+      two-lists shape as `toSpecs == XLayout.specs`, and for the same structural reason: this file
+      sits DOWNSTREAM of `VerifiedTrain`, so the renderer cannot share the definition by import
+      without inverting the dependency. `tests/TestDropPathRamp.lean` is the `#guard` that pins
+      them, and it is what stops the ramp drifting the way §2k's `α/K` did. -/
+  dropKeeps : Array Float := #[]
 
 namespace VerifiedNetSpec
 
@@ -197,7 +206,8 @@ def d0 (s : VerifiedNetSpec) : Nat := s.inC * s.imageH * s.imageW
 /-- Lower to the runtime `VerifiedNet` the driver consumes. -/
 def toNet (s : VerifiedNetSpec) : VerifiedNet :=
   { name := s.name, slug := s.slug, specs := s.toSpecs, d0 := s.d0,
-    nClasses := s.nClasses, data := s.data, blurb := s.blurb, bnChannels := s.bnChannels }
+    nClasses := s.nClasses, data := s.data, blurb := s.blurb, bnChannels := s.bnChannels,
+    dropKeeps := s.dropKeeps }
 
 /-- Train end-to-end (delegates to the shared `VerifiedNet.train` driver). -/
 def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=

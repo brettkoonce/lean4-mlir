@@ -1167,11 +1167,19 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let pTy := sigList.map (fun p => ty p.2)
+    -- ⚠⚠ THE RETURN LAYOUT MUST MIRROR THE INPUT LAYOUT, tensor for tensor. The driver does
+    -- `pbuf := out` — each step's output IS the next step's input (§2d.3's no-copy handover) — and
+    -- the shim's G4 guard checks the counts agree. So the drop scales RIDE THROUGH unread, exactly
+    -- as `%bc1`/`%bc2` and `%emad`/`%oemad` already do. Omitting them is not a subtle error: the
+    -- first attempt at this did, and G4 refused the call with "returns 740 outputs, caller supplied
+    -- 749 destinations" before a single step ran. Loud, and the right way round.
+    let dpNames := if sd then enetDropIdxs.map dpName else []
+    let dpTys   := if sd then enetDropIdxs.map (fun _ => ty [B]) else []
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
-                     ++ (if ema then ["%emad", "%oemad"] else []) ++ statNames
+                     ++ (if ema then ["%emad", "%oemad"] else []) ++ statNames ++ dpNames
     let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
                      ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []) ++ statTypes
+                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []) ++ statTypes ++ dpTys
     pure (
       (if replicas ≤ 1 then
         "    // ── EfficientNet-B0 AdamW train step: gradients + optimizer are pretty(AST node) ──\n"
@@ -1230,7 +1238,8 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
      ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
      ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
-     ++ bnOc.flatMap (fun oc => [ty [oc], ty [oc]]))
+     ++ bnOc.flatMap (fun oc => [ty [oc], ty [oc]])
+     ++ (if sd then enetDropIdxs.map (fun _ => ty [B]) else []))
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
   -- artifact path and `LEAN_MLIR_VARIANT`.

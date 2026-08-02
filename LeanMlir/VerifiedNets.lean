@@ -545,6 +545,17 @@ def efficientnetVerified : VerifiedNetSpec where
   bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
     480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
     1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
+  -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*sd` variants.
+  -- `keep_i = 1 − 0.2·i/(16−1)` at the NINE block indices that carry a skip: 2,4,6,7,9,10,12,13,14.
+  --
+  -- ⚠⚠ THE INDEX IS THE BLOCK INDEX, NOT THE SITE ORDINAL. The reference advances its ramp counter
+  -- on EVERY MBConv block (`dbi := dbi + 1`, unconditional) while the drop fires only inside the
+  -- skip guard — so the denominator is 15, not 8, and the nine keeps are UNEVENLY spaced. Deriving
+  -- them from the site ordinal instead gives nine evenly-spaced keeps: it compiles, runs, descends
+  -- and trains a different objective. §2k's α/K bug in a new place, and no numeric tie can see it,
+  -- because every tie compares the render against a peer built from the same constants.
+  dropKeeps := (#[2, 4, 6, 7, 9, 10, 12, 13, 14] : Array Nat).map
+    (fun i => 1.0 - 0.2 * i.toFloat / 15.0)
 
 /-- **EfficientNet-B0 on full 1000-class ImageNet** — the EfficientNet peer of the R34, ViT and
     ConvNeXt ImageNet specs (§2p). Identical architecture to `efficientnetVerified`; only the head

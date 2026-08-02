@@ -75,6 +75,21 @@ structure VerifiedNet where
       batch mean/var out in passthrough slots, the driver EMAs them, and eval uses
       `<slug>_fwd_eval.mlir` (affine BN with the running stats) instead of `<slug>_fwd.mlir`. -/
   bnChannels : Array Nat := #[]
+  /-- **Stochastic-depth keep probabilities**, one per drop site, in the render's signature order
+      (`planning/stochastic_depth.md`). Empty = the net has no drop sites, which is every net today
+      except EfficientNet's `*sd` variants.
+
+      ⚠ THE DRIVER OWNS THE RAMP, and that is deliberate rather than a shortcut: the emitted op is a
+      pure per-example multiply and `1/keep_i` is folded into the value supplied here, because a
+      BAKED `1/keep_i` and "the forward emits the sites too" cannot both hold (a ones scale would
+      then compute `x/keep_i`, and the reference returns the branch untouched at eval). It is the
+      same place `%lr` lives, for the same reason — one graph, many schedules.
+
+      ⚠ It is therefore a SECOND hand-list against the renderer's `enetDropIdxs`, exactly like
+      `toSpecs == XLayout.specs`. `tests/TestDropPathRamp.lean` is the `#guard` that pins the two;
+      `VerifiedSpec` sits downstream of this file, so the renderer cannot share the definition by
+      import without inverting the dependency. -/
+  dropKeeps : Array Float := #[]
 
 /-- Training hyperparameters — the `TrainConfig` of the verified path. Mirrors the
     reference `TrainConfig`; kept as its own object so a net is a (spec, config) pair. -/
@@ -653,6 +668,15 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let emaOn := variant.startsWith "ema"
   let nRegions := if emaOn then 4 else 3
   let nScalars := if emaOn then 5 else 3
+  -- "…sd" = the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the graph takes one
+  -- extra `tensor<Bxf32>` per drop site, carrying `bernoulli(keep_i)/keep_i` per example.
+  --
+  -- ⚠ A SUBSTRING test, not a prefix one — the marker TRAILS (`adamsd`), and three axes now share
+  -- this string. `emarms` already cost one prefix test (`planning/ema.md`): a name encoding two
+  -- independent axes breaks `startsWith` QUIETLY, and there it would have initialised RMSProp's
+  -- mean-square to 0. Check all three predicates together before adding a fourth axis.
+  let sdOn := (variant.splitOn "sd").length > 1 && !net.dropKeeps.isEmpty
+  let nDrop := if sdOn then net.dropKeeps.size else 0
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
@@ -717,6 +741,8 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   if rmsprop then
     IO.println s!"  ▸ RMSPROP: m = momentum buffer (init 0), v = running MEAN-SQUARE (init 1.0, \
 TF convention — this optimizer is not bias-corrected)"
+  if sdOn then
+    IO.println s!"  ▸ STOCHASTIC DEPTH: {nDrop} drop sites, keeps {net.dropKeeps.map (fun k => (k * 1000.0).round / 1000.0)} — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward)."
   if emaOn then
     IO.println s!"  ▸ EMA: 4th blob region [θ|m|v|ema], shadow starts AT the weights, decay \
 min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW."
@@ -727,10 +753,15 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   if replicas > 1 then
     IO.println s!"  DATA-PARALLEL: {replicas} replicas x bs {bs} = global batch {gbs}, {nb} steps/epoch"
   (← IO.getStdout).flush
+  -- ⚠ The drop scales go LAST, after the BN stats, matching `enetFwdSig`/`inSig`'s placement.
+  -- Anywhere else and they capture an existing positional slot — the mnv2 `convBias` failure
+  -- (§2m), which is silent until the driver mis-walks the blob.
+  let dropShapes : Array (Array Nat) := Array.replicate nDrop #[bs]
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
                                 ++ (if emaOn then net.paramShapes else #[])
                                 ++ Array.replicate nScalars #[]
-                                ++ (if hasBn then bnStatShapes else #[]))
+                                ++ (if hasBn then bnStatShapes else #[])
+                                ++ dropShapes)
   -- Device-resident parameters (handoff §2d.3). The leading `3×P` tensors of
   -- `adamShapes` are `[θ|m|v]`, and they are exactly the part of the blob this
   -- loop writes ONCE and thereafter only hands straight back: below, the host
@@ -876,9 +907,13 @@ it and its .epoch marker aside and start fresh."
   -- Build the reusable step buffer once, AFTER any checkpoint resume has settled
   -- `thetamv`. The scalar slots are filled per step; the BN region per step too.
   let scalarSlots ← F32.const nScalars.toUSize 0.0
+  -- The drop-scale slots are reserved here and refilled per step, exactly like the scalar and BN
+  -- regions — a fresh `F32.concat` per step would cost two whole-blob host memcpys (the mistake
+  -- `planning/xla_pjrt_ladder.md` §8 measured at 272 MB/step on R34).
+  let dropSlots ← F32.const (nDrop * bs).toUSize 1.0
   pbuf := if hasBn
-          then F32.concat #[thetamv, scalarSlots, runningBnStats]
-          else F32.concat #[thetamv, scalarSlots]
+          then F32.concat #[thetamv, scalarSlots, runningBnStats, dropSlots]
+          else F32.concat #[thetamv, scalarSlots, dropSlots]
   for ep in [startEpoch:nEpochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
@@ -934,6 +969,16 @@ it and its .epoch marker aside and start fresh."
         pbuf ← F32.blit pbuf (nRegions * net.nParams + 3).toUSize emaPair 0 2
       if hasBn then
         pbuf ← F32.blit pbuf (nRegions * net.nParams + nScalars).toUSize runningBnStats 0 nBnStats.toUSize
+      -- ▶ STOCHASTIC DEPTH: draw this step's per-example keep scales and blit them into the
+      -- trailing slots. ⚠ SEEDED FROM THE GLOBAL STEP, like `augSeed` below — an unseeded or
+      -- wall-clock-seeded draw makes the run unreproducible and breaks every gate that replays a
+      -- step. ⚠ These are ORDINARY inputs, deliberately NOT on the resident path (`nResident`
+      -- covers only the leading `nRegions * P` tensors): they change every step, so retaining them
+      -- would be wrong rather than merely wasteful.
+      if sdOn then
+        let sc ← F32.dropScales net.dropKeeps bs (ep * nb + bi + 1).toUSize
+        pbuf ← F32.blit pbuf (nRegions * net.nParams + nScalars + nBnStats).toUSize sc 0
+                 (nDrop * bs).toUSize
       let augSeed := (ep * nb + bi + 1).toUSize
       -- ImageNet takes the whole batch off the wire, already augmented and normalized by the shim,
       -- so it bypasses BOTH the slice and the augmentation below. That is deliberate: the transform
