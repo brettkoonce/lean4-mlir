@@ -4842,6 +4842,38 @@ to zero.
 (bf16, 4$\times$ 4060 Ti). The kink near epoch~5 is the end of
 warmup; the steady late climb is the cosine anneal.
 
+\prosesection{Phase 4: the PJRT bridge}
+
+Every ImageNet recipe in this book opens with the same caveat --- the
+numbers come from the phase-2 (Lean$\to$JAX) trainer, and whether the
+verified codegen path can reach this scale is an open question. Phase 4
+is that question being answered. It is a second trusted lowerer,
+\texttt{ffi/pjrt\_ffi.c}, implementing the same C surface as the IREE
+(phase 3) shim and handing the graph to XLA through the PJRT C API. Nothing above the shim changes --- the
+backend is whichever \texttt{.so} the binary linked, and backend
+detection is a weak symbol, so a binary cannot disagree with the library
+it linked --- and there is no Python at run time. What the trainer
+executes is \texttt{pretty(provenGraph)}: the same rendered artifact the
+proofs reason about, not a hand-written emitter.
+
+At ImageNet scale, on the same four-card box as the bf16 run above:
+
+\begin{center}
+\begin{tabular}{l l r r r r r}
+\hline
+GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
+\hline
+2$\times$ 7900 XTX (ROCm) & fp32 & ---           & 30 & ---          & --- & --- \\
+4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$32 min  & 30 & $\sim$16 hr  & --- & --- \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent ResNet-34 / ImageNet-1k on the phase-4 path, on the two rigs
+this book measures on.
+
+\textbf{[TODO --- 30-epoch R34.]}
+
 \prosesection{A reasonable stopping point}
 
 For the fastest path through this book, the route is roughly:
