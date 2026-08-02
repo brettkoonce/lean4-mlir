@@ -65,7 +65,7 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: ViT's EMA peer, then stochastic depth (`planning/stochastic_depth.md`).**
+## 0. ▶ START HERE — **next: stochastic depth (`planning/stochastic_depth.md`). ViT's EMA peer is DONE.**
 
 **Rewritten 2026-08-02 at the end of the recipe-gaps session** (RMSProp's driver half, then EMA on
 two nets). Everything below §0a is committed and green. Read this section, `planning/recipe_gaps.md`
@@ -89,34 +89,45 @@ runs this box will crash."* Sustained multi-GPU load destabilises ares. That is 
 * ⚠ **Ask before starting anything long**, and use `scripts/supervise.sh` (AER restart, thermal
   resting, stall guard) if a long run is ever sanctioned.
 
-### ▶ THE NEXT TWO THREADS, in order
+### ✅ 1. ViT's EMA peer — **DONE 2026-08-02. The EMA scorecard is 3 of 3.**
 
-**1. ViT's EMA peer — small, and the recipe is fully worked out.** ConvNeXt (single + DP) and
-EfficientNet are done (below); ViT is the last of the three nets whose reference uses EMA, and it is
-the *cheapest* of the three: LayerNorm, so there is **no `ema_bn`** to carry — the parameter shadow
-alone. Follow `EfficientNetRender.lean`'s shape exactly:
+`verified_mlir/vit_ema_train_step.mlir`, `LEAN_MLIR_VARIANT=ema`. **807 in / 805 out** =
+605/603 + 200 + 2, zero new `SHlo` ops (fourth time). It was the cheapest of the three exactly as
+scoped — LayerNorm ⇒ `hasBn` false ⇒ the driver's whole `ema_bn` arm is skipped rather than
+special-cased — and **the driver needed nothing**: `nRegions`/`nScalars` and the checkpoint size
+guard were already generic. 69 functional lines in the renderer, plus the caller's two knobs.
 
-* thread `(ema : Bool := false)` through the renderer, and emit
-  `adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z)` **at the call site** where the
-  per-parameter tail returns the updated `nT`. **No new op** — `adamMNext β₁ m g = β₁·m + (1−β₁)·g`
-  IS the EMA update at `(β₁ := d, m := ema, g := θ')`;
-* signature gains 200 `%<nm>e` inputs + `%emad`/`%oemad`; the **return layout must mirror the input
-  layout region-for-region and scalar-for-scalar** (`pbuf := out` hands each step's output back);
-* new variant via `vitAdamVariant`, with the `ema` marker **LEADING** — the driver keys its
-  4-region blob off `variant.startsWith "ema"`;
-* ⚠ **check the other predicates in the same breath.** EfficientNet's `emarms` broke
-  `startsWith "rms"` and would have silently initialised RMSProp's mean-square to 0 (see below).
-  ViT is AdamW-only so there is no second axis today — but `vit-adam-tie`, `vit-dp-check` and the
-  residency gate all key off the variant string;
-* driver: **nothing to do.** `nRegions`/`nScalars` are already generic and the checkpoint size guard
-  is in. Only the caller needs the `LEAN_MLIR_EMA_DECAY_U` knob (copy `ConvNeXtAdamCommon.lean`).
+Gates: gate 1 **0 diff lines** across all 12 committed `vit*`/`vitin*` artifacts (writers FORCED) ·
+**`decay = 0` ⇒ shadow BIT-IDENTICAL, 0 of 5,526,346** · ratio known answer **5.96e-5** against a
+no-warmup-correction control at **150,995×** · **residency at 4 regions, 0 of 88,421,536 bytes**,
+both controls firing · size guard throws on a forged 3-region file · shadow **tracks then exceeds
+from epoch 1** (42.37/50.65/54.34/56.61% vs live 40.64/42.93/48.41/51.64%, chance 10%) · writer
+audit **96 artifacts, one writer each** · build 3,911 green. Full write-up in `planning/ema.md`.
 
-Gates, all short: gate 1 byte-identical at `ema := false` · **`decay = 0` ⇒ shadow BIT-IDENTICAL to
-the live weights** (the free exact endpoint) · the ratio known answer with the no-warmup-correction
-control · shadow **tracks then exceeds** over 3-4 epochs. ⚠ ViT's Imagenette run is the weakest of
-the five (71.31% at 80 epochs), so read a 3-epoch shadow-vs-live delta, not an absolute.
+**Three things from it that outlive the feature:**
 
-**2. Stochastic depth — `planning/stochastic_depth.md`, and read it before scoping.** It re-tiers
+1. ⚠⚠ **A GATE PORTED BETWEEN NETS INHERITS THE SOURCE NET'S CONDITIONING, NOT THE TARGET'S.** The
+   ratio gate measures `ema₁ − θ₁ = d₀·(θ₀ − θ₁)`, a difference of two nearly-equal f32 numbers. At
+   ViT's step 1 the warmup LR is `3e-4/(5·295) ≈ 2e-7`, putting `ema − θ` at ~**one ULP of θ** — so
+   the first run read 1.96e-2 with its control only 455× away, and *nothing was wrong with the
+   render*. ConvNeXt never saw this because its baseLR/warmup give a **50× larger** step 1. Fixed by
+   conditioning the instrument (`LEAN_MLIR_BASE_LR_U=100000`, the `r34-mom-tie` move), after which
+   the same gate reads 5.96e-5 against 150,995×. §2j's rule in a fourth place.
+2. **The train losses are IDENTICAL to six decimals across the `ema`/`adam` pair, all four epochs**,
+   over two different HLO programs (805 outputs vs 603). ConvNeXt's were merely close. That is what
+   turns the shadow-vs-live accuracy table from "two similar runs" into **one θ trajectory read two
+   ways** — a control, not a coincidence — and it is the cheapest evidence that the EMA op perturbs
+   the optimizer not at all.
+3. ⚠ **An `ema` run on Imagenette is a GATE VEHICLE, not a matched pair.** `vitTinyConfig` sets no
+   EMA at all; 0.99996 is `vitTinyImagenetConfig`'s DeiT value, carried as the knob's default so a
+   future ImageNet pair needs no edit. Do not quote the 4-epoch numbers as a reference comparison.
+
+⚠ Still owed: the `emadp` DP peers on **both** ViT and EfficientNet (`vitAdamVariant 32 2 true`
+names ViT's; nothing renders either), and any long run.
+
+### ▶ 2. THE NEXT THREAD
+
+**Stochastic depth — `planning/stochastic_depth.md`, and read it before scoping.** It re-tiers
 the job in BOTH directions: the math is one `selectMidB`-shaped op whose VJP is itself, while the
 plumbing is the repo's first per-step *random graph input*. Two things to settle first, and the
 second is a prerequisite rather than a follow-up:
@@ -128,6 +139,15 @@ second is a prerequisite rather than a follow-up:
   its construction needs linearity in the gradient and that net wants stochastic depth *and*
   RMSProp. **No working DP construction exists there yet.** The doc recommends ConvNeXt-only,
   single-device, as a decision point precisely to defer this.
+
+### ▶ WHAT LANDED 2026-08-02, third session (1 commit)
+
+* **ViT's EMA peer** — the section above. EMA is **3 of 3**; zero new ops on all three nets.
+* The **CI drift guard widened again** because the coverage check demanded it: ViT diffed **2 of
+  the 13** artifacts `ViTRender` writes. Now all 13, so coverage goes **40/81 → 53/84** and
+  `render_guard_baseline.txt` **46 → 36** — that file may only shrink.
+* `LEAN_MLIR_BASE_LR_U` added to `ViTAdamCommon` (the `Resnet34AdamCommon` knob), as a gate
+  instrument rather than a training knob. Default unchanged, so every existing run is unaffected.
 
 ### ▶ WHAT LANDED 2026-08-02, second session (5 commits)
 

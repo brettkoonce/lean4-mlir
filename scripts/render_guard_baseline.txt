@@ -34,13 +34,3 @@ verified_mlir/resnet34in_fwd.mlir
 verified_mlir/resnet34in_fwd_eval.mlir
 verified_mlir/resnet34in_mom256_train_step.mlir
 verified_mlir/resnet34in_momdp64_train_step.mlir
-verified_mlir/vit_adam128_train_step.mlir
-verified_mlir/vit_adam64_train_step.mlir
-verified_mlir/vit_adam_train_step.mlir
-verified_mlir/vit_adamdp128x4_train_step.mlir
-verified_mlir/vit_adamdp32x4_train_step.mlir
-verified_mlir/vit_adamdp64_train_step.mlir
-verified_mlir/vit_adamdp_train_step.mlir
-verified_mlir/vitin_adam128_train_step.mlir
-verified_mlir/vitin_adamdp128x4_train_step.mlir
-verified_mlir/vitin_fwd.mlir

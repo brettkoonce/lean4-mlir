@@ -59,6 +59,16 @@ NETS=(
   "r34|resnet34-verified-adam-xla|resnet34|10|1|"
   "efficientnet|efficientnet-verified-adam-xla|efficientnet|10|1|"
   "vit|vit-verified-adam-xla|vit|10|2|"
+  # ⚠ The EMA row gates a FOUR-region blob, `[θ|m|v|ema]`, where every other row here is three.
+  # That is the whole reason it is worth a row of its own: `nResident` goes 3·P → 4·P, so this is
+  # the only check that the shim's "n tensors in, n out, counts agree tensor for tensor" contract
+  # actually holds at the wider layout rather than merely being argued to (`planning/ema.md` §4).
+  # Mode 2 for the same reason the plain `vit` row is: ViT+AdamW is CONTRACTIVE and absorbs a 1-ULP
+  # fault to ~1 byte of 66M, so mode 1 would pass only because 1 > 0 and could rot into a false
+  # green. ⚠ It also cannot see the SHADOW's own correctness — eval-only state is structurally
+  # invisible to this gate, exactly as hold-mode is. That is what the tracks-then-exceeds
+  # trajectory gate is for.
+  "vit-ema|vit-verified-adam-xla|vit|10|2|LEAN_MLIR_VARIANT=ema"
   "mnv2-rms|mobilenetv2-verified-adam-xla|mobilenetv2|10|2|LEAN_MLIR_VARIANT=rms"
   "enet-rms|efficientnet-verified-adam-xla|efficientnet|10|2|LEAN_MLIR_VARIANT=rms"
 )

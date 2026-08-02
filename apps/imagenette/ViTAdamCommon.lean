@@ -17,7 +17,13 @@ here and correct; the graph dies in MIOpen.
 
 -- Matches MainVitTrain.lean's `vitTinyConfig` (the reference): 80 epochs, bs 32,
 -- AdamW lr 3e-4 / wd 1e-4, cosine + 5-epoch warmup, label smoothing 0.1, augment.
--- (vitTinyConfig sets NO EMA and gradClipNorm 0.0, so the verified path omits them too.)
+-- (vitTinyConfig sets NO EMA and gradClipNorm 0.0, so the DEFAULT verified path omits them too.)
+--
+-- ⚠ That parenthesis still holds and is why `LEAN_MLIR_VARIANT=ema` is opt-in here rather than the
+-- default. EMA belongs to the **ImageNet** ViT recipe (`jax/MainVitImagenet.lean`'s
+-- `vitTinyImagenetConfig.emaDecay := 0.99996`, the DeiT default), not to this Imagenette baseline.
+-- So an `ema` run on Imagenette is a GATE VEHICLE — the cheap place to establish that the shadow is
+-- wired correctly — not a matched pair with `vitTinyConfig`. Do not describe it as one.
 def vitAdamConfig : VerifiedConfig where
   epochs    := 80
   batchSize := 32
@@ -27,18 +33,23 @@ def vitAdamConfig : VerifiedConfig where
 
     `LEAN_MLIR_VARIANT` selects the rendered train step, i.e. which
     `verified_mlir/vit_<variant>_train_step.mlir` is loaded (and with it a distinct vmfb and
-    checkpoint). Two exist, and **both are `pretty(provenGraph)` out of
-    `Proofs/Codegen/ViTRender.lean`**:
+    checkpoint). All are `pretty(provenGraph)` out of `Proofs/Codegen/ViTRender.lean`, and
+    `vitAdamVariant` there is the single description of the spelling:
 
     * **`adam`** (default) — the certified single-device render, licensed by `vit-adam-tie`:
       gradient norm-rel 1e-6, `%loss` bit-exact, 0/200 params disagreeing, on all 16,579,041
       returned floats (handoff §2a).
-    * **`adamdp`** — the DATA-PARALLEL render: the same graph plus one `all_reduce(add)/N` per
-      parameter gradient between the certified gradient and the certified AdamW triple. That
-      collective is a **declared trusted carve-out** (§5) and the render says so in its own output
-      banner. ⛔ It is **numerically ungated** — `vit-dp-check` is written and will pass the moment
-      the graph runs, but the graph does not execute on this box. Do not describe ViT multi-GPU as
-      working. Pair it with `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and `HIP_VISIBLE_DEVICES` unset.
+    * **`adamdp`** (and `adamdp64` / `adamdp32x4` / `adamdp128x4`) — the DATA-PARALLEL renders: the
+      same graph plus one `all_reduce(add)/N` per parameter gradient between the certified gradient
+      and the certified AdamW triple. That collective is a **declared trusted carve-out** (§5) and
+      the render says so in its own output banner. ✅ Gated 2026-07-30 — `vit-dp-check` reproduces
+      the single-device step **bit-exactly on all 16,579,041 floats** against a sum-not-mean control
+      that fires at 0.996. (An earlier version of this docstring said the graph does not execute on
+      this box; §2j retired that.) Pair it with `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and
+      `HIP_VISIBLE_DEVICES` unset.
+    * **`ema`** — the EMA weight-shadow render (`planning/ema.md`). ⚠ Its blob has **four** regions
+      where every other variant has three, so it cannot share a checkpoint with them; the driver's
+      size guard makes a crossed one throw rather than resume misaligned garbage.
 
     This driver no longer WRITES its artifact. Until 2026-07-28 it re-emitted the hand-written
     `ViTRender.vitTrainStepModuleAdamSched` on every startup, which meant the committed bytes were
@@ -57,5 +68,42 @@ LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.
   -- `adam64`/`adamdp64` at 64. Eval needs no flag: `trainAdamSched` reads the eval width off the
   -- forward artifact (`evalBs`), so it scores at 32 whatever the train batch is.
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD vitAdamConfig.batchSize
+  -- ▶ `ema` selects the EMA-shadow render (`planning/ema.md`): the same AdamW graph plus a 4th
+  -- `[θ|m|v|ema]` blob region updated by `adamMNextF` at `(β₁ := d)`, with EVAL AND THE CHECKPOINT
+  -- scoring the shadow. ViT is the cheapest of the three EMA nets — LayerNorm means there is no
+  -- `ema_bn` peer to carry, so it is the parameter shadow alone.
+  --
+  -- `LEAN_MLIR_EMA_DECAY_U` sets the decay in MICRO-units, because this toolchain has no
+  -- `String.toFloat?` (the `LEAN_MLIR_BASE_LR_U` dodge). The default here is **0.99996** — the
+  -- DeiT value `jax/MainVitImagenet.lean`'s `vitTinyImagenetConfig` carries, NOT the 0.9999
+  -- ConvNeXt and EfficientNet use. `trainAdamSched`'s own default is 0.9999, so passing this
+  -- explicitly is what stops the two references silently converging on one number.
+  -- ⚠ It is the IMAGENET recipe's value, carried here so the knob's default is the one a matched
+  -- pair would want; `vitTinyConfig` (this trainer's actual reference) has no EMA at all.
+  -- ⚠ **`0` is meaningful and is the gate**: at decay 0 the shadow must be BIT-IDENTICAL to the
+  -- live weights, since `d = min(0, ·) = 0 ⇒ ema' = θ'`. A free exact endpoint, and it is what pins
+  -- the wiring — a shadow reading the wrong slot fails it immediately.
+  --
+  -- ⚠ At 0.99996 the time constant is 25,000 optimizer steps, and an 80-epoch Imagenette run is
+  -- 23,600 — i.e. **under one τ**, tighter than ConvNeXt's 2.4 τ. That is exactly the regime
+  -- `ema.md` §2 says the warmup correction exists for, and it is why the correction is applied in
+  -- the driver rather than being left to the decay value.
+  let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.99996
+  -- `LEAN_MLIR_BASE_LR_U` — base LR in MICRO-units, the `Resnet34AdamCommon` knob, added here for
+  -- the EMA ratio gate rather than for training. Default 0.0003 (`vitTinyConfig`) is unchanged, so
+  -- every existing run is bit-for-bit unaffected.
+  --
+  -- ⚠ It is an INSTRUMENT, and the reason is worth keeping. The gate's known answer is
+  -- `ema₁ − θ₁ = d₀·(θ₀ − θ₁)`, so it measures a difference of two nearly-equal f32 numbers: at
+  -- ViT's step 1 the warmup LR is 3e-4/(5·295) ≈ 2e-7, which puts `ema − θ` at roughly ONE ULP of
+  -- θ and leaves the ratio dominated by cancellation rather than by the formula. Raising the LR
+  -- moves θ far enough for the subtraction to be well-conditioned; it changes nothing about the
+  -- EMA arithmetic under test. Same move as `r34-mom-tie` needing `BASE_LR_U=100000`, and the same
+  -- §2j rule underneath: check the instrument can RESOLVE the thing you are measuring first.
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.0003
   vitVerified.toNet.trainAdamSched { vitAdamConfig with batchSize := bs }
-    (argv.head?.getD "data") 0.0003 0.9 0.999 5 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant 0.0 1.0 emaDecay

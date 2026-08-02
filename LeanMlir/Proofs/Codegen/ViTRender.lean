@@ -436,8 +436,9 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
     runtime `tensor<f32>` args, so one render serves the whole cosine+warmup schedule. Mirrors
     `ResNet34RenderB.adamOne`, minus the replica collective (ViT has no DP render yet). -/
-private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : String) (replicas : Nat) :
-    StateM Nat (String × String × String × String) := do
+private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : String) (replicas : Nat)
+    (ema : Bool := false) :
+    StateM Nat (String × String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   -- At `replicas > 1` the gradient is averaged across devices first. **That collective is a TRUSTED
@@ -453,7 +454,53 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
   let (cV, nV) ← pretty bs (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
   let (cT, nT) ← pretty bs (.adamWParamF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
                     "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" ds 0 0 0 0 0 0 0 z z z gr)
-  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+  -- ▶ THE EMA SHADOW, and as on ConvNeXt/EfficientNet it needs NO new op:
+  -- `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the reference's `ema_update`
+  -- (`jax/Jax/Codegen.lean:2459`) at `(β₁ := d, m := ema, g := θ')`, so `adamMNextF` renders it and
+  -- `adamMNextF_faithful` closes the denotation side by `rfl`. Fourth net, same reading.
+  --
+  -- ⚠ It consumes `nT`, the UPDATED parameter, not the gradient — the shadow averages WEIGHTS. It
+  -- therefore sits downstream of the whole AdamW triple, and (at `replicas > 1`) downstream of the
+  -- collective, which is why the shadow and the all_reduce cannot interact.
+  -- ⚠ `%emad`/`%oemad` are function ARGS, not constants, because the reference's decay is
+  -- TIME-VARYING: `d = min(decay, (1+t)/(10+t))`, TF's warmup-corrected form. `planning/ema.md` §2
+  -- has the reference's own measurement of dropping it — a shadow holding 12.8% of the random init
+  -- and scoring 0.00% top-1 while the live weights scored 70.48%.
+  --
+  -- At `ema := false` NO `pretty` call happens, so the fresh-name counter does not move and all
+  -- TEN committed `vit*`/`vitin*` artifacts re-render byte-identically. Gate 1's strong form, free.
+  let (cE, nE) ← if ema then
+      pretty bs (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
+    else pure ("", "")
+  pure (arS ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, nE)
+
+/-- The driver's **variant slug** for a (per-device batch, replica count, EMA) triple: the artifact
+    is `verified_mlir/vit_<variant>_train_step.mlir`, the entry point is `@vit_<variant>_train_step`
+    and `LEAN_MLIR_VARIANT=<variant>` selects it at run time.
+
+    This is the ViT peer of `cnxAdamVariant` / `r34AdamVariant` / `mnv2AdamVariant`, and unlike
+    theirs it is **documentation plus a drift guard rather than the name's producer** —
+    `vitAdamTrainStepFaithful` takes `funcName` explicitly (it predates the slug convention) and the
+    `#eval` paths must stay string literals for `regen_verified_mlir.sh`'s writer audit to see them.
+    So the `#guard`s at the bottom of this file are what tie the literals to this function; the
+    contract is checked at `lake build` rather than merely described.
+
+    ⚠ ViT's spelling breaks the "the number is the per-device batch" convention at 4 replicas
+    (`adamdp32x4`, `adamdp128x4`) and that is deliberate — `vit_adamdp_train_step.mlir` is a
+    COMMITTED 2-replica artifact at bs32, so a 4-replica render reusing `adamdp` would give one path
+    two writers computing different graphs. Encoded here so the exception cannot be forgotten.
+
+    ⚠ **The `ema` marker LEADS.** `trainAdamSched` keys its 4-region `[θ|m|v|ema]` blob off
+    `variant.startsWith "ema"`, so a trailing marker would silently select the 3-region layout for a
+    4-region graph — every parameter misaligned. And note what that cost on EfficientNet: its
+    RMSProp+EMA variant is `emarms`, which does **not** start with `"rms"`, so the mean-square would
+    have initialised to 0 through a prefix test. ViT is AdamW-only, so there is no second axis here
+    today; if one is ever added, make both predicates substring tests first. -/
+def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false) : String :=
+  (if ema then "ema" else "adam")
+    ++ (if replicas ≤ 1 then "" else "dp")
+    ++ (if bs == 32 && replicas ≤ 2 then "" else toString bs)
+    ++ (if replicas > 2 then s!"x{replicas}" else "")
 
 /-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4). -/
 private def vitAdamConsts : String :=
@@ -475,10 +522,16 @@ private def vitAdamConsts : String :=
 
     Interface: 605 in (`%x`, 200 θ, 200 m, 200 v, `%lr`/`%bc1`/`%bc2`, `%onehot`) / 603 out
     (200 θ', 200 m', 200 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
-    render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged. -/
+    render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged.
+
+    At `ema := true` (`planning/ema.md`) the blob gains a **fourth region** and the scalar tail goes
+    3 → 5, so the interface becomes **807 in / 805 out** = 605/603 + 200 (the shadow) + 2
+    (`%emad`/`%oemad`). ⚠ `ema` is LAST in this signature on purpose: inserted mid-list it would
+    capture an existing positional argument at every call site, which is the mnv2/enet `convBias`
+    lesson (§2m). -/
 def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     (bStr : String := "32.0") (replicas : Nat := 1) (bs : Nat := 32)
-    (nClasses : Nat := 10) (alpha : Float := 0.1) : String :=
+    (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false) : String :=
   -- ⚠ α and K are the ONLY knobs; every emitted smoothing constant is derived from them here.
   -- Passing the cotangent's `−α/K` as a separate string (which is what this took until
   -- 2026-07-31) is the same two-writers-for-one-fact shape §2a spent a thread removing: the two
@@ -492,11 +545,13 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     let mut thetaN : List String := []
     let mut mN : List String := []
     let mut vN : List String := []
+    let mut eN : List String := []
     for i in [0:(vitParamSig nClasses).length] do
       let (nm, ds) := (vitParamSig nClasses)[i]!
-      let (c, nT, nM, nV) ← vitAdamOne bs nm ds (gradNames[i]!) replicas
+      let (c, nT, nM, nV, nE) ← vitAdamOne bs nm ds (gradNames[i]!) replicas ema
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
+      if ema then eN := eN ++ [nE]
     -- `%loss` is REPORT-ONLY and on no gradient path, so NO theorem covers it — §2b shipped plain
     -- CE here against a smoothed-CE cotangent and only the numeric tie caught it. It is therefore
     -- built from the SAME smoothed recipe the cotangent implies, and declared as a carve-out.
@@ -523,8 +578,18 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let pTy := (vitParamSig nClasses).map (fun (_, ds) => ty ds)
-    let retVals := thetaN ++ mN ++ vN ++ ["%loss", "%bc1", "%bc2"]
-    let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+    -- ⚠ THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
+    -- The driver does `pbuf := out` — each step's output IS the next step's input (§2d.3's no-copy
+    -- handover) — so a return list that dropped the shadow, or carried fewer scalars than the
+    -- signature takes, would silently re-interpret the blob from step 2 onward rather than fail. It
+    -- is also exactly what the resident shim checks (inputs `[res_in, res_in+n)` and outputs
+    -- `[res_out, res_out+n)` must agree tensor for tensor), which is why a 4th region needs no C
+    -- change at all. `%emad`/`%oemad` ride through unread, as `%bc1`/`%bc2` already do.
+    let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
+                     ++ (if ema then ["%emad", "%oemad"] else [])
+    let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
+                     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
     pure <|
       (if replicas <= 1 then
         "    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──\n"
@@ -534,15 +599,29 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
         "    // The gradients and the AdamW triple are pretty(verified AST). The per-parameter\n" ++
         "    // all_reduce(add)/N between them is NOT — it is a TRUSTED CARVE-OUT, emitted text\n" ++
         "    // outside every faithfulness theorem, exactly like the lowerer (handoff §5).\n") ++
+      -- The shadow is NOT a carve-out and the banner says which it is, because §2h-quater found a
+      -- committed artifact under-describing its own certification level and that is still a wrong
+      -- statement in the one place a reader trusts.
+      (if ema then
+        "    // ── EMA WEIGHT SHADOW (planning/ema.md): a 4th [θ|m|v|ema] region, one adamMNextF\n" ++
+        "    // per parameter at (β₁ := %emad) on the UPDATED weight. It is pretty(verified AST)\n" ++
+        "    // like the rest of the optimizer — NOT a carve-out. EVAL AND CHECKPOINTS SCORE IT.\n"
+       else "") ++
       code ++ vitAdamConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let pSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
   let mSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}m: {ty ds}"))
   let vSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}v: {ty ds}"))
+  let eSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}e: {ty ds}"))
   let argSig := s!"%x: {ty [bs, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [bs, nClasses]}"
+    (if ema then ", " ++ eSig else "") ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
+    (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++
+    s!", %onehot: {ty [bs, nClasses]}"
   let pTy := (vitParamSig nClasses).map (fun (_, ds) => ty ds)
-  let retTys := pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+  let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
+    ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
+    ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
   let body : String := go.run' 0
   "module @m {\n" ++
   s!"  func.func @{funcName}({argSig}) -> ({String.intercalate ", " retTys}) " ++ "{\n" ++
@@ -714,3 +793,59 @@ end Proofs.StableHLO
   (Proofs.StableHLO.vitAdamTrainStepFaithful "vitin_adamdp128x4_train_step" "128.0" 4 128 1000)
 #eval IO.FS.writeFile "verified_mlir/vitin_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderV "vitin_fwd" 256 1000)
+
+-- ── ▶ THE EMA VARIANT (`planning/ema.md`), selected by `LEAN_MLIR_VARIANT=ema` ─────────────────
+-- ViT is the last of the three nets whose reference uses EMA (`vitTinyImagenetConfig.emaDecay :=
+-- 0.99996`; ConvNeXt landed first, then EfficientNet's `emarms`), and it is the CHEAPEST of the
+-- three: LayerNorm means there are no BN running buffers, so there is no `ema_bn` peer to carry —
+-- the parameter shadow alone. `hasBn` is false for this net, so the driver's whole `ema_bn` arm is
+-- skipped rather than special-cased.
+--
+-- Same graph plus one `adamMNextF` per parameter on the UPDATED weight — `d·ema + (1−d)·θ'`, which
+-- is `Proofs.adamMNext` at `(β₁ := d, m := ema, g := θ')`. **No new op, no new `den`, no new
+-- faithfulness theorem, no new VJP.** Fourth time enumerating a reference update against existing
+-- ops AT THEIR OTHER READINGS has collapsed a scoped op family to zero (§2k heavy-ball,
+-- recipe_gaps v1.2 RMSProp, ConvNeXt/EfficientNet EMA, here).
+--
+-- ⚠ THE BLOB GAINS A FOURTH REGION: `[θ|m|v|ema]`, 807 in / 805 out, and the scalar tail goes
+-- 3 → 5 (`%emad`, `%oemad`). That is why it renders to its OWN slug — a 4-region graph fed a
+-- 3-region blob is not a subtle numeric wrong answer, it is every parameter misaligned, and
+-- `vit_adam_train_step.mlir` (which the 71.31% 80-epoch run, `vit-adam-tie` and `vit-dp-check` all
+-- depend on) must stay exactly what it is. `trainAdamSched`'s checkpoint SIZE GUARD is the other
+-- half of that: checkpoints carry no header, so a 3-region file read as 4 resumes silent garbage.
+--
+-- ⚠ `%emad`/`%oemad` are ARGS rather than constants because the reference's decay is time-varying,
+-- `d = min(decay, (1+t)/(10+t))` — TF's warmup-corrected `ExponentialMovingAverage`. That
+-- correction is REQUIRED at our scale, not optional: `ema.md` §2 has the reference's own
+-- measurement of dropping it (a shadow still holding 12.8% of the random init at 3.1 τ, scoring
+-- **0.00% top-1** while the live weights scored 70.48%), and an 80-epoch Imagenette run is 23,600
+-- steps = 2.4 τ at decay 0.9999 — squarely inside that regime.
+--
+-- ⚠ Read this net's smoke as a DELTA, never an absolute. ViT's 80-epoch Imagenette result (71.31%)
+-- is the weakest of the five by a wide margin — the expected outcome for a ViT with no pretraining
+-- on 9,469 images, not a defect — so the gate is "the shadow tracks then exceeds the live
+-- weights", which is a comparison within one run.
+#eval IO.FS.writeFile "verified_mlir/vit_ema_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithful "vit_ema_train_step" "32.0" 1 32 10 0.1 (ema := true))
+
+-- ── The naming contract, pinned (§2d.1) ───────────────────────────────────────────────────────
+-- `vitAdamVariant` is the single description of ViT's variant spelling, and these `#guard`s are
+-- what tie it to the literal `funcName`s above — a rename on either side fails at `lake build`
+-- rather than at run time as an "entry mismatch". (The artifact paths must stay literals: the
+-- writer audit greps for the literal string `IO.FS.writeFile "verified_mlir/`.)
+#guard Proofs.StableHLO.vitAdamVariant 32 1 == "adam"
+#guard Proofs.StableHLO.vitAdamVariant 32 2 == "adamdp"
+#guard Proofs.StableHLO.vitAdamVariant 64 1 == "adam64"
+#guard Proofs.StableHLO.vitAdamVariant 64 2 == "adamdp64"
+#guard Proofs.StableHLO.vitAdamVariant 128 1 == "adam128"
+-- The two that break the "the number is the per-device batch" convention, encoded so the exception
+-- cannot be quietly re-broken: a 4-replica render reusing `adamdp` would give one artifact path two
+-- writers computing different graphs (§2a), and the failure mode is a silent clobber.
+#guard Proofs.StableHLO.vitAdamVariant 32 4 == "adamdp32x4"
+#guard Proofs.StableHLO.vitAdamVariant 128 4 == "adamdp128x4"
+-- The EMA peer. A distinct slug from the AdamW one is the point: the EMA render carries a FOURTH
+-- `[θ|m|v|ema]` region, so it and the AdamW render cannot share an artifact path, a checkpoint or a
+-- driver invocation. ⚠ The marker LEADS — `trainAdamSched` keys its 4-region layout off
+-- `variant.startsWith "ema"`, and on EfficientNet a *prefix* test on a two-axis name (`emarms`)
+-- already misclassified a variant once and would have initialised RMSProp's mean-square to 0.
+#guard Proofs.StableHLO.vitAdamVariant 32 1 true == "ema"

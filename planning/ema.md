@@ -81,8 +81,65 @@
 > tests now. **When one string encodes two independent axes, prefix tests stop working and fail
 > quietly.**
 >
-> ⚠ **Still not done**: ViT, EfficientNet's DP peer, and any long run. The 3-4 epoch smokes are
-> descent evidence, not accuracy numbers.
+> ### ✅ AND VIT, 2026-08-02 — the third and last EMA net. **The scorecard is 3 of 3.**
+>
+> `verified_mlir/vit_ema_train_step.mlir`, `LEAN_MLIR_VARIANT=ema`. Zero new ops, fourth time.
+> **807 in / 805 out** = 605/603 + 200 (the shadow) + 2 (`%emad`/`%oemad`). The cheapest of the
+> three exactly as scoped: LayerNorm ⇒ `hasBn` is false ⇒ the driver's whole `ema_bn` arm is
+> skipped rather than special-cased, so it is the parameter shadow alone. **The driver needed
+> nothing** — `nRegions`/`nScalars` and the size guard were already generic.
+>
+> | gate | result |
+> |---|---|
+> | gate 1 — all 12 committed `vit*`/`vitin*` artifacts re-render | **0 lines of diff** (writers FORCED via `lake env lean`) |
+> | ⭐ **`decay = 0` ⇒ shadow ≡ live weights** | **BIT-IDENTICAL, 0 of 5,526,346**, and non-vacuous (`m` non-zero on all 5,526,346, so a real step happened) |
+> | ⭐ **ratio known answer** `(ema@.05−θ)/(ema@.9999−θ) = d_A/d_B = 0.5` | **5.96e-5** norm-rel |
+> | **control** — no warmup correction (predicted 0.050005) | **8.999**, i.e. **150,995×** the tie |
+> | **control 0** — θ and `m` bit-identical across the two decays | ✅ required, else the ratio compares two different θ trajectories |
+> | **checkpoint size guard** on a forged 3-region file | throws, rc=1, with the fix in the message |
+> | **residency**, 4 regions | **0 of 88,421,536 bytes**, floor 0, both controls fire (init 39,687,902 · staleness 54,590,705). Banner: `holds 800 parameter tensors` = 4×200 |
+> | ⭐ **shadow TRACKS THEN EXCEEDS**, 4 epochs | 42.37/50.65/54.34/**56.61%** vs live 40.64/42.93/48.41/**51.64%** — exceeds from **epoch 1**, never near chance (10%) |
+> | train loss vs the AdamW peer | **IDENTICAL to all six decimals, all four epochs** |
+>
+> **▶ The loss row is stronger than it looks and it is what makes the accuracy pair a CONTROL.**
+> ConvNeXt's peer losses were close but not equal (2.83/2.05/1.62/1.35 vs 2.89/2.05/1.61/1.37);
+> ViT's are *identical* — 2.102756 / 1.791624 / 1.658023 / 1.578948 on both sides — across two
+> different HLO programs (805 outputs vs 603). So the shadow-vs-live comparison is one θ trajectory
+> read two ways, not two runs that merely look similar, and the EMA op provably perturbs nothing.
+>
+> ### ⚠⚠ THE RATIO GATE NEEDED ITS INSTRUMENT CONDITIONED FIRST, and that is the reusable part
+>
+> The gate measures `ema₁ − θ₁ = d₀·(θ₀ − θ₁)`, i.e. a difference of two nearly-equal f32 numbers.
+> At ViT's **step 1** the warmup LR is `3e-4/(5·295) ≈ 2e-7`, which puts `ema − θ` at roughly **one
+> ULP of θ** — so the first run of this gate read **1.96e-2** and its control only **455×** away.
+> Nothing was wrong with the render; the instrument could not resolve the quantity. Re-run at
+> `LEAN_MLIR_BASE_LR_U=100000` (a knob added here, the `r34-mom-tie` move) the conditioning goes
+> **1.4e-5 → 3.6e-2** median and the same gate reads **5.96e-5** against a **150,995×** control.
+>
+> ⚠ ConvNeXt did not hit this because its baseLR is 1e-3 with a 3-epoch warmup against ViT's 3e-4
+> with 5 — a **50× larger** step 1. **A gate ported between nets inherits the source net's
+> conditioning, not the target's.** §2j's rule in a fourth place: check the instrument can resolve
+> the thing you are measuring before reading the answer off it.
+>
+> **The residue is cancellation, not a wrong formula, and it is measured rather than asserted:**
+> bucketed by `|ema−θ|/|θ|` the median ratio is **0.500000000 in every bucket** while the max
+> deviation tracks conditioning decade for decade — 2.06e-6 / 1.60e-5 / 8.25e-5. A wrong formula
+> would be uniform across buckets (§2f-bis: fp conditioning is LOCAL, a different function GLOBAL).
+>
+> ⚠ **An `ema` run on Imagenette is a GATE VEHICLE, not a matched pair.** `vitTinyConfig` (this
+> trainer's reference) sets **no EMA at all**; 0.99996 is `vitTinyImagenetConfig`'s DeiT value, and
+> it is carried as the knob's default so a future ImageNet pair wants no edit. Do not describe the
+> 4-epoch numbers as a reference comparison — and read them as a delta, since ViT's 80-epoch
+> Imagenette result (71.31%) is the weakest of the five.
+>
+> ⚠ **The predicate check, run rather than assumed** (the `emarms` lesson): all seven ViT AdamW
+> spellings read `rmsprop=F, emaOn=F` ⇒ 3 regions; `ema`/`emadp` read `F/T` ⇒ 4; and `emarms` still
+> reads BOTH. ViT is AdamW-only so there is no second axis today — if one is ever added, make both
+> predicates substring tests first.
+>
+> ⚠ **Still not done**: ViT's and EfficientNet's DP peers (`emadp` — `vitAdamVariant 32 2 true`
+> names it, nothing renders it), and any long run. The 3-4 epoch smokes are descent evidence, not
+> accuracy numbers.
 >
 > The scoping below is kept as written; the measurement calibrates against it.
 
