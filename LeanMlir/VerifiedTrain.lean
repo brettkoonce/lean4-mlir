@@ -259,6 +259,33 @@ def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
     acc := acc ++ chunk
   pure acc
 
+/-- Resolve a net's generated shim to a path on disk, or `none`. The candidate list is
+    `spawnShim`'s, factored out so the two callers cannot disagree about WHICH file they are
+    reading — one of them decides the wire, the other spawns it. -/
+def resolveShimScript (shimScript : String) : IO (Option System.FilePath) := do
+  let candidates : List System.FilePath := match ← IO.getEnv "SHIM_SCRIPT" with
+    | some p => [p]
+    | none   => if shimScript.isEmpty then []
+                else [s!"jax/.lake/build/{shimScript}", s!".lake/build/{shimScript}"]
+  candidates.findM? (fun p => System.FilePath.pathExists p)
+
+/-- ⭐ **The `SHIM_MIX` default a generated shim BAKES** — read out of the producer rather than
+    restated here. `""` when the shim cannot be found or declares nothing.
+
+    ⚠ This is the mixup-λ lesson one layer up (§0.4 finding 3): *recover a constant by READING it,
+    not by fitting or re-declaring it.* The alternative was a `useMixup` field on `VerifiedNet`
+    duplicating what `generateShim` already baked from the same config — a second definition of one
+    fact, which is the failure this repo keeps paying for. The shim text is the single source. -/
+def shimMixDefault (shimScript : String) : IO String := do
+  match ← resolveShimScript shimScript with
+  | none => pure ""
+  | some script => do
+    let txt ← IO.FS.readFile script
+    let key := "os.environ.get('SHIM_MIX', '"
+    match txt.splitOn key with
+    | _ :: rest :: _ => pure ((rest.splitOn "'").headD "")
+    | _              => pure ""
+
 /-- Spawn the shim for one split and consume its preamble.
 
     The preamble (`LMSH` | version | batch | flat) is checked rather than skipped: a batch or
@@ -328,14 +355,10 @@ $SHIM_PYTHON at it — a bare `python3` off PATH will not have tfds."
   -- At v2 pass nothing — the shim's baked default is that net's reference recipe, which is the
   -- state we want. ⚠ Announced rather than silent: dropping a declared augmentation without
   -- saying so is the same "matrix reads capability, not state" defect this whole thread fixes.
-  let mixDefault ←
-    if nclasses > 0 then pure "" else do
-      -- Read the producer rather than restate it (the mixup-λ lesson: recover, don't fit).
-      let txt ← IO.FS.readFile script
-      let key := "os.environ.get('SHIM_MIX', '"
-      match txt.splitOn key with
-      | _ :: rest :: _ => pure ((rest.splitOn "'").headD "")
-      | _              => pure ""
+  -- ⚠ ONE reader, shared with the trainer's soft-target decision (`shimMixDefault`). They must
+  -- agree: the trainer decides the WIRE from this value and this call site decides the
+  -- ANNOUNCEMENT, so two readings could announce one thing and stream another.
+  let mixDefault ← if nclasses > 0 then pure "" else shimMixDefault shimScript
   let mixEnv : Array (String × Option String) :=
     if nclasses > 0 then #[] else #[("SHIM_MIX", some "off")]
   if nclasses == 0 && split == "train" && mixDefault != "" && mixDefault != "off" then
@@ -1030,8 +1053,34 @@ it and its .epoch marker aside and start fresh."
   --
   -- No render change is required for any of this: the committed renders are AFFINE in `%onehot`
   -- (measured, `lake build soft-target-tie`), so a mixed target yields the mixed gradient.
-  let softTargets := (← IO.getEnv "SHIM_SOFT").isSome
+  -- ▶▶ **DEFAULT-ON as of 2026-08-03, for any net whose OWN shim declares mixing.** Until now
+  -- `SHIM_SOFT` had to be set by hand, so a plain ViT/ConvNeXt ImageNet run streamed
+  -- `SHIM_MIX=off` — i.e. trained WITHOUT the mixup/cutmix their references set — and merely
+  -- announced that it had. An opt-in flag for a reference feature is the "matrix reads capability,
+  -- not state" defect in the data path (§0.9 finding 3): the capability was there and no run used
+  -- it. The default now follows the net's config.
+  --
+  -- ⚠ Derived from the shim's BAKED default, not from a new field: `generateShim` already wrote
+  -- the config's `useMixup`/`useCutmix` into the script, and a `VerifiedNet.mixes` flag would be a
+  -- second definition of that one fact. `shimMixDefault` is the single reader, shared with
+  -- `spawnShim` so the wire and the announcement cannot disagree.
+  --
+  -- ⚠ `SHIM_SOFT=0` still forces wire v1 OFF — the escape hatch every gate needs, because several
+  -- of them (`*-dp-check`, the known-answer ties) want hard labels and a deterministic stream.
+  -- ⚠ Nets whose reference does NOT mix are untouched: R34, mnv2 and **EfficientNet** all bake
+  -- `off`, so this is inert for them. Turning it on there would move them AWAY from their
+  -- references, not toward them.
+  let mixDecl ← shimMixDefault net.shimScript
+  let declaresMix := mixDecl != "" && mixDecl != "off"
+  let softTargets := match ← IO.getEnv "SHIM_SOFT" with
+    | some v => v != "0" && v.toLower != "off" && v != "false"
+    | none   => declaresMix
   let shimNC := if softTargets then net.nClasses else 0
+  -- ⚠ ANNOUNCED, never silent — the whole point of the change is that the previous behaviour was
+  -- announced-but-off, and an unannounced on would be worse.
+  if declaresMix then
+    IO.println s!"  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX={mixDecl}; {if softTargets then "ON (wire v2, soft float32 targets — the reference recipe)"
+  else "OFF (SHIM_SOFT explicitly disabled)"}. ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step."
   let imgStreams : Array IO.FS.Handle ←
     if net.data == .imagenet then
       spawnShimSharded net.shimScript "train" gbs (3 * 224 * 224)

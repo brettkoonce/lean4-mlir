@@ -44,7 +44,20 @@ two renderers fails the BYTE tie loudly rather than propagating silently. That i
 
 ViT-Tiny: patch 16×16/s16 over 224² ⇒ **196 patch tokens, 197 with CLS**; `D = 192 = 3 heads × 64`;
 MLP 768; depth 12. -/
-private def vbB : Nat := 32          -- THE BATCH. The only number in this file that is one.
+-- ⚠⚠ **THE BATCH WAS A PRIVATE CONSTANT AND IS NOW A PARAMETER (2026-08-03).** It had to become
+-- one to render ViT's SHIPPING data-parallel artifact: an ImageNet run loads the DP render, and
+-- `vitin_adamdp128x4wxclip` carries no stochastic depth while `vitin_adamwxclipdrop` (batch 32,
+-- single-device) sits beside it unused. The DP peer must be at batch **128** to match
+-- `vitTinyImagenetConfig`, and 128 was not expressible while this was a `def`.
+--
+-- ⚠ It is threaded as a parameter NAMED `vbB` on purpose: all 134 uses in this file are function
+-- BODIES, and naming the parameter after the constant leaves every one of them byte-identical. The
+-- diff is signatures and call sites only, which is what makes the byte-identity gate below
+-- meaningful — at `vbB := 32` every committed artifact must re-render unchanged.
+--
+-- ⚠ ConvNeXt has the same shape (`cBS`, a private constant, 104 uses) and handoff §5 calls making
+-- it a parameter "the whole prerequisite" for the stronger split-identity gate. Same move, and it
+-- is cheap: the bodies do not move.
 private def vbTk : Nat := 196        -- patch tokens (the token axis is `vbTk + 1`)
 private def vbTok : Nat := 197       -- tokens including CLS
 private def vbD : Nat := 192         -- model dim
@@ -66,7 +79,7 @@ private def zKb {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 
     ⚠ `m := vbTok` is the TOKEN count PER EXAMPLE and `N := vbB` is the batch. Collapsing those two
     into one index is exactly the defect this file exists to remove. -/
-private def vlnFwdB (gName btName xin : String) : StateM Nat (String × String) := do
+private def vlnFwdB (vbB : Nat) (gName btName xin : String) : StateM Nat (String × String) := do
   let (c1, a) ← pretty vbB (.batchOp (N := vbB)
       (.lnRow (m := vbTok) (n := vbD) "%one" "%zero" vEPS 0 1 0)
       (.operand xin (zVb : Vec (vbB*(vbTok*vbD)))))
@@ -89,14 +102,14 @@ set_option maxRecDepth 8000 in
     `Qₖ·Kₖᵀ` — its own `Q` against its own `K`. A descriptor would hand every example operand 0's
     left factor, and a `den` reading the batched index as one big matrix would multiply the whole
     batch together; **both type-check and both emit the identical `dot_general`**. -/
-private def vBlockFwdB (pfx xin : String) (drop : Option Nat := none) :
+private def vBlockFwdB (vbB : Nat) (pfx xin : String) (drop : Option Nat := none) :
     StateM Nat (String × BSaves) := do
   -- `drop = some i` is the BLOCK index; the two mask ordinals are `vitSiteIdx i 0` (attention) and
   -- `vitSiteIdx i 1` (MLP). ⚠ They must be DIFFERENT inputs at the SAME keep — one mask per block
   -- halves the noise and no structural check sees it (`stochastic_depth.md` §6.3).
   let dpA := drop.map (fun i => dpName (vitSiteIdx i 0))
   let dpM := drop.map (fun i => dpName (vitSiteIdx i 1))
-  let (c1, ln1) ← vlnFwdB s!"%{pfx}g1" s!"%{pfx}bt1" xin
+  let (c1, ln1) ← vlnFwdB vbB s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let qkv := fun (w b : String) => pretty vbB (.batchOp (N := vbB)
       (.denseRow (N := vbTok) (a := vbD) (c := vbD) w b (zMb : Mat vbD vbD) (zVb : Vec vbD))
       (.operand ln1 (zVb : Vec (vbB*(vbTok*vbD)))))
@@ -152,7 +165,7 @@ private def vBlockFwdB (pfx xin : String) (drop : Option Nat := none) :
     | none   => pure ("", o)
   let (ch, hres) ← pretty vbB (.addVB (.operand xin (zVb : Vec (vbB*(vbTok*vbD))))
       (.operand oD (zVb : Vec (vbB*(vbTok*vbD)))))
-  let (c2, ln2) ← vlnFwdB s!"%{pfx}g2" s!"%{pfx}bt2" hres
+  let (c2, ln2) ← vlnFwdB vbB s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty vbB (.batchOp (N := vbB)
       (.denseRow (N := vbTok) (a := vbD) (c := vbM) s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
         (zMb : Mat vbD vbM) (zVb : Vec vbM))
@@ -181,7 +194,7 @@ set_option maxRecDepth 8000 in
     ⚠ Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := vbB` and
     the batch is an index of the AST rather than a number only `pretty` knows. That is the entire
     content of the move; the emitted text is unchanged, which the tie checks. -/
-def vitFwd12B (nClasses : Nat) (sd : Bool := false) : StateM Nat (String × FwdSaves) := do
+def vitFwd12B (vbB : Nat) (nClasses : Nat) (sd : Bool := false) : StateM Nat (String × FwdSaves) := do
   let (ce, embed) ← pretty vbB (.batchOp (N := vbB)
       (.patchEmbed (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD)
         "%wConv" "%bConv" "%cls" "%pos"
@@ -191,9 +204,9 @@ def vitFwd12B (nClasses : Nat) (sd : Bool := false) : StateM Nat (String × FwdS
   let mut cur := embed
   let mut blocks : Array BSaves := #[]
   for i in [0:vDEPTH] do
-    let (cb, sv) ← vBlockFwdB s!"b{i}_" cur (if sd then some i else none)
+    let (cb, sv) ← vBlockFwdB vbB s!"b{i}_" cur (if sd then some i else none)
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
-  let (cf, fl) ← vlnFwdB "%gF" "%btF" cur
+  let (cf, fl) ← vlnFwdB vbB "%gF" "%btF" cur
   -- ⚠ `(N := vbTk)` is the PATCH count (196), so the operand's token axis is 197 and the result is
   -- one `[192]` row per example. Passing the batch here instead type-checks and keeps example 0.
   let (cs, sl) ← pretty vbB (.batchOp (N := vbB) (.clsSlice (N := vbTk) (D := vbD))
@@ -210,8 +223,11 @@ set_option maxRecDepth 8000 in
     happen (§2a-quater). The writer lands with the swap, not before. -/
 def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10)
     -- ⚠ TRAILING, per §2m.
-    (sd : Bool := false) : String :=
-  let (body, sv) := (vitFwd12B nClasses sd).run' 0
+    (sd : Bool := false)
+    -- ⚠ `vbB` LAST and defaulted, so every existing positional call site is untouched and the
+    -- committed artifacts re-render byte-identically at 32. See the note on `vbB` above.
+    (vbB : Nat := 32) : String :=
+  let (body, sv) := (vitFwd12B vbB nClasses sd).run' 0
   let res := sv.logits
   let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
   let argSig := s!"%x: {ty [vbB, 3*224*224]}, %wConv: {ty [vbD,3,16,16]}, %bConv: {ty [vbD]}, " ++
@@ -248,7 +264,7 @@ end Proofs.StableHLO
 namespace Proofs.StableHLO
 
 /-- One **vector-LN backward** site, batched. Returns `(code, dxin, dγ, dβ)`. -/
-private def vlnBackB (gName btName xin dyOut : String) :
+private def vlnBackB (vbB : Nat) (gName btName xin dyOut : String) :
     StateM Nat (String × String × String × String) := do
   let (cb, nb) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
       (.operand dyOut (zVb : Vec (vbB*(vbTok*vbD)))))
@@ -269,7 +285,7 @@ set_option maxRecDepth 8000 in
     `dvs = smᵀ·dpv`, `dqs = dqk·ks`, `dkt = qsᵀ·dqk` — four matmuls, every one with BOTH operands
     per-example. A descriptor would pair example `k`'s cotangent with example 0's saved activation:
     it type-checks, it emits the identical `dot_general`, and it trains. -/
-private def vBlockBackB (pfx : String) (sv : BSaves) (dyOut : String) (drop : Option Nat := none) :
+private def vBlockBackB (vbB : Nat) (pfx : String) (sv : BSaves) (dyOut : String) (drop : Option Nat := none) :
     StateM Nat (String × String × List String) := do
   let p := pfx
   let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
@@ -302,7 +318,7 @@ private def vBlockBackB (pfx : String) (sv : BSaves) (dyOut : String) (drop : Op
       sv.ln2 zTok (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
   let (c7, nbfc1) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbM)
       (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
-  let (c8, dhresLn2, ng2, nbt2) ← vlnBackB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
+  let (c8, dhresLn2, ng2, nbt2) ← vlnBackB vbB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
   let (c9, dhres) ← pretty vbB (.addVB (.operand dyOut zTok) (.operand dhresLn2 zTok))
   -- ─ Attention sublayer back ─
   -- ▶ The ATTENTION branch's site, same shape: `hres = xin + s⊙o` ⇒ `do = s ⊙ dhres`, and the
@@ -376,7 +392,7 @@ private def vBlockBackB (pfx : String) (sv : BSaves) (dyOut : String) (drop : Op
   let (cV, dln1v, nWv, nbv) ← qkvBack s!"%{p}Wv" dvAcc
   let (cs1, dln1a) ← pretty vbB (.addVB (.operand dln1q zTok) (.operand dln1k zTok))
   let (cs2, dln1) ← pretty vbB (.addVB (.operand dln1a zTok) (.operand dln1v zTok))
-  let (cl1, dxinLn1, ng1, nbt1) ← vlnBackB s!"%{p}g1" s!"%{p}bt1" sv.xin dln1
+  let (cl1, dxinLn1, ng1, nbt1) ← vlnBackB vbB s!"%{p}g1" s!"%{p}bt1" sv.xin dln1
   let (cx, dxin) ← pretty vbB (.addVB (.operand dhres zTok) (.operand dxinLn1 zTok))
   let names := [ng1, nbt1, nWq, nbq, nWk, nbk, nWv, nbv, nWo, nbo, ng2, nbt2,
                 nWfc1, nbfc1, nWfc2, nbfc2]
@@ -387,9 +403,9 @@ set_option maxRecDepth 16000 in
     batched peer of `vitBackAll bs nClasses lrStr true (some …)`. Returns
     `(code, gradients-in-func-arg-order, softmaxSSA)`, the same shape, so the AdamW tail in
     `ViTRender.lean` can consume either. -/
-def vitBackAllB (nClasses : Nat) (smooth : Option (String × String × String) := none)
+def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String × String) := none)
     (sd : Bool := false) : StateM Nat (String × List String × String) := do
-    let (fwd, sv) ← vitFwd12B nClasses sd
+    let (fwd, sv) ← vitFwd12B vbB nClasses sd
     let zCls : Vec (vbB*nClasses) := fun _ => 0
     let (cSm, nSm) ← pretty vbB (.batchOp (N := vbB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := vbB) (.expe (n := nClasses)) (.operand sv.logits zCls)))
@@ -416,13 +432,13 @@ def vitBackAllB (nClasses : Nat) (smooth : Option (String × String × String) :
     let (cbc, nbc) ← pretty vbB (.biasGradB (N := vbB) (n := nClasses) (.operand nDy zCls))
     let (cPad, dfln) ← pretty vbB (.batchOp (N := vbB) (.clsPad (N := vbTk) (D := vbD))
         (.operand dcls (zVb : Vec (vbB*vbD))))
-    let (cFln, dflnIn, ngF, nbtF) ← vlnBackB "%gF" "%btF" sv.flnIn dfln
+    let (cFln, dflnIn, ngF, nbtF) ← vlnBackB vbB "%gF" "%btF" sv.flnIn dfln
     let mut code := fwd ++ cDy ++ cDc ++ cWc ++ cbc ++ cPad ++ cFln
     let mut dcur := dflnIn
     let mut blkNames : Array (List String) := #[]
     for j in [0:vDEPTH] do
       let i := vDEPTH - 1 - j
-      let (cb, dx, names) ← vBlockBackB s!"b{i}_" (sv.blocks[i]!) dcur (if sd then some i else none)
+      let (cb, dx, names) ← vBlockBackB vbB s!"b{i}_" (sv.blocks[i]!) dcur (if sd then some i else none)
       code := code ++ cb; dcur := dx; blkNames := blkNames.push names
     -- patch-embed params
     let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
@@ -466,7 +482,9 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
     (bStr : String := "32.0") (replicas : Nat := 1) (nClasses : Nat := 10)
     (alpha : Float := 0.1) (ema : Bool := false)
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
-    (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false) : String :=
+    (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false)
+    -- ⚠ LAST and defaulted, for `vitFwdRenderB`'s reason.
+    (vbB : Nat := 32) : String :=
   let alphaStr := fmt6 alpha
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   -- ⚠⚠ `sd` IS SPELLED ONCE AND REACHES BOTH HALVES FROM HERE — the traversal (which places the 24
@@ -474,7 +492,7 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
   -- signature). Letting a caller set them independently is the shape of defect this thread keeps
   -- finding; here there is nothing to keep in step.
   vitAdamTrainStepFaithful funcName bStr replicas vbB nClasses alpha ema wdExclude wdStr clip clipStr
-    (traversal := some (vitBackAllB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd))
+    (traversal := some (vitBackAllB vbB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd))
     (sd := sd)
 
 end Proofs.StableHLO
@@ -516,6 +534,25 @@ def vitDropFwdBanner : String :=
   (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamwxclipdrop_train_step" "32.0" 1 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true))
+-- ▶▶ **THE SHIPPING DATA-PARALLEL RENDER — the artifact an ImageNet run actually loads.**
+-- Found 2026-08-03 by listing what each artifact BAKES: `vitin_adamdp128x4wxclip` (201 all_reduce)
+-- declares **zero** `%dp<n>` mask inputs, while `vitin_adamwxclipdrop` (24 inputs, 0 all_reduce,
+-- batch 32) sat beside it unused. So a 4-replica ViT run trained with NO stochastic depth, silently
+-- — `vitTinyImagenetConfig` sets `dropPath 0.1`.
+--
+-- ⚠⚠ §0.5's DEFECT ON A NEW AXIS, and the same check found it: list what the artifact bakes rather
+-- than reading the recipe matrix, which said ✅ because the FEATURE existed at Imagenette scale and
+-- single-device. A matrix records a capability; only the artifact records the state.
+--
+-- ⚠ **Batch 128, and that is why `vbB` had to stop being a constant.** 128 × 4 replicas = global
+-- 512 = `vitTinyImagenetConfig.batchSize`, matching `vitin_adamdp128x4wxclip`'s geometry so the two
+-- are comparable. At batch 32 the step count would be 4× the reference's, which §2d.2 measured as
+-- the axis accuracy actually tracks — a render nobody should pair-run.
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4wxclipdrop_train_step" "128.0" 4 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128))
+
 #eval IO.FS.writeFile "verified_mlir/vitin_drop_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitin_drop_fwd" 1000 (sd := true))
 

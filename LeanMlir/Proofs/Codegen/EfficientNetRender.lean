@@ -1708,6 +1708,24 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/enetin_emarms64dropdo_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true) (sd := true) (cd := true))
+-- ▶▶ **THE SHIPPING DATA-PARALLEL RENDER — and it exists because an ImageNet run loads the DP
+-- artifact, not the single-device one.** Found 2026-08-03 by listing what each artifact BAKES:
+-- `enetin_emarmsdp64` (214 all_reduce) had NEITHER stochastic depth NOR classifier dropout, while
+-- `enetin_emarms64dropdo` (0 all_reduce, single-device) sat beside it unused. So a 4-replica
+-- EfficientNet run trained without the two regularisers its reference sets, silently.
+--
+-- ⚠⚠ THIS IS §0.5's DEFECT RECURRING ON A NEW AXIS. There the four ImageNet DP renders were three
+-- features behind their single-device peers (`wd` 500× off, no `wx`, no clip); here it is the
+-- regularisers. Same detection method, and it is the one that works: **list what the artifact
+-- bakes — do not read the recipe matrix**, which said ✅ on both rows because the FEATURE existed.
+-- The matrix records a capability; only the artifact records the state (§0.9 finding 3).
+--
+-- 4 replicas × batch 64 = global 256 = `efficientNetB0ImagenetConfig.batchSize`, matching
+-- `enetin_emarmsdp64`'s geometry exactly so the two are comparable.
+#eval IO.FS.writeFile "verified_mlir/enetin_emarmsdp64dropdo_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 4 false "enetin" .rmsprop (ema := true) (sd := true) (cd := true))
+
 #eval IO.FS.writeFile "verified_mlir/enetin_dropdo_fwd.mlir"
   (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "enetin_dropdo"
     (sd := true) (cd := true))
@@ -1720,6 +1738,9 @@ end Proofs.StableHLO
 -- full pairwise table; these three are the spellings this file commits to.
 #guard Proofs.StableHLO.enetAdamVariant 32 1 .adamw false false true == "adamdo"
 #guard Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop true true true == "emarms64dropdo"
+-- ⭐ The SHIPPING DP spelling. `rmsdp` (not `rms`) because replicas > 1, then the batch, then both
+-- regulariser markers — the artifact an ImageNet run at 4 replicas actually loads.
+#guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop true true true == "emarmsdp64dropdo"
 -- ⭐ The collision checks, in the driver's own predicate (`variant.splitOn "drop"`), stated as the
 -- two facts that would break if the marker were spelled `"dropout"`:
 --   a dropout-ONLY variant must NOT look like a stochastic-depth one …
