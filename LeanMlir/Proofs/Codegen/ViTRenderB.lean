@@ -205,3 +205,231 @@ def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10) : St
   body ++ s!"    return {res} : {ty [vbB, nClasses]}\n" ++ "  }\n}\n"
 
 end Proofs.StableHLO
+
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- § The BACKWARD at `N := B` — node-by-node reverse of `vBlockFwdB`/`vitFwd12B`
+-- ════════════════════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ **AdamW only, deliberately**, exactly as `ConvNeXtRenderB` is. The per-example traversal serves
+-- both renders off one `adam` flag; this one does not, because the SGD path bakes `lr` as a literal
+-- where AdamW takes it as a runtime `%lr` operand, and an SGD render at the batched index is not
+-- something any config asks for. Adding the flag later is cheap; adding an artifact nobody loads is
+-- §2a-quater's silent-hyperparameter hazard.
+--
+-- ⚠⚠ THREE OPS CHANGE THEIR `N` FROM 1 TO THE BATCH AND EMIT THE SAME TEXT. `denseBiasGradB`,
+-- `shiftB` and `divConstB` are written `(N := 1)` in the per-example render — the batch-unit
+-- convention §2b removed everywhere else. Their emits read the width off `n` and ignore `N`, so the
+-- text is identical either way; what changes is the DENOTATION, and for `denseBiasGradB` it changes
+-- from "sum one thing" to "sum the batch", which is what a shared parameter's gradient must be.
+-- That is the entire batched-index move in one line, and it is invisible to the byte tie.
+
+namespace Proofs.StableHLO
+
+/-- One **vector-LN backward** site, batched. Returns `(code, dxin, dγ, dβ)`. -/
+private def vlnBackB (gName btName xin dyOut : String) :
+    StateM Nat (String × String × String × String) := do
+  let (cb, nb) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
+      (.operand dyOut (zVb : Vec (vbB*(vbTok*vbD)))))
+  let (cg, ng) ← pretty vbB (.veclnGammaGradB (N := vbB) (R := vbTok) (D := vbD) xin vEPS 0
+      (zVb : Vec (vbB*(vbTok*vbD))) (.operand dyOut (zVb : Vec (vbB*(vbTok*vbD)))))
+  let (cs, da) ← pretty vbB (.batchOp (N := vbB)
+      (.rowScale (m := vbTok) (n := vbD) gName (zVb : Vec vbD))
+      (.operand dyOut (zVb : Vec (vbB*(vbTok*vbD)))))
+  let (cn, dx) ← pretty vbB (.lnRowBackB (N := vbB) (m := vbTok) (n := vbD) "%one" xin vEPS 0 1
+      (zVb : Vec (vbB*(vbTok*vbD))) (.operand da (zVb : Vec (vbB*(vbTok*vbD)))))
+  pure (cb ++ cg ++ cs ++ cn, dx, ng, nb)
+
+set_option maxRecDepth 8000 in
+/-- One **transformer block backward**, batched. Returns `(code, dxin, the 16 gradient SSAs in
+    `blkArgSig` order)`.
+
+    ⚠ The per-head SDPA backward is where `matmulFB` earns the increment: `dsm = dpv·vsᵀ`,
+    `dvs = smᵀ·dpv`, `dqs = dqk·ks`, `dkt = qsᵀ·dqk` — four matmuls, every one with BOTH operands
+    per-example. A descriptor would pair example `k`'s cotangent with example 0's saved activation:
+    it type-checks, it emits the identical `dot_general`, and it trains. -/
+private def vBlockBackB (pfx : String) (sv : BSaves) (dyOut : String) :
+    StateM Nat (String × String × List String) := do
+  let p := pfx
+  let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
+  -- ─ MLP sublayer back ─
+  let (c1, dg) ← pretty vbB (.batchOp (N := vbB)
+      (.denseRowBack (rows := vbTok) (a := vbM) (c := vbD) s!"%{p}Wfc2" (zMb : Mat vbM vbD))
+      (.operand dyOut zTok))
+  let (c2, nWfc2) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbM) (c := vbD)
+      sv.g (zVb : Vec (vbB*(vbTok*vbM))) (.operand dyOut zTok))
+  let (c3, nbfc2) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
+      (.operand dyOut zTok))
+  let (c4, df1) ← pretty vbB (.geluBackB sv.f1 (zVb : Vec (vbB*(vbTok*vbM)))
+      (.operand dg (zVb : Vec (vbB*(vbTok*vbM)))))
+  let (c5, dln2) ← pretty vbB (.batchOp (N := vbB)
+      (.denseRowBack (rows := vbTok) (a := vbD) (c := vbM) s!"%{p}Wfc1" (zMb : Mat vbD vbM))
+      (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
+  let (c6, nWfc1) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbM)
+      sv.ln2 zTok (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
+  let (c7, nbfc1) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbM)
+      (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
+  let (c8, dhresLn2, ng2, nbt2) ← vlnBackB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
+  let (c9, dhres) ← pretty vbB (.addVB (.operand dyOut zTok) (.operand dhresLn2 zTok))
+  -- ─ Attention sublayer back ─
+  let (c10, dacc) ← pretty vbB (.batchOp (N := vbB)
+      (.denseRowBack (rows := vbTok) (a := vbD) (c := vbD) s!"%{p}Wo" (zMb : Mat vbD vbD))
+      (.operand dhres zTok))
+  let (c11, nWo) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbD)
+      sv.att zTok (.operand dhres zTok))
+  let (c12, nbo) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
+      (.operand dhres zTok))
+  let mut code := c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++ c9 ++ c10 ++ c11 ++ c12
+  let mut dqAcc : String := ""; let mut dkAcc : String := ""; let mut dvAcc : String := ""
+  let zHd : Vec (vbB*(vbTok*vbHd)) := fun _ => 0
+  let zAtt : Vec (vbB*(vbTok*vbTok)) := fun _ => 0
+  let zHdT : Vec (vbB*(vbHd*vbTok)) := fun _ => 0
+  for hh in [0:vbH] do
+    let h : Fin vbH := ⟨hh % vbH, Nat.mod_lt _ (by decide)⟩
+    let (ca, dpv) ← pretty vbB (.batchOp (N := vbB)
+        (.headSlice (N := vbTok) (heads := vbH) (d := vbHd) h)
+        (.operand dacc (zVb : Vec (vbB*(vbTok*(vbH*vbHd))))))
+    let (cb, vsT) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbHd))
+        (.operand (sv.vss[hh]!) zHd))
+    let (cc, dsm) ← pretty vbB (.matmulFB (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok)
+        (.operand dpv zHd) (.operand vsT zHdT))
+    let (cd, smT) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbTok))
+        (.operand (sv.sms[hh]!) zAtt))
+    let (ce, dvs) ← pretty vbB (.matmulFB (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
+        (.operand smT zAtt) (.operand dpv zHd))
+    let (cf, dsc) ← pretty vbB (.softmaxRowBackB (N := vbB) (m := vbTok) (n := vbTok)
+        (sv.scs[hh]!) zAtt (.operand dsm zAtt))
+    let (cg2, dqk) ← pretty vbB (.scaleB (N := vbB) (n := vbTok*vbTok) vSCALE 0
+        (.operand dsc zAtt))
+    let (ch, dqs) ← pretty vbB (.matmulFB (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
+        (.operand dqk zAtt) (.operand (sv.kss[hh]!) zHd))
+    let (ci, qsT) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbHd))
+        (.operand (sv.qss[hh]!) zHd))
+    let (cj, dkt) ← pretty vbB (.matmulFB (N := vbB) (m := vbHd) (k := vbTok) (n := vbTok)
+        (.operand qsT zHdT) (.operand dqk zAtt))
+    let (ck, dks) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbHd) (n := vbTok))
+        (.operand dkt zHdT))
+    let hpad := fun (src : String) => pretty vbB (.batchOp (N := vbB)
+        (.headPad (N := vbTok) (heads := vbH) (d := vbHd) h) (.operand src zHd))
+    let (cl, dqH) ← hpad dqs
+    let (cm, dkH) ← hpad dks
+    let (cn, dvH) ← hpad dvs
+    code := code ++ ca ++ cb ++ cc ++ cd ++ ce ++ cf ++ cg2 ++ ch ++ ci ++ cj ++ ck ++ cl ++ cm ++ cn
+    if hh == 0 then
+      dqAcc := dqH; dkAcc := dkH; dvAcc := dvH
+    else
+      let (cq, dqs2) ← pretty vbB (.addVB (.operand dqAcc zTok) (.operand dqH zTok))
+      let (cr, dks2) ← pretty vbB (.addVB (.operand dkAcc zTok) (.operand dkH zTok))
+      let (cs, dvs2) ← pretty vbB (.addVB (.operand dvAcc zTok) (.operand dvH zTok))
+      code := code ++ cq ++ cr ++ cs; dqAcc := dqs2; dkAcc := dks2; dvAcc := dvs2
+  -- Q/K/V dense backward
+  let qkvBack := fun (w acc : String) => do
+    let (c1', dln) ← pretty vbB (.batchOp (N := vbB)
+        (.denseRowBack (rows := vbTok) (a := vbD) (c := vbD) w (zMb : Mat vbD vbD))
+        (.operand acc zTok))
+    let (c2', nW) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbD)
+        sv.ln1 zTok (.operand acc zTok))
+    let (c3', nb') ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
+        (.operand acc zTok))
+    pure (c1' ++ c2' ++ c3', dln, nW, nb')
+  let (cQ, dln1q, nWq, nbq) ← qkvBack s!"%{p}Wq" dqAcc
+  let (cK, dln1k, nWk, nbk) ← qkvBack s!"%{p}Wk" dkAcc
+  let (cV, dln1v, nWv, nbv) ← qkvBack s!"%{p}Wv" dvAcc
+  let (cs1, dln1a) ← pretty vbB (.addVB (.operand dln1q zTok) (.operand dln1k zTok))
+  let (cs2, dln1) ← pretty vbB (.addVB (.operand dln1a zTok) (.operand dln1v zTok))
+  let (cl1, dxinLn1, ng1, nbt1) ← vlnBackB s!"%{p}g1" s!"%{p}bt1" sv.xin dln1
+  let (cx, dxin) ← pretty vbB (.addVB (.operand dhres zTok) (.operand dxinLn1 zTok))
+  let names := [ng1, nbt1, nWq, nbq, nWk, nbk, nWv, nbv, nWo, nbo, ng2, nbt2,
+                nWfc1, nbfc1, nWfc2, nbfc2]
+  pure (code ++ cQ ++ cK ++ cV ++ cs1 ++ cs2 ++ cl1 ++ cx, dxin, names)
+
+set_option maxRecDepth 16000 in
+/-- **The whole-net batched traversal** — forward + cotangent + all 200 parameter gradients, the
+    batched peer of `vitBackAll bs nClasses lrStr true (some …)`. Returns
+    `(code, gradients-in-func-arg-order, softmaxSSA)`, the same shape, so the AdamW tail in
+    `ViTRender.lean` can consume either. -/
+def vitBackAllB (nClasses : Nat) (smooth : Option (String × String × String) := none) :
+    StateM Nat (String × List String × String) := do
+    let (fwd, sv) ← vitFwd12B nClasses
+    let zCls : Vec (vbB*nClasses) := fun _ => 0
+    let (cSm, nSm) ← pretty vbB (.batchOp (N := vbB) (.softmaxDiv (n := nClasses))
+        (.batchOp (N := vbB) (.expe (n := nClasses)) (.operand sv.logits zCls)))
+    let (cD0, nD0) ← pretty vbB (.subB (.operand nSm zCls) (.operand "%onehot" zCls))
+    let (cSmooth, nDy) ← match smooth with
+      | none => pure ("", nD0)
+      | some (aStr, negAK, bStr) => do
+          let (c1, n1) ← pretty vbB (.scaleB (N := vbB) (n := nClasses) aStr 0
+              (.operand "%onehot" zCls))
+          let (c2, n2) ← pretty vbB (.addVB (.operand nD0 zCls) (.operand n1 zCls))
+          -- ⚠ `N := vbB` where the per-example render writes `N := 1`. Same emitted text (the
+          -- emitter reads `n`), different denotation — and here the denotation was already right,
+          -- because both are POINTWISE. It is `denseBiasGradB` below where the change bites.
+          let (c3, n3) ← pretty vbB (.shiftB (N := vbB) (n := nClasses) negAK 0 (.operand n2 zCls))
+          let (c4, n4) ← pretty vbB (.divConstB (N := vbB) (n := nClasses) bStr 0
+              (.operand n3 zCls))
+          pure (c1 ++ c2 ++ c3 ++ c4, n4)
+    let cDy := cSm ++ cD0 ++ cSmooth
+    -- head
+    let (cDc, dcls) ← pretty vbB (.batchOp (N := vbB)
+        (.dotOut (m := vbD) (n := nClasses) "%Wc" (zMb : Mat vbD nClasses)) (.operand nDy zCls))
+    let (cWc, nWc) ← pretty vbB (.weightGradB (N := vbB) (m := vbD) (n := nClasses) sv.clsTok
+        (zVb : Vec (vbB*vbD)) (.operand nDy zCls))
+    let (cbc, nbc) ← pretty vbB (.biasGradB (N := vbB) (n := nClasses) (.operand nDy zCls))
+    let (cPad, dfln) ← pretty vbB (.batchOp (N := vbB) (.clsPad (N := vbTk) (D := vbD))
+        (.operand dcls (zVb : Vec (vbB*vbD))))
+    let (cFln, dflnIn, ngF, nbtF) ← vlnBackB "%gF" "%btF" sv.flnIn dfln
+    let mut code := fwd ++ cDy ++ cDc ++ cWc ++ cbc ++ cPad ++ cFln
+    let mut dcur := dflnIn
+    let mut blkNames : Array (List String) := #[]
+    for j in [0:vDEPTH] do
+      let i := vDEPTH - 1 - j
+      let (cb, dx, names) ← vBlockBackB s!"b{i}_" (sv.blocks[i]!) dcur
+      code := code ++ cb; dcur := dx; blkNames := blkNames.push names
+    -- patch-embed params
+    let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
+    let (cwC, nwConv) ← pretty vbB (.patchEmbedWeightGradB (N := vbB) (ic := 3) (H := 224) (W := 224)
+        (P := 16) (tk := vbTk) (D := vbD) "%ximg" (zVb : Vec (vbB*(3*224*224)))
+        (.operand dcur zTok))
+    let (cbC, nbConv) ← pretty vbB (.patchEmbedBiasGradB (N := vbB) (tk := vbTk) (c := vbD)
+        (.operand dcur zTok))
+    let (cClSl, dclsRow) ← pretty vbB (.batchOp (N := vbB) (.clsSlice (N := vbTk) (D := vbD))
+        (.operand dcur zTok))
+    -- ⚠⚠ THE ONE LINE WHERE `N := 1 → N := vbB` CHANGES THE FUNCTION. The CLS token is ONE shared
+    -- `[192]` parameter, so its gradient is the sum of every example's CLS-row cotangent. The
+    -- per-example render writes `(N := 1)` and gets "sum one thing" — correct there, because
+    -- `pretty B` was doing the batch lift outside the AST. Here the AST owns the batch, so the sum
+    -- must be over it. Same emitted text either way (the emit reduces the `B` axis); the byte tie
+    -- cannot see this and `den_rowDenseBiasGradB_at_one`'s argument is why.
+    let (cCl, ncls) ← pretty vbB (.denseBiasGradB (N := vbB) (c := vbD)
+        (.operand dclsRow (zVb : Vec (vbB*vbD))))
+    let (cPo, npos) ← pretty vbB (.posEmbedGradB (N := vbB) (tk := vbTk) (D := vbD)
+        (.operand dcur zTok))
+    let blkOutOrdered := (List.range vDEPTH).flatMap (fun i => blkNames[vDEPTH - 1 - i]!)
+    pure (code ++ cwC ++ cbC ++ cClSl ++ cCl ++ cPo,
+          [nwConv, nbConv, ncls, npos] ++ blkOutOrdered ++ [ngF, nbtF, nWc, nbc], nSm)
+
+end Proofs.StableHLO
+
+namespace Proofs.StableHLO
+
+set_option maxRecDepth 16000 in
+/-- **The ViT-Tiny AdamW train step at the batched index.** ⚠ It is the SAME renderer the
+    per-example path uses — `vitAdamTrainStepFaithful` with `traversal` pointed at `vitBackAllB` —
+    not a copy.
+
+    That is possible because the AdamW tail is entirely **parameter-space**: `adamMNextF`,
+    `adamVNextF`, `adamWParamF`, `gradSumSqAccF` and `clipScaleF` are indexed by the parameter's own
+    size and never see the batch. So "the AdamW tail at the batched index" is no work at all — the
+    batch had already been factored out of it by the ops' own shapes, and the only thing that moves
+    is which traversal produced the gradients. ConvNeXt's increment 7 found the same and it
+    generalises: the optimizer is where the batch has already been summed away. -/
+def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
+    (bStr : String := "32.0") (replicas : Nat := 1) (nClasses : Nat := 10)
+    (alpha : Float := 0.1) (ema : Bool := false)
+    (wdExclude : Bool := false) (wdStr : String := "0.0001")
+    (clip : Bool := false) (clipStr : String := "1.0") : String :=
+  let alphaStr := fmt6 alpha
+  let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
+  vitAdamTrainStepFaithful funcName bStr replicas vbB nClasses alpha ema wdExclude wdStr clip clipStr
+    (traversal := some (vitBackAllB nClasses (some (alphaStr, negAlphaKStr, bStr))))
+
+end Proofs.StableHLO

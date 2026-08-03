@@ -300,7 +300,10 @@ private def blkRetTys : List String :=
     and, in func-arg order, one SSA per parameter — the **updated param** at `adam := false`, the
     **un-fused gradient** at `adam := true`. One traversal, two tails: the alternative was a second
     copy of the depth-12 backward, which is the double-writer disease one level down. -/
-private def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
+-- ⚠ NOT `private`: `ViTRenderB`'s tie compares against this traversal directly. Comparing
+-- against the rendered ARTIFACT instead would fold the AdamW tail into the diff and lose the
+-- gradient-LIST check, which is the one a string diff cannot make.
+def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) :
     StateM Nat (String × List String × String) := do
     let (fwd, sv) ← vitFwd12 bs nClasses
@@ -635,7 +638,15 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     (bStr : String := "32.0") (replicas : Nat := 1) (bs : Nat := 32)
     (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false)
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
-    (clip : Bool := false) (clipStr : String := "1.0") : String :=
+    (clip : Bool := false) (clipStr : String := "1.0")
+    -- ⚠ Which TRAVERSAL to render. `none` = this file's per-example `vitBackAll`, i.e. every
+    -- existing call site unchanged. `ViTRenderB` passes its batched peer here rather than copying
+    -- the AdamW tail, because the tail is PARAMETER-space — `adamMNextF`, `adamWParamF`,
+    -- `gradSumSqAccF`, `clipScaleF` are all indexed by the param's own size and never see the batch
+    -- — so a second copy would be the double-writer disease for no gain at all. ConvNeXt's
+    -- increment 7 measured exactly this and found the tail was FREE.
+    -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument.
+    (traversal : Option (StateM Nat (String × List String × String)) := none) : String :=
   -- ⚠ α and K are the ONLY knobs; every emitted smoothing constant is derived from them here.
   -- Passing the cotangent's `−α/K` as a separate string (which is what this took until
   -- 2026-07-31) is the same two-writers-for-one-fact shape §2a spent a thread removing: the two
@@ -643,7 +654,8 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
   let alphaStr := fmt6 alpha
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   let go : StateM Nat String := do
-    let (code, gradNames, nSm) ← vitBackAll bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr))
+    let (code, gradNames, nSm) ←
+      traversal.getD (vitBackAll bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr)))
     -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`, `recipe_gaps.md` v1.4b) — the
     -- reference's `gn = sqrt(sum(jnp.sum(g*g) for g in tree.leaves(grads)))` then
     -- `g * min(1, CLIP/(gn + 1e-6))`, applied to ALL 200 gradients before the optimizer sees them.
