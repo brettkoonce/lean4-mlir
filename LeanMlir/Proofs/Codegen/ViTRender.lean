@@ -33,6 +33,67 @@ private def zVv {n : Nat} : Vec n := fun _ => 0
 private def zMm {a b : Nat} : Mat a b := fun _ _ => 0
 private def zKk {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 
+-- ════════════════════════════════════════════════════════════════
+-- ── ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`, handoff §0.2 ▶3) ───────────────────────
+-- ViT is the LAST net to get this, and it is the awkward shape of the three. `transformer_block`
+-- in the reference (`jax/Jax/Codegen.lean`) opens with
+--
+--     ka, km = jax.random.split(drop_key) if drop_key is not None else (None, None)
+--     …
+--     x = x + _drop_branch(mhsa(x2, …), ka, keep_prob)
+--     …
+--     x = x + _drop_branch(mm(h, w2.T) + b2m, km, keep_prob)
+--
+-- so **each block has TWO sites** — the attention branch and the MLP branch — which drop
+-- INDEPENDENTLY (two split sub-keys) but share ONE keep probability.
+--
+-- ⚠⚠ SITES ≠ RAMP INDEX, AND EMITTING ONE MASK PER *BLOCK* IS THE PLAUSIBLE MISTAKE.
+-- `stochastic_depth.md` §6.3 names it: one mask per block instead of one per site halves the noise
+-- (the two branches would drop together instead of independently) and is **invisible in every
+-- structural check** — same site count in the emitted text, same arity if the count is right, same
+-- keeps, same everything but the randomness. So the site index is `2·i + branch` while the RAMP
+-- index stays the block index `i`, and `#guard`s below pin both.
+--
+-- ⚠ The ramp denominator is 11 = `totalDrop − 1` where `totalDrop` is the ENCODER's block count
+-- (`emitForward` sums every `transformerEncoder`'s `nBlocks`), so `keep_i = 1 − dropPath·i/11`,
+-- block 0 keeping everything and block 11 keeping `1 − dropPath` exactly.
+--
+-- ⚠⚠ AND THE RESIDUAL ADD PUTS THE BRANCH SECOND ON THIS NET. `hres = addVB(xin, o)` emits
+-- `add %xin, %o`, where EfficientNet and ConvNeXt both emit `add %branch, %skip`. That is not a
+-- cosmetic difference: `scripts/misplace_drop_sites.py` matched only the branch-first shape and
+-- silently rewrote ZERO of ViT's sites — a control that quietly does nothing reads exactly like a
+-- control that ran. It handles both orders now and REFUSES at zero matches.
+
+/-- Total encoder blocks = the reference's `totalDrop`, i.e. the ramp DENOMINATOR is this minus 1. -/
+def vitDropTotal : Nat := vDEPTH
+
+/-- **Two sites per block** — the attention branch and the MLP branch, dropping independently. -/
+def vitDropSites : Nat := 2 * vitDropTotal
+
+/-- **The mask-input ordinal of block `i`'s branch `br`** (`br = 0` attention, `1` MLP). The single
+    source for the numbering: the forward walks blocks upward, the backward downward, and both call
+    this. ⚠ Distinct from the RAMP index, which is `i` for BOTH branches. -/
+def vitSiteIdx (i br : Nat) : Nat := 2 * i + br
+
+/-- The ramp index of a site ordinal — the inverse direction, used by the driver's keep table. -/
+def vitRampOf (site : Nat) : Nat := site / 2
+
+#guard vitDropTotal == 12
+#guard vitDropSites == 24
+-- The 24 (block, branch) pairs map onto `0 … 23` exactly once each.
+#guard ((List.range vDEPTH).flatMap (fun i => [vitSiteIdx i 0, vitSiteIdx i 1])) == List.range 24
+-- ⚠ Both branches of a block share ONE ramp index — that is what "sites ≠ ramp index" means, and
+-- it is the half a site-ordinal ramp would get wrong (24 evenly-spaced keeps instead of 12 pairs).
+#guard (List.range vDEPTH).all (fun i => vitRampOf (vitSiteIdx i 0) == i && vitRampOf (vitSiteIdx i 1) == i)
+-- …and the two sites of a block are DIFFERENT inputs, which is what stops them dropping together.
+#guard (List.range vDEPTH).all (fun i => vitSiteIdx i 0 != vitSiteIdx i 1)
+
+/-- The `%dp<i>: tensor<Bxf32>` inputs an SD ViT render appends to its signature — one per SITE, in
+    ordinal order, which is the order the driver's `dropScales` writes them into the blob. -/
+def vitDropSig (B : Nat) (sd : Bool) : String :=
+  if sd then String.join ((List.range vitDropSites).map (fun i => s!", {dpName i}: {ty [B]}"))
+  else ""
+
 -- ── node-by-node renderers (the computable ConvNeXt pattern: each `pretty` emits ONE op with
 --    `.operand <prevSSA> <zero-placeholder>`, threading SSA name strings; `vitBlockGraphMHV` is the
 --    composed-graph reference) ──
@@ -565,7 +626,8 @@ private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
     have initialised to 0 through a prefix test. ViT is AdamW-only, so there is no second axis here
     today; if one is ever added, make both predicates substring tests first. -/
 def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
-    (wdExclude : Bool := false) (clip : Bool := false) : String :=
+    (wdExclude : Bool := false) (clip : Bool := false)  (sd : Bool := false)
+    : String :=
   (if ema then "ema" else "adam")
     ++ (if replicas ≤ 1 then "" else "dp")
     ++ (if bs == 32 && replicas ≤ 2 then "" else toString bs)
@@ -587,6 +649,13 @@ def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
     -- needs no driver predicate: the clip changes no arity, no type and no region.
     ++ (if wdExclude then "wx" else "")
     ++ (if clip then "clip" else "")
+    -- ▶ `drop` = stochastic depth (`planning/stochastic_depth.md`), the 24 per-branch masks.
+    -- TRAILING, and it is the marker's NAME that matters rather than its position: `"sd"` collides
+    -- (`rms` ++ `dp` spells `rmsdp` ⊇ "sd"), a collision no placement avoids. ⚠ It must not LEAD
+    -- either — the driver keys its 4-region `[θ|m|v|ema]` blob off `variant.startsWith "ema"`.
+    -- ⚠ Unlike `wx` and `clip`, this flag changes the ARITY (24 extra inputs, 24 pass-through
+    -- outputs), so `tests/TestVariantPredicates.lean` runs every CONCATENATION.
+    ++ (if sd then "drop" else "")
 
 /-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4).
 
@@ -646,7 +715,13 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     -- — so a second copy would be the double-writer disease for no gain at all. ConvNeXt's
     -- increment 7 measured exactly this and found the tail was FREE.
     -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument.
-    (traversal : Option (StateM Nat (String × List String × String)) := none) : String :=
+    (traversal : Option (StateM Nat (String × List String × String)) := none)
+    -- ⚠ STOCHASTIC DEPTH is a signature/variant flag here and a site-placement flag in the
+    -- TRAVERSAL. `ViTRenderB` is the only caller that sets either and it spells `sd` once, passing
+    -- it to both. If they ever disagreed the failure is LOUD both ways: sites without inputs emit
+    -- an undeclared `%dp<i>` (the lowerer rejects it); inputs without sites leave an unused
+    -- argument (an arity mismatch at the driver). Neither is silent — the §2m property.
+    (sd : Bool := false) : String :=
   -- ⚠ α and K are the ONLY knobs; every emitted smoothing constant is derived from them here.
   -- Passing the cotangent's `−α/K` as a separate string (which is what this took until
   -- 2026-07-31) is the same two-writers-for-one-fact shape §2a spent a thread removing: the two
@@ -756,11 +831,17 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     -- is also exactly what the resident shim checks (inputs `[res_in, res_in+n)` and outputs
     -- `[res_out, res_out+n)` must agree tensor for tensor), which is why a 4th region needs no C
     -- change at all. `%emad`/`%oemad` ride through unread, as `%bc1`/`%bc2` already do.
+    -- ⚠⚠ THE DROP MASKS RIDE THROUGH AS OUTPUTS, unread, exactly as `%bc1`/`%bc2` do — because
+    -- the return layout must MIRROR the input layout tensor for tensor (`pbuf := out` is the
+    -- no-copy handover) and the shim's G4 guard counts both sides. EfficientNet's first attempt
+    -- omitted them and G4 refused the call before a single step ran. Loud, and the right way round.
+    let dpNames := if sd then (List.range vitDropSites).map dpName else []
+    let dpTys := if sd then (List.range vitDropSites).map (fun _ => ty [bs]) else []
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
-                     ++ (if ema then ["%emad", "%oemad"] else [])
+                     ++ (if ema then ["%emad", "%oemad"] else []) ++ dpNames
     let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
                      ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
+                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []) ++ dpTys
     pure <|
       (if replicas <= 1 then
         "    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──\n"
@@ -788,11 +869,15 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     (if ema then ", " ++ eSig else "") ++
     ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
     (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++
+    -- ⚠ The drop scales go LAST, after the scalars and before `%onehot`, matching the driver's blob
+    -- layout and `vitFwdRenderB`'s placement. Mid-list they capture an existing positional slot.
+    vitDropSig bs sd ++
     s!", %onehot: {ty [bs, nClasses]}"
   let pTy := (vitParamSig nClasses).map (fun (_, ds) => ty ds)
   let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
+    ++ (if sd then (List.range vitDropSites).map (fun _ => ty [bs]) else [])
   let body : String := go.run' 0
   "module @m {\n" ++
   s!"  func.func @{funcName}({argSig}) -> ({String.intercalate ", " retTys}) " ++ "{\n" ++

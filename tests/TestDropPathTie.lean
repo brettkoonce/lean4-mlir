@@ -1,6 +1,7 @@
 import LeanMlir.VerifiedNets
 import LeanMlir.Proofs.Codegen.EfficientNetRender
 import LeanMlir.Proofs.Codegen.ConvNeXtRenderB
+import LeanMlir.Proofs.Codegen.ViTRenderB
 
 /-! # Stochastic depth — the two gates that cover the op's INTERIOR
 
@@ -298,6 +299,21 @@ private structure DropNet where
   spec   : VerifiedNetSpec
   sites  : List Nat               -- the ramp index of each site, in signature order
   hasEval : Bool                  -- a frozen-stats `_fwd_eval` peer (BN nets only)
+  -- ⚠⚠ **B4 IS ARCHITECTURE-DEPENDENT AND ON ViT IT IS INVALID ON THE *CORRECT* RENDER.** B4 says
+  -- "with every site zeroed the net still depends on `x`", and on a CNN that holds: zeroing every
+  -- residual branch leaves a stack of identities with the stem and the head still reading the
+  -- image. On ViT it does NOT, and for a reason that has nothing to do with placement — **the
+  -- classifier reads only the CLS token**, and with all 24 branches dropped the blocks are
+  -- identities, so the CLS token never mixes with the patch tokens. The logits are constant in `x`
+  -- BY CONSTRUCTION. (Measured: rel 0.000000 on the correct render. They also collapse to exactly
+  -- zero, because this harness zero-inits `cls`/`pos` and β — a second, independent reason.)
+  --
+  -- So B4 is SKIPPED here rather than weakened, and the load on ViT falls on **B2's collapse check
+  -- and B3** — both of which do discriminate (measured: B2 |logits|max 3.52 correct vs 0.000000
+  -- misplaced; B3 rel 0.265 correct). ⚠ That is a genuinely weaker gate set than the CNNs get, and
+  -- saying so is the point: a gate ported between architectures inherits the SOURCE's structure,
+  -- not the target's — §0.4 finding 1 one axis over, on the architecture rather than the numerics.
+  b4Valid : Bool := true
 
 private def enetDropNet : DropNet :=
   { slug := "efficientnet", refFn := "efficientnet_fwd", spec := efficientnetVerified,
@@ -308,6 +324,14 @@ private def enetDropNet : DropNet :=
 private def cnxDropNet : DropNet :=
   { slug := "convnext", refFn := "convnext_fwd", spec := convnextVerified,
     sites := List.range cnxDropSites, hasEval := false }
+
+/-- ViT-Tiny. ⚠ **TWO sites per block**, so `sites` is 24 long where the net has 12 blocks — and
+    that is exactly what B3 is sharpest on here: zeroing the attention branch of block 0 must NOT
+    absorb the MLP branch of block 11, and under the misplacement it would. No `_fwd_eval` peer
+    (LayerNorm ⇒ train == eval). -/
+private def vitDropNet : DropNet :=
+  { slug := "vit", refFn := "vit_fwd", spec := vitVerified,
+    sites := List.range vitDropSites, hasEval := false, b4Valid := false }
 
 private def gateNet (dn : DropNet) (isEval : Bool) (cand : Option String) : IO Unit := do
   let fn   := if isEval then s!"{dn.slug}_drop_fwd_eval" else s!"{dn.slug}_drop_fwd"
@@ -425,6 +449,16 @@ the BLOCK OUTPUT rather than the residual branch: the activation is already iden
 upstream site, so no later mask can matter. The render claims `s ⊙ branch + x`.")
 
   -- ── B4: with every site zeroed the net must still depend on its input ──
+  if !dn.b4Valid then
+    IO.println s!"  ⚠ B4 SKIPPED on {spec.name}: with every residual branch dropped the blocks are \
+identities and the CLS-token classifier never mixes with the patch tokens, so the logits are \
+constant in x BY CONSTRUCTION — an architectural fact, not a placement one. B2's collapse check \
+and B3 carry the load here, and that is a weaker set than the CNNs get."
+    IO.println s!"✓ GATE B ({spec.name}): the ones mask is the identity ({e1}/{n} bit-exact against \
+the drop-free forward), the mask reaches site {k} without collapsing it (|logits|max {magZk}), and \
+an upstream zero does NOT absorb a downstream one (B3 {rel d3 m3}) — the last of which is \
+impossible if the scale sat on the block output"
+    return
   let allZero := (List.replicate sites.length (uniform bs 0.0)).toArray
   let yZ  ← runAt rA x  allZero
   let yZ2 ← runAt rA x2 allZero
@@ -459,7 +493,8 @@ B1 as a bound."
     | _ => none
   -- ⚠ Which net gate B drives. Default EfficientNet, so every committed invocation above is
   -- unchanged; `convnext` selects the batched-chain SD render (handoff §0.10).
-  let dn := if args.contains "convnext" then cnxDropNet else enetDropNet
+  let dn := if args.contains "convnext" then cnxDropNet
+            else if args.contains "vit" then vitDropNet else enetDropNet
   if doOp  then gateOp (args.contains "--break")
   if doNet then
     if isEval && !dn.hasEval then

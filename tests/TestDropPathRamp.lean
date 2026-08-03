@@ -1,6 +1,7 @@
 import LeanMlir.VerifiedNets
 import LeanMlir.Proofs.Codegen.EfficientNetRender
 import LeanMlir.Proofs.Codegen.ConvNeXtRenderB
+import LeanMlir.Proofs.Codegen.ViTRenderB
 
 /-! # The stochastic-depth ramp, pinned across the driver/renderer seam
 
@@ -86,6 +87,41 @@ private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
 -- renders — with the check that says so rather than the comment.
 #guard convnextImagenetVerified.dropKeeps == convnextVerified.dropKeeps
 
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+--  ▶ ViT-Tiny — a THIRD shape of the same seam, and the trap moves again
+--
+--  EfficientNet's hazard is the SITE ORDINAL (9 sites over 16 blocks). ConvNeXt's is the STAGE
+--  (one counter across four of them). ViT's is that **sites ≠ ramp index in the other direction**:
+--  24 sites over 12 blocks, TWO per block, both at the SAME keep. Deriving the ramp from the site
+--  ordinal gives 24 evenly-spaced keeps where the reference has 12 PAIRS — same site count, same
+--  arity, same emitted op count, different objective.
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+
+#guard vitVerified.dropKeeps.size == vitDropSites
+#guard vitDropSites == 2 * vitDropTotal
+
+-- ⭐ Every site's keep is the reference's ramp AT ITS BLOCK INDEX, read through the renderer's own
+-- `vitRampOf` rather than restated.
+#guard ((Array.range vitDropSites).zip vitVerified.dropKeeps).all
+         (fun (sIdx, k) => ((k - refKeep 0.1 (vitRampOf sIdx) vitDropTotal).abs) < 1e-9)
+
+-- ⚠ THE PAIRING, which is where the ViT-specific defect would show: the two branches of a block
+-- share one keep…
+#guard (List.range vitDropTotal).all (fun i =>
+         vitVerified.dropKeeps[vitSiteIdx i 0]! == vitVerified.dropKeeps[vitSiteIdx i 1]!)
+-- …and consecutive BLOCKS do not, or the check above is vacuous.
+#guard (List.range (vitDropTotal - 1)).all (fun i =>
+         vitVerified.dropKeeps[vitSiteIdx i 0]! != vitVerified.dropKeeps[vitSiteIdx (i+1) 0]!)
+-- ⚠ And the site-ordinal misreading must NOT agree with it: at site 2 the correct keep is block 1's,
+-- not site 2's.
+#guard (vitVerified.dropKeeps[2]! - refKeep 0.1 2 vitDropTotal).abs > 1e-3
+
+-- Block 0 keeps exactly 1.0; block 11 keeps exactly `1 - dropPath`.
+#guard vitVerified.dropKeeps[0]! == 1.0
+#guard (vitVerified.dropKeeps[23]! - 0.9).abs < 1e-9
+
+#guard vitImagenetVerified.dropKeeps == vitVerified.dropKeeps
+
 #eval do
   IO.println "── stochastic-depth ramp, driver vs renderer ──"
   IO.println "EfficientNet-B0:"
@@ -98,3 +134,9 @@ private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
       let i := cnxBlockIdx si j
       IO.println s!"  stage {si} block {j} → ramp {i}: keep {convnextVerified.dropKeeps[i]!}"
   IO.println s!"✓ {cnxDropSites} sites, denominator {cnxDropTotal - 1}, ramp agrees with the reference"
+  IO.println "ViT-Tiny:"
+  for i in [0:vitDropTotal] do
+    IO.println s!"  block {i}: sites {vitSiteIdx i 0}/{vitSiteIdx i 1} (attn/mlp) → keep \
+{vitVerified.dropKeeps[vitSiteIdx i 0]!}"
+  IO.println s!"✓ {vitDropSites} sites at {vitDropTotal} keeps, denominator {vitDropTotal - 1}, \
+two INDEPENDENT masks per block sharing one keep"

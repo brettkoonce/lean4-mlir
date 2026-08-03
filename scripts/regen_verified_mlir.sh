@@ -93,7 +93,12 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
          # transpose/reverse), all in the BACKWARD — so each pair is internally consistent and the
          # prefix property is unaffected by which chain produced it.
          ("convnext_drop_fwd.mlir", "convnext_adamdrop_train_step.mlir"),
-         ("cnxin_drop_fwd.mlir",    "cnxin_adamwxclipdrop_train_step.mlir")]
+         ("cnxin_drop_fwd.mlir",    "cnxin_adamwxclipdrop_train_step.mlir"),
+         # ViT's SD pair, on the batched chain (ViTRenderB). ⚠ Unlike ConvNeXt's, ViT's batched
+         # chain reproduces its committed artifacts byte-for-byte, so these are the same emitter
+         # the drop-free vit_fwd/vit_adam_train_step above come from — one renderer, two flags.
+         ("vit_drop_fwd.mlir",   "vit_adamdrop_train_step.mlir"),
+         ("vitin_drop_fwd.mlir", "vitin_adamwxclipdrop_train_step.mlir")]
 
 def body(lines, what):
     """The pretty(AST) body: everything from the first `%v0 = ` definition on.
@@ -220,7 +225,8 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "proofs" ]; then
     LeanMlir.Proofs.Codegen.EfficientNetRender \
     LeanMlir.Proofs.Codegen.ConvNeXtRender \
     LeanMlir.Proofs.Codegen.ConvNeXtRenderB \
-    LeanMlir.Proofs.Codegen.ViTRender
+    LeanMlir.Proofs.Codegen.ViTRender \
+    LeanMlir.Proofs.Codegen.ViTRenderB
   do
     echo "  lake build $m"
     lake build "$m"

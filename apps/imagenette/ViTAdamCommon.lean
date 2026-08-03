@@ -105,5 +105,33 @@ LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.0003
-  vitVerified.toNet.trainAdamSched { vitAdamConfig with batchSize := bs }
+  -- ▶ `drop*` variants select the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the
+  -- graph takes 24 extra `tensor<Bxf32>` inputs — TWO per block, the attention and MLP residual
+  -- branches dropping independently at one shared keep — carrying `bernoulli(keep_i)/keep_i` per
+  -- example, drawn on the host and seeded from the global step. ⚠ It is the ONE ViT render built on
+  -- the BATCHED chain (`ViTRenderB`); a per-example mask is not expressible at the per-example
+  -- index at all.
+  --
+  -- `LEAN_MLIR_DROP_RATE_U` is the rate in MICRO-units (`100000` = 0.1, the DeiT value and
+  -- `vitTinyImagenetConfig.dropPath`). Unset ⇒ the spec's ramp.
+  -- ⚠⚠ **`0` is meaningful and it is THE GATE**: every keep becomes 1.0, every supplied scale is
+  -- exactly 1.0, and each drop op is the identity in IEEE (`Proofs.dropPath_ones_id`), so `adamdrop`
+  -- must train bit-identically to plain `adam`. ⚠ But it is an ENDPOINT gate and endpoint gates are
+  -- structurally BLIND TO PLACEMENT — `1 ⊙ (branch + x) = branch + x` exactly, so a site on the
+  -- block OUTPUT passes it bit-for-bit. `scripts/misplace_drop_sites.py` is the control that makes a
+  -- green run mean anything, and on ViT it needed fixing first: the branch is the SECOND operand of
+  -- this net's residual add, which the script could not match.
+  let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
+    | some 0 => { vitVerified.toNet with
+                    dropKeeps := vitVerified.dropKeeps.map (fun _ => 1.0) }
+    | some u =>
+        -- Re-derive from the SPEC's own keeps so the site→block pairing stays the renderer's:
+        -- `i = (1 − keep)·11/0.1` recovers the BLOCK index the spec encoded, which is shared by
+        -- each site pair. Deriving it from the site ordinal would unpair them.
+        let rate := u.toFloat * 1e-6
+        { vitVerified.toNet with
+            dropKeeps := vitVerified.dropKeeps.map
+              (fun k => 1.0 - rate * ((1.0 - k) * 11.0 / 0.1) / 11.0) }
+    | none   => vitVerified.toNet
+  dropNet.trainAdamSched { vitAdamConfig with batchSize := bs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant 0.0 1.0 emaDecay

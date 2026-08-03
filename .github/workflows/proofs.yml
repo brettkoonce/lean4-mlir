@@ -160,6 +160,17 @@ jobs:
               verified_mlir/cnxin_drop_fwd.mlir \
 
             || { echo "::error::committed verified_mlir/{convnext,cnxin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
+          # ViT's SD renders, from ViTRenderB — the batched chain. ⚠ That chain reproduces ViT's
+          # committed drop-free artifacts byte-for-byte (unlike ConvNeXt's, which differs on 78
+          # conv-VJP lines), so these come from the same emitter as vit_fwd/vit_adam_train_step.
+          lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean
+          git diff --exit-code -- verified_mlir/vit_adamdrop_train_step.mlir \
+              verified_mlir/vit_adamdpdrop_train_step.mlir \
+              verified_mlir/vit_drop_fwd.mlir \
+              verified_mlir/vitin_adamwxclipdrop_train_step.mlir \
+              verified_mlir/vitin_drop_fwd.mlir \
+
+            || { echo "::error::committed verified_mlir/{vit,vitin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean)"; exit 1; }
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set
           # costs nothing extra (the `lake env lean` above already ran every writer) and is why ten

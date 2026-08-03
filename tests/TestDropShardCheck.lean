@@ -78,7 +78,8 @@ def main (argv : List String) : IO Unit := do
   -- NOT a cosmetic switch: see `nBnStats == 0` below, where the anti-vacuity half of the gate
   -- changes shape because an LN net has no replica-0-local batch statistics.
   let cnx  := argv.contains "convnext"
-  let spec := if cnx then convnextVerified else efficientnetVerified
+  let vit  := argv.contains "vit"
+  let spec := if cnx then convnextVerified else if vit then vitVerified else efficientnetVerified
   let net  := spec.toNet
   let bs   := 32
   let replicas := ((← IO.getEnv "DROP_REPLICAS").bind (·.toNat?)).getD 2
@@ -93,9 +94,13 @@ hold, so swap-invariance stops being a bit-exactness claim.")
     throw (IO.userError "the selected net has no drop sites — nothing to gate")
   -- ⚠ The path is still argv[0] when it is a path, so every committed invocation is unchanged; the
   -- `convnext` selector only moves the DEFAULT (and the spec above, which is what actually matters).
-  let dpPath := match argv.filter (fun a => a != "convnext") with
+  -- ⚠ Every SELECTOR must be filtered out here, not just the first one. `vit` was left in the list
+  -- when it was added and became argv[0] — i.e. the artifact PATH — so the run died opening a file
+  -- called "vit". Loud, but the shape of it is the §2m positional-argument hazard in argv form.
+  let dpPath := match argv.filter (fun a => a != "convnext" && a != "vit") with
     | p :: _ => p
     | []     => if cnx then "verified_mlir/convnext_adamdpdrop_train_step.mlir"
+                else if vit then "verified_mlir/vit_adamdpdrop_train_step.mlir"
                 else "verified_mlir/efficientnet_adamdpdrop_train_step.mlir"
   IO.println "stochastic-depth SHARD gate — duplicated batch, ASYMMETRIC mask, halves swapped"
   IO.println s!"  DP     : {dpPath} ({replicas} replicas × bs {bs} = global {gbs})"

@@ -89,7 +89,13 @@ set_option maxRecDepth 8000 in
     `Qₖ·Kₖᵀ` — its own `Q` against its own `K`. A descriptor would hand every example operand 0's
     left factor, and a `den` reading the batched index as one big matrix would multiply the whole
     batch together; **both type-check and both emit the identical `dot_general`**. -/
-private def vBlockFwdB (pfx xin : String) : StateM Nat (String × BSaves) := do
+private def vBlockFwdB (pfx xin : String) (drop : Option Nat := none) :
+    StateM Nat (String × BSaves) := do
+  -- `drop = some i` is the BLOCK index; the two mask ordinals are `vitSiteIdx i 0` (attention) and
+  -- `vitSiteIdx i 1` (MLP). ⚠ They must be DIFFERENT inputs at the SAME keep — one mask per block
+  -- halves the noise and no structural check sees it (`stochastic_depth.md` §6.3).
+  let dpA := drop.map (fun i => dpName (vitSiteIdx i 0))
+  let dpM := drop.map (fun i => dpName (vitSiteIdx i 1))
   let (c1, ln1) ← vlnFwdB s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let qkv := fun (w b : String) => pretty vbB (.batchOp (N := vbB)
       (.denseRow (N := vbTok) (a := vbD) (c := vbD) w b (zMb : Mat vbD vbD) (zVb : Vec vbD))
@@ -138,8 +144,14 @@ private def vBlockFwdB (pfx xin : String) : StateM Nat (String × BSaves) := do
       (.denseRow (N := vbTok) (a := vbD) (c := vbD) s!"%{pfx}Wo" s!"%{pfx}bo"
         (zMb : Mat vbD vbD) (zVb : Vec vbD))
       (.operand acc (zVb : Vec (vbB*(vbTok*vbD)))))
+  -- ▶ SITE 1 of 2: the ATTENTION branch, between the out-dense and the skip add. The reference's
+  -- `x = x + _drop_branch(mhsa(…), ka, keep_prob)` — the drop scales `mhsa`, never `x`.
+  let (cdA, oD) ← match dpA with
+    | some m => pretty vbB (.dropPathB (N := vbB) (n := vbTok*vbD) m (fun _ => 0 : Vec vbB)
+                              (.operand o (zVb : Vec (vbB*(vbTok*vbD)))))
+    | none   => pure ("", o)
   let (ch, hres) ← pretty vbB (.addVB (.operand xin (zVb : Vec (vbB*(vbTok*vbD))))
-      (.operand o (zVb : Vec (vbB*(vbTok*vbD)))))
+      (.operand oD (zVb : Vec (vbB*(vbTok*vbD)))))
   let (c2, ln2) ← vlnFwdB s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty vbB (.batchOp (N := vbB)
       (.denseRow (N := vbTok) (a := vbD) (c := vbM) s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
@@ -151,9 +163,14 @@ private def vBlockFwdB (pfx xin : String) : StateM Nat (String × BSaves) := do
       (.denseRow (N := vbTok) (a := vbM) (c := vbD) s!"%{pfx}Wfc2" s!"%{pfx}bfc2"
         (zMb : Mat vbM vbD) (zVb : Vec vbD))
       (.operand g (zVb : Vec (vbB*(vbTok*vbM)))))
+  -- ▶ SITE 2 of 2: the MLP branch, between fc2 and the skip add.
+  let (cdM, f2D) ← match dpM with
+    | some m => pretty vbB (.dropPathB (N := vbB) (n := vbTok*vbD) m (fun _ => 0 : Vec vbB)
+                              (.operand f2 (zVb : Vec (vbB*(vbTok*vbD)))))
+    | none   => pure ("", f2)
   let (cr, bout) ← pretty vbB (.addVB (.operand hres (zVb : Vec (vbB*(vbTok*vbD))))
-      (.operand f2 (zVb : Vec (vbB*(vbTok*vbD)))))
-  pure (code ++ co ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cr,
+      (.operand f2D (zVb : Vec (vbB*(vbTok*vbD)))))
+  pure (code ++ co ++ cdA ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cdM ++ cr,
     { xin, ln1, q, k, v, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
 
 set_option maxRecDepth 8000 in
@@ -164,7 +181,7 @@ set_option maxRecDepth 8000 in
     ⚠ Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := vbB` and
     the batch is an index of the AST rather than a number only `pretty` knows. That is the entire
     content of the move; the emitted text is unchanged, which the tie checks. -/
-def vitFwd12B (nClasses : Nat) : StateM Nat (String × FwdSaves) := do
+def vitFwd12B (nClasses : Nat) (sd : Bool := false) : StateM Nat (String × FwdSaves) := do
   let (ce, embed) ← pretty vbB (.batchOp (N := vbB)
       (.patchEmbed (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD)
         "%wConv" "%bConv" "%cls" "%pos"
@@ -174,7 +191,7 @@ def vitFwd12B (nClasses : Nat) : StateM Nat (String × FwdSaves) := do
   let mut cur := embed
   let mut blocks : Array BSaves := #[]
   for i in [0:vDEPTH] do
-    let (cb, sv) ← vBlockFwdB s!"b{i}_" cur
+    let (cb, sv) ← vBlockFwdB s!"b{i}_" cur (if sd then some i else none)
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
   let (cf, fl) ← vlnFwdB "%gF" "%btF" cur
   -- ⚠ `(N := vbTk)` is the PATCH count (196), so the operand's token axis is 197 and the result is
@@ -191,13 +208,18 @@ set_option maxRecDepth 8000 in
     same `%x`. Not written to `verified_mlir/`: it exists to be TIED against the committed
     per-example artifact, and an artifact nothing loads is a silent-hyperparameter hazard waiting to
     happen (§2a-quater). The writer lands with the swap, not before. -/
-def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10) : String :=
-  let (body, sv) := (vitFwd12B nClasses).run' 0
+def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10)
+    -- ⚠ TRAILING, per §2m.
+    (sd : Bool := false) : String :=
+  let (body, sv) := (vitFwd12B nClasses sd).run' 0
   let res := sv.logits
   let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
   let argSig := s!"%x: {ty [vbB, 3*224*224]}, %wConv: {ty [vbD,3,16,16]}, %bConv: {ty [vbD]}, " ++
     s!"%cls: {ty [vbD]}, %pos: {ty [vbTok,vbD]}, " ++ blkSigs ++
-    s!", %gF: {ty [vbD]}, %btF: {ty [vbD]}, %Wc: {ty [vbD,nClasses]}, %bc: {ty [nClasses]}"
+    s!", %gF: {ty [vbD]}, %btF: {ty [vbD]}, %Wc: {ty [vbD,nClasses]}, %bc: {ty [nClasses]}" ++
+    -- ⚠ The mask inputs go LAST, after every parameter, matching the train step and the driver's
+    -- blob layout. Mid-list they would capture an existing positional slot (§2m).
+    vitDropSig vbB sd
   "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [vbB, nClasses]} " ++ "{\n" ++
   "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
   "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -247,18 +269,30 @@ set_option maxRecDepth 8000 in
     `dvs = smᵀ·dpv`, `dqs = dqk·ks`, `dkt = qsᵀ·dqk` — four matmuls, every one with BOTH operands
     per-example. A descriptor would pair example `k`'s cotangent with example 0's saved activation:
     it type-checks, it emits the identical `dot_general`, and it trains. -/
-private def vBlockBackB (pfx : String) (sv : BSaves) (dyOut : String) :
+private def vBlockBackB (pfx : String) (sv : BSaves) (dyOut : String) (drop : Option Nat := none) :
     StateM Nat (String × String × List String) := do
   let p := pfx
   let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
+  let dpA := drop.map (fun i => dpName (vitSiteIdx i 0))
+  let dpM := drop.map (fun i => dpName (vitSiteIdx i 1))
   -- ─ MLP sublayer back ─
+  -- ▶ THE DROP'S BACKWARD IS THE SAME OP AT THE SAME MASK (`Proofs.dropPath_vjp_is_self`).
+  -- ⚠⚠ IT FEEDS **THREE** CONSUMERS AND THE SKIP FAN-IN MUST NOT BE ONE OF THEM. `bout = hres + s⊙f2`
+  -- ⇒ `df2 = s ⊙ dyOut` and `dhres ⊇ dyOut` RAW. All three of fc2's input-VJP, its weight gradient
+  -- and its bias gradient read the cotangent at the fc2 OUTPUT, so all three take the dropped one.
+  -- ConvNeXt's LayerScale-γ finding (one consumer) with the count multiplied: feeding any of them
+  -- the undropped cotangent type-checks, trains and descends.
+  let (cdM, dyD) ← match dpM with
+    | some m => pretty vbB (.dropPathB (N := vbB) (n := vbTok*vbD) m (fun _ => 0 : Vec vbB)
+                              (.operand dyOut zTok))
+    | none   => pure ("", dyOut)
   let (c1, dg) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowBack (rows := vbTok) (a := vbM) (c := vbD) s!"%{p}Wfc2" (zMb : Mat vbM vbD))
-      (.operand dyOut zTok))
+      (.operand dyD zTok))
   let (c2, nWfc2) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbM) (c := vbD)
-      sv.g (zVb : Vec (vbB*(vbTok*vbM))) (.operand dyOut zTok))
+      sv.g (zVb : Vec (vbB*(vbTok*vbM))) (.operand dyD zTok))
   let (c3, nbfc2) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
-      (.operand dyOut zTok))
+      (.operand dyD zTok))
   let (c4, df1) ← pretty vbB (.geluBackB sv.f1 (zVb : Vec (vbB*(vbTok*vbM)))
       (.operand dg (zVb : Vec (vbB*(vbTok*vbM)))))
   let (c5, dln2) ← pretty vbB (.batchOp (N := vbB)
@@ -271,14 +305,20 @@ private def vBlockBackB (pfx : String) (sv : BSaves) (dyOut : String) :
   let (c8, dhresLn2, ng2, nbt2) ← vlnBackB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
   let (c9, dhres) ← pretty vbB (.addVB (.operand dyOut zTok) (.operand dhresLn2 zTok))
   -- ─ Attention sublayer back ─
+  -- ▶ The ATTENTION branch's site, same shape: `hres = xin + s⊙o` ⇒ `do = s ⊙ dhres`, and the
+  -- res₁ fan-in below keeps the RAW `dhres`.
+  let (cdA, dhD) ← match dpA with
+    | some m => pretty vbB (.dropPathB (N := vbB) (n := vbTok*vbD) m (fun _ => 0 : Vec vbB)
+                              (.operand dhres zTok))
+    | none   => pure ("", dhres)
   let (c10, dacc) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowBack (rows := vbTok) (a := vbD) (c := vbD) s!"%{p}Wo" (zMb : Mat vbD vbD))
-      (.operand dhres zTok))
+      (.operand dhD zTok))
   let (c11, nWo) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbD)
-      sv.att zTok (.operand dhres zTok))
+      sv.att zTok (.operand dhD zTok))
   let (c12, nbo) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
-      (.operand dhres zTok))
-  let mut code := c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++ c9 ++ c10 ++ c11 ++ c12
+      (.operand dhD zTok))
+  let mut code := cdM ++ c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++ c9 ++ cdA ++ c10 ++ c11 ++ c12
   let mut dqAcc : String := ""; let mut dkAcc : String := ""; let mut dvAcc : String := ""
   let zHd : Vec (vbB*(vbTok*vbHd)) := fun _ => 0
   let zAtt : Vec (vbB*(vbTok*vbTok)) := fun _ => 0
@@ -347,9 +387,9 @@ set_option maxRecDepth 16000 in
     batched peer of `vitBackAll bs nClasses lrStr true (some …)`. Returns
     `(code, gradients-in-func-arg-order, softmaxSSA)`, the same shape, so the AdamW tail in
     `ViTRender.lean` can consume either. -/
-def vitBackAllB (nClasses : Nat) (smooth : Option (String × String × String) := none) :
-    StateM Nat (String × List String × String) := do
-    let (fwd, sv) ← vitFwd12B nClasses
+def vitBackAllB (nClasses : Nat) (smooth : Option (String × String × String) := none)
+    (sd : Bool := false) : StateM Nat (String × List String × String) := do
+    let (fwd, sv) ← vitFwd12B nClasses sd
     let zCls : Vec (vbB*nClasses) := fun _ => 0
     let (cSm, nSm) ← pretty vbB (.batchOp (N := vbB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := vbB) (.expe (n := nClasses)) (.operand sv.logits zCls)))
@@ -382,7 +422,7 @@ def vitBackAllB (nClasses : Nat) (smooth : Option (String × String × String) :
     let mut blkNames : Array (List String) := #[]
     for j in [0:vDEPTH] do
       let i := vDEPTH - 1 - j
-      let (cb, dx, names) ← vBlockBackB s!"b{i}_" (sv.blocks[i]!) dcur
+      let (cb, dx, names) ← vBlockBackB s!"b{i}_" (sv.blocks[i]!) dcur (if sd then some i else none)
       code := code ++ cb; dcur := dx; blkNames := blkNames.push names
     -- patch-embed params
     let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
@@ -426,10 +466,71 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
     (bStr : String := "32.0") (replicas : Nat := 1) (nClasses : Nat := 10)
     (alpha : Float := 0.1) (ema : Bool := false)
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
-    (clip : Bool := false) (clipStr : String := "1.0") : String :=
+    (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false) : String :=
   let alphaStr := fmt6 alpha
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
+  -- ⚠⚠ `sd` IS SPELLED ONCE AND REACHES BOTH HALVES FROM HERE — the traversal (which places the 24
+  -- sites) and the wrapper (which declares the 24 inputs, the 24 pass-through outputs and the
+  -- signature). Letting a caller set them independently is the shape of defect this thread keeps
+  -- finding; here there is nothing to keep in step.
   vitAdamTrainStepFaithful funcName bStr replicas vbB nClasses alpha ema wdExclude wdStr clip clipStr
-    (traversal := some (vitBackAllB nClasses (some (alphaStr, negAlphaKStr, bStr))))
+    (traversal := some (vitBackAllB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd))
+    (sd := sd)
 
 end Proofs.StableHLO
+
+/-- The SD forward's banner. Its own, because these bytes ARE a different render and a banner
+    claiming otherwise is §0.9 finding 3 in the artifact itself. -/
+def vitDropFwdBanner : String :=
+  "    // ── ViT-Tiny forward at the BATCHED index N := B, with STOCHASTIC DEPTH ──\n"
+
+-- ════════════════════════════════════════════════════════════════
+-- § ▶ THE STOCHASTIC-DEPTH ARTIFACTS (`planning/stochastic_depth.md`, handoff §0.2 ▶3)
+-- ════════════════════════════════════════════════════════════════
+--
+-- ⚠ These are the only artifacts this file writes, and they are all NEW. Unlike ConvNeXt, ViT's
+-- drop-free batched chain is byte-identical to its committed artifacts, so the SWAP here would move
+-- nothing and needs no numeric licence — but it is still not made, because there is nothing to gain
+-- from it until something renders off the batched chain. These do.
+--
+-- ⚠ 24 sites, TWO per block, at 12 keeps: the reference splits one sub-key per residual branch
+-- (`ka, km = split(drop_key)`) and gives both the same `keep_prob`. One mask per BLOCK instead
+-- would halve the noise and pass every structural check (`stochastic_depth.md` §6.3).
+
+#eval IO.FS.writeFile "verified_mlir/vit_adamdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdrop_train_step" "32.0" 1 10 0.1
+    (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := false) (clipStr := "1.0")
+    (sd := true))
+
+-- Its prefix partner. ⚠ The SD variant gets its OWN forward rather than reusing `vit_fwd`: letting
+-- the SD trainer eval through the drop-free forward is what the reference literally does, but it
+-- would leave the SD train step with no `forward ⊂ train-step` partner at all — i.e. SPEND one of
+-- the two load-bearing structural gates in the repo rather than pay 24 dead multiplies at eval.
+#eval IO.FS.writeFile "verified_mlir/vit_drop_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vit_drop_fwd" 10 (sd := true))
+
+-- ⚠ BOTH SCALES and the DP peer, per §0.4 finding 5 and §0.5: a feature is not done when its
+-- Imagenette artifact renders, and an ImageNet run loads the DP render. `wx` ++ `clip` ++ `drop` at
+-- wd 0.05 is `vitTinyImagenetConfig`'s optimizer-and-regulariser set entire.
+#eval IO.FS.writeFile "verified_mlir/vitin_adamwxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamwxclipdrop_train_step" "32.0" 1 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true))
+#eval IO.FS.writeFile "verified_mlir/vitin_drop_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vitin_drop_fwd" 1000 (sd := true))
+
+-- The 2-replica peer, and the replica count is not a choice: `drop-shard-check`'s known answer is
+-- exact only at TWO (f32 addition is commutative; above two the collective is a tree and
+-- associativity does not hold).
+#eval IO.FS.writeFile "verified_mlir/vit_adamdpdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdpdrop_train_step" "32.0" 2 10 0.1
+    (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := false) (clipStr := "1.0")
+    (sd := true))
+
+-- ⚠ ViT takes `funcName` EXPLICITLY where ConvNeXt derives it from the variant, so the entry name
+-- and the artifact path are two writers for one fact here. These pin them against each other.
+#guard Proofs.StableHLO.vitAdamVariant 32 1 false false false true == "adamdrop"
+#guard Proofs.StableHLO.vitAdamVariant 32 2 false false false true == "adamdpdrop"
+#guard Proofs.StableHLO.vitAdamVariant 32 1 false true true true == "adamwxclipdrop"
+-- The marker must not LEAD: the driver keys its 4-region blob off `startsWith "ema"`.
+#guard (Proofs.StableHLO.vitAdamVariant 32 1 true false false true).startsWith "ema"

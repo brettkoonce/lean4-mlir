@@ -772,6 +772,17 @@ def vitVerified : VerifiedNetSpec where
     .layerNorm 192,               -- final LayerNorm (per-channel [192])
     .dense 192 10 ]               -- CLS-head 192→10
   blurb := "ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → IREE FFI → GPU"
+  -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*drop` variants.
+  -- ⚠⚠ **24 ENTRIES FOR 12 KEEPS, AND THE PAIRING IS THE CONTENT.** ViT drops each block's TWO
+  -- residual branches INDEPENDENTLY (`ka, km = jax.random.split(drop_key)`) but at the SAME keep
+  -- probability, so site `2i` and site `2i+1` share `keep_i = 1 - 0.1*i/11`. The driver needs one
+  -- entry per SITE because it draws one Bernoulli stream per mask INPUT; deriving 24 evenly-spaced
+  -- keeps from the site ordinal instead would be a different objective, and emitting ONE mask per
+  -- block would halve the noise. Neither is visible in any structural check
+  -- (`stochastic_depth.md` §6.3); `tests/TestDropPathRamp.lean` is what pins it.
+  -- ⚠ The denominator is 11 = 12 blocks - 1, and block 11 keeps exactly `1 - dropPath` — unlike
+  -- EfficientNet, whose deepest SITE is one ramp step short because its last block has no skip.
+  dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
 
 -- Derived layout (200 params) == the audited hand-list ViTLayout.specs.
 #guard vitVerified.toSpecs == ViTLayout.specs
@@ -829,6 +840,11 @@ def vitImagenetVerified : VerifiedNetSpec where
     .layerNorm 192,               -- final LayerNorm (per-channel [192])
     .dense 192 1000 ]             -- CLS-head 192→1000
   blurb := "ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  -- The ImageNet peer of `vitVerified.dropKeeps`. IDENTICAL — the ramp is a property of the
+  -- ARCHITECTURE (12 blocks, 2 sites each) and of `dropPath := 0.1`, neither of which moves with the
+  -- class count. ⚠ Here it IS a reference recipe item (`vitTinyImagenetConfig.dropPath`, the DeiT
+  -- value), where on Imagenette it is a gate vehicle.
+  dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
 
 -- The two ViT specs must differ in EXACTLY one parameter shape — the head. Anything else moving
 -- means the ImageNet spec drifted from the Imagenette one it is supposed to be the 1000-class twin

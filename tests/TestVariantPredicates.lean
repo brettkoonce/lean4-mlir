@@ -95,7 +95,12 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- ⚠ `adamdpwxclipdrop` is the shipping ImageNet spelling — `convNeXtTinyImagenetConfig` sets
     -- decay 0.05 + `wdExcludeNormBias` + `gradClipNorm` + `dropPath`, so it is all four at once.
   , ("adamwxclipdrop", false, false, true), ("adamdpwxclipdrop", false, false, true)
-  , ("adamdpdrop", false, false, true), ("emawxclipdrop", true, false, true) ]
+  , ("adamdpdrop", false, false, true), ("emawxclipdrop", true, false, true)
+    -- ▶ ViT's SD spellings. ViT's variant carries a BATCH suffix the other two do not
+    -- (`adam64`, `adam128`), so `drop` concatenates against a DIGIT here — a third ordering of the
+    -- same three markers, and the reason this table is run rather than reasoned about.
+  , ("adam128wxclipdrop", false, false, true), ("adamdp128x4drop", false, false, true)
+  , ("adam64drop", false, false, true) ]
 
 #guard table.all (fun (v, e, r, s) => emaOn v == e && rmsOn v == r && sdOn v == s)
 
