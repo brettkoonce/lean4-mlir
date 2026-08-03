@@ -65,7 +65,22 @@ namespace StableHLO
 -- heartbeat ceiling with every added op. The MobileNetV2 depthwise-SGD ops (the 4 `depthwise*Sgd`
 -- constructors) pushed several of these over the 200000 default; raise the file floor (the heavy
 -- `cnnBackGraph_faithful` keeps its own larger `2000000` bump below).
-set_option maxHeartbeats 1000000
+--
+-- ⚠ 2026-08-03, the batched-index move (§0.2 ▶2, increment 2): **1000000 → 4000000**. Adding
+-- `geluBackB` + `lnRowBackB` put NINE of the proofs below over the 1M floor at once, and it is a
+-- threshold effect rather than anything about these two ops — ONE new arm, shape-identical to the
+-- existing `swishBackB`, trips the same nine. Measured: 4× clears every one, whole-file elaboration
+-- 3m32s. ⚠ A `set_option … in` on each proof does NOT work here: the option does not attach across
+-- the declaration's doc comment, and the proofs still report the 1M ceiling. The file floor is the
+-- knob, which is what this comment's own history already said.
+--
+-- ⚠⚠ This REFINES §0.8's finding, it does not repeat it. There, two ops with NO `{n : Nat}` binder
+-- made unfolding `den` so much dearer that **4× did not help at any budget tried** and the fix was
+-- to remove arms. Here the arms are parametric, the per-arm cost is modest, and the budget IS the
+-- fix. The rule to carry forward: *parametric arms are affordable at a price; fixed-index arms are
+-- not affordable at all.* Anyone adding the ~11 remaining ViT/ConvNeXt forms should expect to move
+-- this number again, and should check `den`'s elaboration time before assuming it still scales.
+set_option maxHeartbeats 4000000
 
 -- ════════════════════════════════════════════════════════════════
 -- § Batched lift (EfficientNet) — per-example block-apply over N examples,
@@ -503,6 +518,15 @@ inductive SHlo : Nat → Type where
   -- linear map is its own transpose, so there is no `*Grad` peer to build or to keep in step.
   | dropPathB    {N n : Nat} (mName : String) (s : Vec N)        : SHlo (N*n) → SHlo (N*n)
   | swishBackB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
+  -- ── ViT / ConvNeXt's two saved-activation BACKWARDS (§0.2 ▶2, increment 2). These cannot be
+  --    `BatchableOp` descriptors and the reason is the descriptor rule itself: a descriptor's
+  --    `den` is `batchMap N (denOp op)`, ONE fixed function, which would hand example 0's saved
+  --    activation to all `N`. They take the whole-batch `x` instead — `geluBackB` pointwise (so
+  --    the VJP at width `N*n` already IS the batch-lift, `swishBackB`'s exact shape), `lnRowBackB`
+  --    via `batchMapAux` (so example `n` gets `batchSlice n x`).
+  | geluBackB    {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
+  | lnRowBackB   {N m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (N*(m*n)))
+      : SHlo (N*(m*n)) → SHlo (N*(m*n))
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   -- Chapter 8 (ConvNeXt): GELU forward (tanh approximation,
   -- `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via `stablehlo.tanh`) and its
@@ -1406,6 +1430,13 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .selectMidB _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
   | _, .dropPathB (N := N) (n := n) _ s e => Proofs.dropPath N n s (den e)
   | _, .swishBackB (N := N) (n := n) _ x e => (swish_has_vjp (N*n)).backward x (den e)
+  -- `gelu` is POINTWISE, so its VJP at the batched width `N*n` is already the batch-lift of the
+  -- per-example one — the same argument `swishBackB` rests on, and why neither needs `batchMapAux`.
+  | _, .geluBackB (N := N) (n := n) _ x e => (gelu_has_vjp (N*n)).backward x (den e)
+  -- LayerNorm's backward is NOT pointwise (it reduces within a row), so this one genuinely needs
+  -- the auxiliary lift: example `k` is handed `batchSlice k x`, never the whole `x`.
+  | _, .lnRowBackB (N := N) (m := m) (n := n) _ _ _ ε γ x e =>
+      batchMapAux N (rowLNBackFlat m n ε γ) x (den e)
   | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoid_has_vjp (N*n)).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
   | _, .geluBack (n := n) _ x e => (gelu_has_vjp n).backward x (den e)
@@ -1655,6 +1686,22 @@ theorem den_batchOp_gelu_eq_geluF {N n : Nat} (e : SHlo (N * n)) :
     den (.dropPathB mN s e) = Proofs.dropPath N n s (den e) := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.swishBackB xN x e) = (swish_has_vjp (N*n)).backward x (den e) := rfl
+@[simp] theorem den_geluBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.geluBackB xN x e) = (gelu_has_vjp (N*n)).backward x (den e) := rfl
+@[simp] theorem den_lnRowBackB {N m n : Nat} (gN xN es : String) (ε γ : ℝ)
+    (x : Vec (N*(m*n))) (e : SHlo (N*(m*n))) :
+    den (.lnRowBackB gN xN es ε γ x e) = batchMapAux N (rowLNBackFlat m n ε γ) x (den e) := rfl
+
+/-- **`lnRowBackB` hands each example its OWN saved activation** — the property that forced it to be
+    a constructor rather than a descriptor, stated so it can be cited instead of re-argued. Example
+    `k`'s output block is the per-example backward applied to `batchSlice k x`, never to the whole
+    `x` and never to example 0's. A descriptor would give the latter, silently: same types, same
+    emitted bytes, different function. -/
+theorem den_lnRowBackB_per_example {N m n : Nat} (gN xN es : String) (ε γ : ℝ)
+    (x : Vec (N*(m*n))) (e : SHlo (N*(m*n))) (k : Fin N) (i : Fin (m*n)) :
+    den (.lnRowBackB gN xN es ε γ x e) (finProdFinEquiv (k, i))
+      = rowLNBackFlat m n ε γ (batchSlice N (m*n) x k) (batchSlice N (m*n) (den e) k) i := by
+  simp [den_lnRowBackB, batchMapAux]
 @[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.sigmoidBackB xN x e) = (sigmoid_has_vjp (N*n)).backward x (den e) := rfl
 @[simp] theorem den_addVB {N n : Nat} (a b : SHlo (N*n)) :
@@ -3496,6 +3543,12 @@ def skel : {k : Nat} → SHlo k → Raw
   -- `convStridedWeightSgd` uses for `xN`/`lrS`, so the generic `.batched` tag needs no widening.
   | _, .dropPathB (N := N) (n := n) mN _ e => .batched "dropPathP" [mN] [N, n] (skel e)
   | _, .swishBackB (N := N) (n := n) xN _ e => .batched "swishBackP" [xN] [N, n] (skel e)
+  -- ⚠ Routed through the GENERIC `.batched` tag, like every batched op above — which is why these
+  -- cost five sites (ctor, den, the `rfl` theorem, this line, `emitTok`) and not §4's ten: `Raw`,
+  -- `Tok`, `toToks`, `parseStack` and the `parse_toToks` induction all already handle `.batched`.
+  | _, .geluBackB (N := N) (n := n) xN _ e => .batched "geluBackP" [xN] [N, n] (skel e)
+  | _, .lnRowBackB (N := N) (m := m) (n := n) gN xN es _ _ _ e =>
+      .batched "lnRowBackP" [gN, xN, es] [N, m, n] (skel e)
   | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
   | _, .addVB (N := N) (n := n) a b => .batched2 "addV" [] [N, n] (skel a) (skel b)
   | _, .subB (N := N) (n := n) a b  => .batched2 "sub" [] [N, n] (skel a) (skel b)
@@ -5440,6 +5493,75 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       --    instead of the SHlo index — which is the entire content of the batched-index move on
       --    the emit side. `tests/TestBatchedEmitTie.lean` ties each pair, so "byte-for-byte" is
       --    checked rather than intended.
+      | "geluBackP", [x], [_N, n] => do
+          -- byte-for-byte `.geluBack`'s emit, width from the descriptor's `n`.
+          let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+          let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+          let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
+          let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
+          let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
+          pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty [B,n]}\n" ++
+                s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty [B,n]}\n" ++
+                s!"    {ck} = stablehlo.constant dense<0.044715> : {ty [B,n]}\n" ++
+                s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty [B,n]}\n" ++
+                s!"    {inn} = stablehlo.add {x}, {kx3} : {ty [B,n]}\n" ++
+                s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty [B,n]}\n" ++
+                s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty [B,n]}\n" ++
+                s!"    {t} = stablehlo.tanh {u} : {ty [B,n]}\n" ++
+                s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
+                s!"    {opt} = stablehlo.add {one}, {t} : {ty [B,n]}\n" ++
+                s!"    {chalf} = stablehlo.constant dense<0.5> : {ty [B,n]}\n" ++
+                s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty [B,n]}\n" ++
+                s!"    {t2} = stablehlo.multiply {t}, {t} : {ty [B,n]}\n" ++
+                s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty [B,n]}\n" ++
+                s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty [B,n]}\n" ++
+                s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty [B,n]}\n" ++
+                s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty [B,n]}\n" ++
+                s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty [B,n]}\n" ++
+                s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty [B,n]}\n" ++
+                s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty [B,n]}\n" ++
+                s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty [B,n]}\n" ++
+                s!"    {gp} = stablehlo.add {term1}, {term2} : {ty [B,n]}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {gp} : {ty [B,n]}\n", o :: st)
+      | "lnRowBackP", [gN, xN, epsStr], [_N, m, n] => do
+          -- byte-for-byte `.lnRowBack`'s emit; `m` is rows PER EXAMPLE.
+          let dn ← fresh; let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
+          let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+          let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+          let xhat ← fresh; let gb ← fresh; let dxh ← fresh; let sdxr ← fresh; let sdx ← fresh
+          let xd ← fresh; let sxdr ← fresh; let sxd ← fresh; let t1 ← fresh; let i1 ← fresh
+          let xs ← fresh; let i2 ← fresh; let sN ← fresh; let o0 ← fresh; let o ← fresh
+          pure (
+            s!"    {dn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {xn} = stablehlo.reshape {xN} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
+            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
+            s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
+            s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+            s!"    {dxh} = stablehlo.multiply {gb}, {dn} : {ty [B,m,n]}\n" ++
+            s!"    {sdxr} = stablehlo.reduce({dxh} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+            s!"    {sdx} = stablehlo.broadcast_in_dim {sdxr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+            s!"    {xd} = stablehlo.multiply {xhat}, {dxh} : {ty [B,m,n]}\n" ++
+            s!"    {sxdr} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+            s!"    {sxd} = stablehlo.broadcast_in_dim {sxdr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+            s!"    {t1} = stablehlo.multiply {dxh}, {nf} : {ty [B,m,n]}\n" ++
+            s!"    {i1} = stablehlo.subtract {t1}, {sdx} : {ty [B,m,n]}\n" ++
+            s!"    {xs} = stablehlo.multiply {xhat}, {sxd} : {ty [B,m,n]}\n" ++
+            s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,m,n]}\n" ++
+            s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,m,n]}\n" ++
+            s!"    {o0} = stablehlo.multiply {sN}, {i2} : {ty [B,m,n]}\n" ++
+            s!"    {o} = stablehlo.reshape {o0} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
       | "gelu", [], [_N, n] => do
           let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
           let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh

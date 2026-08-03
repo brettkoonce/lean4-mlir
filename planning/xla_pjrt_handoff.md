@@ -204,10 +204,47 @@ yet, which is exactly what makes this increment safe to land on its own.
 control is worthless unless `lake build LeanMlir.Proofs.Codegen.StableHLO` runs between the edit and
 the test. Both runs above did.
 
-**Next increment**: ConvNeXt's remaining ~9 (`flatConvStride4`, `layerScaleCh` as descriptors;
-`lnRowBack`, `geluBack`, `layerScaleChGammaGrad`, `veclnGammaGrad`, `convStride4WeightGrad`,
-`rowDenseBiasGrad` as own ctors — all `batchMapAux`-shaped), then the renderer re-instantiation and
-the whole-net tie against the committed `convnext_adam_train_step.mlir`.
+##### ✅ INCREMENT 2 LANDED 2026-08-03 — the two saved-activation backwards, and a REVISED cost
+
+`geluBackB` · `lnRowBackB`, as their own `SHlo` constructors — **not** descriptors, and the reason
+is the descriptor rule itself: `den` is `batchMap N (denOp op)`, ONE fixed function, so a descriptor
+would hand example 0's saved activation to all `N`. `den_lnRowBackB_per_example` states that on the
+den side (example `k` gets `batchSlice k x`); the emit tie states it on the other. Tie **21 → 23**
+forms, control fires (`lnRowBackP` reading `dy` instead of the saved `x` — a defect no structural
+check sees) on `lnRowBack` and only `lnRowBack`, rc=1. Build 3,913 green, `verified_mlir/` 0 diff,
+3 new declarations 3-axiom (audit 1511 → 1512).
+
+⚠⚠ **AND THE PER-FORM COST IS LOWER THAN §0.2 SAID — an own ctor is FIVE sites, not §4's ten.**
+Measured, not recalled: `swishBackB`, `selectPosB`, `dropPathB`, `scaleB` and six others route
+`skel` through the **generic `.batched` Raw/Tok tag**, so `Raw`, `Tok`, `toToks`, `parseStack` and
+the `parse_toToks` induction case all already handle them. What a batched op costs is: constructor,
+`den`, the `rfl` theorem, one `skel` line, one `emitTok` case. §4's ten-site rule is for an op
+needing a NEW skeleton shape — which none of ViT's or ConvNeXt's remaining forms does, except
+possibly `matmulF` (two children). So the table above is right about the form counts and roughly 2×
+pessimistic about the sites.
+
+⚠⚠ **THE REAL COST IS SOMEWHERE ELSE, AND IT IS A THRESHOLD: `den`'s heartbeat budget.** Adding
+these two arms put **nine** unrelated `simp only [… den …]` proofs over the file's 1M floor at once
+— and it is not about these ops: **ONE new arm, shape-identical to the existing `swishBackB`, trips
+the same nine.** The file floor is now **4,000,000** (whole-file elaboration 3m32s), continuing a log
+its own header comment already keeps (the mnv2 depthwise-SGD ops did this at the 200000 default).
+
+* ⚠ **`set_option maxHeartbeats … in` per proof does NOT work here** — the option does not attach
+  across the declaration's doc comment, and the proofs still report the 1M ceiling. Measured, after
+  trying it on all nine. The file floor is the only knob.
+* ⚠⚠ **This REFINES §0.8's finding rather than repeating it.** There, two ops with no `{n : Nat}`
+  binder made `den` so much dearer that **4× did not help** and the fix was to *remove* arms. Here
+  the arms are parametric, the increment is modest, and the budget IS the fix. Carry forward:
+  *parametric arms are affordable at a price; fixed-index arms are not affordable at all.*
+* ⚠ **Anyone adding the ~11 remaining forms should expect to move that number again**, and should
+  measure `den`'s elaboration time rather than assume it still scales.
+
+**Next increment**: ConvNeXt's remaining ~9 — `flatConvStride4`, `layerScaleCh`, `expe`, `softmaxDiv`
+as descriptors; `layerScaleChGammaGrad`, `veclnGammaGrad`, `rowDenseBiasGrad`,
+`convStride4WeightGrad` as own ctors. ⚠ The last three CONTRACT the batch *and* the row axis
+(`SHlo (N*(m*n)) → SHlo n`), which is a two-level reduction no existing `*GradB` has — `denseBiasGradB`
+contracts one level. Check that shape before assuming the `*GradB` template copies. Then the
+renderer re-instantiation and the whole-net tie against the committed `convnext_adam_train_step.mlir`.
 
 ---
 

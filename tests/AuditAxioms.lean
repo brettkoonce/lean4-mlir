@@ -636,6 +636,10 @@ open Proofs
 -- needs. The emit half is `tests/TestBatchedEmitTie.lean`; neither half implies the other.
 #print axioms StableHLO.den_batchOp_lnRow_eq_lnRowF
 #print axioms StableHLO.den_batchOp_gelu_eq_geluF
+-- The saved-activation backwards, which CANNOT be descriptors: `lnRowBackB` hands example `k`
+-- `batchSlice k x` rather than the whole `x`, and a descriptor would silently give the latter —
+-- same types, same emitted bytes, different function. That is the statement being audited.
+#print axioms StableHLO.den_lnRowBackB_per_example
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
 -- R4 Stage A, Chapter 4 (CNN): conv + maxpool forward ops; the whole MNIST-CNN

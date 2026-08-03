@@ -138,6 +138,19 @@ private def cases : List (String × String × String) :=
      render (pretty BS (.rowBiasF (m := rows) (n := c) "%bt" zc (.operand "%x" zr))),
      render (pretty BS (.batchOp (N := BS) (.rowBias (m := rows) (n := c) "%bt" zc)
                           (.operand "%x" zrb))))
+  -- ── the two SAVED-ACTIVATION backwards (increment 2). Not descriptors, and the reason is the
+  --    descriptor rule itself: `batchMap N (denOp op)` is ONE fixed function, so a descriptor
+  --    would hand example 0's saved activation to all N. They take the whole-batch `x` instead —
+  --    `geluBackB` pointwise (`swishBackB`'s exact shape), `lnRowBackB` via `batchMapAux`.
+  --    `den_lnRowBackB_per_example` is the den-side statement of that; this is the emit side.
+  , ("geluBack",
+     render (pretty BS (.geluBack "%s" zv (.operand "%x" zv))),
+     render (pretty BS (.geluBackB "%s" zvb (.operand "%x" zvb))))
+  , ("lnRowBack",
+     render (pretty BS (.lnRowBack "%g" "%s" "1.0e-5" 0 1 (m := rows) (n := c) zr
+                          (.operand "%x" zr))),
+     render (pretty BS (.lnRowBackB (N := BS) (m := rows) (n := c) "%g" "%s" "1.0e-5" 0 1 zrb
+                          (.operand "%x" zrb))))
   ] ++
   -- ── step 3: max-pool + the conv bias param grads ──
   (let zp   : Vec (pc*(2*ph)*(2*ph)) := fun _ => 0
