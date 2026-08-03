@@ -640,6 +640,11 @@ open Proofs
 -- `batchSlice k x` rather than the whole `x`, and a descriptor would silently give the latter —
 -- same types, same emitted bytes, different function. That is the statement being audited.
 #print axioms StableHLO.den_lnRowBackB_per_example
+-- ⚠ The two statements the EMIT tie structurally cannot make, because both forms render identical
+-- bytes: the softmax denominator is example `k`'s own sum rather than the batch's total, and the
+-- batched bias gradient's two-level contraction collapses to its per-example peer at N = 1.
+#print axioms StableHLO.den_batchOp_softmaxDiv_per_example
+#print axioms StableHLO.den_rowDenseBiasGradB_at_one
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
 -- R4 Stage A, Chapter 4 (CNN): conv + maxpool forward ops; the whole MNIST-CNN

@@ -239,12 +239,49 @@ its own header comment already keeps (the mnv2 depthwise-SGD ops did this at the
 * ⚠ **Anyone adding the ~11 remaining forms should expect to move that number again**, and should
   measure `den`'s elaboration time rather than assume it still scales.
 
-**Next increment**: ConvNeXt's remaining ~9 — `flatConvStride4`, `layerScaleCh`, `expe`, `softmaxDiv`
-as descriptors; `layerScaleChGammaGrad`, `veclnGammaGrad`, `rowDenseBiasGrad`,
-`convStride4WeightGrad` as own ctors. ⚠ The last three CONTRACT the batch *and* the row axis
-(`SHlo (N*(m*n)) → SHlo n`), which is a two-level reduction no existing `*GradB` has — `denseBiasGradB`
-contracts one level. Check that shape before assuming the `*GradB` template copies. Then the
-renderer re-instantiation and the whole-net tie against the committed `convnext_adam_train_step.mlir`.
+##### ✅ INCREMENT 3 LANDED 2026-08-03 — **ConvNeXt's op set is COMPLETE**; what is left is the swap
+
+The remaining nine: `convStride4`, `layerScaleCh`, `expe`, `softmaxDiv` as descriptors;
+`convStride4WeightGradB`, `layerScaleChGammaGradB`, `veclnGammaGradB`, `rowDenseBiasGradB` as own
+ctors (plus increment 2's two). Tie **23 → 31** forms; control fires (`layerScaleChP` broadcasting γ
+on axis 2 instead of 1 — same op count, types and line count) on `layerScaleCh` and only it, rc=1.
+Build **3,913** green, `verified_mlir/` 0 diff, 7 new declarations 3-axiom (audit 1512 → 1514).
+
+**Three findings, and the first two are why the site estimate keeps falling:**
+
+1. ⚠⚠ **THE FOUR BATCH-CONTRACTING GRADIENTS NEEDED NO NEW EMIT AT ALL — they alias their
+   per-example peer's `Raw`.** Their emitted MLIR *already* contracts the batch axis
+   (`layerScaleChGammaGrad` reduces `dimensions = [0, 2, 3]`, `rowDenseBiasGrad` `[0, 1]`), because
+   values flow as `tensor<B, …>` and `B` is `pretty`'s, never the SHlo index. So the batched form
+   emits the same text **by construction** rather than by a copied body, and the two cannot drift.
+   It was the `den` that was per-example. The file already used this for the depthwise bias grads;
+   it generalises. ⚠ Note what is dropped: the batch `N` does **not** ride in `info` — the emitter
+   never used it, and passing it would add a number meaning nothing at the emit and everything at
+   the denotation, which is the exact conflation this thread removes.
+2. ⚠⚠ **`expe` AND `softmaxDiv` ARE DESCRIPTORS FOR OPPOSITE HALVES OF THE SAME DEFECT**, and the
+   pair is the cleanest statement of why both gates are mandatory. `expe`'s `den` was already
+   honest at the batched index (`Real.exp` pointwise *is* its own batch-lift) and only its **emit**
+   was wrong — it reads the width off the SHlo index and would emit `tensor<B×(N·n)>`, a type error.
+   `softmaxDiv` is the exact reverse: its **emit** already reduced over `dimensions = [1]`, i.e. per
+   example, while its `den` at index `N·n` reads `v j / ∑ k, v k` over all `N·n` coordinates —
+   **it divides by the whole batch's total**. One is a type error you cannot miss; the other is a
+   silent wrong answer that renders byte-for-byte identically and always would.
+   `den_batchOp_softmaxDiv_per_example` is the only thing that separates them.
+3. ⚠ **`chanIdx` had to move above `denOp`** — a 5-line definition, but it means `denOp` now depends
+   on it, so anything that reorders those two breaks the build rather than silently changing a
+   denotation. Cheap and worth knowing before the next form that needs a layout helper.
+
+⚠ **The two-level contraction predicted last increment was real** (`veclnGammaGradB`,
+`rowDenseBiasGradB`: `SHlo (N*(R*c)) → SHlo c`, an outer `Σ_n` over the batch and an inner `Σ_r`
+over rows, where the per-example peer has only the inner one). ⚠⚠ **And it is invisible at `N = 1`**
+— `den_rowDenseBiasGradB_at_one` says so: a render that dropped the batch sum type-checks, emits
+the same bytes, and agrees on a one-example batch. Any gate for it must run at `N > 1`.
+
+**Next**: ConvNeXt's renderer re-instantiation at `N := B`, then the whole-net tie against the
+committed `convnext_adam_train_step.mlir`. ⚠ That is where this thread stops being additive — every
+increment so far has held `verified_mlir/` at 0 diff, and the swap is the first one that changes
+committed bytes. Expect §2b's shape: the graph structure identical, the *types* moving on every
+pointwise line. And ViT still needs its ~12 remaining forms plus the `matmulF` combinator.
 
 ---
 

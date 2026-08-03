@@ -151,7 +151,69 @@ private def cases : List (String × String × String) :=
                           (.operand "%x" zr))),
      render (pretty BS (.lnRowBackB (N := BS) (m := rows) (n := c) "%g" "%s" "1.0e-5" 0 1 zrb
                           (.operand "%x" zrb))))
+  -- ── increment 3: ConvNeXt's stem conv, LayerScale, and the loss-path softmax pair.
+  --    ⚠ `expe` and `softmaxDiv` are here for OPPOSITE halves of the §2b defect: `expe`'s den was
+  --    already honest at the batched index and only its EMIT read the width off the SHlo index;
+  --    `softmaxDiv`'s emit already reduced per example while its DEN would have divided by the
+  --    sum over the whole batch. This file can only see the first kind — the second is
+  --    `den_batchOp_softmaxDiv`'s job — which is the standing argument for gating both halves.
+  , ("expe",
+     render (pretty BS (.expe (.operand "%x" zv))),
+     render (pretty BS (.batchOp (N := BS) (.expe (n := n)) (.operand "%x" zvb))))
+  , ("softmaxDiv",
+     render (pretty BS (.softmaxDiv (.operand "%x" zv))),
+     render (pretty BS (.batchOp (N := BS) (.softmaxDiv (n := n)) (.operand "%x" zvb))))
+  , ("layerScaleCh",
+     render (pretty BS (.layerScaleChF (c := pc) (h := ph) (w := ph) "%g" zc2
+                          (.operand "%x" zq0))),
+     render (pretty BS (.batchOp (N := BS) (.layerScaleCh (c := pc) (h := ph) (w := ph) "%g" zc2)
+                          (.operand "%x" zq0b))))
   ] ++
+  -- ── the stem conv and the four batch-contracting PARAMETER gradients ──────────────────────────
+  --    ⚠⚠ The four gradients ALIAS their per-example peer's `Raw` (their emitted MLIR already
+  --    contracts the batch axis — `layerScaleChGammaGrad` reduces `dimensions = [0, 2, 3]`), so
+  --    these four rows are true BY CONSTRUCTION and cannot fail while that holds. They are here
+  --    anyway, and the reason is worth stating: if anyone later gives one of them its own tag —
+  --    the obvious "tidy-up" — the byte-identity stops being structural and starts being a claim,
+  --    and this is the row that would then carry it. A gate that is currently trivial but becomes
+  --    load-bearing on a foreseeable edit is worth its four lines.
+  (let zs4  : Vec (ic*(2*(2*ch))*(2*(2*ch))) := fun _ => 0
+   let zs4b : Vec (BS*(ic*(2*(2*ch))*(2*(2*ch)))) := fun _ => 0
+   let zoc  : Vec oc := fun _ => 0
+   let zk4  : Kernel4 oc ic kk kk := fun _ _ _ _ => 0
+   let zov  : Vec (oc*ch*ch) := fun _ => 0
+   let zovb : Vec (BS*(oc*ch*ch)) := fun _ => 0
+   let zq0  : Vec (pc*ph*ph) := fun _ => 0
+   let zq0b : Vec (BS*(pc*ph*ph)) := fun _ => 0
+   let zr   : Vec (rows*c) := fun _ => 0
+   let zrb  : Vec (BS*(rows*c)) := fun _ => 0
+   [ ("convStride4",
+      render (pretty BS (.flatConvStride4F (ic := ic) (oc := oc) (h := ch) (w := ch)
+                           (kH := kk) (kW := kk) "%W" "%b" zk4 zoc (.operand "%x" zs4))),
+      render (pretty BS (.batchOp (N := BS)
+                           (.convStride4 (ic := ic) (oc := oc) (h := ch) (w := ch)
+                              (kH := kk) (kW := kk) "%W" "%b" zk4 zoc)
+                           (.operand "%x" zs4b))))
+   , ("convStride4WeightGrad",
+      render (pretty BS (.convStride4WeightGrad (ic := ic) (oc := oc) (h := ch) (w := ch)
+                           (kH := kk) (kW := kk) "%x" zoc zs4 zk4 (.operand "%dy" zov))),
+      render (pretty BS (.convStride4WeightGradB (N := BS) (ic := ic) (oc := oc) (h := ch) (w := ch)
+                           (kH := kk) (kW := kk) "%x" zoc zs4b zk4 (.operand "%dy" zovb))))
+   , ("layerScaleChGammaGrad",
+      render (pretty BS (.layerScaleChGammaGrad (c := pc) (h := ph) (w := ph) "%x" zq0
+                           (.operand "%dy" zq0))),
+      render (pretty BS (.layerScaleChGammaGradB (N := BS) (c := pc) (h := ph) (w := ph) "%x" zq0b
+                           (.operand "%dy" zq0b))))
+   , ("veclnGammaGrad",
+      render (pretty BS (.veclnGammaGrad (N := rows) (D := c) "%x" "1.0e-5" 0 zr
+                           (.operand "%dy" zr))),
+      render (pretty BS (.veclnGammaGradB (N := BS) (R := rows) (D := c) "%x" "1.0e-5" 0 zrb
+                           (.operand "%dy" zrb))))
+   , ("rowDenseBiasGrad",
+      render (pretty BS (.rowDenseBiasGrad (N := rows) (c := c) (.operand "%dy" zr))),
+      render (pretty BS (.rowDenseBiasGradB (N := BS) (R := rows) (c := c)
+                           (.operand "%dy" zrb))))
+   ]) ++
   -- ── step 3: max-pool + the conv bias param grads ──
   (let zp   : Vec (pc*(2*ph)*(2*ph)) := fun _ => 0
    let zpb  : Vec (BS*(pc*(2*ph)*(2*ph))) := fun _ => 0

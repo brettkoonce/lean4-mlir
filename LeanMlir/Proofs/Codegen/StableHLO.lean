@@ -206,6 +206,20 @@ inductive BatchableOp : Nat → Nat → Type where
   --    per-example renderers make structurally.
   | gelu {n : Nat}                                          : BatchableOp n n
   | transpose {m n : Nat}                                   : BatchableOp (m*n) (n*m)
+  -- ── increment 3: ConvNeXt's stem conv, its LayerScale, and the loss-path softmax pair.
+  --    ⚠ `expe` and `softmaxDiv` are descriptors for OPPOSITE halves of the §2b defect, and the
+  --    contrast is worth keeping. `expe`'s `den` is already honest at the batched index
+  --    (`Real.exp` pointwise IS its own batch-lift) and only its EMIT is wrong there — it reads
+  --    the width off the SHlo index and would emit `tensor<B×(N·n)>`. `softmaxDiv` is the reverse:
+  --    its emit already reduces over `dimensions = [1]`, i.e. per example, while its `den`
+  --    (`v j / ∑ k, v k`) would divide by the sum over the WHOLE BATCH at index `N·n`. One of them
+  --    is a typing bug and the other a silent wrong answer; the descriptor fixes both the same way.
+  | convStride4 {ic oc h w kH kW : Nat} (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (bias : Vec oc)
+      : BatchableOp (ic*(2*(2*h))*(2*(2*w))) (oc*h*w)
+  | layerScaleCh {c h w : Nat} (γName : String) (γ : Vec c)  : BatchableOp (c*h*w) (c*h*w)
+  | expe {n : Nat}                                          : BatchableOp n n
+  | softmaxDiv {n : Nat}                                    : BatchableOp n n
   | lnRow {m n : Nat} (gName bName epsStr : String) (ε γ β : ℝ) : BatchableOp (m*n) (m*n)
   | rowScale {m n : Nat} (gName : String) (γ : Vec n)       : BatchableOp (m*n) (m*n)
   | rowBias {m n : Nat} (bName : String) (β : Vec n)        : BatchableOp (m*n) (m*n)
@@ -525,6 +539,19 @@ inductive SHlo : Nat → Type where
   --    the VJP at width `N*n` already IS the batch-lift, `swishBackB`'s exact shape), `lnRowBackB`
   --    via `batchMapAux` (so example `n` gets `batchSlice n x`).
   | geluBackB    {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
+  -- ── increment 3: the batch-contracting PARAMETER gradients (`Σ_n` over the batch, the shape
+  --    every `*GradB` takes). Two of them contract TWO levels — the batch AND the row axis —
+  --    which no existing `*GradB` does, because `denseBiasGradB` sits on a net where each example
+  --    is one row. ⚠ That is why the row count `R` is an explicit index here: reading `rowDense`'s
+  --    own `N` as the batch is precisely the confusion the batched index exists to prevent.
+  | convStride4WeightGradB {N ic oc h w kH kW : Nat} (xName : String)
+      (b : Vec oc) (x : Vec (N * (ic*(2*(2*h))*(2*(2*w))))) (W : Kernel4 oc ic kH kW)
+      : SHlo (N * (oc*h*w)) → SHlo (oc*ic*kH*kW)
+  | layerScaleChGammaGradB {N c h w : Nat} (xName : String) (x : Vec (N*(c*h*w)))
+      : SHlo (N*(c*h*w)) → SHlo c
+  | veclnGammaGradB {N R D : Nat} (xName epsStr : String) (ε : ℝ) (x : Vec (N*(R*D)))
+      : SHlo (N*(R*D)) → SHlo D
+  | rowDenseBiasGradB {N R c : Nat}                             : SHlo (N*(R*c)) → SHlo c
   | lnRowBackB   {N m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (N*(m*n)))
       : SHlo (N*(m*n)) → SHlo (N*(m*n))
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
@@ -1133,6 +1160,12 @@ noncomputable def rowScaleFlat (m n : Nat) (γ : Vec n) (v : Vec (m*n)) : Vec (m
 noncomputable def rowBiasFlat (m n : Nat) (β : Vec n) (v : Vec (m*n)) : Vec (m*n) :=
   Mat.flatten (fun r k => (Mat.unflatten v) r k + β k)
 
+/-- Channel index of a flat `c·h·w` position (the repo's left-assoc
+    `finProdFinEquiv` convention: `k ↔ ((chan, row), col)`). Used to expand a
+    per-channel parameter (`Vec c`) to the flat per-element map. -/
+def chanIdx (c h w : Nat) (k : Fin (c * h * w)) : Fin c :=
+  (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1
+
 /-- **The proven per-example forward of a `BatchableOp`** — exactly the existing
     batch-1 op (`flatConv`/`depthwiseFlat`/`dense`/`globalAvgPoolFlat`/`seBlockFull`/…).
     `SHlo.batchOp`'s `den` is `batchMap N (denOp op)`. -/
@@ -1157,6 +1190,13 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   -- which is what makes the batched node a `batchMap` of a proven map rather than a new function.
   | _, _, .gelu (n := n) => gelu n
   | _, _, .transpose (m := m) (n := n) => transposeFlat m n
+  | _, _, .convStride4 _ _ W bias => flatConvStride4 W bias
+  | _, _, .layerScaleCh (c := c) (h := h) (w := w) _ γ =>
+      fun v => layerScale (fun k => γ (chanIdx c h w k)) v
+  -- Per-EXAMPLE softmax: the denominator is that example's own sum, which is the whole point of
+  -- giving `softmaxDiv` a descriptor (see the constructor's note).
+  | _, _, .expe => fun v j => Real.exp (v j)
+  | _, _, .softmaxDiv => fun v j => v j / ∑ k, v k
   | _, _, .lnRow (m := m) (n := n) _ _ _ ε γ β => rowLNFlat m n ε γ β
   | _, _, .rowScale (m := m) (n := n) _ γ => rowScaleFlat m n γ
   | _, _, .rowBias (m := m) (n := n) _ β => rowBiasFlat m n β
@@ -1171,12 +1211,6 @@ noncomputable def bnBatchLA (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
     (fun y => y ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))
       (bnBatchTensor4 N oc h w ε γ β
         (v ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm))
-
-/-- Channel index of a flat `c·h·w` position (the repo's left-assoc
-    `finProdFinEquiv` convention: `k ↔ ((chan, row), col)`). Used to expand a
-    per-channel parameter (`Vec c`) to the flat per-element map. -/
-def chanIdx (c h w : Nat) (k : Fin (c * h * w)) : Fin c :=
-  (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1
 
 /-- Which BatchNorm a forward chain emits — the batched-index peer of `ResNet34Render.R34Bn`,
     shared by the EfficientNet and MobileNetV2 renders so one traversal can produce both the
@@ -1433,6 +1467,26 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   -- `gelu` is POINTWISE, so its VJP at the batched width `N*n` is already the batch-lift of the
   -- per-example one — the same argument `swishBackB` rests on, and why neither needs `batchMapAux`.
   | _, .geluBackB (N := N) (n := n) _ x e => (gelu_has_vjp (N*n)).backward x (den e)
+  -- The `Σ_n` shape, verbatim from `convWeightGradB`: a shared parameter's batched gradient is the
+  -- sum over examples of the per-example gradient on `batchSlice n`.
+  | _, .convStride4WeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
+      fun idx => ∑ n : Fin N,
+        (flatConvStride4_weight_grad_has_vjp b
+            (batchSlice N (ic*(2*(2*h))*(2*(2*w))) x n)).backward
+          (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
+  | _, .layerScaleChGammaGradB (N := N) (c := c) (h := h) (w := w) _ x e =>
+      fun cc => ∑ n : Fin N, ∑ k : Fin (c*h*w),
+        (if chanIdx c h w k = cc
+         then batchSlice N (c*h*w) x n k * batchSlice N (c*h*w) (den e) n k else 0)
+  -- ⚠ TWO-LEVEL: the outer `Σ_n` is the batch, the inner `Σ_r` the rows within one example. The
+  -- per-example peer has only the inner one, so a naive copy would silently drop the batch sum —
+  -- and the shapes would still check, because both spellings land in `Vec D`.
+  | _, .veclnGammaGradB (N := N) (R := R) (D := D) _ _ ε x e =>
+      fun k => ∑ n : Fin N, ∑ r : Fin R,
+        Mat.unflatten (batchSlice N (R*D) (den e) n) r k
+          * layerNormForward D ε 1 0 (Mat.unflatten (batchSlice N (R*D) x n) r) k
+  | _, .rowDenseBiasGradB (N := N) (R := R) (c := c) e =>
+      fun j => ∑ n : Fin N, ∑ r : Fin R, batchSlice R c (batchSlice N (R*c) (den e) n) r j
   -- LayerNorm's backward is NOT pointwise (it reduces within a row), so this one genuinely needs
   -- the auxiliary lift: example `k` is handed `batchSlice k x`, never the whole `x`.
   | _, .lnRowBackB (N := N) (m := m) (n := n) _ _ _ ε γ x e =>
@@ -1629,6 +1683,35 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
 --    function wearing a `tensor<Bxn>` type.
 @[simp] theorem den_batchOp_gelu {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.gelu (n := n)) e) = batchMap N (gelu n) (den e) := rfl
+@[simp] theorem den_batchOp_expe {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.expe (n := n)) e)
+      = batchMap N (fun v j => Real.exp (v j)) (den e) := rfl
+@[simp] theorem den_batchOp_softmaxDiv {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.softmaxDiv (n := n)) e)
+      = batchMap N (fun v j => v j / ∑ k, v k) (den e) := rfl
+@[simp] theorem den_batchOp_layerScaleCh {N c h w : Nat} (gN : String) (γ : Vec c)
+    (e : SHlo (N * (c*h*w))) :
+    den (.batchOp (N := N) (.layerScaleCh (c := c) (h := h) (w := w) gN γ) e)
+      = batchMap N (fun v => layerScale (fun k => γ (chanIdx c h w k)) v) (den e) := rfl
+@[simp] theorem den_batchOp_convStride4 {N ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (bias : Vec oc)
+    (e : SHlo (N * (ic*(2*(2*h))*(2*(2*w))))) :
+    den (.batchOp (N := N) (.convStride4 (h := h) (w := w) wN bN W bias) e)
+      = batchMap N (flatConvStride4 W bias) (den e) := rfl
+
+/-- **The softmax denominator is PER EXAMPLE — the property this descriptor exists for.** Example
+    `k`'s output divides by example `k`'s own sum, not by the sum over the whole batch.
+
+    ⚠ This is the half the emit tie structurally cannot see. `.softmaxDiv`'s emitted MLIR was
+    *already* per-example (it reduces over `dimensions = [1]` of `tensor<B,n>`), so the batched and
+    per-example forms render byte-for-byte identically and always would — while the descriptor-less
+    `den` at index `N·n` reads `v j / ∑ k, v k` over ALL `N·n` coordinates, i.e. it divides by the
+    batch's total. Same bytes, different function, and only this statement separates them. -/
+theorem den_batchOp_softmaxDiv_per_example {N n : Nat} (e : SHlo (N * n))
+    (k : Fin N) (j : Fin n) :
+    den (.batchOp (N := N) (.softmaxDiv (n := n)) e) (finProdFinEquiv (k, j))
+      = batchSlice N n (den e) k j / ∑ i, batchSlice N n (den e) k i := by
+  simp [den_batchOp_softmaxDiv, batchMap, batchSlice]
 @[simp] theorem den_batchOp_transpose {N m n : Nat} (e : SHlo (N * (m*n))) :
     den (.batchOp (N := N) (.transpose (m := m) (n := n)) e)
       = batchMap N (transposeFlat m n) (den e) := rfl
@@ -1688,6 +1771,18 @@ theorem den_batchOp_gelu_eq_geluF {N n : Nat} (e : SHlo (N * n)) :
     den (.swishBackB xN x e) = (swish_has_vjp (N*n)).backward x (den e) := rfl
 @[simp] theorem den_geluBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.geluBackB xN x e) = (gelu_has_vjp (N*n)).backward x (den e) := rfl
+@[simp] theorem den_rowDenseBiasGradB {N R c : Nat} (e : SHlo (N*(R*c))) :
+    den (.rowDenseBiasGradB (N := N) (R := R) (c := c) e)
+      = fun j => ∑ n : Fin N, ∑ r : Fin R, batchSlice R c (batchSlice N (R*c) (den e) n) r j := rfl
+
+/-- **The two-level contraction is real, and this is what would have been silently lost.** At
+    `N = 1` the batched bias gradient collapses to its per-example peer — so a render that dropped
+    the batch sum type-checks, emits the same bytes and agrees on a one-example batch. The gate
+    that catches it has to run at `N > 1`, which is why the emit tie alone is not enough here. -/
+theorem den_rowDenseBiasGradB_at_one {R c : Nat} (e : SHlo (1*(R*c))) (j : Fin c) :
+    den (.rowDenseBiasGradB (N := 1) (R := R) (c := c) e) j
+      = ∑ r : Fin R, batchSlice R c (batchSlice 1 (R*c) (den e) 0) r j := by
+  simp [den_rowDenseBiasGradB, Finset.sum_fin_eq_sum_range]
 @[simp] theorem den_lnRowBackB {N m n : Nat} (gN xN es : String) (ε γ : ℝ)
     (x : Vec (N*(m*n))) (e : SHlo (N*(m*n))) :
     den (.lnRowBackB gN xN es ε γ x e) = batchMapAux N (rowLNBackFlat m n ε γ) x (den e) := rfl
@@ -3482,6 +3577,11 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   -- precedent and `emitTok` splices both the same way. The alternative is a second string list.
   | .gelu (n := n) => ("gelu", [], [N, n])
   | .transpose (m := m) (n := n) => ("transposeP", [], [N, m, n])
+  | .convStride4 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
+      ("convStride4P", [wN, bN], [N, ic, oc, h, w, kH, kW])
+  | .layerScaleCh (c := c) (h := h) (w := w) gN _ => ("layerScaleChP", [gN], [N, c, h, w])
+  | .expe (n := n) => ("expeP", [], [N, n])
+  | .softmaxDiv (n := n) => ("softmaxDivP", [], [N, n])
   | .lnRow (m := m) (n := n) gN bN es _ _ _ => ("lnRowP", [gN, bN, es], [N, m, n])
   | .rowScale (m := m) (n := n) gN _ => ("rowScaleP", [gN], [N, m, n])
   | .rowBias (m := m) (n := n) bN _ => ("rowBiasP", [bN], [N, m, n])
@@ -3547,6 +3647,24 @@ def skel : {k : Nat} → SHlo k → Raw
   -- cost five sites (ctor, den, the `rfl` theorem, this line, `emitTok`) and not §4's ten: `Raw`,
   -- `Tok`, `toToks`, `parseStack` and the `parse_toToks` induction all already handle `.batched`.
   | _, .geluBackB (N := N) (n := n) xN _ e => .batched "geluBackP" [xN] [N, n] (skel e)
+  -- ⚠⚠ THESE FOUR ALIAS THEIR PER-EXAMPLE PEER'S `Raw` — deliberately, and it is the pattern the
+  -- depthwise bias grads already use. Their emitted MLIR ALREADY contracts the batch axis
+  -- (`layerScaleChGammaGrad` reduces `dimensions = [0, 2, 3]`, `rowDenseBiasGrad` `[0, 1]`), because
+  -- values flow as `tensor<B, …>` and `B` is `pretty`'s, never the SHlo index. So the batched form
+  -- emits the same text BY CONSTRUCTION rather than by a copied body — no new `emitTok` case, and
+  -- no way for the two to drift. It is the `den` that was per-example and is now honest.
+  --
+  -- ⚠ Note what is dropped: the batch `N` does NOT ride in `info`. The emitter never used it (it
+  -- reads `B`), so passing it would add a number that means nothing at the emit and everything at
+  -- the denotation — the exact conflation this whole thread exists to remove.
+  | _, .convStride4WeightGradB (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
+      .batched "convStride4WeightGrad" [xN] [ic, oc, h, w, kH, kW] (skel e)
+  | _, .layerScaleChGammaGradB (c := c) (h := h) (w := w) xN _ e =>
+      .batched "layerScaleChGammaGrad" [xN] [c, h, w] (skel e)
+  | _, .veclnGammaGradB (R := R) (D := D) xN es _ _ e =>
+      .batched "veclnGammaGrad" [xN, es] [R, D] (skel e)
+  | _, .rowDenseBiasGradB (R := R) (c := c) e =>
+      .batched "rowDenseBiasGrad" [] [R, c] (skel e)
   | _, .lnRowBackB (N := N) (m := m) (n := n) gN xN es _ _ _ e =>
       .batched "lnRowBackP" [gN, xN, es] [N, m, n] (skel e)
   | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
@@ -5562,6 +5680,39 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,m,n]}\n" ++
             s!"    {o0} = stablehlo.multiply {sN}, {i2} : {ty [B,m,n]}\n" ++
             s!"    {o} = stablehlo.reshape {o0} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      | "expeP", [], [_N, n] => do
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.exponential {r} : {ty [B,n]}\n", o :: st)
+      | "softmaxDivP", [], [_N, n] => do
+          -- byte-for-byte `.softmaxDiv`'s emit — which already reduced over `dimensions = [1]`,
+          -- i.e. per example. It is the DEN that this descriptor fixes.
+          let z ← fresh; let s ← fresh; let sb ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {s} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [1] : ({ty [B,n]}, tensor<f32>) -> {ty [B]}\n" ++
+            s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
+            s!"    {o} = stablehlo.divide {r}, {sb} : {ty [B,n]}\n", o :: st)
+      | "layerScaleChP", [gN], [_N, c, h, w'] => do
+          let xn ← fresh; let gb ← fresh; let m ← fresh; let o ← fresh
+          pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*h*w']}) -> {ty [B,c,h,w']}\n" ++
+                s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w']}\n" ++
+                s!"    {m} = stablehlo.multiply {xn}, {gb} : {ty [B,c,h,w']}\n" ++
+                s!"    {o} = stablehlo.reshape {m} : ({ty [B,c,h,w']}) -> {ty [B, c*h*w']}\n", o :: st)
+      | "convStride4P", [w, b], [_N, ic, oc, h, w', kH, kW] => do
+          -- byte-for-byte `.flatConvStride4F`'s emit, including its ⚠ pad-one-less rule: the
+          -- denotation reads the SAME conv at the offset-1 positions 4i+1, so the emitted pad is
+          -- (k-1)/2 − 1 — for the 4×4 stem that is 0, the paper's left-aligned window.
+          let pH := (kH - 1) / 2 - 1; let pW := (kW - 1) / 2 - 1
+          let xn ← fresh; let cv ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
+          pure (
+            s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*(2*(2*h))*(2*(2*w'))]}) -> {ty [B,ic,2*(2*h),2*(2*w')]}\n" ++
+            s!"    {cv} = stablehlo.convolution({xn}, {w})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [4, 4], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [B,ic,2*(2*h),2*(2*w')]}, {ty [oc,ic,kH,kW]}) -> {ty [B,oc,h,w']}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
+            s!"    {ob} = stablehlo.add {cv}, {bb} : {ty [B,oc,h,w']}\n" ++
+            s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
       | "gelu", [], [_N, n] => do
           let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
           let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
