@@ -71,24 +71,30 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: the BATCHED-INDEX MOVE. §0.2 has the order.**
+## 0. ▶ START HERE — **next: ConvNeXt's STOCHASTIC-DEPTH RENDER on the batched chain. §0.10.**
 
-**Rewritten 2026-08-02 for a fresh session; updated the same day when grad clip landed.** State:
-`lake build Proofs Certs Codegen` **3,913** green · **115** artifacts, one writer each ·
-`verified_mlir/` clean · drift-guard coverage **72/103** with `render_guard_baseline.txt` unchanged
-(that file may only shrink).
+**Rewritten 2026-08-03 for a fresh session.** State: `lake build Proofs Certs Codegen` **3,913**
+green · **118** artifacts, one writer each · `verified_mlir/` clean · `TestBatchedEmitTie` **34**
+batched forms · drift-guard baseline unchanged (that file may only shrink).
 
-**Read in this order:** this section (§0), then `planning/recipe_gaps.md` — which is the plan and
-supersedes every ordering further down this file. The feature specs are `planning/ema.md` and
-`planning/stochastic_depth.md`. Everything from §0a onward is HISTORY and context; nothing there is
-a live thread unless §0.3 says it is owed.
+**Read in this order:** this section (§0), then `planning/stochastic_depth.md` — which is the spec
+for the next thread and is already written. `planning/recipe_gaps.md` is the older plan and its
+v1.0-v1.5a items are done or hardware-blocked; read it for context, not for ordering. Everything
+from §0a onward is HISTORY; nothing there is live unless §0.3 says it is owed.
+
+**The one-paragraph version.** All five nets are at PJRT parity at both scales. The per-net data
+shims are wired (§0.9). ConvNeXt is fully re-instantiated at the batched index `N := B` — forward,
+backward, AdamW tail — and ties against its committed artifacts (§0.10). That was the prerequisite
+for **per-example stochastic depth**, which is the next thread and is the first one in a while whose
+deliverable is a feature rather than a gate.
 
 **§0 is laid out for someone starting cold:**
 
 | | |
 |---|---|
 | **§0.1** | ⚠ the box constraint — it re-orders everything |
-| **§0.2** | ▶ **THE NEXT THREADS, in order** — batched index → the rest |
+| **§0.10** | ▶▶ **START HERE: ConvNeXt's stochastic-depth render** — what exists, what to build, the gates |
+| **§0.2** | ▶ the thread ordering, and what is already done in it |
 | **§0.3** | ⚠ what is OWED, collected in one place |
 | **§0.9** | ✅ the per-net data shims — wired, gated, and the streams measured apart |
 | **§0.5** | ✅ DP ImageNet recipe parity — and the DP control it broke |
@@ -115,7 +121,66 @@ runs this box will crash."* Sustained multi-GPU load destabilises ares. That is 
 * ⚠ **Ask before starting anything long**, and use `scripts/supervise.sh` (AER restart, thermal
   resting, stall guard) if a long run is ever sanctioned.
 
-### §0.2 ▶ THE NEXT THREADS, IN ORDER — ▶1 (the shim wiring) is DONE; **▶2 is the live one**
+### §0.10 ▶▶ **THE NEXT THREAD: ConvNeXt's stochastic-depth render, on the batched chain**
+
+`planning/stochastic_depth.md` is the spec and it is already written — read §2 (where the randomness
+lives), §3 (train/eval as a DATA difference) and §5 (the input class). This section is only what
+changed under it, which is that **the blocker is gone**.
+
+#### What EXISTS — none of this needs building
+
+| piece | where |
+|---|---|
+| the op `dropPathB {N n} (mName) (s : Vec N)` + `den`, VJP, faithfulness | `StableHLO.lean`; VJP is `layerScale_has_vjp` **verbatim** |
+| its two INTERIOR gates + the misplacement control | `lake build droppath-tie` (§0.4), `scripts/misplace_drop_sites.py` |
+| the **DP mask-shard gate** and the sharding fix | §0.6 — `pjrt_ffi_invoke_f32_dp2`, `drop-shard-check` |
+| the driver: `dropKeeps`, the ramp, the per-step mask slots | `VerifiedNet.dropKeeps`, `trainAdamSched`'s `dropSlots` |
+| **ConvNeXt's whole chain at `N := B`** | `ConvNeXtRenderB.lean` — forward, `convNextBackAllB`, AdamW tail |
+| the tie that says the chain is the committed net | `lake build convnext-fwd-b-tie` (§0.10's gates below) |
+
+#### What to BUILD — and it is small, which is the whole point of §0.2 ▶2
+
+**18 sites, one per block** (`[3,3,9,3]`, drop rate 0.1 — `stochastic_depth.md` §1's table), each on
+the **residual branch only**: in `fwdBlockB`, `dropPathB` goes between `layerScaleCh` and the
+`addVB`, i.e. it scales `ls` and never `xin`. The backward emits the **same constructor on the
+cotangent** (the VJP is itself), between `dy` and `layerScaleCh` in `bwdBlockB`.
+
+Then: the mask inputs on the signature, the `drop` variant name, the `#eval` writer, and
+`convnextImagenetVerified.dropKeeps` / the Imagenette peer.
+
+⚠⚠ **THE PLACEMENT IS THE WHOLE CORRECTNESS QUESTION AND THE OBVIOUS GATE IS BLIND TO IT.** §0.4's
+finding 1, measured: *an identity gate at `s = 1` cannot see WHERE `s` is applied* — `1 ⊙ (branch +
+x) = branch + x`, so at keep = 1 a site on the block OUTPUT and a site on the BRANCH are the same
+function, bit-for-bit. EfficientNet's whole original gate set was blind to this. Use
+`scripts/misplace_drop_sites.py`'s construction (move every site to the block output; same SSA
+names, order, types and line count) as the control **before** believing any green run.
+
+#### The gates, in the order they should run
+
+1. **The chain is unchanged at keep = 1** — `convnext-fwd-b-tie` must still pass. The drop render at
+   an all-ones mask must tie to the no-drop one; that is `adamdrop` vs `adam`, the EfficientNet
+   construction (§0.4: 0 of 4,020,358, real recipe firing at 1.89). ⚠ **Under `scripts/det_shim.sh`**
+   — cross-graph numeric comparison on CUDA has no resolution without it, twice recorded.
+2. **The misplacement control** — `misplace_drop_sites.py`, must go red.
+3. **The interior gate** — `droppath-tie --op` at `B ≠ n` so a wrong broadcast axis is a type error.
+4. **`verified_mlir/` diff** — the drop render is a NEW artifact; every existing one must stay
+   byte-identical (writers FORCED with `lake env lean`, §2n's vacuous-green trap).
+5. **DP** — `drop-shard-check` already exists and its construction is optimizer-agnostic (§0.6).
+
+#### ⚠ Two things to decide before starting, both recorded rather than settled
+
+* **Which chain the drop render is built on.** `ConvNeXtRenderB` is tied but **not swapped in** —
+  the committed artifacts are still the per-example renderer's (§0.3). The clean move is to build
+  `convnext_adamdrop` on the BATCHED chain and swap both at once, so the 78-line emitter difference
+  lands once, with the numeric tie licensing a change that has a purpose. See §0.3's swap row.
+* **What it buys, before spending it.** `stochastic_depth.md` §8 is blunt: ConvNeXt's reference
+  75.93% needs 300 epochs and the full aug pack, and the verified Imagenette run is *overfitting*
+  already — so SD is a **recipe-parity** item, not an accuracy one. Build it to close the gap
+  honestly; do not expect a number to move.
+
+---
+
+### §0.2 ▶ THE THREAD ORDERING — ▶1 and ▶2 are DONE; ▶3 is what remains after §0.10
 
 **All five nets are at PJRT parity** (`<net>-verified-adam-xla` + `<net>-imagenet-verified-xla`, both
 scales, all five execute). R34 and mnv2 are feature-complete against their references except bf16.
@@ -132,7 +197,16 @@ finding that outlives it: **a definition is not a call site** — see §0.9.
 
 ---
 
-#### ▶ 2. THE BATCHED-INDEX MOVE — the real prerequisite for stochastic depth on ViT/ConvNeXt
+#### ▶ 2. ✅ THE BATCHED-INDEX MOVE — **DONE FOR ConvNeXt 2026-08-03** (7 increments, below).
+####      ⛔ ViT still needs it: ~12 forms + the `matmulF` combinator
+
+**ConvNeXt is fully at `N := B`** — forward byte-identical, backward + gradMap tied, AdamW
+tail shared with the per-example renderer. The increment log and every finding are below;
+**if you are here to build stochastic depth, §0.10 is the section you want**, and the only
+thing you need from this one is that the chain exists and is tied.
+
+The original scoping follows, kept because the ViT half is still owed and the cost method is
+the reusable part.
 
 **Measured, not recalled** — distinct AST forms per renderer:
 
@@ -448,6 +522,9 @@ none for dropout — they are different regularisers, and `StableHLO.lean:5329`'
 | ~~⚠ the ViT / EfficientNet EMA DP peers are RENDERED BUT UNGATED~~ ✅ **CLOSED 2026-08-02** | both gated at **4 replicas, every region BIT-EXACT** — ViT 22,869,669 floats, EfficientNet 21,196,213 (incl. the 4th region and 49 BN layers), sum-not-mean controls at **2.96 / 2.39**. The EMA scorecard is 3 of 3 on DP as well as single-device | §0.7 |
 | ~~⛔ **the per-net data SHIMS are not wired**~~ ✅ **CLOSED 2026-08-02** | `VerifiedNet.shimScript`, no fallback, `scripts/gen_shims.sh` + `scripts/shim_wiring_gate.py`. Measured: ViT / ConvNeXt / EfficientNet each stream a **different** train digest from R34's now, mnv2 ≡ R34 to the bit (predicted — its config is R34's), and all five validation streams stay identical | §0.9 |
 | ⚠ **ViT/ConvNeXt at wire v1 now run WITHOUT their reference's mixup/cutmix, announced** | their shims bake `SHIM_MIX=both`; a mixed target cannot ride int32 labels, so the driver passes `off` and prints that it did. `SHIM_SOFT=1` gets soft targets **and** that net's own mixing — which is the reference recipe and has never had a long run | §0.9 |
+| ⛔ **ConvNeXt's batched chain is TIED BUT NOT SWAPPED** — and the swap is blocked on the toolchain | `ConvNeXtRenderB` renders the whole train step; it differs from the committed artifact on **78 lines**, all the conv-VJP's `transpose`/`reverse` in the other ORDER (they commute — disjoint axes). §5 requires a NUMERIC tie to license a swap, `convnext-adam-tie` is **IREE-linked and fails to link on ares** (`clang exited with code 1`), and a byte tie cannot substitute. **Two ways out: run it on a box with working IREE, or port that harness to `xlaLink` the way `fwd-tie` already is.** ⚠ Do it *with* the drop render, not before — §0.10 | §0.10 |
+| ⚠ **`convBack` and `convBackBatched` are two emitters for one VJP, never tied to each other** | They order the kernel `transpose`/`reverse` differently; both compute the same kernel. Nobody noticed because no net used both until ConvNeXt's port. Aligning them has real blast radius — whichever side moves changes committed artifacts (batched: R34/mnv2/enet; per-example: ConvNeXt/ViT). **Recorded, not fixed**; the tie now measures it instead of it being unknown | §0.10 |
+| ⛔ **ViT's batched-index move** — ~12 forms + `matmulF` | ~10 of ConvNeXt's forms were shared and are already built. What is ViT-only: `patchEmbed`, `clsPad`/`clsSlice`, `headPad`/`headSlice`, `posEmbedGrad`, `rowDenseWeightGrad`, `softmaxRowBack`, `denseRow`. ⚠ **`matmulF` is the schedule risk**: attention has BOTH operands per-example, where every batched binary in the kit is pointwise-same-shape — it needs a `batchMap2`-shaped combinator, its own VJP and a `dot_general` with a batching dimension. Cost it separately | §0.2 ▶2 |
 | ⚠ **EfficientNet's classifier dropout 0.2 is missing and UNLISTED** | `MainEfficientNetImagenet.lean:68` sets it; there are **zero dropout sites in any verified enet render**. The matrix has a stochastic-depth row and no dropout row — different regularisers | §0.2 ▶3 |
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
@@ -2017,8 +2094,20 @@ LD_LIBRARY_PATH=/tmp/detshim CUDA_VISIBLE_DEVICES=0 .lake/build/bin/droppath-tie
 #     python3 scripts/misplace_drop_sites.py verified_mlir/efficientnet_drop_fwd.mlir /tmp/mis.mlir
 #     .lake/build/bin/droppath-tie --net --cand /tmp/mis.mlir
 
+# THE BATCHED INDEX (§0.2 ▶2 / §0.10). ConvNeXt's whole chain at N := B, tied at three levels
+# against the committed per-example artifacts. No GPU — it is a string compare.
+lake build convnext-fwd-b-tie && .lake/build/bin/convnext-fwd-b-tie
+#   forward  : BYTE-IDENTICAL vs verified_mlir/convnext_fwd.mlir
+#   backward : 4,915 lines + the gradMap (180 params, same names, same SSA, same ORDER)
+#   train step: 11,611 lines vs convnext_adam_train_step.mlir
+#   ◐ 78 lines differ and are ALLOWED: the conv-VJP's transpose/reverse in the other order. The
+#     allowance is narrow ON PURPOSE — it is what isolated a real padding bug (§0.10). Never widen
+#     it; characterise it.
+#   ⚠ rm -f the binary and check the build's rc BEFORE running: a stale `lake exe` binary reports
+#     the PREVIOUS build's result, which reads exactly like "the control did not fire".
+
 # the render ties (§2a, §2b, §2e). The AdamW ones need a GPU; TestBatchedEmitTie is CPU-only.
-lake env lean tests/TestBatchedEmitTie.lean            # 16 emit ties + 23 grad-prefix checks
+lake env lean tests/TestBatchedEmitTie.lean            # 34 emit ties + 23 grad-prefix checks
 lake build resnet34-adam-tie && .lake/build/bin/resnet34-adam-tie
 lake build cifar8-adam-tie   && .lake/build/bin/cifar8-adam-tie
 # §2i — SIX cifar8 optimizer variants through one harness. Gates the RECOVERED GRADIENT (never θ'),

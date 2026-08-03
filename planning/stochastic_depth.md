@@ -308,6 +308,22 @@ only on the failure path, which is the half a passing run never exercises.
 
 ## 8. Honest cost, and the recommendation
 
+> ⚠⚠ **STATUS 2026-08-03 — the blocker named in §5 is GONE, and the cost table below is now
+> pessimistic for ConvNeXt.** This spec was written when ConvNeXt rendered at the PER-EXAMPLE index,
+> where a per-example mask is not expressible at all (a node denotes ONE example; `pretty B` lifts
+> it, so the node cannot see `j` — handoff §0.2 ▶2). ConvNeXt is now **fully re-instantiated at the
+> batched index `N := B`** (`LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean`), forward byte-identical
+> to `convnext_fwd.mlir` and the whole train step tied against `convnext_adam_train_step.mlir`.
+> So the rows below that assume a per-example chain no longer apply, and the recommendation —
+> **ConvNeXt only, single-device** — stands and is now cheap. **Handoff §0.10 is the work order**:
+> what exists, the 18 sites, the gates in order, and the two decisions to take first.
+>
+> ⚠ Two rows of the table below are also settled since: the **DP sharding gate** is built and its
+> construction is optimizer-agnostic (§7d), and **the interior gates** are done (§7a-c) — including
+> the finding that every ENDPOINT gate was blind to placement, which is the trap to respect when
+> siting the 18 drops.
+
+
 | phase | cost |
 |---|---|
 | the op + cert + emit tie | **small** — one `selectMidB`-shaped ctor, VJP is itself |
