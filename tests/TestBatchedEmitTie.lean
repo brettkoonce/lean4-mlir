@@ -217,6 +217,12 @@ private def cases : List (String × String × String) :=
   --    ⚠ The four gradients are driven through their `*Sgd` peers in the un-fused block below as
   --    well; here they are pinned against the per-example GRADIENT, which is the comparison that
   --    says the batched ctor did not change the tag's dims.
+  -- ⚠ `scale` was relied on by ConvNeXt's byte tie and by 36 ViT SDPA sites without ever being
+  --    pinned individually. Added when ViT's forward started depending on it: a whole-net byte tie
+  --    localises nothing, which is the standing argument for this file existing at all.
+  , ("scale",
+     render (pretty BS (.scaleF "0.125" 0 (.operand "%x" zv))),
+     render (pretty BS (.scaleB (N := BS) (n := n) "0.125" 0 (.operand "%x" zvb))))
   , ("matmulF",
      render (pretty BS (.matmulF (m := rows) (k := a) (n := c)
                           (.operand "%q" (fun _ => 0 : Vec (rows*a)))

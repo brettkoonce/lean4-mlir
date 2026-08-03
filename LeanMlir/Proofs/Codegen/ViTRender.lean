@@ -21,10 +21,13 @@ open Proofs Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
-private def vEPS : String := "1.0e-5"
-private def vSCALE : String := "0.125"
+-- ⚠ NOT `private`: `ViTRenderB` shares these rather than restating them. A second copy of an
+-- epsilon or a depth is the double-writer disease with a silently-wrong hyperparameter as its
+-- failure mode (§2a-quater), and the SDPA scale in particular is a number no type would catch.
+def vEPS : String := "1.0e-5"
+def vSCALE : String := "0.125"
 private def vLR : String := "0.1"
-private def vDEPTH : Nat := 12
+def vDEPTH : Nat := 12
 
 private def zVv {n : Nat} : Vec n := fun _ => 0
 private def zMm {a b : Nat} : Mat a b := fun _ _ => 0
@@ -44,7 +47,7 @@ private def vlnFwd (bs : Nat) (gName btName xin : String) : StateM Nat (String �
 
 /-- The forward SSA names a block's backward + param-SGD reference (the ConvNeXt-`FNames` analogue).
     Per-head arrays hold the 3 heads' slices + pre-softmax + softmax-output. -/
-private structure BSaves where
+structure BSaves where
   xin : String       -- block input (LN1 input, residual1)
   ln1 : String       -- LN1 output (Q/K/V dense input)
   q : String         -- Q output
@@ -106,7 +109,7 @@ private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Nat (String × BSav
 
 /-- Forward saves the whole-net backward references: the patch embed SSA, the per-block saves, the
     final-LN input (last block output) + output, and the logits SSA. -/
-private structure FwdSaves where
+structure FwdSaves where
   embed : String
   blocks : Array BSaves
   flnIn : String        -- final-LN input (= last block output)
@@ -131,7 +134,7 @@ private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Nat (String × FwdSave
   pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, fln := fl, clsTok := sl, logits })
 
 /-- Per-block func-arg signature (committed forward order). -/
-private def blkArgSig (i : Nat) : String :=
+def blkArgSig (i : Nat) : String :=
   String.intercalate ", "
     [s!"%b{i}_g1: {ty [192]}", s!"%b{i}_bt1: {ty [192]}",
      s!"%b{i}_Wq: {ty [192,192]}", s!"%b{i}_bq: {ty [192]}",

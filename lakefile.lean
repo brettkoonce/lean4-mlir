@@ -63,7 +63,7 @@ lean_lib «Proofs» where
              -- runner this is the ONLY way its `.olean` — and therefore the six stochastic-
              -- depth artifacts its `#eval`s write — ever get built (scripts/check_render_coverage.py).
              `LeanMlir.Proofs.Codegen.ConvNeXtRenderB,
-             `LeanMlir.Proofs.Codegen.ViTRender]
+             `LeanMlir.Proofs.Codegen.ViTRender, `LeanMlir.Proofs.Codegen.ViTRenderB]
 
 /-- **`lake build Certs`** — the certificate corpus (155 files, ~87k lines:
     FloatBridges, ties, seals, descent, Lipschitz/LipSDP, Muon, …): the VJP
@@ -685,6 +685,10 @@ lean_lib «Certs» where
              -- (fwd + per-head SDPA backward chain + 200-param SGD via the 6 new ops); iree-validated
              -- (LeanMlir/Proofs/Codegen/ViTRender.lean). NO param gap — vit has the patch-weight VJP cert.
              `LeanMlir.Proofs.Codegen.ViTRender,
+             -- ch10-ViT-Tiny §1b BATCHED: the same forward at N := B — the last net to make the
+             -- move, and the only one where a per-EXAMPLE stochastic-depth mask is not yet
+             -- expressible. Writes no artifact; `vit-fwd-b-tie` gates it (ViTRenderB.lean).
+             `LeanMlir.Proofs.Codegen.ViTRenderB,
              -- ch10-ViT-Tiny §1 FOLD: each emitted param-SGD op den=certified — vecln γ/β, rowwise
              -- dense W/b, patch conv W/b, pos (one-line delegations to ViTVecLN/ViTClose certs); the
              -- head reuses Cifar8PoC.dense{W,B}_den, cls reuses denseBiasSgdB (ViTFaithfulPoC.lean).
@@ -1574,6 +1578,17 @@ lean_exe «fwd-tie» where
     whole-net diff can only report. -/
 lean_exe «convnext-fwd-b-tie» where
   root := `tests.TestConvNeXtFwdBTie
+
+/-- **ViT's batched-index forward, byte-tied against the committed artifact** (handoff §0.2 ▶3).
+
+    The peer of `convnext-fwd-b-tie`, and the bar is STRICTER: ConvNeXt's batched chain differs from
+    its per-example one on 78 conv-VJP lines (two emitters for one VJP that were never tied to each
+    other), so its train-step tie carries an allowance. ViT uses one emitter per op, so this is
+    exact byte-identity with no allowance — anything else is a defect, not a known divergence.
+
+        lake build vit-fwd-b-tie && .lake/build/bin/vit-fwd-b-tie -/
+lean_exe «vit-fwd-b-tie» where
+  root := `tests.TestViTFwdBTie
 
 /-- §2m ConvNeXt step 1: can the existing ops spell a **channel** LayerNorm?
 
