@@ -630,6 +630,12 @@ open Proofs
 -- conditional whole-network VJP at a smooth point).
 #print axioms StableHLO.reluF_faithful
 #print axioms StableHLO.selectPos_faithful
+-- The batched-index move for ViT/ConvNeXt (§0.2 ▶2): a descriptor denotes `batchMap N` of the
+-- SAME per-example map the op it replaces denotes. Stated against the peer's `den` rather than
+-- against the underlying function, because that is the claim a reader of the swapped render
+-- needs. The emit half is `tests/TestBatchedEmitTie.lean`; neither half implies the other.
+#print axioms StableHLO.den_batchOp_lnRow_eq_lnRowF
+#print axioms StableHLO.den_batchOp_gelu_eq_geluF
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
 -- R4 Stage A, Chapter 4 (CNN): conv + maxpool forward ops; the whole MNIST-CNN

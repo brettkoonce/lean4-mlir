@@ -154,12 +154,60 @@ is `batchMap N (denOp op)`, one FIXED function across the batch.
 descends — with no faithful `den` behind it. Same shape as `swishBack`/`selectPos`, which needed
 their own constructors holding the whole-batch `x`.
 
-So: **14 forms on ViT, 8 on ConvNeXt**, each needing a batched peer + cert + emit tie. §2b did this
-for R34 and is the single largest thread in this file. ⚠ The form COUNTS are measured; the per-form
-effort is not — cost it before committing to a session count.
-
 **Once it lands, stochastic depth is nearly free**: `dropPathB`, its cert (`layerScale_has_vjp`
 verbatim), the driver, and the DP mask-shard gate (§0.6) all already exist.
+
+##### ⚠⚠ COSTED 2026-08-03, and the "14 and 8" above UNDERSTATES it — do not plan off those numbers
+
+The counts above are of per-example *index conventions*; the **work** is per missing batched FORM,
+and it was measured by classifying every `SHlo` constructor each renderer uses (ViT **49**,
+ConvNeXt **54**) against the 14 existing `BatchableOp` descriptors and the 42 existing batched
+`SHlo` ctors:
+
+| | descriptors needed (4 sites) | own ctors needed (10 sites) | total |
+|---|---|---|---|
+| **ConvNeXt** | ~8 | ~6 | **~14** |
+| **ViT** | ~11 | ~10, **+1 new combinator** | **~22** |
+
+⚠⚠ **DO ConvNeXt FIRST, and the reason is not its size.** ConvNeXt is a CNN, so **every one of its
+conv / depthwise / dense / gap forms already exists** — `conv`, `convStrided`, `depthwise`,
+`depthwiseStrided`, `dense`, `gap` as descriptors, and `convBackBatched`, `convWeightGradB`,
+`depthwiseBackBatched`, `convBiasGradB`, … as ctors, all built for R34/mnv2/EfficientNet in §2b.
+What ConvNeXt is missing is only its *own* layers, and **~10 of those ~14 forms are ALSO ViT's**
+(`lnRow`, `lnRowBack`, `rowScale`, `rowBias`, `gelu`, `geluBack`, `transpose`, `veclnGammaGrad`,
+`rowDenseBiasGrad`, `expe`/`softmaxDiv`). So the cheaper net pays down roughly half of the dearer
+one, and nothing is paid twice.
+
+⚠ **ViT has one piece that is not a copy of an existing pattern, and it is the schedule risk:
+`matmulF`.** Attention's `QKᵀ` and `·V` have **both operands per-example**, where every batched
+binary in the kit (`addVB`, `subB`) is pointwise-same-shape and needs no combinator at all. A
+batched matmul needs a `batchMap2`-shaped combinator (`batchMap`/`batchMapAux` do not cover it), its
+own VJP, and a `dot_general` emit carrying a batching dimension. Cost that separately before
+starting ViT; everything else on both nets is a template copy.
+
+⚠ **What is NOT a cost, checked rather than assumed**: descriptors need **no `StableHLOParse`
+roundtrip case** (they route through the generic `.batched` tag — §4), and the row ops need no
+`Nat.mul_assoc` gymnastics, because a descriptor carries its own internal `(m, n)` and the SHlo
+index stays `N * (m*n)`. Those were the two things that looked like they would dominate.
+
+##### ✅ INCREMENT 1 LANDED 2026-08-03 — the five forms BOTH nets need
+
+`gelu` · `transpose` · `lnRow` · `rowScale` · `rowBias`, as `BatchableOp` descriptors (4 sites each,
+no parse case). Gates: `tests/TestBatchedEmitTie.lean` **16 → 21 batched forms**, each emitting its
+per-example peer's text **byte-for-byte**; 7 new `rfl` declarations, all **3-axiom** (audit
+1509 → 1511); build **3,913** green; `verified_mlir/` **0 lines of diff** — nothing renders them
+yet, which is exactly what makes this increment safe to land on its own.
+
+⚠ **Control run and it fires**: perturbing the batched `lnRowP` emit by one reduce axis
+(`dimensions = [2]` → `[1]`) turns the tie red on `lnRow` and only `lnRow`, rc=1. ⚠⚠ And the trap
+§4 warns about is live here — `lake env lean` links the COMMITTED `.olean` of its imports, so the
+control is worthless unless `lake build LeanMlir.Proofs.Codegen.StableHLO` runs between the edit and
+the test. Both runs above did.
+
+**Next increment**: ConvNeXt's remaining ~9 (`flatConvStride4`, `layerScaleCh` as descriptors;
+`lnRowBack`, `geluBack`, `layerScaleChGammaGrad`, `veclnGammaGrad`, `convStride4WeightGrad`,
+`rowDenseBiasGrad` as own ctors — all `batchMapAux`-shaped), then the renderer re-instantiation and
+the whole-net tie against the committed `convnext_adam_train_step.mlir`.
 
 ---
 

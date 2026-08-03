@@ -56,6 +56,7 @@ private def cases : List (String × String × String) :=
   let zrb : Vec (BS*(rows*c)) := fun _ => 0
   let zW  : Mat a c := fun _ _ => 0
   let zc2  : Vec pc := fun _ => 0
+  let zc   : Vec c := fun _ => 0
   let zq0  : Vec (pc*ph*ph) := fun _ => 0
   let zq0b : Vec (BS*(pc*ph*ph)) := fun _ => 0
   [ ("swish",
@@ -107,6 +108,35 @@ private def cases : List (String × String × String) :=
      render (pretty BS (.denseRowBack (N := rows) (a := a) (c := c) "%W" zW (.operand "%x" zr))),
      render (pretty BS (.batchOp (N := BS)
                           (.denseRowBack (rows := rows) (a := a) (c := c) "%W" zW)
+                          (.operand "%x" zrb))))
+  -- ── ViT / ConvNeXt, the batched-index move (§0.2 ▶2). Five row/pointwise FORWARD forms, shared
+  --    by both nets — which is why they go first: every one of them is on ConvNeXt's critical path
+  --    AND on ViT's, so the cheaper net pays down roughly half of the dearer one.
+  --
+  --    ⚠ `rows` here is the token / spatial axis PER EXAMPLE, never the batch. A descriptor's
+  --    whole job is to keep those two numbers apart — `N` for the denotation, `rows*c` for the
+  --    emit — and a tie at `rows ≠ BS` is what makes a swapped pair a type error rather than a
+  --    silent agreement. (`rows` is 3 against `BS` 32 here, so they cannot be confused.)
+  , ("gelu",
+     render (pretty BS (.geluF (.operand "%x" zv))),
+     render (pretty BS (.batchOp (N := BS) (.gelu (n := n)) (.operand "%x" zvb))))
+  , ("transpose",
+     render (pretty BS (.transposeF (m := rows) (n := c) (.operand "%x" zr))),
+     render (pretty BS (.batchOp (N := BS) (.transpose (m := rows) (n := c))
+                          (.operand "%x" zrb))))
+  , ("lnRow",
+     render (pretty BS (.lnRowF "%g" "%bt" "1.0e-5" 0 1 0 (m := rows) (n := c)
+                          (.operand "%x" zr))),
+     render (pretty BS (.batchOp (N := BS)
+                          (.lnRow (m := rows) (n := c) "%g" "%bt" "1.0e-5" 0 1 0)
+                          (.operand "%x" zrb))))
+  , ("rowScale",
+     render (pretty BS (.rowScaleF (m := rows) (n := c) "%g" zc (.operand "%x" zr))),
+     render (pretty BS (.batchOp (N := BS) (.rowScale (m := rows) (n := c) "%g" zc)
+                          (.operand "%x" zrb))))
+  , ("rowBias",
+     render (pretty BS (.rowBiasF (m := rows) (n := c) "%bt" zc (.operand "%x" zr))),
+     render (pretty BS (.batchOp (N := BS) (.rowBias (m := rows) (n := c) "%bt" zc)
                           (.operand "%x" zrb))))
   ] ++
   -- ── step 3: max-pool + the conv bias param grads ──

@@ -178,6 +178,22 @@ inductive BatchableOp : Nat → Nat → Type where
   -- dimension. The descriptor form exists so the batch can move to `N`.
   | softmaxRow {m n : Nat}                                 : BatchableOp (m*n) (m*n)
   | denseRowBack {rows a c : Nat} (wName : String) (W : Mat a c) : BatchableOp (rows*c) (rows*a)
+  -- ── ViT / ConvNeXt: the row-indexed and pointwise forward forms (§0.2 ▶2, the batched-index
+  --    move). All five carry only batch-INVARIANT data — a scalar ε/γ/β, a shared per-feature
+  --    vector, or nothing — which is exactly the descriptor precondition (`den` is
+  --    `batchMap N (denOp op)`, ONE fixed function across the batch). The saved-activation
+  --    backwards of the same layers (`lnRowBack`, `geluBack`, `softmaxRowBack`) can NOT be
+  --    descriptors and take the `batchMapAux` shape as their own constructors.
+  --
+  --    ⚠ `m` is rows PER EXAMPLE — the token axis on ViT, the spatial axis on ConvNeXt's
+  --    channel-LN — never the batch. That separation is the whole point of a descriptor: `N` is
+  --    the denotation's batch, `m*n` the emit width. Reading `m` as the batch is the mistake the
+  --    per-example renderers make structurally.
+  | gelu {n : Nat}                                          : BatchableOp n n
+  | transpose {m n : Nat}                                   : BatchableOp (m*n) (n*m)
+  | lnRow {m n : Nat} (gName bName epsStr : String) (ε γ β : ℝ) : BatchableOp (m*n) (m*n)
+  | rowScale {m n : Nat} (gName : String) (γ : Vec n)       : BatchableOp (m*n) (m*n)
+  | rowBias {m n : Nat} (bName : String) (β : Vec n)        : BatchableOp (m*n) (m*n)
 
 -- ════════════════════════════════════════════════════════════════
 -- § StableHLO-subset AST — denotable AND renderable
@@ -1112,6 +1128,14 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .maxPool (c := c) (h := h) (w := w) => maxPoolFlat c h w
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
+  -- The five ViT/ConvNeXt row/pointwise forms — each denotes the SAME per-example function its
+  -- descriptor-less peer does (`.geluF`, `.transposeF`, `.lnRowF`, `.rowScaleF`, `.rowBiasF`),
+  -- which is what makes the batched node a `batchMap` of a proven map rather than a new function.
+  | _, _, .gelu (n := n) => gelu n
+  | _, _, .transpose (m := m) (n := n) => transposeFlat m n
+  | _, _, .lnRow (m := m) (n := n) _ _ _ ε γ β => rowLNFlat m n ε γ β
+  | _, _, .rowScale (m := m) (n := n) _ γ => rowScaleFlat m n γ
+  | _, _, .rowBias (m := m) (n := n) _ β => rowBiasFlat m n β
 
 /-- **True batch-norm at the network's left-assoc `[N,C,H,W]` flat index.** The
     proven `bnBatchTensor4` (typed at `N·(oc·(h·w))`) conjugated by the `mul_assoc`
@@ -1566,6 +1590,44 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
       = batchMap N (rowDenseBackFlat rows a c W) (den e) := rfl
 @[simp] theorem den_batchOp_relu {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.relu (n := n)) e) = batchMap N (relu n) (den e) := rfl
+-- ── ViT / ConvNeXt's five row/pointwise descriptors (§0.2 ▶2). The DENOTATION half of the
+--    batched-index move, and it is the half `tests/TestBatchedEmitTie.lean` structurally cannot
+--    see: `skel` erases values, so a descriptor with the wrong `denOp` emits identical bytes.
+--    Each is `batchMap N` of the SAME proven per-example map its descriptor-less peer denotes,
+--    by `rfl` — which is what makes the batched node honest at `N := B` rather than a one-example
+--    function wearing a `tensor<Bxn>` type.
+@[simp] theorem den_batchOp_gelu {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.gelu (n := n)) e) = batchMap N (gelu n) (den e) := rfl
+@[simp] theorem den_batchOp_transpose {N m n : Nat} (e : SHlo (N * (m*n))) :
+    den (.batchOp (N := N) (.transpose (m := m) (n := n)) e)
+      = batchMap N (transposeFlat m n) (den e) := rfl
+@[simp] theorem den_batchOp_lnRow {N m n : Nat} (gN bN es : String) (ε γ β : ℝ)
+    (e : SHlo (N * (m*n))) :
+    den (.batchOp (N := N) (.lnRow (m := m) (n := n) gN bN es ε γ β) e)
+      = batchMap N (rowLNFlat m n ε γ β) (den e) := rfl
+@[simp] theorem den_batchOp_rowScale {N m n : Nat} (gN : String) (γ : Vec n)
+    (e : SHlo (N * (m*n))) :
+    den (.batchOp (N := N) (.rowScale (m := m) (n := n) gN γ) e)
+      = batchMap N (rowScaleFlat m n γ) (den e) := rfl
+@[simp] theorem den_batchOp_rowBias {N m n : Nat} (bN : String) (β : Vec n)
+    (e : SHlo (N * (m*n))) :
+    den (.batchOp (N := N) (.rowBias (m := m) (n := n) bN β) e)
+      = batchMap N (rowBiasFlat m n β) (den e) := rfl
+
+/-- **The two halves agree, per form.** The batched descriptor denotes the batch-lift of exactly
+    what its per-example peer denotes — stated against `den (.lnRowF …)` rather than against
+    `rowLNFlat` so the claim is *"same function as the op the renderer is replacing"*, which is
+    what a reader of the swapped render needs. `rfl` on both sides; kept as five separate
+    statements because a `simp` set of five `batchMap` rewrites is what the whole-net faithfulness
+    proof will consume. -/
+theorem den_batchOp_lnRow_eq_lnRowF {N m n : Nat} (gN bN es : String) (ε γ β : ℝ)
+    (e : SHlo (N * (m*n))) :
+    den (.batchOp (N := N) (.lnRow (m := m) (n := n) gN bN es ε γ β) e)
+      = batchMap N (fun v => den (.lnRowF gN bN es ε γ β (.operand "" v))) (den e) := rfl
+
+theorem den_batchOp_gelu_eq_geluF {N n : Nat} (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.gelu (n := n)) e)
+      = batchMap N (fun v => den (.geluF (n := n) (.operand "" v))) (den e) := rfl
 @[simp] theorem den_scaleB {N n : Nat} (sS : String) (s : ℝ) (e : SHlo (N*n)) :
     den (.scaleB sS s e) = fun i => den e i * s := rfl
 @[simp] theorem den_shiftB {N n : Nat} (sS : String) (s : ℝ) (e : SHlo (N*n)) :
@@ -3369,6 +3431,13 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .maxPool (c := c) (h := h) (w := w) => ("maxPool", [], [N, c, h, w])
   | .softmaxRow (m := m) (n := n) => ("softmaxRow", [], [N, m, n])
   | .denseRowBack (rows := rows) (a := a) (c := c) wN _ => ("denseRowBackP", [wN], [N, rows, a, c])
+  -- ⚠ `epsStr` rides in `names` though it is a LITERAL, not an SSA name — `bnEval` set that
+  -- precedent and `emitTok` splices both the same way. The alternative is a second string list.
+  | .gelu (n := n) => ("gelu", [], [N, n])
+  | .transpose (m := m) (n := n) => ("transposeP", [], [N, m, n])
+  | .lnRow (m := m) (n := n) gN bN es _ _ _ => ("lnRowP", [gN, bN, es], [N, m, n])
+  | .rowScale (m := m) (n := n) gN _ => ("rowScaleP", [gN], [N, m, n])
+  | .rowBias (m := m) (n := n) bN _ => ("rowBiasP", [bN], [N, m, n])
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
     index; keeps op structure, shapes, leaf names). -/
@@ -5366,6 +5435,72 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
             s!"    {dv} = stablehlo.divide {e}, {sb} : {ty [B,m,n]}\n" ++
             s!"    {o} = stablehlo.reshape {dv} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      -- ── the five ViT/ConvNeXt row/pointwise descriptors (§0.2 ▶2). Each body is a BYTE-FOR-BYTE
+      --    copy of its descriptor-less peer's, with the width read from the descriptor's `m`/`n`
+      --    instead of the SHlo index — which is the entire content of the batched-index move on
+      --    the emit side. `tests/TestBatchedEmitTie.lean` ties each pair, so "byte-for-byte" is
+      --    checked rather than intended.
+      | "gelu", [], [_N, n] => do
+          let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+          let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+          let chalf ← fresh; let hx ← fresh; let o ← fresh
+          pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty [B,n]}\n" ++
+                s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty [B,n]}\n" ++
+                s!"    {ck} = stablehlo.constant dense<0.044715> : {ty [B,n]}\n" ++
+                s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty [B,n]}\n" ++
+                s!"    {inn} = stablehlo.add {r}, {kx3} : {ty [B,n]}\n" ++
+                s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty [B,n]}\n" ++
+                s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty [B,n]}\n" ++
+                s!"    {t} = stablehlo.tanh {u} : {ty [B,n]}\n" ++
+                s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
+                s!"    {opt} = stablehlo.add {one}, {t} : {ty [B,n]}\n" ++
+                s!"    {chalf} = stablehlo.constant dense<0.5> : {ty [B,n]}\n" ++
+                s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty [B,n]}\n" ++
+                s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty [B,n]}\n", o :: st)
+      | "transposeP", [], [_N, m, n] => do
+          let xn ← fresh; let t ← fresh; let o ← fresh
+          pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {t} = stablehlo.transpose {xn}, dims = [0, 2, 1] : ({ty [B,m,n]}) -> {ty [B,n,m]}\n" ++
+            s!"    {o} = stablehlo.reshape {t} : ({ty [B,n,m]}) -> {ty [B, n*m]}\n", o :: st)
+      | "lnRowP", [gN, bN, epsStr], [_N, m, n] => do
+          let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
+          let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+          let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+          let xhat ← fresh; let gb ← fresh; let bb ← fresh; let gx ← fresh; let ob ← fresh
+          let o ← fresh
+          pure (
+            s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
+            s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
+            s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
+            s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
+            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
+            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
+            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
+            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
+            s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
+            s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+            s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,m,n]}\n" ++
+            s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,m,n]}\n" ++
+            s!"    {o} = stablehlo.reshape {ob} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      | "rowScaleP", [gN], [_N, m, n] => do
+          let xn ← fresh; let gb ← fresh; let mu ← fresh; let o ← fresh
+          pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [2] : ({ty [n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {mu} = stablehlo.multiply {xn}, {gb} : {ty [B,m,n]}\n" ++
+            s!"    {o} = stablehlo.reshape {mu} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      | "rowBiasP", [bN], [_N, m, n] => do
+          let xn ← fresh; let bb ← fresh; let ad ← fresh; let o ← fresh
+          pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {ad} = stablehlo.add {xn}, {bb} : {ty [B,m,n]}\n" ++
+            s!"    {o} = stablehlo.reshape {ad} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
       | "denseRowBackP", [wN], [_N, rows, a, c] => do
           -- byte-for-byte `.denseRowBack`'s emit; `rows` is per-example rows.
           let dn ← fresh; let dg ← fresh; let o ← fresh
