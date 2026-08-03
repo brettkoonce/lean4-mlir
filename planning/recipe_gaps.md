@@ -69,14 +69,14 @@ that does not exist yet.
 | warmup | 5 ✅ | 5 ✅ | 20 ✅ | 5 ✅ | 5 ✅ | driver arg |
 | label smoothing | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.1 ✅ | 0.0 ✅ | derived from `nClasses` |
 | grad clip | — | 1.0 ✅ | 1.0 ✅ | — | — | ✅ **BOTH nets, 2026-08-02** — `clip` variant, `lake build clip-tie {vit,convnext}` |
-| **mixup / cutmix** | — | 0.8/1.0 ⚠ | 0.8/1.0 ⚠ | — | — | wire ✅, **producer ✅** (2026-08-02; no run yet) |
-| RandAugment (geo) | — | ⚠ | ⚠ | — | — | ⚠ **supported, NOT WIRED** — the default shim is R34's (Tier A) |
-| random erasing | — | ⚠ | ⚠ | — | — | ⚠ **supported, NOT WIRED** (Tier A) |
-| repeated aug | — | 3 ⚠ | — | — | — | ⚠ **supported, NOT WIRED** (Tier A) |
-| **AutoAugment** | — | — | — | ✅ ⚠ | — | ⚠ **supported, NOT WIRED** — enet's reference sets `useAutoAugment`; the default shim has none (Tier A) |
+| **mixup / cutmix** | — | 0.8/1.0 ⚠ | 0.8/1.0 ⚠ | — | — | producer ✅ + shim ✅, but **OFF on the default path**: a mixed target cannot ride wire v1's int32 labels, so the driver passes `SHIM_MIX=off` and prints that it did. `SHIM_SOFT=1` turns it on. ⚠ λ is numpy's, not `jax.random`'s — agreement is **permanently distribution-only** |
+| RandAugment (geo) | — | ✅ | ✅ | — | — | ✅ **WIRED 2026-08-02** (§0.9) — `VerifiedNet.shimScript`, no fallback; `shim_wiring_gate.py` gate ② confirms call sites match each config |
+| random erasing | — | ✅ | ✅ | — | — | ✅ **WIRED 2026-08-02** (§0.9) |
+| repeated aug | — | 3 ✅ | — | — | — | ✅ **WIRED 2026-08-02** (§0.9) |
+| **AutoAugment** | — | — | — | ✅ | — | ✅ **WIRED 2026-08-02** (§0.9) — and control C1 measures why a definition census gets this wrong: ViT/ConvNeXt *define* `_autoaugment` and never call it |
 | **classifier dropout** | — | — | — | **0.2 ✅** | — | ✅ **DONE 2026-08-03** — `dropoutB` op + cert, `adamdo`/`emarms64dropdo` renders, `lake build dropout-tie` (gate A bit-exact 40/40 + gate W). ⚠ It is NOT the stochastic-depth row below: same op (`layerScale`), **different mask RANK** — per ELEMENT here, per EXAMPLE there |
-| stochastic depth | — | 0.1 ❌ | 0.1 ❌ | 0.2 ⚠ | — | ⚠ **op + cert + EfficientNet render done 2026-08-02**, driver owed. ConvNeXt/ViT need the §2b batched-index move first — they render at the PER-EXAMPLE index, where a per-example mask is §4's descriptor trap |
-| EMA | — | ✅→**✅** | ✅→**✅** | ✅→**✅** | — | ✅ **all three, 2026-08-02** (ConvNeXt + DP peer, EfficientNet incl. `ema_bn`, ViT). ⚠ Imagenette slugs only — no `*in_ema*` render exists |
+| stochastic depth | — | 0.1 ✅ | 0.1 ✅ | 0.2 ✅ | — | ✅ **ALL THREE, both scales, 2026-08-02/03** — EfficientNet (§0.4), ConvNeXt (§0.10) and ViT (§0.11), the last two on the batched chain the §0.2 ▶2/▶3 move built. DP mask-shard gate run on each (§0.6) |
+| EMA | — | ✅ | ✅ | ✅ | — | ✅ **all three, 2026-08-02**, and at BOTH scales — `vitin_ema128`/`emadp128x4`, `cnxin_ema`/`emadp`, `enetin_emarms64`/`emarmsdp64`. DP peers gated at 4 replicas, every region bit-exact (§0.7). ⚠ Never GATE on the shadow — it is θ's low-pass filter (§3) |
 | **bf16 / bf16Conv** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | batch / epochs | ✅ | ✅ | ✅ | ✅ | ✅ | all matched at 4 replicas |
 
@@ -93,9 +93,16 @@ not reading this table.
 |---|---|---|
 | **R34** | bf16 | **at parity — run it** |
 | **mnv2** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, bf16 | **at parity — run it** |
-| **EfficientNet** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, ~~EMA~~ ✅, dropPath ⚠ (render ✅, driver owed), bf16 | **one regulariser short**, and it is half-built |
-| **ConvNeXt** | mixup, cutmix, dropPath (+ the §2b index move), ~~EMA~~ ✅, ~~grad clip~~ ✅, ~~wdExclude~~ ✅, bf16 | the aug/regulariser pack, minus EMA |
+| **EfficientNet** | ~~RMSProp~~ ✅, ~~EMA~~ ✅, ~~dropPath~~ ✅, ~~classifier dropout~~ ✅ (2026-08-03), bf16 | **at parity — run it.** `enetin_emarms64dropdo` is the whole recipe in one artifact |
+| **ConvNeXt** | ~~dropPath~~ ✅, ~~EMA~~ ✅, ~~grad clip~~ ✅, ~~wdExclude~~ ✅, ~~aug pack~~ ✅, **mixup/cutmix off by default**, bf16 | **at parity except mixup**, which is wired but needs `SHIM_SOFT=1` |
 | **ViT** | same as ConvNeXt | same |
+
+⚠⚠ **EVERY REMAINING ROW IS A RUN OR A THROUGHPUT ITEM, NOT A RENDER GAP** — as of 2026-08-03 the
+last unlisted render gap (EfficientNet's classifier dropout) closed. What is left on this matrix is
+**bf16** (throughput, and `bf16_renderer.md` measured bf16 depthwise conv at 0.50× — *slower* — on
+the depthwise nets), **mixup's default-off wiring**, and **the runs themselves**. ⚠ Read that as
+"the code is there", NOT as "the numbers are reproduced": §0.1 says this box cannot do long runs,
+and no net has an ImageNet pair run on the verified path.
 
 ✅ **BOTH HALVES OF RMSProp ARE DONE as of 2026-08-02** — the render (v1.2, §3 Tier D) and now the
 driver: the mean-square slot initialises to **1.0** and the exponential schedule is threaded
