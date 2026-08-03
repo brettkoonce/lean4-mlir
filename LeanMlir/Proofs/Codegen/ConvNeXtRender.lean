@@ -371,7 +371,7 @@ def cnxAllParams (nClasses : Nat := 10) : List (String × List Nat) := allParams
 /-- Every SSA name the ConvNeXt-T forward produces. `convNextFwdFaithfulV` returns just `logits`;
     the train steps additionally consume the block records, the two downsample names and the
     head's `gap`/`hn` on the way back. -/
-private structure CFwd where
+structure CFwd where
   code    : String                  -- stem → 4 stages → GAP → LN → dense, in emission order
   blksAll : Array (Array FNames)    -- the [3,3,9,3] block forwards, stage-major, forward order
   downLn  : Array String            -- the 3 downsample LN outputs (the strided conv's input)
@@ -463,7 +463,7 @@ set_option maxRecDepth 8000 in
     Gate on the refactor: `convnext_train_step.mlir` must come back byte-identical. It does — the
     softmax is now `pretty`d on its own line instead of nested inside the `.sub` so that `%loss` can
     read it, but `.operand` is a leaf that emits nothing, so the fresh-name sequence is unchanged. -/
-private def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none)
+def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none)
     (nClasses : Nat := 10) :
     StateM Nat (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain `convNextFwdFaithfulV` emits, so `@convnext_fwd` and the two

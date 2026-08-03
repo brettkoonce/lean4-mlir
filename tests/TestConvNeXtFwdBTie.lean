@@ -52,5 +52,84 @@ def main : IO Unit := do
         diffs := diffs + 1
     IO.println s!"  ✗ {diffs} differing line(s); lengths {gl.size} vs {wl.size}"
     throw <| IO.userError "MISMATCH: the batched ConvNeXt forward does not emit the committed \
-artifact. Run `lake env lean tests/TestBatchedEmitTie.lean` FIRST — it localises which of the 31 \
+artifact. Run `lake env lean tests/TestBatchedEmitTie.lean` FIRST — it localises which of the 34 \
 batched forms diverged from its per-example peer, which this whole-net diff cannot."
+
+  -- ══════════════════════════════════════════════════════════════════════════════════════════
+  --  The BACKWARD: the whole-net traversal, against its per-example peer.
+  --
+  --  ⚠⚠ TWO checks, and the second is the one a string diff cannot make. `convNextBackAll`
+  --  returns `(code, gradMap, softmax)` where `gradMap` maps each of the 180 parameter names to
+  --  the SSA holding its gradient. Identical CODE with a permuted MAP is a render that computes
+  --  every gradient correctly and hands them to the wrong parameters — it would pass a byte diff,
+  --  pass every structural audit, train, and descend. So the map is compared name for name and in
+  --  ORDER, which is also what the AdamW tail consumes.
+  -- ══════════════════════════════════════════════════════════════════════════════════════════
+  let smooth : Option (String × String × String) := some ("0.1", "-0.01", "32.0")
+  let (wantCode, wantMap, wantSm) := (Proofs.StableHLO.convNextBackAll true smooth 10).run' 0
+  let (gotCode, gotMap, gotSm) := (convNextBackAllB smooth 10).run' 0
+  IO.println "── ConvNeXt: the batched-index BACKWARD vs the per-example traversal ──"
+  IO.println s!"  per-example : {wantCode.length} chars, {wantMap.length} gradients, softmax {wantSm}"
+  IO.println s!"  batched     : {gotCode.length} chars, {gotMap.length} gradients, softmax {gotSm}"
+  let mut bad : Nat := 0
+  if gotCode != wantCode then
+    let gl := (gotCode.splitOn "\n").toArray
+    let wl := (wantCode.splitOn "\n").toArray
+    if gl.size != wl.size then
+      IO.println s!"  ✗ line counts differ: {gl.size} vs {wl.size}"
+      bad := bad + 1
+    -- ⚠⚠ THE ONE ALLOWED DIFFERENCE, and it is a PRE-EXISTING divergence between two emitters that
+    -- were never tied to each other. The conv input-VJP prepares its kernel with a `transpose`
+    -- (dims [1,0,2,3]) and a `reverse` (dims [2,3]); `.convBack` emits transpose-then-reverse and
+    -- `.convBackBatched` emits reverse-then-transpose. The two act on DISJOINT axes, so they
+    -- commute and both renders compute the same kernel — but the text differs, and nothing noticed
+    -- because no net used both emitters until this port. EfficientNet/mnv2/R34 use only the
+    -- batched one; ConvNeXt/ViT only the per-example one.
+    --
+    -- The allowance is narrow ON PURPOSE: every differing line must be one of those two ops, the
+    -- line counts must match, and the SSA numbering must not move. Anything else — a shape, a
+    -- constant, an operand, an op that is not this pair — fails. An "ignore the conv backward"
+    -- allowance would hide precisely the class of defect this tie exists to catch.
+    let mut swapPair : Nat := 0
+    let mut other : Nat := 0
+    let mut shown : Nat := 0
+    for i in [0:min gl.size wl.size] do
+      if gl[i]! != wl[i]! then
+        let isPair (s : String) : Bool :=
+          (s.splitOn "stablehlo.reverse").length > 1 || (s.splitOn "stablehlo.transpose").length > 1
+        if isPair (gl[i]!) && isPair (wl[i]!) then
+          swapPair := swapPair + 1
+        else
+          other := other + 1
+          if shown < 6 then
+            IO.println s!"  L{i+1} batched  : {(gl[i]!).take 160}"
+            IO.println s!"  L{i+1} per-ex   : {(wl[i]!).take 160}"
+            shown := shown + 1
+    IO.println s!"  ◐ code: {swapPair} line(s) are the conv-VJP transpose/reverse ORDER swap \
+(commuting ops, disjoint axes) — allowed"
+    if other != 0 then
+      IO.println s!"  ✗ code: {other} differing line(s) are NOT that swap"
+      bad := bad + other
+    else
+      IO.println s!"  ✅ code identical apart from that swap; {gl.size} lines, SSA numbering unmoved"
+  else
+    IO.println "  ✅ code BYTE-IDENTICAL"
+  -- the map, name for name and in order
+  if gotMap != wantMap then
+    let mut shown : Nat := 0
+    for i in [0:min gotMap.length wantMap.length] do
+      let (gn, gs) := gotMap[i]!
+      let (wn, ws) := wantMap[i]!
+      if gn != wn || gs != ws then
+        if shown < 8 then
+          IO.println s!"  #{i} batched {gn} -> {gs}   per-ex {wn} -> {ws}"
+          shown := shown + 1
+        bad := bad + 1
+    IO.println s!"  ✗ gradMap differs ({gotMap.length} vs {wantMap.length} entries)"
+  else
+    IO.println s!"  ✅ gradMap IDENTICAL — {gotMap.length} parameters, same names, same SSA, same order"
+  if gotSm != wantSm then
+    IO.println s!"  ✗ softmax SSA {gotSm} vs {wantSm}"; bad := bad + 1
+  if bad != 0 then
+    throw <| IO.userError s!"MISMATCH in the batched ConvNeXt BACKWARD ({bad} difference(s))."
+  IO.println "  ✅ the batched backward computes and routes what the per-example one does"

@@ -116,26 +116,33 @@ set_option maxRecDepth 8000 in
     ⚠ Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := bB` and
     the batch is an index of the AST rather than a number only `pretty` knows. That is the entire
     content of the move; the emitted text is unchanged, which the tie checks. -/
-def convNextFwdChainB (nClasses : Nat := 10) : StateM Nat (String × String) := do
+def convNextFwdChainB (nClasses : Nat := 10) : StateM Nat CFwd := do
   let (cS, stemC) ← pretty bB (.batchOp (N := bB)
       (.convStride4 (h := 56) (w := 56) "%psW" "%psb" (zKB : Kernel4 96 3 4 4) zVB)
       (.operand "%x" (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56)))))))
   let (cSln, stem) ← lnFwdSiteB "%psng" "%psnbt" stemC 96 56
   let mut fwd := cS ++ cSln
   let mut cur := stem
+  let mut blksAll : Array (Array FNames) := #[]
+  let mut downLn : Array String := #[]
+  let mut downIn : Array String := #[]
   for si in [0:4] do
     let c := bDims[si]!; let e := 4 * c; let h := bSpats[si]!
+    let mut blks : Array FNames := #[]
     for j in [0:bDepths[si]!] do
       let (code, bn) ← fwdBlockB s!"s{si}b{j}" cur c e h
-      fwd := fwd ++ code; cur := bn.bout
+      fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
+    blksAll := blksAll.push blks
     if si < 3 then
-      let (code, _, o) ← fwdDownB s!"d{si}" cur c bDims[si+1]! bSpats[si+1]!
-      fwd := fwd ++ code; cur := o
+      downIn := downIn.push cur
+      let (code, n, o) ← fwdDownB s!"d{si}" cur c bDims[si+1]! bSpats[si+1]!
+      fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := 768) (h := 7) (w := 7))
       (.operand cur zVB))
   let (cLog, logits) ← pretty bB (.batchOp (N := bB)
       (.dense "%Wd" "%bd" (zMB : Mat 768 nClasses) zVB) (.operand gap zVB))
-  pure (fwd ++ cG ++ cLog, logits)
+  pure { code := fwd ++ cG ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,
+         gap := gap, stemC := stemC, hn := gap, logits := logits }
 
 set_option maxRecDepth 8000 in
 /-- **`@convnext_fwd_b`** — the batched-index peer of `convNextFwdFaithfulV`, same 180-parameter
@@ -146,7 +153,8 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
     (banner : String :=
       "    // ── ConvNeXt-T forward at the BATCHED index N := B: every line is pretty(batchOp …) ──\n")
     : String := Id.run do
-  let (body, logits) := (convNextFwdChainB nClasses).run' 0
+  let F : CFwd := (convNextFwdChainB nClasses).run' 0
+  let body := F.code; let logits := F.logits
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [bB, 3*224*224]) :: (cnxAllParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}"))
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [bB,nClasses]} " ++ "{\n" ++
@@ -277,6 +285,96 @@ private def downParamGradB (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat
       (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
   pure (cB ++ cNg ++ cNb ++ wcode,
     [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb), (s!"{pfx}W", nW), (s!"{pfx}b", nB)])
+
+set_option maxRecDepth 8000 in
+/-- **The whole-net batched traversal** — forward + cotangent + every parameter gradient, the
+    batched peer of `convNextBackAll true (some …)`. Returns `(code, gradMap, softmaxSSA)` with the
+    same shape, so the AdamW tail in `ConvNeXtRender.lean` can consume either.
+
+    ⚠ **AdamW only, deliberately.** The per-example traversal serves both renders off one `adam`
+    flag; this one does not, because the SGD path bakes `lr` as a literal where AdamW takes it as a
+    runtime `%lr` operand, and an SGD render at the batched index is not something any config asks
+    for yet. Adding the flag later is cheap; adding an artifact nobody loads is §2a-quater's
+    silent-hyperparameter hazard.
+
+    ⚠ The `%dgi`/`%dgb`/`%dgn`/`%dgd`/`%dgapf` GAP-backward block is **hand-written text on both
+    sides**, carried over verbatim. It is one of §5's declared non-AST carve-outs, so the batched
+    move neither improves nor degrades it — but note it is parameterised by `bB` and therefore
+    already batch-correct, which is why it needs no peer. -/
+def convNextBackAllB (smooth : Option (String × String × String) := none) (nClasses : Nat := 10) :
+    StateM Nat (String × List (String × String) × String) := do
+    -- ═══ forward — the SAME chain the byte-tied `convNextFwdChainB` emits ═══
+    let F : CFwd ← convNextFwdChainB nClasses
+    let (cSm, nSm) ← pretty bB (.batchOp (N := bB) (.softmaxDiv (n := nClasses))
+        (.batchOp (N := bB) (.expe (n := nClasses))
+          (.operand F.logits (zVB : Vec (bB*nClasses)))))
+    let (cSub, dyr) ← pretty bB (.subB (.operand nSm (zVB : Vec (bB*nClasses)))
+        (.operand "%onehot" zVB))
+    let fwd := F.code ++ cSm ++ cSub
+    -- ═══ the cotangent ═══
+    let (cDyC, dyName) ← match smooth with
+      | none => pure (s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [bB, nClasses]}\n", "%dy")
+      | some (aStr, negAK, bStr) => do
+          let (c1, n1) ← pretty bB (.scaleB (N := bB) (n := nClasses) aStr 0
+              (.operand "%onehot" (zVB : Vec (bB*nClasses))))
+          let (c2, n2) ← pretty bB (.addVB (.operand dyr (zVB : Vec (bB*nClasses)))
+              (.operand n1 (zVB : Vec (bB*nClasses))))
+          -- ⚠ At the batched index these are `N := bB`, where the per-example render writes
+          -- `N := 1` — the SAME emitted text (the tag's `n` is what the emitter reads), and the
+          -- annotation trap that note warns about disappears, because `bB * nClasses` never has to
+          -- reduce definitionally to anything.
+          let (c3, n3) ← pretty bB (.shiftB (N := bB) (n := nClasses) negAK 0
+              (.operand n2 (zVB : Vec (bB*nClasses))))
+          let (c4, n4) ← pretty bB (.divConstB (N := bB) (n := nClasses) bStr 0
+              (.operand n3 (zVB : Vec (bB*nClasses))))
+          pure (c1 ++ c2 ++ c3 ++ c4, n4)
+    -- ═══ head ═══
+    let (cDd, cot_gap) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (zMB : Mat 768 nClasses))
+        (.operand dyName zVB))
+    let (cWd, nWd) ← pretty bB (.weightGradB (N := bB) (m := 768) (n := nClasses) F.hn
+        (zVB : Vec (bB*768)) (.operand dyName (zVB : Vec (bB*nClasses))))
+    let (cBd, nBd) ← pretty bB (.biasGradB (N := bB) (n := nClasses)
+        (.operand dyName (zVB : Vec (bB*nClasses))))
+    let mut updMap : List (String × String) := [("Wd", nWd), ("bd", nBd)]
+    let mut bwd := cDyC ++ cDd ++ cWd ++ cBd ++
+      s!"    %dgi = stablehlo.reshape {cot_gap} : ({ty [bB,768]}) -> {ty [bB,768,1,1]}\n" ++
+      s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [bB,768,1,1]}) -> {ty [bB,768,7,7]}\n" ++
+      s!"    %dgn = stablehlo.constant dense<49.0> : {ty [bB,768,7,7]}\n" ++
+      s!"    %dgd = stablehlo.divide %dgb, %dgn : {ty [bB,768,7,7]}\n" ++
+      s!"    %dgapf = stablehlo.reshape %dgd : ({ty [bB,768,7,7]}) -> {ty [bB, 768*7*7]}\n"
+    let mut dy := "%dgapf"
+    for si' in [0:4] do
+      let si := 3 - si'
+      let c := bDims[si]!; let e := 4 * c; let h := bSpats[si]!
+      for j' in [0:bDepths[si]!] do
+        let j := bDepths[si]! - 1 - j'
+        let b := (F.blksAll[si]!)[j]!
+        let (code, cot_xin, cot_p, cot_e, cot_n, cot_d) ← bwdBlockB s!"s{si}b{j}" dy b c e h
+        let (pcode, pairs) ← blockParamGradB s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dy c e h
+        bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_xin
+      if si > 0 then
+        let ci := bDims[si-1]!; let h2 := bSpats[si]!
+        let (code, cot_n, cot_x) ← bwdDownB s!"d{si-1}" dy (F.downIn[si-1]!) ci c h2
+        let (pcode, pairs) ← downParamGradB s!"d{si-1}" (F.downLn[si-1]!) (F.downIn[si-1]!)
+            cot_n dy ci c h2
+        bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_x
+    -- ═══ stem: back through the stem LN, then the patchify conv's own gradients ═══
+    let (cg, ng) ← lnGammaTailB "%psng" F.stemC dy 96 56
+    let (cb, nb) ← lnBetaTailB dy 96 56
+    let (cx, dx) ← lnBackSiteB "%psng" F.stemC dy 96 56
+    bwd := bwd ++ cg ++ cb ++ cx
+    updMap := updMap ++ [("psng", ng), ("psnbt", nb)]
+    dy := dx
+    let (cPsb, nPsb) ← pretty bB (.convBiasGradB (N := bB) (ic := 3) (oc := 96) (h := 56) (w := 56)
+        (kH := 4) (kW := 4) (zKB : Kernel4 96 3 4 4) (zVB : Vec (bB*(3*56*56))) (zVB : Vec 96)
+        (.operand dy zVB))
+    let (cPsW, nPsW) ← pretty bB (.convStride4WeightGradB (N := bB) (ic := 3) (oc := 96) (h := 56)
+        (w := 56) (kH := 4) (kW := 4) "%x" (zVB : Vec 96)
+        (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (zKB : Kernel4 96 3 4 4)
+        (.operand dy (zVB : Vec (bB*(96*56*56)))))
+    bwd := bwd ++ cPsW ++ cPsb
+    updMap := updMap ++ [("psW", nPsW), ("psb", nPsb)]
+    pure (fwd ++ bwd, updMap, nSm)
 
 /-- The per-example render's own banner, so the tie can demand **byte-identity** rather than
     "identical apart from a comment". ⚠ Worth the parameter: a tie that compares modulo one line is

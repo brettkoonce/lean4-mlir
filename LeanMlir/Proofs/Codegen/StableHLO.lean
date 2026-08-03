@@ -6043,7 +6043,14 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       | "convStridedBackBatched", [wN], [_N, ic, oc, h, w, kH, kW] => do
           -- stride-2 conv input-VJP: upsample dy (zero-interleave to 2h×2w) then the
           -- stride-1 conv input-VJP. Produces dx at the 2h×2w input resolution.
-          let p := (kH - 1) / 2
+          -- ⚠⚠ ASYMMETRIC pad, matching `.convStridedBack`. The symmetric `[[p,p],[p,p]]` this
+          -- emitted AGREES at every odd kernel (kH=3 ⇒ pH=1 ⇒ kH−1−pH=1) and is WRONG at even
+          -- ones (kH=2 ⇒ [[0,0]] where the VJP needs [[1,0]]). §2f-bis fixed exactly this in the
+          -- per-example emitter and it was never carried here, because no batched net had an
+          -- even strided kernel until ConvNeXt's 2×2/s2 downsample. Found by the whole-net
+          -- backward tie — 3 lines, at the 3 downsamples. Inert on every committed batched
+          -- artifact, all of which are odd (R34 3×3, mnv2/enet 3×3 and 5×5).
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
           let dyr ← fresh; let z ← fresh; let up ← fresh; let rev ← fresh; let wt ← fresh
           let dx ← fresh; let o ← fresh
           pure (
@@ -6054,7 +6061,7 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {wt} = stablehlo.transpose {rev}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
             s!"    {dx} = stablehlo.convolution({up}, {wt})\n" ++
             "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
-            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{kH - 1 - pH}, {pH}], [{kW - 1 - pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
             s!" : ({ty [B,oc,2*h,2*w]}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,2*h,2*w]}\n" ++
             s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,2*h,2*w]}) -> {ty [B, ic*(2*h)*(2*w)]}\n", o :: st)

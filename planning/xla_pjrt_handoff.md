@@ -333,12 +333,49 @@ Three more forms landed on the way, taking the tie to **34**:
 the AST. `biasGradB` is `den e` verbatim for that reason. Do not "fix" it in isolation; it is one
 half of a pair whose other half is emitted text.
 
-**Next, in order**: compose `convNextBackAllB` (mirroring `convNextBackAll true (some …)`, which is
-now public), tie it against the per-example traversal — code string *and* the parameter→SSA map, so
-a mis-ordered gradient is caught as well as a mis-rendered one — then the AdamW tail and the
-whole-net tie against `convnext_adam_train_step.mlir`, then the swap. ⚠ The swap is still the first
-step in this thread that changes committed bytes; increments 1-5 have all held `verified_mlir/` at
-0 diff. And ViT needs its ~12 remaining forms plus the `matmulF` combinator.
+##### ✅ INCREMENT 6 LANDED 2026-08-03 — `convNextBackAllB`, and **it found a real defect**
+
+`convNextBackAllB` composes the whole batched traversal — forward + cotangent + all 180 parameter
+gradients — and `convnext-fwd-b-tie` now gates it against the per-example `convNextBackAll`:
+
+| | result |
+|---|---|
+| forward vs the committed artifact | **byte-identical**, 136,172 chars |
+| backward code | **4,915 lines, SSA numbering unmoved**, identical apart from one allowed swap |
+| ⚠ the allowed swap | 78 lines: the conv-VJP's `transpose`/`reverse` in the other ORDER |
+| **the gradMap** | **IDENTICAL — 180 parameters, same names, same SSA, same order** |
+
+⚠⚠ **THE MAP IS THE CHECK A STRING DIFF CANNOT MAKE.** Identical code with a permuted map is a
+render that computes every gradient correctly and hands them to the **wrong parameters** — it passes
+a byte diff, passes every structural audit, trains, and descends. It is the `wdx-tie` partition
+lesson in the routing direction.
+
+**⛔ AND THE TIE FOUND A LIVE DEFECT IN THE BATCHED EMITTER — `convStridedBackBatched` PADS WRONG AT
+EVEN KERNELS.** It emitted symmetric `pad = [[p,p],[p,p]]` with `p = (kH−1)/2`; the per-example
+`.convStridedBack` emits asymmetric `[[kH−1−pH, pH], …]`. Those **agree at every odd kernel**
+(kH=3 ⇒ both `[[1,1]]`) and diverge at even ones (kH=2 ⇒ `[[0,0]]` against the required `[[1,0]]`).
+This is **§2f-bis's even-kernel gap, fixed in the per-example emitter and never carried to the
+batched one** — invisible because no batched net had an even strided kernel until ConvNeXt's 2×2/s2
+downsample. Fixed; **`verified_mlir/` stays 0 diff**, because every committed batched artifact is
+odd (R34 3×3, mnv2/enet 3×3 and 5×5), so the fix is provably inert there and correct here.
+
+⚠⚠ **The narrow allowance is what found it.** A lazier tie — "ignore the conv backward", or a
+tolerance — would have swallowed all 81 lines. Requiring every differing line to be *specifically*
+the commuting `transpose`/`reverse` pair left exactly 3 lines unexplained, and those 3 were the bug.
+**Characterise an allowance, never widen a gate to fit it.**
+
+⚠ **The remaining 78-line difference is PRE-EXISTING and is not this thread's**: `convBack` and
+`convBackBatched` are two independent emitters for one VJP that were **never tied to each other**,
+and they order the kernel `transpose`/`reverse` differently. They commute (disjoint axes), so both
+compute the same kernel. Nobody noticed because no net used both until this port. **Aligning them is
+a separate call with real blast radius** — whichever side changes moves committed artifacts (the
+batched spelling is in R34/mnv2/EfficientNet; the per-example one in ConvNeXt/ViT). Left alone
+deliberately; the tie now records it precisely instead of it being unknown.
+
+**Next, in order**: the AdamW tail (`convnextAdamOne` at the batched index) → the whole-net tie
+against `convnext_adam_train_step.mlir` → the swap. ⚠ The swap is still the first step that changes
+committed bytes; increments 1-6 have all held `verified_mlir/` at 0 diff. And ViT needs its ~12
+remaining forms plus the `matmulF` combinator.
 
 ---
 
