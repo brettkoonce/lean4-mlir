@@ -224,6 +224,32 @@ inductive BatchableOp : Nat → Nat → Type where
   | lnRow {m n : Nat} (gName bName epsStr : String) (ε γ β : ℝ) : BatchableOp (m*n) (m*n)
   | rowScale {m n : Nat} (gName : String) (γ : Vec n)       : BatchableOp (m*n) (m*n)
   | rowBias {m n : Nat} (bName : String) (β : Vec n)        : BatchableOp (m*n) (m*n)
+  -- ── ViT increment 1 (handoff §0.2 ▶3): the six forms whose data is batch-INVARIANT.
+  --
+  --    ⚠⚠ `N` HERE IS ViT's TOKEN COUNT, NOT THE BATCH — and on this net the two are far easier
+  --    to conflate than on ConvNeXt, because the per-example renderer already spells the token
+  --    axis `N`. A `BatchableOp a b` never sees the batch at all: `SHlo.batchOp`'s own `{N}` is
+  --    the batch and these `N`s ride INSIDE `a` and `b`. Reading either as the other is the exact
+  --    defect this whole thread removes, and it type-checks in both directions.
+  --
+  --    All six qualify as descriptors by §4's rule — the data each carries is a weight, a bias, a
+  --    head INDEX or nothing, i.e. the same for every example. ViT's saved-activation backwards
+  --    (`softmaxRowBack`) and its batch-contracting parameter gradients cannot be descriptors and
+  --    take their own constructors, exactly as ConvNeXt's did.
+  | denseRow {N a c : Nat} (wName bName : String) (W : Mat a c) (b : Vec c)
+      : BatchableOp (N*a) (N*c)
+  | patchEmbed {ic H W P N D : Nat} (wName bName clsName posName : String)
+      (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N+1) D)
+      : BatchableOp (ic*H*W) ((N+1)*D)
+  -- ⚠ `clsSlice`/`clsPad` and `headSlice`/`headPad` are VJP pairs, and each pair is
+  -- shape-asymmetric — the slice contracts, the pad scatters back. That asymmetry is what makes
+  -- them safe as descriptors despite looking like data movement: neither reads a value.
+  | clsSlice {N D : Nat}                                    : BatchableOp ((N+1)*D) D
+  | clsPad {N D : Nat}                                      : BatchableOp D ((N+1)*D)
+  -- ⚠ `h : Fin heads` is an INDEX, not per-example data — head `h` is the same head for every
+  -- example. A per-example head choice would be a different architecture.
+  | headSlice {N heads d : Nat} (h : Fin heads)             : BatchableOp (N*(heads*d)) (N*d)
+  | headPad {N heads d : Nat} (h : Fin heads)               : BatchableOp (N*d) (N*(heads*d))
 
 -- ════════════════════════════════════════════════════════════════
 -- § StableHLO-subset AST — denotable AND renderable
@@ -1209,6 +1235,16 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .lnRow (m := m) (n := n) _ _ _ ε γ β => rowLNFlat m n ε γ β
   | _, _, .rowScale (m := m) (n := n) _ γ => rowScaleFlat m n γ
   | _, _, .rowBias (m := m) (n := n) _ β => rowBiasFlat m n β
+  -- ViT increment 1. Each denotes the SAME per-example function its descriptor-less peer does
+  -- (`.denseRowF`, `.patchEmbedF`, `.clsSliceF`, `.clsPadF`, `.headSliceF`, `.headPadF`), which is
+  -- what makes the batched node a `batchMap` of a proven map rather than a new function.
+  | _, _, .denseRow (N := N) (a := a) (c := c) _ _ W b => rowDenseFlat N a c W b
+  | _, _, .patchEmbed (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ _ _ Wc bc cls pos =>
+      patchEmbedFlat ic H W P N D Wc bc cls pos
+  | _, _, .clsSlice (N := N) (D := D) => clsSliceFlat N D
+  | _, _, .clsPad (N := N) (D := D) => clsPadFlat N D
+  | _, _, .headSlice (N := N) (heads := heads) (d := d) h => headSliceFlat N heads d h
+  | _, _, .headPad (N := N) (heads := heads) (d := d) h => headPadFlat N heads d h
 
 /-- **True batch-norm at the network's left-assoc `[N,C,H,W]` flat index.** The
     proven `bnBatchTensor4` (typed at `N·(oc·(h·w))`) conjugated by the `mul_assoc`
@@ -1748,6 +1784,52 @@ theorem den_batchOp_softmaxDiv_per_example {N n : Nat} (e : SHlo (N * n))
     den (.batchOp (N := N) (.rowBias (m := m) (n := n) bN β) e)
       = batchMap N (rowBiasFlat m n β) (den e) := rfl
 
+/-! ### ViT increment 1 — the six batch-invariant forms
+
+⚠ Read the binders: `N` is the BATCH and `tk` is ViT's token count. The per-example renderer calls
+the token axis `N`, so these two statements are the place where that name is re-pointed, and
+getting them the wrong way round type-checks (both are `Nat` and both appear multiplied). -/
+
+@[simp] theorem den_batchOp_denseRow {N tk a c : Nat} (wN bN : String) (W : Mat a c) (b : Vec c)
+    (e : SHlo (N * (tk*a))) :
+    den (.batchOp (N := N) (.denseRow (N := tk) wN bN W b) e)
+      = batchMap N (rowDenseFlat tk a c W b) (den e) := rfl
+
+@[simp] theorem den_batchOp_patchEmbed {N ic H W P tk D : Nat} (wN bN clsN posN : String)
+    (Wc : Kernel4 D ic P P) (bc cls : Vec D) (pos : Mat (tk+1) D) (e : SHlo (N * (ic*H*W))) :
+    den (.batchOp (N := N) (.patchEmbed (N := tk) wN bN clsN posN Wc bc cls pos) e)
+      = batchMap N (patchEmbedFlat ic H W P tk D Wc bc cls pos) (den e) := rfl
+
+@[simp] theorem den_batchOp_clsSlice {N tk D : Nat} (e : SHlo (N * ((tk+1)*D))) :
+    den (.batchOp (N := N) (.clsSlice (N := tk) (D := D)) e)
+      = batchMap N (clsSliceFlat tk D) (den e) := rfl
+
+@[simp] theorem den_batchOp_clsPad {N tk D : Nat} (e : SHlo (N * D)) :
+    den (.batchOp (N := N) (.clsPad (N := tk) (D := D)) e)
+      = batchMap N (clsPadFlat tk D) (den e) := rfl
+
+@[simp] theorem den_batchOp_headSlice {N tk heads d : Nat} (h : Fin heads)
+    (e : SHlo (N * (tk*(heads*d)))) :
+    den (.batchOp (N := N) (.headSlice (N := tk) (d := d) h) e)
+      = batchMap N (headSliceFlat tk heads d h) (den e) := rfl
+
+@[simp] theorem den_batchOp_headPad {N tk heads d : Nat} (h : Fin heads)
+    (e : SHlo (N * (tk*d))) :
+    den (.batchOp (N := N) (.headPad (N := tk) (heads := heads) h) e)
+      = batchMap N (headPadFlat tk heads d h) (den e) := rfl
+
+/-- ⭐ **THE CLS SLICE IS THE ONE PLACE THE BATCH AND THE TOKEN AXIS COULD SWAP SILENTLY.**
+    `clsSlice` takes `(tk+1)*D` to `D` — it CONTRACTS — and `batchMap N` of it takes `N*((tk+1)*D)`
+    to `N*D`. A render that read the batch as the token axis would take `(N+1)*D` to `D`, i.e. drop
+    every example but one and still type-check at `N = tk`. Stated so the two indices are pinned
+    apart by a theorem rather than by a naming convention. -/
+theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D)))
+    (k : Fin N) (i : Fin D) :
+    den (.batchOp (N := N) (.clsSlice (N := tk) (D := D)) e) (finProdFinEquiv (k, i))
+      = clsSliceFlat tk D (batchSlice N ((tk+1)*D) (den e) k) i := by
+  simp only [den_batchOp_clsSlice, batchMap, Equiv.symm_apply_apply]
+  rfl
+
 /-- **The two halves agree, per form.** The batched descriptor denotes the batch-lift of exactly
     what its per-example peer denotes — stated against `den (.lnRowF …)` rather than against
     `rowLNFlat` so the claim is *"same function as the op the renderer is replacing"*, which is
@@ -1758,6 +1840,14 @@ theorem den_batchOp_lnRow_eq_lnRowF {N m n : Nat} (gN bN es : String) (ε γ β 
     (e : SHlo (N * (m*n))) :
     den (.batchOp (N := N) (.lnRow (m := m) (n := n) gN bN es ε γ β) e)
       = batchMap N (fun v => den (.lnRowF gN bN es ε γ β (.operand "" v))) (den e) := rfl
+
+/-- ViT increment 1's peer of the above, on the form that carries the most data. ⚠ Its per-example
+    peer takes the TOKEN count as `N`; this one takes the BATCH as `N` and the token count as `tk`,
+    and both `N`s are `Nat`. Writing the equation out is what makes the two visible at once. -/
+theorem den_batchOp_denseRow_eq_denseRowF {N tk a c : Nat} (wN bN : String)
+    (W : Mat a c) (b : Vec c) (e : SHlo (N * (tk*a))) :
+    den (.batchOp (N := N) (.denseRow (N := tk) wN bN W b) e)
+      = batchMap N (fun v => den (.denseRowF (N := tk) wN bN W b (.operand "" v))) (den e) := rfl
 
 theorem den_batchOp_gelu_eq_geluF {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.gelu (n := n)) e)
@@ -3618,6 +3708,17 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .lnRow (m := m) (n := n) gN bN es _ _ _ => ("lnRowP", [gN, bN, es], [N, m, n])
   | .rowScale (m := m) (n := n) gN _ => ("rowScaleP", [gN], [N, m, n])
   | .rowBias (m := m) (n := n) bN _ => ("rowBiasP", [bN], [N, m, n])
+  -- ViT increment 1. ⚠ The FIRST entry of `info` is the batch and every following one is the tag's
+  -- own dims — so `[N, tk, a, c]` reads "batch N, token count tk". The emitter below uses only the
+  -- tail (it takes the batch from `pretty`'s `B`), which is why the batched text is its
+  -- per-example peer's byte for byte; `tests/TestBatchedEmitTie.lean` is what pins that.
+  | .denseRow (N := tk) (a := a) (c := c) wN bN _ _ => ("denseRowP", [wN, bN], [N, tk, a, c])
+  | .patchEmbed (ic := ic) (H := H) (W := W) (P := P) (N := tk) (D := D) wN bN clsN posN _ _ _ _ =>
+      ("patchEmbedP", [wN, bN, clsN, posN], [N, ic, H, W, P, tk, D])
+  | .clsSlice (N := tk) (D := D) => ("clsSliceP", [], [N, tk, D])
+  | .clsPad (N := tk) (D := D) => ("clsPadP", [], [N, tk, D])
+  | .headSlice (N := tk) (heads := heads) (d := d) h => ("headSliceP", [], [N, tk, heads, d, h.val])
+  | .headPad (N := tk) (heads := heads) (d := d) h => ("headPadP", [], [N, tk, heads, d, h.val])
 
 /-- Erase an `SHlo` graph to its renderable skeleton (drops `ℝ` values + shape
     index; keeps op structure, shapes, leaf names). -/
@@ -5819,6 +5920,61 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, rows*c]}) -> {ty [B,rows,c]}\n" ++
             s!"    {dg} = stablehlo.dot_general {dn}, {wN}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({ty [B,rows,c]}, {ty [a,c]}) -> {ty [B,rows,a]}\n" ++
             s!"    {o} = stablehlo.reshape {dg} : ({ty [B,rows,a]}) -> {ty [B, rows*a]}\n", o :: st)
+      -- ══ ViT increment 1: the six batch-invariant forms. Every one is byte-for-byte its
+      --    per-example peer's emit with the TOKEN count read off the tag (`tk`) instead of off the
+      --    SHlo index — which is the whole content of the move, since `B` was always `pretty`'s.
+      --    ⚠ `_N` (the batch) is deliberately unused in all six: an emit that read it would be
+      --    reintroducing the conflation. `tests/TestBatchedEmitTie.lean` pins each against its peer.
+      | "denseRowP", [wN, bN], [_N, tk, a, c] => do
+          let xn ← fresh; let dg ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
+          pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, tk*a]}) -> {ty [B,tk,a]}\n" ++
+            s!"    {dg} = stablehlo.dot_general {xn}, {wN}, contracting_dims = [2] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,tk,a]}, {ty [a,c]}) -> {ty [B,tk,c]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [c]}) -> {ty [B,tk,c]}\n" ++
+            s!"    {ob} = stablehlo.add {dg}, {bb} : {ty [B,tk,c]}\n" ++
+            s!"    {o} = stablehlo.reshape {ob} : ({ty [B,tk,c]}) -> {ty [B, tk*c]}\n", o :: st)
+      | "patchEmbedP", [wN, bN, clsN, posN], [_N, ic, H, W, P, tk, D] => do
+          let hp := H / P; let wp := W / P
+          let xn ← fresh; let cv ← fresh; let bb ← fresh; let cb ← fresh
+          let tr ← fresh; let tkn ← fresh; let clsb ← fresh; let cat ← fresh
+          let pb ← fresh; let ob ← fresh; let o ← fresh
+          pure (
+            s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*H*W]}) -> {ty [B,ic,H,W]}\n" ++
+            s!"    {cv} = stablehlo.convolution({xn}, {wN})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [{P}, {P}], pad = [[0, 0], [0, 0]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({ty [B,ic,H,W]}, {ty [D,ic,P,P]}) -> {ty [B,D,hp,wp]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [D]}) -> {ty [B,D,hp,wp]}\n" ++
+            s!"    {cb} = stablehlo.add {cv}, {bb} : {ty [B,D,hp,wp]}\n" ++
+            s!"    {tr} = stablehlo.transpose {cb}, dims = [0, 2, 3, 1] : ({ty [B,D,hp,wp]}) -> {ty [B,hp,wp,D]}\n" ++
+            s!"    {tkn} = stablehlo.reshape {tr} : ({ty [B,hp,wp,D]}) -> {ty [B,tk,D]}\n" ++
+            s!"    {clsb} = stablehlo.broadcast_in_dim {clsN}, dims = [2] : ({ty [D]}) -> {ty [B,1,D]}\n" ++
+            s!"    {cat} = stablehlo.concatenate {clsb}, {tkn}, dim = 1 : ({ty [B,1,D]}, {ty [B,tk,D]}) -> {ty [B,tk+1,D]}\n" ++
+            s!"    {pb} = stablehlo.broadcast_in_dim {posN}, dims = [1, 2] : ({ty [tk+1,D]}) -> {ty [B,tk+1,D]}\n" ++
+            s!"    {ob} = stablehlo.add {cat}, {pb} : {ty [B,tk+1,D]}\n" ++
+            s!"    {o} = stablehlo.reshape {ob} : ({ty [B,tk+1,D]}) -> {ty [B, (tk+1)*D]}\n", o :: st)
+      | "clsSliceP", [], [_N, tk, D] => do
+          let xn ← fresh; let sl ← fresh; let o ← fresh
+          pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, (tk+1)*D]}) -> {ty [B,tk+1,D]}\n" ++
+            s!"    {sl} = stablehlo.slice {xn} [0:{B}, 0:1, 0:{D}] : ({ty [B,tk+1,D]}) -> {ty [B,1,D]}\n" ++
+            s!"    {o} = stablehlo.reshape {sl} : ({ty [B,1,D]}) -> {ty [B,D]}\n", o :: st)
+      | "clsPadP", [], [_N, tk, D] => do
+          let dn ← fresh; let z ← fresh; let pd ← fresh; let o ← fresh
+          pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B,D]}) -> {ty [B,1,D]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {pd} = stablehlo.pad {dn}, {z}, low = [0, 0, 0], high = [0, {tk}, 0], interior = [0, 0, 0] : ({ty [B,1,D]}, tensor<f32>) -> {ty [B,tk+1,D]}\n" ++
+            s!"    {o} = stablehlo.reshape {pd} : ({ty [B,tk+1,D]}) -> {ty [B, (tk+1)*D]}\n", o :: st)
+      | "headSliceP", [], [_N, tk, heads, d, hIdx] => do
+          let xn ← fresh; let sl ← fresh; let o ← fresh
+          pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, tk*(heads*d)]}) -> {ty [B,tk,heads*d]}\n" ++
+            s!"    {sl} = stablehlo.slice {xn} [0:{B}, 0:{tk}, {hIdx*d}:{(hIdx+1)*d}] : ({ty [B,tk,heads*d]}) -> {ty [B,tk,d]}\n" ++
+            s!"    {o} = stablehlo.reshape {sl} : ({ty [B,tk,d]}) -> {ty [B, tk*d]}\n", o :: st)
+      | "headPadP", [], [_N, tk, heads, d, hIdx] => do
+          let dn ← fresh; let z ← fresh; let pd ← fresh; let o ← fresh
+          pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, tk*d]}) -> {ty [B,tk,d]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {pd} = stablehlo.pad {dn}, {z}, low = [0, 0, {hIdx*d}], high = [0, 0, {(heads-1-hIdx)*d}], interior = [0, 0, 0] : ({ty [B,tk,d]}, tensor<f32>) -> {ty [B,tk,heads*d]}\n" ++
+            s!"    {o} = stablehlo.reshape {pd} : ({ty [B,tk,heads*d]}) -> {ty [B, tk*(heads*d)]}\n", o :: st)
       -- ══ The un-fused BATCHED gradients: each is its `*SgdB` peer's emit with the SGD tail
       --    (const lr / multiply / subtract) removed, so the text is a byte-PREFIX of it. ══
       | "convWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] => do

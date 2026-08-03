@@ -636,6 +636,11 @@ open Proofs
 -- needs. The emit half is `tests/TestBatchedEmitTie.lean`; neither half implies the other.
 #print axioms StableHLO.den_batchOp_lnRow_eq_lnRowF
 #print axioms StableHLO.den_batchOp_gelu_eq_geluF
+-- ViT increment 1 (§0.2 ▶3): the same claim on ViT's most data-carrying descriptor. ⚠ Its
+-- per-example peer names the TOKEN count `N`; the batched one names the BATCH `N` and the
+-- tokens `tk`. Both are `Nat` and both appear multiplied, so the swap type-checks — this
+-- statement is where the two are pinned apart.
+#print axioms StableHLO.den_batchOp_denseRow_eq_denseRowF
 -- The saved-activation backwards, which CANNOT be descriptors: `lnRowBackB` hands example `k`
 -- `batchSlice k x` rather than the whole `x`, and a descriptor would silently give the latter —
 -- same types, same emitted bytes, different function. That is the statement being audited.
@@ -645,6 +650,10 @@ open Proofs
 -- batched bias gradient's two-level contraction collapses to its per-example peer at N = 1.
 #print axioms StableHLO.den_batchOp_softmaxDiv_per_example
 #print axioms StableHLO.den_rowDenseBiasGradB_at_one
+-- ⚠ And ViT's version of that trap, which is sharper: `clsSlice` CONTRACTS `(tk+1)*D` to `D`,
+-- so a render reading the batch as the token axis takes `(N+1)*D` to `D` — it keeps ONE
+-- example and drops the rest, and at `N = tk` it type-checks and agrees.
+#print axioms StableHLO.den_batchOp_clsSlice_per_example
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
 -- R4 Stage A, Chapter 4 (CNN): conv + maxpool forward ops; the whole MNIST-CNN

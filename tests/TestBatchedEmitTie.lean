@@ -168,6 +168,58 @@ private def cases : List (String × String × String) :=
                           (.operand "%x" zq0))),
      render (pretty BS (.batchOp (N := BS) (.layerScaleCh (c := pc) (h := ph) (w := ph) "%g" zc2)
                           (.operand "%x" zq0b))))
+  -- ── ViT increment 1 (handoff §0.2 ▶3): the six forms whose data is batch-INVARIANT.
+  --
+  --    ⚠⚠ EVERY ONE OF THESE IS DRIVEN AT `tk = 4` AGAINST `BS = 32`, AND THAT IS THE POINT.
+  --    ViT's per-example renderer already calls its TOKEN axis `N`, so "the batch" and "the token
+  --    count" are the same letter on the two sides of each pair. At `tk ≠ BS` a form that read one
+  --    for the other emits a different shape and this file goes red; at `tk = BS` it would agree
+  --    silently. That is the same argument the ConvNeXt five carry for `rows ≠ BS`, one net over
+  --    and considerably sharper, because here the collision is in the SOURCE TEXT and not only in
+  --    the semantics.
+  , ("denseRow",
+     render (pretty BS (.denseRowF (N := rows) (a := a) (c := c) "%W" "%b" zW zc
+                          (.operand "%x" (fun _ => 0 : Vec (rows*a))))),
+     render (pretty BS (.batchOp (N := BS) (.denseRow (N := rows) (a := a) (c := c) "%W" "%b" zW zc)
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(rows*a)))))))
+  , ("clsSlice",
+     render (pretty BS (.clsSliceF (N := tk) (D := dm)
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))),
+     render (pretty BS (.batchOp (N := BS) (.clsSlice (N := tk) (D := dm))
+                          (.operand "%x" (fun _ => 0 : Vec (BS*((tk+1)*dm)))))))
+  , ("clsPad",
+     render (pretty BS (.clsPadF (N := tk) (D := dm)
+                          (.operand "%x" (fun _ => 0 : Vec dm)))),
+     render (pretty BS (.batchOp (N := BS) (.clsPad (N := tk) (D := dm))
+                          (.operand "%x" (fun _ => 0 : Vec (BS*dm))))))
+  -- ⚠ head 1 of 4, NOT head 0, and NOT head 1 of 3: at `h = 0` the pad's `low` is 0 and the slice's offset is 0, so an
+  -- emit that dropped the index entirely would still agree. The interior head is the only one that
+  -- pins the slice offset. And 1-of-4 rather than 1-of-3 because at 1-of-3 the pad's
+  -- `low` and `high` are both `d` — symmetric, so swapping them would be inert too.
+  , ("headSlice",
+     render (pretty BS (.headSliceF (N := rows) (heads := 4) (d := a) ⟨1, by decide⟩
+                          (.operand "%x" (fun _ => 0 : Vec (rows*(4*a)))))),
+     render (pretty BS (.batchOp (N := BS) (.headSlice (N := rows) (heads := 4) (d := a)
+                          ⟨1, by decide⟩)
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(rows*(4*a))))))))
+  , ("headPad",
+     render (pretty BS (.headPadF (N := rows) (heads := 4) (d := a) ⟨1, by decide⟩
+                          (.operand "%x" (fun _ => 0 : Vec (rows*a))))),
+     render (pretty BS (.batchOp (N := BS) (.headPad (N := rows) (heads := 4) (d := a)
+                          ⟨1, by decide⟩)
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(rows*a)))))))
+  , ("patchEmbed",
+     render (pretty BS (.patchEmbedF (ic := pi) (H := pH) (W := pW) (P := pp) (N := tk) (D := dm)
+                          "%W" "%b" "%cls" "%pos" (fun _ _ _ _ => 0 : Kernel4 dm pi pp pp)
+                          (fun _ => 0 : Vec dm) (fun _ => 0 : Vec dm)
+                          (fun _ _ => 0 : Mat (tk+1) dm)
+                          (.operand "%x" (fun _ => 0 : Vec (pi*pH*pW))))),
+     render (pretty BS (.batchOp (N := BS)
+                          (.patchEmbed (ic := pi) (H := pH) (W := pW) (P := pp) (N := tk) (D := dm)
+                            "%W" "%b" "%cls" "%pos" (fun _ _ _ _ => 0 : Kernel4 dm pi pp pp)
+                            (fun _ => 0 : Vec dm) (fun _ => 0 : Vec dm)
+                            (fun _ _ => 0 : Mat (tk+1) dm))
+                          (.operand "%x" (fun _ => 0 : Vec (BS*(pi*pH*pW)))))))
   ] ++
   -- ── the stem conv and the four batch-contracting PARAMETER gradients ──────────────────────────
   --    ⚠⚠ The four gradients ALIAS their per-example peer's `Raw` (their emitted MLIR already
