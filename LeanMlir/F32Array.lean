@@ -103,6 +103,65 @@ def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray :=
     out ← write3 out (j - 2).toUSize buf[j-2]! buf[j-1]! buf[j]!
   pure out
 
+/-- ▶ **The classifier-dropout mask** (`recipe_gaps.md` gap C) — `n` INDEPENDENT Bernoulli draws at
+    keep probability `keep`, each survivor scaled by `1/keep`. Fills one `%do: tensor<B×w×f32>`
+    graph input, so `n = B * w`.
+
+    ⚠⚠ **`n` DRAWS, NOT `B` — this is `dropScales`' per-example loop replaced by a per-ELEMENT one,
+    and that single difference is the whole distinction between the two regularisers.** The
+    reference draws `bernoulli(key, keep, x.shape)` for the classifier
+    (`jax/Jax/Codegen.lean:1971`) against `(branch.shape[0],) + (1,)*(ndim-1)` for stochastic depth
+    (`:1037`). A mask built by drawing `B` values and repeating each `w` times type-checks, fills
+    the same buffer, trains and descends — it is stochastic depth on the classifier. Nothing
+    downstream can tell: the shapes agree, the emitted graph is identical, and only the
+    DISTRIBUTION differs. `Proofs.dropPath_scales_uniformly` is the statement of what would be
+    wrong; on this side it is the loop bound, and there is no gate but reading it.
+
+    ⚠ **Seed it from a stream DISJOINT from `dropScales`'.** The reference offsets by `999983`
+    (`fold_in(drop_key, 999983)` against `fold_in(drop_key, block_index)`) exactly so a net running
+    both regularisers does not correlate them; the caller adds that offset. Sharing a seed here
+    would make the classifier mask a function of block 0's drop decisions, every step.
+
+    ⚠ Same `1/keep` folding as `dropScales`, for the same reason: the graph bakes no constant, so a
+    ones mask (`keep ≥ 1`, or eval) is the EXACT identity rather than a rescale.
+
+    Pure Lean for `dropScales`' reasons — `stablehlo.rng` would make every bit-exactness gate in the
+    repo contingent on seeding an XLA RNG identically across two lowerers. ⚠ It is bigger than
+    `dropScales` (40,960 floats at B=32×1280, against 288) but still ~2 ULP of a ~310 ms step, and
+    keeping the draw here keeps the randomness readable and seeded where it can be audited. -/
+def dropoutMask (keep : Float) (n : Nat) (seed : USize) : IO ByteArray := do
+  let mut out ← const n.toUSize 1.0
+  if keep ≥ 1.0 || n == 0 then
+    return out
+  -- ⚠ REFUSE below 3 rather than return the all-ones buffer. `write3` is the only in-place float
+  -- writer, so it cannot tile 1 or 2 elements, and the overlap-backwards tail below would index
+  -- past the start. The failure mode if this were silent is the bad one: `out` is already filled
+  -- with 1.0, so a too-small mask would come back as the exact IDENTITY — dropout switched off,
+  -- with the render, the arity and every shape still correct. Real call sites are `B * width`
+  -- (≥ 1280 here), so this only fires on a mis-sized caller, which is precisely when it should.
+  if n < 3 then
+    throw (IO.userError s!"dropoutMask: n = {n} < 3 cannot be written by write3; a silent \
+all-ones return would be the identity, i.e. dropout switched off")
+  -- xorshift64*, the same family `dropScales` and `heInit` use.
+  let mut st : UInt64 := (seed.toUInt64 * 2654435761) ||| 1
+  let inv := 1.0 / keep
+  let mut buf : Array Float := #[]
+  for _ in [0:n] do
+    st := st ^^^ (st <<< 13); st := st ^^^ (st >>> 7); st := st ^^^ (st <<< 17)
+    -- u ∈ [0,1) from the top 24 bits — float32's mantissa width, as in `dropScales`.
+    let u := (st >>> 40).toNat.toFloat / 16777216.0
+    buf := buf.push (if u < keep then inv else 0.0)
+  -- `write3` is the only in-place float writer, so tile in threes and finish the tail by
+  -- overlapping backwards from the end (`dropScales`' idiom — every element is written, and the
+  -- overlap rewrites already-correct values rather than skipping any).
+  let mut i := 0
+  while i + 3 ≤ buf.size do
+    out ← write3 out i.toUSize buf[i]! buf[i+1]! buf[i+2]!
+    i := i + 3
+  for j in [i:buf.size] do
+    out ← write3 out (j - 2).toUSize buf[j-2]! buf[j-1]! buf[j]!
+  pure out
+
 /-- Concatenate multiple ByteArrays. Fast (memcpy per chunk). -/
 def concat (arrays : Array ByteArray) : ByteArray := Id.run do
   let mut out : ByteArray := .empty

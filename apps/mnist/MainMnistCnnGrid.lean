@@ -23,7 +23,10 @@ open Proofs.StableHLO in
     14×14, 3×3 kernels, B=128, lr 0.1/128). Values are erased by `pretty`, so the zero
     placeholders print the exact text the `den` theorems certify. -/
 def renderCnnGrid (d : Nat) : IO Unit := do
-  IO.FS.createDirAll "verified_mlir"
+  -- ⚠ The SAME directory the net reads from (`VerifiedNet.mlirDir`) — build products, not
+  -- committed renders, so they must not land in the pinned `verified_mlir/`.
+  let dir := (cnnG d).mlirDir
+  IO.FS.createDirAll dir
   let slug := s!"cnn_{d}"
   let ts := (cnnTrainStepFaithfulV 128 1 32 14 14 d 10 3 3 "0.00078125"
       (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -33,8 +36,8 @@ def renderCnnGrid (d : Nat) : IO Unit := do
       (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
       (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
       (fun _ => 0)).replace "@cnn_fwd" s!"@{slug}_fwd"
-  IO.FS.writeFile s!"verified_mlir/{slug}_train_step.mlir" ts
-  IO.FS.writeFile s!"verified_mlir/{slug}_fwd.mlir" fwd
+  IO.FS.writeFile s!"{dir}/{slug}_train_step.mlir" ts
+  IO.FS.writeFile s!"{dir}/{slug}_fwd.mlir" fwd
 
 def main (argv : List String) : IO Unit := do
   match argv with

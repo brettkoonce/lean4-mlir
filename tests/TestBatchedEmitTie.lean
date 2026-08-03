@@ -567,6 +567,35 @@ private def dropPathBackEmit : String :=
   render (pretty BS (.dropPathB (N := BS) (n := n) "%dp0"
                        (fun _ => 0 : Vec BS) (.operand "%x" (fun _ => 0 : Vec (BS*n)))))
 
+/-- **Classifier dropout's emit guard** (`recipe_gaps.md` gap C) — and it is `dropPathB`'s read
+    BACKWARDS, which is the point of putting the two side by side.
+
+    `dropoutB` has no per-example peer either, and the one structural property that could plausibly
+    be wrong is the mirror of stochastic depth's:
+
+    > **the mask is per-ELEMENT, not per-sample.**
+
+    The reference draws `bernoulli(key, keep, x.shape)` (`jax/Jax/Codegen.lean:1971`) — the full
+    `(B, 1280)` shape, not `(B, 1, …, 1)`. So a `tensor<B>` input plus `broadcast_in_dim dims = [0]`
+    here typechecks, compiles, runs, descends, and is **stochastic depth on the classifier** — a
+    different regulariser, exactly as the reverse substitution is on a residual branch.
+
+    ⚠ Until this op existed the hazard was one-directional and every comment in the kit wrote it
+    that way. It is now symmetric, and these two blocks are the pair that says so: `dropPathB`'s
+    asserts the broadcast is PRESENT, this one asserts it is ABSENT. Neither alone distinguishes
+    the two ops. `Proofs.dropout_of_dropScale` and `Proofs.dropPath_scales_uniformly` are the
+    denotation-side peers — this is a claim about bytes, those are claims about functions, and a
+    render that swapped the ops would be wrong on both counts. -/
+private def dropoutEmit : String :=
+  render (pretty BS (.dropoutB (N := BS) (n := n) "%do"
+                       (fun _ => 0 : Vec (BS*n)) (.operand "%x" (fun _ => 0 : Vec (BS*n)))))
+
+/-- The same op on a COTANGENT. `dropout_vjp_is_self` says this IS the certified VJP; this says the
+    two render the same bytes, i.e. that there is genuinely one emitter. -/
+private def dropoutBackEmit : String :=
+  render (pretty BS (.dropoutB (N := BS) (n := n) "%do"
+                       (fun _ => 0 : Vec (BS*n)) (.operand "%x" (fun _ => 0 : Vec (BS*n)))))
+
 /-- Fail loudly. NOT `IO.Process.exit 1`: under `#eval` the elaborator buffers the eval's output
     and prints it only after the eval returns, so `exit` kills the process with **every diagnostic
     discarded** — you get a bare non-zero status and no idea which form broke. (Verified against a
@@ -621,5 +650,32 @@ def main : IO Unit := do
 transpose, so these must be one emitter:\n forward:\n{e} backward:\n{dropPathBackEmit}"
   IO.println "  ✓ dropPathB: per-SAMPLE scale (dims = [0] over tensor<32xf32>), no baked keep"
   IO.println "  ✓ dropPathB: backward emits the forward's text byte-for-byte (VJP is itself)"
+  -- ── classifier dropout: the mask is per-ELEMENT (§ dropoutEmit above) ──
+  IO.println "── classifier dropout: dropoutB ──"
+  let d := dropoutEmit
+  if d.isEmpty || (d.splitOn "MALFORMED").length != 1 then
+    die "DEGENERATE: dropoutB render is empty or fell through to // MALFORMED"
+  -- ⭐ the load-bearing one, and it is the EXACT MIRROR of dropPathB's above: the mask carries the
+  --    value's own shape and is multiplied in directly. A `broadcast_in_dim` here would be
+  --    stochastic depth on the classifier — it trains, and no numeric gate sees it.
+  if (d.splitOn "stablehlo.multiply %do, %x : tensor<32x12xf32>").length != 2 then
+    die s!"dropoutB does not multiply a per-ELEMENT tensor<32x12xf32> mask in directly:\n{d}"
+  if (d.splitOn "broadcast_in_dim").length != 1 then
+    die s!"dropoutB BROADCASTS its mask — that is stochastic depth, not dropout:\n{d}"
+  -- ⚠ Same no-baked-constant requirement as dropPathB, for the same reason: the driver folds
+  -- `1/keep` into the mask, which is what makes the ones-mask forward the exact identity.
+  if (d.splitOn "stablehlo.constant").length != 1 then
+    die s!"dropoutB emits a baked constant — eval at a ones mask would not be the identity:\n{d}"
+  if d != dropoutBackEmit then
+    die s!"dropoutB's backward does not emit its forward's text — a diagonal map is its own \
+transpose, so these must be one emitter:\n forward:\n{d} backward:\n{dropoutBackEmit}"
+  -- ⭐⭐ THE PAIR, stated as one check: the two regularisers must not render the same bytes. Each
+  --    block above passes on its own op; only this says they are DISTINGUISHABLE, which is the
+  --    property that makes either emit test worth running.
+  if d == e then
+    die s!"dropoutB and dropPathB emit IDENTICAL text — one of them is the wrong regulariser:\n{d}"
+  IO.println "  ✓ dropoutB: per-ELEMENT mask (tensor<32x12xf32> multiplied in, NO broadcast)"
+  IO.println "  ✓ dropoutB: backward emits the forward's text byte-for-byte (VJP is itself)"
+  IO.println "  ✓ dropoutB ≠ dropPathB: the two regularisers render distinguishable text"
 
 #eval main

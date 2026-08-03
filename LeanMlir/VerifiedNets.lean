@@ -89,6 +89,14 @@ def mlpVerified : VerifiedNetSpec where
 def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
   name     := s!"MNIST-MLP-{d₁}x{d₂}"
   slug     := s!"mlp_{d₁}x{d₂}"
+  -- ⚠⚠ A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
+  -- artifact at run time and immediately trains on it, so the file is regenerated every
+  -- invocation. It wrote into `verified_mlir/` until 2026-08-03 and 74 such files had been checked
+  -- in across the three sweep specs — never loaded by anything, and invisible to the writer audit,
+  -- which greps for a LITERAL path while these writers interpolate the slug. `verified_mlir/` is
+  -- now pinned to exactly the certified corpus (`regen_verified_mlir.sh check`), which it could not
+  -- be while transients landed there. See `VerifiedNet.mlirDir`.
+  mlirDir  := ".lake/build"
   inC      := 1
   imageH   := 28
   imageW   := 28
@@ -131,6 +139,14 @@ def cnnVerified : VerifiedNetSpec where
 def cnnG (d : Nat) : VerifiedNetSpec where
   name     := s!"MNIST-CNN-fc{d}"
   slug     := s!"cnn_{d}"
+  -- ⚠⚠ A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
+  -- artifact at run time and immediately trains on it, so the file is regenerated every
+  -- invocation. It wrote into `verified_mlir/` until 2026-08-03 and 74 such files had been checked
+  -- in across the three sweep specs — never loaded by anything, and invisible to the writer audit,
+  -- which greps for a LITERAL path while these writers interpolate the slug. `verified_mlir/` is
+  -- now pinned to exactly the certified corpus (`regen_verified_mlir.sh check`), which it could not
+  -- be while transients landed there. See `VerifiedNet.mlirDir`.
+  mlirDir  := ".lake/build"
   inC      := 1
   imageH   := 28
   imageW   := 28
@@ -256,6 +272,14 @@ def cifar8BnVerified : VerifiedNetSpec where
 def cifar8BnG (d : Nat) : VerifiedNetSpec where
   name     := s!"CIFAR-CNN8-BN-fc{d}"
   slug     := s!"cifar8_bn_{d}"
+  -- ⚠⚠ A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
+  -- artifact at run time and immediately trains on it, so the file is regenerated every
+  -- invocation. It wrote into `verified_mlir/` until 2026-08-03 and 74 such files had been checked
+  -- in across the three sweep specs — never loaded by anything, and invisible to the writer audit,
+  -- which greps for a LITERAL path while these writers interpolate the slug. `verified_mlir/` is
+  -- now pinned to exactly the certified corpus (`regen_verified_mlir.sh check`), which it could not
+  -- be while transients landed there. See `VerifiedNet.mlirDir`.
+  mlirDir  := ".lake/build"
   inC      := 3
   imageH   := 32
   imageW   := 32
@@ -564,6 +588,24 @@ def efficientnetVerified : VerifiedNetSpec where
   -- because every tie compares the render against a peer built from the same constants.
   dropKeeps := (#[2, 4, 6, 7, 9, 10, 12, 13, 14] : Array Nat).map
     (fun i => 1.0 - 0.2 * i.toFloat / 15.0)
+  -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C). `efficientNetB0ImagenetConfig` sets
+  -- `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`), so keep = 0.8, and the width is the
+  -- head's 1280 — the GAP output the classifier consumes, NOT `nClasses`.
+  --
+  -- ⚠⚠ IT IS PER-ELEMENT AND `dropKeeps` ABOVE IS PER-EXAMPLE, which is why this is a separate
+  -- field and not another entry in that array. The reference draws `bernoulli(key, keep, x.shape)`
+  -- here against `(B, 1, …, 1)` there. Folding this into `dropKeeps` would type-check on the Lean
+  -- side and produce a `tensor<Bxf32>` mask for a `tensor<Bx1280xf32>` input — an arity/type
+  -- refusal, which is the good outcome; the BAD one is the reverse, drawing B values and repeating
+  -- them, which is stochastic depth on the classifier and is silent. See `F32.dropoutMask`.
+  --
+  -- ⚠ It is on the IMAGENETTE net too, and the ramp comment above says why the SD ramp does not
+  -- move between scales; this is the same argument. `efficientNetB0Config` (Imagenette) does not
+  -- itself set dropout — this carries the ImageNet reference's value so the `adamdo` render has a
+  -- gate vehicle at the cheap scale, exactly as `dropKeeps` carries ImageNet's ramp. ⚠ So do NOT
+  -- quote an Imagenette `adamdo` run as a reference comparison; it is a gate vehicle
+  -- (`planning/ema.md`'s finding 3, same shape).
+  dropoutKeep := some (0.8, 1280)
 
 /-- **EfficientNet-B0 on full 1000-class ImageNet** — the EfficientNet peer of the R34, ViT and
     ConvNeXt ImageNet specs (§2p). Identical architecture to `efficientnetVerified`; only the head
@@ -620,6 +662,10 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
   -- of the class count or the batch, so the ramp does not move between scales.
   dropKeeps := (#[2, 4, 6, 7, 9, 10, 12, 13, 14] : Array Nat).map
     (fun i => 1.0 - 0.2 * i.toFloat / 15.0)
+  -- The ImageNet peer, and IDENTICAL for the same reason the ramp is: the mask width is the head's
+  -- input (1280), which is a property of the ARCHITECTURE. Only the classifier's OUTPUT moves
+  -- between scales (10 → 1000), and the dropout site sits before it.
+  dropoutKeep := some (0.8, 1280)
 
 -- Exactly one parameter shape may differ — the head. And the BN layout must be IDENTICAL, since
 -- the running-stat region is positional: a drift there misaligns every frozen statistic at eval.

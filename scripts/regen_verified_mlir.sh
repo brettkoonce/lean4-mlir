@@ -61,6 +61,114 @@ check_writers() {
   return $rc
 }
 
+# ── ⭐⭐ the MANIFEST: verified_mlir/ must contain EXACTLY the certified corpus ──
+# The official list is not a file anyone maintains — it is *derived*: an artifact belongs in
+# `verified_mlir/` iff some `Proofs/Codegen/*.lean` writes it with a LITERAL
+# `IO.FS.writeFile "verified_mlir/<name>"`. Anything else on disk is a build product or a
+# leftover, and anything named by a writer but absent has not been regenerated.
+#
+# ⚠⚠ WHY THIS EXISTS (2026-08-03). The directory held **206** files and only 132 had a literal
+# writer. The other 74 — `mlp_<d1>x<d2>_*`, `cnn_<d>_*`, `cifar8_bn_<d>_*` — were BUILD PRODUCTS of
+# the width/batch sweeps, rendered from argv and trained on immediately, so every one was
+# regenerated on the next invocation and **nothing ever loaded the committed copy**. They were
+# checked in because their writers spelled the path with an interpolated slug
+# (`s!"verified_mlir/{slug}_..."`) and landed in the corpus by default.
+#
+# ⚠ AND THE WRITER AUDIT ABOVE COULD NOT SEE THEM, BY CONSTRUCTION: it greps for a literal path, so
+# an interpolated writer is invisible to it — including a *second* writer for an artifact that
+# already has one, which is the exact race that audit exists to catch. Two renderers already carry
+# comments saying "do not interpolate these paths" for this reason; the comments were right and
+# nothing enforced them. This check does, from the other side: it audits the DIRECTORY rather than
+# the writers, so it cannot be evaded by how a path is spelled.
+#
+# The sweeps now write to `.lake/build/` (`VerifiedNet.mlirDir`). If one ever points back here, this
+# goes red on the next audit instead of silently repopulating the corpus.
+check_manifest() {
+  echo "── verified_mlir/ manifest (on disk == has a literal Proofs writer) ──"
+  local tmp_disk tmp_writer rc
+  tmp_disk="$(mktemp)"; tmp_writer="$(mktemp)"
+  ls verified_mlir/*.mlir 2>/dev/null | sed 's|verified_mlir/||' | sort > "$tmp_disk"
+  # ⚠ The `\.mlir"` suffix is REQUIRED and it is not decoration. Prose that quotes this pattern
+  # counts as a writer otherwise: this gate's own docstring in `VerifiedTrain.lean` contains
+  # `IO.FS.writeFile "verified_mlir/…"`, and the FIRST run of this check duly reported `…` as
+  # "named by a writer but absent from disk". Two renderers carry the same shape of comment.
+  # A good failure, though — the gate tripped on its own documentation, which is evidence it reads
+  # the tree rather than a hand-maintained list.
+  grep -rho 'IO.FS.writeFile "verified_mlir/[^"]*\.mlir"' --include='*.lean' . \
+    | sed 's|.*verified_mlir/||; s|"$||' | sort -u > "$tmp_writer"
+  rc=0
+  local extra missing
+  extra="$(comm -23 "$tmp_disk" "$tmp_writer")"
+  missing="$(comm -13 "$tmp_disk" "$tmp_writer")"
+  if [ -n "$extra" ]; then
+    echo "  ⚠ $(echo "$extra" | wc -l) file(s) on disk with NO literal Proofs writer:"
+    echo "$extra" | sed 's|^|      |'
+    echo "    → either give it a literal writer in Proofs/Codegen, or write it to .lake/build"
+    echo "      (VerifiedNet.mlirDir) if it is a build product."
+    rc=1
+  fi
+  if [ -n "$missing" ]; then
+    echo "  ⚠ $(echo "$missing" | wc -l) artifact(s) named by a writer but ABSENT from disk:"
+    echo "$missing" | sed 's|^|      |'
+    echo "    → run scripts/regen_verified_mlir.sh proofs"
+    rc=1
+  fi
+  [ $rc -eq 0 ] && echo "  OK — $(wc -l < "$tmp_disk") artifacts, each with exactly one literal Proofs/Codegen writer"
+  rm -f "$tmp_disk" "$tmp_writer"
+  return $rc
+}
+
+# ── ⭐ the path/entry audit: an artifact's FILENAME must equal the function it declares ──
+# The driver derives BOTH from one string: the path from `verified_mlir/{slug}_{variant}_train_step
+# .mlir` (VerifiedTrain.lean:771) and the entry from `m.{slug}_{variant}_train_step` (:868). So the
+# two spellings must coincide or the artifact is unreachable at EVERY value of LEAN_MLIR_VARIANT —
+# one spelling finds the file and asks for an entry it does not contain, the other names the right
+# entry at a path that does not exist.
+#
+# ⚠⚠ FOUND 2026-08-03 BY A `#guard`, NOT BY THIS: `enetin_emarmsdrop64_train_step.mlir` declared
+# `@enetin_emarms64drop_train_step` (the batch suffix precedes the regulariser markers in
+# `enetAdamVariant`, and the path was written by hand the other way round). It had been committed,
+# prefix-audited and carried in the recipe matrix as a shipped ImageNet artifact, and it could not
+# be loaded. It survived because every gate on it READS THE FILE; none of them opens it through the
+# driver, and structural gates are blind to the name they were handed.
+#
+# This is handoff §0.8 finding 2 ("a bool-derived variant name cannot distinguish two renders …
+# an entry disagreeing with its own path") recurring on the axis that finding did not check — there
+# the ENTRY had drifted, here the FILENAME had. The general form: when one string derives two
+# artifacts, audit that they agree; do not audit either one alone.
+check_entry_names() {
+  echo "── artifact path == declared entry ──"
+  python3 - <<'PY'
+import re, sys
+from pathlib import Path
+bad = []
+n = 0
+# Deliberate carve-outs, each a render that is NOT loaded by the variant path and says so:
+#   cifar8_adam256      — a batch-256 render of the cifar8 adam graph, loaded by the DP split
+#                         identity harness by explicit path, never by variant.
+#   mobilenetv2_reduced — the parameter-reduced net used by tests, same story.
+# ⚠ Anything added here must be a render nothing resolves by `{slug}_{variant}`. If in doubt it is
+# not a carve-out — the whole point of this check is that the failure it catches is silent.
+EXEMPT = {"cifar8_adam256_train_step", "mobilenetv2_reduced_train_step"}
+for f in sorted(Path("verified_mlir").glob("*.mlir")):
+    base = f.stem
+    if base in EXEMPT:
+        continue
+    m = re.search(r"func\.func @([A-Za-z0-9_]+)", f.read_text())
+    n += 1
+    if not m:
+        bad.append((base, "<no func.func>"))
+    elif m.group(1) != base:
+        bad.append((base, m.group(1)))
+for base, entry in bad:
+    print(f"  MISMATCH — {base}.mlir declares @{entry}")
+    print(f"             the driver cannot load this at any LEAN_MLIR_VARIANT")
+if bad:
+    sys.exit(1)
+print(f"  OK — all {n} audited artifacts declare the entry their filename names")
+PY
+}
+
 # ── the train/eval tie: the eval forward must BE the forward the trainer differentiates ──
 # A train step is (forward ++ backward), so a correctly-paired forward artifact is a byte-prefix
 # of its train-step artifact. This is what caught the ResNet-34 BN skew: the committed
@@ -85,7 +193,14 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
          # sites are emitted in the forward too (at an all-ones scale, exactly the identity), so
          # the SD train step keeps a prefix partner instead of the audit quietly not covering it.
          ("efficientnet_drop_fwd.mlir", "efficientnet_adamdrop_train_step.mlir"),
-         ("enetin_drop_fwd.mlir",       "enetin_emarmsdrop64_train_step.mlir"),
+         ("enetin_drop_fwd.mlir",       "enetin_emarms64drop_train_step.mlir"),
+         # Classifier dropout (recipe_gaps.md gap C, 2026-08-03). Same design as the SD pair and for
+         # the same reason: the dropout site is emitted in the forward too, at the driver's all-ones
+         # mask (exactly the identity — 1*x = x in IEEE), so the dropout variants keep a prefix
+         # partner. `enetin_dropdo_fwd` carries BOTH mask families, which is what pairs it with the
+         # full-reference-recipe train step.
+         ("efficientnet_do_fwd.mlir", "efficientnet_adamdo_train_step.mlir"),
+         ("enetin_dropdo_fwd.mlir",   "enetin_emarms64dropdo_train_step.mlir"),
          # ConvNeXt's SD pair, on the BATCHED chain (ConvNeXtRenderB) — where a per-example mask is
          # expressible at all. ⚠ These are the only ConvNeXt artifacts from that chain: the drop-free
          # batched render is tied but NOT swapped, so `convnext_fwd`/`convnext_train_step` above are
@@ -202,6 +317,10 @@ PY
 if [ "$WHAT" = "check" ]; then
   rc=0
   check_writers || rc=1
+  echo
+  check_manifest || rc=1
+  echo
+  check_entry_names || rc=1
   echo
   check_fwd_prefix || rc=1
   echo

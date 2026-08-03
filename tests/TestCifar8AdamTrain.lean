@@ -660,10 +660,28 @@ def main : IO Unit := do
   -- ── FC-head width sweep (conv backbone @ [16,16,32,32] fixed) ──
   -- Render adamw train-step + forward for each dense-head width d, func-slugged so the
   -- `cifar8-bn-grid` driver trains each via `trainAdamSched "adam"` (eval through @<slug>_fwd,
-  -- per-channel BN ⇒ train=eval). Written to verified_mlir/cifar8_bn_<d>_{adam_train_step,fwd}.mlir.
+  -- per-channel BN ⇒ train=eval).
+  --
+  -- ⚠⚠ **Written to `.lake/build/`, NOT `verified_mlir/`, since 2026-08-03.** These are BUILD
+  -- PRODUCTS: `cifar8BnG d` renders from argv and trains on the result, so every one is
+  -- regenerated on the next invocation. 20 of them had been checked in — never loaded by anything,
+  -- and invisible to the writer audit, which greps for a LITERAL path while this loop interpolates
+  -- the slug. `verified_mlir/` is now pinned to exactly the certified corpus, which it could not be
+  -- while transients landed there.
+  --
+  -- ⚠ **This IS a second spelling of `cifar8BnG.mlirDir`, and it is deliberate.** This file imports
+  -- only the renderers (`StableHLO`, `ViTRender`, `Types`); pulling in `LeanMlir.VerifiedNets` —
+  -- and with it the whole `VerifiedSpec` → `VerifiedTrain` chain — to read one string would be a
+  -- heavy dependency for a render test. The two spellings are pinned not by an import but by
+  -- `scripts/regen_verified_mlir.sh check`, which FAILS if any file appears in `verified_mlir/`
+  -- without a literal `Proofs/Codegen` writer — so a drift back to `verified_mlir/` here goes red
+  -- on the next audit rather than silently repopulating the corpus. That is the honest trade: a
+  -- duplicated constant guarded by a gate, rather than an undeclared one.
+  let sweepDir := ".lake/build"
+  IO.FS.createDirAll sweepDir
   for d in [8,16,32,64,128,256,512,1024,2048,4096] do
     let slug := s!"cifar8_bn_{d}"
-    IO.FS.writeFile s!"verified_mlir/{slug}_adam_train_step.mlir"
+    IO.FS.writeFile s!"{sweepDir}/{slug}_adam_train_step.mlir"
       (cifar8BnAdamTrainStep d s!"{slug}_adam_train_step")
     let fwd := (Proofs.StableHLO.cifar8BnFwdModuleV 128 3 16 16 32 32 2 2 d 10 3 3 "1.0e-05"
       (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
@@ -676,7 +694,7 @@ def main : IO Unit := do
       (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
       (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
       (fun _ => 0)).replace "@cifar8_bn_fwd" s!"@{slug}_fwd"
-    IO.FS.writeFile s!"verified_mlir/{slug}_fwd.mlir" fwd
+    IO.FS.writeFile s!"{sweepDir}/{slug}_fwd.mlir" fwd
   IO.println "rendered cifar8_bn FC-head width-sweep MLIRs (d ∈ 8..4096)"
 
 #eval main

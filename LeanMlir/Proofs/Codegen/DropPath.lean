@@ -193,4 +193,128 @@ theorem keepProb_last (dropRate : ℝ) (totalDrop : Nat) (h : 2 ≤ totalDrop) :
 @[simp] theorem keepProb_zero_rate (i totalDrop : Nat) : keepProb 0 i totalDrop = 1 := by
   simp [keepProb]
 
+/-! ## Classifier dropout — the OTHER diagonal scale, and the reason both live in one file
+
+`recipe_gaps.md` gap C. The reference emits it in the `.dense` case
+(`jax/Jax/Codegen.lean:1971`), immediately before the classifier:
+
+```python
+if drop_key is not None:
+    x = x * jax.random.bernoulli(jax.random.fold_in(drop_key, 999983),
+                                 keep, x.shape).astype(x.dtype) / keep
+```
+
+⚠⚠ **`x.shape`, NOT `(B, 1, …, 1)` — and that one argument is the whole difference.** Stochastic
+depth draws ONE Bernoulli per example and broadcasts it over the branch; dropout draws one per
+ELEMENT. Everything else is identical: inverted (`/ keep`), train-only, a diagonal linear map.
+
+**They are therefore the same op at two different mask ranks, which is exactly why they are
+dangerous to each other.** `StableHLO.lean`'s `dropPathP` emit case, `tests/TestBatchedEmitTie.lean`
+and `Proofs.dropScale`'s docstring have each independently written down the warning that emitting a
+`tensor<B×n>` scale where a `tensor<B>` one belongs *"typechecks, compiles, runs, descends, and is
+per-element dropout — a different regulariser"*. That sentence is now a live op rather than a
+hypothetical, so the confusion runs in **both** directions and the file states the relationship
+rather than warning about it:
+
+| | mask | reachable scales |
+|---|---|---|
+| `dropPath` | `Vec N`, lifted by `dropScale` | uniform within an example (`dropPath_scales_uniformly`) |
+| `dropout` | `Vec (N*n)` | all of them — `dropout_of_dropScale` says `dropPath` is the special case |
+
+**And it is one MORE reading of `layerScale`** — the fifth time enumerating a reference feature
+against the ops already present has collapsed a scoped family (§2k heavy-ball, RMSProp, the EMA
+shadow, `dropPath`, here). Dropout is the *cheapest* of them: `dropPath` needed `dropScale` to lift
+a per-example vector to the batched index, and dropout needs nothing at all — the mask already has
+the value's type, so the denotation is `layerScale` applied directly. -/
+
+/-- **Classifier dropout at the batched index** — the per-ELEMENT inverted mask, `layerScale`
+    applied with no lift at all.
+
+    ⚠ `N` and `n` are carried as explicit arguments even though the body ignores them, so that a
+    `dropout` node and the `dropPath` node it could be confused with have the same shape of
+    signature and the batched index is visible at every use site. The op that renders this
+    (`SHlo.dropoutB`) needs `N` and `n` for its emitted type anyway. -/
+noncomputable def dropout (_N _n : Nat) {m : Nat} (mask : Vec m) : Vec m → Vec m :=
+  layerScale mask
+
+@[simp] theorem dropout_apply (N n : Nat) {m : Nat} (mask x : Vec m) (idx : Fin m) :
+    dropout N n mask x idx = mask idx * x idx := rfl
+
+/-- ⭐ **The supplied mask IS the reference's `bernoulli(…) / keep`.** `dropPath_eq_reference`'s
+    twin, and stated for the same reason: folding the `1/keep` inversion into the input is exactly
+    the step at which inverted dropout could quietly become the un-inverted kind, which trains and
+    shifts every classifier input's scale at eval. -/
+theorem dropout_eq_reference (N n : Nat) {m : Nat} (keep : Vec m) (kp : ℝ) (x : Vec m)
+    (idx : Fin m) :
+    dropout N n (fun i => keep i / kp) x idx = x idx * keep idx / kp := by
+  simp [dropout, layerScale]; ring
+
+/-- ⭐ **EVAL IS THE IDENTITY, EXACTLY**, and — as with `dropPath_ones_id` — this is a theorem about
+    ONE graph at a particular input, not about two graphs.
+
+    The forward render emits the dropout site too and the driver supplies an all-ones mask there, so
+    `@efficientnet_do_fwd` stays a byte-PREFIX of `@efficientnet_adamdo_train_step` and the
+    `forward ⊂ train-step` prefix audit — one of the two load-bearing structural gates in the repo —
+    survives untouched. `1 * x = x` is exact in IEEE, so "the identity" is bit-exact, not close. -/
+@[simp] theorem dropout_ones_id (N n : Nat) {m : Nat} (x : Vec m) :
+    dropout N n (fun _ => (1 : ℝ)) x = x := by
+  funext idx; simp [dropout, layerScale]
+
+/-- A zero mask kills the input exactly — the other endpoint, and the control that pins the site to
+    where the renderer claims it is. -/
+@[simp] theorem dropout_zeros_zero (N n : Nat) {m : Nat} (x : Vec m) :
+    dropout N n (fun _ => (0 : ℝ)) x = fun _ => 0 := by
+  funext idx; simp [dropout, layerScale]
+
+/-- **The VJP, `layerScale`'s verbatim again.** No second emitter, no `*Grad` peer, no new
+    certificate. -/
+noncomputable def dropout_has_vjp (N n : Nat) {m : Nat} (mask : Vec m) :
+    HasVJP (dropout N n mask) :=
+  layerScale_has_vjp mask
+
+/-- ⭐ **THE BACKWARD IS THE FORWARD**, at the same mask — `dropPath_vjp_is_self` one rank up.
+
+    ⚠⚠ **But note what this does NOT say, because it is where this feature's one real defect
+    lives.** It says the cotangent flowing *through* the site is scaled by the same mask. It says
+    nothing about the classifier WEIGHT gradient, which reads the dense's INPUT — and the dense's
+    input is the DROPPED activation, not the pooled one. `∂L/∂W = Σ_b dy_b ⊗ (mask_b ⊙ x_b)`.
+    Feeding it the undropped activation type-checks, trains and descends, and is invisible at
+    `mask ≡ 1`, which is where every identity gate for this feature sits. It is
+    `planning/xla_pjrt_handoff.md` §0.10's LayerScale-γ defect in the same shape: *when an op is
+    spliced into a chain, list every CONSUMER of the value it displaced.* -/
+theorem dropout_vjp_is_self (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m) :
+    (dropout_has_vjp N n mask).backward x dy = dropout N n mask dy := rfl
+
+/-- The `correct` field spelled out, matching every other `_has_vjp_correct` in the kit. -/
+theorem dropout_has_vjp_correct (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m)
+    (i : Fin m) :
+    (dropout_has_vjp N n mask).backward x dy i =
+      ∑ j : Fin m, pdiv (dropout N n mask) x i j * dy j :=
+  (dropout_has_vjp N n mask).correct x dy i
+
+/-- ⭐⭐ **`dropPath` IS `dropout` AT A LIFTED MASK** — the bridge, and it is `rfl`.
+
+    Both are `layerScale`; the only content of "stochastic depth" over "dropout" is that its mask
+    factors through `dropScale`. Stating it makes the containment a theorem instead of a comment,
+    and it is the reason these two ops share a file: anything proved about one at a lifted mask
+    transfers, and anything that *fails* to transfer is exactly the per-element freedom below. -/
+theorem dropout_of_dropScale (N n : Nat) (s : Vec N) :
+    dropout N n (dropScale N n s) = dropPath N n s := rfl
+
+/-- ⭐⭐ **AND HERE IS THE FREEDOM `dropPath` DOES NOT HAVE** — the formal content of "per-SAMPLE".
+
+    Within one example, `dropPath` scales every position by the same factor, so the output at two
+    such positions stays in the ratio the *input* had: `y_i · x_j = y_j · x_i`. `dropout`'s mask is
+    free to break that, and does — which is precisely the difference the emitted text spells as
+    `broadcast_in_dim dims = [0]` versus no broadcast at all.
+
+    So this is the denotation-side peer of `tests/TestBatchedEmitTie.lean`'s two mask assertions.
+    Neither gate can substitute for the other: the emit test says the two ops render different
+    bytes, this says they compute different functions, and a render that emitted one where the other
+    belongs would be wrong on both counts and caught by whichever ran. -/
+theorem dropPath_scales_uniformly (N n : Nat) (s : Vec N) (x : Vec (N * n)) (i j : Fin (N * n))
+    (h : (finProdFinEquiv.symm i).1 = (finProdFinEquiv.symm j).1) :
+    dropPath N n s x i * x j = dropPath N n s x j * x i := by
+  simp only [dropPath_apply, h]; ring
+
 end Proofs

@@ -665,6 +665,21 @@ open Proofs
 -- same bytes and agrees on a one-example batch. Any gate on the four contracting gradients
 -- must run at N > 1.
 #print axioms StableHLO.den_posEmbedGradB_at_one
+-- ⚠⚠ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C), and it is on this list for the same reason the
+-- three above are: these are the statements the emit tie structurally CANNOT make. `dropoutB` and
+-- `dropPathB` are one op — `layerScale` — at two mask ranks, so which of them a render should carry
+-- is a question about the DENOTATION, and the byte tie can only see that the two render
+-- differently. `den_dropoutB_of_dropScale` is the containment (`dropPath` IS `dropout` at a lifted
+-- mask, `rfl`); `dropPath_scales_uniformly` is the gap that makes the containment strict — within
+-- one example stochastic depth scales every position identically, and dropout is free not to.
+-- Substituting either op for the other type-checks, compiles, trains and descends.
+#print axioms StableHLO.dropoutB_faithful
+#print axioms StableHLO.dropoutB_back_faithful
+#print axioms StableHLO.den_dropoutB_of_dropScale
+#print axioms Proofs.dropPath_scales_uniformly
+#print axioms Proofs.dropout_eq_reference
+#print axioms Proofs.dropout_ones_id
+#print axioms Proofs.dropout_vjp_is_self
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
 -- R4 Stage A, Chapter 4 (CNN): conv + maxpool forward ops; the whole MNIST-CNN

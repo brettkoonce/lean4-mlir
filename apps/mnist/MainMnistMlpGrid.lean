@@ -23,7 +23,10 @@ open Proofs.StableHLO in
     to 0.1/128 = the mean-loss equiv of the book's 0.1). Values are erased by `pretty`,
     so the zero placeholders print the exact text the `den` theorems certify. -/
 def renderGrid (d₁ d₂ : Nat) : IO Unit := do
-  IO.FS.createDirAll "verified_mlir"
+  -- ⚠ The SAME directory the net reads from (`VerifiedNet.mlirDir`), derived rather than
+  -- restated: these are build products and must not land in the pinned `verified_mlir/`.
+  let dir := (mlpG d₁ d₂).mlirDir
+  IO.FS.createDirAll dir
   let slug := s!"mlp_{d₁}x{d₂}"
   -- The renderers hardcode `@mlp_train_step` / `@mlp_fwd`; the driver invokes
   -- `m.{slug}_train_step`, so rename the exported func symbol to the slug (module
@@ -34,8 +37,8 @@ def renderGrid (d₁ d₂ : Nat) : IO Unit := do
   let fwd := (mlpFwdModuleV 128 784 d₁ d₂ 10
       (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
       (fun _ => 0)).replace "@mlp_fwd" s!"@{slug}_fwd"
-  IO.FS.writeFile s!"verified_mlir/{slug}_train_step.mlir" ts
-  IO.FS.writeFile s!"verified_mlir/{slug}_fwd.mlir" fwd
+  IO.FS.writeFile s!"{dir}/{slug}_train_step.mlir" ts
+  IO.FS.writeFile s!"{dir}/{slug}_fwd.mlir" fwd
 
 def main (argv : List String) : IO Unit := do
   match argv with

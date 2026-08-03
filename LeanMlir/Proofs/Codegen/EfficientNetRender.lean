@@ -304,6 +304,37 @@ def enetDropSites : Nat := enetDropIdxs.length
 def enetDropSig (B : Nat) (sd : Bool) : String :=
   if sd then String.join (enetDropIdxs.map (fun i => s!", {dpName i}: {ty [B]}")) else ""
 
+-- ── ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C) ─────────────────────────────────────────────
+-- `efficientNetB0ImagenetConfig` sets `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`)
+-- and until now there were **zero dropout sites in any verified EfficientNet render**. The recipe
+-- matrix carried a stochastic-depth row and no dropout row, which read as coverage: they are
+-- different regularisers, at different places, with different mask ranks.
+--
+-- ⚠⚠ ONE SITE, AND IT IS NOT A RAMP. The reference applies it in the `.dense` case
+-- (`jax/Jax/Codegen.lean:1971`), immediately before the single classifier — so unlike stochastic
+-- depth there is no per-block schedule, no `totalDrop` denominator, and therefore none of §2k's
+-- `α/K` class of silent-constant bug is even spellable here. What replaces that risk is the mask
+-- RANK (`Proofs.dropout` vs `Proofs.dropPath`) and the weight-gradient operand below.
+--
+-- ⚠ THE WIDTH IS THE HEAD'S, NOT THE CLASS COUNT. Dropout sits between GAP and the dense, so the
+-- mask is `tensor<B×1280>` at every `nClasses` — Imagenette and ImageNet renders take the SAME
+-- mask shape, which is why `enetDropoutSig` does not read `nClasses` and must not be "fixed" to.
+
+/-- The classifier's input width — EfficientNet-B0's head channel count, i.e. the GAP output and
+    hence the dropout mask's per-example width. Independent of `nClasses`. -/
+def enetHeadWidth : Nat := 1280
+
+/-- The `%do: tensor<B×1280xf32>` input, appended when classifier dropout is on. Empty when off,
+    which is what keeps the inertness gate byte-identical.
+
+    ⚠ It goes **after** `enetDropSig`, i.e. dead last in every signature. Two independent reasons,
+    and the second is the one that bites: a parameter inserted mid-list captures an existing
+    positional slot (the mnv2 `convBias` failure, §2m) and the driver walks these signatures
+    positionally; and the drop-mask tail is what the DP shim shards by COUNT from the end
+    (`n_shard_tail`), so a per-example input placed before them would be counted as one of them. -/
+def enetDropoutSig (B : Nat) (cd : Bool) : String :=
+  if cd then s!", {doName}: {ty [B, enetHeadWidth]}" else ""
+
 -- § MBConv forward emitters (stride-1 expand / no-skip expand / strided expand / no-expand b1)
 -- ════════════════════════════════════════════════════════════════
 
@@ -650,7 +681,21 @@ structure ENetFwd where
   hc     : String            -- head 1×1 conv out (= head BN input)
   hn     : String            -- head BN out (= head swish pre-act)
   hr     : String            -- head swish out (= GAP input)
-  gap    : String            -- global-average-pool out (= dense input)
+  gap    : String            -- global-average-pool out
+  /-- ⭐⭐ **THE CLASSIFIER'S ACTUAL INPUT** — `gap` with classifier dropout OFF, the `dropoutB`
+      output with it ON. It exists as its own field, rather than every consumer reading `gap`,
+      because there are TWO consumers and one of them is easy to miss:
+
+      * the dense forward, which obviously reads it; and
+      * ⚠⚠ **the dense WEIGHT gradient**, `∂L/∂W = Σ_b dy_b ⊗ (input_b)` — which reads the dense's
+        input, i.e. the DROPPED activation, not the pooled one.
+
+      Feeding `dnW` the undropped `gap` type-checks, trains, descends, and is wrong on the one
+      parameter dropout acts through. It is invisible to every ones-mask gate this feature has,
+      because at `mask ≡ 1` the two values are equal. That is handoff §0.10's LayerScale-γ defect
+      in the same shape, and the reason it is a named field is the carry-forward that record asks
+      for: *when an op is spliced into a chain, list every consumer of the value it displaced.* -/
+  cin    : String            -- dense input (= gap, or the dropout output when cd is on)
   logits : String            -- dense out
   /-- The 49 BN layers as `(BN-input SSA, stat prefix, channels, spatial side)`, stem → blocks in
       forward order → head. Single source for the eval signature, the eval BN sites and the AdamW
@@ -669,7 +714,7 @@ set_option maxRecDepth 4000000 in
     driver's frozen running stats (the `bnEval` descriptor) and the net becomes
     class-batch-independent. -/
 private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
-    (sd : Bool := false) : StateM Nat ENetFwd := do
+    (sd : Bool := false) (cd : Bool := false) : StateM Nat ENetFwd := do
   -- `dp i` is `some i` exactly when block `i` is in `enetDropIdxs` AND stochastic depth is on —
   -- so the one list drives the signature and every call site, and the ramp index carried is the
   -- BLOCK index (see `enetDropIdxs`' note on why the site ordinal would be wrong).
@@ -711,14 +756,26 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     let (cHn, nHn) ← bnSiteB B 1280 7 7 mode epsStr "%hg" "%hbt" "hn" nHc
     let (cHr, nHr) ← pretty B (.batchOp (.swish) (.operand nHn zH7F))
     let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7)) (.operand nHr zH7F))
-    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z1280c))
+    -- ▶ CLASSIFIER DROPOUT: the per-ELEMENT inverted mask, exactly where the reference puts it —
+    -- between GAP and the dense (`jax/Jax/Codegen.lean:1971`, the `.dense` case).
+    -- ⚠ At `cd = false` NO `pretty` call happens, so the fresh-name counter does not move and every
+    -- committed artifact re-renders byte-identically. Same convention as `drop`'s `Option Nat`; it
+    -- is what makes the inertness gate a byte claim rather than a diff-review.
+    -- ⚠ Emitted in the FORWARD too, at the driver's all-ones mask, so `@efficientnet_do_fwd` stays
+    -- a byte-prefix of the train step and the `forward ⊂ train-step` audit survives. The identity
+    -- is exact, not close (`Proofs.dropout_ones_id`; `1 * x = x` in IEEE).
+    let (cDo, nCin) ← if cd then
+        pretty B (.dropoutB (N := B) (n := enetHeadWidth) doName (fun _ => 0 : Vec (B * enetHeadWidth))
+          (.operand nGap z1280c))
+      else pure ("", nGap)
+    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nCin z1280c))
     pure { code := cStc ++ cStn ++ cStr ++
              f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
              f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
-             f15.code ++ f16.code ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+             f15.code ++ f16.code ++ cHc ++ cHn ++ cHr ++ cGap ++ cDo ++ cLog,
            stc := nStc, stn := nStn, str := nStr,
            blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16],
-           hc := nHc, hn := nHn, hr := nHr, gap := nGap, logits := nLog,
+           hc := nHc, hn := nHn, hr := nHr, gap := nGap, cin := nCin, logits := nLog,
            bns := (nStc, "stn", 32, 112) ::
              (f1.bns ++ f2.bns ++ f3.bns ++ f4.bns ++ f5.bns ++ f6.bns ++ f7.bns ++ f8.bns ++
               f9.bns ++ f10.bns ++ f11.bns ++ f12.bns ++ f13.bns ++ f14.bns ++ f15.bns ++
@@ -728,15 +785,18 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     The stat half is derived from the SAME `bns` the traversal built (never a parallel table), so
     the eval forward's slots cannot drift out of the order the driver packs `runningBnStats` in. -/
 private def enetFwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
-    (sd : Bool := false) : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses mode epsStr convBias sd).run' 0
+    (sd : Bool := false) (cd : Bool := false) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses mode epsStr convBias sd cd).run' 0
   let params := (enetSig nClasses convBias).map (fun (nm, d) => s!"%{nm}: {ty d}")
   let stats := if mode == .train then [] else
     F.bns.flatMap (fun (_, sp, c, _) => [s!"%{sp}mu: {ty [c]}", s!"%{sp}var: {ty [c]}"])
   -- ⚠ The drop inputs go LAST, after the BN stats, so adding them cannot shift an existing
   -- positional slot — the mnv2 `convBias` lesson (§2m): a parameter inserted mid-list captures
   -- an existing argument, and the driver walks this signature positionally.
-  String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats)) ++ enetDropSig B sd
+  -- ⚠ And the dropout mask goes after THOSE — see `enetDropoutSig` on why the order within the
+  -- per-example tail matters as well as the tail's position.
+  String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats)) ++
+    enetDropSig B sd ++ enetDropoutSig B cd
 
 set_option maxRecDepth 4000000 in
 /-- **`@efficientnet_fwd` rendered ENTIRELY from the verified AST** — 263 inputs (`%x` plus the 262
@@ -744,10 +804,10 @@ set_option maxRecDepth 4000000 in
     train step, so it is a byte-identical PREFIX of `efficientnet_train_step.mlir`, ending exactly
     where the loss begins. Replaces the hand-written emitter in `tests/TestEfficientNetFwd.lean`. -/
 def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
-    (slug : String := "efficientnet") (sd : Bool := false) : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias sd).run' 0
+    (slug : String := "efficientnet") (sd : Bool := false) (cd : Bool := false) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias sd cd).run' 0
   "module @m {\n" ++
-  s!"  func.func @{slug}_fwd({enetFwdSig B nClasses .train epsStr convBias sd}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd({enetFwdSig B nClasses .train epsStr convBias sd cd}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 forward: every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -764,10 +824,10 @@ set_option maxRecDepth 4000000 in
     driver EMAs into exactly these slots — and both sides of that contract now come off one
     `bns` list rather than two independently-written ones. -/
 def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
-    (slug : String := "efficientnet") (sd : Bool := false) : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias sd).run' 0
+    (slug : String := "efficientnet") (sd : Bool := false) (cd : Bool := false) : String :=
+  let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias sd cd).run' 0
   "module @m {\n" ++
-  s!"  func.func @{slug}_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias sd}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias sd cd}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -806,9 +866,9 @@ set_option maxRecDepth 4000000 in
     construction, not by inspection (§2a). -/
 private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) (convBias : Bool := false)
-    (sd : Bool := false) :
+    (sd : Bool := false) (cd : Bool := false) :
     StateM Nat (String × List String × String × List (String × String × Nat × Nat)) := do
-    let F : ENetFwd ← enetFwdChain B nClasses .train epsStr convBias sd
+    let F : ENetFwd ← enetFwdChain B nClasses .train epsStr convBias sd cd
     -- The SAME `dp` the forward used, from the SAME `enetDropIdxs`. The backward walks the
     -- blocks in REVERSE, so a carried counter would have to be reversed too — the easy place
     -- to be off by one. Both directions derive it from the literal block index instead.
@@ -819,7 +879,12 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     let f12 := F.blocks[11]!; let f13 := F.blocks[12]!; let f14 := F.blocks[13]!
     let f15 := F.blocks[14]!; let f16 := F.blocks[15]!
     let nStc := F.stc; let nStn := F.stn; let nStr := F.str
-    let nHc := F.hc; let nHn := F.hn; let nGap := F.gap; let nLog := F.logits
+    -- ⚠ `F.gap` is deliberately NOT bound here. Its one backward consumer was the classifier weight
+    -- gradient, which must read `F.cin` (the dense's actual input — see `ENetFwd.cin`), and a
+    -- convenient `nGap` sitting in scope beside it is exactly how that gradient would silently get
+    -- the undropped activation back. The cotangent path reaches GAP through `gapBackBatched`, which
+    -- needs no forward name at all.
+    let nHc := F.hc; let nHn := F.hn; let nLog := F.logits
     let z32  : Vec 32 := fun _ => 0
     let z112B : Vec (B * (32*(112*112))) := fun _ => 0
     let z112F : Vec (B * (32*112*112)) := fun _ => 0
@@ -855,9 +920,24 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     let cDy := cD0 ++ cSmooth
     -- ═══ head backward: dense back → GAP back → swish mask → bn back → 1×1 conv back ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
-    let (cWfc, nWfc) ← dnW adam B 1280 nClasses nGap "%Wd" lrStr nDy
+    -- ⚠⚠ `F.cin`, NOT `nGap` — the classifier weight gradient reads the DENSE'S INPUT, which with
+    -- classifier dropout on is the dropped activation. `∂L/∂W = Σ_b dy_b ⊗ (mask_b ⊙ gap_b)`.
+    -- Passing `nGap` here type-checks, trains, descends, and is wrong on the one parameter dropout
+    -- acts through — invisible to every ones-mask gate, because there the two values are equal.
+    -- See `ENetFwd.cin` and handoff §0.10 (ConvNeXt's LayerScale-γ, the same defect one net over).
+    let (cWfc, nWfc) ← dnW adam B 1280 nClasses F.cin "%Wd" lrStr nDy
     let (cbfc, nbfc) ← dnB adam B nClasses "%bd" lrStr nDy
-    let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 1280) (h := 7) (w := 7) (.operand nDgi z1280c))
+    -- ▶ CLASSIFIER DROPOUT'S BACKWARD IS THE SAME OP AT THE SAME MASK
+    -- (`Proofs.dropout_vjp_is_self`) — a diagonal linear map is its own transpose. It sits between
+    -- the dense's input-VJP and the GAP backward, mirroring the forward's position between GAP and
+    -- the dense. ⚠ The DENSE side is above and reads `F.cin`; this side scales the cotangent on its
+    -- way DOWN. Both are needed and neither implies the other: the first is the weight gradient,
+    -- the second is everything upstream of the classifier.
+    let (cDdo, nDdo) ← if cd then
+        pretty B (.dropoutB (N := B) (n := enetHeadWidth) doName (fun _ => 0 : Vec (B * enetHeadWidth))
+          (.operand nDgi z1280c))
+      else pure ("", nDgi)
+    let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 1280) (h := 7) (w := 7) (.operand nDdo z1280c))
     let (cHsw, nHsw) ← pretty B (.swishBackB nHn (fun _ => 0) (.operand nDgp zH7F))
     let (cHbn, nHbn) ← pretty B (.bnBatchBack (N := B) (oc := 1280) (h := 7) (w := 7) "%hg" nHc epsStr 0 z1280 zH7B (.operand nHsw zH7B))
     let (cHxb, nHxb) ← pretty B (.convBackBatched (N := B) (ic := 320) (oc := 1280) (h := 7) (w := 7) "%hW" zHk z1280 (.operand nHbn zH7F))
@@ -895,7 +975,7 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     -- ═══ assemble (params in func-arg order: stem, blocks fwd-order, head, dense) ═══
     -- `F.code` is exactly what `@efficientnet_fwd` renders, so the artifact is its byte-prefix.
     let fwdCode := F.code ++ cSm ++ cDy
-    let bwdCode := cDgi ++ cWfc ++ cbfc ++ cDgp ++ cHsw ++ cHbn ++ cHxb ++ cgh ++ cth ++ cWh ++ cbh ++
+    let bwdCode := cDgi ++ cWfc ++ cbfc ++ cDdo ++ cDgp ++ cHsw ++ cHbn ++ cHxb ++ cgh ++ cth ++ cWh ++ cbh ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
       b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++
       cDsr ++ cDsn ++ csW ++ csb ++ csg ++ cst
@@ -1035,7 +1115,7 @@ private def enetAdamConsts : String :=
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes.
     Same convention as `r34AdamVariant`. -/
 def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := false)
-    (sd : Bool := false) : String :=
+    (sd : Bool := false) (cd : Bool := false) : String :=
   -- ⚠⚠ THE STOCHASTIC-DEPTH MARKER IS `"drop"`, NOT `"sd"`, AND THAT IS A BUG FIX.
   -- `"sd"` collides: `rms` ++ `dp` spells **`rmsdp`**, which CONTAINS "sd", so a `"sd"` substring
   -- test fires on `rmsdp64` and `emarmsdp64` — every RMSProp DATA-PARALLEL variant, including the
@@ -1058,7 +1138,19 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
    | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
    | .rmsprop => if replicas ≤ 1 then "rms"  else "rmsdp") ++
   (if B == 32 then "" else toString B) ++
-  (if sd then "drop" else "")
+  (if sd then "drop" else "") ++
+  -- ⚠⚠ AND THE CLASSIFIER-DROPOUT MARKER IS `"do"`, WHICH IS A CHOICE, NOT A DEFAULT.
+  -- The obvious spelling is `"dropout"`, and it is unusable: it CONTAINS `"drop"`, so the driver's
+  -- `variant.splitOn "drop"` test — which is how stochastic depth is detected — would fire on a
+  -- dropout-only render and try to pack nine mask slots that graph does not have. That is the
+  -- `emarms`/`rmsdp` collision (`planning/ema.md`, and §2f-bis's rename of `"sd"` → `"drop"`) for
+  -- the THIRD time, and the third time is what makes it a rule rather than an anecdote:
+  -- **with N markers the collisions are between PAIRS, so a new marker must be checked against
+  -- every existing one, not read on its own.** `tests/TestVariantPredicates.lean` runs that check
+  -- rather than reasoning about it.
+  -- ⚠ It TRAILS `drop` for the same reason `drop` trails everything: a leading marker would break
+  -- `variant.startsWith "ema"`, the driver's 4-region `[θ|m|v|ema]` blob test.
+  (if cd then "do" else "")
 
 set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
@@ -1087,7 +1179,8 @@ set_option maxRecDepth 4000000 in
 def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (alphaStr negAlphaKStr bStr : String) (replicas : Nat := 1)
     (convBias : Bool := false) (slug : String := "efficientnet")
-    (opt : OptKind := .adamw) (ema : Bool := false) (sd : Bool := false) : String :=
+    (opt : OptKind := .adamw) (ema : Bool := false) (sd : Bool := false)
+    (cd : Bool := false) : String :=
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when empty. Passing −α/K as a string independent
   -- of K is the two-writers-for-one-fact shape that shipped a K=10 constant into R34's first
   -- ImageNet render ON THE GRADIENT PATH (§2k), and again into ConvNeXt's report-only loss
@@ -1102,7 +1195,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- the wrong layer's statistics simply flow into the wrong `@efficientnet_fwd_eval` slot.
   let go : StateM Nat (String × List Nat) := do
     let (code, gradNames, nSm, bnList) ←
-      enetBackAll B nClasses epsStr "0.0" true (some (alphaStr, negAlphaKStr, bStr)) convBias sd
+      enetBackAll B nClasses epsStr "0.0" true (some (alphaStr, negAlphaKStr, bStr)) convBias sd cd
     -- ═══ BN running statistics: batch μ/var per BN layer, from that layer's BN INPUT. `den` is the
     --     same `bnMean`/`bnVar` `bnBatchF` normalises by, so these ARE the statistics the forward
     --     used rather than a separately-derived approximation. ═══
@@ -1182,8 +1275,9 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     -- as `%bc1`/`%bc2` and `%emad`/`%oemad` already do. Omitting them is not a subtle error: the
     -- first attempt at this did, and G4 refused the call with "returns 740 outputs, caller supplied
     -- 749 destinations" before a single step ran. Loud, and the right way round.
-    let dpNames := if sd then enetDropIdxs.map dpName else []
-    let dpTys   := if sd then enetDropIdxs.map (fun _ => ty [B]) else []
+    let dpNames := (if sd then enetDropIdxs.map dpName else []) ++ (if cd then [doName] else [])
+    let dpTys   := (if sd then enetDropIdxs.map (fun _ => ty [B]) else [])
+                     ++ (if cd then [ty [B, enetHeadWidth]] else [])
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
                      ++ (if ema then ["%emad", "%oemad"] else []) ++ statNames ++ dpNames
     let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
@@ -1240,7 +1334,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     -- ⚠ The drop scales go LAST, after the BN stats and before `%onehot` is appended, matching
     -- `enetFwdSig`'s placement — inserted mid-list they would capture an existing positional slot,
     -- which is the mnv2 `convBias` failure (§2m) and is silent until the driver mis-walks the blob.
-    enetDropSig B sd ++
+    enetDropSig B sd ++ enetDropoutSig B cd ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (fun p => ty p.2)
   let outSig := String.intercalate ", "
@@ -1248,11 +1342,12 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
      ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
      ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
      ++ bnOc.flatMap (fun oc => [ty [oc], ty [oc]])
-     ++ (if sd then enetDropIdxs.map (fun _ => ty [B]) else []))
+     ++ (if sd then enetDropIdxs.map (fun _ => ty [B]) else [])
+     ++ (if cd then [ty [B, enetHeadWidth]] else []))
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
   -- artifact path and `LEAN_MLIR_VARIANT`.
-  let fname := s!"{slug}_{enetAdamVariant B replicas opt ema sd}_train_step"
+  let fname := s!"{slug}_{enetAdamVariant B replicas opt ema sd cd}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1520,7 +1615,13 @@ end Proofs.StableHLO
 -- exactly why it is easy to stop at one and not notice.
 --
 -- `emarms64` is the reference's ACTUAL recipe at ImageNet scale — RMSProp + exponential decay +
--- EMA — and with stochastic depth it is `efficientNetB0ImagenetConfig` entire.
+-- EMA. ⚠ This comment used to end *"and with stochastic depth it is `efficientNetB0ImagenetConfig`
+-- entire"*, and that was FALSE the day it was written: the config also sets `dropout := 0.2`
+-- (`jax/MainEfficientNetImagenet.lean:68`), which no render had. Corrected 2026-08-03 with the
+-- render that makes it true — `enetin_emarmsdropdo64` below. ⚠ The claim was wrong in the way
+-- §0.9 finding 3 describes: the recipe matrix had a stochastic-depth row and no dropout row, so
+-- "the regulariser is covered" read as "the regularisers are covered", and a doc drifts to the
+-- flattering reading whenever a capability and a state share a sentence.
 #eval IO.FS.writeFile "verified_mlir/enetin_emarms64_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true))
@@ -1531,8 +1632,101 @@ end Proofs.StableHLO
 -- Stochastic depth at ImageNet scale. ⚠ Same 9 sites and the same block-index ramp — `enetDropIdxs`
 -- is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips), not of the class count or the
 -- batch, so `enetin` reuses it unchanged and `tests/TestDropPathRamp.lean` covers both.
-#eval IO.FS.writeFile "verified_mlir/enetin_emarmsdrop64_train_step.mlir"
+-- ⚠⚠ THE PATH WAS `enetin_emarmsdrop64_train_step.mlir` AND THAT ARTIFACT WAS UNLOADABLE.
+-- Renamed 2026-08-03. `enetAdamVariant 64 1 .rmsprop true true` emits **`emarms64drop`** — the
+-- batch suffix precedes the regulariser markers — while the path spelled `emarmsdrop64`. The
+-- driver derives the artifact path from `variant` (`VerifiedTrain.lean:771`) AND the entry name
+-- from the same `variant` (`:868`), so the two spellings cannot both be reached: `emarmsdrop64`
+-- finds the file and asks for an entry it does not contain, `emarms64drop` names the right entry
+-- at a path that does not exist. No byte of the artifact changed; only its name did.
+-- ⚠ It survived because every gate on it is structural — the prefix audit reads the file, and
+-- nothing loaded it through the driver. §0.8 finding 2's defect class ("an entry disagreeing with
+-- its own path"), recurring in the one place that finding did not look: the FILENAME, not the
+-- entry. `scripts/regen_verified_mlir.sh check` now audits basename == entry across all artifacts.
+#eval IO.FS.writeFile "verified_mlir/enetin_emarms64drop_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true) (sd := true))
 #eval IO.FS.writeFile "verified_mlir/enetin_drop_fwd.mlir"
   (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "enetin_drop" (sd := true))
+
+-- ── ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C), 2026-08-03 ──────────────────────────────────
+-- `efficientNetB0ImagenetConfig` sets `dropout := 0.2` and there were **zero dropout sites in any
+-- verified EfficientNet render**. Found by handoff §0.2 ▶3 the same way §0.5 and §0.9 were found —
+-- by LISTING what each artifact bakes against what the config sets, rather than reading the
+-- capability. It is the last unlisted render gap on this net.
+--
+-- ⚠⚠ IT IS NOT STOCHASTIC DEPTH AT A DIFFERENT SITE. The reference draws
+-- `bernoulli(key, keep, x.shape)` — one Bernoulli per (example, feature) — where stochastic depth
+-- draws `(B, 1, …, 1)`. Same op (`layerScale`), different mask RANK, and each is what the other's
+-- comments have spent this file warning about. `Proofs.dropout_of_dropScale` states the
+-- containment and `Proofs.dropPath_scales_uniformly` the gap; `tests/TestBatchedEmitTie.lean` pins
+-- both directions in the emitted bytes.
+--
+-- ⚠ ONE site and NO ramp — so `enetDropIdxs`' expensive block-index/site-ordinal distinction has
+-- no analogue here, and §2k's `α/K` class of silent-constant bug is not spellable. What replaces it
+-- is the weight-gradient operand (`ENetFwd.cin`), which no ones-mask gate can see.
+
+-- The Imagenette AdamW peer: dropout alone, so it pairs with `efficientnet_adam` for the keep = 1
+-- tie. ⚠ That tie is this feature's floor measurement — at an all-ones mask the two renders must
+-- agree BIT-EXACTLY, because `1 * x = x` is exact in IEEE (`Proofs.dropout_ones_id`).
+#eval IO.FS.writeFile "verified_mlir/efficientnet_adamdo_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+    "0.100000" "-0.010000" "32.0" (cd := true))
+
+-- The forward peers, for the same reason the SD ones exist: the dropout variant needs its OWN
+-- `forward ⊂ train-step` pair, or the prefix audit quietly stops covering it. The site is emitted
+-- here too and the driver supplies an all-ones mask at eval, so it is the exact identity.
+#eval IO.FS.writeFile "verified_mlir/efficientnet_do_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 32 10 "1.0e-5" false "efficientnet_do" (cd := true))
+#eval IO.FS.writeFile "verified_mlir/efficientnet_do_fwd_eval.mlir"
+  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5" false "efficientnet_do" (cd := true))
+
+-- ▶ **THE FULL REFERENCE RECIPE AT IMAGENET SCALE — the first EfficientNet artifact that is
+-- `efficientNetB0ImagenetConfig` entire on the regulariser axis**: RMSProp (TF flavour, ε inside
+-- the sqrt, ms-init 1.0) + EMA 0.9999 + stochastic depth 0.1 + classifier dropout 0.2. The peer of
+-- ConvNeXt's `cnxin_adamdpwxclipdrop` (handoff §0.10), and what the 72.31% reference pair would
+-- need to be reachable through the verified path.
+--
+-- ⚠⚠ NOTE THE PATH: `enetin_emarms64dropdo`, batch suffix BEFORE the two regulariser markers,
+-- because that is what `enetAdamVariant` emits and the driver derives the artifact PATH and the
+-- entry NAME from the same string (`VerifiedTrain.lean:771` and `:868`). The neighbouring
+-- `enetin_emarmsdrop64_train_step.mlir` had them the other way round and was therefore
+-- **unloadable at any `LEAN_MLIR_VARIANT`** — see the note on that `#eval` below. The `#guard`s at
+-- the bottom of this file are what caught it, which is the argument for pinning literal paths
+-- against the function that derives them rather than writing both by hand.
+--
+-- ⚠ It carries BOTH mask families at once, which is exactly why it is worth committing rather than
+-- assembling ad hoc: nine `tensor<64xf32>` per-example scales followed by one
+-- `tensor<64x1280xf32>` per-element mask, in that order, and the two must not be confused by the
+-- driver (which packs them), the shim (which shards the tail by COUNT) or a reader. It is the only
+-- artifact in the repo where getting the mask rank wrong would be a type error rather than a silent
+-- regulariser swap — which is a property of this pairing, not something to rely on elsewhere.
+--
+-- ⚠ Still short of the reference in the ways `enetin_rms64`'s docstring lists (the driver owes the
+-- 1.0 mean-square init and the exponential LR schedule). Correct renders of the right optimizer and
+-- the right regularisers; not yet a matched pair.
+#eval IO.FS.writeFile "verified_mlir/enetin_emarms64dropdo_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true) (sd := true) (cd := true))
+#eval IO.FS.writeFile "verified_mlir/enetin_dropdo_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "enetin_dropdo"
+    (sd := true) (cd := true))
+
+-- Pin the variant spellings the four paths above depend on, so a rename fails at `lake build`
+-- rather than at run time as an "entry mismatch".
+-- ⚠ The last two are the collision checks that matter, and they are why the marker is `"do"` and
+-- not `"dropout"`: `dropdo` must still contain `"drop"` exactly once as the SD marker, and a
+-- dropout-only variant must NOT contain it at all. `tests/TestVariantPredicates.lean` runs the
+-- full pairwise table; these three are the spellings this file commits to.
+#guard Proofs.StableHLO.enetAdamVariant 32 1 .adamw false false true == "adamdo"
+#guard Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop true true true == "emarms64dropdo"
+-- ⭐ The collision checks, in the driver's own predicate (`variant.splitOn "drop"`), stated as the
+-- two facts that would break if the marker were spelled `"dropout"`:
+--   a dropout-ONLY variant must NOT look like a stochastic-depth one …
+#guard ((Proofs.StableHLO.enetAdamVariant 32 1 .adamw false false true).splitOn "drop").length == 1
+--   … and the combined one must look like exactly ONE stochastic-depth marker, not two.
+#guard ((Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop true true true).splitOn "drop").length == 2
+-- And OFF, every spelling is byte-identical to what it always was — the inertness gate in the
+-- naming layer, which is what keeps all 129 committed artifacts at 0 diff.
+#guard Proofs.StableHLO.enetAdamVariant 32 1 .adamw false false false == "adam"
+#guard Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop true true false == "emarms64drop"

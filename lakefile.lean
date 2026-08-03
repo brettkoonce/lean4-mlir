@@ -1684,6 +1684,23 @@ lean_exe «droppath-tie» where
   root := `tests.TestDropPathTie
   moreLinkArgs := xlaLink
 
+/-- ▶ **Classifier dropout's two gates** (`recipe_gaps.md` gap C) — the ones its endpoint checks
+    structurally cannot make. Gate A: the mask multiplies PER ELEMENT, against a host-computed
+    answer, with the per-EXAMPLE mask (i.e. stochastic depth on the classifier) as the control.
+    Gate W: the classifier WEIGHT GRADIENT reads the dropped activation, not the pooled one — the
+    ConvNeXt LayerScale-γ defect (handoff §0.10) one net over, and invisible to every ones-mask
+    gate because there the two activations are the same buffer.
+
+        lake build dropout-tie
+        CUDA_VISIBLE_DEVICES=0 .lake/build/bin/dropout-tie
+        .lake/build/bin/dropout-tie --op --break     # gate A is falsifiable
+        .lake/build/bin/dropout-tie --net            # gate W only — NO GPU, milliseconds
+        scripts/fault_dropout_wgrad.py verified_mlir/efficientnet_adamdo_train_step.mlir /tmp/f.mlir
+        .lake/build/bin/dropout-tie --net /tmp/f.mlir              # goes red, rc=1 -/
+lean_exe «dropout-tie» where
+  root := `tests.TestDropoutTie
+  moreLinkArgs := xlaLink
+
 /-- **recipe_gaps v1.4's gate — `wdExcludeNormBias`, the timm/DeiT `no_weight_decay` render.**
     `vit_adamwx` is `vit_adam` with decoupled decay switched off for the 126 params timm excludes
     (every 1-D param plus the positional embedding). The change moves NO arity, NO type and NO

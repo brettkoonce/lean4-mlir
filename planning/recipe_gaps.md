@@ -74,7 +74,7 @@ that does not exist yet.
 | random erasing | — | ⚠ | ⚠ | — | — | ⚠ **supported, NOT WIRED** (Tier A) |
 | repeated aug | — | 3 ⚠ | — | — | — | ⚠ **supported, NOT WIRED** (Tier A) |
 | **AutoAugment** | — | — | — | ✅ ⚠ | — | ⚠ **supported, NOT WIRED** — enet's reference sets `useAutoAugment`; the default shim has none (Tier A) |
-| **classifier dropout** | — | — | — | **0.2 ❌** | — | ❌ **MISSING AND WAS UNLISTED** — zero dropout sites in any verified enet render. NOT the same thing as the stochastic-depth row below |
+| **classifier dropout** | — | — | — | **0.2 ✅** | — | ✅ **DONE 2026-08-03** — `dropoutB` op + cert, `adamdo`/`emarms64dropdo` renders, `lake build dropout-tie` (gate A bit-exact 40/40 + gate W). ⚠ It is NOT the stochastic-depth row below: same op (`layerScale`), **different mask RANK** — per ELEMENT here, per EXAMPLE there |
 | stochastic depth | — | 0.1 ❌ | 0.1 ❌ | 0.2 ⚠ | — | ⚠ **op + cert + EfficientNet render done 2026-08-02**, driver owed. ConvNeXt/ViT need the §2b batched-index move first — they render at the PER-EXAMPLE index, where a per-example mask is §4's descriptor trap |
 | EMA | — | ✅→**✅** | ✅→**✅** | ✅→**✅** | — | ✅ **all three, 2026-08-02** (ConvNeXt + DP peer, EfficientNet incl. `ema_bn`, ViT). ⚠ Imagenette slugs only — no `*in_ema*` render exists |
 | **bf16 / bf16Conv** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |

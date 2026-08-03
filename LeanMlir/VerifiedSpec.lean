@@ -193,6 +193,15 @@ structure VerifiedNetSpec where
       without inverting the dependency. `tests/TestDropPathRamp.lean` is the `#guard` that pins
       them, and it is what stops the ramp drifting the way §2k's `α/K` did. -/
   dropKeeps : Array Float := #[]
+  /-- Which directory this net's artifacts live in — see `VerifiedNet.mlirDir`. Default
+      `verified_mlir/` (the certified, pinned corpus); the width/batch SWEEP specs set
+      `.lake/build` because they render from argv at run time and their output is a build product. -/
+  mlirDir : String := "verified_mlir"
+  /-- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C) — `(keep_prob, per-example width)`, `none` when
+      the net has none. See `VerifiedNet.dropoutKeep` for why the WIDTH is carried: this mask is
+      per-ELEMENT where `dropKeeps` above is per-example, and every downstream difference (blob
+      shape, draw count, DP shard split) falls out of that one number. -/
+  dropoutKeep : Option (Float × Nat) := none
   /-- The generated ImageNet batch shim this net streams — see `VerifiedNet.shimScript` for why
       there is no default and why an empty one refuses instead of falling back. Required on every
       `.imagenet` spec; meaningless on the others. -/
@@ -211,7 +220,8 @@ def d0 (s : VerifiedNetSpec) : Nat := s.inC * s.imageH * s.imageW
 def toNet (s : VerifiedNetSpec) : VerifiedNet :=
   { name := s.name, slug := s.slug, specs := s.toSpecs, d0 := s.d0,
     nClasses := s.nClasses, data := s.data, blurb := s.blurb, bnChannels := s.bnChannels,
-    dropKeeps := s.dropKeeps, shimScript := s.shimScript }
+    dropKeeps := s.dropKeeps, dropoutKeep := s.dropoutKeep, shimScript := s.shimScript,
+    mlirDir := s.mlirDir }
 
 /-- Train end-to-end (delegates to the shared `VerifiedNet.train` driver). -/
 def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=

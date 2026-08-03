@@ -558,6 +558,28 @@ inductive SHlo : Nat → Type where
   -- ⚠ THE BACKWARD IS THIS SAME OP at the same mask (`Proofs.dropPath_vjp_is_self`): a diagonal
   -- linear map is its own transpose, so there is no `*Grad` peer to build or to keep in step.
   | dropPathB    {N n : Nat} (mName : String) (s : Vec N)        : SHlo (N*n) → SHlo (N*n)
+  -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask the reference
+  -- applies immediately before the classifier dense (`jax/Jax/Codegen.lean:1971`). `mName` is a
+  -- graph INPUT of type `tensor<N×n×f32>`, drawn on the HOST for `dropPathB`'s reasons exactly.
+  --
+  -- ⚠⚠ IT IS `dropPathB` AT A MASK OF THE VALUE'S OWN TYPE, AND THAT IS THE ONLY DIFFERENCE.
+  -- `Proofs.dropout_of_dropScale` proves the containment (`dropPath` is this op at a lifted mask);
+  -- `Proofs.dropPath_scales_uniformly` proves the gap. In the emitted text the whole distinction is
+  -- one line: `dropPathP` broadcasts `tensor<B>` over `dims = [0]`, this multiplies directly. Each
+  -- of the two is what the OTHER's comments have been warning about — "emitting a `tensor<B×n>`
+  -- scale is per-element dropout, a different regulariser" is now a live op, so the confusion runs
+  -- both ways and both directions are pinned in `tests/TestBatchedEmitTie.lean`.
+  --
+  -- ⚠ Own constructor for `dropPathB`'s reason inverted: a `BatchableOp` descriptor's `den` is
+  -- `batchMap N (denOp op)`, ONE fixed function, so it could not carry a mask that differs across
+  -- examples any more than it could carry a saved per-example activation.
+  -- ⚠ NO BAKED `1/keep` — the driver folds the inversion into the supplied mask, which is what
+  -- makes the ones-mask forward the exact identity (`Proofs.dropout_ones_id`) and lets the op be
+  -- emitted in the forward at all, keeping the `forward ⊂ train-step` prefix audit alive.
+  -- ⚠ THE BACKWARD IS THIS SAME OP at the same mask (`Proofs.dropout_vjp_is_self`) — but see that
+  -- theorem's note: the classifier WEIGHT gradient reads the dense's input, which is the DROPPED
+  -- activation, and no ones-mask gate can see that being wrong.
+  | dropoutB     {N n : Nat} (mName : String) (mask : Vec (N*n)) : SHlo (N*n) → SHlo (N*n)
   | swishBackB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   -- ── ViT / ConvNeXt's two saved-activation BACKWARDS (§0.2 ▶2, increment 2). These cannot be
   --    `BatchableOp` descriptors and the reason is the descriptor rule itself: a descriptor's
@@ -1547,6 +1569,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .selectPosB _ x e => fun i => if x i > 0 then den e i else 0
   | _, .selectMidB _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
   | _, .dropPathB (N := N) (n := n) _ s e => Proofs.dropPath N n s (den e)
+  | _, .dropoutB (N := N) (n := n) _ mask e => Proofs.dropout N n mask (den e)
   | _, .swishBackB (N := N) (n := n) _ x e => (swish_has_vjp (N*n)).backward x (den e)
   -- `gelu` is POINTWISE, so its VJP at the batched width `N*n` is already the batch-lift of the
   -- per-example one — the same argument `swishBackB` rests on, and why neither needs `batchMapAux`.
@@ -1941,6 +1964,8 @@ theorem den_batchOp_gelu_eq_geluF {N n : Nat} (e : SHlo (N * n)) :
 
 @[simp] theorem den_dropPathB {N n : Nat} (mN : String) (s : Vec N) (e : SHlo (N*n)) :
     den (.dropPathB mN s e) = Proofs.dropPath N n s (den e) := rfl
+@[simp] theorem den_dropoutB {N n : Nat} (mN : String) (mask : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.dropoutB mN mask e) = Proofs.dropout N n mask (den e) := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.swishBackB xN x e) = (swish_has_vjp (N*n)).backward x (den e) := rfl
 @[simp] theorem den_geluBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
@@ -2238,6 +2263,35 @@ theorem dropPathB_back_faithful {N n : Nat} (mN : String) (s : Vec N)
 @[simp] theorem den_dropPathB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
     den (.dropPathB mN (fun _ => 1) e) = den e := by
   simp [den_dropPathB]
+
+/-- **Classifier-dropout forward faithfulness.** `dropoutB` denotes `Proofs.dropout`, the
+    per-ELEMENT inverted mask. `rfl`, because dropout is `layerScale` at a mask of the value's own
+    type — no lift, which is what makes it cheaper than `dropPathB` rather than dearer. -/
+theorem dropoutB_faithful {N n : Nat} (mN : String) (mask : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.dropoutB mN mask e) = Proofs.dropout N n mask (den e) := rfl
+
+/-- ⭐ **Classifier-dropout BACKWARD faithfulness — the SAME constructor**, `dropPathB_back_faithful`
+    one mask rank up. ⚠ This covers the cotangent flowing THROUGH the site and nothing else; see
+    `Proofs.dropout_vjp_is_self` on the classifier weight gradient, which reads the dense's input
+    and must therefore read the DROPPED activation. -/
+theorem dropoutB_back_faithful {N n : Nat} (mN : String) (mask : Vec (N*n))
+    (x : Vec (N*n)) (e : SHlo (N*n)) :
+    den (.dropoutB mN mask e) = (Proofs.dropout_has_vjp N n mask).backward x (den e) := rfl
+
+/-- ⭐ **The ones-mask identity on the AST**, which is what licenses emitting the dropout site in
+    the FORWARD artifact: `@efficientnet_do_fwd` and `@efficientnet_adamdo_train_step` are then one
+    graph differing only in the mask the driver supplies, and the prefix audit survives. -/
+@[simp] theorem den_dropoutB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
+    den (.dropoutB mN (fun _ => 1) e) = den e := by
+  simp [den_dropoutB]
+
+/-- ⭐⭐ **THE TWO OPS AGREE EXACTLY WHEN THE MASK IS LIFTED, AND THE AST SAYS SO.**
+    `Proofs.dropout_of_dropScale` at the node level: a `dropoutB` carrying `dropScale N n s` denotes
+    what the `dropPathB` at `s` denotes. This is the substitution that would be a silent regulariser
+    swap if it were made in the *other* direction on an unlifted mask, and it is stated here so that
+    the containment is checkable rather than argued. -/
+theorem den_dropoutB_of_dropScale {N n : Nat} (mN dN : String) (s : Vec N) (e : SHlo (N*n)) :
+    den (.dropoutB mN (Proofs.dropScale N n s) e) = den (.dropPathB dN s e) := rfl
 
 /-- A dense forward layer graph: `broadcast(bias) + dot_general(·, W)`. -/
 def denseF {a c : Nat} (wN bN : String) (W : Mat a c) (bias : Vec c) (e : SHlo a) : SHlo c :=
@@ -3680,6 +3734,18 @@ def fresh : StateM Nat String := do
     both renderers are in this namespace, so no call site changed and no artifact byte moved.) -/
 def dpName (i : Nat) : String := s!"%dp{i}"
 
+/-- **The classifier-dropout mask input name** — the `mName` a `dropoutB` carries, and the
+    `tensor<B×n×f32>` the signature declares for it.
+
+    ⚠⚠ **IT IS DELIBERATELY NOT `%dp{i}`-SHAPED, and that is not cosmetic.**
+    `scripts/misplace_drop_sites.py` builds the stochastic-depth placement control by matching
+    `%dp\d+` textually; a dropout input spelled `%dp9` would be swept into that rewrite, silently
+    changing a control's meaning on a render it was never written for. Handoff §0.11 records the
+    other half of this hazard on ViT — a control that quietly does nothing reads exactly like a
+    control that ran — and the cheap defence is a name the SD tooling cannot match.
+    `grep -c '%do' verified_mlir/*.mlir` is 0 across every committed artifact. -/
+def doName : String := "%do"
+
 -- ── Renderable skeleton + postorder tokenization (one form, shared with the
 --    parser in StableHLOParse.lean) ──
 
@@ -3894,6 +3960,10 @@ def skel : {k : Nat} → SHlo k → Raw
   -- Two name slots: the mask INPUT and the baked `1/keep` literal. Same two-string shape
   -- `convStridedWeightSgd` uses for `xN`/`lrS`, so the generic `.batched` tag needs no widening.
   | _, .dropPathB (N := N) (n := n) mN _ e => .batched "dropPathP" [mN] [N, n] (skel e)
+  -- ⚠ A DIFFERENT TAG, not a flag on `dropPathP`. The two emit different text and denote different
+  -- functions, so they must be distinguishable in the skeleton — a shared tag would make the
+  -- round-trip parser unable to tell a per-sample render from a per-element one.
+  | _, .dropoutB (N := N) (n := n) mN _ e => .batched "dropoutP" [mN] [N, n] (skel e)
   | _, .swishBackB (N := N) (n := n) xN _ e => .batched "swishBackP" [xN] [N, n] (skel e)
   -- ⚠ Routed through the GENERIC `.batched` tag, like every batched op above — which is why these
   -- cost five sites (ctor, den, the `rfl` theorem, this line, `emitTok`) and not §4's ten: `Raw`,
@@ -5846,6 +5916,23 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           let mb ← fresh; let o ← fresh
           pure (s!"    {mb} = stablehlo.broadcast_in_dim {mN}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.multiply {mb}, {r} : {ty [B,n]}\n", o :: st)
+      | "dropoutP", [mN], [_N, n] => do
+          -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask, applied
+          -- immediately before the classifier dense. `mN` is a graph INPUT of type
+          -- `tensor<B×n×f32>` — one value per (example, feature), computed on the host.
+          --
+          -- ⚠⚠ **NO `broadcast_in_dim`, AND THAT ABSENCE IS THE WHOLE CLAIM.** The mask already
+          -- has the value's shape, because the reference draws `bernoulli(key, keep, x.shape)`
+          -- (`jax/Jax/Codegen.lean:1971`) rather than the `(B, 1, …, 1)` shape stochastic depth
+          -- uses. A `dims = [0]` broadcast off a `tensor<B>` input here typechecks, compiles, runs,
+          -- descends — and is stochastic depth on the classifier, a different regulariser. That is
+          -- `dropPathP`'s warning read backwards, and `tests/TestBatchedEmitTie.lean` pins both
+          -- directions: that one asserts the broadcast is PRESENT, this one that it is ABSENT.
+          -- ⚠ NO BAKED `1/keep`, for `dropPathP`'s reason exactly: the driver folds the inversion
+          -- into the supplied mask, so the ones-mask forward is the exact identity and this op can
+          -- be emitted in the forward artifact without rescaling eval.
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.multiply {mN}, {r} : {ty [B,n]}\n", o :: st)
       | "swishBackP", [x], [_N, n] => do
           -- byte-for-byte `.swishBack`'s emit, width from the descriptor's `n`.
           let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh

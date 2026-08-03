@@ -77,21 +77,136 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ## 0. ▶ START HERE — **the batched-index thread is CLOSED. Next: §0.3's leftovers, or a long run.**
 
-**Rewritten 2026-08-03, after ViT's batched-index move and its stochastic-depth render landed.**
-State: `lake build Proofs Certs Codegen` **3,915** green · **129** artifacts, one writer each ·
-`verified_mlir/` **0 lines of diff with the writers forced** · `TestBatchedEmitTie` **47** batched
-forms · `TestVariantPredicates` **48** spellings · axiom audit **1,517**, all 3-axiom · drift-guard
-coverage **86/117**, baseline unchanged (that file may only shrink).
+**Rewritten 2026-08-03, after ViT's batched-index move, its stochastic-depth render, and
+EfficientNet's classifier dropout landed.** State: `lake build Proofs Certs Codegen` **3,915** green ·
+**134** artifacts, one writer each · `verified_mlir/` **132 artifacts** (was 206 — 74 sweep build products removed, §4) ·
+**0 lines of diff with the writers forced** · manifest + path==entry audits, both NEW · `TestBatchedEmitTie` **47**
+batched forms + both mask-rank assertions · `TestVariantPredicates` **52** spellings, **4** axes ·
+axiom audit **1,524**, all 3-axiom · drift-guard coverage **86/117**, baseline unchanged (that file
+may only shrink).
 
-**The one-paragraph version.** **All five nets are now at the batched index `N := B`, and
-stochastic depth exists on the three nets whose references set it** (EfficientNet, ConvNeXt, ViT),
-at both scales, with the DP mask-shard gate run on each. The §0.2 ▶2/▶3 thread — the largest
-remaining item in this file for two sessions — is closed. What is left is §0.3's list and the runs
-§0.1 says this box cannot do.
+**The one-paragraph version.** **All five nets are now at the batched index `N := B`**, stochastic
+depth exists on the three nets whose references set it (EfficientNet, ConvNeXt, ViT) at both scales
+with the DP mask-shard gate run on each, and **EfficientNet's classifier dropout — the last unlisted
+render gap — is closed** (§0.12), giving `enetin_emarms64dropdo`: the first EfficientNet artifact
+carrying its reference's whole regulariser set. The §0.2 ▶2/▶3 thread — the largest remaining item
+in this file for two sessions — is closed. ⚠ §0.12 also found a **committed artifact that could not
+be loaded at any `LEAN_MLIR_VARIANT`**; there is a new audit for that class. What is left is §0.3's
+list and the runs §0.1 says this box cannot do.
 
 **Read in this order:** this section, then §0.3 (what is owed). §0.10 and §0.11 are the two SD
 records; `planning/stochastic_depth.md` §7e-f is the gate detail. Everything from §0a onward is
 HISTORY.
+
+### §0.12 ✅ **EfficientNet's CLASSIFIER DROPOUT — 2026-08-03.** The last unlisted render gap
+
+`recipe_gaps.md` gap C. `efficientNetB0ImagenetConfig` sets `dropout := 0.2` and there were **zero
+dropout sites in any verified EfficientNet render**. Closed with one op, one site, one emit line.
+
+| | result |
+|---|---|
+| the op | `SHlo.dropoutB` — **5 sites**, and the emit is **one line**: `multiply %do, %r`, no broadcast |
+| the denotation | `Proofs.dropout = layerScale mask` — a **fifth** reading of `layerScale`, and the cheapest yet (`dropPath` needed `dropScale` to lift; this needs nothing) |
+| inertness | `verified_mlir/` **0 lines of diff** with the writers FORCED, across all 129 pre-existing artifacts |
+| new artifacts | 5, all NEW: `efficientnet_{adamdo,do_fwd,do_fwd_eval}`, `enetin_{emarms64dropdo,dropdo_fwd}` |
+| ⭐ `enetin_emarms64dropdo` | **the first EfficientNet artifact that is `efficientNetB0ImagenetConfig` entire on the regulariser axis** — RMSProp + EMA 0.9999 + dropPath 0.1 + dropout 0.2 |
+| prefix audit | `efficientnet_do_fwd` ⊂ `adamdo` (**1936** lines, against the drop-free forward's 1935 — exactly one more), `enetin_dropdo_fwd` ⊂ `emarms64dropdo` (1954) |
+| gate A (`dropout-tie --op`) | **bit-exact 40/40** vs the host per-element product; both endpoint theorems on device |
+| ⭐ gate A control C1 | the per-EXAMPLE mask — *stochastic depth on the classifier* — fires at rel **0.89**, 8/40 exact |
+| gate A control C2 | one mask cell 1% wrong → fires on exactly 1 coordinate |
+| ⭐⭐ gate W (`dropout-tie --net`) | the classifier weight gradient reads the **dropped** activation; `fault_dropout_wgrad.py` → **rc=1** |
+| axiom audit | 1,517 → **1,524**, all 3-axiom |
+| build | `lake build Proofs Certs Codegen` **3,915** green (unchanged — theorems in an existing module) |
+| ⭐ the paired smoke, det shim | `adam` **1.830244 / 1.827185 / 1.821169** vs `adamdo` **1.821010 / 1.876230 / 1.845620** — same synth data, same seed, only the mask differs |
+
+The paired smoke is the **anti-vacuity** half and it is worth reading as one: the trajectories
+separate at step 0 and are **4.9e-2** apart by step 1, against a cross-process floor of ~2e-4 (two
+runs of the SAME config measured 1.820689 / 1.820854). The deltas alternate sign, which is what a
+freshly-drawn per-step Bernoulli mask does and a baked constant does not. ⚠ Three steps is *"it runs
+and the mask reaches the objective"*, nothing more — §0.1.
+
+⚠ **And it cost GPU time to learn that `LEAN_MLIR_MAX_STEPS` DOES NOT CAP THIS DRIVER.**
+`trainAdamSched` — the path every `adam`/`rms`/`ema`/`drop`/`do` variant takes — reads
+**`LEAN_MLIR_G2_STEPS`**; `MAX_STEPS` is `train`'s, and is read *nowhere* on this path, so it is
+silently ignored and a "3-step probe" runs the full 80-epoch schedule. The knob is documented in
+`§2d.3`'s block and in this file's own memory, and it was still the wrong one to reach for. **Use
+`LEAN_MLIR_G2_STEPS` for any short probe on a verified AdamW/RMSProp trainer.**
+
+#### ⚠⚠ THE FINDING: the two regularisers are ONE OP AT TWO MASK RANKS, and the hazard was only ever written down in one direction
+
+`dropPath` and `dropout` are both `layerScale`. The entire difference is that the reference draws
+`bernoulli(key, keep, x.shape)` for the classifier and `(B, 1, …, 1)` for the branch. For two
+sessions the kit carried that as a *warning* — `dropPathP`'s emit case, `TestBatchedEmitTie` and
+`Proofs.dropScale`'s docstring each say "a `tensor<B×n>` scale here would be per-element dropout, a
+different regulariser". **The warning was correct and the op it warned about did not exist**, which
+is exactly why the gap read as covered: the recipe matrix had a stochastic-depth row, and a reader
+checking "is the regulariser there" found one.
+
+It is now symmetric, and both directions are pinned rather than commented:
+
+| | mask | pinned by |
+|---|---|---|
+| bytes | `dims = [0]` broadcast present / **absent** | `TestBatchedEmitTie`, both assertions + `dropoutB ≠ dropPathB` |
+| function | uniform within an example / free | `dropPath_scales_uniformly`, `dropout_of_dropScale` |
+| device | per-example ref must **not** match | gate A control C1, rel 0.89 |
+
+*Carry forward: **a warning about a confusion is not a gate against it**, and the direction a warning
+is written in is the direction someone will check.*
+
+#### ⚠⚠ AND THE DEFECT §0.10 PREDICTED, CAUGHT BY CONSTRUCTION THIS TIME
+
+ConvNeXt's LayerScale γ gradient read the undropped cotangent — 18 of 180 gradients wrong, found by
+tracing operands **by hand**. Dropout has the identical shape: `∂L/∂W_d = Σ_b (dense input)_b ⊗ dy_b`,
+and the dense's input is the **dropped** activation. Feeding it the pooled one type-checks, trains,
+descends, and **is bit-identical at a ones mask** — so the keep = 1 tie, the prefix audit and
+`dropout_ones_id` all pass on it.
+
+So §0.10's carry-forward was applied *before* writing the backward: `ENetFwd.cin` is a named field
+for the classifier's real input, `F.gap` is deliberately **not bound** in `enetBackAll` (a convenient
+`nGap` in scope is how the wrong operand gets picked), and `scripts/fault_dropout_wgrad.py` is the
+defect mechanised so gate W has a control it is verified to fail against. ⚠ **Gate W is STRUCTURAL
+on purpose** — the defect is an operand choice, so a byte check localises it exactly where a numeric
+tie would say "some parameter moved". It needs no GPU and runs in milliseconds, which §0.1 makes a
+feature rather than a compromise.
+
+#### ⛔ AND IT FOUND AN UNLOADABLE COMMITTED ARTIFACT — `enetin_emarmsdrop64`
+
+A `#guard` pinning the literal artifact path against `enetAdamVariant` failed, and the reason was
+not the guard: **`enetAdamVariant 64 1 .rmsprop true true` emits `emarms64drop`** — the batch suffix
+precedes the regulariser markers — while the committed file was named `enetin_emarmsdrop64_train_step.mlir`
+and declared `@enetin_emarms64drop_train_step` inside. The driver derives the artifact PATH
+(`VerifiedTrain.lean:771`) and the entry NAME (`:868`) from the **same** `variant` string, so neither
+spelling reaches it: one finds the file and asks for an entry it does not contain, the other names
+the right entry at a path that does not exist. **That artifact could not be loaded at any
+`LEAN_MLIR_VARIANT`.**
+
+⚠ It had been committed, prefix-audited and carried in the recipe matrix as a shipped ImageNet
+render. It survived because **every gate on it reads the file**; none opens it through the driver,
+and a structural gate is blind to the name it was handed. `tests/TestVariantPredicates.lean` also
+carried `emarmsdrop64` — a spelling no renderer emits — because its table was written by hand rather
+than grown from the function, which is the same drift one layer up.
+
+Fixed: renamed (no byte moved), and `scripts/regen_verified_mlir.sh check` now audits **basename ==
+declared entry** across all 204 artifacts, with two documented carve-outs. This is §0.8 finding 2
+recurring on the axis that finding did not check — there the ENTRY had drifted, here the FILENAME
+had. *General form: when one string derives two artifacts, audit that they agree; auditing either
+alone cannot see it.*
+
+#### ⚠ What this leaves owed
+
+* **No long run.** Dropout is a regulariser; the gates say the render is right, not that it helps.
+  §0.1. The Imagenette `adamdo` render is a **gate vehicle** — `efficientNetB0Config` sets no
+  dropout, so its 0.2 is ImageNet's value carried down (`ema.md` finding 3's shape). Do not quote an
+  Imagenette `adamdo` run as a reference comparison.
+* **No DP peer and no mask-shard gate.** The driver counts the dropout mask into `nShardTail` and
+  the shim splits a rank-2 tail by rows exactly as it does a rank-1 one (`elems / n_replicas`, so no
+  C change was needed) — but **that is reasoning, not a measurement**. `drop-shard-check`'s
+  swap-invariance construction transfers unchanged; nothing has run it. ⚠ Treat the DP path as
+  unevidenced until it does.
+* **The other net that sets it**: `MainMobilenetV2Imagenet.lean:66` also sets `dropout := 0.2`, and
+  mnv2 is at `N := B` already, so the op drops straight in. Not done here.
+
+---
 
 ### §0.11 ✅ **ViT — the batched index AND stochastic depth, 2026-08-03**
 
@@ -135,6 +250,7 @@ exactly like a control that ran.**
 | | |
 |---|---|
 | **§0.1** | ⚠ the box constraint — it re-orders everything |
+| **§0.12** | ✅ **EfficientNet's classifier dropout**, and the unloadable artifact it found |
 | **§0.11** | ✅ **ViT — batched index + stochastic depth**, and the gate that is invalid there |
 | **§0.10** | ✅ **ConvNeXt's stochastic-depth render**, the gates, and the one defect no gate caught |
 | **§0.2** | ▶ the thread ordering — ▶1, ▶2 and ▶3 are all DONE |
@@ -558,10 +674,13 @@ Then:
   nets: `bf16_renderer.md` measured **bf16 depthwise conv at 0.50×, twice as SLOW**. Throughput,
   not accuracy.
 
-⚠ **And one unlisted RENDER gap found the same day**: EfficientNet's reference sets
-`dropout := 0.2` (classifier dropout, `MainEfficientNetImagenet.lean:68`) and there are **ZERO
-dropout sites in any verified EfficientNet render**. The matrix has a row for stochastic depth and
-none for dropout — they are different regularisers, and `StableHLO.lean:5329`'s own comment says so.
+✅ **And one unlisted RENDER gap found the same day — CLOSED 2026-08-03, §0.12.** EfficientNet's
+reference sets `dropout := 0.2` (classifier dropout, `MainEfficientNetImagenet.lean:68`) and there
+were **ZERO dropout sites in any verified EfficientNet render**. The matrix had a row for stochastic
+depth and none for dropout — they are different regularisers, and `StableHLO.lean`'s own comment
+said so. ⚠ The comment said it in ONE direction only ("a `tensor<B×n>` scale would be per-element
+dropout, a different regulariser"), which is how the gap stayed invisible: the hazard was written
+down as a hypothetical for years while the actual op was missing.
 
 ---
 
@@ -579,7 +698,7 @@ none for dropout — they are different regularisers, and `StableHLO.lean:5329`'
 | ⚠ **ConvNeXt's batched chain is NOT SWAPPED — but it is now NUMERICALLY TIED**, so the blocker is gone | The keep = 1 SD gate compares `convnext_adam` (per-example chain) against `convnext_adamdrop` (batched chain, mask ≡ 1.0) and gets **0 of 83,478,846** floats differing after 3 AdamW steps, against a bit-exact floor — over a pair that differs by exactly the 78 conv-VJP `transpose`/`reverse` lines. `scripts/perturb_conv_vjp.py` fires at 0.0343, so the comparison provably reads those lines. **That is the §5 license `convnext-adam-tie` could not give** (it is IREE-linked and does not link on ares). ⚠ Left unswapped deliberately: it would move bytes in the artifact behind the 84.41% 80-epoch run for no functional gain | §0.10 |
 | ⚠ **`convBack` and `convBackBatched` are two emitters for one VJP, never tied to each other** | They order the kernel `transpose`/`reverse` differently; both compute the same kernel. Nobody noticed because no net used both until ConvNeXt's port. Aligning them has real blast radius — whichever side moves changes committed artifacts (batched: R34/mnv2/enet; per-example: ConvNeXt/ViT). **Recorded, not fixed**; the tie now measures it instead of it being unknown | §0.10 |
 | ~~⛔ **ViT's batched-index move**~~ ✅ **CLOSED 2026-08-03** — the whole chain byte-identical, SD landed (§0.11). What follows was the estimate: EfficientNet and ConvNeXt both have it, ViT's reference sets `dropPath 0.1` (24 sites, two per block), and the op/cert/driver/DP-gate are all built | ~10 of ConvNeXt's forms were shared and are already built. What is ViT-only: `patchEmbed`, `clsPad`/`clsSlice`, `headPad`/`headSlice`, `posEmbedGrad`, `rowDenseWeightGrad`, `softmaxRowBack`, `denseRow`. ⚠ **`matmulF` is the schedule risk**: attention has BOTH operands per-example, where every batched binary in the kit is pointwise-same-shape — it needs a `batchMap2`-shaped combinator, its own VJP and a `dot_general` with a batching dimension. Cost it separately | §0.2 ▶2 |
-| ⚠ **EfficientNet's classifier dropout 0.2 is missing and UNLISTED** | `MainEfficientNetImagenet.lean:68` sets it; there are **zero dropout sites in any verified enet render**. The matrix has a stochastic-depth row and no dropout row — different regularisers | §0.2 ▶3 |
+| ~~⚠ **EfficientNet's classifier dropout 0.2 is missing and UNLISTED**~~ ✅ **CLOSED 2026-08-03** | `dropoutB` (5 sites, one emit line), `Proofs.dropout` (a fifth reading of `layerScale`), 5 new artifacts incl. `enetin_emarms64dropdo` — **the first EfficientNet render that is `efficientNetB0ImagenetConfig` entire on the regulariser axis**. `lake build dropout-tie`: gate A bit-exact **40/40** with the wrong-regulariser control at rel **0.89**, gate W (the weight-gradient operand) with `fault_dropout_wgrad.py` firing rc=1. ⚠ **No long run** — the gates say the render is right, not that it helps | §0.12 |
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
 | ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
@@ -2218,6 +2337,19 @@ LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
 #   ^ §2h-quater: 1.68× (marginal epoch, train-only, 77.5 s → 46.0 s). Measure with
 #     LEAN_MLIR_SKIP_EVAL=1 on BOTH sides — eval runs single-replica and is not part of the ratio.
 
+# ▶ CLASSIFIER DROPOUT (§0.12). Gate A needs a GPU; gate W needs NOTHING and runs in milliseconds.
+#   lake build dropout-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/dropout-tie
+#   .lake/build/bin/dropout-tie --op --break     # gate A falsifiable: one mask cell 1% wrong
+#   .lake/build/bin/dropout-tie --net            # gate W alone — no GPU, no det shim, no floor
+#   scripts/fault_dropout_wgrad.py verified_mlir/efficientnet_adamdo_train_step.mlir /tmp/f.mlir
+#   .lake/build/bin/dropout-tie --net /tmp/f.mlir              # rc=1, and it names line + operand
+# ⚠⚠ RUN GPU GATES ONE AT A TIME. Two XLA processes contending for the device do NOT produce a
+#   clean error: the plugin's `StreamPool::BorrowStream` fails, throws an absl status, and the throw
+#   CRASHES DURING UNWINDING (the Lean binary's static libunwind vs the plugin's). You get a bare
+#   SIGSEGV that reads exactly like a broken gate. Observed 2026-08-03 on BOTH `dropout-tie --op`
+#   and the committed `droppath-tie --op`; both pass 40/40 the moment the device is free. Check
+#   `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` before believing a segfault.
+#
 # the DP throughput bench (§2e-ter). Interleaved, min statistic, SYNTHETIC inputs so the loader is
 # out of it — an end-to-end run measures a DIFFERENT thing (1.67× vs 1.75×) and both are reported.
 lake build efficientnet-dp-bench && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-bench 30
@@ -7200,6 +7332,36 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   three times. Emit it once and thread the SSA name (`.operand gradSSA`).
 - **Two writers for one artifact is a silent last-writer-wins race.** Run
   `scripts/regen_verified_mlir.sh check` before trusting anything in `verified_mlir/`.
+- ⚠⚠ **THE WRITER AUDIT GREPS A LITERAL PATH, SO AN INTERPOLATED WRITER IS INVISIBLE TO IT** — and
+  that is how `verified_mlir/` came to hold **206** files of which only 132 were certified renders.
+  The other 74 (`mlp_<d1>x<d2>_*`, `cnn_<d>_*`, `cifar8_bn_<d>_*`) were BUILD PRODUCTS of the
+  width/batch sweeps: rendered from argv and trained on immediately, so every one was regenerated
+  on the next invocation and **nothing ever loaded the committed copy**. They landed in the corpus
+  only because their writers spelled the path `s!"verified_mlir/{slug}_..."`. Two renderers already
+  carried comments saying *"do not interpolate these paths"*; the comments were right and nothing
+  enforced them. Fixed 2026-08-03: `VerifiedNet.mlirDir` (default `verified_mlir`, `.lake/build` on
+  the three sweep specs, 30 driver read sites now derive from it), the 74 removed, and
+  **`check_manifest`** added — on-disk set must equal the literal-Proofs-writer set, both directions,
+  both controls verified to fire. ⚠ It audits the DIRECTORY, not the writers, so it cannot be evaded
+  by how a path is spelled. *General form: an audit that greps for a spelling can only see code
+  written that way; audit the artifact instead.*
+  ⚠ And note the claim §2a closed — *"every `verified_mlir/` artifact is `Proofs/`-rendered"* — was
+  true of the 132 and **false of the 74**, 20 of which came from `tests/`. It is true now.
+- ⚠⚠ **AN ARTIFACT'S FILENAME AND ITS DECLARED ENTRY ARE TWO THINGS, AND THE DRIVER DERIVES BOTH
+  FROM ONE STRING.** Path from `verified_mlir/{slug}_{variant}_train_step.mlir`
+  (`VerifiedTrain.lean:771`), entry from `m.{slug}_{variant}_train_step` (`:868`). If they disagree
+  the artifact is unreachable at EVERY `LEAN_MLIR_VARIANT` — one spelling finds the file and asks
+  for an entry it lacks, the other names the right entry at a missing path. `enetin_emarmsdrop64`
+  shipped that way (§0.12): committed, prefix-audited, in the recipe matrix, unloadable. **Every
+  gate on it read the file; none opened it through the driver.** `regen_verified_mlir.sh check`
+  audits basename == entry now. ⚠ And pin literal `#eval` paths against the function that derives
+  the variant — a `#guard` is what caught it, and a hand-written path is what caused it.
+- ⚠⚠ **TWO XLA PROCESSES ON ONE GPU CRASH WITH SIGSEGV, NOT AN ERROR.** `StreamPool::BorrowStream`
+  fails, the plugin throws an absl status, and the throw dies in unwinding (the Lean binary links
+  its own libunwind). A gate that is fine reads as broken. Observed 2026-08-03 on `dropout-tie` and
+  on the committed `droppath-tie`; both green once the device was free. This is §4's "two sequential
+  runs can overlap" one consequence further on — check
+  `nvidia-smi --query-compute-apps=pid,used_memory --format=csv` before diagnosing a segfault.
 
 **Guards, and how to use them**
 
@@ -7334,6 +7496,12 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   tracked modifications only; use `.gitignore` for the rest.
 - Rendering at a non-default batch breaks eval unless the forward graph is re-rendered too — that
   is what `LEAN_MLIR_SKIP_EVAL` is for.
+- ⚠⚠ **`LEAN_MLIR_MAX_STEPS` DOES NOT CAP THE VERIFIED AdamW/RMSProp TRAINERS.** `trainAdamSched` —
+  the path every `adam`/`adamdp`/`rms`/`ema`/`drop`/`do` variant takes — reads **`LEAN_MLIR_G2_STEPS`**.
+  `MAX_STEPS` belongs to `train` (the SGD driver) and is read nowhere on the Adam path, so it is
+  silently ignored: a "3-step probe" runs the full schedule, holds the GPU, and (§4 above) makes any
+  concurrently-launched gate segfault. Cost time on 2026-08-03 even with the right answer already in
+  the notes. **`LEAN_MLIR_G2_STEPS` for short probes on a verified AdamW/RMSProp trainer.**
 
 ---
 

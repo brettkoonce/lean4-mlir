@@ -2,7 +2,7 @@ import LeanMlir.VerifiedNets
 
 /-! # The variant-string predicates, run rather than reasoned about
 
-`LEAN_MLIR_VARIANT` now encodes **three independent axes**, and `trainAdamSched` recovers each with
+`LEAN_MLIR_VARIANT` now encodes **four independent axes**, and `trainAdamSched` recovers each with
 a string test on the name:
 
 | axis | predicate | what it decides |
@@ -10,13 +10,14 @@ a string test on the name:
 | EMA | `variant.startsWith "ema"` | a FOURTH `[θ\|m\|v\|ema]` blob region, 5 scalars not 3 |
 | RMSProp | `"rms"` substring | the mean-square slot initialises to **1.0**, not 0 |
 | stochastic depth | `"drop"` substring | N extra `tensor<Bxf32>` scale inputs |
+| classifier dropout | `"do"` substring | ONE extra `tensor<Bx1280xf32>` mask input |
 
 Every one of those is a SILENT wrong answer if it misfires: a 3-region blob fed to a 4-region graph
 misaligns every parameter, a zero-initialised mean-square is a different optimizer, and a spurious
 drop-scale block is an arity error at best.
 
 **This file exists because the naming has now broken TWICE, and the second time was not visible by
-reading names one at a time.**
+reading names one at a time. The THIRD collision was caught before it shipped, by this file.**
 
 1. `planning/ema.md` — the RMSProp test was `startsWith "rms"`, and the RMSProp+EMA variant is
    **`emarms`**, which does not start with "rms". A prefix test on a two-axis name fails quietly;
@@ -27,8 +28,19 @@ reading names one at a time.**
    between two OTHER markers meeting, not between the new marker and an old one, which is precisely
    what reading a name at a time cannot show you. Renamed to `"drop"`.
 
+3. `recipe_gaps.md` gap C — classifier dropout's obvious marker is `"dropout"`, which **contains
+   `"drop"`**, so every dropout render would have read as a stochastic-depth one and the driver
+   would have packed nine mask slots the graph does not have. ⚠ Unlike the first two this was
+   caught *before* it shipped, and the difference is only that this file existed to be extended.
+   Marker `"do"`; the counterfactual is pinned below (`sdOn "adamdropout" == true`).
+
 So the rule, and it is what this file enforces: **with N markers the collisions are between PAIRS
 of them, so a new marker has to be checked against every CONCATENATION, not every marker.**
+
+⚠ And a second rule this file learned the hard way in its own table (2026-08-03): **grow the table
+from the `*AdamVariant` FUNCTIONS, not from memory.** It carried `emarmsdrop64` for a session — a
+spelling no renderer emits, while the real `emarms64drop` was absent — and the artifact named after
+the wrong spelling turned out to be unloadable. A hand-written table of derived names drifts.
 
     lake env lean tests/TestVariantPredicates.lean
 -/
@@ -36,6 +48,15 @@ of them, so a new marker has to be checked against every CONCATENATION, not ever
 private def emaOn (v : String) : Bool := v.startsWith "ema"
 private def rmsOn (v : String) : Bool := (v.splitOn "rms").length > 1
 private def sdOn  (v : String) : Bool := (v.splitOn "drop").length > 1
+/-- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C, 2026-08-03) — a FOURTH axis, and the first one
+    since `sd` that the driver must actually predicate on: it adds one `tensor<B×1280xf32>` input,
+    so a misfire is an arity error at best and a mis-walked blob at worst.
+
+    ⚠⚠ **THE MARKER IS `"do"`, NOT `"dropout"`, AND THAT IS FORCED BY `sdOn` ABOVE.** `"dropout"`
+    CONTAINS `"drop"`, so a dropout-only variant would read as a stochastic-depth one and the
+    driver would try to pack nine mask slots the graph does not have. That is collision #3, and it
+    is the first one that was predicted rather than discovered — because this file existed. -/
+private def cdOn  (v : String) : Bool := (v.splitOn "do").length > 1
 
 /-- Every variant string any renderer can produce today, with what each axis MUST read.
     Grown from the `*AdamVariant` functions, not from the artifacts — an artifact that does not
@@ -100,9 +121,49 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- (`adam64`, `adam128`), so `drop` concatenates against a DIGIT here — a third ordering of the
     -- same three markers, and the reason this table is run rather than reasoned about.
   , ("adam128wxclipdrop", false, false, true), ("adamdp128x4drop", false, false, true)
-  , ("adam64drop", false, false, true) ]
+  , ("adam64drop", false, false, true)
+    -- ▶ CLASSIFIER DROPOUT's spellings (`recipe_gaps.md` gap C). ⚠ `emarms64drop*` is EfficientNet's
+    -- REAL ordering — the batch suffix precedes the regulariser markers — which this table had
+    -- wrong as `emarmsdrop64` until 2026-08-03, when a `#guard` against `enetAdamVariant` caught
+    -- that no renderer emits it. Both are kept: the real one because it ships, the other because a
+    -- collision table should cover strings whether or not anything emits them. That the two
+    -- disagreed for a session is the sharpest possible argument for this file's own rule — a table
+    -- of names written by hand drifts from the function that derives them.
+  , ("adamdo", false, false, false), ("emarms64dropdo", true, true, true)
+  , ("emarms64drop", true, true, true), ("rmsdo64", false, true, false) ]
 
 #guard table.all (fun (v, e, r, s) => emaOn v == e && rmsOn v == r && sdOn v == s)
+
+-- ⭐⭐ THE `do` MARKER AGAINST EVERY CONCATENATION IN THE TABLE, which is the check this file
+-- exists for. `"do"` is two characters, so the question is not "does any marker contain it" but
+-- "can any PAIR of markers, or a marker meeting a digit, spell it" — the `rms` ++ `dp` ⊇ "sd"
+-- shape. Answer, RUN rather than reasoned: no existing marker ends in `d` and none begins with
+-- `o`, and no marker contains `do` internally (`drop` is d-r-o-p). So `cdOn` fires on exactly the
+-- variants that set it.
+#guard table.all (fun (v, _, _, _) => cdOn v == ((v.splitOn "do").length > 1))
+#guard cdOn "adamdo" == true
+#guard cdOn "emarms64dropdo" == true
+-- …and on NONE of the others. ⚠ This is the load-bearing half — every remaining row is a committed,
+-- gated artifact whose driver path must not grow a mask input — and it is stated as a PARTITION
+-- rather than as a count or a disjunction of excuses. §0.4 finding 5: gate the partition, not the
+-- count. (The first draft of this check was a patched-up `|| v == … || s` chain, and it failed on
+-- `rmsdo64` — a dropout spelling the chain had simply not been updated for. A partition cannot
+-- rot that way: adding a spelling to the table without adding it here fails immediately.)
+private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsdo64"]
+#guard table.all (fun (v, _, _, _) => cdOn v == dropoutSpellings.contains v)
+#guard dropoutSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
+#guard cdOn "emarms64drop" == false      -- ⚠ `drop` alone must NOT read as dropout
+#guard cdOn "adamdpdrop" == false        -- ⚠ nor `dp` ++ `drop`
+#guard cdOn "adamdp128x4wxclipdrop" == false
+#guard cdOn "rmsdp64" == false
+-- ⚠ And the reverse direction — the one that forced the spelling. A `"dropout"` marker would make
+-- every dropout render read as a stochastic-depth one; this is that counterfactual, pinned.
+#guard sdOn "adamdropout" == true        -- what `"dropout"` WOULD have done: a false SD positive
+#guard sdOn "adamdo" == false            -- what `"do"` actually does
+-- ⚠ and `do` must not disturb the other three axes in the combined spelling
+#guard emaOn "emarms64dropdo" == true
+#guard rmsOn "emarms64dropdo" == true
+#guard sdOn  "emarms64dropdo" == true
 
 -- ⚠ The regression, pinned directly: the OLD `"sd"` marker fires on `rmsdp64`, the new one does not.
 #guard (("rmsdp64".splitOn "sd").length > 1) == true
@@ -148,5 +209,5 @@ private def table : List (String × Bool × Bool × Bool) :=
   IO.println "── variant predicates ──"
   for (v, e, r, s) in table do
     let regions := if e then 4 else 3
-    IO.println s!"  {v} — ema={e} rms={r} drop={s} → {regions} blob regions"
-  IO.println s!"✓ {table.length} variant spellings, 3 axes, no collision"
+    IO.println s!"  {v} — ema={e} rms={r} drop={s} dropout={cdOn v} → {regions} blob regions"
+  IO.println s!"✓ {table.length} variant spellings, 4 axes, no collision"

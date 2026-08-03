@@ -61,7 +61,22 @@ deriving BEq, Repr
 structure VerifiedNet where
   /-- Display name, e.g. `"ResNet-34"`. -/
   name     : String
-  /-- Codegen slug: drives `verified_mlir/<slug>_{train_step,fwd}.mlir`,
+  /-- ⚠ **Which directory this net's artifacts live in.** Default `verified_mlir/` — the CERTIFIED
+      corpus, whose contents are pinned by `scripts/regen_verified_mlir.sh check` to exactly the set
+      with a literal `IO.FS.writeFile "verified_mlir/…"` writer in `Proofs/Codegen/`.
+
+      ⚠⚠ **The width/batch SWEEP nets set `.lake/build` instead, and that is what keeps the pin
+      possible.** `mlpG`, `cnnG` and `cifar8BnG` render their artifact at run time from argv and
+      immediately train on it — so those files are BUILD PRODUCTS, not committed renders. They used
+      to be written into `verified_mlir/` and 74 of them had been checked in: never loaded by
+      anything, regenerated on every invocation, and invisible to the writer audit because that
+      audit greps for a LITERAL path and these writers interpolate a slug. A directory that mixes a
+      certified corpus with transients cannot be audited as either.
+
+      ⚠ It is a field rather than a global because the read sites are per-net and there are 30 of
+      them; one spelling in `VerifiedNet` beats 30 in the driver. -/
+  mlirDir : String := "verified_mlir"
+  /-- Codegen slug: drives `<mlirDir>/<slug>_{train_step,fwd}.mlir`,
       `.lake/build/<slug>_{ts,fwd}_v.vmfb`, and the `m.<slug>_{train_step,fwd}` funcs. -/
   slug     : String
   /-- `(dims, initKind)` per param, in func-arg order — the matching `XLayout.specs`.
@@ -95,6 +110,23 @@ structure VerifiedNet where
       `VerifiedSpec` sits downstream of this file, so the renderer cannot share the definition by
       import without inverting the dependency. -/
   dropKeeps : Array Float := #[]
+  /-- ▶ **CLASSIFIER DROPOUT** (`recipe_gaps.md` gap C) — `(keep_prob, per-example width)`, or
+      `none` when the net has none. EfficientNet-B0: `(0.8, 1280)` for the reference's
+      `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`).
+
+      ⚠⚠ **THE WIDTH IS HERE BECAUSE THE MASK IS PER-ELEMENT, WHICH IS THE WHOLE DIFFERENCE FROM
+      `dropKeeps`.** Stochastic depth's masks are `tensor<Bxf32>` — one value per example, so the
+      driver needs no width at all. Dropout's is `tensor<B×w×f32>`, drawn per (example, feature),
+      because the reference draws `bernoulli(key, keep, x.shape)` rather than the `(B, 1, …, 1)`
+      shape. Every downstream difference — the blob shape, the draw count, the shard split — falls
+      out of that one number, which is why it is carried rather than assumed to be `net.d0` or
+      `nClasses`. It is the CLASSIFIER'S INPUT width (EfficientNet's head channels), independent of
+      the class count, so the Imagenette and ImageNet renders take the same mask shape.
+
+      ⚠ `keep_prob`, not the drop rate: `1/keep` is folded into the supplied mask by the driver, so
+      the graph bakes no constant and the ones-mask forward is the exact identity
+      (`Proofs.dropout_ones_id`). Same convention as `dropKeeps`, for the same reason. -/
+  dropoutKeep : Option (Float × Nat) := none
   /-- **The generated ImageNet batch shim this net streams**, as a bare filename under
       `jax/.lake/build/` — e.g. `"generated_vit_tiny_imagenet_shim.py"`. Required on every
       `.imagenet` net; ignored (and empty) on every other dataset, which loads from disk.
@@ -500,9 +532,9 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let nc := net.nClasses
   IO.println (if (← IreeSession.backendName) == "xla"
               then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
-  let tsSess  ← mkSession s!"verified_mlir/{net.slug}_train_step.mlir"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
                           s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdSess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
                           s!".lake/build/{net.slug}_fwd_v.vmfb"
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
@@ -622,8 +654,8 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
   IO.println net.blurb
   let tsVmfb  := s!".lake/build/{net.slug}_adam_ts.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_adam_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"             fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_adam_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"             fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
@@ -756,6 +788,19 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- This is `planning/ema.md`'s `emarms` defect a second time, one axis further on.
   let sdOn := (variant.splitOn "drop").length > 1 && !net.dropKeeps.isEmpty
   let nDrop := if sdOn then net.dropKeeps.size else 0
+  -- ▶ CLASSIFIER DROPOUT. ⚠⚠ The marker is `"do"` and NOT `"dropout"`, and that is forced by the
+  -- line above: `"dropout"` contains `"drop"`, so a dropout-only variant would set `sdOn` and this
+  -- driver would pack nine mask slots into a graph that has none. Collision #3 on this naming, and
+  -- the first caught before it shipped — `tests/TestVariantPredicates.lean` runs the pairwise table
+  -- rather than reasoning about it, and pins the counterfactual (`sdOn "adamdropout" == true`).
+  let cdOn := (variant.splitOn "do").length > 1 && net.dropoutKeep.isSome
+  let doKeep := (net.dropoutKeep.map (·.1)).getD 1.0
+  let doWidth := if cdOn then (net.dropoutKeep.map (·.2)).getD 0 else 0
+  -- ⚠ The per-example TAIL the DP shim shards is BOTH mask families — nine `tensor<gbs>` scales
+  -- followed by one `tensor<gbs × w>` mask — so the count it takes is their sum, not `nDrop`.
+  -- Both are per-example along dim 0 and the shim splits by `elems / replicas`, so a rank-2 tail
+  -- entry shards by ROWS exactly as a rank-1 one does. See the `mlpTrainStepVDP` call below.
+  let nShardTail := nDrop + (if cdOn then 1 else 0)
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
@@ -768,12 +813,12 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   let hasBn := !net.bnChannels.isEmpty
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
-  let tsSess  ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
                           s!".lake/build/{net.slug}_{variant}_ts.vmfb"
-  let fwdSess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
                           s!".lake/build/{net.slug}_fwd_v.vmfb"
   let fwdEvalSess ← if hasBn then
-      mkSession s!"verified_mlir/{net.slug}_fwd_eval.mlir"
+      mkSession s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
                 s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
     else pure fwdSess
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
@@ -808,8 +853,8 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- off the artifact rather than assuming `bs` (see `fwdRenderedBatch`); when they agree — every
   -- default run — this is `bs` and nothing below changes.
   let evalBs := (← fwdRenderedBatch
-    (if hasBn then s!"verified_mlir/{net.slug}_fwd_eval.mlir"
-     else s!"verified_mlir/{net.slug}_fwd.mlir")).getD bs
+    (if hasBn then s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
+     else s!"{net.mlirDir}/{net.slug}_fwd.mlir")).getD bs
   let nbt := (nEval + evalBs - 1) / evalBs  -- ceil: the last partial batch is zero-padded, not dropped
   -- The schedule label is part of the run's evidence, not decoration: an exponential-decay run and
   -- a cosine one are different experiments and the log has to say which it was. Spelled so the
@@ -822,6 +867,14 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
 TF convention — this optimizer is not bias-corrected)"
   if sdOn then
     IO.println s!"  ▸ STOCHASTIC DEPTH: {nDrop} drop sites, keeps {net.dropKeeps.map (fun k => (k * 1000.0).round / 1000.0)} — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward)."
+  -- ⚠ It ANNOUNCES ITSELF, and that is §0.9's finding rather than politeness: a banner that names
+  -- only the architecture makes a run with the wrong regulariser read exactly like a right one.
+  -- The keep and the mask SHAPE are both printed, because the shape is the whole difference from
+  -- the line above — `B × w` is per-element dropout, `B` alone would be stochastic depth.
+  if cdOn then
+    IO.println s!"  ▸ CLASSIFIER DROPOUT: keep {doKeep}, mask tensor<{gbs}x{doWidth}xf32> \
+(PER-ELEMENT, one Bernoulli per example×feature — not per-example like the drop scales), \
+host-drawn per step at seed+999983, 1/keep folded in. Eval is the identity (drop-free forward)."
   if emaOn then
     IO.println s!"  ▸ EMA: 4th blob region [θ|m|v|ema], shadow starts AT the weights, decay \
 min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW."
@@ -842,6 +895,13 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- shard flag existed) hand every replica the same `bs` rows. At `replicas = 1` this IS `bs`, so
   -- every existing run and every committed artifact is untouched.
   let dropShapes : Array (Array Nat) := Array.replicate nDrop #[gbs]
+    -- ▶ CLASSIFIER DROPOUT's slot, LAST — after the stochastic-depth scales, matching
+    -- `enetFwdSig`/`inSig`'s order. ⚠ It is the first mask slot that is not `#[gbs]`: rank 2, and
+    -- `gbs` times WIDER. Everything above assumed a per-example mask was one float per example;
+    -- this is one per (example, feature). `gbs` and not `bs` for `dropShapes`' reason exactly —
+    -- the shim splits the GLOBAL buffer by rows, so a per-device sizing would leave it nothing to
+    -- split (§5b's defect, the half that made replication type-check).
+    ++ (if cdOn then #[#[gbs, doWidth]] else #[])
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
                                 ++ (if emaOn then net.paramShapes else #[])
                                 ++ Array.replicate nScalars #[]
@@ -995,7 +1055,10 @@ it and its .epoch marker aside and start fresh."
   -- The drop-scale slots are reserved here and refilled per step, exactly like the scalar and BN
   -- regions — a fresh `F32.concat` per step would cost two whole-blob host memcpys (the mistake
   -- `planning/xla_pjrt_ladder.md` §8 measured at 272 MB/step on R34).
-  let dropSlots ← F32.const (nDrop * gbs).toUSize 1.0
+  -- ⚠ Sized for BOTH families. The `1.0` fill is load-bearing and not a placeholder: a mask slot
+  -- that is never refilled must be the exact identity, which `1.0` is and `0.0` emphatically is not
+  -- (it would zero the classifier's input and train nothing).
+  let dropSlots ← F32.const (nDrop * gbs + (if cdOn then gbs * doWidth else 0)).toUSize 1.0
   pbuf := if hasBn
           then F32.concat #[thetamv, scalarSlots, runningBnStats, dropSlots]
           else F32.concat #[thetamv, scalarSlots, dropSlots]
@@ -1070,6 +1133,19 @@ it and its .epoch marker aside and start fresh."
         let sc ← F32.dropScales net.dropKeeps gbs (ep * nb + bi + 1).toUSize
         pbuf ← F32.blit pbuf (nRegions * net.nParams + nScalars + nBnStats).toUSize sc 0
                  (nDrop * gbs).toUSize
+      -- ▶ CLASSIFIER DROPOUT: this step's per-ELEMENT mask, into the slot after the SD scales.
+      -- ⚠⚠ A SEPARATE SEED STREAM, and that is the reference's own structure rather than caution:
+      -- it draws the classifier mask at `fold_in(drop_key, 999983)` while stochastic depth uses
+      -- `fold_in(drop_key, block_index)` — a distinct sub-key precisely so the two regularisers do
+      -- not share draws. Handing both the same seed here would correlate the classifier mask with
+      -- block 0's drop decision every step: it trains, it descends, and no gate in this feature's
+      -- set compares the two streams. `999983` is carried verbatim so the divergence is the
+      -- reference's constant and not an arbitrary one of ours.
+      if cdOn then
+        let dm ← F32.dropoutMask doKeep (gbs * doWidth) ((ep * nb + bi + 1) + 999983).toUSize
+        pbuf ← F32.blit pbuf
+                 (nRegions * net.nParams + nScalars + nBnStats + nDrop * gbs).toUSize dm 0
+                 (gbs * doWidth).toUSize
       let augSeed := (ep * nb + bi + 1).toUSize
       -- ImageNet takes the whole batch off the wire, already augmented and normalized by the shim,
       -- so it bypasses BOTH the slice and the augmentation below. That is deliberate: the transform
@@ -1102,7 +1178,7 @@ it and its .epoch marker aside and start fresh."
         -- of the shim before any DP drop render existed to expose it. At `nDrop = 0` the argument
         -- is inert and every non-SD DP run is byte-identical to before.
         then IreeSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
-               gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize nResident nDrop.toUSize
+               gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize nResident nShardTail.toUSize
         else IreeSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
                bs.toUSize d0.toUSize nc.toUSize nResident
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
@@ -1218,9 +1294,9 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   -- strings for nets that have not been ported (xla_pjrt_ladder.md §2).
   IO.println (if (← IreeSession.backendName) == "xla"
               then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
-  let tsSess  ← mkSession s!"verified_mlir/{net.slug}_train_step.mlir"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
                           s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdSess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
                           s!".lake/build/{net.slug}_fwd_v.vmfb"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
     loadData net dataDir
@@ -2183,8 +2259,8 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → IREE → GPU)"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
@@ -2297,8 +2373,8 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   IO.println s!"Spectral-norm-constrained PGD study on {net.name} (verified codegen → IREE → GPU)"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
@@ -2410,8 +2486,8 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
   IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → IREE → GPU)"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
@@ -2562,8 +2638,8 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
   IO.println s!"Spectral-norm-constrained PGD study on {net.name} (verified codegen → IREE → GPU)"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
@@ -2819,8 +2895,8 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   IO.println s!"Randomized-smoothing certificate on {net.name} (verified codegen → IREE → GPU, forward-only)"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   -- `trainPix`/`crop`: Imagenette train ships at 256² and is center-cropped to 224² per batch
@@ -3019,8 +3095,8 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → IREE → GPU)"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
@@ -3141,8 +3217,8 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
   IO.println "  [fp8 E4M3] fp32 master · per-column W / per-tensor x → E4M3 grid · fp32 accumulate"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
@@ -3213,8 +3289,8 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   IO.println "  note: depth>1 ⇒ intermediate activations & cotangents stay fp32 (inside the kernel); weights + input are E4M3"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"        fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
@@ -3283,12 +3359,12 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let tsVmfb  := s!".lake/build/{net.slug}_{variant}_ts.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   let fwdEvalVmfb := s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
-  compileVmfb s!"verified_mlir/{net.slug}_{variant}_train_step.mlir" tsVmfb
-  compileVmfb s!"verified_mlir/{net.slug}_fwd.mlir"             fwdVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" tsVmfb
+  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"             fwdVmfb
   let tsSess  ← IreeSession.create tsVmfb
   let fwdSess ← IreeSession.create fwdVmfb
   let fwdEvalSess ← if hasBn then do
-      compileVmfb s!"verified_mlir/{net.slug}_fwd_eval.mlir" fwdEvalVmfb
+      compileVmfb s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir" fwdEvalVmfb
       IreeSession.create fwdEvalVmfb
     else pure fwdSess
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
