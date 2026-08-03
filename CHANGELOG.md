@@ -3,6 +3,50 @@
 Release history for *Lean 4 → MLIR → GPU*. The README keeps only the current
 version; older entries live here.
 
+## v0.6.3 — The PJRT backend
+
+A second trusted lowerer. `ffi/pjrt_ffi.c` implements the same C surface as
+the IREE shim — symbol-identical under `nm -D`, so nothing above the shim
+changed and the backend is whichever `.so` a binary linked — and hands the
+proven graph to XLA through the PJRT C API, with no Python at run time. What
+executes is `pretty(provenGraph)`: the same rendered artifact the proofs
+reason about, not a hand-written emitter. ResNet-34 on Imagenette goes from
+IREE's 1702 ms/step to **162**, within 1.04× of hand-written JAX per step;
+ViT lands at 128 ms/step (9.2× IREE) with an 80-epoch run at 71.31%. The
+AdamW scorecard reaches **6 of 6** — every whole-net render certified, each
+swap licensed by a numeric tie verified to fail — and with §2i's cifar8 port
+every committed artifact is `Proofs/`-rendered with no carve-out. Data
+parallelism is gated by the exact batch-decomposition identity, and
+device-resident parameters stop the `[θ|m|v]` blob crossing PCIe, taking
+4-GPU ResNet-34/ImageNet from 596 to 386 ms/step.
+
+ImageNet becomes real. All five nets — ResNet-34, ViT-Tiny, ConvNeXt-T,
+EfficientNet-B0, MobileNetV2 — have gated trainers matching their JAX
+reference parameter counts exactly, and the recipe gap closes behind them:
+RMSProp (TF-flavoured, ε inside the sqrt), the EMA weight shadow,
+stochastic depth, mixup/cutmix over a soft-target wire that needed no render
+change because the renders are affine in `%onehot`, global-norm gradient
+clipping, `wdExcludeNormBias`, and classifier dropout. ConvNeXt and ViT move
+to the batched index `N := B`, byte-identical to their committed artifacts.
+ConvNeXt gets its **real** channel LayerNorm — parameter count exact at
+28,587,592, the scalar-LN chain deleted, 180/180 bit-identical on the render
+capstone. Five copies of one label-smoothing bug, hardcoded at K=10 across
+four nets, were found and derived.
+
+Two new demos and a sharper trust story. A 2D UNet segments brain tumours on
+MSD Task01 (BraTS) with a validated soft-Dice loss, a focal-CE arm chosen by
+gradient scorecard, and an honest WT-0.66 verdict; detection grows anchor-YOLO
+with DIoU, an FD-verified FPN neck, and multi-scale target encoding that lifts
+coverage 60.9% → 88.2%. `tests/comparator/Challenge.lean` now **imports Mathlib
+and nothing else** — the 13 architecture-free calculus theorems, including the
+`fderiv` pin, with their vocabulary inlined; the 39 statements about specific
+networks live in `ChallengeArch.lean`, which says why importing them beats
+copying every architecture into the challenge. 52 theorems, both pairs green.
+1524 theorems close over the three core axioms, 134 artifacts carry one writer
+each, 41 bestiary binaries match their golden parameter table, and the
+toolchain moves to Lean 4.32.2 (past the v4.32.1 kernel soundness hotfix) with
+zero source changes and a byte-identical artifact regen.
+
 ## v0.6.2 — Certified robustness
 
 The robustness ladder becomes the release. PGD attacks run against every

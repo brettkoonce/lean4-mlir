@@ -16,10 +16,11 @@ Companion code for the upcoming book *Verified Deep Learning with Lean 4*
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
 
-**Current version: `v0.6.2`** — certified robustness: PGD attacks vs.
-Lipschitz/LipSDP certificates vs. randomized smoothing (Cohen 2019), all
-end-to-end theorems; the 5-net FloatBridge matrix completes; toolchain on
-Lean 4.32.0. Full release history in [CHANGELOG.md](CHANGELOG.md).
+**Current version: `v0.6.3`** — the PJRT backend: a second trusted lowerer
+that runs the proven graph through XLA, 10.5x faster than IREE and within
+1.04x of hand-written JAX; all five nets have gated ImageNet trainers at
+exact reference parameter counts; `Challenge.lean` now imports only Mathlib;
+toolchain on Lean 4.32.2. Full release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
@@ -675,7 +676,7 @@ ROCm 7.2.0 / gfx1100.
   title   = {Verified Deep Learning with Lean 4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
   doi     = {10.5281/zenodo.20402133},
-  version = {0.6.2},
+  version = {0.6.3},
   year    = {2026},
 }
 ```
