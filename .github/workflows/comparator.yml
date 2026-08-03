@@ -16,11 +16,15 @@ name: Comparator (independent kernel re-check)
 # makes the kernel legible if the sandbox ever fails.
 #
 # Tool pinning: lean4export reads the project's `.olean`s, so its build
-# must stay olean-compatible with the project's Lean (v4.32.0 — bumped from
-# v4.31.0; LEAN4EXPORT_REF below is upstream's `v4.32.0` release tag, which
-# matches the project's lean-toolchain exactly). If a future bump breaks the
-# build, pin LEAN4EXPORT_REF/COMPARATOR_REF to the first commit that went
-# green here (or to a commit whose lean-toolchain matches the project's).
+# must stay olean-compatible with the project's Lean (v4.32.2). LEAN4EXPORT_REF
+# stays on upstream's `v4.32.0` release tag — upstream cut no v4.32.1/.2 tag —
+# and the `cp lean-toolchain` in the build step below is what makes that safe:
+# the v4.32.0 *source* is rebuilt with the project's exact Lean, and the cache
+# key hashes lean-toolchain so a bump busts it. What matters is the Lean the
+# exporter is BUILT with, not the tag it is built FROM; a mismatch shows up as
+# "incompatible header" at the export step, which looks nothing like a proof
+# failure. If a future bump breaks the build, pin LEAN4EXPORT_REF/COMPARATOR_REF
+# to the first commit that went green here.
 
 on:
   push:
