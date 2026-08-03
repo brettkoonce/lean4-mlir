@@ -14,12 +14,40 @@ landlock, with the option to pile on the
 [nanoda](https://github.com/ammkrn/nanoda_lib) kernel as a second
 opinion.
 
+## Two challenge files, split on whether a network is named
+
+`Challenge.lean` **imports Mathlib and nothing else.** It holds the 13
+architecture-free theorems — chapter 1's `pdiv` calculus rules and chapter 9's
+matrix-level rules — with the handful of definitions they need (`Vec`, `Mat`,
+`basisVec`, `pdiv`, `pdivMat`, `Mat.{mul,transpose,flatten,unflatten}`) copied
+inline. Every one is a one-liner over Mathlib's `fderiv`, and
+`chk_pdiv_is_fderiv` pins that by `rfl`. A reviewer can read this file and
+know exactly what is claimed without reading a line of this project.
+
+Copying those definitions is safe in a way that copying an architecture would
+not be: comparator compares the Challenge and Solution statements
+bit-identically, so a copy that drifted would fail the run rather than quietly
+prove something weaker.
+
+`ChallengeArch.lean` holds the other 39 and **does** import
+`LeanMlir.Proofs.*`, because each of them is a statement *about a specific
+network* — "ResNet-34's rendered backward equals its Fréchet derivative"
+cannot be phrased without ResNet-34 in scope. Making those Mathlib-only would
+mean a second copy of every architecture, which must then never drift from the
+first; that is a weaker guarantee than an import, not a stronger one.
+
+The division is the point: once the `fderiv` pin and the structural rules are
+checked over Mathlib alone, the architecture theorems are applications of
+them, and what a reviewer must additionally trust is the forward functions and
+nothing else.
+
 ## What gets verified
 
 The 52 theorems span foundation rules (incl. `chk_pdiv_is_fderiv`, which pins
 `pdiv` to Mathlib's `fderiv`), every chapter's headline
 Jacobian, the public `*_has_vjp_correct` wrappers, and the five
-whole-network VJPs:
+whole-network VJPs. The first two buckets are `Challenge.lean`; the rest are
+`ChallengeArch.lean`:
 
 | Bucket | Theorems |
 |---|---|
@@ -38,7 +66,9 @@ whole-network VJPs:
 For each, comparator confirms:
 
 1. The Solution's theorem statement is bit-identical to the Challenge's
-   (which has `:= by sorry`) — the prover didn't redefine the goal.
+   (which has `:= by sorry`) — the prover didn't redefine the goal. For the
+   Mathlib-only pair this also pins the inlined vocabulary: `Solution.lean`
+   carries its own copy, and a divergence between the two would surface here.
 2. The Solution's proof uses **only** `propext`, `Quot.sound`,
    `Classical.choice` — no project axioms anywhere in the transitive
    closure.

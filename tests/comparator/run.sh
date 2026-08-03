@@ -1,5 +1,7 @@
 #!/bin/bash
-# Run leanprover/comparator against the 52 theorems in Solution.lean.
+# Run leanprover/comparator against both challenge/solution pairs:
+#   config.json      — 13 architecture-free theorems, Challenge imports only Mathlib
+#   config-arch.json — 39 architecture theorems, ChallengeArch imports the project
 #
 # What it verifies (per Lean's kernel, independently of the elaborator):
 #   1. Solution's theorem statements bit-identically match Challenge's
@@ -61,8 +63,9 @@ lake update >/dev/null
 # correct) instead of aborting the run under `set -e` — matches proofs.yml.
 lake exe cache get >/dev/null || true
 
-echo "[2/3] lake build Solution (outside sandbox)…"
-lake build Solution
+echo "[2/3] lake build Solution SolutionArch (outside sandbox)…"
+lake build Solution SolutionArch
 
-echo "[3/3] lake env comparator config.json…"
+echo "[3/3] lake env comparator — the Mathlib-only pair, then the architectures…"
 PATH="$WRAPPER_DIR:$PATH" lake env comparator config.json
+PATH="$WRAPPER_DIR:$PATH" lake env comparator config-arch.json
