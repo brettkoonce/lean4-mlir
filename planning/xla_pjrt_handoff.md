@@ -75,33 +75,69 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 
 ---
 
-## 0. ▶ START HERE — **next: ViT's batched-index move (§0.2 ▶3), or ConvNeXt's SD swap (§0.3).**
+## 0. ▶ START HERE — **the batched-index thread is CLOSED. Next: §0.3's leftovers, or a long run.**
 
-**Rewritten 2026-08-03, after ConvNeXt's stochastic-depth render landed.** State:
-`lake build Proofs Certs Codegen` **3,914** green · **124** artifacts, one writer each ·
-`verified_mlir/` **0 lines of diff with the writers forced** · `TestBatchedEmitTie` **34** batched
-forms · `TestVariantPredicates` **45** spellings · drift-guard coverage **81/112**, baseline
-unchanged (that file may only shrink).
+**Rewritten 2026-08-03, after ViT's batched-index move and its stochastic-depth render landed.**
+State: `lake build Proofs Certs Codegen` **3,915** green · **129** artifacts, one writer each ·
+`verified_mlir/` **0 lines of diff with the writers forced** · `TestBatchedEmitTie` **47** batched
+forms · `TestVariantPredicates` **48** spellings · axiom audit **1,517**, all 3-axiom · drift-guard
+coverage **86/117**, baseline unchanged (that file may only shrink).
 
-**Read in this order:** this section (§0), then §0.10 for what just landed and what it left owed.
-`planning/stochastic_depth.md` §7e is the gate record; `planning/recipe_gaps.md` is the older plan
-and its v1.0-v1.5a items are done or hardware-blocked — read it for context, not for ordering.
-Everything from §0a onward is HISTORY; nothing there is live unless §0.3 says it is owed.
+**The one-paragraph version.** **All five nets are now at the batched index `N := B`, and
+stochastic depth exists on the three nets whose references set it** (EfficientNet, ConvNeXt, ViT),
+at both scales, with the DP mask-shard gate run on each. The §0.2 ▶2/▶3 thread — the largest
+remaining item in this file for two sessions — is closed. What is left is §0.3's list and the runs
+§0.1 says this box cannot do.
 
-**The one-paragraph version.** All five nets are at PJRT parity at both scales. ConvNeXt is fully
-re-instantiated at the batched index `N := B`, and **stochastic depth is built on that chain and
-gated** (§0.10) — 18 sites, six artifacts, eight gates, five controls, no committed artifact moved.
-Three nets now have SD (EfficientNet, ConvNeXt at both scales); ViT is the one that does not, and
-the reason is the same as it was: it still renders at the per-example index, where a per-example
-mask is not expressible. **That move is what is next**, and it is the last large item in §0.2.
+**Read in this order:** this section, then §0.3 (what is owed). §0.10 and §0.11 are the two SD
+records; `planning/stochastic_depth.md` §7e-f is the gate detail. Everything from §0a onward is
+HISTORY.
+
+### §0.11 ✅ **ViT — the batched index AND stochastic depth, 2026-08-03**
+
+| | result |
+|---|---|
+| forward vs `vit_fwd.mlir` | **byte-identical**, 237,270 chars, 2,481 lines |
+| backward vs the per-example traversal | **byte-identical**, 7,026 lines, SSA unmoved |
+| the gradient LIST | **identical** — 200 params, same SSA, same ORDER |
+| train step vs `vit_adam_train_step.mlir` | **byte-identical**, 1,281,515 chars, 14,457 lines |
+| SD: keep = 1 vs plain `adam` | **0 of 16,579,038** floats, bit-exact floor; real ramp fires at **0.631** |
+| SD: gate B (`droppath-tie --net vit`) | floor 320/320, B1 320/320, B2 **0.535**, B3 **0.265** |
+| SD: DP mask shard, 2 replicas | ① **16,579,038/16,579,038**; controls at rel 0.833 and an arity refusal |
+
+⚠⚠ **ViT's SWAP IS FREE, WHERE ConvNeXt's IS NOT.** ViT uses one emitter per op, so the batched
+chain reproduces every committed artifact exactly — there is no byte change to license and §5's
+numeric-tie requirement has nothing to bite on. ConvNeXt's differs on 78 conv-VJP lines and needs
+the licence §0.10 records. Neither swap is made; both should land with something that renders off
+the batched chain.
+
+⚠⚠ **`matmulF` WAS THE COSTED SCHEDULE RISK AND IT IS FOUR SITES.** `batchMapAux` **is**
+`batchMap2` (its body is symmetric in the two operands — only the docstring said otherwise), the
+`dot_general` already carried `batching_dims = [0] x [0]`, and `.batched2` already existed for
+`addVB`. Fifth time reading a scoped op family against existing ops *at their other readings* has
+collapsed it.
+
+⚠⚠ **AND A GATE THAT IS INVALID ON ONE ARCHITECTURE.** Gate B's B4 — *"with every site zeroed the
+net still depends on `x`"* — is FALSE on a correct ViT render, because the classifier reads only
+the CLS token and 24 dropped branches make every block an identity, so the CLS token never mixes
+with the patches. It is skipped there with the reason recorded, and B2's collapse check + B3 carry
+a knowingly weaker load. *A gate ported between architectures inherits the source's structure, not
+the target's* — §0.4 finding 1 on the shape rather than the conditioning, fifth landing.
+
+⚠ **And the misplacement control silently did nothing on ViT.** `misplace_drop_sites.py` matched
+only `add %branch, %skip`; ViT emits the skip FIRST, so it rewrote **0 of 24** sites, wrote a
+byte-identical copy, and the gate it feeds would have gone green against an unmodified render. It
+takes both orders now and REFUSES at zero matches. **A control that quietly does nothing reads
+exactly like a control that ran.**
 
 **§0 is laid out for someone starting cold:**
 
 | | |
 |---|---|
 | **§0.1** | ⚠ the box constraint — it re-orders everything |
-| **§0.10** | ✅ **ConvNeXt's stochastic-depth render — DONE**, the gates, and the one defect no gate caught |
-| **§0.2** | ▶ the thread ordering — **▶3 (ViT's batched index) is what remains** |
+| **§0.11** | ✅ **ViT — batched index + stochastic depth**, and the gate that is invalid there |
+| **§0.10** | ✅ **ConvNeXt's stochastic-depth render**, the gates, and the one defect no gate caught |
+| **§0.2** | ▶ the thread ordering — ▶1, ▶2 and ▶3 are all DONE |
 | **§0.3** | ⚠ what is OWED, collected in one place |
 | **§0.9** | ✅ the per-net data shims — wired, gated, and the streams measured apart |
 | **§0.5** | ✅ DP ImageNet recipe parity — and the DP control it broke |
@@ -542,7 +578,7 @@ none for dropout — they are different regularisers, and `StableHLO.lean:5329`'
 | ⚠ **ViT/ConvNeXt at wire v1 now run WITHOUT their reference's mixup/cutmix, announced** | their shims bake `SHIM_MIX=both`; a mixed target cannot ride int32 labels, so the driver passes `off` and prints that it did. `SHIM_SOFT=1` gets soft targets **and** that net's own mixing — which is the reference recipe and has never had a long run | §0.9 |
 | ⚠ **ConvNeXt's batched chain is NOT SWAPPED — but it is now NUMERICALLY TIED**, so the blocker is gone | The keep = 1 SD gate compares `convnext_adam` (per-example chain) against `convnext_adamdrop` (batched chain, mask ≡ 1.0) and gets **0 of 83,478,846** floats differing after 3 AdamW steps, against a bit-exact floor — over a pair that differs by exactly the 78 conv-VJP `transpose`/`reverse` lines. `scripts/perturb_conv_vjp.py` fires at 0.0343, so the comparison provably reads those lines. **That is the §5 license `convnext-adam-tie` could not give** (it is IREE-linked and does not link on ares). ⚠ Left unswapped deliberately: it would move bytes in the artifact behind the 84.41% 80-epoch run for no functional gain | §0.10 |
 | ⚠ **`convBack` and `convBackBatched` are two emitters for one VJP, never tied to each other** | They order the kernel `transpose`/`reverse` differently; both compute the same kernel. Nobody noticed because no net used both until ConvNeXt's port. Aligning them has real blast radius — whichever side moves changes committed artifacts (batched: R34/mnv2/enet; per-example: ConvNeXt/ViT). **Recorded, not fixed**; the tie now measures it instead of it being unknown | §0.10 |
-| ⛔ **ViT's batched-index move** — ~12 forms + `matmulF`. ⚠ **It is now the ONLY thing between ViT and stochastic depth**: EfficientNet and ConvNeXt both have it, ViT's reference sets `dropPath 0.1` (24 sites, two per block), and the op/cert/driver/DP-gate are all built | ~10 of ConvNeXt's forms were shared and are already built. What is ViT-only: `patchEmbed`, `clsPad`/`clsSlice`, `headPad`/`headSlice`, `posEmbedGrad`, `rowDenseWeightGrad`, `softmaxRowBack`, `denseRow`. ⚠ **`matmulF` is the schedule risk**: attention has BOTH operands per-example, where every batched binary in the kit is pointwise-same-shape — it needs a `batchMap2`-shaped combinator, its own VJP and a `dot_general` with a batching dimension. Cost it separately | §0.2 ▶2 |
+| ~~⛔ **ViT's batched-index move**~~ ✅ **CLOSED 2026-08-03** — the whole chain byte-identical, SD landed (§0.11). What follows was the estimate: EfficientNet and ConvNeXt both have it, ViT's reference sets `dropPath 0.1` (24 sites, two per block), and the op/cert/driver/DP-gate are all built | ~10 of ConvNeXt's forms were shared and are already built. What is ViT-only: `patchEmbed`, `clsPad`/`clsSlice`, `headPad`/`headSlice`, `posEmbedGrad`, `rowDenseWeightGrad`, `softmaxRowBack`, `denseRow`. ⚠ **`matmulF` is the schedule risk**: attention has BOTH operands per-example, where every batched binary in the kit is pointwise-same-shape — it needs a `batchMap2`-shaped combinator, its own VJP and a `dot_general` with a batching dimension. Cost it separately | §0.2 ▶2 |
 | ⚠ **EfficientNet's classifier dropout 0.2 is missing and UNLISTED** | `MainEfficientNetImagenet.lean:68` sets it; there are **zero dropout sites in any verified enet render**. The matrix has a stochastic-depth row and no dropout row — different regularisers | §0.2 ▶3 |
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
