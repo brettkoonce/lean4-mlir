@@ -145,7 +145,6 @@ jobs:
               verified_mlir/convnext_adamclip_train_step.mlir \
               verified_mlir/cnxin_adamwxclip_train_step.mlir \
               verified_mlir/cnxin_adamdpwxclip_train_step.mlir \
-
             || { echo "::error::committed verified_mlir/{convnext,cnxin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
           # The STOCHASTIC-DEPTH renders come from a DIFFERENT module — ConvNeXtRenderB, the chain at
           # the batched index N := B, which is the only one where a per-EXAMPLE drop mask is
@@ -158,7 +157,6 @@ jobs:
               verified_mlir/cnxin_adamwxclipdrop_train_step.mlir \
               verified_mlir/cnxin_adamdpwxclipdrop_train_step.mlir \
               verified_mlir/cnxin_drop_fwd.mlir \
-
             || { echo "::error::committed verified_mlir/{convnext,cnxin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
           # ViT's SD renders, from ViTRenderB — the batched chain. ⚠ That chain reproduces ViT's
           # committed drop-free artifacts byte-for-byte (unlike ConvNeXt's, which differs on 78
@@ -169,7 +167,7 @@ jobs:
               verified_mlir/vit_drop_fwd.mlir \
               verified_mlir/vitin_adamwxclipdrop_train_step.mlir \
               verified_mlir/vitin_drop_fwd.mlir \
-
+              verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir \
             || { echo "::error::committed verified_mlir/{vit,vitin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean)"; exit 1; }
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set
@@ -189,10 +187,16 @@ jobs:
               verified_mlir/efficientnet_adamdpdrop_train_step.mlir \
               verified_mlir/efficientnet_drop_fwd.mlir \
               verified_mlir/efficientnet_drop_fwd_eval.mlir \
+              verified_mlir/efficientnet_adamdo_train_step.mlir \
+              verified_mlir/efficientnet_do_fwd.mlir \
+              verified_mlir/efficientnet_do_fwd_eval.mlir \
               verified_mlir/enetin_emarms64_train_step.mlir \
               verified_mlir/enetin_emarmsdp64_train_step.mlir \
-              verified_mlir/enetin_emarmsdrop64_train_step.mlir \
+              verified_mlir/enetin_emarms64drop_train_step.mlir \
+              verified_mlir/enetin_emarms64dropdo_train_step.mlir \
+              verified_mlir/enetin_emarmsdp64dropdo_train_step.mlir \
               verified_mlir/enetin_drop_fwd.mlir \
+              verified_mlir/enetin_dropdo_fwd.mlir \
               verified_mlir/enetin_fwd.mlir verified_mlir/enetin_fwd_eval.mlir \
               verified_mlir/enetin_adam64_train_step.mlir \
               verified_mlir/enetin_adamdp64_train_step.mlir \
