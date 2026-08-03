@@ -294,8 +294,10 @@ def enetDropSites : Nat := enetDropIdxs.length
 #guard enetDropIdxs.all (· < enetDropTotal)
 #guard (enetDropIdxs.zip (enetDropIdxs.drop 1)).all (fun (a, b) => a < b)
 
-/-- The drop-path scale input name for block index `i`. Signature and emit both read this. -/
-def dpName (i : Nat) : String := s!"%dp{i}"
+-- ⚠ `dpName` used to live here. It moved to `StableHLO.lean` (beside `fresh`) when ConvNeXt's SD
+-- render needed the same spelling: `scripts/misplace_drop_sites.py` matches `%dp\d+` textually, so
+-- a second definition would put a committed shell script in the middle of a two-writer drift. Same
+-- namespace, so every use below is unchanged and no artifact byte moved.
 
 /-- The `%dp<i>: tensor<Bxf32>` inputs, appended to a render's signature when stochastic depth is
     on. Empty when off, which is what keeps gate 1 byte-identical. -/

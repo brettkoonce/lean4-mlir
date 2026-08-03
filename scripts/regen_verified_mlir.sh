@@ -85,7 +85,15 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
          # sites are emitted in the forward too (at an all-ones scale, exactly the identity), so
          # the SD train step keeps a prefix partner instead of the audit quietly not covering it.
          ("efficientnet_drop_fwd.mlir", "efficientnet_adamdrop_train_step.mlir"),
-         ("enetin_drop_fwd.mlir",       "enetin_emarmsdrop64_train_step.mlir")]
+         ("enetin_drop_fwd.mlir",       "enetin_emarmsdrop64_train_step.mlir"),
+         # ConvNeXt's SD pair, on the BATCHED chain (ConvNeXtRenderB) — where a per-example mask is
+         # expressible at all. ⚠ These are the only ConvNeXt artifacts from that chain: the drop-free
+         # batched render is tied but NOT swapped, so `convnext_fwd`/`convnext_train_step` above are
+         # still the per-example renderer's. The two chains differ on 78 conv-VJP lines (commuting
+         # transpose/reverse), all in the BACKWARD — so each pair is internally consistent and the
+         # prefix property is unaffected by which chain produced it.
+         ("convnext_drop_fwd.mlir", "convnext_adamdrop_train_step.mlir"),
+         ("cnxin_drop_fwd.mlir",    "cnxin_adamwxclipdrop_train_step.mlir")]
 
 def body(lines, what):
     """The pretty(AST) body: everything from the first `%v0 = ` definition on.
@@ -211,6 +219,7 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "proofs" ]; then
     LeanMlir.Proofs.Codegen.MobileNetV2Render \
     LeanMlir.Proofs.Codegen.EfficientNetRender \
     LeanMlir.Proofs.Codegen.ConvNeXtRender \
+    LeanMlir.Proofs.Codegen.ConvNeXtRenderB \
     LeanMlir.Proofs.Codegen.ViTRender
   do
     echo "  lake build $m"

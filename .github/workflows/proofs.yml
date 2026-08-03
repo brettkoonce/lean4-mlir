@@ -147,6 +147,19 @@ jobs:
               verified_mlir/cnxin_adamdpwxclip_train_step.mlir \
 
             || { echo "::error::committed verified_mlir/{convnext,cnxin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
+          # The STOCHASTIC-DEPTH renders come from a DIFFERENT module — ConvNeXtRenderB, the chain at
+          # the batched index N := B, which is the only one where a per-EXAMPLE drop mask is
+          # expressible at all (handoff §0.10). It is a separate `lake env lean` because it is a
+          # separate file, not because the artifacts are less guarded: all five are diffed.
+          lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean
+          git diff --exit-code -- verified_mlir/convnext_adamdrop_train_step.mlir \
+              verified_mlir/convnext_adamdpdrop_train_step.mlir \
+              verified_mlir/convnext_drop_fwd.mlir \
+              verified_mlir/cnxin_adamwxclipdrop_train_step.mlir \
+              verified_mlir/cnxin_adamdpwxclipdrop_train_step.mlir \
+              verified_mlir/cnxin_drop_fwd.mlir \
+
+            || { echo "::error::committed verified_mlir/{convnext,cnxin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set
           # costs nothing extra (the `lake env lean` above already ran every writer) and is why ten

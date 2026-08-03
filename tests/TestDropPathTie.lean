@@ -1,5 +1,6 @@
 import LeanMlir.VerifiedNets
 import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Proofs.Codegen.ConvNeXtRenderB
 
 /-! # Stochastic depth — the two gates that cover the op's INTERIOR
 
@@ -281,9 +282,36 @@ private structure NetRun where
 
 private def uniform (bs : Nat) (v : Float) : Array Float := Array.replicate bs v
 
-private def gateNet (isEval : Bool) (cand : Option String) : IO Unit := do
-  let fn   := if isEval then "efficientnet_drop_fwd_eval" else "efficientnet_drop_fwd"
-  let refFn := if isEval then "efficientnet_fwd_eval" else "efficientnet_fwd"
+/-- **Which net gate B is driving.** ⚠ ONE harness for both, per `rms-tie`/`wdx-tie`/`shard-check` —
+    a second copy is the double-writer disease one level down, in code. What differs between the two
+    nets is exactly four facts (the spec, the artifact slug, the site list, and whether there is an
+    `_eval` peer), and every one of them is read from the renderer or the spec rather than restated.
+
+    ⚠ **A green EfficientNet run does not license ConvNeXt.** The two place their sites in different
+    renderers (`EfficientNetRender.eFwd` at the per-example index, `ConvNeXtRenderB.fwdBlockB` at the
+    batched one) and around different residual algebra — enet's branch is a project-BN, ConvNeXt's is
+    a LayerScale. That is the `rms-tie` ε-placement lesson one knob over: the same edit on two
+    renderers has already behaved differently once (§0.4 finding 5). -/
+private structure DropNet where
+  slug   : String                 -- artifact prefix: `<slug>_drop_fwd.mlir`
+  refFn  : String                 -- the DROP-FREE forward this must equal at a ones mask
+  spec   : VerifiedNetSpec
+  sites  : List Nat               -- the ramp index of each site, in signature order
+  hasEval : Bool                  -- a frozen-stats `_fwd_eval` peer (BN nets only)
+
+private def enetDropNet : DropNet :=
+  { slug := "efficientnet", refFn := "efficientnet_fwd", spec := efficientnetVerified,
+    sites := enetDropIdxs, hasEval := true }
+
+/-- ConvNeXt-T. ⚠ No `_fwd_eval` peer and it must not grow one: LayerNorm reduces within one
+    example, never over the batch, so train == eval. -/
+private def cnxDropNet : DropNet :=
+  { slug := "convnext", refFn := "convnext_fwd", spec := convnextVerified,
+    sites := List.range cnxDropSites, hasEval := false }
+
+private def gateNet (dn : DropNet) (isEval : Bool) (cand : Option String) : IO Unit := do
+  let fn   := if isEval then s!"{dn.slug}_drop_fwd_eval" else s!"{dn.slug}_drop_fwd"
+  let refFn := if isEval then s!"{dn.refFn}_eval" else dn.refFn
   -- ⚠ `--cand` is what makes a green run BELIEVABLE, and it is the `vit-dp-check` lesson (§2j):
   -- that harness hardcoded both paths and took no argv, so its bit-exact PASS was UNFALSIFIABLE
   -- until an argument was added and the sum-not-mean control built. Point this at a render with
@@ -291,10 +319,10 @@ private def gateNet (isEval : Bool) (cand : Option String) : IO Unit := do
   let dropPath := cand.getD s!"verified_mlir/{fn}.mlir"
   IO.println s!"── GATE B — the all-zero-mask control, at @{fn}"
   if cand.isSome then IO.println s!"  ⚠ CANDIDATE render: {dropPath}"
-  let spec := efficientnetVerified
+  let spec := dn.spec
   let net := spec.toNet
   let bs := 32
-  let sites := enetDropIdxs
+  let sites := dn.sites
   IO.println s!"  {net.specs.size} params, {sites.length} drop sites {sites}, bs {bs}, \
 backend {← IreeSession.backendName}"
 
@@ -429,5 +457,12 @@ B1 as a bound."
   let cand := match args.dropWhile (· != "--cand") with
     | _ :: p :: _ => some p
     | _ => none
+  -- ⚠ Which net gate B drives. Default EfficientNet, so every committed invocation above is
+  -- unchanged; `convnext` selects the batched-chain SD render (handoff §0.10).
+  let dn := if args.contains "convnext" then cnxDropNet else enetDropNet
   if doOp  then gateOp (args.contains "--break")
-  if doNet then gateNet isEval cand
+  if doNet then
+    if isEval && !dn.hasEval then
+      throw <| IO.userError s!"{dn.slug} has no `_fwd_eval` peer — LayerNorm reduces within one \
+example, so train == eval and the frozen-stats forward the BN nets need does not exist. Drop --eval."
+    gateNet dn isEval cand

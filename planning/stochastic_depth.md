@@ -205,6 +205,46 @@ how the mnv2 swap shipped a 160-param forward past a green tie.**
 | **asymmetric-batch DP gate** (§5b) | the mask is SHARDED, not replicated | ✅ **DONE 2026-08-02** — `lake build drop-shard-check`, and it found the defect §5b predicted. §7d |
 | **residency gate unchanged** | masks stayed off the resident path | ✅ 2026-08-02 |
 
+### ✅ 7e. **ConvNeXt-T — DONE 2026-08-03.** The recommendation in §8 executed
+
+`ConvNeXtRenderB.lean` renders the 18 sites, one per block, on the residual branch (between
+`layerScaleCh` and the `addVB`); the backward emits the same constructor on the cotangent between
+`dy` and `layerScaleCh`. Six artifacts, all NEW — `convnext_{adamdrop,adamdpdrop}_train_step`,
+`convnext_drop_fwd`, `cnxin_{adamwxclipdrop,adamdpwxclipdrop}_train_step`, `cnxin_drop_fwd` — so no
+committed artifact moved (0 lines of diff with the writers forced).
+
+| gate | result | its control |
+|---|---|---|
+| the drop-free chain is unchanged | `convnext-fwd-b-tie` still byte-identical, gradMap 180/180 | — |
+| `verified_mlir/` diff, writers FORCED | **0 lines** on all 118 committed artifacts | — |
+| **keep = 1 ⇒ `adamdrop` trains what `adam` trains** | **0 of 83,478,846** floats differ after 3 AdamW steps, against a **bit-exact** A-vs-A floor | real 0.1 ramp fires at norm-rel **0.399** (100% of coords); broken conv-VJP flip at **0.0343** |
+| **the misplacement control** | `misplace_drop_sites.py` → **rc=1** at B2's collapse check | — |
+| gate B (all-zero mask), `droppath-tie --net convnext` | floor 320/320, B1 320/320, **B3 0.259**, **B4 1.104** | the misplaced render, above |
+| gate A (the op, `B ≠ n`) | bit-exact 40/40 | C1 1.29, C2 35/40 |
+| **DP mask shard**, `drop-shard-check convnext` | ① **83,478,846/83,478,846** bit-identical, ②a `%loss` 4.5413 → 4.3645 MOVED | `DROP_FAULT=replicate` fires ① at **81,799,716** moving, rel 1.00005; `PJRT_DP_NO_MASK_SHARD=1` refuses on arity |
+| prefix audit | `convnext_drop_fwd` ⊂ `convnext_adamdrop`, **1580 lines**; same for `cnxin` | — |
+
+**Three findings that outlive the feature:**
+
+1. ⚠⚠ **§7b's ones-mask blindness REPRODUCED ON A SECOND NET, and it is what makes the control
+   necessary rather than tidy.** On the misplaced ConvNeXt render, B1 — the ones-mask identity
+   against the drop-free `convnext_fwd` — passes **BIT-EXACT 320/320**, and the keep = 1 train-step
+   gate would too. The gate that fires is B2's *collapse* check. Two nets, same conclusion: every
+   endpoint gate is blind to placement, and only `s = 0` separates the two wirings.
+2. ⚠⚠ **ONE PARAMETER GRADIENT READS THE COTANGENT AT THE DROP SITE, and it is silent.** LayerScale's
+   γ gradient is `Σ (cot ⊙ p)` at the cotangent of the LayerScale *output* — which the drop scales.
+   Every other block gradient descends from `cot_p` and inherits the scale; `%…lg` is the one that
+   would be computed against an undropped cotangent. It type-checks, trains and descends: **18 of
+   180 gradients wrong by a per-example factor, on the parameter stochastic depth is about.** Found
+   by tracing the operands, not by any gate — the keep = 1 tie cannot see it (at `s = 1` the two
+   cotangents are equal) and the placement controls do not touch the backward.
+3. ⚠⚠ **AN LN NET HAS NO BATCH STATISTICS, SO §7d's ANTI-VACUITY HALF SHRINKS TO ONE SCALAR.**
+   EfficientNet witnesses "replica 0 received a different mask" with 42,016 replica-0-local floats;
+   ConvNeXt has exactly one, `%loss`. ① is unchanged and still discriminating (its control moves
+   81.8M outputs), but the check pulling the other way is now a single float plus the harness's
+   mask-halves-differ refusal. The harness **says so at run time** rather than reporting the BN
+   line as `0/0 MOVED` and letting a reader take it for a pass.
+
 ### ✅ 7a. The interior gates — DONE 2026-08-02, `lake build droppath-tie`
 
 The six gates run when the feature landed all pin an **endpoint**: `dropPath = 0` is inert, keep = 1
@@ -332,6 +372,12 @@ only on the failure path, which is the half a passing run never exercises.
 | the other two renderers | medium (ViT's two-sites-per-block; enet's skip guard) |
 | **the DP sharding gate** | ⚠ **unknown — the construction does not exist for the RMSProp nets** |
 | re-running every arity-sensitive harness on 3 nets | breadth, not depth |
+
+> ✅ **DONE 2026-08-03 — and it went past "single-device".** §7e is the record: 18 sites, five
+> artifacts, seven gates with five controls, including the DP mask-shard gate at two replicas. The
+> cost came in at what §8 predicted for the render half and **less** for the plumbing half, because
+> the driver, the op, the cert and the shard gate were all already built. What was NOT predicted:
+> the LayerScale-γ cotangent (§7e finding 2), which no gate in this table would have caught.
 
 **Recommendation: do ConvNeXt only, single-device, and stop there for a decision point.** It is the
 net with one site per block (no ViT branch-splitting, no enet skip guard), it already has the

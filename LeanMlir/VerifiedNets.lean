@@ -659,6 +659,23 @@ def convnextVerified : VerifiedNetSpec where
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,  -- stage 4 (3) @7
     .globalAvgPool, .dense 768 10 ]                                    -- head: GAP → dense
   blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 sites (§2m); the count matches the JAX reference at 28,587,592 for K=1000"
+  -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*drop` variants.
+  -- `keep_i = 1 − 0.1·i/(18−1)` at EVERY block — ConvNeXt has one site per block and every block
+  -- carries a residual, so unlike EfficientNet there is no skip guard and the site list is
+  -- `0 … 17` entire.
+  --
+  -- ⚠⚠ THE DENOMINATOR IS 17, i.e. `totalDrop − 1` OVER THE WHOLE NET, and the index is the GLOBAL
+  -- block index. The reference's `dbi` is one counter advanced once per `convnext_block` across all
+  -- four stages (`jax/Jax/Codegen.lean:1948`); re-indexing per stage would give four short ramps
+  -- instead of one long one — it compiles, runs, descends and trains a different objective, and no
+  -- numeric tie can see it, because every tie compares the render against a peer built from the same
+  -- constants. `tests/TestDropPathRamp.lean` is what pins this against the renderer's
+  -- `cnxBlockIdx`, from a THIRD reading of the reference.
+  --
+  -- ⚠ Block 0's keep is exactly 1.0, so `F32.dropScales` hands that site an exact 1.0 and the op is
+  -- the identity in IEEE — which is the reference's `keep_prob < 1.0` guard, obtained as data rather
+  -- than as a missing site.
+  dropKeeps := (Array.range 18).map (fun i => 1.0 - 0.1 * i.toFloat / 17.0)
 
 /-- **ConvNeXt-T on full 1000-class ImageNet** — the ConvNeXt peer of `resnet34ImagenetVerified`
     and `vitImagenetVerified` (handoff §2p). Identical architecture to `convnextVerified`; only the
@@ -703,6 +720,13 @@ def convnextImagenetVerified : VerifiedNetSpec where
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
     .globalAvgPool, .dense 768 1000 ]
   blurb := "ConvNeXt-T on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  -- The ImageNet peer of `convnextVerified.dropKeeps`. IDENTICAL, and that is the content: the ramp
+  -- is a property of the ARCHITECTURE (18 blocks, one site each) and of `dropPath := 0.1`, neither
+  -- of which moves with the class count or the batch. ⚠ Unlike the Imagenette render, this one is a
+  -- REFERENCE recipe item — `convNeXtTinyImagenetConfig.dropPath := 0.1`, the ConvNeXt-T paper
+  -- value — so `cnxin_adamdpwxclipdrop` is the first ConvNeXt artifact carrying every
+  -- optimizer-and-regulariser knob its reference sets.
+  dropKeeps := (Array.range 18).map (fun i => 1.0 - 0.1 * i.toFloat / 17.0)
 
 -- The two ConvNeXt specs must differ in EXACTLY one parameter shape — the head. Anything else
 -- moving means the ImageNet spec drifted from the Imagenette one it is the 1000-class twin of.

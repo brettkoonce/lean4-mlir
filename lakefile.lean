@@ -58,7 +58,12 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.MobileNetV2Render,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderB,
              `LeanMlir.Proofs.Codegen.EfficientNetRender,
-             `LeanMlir.Proofs.Codegen.ConvNeXtRender, `LeanMlir.Proofs.Codegen.ViTRender]
+             `LeanMlir.Proofs.Codegen.ConvNeXtRender,
+             -- ⚠ A ROOT, and it has to be: nothing imports a leaf renderer, so on a fresh
+             -- runner this is the ONLY way its `.olean` — and therefore the six stochastic-
+             -- depth artifacts its `#eval`s write — ever get built (scripts/check_render_coverage.py).
+             `LeanMlir.Proofs.Codegen.ConvNeXtRenderB,
+             `LeanMlir.Proofs.Codegen.ViTRender]
 
 /-- **`lake build Certs`** — the certificate corpus (155 files, ~87k lines:
     FloatBridges, ties, seals, descent, Lipschitz/LipSDP, Muon, …): the VJP
@@ -666,6 +671,11 @@ lean_lib «Certs» where
              -- verified_mlir/convnext_train_step.mlir. 2 documented hand-written gaps (the stem 4×4/s4
              -- + downsample 2×2/s2 weight grads — no even/stride-4 weight-grad VJP yet) (ConvNeXtRender.lean).
              `LeanMlir.Proofs.Codegen.ConvNeXtRender,
+             -- ch9-ConvNeXt-T §1b BATCHED: the same chain at N := B, plus the STOCHASTIC-DEPTH
+             -- renders (18 per-block residual-branch masks) — the only ConvNeXt artifacts from
+             -- that chain, since the drop-free batched render is tied but not swapped
+             -- (ConvNeXtRenderB.lean).
+             `LeanMlir.Proofs.Codegen.ConvNeXtRenderB,
              -- ch9-ConvNeXt-T §1a TIE: the whole [3,3,9,3] train step tied through the REAL forward —
              -- 18 blocks + 3 downsamples + GAP→LN→dense head + stem bias den-composed
              -- forward→loss→backward (GELU masks, identity-skip fan-in, downsample LN-back); the 4

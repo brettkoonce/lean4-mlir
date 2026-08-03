@@ -51,6 +51,73 @@ private def zV {n : Nat} : Vec n := fun _ => 0
 private def zM {a b : Nat} : Mat a b := fun _ _ => 0
 private def zT {c h w : Nat} : Tensor3 c h w := fun _ _ _ => 0
 
+-- ════════════════════════════════════════════════════════════════
+-- ── ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`, handoff §0.10) ────────────────────────
+-- ConvNeXt-T is the easy shape of this feature and that is why it is the net that gets it: ONE
+-- site per block, on the residual branch, and **every** block carries one — no EfficientNet skip
+-- guard, no ViT branch split. `convnext_block` in the reference (`jax/Jax/Codegen.lean:1079`) ends
+--
+--     branch = x * ls.reshape(1, -1, 1, 1)
+--     if drop_key is not None and keep_prob < 1.0:
+--         keep = jax.random.bernoulli(drop_key, keep_prob).astype(branch.dtype)
+--         branch = branch * keep / keep_prob
+--     return residual + branch
+--
+-- so the site sits between LayerScale and the skip add — `s·branch + x`, never `s·(branch + x)`.
+--
+-- ⚠⚠ AND THE RAMP INDEX IS THE GLOBAL BLOCK INDEX ACROSS ALL FOUR STAGES, not the per-stage `j`.
+-- `emitForward`'s `dbi` is a single counter advanced once per `convnext_block` over the whole net
+-- (`Codegen.lean:1948-1955`), and `totalDrop` sums every `convNextStage`'s block count — so the
+-- denominator is **17** and stage 1's first block is index 3, not 0. Re-indexing per stage gives
+-- four short ramps instead of one long one: it compiles, runs, descends, and trains a different
+-- objective, and no numeric tie can see it (every tie compares the render against a peer built from
+-- the same constants). §2k's `α/K` bug, and EfficientNet's site-ordinal trap, in a third place.
+-- `cnxBlockIdx` is the single source and BOTH traversals call it — which matters more here than it
+-- did on EfficientNet, because the backward walks the stages in REVERSE and a hand-carried counter
+-- would have to be run backwards to agree.
+--
+-- ⚠ The reference's `keep_prob < 1.0` guard is a run-time shortcut, not a structural difference:
+-- block 0's keep is exactly 1.0, and with `1/keep` folded into the supplied mask (`Proofs.dropPath`)
+-- the driver hands that site an exact 1.0, so the emitted op is the identity in IEEE
+-- (`Proofs.dropPath_ones_id`). Emitting all 18 keeps the sites, the mask inputs and the ramp indices
+-- one uniform list instead of a list with a hole at its head.
+--
+-- ⚠ These live in THIS file rather than in `ConvNeXtRenderB.lean`, where the sites are actually
+-- emitted, because the train-step renderer here owns the signature and the variant name and would
+-- otherwise need a second copy — `ConvNeXtRenderB` imports this file, not the other way round.
+
+/-- Total ConvNeXt-T blocks = the reference's `totalDrop`, i.e. the ramp DENOMINATOR is this
+    minus 1. Derived from the stage table this file traverses, not restated beside it. -/
+def cnxDropTotal : Nat := cDepths.foldl (· + ·) 0
+
+/-- **The ramp index of stage `si`'s block `j`** — the reference's `dbi`, which counts blocks over
+    the WHOLE net. The single source for the drop-site numbering: the forward calls it walking the
+    stages forwards, the backward walking them backwards, and they cannot disagree. -/
+def cnxBlockIdx (si j : Nat) : Nat :=
+  ((List.range si).map (fun k => cDepths[k]!)).foldl (· + ·) 0 + j
+
+/-- The number of per-example drop-path scale inputs an SD ConvNeXt render takes: one per block. -/
+def cnxDropSites : Nat := cnxDropTotal
+
+#guard cnxDropTotal == 18
+#guard cnxDropSites == 18
+-- The 18 `(stage, block)` pairs map onto `0 … 17` exactly once each — i.e. `cnxBlockIdx` really is
+-- a numbering of the blocks and not merely an increasing function of them.
+#guard ((List.range 4).flatMap (fun si => (List.range cDepths[si]!).map (cnxBlockIdx si))) ==
+         List.range 18
+-- Stage boundaries, spelled out because "index 0 at the top of each stage" is the wrong reading
+-- this is here to prevent.
+#guard cnxBlockIdx 1 0 == 3
+#guard cnxBlockIdx 2 0 == 6
+#guard cnxBlockIdx 3 0 == 15
+
+/-- The `%dp<i>: tensor<Bxf32>` inputs an SD render appends to its signature — one per block, in
+    ramp-index order, which is the order the driver's `dropScales` writes them into the blob.
+    Empty when off, which is what keeps every committed artifact byte-identical. -/
+def cnxDropSig (B : Nat) (sd : Bool) : String :=
+  if sd then String.join ((List.range cnxDropSites).map (fun i => s!", {dpName i}: {ty [B]}"))
+  else ""
+
 -- ── The two hand-written weight-grad emitters that used to live here (`rs4`, `patchWGrad`
 --    for the 4×4/s4 patchify stem, `downWGrad` for the even-kernel 2×2/s2 downsample) are
 --    DELETED, not left dormant — a retired emitter that can still be called is one more
@@ -643,7 +710,7 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
     AdamW trainer runs, whose blob has three. That is §2a's last-writer-wins race, and here it would
     also be an arity mismatch the driver could not survive. -/
 def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := false)
-    (clip : Bool := false) : String :=
+    (clip : Bool := false) (sd : Bool := false) : String :=
   (if ema then "ema" else "adam") ++ (if replicas ≤ 1 then "" else "dp")
     -- `wx` = timm no_weight_decay; TRAILING, and checked against every CONCATENATION in
     -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
@@ -658,6 +725,15 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- renderer but not this function produces an artifact whose declared entry disagrees with its
     -- own path — caught only because the shim refuses the call. The `#guard`s below pin it.
     ++ (if clip then "clip" else "")
+    -- ▶ `drop` = stochastic depth (`planning/stochastic_depth.md`), the 18 per-block residual-branch
+    -- masks. TRAILING, and it is the marker's NAME that matters rather than its position: `"sd"`
+    -- collides, because `rms` ++ `dp` spells `rmsdp` which CONTAINS "sd" — a collision between two
+    -- OTHER markers meeting, which no placement avoids (`ema.md`'s `emarms` defect one axis on).
+    -- ⚠ It must not LEAD either: the driver keys its 4-region `[θ|m|v|ema]` blob off
+    -- `variant.startsWith "ema"`, and `dropema` does not start with "ema".
+    -- ⚠ Unlike `wx`, this flag is NOT free of the driver: it changes the arity (18 extra inputs and
+    -- 18 pass-through outputs), so `tests/TestVariantPredicates.lean` runs every CONCATENATION.
+    ++ (if sd then "drop" else "")
 
 /-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe.
 
@@ -716,6 +792,14 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- `clipScaleF`, `gradSumSqAccF` are all indexed by the param size and never see the batch —
     -- so a second copy would be the double-writer disease for no gain at all.
     (traversal : Option (StateM Nat (String × List (String × String) × String)) := none)
+    -- ⚠ STOCHASTIC DEPTH is a signature/variant flag HERE and a site-placement flag in the
+    -- TRAVERSAL, and the two must agree. They are not independently settable in practice —
+    -- `convNextAdamTrainStepFaithfulB` is the only caller that sets either, and it spells `sd` once
+    -- and passes it to both. If they ever did disagree the failure is LOUD in both directions: sites
+    -- without inputs emit an undeclared `%dp<i>` (the lowerer rejects it), inputs without sites
+    -- leave an unused argument (an arity mismatch at the driver). Neither is silent, which is the
+    -- §2m property.
+    (sd : Bool := false)
     : String := Id.run do
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
   -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
@@ -812,11 +896,19 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- what the resident shim checks: inputs `[res_in, res_in+n)` and outputs `[res_out, res_out+n)`
     -- must agree tensor for tensor, which is why a 4th region needs no C change at all.
     -- `%emad`/`%oemad` ride through unread, as `%bc1`/`%bc2` already do.
+    -- ⚠⚠ THE DROP MASKS RIDE THROUGH AS OUTPUTS, unread, exactly as `%bc1`/`%bc2` and
+    -- `%emad`/`%oemad` do — because the return layout must MIRROR the input layout tensor for
+    -- tensor (`pbuf := out` is the no-copy handover) and the shim's G4 guard counts both sides.
+    -- EfficientNet's first attempt at this omitted them and G4 refused the call before a single
+    -- step ran ("returns 740 outputs, caller supplied 749 destinations"). Loud, and the right way
+    -- round.
+    let dpNames := if sd then (List.range cnxDropSites).map dpName else []
+    let dpTys   := if sd then (List.range cnxDropSites).map (fun _ => ty [cBS]) else []
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
-                     ++ (if ema then ["%emad", "%oemad"] else [])
+                     ++ (if ema then ["%emad", "%oemad"] else []) ++ dpNames
     let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
                      ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
+                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []) ++ dpTys
     pure <|
       (if replicas ≤ 1 then
         -- Updated 2026-07-29. This banner used to carve out the stem 4x4/s4 and the 2x2/s2
@@ -849,12 +941,18 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (if ema then ", " ++ eSig else "") ++
     ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
     (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++
+    -- ⚠ The drop scales go LAST, after the scalars and before `%onehot` is appended, matching the
+    -- driver's blob layout (`[θ|m|v|scalars|drops]`, `%x` and `%onehot` passed separately) and
+    -- `convNextFwdRenderB`'s placement. Inserted mid-list they would capture an existing positional
+    -- slot — the mnv2 `convBias` failure (§2m), silent until the driver mis-walks the blob.
+    cnxDropSig cBS sd ++
     ", %onehot: " ++ ty [cBS,nClasses]
   let pTy := (allParams nClasses).map (fun p => ty p.2)
   let retTyL := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
        ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-       ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []))
+       ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
+       ++ (if sd then (List.range cnxDropSites).map (fun _ => ty [cBS]) else []))
   -- ⚠ The slug is load-bearing exactly as it is on R34 (§2k) and ViT (§2p): a 1000-class render
   -- emitted under the `convnext` slug would collide with the artifacts the 84.41% Imagenette run,
   -- the prefix audit and every `convnext-adam-tie` invocation depend on.
@@ -866,7 +964,10 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- below are what stop it recurring silently.
   -- ⚠ `clip` MUST reach the variant here for the SAME reason `wdExclude` must, and this is the
   -- second time that exact hazard has been live on this line. `planning/grad_clip.md` §6.
-  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip}_train_step"
+  -- ⚠ `sd` is the THIRD flag that must reach it, and unlike the other two it also changes the
+  -- ARITY — so a variant name that dropped it would put an 18-input-wider graph behind the plain
+  -- `adam` path's artifact name and checkpoint. `#guard`s below pin every spelling.
+  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++

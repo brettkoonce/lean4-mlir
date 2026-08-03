@@ -73,7 +73,12 @@ private def entryOf (path : String) : IO String := do
   | some rest => pure ("m." ++ rest.takeWhile (· != '('))
 
 def main (argv : List String) : IO Unit := do
-  let spec := efficientnetVerified
+  -- ⚠ ONE harness for both nets, per `rms-tie`/`wdx-tie`/`shard-check` — a second copy is the
+  -- double-writer disease one level down, in code. `convnext` selects the LayerNorm net, and it is
+  -- NOT a cosmetic switch: see `nBnStats == 0` below, where the anti-vacuity half of the gate
+  -- changes shape because an LN net has no replica-0-local batch statistics.
+  let cnx  := argv.contains "convnext"
+  let spec := if cnx then convnextVerified else efficientnetVerified
   let net  := spec.toNet
   let bs   := 32
   let replicas := ((← IO.getEnv "DROP_REPLICAS").bind (·.toNat?)).getD 2
@@ -86,7 +91,12 @@ hold, so swap-invariance stops being a bit-exactness claim.")
   let nDrop := net.dropKeeps.size
   if nDrop == 0 then
     throw (IO.userError "the selected net has no drop sites — nothing to gate")
-  let dpPath := argv.getD 0 "verified_mlir/efficientnet_adamdpdrop_train_step.mlir"
+  -- ⚠ The path is still argv[0] when it is a path, so every committed invocation is unchanged; the
+  -- `convnext` selector only moves the DEFAULT (and the spec above, which is what actually matters).
+  let dpPath := match argv.filter (fun a => a != "convnext") with
+    | p :: _ => p
+    | []     => if cnx then "verified_mlir/convnext_adamdpdrop_train_step.mlir"
+                else "verified_mlir/efficientnet_adamdpdrop_train_step.mlir"
   IO.println "stochastic-depth SHARD gate — duplicated batch, ASYMMETRIC mask, halves swapped"
   IO.println s!"  DP     : {dpPath} ({replicas} replicas × bs {bs} = global {gbs})"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {nDrop} drop sites, \
@@ -256,7 +266,19 @@ the output layout, not in the sharding.")
     throw (IO.userError s!"②a FAILED — VACUOUS. `%loss` did not move when the mask halves were \
 swapped. It is computed on replica 0 from replica 0's rows and replica 0's MASK, so a swap that \
 reaches the device must change it. Identical means replica 0 saw the same mask twice.")
-  if bnDiff == 0 then
+  -- ⚠⚠ ON A LAYERNORM NET THERE ARE NO BATCH STATISTICS, SO ②a CARRIES THE ANTI-VACUITY LOAD ALONE
+  -- — and that is a real weakening, stated rather than papered over. EfficientNet witnesses "replica
+  -- 0 received a different mask" with tens of thousands of replica-0-local floats; ConvNeXt has
+  -- exactly ONE, `%loss`. It is still a genuine witness (report-only, computed on replica 0 from
+  -- replica 0's rows and mask), and it is not the only thing standing between this gate and
+  -- vacuity: the harness already REFUSES above if the two mask halves are equal. But a one-scalar
+  -- anti-vacuity check would not survive a defect that happened to leave `%loss` fixed, and nothing
+  -- here rules that out.
+  if nBnStats == 0 then
+    IO.println s!"  ⚠ {spec.name} normalises with LayerNorm — there are NO replica-0-local batch \
+statistics, so ②a (`%loss`) is the WHOLE anti-vacuity half. Weaker than the BN nets' ②, and the \
+mask-halves-differ refusal above is the other thing keeping ① from being vacuous."
+  else if bnDiff == 0 then
     throw (IO.userError s!"② FAILED — VACUOUS. Not one of the {nBnStats} batch statistics moved \
 when the mask halves were swapped. Those are replica-0-LOCAL, and every BN layer downstream of a \
 drop site sees masked activations, so replica 0 receiving a different mask MUST move them. Zero \

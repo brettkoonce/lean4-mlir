@@ -86,7 +86,16 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("adamdpwxclip", false, false, false), ("emaclip", true, false, false)
     -- and composed with each of the three axes
   , ("emarmsclip", true, true, false), ("adamdropclip", false, false, true)
-  , ("emarmsdrop64wxclip", true, true, true) ]
+  , ("emarmsdrop64wxclip", true, true, true)
+    -- ▶ ConvNeXt's SD spellings (handoff §0.10), and they are here because the ORDER differs from
+    -- EfficientNet's. `cnxAdamVariant` appends `drop` LAST — after `wx` and `clip` — where
+    -- `enetAdamVariant` appends it after the batch suffix, so the same three markers concatenate
+    -- into different strings on the two nets. Reading either net's order and assuming the other
+    -- matches is exactly the one-name-at-a-time reasoning the `sd`/`rmsdp` collision falsified.
+    -- ⚠ `adamdpwxclipdrop` is the shipping ImageNet spelling — `convNeXtTinyImagenetConfig` sets
+    -- decay 0.05 + `wdExcludeNormBias` + `gradClipNorm` + `dropPath`, so it is all four at once.
+  , ("adamwxclipdrop", false, false, true), ("adamdpwxclipdrop", false, false, true)
+  , ("adamdpdrop", false, false, true), ("emawxclipdrop", true, false, true) ]
 
 #guard table.all (fun (v, e, r, s) => emaOn v == e && rmsOn v == r && sdOn v == s)
 

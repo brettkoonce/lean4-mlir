@@ -3460,6 +3460,18 @@ def tyBf16 (dims : List Nat) : String :=
 def fresh : StateM Nat String := do
   let k ← get; set (k + 1); pure s!"%v{k}"
 
+/-- **The stochastic-depth mask input name for ramp index `i`** — the `mName` a `dropPathB` carries,
+    and the `tensor<Bxf32>` the signature declares for it.
+
+    ⚠ It lives HERE, beside the emitter, rather than in one net's renderer, because the spelling is
+    load-bearing in three places that must agree and only one of them is Lean: `dropPathP`'s emit
+    reads it as an operand, every SD render's signature declares it, and
+    **`scripts/misplace_drop_sites.py` matches `%dp\d+` textually** to build the placement control.
+    A second definition would be the double-writer disease with a committed shell script as the
+    third writer. (It started in `EfficientNetRender.lean` and moved when ConvNeXt needed it too;
+    both renderers are in this namespace, so no call site changed and no artifact byte moved.) -/
+def dpName (i : Nat) : String := s!"%dp{i}"
+
 -- ── Renderable skeleton + postorder tokenization (one form, shared with the
 --    parser in StableHLOParse.lean) ──
 

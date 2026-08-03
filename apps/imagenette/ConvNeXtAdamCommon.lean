@@ -23,7 +23,10 @@ def convnextAdamConfig : VerifiedConfig where
 
     `LEAN_MLIR_VARIANT` selects the rendered train step, i.e. which
     `verified_mlir/convnext_<variant>_train_step.mlir` is loaded (and with it a distinct vmfb and
-    checkpoint). Two exist, both written by `Proofs/Codegen/ConvNeXtRender.lean`:
+    checkpoint). ⚠ They come from **two** renderers now: `adam`/`adamdp` (and the `ema`/`wx`/`clip`
+    spellings) from `Proofs/Codegen/ConvNeXtRender.lean` at the per-example index, and
+    `adamdrop`/`adamdpdrop` from `Proofs/Codegen/ConvNeXtRenderB.lean` at the batched index `N := B`
+    — which is the only place a per-EXAMPLE stochastic-depth mask is expressible at all.
 
     * **`adam`** (default) — `pretty(provenGraph)`, tied bit-exactly against the retired
       hand-written emitter on all 83,434,629 returned floats (handoff §2f-bis, §5: all 180 params
@@ -35,6 +38,16 @@ def convnextAdamConfig : VerifiedConfig where
       and `HIP_VISIBLE_DEVICES` unset, and use the **XLA** build — collectives exist only on the
       PJRT path, and the IREE shim refuses a DP entry point outright rather than silently running
       single-device.
+
+    * **`adamdrop`** / **`adamdpdrop`** — STOCHASTIC DEPTH (`planning/stochastic_depth.md`): the same
+      AdamW graph plus 18 per-block residual-branch drop sites, taking 18 extra `tensor<32xf32>`
+      inputs (and returning them unread, so the blob layout mirrors). `LEAN_MLIR_DROP_RATE_U` sets
+      the rate; **`0` is the gate** — every keep is 1.0, every scale is exactly 1.0, and this must
+      then train bit-identically to `adam`. Measured 2026-08-03: **0 of 83,478,846 floats** differ
+      after 3 steps under `scripts/det_shim.sh`, with the real 0.1 ramp firing at norm-rel 0.399.
+      ⚠ `adamdpdrop` is rendered at **2** replicas, not 4, because it exists for
+      `drop-shard-check` — whose known answer is exact only at two (f32 addition is commutative;
+      above two the collective is a tree and associativity does not hold).
 
     No `LEAN_MLIR_BATCH` here, unlike EfficientNet: the batch is baked into the graph and bs32 is
     the only ConvNeXt render that exists, so the knob could only ever produce a shape error. -/
@@ -53,5 +66,32 @@ def runConvNeXtAdam (argv : List String) : IO Unit := do
   let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.9999
-  convnextVerified.toNet.trainAdamSched convnextAdamConfig
+  -- ▶ `drop*` variants select the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the
+  -- graph takes 18 extra `tensor<32xf32>` inputs, one per block, carrying `bernoulli(keep_i)/keep_i`
+  -- per example, drawn on the host and seeded from the global step. ⚠ It is the ONE ConvNeXt render
+  -- built on the BATCHED chain (`ConvNeXtRenderB`) — a per-example mask is not expressible at the
+  -- per-example index at all — so `adamdrop` is not byte-comparable to `adam`; its keep = 1 tie is
+  -- numeric.
+  --
+  -- `LEAN_MLIR_DROP_RATE_U` is the rate in MICRO-units (`100000` = 0.1, the ConvNeXt-T paper value
+  -- and `convNeXtTinyImagenetConfig.dropPath`). Unset ⇒ the spec's ramp.
+  -- ⚠⚠ **`0` is meaningful and it is THE GATE**: every keep becomes 1.0, so every supplied scale is
+  -- exactly 1.0 and each drop op is the identity in IEEE (`Proofs.dropPath_ones_id`). The `adamdrop`
+  -- render must then train the same parameters as the plain `adam` render — the peer of EMA's
+  -- `decay = 0`. ⚠ But it is an ENDPOINT gate and endpoint gates are structurally BLIND TO
+  -- PLACEMENT: `1 ⊙ (branch + x) = branch + x` exactly, so a site on the block OUTPUT passes it
+  -- bit-for-bit (`stochastic_depth.md` §7b, measured). `scripts/misplace_drop_sites.py` is the
+  -- control that makes a green run mean anything.
+  let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
+    | some 0 => { convnextVerified.toNet with
+                    dropKeeps := convnextVerified.dropKeeps.map (fun _ => 1.0) }
+    | some u =>
+        -- Re-derive the ramp at a different rate from the SPEC's own keeps, so the block indices
+        -- stay the renderer's: `i = (1 − keep)·17/0.1` recovers the index the spec encoded.
+        let rate := u.toFloat * 1e-6
+        { convnextVerified.toNet with
+            dropKeeps := convnextVerified.dropKeeps.map
+              (fun k => 1.0 - rate * ((1.0 - k) * 17.0 / 0.1) / 17.0) }
+    | none   => convnextVerified.toNet
+  dropNet.trainAdamSched convnextAdamConfig
     (argv.head?.getD "data") 0.001 0.9 0.999 3 variant 0.0 1.0 emaDecay
