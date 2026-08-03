@@ -1,5 +1,10 @@
 .lake/
-.venv
+# ⚠ `.venv*`, not `.venv` — the exact pattern is what let a 1.1 GB venv BACKUP into history.
+# `.venv-iree-april-backup/` was swept into c942f5ce (5,383 files alongside 14 real ones) by a
+# broad `git add`, rode 49 unpushed commits, and was only caught when GitHub rejected the push on
+# its two >100 MB `.so` files. Stripped with filter-branch 2026-08-03. The glob covers any future
+# `.venv-<whatever>` the same way.
+.venv*
 data/
 __pycache__/
 
