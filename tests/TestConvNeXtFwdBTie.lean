@@ -133,3 +133,50 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
   if bad != 0 then
     throw <| IO.userError s!"MISMATCH in the batched ConvNeXt BACKWARD ({bad} difference(s))."
   IO.println "  ✅ the batched backward computes and routes what the per-example one does"
+
+  -- ══════════════════════════════════════════════════════════════════════════════════════════
+  --  The WHOLE TRAIN STEP, against the committed artifact — the bytes the trainer loads.
+  --
+  --  ⚠ Same allowance, same reason, and it must stay THIS narrow: the AdamW tail is
+  --  parameter-space (adamMNextF / clipScaleF / gradSumSqAccF are indexed by the param's own size
+  --  and never see the batch), so it is rendered by the SAME function on both sides. Any
+  --  difference here that is not the conv-VJP swap is therefore in the traversal, and is a defect.
+  -- ══════════════════════════════════════════════════════════════════════════════════════════
+  let wantTS ← IO.FS.readFile "verified_mlir/convnext_adam_train_step.mlir"
+  let gotTS := convNextAdamTrainStepFaithfulB "0.100000" "-0.010000" "32.0"
+  IO.println "── ConvNeXt: the batched AdamW train step vs the committed artifact ──"
+  IO.println s!"  committed : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
+  IO.println s!"  batched   : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"
+  if gotTS == wantTS then
+    IO.println "  ✅ BYTE-IDENTICAL"
+  else
+    let gl := (gotTS.splitOn "\n").toArray
+    let wl := (wantTS.splitOn "\n").toArray
+    let mut pairSwap : Nat := 0
+    let mut otherTS : Nat := 0
+    let mut shown : Nat := 0
+    if gl.size != wl.size then
+      IO.println s!"  ✗ line counts differ: {gl.size} vs {wl.size}"
+      otherTS := otherTS + 1
+    for i in [0:min gl.size wl.size] do
+      if gl[i]! != wl[i]! then
+        let isPair (s : String) : Bool :=
+          (s.splitOn "stablehlo.reverse").length > 1 || (s.splitOn "stablehlo.transpose").length > 1
+        if isPair (gl[i]!) && isPair (wl[i]!) then
+          pairSwap := pairSwap + 1
+        else
+          otherTS := otherTS + 1
+          if shown < 6 then
+            IO.println s!"  L{i+1} batched  : {(gl[i]!).take 160}"
+            IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
+            shown := shown + 1
+    IO.println s!"  ◐ {pairSwap} line(s) are the conv-VJP transpose/reverse ORDER swap — allowed"
+    if otherTS != 0 then
+      IO.println s!"  ✗ {otherTS} differing line(s) are NOT that swap"
+      throw <| IO.userError s!"MISMATCH in the batched ConvNeXt TRAIN STEP ({otherTS} unexplained \
+difference(s)). The gradMap check above passed, so the routing is right — look at the emitted ops."
+    IO.println s!"  ✅ train step identical apart from that swap; {gl.size} lines, SSA unmoved"
+    IO.println "  ⚠ THE SWAP IS A REAL BYTE CHANGE. Swapping the writer to the batched renderer \
+would move those lines in a COMMITTED artifact, so it needs `convnext-adam-tie` (numeric, GPU) to \
+license it — a byte tie cannot, and §5's rule is that every swap is licensed by a numeric tie that \
+was verified to fail."

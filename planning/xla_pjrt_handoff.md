@@ -372,10 +372,51 @@ a separate call with real blast radius** — whichever side changes moves commit
 batched spelling is in R34/mnv2/EfficientNet; the per-example one in ConvNeXt/ViT). Left alone
 deliberately; the tie now records it precisely instead of it being unknown.
 
-**Next, in order**: the AdamW tail (`convnextAdamOne` at the batched index) → the whole-net tie
-against `convnext_adam_train_step.mlir` → the swap. ⚠ The swap is still the first step that changes
-committed bytes; increments 1-6 have all held `verified_mlir/` at 0 diff. And ViT needs its ~12
-remaining forms plus the `matmulF` combinator.
+##### ✅ INCREMENT 7 LANDED 2026-08-03 — the AdamW tail was FREE, and the whole train step ties
+
+**The tail needed no batched peer at all.** `adamMNextF`, `adamVNextF`, `adamWParamF`,
+`gradSumSqAccF` and `clipScaleF` are indexed by each **parameter's own size** and never see the
+batch — so the batch had already been factored out of the optimizer by the ops' own shapes. What
+landed is a `traversal` parameter on `convNextAdamTrainStepFaithful` (trailing, per §2m) and a
+four-line `convNextAdamTrainStepFaithfulB` that points it at `convNextBackAllB`. **One writer, two
+traversals**; a second copy of the tail would have been the double-writer disease for no gain.
+
+Gate 1 on the refactor: `verified_mlir/` **0 diff with the writers FORCED** (`lake env lean` on the
+render file — §2n's vacuous-green trap).
+
+| whole-net tie | result |
+|---|---|
+| forward vs `convnext_fwd.mlir` | **byte-identical**, 136,172 chars |
+| backward vs the per-example traversal | 4,915 lines, gradMap identical (180 params, order included) |
+| **train step vs `convnext_adam_train_step.mlir`** | **984,767 chars, 11,611 lines both sides** — identical apart from the 78 conv-VJP swap lines |
+
+⚠ Threading `trav` also collapsed a small pre-existing inconsistency: the fresh-name counter was
+computed from `convNextBackAll … negAlphaKStr` while the body used the DERIVED `negAK`. Only the
+COUNT is read, so it was harmless — but it was two spellings of one traversal, and gate 1 is what
+says the count did not move.
+
+##### ⛔ THE SWAP — BLOCKED HERE, and the blocker is the toolchain, not the code
+
+`convnext-adam-tie` is **IREE-linked** (`lakefile.lean:1806`) and **fails to link on ares** —
+`clang exited with code 1`, which is the retired-IREE condition this file already records. So the
+numeric tie that would license a ConvNeXt train-step swap cannot be run on this box.
+
+⚠ **And a byte tie cannot substitute for it.** The 78 lines are a real byte change to a committed
+artifact. §5's rule is that every swap is licensed by a numeric tie *that was verified to fail*; an
+argument that `transpose` and `reverse` commute on disjoint axes is a claim about StableHLO
+semantics, and §5 is explicit that the emitter is audited-but-trusted.
+
+⚠ **Worth weighing before running it anywhere: the swap currently buys nothing.** The batched
+render's value is that per-example stochastic depth becomes expressible — and ConvNeXt's SD render
+does not exist yet. Swapping now moves 78 lines in the artifact behind the **84.41% 80-epoch run**
+(§2o Part B) and its DP numbers, for no functional gain. **The natural time to swap is together
+with ConvNeXt's `drop` render**, where the new bytes are the point rather than a side effect. Two
+ways to unblock: run `convnext-adam-tie` on a box with a working IREE, or port that harness to
+`xlaLink` the way `fwd-tie` already is.
+
+**Next**: ConvNeXt's stochastic-depth render on the batched chain (`dropPathB` at the block outputs
+— the op, its cert and the driver all exist), which is what makes the swap worth licensing. Then
+ViT: ~12 remaining forms plus the `matmulF` combinator.
 
 ---
 

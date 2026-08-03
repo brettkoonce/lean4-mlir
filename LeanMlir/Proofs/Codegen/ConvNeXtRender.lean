@@ -710,6 +710,12 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- at every call site, which is how the mnv2 `convBias` threading went wrong.
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
     (clip : Bool := false) (clipStr : String := "1.0")
+    -- ⚠ Which TRAVERSAL to render. `none` = this file's per-example `convNextBackAll`, i.e.
+    -- every existing call site unchanged. `ConvNeXtRenderB` passes its batched peer here rather
+    -- than copying the AdamW tail, because the tail is PARAMETER-space — `adamMNextF`,
+    -- `clipScaleF`, `gradSumSqAccF` are all indexed by the param size and never see the batch —
+    -- so a second copy would be the double-writer disease for no gain at all.
+    (traversal : Option (StateM Nat (String × List (String × String) × String)) := none)
     : String := Id.run do
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
   -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
@@ -718,7 +724,8 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- (≈87 against ln(1000)=6.9) caught it. The empty-string default keeps every existing call site
   -- byte-identical while making the K=1000 spelling impossible to get wrong.
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
-  let (body, gradMap, nSm) := (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses).run' 0
+  let trav := traversal.getD (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses)
+  let (body, gradMap, nSm) := trav.run' 0
   let go : StateM Nat String := do
     -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) — ConvNeXt's half. Structurally the
     -- ViT block, and it has to be a second copy only because the two renderers thread their
@@ -832,7 +839,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   -- The AdamW body continues the SGD traversal's fresh-name counter. `convNextBackAll` consumed
   -- names 0..k, so the Adam ops must start at k — otherwise they collide with the backward's SSAs.
-  let used := ((convNextBackAll true (some (alphaStr, negAlphaKStr, bStr))).run 0).2
+  let used := (trav.run 0).2
   let inner : String := go.run' used
   let pSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}"))
   let mSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}m: {ty d}"))

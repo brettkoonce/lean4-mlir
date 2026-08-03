@@ -376,6 +376,25 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     updMap := updMap ++ [("psW", nPsW), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
 
+set_option maxRecDepth 8000 in
+/-- **The ConvNeXt-T AdamW train step at the batched index.** ⚠ It is the SAME renderer the
+    per-example path uses — `convNextAdamTrainStepFaithful` with `traversal` pointed at
+    `convNextBackAllB` — not a copy.
+
+    That is possible because the AdamW tail is entirely **parameter-space**: `adamMNextF`,
+    `adamVNextF`, `adamWParamF`, `gradSumSqAccF` and `clipScaleF` are indexed by the parameter's
+    own size and never see the batch. So "the AdamW tail at the batched index" turned out to be no
+    work at all — the batch had already been factored out of it, by the ops' own shapes. The only
+    thing that moves is which traversal produced the gradients. -/
+def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
+    (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
+    (ema : Bool := false) (wdExclude : Bool := false) (wdStr : String := "0.0001")
+    (clip : Bool := false) (clipStr : String := "1.0") : String :=
+  let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
+  convNextAdamTrainStepFaithful alphaStr negAlphaKStr bStr replicas nClasses slug ema
+    wdExclude wdStr clip clipStr
+    (traversal := some (convNextBackAllB (some (alphaStr, negAK, bStr)) nClasses))
+
 /-- The per-example render's own banner, so the tie can demand **byte-identity** rather than
     "identical apart from a comment". ⚠ Worth the parameter: a tie that compares modulo one line is
     a tie with a hole in it, and the hole is exactly where a renderer's own description of what it
