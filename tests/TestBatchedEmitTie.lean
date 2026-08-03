@@ -187,6 +187,11 @@ private def cases : List (String × String × String) :=
    let zq0b : Vec (BS*(pc*ph*ph)) := fun _ => 0
    let zr   : Vec (rows*c) := fun _ => 0
    let zrb  : Vec (BS*(rows*c)) := fun _ => 0
+   let zvc  : Vec c := fun _ => 0
+   let zvcb : Vec (BS*c) := fun _ => 0
+   let zva  : Vec a := fun _ => 0
+   let zvab : Vec (BS*a) := fun _ => 0
+   let zWo  : Mat a c := fun _ _ => 0
    [ ("convStride4",
       render (pretty BS (.flatConvStride4F (ic := ic) (oc := oc) (h := ch) (w := ch)
                            (kH := kk) (kW := kk) "%W" "%b" zk4 zoc (.operand "%x" zs4))),
@@ -213,6 +218,23 @@ private def cases : List (String × String × String) :=
       render (pretty BS (.rowDenseBiasGrad (N := rows) (c := c) (.operand "%dy" zr))),
       render (pretty BS (.rowDenseBiasGradB (N := BS) (R := rows) (c := c)
                            (.operand "%dy" zrb))))
+   -- ── the classifier head: `dotOut` (input-VJP) and the two dense param grads.
+   --    ⚠ `dotOut` is `softmaxDiv`'s situation one op over — its `dot_general` was ALREADY
+   --    per-example (contracting dim 1 of tensor<B,n>), so only the `den` was wrong at the batched
+   --    index. ⚠ `weightGradB`/`biasGradB` exist even though `denseWeightGradB`/`denseBiasGradB`
+   --    denote the same thing: those carry different Raw TAGS, so reusing them would change the
+   --    emitted text. Two ops can denote one function and still be two renders.
+   , ("dotOut",
+      render (pretty BS (.dotOut (m := a) (n := c) "%W" (zWo : Mat a c) (.operand "%dy" zvc))),
+      render (pretty BS (.batchOp (N := BS) (.dotOut (m := a) (n := c) "%W" (zWo : Mat a c))
+                           (.operand "%dy" zvcb))))
+   , ("weightGrad",
+      render (pretty BS (.weightGrad (m := a) (n := c) "%x" (zva : Vec a) (.operand "%dy" zvc))),
+      render (pretty BS (.weightGradB (N := BS) (m := a) (n := c) "%x" (zvab)
+                           (.operand "%dy" zvcb))))
+   , ("biasGrad",
+      render (pretty BS (.biasGrad (n := c) (.operand "%dy" zvc))),
+      render (pretty BS (.biasGradB (N := BS) (n := c) (.operand "%dy" zvcb))))
    ]) ++
   -- ── step 3: max-pool + the conv bias param grads ──
   (let zp   : Vec (pc*(2*ph)*(2*ph)) := fun _ => 0

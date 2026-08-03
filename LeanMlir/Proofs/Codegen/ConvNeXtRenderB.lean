@@ -154,6 +154,130 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
     chLnPrelude ++ body ++
     s!"    return {logits} : {ty [bB,nClasses]}\n" ++ "  }\n}\n"
 
+/-! ## The backward
+
+Every site below is the per-example site with its node swapped for the batched form. ⚠ Two of them
+are where increments 2 and 3's constructors earn their keep, and both are cases the emit tie alone
+cannot judge:
+
+* `lnRowBackB` takes the whole-batch saved LN input and hands example `k` `batchSlice k x`
+  (`batchMapAux`). A descriptor here would hand example 0's activation to all `N` — same types,
+  same bytes, different function (`den_lnRowBackB_per_example`).
+* `veclnGammaGradB` / `rowDenseBiasGradB` contract the batch **and** the spatial rows. The
+  per-example peers contract only the rows, and the two spellings agree at `N = 1`
+  (`den_rowDenseBiasGradB_at_one`) — so a render that dropped the batch sum would pass a
+  one-example check. -/
+
+/-- One **channel-LN input-VJP** site, batched. -/
+private def lnBackSiteB (gN xName cot : String) (c h : Nat) :
+    StateM Nat (String × String) := do
+    let (k1, xT)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
+                                   (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))
+    let (k2, dT)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
+                                   (reassocB (.operand cot (zVB : Vec (bB*(c*h*h))))))
+    let (k3, da)  ← pretty bB (.batchOp (N := bB) (.rowScale (m := h*h) (n := c) gN (zVB : Vec c))
+                                   (.operand dT (zVB : Vec (bB*(h*h*c)))))
+    let (k4, dxT) ← pretty bB (.lnRowBackB (N := bB) (m := h*h) (n := c) "%one" xT bEPS 0 1 zVB
+                                   (.operand da (zVB : Vec (bB*(h*h*c)))))
+    let (k5, o)   ← pretty bB (.batchOp (N := bB) (.transpose (m := h*h) (n := c))
+                                   (.operand dxT (zVB : Vec (bB*(h*h*c)))))
+    pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
+
+/-- The **γ tail** for one LN site — the two-level `veclnGammaGradB`. -/
+private def lnGammaTailB (gN xName cot : String) (c h : Nat) :
+    StateM Nat (String × String) := do
+    let (k1, xT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
+                                  (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))
+    let (k2, dT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
+                                  (reassocB (.operand cot (zVB : Vec (bB*(c*h*h))))))
+    let (k3, o) ← pretty bB (.veclnGammaGradB (N := bB) (R := h*h) (D := c) xT bEPS 0
+                                 (zVB : Vec (bB*(h*h*c))) (.operand dT (zVB : Vec (bB*(h*h*c)))))
+    pure (k1 ++ k2 ++ k3, o)
+
+/-- The **β tail** — the two-level `rowDenseBiasGradB`, contracting batch and spatial rows. -/
+private def lnBetaTailB (cot : String) (c h : Nat) : StateM Nat (String × String) := do
+    let (k1, dT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
+                                  (reassocB (.operand cot (zVB : Vec (bB*(c*h*h))))))
+    let (k2, o) ← pretty bB (.rowDenseBiasGradB (N := bB) (R := h*h) (c := c)
+                                 (.operand dT (zVB : Vec (bB*(h*h*c)))))
+    pure (k1 ++ k2, o)
+
+/-- One **ConvNeXt block** backward: the cotangent chain only, param tails separate (the
+    per-example renderer factors it the same way, which is what makes ConvNeXt the cheapest of the
+    five to thread). -/
+private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) :
+    StateM Nat (String × String × String × String × String × String) := do
+  let (k1, cot_p) ← pretty bB (.batchOp (N := bB)
+      (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (zVB : Vec c)) (.operand dy zVB))
+  let (k2, cot_g) ← pretty bB (.convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}pW"
+      (zKB : Kernel4 c e 1 1) zVB (.operand cot_p zVB))
+  let (k3, cot_e) ← pretty bB (.geluBackB b.e (zVB : Vec (bB*(e*h*h))) (.operand cot_g zVB))
+  let (k4, cot_n) ← pretty bB (.convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}eW"
+      (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB))
+  let (k5, cot_d) ← lnBackSiteB s!"%{pfx}ng" b.d cot_n c h
+  let (k6, cot_main) ← pretty bB (.depthwiseBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}dW"
+      (zDB : DepthwiseKernel c 7 7) zVB (.operand cot_d zVB))
+  let (k7, cot_xin) ← pretty bB (.addVB (.operand cot_main (zVB : Vec (bB*(c*h*h))))
+      (.operand dy zVB))
+  pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, cot_xin, cot_p, cot_e, cot_n, cot_d)
+
+/-- One **downsample** backward. -/
+private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) :
+    StateM Nat (String × String × String) := do
+  let (k1, cot_n) ← pretty bB (.convStridedBackBatched (N := bB) (h := h2) (w := h2) s!"%{pfx}W"
+      (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
+  let (k2, cot_x) ← lnBackSiteB s!"%{pfx}ng" xin cot_n ci (2*h2)
+  pure (k1 ++ k2, cot_n, cot_x)
+
+/-- The **parameter gradients of one block** — every one a `*GradB`, i.e. `Σ_n` over the batch of
+    the per-example gradient on `batchSlice n`. AdamW only: the SGD tail stays in the per-example
+    renderer until the swap, since `%lr` is a runtime operand on the AdamW path and a baked literal
+    on the SGD one (§2a-quater's silent-hyperparameter hazard). -/
+private def blockParamGradB (pfx : String) (b : FNames)
+    (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) :
+    StateM Nat (String × List (String × String)) := do
+  let (cLg, nLg) ← pretty bB (.layerScaleChGammaGradB (N := bB) (c := c) (h := h) (w := h) b.p
+      (zVB : Vec (bB*(c*h*h))) (.operand dy zVB))
+  let (cPw, nPw) ← pretty bB (.convWeightGradB (N := bB) (ic := e) (oc := c) (h := h) (w := h)
+      (kH := 1) (kW := 1) b.g (zVB : Vec c) (zVB : Vec (bB*(e*h*h))) (zKB : Kernel4 c e 1 1)
+      (.operand cot_p zVB))
+  let (cPb, nPb) ← pretty bB (.convBiasGradB (N := bB) (ic := e) (oc := c) (h := h) (w := h)
+      (kH := 1) (kW := 1) (zKB : Kernel4 c e 1 1) (zVB : Vec (bB*(e*h*h))) (zVB : Vec c)
+      (.operand cot_p zVB))
+  let (cEw, nEw) ← pretty bB (.convWeightGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
+      (kH := 1) (kW := 1) b.n (zVB : Vec e) (zVB : Vec (bB*(c*h*h))) (zKB : Kernel4 e c 1 1)
+      (.operand cot_e zVB))
+  let (cEb, nEb) ← pretty bB (.convBiasGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
+      (kH := 1) (kW := 1) (zKB : Kernel4 e c 1 1) (zVB : Vec (bB*(c*h*h))) (zVB : Vec e)
+      (.operand cot_e zVB))
+  let (cNg, nNg) ← lnGammaTailB s!"%{pfx}ng" b.d cot_n c h
+  let (cNb, nNb) ← lnBetaTailB cot_n c h
+  let (cDw, nDw) ← pretty bB (.depthwiseWeightGradB (N := bB) (c := c) (h := h) (w := h)
+      (kH := 7) (kW := 7) b.xin (zVB : Vec c) (zVB : Vec (bB*(c*h*h)))
+      (zDB : DepthwiseKernel c 7 7) (.operand cot_d zVB))
+  let (cDb, nDb) ← pretty bB (.depthwiseBiasGradB (N := bB) (c := c) (h := h) (w := h)
+      (kH := 7) (kW := 7) (zDB : DepthwiseKernel c 7 7) (zVB : Vec (bB*(c*h*h))) (zVB : Vec c)
+      (.operand cot_d zVB))
+  pure (cLg ++ cPw ++ cPb ++ cEw ++ cEb ++ cNg ++ cNb ++ cDw ++ cDb,
+    [(s!"{pfx}dW", nDw), (s!"{pfx}db", nDb), (s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb),
+     (s!"{pfx}eW", nEw), (s!"{pfx}eb", nEb), (s!"{pfx}pW", nPw), (s!"{pfx}pb", nPb),
+     (s!"{pfx}lg", nLg)])
+
+/-- The **parameter gradients of one downsample**. -/
+private def downParamGradB (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat) :
+    StateM Nat (String × List (String × String)) := do
+  let (cB, nB) ← pretty bB (.convStridedBiasGradB (N := bB) (ic := ci) (oc := co) (h := h2)
+      (w := h2) (kH := 2) (kW := 2) (zKB : Kernel4 co ci 2 2)
+      (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zVB : Vec co) (.operand dy zVB))
+  let (cNg, nNg) ← lnGammaTailB s!"%{pfx}ng" downIn cot_n ci (2*h2)
+  let (cNb, nNb) ← lnBetaTailB cot_n ci (2*h2)
+  let (wcode, nW) ← pretty bB (.convStridedWeightGradB (N := bB) (ic := ci) (oc := co) (h := h2)
+      (w := h2) (kH := 2) (kW := 2) downLn (zVB : Vec co)
+      (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zKB : Kernel4 co ci 2 2)
+      (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
+  pure (cB ++ cNg ++ cNb ++ wcode,
+    [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb), (s!"{pfx}W", nW), (s!"{pfx}b", nB)])
+
 /-- The per-example render's own banner, so the tie can demand **byte-identity** rather than
     "identical apart from a comment". ⚠ Worth the parameter: a tie that compares modulo one line is
     a tie with a hole in it, and the hole is exactly where a renderer's own description of what it

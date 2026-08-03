@@ -218,6 +218,7 @@ inductive BatchableOp : Nat → Nat → Type where
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)
       : BatchableOp (ic*(2*(2*h))*(2*(2*w))) (oc*h*w)
   | layerScaleCh {c h w : Nat} (γName : String) (γ : Vec c)  : BatchableOp (c*h*w) (c*h*w)
+  | dotOut {m n : Nat} (wName : String) (W : Mat m n)        : BatchableOp n m
   | expe {n : Nat}                                          : BatchableOp n n
   | softmaxDiv {n : Nat}                                    : BatchableOp n n
   | lnRow {m n : Nat} (gName bName epsStr : String) (ε γ β : ℝ) : BatchableOp (m*n) (m*n)
@@ -552,6 +553,13 @@ inductive SHlo : Nat → Type where
   | veclnGammaGradB {N R D : Nat} (xName epsStr : String) (ε : ℝ) (x : Vec (N*(R*D)))
       : SHlo (N*(R*D)) → SHlo D
   | rowDenseBiasGradB {N R c : Nat}                             : SHlo (N*(R*c)) → SHlo c
+  -- ⚠ The HEAD's dense grads. `denseWeightGradB`/`denseBiasGradB` already exist and denote the
+  -- same thing — but they carry their OWN `Raw` tags ("denseWeightGrad"/"denseBiasGrad"), where
+  -- ConvNeXt's and ViT's head emits `weightGrad`/`biasGrad`. Reusing them would change the
+  -- emitted text, so these two alias the per-example Raw instead. A reminder that two ops
+  -- denoting the same function are still two RENDERS, and the byte tie is what notices.
+  | weightGradB {N m n : Nat} (xName : String) (x : Vec (N*m))  : SHlo (N*n) → SHlo (m*n)
+  | biasGradB   {N n : Nat}                                     : SHlo (N*n) → SHlo (N*n)
   | lnRowBackB   {N m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (N*(m*n)))
       : SHlo (N*(m*n)) → SHlo (N*(m*n))
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
@@ -1195,6 +1203,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
       fun v => layerScale (fun k => γ (chanIdx c h w k)) v
   -- Per-EXAMPLE softmax: the denominator is that example's own sum, which is the whole point of
   -- giving `softmaxDiv` a descriptor (see the constructor's note).
+  | _, _, .dotOut _ W => fun v i => ∑ j, W i j * v j
   | _, _, .expe => fun v j => Real.exp (v j)
   | _, _, .softmaxDiv => fun v j => v j / ∑ k, v k
   | _, _, .lnRow (m := m) (n := n) _ _ _ ε γ β => rowLNFlat m n ε γ β
@@ -1487,6 +1496,14 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
           * layerNormForward D ε 1 0 (Mat.unflatten (batchSlice N (R*D) x n) r) k
   | _, .rowDenseBiasGradB (N := N) (R := R) (c := c) e =>
       fun j => ∑ n : Fin N, ∑ r : Fin R, batchSlice R c (batchSlice N (R*c) (den e) n) r j
+  -- `Σ_n` over the batch of the per-example outer product / cotangent, the `*GradB` shape.
+  | _, .weightGradB (N := N) (m := m) (n := n) _ x e =>
+      fun idx => ∑ k : Fin N,
+        (Mat.flatten (fun i j => batchSlice N m x k i * batchSlice N n (den e) k j)) idx
+  -- ⚠ `biasGrad` is the IDENTITY on its operand (the per-example peer returns `SHlo n`, not
+  -- `SHlo` of the bias width) — the channel sum happens in the emitted reduce, outside the AST.
+  -- Carried over verbatim so the batched form is the same carve-out, not a new one.
+  | _, .biasGradB e => den e
   -- LayerNorm's backward is NOT pointwise (it reduces within a row), so this one genuinely needs
   -- the auxiliary lift: example `k` is handed `batchSlice k x`, never the whole `x`.
   | _, .lnRowBackB (N := N) (m := m) (n := n) _ _ _ ε γ x e =>
@@ -1683,6 +1700,9 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
 --    function wearing a `tensor<Bxn>` type.
 @[simp] theorem den_batchOp_gelu {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.gelu (n := n)) e) = batchMap N (gelu n) (den e) := rfl
+@[simp] theorem den_batchOp_dotOut {N m n : Nat} (wN : String) (W : Mat m n) (e : SHlo (N * n)) :
+    den (.batchOp (N := N) (.dotOut wN W) e)
+      = batchMap N (fun v i => ∑ j, W i j * v j) (den e) := rfl
 @[simp] theorem den_batchOp_expe {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.expe (n := n)) e)
       = batchMap N (fun v j => Real.exp (v j)) (den e) := rfl
@@ -3580,6 +3600,7 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .convStride4 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
       ("convStride4P", [wN, bN], [N, ic, oc, h, w, kH, kW])
   | .layerScaleCh (c := c) (h := h) (w := w) gN _ => ("layerScaleChP", [gN], [N, c, h, w])
+  | .dotOut (m := m) (n := n) wN _ => ("dotOutP", [wN], [N, m, n])
   | .expe (n := n) => ("expeP", [], [N, n])
   | .softmaxDiv (n := n) => ("softmaxDivP", [], [N, n])
   | .lnRow (m := m) (n := n) gN bN es _ _ _ => ("lnRowP", [gN, bN, es], [N, m, n])
@@ -3665,6 +3686,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "veclnGammaGrad" [xN, es] [R, D] (skel e)
   | _, .rowDenseBiasGradB (R := R) (c := c) e =>
       .batched "rowDenseBiasGrad" [] [R, c] (skel e)
+  | _, .weightGradB (m := m) (n := n) xN _ e => .weightGrad xN m n (skel e)
+  | _, .biasGradB (n := n) e => .biasGrad n (skel e)
   | _, .lnRowBackB (N := N) (m := m) (n := n) gN xN es _ _ _ e =>
       .batched "lnRowBackP" [gN, xN, es] [N, m, n] (skel e)
   | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
@@ -5680,6 +5703,10 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,m,n]}\n" ++
             s!"    {o0} = stablehlo.multiply {sN}, {i2} : {ty [B,m,n]}\n" ++
             s!"    {o} = stablehlo.reshape {o0} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      | "dotOutP", [w], [_N, m, n] => do
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.dot_general {r}, {w}, contracting_dims = [1] x [1], " ++
+                s!"precision = [DEFAULT, DEFAULT] : ({ty [B,n]}, {ty [m,n]}) -> {ty [B,m]}\n", o :: st)
       | "expeP", [], [_N, n] => do
           let o ← fresh
           pure (s!"    {o} = stablehlo.exponential {r} : {ty [B,n]}\n", o :: st)

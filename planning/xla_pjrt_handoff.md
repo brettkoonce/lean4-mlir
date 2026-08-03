@@ -308,11 +308,37 @@ class (§2a-quater), and the one a byte tie catches where a numeric tie at 1e-4 
    Copying either would have been the double-writer disease, and the prelude in particular is a
    string the artifact depends on byte-for-byte.
 
-**Next**: ConvNeXt's BACKWARD at `N := B` (the `bwdBlock`/`bwdDown`/`lnBackSite` peers + the
-optimizer tail), then the whole-net tie against `convnext_adam_train_step.mlir`, then the swap.
-⚠ The swap is the first step in this thread that changes committed bytes — everything through
-increment 4 has held `verified_mlir/` at 0 diff. And ViT still needs its ~12 remaining forms plus
-the `matmulF` combinator.
+##### ◐ INCREMENT 5 (2026-08-03) — the backward SITES build; the whole-net chain is NOT composed yet
+
+⚠ **Read this as partial.** What exists and builds: `lnBackSiteB`, `lnGammaTailB`, `lnBetaTailB`,
+`bwdBlockB`, `bwdDownB`, `blockParamGradB`, `downParamGradB` — every per-example backward site with
+its node swapped for the batched form. What does **not** exist: `convNextBackAllB`, the whole-net
+traversal that composes them, and therefore the train-step tie. The forward tie
+(`convnext-fwd-b-tie`) is the only whole-net gate on this file so far, and it still passes.
+
+Three more forms landed on the way, taking the tie to **34**:
+
+* **`dotOut`** as a descriptor — `softmaxDiv`'s situation one op over. Its `dot_general` was
+  *already* per-example (contracting dim 1 of `tensor<B,n>`); only the `den` read the whole batch at
+  index `N·n`. Emit unchanged, denotation fixed.
+* ⚠⚠ **`weightGradB` / `biasGradB`, and the reason they exist is worth carrying:**
+  `denseWeightGradB` / `denseBiasGradB` already existed and **denote the same functions** — but they
+  carry different `Raw` TAGS (`"denseWeightGrad"` vs `"weightGrad"`), which ConvNeXt's and ViT's head
+  does not emit. Reusing them would have changed the emitted text. **Two ops can denote one function
+  and still be two renders**, and the byte tie is what notices. A `den`-only check would have waved
+  the substitution through.
+
+⚠ **`biasGrad` is a carve-out and its batched peer inherits it**: the per-example op returns
+`SHlo n`, not `SHlo` of the bias width — the channel sum happens in the emitted `reduce`, outside
+the AST. `biasGradB` is `den e` verbatim for that reason. Do not "fix" it in isolation; it is one
+half of a pair whose other half is emitted text.
+
+**Next, in order**: compose `convNextBackAllB` (mirroring `convNextBackAll true (some …)`, which is
+now public), tie it against the per-example traversal — code string *and* the parameter→SSA map, so
+a mis-ordered gradient is caught as well as a mis-rendered one — then the AdamW tail and the
+whole-net tie against `convnext_adam_train_step.mlir`, then the swap. ⚠ The swap is still the first
+step in this thread that changes committed bytes; increments 1-5 have all held `verified_mlir/` at
+0 diff. And ViT needs its ~12 remaining forms plus the `matmulF` combinator.
 
 ---
 
