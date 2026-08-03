@@ -589,6 +589,45 @@ inductive SHlo : Nat → Type where
   | lnRowBackB   {N m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (N*(m*n)))
       : SHlo (N*(m*n)) → SHlo (N*(m*n))
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
+  -- ── ViT increment 2 (handoff §0.2 ▶3): the six forms that CANNOT be descriptors, because each
+  --    either reads a per-example saved activation or contracts the batch away.
+  --
+  --    ⚠⚠ `matmulFB` WAS BILLED AS THE SCHEDULE RISK AND IT IS NOT ONE. §0.2's cost note says
+  --    attention needs "a `batchMap2`-shaped combinator, its own VJP and a `dot_general` carrying a
+  --    batching dimension", because both its operands are per-example where every batched binary in
+  --    the kit is pointwise-same-shape. Measured instead of estimated, all three evaporate:
+  --      · **`batchMapAux` IS `batchMap2`.** Its body is `f (batchSlice aux k) (batchSlice x k)` —
+  --        fully symmetric in the two arguments. Nothing in the definition requires the first to be
+  --        a saved activation rather than a second graph operand; only the docstring did.
+  --      · **the `dot_general` already carries `batching_dims = [0] x [0]`.** `matmulF`'s emit was
+  --        written per-example from the start, so it needs no change — the `expe`/`softmaxDiv`
+  --        situation (§0.2 increment 3) with only the `den` half wrong.
+  --      · **`.batched2` already exists** (`addVB`/`subB` use it), and `matmulF`'s own `Raw` tag is
+  --        binary, so this aliases it and needs no new skeleton shape.
+  --    What is left is a constructor, a `den`, a `rfl` and one `skel` line. **Four sites.**
+  | matmulFB {N m k n : Nat} : SHlo (N*(m*k)) → SHlo (N*(k*n)) → SHlo (N*(m*n))
+  -- ⚠ A saved-activation backward, so it takes the WHOLE-batch `preAct` and hands example `k` its
+  -- own slice via `batchMapAux`. A descriptor would give every example example 0's scores — same
+  -- types, same emitted bytes, different function. `lnRowBackB`'s situation exactly.
+  | softmaxRowBackB {N m n : Nat} (xName : String) (preAct : Vec (N*(m*n)))
+      : SHlo (N*(m*n)) → SHlo (N*(m*n))
+  -- ── the four batch-contracting parameter gradients. ⚠ Every one of their per-example emits
+  --    ALREADY reduces over the batch axis (`dimensions = [0, 1]`, `[0]`,
+  --    `contracting_dims = [0, 1] x [0, 1]`) — values flow as `tensor<B, …>` and `B` is `pretty`'s,
+  --    never the SHlo index — so all four alias their per-example `Raw` and emit the same text BY
+  --    CONSTRUCTION rather than by a copied body. It was only ever the `den` that was per-example.
+  --    ⚠⚠ And the two-level contraction is INVISIBLE AT `N = 1`: a render that dropped the batch
+  --    sum type-checks, emits the same bytes and agrees on a one-example batch. Any gate must run
+  --    at `N > 1` (`den_rowDenseBiasGradB_at_one` states the same thing one op over).
+  | rowDenseWeightGradB {N tk a c : Nat} (xName : String) (x : Vec (N*(tk*a)))
+      : SHlo (N*(tk*c)) → SHlo (a*c)
+  | posEmbedGradB {N tk D : Nat}                : SHlo (N*((tk+1)*D)) → SHlo ((tk+1)*D)
+  | patchEmbedWeightGradB {N ic H W P tk D : Nat} (xName : String) (x : Vec (N*(ic*H*W)))
+      : SHlo (N*((tk+1)*D)) → SHlo (D*ic*P*P)
+  -- ⚠ Sums tokens 1…tk and SKIPS the CLS row, which is what `p.succ` says. A batched peer that
+  -- summed all `tk+1` rows would fold the CLS token's cotangent into the patch bias — it compiles,
+  -- trains and descends, and the emitted `slice [.., 1:tk+1, ..]` is the only place it shows.
+  | patchEmbedBiasGradB {N tk c : Nat}          : SHlo (N*((tk+1)*c)) → SHlo c
   -- Chapter 8 (ConvNeXt): GELU forward (tanh approximation,
   -- `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via `stablehlo.tanh`) and its
   -- input-VJP (`dy · gelu'(x)`, closed form from the tanh-approx derivative).
@@ -1532,6 +1571,31 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
           * layerNormForward D ε 1 0 (Mat.unflatten (batchSlice N (R*D) x n) r) k
   | _, .rowDenseBiasGradB (N := N) (R := R) (c := c) e =>
       fun j => ∑ n : Fin N, ∑ r : Fin R, batchSlice R c (batchSlice N (R*c) (den e) n) r j
+  -- ── ViT increment 2. The first two are `batchMapAux` (per-example, no contraction); the last
+  --    four are `Σ_b` over the batch of the per-example gradient — the `*GradB` shape.
+  --    ⚠ `batchMapAux` used SYMMETRICALLY here for the first time: `matmulFB`'s "aux" is the left
+  --    operand of a binary op, not a saved activation. Its body never cared.
+  | _, .matmulFB (N := N) (m := m) (k := k) (n := n) a b =>
+      batchMapAux N (matMulFlat m k n) (den a) (den b)
+  | _, .softmaxRowBackB (N := N) (m := m) (n := n) _ preAct e =>
+      batchMapAux N (rowSoftmaxBackFlat m n) preAct (den e)
+  | _, .rowDenseWeightGradB (N := N) (tk := tk) (a := a) (c := c) _ x e =>
+      fun idx => ∑ b : Fin N,
+        Mat.flatten (fun i j => ∑ t : Fin tk,
+          batchSlice tk a (batchSlice N (tk*a) x b) t i
+            * batchSlice tk c (batchSlice N (tk*c) (den e) b) t j) idx
+  | _, .posEmbedGradB (N := N) (tk := tk) (D := D) e =>
+      fun i => ∑ b : Fin N, batchSlice N ((tk+1)*D) (den e) b i
+  | _, .patchEmbedWeightGradB (N := N) (ic := ic) (H := H) (W := W) (P := P) (tk := tk) (D := D)
+        _ x e =>
+      fun idx => ∑ b : Fin N,
+        patchEmbedWeightGradFlat ic H W P tk D
+          (batchSlice N (ic*H*W) x b) (batchSlice N ((tk+1)*D) (den e) b) idx
+  -- ⚠ `p.succ` skips the CLS row, exactly as the per-example peer does; the batch sum is the outer
+  -- one. Two levels, and the inner one is the one the emitted `slice [.., 1:tk+1, ..]` encodes.
+  | _, .patchEmbedBiasGradB (N := N) (tk := tk) (c := c) e =>
+      fun i => ∑ b : Fin N, ∑ p : Fin tk,
+        batchSlice (tk+1) c (batchSlice N ((tk+1)*c) (den e) b) p.succ i
   -- `Σ_n` over the batch of the per-example outer product / cotangent, the `*GradB` shape.
   | _, .weightGradB (N := N) (m := m) (n := n) _ x e =>
       fun idx => ∑ k : Fin N,
@@ -1909,6 +1973,60 @@ theorem den_lnRowBackB_per_example {N m n : Nat} (gN xN es : String) (ε γ : �
   simp [den_lnRowBackB, batchMapAux]
 @[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.sigmoidBackB xN x e) = (sigmoid_has_vjp (N*n)).backward x (den e) := rfl
+
+/-! ### ViT increment 2 — the six forms that cannot be descriptors -/
+
+@[simp] theorem den_matmulFB {N m k n : Nat} (a : SHlo (N*(m*k))) (b : SHlo (N*(k*n))) :
+    den (.matmulFB a b) = batchMapAux N (matMulFlat m k n) (den a) (den b) := rfl
+
+/-- ⭐ **ATTENTION'S MATMUL IS PER-EXAMPLE IN *BOTH* OPERANDS**, which is the property the whole
+    `matmulF` scoping worry was about. Example `k`'s output is `Qₖ·Kₖᵀ` — its own `Q` against its
+    own `K` — never `Q₀` against `Kₖ`, and never the whole batch flattened into one big matrix.
+
+    ⚠ **All three of those type-check.** At the batched index `N*(m*k)`, a `den` that read the
+    index as one matrix would compute `matMulFlat` at the wrong `m` and still be a `Vec`; a
+    descriptor would hand every example operand 0's left factor. What separates them is this
+    statement, and the emit tie cannot make it — the emitted `dot_general` carries
+    `batching_dims = [0] x [0]` in every one of those worlds. -/
+theorem den_matmulFB_per_example {N m k n : Nat} (a : SHlo (N*(m*k))) (b : SHlo (N*(k*n)))
+    (t : Fin N) (i : Fin (m*n)) :
+    den (.matmulFB a b) (finProdFinEquiv (t, i))
+      = matMulFlat m k n (batchSlice N (m*k) (den a) t) (batchSlice N (k*n) (den b) t) i := by
+  simp [den_matmulFB, batchMapAux]
+
+@[simp] theorem den_softmaxRowBackB {N m n : Nat} (xN : String) (preAct : Vec (N*(m*n)))
+    (e : SHlo (N*(m*n))) :
+    den (.softmaxRowBackB xN preAct e) = batchMapAux N (rowSoftmaxBackFlat m n) preAct (den e) :=
+  rfl
+
+/-- **Each example's softmax backward recomputes from ITS OWN saved scores.** The descriptor
+    version would hand all `N` example 0's — same types, same bytes, different function.
+    `lnRowBackB`'s statement, on attention. -/
+theorem den_softmaxRowBackB_per_example {N m n : Nat} (xN : String) (preAct : Vec (N*(m*n)))
+    (e : SHlo (N*(m*n))) (k : Fin N) (i : Fin (m*n)) :
+    den (.softmaxRowBackB xN preAct e) (finProdFinEquiv (k, i))
+      = rowSoftmaxBackFlat m n (batchSlice N (m*n) preAct k)
+          (batchSlice N (m*n) (den e) k) i := by
+  simp [den_softmaxRowBackB, batchMapAux]
+
+@[simp] theorem den_posEmbedGradB {N tk D : Nat} (e : SHlo (N*((tk+1)*D))) :
+    den (.posEmbedGradB (tk := tk) (D := D) e)
+      = fun i => ∑ b : Fin N, batchSlice N ((tk+1)*D) (den e) b i := rfl
+
+@[simp] theorem den_patchEmbedBiasGradB {N tk c : Nat} (e : SHlo (N*((tk+1)*c))) :
+    den (.patchEmbedBiasGradB (tk := tk) (c := c) e)
+      = fun i => ∑ b : Fin N, ∑ p : Fin tk,
+          batchSlice (tk+1) c (batchSlice N ((tk+1)*c) (den e) b) p.succ i := rfl
+
+/-- ⚠⚠ **THE BATCH SUM IS INVISIBLE AT `N = 1`.** At one example the outer `∑ b` has a single term,
+    so a render that dropped it type-checks, emits the same bytes and agrees exactly — which is why
+    any gate on these four must run at `N > 1`. `den_rowDenseBiasGradB_at_one` says the same thing
+    for ConvNeXt's bias gradient; this is ViT's positional embedding, where the shared parameter is
+    the whole `(tk+1) × D` table. -/
+theorem den_posEmbedGradB_at_one {tk D : Nat} (e : SHlo (1*((tk+1)*D))) (i : Fin ((tk+1)*D)) :
+    den (.posEmbedGradB (N := 1) (tk := tk) (D := D) e) i
+      = batchSlice 1 ((tk+1)*D) (den e) 0 i := by
+  simp [den_posEmbedGradB]
 @[simp] theorem den_addVB {N n : Nat} (a b : SHlo (N*n)) :
     den (.addVB a b) = fun j => den a j + den b j := rfl
 @[simp] theorem den_subB {N n : Nat} (a b : SHlo (N*n)) :
@@ -3799,6 +3917,23 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "veclnGammaGrad" [xN, es] [R, D] (skel e)
   | _, .rowDenseBiasGradB (R := R) (c := c) e =>
       .batched "rowDenseBiasGrad" [] [R, c] (skel e)
+  -- ── ViT increment 2: SIX ALIASES AND NOT ONE NEW EMIT CASE. Every one of these emits its
+  --    per-example peer's `Raw` verbatim — the batch never appears in the tag, because the emitter
+  --    reads `B` from `pretty` and its dims from the tag, and (for the four gradients) already
+  --    contracts the batch axis. So these forms cannot drift from their peers by construction
+  --    rather than by a copied body kept honest by a test. Increment 3's finding, generalised.
+  --    ⚠ `matmulFB` rides the BINARY `.matmulF` tag: `.batched2` exists for `addVB`/`subB`, but a
+  --    direct alias is better still, because it shares the emit rather than restating it.
+  | _, .matmulFB (m := m) (k := k) (n := n) a b => .matmulF m k n (skel a) (skel b)
+  | _, .softmaxRowBackB (m := m) (n := n) x _ e => .softmaxRowBack x m n (skel e)
+  | _, .rowDenseWeightGradB (tk := tk) (a := a) (c := c) xN _ e =>
+      .batched "rowDenseWeightGrad" [xN] [tk, a, c] (skel e)
+  | _, .posEmbedGradB (tk := tk) (D := D) e =>
+      .batched "posEmbedGrad" [] [tk, D] (skel e)
+  | _, .patchEmbedWeightGradB (ic := ic) (H := H) (W := W) (P := P) (tk := tk) (D := D) xN _ e =>
+      .batched "patchEmbedWeightGrad" [xN] [ic, H, W, P, tk, D] (skel e)
+  | _, .patchEmbedBiasGradB (tk := tk) (c := c) e =>
+      .batched "patchEmbedBiasGrad" [] [tk, c] (skel e)
   | _, .weightGradB (m := m) (n := n) xN _ e => .weightGrad xN m n (skel e)
   | _, .biasGradB (n := n) e => .biasGrad n (skel e)
   | _, .lnRowBackB (N := N) (m := m) (n := n) gN xN es _ _ _ e =>

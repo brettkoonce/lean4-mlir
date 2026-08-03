@@ -208,6 +208,48 @@ private def cases : List (String × String × String) :=
      render (pretty BS (.batchOp (N := BS) (.headPad (N := rows) (heads := 4) (d := a)
                           ⟨1, by decide⟩)
                           (.operand "%x" (fun _ => 0 : Vec (BS*(rows*a)))))))
+  -- ── ViT increment 2: the six forms that CANNOT be descriptors. Every one of them ALIASES its
+  --    per-example peer's `Raw`, so these cases check something slightly different from the rest of
+  --    this file: not "the copied emit body still agrees" but "the alias really is wired to that
+  --    tag". A mis-aliased form falls through to `// MALFORMED` or emits another op's text, and
+  --    both show up here immediately.
+  --
+  --    ⚠ The four gradients are driven through their `*Sgd` peers in the un-fused block below as
+  --    well; here they are pinned against the per-example GRADIENT, which is the comparison that
+  --    says the batched ctor did not change the tag's dims.
+  , ("matmulF",
+     render (pretty BS (.matmulF (m := rows) (k := a) (n := c)
+                          (.operand "%q" (fun _ => 0 : Vec (rows*a)))
+                          (.operand "%k" (fun _ => 0 : Vec (a*c))))),
+     render (pretty BS (.matmulFB (N := BS) (m := rows) (k := a) (n := c)
+                          (.operand "%q" (fun _ => 0 : Vec (BS*(rows*a))))
+                          (.operand "%k" (fun _ => 0 : Vec (BS*(a*c)))))))
+  , ("softmaxRowBack",
+     render (pretty BS (.softmaxRowBack (m := rows) (n := c) "%s" zr (.operand "%x" zr))),
+     render (pretty BS (.softmaxRowBackB (N := BS) (m := rows) (n := c) "%s" zrb
+                          (.operand "%x" zrb))))
+  , ("rowDenseWeightGradB",
+     render (pretty BS (.rowDenseWeightGrad (N := rows) (a := a) (c := c) "%h"
+                          (fun _ => 0 : Vec (rows*a)) (.operand "%x" zr))),
+     render (pretty BS (.rowDenseWeightGradB (N := BS) (tk := rows) (a := a) (c := c) "%h"
+                          (fun _ => 0 : Vec (BS*(rows*a))) (.operand "%x" zrb))))
+  , ("posEmbedGradB",
+     render (pretty BS (.posEmbedGrad (N := tk) (D := dm)
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))),
+     render (pretty BS (.posEmbedGradB (N := BS) (tk := tk) (D := dm)
+                          (.operand "%x" (fun _ => 0 : Vec (BS*((tk+1)*dm)))))))
+  , ("patchEmbedBiasGradB",
+     render (pretty BS (.patchEmbedBiasGrad (N := tk) (c := c)
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*c))))),
+     render (pretty BS (.patchEmbedBiasGradB (N := BS) (tk := tk) (c := c)
+                          (.operand "%x" (fun _ => 0 : Vec (BS*((tk+1)*c)))))))
+  , ("patchEmbedWeightGradB",
+     render (pretty BS (.patchEmbedWeightGrad (ic := pi) (H := pH) (W := pW) (P := pp)
+                          (N := tk) (D := dm) "%img" (fun _ => 0 : Vec (pi*pH*pW))
+                          (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))),
+     render (pretty BS (.patchEmbedWeightGradB (N := BS) (ic := pi) (H := pH) (W := pW) (P := pp)
+                          (tk := tk) (D := dm) "%img" (fun _ => 0 : Vec (BS*(pi*pH*pW)))
+                          (.operand "%x" (fun _ => 0 : Vec (BS*((tk+1)*dm)))))))
   , ("patchEmbed",
      render (pretty BS (.patchEmbedF (ic := pi) (H := pH) (W := pW) (P := pp) (N := tk) (D := dm)
                           "%W" "%b" "%cls" "%pos" (fun _ _ _ _ => 0 : Kernel4 dm pi pp pp)

@@ -654,6 +654,17 @@ open Proofs
 -- so a render reading the batch as the token axis takes `(N+1)*D` to `D` — it keeps ONE
 -- example and drops the rest, and at `N = tk` it type-checks and agrees.
 #print axioms StableHLO.den_batchOp_clsSlice_per_example
+-- ViT increment 2: the three statements the emit tie cannot make, on the forms that cannot be
+-- descriptors. ⚠ `matmulFB` is attention's, and it is the one the whole `matmulF` scoping
+-- worry was about: example k's output is Qk·Kkᵀ — its OWN Q against its OWN K. A descriptor
+-- (every example gets operand 0's left factor) and a den reading the batched index as one big
+-- matrix BOTH type-check and BOTH emit the same `dot_general batching_dims = [0] x [0]`.
+#print axioms StableHLO.den_matmulFB_per_example
+#print axioms StableHLO.den_softmaxRowBackB_per_example
+-- ⚠⚠ And the batch sum that is invisible at N = 1: a render dropping it type-checks, emits the
+-- same bytes and agrees on a one-example batch. Any gate on the four contracting gradients
+-- must run at N > 1.
+#print axioms StableHLO.den_posEmbedGradB_at_one
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
 -- R4 Stage A, Chapter 4 (CNN): conv + maxpool forward ops; the whole MNIST-CNN
