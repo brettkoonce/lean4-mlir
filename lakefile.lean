@@ -1555,6 +1555,16 @@ lean_exe «fwd-tie» where
   root := `tests.TestFwdTie
   moreLinkArgs := xlaLink
 
+/-- §0.2 ▶2, the batched-index move: the ConvNeXt forward rendered at `N := B` must emit the
+    committed `verified_mlir/convnext_fwd.mlir` BYTE FOR BYTE. No GPU — it is a string compare, so
+    it belongs in every pre-commit sweep rather than behind a device.
+
+    ⚠ Pair it with `lake env lean tests/TestBatchedEmitTie.lean`: that file pins each of the 31
+    batched forms against its per-example peer individually, so it localises a failure this
+    whole-net diff can only report. -/
+lean_exe «convnext-fwd-b-tie» where
+  root := `tests.TestConvNeXtFwdBTie
+
 /-- §2m ConvNeXt step 1: can the existing ops spell a **channel** LayerNorm?
 
     ConvNeXt's render normalises with `.bnF` (`bnForward` over the whole `C·H·W` map, scalar γ/β)

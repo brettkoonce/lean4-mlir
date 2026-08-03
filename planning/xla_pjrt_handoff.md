@@ -277,11 +277,42 @@ over rows, where the per-example peer has only the inner one). ⚠⚠ **And it i
 — `den_rowDenseBiasGradB_at_one` says so: a render that dropped the batch sum type-checks, emits
 the same bytes, and agrees on a one-example batch. Any gate for it must run at `N > 1`.
 
-**Next**: ConvNeXt's renderer re-instantiation at `N := B`, then the whole-net tie against the
-committed `convnext_adam_train_step.mlir`. ⚠ That is where this thread stops being additive — every
-increment so far has held `verified_mlir/` at 0 diff, and the swap is the first one that changes
-committed bytes. Expect §2b's shape: the graph structure identical, the *types* moving on every
-pointwise line. And ViT still needs its ~12 remaining forms plus the `matmulF` combinator.
+##### ✅ INCREMENT 4 LANDED 2026-08-03 — ConvNeXt's FORWARD at `N := B`, **byte-identical**
+
+`LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` renders the whole ConvNeXt-T forward with every node
+a `batchOp`/`*B` form, and `lake build convnext-fwd-b-tie` says it emits the committed
+`verified_mlir/convnext_fwd.mlir` **byte for byte — 136,172 chars, 1,555 lines, zero differing
+lines.** So the batched index changed the *denotation* and nothing else.
+
+⚠⚠ **A BYTE tie was available here where §2b's R34 move needed a numeric one, and the reason is
+structural**: every batched form was built to emit its per-example peer's text byte-for-byte, and
+`TestBatchedEmitTie` pins all 31 individually. The whole-net claim is the per-form claim composed —
+and when it fails, that file localises which form did it in one run, which a 1e-6 tolerance argument
+cannot. §2b had no per-form corpus at the time and paid for it.
+
+Control: `bEPS` 1.0e-6 → 1.0e-5 fires on **22 lines**, rc=1 — the silently-wrong-hyperparameter
+class (§2a-quater), and the one a byte tie catches where a numeric tie at 1e-4 would not.
+
+**Two things this cost that are worth knowing:**
+
+1. ⚠⚠ **A CONTROL THAT DOES NOT COMPILE IS NOT A CONTROL, AND A STALE BINARY WILL TELL YOU IT
+   PASSED.** The first attempt swapped the LN site's closing `transpose (m := h*h) (n := c)` to
+   `(m := c) (n := h*h)`. That is a **type error** — the indices are forced by the operand — so
+   `lake build` failed with 3 errors, `.lake/build/bin/convnext-fwd-b-tie` was still sitting there
+   from the previous green build, and running it reported **BYTE-IDENTICAL, rc=0**. Read at a
+   glance that is "the control did not fire"; it is actually "the control never ran". §4 records
+   this for `lake env lean` and for `.vmfb` caches; it applies to **`lake exe` binaries** too.
+   `rm -f` the binary and check the build's rc *before* running it. The good news underneath: the
+   render is tight enough that the obvious perturbation cannot even be spelled.
+2. ⚠ `chLnPrelude` and `FNames` had to stop being `private` so both renderers share ONE definition.
+   Copying either would have been the double-writer disease, and the prelude in particular is a
+   string the artifact depends on byte-for-byte.
+
+**Next**: ConvNeXt's BACKWARD at `N := B` (the `bwdBlock`/`bwdDown`/`lnBackSite` peers + the
+optimizer tail), then the whole-net tie against `convnext_adam_train_step.mlir`, then the swap.
+⚠ The swap is the first step in this thread that changes committed bytes — everything through
+increment 4 has held `verified_mlir/` at 0 diff. And ViT still needs its ~12 remaining forms plus
+the `matmulF` combinator.
 
 ---
 

@@ -103,7 +103,7 @@ private def unassoc {c h : Nat} (e : SHlo (c*(h*h))) : SHlo (c*h*h) := (Nat.mul_
     prelude, and the artifact uses an SSA name nothing defines — `iree-compile`/XLA say "use of
     undeclared SSA value name" and nothing before them says anything. It happened HERE too, on the
     first flag-on render, and `regen_verified_mlir.sh check`'s prelude audit is what generalises. -/
-private def chLnPrelude : String :=
+def chLnPrelude : String :=
     "    // §2m: the channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL\n" ++
     "    // per-channel affine with rowScaleF/rowBiasF, so these two are its scalar identities.\n" ++
     "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
@@ -174,7 +174,7 @@ private def lnBetaTail (adam : Bool) (btN cot : String) (c h : Nat) :
     pure (k1 ++ k2, o)
 
 -- ── captured forward names per ConvNeXt block ──
-private structure FNames where
+structure FNames where
   xin : String   -- block input (residual skip / depthwise in)
   d : String     -- depthwise out (LN in)
   n : String     -- LN out (expand in)
