@@ -2775,6 +2775,22 @@ structure BenchItem where
       anchor measured on the reference card; until someone has that card, a bracket is the most
       the evidence supports. -/
   transportSensitive : Bool := false
+  /-- **Direct mode** (`BENCH_DIRECT=1`): the `-xla` trainer that IS this chapter, and the epoch
+      count it trains for. With both set, the chapter can be measured on THIS box instead of
+      scaled from the reference card — which is the only way a row that is not its own probe can
+      be accurate, since no hardware factor transfers across a bottleneck change. -/
+  probeXla : String := ""
+  epochs   : Nat := 0
+  /-- Direct mode: steps/epoch, set ONLY for `trainAdamSched` nets (the five Imagenette ones).
+      ⚠ Those trainers print `Epoch N/80: loss=…` with **no ms**, so `lastEpochMs` cannot read them
+      and a 3-epoch probe returns nothing — which is exactly how the first version of direct mode
+      failed, silently, with exit 0 on all five. They report ms/**step** through the
+      `LEAN_MLIR_MAX_STEPS` PROBE line instead, which is why `runProbe` already carries a
+      `stepProbe` parameter for the attn probe. A non-zero value here selects that path.
+      ⭐ It is also strictly better: the step probe warms 8 and times 9..40 (seconds, not epochs),
+      and §2d.3 records that it `return ()`s BEFORE any checkpoint write, so it cannot leave a
+      marker. ⚠ It excludes the EVAL pass, so these rows are TRAIN-ONLY — see the footnote. -/
+  stepsPerEpoch : Nat := 0
 
 /-- The XLA MNIST/CIFAR rows were measured 2026-07-30 on the reference 7900 XTX with the
     SAME construction as the IREE ones — steady-state ms/epoch (real data + eval, last of
@@ -2795,20 +2811,24 @@ structure BenchItem where
     ±6% per-run spread documented on `probeConvRefMsXla`; the conv-family ones (ch3, ch4)
     are the affected pair. Treat them as ±6%, not as exact. -/
 def benchTable : List BenchItem :=
-  [ { chapter := "1  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist" },      -- IREE 535ms × 12   | XLA 239ms × 12
-    { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist" },      -- IREE 3200ms × 12  | XLA 676ms × 12
+  [ { chapter := "1  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist",
+      probeXla := "mnist-linear-verified-xla", epochs := 12 },      -- IREE 535ms × 12   | XLA 239ms × 12
+    { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist",
+      probeXla := "mnist-mlp-verified-xla", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
-      transportSensitive := true },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
-    { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar" },      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+      transportSensitive := true, probeXla := "mnist-cnn-verified-xla", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
+    { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar",
+      probeXla := "cifar8-bn-verified-xla", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
     { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
-      transportSensitive := true },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
+      transportSensitive := true, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
     { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
-      transportSensitive := true },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
+      transportSensitive := true, probeXla := "mobilenetv2-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
     { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette",
-      transportSensitive := true },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
+      transportSensitive := true, probeXla := "efficientnet-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
     { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6841, tier := "imagenette",
-      transportSensitive := true },                                                                     -- IREE 13.3h | XLA 1h54m01s ⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the channel-LN net at 6841s
-    { chapter := "9  ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
+      transportSensitive := true, probeXla := "convnext-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 13.3h | XLA 1h54m01s ⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the channel-LN net at 6841s
+    { chapter := "9  ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette",
+      probeXla := "vit-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
 
 /-- This chapter's reference wall-clock on the selected lowerer. -/
 def BenchItem.refOn (it : BenchItem) (xla : Bool) : Option Nat :=
@@ -2975,6 +2995,7 @@ def fmtDur (sec : Nat) : String :=
 def fmtRange (lo hi : Nat) : String :=
   if lo == hi then fmtDur lo else s!"{fmtDur lo}-{fmtDur hi}"
 
+
 /-- `num/den` as a 2-decimal multiplier string, e.g. `1.24`. -/
 def fmtFactor (num den : Nat) : String :=
   if den == 0 then "?" else
@@ -3023,6 +3044,54 @@ def gpuBusyPct (backend : String) : IO (Option Nat) := do
       let o ← IO.Process.output { cmd := "rocm-smi", args := #["--showuse"] }
       pure (((o.stdout.splitOn "\n").find? (fun l => (l.splitOn "use (%)").length > 1)).bind firstNat)
   catch _ => pure none
+
+/-- **Direct mode's probe: measure the chapter's OWN trainer on THIS box, 3 real epochs.**
+
+    `runProbe` answers *"how does my card compare to a 7900 XTX"* and then multiplies a reference.
+    That is exact for a chapter which IS its own probe (ch1/2 are the dense probe, ch4 the conv one,
+    ch9 the attn one) and an extrapolation for every other — which is the whole reason ch3 and ch5-8
+    print a bracket. This answers the other question directly: run the chapter's real trainer and
+    multiply by its own epoch count. No reference card, no hardware factor, no bottleneck
+    assumption. §2j validated the method at **0.3%** (ch9's wall was extrapolated at 3480 s from a
+    marginal-epoch measurement; the real 80-epoch run landed at 3491 s).
+
+    ⚠⚠ **REAL data, not `LEAN_MLIR_BENCH_SYNTH`** — deliberately. The synthetic path exists to take
+    the loader out of a *comparison*; here the loader is part of the answer, and §2e-ter measured it
+    at ~6.3% of a 1-GPU epoch. Excluding it is most of why even the bracket's transport end came in
+    6% low against the measured ResNet-34 run.
+
+    ⚠⚠ **AND IT MUST NOT TOUCH A CHECKPOINT**, in either direction. `trainAdamSched` checkpoints per
+    epoch, so a naive 3-epoch probe would (a) RESUME an existing checkpoint — measuring a warm
+    restart, or nothing at all if the marker is at the epoch budget (§4's silent no-op) — and
+    (b) leave its own marker at 3 for the next real run to resume from. The caller stashes and
+    restores; this function only runs. -/
+def runDirectProbe (it : BenchItem) (backend gpu : String)
+    (runEnv : Array (String × Option String)) : IO (Option Nat) := do
+  IO.println s!"\n  ▸ measuring {it.chapter} directly — {it.probeXla}, 3 real epochs…"
+  let bp ← IO.Process.spawn { cmd := "lake", args := #["build", it.probeXla] }
+  if (← bp.wait) != 0 then
+    IO.eprintln s!"    build failed: {it.probeXla}"
+    return none
+  let vis := if backend == "cuda" then "CUDA_VISIBLE_DEVICES" else "HIP_VISIBLE_DEVICES"
+  let stepMode := it.stepsPerEpoch > 0
+  -- ⚠ MAX_STEPS warms 8 and times 9..n, so anything ≤ 8 fires NOTHING and caps nothing (§0.12).
+  let capEnv := if stepMode then #[("LEAN_MLIR_MAX_STEPS", some "40")]
+                            else #[("LEAN_MLIR_MAX_EPOCHS", some "3")]
+  let env := runEnv ++ capEnv ++ #[("IREE_BACKEND", some backend), (vis, some gpu)]
+  let o ← IO.Process.output { cmd := s!".lake/build/bin/{it.probeXla}", args := #["data"], env := env }
+  match (if stepMode then probeMsStep o.stdout else lastEpochMs o.stdout) with
+  | none =>
+      IO.eprintln s!"    no timing for {it.probeXla} (dataset present? exit {o.exitCode})"
+      pure none
+  | some ms =>
+      if stepMode then
+        let total := ms * it.stepsPerEpoch * it.epochs / 1000
+        IO.println s!"    {ms} ms/step × {it.stepsPerEpoch} steps × {it.epochs} ep = {fmtDur total}   (measured here; TRAIN-ONLY)"
+        pure (some total)
+      else
+        let total := ms * it.epochs / 1000
+        IO.println s!"    {ms} ms/epoch × {it.epochs} ep = {fmtDur total}   (measured here, incl. eval)"
+        pure (some total)
 
 /-- Build + run one probe net and return its steady-state timing. With `stepProbe`
     set (`attn` anchor) it caps at N steps and reads ms/step; otherwise it runs 3
@@ -3079,6 +3148,10 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
         pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
       else pure #[]
   let cmdName := if ref.xla then "benchmark-xla" else "benchmark"
+  -- ▶ DIRECT MODE: measure every chapter's own trainer here instead of scaling a foreign
+  --   reference. See `runDirectProbe`. XLA only — the IREE path has no in-process compile, so a
+  --   3-epoch probe would pay ~10-15 min of iree-compile per net.
+  let direct := ref.xla && ((← IO.getEnv "BENCH_DIRECT").getD "" != "")
   IO.println s!"━━━ lake run {cmdName} ━━━ verified-NN training throughput on your GPU"
   IO.println s!"  lowerer: {ref.lowerer}   backend: {backend}   gpu: {gpu}   (synthetic-input probes — no dataset needed)"
   -- Pre-flight: a busy GPU inflates every probe. Warn if the card isn't idle.
@@ -3089,6 +3162,58 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
   | none   => pure ()
   -- Synthetic input (LEAN_MLIR_BENCH_SYNTH, set in runProbe): one constant batch reused
   -- at the dataset's real step count, so no MNIST/CIFAR/Imagenette download is required.
+  if direct then
+    -- ⚠⚠ A 3-epoch probe on a checkpointing trainer is DESTRUCTIVE IN BOTH DIRECTIONS (§4): it
+    --   resumes whatever marker is on disk — measuring a warm restart, or NOTHING if the marker is
+    --   at the epoch budget, which exits `done` with rc=0 and no timing — and it leaves its own
+    --   marker at 3 for the next real run to resume from. So: refuse if a trainer is live, stash
+    --   every XLA checkpoint, measure, restore. Stash rather than delete, because these are
+    --   someone's training state.
+    let ps ← IO.Process.output { cmd := "bash", args := #["-c", "ps -eo comm | grep -c verified || true"] }
+    if (ps.stdout.trim.toNat?.getD 0) > 0 then
+      IO.eprintln "  ⛔ a *-verified* trainer is RUNNING. Direct mode stashes checkpoints and would \
+corrupt it (and contend for the GPU). Stop it first."
+      return 1
+    let stash := ".lake/build/benchdirect-stash"
+    IO.println s!"\n  ▶ DIRECT MODE — measuring each chapter's own trainer on THIS box (3 real epochs each)."
+    IO.println s!"    checkpoints stashed to {stash}/ and restored afterwards (§4: a probe must not resume or leave one)."
+    _ ← IO.Process.output { cmd := "bash", args := #["-c",
+      s!"mkdir -p {stash} && mv .lake/build/*_ckpt_xla.bin* {stash}/ 2>/dev/null; true"] }
+    let mut rows : Array (BenchItem × Option Nat) := #[]
+    for it in benchTable do
+      if it.probeXla.isEmpty || it.epochs == 0 then
+        rows := rows.push (it, none)
+      else
+        rows := rows.push (it, ← runDirectProbe it backend gpu runEnv)
+    -- the probes' own markers go; the stash comes back
+    _ ← IO.Process.output { cmd := "bash", args := #["-c",
+      s!"rm -f .lake/build/*_ckpt_xla.bin*; mv {stash}/* .lake/build/ 2>/dev/null; rmdir {stash} 2>/dev/null; true"] }
+    IO.println s!"\n  MEASURED training time on THIS box ({ref.lowerer}, real data, current certified bytes):\n"
+    let rule := "  " ++ String.ofList (List.replicate 47 '-')
+    IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR s!"ref({ref.lowerer})" 15}measured here"
+    IO.println rule
+    let mut tot := 0
+    for (it, m) in rows do
+      let refCol := match it.refOn ref.xla with | some r => fmtDur r | none => "n/a"
+      match m with
+      | some sec => tot := tot + sec
+                    IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR refCol 15}{fmtDur sec}"
+      | none     => IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR refCol 15}— (probe failed)"
+    IO.println rule
+    IO.println s!"  {padR "Full Part-1 training" 30}{padR "" 15}{fmtDur tot}"
+    IO.println "\n  * every number is 3 steady-state epochs of that chapter's OWN trainer × its own"
+    IO.println "    epoch count — no reference card, no hardware factor, no bottleneck assumption."
+    IO.println "    §2j validated the method at 0.3% (ch9 extrapolated 3480s; real run 3491s)."
+    IO.println "  * real data, so the ~6.3% per-epoch loader term (§2e-ter) is included — unlike the"
+    IO.println "    scaled mode, whose probes are synthetic by design."
+    IO.println "  * current certified bytes, so a re-render cannot silently invalidate it."
+    IO.println "  * ⚠ the five Imagenette rows are TRAIN-ONLY. Their trainers (trainAdamSched) print no"
+    IO.println "    per-epoch ms, so they are measured as median ms/step × 295 steps × 80 ep via the"
+    IO.println "    MAX_STEPS probe — which returns before the eval pass. Eval adds ~5% on R34 and"
+    IO.println "    ~8% on ConvNeXt (§2h). Add that back before comparing to a wall clock."
+    IO.println "  * PJRT_FFI_RESIDENT is not set, so this is the COPYING path (§2d.3: residency is"
+    IO.println "    2.03× on ResNet-34 bs32). Set it to measure the other one."
+    return 0
   let denseMs ← runProbe ref.denseProbe "dense" ref.denseRefMs backend gpu runEnv
   let convMs  ← runProbe ref.convProbe  "conv"  ref.convRefMs  backend gpu runEnv
   let attnMs ← if ref.attnProbe.isEmpty then do
