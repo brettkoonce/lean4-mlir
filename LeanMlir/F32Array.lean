@@ -180,9 +180,15 @@ def extractLoss (out : ByteArray) (lossIdx : Nat) : Float :=
 def dropLoss (out : ByteArray) (nParams : Nat) : ByteArray :=
   out.extract 0 (nParams * 4)
 
-/-- Argmax over 10 float32 values starting at element offset `off`. -/
-@[extern "lean_f32_argmax10"]
-opaque argmax10 (ba : @& ByteArray) (off : USize) : USize
+/-- Argmax over `n` float32 values starting at element offset `off`.
+
+    ⚠ Replaced `argmax10`, which took no `n` and scanned a literal 10 entries. Every net this
+    repo GATES is 10-class (Imagenette / CIFAR / MNIST), so the constant was right everywhere it
+    was ever checked and wrong on exactly the un-gated tier — the 1000-class ImageNet trainers,
+    where it confined every prediction to labels 0..9. Pass the net's own class count at the call
+    site; it is already the multiplier in the `off` expression, so the two cannot disagree. -/
+@[extern "lean_f32_argmax_n"]
+opaque argmaxN (ba : @& ByteArray) (off : USize) (n : USize) : USize
 
 /-- Load MNIST images from IDX file directly into f32 ByteArray (normalized to [0,1]).
     Returns (images ByteArray, count as Nat). -/

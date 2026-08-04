@@ -1139,7 +1139,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
             logitsAcc ← F32.ema logitsAcc logits mom
           let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
           for i in [:evalBatch] do
-            let pred := F32.argmax10 logitsAcc (i * spec.numClasses).toUSize
+            let pred := F32.argmaxN logitsAcc (i * spec.numClasses).toUSize spec.numClasses.toUSize
             let label := lblSlice.data[i * 4]!.toNat
             if pred.toNat == label then correct := correct + 1
             total := total + 1
@@ -1183,7 +1183,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
       for bi in [:evalSteps] do
         let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
         for i in [:evalBatch] do
-          let pred := F32.argmax10 logitsAccs[bi]! (i * spec.numClasses).toUSize
+          let pred := F32.argmaxN logitsAccs[bi]! (i * spec.numClasses).toUSize spec.numClasses.toUSize
           let label := lblSlice.data[i * 4]!.toNat
           if pred.toNat == label then correct := correct + 1
           total := total + 1
@@ -1251,7 +1251,7 @@ def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                     evalParams evalShapesBA xba evalXSh evalBatch.toUSize nClasses
     let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
     for i in [:evalBatch] do
-      let pred := F32.argmax10 logits (i * spec.numClasses).toUSize
+      let pred := F32.argmaxN logits (i * spec.numClasses).toUSize spec.numClasses.toUSize
       let label := lblSlice.data[i * 4]!.toNat
       if pred.toNat == label then correct := correct + 1
       total := total + 1

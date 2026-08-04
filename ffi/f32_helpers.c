@@ -44,12 +44,22 @@ LEAN_EXPORT lean_obj_res lean_f32_he_init(size_t seed, size_t n, double scale, l
     return lean_io_result_mk_ok(ba);
 }
 
-// ---- Argmax over 10 float32 values at element offset ----
-LEAN_EXPORT size_t lean_f32_argmax10(b_lean_obj_arg ba, size_t off) {
+// ---- Argmax over `n` float32 values at element offset ----
+//
+// ⚠ This REPLACED `lean_f32_argmax10`, whose window was the literal 10. That was correct
+// for every net the repo had ever GATED — Imagenette, CIFAR and MNIST are all 10-class — and
+// silently wrong for the 1000-class ImageNet trainers, which score argmax over the first ten
+// logits and can therefore only ever be right on labels 0..9. Measured on the R34/ImageNet
+// 4-GPU run before the fix: epoch 2 reported 471/49920 = 0.94%, which is 471 of the ~499
+// reachable images = 94% on the sub-problem it was actually being asked. The class count is
+// a PARAMETER now precisely so it cannot drift from the net again — the old signature had
+// nowhere to put it, so nothing could check it.
+LEAN_EXPORT size_t lean_f32_argmax_n(b_lean_obj_arg ba, size_t off, size_t n) {
     const float* p = (const float*)lean_sarray_cptr(ba);
+    if (n == 0) return 0;
     size_t best = 0;
     float bestv = p[off];
-    for (size_t i = 1; i < 10; i++) {
+    for (size_t i = 1; i < n; i++) {
         if (p[off + i] > bestv) { best = i; bestv = p[off + i]; }
     }
     return best;

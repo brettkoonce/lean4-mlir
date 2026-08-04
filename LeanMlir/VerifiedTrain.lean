@@ -646,7 +646,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
                         xb xShape bs.toUSize nc.toUSize
                         nResident (ep + 1).toUSize
         for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
-          let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+          let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
           let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
           if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
@@ -718,7 +718,7 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
       let logits ← IreeSession.forwardF32 fwdSess fwdFn thetaCur fwdShapes
                       xb xShape bs.toUSize nc.toUSize
       for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
-        let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+        let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
@@ -1311,7 +1311,7 @@ it and its .epoch marker aside and start fresh."
                       xb xShape evalBs.toUSize nc.toUSize
                       evalResident (ep + 1).toUSize
       for j in [0:min evalBs (nEval - bi * evalBs)] do   -- score real rows only, not the pad
-        let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+        let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * evalBs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
@@ -1410,7 +1410,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
                       xb xShape bs.toUSize d1.toUSize
                       nResident (ep + 1).toUSize
       for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
-        let pred := (F32.argmax10 logits (j * d1).toUSize).toNat
+        let pred := (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
@@ -2342,7 +2342,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
     let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
     let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
     for j in [0:min bs (nEval - bi * bs)] do
-      if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+      if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
         clean := clean + 1
   IO.println s!"clean test acc = {clean}/{nEval} = {clean.toFloat/nEval.toFloat*100.0}%"
   let K := 40
@@ -2363,7 +2363,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
           x ← IreeSession.forwardF32 pgdSess "m.mlp_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
         let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
         for j in [0:min bs (nEval - bi * bs)] do
-          if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
             correct := correct + 1
       let lbl := if linf then "L∞" else "L2"
       IO.println s!"{lbl} PGD eps={eps}: adv acc = {correct.toFloat/nEval.toFloat*100.0}%"
@@ -2451,7 +2451,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
         x ← IreeSession.forwardF32 pgdSess "m.mlp_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
       let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
-        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
           correct := correct + 1
     pure (correct.toFloat / nEval.toFloat * 100.0)
   let tot := nEval.toFloat
@@ -2563,7 +2563,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
       let logits ← IreeSession.forwardF32 fwdSess fwdFn th shapes xb xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
-        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
           c := c + 1
     pure (c.toFloat / nEval.toFloat * 100.0)
   IO.println s!"  training {net.name} ({cfg.epochs} epochs, bs {bs}) ..."
@@ -2596,7 +2596,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
           x ← IreeSession.forwardF32 pgdSess s!"m.{net.slug}_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
         let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
         for j in [0:min bs (nEval - bi * bs)] do
-          if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
             correct := correct + 1
       let lbl := if linf then "L∞" else "L2"
       IO.println s!"{lbl} PGD eps={eps}: adv acc = {correct.toFloat/nEval.toFloat*100.0}%"
@@ -2715,7 +2715,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
         x ← IreeSession.forwardF32 pgdSess s!"m.{net.slug}_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
       let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
-        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
           correct := correct + 1
     pure (correct.toFloat / nEval.toFloat * 100.0)
   let tot := nEval.toFloat
@@ -2746,7 +2746,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
         let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
         let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
         for j in [0:min bs (nEval - bi * bs)] do
-          if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+          if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
             c := c + 1
       let acc := c.toFloat / nEval.toFloat * 100.0
       if acc > bestAcc then bestAcc := acc; bestTheta := theta
@@ -3030,7 +3030,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
         let xb := F32.sliceImages evalImg (bi * bs) bs d0
         let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb (net.xShape bs) bs.toUSize d1.toUSize
         for j in [0:bs] do
-          if (F32.argmax10 logits (j*d1).toUSize).toNat == (evalLbl.get! (4*(bi*bs+j))).toNat then c := c+1
+          if (F32.argmaxN logits (j*d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4*(bi*bs+j))).toNat then c := c+1
       let acc := c.toFloat/(evalBatches*bs).toFloat*100.0
       if acc > bestAcc then bestAcc := acc; bestTheta := theta
       IO.println s!"    epoch {ep+1}/{cfg.epochs}: clean acc = {acc}%"
@@ -3045,7 +3045,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
         let xN ← F32.addGaussianTiled base off.toUSize d0.toUSize bs.toUSize sigma (sd + ci.toUSize)
         let logits ← IreeSession.forwardF32 fwdSess fwdFn th shapes xN (net.xShape bs) bs.toUSize d1.toUSize
         for j in [0:bs] do
-          let a := (F32.argmax10 logits (j*d1).toUSize).toNat
+          let a := (F32.argmaxN logits (j*d1).toUSize d1.toUSize).toNat
           counts := counts.set! a (counts[a]! + 1)
       pure counts
     let sampleCounts := fun (off nBat : Nat) (sd : USize) => sampleCountsB evalImg off nBat sd
@@ -3171,7 +3171,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
     let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
     let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes xb xShape bs.toUSize d1.toUSize
     for j in [0:min bs (nEval - bi * bs)] do
-      if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+      if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
         clean := clean + 1
   IO.println s!"clean test acc = {clean}/{nEval} = {clean.toFloat/nEval.toFloat*100.0}%"
   -- L∞ PGD sweep
@@ -3192,7 +3192,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
         x ← IreeSession.forwardF32 pgdSess "m.linear_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
       let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes x xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
-        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
           correct := correct + 1
     IO.println s!"L∞ PGD eps={eps}: adv acc = {correct}/{nEval} = {correct.toFloat/nEval.toFloat*100.0}%"
   -- ── L2 sandwich: Lipschitz certificate (lower bound) vs L2 PGD (upper bound) ──
@@ -3239,7 +3239,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
         x ← IreeSession.forwardF32 pgdSess "m.linear_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
       let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes x xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
-        if (F32.argmax10 logits (j * d1).toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
+        if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == (evalLbl.get! (4 * (bi * bs + j))).toNat then
           correct := correct + 1
     IO.println s!"L2 PGD eps={eps}: adv acc = {correct.toFloat/tot*100.0}%  (sandwich: cert ≤ true ≤ this)"
   IO.println "done (phase-3 PGD: gradient computed by the proven input-VJP kernel via IREE)."
@@ -3303,7 +3303,7 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
       let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
                       xb xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
-        let pred := (F32.argmax10 logits (j * d1).toUSize).toNat
+        let pred := (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
@@ -3377,7 +3377,7 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
       let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
                       xb xShape bs.toUSize nc.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
-        let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+        let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
@@ -3515,7 +3515,7 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
       let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
                       xb xShape bs.toUSize nc.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
-        let pred := (F32.argmax10 logits (j * nc).toUSize).toNat
+        let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
         let lbl  := (evalLbl.get! (4 * (bi * bs + j))).toNat
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0

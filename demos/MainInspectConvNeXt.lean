@@ -64,7 +64,7 @@ def main : IO Unit := do
     if bi == 0 then firstBatchLogits := logits
     let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch
     for i in [:evalBatch] do
-      let pred := (F32.argmax10 logits (i * specGelu.numClasses).toUSize).toNat
+      let pred := (F32.argmaxN logits (i * specGelu.numClasses).toUSize specGelu.numClasses.toUSize).toNat
       let label := lblSlice.data[i * 4]!.toNat
       predHist := predHist.modify pred (· + 1)
       classTotal := classTotal.modify label (· + 1)

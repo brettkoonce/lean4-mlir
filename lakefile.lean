@@ -1928,6 +1928,18 @@ lean_exe «shard-check» where
   root := `tests.TestShardCheck
   moreLinkArgs := xlaLink
 
+/-- `argmax-check` — the class-count gate on `F32.argmaxN`, the eval scorer every trainer here
+    reads its top-1 through. Needs no GPU and no backend: pure host arithmetic on a synthetic
+    logit block, so it can run anywhere and costs nothing.
+
+    ⚠ It exists because the predecessor `F32.argmax10` scanned a LITERAL 10 entries and was
+    therefore correct on every net the repo gated (Imagenette/CIFAR/MNIST are all 10-class) and
+    silently wrong on the ungated 1000-class ImageNet tier — where it reported 0.94% for a net
+    that was really at ~4.4%, because it could only ever be right on labels 0..9. The file ships
+    its own CONTROL: a 10-wide window re-run on the same data, required to MISS. -/
+lean_exe «argmax-check» where
+  root := `tests.TestArgmaxN
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and
