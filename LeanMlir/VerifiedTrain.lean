@@ -212,17 +212,42 @@ def mkSession (mlirPath outVmfb : String) : IO IreeSession := do
     compileVmfb mlirPath vmfbPath
     IreeSession.create vmfbPath
 
-/-- Init one parameter from its `(dims, initKind)` spec: He(fan-in) weights (kind 0;
-    fan-in = `ic·kH·kW` for a rank-4 conv kernel, `in` for a rank-2 dense matrix),
-    γ = 1 (kind 1), β / bias = 0 (kind 2). -/
+/-- Init one parameter from its `(dims, initKind)` spec, matching the JAX reference's
+    initialisers — they are the oracle these nets are paired against:
+
+      * rank-4 conv kernel `[oc, ic, kH, kW]` → He **fan-OUT**, variance `2/(oc·kH·kW)`
+      * rank-2 dense matrix `[in, out]`       → **Glorot**, variance `2/(in + out)`
+      * γ = 1 (kind 1), β / bias = 0 (kind 2)
+
+    ⚠ **Both weight cases CHANGED 2026-08-04.** This used variance `2/fan_in` for BOTH, where
+    `jax/Jax/Codegen.lean` emits `uniform(±√(6/fan_out))` for convs (variance `2/fan_out` —
+    torchvision's `kaiming_normal_(mode='fan_out', nonlinearity='relu')` convention for ResNet,
+    `emitConvBnInit`) and `uniform(±√(6/(fan_in+fan_out)))` for dense (Glorot, `emitDenseInit`).
+    **The two paths had therefore never agreed on init, on any net.** It is identical wherever
+    `ic == oc`; the gaps are the stem (R34: fan_in 147 vs fan_out 3136 — **4.6× in σ**), every
+    stage-entry conv and 1×1 projection (2×), and every classifier (R34: `2/512` vs `2/1512`,
+    1.7× in σ).
+
+    ⚠⚠ This moves the init of **every verified net**, so no previously recorded accuracy is
+    reproducible from its seed any more. It changes **no committed artifact** — init is host-side
+    and no `verified_mlir/` file mentions it.
+
+    ⚠ The DISTRIBUTION still differs and is left alone deliberately: `F32.heInit` sums three
+    uniforms (Bates-3, ≈ normal) where JAX draws one uniform. **Variance is matched; shape is
+    not.** torchvision itself uses a normal here, so neither side is canonical on that axis, and
+    changing the sampler would move every net for a second-order reason. -/
 private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
   | 1 => F32.const n.toUSize 1.0
   | 2 => F32.const n.toUSize 0.0
   | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
+    -- `heInit`'s output variance is exactly `scale²` (three uniforms on [-½,½], summed, ×2·scale).
+    let variance :=
+      if dims.size == 4 then 2.0 / (dims[0]! * dims[2]! * dims[3]!).toFloat   -- He, fan-OUT
+      else if dims.size == 2 then 2.0 / (dims[0]! + dims[1]!).toFloat         -- Glorot
+      else 2.0 / (dims[0]!).toFloat                                           -- rank-1: unchanged
+    F32.heInit seed.toUSize n.toUSize (Float.sqrt variance)
 
 /-- Load CIFAR-10 `.bin` records (3073 bytes: 1 label byte + 3072 image bytes).
     Returns f32 images `[n×3072]` (normalized) and int32-LE labels `[n×4]`. -/
@@ -1242,7 +1267,14 @@ it and its .epoch marker aside and start fresh."
       if hasBn then
         let batchBn := out.extract ((nRegions * net.nParams + nScalars) * 4)
                                    ((nRegions * net.nParams + nScalars + nBnStats) * 4)
-        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.1)
+        -- ⚠ 0.01, NOT 0.1 — corrected 2026-08-04. `F32.ema` computes
+        -- `(1−m)·running + m·batch`, so this `m` is the weight on the NEW batch, and the
+        -- reference's `momentum=0.99` (`_bn` in `jax/Jax/Codegen.lean`, which updates
+        -- `momentum*rm + (1−momentum)*bm`) is `m = 0.01` here. At 0.1 the running stats
+        -- averaged ~10 batches against the reference's ~100 — 10× noisier. It is EVAL-ONLY,
+        -- so it depressed every reported top-1 without touching a single gradient, and it
+        -- bit hardest early, when the activation statistics are still moving fast.
+        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.01)
         -- ▶ `ema_bn` — the BN running buffers get their OWN shadow, and on a batch-BN net this is
         -- not optional decoration. The reference's own words: eval pairs EMA weights with
         -- EMA-LAGGED stats, "avoiding the weights/stats mismatch that blows up early eval". EMA
@@ -3501,7 +3533,14 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
       thetamv := F32.concat #[thetaMasterNew, mvPrime]
       if hasBn then
         let batchBn := out.extract ((3 * net.nParams + 3) * 4) ((3 * net.nParams + 3 + nBnStats) * 4)
-        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.1)
+        -- ⚠ 0.01, NOT 0.1 — corrected 2026-08-04. `F32.ema` computes
+        -- `(1−m)·running + m·batch`, so this `m` is the weight on the NEW batch, and the
+        -- reference's `momentum=0.99` (`_bn` in `jax/Jax/Codegen.lean`, which updates
+        -- `momentum*rm + (1−momentum)*bm`) is `m = 0.01` here. At 0.1 the running stats
+        -- averaged ~10 batches against the reference's ~100 — 10× noisier. It is EVAL-ONLY,
+        -- so it depressed every reported top-1 without touching a single gradient, and it
+        -- bit hardest early, when the activation statistics are still moving fast.
+        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.01)
         bnFirst := false
     IO.println s!"Epoch {ep + 1}/{nEpochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
     let thetaCur := thetamv.extract 0 pBytes
