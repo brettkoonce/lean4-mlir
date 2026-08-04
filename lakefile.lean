@@ -2739,6 +2739,42 @@ structure BenchItem where
       ch.9 needed it until the MIOpen workaround landed on 2026-07-30. -/
   refSecXla : Option Nat
   tier    : String          -- "" | "mnist" | "cifar" | "imagenette"
+  /-- ⚠⚠ **This chapter's BOTTLENECK MIX is not the one its probe measures**, so a single
+      hardware factor cannot describe it and the row prints a RANGE instead.
+
+      The `family` axis says which *ops* a chapter runs. It does not say what the chapter is
+      *limited by*, and on this path most of them are limited by the parameter round trip, not by
+      arithmetic: §2d.3 measured the param share of a step at **33.5%** for the conv probe
+      (`cifar8-bn`, 32²) against **59.4%** for ResNet-34, **46.7%** for EfficientNet and **84.6%**
+      for the MNIST CNN. A card whose transport:compute ratio differs from the reference's — e.g.
+      PCIe Gen3 x8 against a 7900 XTX — therefore gets a *different* factor for each, and scaling a
+      transport-bound chapter by a compute-bound probe is the §2j mismatched-baseline trap one axis
+      over: same lowerer, same card, wrong bottleneck.
+
+      ⭐ **MEASURED, 2026-08-04 on ares (RTX 4060 Ti, PCIe Gen3 x8):** the probes read conv
+      **0.56×** and dense **1.33×** (idle card) — a 2.4× spread that is not noise but two different
+      bottlenecks. The old single number predicted ch5 at **35m**; the real 80-epoch run came in at
+      **89m** (66.7 s marginal epoch × 80, `runs/r34_pool3s2_80ep_aug04.log`), i.e. **2.5×
+      optimistic**. The bracket's transport end predicts **84m** — 1.06× low.
+
+      ⚠⚠ **SO THE BRACKET DOES NOT CONTAIN THE TRUTH, AND MUST NOT BE SOLD AS A BOUND.** R34's real
+      like-for-like ratio is **5333/3780 = 1.41×**, above *both* probe factors. The cause is
+      structural and known: the probes run `LEAN_MLIR_BENCH_SYNTH=1`, so they exclude the data
+      loader **by design**, and §2e-ter measured per-epoch host overhead at **6.3%** of a 1-GPU
+      epoch — the size of the miss. A bracket over two synthetic probes cannot reach a real run's
+      loader term. Read it as *"the compute/transport estimate spans this"*, not as an interval the
+      answer lies in. It takes ch5 from 2.5× wrong to 1.06× wrong; that is the whole claim.
+
+      On the reference card both factors read ~1.0, the range collapses, and nothing about the
+      published column changes.
+
+      ⚠ Do NOT "fix" this by re-pointing these rows at the dense probe. That is one measured
+      chapter, and one sample is not a measurement — the same error this repo has already paid for
+      three times (the retracted conv-probe thermal story, the retracted `MIOPEN_DEBUG_CONV_GEMM`
+      fix, the retracted pinned-d2h mechanism). The honest fix is a 224² conv probe with its own
+      anchor measured on the reference card; until someone has that card, a bracket is the most
+      the evidence supports. -/
+  transportSensitive : Bool := false
 
 /-- The XLA MNIST/CIFAR rows were measured 2026-07-30 on the reference 7900 XTX with the
     SAME construction as the IREE ones — steady-state ms/epoch (real data + eval, last of
@@ -2761,12 +2797,17 @@ structure BenchItem where
 def benchTable : List BenchItem :=
   [ { chapter := "1  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist" },      -- IREE 535ms × 12   | XLA 239ms × 12
     { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist" },      -- IREE 3200ms × 12  | XLA 676ms × 12
-    { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist" },      -- IREE 23764ms × 10 | XLA 4103ms × 10
+    { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
+      transportSensitive := true },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
     { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar" },      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
-    { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 4260, tier := "imagenette" }, -- IREE 9.5h  | XLA 1h11m
-    { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette" }, -- IREE 5.4h  | XLA 1h25m
-    { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette" }, -- IREE 6.2h  | XLA 1h34m
-    { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6960, tier := "imagenette" }, -- IREE 13.3h | XLA 1h56m
+    { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
+      transportSensitive := true },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
+    { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
+      transportSensitive := true },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
+    { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette",
+      transportSensitive := true },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
+    { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6841, tier := "imagenette",
+      transportSensitive := true },                                                                     -- IREE 13.3h | XLA 1h54m01s ⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the channel-LN net at 6841s
     { chapter := "9  ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette" } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
 
 /-- This chapter's reference wall-clock on the selected lowerer. -/
@@ -2905,12 +2946,34 @@ def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat
       else refSec * aMs / ref.attnRefMs
     else refSec * cMs / ref.convRefMs
 
+/-- **The estimate as a BRACKET**, `(lo, hi)`, for the reason on `BenchItem.transportSensitive`.
+
+    A chapter whose bottleneck mix its probe does not share gets both candidate factors — its own
+    family's (compute-leaning) and the dense probe's (transport-leaning) — and the row prints the
+    interval between them. Everything else returns a degenerate `(x, x)` and prints exactly as
+    before.
+
+    ⭐ **On the reference card the two factors both read ~1.0, so every bracket collapses and the
+    published column is unchanged.** The bracket only opens on a card whose transport:compute ratio
+    differs from the reference's — which is precisely when a single factor stops being meaningful.
+    Measured on ares 2026-08-04: ch5's bracket is 40m–91m and the real run landed at **89m**. -/
+def yourSecRange (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option (Nat × Nat) :=
+  (yourSecOf ref it dMs cMs aMs).map fun base =>
+    if it.transportSensitive then
+      let transport := (it.refOn ref.xla).getD 0 * dMs / ref.denseRefMs
+      (Nat.min base transport, Nat.max base transport)
+    else (base, base)
+
 
 /-- Human duration from whole seconds: `45s` / `12m` / `9.5h`. -/
 def fmtDur (sec : Nat) : String :=
   if sec < 90 then s!"{sec}s"
   else if sec < 5400 then s!"{(sec + 30) / 60}m"
   else let t := (sec * 10 + 1800) / 3600; s!"{t / 10}.{t % 10}h"
+
+/-- Render a bracket: a single duration when it is degenerate, `lo-hi` when it is not. -/
+def fmtRange (lo hi : Nat) : String :=
+  if lo == hi then fmtDur lo else s!"{fmtDur lo}-{fmtDur hi}"
 
 /-- `num/den` as a 2-decimal multiplier string, e.g. `1.24`. -/
 def fmtFactor (num den : Nat) : String :=
@@ -3040,39 +3103,75 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
     let rule := "  " ++ String.ofList (List.replicate 47 '-')
     IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR s!"ref({ref.lowerer})" 15}your gpu"
     IO.println rule
-    let mut yourTotal := 0
+    let mut yourLoTotal := 0
+    let mut yourHiTotal := 0
     let mut refTotal := 0
     let mut covered := 0
+    let mut anyBracket := false
     for it in benchTable do
-      match it.refOn ref.xla, yourSecOf ref it dMs cMs aMs with
-      | some refSec, some yourSec =>
-        yourTotal := yourTotal + yourSec
+      match it.refOn ref.xla, yourSecRange ref it dMs cMs aMs with
+      | some refSec, some (lo, hi) =>
+        yourLoTotal := yourLoTotal + lo
+        yourHiTotal := yourHiTotal + hi
         refTotal := refTotal + refSec
         covered := covered + 1
-        let flag := if it.family == "attn" && aMs == 0 then " *proxy" else ""
-        IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur refSec) 15}{fmtDur yourSec}{flag}"
+        if lo != hi then anyBracket := true
+        -- ⚠ `‡` marks a row whose bottleneck mix its probe does not share, so the estimate is a
+        --   BRACKET rather than a number. See `BenchItem.transportSensitive`.
+        let flag := if it.family == "attn" && aMs == 0 then " *proxy"
+                    else if lo != hi then " ‡" else ""
+        IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur refSec) 15}{fmtRange lo hi}{flag}"
       | _, _ =>
         IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR "n/a" 15}n/a  (no {ref.lowerer} reference)"
     IO.println rule
     let totalLabel := if covered == benchTable.length then "Full Part-1 training"
                       else s!"Part-1 training ({covered} of {benchTable.length} ch.)"
-    IO.println s!"  {padR totalLabel 30}{padR (fmtDur refTotal) 15}{fmtDur yourTotal}"
+    IO.println s!"  {padR totalLabel 30}{padR (fmtDur refTotal) 15}{fmtRange yourLoTotal yourHiTotal}"
     IO.println "\n  `lake run` tiers on your gpu (training time):"
     for (tier, label) in [("mnist", "lake run mnist"), ("cifar", "lake run cifar"),
                           ("imagenette", "lake run imagenette")] do
       let items := benchTable.filter (·.tier == tier)
       let refS := (items.filterMap (·.refOn ref.xla)).foldl (· + ·) 0
-      let yourS := (items.filterMap (fun it => yourSecOf ref it dMs cMs aMs)).foldl (· + ·) 0
+      let rs := items.filterMap (fun it => yourSecRange ref it dMs cMs aMs)
+      let yourLo := (rs.map (·.1)).foldl (· + ·) 0
+      let yourHi := (rs.map (·.2)).foldl (· + ·) 0
       let miss := items.length - (items.filterMap (·.refOn ref.xla)).length
       let note := if miss == 0 then "" else s!"   ({miss} ch. n/a)"
       -- All three demo groups have an `-xla` peer, so name the command the user would
       -- actually run on this path rather than its IREE sibling.
       let suffix := if ref.xla then "-xla" else ""
-      IO.println s!"    {padR (label ++ suffix) 26}{padR (fmtDur refS) 9}→  {fmtDur yourS}{note}"
+      IO.println s!"    {padR (label ++ suffix) 26}{padR (fmtDur refS) 9}→  {fmtRange yourLo yourHi}{note}"
     IO.println s!"\n  * each family uses its own probe ({ref.denseProbe}, {ref.convProbe}\
 {if ref.attnProbe.isEmpty then ", no attn probe" else s!", {ref.attnProbe}"});"
     IO.println "    other 224² convnets are extrapolated from the 32² conv probe — order-of-"
     IO.println "    magnitude."
+    if anyBracket then do
+      IO.println "  * ‡ = the estimate is a RANGE, not a number, because this chapter's BOTTLENECK is"
+      IO.println "    not the one its probe measures. `family` says which ops a chapter runs; it does"
+      IO.println "    not say what limits it. On this path most chapters are limited by the PARAMETER"
+      IO.println "    ROUND TRIP, and its share of a step varies enormously: 33.5% for the conv probe"
+      IO.println "    (cifar8-bn, 32²) against 59.4% for ResNet-34, 46.7% for EfficientNet and 84.6%"
+      IO.println "    for the MNIST CNN (handoff §2d.3). So a card whose transport:compute ratio"
+      IO.println "    differs from the reference's gets a DIFFERENT factor for each, and no single"
+      IO.println "    number is honest. The range spans this card's compute-leaning and"
+      IO.println "    transport-leaning factors; on the reference card they coincide and it collapses."
+      IO.println "    ⭐ Calibration, ares 2026-08-04 (RTX 4060 Ti, PCIe Gen3 x8, idle): probes read"
+      IO.println "    conv 0.56× and dense 1.33×. The old single number put ch5 at 35m; the real"
+      IO.println "    80-epoch run came in at 89m — 2.5× optimistic. The bracket's transport end"
+      IO.println "    predicts 84m, i.e. 1.06× low."
+      IO.println "    ⚠⚠ THE RANGE IS NOT A BOUND. R34's true ratio is 1.41×, above BOTH probe"
+      IO.println "    factors, because the probes run on synthetic input and exclude the data loader"
+      IO.println "    by design (§2e-ter: ~6.3% of a 1-GPU epoch — the size of the miss). Read it as"
+      IO.println "    the span of the compute/transport estimate, not as an interval containing the"
+      IO.println "    answer. It takes ch5 from 2.5× wrong to 1.06× wrong; that is the whole claim."
+      IO.println "    ⚠ A narrow range is not accuracy either: it means the two factors agree, which"
+      IO.println "    on a card unlike the reference is itself worth distrusting."
+      IO.println "  * PJRT_FFI_RESIDENT is NOT set by these probes, so every number here describes"
+      IO.println "    the COPYING path. Residency removes most of the parameter round trip (§2d.3:"
+      IO.println "    2.03× on ResNet-34 bs32, 3.1× on cifar8-bn), which is exactly the term the"
+      IO.println "    brackets are wide about — so a resident run lands near the LOW end and the"
+      IO.println "    reference column would need re-anchoring before that could be reported as an"
+      IO.println "    estimate rather than a coincidence."
     if !ref.attnProbe.isEmpty then
       IO.println "    A `*proxy` ViT row means the attn probe did not report — it failed to build,"
       IO.println "    or it ran without emitting a PROBE line — so that row borrowed the conv"
