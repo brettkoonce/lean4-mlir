@@ -122,6 +122,51 @@ theorem maxPool3s2_attained {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
   exact ⟨ab, hab⟩
 
 -- ════════════════════════════════════════════════════════════════
+-- § Magnitude and closeness — what the FLOAT bridge needs
+-- ════════════════════════════════════════════════════════════════
+--
+-- ⚠⚠ These exist because `r34Forward` — the skeleton `r34_floatBridges` is stated over — supplies
+-- its pool CONCRETELY (`floatBridges_maxPool`) where it supplies all 16 blocks abstractly. So
+-- moving the net's pool moved a `rfl` that had nothing to do with the codegen, and it surfaced as
+-- a **`(deterministic) timeout at whnf`** on `resnet34Forward_full_pc_eq_skeleton` rather than as
+-- a type error. ⚠ Raising the heartbeat budget — the recorded fix for the superficially identical
+-- symptom in `xla_pjrt_handoff.md` §0.2 increment 2 — would have spent unbounded compute on a
+-- proposition that was FALSE. *A `whnf` timeout on an `rfl` is not evidence about the budget; the
+-- first question is whether the two sides should be equal at all.*
+
+/-- **The 3×3 pool never grows magnitudes** — it selects an existing window cell.
+    ⭐ `Finset.sup'` again makes the window size stop mattering: `maxPool2_abs_le` needs a nested
+    `abs_max_le (abs_max_le _ _) (abs_max_le _ _)` for 4 cells, which at 9 would be worse; here it
+    is `sup'_le` plus one `le_sup'`, independent of the window. Fourth collapse of the same kind. -/
+theorem maxPool3s2_abs_le {c h w : Nat} {x : Tensor3 c (2 * h) (2 * w)} {A : ℝ}
+    (hx : ∀ ci hi wi, |x ci hi wi| ≤ A) (ci : Fin c) (hi : Fin h) (wi : Fin w) :
+    |maxPool3s2 x ci hi wi| ≤ A := by
+  obtain ⟨ab, hab⟩ := maxPool3s2_attained x ci hi wi
+  rw [hab]; exact hx _ _ _
+
+/-- **The 3×3 pool is 1-Lipschitz in the sup norm** — the peer of `maxPool2_close`. Standard
+    sup-vs-sup argument: each side is ≤ the other plus `e`, from `sup'_le` and `le_sup'`. -/
+theorem maxPool3s2_close {c h w : Nat} (xt xa : Tensor3 c (2 * h) (2 * w)) {e : ℝ}
+    (hx : ∀ ci hi wi, |xt ci hi wi - xa ci hi wi| ≤ e)
+    (ci : Fin c) (hi : Fin h) (wi : Fin w) :
+    |maxPool3s2 xt ci hi wi - maxPool3s2 xa ci hi wi| ≤ e := by
+  have key : ∀ (u v : Tensor3 c (2 * h) (2 * w)),
+      (∀ a b d, |u a b d - v a b d| ≤ e) →
+      maxPool3s2 u ci hi wi - maxPool3s2 v ci hi wi ≤ e := by
+    intro u v huv
+    obtain ⟨ab, hab⟩ := maxPool3s2_attained u ci hi wi
+    have hle : u ci (win3RowInv hi ab.1) (win3ColInv wi ab.2)
+        - v ci (win3RowInv hi ab.1) (win3ColInv wi ab.2) ≤ e :=
+      le_of_abs_le (huv _ _ _)
+    have hv := le_maxPool3s2 v ci hi wi ab
+    rw [hab]; linarith
+  have h1 := key xt xa hx
+  have h2 := key xa xt (fun a b d => by rw [abs_sub_comm]; exact hx a b d)
+  rw [abs_sub_le_iff]; exact ⟨h1, by linarith⟩
+
+-- (the two flattened peers live at the end of the file, after `maxPool3s2Flat` is defined.)
+
+-- ════════════════════════════════════════════════════════════════
 -- § Smoothness and the argmax predicate
 -- ════════════════════════════════════════════════════════════════
 
@@ -135,6 +180,30 @@ def MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
       (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
     x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ≠
       x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2)
+
+/-- ⭐ **Positional injectivity ⇒ `MaxPool3s2Smooth`** — the discharge lemma for the whole-net live
+    and seal witnesses, the peer of `MnistCNN`'s `maxPool2Smooth_of_injective`. One injectivity
+    argument in place of `36·c·h·w` per-window `decide`s (9 offsets pairwise, against 2×2's 6), which
+    at ResNet-34's stem is why case-bashing is not an option.
+
+    ⚠⚠ **And it is STRICTLY SHORTER than its 2×2 peer, for the reason the padding forced.**
+    `MaxPool2Smooth` is quantified over **offsets**, so its discharge lemma has to get from
+    "the two input positions coincide" back to "the two offsets coincide" — two `Fin.mk.injEq` +
+    `omega` decodes, valid only because there distinct offsets always meant distinct positions.
+    `MaxPool3s2Smooth` is quantified over **positions** precisely because that is false here (the
+    clamped duplicate `a = 0 ≡ a = 1` in the first window, `win3RowInv_first_dup`), so injectivity
+    lands directly on the hypothesis and the decode step does not exist. **The carve-out that made
+    the predicate awkward to state is what makes it cheap to discharge.**
+
+    The hypothesis is the same one the 2×2 sites already supply: on each channel the position map
+    `(r, s) ↦ x ci r s` is injective. -/
+theorem maxPool3s2Smooth_of_injective {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
+    (hinj : ∀ (ci : Fin c) (r r' : Fin (2 * h)) (s s' : Fin (2 * w)),
+              x ci r s = x ci r' s' → r = r' ∧ s = s') :
+    MaxPool3s2Smooth x := by
+  intro ci hi_out wi_out ab ab' hne hval
+  obtain ⟨hr, hs⟩ := hinj ci _ _ _ _ hval
+  exact hne (Prod.ext_iff.mpr ⟨hr, hs⟩)
 
 /-- Input `(ci, hi_in, wi_in)` attains the max of the window at output `(ho, wo)`.
     ⚠ Unlike `MaxPool2IsArgmax` this takes the OUTPUT position explicitly: with overlapping
@@ -434,5 +503,25 @@ noncomputable def maxPool3s2Flat_has_vjp_at {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x) :
     HasVJPAt (maxPool3s2Flat c h w) (Tensor3.flatten x) :=
   hasVJPAt3_to_hasVJPAt (maxPool3s2_has_vjp_at3 x h_smooth)
+
+/-- Flattened magnitude bound — the form the R34 forward float bridge threads
+    (`maxPoolFlat_abs_le`'s peer). -/
+theorem maxPool3s2Flat_abs_le {c h w : Nat} {v : Vec (c * (2 * h) * (2 * w))} {A : ℝ}
+    (hv : ∀ k, |v k| ≤ A) (k : Fin (c * h * w)) :
+    |maxPool3s2Flat c h w v k| ≤ A := by
+  have huf : ∀ ci hi wi, |Tensor3.unflatten v ci hi wi| ≤ A := by
+    intro ci hi wi; simp only [Tensor3.unflatten]; exact hv _
+  simp only [maxPool3s2Flat, Tensor3.flatten]
+  exact maxPool3s2_abs_le huf _ _ _
+
+/-- Flattened closeness — `maxPoolFlat_close`'s peer. -/
+theorem maxPool3s2Flat_close {c h w : Nat} (vt va : Vec (c * (2 * h) * (2 * w)))
+    {e : ℝ} (hv : ∀ k, |vt k - va k| ≤ e) (k : Fin (c * h * w)) :
+    |maxPool3s2Flat c h w vt k - maxPool3s2Flat c h w va k| ≤ e := by
+  have huf : ∀ ci hi wi,
+      |Tensor3.unflatten vt ci hi wi - Tensor3.unflatten va ci hi wi| ≤ e := by
+    intro ci hi wi; simp only [Tensor3.unflatten]; exact hv _
+  simp only [maxPool3s2Flat, Tensor3.flatten]
+  exact maxPool3s2_close (Tensor3.unflatten vt) (Tensor3.unflatten va) huf _ _ _
 
 end Proofs

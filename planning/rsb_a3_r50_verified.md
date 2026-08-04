@@ -21,31 +21,35 @@ deviation found while scoping it (§4b) — a finished max-pool VJP witness and 
 |---|---|---|
 | `VLayer.bottleneckStage` + layout helpers | ✅ built, 7 `#guard`s, controls verified to redden | `VerifiedSpec.lean` |
 | `resnet50Verified` / `resnet50ImagenetVerified` | ✅ **LAYOUT ONLY** — params land on **25,557,032** exactly | `VerifiedNets.lean` |
-| ⭐ `maxPool3s2` **full VJP witness** | ✅ 438 lines, 21 decls, **0 `sorry`**, every theorem 3-axiom | `Proofs/Architectures/MaxPool3s2.lean` |
+| ⭐ `maxPool3s2` **full VJP witness** | ✅ 438 lines, **0 `sorry`**, every theorem 3-axiom; + `maxPool3s2Smooth_of_injective`, `*_abs_le`, `*_close` (2026-08-04) | `Proofs/Architectures/MaxPool3s2.lean` |
 | ⭐ JAX `max_pool2d` → symmetric padding | ✅ landed + gated both ways (§4b) | `jax/Jax/Codegen.lean` |
+| ⭐ the pool's **codegen** | ✅ **DONE 2026-08-04** — 4 op forms, 4 render sites, **14 artifacts re-rendered**, all gates green (§4b) | `Proofs/Codegen/StableHLO.lean` |
 | the bottleneck architecture (3 block VJPs) | ⛔ not started | Phase 1 |
 | `ResNet50RenderB.lean` | ⛔ not started | Phase 2 |
-| the pool's **codegen** | ⛔ not started — site map in §4b | — |
 
-**`verified_mlir/` is 0 lines of diff.** Nothing emits yet, on either thread.
+**`verified_mlir/` moved on exactly 14 files / 24 lines** — the R34 stem pool and nothing else.
+Nothing R50-specific emits yet; `resnet50Verified` is still layout-only.
 
 ### ⚠⚠ THE ONE THING THAT BITES IF YOU DO NOTHING ELSE
 
-**JAX now pools the paper's 3×3 window; the verified path still pools 2×2.** The two disagree at
-the stem *more* than before this work started. That is the cost of fixing the cheaper side first,
-and it closes when the pool codegen + the 14-artifact re-render land.
+✅ **Both paths pool the paper's symmetric 3×3/s2 as of 2026-08-04** — the inconsistency window this
+section used to warn about is CLOSED, and R34's verified-vs-JAX pair compares one architecture again.
 
-⛔ **Do not start an R34 verified-vs-JAX pair run in this window** — it would compare two nets that
-differ at the stem. The R34/ImageNet 30-epoch run (~26 h, `xla_pjrt_handoff.md` §0.3) is otherwise
-ready and was the queued next run.
+⛔ **But do not quote a pair number yet, and the reason is now RE-RUNS, not code.** The verified
+**90.06%** Imagenette baseline belongs to the 2×2 net and is VOID; so are JAX's RSB-A3 76.66% and
+R34/ImageNet 72.1%. Both sides need re-measuring before anything is compared across them. The
+R34/ImageNet 30-epoch run (~26 h, `xla_pjrt_handoff.md` §0.3) is otherwise ready.
 
 ### ▶ Suggested order for a fresh session
 
-1. **The pool codegen** (§4b's site map) — 10 sites across two forms, then the R34 renderer swap.
-   Unblocks everything and closes the inconsistency window.
-2. **Re-render the 14 `resnet34*`/`resnet34in*` artifacts**, re-run R34's ties / `dp-check` /
-   `shard-check` / residency, re-run the **90.06%** Imagenette baseline (~1h03m).
-3. **Re-run the voided JAX numbers** (RSB-A3, R34/ImageNet).
+1. ~~**The pool codegen**~~ ✅ **DONE 2026-08-04** (§4b), together with the 14-artifact re-render.
+   ⚠ Read §4b's two undercounts before trusting any other site map in this doc.
+2. **The re-runs**, which are what the pair now waits on: the **90.06%** Imagenette baseline
+   (~1h03m) and the voided JAX numbers (RSB-A3, R34/ImageNet). Also cheap and unrun: R34's
+   `dp-check` / `shard-check` / residency.
+3. **Optionally, the live/seal port** — `maxPool3s2Smooth_of_injective` exists now and the port is
+   measured as a name swap per site (§4b's owed list), but it changes what 5 witness files describe,
+   which is a §2n label-vs-port call.
 4. **Then** Phase 1 — the bottleneck block VJPs. It is CPU proof work, so §0.1 of the handoff says
    it pairs well with a long run burning in the background.
 
@@ -291,7 +295,102 @@ propagates into the gap function and the domination step of `flat_hasFDerivAt`.
 * **JAX R34/ImageNet 72.1% / 90.7%** (90 ep).
 * Every other 3×3-pool JAX number. ⚠ 2×2 nets are provably unaffected (gate above).
 
-### ▶ NEXT: the codegen — site map MEASURED, so it is mechanical
+### ✅ THE CODEGEN — DONE 2026-08-04. **The verified stem pool is the paper's, and the two paths agree again**
+
+`lake build Proofs Certs Codegen` **3,916** green (was 3,915) · `verified_mlir/` **14 artifacts,
+24 lines** · `TestBatchedEmitTie` **47 → 49** forms · axiom audit **1,524 → 1,536**, all clean.
+The verified side now renders `maxPool3s2Flat` and the JAX side already emitted symmetric 3×3/s2
+(`MainResnet{,Imagenet}.lean` and both R50 mains are `.maxPool 3 2`), so **§0a's "the two paths
+differ at the stem, worse than before the work started" is CLOSED.**
+
+| gate | result |
+|---|---|
+| `verified_mlir/` re-render | **exactly 24 lines: 14 `reduce_window` + 10 `select_and_scatter`** — every artifact's line count and SSA numbering UNMOVED |
+| ⭐ emit tie, new block | window `1,1,3,3` · stride `1,1,2,2` · padding `[[1,1],[1,1]]` · 2×2 untouched · **`maxPool3s2 ≠ maxPool`** |
+| ⚠ emit-tie CONTROL | symmetric → XLA `'SAME'` `[[0,1],[0,1]]` → **rc=1 on the PADDING assertion alone**, while window, stride, output shape and all 49 tie rows stay green |
+| `fwd-tie resnet34` (XLA) | compiles 1797 ms, self-tie **bit-exact 320/320**, logits \|max\| 2.27 |
+| `fwd-tie resnet34 --eval` | compiles, self-tie **bit-exact 320/320** + 36 BN layers / 17,024 stats |
+| ⭐ DISCRIMINATION, `_fwd` 2×2 vs 3×3 | **rel 0.613, 0/320 bit-exact** — the change is real, not vacuous |
+| ⭐⭐ DISCRIMINATION, `_fwd_eval` | **rel 1.994** — *above 1, i.e. the logits disagree in SIGN* |
+| `r34-mom-tie` (XLA, the TRAIN step) | ① 905e-9 ② 58.5e-9 ③ bit-exact 21,289,802 — controls fire at 475,297× and 351× |
+| audits | writer **137**/one-each · manifest **134** · path==entry **132** · `resnet34_fwd` still a **1106-line** byte-identical prefix · MALFORMED / empty-slot / `%zb` all OK |
+
+#### ⚠⚠ THIS SECTION'S OWN SITE MAP UNDERCOUNTED, IN TWO PLACES — and the second one had teeth
+
+**1. It is FOUR render sites and FOUR op forms, not two.** `ResNet34RenderB` does use exactly two
+pool forms, as measured — but `resnet34_fwd` and `resnet34_fwd_eval` are written by
+**`ResNet34Render`**, the *per-example* renderer, and **the AdamW trainer evals through
+`resnet34_fwd_eval`**. So the plan's "`ResNet34RenderB` swap (2 lines)" would have trained a
+3×3-pool net and scored it with a 2×2-pool forward.
+
+⭐ **That is not a hypothetical — it is measured at rel 1.994**, above 1, meaning the logits
+disagree in **sign**. It is §2g's `mobilenetv2_fwd` defect (rel 1.857) reproduced on ResNet-34, the
+net where the two-worlds trap was first found. Per-example `SHlo.maxPool3s2F`/`.maxPool3s2Back`
+were added alongside the batched pair for exactly this; all four ride the generic `.batched` tag,
+so the ~5-sites-each estimate held.
+
+**2. ⛔ The kernel is INVISIBLE to the param-count audit, so §2m's method could never have caught
+this.** `VerifiedSpec.toSpecs` is `| maxPool _ _ => #[]` — it discards **both** nats. So
+`.maxPool 2 2` and `.maxPool 3 2` are identical to `toSpecs`, to `ResNet34Layout.specs`, to the
+`#guard`s, and to every param-count check that closed five nets' architecture gaps in §2m. The
+**only** thing in the repo that reads the `3` is `denoteR34Full`'s pattern match, which is why the
+spec's pool and `resnet34Forward_full_pc`'s must move together and why `resnet34Verified_denote_eq`'s
+`rfl` is now the thing holding them together. *General form: a parameter no audit reads is a
+parameter that can be wrong forever.*
+
+#### ⛔⛔ AND IT BROKE A `rfl` IN THE FLOAT SUBSYSTEM — as a TIMEOUT, not a type error
+
+`r34Forward` — the skeleton `r34_floatBridges` is stated over — supplies its **pool concretely**
+(`floatBridges_maxPool`) where it supplies all 16 blocks as abstract `FloatBridges` hypotheses. So
+moving the net's pool falsified `resnet34Forward_full_pc_eq_skeleton`, a `rfl` in
+`WholeNetForwardTies.lean`, and the build surfaced it as
+**`(deterministic) timeout at whnf, maximum number of heartbeats (200000)`**.
+
+⚠⚠ **Raising the heartbeat budget is the recorded fix for the superficially identical symptom in
+`xla_pjrt_handoff.md` §0.2 increment 2, and here it would have spent unbounded compute on a
+proposition that is FALSE.** *A `whnf` timeout on an `rfl` is not evidence about the budget; the
+first question is whether the two sides should be equal at all.* Carry that forward.
+
+Closed with **four declarations, not a port**: `maxPool3s2_abs_le`, `maxPool3s2_close` (+ their
+flattened peers) → `floatClose_maxPool3s2` → `floatBridges_maxPool3s2`, then `r34Forward`'s pool.
+⭐ **`Finset.sup'` collapsed the window size for the FOURTH time in this op**: `maxPool2_abs_le` is
+a nested 4-way `abs_max_le` that would be 9-way at 3×3; the `sup'` version is `sup'_le` plus one
+`le_sup'` and does not mention the window at all.
+
+#### ⚠ WHAT IS STILL OWED — none of it is codegen
+
+* ✅ **`maxPool3s2Smooth_of_injective` LANDED 2026-08-04** — the discharge lemma the live/seal port
+  needs. 3-axiom clean; audit **1,536 → 1,539**. ⭐ **It is SHORTER than its 2×2 peer**, and the
+  reason is the carve-out that made the predicate awkward to state: `MaxPool2Smooth` quantifies over
+  **offsets**, so `maxPool2Smooth_of_injective` has to decode "the positions coincide" back to "the
+  offsets coincide" (two `Fin.mk.injEq` + `omega`), valid only because there distinct offsets always
+  meant distinct positions. `MaxPool3s2Smooth` quantifies over **positions** — forced by the clamped
+  first-window duplicate — so injectivity lands on the hypothesis directly and the decode does not
+  exist. *The thing that made the predicate ugly is what makes it cheap to discharge.*
+* ⛔ **But the 5 live/seal witnesses are NOT ported** — they still pool 2×2.
+  `ResNet34Live{PC,Realistic}`, `ResNet34.lean`, `ResNet34LiveSeal`, `ResNet34LiveRealisticSeal`.
+  They stay TRUE (stated over their own local defs) and they are 2-channel *representatives*, the
+  same status `Architectures/ConvNeXt.lean`'s ch9 net has — but they describe a pool the repo does
+  not ship. ⭐ **The port cost is now MEASURED, not estimated**: a throwaway probe re-proved the
+  real realistic-dims site (`stem224_maxpool_smooth`, at 2×112²→2×56²) with the tactic body
+  **verbatim unchanged** and only the two names swapped, and the `HasVJPAt` / `DifferentiableAt`
+  it feeds both went through (`maxPool3s2Flat_has_vjp_at` / `_differentiableAt` already existed, and
+  `resnet34_has_vjp_at` takes the pool as a PARAMETER `mp`). So the port is a name swap per site.
+  Left undone deliberately — it changes what those files describe, which is §2n's label-vs-port
+  call and Brett's to make.
+* ⛔ **No long run** (§0.1). The **90.06%** Imagenette baseline belongs to the 2×2 net and is now
+  VOID; the re-run is ~1h03m. Every gate above says the render is right, not that it trains better.
+* ⛔ **The JAX numbers voided in §4b above are still not re-run.**
+* ⚠ **`resnet34-adam-tie` was NOT run** — it is IREE-linked and IREE does not link on ares
+  (`xla_pjrt_handoff.md` §0.10). `r34-mom-tie` (XLA) covers the train step instead, and is what
+  compiled the new `select_and_scatter` at all.
+* ⚠ **`dp-check` / `shard-check` / residency not re-run.** Cheap and unblocked; the pool is
+  upstream of the collective so nothing about them should move, but that is reasoning.
+* ⚠ **`ResNet34RenderB` is still un-diffed by the CI drift guard** (13 of the 14 R34 artifacts are
+  baselined). So `verified_mlir/`'s diff here is evidence only because the writers were forced by a
+  real `lake build Proofs Certs Codegen`.
+
+*The original plan follows, for the record.*
 
 ~~1. The `HasVJPAt3` witness~~ ✅ **DONE 2026-08-04** (above). The "33 declarations to mirror"
 estimate was right about the source region and pessimistic about the work — see the four collapses.

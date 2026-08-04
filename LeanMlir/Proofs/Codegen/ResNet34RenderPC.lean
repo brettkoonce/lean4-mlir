@@ -119,7 +119,9 @@ noncomputable def resnet34Forward_full_pc (ε : ℝ)
   idFwd (h := 56) (w := 56) ε a2W1 a2b1 a2g1 a2t1 a2W2 a2b2 a2g2 a2t2 ∘
   idFwd (h := 56) (w := 56) ε a1W1 a1b1 a1g1 a1t1 a1W2 a1b2 a1g2 a1t2 ∘
   idFwd (h := 56) (w := 56) ε a0W1 a0b1 a0g1 a0t1 a0W2 a0b2 a0g2 a0t2 ∘
-  maxPoolFlat 64 56 56 ∘
+  -- ⭐ He et al.'s 3×3/s2 stem pool (2026-08-04). ⚠ Read `maxPool3s2Flat`'s docstring before
+  -- "simplifying" this back: `maxPoolFlat` has the same TYPE and a different function.
+  maxPool3s2Flat 64 56 56 ∘
   cbrStridedPC (h := 112) (w := 112) Ws bs ε γs βs
 
 namespace StableHLO
@@ -210,7 +212,7 @@ def resnet34FwdGraphFullPC (epsStr : String) (ε : ℝ)
     (Wd : Mat 512 10) (bd : Vec 10)
     (x : Vec (3 * 224 * 224)) : SHlo 10 :=
   let pooled : SHlo (64 * 56 * 56) :=
-    .maxPoolF (c := 64) (h := 56) (w := 56)
+    .maxPool3s2F (c := 64) (h := 56) (w := 56)
       (.reluF (.bnPerChannelF (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr ε γs βs
         (.flatConvStridedF (h := 112) (w := 112) "%sW" "%sb" Ws bs (.operand "%x" x))))
   let s1b0 := idBlockGraphPC "s1b0" epsStr a0W1 a0b1 ε a0g1 a0t1 a0W2 a0b2 ε a0g2 a0t2 pooled
@@ -258,7 +260,7 @@ theorem resnet34FwdGraphFullPC_faithful (epsStr : String) (ε : ℝ)
   simp only [resnet34FwdGraphFullPC, resnet34Forward_full_pc, idFwd, downFwd, cbrStridedPC,
              idBlockGraphPC_faithful, downBlockGraphPC_faithful,
              reluF_faithful, bnPerChannelF_faithful, flatConvStridedF_faithful,
-             maxPoolF_faithful, gapF_faithful, denseF_faithful, den_operand, Function.comp_apply]
+             maxPool3s2F_faithful, gapF_faithful, denseF_faithful, den_operand, Function.comp_apply]
 
 end StableHLO
 end Proofs

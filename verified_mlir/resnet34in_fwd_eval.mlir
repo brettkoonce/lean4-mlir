@@ -37,7 +37,7 @@ module @m {
       ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):
         %pm = stablehlo.maximum %pa, %pb : tensor<f32>
         stablehlo.return %pm : tensor<f32>
-    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<256x64x112x112xf32>, tensor<f32>) -> tensor<256x64x56x56xf32>
+    }) {window_dimensions = array<i64: 1, 1, 3, 3>, window_strides = array<i64: 1, 1, 2, 2>, padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>} : (tensor<256x64x112x112xf32>, tensor<f32>) -> tensor<256x64x56x56xf32>
     %v23 = stablehlo.reshape %v22 : (tensor<256x64x56x56xf32>) -> tensor<256x200704xf32>
     %v24 = stablehlo.reshape %v23 : (tensor<256x200704xf32>) -> tensor<256x64x56x56xf32>
     %v25 = stablehlo.convolution(%v24, %s1b0W1)

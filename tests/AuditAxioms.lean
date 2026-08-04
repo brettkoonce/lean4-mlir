@@ -689,6 +689,45 @@ open Proofs
 #print axioms StableHLO.cnnFwdGraph_faithful
 #print axioms StableHLO.convBack_faithful
 #print axioms StableHLO.maxPoolBack_faithful
+-- ⭐ He et al.'s 3×3/s2 STEM POOL (`planning/rsb_a3_r50_verified.md` §4b) — the op every ResNet
+-- here now uses, and the whole witness chain behind it. ⚠ The witness landed 2026-08-04 and was
+-- **never audited**; it is added here with the codegen that consumes it, which is §2n finding 2's
+-- own rule applied on time for once (*when you replace X with Y, diff the audit coverage of X
+-- against Y*) — the render's pool moved from `maxPoolF_faithful` above to `maxPool3s2F_faithful`
+-- below, and the rung-E capstone moved with it.
+--   the window geometry: the low clamp IS Nat truncated subtraction, so the symmetric form needs
+--   no `min` and no extended-reals type for the `-∞` pad.
+#print axioms win3RowInv_first_dup
+#print axioms win3ColInv_first_dup
+#print axioms win3Row_mem_le_two
+--   the argmax: `Finset.sup'` over `Fin 3 × Fin 3`, which is why window size stopped mattering
+--   (`maxPool2_eq_at_max` needs a 4-way `fin_cases`; at 3×3 that would have been 9).
+#print axioms maxPool3s2_eq_at_max
+#print axioms maxPool3s2_eq_argmax_value
+--   the local linearisation and the smooth-point VJP. ⚠ `maxPool3s2LocalReindex` is NOT injective
+--   — overlapping windows can select one input twice — and `reindexCLM`'s adjoint sums over
+--   preimages by construction, which is why the accumulating backward needed no new analysis.
+#print axioms maxPool3s2_flat_hasFDerivAt
+#print axioms pdiv3_maxPool3s2_smooth
+#print axioms maxPool3s2_has_vjp_at3
+#print axioms maxPool3s2Flat_differentiableAt
+#print axioms maxPool3s2Flat_has_vjp_at
+--   ⭐ the DISCHARGE lemma for the smoothness hypothesis — `maxPool2Smooth_of_injective`'s peer,
+--   and the piece the whole-net live/seal witnesses need to move off the 2×2 pool. One injectivity
+--   argument in place of 36·c·h·w per-window `decide`s. ⚠ It is SHORTER than its 2×2 peer because
+--   `MaxPool3s2Smooth` quantifies over POSITIONS (forced by the clamped first-window duplicate),
+--   so injectivity lands on the hypothesis directly and the offset-decode step does not exist.
+#print axioms maxPool3s2Smooth_of_injective
+--   and the float side (`floatBridges_maxPool`'s peer) — needed because `r34Forward` supplies its
+--   pool CONCRETELY where it supplies all 16 blocks abstractly, so the render swap moved a `rfl`
+--   in `WholeNetForwardTies` and surfaced it as a `whnf` timeout rather than a type error.
+#print axioms floatClose_maxPool3s2
+#print axioms floatBridges_maxPool3s2
+--   and the codegen that denotes it: forward `reduce_window` at window 3 / stride 2 / SYMMETRIC
+--   padding 1, backward the same window on `select_and_scatter` (whose add-reduce already
+--   accumulates, so the emitter needed no change).
+#print axioms StableHLO.maxPool3s2F_faithful
+#print axioms StableHLO.maxPool3s2Back_faithful
 -- A2c: the whole-chain CNN backward graph denotes the proven conditional
 -- whole-network VJP mnistCnnNoBn_has_vjp_at.backward (MLP-analog of
 -- mlpBackGraph_faithful).

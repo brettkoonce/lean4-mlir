@@ -1,4 +1,8 @@
 import LeanMlir.Proofs.Codegen.Resnet34BlockBridge
+-- He et al.'s 3×3/s2 stem pool, for `floatClose_maxPool3s2` below. It imports only
+-- `Architectures.CNN`, which this file already has transitively (it uses `maxPoolFlat_abs_le`),
+-- so this adds no cycle. `planning/rsb_a3_r50_verified.md` §4b.
+import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-!
 # ℝ→Float32 bridge: the composition backbone (whole-net certificate)
@@ -135,6 +139,16 @@ theorem floatClose_maxPool {c h w : Nat} (A : ℝ) :
     FloatClose A A (maxPoolFlat c h w) (maxPoolFlat c h w) (fun e => e) :=
   ⟨fun _v hv i => ⟨maxPoolFlat_abs_le hv i, maxPoolFlat_abs_le hv i⟩,
    fun vt va _e _ _ hd i => maxPoolFlat_close vt va hd i⟩
+
+/-- ⭐ **He et al.'s 3×3/s2 stem pool is `FloatClose`** — the peer of `floatClose_maxPool`, and
+    identical in shape: a max is EXACT (it selects an existing cell, so the modulus is `id` and the
+    magnitude is unchanged) whatever the window size. The overlap that makes the *backward*
+    accumulate is invisible here, because the forward at one output still reads one cell.
+    `planning/rsb_a3_r50_verified.md` §4b. -/
+theorem floatClose_maxPool3s2 {c h w : Nat} (A : ℝ) :
+    FloatClose A A (maxPool3s2Flat c h w) (maxPool3s2Flat c h w) (fun e => e) :=
+  ⟨fun _v hv i => ⟨maxPool3s2Flat_abs_le hv i, maxPool3s2Flat_abs_le hv i⟩,
+   fun vt va _e _ _ hd i => maxPool3s2Flat_close vt va hd i⟩
 
 /-- **Global-average-pool is `FloatClose`** — `Vec (c·h·w) → Vec c`, the SE squeeze.
     GAP is a per-channel `bnMean` (`globalAvgPoolFlat_eq_bnMean`), so the real output
@@ -511,6 +525,10 @@ theorem floatBridges_relu {n : Nat} : FloatBridges (relu n) :=
 /-- MaxPool float-bridges (magnitude-stable). -/
 theorem floatBridges_maxPool {c h w : Nat} : FloatBridges (maxPoolFlat c h w) :=
   fun A hA => ⟨A, _, _, hA, floatClose_maxPool A⟩
+
+/-- 3×3/s2 stem-pool float-bridges — `floatBridges_maxPool`'s peer, same one-liner. -/
+theorem floatBridges_maxPool3s2 {c h w : Nat} : FloatBridges (maxPool3s2Flat c h w) :=
+  fun A hA => ⟨A, _, _, hA, floatClose_maxPool3s2 A⟩
 
 /-- Convolution float-bridges (output magnitude `layerAct + layerBudget`). -/
 theorem floatBridges_flatConv {ic oc h w kH kW : Nat} (M : FloatModel)

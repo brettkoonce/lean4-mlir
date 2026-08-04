@@ -19,6 +19,10 @@ import LeanMlir.Proofs.Codegen.RmsPropStep
 -- DropPath imports only Architectures.ConvNeXt (for `layerScale`, which this file already has in
 -- scope), so it adds no cycle either. `planning/stochastic_depth.md`.
 import LeanMlir.Proofs.Codegen.DropPath
+-- He et al.'s 3×3/s2 stem pool (`maxPool3s2Flat` + its VJP witness), so the stem-pool ops can
+-- denote it. MaxPool3s2 imports only Architectures.CNN, which this file already has in scope
+-- transitively, so it adds no cycle. `planning/rsb_a3_r50_verified.md` §4b.
+import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # R4 — printer faithfulness, Stage A (Chapter 1: the linear classifier)
 
@@ -180,6 +184,15 @@ inductive BatchableOp : Nat → Nat → Type where
   -- Its BACKWARD is `maxPoolBackB`, not a descriptor — it routes `dy` to the saved input's
   -- window argmax, which is per-example data.
   | maxPool {c h w : Nat}                                  : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
+  -- ⭐ **3×3/s2 max-pool FORWARD** — He et al.'s ResNet stem pool (`planning/rsb_a3_r50_verified.md`
+  -- §4b). Same TYPE as `.maxPool` above (112→56 either way, since symmetric `(3−1)/2 = 1` padding
+  -- makes the output width `h`), and a **different function**: the windows OVERLAP. That the two
+  -- share a type is exactly why the deviation survived undocumented on every ResNet here — nothing
+  -- ever failed to compile. A descriptor for `.maxPool`'s reason: the forward carries no saved
+  -- value, so `batchMap N maxPool3s2Flat` is per-example pooling across the batch.
+  -- ⚠ Its BACKWARD is `maxPool3s2BackB`, and it ACCUMULATES: an input can be the argmax of up to
+  -- four windows, where `maxPool2`'s backward is a single lookup. See `MaxPool3s2.lean`.
+  | maxPool3s2 {c h w : Nat}                               : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
   -- NOTE: the pointwise activation VJPs (`swishBack`/`sigmoidBack`/`selectPos`) are
   -- deliberately NOT here. `BatchableOp` lifts a FIXED function across examples, and
   -- their backward depends on the saved pre-activation, which varies per example —
@@ -316,6 +329,10 @@ inductive SHlo : Nat → Type where
   | flatConvF  {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)                    : SHlo (ic*h*w) → SHlo (oc*h*w)
   | maxPoolF   {c h w : Nat}                                    : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
+  -- ⭐ The **3×3/s2** peer of `maxPoolF` — He et al.'s ResNet stem pool, at the PER-EXAMPLE index
+  -- (`ResNet34Render`'s world; the batched peer is the `BatchableOp.maxPool3s2` descriptor). Same
+  -- type, overlapping windows, different function — see the note on that descriptor.
+  | maxPool3s2F {c h w : Nat}                                   : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
   -- Conv input-VJP backward (reversed-kernel `stablehlo.convolution`); `v` is
   -- the saved conv input. Conv is linear, so this is a global VJP.
   | convBack   {ic oc h w kH kW : Nat} (wName : String)
@@ -323,6 +340,11 @@ inductive SHlo : Nat → Type where
   -- Max-pool backward (`select_and_scatter`, route dy to the window argmax);
   -- `x` is the saved pre-pool input. Conditional (no-ties) like the ReLU kink.
   | maxPoolBack {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
+  -- ⭐ The **3×3/s2** peer of `maxPoolBack`. Same `select_and_scatter`, wider window, symmetric
+  -- padding — ⚠ and **nothing else changes**, because `select_and_scatter` already scatters with an
+  -- **add** reduction, which is exactly the accumulation overlapping windows need. The emitter was
+  -- always general enough; only the window attributes move.
+  | maxPool3s2Back {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
   -- Chapter 3 (CNN) param-SGD tail (the conv train step, folded into the AST):
   -- the fused conv kernel/bias update ops — the conv analogue of `weightSgd`/`biasSgd`.
   -- `convWeightSgd`: `W − lr·(conv2d_weight_grad(b,x)·dy)` via the transpose-trick conv
@@ -526,6 +548,14 @@ inductive SHlo : Nat → Type where
   -- `batchMapAux`, which hands example `n` its OWN slice of `x` (a `batchMap` descriptor would
   -- hand every example one example's input). Conditional (no window ties), like the unbatched op.
   | maxPoolBackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
+      SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
+  -- ⭐ Batched **3×3/s2** max-pool backward — `maxPoolBackB`'s peer at the paper's stem pool.
+  -- Same `batchMapAux` story (example `n` gets its OWN slice of `x`), same reason it is not a
+  -- descriptor. What differs from the 2×2 peer is only inside `maxPool3s2BackFlat`: the windows
+  -- overlap, so the backward SUMS over every output that selected this input rather than looking
+  -- one up. The emitted `select_and_scatter` needed no change for that — it already reduces with
+  -- `add`. `planning/rsb_a3_r50_verified.md` §4b.
+  | maxPool3s2BackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
       SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
   -- Batched conv BIAS param-SGD, the peers of `conv{,Strided}WeightSgdB`: `b − lr·Σ_n dβ_n`,
   -- the same shared-parameter batch sum the rest of the `*SgdB` family takes. The bias grad is
@@ -1081,6 +1111,27 @@ noncomputable def maxPoolBackFlat (c h w : Nat)
     if MaxPool2IsArgmax (Tensor3.unflatten xv : Tensor3 c (2*h) (2*w)) q.1 q.2 p.2
     then (Tensor3.unflatten dyv : Tensor3 c h w) q.1 (winRow q.2) (winCol p.2) else 0
 
+/-- **3×3/s2 max-pool backward (flattened)** — the peer of `maxPoolBackFlat` at He et al.'s stem
+    pool, matching `maxPool3s2_has_vjp_at3.backward` lifted through `hasVJPAt3_to_hasVJPAt`. Total
+    in the saved input `xv` (the no-ties proof lives only in `.correct`).
+
+    ⚠⚠ **This is a SUM where the 2×2 peer is a lookup, and that is the whole difference between the
+    two pools.** `maxPool2`'s windows tile, so each input is the argmax of at most one output and
+    the backward can name it directly. 3×3/s2 windows OVERLAP, so an input can be the argmax of up
+    to four outputs (`win3Row_mem_le_two` squared) and the cotangent must ACCUMULATE. Nothing in
+    `HasVJPAt3.correct` had to change for that — it already states the backward as a sum over all
+    outputs, and `maxPool2`'s peer merely *collapses* it using disjointness. -/
+noncomputable def maxPool3s2BackFlat (c h w : Nat)
+    (xv : Vec (c*(2*h)*(2*w))) (dyv : Vec (c*h*w)) : Vec (c*(2*h)*(2*w)) :=
+  fun idx =>
+    let p := finProdFinEquiv.symm idx
+    let q := finProdFinEquiv.symm p.1
+    ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
+      (if maxPool3s2LocalReindex (Tensor3.unflatten xv : Tensor3 c (2*h) (2*w))
+              (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
+            = finProdFinEquiv (finProdFinEquiv (q.1, q.2), p.2)
+        then (1 : ℝ) else 0) * (Tensor3.unflatten dyv : Tensor3 c h w) co ho wo
+
 /-- **Row-softmax (flattened)** — apply the 1-D `softmax` (MLP.lean) to each of
     the `m` rows of the row-major `Vec (m*n)`. Definitionally equal to
     `Mat.flatten ∘ rowSoftmax ∘ Mat.unflatten` (Attention.lean's `rowSoftmax`);
@@ -1278,6 +1329,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .relu (n := n) => relu n
   | _, _, .relu6 (n := n) => relu6 n
   | _, _, .maxPool (c := c) (h := h) (w := w) => maxPoolFlat c h w
+  | _, _, .maxPool3s2 (c := c) (h := h) (w := w) => maxPool3s2Flat c h w
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
   -- The five ViT/ConvNeXt row/pointwise forms — each denotes the SAME per-example function its
@@ -1518,8 +1570,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .convertF rnd e => fun i => rnd (den e i)
   | _, .flatConvF _ _ W b e => flatConv W b (den e)
   | _, .maxPoolF (c := c) (h := h) (w := w) e => maxPoolFlat c h w (den e)
+  | _, .maxPool3s2F (c := c) (h := h) (w := w) e => maxPool3s2Flat c h w (den e)
   | _, .convBack _ W b v e => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v (den e)
   | _, .maxPoolBack (c := c) (h := h) (w := w) _ x e => maxPoolBackFlat c h w x (den e)
+  | _, .maxPool3s2Back (c := c) (h := h) (w := w) _ x e => maxPool3s2BackFlat c h w x (den e)
   | _, .bnF (n := n) _ _ _ ε γ β e => bnForward n ε γ β (den e)
   | _, .bnBack (n := n) _ _ _ ε γ x e => bn_grad_input n ε γ x (den e)
   | _, .addV a b       => fun j => den a j + den b j
@@ -1558,6 +1612,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
   | _, .maxPoolBackB (N := N) (c := c) (h := h) (w := w) _ x e =>
       batchMapAux N (maxPoolBackFlat c h w) x (den e)
+  | _, .maxPool3s2BackB (N := N) (c := c) (h := h) (w := w) _ x e =>
+      batchMapAux N (maxPool3s2BackFlat c h w) x (den e)
   | _, .convBiasSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ W x b lr e =>
       fun o => b o - lr * ∑ n : Fin N,
         (conv2d_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward b
@@ -1957,6 +2013,24 @@ theorem den_batchOp_gelu_eq_geluF {N n : Nat} (e : SHlo (N * n)) :
 @[simp] theorem den_maxPoolBackB {N c h w : Nat} (xN : String) (x : Vec (N*(c*(2*h)*(2*w))))
     (e : SHlo (N*(c*h*w))) :
     den (.maxPoolBackB xN x e) = batchMapAux N (maxPoolBackFlat c h w) x (den e) := rfl
+/-- ⭐ The batched 3×3/s2 pool forward denotes He et al.'s pool lifted across the batch. ⚠ Read it
+    beside `den_batchOp_maxPool` directly above: **same type, different function.** The two
+    descriptors are indistinguishable to every structural check the repo has — arity, op counts,
+    the prefix audit and the shape of the emitted text — which is exactly how the deviation
+    survived undocumented on every ResNet here. `maxPool3s2_ne_maxPool_descr` pins them apart. -/
+@[simp] theorem den_batchOp_maxPool3s2 {N c h w : Nat} (e : SHlo (N * (c*(2*h)*(2*w)))) :
+    den (.batchOp (N := N) (.maxPool3s2 (c := c) (h := h) (w := w)) e)
+      = batchMap N (maxPool3s2Flat c h w) (den e) := rfl
+@[simp] theorem den_maxPool3s2BackB {N c h w : Nat} (xN : String) (x : Vec (N*(c*(2*h)*(2*w))))
+    (e : SHlo (N*(c*h*w))) :
+    den (.maxPool3s2BackB xN x e) = batchMapAux N (maxPool3s2BackFlat c h w) x (den e) := rfl
+-- ⚠ **What separates the two pools is NOT stated here, deliberately.** A `≠` between the two
+-- constructors would be content-free — Lean makes distinct constructors distinct — and the pair
+-- share a type, an arity, an op count and a `pretty` shape, so nothing structural tells them
+-- apart. The claim worth pinning is that they **emit different text**, and that lives in
+-- `tests/TestBatchedEmitTie.lean` beside the `dropoutB ≠ dropPathB` assertions (§0.12) for the
+-- same reason: two poolings differing only in a window are exactly the pair a reader ticks off as
+-- "present" without checking *which*, and only the bytes settle it.
 @[simp] theorem den_selectPosB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.selectPosB xN x e) = fun i => if x i > 0 then den e i else 0 := rfl
 @[simp] theorem den_selectMidB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
@@ -2358,6 +2432,12 @@ theorem flatConvF_faithful {ic oc h w kH kW : Nat} (wN bN : String)
 theorem maxPoolF_faithful {c h w : Nat} (e : SHlo (c*(2*h)*(2*w))) :
     den (.maxPoolF e) = maxPoolFlat c h w (den e) := rfl
 
+/-- ⭐ **3×3/s2 max-pool forward faithfulness.** The (flattened) `reduce_window(max)` op at window
+    3, stride 2, symmetric padding 1 denotes the proven `maxPool3s2Flat` — He et al.'s stem pool.
+    `planning/rsb_a3_r50_verified.md` §4b. -/
+theorem maxPool3s2F_faithful {c h w : Nat} (e : SHlo (c*(2*h)*(2*w))) :
+    den (.maxPool3s2F e) = maxPool3s2Flat c h w (den e) := rfl
+
 /-- **Conv backward faithfulness.** The reversed-kernel `stablehlo.convolution`
     (transpose+reverse+conv) denotes the proven conv input-VJP — the flattened
     `conv2d_has_vjp3` backward (conv is linear, so this is a global VJP). -/
@@ -2378,6 +2458,24 @@ theorem maxPoolBack_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)
   funext idx
   simp only [den, maxPoolBackFlat, maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
              maxPool2_has_vjp_at3]
+
+/-- ⭐ **3×3/s2 max-pool backward faithfulness (smooth point).** The emitted `select_and_scatter`
+    graph at window 3 / stride 2 / symmetric padding 1 denotes the proven
+    `maxPool3s2Flat_has_vjp_at` backward, under `MaxPool3s2Smooth`.
+
+    ⚠ The hypothesis is stated over **positions**, not window offsets, and that is not a stylistic
+    difference from `maxPoolBack_faithful`: with overlapping windows two offsets can name one input
+    cell (the clamped duplicate at the first window), where the values are equal by construction
+    and smoothness must say nothing. `maxPool2` has no analogue because there distinct offsets
+    always meant distinct positions. See `MaxPool3s2.lean`'s header. -/
+theorem maxPool3s2Back_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)))
+    (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten x : Tensor3 c (2*h) (2*w)))
+    (e : SHlo (c*h*w)) :
+    den (.maxPool3s2Back xN x e)
+      = (maxPool3s2Flat_has_vjp_at (Tensor3.unflatten x) h_smooth).backward (den e) := by
+  funext idx
+  simp only [den, maxPool3s2BackFlat, maxPool3s2Flat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
+             maxPool3s2_has_vjp_at3]
 
 /-- **BN forward faithfulness.** The per-example reduce/normalize/affine graph
     (γ·(x−μ)·istd + β, μ/var over the feature axis) denotes the proven
@@ -3722,6 +3820,58 @@ def tyBf16 (dims : List Nat) : String :=
 def fresh : StateM Nat String := do
   let k ← get; set (k + 1); pure s!"%v{k}"
 
+/-- **The 3×3/s2 pool's emitted forward text**, given already-freshened names.
+
+    ⚠⚠ It is a shared helper rather than two copies for the reason `sWGradGeom` is (§2f-bis): the
+    per-example `.maxPool3s2F` and the batched `BatchableOp.maxPool3s2` are two `emitTok` arms
+    emitting **one** program, and a window or padding that drifted between them would be a pair of
+    renders that agree on every structural check and compute different functions — which is the
+    exact failure this whole op exists to fix. With one writer they cannot drift, and
+    `TestBatchedEmitTie` then measures rather than assumes it.
+
+    `window_dimensions = 3, window_strides = 2, padding = [[1,1],[1,1]]` on the spatial axes: He
+    et al./torchvision `MaxPool2d(3, stride=2, padding=1)`, window `i` = input `[2i−1, 2i+1]`.
+    ⚠ NOT XLA `'SAME'`, which pads `(0,1)` and slides the grid one input position — the two are
+    different functions everywhere. -/
+def maxPool3s2FwdText (B c h w : Nat) (r xn ninf p o : String) : String :=
+  s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+  s!"    {ninf} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+  s!"    {p} = \"stablehlo.reduce_window\"({xn}, {ninf}) (" ++ "{\n" ++
+  "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
+  "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
+  "        stablehlo.return %pm : tensor<f32>\n" ++
+  "    }) {window_dimensions = array<i64: 1, 1, 3, 3>, window_strides = array<i64: 1, 1, 2, 2>, " ++
+  "padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>}" ++
+  s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
+  s!"    {o} = stablehlo.reshape {p} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n"
+
+/-- **The 3×3/s2 pool's emitted backward text**, given already-freshened names. Shared by the
+    per-example and batched arms, for `maxPool3s2FwdText`'s reason.
+
+    ⭐ Only the window attributes differ from `maxPoolBack`'s emit — **nothing else** — because
+    `select_and_scatter`'s scatter region already reduces with `add`, which is exactly the
+    accumulation overlapping windows need. The emitter was general enough before the op existed.
+
+    ⚠ `%sa`/`%sb`/`%sc`/`%sd` are hardcoded region block arguments and are therefore RESERVED SSA
+    names (§4): a top-level value of the same name is a redefinition error that surfaces only at
+    XLA compile time. -/
+def maxPool3s2BackText (B c h w : Nat) (xN r xr dr z scn o : String) : String :=
+  s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+  s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+  s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    {scn} = \"stablehlo.select_and_scatter\"({xr}, {dr}, {z}) (" ++ "{\n" ++
+  "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
+  "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+  "        stablehlo.return %sge : tensor<i1>\n" ++
+  "    }, " ++ "{\n" ++
+  "      ^bb0(%sc: tensor<f32>, %sd: tensor<f32>):\n" ++
+  "        %ss = stablehlo.add %sc, %sd : tensor<f32>\n" ++
+  "        stablehlo.return %ss : tensor<f32>\n" ++
+  "    }) {window_dimensions = array<i64: 1, 1, 3, 3>, window_strides = array<i64: 1, 1, 2, 2>, " ++
+  "padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>}" ++
+  s!" : ({ty [B,c,2*h,2*w]}, {ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
+  s!"    {o} = stablehlo.reshape {scn} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n"
+
 /-- **The stochastic-depth mask input name for ramp index `i`** — the `mName` a `dropPathB` carries,
     and the `tensor<Bxf32>` the signature declares for it.
 
@@ -3877,6 +4027,11 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .relu (n := n) => ("relu", [], [N, n])
   | .relu6 (n := n) => ("relu6", [], [N, n])
   | .maxPool (c := c) (h := h) (w := w) => ("maxPool", [], [N, c, h, w])
+  -- ⚠ A DIFFERENT tag from `.maxPool`, deliberately. The two denote different functions at the
+  -- same type, so sharing a tag would make the emitted text the only thing separating them — and
+  -- the emitted text is what a reader checks last. `maxPool3s2_ne_maxPool_descr` is the den-side
+  -- half of the same pin.
+  | .maxPool3s2 (c := c) (h := h) (w := w) => ("maxPool3s2", [], [N, c, h, w])
   | .softmaxRow (m := m) (n := n) => ("softmaxRow", [], [N, m, n])
   | .denseRowBack (rows := rows) (a := a) (c := c) wN _ => ("denseRowBackP", [wN], [N, rows, a, c])
   -- ⚠ `epsStr` rides in `names` though it is a LITERAL, not an SSA name — `bnEval` set that
@@ -3951,6 +4106,18 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .addV a b              => .addV k (skel a) (skel b)
   | _, .maxPoolBackB (N := N) (c := c) (h := h) (w := w) xN _ e =>
       .batched "maxPoolBackP" [xN] [N, c, h, w] (skel e)
+  -- ⭐ The three 3×3/s2 pool forms all ride the generic `.batched` tag, so they cost NO
+  -- `Raw`/`Tok`/`toToks`/`parseStack`/`parse_toToks` work (§0.2 increment 2's five-site route).
+  -- ⚠ The per-example and batched BACKWARDS share one tag and are distinguished by the nat list's
+  -- ARITY (3 vs 4) — `depthwiseWeightGrad`'s convention, and legitimate here for its reason: the
+  -- emitter ignores `N` (it reads the batch off `pretty`'s `B`), so the two emit identical text by
+  -- construction and the arity carries only the `den`-side difference.
+  | _, .maxPool3s2F (c := c) (h := h) (w := w) e =>
+      .batched "maxPool3s2" [] [c, h, w] (skel e)
+  | _, .maxPool3s2Back (c := c) (h := h) (w := w) xN _ e =>
+      .batched "maxPool3s2BackP" [xN] [c, h, w] (skel e)
+  | _, .maxPool3s2BackB (N := N) (c := c) (h := h) (w := w) xN _ e =>
+      .batched "maxPool3s2BackP" [xN] [N, c, h, w] (skel e)
   | _, .convBiasSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ _ _ e =>
       .batched "convBiasSgd" [bN, lrS] [N, oc, h, w] (skel e)
   | _, .convStridedBiasSgdB (N := N) (oc := oc) (h := h) (w := w) bN lrS _ _ _ _ e =>
@@ -5853,6 +6020,20 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
             s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {pp} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      -- ⭐ The 3×3/s2 stem pool, forward — both index conventions, ONE text writer
+      -- (`maxPool3s2FwdText`), so the per-example and batched forms cannot drift.
+      | "maxPool3s2", [], [c, h, w] => do
+          let xn ← fresh; let ninf ← fresh; let pp ← fresh; let o ← fresh
+          pure (maxPool3s2FwdText B c h w r xn ninf pp o, o :: st)
+      | "maxPool3s2", [], [_N, c, h, w] => do
+          let xn ← fresh; let ninf ← fresh; let pp ← fresh; let o ← fresh
+          pure (maxPool3s2FwdText B c h w r xn ninf pp o, o :: st)
+      | "maxPool3s2BackP", [xN], [c, h, w] => do
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let scn ← fresh; let o ← fresh
+          pure (maxPool3s2BackText B c h w xN r xr dr z scn o, o :: st)
+      | "maxPool3s2BackP", [xN], [_N, c, h, w] => do
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let scn ← fresh; let o ← fresh
+          pure (maxPool3s2BackText B c h w xN r xr dr z scn o, o :: st)
       | "maxPoolBackP", [xN], [_N, c, h, w] => do
           -- byte-for-byte `.maxPoolBack`'s emit. NOTE the region block arguments %sa/%sb/%sc/%sd
           -- are HARDCODED here, so they are reserved SSA names: a top-level value of the same

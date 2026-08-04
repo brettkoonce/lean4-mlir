@@ -96,15 +96,17 @@ current renders — R34's 30-epoch tier is ~26 h and is the decided next run. �
 measure 6–10× the previously recorded table and the cause is NOT found; the obvious hypothesis was
 tested and refuted. What is left is §0.3's list and the runs §0.1 says this box cannot do.
 
-⚠⚠ **STOP-BEFORE-YOU-RUN, added 2026-08-04.** The R34 pair run named above is **blocked, and not on
-hardware.** Scoping ResNet-50 turned up that **the verified stem max pool is 2×2 where He et al. and
-all three JAX references use 3×3/s2** — a different function at identical output shape, documented
-nowhere, on every ResNet here. The JAX side turned out not to be the paper either (XLA `'SAME'`
-offsets the pooling grid by one input position vs the paper's symmetric pad). **JAX is fixed and
-gated; the verified side is not** — its VJP witness is built and 3-axiom clean, its codegen is not.
-So the two paths currently differ at the stem *more than before*, and a pair run would compare two
-different nets. Standalone verified numbers are fine if stated as such. §0.3's first row and
-`planning/rsb_a3_r50_verified.md` §4b have the detail, the gates and the ~10-site codegen map.
+✅ **THE STEM POOL IS CLOSED ON BOTH SIDES — 2026-08-04.** Scoping ResNet-50 turned up that **the
+verified stem max pool was 2×2 where He et al. and all three JAX references use 3×3/s2** — a
+different function at identical output shape, documented nowhere, on every ResNet here. The JAX
+side turned out not to be the paper either (XLA `'SAME'` offsets the pooling grid by one input
+position vs the paper's symmetric pad). Both sides are now the paper's: JAX landed 2026-08-03, and
+the **verified codegen + re-render landed 2026-08-04** — 4 op forms, 4 render sites, 14 artifacts,
+`lake build Proofs Certs Codegen` **3,916** green. The two paths agree at the stem again.
+⚠ **But the R34 pair run is still blocked on the RE-RUNS, not on code**: the **90.06%** Imagenette
+baseline belongs to the 2×2 net and is VOID, and so are the JAX numbers §4b lists. Quote nothing
+across the two paths until both are re-run. `rsb_a3_r50_verified.md` §4b has the gates, the two
+places this doc's own site map undercounted, and what is still owed on the proof side.
 
 **Read in this order:** this section, then §0.3 (what is owed — **the stem-pool row first**).
 §0.10 and §0.11 are the two SD records; `planning/stochastic_depth.md` §7e-f is the gate detail.
@@ -376,8 +378,10 @@ runs this box will crash."* Sustained multi-GPU load destabilises ares. That is 
   runnable here.** (⚠ this bullet read **~16 h** until 2026-08-04 — that was §2d.3's 386 ms/step;
   §0.13 measured **616** on the current renders and §0's headline already says 26 h.) Nothing about
   it is wrong; it is blocked on hardware, not on code. Same for `recipe_gaps.md` §4's ~203 h budget
-  for all five nets at reference epochs. ⚠⚠ **And as a verified-vs-JAX PAIR it is now also blocked
-  on the stem pool** (§0.3) — the two paths differ there until the verified codegen lands.
+  for all five nets at reference epochs. ✅ **The stem-pool blocker on the PAIR is gone as of
+  2026-08-04** — both paths pool the paper's 3×3/s2 (§0.3) — ⚠ but the pair still needs the VOID
+  **90.06%** Imagenette baseline and the VOID JAX numbers RE-RUN before anything is quoted across
+  the two.
 * **What IS available is build-and-gate work**, and 2026-08-02 is six threads of evidence that it
   goes fine: every gate in §0.4 is a known answer, a bit-identity check or a few-step smoke, all
   single-GPU and all minutes.
@@ -795,7 +799,7 @@ down as a hypothetical for years while the actual op was missing.
 
 | owed | why it matters | where |
 |---|---|---|
-| ⛔⛔ **THE STEM MAX POOL IS NOT THE PAPER'S — on EVERY ResNet here, and the two paths now DISAGREE** (2026-08-04) | He et al. specify **3×3/s2** after the stem conv for all of 18/34/50/101/152, and all three JAX references emitted it. `resnet34Verified`/`resnet34ImagenetVerified` use **`.maxPool 2 2`** — non-overlapping, a different function at identical output shape (112→56), and **documented nowhere**. Found while scoping R50. ⚠ It turned out the JAX side was not the paper either: it emitted XLA `'SAME'`, which for 3×3/s2 pads `(0,1)` — window `[2i, 2i+2]` — against the paper's symmetric `[2i−1, 2i+1]`, i.e. **a pooling grid offset by one input position** (measured at `n=12`: `[2,4,6,8,10,11]` vs `[1,3,5,7,9,11]`). **JAX is FIXED and gated** (bit-identical at 2×2, so no cifar/mnist net moved; R50 logits move rel 0.075). **The verified side is NOT** — `maxPool3s2`'s full VJP witness is built and 3-axiom clean (438 lines, 0 `sorry`), but its **codegen is not**, so `SHlo.maxPoolF` still bakes non-overlapping 2× downsampling in its own type. ⚠⚠ **Until the codegen + the 14-artifact re-render land, verified and JAX differ at the stem** — worse than before the work started. Cost to close: ~10 codegen sites (site map in the R50 doc §4b), the re-render, R34's ties/`dp-check`/`shard-check`/residency, and the 90.06% Imagenette re-run | `rsb_a3_r50_verified.md` §4b |
+| ~~⛔⛔ **THE STEM MAX POOL IS NOT THE PAPER'S**~~ ✅ **CODEGEN CLOSED 2026-08-04; the RE-RUNS are what is left** | He et al. specify **3×3/s2** for all of 18/34/50/101/152. The verified renders used **2×2** — non-overlapping, a different function at identical output shape (112→56), **documented nowhere**; and the JAX side was emitting XLA `'SAME'`, which pads `(0,1)` against the paper's symmetric `(1,1)`, i.e. **a pooling grid offset by one input position**. Both sides are the paper's now: 4 op forms (`BatchableOp.maxPool3s2`, `SHlo.maxPool3s2F`/`.maxPool3s2Back`/`.maxPool3s2BackB`, ~5 sites each on the generic `.batched` tag), 4 render sites, **14 artifacts / 24 lines, no line-count or SSA movement**, build **3,916** green, audit **1,524 → 1,536**. Gates: emit tie **47 → 49** forms with the symmetric-vs-`'SAME'` control firing **rc=1 on the padding assertion alone**; `fwd-tie` self bit-exact 320/320 on both forwards; **discrimination rel 0.613 (`_fwd`) and 1.994 (`_fwd_eval`)**; `r34-mom-tie` certified on the new train step. ⚠⚠ **Two undercounts worth reading**: the site map said "`ResNet34RenderB`, 2 lines", but `resnet34_fwd{,_eval}` come from `ResNet34Render` and the AdamW trainer **evals** through `_fwd_eval` — measured, that skew is **rel 1.994, i.e. the logits disagree in SIGN**, §2g's `mobilenetv2_fwd` defect on R34; and `toSpecs` is `\| maxPool _ _ => #[]`, so the KERNEL is invisible to every param-count audit §2m used. **Still owed**: the VOID 90.06% Imagenette re-run (~1h03m), the VOID JAX numbers, `dp-check`/`shard-check`/residency, and the 5 live/seal witnesses that still pool 2×2 (they need one missing `maxPool3s2Smooth_of_injective`) | `rsb_a3_r50_verified.md` §4b |
 | ~~⛔ the four ImageNet renders bake `wd = 1e-4`~~ ✅ **CLOSED 2026-08-02** | all four bake **0.05** now; the re-render diff was exactly 4 lines, all `%wd`, every other artifact byte-identical, and both pairs re-gate bit-exact at 4 replicas | §0.5 |
 | ~~⛔ stochastic depth's **asymmetric-batch DP gate**~~ ✅ **CLOSED 2026-08-02** | `lake build drop-shard-check` — and §5b's prediction was right: the masks WERE being replicated, in the shim, before any DP drop render existed. Both existing constructions were unusable and the answer was neither of them | §0.6 |
 | ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
@@ -1695,10 +1699,11 @@ the top of §0). Nothing below is stale; the preflight was green and the rig smo
 **Everything here stands for the day a box can sustain it.** Do not re-derive it, and do not start
 it here without asking.
 
-⚠⚠ **NEW BLOCKER 2026-08-04, and it is not hardware**: as a verified-vs-JAX **pair** run this is
-blocked on the stem pool (§0.3). The JAX side now pools the paper's 3×3 window; the verified side
-still pools 2×2, so the pair would compare two nets that differ at the stem. Runnable as a
-standalone verified number, stated as such — not as a pair.
+✅ **The stem-pool blocker is CLOSED 2026-08-04** — the verified codegen landed, so both paths now
+pool the paper's symmetric 3×3/s2 and the pair compares one architecture again (§0.3).
+⚠ What the pair still needs is the **re-runs**: the 90.06% Imagenette baseline belongs to the 2×2
+net and is VOID, and so are the JAX numbers. Runnable as a standalone verified number, stated as
+such; not as a pair until both sides are re-measured.
 
 ### ▶ THE JOB: get R34/ImageNet over the line
 

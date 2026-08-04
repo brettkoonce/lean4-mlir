@@ -286,7 +286,12 @@ private def r34FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
   let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" (biasName convBias "%sbi" 64) zSk z64 (.operand "%x" zx))
   let (cStn, nStn) ← bnSite B 64 112 mode epsStr "%sg" "%sbt" "stn" nStc
   let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
-  let (cStp, nStp) ← pretty B (.maxPoolF (c := 64) (h := 56) (w := 56) (.operand nStr z112))
+  -- ⭐ He et al.'s 3×3/s2 stem pool — see the note on `ResNet34RenderB`'s peer. ⚠ This renderer
+  -- writes `resnet34_fwd{,_eval}` as well as the SGD train step, and the ADAMW trainer evals
+  -- through `resnet34_fwd_eval`. So it had to move with `ResNet34RenderB`, not after it: leaving
+  -- it at 2×2 would have trained a 3×3-pool net and scored it with a 2×2-pool forward — §2g's
+  -- `mobilenetv2_fwd` defect (logits rel 1.86) on the very net where it was first found.
+  let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := 56) (w := 56) (.operand nStr z112))
   -- ═══ 16 blocks ═══
   let f1  ← idFwd   B 64 56 mode epsStr "s1b0" nStp convBias
   let f2  ← idFwd   B 64 56 mode epsStr "s1b1" f1.o convBias
@@ -413,7 +418,7 @@ def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     let b1  ← idBackSgd   B 64 56 epsStr lrStr "s1b0" blk[0]! b2.dx convBias
     -- ═══ stem backward: maxpool-back → relu-back → BN-back, then stem param SGD ═══
     let zSt112 : Vec (64*112*112) := fun _ => 0
-    let (cDmp, nDmp) ← pretty B (.maxPoolBack (c := 64) (h := 56) (w := 56) F.str zSt112 (.operand b1.dx z56))
+    let (cDmp, nDmp) ← pretty B (.maxPool3s2Back (c := 64) (h := 56) (w := 56) F.str zSt112 (.operand b1.dx z56))
     let (cDsr, nDsr) ← pretty B (.selectPos F.stn zSt112 (.operand nDmp zSt112))
     let (cDsn, nDsn) ← pretty B (.bnPerChannelBack (oc := 64) (h := 112) (w := 112) "%sg" F.stc epsStr 0 z64 zSt112 (.operand nDsr zSt112))
     let (csW, nsW) ← pretty B (.convStridedWeightSgd "%x" "%sW" lrStr z64 zx zSk 0 (.operand nDsn zSt112))

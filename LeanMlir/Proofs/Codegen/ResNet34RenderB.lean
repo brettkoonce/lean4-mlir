@@ -340,7 +340,10 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := 112) (w := 112) "%sW" (biasName convBias "%sbi" 64) zSk z64) (.operand "%x" zx))
     let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
     let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*112*112)) (.operand nStn z112))
-    let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool (c := 64) (h := 56) (w := 56)) (.operand nStr z112))
+    -- ⭐ He et al.'s 3×3/s2 stem pool. ⚠ This read `.maxPool` (2×2, non-overlapping) until
+    -- 2026-08-04 — a different function at the identical 112→56 output shape, so nothing ever
+    -- failed. `planning/rsb_a3_r50_verified.md` §4b.
+    let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := 56) (w := 56)) (.operand nStr z112))
     -- ═══ 16 blocks ═══
     let f1  ← idFwdB   B 64 56 epsStr "s1b0" nStp convBias
     let f2  ← idFwdB   B 64 56 epsStr "s1b1" f1.o convBias
@@ -399,7 +402,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let b2  ← idBackGradB   B 64 56 epsStr "s1b1" f2 b3.dx convBias
     let b1  ← idBackGradB   B 64 56 epsStr "s1b0" f1 b2.dx convBias
     -- ═══ stem backward: maxpool-back → relu mask → BN back, then the 4 stem grads ═══
-    let (cDmp, nDmp) ← pretty B (.maxPoolBackB (N := B) (c := 64) (h := 56) (w := 56) nStr z112 (.operand b1.dx z56))
+    let (cDmp, nDmp) ← pretty B (.maxPool3s2BackB (N := B) (c := 64) (h := 56) (w := 56) nStr z112 (.operand b1.dx z56))
     let (cDsr, nDsr) ← pretty B (.selectPosB nStn z112 (.operand nDmp z112))
     let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 64) (h := 112) (w := 112) "%sg" nStc epsStr 0 z64 z112b (.operand nDsr z112b))
     let (csW, nsW) ← pretty B (.convStridedWeightGradB "%x" z64 zx zSk (.operand nDsn z112))

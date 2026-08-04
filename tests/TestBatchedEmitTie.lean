@@ -357,6 +357,19 @@ private def cases : List (String × String × String) :=
       render (pretty BS (.maxPoolBack (c := pc) (h := ph) (w := ph) "%s" zp (.operand "%x" zq))),
       render (pretty BS (.maxPoolBackB (c := pc) (h := ph) (w := ph) "%s" zpb
                            (.operand "%x" zqb))))
+   -- ⭐ He et al.'s 3×3/s2 stem pool (`planning/rsb_a3_r50_verified.md` §4b). These two rows tie
+   --   the per-example and batched forms; the block at the end of `main` is what says the 3×3 op
+   --   is a DIFFERENT op from the 2×2 one above, which is the check the deviation needed and
+   --   never had.
+   , ("maxPool3s2",
+      render (pretty BS (.maxPool3s2F (c := pc) (h := ph) (w := ph) (.operand "%x" zp))),
+      render (pretty BS (.batchOp (N := BS) (.maxPool3s2 (c := pc) (h := ph) (w := ph))
+                           (.operand "%x" zpb))))
+   , ("maxPool3s2Back",
+      render (pretty BS (.maxPool3s2Back (c := pc) (h := ph) (w := ph) "%s" zp
+                           (.operand "%x" zq))),
+      render (pretty BS (.maxPool3s2BackB (c := pc) (h := ph) (w := ph) "%s" zpb
+                           (.operand "%x" zqb))))
    , ("convBiasSgd",
       render (pretty BS (.convBiasSgd (h := ch) (w := ch) "%b" "0.05" zK zT zB 0
                            (.operand "%x" zdy))),
@@ -677,5 +690,52 @@ transpose, so these must be one emitter:\n forward:\n{d} backward:\n{dropoutBack
   IO.println "  ✓ dropoutB: per-ELEMENT mask (tensor<32x12xf32> multiplied in, NO broadcast)"
   IO.println "  ✓ dropoutB: backward emits the forward's text byte-for-byte (VJP is itself)"
   IO.println "  ✓ dropoutB ≠ dropPathB: the two regularisers render distinguishable text"
+  -- ── the stem pool: 3×3/s2 symmetric is NOT 2×2/s2, and NOT XLA `'SAME'` ──
+  --
+  -- ⚠⚠ This block is the whole reason the op exists, and it is the check that was missing for as
+  -- long as the deviation was. `maxPool3s2` and `maxPool` share a TYPE (112→56 either way), an
+  -- arity, an op count, and the shape of their emitted text — so the tie rows above pass for both
+  -- and every structural audit in the repo is blind to the difference. Only the window attributes
+  -- separate them, and only bytes can say so.
+  IO.println "── the stem pool: maxPool3s2 ──"
+  let mp3 := (cases.filter (fun c => c.1 == "maxPool3s2")).head!.2.1
+  let mp3b := (cases.filter (fun c => c.1 == "maxPool3s2Back")).head!.2.1
+  let mp2 := (cases.filter (fun c => c.1 == "maxPool")).head!.2.1
+  let mp2b := (cases.filter (fun c => c.1 == "maxPoolBack")).head!.2.1
+  for (nm, txt) in [("maxPool3s2", mp3), ("maxPool3s2Back", mp3b)] do
+    if txt.isEmpty || (txt.splitOn "MALFORMED").length != 1 then
+      die s!"DEGENERATE: {nm} render is empty or fell through to // MALFORMED"
+    -- ⭐ the window itself. `1, 1, 3, 3` over the two spatial axes, stride `1, 1, 2, 2`.
+    if (txt.splitOn "window_dimensions = array<i64: 1, 1, 3, 3>").length != 2 then
+      die s!"{nm} does not pool a 3×3 window — that is not He et al.'s stem pool:\n{txt}"
+    if (txt.splitOn "window_strides = array<i64: 1, 1, 2, 2>").length != 2 then
+      die s!"{nm} does not stride 2 — the output shape would not be 112→56:\n{txt}"
+    -- ⭐⭐ SYMMETRIC padding, and this is the half a reader gets wrong. XLA `'SAME'` on a 112→56
+    --    axis pads `(low 0, high 1)` — window `i` = `[2i, 2i+2]` — where He et al./torchvision pad
+    --    `[[1,1],[1,1]]`, window `i` = `[2i−1, 2i+1]`. The two grids are offset by ONE input
+    --    position and are different functions everywhere; measured on device at n = 12, `SAME`
+    --    peaks at [2,4,6,8,10,11] against symmetric's [1,3,5,7,9,11]. Both compile, both train,
+    --    both have the right output shape. `planning/rsb_a3_r50_verified.md` §4b.
+    if (txt.splitOn "padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>").length != 2 then
+      die s!"{nm}'s padding is not SYMMETRIC 1 — XLA 'SAME' would offset the pooling grid by one \
+input position, which is a different function at the same output shape:\n{txt}"
+  -- ⚠ The 2×2 ops must NOT have moved. They back every mnist/cifar net in the repo, and the whole
+  -- claim that this change is confined to the ResNets rests on their emit being untouched.
+  if (mp2.splitOn "window_dimensions = array<i64: 1, 1, 2, 2>").length != 2 then
+    die s!"maxPool (2×2) no longer emits a 2×2 window — every mnist/cifar net just moved:\n{mp2}"
+  if (mp2.splitOn "padding").length != 1 then
+    die s!"maxPool (2×2) now emits a padding attribute — it did not before, so its bytes moved:\n{mp2}"
+  -- ⭐⭐ THE PAIR, the `dropoutB ≠ dropPathB` move one op over: each block above passes on its own
+  --    op, and only this says the two pools are DISTINGUISHABLE. Without it a render that reached
+  --    for the wrong pool would tie, audit and train exactly like the right one — which is what
+  --    happened, on every ResNet here, for as long as the renders existed.
+  if mp3 == mp2 then
+    die s!"maxPool3s2 and maxPool emit IDENTICAL text — one of them is the wrong pool:\n{mp3}"
+  if mp3b == mp2b then
+    die s!"maxPool3s2Back and maxPoolBack emit IDENTICAL text — one of them is the wrong pool:\n{mp3b}"
+  IO.println "  ✓ maxPool3s2: 3×3 window, stride 2, SYMMETRIC padding 1 (He et al., not XLA 'SAME')"
+  IO.println "  ✓ maxPool3s2Back: same window on the select_and_scatter (add-reduce accumulates)"
+  IO.println "  ✓ maxPool (2×2) untouched: 2×2 window, no padding attribute"
+  IO.println "  ✓ maxPool3s2 ≠ maxPool: the two pools render distinguishable text"
 
 #eval main

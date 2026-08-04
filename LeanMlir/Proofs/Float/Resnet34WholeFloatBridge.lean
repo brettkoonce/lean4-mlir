@@ -105,13 +105,16 @@ noncomputable def r34Forward (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (Wd : Mat 512
   ∘ b2 ∘ b1 ∘ b0
   ∘ d2
   ∘ a2 ∘ a1 ∘ a0
-  ∘ maxPoolFlat 64 56 56
+  -- ⭐ He et al.'s 3×3/s2 stem pool (2026-08-04). ⚠ This slot is CONCRETE where all 16 blocks
+  -- are abstract `FloatBridges` hypotheses — which is why moving the net's pool broke
+  -- `resnet34Forward_full_pc_eq_skeleton`, a `rfl` in a different file, as a `whnf` TIMEOUT.
+  ∘ maxPool3s2Flat 64 56 56
   ∘ (relu (64 * 112 * 112) ∘ bnS ∘ flatConvStride2 (h := 112) (w := 112) Ws bs)
 
 set_option maxRecDepth 100000 in
 /-- **The whole ResNet-34 forward float-bridges** — the forward peer of `r34_grad_floatBridges`.
     One `.comp` chain over the per-op forward bridges: the concrete stem (`flatConvStride2 ∘ bn ∘
-    relu`), `maxPoolFlat`, the 16 supplied blocks, `globalAvgPoolFlat`, and `dense`. The deployed
+    relu`), `maxPool3s2Flat`, the 16 supplied blocks, `globalAvgPoolFlat`, and `dense`. The deployed
     float forward of the whole 34-layer net is within an explicit budget of the certified `ℝ`
     forward. Closes under `[propext, Classical.choice, Quot.sound]`. -/
 theorem r34_floatBridges (M : FloatModel)
@@ -143,7 +146,7 @@ theorem r34_floatBridges (M : FloatModel)
       (relu (64 * 112 * 112) ∘ bnS ∘ flatConvStride2 (h := 112) (w := 112) Ws bs) :=
     ((floatBridges_flatConvStride2 (h := 112) (w := 112) M Ws bs hws hbsβ (by norm_num) hWs hbs).comp
       hbnS).comp floatBridges_relu
-  have hMP := hstem.comp (floatBridges_maxPool (c := 64) (h := 56) (w := 56))
+  have hMP := hstem.comp (floatBridges_maxPool3s2 (c := 64) (h := 56) (w := 56))
   have hA := ((hMP.comp ha0).comp ha1).comp ha2
   have hD2 := hA.comp hd2
   have hB := ((hD2.comp hb0).comp hb1).comp hb2

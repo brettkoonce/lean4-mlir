@@ -675,7 +675,11 @@ noncomputable def resnet34ForwardW (w : R34Weights) : Vec (3 * 224 * 224) → Ve
 noncomputable def denoteR34Full (layers : List VLayer) (w : R34Weights) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
-  | [.convBnNB 3 64 7 2, .maxPool 2 2,
+  -- ⭐ `.maxPool 3 2` since 2026-08-04 — He et al.'s stem pool. ⚠ This pattern is the *point* of
+  -- the layer list: it is deliberately drift-sensitive, so moving the spec's pool without moving
+  -- `resnet34Forward_full_pc`'s (or the reverse) drops the whole net to `fun _ => 0` and
+  -- `resnet34Verified_denote_eq`'s `rfl` fails at `lake build`. Both moved together here.
+  | [.convBnNB 3 64 7 2, .maxPool 3 2,
      .residualStage 64 64 3 1, .residualStage 64 128 4 2,
      .residualStage 128 256 6 2, .residualStage 256 512 3 2,
      .globalAvgPool, .dense 512 10] => resnet34ForwardW w

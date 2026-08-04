@@ -364,14 +364,14 @@ def resnet34Verified : VerifiedNetSpec where
   data     := .imagenette
   layers   := [
     .convBnNB 3 64 7 2,          -- 7×7-s2 stem → BN → relu       224→112 (no conv bias)
-    .maxPool 2 2,                --                                112→56
+    .maxPool 3 2,                -- He et al. 3×3-s2, OVERLAPPING  112→56
     .residualStage  64  64 3 1,  -- stage1: 3 identity            @56
     .residualStage  64 128 4 2,  -- stage2: downsample + 3        56→28
     .residualStage 128 256 6 2,  -- stage3: downsample + 5        28→14
     .residualStage 256 512 3 2,  -- stage4: downsample + 2        14→7
     .globalAvgPool,
     .dense 512 10 ]
-  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU"
   -- 36 BN layers in forward order (stem; then per basic block 2, per downsample block 3) — the
   -- running-stats layout for trainAdamSched + @resnet34_fwd_eval. Matches TestResnet34Train.bnLayers.
   bnChannels := #[64,
@@ -413,7 +413,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
   shimScript := "generated_resnet34_imagenet_shim.py"
   layers   := [
     .convBnNB 3 64 7 2,          -- 7×7-s2 stem → BN → relu       224→112 (no conv bias)
-    .maxPool 2 2,                --                                112→56
+    .maxPool 3 2,                -- He et al. 3×3-s2, OVERLAPPING  112→56
     .residualStage  64  64 3 1,  -- stage1: 3 identity            @56
     .residualStage  64 128 4 2,  -- stage2: downsample + 3        56→28
     .residualStage 128 256 6 2,  -- stage3: downsample + 5        28→14
@@ -446,13 +446,16 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
 /-- ch? **ResNet-50 on Imagenette 224²** — the bottleneck sibling of `resnet34Verified`:
     7×7-s2 stem → BN → relu → pool → `[3,4,6,3]` bottleneck stages → GAP → dense.
 
-    ⚠ **STEM POOL DEVIATION, and it is inherited from `resnet34Verified` rather than introduced
-    here.** He et al. (and all three JAX references) specify a **3×3 stride-2 overlapping** max
-    pool; this is **2×2 stride-2, non-overlapping**. The output shape is identical (112→56) so
-    nothing fails — the *function* differs. The kit cannot currently express the paper's pool at
-    all: `SHlo.maxPoolF {c h w} : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)` bakes non-overlapping 2×
-    downsampling into its own type and takes no kernel parameter. Recorded here rather than left
-    in a codegen docstring, per §2l — the sin there was the blurb, not the deviation. -/
+    ✅ **The stem pool is He et al.'s 3×3/s2 as of 2026-08-04** (`SHlo.maxPool3s2F` / the
+    `BatchableOp.maxPool3s2` descriptor, denoting `Proofs.maxPool3s2Flat`), with **symmetric**
+    padding 1 — the paper's window `[2i−1, 2i+1]`, not XLA `'SAME'`'s `[2i, 2i+2]`.
+
+    ⚠ The deviation this docstring used to record was **2×2 stride-2, non-overlapping**, inherited
+    from `resnet34Verified` and documented nowhere for as long as the R34 renders existed. It
+    survived because the output shape is identical (112→56), so every structural check in the repo
+    was blind to it and nothing ever failed. Kept in the record because *that* is the reusable
+    part: a deviation at an unchanged type is invisible to arity, op counts and the prefix audit
+    alike, and only the emitted window separates the two. `planning/rsb_a3_r50_verified.md` §4b. -/
 def resnet50Verified : VerifiedNetSpec where
   name     := "ResNet-50 (Imagenette)"
   slug     := "resnet50"
@@ -463,7 +466,7 @@ def resnet50Verified : VerifiedNetSpec where
   data     := .imagenette
   layers   := [
     .convBnNB 3 64 7 2,              -- 7×7-s2 stem → BN → relu        224→112 (no conv bias)
-    .maxPool 2 2,                    -- ⚠ paper is 3×3-s2 (above)      112→56
+    .maxPool 3 2,                    -- He et al. 3×3-s2, OVERLAPPING  112→56
     .bottleneckStage   64  256 3 1,  -- stage1: project + 2 identity   @56  (64→256 at stride 1)
     .bottleneckStage  256  512 4 2,  -- stage2                         56→28
     .bottleneckStage  512 1024 6 2,  -- stage3                         28→14
@@ -502,7 +505,7 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
   shimScript := "generated_resnet50_imagenet_shim.py"   -- ⚠ NOT generated yet; scripts/gen_shims.sh
   layers   := [
     .convBnNB 3 64 7 2,
-    .maxPool 2 2,                    -- ⚠ paper is 3×3-s2 — see `resnet50Verified`
+    .maxPool 3 2,                    -- He et al. 3×3-s2 — see `resnet50Verified`
     .bottleneckStage   64  256 3 1,
     .bottleneckStage  256  512 4 2,
     .bottleneckStage  512 1024 6 2,
