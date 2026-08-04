@@ -289,6 +289,45 @@ window), where the values are equal by construction and smoothness must say noth
 no analogue because there distinct offsets always meant distinct positions. That distinction
 propagates into the gap function and the domination step of `flat_hasFDerivAt`.
 
+### ⛔⛔ 4c. AND IT WAS NEVER JUST THE POOL — every STRIDED CONV had it too (found 2026-08-04)
+
+⚠⚠ **§4b's "both paths pool the paper's symmetric 3×3/s2, the inconsistency window is CLOSED" was
+TRUE ABOUT THE POOL AND TOO STRONG ABOUT THE STEM.** The JAX side emitted `conv_bn(…, padding='SAME')`
+for *convolutions* as well, and XLA's `SAME` splits asymmetrically for exactly the same reason it did
+on the pool. Measured:
+
+| layer | verified render | XLA `'SAME'` | |
+|---|---|---|---|
+| stem 7×7/s2 @224 | `[[3,3],[3,3]]` | **(2,3)** | ✗ differ |
+| stage2/3/4 3×3/s2 @56/28/14 | `[[1,1],[1,1]]` | **(0,1)** | ✗ differ |
+| projection 1×1/s2 | `[[0,0],[0,0]]` | (0,0) | ✓ agree |
+
+**Four layers, not one**, each a one-input-pixel grid offset, and output shapes identical in every
+row — which is why nothing ever failed, the pool's hiding mechanism exactly. ⭐ **The verified side
+was already right**: it has always emitted symmetric `(k−1)/2`, which is torchvision's
+`Conv2d(padding=3)` / `padding=1`. So this is a JAX-side fix and it does **not** disturb a running
+verified job.
+
+**Fixed 2026-08-04** in `conv2d` / both `conv_bn`s: `padding='SAME'` → `padding=None` defaulting to
+`((k−1)//2, …)` off `w.shape[2:]`. ⭐ **The scoping falls out of the call sites and is enforced, not
+argued**: the ResNet emitters pass no `padding` argument (⇒ symmetric), while **MobileNetV2 and
+EfficientNet pass `padding='SAME'` EXPLICITLY** — and they are TF-origin ports where asymmetric
+`SAME` *is* the reference, so "fixing" them would be the actual regression.
+
+| gate | net | result |
+|---|---|---|
+| ⭐ DISCRIMINATION | R34/ImageNet | logits **MOVE** — rel **0.0546**, 61/2000 bit-exact |
+| INERTNESS | mnist-cnn (stride-1, 2×2 pool) | **bit-identical 60/60** — stride 1 + odd kernel ⇒ `SAME` ≡ symmetric |
+| ⭐ SCOPING | MobileNetV2 | **bit-identical 2000/2000** — the TF-origin path really is untouched |
+| shim | R34 ImageNet shim | **byte-identical** — data path unaffected, running job safe |
+
+⚠ Diffed against a **regenerated** baseline (`git stash` → rebuild → generate → restore), per §4b's
+own methodology note. The diff is two signatures + two padding lines and nothing else.
+
+⚠ **This does NOT explain the verified-vs-reference accuracy gap** and should not be sold as such: a
+one-pixel padding offset is a real fidelity difference but a small functional one. At epoch 3 the
+verified run reads 8.09% against the reference's 37.0%, and that remains unexplained.
+
 ### ⛔ What this VOIDS, and it is not small
 
 * **JAX R50 RSB-A3 `rsb-faithful` 76.66% / 93.03%** — the number this whole pair was anchored on.

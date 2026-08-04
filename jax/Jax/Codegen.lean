@@ -458,7 +458,25 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "# ═══════════════════════════════════════════════════════════════════════\n" ++
       "#  Conv / Pool helpers\n" ++
       "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
-      "def conv2d(x, w, b, padding='SAME', stride=(1,1)):\n" ++
+      "def conv2d(x, w, b, padding=None, stride=(1,1)):\n" ++
+      "    # He et al. / torchvision: SYMMETRIC padding (k-1)//2 — i.e. nn.Conv2d(padding=k//2)\n" ++
+      "    # — NOT XLA 'SAME'. This is the max_pool2d finding one op over, and it hides the\n" ++
+      "    # same way: the OUTPUT SHAPE is identical either way, so nothing ever fails.\n" ++
+      "    #\n" ++
+      "    # At stride 1 with an ODD kernel the two are BIT-IDENTICAL, which is every conv in\n" ++
+      "    # the repo except the strided ones — so cifar/mnist and all stride-1 layers are\n" ++
+      "    # provably unaffected. They differ only when STRIDED on an even input:\n" ++
+      "    #   7x7/s2 on 224: 'SAME' pads (2,3), symmetric (3,3)\n" ++
+      "    #   3x3/s2 on 56/28/14: 'SAME' pads (0,1), symmetric (1,1)\n" ++
+      "    #   1x1/s2: (0,0) both ways — projections are unaffected.\n" ++
+      "    # As with the pool, the two grids are offset by one input position.\n" ++
+      "    #\n" ++
+      "    # Changed 2026-08-04 for paper-faithfulness. ⚠ Scoped to the ResNet-family helpers\n" ++
+      "    # ON PURPOSE: MobileNetV2/EfficientNet emit their own conv_general_dilated with\n" ++
+      "    # 'SAME' and are TF-origin ports, where asymmetric 'SAME' IS the reference. Do not\n" ++
+      "    # 'fix' those. See planning/rsb_a3_r50_verified.md §4b.\n" ++
+      "    if padding is None:\n" ++
+      "        padding = (((w.shape[2] - 1) // 2,) * 2, ((w.shape[3] - 1) // 2,) * 2)\n" ++
       "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "    return x + b.reshape(1, -1, 1, 1)\n\n"
@@ -549,7 +567,12 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         "        xn = (x - rm.reshape(1, -1, 1, 1)) / jnp.sqrt(rv.reshape(1, -1, 1, 1) + eps)\n" ++
         "        new = (rm, rv)\n" ++
         "    return xn * gamma.reshape(1, -1, 1, 1) + beta.reshape(1, -1, 1, 1), new\n\n" ++
-        "def conv_bn(x, w, gamma, beta, prev, training, stride=(1,1), padding='SAME'):\n" ++
+        "def conv_bn(x, w, gamma, beta, prev, training, stride=(1,1), padding=None):\n" ++
+        "    # SYMMETRIC (k-1)//2, not XLA 'SAME' — see conv2d for the full argument. Inert at\n" ++
+        "    # stride 1 with an odd kernel; moves ONLY the strided convs (R34: the 7x7/s2 stem\n" ++
+        "    # and the three 3x3/s2 stage entries).\n" ++
+        "    if padding is None:\n" ++
+        "        padding = (((w.shape[2] - 1) // 2,) * 2, ((w.shape[3] - 1) // 2,) * 2)\n" ++
         "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
         "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
         "    return _bn(x, gamma, beta, prev, training)\n\n" ++
@@ -559,7 +582,10 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         "    return [(jnp.zeros(c, jnp.float32), jnp.ones(c, jnp.float32)) for c in _BN_CHANNELS]\n\n"
     else
     code := code ++
-      "def conv_bn(x, w, gamma, beta, stride=(1,1), padding='SAME'):\n" ++
+      "def conv_bn(x, w, gamma, beta, stride=(1,1), padding=None):\n" ++
+      "    # SYMMETRIC (k-1)//2, not XLA 'SAME' — see conv2d. Inert at stride 1 / odd kernel.\n" ++
+      "    if padding is None:\n" ++
+      "        padding = (((w.shape[2] - 1) // 2,) * 2, ((w.shape[3] - 1) // 2,) * 2)\n" ++
       "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "    # Batch normalization: mean/var over (N, H, W) per channel,\n" ++
