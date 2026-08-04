@@ -37,6 +37,21 @@ inductive VLayer where
   /-- A basic-block residual stage: `nBlocks` blocks at `oc` channels. The first block
       downsamples (and projects the skip) iff `stride ≠ 1 ∨ ic ≠ oc`; the rest are identity. -/
   | residualStage (ic oc nBlocks stride : Nat)
+  /-- A **bottleneck** residual stage (ResNet-50/101/152): `nBlocks` blocks, each
+      `1×1 (oc/4) → BN → relu`, `3×3 (oc/4) → BN → relu`, `1×1 (oc) → BN`, `+skip`, `relu`.
+      The first block projects the skip (`1×1 → BN`) iff `stride ≠ 1 ∨ ic ≠ oc` — the same
+      dispatch `residualStage` uses, and for R50 that fires on **all four** stages, because
+      stage 1 changes 64→256 at stride 1 where R34's stage 1 is `ic = oc`.
+
+      ⚠ **This is ResNet v1.5, not He et al.'s v1**: the stride sits on the **3×3** (and on the
+      projection), with the leading 1×1 at stride 1. Measured off the reference
+      (`jax/Jax/Codegen.lean`'s `bottleneck_block_down`), not assumed — putting it on the first
+      1×1 compiles, trains, descends and is a different net (§2k's heavy-ball trap one layer up).
+
+      **No conv biases** — every conv here is BN-followed, so a bias cannot reach the output
+      (`convBnNB`'s argument, four convs at a time). torchvision's R50 carries none either, which
+      is why the derived count lands on the reference's 25,557,032 with no adjustment (§2m). -/
+  | bottleneckStage (ic oc nBlocks stride : Nat)
   /-- global average pool. No params. -/
   | globalAvgPool
   /-- dense `ic→oc`. Params `{W,b}`. -/
@@ -120,6 +135,27 @@ private def stageSpec (ic oc count stride : Nat) : Array (Array Nat × Nat) := I
   for _ in [0:count-1] do a := a ++ idBlk oc
   return a
 
+/-- Identity bottleneck block `cin→mid→mid→oc`, **no conv biases**: `1×1 → BN → relu`,
+    `3×3 → BN → relu`, `1×1 → BN`, skip = identity. Nine tensors. -/
+private def bneckIdBlk (cin mid oc : Nat) : Array (Array Nat × Nat) :=
+  #[(#[mid,cin,1,1],0),(#[mid],1),(#[mid],2),
+    (#[mid,mid,3,3],0),(#[mid],1),(#[mid],2),
+    (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
+/-- Projecting bottleneck block: the identity body plus the `1×1` shortcut conv → BN.
+    The projection comes **last**, matching the reference's `conv_bn` call order
+    (`bottleneck_block_down` does idx, idx+1, idx+2, then idx+3 for the shortcut) — the same
+    convention `downBlk` uses. Twelve tensors. -/
+private def bneckDownBlk (cin mid oc : Nat) : Array (Array Nat × Nat) :=
+  bneckIdBlk cin mid oc ++ #[(#[oc,cin,1,1],0),(#[oc],1),(#[oc],2)]
+/-- A bottleneck stage. Width is `mid = oc/4` (the standard 4× expansion); the later blocks
+    take `oc` as their input, so only the first one can change channels. -/
+private def bottleneckStageSpec (ic oc count stride : Nat) : Array (Array Nat × Nat) := Id.run do
+  let mid := oc / 4
+  let mut a : Array (Array Nat × Nat) :=
+    if stride != 1 || ic != oc then bneckDownBlk ic mid oc else bneckIdBlk ic mid oc
+  for _ in [0:count-1] do a := a ++ bneckIdBlk oc mid oc
+  return a
+
 /-- The `(dims, initKind)` params this layer contributes, in func-arg order
     (`initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias)). -/
 def toSpecs : VLayer → Array (Array Nat × Nat)
@@ -127,6 +163,7 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | convBnNB ic oc k _      => convBnNBSpec ic oc k
   | maxPool _ _             => #[]
   | residualStage ic oc n s => stageSpec ic oc n s
+  | bottleneckStage ic oc n s => bottleneckStageSpec ic oc n s
   | globalAvgPool           => #[]
   | dense ic oc             => #[(#[ic,oc],0),(#[oc],2)]
   | relu                    => #[]

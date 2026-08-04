@@ -434,6 +434,114 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
 #guard resnet34ImagenetVerified.toSpecs.pop.pop == resnet34Verified.toSpecs.pop.pop
 #guard resnet34ImagenetVerified.toSpecs.back! == (#[1000], 2)
 
+/-! ### ResNet-50 — the bottleneck pair (`planning/rsb_a3_r50_verified.md`)
+
+    ⚠⚠ **SKELETON, 2026-08-03. These two specs are the LAYOUT only.** There is no
+    `Proofs/Architectures/ResNet50*.lean`, no `ResNet50RenderB.lean`, no artifact and no rung E —
+    so nothing renders, trains or is gated off them yet. They exist because the layout is what the
+    `#guard`s below can check *today*, and because the derived param count is the §2k precondition
+    that decides whether the JAX pair is meaningful at all. Phases 1–3 of the planning doc are what
+    make them real. -/
+
+/-- ch? **ResNet-50 on Imagenette 224²** — the bottleneck sibling of `resnet34Verified`:
+    7×7-s2 stem → BN → relu → pool → `[3,4,6,3]` bottleneck stages → GAP → dense.
+
+    ⚠ **STEM POOL DEVIATION, and it is inherited from `resnet34Verified` rather than introduced
+    here.** He et al. (and all three JAX references) specify a **3×3 stride-2 overlapping** max
+    pool; this is **2×2 stride-2, non-overlapping**. The output shape is identical (112→56) so
+    nothing fails — the *function* differs. The kit cannot currently express the paper's pool at
+    all: `SHlo.maxPoolF {c h w} : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)` bakes non-overlapping 2×
+    downsampling into its own type and takes no kernel parameter. Recorded here rather than left
+    in a codegen docstring, per §2l — the sin there was the blurb, not the deviation. -/
+def resnet50Verified : VerifiedNetSpec where
+  name     := "ResNet-50 (Imagenette)"
+  slug     := "resnet50"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .convBnNB 3 64 7 2,              -- 7×7-s2 stem → BN → relu        224→112 (no conv bias)
+    .maxPool 2 2,                    -- ⚠ paper is 3×3-s2 (above)      112→56
+    .bottleneckStage   64  256 3 1,  -- stage1: project + 2 identity   @56  (64→256 at stride 1)
+    .bottleneckStage  256  512 4 2,  -- stage2                         56→28
+    .bottleneckStage  512 1024 6 2,  -- stage3                         28→14
+    .bottleneckStage 1024 2048 3 2,  -- stage4                         14→7
+    .globalAvgPool,
+    .dense 2048 10 ]
+  blurb := "ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224². LAYOUT SKELETON: no render, no proof chain, no artifact yet."
+  -- 53 BN layers, in `conv_bn` call order: per block the three body convs, then the projection.
+  bnChannels := #[64,
+    -- stage1 @ mid 64, oc 256: proj-block (4) + 2 identity (3 each)
+    64,64,256,256,  64,64,256,  64,64,256,
+    -- stage2 @ mid 128, oc 512
+    128,128,512,512,  128,128,512,  128,128,512,  128,128,512,
+    -- stage3 @ mid 256, oc 1024
+    256,256,1024,1024,  256,256,1024,  256,256,1024,  256,256,1024,
+    256,256,1024,  256,256,1024,
+    -- stage4 @ mid 512, oc 2048
+    512,512,2048,2048,  512,512,2048,  512,512,2048]
+
+/-- **ResNet-50 on full 1000-class ImageNet** — the verified peer of `jax/MainResnet50Imagenet.lean`,
+    whose RSB-A3 `rsb-faithful` recipe has already run: **76.66% top-1 / 93.03% top-5 @ ep100**.
+    Same backbone as `resnet50Verified`, head widened to 2048→1000.
+
+    ⚠ The reference number is at **effective batch 2048** (512 micro × 4 grad-accum), and the
+    verified driver has **no gradient accumulation**. At bs512 the same recipe gives **40.8%**, not
+    78.1% — LAMB is a large-batch optimizer. So a pair run is not comparable until that is settled;
+    `planning/rsb_a3_r50_verified.md` §3 is the decision. -/
+def resnet50ImagenetVerified : VerifiedNetSpec where
+  name     := "ResNet-50 (ImageNet-1k)"
+  slug     := "resnet50in"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  shimScript := "generated_resnet50_imagenet_shim.py"   -- ⚠ NOT generated yet; scripts/gen_shims.sh
+  layers   := [
+    .convBnNB 3 64 7 2,
+    .maxPool 2 2,                    -- ⚠ paper is 3×3-s2 — see `resnet50Verified`
+    .bottleneckStage   64  256 3 1,
+    .bottleneckStage  256  512 4 2,
+    .bottleneckStage  512 1024 6 2,
+    .bottleneckStage 1024 2048 3 2,
+    .globalAvgPool,
+    .dense 2048 1000 ]
+  blurb := "ResNet-50 on full 1000-class ImageNet via the VERIFIED renderer. LAYOUT SKELETON: no render, no proof chain, no artifact yet."
+  bnChannels := resnet50Verified.bnChannels
+
+-- ▶ §2k's precondition, and it is FREE here: the derived layout must total the reference's own
+-- reported parameter count. `jax/.lake/build/generated_resnet50_imagenet.py` reports 25,557,032,
+-- which is also torchvision's — the two conventions already agree because neither carries conv
+-- biases (§2m). A mismatch here means the spec drifted from the net it is paired against, and it
+-- is exactly the check whose ABSENCE let two different "ResNet-34"s ship (§2k/§2l).
+#guard (resnet50ImagenetVerified.toSpecs.foldl
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 25557032
+#guard (resnet50Verified.toSpecs.foldl
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 23528522
+-- 53 BN layers = 1 stem + 16 blocks × 3 + 4 projections (all four stages project — stage 1
+-- changes 64→256 at stride 1, where R34's stage 1 is ic = oc and needs none).
+#guard resnet50Verified.bnChannels.size == 53
+-- ⚠⚠ AND `bnChannels` IS A HAND-WRITTEN LITERAL WITH NOTHING TYING IT TO `layers`. Measured:
+-- deleting a stage-3 block reddens all three counts above and leaves the `.size == 53` check
+-- GREEN, because that array is not derived from anything. So pin it to the layout the way §2m
+-- says — two independent routes, both gated. Every BN γ is the `(#[c], 1)` entry (initKind 1 =
+-- ones), and `toSpecs` emits them in func-arg order, so filtering them out reproduces the BN
+-- width list exactly. This is the audit whose ABSENCE let mnv2 ship a 158-param train step
+-- against a 160-param eval forward (§2m).
+#guard (resnet50Verified.toSpecs.filterMap
+          (fun (d, k) => if k == 1 then some d[0]! else none)) == resnet50Verified.bnChannels
+#guard (resnet50ImagenetVerified.toSpecs.filterMap
+          (fun (d, k) => if k == 1 then some d[0]! else none)) == resnet50ImagenetVerified.bnChannels
+-- 161 param tensors = 53 W + 53 γ + 53 β + dense {W, b}.
+#guard resnet50ImagenetVerified.toSpecs.size == 161
+-- The two differ in EXACTLY the head, the `resnet34in`/`resnet34` contract one net over.
+#guard resnet50ImagenetVerified.toSpecs.size == resnet50Verified.toSpecs.size
+#guard resnet50ImagenetVerified.toSpecs.pop.pop == resnet50Verified.toSpecs.pop.pop
+#guard resnet50ImagenetVerified.toSpecs.back! == (#[1000], 2)
+
 /-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 17 inverted-residual
     blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
     relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense.
