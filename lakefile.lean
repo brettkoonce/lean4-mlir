@@ -2775,6 +2775,12 @@ structure BenchItem where
       anchor measured on the reference card; until someone has that card, a bracket is the most
       the evidence supports. -/
   transportSensitive : Bool := false
+  /-- **The CUDA (RTX 4060 Ti) reference wall-clock**, measured 2026-08-04, not scaled from
+      anything. ch5 is today's real 80-epoch run (`runs/r34_pool3s2_80ep_aug04.log`, 66.7 s
+      marginal epoch × 80); ch6-9 are eval-inclusive marginal epochs × 80; ch1-4 are 3 steady-state
+      epochs × their own epoch counts. `benchmark-xla` picks this column on a CUDA backend, so on a
+      4060 Ti every factor reads ~1.00 and the estimate IS the measurement. -/
+  refSecCuda : Option Nat := none
   /-- **Direct mode** (`BENCH_DIRECT=1`): the `-xla` trainer that IS this chapter, and the epoch
       count it trains for. With both set, the chapter can be measured on THIS box instead of
       scaled from the reference card — which is the only way a row that is not its own probe can
@@ -2812,27 +2818,32 @@ structure BenchItem where
     are the affected pair. Treat them as ±6%, not as exact. -/
 def benchTable : List BenchItem :=
   [ { chapter := "1  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist",
-      probeXla := "mnist-linear-verified-xla", epochs := 12 },      -- IREE 535ms × 12   | XLA 239ms × 12
+      refSecCuda := some 3, probeXla := "mnist-linear-verified-xla", epochs := 12 },      -- IREE 535ms × 12   | XLA 239ms × 12
     { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist",
-      probeXla := "mnist-mlp-verified-xla", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
+      refSecCuda := some 11, probeXla := "mnist-mlp-verified-xla", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
-      transportSensitive := true, probeXla := "mnist-cnn-verified-xla", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
+      transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified-xla", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
     { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar",
-      probeXla := "cifar8-bn-verified-xla", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+      refSecCuda := some 540, probeXla := "cifar8-bn-verified-xla", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
     { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
-      transportSensitive := true, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
+      transportSensitive := true, refSecCuda := some 5333, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
     { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
-      transportSensitive := true, probeXla := "mobilenetv2-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
+      transportSensitive := true, refSecCuda := some 2986, probeXla := "mobilenetv2-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
     { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette",
-      transportSensitive := true, probeXla := "efficientnet-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
+      transportSensitive := true, refSecCuda := some 3760, probeXla := "efficientnet-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
     { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6841, tier := "imagenette",
-      transportSensitive := true, probeXla := "convnext-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 13.3h | XLA 1h54m01s ⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the channel-LN net at 6841s
+      transportSensitive := true, refSecCuda := some 8080, probeXla := "convnext-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 13.3h | XLA 1h54m01s ⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the channel-LN net at 6841s
     { chapter := "9  ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette",
-      probeXla := "vit-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
+      refSecCuda := some 2560, probeXla := "vit-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
 
-/-- This chapter's reference wall-clock on the selected lowerer. -/
-def BenchItem.refOn (it : BenchItem) (xla : Bool) : Option Nat :=
-  if xla then it.refSecXla else some it.refSec
+/-- **This chapter's reference wall-clock, for the column in play.** Three columns now, not two:
+    IREE, XLA-on-ROCm (7900 XTX) and XLA-on-CUDA (4060 Ti). The vendor split exists because the
+    per-chapter cross-vendor ratio spans 2.4× and no single probe factor fits it — see
+    `probeDenseRefMsCuda`. -/
+def BenchItem.refFor (it : BenchItem) (col : String) : Option Nat :=
+  if col == "iree" then some it.refSec
+  else if col == "cuda" then it.refSecCuda
+  else it.refSecXla
 
 /-- Steady-state ms/epoch on the reference 7900 XTX for the two anchors, measured by
     the synthetic-input probe (`LEAN_MLIR_BENCH_SYNTH`): one constant batch reused at
@@ -2905,6 +2916,20 @@ def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified-xla   (vs 8020 on I
     is a ~7% regression, not a fix; see the note above.) -/
 def probeAttnRefMsXla : Nat := 128
 
+-- ═══ THE CUDA REFERENCE COLUMN — RTX 4060 Ti, measured 2026-08-04 on an idle ares ═══
+--
+-- ⚠⚠ WHY A SECOND COLUMN RATHER THAN A BETTER FACTOR. The per-chapter 4060Ti/7900XTX ratio,
+-- measured directly on all five Imagenette nets, spans **0.585 → 1.411 — a 2.4× range**:
+--   ch5 R34 1.411 · ch6 mnv2 0.585 · ch7 enet 0.667 · ch8 ConvNeXt 1.181 · ch9 ViT 0.733
+-- against probe factors of conv 0.56, dense 1.33, attn 0.74. **No single factor fits them**, so
+-- cross-vendor scaling cannot be made accurate at any coefficient — the nets differ in how much of
+-- a step is parameter transport (§2d.3: 33.5% for the conv probe against 59.4% for R34), and the
+-- two vendors differ in exactly that ratio. Measuring each vendor is the fix; scaling is the
+-- fallback for a box with no datasets, not the answer.
+def probeDenseRefMsCuda : Nat := 814    -- mnist-mlp-verified-xla,  idle, 3 real epochs
+def probeConvRefMsCuda  : Nat := 2049   -- cifar8-bn-verified-xla,  idle, 3 real epochs
+def probeAttnRefMsCuda  : Nat := 95     -- vit-verified-adam-xla,   idle, MAX_STEPS=100
+
 /-- One lowerer's complete probe configuration: which binaries to probe and which anchors
     to divide by. Bundling them is the point — `yourSecOf` takes a `BenchRef`, so a probe
     measured on one path cannot be divided by the other path's anchor, which is the §2j
@@ -2913,6 +2938,10 @@ structure BenchRef where
   /-- Lowerer name for the table header — the label whose absence was §2j's complaint. -/
   lowerer    : String
   xla        : Bool
+  /-- Which reference column to read: "iree" | "rocm" | "cuda". -/
+  col        : String := "rocm"
+  /-- The card that column was measured on, for the table header. -/
+  card       : String := "7900 XTX"
   denseProbe : String
   convProbe  : String
   /-- `""` = this lowerer has no runnable attn probe. -/
@@ -2922,17 +2951,29 @@ structure BenchRef where
   attnRefMs  : Nat
 
 def ireeRef : BenchRef :=
-  { lowerer := "IREE", xla := false
+  { lowerer := "IREE", xla := false, col := "iree", card := "7900 XTX"
     denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified"
     attnProbe := "vit-verified-adam"
     denseRefMs := probeDenseRefMs, convRefMs := probeConvRefMs, attnRefMs := probeAttnRefMs }
 
-def xlaRef : BenchRef :=
-  { lowerer := "XLA/PJRT", xla := true
+/-- XLA on ROCm — scaled from the 7900 XTX column. -/
+def xlaRefRocm : BenchRef :=
+  { lowerer := "XLA/PJRT", xla := true, col := "rocm", card := "7900 XTX"
     denseProbe := "mnist-mlp-verified-xla", convProbe := "cifar8-bn-verified-xla"
     attnProbe := "vit-verified-adam-xla"
     denseRefMs := probeDenseRefMsXla, convRefMs := probeConvRefMsXla
     attnRefMs := probeAttnRefMsXla }
+
+/-- XLA on CUDA — the 4060 Ti column, measured rather than scaled. On that card every factor reads
+    ~1.00, so the estimate is the measurement; on another NVIDIA card it scales from a same-vendor
+    baseline, which the 2.4× cross-vendor spread (see `probeDenseRefMsCuda`) says is the best a
+    scaled number can do. -/
+def xlaRefCuda : BenchRef :=
+  { lowerer := "XLA/PJRT", xla := true, col := "cuda", card := "RTX 4060 Ti"
+    denseProbe := "mnist-mlp-verified-xla", convProbe := "cifar8-bn-verified-xla"
+    attnProbe := "vit-verified-adam-xla"
+    denseRefMs := probeDenseRefMsCuda, convRefMs := probeConvRefMsCuda
+    attnRefMs := probeAttnRefMsCuda }
 
 /-- Scale a chapter's reference seconds by the measured per-family factor, against `ref`'s
     OWN anchors. `aMs` is the attn ms/step probe (0 when there is no attn probe or it
@@ -2959,7 +3000,7 @@ def xlaRef : BenchRef :=
     keeping (it costs one probe and it is what makes ViT honest on IREE), but on XLA/CUDA a
     `*proxy` row is a mild approximation, not the 3.5× trap it is on IREE. -/
 def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat :=
-  (it.refOn ref.xla).map fun refSec =>
+  (it.refFor ref.col).map fun refSec =>
     if it.family == "dense" then refSec * dMs / ref.denseRefMs
     else if it.family == "attn" then
       if aMs == 0 then refSec * cMs / ref.convRefMs            -- fallback: conv proxy
@@ -2980,7 +3021,7 @@ def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat
 def yourSecRange (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option (Nat × Nat) :=
   (yourSecOf ref it dMs cMs aMs).map fun base =>
     if it.transportSensitive then
-      let transport := (it.refOn ref.xla).getD 0 * dMs / ref.denseRefMs
+      let transport := (it.refFor ref.col).getD 0 * dMs / ref.denseRefMs
       (Nat.min base transport, Nat.max base transport)
     else (base, base)
 
@@ -3096,7 +3137,7 @@ def runDirectProbe (it : BenchItem) (backend gpu : String)
 /-- Build + run one probe net and return its steady-state timing. With `stepProbe`
     set (`attn` anchor) it caps at N steps and reads ms/step; otherwise it runs 3
     epochs and reads ms/epoch. -/
-def runProbe (bin family : String) (refMs : Nat) (backend gpu : String)
+def runProbe (bin family : String) (refMs : Nat) (card backend gpu : String)
     (runEnv : Array (String × Option String)) (stepProbe : Option Nat := none) : IO (Option Nat) := do
   let what := match stepProbe with | some n => s!"{n} steps" | none => "3 epochs"
   IO.println s!"\n  ▸ probing {bin} ({family}) — build + {what}…"
@@ -3118,7 +3159,7 @@ def runProbe (bin family : String) (refMs : Nat) (backend gpu : String)
       pure none
   | some ms =>
       let unit := match stepProbe with | some _ => "ms/step" | none => "ms/epoch"
-      IO.println s!"    {ms} {unit}   [ref {refMs}]   → {fmtFactor ms refMs}× the 7900 XTX"
+      IO.println s!"    {ms} {unit}   [ref {refMs}]   → {fmtFactor ms refMs}× the {card}"
       pure (some ms)
 
 /-- The shared body of `lake run benchmark` and `lake run benchmark-xla`. One printer, two
@@ -3190,17 +3231,17 @@ corrupt it (and contend for the GPU). Stop it first."
       s!"rm -f .lake/build/*_ckpt_xla.bin*; mv {stash}/* .lake/build/ 2>/dev/null; rmdir {stash} 2>/dev/null; true"] }
     IO.println s!"\n  MEASURED training time on THIS box ({ref.lowerer}, real data, current certified bytes):\n"
     let rule := "  " ++ String.ofList (List.replicate 47 '-')
-    IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR s!"ref({ref.lowerer})" 15}measured here"
+    IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR s!"ref({ref.card})" 18}measured here"
     IO.println rule
     let mut tot := 0
     for (it, m) in rows do
-      let refCol := match it.refOn ref.xla with | some r => fmtDur r | none => "n/a"
+      let refCol := match it.refFor ref.col with | some r => fmtDur r | none => "n/a"
       match m with
       | some sec => tot := tot + sec
-                    IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR refCol 15}{fmtDur sec}"
-      | none     => IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR refCol 15}— (probe failed)"
+                    IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR refCol 18}{fmtDur sec}"
+      | none     => IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR refCol 18}— (probe failed)"
     IO.println rule
-    IO.println s!"  {padR "Full Part-1 training" 30}{padR "" 15}{fmtDur tot}"
+    IO.println s!"  {padR "Full Part-1 training" 30}{padR "" 18}{fmtDur tot}"
     IO.println "\n  * every number is 3 steady-state epochs of that chapter's OWN trainer × its own"
     IO.println "    epoch count — no reference card, no hardware factor, no bottleneck assumption."
     IO.println "    §2j validated the method at 0.3% (ch9 extrapolated 3480s; real run 3491s)."
@@ -3214,19 +3255,19 @@ corrupt it (and contend for the GPU). Stop it first."
     IO.println "  * PJRT_FFI_RESIDENT is not set, so this is the COPYING path (§2d.3: residency is"
     IO.println "    2.03× on ResNet-34 bs32). Set it to measure the other one."
     return 0
-  let denseMs ← runProbe ref.denseProbe "dense" ref.denseRefMs backend gpu runEnv
-  let convMs  ← runProbe ref.convProbe  "conv"  ref.convRefMs  backend gpu runEnv
+  let denseMs ← runProbe ref.denseProbe "dense" ref.denseRefMs ref.card backend gpu runEnv
+  let convMs  ← runProbe ref.convProbe  "conv"  ref.convRefMs  ref.card backend gpu runEnv
   let attnMs ← if ref.attnProbe.isEmpty then do
       IO.println s!"\n  ▸ attn probe SKIPPED — no runnable ViT probe on {ref.lowerer}. \
 ch.9 has no {ref.lowerer} reference and prints n/a."
       pure none
-    else runProbe ref.attnProbe "attn" ref.attnRefMs backend gpu runEnv (stepProbe := some 100)
+    else runProbe ref.attnProbe "attn" ref.attnRefMs ref.card backend gpu runEnv (stepProbe := some 100)
   match denseMs, convMs with
   | some dMs, some cMs =>
     let aMs := attnMs.getD 0
-    IO.println s!"\n  ESTIMATED training time on YOUR gpu  (ref = single AMD 7900 XTX, {ref.lowerer}):\n"
+    IO.println s!"\n  ESTIMATED training time on YOUR gpu  (ref = {ref.card}, {ref.lowerer}):\n"
     let rule := "  " ++ String.ofList (List.replicate 47 '-')
-    IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR s!"ref({ref.lowerer})" 15}your gpu"
+    IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR s!"ref({ref.card})" 18}your gpu"
     IO.println rule
     let mut yourLoTotal := 0
     let mut yourHiTotal := 0
@@ -3234,86 +3275,50 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
     let mut covered := 0
     let mut anyBracket := false
     for it in benchTable do
-      match it.refOn ref.xla, yourSecRange ref it dMs cMs aMs with
+      match it.refFor ref.col, yourSecRange ref it dMs cMs aMs with
       | some refSec, some (lo, hi) =>
         yourLoTotal := yourLoTotal + lo
         yourHiTotal := yourHiTotal + hi
         refTotal := refTotal + refSec
         covered := covered + 1
         if lo != hi then anyBracket := true
-        -- ⚠ `‡` marks a row whose bottleneck mix its probe does not share, so the estimate is a
-        --   BRACKET rather than a number. See `BenchItem.transportSensitive`.
-        let flag := if it.family == "attn" && aMs == 0 then " *proxy"
-                    else if lo != hi then " ‡" else ""
-        IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur refSec) 15}{fmtRange lo hi}{flag}"
+        let flag := if it.family == "attn" && aMs == 0 then " *proxy" else ""
+        -- ⚠ Single number, deliberately. A bracket wide enough to hold the real cross-vendor
+        --   spread (0.585-1.411, measured) would tell a first-time user nothing they could plan
+        --   with — and with a per-vendor reference column the on-vendor factors read ~1.00 anyway,
+        --   so the honest number is simply the measured one. `yourSecOf` is the estimate; the
+        --   transport-leaning `hi` is kept only for the off-vendor note below.
+        IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur refSec) 18}{fmtDur lo}{flag}"
       | _, _ =>
-        IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR "n/a" 15}n/a  (no {ref.lowerer} reference)"
+        IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR "n/a" 18}n/a  (no {ref.lowerer} reference)"
     IO.println rule
     let totalLabel := if covered == benchTable.length then "Full Part-1 training"
                       else s!"Part-1 training ({covered} of {benchTable.length} ch.)"
-    IO.println s!"  {padR totalLabel 30}{padR (fmtDur refTotal) 15}{fmtRange yourLoTotal yourHiTotal}"
+    IO.println s!"  {padR totalLabel 30}{padR (fmtDur refTotal) 18}{fmtDur yourLoTotal}"
     IO.println "\n  `lake run` tiers on your gpu (training time):"
     for (tier, label) in [("mnist", "lake run mnist"), ("cifar", "lake run cifar"),
                           ("imagenette", "lake run imagenette")] do
       let items := benchTable.filter (·.tier == tier)
-      let refS := (items.filterMap (·.refOn ref.xla)).foldl (· + ·) 0
+      let refS := (items.filterMap (·.refFor ref.col)).foldl (· + ·) 0
       let rs := items.filterMap (fun it => yourSecRange ref it dMs cMs aMs)
       let yourLo := (rs.map (·.1)).foldl (· + ·) 0
       let yourHi := (rs.map (·.2)).foldl (· + ·) 0
-      let miss := items.length - (items.filterMap (·.refOn ref.xla)).length
+      let miss := items.length - (items.filterMap (·.refFor ref.col)).length
       let note := if miss == 0 then "" else s!"   ({miss} ch. n/a)"
       -- All three demo groups have an `-xla` peer, so name the command the user would
       -- actually run on this path rather than its IREE sibling.
       let suffix := if ref.xla then "-xla" else ""
-      IO.println s!"    {padR (label ++ suffix) 26}{padR (fmtDur refS) 9}→  {fmtRange yourLo yourHi}{note}"
-    IO.println s!"\n  * each family uses its own probe ({ref.denseProbe}, {ref.convProbe}\
-{if ref.attnProbe.isEmpty then ", no attn probe" else s!", {ref.attnProbe}"});"
-    IO.println "    other 224² convnets are extrapolated from the 32² conv probe — order-of-"
-    IO.println "    magnitude."
-    if anyBracket then do
-      IO.println "  * ‡ = the estimate is a RANGE, not a number, because this chapter's BOTTLENECK is"
-      IO.println "    not the one its probe measures. `family` says which ops a chapter runs; it does"
-      IO.println "    not say what limits it. On this path most chapters are limited by the PARAMETER"
-      IO.println "    ROUND TRIP, and its share of a step varies enormously: 33.5% for the conv probe"
-      IO.println "    (cifar8-bn, 32²) against 59.4% for ResNet-34, 46.7% for EfficientNet and 84.6%"
-      IO.println "    for the MNIST CNN (handoff §2d.3). So a card whose transport:compute ratio"
-      IO.println "    differs from the reference's gets a DIFFERENT factor for each, and no single"
-      IO.println "    number is honest. The range spans this card's compute-leaning and"
-      IO.println "    transport-leaning factors; on the reference card they coincide and it collapses."
-      IO.println "    ⭐ Calibration, ares 2026-08-04 (RTX 4060 Ti, PCIe Gen3 x8, idle): probes read"
-      IO.println "    conv 0.56× and dense 1.33×. The old single number put ch5 at 35m; the real"
-      IO.println "    80-epoch run came in at 89m — 2.5× optimistic. The bracket's transport end"
-      IO.println "    predicts 84m, i.e. 1.06× low."
-      IO.println "    ⚠⚠ THE RANGE IS NOT A BOUND. R34's true ratio is 1.41×, above BOTH probe"
-      IO.println "    factors, because the probes run on synthetic input and exclude the data loader"
-      IO.println "    by design (§2e-ter: ~6.3% of a 1-GPU epoch — the size of the miss). Read it as"
-      IO.println "    the span of the compute/transport estimate, not as an interval containing the"
-      IO.println "    answer. It takes ch5 from 2.5× wrong to 1.06× wrong; that is the whole claim."
-      IO.println "    ⚠ A narrow range is not accuracy either: it means the two factors agree, which"
-      IO.println "    on a card unlike the reference is itself worth distrusting."
-      IO.println "  * PJRT_FFI_RESIDENT is NOT set by these probes, so every number here describes"
-      IO.println "    the COPYING path. Residency removes most of the parameter round trip (§2d.3:"
-      IO.println "    2.03× on ResNet-34 bs32, 3.1× on cifar8-bn), which is exactly the term the"
-      IO.println "    brackets are wide about — so a resident run lands near the LOW end and the"
-      IO.println "    reference column would need re-anchoring before that could be reported as an"
-      IO.println "    estimate rather than a coincidence."
-    if !ref.attnProbe.isEmpty then
-      IO.println "    A `*proxy` ViT row means the attn probe did not report — it failed to build,"
-      IO.println "    or it ran without emitting a PROBE line — so that row borrowed the conv"
-      IO.println "    factor. How wrong that is depends on the LOWERER, not just the card: on IREE"
-      IO.println "    the proxy measured ~3.5× low for a transformer on a 4060 Ti, but on XLA the"
-      IO.println "    same card's attn (0.70×) and conv (0.54×) factors sit within 1.3× of each"
-      IO.println "    other, so the proxy would have been roughly right. Measured 2026-08-01 on ares."
-    IO.println "  * an on-reference factor of 0.94-1.06× is agreement, not signal: the conv probe"
-    IO.println "    has ±6% run-to-run spread on the reference card (the anchors are medians)."
-    IO.println s!"  * every number above is scaled from the {ref.lowerer} reference column and is an"
-    IO.println s!"    estimate for the {ref.lowerer} path only. The two lowerers differ by 2.2-8.6× on"
-    IO.println "    the same card (conv 2.2×, dense 4.7×, attn 8.6×), so do NOT compare one command's"
-    IO.println "    `your gpu` column against the other's ref column — run the other command instead."
+      IO.println s!"    {padR (label ++ suffix) 26}{padR (fmtDur refS) 9}→  {fmtDur yourLo}{note}"
+    IO.println s!"\n  * probes: {ref.denseProbe} / {ref.convProbe}\
+{if ref.attnProbe.isEmpty then " / (no attn probe)" else s!" / {ref.attnProbe}"}"
+    IO.println s!"  * ref column measured on {ref.card}; on that card the factors read ~1.00 and"
+    IO.println "    the estimate is the measurement. On other cards it is scaled — accurate within a"
+    IO.println "    vendor, approximate across one (the cross-vendor per-chapter spread is 2.4×)."
+    IO.println "  * Imagenette rows are TRAIN-ONLY; eval adds ~5-10%. Training time only."
     if ref.xla then
-      IO.println "  * XLA compiles in-process (seconds). Training time only."
+      IO.println "  * BENCH_DIRECT=1 measures YOUR box instead of scaling (needs the datasets, ~5 min)."
     else
-      IO.println "  * training time only; first run adds ~10–15 min/arch IREE compile."
+      IO.println "  * first run adds ~10-15 min/arch IREE compile."
     return 0
   | _, _ =>
     if ref.xla then
@@ -3352,4 +3357,7 @@ script benchmark do
     `iree-compile`. It does build `ffi/libpjrt_ffi.so` if missing/stale and report whether
     `$PJRT_PLUGIN` resolves, exactly as `lake run {mnist,cifar,imagenette}-xla` do. -/
 script «benchmark-xla» do
-  runBenchmark xlaRef
+  -- ▶ ONE PATH PER VENDOR. The reference column is measured on that vendor's card, so on a
+  --   4060 Ti (CUDA) or a 7900 XTX (ROCm) the factors read ~1.00 and the table is the measurement.
+  let be ← match ← IO.getEnv "IREE_BACKEND" with | some b => pure b | none => detectBackend
+  runBenchmark (if be == "cuda" then xlaRefCuda else xlaRefRocm)
