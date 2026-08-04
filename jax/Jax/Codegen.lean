@@ -465,8 +465,23 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   if spec.hasPool then
     code := code ++
       "def max_pool2d(x, size=2, stride=2):\n" ++
+      "    # He et al. / torchvision: SYMMETRIC padding (size-1)//2 — i.e.\n" ++
+      "    # nn.MaxPool2d(size, stride, padding=(size-1)//2) — NOT XLA 'SAME'.\n" ++
+      "    #\n" ++
+      "    # At size=2 this is BIT-IDENTICAL to 'SAME' (p=0), so every 2x2 pool in the\n" ++
+      "    # repo (cifar/mnist) is unaffected — verified. It differs only at ODD kernels:\n" ++
+      "    # for 3x3/s2 on 112, 'SAME' pads (low=0, high=1) giving window i = [2i, 2i+2],\n" ++
+      "    # where the paper's symmetric pad gives [2i-1, 2i+1]. The two grids are offset\n" ++
+      "    # by one input position and are different functions everywhere (measured at\n" ++
+      "    # n=12: 'SAME' window maxima [2,4,6,8,10,11] vs symmetric [1,3,5,7,9,11]).\n" ++
+      "    # Output shape is unchanged (112 -> 56) either way.\n" ++
+      "    #\n" ++
+      "    # Changed 2026-08-03 for paper-faithfulness; see planning/rsb_a3_r50_verified.md.\n" ++
+      "    # This MOVES the ResNet stem pool, so it voids R34-ImageNet's and R50's numbers.\n" ++
+      "    p = (size - 1) // 2\n" ++
       "    return jax.lax.reduce_window(x, -jnp.inf, jax.lax.max,\n" ++
-      "             (1, 1, size, size), (1, 1, stride, stride), 'SAME')\n\n"
+      "             (1, 1, size, size), (1, 1, stride, stride),\n" ++
+      "             ((0, 0), (0, 0), (p, p), (p, p)))\n\n"
   if spec.hasBn then
     if cfg.runningBN then
       -- Running-BN (gap A): train normalises with batch stats + EMA-updates the

@@ -11,15 +11,41 @@ bestiary. The run is a bonus.
 
 ---
 
-## FIDELITY LEDGER — what's paper-faithful vs what deviates (latest: 2026-07-07)
+## FIDELITY LEDGER — what's paper-faithful vs what deviates (latest: 2026-08-04)
 
 Single source of truth for how close the R50 trainer is to the published timm recipe. Keep this
 section current when faithfulness changes; the phased build history below is frozen at 2026-06-22.
 Config lives in `jax/MainResnet50Imagenet.lean`; RandAugment/aug codegen in `jax/Jax/Codegen.lean`.
 
-**Best measured result (RSB-A3 tier):** `rsb-faithful` recipe → **76.66% top-1 / 93.03% top-5**
-(ep100), vs paper RSB-A3 **78.1%** = **−1.4 pt**. The 40.8%→76.66% recovery was giving LAMB its
-design batch via grad-accum (eff bs2048); the saga is in memory `project_r50_a3_lowval_diagnostic`.
+⚠⚠ **EVERY ACCURACY NUMBER BELOW IS VOID AS OF 2026-08-04 AND MUST BE RE-RUN.** The stem max pool
+changed (next bullet) — it is one layer, near the input, on the gradient path, so the net is a
+different function and its numbers belong to a net this repo no longer emits.
+
+⛔ **STEM POOL — the emitter was never the paper's, fixed 2026-08-04.** `max_pool2d` emitted
+`reduce_window(..., 'SAME')`. XLA's `SAME` for 3×3/s2 on a 112→56 axis pads `(low 0, high 1)`, so
+window `i` covered `[2i, 2i+2]`. He et al. / torchvision use `MaxPool2d(3, stride=2, padding=1)` —
+**symmetric**, window `[2i−1, 2i+1]`. The two grids are **offset by one input position** and differ
+at every window (measured at `n = 12`: `SAME` maxima `[2,4,6,8,10,11]` vs symmetric
+`[1,3,5,7,9,11]`). Now emits explicit `((0,0),(0,0),(p,p),(p,p))` with `p = (size−1)//2`.
+
+* ⭐ **Inert for every 2×2 pool** — at `size = 2`, `p = 0` ⇒ symmetric ≡ `SAME`. Gated end to end:
+  `mnist-cnn` (which calls the shared helper twice) is **BIT-IDENTICAL** across the change. So no
+  cifar/mnist/VGG number moves; the blast radius is exactly the 3×3 users.
+* ⚠ **What it voids**: this doc's **76.66% / 93.03%**, and `planning/r34_imagenet.md`'s R34/ImageNet
+  **72.1% / 90.7%** (90 ep). Both need re-running before anything is quoted again.
+* ⚠ It was found from the *verified* side, not here — `planning/rsb_a3_r50_verified.md` §4b has the
+  full write-up, the gates, and why the verified path still pools 2×2 until its codegen lands.
+* ⚠ **Method note that cost time**: the on-disk `jax/.lake/build/generated_*.py` were STALE (they
+  predated the AUG_SEED, shim-sharding and EMA-warmup changes), so diffing a codegen edit against
+  them showed unrelated deltas as if they were the edit's. **Diff against a regenerated baseline**
+  — `git stash` the change, rebuild, generate, restore — never against what happens to be on disk.
+
+**Best measured result (RSB-A3 tier) — ⛔ VOID, see above; kept for the regime finding:**
+`rsb-faithful` recipe → **76.66% top-1 / 93.03% top-5** (ep100), vs paper RSB-A3 **78.1%** =
+**−1.4 pt**. The 40.8%→76.66% recovery was giving LAMB its design batch via grad-accum
+(eff bs2048); the saga is in memory `project_r50_a3_lowval_diagnostic`. ⭐ **That finding survives
+the re-run** — it is about batch size, not the pool — so `rsb-faithful` is still the recipe to
+re-run first, and the −1.4 pt attribution below is what the re-run re-opens.
 
 **Recipes** (positional arg to `resnet50-imagenet <recipe>`; `--help` lists them):
 | recipe | tier | batch | notes |
@@ -84,6 +110,8 @@ of `.bin` weights. Set `LEAN_MLIR_KEEP_BIN`.
 - `wdExcludeNormBias` (timm no_weight_decay skip-list: BN γ/β + biases). Was an A3-only-branch bug
   in the LAMB path; fixed (see `project_grad_accum_lever`).
 - running-BN eval (train running mean/var, not eval-batch).
+- **Stem max pool — now literal `MaxPool2d(3, stride=2, padding=1)`** (closed 2026-08-04, see the
+  ledger head). Was XLA `'SAME'`, i.e. a pooling grid offset by one input position.
 - **RandAugment — now literal `rand-m6-mstd0.5-inc1`** (closed 2026-07-07, `Jax/Codegen.lean`):
   op set = timm `_RAND_INCREASING_TRANSFORMS` (15 ops, no `Identity`, +`Invert` +`SolarizeAdd`);
   per-op apply prob 0.5; geometric interp BILINEAR (was NEAREST); TranslateX/Y `-Rel`
@@ -102,6 +130,19 @@ of `.bin` weights. Set `LEAN_MLIR_KEEP_BIN`.
 **Residual −1.4 pt attribution (best guess, post-RandAugment-fix):** BN regime (Ghost/K×-update or
 single-card big-batch) + LAMB impl micro-details + bf16. The RandAugment op-set/interp deltas that
 were on this list are now closed. Quantifying requires the `true-2048` run on an 80GB card.
+
+⭐ **AND THE STEM POOL WAS A CANDIDATE NOBODY HAD ON THE LIST** (2026-08-04). The −1.4 pt was
+attributed across three causes while a fourth — a stem pooling grid offset by one input position —
+sat unnoticed the whole time. It is now closed, so **the `rsb-faithful` re-run is a free test of
+it**: if the gap narrows, the pool was carrying some of the −1.4 pt and the other three
+attributions shrink accordingly; if it does not move, the existing three are better supported than
+they were, because a live confounder has been removed.
+
+⚠ **Do not predict which** — record the measured number. And note the honest reading either way:
+this list was a *guess* presented as a decomposition, and the item that turned out to be real was
+not on it. The lesson is `xla_pjrt_handoff.md` §2k's, one doc over: **a residual is only evidence
+when it is explained, not when it is small** — −1.4 pt looked like "the usual implementation
+noise", which is exactly what made a fourth cause easy to miss.
 
 ---
 

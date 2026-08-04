@@ -91,12 +91,108 @@ with the DP mask-shard gate run on each, and **EfficientNet's classifier dropout
 render gap — is closed** (§0.12), giving `enetin_emarms64dropdo`: the first EfficientNet artifact
 carrying its reference's whole regulariser set. The §0.2 ▶2/▶3 thread — the largest remaining item
 in this file for two sessions — is closed. ⚠ §0.12 also found a **committed artifact that could not
-be loaded at any `LEAN_MLIR_VARIANT`**; there is a new audit for that class. What is left is §0.3's
-list and the runs §0.1 says this box cannot do.
+be loaded at any `LEAN_MLIR_VARIANT`**; there is a new audit for that class. **And all five now RUN 4-way data-parallel on real ImageNet** (§0.13) with ms/step measured on the
+current renders — R34's 30-epoch tier is ~26 h and is the decided next run. ⚠ EfficientNet and ViT
+measure 6–10× the previously recorded table and the cause is NOT found; the obvious hypothesis was
+tested and refuted. What is left is §0.3's list and the runs §0.1 says this box cannot do.
 
-**Read in this order:** this section, then §0.3 (what is owed). §0.10 and §0.11 are the two SD
-records; `planning/stochastic_depth.md` §7e-f is the gate detail. Everything from §0a onward is
-HISTORY.
+⚠⚠ **STOP-BEFORE-YOU-RUN, added 2026-08-04.** The R34 pair run named above is **blocked, and not on
+hardware.** Scoping ResNet-50 turned up that **the verified stem max pool is 2×2 where He et al. and
+all three JAX references use 3×3/s2** — a different function at identical output shape, documented
+nowhere, on every ResNet here. The JAX side turned out not to be the paper either (XLA `'SAME'`
+offsets the pooling grid by one input position vs the paper's symmetric pad). **JAX is fixed and
+gated; the verified side is not** — its VJP witness is built and 3-axiom clean, its codegen is not.
+So the two paths currently differ at the stem *more than before*, and a pair run would compare two
+different nets. Standalone verified numbers are fine if stated as such. §0.3's first row and
+`planning/rsb_a3_r50_verified.md` §4b have the detail, the gates and the ~10-site codegen map.
+
+**Read in this order:** this section, then §0.3 (what is owed — **the stem-pool row first**).
+§0.10 and §0.11 are the two SD records; `planning/stochastic_depth.md` §7e-f is the gate detail.
+Everything from §0a onward is HISTORY.
+
+### §0.13 ▶ **THE IMAGENET SMOKE + MEASURED THROUGHPUT — 2026-08-03.** All five run 4-way DP; the numbers are NOT what the old table says
+
+**All five verified ImageNet trainers execute data-parallel on 4 GPUs on real tfds ImageNet.** This
+is the first time every net has been through the DP path at ImageNet scale on the current renders.
+
+| net | variant | outputs | compile | first loss | descends |
+|---|---|---|---|---|---|
+| ResNet-34 | `momdp64` | 405 | 6.5 s | 7.787 | ✅ |
+| MobileNetV2 | `rmsdp64` | 581 | 11.0 s | 7.020 | ✅ |
+| EfficientNet-B0 | `emarmsdp64dropdo` | **965** | 14.3 s | 7.030 | ✅ |
+| ConvNeXt-T | `adamdpwxclipdrop` | 561 | — | **10.417** ⚠ | ✅ 10.42 → 8.63 |
+| ViT-Tiny | `adamdp128x4wxclipdrop` | 627 | — | 7.982 | ✅ |
+
+EfficientNet's 965 outputs is §0.12's new artifact working: EMA's 4th blob region + 9 dropPath masks
++ the dropout mask all riding through. Every net announces `DATA-PARALLEL: 4 replicas x bs N`.
+
+#### ⭐ MEASURED ms/step (`LEAN_MLIR_MAX_STEPS=40`, median of steps 9–40, 4 GPUs, real shim)
+
+| net | ms/step | per-replica × 4 | global | steps/ep | min/epoch | **80 ep** | 30 ep |
+|---|---|---|---|---|---|---|---|
+| MobileNetV2 | **396** | 64 | 256 | 5,004 | 33 | 44 h | 17 h |
+| ResNet-34 | **616** | 64 | 256 | 5,004 | 51 | 68 h | **26 h** |
+| ConvNeXt-T | **922** | 32 | **128** | **10,009** | 154 | 205 h | 77 h |
+| EfficientNet-B0 | **2,023** | 64 | 256 | 5,004 | 169 | 225 h | 84 h |
+| ViT-Tiny | **4,489** | 128 | 512 | 2,502 | 187 | 250 h | 94 h |
+| | | | | | **sequential** | **792 h ≈ 33 d** | |
+
+R34's 616 matches the job config's independently measured 625 (2026-08-01) — the only cross-check
+available, and it holds. **R34's 30-epoch tier is the decided run: ~26 h.**
+
+#### ⚠⚠ TWO NETS ARE 6–10× THE PREVIOUSLY RECORDED TABLE, AND THE CAUSE IS NOT FOUND
+
+`planning/imagenet_sweep.md` records enetin **310** and vitin **424** ms/step on 4 GPUs. Measured
+here: **2,023** and **4,489**. Per image the split is stark — R34 2.41 ms and mnv2 1.55 ms (neither
+carries a feature added this session), against ConvNeXt 7.20, EfficientNet 7.90 and ViT 8.77 (all
+three do).
+
+⚠ **The obvious hypothesis — that this session's features caused it — was TESTED AND REFUTED**, and
+that is the useful part:
+
+| isolation probe | result |
+|---|---|
+| EfficientNet **without** any masks (`emarmsdp64`) | **2,161** ms vs 2,023 **with** — the masks cost NOTHING |
+| ViT mixup OFF (`SHIM_SOFT=0`, same render) | 4,051 vs 4,489 — ~10%, real but not the story |
+| ConvNeXt mixup OFF | 906 vs 922 — noise |
+
+So `F32.dropoutMask`'s 327,680 pure-Lean draws per step and wire-v2's 1000× label bytes are both
+**cheap**, contrary to the prediction. The variants differ from the old table's (that one measured
+plain AdamW; these are RMSProp+EMA and wx+clip), but the feature delta does not explain 6–10×.
+**Do not budget an EfficientNet or ViT ImageNet run off either number until this is understood.**
+
+#### ⚠ ConvNeXt's initial loss is 10.42 where every other net starts near ln(1000) = 6.91
+
+It descends briskly (10.42 → 11.20 → 10.24 → 9.79 → 9.29 → 8.63), and its baked loss divisor is
+correct (`%lbfc = dense<32.0>`, its per-replica batch — checked against all four DP artifacts, each
+bakes its own). So the smoke passes. But §5 lists ConvNeXt's `%loss` as a report-only carve-out
+outside every faithfulness theorem, and **R34's shipped WRONG once** (plain CE where its cotangent
+implied smoothed CE, caught only by a numeric tie). A 1.5× discrepancy on the one net whose `%loss`
+is its *only* forward-only output deserves a look before anyone quotes a loss curve from it.
+
+#### ▶ ConvNeXt at batch 64 — SCOPED, NOT BUILT
+
+`cnxin` renders at 32 (global 128, **10,009 steps/epoch — double every other net**) purely because
+the batch is a private constant. §2p calls threading it *"the single best pre-run optimisation
+available"*. Scoped 2026-08-03, and it is **bigger than ViT's `vbB` job**:
+
+| file | constant | uses | note |
+|---|---|---|---|
+| `ConvNeXtRenderB.lean` | `bB := 32` | 111 | writes the drop artifacts |
+| `ConvNeXtRender.lean` | `cBS := 32` | 104, **16 functions** | writes EVERY committed ConvNeXt artifact |
+
+⚠ **Both must move together**, and that is the part a first look misses: `convNextAdamTrainStepFaithfulB`
+DELEGATES to the per-example `convNextAdamTrainStepFaithful` with a batched traversal, so the
+signature/AdamW tail comes from `cBS` while the traversal comes from `bB`.
+
+⚠ The method that made ViT's cheap transfers: **name the parameter after the constant**, so all 215
+body uses stay byte-identical and the diff is signatures + call sites only. The gate is the same —
+at 32, every committed `convnext_*`/`cnxin_*` must re-render unchanged (ViT's did, 0 files).
+A first attempt at the `cBS` half was started and REVERTED cleanly; the private helpers thread fine,
+but the four public entry points need their trailing-parameter insertion done against their real
+multi-line signatures rather than by regex. Expect ~26 signatures across the two files.
+
+---
 
 ### §0.12 ✅ **EfficientNet's CLASSIFIER DROPOUT — 2026-08-03.** The last unlisted render gap
 
@@ -125,12 +221,19 @@ runs of the SAME config measured 1.820689 / 1.820854). The deltas alternate sign
 freshly-drawn per-step Bernoulli mask does and a baked constant does not. ⚠ Three steps is *"it runs
 and the mask reaches the objective"*, nothing more — §0.1.
 
-⚠ **And it cost GPU time to learn that `LEAN_MLIR_MAX_STEPS` DOES NOT CAP THIS DRIVER.**
-`trainAdamSched` — the path every `adam`/`rms`/`ema`/`drop`/`do` variant takes — reads
-**`LEAN_MLIR_G2_STEPS`**; `MAX_STEPS` is `train`'s, and is read *nowhere* on this path, so it is
-silently ignored and a "3-step probe" runs the full 80-epoch schedule. The knob is documented in
-`§2d.3`'s block and in this file's own memory, and it was still the wrong one to reach for. **Use
-`LEAN_MLIR_G2_STEPS` for any short probe on a verified AdamW/RMSProp trainer.**
+⚠⚠ **AND THE TWO STEP KNOBS DO DIFFERENT THINGS — a first reading of this got it wrong and the
+correction is the useful part.** On `trainAdamSched` (every `adam`/`rms`/`ema`/`drop`/`do` variant):
+
+| knob | what it does |
+|---|---|
+| **`LEAN_MLIR_G2_STEPS=n`** | caps batches **per epoch**. The epoch loop still runs to `cfg.epochs`, so `n` × 80 steps total |
+| **`LEAN_MLIR_MAX_STEPS=n`** | ⭐ the **steady-state ms/step PROBE**: warm 8 steps, time 9..`n`, print the MEDIAN, `return ()`. Not a cap — a benchmark |
+
+⚠ `MAX_STEPS` has an **8-step warmup**, so any value ≤ 8 fires nothing *and* caps nothing: the run
+goes to the full schedule looking like the knob was ignored. That is what `MAX_STEPS=3` did here,
+and it is why a first pass through this concluded the variable was "read nowhere on this path" —
+it is read (`VerifiedTrain.lean:1089`, `:1257`), just never triggered. **Use `MAX_STEPS=40` to
+measure throughput and `G2_STEPS=2` to smoke; below 9, `MAX_STEPS` is a no-op.**
 
 #### ⚠⚠ THE FINDING: the two regularisers are ONE OP AT TWO MASK RANKS, and the hazard was only ever written down in one direction
 
@@ -250,6 +353,7 @@ exactly like a control that ran.**
 | | |
 |---|---|
 | **§0.1** | ⚠ the box constraint — it re-orders everything |
+| **§0.13** | ▶ **the ImageNet smoke + MEASURED ms/step** — all five run 4-way DP; two are 6–10× the old table |
 | **§0.12** | ✅ **EfficientNet's classifier dropout**, and the unloadable artifact it found |
 | **§0.11** | ✅ **ViT — batched index + stochastic depth**, and the gate that is invalid there |
 | **§0.10** | ✅ **ConvNeXt's stochastic-depth render**, the gates, and the one defect no gate caught |
@@ -268,9 +372,12 @@ Brett, 2026-08-02, stopping four concurrent 80-epoch Imagenette trainers mid-fli
 runs this box will crash."* Sustained multi-GPU load destabilises ares. That is not a footnote — it
 **re-orders this whole file**, because:
 
-* **§0's former headline, the R34/ImageNet 30-epoch run, is ~16 h on 4 GPUs and is NOT currently
-  runnable here.** Nothing about it is wrong; it is blocked on hardware, not on code. Same for
-  `recipe_gaps.md` §4's ~203 h budget for all five nets at reference epochs.
+* **§0's former headline, the R34/ImageNet 30-epoch run, is ~26 h on 4 GPUs and is NOT currently
+  runnable here.** (⚠ this bullet read **~16 h** until 2026-08-04 — that was §2d.3's 386 ms/step;
+  §0.13 measured **616** on the current renders and §0's headline already says 26 h.) Nothing about
+  it is wrong; it is blocked on hardware, not on code. Same for `recipe_gaps.md` §4's ~203 h budget
+  for all five nets at reference epochs. ⚠⚠ **And as a verified-vs-JAX PAIR it is now also blocked
+  on the stem pool** (§0.3) — the two paths differ there until the verified codegen lands.
 * **What IS available is build-and-gate work**, and 2026-08-02 is six threads of evidence that it
   goes fine: every gate in §0.4 is a known answer, a bit-identity check or a few-step smoke, all
   single-GPU and all minutes.
@@ -688,6 +795,7 @@ down as a hypothetical for years while the actual op was missing.
 
 | owed | why it matters | where |
 |---|---|---|
+| ⛔⛔ **THE STEM MAX POOL IS NOT THE PAPER'S — on EVERY ResNet here, and the two paths now DISAGREE** (2026-08-04) | He et al. specify **3×3/s2** after the stem conv for all of 18/34/50/101/152, and all three JAX references emitted it. `resnet34Verified`/`resnet34ImagenetVerified` use **`.maxPool 2 2`** — non-overlapping, a different function at identical output shape (112→56), and **documented nowhere**. Found while scoping R50. ⚠ It turned out the JAX side was not the paper either: it emitted XLA `'SAME'`, which for 3×3/s2 pads `(0,1)` — window `[2i, 2i+2]` — against the paper's symmetric `[2i−1, 2i+1]`, i.e. **a pooling grid offset by one input position** (measured at `n=12`: `[2,4,6,8,10,11]` vs `[1,3,5,7,9,11]`). **JAX is FIXED and gated** (bit-identical at 2×2, so no cifar/mnist net moved; R50 logits move rel 0.075). **The verified side is NOT** — `maxPool3s2`'s full VJP witness is built and 3-axiom clean (438 lines, 0 `sorry`), but its **codegen is not**, so `SHlo.maxPoolF` still bakes non-overlapping 2× downsampling in its own type. ⚠⚠ **Until the codegen + the 14-artifact re-render land, verified and JAX differ at the stem** — worse than before the work started. Cost to close: ~10 codegen sites (site map in the R50 doc §4b), the re-render, R34's ties/`dp-check`/`shard-check`/residency, and the 90.06% Imagenette re-run | `rsb_a3_r50_verified.md` §4b |
 | ~~⛔ the four ImageNet renders bake `wd = 1e-4`~~ ✅ **CLOSED 2026-08-02** | all four bake **0.05** now; the re-render diff was exactly 4 lines, all `%wd`, every other artifact byte-identical, and both pairs re-gate bit-exact at 4 replicas | §0.5 |
 | ~~⛔ stochastic depth's **asymmetric-batch DP gate**~~ ✅ **CLOSED 2026-08-02** | `lake build drop-shard-check` — and §5b's prediction was right: the masks WERE being replicated, in the shim, before any DP drop render existed. Both existing constructions were unusable and the answer was neither of them | §0.6 |
 | ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
@@ -702,7 +810,10 @@ down as a hypothetical for years while the actual op was missing.
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
 | ⛔⛔ **ViT's and EfficientNet's SHIPPING DP ARTIFACTS ARE A REGULARISER BEHIND their single-device peers** — found 2026-08-03 by listing what each artifact BAKES | An ImageNet run at 4 replicas loads the **DP** render. Measured: `cnxin_adamdpwxclipdrop` has dropPath ✅; **`vitin_adamdp128x4wxclip` has NO dropPath**, and **`enetin_emarmsdp64` has neither dropPath nor classifier dropout** — while `vitin_adamwxclipdrop` and `enetin_emarms64dropdo` (0 all_reduce, single-device) sit beside them unused. So a 4-replica ViT/EfficientNet run silently trains WITHOUT the regularisers their references set, exactly as §0.5's four artifacts did with `wd`. ⚠ **This is §0.5's finding recurring on a new axis**, and the check that found it was the same one: list what the artifact bakes, do not read the recipe matrix. Cost to close: **one `#eval` each** (`replicas` is already a parameter on both renderers) plus a DP mask-shard gate run — `drop-shard-check` transfers unchanged | §0.5, §0.12 |
-| ⛔ **R34/ImageNet, 30 epochs** | ~16 h on 4 GPUs. Blocked on hardware, not code; the preflight is green and the rig smoke-tested | §0.4's R34 block |
+| ⚠⚠ **EfficientNet and ViT measure 6–10× their recorded ImageNet ms/step, cause UNKNOWN** | `imagenet_sweep.md` says enetin 310 / vitin 424 on 4 GPUs; measured 2026-08-03 on the current renders: **2,023 / 4,489**. Per image, the two nets carrying no new feature (R34 2.41, mnv2 1.55) are 3–6× cheaper than the three that do. ⚠ The hypothesis that this session's features caused it was **REFUTED by isolation probes** — masks cost nothing (2,161 without vs 2,023 with), mixup ~10% on ViT only. Variants differ from the old table's, but not by 6–10×. **Do not budget an enet/ViT ImageNet run off either number** | §0.13 |
+| ▶ **ConvNeXt at batch 64** — scoped, not built | `cnxin` is at 32 (global 128, 10,009 steps/epoch, double every other net) because the batch is a private constant in TWO files that must move together (`cBS` 104 uses/16 fns, `bB` 111 uses) — the delegation is what makes it two. §2p calls it "the single best pre-run optimisation available". The ViT `vbB` method transfers; a first attempt was started and reverted cleanly | §0.13 |
+| ⚠ **ConvNeXt's ImageNet init loss is 10.42**, where every other net starts near ln(1000)=6.91 | It descends and its baked divisor is correct, so it is not a blocker — but `%loss` is a report-only carve-out on the one net where it is the ONLY forward-only output, and R34's shipped wrong once | §0.13 |
+| ⛔ **R34/ImageNet, 30 epochs** | ~26 h on 4 GPUs at §0.13's measured 616 ms/step (⚠ **this row used to say ~16 h** — that was §2d.3's 386 ms/step, which §0.13 superseded). Blocked on hardware, not code; the preflight is green and the rig smoke-tested. ⚠⚠ **AND NOW BLOCKED ON THE POOL ROW ABOVE**: as a verified-vs-JAX *pair* run it would compare two nets that differ at the stem. Runnable today only as a standalone verified number, stated as such | §0.4's R34 block |
 
 ---
 
@@ -1578,10 +1689,16 @@ says so in its own header.
 ### ▶ R34/ImageNet — ⛔ BLOCKED ON HARDWARE, NOT ON CODE (2026-08-02)
 
 ⚠ **This was §0's headline until 2026-08-02 and it is still the right run — but it cannot be done on
-this box.** It is ~16 h on 4 GPUs, and sustained multi-GPU load destabilises ares (see the top of
-§0). Nothing below is stale; the preflight was green and the rig smoke-tested. **Everything here
-stands for the day a box can sustain it.** Do not re-derive it, and do not start it here without
-asking.
+this box.** It is **~26 h** on 4 GPUs (⚠ this said ~16 h until 2026-08-04, from §2d.3's 386 ms/step;
+§0.13 measured **616** on the current renders), and sustained multi-GPU load destabilises ares (see
+the top of §0). Nothing below is stale; the preflight was green and the rig smoke-tested.
+**Everything here stands for the day a box can sustain it.** Do not re-derive it, and do not start
+it here without asking.
+
+⚠⚠ **NEW BLOCKER 2026-08-04, and it is not hardware**: as a verified-vs-JAX **pair** run this is
+blocked on the stem pool (§0.3). The JAX side now pools the paper's 3×3 window; the verified side
+still pools 2×2, so the pair would compare two nets that differ at the stem. Runnable as a
+standalone verified number, stated as such — not as a pair.
 
 ### ▶ THE JOB: get R34/ImageNet over the line
 
@@ -7497,12 +7614,16 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   tracked modifications only; use `.gitignore` for the rest.
 - Rendering at a non-default batch breaks eval unless the forward graph is re-rendered too — that
   is what `LEAN_MLIR_SKIP_EVAL` is for.
-- ⚠⚠ **`LEAN_MLIR_MAX_STEPS` DOES NOT CAP THE VERIFIED AdamW/RMSProp TRAINERS.** `trainAdamSched` —
-  the path every `adam`/`adamdp`/`rms`/`ema`/`drop`/`do` variant takes — reads **`LEAN_MLIR_G2_STEPS`**.
-  `MAX_STEPS` belongs to `train` (the SGD driver) and is read nowhere on the Adam path, so it is
-  silently ignored: a "3-step probe" runs the full schedule, holds the GPU, and (§4 above) makes any
-  concurrently-launched gate segfault. Cost time on 2026-08-03 even with the right answer already in
-  the notes. **`LEAN_MLIR_G2_STEPS` for short probes on a verified AdamW/RMSProp trainer.**
+- ⚠⚠ **THE TWO STEP KNOBS ARE NOT INTERCHANGEABLE, AND NEITHER IS A NO-OP.** On `trainAdamSched`
+  (every `adam`/`adamdp`/`rms`/`ema`/`drop`/`do` variant): **`LEAN_MLIR_G2_STEPS=n`** caps batches
+  PER EPOCH (the epoch loop still runs to `cfg.epochs`), while **`LEAN_MLIR_MAX_STEPS=n`** is the
+  steady-state **ms/step probe** — warm 8, time 9..`n`, print the median, exit
+  (`VerifiedTrain.lean:1089`, `:1257`). ⚠ The probe's 8-step warmup means **any `MAX_STEPS` ≤ 8
+  fires nothing and caps nothing**, so the run goes to the full schedule and reads exactly like an
+  ignored variable — which is how a first pass here mis-concluded that `MAX_STEPS` was "read
+  nowhere on this path". It is read; it just needs ≥ 9. **`G2_STEPS=2` to smoke, `MAX_STEPS=40` to
+  measure.** Getting this wrong holds the GPU, and per the bullet above that makes any
+  concurrently-launched gate segfault rather than error.
 
 ---
 
