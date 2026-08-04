@@ -1837,13 +1837,28 @@ number is the *pool* and says nothing about headroom. Whether bs256 fits is **un
 
 **⚠ Three things to know before running it long:**
 
-1. **This box stores Imagenette train at 224², not 256² — every Imagenette run here needs
-   `LEAN_MLIR_IMAGENETTE_TRAIN=224` or it dies with `uncaught exception: short read`.** `train.bin`
-   is 1,425,359,105 bytes = exactly 9469 × 150,529 (224² records). It is a **pre-existing box
-   condition, not a DP one** — the single-device `adam` variant fails identically. ⚠ And it is not
-   only a loader flag: `crop := (px == 256)`, so at 224 the run trains with **no random crop**, i.e.
-   a weaker augmentation than the 71.31% 80-epoch run in §0b. Do not compare accuracy across the two
-   without saying so.
+1. ~~**This box stores Imagenette train at 224², not 256²**~~ ⛔⛔ **THAT WAS NEVER A BOX CONDITION —
+   IT WAS A STALE DATA FILE, AND IT COST EVERY IMAGENETTE RUN HERE ITS RANDOM CROP.** Corrected
+   2026-08-04. `data/imagenette/train.bin` was 1,425,359,105 bytes = 9469 × 150,529 (224² records),
+   so runs needed `LEAN_MLIR_IMAGENETTE_TRAIN=224` or died with `short read` — and this file called
+   that a *"pre-existing box condition"* for weeks. It is not: **`preprocess_imagenette.py` has
+   always set `TRAIN_SIZE = 256`**, with the comment *"train at 256, random crop to 224 at train
+   time"*. The committed `.bin` simply predated that and was never regenerated, while the source
+   images sat extracted at `data/imagenette/imagenette2-320/` the whole time.
+   **Regenerating took 24 SECONDS** and lands on 1,861,690,625 = 9469 × 196,609 + 4 exactly:
+   ```bash
+   python3 -c "import importlib.util as u; s=u.spec_from_file_location('p','preprocess_imagenette.py'); \
+     m=u.module_from_spec(s); s.loader.exec_module(m); \
+     m.process_split('data/imagenette/imagenette2-320/train','data/imagenette/train.bin',size=m.TRAIN_SIZE)"
+   ```
+   ⚠ `val.bin` is correct as-is and must NOT be regenerated — `VAL_SIZE = 224` by design (center
+   crop), and 590,826,329 = 3925 × 150,529 + 4 checks out.
+   ⚠⚠ **Now DROP `LEAN_MLIR_IMAGENETTE_TRAIN=224` from every Imagenette invocation here** — at the
+   256 default `crop := (px == 256)` is true, so random crop is back on and this box's runs are
+   finally the same recipe as §0b's table. Any accuracy measured here under the 224 flag was trained
+   with a **weaker augmentation than the numbers it was being compared against**, which is the real
+   cost of the miss. *General form: a workaround that makes the error go away is not a diagnosis —
+   the flag worked, so nobody asked why the file was the wrong size.*
 2. **Global batch 128 is a DIFFERENT EXPERIMENT from the 71.31% run**, which was global 32. §2d.2
    measured accuracy tracking *step count*: 295 → 73 steps/epoch is two halvings, worth roughly
    −1.5 to −2.5 points at unscaled LR. To reproduce the single-device number on four cards, render
