@@ -1940,6 +1940,16 @@ lean_exe «shard-check» where
 lean_exe «argmax-check» where
   root := `tests.TestArgmaxN
 
+/-- `r34-dp-shard` — the DP gate R34 never had. `shard-check`'s own docstring says R34 is absent
+    "on purpose … no `adamdp` peer at this batch to pair with", and there is no `resnet34-dp-check`
+    either, so the net carrying the 30-epoch ImageNet run is the one net whose data-parallel path
+    rests entirely on a source comment. This asks the narrower question the full identity would
+    subsume — do replicas 1..3 affect the update at all — using only the committed DP artifact, no
+    single-device bs64 peer. TEST + a CONTROL that must fire. Needs 4 GPUs and the XLA backend. -/
+lean_exe «r34-dp-shard» where
+  root := `tests.TestR34DpShard
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and
