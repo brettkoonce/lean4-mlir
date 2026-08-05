@@ -119,48 +119,101 @@ comparison. Capacity is irrelevant when the consumer pulls one batch and walks a
 The generated JAX trainer calls `prefetch_to_device(it, sharding, depth=2)`. **368→201 is
 transport we don't overlap and they do.** 201→101 is bf16, a separate axis.
 
-Post-residency the step is roughly **~105 ms compute · ~5 ms params · ~250 ms image path** — the
-image path is now dominant, which is precisely what residency exposed.
+#### ✅ MEASURED 2026-08-05 — the split is real, and it is not where this file put it
+
+`LEAN_MLIR_BENCH_SYNTH=1` **did not work on ImageNet** until today: `imgStreams` was spawned on
+`net.data == .imagenet` alone, so a "synthetic" run still did the full 154 MB blocking pipe read
+every step. On every other dataset synth replaces a preloaded host array; ImageNet never had one,
+so the flag replaced nothing and announced nothing. Fixed in `VerifiedTrain.lean` (skip the spawn
+under synth, announce it, and give `mkSynthData` a real `.imagenet` case — it had been falling
+through to **mnist's 60,000**, making a synthetic epoch 234 steps where the real one is 5,004).
+
+Same binary, same config (4×bs64, momdp64, resident, fp32, devices 0,2,3,4), `MAX_STEPS=120`:
+
+| | ms/step | what it is |
+|---|---|---|
+| real, shim on | **377** | `t_read + t_rest` |
+| synth, shim off | **219** | `t_rest` (identical at `MAX_STEPS=40`) |
+| **difference** | **158** | **`t_read`** |
+
+⭐ Validated against production: 5004 × 377 ms × 30 ep = **15.7 h** against the run's actual
+**15.5 h**. The probe tracks the in-run figure (368, steps 200–1200) to 2.4%.
+
+**What this changes:**
+
+1. ⭐ **The prefetch ceiling is `max(158, 219)` = 219 ms/step — 377 → 219, `1.72×`**, i.e. 30
+   epochs 15.7 h → **9.1 h**. Close to this file's 1.8× guess, but now a bound rather than a hope.
+2. ⭐ **`t_read < t_rest`, so one producer already has the slack.** The read needs 158 ms and
+   compute gives it 219 — confirming `SHIM_WORKERS>1` does not bind for R34, and now by
+   measurement rather than by the img/s argument §2.1 says was never the relevant one.
+3. ⚠⚠ **The decomposition above — "~105 compute · ~5 params · ~250 image path" — is WRONG, and
+   the error matters.** The un-hidable floor is **219**, not ~110. Device compute is ~105 (the
+   residency measurement's own control), so **~114 ms of the floor is host-side work plus the
+   154 MB H2D of `x`** — which lives *inside* `mlpTrainStepVDP` and which prefetching the **pipe**
+   does not touch. Overlap cannot go below 219; only shrinking or overlapping the H2D can.
+4. ▶ **Therefore uint8 (§2.4) is worth more than "then", and for a second reason.** It cuts the
+   158 ms read *and* the H2D term inside the 219 ms floor — the only lever identified that touches
+   the post-overlap floor at all. It stays second in ORDER (overlap first, it is cheaper and
+   gateable on bit-identity), but it is not a cleanup item.
+
+▶ **Next measurement:** split the 219 into compute / H2D / host blob patching. Item 3 is arithmetic
+off a borrowed compute figure, not a measurement, and now that the prefetch has landed (§2.3, 224
+ms/step) it is **the** binding term — every remaining lever on this path aims at it.
 
 ### 2.3 The change
 
-Depth-1 double buffer — issue the read for step i+1 **before** invoking step i:
+## ✅ BUILT AND GATED 2026-08-05 — **377 → 224 ms/step, 1.68×**
 
-```lean
-let mut inflight ← IO.asTask (prio := .dedicated)
-                     (readShimBatchRR imgStreams (ep * nb) gbs flat shimNC)
-for bi in [0:nb] do
-  let (xb, yb) ← IO.ofExcept (← IO.wait inflight)
-  if bi + 1 < nb then
-    inflight ← IO.asTask (prio := .dedicated)
-                 (readShimBatchRR imgStreams (ep * nb + bi + 1) gbs flat shimNC)
-  ... assemble pbuf ...
-  let out ← IreeSession.mlpTrainStepVDP ...   -- the reader drains the pipe during this
-```
+`LeanMlir/VerifiedTrain.lean`, depth-1 double buffer, **`LEAN_MLIR_PREFETCH` default ON** with
+`=0` as the gate's control. 30 epochs of R34/ImageNet: **15.7 h → 9.3 h**. Landed 5 ms above the
+219 ms ceiling §2.2 measured, and that residual is the real path allocating a fresh 154 MB
+`ByteArray` per step where the synth floor reuses one buffer.
 
-⚠⚠ **Depth 1 is a correctness condition, not a simplification, for two independent reasons.** A
-pipe is a stream, so two concurrent reads on one handle interleave and corrupt a batch. And the
-resident path carries a **generation counter** (`res_gen`, `ffi/pjrt_ffi.c`) requiring strict step
-order. With `SHIM_WORKERS=n` the natural depth is n — one in flight *per handle*, never two on one.
+⭐ **`Task.Priority.default` (the pool), not `.dedicated` — worth 12 ms/step** (236 → 224). The
+usual advice for a blocking read is `.dedicated`, so a long `read()` cannot occupy a pool worker
+and starve other tasks. That reasoning does not apply at depth 1 — there is **exactly one
+outstanding task by construction**, so there is nothing to starve — while `.dedicated` spawns a
+fresh OS thread every step, 150,120 of them over a 30-epoch run. The doc's sketch (and the first
+implementation) had `.dedicated`; it was a 5% error.
 
-⚠ Scope to the shim path only; Imagenette/CIFAR augment host-side off `augSeed` in the loop.
-⚠ **No threading exists anywhere in this repo** — `IO.asTask` appears zero times.
+**How depth 1 is actually bought:** read `i+1` is issued *after* the wait on read `i` and *before*
+the invoke. After-the-wait is the correctness condition (one read outstanding ⇒ one thread on the
+handles, in issue order); before-the-invoke is the entire point. Two concurrent reads on one pipe
+would interleave and corrupt both batches, and the resident path's `res_gen` requires strict step
+order. ⚠ The prefetch is skipped on the last step of the last epoch — otherwise a pool worker is
+left blocked in `read()` on a live producer while `main` returns. The guard spans the epoch
+boundary rather than stopping at `bi + 1 < nb`, so the overlap survives it: `ep*nb + bi + 1` at the
+end of epoch e is exactly `ep'*nb + 0` for e+1.
 
-**Gate**: same handle, same order, same bytes — only *when* moves. So N steps with and without
-prefetch must give a **bit-identical loss sequence**.
+### The gate — `tests/prefetch_tie.sh`, PASS
 
-▶ **Measure `LEAN_MLIR_BENCH_SYNTH=1` first.** Already in the driver, already used by the bench
-for exactly this. Synth vs real at equal step count splits `t_read` from `t_rest` as one number
-instead of inferring it from utilisation sampling as this file has.
+Three runs: A1/A2 both OFF (**the control**), B ON (the verdict), `[θ|m|v]` dumps compared
+bit-for-bit over 2 epochs × 12 steps so it **crosses an epoch boundary** — the one place the index
+arithmetic can be wrong on its own. **Control 0 bytes, verdict 0 bytes.**
 
-**Estimate: 368 → ~200 ms/step (~1.8×).** Labelled an estimate; the synth measurement is what
-makes it a number.
+⚠⚠ **The control failed on the first attempt and that is the finding worth keeping.** A1 vs A2
+differed in **145,301,829 of 261,572,064 bytes** — two runs of the *identical* path. Cause: XLA
+autotuning picks convolution algorithms per process on CUDA, exactly what `scripts/det_shim.sh`
+exists for and records (191,094,739 of 255,477,624 at 10 steps). With the deterministic shim on
+`LD_LIBRARY_PATH` the floor is 0 and the gate reads. **Had the gate been written as two runs
+instead of three, it would have reported a 145 MB "failure" of a change that is bit-exact** — or,
+run once in the other order, a green that meant nothing. §6's lesson, paid immediately.
+
+⚠ `LEAN_MLIR_BENCH_SYNTH` must NOT be set for this gate — it now skips the shim spawn, so there
+would be no read to prefetch and the gate would compare a path against itself and pass forever.
+
+⚠ Still open, both deliberately: **`SHIM_WORKERS>1` keeps depth 1**, where the natural depth is n
+(one in flight per handle); and the non-shim datasets are untouched — Imagenette/CIFAR augment
+host-side off `augSeed` in the loop and have no pipe to drain.
 
 ### 2.4 Then
 
 * **uint8 wire** — 154 MB → 38.5 MB/step. *After* overlap, since overlap hides latency and what
   remains exposed is bandwidth. Compatible with the one-definition rule **iff** only the affine
   normalize moves to device. ⚠ Changes a gated interface (the preamble's G4 check).
+  ▶ **Now the only identified lever on the 224 ms floor, and it hits that floor twice** — §2.2's
+  measurement puts the 154 MB H2D of `x` and a 154 MB host allocation *inside* the un-overlappable
+  term, and uint8 cuts both 4×. This is no longer a cleanup item.
 * **`SHIM_WORKERS>1`** — built, one env var, defaults to 1. 2 workers **1.71×**, 4 **2.36×**. The
   **ViT** lever; does not bind for R34.
 

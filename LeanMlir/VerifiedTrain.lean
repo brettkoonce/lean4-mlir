@@ -566,6 +566,11 @@ private def mkSynthData (data : VerifiedData) (d0 bs : Nat) :
   let (nTr, px, crop) := match data with
     | .imagenette => (9469, 3 * 256 * 256, true)   -- 256² pre-crop → 224² each step
     | .cifar      => (50000, d0, false)
+    -- ⚠ ImageNet needs its OWN case, and until 2026-08-05 it fell through to mnist's 60,000 —
+    -- so a synthetic ImageNet epoch was 234 steps where the real one is 5,004. Invisible to the
+    -- `MAX_STEPS` probes (which cap far below either) and wrong for anything reading steps/epoch.
+    -- The shim already delivers 224² pre-augmented, so there is no host-side crop here.
+    | .imagenet   => (1281167, d0, false)
     | _           => (60000, d0, false)             -- mnist
   let img ← F32.const (bs * px).toUSize 0.1
   let lbl ← F32.const bs.toUSize 0.0               -- bs int32 zero labels (4 bytes each)
@@ -1117,11 +1122,41 @@ it and its .epoch marker aside and start fresh."
   if declaresMix then
     IO.println s!"  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX={mixDecl}; {if softTargets then "ON (wire v2, soft float32 targets — the reference recipe)"
   else "OFF (SHIM_SOFT explicitly disabled)"}. ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step."
+  -- ⚠⚠ `!synth`, ADDED 2026-08-05, and its absence made `LEAN_MLIR_BENCH_SYNTH` INERT on the one
+  -- dataset where the data path is the dominant term. The stream was spawned on `net.data ==
+  -- .imagenet` alone and the per-step branch below prefers it whenever it is non-empty, so a
+  -- "synthetic" ImageNet run still did the full 154 MB blocking pipe read every step. On every
+  -- other dataset synth replaces a preloaded host array; ImageNet never had one, so the flag
+  -- replaced nothing and said so nowhere. That is handoff §4's own lesson in a new place — *the
+  -- synthetic path exists to remove a variable from a measurement, which makes it exactly the code
+  -- least likely to be looked at when the measurement comes out clean.*
+  --
+  -- ▶ This is what splits `t_read` from `t_rest`: the same binary at the same step count, real vs
+  -- synth, differs by exactly the shim read. That difference is the ceiling on what a prefetch can
+  -- hide (planning/next_session_pipeline_then_r50.md §2).
+  --
+  -- ⚠ It changes what `scripts/residency_gate.sh` feeds an ImageNet net — from a seeded real
+  -- stream to one constant batch. Both are deterministic, which is all that gate's bit-identity
+  -- verdict needs, but a constant batch is less numerically varied, so re-confirm the FAULT
+  -- control fires before trusting a green from it.
   let imgStreams : Array IO.FS.Handle ←
-    if net.data == .imagenet then
+    if net.data == .imagenet && !synth then
       spawnShimSharded net.shimScript "train" gbs (3 * 224 * 224)
         (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1) shimWorkers shimNC
     else pure #[]
+  if synth && net.data == .imagenet then
+    -- ⚠ ANNOUNCED, because the previous behaviour was silent and that is the whole defect: a
+    -- number measured this way is NOT a step time, and nothing else in the log would say so.
+    IO.println s!"  [SYNTH] imagenet shim NOT spawned — one constant batch, zero pipe reads. \
+This measures t_rest (compute + params + host blob patching), NOT a full step."
+    -- Wire v2 sizes the target buffer at `gbs × nClasses`, not `gbs`, and `mkSynthData` cannot
+    -- know that — it runs before the shim's declared mixing is read. Without this a mixing net
+    -- (ViT, ConvNeXt) would read `gbs × nClasses` floats out of a `gbs`-float buffer the moment
+    -- synth started supplying the labels, which is the bs128×2 overread of §2d.3 wearing new
+    -- clothes. Uniform `1/nc` rather than zeros: a valid probability vector, and step timing is
+    -- value-independent either way.
+    if shimNC > 0 then
+      curLbl ← F32.const (gbs * shimNC).toUSize (1.0 / shimNC.toFloat)
   -- LEAN_MLIR_MAX_STEPS: run a short steady-state ms/step probe then exit. This is
   -- the benchmark's `attn` anchor — ViT is matmul/attention-bound, so its per-step
   -- cost scales very differently from conv across GPUs and can't borrow the conv
@@ -1147,6 +1182,53 @@ it and its .epoch marker aside and start fresh."
   pbuf := if hasBn
           then F32.concat #[thetamv, scalarSlots, runningBnStats, dropSlots]
           else F32.concat #[thetamv, scalarSlots, dropSlots]
+  -- ▶▶ DEPTH-1 PREFETCH of the shim read — planning/next_session_pipeline_then_r50.md §2.
+  --
+  -- The step was two blocking calls back to back: `readShimBatchRR` (154 MB off a pipe) and then
+  -- the invoke, with NOTHING draining the pipe during compute. A batch is 154 MB and a pipe's
+  -- buffer is 64 KB (this box caps `pipe-max-size` at 1 MB, still 0.6% of a batch), so the
+  -- producer filled its buffer, blocked in `write()`, and slept through the entire compute. It
+  -- measured 258% CPU on a 32-core box: not slow, throttled. ⚠ Which is why "one producer does
+  -- ~1,530 img/s and R34 needs ~380" was never the relevant comparison — capacity is irrelevant
+  -- when the consumer pulls one batch and walks away.
+  --
+  -- ⭐ MEASURED, `LEAN_MLIR_BENCH_SYNTH` real-vs-synth at 4×bs64 resident fp32: the step was
+  -- **377 ms = 158 read + 219 rest**, so `max(158, 219)` = **219** and the read hides COMPLETELY
+  -- behind compute. ✅ Delivered: **377 → 224 ms/step, 1.68×** (30 epochs 15.7 h → 9.3 h), 5 ms
+  -- off that ceiling. Bit-identity gated by `tests/prefetch_tie.sh`.
+  --
+  -- ⚠⚠ **DEPTH 1 IS THE CORRECTNESS CONDITION, NOT A SIMPLIFICATION**, and it is bought below by
+  -- issuing read `i+1` only AFTER waiting on read `i`: exactly one read is ever outstanding, so
+  -- the handles are touched by one thread at a time and strictly in issue order. Two concurrent
+  -- reads on one handle would interleave and corrupt both batches — a pipe is a stream, not a
+  -- message queue — and the resident path's generation counter (`res_gen`, `ffi/pjrt_ffi.c`)
+  -- requires strict step order. With `SHIM_WORKERS=n` the natural depth is n, one in flight PER
+  -- HANDLE, never two on one; that generalisation is not built here.
+  --
+  -- ⚠ Shim path only. Imagenette/CIFAR augment host-side off `augSeed` inside the loop and have
+  -- no pipe to drain.
+  -- ⚠ This introduces the FIRST concurrency primitive in the repo — `IO.asTask` appeared zero
+  -- times before it. The reader thread touches nothing the step touches: it owns the handles and
+  -- returns two fresh `ByteArray`s.
+  --
+  -- DEFAULT ON, with `LEAN_MLIR_PREFETCH=0` as the escape hatch — the same shape as `SHIM_SOFT=0`,
+  -- and for the same reason: it is the control the gate needs. ⚠ The gate is that the read ORDER
+  -- is unchanged (same handle, same sequence, same bytes; only *when* moves), so N steps with and
+  -- without must give a BIT-IDENTICAL loss sequence. `tests/prefetch_tie.sh`.
+  let prefetch := match ← IO.getEnv "LEAN_MLIR_PREFETCH" with
+    | some v => v != "0" && v.toLower != "off" && v != "false"
+    | none   => true
+  if !imgStreams.isEmpty then
+    -- ⚠ ANNOUNCED. §0.9's finding, and 2026-08-05's: a throughput setting that prints nothing when
+    -- OFF is how `PJRT_FFI_RESIDENT` let a 16 h benchmark and a 26 h production config diverge for
+    -- a week. Both states say so.
+    IO.println (if prefetch
+      then "  ▸ SHIM PREFETCH: ON (depth 1 — step i+1's read is issued before step i's invoke, so \
+the producer fills the pipe during compute). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64."
+      else "  ▸ SHIM PREFETCH: OFF (LEAN_MLIR_PREFETCH=0) — the read blocks the step. This is the \
+gate's control, not a configuration.")
+  -- The one batch in flight. `none` on the first step of the run and on the non-shim path.
+  let mut inflight : Option (Task (Except IO.Error (ByteArray × ByteArray))) := none
   for ep in [startEpoch:nEpochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
@@ -1236,24 +1318,76 @@ it and its .epoch marker aside and start fresh."
       -- so it bypasses BOTH the slice and the augmentation below. That is deliberate: the transform
       -- has exactly one definition (the generated shim, shared with the JAX reference), and a second
       -- copy here is the double-writer failure this repo keeps paying for.
-      let (xb, yb) ← if !imgStreams.isEmpty then
-          -- Round-robin across the sharded producers; with SHIM_WORKERS=1 (the default) this is
-          -- `imgStreams[0]` every step, i.e. exactly the single-producer path.
-          readShimBatchRR imgStreams (ep * nb + bi) gbs (3 * 224 * 224) shimNC
-        else do
-          let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * gbs) gbs trainPix
-          -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
-          -- lives in the data pipeline, not the network): Imagenette = random crop
-          -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
-          -- MNIST = none.
-          let x ← match net.data with
-            | .imagenette =>
-                let c ← if crop then F32.randomCrop xbRaw gbs.toUSize 3 256 256 224 224 augSeed
-                        else pure xbRaw
-                F32.randomHFlip c gbs.toUSize 3 224 224 (augSeed + 7777)
-            | .cifar => F32.randomHFlip xbRaw gbs.toUSize 3 32 32 augSeed
-            | _ => pure xbRaw
-          pure (x, if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs)
+      -- ⚠ Statement position, not `let (xb, yb) ← if …`, because the prefetch branch REASSIGNS
+      -- `inflight`, and do-notation only threads a mutable variable through statements — inside a
+      -- nested `do` used as an expression the assignment does not elaborate.
+      let mut xb := ByteArray.empty
+      let mut yb := ByteArray.empty
+      if !imgStreams.isEmpty then
+        -- Round-robin across the sharded producers; with SHIM_WORKERS=1 (the default) this is
+        -- `imgStreams[0]` every step, i.e. exactly the single-producer path.
+        let flat := 3 * 224 * 224
+        if prefetch then
+          -- Step `bi`'s batch has been in flight since step `bi-1` issued it. `none` only on the
+          -- very first step of the run — one step of no overlap in 150,120, not worth a case.
+          -- ⚠ The index runs `ep * nb + bi` unbroken across the epoch boundary, which is what the
+          -- round-robin needs: the train iterator `.repeat()`s inside the shim and never ends, so
+          -- there is no per-epoch restart to resynchronise against.
+          --
+          -- ⭐ `Task.Priority.default` (the pool), NOT `.dedicated`, and it is worth **12 ms/step**
+          -- — measured 2026-08-05, R34/ImageNet 4×bs64: **236 dedicated vs 224 pooled**. The usual
+          -- advice for a blocking read is `.dedicated`, so that a long `read()` does not occupy a
+          -- pool worker and starve other tasks. That reasoning does not apply here and its cost
+          -- does: depth 1 means there is **exactly one outstanding task by construction**, so
+          -- there is nothing to starve, while `.dedicated` spawns a fresh OS thread **every step**
+          -- — 150,120 of them over a 30-epoch run. Pooled lands 5 ms above the 219 ms synth floor,
+          -- and that residual is the real path allocating a fresh 154 MB `ByteArray` per step
+          -- where synth reuses one buffer.
+          let t ← match inflight with
+            | some t => pure t
+            | none   => IO.asTask (readShimBatchRR imgStreams (ep * nb + bi) gbs flat shimNC)
+                          Task.Priority.default
+          let r ← IO.wait t
+          -- ⚠⚠ HERE, and the position is load-bearing at both ends. BEFORE the invoke below is the
+          -- entire point — the reader drains the pipe during compute instead of sleeping through
+          -- it. AFTER the wait above is the depth-1 correctness condition: one read outstanding,
+          -- one thread on the handles, issue order preserved. Moving this line earlier would put
+          -- two reads on one pipe and interleave them.
+          -- ⚠ Not on the LAST step of the LAST epoch: that read would never be consumed, and it
+          -- would leave a pool worker blocked in `read()` on a live producer while `main`
+          -- returns. The condition spans the epoch boundary rather than stopping at `bi + 1 < nb`,
+          -- so the overlap survives it — `ep * nb + bi + 1` at the end of epoch e is exactly
+          -- `ep' * nb + 0` for e+1, which is what makes the round-robin continuous.
+          -- ⚠ The `LEAN_MLIR_MAX_STEPS` probe still `return`s mid-loop with one read outstanding;
+          -- that path is a measurement, not a training run, and it exits through the same reap.
+          if bi + 1 < nb || ep + 1 < nEpochs then
+            inflight := some (← IO.asTask
+              (readShimBatchRR imgStreams (ep * nb + bi + 1) gbs flat shimNC) Task.Priority.default)
+          else
+            inflight := none
+          -- ⚠ Unwrapped AFTER the next read is issued, so a mid-epoch read error still leaves the
+          -- pipeline in a consistent state — it throws here with exactly one orphaned task, which
+          -- the process exit reaps. Unwrapping first would throw with nothing in flight and make
+          -- the failure depend on where in the step it happened.
+          let (i, l) ← IO.ofExcept r
+          xb := i; yb := l
+        else
+          let (i, l) ← readShimBatchRR imgStreams (ep * nb + bi) gbs flat shimNC
+          xb := i; yb := l
+      else
+        let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * gbs) gbs trainPix
+        -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
+        -- lives in the data pipeline, not the network): Imagenette = random crop
+        -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
+        -- MNIST = none.
+        let x ← match net.data with
+          | .imagenette =>
+              let c ← if crop then F32.randomCrop xbRaw gbs.toUSize 3 256 256 224 224 augSeed
+                      else pure xbRaw
+              F32.randomHFlip c gbs.toUSize 3 224 224 (augSeed + 7777)
+          | .cifar => F32.randomHFlip xbRaw gbs.toUSize 3 32 32 augSeed
+          | _ => pure xbRaw
+        xb := x; yb := if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs
       let out ← if replicas > 1
         -- ⚠ `nDrop` is the SHARDED TAIL. The drop masks are per-EXAMPLE, so under data parallelism
         -- replica r must get mask rows [r*bs, (r+1)*bs) — the same split `x` gets — not a copy of
