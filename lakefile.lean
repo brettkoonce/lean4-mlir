@@ -352,6 +352,15 @@ lean_lib «Certs» where
              -- via IR.convBackDenote_eq_input_grad_formula) ⇒ r34IdBlockBack(pinned) = its .backward.
              -- b1-free (no batched↔non-batched reconciliation).
              `LeanMlir.Proofs.Foundation.Resnet34BackCertifiedTie,
+             -- R50 phase 1 (planning/next_session_pipeline_then_r50.md §3.1): the THREE bottleneck
+             -- blocks' certified VJPs. bblkPC (identity, 12 blocks), bblkPStridedPC (strided
+             -- projection, stages 2/3/4 block 0) and — the one with NO R34 analogue —
+             -- bblkPProjPC, the STRIDE-1 projection that R50's stage 1 block 0 needs because it
+             -- goes 64→256 without changing resolution. ⚠ rblkPStridedPC cannot serve there: the
+             -- halving is in its TYPE. ⚠ The stride sits on the 3×3 (v1.5/torchvision), not the
+             -- leading 1×1. Zero new foundation — every underlying lemma was already generic in
+             -- {ic oc h w kH kW}, so the third conv is one more vjp_comp_at link.
+             `LeanMlir.Proofs.Foundation.Resnet50BlocksCertified,
              -- A3 §1e depthwise backward (mnv2/enet/convnext blocker): the depthwise input-VJP is a
              -- forward depthwise conv at the spatially-reversed kernel (dwReverse, FREE reuse of
              -- floatBridges_depthwise — the depthwise twin of convBack); strided variant =
