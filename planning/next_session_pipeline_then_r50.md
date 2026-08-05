@@ -3,6 +3,28 @@
 **Written 2026-08-05**, at the end of the session that produced the first trustworthy verified
 ImageNet number.
 
+---
+
+## ▶▶ SUPERSEDED FOR §4 — read `planning/next_session_rsb_a3.md` first
+
+**As of 2026-08-05 (late), every §4 ingredient is built and individually certified**: gradient
+accumulation, LAMB, BCE-with-logits, and the 160/224 renderer parameterisation. ⛔ **They are not
+composed**, and that — plus the 160 data path and the still-unmeasured R50 ms/step — is the next
+session. `next_session_rsb_a3.md` is that brief.
+
+**This file is now the HISTORY**: how each piece got built, what each gate says, and the findings
+along the way (the wrong-emitter trap in §3.2, the prefix-audit decision, the ε-placement
+measurement). Everything below is accurate and none of it is the plan.
+
+| | where |
+|---|---|
+| what to do next | `next_session_rsb_a3.md` |
+| how R50's gradient got gated | §3.2 + "WHAT LANDED (late)" below |
+| the R50 architecture scoping | `rsb_a3_r50_verified.md` |
+| why LAMB at bs512 is not the recipe | `rsb_a2_resnet50.md` (40.8% against 78.1%) |
+
+---
+
 ▶ **The frame for everything below: R34/ImageNet is now a known-good reference configuration.**
 Not "a net that works" — a *standard*. Every other net is behind it on a small number of
 enumerable axes, and most of the remaining work is bringing them to it rather than inventing
