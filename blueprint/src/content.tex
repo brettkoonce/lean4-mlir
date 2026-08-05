@@ -4883,15 +4883,13 @@ At ImageNet scale, on the same four-card box as the bf16 run above:
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
 2$\times$ 7900 XTX (ROCm) & fp32 & ---           & 30 & $\sim$20 hr  & --- & --- \\
-4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$32 min  & 30 & $\sim$16 hr  & --- & --- \\
+4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$30.9 min & 30 & $\sim$15.5 hr & $\mathbf{70.74\%}$ & $\mathbf{90.14\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent ResNet-34 / ImageNet-1k on the phase-4 path, on the two rigs
 this book measures on.
-
-\textbf{[TODO --- 30-epoch R34.]}
 
 \prosesection{A reasonable stopping point}
 
