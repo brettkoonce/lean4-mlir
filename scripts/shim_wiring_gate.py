@@ -44,6 +44,7 @@ NETS = [
     ("mnv2in",     "MainMobilenetV2Imagenet.lean",   "MobileNetV2 (ImageNet, bf16)"),
     ("enetin",     "MainEfficientNetImagenet.lean",  "EfficientNet-B0 (ImageNet, bf16)"),
     ("cnxin",      "MainConvNeXtImagenet.lean",      "ConvNeXt-T (ImageNet, bf16)"),
+    ("resnet50in", "MainResnet50Imagenet.lean",      "ResNet-50 (ImageNet)"),
 ]
 
 FAILS = []
@@ -162,7 +163,7 @@ for slug, _, _ in NETS:
 present = [wiring[s] for s, _, _ in NETS if wiring.get(s)]
 # THE property the defect violated: five nets resolved to ONE shim. Distinctness is what says the
 # fix landed, and a duplicated entry (copy-paste between two nets) is otherwise silent.
-check(len(set(present)) == len(present), "all five resolve to DISTINCT shims",
+check(len(set(present)) == len(present), "all resolve to DISTINCT shims",
       f"{len(set(present))} distinct of {len(present)}")
 for slug, _, _ in NETS:
     s = wiring.get(slug)
@@ -217,7 +218,7 @@ for slug, mainfile, _ in NETS:
 nontrivial = [f for f in FEATURES
               if any(s[f] for s in sites_by_slug.values())
               and any(not s[f] for s in sites_by_slug.values())]
-check(len(nontrivial) >= 3, "the partition is non-trivial (≥3 features split the five nets)",
+check(len(nontrivial) >= 3, "the partition is non-trivial (≥3 features split the nets)",
       f"split features: {nontrivial}")
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -313,7 +314,7 @@ if "--stream" in sys.argv:
     # so all five must agree. A difference means an augmentation leaked into eval — which would be
     # the mixup split defect (§0.4) one layer down.
     check(len(set(val.values())) == 1,
-          "val is untouched: all five validation streams are IDENTICAL",
+          "val is untouched: every validation stream is IDENTICAL",
           f"{len(set(val.values()))} distinct digests")
     # C2b — the failure the driver's SHIM_MIX handling exists to prevent, measured rather than
     # argued. ViT's shim, left to its own baked default on a wire-v1 TRAIN stream, exits before
@@ -345,18 +346,23 @@ else:
 if "--break" in sys.argv:
     print("\n── --break: the negative controls ──")
     # (a) the pre-fix world: every net wired to R34's shim. Gate 0's distinctness must fire, and so
-    #     must gate 2 on the three nets whose augmentation vanishes.
+    #     must gate 2 on every net whose augmentation vanishes — i.e. every net whose recipe is
+    #     NOT R34's. That count is 4 as of 2026-08-05: vitin, enetin, cnxin and resnet50in.
+    #     ⚠ It was 3 until R50 was wired; mnv2in does not count because its config IS R34's
+    #     (no extra augmentation), which is why gate 2's partition treats them as one class.
+    #     Bump this deliberately when a net joins — a wrong constant here makes control A red
+    #     and the whole file useless, which is exactly what it did when R50 arrived.
     r34 = os.path.join(BUILD, "generated_resnet34_imagenet_shim.py")
     faux = {s: "generated_resnet34_imagenet_shim.py" for s, _, _ in NETS}
     distinct_fired = len(set(faux.values())) != len(faux)
     partition_fired = sum(
         1 for slug, _, _ in NETS
         if any(flags_by_slug[slug][f] != shim_call_sites(r34)[f] for f in FEATURES))
-    print(f"    pre-fix wiring (all five → R34's shim): distinctness fires = {distinct_fired}, "
+    print(f"    pre-fix wiring (every net → R34's shim): distinctness fires = {distinct_fired}, "
           f"partition fires on {partition_fired} nets")
-    check(distinct_fired and partition_fired == 3,
-          "control A: the pre-fix wiring is REJECTED, on exactly the 3 affected nets",
-          f"distinct={distinct_fired}, partition fired on {partition_fired} (want 3)")
+    check(distinct_fired and partition_fired == 4,
+          "control A: the pre-fix wiring is REJECTED, on exactly the 4 affected nets",
+          f"distinct={distinct_fired}, partition fired on {partition_fired} (want 4)")
     # (b) swap two nets' shims — the counts stay right, only the PARTITION is wrong. This is the
     #     `swap1` control from wdx-tie: a gate checking "five distinct shims exist" passes it.
     swapped = dict(wiring)
@@ -367,7 +373,7 @@ if "--break" in sys.argv:
         sites = shim_call_sites(os.path.join(BUILD, swapped[slug]))
         if any(flags_by_slug[slug][f] != sites[f] for f in FEATURES):
             swap_fired += 1
-    print(f"    swapped ViT↔ConvNeXt: still five distinct shims = {still_distinct}, "
+    print(f"    swapped ViT↔ConvNeXt: still all-distinct shims = {still_distinct}, "
           f"partition fires on {swap_fired} nets")
     check(still_distinct and swap_fired == 2,
           "control B: a SWAP is rejected by the partition though distinctness passes it",

@@ -24,6 +24,10 @@ EXES=(
   "mobilenet-v2-imagenet:generated_mobilenet_v2_imagenet_shim.py"
   "efficientnet-b0-imagenet:generated_efficientnet_b0_imagenet_shim.py"
   "convnext-tiny-imagenet:generated_convnext_tiny_imagenet_shim.py"
+  # R50 joined 2026-08-05 with the R50 scoping work: `resnet50ImagenetVerified` sets
+  # `shimScript` to this name, so without a row here the spec points at a file nothing
+  # writes — `spawnShim` REFUSES rather than falling back, which is the whole §0.9 design.
+  "resnet50-imagenet:generated_resnet50_imagenet_shim.py"
 )
 
 echo "── generating $(( ${#EXES[@]} )) per-net ImageNet shims (recipe 'default') ──"
