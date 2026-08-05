@@ -13,6 +13,29 @@ collapse, §2.1's three block forms, §2.2's v1.5 stride. This file does not rep
 
 ---
 
+## ✅ WHAT LANDED 2026-08-05 (evening) — read this first, then skip to §4
+
+Seven commits on `perf/shim-prefetch`. **§1, §2 and §3 are done.** The next session is §4, and its
+one blocker is gradient accumulation.
+
+| | was | now |
+|---|---|---|
+| **§2 pipeline** | 377 ms/step | **224**, 1.68× — depth-1 prefetch, bit-identity gated |
+| **§2.4 uint8** | "the next lever" | ⛔ **dropped, measured** — worth 2.5%, see §2.2 |
+| **§1.2 the 6–10× mystery** | cause unknown, blocked 2 nets | ✅ **solved** — it was the producer |
+| **enetin** | 2,023 ms/step | **203** (10.2×) |
+| **cnxin** | 895 ms/step | **235** (3.8×) |
+| **vitin** | 4,348 ms/step | **665** (6.5×) |
+| **§1.1 job configs** | 1 of 6 | ✅ **5 of 6**, each with a `SHIM_WORKERS` precheck |
+| **§3 ResNet-50** | did not exist | ✅ **trains on ImageNet**, phases 1–3 |
+| the whole 80-ep sweep | 792 h ≈ 33 d | **159 h ≈ 6.6 d** |
+
+⚠⚠ **THE ONE DEBT THIS SESSION CREATED, and it must not be inherited quietly: R50's GRADIENT is
+not gated.** §3.2's problem is unchanged and §3.3 below spells it out. R50 trains and descends,
+and per §6 that is worth nothing on its own.
+
+---
+
 ## 0. BASE CAMP — what R34/ImageNet now establishes
 
 **70.735% top-1 / 90.140% top-5** at 30 epochs, 4×bs64, fp32, 15.5 h — above the phase-2
@@ -53,42 +76,71 @@ ImageNet scale before tonight, its number would have been ~4× low and believed.
 
 | net | job config | DP shard gate | regularisers in the DP artifact | throughput | other |
 |---|---|---|---|---|---|
-| **resnet34in** | ✅ `r34-imagenet-4gpu.conf` | ✅ `r34-dp-shard` | ✅ | ✅ 368 ms/step | **base camp** |
-| **mnv2in** | ⛔ none | ✅ `shard-check mnv2in` | ✅ | ✅ 396 ms/step | ⚠ 80-ep re-run owed since the conv-bias swap |
-| **enetin** | ⛔ none | ✅ `shard-check enetin` | ⛔ **`enetin_emarmsdp64` has NEITHER dropPath NOR classifier dropout** | ⚠⚠ **2,023 ms/step vs 310 recorded** | |
-| **cnxin** | ⛔ none | ✅ `shard-check cnxin` | ✅ `cnxin_adamdpwxclipdrop` | ⚠ 922 ms/step; **batch 32 ⇒ 10,009 steps/epoch, double everyone** | batch-64 scoped, not built (§2p: "the single best pre-run optimisation available") |
-| **vitin** | ⛔ none | ⛔ **only `vit-dp-check`, duplicated-batch — structurally blind to shard OFFSET** | ⛔ **`vitin_adamdp128x4wxclip` has NO dropPath** | ⚠⚠ **4,489 ms/step vs 424 recorded** | needs `SHIM_WORKERS≥2` (wants ~1,940 img/s, one producer gives ~1,530) |
-| **resnet50in** | ⛔ none | ⛔ none | — | — | ✅ shim wired 2026-08-05; **the net itself does not exist** (§3) |
+| **resnet34in** | ✅ `r34-imagenet-4gpu.conf` | ✅ `r34-dp-shard` | ✅ | ✅ **224** ms/step (w=1) | **base camp** |
+| **mnv2in** | ✅ `mnv2-imagenet-4gpu.conf` | ✅ `shard-check mnv2in` | ✅ | ✅ **201** ms/step (w=1; w=4 is WORSE) | ⚠ 80-ep re-run owed since the conv-bias swap |
+| **enetin** | ✅ `enet-imagenet-4gpu.conf` | ✅ `shard-check enetin` | ✅ conf points at `emarmsdp64**dropdo**` | ✅ **203** ms/step (w=8, was 2,061) | |
+| **cnxin** | ✅ `cnx-imagenet-4gpu.conf` | ✅ `shard-check cnxin` | ✅ `cnxin_adamdpwxclipdrop` | ✅ **235** ms/step (w=8, was 895); **batch 32 ⇒ 10,009 steps/epoch, double everyone** | ▶ batch-64 rescope is now the top lever — it is compute-bound at 235 |
+| **vitin** | ✅ `vit-imagenet-4gpu.conf` | ⛔ **still only `vit-dp-check`, duplicated-batch — structurally blind to shard OFFSET** | ✅ conf points at `adamdp128x4wxclip**drop**` | ⚠ **665** ms/step (w=8, was 4,348) against a **250** floor — still data-bound | ⚠ w=16 is SLOWER (710); 32 cores cannot make the ~2,048 img/s it wants |
+| **resnet50in** | ⛔ none | ⛔ none | ✅ AdamW kit | ⛔ unmeasured | ✅ **the net exists and trains** (§3); ⚠⚠ gradient ungated |
 
-### 1.1 The cheap parity items, in the order I would do them
+### 1.1 ✅ DONE — job configs, and the regulariser gap closed by pointing at the right artifact
 
-1. **Job configs for the other five.** `scripts/jobs/r34-imagenet-4gpu.conf` is the template and
-   it now carries the `PJRT_FFI_RESIDENT=1` line **and a PRECHECK that refuses to launch without
-   it**. ⚠ Copy the precheck too — the flag's failure mode is an *absent* line in a 5,000-line
-   log, which is how a 16 h benchmark and a 26 h reality diverged for a week.
-2. **ViT's shard gate.** `vit-dp-check` hands both replicas the *same* rows, so a shard-offset bug
-   leaves the halves identical and it passes bit-exact. It establishes "the collective averages",
-   **not** "the replicas saw different data". Either add `vitin` to `TestShardCheck`'s table (it
-   needs a single-device render at the same per-replica batch) or copy `TestR34DpShard.lean` for
-   the weaker discrimination form.
-3. **The two regulariser-behind DP artifacts.** One `#eval` each — `replicas` is already a
-   parameter on both renderers — plus a `drop-shard-check` run, which transfers unchanged. ⚠ A
-   4-replica ViT or EfficientNet run today silently trains **without** the regularisers its
-   reference sets. The check that finds this is: *list what the artifact bakes*, never read the
-   recipe matrix.
+Four new configs (`mnv2`, `enet`, `cnx`, `vit`), each carrying the R34 template's residency
+precheck **plus a new one for `SHIM_WORKERS`**, whose failure mode is identical: an absent line, a
+run that reads completely normal, and up to 10× the wall-clock. Both refusals verified against
+negative controls including a wrong-value case.
 
-### 1.2 The one that is not cheap, and blocks two nets
+⭐ **Item 3 needed no `#eval` at all** — `enetin_emarmsdp64dropdo` and
+`vitin_adamdp128x4wxclipdrop` were already on disk beside their under-regularised peers. The
+configs now name them. ⚠ That is a *file exists* check, not a *bake* check: confirm by listing what
+the artifact contains, never off the variant name.
 
-⚠⚠ **EfficientNet and ViT measure 6–10× their recorded ImageNet ms/step and the cause is not
-found.** `imagenet_sweep.md` says enetin 310 / vitin 424; §0.13 measured **2,023 / 4,489** on the
-current renders. The obvious hypothesis — that the new regularisers caused it — was **tested and
-refuted**: masks cost nothing (2,161 without vs 2,023 with), mixup ~10% on ViT only.
+⛔ **Item 2 is still open** — ViT's shard gate is still the duplicated-batch `vit-dp-check`, and
+vitin's config launches 4 genuinely-sharded replicas against it. It is the weakest sharding
+evidence in the set and the config says so.
 
-Per image the split is stark: R34 2.41 ms and mnv2 1.55 ms (neither carries a feature added that
-session) against ConvNeXt 7.20, EfficientNet 7.90, ViT 8.77 (all three do).
+### 1.2 ✅ SOLVED — it was the producer, and the fix was a knob that already existed
 
-▶ **Do not budget a run for either net off either number.** This is the first job for those two,
-ahead of any parity work, because you cannot tell whether §2 fixes it if you don't know what it is.
+⚠⚠ **The cause was the data pipeline, not the net, and `SHIM_WORKERS` fixes it.**
+
+`LEAN_MLIR_BENCH_SYNTH` (once §2.2's fix made it mean anything) plus `PJRT_FFI_TIMING` split it in
+one run: EfficientNet real **2,061** ms/step against synth **196**, with a *byte-identical invoke* —
+188.7 real vs 188.5 synth. So all 1,865 ms was the producer and none of it the net; enet's device
+compute is **144.5 ms, cheaper than R34's 188.3**.
+
+⭐ **The three slow nets are exactly the three whose shims run AutoAugment + RandAugment** (plus
+erasing on ConvNeXt/ViT, plus repeated augmentation on ViT); R34 and mnv2 do flip only. That is the
+whole fast/slow split, and it matches the per-image ordering exactly.
+
+⚠ **Nothing regressed.** `imagenet_sweep.md`'s 310/424 were measured when every net was hardcoded
+to R34's *light* shim — the bug fixed 2026-08-02. §0.13's 2,023/4,489 came after each net got its
+own *correct* heavy shim, still with one producer. **The pipeline became correct and the producer
+count did not follow.**
+
+⚠ §0.13's isolation probes tested dropPath masks and mixup and correctly cleared them — both are
+GPU-side, and the cause was on the producer side, which none of those probes touched. ▶ Transferable:
+*a probe that clears every hypothesis you had is evidence your hypotheses share a blind spot.*
+
+| net | 1 worker | chosen | floor | 80 ep was → is |
+|---|---|---|---|---|
+| mnv2 | 201 | **201** (w=1) | 152 | 44 h → 22.4 h |
+| enet | 2,061 | **203** (w=8) | 196 | 225 h → 22.6 h |
+| cnx | 895 | **235** (w=8) | 214 | 205 h → 52.3 h |
+| vit | 4,348 | **665** (w=8) | 250 | 250 h → 37.0 h |
+
+⚠ **It is NOT `tf.data` autoscaling doing this.** `num_parallel_calls=AUTOTUNE` leaves one producer
+at ~3 of 32 cores; scaling is near-linear across **processes**, so the worker count is a number
+someone has to set per net — which is why it belongs in a config with a precheck rather than in a
+default. A C rewrite of the augmentation would attack the constant factor on kernels that are
+already compiled TF ops, i.e. the part that is least broken.
+
+⚠ **ViT stays data-bound** at 665 against a 250 floor, and **16 workers is slower than 8** (710).
+It needs ~2,048 img/s of RandAugment+erasing+repeated-aug and this box cannot produce it. That is
+hardware, not a bug. ⚠ uint8 does not help it either — the constraint is CPU augmentation, not
+transport.
+
+▶ **Unexamined and worth a look:** ViT's LAUNCH time is **118 ms** against R34's 9.4 — 47% of its
+non-data step.
 
 ---
 
@@ -266,56 +318,96 @@ first try** (25,557,032). Still true. What exists: `VLayer.bottleneckStage`, the
 `maxPool3s2` witness + codegen, and (new) the shim. What does not: the block VJPs, the renderer,
 any artifact.
 
-### 3.1 Phase 1 — three bottleneck block VJPs (CPU proof work)
+### 3.1 ✅ Phase 1 DONE — `LeanMlir/Proofs/Foundation/Resnet50BlocksCertified.lean`
 
-⚠⚠ **THREE forms, and the third is the one a first look misses:**
+All three forms, forward + certified VJP, **3-axiom clean** (`propext, Classical.choice,
+Quot.sound`). Compiled first pass.
 
-| form | where | exists? |
+| form | where | name |
 |---|---|---|
-| identity bottleneck | 12 blocks | new (3-conv peer of `rblkPC`) |
-| strided projection | stages 2/3/4 block 0 | new (3-conv peer of `rblkPStridedPC`) |
-| ⭐ **stride-1 projection** | **stage 1 block 0 ONLY** | ⛔ **no analogue anywhere** |
+| identity bottleneck | 12 blocks | `bblkPC` / `bblkPC_has_vjp_at` |
+| strided projection | stages 2/3/4 block 0 | `bblkPStridedPC` / `…_has_vjp_at` |
+| ⭐ **stride-1 projection** | **stage 1 block 0 ONLY** | `bblkPProjPC` / `…_has_vjp_at` |
 
-R34 never needed it (stage 1 is `ic = oc = 64`). R50's stage 1 goes 64→256 at stride 1.
-`rblkPStridedPC` hardcodes `flatConvStride2` *and* bakes the `(2*h)`/`(2*w)` index — a different
-type, not a different argument.
+⭐ **Zero new foundation, and that is §1's op-cost collapse showing up on the proof side.**
+`convBnReluPC_has_vjp_at`, `flatConv_has_vjp`, `flatConvStride2_has_vjp`,
+`bnPerChannelTensor3_has_vjp` and `residualProj_has_vjp_at` were **already generic** in
+`{ic oc h w kH kW}` / `{m n}`, so the bottleneck's third conv is one more `vjp_comp_at` link.
 
-⚠ **Build the stride-1 projection FIRST.** Reaching for the strided form there is a *shape* error
-and fails loudly; an identity skip is a **silent wrong net that trains and descends**. After
-2026-08-05, "trains and descends" is worth nothing.
+Confirmed while building: `rblkPStridedPC` reads `Vec (ic*(2*h)*(2*w)) → Vec (oc*h*w)`, so the
+halving is in the **type**. Kernel extents stayed binders, so 1×1-vs-3×3 is an argument.
 
-⚠ **The stride is on the 3×3** (v1.5/torchvision), not the leading 1×1. Backwards compiles,
-trains, descends, and is a different net — worth ~0.5 pt.
+Also carries a wiring section pinning the blocks at R50's real dims and composing whole stages —
+it catches the bottleneck's easiest inversion, that an identity block's `mid` is a **quarter** of
+its `c` (256 with mid 64), not a multiple.
 
-### 3.2 Phase 2 — `ResNet50RenderB.lean` at `N := B`
+### 3.2 ✅ Phase 2 DONE — `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean`
 
-⚠ **No incumbent hand-written R50 render to tie against.** Every other net's swap was licensed by
-a bit-exact numeric tie; this one cannot be. Substitutes: the layer-level VJP oracle
-(`tests/vjp_oracle/run.sh`) and a keep-1 known-answer check. **Say which one licensed the swap.**
+Four artifacts, all from one renderer: `resnet50in_{adam64,adamdp64}_train_step.mlir` (594 in / 592
+out) and `resnet50in_fwd{,_eval}.mlir` (162 / 268 in). Both forwards share ONE chain via `bnSite`'s
+train/eval switch, so the scored net and the differentiated net cannot drift — §2g's
+`mobilenetv2_fwd` defect. `optOne`/`optConstsB`/`bnSite` went private→public rather than being
+copied; no emitted bytes change and R34's artifacts re-render byte-identical (checked).
 
-### 3.3 Phase 3 — scale, DP, residency
+✅ **`tests/TestR50Contract.lean`** gates the layout: **161 tensors**, **25,557,032 params** (exact,
+torchvision's published count), **shapes elementwise** against the spec the *driver* walks. Verified
+non-blind by cutting stage 3 to 5 blocks.
 
-Param count must land on **25,557,032**. Then a `resnet50-dp-shard` (copy `TestR34DpShard.lean`,
-change the slug), `residency_gate_all.sh` with the right fault mode, a job config with the
-residency precheck, and a 40-step smoke.
+⚠⚠ **BUT §3.2's original warning still stands and is now a DEBT, not a plan.** There is no incumbent
+R50 render, so the bit-exact-tie license every other swap had does not exist. **The gradient is
+ungated.** Before any number is quoted:
+
+* ⛔ `tests/vjp_oracle/run.sh bottleneck` covers the **identity** block only — its case is
+  `.bottleneckBlock 8 8 1 1`, **no projection**. It covers neither projection form and specifically
+  **not the stride-1 one**. Two new oracle cases would close that.
+* ⛔ Nothing exercises the **whole-net wiring**. The check that would is a loss-sequence agreement
+  against `jax/MainResnet50Imagenet.lean` at matched init — the evidence class R34's own ImageNet
+  number rests on, and the machinery exists (the oracle already does init-dump/init-load + NO_SHUFFLE).
+
+**Say which one licensed the swap.** Neither has been run.
+
+### 3.3 ✅ Phase 3 DONE (partly) — it trains
+
+`resnet50-imagenet-verified-xla` + `apps/imagenette/Resnet50ImagenetCommon.lean`. Single-GPU smoke:
+483 resident tensors (292.5 MB), 53 BN layers / 53,120 stat floats, losses **7.609 / 7.461 / 7.671**
+against ln(1000) = 6.91 — the excess is label smoothing plus this net's mixup soft targets (R34
+starts at 7.14 with mixup off).
+
+⛔ Still owed from this phase: `resnet50-dp-shard` (copy `TestR34DpShard.lean`, change the slug),
+`residency_gate_all.sh` with the right fault mode, a job config, a 4-GPU smoke, and a ms/step
+measurement — R50's throughput is **unmeasured**.
+
+▶ Fixed on the way: under `LEAN_MLIR_SKIP_EVAL` the driver printed
+`acc = 0/49920 = 0.000000%  top5 = 0/49920` on a run that scored nothing — indistinguishable from a
+catastrophically broken net, and on R50's first run that is exactly how it read. Exact zeros on
+**both** top-1 and top-5 are the tell (chance at 1000 classes is ~50 and ~250). It now says eval was
+skipped.
 
 **Phases 1–3 give a verified R50 that exists, trains and is gated at the certified AdamW kit —
-real value even if §4 never runs.**
+real value even if §4 never runs.** ⚠ "Gated" there means the LAYOUT. See §3.2.
 
 ---
 
-## 4. RSB-A3 — the recipe, and the blocker that is not code
+## 4. ▶▶ RSB-A3 — **THE NEXT SESSION.** Gradient accumulation is the blocker
 
 JAX already has the recipes (`jax/MainResnet50Imagenet.lean`): `rsb-faithful`, `true-2048`,
-`a2-accum`, `a1`, `adam-probe`.
+`a2-accum`, `a1`, `adam-probe`, and `rsb-faithful` has already run: **76.66% top-1 @ ep100**.
 
 | piece | cost | state |
 |---|---|---|
+| ⛔⛔ **gradient accumulation** | driver work | **the blocker.** `grep gradAccum LeanMlir/VerifiedTrain.lean` still returns **0** — re-checked 2026-08-05. It exists only in `Types.lean`'s JAX-side `TrainConfig` and four `jax/Main*.lean` |
+| **LAMB** | 2–3 ops *estimated* | ⚠ **the one number in `rsb_a3_r50_verified.md` §2.3 that is NOT a measurement.** Cost it the §0.8 way first. ⚠ LAMB **breaks every gate that recovers `g` from `m'`** — `r34-mom-tie`, `rms-tie`, `wdx-tie`, `shard-check` |
 | **BCE with logits** | ~1 descriptor | `BatchableOp.sigmoid` is pointwise + batch-invariant ⇒ legal descriptor. `sigmoidF` exists with a global hypothesis-free `sigmoid_has_vjp`; the cotangent `σ(z) − t` is CE's with one op swapped |
-| **LAMB** | 2–3 ops *estimated* | ⚠ **§2.3: the one number in that doc that is NOT a measurement.** Cost it the §0.8 way first. ⚠ LAMB **breaks every gate that recovers `g` from `m'`** — `r34-mom-tie`, `rms-tie`, `wdx-tie`, `shard-check` |
 | **160 train / 224 eval** | two artifacts | ⚠ the §2g prefix audit (`_fwd` ⊂ `_train_step`) **cannot hold across them**. Decide explicitly; do not let it degrade to "the audit doesn't cover R50" |
-| **mixup / cutmix** | ⛔ cotangent missing | producer half ✅ (R50's shim defaults `SHIM_MIX=both`), driver speaks wire v2 ✅ (`nclasses > 0` ⇒ `SHIM_NCLASSES`). **No `softLabelCE` cotangent in any renderer** — `grep` finds none |
-| ⛔⛔ **gradient accumulation** | driver work | **`grep gradAccum LeanMlir/VerifiedTrain.lean` returns 0** |
+| ✅ **mixup / cutmix** | **NOT A GAP — this row was stale** | corrected 2026-08-05 |
+
+⭐ **The mixup row was wrong and cost nothing only because nobody acted on it.** It claimed "no
+`softLabelCE` cotangent in any renderer — `grep` finds none". `lean_exe soft-target-tie` /
+`tests/TestSoftTargetTie.lean` exist **specifically to retire that claim**: every render takes the
+target as a float `[batch, nClasses]` and the emitted cotangent is affine in it, so
+`grad(λ·y_a + (1−λ)·y_b) = λ·grad(y_a) + (1−λ)·grad(y_b)` holds **by construction**, gated on the
+committed bytes. Producer half ✅, wire v2 ✅ — and R50's smoke already streamed `SHIM_MIX=both`.
+▶ *A "grep finds none" is evidence about a name, not about a capability.*
 
 **Why grad accum is the blocker.** `rsb-faithful` is `gradAccumSteps := 4` — 512 micro × 4 =
 effective **bs2048**, LAMB's design batch, at `learningRate := 0.008` (the bs2048 rate, explicitly
@@ -331,23 +423,54 @@ re-runs.
 
 ▶ **Decide before phase 4, not during it.**
 
+### 4.1 What the grad-accum session should know before it starts
+
+1. ⚠⚠ **Settle §3.2's gradient debt first, or at least decide not to.** RSB-A3 is a ~1.5–2 day fp32
+   run on an R50 whose gradient has never been checked against anything. Two oracle cases plus a
+   matched-init loss tie is a few hours; discovering the net was wrong after two days is not.
+2. **The step loop changed under you.** §2.3's depth-1 prefetch means the shim read is now issued
+   *inside* the step, one in flight, with a strict-order requirement (`res_gen`). Grad accum makes
+   the micro-step the unit — **the prefetch index must follow the MICRO-step, not the optimizer
+   step**, or the pipeline desynchronises. `tests/prefetch_tie.sh` is the gate that catches it and
+   it already crosses an epoch boundary; extend it to cross an accumulation boundary.
+3. **BN is the real design question, not the accumulation.** Accumulating gradients is
+   arithmetic; deciding what BN normalises over across 4 micro-batches is a modelling choice. JAX
+   took Ghost-BN. ⚠ Whatever is chosen, the DP shard gate's argument (`N×b ≠ 1×(N·b)` by design)
+   now has a second axis and the gate text needs to say which.
+4. **fp32 is the regime.** bf16 is untouched (§2.2 item 4: it is the only lever on the 86% that is
+   device compute) so activation memory is what it is — which is exactly why grad accum is the
+   route and real bs2048 is not.
+5. Wall-clock to budget: R50/A3 at 160px, 100 epochs, extrapolated off R34's measured 224 ms/step,
+   is roughly **1.5–2 days**. ⚠ Extrapolated, not measured — **R50's ms/step is still unmeasured**
+   (§3.3). Measure it first; it is one 40-step probe.
+
 ---
 
 ## 5. HOW CLOSE
 
-**Parity for the other four nets: close, and mostly mechanical.** Job configs from a template,
-two `#eval`s for the regulariser gap, one shard gate for ViT. ⚠ Except the 6–10× throughput
-mystery, which is a comprehension problem and gates two of them.
+**Parity: ✅ done, and it was one knob.** All five configs exist, and the 6–10× "comprehension
+problem" that gated two nets turned out to be a producer count. ⛔ Left: ViT's shard gate, and
+ConvNeXt's batch-64 rescope (now the largest single lever on the sweep — it is compute-bound at
+235 ms/step, so halving its step count per epoch should nearly halve its wall-clock).
 
-**A plain verified R50 (§3): genuinely close.** Zero new ops, exact param count, shim wired,
-scale path proven, every gate transfers by changing a slug. The work is three block VJPs and a
-renderer. §6 of the R50 doc estimates **3–5 sessions** and notes three of its own estimates came
-in low-side-wrong in the same direction.
+**A plain verified R50 (§3): ✅ it exists and trains.** The estimate was 3–5 sessions with a note
+that three of that doc's own estimates came in low-side-wrong; it took **one**, because the op-cost
+collapse §1 measured turned out to hold on the proof side too — every underlying VJP lemma was
+already generic, so three block VJPs compiled on the first pass. ⚠ **The estimate was low-side-wrong
+in the OTHER direction this time, and that is worth remembering with suspicion rather than
+satisfaction: what came in fast was the part with a template. The part with no template — licensing
+a render with no incumbent — is untouched.**
 
-**RSB-A3 specifically: not close, and the gap is the recipe, not the net.** Grad accumulation is a
-driver feature that has not been written, mixup needs a cotangent that does not exist, and LAMB's
-cost is an estimate the doc itself flags. Plus 100 epochs is a multi-day run — which is the
-argument for §2 first.
+**RSB-A3: still not close, and the gap is still the recipe.** But it is one item smaller than this
+file claimed: mixup was never blocked. What remains is grad accumulation (driver work, not written),
+LAMB (an estimate the doc flags as its only non-measurement), and the 160/224 audit decision. Plus
+100 epochs is a ~1.5–2 day fp32 run — which was the argument for §2 first, and §2 is now done.
+
+⚠ **The claim ceiling does not move for any of it, and R50 sits BELOW R34 on it.** R34/ImageNet has
+a pair agreement (0.055 nats, and 17,312 vs 17,313 on the same weights). R50 has a *layout* gate and
+a smoke. Until §3.2's debt is paid, the honest sentence about R50 is "it renders from the certified
+renderer and it runs" — not "one architecture, two independent lowerings, agreeing", which is R34's
+sentence and has to be earned separately.
 
 ⚠ **The claim ceiling does not move for any of it.** The proof-carrying tier stops at Imagenette.
 ImageNet inherits *provenance* plus whatever a pair agreement shows — "one architecture, two
