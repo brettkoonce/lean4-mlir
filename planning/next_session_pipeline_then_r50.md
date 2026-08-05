@@ -106,12 +106,31 @@ producing side and by `tests/TestVariantPredicates.lean` on the consuming side, 
 **Smoked on ImageNet**: 8 micro-batches at k=4 single-GPU, losses 7.44 / 7.65 / 7.78 against §3.3's
 7.609 / 7.461 / 7.671, warmup LR correct on the update clock.
 
-### ⛔ What this did NOT do
+### ✅ AND THEN, same session — both of those gaps closed
 
-* **`accdp8x64` (effective batch 2048) has never been run.** It renders and it is covered by neither
-  gate: `r50-accum-tie` is single-device, and the DP text tie needs a matched-k single-device peer,
-  which only `acc4x64`/`accdp4x64` have. A 4-GPU smoke is owed.
-* **The different-micro-batch decomposition is ungated** (see above — it needs a BN-free peer).
+⭐⭐ **`lake build r50-accum-shard-tie` — the different-micro-batch identity, and it is EXACT.**
+The naive complement ("k micro-batches of b == one step at k·b") is false by design: k micro-batches
+give k BatchNorm groups where one big batch gives one. ▶ **But R50 already has a render that
+computes exactly that grouping — the DATA-PARALLEL one**, whose replicas each normalise over their
+own b rows (`shard-check`'s own docstring is where that fact is recorded). So
+
+    acc(x₁..x_k) on 1 device  ==  adamdp([x₁|..|x_k]) on k replicas
+
+exactly, with the two sides reaching it through completely different machinery: a serial accumulator
+with a folded `1/k` against a collective `all_reduce` and a divide. Measured **rel ≤ 1e-6 on θ', m'
+AND v'** — every region, unlike `shard-check`, which averages two separately-optimised steps and so
+can only compare the linear `m`. ⟂ The control is the blind spot itself: the DUPLICATED batch (what
+`r50-accum-tie` runs) misses by **17,244× the tie**.
+
+⚠ `PJRT_REPLICAS=4` is required and is not redundant with `CUDA_VISIBLE_DEVICES` — the shim decides
+per SESSION (`reps = (g_replicas > 1 && strstr(mlir, "all_reduce")) ? g_replicas : 1`), so setting it
+is safe even though half this harness is single-device. Without it the DP invoke refuses outright,
+which is the right failure: a silent single-device run would have tied against itself.
+
+✅ **`accdp8x64` smoked at EFFECTIVE BATCH 2048** — 4 replicas × 64 micro × k=8, 16 micro-batches =
+2 updates, losses 7.52 / 7.51 / 7.61. RSB-A3's design batch now runs.
+
+### ⛔ What this did NOT do
 * **LAMB, BCE-with-logits and 160/224 are still absent**, so this is AdamW at a large batch and must
   not be called `rsb-faithful`. §4's table is otherwise unchanged.
 * The two `vjp_oracle` projection cases, now correctly scoped to `MlirCodegen`.

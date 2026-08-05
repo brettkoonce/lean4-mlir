@@ -2039,6 +2039,27 @@ lean_exe «r50-accum-tie» where
   root := `tests.TestR50AccumTie
   moreLinkArgs := xlaLink
 
+/-- `r50-accum-shard-tie` — accumulation over **DIFFERENT** micro-batches, which `r50-accum-tie`
+    is structurally blind to (it runs k micro-steps on the same batch, so every micro-gradient is
+    the same). The same hole every `*-dp-check` has and that `shard-check` closes one level up.
+
+    ⭐ The naive complement — "k micro-batches of b == one step at batch k·b" — is FALSE by design:
+    k micro-batches give k BatchNorm groups where one big batch gives one. That is Ghost-BN. But
+    R50 already has a render that computes exactly that: the DATA-PARALLEL one, whose replicas each
+    normalise over their own b rows. So `acc(x₁..x_k) == adamdp([x₁|..|x_k])` EXACTLY, and the two
+    sides reach it through a serial accumulator with a folded 1/k versus an `all_reduce` and a
+    divide — neither a re-derivation of the other.
+
+    ⚠ It compares θ', m' AND v', unlike `shard-check` (which averages two separately-optimised
+    steps and so can only compare the linear `m`). CONTROL: the duplicated batch — exactly what
+    `r50-accum-tie` runs — must MISS. Needs FOUR GPUs and the XLA backend.
+
+        lake build r50-accum-shard-tie
+        CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 .lake/build/bin/r50-accum-shard-tie -/
+lean_exe «r50-accum-shard-tie» where
+  root := `tests.TestR50AccumShardTie
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and
