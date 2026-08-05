@@ -2747,3 +2747,45 @@ LEAN_EXPORT lean_obj_res lean_f32_blit(
     memcpy(d + dst_off, s + src_off, count * sizeof(float));
     return lean_io_result_mk_ok(arr);
 }
+
+// dst[dst_off + i] += a * src[src_off + i], for i < count. The perturbation
+// primitive the adjoint gradcheck needs: it walks a CONTIGUOUS slice of the
+// packed [theta|m|v] blob, which is exactly one parameter GROUP (the tensors
+// are packed in func-arg order), so a direction supported on one block is a
+// slice rather than a mask. Accumulates in float — the destination is f32 and
+// widening the sum would misrepresent what the device will actually see.
+LEAN_EXPORT lean_obj_res lean_f32_axpy_slice(
+        lean_obj_arg dst, size_t dst_off,
+        b_lean_obj_arg src, size_t src_off, size_t count, double a, lean_obj_arg w) {
+    (void)w;
+    lean_object* arr = f32_sarray_exclusive(dst);
+    size_t nd = lean_sarray_size(arr) / 4;
+    size_t ns = lean_sarray_size(src) / 4;
+    if (dst_off + count > nd || src_off + count > ns) {
+        return lean_io_result_mk_error(lean_mk_io_user_error(
+            lean_mk_string("F32.axpySlice: range out of bounds")));
+    }
+    float* d = (float*)lean_sarray_cptr(arr);
+    const float* s = (const float*)lean_sarray_cptr(src);
+    const float af = (float)a;
+    for (size_t i = 0; i < count; i++) d[dst_off + i] += af * s[src_off + i];
+    return lean_io_result_mk_ok(arr);
+}
+
+// Sum_{i<count} a[a_off+i] * b[b_off+i], accumulated in DOUBLE.
+//
+// The double accumulator is load-bearing, not caution: this is the predicted
+// directional derivative <g, delta> over up to 4.7M terms of one sign, and an
+// f32 running sum loses ~log2(n) bits to the accumulation alone — which would
+// show up as a spurious relative error in the very quantity being gated.
+LEAN_EXPORT double lean_f32_dot_slice(
+        b_lean_obj_arg a, size_t a_off, b_lean_obj_arg b, size_t b_off, size_t count) {
+    size_t na = lean_sarray_size(a) / 4;
+    size_t nb = lean_sarray_size(b) / 4;
+    if (a_off + count > na || b_off + count > nb) return 0.0 / 0.0;  // NaN: caller must notice
+    const float* pa = (const float*)lean_sarray_cptr(a);
+    const float* pb = (const float*)lean_sarray_cptr(b);
+    double acc = 0.0;
+    for (size_t i = 0; i < count; i++) acc += (double)pa[a_off + i] * (double)pb[b_off + i];
+    return acc;
+}

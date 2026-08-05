@@ -1985,6 +1985,36 @@ lean_exe «r34-dp-shard» where
   root := `tests.TestR34DpShard
   moreLinkArgs := xlaLink
 
+/-- `r50-gradcheck` — **the gate R50's backward never had**
+    (`planning/next_session_pipeline_then_r50.md` §3.2). Phases 1–3 shipped a net that renders,
+    trains and descends behind a LAYOUT gate (`TestR50Contract`) with nothing on the gradient, and
+    R50 is the one net with no incumbent hand-written artifact to tie against.
+
+    The train step returns its own loss next to `[θ'|m'|v']`, so a single invoke from `m = v = 0`
+    gives both `L(θ)` and `g = 10·m'` (§2k's construction). The check is then the adjoint identity
+    `⟨g, δ⟩ = (L(θ+δ) − L(θ−δ))/2` on the COMMITTED bytes, one direction per block, so it localises
+    to the three bottleneck forms individually — including the stride-1 projection that §3.2 flags
+    as covered by nothing.
+
+    Two tiers, because they cover each other's blind spots: the closed-form homogeneity identities
+    (`⟨g_W, W⟩ = 0` on 53 BN-followed convs, `⟨g_γ,γ⟩+⟨g_β,β⟩ = 0` on 33 pre-conv BN affines — the
+    stem's being the only gradient path through `maxPool3s2`) pin the STRUCTURE to 6e-5 with no
+    finite differences at all, and the adjoint probes pin the SCALE, which the identities cannot
+    see. Controls: 21 sites where the invariance is FALSE must violate it, and a doubled gradient
+    must not fit.
+
+    ⚠ §3.2's proposed `vjp_oracle` cases would have gated `MlirCodegen.emitBottleneckBlock`, a
+    DIFFERENT lowering from the one `resnet50-imagenet-verified-xla` runs.
+
+    ⚠ This gates `adam64`; the driver defaults to `adamdp64`, whose `%loss` is replica-local while
+    its gradient is all-reduced, so tier 2 cannot run there. `python3 tests/r50_dp_render_tie.py`
+    carries the verdict across by text. Needs one GPU and the XLA backend.
+
+        lake build r50-gradcheck && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-gradcheck -/
+lean_exe «r50-gradcheck» where
+  root := `tests.TestR50GradCheck
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and

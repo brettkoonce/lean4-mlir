@@ -55,6 +55,25 @@ opaque write3 (ba : ByteArray) (idx : USize) (a b c : Float) : IO ByteArray
 opaque blit (dst : ByteArray) (dstOff : USize) (src : @& ByteArray)
   (srcOff count : USize) : IO ByteArray
 
+/-- `dst[dstOff + i] += a · src[srcOff + i]` for `i < count`, **in place** when `dst` is
+    unshared. The perturbation primitive of the adjoint gradcheck
+    (`tests/TestR50GradCheck.lean`): parameter tensors are packed in func-arg order, so a
+    direction supported on one BLOCK is a contiguous slice and needs no mask. -/
+@[extern "lean_f32_axpy_slice"]
+opaque axpySlice (dst : ByteArray) (dstOff : USize) (src : @& ByteArray)
+  (srcOff count : USize) (a : Float) : IO ByteArray
+
+/-- `Σ_{i<count} a[aOff+i] · b[bOff+i]`, accumulated in **f64**.
+
+    ⚠ The wide accumulator is the point. This computes the predicted directional derivative
+    `⟨g, δ⟩` over as many as 4.7M same-sign terms; an f32 running sum would lose ~log₂ n bits to
+    the accumulation and report it as disagreement between the gradient and the finite
+    difference — i.e. as a failure of the thing under test. Returns `NaN` on an out-of-range
+    slice rather than clamping, so a caller that mis-computes an offset sees it. -/
+@[extern "lean_f32_dot_slice"]
+opaque dotSlice (a : @& ByteArray) (aOff : USize) (b : @& ByteArray)
+  (bOff count : USize) : Float
+
 /-- **Per-site, per-example stochastic-depth scales** — `bernoulli(keep_i)/keep_i` for each of
     `keeps.size` drop sites × `bs` examples, laid out site-major to match the render's
     `%dp<i>: tensor<Bxf32>` inputs in signature order. Returns `keeps.size * bs` float32.
