@@ -1,0 +1,70 @@
+I0805 14:39:31.189584  782034 service.cc:178] XLA service 0x71b92c489560 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0805 14:39:31.189636  782034 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0805 14:39:31.189641  782034 service.cc:194]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0805 14:39:31.189645  782034 service.cc:194]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0805 14:39:31.189647  782034 service.cc:194]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0805 14:39:31.192956  782034 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0805 14:39:31.192986  782034 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0805 14:39:31.193023  782034 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0805 14:39:31.193038  782034 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0805 14:39:31.193050  782034 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0805 14:39:31.193062  782034 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0805 14:39:31.193077  782034 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 1 for CollectiveBFCAllocator.
+I0805 14:39:31.193089  782034 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 2 for CollectiveBFCAllocator.
+I0805 14:39:31.193100  782034 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 3 for CollectiveBFCAllocator.
+I0805 14:39:31.203362  782034 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 4 device(s)
+I0805 14:39:32.416720  782100 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 4 bytes spill stores, 4 bytes spill loads
+
+I0805 14:39:32.866101  782086 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 800 bytes spill stores, 800 bytes spill loads
+
+I0805 14:39:32.929079  782090 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 8 bytes spill stores, 8 bytes spill loads
+
+I0805 14:39:33.017585  782099 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 132 bytes spill stores, 72 bytes spill loads
+
+I0805 14:39:33.056330  782093 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 44 bytes spill stores, 44 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34in_momdp64_train_step.mlir (@resnet34in_momdp64_train_step, 405 outputs, 4 replicas) in 6530 ms
+I0805 14:39:38.221052  782094 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 48 bytes spill stores, 48 bytes spill loads
+
+I0805 14:39:38.449708  782096 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 832 bytes spill stores, 832 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34in_fwd.mlir (@resnet34in_fwd, 1 outputs, 1 replica) in 4943 ms
+[pjrt_ffi] compiled verified_mlir/resnet34in_fwd_eval.mlir (@resnet34in_fwd_eval, 1 outputs, 1 replica) in 209 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785940783.254471  783451 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1785940785.191344  783590 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+ResNet-34 on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  xla/pjrt verified_mlir/resnet34in_momdp64_train_step.mlir
+  xla/pjrt verified_mlir/resnet34in_fwd.mlir
+  xla/pjrt verified_mlir/resnet34in_fwd_eval.mlir
+  imagenet shim: jax/.lake/build/generated_resnet34_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet: draining the val split into RAM (~30 GB, one time)…
+  imagenet: val ready — 49920 images, 28665 MB
+  train 1281167, test 49920; bs 64, ResNet-34 (ImageNet-1k) momdp64 (cosine+warmup 5ep, baseLR 0.100000), He init
+  eval batch 256 (the batch @resnet34in_fwd_eval was RENDERED at) != train batch 64 — sound because eval is class-batch-independent
+  running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34in_fwd_eval
+  DATA-PARALLEL: 4 replicas x bs 64 = global batch 256, 500 steps/epoch
+  ▸ resuming from checkpoint at epoch 29
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785940827.224667  783814 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1785940829.175598  783953 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @resnet34in_momdp64_train_step holds 330 parameter tensors (249.5 MB) on 4 devices; they stop crossing PCIe from here
+W0805 14:40:31.047128  782071 allocator_memory_registration.cc:63] Failed to register GPU memory with clique devices=4:[0,1,2,3]; local_participants=4; communication_id=0; incarnations=[]: INTERNAL: NCCL operation ncclCommRegister(comm, addr.opaque(), addr.size(), &handle) failed: unhandled cuda error (run with NCCL_DEBUG=INFO for details). Last NCCL warning(error) log entry (may be unrelated) 'Cuda failure 500 'named symbol not found''.
+I0805 14:40:31.150846  782074 cuda_dnn.cc:436] Loaded cuDNN version 92302
+I0805 14:40:31.150878  782071 cuda_dnn.cc:436] Loaded cuDNN version 92302
+I0805 14:40:31.150915  782068 cuda_dnn.cc:436] Loaded cuDNN version 92302
+  imagenet shim: jax/.lake/build/generated_resnet34_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 1)
+  step 0/500: loss=2.271424
+  step 1/500: loss=2.434312
+  step 2/500: loss=1.959525
+  step 100/500: loss=2.343407
+  step 200/500: loss=1.992261
+  step 300/500: loss=1.934802
+  step 400/500: loss=2.599260
+[pjrt_ffi] RESIDENT: @resnet34in_fwd_eval holds 182 parameter tensors (83.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/30: loss=2.332052 lr=0.000000
+  epoch 30: test_acc = 35298/49920 = 70.709135%  top5 = 44998/49920 = 90.140224%
+done (trained ResNet-34 (ImageNet-1k) momdp64 + cosine/warmup via packed threading).

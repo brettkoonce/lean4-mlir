@@ -1,0 +1,6 @@
+[sup] 2026-08-05 01:45:30 START job=r34-imagenet-4gpu devs=0,2,3,4 epochs=30 rest_after=[none] temp_max=78 stall=1800s logs=/tmp/supervise_r34-imagenet-4gpu
+[sup] 2026-08-05 01:45:30 cmd: .lake/build/bin/resnet34-imagenet-verified-xla data
+[sup] 2026-08-05 01:45:30 attempt 1: resuming at epoch 5/30 (next rest: 999)
+[sup] 2026-08-05 01:45:30   launched PID=620779 PGID=620779
+[sup]   last line: done (trained ResNet-34 (ImageNet-1k) momdp64 + cosine/warmup via packed threading).
+[sup] 2026-08-05 14:38:34 ✅ COMPLETE — 30/30 epochs
