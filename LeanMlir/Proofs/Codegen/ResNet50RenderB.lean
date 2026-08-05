@@ -406,7 +406,17 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- `bce` swaps the LOSS (and therefore the cotangent) for BCE-with-logits — RSB-A2/A3's, and the
     -- reason the recipe's lr is what it is. `vSuffix` appends to `r34AdamVariant`'s name so the
     -- artifact, the entry point and `LEAN_MLIR_VARIANT` stay one string.
-    (bce : Bool := false) (vSuffix : String := "") : String :=
+    (bce : Bool := false) (vSuffix : String := "")
+    -- ⭐⭐ RESOLUTION, and it is parameterised by the FINAL feature size rather than by the input.
+    -- `q = 7` is 224 (every committed artifact, byte for byte); `q = 5` is RSB-A3's **160**.
+    --
+    -- ⚠⚠ **Deriving UPWARD by doubling is not a style choice, it is what makes the dependent types
+    -- work.** Every size relation this graph needs is of the form "the input to a stride-2 op is
+    -- twice its output", and `Vec (ic*(2*h)*(2*w)) → Vec (oc*h*w)` states that IN THE TYPE. Written
+    -- downward (`imgSize/2`, `imgSize/4`, …) Lean would have to prove `2*(imgSize/4) = imgSize/2`,
+    -- which is false for odd inputs and not definitional for a variable. Written as `q4 := 2*q5`,
+    -- `q3 := 2*q4`, … every such equation holds by zeta-reduction and nothing needs a proof.
+    (q : Nat := 7) : String :=
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
@@ -414,42 +424,51 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     | .adamwAccum k   => s!"AdamW over {k} ACCUMULATED micro-batches"
   let accOn := match opt with | .adamwAccum _ => true | _ => false
   let go : StateM Nat String := do
-    -- ═══ stem: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 pool (224→112→56) ═══
-    let zx    : Vec (B*(3*224*224)) := fun _ => 0
+    -- The ladder, bottom-up. At q = 7: 5→…  no — at q = 7 these are 7, 14, 28, 56, 112 and the
+    -- input is 224; at q = 5 they are 5, 10, 20, 40, 80 and the input is 160.
+    let q5 := q            -- stage 4 / the GAP window
+    let q4 := 2 * q5       -- stage 3
+    let q3 := 2 * q4       -- stage 2
+    let q2 := 2 * q3       -- stage 1, and the max-pool's output
+    let q1 := 2 * q2       -- the stem conv's output
+    -- ═══ stem: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 pool (img→img/2→img/4) ═══
+    -- ⚠ `2*q1` rather than a name, because `convStrided (h := q1)` demands its operand at exactly
+    -- `Vec (B*(3*(2*q1)*(2*q1)))` and any other spelling of the same number is a different TERM.
+    let zx    : Vec (B*(3*(2*q1)*(2*q1))) := fun _ => 0
     let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
     let z64   : Vec 64 := fun _ => 0
-    let z112  : Vec (B*(64*112*112)) := fun _ => 0
-    let z112b : Vec (B*(64*(112*112))) := fun _ => 0
-    let z56   : Vec (B*(64*56*56)) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := 112) (w := 112) "%sW" (zb 64) zSk z64) (.operand "%x" zx))
-    let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
-    let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*112*112)) (.operand nStn z112))
-    let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := 56) (w := 56)) (.operand nStr z112))
+    let z112  : Vec (B*(64*q1*q1)) := fun _ => 0
+    let z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
+    let z56   : Vec (B*(64*q2*q2)) := fun _ => 0
+    let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := q1) (w := q1) "%sW" (zb 64) zSk z64) (.operand "%x" zx))
+    let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := q1) (w := q1) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
+    let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*q1*q1)) (.operand nStn z112))
+    let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := q2) (w := q2)) (.operand nStr z112))
     -- ═══ 16 bottleneck blocks, [3,4,6,3] ═══
-    let f1  ← bnkProjFwdB    B   64  64  256 56 epsStr "s1b0" nStp   -- ⭐ the stride-1 projection
-    let f2  ← bnkIdFwdB      B       64  256 56 epsStr "s1b1" f1.o
-    let f3  ← bnkIdFwdB      B       64  256 56 epsStr "s1b2" f2.o
-    let f4  ← bnkStridedFwdB B  256 128  512 28 epsStr "s2b0" f3.o
-    let f5  ← bnkIdFwdB      B      128  512 28 epsStr "s2b1" f4.o
-    let f6  ← bnkIdFwdB      B      128  512 28 epsStr "s2b2" f5.o
-    let f7  ← bnkIdFwdB      B      128  512 28 epsStr "s2b3" f6.o
-    let f8  ← bnkStridedFwdB B  512 256 1024 14 epsStr "s3b0" f7.o
-    let f9  ← bnkIdFwdB      B      256 1024 14 epsStr "s3b1" f8.o
-    let f10 ← bnkIdFwdB      B      256 1024 14 epsStr "s3b2" f9.o
-    let f11 ← bnkIdFwdB      B      256 1024 14 epsStr "s3b3" f10.o
-    let f12 ← bnkIdFwdB      B      256 1024 14 epsStr "s3b4" f11.o
-    let f13 ← bnkIdFwdB      B      256 1024 14 epsStr "s3b5" f12.o
-    let f14 ← bnkStridedFwdB B 1024 512 2048  7 epsStr "s4b0" f13.o
-    let f15 ← bnkIdFwdB      B      512 2048  7 epsStr "s4b1" f14.o
-    let f16 ← bnkIdFwdB      B      512 2048  7 epsStr "s4b2" f15.o
+    let f1  ← bnkProjFwdB    B   64  64  256 q2 epsStr "s1b0" nStp   -- ⭐ the stride-1 projection
+    let f2  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b1" f1.o
+    let f3  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b2" f2.o
+    let f4  ← bnkStridedFwdB B  256 128  512 q3 epsStr "s2b0" f3.o
+    let f5  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b1" f4.o
+    let f6  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b2" f5.o
+    let f7  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b3" f6.o
+    let f8  ← bnkStridedFwdB B  512 256 1024 q4 epsStr "s3b0" f7.o
+    let f9  ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b1" f8.o
+    let f10 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b2" f9.o
+    let f11 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b3" f10.o
+    let f12 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b4" f11.o
+    let f13 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b5" f12.o
+    let f14 ← bnkStridedFwdB B 1024 512 2048  q5 epsStr "s4b0" f13.o
+    let f15 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b1" f14.o
+    let f16 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b2" f15.o
     -- ═══ head: GAP(7×7) → dense(2048→nClasses) ═══
-    let zL    : Vec (B*(2048*7*7)) := fun _ => 0
+    let zL    : Vec (B*(2048*q5*q5)) := fun _ => 0
     let z2048 : Vec (B*2048) := fun _ => 0
     let zWd   : Mat 2048 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
     let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
     let zNCp  : Vec (B*nClasses) := fun _ => 0
-    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := 7) (w := 7)) (.operand f16.o zL))
+    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := q5) (w := q5)) (.operand f16.o zL))
     let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
     -- ═══ the loss cotangent ═══
     --
@@ -486,31 +505,31 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B) (.denseRowBack (rows := 1) (a := 2048) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
     let (cWd,  nWd)  ← pretty B (.denseWeightGradB (c := nClasses) nGap z2048 (.operand nDy zNCp))
     let (cbd,  nbd)  ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
-    let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 2048) (h := 7) (w := 7) (.operand nDgi z2048))
+    let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 2048) (h := q5) (w := q5) (.operand nDgi z2048))
     -- ═══ 16 block backwards, in reverse ═══
-    let b16 ← bnkIdBackGradB      B      512 2048  7 epsStr "s4b2" f16 nDgp
-    let b15 ← bnkIdBackGradB      B      512 2048  7 epsStr "s4b1" f15 b16.dx
-    let b14 ← bnkStridedBackGradB B 1024 512 2048  7 epsStr "s4b0" f14 b15.dx
-    let b13 ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b5" f13 b14.dx
-    let b12 ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b4" f12 b13.dx
-    let b11 ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b3" f11 b12.dx
-    let b10 ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b2" f10 b11.dx
-    let b9  ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b1" f9  b10.dx
-    let b8  ← bnkStridedBackGradB B  512 256 1024 14 epsStr "s3b0" f8  b9.dx
-    let b7  ← bnkIdBackGradB      B      128  512 28 epsStr "s2b3" f7  b8.dx
-    let b6  ← bnkIdBackGradB      B      128  512 28 epsStr "s2b2" f6  b7.dx
-    let b5  ← bnkIdBackGradB      B      128  512 28 epsStr "s2b1" f5  b6.dx
-    let b4  ← bnkStridedBackGradB B  256 128  512 28 epsStr "s2b0" f4  b5.dx
-    let b3  ← bnkIdBackGradB      B       64  256 56 epsStr "s1b2" f3  b4.dx
-    let b2  ← bnkIdBackGradB      B       64  256 56 epsStr "s1b1" f2  b3.dx
-    let b1  ← bnkProjBackGradB    B   64  64  256 56 epsStr "s1b0" f1  b2.dx
+    let b16 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b2" f16 nDgp
+    let b15 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b1" f15 b16.dx
+    let b14 ← bnkStridedBackGradB B 1024 512 2048  q5 epsStr "s4b0" f14 b15.dx
+    let b13 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b5" f13 b14.dx
+    let b12 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b4" f12 b13.dx
+    let b11 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b3" f11 b12.dx
+    let b10 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b2" f10 b11.dx
+    let b9  ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b1" f9  b10.dx
+    let b8  ← bnkStridedBackGradB B  512 256 1024 q4 epsStr "s3b0" f8  b9.dx
+    let b7  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b3" f7  b8.dx
+    let b6  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b2" f6  b7.dx
+    let b5  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b1" f5  b6.dx
+    let b4  ← bnkStridedBackGradB B  256 128  512 q3 epsStr "s2b0" f4  b5.dx
+    let b3  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b2" f3  b4.dx
+    let b2  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b1" f2  b3.dx
+    let b1  ← bnkProjBackGradB    B   64  64  256 q2 epsStr "s1b0" f1  b2.dx
     -- ═══ stem backward ═══
-    let (cDmp, nDmp) ← pretty B (.maxPool3s2BackB (N := B) (c := 64) (h := 56) (w := 56) nStr z112 (.operand b1.dx z56))
+    let (cDmp, nDmp) ← pretty B (.maxPool3s2BackB (N := B) (c := 64) (h := q2) (w := q2) nStr z112 (.operand b1.dx z56))
     let (cDsr, nDsr) ← pretty B (.selectPosB nStn z112 (.operand nDmp z112))
-    let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 64) (h := 112) (w := 112) "%sg" nStc epsStr 0 z64 z112b (.operand nDsr z112b))
+    let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 64) (h := q1) (w := q1) "%sg" nStc epsStr 0 z64 z112b (.operand nDsr z112b))
     let (csW, nsW) ← pretty B (.convStridedWeightGradB "%x" z64 zx zSk (.operand nDsn z112))
     let (csg, nsg) ← pretty B (.bnGammaGradB nStc epsStr 0 z112b (.operand nDsr z112b))
-    let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 64) (h := 112) (w := 112) (.operand nDsr z112b))
+    let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 64) (h := q1) (w := q1) (.operand nDsr z112b))
     -- ═══ BN running statistics, from each BN layer's INPUT ═══
     let bnStat (oc hh : Nat) (xn : String) : StateM Nat (String × String × String) := do
       let zbv : Vec (B*(oc*(hh*hh))) := fun _ => 0
@@ -534,23 +553,23 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       let (c3, m3, v3) ← bnStat oc hh f.c3
       let (cp, mp, vp) ← bnStat oc hh f.cp
       pure (c1 ++ c2 ++ c3 ++ cp, [m1, v1, m2, v2, m3, v3, mp, vp])
-    let (cSt0, st0) ← bnStat 64 112 nStc
-    let (cSt1,  st1)  ← projStats  64  256 56 f1
-    let (cSt2,  st2)  ← idStats    64  256 56 f2
-    let (cSt3,  st3)  ← idStats    64  256 56 f3
-    let (cSt4,  st4)  ← strStats  128  512 28 f4
-    let (cSt5,  st5)  ← idStats   128  512 28 f5
-    let (cSt6,  st6)  ← idStats   128  512 28 f6
-    let (cSt7,  st7)  ← idStats   128  512 28 f7
-    let (cSt8,  st8)  ← strStats  256 1024 14 f8
-    let (cSt9,  st9)  ← idStats   256 1024 14 f9
-    let (cSt10, st10) ← idStats   256 1024 14 f10
-    let (cSt11, st11) ← idStats   256 1024 14 f11
-    let (cSt12, st12) ← idStats   256 1024 14 f12
-    let (cSt13, st13) ← idStats   256 1024 14 f13
-    let (cSt14, st14) ← strStats  512 2048  7 f14
-    let (cSt15, st15) ← idStats   512 2048  7 f15
-    let (cSt16, st16) ← idStats   512 2048  7 f16
+    let (cSt0, st0) ← bnStat 64 q1 nStc
+    let (cSt1,  st1)  ← projStats  64  256 q2 f1
+    let (cSt2,  st2)  ← idStats    64  256 q2 f2
+    let (cSt3,  st3)  ← idStats    64  256 q2 f3
+    let (cSt4,  st4)  ← strStats  128  512 q3 f4
+    let (cSt5,  st5)  ← idStats   128  512 q3 f5
+    let (cSt6,  st6)  ← idStats   128  512 q3 f6
+    let (cSt7,  st7)  ← idStats   128  512 q3 f7
+    let (cSt8,  st8)  ← strStats  256 1024 q4 f8
+    let (cSt9,  st9)  ← idStats   256 1024 q4 f9
+    let (cSt10, st10) ← idStats   256 1024 q4 f10
+    let (cSt11, st11) ← idStats   256 1024 q4 f11
+    let (cSt12, st12) ← idStats   256 1024 q4 f12
+    let (cSt13, st13) ← idStats   256 1024 q4 f13
+    let (cSt14, st14) ← strStats  512 2048 q5 f14
+    let (cSt15, st15) ← idStats   512 2048 q5 f15
+    let (cSt16, st16) ← idStats   512 2048 q5 f16
     -- ═══ the 161 parameter gradients in func-arg order ═══
     let stemPs : List PGrad := [⟨"sW", nsW, [64,3,7,7]⟩, ⟨"sg", nsg, [64]⟩, ⟨"sbt", nst, [64]⟩]
     let headPs : List PGrad := [⟨"Wd", nWd, [2048, nClasses]⟩, ⟨"bd", nbd, [nClasses]⟩]
@@ -661,7 +680,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
                               (sigList.map (fun (n, t) => s!"{n}a: {t}")) else ""
   let accSSig := if accOn then ", %aup: tensor<f32>, %akeep: tensor<f32>" else ""
   let statSig := String.intercalate ", " (r50StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++ aSig ++
+  let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++ aSig ++
     ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++ accSSig ++ ", " ++ statSig ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
@@ -779,37 +798,41 @@ set_option maxRecDepth 4000000 in
 /-- The full R50 forward: stem → `[3,4,6,3]` bottlenecks → GAP(7×7) → dense(2048→nClasses).
     `mode` picks batch statistics (`.train`) or frozen running stats (`.eval`); ONE chain, so the
     two renders cannot describe different nets. -/
-private def r50FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String) :
-    StateM Nat (String × String) := do
-  let zx   : Vec (3*224*224) := fun _ => 0
+private def r50FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
+    -- ⚠ TRAILING, and the SAME ladder the train step uses (`q = 7` is 224, `q = 5` is 160). It has
+    -- to be the same derivation, not merely the same numbers: the §2g prefix audit only means
+    -- anything if the forward and the train step are one chain at one resolution.
+    (q : Nat := 7) : StateM Nat (String × String) := do
+  let q5 := q; let q4 := 2 * q5; let q3 := 2 * q4; let q2 := 2 * q3; let q1 := 2 * q2
+  let zx   : Vec (3*(2*q1)*(2*q1)) := fun _ => 0
   let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
   let z64  : Vec 64 := fun _ => 0
-  let z112 : Vec (64*112*112) := fun _ => 0
-  let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" (zb 64) zSk z64 (.operand "%x" zx))
-  let (cStn, nStn) ← bnSite B 64 112 mode epsStr "%sg" "%sbt" "stn" nStc
+  let z112 : Vec (64*q1*q1) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := q1) (w := q1) "%sW" (zb 64) zSk z64 (.operand "%x" zx))
+  let (cStn, nStn) ← bnSite B 64 q1 mode epsStr "%sg" "%sbt" "stn" nStc
   let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
-  let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := 56) (w := 56) (.operand nStr z112))
-  let (c1, n1)   ← bnkProjFwdV    B   64  64  256 56 mode epsStr "s1b0" nStp
-  let (c2, n2)   ← bnkIdFwdV      B       64  256 56 mode epsStr "s1b1" n1
-  let (c3, n3)   ← bnkIdFwdV      B       64  256 56 mode epsStr "s1b2" n2
-  let (c4, n4)   ← bnkStridedFwdV B  256 128  512 28 mode epsStr "s2b0" n3
-  let (c5, n5)   ← bnkIdFwdV      B      128  512 28 mode epsStr "s2b1" n4
-  let (c6, n6)   ← bnkIdFwdV      B      128  512 28 mode epsStr "s2b2" n5
-  let (c7, n7)   ← bnkIdFwdV      B      128  512 28 mode epsStr "s2b3" n6
-  let (c8, n8)   ← bnkStridedFwdV B  512 256 1024 14 mode epsStr "s3b0" n7
-  let (c9, n9)   ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b1" n8
-  let (c10, n10) ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b2" n9
-  let (c11, n11) ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b3" n10
-  let (c12, n12) ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b4" n11
-  let (c13, n13) ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b5" n12
-  let (c14, n14) ← bnkStridedFwdV B 1024 512 2048  7 mode epsStr "s4b0" n13
-  let (c15, n15) ← bnkIdFwdV      B      512 2048  7 mode epsStr "s4b1" n14
-  let (c16, n16) ← bnkIdFwdV      B      512 2048  7 mode epsStr "s4b2" n15
-  let zL    : Vec (2048*7*7) := fun _ => 0
+  let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := q2) (w := q2) (.operand nStr z112))
+  let (c1, n1)   ← bnkProjFwdV    B   64  64  256 q2 mode epsStr "s1b0" nStp
+  let (c2, n2)   ← bnkIdFwdV      B       64  256 q2 mode epsStr "s1b1" n1
+  let (c3, n3)   ← bnkIdFwdV      B       64  256 q2 mode epsStr "s1b2" n2
+  let (c4, n4)   ← bnkStridedFwdV B  256 128  512 q3 mode epsStr "s2b0" n3
+  let (c5, n5)   ← bnkIdFwdV      B      128  512 q3 mode epsStr "s2b1" n4
+  let (c6, n6)   ← bnkIdFwdV      B      128  512 q3 mode epsStr "s2b2" n5
+  let (c7, n7)   ← bnkIdFwdV      B      128  512 q3 mode epsStr "s2b3" n6
+  let (c8, n8)   ← bnkStridedFwdV B  512 256 1024 q4 mode epsStr "s3b0" n7
+  let (c9, n9)   ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b1" n8
+  let (c10, n10) ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b2" n9
+  let (c11, n11) ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b3" n10
+  let (c12, n12) ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b4" n11
+  let (c13, n13) ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b5" n12
+  let (c14, n14) ← bnkStridedFwdV B 1024 512 2048  q5 mode epsStr "s4b0" n13
+  let (c15, n15) ← bnkIdFwdV      B      512 2048  q5 mode epsStr "s4b1" n14
+  let (c16, n16) ← bnkIdFwdV      B      512 2048  q5 mode epsStr "s4b2" n15
+  let zL    : Vec (2048*q5*q5) := fun _ => 0
   let z2048 : Vec 2048 := fun _ => 0
   let zWd   : Mat 2048 nClasses := fun _ _ => 0
   let zNC   : Vec nClasses := fun _ => 0
-  let (cGap, nGap) ← pretty B (.gapF (c := 2048) (h := 7) (w := 7) (.operand n16 zL))
+  let (cGap, nGap) ← pretty B (.gapF (c := 2048) (h := q5) (w := q5) (.operand n16 zL))
   let (cLog, nLog) ← pretty B (denseF "%Wd" "%bd" zWd zNC (.operand nGap z2048))
   pure (cStc ++ cStn ++ cStr ++ cStp ++
         c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++
@@ -819,13 +842,13 @@ set_option maxRecDepth 4000000 in
 /-- **`@resnet50in_fwd`** — 162 inputs (`%x` + 161 params), logits `[B, nClasses]`. Batch-statistic
     BN, i.e. the same forward the train step differentiates. -/
 def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
-    (slug : String := "resnet50in") : String :=
+    (slug : String := "resnet50in") (q : Nat := 7) (vSuffix : String := "") : String :=
   let sigList := r50SigList nClasses
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+  let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let (code, logits) := (r50FwdChain B nClasses .train epsStr).run' 0
+  let (code, logits) := (r50FwdChain B nClasses .train epsStr q).run' 0
   "module @m {\n" ++
-  s!"  func.func @{slug}_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-50 forward: every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ code ++
   s!"    return {logits} : {ty [B, nClasses]}\n" ++
@@ -836,13 +859,13 @@ set_option maxRecDepth 4000000 in
     161 params + 106 stat inputs + `%x` = **268 inputs**. This is what the driver scores through,
     so its BN order must match `r50StatSigList`, which it does by sharing the chain. -/
 def resnet50FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
-    (slug : String := "resnet50in") : String :=
+    (slug : String := "resnet50in") (q : Nat := 7) (vSuffix : String := "") : String :=
   let sigList := r50SigList nClasses ++ r50StatSigList
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+  let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let (code, logits) := (r50FwdChain B nClasses .eval epsStr).run' 0
+  let (code, logits) := (r50FwdChain B nClasses .eval epsStr q).run' 0
   "module @m {\n" ++
-  s!"  func.func @{slug}_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-50 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ code ++
   s!"    return {logits} : {ty [B, nClasses]}\n" ++
@@ -935,6 +958,30 @@ end Proofs.StableHLO
 -- Batch 256 on the forwards, matching the shim's val batch: 195 × 256 = 49,920 after tfds
 -- drop_remainder, the count the reference reports scoring. ⚠ `evalBs` in the driver is read OFF
 -- the artifact, so this need not equal the train batch.
+-- ⭐⭐ RSB-A3's RESOLUTION SPLIT — train @160, eval @224 (`next_session_pipeline_then_r50.md` §4).
+--
+-- Slug `resnet50in160`, so the resolution is in the name the driver opens rather than in a suffix
+-- some call site has to remember. ⚠ THE EVAL FORWARD IS DELIBERATELY AT A DIFFERENT RESOLUTION
+-- FROM ITS OWN TRAIN STEP — that is the recipe, not an oversight: `q = 5` (160) for training,
+-- `q = 7` (224) for scoring, one renderer, two instantiations.
+--
+-- ⚠ These are the RENDER half. They have no data path yet: `resnet50ImagenetVerified` is a 224 net
+-- (`d0 = 3·224·224`) and the tfds shim produces 224 crops, so a 160 `VerifiedNetSpec` and a 160
+-- shim are still owed before any of this can run. Rendering them now is what type-checks the
+-- resolution parameterisation at `q = 5` — the part with the dependent-type risk.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lamb64bce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
+  (Proofs.StableHLO.resnet50FwdFaithfulV 64 1000 "1.0e-05" "resnet50in160" (q := 5))
+
+-- ⭐ eval at 224 (`q = 7`) and batch 256, exactly as the 224 net scores. This is A3's
+-- `train@160 / test@224 (crop 0.95)` split, and the only thing that makes it expressible is that
+-- BN in `.eval` mode reads FROZEN per-channel statistics — which are resolution-independent.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd_eval.mlir"
+  (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in160" (q := 7))
+
 #eval IO.FS.writeFile "verified_mlir/resnet50in_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdFaithfulV 256 1000 "1.0e-05" "resnet50in")
 

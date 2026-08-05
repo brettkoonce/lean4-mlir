@@ -174,6 +174,78 @@ asserts BOTH directions: dead in A, live in B. If it ever fires in A, the floor 
 (not 1e-4). Reusing AdamW's would render a LAMB that is structurally right and 200× off on the
 decay.
 
+### ✅ BCE-WITH-LOGITS — §4's loss row, one op, and an exact gate
+
+⭐ **ONE new op, which is what §4 estimated.** `sigmoidF` already denoted `Proofs.sigmoid` with a
+global hypothesis-free `sigmoid_has_vjp`, but it is indexed PER EXAMPLE; the loss cotangent lives at
+`SHlo (N*n)`. So `sigmoidB` is the same function at the batched index — and it needs **no new
+`Raw`/`Tok`/parse constructor**, because `skel` maps it onto the generic `.batched "sigmoidP"` node
+the whole batched-pointwise family shares. 5 sites, not 11.
+
+⭐ **The cotangent is the same shape with one op swapped, and THREE ops instead of five**:
+`(softmax(z) − t)/B` becomes `(σ(z) − t)/(B·K)`, and the two label-smoothing nodes disappear.
+
+⚠⚠ **THE DIVISOR IS `B·K`, NOT `B`** — timm's `reduction='mean'` is over B×C, not the mean of the
+per-example sum. At K = 1000 that is **1000× on the effective step**, and the reference's own comment
+says its lr is tuned to this form. ⚠ **No label smoothing on the BCE path**: a3 is `ls0.0`, the soft
+targets come from mixup through `%onehot`.
+
+⭐ The loss emits as `softplus(z) − t·z` — expanding `t·softplus(−z) + (1−t)·softplus(z)` with
+`softplus(−x) = softplus(x) − x` collapses two softplus calls to one, and it never exponentiates a
+positive number.
+
+**`lake build r50-bce-tie` is EXACT, not a tolerance argument.** ⭐ Zero the classifier weight and
+`z = Wd·gap + bd` collapses to `z = bd` — a vector the harness chose, known to the last bit, with no
+forward to reproduce. Loss and cotangent are then closed forms; `g_bd` comes from AdamW's
+`m' = 0.1·g` (§2k's fifth use). Measured: gradient rel <1e-6, loss 0.819656 against 0.819656. ⟂ The
+softmax-CE peer reports 7.815135; the wrong-divisor control misses by exactly **999×**.
+
+⭐⭐ **And the ⟂① control caught the HARNESS, not the render.** It requires the CE peer to match
+softmax-CE's OWN closed form, and the first draft computed PLAIN CE where the render emits SMOOTHED
+CE (7.815 against 7.800). ▶ *A control that can catch the harness is worth more than one that can
+only catch the render* — the green would otherwise have rested on arithmetic nobody checked.
+
+### ✅ 160/224 — the renderer is parameterised, and §4's audit warning has an ANSWER
+
+⭐ **Parameterised by the FINAL feature size, deriving UPWARD by doubling** (`q4 := 2*q5`, …), and
+that is not a style choice: every size relation this graph needs is "the input of a stride-2 op is
+twice its output", stated IN THE TYPE (`Vec (ic*(2*h)*(2*w)) → Vec (oc*h*w)`). Written downward
+(`imgSize/2`, `imgSize/4`) Lean would have to prove `2*(imgSize/4) = imgSize/2` — false for odd
+inputs and not definitional for a variable. Upward, every equation holds by zeta-reduction.
+
+`q = 7` is 224 and **every committed artifact re-renders byte-identically**; `q = 5` is A3's 160.
+Rendered: `resnet50in160_lamb64bce_train_step` (64×76800 in, 2048×5×5 deepest), `resnet50in160_fwd`,
+and `resnet50in160_fwd_eval` **at 224** — the split expressed in the artifacts, and expressible only
+because `.eval` BN reads FROZEN per-channel statistics, which are resolution-independent.
+
+⚠⚠ **A COMPILE PROBE CAUGHT A MISSED SITE, and nothing else would have.** `gapBackBatched` still had
+`h := 7` baked; at `q = 5` it produced `tensor<64x51200>` used where `tensor<64x100352>` was defined.
+Lean type-checked the render — the literal is a graph *argument*, not an index — so only XLA saw it.
+▶ *A resolution parameterisation is not done when it elaborates; it is done when it compiles.*
+
+#### ▶▶ §4's "decide explicitly" on the prefix audit — DECIDED, and the obstruction is NOT the split
+
+§4 said the `_fwd ⊂ _train_step` audit "cannot hold across" 160/224 and "do not let it degrade to
+'the audit doesn't cover R50'". ⭐ **Measured: R50 is not in `check_fwd_prefix`'s PAIRS list at all,
+and the reason has nothing to do with resolution.**
+
+`resnet50in_fwd.mlir` is rendered by `r50FwdChain`, the PER-EXAMPLE chain (`bnkIdFwdV`), where the
+train step's forward is the BATCHED one (`bnkIdFwdB`). At the first BN site the forward emits a
+normaliser of **12544 = 112²** and the train step **802816 = 64·112²**. ⚠ **`resnet34in` has exactly
+the same pattern** (12544 against 802816), so this is a property of every ImageNet render here, not
+an R50 defect and not something the 160/224 work introduced.
+
+It is not live today — BN nets score through `_fwd_eval` (frozen stats, no batch/per-example
+distinction). ⚠ **But `LEAN_MLIR_EVAL_BATCHSTATS=1` routes eval through `_fwd`**, and on any BN
+ImageNet net that scores a PER-EXAMPLE-BN forward against BATCH-BN training. Opt-in, pre-existing,
+and now written down.
+
+▶ **The fix, and it is the honest answer to §4's question:** render a BATCHED forward from the train
+step's own `*FwdB` emitters and pair THAT with the train step. Then the prefix holds by construction
+at whatever `q` both are rendered at, and the 224 eval forward is licensed numerically (`fwd-tie`)
+rather than by the prefix rule — which is correct, because it is deliberately a different function
+at a different resolution. **Not built.**
+
 ### ⛔ What this did NOT do
 * ⛔⛔ **LAMB and ACCUMULATION ARE NOT COMPOSED.** `R34Opt.lamb` and `R34Opt.adamwAccum k` are
   separate constructors; there is no `.lambAccum`. LAMB is a LARGE-BATCH optimizer and
@@ -183,7 +255,15 @@ decay.
   which optimizer consumes `Gt`.
 * **`lamb64` has never been trained**, only certified against its closed form. No smoke, no loss
   curve.
-* **BCE-with-logits and 160/224 are still absent**, so nothing here is `rsb-faithful`.
+* ⛔ **The 160 artifacts HAVE NO DATA PATH.** `resnet50ImagenetVerified` is a 224 net
+  (`d0 = 3·224·224`) and the tfds shim produces 224 crops. A 160 `VerifiedNetSpec` and a 160 shim
+  (`trainRes := 160`, which the JAX config already carries) are owed before any of it can run. What
+  is done is the RENDER half, and it compiles.
+* ⛔ **The batched forward for the prefix audit is not built** (see the decision above), so R50 is
+  still outside `check_fwd_prefix`.
+* ⛔ **BCE is not composed with accumulation either** — `bce` is a flag on the renderer and
+  `.adamwAccum` is an optimizer constructor, so `lamb64bce` and `acc4x64` exist but
+  `lamb+bce+accum` does not.
 * **`wdExcludeNormBias`** (timm `no_weight_decay`, which RSB-A3 sets) is not in the LAMB render —
   the `wx` marker exists on other nets for exactly this and was not threaded here.
 * The two `vjp_oracle` projection cases, now correctly scoped to `MlirCodegen`.
