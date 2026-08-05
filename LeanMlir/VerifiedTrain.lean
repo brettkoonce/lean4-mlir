@@ -1500,7 +1500,15 @@ gate's control, not a configuration.")
           correct5 := correct5 + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let acc5 := correct5.toFloat / nEval.toFloat * 100.0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%"
+    -- ⚠ Under `LEAN_MLIR_SKIP_EVAL` the loop above runs ZERO batches, so `correct` is 0 and this
+    -- line printed `acc = 0/49920 = 0.000000%  top5 = 0/49920` — a number INDISTINGUISHABLE from a
+    -- catastrophically broken net, on a run that scored nothing. Found 2026-08-05 on R50's first
+    -- smoke, where it read as the new net being wrong. Exact zeros on BOTH top-1 and top-5 are the
+    -- tell (chance at 1000 classes is ~50 and ~250), but a reader should not have to notice that.
+    if skipEval then
+      IO.println s!"  epoch {ep + 1}: eval SKIPPED (LEAN_MLIR_SKIP_EVAL) — no accuracy was measured"
+    else
+      IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%"
     (← IO.getStdout).flush
     IO.FS.writeBinFile ckptPath thetamv
     IO.FS.writeFile epPath (toString (ep + 1))

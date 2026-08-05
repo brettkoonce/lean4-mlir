@@ -1500,6 +1500,20 @@ lean_exe «resnet34-imagenet-verified-xla» where
   root := `apps.imagenette.MainResnet34ImagenetXla
   moreLinkArgs := xlaLink
 
+/-- Shared body of the ResNet-50 / **full ImageNet-1k** trainer. Its own `lean_lib` for the same
+    reason `Resnet34ImagenetCommon` has one: lake needs a module root for a shared `Common`. -/
+lean_lib «Resnet50ImagenetCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.Resnet50ImagenetCommon]
+
+/-- **ResNet-50 on full 1000-class ImageNet** — R50 phase 3. The bottleneck renderer
+    (`ResNet50RenderB`) at `nClasses := 1000`, AdamW, 4-replica by default.
+    ⚠ NOT RSB-A3 — no LAMB, no bs2048, no gradient accumulation. ⚠ And no incumbent render to tie
+    against (§3.2), so name the check that licenses any number off it. -/
+lean_exe «resnet50-imagenet-verified-xla» where
+  root := `apps.imagenette.MainResnet50ImagenetXla
+  moreLinkArgs := xlaLink
+
 /-- Shared body of the ViT-Tiny / **full ImageNet-1k** trainer (handoff §2p). Its own `lean_lib`
     for the same reason `Resnet34ImagenetCommon` has one. -/
 lean_lib «ViTImagenetCommon» where

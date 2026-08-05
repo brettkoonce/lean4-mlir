@@ -70,7 +70,10 @@ deriving DecidableEq, Repr
 /-- One BN site. `statP` is the running-stat input prefix (`%{statP}mu` / `%{statP}var`), used
     only in `.eval` mode; in `.train` mode the stats are reduced out of `xin` and `statP` is
     ignored. Every R34 BN site is spatially square, so one `hh` suffices. -/
-private def bnSite (B oc hh : Nat) (mode : R34Bn) (epsStr gName btName statP xin : String) :
+-- ⚠ PUBLIC (was `private` until 2026-08-05): `ResNet50RenderB.lean`'s forward chain needs the
+-- SAME train/eval BN switch. A second copy there would let R50's eval forward drift from its
+-- train forward — §2g's `mobilenetv2_fwd` defect exactly. Visibility changes no emitted bytes.
+def bnSite (B oc hh : Nat) (mode : R34Bn) (epsStr gName btName statP xin : String) :
     StateM Nat (String × String) := do
   let zc  : Vec oc := fun _ => 0
   let zin : Vec (oc*hh*hh) := fun _ => 0

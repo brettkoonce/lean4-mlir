@@ -603,6 +603,176 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
 
 end Proofs.StableHLO
 
+namespace Proofs.StableHLO
+
+-- ════════════════════════════════════════════════════════════════
+-- § The forward chain — `@resnet50in_fwd` and `@resnet50in_fwd_eval`
+-- ════════════════════════════════════════════════════════════════
+
+/-! ⚠ These live here rather than in a `ResNet50Render.lean` peer of R34's split. That split is
+historical — R34 has a per-example-BN net AND a batch-BN net, and they are different functions, so
+they get different files. R50 has only the batch-BN net, so one file keeps `r50SigList` and every
+consumer of it together.
+
+⚠⚠ **The train and eval forwards MUST be the same chain with one switch**, which is why `bnSite`
+(shared with R34, now public) takes the mode rather than each render spelling its BN. §2g's
+`mobilenetv2_fwd` defect was exactly this drifting: a net trained with one pool and scored with
+another, logits rel 1.86, silent. -/
+
+/-- Identity bottleneck forward, per-example vocabulary. -/
+private def bnkIdFwdV (B mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
+    StateM Nat (String × String) := do
+  let ww := hh
+  let zm   : Vec mid := fun _ => 0
+  let zo   : Vec oc := fun _ => 0
+  let zk1  : Kernel4 mid oc 1 1 := fun _ _ _ _ => 0
+  let zk2  : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zOut : Vec (oc*hh*ww) := fun _ => 0
+  let zMid : Vec (mid*hh*ww) := fun _ => 0
+  let (cC1, nC1) ← pretty B (.flatConvF (ic := oc) (oc := mid) (h := hh) (w := ww) s!"%{p}W1" (zb mid) zk1 zm (.operand xName zOut))
+  let (cN1, nN1) ← bnSite B mid hh mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
+  let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zMid))
+  let (cC2, nC2) ← pretty B (.flatConvF (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm (.operand nR1 zMid))
+  let (cN2, nN2) ← bnSite B mid hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
+  let (cR2, nR2) ← pretty B (.reluF (.operand nN2 zMid))
+  let (cC3, nC3) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo (.operand nR2 zMid))
+  let (cN3, nN3) ← bnSite B oc hh mode epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
+  let (cA,  nA)  ← pretty B (.addV (.operand nN3 zOut) (.operand xName zOut))
+  let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
+  pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cA ++ cO, nO)
+
+/-- ⭐ Stride-1 projection bottleneck forward — stage 1 block 0. The projection is `.flatConvF`,
+    NOT `.flatConvStridedF`. -/
+private def bnkProjFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
+    StateM Nat (String × String) := do
+  let ww := hh
+  let zm   : Vec mid := fun _ => 0
+  let zo   : Vec oc := fun _ => 0
+  let zk1  : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
+  let zk2  : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc cin 1 1 := fun _ _ _ _ => 0
+  let zIn  : Vec (cin*hh*ww) := fun _ => 0
+  let zOut : Vec (oc*hh*ww) := fun _ => 0
+  let zMid : Vec (mid*hh*ww) := fun _ => 0
+  let (cC1, nC1) ← pretty B (.flatConvF (ic := cin) (oc := mid) (h := hh) (w := ww) s!"%{p}W1" (zb mid) zk1 zm (.operand xName zIn))
+  let (cN1, nN1) ← bnSite B mid hh mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
+  let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zMid))
+  let (cC2, nC2) ← pretty B (.flatConvF (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm (.operand nR1 zMid))
+  let (cN2, nN2) ← bnSite B mid hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
+  let (cR2, nR2) ← pretty B (.reluF (.operand nN2 zMid))
+  let (cC3, nC3) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo (.operand nR2 zMid))
+  let (cN3, nN3) ← bnSite B oc hh mode epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
+  let (cCp, nCp) ← pretty B (.flatConvF (ic := cin) (oc := oc) (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo (.operand xName zIn))
+  let (cNp, nNp) ← bnSite B oc hh mode epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
+  let (cA,  nA)  ← pretty B (.addV (.operand nN3 zOut) (.operand nNp zOut))
+  let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
+  pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO, nO)
+
+/-- Strided projection bottleneck forward. ⚠ `conv1`/`bn1`/`relu1` at `2hh`; only `conv2` strides. -/
+private def bnkStridedFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
+    StateM Nat (String × String) := do
+  let ww := hh
+  let zm     : Vec mid := fun _ => 0
+  let zo     : Vec oc := fun _ => 0
+  let zk1    : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
+  let zk2    : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3    : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zkp    : Kernel4 oc cin 1 1 := fun _ _ _ _ => 0
+  let zIn    : Vec (cin*(2*hh)*(2*ww)) := fun _ => 0
+  let zMidIn : Vec (mid*(2*hh)*(2*ww)) := fun _ => 0
+  let zMid   : Vec (mid*hh*ww) := fun _ => 0
+  let zOut   : Vec (oc*hh*ww) := fun _ => 0
+  let (cC1, nC1) ← pretty B (.flatConvF (ic := cin) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}W1" (zb mid) zk1 zm (.operand xName zIn))
+  let (cN1, nN1) ← bnSite B mid (2*hh) mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
+  let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zMidIn))
+  let (cC2, nC2) ← pretty B (.flatConvStridedF (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm (.operand nR1 zMidIn))
+  let (cN2, nN2) ← bnSite B mid hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
+  let (cR2, nR2) ← pretty B (.reluF (.operand nN2 zMid))
+  let (cC3, nC3) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo (.operand nR2 zMid))
+  let (cN3, nN3) ← bnSite B oc hh mode epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
+  let (cCp, nCp) ← pretty B (.flatConvStridedF (ic := cin) (oc := oc) (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo (.operand xName zIn))
+  let (cNp, nNp) ← bnSite B oc hh mode epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
+  let (cA,  nA)  ← pretty B (.addV (.operand nN3 zOut) (.operand nNp zOut))
+  let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
+  pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO, nO)
+
+set_option maxRecDepth 4000000 in
+/-- The full R50 forward: stem → `[3,4,6,3]` bottlenecks → GAP(7×7) → dense(2048→nClasses).
+    `mode` picks batch statistics (`.train`) or frozen running stats (`.eval`); ONE chain, so the
+    two renders cannot describe different nets. -/
+private def r50FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String) :
+    StateM Nat (String × String) := do
+  let zx   : Vec (3*224*224) := fun _ => 0
+  let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
+  let z64  : Vec 64 := fun _ => 0
+  let z112 : Vec (64*112*112) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" (zb 64) zSk z64 (.operand "%x" zx))
+  let (cStn, nStn) ← bnSite B 64 112 mode epsStr "%sg" "%sbt" "stn" nStc
+  let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
+  let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := 56) (w := 56) (.operand nStr z112))
+  let (c1, n1)   ← bnkProjFwdV    B   64  64  256 56 mode epsStr "s1b0" nStp
+  let (c2, n2)   ← bnkIdFwdV      B       64  256 56 mode epsStr "s1b1" n1
+  let (c3, n3)   ← bnkIdFwdV      B       64  256 56 mode epsStr "s1b2" n2
+  let (c4, n4)   ← bnkStridedFwdV B  256 128  512 28 mode epsStr "s2b0" n3
+  let (c5, n5)   ← bnkIdFwdV      B      128  512 28 mode epsStr "s2b1" n4
+  let (c6, n6)   ← bnkIdFwdV      B      128  512 28 mode epsStr "s2b2" n5
+  let (c7, n7)   ← bnkIdFwdV      B      128  512 28 mode epsStr "s2b3" n6
+  let (c8, n8)   ← bnkStridedFwdV B  512 256 1024 14 mode epsStr "s3b0" n7
+  let (c9, n9)   ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b1" n8
+  let (c10, n10) ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b2" n9
+  let (c11, n11) ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b3" n10
+  let (c12, n12) ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b4" n11
+  let (c13, n13) ← bnkIdFwdV      B      256 1024 14 mode epsStr "s3b5" n12
+  let (c14, n14) ← bnkStridedFwdV B 1024 512 2048  7 mode epsStr "s4b0" n13
+  let (c15, n15) ← bnkIdFwdV      B      512 2048  7 mode epsStr "s4b1" n14
+  let (c16, n16) ← bnkIdFwdV      B      512 2048  7 mode epsStr "s4b2" n15
+  let zL    : Vec (2048*7*7) := fun _ => 0
+  let z2048 : Vec 2048 := fun _ => 0
+  let zWd   : Mat 2048 nClasses := fun _ _ => 0
+  let zNC   : Vec nClasses := fun _ => 0
+  let (cGap, nGap) ← pretty B (.gapF (c := 2048) (h := 7) (w := 7) (.operand n16 zL))
+  let (cLog, nLog) ← pretty B (denseF "%Wd" "%bd" zWd zNC (.operand nGap z2048))
+  pure (cStc ++ cStn ++ cStr ++ cStp ++
+        c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++
+        c9 ++ c10 ++ c11 ++ c12 ++ c13 ++ c14 ++ c15 ++ c16 ++ cGap ++ cLog, nLog)
+
+set_option maxRecDepth 4000000 in
+/-- **`@resnet50in_fwd`** — 162 inputs (`%x` + 161 params), logits `[B, nClasses]`. Batch-statistic
+    BN, i.e. the same forward the train step differentiates. -/
+def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
+    (slug : String := "resnet50in") : String :=
+  let sigList := r50SigList nClasses
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let (code, logits) := (r50FwdChain B nClasses .train epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @{slug}_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── ResNet-50 forward: every line is pretty(verified AST node) ──\n" ++
+  zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ code ++
+  s!"    return {logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
+set_option maxRecDepth 4000000 in
+/-- **`@resnet50in_fwd_eval`** — the inference forward, every BN site reading frozen running stats.
+    161 params + 106 stat inputs + `%x` = **268 inputs**. This is what the driver scores through,
+    so its BN order must match `r50StatSigList`, which it does by sharing the chain. -/
+def resnet50FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
+    (slug : String := "resnet50in") : String :=
+  let sigList := r50SigList nClasses ++ r50StatSigList
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let (code, logits) := (r50FwdChain B nClasses .eval epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @{slug}_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── ResNet-50 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
+  zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ code ++
+  s!"    return {logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
+end Proofs.StableHLO
+
 -- ⚠ Slug `resnet50in`, distinct from any 10-class R50, for the reason §2k records for `resnet34in`:
 -- the forwards carry no variant in their path, so a shared slug would silently overwrite a
 -- different-arity artifact.
@@ -620,3 +790,12 @@ end Proofs.StableHLO
 -- `lake build` rather than at run time as a shim "entry mismatch".
 #guard Proofs.StableHLO.r34AdamVariant 64 1 == "adam64"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 == "adamdp64"
+
+-- Batch 256 on the forwards, matching the shim's val batch: 195 × 256 = 49,920 after tfds
+-- drop_remainder, the count the reference reports scoring. ⚠ `evalBs` in the driver is read OFF
+-- the artifact, so this need not equal the train batch.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_fwd.mlir"
+  (Proofs.StableHLO.resnet50FwdFaithfulV 256 1000 "1.0e-05" "resnet50in")
+
+#eval IO.FS.writeFile "verified_mlir/resnet50in_fwd_eval.mlir"
+  (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in")
