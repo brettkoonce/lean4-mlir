@@ -156,9 +156,48 @@ Same binary, same config (4×bs64, momdp64, resident, fp32, devices 0,2,3,4), `M
    the post-overlap floor at all. It stays second in ORDER (overlap first, it is cheaper and
    gateable on bit-identity), but it is not a cleanup item.
 
-▶ **Next measurement:** split the 219 into compute / H2D / host blob patching. Item 3 is arithmetic
-off a borrowed compute figure, not a measurement, and now that the prefetch has landed (§2.3, 224
-ms/step) it is **the** binding term — every remaining lever on this path aims at it.
+#### ✅ AND THEN MEASURED — the 219 splits, and item 3 above was wrong too
+
+`PJRT_FFI_TIMING=40` (already in `ffi/pjrt_ffi.c`, opt-in, zero cost when unset) reports the invoke
+directly. R34/ImageNet 4×bs64, resident, prefetch ON, steps 81–120:
+
+| term | ms | share |
+|---|---|---|
+| **device compute** | **188.3** | **86%** |
+| one-hot h2d (4 × 0.25 MB) | 11.3 | 5.2% |
+| launch | 9.5 | 4.3% |
+| **image h2d (147 MiB)** | **7.4** | **3.4%** |
+| d2h | 2.4 | 1.1% |
+| = invoke | 218.5 | (driver step 224) |
+
+⚠⚠ **This kills the uint8 case, and it kills the paragraph I wrote three hours earlier saying
+uint8 "hits the floor twice".** The 147 MiB image h2d is **7.4 ms — 3.4% of the step** — and it
+moves at **20.4 GiB/s, PCIe 4.0 x16 line rate**. It is not a bottleneck; it is already optimal.
+Cutting the bytes 4× saves ~5.5 ms of a 219 ms step: **≈2.5%**. Against that: a changed wire
+protocol, a changed shim (shared with the JAX reference), normalize moved into the certified
+renderer, and the G4 gated interface. ▶ **Do not build it for R34.**
+
+⚠ The whole host↔device budget is **21 ms = 9.6%**. That is the hard ceiling on *every* transfer
+optimisation combined, uint8 included. §2.1's framing — that the image path was the dominant term
+residency had exposed — was right about the PIPE READ (158 ms, now hidden) and wrong about the
+TRANSFER. Two different 154 MB costs, and only one of them was ever real.
+
+⭐ **The surprise: the one-hot costs more than the image.** 4 × 0.25 MB takes **11.3 ms** while
+147 MiB takes 0.2 ms to issue. Not back-pressure — **reversing the issue order so the one-hot goes
+first left it at 11.6 ms**, and not bytes, since x is 600× larger for 1/50th the issue cost. So
+~5% of the step is spent inside `BufferFromHostBuffer` on four small buffers, cause unknown.
+▶ That is a bigger prize than uint8's entire ceiling and it needs no interface change; the likely
+route is the residency mechanism (a retained buffer updated in place) rather than a fresh
+allocation per step.
+
+▶▶ **The real lever is bf16, and it is the only one that touches the 86%.** §2.2's own table has
+JAX at 201 ms fp32 → **101 ms bf16 on these same cards**. Our 188 ms of device compute is
+consistent with JAX's 201 ms fp32 step, which is the cross-check that says the compute is not
+anomalous — it is simply what this net costs in fp32 here.
+
+⚠ The 188 ms does NOT reconcile with the residency note's "compute UNCHANGED (105.6 → 104.8 ms)"
+recorded for "exactly this shape". One of the two is a different configuration; the JAX agreement
+above says today's number is the trustworthy one. Unresolved, and flagged rather than smoothed.
 
 ### 2.3 The change
 
@@ -208,14 +247,15 @@ host-side off `augSeed` in the loop and have no pipe to drain.
 
 ### 2.4 Then
 
-* **uint8 wire** — 154 MB → 38.5 MB/step. *After* overlap, since overlap hides latency and what
-  remains exposed is bandwidth. Compatible with the one-definition rule **iff** only the affine
-  normalize moves to device. ⚠ Changes a gated interface (the preamble's G4 check).
-  ▶ **Now the only identified lever on the 224 ms floor, and it hits that floor twice** — §2.2's
-  measurement puts the 154 MB H2D of `x` and a 154 MB host allocation *inside* the un-overlappable
-  term, and uint8 cuts both 4×. This is no longer a cleanup item.
+* ⛔ **uint8 wire — MEASURED AND DROPPED for R34.** 154 MB → 38.5 MB/step buys **≈2.5%**: the image
+  h2d is 7.4 ms of a 219 ms step and already runs at PCIe line rate (§2.2). Cost is a changed wire
+  protocol, a changed shim, normalize inside the certified renderer, and the G4 gated interface.
+  ⚠ **Revisit only after bf16.** At 101 ms of compute the 158 ms pipe read no longer hides behind
+  it, and the arithmetic inverts — this is a conditional "no", not a permanent one.
+* ▶ **The one-hot's 11.3 ms** (§2.2) — 5% of the step, no interface change, bigger than uint8's
+  entire ceiling. The first thing to try on this path.
 * **`SHIM_WORKERS>1`** — built, one env var, defaults to 1. 2 workers **1.71×**, 4 **2.36×**. The
-  **ViT** lever; does not bind for R34.
+  **ViT** lever; does not bind for R34 — measured, the read has 61 ms of slack (158 vs 219).
 
 ---
 
