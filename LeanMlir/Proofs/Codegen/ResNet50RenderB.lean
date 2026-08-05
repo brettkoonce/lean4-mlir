@@ -401,7 +401,12 @@ set_option maxRecDepth 4000000 in
     ⚠ The block sequence is `[3,4,6,3]` with block 0 of every stage projecting. Stage 1's projects
     at **stride 1** (`bnkProjFwdB`); stages 2/3/4 project strided. -/
 def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
-    (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet50in") : String :=
+    (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet50in")
+    -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument.
+    -- `bce` swaps the LOSS (and therefore the cotangent) for BCE-with-logits — RSB-A2/A3's, and the
+    -- reason the recipe's lr is what it is. `vSuffix` appends to `r34AdamVariant`'s name so the
+    -- artifact, the entry point and `LEAN_MLIR_VARIANT` stay one string.
+    (bce : Bool := false) (vSuffix : String := "") : String :=
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
@@ -446,13 +451,37 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let zNCp  : Vec (B*nClasses) := fun _ => 0
     let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := 7) (w := 7)) (.operand f16.o zL))
     let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
-    -- ═══ label-smoothed softmax-CE cotangent, composed from kit ops (α = 0.1, K = nClasses) ═══
-    let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
+    -- ═══ the loss cotangent ═══
+    --
+    -- ⭐⭐ **BCE-with-logits is the SAME SHAPE with one op swapped, and THREE ops instead of five.**
+    -- Softmax-CE's cotangent is `(softmax(z) − t)/B` with `t` the smoothed target; BCE's is
+    -- `(σ(z) − t)/(B·K)`. So `softmaxRow → sigmoidB`, and the two label-smoothing nodes disappear.
+    --
+    -- ⚠⚠ **THE DIVISOR IS `B·K`, NOT `B`, AND THAT IS NOT A DETAIL.** timm's `BinaryCrossEntropy`
+    -- is `reduction='mean'` over B×C, not the mean of the per-example SUM over classes. The
+    -- reference's own comment: *"that would be NC× larger and need an NC× smaller lr — RSB-A2's
+    -- lr 5e-3 is tuned to this form."* At K = 1000 the two differ by 1000× on the effective step.
+    --
+    -- ⚠ **NO LABEL SMOOTHING on the BCE path**, and that is A3's recipe rather than an omission:
+    -- timm's a3 arg string is `…-m0.1-sd0.0-d0.0-ls0.0-100`, i.e. `ls0.0`. The soft targets come
+    -- from mixup/cutmix through `%onehot` (wire v2), not from a smoothing constant in the loss.
+    let (cSm,  nSm)  ← if bce
+      -- ⚠ `zNCp : Vec (B*nClasses)`, not `zNCb : Vec (B*(1*nClasses))`. The two indices are equal
+      -- but NOT definitionally so for a variable `nClasses` (`Nat.mul` recurses on its second
+      -- argument, so `1 * n` does not reduce), and `sigmoidB`'s `{N n}` unify against the bare
+      -- product. The `if` still typechecks because both branches are `StateM Nat (String × String)`
+      -- — the SHlo index never escapes the branch.
+      then pretty B (.sigmoidB (N := B) (n := nClasses) (.operand nLog zNCp))
+      else pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
     let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
-    let (cLsa, nLsa) ← pretty B (.scaleB "0.100000" 0 (.operand "%onehot" zNCb))
-    let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
-    let (cD2,  nD2)  ← pretty B (.shiftB s!"-{alphaOverK nClasses}" 0 (.operand nD1 zNCb))
-    let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
+    let (cLsa, nLsa) ← if bce then pure ("", nD0)
+      else pretty B (.scaleB "0.100000" 0 (.operand "%onehot" zNCb))
+    let (cD1,  nD1)  ← if bce then pure ("", nD0)
+      else pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
+    let (cD2,  nD2)  ← if bce then pure ("", nD0)
+      else pretty B (.shiftB s!"-{alphaOverK nClasses}" 0 (.operand nD1 zNCb))
+    let (cDy,  nDy)  ← pretty B (.divConstB (if bce then s!"{B * nClasses}.0" else s!"{B}.0") 0
+                                  (.operand nD2 zNCb))
     -- ═══ head backward + dense grads ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B) (.denseRowBack (rows := 1) (a := 2048) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
     let (cWd,  nWd)  ← pretty B (.denseWeightGradB (c := nClasses) nGap z2048 (.operand nDy zNCp))
@@ -551,6 +580,31 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- `%loss` is REPORT-ONLY (logging), on no gradient path, and NOT `pretty` of an AST node — the
     -- same §5 carve-out R34's takes. SMOOTHED CE, matching the cotangent's soft target; a first cut
     -- on R34 computed plain CE here and only a numeric tie caught it.
+    -- ⭐ **BCE-with-logits, in the stable form `softplus(z) − t·z`.** Expanding
+    -- `t·softplus(−z) + (1−t)·softplus(z)` with the identity `softplus(−x) = softplus(x) − x`
+    -- collapses the reference's two softplus calls to ONE, and the result never exponentiates a
+    -- positive number: `softplus(z) = max(z,0) + log(1 + exp(−|z|))`. Report-only, like the CE
+    -- loss beside it — the §5 carve-out — but the arithmetic still has to be right, because the
+    -- epoch curve is how the run is judged against the reference (§2b's `%loss` bug).
+    let lossCodeBce :=
+      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+      "    // BCE-with-logits, mean over B x K: softplus(z) - t*z, softplus stable as\n" ++
+      "    // max(z,0) + log(1 + exp(-|z|)). ⚠ mean over B*K, NOT mean of the per-example sum.\n" ++
+      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+      s!"    %lzb = stablehlo.constant dense<0.0> : {ty [B, nClasses]}\n" ++
+      s!"    %labs = stablehlo.abs {nLog} : {ty [B, nClasses]}\n" ++
+      s!"    %lneg = stablehlo.negate %labs : {ty [B, nClasses]}\n" ++
+      s!"    %lexp = stablehlo.exponential %lneg : {ty [B, nClasses]}\n" ++
+      s!"    %lone = stablehlo.constant dense<1.0> : {ty [B, nClasses]}\n" ++
+      s!"    %l1pe = stablehlo.add %lone, %lexp : {ty [B, nClasses]}\n" ++
+      s!"    %llg = stablehlo.log %l1pe : {ty [B, nClasses]}\n" ++
+      s!"    %lmax = stablehlo.maximum {nLog}, %lzb : {ty [B, nClasses]}\n" ++
+      s!"    %lsp = stablehlo.add %lmax, %llg : {ty [B, nClasses]}\n" ++
+      s!"    %ltz = stablehlo.multiply %onehot, {nLog} : {ty [B, nClasses]}\n" ++
+      s!"    %lbce = stablehlo.subtract %lsp, %ltz : {ty [B, nClasses]}\n" ++
+      s!"    %lsum2 = stablehlo.reduce(%lbce init: %lz) applies stablehlo.add across dimensions = [0, 1] : ({ty [B, nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
+      s!"    %lbfc = stablehlo.constant dense<{B * nClasses}.0> : tensor<f32>\n" ++
+      s!"    %loss = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n"
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
       s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -595,7 +649,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
         "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5).\n") ++
       zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt ++ adamCode ++
-      lossCode ++
+      (if bce then lossCodeBce else lossCode) ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r50SigList nClasses
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
@@ -618,7 +672,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let inner : String := go.run' 0
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
-  let fname := s!"{slug}_{r34AdamVariant B replicas opt}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt}{vSuffix}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -837,6 +891,21 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/resnet50in_accdp8x64_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
     (Proofs.StableHLO.R34Opt.adamwAccum 8) "resnet50in")
+
+-- ⭐⭐ BCE-WITH-LOGITS — RSB-A2/A3's loss (`planning/next_session_pipeline_then_r50.md` §4).
+--
+-- Same three regions and the same signature as the CE renders: the loss is not state, so nothing
+-- in the driver moves. ⚠ `adam64bce` exists so `lake build r50-bce-tie` can recover the cotangent
+-- from AdamW's `m' = 0.1·g` (LAMB's trust ratio is in the way); `lamb64bce` is the recipe-facing
+-- pair. Both share ONE `lossCodeBce`, so a defect in the loss cannot be present in one and not the
+-- other.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_adam64bce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.R34Opt.adamw "resnet50in" (bce := true) (vSuffix := "bce"))
+
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lamb64bce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.R34Opt.lamb "resnet50in" (bce := true) (vSuffix := "bce"))
 
 -- ⭐⭐ LAMB — RSB-A3's optimizer (`planning/rsb_a3_r50_verified.md` §2.3). THREE regions, same
 -- `[θ|m|v]` signature as `adam64`, because the trust ratio is computed inside the graph from θ and

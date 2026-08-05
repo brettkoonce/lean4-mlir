@@ -644,6 +644,15 @@ inductive SHlo : Nat → Type where
   | biasGradB   {N n : Nat}                                     : SHlo (N*n) → SHlo (N*n)
   | lnRowBackB   {N m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (N*(m*n)))
       : SHlo (N*(m*n)) → SHlo (N*(m*n))
+  -- ⭐ The BATCHED forward sigmoid, for **BCE-with-logits** (RSB-A2/A3's loss). `sigmoidF` already
+  --    denotes `Proofs.sigmoid` and already carries a global hypothesis-free `sigmoid_has_vjp`, but
+  --    it is indexed PER EXAMPLE and emits at `ty [B, n]`; the loss cotangent lives at `SHlo (N*n)`
+  --    with the `*B` family (`subB`, `divConstB`). So this is the same function at the batched
+  --    index — one constructor, and `planning/next_session_pipeline_then_r50.md` §4 estimated
+  --    "~1 descriptor" for exactly this.
+  -- ⚠ It needs NO new `Raw`/`Tok`/parse constructor: `skel` maps it onto the generic
+  --    `.batched "sigmoidP"` node the whole batched-pointwise family shares.
+  | sigmoidB     {N n : Nat}                                    : SHlo (N*n) → SHlo (N*n)
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
   -- ── ViT increment 2 (handoff §0.2 ▶3): the six forms that CANNOT be descriptors, because each
   --    either reads a per-example saved activation or contracts the batch away.
@@ -1714,6 +1723,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   -- the auxiliary lift: example `k` is handed `batchSlice k x`, never the whole `x`.
   | _, .lnRowBackB (N := N) (m := m) (n := n) _ _ _ ε γ x e =>
       batchMapAux N (rowLNBackFlat m n ε γ) x (den e)
+  | _, .sigmoidB (N := N) (n := n) e => sigmoid (N*n) (den e)
   | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoid_has_vjp (N*n)).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
   | _, .geluBack (n := n) _ x e => (gelu_has_vjp n).backward x (den e)
@@ -2099,6 +2109,11 @@ theorem den_lnRowBackB_per_example {N m n : Nat} (gN xN es : String) (ε γ : �
   simp [den_lnRowBackB, batchMapAux]
 @[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.sigmoidBackB xN x e) = (sigmoid_has_vjp (N*n)).backward x (den e) := rfl
+
+/-- **`sigmoidB` denotes `Proofs.sigmoid` at the batched index** — `rfl`, the same function
+    `sigmoidF_faithful` states one index down. This is BCE-with-logits' only new op. -/
+@[simp] theorem sigmoidB_faithful {N n : Nat} (e : SHlo (N*n)) :
+    den (.sigmoidB (N := N) (n := n) e) = sigmoid (N*n) (den e) := rfl
 
 /-! ### ViT increment 2 — the six forms that cannot be descriptors -/
 
@@ -4218,6 +4233,7 @@ def skel : {k : Nat} → SHlo k → Raw
   | _, .biasGradB (n := n) e => .biasGrad n (skel e)
   | _, .lnRowBackB (N := N) (m := m) (n := n) gN xN es _ _ _ e =>
       .batched "lnRowBackP" [gN, xN, es] [N, m, n] (skel e)
+  | _, .sigmoidB (N := N) (n := n) e => .batched "sigmoidP" [] [N, n] (skel e)
   | _, .sigmoidBackB (N := N) (n := n) xN _ e => .batched "sigmoidBackP" [xN] [N, n] (skel e)
   | _, .addVB (N := N) (n := n) a b => .batched2 "addV" [] [N, n] (skel a) (skel b)
   | _, .subB (N := N) (n := n) a b  => .batched2 "sub" [] [N, n] (skel a) (skel b)
@@ -6210,6 +6226,12 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           let mb ← fresh; let o ← fresh
           pure (s!"    {mb} = stablehlo.broadcast_in_dim {mN}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.multiply {mb}, {r} : {ty [B,n]}\n", o :: st)
+      | "sigmoidP", [], [_N, n] => do
+          -- σ(z) at the batched shape, for BCE-with-logits' cotangent `(σ(z) − t)/(B·K)`.
+          -- ⚠ ONE op, and `stablehlo.logistic` is the same primitive `sigmoidF` emits — the
+          -- difference is only the shape it is emitted at.
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.logistic {r} : {ty [B,n]}\n", o :: st)
       | "dropoutP", [mN], [_N, n] => do
           -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask, applied
           -- immediately before the classifier dense. `mN` is a graph INPUT of type

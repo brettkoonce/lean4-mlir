@@ -2081,6 +2081,23 @@ lean_exe «r50-lamb-tie» where
   root := `tests.TestR50LambTie
   moreLinkArgs := xlaLink
 
+/-- `r50-bce-tie` — **BCE-with-logits, numerically certified** (§4's loss row). RSB-A2/A3 do not
+    train with softmax CE: every class is an independent sigmoid, `reduction='mean'` over B×K.
+
+    ⭐ The trick that makes it EXACT: zero the classifier weight, so `z = Wd·gap + bd` collapses to
+    `z = bd` — a vector the harness chose, known to the last bit, with no forward to reproduce. The
+    loss and the whole cotangent are then closed forms in `bd` and the targets, and `g_bd` comes out
+    of AdamW's `m' = 0.1·g` (§2k). The degeneracy is the instrument.
+
+    ⚠ The control worth having is the REDUCTION: mean over B alone rather than B×K is `K = 1000×`
+    on the effective step, changes no shape, no op and no arity, and descends perfectly well at
+    1/1000 of the intended learning rate. Needs one GPU and the XLA backend.
+
+        lake build r50-bce-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-bce-tie -/
+lean_exe «r50-bce-tie» where
+  root := `tests.TestR50BceTie
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and
