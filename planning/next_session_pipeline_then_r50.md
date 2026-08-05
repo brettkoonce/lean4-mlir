@@ -130,9 +130,62 @@ which is the right failure: a silent single-device run would have tied against i
 ✅ **`accdp8x64` smoked at EFFECTIVE BATCH 2048** — 4 replicas × 64 micro × k=8, 16 micro-batches =
 2 updates, losses 7.52 / 7.51 / 7.61. RSB-A3's design batch now runs.
 
+### ✅⭐ AND THEN LAMB — §2.3's one ESTIMATE, now a measurement
+
+`rsb_a3_r50_verified.md` §2.3 flags its LAMB row as *"2–3 ops **estimated** — the one number in
+this file that is NOT a measurement. Cost it the §0.8 way first."* ▶ **Measured: two.**
+
+`gradSumSqAccF` — the per-leaf `∑gᵢ²` — was **already in the AST for the global-norm clip**, and
+`sgdParamF` for heavy-ball, so LAMB needed only `lambDirF` (the direction) and `lambScaleF` (the
+trust-scaled step). The footprint of one new `SHlo` constructor, counted off `clipScaleF`: 8 sites
+in `StableHLO.lean` (the constructor, `den`, a `*_faithful` theorem, `Raw`, `skel`, `Tok`,
+`toToks`, `pretty`) plus 2 in `StableHLOParse.lean`. ⚠ The whnf blow-up that file's own retraction
+note warns about did NOT recur, and the reason is that both new ops mirror a shape the AST already
+has: `lambDirF` is `adamWParamF`'s signature minus `%lr`, `lambScaleF` is `clipScaleF`'s exactly.
+
+⭐⭐ **`lambScaleF` takes only `‖θ‖²` as its scalar child and recomputes `‖r‖²` from its own tensor
+child.** Taking both norms would have made it the kit's first TERNARY constructor — the unfamiliar
+shape the retraction note is about. `r` is already there, so the recomputation is free.
+
+`LeanMlir/Proofs/Codegen/Lamb.lean` is the ℝ reference (`AdamStep`/`GradClip`'s peer), and
+`lambScale_not_shared` is the statement that LAMB's factor is PER TENSOR where the clip's is one
+scalar shared across every parameter. ▶ The two features emit nearly the same lines and differ in
+the quantifier; that is the confusion worth having a theorem about.
+
+**`lake build r50-lamb-tie`** — §2k's construction for the third time (`r34-mom-tie`, `rms-tie`,
+now this): recover `g = 10·m'` from the committed AdamW render at `m = v = 0`, then require the
+LAMB render to satisfy the closed form per parameter tensor. Step rel **3e-6**.
+
+⚠⚠ **AND IT RUNS TWO SECOND-MOMENT REGIMES, because one of the three controls turned out to be
+DEAD at a typical `v` — which is itself the finding.** At `v̂ ≈ 1` the two ε placements
+(`√v̂ + ε` against `√(v̂ + ε)`) differ by `ε/(2√v̂)` against `ε`, i.e. **5e-7 at LAMB's ε = 1e-6** —
+below the harness's own 3e-6 floor. ⭐ **LAMB's ε makes its placement unobservable at a typical
+second moment, unlike RMSProp's ε = 1e-3, which `RmsPropStep` records at ~30×.** So the gate adds a
+second regime at `v̂ ≈ 1e-7` (early training, small gradients) where the separation is 3×, and
+asserts BOTH directions: dead in A, live in B. If it ever fires in A, the floor argument is stale.
+
+| ⟂ control, each a wrong LAMB that trains and descends | regime A | regime B |
+|---|---|---|
+| `trust ≡ 1` — plain Adam, i.e. forgetting the layer-wise part that IS the algorithm | **0.891** (312,735× the tie) | 1.134 |
+| `√(v̂+ε)` — RMSProp-TF's ε placement | 3e-6 ⚠ dead by measurement | **0.780** (68,290×) |
+| decay AFTER the trust ratio — AdamW's placement | **0.133** | 4e-5 |
+
+⚠ The constants are timm's a3 arg string, not AdamW's: **ε = 1e-6** (not 1e-8) and **wd = 0.02**
+(not 1e-4). Reusing AdamW's would render a LAMB that is structurally right and 200× off on the
+decay.
+
 ### ⛔ What this did NOT do
-* **LAMB, BCE-with-logits and 160/224 are still absent**, so this is AdamW at a large batch and must
-  not be called `rsb-faithful`. §4's table is otherwise unchanged.
+* ⛔⛔ **LAMB and ACCUMULATION ARE NOT COMPOSED.** `R34Opt.lamb` and `R34Opt.adamwAccum k` are
+  separate constructors; there is no `.lambAccum`. LAMB is a LARGE-BATCH optimizer and
+  `rsb_a2_resnet50.md` records it at bs512 giving **40.8% against 78.1%**, so LAMB without the
+  accumulation is the regime that finding warns about. The composition is the next step and it is
+  mechanical — the accumulation's fourth region and `%aup`/`%akeep` switching are orthogonal to
+  which optimizer consumes `Gt`.
+* **`lamb64` has never been trained**, only certified against its closed form. No smoke, no loss
+  curve.
+* **BCE-with-logits and 160/224 are still absent**, so nothing here is `rsb-faithful`.
+* **`wdExcludeNormBias`** (timm `no_weight_decay`, which RSB-A3 sets) is not in the LAMB render —
+  the `wx` marker exists on other nets for exactly this and was not threaded here.
 * The two `vjp_oracle` projection cases, now correctly scoped to `MlirCodegen`.
 
 ---

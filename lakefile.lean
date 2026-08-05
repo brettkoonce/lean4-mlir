@@ -2060,6 +2060,27 @@ lean_exe «r50-accum-shard-tie» where
   root := `tests.TestR50AccumShardTie
   moreLinkArgs := xlaLink
 
+/-- `r50-lamb-tie` — **LAMB, numerically certified.** `planning/rsb_a3_r50_verified.md` §2.3's LAMB
+    row is the ONE line that file flags as an estimate rather than a measurement ("2–3 ops"). Built,
+    and measured at **two** new `SHlo` constructors — `gradSumSqAccF` was already there for the
+    global-norm clip and `sgdParamF` for heavy-ball.
+
+    §2k's construction for the third time: recover `g = 10·m'` from the committed AdamW render at
+    `m = v = 0`, then require the LAMB render to satisfy the closed form, per parameter TENSOR.
+
+    ▶▶ THE CONTROLS ARE THE POINT — three wrong LAMBs that every one of them trains and descends:
+    `trust ≡ 1` (plain Adam, i.e. forgetting the layer-wise part that IS the algorithm),
+    `√(v̂ + ε)` (RMSProp-TF's ε placement) and the decay applied AFTER the trust ratio (AdamW's).
+    Each must miss by ≥10× the tie.
+
+    ⚠ The comparison is on the STEP `θ' − θ`, not `θ'` — the step is ~1e-3 of θ, so a relative error
+    on θ' divides by the wrong thing. Needs one GPU and the XLA backend.
+
+        lake build r50-lamb-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-lamb-tie -/
+lean_exe «r50-lamb-tie» where
+  root := `tests.TestR50LambTie
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and

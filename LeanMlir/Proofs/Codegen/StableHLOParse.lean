@@ -127,6 +127,12 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   -- `clipScaleF` the deeper element is the FACTOR — `toToks` emits factor-then-gradient.
   | .gradSumSqAccF ds :: ts, g :: acc :: st => parseStack ts (.gradSumSqAccF ds acc g :: st)
   | .clipScaleF cS eS ds :: ts, g :: sN :: st => parseStack ts (.clipScaleF cS eS ds sN g :: st)
+  -- LAMB. ⚠ `lambDirF` is UNARY (θ/m/v ride as NAMES, like `adamWParamF`); `lambScaleF` is binary
+  -- with the deeper element the ‖θ‖² SCALAR — `toToks` emits scalar-then-direction, the
+  -- `clipScaleF` order exactly.
+  | .lambDirF θ m v b1 ob1 b2 ob2 bc1 bc2 eps wd ds :: ts, e :: st =>
+      parseStack ts (.lambDirF θ m v b1 ob1 b2 ob2 bc1 bc2 eps wd ds e :: st)
+  | .lambScaleF ds :: ts, r :: wn2 :: st => parseStack ts (.lambScaleF ds wn2 r :: st)
   | .depthwiseF w b c h w' kH kW :: ts, e :: st =>
       parseStack ts (.depthwiseF w b c h w' kH kW e :: st)
   | .depthwiseBack w c h w' kH kW :: ts, e :: st =>
@@ -243,6 +249,10 @@ theorem parseStack_toToks (r : Raw) :
   | gradSumSqAccF ds acc e iha ihe =>
       intro ts st; simp only [toToks, List.append_assoc, iha, ihe]; rfl
   | clipScaleF cS eS ds sN e ihs ihe =>
+      intro ts st; simp only [toToks, List.append_assoc, ihs, ihe]; rfl
+  | lambDirF θ m v b1 ob1 b2 ob2 bc1 bc2 eps wd ds e ih =>
+      intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | lambScaleF ds wn2 e ihs ihe =>
       intro ts st; simp only [toToks, List.append_assoc, ihs, ihe]; rfl
   | depthwiseF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseBack w c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

@@ -155,7 +155,12 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- batch, so the marker concatenates against DIGITS and an `x` — a shape none of the other four
     -- markers has, and `accdp` puts `dp` INSIDE the prefix rather than after it.
   , ("acc4x64", false, false, false), ("accdp8x64", false, false, false)
-  , ("acc2x128", false, false, false) ]
+  , ("acc2x128", false, false, false)
+    -- ▶ LAMB (`r34AdamVariant .lamb`). ⚠ It needs NO driver predicate — three regions, the same
+    -- `[θ|m|v]` signature as `adam`, because the trust ratio is computed inside the graph from θ
+    -- and the direction and needs no extra state. So it is here for `wx`/`clip`'s reason: to prove
+    -- the new marker disturbs NONE of the five. `lamb` ends in `b` and `lambdp` puts `dp` after it.
+  , ("lamb64", false, false, false), ("lambdp64", false, false, false) ]
 
 #guard table.all (fun (v, e, r, s) => emaOn v == e && rmsOn v == r && sdOn v == s)
 
@@ -262,6 +267,19 @@ private def accumSpellings : List String := ["acc4x64", "accdp8x64", "acc2x128"]
 -- k = 2128 and not k = 128. The `takeWhile` is what makes that true; this is the check that says so.
 #guard accK "acc2x128" != 128
 #guard accK "acc2x128" != 2128
+
+-- ⚠ LAMB against every CONCATENATION. Same question as `wx` and `clip`: can any pair of markers
+-- spell it? No marker ends in `l`, `la` or `lam`, and none begins with `amb`, `mb` or `b` — but
+-- "no marker begins with b" is exactly the reasoning `rms` ++ `dp` ⊇ "sd" falsified, so it is run.
+#guard emaOn "lamb64" == false
+#guard rmsOn "lamb64" == false
+#guard sdOn  "lamb64" == false
+#guard cdOn  "lamb64" == false
+#guard accOn "lamb64" == false
+#guard accOn "lambdp64" == false
+-- and LAMB must not invent an axis in the DP spelling either, where `dp` trails the marker
+#guard emaOn "lambdp64" == false
+#guard cdOn  "lambdp64" == false
 
 #eval do
   IO.println "── variant predicates ──"

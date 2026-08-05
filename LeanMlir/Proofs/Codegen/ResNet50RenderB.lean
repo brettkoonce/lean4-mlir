@@ -405,6 +405,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
+    | .lamb           => "LAMB (per-tensor trust ratio)"
     | .adamwAccum k   => s!"AdamW over {k} ACCUMULATED micro-batches"
   let accOn := match opt with | .adamwAccum _ => true | _ => false
   let go : StateM Nat String := do
@@ -837,10 +838,24 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
     (Proofs.StableHLO.R34Opt.adamwAccum 8) "resnet50in")
 
+-- ⭐⭐ LAMB — RSB-A3's optimizer (`planning/rsb_a3_r50_verified.md` §2.3). THREE regions, same
+-- `[θ|m|v]` signature as `adam64`, because the trust ratio is computed inside the graph from θ and
+-- the direction and needs no extra state. So the driver is byte-identical across `adam64` and
+-- `lamb64` — the only per-net fact is which file it opens.
+--
+-- ⚠⚠ THIS IS LAMB, NOT `rsb-faithful`. That recipe is LAMB **at effective batch 2048** with
+-- BCE-with-logits and a 160/224 resolution split; `planning/rsb_a2_resnet50.md` records LAMB at
+-- bs512 giving 40.8% against 78.1%, so the batch is not a detail. Composing this with the
+-- accumulation render (`.lambAccum`) is not built — see the handoff.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lamb64_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.R34Opt.lamb "resnet50in")
+
 -- Pin the literal artifact paths above against the name the renderer emits, so a rename fails at
 -- `lake build` rather than at run time as a shim "entry mismatch".
 #guard Proofs.StableHLO.r34AdamVariant 64 1 == "adam64"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 == "adamdp64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb == "lamb64"
 #guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.adamwAccum 4) == "acc4x64"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8) == "accdp8x64"
 -- ⚠ The driver reads `k` back OUT of this string (`VerifiedTrain`'s `accK`). Pin the round trip

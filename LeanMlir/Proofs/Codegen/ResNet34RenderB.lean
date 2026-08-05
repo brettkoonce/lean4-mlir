@@ -217,6 +217,11 @@ inductive R34Opt
   | adamw
   /-- `g ← g + wd·θ`, `v' = μ·v + g`, `θ' = θ − lr·v'`; velocity in the `v` slot, `m` untouched. -/
   | heavyBall
+  /-- ⭐⭐ **LAMB** (You et al. 2019) — RSB-A3's optimizer, `planning/rsb_a3_r50_verified.md` §2.3's
+      one ESTIMATED line, now measured at **two new ops**. Adam moments give a direction
+      `r = m̂/(√v̂+ε) + wd·θ`, then a PER-PARAMETER-TENSOR trust ratio `‖θ‖/‖r‖` rescales the step.
+      `Proofs.Lamb` is the ℝ reference; see `optOne`. -/
+  | lamb
   /-- ⭐ **AdamW over `k` accumulated micro-batches** — `planning/next_session_pipeline_then_r50.md`
       §4's blocker. A FOURTH parameter region `G` holds the running gradient sum, and the graph is
       one function for both phases with two runtime scalars deciding which it is. See `optOne`. -/
@@ -261,6 +266,31 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                       "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
     pure (arS ++ cM ++ cV ++ cT, nT, nM, nV, none)
+  | .lamb =>
+    -- ⭐⭐ LAMB, in four ops per parameter, TWO of which are new (`planning/rsb_a3_r50_verified.md`
+    -- §2.3 estimated "2–3"; measured at 2, because `gradSumSqAccF` was already here for the clip
+    -- and `sgdParamF` for heavy-ball). `Proofs.Lamb` carries the ℝ reference and the clauses.
+    let z1 : Vec 1 := fun _ => 0
+    -- ① the DIRECTION, `r = m̂/(√v̂+ε) + wd·θ`, from the incoming moments and this step's gradient.
+    -- ⚠ ε OUTSIDE the root and the decay INSIDE `r` — both placements are load-bearing and both
+    -- have a plausible wrong neighbour (RMSProp-TF's `√(v̂+ε)`, AdamW's decay after the ratio).
+    let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
+                      "%b2" "%ob2" "%bc1" "%bc2" "%eps" "%wd" g.ds 0 0 0 0 0 0 z z z gr)
+    -- ② `‖θ‖²`, THIS parameter's own. ⚠ Seeded at `%lzero` and never folded across parameters —
+    -- that single-leaf fold is the entire difference from the global-norm clip, whose whole
+    -- semantic content is that ONE scalar is shared (`Proofs.clipFactor_shared` against
+    -- `Proofs.lambScale_not_shared`). The two features emit nearly the same lines.
+    let (cN, nN) ← pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
+                              (.operand s!"%{g.nm}" z))
+    -- ③ `trust · r`, with `‖r‖²` reduced inside the op from its own tensor child.
+    let (cS, nS) ← pretty B (.lambScaleF (n := n) g.ds (.operand nN z1) (.operand nR z))
+    -- ④ `θ' = θ − lr·(trust·r)` — `sgdParamF`, an op that already exists, applied to the scaled
+    -- direction exactly as `.heavyBall` applies it to the velocity.
+    let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nS z))
+    -- the moments themselves, unchanged from `.adamw` — LAMB's m and v ARE Adam's.
+    let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
+    let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
+    pure (arS ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT, nT, nM, nV, none)
   | .adamwAccum _ =>
     -- ⭐ **The whole feature, and it adds exactly ONE op per parameter.**
     --
@@ -329,6 +359,20 @@ def optConstsB (opt : R34Opt) : String :=
   | .heavyBall =>
     "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
     "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+  | .lamb =>
+    -- ⚠ **`%eps` is 1e-6, NOT AdamW's 1e-8**, and `%wd` is 0.02, NOT 1e-4. Both come off timm's a3
+    -- arg string (`lamb-cosine-lr0.008-wd0.02-…`), which `jax/MainResnet50Imagenet.lean` decodes in
+    -- its own comment. Reusing AdamW's numbers here would render a LAMB that is structurally right
+    -- and 200x off on the decay.
+    -- ⚠ `%lzero` seeds each parameter's OWN norm fold, one leaf deep. The clip's `%zero` seeds a
+    -- fold across ALL parameters. Same op, and the seed placement is the whole difference.
+    "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+    "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+    "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+    "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+    "    %eps = stablehlo.constant dense<1.0e-6> : tensor<f32>\n" ++
+    "    %wd = stablehlo.constant dense<0.02> : tensor<f32>\n" ++
+    "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n"
   | .adamwAccum k =>
     -- ⚠ **A TRUSTED CARVE-OUT, and deliberately the smallest one that does the job**: eight lines of
     -- SCALAR arithmetic emitted ONCE, next to the constants that were already emitted text. The 161
@@ -387,6 +431,7 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw) : String :=
    -- disagreement between them is silent: the run would apply on a cadence the `1/k` does not
    -- match, i.e. a wrong effective learning rate with no error anywhere. Carrying `k` in the
    -- artifact NAME makes the driver read it off the same string that selects the file.
+   | .lamb      => if replicas ≤ 1 then "lamb" else "lambdp"
    | .adamwAccum k => (if replicas ≤ 1 then "acc" else "accdp") ++ toString k ++ "x") ++
   (if B == 32 then "" else toString B)
 
@@ -407,6 +452,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- its signature, so passing `.adamwAccum` here would emit an optimizer that reads `%<p>a` inputs
     -- the function does not declare. The renderer REFUSES rather than emitting invalid MLIR that
     -- `iree-compile` would report as an undefined-value error a hundred lines from the cause.
+    | .lamb      => "LAMB"
     | .adamwAccum k => panic! s!"resnet34TrainStepFaithfulB: .adamwAccum {k} needs a fourth \
 parameter region and R34's signature has three — render it from ResNet50RenderB, or add the region \
 here first"

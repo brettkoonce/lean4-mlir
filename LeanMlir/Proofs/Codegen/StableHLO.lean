@@ -13,6 +13,10 @@ import LeanMlir.Proofs.Codegen.AdamStep
 -- The ℝ global-norm clip spec (`gradSumSq`/`clipFactor`/`clipScale`), so the four clip ops can
 -- denote it. GradClip imports only AdamStep, so this adds no cycle either.
 import LeanMlir.Proofs.Codegen.GradClip
+-- LAMB (`lambDir`/`lambTrust`/`lambScale`), RSB-A3's optimizer. Imports GradClip for `scalarOf`
+-- and `gradSumSq` — the per-leaf squared norm is SHARED with the clip rather than re-derived, so
+-- the two features cannot drift on what a norm is.
+import LeanMlir.Proofs.Codegen.Lamb
 import LeanMlir.Proofs.Codegen.SgdMomentumStep
 -- RmsPropStep imports only the two above, so this adds no cycle either.
 import LeanMlir.Proofs.Codegen.RmsPropStep
@@ -1098,6 +1102,24 @@ inductive SHlo : Nat → Type where
   | gradSumSqAccF {n : Nat} (ds : List Nat)                     : SHlo 1 → SHlo n → SHlo 1
   | clipScaleF   {n : Nat} (clipStr epsStr : String) (c ε : ℝ)
       (ds : List Nat)                                           : SHlo 1 → SHlo n → SHlo n
+  -- ══ LAMB (`Proofs.Lamb`), RSB-A3's optimizer. TWO ops, and `gradSumSqAccF` above is the third
+  --    it needs — already here for the clip, and deliberately reused: the per-leaf squared norm is
+  --    one quantity and writing a second one is the double-writer failure.
+  --
+  --    ⚠ BOTH mirror a shape this AST already has. `lambDirF` is `adamWParamF`'s signature minus
+  --    `%lr` (same fields, same single tensor child); `lambScaleF` is `clipScaleF`'s exactly
+  --    (`SHlo 1 → SHlo n → SHlo n`). That is not tidiness — the retraction note above records that
+  --    introducing an unfamiliar constructor SHAPE killed nine unrelated `simp only [… den …]`
+  --    proofs with a `whnf` timeout that 4× the heartbeat budget did not fix.
+  --
+  --    ⚠⚠ `lambScaleF` takes only `‖θ‖²` as its scalar child and recomputes `‖r‖²` from its own
+  --    tensor child. Taking both norms as children would make it the kit's first TERNARY
+  --    constructor; `r` is already there, so the recomputation is free and the shape stays known.
+  | lambDirF   {n : Nat}
+      (θName mName vName b1Name ob1Name b2Name ob2Name bc1Name bc2Name
+        epsName wdName : String) (ds : List Nat)
+      (β₁ β₂ ε wd bc₁ bc₂ : ℝ) (θ m v : Vec n)                  : SHlo n → SHlo n
+  | lambScaleF {n : Nat} (ds : List Nat)                        : SHlo 1 → SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
@@ -1442,6 +1464,11 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   -- every other arm of this match passes `den e` along whole. See `Proofs.scalarOf`.
   | _, .gradSumSqAccF _ acc e      => fun _ => scalarOf (den acc) + gradSumSq (den e)
   | _, .clipScaleF _ _ c ε _ s e   => clipScale (clipFactor c ε (scalarOf (den s))) (den e)
+  -- LAMB: the direction from the INCOMING moments and this step's gradient, then the per-tensor
+  -- trust scaling. `θ'` itself is `sgdParamF θ lr (lambScaleF …)` — an op that already exists.
+  | _, .lambDirF _ _ _ _ _ _ _ _ _ _ _ _ β₁ β₂ ε wd bc₁ bc₂ θ m v e =>
+      lambDir β₁ β₂ ε wd bc₁ bc₂ θ m v (den e)
+  | _, .lambScaleF _ s e           => lambScale (scalarOf (den s)) (den e)
   | _, .bnGammaSgd (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
         bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
@@ -2888,6 +2915,20 @@ theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
 @[simp] theorem gradSumSqAccF_faithful {n : Nat} (ds : List Nat) (acc : SHlo 1) (e : SHlo n) :
     den (.gradSumSqAccF ds acc e) = fun _ => scalarOf (den acc) + gradSumSq (den e) := rfl
 
+/-- **`lambDirF` denotes `Proofs.lambDir`** — `rfl`, i.e. the rendered LAMB direction IS the ℝ
+    definition, structurally. Same bar as `adamWParamF_faithful`. -/
+@[simp] theorem lambDirF_faithful {n : Nat}
+    (θN mN vN b1N ob1N b2N ob2N bc1N bc2N epsN wdN : String) (ds : List Nat)
+    (β₁ β₂ ε wd bc₁ bc₂ : ℝ) (θ m v : Vec n) (e : SHlo n) :
+    den (.lambDirF θN mN vN b1N ob1N b2N ob2N bc1N bc2N epsN wdN ds β₁ β₂ ε wd bc₁ bc₂ θ m v e)
+      = lambDir β₁ β₂ ε wd bc₁ bc₂ θ m v (den e) := rfl
+
+/-- **`lambScaleF` denotes `Proofs.lambScale`.** ⚠ The trust ratio is computed from THIS tensor's
+    own norm, which is what makes it layer-wise; `clipScaleF`'s factor is shared across every
+    parameter. The two ops look alike and differ in exactly that quantifier. -/
+@[simp] theorem lambScaleF_faithful {n : Nat} (ds : List Nat) (s : SHlo 1) (e : SHlo n) :
+    den (.lambScaleF ds s e) = lambScale (scalarOf (den s)) (den e) := rfl
+
 /-- **The rescale is `Proofs.clipScale` at `Proofs.clipFactor` of the summed total** — the
     reference's `g * jnp.minimum(1.0, CLIP / (gn + 1e-6))` with `gn = sqrt(total)`.
 
@@ -3964,6 +4005,8 @@ inductive Raw where
   -- denotation-only, as everywhere in `Raw`); `clipScaleF`/`addScalarF` are BINARY.
   | gradSumSqAccF (ds : List Nat)                            : Raw → Raw → Raw
   | clipScaleF    (clipStr epsStr : String) (ds : List Nat)  : Raw → Raw → Raw
+  | lambDirF (θ m v b1 ob1 b2 ob2 bc1 bc2 eps wd : String) (ds : List Nat) : Raw → Raw
+  | lambScaleF    (ds : List Nat)                            : Raw → Raw → Raw
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Raw → Raw
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Raw → Raw
@@ -4233,6 +4276,9 @@ def skel : {k : Nat} → SHlo k → Raw
       .rmsBufNextF sqN bufN rhoN orhoN muN epsN ds (skel e)
   | _, .gradSumSqAccF ds acc e         => .gradSumSqAccF ds (skel acc) (skel e)
   | _, .clipScaleF cS eS _ _ ds s e    => .clipScaleF cS eS ds (skel s) (skel e)
+  | _, .lambDirF a b c d e' f g h i j k ds _ _ _ _ _ _ _ _ _ x =>
+      .lambDirF a b c d e' f g h i j k ds (skel x)
+  | _, .lambScaleF ds s e              => .lambScaleF ds (skel s) (skel e)
   | _, .depthwiseF (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .depthwiseF wN bN c h w kH kW (skel e)
   | _, .depthwiseBack (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
@@ -4442,6 +4488,8 @@ inductive Tok where
   | rmsBufNextF (sq buf rho orho mu eps : String) (ds : List Nat) : Tok
   | gradSumSqAccF (ds : List Nat)                           : Tok
   | clipScaleF    (clipStr epsStr : String) (ds : List Nat) : Tok
+  | lambDirF (θ m v b1 ob1 b2 ob2 bc1 bc2 eps wd : String) (ds : List Nat) : Tok
+  | lambScaleF    (ds : List Nat)                           : Tok
   | depthwiseF    (w b : String) (c h w' kH kW : Nat) : Tok
   | depthwiseBack (w : String) (c h w' kH kW : Nat) : Tok
   | depthwiseStridedF    (w b : String) (c h w' kH kW : Nat) : Tok
@@ -4539,6 +4587,9 @@ def toToks : Raw → List Tok
   -- LEFT child is the scalar in both cases — the accumulator, and the summed global total.
   | .gradSumSqAccF ds acc e  => toToks acc ++ toToks e ++ [.gradSumSqAccF ds]
   | .clipScaleF cS eS ds s e => toToks s ++ toToks e ++ [.clipScaleF cS eS ds]
+  | .lambDirF a b c d e' f g h i j k ds x =>
+      toToks x ++ [.lambDirF a b c d e' f g h i j k ds]
+  | .lambScaleF ds s e       => toToks s ++ toToks e ++ [.lambScaleF ds]
   | .depthwiseF w b c h w' kH kW e => toToks e ++ [.depthwiseF w b c h w' kH kW]
   | .depthwiseBack w c h w' kH kW e => toToks e ++ [.depthwiseBack w c h w' kH kW]
   | .depthwiseStridedF w b c h w' kH kW e => toToks e ++ [.depthwiseStridedF w b c h w' kH kW]
@@ -5427,6 +5478,68 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!"    {fac} = stablehlo.minimum {one}, {rat} : tensor<f32>\n" ++
         s!"    {fb} = stablehlo.broadcast_in_dim {fac}, dims = [] : (tensor<f32>) -> {T}\n" ++
         s!"    {o} = stablehlo.multiply {fb}, {g} : {T}\n", o :: st)
+  -- ══ LAMB (`Proofs.Lamb`), RSB-A3's optimizer. `lambDirF` is `adamWParamF`'s block truncated at
+  --    the ratio with `wd·θ` ADDED rather than subtracted at the end — the decay is decoupled and
+  --    lands INSIDE the direction, hence inside the norm the trust ratio takes. ══
+  | .lambDirF θN mN vN b1N ob1N b2N ob2N bc1N bc2N epsN wdN ds, r :: st => do
+      let T := ty ds
+      let b1b ← fresh; let ob1b ← fresh; let ms ← fresh; let mg ← fresh; let mn ← fresh
+      let b2b ← fresh; let ob2b ← fresh; let vs ← fresh; let g2 ← fresh; let vg ← fresh; let vn ← fresh
+      let bc1b ← fresh; let bc2b ← fresh; let mh ← fresh; let vh ← fresh
+      let epsb ← fresh; let sq ← fresh; let dn ← fresh; let rat ← fresh
+      let wdb ← fresh; let wdp ← fresh; let o ← fresh
+      pure (
+        s!"    {b1b} = stablehlo.broadcast_in_dim {b1N}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {ob1b} = stablehlo.broadcast_in_dim {ob1N}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {ms} = stablehlo.multiply {b1b}, {mN} : {T}\n" ++
+        s!"    {mg} = stablehlo.multiply {ob1b}, {r} : {T}\n" ++
+        s!"    {mn} = stablehlo.add {ms}, {mg} : {T}\n" ++
+        s!"    {b2b} = stablehlo.broadcast_in_dim {b2N}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {ob2b} = stablehlo.broadcast_in_dim {ob2N}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {vs} = stablehlo.multiply {b2b}, {vN} : {T}\n" ++
+        s!"    {g2} = stablehlo.multiply {r}, {r} : {T}\n" ++
+        s!"    {vg} = stablehlo.multiply {ob2b}, {g2} : {T}\n" ++
+        s!"    {vn} = stablehlo.add {vs}, {vg} : {T}\n" ++
+        s!"    {bc1b} = stablehlo.broadcast_in_dim {bc1N}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {bc2b} = stablehlo.broadcast_in_dim {bc2N}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {mh} = stablehlo.divide {mn}, {bc1b} : {T}\n" ++
+        s!"    {vh} = stablehlo.divide {vn}, {bc2b} : {T}\n" ++
+        s!"    {epsb} = stablehlo.broadcast_in_dim {epsN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        -- ⚠ ε OUTSIDE the root. `sqrt(vh + eps)` is RMSProp-TF's placement and a different
+        -- optimizer; the reference is literal — `mc / (jnp.sqrt(vc) + EPS)`.
+        s!"    {sq} = stablehlo.sqrt {vh} : {T}\n" ++
+        s!"    {dn} = stablehlo.add {sq}, {epsb} : {T}\n" ++
+        s!"    {rat} = stablehlo.divide {mh}, {dn} : {T}\n" ++
+        s!"    {wdb} = stablehlo.broadcast_in_dim {wdN}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {wdp} = stablehlo.multiply {wdb}, {θN} : {T}\n" ++
+        s!"    {o} = stablehlo.add {rat}, {wdp} : {T}\n", o :: st)
+  | .lambScaleF ds, r :: wn2 :: st => do
+      -- `trust · r` with `trust = ‖θ‖/‖r‖`, guarded to 1 when either norm vanishes.
+      -- ⚠⚠ `‖r‖²` is reduced HERE, from this op's own tensor child, so the trust ratio is
+      -- PER PARAMETER TENSOR. That is the whole difference from `clipScaleF` above, whose factor
+      -- is one scalar shared across every parameter — the two blocks look alike and differ in the
+      -- quantifier (`Proofs.lambScale_not_shared` states it).
+      -- ⚠ The guard is not a corner case: the driver inits every BN β and dense bias to 0, so
+      -- `wn2 = 0` on those tensors at step 1 and `select` takes the `1.0` branch on a real run.
+      let T := ty ds
+      let dims := String.intercalate ", " ((List.range ds.length).map toString)
+      let z ← fresh; let rsq ← fresh; let rn2 ← fresh
+      let wn ← fresh; let rn ← fresh; let rat ← fresh; let one ← fresh
+      let okW ← fresh; let okR ← fresh; let ok ← fresh; let tr ← fresh; let tb ← fresh; let o ← fresh
+      pure (
+        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+        s!"    {rsq} = stablehlo.multiply {r}, {r} : {T}\n" ++
+        s!"    {rn2} = stablehlo.reduce({rsq} init: {z}) applies stablehlo.add across dimensions = [{dims}] : ({T}, tensor<f32>) -> tensor<f32>\n" ++
+        s!"    {wn} = stablehlo.sqrt {wn2} : tensor<f32>\n" ++
+        s!"    {rn} = stablehlo.sqrt {rn2} : tensor<f32>\n" ++
+        s!"    {rat} = stablehlo.divide {wn}, {rn} : tensor<f32>\n" ++
+        s!"    {one} = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+        s!"    {okW} = stablehlo.compare GT, {wn2}, {z} : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+        s!"    {okR} = stablehlo.compare GT, {rn2}, {z} : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+        s!"    {ok} = stablehlo.and {okW}, {okR} : tensor<i1>\n" ++
+        s!"    {tr} = stablehlo.select {ok}, {rat}, {one} : tensor<i1>, tensor<f32>\n" ++
+        s!"    {tb} = stablehlo.broadcast_in_dim {tr}, dims = [] : (tensor<f32>) -> {T}\n" ++
+        s!"    {o} = stablehlo.multiply {tb}, {r} : {T}\n", o :: st)
   | .bnPerChannelEvalF gN bN muN varN epsStr oc h w, r :: st => do
       -- INFERENCE per-channel BatchNorm: reshape to [B,oc,h,w], then the affine map
       -- γ·(x − μ)·rsqrt(var + ε) + β with μ/var/γ/β all rank-1 `[oc]` graph inputs
