@@ -180,6 +180,20 @@ def extractLoss (out : ByteArray) (lossIdx : Nat) : Float :=
 def dropLoss (out : ByteArray) (nParams : Nat) : ByteArray :=
   out.extract 0 (nParams * 4)
 
+/-- Decode the little-endian **int32** label at record `i` of a packed label buffer.
+
+    ⚠ Replaces `lbl.get! (4 * i)`, which returned a `UInt8` — **byte 0 only**, i.e. `label % 256`.
+    Every net this repo GATES is 10-class (Imagenette / CIFAR / MNIST), so byte 0 *is* the label
+    there and the truncation was invisible; on 1000-class ImageNet it silently discarded the high
+    byte, and since a correct prediction can then only match on classes 0..255, it capped every
+    reported top-1 at roughly a quarter of the truth. Measured off the val wire 2026-08-05: the
+    first batch carries labels 1..988 with **193 of 256 (75.4%) above 255**. -/
+def readLabel (lbl : ByteArray) (i : Nat) : Nat :=
+  (lbl.get! (4 * i)).toNat
+    ||| ((lbl.get! (4 * i + 1)).toNat <<< 8)
+    ||| ((lbl.get! (4 * i + 2)).toNat <<< 16)
+    ||| ((lbl.get! (4 * i + 3)).toNat <<< 24)
+
 /-- Argmax over `n` float32 values starting at element offset `off`.
 
     ⚠ Replaced `argmax10`, which took no `n` and scanned a literal 10 entries. Every net this

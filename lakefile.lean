@@ -1940,6 +1940,13 @@ lean_exe «shard-check» where
 lean_exe «argmax-check» where
   root := `tests.TestArgmaxN
 
+/-- `label-check` — the WIDTH gate on eval label decoding, and `argmax-check`'s twin: both were
+    10-class assumptions in code that also runs at 1000 classes, both correct everywhere the repo
+    gates. `ByteArray.get!` yields a `UInt8`, so the old `(evalLbl.get! (4*i)).toNat` read byte 0
+    only — `label % 256` — capping ImageNet top-1 at roughly a quarter of the truth. No GPU. -/
+lean_exe «label-check» where
+  root := `tests.TestLabelDecode
+
 /-- `r34-dp-shard` — the DP gate R34 never had. `shard-check`'s own docstring says R34 is absent
     "on purpose … no `adamdp` peer at this batch to pair with", and there is no `resnet34-dp-check`
     either, so the net carrying the 30-epoch ImageNet run is the one net whose data-parallel path
