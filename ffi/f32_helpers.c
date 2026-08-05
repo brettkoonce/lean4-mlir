@@ -54,6 +54,23 @@ LEAN_EXPORT lean_obj_res lean_f32_he_init(size_t seed, size_t n, double scale, l
 // reachable images = 94% on the sub-problem it was actually being asked. The class count is
 // a PARAMETER now precisely so it cannot drift from the net again — the old signature had
 // nowhere to put it, so nothing could check it.
+// ---- Rank of `label` within a row of `n` float32 logits at element offset ----
+//
+// Returns the count of entries STRICTLY GREATER than the label's own logit, so the label is
+// in the top-k iff `rank < k`. This is deliberately the same construction the JAX reference
+// uses (`jnp.sum(logits > true_logit, axis=1) < 5`) rather than a sort or a top_k: that side
+// notes `jax.lax.top_k`'s indices are broken on ROCm/gfx1100, and matching the formulation
+// keeps the two paths' top-5 comparable by construction, ties included — strictly-greater
+// means ties resolve in the label's favour on BOTH sides.
+LEAN_EXPORT size_t lean_f32_rank_of(b_lean_obj_arg ba, size_t off, size_t n, size_t label) {
+    const float* p = (const float*)lean_sarray_cptr(ba);
+    if (label >= n) return n;          // out-of-range label ranks last; never counts as correct
+    const float t = p[off + label];
+    size_t rank = 0;
+    for (size_t i = 0; i < n; i++) if (p[off + i] > t) rank++;
+    return rank;
+}
+
 LEAN_EXPORT size_t lean_f32_argmax_n(b_lean_obj_arg ba, size_t off, size_t n) {
     const float* p = (const float*)lean_sarray_cptr(ba);
     if (n == 0) return 0;

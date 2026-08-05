@@ -1344,6 +1344,7 @@ it and its .epoch marker aside and start fresh."
     let evalShapes := if useRunning then fwdEvalShapes else fwdShapes
     let evalResident := (net.paramShapes.size + (if useRunning then 2 * net.bnChannels.size else 0)).toUSize
     let mut correct := 0
+    let mut correct5 := 0
     for bi in [0:(if skipEval then 0 else nbt)] do
       let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs d0 nEval
       -- Hold the eval parameters on device across the eval batches (§2d.3). The
@@ -1357,8 +1358,15 @@ it and its .epoch marker aside and start fresh."
         let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
         let lbl  := F32.readLabel evalLbl (bi * evalBs + j)
         if pred == lbl then correct := correct + 1
+        -- top-5 by the label's RANK, matching the reference's `sum(logits > true_logit) < 5`.
+        -- Free: it reads the same logits row already on the host, and it is the metric the
+        -- reference's headline is quoted by (72.02% top-1 / 90.62% top-5), which this side could
+        -- not state at all until now.
+        if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
+          correct5 := correct5 + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%"
+    let acc5 := correct5.toFloat / nEval.toFloat * 100.0
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%"
     (← IO.getStdout).flush
     IO.FS.writeBinFile ckptPath thetamv
     IO.FS.writeFile epPath (toString (ep + 1))

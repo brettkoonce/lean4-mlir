@@ -204,6 +204,17 @@ def readLabel (lbl : ByteArray) (i : Nat) : Nat :=
 @[extern "lean_f32_argmax_n"]
 opaque argmaxN (ba : @& ByteArray) (off : USize) (n : USize) : USize
 
+/-- Rank of `label` in a row of `n` logits at element offset `off`: the count of entries
+    STRICTLY GREATER than the label's own logit. The label is in the top-`k` iff `rank < k`.
+
+    Deliberately the same construction as the JAX reference's
+    `jnp.sum(logits > true_logit, axis=1) < 5` rather than a sort or `top_k` — that side records
+    `jax.lax.top_k`'s indices as broken on ROCm/gfx1100, and matching the formulation makes the
+    two paths' top-5 comparable by construction, ties included (strictly-greater means a tie
+    resolves in the label's favour on both sides). -/
+@[extern "lean_f32_rank_of"]
+opaque rankOf (ba : @& ByteArray) (off : USize) (n : USize) (label : USize) : USize
+
 /-- Load MNIST images from IDX file directly into f32 ByteArray (normalized to [0,1]).
     Returns (images ByteArray, count as Nat). -/
 @[extern "lean_f32_load_idx_images"]

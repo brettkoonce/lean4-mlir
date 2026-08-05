@@ -60,8 +60,38 @@ def main : IO Unit := do
     IO.println s!"  ❌ B  control did NOT fire: a 10-wide window returned 700, so this file proves nothing"
     bad := bad + 1
 
+  -- ══ Gates C/D: `rankOf`, the top-5 metric — added 2026-08-05 ══
+  -- The verified side had NO top-5 at all, while the reference's headline is quoted as
+  -- "72.02% top-1 / 90.62% top-5". `rankOf` counts strictly-greater logits, so the label is in
+  -- the top-k iff rank < k — the same construction the reference uses (it avoids `top_k`, whose
+  -- indices it records as broken on ROCm/gfx1100). Matching the formulation makes the two sides'
+  -- top-5 comparable by construction, ties and all.
+  let mut ranked ← F32.const K.toUSize 0.0
+  -- six descending values at known indices; everything else is 0
+  let places := #[(100, 6.0), (200, 5.0), (300, 4.0), (400, 3.0), (500, 2.0), (600, 1.0)]
+  for (idx, v) in places do
+    ranked ← F32.write3 ranked (idx - 1).toUSize 0.0 v 0.0
+  let expect : Array (Nat × Nat) := #[(100, 0), (200, 1), (500, 4), (600, 5), (700, 6)]
+  let mut rankBad : Array (Nat × Nat × Nat) := #[]
+  for (lbl, want) in expect do
+    let got := (F32.rankOf ranked 0 K.toUSize lbl.toUSize).toNat
+    if got != want then rankBad := rankBad.push (lbl, want, got)
+  if rankBad.isEmpty then
+    IO.println s!"  ✅ C  rankOf: {expect.size} labels rank exactly as constructed (0,1,4,5,6)"
+  else
+    IO.println s!"  ❌ C  rankOf wrong (label, want, got): {rankBad}"; bad := bad + 1
+
+  -- ⭐ THE BOUNDARY, which is the whole gate: rank 4 is in the top-5 and rank 5 is NOT.
+  -- An off-by-one here (`<=` for `<`) would silently inflate every top-5 number ever reported.
+  let in5 (lbl : Nat) : Bool := (F32.rankOf ranked 0 K.toUSize lbl.toUSize).toNat < 5
+  if in5 500 && !(in5 600) then
+    IO.println "  ✅ D  top-5 boundary: rank 4 is IN, rank 5 is OUT"
+  else
+    IO.println s!"  ❌ D  top-5 boundary wrong: rank4 in5={in5 500}, rank5 in5={in5 600}"
+    bad := bad + 1
+
   if bad == 0 then
-    IO.println "argmax-check: OK (2 gates + 1 control)"
+    IO.println "argmax-check: OK (4 gates + 1 control)"
   else
     IO.println s!"argmax-check: {bad} FAILED"
     throw <| IO.userError "argmax-check failed"
