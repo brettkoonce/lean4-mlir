@@ -240,7 +240,11 @@ deriving DecidableEq, Repr
 
     At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
     render stays byte-identical — which is the cheap self-check that this insertion is inert. -/
-private def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
+-- ⚠ PUBLIC (was `private` until 2026-08-05): `ResNet50RenderB.lean` folds the SAME optimizer
+-- tail over its own parameter list. Duplicating it there would put AdamW/heavy-ball semantics
+-- in two places, which is the double-writer failure this repo keeps paying for. Visibility does
+-- not change emitted bytes, so every committed R34 artifact is untouched.
+def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     StateM Nat (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
@@ -282,7 +286,7 @@ private def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
 
     `%wd` is baked rather than a runtime arg because weight decay is not scheduled — unlike `%lr`,
     which stays a `tensor<f32>` argument so one graph serves the whole cosine schedule. -/
-private def optConstsB (opt : R34Opt) : String :=
+def optConstsB (opt : R34Opt) : String :=
   match opt with
   | .adamw =>
     "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++

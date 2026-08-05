@@ -54,6 +54,10 @@ lean_lib «Proofs» where
              -- the renderers the verified-render drift guard re-elaborates
              `LeanMlir.Proofs.Codegen.MlpRender, `LeanMlir.Proofs.Codegen.CnnRender,
              `LeanMlir.Proofs.Codegen.ResNet34Render, `LeanMlir.Proofs.Codegen.ResNet34RenderB,
+             -- R50 phase 2: the bottleneck train-step renderer. SOLE writer of
+             -- verified_mlir/resnet50in_*_train_step.mlir, so its olean must exist wherever the
+             -- corpus is built (same reason the two RenderB entries below carry).
+             `LeanMlir.Proofs.Codegen.ResNet50RenderB,
              `LeanMlir.Proofs.Codegen.AdamRender,
              `LeanMlir.Proofs.Codegen.MobileNetV2Render,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderB,
@@ -904,6 +908,7 @@ lean_lib «Certs» where
              -- actually train on, so their oleans must exist wherever the
              -- corpus is built. Guarded by scripts/check_render_coverage.py.
              `LeanMlir.Proofs.Codegen.ResNet34RenderB,
+             `LeanMlir.Proofs.Codegen.ResNet50RenderB,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderB]
 
 /-- **`lake build CertsHeavy`** — the GENERATED full-input certificate

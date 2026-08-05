@@ -1,0 +1,622 @@
+import LeanMlir.Proofs.Codegen.ResNet34RenderB
+
+/-! # ResNet-50 train step rendered from the verified AST, at the BATCHED index
+
+R50 phase 2 (`planning/next_session_pipeline_then_r50.md` §3.2). The bottleneck peer of
+`ResNet34RenderB.lean`, block for block: batch BN (`bnBatchF`, reduced over `[0,2,3]`), the whole
+graph at `N := B`, the un-fused `*GradB` parameter gradients, and the proven AdamW /
+heavy-ball tail — `optOne`/`optConstsB` are **imported, not copied**, so the optimizer has one
+definition across both nets.
+
+## The three block forms, and why the third exists
+
+`Resnet50BlocksCertified.lean` carries the certified VJPs; this file renders them.
+
+| renderer | block | where |
+|---|---|---|
+| `bnkIdFwdB` / `bnkIdBackGradB` | identity, `oc → mid → mid → oc` | 12 blocks |
+| `bnkProjFwdB` / `bnkProjBackGradB` | ⭐ **stride-1** projection | **stage 1 block 0 only** |
+| `bnkStridedFwdB` / `bnkStridedBackGradB` | strided projection | stages 2/3/4 block 0 |
+
+⚠ **The stride is on the 3×3 (`W2`), not the leading 1×1** — v1.5 / torchvision, which is what
+`jax/MainResnet50Imagenet.lean` trains. So in the strided block `conv1`, `bn1` and `relu1` all run
+at the **input** resolution `2hh`, and only `conv2` decimates. That asymmetry is why the strided
+renderer carries two sets of zero-vectors (`zIn`/`zMidIn` at `2hh`, `zMid`/`zOut` at `hh`) where
+the other two carry one.
+
+⚠ **`mid = oc / 4`**, so an identity block's `mid` is a QUARTER of its channel count, not a
+multiple. `VerifiedSpec.bottleneckStageSpec` already computes it that way and already selects the
+projecting form when `stride != 1 || ic != oc` — which is exactly how stage 1 (64→256 at stride 1)
+gets a projection. This file's block sequence must agree with that spec's ORDER, because the
+driver packs `[θ|m|v]` off `net.specs`; `r50SigList` below is the render's side of that contract
+and `#guard`s pin the counts.
+
+## ⚠ No conv biases
+
+Every conv here is bias-free (`convBnNB` in the spec — 9 tensors per identity block, 12 per
+projection block), matching R34's ImageNet render. The `convBias` plumbing R34's renderer carries
+for its CIFAR-era artifacts is deliberately absent rather than threaded and passed `false`.
+
+## ⚠⚠ There is no incumbent hand-written R50 render to tie against
+
+§3.2. Every other net's swap onto the verified renderer was licensed by a bit-exact numeric tie
+against the hand-written artifact it replaced. R50 has no such artifact, so that license does not
+exist here and **must not be implied**. The substitutes are the layer-level VJP oracle
+(`tests/vjp_oracle/run.sh`) and a keep-1 known-answer check, and whichever one is used has to be
+named in the commit that ships a number off this render.
+-/
+
+open Proofs.StableHLO
+
+namespace Proofs.StableHLO
+
+/-- The zero constant bound to every conv's bias operand. R50 is bias-free (`convBnNB`), but the
+    proven conv ops still TAKE a bias, so it binds to `%zb{c}` and `zeroBiasPrelude` emits those
+    constants once at the top of the body. Routed through `biasName` rather than spelled inline so
+    the naming has one definition shared with R34's renderer. -/
+private def zb (c : Nat) : String := biasName false "" c
+
+-- ════════════════════════════════════════════════════════════════
+-- § Signature lists — the render's side of the driver contract
+-- ════════════════════════════════════════════════════════════════
+
+/-- One bottleneck block's parameters, in `bneckIdBlk` order: `W1 g1 bt1 W2 g2 bt2 W3 g3 bt3`,
+    plus `Wp gp btp` LAST when it projects. ⚠ The projection going last is not cosmetic — it is
+    `bneckDownBlk`'s order and therefore the order the driver's `[θ|m|v]` walk assumes. -/
+private def bnkSig (p : String) (cin mid oc : Nat) (proj : Bool) : List (String × List Nat) :=
+  [(s!"%{p}W1", [mid,cin,1,1]), (s!"%{p}g1", [mid]), (s!"%{p}bt1", [mid]),
+   (s!"%{p}W2", [mid,mid,3,3]), (s!"%{p}g2", [mid]), (s!"%{p}bt2", [mid]),
+   (s!"%{p}W3", [oc,mid,1,1]),  (s!"%{p}g3", [oc]),  (s!"%{p}bt3", [oc])] ++
+  (if proj then
+     [(s!"%{p}Wp", [oc,cin,1,1]), (s!"%{p}gp", [oc]), (s!"%{p}btp", [oc])]
+   else [])
+
+/-- One bottleneck STAGE's parameters: block 0 projects (channels change, and in stage 1 that is
+    the only thing that changes), the rest are identity blocks reading `oc`. -/
+private def bnkStageSig (s : String) (ic oc count : Nat) : List (String × List Nat) :=
+  let mid := oc / 4
+  (bnkSig s!"{s}b0" ic mid oc true) ++
+  ((List.range (count - 1)).flatMap (fun i => bnkSig s!"{s}b{i+1}" oc mid oc false))
+
+/-- **The 161 R50 parameter inputs**, in func-arg order: stem (3), the `[3,4,6,3]` bottleneck
+    stages, then the head. Single source for `%p`, `%pm`, `%pv` and the return order. -/
+def r50ShapeList (nClasses : Nat) : List (String × List Nat) :=
+  [("%sW", [64,3,7,7]), ("%sg", [64]), ("%sbt", [64])] ++
+  bnkStageSig "s1"   64  256 3 ++
+  bnkStageSig "s2"  256  512 4 ++
+  bnkStageSig "s3"  512 1024 6 ++
+  bnkStageSig "s4" 1024 2048 3 ++
+  [("%Wd", [2048, nClasses]), ("%bd", [nClasses])]
+
+/-- The same list as MLIR types. Derived, so the shapes have one definition. -/
+def r50SigList (nClasses : Nat) : List (String × String) :=
+  (r50ShapeList nClasses).map (fun (n, ds) => (n, ty ds))
+
+/-- One block's BN running-stat slots, in BN-forward order `n1 n2 n3 [np]`. -/
+private def bnkStatSig (p : String) (mid oc : Nat) (proj : Bool) : List (String × String) :=
+  [(s!"%{p}n1mu", ty [mid]), (s!"%{p}n1var", ty [mid]),
+   (s!"%{p}n2mu", ty [mid]), (s!"%{p}n2var", ty [mid]),
+   (s!"%{p}n3mu", ty [oc]),  (s!"%{p}n3var", ty [oc])] ++
+  (if proj then [(s!"%{p}npmu", ty [oc]), (s!"%{p}npvar", ty [oc])] else [])
+
+private def bnkStageStatSig (s : String) (oc count : Nat) : List (String × String) :=
+  let mid := oc / 4
+  (bnkStatSig s!"{s}b0" mid oc true) ++
+  ((List.range (count - 1)).flatMap (fun i => bnkStatSig s!"{s}b{i+1}" mid oc false))
+
+/-- **The 106 running-stat inputs** — 53 BN layers × (μ, var), μ and var interleaved per layer,
+    which is how the driver packs `runningBnStats` off `bnChannels`. -/
+def r50StatSigList : List (String × String) :=
+  [("%stnmu", ty [64]), ("%stnvar", ty [64])] ++
+  bnkStageStatSig "s1"  256 3 ++
+  bnkStageStatSig "s2"  512 4 ++
+  bnkStageStatSig "s3" 1024 6 ++
+  bnkStageStatSig "s4" 2048 3
+
+-- 3 stem + (12+9+9) + (12+27) + (12+45) + (12+18) + 2 head = 161 parameter tensors.
+#guard (r50SigList 1000).length == 161
+-- 53 BN layers ⇒ 106 stat slots. stem 1 + s1 (4+3+3=10) + s2 13 + s3 19 + s4 10 = 53.
+#guard r50StatSigList.length == 106
+
+-- ════════════════════════════════════════════════════════════════
+-- § Bottleneck block forwards (batch BN)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Saved forward SSA names the bottleneck's backward + gradient passes reference. The 3-conv peer
+    of `BFwdB`: two interior ReLUs (`r1`, `r2`) where the basic block has one. -/
+structure BNFwd where
+  code : String
+  xin : String
+  o  : String        -- block output (post-relu)
+  a  : String        -- pre-output-relu sum
+  c1 : String        -- conv1 out (= BN1 in)
+  n1 : String        -- BN1 out (= relu1 pre-activation)
+  r1 : String        -- relu1 out (= conv2 in)
+  c2 : String        -- conv2 out (= BN2 in)
+  n2 : String        -- BN2 out (= relu2 pre-activation)
+  r2 : String        -- relu2 out (= conv3 in)
+  c3 : String        -- conv3 out (= BN3 in)
+  cp : String        -- projection conv out ("" for identity)
+deriving Inhabited
+
+/-- Identity bottleneck forward: `1×1 → BN → relu → 3×3 → BN → relu → 1×1 → BN → (+x) → relu`,
+    all at `hh`, channels `oc → mid → mid → oc`. -/
+private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String) : StateM Nat BNFwd := do
+  let ww := hh
+  let zm   : Vec mid := fun _ => 0
+  let zo   : Vec oc := fun _ => 0
+  let zk1  : Kernel4 mid oc 1 1 := fun _ _ _ _ => 0
+  let zk2  : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zOut : Vec (B*(oc*hh*ww)) := fun _ => 0
+  let zMid : Vec (B*(mid*hh*ww)) := fun _ => 0
+  let (cC1, nC1) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}W1" (zb mid) zk1 zm) (.operand xName zOut))
+  let (cN1, nN1) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zm zm (.operand nC1 zMid))
+  let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN1 zMid))
+  let (cC2, nC2) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm) (.operand nR1 zMid))
+  let (cN2, nN2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zm zm (.operand nC2 zMid))
+  let (cR2, nR2) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN2 zMid))
+  let (cC3, nC3) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo) (.operand nR2 zMid))
+  let (cN3, nN3) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" s!"%{p}bt3" epsStr 0 zo zo (.operand nC3 zOut))
+  let (cA,  nA)  ← pretty B (.addVB (.operand nN3 zOut) (.operand xName zOut))
+  let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cA ++ cO,
+         xin := xName, o := nO, a := nA,
+         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := "" }
+
+/-- ⭐ **Stride-1 projection bottleneck forward** — R50 stage 1 block 0, and nowhere else.
+    `cin → mid → mid → oc` with the resolution unchanged, so the projection is a plain `1×1`
+    conv → BN, NOT the strided one `bnkStridedFwdB` uses. -/
+private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String) : StateM Nat BNFwd := do
+  let ww := hh
+  let zm   : Vec mid := fun _ => 0
+  let zo   : Vec oc := fun _ => 0
+  let zk1  : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
+  let zk2  : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc cin 1 1 := fun _ _ _ _ => 0
+  let zIn  : Vec (B*(cin*hh*ww)) := fun _ => 0
+  let zOut : Vec (B*(oc*hh*ww)) := fun _ => 0
+  let zMid : Vec (B*(mid*hh*ww)) := fun _ => 0
+  let (cC1, nC1) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}W1" (zb mid) zk1 zm) (.operand xName zIn))
+  let (cN1, nN1) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zm zm (.operand nC1 zMid))
+  let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN1 zMid))
+  let (cC2, nC2) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm) (.operand nR1 zMid))
+  let (cN2, nN2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zm zm (.operand nC2 zMid))
+  let (cR2, nR2) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN2 zMid))
+  let (cC3, nC3) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo) (.operand nR2 zMid))
+  let (cN3, nN3) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" s!"%{p}bt3" epsStr 0 zo zo (.operand nC3 zOut))
+  -- the projection: a STRIDE-1 1×1 conv. `.conv`, not `.convStrided` — the whole point of this form.
+  let (cCp, nCp) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo) (.operand xName zIn))
+  let (cNp, nNp) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zo zo (.operand nCp zOut))
+  let (cA,  nA)  ← pretty B (.addVB (.operand nN3 zOut) (.operand nNp zOut))
+  let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO,
+         xin := xName, o := nO, a := nA,
+         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := nCp }
+
+/-- **Strided projection bottleneck forward** — stages 2/3/4 block 0. `cin → mid → mid → oc`,
+    `2hh → hh`.
+
+    ⚠ `conv1`/`bn1`/`relu1` run at the **input** resolution `2hh`; only `conv2` (the 3×3) is
+    strided. v1.5. -/
+private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String) : StateM Nat BNFwd := do
+  let ww := hh
+  let zm   : Vec mid := fun _ => 0
+  let zo   : Vec oc := fun _ => 0
+  let zk1  : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
+  let zk2  : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc cin 1 1 := fun _ _ _ _ => 0
+  let zIn    : Vec (B*(cin*(2*hh)*(2*ww))) := fun _ => 0
+  let zMidIn : Vec (B*(mid*(2*hh)*(2*ww))) := fun _ => 0
+  let zMid   : Vec (B*(mid*hh*ww)) := fun _ => 0
+  let zOut   : Vec (B*(oc*hh*ww)) := fun _ => 0
+  let (cC1, nC1) ← pretty B (.batchOp (N := B) (.conv (h := 2*hh) (w := 2*ww) s!"%{p}W1" (zb mid) zk1 zm) (.operand xName zIn))
+  let (cN1, nN1) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}g1" s!"%{p}bt1" epsStr 0 zm zm (.operand nC1 zMidIn))
+  let (cR1, nR1) ← pretty B (.batchOp (N := B) (.relu (n := mid*(2*hh)*(2*ww))) (.operand nN1 zMidIn))
+  -- ⚠⚠ THE STRIDE LIVES HERE, on the 3×3. Moving it to `W1` above is ResNet v1, a different net.
+  let (cC2, nC2) ← pretty B (.batchOp (N := B) (.convStrided (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm) (.operand nR1 zMidIn))
+  let (cN2, nN2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" s!"%{p}bt2" epsStr 0 zm zm (.operand nC2 zMid))
+  let (cR2, nR2) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN2 zMid))
+  let (cC3, nC3) ← pretty B (.batchOp (N := B) (.conv (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo) (.operand nR2 zMid))
+  let (cN3, nN3) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" s!"%{p}bt3" epsStr 0 zo zo (.operand nC3 zOut))
+  let (cCp, nCp) ← pretty B (.batchOp (N := B) (.convStrided (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo) (.operand xName zIn))
+  let (cNp, nNp) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zo zo (.operand nCp zOut))
+  let (cA,  nA)  ← pretty B (.addVB (.operand nN3 zOut) (.operand nNp zOut))
+  let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO,
+         xin := xName, o := nO, a := nA,
+         c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := nCp }
+
+-- ════════════════════════════════════════════════════════════════
+-- § Bottleneck block backwards + UN-FUSED parameter gradients
+-- ════════════════════════════════════════════════════════════════
+
+/-- Identity bottleneck backward + its 9 parameter gradients.
+
+    Cotangent chain: `da` (output relu) → `bn3` → `conv3` → `relu2` → `bn2` → `conv2` → `relu1`
+    → `bn1` → `conv1`, then `dx = dc1 + da` (the identity skip carries `da` unchanged).
+    ⚠ Each BN's γ/β gradient reads the cotangent at that BN's OUTPUT: `da` for bn3, `dr2` for
+    bn2, `dr1` for bn1 — off by one and the gradient is silently wrong. -/
+private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (dyName : String) :
+    StateM Nat BBackB := do
+  let xName := f.xin
+  let ww := hh
+  let zm    : Vec mid := fun _ => 0
+  let zo    : Vec oc := fun _ => 0
+  let zk1   : Kernel4 mid oc 1 1 := fun _ _ _ _ => 0
+  let zk2   : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3   : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zOut  : Vec (B*(oc*hh*ww)) := fun _ => 0
+  let zMid  : Vec (B*(mid*hh*ww)) := fun _ => 0
+  let zbnO  : Vec (B*(oc*(hh*ww))) := fun _ => 0
+  let zbnM  : Vec (B*(mid*(hh*ww))) := fun _ => 0
+  let (cDa,  nDa)  ← pretty B (.selectPosB f.a zOut (.operand dyName zOut))
+  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDa zbnO))
+  let (cDc3, nDc3) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
+  let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
+  let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
+  let (cDc2, nDc2) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" zk2 zm (.operand nDn2 zMid))
+  let (cDr1, nDr1) ← pretty B (.selectPosB f.n1 zMid (.operand nDc2 zMid))
+  let (cDn1, nDn1) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g1" f.c1 epsStr 0 zm zbnM (.operand nDr1 zbnM))
+  let (cDc1, nDc1) ← pretty B (.convBackBatched (N := B) (ic := oc) (oc := mid) (h := hh) (w := ww) s!"%{p}W1" zk1 zm (.operand nDn1 zMid))
+  let (cDx,  nDx)  ← pretty B (.addVB (.operand nDc1 zOut) (.operand nDa zOut))
+  -- parameter gradients, func-arg order: W1 g1 bt1 W2 g2 bt2 W3 g3 bt3
+  let (cW1, nW1) ← pretty B (.convWeightGradB (ic := oc) (oc := mid) (h := hh) (w := ww) xName zm zOut zk1 (.operand nDn1 zMid))
+  let (cg1, ng1) ← pretty B (.bnGammaGradB f.c1 epsStr 0 zbnM (.operand nDr1 zbnM))
+  let (ct1, nt1) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr1 zbnM))
+  let (cW2, nW2) ← pretty B (.convWeightGradB (ic := mid) (oc := mid) (h := hh) (w := ww) f.r1 zm zMid zk2 (.operand nDn2 zMid))
+  let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
+  let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
+  let (cW3, nW3) ← pretty B (.convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
+  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDa zbnO))
+  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
+  pure { code := cDa ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++ cDx ++
+                 cW1 ++ cg1 ++ ct1 ++ cW2 ++ cg2 ++ ct2 ++ cW3 ++ cg3 ++ ct3,
+         dx := nDx,
+         ps := [⟨s!"{p}W1", nW1, [mid,oc,1,1]⟩, ⟨s!"{p}g1", ng1, [mid]⟩, ⟨s!"{p}bt1", nt1, [mid]⟩,
+                ⟨s!"{p}W2", nW2, [mid,mid,3,3]⟩, ⟨s!"{p}g2", ng2, [mid]⟩, ⟨s!"{p}bt2", nt2, [mid]⟩,
+                ⟨s!"{p}W3", nW3, [oc,mid,1,1]⟩, ⟨s!"{p}g3", ng3, [oc]⟩, ⟨s!"{p}bt3", nt3, [oc]⟩] }
+
+/-- ⭐ **Stride-1 projection bottleneck backward** + its 12 parameter gradients — stage 1 block 0.
+    Identical to the identity backward except the skip branch carries its own `bn→conv` backward
+    (`dnp`/`dcp`) and `dx = dc1 + dcp`. -/
+private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
+    (dyName : String) : StateM Nat BBackB := do
+  let xName := f.xin
+  let ww := hh
+  let zm    : Vec mid := fun _ => 0
+  let zo    : Vec oc := fun _ => 0
+  let zk1   : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
+  let zk2   : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3   : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zkp   : Kernel4 oc cin 1 1 := fun _ _ _ _ => 0
+  let zIn   : Vec (B*(cin*hh*ww)) := fun _ => 0
+  let zOut  : Vec (B*(oc*hh*ww)) := fun _ => 0
+  let zMid  : Vec (B*(mid*hh*ww)) := fun _ => 0
+  let zbnO  : Vec (B*(oc*(hh*ww))) := fun _ => 0
+  let zbnM  : Vec (B*(mid*(hh*ww))) := fun _ => 0
+  let (cDa,  nDa)  ← pretty B (.selectPosB f.a zOut (.operand dyName zOut))
+  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDa zbnO))
+  let (cDc3, nDc3) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
+  let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
+  let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
+  let (cDc2, nDc2) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" zk2 zm (.operand nDn2 zMid))
+  let (cDr1, nDr1) ← pretty B (.selectPosB f.n1 zMid (.operand nDc2 zMid))
+  let (cDn1, nDn1) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g1" f.c1 epsStr 0 zm zbnM (.operand nDr1 zbnM))
+  let (cDc1, nDc1) ← pretty B (.convBackBatched (N := B) (ic := cin) (oc := mid) (h := hh) (w := ww) s!"%{p}W1" zk1 zm (.operand nDn1 zMid))
+  let (cDnp, nDnp) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" f.cp epsStr 0 zo zbnO (.operand nDa zbnO))
+  let (cDcp, nDcp) ← pretty B (.convBackBatched (N := B) (ic := cin) (oc := oc) (h := hh) (w := ww) s!"%{p}Wp" zkp zo (.operand nDnp zOut))
+  let (cDx,  nDx)  ← pretty B (.addVB (.operand nDc1 zIn) (.operand nDcp zIn))
+  let (cW1, nW1) ← pretty B (.convWeightGradB (ic := cin) (oc := mid) (h := hh) (w := ww) xName zm zIn zk1 (.operand nDn1 zMid))
+  let (cg1, ng1) ← pretty B (.bnGammaGradB f.c1 epsStr 0 zbnM (.operand nDr1 zbnM))
+  let (ct1, nt1) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr1 zbnM))
+  let (cW2, nW2) ← pretty B (.convWeightGradB (ic := mid) (oc := mid) (h := hh) (w := ww) f.r1 zm zMid zk2 (.operand nDn2 zMid))
+  let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
+  let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
+  let (cW3, nW3) ← pretty B (.convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
+  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDa zbnO))
+  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
+  let (cWp, nWp) ← pretty B (.convWeightGradB (ic := cin) (oc := oc) (h := hh) (w := ww) xName zo zIn zkp (.operand nDnp zOut))
+  let (cgp, ngp) ← pretty B (.bnGammaGradB f.cp epsStr 0 zbnO (.operand nDa zbnO))
+  let (ctp, ntp) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
+  pure { code := cDa ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++
+                 cDnp ++ cDcp ++ cDx ++
+                 cW1 ++ cg1 ++ ct1 ++ cW2 ++ cg2 ++ ct2 ++ cW3 ++ cg3 ++ ct3 ++ cWp ++ cgp ++ ctp,
+         dx := nDx,
+         ps := [⟨s!"{p}W1", nW1, [mid,cin,1,1]⟩, ⟨s!"{p}g1", ng1, [mid]⟩, ⟨s!"{p}bt1", nt1, [mid]⟩,
+                ⟨s!"{p}W2", nW2, [mid,mid,3,3]⟩, ⟨s!"{p}g2", ng2, [mid]⟩, ⟨s!"{p}bt2", nt2, [mid]⟩,
+                ⟨s!"{p}W3", nW3, [oc,mid,1,1]⟩, ⟨s!"{p}g3", ng3, [oc]⟩, ⟨s!"{p}bt3", nt3, [oc]⟩,
+                ⟨s!"{p}Wp", nWp, [oc,cin,1,1]⟩, ⟨s!"{p}gp", ngp, [oc]⟩, ⟨s!"{p}btp", ntp, [oc]⟩] }
+
+/-- **Strided projection bottleneck backward** + its 12 parameter gradients — stages 2/3/4 block 0.
+
+    ⚠ `dc2` is the STRIDED conv backward, so it takes the cotangent from `hh` back up to `2hh`;
+    everything upstream of it (`dr1`, `dn1`, `dc1`, `W1`'s grad) lives at `2hh`. -/
+private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
+    (dyName : String) : StateM Nat BBackB := do
+  let xName := f.xin
+  let ww := hh
+  let zm    : Vec mid := fun _ => 0
+  let zo    : Vec oc := fun _ => 0
+  let zk1   : Kernel4 mid cin 1 1 := fun _ _ _ _ => 0
+  let zk2   : Kernel4 mid mid 3 3 := fun _ _ _ _ => 0
+  let zk3   : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zkp   : Kernel4 oc cin 1 1 := fun _ _ _ _ => 0
+  let zIn     : Vec (B*(cin*(2*hh)*(2*ww))) := fun _ => 0
+  let zMidIn  : Vec (B*(mid*(2*hh)*(2*ww))) := fun _ => 0
+  let zbnMIn  : Vec (B*(mid*((2*hh)*(2*ww)))) := fun _ => 0
+  let zMid    : Vec (B*(mid*hh*ww)) := fun _ => 0
+  let zOut    : Vec (B*(oc*hh*ww)) := fun _ => 0
+  let zbnO    : Vec (B*(oc*(hh*ww))) := fun _ => 0
+  let zbnM    : Vec (B*(mid*(hh*ww))) := fun _ => 0
+  let (cDa,  nDa)  ← pretty B (.selectPosB f.a zOut (.operand dyName zOut))
+  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDa zbnO))
+  let (cDc3, nDc3) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
+  let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
+  let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
+  -- the strided conv backward: hh → 2hh
+  let (cDc2, nDc2) ← pretty B (.convStridedBackBatched (N := B) (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" zk2 zm (.operand nDn2 zMid))
+  let (cDr1, nDr1) ← pretty B (.selectPosB f.n1 zMidIn (.operand nDc2 zMidIn))
+  let (cDn1, nDn1) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}g1" f.c1 epsStr 0 zm zbnMIn (.operand nDr1 zbnMIn))
+  let (cDc1, nDc1) ← pretty B (.convBackBatched (N := B) (ic := cin) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}W1" zk1 zm (.operand nDn1 zMidIn))
+  let (cDnp, nDnp) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" f.cp epsStr 0 zo zbnO (.operand nDa zbnO))
+  let (cDcp, nDcp) ← pretty B (.convStridedBackBatched (N := B) (ic := cin) (oc := oc) (h := hh) (w := ww) s!"%{p}Wp" zkp zo (.operand nDnp zOut))
+  let (cDx,  nDx)  ← pretty B (.addVB (.operand nDc1 zIn) (.operand nDcp zIn))
+  let (cW1, nW1) ← pretty B (.convWeightGradB (ic := cin) (oc := mid) (h := 2*hh) (w := 2*ww) xName zm zIn zk1 (.operand nDn1 zMidIn))
+  let (cg1, ng1) ← pretty B (.bnGammaGradB f.c1 epsStr 0 zbnMIn (.operand nDr1 zbnMIn))
+  let (ct1, nt1) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := 2*hh) (w := 2*ww) (.operand nDr1 zbnMIn))
+  let (cW2, nW2) ← pretty B (.convStridedWeightGradB (ic := mid) (oc := mid) (h := hh) (w := ww) f.r1 zm zMidIn zk2 (.operand nDn2 zMid))
+  let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
+  let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
+  let (cW3, nW3) ← pretty B (.convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
+  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDa zbnO))
+  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
+  let (cWp, nWp) ← pretty B (.convStridedWeightGradB (ic := cin) (oc := oc) (h := hh) (w := ww) xName zo zIn zkp (.operand nDnp zOut))
+  let (cgp, ngp) ← pretty B (.bnGammaGradB f.cp epsStr 0 zbnO (.operand nDa zbnO))
+  let (ctp, ntp) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
+  pure { code := cDa ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++
+                 cDnp ++ cDcp ++ cDx ++
+                 cW1 ++ cg1 ++ ct1 ++ cW2 ++ cg2 ++ ct2 ++ cW3 ++ cg3 ++ ct3 ++ cWp ++ cgp ++ ctp,
+         dx := nDx,
+         ps := [⟨s!"{p}W1", nW1, [mid,cin,1,1]⟩, ⟨s!"{p}g1", ng1, [mid]⟩, ⟨s!"{p}bt1", nt1, [mid]⟩,
+                ⟨s!"{p}W2", nW2, [mid,mid,3,3]⟩, ⟨s!"{p}g2", ng2, [mid]⟩, ⟨s!"{p}bt2", nt2, [mid]⟩,
+                ⟨s!"{p}W3", nW3, [oc,mid,1,1]⟩, ⟨s!"{p}g3", ng3, [oc]⟩, ⟨s!"{p}bt3", nt3, [oc]⟩,
+                ⟨s!"{p}Wp", nWp, [oc,cin,1,1]⟩, ⟨s!"{p}gp", ngp, [oc]⟩, ⟨s!"{p}btp", ntp, [oc]⟩] }
+
+-- ════════════════════════════════════════════════════════════════
+-- § The whole-net batched train step
+-- ════════════════════════════════════════════════════════════════
+
+set_option maxRecDepth 4000000 in
+/-- **ResNet-50 `[3,4,6,3]` bottleneck train step, batch-BN, rendered at `N := B`.**
+
+    161 θ / 161 m / 161 v, `%lr`/`%bc1`/`%bc2`, 106 running-stat slots and `%onehot` in;
+    161 θ' / 161 m' / 161 v', `%loss`/`%bc1`/`%bc2` and 106 batch stats out. Parameter ORDER comes
+    from `r50SigList`, the same single source the signature and the return list use, so the
+    arity/order contract cannot drift within this file — and it is written to agree with
+    `VerifiedSpec.bottleneckStageSpec`, which is what the DRIVER walks.
+
+    ⚠ The block sequence is `[3,4,6,3]` with block 0 of every stage projecting. Stage 1's projects
+    at **stride 1** (`bnkProjFwdB`); stages 2/3/4 project strided. -/
+def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
+    (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet50in") : String :=
+  let optLabel : String := match opt with
+    | .adamw     => "AdamW"
+    | .heavyBall => "heavy-ball momentum + coupled L2"
+  let go : StateM Nat String := do
+    -- ═══ stem: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 pool (224→112→56) ═══
+    let zx    : Vec (B*(3*224*224)) := fun _ => 0
+    let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
+    let z64   : Vec 64 := fun _ => 0
+    let z112  : Vec (B*(64*112*112)) := fun _ => 0
+    let z112b : Vec (B*(64*(112*112))) := fun _ => 0
+    let z56   : Vec (B*(64*56*56)) := fun _ => 0
+    let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := 112) (w := 112) "%sW" (zb 64) zSk z64) (.operand "%x" zx))
+    let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
+    let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*112*112)) (.operand nStn z112))
+    let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := 56) (w := 56)) (.operand nStr z112))
+    -- ═══ 16 bottleneck blocks, [3,4,6,3] ═══
+    let f1  ← bnkProjFwdB    B   64  64  256 56 epsStr "s1b0" nStp   -- ⭐ the stride-1 projection
+    let f2  ← bnkIdFwdB      B       64  256 56 epsStr "s1b1" f1.o
+    let f3  ← bnkIdFwdB      B       64  256 56 epsStr "s1b2" f2.o
+    let f4  ← bnkStridedFwdB B  256 128  512 28 epsStr "s2b0" f3.o
+    let f5  ← bnkIdFwdB      B      128  512 28 epsStr "s2b1" f4.o
+    let f6  ← bnkIdFwdB      B      128  512 28 epsStr "s2b2" f5.o
+    let f7  ← bnkIdFwdB      B      128  512 28 epsStr "s2b3" f6.o
+    let f8  ← bnkStridedFwdB B  512 256 1024 14 epsStr "s3b0" f7.o
+    let f9  ← bnkIdFwdB      B      256 1024 14 epsStr "s3b1" f8.o
+    let f10 ← bnkIdFwdB      B      256 1024 14 epsStr "s3b2" f9.o
+    let f11 ← bnkIdFwdB      B      256 1024 14 epsStr "s3b3" f10.o
+    let f12 ← bnkIdFwdB      B      256 1024 14 epsStr "s3b4" f11.o
+    let f13 ← bnkIdFwdB      B      256 1024 14 epsStr "s3b5" f12.o
+    let f14 ← bnkStridedFwdB B 1024 512 2048  7 epsStr "s4b0" f13.o
+    let f15 ← bnkIdFwdB      B      512 2048  7 epsStr "s4b1" f14.o
+    let f16 ← bnkIdFwdB      B      512 2048  7 epsStr "s4b2" f15.o
+    -- ═══ head: GAP(7×7) → dense(2048→nClasses) ═══
+    let zL    : Vec (B*(2048*7*7)) := fun _ => 0
+    let z2048 : Vec (B*2048) := fun _ => 0
+    let zWd   : Mat 2048 nClasses := fun _ _ => 0
+    let zNC   : Vec nClasses := fun _ => 0
+    let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
+    let zNCp  : Vec (B*nClasses) := fun _ => 0
+    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := 7) (w := 7)) (.operand f16.o zL))
+    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
+    -- ═══ label-smoothed softmax-CE cotangent, composed from kit ops (α = 0.1, K = nClasses) ═══
+    let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
+    let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
+    let (cLsa, nLsa) ← pretty B (.scaleB "0.100000" 0 (.operand "%onehot" zNCb))
+    let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
+    let (cD2,  nD2)  ← pretty B (.shiftB s!"-{alphaOverK nClasses}" 0 (.operand nD1 zNCb))
+    let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
+    -- ═══ head backward + dense grads ═══
+    let (cDgi, nDgi) ← pretty B (.batchOp (N := B) (.denseRowBack (rows := 1) (a := 2048) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
+    let (cWd,  nWd)  ← pretty B (.denseWeightGradB (c := nClasses) nGap z2048 (.operand nDy zNCp))
+    let (cbd,  nbd)  ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
+    let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 2048) (h := 7) (w := 7) (.operand nDgi z2048))
+    -- ═══ 16 block backwards, in reverse ═══
+    let b16 ← bnkIdBackGradB      B      512 2048  7 epsStr "s4b2" f16 nDgp
+    let b15 ← bnkIdBackGradB      B      512 2048  7 epsStr "s4b1" f15 b16.dx
+    let b14 ← bnkStridedBackGradB B 1024 512 2048  7 epsStr "s4b0" f14 b15.dx
+    let b13 ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b5" f13 b14.dx
+    let b12 ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b4" f12 b13.dx
+    let b11 ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b3" f11 b12.dx
+    let b10 ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b2" f10 b11.dx
+    let b9  ← bnkIdBackGradB      B      256 1024 14 epsStr "s3b1" f9  b10.dx
+    let b8  ← bnkStridedBackGradB B  512 256 1024 14 epsStr "s3b0" f8  b9.dx
+    let b7  ← bnkIdBackGradB      B      128  512 28 epsStr "s2b3" f7  b8.dx
+    let b6  ← bnkIdBackGradB      B      128  512 28 epsStr "s2b2" f6  b7.dx
+    let b5  ← bnkIdBackGradB      B      128  512 28 epsStr "s2b1" f5  b6.dx
+    let b4  ← bnkStridedBackGradB B  256 128  512 28 epsStr "s2b0" f4  b5.dx
+    let b3  ← bnkIdBackGradB      B       64  256 56 epsStr "s1b2" f3  b4.dx
+    let b2  ← bnkIdBackGradB      B       64  256 56 epsStr "s1b1" f2  b3.dx
+    let b1  ← bnkProjBackGradB    B   64  64  256 56 epsStr "s1b0" f1  b2.dx
+    -- ═══ stem backward ═══
+    let (cDmp, nDmp) ← pretty B (.maxPool3s2BackB (N := B) (c := 64) (h := 56) (w := 56) nStr z112 (.operand b1.dx z56))
+    let (cDsr, nDsr) ← pretty B (.selectPosB nStn z112 (.operand nDmp z112))
+    let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 64) (h := 112) (w := 112) "%sg" nStc epsStr 0 z64 z112b (.operand nDsr z112b))
+    let (csW, nsW) ← pretty B (.convStridedWeightGradB "%x" z64 zx zSk (.operand nDsn z112))
+    let (csg, nsg) ← pretty B (.bnGammaGradB nStc epsStr 0 z112b (.operand nDsr z112b))
+    let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 64) (h := 112) (w := 112) (.operand nDsr z112b))
+    -- ═══ BN running statistics, from each BN layer's INPUT ═══
+    let bnStat (oc hh : Nat) (xn : String) : StateM Nat (String × String × String) := do
+      let zbv : Vec (B*(oc*(hh*hh))) := fun _ => 0
+      let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zbv))
+      let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zbv))
+      pure (cM ++ cV, nM, nV)
+    -- identity + stride-1-projection blocks keep every BN at `hh`.
+    let idStats (mid oc hh : Nat) (f : BNFwd) : StateM Nat (String × List String) := do
+      let (c1, m1, v1) ← bnStat mid hh f.c1
+      let (c2, m2, v2) ← bnStat mid hh f.c2
+      let (c3, m3, v3) ← bnStat oc hh f.c3
+      pure (c1 ++ c2 ++ c3, [m1, v1, m2, v2, m3, v3])
+    let projStats (mid oc hh : Nat) (f : BNFwd) : StateM Nat (String × List String) := do
+      let (cb, ns) ← idStats mid oc hh f
+      let (cp, mp, vp) ← bnStat oc hh f.cp
+      pure (cb ++ cp, ns ++ [mp, vp])
+    -- ⚠ the STRIDED block's bn1 lives at `2*hh`; only bn2/bn3/bnp are at `hh`.
+    let strStats (mid oc hh : Nat) (f : BNFwd) : StateM Nat (String × List String) := do
+      let (c1, m1, v1) ← bnStat mid (2*hh) f.c1
+      let (c2, m2, v2) ← bnStat mid hh f.c2
+      let (c3, m3, v3) ← bnStat oc hh f.c3
+      let (cp, mp, vp) ← bnStat oc hh f.cp
+      pure (c1 ++ c2 ++ c3 ++ cp, [m1, v1, m2, v2, m3, v3, mp, vp])
+    let (cSt0, st0) ← bnStat 64 112 nStc
+    let (cSt1,  st1)  ← projStats  64  256 56 f1
+    let (cSt2,  st2)  ← idStats    64  256 56 f2
+    let (cSt3,  st3)  ← idStats    64  256 56 f3
+    let (cSt4,  st4)  ← strStats  128  512 28 f4
+    let (cSt5,  st5)  ← idStats   128  512 28 f5
+    let (cSt6,  st6)  ← idStats   128  512 28 f6
+    let (cSt7,  st7)  ← idStats   128  512 28 f7
+    let (cSt8,  st8)  ← strStats  256 1024 14 f8
+    let (cSt9,  st9)  ← idStats   256 1024 14 f9
+    let (cSt10, st10) ← idStats   256 1024 14 f10
+    let (cSt11, st11) ← idStats   256 1024 14 f11
+    let (cSt12, st12) ← idStats   256 1024 14 f12
+    let (cSt13, st13) ← idStats   256 1024 14 f13
+    let (cSt14, st14) ← strStats  512 2048  7 f14
+    let (cSt15, st15) ← idStats   512 2048  7 f15
+    let (cSt16, st16) ← idStats   512 2048  7 f16
+    -- ═══ the 161 parameter gradients in func-arg order ═══
+    let stemPs : List PGrad := [⟨"sW", nsW, [64,3,7,7]⟩, ⟨"sg", nsg, [64]⟩, ⟨"sbt", nst, [64]⟩]
+    let headPs : List PGrad := [⟨"Wd", nWd, [2048, nClasses]⟩, ⟨"bd", nbd, [nClasses]⟩]
+    let allPs : List PGrad := stemPs ++
+      b1.ps ++ b2.ps ++ b3.ps ++ b4.ps ++ b5.ps ++ b6.ps ++ b7.ps ++ b8.ps ++
+      b9.ps ++ b10.ps ++ b11.ps ++ b12.ps ++ b13.ps ++ b14.ps ++ b15.ps ++ b16.ps ++ headPs
+    -- ═══ the optimizer: one proven triple per parameter, `optOne` shared with R34 ═══
+    let mut adamCode := ""
+    let mut thetaN : List String := []
+    let mut mNames : List String := []
+    let mut vNames : List String := []
+    for g in allPs do
+      let (c, nT, nM, nV) ← optOne opt B replicas g
+      adamCode := adamCode ++ c
+      thetaN := thetaN ++ [nT]
+      mNames := mNames ++ [nM]
+      vNames := vNames ++ [nV]
+    let statCode := cSt0 ++ cSt1 ++ cSt2 ++ cSt3 ++ cSt4 ++ cSt5 ++ cSt6 ++ cSt7 ++ cSt8 ++
+      cSt9 ++ cSt10 ++ cSt11 ++ cSt12 ++ cSt13 ++ cSt14 ++ cSt15 ++ cSt16
+    let statNames := st0.1 :: st0.2 :: (st1 ++ st2 ++ st3 ++ st4 ++ st5 ++ st6 ++ st7 ++ st8 ++
+      st9 ++ st10 ++ st11 ++ st12 ++ st13 ++ st14 ++ st15 ++ st16)
+    -- `%loss` is REPORT-ONLY (logging), on no gradient path, and NOT `pretty` of an AST node — the
+    -- same §5 carve-out R34's takes. SMOOTHED CE, matching the cotangent's soft target; a first cut
+    -- on R34 computed plain CE here and only a numeric tie caught it.
+    let lossCode :=
+      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+      s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
+      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
+      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [B]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses}> : {ty [B]}\n" ++
+      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
+      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
+      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
+      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
+      s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
+      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    let body := cStc ++ cStn ++ cStr ++ cStp ++
+      f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
+      f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++ f16.code ++
+      cGap ++ cLog ++ cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
+      cDgi ++ cWd ++ cbd ++ cDgp ++
+      b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
+      b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++
+      cDmp ++ cDsr ++ cDsn ++ csW ++ csg ++ cst ++ statCode
+    let pTypes : List String := allPs.map (fun g => ty g.ds)
+    let statTypes : List String := (r50StatSigList.map (·.2))
+    let retVals := thetaN ++ mNames ++ vNames ++ ["%loss", "%bc1", "%bc2"] ++ statNames
+    let retTys  := pTypes ++ pTypes ++ pTypes ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
+    pure <|
+      (if replicas ≤ 1 then
+        s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step: every line is pretty(verified AST node) ──\n"
+       else
+        s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
+        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5).\n") ++
+      zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt ++ adamCode ++
+      lossCode ++
+      s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
+  let sigList : List (String × String) := r50SigList nClasses
+  let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let mSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}m: {t}"))
+  let vSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}v: {t}"))
+  let statSig := String.intercalate ", " (r50StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statSig ++
+    s!", %onehot: {ty [B, nClasses]}"
+  let pTy := sigList.map (·.2)
+  let outSig := String.intercalate ", "
+    (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ (r50StatSigList.map (·.2)))
+  let inner : String := go.run' 0
+  -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
+  -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt}_train_step"
+  "module @m {\n" ++
+  s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
+  inner ++
+  "  }\n}\n"
+
+end Proofs.StableHLO
+
+-- ⚠ Slug `resnet50in`, distinct from any 10-class R50, for the reason §2k records for `resnet34in`:
+-- the forwards carry no variant in their path, so a shared slug would silently overwrite a
+-- different-arity artifact.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_adam64_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.R34Opt.adamw "resnet50in")
+
+-- The 4-GPU data-parallel peer at `B := 64` PER REPLICA ⇒ global batch 256, matching R34's
+-- ImageNet recipe and the reference's. One `#eval`: `optOne` already takes `replicas`.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_adamdp64_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    Proofs.StableHLO.R34Opt.adamw "resnet50in")
+
+-- Pin the literal artifact paths above against the name the renderer emits, so a rename fails at
+-- `lake build` rather than at run time as a shim "entry mismatch".
+#guard Proofs.StableHLO.r34AdamVariant 64 1 == "adam64"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 == "adamdp64"
