@@ -13,6 +13,111 @@ collapse, §2.1's three block forms, §2.2's v1.5 stride. This file does not rep
 
 ---
 
+## ✅ WHAT LANDED 2026-08-05 (late) — §3.2's debt PAID, §4's blocker BUILT
+
+Two commits. **R50's gradient is gated and gradient accumulation exists, is certified, and trains.**
+
+| | was | now |
+|---|---|---|
+| **§3.2 R50's gradient** | ⚠⚠ ungated, "say which one licensed the swap" | ✅ `lake build r50-gradcheck` — two tiers on the committed bytes |
+| **§4 grad accumulation** | ⛔⛔ `grep gradAccum` returns 0 | ✅ rendered, certified, and smoked on ImageNet |
+
+### The gradient gate — and §3.2 named the wrong two checks
+
+⚠⚠ **§3.2's `vjp_oracle` cases would have gated the WRONG EMITTER.** `tests/vjp_oracle/run.sh`
+drives `NetSpec.train`, i.e. `MlirCodegen.emitBottleneckBlock`; `resnet50-imagenet-verified-xla`
+runs `ResNet50RenderB`. Different lowerings. ▶ Those cases are still worth adding — they cover
+`apps/baselines/MainResnet50Train.lean` — and they are not the R50 gate.
+
+`tests/TestR50GradCheck.lean` drives the committed artifact and needs no second framework: the train
+step returns its own loss beside its own `m'`, so one invoke from `m = v = 0` gives `L(θ)` **and**
+`g = 10·m'` (§2k's construction).
+
+⭐ **TIER 1 is two closed-form identities with no finite differences anywhere.** Every conv is
+BN-followed and bias-free, so `L` is 0-homogeneous in each kernel and Euler gives `⟨g_W, W⟩ = 0` on
+53 sites. ⭐⭐ The BN-AFFINE version is the one with teeth: `⟨g_W,W⟩` factors as `⟨c, J_W W⟩` with
+`J_W W = 0`, so it holds for **any** arriving cotangent, while `⟨g_γ,γ⟩+⟨g_β,β⟩ = 0` is a statement
+*about* that cotangent — and the stem's is the only gradient path through `maxPool3s2`. All 86 sites
+land ≤ **6.1e-5**, which is BN's `ε/var` and not a coincidence.
+
+**TIER 2 is the adjoint probe** `⟨g,δ⟩ ≟ (L₊−L₋)/2`, one direction per block, which pins the SCALE
+that tier 1 is blind to. ⚠ Its resolution is depth-dependent and MEASURED (`R50_GC_SCAN=1`): 0.00097
+at the head, 0.17 at the stem, where the perturbation drags the forward across millions of ReLU
+kinks. The stem's fp32 noise floor is read off R50's own BN scale invariance — 0.0012, i.e. 140×
+below the residual, so that residual is truncation and not arithmetic.
+
+▶ **The honest sentence: the structure is pinned to 6e-5 everywhere, the magnitude to ~0.1% at
+stage 4 and ~17% at the stem.** The two tiers cover each other's blind spots; that is the design.
+
+⚠ Controls, all live: 21 sites where the homogeneity is FALSE violate it with **no overlap at all**
+(weakest 12–34× the worst passing site, median ~450×), and the 3e-4 tolerance sits *between* the two
+populations rather than being a round number. A doubled gradient misses by 5.9×.
+
+⚠ **Two designs were tried and DROPPED rather than quietly kept** — a whole-net random-sign
+direction (degenerate at n = 25.5M) and a projection-blind control (the shortcut is only ~4% of
+`‖m'‖²` at s1b0, so it could not fire). Both are recorded in the file. §6, paid again.
+
+⚠ `tests/r50_dp_render_tie.py` carries the verdict to the DP artifacts. The DP render all-reduces
+the gradient but **NOT the loss** — `%loss` is replica 0's own shard — so tier 2 cannot run there.
+Instead: substitute each `%arsum<P>`'s named gradient SSA on both sides, drop the all-reduce blocks,
+and the files must be IDENTICAL line for line. They are (12,273 lines, 161 params), for both the
+plain and the accumulation pair. Negative control verified.
+
+### Gradient accumulation — `R34Opt.adamwAccum k`, and it cost ONE op per parameter
+
+A fourth region `[θ|m|v|G]` and two runtime scalars, so **one graph is both phases** — one compile,
+one resident parameter set, and no way for an "accumulate" and an "apply" render to drift.
+
+* `Gt = akeep·G + g` is `momVNextF` read the way `.heavyBall` reads it for coupled L2, so **no new
+  `SHlo` constructor**. ⭐ `%akeep` is 0 on the first micro-batch of a cycle, so the accumulator
+  RESETS by dropping the previous total — there is no zeroing step that could be skipped.
+* `%aup ∈ {0,1}` selects the phase by arithmetic: at 0, `β₁ = β₂ = 1` and `(1−β₁) = (1−β₂) = 0`, so
+  both moments are exact passthroughs, and `lr = 0` freezes θ COMPLETELY because AdamW's decay is
+  DECOUPLED. The 161 per-parameter tails stay byte-identical to `.adamw`'s; the carve-out is eight
+  lines of SCALAR arithmetic emitted once.
+* ⭐⭐ **`1/k` is folded in ASYMMETRICALLY** — `%ob1` carries `(1−β₁)/k` and `%ob2` carries
+  `(1−β₂)/k²`, because `v` is QUADRATIC in the gradient. A shared scale gives the mean of the
+  per-micro-batch second moments instead of the second moment of the mean: a different optimizer
+  that descends and looks entirely normal.
+* ⚠ `fmt12`, not `fmt6`: at k = 4, `(1−β₂)/k² = 6.25e-5`, which `fmt6` emits as `0.000063` — **0.8%
+  wrong, baked, in the optimizer.** Same class as §2k's hardcoded label-smoothing mass.
+
+**`lake build r50-accum-tie`** — k micro-steps on the SAME batch must reproduce ONE step of the
+committed `adam64` artifact, which was rendered before accumulation existed. Measured:
+`[θ|m|v]` **76,671,096/76,671,096 bit-exact** across every accumulate micro-batch, and the apply
+ties to rel ≤ **1e-6** on all three regions, against a WRONG-k control that misses by **1778×**.
+⚠ Duplicated batch, so it is blind to the combination of DIFFERENT micro-batches, exactly as every
+`*-dp-check` is blind to shard offset. The complementary exact check needs a BN-free net (R50
+normalises per micro-batch by design — that IS Ghost-BN) and is not built.
+
+⭐ **§4.1 item 2 is discharged BY CONSTRUCTION.** The driver's step loop is unchanged: one iteration
+is still one micro-batch, one shim read, one invoke. Only the scalars written per iteration changed,
+so the depth-1 prefetch already follows the MICRO-step. What splits is `mstep` (micro-batches — the
+augmentation seed, the drop masks, the prefetch) from `gstep` (updates — the LR schedule and Adam's
+bias correction). ⚠ `totalSteps`/`warmSteps` are now counted in UPDATES; left in micro-batches the
+cosine would run k× too fast.
+
+⚠ `k` is IN THE ARTIFACT NAME (`acc4x64`, `accdp8x64`) and the driver reads it off the same string
+that selects the file, because the graph has `1/k` baked and the driver picks the cadence — a
+disagreement is silent (a wrong effective LR, no error anywhere). Round-tripped by `#guard` on the
+producing side and by `tests/TestVariantPredicates.lean` on the consuming side, which now runs
+**55 spellings across 5 axes**.
+
+**Smoked on ImageNet**: 8 micro-batches at k=4 single-GPU, losses 7.44 / 7.65 / 7.78 against §3.3's
+7.609 / 7.461 / 7.671, warmup LR correct on the update clock.
+
+### ⛔ What this did NOT do
+
+* **`accdp8x64` (effective batch 2048) has never been run.** It renders and it is covered by neither
+  gate: `r50-accum-tie` is single-device, and the DP text tie needs a matched-k single-device peer,
+  which only `acc4x64`/`accdp4x64` have. A 4-GPU smoke is owed.
+* **The different-micro-batch decomposition is ungated** (see above — it needs a BN-free peer).
+* **LAMB, BCE-with-logits and 160/224 are still absent**, so this is AdamW at a large batch and must
+  not be called `rsb-faithful`. §4's table is otherwise unchanged.
+* The two `vjp_oracle` projection cases, now correctly scoped to `MlirCodegen`.
+
+---
+
 ## ✅ WHAT LANDED 2026-08-05 (evening) — read this first, then skip to §4
 
 Seven commits on `perf/shim-prefetch`. **§1, §2 and §3 are done.** The next session is §4, and its
@@ -353,6 +458,12 @@ copied; no emitted bytes change and R34's artifacts re-render byte-identical (ch
 torchvision's published count), **shapes elementwise** against the spec the *driver* walks. Verified
 non-blind by cutting stage 3 to 5 blocks.
 
+### ✅ PAID 2026-08-05 (late) — `lake build r50-gradcheck`
+
+The debt below is discharged; the two checks it names are **not** how, and one of them would have
+gated the wrong emitter. See "WHAT LANDED (late)" at the top. Kept verbatim because the reasoning
+about *what licenses a render with no incumbent* is still the standing rule.
+
 ⚠⚠ **BUT §3.2's original warning still stands and is now a DEBT, not a plan.** There is no incumbent
 R50 render, so the bit-exact-tie license every other swap had does not exist. **The gradient is
 ungated.** Before any number is quoted:
@@ -395,7 +506,7 @@ JAX already has the recipes (`jax/MainResnet50Imagenet.lean`): `rsb-faithful`, `
 
 | piece | cost | state |
 |---|---|---|
-| ⛔⛔ **gradient accumulation** | driver work | **the blocker.** `grep gradAccum LeanMlir/VerifiedTrain.lean` still returns **0** — re-checked 2026-08-05. It exists only in `Types.lean`'s JAX-side `TrainConfig` and four `jax/Main*.lean` |
+| ✅ **gradient accumulation** | ~~driver work~~ | ✅ **BUILT AND CERTIFIED 2026-08-05 (late)** — `R34Opt.adamwAccum k`, a fourth `[θ\|m\|v\|G]` region, one op per parameter, `lake build r50-accum-tie`. No longer the blocker |
 | **LAMB** | 2–3 ops *estimated* | ⚠ **the one number in `rsb_a3_r50_verified.md` §2.3 that is NOT a measurement.** Cost it the §0.8 way first. ⚠ LAMB **breaks every gate that recovers `g` from `m'`** — `r34-mom-tie`, `rms-tie`, `wdx-tie`, `shard-check` |
 | **BCE with logits** | ~1 descriptor | `BatchableOp.sigmoid` is pointwise + batch-invariant ⇒ legal descriptor. `sigmoidF` exists with a global hypothesis-free `sigmoid_has_vjp`; the cotangent `σ(z) − t` is CE's with one op swapped |
 | **160 train / 224 eval** | two artifacts | ⚠ the §2g prefix audit (`_fwd` ⊂ `_train_step`) **cannot hold across them**. Decide explicitly; do not let it degrade to "the audit doesn't cover R50" |
@@ -421,18 +532,27 @@ re-runs.
 | **real bs2048** | ~80 GB activations at 160px — **this box cannot** | cleanest reproduction, ungated here |
 | **accept bs512** | free | the **40.8%** regime: a valid *engineering* pair, a useless *accuracy* one |
 
-▶ **Decide before phase 4, not during it.**
+▶ **Decide before phase 4, not during it.** ✅ **DECIDED AND BUILT: grad accum in the driver**, with
+Ghost-BN inherited rather than chosen (each micro-batch normalises over itself, which is what the
+per-micro-batch forward does and what JAX took). ⚠ The DP shard gate's argument now has that second
+axis and its text has not been updated — §4.1 item 3's warning is still open.
 
 ### 4.1 What the grad-accum session should know before it starts
 
 1. ⚠⚠ **Settle §3.2's gradient debt first, or at least decide not to.** RSB-A3 is a ~1.5–2 day fp32
    run on an R50 whose gradient has never been checked against anything. Two oracle cases plus a
    matched-init loss tie is a few hours; discovering the net was wrong after two days is not.
-2. **The step loop changed under you.** §2.3's depth-1 prefetch means the shim read is now issued
-   *inside* the step, one in flight, with a strict-order requirement (`res_gen`). Grad accum makes
-   the micro-step the unit — **the prefetch index must follow the MICRO-step, not the optimizer
-   step**, or the pipeline desynchronises. `tests/prefetch_tie.sh` is the gate that catches it and
-   it already crosses an epoch boundary; extend it to cross an accumulation boundary.
+2. ✅ **DISCHARGED BY CONSTRUCTION.** The accumulation implemented 2026-08-05 changes no loop
+   structure at all: one iteration is still one micro-batch, one shim read, one invoke, and only the
+   scalars written per iteration differ. So the depth-1 prefetch already follows the MICRO-step, and
+   `tests/prefetch_tie.sh` needs no extension to remain valid. ⚠ What DID split is the step counter:
+   `mstep` (micro-batches — the augmentation seed, the drop masks, the prefetch index) from `gstep`
+   (updates — the LR schedule and Adam's bias correction), and `totalSteps`/`warmSteps` moved to the
+   update clock. Left in micro-batches the cosine runs k× too fast.
+
+   *Original warning, kept because it is what the design had to satisfy:* §2.3's depth-1 prefetch
+   means the shim read is issued *inside* the step, one in flight, with a strict-order requirement
+   (`res_gen`); the prefetch index must follow the MICRO-step or the pipeline desynchronises.
 3. **BN is the real design question, not the accumulation.** Accumulating gradients is
    arithmetic; deciding what BN normalises over across 4 micro-batches is a modelling choice. JAX
    took Ghost-BN. ⚠ Whatever is chosen, the DP shard gate's argument (`N×b ≠ 1×(N·b)` by design)

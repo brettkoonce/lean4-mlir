@@ -827,8 +827,31 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- ⚠ Keyed off the variant PREFIX, the same reverse-of-`cnxAdamVariant` reading `rmsprop` uses,
   -- and pinned upstream by the `#guard`s beside that renderer's `#eval`s.
   let emaOn := variant.startsWith "ema"
-  let nRegions := if emaOn then 4 else 3
-  let nScalars := if emaOn then 5 else 3
+  -- ⭐⭐ GRADIENT ACCUMULATION (`planning/next_session_pipeline_then_r50.md` §4). "acc<k>x<B>" /
+  -- "accdp<k>x<B>" is the `.adamwAccum` render: a FOURTH region `G` holding the running gradient
+  -- sum, and two extra scalars `%aup`/`%akeep` deciding, per micro-batch, whether this invoke
+  -- accumulates or applies. Same blob SHAPE as the EMA render, so `nRegions`/`nScalars` carry it.
+  --
+  -- ⚠⚠ **`k` IS READ OFF THE VARIANT NAME, and that is the point.** The graph has `1/k` BAKED into
+  -- `%ob1`/`%ob2` (`optConstsB`), and the driver decides the apply cadence. If those two disagree
+  -- the run does not fail — it trains at a silently wrong effective learning rate. Reading `k` from
+  -- the same string that names the artifact file makes them agree by construction;
+  -- `ResNet50RenderB` pins the round trip with a `#guard` on the producing side.
+  let accOn := variant.startsWith "acc"
+  let accK := if accOn then
+      (((variant.drop (if variant.startsWith "accdp" then 5 else 3)).takeWhile (· != 'x')).toNat?).getD 0
+    else 1
+  if accOn && accK < 1 then
+    throw <| IO.userError s!"variant '{variant}' starts with 'acc' but no accumulation count could \
+be read from it — the name must be acc<k>x<B> or accdp<k>x<B>, and <k> is what the graph's baked \
+1/k was rendered for"
+  -- ⚠ Both want the fourth region. Silently letting one win would put the EMA shadow and the
+  -- gradient accumulator in the same slots.
+  if emaOn && accOn then
+    throw <| IO.userError "variant selects BOTH the EMA shadow and gradient accumulation, and they \
+occupy the same fourth region of [θ|m|v|·]. Render one or the other."
+  let nRegions := if emaOn || accOn then 4 else 3
+  let nScalars := if emaOn || accOn then 5 else 3
   -- "…drop" = the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the graph takes one
   -- extra `tensor<Bxf32>` per drop site, carrying `bernoulli(keep_i)/keep_i` per example.
   --
@@ -942,6 +965,23 @@ host-drawn per step at seed+999983, 1/keep folded in. Eval is the identity (drop
   if emaOn then
     IO.println s!"  ▸ EMA: 4th blob region [θ|m|v|ema], shadow starts AT the weights, decay \
 min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW."
+  if accOn then
+    -- ⚠⚠ IT ANNOUNCES ITSELF, and here that is not politeness either: a run with the wrong `k`
+    -- prints an entirely normal loss curve at a silently wrong effective batch and learning rate.
+    -- §6's rule — "a setting with no output and no gate is a setting that can be silently wrong".
+    IO.println s!"  ▸ GRADIENT ACCUMULATION: k = {accK}, 4th blob region [θ|m|v|G]. Micro-batch \
+{gbs} x {accK} = EFFECTIVE BATCH {gbs * accK}. {nb} micro-batches/epoch = {nb / accK} updates/epoch; \
+the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on \
+micro-batches."
+    IO.println s!"     ⚠ This is AdamW at that batch, NOT rsb-faithful — LAMB and BCE-with-logits \
+are still absent (planning/rsb_a3_r50_verified.md §2.3)."
+    -- ⚠⚠ A cycle that straddles the epoch boundary applies with fewer than `k` micro-batches while
+    -- the graph still divides by `k`, i.e. a short step at a wrong scale — once per epoch, invisible
+    -- in the loss curve. Refuse rather than round.
+    if nb % accK != 0 then
+      throw <| IO.userError s!"{nb} micro-batches per epoch is not divisible by k = {accK}: the \
+last cycle of every epoch would apply {nb % accK} micro-batches' gradient still divided by {accK}. \
+Cap the steps to a multiple of {accK} (LEAN_MLIR_G2_STEPS) or render a different k."
   if evalBs != bs then
     IO.println s!"  eval batch {evalBs} (the batch @{net.slug}_fwd{if hasBn then "_eval" else ""} \
 was RENDERED at) != train batch {bs} — sound because eval is class-batch-independent"
@@ -967,7 +1007,11 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
     -- split (§5b's defect, the half that made replication type-check).
     ++ (if cdOn then #[#[gbs, doWidth]] else #[])
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
-                                ++ (if emaOn then net.paramShapes else #[])
+                                -- the FOURTH region: the EMA shadow, or the gradient accumulator.
+                                -- ⚠ The G4 gated interface counts destinations off THIS list, so
+                                -- omitting it does not mis-walk the blob quietly — the shim refuses
+                                -- ("returns 755 outputs, caller supplied 594 destinations").
+                                ++ (if emaOn || accOn then net.paramShapes else #[])
                                 ++ Array.replicate nScalars #[]
                                 ++ (if hasBn then bnStatShapes else #[])
                                 ++ dropShapes)
@@ -1029,7 +1073,14 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- ⚠ THE EMA SHADOW STARTS AT THE WEIGHTS (`ema_params = params`, jax/Jax/Codegen.lean:2739), not
   -- at zeros. A zero-init shadow is a different filter; and it is the warmup-corrected decay below
   -- that stops even THIS init from poisoning the average early — see the `emaD` note.
-  let mut thetamv := F32.concat (#[theta, zeros, msInit] ++ (if emaOn then #[theta] else #[]))
+  -- ⚠ The FOURTH region, when there is one, and the two features that use it seed it DIFFERENTLY.
+  -- The EMA shadow starts AT the weights (starting it at the random init is the defect
+  -- `planning/ema.md` records: a shadow evaluated at chance on short runs). The gradient
+  -- ACCUMULATOR starts at ZERO — and it would be harmless at any value, because `%akeep = 0` on
+  -- the first micro-batch of every cycle discards whatever is there. Zero anyway, so a checkpoint
+  -- written mid-cycle resumes from something meaningful rather than from a stale partial sum.
+  let mut thetamv := F32.concat (#[theta, zeros, msInit] ++
+    (if emaOn then #[theta] else if accOn then #[zeros] else #[]))
   let mvBytes := nRegions * net.nParams * 4
   let pBytes := net.nParams * 4
   -- Running BN stats (EMA of per-layer batch mean/var; mom 1.0 on the first step to seed,
@@ -1043,8 +1094,11 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- The reusable step buffer: [theta|m|v | lr,bc1,bc2 | bn stats]. Built once here
   -- and thereafter carried forward from each step's output (see the inner loop).
   let mut pbuf : ByteArray := .empty
-  let totalSteps := (cfg.epochs * nb).toFloat
-  let warmSteps := (warmupEpochs * nb).toFloat
+  -- ⚠ Both are counted in OPTIMIZER steps. Under accumulation an epoch is `nb` micro-batches but
+  -- only `nb / k` updates, so a schedule left in micro-batches would run the cosine (and the
+  -- warmup) `k` times too fast and finish the run at a learning rate the recipe never reaches.
+  let totalSteps := (cfg.epochs * nb / accK).toFloat
+  let warmSteps := (warmupEpochs * nb / accK).toFloat
   -- Auto checkpoint/resume: each epoch writes [θ|m|v] + the next-epoch counter;
   -- on startup, resume from the latest checkpoint if present (survives reaps).
   -- Delete `.lake/build/<slug>_adam_ckpt.bin{,.epoch}` to start fresh.
@@ -1242,7 +1296,18 @@ gate's control, not a configuration.")
                            (ep + 42).toUSize
       curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
-      let gstep := (ep * nb + bi + 1).toFloat
+      -- ▶▶ MICRO-STEP vs OPTIMIZER STEP. Without accumulation these are the same number and every
+      -- expression below reads exactly as it did. With it, `mstep` counts micro-batches (it seeds
+      -- the augmentation and the drop masks, and it is what the depth-1 prefetch indexes — §4.1's
+      -- "the prefetch index must follow the MICRO-step") while `gstep` counts UPDATES and is what
+      -- the LR schedule and Adam's bias correction read.
+      let mstep := ep * nb + bi + 1
+      -- `%akeep` is 0 on the first micro-batch of a cycle and 1 after: the accumulator RESETS by
+      -- dropping the previous total (`Gt = akeep·G + g`), so there is no separate zeroing step that
+      -- could be missed. `%aup` is 1 only on the last, where the optimizer actually moves.
+      let applyNow := !accOn || mstep % accK == 0
+      let keepAcc  := if accOn && (mstep - 1) % accK != 0 then 1.0 else 0.0
+      let gstep := (if accOn then (mstep + accK - 1) / accK else mstep).toFloat
       -- Post-warmup decay: exponential when `expDecayRate > 0` (the EfficientNet/MobileNetV2
       -- schedule), cosine otherwise. The exponential branch reproduces the formula
       -- `jax/Jax/Codegen.lean` EMITS for these two references, line for line:
@@ -1269,7 +1334,15 @@ gate's control, not a configuration.")
       -- scalars and the BN region are refreshed. Rebuilding it with F32.concat
       -- (and slicing [theta|m|v] back out afterwards) cost two 272 MB host
       -- memcpys per step at R34 scale — see planning/xla_pjrt_ladder.md §8.
-      pbuf ← F32.write3 pbuf (nRegions * net.nParams).toUSize lrt bc1 bc2
+      -- ⚠ `lr = 0` ON AN ACCUMULATE MICRO-BATCH IS WHAT FREEZES θ, and it freezes it COMPLETELY:
+      -- AdamW's decay is DECOUPLED (`θ' = θ − lr·m̂/(√v̂+ε) − lr·wd·θ`), so both terms vanish. A
+      -- COUPLED-L2 optimizer would keep decaying k times per update and this would be wrong.
+      pbuf ← F32.write3 pbuf (nRegions * net.nParams).toUSize
+               (if applyNow then lrt else 0.0) bc1 bc2
+      if accOn then
+        let accPair ← F32.const 3 0.0
+        let accPair ← F32.write3 accPair 0 (if applyNow then 1.0 else 0.0) keepAcc 0.0
+        pbuf ← F32.blit pbuf (nRegions * net.nParams + 3).toUSize accPair 0 2
       -- ⚠ THE WARMUP-CORRECTED DECAY, required at our scale rather than optional.
       -- `d = min(decay, (1+t)/(10+t))` is TF's `ExponentialMovingAverage(decay, num_updates)`, the
       -- form the reference emits (`jax/Jax/Codegen.lean:2460`). Without it the shadow decays its own

@@ -7167,6 +7167,22 @@ def fmt6 (x : Float) : String :=
   let fs := (toString fp).leftpad 6 '0'
   (if neg then "-" else "") ++ toString ip ++ "." ++ fs
 
+/-- Fixed-12-decimal float literal, for constants `fmt6` would destroy.
+
+    ⚠ It exists because `fmt6` is not a formatting preference, it is a PRECISION CEILING, and small
+    derived constants fall straight through it. Gradient accumulation's second-moment coefficient is
+    `(1−β₂)/K²`; at K = 4 that is `6.25e-5`, which `fmt6` emits as `0.000063` — **0.8% wrong**, in a
+    baked literal, in the optimizer, where nothing downstream would question it. Same class as §2k's
+    hardcoded `0.010000` label-smoothing mass. `fmt6` stays the default so every committed artifact
+    re-renders byte-identically; this is for constants that need the room. -/
+def fmt12 (x : Float) : String :=
+  let neg := x < 0.0
+  let n := ((if neg then -x else x) * 1000000000000.0 + 0.5).toUInt64.toNat
+  let ip := n / 1000000000000
+  let fp := n % 1000000000000
+  let fs := (toString fp).leftpad 12 '0'
+  (if neg then "-" else "") ++ toString ip ++ "." ++ fs
+
 /-- **The label-smoothing mass per class, α/K.** α = 0.1 throughout; K is `nClasses`.
 
     ⚠ **This was hardcoded `0.010000` — correct at K = 10 and WRONG at every other K**, and it sat

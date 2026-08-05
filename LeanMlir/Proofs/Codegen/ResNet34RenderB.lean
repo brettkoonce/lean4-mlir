@@ -217,6 +217,10 @@ inductive R34Opt
   | adamw
   /-- `g ← g + wd·θ`, `v' = μ·v + g`, `θ' = θ − lr·v'`; velocity in the `v` slot, `m` untouched. -/
   | heavyBall
+  /-- ⭐ **AdamW over `k` accumulated micro-batches** — `planning/next_session_pipeline_then_r50.md`
+      §4's blocker. A FOURTH parameter region `G` holds the running gradient sum, and the graph is
+      one function for both phases with two runtime scalars deciding which it is. See `optOne`. -/
+  | adamwAccum (k : Nat)
 deriving DecidableEq, Repr
 
 /-- `(θ', m', v')` for one parameter, from its un-fused gradient.
@@ -245,7 +249,7 @@ deriving DecidableEq, Repr
 -- in two places, which is the double-writer failure this repo keeps paying for. Visibility does
 -- not change emitted bytes, so every committed R34 artifact is untouched.
 def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
-    StateM Nat (String × String × String × String) := do
+    StateM Nat (String × String × String × String × Option String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
@@ -256,7 +260,34 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
     let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                       "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
-    pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+    pure (arS ++ cM ++ cV ++ cT, nT, nM, nV, none)
+  | .adamwAccum _ =>
+    -- ⭐ **The whole feature, and it adds exactly ONE op per parameter.**
+    --
+    -- ① the accumulator, `Gt = akeep·G + g`. That is `momVNextF` read the way `.heavyBall` reads it
+    -- for coupled L2 — `Proofs.momVNext μ v g = μ·v + g`, so instantiating `(μ := %akeep, v := G)`
+    -- denotes exactly the accumulation. **No new `SHlo` constructor**, so none of the ten-site
+    -- surgery an added op costs, and the faithfulness theorem carries over untouched.
+    --
+    -- ⚠ `%akeep` is 0 on the FIRST micro-batch of a cycle and 1 after, so the cycle RESETS by
+    -- dropping the previous total rather than by a separate zeroing pass — which is why one scalar
+    -- and one op suffice, and why there is no "clear the accumulator" step that could be skipped.
+    let (cG, nG) ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
+    let gt : SHlo n := .operand nG z
+    -- ② the moments and the parameter, **byte-identical to `.adamw`'s** except that they consume
+    -- `Gt` rather than `g`. The `1/k` that turns a SUM into a MEAN is not applied here: it is folded
+    -- into `%ob1 = (1−β₁)/k` and `%ob2 = (1−β₂)/k²` by `optConstsB`, because `v` is QUADRATIC in the
+    -- gradient and a single shared scale factor cannot serve both moments. Folding it is what keeps
+    -- this from needing a scalar-multiply op the vocabulary does not have.
+    --
+    -- On an ACCUMULATE micro-batch `optConstsB` sets `%b1 = %b2 = 1` and `%ob1 = %ob2 = 0`, so both
+    -- moments are exact passthroughs; `%lr = 0` freezes θ, and AdamW's decay is DECOUPLED (`−lr·wd·θ`)
+    -- so lr = 0 freezes it COMPLETELY rather than leaving a decay term running k times per step.
+    let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gt)
+    let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gt)
+    let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
+                      "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gt)
+    pure (arS ++ cG ++ cM ++ cV ++ cT, nT, nM, nV, some nG)
   | .heavyBall =>
     -- ── Three applications of ops that ALREADY EXIST. No new `SHlo` constructor, so none of the
     -- ten-site surgery (and none of the `StableHLOParse` roundtrip risk) an added op costs.
@@ -279,7 +310,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nV z))
     -- `m` rides through untouched, so the packed `[θ|m|v]` signature is shared with `.adamw` and
     -- the driver is byte-identical across variants (the `CnnRender.optTail` `.sgd` convention).
-    pure (arS ++ cD ++ cV ++ cT, nT, s!"%{g.nm}m", nV)
+    pure (arS ++ cD ++ cV ++ cT, nT, s!"%{g.nm}m", nV, none)
 
 /-- The optimizer's baked constants. `.adamw` is byte-for-byte the committed block; `.heavyBall`
     emits only what it reads, so there are no dead constants in the momentum artifact.
@@ -298,6 +329,39 @@ def optConstsB (opt : R34Opt) : String :=
   | .heavyBall =>
     "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
     "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+  | .adamwAccum k =>
+    -- ⚠ **A TRUSTED CARVE-OUT, and deliberately the smallest one that does the job**: eight lines of
+    -- SCALAR arithmetic emitted ONCE, next to the constants that were already emitted text. The 161
+    -- per-parameter tails stay `pretty(verified AST node)` and are byte-identical to `.adamw`'s.
+    --
+    -- `%aup ∈ {0, 1}` is the APPLY flag, supplied per micro-batch by the driver. It selects between
+    -- the two phases by arithmetic rather than by two artifacts — one graph, one compile, one
+    -- resident parameter set, and no way for an "accumulate" and an "apply" render to drift:
+    --
+    --     accumulate (%aup = 0):  β₁ = 1, (1−β₁) = 0  ⇒  m' = m,  v' = v   exactly
+    --     apply      (%aup = 1):  β₁ = 0.9, (1−β₁)/k  ⇒  m' = 0.9·m + (1−β₁)·(Gt/k)
+    --
+    -- ⭐ `1/k` is folded in HERE, and asymmetrically: `%ob1` carries `1/k` while `%ob2` carries
+    -- `1/k²`, because `v` consumes the gradient SQUARED. `v' = β₂v + ((1−β₂)/k²)·Gt² =
+    -- β₂v + (1−β₂)·(Gt/k)²` — the identity that makes accumulation equal a real large-batch step
+    -- rather than the "mean of per-micro-batch second moments" a naive implementation produces.
+    --
+    -- ⚠ `fmt12`, not `fmt6`: at k = 4, `(1−β₂)/k² = 6.25e-5`, and `fmt6` emits `0.000063` — 0.8%
+    -- wrong, baked, in the optimizer.
+    let kf := k.toFloat
+    "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+    "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n" ++
+    "    %aone = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+    s!"    %aob1 = stablehlo.constant dense<{fmt12 (1.0 - 0.9)}> : tensor<f32>\n" ++
+    "    %ab1d = stablehlo.multiply %aup, %aob1 : tensor<f32>\n" ++
+    "    %b1 = stablehlo.subtract %aone, %ab1d : tensor<f32>\n" ++
+    s!"    %aob1k = stablehlo.constant dense<{fmt12 ((1.0 - 0.9) / kf)}> : tensor<f32>\n" ++
+    "    %ob1 = stablehlo.multiply %aup, %aob1k : tensor<f32>\n" ++
+    s!"    %aob2 = stablehlo.constant dense<{fmt12 (1.0 - 0.999)}> : tensor<f32>\n" ++
+    "    %ab2d = stablehlo.multiply %aup, %aob2 : tensor<f32>\n" ++
+    "    %b2 = stablehlo.subtract %aone, %ab2d : tensor<f32>\n" ++
+    s!"    %aob2k = stablehlo.constant dense<{fmt12 ((1.0 - 0.999) / (kf * kf))}> : tensor<f32>\n" ++
+    "    %ob2 = stablehlo.multiply %aup, %aob2k : tensor<f32>\n"
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net batched AdamW train step
@@ -317,7 +381,13 @@ def optConstsB (opt : R34Opt) : String :=
 def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw) : String :=
   (match opt with
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
-   | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp") ++
+   | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp"
+   -- ⭐ `k` is IN THE NAME — `acc4x64`, `accdp4x64` — because the driver has to know it (to decide
+   -- which micro-batch applies) and the graph has it baked (in `%ob1`/`%ob2`). Two places, and a
+   -- disagreement between them is silent: the run would apply on a cadence the `1/k` does not
+   -- match, i.e. a wrong effective learning rate with no error anywhere. Carrying `k` in the
+   -- artifact NAME makes the driver read it off the same string that selects the file.
+   | .adamwAccum k => (if replicas ≤ 1 then "acc" else "accdp") ++ toString k ++ "x") ++
   (if B == 32 then "" else toString B)
 
 set_option maxRecDepth 4000000 in
@@ -333,6 +403,13 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let optLabel : String := match opt with
     | .adamw     => "AdamW"
     | .heavyBall => "heavy-ball momentum + coupled L2"
+    -- ⚠ R34 renders no accumulation artifact — `resnet34TrainStepFaithfulB` has no fourth region in
+    -- its signature, so passing `.adamwAccum` here would emit an optimizer that reads `%<p>a` inputs
+    -- the function does not declare. The renderer REFUSES rather than emitting invalid MLIR that
+    -- `iree-compile` would report as an undefined-value error a hundred lines from the cause.
+    | .adamwAccum k => panic! s!"resnet34TrainStepFaithfulB: .adamwAccum {k} needs a fourth \
+parameter region and R34's signature has three — render it from ResNet50RenderB, or add the region \
+here first"
   let go : StateM Nat String := do
     -- ═══ stem: 7×7/s2 conv → batch BN → relu → 2×2 maxpool ═══
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
@@ -461,7 +538,10 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
-      let (c, nT, nM, nV) ← optOne opt B replicas g
+      -- ⚠ R34 renders no accumulation variant, so the fifth component (the accumulator's output
+      -- name) is always `none` here. Dropping it rather than threading it is what keeps every
+      -- committed R34 artifact byte-identical across this change.
+      let (c, nT, nM, nV, _) ← optOne opt B replicas g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]

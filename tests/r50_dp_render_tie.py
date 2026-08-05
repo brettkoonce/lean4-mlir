@@ -30,11 +30,21 @@ sweep. Exits non-zero on any residual difference, and refuses a vacuous pass (0 
 import re
 import sys
 
-A = "verified_mlir/resnet50in_adam64_train_step.mlir"
-B = "verified_mlir/resnet50in_adamdp64_train_step.mlir"
+# Every (1-replica, 4-replica) pair rendered at the SAME optimizer and the SAME k. The accumulation
+# pair is here for the same reason as the plain one: `r50-accum-tie` can only run single-device (the
+# DP render's %loss is replica-local, see below), so its verdict reaches `accdp4x64` by this text
+# argument or not at all. ⚠ `accdp8x64` — the effective-batch-2048 artifact — has no matched-k
+# single-device peer and is therefore NOT covered here; it is the same renderer at a different
+# baked constant, which is an inheritance argument rather than a check, and it says so.
+PAIRS = [
+    ("verified_mlir/resnet50in_adam64_train_step.mlir",
+     "verified_mlir/resnet50in_adamdp64_train_step.mlir"),
+    ("verified_mlir/resnet50in_acc4x64_train_step.mlir",
+     "verified_mlir/resnet50in_accdp4x64_train_step.mlir"),
+]
 # Overridable so the NEGATIVE CONTROL can be run: point B at a mutated copy and this must FAIL.
 if len(sys.argv) == 3:
-    A, B = sys.argv[1], sys.argv[2]
+    PAIRS = [(sys.argv[1], sys.argv[2])]
 
 # The all-reduce block emitted per parameter, in `emitGradAllReduce` order. Every one of these
 # lines is the TRUSTED CARVE-OUT the DP render documents in its own header; they are removed from
@@ -58,7 +68,7 @@ def sub_ssa(line: str, old: str, new: str) -> str:
     return lhs + eq + re.sub(r'(?<![\w%])' + re.escape(old) + r'(?![\w])', new, rhs)
 
 
-def main() -> int:
+def check(A: str, B: str) -> int:
     try:
         a = open(A).read().splitlines()
         b = open(B).read().splitlines()
@@ -78,7 +88,7 @@ def main() -> int:
 
     # 2. Normalise. In A the gradient SSA becomes @G<P>; in B %armean<P> becomes the same token.
     #    Comments and the function name differ by design and are dropped/normalised.
-    fname = re.compile(r'resnet50in_adam(?:dp)?64_train_step')
+    fname = re.compile(r'resnet50in_\w+_train_step')
     an = [fname.sub('resnet50in_OPT', l) for l in a if not COMMENT.match(l)]
     for p, g in grads.items():
         an = [sub_ssa(l, g, f'@G{p}') for l in an]
@@ -105,6 +115,13 @@ def main() -> int:
     print("  The DP render is NOT the single-device render plus an all-reduce, so the gradcheck's")
     print("  verdict does NOT transfer. Gate the DP artifact directly or fix the divergence.")
     return 1
+
+
+def main() -> int:
+    rc = 0
+    for a, b in PAIRS:
+        rc = max(rc, check(a, b))
+    return rc
 
 
 if __name__ == "__main__":

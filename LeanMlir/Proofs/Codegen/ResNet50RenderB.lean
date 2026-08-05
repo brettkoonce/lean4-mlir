@@ -403,8 +403,10 @@ set_option maxRecDepth 4000000 in
 def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet50in") : String :=
   let optLabel : String := match opt with
-    | .adamw     => "AdamW"
-    | .heavyBall => "heavy-ball momentum + coupled L2"
+    | .adamw          => "AdamW"
+    | .heavyBall      => "heavy-ball momentum + coupled L2"
+    | .adamwAccum k   => s!"AdamW over {k} ACCUMULATED micro-batches"
+  let accOn := match opt with | .adamwAccum _ => true | _ => false
   let go : StateM Nat String := do
     -- ═══ stem: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 pool (224→112→56) ═══
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
@@ -530,12 +532,17 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut thetaN : List String := []
     let mut mNames : List String := []
     let mut vNames : List String := []
+    let mut aNames : List String := []
     for g in allPs do
-      let (c, nT, nM, nV) ← optOne opt B replicas g
+      let (c, nT, nM, nV, nA) ← optOne opt B replicas g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]
       vNames := vNames ++ [nV]
+      -- ⭐ The accumulator's output name, present only under `.adamwAccum`. It becomes the FOURTH
+      -- region of the packed blob — the same shape the EMA renders use, so the driver's
+      -- `nRegions = 4` path is reused rather than a second one being written.
+      match nA with | some a => aNames := aNames ++ [a] | none => pure ()
     let statCode := cSt0 ++ cSt1 ++ cSt2 ++ cSt3 ++ cSt4 ++ cSt5 ++ cSt6 ++ cSt7 ++ cSt8 ++
       cSt9 ++ cSt10 ++ cSt11 ++ cSt12 ++ cSt13 ++ cSt14 ++ cSt15 ++ cSt16
     let statNames := st0.1 :: st0.2 :: (st1 ++ st2 ++ st3 ++ st4 ++ st5 ++ st6 ++ st7 ++ st8 ++
@@ -569,8 +576,16 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       cDmp ++ cDsr ++ cDsn ++ csW ++ csg ++ cst ++ statCode
     let pTypes : List String := allPs.map (fun g => ty g.ds)
     let statTypes : List String := (r50StatSigList.map (·.2))
-    let retVals := thetaN ++ mNames ++ vNames ++ ["%loss", "%bc1", "%bc2"] ++ statNames
-    let retTys  := pTypes ++ pTypes ++ pTypes ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
+    -- ⚠ THE PACKED LAYOUT IS `[θ|m|v|(G)| scalars | BN stats]`, and the driver indexes it off
+    -- `nRegions`/`nScalars` rather than literals — so the accumulator has to sit where the EMA
+    -- shadow sits (fourth region) and the two accum scalars where EMA's two sit (slots 4 and 5).
+    -- `%aup`/`%akeep` ride out as passthroughs so `#out = #in − 2` holds exactly as for `.adamw`.
+    let accScalars := if accOn then ["%aup", "%akeep"] else []
+    let accScalarTys := accScalars.map (fun _ => "tensor<f32>")
+    let retVals := thetaN ++ mNames ++ vNames ++ aNames ++
+      ["%loss", "%bc1", "%bc2"] ++ accScalars ++ statNames
+    let retTys  := pTypes ++ pTypes ++ pTypes ++ (if accOn then pTypes else []) ++
+      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accScalarTys ++ statTypes
     pure <|
       (if replicas ≤ 1 then
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step: every line is pretty(verified AST node) ──\n"
@@ -585,13 +600,20 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
   let mSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}m: {t}"))
   let vSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}v: {t}"))
+  -- The accumulator region `G`, named `<p>a`, present only under `.adamwAccum`. At every other
+  -- optimizer this is the empty string, so the three committed R50 artifacts re-render byte for byte.
+  let aSig := if accOn then ", " ++ String.intercalate ", "
+                              (sigList.map (fun (n, t) => s!"{n}a: {t}")) else ""
+  let accSSig := if accOn then ", %aup: tensor<f32>, %akeep: tensor<f32>" else ""
   let statSig := String.intercalate ", " (r50StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statSig ++
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++ aSig ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++ accSSig ++ ", " ++ statSig ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
+  let accTy := if accOn then ["tensor<f32>", "tensor<f32>"] else []
   let outSig := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ (r50StatSigList.map (·.2)))
+    (pTy ++ pTy ++ pTy ++ (if accOn then pTy else []) ++
+     ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accTy ++ (r50StatSigList.map (·.2)))
   let inner : String := go.run' 0
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
@@ -786,10 +808,45 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
     Proofs.StableHLO.R34Opt.adamw "resnet50in")
 
+-- ⭐⭐ GRADIENT ACCUMULATION — `planning/next_session_pipeline_then_r50.md` §4's blocker.
+--
+-- A FOURTH parameter region `G` and two runtime scalars, so one graph is both phases. `k` is in the
+-- artifact name because the driver must agree with the `1/k` baked into `%ob1`/`%ob2`, and a
+-- disagreement is silent (a wrong effective learning rate, no error anywhere).
+--
+-- ⚠ THE TWO ARE FOR DIFFERENT JOBS AND ONLY ONE IS THE RECIPE:
+--   * `acc4x64`   — 1 replica, micro-batch 64, k = 4 ⇒ effective **256**. This is what
+--     `lake build r50-accum-tie` gates, because the tie needs a SINGLE-DEVICE peer to compare
+--     against and the DP render's `%loss` is replica-local (`tests/r50_dp_render_tie.py`).
+--   * `accdp8x64` — 4 replicas, micro-batch 64, k = 8 ⇒ effective **2048**, which is RSB-A3's
+--     design batch and LAMB's. ⚠ It is the batch, NOT the recipe: `planning/rsb_a3_r50_verified.md`
+--     §2.3's LAMB and BCE-with-logits are still absent, so this is AdamW at bs2048 and must not be
+--     described as `rsb-faithful`.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_acc4x64_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.adamwAccum 4) "resnet50in")
+
+-- ⚠ `accdp4x64` exists for ONE reason: it is `acc4x64`'s data-parallel peer at the SAME k, which is
+-- what `tests/r50_dp_render_tie.py` needs to carry `r50-accum-tie`'s verdict onto the DP
+-- accumulation path. Without a matched-k pair that tie has nothing to diff. It is not a recipe.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_accdp4x64_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.adamwAccum 4) "resnet50in")
+
+#eval IO.FS.writeFile "verified_mlir/resnet50in_accdp8x64_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.adamwAccum 8) "resnet50in")
+
 -- Pin the literal artifact paths above against the name the renderer emits, so a rename fails at
 -- `lake build` rather than at run time as a shim "entry mismatch".
 #guard Proofs.StableHLO.r34AdamVariant 64 1 == "adam64"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 == "adamdp64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.adamwAccum 4) == "acc4x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8) == "accdp8x64"
+-- ⚠ The driver reads `k` back OUT of this string (`VerifiedTrain`'s `accK`). Pin the round trip
+-- here, where the name is produced, rather than trusting two parsers to agree.
+#guard ((Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8)).drop 5
+          |>.takeWhile (· != 'x')) == "8"
 
 -- Batch 256 on the forwards, matching the shim's val batch: 195 × 256 = 49,920 after tfds
 -- drop_remainder, the count the reference reports scoring. ⚠ `evalBs` in the driver is read OFF

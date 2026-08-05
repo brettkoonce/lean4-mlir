@@ -58,6 +58,26 @@ private def sdOn  (v : String) : Bool := (v.splitOn "drop").length > 1
     is the first one that was predicted rather than discovered — because this file existed. -/
 private def cdOn  (v : String) : Bool := (v.splitOn "do").length > 1
 
+/-- ⭐⭐ GRADIENT ACCUMULATION (`planning/next_session_pipeline_then_r50.md` §4, 2026-08-05) — a
+    FIFTH axis, and the second one after `ema` that changes the number of blob REGIONS: `acc<k>x<B>`
+    carries `[θ|m|v|G]`, 4 regions and 5 scalars. A misfire misaligns every parameter.
+
+    ⚠ It is a PREFIX test, like `emaOn` and for the same reason — the marker leads, so there is no
+    concatenation that can spell it accidentally. ⚠⚠ And that is also its known limit, defect #1's
+    shape exactly: a hypothetical `emaacc4x64` would read as EMA and NOT as accumulation. The
+    driver closes it by REFUSING the combination outright (both want the fourth region), which is
+    the only correct answer anyway; `accOn "emaacc4x64" == false` is pinned below so that limit is
+    recorded rather than rediscovered. -/
+private def accOn (v : String) : Bool := v.startsWith "acc"
+
+/-- `k`, read back out of the name. ⚠⚠ **This parse is load-bearing and it is the reason `k` is in
+    the name at all.** The graph has `1/k` BAKED into `%ob1`/`%ob2`; the driver decides the apply
+    cadence. A disagreement does not fail — it trains at a silently wrong effective learning rate.
+    `ResNet50RenderB` `#guard`s the round trip on the producing side; this is the consuming side. -/
+private def accK (v : String) : Nat :=
+  if accOn v then (((v.drop (if v.startsWith "accdp" then 5 else 3)).takeWhile (· != 'x')).toNat?).getD 0
+  else 1
+
 /-- Every variant string any renderer can produce today, with what each axis MUST read.
     Grown from the `*AdamVariant` functions, not from the artifacts — an artifact that does not
     exist yet is exactly the one whose name will collide. -/
@@ -130,7 +150,12 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- disagreed for a session is the sharpest possible argument for this file's own rule — a table
     -- of names written by hand drifts from the function that derives them.
   , ("adamdo", false, false, false), ("emarms64dropdo", true, true, true)
-  , ("emarms64drop", true, true, true), ("rmsdo64", false, true, false) ]
+  , ("emarms64drop", true, true, true), ("rmsdo64", false, true, false)
+    -- ▶▶ GRADIENT ACCUMULATION's spellings (`r34AdamVariant .adamwAccum`). ⚠ Both carry `k` and a
+    -- batch, so the marker concatenates against DIGITS and an `x` — a shape none of the other four
+    -- markers has, and `accdp` puts `dp` INSIDE the prefix rather than after it.
+  , ("acc4x64", false, false, false), ("accdp8x64", false, false, false)
+  , ("acc2x128", false, false, false) ]
 
 #guard table.all (fun (v, e, r, s) => emaOn v == e && rmsOn v == r && sdOn v == s)
 
@@ -205,9 +230,44 @@ private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsd
 #guard emaOn "clipema" == false
 #guard emaOn "emaclip" == true
 
+-- ⭐⭐ THE `acc` MARKER AGAINST EVERY CONCATENATION IN THE TABLE. Stated as a PARTITION, the form
+-- §0.4 finding 5 requires and the form that caught `rmsdo64` in the `do` block above.
+private def accumSpellings : List String := ["acc4x64", "accdp8x64", "acc2x128"]
+#guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
+#guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
+-- ⚠ and accumulation must disturb NONE of the other four axes. `acc4x64` contains no "ema" prefix,
+-- no "rms", no "drop"; `accdp8x64` puts `dp` inside the prefix, which is a placement no other
+-- marker uses, so it is run rather than reasoned about.
+#guard table.all (fun (v, _, _, _) => !accOn v || (!emaOn v && !rmsOn v && !sdOn v && !cdOn v))
+-- ⚠ the reverse direction, which is the load-bearing half: every committed 3-region variant must
+-- NOT read as accumulation, or the driver packs a fourth region into a graph that has three.
+#guard accOn "adamdp64" == false
+#guard accOn "emarmsdp64" == false
+#guard accOn "momdp64" == false
+#guard accOn "adamdpwxclipdrop" == false
+-- ⚠ THE KNOWN LIMIT, pinned rather than rediscovered: `accOn` is a prefix test, so a two-axis name
+-- with `ema` leading would miss it. The driver refuses `ema` × `acc` outright — they want the same
+-- fourth region — so this is the correct answer, not a latent bug. Defect #1's exact shape.
+#guard accOn "emaacc4x64" == false
+#guard emaOn "emaacc4x64" == true
+-- ⚠⚠ `k` ROUND-TRIPS, both spellings, including the two-digit case where `accdp` must be stripped
+-- as 5 characters and `acc` as 3. Getting this off by one gives k = 8 read as 0 or as 88.
+#guard accK "acc4x64" == 4
+#guard accK "accdp8x64" == 8
+#guard accK "acc2x128" == 2
+#guard accK "acc16x32" == 16
+#guard accK "accdp16x64" == 16
+#guard accK "adamdp64" == 1        -- non-accumulation variants read k = 1, i.e. no accumulation
+-- ⚠ and the digits AFTER the `x` are the batch, never `k` — `acc2x128` is k = 2 at batch 128, not
+-- k = 2128 and not k = 128. The `takeWhile` is what makes that true; this is the check that says so.
+#guard accK "acc2x128" != 128
+#guard accK "acc2x128" != 2128
+
 #eval do
   IO.println "── variant predicates ──"
   for (v, e, r, s) in table do
-    let regions := if e then 4 else 3
-    IO.println s!"  {v} — ema={e} rms={r} drop={s} dropout={cdOn v} → {regions} blob regions"
-  IO.println s!"✓ {table.length} variant spellings, 4 axes, no collision"
+    let regions := if e || accOn v then 4 else 3
+    let kNote := if accOn v then s!" k={accK v}" else ""
+    IO.println s!"  {v} — ema={e} rms={r} drop={s} dropout={cdOn v} accum={accOn v}{kNote} \
+→ {regions} blob regions"
+  IO.println s!"✓ {table.length} variant spellings, 5 axes, no collision"

@@ -2015,6 +2015,30 @@ lean_exe «r50-gradcheck» where
   root := `tests.TestR50GradCheck
   moreLinkArgs := xlaLink
 
+/-- `r50-accum-tie` — **gradient accumulation, numerically certified**
+    (`planning/next_session_pipeline_then_r50.md` §4's blocker). The `.adamwAccum` render carries a
+    FOURTH parameter region `G` and two runtime scalars deciding, per micro-batch, whether the
+    invoke accumulates or applies.
+
+    Run it k times on the SAME batch: every micro-gradient is then the same `g`, so the cycle must
+    reproduce ONE step of the committed `resnet50in_adam64_train_step.mlir` — a different artifact,
+    rendered before accumulation existed, whose gradient `r50-gradcheck` certifies. Plus a
+    bit-exactness claim that the accumulate micro-batches leave `[θ|m|v]` untouched.
+
+    ⭐ The check with teeth is `v'`: it is QUADRATIC in the gradient, so `%ob2` must carry
+    `(1−β₂)/k²` where `%ob1` carries `(1−β₁)/k`. A single shared scale gives the mean of the
+    per-micro-batch second moments instead of the second moment of the mean — a different optimizer
+    that descends and looks entirely normal.
+
+    ⚠ Duplicated batch, so it is blind to the combination of DIFFERENT micro-batches, exactly as
+    every `*-dp-check` is blind to shard offset. CONTROL: applying one micro-batch early must miss.
+    Needs one GPU and the XLA backend.
+
+        lake build r50-accum-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-accum-tie -/
+lean_exe «r50-accum-tie» where
+  root := `tests.TestR50AccumTie
+  moreLinkArgs := xlaLink
+
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
     SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and
