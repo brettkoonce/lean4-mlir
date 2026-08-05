@@ -245,6 +245,31 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **No \`axiom\` declarations anywhere in the repo's Lean sources — the former IEEE rounding axioms are discharged by the constructed \`rndP\` operator (\`Binary32Instance.lean\`), audited in the main 3-axiom closure.**" >> $GITHUB_STEP_SUMMARY
 
+      # ── The SCORING gates. Pure host arithmetic, no GPU, milliseconds — there is no reason
+      #    for these not to be here, and they were not until 2026-08-05.
+      #
+      #    Both exist because of defects that shipped and were invisible for months: `argmax-check`
+      #    for an argmax that scanned a literal 10 of 1000 logits, `label-check` for eval labels
+      #    read one byte wide (`label % 256`). BOTH were correct on every net this repo gates —
+      #    Imagenette, CIFAR and MNIST are all 10-class — and wrong on exactly the ungated
+      #    1000-class tier, where together they under-reported ImageNet top-1 by ~4x.
+      #
+      #    Each ships a CONTROL that must go red (a 10-wide argmax window must MISS a peak at 700;
+      #    a byte-0 read must MISS every label above 255), so a green here is not vacuous.
+      #
+      #    ⚠ The GPU-bound gates cannot live here and are deliberately absent: `r34-dp-shard`
+      #    (4 replicas) and `scripts/residency_gate_all.sh`. Those stay manual — a limit, not an
+      #    oversight, and worth knowing when reading a green run.
+      - name: Scoring gates (argmax width, label width)
+        run: |
+          lake build argmax-check label-check
+          .lake/build/bin/argmax-check
+          .lake/build/bin/label-check
+          echo "### Scoring gates" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **\`argmax-check\`** — argmax honours its class count at K=1000, at a row offset, and the 10-wide control MISSES." >> $GITHUB_STEP_SUMMARY
+          echo "✅ **\`label-check\`** — int32 labels round-trip 0..999, and the byte-0 control MISSES every label > 255." >> $GITHUB_STEP_SUMMARY
+
       - name: Summary
         run: |
           echo "## Proof Verification" >> $GITHUB_STEP_SUMMARY
