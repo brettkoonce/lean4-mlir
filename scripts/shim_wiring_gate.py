@@ -37,14 +37,20 @@ BUILD = os.path.join(ROOT, "jax", ".lake", "build")
 #    verified net is a port of. Everything else — the config name, the shim filename, the flags —
 #    is READ from the two sources rather than restated here (the mixup-λ lesson: recover a constant
 #    by reading it, not by fitting it).
+#    ⚠ The 4th column is the RECIPE the verified net ports, added 2026-08-06. It is "default" for
+#    every net that existed before, which is what this file hardcoded — see `read_recipe`.
 NETS = [
-    # verified slug, the jax reference's Main file,          the reference name in its banner
-    ("resnet34in", "MainResnetImagenet.lean",        "ResNet-34 (ImageNet)"),
-    ("vitin",      "MainVitImagenet.lean",           "ViT-Tiny (ImageNet, bf16)"),
-    ("mnv2in",     "MainMobilenetV2Imagenet.lean",   "MobileNetV2 (ImageNet, bf16)"),
-    ("enetin",     "MainEfficientNetImagenet.lean",  "EfficientNet-B0 (ImageNet, bf16)"),
-    ("cnxin",      "MainConvNeXtImagenet.lean",      "ConvNeXt-T (ImageNet, bf16)"),
-    ("resnet50in", "MainResnet50Imagenet.lean",      "ResNet-50 (ImageNet)"),
+    # verified slug, the jax reference's Main file,          the reference name in its banner, recipe
+    ("resnet34in", "MainResnetImagenet.lean",        "ResNet-34 (ImageNet)",         "default"),
+    ("vitin",      "MainVitImagenet.lean",           "ViT-Tiny (ImageNet, bf16)",    "default"),
+    ("mnv2in",     "MainMobilenetV2Imagenet.lean",   "MobileNetV2 (ImageNet, bf16)", "default"),
+    ("enetin",     "MainEfficientNetImagenet.lean",  "EfficientNet-B0 (ImageNet, bf16)", "default"),
+    ("cnxin",      "MainConvNeXtImagenet.lean",      "ConvNeXt-T (ImageNet, bf16)",  "default"),
+    ("resnet50in", "MainResnet50Imagenet.lean",      "ResNet-50 (ImageNet)",         "default"),
+    # ⭐ Same reference and same Main file as `resnet50in`; it is the RECIPE that differs. `short`
+    # is timm's RSB-A3 — trainRes 160, testCropRatio 0.95, RandAugment m6, mixup/cutmix — and that
+    # recipe's shim is the only one that can feed `resnet50Imagenet160Verified` (d0 = 76,800).
+    ("resnet50in160", "MainResnet50Imagenet.lean",   "ResNet-50 (ImageNet)",         "short"),
 ]
 
 FAILS = []
@@ -77,38 +83,77 @@ def read_shim_scripts():
             out[slug] = s.group(1) if s else None      # None = the field is absent entirely
     return out, imagenet_slugs
 
-def read_default_recipe(mainfile):
-    """(configName, shimFilename) for a Main*Imagenet.lean's `default` recipe.
+def read_recipe(mainfile, recipe="default"):
+    """(configName, shimFilename) for a Main*Imagenet.lean's `<recipe>` entry.
 
     The shim's name comes from the recipe's `out`, so it is DERIVED here rather than hardcoded —
-    renaming a recipe moves the expectation and the wiring together or the gate fires."""
+    renaming a recipe moves the expectation and the wiring together or the gate fires.
+
+    ⚠ `recipe` was a hardcoded "default" until 2026-08-06. It is a parameter because a net's
+    RESOLUTION lives in its recipe's TrainConfig: `resnet50in160` is the same reference and the
+    same Main file as `resnet50in`, differing only in that it ports `short` (RSB-A3, trainRes 160)
+    instead of `default`. Reading the flags off the wrong recipe would compare a RandAugment shim
+    against a no-RandAugment config and fire on a correct wiring."""
     src = open(os.path.join(ROOT, "jax", mainfile)).read()
-    m = re.search(r'\{\s*name\s*:=\s*"default"\s*,\s*cfg\s*:=\s*(\w+)\s*,\s*'
+    m = re.search(r'\{\s*name\s*:=\s*"' + re.escape(recipe) + r'"\s*,\s*cfg\s*:=\s*(\w+)\s*,\s*'
                   r'out\s*:=\s*"([^"]+)"', src, re.S)
     if not m:
-        raise SystemExit(f"{mainfile}: could not find the `default` recipe entry")
+        raise SystemExit(f"{mainfile}: could not find the `{recipe}` recipe entry")
     cfg, out = m.group(1), m.group(2)
     return cfg, (out[:-3] if out.endswith(".py") else out) + "_shim.py"
 
-def read_config_flags(mainfile, cfgname):
-    """The augmentation flags of one TrainConfig `where` block. Absent field ⇒ the structure's
-    default (all off / 1 / 0, checked against LeanMlir/Types.lean)."""
+def _config_body(mainfile, cfgname):
+    """(rawText, baseConfigName|None) for `def <cfgname> : TrainConfig ...`.
+
+    ⚠ Handles BOTH declaration forms. Until 2026-08-06 this only matched `... TrainConfig where`,
+    which silently excluded every config written as a structure UPDATE
+    (`def X : TrainConfig := { Base with ... }`) — the form 20+ configs across the Main files use,
+    including every `*ConfigShort`. A gate that cannot READ a config cannot check it, and this one
+    was reachable the moment a verified net ported a non-`default` recipe."""
     src = open(os.path.join(ROOT, "jax", mainfile)).read()
-    m = re.search(rf"^def\s+{cfgname}\s*:\s*TrainConfig\s+where\s*$", src, re.M)
+    m = re.search(rf"^def\s+{cfgname}\s*:\s*TrainConfig\b", src, re.M)
     if not m:
-        raise SystemExit(f"{mainfile}: no `def {cfgname} : TrainConfig where`")
+        raise SystemExit(f"{mainfile}: no `def {cfgname} : TrainConfig`")
     body = []
     for line in src[m.end():].splitlines()[1:]:
         if line.strip() and not line.startswith(" "):
             break                                    # dedent ⇒ the next declaration
         body.append(line)
     body = "\n".join(body)
-    def b(name):
+    mb = re.search(r"\{\s*(\w+)\s+with\b", body)
+    return body, (mb.group(1) if mb else None)
+
+# The RAW TrainConfig fields the partition is derived from, with their structure defaults
+# (LeanMlir/Types.lean). ⚠ Inheritance is resolved HERE, at the FIELD level, never on the derived
+# features: `randaugment` is `useRandAugment ∧ randAugmentGeometric`, so a derived config that
+# overrides only one of the two is mis-read by any coarser merge.
+_RAW_BOOL = ["useAutoAugment", "useRandAugment", "randAugmentGeometric",
+             "randomErasing", "useMixup", "useCutmix"]
+_RAW_NAT  = {"repeatedAug": 1}
+
+def read_raw_config(mainfile, cfgname, _depth=0):
+    """Raw TrainConfig fields, following `{ Base with ... }` chains base-first."""
+    if _depth > 8:
+        raise SystemExit(f"{mainfile}: the `with` chain from {cfgname} does not terminate")
+    body, base = _config_body(mainfile, cfgname)
+    raw = (read_raw_config(mainfile, base, _depth + 1) if base
+           else {**{k: False for k in _RAW_BOOL}, **_RAW_NAT})
+    for name in _RAW_BOOL:
         mm = re.search(rf"^\s*{name}\s*:=\s*(true|false)\b", body, re.M)
-        return mm.group(1) == "true" if mm else False
-    def n(name, dflt):
+        if mm:
+            raw[name] = (mm.group(1) == "true")
+    for name in _RAW_NAT:
         mm = re.search(rf"^\s*{name}\s*:=\s*(\d+)\b", body, re.M)
-        return int(mm.group(1)) if mm else dflt
+        if mm:
+            raw[name] = int(mm.group(1))
+    return raw
+
+def read_config_flags(mainfile, cfgname):
+    """The augmentation flags of one TrainConfig. Absent field ⇒ INHERITED if the config is a
+    structure update, else the structure's default (all off / 1 / 0, per LeanMlir/Types.lean)."""
+    raw = read_raw_config(mainfile, cfgname)
+    b = lambda name: raw[name]
+    n = lambda name, dflt: raw.get(name, dflt)
     return {
         "autoaugment":  b("useAutoAugment"),
         # The full geometric sampler. `useRandAugment` alone is the colour-only "lite" path, which
@@ -156,16 +201,16 @@ wiring, imagenet_slugs = read_shim_scripts()
 check(len(imagenet_slugs) == len(NETS),
       f"{len(NETS)} .imagenet nets in VerifiedNets.lean",
       f"found {len(imagenet_slugs)}: {imagenet_slugs}")
-for slug, _, _ in NETS:
+for slug, _, _, _ in NETS:
     s = wiring.get(slug)
     check(bool(s), f"{slug}: shimScript is set",
           "MISSING — the driver would refuse at spawn" if not s else s)
-present = [wiring[s] for s, _, _ in NETS if wiring.get(s)]
+present = [wiring[s] for s, _, _, _ in NETS if wiring.get(s)]
 # THE property the defect violated: five nets resolved to ONE shim. Distinctness is what says the
 # fix landed, and a duplicated entry (copy-paste between two nets) is otherwise silent.
 check(len(set(present)) == len(present), "all resolve to DISTINCT shims",
       f"{len(set(present))} distinct of {len(present)}")
-for slug, _, _ in NETS:
+for slug, _, _, _ in NETS:
     s = wiring.get(slug)
     if s:
         check(os.path.exists(os.path.join(BUILD, s)), f"{slug}: {s} exists",
@@ -176,11 +221,11 @@ for slug, _, _ in NETS:
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 print("\n── gate 1: each shim's banner names the reference its net is a port of ──")
 recipes = {}
-for slug, mainfile, refname in NETS:
-    cfgname, expected_file = read_default_recipe(mainfile)
+for slug, mainfile, refname, recipe in NETS:
+    cfgname, expected_file = read_recipe(mainfile, recipe)
     recipes[slug] = (mainfile, cfgname, expected_file)
     # The filename is DERIVED from the recipe's `out`; this compares it to what Lean spawns.
-    check(wiring.get(slug) == expected_file, f"{slug}: shimScript == {mainfile}'s default `out`",
+    check(wiring.get(slug) == expected_file, f"{slug}: shimScript == {mainfile}'s `{recipe}` `out`",
           f"wired {wiring.get(slug)!r}, recipe writes {expected_file!r}")
     p = os.path.join(BUILD, expected_file)
     if os.path.exists(p):
@@ -195,7 +240,7 @@ print("\n── gate 2: the augmentation partition — config vs the generated C
 FEATURES = ["autoaugment", "randaugment", "ra_lite", "random_erase", "repeated_aug"]
 print(f"    {'net':<10}" + "".join(f"{f:<14}" for f in FEATURES))
 flags_by_slug, sites_by_slug = {}, {}
-for slug, mainfile, _ in NETS:
+for slug, mainfile, _, _ in NETS:
     _, cfgname, shimfile = recipes[slug]
     flags = read_config_flags(mainfile, cfgname)
     p = os.path.join(BUILD, shimfile)
@@ -226,7 +271,7 @@ check(len(nontrivial) >= 3, "the partition is non-trivial (≥3 features split t
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 print("\n── control C1: a definition-census gate mis-classifies nets that gate 2 gets right ──")
 wrong = []
-for slug, _, _ in NETS:
+for slug, _, _, _ in NETS:
     _, _, shimfile = recipes[slug]
     p = os.path.join(BUILD, shimfile)
     if not os.path.exists(p):
@@ -246,7 +291,7 @@ check(len(wrong) >= 1,
 #  Gate 3 — the producer default. ⚠ This one CHANGES BEHAVIOUR under SHIM_SOFT=1.
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 print("\n── gate 3: the baked SHIM_MIX default == the config's useMixup/useCutmix ──")
-for slug, _, _ in NETS:
+for slug, _, _, _ in NETS:
     _, _, shimfile = recipes[slug]
     p = os.path.join(BUILD, shimfile)
     if not os.path.exists(p):
@@ -288,7 +333,7 @@ if "--stream" in sys.argv:
     print("\n── control C2: the streams, MEASURED (SHIM_HASH over tfds) ──")
     B, N = 8, 2
     train, val = {}, {}
-    for slug, _, _ in NETS:
+    for slug, _, _, _ in NETS:
         _, _, shimfile = recipes[slug]
         p = os.path.join(BUILD, shimfile)
         train[slug] = shim_hash(p, "train", B, N, 7)
@@ -353,10 +398,10 @@ if "--break" in sys.argv:
     #     Bump this deliberately when a net joins — a wrong constant here makes control A red
     #     and the whole file useless, which is exactly what it did when R50 arrived.
     r34 = os.path.join(BUILD, "generated_resnet34_imagenet_shim.py")
-    faux = {s: "generated_resnet34_imagenet_shim.py" for s, _, _ in NETS}
+    faux = {s: "generated_resnet34_imagenet_shim.py" for s, _, _, _ in NETS}
     distinct_fired = len(set(faux.values())) != len(faux)
     partition_fired = sum(
-        1 for slug, _, _ in NETS
+        1 for slug, _, _, _ in NETS
         if any(flags_by_slug[slug][f] != shim_call_sites(r34)[f] for f in FEATURES))
     print(f"    pre-fix wiring (every net → R34's shim): distinctness fires = {distinct_fired}, "
           f"partition fires on {partition_fired} nets")

@@ -226,7 +226,62 @@ inductive R34Opt
       §4's blocker. A FOURTH parameter region `G` holds the running gradient sum, and the graph is
       one function for both phases with two runtime scalars deciding which it is. See `optOne`. -/
   | adamwAccum (k : Nat)
+  /-- ⭐⭐ **LAMB over `k` accumulated micro-batches — RSB-A3's ACTUAL optimizer**, and the
+      composition `planning/next_session_rsb_a3.md` §1 exists to make expressible.
+
+      ▶ **The observation that makes this one constructor rather than a redesign:** the accumulator
+      `Gt = akeep·G + g` sits UPSTREAM of the optimizer and does not care who consumes it. So the
+      accumulate/apply machinery is shared verbatim with `.adamwAccum` (see `accumScalarConsts`,
+      which both arms emit), and only the tail that consumes `Gt` differs.
+
+      ⚠ An accumulate micro-batch needs `m' = m`, `v' = v`, `θ' = θ`. The first two come from
+      `%b1 = %b2 = 1`, `%ob1 = %ob2 = 0` exactly as for AdamW. **`θ' = θ` comes from `lr = 0`**,
+      because LAMB's parameter step is `sgdParamF θ lr (trust·r)` — at `lr = 0` that is `θ − 0·(…)`
+      exactly, with no decay term left running, since LAMB's `wd` lives INSIDE `r` and the zero
+      multiplies it away. (AdamW gets the same result for a different reason: its decay is
+      DECOUPLED, so `lr = 0` kills it too.)
+
+      ⚠ `lambDirF` also reads `%b1..%ob2`, so on an accumulate micro-batch it computes an `r` built
+      from `β₁·m` rather than the real moment. **That is harmless and is said out loud here**: `r`
+      feeds only `lambScaleF → sgdParamF`, and `lr = 0` discards it. Nothing stateful is written —
+      the moments are passthroughs and θ is frozen, so the accumulate phase's ONLY effect is `Gt`. -/
+  | lambAccum (k : Nat)
 deriving DecidableEq, Repr
+
+/-- The `%aup`-driven scalar block that turns ONE graph into both accumulation phases.
+
+    ⭐⭐ **ONE WRITER, shared by `.adamwAccum` and `.lambAccum`.** These eight lines are the whole
+    accumulate/apply mechanism, and duplicating them per optimizer is exactly the double-writer
+    failure `planning/next_session_rsb_a3.md` §1.1 wanted the type restructured to avoid — the
+    restructure's real purpose was to stop this block existing twice, and factoring it out buys that
+    without the ~8 match sites and 13-artifact re-render the restructure costs.
+
+        accumulate (%aup = 0):  β₁ = 1, (1−β₁) = 0  ⇒  m' = m,  v' = v   exactly
+        apply      (%aup = 1):  β₁ = 0.9, (1−β₁)/k  ⇒  m' = 0.9·m + (1−β₁)·(Gt/k)
+
+    ⭐ `1/k` is folded in HERE, and asymmetrically: `%ob1` carries `1/k` while `%ob2` carries `1/k²`,
+    because `v` consumes the gradient SQUARED. `v' = β₂v + ((1−β₂)/k²)·Gt² = β₂v + (1−β₂)·(Gt/k)²` —
+    the identity that makes accumulation equal a real large-batch step rather than the "mean of
+    per-micro-batch second moments" a naive implementation produces.
+
+    ⚠ `fmt12`, not `fmt6`: at k = 4, `(1−β₂)/k² = 6.25e-5`, and `fmt6` emits `0.000063` — 0.8%
+    wrong, baked, in the optimizer.
+
+    ⚠ β₁/β₂ are 0.9/0.999 for BOTH optimizers (LAMB's moments ARE Adam's), which is why this block
+    needs no per-optimizer parameter. Only `%eps`/`%wd` differ, and those stay in `optConstsB`. -/
+def accumScalarConsts (k : Nat) : String :=
+  let kf := k.toFloat
+  "    %aone = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
+  s!"    %aob1 = stablehlo.constant dense<{fmt12 (1.0 - 0.9)}> : tensor<f32>\n" ++
+  "    %ab1d = stablehlo.multiply %aup, %aob1 : tensor<f32>\n" ++
+  "    %b1 = stablehlo.subtract %aone, %ab1d : tensor<f32>\n" ++
+  s!"    %aob1k = stablehlo.constant dense<{fmt12 ((1.0 - 0.9) / kf)}> : tensor<f32>\n" ++
+  "    %ob1 = stablehlo.multiply %aup, %aob1k : tensor<f32>\n" ++
+  s!"    %aob2 = stablehlo.constant dense<{fmt12 (1.0 - 0.999)}> : tensor<f32>\n" ++
+  "    %ab2d = stablehlo.multiply %aup, %aob2 : tensor<f32>\n" ++
+  "    %b2 = stablehlo.subtract %aone, %ab2d : tensor<f32>\n" ++
+  s!"    %aob2k = stablehlo.constant dense<{fmt12 ((1.0 - 0.999) / (kf * kf))}> : tensor<f32>\n" ++
+  "    %ob2 = stablehlo.multiply %aup, %aob2k : tensor<f32>\n"
 
 /-- `(θ', m', v')` for one parameter, from its un-fused gradient.
 
@@ -318,6 +373,34 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                       "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gt)
     pure (arS ++ cG ++ cM ++ cV ++ cT, nT, nM, nV, some nG)
+  | .lambAccum _ =>
+    -- ⭐⭐ **RSB-A3's optimizer.** Structurally: `.adamwAccum`'s ① accumulator, then `.lamb`'s tail
+    -- reading `Gt` where it read `g`. Nothing else changes, and nothing new is introduced — no new
+    -- `SHlo` constructor, so no ten-site surgery and every faithfulness theorem carries over.
+    let z1 : Vec 1 := fun _ => 0
+    -- ① the accumulator, `Gt = akeep·G + g` — the SAME `momVNextF` instantiation `.adamwAccum`
+    -- uses, for the same reason (`Proofs.momVNext μ v g = μ·v + g` at `(μ := %akeep, v := G)`).
+    -- ⚠ It is upstream of the optimizer and does not know which one follows: that independence is
+    -- the whole reason this composition is a constructor and not a redesign.
+    let (cG, nG) ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
+    let gt : SHlo n := .operand nG z
+    -- ② LAMB's four ops, **byte-identical to `.lamb`'s except that they consume `Gt` rather than
+    -- `g`** — the same substitution `.adamwAccum` makes to AdamW's three.
+    let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
+                      "%b2" "%ob2" "%bc1" "%bc2" "%eps" "%wd" g.ds 0 0 0 0 0 0 z z z gt)
+    -- ⚠ `‖θ‖²` reads θ ALONE — no gradient, so accumulation cannot reach it and this line is
+    -- character-for-character `.lamb`'s.
+    let (cN, nN) ← pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
+                              (.operand s!"%{g.nm}" z))
+    let (cS, nS) ← pretty B (.lambScaleF (n := n) g.ds (.operand nN z1) (.operand nR z))
+    -- ④ `θ' = θ − lr·(trust·r)`. ⭐ THIS is where the accumulate phase is frozen: `%lr = 0` makes it
+    -- `θ − 0·(…) = θ` exactly. LAMB's decay is inside `r`, which the zero multiplies away, so there
+    -- is no decay term left running k times per optimizer step.
+    let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nS z))
+    -- the moments, from `Gt`, with `%b1`/`%ob1` computed from `%aup` — passthroughs while accumulating.
+    let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gt)
+    let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gt)
+    pure (arS ++ cG ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT, nT, nM, nV, some nG)
   | .heavyBall =>
     -- ── Three applications of ops that ALREADY EXIST. No new `SHlo` constructor, so none of the
     -- ten-site surgery (and none of the `StableHLOParse` roundtrip risk) an added op costs.
@@ -390,22 +473,24 @@ def optConstsB (opt : R34Opt) : String :=
     -- β₂v + (1−β₂)·(Gt/k)²` — the identity that makes accumulation equal a real large-batch step
     -- rather than the "mean of per-micro-batch second moments" a naive implementation produces.
     --
-    -- ⚠ `fmt12`, not `fmt6`: at k = 4, `(1−β₂)/k² = 6.25e-5`, and `fmt6` emits `0.000063` — 0.8%
-    -- wrong, baked, in the optimizer.
-    let kf := k.toFloat
+    -- ⚠ `fmt12`, not `fmt6` — see `accumScalarConsts`, which now owns those eight lines so that
+    -- `.lambAccum` emits the SAME mechanism rather than a second copy of it.
     "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
     "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n" ++
-    "    %aone = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
-    s!"    %aob1 = stablehlo.constant dense<{fmt12 (1.0 - 0.9)}> : tensor<f32>\n" ++
-    "    %ab1d = stablehlo.multiply %aup, %aob1 : tensor<f32>\n" ++
-    "    %b1 = stablehlo.subtract %aone, %ab1d : tensor<f32>\n" ++
-    s!"    %aob1k = stablehlo.constant dense<{fmt12 ((1.0 - 0.9) / kf)}> : tensor<f32>\n" ++
-    "    %ob1 = stablehlo.multiply %aup, %aob1k : tensor<f32>\n" ++
-    s!"    %aob2 = stablehlo.constant dense<{fmt12 (1.0 - 0.999)}> : tensor<f32>\n" ++
-    "    %ab2d = stablehlo.multiply %aup, %aob2 : tensor<f32>\n" ++
-    "    %b2 = stablehlo.subtract %aone, %ab2d : tensor<f32>\n" ++
-    s!"    %aob2k = stablehlo.constant dense<{fmt12 ((1.0 - 0.999) / (kf * kf))}> : tensor<f32>\n" ++
-    "    %ob2 = stablehlo.multiply %aup, %aob2k : tensor<f32>\n"
+    accumScalarConsts k
+  | .lambAccum k =>
+    -- ⭐⭐ **THE COMPOSITION, AND IT IS EXACTLY "LAMB's CONSTANTS + THE SHARED ACCUMULATOR".**
+    -- ⚠ `%eps` 1e-6 and `%wd` 0.02 are LAMB's, off timm's a3 arg string — NOT AdamW's 1e-8/1e-4.
+    -- Reusing AdamW's numbers here would render a LAMB that is structurally right and 200× off on
+    -- the decay, which is the exact trap `.lamb`'s own comment records.
+    -- ⚠ `%lzero` seeds each parameter's OWN norm fold, one leaf deep — carried over from `.lamb`
+    -- unchanged, because accumulation does not touch the trust ratio.
+    -- ▶ `%b1`/`%ob1`/`%b2`/`%ob2` are COMPUTED from `%aup`, not baked, which is the only difference
+    -- from `.lamb`'s constant block and is precisely what `accumScalarConsts` supplies.
+    "    %eps = stablehlo.constant dense<1.0e-6> : tensor<f32>\n" ++
+    "    %wd = stablehlo.constant dense<0.02> : tensor<f32>\n" ++
+    "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    accumScalarConsts k
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net batched AdamW train step
@@ -432,7 +517,14 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw) : String :=
    -- match, i.e. a wrong effective learning rate with no error anywhere. Carrying `k` in the
    -- artifact NAME makes the driver read it off the same string that selects the file.
    | .lamb      => if replicas ≤ 1 then "lamb" else "lambdp"
-   | .adamwAccum k => (if replicas ≤ 1 then "acc" else "accdp") ++ toString k ++ "x") ++
+   | .adamwAccum k => (if replicas ≤ 1 then "acc" else "accdp") ++ toString k ++ "x"
+   -- ⚠⚠ `lamb` ++ `acc` — the marker is NO LONGER LEADING, and that is what broke the driver's
+   -- `startsWith "acc"` predicate (defect #4 in `tests/TestVariantPredicates.lean`). The name is
+   -- spelled this way rather than as `accdp8x64lamb` because the OPTIMIZER is the primary axis and
+   -- every other variant leads with it; the fix belongs in the predicate, not in the spelling.
+   -- ⚠ `dp` goes INSIDE, right after `acc`, matching `.adamwAccum`'s placement exactly — so the
+   -- `k` parse is one rule for both, not two.
+   | .lambAccum k => (if replicas ≤ 1 then "lambacc" else "lambaccdp") ++ toString k ++ "x") ++
   (if B == 32 then "" else toString B)
 
 set_option maxRecDepth 4000000 in
@@ -454,6 +546,13 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- `iree-compile` would report as an undefined-value error a hundred lines from the cause.
     | .lamb      => "LAMB"
     | .adamwAccum k => panic! s!"resnet34TrainStepFaithfulB: .adamwAccum {k} needs a fourth \
+parameter region and R34's signature has three — render it from ResNet50RenderB, or add the region \
+here first"
+    -- ⚠ Same refusal, same reason: the fourth region is a property of the SIGNATURE, not of which
+    -- optimizer consumes the accumulator, so `.lambAccum` is no more renderable here than
+    -- `.adamwAccum`. ▶ This arm exists because the match is exhaustive — adding the constructor
+    -- without it is a build error, which is how the type caught this site rather than a run doing so.
+    | .lambAccum k => panic! s!"resnet34TrainStepFaithfulB: .lambAccum {k} needs a fourth \
 parameter region and R34's signature has three — render it from ResNet50RenderB, or add the region \
 here first"
   let go : StateM Nat String := do

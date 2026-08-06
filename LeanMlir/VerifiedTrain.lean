@@ -492,9 +492,13 @@ def readShimBatchRR (hs : Array IO.FS.Handle) (k batch flat : Nat) (nclasses : N
     `(trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop?)` where
     `trainPix` is the stored per-example width of the *training* images (256² for
     Imagenette, `d0` otherwise) and `crop?` requests the 256²→224² center-crop. -/
-private def loadData (net : VerifiedNet) (dataDir : String) :
+private def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0) :
     IO (ByteArray × ByteArray × Nat × ByteArray × ByteArray × Nat × Nat × Bool) := do
   let d0 := net.d0
+  -- `evalD0` is the EVAL forward's rendered input width, read off the artifact by the caller. It is
+  -- only consulted on the `.imagenet` path (the only one that drains a val split off a shim), and
+  -- `0` means "not supplied" ⇒ fall back to `net.d0`, which is what every non-split net wants.
+  let evalD0 := if evalD0 == 0 then d0 else evalD0
   match net.data with
   | .imagenette =>
     let idir := dataDir ++ "/imagenette"
@@ -528,7 +532,17 @@ private def loadData (net : VerifiedNet) (dataDir : String) :
     -- tfds `drop_remainder` = 49,920 images = 30.0 GB. That is the SAME count
     -- `jax/runs/r34_imagenet_bf16_90ep/RESULTS.md` reports for its in-training val, so the two
     -- paths score the identical set.
-    let flat := 3 * 224 * 224
+    -- ⚠⚠ THIS IS THE **VAL** WIDTH, AND IT IS NOT ALWAYS THE TRAIN WIDTH. ImageNet val is drained
+    -- at the EVAL forward's rendered width, which under RSB-A3 is 224² while TRAIN is 160²
+    -- (`resnet50Imagenet160Verified`). Until 2026-08-06 this was the literal `3*224*224` AND was
+    -- returned as `trainPix` too, so the train stream inherited the val resolution: the 160 net
+    -- asked its shim for 150,528 floats/img while the shim correctly sent 76,800, and the wire
+    -- guard refused ("shim sends batch=64 flat=76800, the render wants batch=64 flat=150528").
+    -- ▶ Now READ OFF THE ARTIFACT by the caller and passed in, exactly like `evalBs` — so the val
+    -- drain, the eval invoke's `xShape` and the eval slicer all size from one parse of one
+    -- declaration, and a 224 net still gets 150,528 because that is what its eval render says.
+    let evalFlat := evalD0
+    let flat := evalFlat
     let vb := 256
     let nB := 195
     -- ⚠ The VAL split takes the same per-net shim as train. It streams the center-crop path
@@ -553,7 +567,10 @@ private def loadData (net : VerifiedNet) (dataDir : String) :
       let (i, l) ← readShimBatch h vb flat
       evI := evI ++ i; evL := evL ++ l; n := n + vb
     IO.println s!"  imagenet: val ready — {n} images, {evI.size / 1048576} MB"
-    return (ByteArray.empty, ByteArray.empty, 1281167, evI, evL, n, flat, false)
+    -- ▶ `trainPix` is `net.d0`, the width of the images the TRAIN stream carries — 150,528 for every
+    -- 224 net (so this is INERT for all of them: `net.d0 == 3*224*224` exactly) and 76,800 for the
+    -- 160 net. It is deliberately not `evalFlat`; see the warning above.
+    return (ByteArray.empty, ByteArray.empty, 1281167, evI, evL, n, net.d0, false)
 
 /-- Synthetic-input data for the `lake run benchmark` probes (`LEAN_MLIR_BENCH_SYNTH`):
     ONE constant batch, reused every step, but with the dataset's *real* `nTrain` so the
@@ -779,6 +796,32 @@ private def fwdRenderedBatch (path : String) : IO (Option Nat) := do
   | _ :: rest :: _ => return (rest.takeWhile (· != 'x')).toNat?
   | _ => return none
 
+/-- The eval forward's rendered input shape, `(batch, d0)`, off `%x: tensor<BxWxf32>`.
+
+    ⭐ **BOTH numbers come from ONE parse of ONE declaration**, deliberately. `evalBs` was already
+    read off the artifact rather than assumed; the WIDTH has to be too, and a second parser of the
+    same text is the double-writer failure in miniature — the two could then disagree about the same
+    tensor.
+
+    ▶ Why the width is not `net.d0`: under RSB-A3 the eval resolution is **not** the train
+    resolution. `resnet50in160_fwd_eval.mlir` declares `tensor<256x150528xf32>` (224² eval) while
+    `resnet50in160_fwd.mlir` declares `tensor<64x76800xf32>` (160² train) — the split is already
+    rendered into the artifacts, and this is what lets the driver honour it. For every 224 net the
+    two coincide, so this returns `(bs, net.d0)` there and nothing downstream moves. -/
+private def fwdRenderedShape (path : String) : IO (Option (Nat × Nat)) := do
+  if !(← System.FilePath.pathExists path) then return none
+  let txt ← IO.FS.readFile path
+  match txt.splitOn "%x: tensor<" with
+  | _ :: rest :: _ =>
+    let b := (rest.takeWhile (· != 'x')).toNat?
+    -- `rest` is "BxWxf32>…": drop "Bx", then take up to the next 'x'.
+    let afterB := (rest.dropWhile (· != 'x')).drop 1
+    let w := (afterB.takeWhile (· != 'x')).toNat?
+    match b, w with
+    | some b, some w => return some (b, w)
+    | _, _ => return none
+  | _ => return none
+
 /-- **Scheduled AdamW driver** (Phase 2) — `trainAdamPacked` with a runtime LR and
     bias correction. `lr`/`bc₁`/`bc₂` ride as three rank-0 scalar params in the blob
     tail (`[θ|m|v|lr|bc₁|bc₂]`, the FFI takes no scalar slot) and are returned
@@ -837,14 +880,23 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- the run does not fail — it trains at a silently wrong effective learning rate. Reading `k` from
   -- the same string that names the artifact file makes them agree by construction;
   -- `ResNet50RenderB` pins the round trip with a `#guard` on the producing side.
-  let accOn := variant.startsWith "acc"
+  -- ⚠⚠ SUBSTRING, NOT PREFIX, and `k` parsed from AFTER the marker — changed 2026-08-06, defect #4
+  -- in `tests/TestVariantPredicates.lean`. RSB-A3's composed optimizer is `lambaccdp8x64bce`, where
+  -- `lamb` ++ `acc` puts the marker in the MIDDLE; `startsWith "acc"` is false there, so this
+  -- driver would have packed THREE regions into a FOUR-region graph. ⭐ It also makes the
+  -- `emaOn && accOn` refusal below reachable at all — under the prefix test `accOn "emaacc…"` was
+  -- false, so that throw could never fire and the combination would have silently dropped
+  -- accumulation. Both counterfactuals are pinned in `TestVariantPredicates`.
+  let accOn := (variant.splitOn "acc").length > 1
   let accK := if accOn then
-      (((variant.drop (if variant.startsWith "accdp" then 5 else 3)).takeWhile (· != 'x')).toNat?).getD 0
+      let after := (variant.splitOn "acc").getD 1 ""
+      let after := if after.startsWith "dp" then after.drop 2 else after
+      ((after.takeWhile (· != 'x')).toNat?).getD 0
     else 1
   if accOn && accK < 1 then
-    throw <| IO.userError s!"variant '{variant}' starts with 'acc' but no accumulation count could \
-be read from it — the name must be acc<k>x<B> or accdp<k>x<B>, and <k> is what the graph's baked \
-1/k was rendered for"
+    throw <| IO.userError s!"variant '{variant}' contains 'acc' but no accumulation count could \
+be read from it — the name must spell acc<k>x<B> or accdp<k>x<B> (optionally after an optimizer \
+name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendered for"
   -- ⚠ Both want the fourth region. Silently letting one win would put the EMA shadow and the
   -- gradient accumulator in the same slots.
   if emaOn && accOn then
@@ -905,8 +957,35 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   -- while measuring the parameter transfer share (handoff §2d.3). This is why
   -- `replicas` is read here and not with the other knobs below.
   let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
+  -- ▶ `LEAN_MLIR_EVAL_BATCHSTATS=1` — a DIAGNOSTIC, not a feature. Scores through `@<slug>_fwd`
+  -- (BN over the EVAL BATCH's own statistics) instead of `@<slug>_fwd_eval` (the accumulated
+  -- running buffers). It exists to separate "the weights are bad" from "the running statistics
+  -- are bad", which the loss alone cannot do: the two paths read the SAME θ and differ only in
+  -- what they normalise by. ⚠ Batch-stat scoring is transductive — it peeks at the eval batch —
+  -- so it is NOT a reportable accuracy. It is an upper reference for what these weights can do.
+  let batchStatEval := (← IO.getEnv "LEAN_MLIR_EVAL_BATCHSTATS").isSome
+  let useRunning := hasBn && !batchStatEval
+  if batchStatEval && hasBn then
+    IO.println "  ⚠ LEAN_MLIR_EVAL_BATCHSTATS: scoring via @_fwd (EVAL-BATCH stats), not the \
+running buffers — diagnostic only, transductive, not a reportable number."
+  -- The eval forward is rendered at ITS OWN batch AND ITS OWN INPUT WIDTH, neither of which need
+  -- match training. Read both off the artifact rather than assuming (`fwdRenderedShape`); when they
+  -- agree with `(bs, d0)` — every 224 net — nothing below changes.
+  -- ⚠⚠ COMPUTED HERE, ABOVE `loadData`, and that ordering is load-bearing: the ImageNet val drain
+  -- inside `loadData` has to allocate and read at the EVAL width, so it needs `evalD0` as an input.
+  -- It used to hardcode `3*224*224`, which was right only while train and eval resolutions agreed.
+  let (evalBs, evalD0) := (← fwdRenderedShape
+    (if useRunning then s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
+     else s!"{net.mlirDir}/{net.slug}_fwd.mlir")).getD (bs, d0)
+  -- ⚠ ANNOUNCED when it differs, because a train/eval resolution SPLIT is not visible anywhere else
+  -- in the log, and a run that silently evaluated at the wrong resolution would still report a
+  -- plausible accuracy. RSB-A3 is the case: train 160², eval 224².
+  if evalD0 != d0 then
+    IO.println s!"  ▸ EVAL RES SPLIT: train d0 {d0}, eval d0 {evalD0} (batch {evalBs}) — read off \
+@{net.slug}_fwd{if useRunning then "_eval" else ""}"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    if synth then mkSynthData net.data d0 (bs * replicas) else loadData net dataDir
+    if synth then mkSynthData net.data d0 (bs * replicas)
+    else loadData net dataDir evalD0
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   -- LEAN_MLIR_G2_STEPS caps batches per epoch for gate G2. Deliberately NOT
   -- LEAN_MLIR_MAX_STEPS: that name already means "time a step window then exit"
@@ -925,23 +1004,7 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   let nb := match (← IO.getEnv "LEAN_MLIR_G2_STEPS").bind (·.toNat?) with
     | some n => min n nbFull
     | none   => nbFull
-  -- The eval forward is rendered at ITS OWN batch, which need not be the training batch. Read it
-  -- off the artifact rather than assuming `bs` (see `fwdRenderedBatch`); when they agree — every
-  -- default run — this is `bs` and nothing below changes.
-  -- ▶ `LEAN_MLIR_EVAL_BATCHSTATS=1` — a DIAGNOSTIC, not a feature. Scores through `@<slug>_fwd`
-  -- (BN over the EVAL BATCH's own statistics) instead of `@<slug>_fwd_eval` (the accumulated
-  -- running buffers). It exists to separate "the weights are bad" from "the running statistics
-  -- are bad", which the loss alone cannot do: the two paths read the SAME θ and differ only in
-  -- what they normalise by. ⚠ Batch-stat scoring is transductive — it peeks at the eval batch —
-  -- so it is NOT a reportable accuracy. It is an upper reference for what these weights can do.
-  let batchStatEval := (← IO.getEnv "LEAN_MLIR_EVAL_BATCHSTATS").isSome
-  let useRunning := hasBn && !batchStatEval
-  if batchStatEval && hasBn then
-    IO.println "  ⚠ LEAN_MLIR_EVAL_BATCHSTATS: scoring via @_fwd (EVAL-BATCH stats), not the \
-running buffers — diagnostic only, transductive, not a reportable number."
-  let evalBs := (← fwdRenderedBatch
-    (if useRunning then s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
-     else s!"{net.mlirDir}/{net.slug}_fwd.mlir")).getD bs
+  -- `evalBs`/`evalD0` are read off the eval artifact ABOVE, before `loadData` — see there.
   let nbt := (nEval + evalBs - 1) / evalBs  -- ceil: the last partial batch is zero-padded, not dropped
   -- The schedule label is part of the run's evidence, not decoration: an exponential-decay run and
   -- a cosine one are different experiments and the log has to say which it was. Spelled so the
@@ -1032,7 +1095,10 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   let nResident := (nRegions * net.paramShapes.size).toUSize
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
-  let xShape := net.xShape evalBs      -- eval-only: the train step passes its dims directly
+  -- eval-only: the train step passes its dims directly. ⚠ `packXShape #[evalBs, evalD0]`, NOT
+  -- `net.xShape evalBs` — the latter bakes `net.d0`, i.e. the TRAIN width, which is wrong the
+  -- moment eval runs at a different resolution (RSB-A3: train 160², eval 224²).
+  let xShape := packXShape #[evalBs, evalD0]
   let tsFn  := s!"m.{net.slug}_{variant}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut parts : Array ByteArray := #[]
@@ -1195,7 +1261,15 @@ it and its .epoch marker aside and start fresh."
   -- control fires before trusting a green from it.
   let imgStreams : Array IO.FS.Handle ←
     if net.data == .imagenet && !synth then
-      spawnShimSharded net.shimScript "train" gbs (3 * 224 * 224)
+      -- ⚠⚠ `net.d0`, NOT `3 * 224 * 224`. This is the width the TRAIN shim is *told* to emit, and
+      -- it is the SECOND of two hardcoded 224s that had to fall for the 160 net — the other was
+      -- `loadData`'s `trainPix` (which sizes the READ). Both had to agree with the render, and a
+      -- literal here agreed with only the 224 ones: measured 2026-08-06 as
+      -- "shim sends batch=64 flat=76800, the render wants batch=64 flat=150528".
+      -- ▶ INERT for every incumbent — `LeanMlir/VerifiedNets.lean`'s closing `#guard` block proves
+      -- `net.d0 == 3*224*224` for all six 224 ImageNet nets, so this substitutes equal for equal
+      -- there and changes only `resnet50in160`.
+      spawnShimSharded net.shimScript "train" gbs net.d0
         (((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1) shimWorkers shimNC
     else pure #[]
   if synth && net.data == .imagenet then
@@ -1399,7 +1473,12 @@ gate's control, not a configuration.")
       if !imgStreams.isEmpty then
         -- Round-robin across the sharded producers; with SHIM_WORKERS=1 (the default) this is
         -- `imgStreams[0]` every step, i.e. exactly the single-producer path.
-        let flat := 3 * 224 * 224
+        -- ⚠⚠ THE READ WIDTH, and the THIRD of three independent hardcoded 224s the 160 net had to
+        -- flush out (the others: the shim SPAWN width above, and `loadData`'s `trainPix`). All
+        -- three describe the same buffer and every one of them had to agree with the render, so
+        -- fixing them one at a time surfaced the same refusal three times over.
+        -- ▶ INERT for the six 224 nets by `VerifiedNets.lean`'s closing `#guard` block.
+        let flat := net.d0
         if prefetch then
           -- Step `bi`'s batch has been in flight since step `bi-1` issued it. `none` only on the
           -- very first step of the run — one step of no overlap in 150,120, not worth a case.
@@ -1553,7 +1632,10 @@ gate's control, not a configuration.")
     let mut correct := 0
     let mut correct5 := 0
     for bi in [0:(if skipEval then 0 else nbt)] do
-      let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs d0 nEval
+      -- ⚠ `evalD0`, not `d0`: `evalImg` was drained at the EVAL width, so slicing it at the TRAIN
+      -- width would stride through the buffer wrongly from the second row on (RSB-A3: 224² val
+      -- rows read as 160²). Silent — it would score a plausible-looking accuracy off garbage.
+      let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs evalD0 nEval
       -- Hold the eval parameters on device across the eval batches (§2d.3). The
       -- count is the tensor count of `evalShapes`, which for a BN net is the
       -- params PLUS the two running-stat slots per layer — all of them are inputs

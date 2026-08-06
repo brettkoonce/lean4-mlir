@@ -545,6 +545,68 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
 #guard resnet50ImagenetVerified.toSpecs.pop.pop == resnet50Verified.toSpecs.pop.pop
 #guard resnet50ImagenetVerified.toSpecs.back! == (#[1000], 2)
 
+/-- **ResNet-50 on ImageNet-1k at RSB-A3's TRAIN resolution, 160²** — the same net as
+    `resnet50ImagenetVerified`, fed 160² crops. `planning/next_session_rsb_a3.md` §2.1.
+
+    ⭐ **WHY THIS EXISTS AT ALL IS A WALL-CLOCK ARGUMENT, not a modelling one.** §4's probes measured
+    R50 at **376 ms/step** (4×bs64, resident, `SHIM_WORKERS=8`), which puts 100 epochs at **52.3 h**
+    at 224 — outside the operator's 40 h bar. At 160 the same 100 epochs is ~31–37 h and fits. So
+    this spec is the difference between A3 being runnable on this box and not.
+
+    ⚠ **EVERYTHING EXCEPT `imageH`/`imageW`/`slug`/`shimScript` IS IDENTICAL TO THE 224 SPEC**, and
+    that is checkable rather than asserted: `layers` is shared by construction below, so `toSpecs`
+    — hence the 161 tensors and the 25,557,032 params — is *derived from the same list*. Resolution
+    enters only through `d0 = 3·160·160 = 76,800`. The `#guard`s under this definition pin exactly
+    that, and are the cheapest possible answer to §2.1's "confirm the 160 spec is the same net".
+
+    ⚠ **The shim is the `short` recipe's, NOT `default`'s**, and that is load-bearing twice over:
+      * `short` IS timm's A3 (`jax/MainResnet50Imagenet.lean` — `trainRes := 160`,
+        `testCropRatio := 0.95`, RandAugment m6, mixup 0.1 / cutmix 1.0). `default` is 224 with
+        RRC+hflip only, so it cannot feed this net at all.
+      * `Jax/Codegen.lean` applies `trainRes` **only** inside `_imagenet_decode_random_crop_flip`
+        (the TRAIN path); eval goes through `_imagenet_decode_center_crop` at the hardcoded
+        `_IMG_SIZE = 224`. ▶ So this one shim already emits A3's 160/224 SPLIT — 76,800 floats on
+        train, 150,528 on val — which is the answer to §2's open question and the reason §2.3's
+        `evalD0` driver change is unavoidable rather than optional.
+
+    ⚠⚠ **DO NOT run this net with eval enabled until `evalD0` lands.** The driver feeds `net.d0` to
+    both invokes, so the val read would pull 150,528 floats into a 76,800-float graph. Use
+    `LEAN_MLIR_SKIP_EVAL=1`. -/
+def resnet50Imagenet160Verified : VerifiedNetSpec where
+  name     := "ResNet-50 (ImageNet-1k, 160² train)"
+  slug     := "resnet50in160"
+  inC      := 3
+  imageH   := 160
+  imageW   := 160
+  nClasses := 1000
+  data     := .imagenet
+  -- ⚠ The `short`/A3 recipe's shim (`--shim` writes `<out minus .py>_shim.py`), NOT `default`'s.
+  shimScript := "generated_resnet50_imagenet_short_shim.py"
+  -- ⭐ SHARED, not re-typed. A copied layer list is the double-writer failure this repo keeps
+  -- paying for, and it is exactly what would let a "160 ResNet-50" drift into a different net —
+  -- §2k/§2l's two-different-ResNet-34s, one resolution over.
+  layers   := resnet50ImagenetVerified.layers
+  blurb := "ResNet-50 on full 1000-class ImageNet at RSB-A3's 160² train resolution, via the VERIFIED renderer."
+  bnChannels := resnet50Verified.bnChannels
+
+-- ▶ §2.1's check, and it is the whole point: the 160 spec must be the SAME NET. Params, tensor
+-- count and elementwise layout are resolution-independent (conv weights do not see spatial size,
+-- and the dense head sits after GAP), so all three must match the 224 spec exactly.
+#guard resnet50Imagenet160Verified.toSpecs == resnet50ImagenetVerified.toSpecs
+#guard (resnet50Imagenet160Verified.toSpecs.foldl
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 25557032
+#guard resnet50Imagenet160Verified.toSpecs.size == 161
+#guard (resnet50Imagenet160Verified.toSpecs.filterMap
+          (fun (d, k) => if k == 1 then some d[0]! else none)) == resnet50Imagenet160Verified.bnChannels
+-- ⭐ AND THE ONE THING THAT MUST DIFFER. Without this the guards above are all satisfied by simply
+-- aliasing the 224 spec, which would render the whole definition a no-op. 3·160·160 = 76,800, and
+-- it is the exact width `verified_mlir/resnet50in160_fwd.mlir` declares (`tensor<64x76800xf32>`).
+#guard resnet50Imagenet160Verified.d0 == 76800
+#guard resnet50ImagenetVerified.d0 == 150528
+
+-- ▶ The cross-net form of this invariant needs every `.imagenet` spec in scope, so it lives at the
+-- END of this file (search "trainPix := net.d0").
+
 /-- ch7 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 17 inverted-residual
     blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
     relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense.
@@ -1010,3 +1072,28 @@ def vitImagenetVerified : VerifiedNetSpec where
 #guard vitImagenetVerified.toSpecs.size == vitVerified.toSpecs.size
 #guard vitImagenetVerified.toSpecs.pop.pop == vitVerified.toSpecs.pop.pop
 #guard vitImagenetVerified.toSpecs.back! == (#[1000], 2)
+
+-- ═══════════════════════════════════════════════════════════════════════════════════════════════
+-- ⭐⭐ THE INVARIANT THAT LICENSES `loadData`'s `trainPix := net.d0` (`VerifiedTrain.lean`,
+-- the `.imagenet` branch). Placed here because it needs EVERY `.imagenet` spec in scope.
+--
+-- That function drains VAL at a hardcoded `3·224·224` and, until 2026-08-06, returned the very same
+-- literal as the TRAIN stream width — so the 160 net asked its shim for 150,528 floats/img while
+-- the shim correctly sent 76,800, and the wire guard refused. Switching it to `net.d0` is a
+-- behaviour change ONLY for a net whose `d0` differs from the val width, i.e. only the 160 net.
+-- ▶ These guards ARE the proof that all six incumbents are untouched, and they are why that switch
+-- needed no per-net re-validation.
+--
+-- ⚠⚠ IF YOU ADD AN `.imagenet` NET AT A NON-224 TRAIN RESOLUTION, ONE OF THESE FIRES — and that is
+-- the point, not an obstacle. It means the val drain is still 224 while your train stream is not,
+-- so `evalD0` (`planning/next_session_rsb_a3.md` §2.3) must land before the eval loop can be
+-- trusted. Do NOT relax the guard to make it pass; add the net to the exempt list below it only
+-- once the eval path reads its own width.
+#guard resnet34ImagenetVerified.d0     == 3*224*224
+#guard vitImagenetVerified.d0          == 3*224*224
+#guard mobilenetv2ImagenetVerified.d0  == 3*224*224
+#guard efficientnetImagenetVerified.d0 == 3*224*224
+#guard convnextImagenetVerified.d0     == 3*224*224
+#guard resnet50ImagenetVerified.d0     == 3*224*224
+-- The one net that is DELIBERATELY not 224, and the reason `evalD0` is still open.
+#guard resnet50Imagenet160Verified.d0  == 3*160*160

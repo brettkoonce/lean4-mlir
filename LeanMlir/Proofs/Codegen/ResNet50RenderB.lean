@@ -422,7 +422,11 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     | .heavyBall      => "heavy-ball momentum + coupled L2"
     | .lamb           => "LAMB (per-tensor trust ratio)"
     | .adamwAccum k   => s!"AdamW over {k} ACCUMULATED micro-batches"
-  let accOn := match opt with | .adamwAccum _ => true | _ => false
+    | .lambAccum k    => s!"LAMB (per-tensor trust ratio) over {k} ACCUMULATED micro-batches"
+  -- ⚠ TYPE-based, so unlike the driver's string predicate this one could not silently miss the new
+  -- arm — adding a constructor without extending it is a non-exhaustive match, i.e. a build error.
+  -- That asymmetry is exactly why the driver needs `TestVariantPredicates` and this line does not.
+  let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let go : StateM Nat String := do
     -- The ladder, bottom-up. At q = 7: 5→…  no — at q = 7 these are 7, 14, 28, 56, 112 and the
     -- input is 224; at q = 5 they are 5, 10, 20, 40, 80 and the input is 160.
@@ -972,6 +976,59 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lamb64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
     Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+
+-- ═══════════════════════════════════════════════════════════════════════════════════════════════
+-- ⭐⭐⭐ **RSB-A3 ITSELF — LAMB × BCE × ACCUMULATION × 4 REPLICAS, AT 160.** The composition
+-- `planning/next_session_rsb_a3.md` was written to reach, rendered 2026-08-06.
+--
+-- `lambaccdp8x64bce` = LAMB, BCE-with-logits, k = 8 accumulated micro-batches, 4 replicas × bs64
+-- ⇒ effective batch **2048** — RSB-A3's design batch and the one LAMB was built for
+-- (`planning/rsb_a2_resnet50.md` records LAMB at bs512 giving **40.8% against 78.1%**, so the batch
+-- is not a detail). At `q = 5`, i.e. A3's 160² train resolution, scoring through
+-- `resnet50in160_fwd_eval` at 224².
+--
+-- ⚠⚠ **WHAT THIS STILL IS NOT.** `wdExcludeNormBias` remains absent (§0), so BN γ/β and biases are
+-- decayed where timm excludes them; and the BN regime is Ghost-BN over 64-image micro-batches, not
+-- a genuine bs2048 forward. Quote it against §4.1's delta list, never as "RSB-A3 reproduced".
+--
+-- ⚠ The 1-replica peer below is NOT a second recipe — it is what the accumulation gates need. Both
+-- `r50-accum-tie` and `r50-accum-shard-tie` compare against a SINGLE-DEVICE peer, so a DP-only
+-- render would be ungateable. Same k, same loss, same resolution; only `replicas` differs.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+
+-- ⚠ `k = 4` at ONE replica, the peer `r50-accum-tie` actually runs against (its gate is written at
+-- k = 4). Rendering only k = 8 would leave the composed optimizer's accumulation ungated at the k
+-- the gate uses.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc4x64bce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+
+-- ⚠ `lambdp64bce` — LAMB + BCE at 4 replicas, NO accumulation. It exists for ONE reason: it is the
+-- peer `r50-accum-shard-tie` needs. That gate's identity is `acc(x1..xk) == DP([x1|..|xk])`, so the
+-- right-hand side must be the DATA-PARALLEL render of the SAME optimizer and loss — `adamdp64` would
+-- compare LAMB to AdamW and BCE to CE and fail for three reasons with one number to read.
+-- ▶ §3's "needs a `lambdp64` peer rendered", at the composition's resolution.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambdp64bce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+
+-- ⚠⚠ THE NAME ROUND TRIP FOR THE COMPOSED VARIANT, pinned on the PRODUCING side — the driver reads
+-- `k` back out of this exact string with a substring parse, and a disagreement is silent (a wrong
+-- effective learning rate, no error anywhere). `tests/TestVariantPredicates.lean` pins the
+-- consuming side, including the counterfactual that the OLD `startsWith "acc"` test MISSED this.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) == "lambaccdp8x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8) == "lambacc8x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 4) == "lambacc4x64"
+-- ⚠ and the marker is NOT leading here, which is the whole defect: pin that fact so the spelling
+-- cannot drift back to something the prefix test would have accepted by accident.
+#guard ("lambaccdp8x64bce".startsWith "acc") == false
+#guard (("lambaccdp8x64bce".splitOn "acc").length > 1) == true
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdFaithfulV 64 1000 "1.0e-05" "resnet50in160" (q := 5))

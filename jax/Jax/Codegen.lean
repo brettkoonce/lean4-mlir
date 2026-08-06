@@ -3242,7 +3242,19 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        if not (0 <= shard[0] < shard[1]):\n" ++
   "            raise SystemExit('SHIM_SHARD=%s: need 0 <= i < N' % _sh)\n" ++
   "    it = iter(build_imagenet_iter(split, batch, training, training, shard))\n" ++
-  "    flat = 3 * _IMG_SIZE * _IMG_SIZE\n" ++
+  -- ⚠⚠ `flat` IS THE WIRE'S PER-IMAGE SIZE, and under `trainRes` it is NOT the same on both
+  -- splits. The dataset above already resizes train to `_TRAIN_SIZE` and eval to `_IMG_SIZE`
+  -- (RSB-A3's 160/224 split), but this line hardcoded `_IMG_SIZE` and so framed a 160 batch as
+  -- though it were 224: measured 2026-08-06 as `cannot reshape array of size 4915200 into shape
+  -- (64,3,224,224)` — 4,915,200 = 64 × 3 × 160², i.e. REAL 160 data described with the wrong
+  -- width — and then a short read, "pipe closed after 19660800 of 38535168 bytes".
+  -- ▶ The non-`trainRes` branch is left BYTE-IDENTICAL on purpose: every other net's shim, and the
+  -- committed SHIM_HASH digests, must not move for a change that cannot affect them.
+  (if cfg.trainRes > 0 then
+    "    _RES = _TRAIN_SIZE if training else _IMG_SIZE\n" ++
+    "    flat = 3 * _RES * _RES\n"
+   else
+    "    flat = 3 * _IMG_SIZE * _IMG_SIZE\n") ++
   -- ── WIRE v2: soft targets. `SHIM_NCLASSES=K` (K>0) switches the label section from
   --    `int32[batch]` hard labels to `float32[batch*K]` target distributions, and bumps the
   --    preamble version 1 -> 2 with K appended so the reader can size the read and REFUSE a
@@ -3328,7 +3340,11 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "            tm = lam * t + (np.float32(1.0) - lam) * np.flip(t, 0)\n" ++
   "            return (np.ascontiguousarray(xm, dtype=np.float32),\n" ++
   "                    np.ascontiguousarray(tm, dtype=np.float32))\n" ++
-  "        H = W = _IMG_SIZE\n" ++
+  -- ⚠ Same hardcode, same fix: CutMix pastes a box into `x.reshape(B, 3, H, W)`, and `_mix` only
+  -- ever runs on the TRAIN split (`_MIX_ON` is `and training`). At `trainRes` the train images are
+  -- `_TRAIN_SIZE`, so `_IMG_SIZE` here would reshape a 160 batch as 224 and throw. `_mix` is nested
+  -- inside the function that binds `_RES` above, so it closes over it.
+  (if cfg.trainRes > 0 then "        H = W = _RES\n" else "        H = W = _IMG_SIZE\n") ++
   "        lam = float(rng.beta(_CUT_A, _CUT_A))\n" ++
   "        x4 = x.reshape(B, 3, H, W)\n" ++
   "        c = np.sqrt(1.0 - lam)\n" ++
