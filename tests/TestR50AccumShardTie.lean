@@ -92,15 +92,31 @@ private def cmp (a b : ByteArray) (off n : Nat) : Float × Float × Nat := Id.ru
   return (d, m, ex)
 
 def main : IO Unit := do
-  let net  := resnet50ImagenetVerified.toNet
+  -- ▶ Resolution selects the NET (slug + `d0`); the 160 artifacts are their own family. Parameter
+  -- layout is identical by construction (`VerifiedNets.lean` `#guard`s `toSpecs` equal), so only
+  -- the input width moves.
+  let net ← match (← IO.getEnv "R50_ACC_RES").getD "224" with
+    | "224" => pure resnet50ImagenetVerified.toNet
+    | "160" => pure resnet50Imagenet160Verified.toNet
+    | r     => throw <| IO.userError s!"R50_ACC_RES={r}: want 224 or 160"
   let bs   := 64
   let nP   := net.nParams
   let variant := (← IO.getEnv "R50_ACC_VARIANT").getD "acc4x64"
+  -- ⚠⚠ The DP peer must match `variant` on optimizer, loss and resolution — see the header. For the
+  -- composed RSB-A3 render that is `lambdp64bce`, NOT `adamdp64`.
+  let peer := (← IO.getEnv "R50_ACC_PEER").getD "adamdp64"
+  if peer == variant then
+    throw <| IO.userError s!"R50_ACC_PEER == R50_ACC_VARIANT ('{peer}') — the tie would compare the \
+artifact to itself and pass unconditionally"
   let tol  := (((← IO.getEnv "R50_ACC_TOL_U").bind (·.toNat?)).map (fun u => u.toFloat * 1e-6)
                 |>.getD 2.0e-4)
-  let k := (((variant.drop (if variant.startsWith "accdp" then 5 else 3)).takeWhile (· != 'x')).toNat?).getD 0
+  -- ⚠ SUBSTRING parse — `lambacc4x64bce` does not lead with the marker (defect #4).
+  let k :=
+    let after := (variant.splitOn "acc").getD 1 ""
+    let after := if after.startsWith "dp" then after.drop 2 else after
+    ((after.takeWhile (· != 'x')).toNat?).getD 0
   if k < 2 then
-    throw <| IO.userError s!"could not read k from variant '{variant}' (want acc<k>x<B>)"
+    throw <| IO.userError s!"could not read k from variant '{variant}' (want [<opt>]acc<k>x<B>[<loss>])"
   let lr := 0.01
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
@@ -109,7 +125,7 @@ def main : IO Unit := do
   IO.println s!"§4's accumulation over DIFFERENT micro-batches — the identity r50-accum-tie is blind to"
   IO.println s!"  acc(x1..x{k})  ==  DP([x1|..|x{k}])   ({k} micro-batches of {bs} vs {k} replicas x {bs})"
   IO.println s!"  accumulation : verified_mlir/{net.slug}_{variant}_train_step.mlir"
-  IO.println s!"  data-parallel: verified_mlir/{net.slug}_adamdp64_train_step.mlir"
+  IO.println s!"  data-parallel: verified_mlir/{net.slug}_{peer}_train_step.mlir"
   IO.println s!"  {net.specs.size} params ({nP} floats), lr {lr}, backend {← IreeSession.backendName}"
 
   -- ── one (θ, m, v) both sides see. m and v are non-zero: at m = v = 0 the β₁/β₂ passthrough
@@ -152,7 +168,7 @@ def main : IO Unit := do
                                ++ #[#[], #[], #[]] ++ bnStatShapes)
   let accSess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
                           ".lake/build/r50_accshard_acc.vmfb"
-  let dpSess  ← mkSession s!"verified_mlir/{net.slug}_adamdp64_train_step.mlir"
+  let dpSess  ← mkSession s!"verified_mlir/{net.slug}_{peer}_train_step.mlir"
                           ".lake/build/r50_accshard_dp.vmfb"
 
   /- One accumulation cycle over `batches`, applying on the last micro-batch. -/
@@ -174,7 +190,7 @@ def main : IO Unit := do
   let accOut ← cycle ((Array.range k).map (fun i => (xs[i]!, ys[i]!)))
   IO.println s!"  one {k}-replica data-parallel step on their concatenation…"; (← IO.getStdout).flush
   let dpBuf := F32.concat #[θ, mIn, vIn, ← F32.write3 (← F32.const 3 0.0) 0 lr bc1 bc2, bnIn]
-  let dpOut ← IreeSession.mlpTrainStepVDP dpSess s!"m.{net.slug}_adamdp64_train_step"
+  let dpOut ← IreeSession.mlpTrainStepVDP dpSess s!"m.{net.slug}_{peer}_train_step"
                 xAll dpBuf dpShapes yAll (k * bs).toUSize net.d0.toUSize net.nClasses.toUSize
                 k.toUSize
   -- ⟂ the control: the DUPLICATED batch, i.e. exactly what `r50-accum-tie` runs.

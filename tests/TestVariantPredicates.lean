@@ -62,20 +62,38 @@ private def cdOn  (v : String) : Bool := (v.splitOn "do").length > 1
     FIFTH axis, and the second one after `ema` that changes the number of blob REGIONS: `acc<k>x<B>`
     carries `[θ|m|v|G]`, 4 regions and 5 scalars. A misfire misaligns every parameter.
 
-    ⚠ It is a PREFIX test, like `emaOn` and for the same reason — the marker leads, so there is no
-    concatenation that can spell it accidentally. ⚠⚠ And that is also its known limit, defect #1's
-    shape exactly: a hypothetical `emaacc4x64` would read as EMA and NOT as accumulation. The
-    driver closes it by REFUSING the combination outright (both want the fourth region), which is
-    the only correct answer anyway; `accOn "emaacc4x64" == false` is pinned below so that limit is
-    recorded rather than rediscovered. -/
-private def accOn (v : String) : Bool := v.startsWith "acc"
+    ⚠⚠ **DEFECT #4, 2026-08-06: THIS WAS A PREFIX TEST AND THE REASONING FOR IT WAS WRONG.** The
+    docstring here used to read *"the marker LEADS, so there is no concatenation that can spell it
+    accidentally"* — and then RSB-A3's composed optimizer spelled **`lambaccdp8x64bce`**, where
+    `lamb` ++ `acc` puts the marker in the middle. `startsWith "acc"` is FALSE there, so the driver
+    would have packed THREE regions into a FOUR-region graph.
+
+    ▶ This is the file's own rule turned on the file itself: *a collision lives in a CONCATENATION*,
+    and "the marker leads" is an assumption about which OTHER markers exist, not a property of the
+    marker. It held only while no optimizer name preceded `acc`. ⚠ It is also the fourth instance
+    and the second one caught before shipping — the G4 gate would have refused the arity ("755
+    outputs, caller supplied 594 destinations"), so it was loud, but loud is not the same as caught.
+
+    ⭐ The substring test additionally FIXES the `ema` × `acc` limit rather than merely recording
+    it. Under the prefix test `accOn "emaacc4x64"` was `false`, so the driver's
+    `if emaOn && accOn then throw` could **never fire** — the combination the driver claims to
+    refuse would have run as EMA with the accumulation silently dropped. Now both read true and the
+    refusal actually happens. See the pinned counterfactual below. -/
+private def accOn (v : String) : Bool := (v.splitOn "acc").length > 1
 
 /-- `k`, read back out of the name. ⚠⚠ **This parse is load-bearing and it is the reason `k` is in
     the name at all.** The graph has `1/k` BAKED into `%ob1`/`%ob2`; the driver decides the apply
     cadence. A disagreement does not fail — it trains at a silently wrong effective learning rate.
-    `ResNet50RenderB` `#guard`s the round trip on the producing side; this is the consuming side. -/
+    `ResNet50RenderB` `#guard`s the round trip on the producing side; this is the consuming side.
+
+    ⚠ Parsed from AFTER the marker rather than from a fixed offset, for the same reason `accOn` is
+    a substring test: `v.drop 3` assumed the name starts with `acc`, which `lambaccdp8x64bce` does
+    not. Splitting on the marker makes the parse independent of what precedes it. -/
 private def accK (v : String) : Nat :=
-  if accOn v then (((v.drop (if v.startsWith "accdp" then 5 else 3)).takeWhile (· != 'x')).toNat?).getD 0
+  if accOn v then
+    let after := (v.splitOn "acc").getD 1 ""
+    let after := if after.startsWith "dp" then after.drop 2 else after
+    ((after.takeWhile (· != 'x')).toNat?).getD 0
   else 1
 
 /-- Every variant string any renderer can produce today, with what each axis MUST read.
@@ -156,6 +174,13 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- markers has, and `accdp` puts `dp` INSIDE the prefix rather than after it.
   , ("acc4x64", false, false, false), ("accdp8x64", false, false, false)
   , ("acc2x128", false, false, false)
+    -- ▶▶ RSB-A3's COMPOSED optimizer (`r34AdamVariant .lambAccum`, 2026-08-06) — LAMB × accumulation
+    -- × BCE, i.e. the marker `acc` with ANOTHER OPTIMIZER NAME IN FRONT OF IT. ⚠⚠ This is the row
+    -- that falsified `accOn`'s prefix test (defect #4): `lamb` ++ `acc` is the concatenation the
+    -- old docstring's "the marker leads" reasoning had ruled out by assumption. It also trails
+    -- `bce`, so `acc` here is bracketed on BOTH sides — a placement no other marker has had.
+  , ("lambacc8x64bce", false, false, false), ("lambaccdp8x64bce", false, false, false)
+  , ("lambacc4x64bce", false, false, false), ("lambaccdp4x64", false, false, false)
     -- ▶ LAMB (`r34AdamVariant .lamb`). ⚠ It needs NO driver predicate — three regions, the same
     -- `[θ|m|v]` signature as `adam`, because the trust ratio is computed inside the graph from θ
     -- and the direction and needs no extra state. So it is here for `wx`/`clip`'s reason: to prove
@@ -237,7 +262,11 @@ private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsd
 
 -- ⭐⭐ THE `acc` MARKER AGAINST EVERY CONCATENATION IN THE TABLE. Stated as a PARTITION, the form
 -- §0.4 finding 5 requires and the form that caught `rmsdo64` in the `do` block above.
-private def accumSpellings : List String := ["acc4x64", "accdp8x64", "acc2x128"]
+private def accumSpellings : List String :=
+  ["acc4x64", "accdp8x64", "acc2x128",
+   -- the composed spellings; they MUST be in this partition or the driver reads 3 regions for a
+   -- 4-region graph — which is exactly what the prefix test did.
+   "lambacc8x64bce", "lambaccdp8x64bce", "lambacc4x64bce", "lambaccdp4x64"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- ⚠ and accumulation must disturb NONE of the other four axes. `acc4x64` contains no "ema" prefix,
@@ -250,11 +279,26 @@ private def accumSpellings : List String := ["acc4x64", "accdp8x64", "acc2x128"]
 #guard accOn "emarmsdp64" == false
 #guard accOn "momdp64" == false
 #guard accOn "adamdpwxclipdrop" == false
--- ⚠ THE KNOWN LIMIT, pinned rather than rediscovered: `accOn` is a prefix test, so a two-axis name
--- with `ema` leading would miss it. The driver refuses `ema` × `acc` outright — they want the same
--- fourth region — so this is the correct answer, not a latent bug. Defect #1's exact shape.
-#guard accOn "emaacc4x64" == false
+-- ⭐⭐ THE LIMIT IS GONE, AND ITS DISAPPEARANCE IS THE POINT. This block used to pin
+-- `accOn "emaacc4x64" == false` and call it "the correct answer, not a latent bug", on the grounds
+-- that the driver refuses `ema` × `acc` anyway. ⚠ That justification was CIRCULAR: the driver's
+-- refusal is `if emaOn && accOn then throw`, so with `accOn` false the refusal could never fire and
+-- the combination would have run as EMA with accumulation SILENTLY DROPPED — a 4-region graph fed
+-- 4 regions, no arity error, and no gradient accumulation. The substring test makes both true, so
+-- the refusal fires for real.
+#guard accOn "emaacc4x64" == true
 #guard emaOn "emaacc4x64" == true
+-- ▶▶ DEFECT #4's DIRECT COUNTERFACTUAL: what the OLD prefix test returned for the composed name,
+-- pinned so the regression cannot come back silently.
+#guard ("lambaccdp8x64bce".startsWith "acc") == false   -- the old test: MISSES it
+#guard accOn "lambaccdp8x64bce" == true                 -- the new one: catches it
+#guard accOn "lambacc8x64bce" == true
+-- ⚠ and the composed names must disturb none of the other four axes — `acc` is bracketed by `lamb`
+-- before and `bce` after, a placement no other marker has had.
+#guard emaOn "lambaccdp8x64bce" == false
+#guard rmsOn "lambaccdp8x64bce" == false
+#guard sdOn  "lambaccdp8x64bce" == false
+#guard cdOn  "lambaccdp8x64bce" == false    -- ⚠ `dp` is not `do`; the two differ in one character
 -- ⚠⚠ `k` ROUND-TRIPS, both spellings, including the two-digit case where `accdp` must be stripped
 -- as 5 characters and `acc` as 3. Getting this off by one gives k = 8 read as 0 or as 88.
 #guard accK "acc4x64" == 4
@@ -263,6 +307,14 @@ private def accumSpellings : List String := ["acc4x64", "accdp8x64", "acc2x128"]
 #guard accK "acc16x32" == 16
 #guard accK "accdp16x64" == 16
 #guard accK "adamdp64" == 1        -- non-accumulation variants read k = 1, i.e. no accumulation
+-- ⚠⚠ `k` OUT OF THE COMPOSED NAMES, which is where the old fixed-offset parse broke: `v.drop 3`
+-- assumed the string starts with `acc`, so on `lambaccdp8x64bce` it dropped "lam" and read "bacc…".
+#guard accK "lambaccdp8x64bce" == 8
+#guard accK "lambacc4x64bce" == 4
+#guard accK "lambaccdp4x64" == 4
+-- and the trailing `bce` must not leak into `k` any more than the batch does
+#guard accK "lambacc8x64bce" == 8
+#guard accK "lambacc8x64bce" != 64
 -- ⚠ and the digits AFTER the `x` are the batch, never `k` — `acc2x128` is k = 2 at batch 128, not
 -- k = 2128 and not k = 128. The `takeWhile` is what makes that true; this is the check that says so.
 #guard accK "acc2x128" != 128

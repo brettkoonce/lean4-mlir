@@ -52,7 +52,28 @@ The bit-exact coordinate count is reported alongside, because `Float.toString` p
 
     lake build r50-accum-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-accum-tie
 
-Knobs: `R50_ACC_VARIANT` (default `acc4x64`), `R50_ACC_TOL_U` (micro-units, default 10 = 1e-5).
+## ⭐ GENERALISED 2026-08-06 — the peer is a knob, because the composition moved it
+
+The construction never mentioned AdamW: it says *"k micro-batches on one batch reproduce ONE step of
+the peer render, from the same `(θ, m, v)`"*, and that is a statement about the ACCUMULATOR, not
+about which optimizer consumes it. `%ob1 = (1−β₁)/k` against `Gt = k·g` gives `m' = β₁m + (1−β₁)g`
+whatever reads `m'` afterwards — so LAMB's trust ratio, computed downstream from the same moments,
+ties for exactly the same reason AdamW's parameter step does.
+
+⚠⚠ **THE PEER MUST MATCH THE VARIANT ON EVERY AXIS EXCEPT ACCUMULATION** — same optimizer, same
+loss, same resolution. Tying `lambacc4x64bce` against `adam64` would compare LAMB to AdamW and BCE
+to CE, and would fail for three reasons at once with one number to look at. The pairing is:
+
+| variant under test | peer | why |
+|---|---|---|
+| `acc4x64` (224) | `adam64` | the original: AdamW + CE |
+| `lambacc4x64bce` (160) | `lamb64bce` | RSB-A3's composition: LAMB + BCE, both at `q = 5` |
+
+    R50_ACC_RES=160 R50_ACC_VARIANT=lambacc4x64bce R50_ACC_PEER=lamb64bce \
+      CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-accum-tie
+
+Knobs: `R50_ACC_VARIANT` (default `acc4x64`), `R50_ACC_PEER` (default `adam64`),
+`R50_ACC_RES` (`224` default / `160`), `R50_ACC_TOL_U` (micro-units, default 10 = 1e-5).
 -/
 
 /-- The driver's own init (`VerifiedTrain.mkParam`, private): He fan-out conv, Glorot dense, γ = 1,
@@ -81,24 +102,43 @@ private def cmp (a b : ByteArray) (offA offB n : Nat) : Float × Float × Nat :=
   return (d, m, ex)
 
 def main : IO Unit := do
-  let net  := resnet50ImagenetVerified.toNet
+  -- ▶ The RESOLUTION selects the net, hence the slug and `d0` — the 160 artifacts are a different
+  -- family (`resnet50in160_*`), not a suffix. Identical parameter layout by construction, so θ/m/v
+  -- below are unchanged; only `x`'s width moves. (`VerifiedNets.lean` `#guard`s `toSpecs` equal.)
+  let net ← match (← IO.getEnv "R50_ACC_RES").getD "224" with
+    | "224" => pure resnet50ImagenetVerified.toNet
+    | "160" => pure resnet50Imagenet160Verified.toNet
+    | r     => throw <| IO.userError s!"R50_ACC_RES={r}: want 224 or 160"
   let bs   := 64
   let nP   := net.nParams
   let variant := (← IO.getEnv "R50_ACC_VARIANT").getD "acc4x64"
+  -- ⚠⚠ THE PEER IS A KNOB, and it must match `variant` on optimizer AND loss AND resolution — see
+  -- the header table. A mismatched peer does not fail cleanly: it fails ② with one number that
+  -- cannot distinguish "the accumulator is wrong" from "these are different optimizers".
+  let peer := (← IO.getEnv "R50_ACC_PEER").getD "adam64"
+  if peer == variant then
+    throw <| IO.userError s!"R50_ACC_PEER == R50_ACC_VARIANT ('{peer}') — the tie would compare the \
+artifact to itself and pass unconditionally"
   let tol  := (((← IO.getEnv "R50_ACC_TOL_U").bind (·.toNat?)).map (fun u => u.toFloat * 1e-6)
                 |>.getD 1.0e-5)
   -- `k` off the artifact NAME, the same read the driver does — so this gate and the run it licenses
   -- cannot disagree about what the artifact was rendered for.
-  let k := (((variant.drop (if variant.startsWith "accdp" then 5 else 3)).takeWhile (· != 'x')).toNat?).getD 0
+  -- ⚠ SUBSTRING, not a fixed offset: the composed variant is `lambacc4x64bce`, where the marker does
+  -- not lead. This is `VerifiedTrain`'s `accK` verbatim, and `tests/TestVariantPredicates.lean`
+  -- pins both against the same spellings — defect #4.
+  let k :=
+    let after := (variant.splitOn "acc").getD 1 ""
+    let after := if after.startsWith "dp" then after.drop 2 else after
+    ((after.takeWhile (· != 'x')).toNat?).getD 0
   if k < 2 then
-    throw <| IO.userError s!"could not read k from variant '{variant}' (want acc<k>x<B>)"
+    throw <| IO.userError s!"could not read k from variant '{variant}' (want [<opt>]acc<k>x<B>[<loss>])"
   let lr := 0.01                       -- large enough that θ' ≠ θ by a wide margin
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
 
-  IO.println s!"§4's gradient accumulation, certified — {k} micro-steps on one batch = one AdamW step"
+  IO.println s!"§4's gradient accumulation, certified — {k} micro-steps on one batch = one {peer} step"
   IO.println s!"  under test  verified_mlir/{net.slug}_{variant}_train_step.mlir   (4 regions [θ|m|v|G])"
-  IO.println s!"  peer        verified_mlir/{net.slug}_adam64_train_step.mlir      (3 regions, committed \
+  IO.println s!"  peer        verified_mlir/{net.slug}_{peer}_train_step.mlir      (3 regions, committed \
 before accumulation existed; its gradient is certified by `lake build r50-gradcheck`)"
   IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, lr {lr}, backend {← IreeSession.backendName}"
 
@@ -134,7 +174,7 @@ before accumulation existed; its gradient is certified by `lake build r50-gradch
             (if v == variant then accShapes else admShapes) y
             bs.toUSize net.d0.toUSize net.nClasses.toUSize)
   let runAcc ← mkRun variant
-  let runAdm ← mkRun "adam64"
+  let runAdm ← mkRun peer
 
   -- Adam's bias correction at t = 1, the step the peer takes. The accumulate micro-batches read
   -- these too, but at lr = 0 `adamWParamF` contributes nothing, so they are irrelevant there.
@@ -185,7 +225,7 @@ before accumulation existed; its gradient is certified by `lake build r50-gradch
   IO.println ""
   IO.println s!"  ① accumulate micro-batches leave [θ|m|v] frozen"
   IO.println s!"      max abs Δ {frozenΔ}   bit-exact {frozenExact}/{3 * nP}"
-  IO.println s!"  ② after {k} micro-steps == one AdamW step on the same batch"
+  IO.println s!"  ② after {k} micro-steps == one {peer} step on the same batch"
   IO.println s!"      θ'  max abs Δ {dT}  rel {relT}   bit-exact {eT}/{nP}"
   IO.println s!"      m'  max abs Δ {dM}  rel {relM}   bit-exact {eM}/{nP}"
   IO.println s!"      v'  max abs Δ {dV}  rel {relV}   bit-exact {eV}/{nP}"
@@ -207,7 +247,7 @@ renders agree on doing nothing"
     throw <| IO.userError s!"① FAILED: an accumulate micro-batch moved the optimizer state \
 ({frozenExact}/{3 * nP} bit-exact, max Δ {frozenΔ}) — θ, m and v must be untouched until the apply"
   if worst > tol then
-    throw <| IO.userError s!"② FAILED: {k} accumulated micro-steps != one AdamW step \
+    throw <| IO.userError s!"② FAILED: {k} accumulated micro-steps != one {peer} step \
 (θ' rel {relT}, m' rel {relM}, v' rel {relV}, tolerance {tol}). If v' is the outlier, suspect the \
 1/k² on %ob2 — a shared 1/k gives the mean of the second moments instead of the second moment of \
 the mean"
@@ -215,7 +255,7 @@ the mean"
     throw <| IO.userError s!"CONTROL DEAD: applying after {k-1} micro-batches fits as well as \
 after {k} ({relTb} vs a tie of {worst}) — this harness cannot tell the apply cadence from the \
 baked 1/k, which is the one disagreement that is otherwise silent"
-  IO.println s!"  ✅ CERTIFIED: {k} accumulated micro-batches are ONE AdamW step at {k}x the batch \
+  IO.println s!"  ✅ CERTIFIED: {k} accumulated micro-batches are ONE {peer} step at {k}x the batch \
 — θ' rel {relT}, m' rel {relM}, v' rel {relV}, against a committed peer rendered before \
 accumulation existed, with [θ|m|v] {3 * nP}/{3 * nP} bit-exact across every accumulate micro-batch \
 and a wrong-k control that misses by {relTb} ({relTb / max worst 1e-30}x the tie)."

@@ -167,11 +167,36 @@ private def r50Groups : Array Grp := Id.run do
   return gs.push ⟨"head", "dense 2048→1000", t, 2⟩
 
 def main : IO Unit := do
-  let net  := resnet50ImagenetVerified.toNet
+  -- ▶ Resolution selects the NET (slug + `d0`). Parameter layout is identical by construction, so
+  -- every offset, group and tolerance below is unchanged — only `x`'s width moves.
+  let net ← match (← IO.getEnv "R50_GC_RES").getD "224" with
+    | "224" => pure resnet50ImagenetVerified.toNet
+    | "160" => pure resnet50Imagenet160Verified.toNet
+    | r     => throw <| IO.userError s!"R50_GC_RES={r}: want 224 or 160"
   let bs   := 64
   let nP   := net.nParams
   let nT   := net.specs.size
   let variant := (← IO.getEnv "R50_GC_VARIANT").getD "adam64"
+  -- ⭐⭐ ACCUMULATION-AWARE. A `*acc<k>x*` render has FOUR parameter regions and FIVE scalars, so
+  -- the blob, the loss offset and the gradient recovery all shift. Driving it with `%aup = 1`
+  -- (apply) and `%akeep = 0` (discard the incoming accumulator) makes ONE invoke a complete cycle:
+  -- `Gt = 0·G + g = g`, so the artifact behaves as its non-accumulating peer except that `%ob1`
+  -- carries `(1−β₁)/k` rather than `(1−β₁)`.
+  -- ▶ Hence `m' = ((1−β₁)/k)·g = (0.1/k)·g` and the gradient is recovered at **10k·m'**, not 10·m'.
+  -- ⚠ Getting that factor wrong is invisible to tier 1 — both homogeneity identities are SCALE
+  -- INVARIANT in `g`, so a wrong `k` would sail through them and only tier 2's absolute fit would
+  -- notice. That is why it is derived from the name rather than assumed.
+  let accOn := (variant.splitOn "acc").length > 1
+  let accK  := if accOn then
+      (let after := (variant.splitOn "acc").getD 1 ""
+       let after := if after.startsWith "dp" then after.drop 2 else after
+       ((after.takeWhile (· != 'x')).toNat?).getD 0)
+    else 1
+  if accOn && accK < 2 then
+    throw <| IO.userError s!"could not read k from accumulating variant '{variant}'"
+  let nRegions := if accOn then 4 else 3
+  let gScale := 10.0 * accK.toFloat        -- g = gScale · m'
+  let lossOff := nRegions * nP
   -- Micro-units throughout, so a single `Nat` env var reaches 1e-6 without a float parser.
   let uEnv (k : String) (dflt : Float) : IO Float := do
     pure (((← IO.getEnv k).bind (·.toNat?)).map (fun u => u.toFloat * 1e-6) |>.getD dflt)
@@ -206,8 +231,8 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
   let θ := F32.concat θparts
   let z ← F32.const nP.toUSize 0.0
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3
-  let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
-                            ++ #[#[], #[], #[]] ++ bnStatShapes)
+  let shapes := packShapes ((List.replicate nRegions net.paramShapes).foldl (· ++ ·) #[]
+                            ++ Array.replicate (if accOn then 5 else 3) #[] ++ bnStatShapes)
   let x ← F32.heInit 555 (bs * net.d0).toUSize 1.0
   let mut y : ByteArray := .empty
   for i in [0:bs] do
@@ -219,17 +244,23 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
   let sess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
                        s!".lake/build/r50_gradcheck_{variant}.vmfb"
   let fn := s!"m.{net.slug}_{variant}_train_step"
-  let tl ← F32.write3 (← F32.const 3 0.0) 0 lr 0.1 0.001    -- lr, 1−β₁¹, 1−β₂¹ at t = 1
+  -- lr, 1−β₁¹, 1−β₂¹ at t = 1; then `%aup = 1`, `%akeep = 0` on the accumulating render.
+  let tl ← if accOn then do
+      let t5 ← F32.write3 (← F32.const 5 0.0) 0 lr 0.1 0.001
+      let pair ← F32.write3 (← F32.const 3 0.0) 0 1.0 0.0 0.0
+      F32.blit t5 3 pair 0 2
+    else F32.write3 (← F32.const 3 0.0) 0 lr 0.1 0.001
   let mut nInvokes := 0
   let runAt (θx : ByteArray) : IO ByteArray :=
-    IreeSession.mlpTrainStepV sess fn x (F32.concat #[θx, z, z, tl, bnIn]) shapes y
+    IreeSession.mlpTrainStepV sess fn x
+      (F32.concat (if accOn then #[θx, z, z, z, tl, bnIn] else #[θx, z, z, tl, bnIn])) shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 
   -- ── the base point: L(θ) and g = 10·m' ──
   let out0 ← runAt θ
   nInvokes := nInvokes + 1
-  let l0 := F32.read out0 (3 * nP).toUSize
-  let gNorm2 := 100.0 * F32.dotSlice out0 nP.toUSize out0 nP.toUSize nP.toUSize
+  let l0 := F32.read out0 lossOff.toUSize
+  let gNorm2 := gScale * gScale * F32.dotSlice out0 nP.toUSize out0 nP.toUSize nP.toUSize
   IO.println s!"  base loss {l0}   ‖g‖ {Float.sqrt gNorm2}   (ln 1000 = 6.907755)"
   if !l0.isFinite || l0 < 1e-3 then
     throw <| IO.userError s!"DEGENERATE: base loss {l0} — nothing is being differentiated"
@@ -245,8 +276,8 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
     let mut s := 0.0; let mut gn2 := 0.0; let mut pn2 := 0.0
     for t in ts do
       let (fo, fl) := (offs[t]!, offs[t+1]! - offs[t]!)
-      s   := s   + 10.0  * F32.dotSlice out0 (nP + fo).toUSize θ    fo.toUSize        fl.toUSize
-      gn2 := gn2 + 100.0 * F32.dotSlice out0 (nP + fo).toUSize out0 (nP + fo).toUSize fl.toUSize
+      s   := s   + gScale * F32.dotSlice out0 (nP + fo).toUSize θ    fo.toUSize        fl.toUSize
+      gn2 := gn2 + gScale * gScale * F32.dotSlice out0 (nP + fo).toUSize out0 (nP + fo).toUSize fl.toUSize
       pn2 := pn2 +         F32.dotSlice θ    fo.toUSize        θ    fo.toUSize        fl.toUSize
     return s.abs / max (Float.sqrt gn2 * Float.sqrt pn2) 1e-30
 
@@ -309,7 +340,7 @@ BNs + the head)"
     let θm ← F32.axpySlice (F32.concat #[θ]) fo.toUSize out0 (nP + fo).toUSize fl.toUSize (-α)
     let op ← runAt θp
     let om ← runAt θm
-    return ((F32.read op (3 * nP).toUSize - F32.read om (3 * nP).toUSize) / 2.0, 10.0 * α * mn2)
+    return ((F32.read op lossOff.toUSize - F32.read om lossOff.toUSize) / 2.0, gScale * α * mn2)
 
   -- ⭐ THE NOISE FLOOR, and R50 hands it to us for free. Scaling one BN-followed conv kernel is an
   -- exact invariance of the loss (tier 1 A is its derivative), so the finite difference measured
