@@ -2327,9 +2327,25 @@ lean_exe «fpn-train-emit» where
 
 -- FPN multi-scale detector training + inference (brick #3, bite 8). VisDrone 448,
 -- 3-scale (56/28/14) neck, trained via the single-target DDPM FFI path.
+/-- Shared body of the VisDrone FPN detector — imported by BOTH the IREE and XLA
+    executables so their spec, schedule, and seed cannot drift. Its own `lean_lib`
+    for the same reason `Resnet34AdamCommon` has one: lake needs a module target
+    for a root shared by two exes. -/
+lean_lib «Yolov1VisdroneFpnCommon» where
+  srcDir := "."
+  roots := #[`demos.Yolov1VisdroneFpnCommon]
+
 lean_exe «yolov1-visdrone-fpn» where
   root := `demos.MainYolov1VisdroneFpn
   moreLinkArgs := ireeLink
+
+-- The same detector on XLA/PJRT (planning/detector_pjrt_port.md). Shared body in
+-- `demos/Yolov1VisdroneFpnCommon.lean`; the ONLY difference is the shim linked.
+-- First demo on the XLA path — the five verified nets got there via
+-- `VerifiedTrain.mkSession`, the demos go through `Train.lean`.
+lean_exe «yolov1-visdrone-fpn-xla» where
+  root := `demos.MainYolov1VisdroneFpnXla
+  moreLinkArgs := xlaLink
 
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare

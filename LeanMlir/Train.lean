@@ -67,10 +67,32 @@ private def runIree (mlirPath outPath : String) : IO Bool := do
     return false
   return true
 
+/-- Path of the runnable artifact for one emitted graph, on whichever backend
+    this binary was linked against (`planning/detector_pjrt_port.md`).
+
+    * **IREE** — `iree-compile` turns `{pfx}_{suffix}.mlir` into a `.vmfb`, and
+      that `.vmfb` is what `IreeSession.create` loads.
+    * **XLA** — PJRT compiles the `.mlir` in-process, so no `.vmfb` is ever
+      produced and the `.mlir` *is* the artifact.
+
+    Every `pathExists` guard and `IreeSession.create` call below routes through
+    this. The guards are the reason it exists: they are what decide whether eval
+    runs at all, and with a hardcoded `.vmfb` path they go silently false on XLA
+    — training would look perfectly healthy and simply stop reporting val
+    metrics, which is a much worse failure than not loading. -/
+def graphArtifact (pfx suffix : String) : IO String := do
+  if (← IreeSession.backendName) == "xla"
+  then return s!"{pfx}_{suffix}.mlir"
+  else return s!"{pfx}_{suffix}.vmfb"
+
 /-- Compile `mlirPath` to `outPath` via iree-compile, but skip the work
     if `outPath` exists and `outPath ++ ".hash"` matches the cache key
     for the current MLIR + IREE backend. Returns (compiledNewly, success). -/
 private def runIreeCached (mlirPath outPath mlir : String) : IO (Bool × Bool) := do
+  -- XLA/PJRT has no ahead-of-time compile step — the `.mlir` goes straight to
+  -- the runtime. Report (not-newly-compiled, succeeded) so every caller's
+  -- logging and its `IO.Process.exit 1` on failure stay exactly as they are.
+  if (← IreeSession.backendName) == "xla" then return (false, true)
   let key ← cacheKey mlir
   let hashPath := outPath ++ ".hash"
   let vmfbExists ← System.FilePath.pathExists outPath
@@ -237,7 +259,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     IO.eprintln (if trainNew then "  train step compiled" else "  train step (cached)")
   else
     IO.Process.exit 1
-  return s!"{pfx}_train_step.vmfb"
+  graphArtifact pfx "train_step"
 
 /-- Dataset-specific I/O: where the training/val data lives, how big each
     image is on disk, and what augmentation to apply per batch. Each
@@ -995,7 +1017,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
        -- Workstream A). Eval-forward → argmax over the NC channels →
        -- confusion matrix accumulated in exact Nat across batches →
        -- IoU_c = conf[c][c] / (row_c + col_c − conf[c][c]).
-       let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+       let evalVmfb ← graphArtifact pfx "fwd_eval"
        if ← System.FilePath.pathExists evalVmfb then
          let evalSess ← IreeSession.create evalVmfb
          let (valImg, valLbl, nVal) ← dio.loadVal dataDir
@@ -1096,7 +1118,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
        -- flat detection output as class logits, which is nonsensical.
        IO.eprintln s!"  ({if useFpnRun then "fpn" else "yolov1"} eval skipped — offline mAP pass; train loss above is the signal)"
      else
-      let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+      let evalVmfb ← graphArtifact pfx "fwd_eval"
       if ← System.FilePath.pathExists evalVmfb then
         let evalSess ← IreeSession.create evalVmfb
         let (valImg, valLbl, nVal) ← dio.loadVal dataDir
@@ -1154,7 +1176,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   -- running stats are stale relative to sampled weights — the same
   -- caveat as EMA/SWA's eval block.
   if cfg.useSWAG && swagDeviations.size > 0 then
-    let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+    let evalVmfb ← graphArtifact pfx "fwd_eval"
     if ← System.FilePath.pathExists evalVmfb then
       let evalSess ← IreeSession.create evalVmfb
       let (valImg, valLbl, nVal) ← dio.loadVal dataDir
@@ -1227,10 +1249,10 @@ def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                        else pure ByteArray.empty
   let evalParams := params.append runningBnStats
 
-  let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+  let evalVmfb ← graphArtifact pfx "fwd_eval"
   if !(← System.FilePath.pathExists evalVmfb) then
-    IO.eprintln s!"ERROR: no eval vmfb at {evalVmfb}"
-    IO.eprintln "  (run a training cycle first to compile, or call compileVmfbs)"
+    IO.eprintln s!"ERROR: no eval graph at {evalVmfb}"
+    IO.eprintln "  (run a training cycle first to emit it, or call compileVmfbs)"
     IO.Process.exit 1
   let evalSess ← IreeSession.create evalVmfb
   IO.eprintln "  eval session loaded"
