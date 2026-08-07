@@ -46,6 +46,22 @@ def baselineCount (t : Nat × Nat × Nat × Nat × Nat × Nat) : Nat :=
   let (ic, oc, e, s, pre, post) := t
   (Layer.uib ic oc e s pre post).nParams
 
+/-- MNv4's stage 0, `.fusedMbConv 32 48 4 3 2 1 false` — the block that phase 0 MISSED. It was
+    scoped as "UIB needs no new op", which was true of the block and not of the NET: `fusedMbConv`
+    had never existed on the verified path (the verified EfficientNet is B0, `mbConvSENB`
+    throughout). Tied here at `nBlocks = 1, useSE = false`, which is the only shape
+    `VLayer.fusedMbConvNB` can express — deliberately, so no layout exists that the render cannot
+    emit. -/
+def mnv4FusedStage : Nat × Nat × Nat × Nat × Nat := (32, 48, 4, 3, 2)
+
+def fusedVLayer : Nat :=
+  let (ic, oc, e, k, s) := mnv4FusedStage
+  ((VLayer.fusedMbConvNB ic oc e k s).toSpecs).foldl (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0
+
+def fusedBaseline : Nat :=
+  let (ic, oc, e, k, s) := mnv4FusedStage
+  (Layer.fusedMbConv ic oc e k s 1 false).nParams
+
 def main : IO Unit := do
   let mut bad := 0
   let mut totV := 0
@@ -65,7 +81,13 @@ def main : IO Unit := do
     else
       IO.println s!"  ✓ {fam} uib {ic}->{oc} e{e} pre{pre} post{post}: {v}"
   IO.println s!"\n  UIB-block total: VLayer {totV}  baseline {totB}"
+  -- The fused stage-0 block, tied the same way.
+  if fusedVLayer != fusedBaseline then
+    bad := bad + 1
+    IO.println s!"  ✗ fusedMbConvNB 32->48 e4 k3 s2: VLayer {fusedVLayer} ≠ baseline {fusedBaseline}"
+  else
+    IO.println s!"  ✓ fusedMbConvNB 32->48 e4 k3 s2: {fusedVLayer}"
   if bad != 0 || totV != totB then
     IO.eprintln s!"UIB LAYOUT TIE FAILED ({bad} mismatched blocks)"
     IO.Process.exit 1
-  IO.println "  ✓ uib layout tie: VLayer.toSpecs == Layer.nParams on all 14 blocks, all 4 families"
+  IO.println "  ✓ layout tie: VLayer.toSpecs == Layer.nParams — 14 UIB blocks (all 4 families) + the fused stage"

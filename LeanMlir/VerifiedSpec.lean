@@ -108,6 +108,23 @@ inductive VLayer where
       MobileNetV4. Same class as R50's stride-on-the-3×3 and the 2×2 stem pool. The gate is a
       forward tie against the reference on shared weights — **not** a param count, and not this. -/
   | uib (ic oc expand stride preDWk postDWk : Nat)
+  /-- **Fused inverted bottleneck**, single block, no squeeze-excite — EfficientNetV2's early-stage
+      block, and MobileNetV4's stage 0. `k×k regular conv ic→mid (stride) → BN → swish →
+      1×1 project mid→oc → BN`, no activation after the project; skip iff `stride = 1 ∧ ic = oc`.
+      "Fused" = the MBConv expand-1×1 and depthwise collapse into ONE regular `k×k` conv, which is
+      why nothing here is depthwise. `mid = ic * expand`. Bias-free — both convs are BN-followed.
+
+      ⚠⚠ **THE ACTIVATION IS SWISH, NOT RELU, AND THAT IS A PAPER DEVIATION.** MobileNetV4-Conv is
+      a ReLU network, but both emitters that produced the 84.58% use swish here
+      (`jax/Jax/Codegen.lean:1031` — the reference — and `MlirCodegen.lean:6148`'s
+      `emitConvBnTrainSwish`), inherited from the block being shared with EfficientNetV2. Matching
+      the REFERENCE is what lets the number be reproduced and tied; matching the PAPER would be a
+      different net from the one with the result. Recorded rather than quietly fixed.
+
+      ⚠ Deliberately narrower than the baseline `Layer.fusedMbConv`, which also carries `nBlocks`
+      and `useSE`. MNv4 uses `n = 1, useSE = false`, and a layout whose render does not exist is a
+      trap — so the constructor cannot express what this file cannot emit. -/
+  | fusedMbConvNB (ic oc expand k stride : Nat)
   /-- ConvNeXt block @ `c` channels (expand ratio 4): depthwise 7×7 → scalar-LN → 1×1 expand
       c→4c → GELU → 1×1 project 4c→c → layerScale (per-channel γ). Params: depthwise{W,b};
       LN{γ,β scalar}; expand{W,b}; project{W,b}; layerScale{γ:[c]}. -/
@@ -211,6 +228,10 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
     #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] ++
     (if postDWk > 0 then #[(#[mid,1,postDWk,postDWk],0),(#[mid],1),(#[mid],2)] else #[]) ++
     #[(#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
+  | fusedMbConvNB ic oc expand k _stride =>          -- fused k×k conv (ic→mid) +BN+swish | project 1×1 (mid→oc) +BN
+    let mid := if expand == 1 then oc else ic * expand
+    #[(#[mid,ic,k,k],0),(#[mid],1),(#[mid],2)] ++
+    (if expand == 1 then #[] else #[(#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)])
   | convNextBlock c =>                               -- depthwise 7×7 | LN(scalar) | expand | project | layerScale
     #[(#[c,1,7,7],0),(#[c],2),(#[],1),(#[],2),
       (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],1)]

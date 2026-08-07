@@ -1,0 +1,270 @@
+import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.MobileNetV2Render
+import LeanMlir.ViTRender
+
+/-! # MobileNetV4 — the Universal Inverted Bottleneck render (`planning/mnv4_verified.md` phase 3)
+
+The UIB block, batch-BN, at `N := B`:
+
+```
+  optional pre-DW (k×k)  → BN → relu      -- takes the block's stride
+  expand 1×1 (ic → mid)  → BN → relu
+  optional post-DW (k×k) → BN → relu      -- at stride 1 if a pre-DW already consumed it
+  project 1×1 (mid → oc) → BN             -- NO activation
+  + skip                                  -- iff stride = 1 ∧ ic = oc; NO post-add activation
+```
+
+`mid = ic * expand`, every conv BN-followed and therefore **bias-free** — `VLayer.toSpecs` and
+the baseline's `Layer.nParams` both assume that, and `uib-layout-tie` pins them to each other
+(3,737,088 params over the 14-block table, all four families).
+
+⭐ **`k = 0` omits that depthwise**, which is how one block expresses MNv4's four families:
+ExtraDW (both), IB/MBConv (post only), ConvNeXt-like (pre only), FFN (neither). Those are `if`s
+here, not separate functions, because omitting a shape-preserving op does not change any type.
+
+**Phase 0 found this needs no new op and no new position** (`planning/mnv4_verified.md` §2): the
+depthwise VJP is kernel-general (`cnx_render_dw7*_certified`; the descriptor carries `kH kW`), and
+a leading depthwise already exists — `MobileNetV2RenderB.lean:196`'s `t = 1` inverted residual
+emits `.depthwise (c := ic)` straight onto the block input. What is new is the **composition**:
+ExtraDW puts a depthwise on *both* sides of the pointwise expand.
+
+## Why three functions and not one
+
+`.depthwise : BatchableOp (c*h*w) (c*h*w)` and `.depthwiseStrided : BatchableOp (c*(2h)*(2w))
+(c*h*w)` have different INPUT types, so a stride-polymorphic block cannot typecheck — the same
+reason `MobileNetV2RenderB` splits `irFwdStridedB` from `irFwdSkipB`. The stride-2 case splits
+again by **which depthwise consumes the stride**, because that decides the spatial size the expand
+runs at. Read off the Conv-S table (`jax/MainMobilenetV4.lean`), which lands cleanly:
+
+| | stride | `ic` vs `oc` | function |
+|---|---|---|---|
+| 11 blocks | 1 | `ic = oc` | `uibFwdSkipB` |
+| 2 blocks | 2 | `ic ≠ oc`, `preDWk > 0` | `uibFwdPreStridedB` |
+| 1 block  | 2 | `ic ≠ oc`, `preDWk = 0` | `uibFwdPostStridedB` |
+
+⚠⚠ **ACTIVATION IS PLAIN `relu`, NOT `relu6`.** MobileNetV2's blocks use relu6 and this file sits
+next to that renderer, so the wrong one is one keystroke away. Read off the baseline emitter
+(`MlirCodegen.lean:6357`, "Plain ReLU throughout").
+
+⚠ **A pre/post-DW swap is invisible to every count.** Same `k`, same channels ⇒ same parameter
+shapes, so `uib-layout-tie` passes on a renderer that swaps them, and so does any arity or op-count
+audit. At stride 1 it is invisible to the TYPES too, since both positions are shape-preserving —
+which is why the four families are `if`s that the compiler cannot check. Only a forward tie against
+the reference on shared weights pins the order. Same class as R50's stride-on-the-3×3.
+
+⚠ The baseline drops the stride entirely for a stride-2 FFN block (no depthwise to carry it,
+`MlirCodegen.lean:6364`). No such block exists in the table; this file has no function for that
+shape, so the case is absent rather than silently wrong.
+-/
+
+open Proofs.StableHLO
+
+namespace Proofs.StableHLO
+
+/-- Saved forward SSA names the UIB backward + gradient passes reference. The optional fields are
+    `""` when their depthwise is absent (`k = 0`), which is how the backward reads off which family
+    it is looking at without re-deriving it from the kernel sizes. -/
+structure UibFwdB where
+  code : String
+  o  : String        -- block output (project-BN out, or the skip add)
+  qc : String        -- pre-DW conv / BN / relu out; "" when preDWk = 0
+  qn : String
+  qr : String
+  ec : String        -- expand conv out (= expand-BN input)
+  en : String        -- expand BN out   (= expand-relu pre-activation)
+  er : String        -- expand relu out (= post-DW input, or project input when postDWk = 0)
+  dc : String        -- post-DW conv / BN / relu out; "" when postDWk = 0
+  dn : String
+  dr : String
+  pc : String        -- project conv out (= project-BN input)
+deriving Inhabited
+
+/-- **Stride-1 UIB with the identity skip** (`ic = oc = c`) — 11 of the table's 14 blocks, and all
+    four families. Everything runs at `h×h`: both depthwise positions are shape-preserving, so the
+    `k = 0` omissions are plain `if`s. Block output = `addVB (project-BN out) (block input)`; the
+    bottleneck is LINEAR, no activation after the add. -/
+private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
+    (epsStr p xName : String) : StateM Nat UibFwdB := do
+  let mid := c * expand
+  let zc   : Vec c := fun _ => 0
+  let zm   : Vec mid := fun _ => 0
+  let zqk  : DepthwiseKernel c preDWk preDWk := fun _ _ _ => 0
+  let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
+  let zke  : Kernel4 mid c 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 c mid 1 1 := fun _ _ _ _ => 0
+  let zcb  : Vec (B*(c*h*h)) := fun _ => 0
+  let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
+
+  let mut code := ""
+  let mut qc := ""; let mut qn := ""; let mut qr := ""
+  let mut cur := xName
+  if preDWk > 0 then
+    let (c1, n1) ← pretty B (.batchOp (N := B)
+      (.depthwise (c := c) (h := h) (w := h) s!"%u{p}qW" "" zqk zc) (.operand cur zcb))
+    let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := c) (h := h) (w := h)
+      s!"%u{p}qg" s!"%u{p}qbt" epsStr 0 zc zc (.operand n1 zcb))
+    let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := c*h*h)) (.operand n2 zcb))
+    code := code ++ c1 ++ c2 ++ c3
+    qc := n1; qn := n2; qr := n3; cur := n3
+
+  let (cEc, nEc) ← pretty B (.batchOp (N := B)
+    (.conv (ic := c) (oc := mid) (h := h) (w := h) s!"%u{p}eW" "" zke zm) (.operand cur zcb))
+  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
+    s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zmb))
+  let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nEn zmb))
+  code := code ++ cEc ++ cEn ++ cEr
+  cur := nEr
+
+  let mut dc := ""; let mut dn := ""; let mut dr := ""
+  if postDWk > 0 then
+    let (c1, n1) ← pretty B (.batchOp (N := B)
+      (.depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" "" zdk zm) (.operand cur zmb))
+    let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
+      s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand n1 zmb))
+    let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand n2 zmb))
+    code := code ++ c1 ++ c2 ++ c3
+    dc := n1; dn := n2; dr := n3; cur := n3
+
+  let (cPc, nPc) ← pretty B (.batchOp (N := B)
+    (.conv (ic := mid) (oc := c) (h := h) (w := h) s!"%u{p}pW" "" zkp zc) (.operand cur zmb))
+  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := c) (h := h) (w := h)
+    s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zc zc (.operand nPc zcb))
+  let (cA, nA) ← pretty B (.addVB (.operand nPn zcb) (.operand xName zcb))
+  code := code ++ cPc ++ cPn ++ cA
+
+  pure { code := code, o := nA, qc := qc, qn := qn, qr := qr,
+         ec := nEc, en := nEn, er := nEr, dc := dc, dn := dn, dr := dr, pc := nPc }
+
+/-- **Stride-2 UIB where the PRE-DW carries the stride** (`preDWk > 0`). The pre-DW downsamples
+    `2h×2h → h×h`, so the expand, the optional post-DW (now at stride 1) and the project all run at
+    `h×h`. No skip — `ic ≠ oc`. -/
+private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat)
+    (epsStr p xName : String) : StateM Nat UibFwdB := do
+  let mid := ic * expand
+  let zic  : Vec ic := fun _ => 0
+  let zoc  : Vec oc := fun _ => 0
+  let zm   : Vec mid := fun _ => 0
+  let zqk  : DepthwiseKernel ic preDWk preDWk := fun _ _ _ => 0
+  let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
+  let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
+  let zqb  : Vec (B*(ic*h*h)) := fun _ => 0
+  let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
+  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
+
+  let (cQc, nQc) ← pretty B (.batchOp (N := B)
+    (.depthwiseStrided (c := ic) (h := h) (w := h) s!"%u{p}qW" "" zqk zic) (.operand xName zin))
+  let (cQn, nQn) ← pretty B (.bnBatchF (N := B) (oc := ic) (h := h) (w := h)
+    s!"%u{p}qg" s!"%u{p}qbt" epsStr 0 zic zic (.operand nQc zqb))
+  let (cQr, nQr) ← pretty B (.batchOp (N := B) (.relu (n := ic*h*h)) (.operand nQn zqb))
+
+  let (cEc, nEc) ← pretty B (.batchOp (N := B)
+    (.conv (ic := ic) (oc := mid) (h := h) (w := h) s!"%u{p}eW" "" zke zm) (.operand nQr zqb))
+  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
+    s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zmb))
+  let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nEn zmb))
+
+  let mut code := cQc ++ cQn ++ cQr ++ cEc ++ cEn ++ cEr
+  let mut cur := nEr
+  let mut dc := ""; let mut dn := ""; let mut dr := ""
+  if postDWk > 0 then
+    let (c1, n1) ← pretty B (.batchOp (N := B)
+      (.depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" "" zdk zm) (.operand cur zmb))
+    let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
+      s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand n1 zmb))
+    let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand n2 zmb))
+    code := code ++ c1 ++ c2 ++ c3
+    dc := n1; dn := n2; dr := n3; cur := n3
+
+  let (cPc, nPc) ← pretty B (.batchOp (N := B)
+    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" "" zkp zoc) (.operand cur zmb))
+  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
+    s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
+  code := code ++ cPc ++ cPn
+
+  pure { code := code, o := nPn, qc := nQc, qn := nQn, qr := nQr,
+         ec := nEc, en := nEn, er := nEr, dc := dc, dn := dn, dr := dr, pc := nPc }
+
+/-- **Stride-2 UIB where the POST-DW carries the stride** (`preDWk = 0`, `postDWk > 0`) — the IB /
+    MBConv family at a downsample. The expand runs at the INPUT size `2h×2h`; the post-DW then
+    downsamples to `h×h`. No skip — `ic ≠ oc`. -/
+private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat)
+    (epsStr p xName : String) : StateM Nat UibFwdB := do
+  let mid := ic * expand
+  let zoc  : Vec oc := fun _ => 0
+  let zm   : Vec mid := fun _ => 0
+  let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
+  let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
+  let zeb  : Vec (B*(mid*(2*h)*(2*h))) := fun _ => 0
+  let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
+  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
+
+  let (cEc, nEc) ← pretty B (.batchOp (N := B)
+    (.conv (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) s!"%u{p}eW" "" zke zm) (.operand xName zin))
+  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := 2*h) (w := 2*h)
+    s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zeb))
+  let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*(2*h)*(2*h))) (.operand nEn zeb))
+
+  let (cDc, nDc) ← pretty B (.batchOp (N := B)
+    (.depthwiseStrided (c := mid) (h := h) (w := h) s!"%u{p}dW" "" zdk zm) (.operand nEr zeb))
+  let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
+    s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand nDc zmb))
+  let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nDn zmb))
+
+  let (cPc, nPc) ← pretty B (.batchOp (N := B)
+    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" "" zkp zoc) (.operand nDr zmb))
+  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
+    s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
+
+  pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
+         o := nPn, qc := "", qn := "", qr := "",
+         ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc }
+
+/-- **Fused inverted bottleneck, stride 2, no SE** — MobileNetV4's stage 0
+    (`.fusedMbConv 32 48 4 3 2 1 false`) and EfficientNetV2's early stages.
+
+    ```
+      k×k regular conv ic→mid at stride 2  → BN → swish     -- 2h×2h → h×h
+      1×1 project mid→oc                   → BN             -- NO activation
+    ```
+
+    "Fused" means the MBConv expand-1×1 and its depthwise collapse into ONE regular `k×k` conv, so
+    despite living in a mobile net there is nothing depthwise here. No skip: `ic ≠ oc` and stride 2.
+
+    ⚠⚠ **SWISH, NOT RELU — and that is a deviation from the MNv4 paper, on purpose.** MobileNetV4-Conv
+    is a ReLU network, but the reference that produced 84.58% uses swish at this site
+    (`jax/Jax/Codegen.lean:1031`), inherited from the block being shared with EfficientNetV2. This
+    render must match the REFERENCE or the forward tie cannot pass and the number cannot be
+    reproduced. `uibFwd*` above are relu, correctly — the two activations sit twenty lines apart and
+    the difference is real, not a copy-paste slip. -/
+private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat)
+    (epsStr p xName : String) : StateM Nat UibFwdB := do
+  let mid := if expand == 1 then oc else ic * expand
+  let zoc  : Vec oc := fun _ => 0
+  let zm   : Vec mid := fun _ => 0
+  let zkf  : Kernel4 mid ic k k := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
+  let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
+  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
+
+  let (cFc, nFc) ← pretty B (.batchOp (N := B)
+    (.convStrided (ic := ic) (oc := mid) (h := h) (w := h) (kH := k) (kW := k)
+      s!"%f{p}cW" "" zkf zm) (.operand xName zin))
+  let (cFn, nFn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
+    s!"%f{p}cg" s!"%f{p}cbt" epsStr 0 zm zm (.operand nFc zmb))
+  let (cFs, nFs) ← pretty B (.batchOp (N := B) (.swish (n := mid*h*h)) (.operand nFn zmb))
+
+  let (cPc, nPc) ← pretty B (.batchOp (N := B)
+    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%f{p}pW" "" zkp zoc) (.operand nFs zmb))
+  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
+    s!"%f{p}pg" s!"%f{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
+
+  pure { code := cFc ++ cFn ++ cFs ++ cPc ++ cPn,
+         o := nPn, qc := "", qn := "", qr := "",
+         ec := nFc, en := nFn, er := nFs, dc := "", dn := "", dr := "", pc := nPc }
+
+end Proofs.StableHLO
