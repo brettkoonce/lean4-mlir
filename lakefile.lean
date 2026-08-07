@@ -1481,6 +1481,11 @@ lean_exe «resnet34-verified-adam-xla» where
   root := `apps.imagenette.MainResnet34VerifiedAdamXla
   moreLinkArgs := xlaLink
 
+/-- `uib` layout tie (`planning/mnv4_verified.md` phase 1): `VLayer.toSpecs` vs the baseline
+    `Layer.nParams`, over all four UIB families. Pins the LAYOUT; the ORDER needs a forward tie. -/
+lean_exe «uib-layout-tie» where
+  root := `tests.TestUibLayoutTie
+
 /-- Shared body of the verified R50 + AdamW **Imagenette** trainer — the bottleneck peer of
     `Resnet34AdamCommon`, imported by both backends so their schedule and seed cannot drift.
     Artifacts: the `resnet50_*` renders at the end of `Proofs/Codegen/ResNet50RenderB.lean`. -/

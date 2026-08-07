@@ -92,6 +92,22 @@ inductive VLayer where
       +21,008 gap close exactly (§2m) — the audit's rule was "a rank-1 kind-2 param immediately
       after a **rank-4** kernel", and SE's params are rank-2. -/
   | mbConvSENB (ic mid oc r k : Nat)
+  /-- **MobileNetV4 Universal Inverted Bottleneck** (`planning/mnv4_verified.md`):
+      `optional pre-DW (preDWk) → 1×1 expand ic→mid → optional post-DW (postDWk) → 1×1 project
+      mid→oc`, every conv BN-followed and therefore **bias-free** (`convBnNB`'s argument, and what
+      `Spec.lean`'s baseline count already assumes). `mid = ic * expand`.
+
+      ⭐ `k = 0` means "omit that depthwise", which is how ONE constructor expresses all four of
+      MNv4's block families — ExtraDW (both DWs), IB/MBConv (post only), ConvNeXt-like (pre only),
+      FFN (neither). That is the architecture's whole "stop adding new block types" claim, and it
+      is why this is one `VLayer` case rather than four.
+
+      ⚠⚠ **A wrong pre/post dispatch is INVISIBLE to this function.** A pre-DW and a post-DW at the
+      same `k` and the same channel count contribute *identical* parameter shapes, so emitting one
+      where the table says the other yields a net that type-checks, trains, descends, and is not
+      MobileNetV4. Same class as R50's stride-on-the-3×3 and the 2×2 stem pool. The gate is a
+      forward tie against the reference on shared weights — **not** a param count, and not this. -/
+  | uib (ic oc expand stride preDWk postDWk : Nat)
   /-- ConvNeXt block @ `c` channels (expand ratio 4): depthwise 7×7 → scalar-LN → 1×1 expand
       c→4c → GELU → 1×1 project 4c→c → layerScale (per-channel γ). Params: depthwise{W,b};
       LN{γ,β scalar}; expand{W,b}; project{W,b}; layerScale{γ:[c]}. -/
@@ -189,6 +205,12 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
     #[(#[mid,1,k,k],0),(#[mid],1),(#[mid],2),
       (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),
       (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
+  | uib ic oc expand _stride preDWk postDWk =>       -- (pre-DW if k≠0) | expand 1×1 | (post-DW if k≠0) | project 1×1, each +BN, all bias-free
+    let mid := ic * expand
+    (if preDWk > 0 then #[(#[ic,1,preDWk,preDWk],0),(#[ic],1),(#[ic],2)] else #[]) ++
+    #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] ++
+    (if postDWk > 0 then #[(#[mid,1,postDWk,postDWk],0),(#[mid],1),(#[mid],2)] else #[]) ++
+    #[(#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
   | convNextBlock c =>                               -- depthwise 7×7 | LN(scalar) | expand | project | layerScale
     #[(#[c,1,7,7],0),(#[c],2),(#[],1),(#[],2),
       (#[4*c,c,1,1],0),(#[4*c],2),(#[c,4*c,1,1],0),(#[c],2),(#[c],1)]

@@ -56,13 +56,29 @@ new.
 | "expand/project pointwise + BN" | **already rendered** | `invertedResidual` is exactly this (`:75`), certified for MobileNetV2 |
 | "the residual skip and its stride dispatch" | **already rendered** | `invertedResidual`'s stride argument; same dispatch `residualStage`/`bottleneckStage` use |
 | "BN running statistics through a mobile block" | **already threaded** | `bnChannels` drives it for mnv2/enet. ⚠ The *JAX* side needed UIB wiring and got it 2026-07-19 (`MainMobilenetV4Imagenet.lean:91`); the verified side inherits nothing from that |
-| **"a depthwise BEFORE the expand"** | ⭐ **NEW** | no `VLayer` places a DW upstream of the pointwise expand. This is what ExtraDW and the ConvNeXt-like variant need |
+| ~~"a depthwise BEFORE the expand"~~ | **also already rendered** — corrected 2026-08-07, see below | `MobileNetV2RenderB.lean:196` |
 | **"four block types"** | **NEW as dispatch, not as ops** | `k = 0` means "omit that DW", so one constructor renders 4 shapes: ExtraDW (both), IB/MBConv (post only), ConvNeXt (pre only), FFN (neither) |
 
-**Estimate, labelled as such: no new SHlo op.** Every primitive is a depthwise conv, a pointwise
-conv, a BN, a relu, or an add — all of which the renderer emits today. ▶ **Phase 0 is to confirm
-that**, because it is the assumption the whole plan rests on, and the R50 precedent for "one
-descriptor turned out to be missing" (`BatchableOp.sigmoid` for BCE) is exactly one page long.
+### ✅ PHASE 0 IS DONE (2026-08-07) — and it retired this doc's one "NEW" row
+
+**Result: no new SHlo op, and no new block position either.** Two readings settled it:
+
+1. **The depthwise VJP is kernel-general, not per-`k`.** `Proofs/Architectures/ConvNeXtClose.lean:15`
+   certifies `depthwiseConv2d` via `cnx_render_dw7{W,b}_certified`, annotated *"kernel-general —
+   pinned below"*, and the descriptor carries `kH kW` explicitly (`StableHLOParse.lean:257`,
+   `depthwiseF w b c h w' kH kW e`). Rendered in anger at 3×3 (MNv2), 5×5 (EfficientNet `mbConvSE`)
+   and 7×7 (ConvNeXt). So MNv4's `k ∈ {3,5}` is free.
+2. ⭐ **A leading depthwise already exists.** The row above claimed no `VLayer` puts a DW upstream of
+   the pointwise. It does: `MobileNetV2RenderB.lean:196` is the `t = 1` inverted residual, and it
+   emits `.depthwise (c := ic)` **directly on the block input**, then BN → relu6 → project. ConvNeXt's
+   block is the same shape one level up (DW → LN → expand → project). The op is channel-parameterised
+   (`c`), so the pre-DW is that same constructor at `c := ic`.
+
+▶ **What is actually new is one composition, not a primitive**: ExtraDW's `DW → expand → DW →
+project` puts a depthwise on *both* sides of the pointwise expand. Each adjacency in it —
+`DW → pointwise` (MNv2 `t=1`, ConvNeXt) and `pointwise → DW` (MNv2 `t>1`, EfficientNet) — is already
+certified; nothing has yet composed both in one block. That is a proof-composition question, which
+is Phase 2, and it is a much smaller thing than a missing descriptor.
 
 ---
 
