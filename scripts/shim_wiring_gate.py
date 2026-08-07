@@ -13,7 +13,7 @@ Structure — four gates and two controls, run in this order:
   1  each shim is the RIGHT net's   its generated banner names the reference that net is a port of
   2  the augmentation PARTITION     config flags vs generated CALL SITES, feature by feature
   3  the producer default           SHIM_MIX's baked default == the config's useMixup/useCutmix
-  C1 the count-based control        a census that counts DEFINITIONS mis-classifies 2 of 5 nets
+  C1 the count-based control        a census that counts DEFINITIONS mis-classifies 4 of 7 nets
   C2 the stream, MEASURED (--stream) SHIM_HASH: determinism, mnv2≡r34 known answer, r34≠the rest
 
 ⚠ GATE 2 CHECKS CALL SITES, NOT DEFINITIONS, AND THAT IS THE WHOLE POINT. `generateShim` emits the
@@ -392,9 +392,13 @@ if "--break" in sys.argv:
     print("\n── --break: the negative controls ──")
     # (a) the pre-fix world: every net wired to R34's shim. Gate 0's distinctness must fire, and so
     #     must gate 2 on every net whose augmentation vanishes — i.e. every net whose recipe is
-    #     NOT R34's. That count is 4 as of 2026-08-05: vitin, enetin, cnxin and resnet50in.
-    #     ⚠ It was 3 until R50 was wired; mnv2in does not count because its config IS R34's
-    #     (no extra augmentation), which is why gate 2's partition treats them as one class.
+    #     NOT R34's. That count is 5 as of 2026-08-07: vitin, enetin, cnxin, resnet50in and
+    #     resnet50in160.
+    #     ⚠ It was 3 until R50 was wired, then 4, and 5 once R50 gained its SECOND recipe — the
+    #     `short` (RSB-A3) shim at trainRes 160. Both R50 rows share a Main file and a reference
+    #     but differ in RECIPE, and the partition keys on the recipe, so they count separately.
+    #     mnv2in still does not count because its config IS R34's (no extra augmentation), which
+    #     is why gate 2's partition treats them as one class.
     #     Bump this deliberately when a net joins — a wrong constant here makes control A red
     #     and the whole file useless, which is exactly what it did when R50 arrived.
     r34 = os.path.join(BUILD, "generated_resnet34_imagenet_shim.py")
@@ -405,9 +409,9 @@ if "--break" in sys.argv:
         if any(flags_by_slug[slug][f] != shim_call_sites(r34)[f] for f in FEATURES))
     print(f"    pre-fix wiring (every net → R34's shim): distinctness fires = {distinct_fired}, "
           f"partition fires on {partition_fired} nets")
-    check(distinct_fired and partition_fired == 4,
-          "control A: the pre-fix wiring is REJECTED, on exactly the 4 affected nets",
-          f"distinct={distinct_fired}, partition fired on {partition_fired} (want 4)")
+    check(distinct_fired and partition_fired == 5,
+          "control A: the pre-fix wiring is REJECTED, on exactly the 5 affected nets",
+          f"distinct={distinct_fired}, partition fired on {partition_fired} (want 5)")
     # (b) swap two nets' shims — the counts stay right, only the PARTITION is wrong. This is the
     #     `swap1` control from wdx-tie: a gate checking "five distinct shims exist" passes it.
     swapped = dict(wiring)

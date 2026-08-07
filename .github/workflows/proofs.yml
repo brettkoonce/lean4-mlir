@@ -224,6 +224,34 @@ jobs:
               verified_mlir/vitin_ema128_train_step.mlir \
               verified_mlir/vitin_emadp128x4_train_step.mlir \
             || { echo "::error::committed verified_mlir/{vit,vitin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean)"; exit 1; }
+          # ResNet50RenderB is the SOLE writer of all seventeen R50 artifacts — both
+          # resolutions (`resnet50in` @224 and `resnet50in160` @160, which are different NET
+          # SPECS, not a suffix), every optimizer variant (AdamW, LAMB, accumulation, their DP
+          # peers, BCE), and both `_fwd`/`_fwd_eval` forwards. Guarded from the start rather
+          # than baselined: the whole family arrived in one arc and re-elaborating the module
+          # costs ~18 s, so there was never a CI-budget reason to defer it. The RSB-A3 run of
+          # 2026-08-07 trains on `resnet50in160_lambaccdp8x64bce_train_step`, so that one is a
+          # published result's artifact and must not drift silently.
+          lake env lean LeanMlir/Proofs/Codegen/ResNet50RenderB.lean
+          git diff --exit-code -- \
+              verified_mlir/resnet50in_fwd.mlir \
+              verified_mlir/resnet50in_fwd_eval.mlir \
+              verified_mlir/resnet50in_adam64_train_step.mlir \
+              verified_mlir/resnet50in_adamdp64_train_step.mlir \
+              verified_mlir/resnet50in_adam64bce_train_step.mlir \
+              verified_mlir/resnet50in_lamb64_train_step.mlir \
+              verified_mlir/resnet50in_lamb64bce_train_step.mlir \
+              verified_mlir/resnet50in_acc4x64_train_step.mlir \
+              verified_mlir/resnet50in_accdp4x64_train_step.mlir \
+              verified_mlir/resnet50in_accdp8x64_train_step.mlir \
+              verified_mlir/resnet50in160_fwd.mlir \
+              verified_mlir/resnet50in160_fwd_eval.mlir \
+              verified_mlir/resnet50in160_lamb64bce_train_step.mlir \
+              verified_mlir/resnet50in160_lambdp64bce_train_step.mlir \
+              verified_mlir/resnet50in160_lambacc4x64bce_train_step.mlir \
+              verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir \
+              verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir \
+            || { echo "::error::committed verified_mlir/resnet50in*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ResNet50RenderB.lean)"; exit 1; }
 
       - name: Zero-axiom-declaration guard
         # The former trusted-bridge footprint check is gone: Binary32Instance's
