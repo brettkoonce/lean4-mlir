@@ -1481,6 +1481,17 @@ lean_exe «resnet34-verified-adam-xla» where
   root := `apps.imagenette.MainResnet34VerifiedAdamXla
   moreLinkArgs := xlaLink
 
+/-- Shared body of the verified R50 + AdamW **Imagenette** trainer — the bottleneck peer of
+    `Resnet34AdamCommon`, imported by both backends so their schedule and seed cannot drift.
+    Artifacts: the `resnet50_*` renders at the end of `Proofs/Codegen/ResNet50RenderB.lean`. -/
+lean_lib «Resnet50AdamCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.Resnet50AdamCommon]
+
+lean_exe «resnet50-verified-adam-xla» where
+  root := `apps.imagenette.MainResnet50VerifiedAdamXla
+  moreLinkArgs := xlaLink
+
 /-- Shared body of the ResNet-34 / **full ImageNet-1k** trainer (handoff §2k). Its own `lean_lib`
     for the same reason `Resnet34AdamCommon` has one: lake needs a module for a root shared by an
     executable, and a `Common` without one silently fails to build for the second consumer. -/

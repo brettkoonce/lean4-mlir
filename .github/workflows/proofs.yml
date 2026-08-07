@@ -251,7 +251,10 @@ jobs:
               verified_mlir/resnet50in160_lambacc4x64bce_train_step.mlir \
               verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir \
               verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir \
-            || { echo "::error::committed verified_mlir/resnet50in*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ResNet50RenderB.lean)"; exit 1; }
+              verified_mlir/resnet50_fwd.mlir \
+              verified_mlir/resnet50_fwd_eval.mlir \
+              verified_mlir/resnet50_adam_train_step.mlir \
+            || { echo "::error::committed verified_mlir/resnet50*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ResNet50RenderB.lean)"; exit 1; }
 
       - name: Zero-axiom-declaration guard
         # The former trusted-bridge footprint check is gone: Binary32Instance's

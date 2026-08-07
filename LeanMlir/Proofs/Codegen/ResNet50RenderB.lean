@@ -1044,3 +1044,29 @@ end Proofs.StableHLO
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in_fwd_eval.mlir"
   (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in")
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- § `resnet50Verified` — the IMAGENETTE (10-class) renders.
+--
+-- `resnet50Verified` has existed as a layout skeleton since the R50 scoping work
+-- ("no render, no proof chain, no artifact yet"); these are the artifacts. Same
+-- renderer, same 224² backbone as `resnet50in` — the ONLY deltas are `nClasses`
+-- 1000 → 10 and the slug, which is why this is three lines and not a new chain.
+--
+-- ⭐ B = 32 makes `r34AdamVariant` emit the bare name `"adam"` (the `if B == 32
+-- then ""` branch), so the artifact, the `@resnet50_adam_train_step` entry point
+-- and the driver's default `LEAN_MLIR_VARIANT=adam` are one string — matching
+-- R34's Imagenette pairing exactly rather than inventing a second convention.
+--
+-- ⚠ The forwards are rendered at B = 32 too, because the driver scores eval
+-- through them at the train batch. Any other batch needs re-rendered forwards or
+-- `LEAN_MLIR_SKIP_EVAL=1`, and would otherwise be a shape error at first invoke.
+#eval IO.FS.writeFile "verified_mlir/resnet50_adam_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 32 10 "1.0e-05" 1
+    Proofs.StableHLO.R34Opt.adamw "resnet50")
+
+#eval IO.FS.writeFile "verified_mlir/resnet50_fwd.mlir"
+  (Proofs.StableHLO.resnet50FwdFaithfulV 32 10 "1.0e-05" "resnet50")
+
+#eval IO.FS.writeFile "verified_mlir/resnet50_fwd_eval.mlir"
+  (Proofs.StableHLO.resnet50FwdEvalFaithfulV 32 10 "1.0e-05" "resnet50")
