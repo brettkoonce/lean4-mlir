@@ -45,11 +45,28 @@ lake env lean tests/TestR50Contract.lean   # the layout gate
 ```
 -/
 
-/-- 30 epochs at global batch 256 — the same validation tier R34/ImageNet ran, chosen so the two
-    are directly comparable rather than because it is R50's reference schedule (which is RSB-A3's
-    100 epochs at bs2048; see the recipe warning above). -/
+/-- 100 epochs — RSB-A3's own reference schedule at effective batch 2048. Raised from 30 on
+    2026-08-06 to run the composed A3 artifact (`lambaccdp8x64bce`) at the length the recipe is
+    specified for; the 4-GPU@160 probe measured 240 ms/step, so 100 epochs is ~33 h.
+
+    ⚠⚠ **THIS FIELD IS THE LR SCHEDULE, NOT JUST A LOOP BOUND.**
+    `totalSteps := cfg.epochs * nb / accK` (`VerifiedTrain.lean` 1166) — the cosine anneals over
+    exactly this many epochs. `LEAN_MLIR_MAX_EPOCHS` caps the LOOP (`min n cfg.epochs`) and does
+    NOT touch the schedule, which is precisely what makes a capped run a resumable PREFIX of the
+    full one rather than its own shorter experiment:
+
+      LEAN_MLIR_MAX_EPOCHS=30   → epochs 0..29 of the 100-epoch cosine, checkpointed at 30.
+      (then, unset)             → resumes at 30 and runs 30..99 on the SAME schedule.
+
+    ▶ That is the intended way to take a look before committing the full ~33 h. It is NOT the same
+    as the old `epochs := 30`, which annealed fully by epoch 30 and was a complete experiment.
+
+    ⚠ This is the config for EVERY variant of this driver, not just A3 — `adamdp64` and friends now
+    also schedule over 100 epochs. To recover the old R34-comparable, fully-annealed 30-epoch tier
+    you must set this field back to 30, not pass `LEAN_MLIR_MAX_EPOCHS=30`. The run announces which
+    it is every epoch (`Epoch {ep+1}/{cfg.epochs}`), so a log always says which schedule it ran. -/
 def resnet50ImagenetConfig : VerifiedConfig where
-  epochs    := 30
+  epochs    := 100
   batchSize := 64
 
 /-- Entry point. Defaults to the 4-replica `adamdp64` artifact, since ImageNet-scale R50 on this

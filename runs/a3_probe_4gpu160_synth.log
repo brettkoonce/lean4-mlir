@@ -1,0 +1,59 @@
+I0806 03:05:39.149939 1142878 service.cc:178] XLA service 0x7ece8c489bc0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0806 03:05:39.150025 1142878 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0806 03:05:39.150030 1142878 service.cc:194]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0806 03:05:39.150034 1142878 service.cc:194]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0806 03:05:39.150036 1142878 service.cc:194]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0806 03:05:39.152591 1142878 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0806 03:05:39.152620 1142878 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0806 03:05:39.152657 1142878 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0806 03:05:39.152672 1142878 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0806 03:05:39.152683 1142878 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0806 03:05:39.152696 1142878 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0806 03:05:39.152711 1142878 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 1 for CollectiveBFCAllocator.
+I0806 03:05:39.152723 1142878 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 2 for CollectiveBFCAllocator.
+I0806 03:05:39.152734 1142878 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 3 for CollectiveBFCAllocator.
+I0806 03:05:39.162758 1142878 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 4 device(s)
+I0806 03:05:42.371394 1143011 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 16 bytes spill stores, 16 bytes spill loads
+
+I0806 03:05:43.189981 1143011 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 832 bytes spill stores, 832 bytes spill loads
+
+I0806 03:05:43.205338 1142985 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 160 bytes spill stores, 108 bytes spill loads
+
+I0806 03:05:43.227268 1142993 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 44 bytes spill stores, 44 bytes spill loads
+
+I0806 03:05:43.326208 1142981 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 4 bytes spill stores, 4 bytes spill loads
+
+I0806 03:05:50.052737 1142982 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_add_reduce_fusion_43', 8 bytes spill stores, 8 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir (@resnet50in160_lambaccdp8x64bce_train_step, 755 outputs, 4 replicas) in 11035 ms
+[pjrt_ffi] compiled verified_mlir/resnet50in160_fwd.mlir (@resnet50in160_fwd, 1 outputs, 1 replica) in 410 ms
+I0806 03:05:51.392900 1143000 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 56 bytes spill stores, 56 bytes spill loads
+
+I0806 03:05:51.575573 1142984 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 832 bytes spill stores, 832 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet50in160_fwd_eval.mlir (@resnet50in160_fwd_eval, 1 outputs, 1 replica) in 13945 ms
+  ▸ TRAIN RES: 160×160 (slug resnet50in160, d0 76800, shim generated_resnet50_imagenet_short_shim.py)
+ResNet-50 on full 1000-class ImageNet at RSB-A3's 160² train resolution, via the VERIFIED renderer.
+  xla/pjrt verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir
+  xla/pjrt verified_mlir/resnet50in160_fwd.mlir
+  xla/pjrt verified_mlir/resnet50in160_fwd_eval.mlir
+  ▸ EVAL RES SPLIT: train d0 76800, eval d0 150528 (batch 256) — read off @resnet50in160_fwd_eval
+  train 1281167, test 256; bs 64, ResNet-50 (ImageNet-1k, 160² train) lambaccdp8x64bce (cosine+warmup 5ep, baseLR 0.001000), He init
+  ▸ GRADIENT ACCUMULATION: k = 8, 4th blob region [θ|m|v|G]. Micro-batch 256 x 8 = EFFECTIVE BATCH 2048. 5000 micro-batches/epoch = 625 updates/epoch; the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on micro-batches.
+     ⚠ This is AdamW at that batch, NOT rsb-faithful — LAMB and BCE-with-logits are still absent (planning/rsb_a3_r50_verified.md §2.3).
+  eval batch 256 (the batch @resnet50in160_fwd_eval was RENDERED at) != train batch 64 — sound because eval is class-batch-independent
+  running-stats BN: 53 layers, 53120 stat floats → eval via @resnet50in160_fwd_eval
+  DATA-PARALLEL: 4 replicas x bs 64 = global batch 256, 5000 steps/epoch
+[pjrt_ffi] RESIDENT: @resnet50in160_lambaccdp8x64bce_train_step holds 644 parameter tensors (390.0 MB) on 4 devices; they stop crossing PCIe from here
+W0806 03:06:06.949459 1142978 allocator_memory_registration.cc:63] Failed to register GPU memory with clique devices=4:[0,1,2,3]; local_participants=4; communication_id=0; incarnations=[]: INTERNAL: NCCL operation ncclCommRegister(comm, addr.opaque(), addr.size(), &handle) failed: unhandled cuda error (run with NCCL_DEBUG=INFO for details). Last NCCL warning(error) log entry (may be unrelated) 'Cuda failure 500 'named symbol not found''.
+I0806 03:06:07.179488 1142978 cuda_dnn.cc:436] Loaded cuDNN version 92302
+I0806 03:06:07.179612 1142972 cuda_dnn.cc:436] Loaded cuDNN version 92302
+I0806 03:06:07.179671 1142975 cuda_dnn.cc:436] Loaded cuDNN version 92302
+  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+  [SYNTH] imagenet shim NOT spawned — one constant batch, zero pipe reads. This measures t_rest (compute + params + host blob patching), NOT a full step.
+  step 0/5000: loss=0.834835
+  step 1/5000: loss=0.834835
+  step 2/5000: loss=0.834835
+  step 100/5000: loss=0.823532
+  PROBE: 222 ms/step (median of 112 steps 9..120, ResNet-50 (ImageNet-1k, 160² train))

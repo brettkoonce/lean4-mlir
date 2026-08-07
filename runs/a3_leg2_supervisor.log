@@ -1,0 +1,5 @@
+[sup] 2026-08-06 14:17:07 START job=r50-imagenet-4gpu devs=0,2,3,4 epochs=100 rest_after=[none] temp_max=78 stall=1800s logs=/tmp/supervise_r50-imagenet-4gpu
+[sup] 2026-08-06 14:17:07 cmd: .lake/build/bin/resnet50-imagenet-verified-xla data
+[sup] 2026-08-06 14:17:07 attempt 1: resuming at epoch 30/100 (next rest: 999)
+[sup] 2026-08-06 14:17:07   launched PID=1379545 PGID=1379545
+[sup] 2026-08-07 14:01:19 ✅ COMPLETE — 100/100 epochs

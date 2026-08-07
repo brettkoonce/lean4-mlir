@@ -5005,6 +5005,63 @@ reading anything into the $77.00\%$ vs $78.1\%$ gap.
 \emph{Changed since the $76.66\%$ first run:} RandAugment is now
 timm-literal (\texttt{rand-m6-mstd0.5-inc1}).
 
+\subsection*{Phase 4: RSB-A3 on the verified path}
+
+The same recipe on the \emph{verified} codegen path --- not a
+hand-written emitter but \texttt{pretty(provenGraph)}, the rendered MLIR
+the proofs reason about, lowered through \texttt{ffi/pjrt\_ffi.c} to XLA
+over the PJRT C API with no Python at run time. The artifact is
+\texttt{resnet50in160\_lambaccdp8x64bce\_train\_step}: LAMB $\times$
+BCE-with-logits $\times$ gradient accumulation $k=8$, four replicas at
+per-replica batch 64 for an effective batch of 2048, train@160 /
+eval@224.
+
+\begin{center}
+\begin{tabular}{l l r r r r}
+\hline
+GPU & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
+\hline
+4$\times$ 4060 Ti (fp32)  & Ghost-BN (64) & $\sim$20.6 min & $\sim$34.1 hr & $\mathbf{77.43\%}$ & $\mathbf{93.60\%}$ \\
+2$\times$ 7900 XTX (fp32) & Ghost-BN (64) & ---            & ---           & ---                & ---                \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent 100 epochs each. The 4060~Ti run logged zero thermal
+duty-cycle cooldowns and zero PCIe/AER interruptions. The 7900~XTX row
+is the ROCm rerun and is pending; note it needs its \emph{own} render ---
+the artifact above bakes four replicas, so holding effective batch 2048
+on two cards means a 2-replica graph at $k = 16$ rather than a runtime
+flag.
+
+\textbf{[TODO --- missing for a full A3 implementation.]} This finished
+ahead of the phase-2 reference above ($77.22\%$ / $93.34\%$) while
+lacking the following, so quote it as \emph{the A3 recipe on the verified
+path, with these deltas} --- not as ``RSB-A3 reproduced''. In rough order
+of expected effect:
+
+\begin{itemize}
+  \item \texttt{wdExcludeNormBias} absent --- BN $\gamma/\beta$ and biases
+    are decayed at $\mathrm{wd} = 0.02$ where timm skips them. Largest
+    single delta; the ConvNeXt and ViT renders already carry the
+    mechanism, so this is a port.
+  \item Ghost-BN group is 64 against the reference's 512 --- no collective
+    touches the batch statistics. Needs a cross-replica reduction or a
+    larger per-replica batch (which is baked into the signature).
+  \item BN running-statistic momentum is not compensated for accumulation
+    ($0.99$ per micro-batch at $k = 8$, against the reference's
+    $0.99^{1/k}$). Evaluation-only, plausibly \emph{understates} top-1;
+    one-line fix.
+  \item fp32, not bf16 --- most of the $2\times$ wall-clock gap.
+  \item $0.08\%$ of each epoch is dropped (5000 of 5004 micro-batches,
+    since $8 \nmid 5004$).
+  \item Mixup $\lambda$ is drawn host-side from NumPy --- agreement with
+    the reference is distributional, never per-step.
+  \item \emph{Verification, not recipe:} the gradient check's tier-1B
+    identity does not survive CE$\to$BCE ($\|g\|$ falls $90\times$ and the
+    check measures a cancellation residual). Tier-1A and tier-2 do pass.
+\end{itemize}
+
 \subsection*{What A3 changes from the 2018 recipe}
 
 The ResNet-34 trainer above is a \emph{2018-era} recipe: the original
