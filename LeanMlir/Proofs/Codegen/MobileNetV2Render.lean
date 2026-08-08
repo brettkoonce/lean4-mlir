@@ -84,7 +84,7 @@ private def bnSiteP (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName stat
 
 /-- **STRIDED inverted-residual forward** (b1/b3/b5/b6): expand at the input `2hh×2ww`, depthwise
     downsamples `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Nat MBFwd := do
+private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) (xlaPad : Bool := false) : StateM Nat MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -98,7 +98,12 @@ private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName 
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
   let (cEn, nEn) ← bnSiteP B mid (2*hh) (2*ww) mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
-  let (cDc, nDc) ← pretty B (.depthwiseStridedF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
+  -- ⚠ `xlaPad` picks the TF-origin asymmetric convention. Both tokens have the same type and the
+  -- same output shape, so the ONLY thing that distinguishes the two nets here is this flag.
+  let (cDc, nDc) ← if xlaPad then
+      pretty B (.depthwiseStridedXlaF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
+    else
+      pretty B (.depthwiseStridedF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
   let (cDn, nDn) ← bnSiteP B mid hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zdb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zdb))
@@ -535,31 +540,34 @@ set_option maxRecDepth 4000000 in
     through one chain is the fix for a live §2a skew: the committed `mobilenetv2_fwd.mlir` was a
     hand-written BATCH-BN render while this train step normalises PER EXAMPLE, so
     `mobilenetv2-verified` trained one function and evaluated another. -/
-private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool) :
-    StateM Nat MNV2Fwd := do
+private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
+    (xlaPad : Bool := false) : StateM Nat MNV2Fwd := do
     -- stem: 3x3/s2 conv (3->32, 224->112) -> BN -> relu6 (NO maxpool)
     let zx   : Vec (3*224*224) := fun _ => 0
     let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32  : Vec 32 := fun _ => 0
     let z112 : Vec (32*112*112) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
+    let (cStc, nStc) ← if xlaPad then
+        pretty B (.flatConvStridedXlaF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
+      else
+        pretty B (.flatConvStridedF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
     let (cStn, nStn) ← bnSiteP B 32 112 112 mode epsStr "%gs" "%bts" "stn" nStc
     let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
     -- forward: 17 inverted-residual blocks
     let f1  ← irFwdNoExp   B 32      16 112 mode epsStr "1"  nStr convBias
-    let f2  ← irFwdStrided B 16  96  24  56 mode epsStr "2"  f1.o convBias
+    let f2  ← irFwdStrided B 16  96  24  56 mode epsStr "2"  f1.o convBias xlaPad
     let f3  ← irFwd        B 24 144  24  56 mode epsStr "3"  f2.o convBias
-    let f4  ← irFwdStrided B 24 144  32  28 mode epsStr "4"  f3.o convBias
+    let f4  ← irFwdStrided B 24 144  32  28 mode epsStr "4"  f3.o convBias xlaPad
     let f5  ← irFwd        B 32 192  32  28 mode epsStr "5"  f4.o convBias
     let f6  ← irFwd        B 32 192  32  28 mode epsStr "6"  f5.o convBias
-    let f7  ← irFwdStrided B 32 192  64  14 mode epsStr "7"  f6.o convBias
+    let f7  ← irFwdStrided B 32 192  64  14 mode epsStr "7"  f6.o convBias xlaPad
     let f8  ← irFwd        B 64 384  64  14 mode epsStr "8"  f7.o convBias
     let f9  ← irFwd        B 64 384  64  14 mode epsStr "9"  f8.o convBias
     let f10 ← irFwd        B 64 384  64  14 mode epsStr "10" f9.o convBias
     let f11 ← irFwdNoSkip  B 64 384  96  14 mode epsStr "11" f10.o convBias
     let f12 ← irFwd        B 96 576  96  14 mode epsStr "12" f11.o convBias
     let f13 ← irFwd        B 96 576  96  14 mode epsStr "13" f12.o convBias
-    let f14 ← irFwdStrided B 96 576 160   7 mode epsStr "14" f13.o convBias
+    let f14 ← irFwdStrided B 96 576 160   7 mode epsStr "14" f13.o convBias xlaPad
     let f15 ← irFwd        B 160 960 160   7 mode epsStr "15" f14.o convBias
     let f16 ← irFwd        B 160 960 160   7 mode epsStr "16" f15.o convBias
     let f17 ← irFwdNoSkip  B 160 960 320   7 mode epsStr "17" f16.o convBias
@@ -630,7 +638,16 @@ set_option maxRecDepth 4000000 in
     chain: `bnPerChannelEvalF` performs no reduction, so there is no batch to be honest about. -/
 def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "mobilenetv2") : String :=
-  let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias).run' 0
+  -- ⭐ `xlaPad := true` — the eval forward must be the SAME NET as the train step that produces
+  -- the running statistics it consumes, and that partner is `mobilenetv2_adam_train_step` in
+  -- `MobileNetV2RenderB`, which is XLA-`SAME` since 2026-08-08 (`planning/mnv4_verified.md` §3h).
+  -- ⚠ Its per-example sibling `@mobilenetv2_fwd` stays SYMMETRIC, because that one is the
+  -- byte-prefix of the SGD `mobilenetv2_train_step` whose backward is still symmetric. The two
+  -- forwards are therefore DIFFERENT NETS on purpose. Consequence to know about:
+  -- `LEAN_MLIR_EVAL_BATCHSTATS=1` scores through `@mobilenetv2_fwd`, so under an Adam run that
+  -- diagnostic now measures the wrong architecture. It was already labelled non-reportable
+  -- (transductive); it is now also cross-net. Do not read it as an upper bound on these weights.
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias (xlaPad := true)).run' 0
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval({mnv2FwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // -- MobileNetV2 eval forward (running-stats BN): every line is pretty(verified AST node) --\n" ++
