@@ -319,4 +319,130 @@ theorem flatConvStride4_weight_grad_has_vjp_correct {ic oc h w kH kW : Nat}
             flatConvStride4 (Kernel4.unflatten v') b x) v i j * dy j :=
   (flatConvStride4_weight_grad_has_vjp b x).correct v dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Stride-2 conv at XLA `SAME` = decimateODD ∘ (stride-1 SAME conv)
+--   (`planning/mnv4_verified.md` §3b/§3d — the TF-origin padding convention)
+-- ════════════════════════════════════════════════════════════════
+
+/-! **Why a second stride-2 convolution exists, and why it is not a fix to the first.**
+
+The repo carries two genuinely different stride-2 conventions, and both are correct references
+for the nets that use them:
+
+* **`flatConvStride2`** (above) pads symmetrically, `(k-1)/2` on each side. This is
+  He et al. / torchvision — `nn.Conv2d(padding=k//2)` — and it is what ResNet-34, ResNet-50 and
+  ConvNeXt's references do (`jax/Jax/Codegen.lean:462`, symmetric ON PURPOSE since 2026-08-04).
+* **`flatConvStride2Xla`** (here) pads the way XLA `'SAME'` does: at an **even** input the total
+  padding is `k-2`, split **asymmetrically** as `((k-2)/2, k/2)` — `(0,1)` at `k=3`, `(1,2)` at
+  `k=5`, `(2,3)` at `k=7`. This is what the TF-origin ports do — MobileNetV2, MobileNetV4,
+  EfficientNet — where `padding='SAME'` **is** the reference and must not be "fixed".
+
+⭐ **The identity that makes this nearly free.** A stride-2 XLA-`SAME` conv is the *same*
+symmetric stride-1 conv the even-decimation op already uses, decimated at the **odd** offsets:
+
+  `convXlaSame_s2 W b X = decimateOddFlat (flatConv W b X)`,   `X : Tensor3 ic (2h) (2w)`
+
+because output `ho` then reads `x[2·ho + 1 + kh − (k−1)/2] = x[2·ho + kh − ((k−2)/2)]`, and
+`(k−2)/2` is exactly XLA's `pad_low` at an even input. So the whole asymmetry is **a phase shift
+in the decimation**, not new padding arithmetic: `flatConv` is reused verbatim, and so is every
+one of its VJPs. `decimateOddFlat` and `decimateOddFlat_has_vjp` already exist above (they were
+added for ConvNeXt's 4×4/s4 patchify stem), so this section adds **no new proof obligation** —
+only compositions of results already closed under the three standard axioms.
+
+⚠ **This holds at EVEN inputs only, which is the only case any net in this repo hits** (224, 112,
+56, 28, 14 — every strided site in mnv2/mnv4/enet). At an *odd* input XLA `SAME` pads
+`((k-1)/2, (k-1)/2)` — symmetric — so `flatConvStride2` is already the right op there and this one
+would be wrong. The type enforces it: the input index is `ic*(2*h)*(2*w)`, structurally even.
+Verified against `jax.lax.conv_general_dilated(…, 'SAME')` over
+`H ∈ {224,112,56,28,14,32,16,9,7,15,33} × k ∈ {3,5,7}` — 33 configs, all agreeing with this rule
+(`planning/mnv4_verified.md` §3e). -/
+
+/-- **Stride-2 XLA-`SAME` convolution**, flattened: `Vec (ic·2h·2w) → Vec (oc·h·w)`.
+    `decimateOddFlat ∘ flatConv` — the stride-1 symmetric-SAME conv on the `2h×2w` grid, then keep
+    the **odd** positions. The asymmetric-pad peer of `flatConvStride2`. -/
+noncomputable def flatConvStride2Xla {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+  decimateOddFlat oc h w ∘ (flatConv (h := 2 * h) (w := 2 * w) W b)
+
+theorem flatConvStride2Xla_differentiable {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Differentiable ℝ (flatConvStride2Xla W b
+      : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) := by
+  unfold flatConvStride2Xla
+  have hf : Differentiable ℝ (flatConv (h := 2 * h) (w := 2 * w) W b) :=
+    flatConv_differentiable W b
+  exact (decimateOddFlat_differentiable oc h w).comp hf
+
+/-- **Stride-2 XLA-`SAME` input-VJP.** `vjp_comp` on `decimateOddFlat ∘ flatConv`, reusing the
+    proven stride-1 conv input-VJP and the odd-decimation VJP. The backward zero-upsamples the
+    cotangent **onto the odd positions** and then runs the reversed-kernel conv — i.e. StableHLO's
+    `lhs_dilation = [2,2]` with the transposed padding shifted by one, which is exactly the
+    asymmetry the forward introduced. ⚠ A symmetric backward against this forward is a silent
+    wrong-gradient (`planning/mnv4_verified.md` §3b), and it is this composition that rules it out:
+    the offset lives in one place and both directions read it. -/
+noncomputable def flatConvStride2Xla_has_vjp {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    HasVJP (flatConvStride2Xla W b
+      : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
+  let hf_diff : Differentiable ℝ (flatConv (h := 2 * h) (w := 2 * w) W b) :=
+    flatConv_differentiable W b
+  let hf_vjp : HasVJP (flatConv (h := 2 * h) (w := 2 * w) W b) :=
+    hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)
+  show HasVJP (decimateOddFlat oc h w ∘ (flatConv (h := 2 * h) (w := 2 * w) W b)) from
+  vjp_comp _ _ hf_diff (decimateOddFlat_differentiable oc h w) hf_vjp
+    (decimateOddFlat_has_vjp oc h w)
+
+/-- **Stride-2 XLA-`SAME` input-VJP correctness** (the ℝ-carrying audit headline): the backward
+    equals the `pdiv`-contracted Jacobian. Peer of `flatConvStride2_has_vjp_correct`. -/
+theorem flatConvStride2Xla_has_vjp_correct {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Vec (ic * (2 * h) * (2 * w))) (dy : Vec (oc * h * w)) (i : Fin (ic * (2 * h) * (2 * w))) :
+    (flatConvStride2Xla_has_vjp W b).backward x dy i
+      = ∑ j : Fin (oc * h * w), pdiv (flatConvStride2Xla W b) x i j * dy j :=
+  (flatConvStride2Xla_has_vjp W b).correct x dy i
+
+/-- **Stride-2 XLA-`SAME` weight-VJP.** The same composition viewed as a function of the *kernel*
+    (input `x` fixed): `conv2d_weight_grad` run on the odd-zero-upsampled cotangent. -/
+noncomputable def flatConvStride2Xla_weight_grad_has_vjp {ic oc h w kH kW : Nat}
+    (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
+    HasVJP (fun v : Vec (oc * ic * kH * kW) =>
+      flatConvStride2Xla (Kernel4.unflatten v) b x) :=
+  let f : Vec (oc * ic * kH * kW) → Vec (oc * (2 * h) * (2 * w)) :=
+    fun v => Tensor3.flatten (conv2d (Kernel4.unflatten v) b (Tensor3.unflatten x))
+  let hf_diff : Differentiable ℝ f :=
+    conv2d_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
+  let hf_vjp : HasVJP f :=
+    conv2d_weight_grad_has_vjp (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
+  show HasVJP (decimateOddFlat oc h w ∘ f) from
+  vjp_comp f (decimateOddFlat oc h w) hf_diff (decimateOddFlat_differentiable oc h w)
+    hf_vjp (decimateOddFlat_has_vjp oc h w)
+
+/-- **Stride-2 XLA-`SAME` weight-VJP correctness** (ℝ-headline). -/
+theorem flatConvStride2Xla_weight_grad_has_vjp_correct {ic oc h w kH kW : Nat}
+    (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w)))
+    (v : Vec (oc * ic * kH * kW)) (dy : Vec (oc * h * w)) (i : Fin (oc * ic * kH * kW)) :
+    (flatConvStride2Xla_weight_grad_has_vjp b x).backward v dy i
+      = ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+            flatConvStride2Xla (Kernel4.unflatten v') b x) v i j * dy j :=
+  (flatConvStride2Xla_weight_grad_has_vjp b x).correct v dy i
+
+/-- **Stride-2 XLA-`SAME` bias-VJP.** `fun b => flatConvStride2Xla W b x` = the odd decimation of
+    the stride-1 conv-in-`b`; by `vjp_comp` of `conv2d_bias_grad_has_vjp` with the odd-decimation
+    VJP. The bias peer of `flatConvStride2_bias_grad_has_vjp`. -/
+noncomputable def flatConvStride2Xla_bias_grad_has_vjp {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (x : Vec (ic * (2 * h) * (2 * w))) :
+    HasVJP (fun b : Vec oc =>
+      flatConvStride2Xla W b x : Vec oc → Vec (oc * h * w)) :=
+  let g : Vec oc → Vec (oc * (2 * h) * (2 * w)) :=
+    fun b => Tensor3.flatten (conv2d W b (Tensor3.unflatten x))
+  let hg_diff : Differentiable ℝ g :=
+    conv2d_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
+  let hg_vjp : HasVJP g :=
+    conv2d_bias_grad_has_vjp (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
+  show HasVJP (decimateOddFlat oc h w ∘ g) from
+  vjp_comp g (decimateOddFlat oc h w) hg_diff (decimateOddFlat_differentiable oc h w)
+    hg_vjp (decimateOddFlat_has_vjp oc h w)
+
 end Proofs

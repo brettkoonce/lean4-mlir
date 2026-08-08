@@ -88,6 +88,10 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .broadcastBack c h w :: ts, e :: st => parseStack ts (.broadcastBack c h w e :: st)
   | .flatConvStridedF w b ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.flatConvStridedF w b ic oc h w' kH kW e :: st)
+  | .flatConvStridedXlaF w b ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.flatConvStridedXlaF w b ic oc h w' kH kW e :: st)
+  | .depthwiseStridedXlaF w b c h w' kH kW :: ts, e :: st =>
+      parseStack ts (.depthwiseStridedXlaF w b c h w' kH kW e :: st)
   | .convStridedBack w ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.convStridedBack w ic oc h w' kH kW e :: st)
   | .convStridedWeightSgd xN wN lrS ic oc h w' kH kW :: ts, e :: st =>
@@ -222,6 +226,8 @@ theorem parseStack_toToks (r : Raw) :
   | gapBack c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | broadcastBack c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | flatConvStridedF w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | flatConvStridedXlaF w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | depthwiseStridedXlaF w b c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convStridedBack w ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convStridedWeightSgd xN wN lrS ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | depthwiseWeightSgd xN wN lrS c h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl

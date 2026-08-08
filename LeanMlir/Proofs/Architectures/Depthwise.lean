@@ -1408,6 +1408,100 @@ noncomputable def depthwiseStride2_bias_grad_has_vjp {c h w kH kW : Nat}
     hg_vjp (decimateFlat_has_vjp c h w)
 
 -- ════════════════════════════════════════════════════════════════
+-- § Stride-2 depthwise at XLA `SAME` = decimateODD ∘ (stride-1 depthwise)
+--   (`planning/mnv4_verified.md` §3e — the TF-origin padding convention)
+-- ════════════════════════════════════════════════════════════════
+
+/-! **The depthwise peer of `flatConvStride2Xla`** (`Foundation/StridedConv.lean`), and it exists
+for the same reason: `jax/Jax/Codegen.lean:679`'s `depthwise_conv` defaults to `padding='SAME'`,
+so MobileNetV2's four strided depthwises — and EfficientNet's — pad **asymmetrically**, while
+`depthwiseStride2Flat` above pads symmetrically. Both give the same output size, so only a forward
+tie can see it; `planning/mnv4_verified.md` §3d measured MNv2's five sites at 2.9e-1 of a ~1.05
+logit range in its trainer's BN world.
+
+⭐ Identical structure to the regular-conv case, so identical cost: the asymmetry is a **phase
+shift in the decimation**, `decimateOddFlat` instead of `decimateFlat`. `depthwiseFlat` and all of
+its VJPs are reused verbatim, and `decimateOddFlat_has_vjp` is already proven, so nothing here is
+a new obligation.
+
+⚠ Even inputs only — which the type enforces (`c*(2*h)*(2*w)`) and which is every strided
+depthwise in mnv2/mnv4/enet (112, 56, 28, 14). At an odd input XLA `SAME` is symmetric and
+`depthwiseStride2Flat` is already correct. -/
+
+/-- **Stride-2 XLA-`SAME` depthwise conv**, flattened: `Vec (c·2h·2w) → Vec (c·h·w)`.
+    `decimateOddFlat ∘ depthwiseFlat` — the asymmetric-pad peer of `depthwiseStride2Flat`. -/
+noncomputable def depthwiseStride2FlatXla {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w) :=
+  decimateOddFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)
+
+theorem depthwiseStride2FlatXla_differentiable {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Differentiable ℝ (depthwiseStride2FlatXla W b
+      : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) := by
+  unfold depthwiseStride2FlatXla
+  have hf : Differentiable ℝ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
+    depthwiseFlat_differentiable W b
+  exact (decimateOddFlat_differentiable c h w).comp hf
+
+/-- **Stride-2 XLA-`SAME` depthwise input-VJP.** `vjp_comp` on `decimateOddFlat ∘ depthwiseFlat`.
+    The backward zero-upsamples the cotangent onto the **odd** positions, then runs the
+    reversed-kernel grouped conv — so the forward's asymmetry is placed by the backward too. A
+    symmetric backward against this forward is a silent wrong-gradient. -/
+noncomputable def depthwiseStride2FlatXla_has_vjp {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    HasVJP (depthwiseStride2FlatXla W b
+      : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) :=
+  let hf_diff : Differentiable ℝ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
+    depthwiseFlat_differentiable W b
+  let hf_vjp : HasVJP (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
+    depthwiseFlat_has_vjp W b
+  show HasVJP (decimateOddFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)) from
+  vjp_comp _ _ hf_diff (decimateOddFlat_differentiable c h w) hf_vjp
+    (decimateOddFlat_has_vjp c h w)
+
+/-- **Stride-2 XLA-`SAME` depthwise input-VJP correctness** (the ℝ-carrying audit headline). -/
+theorem depthwiseStride2FlatXla_has_vjp_correct {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (x : Vec (c * (2 * h) * (2 * w))) (dy : Vec (c * h * w)) (i : Fin (c * (2 * h) * (2 * w))) :
+    (depthwiseStride2FlatXla_has_vjp W b).backward x dy i
+      = ∑ j : Fin (c * h * w), pdiv (depthwiseStride2FlatXla W b) x i j * dy j :=
+  (depthwiseStride2FlatXla_has_vjp W b).correct x dy i
+
+/-- **Stride-2 XLA-`SAME` depthwise weight-VJP.** The kernel-side peer, by `vjp_comp` of the proven
+    stride-1 `depthwise_weight_grad_has_vjp3` with the odd-decimation VJP. -/
+noncomputable def depthwiseStride2Xla_weight_grad_has_vjp {c h w kH kW : Nat}
+    (b : Vec c) (x : Vec (c * (2 * h) * (2 * w))) :
+    HasVJP (fun v : Vec (c * kH * kW) =>
+      depthwiseStride2FlatXla (Tensor3.unflatten v : DepthwiseKernel c kH kW) b x) :=
+  let f : Vec (c * kH * kW) → Vec (c * (2 * h) * (2 * w)) :=
+    fun v => Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v : DepthwiseKernel c kH kW) b
+              (Tensor3.unflatten x))
+  let hf_diff : Differentiable ℝ f :=
+    depthwise_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
+  let hf_vjp : HasVJP f :=
+    hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 (h := 2 * h) (w := 2 * w) b
+      (Tensor3.unflatten x))
+  show HasVJP (decimateOddFlat c h w ∘ f) from
+  vjp_comp f (decimateOddFlat c h w) hf_diff (decimateOddFlat_differentiable c h w)
+    hf_vjp (decimateOddFlat_has_vjp c h w)
+
+/-- **Stride-2 XLA-`SAME` depthwise bias-VJP.** -/
+noncomputable def depthwiseStride2Xla_bias_grad_has_vjp {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (x : Vec (c * (2 * h) * (2 * w))) :
+    HasVJP (fun b : Vec c =>
+      depthwiseStride2FlatXla W b x : Vec c → Vec (c * h * w)) :=
+  let g : Vec c → Vec (c * (2 * h) * (2 * w)) :=
+    fun b => Tensor3.flatten (depthwiseConv2d W b (Tensor3.unflatten x))
+  let hg_diff : Differentiable ℝ g :=
+    depthwise_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
+  let hg_vjp : HasVJP g :=
+    depthwise_bias_grad_has_vjp (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
+  show HasVJP (decimateOddFlat c h w ∘ g) from
+  vjp_comp g (decimateOddFlat c h w) hg_diff (decimateOddFlat_differentiable c h w)
+    hg_vjp (decimateOddFlat_has_vjp c h w)
+
+-- ════════════════════════════════════════════════════════════════
 -- § Depthwise SGD-tail denotations — non-reducing wrappers for the `SHlo`
 --   `depthwise{,Strided}{Weight,Bias}Sgd` `den` arms. Defined here (not inlined
 --   in `den`) so the `den` match stays small: `depthwise_weight_grad_has_vjp3` /
