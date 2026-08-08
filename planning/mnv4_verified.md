@@ -5,7 +5,48 @@ checked. Companions: `planning/mnv4_imagenet.md` (the **JAX reference** side —
 the Conv-S/Conv-M distinction), `planning/rsb_a3_r50_verified.md` (the closest precedent: a new
 block form brought onto the verified path).
 
-Status: **NOT STARTED.** Nothing about verified MNv4 exists.
+Status: **PHASES 0–3 (forward) DONE 2026-08-08.** `.uib` and `.fusedMbConvNB` are in `VLayer`, the
+whole Conv-S forward chain renders, `@mnv4_fwd` compiles, and the forward tie against the JAX
+reference RAN. Block order is **pinned at 1.8e-6**. One blocker left, decided below.
+
+---
+
+## ▶ START HERE — the next session (2026-08-08)
+
+**DECISION (Brett, 2026-08-08): build the asymmetric-pad conv + its VJP.** §3b's option 1. The
+render is the side that changes; the reference and its 84.58% stay put.
+
+**Why this and not the other two:** MobileNetV4 is a TF-origin port, and this repo's stated rule for
+that family is that asymmetric `'SAME'` *is* the reference (`generated_mobilenet_v4.py`'s `conv2d`:
+*"MobileNetV2/EfficientNet … are TF-origin ports, where asymmetric 'SAME' IS the reference. Do not
+'fix' those"*). Changing the reference would move the net and void the number; documenting the
+deviation would leave the verified render as a net nobody has a result for.
+
+**What to build, in order:**
+
+1. **Padding in `VLayer`.** It currently has **zero** occurrences of `Padding` — the verified layer
+   language cannot express the distinction at all, which is why this was invisible per-net rather
+   than a transcription slip. The baseline `Layer` already carries `pad : Padding` (`.same`/`.valid`,
+   `Types.lean:20`), and both MNv2 and MNv4 specs declare `.convBn 3 32 3 2 .same`.
+2. **An asymmetric-pad strided conv descriptor** in `Proofs/Codegen/StableHLO.lean`. `convStrided`
+   emits `[[1,1],[1,1]]`; XLA `'SAME'` on 3×3/s2 at an even input is `[[0,1],[0,1]]`. ⚠ The
+   "stride-2 SAME conv" comment at `:400` means *same output size*, NOT XLA SAME — do not read it
+   as prior art for this.
+3. **Its VJP.** The backward has to place the same asymmetry; a symmetric backward against an
+   asymmetric forward is a silent wrong-gradient, and the existing gradcheck harnesses would be the
+   place to catch it.
+4. **Re-run `scripts/mnv4_forward_tie.py`.** Success is the as-is column reaching ~1.8e-6 — the
+   number the symmetric-patched column already achieves, which is what the rest of the net is
+   worth once the stem stops disagreeing.
+
+⚠ **Adding an SHlo op is 10 sites across 2 files**, and a bare `lake build` misses the parser
+roundtrip because it lives under `Certs` (memory: `adding-an-shlo-op`). Budget for that.
+
+⚠⚠ **THIS IS NOT AN MNv4 BUG — IT IS REPO-WIDE, AND MNv2 IS WORSE.** See §3c. Fixing the descriptor
+without then re-checking MobileNetV2 and EfficientNet leaves the same defect in two *shipping*
+nets, one of which carries a quoted Imagenette result.
+
+---
 
 ---
 
@@ -151,6 +192,43 @@ MNv2. That is worth an hour before trusting the mnv2 Imagenette number as a *tie
 
 ---
 
+## 3c. ⚠⚠ THE SAME DEFECT IS IN MOBILENETV2 AND EFFICIENTNET — and MNv2 is worse
+
+`VLayer` cannot express padding, so **every** verified render emits symmetric. Measured over the
+committed corpus (`verified_mlir/*_fwd.mlir`, 2026-08-08):
+
+| render | stride-2 convs | its reference | exposed? |
+|---|---|---|---|
+| `resnet34_fwd`, `resnet50in_fwd` | `[[3,3],[3,3]]` | symmetric since 2026-08-04 | ✅ no — both sides agree |
+| `convnext_fwd` | `[[0,0],[0,0]]` | — | ✅ no — 2×2/s2, SAME and symmetric coincide |
+| `vit_fwd` | none | — | ✅ no |
+| **`mobilenetv2_fwd`** | **5 × `[[1,1],[1,1]]`** | spec says `.same` | ⛔ **yes, and at all five** |
+| **`efficientnet_fwd`** | 3 × `[[1,1]]`, 2 × `[[2,2]]` | TF-origin | ⛔ **likely** |
+| `mnv4_fwd` | `[[1,1],[1,1]]` stem | `.same` | ⛔ measured at 6.16e-2 |
+
+⭐ **MNv2 is exposed at FIVE sites where MNv4 is exposed at one.** MNv4's `uib_block` overrides the
+padding with an explicit symmetric `(k-1)//2` on its depthwises — which is exactly why patching the
+stem alone took the tie to 1.8e-6. MNv2's `sep_conv` instead calls `depthwise_conv(x, dw,
+stride=stride)`, and `depthwise_conv`'s default is **`padding='SAME'`** (`Jax/Codegen.lean:683`).
+So MNv2's stem *and* its four strided depthwises all differ from the render.
+
+⚠ **This does NOT invalidate MNv2's §1a tie.** That tie is Lean-level — spec ↔ render — and it still
+holds: the render faithfully implements the `VerifiedNetSpec`. What is in question is whether that
+spec *is* MobileNetV2-as-published at the strided convs. Both can be true, and only the second is in
+doubt. Say it that way; the two claims are easy to blur and the blur favours us, which is the
+direction to be careful in.
+
+▶ **MNv2's 89.35% (Imagenette, 80ep, 2026-08-06) is the number this touches**, because MNv2 is one
+of the five nets whose results are quoted as tied.
+
+▶ **NOT YET MEASURED.** The MNv2 row above is inference from reading `sep_conv`/`depthwise_conv`,
+not a run. `verified_mlir/mobilenetv2_fwd.mlir` exists and `cd jax && lake exe mobilenet-v2`
+generates the reference, so `scripts/mnv4_forward_tie.py` needs only its param-grouping adapted
+(MNv2's triples are not UIB's). **Do this before or alongside the descriptor work** — it decides
+whether the fix has one consumer or three.
+
+---
+
 ## 4. PHASES
 
 ### Phase 0 — confirm the op set (do this FIRST, it is the load-bearing assumption)
@@ -164,30 +242,73 @@ Add the constructor + its param spec, mirroring `Spec.lean:98`'s arithmetic.
 *Gate*: a `#guard` pinning the `VLayer` param count against the baseline `Layer` count for the whole
 block table — the same two-list shape as `toSpecs == XLayout.specs`, and for the same reason.
 
-### Phase 2 — the UIB block VJP (proof side)
+### ✅ Phase 1b — the fused block (added 2026-08-07, MISSED by the original scoping)
+`VLayer.fusedMbConvNB` + `fusedMbConvFwdStridedB`. Phase 0 scoped the UIB *block* and not the
+*net*: stage 0 is `.fusedMbConv 32 48 4 3 2 1 false` and `fusedMbConv` had never existed on the
+verified path (the verified EfficientNet is B0, `mbConvSENB` throughout). ⚠ It uses **swish**, not
+relu — a deliberate paper deviation, because both emitters behind the 84.58% do
+(`Jax/Codegen.lean:1031`). Deliberately narrower than the baseline constructor: no `nBlocks`, no
+`useSE`, so no layout exists that the renderer cannot emit.
+
+### ✅ Phase 3-forward — DONE (2026-08-08)
+Built: `uibFwdSkipB` / `uibFwdPreStridedB` / `uibFwdPostStridedB` (three functions, because
+`.depthwise` and `.depthwiseStrided` differ in INPUT type and a stride-polymorphic block cannot
+typecheck), `fusedMbConvFwdStridedB`, `mnv4FwdChainB`, `mnv4ShapeList`/`mnv4SigList`,
+`mnv4FwdFaithfulV`.
+
+*Gates standing*: `uib-layout-tie` (3,737,088 + 43,360, `VLayer.toSpecs` vs baseline
+`Layer.nParams`) · `mnv4-fwd-smoke` (32 regular convs / 20 depthwise / 1 swish / 36 relu, the
+per-block depthwise histogram, `%zb` binding, signature ↔ layout shape-for-shape, 4,124,426 params
+= `RESULTS.md`'s 4.1M) · `iree-compile` accepts the module (204,622-byte vmfb) ·
+`scripts/mnv4_forward_tie.py` (§3b).
+
+### Phase 2 — the UIB block VJP (proof side) — NOT STARTED
 Four shapes from one primitive. The depthwise and pointwise VJPs exist (mnv2/enet); what is new is
 the composition with a leading DW.
 *Gate*: 3-axiom clean, and the existing `vjp-oracle-uib` (1.13e-05) as the numerical control.
+▶ Do this AFTER the asymmetric-pad descriptor, so the VJP is written once against the final forward.
 
-### Phase 3 — the renders + the spec + the app
+### Phase 3-rest — the eval forward, the train step, the spec, the app — NOT STARTED
 `mnv4_{fwd,fwd_eval,adam_train_step}` at `nClasses := 10`, B = 32, plus `mobilenetv4Verified` and an
 `Resnet50AdamCommon`-shaped driver pair. ⭐ **The R50/Imagenette work of 2026-08-07 is the template
 and it is three `#eval` lines + a 50-line Common** — that part is genuinely mechanical.
+⚠ The eval forward needs **running-BN** sites, where everything above is batch BN.
 *Gate*: `check_render_coverage.py`; and note that `lake build <exe>` does **not** run the renders
-(learned the hard way on R50 — the exe builds green against artifacts that do not exist).
+(learned the hard way on R50, then again here — the exe builds green against artifacts that do not
+exist, and fails at first invoke).
 
 ### Phase 4 — the run
 80 epochs, bs32, AdamW — the Imagenette tier's schedule.
 *Gate*: **84.58%**, the baseline path's number for this block table.
+⚠ Do not start this before the forward tie is clean. A number off a render that disagrees with the
+reference at the stem is a number for a different net, and it would look completely normal.
 
 ---
 
 ## 5. WHAT WOULD MAKE THIS NOT WORTH DOING
 
-* Phase 0 finds a missing descriptor that is not batch-invariant — then it is a `BatchableOp`
-  question first and an MNv4 question second.
-* The forward tie of §3 cannot be made to pass. Without it there is no way to tell a correct UIB
-  from a plausible one, and a 84.58% that came from the wrong block order is worse than no number.
+* ~~The forward tie cannot be made to pass.~~ **Retired 2026-08-08** — it passes at 1.8e-6 modulo
+  one op's padding, so the block order is settled and this risk is gone.
+* The asymmetric-pad descriptor turns out not to be batch-invariant — then it is a `BatchableOp`
+  question first and an MNv4 question second, and the blast radius (§3c) makes it a repo decision
+  rather than a net one.
+
+---
+
+## 7. WHAT THIS SESSION LEARNED THAT IS NOT ABOUT MNv4
+
+Three findings that outlive this net:
+
+1. **`VLayer` cannot express padding.** Zero occurrences of `Padding`. Every verified render is
+   symmetric by omission, while the baseline specs declare `.same`. This is the root cause of §3b
+   and §3c and it is a gap in the verified layer language, not a transcription error.
+2. **Scoping a BLOCK is not scoping a NET.** Phase 0 cleared UIB and missed `fusedMbConv` entirely,
+   which is the same failure the doc had already written down as the R50 precedent
+   (`BatchableOp.sigmoid`). Enumerate the spec's layer list against `VLayer`'s constructors before
+   declaring an op-set verdict.
+3. **A gate that can fail falsely is worse than a loose one.** `mnv4-fwd-smoke`'s first version
+   reported 42 regular convs instead of 32 because `"feature_group_count = 1"` substring-matches
+   `= 160`. It failed on a *correct* render. Parse numerically.
 
 ---
 
