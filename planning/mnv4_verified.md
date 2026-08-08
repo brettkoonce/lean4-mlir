@@ -102,6 +102,55 @@ same weights, not a shape or count check.
 
 ---
 
+## 3b. ⭐⭐ THE FORWARD TIE RAN (2026-08-08) — order CONFIRMED, one op's padding left
+
+`scripts/mnv4_forward_tie.py` runs `@mnv4_fwd` (iree-compile + iree-run-module) and the ACTUAL
+reference `forward()` from `jax/.lake/build/generated_mobilenet_v4.py` on one shared set of random
+weights, and compares logits. Result, batch 2, seed 42:
+
+| reference variant | max \|Δ\| |
+|---|---|
+| as-is (`padding='SAME'` stem) | **6.164e-02** |
+| stem patched to symmetric `(1,1)` | **1.788e-06** |
+
+⭐ **One line moves it from 14% to fp noise**, so the stem's padding is the ENTIRE disagreement.
+
+⭐⭐ **THE PRE/POST-DW ORDER IS PINNED.** §3 says a swap is invisible to counts, shapes, group
+widths and the types; 1.8e-6 agreement on random weights across 4.1M params and 52 convolutions is
+not survivable by a swapped depthwise. All 14 blocks, all four families, the fused stage, the
+swish/relu split, the skips and the head are confirmed against the net that produced 84.58%. This
+is the gate the doc said nothing could substitute for, and it holds.
+
+### ⛔ The remaining blocker: there is no asymmetric-padding conv descriptor
+
+The reference stem is `conv_bn(…, stride=(2,2), padding='SAME')`; XLA `'SAME'` on 3×3/s2 at 224
+pads **(0,1)**. Every conv descriptor in `Proofs/Codegen/StableHLO.lean` emits **symmetric**
+padding — `convStrided` gives `[[1,1],[1,1]]`, and the "stride-2 SAME conv" at `:400` means *same
+output size*, not XLA `SAME`. Both give 112×112, which is why nothing until this tie could see it.
+
+▶ Three ways out, and it is a judgement call, not a technical one:
+
+1. **Add an asymmetric-pad strided conv** — a new descriptor AND its VJP (the backward has to
+   place the same asymmetry). Real proof-layer work. Correct if the verified path should reproduce
+   the reference bit-for-bit.
+2. **Change the reference to symmetric.** Defensible on paper-faithfulness grounds — this is the
+   `conv2d` change of 2026-08-04 applied one net further — but it changes the net, so **84.58% would
+   have to be re-run** before it means anything.
+3. **Accept and document the deviation.** Cheapest, and the worst of the three: the verified render
+   would then not be the net with the published number, which is precisely the ambiguity the tier
+   exists to remove.
+
+⚠ Note the repo's existing position, which cuts BOTH ways (`generated_mobilenet_v4.py`'s `conv2d`):
+symmetric was adopted for the ResNet family and *"scoped ON PURPOSE: MobileNetV2/EfficientNet emit
+their own … with 'SAME' and are TF-origin ports, where asymmetric 'SAME' IS the reference. Do not
+'fix' those."* MNv4 is a TF-origin port, so by that rule the RENDER is the side that is wrong.
+
+⚠ And the same question is open one net over: **MobileNetV2's verified render uses the same
+symmetric `convStrided` stem**, and its reference is TF-origin too. Nobody has run this tie for
+MNv2. That is worth an hour before trusting the mnv2 Imagenette number as a *tied* result.
+
+---
+
 ## 4. PHASES
 
 ### Phase 0 — confirm the op set (do this FIRST, it is the load-bearing assumption)
