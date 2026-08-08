@@ -345,12 +345,20 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat)
     Returns `(code, logits-SSA)` with logits `[B, nClasses]`. -/
 def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) : StateM Nat (String × String) := do
   -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu ═══
+  -- ⭐ `.convStridedXla`, NOT `.convStrided` — and this net is the reason that token exists.
+  -- The reference stem is `conv_bn(…, stride=(2,2), padding='SAME')`, and XLA `'SAME'` on a 3×3/s2
+  -- at 224 pads **(0,1)**, not (1,1). Both give 112×112, so no shape check, `#guard`, op count or
+  -- arity audit can see the difference — the forward tie is the only thing that can, and it
+  -- measured **6.16e-2** with the symmetric token against **1.79e-6** with the reference patched
+  -- to match (`planning/mnv4_verified.md` §3b). Every OTHER stride-2 site in this net is genuinely
+  -- symmetric: `uib_block` and `fused_mbconv_block` pass an explicit `(pad,pad)` tuple, which is
+  -- why patching this one line alone closed the whole tie.
   let zx    : Vec (B*(3*224*224)) := fun _ => 0
   let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
   let z32   : Vec 32 := fun _ => 0
   let z112  : Vec (B*(32*112*112)) := fun _ => 0
   let (cStc, nStc) ← pretty B (.batchOp (N := B)
-    (.convStrided (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) "%sW" "%zb32" zSk z32)
+    (.convStridedXla (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) "%sW" "%zb32" zSk z32)
     (.operand "%x" zx))
   let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 32) (h := 112) (w := 112)
     "%sg" "%sbt" epsStr 0 z32 z32 (.operand nStc z112))
