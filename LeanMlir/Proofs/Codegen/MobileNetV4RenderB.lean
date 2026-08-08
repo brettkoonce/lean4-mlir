@@ -267,4 +267,81 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat)
          o := nPn, qc := "", qn := "", qr := "",
          ec := nFc, en := nFn, er := nFs, dc := "", dn := "", dr := "", pc := nPc }
 
+/-- **The MobileNetV4-Conv-S forward chain**, batch BN, at `N := B`, 224² → 10 classes.
+
+    Transcribed 1:1 from `jax/MainMobilenetV4.lean` — the Conv-S-sized demo that `RESULTS.md`'s
+    **84.58%** belongs to, NOT faithful Conv-M (~9.7M, no accuracy run). Spatial ladder:
+
+    ```
+      224 --stem s2--> 112 --fused s2--> 56 --uib s2--> 28 --uib s2--> 14 --uib s2--> 7 --GAP--> 1
+    ```
+
+    Block dispatch is forced by the table and checked by the types: the three stride-2 blocks are
+    `ic ≠ oc` and split by which depthwise carries the stride; the eleven stride-1 blocks are all
+    `ic = oc`, hence all skip. Families in order: Fused, ExtraDW, ExtraDW, IB, ExtraDW, ExtraDW,
+    ConvNeXt, IB, ConvNeXt, FFN, ExtraDW, ExtraDW, ExtraDW, IB, ConvNeXt.
+
+    **Activations, and they are not uniform** — each read off the emitter that produced the number,
+    not assumed:
+    * stem and head `.convBn` → **relu** (`MlirCodegen.lean:5852`, `emitConvBnTrain … useRelu := true`)
+    * the fused stage → **swish** (`jax/Jax/Codegen.lean:1031`) — a deliberate paper deviation, see
+      `fusedMbConvFwdStridedB`
+    * every UIB block → **relu** (`MlirCodegen.lean:6357`, "Plain ReLU throughout")
+
+    Returns `(code, logits-SSA)` with logits `[B, nClasses]`. -/
+def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) : StateM Nat (String × String) := do
+  -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu ═══
+  let zx    : Vec (B*(3*224*224)) := fun _ => 0
+  let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+  let z32   : Vec 32 := fun _ => 0
+  let z112  : Vec (B*(32*112*112)) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.batchOp (N := B)
+    (.convStrided (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) "%sW" "" zSk z32)
+    (.operand "%x" zx))
+  let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 32) (h := 112) (w := 112)
+    "%sg" "%sbt" epsStr 0 z32 z32 (.operand nStc z112))
+  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 32*112*112)) (.operand nStn z112))
+
+  -- ═══ stage 0: the fused inverted bottleneck, 112→56 (swish) ═══
+  let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 56 epsStr "0" nStr
+
+  -- ═══ the 14 UIB blocks ═══
+  let b1  ← uibFwdPreStridedB  B  48  80 4 3 5 28 epsStr "1"  f0.o   -- ExtraDW  56→28
+  let b2  ← uibFwdSkipB        B  80     2 3 3 28 epsStr "2"  b1.o   -- ExtraDW  28
+  let b3  ← uibFwdPostStridedB B  80 160 6   3 14 epsStr "3"  b2.o   -- IB       28→14
+  let b4  ← uibFwdSkipB        B 160     4 3 3 14 epsStr "4"  b3.o   -- ExtraDW  14
+  let b5  ← uibFwdSkipB        B 160     4 3 5 14 epsStr "5"  b4.o   -- ExtraDW  14
+  let b6  ← uibFwdSkipB        B 160     4 5 0 14 epsStr "6"  b5.o   -- ConvNeXt 14
+  let b7  ← uibFwdSkipB        B 160     4 0 3 14 epsStr "7"  b6.o   -- IB       14
+  let b8  ← uibFwdSkipB        B 160     4 3 0 14 epsStr "8"  b7.o   -- ConvNeXt 14
+  let b9  ← uibFwdSkipB        B 160     4 0 0 14 epsStr "9"  b8.o   -- FFN      14
+  let b10 ← uibFwdSkipB        B 160     4 3 3 14 epsStr "10" b9.o   -- ExtraDW  14
+  let b11 ← uibFwdPreStridedB  B 160 256 6 5 5  7 epsStr "11" b10.o  -- ExtraDW  14→7
+  let b12 ← uibFwdSkipB        B 256     4 5 5  7 epsStr "12" b11.o  -- ExtraDW  7
+  let b13 ← uibFwdSkipB        B 256     4 0 3  7 epsStr "13" b12.o  -- IB       7
+  let b14 ← uibFwdSkipB        B 256     4 3 0  7 epsStr "14" b13.o  -- ConvNeXt 7
+
+  -- ═══ head: 1×1 conv (256→1280) → batch BN → relu → GAP(7×7) → dense ═══
+  let z7     : Vec (B*(256*7*7)) := fun _ => 0
+  let zHk    : Kernel4 1280 256 1 1 := fun _ _ _ _ => 0
+  let z1280  : Vec 1280 := fun _ => 0
+  let zH7    : Vec (B*(1280*7*7)) := fun _ => 0
+  let z1280b : Vec (B*1280) := fun _ => 0
+  let zWd    : Mat 1280 nClasses := fun _ _ => 0
+  let zNC    : Vec nClasses := fun _ => 0
+  let (cHc, nHc) ← pretty B (.batchOp (N := B)
+    (.conv (ic := 256) (oc := 1280) (h := 7) (w := 7) "%hW" "" zHk z1280) (.operand b14.o z7))
+  let (cHn, nHn) ← pretty B (.bnBatchF (N := B) (oc := 1280) (h := 7) (w := 7)
+    "%hg" "%hbt" epsStr 0 z1280 z1280 (.operand nHc zH7))
+  let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu (n := 1280*7*7)) (.operand nHn zH7))
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
+    (.operand nHr zH7))
+  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
+    (.operand nGap z1280b))
+
+  pure (cStc ++ cStn ++ cStr ++ f0.code
+        ++ b1.code ++ b2.code ++ b3.code ++ b4.code ++ b5.code ++ b6.code ++ b7.code
+        ++ b8.code ++ b9.code ++ b10.code ++ b11.code ++ b12.code ++ b13.code ++ b14.code
+        ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog, nLog)
+
 end Proofs.StableHLO

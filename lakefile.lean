@@ -1486,6 +1486,10 @@ lean_exe «resnet34-verified-adam-xla» where
 lean_exe «uib-layout-tie» where
   root := `tests.TestUibLayoutTie
 
+/-- MNv4 forward-chain structural smoke — op counts against the Conv-S block table. -/
+lean_exe «mnv4-fwd-smoke» where
+  root := `tests.TestMnv4FwdSmoke
+
 /-- Shared body of the verified R50 + AdamW **Imagenette** trainer — the bottleneck peer of
     `Resnet34AdamCommon`, imported by both backends so their schedule and seed cannot drift.
     Artifacts: the `resnet50_*` renders at the end of `Proofs/Codegen/ResNet50RenderB.lean`. -/
