@@ -63,6 +63,49 @@ def main : IO Unit := do
     if got != want then
       IO.println s!"  ✗ depthwise @ groups={c}: got {got}, want {want}"; bad := bad + 1
   if !(← chk "depthwise total" dwTot 20) then bad := bad + 1
+
+  -- ── the module wrapper: self-containment and the layout tie ──
+  let m := mnv4FwdFaithfulV 2 10 "1.0e-05"
+  IO.FS.writeFile ".lake/build/mnv4_fwd.mlir" m
+  let mlines := m.splitOn "\n"
+  -- Every %zbN the body references must be bound by the prelude. An unbound one is an
+  -- undefined SSA name — caught here at `lake build` rather than at iree-compile.
+  let refZb : List Nat := mlines.filterMap (fun l =>
+    match l.splitOn "%zb" with
+    | _ :: rest :: _ => (rest.takeWhile Char.isDigit).toNat?
+    | _ => none)
+  let boundZb : List Nat := mlines.filterMap (fun l =>
+    if (l.splitOn "= stablehlo.constant").length > 1 then
+      match l.splitOn "%zb" with
+      | _ :: rest :: _ => (rest.takeWhile Char.isDigit).toNat?
+      | _ => none
+    else none)
+  let unbound := refZb.filter (fun c => !(boundZb.contains c))
+  if unbound.isEmpty then IO.println s!"  ✓ all %zb widths bound ({boundZb.length} constants)"
+  else
+    IO.println s!"  ✗ UNBOUND %zb widths: {unbound.eraseDups}"; bad := bad + 1
+
+  -- ⭐ The signature and VLayer.toSpecs are two hand-written readings of one layout. Tie them.
+  let sigShapes := (mnv4ShapeList 10).map (fun (_, ds) => ds)
+  let specShapes : List (List Nat) :=
+    ([VLayer.convBnNB 3 32 3 2, VLayer.fusedMbConvNB 32 48 4 3 2,
+      VLayer.uib  48  80 4 2 3 5, VLayer.uib  80  80 2 1 3 3, VLayer.uib  80 160 6 2 0 3,
+      VLayer.uib 160 160 4 1 3 3, VLayer.uib 160 160 4 1 3 5, VLayer.uib 160 160 4 1 5 0,
+      VLayer.uib 160 160 4 1 0 3, VLayer.uib 160 160 4 1 3 0, VLayer.uib 160 160 4 1 0 0,
+      VLayer.uib 160 160 4 1 3 3, VLayer.uib 160 256 6 2 5 5, VLayer.uib 256 256 4 1 5 5,
+      VLayer.uib 256 256 4 1 0 3, VLayer.uib 256 256 4 1 3 0,
+      VLayer.convBnNB 256 1280 1 1, VLayer.dense 1280 10]).flatMap
+        (fun l => (l.toSpecs.map (fun (d, _) => d.toList)).toList)
+  if sigShapes == specShapes then
+    IO.println s!"  ✓ signature ties VLayer.toSpecs: {sigShapes.length} params, shape-for-shape"
+  else
+    IO.println s!"  ✗ SIGNATURE/LAYOUT MISMATCH: sig has {sigShapes.length}, spec has {specShapes.length}"
+    let z := sigShapes.zip specShapes
+    for (a, b) in (z.filter (fun (a, b) => a != b)).take 5 do
+      IO.println s!"      sig {a} vs spec {b}"
+    bad := bad + 1
+  let tot := sigShapes.foldl (fun acc d => acc + d.foldl (· * ·) 1) 0
+  IO.println s!"  total params: {tot}"
   if bad != 0 then
     IO.eprintln s!"MNV4 FORWARD SMOKE FAILED ({bad} mismatches)"
     IO.Process.exit 1

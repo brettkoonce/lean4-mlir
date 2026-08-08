@@ -61,6 +61,60 @@ open Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
+/-- One UIB block's parameters, in **`VLayer.toSpecs` order**: pre-DW? → expand → post-DW? →
+    project, each `{W, γ, β}` and bias-free. The names are exactly what `uibFwd*B` emits, and the
+    order is exactly what `toSpecs` lays out — those two facts are what make the signature and the
+    driver's parameter blob describe the same thing.
+
+    ⚠ A depthwise kernel is `[c, 1, k, k]`, not `[c, c, k, k]`. That is the whole difference between
+    a depthwise and a regular conv at this layer, and it is 3 orders of magnitude of parameters. -/
+private def uibSig (p : String) (ic oc expand preDWk postDWk : Nat) : List (String × List Nat) :=
+  let mid := ic * expand
+  (if preDWk > 0 then
+     [(s!"%u{p}qW", [ic, 1, preDWk, preDWk]), (s!"%u{p}qg", [ic]), (s!"%u{p}qbt", [ic])] else []) ++
+  [(s!"%u{p}eW", [mid, ic, 1, 1]), (s!"%u{p}eg", [mid]), (s!"%u{p}ebt", [mid])] ++
+  (if postDWk > 0 then
+     [(s!"%u{p}dW", [mid, 1, postDWk, postDWk]), (s!"%u{p}dg", [mid]), (s!"%u{p}dbt", [mid])] else []) ++
+  [(s!"%u{p}pW", [oc, mid, 1, 1]), (s!"%u{p}pg", [oc]), (s!"%u{p}pbt", [oc])]
+
+/-- The fused stage's parameters, in `toSpecs` order: the `k×k` regular conv then the 1×1 project. -/
+private def fusedSig (p : String) (ic oc expand k : Nat) : List (String × List Nat) :=
+  let mid := if expand == 1 then oc else ic * expand
+  [(s!"%f{p}cW", [mid, ic, k, k]), (s!"%f{p}cg", [mid]), (s!"%f{p}cbt", [mid])] ++
+  (if expand == 1 then [] else
+     [(s!"%f{p}pW", [oc, mid, 1, 1]), (s!"%f{p}pg", [oc]), (s!"%f{p}pbt", [oc])])
+
+/-- **The MobileNetV4-Conv-S parameter inputs**, in func-arg order: stem (3), the fused stage, the
+    14 UIB blocks, the head conv, the classifier. Single source for the signature and the return
+    order, the same role `r50ShapeList` plays for R50.
+
+    ⚠ This list and `VLayer.toSpecs` are TWO HAND-WRITTEN READINGS of the same layout — the
+    renderer cannot import the spec without inverting the dependency, which is the same two-lists
+    shape as `toSpecs == XLayout.specs` elsewhere. `mnv4-sig-tie` is the `#guard` that pins them. -/
+def mnv4ShapeList (nClasses : Nat) : List (String × List Nat) :=
+  [("%sW", [32, 3, 3, 3]), ("%sg", [32]), ("%sbt", [32])] ++
+  fusedSig "0" 32 48 4 3 ++
+  uibSig "1"   48  80 4 3 5 ++
+  uibSig "2"   80  80 2 3 3 ++
+  uibSig "3"   80 160 6 0 3 ++
+  uibSig "4"  160 160 4 3 3 ++
+  uibSig "5"  160 160 4 3 5 ++
+  uibSig "6"  160 160 4 5 0 ++
+  uibSig "7"  160 160 4 0 3 ++
+  uibSig "8"  160 160 4 3 0 ++
+  uibSig "9"  160 160 4 0 0 ++
+  uibSig "10" 160 160 4 3 3 ++
+  uibSig "11" 160 256 6 5 5 ++
+  uibSig "12" 256 256 4 5 5 ++
+  uibSig "13" 256 256 4 0 3 ++
+  uibSig "14" 256 256 4 3 0 ++
+  [("%hW", [1280, 256, 1, 1]), ("%hg", [1280]), ("%hbt", [1280])] ++
+  [("%Wd", [1280, nClasses]), ("%bd", [nClasses])]
+
+/-- The same list as MLIR types. Derived, so the shapes have one definition. -/
+def mnv4SigList (nClasses : Nat) : List (String × String) :=
+  (mnv4ShapeList nClasses).map (fun (n, ds) => (n, ty ds))
+
 /-- Saved forward SSA names the UIB backward + gradient passes reference. The optional fields are
     `""` when their depthwise is absent (`k = 0`), which is how the backward reads off which family
     it is looking at without re-deriving it from the kernel sizes. -/
@@ -100,7 +154,7 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
   let mut cur := xName
   if preDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
-      (.depthwise (c := c) (h := h) (w := h) s!"%u{p}qW" "" zqk zc) (.operand cur zcb))
+      (.depthwise (c := c) (h := h) (w := h) s!"%u{p}qW" s!"%zb{c}" zqk zc) (.operand cur zcb))
     let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := c) (h := h) (w := h)
       s!"%u{p}qg" s!"%u{p}qbt" epsStr 0 zc zc (.operand n1 zcb))
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := c*h*h)) (.operand n2 zcb))
@@ -108,7 +162,7 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
     qc := n1; qn := n2; qr := n3; cur := n3
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := c) (oc := mid) (h := h) (w := h) s!"%u{p}eW" "" zke zm) (.operand cur zcb))
+    (.conv (ic := c) (oc := mid) (h := h) (w := h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand cur zcb))
   let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
     s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zmb))
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nEn zmb))
@@ -118,7 +172,7 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
   let mut dc := ""; let mut dn := ""; let mut dr := ""
   if postDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
-      (.depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" "" zdk zm) (.operand cur zmb))
+      (.depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand cur zmb))
     let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
       s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand n1 zmb))
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand n2 zmb))
@@ -126,7 +180,7 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
     dc := n1; dn := n2; dr := n3; cur := n3
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := mid) (oc := c) (h := h) (w := h) s!"%u{p}pW" "" zkp zc) (.operand cur zmb))
+    (.conv (ic := mid) (oc := c) (h := h) (w := h) s!"%u{p}pW" s!"%zb{c}" zkp zc) (.operand cur zmb))
   let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := c) (h := h) (w := h)
     s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zc zc (.operand nPc zcb))
   let (cA, nA) ← pretty B (.addVB (.operand nPn zcb) (.operand xName zcb))
@@ -154,13 +208,13 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat)
   let zob  : Vec (B*(oc*h*h)) := fun _ => 0
 
   let (cQc, nQc) ← pretty B (.batchOp (N := B)
-    (.depthwiseStrided (c := ic) (h := h) (w := h) s!"%u{p}qW" "" zqk zic) (.operand xName zin))
+    (.depthwiseStrided (c := ic) (h := h) (w := h) s!"%u{p}qW" s!"%zb{ic}" zqk zic) (.operand xName zin))
   let (cQn, nQn) ← pretty B (.bnBatchF (N := B) (oc := ic) (h := h) (w := h)
     s!"%u{p}qg" s!"%u{p}qbt" epsStr 0 zic zic (.operand nQc zqb))
   let (cQr, nQr) ← pretty B (.batchOp (N := B) (.relu (n := ic*h*h)) (.operand nQn zqb))
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := ic) (oc := mid) (h := h) (w := h) s!"%u{p}eW" "" zke zm) (.operand nQr zqb))
+    (.conv (ic := ic) (oc := mid) (h := h) (w := h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand nQr zqb))
   let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
     s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zmb))
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nEn zmb))
@@ -170,7 +224,7 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat)
   let mut dc := ""; let mut dn := ""; let mut dr := ""
   if postDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
-      (.depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" "" zdk zm) (.operand cur zmb))
+      (.depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand cur zmb))
     let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
       s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand n1 zmb))
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand n2 zmb))
@@ -178,7 +232,7 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat)
     dc := n1; dn := n2; dr := n3; cur := n3
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" "" zkp zoc) (.operand cur zmb))
+    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" s!"%zb{oc}" zkp zoc) (.operand cur zmb))
   let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
     s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
   code := code ++ cPc ++ cPn
@@ -203,19 +257,19 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat)
   let zob  : Vec (B*(oc*h*h)) := fun _ => 0
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) s!"%u{p}eW" "" zke zm) (.operand xName zin))
+    (.conv (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand xName zin))
   let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := 2*h) (w := 2*h)
     s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zeb))
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*(2*h)*(2*h))) (.operand nEn zeb))
 
   let (cDc, nDc) ← pretty B (.batchOp (N := B)
-    (.depthwiseStrided (c := mid) (h := h) (w := h) s!"%u{p}dW" "" zdk zm) (.operand nEr zeb))
+    (.depthwiseStrided (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand nEr zeb))
   let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
     s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand nDc zmb))
   let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nDn zmb))
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" "" zkp zoc) (.operand nDr zmb))
+    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" s!"%zb{oc}" zkp zoc) (.operand nDr zmb))
   let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
     s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
 
@@ -253,13 +307,13 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat)
 
   let (cFc, nFc) ← pretty B (.batchOp (N := B)
     (.convStrided (ic := ic) (oc := mid) (h := h) (w := h) (kH := k) (kW := k)
-      s!"%f{p}cW" "" zkf zm) (.operand xName zin))
+      s!"%f{p}cW" s!"%zb{mid}" zkf zm) (.operand xName zin))
   let (cFn, nFn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
     s!"%f{p}cg" s!"%f{p}cbt" epsStr 0 zm zm (.operand nFc zmb))
   let (cFs, nFs) ← pretty B (.batchOp (N := B) (.swish (n := mid*h*h)) (.operand nFn zmb))
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%f{p}pW" "" zkp zoc) (.operand nFs zmb))
+    (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%f{p}pW" s!"%zb{oc}" zkp zoc) (.operand nFs zmb))
   let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
     s!"%f{p}pg" s!"%f{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
 
@@ -296,7 +350,7 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) : StateM Nat (String × S
   let z32   : Vec 32 := fun _ => 0
   let z112  : Vec (B*(32*112*112)) := fun _ => 0
   let (cStc, nStc) ← pretty B (.batchOp (N := B)
-    (.convStrided (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) "%sW" "" zSk z32)
+    (.convStrided (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) "%sW" "%zb32" zSk z32)
     (.operand "%x" zx))
   let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 32) (h := 112) (w := 112)
     "%sg" "%sbt" epsStr 0 z32 z32 (.operand nStc z112))
@@ -330,7 +384,7 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) : StateM Nat (String × S
   let zWd    : Mat 1280 nClasses := fun _ _ => 0
   let zNC    : Vec nClasses := fun _ => 0
   let (cHc, nHc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := 256) (oc := 1280) (h := 7) (w := 7) "%hW" "" zHk z1280) (.operand b14.o z7))
+    (.conv (ic := 256) (oc := 1280) (h := 7) (w := 7) "%hW" "%zb1280" zHk z1280) (.operand b14.o z7))
   let (cHn, nHn) ← pretty B (.bnBatchF (N := B) (oc := 1280) (h := 7) (w := 7)
     "%hg" "%hbt" epsStr 0 z1280 z1280 (.operand nHc zH7))
   let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu (n := 1280*7*7)) (.operand nHn zH7))
@@ -343,5 +397,34 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) : StateM Nat (String × S
         ++ b1.code ++ b2.code ++ b3.code ++ b4.code ++ b5.code ++ b6.code ++ b7.code
         ++ b8.code ++ b9.code ++ b10.code ++ b11.code ++ b12.code ++ b13.code ++ b14.code
         ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog, nLog)
+
+/-- Every distinct channel width a bias-free conv in this net binds `%zb{c}` at: the stem, the fused
+    stage's two convs, each block's pre-DW (`ic`), expand and post-DW (`mid`) and project (`oc`), and
+    the head. Derived by hand and pinned by `mnv4-fwd-smoke`, which fails on an unbound `%zb`. -/
+def mnv4ZbWidths : List Nat :=
+  [32, 48, 80, 128, 160, 192, 256, 480, 640, 960, 1024, 1280]
+
+/-- **`@mnv4_fwd`** — the MobileNetV4-Conv-S forward as one MLIR module.
+
+    `%x` plus `mnv4SigList`'s parameters in `VLayer.toSpecs` order, logits `[B, nClasses]`. Every
+    conv is bias-free, so the proven conv ops' bias operands bind to the `%zb{c}` zero constants the
+    prelude declares — same op, `bias = 0`, and `x + 0.0` is exact (§2l step B).
+
+    ⚠ `zeroBiasPrelude` must cover every width the chain references or the module has an unbound
+    SSA name. That is a link error at parse time rather than a wrong number, which is the good
+    direction, but `mnv4-fwd-smoke` checks it anyway so the failure arrives at `lake build` and not
+    at `iree-compile`. -/
+def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
+    (slug : String := "mnv4") (vSuffix : String := "") : String :=
+  let sigList := mnv4SigList nClasses
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let (code, logits) := (mnv4FwdChainB B nClasses epsStr).run' 0
+  "module @m {\n" ++
+  s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── MobileNetV4-Conv-S forward: every line is pretty(verified AST node) ──\n" ++
+  zeroBiasPrelude false mnv4ZbWidths ++ code ++
+  s!"    return {logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
 
 end Proofs.StableHLO
