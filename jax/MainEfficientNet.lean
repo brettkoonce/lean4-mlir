@@ -8,6 +8,10 @@ def efficientNetB0 : NetSpec where
   name := "EfficientNet-B0"
   imageH := 224
   imageW := 224
+  -- ⚠ EfficientNet-B0 is SiLU/swish throughout, stem and head included. The verified render always
+  -- did this; the reference did not (`planning/mnv4_verified.md` §3f), and it was worth 51% of
+  -- logit range — five times the padding deviation.
+  convBnAct := .swish
   layers := [
     .convBn 3 32 3 2 .same,                          -- 224→112
     .mbConv  32  16 1 3 1 1 true,                     -- 112

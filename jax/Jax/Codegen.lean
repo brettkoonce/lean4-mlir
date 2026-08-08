@@ -751,7 +751,10 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    if use_skip:\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n"
-  if spec.hasMbConv || spec.layers.any fun | .mbConvV3 .. => true | _ => false then
+  -- ⚠ `convBnAct` also needs these helpers, and it can be set on a net with no MBConv layer at
+  -- all — without this the emitted module calls `swish` / `hard_swish` that were never defined.
+  if spec.hasMbConv || spec.convBnAct == .swish || spec.convBnAct == .hSwish
+     || spec.layers.any fun | .mbConvV3 .. => true | _ => false then
     code := code ++
       "def swish(x):\n" ++
       "    return x * jax.nn.sigmoid(x)\n\n" ++
@@ -1983,7 +1986,16 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         code := code ++ "    x = conv_bn(x, params[" ++ toString pidx ++ "][0], params[" ++
           toString pidx ++ "][1], params[" ++ toString pidx ++ "][2]" ++
           strideStr ++ ", padding='" ++ padStr ++ "')\n"
-      code := code ++ "    x = jax.nn.relu(x)\n"
+      -- ⚠ Was an unconditional `jax.nn.relu(x)`, which made this emitter the reason MobileNetV2's
+      -- reference was ReLU where the net is ReLU6, and EfficientNet's was ReLU where the net is
+      -- swish. See `NetSpec.convBnAct`.
+      code := code ++ (match spec.convBnAct with
+        | .relu     => "    x = jax.nn.relu(x)\n"
+        | .relu6    => "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n"
+        | .swish    => "    x = swish(x)\n"
+        | .hSwish   => "    x = x * jnp.minimum(jax.nn.relu(x + 3.0), 6.0) / 6.0\n"
+        | .gelu     => "    x = jax.nn.gelu(x)\n"
+        | .identity => "")
       pidx := pidx + 1
     | .convNextStage _c nBlocks _ _ =>
       for _ in List.range nBlocks do

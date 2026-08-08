@@ -327,6 +327,27 @@ structure NetSpec where
       (the default) reproduces the old paths exactly, so no existing trainer
       moves. -/
   buildTag : String := ""
+  /-- Activation applied after a `.convBn` layer, **per net**.
+
+      ⚠ This exists because the JAX emitter hardcoded `jax.nn.relu(x)` after every `.convBn`
+      and had no way to say otherwise — which silently made two references deviate from the
+      nets they are supposed to be:
+
+      * **MobileNetV2** is ReLU6 throughout (stem and head included), not ReLU.
+      * **EfficientNet-B0** is SiLU/swish throughout, not ReLU.
+
+      In both cases the *verified render* was already paper-faithful and the *reference* was
+      wrong, so this moves the reference onto the render rather than the other way round
+      (`planning/mnv4_verified.md` §3f/§3h).
+
+      ⚠ The MNv2 deviation is **inert on small activations** — relu6 ≡ relu below 6 — which is
+      exactly why every forward tie at `--scale 0.1` passed with it present. It only appears
+      under He-scaled weights. Do not treat "the tie passed" as evidence the activations agree.
+
+      Scoped PER NET, not per layer, because every net in the kit uses one activation at all of
+      its `.convBn` sites. A net that genuinely mixed them would need a `Layer` field instead;
+      none does, and 458 construction sites is the price of finding out. -/
+  convBnAct : Activation := .relu
 deriving Repr
 
 /-- The "kind" of supervised loss the train step computes. Picks the

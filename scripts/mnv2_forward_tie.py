@@ -129,6 +129,11 @@ def load_reference_forward(stem_sym, dw_sym, bn_perex=False, bn_frozen=False):
     for want, old, new in patches:
         if not want:
             continue
+        # ⚠ ACT sites are now ABSENT by design: `NetSpec.convBnAct` fixed the generator
+        # (2026-08-08), so the reference already emits the right activation. Skip rather than
+        # fail — this axis is kept only so the deviation can be re-created for comparison.
+        if old not in body and any(old == o for o, _ in ACT_SITES):
+            continue
         if old not in body:
             sys.exit("patch site not found — the reference generator's shape changed:\n"
                      f"  {old.splitlines()[0]}")
