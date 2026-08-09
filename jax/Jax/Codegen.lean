@@ -2549,33 +2549,64 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    return x4m.reshape(B, -1), ym\n\n"
    else "") ++
   "@jit\n" ++
-  (if cfg.runningBN then "def eval_batch(params, bn, x, y):\n" else "def eval_batch(params, x, y):\n") ++
+  (if cfg.runningBN then "def eval_batch(params, bn, x, y, take):\n" else "def eval_batch(params, x, y, take):\n") ++
   (if cfg.runningBN then "    logits, _ = forward(params, x, bn, False)\n" else "    logits = forward(params, x)\n") ++
+  -- `take` masks the PADDED tail rows out of the counts (see `evaluate`). Traced, not static, so
+  -- the batch shape stays constant and `@jit` retraces once at most.
+  "    keep = jnp.arange(logits.shape[0]) < take\n" ++
   "    preds = jnp.argmax(logits, axis=-1)\n" ++
   "    log_probs = jax.nn.log_softmax(logits, axis=-1)\n" ++
-  "    loss = -jnp.mean(jnp.sum(log_probs * jax.nn.one_hot(y, " ++ toString nClasses ++ "), axis=-1))\n" ++
-  "    correct1 = jnp.sum(preds == y)\n" ++
+  "    loss = -(jnp.sum(jnp.sum(log_probs * jax.nn.one_hot(y, " ++ toString nClasses ++ "), axis=-1) * keep) / jnp.maximum(take, 1))\n" ++
+  "    correct1 = jnp.sum((preds == y) & keep)\n" ++
   "    # top-5: jax.lax.top_k's indices are broken on ROCm/gfx1100 (garbage on\n" ++
   "    # device, HIP error to host), so rank the true class instead — top-5 is\n" ++
   "    # correct iff fewer than 5 classes have a strictly-greater logit.\n" ++
   "    true_logit = jnp.take_along_axis(logits, y[:, None], axis=1)\n" ++
-  "    correct5 = jnp.sum(jnp.sum(logits > true_logit, axis=1) < 5)\n" ++
+  "    correct5 = jnp.sum((jnp.sum(logits > true_logit, axis=1) < 5) & keep)\n" ++
   "    return correct1, correct5, loss\n\n" ++
   "def evaluate(params, images, labels, batch_size=512):\n" ++
   "    batch_size = (batch_size // n_devices) * n_devices or n_devices\n" ++
+  -- ⚠⚠ TWO EVAL DEFECTS, both invisible in the reported number and both fixed here.
+  --
+  -- (1) THE VAL SET IS SORTED BY CLASS. With BATCH-norm eval (`runningBN := false`) each 512-image
+  --     batch then sees only 2-3 classes, so BN normalises with near-single-class statistics and
+  --     the discriminative signal is destroyed. Measured on Imagenette: mnv2 epoch-10 val goes
+  --     29.91% sorted -> 70.15% shuffled, same weights and recipe. It is why mnv2 and enet BOTH
+  --     plateaued at ~36% — two different architectures reporting the same number, because the
+  --     number was an eval artifact rather than a property of either net.
+  --     The permutation is SEEDED, so eval stays deterministic and run-to-run comparable.
+  --
+  -- (2) THE REMAINDER WAS DROPPED (`len(images) - batch_size + 1`). Not a rounding detail on a
+  --     sorted set: Imagenette val is 3925, so 341 images were skipped and ALL 341 are class 9 —
+  --     390 exist, 49 were ever evaluated. Every published Imagenette number was computed against
+  --     a val set missing 87% of one class. The last batch is now evaluated ragged, and
+  --     `evaluated` counts what was actually seen.
+  "    _p = np.random.default_rng(12345).permutation(len(labels))\n" ++
+  "    images, labels = images[_p], labels[_p]\n" ++
   "    correct1 = 0\n" ++
   "    correct5 = 0\n" ++
   "    total_loss = 0.0\n" ++
   "    n_batches = 0\n" ++
-  "    for i in range(0, len(images) - batch_size + 1, batch_size):\n" ++
+  -- ⚠ The tail batch is PADDED up to `batch_size` (by repeating earlier rows) rather than run
+  -- ragged: `eval_batch` is `@jit` + sharded, so a short batch both retraces and can fail the
+  -- `n_devices` divisibility the sharding needs. Only the first `take` rows of its result are
+  -- counted, so the padding cannot contribute to the score.
+  "    for i in range(0, len(images), batch_size):\n" ++
+  "        xb, yb = images[i:i+batch_size], labels[i:i+batch_size]\n" ++
+  "        take = len(yb)\n" ++
+  "        if take < batch_size:\n" ++
+  "            pad = batch_size - take\n" ++
+  "            xb = np.concatenate([xb, images[:pad]], axis=0)\n" ++
+  "            yb = np.concatenate([yb, labels[:pad]], axis=0)\n" ++
   "        c1, c5, l = eval_batch(params,\n" ++
-  "            jax.device_put(images[i:i+batch_size], data_sharding),\n" ++
-  "            jax.device_put(labels[i:i+batch_size], data_sharding))\n" ++
+  "            jax.device_put(xb, data_sharding),\n" ++
+  "            jax.device_put(yb, data_sharding),\n" ++
+  "            take)\n" ++
   "        correct1 += int(c1)\n" ++
   "        correct5 += int(c5)\n" ++
   "        total_loss += float(l)\n" ++
   "        n_batches += 1\n" ++
-  "    evaluated = n_batches * batch_size\n" ++
+  "    evaluated = len(labels)\n" ++
   "    return correct1, correct5, evaluated, total_loss / max(n_batches, 1)\n\n"
 
 private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetSpec) : String :=
@@ -2893,7 +2924,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "                iter(build_imagenet_iter('validation', " ++ valBatch ++ ", training=False, augment=False)),\n" ++
     "                data_sharding)\n" ++
     "            for x, y in v_iter:\n" ++
-    "                c1, c5, l = eval_batch(" ++ evalArgs ++ ", x, y)\n" ++
+    "                c1, c5, l = eval_batch(" ++ evalArgs ++ ", x, y, len(y))\n" ++
     "                correct1 += int(c1)\n" ++
     "                correct5 += int(c5)\n" ++
     "                total   += y.shape[0]\n" ++
@@ -2928,7 +2959,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "        total_eval_loss = 0.0\n" ++
     "        v_batches = 0\n" ++
     "        for x, y in v_iter:\n" ++
-    "            c1, c5, l = eval_batch(" ++ evalArgs ++ ", x, y)\n" ++
+    "            c1, c5, l = eval_batch(" ++ evalArgs ++ ", x, y, len(y))\n" ++
     "            correct1 += int(c1)\n" ++
     "            correct5 += int(c5)\n" ++
     "            total   += y.shape[0]\n" ++
