@@ -89,15 +89,12 @@ def main : IO Unit := do
 
   -- ⭐ The signature and VLayer.toSpecs are two hand-written readings of one layout. Tie them.
   let sigShapes := (mnv4ShapeList 10).map (fun (_, ds) => ds)
+  -- ⭐ Read off `mobilenetv4Verified`, NOT a list spelled again here. This test used to carry its
+  -- own copy of the block table; the spec now exists (`LeanMlir/VerifiedNets.lean`), so the tie is
+  -- against the object the TRAINER runs rather than against a twin of it — which is the whole
+  -- point of the tie. One fewer transcription of the 14 rows.
   let specShapes : List (List Nat) :=
-    ([VLayer.convBnNB 3 32 3 2, VLayer.fusedMbConvNB 32 48 4 3 2,
-      VLayer.uib  48  80 4 2 3 5, VLayer.uib  80  80 2 1 3 3, VLayer.uib  80 160 6 2 0 3,
-      VLayer.uib 160 160 4 1 3 3, VLayer.uib 160 160 4 1 3 5, VLayer.uib 160 160 4 1 5 0,
-      VLayer.uib 160 160 4 1 0 3, VLayer.uib 160 160 4 1 3 0, VLayer.uib 160 160 4 1 0 0,
-      VLayer.uib 160 160 4 1 3 3, VLayer.uib 160 256 6 2 5 5, VLayer.uib 256 256 4 1 5 5,
-      VLayer.uib 256 256 4 1 0 3, VLayer.uib 256 256 4 1 3 0,
-      VLayer.convBnNB 256 1280 1 1, VLayer.dense 1280 10]).flatMap
-        (fun l => (l.toSpecs.map (fun (d, _) => d.toList)).toList)
+    (mobilenetv4Verified.toSpecs.map (fun (d, _) => d.toList)).toList
   if sigShapes == specShapes then
     IO.println s!"  ✓ signature ties VLayer.toSpecs: {sigShapes.length} params, shape-for-shape"
   else

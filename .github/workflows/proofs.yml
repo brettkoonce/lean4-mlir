@@ -123,6 +123,17 @@ jobs:
               verified_mlir/mnv2in_rms64_train_step.mlir \
               verified_mlir/mnv2in_rmsdp64_train_step.mlir \
             || { echo "::error::committed verified_mlir/{mobilenetv2,mnv2in}_*_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean)"; exit 1; }
+          # MobileNetV4-Conv-S (planning/mnv4_verified.md §3i). Elaborating this module writes
+          # ALL THREE artifacts, so all three are diffed — the fwd/fwd_eval/train_step set comes
+          # from ONE traversal (`mnv4FwdChainB` switched by `BnMode`), and guarding only the train
+          # step would leave the two forwards free to drift away from the graph that trains them.
+          # That is precisely the §3d(b) split this net was built to make impossible.
+          lake env lean LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean
+          git diff --exit-code -- \
+              verified_mlir/mnv4_fwd.mlir \
+              verified_mlir/mnv4_fwd_eval.mlir \
+              verified_mlir/mnv4_adam_train_step.mlir \
+            || { echo "::error::committed verified_mlir/mnv4_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean)"; exit 1; }
           # Elaborating this module writes all EIGHT ConvNeXt artifacts, so diffing only the SGD
           # train step left seven of them unguarded-but-baselined — the same gap the EfficientNet
           # step below had until 2026-08-02. The `lake env lean` above already ran every writer, so

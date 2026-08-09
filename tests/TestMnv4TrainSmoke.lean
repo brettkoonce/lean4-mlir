@@ -73,6 +73,22 @@ def main : IO Unit := do
     IO.println "    ⇒ the net that trains and the net that scores have diverged (§3d(b))."
     bad := bad + 1
 
+  -- ── ⭐ THE SPEC'S BN LIST vs THE RENDER'S STAT SLOTS — the two-lists tie for running stats ──
+  -- `mobilenetv4Verified.bnChannels` drives the driver's running-stat threading; `mnv4StatShapeList`
+  -- drives what the train step RETURNS and what `@mnv4_fwd_eval` READS. They are separate readings
+  -- of one layout (the spec is a light module and cannot import the renderer), so nothing but this
+  -- ties them. A mismatch is silent at run time: the arities agree and the wrong layer's statistics
+  -- flow into the wrong eval slot.
+  let specBn := mobilenetv4Verified.bnChannels.toList
+  let renderBn := (mnv4StatShapeList.map (fun (_, ds) => ds.headD 0)).toArray.toList
+  -- the render carries mu AND var per layer, so halve it by taking every other entry
+  let renderBnLayers := (renderBn.zipIdx.filterMap
+    (fun (c, i) => if i % 2 == 0 then some c else none))
+  if !(← chk "spec bnChannels == render stat widths (52 layers)"
+        (if specBn == renderBnLayers then 1 else 0) 1) then
+    IO.println s!"    spec {specBn.length} entries vs render {renderBnLayers.length}"
+    bad := bad + 1
+
   -- ── the eval forward must read the SAME stat slots the train step returns ──
   let ev := mnv4FwdEvalFaithfulV B nClasses "1.0e-05"
   let mut missing := 0

@@ -61,6 +61,7 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.AdamRender,
              `LeanMlir.Proofs.Codegen.MobileNetV2Render,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderB,
+             `LeanMlir.Proofs.Codegen.MobileNetV4RenderB,
              `LeanMlir.Proofs.Codegen.EfficientNetRender,
              `LeanMlir.Proofs.Codegen.ConvNeXtRender,
              -- ⚠ A ROOT, and it has to be: nothing imports a leaf renderer, so on a fresh
@@ -909,7 +910,10 @@ lean_lib «Certs» where
              -- corpus is built. Guarded by scripts/check_render_coverage.py.
              `LeanMlir.Proofs.Codegen.ResNet34RenderB,
              `LeanMlir.Proofs.Codegen.ResNet50RenderB,
-             `LeanMlir.Proofs.Codegen.MobileNetV2RenderB]
+             `LeanMlir.Proofs.Codegen.MobileNetV2RenderB,
+             -- MNv4 joined 2026-08-09: three artifacts, zero importers — exactly the leaf-writer
+             -- shape `scripts/check_render_coverage.py` exists to catch, and it did.
+             `LeanMlir.Proofs.Codegen.MobileNetV4RenderB]
 
 /-- **`lake build CertsHeavy`** — the GENERATED full-input certificate
     instances (784-dim scorecard + per-pair LipSDP + IBP L∞: ~90k lines of
@@ -1496,6 +1500,21 @@ lean_exe «mnv4-fwd-smoke» where
     Also emits the batch-2 train step `scripts/mnv4_grad_tie.py` runs. -/
 lean_exe «mnv4-train-smoke» where
   root := `tests.TestMnv4TrainSmoke
+
+/-- Shared body of the verified MobileNetV4-Conv-S + AdamW **Imagenette** trainer — the
+    `Resnet50AdamCommon` twin. Its own `lean_lib` for the same reason those have one: lake needs a
+    module for a root shared by an executable, and a `Common` without one silently fails to build
+    for the second consumer. Artifacts: the `mnv4_*` renders at the end of
+    `Proofs/Codegen/MobileNetV4RenderB.lean`. -/
+lean_lib «MobilenetV4AdamCommon» where
+  srcDir := "."
+  roots := #[`apps.imagenette.MobilenetV4AdamCommon]
+
+/-- Phase 4 of `planning/mnv4_verified.md`: 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
+    IREE peer exists yet, and the body is backend-agnostic if one is wanted. -/
+lean_exe «mobilenetv4-verified-adam-xla» where
+  root := `apps.imagenette.MainMobilenetV4VerifiedAdamXla
+  moreLinkArgs := xlaLink
 
 /-- Shared body of the verified R50 + AdamW **Imagenette** trainer — the bottleneck peer of
     `Resnet34AdamCommon`, imported by both backends so their schedule and seed cannot drift.
