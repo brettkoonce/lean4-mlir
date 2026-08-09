@@ -137,6 +137,45 @@ def dwXlaWGradModule : String :=
   s!"  func.func @dw_xla_wgrad(%dy: {ty [B, 6*8*8]}, %x: {ty [B, 6*16*16]}) -> {ty [6,1,3,3]} " ++ "{\n" ++
   body ++ s!"    return {res} : {ty [6,1,3,3]}\n" ++ "  }\n}\n"
 
+/-- `@dw_sym_back_k3` / `@dw_sym_back_k5` — the SYMMETRIC `depthwiseStridedBackBatched`, the
+    input-VJP MobileNetV4's UIB blocks use (their `uib_block` passes an explicit `(p,p)` tuple, so
+    they are genuinely symmetric — only the STEM is XLA `SAME`).
+
+    ⚠⚠ **This op ships in EfficientNet's train step and has never had a known-answer check.**
+    `xla_pad_op_check.py` grew probes for the `…Xla…` peers when those were built (§3g) and stopped
+    there, so the older symmetric backward was covered by nothing but the assumption that it was
+    already right. `planning/mnv4_verified.md`'s MNv4 gradient tie localised a ~2% cotangent error
+    to exactly the block whose dx this op produces, which is what these two probes are here to
+    convict or clear. **k=3 AND k=5**, because the tie's evidence points at k=5 specifically: the
+    k=3 strided block in the middle of the net added no visible jump. -/
+def dwSymBackModule (k : Nat) (zK : DepthwiseKernel 6 k k) : String :=
+  let B := 2
+  let zdy : Vec (B*(6*8*8)) := fun _ => 0
+  let z6 : Vec 6 := fun _ => 0
+  let (body, res) := (pretty B (.depthwiseStridedBackBatched (N := B) (c := 6) (h := 8) (w := 8)
+    "%W" zK z6 (.operand "%dy" zdy))).run' 0
+  "module @m {\n" ++
+  s!"  func.func @dw_sym_back_k{k}(%dy: {ty [B, 6*8*8]}, %W: {ty [6,1,k,k]}) -> {ty [B, 6*16*16]} " ++ "{\n" ++
+  body ++ s!"    return {res} : {ty [B, 6*16*16]}\n" ++ "  }\n}\n"
+
+def dwSymBackK3Module : String := dwSymBackModule 3 (fun _ _ _ => 0)
+def dwSymBackK5Module : String := dwSymBackModule 5 (fun _ _ _ => 0)
+
+/-- `@dw_sym_wgrad_k5` — the symmetric `depthwiseStridedWeightGradB` at k=5, the weight-side peer.
+    Split out from the input-VJP because §3g's bug was precisely that the two shift in OPPOSITE
+    directions: one being right is no evidence about the other. -/
+def dwSymWGradK5Module : String :=
+  let B := 2
+  let zdy : Vec (B*(6*8*8)) := fun _ => 0
+  let zx : Vec (B*(6*16*16)) := fun _ => 0
+  let zK : DepthwiseKernel 6 5 5 := fun _ _ _ => 0
+  let z6 : Vec 6 := fun _ => 0
+  let (body, res) := (pretty B (.depthwiseStridedWeightGradB (N := B) (c := 6)
+    (h := 8) (w := 8) "%x" z6 zx zK (.operand "%dy" zdy))).run' 0
+  "module @m {\n" ++
+  s!"  func.func @dw_sym_wgrad_k5(%dy: {ty [B, 6*8*8]}, %x: {ty [B, 6*16*16]}) -> {ty [6,1,5,5]} " ++ "{\n" ++
+  body ++ s!"    return {res} : {ty [6,1,5,5]}\n" ++ "  }\n}\n"
+
 end Proofs.XlaPadProbe
 
 -- The emitted `pad` is the whole content of these ops, so pin it here too: a `lake env lean` that
@@ -166,4 +205,7 @@ end Proofs.XlaPadProbe
 #eval IO.FS.writeFile ".lake/build/xlapad_dw_back.mlir"    Proofs.XlaPadProbe.dwXlaBackModule
 #eval IO.FS.writeFile ".lake/build/xlapad_conv_wgrad.mlir" Proofs.XlaPadProbe.convXlaWGradModule
 #eval IO.FS.writeFile ".lake/build/xlapad_dw_wgrad.mlir"   Proofs.XlaPadProbe.dwXlaWGradModule
-#eval IO.println "✓ TestXlaPadOps: 7 probe modules written to .lake/build/xlapad_*.mlir"
+#eval IO.FS.writeFile ".lake/build/xlapad_dw_sym_back_k3.mlir" Proofs.XlaPadProbe.dwSymBackK3Module
+#eval IO.FS.writeFile ".lake/build/xlapad_dw_sym_back_k5.mlir" Proofs.XlaPadProbe.dwSymBackK5Module
+#eval IO.FS.writeFile ".lake/build/xlapad_dw_sym_wgrad_k5.mlir" Proofs.XlaPadProbe.dwSymWGradK5Module
+#eval IO.println "✓ TestXlaPadOps: 10 probe modules written to .lake/build/xlapad_*.mlir"

@@ -84,36 +84,126 @@ private def fusedSig (p : String) (ic oc expand k : Nat) : List (String × List 
   (if expand == 1 then [] else
      [(s!"%f{p}pW", [oc, mid, 1, 1]), (s!"%f{p}pg", [oc]), (s!"%f{p}pbt", [oc])])
 
+/-- **One row of the MobileNetV4-Conv-S block table.** `h` is the block's OUTPUT spatial size, so
+    a `stride2` block reads its input at `2h`. -/
+structure UibSpec where
+  /-- parameter-name prefix: `"1"` … `"14"`. -/
+  p : String
+  ic : Nat
+  oc : Nat
+  expand : Nat
+  /-- pre-depthwise kernel, `0` = absent. -/
+  preDWk : Nat
+  /-- post-depthwise kernel, `0` = absent. -/
+  postDWk : Nat
+  h : Nat
+  stride2 : Bool
+deriving Inhabited, DecidableEq
+
+/-- **THE BLOCK TABLE — transcribed once, from `jax/MainMobilenetV4.lean`.**
+
+    ⭐⭐ Everything downstream folds over this list: the parameter signature, the BN stat slots, the
+    forward chain, the backward chain and the running-statistic recomputes. Before it existed the
+    same 14 rows were hand-written FOUR times, and §3/§7.2's whole point is that a divergence
+    between two such readings is invisible — same ops, same channel counts, same types, different
+    net. One table means a dispatch error is a typo in one place rather than a mismatch nothing
+    checks.
+
+    Families in order: ExtraDW, ExtraDW, IB, ExtraDW, ExtraDW, ConvNeXt, IB, ConvNeXt, FFN,
+    ExtraDW, ExtraDW, ExtraDW, IB, ConvNeXt. Spatial ladder 56 → 28 → 14 → 7. -/
+def mnv4Blocks : List UibSpec :=
+  [ ⟨"1",   48,  80, 4, 3, 5, 28, true⟩,   -- ExtraDW  56→28
+    ⟨"2",   80,  80, 2, 3, 3, 28, false⟩,  -- ExtraDW  28
+    ⟨"3",   80, 160, 6, 0, 3, 14, true⟩,   -- IB       28→14
+    ⟨"4",  160, 160, 4, 3, 3, 14, false⟩,  -- ExtraDW  14
+    ⟨"5",  160, 160, 4, 3, 5, 14, false⟩,  -- ExtraDW  14
+    ⟨"6",  160, 160, 4, 5, 0, 14, false⟩,  -- ConvNeXt 14
+    ⟨"7",  160, 160, 4, 0, 3, 14, false⟩,  -- IB       14
+    ⟨"8",  160, 160, 4, 3, 0, 14, false⟩,  -- ConvNeXt 14
+    ⟨"9",  160, 160, 4, 0, 0, 14, false⟩,  -- FFN      14
+    ⟨"10", 160, 160, 4, 3, 3, 14, false⟩,  -- ExtraDW  14
+    ⟨"11", 160, 256, 6, 5, 5,  7, true⟩,   -- ExtraDW  14→7
+    ⟨"12", 256, 256, 4, 5, 5,  7, false⟩,  -- ExtraDW  7
+    ⟨"13", 256, 256, 4, 0, 3,  7, false⟩,  -- IB       7
+    ⟨"14", 256, 256, 4, 3, 0,  7, false⟩ ] -- ConvNeXt 7
+
 /-- **The MobileNetV4-Conv-S parameter inputs**, in func-arg order: stem (3), the fused stage, the
     14 UIB blocks, the head conv, the classifier. Single source for the signature and the return
     order, the same role `r50ShapeList` plays for R50.
 
     ⚠ This list and `VLayer.toSpecs` are TWO HAND-WRITTEN READINGS of the same layout — the
     renderer cannot import the spec without inverting the dependency, which is the same two-lists
-    shape as `toSpecs == XLayout.specs` elsewhere. `mnv4-sig-tie` is the `#guard` that pins them. -/
+    shape as `toSpecs == XLayout.specs` elsewhere. `mnv4-fwd-smoke` is the gate that pins them. -/
 def mnv4ShapeList (nClasses : Nat) : List (String × List Nat) :=
   [("%sW", [32, 3, 3, 3]), ("%sg", [32]), ("%sbt", [32])] ++
   fusedSig "0" 32 48 4 3 ++
-  uibSig "1"   48  80 4 3 5 ++
-  uibSig "2"   80  80 2 3 3 ++
-  uibSig "3"   80 160 6 0 3 ++
-  uibSig "4"  160 160 4 3 3 ++
-  uibSig "5"  160 160 4 3 5 ++
-  uibSig "6"  160 160 4 5 0 ++
-  uibSig "7"  160 160 4 0 3 ++
-  uibSig "8"  160 160 4 3 0 ++
-  uibSig "9"  160 160 4 0 0 ++
-  uibSig "10" 160 160 4 3 3 ++
-  uibSig "11" 160 256 6 5 5 ++
-  uibSig "12" 256 256 4 5 5 ++
-  uibSig "13" 256 256 4 0 3 ++
-  uibSig "14" 256 256 4 3 0 ++
+  mnv4Blocks.flatMap (fun b => uibSig b.p b.ic b.oc b.expand b.preDWk b.postDWk) ++
   [("%hW", [1280, 256, 1, 1]), ("%hg", [1280]), ("%hbt", [1280])] ++
   [("%Wd", [1280, nClasses]), ("%bd", [nClasses])]
 
 /-- The same list as MLIR types. Derived, so the shapes have one definition. -/
 def mnv4SigList (nClasses : Nat) : List (String × String) :=
   (mnv4ShapeList nClasses).map (fun (n, ds) => (n, ty ds))
+
+/-- The running-mean/var slots for one BN layer. -/
+private def bnStatSig4 (nm : String) (c : Nat) : List (String × List Nat) :=
+  [(s!"%{nm}mu", [c]), (s!"%{nm}var", [c])]
+
+/-- One UIB block's BN stat slots, in the SAME order `uibSig` lays out its parameters — pre-DW
+    (at `ic`), expand (at `mid`), post-DW (at `mid`), project (at `oc`), each present exactly when
+    its conv is. The `if`s are the same `k = 0` dispatch, so a family that drops a depthwise drops
+    its stat slot too and the two lists cannot go out of step. -/
+private def uibStatSig (p : String) (ic oc expand preDWk postDWk : Nat) : List (String × List Nat) :=
+  let mid := ic * expand
+  (if preDWk > 0 then bnStatSig4 s!"u{p}qn" ic else []) ++
+  bnStatSig4 s!"u{p}en" mid ++
+  (if postDWk > 0 then bnStatSig4 s!"u{p}dn" mid else []) ++
+  bnStatSig4 s!"u{p}pn" oc
+
+/-- The fused stage's BN stat slots — the `k×k` conv's, then the 1×1 project's. -/
+private def fusedStatSig (p : String) (ic oc expand : Nat) : List (String × List Nat) :=
+  let mid := if expand == 1 then oc else ic * expand
+  bnStatSig4 s!"f{p}cn" mid ++ (if expand == 1 then [] else bnStatSig4 s!"f{p}pn" oc)
+
+/-- **The 104 BN running-statistic slots** = 52 BN layers × (μ, var), in forward-traversal order:
+    stem, the fused stage's two, each UIB block's (2–4 depending on family), the head.
+
+    ⚠ A misaligned stat slot is **SILENT**: the arities still match and the wrong layer's statistics
+    simply flow into the wrong `@mnv4_fwd_eval` slot. That is why the order here and the order the
+    train step returns them in are both derived from the same block table, and why the eval forward
+    reads them through `mnv4Bn`'s `statP` rather than an independently-numbered list. -/
+def mnv4StatShapeList : List (String × List Nat) :=
+  bnStatSig4 "stn" 32 ++
+  fusedStatSig "0" 32 48 4 ++
+  mnv4Blocks.flatMap (fun b => uibStatSig b.p b.ic b.oc b.expand b.preDWk b.postDWk) ++
+  bnStatSig4 "hn" 1280
+
+/-- The stat slots as MLIR types. Derived, so the widths have one definition. -/
+def mnv4StatSigList : List (String × String) :=
+  mnv4StatShapeList.map (fun (n, ds) => (n, ty ds))
+
+/-- **One BN site at the batched index** — the ONLY place the two BN worlds are chosen between.
+
+    `statP` names the running-stat slot: in `.eval` it is read (`%{statP}mu`/`%{statP}var`), in
+    `.train` it is the slot the train step hands the batch statistics back in. Both modes call
+    `pretty` exactly once, so the fresh-name counter advances identically and `@mnv4_fwd`
+    re-renders byte-identical after this threading — the cheap self-check that it is inert.
+
+    ⚠⚠ **This exists so `@mnv4_fwd` and `@mnv4_fwd_eval` cannot be different nets.** That is not a
+    hypothetical: `planning/mnv4_verified.md` §3d(b) measured `mobilenetv2_fwd` in a *different BN
+    world* from the Adam train step that trains it, and `regen_verified_mlir.sh check` went green
+    anyway because it only ever pairs a forward with the SGD step. One traversal, one switch, per
+    the `ResNet50RenderB` rule — the divergence has nowhere to live. -/
+private def mnv4Bn (B oc h : Nat) (mode : BnMode) (epsStr gName btName statP xin : String) :
+    StateM Nat (String × String) := do
+  let zc  : Vec oc := fun _ => 0
+  let zin : Vec (B * (oc*h*h)) := fun _ => 0
+  match mode with
+  | .train => pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
+                          gName btName epsStr 0 zc zc (.operand xin zin))
+  | .eval  => pretty B (.batchOp (N := B) (.bnEval (oc := oc) (h := h) (w := h)
+                          gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc)
+                          (.operand xin zin))
 
 /-- Saved forward SSA names the UIB backward + gradient passes reference. The optional fields are
     `""` when their depthwise is absent (`k = 0`), which is how the backward reads off which family
@@ -137,7 +227,7 @@ deriving Inhabited
     four families. Everything runs at `h×h`: both depthwise positions are shape-preserving, so the
     `k = 0` omissions are plain `if`s. Block output = `addVB (project-BN out) (block input)`; the
     bottleneck is LINEAR, no activation after the add. -/
-private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
+private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String) : StateM Nat UibFwdB := do
   let mid := c * expand
   let zc   : Vec c := fun _ => 0
@@ -155,16 +245,14 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
   if preDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
       (.depthwise (c := c) (h := h) (w := h) s!"%u{p}qW" s!"%zb{c}" zqk zc) (.operand cur zcb))
-    let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := c) (h := h) (w := h)
-      s!"%u{p}qg" s!"%u{p}qbt" epsStr 0 zc zc (.operand n1 zcb))
+    let (c2, n2) ← mnv4Bn B c h mode epsStr s!"%u{p}qg" s!"%u{p}qbt" s!"u{p}qn" n1
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := c*h*h)) (.operand n2 zcb))
     code := code ++ c1 ++ c2 ++ c3
     qc := n1; qn := n2; qr := n3; cur := n3
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
     (.conv (ic := c) (oc := mid) (h := h) (w := h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand cur zcb))
-  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
-    s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zmb))
+  let (cEn, nEn) ← mnv4Bn B mid h mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nEn zmb))
   code := code ++ cEc ++ cEn ++ cEr
   cur := nEr
@@ -173,16 +261,14 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
   if postDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
       (.depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand cur zmb))
-    let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
-      s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand n1 zmb))
+    let (c2, n2) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" n1
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand n2 zmb))
     code := code ++ c1 ++ c2 ++ c3
     dc := n1; dn := n2; dr := n3; cur := n3
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (.conv (ic := mid) (oc := c) (h := h) (w := h) s!"%u{p}pW" s!"%zb{c}" zkp zc) (.operand cur zmb))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := c) (h := h) (w := h)
-    s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zc zc (.operand nPc zcb))
+  let (cPn, nPn) ← mnv4Bn B c h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc
   let (cA, nA) ← pretty B (.addVB (.operand nPn zcb) (.operand xName zcb))
   code := code ++ cPc ++ cPn ++ cA
 
@@ -192,7 +278,7 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat)
 /-- **Stride-2 UIB where the PRE-DW carries the stride** (`preDWk > 0`). The pre-DW downsamples
     `2h×2h → h×h`, so the expand, the optional post-DW (now at stride 1) and the project all run at
     `h×h`. No skip — `ic ≠ oc`. -/
-private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat)
+private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String) : StateM Nat UibFwdB := do
   let mid := ic * expand
   let zic  : Vec ic := fun _ => 0
@@ -205,18 +291,15 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat)
   let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
   let zqb  : Vec (B*(ic*h*h)) := fun _ => 0
   let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
-  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
 
   let (cQc, nQc) ← pretty B (.batchOp (N := B)
     (.depthwiseStrided (c := ic) (h := h) (w := h) s!"%u{p}qW" s!"%zb{ic}" zqk zic) (.operand xName zin))
-  let (cQn, nQn) ← pretty B (.bnBatchF (N := B) (oc := ic) (h := h) (w := h)
-    s!"%u{p}qg" s!"%u{p}qbt" epsStr 0 zic zic (.operand nQc zqb))
+  let (cQn, nQn) ← mnv4Bn B ic h mode epsStr s!"%u{p}qg" s!"%u{p}qbt" s!"u{p}qn" nQc
   let (cQr, nQr) ← pretty B (.batchOp (N := B) (.relu (n := ic*h*h)) (.operand nQn zqb))
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
     (.conv (ic := ic) (oc := mid) (h := h) (w := h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand nQr zqb))
-  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
-    s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zmb))
+  let (cEn, nEn) ← mnv4Bn B mid h mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nEn zmb))
 
   let mut code := cQc ++ cQn ++ cQr ++ cEc ++ cEn ++ cEr
@@ -225,16 +308,14 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat)
   if postDWk > 0 then
     let (c1, n1) ← pretty B (.batchOp (N := B)
       (.depthwise (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand cur zmb))
-    let (c2, n2) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
-      s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand n1 zmb))
+    let (c2, n2) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" n1
     let (c3, n3) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand n2 zmb))
     code := code ++ c1 ++ c2 ++ c3
     dc := n1; dn := n2; dr := n3; cur := n3
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" s!"%zb{oc}" zkp zoc) (.operand cur zmb))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
-    s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
+  let (cPn, nPn) ← mnv4Bn B oc h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc
   code := code ++ cPc ++ cPn
 
   pure { code := code, o := nPn, qc := nQc, qn := nQn, qr := nQr,
@@ -243,7 +324,7 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat)
 /-- **Stride-2 UIB where the POST-DW carries the stride** (`preDWk = 0`, `postDWk > 0`) — the IB /
     MBConv family at a downsample. The expand runs at the INPUT size `2h×2h`; the post-DW then
     downsamples to `h×h`. No skip — `ic ≠ oc`. -/
-private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat)
+private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String) : StateM Nat UibFwdB := do
   let mid := ic * expand
   let zoc  : Vec oc := fun _ => 0
@@ -254,24 +335,20 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat)
   let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
   let zeb  : Vec (B*(mid*(2*h)*(2*h))) := fun _ => 0
   let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
-  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
 
   let (cEc, nEc) ← pretty B (.batchOp (N := B)
     (.conv (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) s!"%u{p}eW" s!"%zb{mid}" zke zm) (.operand xName zin))
-  let (cEn, nEn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := 2*h) (w := 2*h)
-    s!"%u{p}eg" s!"%u{p}ebt" epsStr 0 zm zm (.operand nEc zeb))
+  let (cEn, nEn) ← mnv4Bn B mid (2*h) mode epsStr s!"%u{p}eg" s!"%u{p}ebt" s!"u{p}en" nEc
   let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu (n := mid*(2*h)*(2*h))) (.operand nEn zeb))
 
   let (cDc, nDc) ← pretty B (.batchOp (N := B)
     (.depthwiseStrided (c := mid) (h := h) (w := h) s!"%u{p}dW" s!"%zb{mid}" zdk zm) (.operand nEr zeb))
-  let (cDn, nDn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
-    s!"%u{p}dg" s!"%u{p}dbt" epsStr 0 zm zm (.operand nDc zmb))
+  let (cDn, nDn) ← mnv4Bn B mid h mode epsStr s!"%u{p}dg" s!"%u{p}dbt" s!"u{p}dn" nDc
   let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu (n := mid*h*h)) (.operand nDn zmb))
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%u{p}pW" s!"%zb{oc}" zkp zoc) (.operand nDr zmb))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
-    s!"%u{p}pg" s!"%u{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
+  let (cPn, nPn) ← mnv4Bn B oc h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc
 
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
          o := nPn, qc := "", qn := "", qr := "",
@@ -294,7 +371,7 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat)
     render must match the REFERENCE or the forward tie cannot pass and the number cannot be
     reproduced. `uibFwd*` above are relu, correctly — the two activations sit twenty lines apart and
     the difference is real, not a copy-paste slip. -/
-private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat)
+private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     (epsStr p xName : String) : StateM Nat UibFwdB := do
   let mid := if expand == 1 then oc else ic * expand
   let zoc  : Vec oc := fun _ => 0
@@ -303,23 +380,53 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat)
   let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
   let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
-  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
 
   let (cFc, nFc) ← pretty B (.batchOp (N := B)
     (.convStrided (ic := ic) (oc := mid) (h := h) (w := h) (kH := k) (kW := k)
       s!"%f{p}cW" s!"%zb{mid}" zkf zm) (.operand xName zin))
-  let (cFn, nFn) ← pretty B (.bnBatchF (N := B) (oc := mid) (h := h) (w := h)
-    s!"%f{p}cg" s!"%f{p}cbt" epsStr 0 zm zm (.operand nFc zmb))
+  let (cFn, nFn) ← mnv4Bn B mid h mode epsStr s!"%f{p}cg" s!"%f{p}cbt" s!"f{p}cn" nFc
   let (cFs, nFs) ← pretty B (.batchOp (N := B) (.swish (n := mid*h*h)) (.operand nFn zmb))
 
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (.conv (ic := mid) (oc := oc) (h := h) (w := h) s!"%f{p}pW" s!"%zb{oc}" zkp zoc) (.operand nFs zmb))
-  let (cPn, nPn) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := h) (w := h)
-    s!"%f{p}pg" s!"%f{p}pbt" epsStr 0 zoc zoc (.operand nPc zob))
+  let (cPn, nPn) ← mnv4Bn B oc h mode epsStr s!"%f{p}pg" s!"%f{p}pbt" s!"f{p}pn" nPc
 
   pure { code := cFc ++ cFn ++ cFs ++ cPc ++ cPn,
          o := nPn, qc := "", qn := "", qr := "",
          ec := nFc, en := nFn, er := nFs, dc := "", dn := "", dr := "", pc := nPc }
+
+/-- **Block-shape dispatch, in one place.** Which of the three forwards a row uses is forced by
+    the row: stride 1 ⇒ the identity skip (`ic = oc`, pinned by `mnv4-fwd-smoke`); stride 2 splits
+    on which depthwise carries the stride, because that decides the spatial size the expand runs at.
+    The three cannot be one function — `.depthwise` and `.depthwiseStrided` differ in INPUT type. -/
+private def uibFwdDispatch (B : Nat) (b : UibSpec) (mode : BnMode) (epsStr xName : String) :
+    StateM Nat UibFwdB :=
+  if b.stride2 then
+    if b.preDWk > 0 then
+      uibFwdPreStridedB B b.ic b.oc b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName
+    else
+      uibFwdPostStridedB B b.ic b.oc b.expand b.postDWk b.h mode epsStr b.p xName
+  else
+    uibFwdSkipB B b.ic b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName
+
+/-- Everything the whole-net render needs out of one forward traversal: the emitted code, the
+    logits, and every saved activation the backward reads. `inputs` is each block's INPUT SSA name
+    (`inputs[i]` is what block `i` consumed), which the weight gradients contract against. -/
+structure Mnv4FwdRec where
+  code : String
+  logits : String
+  stc : String          -- stem conv out (= stem-BN input)
+  stn : String          -- stem BN out   (= stem-relu pre-activation)
+  str : String          -- stem relu out
+  f0 : UibFwdB          -- the fused stage
+  blocks : List UibFwdB -- the 14 UIB blocks, in table order
+  inputs : List String  -- each block's input SSA, same order
+  hc : String           -- head conv out (= head-BN input)
+  hn : String           -- head BN out   (= head-relu pre-activation)
+  hr : String           -- head relu out
+  gap : String          -- GAP out (= dense input)
+  last : String         -- the last block's output (= head conv input)
+deriving Inhabited
 
 /-- **The MobileNetV4-Conv-S forward chain**, batch BN, at `N := B`, 224² → 10 classes.
 
@@ -342,8 +449,11 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat)
       `fusedMbConvFwdStridedB`
     * every UIB block → **relu** (`MlirCodegen.lean:6357`, "Plain ReLU throughout")
 
-    Returns `(code, logits-SSA)` with logits `[B, nClasses]`. -/
-def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) : StateM Nat (String × String) := do
+    Returns the full forward RECORD, not just `(code, logits)`: the train step needs every saved
+    activation the backward reads, and the alternative — a second copy of the chain inside the
+    train step — is the two-readings defect this file exists to avoid. -/
+def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train) :
+    StateM Nat Mnv4FwdRec := do
   -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu ═══
   -- ⭐ `.convStridedXla`, NOT `.convStrided` — and this net is the reason that token exists.
   -- The reference stem is `conv_bn(…, stride=(2,2), padding='SAME')`, and XLA `'SAME'` on a 3×3/s2
@@ -360,28 +470,23 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) : StateM Nat (String × S
   let (cStc, nStc) ← pretty B (.batchOp (N := B)
     (.convStridedXla (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) "%sW" "%zb32" zSk z32)
     (.operand "%x" zx))
-  let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 32) (h := 112) (w := 112)
-    "%sg" "%sbt" epsStr 0 z32 z32 (.operand nStc z112))
+  let (cStn, nStn) ← mnv4Bn B 32 112 mode epsStr "%sg" "%sbt" "stn" nStc
   let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 32*112*112)) (.operand nStn z112))
 
   -- ═══ stage 0: the fused inverted bottleneck, 112→56 (swish) ═══
-  let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 56 epsStr "0" nStr
+  let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 56 mode epsStr "0" nStr
 
-  -- ═══ the 14 UIB blocks ═══
-  let b1  ← uibFwdPreStridedB  B  48  80 4 3 5 28 epsStr "1"  f0.o   -- ExtraDW  56→28
-  let b2  ← uibFwdSkipB        B  80     2 3 3 28 epsStr "2"  b1.o   -- ExtraDW  28
-  let b3  ← uibFwdPostStridedB B  80 160 6   3 14 epsStr "3"  b2.o   -- IB       28→14
-  let b4  ← uibFwdSkipB        B 160     4 3 3 14 epsStr "4"  b3.o   -- ExtraDW  14
-  let b5  ← uibFwdSkipB        B 160     4 3 5 14 epsStr "5"  b4.o   -- ExtraDW  14
-  let b6  ← uibFwdSkipB        B 160     4 5 0 14 epsStr "6"  b5.o   -- ConvNeXt 14
-  let b7  ← uibFwdSkipB        B 160     4 0 3 14 epsStr "7"  b6.o   -- IB       14
-  let b8  ← uibFwdSkipB        B 160     4 3 0 14 epsStr "8"  b7.o   -- ConvNeXt 14
-  let b9  ← uibFwdSkipB        B 160     4 0 0 14 epsStr "9"  b8.o   -- FFN      14
-  let b10 ← uibFwdSkipB        B 160     4 3 3 14 epsStr "10" b9.o   -- ExtraDW  14
-  let b11 ← uibFwdPreStridedB  B 160 256 6 5 5  7 epsStr "11" b10.o  -- ExtraDW  14→7
-  let b12 ← uibFwdSkipB        B 256     4 5 5  7 epsStr "12" b11.o  -- ExtraDW  7
-  let b13 ← uibFwdSkipB        B 256     4 0 3  7 epsStr "13" b12.o  -- IB       7
-  let b14 ← uibFwdSkipB        B 256     4 3 0  7 epsStr "14" b13.o  -- ConvNeXt 7
+  -- ═══ the 14 UIB blocks — ONE fold over `mnv4Blocks`, dispatch by the row ═══
+  let mut cur := f0.o
+  let mut bcode := ""
+  let mut blocks : List UibFwdB := []
+  let mut inputs : List String := []
+  for b in mnv4Blocks do
+    let r ← uibFwdDispatch B b mode epsStr cur
+    bcode := bcode ++ r.code
+    blocks := blocks ++ [r]
+    inputs := inputs ++ [cur]
+    cur := r.o
 
   -- ═══ head: 1×1 conv (256→1280) → batch BN → relu → GAP(7×7) → dense ═══
   let z7     : Vec (B*(256*7*7)) := fun _ => 0
@@ -392,19 +497,18 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) : StateM Nat (String × S
   let zWd    : Mat 1280 nClasses := fun _ _ => 0
   let zNC    : Vec nClasses := fun _ => 0
   let (cHc, nHc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := 256) (oc := 1280) (h := 7) (w := 7) "%hW" "%zb1280" zHk z1280) (.operand b14.o z7))
-  let (cHn, nHn) ← pretty B (.bnBatchF (N := B) (oc := 1280) (h := 7) (w := 7)
-    "%hg" "%hbt" epsStr 0 z1280 z1280 (.operand nHc zH7))
+    (.conv (ic := 256) (oc := 1280) (h := 7) (w := 7) "%hW" "%zb1280" zHk z1280) (.operand cur z7))
+  let (cHn, nHn) ← mnv4Bn B 1280 7 mode epsStr "%hg" "%hbt" "hn" nHc
   let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu (n := 1280*7*7)) (.operand nHn zH7))
   let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
     (.operand nHr zH7))
   let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
     (.operand nGap z1280b))
 
-  pure (cStc ++ cStn ++ cStr ++ f0.code
-        ++ b1.code ++ b2.code ++ b3.code ++ b4.code ++ b5.code ++ b6.code ++ b7.code
-        ++ b8.code ++ b9.code ++ b10.code ++ b11.code ++ b12.code ++ b13.code ++ b14.code
-        ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog, nLog)
+  pure { code := cStc ++ cStn ++ cStr ++ f0.code ++ bcode ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+         logits := nLog, stc := nStc, stn := nStn, str := nStr,
+         f0 := f0, blocks := blocks, inputs := inputs,
+         hc := nHc, hn := nHn, hr := nHr, gap := nGap, last := cur }
 
 /-- Every distinct channel width a bias-free conv in this net binds `%zb{c}` at: the stem, the fused
     stage's two convs, each block's pre-DW (`ic`), expand and post-DW (`mid`) and project (`oc`), and
@@ -427,12 +531,662 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   let sigList := mnv4SigList nClasses
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let (code, logits) := (mnv4FwdChainB B nClasses epsStr).run' 0
+  let r := (mnv4FwdChainB B nClasses epsStr .train).run' 0
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── MobileNetV4-Conv-S forward: every line is pretty(verified AST node) ──\n" ++
-  zeroBiasPrelude false mnv4ZbWidths ++ code ++
-  s!"    return {logits} : {ty [B, nClasses]}\n" ++
+  zeroBiasPrelude false mnv4ZbWidths ++ r.code ++
+  s!"    return {r.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
+set_option maxRecDepth 4000000 in
+/-- **`@mnv4_fwd_eval`** — the inference forward, every BN site reading frozen running stats.
+    `%x` + 158 params + 104 stat inputs = **263 inputs**. This is what the driver scores through.
+
+    ⭐ It is `mnv4FwdChainB` at `.eval` — the SAME traversal `@mnv4_fwd` and the train step use, so
+    its BN order matches `mnv4StatSigList` by construction rather than by a second reading. -/
+def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
+    (slug : String := "mnv4") (vSuffix : String := "") : String :=
+  let sigList := mnv4SigList nClasses ++ mnv4StatSigList
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let r := (mnv4FwdChainB B nClasses epsStr .eval).run' 0
+  "module @m {\n" ++
+  s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  "    // ── MobileNetV4-Conv-S eval forward (running-stats BN): every line is pretty(AST node) ──\n" ++
+  zeroBiasPrelude false mnv4ZbWidths ++ r.code ++
+  s!"    return {r.logits} : {ty [B, nClasses]}\n" ++
+  "  }\n}\n"
+
+-- ════════════════════════════════════════════════════════════════
+-- § Block backward + un-fused parameter gradients
+--   (project → post-DW? → expand → pre-DW?; `dy` flows straight into the project-BN backward,
+--    because the UIB bottleneck is LINEAR — no activation after project, none after the skip add)
+-- ════════════════════════════════════════════════════════════════
+
+/-- A trainable parameter: emitted name (no `%`), its un-fused gradient SSA name, and its shape.
+    The AdamW tail is a fold over this list, so the θ/m/v output order cannot drift from the
+    signature order. (`MobileNetV2RenderB`/`ResNet34RenderB` carry same-shaped peers.) -/
+private structure PGradV4 where
+  nm   : String
+  grad : String
+  ds   : List Nat
+deriving Inhabited
+
+/-- Backward result: code, the dx cotangent to the previous block, and the block's parameter
+    gradients in func-arg order. -/
+private structure UibBackB where
+  code : String
+  dx : String
+  ps : List PGradV4
+
+/-- Pair a block's `uibSig`/`fusedSig` slice with the gradient SSA names its backward produced, in
+    the same order.
+
+    ⭐ **ONE source for the names AND the shapes.** The peers hand-write the parameter list twice —
+    once in the signature, once in the backward's `ps` — and rely on eyes to keep them in step. Here
+    the list the func header is built from is literally the list the AdamW tail folds over, so a
+    parameter cannot be one shape in the signature and another in the optimizer. The `k = 0`
+    dispatch is then written once, in `uibSig`, instead of once per family per direction. -/
+private def zipPs (sig : List (String × List Nat)) (grads : List String) : List PGradV4 :=
+  -- `nm` is the emitted name WITHOUT the leading `%`, because the AdamW tail spells `%{nm}m` /
+  -- `%{nm}v` off it. (`String.drop` returns a `String.Slice` on this toolchain.)
+  (sig.zip grads).map (fun ((n, ds), g) => ⟨String.ofList n.toList.tail, g, ds⟩)
+
+/-- **STRIDE-1 UIB backward + its 6/9/12 un-fused gradients** — all four families, `ic = oc = c`.
+    The skip is linear, so `dy` reaches the project BN unchanged AND fans back in at the block dx.
+
+    The two `if`s are the same `k = 0` dispatch the forward used. ⚠ A backward that omits the
+    *other* depthwise from the one the forward emitted still type-checks (both positions are
+    shape-preserving at stride 1) and still descends — it computes the gradient of a different net.
+    That is §3's trap arriving in the backward, so the forward record `f` is read for which
+    positions exist (`f.qn`/`f.dn` are `""` when absent) rather than re-deriving it. -/
+private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
+    (epsStr p xName : String) (f : UibFwdB) (dyName : String) : StateM Nat UibBackB := do
+  let mid := c * expand
+  let zc   : Vec c := fun _ => 0
+  let zm   : Vec mid := fun _ => 0
+  let zqk  : DepthwiseKernel c preDWk preDWk := fun _ _ _ => 0
+  let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
+  let zke  : Kernel4 mid c 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 c mid 1 1 := fun _ _ _ _ => 0
+  let zcb  : Vec (B*(c*h*h)) := fun _ => 0
+  let zcp  : Vec (B*(c*(h*h))) := fun _ => 0
+  let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
+  let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
+  -- ── project 1×1 + BN ──
+  let pIn := if postDWk > 0 then f.dr else f.er
+  let (cPn, nPn) ← pretty B (.bnBatchBack (N := B) (oc := c) (h := h) (w := h)
+    s!"%u{p}pg" f.pc epsStr 0 zc zcp (.operand dyName zcp))
+  let (cPW, nPW) ← pretty B (.convWeightGradB (N := B) (ic := mid) (oc := c) (h := h) (w := h)
+    pIn zc zmb zkp (.operand nPn zcb))
+  let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := c) (h := h) (w := h)
+    f.pc epsStr 0 zcp (.operand dyName zcp))
+  let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := c) (h := h) (w := h)
+    (.operand dyName zcp))
+  let (cPx, nPx) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := c) (h := h) (w := h)
+    s!"%u{p}pW" zkp zc (.operand nPn zcb))
+  let mut code := cPn ++ cPW ++ cPg ++ cPt ++ cPx
+  let mut cur := nPx
+  -- ── post-DW (present iff postDWk > 0), stride 1 on `mid` channels ──
+  let mut dGrads : List String := []
+  if postDWk > 0 then
+    let (c1, n1) ← pretty B (.selectPosB f.dn zmb (.operand cur zmb))
+    let (c2, n2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
+      s!"%u{p}dg" f.dc epsStr 0 zm zmp (.operand n1 zmp))
+    let (c3, n3) ← pretty B (.depthwiseWeightGradB (N := B) (c := mid) (h := h) (w := h)
+      f.er zm zmb zdk (.operand n2 zmb))
+    let (c4, n4) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
+      f.dc epsStr 0 zmp (.operand n1 zmp))
+    let (c5, n5) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
+      (.operand n1 zmp))
+    let (c6, n6) ← pretty B (.depthwiseBackBatched (N := B) (c := mid) (h := h) (w := h)
+      s!"%u{p}dW" zdk zm (.operand n2 zmb))
+    code := code ++ c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6
+    dGrads := [n3, n4, n5]
+    cur := n6
+  -- ── expand 1×1 (c → mid) + BN ──
+  let eIn := if preDWk > 0 then f.qr else xName
+  let (cEm, nEm) ← pretty B (.selectPosB f.en zmb (.operand cur zmb))
+  let (cEn, nEn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
+    s!"%u{p}eg" f.ec epsStr 0 zm zmp (.operand nEm zmp))
+  let (cEW, nEW) ← pretty B (.convWeightGradB (N := B) (ic := c) (oc := mid) (h := h) (w := h)
+    eIn zm zcb zke (.operand nEn zmb))
+  let (cEg, nEg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
+    f.ec epsStr 0 zmp (.operand nEm zmp))
+  let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
+    (.operand nEm zmp))
+  let (cEx, nEx) ← pretty B (.convBackBatched (N := B) (ic := c) (oc := mid) (h := h) (w := h)
+    s!"%u{p}eW" zke zm (.operand nEn zmb))
+  code := code ++ cEm ++ cEn ++ cEW ++ cEg ++ cEt ++ cEx
+  cur := nEx
+  -- ── pre-DW (present iff preDWk > 0), stride 1 on `c` channels, reading the BLOCK INPUT ──
+  let mut qGrads : List String := []
+  if preDWk > 0 then
+    let (c1, n1) ← pretty B (.selectPosB f.qn zcb (.operand cur zcb))
+    let (c2, n2) ← pretty B (.bnBatchBack (N := B) (oc := c) (h := h) (w := h)
+      s!"%u{p}qg" f.qc epsStr 0 zc zcp (.operand n1 zcp))
+    let (c3, n3) ← pretty B (.depthwiseWeightGradB (N := B) (c := c) (h := h) (w := h)
+      xName zc zcb zqk (.operand n2 zcb))
+    let (c4, n4) ← pretty B (.bnGammaGradB (N := B) (oc := c) (h := h) (w := h)
+      f.qc epsStr 0 zcp (.operand n1 zcp))
+    let (c5, n5) ← pretty B (.bnBetaGradB (N := B) (oc := c) (h := h) (w := h)
+      (.operand n1 zcp))
+    let (c6, n6) ← pretty B (.depthwiseBackBatched (N := B) (c := c) (h := h) (w := h)
+      s!"%u{p}qW" zqk zc (.operand n2 zcb))
+    code := code ++ c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6
+    qGrads := [n3, n4, n5]
+    cur := n6
+  -- ── skip fan-in: (body dx) + dy, at the block-input shape ──
+  let (cDx, nDx) ← pretty B (.addVB (.operand cur zcb) (.operand dyName zcb))
+  pure { code := code ++ cDx, dx := nDx,
+         ps := zipPs (uibSig p c c expand preDWk postDWk)
+                 (qGrads ++ [nEW, nEg, nEt] ++ dGrads ++ [nPW, nPg, nPt]) }
+
+/-- **STRIDE-2 UIB backward where the PRE-DW carries the stride.** The pre-DW is always present
+    here, and it is the only op whose input-VJP crosses the resolution change — so the block's dx
+    lands at `2h×2h` and everything upstream of the expand runs at `h×h`. No skip (`ic ≠ oc`). -/
+private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
+    (epsStr p xName : String) (f : UibFwdB) (dyName : String) : StateM Nat UibBackB := do
+  let mid := ic * expand
+  let zic  : Vec ic := fun _ => 0
+  let zoc  : Vec oc := fun _ => 0
+  let zm   : Vec mid := fun _ => 0
+  let zqk  : DepthwiseKernel ic preDWk preDWk := fun _ _ _ => 0
+  let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
+  let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
+  let zqb  : Vec (B*(ic*h*h)) := fun _ => 0
+  let zqp  : Vec (B*(ic*(h*h))) := fun _ => 0
+  let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
+  let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
+  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
+  let zop  : Vec (B*(oc*(h*h))) := fun _ => 0
+  let pIn := if postDWk > 0 then f.dr else f.er
+  let (cPn, nPn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := h) (w := h)
+    s!"%u{p}pg" f.pc epsStr 0 zoc zop (.operand dyName zop))
+  let (cPW, nPW) ← pretty B (.convWeightGradB (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
+    pIn zoc zmb zkp (.operand nPn zob))
+  let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := h) (w := h)
+    f.pc epsStr 0 zop (.operand dyName zop))
+  let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
+    (.operand dyName zop))
+  let (cPx, nPx) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
+    s!"%u{p}pW" zkp zoc (.operand nPn zob))
+  let mut code := cPn ++ cPW ++ cPg ++ cPt ++ cPx
+  let mut cur := nPx
+  let mut dGrads : List String := []
+  if postDWk > 0 then
+    let (c1, n1) ← pretty B (.selectPosB f.dn zmb (.operand cur zmb))
+    let (c2, n2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
+      s!"%u{p}dg" f.dc epsStr 0 zm zmp (.operand n1 zmp))
+    let (c3, n3) ← pretty B (.depthwiseWeightGradB (N := B) (c := mid) (h := h) (w := h)
+      f.er zm zmb zdk (.operand n2 zmb))
+    let (c4, n4) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
+      f.dc epsStr 0 zmp (.operand n1 zmp))
+    let (c5, n5) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
+      (.operand n1 zmp))
+    let (c6, n6) ← pretty B (.depthwiseBackBatched (N := B) (c := mid) (h := h) (w := h)
+      s!"%u{p}dW" zdk zm (.operand n2 zmb))
+    code := code ++ c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6
+    dGrads := [n3, n4, n5]
+    cur := n6
+  -- expand 1×1 (ic → mid) at h; its input is the pre-DW's relu output
+  let (cEm, nEm) ← pretty B (.selectPosB f.en zmb (.operand cur zmb))
+  let (cEn, nEn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
+    s!"%u{p}eg" f.ec epsStr 0 zm zmp (.operand nEm zmp))
+  let (cEW, nEW) ← pretty B (.convWeightGradB (N := B) (ic := ic) (oc := mid) (h := h) (w := h)
+    f.qr zm zqb zke (.operand nEn zmb))
+  let (cEg, nEg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
+    f.ec epsStr 0 zmp (.operand nEm zmp))
+  let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
+    (.operand nEm zmp))
+  let (cEx, nEx) ← pretty B (.convBackBatched (N := B) (ic := ic) (oc := mid) (h := h) (w := h)
+    s!"%u{p}eW" zke zm (.operand nEn zmb))
+  -- pre-DW: STRIDED, so its input-VJP is the one that upsamples h → 2h
+  let (cQm, nQm) ← pretty B (.selectPosB f.qn zqb (.operand nEx zqb))
+  let (cQn, nQn) ← pretty B (.bnBatchBack (N := B) (oc := ic) (h := h) (w := h)
+    s!"%u{p}qg" f.qc epsStr 0 zic zqp (.operand nQm zqp))
+  let (cQW, nQW) ← pretty B (.depthwiseStridedWeightGradB (N := B) (c := ic) (h := h) (w := h)
+    xName zic zin zqk (.operand nQn zqb))
+  let (cQg, nQg) ← pretty B (.bnGammaGradB (N := B) (oc := ic) (h := h) (w := h)
+    f.qc epsStr 0 zqp (.operand nQm zqp))
+  let (cQt, nQt) ← pretty B (.bnBetaGradB (N := B) (oc := ic) (h := h) (w := h)
+    (.operand nQm zqp))
+  let (cQx, nQx) ← pretty B (.depthwiseStridedBackBatched (N := B) (c := ic) (h := h) (w := h)
+    s!"%u{p}qW" zqk zic (.operand nQn zqb))
+  pure { code := code ++ cEm ++ cEn ++ cEW ++ cEg ++ cEt ++ cEx ++
+                 cQm ++ cQn ++ cQW ++ cQg ++ cQt ++ cQx,
+         dx := nQx,
+         ps := zipPs (uibSig p ic oc expand preDWk postDWk)
+                 ([nQW, nQg, nQt] ++ [nEW, nEg, nEt] ++ dGrads ++ [nPW, nPg, nPt]) }
+
+/-- **STRIDE-2 UIB backward where the POST-DW carries the stride** (`preDWk = 0`) — the IB/MBConv
+    family at a downsample. The expand runs at the INPUT resolution `2h×2h`, so its weight gradient
+    contracts against `%x` at `2h` while the project's runs at `h`. No skip (`ic ≠ oc`). -/
+private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
+    (epsStr p xName : String) (f : UibFwdB) (dyName : String) : StateM Nat UibBackB := do
+  let mid := ic * expand
+  let zoc  : Vec oc := fun _ => 0
+  let zm   : Vec mid := fun _ => 0
+  let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
+  let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
+  let zeb  : Vec (B*(mid*(2*h)*(2*h))) := fun _ => 0
+  let zep  : Vec (B*(mid*((2*h)*(2*h)))) := fun _ => 0
+  let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
+  let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
+  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
+  let zop  : Vec (B*(oc*(h*h))) := fun _ => 0
+  let (cPn, nPn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := h) (w := h)
+    s!"%u{p}pg" f.pc epsStr 0 zoc zop (.operand dyName zop))
+  let (cPW, nPW) ← pretty B (.convWeightGradB (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
+    f.dr zoc zmb zkp (.operand nPn zob))
+  let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := h) (w := h)
+    f.pc epsStr 0 zop (.operand dyName zop))
+  let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
+    (.operand dyName zop))
+  let (cPx, nPx) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
+    s!"%u{p}pW" zkp zoc (.operand nPn zob))
+  -- post-DW: STRIDED, so its input-VJP is the one that upsamples h → 2h
+  let (cDm, nDm) ← pretty B (.selectPosB f.dn zmb (.operand nPx zmb))
+  let (cDn, nDn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
+    s!"%u{p}dg" f.dc epsStr 0 zm zmp (.operand nDm zmp))
+  let (cDW, nDW) ← pretty B (.depthwiseStridedWeightGradB (N := B) (c := mid) (h := h) (w := h)
+    f.er zm zeb zdk (.operand nDn zmb))
+  let (cDg, nDg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
+    f.dc epsStr 0 zmp (.operand nDm zmp))
+  let (cDt, nDt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
+    (.operand nDm zmp))
+  let (cDx, nDx) ← pretty B (.depthwiseStridedBackBatched (N := B) (c := mid) (h := h) (w := h)
+    s!"%u{p}dW" zdk zm (.operand nDn zmb))
+  -- expand 1×1 (ic → mid) at the INPUT resolution 2h
+  let (cEm, nEm) ← pretty B (.selectPosB f.en zeb (.operand nDx zeb))
+  let (cEn, nEn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := 2*h) (w := 2*h)
+    s!"%u{p}eg" f.ec epsStr 0 zm zep (.operand nEm zep))
+  let (cEW, nEW) ← pretty B (.convWeightGradB (N := B) (ic := ic) (oc := mid) (h := 2*h) (w := 2*h)
+    xName zm zin zke (.operand nEn zeb))
+  let (cEg, nEg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := 2*h) (w := 2*h)
+    f.ec epsStr 0 zep (.operand nEm zep))
+  let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := 2*h) (w := 2*h)
+    (.operand nEm zep))
+  let (cEx, nEx) ← pretty B (.convBackBatched (N := B) (ic := ic) (oc := mid) (h := 2*h) (w := 2*h)
+    s!"%u{p}eW" zke zm (.operand nEn zeb))
+  pure { code := cPn ++ cPW ++ cPg ++ cPt ++ cPx ++ cDm ++ cDn ++ cDW ++ cDg ++ cDt ++ cDx ++
+                 cEm ++ cEn ++ cEW ++ cEg ++ cEt ++ cEx,
+         dx := nEx,
+         ps := zipPs (uibSig p ic oc expand 0 postDWk)
+                 ([nEW, nEg, nEt] ++ [nDW, nDg, nDt] ++ [nPW, nPg, nPt]) }
+
+/-- **Fused inverted-bottleneck backward, stride 2** — MobileNetV4's stage 0.
+
+    ⚠⚠ **`swishBackB`, NOT `selectPosB`.** The forward is swish here and relu twenty lines up
+    (`fusedMbConvFwdStridedB` records why: the reference that produced 84.58% uses swish at this
+    site). A relu mask against a swish forward type-checks, has the right shape, and descends —
+    it is the same silent-wrong-gradient class as the pre/post-DW swap, in the activation. -/
+private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
+    (epsStr p xName : String) (f : UibFwdB) (dyName : String) : StateM Nat UibBackB := do
+  let mid := if expand == 1 then oc else ic * expand
+  let zoc  : Vec oc := fun _ => 0
+  let zm   : Vec mid := fun _ => 0
+  let zkf  : Kernel4 mid ic k k := fun _ _ _ _ => 0
+  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
+  let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
+  let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
+  let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
+  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
+  let zop  : Vec (B*(oc*(h*h))) := fun _ => 0
+  let (cPn, nPn) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := h) (w := h)
+    s!"%f{p}pg" f.pc epsStr 0 zoc zop (.operand dyName zop))
+  let (cPW, nPW) ← pretty B (.convWeightGradB (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
+    f.er zoc zmb zkp (.operand nPn zob))
+  let (cPg, nPg) ← pretty B (.bnGammaGradB (N := B) (oc := oc) (h := h) (w := h)
+    f.pc epsStr 0 zop (.operand dyName zop))
+  let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
+    (.operand dyName zop))
+  let (cPx, nPx) ← pretty B (.convBackBatched (N := B) (ic := mid) (oc := oc) (h := h) (w := h)
+    s!"%f{p}pW" zkp zoc (.operand nPn zob))
+  let (cSw, nSw) ← pretty B (.swishBackB f.en zmb (.operand nPx zmb))
+  let (cCn, nCn) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := h) (w := h)
+    s!"%f{p}cg" f.ec epsStr 0 zm zmp (.operand nSw zmp))
+  let (cCW, nCW) ← pretty B (.convStridedWeightGradB (N := B) (ic := ic) (oc := mid)
+    (h := h) (w := h) xName zm zin zkf (.operand nCn zmb))
+  let (cCg, nCg) ← pretty B (.bnGammaGradB (N := B) (oc := mid) (h := h) (w := h)
+    f.ec epsStr 0 zmp (.operand nSw zmp))
+  let (cCt, nCt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
+    (.operand nSw zmp))
+  let (cCx, nCx) ← pretty B (.convStridedBackBatched (N := B) (ic := ic) (oc := mid)
+    (h := h) (w := h) s!"%f{p}cW" zkf zm (.operand nCn zmb))
+  pure { code := cPn ++ cPW ++ cPg ++ cPt ++ cPx ++ cSw ++ cCn ++ cCW ++ cCg ++ cCt ++ cCx,
+         dx := nCx,
+         ps := zipPs (fusedSig p ic oc expand k) [nCW, nCg, nCt, nPW, nPg, nPt] }
+
+/-- **Backward dispatch — the SAME `if`s as `uibFwdDispatch`, on the SAME row.**
+
+    ⚠⚠ That the two dispatchers read one `UibSpec` is the point. Differentiating a block as a
+    different family than the forward emitted it type-checks at stride 1 (both depthwise positions
+    are shape-preserving), produces the right shapes, trains and descends — and computes the
+    gradient of a net nobody built. With one table and one row per call there is no second place
+    for the dispatch to be written down differently. -/
+private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
+    (f : UibFwdB) (dyName : String) : StateM Nat UibBackB :=
+  if b.stride2 then
+    if b.preDWk > 0 then
+      uibBackPreStridedGradB B b.ic b.oc b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName
+    else
+      uibBackPostStridedGradB B b.ic b.oc b.expand b.postDWk b.h epsStr b.p xName f dyName
+  else
+    uibBackSkipGradB B b.ic b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName
+
+-- ════════════════════════════════════════════════════════════════
+-- § The AdamW tail — one proven triple per parameter, folded in signature order
+-- ════════════════════════════════════════════════════════════════
+
+/-- `(θ', m', v')` for one parameter, from its un-fused gradient: the proven
+    `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
+    into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked; `%lr`/`%bc1`/`%bc2` are runtime
+    `tensor<f32>` args, so one render serves a whole LR schedule.
+
+    At `replicas > 1` the gradient is first averaged by `ViTRender.emitGradAllReduce`. **That
+    collective is a TRUSTED CARVE-OUT** — emitted text, not `pretty` of an AST node, so outside
+    every faithfulness theorem here; the AdamW triple consumes the averaged gradient as an
+    `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
+    `replicas ≤ 1` it emits nothing and the single-device render stays byte-identical. -/
+private def adamOne4 (B : Nat) (replicas : Nat) (g : PGradV4) :
+    StateM Nat (String × String × String × String) := do
+  let n := g.ds.foldl (· * ·) 1
+  let z : Vec n := fun _ => 0
+  let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+  let gr : SHlo n := .operand gAvg z
+  let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
+  let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
+  let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
+                    "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
+  pure (arS ++ cM ++ cV ++ cT, nT, nM, nV)
+
+/-- β₁/β₂/ε/wd as graph constants — the Imagenette AdamW recipe, identical to MobileNetV2's and
+    ResNet-34's, because MNv4 sits in the same tier and runs the same schedule. -/
+private def adamConsts4 : String :=
+  "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
+  "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
+  "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
+  "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
+  "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
+  "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+
+/-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
+    `verified_mlir/mnv4_<variant>_train_step.mlir`, the entry point is
+    `@mnv4_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it. All three must agree — the
+    shim checks the entry name and refuses a mismatch outright rather than running the wrong graph.
+    `B = 32` is deliberately unsuffixed so the Imagenette artifact keeps a stable name. -/
+def mnv4AdamVariant (B replicas : Nat) : String :=
+  (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B)
+
+-- ════════════════════════════════════════════════════════════════
+-- § The whole-net batched AdamW train step
+-- ════════════════════════════════════════════════════════════════
+
+set_option maxRecDepth 4000000 in
+/-- **MobileNetV4-Conv-S AdamW train step, batch BN, rendered from the verified AST at `N := B`.**
+
+    583 inputs (`%x`, 158 θ, 158 m, 158 v, `%lr`/`%bc1`/`%bc2`, 104 running-stat slots, `%onehot`)
+    and 581 outputs (158 θ', 158 m', 158 v', `%loss`/`%bc1`/`%bc2`, 104 batch stats). Parameter
+    order comes from `mnv4ShapeList` — through `zipPs`, which builds each block's gradient list from
+    the very same `uibSig` slice the signature does — and stat order from `mnv4StatShapeList`.
+
+    Forward: stem 3×3/s2 XLA-`SAME` (3→32, 224→112) → fused MBConv (32→48, 112→56, **swish**) →
+    the 14 UIB blocks (three stride-2 downsamples, eleven identity skips, all four families) →
+    1×1 conv-BN-relu head (256→1280) → GAP → dense.
+
+    The cotangent is composed from kit ops (`softmaxRow → subB → scaleB → addVB → shiftB →
+    divConstB`, α = 0.1, K = nClasses), and `%loss` is report-only and stays outside the AST — the
+    same carve-out `resnet34`/`mobilenetv2` take. -/
+def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
+    (replicas : Nat := 1) (slug : String := "mnv4") : String :=
+  let alphaStr := fmt6 0.1
+  let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
+  let go : StateM Nat String := do
+    -- ═══ forward: THE SHARED CHAIN, not a second copy ═══
+    -- ⭐⭐ `@mnv4_fwd`, `@mnv4_fwd_eval` and this train step are all `mnv4FwdChainB`. The peers
+    -- inline a second transcription of the block table into their train step and rely on eyes to
+    -- keep the two in step; here there is only one, so the train/score divergence §3d(b) measured
+    -- in MobileNetV2 — and that `regen_verified_mlir.sh check` reported green — cannot arise.
+    let fwd ← mnv4FwdChainB B nClasses epsStr .train
+    let zx    : Vec (B*(3*224*224)) := fun _ => 0
+    let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+    let z32   : Vec 32 := fun _ => 0
+    let z112  : Vec (B*(32*112*112)) := fun _ => 0
+    let z112p : Vec (B*(32*(112*112))) := fun _ => 0
+    let z7     : Vec (B*(256*7*7)) := fun _ => 0
+    let zHk    : Kernel4 1280 256 1 1 := fun _ _ _ _ => 0
+    let z1280  : Vec 1280 := fun _ => 0
+    let zH7    : Vec (B*(1280*7*7)) := fun _ => 0
+    let zH7p   : Vec (B*(1280*(7*7))) := fun _ => 0
+    let z1280b : Vec (B*1280) := fun _ => 0
+    let zWd    : Mat 1280 nClasses := fun _ _ => 0
+    let zNCb   : Vec (B*(1*nClasses)) := fun _ => 0
+    let zNCp   : Vec (B*nClasses) := fun _ => 0
+    let nStc := fwd.stc; let nStn := fwd.stn
+    let nHc := fwd.hc; let nHn := fwd.hn; let nGap := fwd.gap; let nLog := fwd.logits
+    -- ═══ label-smoothed softmax-CE cotangent, COMPOSED from kit ops (α = 0.1, K = nClasses):
+    --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. Every line is a verified node. ═══
+    let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses))
+      (.operand nLog zNCb))
+    let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
+    let (cLsa, nLsa) ← pretty B (.scaleB alphaStr 0 (.operand "%onehot" zNCb))
+    let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
+    let (cD2,  nD2)  ← pretty B (.shiftB negAlphaKStr 0 (.operand nD1 zNCb))
+    let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
+    -- ═══ head backward + the 5 head/dense gradients (bias-free conv ⇒ no `hb`) ═══
+    let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
+      (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
+    let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) nGap z1280b (.operand nDy zNCp))
+    let (cbdg, nbdg) ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
+    let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 1280) (h := 7) (w := 7)
+      (.operand nDgi z1280b))
+    let (cDhm, nDhm) ← pretty B (.selectPosB nHn zH7 (.operand nDgp zH7))
+    let (cDhn, nDhn) ← pretty B (.bnBatchBack (N := B) (oc := 1280) (h := 7) (w := 7)
+      "%hg" nHc epsStr 0 z1280 zH7p (.operand nDhm zH7p))
+    let (cDhx, nDhx) ← pretty B (.convBackBatched (N := B) (ic := 256) (oc := 1280) (h := 7) (w := 7)
+      "%hW" zHk z1280 (.operand nDhn zH7))
+    let (cHW, nHW) ← pretty B (.convWeightGradB (N := B) (ic := 256) (oc := 1280) (h := 7) (w := 7)
+      fwd.last z1280 z7 zHk (.operand nDhn zH7))
+    let (cHg, nHg) ← pretty B (.bnGammaGradB (N := B) (oc := 1280) (h := 7) (w := 7)
+      nHc epsStr 0 zH7p (.operand nDhm zH7p))
+    let (cHt, nHt) ← pretty B (.bnBetaGradB (N := B) (oc := 1280) (h := 7) (w := 7)
+      (.operand nDhm zH7p))
+    -- ═══ backward: ONE fold over `mnv4Blocks` reversed, dispatched by the same row the
+    --     forward used, so a family can never be differentiated as a different family ═══
+    let mut dy := nDhx
+    let mut gcode := ""
+    let mut blockPs : List (List PGradV4) := []
+    for (b, f, xin) in (mnv4Blocks.zip (fwd.blocks.zip fwd.inputs)).reverse.map
+        (fun (b, f, xin) => (b, f, xin)) do
+      let g ← uibBackDispatch B b epsStr xin f dy
+      gcode := gcode ++ g.code
+      blockPs := [g.ps] ++ blockPs
+      dy := g.dx
+    let g0 ← fusedMbConvBackStridedGradB B 32 48 4 3 56 epsStr "0" fwd.str fwd.f0 dy
+    -- ═══ stem backward: relu mask → BN back, then the 3 stem gradients (NO conv-back past %x) ═══
+    let (cDsm, nDsm) ← pretty B (.selectPosB nStn z112 (.operand g0.dx z112))
+    let (cDsn, nDsn) ← pretty B (.bnBatchBack (N := B) (oc := 32) (h := 112) (w := 112)
+      "%sg" nStc epsStr 0 z32 z112p (.operand nDsm z112p))
+    let (csW, nsW) ← pretty B (.convStridedXlaWeightGradB "%x" z32 zx zSk (.operand nDsn z112))
+    let (csg, nsg) ← pretty B (.bnGammaGradB (N := B) (oc := 32) (h := 112) (w := 112)
+      nStc epsStr 0 z112p (.operand nDsm z112p))
+    let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 32) (h := 112) (w := 112)
+      (.operand nDsm z112p))
+    -- ═══ BN running statistics: batch μ/var per BN layer, from that layer's BN INPUT.
+    --     Derived from the SAME forward record that computes them (`f.qc`/`f.ec`/`f.dc`/`f.pc`)
+    --     rather than from an independent 52-entry table — a misaligned stat slot is SILENT, since
+    --     the arities still match and the wrong layer's statistics flow into the wrong
+    --     `@mnv4_fwd_eval` slot. ═══
+    let bnStat (oc hh : Nat) (xn : String) : StateM Nat (String × List String) := do
+      let zb : Vec (B*(oc*(hh*hh))) := fun _ => 0
+      let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
+      let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
+      pure (cM ++ cV, [nM, nV])
+    -- One UIB block's stats in `uibStatSig` order. ⚠ `eh` is the EXPAND BN's spatial size, which
+    -- is `2h` for the post-strided family alone (its expand runs before the downsample) and `h`
+    -- everywhere else — the one place the three block shapes are not interchangeable here.
+    let uibStats (b : UibSpec) (f : UibFwdB) : StateM Nat (String × List String) := do
+      let mid := b.ic * b.expand
+      -- the expand BN sits at the INPUT resolution `2h` for the post-strided family alone (its
+      -- expand runs before the downsample); every other site is at the block's own `h`
+      let eh := if b.stride2 && b.preDWk == 0 then 2 * b.h else b.h
+      let mut code := ""
+      let mut ns : List String := []
+      if b.preDWk > 0 then
+        let (c, n) ← bnStat b.ic b.h f.qc
+        code := code ++ c; ns := ns ++ n
+      let (ce, ne) ← bnStat mid eh f.ec
+      code := code ++ ce; ns := ns ++ ne
+      if b.postDWk > 0 then
+        let (c, n) ← bnStat mid b.h f.dc
+        code := code ++ c; ns := ns ++ n
+      let (cp, np) ← bnStat b.oc b.h f.pc
+      pure (code ++ cp, ns ++ np)
+    let (cQs, qs) ← bnStat 32 112 nStc
+    let (cQ0c, q0c) ← bnStat 128 56 fwd.f0.ec
+    let (cQ0p, q0p) ← bnStat  48 56 fwd.f0.pc
+    let mut qcode := ""
+    let mut qnames : List String := []
+    for (b, f) in mnv4Blocks.zip fwd.blocks do
+      let (c, n) ← uibStats b f
+      qcode := qcode ++ c; qnames := qnames ++ n
+    let (cQh, qh) ← bnStat 1280 7 nHc
+    -- ═══ the 158 parameter gradients in func-arg order ═══
+    let stemPs : List PGradV4 :=
+      [⟨"sW", nsW, [32,3,3,3]⟩, ⟨"sg", nsg, [32]⟩, ⟨"sbt", nst, [32]⟩]
+    let headPs : List PGradV4 :=
+      [⟨"hW", nHW, [1280,256,1,1]⟩, ⟨"hg", nHg, [1280]⟩, ⟨"hbt", nHt, [1280]⟩,
+       ⟨"Wd", nWdg, [1280, nClasses]⟩, ⟨"bd", nbdg, [nClasses]⟩]
+    let allPs : List PGradV4 := stemPs ++ g0.ps ++ blockPs.flatten ++ headPs
+    -- ═══ AdamW: one proven triple per parameter ═══
+    let mut adamCode := ""
+    let mut thetaN : List String := []
+    let mut mNames : List String := []
+    let mut vNames : List String := []
+    for g in allPs do
+      let (c, nT, nM, nV) ← adamOne4 B replicas g
+      adamCode := adamCode ++ c
+      thetaN := thetaN ++ [nT]
+      mNames := mNames ++ [nM]
+      vNames := vNames ++ [nV]
+    -- ═══ assemble ═══
+    let statCode := cQs ++ cQ0c ++ cQ0p ++ qcode ++ cQh
+    let statNames : List String := qs ++ q0c ++ q0p ++ qnames ++ qh
+    -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
+    -- `pretty` of an AST node and says so in the emitted text — the same carve-out
+    -- `resnet34`/`mobilenetv2`'s `%loss` takes. The SMOOTHED cross-entropy, matching the
+    -- cotangent's soft target; §2b shipped plain CE against a smoothed cotangent on R34 and only
+    -- the numeric tie caught it.
+    let lossCode :=
+      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+      s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
+      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
+      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [B]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [B]}\n" ++
+      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
+      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
+      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
+      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
+      s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
+      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    let body := fwd.code ++
+      cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
+      cDgi ++ cWdg ++ cbdg ++ cDgp ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHg ++ cHt ++
+      gcode ++ g0.code ++ cDsm ++ cDsn ++ csW ++ csg ++ cst ++ statCode
+    let pTypes : List String := allPs.map (fun g => ty g.ds)
+    let statTypes : List String := mnv4StatSigList.map (·.2)
+    let retVals := thetaN ++ mNames ++ vNames ++ ["%loss", "%bc1", "%bc2"] ++ statNames
+    let retTys  := pTypes ++ pTypes ++ pTypes ++
+      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
+    pure <|
+      (if replicas ≤ 1 then
+        "    // ── MobileNetV4-Conv-S batch-BN AdamW train step: every line is pretty(AST node) ──\n"
+       else
+        s!"    // ── MobileNetV4-Conv-S batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
+        "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT, emitted text outside\n" ++
+        "    // the faithfulness theorems. NOTE this does NOT equal a single-device step at the\n" ++
+        "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design.\n") ++
+      zeroBiasPrelude false mnv4ZbWidths ++ body ++ adamConsts4 ++ adamCode ++ lossCode ++
+      s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
+  let sigList : List (String × String) := mnv4SigList nClasses
+  let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
+  let mSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}m: {t}"))
+  let vSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}v: {t}"))
+  let statSig := String.intercalate ", " (mnv4StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statSig ++
+    s!", %onehot: {ty [B, nClasses]}"
+  let pTy := sigList.map (·.2)
+  let outSig := String.intercalate ", "
+    (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
+     (mnv4StatSigList.map (·.2)))
+  let inner : String := go.run' 0
+  let fname := s!"{slug}_{mnv4AdamVariant B replicas}_train_step"
+  "module @m {\n" ++
+  s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
+  inner ++
   "  }\n}\n"
 
 end Proofs.StableHLO
+
+-- ════════════════════════════════════════════════════════════════
+-- § The layout contract, checked at elaboration
+-- ════════════════════════════════════════════════════════════════
+
+-- 158 parameters and 104 BN stat slots ⇒ the train step is
+-- 1 + 3×158 + 3 + 104 + 1 = 583 inputs and 3×158 + 3 + 104 = 581 outputs, and the eval forward is
+-- 1 + 158 + 104 = 263 inputs. `mnv4-fwd-smoke` ties the 158 to `VLayer.toSpecs` shape-for-shape.
+#guard (Proofs.StableHLO.mnv4ShapeList 10).length == 158
+#guard Proofs.StableHLO.mnv4StatShapeList.length == 104
+
+-- ⭐⭐ **THE STAT-ALIGNMENT GATE, and it is the strong one.** Every conv in this net is
+-- BN-followed, so the BN stat slots must be, in order, two per conv weight at that conv's OUTPUT
+-- channel count — which is the kernel's first dimension for a regular conv `[oc,ic,kH,kW]` AND for
+-- a depthwise `[c,1,k,k]` alike. This pins the stat list's LENGTH, WIDTHS and ORDER against the
+-- parameter list, so the two `k = 0` dispatches (`uibSig`'s and `uibStatSig`'s) cannot diverge.
+--
+-- ⚠ It is worth having as a `#guard` rather than a comment because a misaligned stat slot is
+-- SILENT at run time: the arities still match, and the wrong layer's statistics simply flow into
+-- the wrong `@mnv4_fwd_eval` slot. Nothing downstream would fail — the net would just score
+-- slightly wrong, forever.
+#guard (Proofs.StableHLO.mnv4StatShapeList.map (·.2)) ==
+  ((Proofs.StableHLO.mnv4ShapeList 10).filter (fun p => p.2.length == 4)).flatMap
+    (fun p => [[p.2.headD 0], [p.2.headD 0]])
+
+-- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
+-- call ("entry mismatch"). These pin the literal paths below against `mnv4AdamVariant`, so a
+-- rename fails at `lake build` rather than at run time.
+#guard Proofs.StableHLO.mnv4AdamVariant 32 1 == "adam"
+#guard Proofs.StableHLO.mnv4AdamVariant 32 2 == "adamdp"
+#guard Proofs.StableHLO.mnv4AdamVariant 64 1 == "adam64"
+
+-- ── The three Imagenette artifacts. B=32, nClasses=10, ε=1e-5 — the tier's shape. ──────────────
+-- ⭐ All three come from ONE chain (`mnv4FwdChainB`, switched by `BnMode`) and one block table, so
+-- the train/score split that §3d(b) found in MobileNetV2 — a per-example forward paired with a
+-- batch-BN Adam train step, green under `regen_verified_mlir.sh check` because that script only
+-- ever pairs a forward with the SGD step — has nowhere to live here.
+
+#eval IO.FS.writeFile "verified_mlir/mnv4_fwd.mlir"
+  (Proofs.StableHLO.mnv4FwdFaithfulV 32 10 "1.0e-5")
+
+#eval IO.FS.writeFile "verified_mlir/mnv4_fwd_eval.mlir"
+  (Proofs.StableHLO.mnv4FwdEvalFaithfulV 32 10 "1.0e-5")
+
+-- **This is the artifact the MNv4 Imagenette trainer runs**, and this `#eval` is its only writer.
+-- Target: `RESULTS.md`'s 84.58%, the baseline path's number for this block table
+-- (`planning/mnv4_verified.md` phase 4). ⚠ Unlike MobileNetV2's, that number belongs to the JAX
+-- baseline and does NOT move when this render changes — the stem's `convStridedXla` was chosen so
+-- the two are the same net (§3e), and the forward tie measured 1.423e-06 against it unpatched.
+#eval IO.FS.writeFile "verified_mlir/mnv4_adam_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 32 10 "1.0e-5")

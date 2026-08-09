@@ -5,6 +5,10 @@ checked. Companions: `planning/mnv4_imagenet.md` (the **JAX reference** side —
 the Conv-S/Conv-M distinction), `planning/rsb_a3_r50_verified.md` (the closest precedent: a new
 block form brought onto the verified path).
 
+Status: **PHASE 2 (backward) DONE 2026-08-09 — see §3i.** The train step renders, compiles, and its
+gradient ties `jax.grad` of the reference; zero new SHlo ops were required. What remains is the
+driver/spec plumbing and the 80-epoch run.
+
 Status: **PHASES 0–3 (forward) DONE 2026-08-08.** `.uib` and `.fusedMbConvNB` are in `VLayer`, the
 whole Conv-S forward chain renders, `@mnv4_fwd` compiles, and the forward tie against the JAX
 reference RAN. Block order is **pinned at 1.8e-6**. One blocker left, decided below.
@@ -788,6 +792,92 @@ the Adam pair. That is a deliberate, documentable split and it should be written
 
 ---
 
+## 3i. ✅ THE BACKWARD IS BUILT AND GRADIENT-TIED (2026-08-09) — zero new ops
+
+**Phase 2's gate is met.** `verified_mlir/mnv4_{fwd,fwd_eval,adam_train_step}.mlir` all render and
+`iree-compile`; the train step is 583 inputs / 581 outputs (158 params × θ/m/v + lr/bc1/bc2 + 104
+BN stat slots + `%onehot`), and its gradient ties `jax.grad` of the reference.
+
+### ⭐ It needed NO new SHlo ops — every one already ships in another net
+
+§4's Phase 2 expected proof-layer work. There was none. Checked op by op: `selectPosB` (R34's relu
+mask), `swishBackB` (EfficientNet), `depthwiseBackBatched` / `depthwiseStridedBackBatched` /
+`depthwiseStridedWeightGradB` (mnv2/enet), `convStridedBackBatched` / `convStridedWeightGradB`
+(R34/R50/ConvNeXt), `convStridedXlaWeightGradB` (the mnv2 stem, §3g). MNv4's backward is pure
+composition — which is §6's claim ("a family from one constructor") landing on the backward too.
+
+### ⭐⭐ ONE block table, five consumers
+
+The 14 rows were being hand-written **four** times (signature, stat slots, forward, backward). They
+are now one `List UibSpec`, and `uibFwdDispatch`/`uibBackDispatch` read the same row — so the
+forward and the backward cannot disagree about which family a block is, which is §3's trap.
+Collapsing the four transcriptions re-rendered **byte-identical** to the hand-written chain, which
+is both the check on the refactor and the evidence the table is right.
+
+`@mnv4_fwd`, `@mnv4_fwd_eval` and the train step are all one `mnv4FwdChainB` call switched by
+`BnMode`. ⭐ **So §3d(b)'s hole cannot exist here**: `mnv4-train-smoke` asserts the train step
+contains the forward module's body *verbatim*, as a string. That is the pairing
+`regen_verified_mlir.sh check` fails to form for the other five nets.
+
+### ⚠⚠ THE GRADIENT TIE — and the two controls that stopped it convicting the wrong thing
+
+`scripts/mnv4_grad_tie.py`. The train step returns updated parameters, not gradients, so the
+gradient is recovered **exactly**: AdamW's `m' = β₁·m + (1−β₁)·g` at **m = 0** is `0.1·g`, so
+`g = 10·m'`, independent of lr, the bias corrections and the decoupled weight decay. The reference
+side is `jax.grad` of the **label-smoothed** CE — *not* the reference file's own `loss_fn`, which is
+plain CE (`generated_mobilenet_v4.py:1120`); tying a smoothed backward against an unsmoothed loss
+mismatches on every parameter, which is §2b's R34 bug in mirror image.
+
+The raw run reported **116/158 parameters off by ~1e-2**, and two plausible explanations were
+measured and **both refuted** before the real one was found:
+
+| hypothesis | how it was killed |
+|---|---|
+| fp32 conditioning | an **f64 control**: the fp32 reference tracks f64 at ~1e-5, so 1e-2 is 1000× the arithmetic floor |
+| the symmetric strided-depthwise backward is wrong (the localisation pointed at the block whose dx it produces, and it had **never** had a known-answer check) | three new probes in `xla_pad_op_check.py` — `dw_sym_back_k3/k5`, `dw_sym_wgrad_k5` — all match `jax.vjp` to 5e-7 |
+
+⭐⭐⭐ **The actual cause: a ReLU net's gradient is DISCONTINUOUS in its forward.** The render and the
+reference are two fp32 algorithms agreeing to ~1e-6; wherever a pre-activation sits within that of
+zero, `1[x>0]` disagrees and that position's cotangent moves by O(dy). The fingerprint is exact —
+**one bad channel per BN** (a β gradient is `Σ_{b,h,w} dy`, so one bad spatial position corrupts
+exactly one channel), the same channel in both the γ and β rows, growing with depth as more masks
+are crossed. Setting every BN β to +5 (`--nokink`) puts every pre-activation 5σ clear of zero and
+the whole net drops to the floor: **0/147 live parameters over 10× the control, worst block 7.7×,
+where the raw run was 1000–10000×.**
+
+⚠ Three decades separate passing from the observed failure, so the 10× line is not slack. And it
+was **verified to fail**: swapping the expand BN's γ and β gradients — same shapes, same arity,
+every structural gate still green — takes it to **21/147 failing, worst 3e4**, and independently
+trips the dead-parameter check.
+
+### 🔧 What is worth keeping from this
+
+1. **A gradient tie between two fp32 ReLU nets has a floor set by the forward tie, not by
+   arithmetic.** Budget ~1 corrupted channel per BN per 1e-6 of forward disagreement. Any whole-net
+   gradient tie in this repo will hit this; `--nokink` is the way through.
+2. ⭐ **β gradients are the cotangent trace.** `Σ dy` has no weight contraction in the way, so
+   reading the `*bt` rows in forward order localises where a cotangent first goes wrong. The weight
+   rows blur the boundary; β does not.
+3. **Some β gradients are structurally ZERO** — a BN backward's output has zero per-channel sum and
+   a 1×1 conv-back preserves it, so any BN fed through that path has `Σ dy = 0` exactly. Relative
+   error on those is 0/0 and they dominate every table unless excluded; they get an absolute check
+   instead.
+4. ⚠ **Inference-by-analogy was wrong a THIRD time** (§3d(d) and §3c were the first two, both about
+   EfficientNet's padding). Here it was "the symmetric strided depthwise backward must be the bug".
+   It had genuinely never been probed — that gap was real and is now closed — but it was not the
+   cause. **Probe the op before rewriting it.**
+5. `--device=local-task` gives **exit 245 with empty stderr** on these modules; `local-sync` runs
+   the same vmfb. §3f's gotcha, now handled by an automatic fallback that says which device ran.
+
+### ▶ WHAT PHASE 3-REST STILL OWES
+
+The three artifacts exist and are gated. Not yet done: `mobilenetv4Verified` in `VerifiedNets.lean`,
+the `Resnet50AdamCommon`-shaped driver pair, and the `check_render_coverage.py` entry — the
+"three `#eval` lines + a 50-line Common" part §4 calls mechanical. Then Phase 4's 80-epoch run
+against **84.58%**.
+
+---
+
 ## 4. PHASES
 
 ### Phase 0 — confirm the op set (do this FIRST, it is the load-bearing assumption)
@@ -820,6 +910,11 @@ typecheck), `fusedMbConvFwdStridedB`, `mnv4FwdChainB`, `mnv4ShapeList`/`mnv4SigL
 per-block depthwise histogram, `%zb` binding, signature ↔ layout shape-for-shape, 4,124,426 params
 = `RESULTS.md`'s 4.1M) · `iree-compile` accepts the module (204,622-byte vmfb) ·
 `scripts/mnv4_forward_tie.py` (§3b).
+
+### ✅ Phase 2 + most of Phase 3-rest — DONE 2026-08-09 (codegen)
+See §3i. `@mnv4_fwd_eval` and `@mnv4_adam_train_step` render, compile, and the **whole-net gradient
+tie passes**. Zero new SHlo ops were needed. The paragraph below is the original scoping, kept
+because its sizing estimate was roughly right (~700 lines) and its gate was the correct one.
 
 ### ▶ Phase 2 — the UIB block VJP (proof side) — NOT STARTED, **and now unblocked**
 Four shapes from one primitive. The depthwise and pointwise VJPs exist (mnv2/enet); what is new is

@@ -30,7 +30,9 @@ def expectedDwGroups : List (Nat × Nat) :=
     (1024, 2) ] -- b12,b13 post (256*4)
 
 def main : IO Unit := do
-  let (code, logits) := (mnv4FwdChainB 2 10 "1.0e-05").run' 0
+  let fwd := (mnv4FwdChainB 2 10 "1.0e-05").run' 0
+  let code := fwd.code
+  let logits := fwd.logits
   let lines := code.splitOn "\n"
   let n (pat : String) : Nat := (lines.filter (fun l => (l.splitOn pat).length > 1)).length
   -- ⚠ Parse the group count NUMERICALLY. A substring match on "feature_group_count = 1" also

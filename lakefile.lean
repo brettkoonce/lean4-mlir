@@ -1490,6 +1490,13 @@ lean_exe «uib-layout-tie» where
 lean_exe «mnv4-fwd-smoke» where
   root := `tests.TestMnv4FwdSmoke
 
+/-- MNv4 AdamW train-step smoke (`planning/mnv4_verified.md` phase 2): arity, entry point, the
+    eval forward's stat binding, and — the one no other net has — that the train step's forward
+    region is `@mnv4_fwd`'s body VERBATIM. §3d(b)'s two-worlds split cannot hide behind this.
+    Also emits the batch-2 train step `scripts/mnv4_grad_tie.py` runs. -/
+lean_exe «mnv4-train-smoke» where
+  root := `tests.TestMnv4TrainSmoke
+
 /-- Shared body of the verified R50 + AdamW **Imagenette** trainer — the bottleneck peer of
     `Resnet34AdamCommon`, imported by both backends so their schedule and seed cannot drift.
     Artifacts: the `resnet50_*` renders at the end of `Proofs/Codegen/ResNet50RenderB.lean`. -/

@@ -105,10 +105,18 @@ def main():
     print()
     print(f"{'backward probe':<16} {'vs jax.vjp':>12} {'vs SYMMETRIC vjp':>18}   verdict")
     print("-" * 62)
-    for fn, mlir, grouped, c_in, oc, k in [
-        ("dw_xla_back",   ".lake/build/xlapad_dw_back.mlir",    True,  6, 6, 3),
-        ("conv_xla_wgrad", ".lake/build/xlapad_conv_wgrad.mlir", False, 3, 8, 3),
-        ("dw_xla_wgrad",  ".lake/build/xlapad_dw_wgrad.mlir",   True,  6, 6, 3),
+    # `expect` says WHICH convention this op is supposed to implement. The symmetric strided
+    # depthwise backward is the one MobileNetV4's UIB blocks and EfficientNet's MBConv blocks use,
+    # and until now nothing checked it at all — the probes were added alongside the `…Xla…` ops and
+    # stopped there. For those rows the two columns swap roles: `vs SYMMETRIC vjp` is the answer
+    # and `vs jax.vjp('SAME')` is the control that must NOT match.
+    for fn, mlir, grouped, c_in, oc, k, kind, expect in [
+        ("dw_xla_back",     ".lake/build/xlapad_dw_back.mlir",         True,  6, 6, 3, "gx", "same"),
+        ("conv_xla_wgrad",  ".lake/build/xlapad_conv_wgrad.mlir",      False, 3, 8, 3, "gw", "same"),
+        ("dw_xla_wgrad",    ".lake/build/xlapad_dw_wgrad.mlir",        True,  6, 6, 3, "gw", "same"),
+        ("dw_sym_back_k3",  ".lake/build/xlapad_dw_sym_back_k3.mlir",  True,  6, 6, 3, "gx", "sym"),
+        ("dw_sym_back_k5",  ".lake/build/xlapad_dw_sym_back_k5.mlir",  True,  6, 6, 5, "gx", "sym"),
+        ("dw_sym_wgrad_k5", ".lake/build/xlapad_dw_sym_wgrad_k5.mlir", True,  6, 6, 5, "gw", "sym"),
     ]:
         if not os.path.exists(mlir):
             sys.exit(f"missing {mlir} — re-run `lake env lean tests/TestXlaPadOps.lean`")
@@ -131,7 +139,7 @@ def main():
         gx_x, gw_x = grads('SAME')                       # the Xla-padded net's true gradients
         gx_s, gw_s = grads(((pp, pp), (pp, pp)))         # the symmetric net's — the wrong answer
 
-        if fn == "dw_xla_back":
+        if kind == "gx":
             got = run_module(mlir, fn, [dy.reshape(B, -1), W], work).reshape(B, c_in, HIN, HIN)
             ref_x, ref_s = gx_x, gx_s
         else:
@@ -139,11 +147,15 @@ def main():
             ref_x, ref_s = gw_x.reshape(got.shape), gw_s.reshape(got.shape)
 
         d_x, d_s = np.abs(got - ref_x).max(), np.abs(got - ref_s).max()
-        ok = d_x < 1e-3 and d_s > 1e-3
+        hit, miss = (d_x, d_s) if expect == "same" else (d_s, d_x)
+        ok = hit < 1e-3 and miss > 1e-3
+        label = "XLA-SAME" if expect == "same" else "symmetric"
+        verdict = f"✓ matches {label} vjp" if ok else "✗ WRONG GRADIENT"
+        if hit < 1e-3 and miss < 1e-3:
+            verdict = "✗ VACUOUS (both match)"
         if not ok:
             failures.append(fn)
-        print(f"{fn:<16} {d_x:>12.3e} {d_s:>18.3e}   "
-              f"{'✓ matches XLA-SAME vjp' if ok else '✗ WRONG GRADIENT'}")
+        print(f"{fn:<16} {d_x:>12.3e} {d_s:>18.3e}   {verdict}")
 
     print()
     if failures:
