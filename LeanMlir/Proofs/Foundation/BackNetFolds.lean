@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Foundation.CertifiedChain
+import LeanMlir.Proofs.Foundation.ResNet50BackNet
 import LeanMlir.Proofs.Foundation.ResNet34BackB0
 import LeanMlir.Proofs.Architectures.EfficientNetBackB0
 import LeanMlir.Proofs.Architectures.ConvNeXtBackB0
@@ -247,5 +248,75 @@ noncomputable def r34Trunk_3463 {N c₀ c₁ c₂ c₃ c₄ h w : Nat}
   (r34Stage P1 (List.replicate 2 I1)).comp
     ((r34Stage P2 (List.replicate 3 I2)).comp
       ((r34Stage P3 (List.replicate 5 I3)).comp (r34Stage P4 (List.replicate 2 I4))))
+
+-- ════════════════════════════════════════════════════════════════
+-- § ⭐⭐ R34 WEIGHT WIRING — parameters TYPED BY THEIR BLOCK ROW
+-- ════════════════════════════════════════════════════════════════
+
+/-! The R34 peer of MNv4's `UibParams` and R50's `BottleneckParams`: a row type, and a parameter
+record whose every width is a projection of the row, so a record disagreeing with its row cannot be
+constructed. ⚠ Same caveat as the other two — typing pins **shape**, not **identity**: two rows of
+the same shape have the same record type, so a stage's identity-block repeats stay interchangeable.
+Closing that wants weights drawn from one indexed array in row order (a renderer concern). -/
+
+/-- One R34 basic-block row: `ic → oc` at output resolution `h`, optionally strided. ⚠ A basic
+    block has no bottleneck width — that single missing field is the whole difference from
+    `BottleneckSpec`, and it is why R34 and R50 share stage depths but not block forms. -/
+structure BasicSpec where
+  ic : Nat
+  oc : Nat
+  h : Nat
+  stride2 : Bool
+deriving Repr, DecidableEq
+
+/-- **One basic block's parameters, typed by its row.** Two 3×3 convs (extents left as binders) and
+    a projection for the downsample form. -/
+structure BasicParams (s : BasicSpec) (k1 k2 kp : Nat) where
+  W1 : Kernel4 s.oc s.ic k1 k1
+  b1 : Vec s.oc
+  e1 : ℝ
+  h1 : 0 < e1
+  g1 : Vec s.oc
+  bt1 : Vec s.oc
+  W2 : Kernel4 s.oc s.oc k2 k2
+  b2 : Vec s.oc
+  e2 : ℝ
+  h2 : 0 < e2
+  g2 : Vec s.oc
+  bt2 : Vec s.oc
+  Wp : Kernel4 s.oc s.ic kp kp
+  bp : Vec s.oc
+  ep : ℝ
+  hp : 0 < ep
+  gp : Vec s.oc
+  btp : Vec s.oc
+
+/-- ⭐ **The R34 downsample basic block, built from its row.** Input resolution is `2 * s.h`; the
+    row records the OUTPUT size, matching `UibSpec` and `BottleneckSpec`. -/
+noncomputable def r34DownBlockOfRow (N : Nat) (s : BasicSpec) {k1 k2 kp : Nat}
+    (p : BasicParams s k1 k2 kp) :
+    CertLayer (N * (s.ic * (2 * s.h) * (2 * s.h))) (N * (s.oc * s.h * s.h)) :=
+  r34DownBlockLayer (h := s.h) (w := s.h) N
+    p.W1 p.b1 p.e1 p.h1 p.g1 p.bt1 p.W2 p.b2 p.e2 p.h2 p.g2 p.bt2
+    p.Wp p.bp p.ep p.hp p.gp p.btp
+
+/-- ⭐ **The R34 block table's stage entries**, the peer of `r50StageEntries`. ⚠ Stage 1's entry is
+    an IDENTITY block (`64 → 64`, stride 1), which is exactly why R34 never needed R50's stride-1
+    projection form (§8a) — the one structural difference between the two nets' stage-entry rows. -/
+def r34StageEntries : List BasicSpec :=
+  [ ⟨ 64,  64, 56, false⟩,   -- stage 1 block 0: identity, NOT a projection
+    ⟨ 64, 128, 28, true ⟩,   -- stage 2 block 0
+    ⟨128, 256, 14, true ⟩,   -- stage 3 block 0
+    ⟨256, 512,  7, true ⟩ ]  -- stage 4 block 0
+
+-- The 56→28→14→7 ladder and the channel doubling, as checks rather than prose.
+#guard r34StageEntries.map (·.h) = [56, 28, 14, 7]
+#guard r34StageEntries.map (·.stride2) = [false, true, true, true]
+-- ⭐ Exactly one stage entry preserves channels — stage 1 — and it is the non-strided one. That is
+-- the whole reason R50 needs a block form R34 does not.
+#guard (r34StageEntries.filter (fun s => s.ic == s.oc)).length = 1
+#guard r34StageEntries.all (fun s => s.stride2 || s.ic == s.oc)
+-- R34 and R50 share stage depths (3/4/6/3) and the resolution ladder, differing only in block form.
+#guard r34StageEntries.map (·.h) = r50StageEntries.map (·.h)
 
 end Proofs.StableHLO

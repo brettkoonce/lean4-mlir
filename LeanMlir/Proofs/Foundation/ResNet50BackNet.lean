@@ -241,4 +241,99 @@ noncomputable def r50Trunk_3463 {N c₀ c₁ c₂ c₃ c₄ h w : Nat}
     (r50StageDown  P3 (List.replicate 5 I3))
     (r50StageDown  P4 (List.replicate 2 I4))
 
+-- ════════════════════════════════════════════════════════════════
+-- § ⭐⭐ WEIGHT WIRING — parameters TYPED BY THEIR BLOCK ROW
+-- ════════════════════════════════════════════════════════════════
+
+/-! ⛔ **The gap.** The block layers above take their weights as free arguments, so nothing stops a
+caller pairing stage 2's widths with stage 3's kernels. `r50Trunk_3463` pins arities and
+resolutions; it does not pin the weights.
+
+⭐ **Fix, the same shape MNv4 uses**: a row type, and a parameter record whose every width is a
+*projection of the row*. A record disagreeing with its row cannot be constructed.
+
+⚠ **What it does not pin** (same caveat as MNv4's): two rows with identical shape have identical
+record types, so their weights are interchangeable to the type checker. Typing pins **shape**, not
+**identity**. In R50 that bites within a stage — a stage's identity blocks are all
+`oc → oc/4 → oc`, so its 2/3/5/2 repeats are mutually swappable. Closing that wants the weights
+drawn from one indexed array in row order, which is a renderer concern. -/
+
+/-- One R50 bottleneck row: `ic → mid → oc` at output resolution `h`, optionally strided.
+    ⚠ `mid` is explicit rather than `oc / 4` because the torchvision ratio is a fact about the
+    block table, not about the block form — and baking a division into the type would make every
+    width proof carry it. -/
+structure BottleneckSpec where
+  ic : Nat
+  mid : Nat
+  oc : Nat
+  h : Nat
+  stride2 : Bool
+deriving Repr, DecidableEq
+
+/-- **One bottleneck's parameters, typed by its row.** `kq`/`kd`/`kz`/`kp` are the four kernel
+    extents (1×1, 3×3, 1×1, and the projection's), left as binders exactly as
+    `Resnet50BlocksCertified` argues they should be — 1×1-vs-3×3 is an argument, not a literal. -/
+structure BottleneckParams (s : BottleneckSpec) (kq kd kz kp : Nat) where
+  W1 : Kernel4 s.mid s.ic kq kq
+  b1 : Vec s.mid
+  e1 : ℝ
+  h1 : 0 < e1
+  g1 : Vec s.mid
+  bt1 : Vec s.mid
+  W2 : Kernel4 s.mid s.mid kd kd
+  b2 : Vec s.mid
+  e2 : ℝ
+  h2 : 0 < e2
+  g2 : Vec s.mid
+  bt2 : Vec s.mid
+  W3 : Kernel4 s.oc s.mid kz kz
+  b3 : Vec s.oc
+  e3 : ℝ
+  h3 : 0 < e3
+  g3 : Vec s.oc
+  bt3 : Vec s.oc
+  Wp : Kernel4 s.oc s.ic kp kp
+  bp : Vec s.oc
+  ep : ℝ
+  hp : 0 < ep
+  gp : Vec s.oc
+  btp : Vec s.oc
+
+/-- ⭐ **The stride-1 projection bottleneck, built from its row** (R50 stage 1 block 0). Widths and
+    resolution come from `s`; only the numeric values are free. -/
+noncomputable def r50ProjBlockOfRow (N : Nat) (s : BottleneckSpec) {kq kd kz kp : Nat}
+    (p : BottleneckParams s kq kd kz kp) :
+    CertLayer (N * (s.ic * s.h * s.h)) (N * (s.oc * s.h * s.h)) :=
+  r50ProjBlockLayer (h := s.h) (w := s.h) N
+    p.W1 p.b1 p.e1 p.h1 p.g1 p.bt1 p.W2 p.b2 p.e2 p.h2 p.g2 p.bt2
+    p.W3 p.b3 p.e3 p.h3 p.g3 p.bt3 p.Wp p.bp p.ep p.hp p.gp p.btp
+
+/-- ⭐ **The strided projection bottleneck, built from its row** (stages 2/3/4, block 0). The input
+    resolution is `2 * s.h` — the row records the OUTPUT size, as MNv4's `UibSpec` does. -/
+noncomputable def r50DownBlockOfRow (N : Nat) (s : BottleneckSpec) {kq kd kz kp : Nat}
+    (p : BottleneckParams s kq kd kz kp) :
+    CertLayer (N * (s.ic * (2 * s.h) * (2 * s.h))) (N * (s.oc * s.h * s.h)) :=
+  r50DownBlockLayer (h := s.h) (w := s.h) N
+    p.W1 p.b1 p.e1 p.h1 p.g1 p.bt1 p.W2 p.b2 p.e2 p.h2 p.g2 p.bt2
+    p.W3 p.b3 p.e3 p.h3 p.g3 p.bt3 p.Wp p.bp p.ep p.hp p.gp p.btp
+
+/-- ⭐ **The R50 block table**, as data the builders can read — the peer of `mnv4Blocks`. Stage
+    entry blocks only (the identity repeats are `2/3/5/2` of the stage's `oc → oc/4 → oc` shape).
+    ⚠ `h` is each block's OUTPUT resolution at 224² input. -/
+def r50StageEntries : List BottleneckSpec :=
+  [ ⟨  64,  64,  256, 56, false⟩,   -- stage 1 block 0: stride-1 projection, the R34-less form
+    ⟨ 256, 128,  512, 28, true ⟩,   -- stage 2 block 0
+    ⟨ 512, 256, 1024, 14, true ⟩,   -- stage 3 block 0
+    ⟨1024, 512, 2048,  7, true ⟩ ]  -- stage 4 block 0
+
+-- The torchvision bottleneck ratio `mid = oc / 4`, and the 56→28→14→7 ladder, as checks on the
+-- table rather than prose. A wrong width here is §3's silent class one level up.
+#guard r50StageEntries.all (fun s => s.mid * 4 == s.oc)
+#guard r50StageEntries.map (·.h) = [56, 28, 14, 7]
+#guard r50StageEntries.map (·.stride2) = [false, true, true, true]
+-- Exactly one stride-1 projection — the form §8a records as having no R34 analogue.
+#guard (r50StageEntries.filter (fun s => !s.stride2)).length = 1
+-- Every stage entry changes channels, which is why none of the four has an identity skip.
+#guard r50StageEntries.all (fun s => s.ic != s.oc)
+
 end Proofs.StableHLO

@@ -597,6 +597,86 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
 -- ...and every stride-1 block preserves them, which is why all eleven do.
 #guard mnv4Blocks.all (fun s => s.stride2 || s.ic == s.oc)
 
+-- ════════════════════════════════════════════════════════════════
+-- § ⭐⭐ WEIGHT WIRING — the parameters are TYPED BY THEIR TABLE ROW
+-- ════════════════════════════════════════════════════════════════
+
+/-! ⛔ **The gap this closes.** `mnv4UibSkipBlockOfKs` reads the *dispatch* from the table, but its
+weights are separate arguments — so nothing stopped a caller pairing row 4's `k`s with row 7's
+widths. The dispatch was table-driven; the wiring was not.
+
+⭐ **Fix: index the parameter record by the row.** Every width in `UibParams s` is a *projection of
+`s`* — `s.ic`, `s.oc`, `s.ic * s.expand`, `s.preDWk`, `s.postDWk`. A record with widths that
+disagree with its row **cannot be constructed**, so the block builder needs no side conditions and
+no `#guard`: it is impossible by typing rather than checked after the fact.
+
+⚠ **What this still does not pin**, stated precisely so the next reader does not overclaim: rows
+4, 5 and 10 are all `160 → 160, expand 4`, and 4/10 share `k = 3,3`. Their records are therefore
+the *same type*, so swapping those two blocks' weights typechecks. Typing pins **shape**
+(channels, expand ratio, kernel extents, resolution); it cannot pin **identity** between rows that
+are shape-identical. Closing that needs the weights to come from one indexed array — a renderer
+concern, since the render already folds `mnv4Blocks` in order. -/
+
+/-- **One UIB block's parameters, typed by its table row.** Every width is a projection of `s`, so
+    a record whose widths disagree with the row is not constructible. Bias-free convs still carry a
+    `b` because the stage vocabulary takes one; the render binds it to `%zb{c}`. -/
+structure UibParams (s : UibSpec) where
+  /-- pre-depthwise, at `s.ic` channels and `s.preDWk` extent (degenerate when `k = 0`). -/
+  Wq : DepthwiseKernel s.ic s.preDWk s.preDWk
+  bq : Vec s.ic
+  eq_ : ℝ
+  hq : 0 < eq_
+  gq : Vec s.ic
+  bq2 : Vec s.ic
+  /-- expand `1x1`, `s.ic -> s.ic * s.expand`. -/
+  We : Kernel4 (s.ic * s.expand) s.ic 1 1
+  be : Vec (s.ic * s.expand)
+  ee : ℝ
+  he : 0 < ee
+  ge : Vec (s.ic * s.expand)
+  be2 : Vec (s.ic * s.expand)
+  /-- post-depthwise, at the EXPANDED width and `s.postDWk` extent. -/
+  Wd : DepthwiseKernel (s.ic * s.expand) s.postDWk s.postDWk
+  bd : Vec (s.ic * s.expand)
+  ed : ℝ
+  hd : 0 < ed
+  gd : Vec (s.ic * s.expand)
+  bd2 : Vec (s.ic * s.expand)
+  /-- project `1x1`, `s.ic * s.expand -> s.oc`. -/
+  Wz : Kernel4 s.oc (s.ic * s.expand) 1 1
+  bz : Vec s.oc
+  ez : ℝ
+  hz : 0 < ez
+  gz : Vec s.oc
+  bz2 : Vec s.oc
+
+/-- ⭐⭐ **A UIB body built ENTIRELY from its table row.** Dispatch from `s.preDWk`/`s.postDWk`,
+    widths and resolution from `s`, weights from a record that cannot disagree with `s`. Nothing
+    here is a free argument: given `s`, the only freedom left is the numeric values.
+
+    ⚠ This is the BODY (`ic -> oc`). The identity skip is `CertLayer.residual` on top and needs
+    `oc = ic`, which holds for exactly the eleven non-`stride2` rows (guarded below) — applied by
+    the caller at a concrete row, where it is `rfl` and needs no transport. -/
+noncomputable def mnv4BodyOfRow (N : Nat) (s : UibSpec) (p : UibParams s) :
+    CertLayer (N * (s.ic * s.h * s.h)) (N * (s.oc * s.h * s.h)) :=
+  mnv4UibBody N
+    (mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2)
+    (mnv4ExpandLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2)
+    (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2)
+    (mnv4ProjectLayer (h := s.h) (w := s.h) N p.Wz p.bz p.ez p.hz p.gz p.bz2)
+
+/-- ⭐ **The row-built body's backward graph denotes its VJP.** Immediate from `CertLayer.faithful`
+    — the point is not the proof but that its subject is determined by `s` alone. -/
+theorem mnv4BodyOfRow_faithful (N : Nat) (s : UibSpec) (p : UibParams s)
+    (x : Vec (N * (s.ic * s.h * s.h))) (hx : (mnv4BodyOfRow N s p).ok x)
+    (e : SHlo (N * (s.oc * s.h * s.h))) :
+    den ((mnv4BodyOfRow N s p).graph x e)
+      = ((mnv4BodyOfRow N s p).vjp x hx).backward (den e) :=
+  (mnv4BodyOfRow N s p).faithful x hx e
+
+-- Every non-`stride2` row has `oc = ic`, so `CertLayer.residual` applies to all eleven of them.
+#guard (mnv4Blocks.filter (fun s => !s.stride2)).all (fun s => s.oc == s.ic)
+
 /-- **MNv4's full block ladder, as a type-level check on `mnv4Blocks`.**
 
     The spatial ladder is 56 → 28 → 14 → 7 with the reductions at blocks 1, 3 and 11, and the
