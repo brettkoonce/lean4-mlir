@@ -15,6 +15,14 @@ on:
       - 'lean-toolchain'
       - 'lake-manifest.json'
       - '.github/workflows/blueprint.yml'
+      # ⚠ The checker this workflow RUNS at its last step. Added 2026-08-10 after fixing
+      # `unknown module prefix 'demos'` in it and watching the push not trigger this
+      # workflow — so the fix to a blueprint gate could not be validated by the blueprint
+      # gate. A tool whose source is not a trigger path for the job that runs it is a
+      # third instance of the same latency that produced the bug (see the file's header:
+      # `apps` latent from 2026-07-27, `demos` from `dc5a7db`, both surfaced only when an
+      # unrelated push happened to touch a trigger path).
+      - 'tests/BlueprintCheckDecls.lean'
   workflow_dispatch:
 
 concurrency:
