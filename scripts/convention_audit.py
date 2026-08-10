@@ -292,6 +292,13 @@ def main():
     ap.add_argument("--net", choices=sorted(NETS), default=None)
     ap.add_argument("--selftest", action="store_true",
                     help="require the audit to reproduce the known ledger (see KNOWN)")
+    ap.add_argument("--baseline", default=None, metavar="FILE",
+                    help="RATCHET mode for CI: fail only on divergences not already recorded in "
+                         "FILE. The list may SHRINK, never grow — a new entry means two sides of "
+                         "one net drifted apart with CI green, which is the whole failure this "
+                         "script exists to prevent. Same discipline as render_guard_baseline.txt.")
+    ap.add_argument("--update-baseline", action="store_true",
+                    help="rewrite the baseline to the current state (needs --baseline)")
     args = ap.parse_args()
 
     nets = [args.net] if args.net else sorted(NETS)
@@ -301,6 +308,43 @@ def main():
     bad = [n for n, v in found.items() if v]
     for n in nets:
         print(f"  {n:<6} {'clean' if not found[n] else ', '.join(sorted(found[n]))}")
+
+    ratchet_fail = False
+    if args.baseline:
+        import os
+        current = sorted(f"{n}:{i}" for n in nets for i in found[n])
+        if args.update_baseline:
+            with open(args.baseline, "w") as fh:
+                fh.write("# Render/reference convention divergences this repo currently carries.\n"
+                         "# Regenerate with:\n"
+                         "#   python3 scripts/convention_audit.py --baseline FILE --update-baseline\n"
+                         "# This list may SHRINK, never grow. A new entry means the render and the\n"
+                         "# JAX reference for one net drifted apart and CI stayed green.\n")
+                fh.writelines(f"{e}\n" for e in current)
+            print(f"\n  baseline updated: {len(current)} entr(ies) -> {args.baseline}")
+            return 0
+        known = set()
+        if os.path.exists(args.baseline):
+            known = {l.strip() for l in open(args.baseline)
+                     if l.strip() and not l.startswith("#")}
+        new = [e for e in current if e not in known]
+        # ⚠ scope "resolved" to the nets actually AUDITED. With `--net r34` the baseline still
+        # holds enet/mnv2 rows that this run never looked at, and reporting them as resolved would
+        # invite deleting live debt on the strength of a run that never tested it.
+        audited = {e for e in known if e.split(":")[0] in set(nets)}
+        gone = sorted(audited - set(current))
+        print(f"\n  RATCHET vs {args.baseline}: {len(current)} current, {len(known)} baselined")
+        for e in gone:
+            print(f"    ✓ RESOLVED (drop from the baseline): {e}")
+        if new:
+            ratchet_fail = True
+            print("\n  ✗ NEW DIVERGENCE — the render and its reference drifted apart:")
+            for e in new:
+                print(f"      {e}")
+            print("    Fix it, or — only if the gap is deliberate and budgeted — re-record with")
+            print(f"    python3 scripts/convention_audit.py --baseline {args.baseline} --update-baseline")
+        elif not gone:
+            print("    ✓ no new divergences")
 
     if args.selftest:
         print("\n  SELFTEST — the audit must rediscover the findings that motivated it:")
@@ -317,6 +361,11 @@ def main():
             return 2
         print("  ✓ selftest passes — the audit reproduces every known finding")
 
+    # ⚠ In ratchet mode the EXIT CODE tracks new debt, not total debt: the three open rows are
+    # known and tracked, and failing on them every run would make the signal worthless. Outside
+    # ratchet mode any divergence is a failure, which is what a human wants interactively.
+    if args.baseline:
+        return 2 if ratchet_fail else 0
     return 1 if bad else 0
 
 

@@ -2,7 +2,7 @@
 # book, but had no CI of its own: the only workflow that looked at it was
 # proofs.yml's zero-axiom grep, and the LoC tables explicitly excluded it.
 #
-# Three jobs:
+# Four jobs:
 #   lint   — no Lean, no Mathlib, no GPU, under a minute. Syntax + stats.
 #   build  — the real `lake build`. Cheap because jax/ imports only
 #            LeanMlir.Types + LeanMlir.Spec from the parent (8 jobs for the
@@ -12,6 +12,10 @@
 #   oracle — emit + run the 14 layer-family oracle nets on CPU jax against a
 #            synthetic MNIST. ~33s locally. Emitter-level only; see the job
 #            comment for what it deliberately does not claim.
+#   convention — does the VERIFIED render still spell padding, activation and BN
+#            the same way its JAX reference does? Six divergences across four
+#            nets were each found by hand, a session apiece. Ratchet against
+#            scripts/convention_baseline.txt: fails only on a NEW one.
 name: JAX subproject
 
 on:
@@ -26,6 +30,13 @@ on:
       - 'LeanMlir/VerifiedSpec.lean'
       - 'scripts/gen_shims.sh'
       - 'scripts/shim_wiring_gate.py'
+      # The convention audit diffs the RENDER against the reference, so a render change is exactly
+      # what can introduce a divergence. Without these paths the most likely regression — someone
+      # switches a padding token or an activation on the verified side — touches nothing this
+      # workflow watches, which is how all six known divergences got in.
+      - 'verified_mlir/**'
+      - 'scripts/convention_audit.py'
+      - 'scripts/convention_baseline.txt'
   pull_request:
     paths:
       - 'jax/**'
@@ -37,6 +48,13 @@ on:
       - 'LeanMlir/VerifiedSpec.lean'
       - 'scripts/gen_shims.sh'
       - 'scripts/shim_wiring_gate.py'
+      # The convention audit diffs the RENDER against the reference, so a render change is exactly
+      # what can introduce a divergence. Without these paths the most likely regression — someone
+      # switches a padding token or an activation on the verified side — touches nothing this
+      # workflow watches, which is how all six known divergences got in.
+      - 'verified_mlir/**'
+      - 'scripts/convention_audit.py'
+      - 'scripts/convention_baseline.txt'
   workflow_dispatch:
 
 jobs:
@@ -226,5 +244,80 @@ jobs:
             echo ""
             echo '```'
             grep -E '^(RUN|EMIT|FAIL)' /tmp/oracle.log || true
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+  convention:
+    # ⭐ CONVENTION AUDIT — does the verified render still spell padding, activation and BN the same
+    # way its JAX reference does? Six divergences have been found across four nets, each by hand,
+    # each costing a session; they trace to two gaps (the `.convBn` emitter's hardcoded relu, and
+    # padding being stated independently on each side). This is the standing check that stops a
+    # SEVENTH being discovered a year later.
+    #
+    # RATCHET, not a hard gate: three divergences are known, tracked in
+    # scripts/convention_baseline.txt, and failing on them every run would make the signal
+    # worthless. The job fails only on a divergence not already in that list — which is the
+    # regression it exists to catch. The list may shrink, never grow.
+    #
+    # No GPU, no training, no gradients: it runs each reference's forward() once on a 2x3x224x224
+    # zero input with jax.lax instrumented and reads the render side out of the committed .mlir.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+            jax/.lake/build
+          key: lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
+            lake-jax-
+
+      - name: Install jax (CPU)
+        run: python3 -m pip install --quiet "jax[cpu]"
+
+      - name: Emit the generated references
+        # ⚠ `runJax` WRITES the .py and then spawns python to train it. There is no emit-only flag,
+        # so each exe is pointed at a data dir that does not exist: the file lands (Runner.lean:21,
+        # before the spawn) and the training dies immediately at load. Hence `|| true` — and hence
+        # the explicit existence check after it, because "the command failed" is the EXPECTED path
+        # here and would otherwise hide a genuine emit failure.
+        working-directory: jax
+        run: |
+          set -e
+          lake exe cache get || true
+          NETS="resnet34 mobilenet-v2 mobilenet-v4 efficientnet-b0"
+          lake build $NETS
+          for n in $NETS; do lake exe $n /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true; done
+          missing=0
+          for f in generated_resnet34.py generated_mobilenet_v2.py \
+                   generated_mobilenet_v4.py generated_efficientnet_b0.py; do
+            if [ ! -s ".lake/build/$f" ]; then echo "::error::$f was not emitted"; missing=1; fi
+          done
+          [ "$missing" -eq 0 ]
+
+      - name: Convention audit (ratchet + selftest)
+        run: |
+          set -o pipefail
+          JAX_PLATFORMS=cpu python3 scripts/convention_audit.py \
+              --baseline scripts/convention_baseline.txt --selftest 2>&1 | tee /tmp/audit.log
+          {
+            echo ""
+            echo "## Convention audit"
+            echo ""
+            echo "Render vs JAX reference: padding, activation, BN world. Conventions only — a green"
+            echo "audit does **not** mean the nets agree numerically (that is \`grad_tie.py\`)."
+            echo ""
+            echo '```'
+            grep -E '^  (r34|mnv2|mnv4|enet) |RATCHET|✓ selftest|NEW DIVERGENCE' /tmp/audit.log || true
             echo '```'
           } >> $GITHUB_STEP_SUMMARY

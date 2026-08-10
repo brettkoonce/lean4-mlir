@@ -1,0 +1,10 @@
+# Render/reference convention divergences this repo currently carries.
+# Regenerate with:
+#   python3 scripts/convention_audit.py --baseline FILE --update-baseline
+# This list may SHRINK, never grow. A new entry means the render and the
+# JAX reference for one net drifted apart and CI stayed green.
+enet:activation
+mnv2:activation
+mnv2:bn-split
+r34:bn-split
+r34:padding
