@@ -11815,15 +11815,16 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
     PJRT C API.
 \begin{verbatim}
 python3 -m venv .venv && . .venv/bin/activate
-pip install --upgrade "jax[cuda12]"      # NVIDIA
-pip install --upgrade "jax[rocm]"        # AMD (AMD's package index)
+pip install jax-cuda12-pjrt     # NVIDIA -- the PJRT plugin ONLY
+pip install jax-rocm7-pjrt      # AMD    -- no jax, no jaxlib
 \end{verbatim}
-    The shim looks for the plugin under \texttt{.venv/lib/python3.*/
-    site-packages/jax\_plugins/}, so installing into the repo's own
-    \texttt{.venv} is enough for it to be found. Point at one elsewhere with
-    \texttt{\$PJRT\_PLUGIN}. The ROCm plugin is version-matched to your ROCm
-    install, so it is \texttt{pip install} \emph{with AMD's index}, not a bare
-    one --- but it is still a download, not a build.
+    Those packages carry the PJRT plugin and \emph{nothing else} --- not
+    \texttt{jax}, not \texttt{jaxlib}, so ``no interpreter at training time'' is
+    structural rather than a promise. The shim looks under
+    \texttt{.venv/lib/python3.*/site-packages/jax\_plugins/}, which is exactly
+    where that command puts it; \texttt{\$PJRT\_PLUGIN} points elsewhere. The
+    plugin is version-matched to your CUDA/ROCm install, and it is a 500\,MB
+    download rather than a build.
 
   \item \textbf{Build the FFI shim} (needs only libc and \texttt{dlopen}):
 \begin{verbatim}

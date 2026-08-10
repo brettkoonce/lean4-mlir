@@ -11,15 +11,16 @@ a prebuilt shared library, not a build:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install --upgrade "jax[rocm]"        # AMD's package index; version-matched to your ROCm
+pip install jax-rocm7-pjrt      # the PJRT plugin ONLY -- no jax, no jaxlib
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build mnist-linear-verified
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/mnist-linear-verified data
 ```
 
-Nothing imports JAX and no interpreter runs at training time — the wheel is
-just where XLA's GPU plugin is packaged, and the shim `dlopen`s the `.so`
-through the PJRT C API. No `IREE_BACKEND`, no `IREE_CHIP`, no chip table.
+That package carries the PJRT plugin and nothing else — not `jax`, not
+`jaxlib`. Nothing imports JAX and no interpreter runs at training time; the
+shim `dlopen`s the `.so` through the PJRT C API, and looks in the repo's own
+`.venv` by default. No `IREE_BACKEND`, no `IREE_CHIP`, no chip table.
 
 **Everything below is the IREE path**, which is the *second* lowerer: slower
 here (2.3-4.9x on these nets, because XLA dispatches convolutions and matmuls

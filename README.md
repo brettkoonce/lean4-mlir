@@ -44,7 +44,7 @@ verified without reading a line of this project.
 **With a GPU — one command per tier:**
 
 After a one-time setup (Lean 4 plus an XLA PJRT plugin — `pip install
-"jax[cuda12]"` or `"jax[rocm]"`, which is a download, not a build; see
+jax-cuda12-pjrt` or `jax-rocm7-pjrt`, a download rather than a build; see
 [ROCM.md](ROCM.md) / [CUDA.md](CUDA.md), or [Native setup](#native-setup-gpu-training) below):
 
 ```bash
@@ -523,14 +523,16 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf 
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install --upgrade "jax[cuda12]"      # NVIDIA
-pip install --upgrade "jax[rocm]"        # AMD (AMD's package index)
+pip install jax-rocm7-pjrt      # AMD  -- 503 MB, the plugin ONLY
+pip install jax-cuda12-pjrt     # NVIDIA
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 ```
 
-Nothing imports JAX and no interpreter runs at training time — the wheel is
-just where XLA's GPU plugin is packaged. The shim finds it under the repo's
-own `.venv`; `$PJRT_PLUGIN` points elsewhere.
+These packages carry the PJRT plugin and *nothing else* — not `jax`, not
+`jaxlib`. Nothing imports JAX and no interpreter runs at training time; the
+shim `dlopen`s the `.so` through the PJRT C API. It looks under the repo's own
+`.venv` by default, which is exactly where the command above puts it;
+`$PJRT_PLUGIN` points elsewhere.
 
 **IREE (optional, second lowerer).** Only if you want the portable path or
 want to run the cross-backend check yourself: `pip install iree-base-compiler`
