@@ -578,6 +578,15 @@ lean_lib «Certs» where
              -- ⚠ Resnet50BlocksCertified is the PER-CHANNEL phase 1; this is the
              -- batched world the render actually emits, and needed its own.
              `LeanMlir.Proofs.Foundation.ResNet50BackB0,
+             -- ⭐ Net-agnostic FOLD machinery: `CertLayer` packages a layer with its VJP,
+             -- its backward graph and the proof that the graph denotes the VJP, and
+             -- `CertLayer.comp` proves once the chaining argument every *BackB0 body
+             -- faithfulness lemma writes out by hand. Smoothness preconditions conjoin at
+             -- the right activations, so an `_at` (relu) chain threads its own hypotheses.
+             `LeanMlir.Proofs.Foundation.CertifiedChain,
+             -- R50's blocks as CertLayers + stages + the four-stage trunk. The first
+             -- net-level backward fold in the repo; every other *BackB0 stops at a block.
+             `LeanMlir.Proofs.Foundation.ResNet50BackNet,
              -- ConvNeXt backward-graph faithfulness (den-level): the per-example
              -- (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
              -- separable, so no batched machinery — the block-body backward graph

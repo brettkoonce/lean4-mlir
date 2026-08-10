@@ -217,11 +217,11 @@ noncomputable def r50BottleneckBackBatchedGraph {N c mid h w kH₁ kW₁ kH₂ k
     (W₁ : Kernel4 mid c kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (γ₁ β₁ : Vec mid)
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (γ₂ β₂ : Vec mid)
     (W₃ : Kernel4 c mid kH₃ kW₃) (b₃ : Vec c) (ε₃ : ℝ) (γ₃ β₃ : Vec c)
-    (x dy : Vec (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+    (x : Vec (N * (c * h * w))) (ecot : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   let preRelu := residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                   cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                   cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x
-  let masked : SHlo (N * (c * h * w)) := .selectPos "%outR" preRelu (.operand "%dy" dy)
+  let masked : SHlo (N * (c * h * w)) := .selectPos "%outR" preRelu ecot
   .addV
     (r50BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x masked)
     masked
@@ -240,7 +240,7 @@ theorem r50BottleneckBackBatchedGraph_faithful
     (W₁ : Kernel4 mid c kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec mid)
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
     (W₃ : Kernel4 c mid kH₃ kW₃) (b₃ : Vec c) (ε₃ : ℝ) (hε₃ : 0 < ε₃) (γ₃ β₃ : Vec c)
-    (x dy : Vec (N * (c * h * w)))
+    (x : Vec (N * (c * h * w))) (ecot : SHlo (N * (c * h * w)))
     (h_s1 : ∀ k, bnBatchLA N mid h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0)
     (h_s2 : ∀ k, bnBatchLA N mid h w ε₂ γ₂ β₂
               (batchMap N (flatConv W₂ b₂)
@@ -248,37 +248,37 @@ theorem r50BottleneckBackBatchedGraph_faithful
     (h_out : ∀ k, residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                     cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                     cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
-    den (r50BottleneckBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x dy)
+    den (r50BottleneckBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x ecot)
       = (r50BottleneckB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-          W₃ b₃ ε₃ hε₃ γ₃ β₃ x h_s1 h_s2 h_out).backward dy := by
+          W₃ b₃ ε₃ hε₃ γ₃ β₃ x h_s1 h_s2 h_out).backward (den ecot) := by
   have hmask : den (SHlo.selectPos "%outR"
         (residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
           cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-          cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))
-      = (relu_has_vjp_at (N * (c * h * w)) _ h_out).backward dy :=
-    selectPos_faithful _ _ h_out (.operand "%dy" dy)
+          cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)
+      = (relu_has_vjp_at (N * (c * h * w)) _ h_out).backward (den ecot) :=
+    selectPos_faithful _ _ h_out ecot
   have hbody : den (r50BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x
         (SHlo.selectPos "%outR"
           (residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
             cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-            cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)))
+            cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
       = (r50BodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
           W₃ b₃ ε₃ hε₃ γ₃ β₃ x h_s1 h_s2).backward
-          ((relu_has_vjp_at (N * (c * h * w)) _ h_out).backward dy) := by
+          ((relu_has_vjp_at (N * (c * h * w)) _ h_out).backward (den ecot)) := by
     rw [r50BodyBackBatchedGraph_faithful (hε₁ := hε₁) (hε₂ := hε₂) (hε₃ := hε₃)
       (h_s1 := h_s1) (h_s2 := h_s2), hmask]
   funext i
   have hsum : den (r50BottleneckBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-        W₃ b₃ ε₃ γ₃ β₃ x dy) i
+        W₃ b₃ ε₃ γ₃ β₃ x ecot) i
       = den (r50BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x
             (SHlo.selectPos "%outR"
               (residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                 cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))) i
+                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i
         + den (SHlo.selectPos "%outR"
               (residual (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                 cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)) i := rfl
+                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot) i := rfl
   rw [hsum, hbody, hmask]
   rfl
 
@@ -345,12 +345,12 @@ noncomputable def r50ProjBlockBackBatchedGraph
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (γ₂ β₂ : Vec mid)
     (W₃ : Kernel4 oc mid kH₃ kW₃) (b₃ : Vec oc) (ε₃ : ℝ) (γ₃ β₃ : Vec oc)
     (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
-    (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
+    (x : Vec (N * (ic * h * w))) (ecot : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
   let preRelu := residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
                   (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                    cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                    cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x
-  let masked : SHlo (N * (oc * h * w)) := .selectPos "%outR" preRelu (.operand "%dy" dy)
+  let masked : SHlo (N * (oc * h * w)) := .selectPos "%outR" preRelu ecot
   .addV
     (projBackBatchedGraph Wp bp εp γp βp x masked)
     (r50BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x masked)
@@ -363,7 +363,7 @@ theorem r50ProjBlockBackBatchedGraph_faithful
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
     (W₃ : Kernel4 oc mid kH₃ kW₃) (b₃ : Vec oc) (ε₃ : ℝ) (hε₃ : 0 < ε₃) (γ₃ β₃ : Vec oc)
     (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
-    (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w)))
+    (x : Vec (N * (ic * h * w))) (ecot : SHlo (N * (oc * h * w)))
     (h_s1 : ∀ k, bnBatchLA N mid h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0)
     (h_s2 : ∀ k, bnBatchLA N mid h w ε₂ γ₂ β₂
               (batchMap N (flatConv W₂ b₂)
@@ -373,25 +373,25 @@ theorem r50ProjBlockBackBatchedGraph_faithful
                      cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                      cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r50ProjBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃
-          Wp bp εp γp βp x dy)
+          Wp bp εp γp βp x ecot)
       = (r50ProjBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-          W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x h_s1 h_s2 h_out).backward dy := by
+          W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x h_s1 h_s2 h_out).backward (den ecot) := by
   have hmask : den (SHlo.selectPos "%outR"
         (residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
           (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
            cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-           cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))
-      = (relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy :=
-    selectPos_faithful _ _ h_out (.operand "%dy" dy)
+           cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)
+      = (relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot) :=
+    selectPos_faithful _ _ h_out ecot
   have hbody : den (r50BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x
         (SHlo.selectPos "%outR"
           (residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
             (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
              cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)))
+             cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
       = (r50BodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
           W₃ b₃ ε₃ hε₃ γ₃ β₃ x h_s1 h_s2).backward
-          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy) := by
+          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot)) := by
     rw [r50BodyBackBatchedGraph_faithful (hε₁ := hε₁) (hε₂ := hε₂) (hε₃ := hε₃)
       (h_s1 := h_s1) (h_s2 := h_s2), hmask]
   have hproj : den (projBackBatchedGraph Wp bp εp γp βp x
@@ -399,25 +399,25 @@ theorem r50ProjBlockBackBatchedGraph_faithful
           (residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
             (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
              cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)))
+             cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
       = (projB_has_vjp N Wp bp εp hεp γp βp).backward x
-          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy) := by
+          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot)) := by
     rw [projBackBatchedGraph_faithful (hε := hεp), hmask]
   funext i
   have hsum : den (r50ProjBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-        W₃ b₃ ε₃ γ₃ β₃ Wp bp εp γp βp x dy) i
+        W₃ b₃ ε₃ γ₃ β₃ Wp bp εp γp βp x ecot) i
       = den (projBackBatchedGraph Wp bp εp γp βp x
             (SHlo.selectPos "%outR"
               (residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
                 (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                  cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                 cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))) i
+                 cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i
         + den (r50BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x
               (SHlo.selectPos "%outR"
                 (residualProj (projB N (h := h) (w := w) Wp bp εp γp βp)
                   (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                    cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                   cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))) i := rfl
+                   cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i := rfl
   rw [hsum, hbody, hproj]
   rfl
 
@@ -580,13 +580,13 @@ noncomputable def r50DownBlockBackBatchedGraph
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (γ₂ β₂ : Vec mid)
     (W₃ : Kernel4 oc mid kH₃ kW₃) (b₃ : Vec oc) (ε₃ : ℝ) (γ₃ β₃ : Vec oc)
     (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) :
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (ecot : SHlo (N * (oc * h * w))) :
     SHlo (N * (ic * (2 * h) * (2 * w))) :=
   let preRelu := residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
                   (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                    cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                    cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x
-  let masked : SHlo (N * (oc * h * w)) := .selectPos "%outR" preRelu (.operand "%dy" dy)
+  let masked : SHlo (N * (oc * h * w)) := .selectPos "%outR" preRelu ecot
   .addV
     (projStridedBackBatchedGraph Wp bp εp γp βp x masked)
     (r50DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x masked)
@@ -600,7 +600,7 @@ theorem r50DownBlockBackBatchedGraph_faithful
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
     (W₃ : Kernel4 oc mid kH₃ kW₃) (b₃ : Vec oc) (ε₃ : ℝ) (hε₃ : 0 < ε₃) (γ₃ β₃ : Vec oc)
     (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w)))
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (ecot : SHlo (N * (oc * h * w)))
     (h_s1 : ∀ k, bnBatchLA N mid (2 * h) (2 * w) ε₁ γ₁ β₁
               (batchMap N (flatConv W₁ b₁) x) k ≠ 0)
     (h_s2 : ∀ k, bnBatchLA N mid h w ε₂ γ₂ β₂
@@ -611,25 +611,25 @@ theorem r50DownBlockBackBatchedGraph_faithful
                      cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                      cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r50DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃
-          Wp bp εp γp βp x dy)
+          Wp bp εp γp βp x ecot)
       = (r50DownBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-          W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x h_s1 h_s2 h_out).backward dy := by
+          W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x h_s1 h_s2 h_out).backward (den ecot) := by
   have hmask : den (SHlo.selectPos "%outR"
         (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
           (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
            cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-           cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))
-      = (relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy :=
-    selectPos_faithful _ _ h_out (.operand "%dy" dy)
+           cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)
+      = (relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot) :=
+    selectPos_faithful _ _ h_out ecot
   have hbody : den (r50DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x
         (SHlo.selectPos "%outR"
           (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
             (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
              cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)))
+             cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
       = (r50DownBodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
           W₃ b₃ ε₃ hε₃ γ₃ β₃ x h_s1 h_s2).backward
-          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy) := by
+          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot)) := by
     rw [r50DownBodyBackBatchedGraph_faithful (hε₁ := hε₁) (hε₂ := hε₂) (hε₃ := hε₃)
       (h_s1 := h_s1) (h_s2 := h_s2), hmask]
   have hproj : den (projStridedBackBatchedGraph Wp bp εp γp βp x
@@ -637,26 +637,26 @@ theorem r50DownBlockBackBatchedGraph_faithful
           (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
             (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
              cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)))
+             cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
       = (projStridedB_has_vjp N Wp bp εp hεp γp βp).backward x
-          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy) := by
+          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot)) := by
     rw [projStridedBackBatchedGraph_faithful (hε := hεp), hmask]
   funext i
   have hsum : den (r50DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
-        W₃ b₃ ε₃ γ₃ β₃ Wp bp εp γp βp x dy) i
+        W₃ b₃ ε₃ γ₃ β₃ Wp bp εp γp βp x ecot) i
       = den (projStridedBackBatchedGraph Wp bp εp γp βp x
             (SHlo.selectPos "%outR"
               (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
                 (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                  cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                 cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))) i
+                 cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i
         + den (r50DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x
               (SHlo.selectPos "%outR"
                 (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
                   (projB N (h := h) (w := w) W₃ b₃ ε₃ γ₃ β₃ ∘
                    cbReluStridedB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                    cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x)
-                (.operand "%dy" dy))) i := rfl
+                ecot)) i := rfl
   rw [hsum, hbody, hproj]
   rfl
 

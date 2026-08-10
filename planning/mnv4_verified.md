@@ -1172,14 +1172,103 @@ re-run:
 
 ### ▶ WHAT R50 STILL OWES
 
-* **The net-level fold.** These are the three *block* capstones; chaining them across the 16-block
-  net (plus stem/pool/head) is not done. `Resnet34BackCertifiedTie` is the §B step above this and,
-  per §8, is explicitly NOT required to be on the main line.
+* ~~**The net-level fold.**~~ ✅ **DONE — see §8b.**
 * ⛔ **Still no empirical tie.** R50's forward and gradient have never met an independent oracle —
   there is no `generated_resnet50.py` (10-class). Unchanged by this work, and it is the one axis
   where MNv4 is strong and R50 is not.
 * MNv4's backward is now the whole of the §8 handoff that remains, and it needs its own phase 1
   (`MobileNetV4BlocksCertified.lean`) — genuinely, this time.
+
+## 8b. ✅ THE NET-LEVEL FOLD (2026-08-10) — and it is the FIRST one in the repo
+
+⚠⚠ **Measured before starting, and it reframes §8's whole ✓ column.** `ResNet34BackB0`,
+`MobileNetV2BackB0`, `EfficientNetBackB0` and `ConvNeXtBackB0` all stop at a **block** capstone —
+their last theorems are `r34DownBlockBackBatchedGraph_faithful`,
+`mnv2ResidBlockBackBatchedGraph_faithful`, `mbResidBlockBackBatchedGraph_faithful`,
+`cnxDownChBackGraph_faithful`. Nothing in `LeanMlir/Proofs/` folds blocks into a stage or a net.
+
+▶ So **"whole-net composed backward ✓" in §8 means block capstones for all five nets it credits**,
+and R50 reached parity the moment `ResNet50BackB0` landed. This section is the step *past* parity,
+and the machinery is deliberately net-agnostic so the other five can follow.
+
+### `Foundation/CertifiedChain.lean` — `CertLayer`, and one composition proof
+
+A `CertLayer m n` is a forward map plus, **at every input satisfying its own smoothness
+precondition `ok`**, a VJP, differentiability, a backward graph, and the theorem that the graph
+denotes the VJP.
+
+⭐ **The obstacle was never mathematics — it was that the chaining was open-coded.** Every
+`<body>BackBatchedGraph_faithful` in the repo builds `G₁ x (G₂ (f₁ x) e)`, rewrites with two
+component lemmas, and closes by `rfl` on `vjp_comp_at`'s definitional
+`backward dy = f₁.backward (f₂.backward dy)`. That argument is *identical every time*. A 16-block
+net would be 16 hand-written copies of it over ever-larger terms. `CertLayer.comp` is that proof,
+written once; `chain` folds a list; depth is then free.
+
+⭐ **Carrying `ok` inside the layer is what makes it work for a relu net.** Composition sets
+`ok x = L₁.ok x ∧ L₂.ok (L₁.fwd x)` — the conditions conjoin *at the right activations*. For the
+trunk that is 48 relu families (3 per bottleneck) threaded through 16 successive activations,
+generated rather than typed. `(r50Trunk …).ok x` is not a formality: it is the honest statement
+that the certificate holds where the net is differentiable, and it deepens correctly instead of
+being assumed away.
+
+### `Foundation/ResNet50BackNet.lean` — R50 as blocks → stages → trunk
+
+Three `CertLayer` instances (identity / stride-1 projection / strided projection), `r50StageFirst`
+and `r50StageDown` (a projection block then **any number** of identity blocks), `r50Trunk` (four
+stages), and `r50Trunk_3463`, which pins R50's real block table (3/4/6/3 = one projection block
+plus 2/3/5/2 identity blocks) as a type-level check. `r50Trunk_faithful` is the net-level theorem
+and its proof is `CertLayer.faithful` — **no induction on depth, no new argument**.
+All 3-axiom clean, zero `sorry`, `lake build Certs` green (3915 jobs).
+
+### 🔧 The one real obstacle, and it was plumbing
+
+**The blocks were not pluggable.** `r50…BackBatchedGraph` took its incoming cotangent as
+`dy : Vec n` and wrapped it internally as `.operand "%dy" dy`, so a block could only ever be the
+*last* thing in a graph — nothing could be fed upstream of it. They now take `ecot : SHlo n`, which
+is strictly more general (the committed statement is this one at `ecot := .operand "%dy" dy`).
+⚠ **R34/MNv2/EfficientNet/ConvNeXt all have the same `dy : Vec` signature**, so whoever folds those
+nets pays this same one-line generalisation first. It is the reason the fold looked harder than it is.
+
+### ✅ THE FOLD WAS VERIFIED TO FAIL — on the bug that TYPECHECKS
+
+`CertLayer.comp`'s content is that `L₂`'s graph is evaluated at `L₁.fwd x`, not at `x`. In an
+**endo** chain — R50's 16-block identity tail, where input and output types coincide — writing
+`L₂.graph x e` instead **typechecks**: same ops, same shapes, same arity. That is the silent class,
+and it is the one a fold is most exposed to.
+
+Injected it; the proof fails (`Did not find an occurrence of the pattern den (L₂.graph (L₁.fwd x) ?e)`).
+⭐ Worth keeping: the R50 *block* work needed a second attempt at its negative control because the
+first injection was caught by the type checker and therefore proved nothing. Here the type checker
+cannot help at all, so the proof is carrying the entire weight — which is the point of folding in a
+proof assistant rather than in a renderer.
+
+### ▶ What the fold does NOT yet cover
+
+* **Stem, pool and head.** The trunk is the four bottleneck stages. The stem is conv-bn-relu +
+  3×3/s2 maxpool and the head is GAP + dense; both are `CertLayer`s in principle, neither is built.
+  ▶ The gap is the **pool**, and it is a proof gap, not a codegen one: `maxPool3s2Flat_has_vjp_at`
+  exists (`Architectures/MaxPool3s2.lean`, `_at` on a `MaxPool3s2Smooth` hypothesis — a pool is
+  kinked wherever a window ties), but grep finds **no den-level faithfulness** for the batched
+  `maxPool3s2BackB` graph the render emits. That theorem is what a stem `CertLayer` needs.
+
+  ⚠⚠ **CORRECTION — IREE is NOT what limits this, and an earlier draft of this section said it
+  was.** `iree-compile` rejecting `stablehlo.select_and_scatter` (§3i's gotcha) is a **runtime**
+  fact: it is why R34's train step runs on XLA/PJRT instead of IREE. The proof layer never invokes
+  IREE, so it cannot constrain what is provable — the two are independent, and conflating a
+  *deployment* limit with a *proof* limit is the kind of error that makes a gap look external when
+  it is ours to close.
+
+* **The other five nets are NOT folded** — only the machinery is net-agnostic. Each needs the same
+  three steps: the one-line cotangent generalisation (`.operand "%dy" dy` sites: **r34 13, enet 8,
+  convnext 6, mnv2 4** — mechanical), then `CertLayer` instances per block form, then stage/trunk
+  assembly. ⭐ Only the first step is per-net *work*; `comp`/`chain` are already proven. MNv4 is the
+  exception and is much further back: it has **no backward of any kind**, so it needs §8's phases
+  1–3 before a fold is even a question.
+* **Concrete weights.** `r50Trunk_3463` takes abstract layers, so it checks that R50's arities and
+  resolutions compose — not that any particular committed artifact is what got folded. Tying the
+  fold to `resnet50_adam_train_step.mlir` is a separate step.
+* ⛔ **Still no empirical tie for R50** (no 10-class `generated_resnet50.py`). Unchanged, and it
+  remains the axis where MNv4 is strong and R50 is not.
 
 ⭐ **They are short in OPPOSITE directions, and that decides the order of work.** R50 has the Lean
 block certificates and *no empirical tie at all* — there is no `generated_resnet50.py`, so neither
