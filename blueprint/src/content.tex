@@ -11739,14 +11739,62 @@ one because of how its data is streamed, not because of how it computes.
 
 \section*{Track 1: Proofs only (no GPU needed)}
 
-Read, build, and verify the proofs without running any training. Covers
-everything in Part 1 at the proof level, and depends on neither lowerer ---
-the theorems are about the emitted graph, not about anything that executes it.
+Read, build, and check the proofs without running any training. This track
+depends on neither lowerer --- the theorems are about the emitted graph, not
+about anything that executes it --- and it comes at three levels of
+independence, which are worth distinguishing because they ask you to trust
+different amounts.
+
+\prosesection{Level 1 --- build a proof}
 
 \begin{verbatim}
-lake exe cache get      # Mathlib oleans, ~30 s (vs ~45 min from source)
-lake build LeanMlir
+lake exe cache get           # Mathlib oleans, ~30 s (vs ~45 min from source)
+lake build ProofsMinimal     # two files: the faithfulness PoC + SGD descent
+lake build Proofs            # the whole suite
 \end{verbatim}
+
+\texttt{ProofsMinimal} is the smallest thing that is still a real result:
+\texttt{LinearFaithfulPoC} (the rendered linear layer denotes the Mathlib
+\texttt{fderiv} math) and \texttt{SgdDescentLinear} (the step decreases the
+loss). Start there if you want to see one theorem land before committing to
+the full build.
+
+\prosesection{Level 2 --- check the axioms}
+
+\texttt{\#print axioms} on any theorem shows its transitive axiom closure.
+Every result in this book closes over Lean's three core axioms and nothing
+else; Appendix~\ref{app:verification} is the accounting.
+
+\prosesection{Level 3 --- re-check with an independent kernel}
+
+\texttt{\#print axioms} and \texttt{lake build} both run through Lean's
+elaborator, so they share a trust path with whatever the elaborator did.
+\texttt{tests/comparator/} re-runs Lean's kernel typechecker \emph{independently}
+over 52 theorems, sandboxed, verifying each one's axiom closure statically:
+
+\begin{verbatim}
+tests/comparator/run.sh
+\end{verbatim}
+
+The part worth knowing about is how it splits. \texttt{Challenge.lean}
+\textbf{imports Mathlib and nothing else} --- the 13 architecture-free
+theorems (Chapter~\ref{chap:tensor}'s \texttt{pdiv} calculus rules and
+Chapter~\ref{chap:attention}'s matrix-level ones), with the handful of
+definitions they need copied inline, and \texttt{chk\_pdiv\_is\_fderiv} pinning
+\texttt{pdiv} to Mathlib's \texttt{fderiv} by \texttt{rfl}. \emph{A reviewer can
+read that one file and know exactly what is claimed without reading a line of
+this project.} Copying the definitions is safe here in a way copying an
+architecture would not be: comparator compares the challenge and solution
+statements bit-identically, so a copy that drifted would fail the run rather
+than quietly prove something weaker.
+
+The other 39 live in \texttt{ChallengeArch.lean} and \emph{do} import the
+project, because each is a statement about a specific network --- ``ResNet-34's
+rendered backward equals its Fréchet derivative'' cannot be phrased without
+ResNet-34 in scope. That division is the point: once the \texttt{fderiv} pin
+and the structural rules are checked over Mathlib alone, the architecture
+theorems are applications of them, and what you must additionally trust is the
+forward functions and nothing else.
 
 \section*{Track 2: No-GPU Docker demo}
 
@@ -11858,10 +11906,17 @@ time-budgeted group of \emph{verified} trainers --- no environment variables
 or trainer list to assemble by hand.
 
 \begin{verbatim}
-lake run mnist        # verified MNIST: linear, MLP, CNN            (~10 min)
-lake run cifar        # ch.4 cifar8: SGD/momentum/Adam x bn/no-bn   (~1 hr)
-lake run imagenette   # the 7 Part-I nets at 224^2, 80-epoch AdamW  (~37 h)
+lake run mnist        # verified MNIST: linear, MLP, CNN             (~1 min)
+lake run cifar        # ch.4 cifar8: SGD/momentum/Adam x bn/no-bn   (~15 min)
+lake run imagenette   # the Part-I nets at 224^2, 80-epoch AdamW      (~7 h)
 \end{verbatim}
+
+Those are XLA wall-clocks on one 7900 XTX, and they are the reason the default
+moved. The same three tiers on IREE take $\sim$5~minutes, $\sim$34~minutes and
+$\sim$42~hours --- the whole MNIST tier now finishes in under a minute, and
+Imagenette drops from most of two days to an afternoon. The Imagenette figure
+covers the five nets with recorded timings; MobileNetV4 and ResNet-50 joined
+the tier more recently and are not in that total, so budget somewhat more.
 
 Each has an \texttt{-iree} twin --- \texttt{lake run mnist-iree} and so on ---
 which runs \emph{the same binaries} with the IREE lowerer selected. The tiers
