@@ -17,7 +17,7 @@ being comparable row by row, so the peer was added instead.
 It needed **no new shim code** and adds no new rung: `VerifiedNet.train` drives
 `lean_iree_mlp_train_step_v` and `lean_iree_forward_f32`, both of which route through
 `iree_ffi_invoke_f32` that `ffi/pjrt_ffi.c` already implements — the same path rung 1
-(`mnist-mlp-verified-xla`) established. Per-channel BN is per-example, so there are no
+(`mnist-mlp-verified` on XLA) established. Per-channel BN is per-example, so there are no
 running stats and the still-stubbed `train_step_adam*` family is not reached.
 
 Two hazards that bite the AdamW peers do **not** apply here: `VerifiedNet.train` keeps

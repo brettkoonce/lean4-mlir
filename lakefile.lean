@@ -1249,22 +1249,17 @@ lean_exe «mnist-linear-e4m3-verified» where
 
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
 -- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
-/-- Shared body of the verified MLP trainer — imported by BOTH the IREE and XLA
-    executables so their config and He-init seed cannot drift. -/
-lean_lib «MlpVerifiedCommon» where
-  srcDir := "."
-  roots := #[`apps.mnist.MlpVerifiedCommon]
 
 lean_exe «mnist-mlp-verified» where
   root := `apps.mnist.MainMnistMlpVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 /-- Rung 1 of the XLA ladder (`planning/xla_pjrt_ladder.md`): depth + multiple
     param tensors via the packed-params path, and the first rung with He init.
     Compare against `mnist-mlp-verified` for gate G2. -/
-lean_exe «mnist-mlp-verified-xla» where
-  root := `apps.mnist.MainMnistMlpVerifiedXla
-  moreLinkArgs := xlaLink
+-- Rung 1 of the XLA ladder (depth + multiple parameter tensors) is now a
+-- RUN-TIME choice: `mnist-mlp-verified` serves both lowerers via
+-- $LEAN_MLIR_LOWERER, so its `-xla` peer and their shared-body file are gone.
 
 -- Width-parametric MNIST MLP: `mnist-mlp-grid <d₁> <d₂> [epochs]` renders + trains
 -- the 784→d₁→d₂→10 MLP on the faithful verified StableHLO (the size-sweep demo).
@@ -2888,7 +2883,7 @@ script «imagenette-iree» do
 /-- `lake run mnist` — the XLA peers of `lake run mnist-iree`, and an EXACT mirror:
     all three verified MNIST demos (linear/MLP/CNN) have a `-xla` target. -/
 script mnist do
-  runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified-xla",
+  runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified",
                 "mnist-cnn-verified-xla"] (xla := true)
 
 /-- `lake run cifar` — the XLA peers of `lake run cifar-iree`, and an EXACT mirror since
@@ -3137,7 +3132,7 @@ def benchTable : List BenchItem :=
   [ { chapter := "1  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist",
       refSecCuda := some 3, probeXla := "mnist-linear-verified", epochs := 12 },      -- IREE 535ms × 12   | XLA 239ms × 12
     { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist",
-      refSecCuda := some 11, probeXla := "mnist-mlp-verified-xla", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
+      refSecCuda := some 11, probeXla := "mnist-mlp-verified", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
       transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified-xla", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
     { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar",
@@ -3224,7 +3219,7 @@ def probeAttnRefMs : Nat := 1173
     607 / 610 / 610 / 610 / 615 / 619). Read an on-reference factor of 0.94-1.06× as
     agreement, not as signal — and if you re-anchor, use a median of several runs, not the
     one number in front of you. -/
-def probeDenseRefMsXla : Nat := 610    -- mnist-mlp-verified-xla   (vs 3030 on IREE); median of 8
+def probeDenseRefMsXla : Nat := 610    -- mnist-mlp-verified (XLA) (vs 3030 on IREE); median of 8
 def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified-xla   (vs 8020 on IREE); median of 10
 /-- ms/STEP, `vit-verified-adam-xla`, median of 8 in the DEFAULT configuration, i.e. with no
     MIOpen override (123/125/126/127/128/129/132/137 — ±5%). Against IREE's 1173 that is
@@ -3243,7 +3238,7 @@ def probeAttnRefMsXla : Nat := 128
 -- a step is parameter transport (§2d.3: 33.5% for the conv probe against 59.4% for R34), and the
 -- two vendors differ in exactly that ratio. Measuring each vendor is the fix; scaling is the
 -- fallback for a box with no datasets, not the answer.
-def probeDenseRefMsCuda : Nat := 814    -- mnist-mlp-verified-xla,  idle, 3 real epochs
+def probeDenseRefMsCuda : Nat := 814    -- mnist-mlp-verified (XLA), idle, 3 real epochs
 def probeConvRefMsCuda  : Nat := 2049   -- cifar8-bn-verified-xla,  idle, 3 real epochs
 def probeAttnRefMsCuda  : Nat := 95     -- vit-verified-adam-xla,   idle, MAX_STEPS=100
 
@@ -3276,7 +3271,7 @@ def ireeRef : BenchRef :=
 /-- XLA on ROCm — scaled from the 7900 XTX column. -/
 def xlaRefRocm : BenchRef :=
   { lowerer := "XLA/PJRT", xla := true, col := "rocm", card := "7900 XTX"
-    denseProbe := "mnist-mlp-verified-xla", convProbe := "cifar8-bn-verified-xla"
+    denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified-xla"
     attnProbe := "vit-verified-adam-xla"
     denseRefMs := probeDenseRefMsXla, convRefMs := probeConvRefMsXla
     attnRefMs := probeAttnRefMsXla }
@@ -3287,7 +3282,7 @@ def xlaRefRocm : BenchRef :=
     scaled number can do. -/
 def xlaRefCuda : BenchRef :=
   { lowerer := "XLA/PJRT", xla := true, col := "cuda", card := "RTX 4060 Ti"
-    denseProbe := "mnist-mlp-verified-xla", convProbe := "cifar8-bn-verified-xla"
+    denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified-xla"
     attnProbe := "vit-verified-adam-xla"
     denseRefMs := probeDenseRefMsCuda, convRefMs := probeConvRefMsCuda
     attnRefMs := probeAttnRefMsCuda }

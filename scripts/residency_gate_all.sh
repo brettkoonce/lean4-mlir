@@ -52,7 +52,7 @@ set -uo pipefail
 # what §2d.3's Finding 2 also was.
 NETS=(
   "mnist-linear|mnist-linear-verified|linear|10|2|"
-  "mnist-mlp|mnist-mlp-verified-xla|mlp|10|2|"
+  "mnist-mlp|mnist-mlp-verified|mlp|10|2|"
   "mnist-cnn|mnist-cnn-verified-xla|cnn|10|2|"
   "cifar8-bn-sgd|cifar8-bn-verified-xla|cifar8_bn|10|2|"
   "cifar8-bn-adam|cifar8-bn-verified-adam-xla|cifar8_bn|10|1|"
