@@ -1257,11 +1257,35 @@ the type; they catch nothing about `k = 0` vs `k > 0`, because that slot is shap
 very property that made the collapse possible.
 
 ▶ So the collapse buys **one dispatch instead of two** (no proof-side table that could disagree
-with the forward's), which is worth having. It does **not** pin the block table. Closing that means
-instantiating the layers *from* `mnv4Blocks` rather than from a caller — the same list the render
-folds over — so a transcription error is a typo in one place. That is the natural next step and it
-applies to `r50Trunk_3463` / `r34Trunk_3463` equally: those pin arities and resolutions, not which
-block is which.
+with the forward's), which is worth having. It does **not** pin the block table.
+
+### ✅ …AND THAT IS NOW CLOSED — the dispatch reads `mnv4Blocks`
+
+`mnv4PreDWSlot` / `mnv4PostDWSlot` take the table's `k` and **compute** the slot —
+`if k = 0 then id' else mnv4DWReluLayer` — the same `k = 0` rule the render emits, off the same
+list. `mnv4UibSkipBlockOfKs` builds a block from the two `k`s, so a family mis-dispatch now has to
+be a wrong *number in the table* rather than a wrong argument at a call site. Four `@[simp]` lemmas
+pin the two branches.
+
+⭐⭐ **And the table's own shape is now guarded.** `MobileNetV4RenderB`'s docstring states the family
+sequence and the 11/2/1 dispatch split in **prose**; these turn that prose into `#guard`s that fail
+at `lake env lean`:
+
+| guard | pins |
+|---|---|
+| `mnv4Blocks.map (·.family) = [...]` | all 14 families, in order |
+| skip / pre-strided / post-strided counts `= 11 / 2 / 1` | the render's three forward functions cover every row |
+| `mnv4Blocks.length = 14` | …and nothing falls through the dispatch |
+| `map (·.h)`, `map (·.stride2)` | the 56→28→14→7 ladder and where the reductions are |
+| every stride-2 row has `ic ≠ oc`; every stride-1 row has `ic = oc` | why exactly 11 blocks have a skip |
+
+✅ **Verified non-vacuous**: relabelling block 7 (IB) as ExtraDW, and claiming 12 skip blocks
+instead of 11, both **fail**. A guard that cannot fail is worse than none (§7.3), and this thread
+has already been bitten by one — §4c(a)'s dead relu6 detector.
+
+⚠ **What is still NOT pinned**: that the *weights* passed to a slot are the ones the table's row
+names. The dispatch is table-driven; the parameter wiring is not. Same residual gap as
+`r50Trunk_3463` / `r34Trunk_3463`, which pin arities and resolutions but not which block is which.
 
 ### ▶ WHAT MNv4 STILL OWES
 * **The fused stage (stage 0) and the head.** The fused stage is swish, so it is the globally-smooth

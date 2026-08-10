@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Foundation.BackNetFolds
+import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 
 /-! # MobileNetV4 — the batched UIB backward, and the four families as ONE chain
 
@@ -358,6 +359,108 @@ theorem mnv4UibPostStridedBody_faithful (N : Nat) {ic mid oc h w : Nat}
     den ((mnv4UibPostStridedBody N expand postDW project).graph x e)
       = ((mnv4UibPostStridedBody N expand postDW project).vjp x hx).backward (den e) :=
   (mnv4UibPostStridedBody N expand postDW project).faithful x hx e
+
+-- ════════════════════════════════════════════════════════════════
+-- § ⭐⭐ THE DISPATCH READS THE TABLE — `mnv4Blocks`, not the caller
+-- ════════════════════════════════════════════════════════════════
+
+/-! ⛔ **What this section fixes.** Above, `mnv4UibBody` takes its depthwise slots as *arguments*,
+so passing `id'` where block 4's real pre-DW belongs is **well-typed and still certified** — graph
+and VJP both move with the caller's arguments, so the theorem stays true *about the wrong net*.
+Types catch the stride split (resolution is in the type); they catch nothing about `k = 0` vs
+`k > 0`, because that slot is shape-preserving — the very property that made the collapse possible.
+That is §3's trap, one level up from the render.
+
+⭐ The fix is to make the slot a **function of the block table's `k`**, so the proof side runs the
+same `k = 0` dispatch the render does, off the same `mnv4Blocks` list — one table, not two
+readings. `mnv4-fwd-smoke` already pins the render against that table; these `#guard`s pin the
+table's own shape, so a bad edit fails at `lake env lean` rather than becoming a silent net. -/
+
+/-- The pre-depthwise **slot**, dispatched on the table's `preDWk`. ⭐ `k = 0` ⇒ `id'` — the same
+    rule `uibFwdSkipB` emits, computed rather than chosen. -/
+noncomputable def mnv4PreDWSlot (N : Nat) {c h w kH kW : Nat} (preDWk : Nat)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
+  if preDWk = 0 then CertLayer.id' _ else mnv4DWReluLayer N W b ε hε γ β
+
+/-- The post-depthwise slot, same dispatch on `postDWk`. -/
+noncomputable def mnv4PostDWSlot (N : Nat) {c h w kH kW : Nat} (postDWk : Nat)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
+  if postDWk = 0 then CertLayer.id' _ else mnv4DWReluLayer N W b ε hε γ β
+
+@[simp] theorem mnv4PreDWSlot_zero (N : Nat) {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    mnv4PreDWSlot (h := h) (w := w) N 0 W b ε hε γ β = CertLayer.id' _ := if_pos rfl
+
+@[simp] theorem mnv4PreDWSlot_succ (N : Nat) {c h w kH kW : Nat} (k : Nat)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    mnv4PreDWSlot (h := h) (w := w) N (k + 1) W b ε hε γ β = mnv4DWReluLayer N W b ε hε γ β :=
+  if_neg (Nat.succ_ne_zero k)
+
+@[simp] theorem mnv4PostDWSlot_zero (N : Nat) {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    mnv4PostDWSlot (h := h) (w := w) N 0 W b ε hε γ β = CertLayer.id' _ := if_pos rfl
+
+@[simp] theorem mnv4PostDWSlot_succ (N : Nat) {c h w kH kW : Nat} (k : Nat)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    mnv4PostDWSlot (h := h) (w := w) N (k + 1) W b ε hε γ β = mnv4DWReluLayer N W b ε hε γ β :=
+  if_neg (Nat.succ_ne_zero k)
+
+/-- ⭐ **A UIB skip block built from the table's two `k`s.** The family is now *computed* from
+    `preDWk`/`postDWk` rather than selected by the caller, so a family mis-dispatch has to be a
+    wrong number in `mnv4Blocks` — which the `#guard`s below catch — instead of a silent argument. -/
+noncomputable def mnv4UibSkipBlockOfKs (N : Nat) {c mid h w kHp kWp kHd kWd kHe kWe kHz kWz : Nat}
+    (preDWk postDWk : Nat)
+    (Wq : DepthwiseKernel c kHp kWp) (bq : Vec c) (εq : ℝ) (hεq : 0 < εq) (γq βq : Vec c)
+    (We : Kernel4 mid c kHe kWe) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
+    (Wz : Kernel4 c mid kHz kWz) (bz : Vec c) (εz : ℝ) (hεz : 0 < εz) (γz βz : Vec c) :
+    CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
+  mnv4UibSkipBlock N
+    (mnv4PreDWSlot (h := h) (w := w) N preDWk Wq bq εq hεq γq βq)
+    (mnv4ExpandLayer N We be εe hεe γe βe)
+    (mnv4PostDWSlot (h := h) (w := w) N postDWk Wd bd εd hεd γd βd)
+    (mnv4ProjectLayer N Wz bz εz hεz γz βz)
+
+/-- The four families, named — read off the two kernel slots by **exactly** the rule the slots
+    dispatch on and the render emits. -/
+inductive UibFamily where
+  | extraDW | ib | convNeXtLike | ffn
+deriving DecidableEq, Repr, BEq
+
+/-- Which family a table row denotes. -/
+def UibSpec.family (s : UibSpec) : UibFamily :=
+  match s.preDWk, s.postDWk with
+  | 0, 0 => .ffn
+  | 0, _ => .ib
+  | _, 0 => .convNeXtLike
+  | _, _ => .extraDW
+
+-- ⭐⭐ THE TABLE GUARDS. `MobileNetV4RenderB`'s docstring states the family sequence and the
+-- dispatch counts in PROSE; these turn that prose into checks. A wrong `preDWk` is exactly §3's
+-- silent defect — same ops, same channel counts, same types, different net — and it now fails at
+-- `lake env lean`.
+#guard mnv4Blocks.map (·.family) =
+  [.extraDW, .extraDW, .ib, .extraDW, .extraDW, .convNeXtLike, .ib, .convNeXtLike, .ffn,
+   .extraDW, .extraDW, .extraDW, .ib, .convNeXtLike]
+
+-- The render documents its three forward functions as covering 11 / 2 / 1 blocks. Same split,
+-- recomputed from the table rather than trusted: skip (ic = oc, stride 1), pre-strided, post-strided.
+#guard (mnv4Blocks.filter (fun s => s.ic == s.oc && !s.stride2)).length = 11
+#guard (mnv4Blocks.filter (fun s => s.stride2 && s.preDWk != 0)).length = 2
+#guard (mnv4Blocks.filter (fun s => s.stride2 && s.preDWk == 0)).length = 1
+-- and those three are ALL of them — no row falls through the dispatch.
+#guard mnv4Blocks.length = 14
+
+-- The spatial ladder 56 → 28 → 14 → 7 (`h` is each block's OUTPUT size) and the stride flags.
+#guard mnv4Blocks.map (·.h) = [28, 28, 14, 14, 14, 14, 14, 14, 14, 14, 7, 7, 7, 7]
+#guard mnv4Blocks.map (·.stride2) =
+  [true, false, true, false, false, false, false, false, false, false, true, false, false, false]
+-- Every stride-2 block changes channels, which is why none of the three has a skip.
+#guard mnv4Blocks.all (fun s => !s.stride2 || s.ic != s.oc)
+-- ...and every stride-1 block preserves them, which is why all eleven do.
+#guard mnv4Blocks.all (fun s => s.stride2 || s.ic == s.oc)
 
 /-- **MNv4's full block ladder, as a type-level check on `mnv4Blocks`.**
 
