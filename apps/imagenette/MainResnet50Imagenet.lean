@@ -7,7 +7,7 @@ R50 phase 3. Nothing new was needed in the renderer to reach ImageNet scale — 
 artifacts are four `#eval`s. What was needed was the three bottleneck block VJPs (phase 1) and the
 renderer itself (phase 2).
 
-⚠ Read `Resnet50ImagenetCommon`'s two warnings before quoting anything from this: it is NOT
+⚠ Read the two warnings above before quoting anything from this: it is NOT
 RSB-A3 (no LAMB, no bs2048, no gradient accumulation), and R50 has no incumbent render to tie
 against, so the swap license every other net had does not exist here.
 

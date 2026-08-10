@@ -1450,12 +1450,6 @@ lean_exe «resnet50-verified-adam» where
   root := `apps.imagenette.MainResnet50VerifiedAdam
   moreLinkArgs := lowererLink
 
-/-- Shared body of the ResNet-34 / **full ImageNet-1k** trainer (handoff §2k). Its own `lean_lib`
-    for the same reason `Resnet34AdamCommon` has one: lake needs a module for a root shared by an
-    executable, and a `Common` without one silently fails to build for the second consumer. -/
-lean_lib «Resnet34ImagenetCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.Resnet34ImagenetCommon]
 
 /-- **ResNet-34 on full 1000-class ImageNet** — the scale/reference tier. Same certified renderer at
     `nClasses := 1000, B := 256`, heavy-ball + coupled L2 (the `jax/MainResnetImagenet.lean` recipe),
@@ -1465,9 +1459,9 @@ lean_lib «Resnet34ImagenetCommon» where
     say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
     how every net came to stream R34's augmentation.
     ⚠ Does NOT move the verification tier — proofs stop at Imagenette (§2k). -/
-lean_exe «resnet34-imagenet-verified-xla» where
-  root := `apps.imagenette.MainResnet34ImagenetXla
-  moreLinkArgs := xlaLink
+lean_exe «resnet34-imagenet-verified» where
+  root := `apps.imagenette.MainResnet34Imagenet
+  moreLinkArgs := lowererLink
 
 
 /-- **ResNet-50 on full 1000-class ImageNet** — R50 phase 3. The bottleneck renderer
@@ -1478,11 +1472,6 @@ lean_exe «resnet50-imagenet-verified» where
   root := `apps.imagenette.MainResnet50Imagenet
   moreLinkArgs := lowererLink
 
-/-- Shared body of the ViT-Tiny / **full ImageNet-1k** trainer (handoff §2p). Its own `lean_lib`
-    for the same reason `Resnet34ImagenetCommon` has one. -/
-lean_lib «ViTImagenetCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.ViTImagenetCommon]
 
 /-- **ViT-Tiny on full 1000-class ImageNet** — the ViT peer of the R34 scale tier. Same certified
     renderer at `nClasses := 1000, bs := 128`; at four replicas that is global batch 512, the
@@ -1493,14 +1482,10 @@ lean_lib «ViTImagenetCommon» where
     how every net came to stream R34's augmentation.
     ⚠ Set `SHIM_WORKERS=2` — one producer cannot feed a 4×128 ViT step (§2p).
     ⚠ Does NOT move the verification tier, and is NOT the DeiT recipe (§2p). -/
-lean_exe «vit-imagenet-verified-xla» where
-  root := `apps.imagenette.MainViTImagenetXla
-  moreLinkArgs := xlaLink
+lean_exe «vit-imagenet-verified» where
+  root := `apps.imagenette.MainViTImagenet
+  moreLinkArgs := lowererLink
 
-/-- Shared body of the ConvNeXt-T / **full ImageNet-1k** trainer (handoff §2p). -/
-lean_lib «ConvNeXtImagenetCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.ConvNeXtImagenetCommon]
 
 /-- **ConvNeXt-T on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000`;
     batch stays 32 per device (`cBS` is still private), so four replicas is global 128 and 10,009
@@ -1510,14 +1495,10 @@ lean_lib «ConvNeXtImagenetCommon» where
     say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
     how every net came to stream R34's augmentation.
     ⚠ Does NOT move the verification tier, and is NOT the ConvNeXt paper recipe (§2p). -/
-lean_exe «convnext-imagenet-verified-xla» where
-  root := `apps.imagenette.MainConvNeXtImagenetXla
-  moreLinkArgs := xlaLink
+lean_exe «convnext-imagenet-verified» where
+  root := `apps.imagenette.MainConvNeXtImagenet
+  moreLinkArgs := lowererLink
 
-/-- Shared body of the EfficientNet-B0 / **full ImageNet-1k** trainer (handoff §2p). -/
-lean_lib «EfficientNetImagenetCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.EfficientNetImagenetCommon]
 
 /-- **EfficientNet-B0 on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000,
     B := 64`; four replicas is global 256, the reference's batch. The first ImageNet net here with
@@ -1527,9 +1508,9 @@ lean_lib «EfficientNetImagenetCommon» where
     say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
     how every net came to stream R34's augmentation.
     ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
-lean_exe «efficientnet-imagenet-verified-xla» where
-  root := `apps.imagenette.MainEfficientNetImagenetXla
-  moreLinkArgs := xlaLink
+lean_exe «efficientnet-imagenet-verified» where
+  root := `apps.imagenette.MainEfficientNetImagenet
+  moreLinkArgs := lowererLink
 
 
 /-- **MobileNetV2 on full 1000-class ImageNet** — the fifth scale-tier trainer. `nClasses := 1000,
@@ -1889,7 +1870,7 @@ lean_exe «mobilenetv2-dp-check» where
     `%loss` is the whole of the forward evidence — this harness gates it as well as the gradient,
     the same split `convnext-adam-tie` uses. It is also the first execution anywhere here of a
     RANK-0 `all_reduce` (the 44 scalar LayerNorm γ/β). Needs two GPUs and the XLA backend —
-    collectives exist only on the PJRT path, which is why `convnext-verified-adam-xla` (§2h) had to
+    collectives exist only on the PJRT path, which is why `convnext-verified-adam` (§2h) had to
     come first. -/
 lean_exe «convnext-dp-check» where
   root := `tests.TestConvNeXtDpCheck
@@ -2101,25 +2082,11 @@ lean_exe «efficientnet-verified» where
   root := `apps.imagenette.MainEfficientNetVerified
   moreLinkArgs := ireeLink
 
--- enet peer of mnv2-verified-adam: the proof-rendered train step (all-swish + squeeze-excite +
--- batch-norm) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed θ|m|v + runtime
--- lr/bc threading via trainAdamSched. Recipe matches efficientnet-train (lr 1e-3, wd 1e-4,
--- cosine+warmup 3, label-smoothing 0.1). Render: tests/TestEfficientNetTrain.lean.
-lean_lib «EfficientNetAdamCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.EfficientNetAdamCommon]
 
 lean_exe «efficientnet-verified-adam» where
   root := `apps.imagenette.MainEfficientNetVerifiedAdam
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- The XLA/PJRT peer of `efficientnet-verified-adam` — same program, same certified bytes, other
-    trusted lowerer. It exists for MULTI-GPU: collectives live only on the PJRT path, so the
-    `adamdp` variant cannot run under IREE at all (the shim refuses the DP entry point rather than
-    silently running single-device). -/
-lean_exe «efficientnet-verified-adam-xla» where
-  root := `apps.imagenette.MainEfficientNetVerifiedAdamXla
-  moreLinkArgs := xlaLink
 
 -- Chapter 9: ConvNeXt-T (Liu et al. 2022 — patchify stem + [3,3,9,3] depthwise-7×7
 -- blocks with LN + GELU + layerScale + 3 between-stage downsamples) trained on
@@ -2135,55 +2102,21 @@ lean_exe «convnext-smooth» where
   root := `apps.imagenette.MainConvNeXtSmooth
   moreLinkArgs := ireeLink
 
--- convnext peer of r34-verified-adam: the proof-rendered train step (all-smooth — LayerNorm +
--- GELU + layerScale, no BN) with the gradients un-fused and handed to the proven AdamW triple +
--- packed θ|m|v + runtime lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3,
--- wd 1e-4, cosine+warmup 3, label-smoothing 0.1).
--- Render: LeanMlir/Proofs/Codegen/ConvNeXtRender.lean (pretty(provenGraph) since 2026-07-28).
-/-- Shared body of the verified ConvNeXt-T + AdamW Imagenette trainer — imported by BOTH the IREE
-    and XLA executables so their schedule and seed cannot drift. -/
-lean_lib «ConvNeXtAdamCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.ConvNeXtAdamCommon]
 
 lean_exe «convnext-verified-adam» where
   root := `apps.imagenette.MainConvNeXtVerifiedAdam
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- The XLA/PJRT peer of `convnext-verified-adam` — same program, same certified bytes, other
-    trusted lowerer. ConvNeXt has NO `replicas` support in its renderer, so DP is a later step, but
-    it is unreachable without this binary. Measured clear of ViT's MIOpen blocker before it was
-    written: its 4×4/s4 patchify weight gradient runs on this box (handoff §2h). -/
-lean_exe «convnext-verified-adam-xla» where
-  root := `apps.imagenette.MainConvNeXtVerifiedAdamXla
-  moreLinkArgs := xlaLink
 
 lean_exe «vit-verified» where
   root := `apps.imagenette.MainViTVerified
   moreLinkArgs := ireeLink
 
--- Phase 3c: ViT-Tiny with the VERIFIED-rendered AdamW step (packed θ|m|v threading through the
--- generic FFI). Render: LeanMlir/Proofs/Codegen/ViTRender.lean (pretty(provenGraph) since
--- 2026-07-28 — this driver used to emit it at startup).
-/-- Shared body of the verified ViT-Tiny + AdamW Imagenette trainer — imported by BOTH the IREE and
-    XLA executables so their schedule and seed cannot drift. ViT's schedule is the odd one out
-    (baseLR 3e-4, 5-epoch warmup), which is exactly why it lives in one place. -/
-lean_lib «ViTAdamCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.ViTAdamCommon]
 
 lean_exe «vit-verified-adam» where
   root := `apps.imagenette.MainViTVerifiedAdam
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- The XLA/PJRT peer of `vit-verified-adam`. ⛔ **It does not run on this box** — every ViT graph
-    with a backward dies at EXECUTION in `miopenStatusUnknownError` (the patch-embed weight-grad
-    convolution), and it compiles fine, so a green `lake build` is not evidence it works. It exists
-    because the plumbing is 30 lines and the DP render is unreachable without it. Run on ares, or
-    after rerouting that convolution. Handoff §2h. -/
-lean_exe «vit-verified-adam-xla» where
-  root := `apps.imagenette.MainViTVerifiedAdamXla
-  moreLinkArgs := xlaLink
 
 lean_exe «cifar-cnn-train» where
   root := `apps.baselines.MainCifarCnnTrain
@@ -2269,27 +2202,11 @@ lean_exe «fpn-train-emit» where
   root := `demos.MainFpnTrainEmit
   moreLinkArgs := ireeLink
 
--- FPN multi-scale detector training + inference (brick #3, bite 8). VisDrone 448,
--- 3-scale (56/28/14) neck, trained via the single-target DDPM FFI path.
-/-- Shared body of the VisDrone FPN detector — imported by BOTH the IREE and XLA
-    executables so their spec, schedule, and seed cannot drift. Its own `lean_lib`
-    for the same reason `Resnet34AdamCommon` has one: lake needs a module target
-    for a root shared by two exes. -/
-lean_lib «Yolov1VisdroneFpnCommon» where
-  srcDir := "."
-  roots := #[`demos.Yolov1VisdroneFpnCommon]
 
 lean_exe «yolov1-visdrone-fpn» where
   root := `demos.MainYolov1VisdroneFpn
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
--- The same detector on XLA/PJRT (planning/detector_pjrt_port.md). Shared body in
--- `demos/Yolov1VisdroneFpnCommon.lean`; the ONLY difference is the shim linked.
--- First demo on the XLA path — the five verified nets got there via
--- `VerifiedTrain.mkSession`, the demos go through `Train.lean`.
-lean_exe «yolov1-visdrone-fpn-xla» where
-  root := `demos.MainYolov1VisdroneFpnXla
-  moreLinkArgs := xlaLink
 
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
@@ -2796,8 +2713,8 @@ script cifar do
     warmup 5 against this tier's bs32 / warmup 3. Same net, different recipe. -/
 script imagenette do
   runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
-                "efficientnet-verified-adam-xla", "convnext-verified-adam-xla",
-                "vit-verified-adam-xla", "mobilenetv4-verified-adam",
+                "efficientnet-verified-adam", "convnext-verified-adam",
+                "vit-verified-adam", "mobilenetv4-verified-adam",
                 "resnet50-verified-adam"] (xla := true)
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -3003,11 +2920,11 @@ def benchTable : List BenchItem :=
     { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
       transportSensitive := true, refSecCuda := some 2986, probeXla := "mobilenetv2-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
     { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 3760, probeXla := "efficientnet-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
+      transportSensitive := true, refSecCuda := some 3760, probeXla := "efficientnet-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
     { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6841, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 8080, probeXla := "convnext-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 13.3h | XLA 1h54m01s ⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the channel-LN net at 6841s
+      transportSensitive := true, refSecCuda := some 8080, probeXla := "convnext-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 13.3h | XLA 1h54m01s ⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the channel-LN net at 6841s
     { chapter := "9  ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette",
-      refSecCuda := some 2560, probeXla := "vit-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
+      refSecCuda := some 2560, probeXla := "vit-verified-adam", epochs := 80, stepsPerEpoch := 295 } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
 
 /-- **This chapter's reference wall-clock, for the column in play.** Three columns now, not two:
     IREE, XLA-on-ROCm (7900 XTX) and XLA-on-CUDA (4060 Ti). The vendor split exists because the
@@ -3039,7 +2956,7 @@ def probeAttnRefMs : Nat := 1173
     the IREE anchors these read 4.66× (dense) and 2.19× (conv), which is the whole reason
     a shared reference column would be wrong (§2j).
 
-    **The attn anchor exists as of 2026-07-30 — `vit-verified-adam-xla` runs on this box,
+    **The attn anchor exists as of 2026-07-30 — `vit-verified-adam` runs on this box,
     and it needs no workaround.** That reverses the state recorded from 2026-07-28: the
     graph used to die at *execution* in the patch-embed weight-gradient convolution
     (a fused interior-dilated pad+conv selects MIOpen's no-workspace `GemmFwdRest` solver,
@@ -3082,7 +2999,7 @@ def probeAttnRefMs : Nat := 1173
     one number in front of you. -/
 def probeDenseRefMsXla : Nat := 610    -- mnist-mlp-verified (XLA) (vs 3030 on IREE); median of 8
 def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified (XLA) (vs 8020 on IREE); median of 10
-/-- ms/STEP, `vit-verified-adam-xla`, median of 8 in the DEFAULT configuration, i.e. with no
+/-- ms/STEP, `vit-verified-adam`, median of 8 in the DEFAULT configuration, i.e. with no
     MIOpen override (123/125/126/127/128/129/132/137 — ±5%). Against IREE's 1173 that is
     **9.2×**, the largest cross-lowerer gap of the three families and the reason ViT cannot
     share the conv factor. (With `MIOPEN_DEBUG_CONV_GEMM=0` the median is 136 — that variable
@@ -3101,7 +3018,7 @@ def probeAttnRefMsXla : Nat := 128
 -- fallback for a box with no datasets, not the answer.
 def probeDenseRefMsCuda : Nat := 814    -- mnist-mlp-verified (XLA), idle, 3 real epochs
 def probeConvRefMsCuda  : Nat := 2049   -- cifar8-bn-verified (XLA), idle, 3 real epochs
-def probeAttnRefMsCuda  : Nat := 95     -- vit-verified-adam-xla,   idle, MAX_STEPS=100
+def probeAttnRefMsCuda  : Nat := 95     -- vit-verified-adam,   idle, MAX_STEPS=100
 
 /-- One lowerer's complete probe configuration: which binaries to probe and which anchors
     to divide by. Bundling them is the point — `yourSecOf` takes a `BenchRef`, so a probe
@@ -3133,7 +3050,7 @@ def ireeRef : BenchRef :=
 def xlaRefRocm : BenchRef :=
   { lowerer := "XLA/PJRT", xla := true, col := "rocm", card := "7900 XTX"
     denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified"
-    attnProbe := "vit-verified-adam-xla"
+    attnProbe := "vit-verified-adam"
     denseRefMs := probeDenseRefMsXla, convRefMs := probeConvRefMsXla
     attnRefMs := probeAttnRefMsXla }
 
@@ -3144,7 +3061,7 @@ def xlaRefRocm : BenchRef :=
 def xlaRefCuda : BenchRef :=
   { lowerer := "XLA/PJRT", xla := true, col := "cuda", card := "RTX 4060 Ti"
     denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified"
-    attnProbe := "vit-verified-adam-xla"
+    attnProbe := "vit-verified-adam"
     denseRefMs := probeDenseRefMsCuda, convRefMs := probeConvRefMsCuda
     attnRefMs := probeAttnRefMsCuda }
 
@@ -3517,7 +3434,7 @@ script benchmark do
     divided by IREE's anchors would report Part-1 training ~2-5× too fast, silently.
 
     **All 3 probes and all 9 chapters as of 2026-07-30.** It was 2-and-8 until then, because
-    `vit-verified-adam-xla` did not execute on this box; it now does, with no workaround, though
+    `vit-verified-adam` did not execute on this box; it now does, with no workaround, though
     the MIOpen failure it used to hit is non-deterministic rather than fixed — see
     `probeAttnRefMsXla`. The `n/a` machinery is retained on purpose: it is what would keep an
     unmeasured row honest, and it is what ch.9 needed for two days.

@@ -1,33 +1,18 @@
 import LeanMlir.VerifiedNets
 
-/-! # Shared body of the verified EfficientNet-B0 / **full ImageNet-1k** trainer
+/-! # `efficientnet-imagenet-verified` — EfficientNet-B0 on full ImageNet-1k, verified → XLA
 
-The EfficientNet peer of the R34, ViT and ConvNeXt ImageNet trainers (§2p). Same certified renderer
-at `nClasses := 1000`, `B := 64` — so four replicas is **global batch 256**, which is
-`efficientNetB0ImagenetConfig.batchSize`. Matching the reference's global batch is what keeps the
-two runs a comparable pair.
+The fourth and last of the ImageNet scale-tier trainers (§2p). `B` and `nClasses` were already
+renderer parameters, so this needed only a `slug` — plus the derived −α/K that turned up the third
+copy of §2k's hardcoded-K bug, this time in EfficientNet's report-only loss.
 
-⚠ **First ImageNet net here with BatchNorm.** Consequences: eval goes through `@efficientnetin_fwd_eval`
-with frozen running stats (batch-BN eval is degenerate on a sorted val split), and the per-step
-buffer carries a 2×49-tensor running-stat region that the LayerNorm nets do not have.
+⚠ Does NOT move the verification tier, and the OPTIMIZER does not match the reference (RMSProp +
+exponential decay there, AdamW + cosine here). See `the net's Main file`.
 
-⚠ **The optimizer does NOT match the reference and this is the largest recipe gap of the four.**
-`efficientNetB0ImagenetConfig` uses **RMSProp with exponential LR decay** (×0.97 every 2.4 epochs,
-base LR 0.016@bs256, `cosineDecay := false`); the verified path has AdamW + cosine only. That is on
-top of the usual missing mixup/cutmix/EMA. Do not read a number from this as an EfficientNet-B0
-reproduction — read it as the verified renderer training the same architecture.
-
-```bash
-scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
-gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
-lake build efficientnet-imagenet-verified-xla
-cat .lake/build/efficientnetin_adamdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
-
-PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 \
-  LEAN_MLIR_VARIANT=adamdp64 LEAN_MLIR_BATCH=64 \
-  LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
-  .lake/build/bin/efficientnet-imagenet-verified-xla data 2>&1 | tee runs/efficientnetin_4gpu.log
-```
+**One file, one binary, either lowerer.** The proven graph goes to whichever
+trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
+`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). The `-xla` suffix is
+gone from the target name because it no longer distinguishes anything.
 -/
 
 /-- 80 epochs at 64 per device — the reference's schedule length, and at four replicas its global
@@ -62,3 +47,5 @@ def runEfficientNetImagenet (argv : List String) : IO Unit := do
     { efficientnetImagenetConfig with batchSize := bs }
     (argv.head?.getD "data") baseLR 0.9 0.999 (if rms then sched.warmup else 5) variant
     (if rms then sched.decayRate else 0.0) sched.decayEpochs
+
+def main (argv : List String) : IO Unit := runEfficientNetImagenet argv

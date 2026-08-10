@@ -1213,7 +1213,7 @@ end Proofs.StableHLO
 
 -- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
 -- `vitTinyImagenetConfig.emaDecay := 0.99996` (the DeiT default), so this is the render an ImageNet
--- ViT pair actually needs — `vit_ema` is Imagenette-scale and, as `ViTAdamCommon` records, a GATE
+-- ViT pair actually needs — `vit_ema` is Imagenette-scale and, as `MainViTVerifiedAdam` records, a GATE
 -- VEHICLE rather than a matched pair (`vitTinyConfig` sets no EMA at all). Batch 128 × 4 replicas
 -- = global 512, matching the reference, exactly as the `vitin_adam128` pair does.
 #eval IO.FS.writeFile "verified_mlir/vitin_ema128_train_step.mlir"

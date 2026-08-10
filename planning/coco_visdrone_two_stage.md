@@ -225,7 +225,7 @@ vehicle.
 identical C surface as `libiree_ffi.so`, so nothing above the shim moves."* The §2h
 recipe is 3 files + 2 lakefile entries per net with **no driver change** — split a
 `Common` module out of `demos/MainYolov1VisdroneFpn.lean`, add a
-`yolov1-visdrone-fpn-xla` exe with `xlaLink`. The detector is a demo, not a verified net,
+`yolov1-visdrone-fpn` exe with `xlaLink`. The detector is a demo, not a verified net,
 so there is no render or tie work to do.
 
 **Two risks, both concrete:**

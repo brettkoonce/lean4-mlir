@@ -49,7 +49,7 @@ places this plan was wrong. Body below is the original plan, kept as written.
   ⚠ The other **six** stubs are still `not_ported` — deliberately. They now have a working
   template, but shipping untested marshalling into the trusted shim is worse than a loud stub.
 * `demos/Yolov1VisdroneFpnCommon.lean` + two thin roots + `lean_lib` (a new shared module needs
-  its own lake target, same as `Resnet34AdamCommon`); `lean_exe yolov1-visdrone-fpn-xla`.
+  its own lake target, same as `Resnet34AdamCommon`); `lean_exe yolov1-visdrone-fpn`.
 
 ### The fixed-parameter check — the real proof of "same function"
 
@@ -212,7 +212,7 @@ FPN_TAG=preport FPN_EPOCHS=1 .lake/build/bin/yolov1-visdrone-fpn data/visdrone_f
 
 # 1. thread mkSession through LeanMlir/Train.lean (8 sites, §2)
 # 2. Gate A: re-run step 0 with a different tag, diff the loss column — must be bit-identical
-# 3. add the exe:  lean_exe «yolov1-visdrone-fpn-xla» with moreLinkArgs := xlaLink
+# 3. add the exe:  lean_exe «yolov1-visdrone-fpn» with moreLinkArgs := xlaLink
 #    (§2h recipe: a Common module split if the demo body needs sharing)
 # 4. Gate B: same seed, 1 epoch, IREE vs XLA losses to ~1e-5
 # 5. Gate C: ms/step on the XLA build

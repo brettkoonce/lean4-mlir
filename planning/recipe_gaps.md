@@ -442,7 +442,7 @@ single-GPU and all minutes), and bank the reference-epoch runs. v1.0 is the one 
 *purely* a run, which is why it is the one item currently blocked outright.
 
 ### v1.0 — **run R34.** Zero build. ⛔ **BLOCKED: hardware, not code.**
-`resnet34-imagenet-verified-xla`, `momdp64`, 4 GPUs, residency on, 90 epochs against the
+`resnet34-imagenet-verified`, `momdp64`, 4 GPUs, residency on, 90 epochs against the
 reference's **72.02%**. ~48 h train-only at the measured 386 ms/step × 5004 × 90. This is the pair
 the whole §2k/§2p line of work was pointed at, and nothing blocks it.
 

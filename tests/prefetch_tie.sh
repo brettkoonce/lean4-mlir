@@ -38,7 +38,7 @@ set -u
 STEPS=${STEPS:-12}
 EPOCHS=${EPOCHS:-2}
 DEVS=${DEVS:-0,2,3,4}
-BIN=${BIN:-.lake/build/bin/resnet34-imagenet-verified-xla}
+BIN=${BIN:-.lake/build/bin/resnet34-imagenet-verified}
 VARIANT=${VARIANT:-momdp64}
 BATCH=${BATCH:-64}
 REPLICAS=${REPLICAS:-4}

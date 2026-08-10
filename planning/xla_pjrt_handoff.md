@@ -47,7 +47,7 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `019e09d` | **all five `_fwd` artifacts certified; `mobilenetv2_fwd` was the wrong BN world** |
 | `4bbcb6e` | §2h: the `-xla` trainer plan, de-risked — mnv2/ConvNeXt backward graphs RUN on XLA, ViT's SGD one does not |
 | — | *↓ the `-xla` trainer thread (§2h), 2026-07-29* |
-| `d4da271` | **`mobilenetv2-` and `convnext-verified-adam-xla` built, gated and MEASURED**; ViT plumbed, blocker reproduced |
+| `d4da271` | **`mobilenetv2-` and `convnext-verified-adam` built, gated and MEASURED**; ViT plumbed, blocker reproduced |
 | `2a0aafd` | MobileNetV2 data-parallel — gated by the exact identity on the real net |
 | `1a9a7a1` | **ConvNeXt data-parallel** — the last net with no DP path; 1.68×, and the first rank-0 collectives |
 | `772815f` | eval batch decoupled from train batch (`evalBs`); R34 bs128×2 DP render |
@@ -1730,14 +1730,14 @@ and no JAX 30-epoch run exists to compare against.
 
 ```bash
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
-lake build resnet34-imagenet-verified-xla
+lake build resnet34-imagenet-verified
 scripts/gen_shims.sh                                      # the five per-net data shims (§0.9)
 cat .lake/build/resnet34in_momdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
 
 PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 \
   LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 LEAN_MLIR_BASE_LR_U=100000 \
   LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
-  .lake/build/bin/resnet34-imagenet-verified-xla data 2>&1 | tee runs/r34in_4gpu_30ep_<date>.log
+  .lake/build/bin/resnet34-imagenet-verified data 2>&1 | tee runs/r34in_4gpu_30ep_<date>.log
 #   ⚠ do NOT pipe a long run into `head`/`grep -m1` — §4: SIGPIPE does not kill these trainers,
 #     it DETACHES them. Redirect to a file and read the file. `scripts/supervise.sh` has AER
 #     restart, thermal resting and a stall guard for exactly this (§2d.3a).
@@ -2030,7 +2030,7 @@ peer was added for the conv anchor (`.train` **does** drive the PJRT shim — th
 question). On-reference factors read 0.99-1.02× on both paths.
 
 **▶ AND VIT RUNS ON XLA — the last named hard gap in this whole thread is GONE, but NOT for the
-reason first recorded.** `vit-verified-adam-xla` executes on this box, **with no workaround**, and
+reason first recorded.** `vit-verified-adam` executes on this box, **with no workaround**, and
 is numerically gated: first three step losses agree with the IREE peer to **3e-6** from identical
 fresh init (3.015268/3.005852/2.987083 vs 3.015261/3.005857/2.987081); it descends
 (39.7 → 46.7 → **49.6%** over 3 epochs); **`vit-dp-check` passes BIT-EXACT on all 16,579,041
@@ -2306,9 +2306,9 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-verified-adam-xla data
 # for r34 / vit / convnext / efficientnet / mobilenetv2 — plus cifar8's six and mnist's three.
 # ⚠ The underlying MIOpen fault was NON-DETERMINISTIC rather than fixed (it fired once and not
 # again in 11 runs), so a recurrence is possible; it is a ROCm-box hazard, not a ViT one.
-lake build mobilenetv2-verified-adam convnext-verified-adam-xla
+lake build mobilenetv2-verified-adam convnext-verified-adam
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/mobilenetv2-verified-adam data
-HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam-xla data
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam data
 #   ^ each shares ONE body with its IREE peer (apps/imagenette/<Net>AdamCommon.lean), so the
 #     schedule and seed cannot drift. The IREE peers need the venv on PATH for `iree-compile`:
 #     PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-verified-adam data
@@ -2474,9 +2474,9 @@ LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
 #     does not spoil it because both replicas' groups are the same 32 examples). Pass a broken
 #     render as argv[1] to run the sum-not-mean control.
 LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
-  .lake/build/bin/efficientnet-verified-adam-xla data
+  .lake/build/bin/efficientnet-verified-adam data
 LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
-  .lake/build/bin/convnext-verified-adam-xla data
+  .lake/build/bin/convnext-verified-adam data
 #   ^ §2h-quater: 1.68× (marginal epoch, train-only, 77.5 s → 46.0 s). Measure with
 #     LEAN_MLIR_SKIP_EVAL=1 on BOTH sides — eval runs single-replica and is not part of the ratio.
 
@@ -3020,7 +3020,7 @@ certified renderer is the only writer of both EfficientNet AdamW artifacts from 
 
 **It runs on XLA/PJRT, which was not a given.** ViT's DP render is still unexecutable on this box
 (`miopenStatusUnknownError` in the patch-embed weight-grad convolution), so this was measured before
-anything was built: `efficientnet-verified-adam-xla` — a new target, the shared-body split
+anything was built: `efficientnet-verified-adam` — a new target, the shared-body split
 `Resnet34AdamCommon` already uses — compiles in 20.5 s and reproduces the IREE run within fp noise
 (val 14.98/21.83/27.13% vs IREE's 15.11/21.58/27.97% over 3 epochs). EfficientNet is depthwise
 convolutions throughout; that MIOpen handles them and not ViT's 209×209 patch-embed weight-grad
@@ -3700,7 +3700,7 @@ and the two nets predicted clear were clear.
 | | `-xla` binary | agreement with IREE | descends on certified bytes | marginal epoch (XLA) |
 |---|---|---|---|---|
 | **MobileNetV2** | ✅ `mobilenetv2-verified-adam` | first step **4.9e-5**; epoch-1 loss 3.5e-5, val 594 vs 600 / 3925 | ✅ 26.7 → 38.0 → 52.3 → **59.9%** (4 full epochs); **68.2%** over 80 capped-step epochs | **58.0 s** → 80 ep ≈ **1 h 17 m** |
-| **ConvNeXt-T** | ✅ `convnext-verified-adam-xla` | first three steps ≤ **1.6e-5**; epoch-1 loss and val_acc **IDENTICAL** (2.903300, 502/3925) | ✅ 36.0 → 47.7 → 54.3 → **60.6%** (4 full epochs) | **84.5 s** → 80 ep ≈ **1 h 53 m** |
+| **ConvNeXt-T** | ✅ `convnext-verified-adam` | first three steps ≤ **1.6e-5**; epoch-1 loss and val_acc **IDENTICAL** (2.903300, 502/3925) | ✅ 36.0 → 47.7 → 54.3 → **60.6%** (4 full epochs) | **84.5 s** → 80 ep ≈ **1 h 53 m** |
 | **ViT-Tiny** | ⛔ builds, **does not run** | — | — | — |
 
 Per-epoch deltas were **58/58/59 s** and **84/85/85 s**, so the marginal is stable, not a lucky pair.
@@ -3970,7 +3970,7 @@ EfficientNet's on-GPU 1.75× and end-to-end 1.67× differ for exactly that reaso
 `verified_mlir/convnext_adamdp_train_step.mlir`, written by a second `#eval` in
 `Proofs/Codegen/ConvNeXtRender.lean` at `replicas := 2`; `LEAN_MLIR_VARIANT=adamdp`, entry
 `@convnext_adamdp_train_step`. It renders to its **own** path, so the artifact the trainer runs is
-untouched. Needs `convnext-verified-adam-xla` (§2h) — collectives exist only on the PJRT path.
+untouched. Needs `convnext-verified-adam` (§2h) — collectives exist only on the PJRT path.
 
 **This was the expensive half of the DP work, as §2h predicted** — unlike mnv2 (§2h-bis, one `#eval`
 because its renderer already took `replicas` and already called `emitGradAllReduce`), ConvNeXt had
@@ -4054,7 +4054,7 @@ things it re-demonstrates, both worth having on a sixth net:
 
 #### It trains, and it scales at **1.68×**
 
-`LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2` on `convnext-verified-adam-xla`: the
+`LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2` on `convnext-verified-adam`: the
 banner reports *"DATA-PARALLEL: 2 replicas x bs 32 = global batch 64, 147 steps/epoch"* and the loss
 descends **2.127 → 1.834 → 1.564 → … → 0.897** over 12 epochs.
 
@@ -4714,7 +4714,7 @@ Lean reads batch 0 labels `[26, 948, 227, 24, 582, 614, 141, 155]` and batch 1
 
 #### ✅ The ImageNet net — renders, spec and driver, 2026-07-30. IT RUNS.
 
-`lake build resnet34-imagenet-verified-xla`. Three artifacts under slug **`resnet34in`**
+`lake build resnet34-imagenet-verified`. Three artifacts under slug **`resnet34in`**
 (`mom256_train_step`, `fwd`, `fwd_eval`) at `B := 256, nClasses := 1000`, heavy-ball;
 `resnet34ImagenetVerified` in `VerifiedNets.lean`; `Resnet34ImagenetCommon` + a `-xla` main.
 
@@ -5992,9 +5992,9 @@ which is exactly §4's trap and it has already bitten three nets once.
 
 ```bash
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so   # if older than pjrt_ffi.c
-lake build convnext-verified-adam-xla
+lake build convnext-verified-adam
 mv .lake/build/convnext_adam_ckpt_xla.bin{,.epoch} /tmp/           # the FRESH option
-HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam-xla data \
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam data \
   2>&1 | tee runs/convnext_chln_80ep_<date>.log
 ```
 
@@ -6042,7 +6042,7 @@ no `timeout`/kill is required, and `| head` would not stop the trainer anyway.
 The ViT peer of §2k, stood up as a code/test pass. **No long run yet, deliberately.** Everything
 below is measured on ares (4 × RTX 4060 Ti of the box's 6).
 
-`lake build vit-imagenet-verified-xla`. Three artifacts under slug **`vitin`**
+`lake build vit-imagenet-verified`. Three artifacts under slug **`vitin`**
 (`adam128_train_step`, `adamdp128x4_train_step`, `fwd`) at `nClasses := 1000`, `bs := 128`;
 `vitImagenetVerified` in `VerifiedNets.lean`; `ViTImagenetCommon` + a `-xla` main.
 **No renderer change** — `nClasses`, `bs` and `replicas` were already parameters, so it is three
@@ -7142,7 +7142,7 @@ than a self-tie waiting for phase 1. Side benefit: it establishes that the pinne
 scripts/residency_gate.sh                       # default: r34, 10 steps, vs the pinned path
 GATE_ALT=PJRT_FFI_FAULT=1 scripts/residency_gate.sh    # the red run — expect rc=1
 GATE_ALT=PJRT_FFI_RESIDENT=1 scripts/residency_gate.sh # ▶ what phase 1 will run. ONE env var.
-scripts/residency_gate.sh efficientnet-verified-adam-xla efficientnet 10
+scripts/residency_gate.sh efficientnet-verified-adam efficientnet 10
 ```
 
 **Pointing it at residency is a one-variable change** — nothing else in the harness knows what it is

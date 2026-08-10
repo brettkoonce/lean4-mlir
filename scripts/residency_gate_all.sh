@@ -57,8 +57,8 @@ NETS=(
   "cifar8-bn-sgd|cifar8-bn-verified-xla|cifar8_bn|10|2|"
   "cifar8-bn-adam|cifar8-bn-verified-adam-xla|cifar8_bn|10|1|"
   "r34|resnet34-verified-adam-xla|resnet34|10|1|"
-  "efficientnet|efficientnet-verified-adam-xla|efficientnet|10|1|"
-  "vit|vit-verified-adam-xla|vit|10|2|"
+  "efficientnet|efficientnet-verified-adam|efficientnet|10|1|"
+  "vit|vit-verified-adam|vit|10|2|"
   # ⚠ The EMA row gates a FOUR-region blob, `[θ|m|v|ema]`, where every other row here is three.
   # That is the whole reason it is worth a row of its own: `nResident` goes 3·P → 4·P, so this is
   # the only check that the shim's "n tensors in, n out, counts agree tensor for tensor" contract
@@ -68,9 +68,9 @@ NETS=(
   # green. ⚠ It also cannot see the SHADOW's own correctness — eval-only state is structurally
   # invisible to this gate, exactly as hold-mode is. That is what the tracks-then-exceeds
   # trajectory gate is for.
-  "vit-ema|vit-verified-adam-xla|vit|10|2|LEAN_MLIR_VARIANT=ema"
+  "vit-ema|vit-verified-adam|vit|10|2|LEAN_MLIR_VARIANT=ema"
   "mnv2-rms|mobilenetv2-verified-adam|mobilenetv2|10|2|LEAN_MLIR_VARIANT=rms"
-  "enet-rms|efficientnet-verified-adam-xla|efficientnet|10|2|LEAN_MLIR_VARIANT=rms"
+  "enet-rms|efficientnet-verified-adam|efficientnet|10|2|LEAN_MLIR_VARIANT=rms"
 )
 
 # ⚠ A COLLISION THAT VOIDED THIS GATE ONCE (2026-08-02), and it costs a re-run to
@@ -89,7 +89,7 @@ NETS=(
 #   GATE_DEVICES=0,1,2,3 LD_LIBRARY_PATH=$DET GATE_ALT=PJRT_FFI_RESIDENT=1 \
 #     GATE_FAULT=PJRT_FFI_FAULT=2 LEAN_MLIR_VARIANT=adamdp32x4 LEAN_MLIR_BATCH=32 \
 #     LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
-#     scripts/residency_gate.sh vit-verified-adam-xla vit 10
+#     scripts/residency_gate.sh vit-verified-adam vit 10
 
 DET=${DET_SHIM:-/tmp/residency_detshim}
 OUT=${GATE_OUT:-$(mktemp -d)}
