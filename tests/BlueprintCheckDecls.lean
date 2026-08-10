@@ -17,11 +17,24 @@ imports every lib of the workspace, which over-imports twice over:
   but this workflow builds `lake build LeanMlir Certs`, not the apps tree, so
   importing them died with `unknown module prefix 'apps'`. Latent from
   2026-07-27 until a push touched a blueprint.yml trigger path.
+* **`demos.*` roots** — ⚠⚠ **THE SAME BUG AGAIN, one prefix over.** `dc5a7db`
+  (the FPN detector) added `lean_lib Yolov1VisdroneFpnCommon` rooted at
+  `demos.Yolov1VisdroneFpnCommon`, so `leanLibs` picked up a `demos` root and
+  this died with `unknown module prefix 'demos'` — after a 1 h 5 m build, since
+  checkdecls runs last. Latent until 2026-08-10, when a 43-commit backlog was
+  pushed and the blueprint trigger fired.
+  ▶ The `apps` fix was written as a prefix test against ONE known prefix instead
+  of against "roots this workflow does not build", so it could not generalise.
+  A third demo/trainer tree will do this a third time; the durable fix is to
+  invert the rule (allow-list `LeanMlir`/`Proofs`) rather than keep naming
+  offenders — deliberately not done here, because widening the allow-list is a
+  bigger change than a red CI deserves at this hour, and this keeps the two
+  known cases explicit.
 
 The blueprint text only cites core declarations — measurably so: every `\lean{}`
-in content.tex is a `Proofs.*` or `Layer.*` name, and zero are `apps` — so the
-filtered import set is the honest one. If a blueprint chapter ever cites a
-heavy-corpus or trainer declaration, add that module here explicitly rather
+in content.tex is a `Proofs.*` or `Layer.*` name, and zero are `apps` or `demos`
+— so the filtered import set is the honest one. If a blueprint chapter ever cites
+a heavy-corpus or trainer declaration, add that module here explicitly rather
 than re-importing the whole lib. -/
 
 open Lake Lean
@@ -43,9 +56,12 @@ unsafe def main (args : List String) : IO UInt32 := do
   let coreLibs := ws.root.leanLibs.filter fun lib => lib.name != `CertsHeavy
   -- Filter ROOTS, not libs: a lib that ever mixes `apps` and `LeanMlir` roots
   -- still contributes the half this workflow actually builds.
+  -- ⚠ `demos` is here for the same reason as `apps` and was found the same way — see the
+  -- header. Both are trainer/demo trees this workflow does not build.
+  let unbuiltTrees : List Name := [`apps, `demos]
   let imports := coreLibs.flatMap fun lib =>
     lib.config.roots.filterMap fun module =>
-      if (`apps).isPrefixOf module then none else some { module }
+      if unbuiltTrees.any (·.isPrefixOf module) then none else some { module }
   -- see comments in https://github.com/leanprover/lean4/pull/6325
   enableInitializersExecution
   let env ← Lean.importModules imports {}
