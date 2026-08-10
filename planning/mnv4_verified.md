@@ -5,9 +5,10 @@ checked. Companions: `planning/mnv4_imagenet.md` (the **JAX reference** side —
 the Conv-S/Conv-M distinction), `planning/rsb_a3_r50_verified.md` (the closest precedent: a new
 block form brought onto the verified path).
 
-Status: **PHASE 2 (backward) DONE 2026-08-09 — see §3i.** The train step renders, compiles, and its
-gradient ties `jax.grad` of the reference; zero new SHlo ops were required. What remains is the
-driver/spec plumbing and the 80-epoch run.
+Status: **THE CODEGEN LINE IS COMPLETE (2026-08-10).** Forward tied at 1.423e-06, gradient tied at
+0/147, spec + XLA/PJRT trainer + CI drift guard in, and the 80-epoch run landed at **87.36% top-1 /
+97.63% top-5** (`runs/mnv4_adam_80ep_aug09.log`). What is NOT done is the proof half — see **§8, the
+handoff**: MNv4 and R50 both lack a whole-net composed backward, and that is the next line of work.
 
 Status: **PHASES 0–3 (forward) DONE 2026-08-08.** `.uib` and `.fusedMbConvNB` are in `VLayer`, the
 whole Conv-S forward chain renders, `@mnv4_fwd` compiles, and the forward tie against the JAX
@@ -936,14 +937,29 @@ and it is three `#eval` lines + a 50-line Common** — that part is genuinely me
 (learned the hard way on R50, then again here — the exe builds green against artifacts that do not
 exist, and fails at first invoke).
 
-### Phase 4 — the run
-80 epochs, bs32, AdamW — the Imagenette tier's schedule.
-*Gate*: **84.58%**, the baseline path's number for this block table.
-~~⚠ Do not start this before the forward tie is clean.~~ ✅ **Precondition met 2026-08-08** — the
-tie passes against the unpatched reference at 1.423e-06 (§3e). Still gated on Phases 2 and 3-rest,
-which is what actually produces a train step to run.
+### ✅ Phase 4 — the run — DONE 2026-08-09/10
+80 epochs, bs32, AdamW, XLA/PJRT on gfx1100, ~61 min (46 s/epoch steady, 156 ms/step, ~210 img/s).
+`runs/mnv4_adam_80ep_aug09.log`:
 
----
+| | top-1 | top-5 |
+|---|---|---|
+| epoch 20 | 79.69% | 97.07% |
+| epoch 40 | 83.59% | 97.07% |
+| epoch 72 (peak) | 87.57% | 97.76% |
+| **epoch 80 (final)** | **87.363057%** (3429/3925) | **97.63%** |
+
+Flat over the last eight epochs (87.31–87.49), so this is converged, not a lucky stop.
+
+⚠⚠ **This is NOT a reproduction of 84.58% and must not be written up as one.** The architectures are
+tied (forward 1.423e-06, gradient 0/147) but the RECIPES are not: the JAX baseline is
+`batchSize 192, warmupEpochs 5` (`jax/MainMobilenetV4.lean`) against the tier's `bs32, warmup 3`. Same
+net, different recipe, and 6× batch at a fixed LR plausibly explains most of the +2.78. The
+defensible claim is *"the MNv4-Conv-S block table under the Imagenette tier's recipe scores
+87.36%"*. ▶ It is deliberately NOT in `RESULTS.md` yet, because the caption is the open question,
+not the number.
+
+⚠ Run-to-run spread is real: a 2-epoch benchmark and the full run started from a bit-identical init
+(step-0 loss 2.545151 both) and differed by epoch 1 (14.39% vs 17.99%). Read ±0.3 as noise.
 
 ## 4b. ⭐ THE CONVENTION AUDIT (2026-08-10) — stop finding these one session at a time
 
@@ -993,6 +1009,97 @@ is no `generated_resnet50.py`. Conventions do not depend on class count, and the
 rather than assumed — `resnet50_fwd` and `resnet50in_fwd` have identical strided-pad profiles.
 ▶ Separately: R50-Imagenette therefore has **no baseline number at all** to compare 89.86% against
 — the same "no matched pair" gap §3f records for EfficientNet.
+
+---
+
+## 8. ▶▶ HANDOFF — the WHOLE-NET COMPOSED BACKWARD for MNv4 and R50 (next session)
+
+Both nets ship trained numbers off a certified renderer and neither has a whole-net backward
+theorem. That is the one axis on which they sit below the other five, and closing it puts them on
+the main line. **Measured 2026-08-10, not recalled:**
+
+| net | block-level certified VJP | whole-net composed backward | fwd tie vs JAX ref | grad tie vs JAX ref |
+|---|---|---|---|---|
+| r34 | ✓ | ✓ `ResNet34BackB0` + `Resnet34BackCertifiedTie` | — | 17/18 blocks (§below) |
+| mnv2 | ✓ | ✓ `MobileNetV2BackB0` + CertifiedTie | ✓ 6.08e-06 | — |
+| enet | ✓ | ✓ `EfficientNetBackB0` + CertifiedTie | ✓ 1.13e-06 | — |
+| convnext | ✓ | ✓ `ConvNeXtBackB0` + CertifiedTie | — | — |
+| vit | ✓ | ✓ `ViTBackB0` + `ViTMhsaBackCertifiedTie` | — | — |
+| **r50** | ✓ `Foundation/Resnet50BlocksCertified.lean` | ⛔ **missing** | ⛔ no 10-class reference exists | ⛔ |
+| **mnv4** | ⛔ **missing** | ⛔ **missing** | ✅ 1.423e-06 | ✅ 0/147 |
+
+⭐ **They are short in OPPOSITE directions, and that decides the order of work.** R50 has the Lean
+block certificates and *no empirical tie at all* — there is no `generated_resnet50.py`, so neither
+its forward nor its gradient has ever met an independent oracle, and 89.86% rests on the certified
+renderer plus block proofs. MNv4 is the reverse: the strongest empirical evidence in the repo and
+nothing in Lean beyond the render.
+
+### The target shape — read `MobileNetV2BackB0.lean`, it is the template
+
+Per block form, the peers prove **three** things, and only the first exists for R50:
+
+1. `<blk>_has_vjp_at` — the block's VJP as a proven object. R50 has all three forms already:
+   `bblkPC_has_vjp_at`, `bblkPStridedPC_has_vjp_at`, `bblkPProjPC_has_vjp_at`
+   (`Resnet50BlocksCertified.lean` — note the third, the **stride-1 projection**, exists only in R50
+   stage-1 block 0 and has no R34 analogue).
+2. `<blk>BackBatchedGraph` — a *backward StableHLO graph* built from the emitted tokens.
+3. `<blk>BackBatchedGraph_faithful` — that graph **denotes** the proven VJP. This is the theorem
+   that makes the render's backward the certified one, and it is what both nets are missing.
+
+`<Net>BackCertifiedTie.lean` is a further step (§B: the float-bridge transcription IS the certified
+VJP in the deployed vocabulary) and is NOT required to be on the main line — the five nets that have
+it got it later.
+
+### ▶ Order of work
+
+**R50 first.** It is one step from done: phase 1 is discharged, so the job is (2) + (3) for three
+block forms, mirroring `ResNet34BackB0` — which R50's blocks were explicitly written to mirror.
+
+**MNv4 second, and it needs phase 1 first** — a `MobileNetV4BlocksCertified.lean` in the
+`Resnet50BlocksCertified` shape, then (2) + (3).
+
+### ⚠ Design notes that will save a cycle
+
+* **Activation smoothness decides the theorem FORM.** `MobileNetV2BackB0`'s header is explicit:
+  swish is smooth so its VJP is *global*, relu6 has a two-sided kink so its VJP is the pointwise
+  `relu6_has_vjp_at` and the whole body's statement becomes **`_at` / hypothesis-threaded** via
+  `vjp_comp_at`. MNv4 is **relu** (one-sided kink at 0, backward token `.selectPos`) in all 14 UIB
+  blocks and **swish** in the fused stage — so the UIB bodies are `_at` and the fused stage is
+  global. R50 is relu throughout ⇒ `_at`. Do not start by assuming the global form.
+* ⭐ **MNv4's four families are ONE constructor with `k = 0` omissions, not four proofs.** ExtraDW /
+  IB / ConvNeXt-like / FFN differ only by which depthwise is present. Whether that collapses to one
+  parameterised theorem or needs a case split is the first thing to settle — it is the difference
+  between a small file and a large one, and it is the same question §2 answered for the render
+  (one constructor, three functions, because the STRIDE forces a type split — expect the same here).
+* **The composition is what is new, not the pieces.** Every op MNv4's backward uses already carries
+  a proven `den` (§3i); the depthwise VJP is kernel-general. What has never been composed is a
+  depthwise on *both* sides of the pointwise expand.
+* ⚠ **New proof files must land in a lake target** or they are never built (memory:
+  `specvjp-un-rotted`). `Certs`/`Proofs` roots — and `scripts/check_render_coverage.py` enforces the
+  render half of this, not the proof half.
+* ⚠ **Budget CI cost.** `ViTBackB0` is the heaviest module in the repo (~11 min, ~14 GB) and *looks*
+  like a hang at its last two jobs (memory: `vit-backb0-ci-cost`). A whole-net backward at 224² is
+  that weight class; plan split seams before the file is large.
+
+### ⛔ Do NOT redo — this is already measured
+
+* MNv4's gradient is **verified correct end to end** (`scripts/grad_tie.py --net mnv4 --nokink`,
+  0/147, and the gate was verified to FAIL on an injected γ↔β swap). The proof work is about
+  *certifying* what is already known to be numerically right — it is not a bug hunt.
+* R34's gradient tie (`--net r34`) sits at 17/18 blocks with one holdout (`s3b3`, whose control is
+  the smallest in its stage on every run and whose four structurally-identical siblings all pass).
+  That is a probe-resolution question, not evidence of an R34 backward bug.
+* ⚠ **R50 has no reference to tie against.** If an empirical check is wanted for R50, the missing
+  artifact is a 10-class `generated_resnet50.py`; the conventions can already be audited via the
+  1000-class one (`scripts/convention_audit.py --net r50`, a proxy that was checked, not assumed).
+
+### The other thing R50 and MNv4 owe, and it is not a proof
+
+`r50:padding` and `r34:padding` are open in `scripts/convention_baseline.txt`: both renders are
+symmetric (torchvision-faithful) while their references pass XLA `'SAME'`. One generator fix closes
+both. And no Imagenette net has a matched **recipe** — every JAX baseline is bs192 where every
+verified trainer is bs32 — so no "verified X% vs baseline Y%" pair in the repo is currently
+comparing like with like.
 
 ---
 

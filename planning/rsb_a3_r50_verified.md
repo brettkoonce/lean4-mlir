@@ -1,5 +1,30 @@
 # rsb_a3_r50_verified.md — RSB-A3 ResNet-50 as the SIXTH verified net
 
+---
+
+## ▶▶ 2026-08-10 — R50 IS ONE STEP FROM THE MAIN LINE (see `planning/mnv4_verified.md` §8)
+
+`Foundation/Resnet50BlocksCertified.lean` already discharges step 1 of 3 — all three bottleneck
+forms have `_has_vjp_at` (including `bblkPProjPC`, the stride-1 projection that only R50 stage-1
+block 0 needs). **Missing: the `BackBatchedGraph` + `_faithful` pair** that makes the rendered
+backward the certified one. `ResNet34BackB0.lean` is the template, and R50's blocks were written to
+mirror R34's. Next session does this alongside MNv4's; the full handoff, tier table and design notes
+(relu ⇒ `_at` form, CI weight, lake-target trap) are in `mnv4_verified.md` §8.
+
+Two other R50 facts measured the same day:
+
+* ⛔ **`r50:padding`** — the render is symmetric at all 7 strided convs + the maxpool while
+  `generated_resnet50_imagenet.py` passes XLA `'SAME'`. The RENDER is paper-faithful (torchvision
+  `Conv2d(3,64,7,stride=2,padding=3)`, `MaxPool2d(3,2,padding=1)`), so the generator is the side to
+  fix — the same one fix closes r34. Tracked in `scripts/convention_baseline.txt`.
+* ✅ **The §3d(b) BN two-worlds split is CLOSED for R50** (commit 289c929): `resnet50_fwd` now
+  renders from `r50FwdChainB`, the traversal the train step differentiates, and is a byte-identical
+  1614-line prefix of `resnet50_adam_train_step`. `resnet50FwdFaithfulV`'s docstring had asserted
+  exactly that invariant while building from the PER-EXAMPLE chain.
+* ⚠ R50-Imagenette still has **no baseline number at all** to compare 89.86% against — there is no
+  10-class `generated_resnet50.py`, only the ImageNet ones.
+
+
 **Scoped 2026-08-03 by measurement, not estimate** — every number below was read off the kit or the
 reference, the §2l/§2m way. **Partly built 2026-08-03/04**; §0a is the state.
 
