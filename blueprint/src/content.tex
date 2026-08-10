@@ -11726,15 +11726,14 @@ steps are not evenly spaced:
 \textbf{What you want} & \textbf{What you need} & \textbf{Track} \\[2pt]
 \hline \\[-6pt]
 Read and check the proofs      & Lean. No GPU.                    & 1 \\
-See the pipeline run at all    & Docker.                          & 2 \\
-MNIST / CIFAR / Imagenette     & Lean + one plugin file.          & 3, 4 \\
-Full ImageNet-1k               & the above, plus Python + tfds.   & 5 \\
+MNIST / CIFAR / Imagenette     & Lean + one plugin file.          & 2, 3 \\
+Full ImageNet-1k               & the above, plus Python + tfds.   & 4 \\
 \end{tabular}
 \end{center}
 
-Everything in Part 1 of this book is the third row. It needs \emph{no Python
+Everything in Part 1 of this book is the middle row. It needs \emph{no Python
 at run time and no compiler}: you download one shared library and run a Lean
-binary. Only the ImageNet tier (Track 5) needs an interpreter, and it needs
+binary. Only the ImageNet tier (Track 4) needs an interpreter, and it needs
 one because of how its data is streamed, not because of how it computes.
 
 \section*{Track 1: Proofs only (no GPU needed)}
@@ -11796,39 +11795,7 @@ and the structural rules are checked over Mathlib alone, the architecture
 theorems are applications of them, and what you must additionally trust is the
 forward functions and nothing else.
 
-\section*{Track 2: No-GPU Docker demo}
-
-The repository ships a \texttt{Dockerfile} that builds a CPU-only MNIST demo
-in a multi-stage image. Once built, the final image is $\sim$300\,MB and
-doesn't require a GPU or Python.
-
-\begin{verbatim}
-git clone https://github.com/brettkoonce/lean4-mlir.git
-cd lean4-mlir
-docker build -t lean4-mlir-demo .
-docker run --rm lean4-mlir-demo
-\end{verbatim}
-
-Output: the same three-layer MLP shown in Chapter~\ref{chap:mlp}
-(784 $\to$ 512 $\to$ 512 $\to$ 10) trains for 12 epochs on real MNIST and
-converges to $\sim$97.9\% test accuracy --- 92.0\% after the first epoch,
-97.2\% by the fifth.
-
-Two things to know about this track. It builds the \textbf{IREE} CPU runtime
-from source, which is what makes the first build take $\sim$10 minutes ---
-and that is the right choice here rather than a leftover: XLA's GPU plugins
-ship prebuilt, but there is no equivalent CPU plugin exposing the PJRT C API,
-and CPU-only portable execution is exactly what IREE is designed for. This
-track is the small-runtime path in miniature.
-
-It trains \texttt{mnist-mlp-verified} --- the same proof-carrying trainer
-Chapter~\ref{chap:mlp} walks through, reading the same
-\texttt{verified\_mlir/mlp\_*.mlir} the theorems are about. On CPU that costs
-about 99~seconds an epoch, so the twelve epochs take $\sim$20 minutes rather
-than the couple of minutes a GPU needs. That is the price of the demo being
-the real thing rather than a stand-in.
-
-\section*{Track 3: Native install (XLA/PJRT)}
+\section*{Track 2: Native install (XLA/PJRT)}
 
 This is the default path and the one every number in this book was measured
 on. There is no compiler to build.
@@ -11899,9 +11866,9 @@ The IREE path additionally needs \texttt{iree-compile} on \texttt{\$PATH}
 \texttt{sm\_86} (Ampere), \texttt{sm\_89} (Ada), \texttt{sm\_90} (Hopper).
 That asymmetry is the point of the section below.
 
-\section*{Track 4: One-command demo tiers}
+\section*{Track 3: One-command demo tiers}
 
-With Track 3 in place, a single command builds and runs a curated,
+With Track 2 in place, a single command builds and runs a curated,
 time-budgeted group of \emph{verified} trainers --- no environment variables
 or trainer list to assemble by hand.
 
@@ -11934,7 +11901,7 @@ bundle these targets, and any one builds on its own:
     \texttt{mobilenetv4-verified-adam}, \texttt{resnet50-verified-adam}
 \end{itemize}
 
-\section*{Track 5: ImageNet-1k runners}
+\section*{Track 4: ImageNet-1k runners}
 
 The scale tier. Six nets train on full ImageNet-1k off the same certified
 renderer as their Imagenette counterparts:
@@ -12031,7 +11998,7 @@ unverified code than the small one does.
 \begin{itemize}
   \item \textbf{\texttt{no lowerer shim could be loaded}} --- neither
     \texttt{ffi/libpjrt\_ffi.so} nor \texttt{ffi/libiree\_ffi.so} was found.
-    Build the PJRT one with the \texttt{gcc} line in Track 3; it needs nothing
+    Build the PJRT one with the \texttt{gcc} line in Track 2; it needs nothing
     but libc.
   \item \textbf{\texttt{\$PJRT\_PLUGIN is set but did not load}}, or no plugin
     found --- the XLA plugin is missing or is built for a different CUDA/ROCm
