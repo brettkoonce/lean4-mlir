@@ -361,6 +361,79 @@ theorem mnv4UibPostStridedBody_faithful (N : Nat) {ic mid oc h w : Nat}
   (mnv4UibPostStridedBody N expand postDW project).faithful x hx e
 
 -- ════════════════════════════════════════════════════════════════
+-- § THE FUSED STAGE (stage 0) — swish, and globally smooth
+-- ════════════════════════════════════════════════════════════════
+
+/-! MNv4's stage 0 is `.fusedMbConv 32 48 4 3 2 1 false`: a **regular k×k conv** (not a depthwise)
+doing expansion and downsampling at once, then a 1×1 project. `32 → mid = 32·4 = 128 → 48`, stride
+2, and ⚠ **swish, not relu** — a deliberate paper deviation that both emitters behind the 84.58%
+share (§1b).
+
+⭐ Swish is smooth, so this whole stage is the **globally-certified** kind: `ok = True`, no
+smoothness side conditions, and the VJPs are global `HasVJP`s rather than `_at`. That makes stage 0
+the cheapest part of MNv4's backward despite being the part §1b records as *missed by the original
+scoping*.
+
+⭐⭐ **The forward stage already existed and was already certified** — `stemB` (EfficientNet's
+strided conv-bn-swish, `EfficientNetRenderPC`) is exactly this shape, with `stemB_has_vjp` and
+`stemB_differentiable` in `EfficientNetChainClose`. What was missing repo-wide is its **backward
+graph**: grep found no `stemBackBatchedGraph`. So EfficientNet's own stem was not graph-certified
+either, and building it here closes that for both nets. -/
+
+/-- Batched **strided conv → bn → swish** backward graph — the `cbsBackBatchedGraph` sibling with
+    `convStridedBackBatched` for `convBackBatched`. Serves MNv4's fused stage AND EfficientNet's
+    stem, neither of which had one. -/
+noncomputable def stemBackBatchedGraph {N ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
+    SHlo (N * (ic * (2 * h) * (2 * w))) :=
+  .convStridedBackBatched (N := N) "%stmW" W b
+    (.bnBatchLABack "%stmG" "%stmX" "stmE" ε γ (batchMap N (flatConvStride2 W b) x)
+      (.swishBack "%stmSw"
+        (bnBatchLA N oc h w ε γ β (batchMap N (flatConvStride2 W b) x)) e))
+
+theorem stemBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
+    den (stemBackBatchedGraph W b ε γ β x e)
+      = (stemB_has_vjp N W b ε hε γ β).backward x (den e) := by
+  rw [stemBackBatchedGraph, convStridedBackBatched_faithful (v := x),
+      bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
+  simp only [stemB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+
+/-- The fused stage's **k×k strided conv → bn → swish** as a `CertLayer`. ⚠ Globally certified
+    (`ok = True`) — swish has no kink, so unlike every UIB stage this one carries no hypothesis. -/
+noncomputable def mnv4FusedConvLayer (N : Nat) {ic mid h w kH kW : Nat}
+    (W : Kernel4 mid ic kH kW) (b : Vec mid) (ε : ℝ) (hε : 0 < ε) (γ β : Vec mid) :
+    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * h * w)) where
+  fwd := stemB N (h := h) (w := w) W b ε γ β
+  ok := fun _ => True
+  diff := fun x _ => (stemB_differentiable N W b ε hε γ β) x
+  vjp := fun x _ => (stemB_has_vjp N W b ε hε γ β).toHasVJPAt x
+  graph := fun x e => stemBackBatchedGraph W b ε γ β x e
+  faithful := fun x _ e => stemBackBatchedGraph_faithful W b ε hε γ β x e
+
+/-- ⭐ **MNv4's fused stage (stage 0)** — the strided k×k conv-bn-swish, then the 1×1 project.
+    No skip: `ic = 32 ≠ 48 = oc` and stride 2, so the stage IS the body. -/
+noncomputable def mnv4FusedStage (N : Nat) {ic mid oc h w : Nat}
+    (fusedConv : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * h * w)))
+    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w))) :
+    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
+  fusedConv.comp project
+
+/-- ⭐ **The fused stage's backward graph denotes its VJP.** ⚠ Note the `ok` here: because both
+    constituents are globally smooth, `(mnv4FusedStage …).ok` is `True ∧ True` — the stage is
+    certified at **every** input, with nothing to discharge. The only such stage in MNv4. -/
+theorem mnv4FusedStage_faithful (N : Nat) {ic mid oc h w : Nat}
+    (fusedConv : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * h * w)))
+    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w)))
+    (x : Vec (N * (ic * (2 * h) * (2 * w))))
+    (hx : (mnv4FusedStage N fusedConv project).ok x) (e : SHlo (N * (oc * h * w))) :
+    den ((mnv4FusedStage N fusedConv project).graph x e)
+      = ((mnv4FusedStage N fusedConv project).vjp x hx).backward (den e) :=
+  (mnv4FusedStage N fusedConv project).faithful x hx e
+
+-- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ THE DISPATCH READS THE TABLE — `mnv4Blocks`, not the caller
 -- ════════════════════════════════════════════════════════════════
 

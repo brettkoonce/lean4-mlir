@@ -1288,8 +1288,24 @@ names. The dispatch is table-driven; the parameter wiring is not. Same residual 
 `r50Trunk_3463` / `r34Trunk_3463`, which pin arities and resolutions but not which block is which.
 
 ### ▶ WHAT MNv4 STILL OWES
-* **The fused stage (stage 0) and the head.** The fused stage is swish, so it is the globally-smooth
-  kind (`ok = True`) and should be cheap; enet's `cbsB` is the stage to reuse.
+* ~~**The fused stage (stage 0)**~~ — ✅ **DONE.** `mnv4FusedStage` = strided k×k conv-bn-**swish**
+  → 1×1 project, no skip (`ic = 32 ≠ 48 = oc`, stride 2). ⭐ Swish is smooth, so this is the
+  **globally-certified** kind — `ok = True`, no side conditions, global `HasVJP`s rather than `_at`.
+  The one such stage in MNv4, and the cheapest part of its backward despite §1b recording it as
+  *missed by the original scoping*.
+
+  ⭐⭐ **The forward stage already existed and was already certified**: `stemB` (EfficientNet's
+  strided conv-bn-swish) is exactly this shape, with `stemB_has_vjp`/`stemB_differentiable` in
+  `EfficientNetChainClose`. What was missing **repo-wide** was its *backward graph* — grep found no
+  `stemBackBatchedGraph`, so **EfficientNet's own stem was not graph-certified either**. Building it
+  once (`stemBackBatchedGraph_faithful`) closes that for both nets. ▶ Worth checking whether other
+  nets have the same shape of hole: a forward stage with a VJP and no backward graph is invisible
+  until something tries to compose it.
+
+  ✅ Negative control: `.selectPos` (relu's mask) in the `.swishBack` slot — the plausible slip
+  here, since every *other* MNv4 stage is relu — is caught.
+
+* **The head.** GAP + dense; not built.
 * ⛔ **None of this is tied to the committed artifact.** Same status as every other net's fold:
   these are certified compositions, not a proof that `mnv4_adam_train_step.mlir` IS this graph.
 
