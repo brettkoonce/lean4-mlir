@@ -2834,7 +2834,14 @@ script cifar do
     the chapters: ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Tiny),
     80-epoch AdamW at 224². **~37 h end-to-end** (9.5 + 5.4 + 6.2 + 13.3 + 2.3,
     single 7900 XTX — per the ViT-chapter results table) — a real time
-    investment, not a quick demo. -/
+    investment, not a quick demo.
+
+    ⚠ **This is FIVE nets, not the seven of `imagenette-xla`.** MobileNetV4 and ResNet-50 are
+    XLA-only: `apps/imagenette/` has `MainMobilenetV4VerifiedAdamXla` and
+    `MainResnet50VerifiedAdamXla` and **no IREE peers**, so there is nothing to put here. That is
+    an omission of drivers, not of nets — both have 80-epoch numbers on their certified bytes
+    (87.36% / 89.86%), both off the XLA path. ▶ **`imagenette-xla` is the official set**; this
+    group is the IREE half of the cross-backend comparison. -/
 script imagenette do
   runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
                 "efficientnet-verified-adam", "convnext-verified-adam",
@@ -2896,11 +2903,23 @@ script «cifar-xla» do
 
     Per-epoch, all measured on this card: mnv2 58.0 s, ConvNeXt 84.5 s, EfficientNet 71.1 s,
     ViT **43.5 s** (marginal, `(T₃−T₁)/2`). ⚠ ViT is the one net here **without** an 80-epoch run
-    on its certified bytes — the other four have one. -/
+    on its certified bytes — the other four have one.
+
+    ⭐⭐ **SEVEN NETS as of 2026-08-10, and this is THE OFFICIAL SET** — `lake run mnist-xla`
+    (3) + `lake run cifar-xla` (6) + this (7) is the whole demo surface; nothing else is a
+    headline runner. MobileNetV4 and ResNet-50 joined here and **only** here, because neither has
+    an IREE driver (see `lake run imagenette`'s note). Their numbers, both 80-epoch AdamW at 224²
+    on the certified bytes: **MNv4-Conv-S 87.36%** (`runs/mnv4_adam_80ep_aug09.log`, ~61 min) and
+    **ResNet-50 89.86%** (`runs/r50_imagenette_adam_80ep.log`).
+
+    ⚠ MNv4's 87.36% is **not** a reproduction of the JAX baseline's 84.58%: the architectures are
+    tied (forward 1.423e-06, gradient 0/147) but the RECIPES are not — the baseline is bs192 /
+    warmup 5 against this tier's bs32 / warmup 3. Same net, different recipe. -/
 script «imagenette-xla» do
   runDemoGroup ["resnet34-verified-adam-xla", "mobilenetv2-verified-adam-xla",
                 "efficientnet-verified-adam-xla", "convnext-verified-adam-xla",
-                "vit-verified-adam-xla"] (xla := true)
+                "vit-verified-adam-xla", "mobilenetv4-verified-adam-xla",
+                "resnet50-verified-adam-xla"] (xla := true)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- `lake run download` — fetch the core datasets the verified trainers + the
