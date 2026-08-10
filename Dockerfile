@@ -72,7 +72,7 @@ RUN cd ffi && \
     rm -f flatcc_verifier.o iree_ffi.o
 
 # ── 6. Build the MLP trainer ──────────────────────────────────────
-RUN lake build mnist-mlp-train-f32
+RUN lake build mnist-mlp-verified
 
 # ── 7. Download MNIST ──────────────────────────────────────────────
 RUN bash download_mnist.sh
@@ -87,7 +87,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # The trainer binary
-COPY --from=builder /build/repo/.lake/build/bin/mnist-mlp-train-f32 /app/bin/
+COPY --from=builder /build/repo/.lake/build/bin/mnist-mlp-verified /app/bin/
+# The verified trainer READS its StableHLO rather than generating it: these two
+# files are `pretty(emit g)` off the certified renderer, so the demo runs the same
+# artifact the proofs are about.
+COPY --from=builder /build/repo/verified_mlir/mlp_train_step.mlir /app/verified_mlir/
+COPY --from=builder /build/repo/verified_mlir/mlp_fwd.mlir /app/verified_mlir/
 # IREE FFI shared library
 COPY --from=builder /build/repo/ffi/libiree_ffi.so /app/ffi/
 # MNIST data
@@ -107,5 +112,8 @@ ENV IREE_BACKEND=llvm-cpu
 ENV IREE_DEVICE=local-task
 ENV PATH="/app/bin:${PATH}"
 
-# First run: generates MLIR → compiles vmfb (~30s) → trains 12 epochs (~5 min)
-CMD ["mnist-mlp-train-f32", "data"]
+# Reads the rendered StableHLO → iree-compile to vmfb (~30 s) → trains 12 epochs.
+# ~99 s/epoch on CPU, so ~20 min total: this is the VERIFIED trainer, which is
+# slower than the old unverified `mnist-mlp-train-f32` demo but is the path the
+# book is actually about.
+CMD ["mnist-mlp-verified", "data"]

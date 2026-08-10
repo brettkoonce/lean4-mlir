@@ -11725,9 +11725,9 @@ steps are not evenly spaced:
 \begin{tabular}{@{}lll@{}}
 \textbf{What you want} & \textbf{What you need} & \textbf{Track} \\[2pt]
 \hline \\[-6pt]
-Read and check the proofs      & Lean. No GPU.                    & 3 \\
-See the pipeline run at all    & Docker.                          & 1 \\
-MNIST / CIFAR / Imagenette     & Lean + one plugin file.          & 2, 4 \\
+Read and check the proofs      & Lean. No GPU.                    & 1 \\
+See the pipeline run at all    & Docker.                          & 2 \\
+MNIST / CIFAR / Imagenette     & Lean + one plugin file.          & 3, 4 \\
 Full ImageNet-1k               & the above, plus Python + tfds.   & 5 \\
 \end{tabular}
 \end{center}
@@ -11737,7 +11737,18 @@ at run time and no compiler}: you download one shared library and run a Lean
 binary. Only the ImageNet tier (Track 5) needs an interpreter, and it needs
 one because of how its data is streamed, not because of how it computes.
 
-\section*{Track 1: No-GPU Docker demo}
+\section*{Track 1: Proofs only (no GPU needed)}
+
+Read, build, and verify the proofs without running any training. Covers
+everything in Part 1 at the proof level, and depends on neither lowerer ---
+the theorems are about the emitted graph, not about anything that executes it.
+
+\begin{verbatim}
+lake exe cache get      # Mathlib oleans, ~30 s (vs ~45 min from source)
+lake build LeanMlir
+\end{verbatim}
+
+\section*{Track 2: No-GPU Docker demo}
 
 The repository ships a \texttt{Dockerfile} that builds a CPU-only MNIST demo
 in a multi-stage image. Once built, the final image is $\sim$300\,MB and
@@ -11752,7 +11763,8 @@ docker run --rm lean4-mlir-demo
 
 Output: the same three-layer MLP shown in Chapter~\ref{chap:mlp}
 (784 $\to$ 512 $\to$ 512 $\to$ 10) trains for 12 epochs on real MNIST and
-converges to $\sim$97.9\% test accuracy.
+converges to $\sim$97.9\% test accuracy --- 92.0\% after the first epoch,
+97.2\% by the fifth.
 
 Two things to know about this track. It builds the \textbf{IREE} CPU runtime
 from source, which is what makes the first build take $\sim$10 minutes ---
@@ -11761,12 +11773,14 @@ ship prebuilt, but there is no equivalent CPU plugin exposing the PJRT C API,
 and CPU-only portable execution is exactly what IREE is designed for. This
 track is the small-runtime path in miniature.
 
-It also currently trains the \emph{unverified} \texttt{mnist-mlp-train-f32}
-rather than the proof-carrying \texttt{mnist-mlp-verified} the rest of the
-book runs, so it demonstrates that the toolchain works end to end, not that
-the proofs do. Prefer Track 2 if what you want to see is the verified path.
+It trains \texttt{mnist-mlp-verified} --- the same proof-carrying trainer
+Chapter~\ref{chap:mlp} walks through, reading the same
+\texttt{verified\_mlir/mlp\_*.mlir} the theorems are about. On CPU that costs
+about 99~seconds an epoch, so the twelve epochs take $\sim$20 minutes rather
+than the couple of minutes a GPU needs. That is the price of the demo being
+the real thing rather than a stand-in.
 
-\section*{Track 2: Native install (XLA/PJRT)}
+\section*{Track 3: Native install (XLA/PJRT)}
 
 This is the default path and the one every number in this book was measured
 on. There is no compiler to build.
@@ -11837,20 +11851,9 @@ The IREE path additionally needs \texttt{iree-compile} on \texttt{\$PATH}
 \texttt{sm\_86} (Ampere), \texttt{sm\_89} (Ada), \texttt{sm\_90} (Hopper).
 That asymmetry is the point of the section below.
 
-\section*{Track 3: Proofs only (no GPU needed)}
-
-Read, build, and verify the proofs without running any training. Covers
-everything in Part 1 at the proof level, and depends on neither lowerer ---
-the theorems are about the emitted graph, not about anything that executes it.
-
-\begin{verbatim}
-lake exe cache get      # Mathlib oleans, ~30 s (vs ~45 min from source)
-lake build LeanMlir
-\end{verbatim}
-
 \section*{Track 4: One-command demo tiers}
 
-With Track 2 in place, a single command builds and runs a curated,
+With Track 3 in place, a single command builds and runs a curated,
 time-budgeted group of \emph{verified} trainers --- no environment variables
 or trainer list to assemble by hand.
 
@@ -11973,16 +11976,20 @@ unverified code than the small one does.
 \begin{itemize}
   \item \textbf{\texttt{no lowerer shim could be loaded}} --- neither
     \texttt{ffi/libpjrt\_ffi.so} nor \texttt{ffi/libiree\_ffi.so} was found.
-    Build the PJRT one with the \texttt{gcc} line in Track 2; it needs nothing
+    Build the PJRT one with the \texttt{gcc} line in Track 3; it needs nothing
     but libc.
   \item \textbf{\texttt{\$PJRT\_PLUGIN is set but did not load}}, or no plugin
     found --- the XLA plugin is missing or is built for a different CUDA/ROCm
     version than the one installed. Installing JAX into the repo's own
     \texttt{.venv} puts it where the shim looks by default.
-  \item \textbf{\texttt{HAL device not found}} on an IREE run --- the IREE
-    runtime was built without the requested backend's HAL driver. A shim built
-    for ROCm will fail under \texttt{IREE\_BACKEND=llvm-cpu} with exactly this
-    error, and vice versa; rebuild the runtime with the driver you want.
+  \item \textbf{\texttt{HAL device not found}} on an IREE run --- IREE has
+    \emph{two} knobs and they must agree: \texttt{IREE\_BACKEND} is the
+    \emph{compile} target and \texttt{IREE\_DEVICE} is the \emph{runtime}
+    device. Setting only \texttt{IREE\_BACKEND=llvm-cpu} compiles for CPU and
+    then looks for a GPU to run it on, which reports as this error naming a
+    \texttt{local} target. For CPU you want both:
+    \texttt{IREE\_BACKEND=llvm-cpu IREE\_DEVICE=local-task}. (Failing that, the
+    runtime genuinely lacks that HAL driver and needs rebuilding.)
   \item \textbf{\texttt{lake build} fails with Mathlib cache errors} --- run
     \texttt{lake exe cache get} to populate the local cache. Without it the
     first build compiles all of Mathlib from source ($\sim$45 min); with it,
