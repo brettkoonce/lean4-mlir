@@ -1033,10 +1033,21 @@ target f32HelpersO pkg : System.FilePath := do
   let traceArgs := #["-fPIC", "-O2"]
   buildO oFile srcJob weakArgs traceArgs
 
+-- Runtime lowerer dispatch: dlopens libpjrt_ffi.so / libiree_ffi.so and resolves
+-- the ten-symbol shim surface at run time rather than from the link line, so one
+-- binary serves both backends via $LEAN_MLIR_LOWERER. See ffi/lowerer.h.
+target lowererO pkg : System.FilePath := do
+  let oFile := pkg.buildDir / "ffi" / "lowerer.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / "lowerer.c"
+  let weakArgs := #["-I", (pkg.dir / "ffi").toString]
+  let traceArgs := #["-fPIC", "-O2"]
+  buildO oFile srcJob weakArgs traceArgs
+
 extern_lib libireeffi pkg := do
   let shimO ← fetch <| pkg.target ``ireeLeanFfiO
   let f32O  ← fetch <| pkg.target ``f32HelpersO
-  buildStaticLib (pkg.staticLibDir / nameToStaticLib "ireeffi") #[shimO, f32O]
+  let lowO  ← fetch <| pkg.target ``lowererO
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "ireeffi") #[shimO, f32O, lowO]
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Phase 3 trainers (Lean → MLIR → IREE → GPU)
@@ -1045,6 +1056,13 @@ extern_lib libireeffi pkg := do
 private def ireeLink : Array String :=
   #["-L", "./ffi", "-liree_ffi", "-ldl", "-Wl,-rpath,./ffi",
     "-Wl,--allow-shlib-undefined"]
+
+/-- The successor to `ireeLink`/`xlaLink`: no shim on the link line at all.
+    `ffi/lowerer.c` dlopens whichever of `libpjrt_ffi.so` / `libiree_ffi.so`
+    `$LEAN_MLIR_LOWERER` selects, so ONE executable serves both backends and a
+    box that has only one of the two shims still starts. Migrating a target is
+    just `ireeLink`/`xlaLink` → `lowererLink`; its `-xla` peer then deletes. -/
+private def lowererLink : Array String := #["-ldl"]
 
 lean_exe «resnet34-train» where
   root := `apps.baselines.MainResnetTrain
@@ -1136,7 +1154,7 @@ lean_lib «LinearVerifiedCommon» where
 
 lean_exe «mnist-linear-verified» where
   root := `apps.mnist.MainMnistLinearVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- ═══════════════════════════════════════════════════════════════════
 -- XLA/PJRT backend (planning/xla_pjrt_ladder.md)

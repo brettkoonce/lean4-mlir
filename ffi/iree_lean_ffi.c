@@ -9,19 +9,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include "iree_ffi.h"
+// The shim surface is resolved by dlopen at run time, not from the link line --
+// see ffi/lowerer.h. Every `iree_ffi_*` / `pjrt_ffi_*` name below is a function
+// pointer of the same name, so all call sites in this file are unchanged.
+#include "lowerer.h"
 
-// ---- Which backend shim is linked? ----
+// ---- Which backend shim is loaded? ----
 // `libiree_ffi.so` and `libpjrt_ffi.so` export the same symbols; only the latter
-// defines `pjrt_ffi_marker`. A weak reference resolves to it when the XLA shim is
-// on the link line and stays NULL otherwise, so the Lean driver can pick the
-// right setup path (iree-compile to .vmfb vs. hand the .mlir to XLA) without an
-// env var that could disagree with the binary. See planning/xla_pjrt_ladder.md.
-extern void pjrt_ffi_marker(void) __attribute__((weak));
+// defines `pjrt_ffi_marker`. It is now NULL-or-not by dlsym rather than by weak
+// linkage, which keeps the property this check was written for: it reports what
+// ACTUALLY loaded, so it still cannot disagree with the running program the way
+// a bare env var could. See planning/xla_pjrt_ladder.md.
 
 LEAN_EXPORT lean_obj_res lean_iree_backend_name(lean_obj_arg world) {
   (void)world;
-  return lean_io_result_mk_ok(lean_mk_string(pjrt_ffi_marker ? "xla" : "iree"));
+  // `lowerer_active_name()` rather than a bare `pjrt_ffi_marker` test: this is
+  // the FIRST thing the driver asks, before any session exists, so it has to be
+  // what triggers the dlopen. It still answers with what actually loaded --
+  // internally it is the same marker check, just no longer able to run early.
+  return lean_io_result_mk_ok(lean_mk_string(lowerer_active_name()));
 }
 
 // ---- Device-resident parameters (handoff §2d.3) ----
@@ -37,12 +43,6 @@ LEAN_EXPORT lean_obj_res lean_iree_backend_name(lean_obj_arg world) {
 // design decision that protects every existing gate"). So the Lean driver
 // always calls the same function with the same arguments; this file decides
 // which transport serves it, and on IREE the question never arises.
-extern int pjrt_ffi_invoke_f32_resident_v2(
-    iree_ffi_session_t*, const char*, int, int, int, int, long long, int,
-    const int32_t*, const int64_t*, const float* const*,
-    const unsigned char*, int, const int64_t*, float* const*) __attribute__((weak));
-extern int pjrt_ffi_resident_read(iree_ffi_session_t*, int64_t, float*) __attribute__((weak));
-
 static int resident_wanted(void) {
   static int t = -1;
   if (t < 0) { const char* e = getenv("PJRT_FFI_RESIDENT"); t = (e && atoi(e)) ? 1 : 0; }
@@ -487,18 +487,6 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32(
 }
 
 // ---- Soft-label train step: y_soft is [batch, n_classes] f32 ----
-extern int iree_ffi_train_step_adam_softlabel(
-    iree_ffi_session_t* sess, const char* fn_name, int batch, int n_classes,
-    int n_params,
-    const int32_t* param_ranks,
-    const int64_t* param_dims_flat,
-    const int64_t* param_sizes,
-    const float* packed_params,
-    int x_rank, const int64_t* x_dims, const float* x,
-    const float* y_soft, float lr, float t,
-    float* packed_params_out, float* loss_out,
-    int n_bn_layers, const int64_t* bn_sizes, float* bn_stats_out);
-
 LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_softlabel(
     b_lean_obj_arg sess_obj,
     b_lean_obj_arg fn_name_obj,
@@ -585,18 +573,6 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_softlabel(
 // ---- Adam train step (f32, per-pixel segmentation labels) ----
 // `y_seg_ba` is an int32 [batch, H, W] per-pixel label tensor.
 // Routes to the codegen produced with `useSeg := true`.
-extern int iree_ffi_train_step_adam_ddpm(
-    iree_ffi_session_t* sess, const char* fn_name, int batch, int outC, int outH, int outW,
-    int n_params,
-    const int32_t* param_ranks,
-    const int64_t* param_dims_flat,
-    const int64_t* param_sizes,
-    const float* packed_params,
-    int x_rank, const int64_t* x_dims, const float* x,
-    const float* y_ddpm, float lr, float t,
-    float* packed_params_out, float* loss_out,
-    int n_bn_layers, const int64_t* bn_sizes, float* bn_stats_out);
-
 LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
     b_lean_obj_arg sess_obj,
     b_lean_obj_arg fn_name_obj,
@@ -679,31 +655,6 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
   rp[total_params] = loss_f;
   return lean_io_result_mk_ok(result);
 }
-
-extern int iree_ffi_train_step_adam_seg(
-    iree_ffi_session_t* sess, const char* fn_name, int batch, int H, int W,
-    int n_params,
-    const int32_t* param_ranks,
-    const int64_t* param_dims_flat,
-    const int64_t* param_sizes,
-    const float* packed_params,
-    int x_rank, const int64_t* x_dims, const float* x,
-    const int32_t* y, float lr, float t,
-    float* packed_params_out, float* loss_out,
-    int n_bn_layers, const int64_t* bn_sizes, float* bn_stats_out);
-
-extern int iree_ffi_train_step_adam_yolov1(
-    iree_ffi_session_t* sess, const char* fn_name, int batch,
-    int gridH, int gridW, int perCell,
-    int n_params,
-    const int32_t* param_ranks,
-    const int64_t* param_dims_flat,
-    const int64_t* param_sizes,
-    const float* packed_params,
-    int x_rank, const int64_t* x_dims, const float* x,
-    const float* y_yolo, const float* m_yolo, float lr, float t,
-    float* packed_params_out, float* loss_out,
-    int n_bn_layers, const int64_t* bn_sizes, float* bn_stats_out);
 
 // YOLOv1 variant. y_yolo is f32 [batch, perCell, gridH, gridW] (target);
 // m_yolo is f32 [batch, gridH, gridW] (per-cell objectness mask). Routes
@@ -1096,11 +1047,6 @@ LEAN_EXPORT lean_obj_res lean_iree_linear_train_step(
 // Shard mask: input 0 is x and the last input is the one-hot, both split across
 // replicas; the parameter tensors in between are replicated. `batch` is the
 // GLOBAL batch — the shim gives each replica batch/replicas rows.
-extern int pjrt_ffi_invoke_f32_dp(
-    iree_ffi_session_t*, const char*, int, int,
-    const int32_t*, const int64_t*, const float* const*,
-    const unsigned char*, int, const int64_t*, float* const*) __attribute__((weak));
-
 // ▶ `_dp2` — the `_dp` entry plus `n_shard_tail`. RENAMED rather than extended in place, per §4's
 // rule for `pjrt_ffi_invoke_f32_resident_v2`: a stale `.so` paired with a new binary would shift
 // every argument, and that is not a link error, it is garbage. A rename makes it a link error.
