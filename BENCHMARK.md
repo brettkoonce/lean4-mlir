@@ -1,7 +1,9 @@
 # Benchmark: ROCm vs CUDA
 
-Head-to-head comparison of the Lean4 -> MLIR -> IREE training pipeline
-on AMD and NVIDIA hardware. Same codebase, same MLIR, different backends.
+Head-to-head comparison of the Lean4 -> MLIR -> GPU training pipeline on AMD
+and NVIDIA hardware. Same codebase, same MLIR, different hardware. The numbers
+below are the IREE lowerer; `lake run benchmark` probes both lowerers on your
+own card, and XLA/PJRT is 2.3-10.5x faster on these nets.
 
 ## Hardware
 

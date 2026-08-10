@@ -7,9 +7,10 @@ from `pdiv` primitives up to the whole-network VJPs (ViT, ResNet, MobileNetV2, C
 
 Lean 4 as a specification language for neural networks. Declare architecture
 in Lean, generate StableHLO MLIR (forward + loss + backward + optimizer all
-in one fused function), compile to GPU via IREE, train end-to-end. No Python
-runtime, no autograd library — the gradients are computed at codegen time
-in Lean.
+in one fused function), hand it to a trusted lowerer, train end-to-end. No
+Python runtime, no autograd library — the gradients are computed at codegen
+time in Lean. Two lowerers consume the same proven graph: XLA/PJRT by default,
+IREE for portability — one binary, chosen at run time.
 
 Companion code for the upcoming book *Verified Deep Learning with Lean 4*
 (follow-up to [Convolutional Neural Networks with Swift for TensorFlow](https://doi.org/10.1007/978-1-4842-6168-2), Apress).
@@ -17,8 +18,9 @@ Companion code for the upcoming book *Verified Deep Learning with Lean 4*
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
 
 **Current version: `v0.6.3`** — the PJRT backend: a second trusted lowerer
-that runs the proven graph through XLA, 10.5x faster than IREE and within
-1.04x of hand-written JAX; all five nets have gated ImageNet trainers at
+that runs the proven graph through XLA — 2.3-10.5x faster than IREE depending
+on how much work the vendor kernels get, and within 1.04x of hand-written JAX
+on ResNet-34; all five nets have gated ImageNet trainers at
 exact reference parameter counts; `Challenge.lean` now imports only Mathlib;
 toolchain on Lean 4.32.2. Full release history in [CHANGELOG.md](CHANGELOG.md).
 
@@ -515,11 +517,26 @@ and individual trainers.
 curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh
 ```
 
-### 2. Install IREE
+### 2. Get a lowerer
 
-You need the IREE runtime built for your GPU (CUDA or ROCm). The FFI shim
-in `ffi/` links against `libiree_runtime_unified.a` from the IREE build tree.
-See [`IREE_BUILD.md`](IREE_BUILD.md) for build instructions.
+**XLA/PJRT (default).** One prebuilt shared library, no compiler to build:
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install --upgrade "jax[cuda12]"      # NVIDIA
+pip install --upgrade "jax[rocm]"        # AMD (AMD's package index)
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+```
+
+Nothing imports JAX and no interpreter runs at training time — the wheel is
+just where XLA's GPU plugin is packaged. The shim finds it under the repo's
+own `.venv`; `$PJRT_PLUGIN` points elsewhere.
+
+**IREE (optional, second lowerer).** Only if you want the portable path or
+want to run the cross-backend check yourself: `pip install iree-base-compiler`
+plus a runtime built for your GPU — the FFI shim links against
+`libiree_runtime_unified.a` from that build tree. See
+[`IREE_BUILD.md`](IREE_BUILD.md). Then `LEAN_MLIR_LOWERER=iree`.
 
 ### 3. Get data
 

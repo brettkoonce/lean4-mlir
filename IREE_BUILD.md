@@ -1,8 +1,17 @@
 # Building `libiree_ffi.so` (and running mnist-mlp out of the box)
 
-The Lake build links every trainer against `ffi/libiree_ffi.so`, but that
-file is **not** checked in — you have to build it once. This page is the
-step-by-step. After it, `lake build mnist-mlp-train` should just work.
+> **This is the OPTIONAL second lowerer.** The default path is XLA/PJRT, which is
+> a `pip install` and no compiler build — see [ROCM.md](ROCM.md) / [CUDA.md](CUDA.md).
+> Build IREE if you want the portable path (targets with no vendor kernels, a
+> runtime ~392x smaller), or to run the cross-backend agreement check yourself.
+> One binary serves both; select with `LEAN_MLIR_LOWERER=iree`.
+
+
+Trainers no longer *link* this file — they `dlopen` whichever shim
+`$LEAN_MLIR_LOWERER` selects (`ffi/lowerer.h`), so a box with only the XLA shim
+runs fine and never notices IREE is missing. But `ffi/libiree_ffi.so` is still
+**not** checked in, so `LEAN_MLIR_LOWERER=iree` needs you to build it once.
+This page is the step-by-step.
 
 If you only want to skim: you need (1) `iree-compile` from pip, (2) the
 IREE runtime built from source as static archives, (3) one `gcc` invocation

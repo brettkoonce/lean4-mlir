@@ -1,18 +1,43 @@
 # CUDA Bootstrap: Running on NVIDIA GPUs (RTX 4060 Ti)
 
-Steps to run the Lean → MLIR → IREE training pipeline on an NVIDIA GPU.
-The MLIR codegen is backend-agnostic — only the IREE compile flag and
-runtime library change. This file is the CUDA mirror of [`ROCM.md`](ROCM.md);
+Steps to run the Lean → MLIR → GPU training pipeline on an NVIDIA GPU. The MLIR
+codegen is backend-agnostic, and so is everything above the FFI shim: the
+only thing that changes between lowerers is which `.so` gets `dlopen`ed. This file is the CUDA mirror of [`ROCM.md`](ROCM.md);
 the consolidated `libiree_ffi.so` recipe lives in [`IREE_BUILD.md`](IREE_BUILD.md).
 
 CUDA is the **default** backend (`IREE_BACKEND=cuda`), so most of this is
 "do nothing special." The reference CUDA box is **ares** (6× RTX 4060 Ti,
 Ada = `sm_89`).
 
+## Fast path: XLA/PJRT (no compiler to build)
+
+**This is the default lowerer and where every quoted number comes from.** It is
+a prebuilt shared library, not a build:
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install --upgrade "jax[cuda12]"      # prebuilt wheel from PyPI
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+lake build mnist-linear-verified
+CUDA_VISIBLE_DEVICES=0 .lake/build/bin/mnist-linear-verified data
+```
+
+Nothing imports JAX and no interpreter runs at training time — the wheel is
+just where XLA's GPU plugin is packaged, and the shim `dlopen`s the `.so`
+through the PJRT C API. No `IREE_BACKEND`, no `IREE_CHIP`, no chip table.
+
+**Everything below is the IREE path**, which is the *second* lowerer: slower
+here (2.3-4.9x on these nets, because XLA dispatches convolutions and matmuls
+to cuDNN/cuBLAS while IREE generates every kernel itself) but portable to
+targets that have no vendor kernels at all, with a runtime ~392x smaller. Same
+proven graph either way; the binary picks between them at run time via
+`$LEAN_MLIR_LOWERER`. Build it if you want the portable path or want to run the
+cross-backend agreement check yourself.
+
 ## Prerequisites
 
 - NVIDIA GPU with a recent driver + CUDA toolkit (`libcudart` on the loader path)
-- Lean 4 toolchain via elan (pinned to **v4.31.0** by `lean-toolchain`;
+- Lean 4 toolchain via elan (pinned by `lean-toolchain` (currently v4.32.2);
   elan auto-installs it on the first `lake` call)
 - Python 3.10+ with pip
 
