@@ -1089,7 +1089,7 @@ def vitImagenetVerified : VerifiedNetSpec where
     same `toSpecs`, so the `#guard`s below pass on a spec that swaps them, and at stride 1 both
     positions are shape-preserving so the types pass too. The only thing that pins the ORDER is
     `scripts/mnv4_forward_tie.py` against the JAX reference on shared weights (1.423e-06), and the
-    only thing that pins the BACKWARD's dispatch is `scripts/mnv4_grad_tie.py`. Same invisibility
+    only thing that pins the BACKWARD's dispatch is `scripts/grad_tie.py --net mnv4`. Same invisibility
     class as R50's stride-on-the-3×3. -/
 def mobilenetv4Verified : VerifiedNetSpec where
   name     := "MobileNetV4-Conv-S"

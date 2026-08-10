@@ -1497,9 +1497,16 @@ lean_exe «mnv4-fwd-smoke» where
 /-- MNv4 AdamW train-step smoke (`planning/mnv4_verified.md` phase 2): arity, entry point, the
     eval forward's stat binding, and — the one no other net has — that the train step's forward
     region is `@mnv4_fwd`'s body VERBATIM. §3d(b)'s two-worlds split cannot hide behind this.
-    Also emits the batch-2 train step `scripts/mnv4_grad_tie.py` runs. -/
+    Also emits the batch-2 train step `scripts/grad_tie.py --net mnv4` runs. -/
 lean_exe «mnv4-train-smoke» where
   root := `tests.TestMnv4TrainSmoke
+
+/-- Emits the **batch-2** ResNet-34 AdamW train step that `scripts/grad_tie.py --net r34` runs, and
+    pins the §3d(b) two-worlds split it lives with: `resnet34_fwd` is per-example BN while the Adam
+    train step is batch BN, so unlike MNv4 there is no forward-prefix property to assert. Sole
+    writer of `.lake/build/resnet34_adam_train_step_b2.mlir`. -/
+lean_exe «r34-train-b2» where
+  root := `tests.TestR34TrainB2
 
 /-- Shared body of the verified MobileNetV4-Conv-S + AdamW **Imagenette** trainer — the
     `Resnet50AdamCommon` twin. Its own `lean_lib` for the same reason those have one: lake needs a

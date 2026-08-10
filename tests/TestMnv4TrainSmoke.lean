@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 /-! # MNv4 AdamW train-step structural smoke (`planning/mnv4_verified.md` phase 2)
 
 The backward peer of `TestMnv4FwdSmoke`. It checks three things and emits a **batch-2** copy of
-the train step for `scripts/mnv4_grad_tie.py` to run — the committed artifact is B=32, which is
+the train step for `scripts/grad_tie.py --net mnv4` to run — the committed artifact is B=32, which is
 more than a CPU gradient check wants to carry.
 
 ⭐⭐ **The load-bearing check here is the FORWARD-PREFIX one**, and it is the one the rest of the
@@ -20,7 +20,7 @@ asserts that as a string, at the same batch. It cannot drift without failing at 
 
 ⚠ What this does NOT check is that the gradient is right. Op counts and arities are blind to a
 backward that masks a swish with `selectPos`, or differentiates an ExtraDW block as an FFN — both
-type-check, both descend. That is `scripts/mnv4_grad_tie.py`'s job, and §3g's record of a
+type-check, both descend. That is `scripts/grad_tie.py --net mnv4`'s job, and §3g's record of a
 derived-by-symmetry backward pad that "type-checked, produced the right shape, and would have
 trained and descended" is why the numeric gate is not optional.
 -/
@@ -112,7 +112,7 @@ def main : IO Unit := do
 
   if bad == 0 then
     IO.println "  ✓ mnv4 train step: arity, entry point, forward-prefix and stat binding all hold"
-    IO.println "    ⚠ NOT a gradient check — run scripts/mnv4_grad_tie.py for that."
+    IO.println "    ⚠ NOT a gradient check — run scripts/grad_tie.py --net mnv4 for that."
   else
     IO.println s!"  ✗ {bad} check(s) failed"
     throw (IO.userError "mnv4 train-step smoke FAILED")

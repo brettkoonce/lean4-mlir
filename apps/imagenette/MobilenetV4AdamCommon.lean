@@ -20,7 +20,7 @@ body here is backend-agnostic.
   (`scripts/mnv4_forward_tie.py`), unpatched — which is what pins the pre/post-DW ORDER, invisible
   to every count and type.
 * ✅ The **gradient** ties `jax.grad` of the reference per parameter
-  (`scripts/mnv4_grad_tie.py --nokink`): 0/147 live parameters over 10× the control.
+  (`scripts/grad_tie.py --net mnv4 --nokink`): 0/147 live parameters over 10× the control.
 * ⛔ **There is no §1a proof-chain tie for this net.** Every op the render composes carries a proven
   `den`, but there is no MNv4 composed-backward theorem the way `MobileNetV2BackB0` /
   `ResNet34BackB0` exist for theirs. So a number off this trainer is **measured** correct, not

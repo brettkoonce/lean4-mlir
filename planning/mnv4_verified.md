@@ -821,7 +821,7 @@ contains the forward module's body *verbatim*, as a string. That is the pairing
 
 ### ⚠⚠ THE GRADIENT TIE — and the two controls that stopped it convicting the wrong thing
 
-`scripts/mnv4_grad_tie.py`. The train step returns updated parameters, not gradients, so the
+`scripts/grad_tie.py --net mnv4`. The train step returns updated parameters, not gradients, so the
 gradient is recovered **exactly**: AdamW's `m' = β₁·m + (1−β₁)·g` at **m = 0** is `0.1·g`, so
 `g = 10·m'`, independent of lr, the bias corrections and the decoupled weight decay. The reference
 side is `jax.grad` of the **label-smoothed** CE — *not* the reference file's own `loss_fn`, which is
