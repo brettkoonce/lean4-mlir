@@ -1405,7 +1405,7 @@ lean_exe «cifar8-verified-momentum» where
 
 /-- XLA/PJRT peer of `cifar8-verified-momentum` — the no-BN Nesterov-momentum arm of the six-way optimizer ablation. Shares its body via
     `apps/cifar/Cifar8MomCommon.lean`, so the two backends cannot drift on epochs,
-    batch size, seed or learning rate (§2h). Completes `lake run cifar-xla` to all six. -/
+    batch size, seed or learning rate (§2h). Completes `lake run cifar` to all six. -/
 lean_exe «cifar8-verified-momentum-xla» where
   root := `apps.cifar.MainCifar8VerifiedMomentumXla
   moreLinkArgs := xlaLink
@@ -1438,7 +1438,7 @@ lean_exe «cifar8-bn-verified-momentum» where
 
 /-- XLA/PJRT peer of `cifar8-bn-verified-momentum` — the BN Nesterov-momentum arm. Shares its body via
     `apps/cifar/Cifar8BnMomCommon.lean`, so the two backends cannot drift on epochs,
-    batch size, seed or learning rate (§2h). Completes `lake run cifar-xla` to all six. -/
+    batch size, seed or learning rate (§2h). Completes `lake run cifar` to all six. -/
 lean_exe «cifar8-bn-verified-momentum-xla» where
   root := `apps.cifar.MainCifar8BnVerifiedMomentumXla
   moreLinkArgs := xlaLink
@@ -1460,7 +1460,7 @@ lean_exe «cifar8-verified-sgdsched» where
 /-- XLA/PJRT peer of `cifar8-verified-sgdsched` — the no-BN plain-SGD arm (SGD through the SAME shuffle/hflip/cosine pipeline, so the
     optimizer is the only free variable). Shares its body via
     `apps/cifar/Cifar8SgdSchedCommon.lean`, so the two backends cannot drift on epochs,
-    batch size, seed or learning rate (§2h). Completes `lake run cifar-xla` to all six. -/
+    batch size, seed or learning rate (§2h). Completes `lake run cifar` to all six. -/
 lean_exe «cifar8-verified-sgdsched-xla» where
   root := `apps.cifar.MainCifar8VerifiedSgdSchedXla
   moreLinkArgs := xlaLink
@@ -1478,7 +1478,7 @@ lean_exe «cifar8-bn-verified-sgdsched» where
 
 /-- XLA/PJRT peer of `cifar8-bn-verified-sgdsched` — the BN plain-SGD arm. Shares its body via
     `apps/cifar/Cifar8BnSgdSchedCommon.lean`, so the two backends cannot drift on epochs,
-    batch size, seed or learning rate (§2h). Completes `lake run cifar-xla` to all six. -/
+    batch size, seed or learning rate (§2h). Completes `lake run cifar` to all six. -/
 lean_exe «cifar8-bn-verified-sgdsched-xla» where
   root := `apps.cifar.MainCifar8BnVerifiedSgdSchedXla
   moreLinkArgs := xlaLink
@@ -2819,39 +2819,46 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
     let _ ← rp.wait
   return 0
 
-/-- `lake run mnist` — the verified-MNIST demos (linear/MLP/CNN), ~30 min. -/
-script mnist do
+/-- `lake run mnist-iree` — the verified-MNIST demos (linear/MLP/CNN), ~30 min. -/
+script «mnist-iree» do
   runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified", "mnist-cnn-verified"]
 
-/-- `lake run cifar` — the ch.4 verified cifar8 variants: SGD/momentum/adam ×
+/-- `lake run cifar-iree` — the ch.4 verified cifar8 variants: SGD/momentum/adam ×
     bn/no-bn, ~1 hr. -/
-script cifar do
+script «cifar-iree» do
   runDemoGroup ["cifar8-verified", "cifar8-bn-verified",
                 "cifar8-verified-momentum", "cifar8-bn-verified-momentum",
                 "cifar8-verified-adam", "cifar8-bn-verified-adam"]
 
-/-- `lake run imagenette` — the Part-I verified Imagenette trainers (the rest of
+/-- `lake run imagenette-iree` — the Part-I verified Imagenette trainers (the rest of
     the chapters: ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Tiny),
     80-epoch AdamW at 224². **~37 h end-to-end** (9.5 + 5.4 + 6.2 + 13.3 + 2.3,
     single 7900 XTX — per the ViT-chapter results table) — a real time
     investment, not a quick demo.
 
-    ⚠ **This is FIVE nets, not the seven of `imagenette-xla`.** MobileNetV4 and ResNet-50 are
+    ⚠ **This is FIVE nets, not the seven of `imagenette`.** MobileNetV4 and ResNet-50 are
     XLA-only: `apps/imagenette/` has `MainMobilenetV4VerifiedAdamXla` and
     `MainResnet50VerifiedAdamXla` and **no IREE peers**, so there is nothing to put here. That is
     an omission of drivers, not of nets — both have 80-epoch numbers on their certified bytes
-    (87.36% / 89.86%), both off the XLA path. ▶ **`imagenette-xla` is the official set**; this
+    (87.36% / 89.86%), both off the XLA path. ▶ **`imagenette` is the official set**; this
     group is the IREE half of the cross-backend comparison. -/
-script imagenette do
+script «imagenette-iree» do
   runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
                 "efficientnet-verified-adam", "convnext-verified-adam",
                 "vit-verified-adam"]
 
 -- ═══════════════════════════════════════════════════════════════════════
--- The XLA/PJRT peers of the three groups above. Same nets, same certified
--- artifacts, same schedules and seeds — the ONLY difference is which trusted
--- lowerer consumes the emitted StableHLO, which is the whole point of the
--- second backend (planning/xla_pjrt_handoff.md §1).
+-- ⭐⭐ THE DEFAULT DEMO GROUPS — `lake run {mnist,cifar,imagenette}`.
+--
+-- ⚠ **RENAMED 2026-08-10, and the swap is the confusing kind: these three USED to be
+-- `*-xla`, and the unsuffixed names used to mean the IREE group above.** So a `lake run
+-- imagenette` in any doc, log or shell history older than that date ran the IREE five, not
+-- these. XLA is the default because it is where every quoted number comes from, it is ~4.6×
+-- IREE on EfficientNet, and it is the only path with MobileNetV4 and ResNet-50 at all.
+--
+-- Same nets, same certified artifacts, same schedules and seeds as the `-iree` group — the
+-- ONLY difference is which trusted lowerer consumes the emitted StableHLO, which is the whole
+-- point of the second backend (planning/xla_pjrt_handoff.md §1).
 --
 -- Why you'd reach for these: XLA is **4.6× IREE** on EfficientNet — 80 epochs in
 -- 1 h 35 m against 7 h 50 m (§2e-quinquies) — and multi-GPU is reachable ONLY
@@ -2862,24 +2869,24 @@ script imagenette do
 -- ⚠ Two coverage gaps, both named rather than papered over — see each docstring.
 -- ═══════════════════════════════════════════════════════════════════════
 
-/-- `lake run mnist-xla` — the XLA peers of `lake run mnist`, and an EXACT mirror:
+/-- `lake run mnist` — the XLA peers of `lake run mnist-iree`, and an EXACT mirror:
     all three verified MNIST demos (linear/MLP/CNN) have a `-xla` target. -/
-script «mnist-xla» do
+script mnist do
   runDemoGroup ["mnist-linear-verified-xla", "mnist-mlp-verified-xla",
                 "mnist-cnn-verified-xla"] (xla := true)
 
-/-- `lake run cifar-xla` — the XLA peers of `lake run cifar`, and an EXACT mirror since
+/-- `lake run cifar` — the XLA peers of `lake run cifar-iree`, and an EXACT mirror since
     2026-07-30: all six of the Chapter-4 optimizer ablation (SGD / Nesterov-momentum / AdamW
     × BN / no-BN) now have `-xla` targets. Each shares one body with its IREE peer
     (`apps/cifar/Cifar8*Common.lean`), so the two backends cannot drift on epochs, batch size,
     seed or learning rate — which is what makes a cross-backend difference attributable to the
-    lowerer rather than to the run. Same order as `lake run cifar`. -/
-script «cifar-xla» do
+    lowerer rather than to the run. Same order as `lake run cifar-iree`. -/
+script cifar do
   runDemoGroup ["cifar8-verified-sgdsched-xla", "cifar8-bn-verified-sgdsched-xla",
                 "cifar8-verified-momentum-xla", "cifar8-bn-verified-momentum-xla",
                 "cifar8-verified-adam-xla", "cifar8-bn-verified-adam-xla"] (xla := true)
 
-/-- `lake run imagenette-xla` — the XLA peers of `lake run imagenette`, and **all five as of
+/-- `lake run imagenette` — the XLA peers of `lake run imagenette-iree`, and **all five as of
     2026-07-30**.
 
     ViT was excluded here from 2026-07-28 to 2026-07-30 by measurement, not omission: the graph
@@ -2905,17 +2912,17 @@ script «cifar-xla» do
     ViT **43.5 s** (marginal, `(T₃−T₁)/2`). ⚠ ViT is the one net here **without** an 80-epoch run
     on its certified bytes — the other four have one.
 
-    ⭐⭐ **SEVEN NETS as of 2026-08-10, and this is THE OFFICIAL SET** — `lake run mnist-xla`
-    (3) + `lake run cifar-xla` (6) + this (7) is the whole demo surface; nothing else is a
+    ⭐⭐ **SEVEN NETS as of 2026-08-10, and this is THE OFFICIAL SET** — `lake run mnist`
+    (3) + `lake run cifar` (6) + this (7) is the whole demo surface; nothing else is a
     headline runner. MobileNetV4 and ResNet-50 joined here and **only** here, because neither has
-    an IREE driver (see `lake run imagenette`'s note). Their numbers, both 80-epoch AdamW at 224²
+    an IREE driver (see `lake run imagenette-iree`'s note). Their numbers, both 80-epoch AdamW at 224²
     on the certified bytes: **MNv4-Conv-S 87.36%** (`runs/mnv4_adam_80ep_aug09.log`, ~61 min) and
     **ResNet-50 89.86%** (`runs/r50_imagenette_adam_80ep.log`).
 
     ⚠ MNv4's 87.36% is **not** a reproduction of the JAX baseline's 84.58%: the architectures are
     tied (forward 1.423e-06, gradient 0/147) but the RECIPES are not — the baseline is bs192 /
     warmup 5 against this tier's bs32 / warmup 3. Same net, different recipe. -/
-script «imagenette-xla» do
+script imagenette do
   runDemoGroup ["resnet34-verified-adam-xla", "mobilenetv2-verified-adam-xla",
                 "efficientnet-verified-adam-xla", "convnext-verified-adam-xla",
                 "vit-verified-adam-xla", "mobilenetv4-verified-adam-xla",
@@ -2931,7 +2938,7 @@ script «imagenette-xla» do
 
 /-- The core datasets: `(label, download script, sentinel that exists once it's
     downloaded)`. MNIST + CIFAR feed the benchmark's dense/conv probes; Imagenette
-    feeds the ViT/attn probe and the `lake run imagenette` tier. -/
+    feeds the ViT/attn probe and the `lake run imagenette-iree` tier. -/
 def coreDatasets : List (String × String × String) :=
   [ ("MNIST",      "download_mnist.sh",      "data/train-images-idx3-ubyte"),
     ("CIFAR-10",   "download_cifar.sh",      "data/cifar-10/data_batch_1.bin"),
@@ -3590,8 +3597,8 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
                       else s!"Part-1 training ({covered} of {benchTable.length} ch.)"
     IO.println s!"  {padR totalLabel 30}{padR (fmtDur refTotal) 18}{fmtDur yourLoTotal}"
     IO.println "\n  `lake run` tiers on your gpu (training time):"
-    for (tier, label) in [("mnist", "lake run mnist"), ("cifar", "lake run cifar"),
-                          ("imagenette", "lake run imagenette")] do
+    for (tier, label) in [("mnist", "lake run mnist-iree"), ("cifar", "lake run cifar-iree"),
+                          ("imagenette", "lake run imagenette-iree")] do
       let items := benchTable.filter (·.tier == tier)
       let refS := (items.filterMap (·.refFor ref.col)).foldl (· + ·) 0
       let rs := items.filterMap (fun it => yourSecRange ref it dMs cMs aMs)

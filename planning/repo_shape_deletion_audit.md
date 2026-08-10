@@ -18,7 +18,7 @@ the numbers are worth having on paper before the next year of accretion.*
 | …of which data | 2.3 GB |
 | **git-tracked content** | **47 MB / 964 files** |
 | Lean source | 392 files / 9.6 MB |
-| import cone of `lake run mnist+cifar+imagenette` (14 exes) | 40 modules / 1.8 MB |
+| import cone of `lake run mnist-iree+cifar-iree+imagenette-iree` (14 exes) | 40 modules / 1.8 MB |
 | import cone of *every* book-referenced demo (~50 exes) | 146 modules / 2.5 MB |
 | `Proofs/` IR+render layer (in the demo cone) | 18 files / 1.45 MB / 24.6k lines |
 | `Proofs/` math certificates (outside every demo cone) | **155 files / 5.6 MB / 86.8k lines** |

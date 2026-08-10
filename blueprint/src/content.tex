@@ -11730,10 +11730,11 @@ tracks are included:
     proofs without running any neural-network training. Covers
     everything in Part 1 at the proof level.
   \item \textbf{One-command demo tiers.} With the native setup
-    (Track 2) in place, a single \texttt{lake run mnist},
-    \texttt{cifar}, or \texttt{imagenette} builds and runs a curated,
-    time-budgeted group of \emph{verified} trainers --- no env vars or
-    trainer list to assemble by hand.
+    (Track 2) in place, a single \texttt{lake run mnist-iree},
+    \texttt{cifar-iree}, or \texttt{imagenette-iree} builds and runs a
+    curated, time-budgeted group of \emph{verified} trainers --- no env
+    vars or trainer list to assemble by hand. (Drop the \texttt{-iree}
+    suffix for the XLA/PJRT peers, which are the default tiers.)
 \end{enumerate}
 
 \section*{Track 1: No-GPU Docker demo}
@@ -11794,12 +11795,12 @@ lake build resnet34-verified-adam
     The targets are the verified trainers the three demo tiers
     (Track 4) bundle --- build any one on its own:
     \begin{itemize}
-      \item \texttt{lake run mnist}: \texttt{mnist-linear-verified},
+      \item \texttt{lake run mnist-iree}: \texttt{mnist-linear-verified},
         \texttt{mnist-mlp-verified}, \texttt{mnist-cnn-verified}
-      \item \texttt{lake run cifar}: \texttt{cifar8-verified} and
+      \item \texttt{lake run cifar-iree}: \texttt{cifar8-verified} and
         \texttt{cifar8-bn-verified}, each in plain-SGD /
         \texttt{-momentum} / \texttt{-adam} (six in all)
-      \item \texttt{lake run imagenette}: \texttt{resnet34-verified-adam},
+      \item \texttt{lake run imagenette-iree}: \texttt{resnet34-verified-adam},
         \texttt{mobilenetv2-verified-adam},
         \texttt{efficientnet-verified-adam},
         \texttt{convnext-verified-adam}, \texttt{vit-verified-adam}
@@ -11925,9 +11926,9 @@ and runs a curated, time-budgeted group of \emph{verified} trainers
 back to back:
 
 \begin{verbatim}
-lake run mnist        # verified MNIST: linear, MLP, CNN            (~30 min)
-lake run cifar        # ch.5 cifar8: SGD/momentum/Adam x bn/no-bn   (~1 hr)
-lake run imagenette   # the 5 Part-I nets at 224^2, 80-epoch AdamW  (~37 h)
+lake run mnist-iree        # verified MNIST: linear, MLP, CNN            (~30 min)
+lake run cifar-iree        # ch.5 cifar8: SGD/momentum/Adam x bn/no-bn   (~1 hr)
+lake run imagenette-iree   # the 5 Part-I nets at 224^2, 80-epoch AdamW  (~37 h)
 \end{verbatim}
 
 Each script streams every trainer live and tees it to
@@ -11945,12 +11946,12 @@ top of the Track 2 install:
     without activating the venv first --- the usual one-click footgun.
 \end{itemize}
 
-The tiers escalate by time budget. \texttt{lake run mnist}
+The tiers escalate by time budget. \texttt{lake run mnist-iree}
 ($\sim$30 min) is the quickest end-to-end confirmation that the GPU
-path works; \texttt{lake run cifar} ($\sim$1 hr) is the
+path works; \texttt{lake run cifar-iree} ($\sim$1 hr) is the
 Chapter~\ref{chap:bn} optimizer ablation in full --- the six runs
 (SGD/momentum/AdamW $\times$ BN/no-BN) behind that chapter's accuracy
-curves and table; and \texttt{lake run imagenette} ($\sim$37 h on a
+curves and table; and \texttt{lake run imagenette-iree} ($\sim$37 h on a
 single 7900 XTX) trains all five Part-I architectures
 (ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Ti) at full
 $224\times224$ --- a deliberate investment, not a quick look. Anything
@@ -11969,7 +11970,7 @@ $ lake run benchmark
   6  ResNet-34            9.5h
   10 ViT                  7.8h
   Full Part-1 training   42.8h
-  lake run mnist 5m | cifar 34m | imagenette 42.2h
+  lake run mnist-iree 5m | cifar-iree 34m | imagenette-iree 42.2h
 \end{verbatim}
 
 \noindent Backend auto-detects (CUDA or ROCm), so the numbers come out scaled

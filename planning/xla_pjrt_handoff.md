@@ -61,7 +61,7 @@ Branch **`xla-pjrt-backend`**, on top of `cfbdccd`. Three threads, in order:
 | `f107c47` | **cifar8 BN `{adam,mom,sgd}` certified and swapped** — `opt` threaded, one `bnSig` source, 4 controls; the `.epoch`/`head` trap solved (§4). **5 of 13** |
 | `eab3ecf` | **the 8 `cifar8w*` certified** — `cifar8` at `d1 := 512`, not a second net; a Chapter-5 table, not an ablation. **§2i CLOSED, 13 of 13** |
 | `cf07259` | `lake run {mnist,cifar,imagenette}-xla` — the XLA demo groups, with a shim-build and plugin guard |
-| `eb3632c` | the four missing cifar `-xla` peers — **`lake run cifar-xla` is all six**; six stale writer docstrings corrected |
+| `eb3632c` | the four missing cifar `-xla` peers — **`lake run cifar` is all six**; six stale writer docstrings corrected |
 | — | *↓ the v1.3/v1.4 recipe threads, 2026-08-02 (§0.4)* |
 | `969c21c` | **stochastic depth's two INTERIOR gates** (`droppath-tie`) — and the endpoint gates were blind to PLACEMENT |
 | `bfa4ea2` | **mixup + cutmix, the producer half** (`scripts/mixup_gate.py`) — and the second definition's cost made precise |
@@ -1931,7 +1931,7 @@ noise*, and `scripts/det_shim.sh` exists now because of it.
 **▶ `VerifiedNet.train` IS CONVERTED TOO** — and it is where the gains are largest, because that
 loop reads *nothing* out of a step, so every parameter is resident and the round trip goes to a
 literal zero: **MNIST CNN 6.49× · MNIST MLP 4.39× · cifar8-bn SGD 2.03× · MNIST linear 1.21×**. `lake run
-mnist-xla` is the headline, and `trainLinear` came over with it, so **every training loop behind an
+mnist` is the headline, and `trainLinear` came over with it, so **every training loop behind an
 `-xla` target is converted**; `scripts/residency_gate_all.sh` gates all seven in one command. A second generalisation broke on the way: **§2d.3's Finding 2 ("the system is
 chaotic, bit-identity or nothing") is R34/AdamW-specific** — MLP+SGD *absorbs* a 1-ULP fault, which
 left that gate with no working control until `PJRT_FFI_FAULT=2` (drop a step's retained params) was
@@ -2019,8 +2019,8 @@ open since 2026-07-27, is finished.
 
 **Also landed 2026-07-30: `lake run {mnist,cifar,imagenette}-xla`** (`cf07259`, `eb3632c`). mnist and
 cifar are EXACT mirrors of their IREE groups — the four missing cifar peers were built with the §2h
-recipe, so `lake run cifar-xla` now runs the whole six-way Chapter-5 optimizer ablation on the
-second lowerer. imagenette-xla is 4 of 5; ViT is excluded by measurement, not omission.
+recipe, so `lake run cifar` now runs the whole six-way Chapter-5 optimizer ablation on the
+second lowerer. imagenette is 4 of 5; ViT is excluded by measurement, not omission.
 
 **▶ `lake run benchmark-xla` IS DONE — 2026-07-30, §2j below. UNCOMMITTED.** Both commands now
 label their lowerer, each scales from its own measured reference column, and the mismatched-baseline
@@ -2043,7 +2043,7 @@ documented im2col failure, found `MIOPEN_DEBUG_CONV_GEMM=0` made it run, and rep
 fix — it is **not one**. Measured properly afterwards: the graph runs *without* the variable (11
 consecutive runs, including the byte-identical invocation that had just failed), and setting it
 **costs ~7%** (attn probe 136 vs 128 ms/step; marginal epoch 46.5 s vs 43.5 s). It had already been
-wired into `benchmark-xla` and `imagenette-xla` and was **backed out**. **The real finding is that
+wired into `benchmark-xla` and `imagenette` and was **backed out**. **The real finding is that
 the failure is NON-DETERMINISTIC**: it fired once, on the session's first ViT/XLA execution, and
 never again; the MIOpen on-disk cache shows no writes in that window, so cache population does not
 explain it, and the mechanism is unidentified. Keep the variable as a documented escape hatch only.
@@ -2286,14 +2286,14 @@ what the trainer runs — see §2b.
 
 ```bash
 # ── the one-command entry points (added 2026-07-30): the XLA peers of the three demo groups.
-# mnist-xla and cifar-xla are EXACT mirrors of their IREE groups; imagenette-xla is 4 of 5.
+# mnist and cifar are EXACT mirrors of their IREE groups; imagenette is 4 of 5.
 # Each builds `ffi/libpjrt_ffi.so` if it is missing or older than `ffi/pjrt_ffi.c` (it is NOT a
 # lake target, just the gcc line below), reports whether $PJRT_PLUGIN resolves, then builds and
 # runs each trainer in sequence via run.sh. IREE_BACKEND is irrelevant on these — the backend is
 # whichever .so the target linked.
-lake run mnist-xla        # linear / MLP / CNN — an EXACT mirror of `lake run mnist`
-lake run cifar-xla        # all 6 of `lake run cifar` (SGD/momentum/AdamW × BN/no-BN)
-lake run imagenette-xla   # ⚠ 4 of 5: ViT is excluded BY MEASUREMENT (MIOpen, §0b/§2h)
+lake run mnist        # linear / MLP / CNN — an EXACT mirror of `lake run mnist-iree`
+lake run cifar        # all 6 of `lake run cifar-iree` (SGD/momentum/AdamW × BN/no-BN)
+lake run imagenette   # ⚠ 4 of 5: ViT is excluded BY MEASUREMENT (MIOpen, §0b/§2h)
 
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build resnet34-verified-adam-xla
@@ -4291,7 +4291,7 @@ XLA path gets two guards the IREE path does not need: `ffi/libpjrt_ffi.so` is **
 and the PJRT plugin is `dlopen`'d at run time from `$PJRT_PLUGIN` or a path compiled into the shim,
 so a missing one is reported up front instead of surfacing as a `dlopen` failure at the first step.
 
-**`cifar-xla` is a complete mirror**: the four missing peers (`cifar8{,-bn}-verified-{momentum,
+**`cifar` is a complete mirror**: the four missing peers (`cifar8{,-bn}-verified-{momentum,
 sgdsched}`) were built with the §2h recipe — a shared `apps/cifar/Cifar8*Common.lean` per arm (plus
 a `lean_lib` each, which lake needs to build a module for two roots), the existing main reduced to
 one line, a new `…Xla` root, one lakefile entry. Config and hyperparameters moved **verbatim**
@@ -4391,7 +4391,7 @@ results and the corrections it produced.
 | 3. the script | ✅ `runBenchmark (ref : BenchRef)`, one body, two `script`s. Reuses `ensurePjrtShim`/`notePjrtPlugin`; needs no venv |
 | 4. label the output | ✅ both print `lowerer:` in the header and `ref(IREE)` / `ref(XLA/PJRT)` as the column head, plus a footer forbidding cross-table comparison. `lake run benchmark` gained the word IREE, as §2j asked |
 | 5. *(not scoped)* the attn probe + ch.10 | ✅ **`benchmark-xla` is 3 probes / 9 chapters**, because ViT turned out to run — see this section's tail. `probeAttnRefMsXla := 128` (median of 8), ch.10 `refSecXla := 3480` (marginal epoch 43.5 s × 80) |
-| 6. *(not scoped)* `imagenette-xla` | ✅ **now all five nets**, ViT included |
+| 6. *(not scoped)* `imagenette` | ✅ **now all five nets**, ViT included |
 
 **The trap is now structural, not documentary.** `BenchRef` bundles one lowerer's probe *binaries*
 with its *anchors*, and `yourSecOf` takes a `BenchRef` — so there is no expression that divides an
@@ -4468,7 +4468,7 @@ gate where ConvNeXt's 9.7e-5 landed *under* one, so the rule holds but the margi
 
 **⚠ THE WORKAROUND WAS A FALSE LEAD — the honest account.** The documented im2col failure fired on
 the session's **first** ViT/XLA execution. `MIOPEN_DEBUG_CONV_GEMM=0` then made it run, and that was
-recorded — and wired into `benchmark-xla` and `imagenette-xla` — as the fix. It is not:
+recorded — and wired into `benchmark-xla` and `imagenette` — as the fix. It is not:
 
 * the graph runs **without** the variable, 11 runs including the byte-identical invocation that had
   just failed;
@@ -6800,7 +6800,7 @@ round trip goes to a literal **0.0 ms**: no parameter buffer moves in either dir
 This loop was explicitly OUT of §2d.3's scope — *"`train`/`trainLinear` stay on the copying path,
 they are the demo loops, not the throughput ones"*. That was written before §2d.3's own later
 finding that the demo nets are the most transfer-bound in the set, and the finding wins: **the two
-biggest gains in this entire work item are `lake run mnist-xla`'s two nets.** §2d.3 predicted "~4×"
+biggest gains in this entire work item are `lake run mnist`'s two nets.** §2d.3 predicted "~4×"
 for the MLP and got **4.39×**. It is an *interactivity* item, exactly as it said.
 
 **`trainLinear` came over too** — a different FFI entry point (`linearTrainStepV`, `(x, W0, b0,
@@ -6851,8 +6851,8 @@ make a stale set indistinguishable from a correct one. All three demo nets PASS 
 values each.
 
 **▶ AND IT BUYS NOTHING ON THE CIFAR GROUP — measured, and worth knowing as a BOUND.**
-All six `cifar-xla` variants pass the eval gate (3 epochs, 3 distinct values each), so hold mode
-engages there; it just does not pay. `lake run cifar-xla` is **335 s train-only residency → 333 s
+All six `cifar` variants pass the eval gate (3 epochs, 3 distinct values each), so hold mode
+engages there; it just does not pay. `lake run cifar` is **335 s train-only residency → 333 s
 with eval held**, i.e. nothing outside noise, against 937 s copying. The reason is the one the
 demo table shows from the other side: **eval only benefits where eval is TRANSPORT-bound.**
 cifar8's eval is a conv forward over 10,000 images against ~38 small parameter tensors, so it is
@@ -6872,7 +6872,7 @@ match exactly. Same discipline as the cifar group above; the gate is the det-shi
 | ~2.2× at R34 bs32 | **2.03×** ✅ |
 | 1.15× at bs256 | **1.09×** ✅ |
 | 1.9× on EfficientNet | **1.62×** — right direction, under |
-| *"the SMALL demo nets benefit MOST"* | ✅ **strongly** — the two biggest gains in the set are `mnist-xla`'s, at **6.49×** (CNN) and **4.39×** (MLP, predicted "~4×") |
+| *"the SMALL demo nets benefit MOST"* | ✅ **strongly** — the two biggest gains in the set are `mnist`'s, at **6.49×** (CNN) and **4.39×** (MLP, predicted "~4×") |
 | *"DP efficiency barely moves… the ratio is nearly unchanged"* | ⛔ **true at 2 replicas (1.48 → 1.52×), FALSE at 4 (1.52 → 2.16×)** |
 
 The refutation has a clean cause and §2d.3a had already written it down one section up: the
@@ -7013,7 +7013,7 @@ one).
   naively** — §2d.3's own analysis below still stands, and residency being opt-in is what keeps it
   correct today.
 * ~~**No long run on the resident path**~~ — partially closed 2026-08-01 by running the WHOLE
-  `lake run cifar-xla` group both ways: six nets × 40 epochs, **937 s → 335 s = 2.80×**
+  `lake run cifar` group both ways: six nets × 40 epochs, **937 s → 335 s = 2.80×**
   (~15.6 min → ~5.6 min), `rc=0` on all twelve trainers.
 
   ⚠ **Final accuracies are NOT identical between the two passes, and that is the expected result,
@@ -7269,7 +7269,7 @@ over.** Two reasons, in order:
 **▶ And the surprise worth carrying: the SMALL demo nets benefit MOST.** The MNIST MLP is **75%**
 transfer against R34's 55%, so residency is worth ~4× there and ~2.2× on R34. That inverts the
 premise this whole section was written on. Device-resident parameters is not primarily an
-Imagenette-throughput item — it is a **`lake run mnist-xla` / `cifar-xla` interactivity** item, and
+Imagenette-throughput item — it is a **`lake run mnist` / `cifar` interactivity** item, and
 those are the demo groups a reader actually sits and watches. Weigh that when deciding the 3-4
 sessions: the case is stronger than §2d.3 assumed *and* it points somewhere else.
 

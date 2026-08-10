@@ -50,9 +50,15 @@ lake run mnist          # build + train the verified MNIST nets (linear / MLP / 
 ```
 
 Then scale up: `lake run cifar` (the Chapter-4 BatchNorm × optimizer ablation)
-and `lake run imagenette` (the five Part-I nets at 224²). Not sure how long
+and `lake run imagenette` (the seven Part-I nets at 224²). Not sure how long
 those take on your card? `lake run benchmark` probes your GPU and prints a
 per-chapter time estimate first.
+
+> **The three `lake run` tiers are XLA/PJRT**, which is where every quoted number
+> comes from. Their IREE peers are `lake run {mnist,cifar,imagenette}-iree` — same
+> nets, same certified artifacts, same schedules and seeds, different lowerer.
+> ⚠ These names were **swapped on 2026-08-10**: the unsuffixed commands used to
+> mean the IREE group, so older docs and shell history run something else now.
 
 **Just the proofs (no IREE, no GPU):**
 
@@ -529,11 +535,16 @@ one command (backend auto-detected — `cuda` if `nvidia-smi` is present, else
 `rocm`):
 
 ```bash
-lake run mnist        # verified MNIST: linear / MLP / CNN          (~30 min)
-lake run cifar        # ch.5 cifar8: SGD/momentum/Adam × bn/no-bn   (~1 hr)
-lake run imagenette   # the 5 Part-I nets at 224², 80-epoch AdamW   (~37 h)
+lake run mnist        # verified MNIST: linear / MLP / CNN            (~30 min)
+lake run cifar        # ch.5 cifar8: SGD/momentum/Adam × bn/no-bn     (~1 hr)
+lake run imagenette   # the 7 Part-I nets at 224², 80-epoch AdamW
 lake run benchmark    # probe this GPU, print per-chapter time estimates
 ```
+
+Those three are the **official demo set** — nothing else is a headline runner.
+They run on XLA/PJRT; append `-iree` to any of them for the IREE peer (same nets
+and artifacts, different lowerer). ⚠ `lake run imagenette-iree` is **five** nets,
+not seven: MobileNetV4 and ResNet-50 have no IREE driver.
 
 To build and run a single trainer instead, the targets are the verified nets
 those tiers bundle — e.g. `mnist-mlp-verified`, `cifar8-bn-verified`,
