@@ -1113,8 +1113,73 @@ the main line. **Measured 2026-08-10, not recalled:**
 | enet | ✓ | ✓ `EfficientNetBackB0` + CertifiedTie | ✓ 1.13e-06 | — |
 | convnext | ✓ | ✓ `ConvNeXtBackB0` + CertifiedTie | — | — |
 | vit | ✓ | ✓ `ViTBackB0` + `ViTMhsaBackCertifiedTie` | — | — |
-| **r50** | ✓ `Foundation/Resnet50BlocksCertified.lean` | ⛔ **missing** | ⛔ no 10-class reference exists | ⛔ |
+| **r50** | ✓ `Foundation/Resnet50BlocksCertified.lean` | ✅ **DONE 2026-08-10 — `ResNet50BackB0`, all 3 forms** | ⛔ no 10-class reference exists | ⛔ |
 | **mnv4** | ⛔ **missing** | ⛔ **missing** | ✅ 1.423e-06 | ✅ 0/147 |
+
+## 8a. ✅ R50's WHOLE-NET COMPOSED BACKWARD IS BUILT (2026-08-10)
+
+`LeanMlir/Proofs/Foundation/ResNet50BackB0.lean` — five theorems, **all 3-axiom clean
+`[propext, Classical.choice, Quot.sound]`, zero `sorry`**, registered in the `Certs` lib:
+
+| theorem | what it closes |
+|---|---|
+| `r50BodyBackBatchedGraph_faithful` | the stride-1 bottleneck body `projB ∘ cbReluB ∘ cbReluB` |
+| `r50BottleneckBackBatchedGraph_faithful` | **CAPSTONE 1** — identity block (12 of R50's 16) |
+| `r50ProjBlockBackBatchedGraph_faithful` | **CAPSTONE 2** — stride-1 projection, ⭐ the form with **no R34 analogue** |
+| `r50DownBodyBackBatchedGraph_faithful` | the downsample body `projB ∘ cbReluStridedB ∘ cbReluB` |
+| `r50DownBlockBackBatchedGraph_faithful` | **CAPSTONE 3** — strided projection (stages 2/3/4 block 0) |
+
+### ⚠⚠ §8 WAS WRONG ABOUT WHICH PHASE 1 WAS DISCHARGED
+
+§8 said *"R50 first. It is one step from done: phase 1 is discharged, so the job is (2) + (3)."*
+`Resnet50BlocksCertified.lean` is real, but it certifies the **per-channel, non-batched** forms —
+`bnPerChannelTensor3`, plain `flatConv`, no `N`. The backward-graph vocabulary is **batched**
+(`bnBatchLA`, `batchMap`, `convBackBatched`), which is what the render emits. Grepped before
+starting: **no batched R50 block VJP existed anywhere.** So R50 needed (1) + (2) + (3) — the same
+three steps §8 assigns to MNv4, not two.
+
+▶ **Read this as a warning about §8's MNv4 row too**: the ✓/⛔ there was assembled by reading file
+names and theorem names, and a name does not say which world a theorem lives in.
+
+### ⭐ It was still cheap — every stage already existed
+
+`ResNet34BackB0` builds its own batched stages rather than lifting the PC ones, and they are generic
+in `{ic oc h w kH kW}`, so R50 reuses **all four verbatim**: `cbReluB` (the 1×1 reduce and the
+stride-1 3×3), `cbReluStridedB` (the 3×3 in a downsample block), `projB` (the 1×1 expand and the
+stride-1 skip), `projStridedB` (the strided skip). **Zero new stages, zero new SHlo ops, zero new
+VJP obligations** — the bottleneck's third conv is one more `vjp_comp_at` link. One generic body
+(`{ic mid oc}`) serves all three forms; the identity block instantiates it at `ic = oc`.
+
+⚠ Three relu families per block, where R34 has two (`h_s1`, `h_s2` interior + `h_out` outer), and
+every statement is `_at` — §8's "do not start by assuming the global form" held.
+
+⚠ **The stride is on the 3×3, and it is visible in the types**: `W₁`'s stage is `cbReluB` at
+`(2*h, 2*w)`, `W₂`'s is `cbReluStridedB`. So `h_s1` lives at the input resolution and `h_s2` at the
+output one. That asymmetry is the load-bearing detail of the downsample section, and it is what
+makes v1.5 (torchvision, what the reference trains) rather than v1.
+
+### ✅ THE GATE WAS VERIFIED TO FAIL — twice, and the first attempt was a bad test
+
+A `_faithful` theorem that cannot fail proves nothing, so the graph was perturbed and the proof
+re-run:
+
+| injection | result |
+|---|---|
+| feed stage 3's backward the block input instead of the cumulative activation | ⛔ **bad test** — caught by the TYPE checker (`ic` vs `mid`), i.e. the easy case §3 says not to rely on |
+| **γ ↔ β swapped at stage 2** — same type (`Vec mid`), same arity, same ops, same shapes | ✅ **rewrite fails**: `Did not find an occurrence of the pattern` |
+
+⭐ The second is the silent class — §3i's injected-swap discipline, and the one that matters.
+
+### ▶ WHAT R50 STILL OWES
+
+* **The net-level fold.** These are the three *block* capstones; chaining them across the 16-block
+  net (plus stem/pool/head) is not done. `Resnet34BackCertifiedTie` is the §B step above this and,
+  per §8, is explicitly NOT required to be on the main line.
+* ⛔ **Still no empirical tie.** R50's forward and gradient have never met an independent oracle —
+  there is no `generated_resnet50.py` (10-class). Unchanged by this work, and it is the one axis
+  where MNv4 is strong and R50 is not.
+* MNv4's backward is now the whole of the §8 handoff that remains, and it needs its own phase 1
+  (`MobileNetV4BlocksCertified.lean`) — genuinely, this time.
 
 ⭐ **They are short in OPPOSITE directions, and that decides the order of work.** R50 has the Lean
 block certificates and *no empirical tie at all* — there is no `generated_resnet50.py`, so neither

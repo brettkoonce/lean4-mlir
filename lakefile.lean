@@ -570,6 +570,14 @@ lean_lib «Certs» where
              -- relu (_at) with an OUTER post-residual relu (the extra factor
              -- vs the MBConv/inverted-residual blocks).
              `LeanMlir.Proofs.Foundation.ResNet34BackB0,
+             -- ResNet-50 backward-graph faithfulness (den-level): the 3-conv
+             -- bottleneck body and all THREE block capstones — identity, the
+             -- stride-1 projection (stage 1 block 0, no R34 analogue) and the
+             -- strided projection. Reuses R34's/EfficientNet's batched stages
+             -- verbatim; the bottleneck's extra conv is one more vjp_comp_at link.
+             -- ⚠ Resnet50BlocksCertified is the PER-CHANNEL phase 1; this is the
+             -- batched world the render actually emits, and needed its own.
+             `LeanMlir.Proofs.Foundation.ResNet50BackB0,
              -- ConvNeXt backward-graph faithfulness (den-level): the per-example
              -- (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
              -- separable, so no batched machinery — the block-body backward graph
