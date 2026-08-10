@@ -60,6 +60,24 @@ NETS = {
                  split=("verified_mlir/mnv4_fwd.mlir",
                         "verified_mlir/mnv4_adam_train_step.mlir"),
                  ref="jax/.lake/build/generated_mobilenet_v4.py", shape=(2, 3, 224, 224)),
+    # ⭐ R50 is audited against the 1000-CLASS reference, deliberately. The Imagenette R50 demo is
+    # real (`resnet50Verified`, 89.86% in runs/r50_imagenette_adam_80ep.log) but there is no
+    # `generated_resnet50.py` — only the ImageNet ones. Conventions do not depend on class count:
+    # padding, activation and BN axis are identical between the two variants and only the head
+    # width differs, so the ImageNet reference is a sound CONVENTION proxy. Checked, not assumed:
+    # resnet50_fwd and resnet50in_fwd have byte-identical strided-pad profiles
+    # (3x[[0,0]] 1x1 projections, 3x[[1,1]], 1x[[3,3]]).
+    #
+    # ⚠ What this CANNOT substitute for is a numeric tie: R50-Imagenette has no baseline number to
+    # compare 89.86% against, the same "no matched pair" gap §3f records for EfficientNet.
+    "r50":  dict(pad_src="verified_mlir/resnet50_fwd.mlir",
+                 train="verified_mlir/resnet50_adam_train_step.mlir",
+                 split=("verified_mlir/resnet50_fwd.mlir",
+                        "verified_mlir/resnet50_adam_train_step.mlir"),
+                 ref="jax/.lake/build/generated_resnet50_imagenet.py", shape=(2, 3, 224, 224),
+                 # R50's reference threads running-stats BN: forward(params, x, bn, training)
+                 # returning (logits, new_bn). Every other net is forward(params, x).
+                 call=lambda mod, ps, xx: mod["forward"](ps, xx, mod["init_bn_state"](), True)[0]),
     "enet": dict(pad_src="verified_mlir/efficientnet_fwd.mlir",
                  train="verified_mlir/efficientnet_adam_train_step.mlir",
                  split=("verified_mlir/efficientnet_fwd.mlir",
@@ -75,6 +93,7 @@ NETS = {
 # fixed while a hand-kept ledger still called it open, which is the whole argument for having this
 # script rather than a list in a doc.
 KNOWN = {
+    "r50":  {"padding"},      # measured 2026-08-10, the same shape as r34
     "r34":  {"padding"},
     "mnv2": {"activation"},
     "enet": {"activation"},
@@ -154,7 +173,7 @@ def render_profile(pad_src, train_path, split):
 # § The REFERENCE side — instrument `jax.lax` and run forward() once
 # ═══════════════════════════════════════════════════════════════════════════
 
-def reference_profile(ref_py, shape):
+def reference_profile(ref_py, shape, call=None):
     """⭐ RUNTIME instrumentation, not source parsing.
 
     The generated references reach `conv_general_dilated` through several helpers with different
@@ -218,7 +237,8 @@ def reference_profile(ref_py, shape):
                 mod[nm] = count(nm, mod[nm])
         key = jax.random.PRNGKey(0)
         params = mod["init_params"](key)
-        mod["forward"](params, jnp.zeros(shape, jnp.float32))
+        xin = jnp.zeros(shape, jnp.float32)
+        (call or (lambda m, p, x: m["forward"](p, x)))(mod, params, xin)
     finally:
         jax.lax.conv_general_dilated, jax.lax.reduce_window = real_conv, real_rw
         for nm, fn in saved.items():
@@ -237,7 +257,7 @@ def reference_profile(ref_py, shape):
 def audit(net, verbose=True):
     cfg = NETS[net]
     r = render_profile(cfg["pad_src"], cfg["train"], cfg["split"])
-    j = reference_profile(cfg["ref"], cfg["shape"])
+    j = reference_profile(cfg["ref"], cfg["shape"], cfg.get("call"))
     issues = set()
 
     def hist(xs):

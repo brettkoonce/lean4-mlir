@@ -963,6 +963,7 @@ GPU, no training, no gradients** — seconds per net. Current state:
 | **enet** | ⛔ activation — reference calls relu exactly TWICE (stem, head) where the render is swish |
 | **mnv2** | ⛔ activation (render relu6, reference relu) + BN self-split |
 | **r34** | ⛔ padding (7 strided convs + the maxpool) + BN self-split |
+| **r50** | ⛔ padding + BN self-split — **measured 2026-08-10, R34's exact shape** |
 
 ⚠ **`--selftest` is the load-bearing part.** It asserts the audit reproduces the known ledger; an
 audit that cannot rediscover the findings that motivated it is worse than none, because its green
@@ -982,8 +983,16 @@ still called it open. That is the argument for the script over a list in a markd
 
 ▶ Remaining, and now both are one-liners against a known list rather than discoveries:
 `.convBn` needs an activation parameter (closes enet + mnv2), and the ResNet-family generator needs
-symmetric padding (closes r34 — the render is the paper-faithful side there, torchvision's
+symmetric padding (closes r34 AND r50 — the render is the paper-faithful side on both, torchvision's
 `Conv2d(3,64,7,stride=2,padding=3)` / `MaxPool2d(3,2,padding=1)`).
+
+⚠ **R50 was the "suspected but unmeasured" row and it is now measured — §3c was wrong for BOTH
+ResNets, not just R34.** It is audited against the 1000-class reference on purpose: the Imagenette
+R50 demo is real (`resnet50Verified`, **89.86%** in `runs/r50_imagenette_adam_80ep.log`) but there
+is no `generated_resnet50.py`. Conventions do not depend on class count, and the proxy was checked
+rather than assumed — `resnet50_fwd` and `resnet50in_fwd` have identical strided-pad profiles.
+▶ Separately: R50-Imagenette therefore has **no baseline number at all** to compare 89.86% against
+— the same "no matched pair" gap §3f records for EfficientNet.
 
 ---
 

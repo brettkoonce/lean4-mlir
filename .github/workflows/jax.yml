@@ -295,12 +295,16 @@ jobs:
         run: |
           set -e
           lake exe cache get || true
-          NETS="resnet34 mobilenet-v2 mobilenet-v4 efficientnet-b0"
+          # ⚠ resnet50-IMAGENET, not resnet50: there is no 10-class R50 reference to generate.
+          # The audit uses the 1000-class one as a convention proxy for the Imagenette demo — see
+          # the NETS entry in scripts/convention_audit.py for why that is sound.
+          NETS="resnet34 mobilenet-v2 mobilenet-v4 efficientnet-b0 resnet50-imagenet"
           lake build $NETS
           for n in $NETS; do lake exe $n /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true; done
           missing=0
           for f in generated_resnet34.py generated_mobilenet_v2.py \
-                   generated_mobilenet_v4.py generated_efficientnet_b0.py; do
+                   generated_mobilenet_v4.py generated_efficientnet_b0.py \
+                   generated_resnet50_imagenet.py; do
             if [ ! -s ".lake/build/$f" ]; then echo "::error::$f was not emitted"; missing=1; fi
           done
           [ "$missing" -eq 0 ]
@@ -318,6 +322,6 @@ jobs:
             echo "audit does **not** mean the nets agree numerically (that is \`grad_tie.py\`)."
             echo ""
             echo '```'
-            grep -E '^  (r34|mnv2|mnv4|enet) |RATCHET|✓ selftest|NEW DIVERGENCE' /tmp/audit.log || true
+            grep -E '^  (r34|r50|mnv2|mnv4|enet) |RATCHET|✓ selftest|NEW DIVERGENCE' /tmp/audit.log || true
             echo '```'
           } >> $GITHUB_STEP_SUMMARY

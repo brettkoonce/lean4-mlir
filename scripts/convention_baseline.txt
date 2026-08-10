@@ -8,3 +8,5 @@ mnv2:activation
 mnv2:bn-split
 r34:bn-split
 r34:padding
+r50:bn-split
+r50:padding
