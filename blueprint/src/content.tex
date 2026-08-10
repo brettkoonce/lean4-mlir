@@ -11754,9 +11754,17 @@ Output: the same three-layer MLP shown in Chapter~\ref{chap:mlp}
 (784 $\to$ 512 $\to$ 512 $\to$ 10) trains for 12 epochs on real MNIST and
 converges to $\sim$97.9\% test accuracy.
 
-\emph{Note:} this image still builds the IREE CPU runtime from source, which
-is what makes the first build take $\sim$10 minutes. Subsequent
-\texttt{docker run} invocations reuse the cached image.
+Two things to know about this track. It builds the \textbf{IREE} CPU runtime
+from source, which is what makes the first build take $\sim$10 minutes ---
+and that is the right choice here rather than a leftover: XLA's GPU plugins
+ship prebuilt, but there is no equivalent CPU plugin exposing the PJRT C API,
+and CPU-only portable execution is exactly what IREE is designed for. This
+track is the small-runtime path in miniature.
+
+It also currently trains the \emph{unverified} \texttt{mnist-mlp-train-f32}
+rather than the proof-carrying \texttt{mnist-mlp-verified} the rest of the
+book runs, so it demonstrates that the toolchain works end to end, not that
+the proofs do. Prefer Track 2 if what you want to see is the verified path.
 
 \section*{Track 2: Native install (XLA/PJRT)}
 
@@ -11868,10 +11876,6 @@ bundle these targets, and any one builds on its own:
     \texttt{mobilenetv4-verified-adam}, \texttt{resnet50-verified-adam}
 \end{itemize}
 
-(Unverified \texttt{<arch>-train} targets --- \texttt{vgg-train},
-\texttt{mobilenet-v3-train}, \texttt{efficientnet-v2-train} --- also build,
-for architectures outside the verified set.)
-
 \section*{Track 5: ImageNet-1k runners}
 
 The scale tier. Six nets train on full ImageNet-1k off the same certified
@@ -11975,6 +11979,10 @@ unverified code than the small one does.
     found --- the XLA plugin is missing or is built for a different CUDA/ROCm
     version than the one installed. Installing JAX into the repo's own
     \texttt{.venv} puts it where the shim looks by default.
+  \item \textbf{\texttt{HAL device not found}} on an IREE run --- the IREE
+    runtime was built without the requested backend's HAL driver. A shim built
+    for ROCm will fail under \texttt{IREE\_BACKEND=llvm-cpu} with exactly this
+    error, and vice versa; rebuild the runtime with the driver you want.
   \item \textbf{\texttt{lake build} fails with Mathlib cache errors} --- run
     \texttt{lake exe cache get} to populate the local cache. Without it the
     first build compiles all of Mathlib from source ($\sim$45 min); with it,
