@@ -943,8 +943,23 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
                           s!".lake/build/{net.slug}_{variant}_ts.vmfb"
-  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
-                          s!".lake/build/{net.slug}_fwd_v.vmfb"
+  -- ⭐ PER-VARIANT forward resolution (`planning/mnv4_verified.md` §3d(b)).
+  --
+  -- The train step above is variant-resolved and this was NOT: every variant of a slug loaded the
+  -- one `<slug>_fwd.mlir`. But a slug's variants do not all live in the same BN world — the SGD
+  -- train step comes from the per-example renderer and everything from `*RenderB` is batch BN — so
+  -- one forward artifact cannot be right for both. On MobileNetV2 and ResNet-34 it is the
+  -- per-example one, i.e. correct for the SGD trainer and a DIFFERENT NET from the Adam graph that
+  -- trains every quoted number.
+  --
+  -- `<slug>_<variant>_fwd.mlir` wins when it exists; `<slug>_fwd.mlir` is the fallback, which is
+  -- correct for every net whose forward already matches its batched train step (efficientnet,
+  -- convnext, vit, mnv4, resnet50). ⚠ The fallback is only safe because it is CHECKED below —
+  -- a silent fallback to the wrong world is the defect, not the fix.
+  let fwdVariant := s!"{net.mlirDir}/{net.slug}_{variant}_fwd.mlir"
+  let fwdPath := if (← System.FilePath.pathExists fwdVariant) then fwdVariant
+                 else s!"{net.mlirDir}/{net.slug}_fwd.mlir"
+  let fwdSess ← mkSession fwdPath s!".lake/build/{net.slug}_{variant}_fwd_v.vmfb"
   let fwdEvalSess ← if hasBn then
       mkSession s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
                 s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
@@ -968,6 +983,30 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   if batchStatEval && hasBn then
     IO.println "  ⚠ LEAN_MLIR_EVAL_BATCHSTATS: scoring via @_fwd (EVAL-BATCH stats), not the \
 running buffers — diagnostic only, transductive, not a reportable number."
+  -- ⛔⛔ THE BN-WORLD INVARIANT, asserted exactly when the forward is about to be USED.
+  --
+  -- Batch-stat scoring only means anything if `@<slug>_fwd` normalises the way the train step
+  -- does. Where it does not, this mode silently scores a DIFFERENT ARCHITECTURE — not merely
+  -- different statistics — and reports a plausible number. That is the §3d(b) hazard in its live
+  -- form, and until now nothing anywhere checked it: `regen_verified_mlir.sh` paired the forward
+  -- only with the SGD train step, which shares its world by construction.
+  --
+  -- ⚠ Scoped to `!useRunning` ON PURPOSE. A normal run never invokes this forward (eval goes
+  -- through `@<slug>_fwd_eval`), so failing there would break working trainers over an artifact
+  -- they do not read. The check fires only on the path that actually reads it.
+  if !useRunning && hasBn then
+    let tsTxt ← IO.FS.readFile s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
+    let fwTxt ← IO.FS.readFile fwdPath
+    let batchOf (t : String) : Bool := (t.splitOn "dimensions = [0, 2, 3]").length > 1
+    if batchOf tsTxt != batchOf fwTxt then
+      throw <| IO.userError s!"BN-WORLD MISMATCH — refusing to score through a different net.\n\
+  train step {net.slug}_{variant}_train_step.mlir : \
+{if batchOf tsTxt then "BATCH" else "PER-EXAMPLE"} BN\n\
+  forward    {fwdPath} : {if batchOf fwTxt then "BATCH" else "PER-EXAMPLE"} BN\n\
+  LEAN_MLIR_EVAL_BATCHSTATS would score a DIFFERENT ARCHITECTURE, not just different statistics.\n\
+  Render {net.mlirDir}/{net.slug}_{variant}_fwd.mlir from the chain the train step \
+differentiates (see r50FwdChainB for the pattern), or drop the env var and score through \
+@{net.slug}_fwd_eval."
   -- The eval forward is rendered at ITS OWN batch AND ITS OWN INPUT WIDTH, neither of which need
   -- match training. Read both off the artifact rather than assuming (`fwdRenderedShape`); when they
   -- agree with `(bs, d0)` — every 224 net — nothing below changes.
@@ -976,7 +1015,7 @@ running buffers — diagnostic only, transductive, not a reportable number."
   -- It used to hardcode `3*224*224`, which was right only while train and eval resolutions agreed.
   let (evalBs, evalD0) := (← fwdRenderedShape
     (if useRunning then s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
-     else s!"{net.mlirDir}/{net.slug}_fwd.mlir")).getD (bs, d0)
+     else fwdPath)).getD (bs, d0)
   -- ⚠ ANNOUNCED when it differs, because a train/eval resolution SPLIT is not visible anywhere else
   -- in the log, and a run that silently evaluated at the wrong resolution would still report a
   -- plausible accuracy. RSB-A3 is the case: train 160², eval 224².
