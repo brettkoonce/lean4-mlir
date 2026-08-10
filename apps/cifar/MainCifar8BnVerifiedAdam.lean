@@ -1,4 +1,4 @@
-import apps.cifar.Cifar8BnAdamCommon
+import LeanMlir.VerifiedNets
 
 /-! # `cifar8-bn-verified-adam` — the 8-conv CIFAR-10 CNN **+ per-channel BN** with **AdamW**
 
@@ -14,10 +14,24 @@ Per-channel BN is per-example ⇒ train=eval (no running stats), so `bnChannels`
 and the γ/β are Adam-updated like any other param; eval is plain `@cifar8_bn_fwd`. AdamW
 lr 1e-3, β₁ .9, β₂ .999, wd 1e-4 (baked), 3-epoch warmup + cosine decay.
 
-The body is shared with the XLA build (`cifar8-bn-verified-adam-xla`); see
-`apps/cifar/Cifar8BnAdamCommon.lean` and `planning/xla_pjrt_ladder.md`.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8-bn-verified-adam data`
+
+**One file, one binary, either lowerer.** The proven graph goes to whichever
+trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
+`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). There is no `-xla`
+peer and no shared-body file: the config and entry point below ARE the program.
+The backend is a run-time choice about transport, not a different program, which
+is what the G2 gate asserts.
 -/
+
+def cifar8BnAdamConfig : VerifiedConfig where
+  epochs    := 40
+  batchSize := 128
+
+/-- Entry point for both backends. baseLR 1e-3, β₁ .9, β₂ .999, 3-epoch linear
+    warmup then cosine decay. -/
+def runCifar8BnAdam (argv : List String) : IO Unit :=
+  cifar8BnVerified.toNet.trainAdamSched cifar8BnAdamConfig (argv.head?.getD "data") 0.001 0.9 0.999 3
 
 def main (argv : List String) : IO Unit := runCifar8BnAdam argv

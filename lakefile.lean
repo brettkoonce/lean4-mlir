@@ -1334,82 +1334,29 @@ lean_exe «cifar8-verified» where
   root := `apps.cifar.MainCifar8Verified
   moreLinkArgs := ireeLink
 
--- Deeper 8-conv CIFAR-10 CNN + per-channel BN on the VERIFIED-rendered StableHLO
--- (Proofs.StableHLO.cifar8BnTrainStepText). The pedagogical BN-acceleration demo.
-/-- Shared body of the verified CIFAR-8-BN (plain-SGD) trainer — imported by BOTH the
-    IREE and XLA executables so their config and He-init seed cannot drift. This net is
-    the **conv anchor** for `lake run benchmark` and `lake run benchmark-xla`, which is
-    why the XLA peer exists: both must probe the same net (handoff §2j). -/
-lean_lib «Cifar8BnCommon» where
-  srcDir := "."
-  roots := #[`apps.cifar.Cifar8BnCommon]
 
 lean_exe «cifar8-bn-verified» where
   root := `apps.cifar.MainCifar8BnVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- The XLA/PJRT peer of `cifar8-bn-verified` — the conv anchor for
-    `lake run benchmark-xla`. Adds no rung: `VerifiedNet.train` rides
-    `iree_ffi_invoke_f32`, which `ffi/pjrt_ffi.c` already implements. -/
-lean_exe «cifar8-bn-verified-xla» where
-  root := `apps.cifar.MainCifar8BnVerifiedXla
-  moreLinkArgs := xlaLink
 
--- cifar8 (no BN) Adam peer: the proof-rendered fwd/bwd/param-grads with the SGD update
--- swapped for AdamW (ViTRender.emitAdamV) + packed [θ|m|v] + runtime lr/bc threading via
--- trainAdamSched. Render: tests/TestCifar8AdamTrain.lean. BN/noBN × SGD/Adam ablation.
-lean_lib «Cifar8AdamCommon» where
-  srcDir := "."
-  roots := #[`apps.cifar.Cifar8AdamCommon]
 
 lean_exe «cifar8-verified-adam» where
   root := `apps.cifar.MainCifar8VerifiedAdam
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- The no-BN control for rung 2 — same driver/hyperparameters as
-    `cifar8-bn-verified-adam-xla`, differing only by BatchNorm. -/
-lean_exe «cifar8-verified-adam-xla» where
-  root := `apps.cifar.MainCifar8VerifiedAdamXla
-  moreLinkArgs := xlaLink
 
--- cifar8 + per-channel BN Adam peer (38 params incl. 8× BN γ/β). Same as above with BN.
--- Render: tests/TestCifar8AdamTrain.lean.
-/-- Shared body of the CIFAR-8 BN + AdamW trainer — imported by BOTH the IREE and
-    XLA executables so their schedule, seed, and hyperparameters cannot drift. -/
-lean_lib «Cifar8BnAdamCommon» where
-  srcDir := "."
-  roots := #[`apps.cifar.Cifar8BnAdamCommon]
 
 lean_exe «cifar8-bn-verified-adam» where
   root := `apps.cifar.MainCifar8BnVerifiedAdam
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- Rung 2 of the XLA ladder (`planning/xla_pjrt_ladder.md`): Adam moments and
-    runtime lr/bc₁/bc₂ scalars, i.e. the first RANK-0 tensor inputs. -/
-lean_exe «cifar8-bn-verified-adam-xla» where
-  root := `apps.cifar.MainCifar8BnVerifiedAdamXla
-  moreLinkArgs := xlaLink
 
--- cifar8 Nesterov-momentum SGD peers (v←μv+∇, θ←θ−lr(μv+∇), μ=0.9): same proof-rendered body +
--- emitMomentum, driven by trainAdamSched variant "mom" (reuses [θ|m|v] packing + cosine+warmup lr).
--- Render: tests/TestCifar8AdamTrain.lean. Completes the optimizer ablation (SGD/momentum/Adam).
--- Shared body of the no-BN Nesterov-momentum arm of the six-way optimizer ablation: one module for the IREE and
--- XLA executables, so `epochs`, `batchSize`, the seed and the learning rate cannot drift
--- between the two backends (§2h). Lake needs it as its own lib to build it for both roots.
-lean_lib «Cifar8MomCommon» where
-  srcDir := "."
-  roots := #[`apps.cifar.Cifar8MomCommon]
 
 lean_exe «cifar8-verified-momentum» where
   root := `apps.cifar.MainCifar8VerifiedMomentum
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- XLA/PJRT peer of `cifar8-verified-momentum` — the no-BN Nesterov-momentum arm of the six-way optimizer ablation. Shares its body via
-    `apps/cifar/Cifar8MomCommon.lean`, so the two backends cannot drift on epochs,
-    batch size, seed or learning rate (§2h). Completes `lake run cifar` to all six. -/
-lean_exe «cifar8-verified-momentum-xla» where
-  root := `apps.cifar.MainCifar8VerifiedMomentumXla
-  moreLinkArgs := xlaLink
 
 -- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
 -- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
@@ -1426,63 +1373,23 @@ lean_exe «cifar8-e4m3-verified-adam» where
   root := `apps.cifar.MainCifar8E4M3VerifiedAdam
   moreLinkArgs := ireeLink
 
--- Shared body of the BN Nesterov-momentum arm of the six-way optimizer ablation: one module for the IREE and
--- XLA executables, so `epochs`, `batchSize`, the seed and the learning rate cannot drift
--- between the two backends (§2h). Lake needs it as its own lib to build it for both roots.
-lean_lib «Cifar8BnMomCommon» where
-  srcDir := "."
-  roots := #[`apps.cifar.Cifar8BnMomCommon]
 
 lean_exe «cifar8-bn-verified-momentum» where
   root := `apps.cifar.MainCifar8BnVerifiedMomentum
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- XLA/PJRT peer of `cifar8-bn-verified-momentum` — the BN Nesterov-momentum arm. Shares its body via
-    `apps/cifar/Cifar8BnMomCommon.lean`, so the two backends cannot drift on epochs,
-    batch size, seed or learning rate (§2h). Completes `lake run cifar` to all six. -/
-lean_exe «cifar8-bn-verified-momentum-xla» where
-  root := `apps.cifar.MainCifar8BnVerifiedMomentumXla
-  moreLinkArgs := xlaLink
 
--- cifar8 plain-SGD CONTROL on the momentum/Adam pipeline (trainAdamSched variant "sgd": same
--- per-epoch shuffle + hflip + cosine-warmup, update θ←θ−lr·∇). Makes the SGD/momentum/Adam
--- comparison differ ONLY in the optimizer. Render: tests/TestCifar8AdamTrain.lean.
--- Shared body of the no-BN plain-SGD arm of the six-way optimizer ablation: one module for the IREE and
--- XLA executables, so `epochs`, `batchSize`, the seed and the learning rate cannot drift
--- between the two backends (§2h). Lake needs it as its own lib to build it for both roots.
-lean_lib «Cifar8SgdSchedCommon» where
-  srcDir := "."
-  roots := #[`apps.cifar.Cifar8SgdSchedCommon]
 
 lean_exe «cifar8-verified-sgdsched» where
   root := `apps.cifar.MainCifar8VerifiedSgdSched
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- XLA/PJRT peer of `cifar8-verified-sgdsched` — the no-BN plain-SGD arm (SGD through the SAME shuffle/hflip/cosine pipeline, so the
-    optimizer is the only free variable). Shares its body via
-    `apps/cifar/Cifar8SgdSchedCommon.lean`, so the two backends cannot drift on epochs,
-    batch size, seed or learning rate (§2h). Completes `lake run cifar` to all six. -/
-lean_exe «cifar8-verified-sgdsched-xla» where
-  root := `apps.cifar.MainCifar8VerifiedSgdSchedXla
-  moreLinkArgs := xlaLink
 
--- Shared body of the BN plain-SGD arm of the six-way optimizer ablation: one module for the IREE and
--- XLA executables, so `epochs`, `batchSize`, the seed and the learning rate cannot drift
--- between the two backends (§2h). Lake needs it as its own lib to build it for both roots.
-lean_lib «Cifar8BnSgdSchedCommon» where
-  srcDir := "."
-  roots := #[`apps.cifar.Cifar8BnSgdSchedCommon]
 
 lean_exe «cifar8-bn-verified-sgdsched» where
   root := `apps.cifar.MainCifar8BnVerifiedSgdSched
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- XLA/PJRT peer of `cifar8-bn-verified-sgdsched` — the BN plain-SGD arm. Shares its body via
-    `apps/cifar/Cifar8BnSgdSchedCommon.lean`, so the two backends cannot drift on epochs,
-    batch size, seed or learning rate (§2h). Completes `lake run cifar` to all six. -/
-lean_exe «cifar8-bn-verified-sgdsched-xla» where
-  root := `apps.cifar.MainCifar8BnVerifiedSgdSchedXla
-  moreLinkArgs := xlaLink
 
 -- Wide-head (MNIST-style 2×512 dense, d1=512) cifar8 optimizer ablation: each exe runs SGD /
 -- momentum / AdamW in sequence on the controlled pipeline. Render: tests/TestCifar8WideTrain.lean.
@@ -2835,7 +2742,7 @@ script «mnist-iree» do
 /-- `lake run cifar-iree` — the ch.4 verified cifar8 variants: SGD/momentum/adam ×
     bn/no-bn, ~1 hr. -/
 script «cifar-iree» do
-  runDemoGroup ["cifar8-verified", "cifar8-bn-verified",
+  runDemoGroup ["cifar8-verified-sgdsched", "cifar8-bn-verified-sgdsched",
                 "cifar8-verified-momentum", "cifar8-bn-verified-momentum",
                 "cifar8-verified-adam", "cifar8-bn-verified-adam"]
 
@@ -2888,16 +2795,21 @@ script mnist do
   runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified",
                 "mnist-cnn-verified"] (xla := true)
 
-/-- `lake run cifar` — the XLA peers of `lake run cifar-iree`, and an EXACT mirror since
-    2026-07-30: all six of the Chapter-4 optimizer ablation (SGD / Nesterov-momentum / AdamW
-    × BN / no-BN) now have `-xla` targets. Each shares one body with its IREE peer
-    (`apps/cifar/Cifar8*Common.lean`), so the two backends cannot drift on epochs, batch size,
-    seed or learning rate — which is what makes a cross-backend difference attributable to the
-    lowerer rather than to the run. Same order as `lake run cifar-iree`. -/
+/-- `lake run cifar` — the six-way Chapter-4 optimizer ablation on XLA
+    (SGD / Nesterov-momentum / AdamW × BN / no-BN).
+
+    Now a mirror of `lake run cifar-iree` in the literal sense: the SAME six
+    binaries, differing only in the lowerer `runDemoGroup` selects. It was not
+    before — this group ran the `sgdsched` SGD arm while `cifar-iree` ran the
+    plain-SGD `cifar8-verified` pair, so on that arm a cross-backend difference
+    was NOT attributable to the lowerer, which is exactly what the old docstring
+    promised it was. Both now run `sgdsched`: it puts SGD through the same
+    shuffle/hflip/cosine pipeline as the other five, so the ablation compares
+    optimizers rather than pipelines. -/
 script cifar do
-  runDemoGroup ["cifar8-verified-sgdsched-xla", "cifar8-bn-verified-sgdsched-xla",
-                "cifar8-verified-momentum-xla", "cifar8-bn-verified-momentum-xla",
-                "cifar8-verified-adam-xla", "cifar8-bn-verified-adam-xla"] (xla := true)
+  runDemoGroup ["cifar8-verified-sgdsched", "cifar8-bn-verified-sgdsched",
+                "cifar8-verified-momentum", "cifar8-bn-verified-momentum",
+                "cifar8-verified-adam", "cifar8-bn-verified-adam"] (xla := true)
 
 /-- `lake run imagenette` — the XLA peers of `lake run imagenette-iree`, and **all five as of
     2026-07-30**.
@@ -3138,7 +3050,7 @@ def benchTable : List BenchItem :=
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
       transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
     { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar",
-      refSecCuda := some 540, probeXla := "cifar8-bn-verified-xla", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+      refSecCuda := some 540, probeXla := "cifar8-bn-verified", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
     { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
       transportSensitive := true, refSecCuda := some 5333, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
     { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
@@ -3222,7 +3134,7 @@ def probeAttnRefMs : Nat := 1173
     agreement, not as signal — and if you re-anchor, use a median of several runs, not the
     one number in front of you. -/
 def probeDenseRefMsXla : Nat := 610    -- mnist-mlp-verified (XLA) (vs 3030 on IREE); median of 8
-def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified-xla   (vs 8020 on IREE); median of 10
+def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified (XLA) (vs 8020 on IREE); median of 10
 /-- ms/STEP, `vit-verified-adam-xla`, median of 8 in the DEFAULT configuration, i.e. with no
     MIOpen override (123/125/126/127/128/129/132/137 — ±5%). Against IREE's 1173 that is
     **9.2×**, the largest cross-lowerer gap of the three families and the reason ViT cannot
@@ -3241,7 +3153,7 @@ def probeAttnRefMsXla : Nat := 128
 -- two vendors differ in exactly that ratio. Measuring each vendor is the fix; scaling is the
 -- fallback for a box with no datasets, not the answer.
 def probeDenseRefMsCuda : Nat := 814    -- mnist-mlp-verified (XLA), idle, 3 real epochs
-def probeConvRefMsCuda  : Nat := 2049   -- cifar8-bn-verified-xla,  idle, 3 real epochs
+def probeConvRefMsCuda  : Nat := 2049   -- cifar8-bn-verified (XLA), idle, 3 real epochs
 def probeAttnRefMsCuda  : Nat := 95     -- vit-verified-adam-xla,   idle, MAX_STEPS=100
 
 /-- One lowerer's complete probe configuration: which binaries to probe and which anchors
@@ -3273,7 +3185,7 @@ def ireeRef : BenchRef :=
 /-- XLA on ROCm — scaled from the 7900 XTX column. -/
 def xlaRefRocm : BenchRef :=
   { lowerer := "XLA/PJRT", xla := true, col := "rocm", card := "7900 XTX"
-    denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified-xla"
+    denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified"
     attnProbe := "vit-verified-adam-xla"
     denseRefMs := probeDenseRefMsXla, convRefMs := probeConvRefMsXla
     attnRefMs := probeAttnRefMsXla }
@@ -3284,7 +3196,7 @@ def xlaRefRocm : BenchRef :=
     scaled number can do. -/
 def xlaRefCuda : BenchRef :=
   { lowerer := "XLA/PJRT", xla := true, col := "cuda", card := "RTX 4060 Ti"
-    denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified-xla"
+    denseProbe := "mnist-mlp-verified", convProbe := "cifar8-bn-verified"
     attnProbe := "vit-verified-adam-xla"
     denseRefMs := probeDenseRefMsCuda, convRefMs := probeConvRefMsCuda
     attnRefMs := probeAttnRefMsCuda }

@@ -1,4 +1,4 @@
-import apps.cifar.Cifar8MomCommon
+import LeanMlir.VerifiedNets
 
 /-! # `cifar8-verified-momentum` — 8-conv CIFAR-10 CNN (no BN), **Nesterov-momentum SGD**
 
@@ -15,6 +15,23 @@ cosine + warmup lr schedule as the Adam path — a like-for-like "modern SGD" co
 baseLR 0.02 (peak), μ 0.9, 3-epoch warmup + cosine decay, no weight decay.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8-verified-momentum data`
+
+**One file, one binary, either lowerer.** The proven graph goes to whichever
+trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
+`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). There is no `-xla`
+peer and no shared-body file: the config and entry point below ARE the program.
+The backend is a run-time choice about transport, not a different program, which
+is what the G2 gate asserts.
 -/
+
+def cifar8MomConfig : VerifiedConfig where
+  epochs    := 40
+  batchSize := 128
+
+/-- Entry point for both backends.
+    baseLR 0.02 (peak), μ 0.9 baked in the render, 3-epoch warmup + cosine, no weight decay.
+    The β args are unused by the momentum step. -/
+def runCifar8Mom (argv : List String) : IO Unit :=
+  cifar8Verified.toNet.trainAdamSched cifar8MomConfig (argv.head?.getD "data") 0.02 0.9 0.999 3 "mom"
 
 def main (argv : List String) : IO Unit := runCifar8Mom argv

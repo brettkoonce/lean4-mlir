@@ -1,4 +1,4 @@
-import apps.cifar.Cifar8BnSgdSchedCommon
+import LeanMlir.VerifiedNets
 
 /-! # `cifar8-bn-verified-sgdsched` — plain SGD (BN net) on the momentum/Adam pipeline
 
@@ -10,6 +10,23 @@ as the BN momentum/Adam runs, so the optimizer is the only free variable. 38 par
 baseLR 0.1, 3-epoch warmup + cosine decay.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8-bn-verified-sgdsched data`
+
+**One file, one binary, either lowerer.** The proven graph goes to whichever
+trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
+`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). There is no `-xla`
+peer and no shared-body file: the config and entry point below ARE the program.
+The backend is a run-time choice about transport, not a different program, which
+is what the G2 gate asserts.
 -/
+
+def cifar8BnSgdSchedConfig : VerifiedConfig where
+  epochs    := 40
+  batchSize := 128
+
+/-- Entry point for both backends.
+    baseLR 0.1, 3-epoch warmup + cosine. Per-channel BN ⇒ train = eval, eval via
+    `@cifar8_bn_fwd`. -/
+def runCifar8BnSgdSched (argv : List String) : IO Unit :=
+  cifar8BnVerified.toNet.trainAdamSched cifar8BnSgdSchedConfig (argv.head?.getD "data") 0.1 0.9 0.999 3 "sgd"
 
 def main (argv : List String) : IO Unit := runCifar8BnSgdSched argv
