@@ -1756,9 +1756,7 @@ the control has to be aimed.
 
 * ⛔ **Not tied to the committed artifact.** Same status as every other net's fold: a certified
   composition, not a proof that `verified_mlir/vit_train_step.mlir` IS this graph.
-* ⚠ **The other five nets' folds are not in `AuditAxioms`** — that file imports their *block*
-  capstones but not their `CertLayer` layers. ViT's being audited and theirs not is a gap in the
-  audit, not a difference in the proofs.
+* ~~⚠ **The other five nets' folds are not in `AuditAxioms`**~~ — ✅ **CLOSED, see §8h.**
 
 ### ⭐ AND THE CI-COST WARNING WAS A CATEGORY ERROR
 
@@ -1766,6 +1764,36 @@ the control has to be aimed.
 runner** figure (memory `vit-backb0-ci-cost` says so; it was read as a property of the module).
 Three sessions deferred this work partly on that number. ▶ **A cost measured on one machine is not
 a property of the code** — and "budget the CI cost" deterred nothing but the work.
+
+## 8h. ✅ ALL SEVEN FOLDS ARE NOW AXIOM-AUDITED (2026-08-10)
+
+`tests/AuditAxioms.lean` gained 41 lines across six modules — `CertifiedChain`, `ResNet50BackNet`,
+`BackNetFolds`, `MobileNetV4BackB0`, `EfficientNetBackNet`, `ViTBackNet`. **1592 `#print axioms`
+lines, 1592 three-axiom clean**, `scripts/check_audit_coverage.py` green (all 181 imports
+reachable from the Proofs+Certs roots).
+
+⚠ **The gap was worse than "one file was incomplete."** This audit imported every net's *block*
+capstone and none of the `CertLayer` layers built on them — so the **newest and least-exercised
+tier of the whole proof stack was the one tier with no axiom check**, for four commits. `certs.yml`
+fails on `total -ne ok`, so this is a live ratchet, not a listing.
+
+### ⭐⭐ `CertLayer.comp` is the single most load-bearing line in the section
+
+Every fold in all seven nets routes through it — it is the composition argument each
+`<body>BackBatchedGraph_faithful` used to write out by hand. **An axiom in `comp` would be an
+axiom in seven nets' folds at once**, and until now nothing checked it. `id'`, `residual`,
+`chain`, `chain_fwd` and `chain_faithful` are audited with it.
+
+### ✅ AND THE LAYER LINES WERE VERIFIED NON-VACUOUS
+
+A third of the new lines print axioms for a **structure instance** (`r34BasicBlockLayer`,
+`mnv4DWReluLayer`, `vitNetLayer`…) rather than a theorem, on the claim that `#print axioms`
+traverses the `faithful` *field*. If it did not, those lines would be decorative and the section
+would be a false green of exactly the §4c(a) kind.
+
+Probed rather than assumed: a layer identical to `CertLayer.id'` but with `faithful := by sorry`
+prints `[propext, sorryAx, Classical.choice, Quot.sound]`. ▶ **The field is covered, and CI would
+fail on it.**
 
 ---
 

@@ -134,6 +134,10 @@ import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoC
 import LeanMlir.Proofs.Architectures.ConvNeXtTiePoC
 import LeanMlir.Proofs.Architectures.ViTBackB0
 import LeanMlir.Proofs.Foundation.ViTBackNet
+import LeanMlir.Proofs.Foundation.ResNet50BackNet
+import LeanMlir.Proofs.Foundation.BackNetFolds
+import LeanMlir.Proofs.Foundation.MobileNetV4BackB0
+import LeanMlir.Proofs.Foundation.EfficientNetBackNet
 import LeanMlir.Proofs.Foundation.LinearFaithfulPoC
 import LeanMlir.Proofs.Float.E4M3FaithfulPoC
 import LeanMlir.Proofs.Foundation.MlpFaithfulPoC
@@ -3139,6 +3143,102 @@ open Proofs
 #print axioms StableHLO.vitNetLayer_graph
 #print axioms StableHLO.vitNetLayer_ok
 #print axioms StableHLO.vitNetBackGraph_faithful_via_fold
+
+-- ════════════════════════════════════════════════════════════════
+-- § THE `CertLayer` FOLDS — all seven nets (2026-08-10)
+-- ════════════════════════════════════════════════════════════════
+
+-- ⚠ These were NOT audited here until now, and the gap mattered: this file imported every net's
+-- BLOCK capstone but none of the `CertLayer` layers built on top of them, so the folds — the
+-- newest and least-exercised layer of the proof stack — were the one tier with no axiom check.
+-- A `CertLayer` is a STRUCTURE whose `faithful` field is the theorem, so `#print axioms` on the
+-- layer itself covers that proof; the separate `_faithful` lines below are the capstones stated
+-- as theorems rather than fields.
+-- ✅ That claim was VERIFIED, not assumed: a probe layer identical to `CertLayer.id'` but with
+-- `faithful := by sorry` prints `[propext, sorryAx, Classical.choice, Quot.sound]`, so the layer
+-- lines below are not vacuous and this workflow's `total -ne ok` check would fail on them. A gate
+-- that cannot fail is worse than no gate — and every `<net>Layer` line here is a structure, so
+-- this was the one thing that could have made a third of the section decorative.
+
+-- ⭐⭐ THE MACHINERY FIRST — `CertLayer.comp` is the single composition proof that every fold in
+-- this section routes through (the argument each `<body>BackBatchedGraph_faithful` used to write
+-- out by hand: build `G₁ x (G₂ (f₁ x) e)`, rewrite with the two component lemmas, close by `rfl`
+-- on `vjp_comp_at`'s definitional backward). If any one declaration here needs to be clean, it is
+-- this one: an axiom in `comp` would be an axiom in all seven nets' folds at once.
+-- `residual` wraps a layer in an identity skip (`ok` unchanged — an identity skip is smooth and
+-- adds no condition); `chain` folds a list, and `chain_faithful` is the whole-net statement with
+-- NO induction on depth, which is the entire point of the file.
+#print axioms StableHLO.CertLayer.id'
+#print axioms StableHLO.CertLayer.comp
+#print axioms StableHLO.CertLayer.residual
+#print axioms StableHLO.CertLayer.chain
+#print axioms StableHLO.CertLayer.chain_fwd
+#print axioms StableHLO.CertLayer.chain_faithful
+
+-- R50 — the three bottleneck forms (identity / stride-1 projection / strided projection; the
+-- middle one has NO R34 analogue), the stage combinator, and the four-stage trunk. `r50Trunk_3463`
+-- pins the real block table (3/4/6/3 = one projection block plus 2/3/5/2 identity blocks) as a
+-- TYPE-level check, and `r50DownBlockOfRow` is the weight-wiring form whose every width is a
+-- projection of its `BottleneckSpec` row.
+-- ⚠ `r50Trunk_faithful`'s proof is `CertLayer.faithful` — no induction on depth, no new argument.
+#print axioms StableHLO.r50BottleneckLayer
+#print axioms StableHLO.r50ProjBlockLayer
+#print axioms StableHLO.r50DownBlockLayer
+#print axioms StableHLO.r50Stage_faithful
+#print axioms StableHLO.r50Trunk_faithful
+#print axioms StableHLO.r50Trunk_3463
+#print axioms StableHLO.r50DownBlockOfRow
+
+-- r34 / mnv2 / enet / convnext. ⭐ The `ok` field splits these by ACTIVATION, and smooth is the
+-- STRONGER case: enet (swish) and convnext (gelu) are `ok = True` — the graph denotes the VJP
+-- everywhere, no side condition — while r34 (relu, one kink) and mnv2 (relu6, TWO kinks, and no
+-- outer relu since its block output IS the residual add) carry `_at` clauses that `comp` conjoins
+-- at the right activations rather than dropping.
+#print axioms StableHLO.enetMBConvLayer
+#print axioms StableHLO.cnxBlockLayer
+#print axioms StableHLO.cnxBlockChLayer
+#print axioms StableHLO.r34BasicBlockLayer
+#print axioms StableHLO.r34DownBlockLayer
+#print axioms StableHLO.mnv2ResidBlockLayer
+#print axioms StableHLO.enetChain_faithful
+#print axioms StableHLO.r34Trunk_3463
+#print axioms StableHLO.r34DownBlockOfRow
+
+-- MNv4 — ⭐⭐ the four UIB families COLLAPSED into one body: both depthwise slots are shape- and
+-- channel-preserving, so an absent depthwise is `CertLayer.id'` in the same slot rather than a
+-- different composition. One definition, four applications, NO case split — and therefore no
+-- proof-side dispatch that could silently disagree with the renderer's. `mnv4BodyOfRow_faithful`
+-- closes the remaining gap by making the slots READ the block table's `k` (`if k = 0 then id'`),
+-- so a family mis-dispatch has to be a wrong number in `mnv4Blocks` rather than a wrong argument.
+-- ⚠ The stride-2 forms deliberately do NOT collapse: a depthwise carrying the stride maps
+-- (2h,2w) ↦ (h,w), a different TYPE, so it cannot be an identity — and WHICH depthwise carries it
+-- decides the resolution every later stage runs at (pre-strided vs post-strided).
+-- ⭐ `stemBackBatchedGraph_faithful` was built for MNv4's fused stage and closed EfficientNet's
+-- stem hole at the same time — that forward was certified with a VJP but had no backward graph.
+#print axioms StableHLO.dwbReluBackBatchedGraph_faithful
+#print axioms StableHLO.dwbReluBstridedBackBatchedGraph_faithful
+#print axioms StableHLO.mnv4UibSkipBlock_faithful
+#print axioms StableHLO.mnv4UibPreStridedBody_faithful
+#print axioms StableHLO.mnv4UibPostStridedBody_faithful
+#print axioms StableHLO.stemBackBatchedGraph_faithful
+#print axioms StableHLO.mnv4FusedStage_faithful
+#print axioms StableHLO.mnv4Head_faithful
+#print axioms StableHLO.mnv4BodyOfRow_faithful
+
+-- EfficientNet — §8e's VJP-without-backward-graph holes, closed. ⚠ Of the four the sweep flagged,
+-- only TWO were real: `mbStridedFwdB_has_vjp` and `mbDownBodyB_has_vjp` are definitionally the
+-- same object (`rfl`), which a name-keyed audit cannot tell from two objects, and `mbExpFwdB`
+-- ties where the types meet. The genuinely new compositions are `mbNoExp` (`projB ∘ seB ∘ dwbsB`)
+-- and `head` (`dense ∘ GAP ∘ cbsB`). `scripts/vjp_graph_sweep.py` now pins the resulting ledger.
+#print axioms StableHLO.enetMbExp_faithful
+#print axioms StableHLO.enetMbNoExp_faithful
+#print axioms StableHLO.enetMbStrided_faithful
+#print axioms StableHLO.enetHead_faithful
+#print axioms StableHLO.mbStridedFwdBackBatchedGraph_faithful
+#print axioms StableHLO.mbExpFwdBackBatchedGraph_faithful
+#print axioms StableHLO.mbNoExpBackBatchedGraph_faithful
+#print axioms StableHLO.headBackBatchedGraph_faithful
+#print axioms StableHLO.enetTrunk
 -- ViT-Tiny §1 FOLD (ViTFaithfulPoC) — each emitted param-SGD op `den` = the certified loss-descent
 -- step, for every parameter family of the depth-12 ViT-Tiny train step. veclnGammaSgd (vector-[D] LN
 -- γ, the Σ_tokens dy·x̂ reduce) → vit_render_veclngamma_certified; rowDenseWeightSgd/rowDenseBiasSgd
