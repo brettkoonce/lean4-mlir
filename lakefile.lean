@@ -1438,20 +1438,12 @@ lean_exe «mnv4-train-smoke» where
 lean_exe «r34-train-b2» where
   root := `tests.TestR34TrainB2
 
-/-- Shared body of the verified MobileNetV4-Conv-S + AdamW **Imagenette** trainer — the
-    `Resnet50AdamCommon` twin. Its own `lean_lib` for the same reason those have one: lake needs a
-    module for a root shared by an executable, and a `Common` without one silently fails to build
-    for the second consumer. Artifacts: the `mnv4_*` renders at the end of
-    `Proofs/Codegen/MobileNetV4RenderB.lean`. -/
-lean_lib «MobilenetV4AdamCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.MobilenetV4AdamCommon]
 
 /-- Phase 4 of `planning/mnv4_verified.md`: 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
     IREE peer exists yet, and the body is backend-agnostic if one is wanted. -/
-lean_exe «mobilenetv4-verified-adam-xla» where
-  root := `apps.imagenette.MainMobilenetV4VerifiedAdamXla
-  moreLinkArgs := xlaLink
+lean_exe «mobilenetv4-verified-adam» where
+  root := `apps.imagenette.MainMobilenetV4VerifiedAdam
+  moreLinkArgs := lowererLink
 
 
 lean_exe «resnet50-verified-adam» where
@@ -1539,19 +1531,15 @@ lean_exe «efficientnet-imagenet-verified-xla» where
   root := `apps.imagenette.MainEfficientNetImagenetXla
   moreLinkArgs := xlaLink
 
-/-- Shared body of the MobileNetV2 / **full ImageNet-1k** trainer (handoff §2p). -/
-lean_lib «MobileNetV2ImagenetCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.MobileNetV2ImagenetCommon]
 
 /-- **MobileNetV2 on full 1000-class ImageNet** — the fifth scale-tier trainer. `nClasses := 1000,
     B := 64`; four replicas is global 256, the reference's batch. Batch-BN, so it has a `_fwd_eval`
     peer and a running-stat region.
 
     ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
-lean_exe «mobilenetv2-imagenet-verified-xla» where
-  root := `apps.imagenette.MainMobileNetV2ImagenetXla
-  moreLinkArgs := xlaLink
+lean_exe «mobilenetv2-imagenet-verified» where
+  root := `apps.imagenette.MainMobileNetV2Imagenet
+  moreLinkArgs := lowererLink
 
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
@@ -1888,7 +1876,7 @@ lean_exe «efficientnet-dp-check» where
 
     mnv2 returns 104 BN batch statistics (52 layers), so it has a forward-only `bnstat` region that
     must come back BIT-EXACT. Needs two GPUs and the XLA backend — collectives exist only on the
-    PJRT path, which is why `mobilenetv2-verified-adam-xla` (§2h) had to come first. -/
+    PJRT path, which is why `mobilenetv2-verified-adam` (§2h) had to come first. -/
 lean_exe «mobilenetv2-dp-check» where
   root := `tests.TestMobilenetV2DpCheck
   moreLinkArgs := xlaLink
@@ -2100,27 +2088,11 @@ lean_exe «mobilenetv2-verified» where
   root := `apps.imagenette.MainMobilenetV2Verified
   moreLinkArgs := ireeLink
 
--- mnv2 peer of vit-verified-adam: the proof-rendered train step with the gradients un-fused and
--- handed to the proven AdamW triple + packed θ|m|v + runtime lr/bc threading via trainAdamSched.
--- Recipe matches mobilenet-v2-train (lr 1e-3, wd 1e-4, cosine+warmup 3, label-smoothing 0.1).
--- Render: LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean (pretty(provenGraph) since 2026-07-28).
-/-- Shared body of the verified mnv2 + AdamW Imagenette trainer — imported by BOTH the IREE and
-    XLA executables so their schedule and seed cannot drift. -/
-lean_lib «MobilenetV2AdamCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.MobilenetV2AdamCommon]
 
 lean_exe «mobilenetv2-verified-adam» where
   root := `apps.imagenette.MainMobilenetV2VerifiedAdam
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- The XLA/PJRT peer of `mobilenetv2-verified-adam` — same program, same certified bytes, other
-    trusted lowerer. XLA measured 4.6× IREE on EfficientNet, and this net was IREE-only; it is also
-    the prerequisite for ever giving mnv2 a DP path, since collectives live only on the PJRT path.
-    Measured clear of ViT's MIOpen blocker before it was written (handoff §2h). -/
-lean_exe «mobilenetv2-verified-adam-xla» where
-  root := `apps.imagenette.MainMobilenetV2VerifiedAdamXla
-  moreLinkArgs := xlaLink
 
 -- ch8 E4/E5/E6: EfficientNet-B0 (faithful [t,c,n,s,k] config — 16 MBConv layers,
 -- inverted-residual + squeeze-excite + swish + BATCH norm, 3×3/5×5 depthwise) trained
@@ -2823,9 +2795,9 @@ script cifar do
     tied (forward 1.423e-06, gradient 0/147) but the RECIPES are not — the baseline is bs192 /
     warmup 5 against this tier's bs32 / warmup 3. Same net, different recipe. -/
 script imagenette do
-  runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam-xla",
+  runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
                 "efficientnet-verified-adam-xla", "convnext-verified-adam-xla",
-                "vit-verified-adam-xla", "mobilenetv4-verified-adam-xla",
+                "vit-verified-adam-xla", "mobilenetv4-verified-adam",
                 "resnet50-verified-adam"] (xla := true)
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -3029,7 +3001,7 @@ def benchTable : List BenchItem :=
     { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
       transportSensitive := true, refSecCuda := some 5333, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
     { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 2986, probeXla := "mobilenetv2-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
+      transportSensitive := true, refSecCuda := some 2986, probeXla := "mobilenetv2-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
     { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette",
       transportSensitive := true, refSecCuda := some 3760, probeXla := "efficientnet-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
     { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6841, tier := "imagenette",

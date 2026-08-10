@@ -726,8 +726,8 @@ artifact tie first**, then run the same probe on the new one.
 ### ▶ BOTH RE-RUNS LAUNCHED (2026-08-08)
 
 ```
-HIP_VISIBLE_DEVICES=0                        .lake/build/bin/mobilenetv2-verified-adam-xla data
-HIP_VISIBLE_DEVICES=1 LEAN_MLIR_VARIANT=rms  .lake/build/bin/mobilenetv2-verified-adam-xla data
+HIP_VISIBLE_DEVICES=0                        .lake/build/bin/mobilenetv2-verified-adam data
+HIP_VISIBLE_DEVICES=1 LEAN_MLIR_VARIANT=rms  .lake/build/bin/mobilenetv2-verified-adam data
   -> runs/mnv2_adam_80ep_xlapad_aug08.log   (replaces 89.35%)
   -> runs/mnv2_rms_80ep_xlapad_aug08.log    (replaces 76.03%)
 ```

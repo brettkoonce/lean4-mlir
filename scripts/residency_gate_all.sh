@@ -69,7 +69,7 @@ NETS=(
   # invisible to this gate, exactly as hold-mode is. That is what the tracks-then-exceeds
   # trajectory gate is for.
   "vit-ema|vit-verified-adam-xla|vit|10|2|LEAN_MLIR_VARIANT=ema"
-  "mnv2-rms|mobilenetv2-verified-adam-xla|mobilenetv2|10|2|LEAN_MLIR_VARIANT=rms"
+  "mnv2-rms|mobilenetv2-verified-adam|mobilenetv2|10|2|LEAN_MLIR_VARIANT=rms"
   "enet-rms|efficientnet-verified-adam-xla|efficientnet|10|2|LEAN_MLIR_VARIANT=rms"
 )
 

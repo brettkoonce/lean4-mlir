@@ -898,7 +898,7 @@ end Proofs.StableHLO
 -- rendered at and it must match `PJRT_REPLICAS` at run time, because the graph bakes
 -- `replica_groups`. Re-render here to change it.
 --
--- It needs the XLA build (`mobilenetv2-verified-adam-xla`, §2h): collectives exist only on the PJRT
+-- It needs the XLA build (`mobilenetv2-verified-adam`, §2h): collectives exist only on the PJRT
 -- path, and the IREE shim refuses a DP entry point outright rather than silently running
 -- single-device.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_adamdp_train_step.mlir"

@@ -1,33 +1,18 @@
 import LeanMlir.VerifiedNets
 
-/-! # Shared body of the verified MobileNetV2 / **full ImageNet-1k** trainer
+/-! # `mobilenetv2-imagenet-verified` — MobileNetV2 on full ImageNet-1k, verified → XLA
 
-The fifth and last of the scale-tier trainers (§2p). Same certified renderer at `nClasses := 1000`,
-`B := 64` — four replicas is **global batch 256**, which is `mobilenetV2ImagenetConfig.batchSize`,
-so the 5004 steps/epoch match the reference exactly.
+The last of the five scale-tier trainers (§2p). Needed only a `slug` plus derived label-smoothing
+constants — and mnv2 was the worst of the five on that axis, carrying the K=10 value in the
+COTANGENT (the gradient path, §2k's original bug) as well as in the report-only loss.
 
-⚠ A batch-BN net: eval goes through `@mobilenetv2in_fwd_eval` with frozen running stats, and the step
-buffer carries a 2×52-tensor stat region. §2g's forward/train-step skew was found on THIS net —
-`mobilenetv2_fwd` was batch-BN against a per-example-BN train step, so the trainer scored a
-different net than it trained (logits rel 1.86). The forwards here come off the same chain the
-train step differentiates, under their own slug.
+⚠ Does NOT move the verification tier; optimizer does not match the reference (RMSProp there,
+AdamW here). See `MobileNetV2ImagenetCommon`.
 
-⚠ **The optimizer does not match the reference**: MobileNetV2's recipe is **RMSProp at LR 0.045**
-with the paper's schedule, where the verified path has AdamW + cosine — the same gap EfficientNet
-has. On top of the usual missing mixup/cutmix/EMA. Read a result as the verified renderer training
-this architecture, not as a MobileNetV2 reproduction.
-
-```bash
-scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
-gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
-lake build mobilenetv2-imagenet-verified-xla
-cat .lake/build/mobilenetv2in_adamdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
-
-PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 \
-  LEAN_MLIR_VARIANT=adamdp64 LEAN_MLIR_BATCH=64 \
-  LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
-  .lake/build/bin/mobilenetv2-imagenet-verified-xla data 2>&1 | tee runs/mobilenetv2in_4gpu.log
-```
+**One file, one binary, either lowerer.** The proven graph goes to whichever
+trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
+`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). The `-xla` suffix is
+gone from the target name because it no longer distinguishes anything.
 -/
 
 /-- 300 epochs at 64 per device — the reference's schedule length, and at four replicas its global
@@ -58,3 +43,5 @@ def runMobileNetV2Imagenet (argv : List String) : IO Unit := do
     { mobilenetv2ImagenetConfig with batchSize := bs }
     (argv.head?.getD "data") baseLR 0.9 0.999 (if rms then sched.warmup else 5) variant
     (if rms then sched.decayRate else 0.0) sched.decayEpochs
+
+def main (argv : List String) : IO Unit := runMobileNetV2Imagenet argv

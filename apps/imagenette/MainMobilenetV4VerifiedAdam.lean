@@ -1,31 +1,34 @@
 import LeanMlir.VerifiedNets
 
-/-! # Shared body of the verified MobileNetV4-Conv-S + AdamW Imagenette trainer
+/-! # `mobilenetv4-verified-adam` — the MobileNetV4-Conv-S AdamW trainer on XLA/PJRT
 
-`mobilenetv4-verified-adam-xla` (XLA/PJRT) runs `mobilenetv4Verified` against
-`verified_mlir/mnv4_<variant>_train_step.mlir`. Structurally the `Resnet50AdamCommon` twin:
-identical harness, one net swapped.
+Shared body in `apps/imagenette/MobilenetV4AdamCommon.lean`, linked against `ffi/libpjrt_ffi.so`.
 
-Lake requires a distinct root module per executable, so the config and entry point live here rather
-than being duplicated the moment an IREE peer is added; drift in `epochs`, `batchSize`, the seed or
-any AdamW hyperparameter would quietly invalidate the comparison against the other Imagenette nets.
+Phase 4 of `planning/mnv4_verified.md`: 80 epochs, bs32, AdamW, target **84.58%** — the JAX-baseline
+path's number for this block table. The forward and the gradient are both tied against that
+reference (§3e, §3i), so the two paths are the same net and the number is a reproduction rather than
+a fresh measurement.
 
-⚠ **XLA/PJRT only, and that is deliberate.** Every other Imagenette net has an IREE peer; this one
-does not yet, because nothing has needed it. Adding one is a lakefile entry plus `ireeLink` — the
-body here is backend-agnostic.
+⚠ **This does not move the verification tier.** Every op the render composes carries a proven `den`,
+but MNv4 has no composed-backward theorem yet — see `MobilenetV4AdamCommon`'s header.
 
-## What is and is not tied on this net (`planning/mnv4_verified.md`)
+```
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+lake build mobilenetv4-verified-adam
 
-* ✅ The **forward** ties the JAX reference on shared weights at **1.423e-06**
-  (`scripts/mnv4_forward_tie.py`), unpatched — which is what pins the pre/post-DW ORDER, invisible
-  to every count and type.
-* ✅ The **gradient** ties `jax.grad` of the reference per parameter
-  (`scripts/grad_tie.py --net mnv4 --nokink`): 0/147 live parameters over 10× the control.
-* ⛔ **There is no §1a proof-chain tie for this net.** Every op the render composes carries a proven
-  `den`, but there is no MNv4 composed-backward theorem the way `MobileNetV2BackB0` /
-  `ResNet34BackB0` exist for theirs. So a number off this trainer is **measured** correct, not
-  proven — a tier below mnv2/R34. Name that when quoting it; the same caveat `Resnet50AdamCommon`
-  carries, for the same reason.
+# ⚠ the data arg is the ROOT, not the dataset dir — `loadData` appends `/imagenette` itself.
+#   Passing `data/imagenette` fails only at the loader, AFTER every artifact compiles and the
+#   full header prints, which reads like a data problem and is an argv problem (§3h trap 1).
+# ⚠ and move any stale checkpoint aside first, or the run resumes the OLD net and exits zero:
+mv .lake/build/mnv4_adam_ckpt_xla.bin{,.bak} 2>/dev/null
+
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/mobilenetv4-verified-adam data
+```
+
+**One file, one binary, either lowerer.** The proven graph goes to whichever
+trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
+`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). The `-xla` suffix is
+gone from the target name because it no longer distinguishes anything.
 -/
 
 /-- Matches `resnet50AdamConfig` / `efficientnetAdamConfig` — 80 epochs, bs 32 — so the MNv4 row of
@@ -68,3 +71,5 @@ def runMobilenetV4Adam (argv : List String) : IO Unit := do
     | none   => 0.001
   mobilenetv4Verified.toNet.trainAdamSched { mobilenetv4AdamConfig with batchSize := bs }
     (argv.head?.getD "data") baseLR 0.9 0.999 3 variant
+
+def main (argv : List String) : IO Unit := runMobilenetV4Adam argv

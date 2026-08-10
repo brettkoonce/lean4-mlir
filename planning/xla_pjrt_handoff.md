@@ -2306,8 +2306,8 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-verified-adam-xla data
 # for r34 / vit / convnext / efficientnet / mobilenetv2 — plus cifar8's six and mnist's three.
 # ⚠ The underlying MIOpen fault was NON-DETERMINISTIC rather than fixed (it fired once and not
 # again in 11 runs), so a recurrence is possible; it is a ROCm-box hazard, not a ViT one.
-lake build mobilenetv2-verified-adam-xla convnext-verified-adam-xla
-HIP_VISIBLE_DEVICES=0 .lake/build/bin/mobilenetv2-verified-adam-xla data
+lake build mobilenetv2-verified-adam convnext-verified-adam-xla
+HIP_VISIBLE_DEVICES=0 .lake/build/bin/mobilenetv2-verified-adam data
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam-xla data
 #   ^ each shares ONE body with its IREE peer (apps/imagenette/<Net>AdamCommon.lean), so the
 #     schedule and seed cannot drift. The IREE peers need the venv on PATH for `iree-compile`:
@@ -2317,7 +2317,7 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/convnext-verified-adam-xla data
 #     resumed — and one at `epoch=80` makes the run a silent no-op. Hit on 2026-07-29 on all three.
 
 # the honest wall-clock measurement — marginal epoch (T3-T1)/2, never wall-clock-minus-compile
-scripts/marginal_epoch.sh runs/mnv2_xla.log -- .lake/build/bin/mobilenetv2-verified-adam-xla data
+scripts/marginal_epoch.sh runs/mnv2_xla.log -- .lake/build/bin/mobilenetv2-verified-adam data
 
 # multi-GPU (§2b-quater): the DP render is certified-graph + trusted collective, written by the
 # same `lake build LeanMlir.Proofs.Codegen.ResNet34RenderB` as the single-device one. To change the
@@ -2469,7 +2469,7 @@ lake build convnext-dp-check     && PJRT_REPLICAS=2 .lake/build/bin/convnext-dp-
 #   ConvNeXt gates %loss as well as the gradient: LayerNorm ⇒ no bnstat region, so %loss is the
 #   ONLY forward-only output. It is also the only DP render with RANK-0 collectives (44 scalar LN).
 LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2 \
-  .lake/build/bin/mobilenetv2-verified-adam-xla data
+  .lake/build/bin/mobilenetv2-verified-adam data
 #   ^ the exact identity ON THE REAL NET (duplicated batch ⇒ all_reduce/2 is the identity, and BN
 #     does not spoil it because both replicas' groups are the same 32 examples). Pass a broken
 #     render as argv[1] to run the sum-not-mean control.
@@ -3699,7 +3699,7 @@ and the two nets predicted clear were clear.
 
 | | `-xla` binary | agreement with IREE | descends on certified bytes | marginal epoch (XLA) |
 |---|---|---|---|---|
-| **MobileNetV2** | ✅ `mobilenetv2-verified-adam-xla` | first step **4.9e-5**; epoch-1 loss 3.5e-5, val 594 vs 600 / 3925 | ✅ 26.7 → 38.0 → 52.3 → **59.9%** (4 full epochs); **68.2%** over 80 capped-step epochs | **58.0 s** → 80 ep ≈ **1 h 17 m** |
+| **MobileNetV2** | ✅ `mobilenetv2-verified-adam` | first step **4.9e-5**; epoch-1 loss 3.5e-5, val 594 vs 600 / 3925 | ✅ 26.7 → 38.0 → 52.3 → **59.9%** (4 full epochs); **68.2%** over 80 capped-step epochs | **58.0 s** → 80 ep ≈ **1 h 17 m** |
 | **ConvNeXt-T** | ✅ `convnext-verified-adam-xla` | first three steps ≤ **1.6e-5**; epoch-1 loss and val_acc **IDENTICAL** (2.903300, 502/3925) | ✅ 36.0 → 47.7 → 54.3 → **60.6%** (4 full epochs) | **84.5 s** → 80 ep ≈ **1 h 53 m** |
 | **ViT-Tiny** | ⛔ builds, **does not run** | — | — | — |
 
@@ -3882,7 +3882,7 @@ epoch 1.
 `verified_mlir/mobilenetv2_adamdp_train_step.mlir`, written by a second `#eval` in
 `Proofs/Codegen/MobileNetV2RenderB.lean` at `replicas := 2`; `LEAN_MLIR_VARIANT=adamdp`, entry
 `@mobilenetv2_adamdp_train_step`. It renders to its **own** path, so the artifact the trainer runs
-is untouched. Needs `mobilenetv2-verified-adam-xla` (§2h) — collectives exist only on the PJRT path.
+is untouched. Needs `mobilenetv2-verified-adam` (§2h) — collectives exist only on the PJRT path.
 
 This was the cheap half of the DP work, exactly as §2h predicted: the renderer already took
 `replicas`, already called `emitGradAllReduce`, and `mnv2AdamVariant` already returned the slug.
@@ -3938,7 +3938,7 @@ The identity gate says the DP step computes the right thing; these say what it c
 trainer actually drives it.
 
 **It trains.** `LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_REPLICAS=2 PJRT_REPLICAS=2` on
-`mobilenetv2-verified-adam-xla`: the banner reports *"DATA-PARALLEL: 2 replicas x bs 32 = global
+`mobilenetv2-verified-adam`: the banner reports *"DATA-PARALLEL: 2 replicas x bs 32 = global
 batch 64"*, loss descends 2.506 → 2.291 → 2.128 and val reaches 17.8% at epoch 1.
 
 **Marginal epoch, train-only, measured solo on 2× 7900 XTX** (`scripts/marginal_epoch.sh`):

@@ -36,7 +36,7 @@ Two failure modes it separates, both of which have actually happened in this rep
 
 Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path — the IREE shim
 refuses a DP entry point outright rather than silently running single-device, which is why
-`mobilenetv2-verified-adam-xla` had to exist first, §2h).
+`mobilenetv2-verified-adam` had to exist first, §2h).
 -/
 
 private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
