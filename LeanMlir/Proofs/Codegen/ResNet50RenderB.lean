@@ -390,6 +390,90 @@ private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f :
 -- ════════════════════════════════════════════════════════════════
 
 set_option maxRecDepth 4000000 in
+/-- Everything the whole-net render needs out of ONE forward traversal of ResNet-50: the emitted
+    code, the logits, and every saved activation the backward reads.
+
+    ⭐⭐ **This exists so `@resnet50_fwd` and `@resnet50_adam_train_step` cannot be different nets.**
+    They were: `resnet50FwdFaithfulV` built its forward from the PER-EXAMPLE chain (`r50FwdChain`,
+    which reaches `bnSite` and therefore `bnPerChannelF`, reduce `[2,3]`, divisor `H·W`) while the
+    train step is batch BN (reduce `[0,2,3]`, divisor `B·H·W`). Its own docstring claimed "the same
+    forward the train step differentiates", which was the invariant that did not hold.
+    `scripts/regen_verified_mlir.sh check` could not see it: it only ever paired a forward with the
+    SGD train step, and R50 has none (`planning/mnv4_verified.md` §3d(b)).
+
+    ⚠ The eval forward is deliberately NOT moved onto this chain. `bnEval` reads frozen per-channel
+    statistics as graph inputs, so it is the same arithmetic in either vocabulary and has no
+    BN-world to disagree about — and it is the artifact that actually scores, so leaving its bytes
+    untouched keeps 89.86% (`runs/r50_imagenette_adam_80ep.log`) exactly where it is. -/
+structure R50FwdRecB where
+  code : String
+  logits : String
+  stc : String            -- stem conv out (= stem-BN input)
+  stn : String            -- stem BN out   (= stem-relu pre-activation)
+  str : String            -- stem relu out (= maxpool input)
+  stp : String            -- maxpool out
+  gap : String            -- GAP out (= dense input)
+  b : Array BNFwd         -- the 16 bottleneck blocks, in forward order
+deriving Inhabited
+
+set_option maxRecDepth 4000000 in
+/-- **The ResNet-50 forward chain at the BATCHED index** — one traversal, consumed by both
+    `@resnet50_fwd` and the train step that differentiates it. -/
+def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7) :
+    StateM Nat R50FwdRecB := do
+  -- The ladder, bottom-up. At q = 7: 5→…  no — at q = 7 these are 7, 14, 28, 56, 112 and the
+  -- input is 224; at q = 5 they are 5, 10, 20, 40, 80 and the input is 160.
+  let q5 := q            -- stage 4 / the GAP window
+  let q4 := 2 * q5       -- stage 3
+  let q3 := 2 * q4       -- stage 2
+  let q2 := 2 * q3       -- stage 1, and the max-pool's output
+  let q1 := 2 * q2       -- the stem conv's output
+  -- ═══ stem: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 pool (img→img/2→img/4) ═══
+  -- ⚠ `2*q1` rather than a name, because `convStrided (h := q1)` demands its operand at exactly
+  -- `Vec (B*(3*(2*q1)*(2*q1)))` and any other spelling of the same number is a different TERM.
+  let zx    : Vec (B*(3*(2*q1)*(2*q1))) := fun _ => 0
+  let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
+  let z64   : Vec 64 := fun _ => 0
+  let z112  : Vec (B*(64*q1*q1)) := fun _ => 0
+  let z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
+  let z56   : Vec (B*(64*q2*q2)) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := q1) (w := q1) "%sW" (zb 64) zSk z64) (.operand "%x" zx))
+  let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := q1) (w := q1) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
+  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*q1*q1)) (.operand nStn z112))
+  let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := q2) (w := q2)) (.operand nStr z112))
+  -- ═══ 16 bottleneck blocks, [3,4,6,3] ═══
+  let f1  ← bnkProjFwdB    B   64  64  256 q2 epsStr "s1b0" nStp   -- ⭐ the stride-1 projection
+  let f2  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b1" f1.o
+  let f3  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b2" f2.o
+  let f4  ← bnkStridedFwdB B  256 128  512 q3 epsStr "s2b0" f3.o
+  let f5  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b1" f4.o
+  let f6  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b2" f5.o
+  let f7  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b3" f6.o
+  let f8  ← bnkStridedFwdB B  512 256 1024 q4 epsStr "s3b0" f7.o
+  let f9  ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b1" f8.o
+  let f10 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b2" f9.o
+  let f11 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b3" f10.o
+  let f12 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b4" f11.o
+  let f13 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b5" f12.o
+  let f14 ← bnkStridedFwdB B 1024 512 2048  q5 epsStr "s4b0" f13.o
+  let f15 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b1" f14.o
+  let f16 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b2" f15.o
+  -- ═══ head: GAP(7×7) → dense(2048→nClasses) ═══
+  let zL    : Vec (B*(2048*q5*q5)) := fun _ => 0
+  let z2048 : Vec (B*2048) := fun _ => 0
+  let zWd   : Mat 2048 nClasses := fun _ _ => 0
+  let zNC   : Vec nClasses := fun _ => 0
+  let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
+  let zNCp  : Vec (B*nClasses) := fun _ => 0
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := q5) (w := q5)) (.operand f16.o zL))
+  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
+  pure { code := cStc ++ cStn ++ cStr ++ cStp ++
+                 f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
+                 f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
+                 f15.code ++ f16.code ++ cGap ++ cLog,
+         logits := nLog, stc := nStc, stn := nStn, str := nStr, stp := nStp, gap := nGap,
+         b := #[f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16] }
+
 /-- **ResNet-50 `[3,4,6,3]` bottleneck train step, batch-BN, rendered at `N := B`.**
 
     161 θ / 161 m / 161 v, `%lr`/`%bc1`/`%bc2`, 106 running-stat slots and `%onehot` in;
@@ -428,52 +512,31 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   -- That asymmetry is exactly why the driver needs `TestVariantPredicates` and this line does not.
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let go : StateM Nat String := do
-    -- The ladder, bottom-up. At q = 7: 5→…  no — at q = 7 these are 7, 14, 28, 56, 112 and the
-    -- input is 224; at q = 5 they are 5, 10, 20, 40, 80 and the input is 160.
-    let q5 := q            -- stage 4 / the GAP window
-    let q4 := 2 * q5       -- stage 3
-    let q3 := 2 * q4       -- stage 2
-    let q2 := 2 * q3       -- stage 1, and the max-pool's output
-    let q1 := 2 * q2       -- the stem conv's output
-    -- ═══ stem: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 pool (img→img/2→img/4) ═══
-    -- ⚠ `2*q1` rather than a name, because `convStrided (h := q1)` demands its operand at exactly
-    -- `Vec (B*(3*(2*q1)*(2*q1)))` and any other spelling of the same number is a different TERM.
+    -- ═══ forward: THE SHARED CHAIN, not a second copy (see `r50FwdChainB`) ═══
+    let fw ← r50FwdChainB B nClasses epsStr q
+    let q5 := q
+    let q4 := 2 * q5
+    let q3 := 2 * q4
+    let q2 := 2 * q3
+    let q1 := 2 * q2
     let zx    : Vec (B*(3*(2*q1)*(2*q1))) := fun _ => 0
     let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
     let z64   : Vec 64 := fun _ => 0
     let z112  : Vec (B*(64*q1*q1)) := fun _ => 0
     let z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
     let z56   : Vec (B*(64*q2*q2)) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStrided (h := q1) (w := q1) "%sW" (zb 64) zSk z64) (.operand "%x" zx))
-    let (cStn, nStn) ← pretty B (.bnBatchF (N := B) (oc := 64) (h := q1) (w := q1) "%sg" "%sbt" epsStr 0 z64 z64 (.operand nStc z112))
-    let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*q1*q1)) (.operand nStn z112))
-    let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := q2) (w := q2)) (.operand nStr z112))
-    -- ═══ 16 bottleneck blocks, [3,4,6,3] ═══
-    let f1  ← bnkProjFwdB    B   64  64  256 q2 epsStr "s1b0" nStp   -- ⭐ the stride-1 projection
-    let f2  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b1" f1.o
-    let f3  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b2" f2.o
-    let f4  ← bnkStridedFwdB B  256 128  512 q3 epsStr "s2b0" f3.o
-    let f5  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b1" f4.o
-    let f6  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b2" f5.o
-    let f7  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b3" f6.o
-    let f8  ← bnkStridedFwdB B  512 256 1024 q4 epsStr "s3b0" f7.o
-    let f9  ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b1" f8.o
-    let f10 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b2" f9.o
-    let f11 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b3" f10.o
-    let f12 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b4" f11.o
-    let f13 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b5" f12.o
-    let f14 ← bnkStridedFwdB B 1024 512 2048  q5 epsStr "s4b0" f13.o
-    let f15 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b1" f14.o
-    let f16 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b2" f15.o
-    -- ═══ head: GAP(7×7) → dense(2048→nClasses) ═══
     let zL    : Vec (B*(2048*q5*q5)) := fun _ => 0
     let z2048 : Vec (B*2048) := fun _ => 0
     let zWd   : Mat 2048 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
     let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
     let zNCp  : Vec (B*nClasses) := fun _ => 0
-    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := q5) (w := q5)) (.operand f16.o zL))
-    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
+    let nStc := fw.stc; let nStn := fw.stn; let nStr := fw.str; let nStp := fw.stp
+    let nGap := fw.gap; let nLog := fw.logits
+    let f1 := fw.b[0]!;  let f2 := fw.b[1]!;  let f3 := fw.b[2]!;  let f4 := fw.b[3]!
+    let f5 := fw.b[4]!;  let f6 := fw.b[5]!;  let f7 := fw.b[6]!;  let f8 := fw.b[7]!
+    let f9 := fw.b[8]!;  let f10 := fw.b[9]!; let f11 := fw.b[10]!; let f12 := fw.b[11]!
+    let f13 := fw.b[12]!; let f14 := fw.b[13]!; let f15 := fw.b[14]!; let f16 := fw.b[15]!
     -- ═══ the loss cotangent ═══
     --
     -- ⭐⭐ **BCE-with-logits is the SAME SHAPE with one op swapped, and THREE ops instead of five.**
@@ -644,10 +707,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-    let body := cStc ++ cStn ++ cStr ++ cStp ++
-      f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
-      f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++ f16.code ++
-      cGap ++ cLog ++ cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
+    let body := fw.code ++ cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
       cDgi ++ cWd ++ cbd ++ cDgp ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
       b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++
@@ -844,13 +904,25 @@ private def r50FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
 
 set_option maxRecDepth 4000000 in
 /-- **`@resnet50in_fwd`** — 162 inputs (`%x` + 161 params), logits `[B, nClasses]`. Batch-statistic
-    BN, i.e. the same forward the train step differentiates. -/
+    BN, i.e. the same forward the train step differentiates.
+
+    ⚠⚠ **That sentence was FALSE until 2026-08-10 and is now enforced.** This built its forward from
+    `r50FwdChain .train`, which reaches R34's shared `bnSite` and therefore `bnPerChannelF` — reduce
+    `[2,3]`, divisor `H·W`, PER-EXAMPLE — while `resnet50TrainStepFaithfulB` is `bnBatchF`, reduce
+    `[0,2,3]`, divisor `B·H·W`. Two different functions under one net's name (§3d(b)), and
+    `regen_verified_mlir.sh check` could not see it because it only ever paired a forward with the
+    SGD train step and R50 has none. It now renders from `r50FwdChainB` — literally the traversal
+    the train step differentiates — so `check_adam_prefix` holds it as a byte prefix.
+
+    ⚠ `r50FwdChain`'s `.train` branch is now UNUSED by R50 and must stay that way; it survives only
+    because `.eval` shares the function. Rendering a forward from it reopens the split. -/
 def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
     (slug : String := "resnet50in") (q : Nat := 7) (vSuffix : String := "") : String :=
   let sigList := r50SigList nClasses
   let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let (code, logits) := (r50FwdChain B nClasses .train epsStr q).run' 0
+  let fwr := (r50FwdChainB B nClasses epsStr q).run' 0
+  let (code, logits) := (fwr.code, fwr.logits)
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-50 forward: every line is pretty(verified AST node) ──\n" ++

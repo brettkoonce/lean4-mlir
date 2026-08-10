@@ -185,9 +185,10 @@ PY
 # ⚠ The check is not FALSE. It is just not about the artifact anyone trains on. That is the lesson
 # worth keeping: when a guard goes green, check WHAT PAIRING IT FORMED.
 #
-# Measured 2026-08-10: 4 of the 7 pairs already hold, so this is real new coverage and not just a
-# list of known failures. The 3 that do not are recorded below and are non-fatal; a divergence NOT
-# on that list fails the check.
+# Measured 2026-08-10: 4 of the 7 pairs already held, so this was real new coverage and not just a
+# list of known failures. R50 was then CLOSED the same day by rendering `resnet50_fwd` from
+# `r50FwdChainB` — the traversal the train step differentiates — taking it to 5 paired, 2 split.
+# The 2 that remain are recorded below and are non-fatal; a divergence NOT on that list fails.
 check_adam_prefix() {
   echo "── forward ⊂ ADAM train-step prefix check (§3d(b)) ──"
   python3 - <<'PY_INNER'
@@ -212,7 +213,6 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_adam_train_step.mlir"),
 #    statistics.
 KNOWN_SPLIT = {
   "resnet34_fwd.mlir":    "per-example BN vs the batch-BN Adam step — two renderers (ResNet34Render vs ResNet34RenderB)",
-  "resnet50_fwd.mlir":    "per-example BN vs the batch-BN Adam step — same two-renderer split",
   "mobilenetv2_fwd.mlir": "per-example BN vs the batch-BN Adam step — same two-renderer split",
 }
 
