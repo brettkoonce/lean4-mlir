@@ -1968,24 +1968,37 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   for l in spec.layers do
     match l with
     | .conv2d _ _ _ pad act =>
-      let padStr := match pad with | .same => "SAME" | .valid => "VALID"
+      -- ⚠ `.same` under `.symmetric` emits NO padding argument, so `conv2d`'s own
+      -- torchvision `(k-1)//2` default applies. Passing `'SAME'` here is what overrode that
+      -- default at the ResNet stem. See `NetSpec.convPadStyle`.
+      let padArg := match pad, spec.convPadStyle with
+        | .same,  .symmetric => ""
+        | .same,  .xlaSame   => ", 'SAME'"
+        | .valid, _          => ", 'VALID'"
       code := code ++ "    x = conv2d(x, params[" ++ toString pidx ++ "][0], params[" ++
-        toString pidx ++ "][1], '" ++ padStr ++ "')\n"
+        toString pidx ++ "][1]" ++ padArg ++ ")\n"
       if act == .relu then code := code ++ "    x = jax.nn.relu(x)\n"
       if act == .relu6 then code := code ++ "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n"
       pidx := pidx + 1
     | .convBn _ _ _ s pad =>
-      let padStr := match pad with | .same => "SAME" | .valid => "VALID"
+      -- ⚠ `.same` under `.symmetric` emits NO `padding=` argument, so `conv_bn`'s own
+      -- torchvision `(k-1)//2` default applies — one statement of the convention, not two.
+      -- The explicit `padding='SAME'` this replaces is what silently made the ResNet
+      -- references XLA-padded at their 7×7/s2 stem. See `NetSpec.convPadStyle`.
+      let padArg := match pad, spec.convPadStyle with
+        | .same,  .symmetric => ""
+        | .same,  .xlaSame   => ", padding='SAME'"
+        | .valid, _          => ", padding='VALID'"
       let strideStr := if s == 1 then "" else ", stride=(" ++ toString s ++ "," ++ toString s ++ ")"
       if cfg.runningBN then
         code := code ++ "    x, _ns = conv_bn(x, params[" ++ toString pidx ++ "][0], params[" ++
           toString pidx ++ "][1], params[" ++ toString pidx ++ "][2], bn[bn_i], training" ++
-          strideStr ++ ", padding='" ++ padStr ++ "')\n"
+          strideStr ++ padArg ++ ")\n"
         code := code ++ "    bn_out.append(_ns); bn_i += 1\n"
       else
         code := code ++ "    x = conv_bn(x, params[" ++ toString pidx ++ "][0], params[" ++
           toString pidx ++ "][1], params[" ++ toString pidx ++ "][2]" ++
-          strideStr ++ ", padding='" ++ padStr ++ "')\n"
+          strideStr ++ padArg ++ ")\n"
       -- ⚠ Was an unconditional `jax.nn.relu(x)`, which made this emitter the reason MobileNetV2's
       -- reference was ReLU where the net is ReLU6, and EfficientNet's was ReLU where the net is
       -- swish. See `NetSpec.convBnAct`.

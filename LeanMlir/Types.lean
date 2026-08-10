@@ -22,6 +22,34 @@ inductive Padding where
   | valid
 deriving Repr, BEq
 
+/-- How a layer's `.same` padding is **spelled** when it is STRIDED.
+
+    `.same` states an intent ("keep the output size"), and at stride 1 with an odd kernel the two
+    spellings below are bit-identical — which is every conv in the kit except the strided ones.
+    They differ only when strided on an even input, where the two grids sit one input position
+    apart:
+
+    * `.xlaSame`   — XLA `'SAME'`, extra row on the HIGH side. 7×7/s2 on 224 pads (2,3);
+      3×3/s2 on an even input pads (0,1). This is the reference for the **TF-origin ports**
+      (MobileNetV2/V4, EfficientNet), where asymmetric `'SAME'` genuinely IS the published net.
+    * `.symmetric` — torchvision / He et al., `(k-1)//2` on both sides, i.e.
+      `nn.Conv2d(padding=k//2)`. This is the reference for the **ResNet family**.
+
+    ⚠ This exists for the same reason `NetSpec.convBnAct` does: the JAX emitter stated the
+    convention independently of the render and had no way to say anything but `'SAME'`, so the
+    ResNet references silently used XLA padding at their 7×7/s2 stem while the verified render
+    used torchvision's symmetric pad. Neither shape nor op count nor arity can see the difference
+    (`planning/mnv4_verified.md` §3c/§4b).
+
+    ⚠ The Python helpers `conv2d`/`conv_bn` already DEFAULT to symmetric — that was fixed
+    2026-08-04 — but the top-level layer emitter passed an explicit `padding='SAME'` that
+    overrode the default at exactly the stem. `.symmetric` here means "pass nothing and let the
+    helper's default apply", so there is one statement of the convention, not two. -/
+inductive PadStyle where
+  | xlaSame
+  | symmetric
+deriving Repr, BEq
+
 inductive Layer where
   | conv2d  (ic oc kSize : Nat) (pad : Padding) (act : Activation)
   | convBn  (ic oc kSize stride : Nat) (pad : Padding)
@@ -348,6 +376,22 @@ structure NetSpec where
       its `.convBn` sites. A net that genuinely mixed them would need a `Layer` field instead;
       none does, and 458 construction sites is the price of finding out. -/
   convBnAct : Activation := .relu
+  /-- How `.same` is spelled at a **strided top-level** `.conv2d`/`.convBn`, **per net**.
+
+      See `PadStyle`. Defaults to `.xlaSame`, which is what the emitter has always emitted, so
+      every net that does not set this stays byte-identical. The ResNet-family mains set
+      `.symmetric` because torchvision's `Conv2d(3,64,7,stride=2,padding=3)` is the net their
+      verified render already implements.
+
+      ⚠ Only bites at a STRIDED top-level conv. Block-internal convs (`basic_block_down`,
+      `bottleneck_block_down`, …) call the helpers without a padding argument and so already take
+      the symmetric default; the mobile/TF-origin blocks pass `'SAME'` explicitly inside their own
+      helpers and are likewise untouched by this field. It moves exactly the stem, which is the
+      one site the 2026-08-04 helper-default fix could not reach.
+
+      Scoped per net rather than per layer for the same reason as `convBnAct`: no net in the kit
+      mixes the two conventions across its own top-level convs. -/
+  convPadStyle : PadStyle := .xlaSame
 deriving Repr
 
 /-- The "kind" of supervised loss the train step computes. Picks the

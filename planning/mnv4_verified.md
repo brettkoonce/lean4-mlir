@@ -973,13 +973,16 @@ The audit instruments `jax.lax` and runs the reference's `forward()` once on a 2
 input, reads the same facts out of the committed `.mlir`, and diffs the convention profiles. **No
 GPU, no training, no gradients** — seconds per net. Current state:
 
-| net | verdict |
-|---|---|
-| **mnv4** | ✅ clean |
-| **enet** | ⛔ activation — reference calls relu exactly TWICE (stem, head) where the render is swish |
-| **mnv2** | ⛔ activation (render relu6, reference relu) + BN self-split |
-| **r34** | ⛔ padding (7 strided convs + the maxpool) + BN self-split |
-| **r50** | ⛔ padding + BN self-split — **measured 2026-08-10, R34's exact shape** |
+| net | verdict when the audit was written | **now (2026-08-10, after §4c)** |
+|---|---|---|
+| **mnv4** | ✅ clean | ✅ clean |
+| **enet** | ⛔ activation — reference calls relu exactly TWICE (stem, head) where the render is swish | ✅ clean |
+| **mnv2** | ⛔ activation (render relu6, reference relu) + BN self-split | ⚠ bn-split only |
+| **r34** | ⛔ padding (7 strided convs + the maxpool) + BN self-split | ⚠ bn-split only |
+| **r50** | ⛔ padding + BN self-split — **measured 2026-08-10, R34's exact shape** | ✅ clean |
+
+⚠ The r50 row's "+ BN self-split" was wrong: `resnet50_fwd` and `resnet50_adam_train_step` are
+both batch BN and always agreed. The split is real on **mnv2 and r34 only**.
 
 ⚠ **`--selftest` is the load-bearing part.** It asserts the audit reproduces the known ledger; an
 audit that cannot rediscover the findings that motivated it is worse than none, because its green
@@ -1001,6 +1004,91 @@ still called it open. That is the argument for the script over a list in a markd
 `.convBn` needs an activation parameter (closes enet + mnv2), and the ResNet-family generator needs
 symmetric padding (closes r34 AND r50 — the render is the paper-faithful side on both, torchvision's
 `Conv2d(3,64,7,stride=2,padding=3)` / `MaxPool2d(3,2,padding=1)`).
+
+## 4c. ✅ BOTH REMAINING ROWS ARE CLOSED (2026-08-10) — and one of them was already fixed
+
+`scripts/convention_audit.py` now reports **enet, mnv4 and r50 fully clean, mnv2 and r34 carrying
+`bn-split` alone**. `scripts/convention_baseline.txt` went from **6 entries to 2**. Both closures
+moved the **reference** onto the render; **no verified artifact, number or proof moved** — the diff
+touches `LeanMlir/Types.lean`, `jax/Jax/Codegen.lean`, four `jax/MainResnet*.lean` and two scripts,
+and `verified_mlir/` is untouched.
+
+### (a) The activation row was ALREADY fixed — the AUDIT was wrong
+
+`NetSpec.convBnAct` landed in `9f53068` and both references have been correct since. enet was
+genuinely clean. **mnv2's `⛔ activation` was a FALSE RED in the audit itself**: its relu6 detector
+shimmed `jax.nn.relu6`, which this generator never calls — it emits the idiom
+`jnp.minimum(jax.nn.relu(x), 6.0)`. So the reference side could not report relu6 under *any*
+circumstances, and the row could never clear no matter what the generator did.
+
+⭐⭐ **A false RED is the dangerous direction for a ratchet.** A false green gets found by the next
+tie; a false red gets *recorded in the baseline* and reads as live debt forever — §4b listed it as
+one of two remaining tasks. Fixed by detecting the clamp itself (`min_shim`: a `jnp.minimum`
+against the scalar 6.0), and the check is now a **count**, not a presence test, for the same reason
+the relu check is: "the reference has SOME relu6" would pass with the stem and head still plain
+relu. Measured after the fix: **render relu6=35, reference relu6=35**, at 35 sites.
+
+⚠ ⭐ **`--selftest` is what caught it, and it caught it by failing on the WRONG net** — enet, whose
+fix had landed while the ledger still said otherwise. That is the argument for the selftest
+existing at all, arriving one net over from where it was aimed.
+
+⛔ **And the selftest had gone vacuous.** With every row clean, "the corpus matches KNOWN" asserts
+`clean == clean` and passes even if every detector is dead — which is exactly how the broken relu6
+shim survived. The comparison is now a pure function (`compare()`), and `--selftest` replays the
+five historical divergences through it as synthetic profiles plus a **matched-profile negative
+control**. The ledger check remains as a second stage. Debt being paid must not silently retire
+the gate that proved it.
+
+### (b) The padding row — one site, and the helper default was already right
+
+The 2026-08-04 fix made `conv2d`/`conv_bn` default to symmetric `(k-1)//2`. It did not stick at the
+stem, because the **top-level layer emitter passed an explicit `padding='SAME'`** that overrode the
+default — so r34/r50 diverged at exactly one of seven strided convs (`{'sym': 7}` render vs
+`{'same': 1, 'sym': 6}` reference). Everything else — the block downsample convs and the stem pool
+— already agreed.
+
+Fixed with `NetSpec.convPadStyle : PadStyle`, mirroring `convBnAct`: **defaults to `.xlaSame`** so
+every net stays byte-identical, and the four `MainResnet*.lean` set `.symmetric`, which emits *no*
+padding argument and lets the helper's own default apply. **One statement of the convention, not
+two** — the second statement is what rotted.
+
+⭐ **The control that makes this a change and not a hope:** mnv2, mnv4 and enet were regenerated and
+are **byte-identical** to their pre-change files. The r34/r50 diff is the single stem line.
+
+### (c) ⛔ IT BROKE A GATE — and the gate had already been broken for a week
+
+`grad_tie.py --net r34` monkey-patched the reference symmetric at `conv_bn` **and** `max_pool2d`.
+The pool patch stopped matching when the generator was fixed on 2026-08-03, and
+`load_reference_forward` *asserts every patch fires* — so `--net r34` was dying on
+`reference patch matched 0 times`, not running, and nothing in CI runs it.
+
+▶ Both patches are now deleted: the reference needs no rewriting, so **the tie measures the shipped
+reference**. Result, against the unpatched file:
+
+| mode | live params over 10× the control | worst block |
+|---|---|---|
+| `--nokink` | **0/110** | s2b2 1.45× |
+| default (kinked) | **0/110** | s3b3 1.19× |
+
+⭐ **The `s3b3` holdout §8 records as "17/18 blocks" does not reproduce** — 1.19×, well inside.
+⚠ Do **not** read that as this change having fixed it: the old patch already forced the stem
+symmetric (`kh//2` = 3 for the 7×7), so the patched net and today's net should agree, and the b2
+artifact was re-rendered 2026-08-10. **Cause not isolated; the holdout is simply gone.**
+
+⚠ **A patch list is a second place the convention is stated, and it rots the moment the first place
+is fixed.** Checked the siblings: `enet_forward_tie.py` and `mnv2_forward_tie.py` already skip
+their dead `ACT_SITES` by design (guarded 2026-08-08). `grad_tie.py` was the one that hard-failed.
+
+### (d) ⛔ WHAT THIS VOIDS — two JAX baseline numbers, and they were already void
+
+`RESULTS.md`'s Imagenette **ResNet-34 90.29%** and **ResNet-50 89.40%** come off
+`generated_resnet34.py` / `generated_resnet50.py`, whose stem just moved. ⚠ They were **already**
+stale before today — the 2026-08-03 pool fix and the 2026-08-04 strided-conv fix moved these same
+two nets, and `max_pool2d`'s own docstring says so in as many words (*"This MOVES the ResNet stem
+pool, so it voids R34-ImageNet's and R50's numbers"*). Today closes the last site rather than
+opening a new hole. **Neither is flagged in `RESULTS.md`; both need a caption or a re-run.**
+Nothing on the verified path is affected — R50's 89.86% and R34's verified numbers train on renders
+that never moved.
 
 ⚠ **R50 was the "suspected but unmeasured" row and it is now measured — §3c was wrong for BOTH
 ResNets, not just R34.** It is audited against the 1000-class reference on purpose: the Imagenette
@@ -1086,18 +1174,22 @@ block forms, mirroring `ResNet34BackB0` — which R50's blocks were explicitly w
 * MNv4's gradient is **verified correct end to end** (`scripts/grad_tie.py --net mnv4 --nokink`,
   0/147, and the gate was verified to FAIL on an injected γ↔β swap). The proof work is about
   *certifying* what is already known to be numerically right — it is not a bug hunt.
-* R34's gradient tie (`--net r34`) sits at 17/18 blocks with one holdout (`s3b3`, whose control is
-  the smallest in its stage on every run and whose four structurally-identical siblings all pass).
-  That is a probe-resolution question, not evidence of an R34 backward bug.
+* ~~R34's gradient tie (`--net r34`) sits at 17/18 blocks with one holdout (`s3b3`…)~~ — **re-run
+  2026-08-10 (§4c(c)): 0/110 live parameters in BOTH `--nokink` and default mode**, against the
+  shipped reference with the monkey-patches removed. `s3b3` is 1.19×. It was never evidence of an
+  R34 backward bug and is no longer a holdout at all.
 * ⚠ **R50 has no reference to tie against.** If an empirical check is wanted for R50, the missing
   artifact is a 10-class `generated_resnet50.py`; the conventions can already be audited via the
   1000-class one (`scripts/convention_audit.py --net r50`, a proxy that was checked, not assumed).
 
 ### The other thing R50 and MNv4 owe, and it is not a proof
 
-`r50:padding` and `r34:padding` are open in `scripts/convention_baseline.txt`: both renders are
-symmetric (torchvision-faithful) while their references pass XLA `'SAME'`. One generator fix closes
-both. And no Imagenette net has a matched **recipe** — every JAX baseline is bs192 where every
+~~`r50:padding` and `r34:padding` are open in `scripts/convention_baseline.txt`~~ — ✅ **CLOSED
+2026-08-10, see §4c**: one generator field (`NetSpec.convPadStyle`) closed both, and the baseline
+is down to `mnv2:bn-split` + `r34:bn-split`. ⚠ Two consequences for the table above: R34's grad-tie
+row is now **0/110 in both modes** against the *unpatched* reference (the `s3b3` holdout does not
+reproduce), and `RESULTS.md`'s R34 90.29% / R50 89.40% **JAX baseline** numbers are for a net that
+no longer exists. And no Imagenette net has a matched **recipe** — every JAX baseline is bs192 where every
 verified trainer is bs32 — so no "verified X% vs baseline Y%" pair in the repo is currently
 comparing like with like.
 

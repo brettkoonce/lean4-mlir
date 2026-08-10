@@ -8,6 +8,9 @@ import Jax
 
 def resnet34Imagenet : NetSpec where
   name := "ResNet-34 (ImageNet)"
+  -- torchvision's `Conv2d(3, 64, 7, stride=2, padding=3)`, not XLA 'SAME' — the net the
+  -- verified render already implements. Bites only at the 7x7/s2 stem. See `PadStyle`.
+  convPadStyle := .symmetric
   imageH := 224
   imageW := 224
   layers := [

@@ -81,36 +81,33 @@ NETS = {
         # R34 trains on XLA/PJRT, so the tie runs the same lowerer the trainer does.
         nparams=110, nstats=72, nclasses=10, runner="xla",
         emit="lake build r34-train-b2 && .lake/build/bin/r34-train-b2",
-        # ⚠⚠ THE REFERENCE IS THE DEVIATING SIDE HERE, and it took a crossed 2x2 grid to see it.
-        # `generated_resnet34.py` passes `padding='SAME'` to BOTH `conv_bn` and `max_pool2d`, i.e.
-        # XLA's ASYMMETRIC same. The render is symmetric everywhere (conv [[3,3]]/[[1,1]], pool
-        # [[1,1]]) — which is torchvision/He et al.: `Conv2d(3,64,7,stride=2,padding=3)`,
-        # `MaxPool2d(3,2,padding=1)`, downsample `padding=1`. So the RENDER is paper-faithful and
-        # the reference deviates, the same direction as EfficientNet's swish (§3f) and the opposite
-        # of the TF-origin nets, where asymmetric SAME IS the reference.
+        # ✅ NO PATCHES — and that is the point. This entry used to monkey-patch the reference
+        # symmetric at TWO sites, because `generated_resnet34.py` passed XLA's ASYMMETRIC `'SAME'`
+        # to both `conv_bn` and `max_pool2d` where the render is symmetric everywhere (conv
+        # [[3,3]]/[[1,1]], pool [[1,1]]) — torchvision/He et al.:
+        # `Conv2d(3,64,7,stride=2,padding=3)`, `MaxPool2d(3,2,padding=1)`, downsample `padding=1`.
+        # The RENDER was the paper-faithful side, the same direction as EfficientNet's swish (§3f)
+        # and the opposite of the TF-origin nets, where asymmetric SAME IS the reference.
         #
-        # ⭐ Patching only ONE axis makes the disagreement WORSE (1.27e-2 and 1.18e-2, against
-        # 1.70e-3 unpatched); matching BOTH ties %loss at 1.99e-09. A one-axis sweep would have
-        # sent the next reader hunting a structural bug that does not exist — §7.4's lesson,
-        # arriving on a fourth net.
-        patches=[
-            (r"def conv_bn\(.*?return x \* gamma\.reshape\(1, -1, 1, 1\) \+ beta\.reshape\(1, -1, 1, 1\)\n",
-             "def conv_bn(x, w, gamma, beta, stride=(1,1), padding='SAME'):\n"
-             "    if padding == 'SAME':\n"
-             "        kh, kw = w.shape[2], w.shape[3]\n"
-             "        padding = ((kh//2, kh//2), (kw//2, kw//2))\n"
-             "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n"
-             "          dimension_numbers=('NCHW','OIHW','NCHW')).astype(jnp.float32)\n"
-             "    mean = jnp.mean(x, axis=(0,2,3), keepdims=True)\n"
-             "    var = jnp.var(x, axis=(0,2,3), keepdims=True)\n"
-             "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n"
-             "    return x * gamma.reshape(1,-1,1,1) + beta.reshape(1,-1,1,1)\n"),
-            (r"def max_pool2d\(.*?'SAME'\)\n",
-             "def max_pool2d(x, size=2, stride=2):\n"
-             "    p = size//2\n"
-             "    return jax.lax.reduce_window(x, -jnp.inf, jax.lax.max, (1,1,size,size),\n"
-             "             (1,1,stride,stride), ((0,0),(0,0),(p,p),(p,p)))\n"),
-        ],
+        # ⭐ The GENERATOR has since been moved onto the render, so the deviation no longer exists
+        # to patch: `max_pool2d` symmetric (2026-08-03), the helper conv defaults symmetric
+        # (2026-08-04), and the 7x7/s2 stem via `NetSpec.convPadStyle` (2026-08-10) — that last one
+        # because the layer emitter passed an explicit `padding='SAME'` that overrode the helper
+        # default at exactly the stem. `scripts/convention_audit.py --net r34` now reports the
+        # padding axis clean, which is the check that says these patches are dead rather than
+        # merely unused.
+        #
+        # ⚠ Two reasons this is strictly better than keeping them, both learned the expensive way:
+        # the tie now measures the SHIPPED reference instead of a rewritten one, and the pool patch
+        # had ALREADY stopped firing when the generator moved in August — `load_reference_forward`
+        # asserts every patch matches exactly once, so `--net r34` was dying on
+        # "reference patch matched 0 times" rather than running. A patch list is a second place the
+        # convention is stated, and it rots the moment the first place is fixed.
+        #
+        # ⭐ Kept for the record, because it is the reason the crossed grid exists: patching only
+        # ONE of the two axes made the disagreement WORSE (1.27e-2 and 1.18e-2, against 1.70e-3
+        # unpatched); matching BOTH tied %loss at 1.99e-09. A one-axis sweep would have sent the
+        # next reader hunting a structural bug that does not exist — §7.4's lesson, on a fourth net.
     ),
 }
 

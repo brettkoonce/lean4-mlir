@@ -6,10 +6,18 @@ reference to be different nets, and each one cost a session to discover:
 
     mnv4  stem padding          render wrong   fixed (convStridedXla)
     mnv2  padding, 5 sites      render wrong   fixed (switched + 2 re-runs)
-    mnv2  stem/head relu6/relu  REFERENCE      open
-    enet  stem/head swish/relu  REFERENCE      open
-    enet  stem padding          render wrong   open
-    r34   conv + pool padding   REFERENCE      open  (found 2026-08-10)
+    mnv2  stem/head relu6/relu  REFERENCE      fixed (NetSpec.convBnAct)
+    enet  stem/head swish/relu  REFERENCE      fixed (NetSpec.convBnAct)
+    enet  stem padding          render wrong   fixed (convStridedXla, re-run aug08)
+    r34   conv + pool padding   REFERENCE      fixed (pool + helper defaults, then
+    r50   stem padding          REFERENCE             NetSpec.convPadStyle for the stem)
+
+⚠ **This script has itself been wrong.** Its `relu6` detector shimmed `jax.nn.relu6`, which this
+generator never calls — it emits `jnp.minimum(jax.nn.relu(x), 6.0)`. So the reference side could
+not report relu6 under any circumstances, and `mnv2:activation` stayed red for a day after the
+generator was fixed. A false RED is the dangerous direction for a ratchet: the baseline gets
+frozen against it and the row looks like live debt forever. `--selftest` is what caught it, by
+failing on enet — see `min_shim`.
 
 Those are not six bugs. They are **two gaps spelled twice**: the JAX `.convBn` layer emitter
 hardcodes `jax.nn.relu` and has no activation parameter, and padding is stated independently on
@@ -92,13 +100,51 @@ NETS = {
 # 2026-08-08 (`runs/enet_adam_80ep_xlapad_aug08.log`, 89.76%) — the audit found that row already
 # fixed while a hand-kept ledger still called it open, which is the whole argument for having this
 # script rather than a list in a doc.
+# The live ledger: what each net is EXPECTED to still show for padding/activation. All five are
+# now clean on both axes (r34/mnv2 still carry `bn-split`, which is a separate defect and not
+# checked here). ⚠ Because this is all-clean it no longer proves the detectors work — that job
+# moved to REGRESSIONS below.
 KNOWN = {
-    "r50":  {"padding"},      # measured 2026-08-10, the same shape as r34
-    "r34":  {"padding"},
-    "mnv2": {"activation"},
-    "enet": {"activation"},
+    "r50":  set(),            # padding closed 2026-08-10 (NetSpec.convPadStyle)
+    "r34":  set(),            # padding closed 2026-08-10 (NetSpec.convPadStyle)
+    "mnv2": set(),            # activation closed 2026-08-09 (NetSpec.convBnAct)
+    "enet": set(),            # activation closed 2026-08-09 (NetSpec.convBnAct)
     "mnv4": set(),
 }
+
+# ⭐ THE HISTORICAL DIVERGENCES, as synthetic profile pairs. Each is a real finding this repo paid
+# a session for, reduced to the two numbers that separate the sides. `--selftest` replays them
+# through `compare()` and requires each to be caught.
+#
+# ⚠ This is the load-bearing half of the selftest now that the ledger is clean. A ledger-only
+# selftest degenerates the moment the debt is paid: it asserts "clean == clean" and passes even if
+# every detector is dead. That is not hypothetical — the `relu6` detector WAS dead (it shimmed
+# `jax.nn.relu6`, which the generator never emits) and the ledger-based selftest happily called
+# mnv2 a confirmed finding for it.
+def _prof(pads=("sym",), pools=("sym",), relu=10, relu6=0, bn="batch", split=("batch", "batch")):
+    return (dict(strided_conv_pads=list(pads), strided_pool_pads=list(pools),
+                 acts={"relu": relu, "clamp_hi(relu6)": relu6, "logistic(swish/sigmoid)": 0},
+                 bn_train=bn, bn_split_a=split[0], bn_split_b=split[1], split_names=("a", "b")),
+            dict(strided_conv_pads=list(pads), strided_pool_pads=list(pools),
+                 acts={"relu": relu, "relu6": relu6}, bn=bn))
+
+REGRESSIONS = []
+_r, _j = _prof(pads=("sym",) * 7)                       # r34/r50: render symmetric stem…
+_j["strided_conv_pads"] = ["same"] + ["sym"] * 6        # …reference XLA 'SAME' at exactly one site
+REGRESSIONS.append(("r34/r50 stem padding", _r, _j, "padding"))
+_r, _j = _prof(relu=35, relu6=35)                       # mnv2: render relu6 at every site…
+_j["acts"] = {"relu": 35, "relu6": 0}                   # …reference plain relu (the dead shim)
+REGRESSIONS.append(("mnv2 stem/head relu6-vs-relu", _r, _j, "activation"))
+_r, _j = _prof(relu=0)                                  # enet: render swish throughout…
+_j["acts"] = {"relu": 2, "swish": 47}                   # …reference relu at exactly 2 of 49 sites
+REGRESSIONS.append(("enet stem/head swish-vs-relu", _r, _j, "activation"))
+_r, _j = _prof(split=("per-example", "batch"))          # mnv2/r34: fwd and train_step disagree
+REGRESSIONS.append(("BN two-worlds split", _r, _j, "bn-split"))
+_r, _j = _prof(bn="batch")                              # render trains batch, reference per-example
+_j["bn"] = "per-example"
+REGRESSIONS.append(("BN world mismatch", _r, _j, "bn-world"))
+_r, _j = _prof(pads=("sym",) * 7, relu=35, relu6=35)    # the NEGATIVE control — see selftest
+REGRESSIONS.append(("matched profiles (control)", _r, _j, None))
 
 
 def pad_kind(lo, hi):
@@ -225,9 +271,34 @@ def reference_profile(ref_py, shape, call=None):
             return fn(*a, **k)
         return shim
 
+    # ⚠⚠ relu6 is NOT spelled `jax.nn.relu6` by this generator — it emits the idiom
+    # `jnp.minimum(jax.nn.relu(x), 6.0)`. Shimming `jax.nn.relu6` therefore never fires, and the
+    # reference side reported "relu, no relu6" no matter what the generator did. That made
+    # `mnv2:activation` a divergence the audit could not clear even once the generator was fixed
+    # (`NetSpec.convBnAct`, 2026-08-09) — a FALSE RED, which is worse than a false green here
+    # because it is what a ratchet baseline gets frozen against.
+    #
+    # So detect the clamp itself: a `jnp.minimum` against the scalar 6.0. This deliberately counts
+    # hard-swish's clamp too — and that is correct, because the RENDER side counts
+    # `stablehlo.minimum` with exactly the same ambiguity. Both sides count "clamp-at-6 sites", so
+    # the comparison stays sound even if a hard-swish net is ever audited.
+    real_min = jnp.minimum
+
+    def is_six(v):
+        try:
+            return np.ndim(v) == 0 and float(v) == 6.0
+        except Exception:
+            return False
+
+    def min_shim(a, b, *rest, **kw):
+        if is_six(a) or is_six(b):
+            rec["acts"]["relu6"] = rec["acts"].get("relu6", 0) + 1
+        return real_min(a, b, *rest, **kw)
+
     saved = {}
     try:
         jax.lax.conv_general_dilated, jax.lax.reduce_window = conv_shim, rw_shim
+        jnp.minimum = min_shim
         for nm in ("relu", "relu6", "sigmoid", "silu", "swish", "gelu"):
             if hasattr(jax.nn, nm):
                 saved[nm] = getattr(jax.nn, nm)
@@ -241,6 +312,7 @@ def reference_profile(ref_py, shape, call=None):
         (call or (lambda m, p, x: m["forward"](p, x)))(mod, params, xin)
     finally:
         jax.lax.conv_general_dilated, jax.lax.reduce_window = real_conv, real_rw
+        jnp.minimum = real_min
         for nm, fn in saved.items():
             setattr(jax.nn, nm, fn)
 
@@ -254,36 +326,49 @@ def reference_profile(ref_py, shape, call=None):
 
 # ═══════════════════════════════════════════════════════════════════════════
 
-def audit(net, verbose=True):
-    cfg = NETS[net]
-    r = render_profile(cfg["pad_src"], cfg["train"], cfg["split"])
-    j = reference_profile(cfg["ref"], cfg["shape"], cfg.get("call"))
+def hist(xs):
+    return {k: xs.count(k) for k in sorted(set(xs))} or {}
+
+
+def compare(r, j):
+    """The whole verdict, as a PURE function of two profiles.
+
+    ⭐ Factored out of `audit()` so `--selftest` can drive it with synthetic profiles. Once every
+    ledger row is fixed, a selftest that only checks "the live corpus matches KNOWN" asserts
+    nothing — every detector could be dead and it would still print green, which is the exact
+    failure mode that let the broken `relu6` shim survive. Replaying the historical divergences
+    through this function keeps the guarantee after the debt is paid."""
     issues = set()
-
-    def hist(xs):
-        return {k: xs.count(k) for k in sorted(set(xs))} or {}
-
     rp, jp = hist(r["strided_conv_pads"]), hist(j["strided_conv_pads"])
     rq, jq = hist(r["strided_pool_pads"]), hist(j["strided_pool_pads"])
     if rp != jp or rq != jq:
         issues.add("padding")
-    # activation: compare the SETS of activation kinds each side uses. Counts differ legitimately
-    # (a swish is one call on the reference and logistic+multiply on the render), but a kind that
-    # appears on one side and not the other is a real divergence — that is exactly mnv2's relu6
-    # and enet's swish.
-    ref_kinds = {k for k, v in j["acts"].items() if v}
-    ren_relu6 = r["acts"]["clamp_hi(relu6)"] > 0
-    if ren_relu6 != ("relu6" in ref_kinds):
-        issues.add("activation")        # mnv2: render relu6, reference plain relu
-    # ⭐ COUNT, not presence. EfficientNet's reference calls relu exactly TWICE — stem and head —
-    # and swish everywhere else, while the render is swish throughout. Both sides therefore "have
-    # swish", and a presence test calls that clean. Only the relu SITE COUNT sees it.
+    # ⭐ COUNT, not presence, on both activation checks. EfficientNet's reference called relu
+    # exactly TWICE — stem and head — and swish everywhere else, while the render is swish
+    # throughout; both sides therefore "have swish" and a presence test calls that clean. Only the
+    # relu SITE COUNT sees it. Same for relu6: mnv2's render clamps at 6 in all 35 sites, so "the
+    # reference has SOME relu6" would pass with the stem and head still plain relu, which is
+    # precisely the divergence the row exists to catch. The two sides are commensurable because
+    # both count clamp-at-6 SITES (see `min_shim`).
+    if r["acts"]["clamp_hi(relu6)"] != j["acts"].get("relu6", 0):
+        issues.add("activation")        # mnv2 pre-fix: render relu6 at 35 sites, reference 0
     if r["acts"]["relu"] != j["acts"].get("relu", 0):
-        issues.add("activation")
+        issues.add("activation")        # enet pre-fix: render 0 relu, reference 2
     if r["bn_train"] != j["bn"]:
         issues.add("bn-world")
     if r["bn_split_a"] != r["bn_split_b"]:
         issues.add("bn-split")          # the §3d(b) hole: two artifacts of one net disagree
+    return issues
+
+
+def audit(net, verbose=True):
+    cfg = NETS[net]
+    r = render_profile(cfg["pad_src"], cfg["train"], cfg["split"])
+    j = reference_profile(cfg["ref"], cfg["shape"], cfg.get("call"))
+    issues = compare(r, j)
+    rp, jp = hist(r["strided_conv_pads"]), hist(j["strided_conv_pads"])
+    rq, jq = hist(r["strided_pool_pads"]), hist(j["strided_pool_pads"])
+    ren_relu6 = r["acts"]["clamp_hi(relu6)"]
 
     if verbose:
         print(f"\n══ {net} ══  render {cfg['pad_src'].split('/')[-1]}  vs  {cfg['ref'].split('/')[-1]}")
@@ -367,19 +452,29 @@ def main():
             print("    ✓ no new divergences")
 
     if args.selftest:
-        print("\n  SELFTEST — the audit must rediscover the findings that motivated it:")
         ok = True
+        # (1) DETECTORS — replay every historical divergence through compare(). This is what keeps
+        #     the selftest meaningful now that the live ledger is clean.
+        print("\n  SELFTEST (1/2) — each historical finding must still be CAUGHT:")
+        for label, rp_, jp_, want in REGRESSIONS:
+            got = compare(rp_, jp_)
+            good = (want is None and not got) or (want is not None and want in got)
+            ok &= good
+            expect = "clean (as expected)" if want is None else f"detected {want}"
+            actual = "" if good else f"  ← GOT {sorted(got) or ['clean']}"
+            print(f"    {'✓' if good else '✗'} {label:<32} {expect}{actual}")
+        # (2) LEDGER — the live corpus must match what the ledger says it is.
+        print("\n  SELFTEST (2/2) — the live corpus must match the ledger:")
         for n in nets:
             want, got = KNOWN[n], {i for i in found[n] if i in ("padding", "activation")}
-            mark = "✓" if want == got else "✗"
-            if want != got:
-                ok = False
-            print(f"    {mark} {n:<6} expected {sorted(want) or ['clean']}, got {sorted(got) or ['clean']}")
+            ok &= want == got
+            print(f"    {'✓' if want == got else '✗'} {n:<6} expected "
+                  f"{sorted(want) or ['clean']}, got {sorted(got) or ['clean']}")
         if not ok:
             print("\n  ✗ SELFTEST FAILED — the audit does not reproduce the ledger, so a green run")
             print("    from it means nothing. Fix the audit before trusting any row above.")
             return 2
-        print("  ✓ selftest passes — the audit reproduces every known finding")
+        print("\n  ✓ selftest passes — every detector fires, and the corpus matches the ledger")
 
     # ⚠ In ratchet mode the EXIT CODE tracks new debt, not total debt: the three open rows are
     # known and tracked, and failing on them every run would make the signal worthless. Outside
