@@ -1409,25 +1409,11 @@ lean_exe «resnet34-verified» where
   root := `apps.imagenette.MainResnet34Verified
   moreLinkArgs := ireeLink
 
--- r34 peer of mnv2/enet-verified-adam: the proof-rendered train step (per-channel BN + strided
--- downsamples) with the SGD update swapped for AdamW (ViTRender.emitAdamV) + packed θ|m|v + runtime
--- lr/bc threading via trainAdamSched. Recipe matches the reference (lr 1e-3, wd 1e-4, cosine+warmup
--- 3, label-smoothing 0.1). Render: tests/TestResnet34Train.lean.
-/-- Shared body of the verified R34 + AdamW Imagenette trainer — imported by BOTH
-    the IREE and XLA executables so their schedule and seed cannot drift. -/
-lean_lib «Resnet34AdamCommon» where
-  srcDir := "."
-  roots := #[`apps.imagenette.Resnet34AdamCommon]
 
 lean_exe «resnet34-verified-adam» where
   root := `apps.imagenette.MainResnet34VerifiedAdam
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
-/-- Rung 3 of the XLA ladder (`planning/xla_pjrt_ladder.md`): full scale at 224²,
-    BN running stats, and the regime the 20-40x measurements came from. -/
-lean_exe «resnet34-verified-adam-xla» where
-  root := `apps.imagenette.MainResnet34VerifiedAdamXla
-  moreLinkArgs := xlaLink
 
 /-- `uib` layout tie (`planning/mnv4_verified.md` phase 1): `VLayer.toSpecs` vs the baseline
     `Layer.nParams`, over all four UIB families. Pins the LAYOUT; the ORDER needs a forward tie. -/

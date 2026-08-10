@@ -7,7 +7,7 @@ the same program — same `VerifiedNetSpec` (`resnet50Verified`), same
 `verified_mlir/resnet50_adam_train_step.mlir`, same schedule and He-init seed.
 Only the linked trusted lowerer differs.
 
-This is the **bottleneck** peer of `Resnet34AdamCommon`: identical harness, one
+This is the **bottleneck** peer of `MainResnet34VerifiedAdam`: identical harness, one
 net swapped. `resnet50Verified` carried the note "LAYOUT SKELETON: no render, no
 proof chain, no artifact yet" — the render half is now discharged
 (`Proofs/Codegen/ResNet50RenderB.lean`, the `resnet50_*` block at the end).

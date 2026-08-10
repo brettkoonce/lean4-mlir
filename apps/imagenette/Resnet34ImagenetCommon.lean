@@ -30,7 +30,7 @@ HIP_VISIBLE_DEVICES=0 LEAN_MLIR_VARIANT=mom256 LEAN_MLIR_BATCH=256 \
 
 `LEAN_MLIR_BASE_LR_U=100000` is **0.1**, the reference's rate. The 0.001 default is an *AdamW*
 rate and would under-step heavy-ball by ~100×, which reads as a broken render rather than a wrong
-knob — see `Resnet34AdamCommon`.
+knob — see `MainResnet34VerifiedAdam`.
 -/
 
 /-- 30 epochs at batch 256 — the `resnet34ImagenetConfigShort` tier on the JAX side, i.e. the

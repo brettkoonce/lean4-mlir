@@ -5,7 +5,7 @@ import apps.imagenette.Resnet50AdamCommon
 The same program as `resnet50-verified-adam` (shared body in
 `apps/imagenette/Resnet50AdamCommon.lean`), linked against `ffi/libpjrt_ffi.so`.
 
-The bottleneck peer of `resnet34-verified-adam-xla`: same harness, same 80-epoch
+The bottleneck peer of `resnet34-verified-adam` (on XLA): same harness, same 80-epoch
 bs32 AdamW schedule, one net swapped. `resnet50Verified` was a layout skeleton
 with no artifacts until `Proofs/Codegen/ResNet50RenderB.lean` grew its
 `resnet50_*` renders.

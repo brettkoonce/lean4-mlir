@@ -8,7 +8,7 @@ schedule and He-init seed. Only the linked trusted lowerer differs.
 
 Lake requires a distinct root module per executable, so the config and entry point live here rather
 than being duplicated; drift in `epochs`, `batchSize`, the seed, or any AdamW hyperparameter would
-quietly invalidate any cross-backend comparison. Same reason as `Resnet34AdamCommon.lean` and
+quietly invalidate any cross-backend comparison. Same reason as `MainResnet34VerifiedAdam.lean` and
 `EfficientNetAdamCommon.lean`.
 -/
 

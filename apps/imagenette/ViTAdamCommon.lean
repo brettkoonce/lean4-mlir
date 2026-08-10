@@ -8,7 +8,7 @@ seed. Only the linked trusted lowerer differs.
 
 Lake requires a distinct root module per executable, so the config and entry point live here rather
 than being duplicated; drift in `epochs`, `batchSize`, the seed, or any AdamW hyperparameter would
-quietly invalidate any cross-backend comparison. Same reason as `Resnet34AdamCommon.lean` and
+quietly invalidate any cross-backend comparison. Same reason as `MainResnet34VerifiedAdam.lean` and
 `EfficientNetAdamCommon.lean`.
 
 ⛔ **The XLA binary does not run on this box** — see `MainViTVerifiedAdamXla.lean`. The plumbing is
@@ -91,7 +91,7 @@ LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.
   let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.99996
-  -- `LEAN_MLIR_BASE_LR_U` — base LR in MICRO-units, the `Resnet34AdamCommon` knob, added here for
+  -- `LEAN_MLIR_BASE_LR_U` — base LR in MICRO-units, the `MainResnet34VerifiedAdam` knob, added here for
   -- the EMA ratio gate rather than for training. Default 0.0003 (`vitTinyConfig`) is unchanged, so
   -- every existing run is bit-for-bit unaffected.
   --
