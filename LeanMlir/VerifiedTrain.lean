@@ -910,7 +910,7 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   -- ⚠⚠ THE MARKER IS `"drop"` BECAUSE `"sd"` COLLIDES, and the collision is between two OTHER
   -- markers meeting: `rms` ++ `dp` spells **`rmsdp`**, which contains "sd". A `"sd"` substring test
   -- therefore fires on `rmsdp64` and `emarmsdp64` — every RMSProp data-parallel variant, including
-  -- the committed and gated `enetin_rmsdp64` — and would have appended 9 drop scales to a graph
+  -- the committed and gated `efficientnetin_rmsdp64` — and would have appended 9 drop scales to a graph
   -- that takes none. Caught by running the predicate table (`tests/TestVariantPredicates.lean`)
   -- rather than reading names one at a time; with three markers the collisions are between PAIRS.
   -- This is `planning/ema.md`'s `emarms` defect a second time, one axis further on.

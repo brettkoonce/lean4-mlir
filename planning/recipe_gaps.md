@@ -76,7 +76,7 @@ that does not exist yet.
 | **AutoAugment** | — | — | — | ✅ | — | ✅ **WIRED 2026-08-02** (§0.9) — and control C1 measures why a definition census gets this wrong: ViT/ConvNeXt *define* `_autoaugment` and never call it |
 | **classifier dropout** | — | — | — | **0.2 ✅** | — | ✅ **DONE 2026-08-03** — `dropoutB` op + cert, `adamdo`/`emarms64dropdo` renders, `lake build dropout-tie` (gate A bit-exact 40/40 + gate W). ⚠ It is NOT the stochastic-depth row below: same op (`layerScale`), **different mask RANK** — per ELEMENT here, per EXAMPLE there |
 | stochastic depth | — | 0.1 ✅ | 0.1 ✅ | 0.2 ✅ | — | ✅ **ALL THREE, both scales, 2026-08-02/03** — EfficientNet (§0.4), ConvNeXt (§0.10) and ViT (§0.11), the last two on the batched chain the §0.2 ▶2/▶3 move built. DP mask-shard gate run on each (§0.6) |
-| EMA | — | ✅ | ✅ | ✅ | — | ✅ **all three, 2026-08-02**, and at BOTH scales — `vitin_ema128`/`emadp128x4`, `cnxin_ema`/`emadp`, `enetin_emarms64`/`emarmsdp64`. DP peers gated at 4 replicas, every region bit-exact (§0.7). ⚠ Never GATE on the shadow — it is θ's low-pass filter (§3) |
+| EMA | — | ✅ | ✅ | ✅ | — | ✅ **all three, 2026-08-02**, and at BOTH scales — `vitin_ema128`/`emadp128x4`, `convnextin_ema`/`emadp`, `efficientnetin_emarms64`/`emarmsdp64`. DP peers gated at 4 replicas, every region bit-exact (§0.7). ⚠ Never GATE on the shadow — it is θ's low-pass filter (§3) |
 | **bf16 / bf16Conv** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | batch / epochs | ✅ | ✅ | ✅ | ✅ | ✅ | all matched at 4 replicas |
 
@@ -84,7 +84,7 @@ that does not exist yet.
 2026-08-02 every ViT/ConvNeXt ✅ above was true of the single-device artifact and false of the
 data-parallel one, which is the artifact an ImageNet run actually loads: the DP renders were three
 features behind (`wd` 500× off, no `wx`, no clip). Closed by `vitin_adamdp128x4wxclip` /
-`cnxin_adamdpwxclip` (handoff §0.5). The check that found it was listing what each artifact BAKES,
+`convnextin_adamdpwxclip` (handoff §0.5). The check that found it was listing what each artifact BAKES,
 not reading this table.
 
 **Distance to parity, per net:**
@@ -93,7 +93,7 @@ not reading this table.
 |---|---|---|
 | **R34** | bf16 | **at parity — run it** |
 | **mnv2** | ~~RMSProp~~ ✅, ~~ms-init 1.0 + exp decay~~ ✅, bf16 | **at parity — run it** |
-| **EfficientNet** | ~~RMSProp~~ ✅, ~~EMA~~ ✅, ~~dropPath~~ ✅, ~~classifier dropout~~ ✅ (2026-08-03), bf16 | **at parity — run it.** `enetin_emarms64dropdo` is the whole recipe in one artifact |
+| **EfficientNet** | ~~RMSProp~~ ✅, ~~EMA~~ ✅, ~~dropPath~~ ✅, ~~classifier dropout~~ ✅ (2026-08-03), bf16 | **at parity — run it.** `efficientnetin_emarms64dropdo` is the whole recipe in one artifact |
 | **ConvNeXt** | ~~dropPath~~ ✅, ~~EMA~~ ✅, ~~grad clip~~ ✅, ~~wdExclude~~ ✅, ~~aug pack~~ ✅, **mixup/cutmix off by default**, bf16 | **at parity except mixup**, which is wired but needs `SHIM_SOFT=1` |
 | **ViT** | same as ConvNeXt | same |
 
@@ -369,7 +369,7 @@ stream.
   nets** — §4 v1.2 has the runs.
 
   ▶ **The DP renders are compiled and gated too**, which was the third thing this section owed.
-  `mnv2in_rmsdp64` and `enetin_rmsdp64` now compile and execute at **4 replicas** and pass the
+  `mobilenetv2in_rmsdp64` and `efficientnetin_rmsdp64` now compile and execute at **4 replicas** and pass the
   duplicated-batch identity: forward **BIT-EXACT** (34,112 / 42,016 BN statistics), buffer norm-rel
   **7.8e-7 / 8.1e-7**, against sum-not-mean controls that fire at **2.22 / 2.39** with rc=1 — six
   orders of separation.
@@ -513,11 +513,11 @@ Discovered 2026-08-02 by listing the artifacts rather than reasoning about them:
 
 | feature | Imagenette slug | ImageNet slug (`*in_*`) |
 |---|---|---|
-| RMSProp | ✅ `efficientnet_rms`, `mobilenetv2_rms` | ✅ `enetin_rms64`/`rmsdp64`, `mnv2in_rms64`/`rmsdp64` |
+| RMSProp | ✅ `efficientnet_rms`, `mobilenetv2_rms` | ✅ `efficientnetin_rms64`/`rmsdp64`, `mobilenetv2in_rms64`/`rmsdp64` |
 | **EMA** | ✅ `convnext_ema{,dp}`, `efficientnet_emarms`, `vit_ema` | ❌ **none** |
 | **stochastic depth** | ⚠ `efficientnet_adamsd` (render only) | ❌ **none** |
 
-So `enetin`'s trainer is still AdamW-or-RMSProp with no EMA and no dropPath — i.e. **the ImageNet
+So `efficientnetin`'s trainer is still AdamW-or-RMSProp with no EMA and no dropPath — i.e. **the ImageNet
 trainers do not yet carry the features their references need**, and the 72.31% pair is not
 reachable through them today. RMSProp is the only feature that was carried to both scales.
 
@@ -593,9 +593,9 @@ descends.
 renders at 0.05** — both halves of the reference's decay recipe, the magnitude and the mask.
 
 ⚠ **The same 500× gap is on ConvNeXt** (`convnextTinyImagenetConfig.weightDecay := 0.05` against a
-baked 1e-4), and `cnxin_adamwx` renders at 0.05 for the same reason `vitin_adam128wx` does.
+baked 1e-4), and `convnextin_adamwx` renders at 0.05 for the same reason `vitin_adam128wx` does.
 
-⚠ **`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam` and `cnxin_adamdp` are STILL at 1e-4 and
+⚠ **`vitin_adam128`, `vitin_adamdp128x4`, `convnextin_adam` and `convnextin_adamdp` are STILL at 1e-4 and
 were NOT touched.** Changing them
 is a separate call with its own blast radius (the DP peer, the residency-gate row, the committed
 `vit-dp-check` numbers). **Owed**, and it should be done before any ViT/ImageNet pair run — a
@@ -638,7 +638,7 @@ edit behaves differently on the two renderers, and only running both found it.*
 
 `planning/grad_clip.md` §11 is the record: **two `SHlo` ops, no new proof machinery, no driver
 change**, four artifacts (`vit_adamclip`, `vitin_adam128wxclip`, `convnext_adamclip`,
-`cnxin_adamwxclip`), and `lake build clip-tie` green on both nets with **all six controls firing**.
+`convnextin_adamwxclip`), and `lake build clip-tie` green on both nets with **all six controls firing**.
 The gate is the CONSTANCY of `m'_clip/m'_adam` across parameters (**1.12 / 1.15 ULPs**), because
 that is the only property a per-parameter clip gets wrong — and its control fires at **7.6M /
 30.4M ULPs** while passing every other gate. ⛔ Owed: the DP artifact and its numeric gate.

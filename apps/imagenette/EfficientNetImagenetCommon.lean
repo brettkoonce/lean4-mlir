@@ -7,7 +7,7 @@ at `nClasses := 1000`, `B := 64` — so four replicas is **global batch 256**, w
 `efficientNetB0ImagenetConfig.batchSize`. Matching the reference's global batch is what keeps the
 two runs a comparable pair.
 
-⚠ **First ImageNet net here with BatchNorm.** Consequences: eval goes through `@enetin_fwd_eval`
+⚠ **First ImageNet net here with BatchNorm.** Consequences: eval goes through `@efficientnetin_fwd_eval`
 with frozen running stats (batch-BN eval is degenerate on a sorted val split), and the per-step
 buffer carries a 2×49-tensor running-stat region that the LayerNorm nets do not have.
 
@@ -21,12 +21,12 @@ reproduction — read it as the verified renderer training the same architecture
 scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build efficientnet-imagenet-verified-xla
-cat .lake/build/enetin_adamdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
+cat .lake/build/efficientnetin_adamdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
 
 PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 \
   LEAN_MLIR_VARIANT=adamdp64 LEAN_MLIR_BATCH=64 \
   LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
-  .lake/build/bin/efficientnet-imagenet-verified-xla data 2>&1 | tee runs/enetin_4gpu.log
+  .lake/build/bin/efficientnet-imagenet-verified-xla data 2>&1 | tee runs/efficientnetin_4gpu.log
 ```
 -/
 

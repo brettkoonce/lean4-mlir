@@ -1119,7 +1119,7 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
   -- ⚠⚠ THE STOCHASTIC-DEPTH MARKER IS `"drop"`, NOT `"sd"`, AND THAT IS A BUG FIX.
   -- `"sd"` collides: `rms` ++ `dp` spells **`rmsdp`**, which CONTAINS "sd", so a `"sd"` substring
   -- test fires on `rmsdp64` and `emarmsdp64` — every RMSProp DATA-PARALLEL variant, including the
-  -- committed and gated `enetin_rmsdp64`. No placement of an `sd` marker avoids that; the collision
+  -- committed and gated `efficientnetin_rmsdp64`. No placement of an `sd` marker avoids that; the collision
   -- is between two OTHER markers meeting. Only renaming fixes it, and `drop` collides with nothing.
   --
   -- This is the `emarms` defect (`planning/ema.md`) a second time, one axis further on, and it is
@@ -1433,8 +1433,8 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 128 10 "1.0e-5"
     "0.100000" "-0.010000" "128.0" 2)
 
--- ── EfficientNet-B0 on FULL 1000-class ImageNet, slug `enetin` — 2026-08-02 ────────────────────
--- The EfficientNet peer of `resnet34in_*` (§2k), `vitin_*` and `cnxin_*` (§2p). No renderer
+-- ── EfficientNet-B0 on FULL 1000-class ImageNet, slug `efficientnetin` — 2026-08-02 ────────────────────
+-- The EfficientNet peer of `resnet34in_*` (§2k), `vitin_*` and `convnextin_*` (§2p). No renderer
 -- restructuring was needed — `B` and `nClasses` were already parameters; what this change added is
 -- a `slug` (the three entry names were baked) and the derived −α/K above.
 --
@@ -1451,16 +1451,16 @@ end Proofs.StableHLO
 -- ⚠ `enetAdamVariant B replicas` encodes the PER-DEVICE batch and NOT the replica count, so
 -- `adamdp64` would name both a 2-replica and a 4-replica render at B=64. Only the 4-replica one is
 -- emitted here, so nothing collides today; anyone adding the 2-replica peer must rename first.
-#eval IO.FS.writeFile "verified_mlir/enetin_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "enetin")
-#eval IO.FS.writeFile "verified_mlir/enetin_fwd_eval.mlir"
-  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 64 1000 "1.0e-5" false "enetin")
-#eval IO.FS.writeFile "verified_mlir/enetin_adam64_train_step.mlir"
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "efficientnetin")
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_fwd_eval.mlir"
+  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 64 1000 "1.0e-5" false "efficientnetin")
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_adam64_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 1 false "enetin")
-#eval IO.FS.writeFile "verified_mlir/enetin_adamdp64_train_step.mlir"
+    "0.100000" "" "64.0" 1 false "efficientnetin")
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_adamdp64_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 4 false "enetin")
+    "0.100000" "" "64.0" 4 false "efficientnetin")
 
 -- ── ▶ RMSProp: the optimizer the EfficientNet reference ACTUALLY USES ─────────────────────────
 -- `planning/recipe_gaps.md` §2: RMSProp is one of TWO gaps between this net and the reference's
@@ -1506,12 +1506,12 @@ end Proofs.StableHLO
 -- INITIALISED TO 1.0 (TF's convention — a zero init is not a crash, it is a different and much
 -- larger first step), and the LR schedule must be exponential 0.97/epoch rather than cosine.
 -- Until both land these are correct renders of the right optimizer, not a matched pair.
-#eval IO.FS.writeFile "verified_mlir/enetin_rms64_train_step.mlir"
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_rms64_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 1 false "enetin" .rmsprop)
-#eval IO.FS.writeFile "verified_mlir/enetin_rmsdp64_train_step.mlir"
+    "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop)
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_rmsdp64_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 4 false "enetin" .rmsprop)
+    "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop)
 
 -- Pin the two literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed this fails at `lake build` instead of at run time as an "entry mismatch".
@@ -1606,8 +1606,8 @@ end Proofs.StableHLO
 
 -- ── ▶ v1.2c: THE IMAGENET PEERS of the EMA and stochastic-depth renders ────────────────────────
 -- `planning/recipe_gaps.md` v1.2c. Found 2026-08-02 by LISTING the artifacts rather than reasoning
--- about them: RMSProp was carried to both scales (`enetin_rms64`), **EMA and stochastic depth were
--- not** — so `enetin`'s trainer had neither, and EfficientNet's 72.31% reference pair was not
+-- about them: RMSProp was carried to both scales (`efficientnetin_rms64`), **EMA and stochastic depth were
+-- not** — so `efficientnetin`'s trainer had neither, and EfficientNet's 72.31% reference pair was not
 -- reachable through it at all. The features existed only at Imagenette scale.
 --
 -- ⚠ The lesson is the cheap one: a feature is not "done" when its Imagenette artifact renders. Both
@@ -1618,21 +1618,21 @@ end Proofs.StableHLO
 -- EMA. ⚠ This comment used to end *"and with stochastic depth it is `efficientNetB0ImagenetConfig`
 -- entire"*, and that was FALSE the day it was written: the config also sets `dropout := 0.2`
 -- (`jax/MainEfficientNetImagenet.lean:68`), which no render had. Corrected 2026-08-03 with the
--- render that makes it true — `enetin_emarmsdropdo64` below. ⚠ The claim was wrong in the way
+-- render that makes it true — `efficientnetin_emarmsdropdo64` below. ⚠ The claim was wrong in the way
 -- §0.9 finding 3 describes: the recipe matrix had a stochastic-depth row and no dropout row, so
 -- "the regulariser is covered" read as "the regularisers are covered", and a doc drifts to the
 -- flattering reading whenever a capability and a state share a sentence.
-#eval IO.FS.writeFile "verified_mlir/enetin_emarms64_train_step.mlir"
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_emarms64_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true))
-#eval IO.FS.writeFile "verified_mlir/enetin_emarmsdp64_train_step.mlir"
+    "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop (ema := true))
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 4 false "enetin" .rmsprop (ema := true))
+    "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true))
 
 -- Stochastic depth at ImageNet scale. ⚠ Same 9 sites and the same block-index ramp — `enetDropIdxs`
 -- is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips), not of the class count or the
--- batch, so `enetin` reuses it unchanged and `tests/TestDropPathRamp.lean` covers both.
--- ⚠⚠ THE PATH WAS `enetin_emarmsdrop64_train_step.mlir` AND THAT ARTIFACT WAS UNLOADABLE.
+-- batch, so `efficientnetin` reuses it unchanged and `tests/TestDropPathRamp.lean` covers both.
+-- ⚠⚠ THE PATH WAS `efficientnetin_emarmsdrop64_train_step.mlir` AND THAT ARTIFACT WAS UNLOADABLE.
 -- Renamed 2026-08-03. `enetAdamVariant 64 1 .rmsprop true true` emits **`emarms64drop`** — the
 -- batch suffix precedes the regulariser markers — while the path spelled `emarmsdrop64`. The
 -- driver derives the artifact path from `variant` (`VerifiedTrain.lean:771`) AND the entry name
@@ -1643,11 +1643,11 @@ end Proofs.StableHLO
 -- nothing loaded it through the driver. §0.8 finding 2's defect class ("an entry disagreeing with
 -- its own path"), recurring in the one place that finding did not look: the FILENAME, not the
 -- entry. `scripts/regen_verified_mlir.sh check` now audits basename == entry across all artifacts.
-#eval IO.FS.writeFile "verified_mlir/enetin_emarms64drop_train_step.mlir"
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_emarms64drop_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true) (sd := true))
-#eval IO.FS.writeFile "verified_mlir/enetin_drop_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "enetin_drop" (sd := true))
+    "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop (ema := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_drop_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "efficientnetin_drop" (sd := true))
 
 -- ── ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C), 2026-08-03 ──────────────────────────────────
 -- `efficientNetB0ImagenetConfig` sets `dropout := 0.2` and there were **zero dropout sites in any
@@ -1684,13 +1684,13 @@ end Proofs.StableHLO
 -- ▶ **THE FULL REFERENCE RECIPE AT IMAGENET SCALE — the first EfficientNet artifact that is
 -- `efficientNetB0ImagenetConfig` entire on the regulariser axis**: RMSProp (TF flavour, ε inside
 -- the sqrt, ms-init 1.0) + EMA 0.9999 + stochastic depth 0.1 + classifier dropout 0.2. The peer of
--- ConvNeXt's `cnxin_adamdpwxclipdrop` (handoff §0.10), and what the 72.31% reference pair would
+-- ConvNeXt's `convnextin_adamdpwxclipdrop` (handoff §0.10), and what the 72.31% reference pair would
 -- need to be reachable through the verified path.
 --
--- ⚠⚠ NOTE THE PATH: `enetin_emarms64dropdo`, batch suffix BEFORE the two regulariser markers,
+-- ⚠⚠ NOTE THE PATH: `efficientnetin_emarms64dropdo`, batch suffix BEFORE the two regulariser markers,
 -- because that is what `enetAdamVariant` emits and the driver derives the artifact PATH and the
 -- entry NAME from the same string (`VerifiedTrain.lean:771` and `:868`). The neighbouring
--- `enetin_emarmsdrop64_train_step.mlir` had them the other way round and was therefore
+-- `efficientnetin_emarmsdrop64_train_step.mlir` had them the other way round and was therefore
 -- **unloadable at any `LEAN_MLIR_VARIANT`** — see the note on that `#eval` below. The `#guard`s at
 -- the bottom of this file are what caught it, which is the argument for pinning literal paths
 -- against the function that derives them rather than writing both by hand.
@@ -1702,16 +1702,16 @@ end Proofs.StableHLO
 -- artifact in the repo where getting the mask rank wrong would be a type error rather than a silent
 -- regulariser swap — which is a property of this pairing, not something to rely on elsewhere.
 --
--- ⚠ Still short of the reference in the ways `enetin_rms64`'s docstring lists (the driver owes the
+-- ⚠ Still short of the reference in the ways `efficientnetin_rms64`'s docstring lists (the driver owes the
 -- 1.0 mean-square init and the exponential LR schedule). Correct renders of the right optimizer and
 -- the right regularisers; not yet a matched pair.
-#eval IO.FS.writeFile "verified_mlir/enetin_emarms64dropdo_train_step.mlir"
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_emarms64dropdo_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 1 false "enetin" .rmsprop (ema := true) (sd := true) (cd := true))
+    "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
 -- ▶▶ **THE SHIPPING DATA-PARALLEL RENDER — and it exists because an ImageNet run loads the DP
 -- artifact, not the single-device one.** Found 2026-08-03 by listing what each artifact BAKES:
--- `enetin_emarmsdp64` (214 all_reduce) had NEITHER stochastic depth NOR classifier dropout, while
--- `enetin_emarms64dropdo` (0 all_reduce, single-device) sat beside it unused. So a 4-replica
+-- `efficientnetin_emarmsdp64` (214 all_reduce) had NEITHER stochastic depth NOR classifier dropout, while
+-- `efficientnetin_emarms64dropdo` (0 all_reduce, single-device) sat beside it unused. So a 4-replica
 -- EfficientNet run trained without the two regularisers its reference sets, silently.
 --
 -- ⚠⚠ THIS IS §0.5's DEFECT RECURRING ON A NEW AXIS. There the four ImageNet DP renders were three
@@ -1721,13 +1721,13 @@ end Proofs.StableHLO
 -- The matrix records a capability; only the artifact records the state (§0.9 finding 3).
 --
 -- 4 replicas × batch 64 = global 256 = `efficientNetB0ImagenetConfig.batchSize`, matching
--- `enetin_emarmsdp64`'s geometry exactly so the two are comparable.
-#eval IO.FS.writeFile "verified_mlir/enetin_emarmsdp64dropdo_train_step.mlir"
+-- `efficientnetin_emarmsdp64`'s geometry exactly so the two are comparable.
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64dropdo_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
-    "0.100000" "" "64.0" 4 false "enetin" .rmsprop (ema := true) (sd := true) (cd := true))
+    "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
 
-#eval IO.FS.writeFile "verified_mlir/enetin_dropdo_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "enetin_dropdo"
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_dropdo_fwd.mlir"
+  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "efficientnetin_dropdo"
     (sd := true) (cd := true))
 
 -- Pin the variant spellings the four paths above depend on, so a rename fails at `lake build`

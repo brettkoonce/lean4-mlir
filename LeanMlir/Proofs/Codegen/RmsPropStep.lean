@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Codegen.SgdMomentumStep
 
 /-! # RMSProp with momentum over ℝ — the optimizer MobileNetV2 and EfficientNet actually use
 
-The ℝ reference for the `mnv2in`/`enetin` ImageNet train steps (`planning/recipe_gaps.md` v1.2).
+The ℝ reference for the `mobilenetv2in`/`efficientnetin` ImageNet train steps (`planning/recipe_gaps.md` v1.2).
 Coordinatewise over `Vec`, mirroring the emitted StableHLO op-for-op so the faithfulness theorem in
 `StableHLO.lean` is a structural match (`rfl`), exactly as `AdamStep` is for the AdamW triple and
 `SgdMomentumStep` for the SGD/Nesterov pair.

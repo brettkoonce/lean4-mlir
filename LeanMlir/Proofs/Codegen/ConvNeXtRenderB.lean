@@ -542,7 +542,7 @@ end Proofs.StableHLO
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := false) (clipStr := "1.0")
     (sd := true))
 
--- ── Full 1000-class ImageNet, slug `cnxin` ─────────────────────────────────────────────────────
+-- ── Full 1000-class ImageNet, slug `convnextin` ─────────────────────────────────────────────────────
 -- ⚠ BOTH SCALES, deliberately. §0.4 finding 5: *a feature is not done when its Imagenette artifact
 -- renders* — RMSProp had been carried to both scales and EMA/dropPath had not, so EfficientNet's
 -- ImageNet trainer did not carry the features its reference number depends on. Both scales are one
@@ -553,16 +553,16 @@ end Proofs.StableHLO
 -- single-device peers. `wx` ++ `clip` ++ `drop` is `convNeXtTinyImagenetConfig` entire
 -- (`weightDecay := 0.05`, `wdExcludeNormBias := true`, `gradClipNorm := 1.0`, `dropPath := 0.1`) —
 -- the first ConvNeXt artifact that carries every optimizer-and-regulariser knob its reference sets.
-#eval IO.FS.writeFile "verified_mlir/cnxin_adamwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "cnxin"
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true))
-#eval IO.FS.writeFile "verified_mlir/cnxin_adamdpwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "cnxin"
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true))
-#eval IO.FS.writeFile "verified_mlir/cnxin_drop_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "cnxin_drop_fwd" 1000
+#eval IO.FS.writeFile "verified_mlir/convnextin_drop_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB "convnextin_drop_fwd" 1000
     Proofs.StableHLO.cnxDropFwdBanner (sd := true))
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the call

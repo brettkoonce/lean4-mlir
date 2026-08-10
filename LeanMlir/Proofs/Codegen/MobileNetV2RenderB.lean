@@ -915,7 +915,7 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_rms_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5" 1 false "mobilenetv2" .rmsprop)
 
--- ── MobileNetV2 / ImageNet-1k train steps, slug `mnv2in` ──────────────────────────────────────
+-- ── MobileNetV2 / ImageNet-1k train steps, slug `mobilenetv2in` ──────────────────────────────────────
 -- Batch 64 x 4 replicas = global 256 = `mobilenetV2ImagenetConfig.batchSize`, so the step count
 -- per epoch (5004) matches the reference exactly. All three label-smoothing constants are derived
 -- from `nClasses` as of this change; at K=1000 the cotangent shift is -0.000100 and the loss's
@@ -923,10 +923,10 @@ end Proofs.StableHLO
 --
 -- ⚠ `mnv2AdamVariant B replicas` encodes the PER-DEVICE batch, not the replica count, so
 -- `adamdp64` would name both a 2- and a 4-replica render at B=64. Only the 4-replica one exists.
-#eval IO.FS.writeFile "verified_mlir/mnv2in_adam64_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mnv2in")
-#eval IO.FS.writeFile "verified_mlir/mnv2in_adamdp64_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mnv2in")
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adam64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in")
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adamdp64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in")
 
 -- ── ▶ RMSProp: the optimizer the MobileNetV2 reference ACTUALLY USES ──────────────────────────
 -- `planning/recipe_gaps.md` §2: RMSProp is the ONLY gap between this net and the JAX reference's
@@ -945,10 +945,10 @@ end Proofs.StableHLO
 --      different and much larger first step;
 --   2. exponential LR decay (0.98/epoch), which is recipe_gaps' Tier C and still open.
 -- Until both land this artifact is a correct render of the right optimizer, not a matched pair.
-#eval IO.FS.writeFile "verified_mlir/mnv2in_rms64_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mnv2in" .rmsprop)
-#eval IO.FS.writeFile "verified_mlir/mnv2in_rmsdp64_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mnv2in" .rmsprop)
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rms64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in" .rmsprop)
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in" .rmsprop)
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
 -- call ("entry mismatch"). These pin the literal path above against `mnv2AdamVariant`, so a rename

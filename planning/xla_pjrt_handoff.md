@@ -88,7 +88,7 @@ may only shrink).
 **The one-paragraph version.** **All five nets are now at the batched index `N := B`**, stochastic
 depth exists on the three nets whose references set it (EfficientNet, ConvNeXt, ViT) at both scales
 with the DP mask-shard gate run on each, and **EfficientNet's classifier dropout — the last unlisted
-render gap — is closed** (§0.12), giving `enetin_emarms64dropdo`: the first EfficientNet artifact
+render gap — is closed** (§0.12), giving `efficientnetin_emarms64dropdo`: the first EfficientNet artifact
 carrying its reference's whole regulariser set. The §0.2 ▶2/▶3 thread — the largest remaining item
 in this file for two sessions — is closed. ⚠ §0.12 also found a **committed artifact that could not
 be loaded at any `LEAN_MLIR_VARIANT`**; there is a new audit for that class. **And all five now RUN 4-way data-parallel on real ImageNet** (§0.13) with ms/step measured on the
@@ -144,7 +144,7 @@ available, and it holds. **R34's 30-epoch tier is the decided run: ~26 h.**
 
 #### ⚠⚠ TWO NETS ARE 6–10× THE PREVIOUSLY RECORDED TABLE, AND THE CAUSE IS NOT FOUND
 
-`planning/imagenet_sweep.md` records enetin **310** and vitin **424** ms/step on 4 GPUs. Measured
+`planning/imagenet_sweep.md` records efficientnetin **310** and vitin **424** ms/step on 4 GPUs. Measured
 here: **2,023** and **4,489**. Per image the split is stark — R34 2.41 ms and mnv2 1.55 ms (neither
 carries a feature added this session), against ConvNeXt 7.20, EfficientNet 7.90 and ViT 8.77 (all
 three do).
@@ -174,7 +174,7 @@ is its *only* forward-only output deserves a look before anyone quotes a loss cu
 
 #### ▶ ConvNeXt at batch 64 — SCOPED, NOT BUILT
 
-`cnxin` renders at 32 (global 128, **10,009 steps/epoch — double every other net**) purely because
+`convnextin` renders at 32 (global 128, **10,009 steps/epoch — double every other net**) purely because
 the batch is a private constant. §2p calls threading it *"the single best pre-run optimisation
 available"*. Scoped 2026-08-03, and it is **bigger than ViT's `vbB` job**:
 
@@ -189,7 +189,7 @@ signature/AdamW tail comes from `cBS` while the traversal comes from `bB`.
 
 ⚠ The method that made ViT's cheap transfers: **name the parameter after the constant**, so all 215
 body uses stay byte-identical and the diff is signatures + call sites only. The gate is the same —
-at 32, every committed `convnext_*`/`cnxin_*` must re-render unchanged (ViT's did, 0 files).
+at 32, every committed `convnext_*`/`convnextin_*` must re-render unchanged (ViT's did, 0 files).
 A first attempt at the `cBS` half was started and REVERTED cleanly; the private helpers thread fine,
 but the four public entry points need their trailing-parameter insertion done against their real
 multi-line signatures rather than by regex. Expect ~26 signatures across the two files.
@@ -206,9 +206,9 @@ dropout sites in any verified EfficientNet render**. Closed with one op, one sit
 | the op | `SHlo.dropoutB` — **5 sites**, and the emit is **one line**: `multiply %do, %r`, no broadcast |
 | the denotation | `Proofs.dropout = layerScale mask` — a **fifth** reading of `layerScale`, and the cheapest yet (`dropPath` needed `dropScale` to lift; this needs nothing) |
 | inertness | `verified_mlir/` **0 lines of diff** with the writers FORCED, across all 129 pre-existing artifacts |
-| new artifacts | 5, all NEW: `efficientnet_{adamdo,do_fwd,do_fwd_eval}`, `enetin_{emarms64dropdo,dropdo_fwd}` |
-| ⭐ `enetin_emarms64dropdo` | **the first EfficientNet artifact that is `efficientNetB0ImagenetConfig` entire on the regulariser axis** — RMSProp + EMA 0.9999 + dropPath 0.1 + dropout 0.2 |
-| prefix audit | `efficientnet_do_fwd` ⊂ `adamdo` (**1936** lines, against the drop-free forward's 1935 — exactly one more), `enetin_dropdo_fwd` ⊂ `emarms64dropdo` (1954) |
+| new artifacts | 5, all NEW: `efficientnet_{adamdo,do_fwd,do_fwd_eval}`, `efficientnetin_{emarms64dropdo,dropdo_fwd}` |
+| ⭐ `efficientnetin_emarms64dropdo` | **the first EfficientNet artifact that is `efficientNetB0ImagenetConfig` entire on the regulariser axis** — RMSProp + EMA 0.9999 + dropPath 0.1 + dropout 0.2 |
+| prefix audit | `efficientnet_do_fwd` ⊂ `adamdo` (**1936** lines, against the drop-free forward's 1935 — exactly one more), `efficientnetin_dropdo_fwd` ⊂ `emarms64dropdo` (1954) |
 | gate A (`dropout-tie --op`) | **bit-exact 40/40** vs the host per-element product; both endpoint theorems on device |
 | ⭐ gate A control C1 | the per-EXAMPLE mask — *stochastic depth on the classifier* — fires at rel **0.89**, 8/40 exact |
 | gate A control C2 | one mask cell 1% wrong → fires on exactly 1 coordinate |
@@ -274,12 +274,12 @@ on purpose** — the defect is an operand choice, so a byte check localises it e
 tie would say "some parameter moved". It needs no GPU and runs in milliseconds, which §0.1 makes a
 feature rather than a compromise.
 
-#### ⛔ AND IT FOUND AN UNLOADABLE COMMITTED ARTIFACT — `enetin_emarmsdrop64`
+#### ⛔ AND IT FOUND AN UNLOADABLE COMMITTED ARTIFACT — `efficientnetin_emarmsdrop64`
 
 A `#guard` pinning the literal artifact path against `enetAdamVariant` failed, and the reason was
 not the guard: **`enetAdamVariant 64 1 .rmsprop true true` emits `emarms64drop`** — the batch suffix
-precedes the regulariser markers — while the committed file was named `enetin_emarmsdrop64_train_step.mlir`
-and declared `@enetin_emarms64drop_train_step` inside. The driver derives the artifact PATH
+precedes the regulariser markers — while the committed file was named `efficientnetin_emarmsdrop64_train_step.mlir`
+and declared `@efficientnetin_emarms64drop_train_step` inside. The driver derives the artifact PATH
 (`VerifiedTrain.lean:771`) and the entry NAME (`:868`) from the **same** `variant` string, so neither
 spelling reaches it: one finds the file and asks for an entry it does not contain, the other names
 the right entry at a path that does not exist. **That artifact could not be loaded at any
@@ -399,8 +399,8 @@ rate 0.1), on the **residual branch only**: `dropPathB` between `layerScaleCh` a
 `bwdBlockB` (`Proofs.dropPath_vjp_is_self` — a diagonal linear map is its own transpose).
 
 **Six artifacts, all NEW, so no committed artifact moved**: `convnext_{adamdrop,adamdpdrop}_train_step`,
-`convnext_drop_fwd`, `cnxin_{adamwxclipdrop,adamdpwxclipdrop}_train_step`, `cnxin_drop_fwd`.
-`cnxin_adamdpwxclipdrop` is **the first ConvNeXt artifact carrying every optimizer-and-regulariser
+`convnext_drop_fwd`, `convnextin_{adamwxclipdrop,adamdpwxclipdrop}_train_step`, `convnextin_drop_fwd`.
+`convnextin_adamdpwxclipdrop` is **the first ConvNeXt artifact carrying every optimizer-and-regulariser
 knob `convNeXtTinyImagenetConfig` sets** — wd 0.05, `wdExcludeNormBias`, grad clip 1.0, dropPath 0.1.
 
 #### The gates, and every one has a control
@@ -807,7 +807,7 @@ down as a hypothetical for years while the actual op was missing.
 | ~~⛔⛔ **THE STEM MAX POOL IS NOT THE PAPER'S**~~ ✅ **CODEGEN CLOSED 2026-08-04; the RE-RUNS are what is left** | He et al. specify **3×3/s2** for all of 18/34/50/101/152. The verified renders used **2×2** — non-overlapping, a different function at identical output shape (112→56), **documented nowhere**; and the JAX side was emitting XLA `'SAME'`, which pads `(0,1)` against the paper's symmetric `(1,1)`, i.e. **a pooling grid offset by one input position**. Both sides are the paper's now: 4 op forms (`BatchableOp.maxPool3s2`, `SHlo.maxPool3s2F`/`.maxPool3s2Back`/`.maxPool3s2BackB`, ~5 sites each on the generic `.batched` tag), 4 render sites, **14 artifacts / 24 lines, no line-count or SSA movement**, build **3,916** green, audit **1,524 → 1,536**. Gates: emit tie **47 → 49** forms with the symmetric-vs-`'SAME'` control firing **rc=1 on the padding assertion alone**; `fwd-tie` self bit-exact 320/320 on both forwards; **discrimination rel 0.613 (`_fwd`) and 1.994 (`_fwd_eval`)**; `r34-mom-tie` certified on the new train step. ⚠⚠ **Two undercounts worth reading**: the site map said "`ResNet34RenderB`, 2 lines", but `resnet34_fwd{,_eval}` come from `ResNet34Render` and the AdamW trainer **evals** through `_fwd_eval` — measured, that skew is **rel 1.994, i.e. the logits disagree in SIGN**, §2g's `mobilenetv2_fwd` defect on R34; and `toSpecs` is `\| maxPool _ _ => #[]`, so the KERNEL is invisible to every param-count audit §2m used. **Still owed**: the VOID 90.06% Imagenette re-run (~1h03m), the VOID JAX numbers, `dp-check`/`shard-check`/residency, and the 5 live/seal witnesses that still pool 2×2 (they need one missing `maxPool3s2Smooth_of_injective`) | `rsb_a3_r50_verified.md` §4b |
 | ~~⛔ the four ImageNet renders bake `wd = 1e-4`~~ ✅ **CLOSED 2026-08-02** | all four bake **0.05** now; the re-render diff was exactly 4 lines, all `%wd`, every other artifact byte-identical, and both pairs re-gate bit-exact at 4 replicas | §0.5 |
 | ~~⛔ stochastic depth's **asymmetric-batch DP gate**~~ ✅ **CLOSED 2026-08-02** | `lake build drop-shard-check` — and §5b's prediction was right: the masks WERE being replicated, in the shim, before any DP drop render existed. Both existing constructions were unusable and the answer was neither of them | §0.6 |
-| ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `cnxin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
+| ~~⛔ the **DP clip artifact + its numeric gate**~~ ✅ **CLOSED 2026-08-02** | `vitin_adamdp128x4wxclip` / `convnextin_adamdpwxclip` — the shipping recipe at 4 replicas, **bit-exact on 17,152,251 / 85,762,779 floats** | §0.5 |
 | ⚠⚠ **every DP render's sum-not-mean control is BLIND once a clip is on** | a NEW hole, found by running it: grad clip is scale-invariant where it saturates, so the standard control passes bit-exact on a deliberately broken collective. The composed control (`perturb_clip.py hi` + sum-not-mean) is documented in `TestViTDpCheck.lean`. ⚠ **Any future clipped render must use it** | §0.5 |
 | ~~⚠ the ViT / EfficientNet EMA DP peers are RENDERED BUT UNGATED~~ ✅ **CLOSED 2026-08-02** | both gated at **4 replicas, every region BIT-EXACT** — ViT 22,869,669 floats, EfficientNet 21,196,213 (incl. the 4th region and 49 BN layers), sum-not-mean controls at **2.96 / 2.39**. The EMA scorecard is 3 of 3 on DP as well as single-device | §0.7 |
 | ~~⛔ **the per-net data SHIMS are not wired**~~ ✅ **CLOSED 2026-08-02** | `VerifiedNet.shimScript`, no fallback, `scripts/gen_shims.sh` + `scripts/shim_wiring_gate.py`. Measured: ViT / ConvNeXt / EfficientNet each stream a **different** train digest from R34's now, mnv2 ≡ R34 to the bit (predicted — its config is R34's), and all five validation streams stay identical | §0.9 |
@@ -815,12 +815,12 @@ down as a hypothetical for years while the actual op was missing.
 | ⚠ **ConvNeXt's batched chain is NOT SWAPPED — but it is now NUMERICALLY TIED**, so the blocker is gone | The keep = 1 SD gate compares `convnext_adam` (per-example chain) against `convnext_adamdrop` (batched chain, mask ≡ 1.0) and gets **0 of 83,478,846** floats differing after 3 AdamW steps, against a bit-exact floor — over a pair that differs by exactly the 78 conv-VJP `transpose`/`reverse` lines. `scripts/perturb_conv_vjp.py` fires at 0.0343, so the comparison provably reads those lines. **That is the §5 license `convnext-adam-tie` could not give** (it is IREE-linked and does not link on ares). ⚠ Left unswapped deliberately: it would move bytes in the artifact behind the 84.41% 80-epoch run for no functional gain | §0.10 |
 | ⚠ **`convBack` and `convBackBatched` are two emitters for one VJP, never tied to each other** | They order the kernel `transpose`/`reverse` differently; both compute the same kernel. Nobody noticed because no net used both until ConvNeXt's port. Aligning them has real blast radius — whichever side moves changes committed artifacts (batched: R34/mnv2/enet; per-example: ConvNeXt/ViT). **Recorded, not fixed**; the tie now measures it instead of it being unknown | §0.10 |
 | ~~⛔ **ViT's batched-index move**~~ ✅ **CLOSED 2026-08-03** — the whole chain byte-identical, SD landed (§0.11). What follows was the estimate: EfficientNet and ConvNeXt both have it, ViT's reference sets `dropPath 0.1` (24 sites, two per block), and the op/cert/driver/DP-gate are all built | ~10 of ConvNeXt's forms were shared and are already built. What is ViT-only: `patchEmbed`, `clsPad`/`clsSlice`, `headPad`/`headSlice`, `posEmbedGrad`, `rowDenseWeightGrad`, `softmaxRowBack`, `denseRow`. ⚠ **`matmulF` is the schedule risk**: attention has BOTH operands per-example, where every batched binary in the kit is pointwise-same-shape — it needs a `batchMap2`-shaped combinator, its own VJP and a `dot_general` with a batching dimension. Cost it separately | §0.2 ▶2 |
-| ~~⚠ **EfficientNet's classifier dropout 0.2 is missing and UNLISTED**~~ ✅ **CLOSED 2026-08-03** | `dropoutB` (5 sites, one emit line), `Proofs.dropout` (a fifth reading of `layerScale`), 5 new artifacts incl. `enetin_emarms64dropdo` — **the first EfficientNet render that is `efficientNetB0ImagenetConfig` entire on the regulariser axis**. `lake build dropout-tie`: gate A bit-exact **40/40** with the wrong-regulariser control at rel **0.89**, gate W (the weight-gradient operand) with `fault_dropout_wgrad.py` firing rc=1. ⚠ **No long run** — the gates say the render is right, not that it helps | §0.12 |
+| ~~⚠ **EfficientNet's classifier dropout 0.2 is missing and UNLISTED**~~ ✅ **CLOSED 2026-08-03** | `dropoutB` (5 sites, one emit line), `Proofs.dropout` (a fifth reading of `layerScale`), 5 new artifacts incl. `efficientnetin_emarms64dropdo` — **the first EfficientNet render that is `efficientNetB0ImagenetConfig` entire on the regulariser axis**. `lake build dropout-tie`: gate A bit-exact **40/40** with the wrong-regulariser control at rel **0.89**, gate W (the weight-gradient operand) with `fault_dropout_wgrad.py` firing rc=1. ⚠ **No long run** — the gates say the render is right, not that it helps | §0.12 |
 | ⚠ mixup/cutmix has **no long run**, and its λ stream is numpy's, not `jax.random`'s | a paired run agrees **in distribution, not per step**. Never quote it as the augmentation pipeline's byte-identity | §2b |
 | ⚠ mnv2's **80-epoch re-run** after the conv-bias swap | 86.73% was measured on the 210-param net | §2m |
-| ⛔⛔ **ViT's and EfficientNet's SHIPPING DP ARTIFACTS ARE A REGULARISER BEHIND their single-device peers** — found 2026-08-03 by listing what each artifact BAKES | An ImageNet run at 4 replicas loads the **DP** render. Measured: `cnxin_adamdpwxclipdrop` has dropPath ✅; **`vitin_adamdp128x4wxclip` has NO dropPath**, and **`enetin_emarmsdp64` has neither dropPath nor classifier dropout** — while `vitin_adamwxclipdrop` and `enetin_emarms64dropdo` (0 all_reduce, single-device) sit beside them unused. So a 4-replica ViT/EfficientNet run silently trains WITHOUT the regularisers their references set, exactly as §0.5's four artifacts did with `wd`. ⚠ **This is §0.5's finding recurring on a new axis**, and the check that found it was the same one: list what the artifact bakes, do not read the recipe matrix. Cost to close: **one `#eval` each** (`replicas` is already a parameter on both renderers) plus a DP mask-shard gate run — `drop-shard-check` transfers unchanged | §0.5, §0.12 |
-| ⚠⚠ **EfficientNet and ViT measure 6–10× their recorded ImageNet ms/step, cause UNKNOWN** | `imagenet_sweep.md` says enetin 310 / vitin 424 on 4 GPUs; measured 2026-08-03 on the current renders: **2,023 / 4,489**. Per image, the two nets carrying no new feature (R34 2.41, mnv2 1.55) are 3–6× cheaper than the three that do. ⚠ The hypothesis that this session's features caused it was **REFUTED by isolation probes** — masks cost nothing (2,161 without vs 2,023 with), mixup ~10% on ViT only. Variants differ from the old table's, but not by 6–10×. **Do not budget an enet/ViT ImageNet run off either number** | §0.13 |
-| ▶ **ConvNeXt at batch 64** — scoped, not built | `cnxin` is at 32 (global 128, 10,009 steps/epoch, double every other net) because the batch is a private constant in TWO files that must move together (`cBS` 104 uses/16 fns, `bB` 111 uses) — the delegation is what makes it two. §2p calls it "the single best pre-run optimisation available". The ViT `vbB` method transfers; a first attempt was started and reverted cleanly | §0.13 |
+| ⛔⛔ **ViT's and EfficientNet's SHIPPING DP ARTIFACTS ARE A REGULARISER BEHIND their single-device peers** — found 2026-08-03 by listing what each artifact BAKES | An ImageNet run at 4 replicas loads the **DP** render. Measured: `convnextin_adamdpwxclipdrop` has dropPath ✅; **`vitin_adamdp128x4wxclip` has NO dropPath**, and **`efficientnetin_emarmsdp64` has neither dropPath nor classifier dropout** — while `vitin_adamwxclipdrop` and `efficientnetin_emarms64dropdo` (0 all_reduce, single-device) sit beside them unused. So a 4-replica ViT/EfficientNet run silently trains WITHOUT the regularisers their references set, exactly as §0.5's four artifacts did with `wd`. ⚠ **This is §0.5's finding recurring on a new axis**, and the check that found it was the same one: list what the artifact bakes, do not read the recipe matrix. Cost to close: **one `#eval` each** (`replicas` is already a parameter on both renderers) plus a DP mask-shard gate run — `drop-shard-check` transfers unchanged | §0.5, §0.12 |
+| ⚠⚠ **EfficientNet and ViT measure 6–10× their recorded ImageNet ms/step, cause UNKNOWN** | `imagenet_sweep.md` says efficientnetin 310 / vitin 424 on 4 GPUs; measured 2026-08-03 on the current renders: **2,023 / 4,489**. Per image, the two nets carrying no new feature (R34 2.41, mnv2 1.55) are 3–6× cheaper than the three that do. ⚠ The hypothesis that this session's features caused it was **REFUTED by isolation probes** — masks cost nothing (2,161 without vs 2,023 with), mixup ~10% on ViT only. Variants differ from the old table's, but not by 6–10×. **Do not budget an enet/ViT ImageNet run off either number** | §0.13 |
+| ▶ **ConvNeXt at batch 64** — scoped, not built | `convnextin` is at 32 (global 128, 10,009 steps/epoch, double every other net) because the batch is a private constant in TWO files that must move together (`cBS` 104 uses/16 fns, `bB` 111 uses) — the delegation is what makes it two. §2p calls it "the single best pre-run optimisation available". The ViT `vbB` method transfers; a first attempt was started and reverted cleanly | §0.13 |
 | ⚠ **ConvNeXt's ImageNet init loss is 10.42**, where every other net starts near ln(1000)=6.91 | It descends and its baked divisor is correct, so it is not a blocker — but `%loss` is a report-only carve-out on the one net where it is the ONLY forward-only output, and R34's shipped wrong once | §0.13 |
 | ~~⛔ **R34/ImageNet, 30 epochs**~~ ✅ **RUN 2026-08-05: 70.735% top-1 / 90.140% top-5** | The first trustworthy verified ImageNet number this repo has ever had — every earlier one was ~4x low (§0.3's label row). **35,311/49,920 top-1**, final train loss 2.3499, 4x bs64 = global 256, heavy-ball + coupled L2, cosine + 5ep warmup @ peak 0.1, wd 1e-4, label smoothing 0.1, symmetric 3x3/s2 stem pool, `PJRT_FFI_RESIDENT=1`. **368 ms/step, ~30.9 min/epoch, 15.5 h** for 30 epochs (26 h without residency). ⭐ **Above the 30-epoch JAX reference's 69.26%** (`blueprint/src/content.tex`, 2x 7900 XTX fp32) by 1.48 pts, and its top-5 sits just under the **90-epoch** run's 90.62%. ⭐⭐ **The load-bearing evidence is not the endpoint but the epoch-5 cross-check**: the SAME weights scored 17,312/49,920 here against JAX's 17,313/49,920 on the same box — ONE IMAGE apart — with train losses agreeing to 0.055 nats at epochs 1, 2, 5 and 6. ⚠ **Claim ceiling unchanged**: the proof-carrying tier stops at Imagenette; this inherits provenance (`pretty(provenGraph)` off the same renderer) plus the pair agreement. Say *"one architecture, two independent lowerings, agreeing"*, never *"proven"*. ⚠ The exact 30-epoch JAX peer has still never been run ON THIS BOX (the `short` recipe, ~5 h); the same-box reference measured last night was the 90-epoch bf16 schedule. Artifacts: `runs/r34in_verified_30ep_2026-08-05/` | §0.4's R34 block |
 
@@ -860,10 +860,10 @@ matrix read ✅ on a **capability** (`generateShim` honours every flag) rather t
 | | train digest | |
 |---|---|---|
 | resnet34in | `f6dca723f5e9e535` | — |
-| **mnv2in** | `f6dca723f5e9e535` | ⚠ **known answer: ≡ R34 to the bit** |
+| **mobilenetv2in** | `f6dca723f5e9e535` | ⚠ **known answer: ≡ R34 to the bit** |
 | **vitin** | `98712d1e21443405` | ≠ R34 |
-| **enetin** | `0e3a0c4c84a10707` | ≠ R34 |
-| **cnxin** | `fa85309026d0ee36` | ≠ R34 |
+| **efficientnetin** | `0e3a0c4c84a10707` | ≠ R34 |
+| **convnextin** | `fa85309026d0ee36` | ≠ R34 |
 | all five, **validation** | `0431fa5caacb8c74` | identical — eval is untouched |
 
 mnv2 is the **inertness** half and it is a prediction, not a coincidence: its config sets
@@ -908,7 +908,7 @@ dropout 0.2, which is a RENDER gap and unaffected by any of this.
 
 **Two `SHlo` ops, no new proof machinery, no driver change** — `recipe_gaps`' Tier E was wrong by a
 tier, the second time an estimate there was (RMSProp's "op family" was one op). Four artifacts
-(`vit_adamclip`, `vitin_adam128wxclip`, `convnext_adamclip`, `cnxin_adamwxclip`), `lake build
+(`vit_adamclip`, `vitin_adam128wxclip`, `convnext_adamclip`, `convnextin_adamwxclip`), `lake build
 clip-tie {vit,convnext}`, **all six controls firing**, 17 new declarations 3-axiom clean.
 
 | gate | ViT (200 params) | ConvNeXt (180) |
@@ -953,7 +953,7 @@ at ~960,000 ppm **while passing ①**, because ‖g‖² is still one shared sca
    run FIRST now, because it is also ①'s floor, and it refuses with the det-shim recipe.
 
 ✅ **The DP artifact and its gate landed the same day — §0.5.** `vitin_adamdp128x4wxclip` /
-`cnxin_adamdpwxclip`, bit-exact at 4 replicas on 17,152,251 / 85,762,779 floats. ⚠ And running its
+`convnextin_adamdpwxclip`, bit-exact at 4 replicas on 17,152,251 / 85,762,779 floats. ⚠ And running its
 control turned up a **new hole in a gate every DP render uses**: the sum-not-mean control is
 structurally blind on any clipped render, because grad clip is scale-invariant where it saturates.
 §0.5 has the mechanism and the composed control that replaces it.
@@ -1054,10 +1054,10 @@ does not help here; the norm is a property of the *data*, so drive it with a sca
 ### §0.7 ✅ THE ViT / EfficientNet EMA DP PEERS, GATED (2026-08-02) — and the shadow re-measured
 
 ⚠ **§0.3's row said "nothing renders either" and that was STALE**: v1.2c (`e5f0c9bc`) rendered both
-`vitin_emadp128x4` and `enetin_emarmsdp64`. What was actually owed was the NUMERIC GATE — ConvNeXt's
+`vitin_emadp128x4` and `efficientnetin_emarmsdp64`. What was actually owed was the NUMERIC GATE — ConvNeXt's
 `convnext_emadp` was gated when it landed, these two came across as a carry-forward and no check had
 ever run on them. **No new renders were needed**; the single-device peers at the matching per-device
-batch (`vitin_ema128`, `enetin_emarms64`) already existed.
+batch (`vitin_ema128`, `efficientnetin_emarms64`) already existed.
 
 The two `dp-check` harnesses could not feed them: an `ema*` render carries a **fourth
 `[θ|m|v|ema]` region and a 5-slot scalar tail**, and only ConvNeXt's harness knew that. Both now
@@ -1065,7 +1065,7 @@ build the blob they feed. ⚠ The predicate is a **substring**, not `startsWith`
 recipe is `emarms`, and this is the exact axis where a prefix test already failed once
 (`planning/ema.md`: `emarms` does not start with `"rms"`).
 
-| duplicated-batch identity, 4 replicas | ViT (`vitin_ema*`) | EfficientNet (`enetin_emarms*`) |
+| duplicated-batch identity, 4 replicas | ViT (`vitin_ema*`) | EfficientNet (`efficientnetin_emarms*`) |
 |---|---|---|
 | θ / m / v / **ema** | **bit-exact 5,717,416 each** | **bit-exact 5,288,548 each** |
 | `%loss` + scalars · BN stats | 5/5 · — | 5/5 · **42,016/42,016** |
@@ -1150,12 +1150,12 @@ recipe*, while the corrected single-device renders sat beside it unused. Found b
 each artifact bakes** — §0.4 finding 5 one axis over (there Imagenette-vs-ImageNet, here
 single-device-vs-DP).
 
-* **decay fixed on all four** (`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam`, `cnxin_adamdp`).
+* **decay fixed on all four** (`vitin_adam128`, `vitin_adamdp128x4`, `convnextin_adam`, `convnextin_adamdp`).
   The re-render diff is **exactly 4 lines, all `%wd`**; every other committed artifact is
   byte-identical. ⚠ They stay short of the reference in the ways their docstrings list (no `wx`, no
   clip, one-hot targets) — **the decay was never on that list, it was a typo**, and no config
   anywhere says "ImageNet ViT at 1e-4".
-* **the shipping renders exist**: `vitin_adamdp128x4wxclip` (global 512) and `cnxin_adamdpwxclip`,
+* **the shipping renders exist**: `vitin_adamdp128x4wxclip` (global 512) and `convnextin_adamdpwxclip`,
   `wd = 0.05`, decay partitions 126/74 and 121/59 matching their single-device peers,
   **200 / 180 all_reduces (not 400 / 360)**, every one before the norm fold.
 * **gated at 4 replicas, bit-exact** under the det shim: ViT **17,152,251/17,152,251** floats,
@@ -1449,9 +1449,9 @@ shape (§2a-quater), a silently wrong hyperparameter that compiles, runs and des
 **0.05** — both halves of the recipe, the magnitude and the mask.
 
 ⚠ **The same 500× gap is on ConvNeXt** (`convnextTinyImagenetConfig.weightDecay := 0.05`), and
-`cnxin_adamwx` renders at 0.05 for the same reason `vitin_adam128wx` does.
+`convnextin_adamwx` renders at 0.05 for the same reason `vitin_adam128wx` does.
 
-⚠ **`vitin_adam128`, `vitin_adamdp128x4`, `cnxin_adam` and `cnxin_adamdp` are STILL at 1e-4 and
+⚠ **`vitin_adam128`, `vitin_adamdp128x4`, `convnextin_adam` and `convnextin_adamdp` are STILL at 1e-4 and
 were NOT touched** — a separate call with its own blast radius (the DP peers, the residency rows,
 the committed `vit-dp-check`/`convnext-dp-check` numbers). **Owed, and it must be closed before any
 ViT or ConvNeXt ImageNet pair run**: a matched pair at the wrong decay is not a matched pair.
@@ -1507,7 +1507,7 @@ a scale reaching the identity path, or a backward that dropped the SKIP cotangen
 
 1. ⚠⚠ **`sd` COLLIDED WITH `rmsdp`, AND THE COLLISION WAS BETWEEN TWO *OTHER* MARKERS MEETING.**
    `rms` ++ `dp` spells `rmsdp`, which contains "sd" — so the stochastic-depth predicate fired on
-   every RMSProp data-parallel variant, including the committed and gated `enetin_rmsdp64`. This is
+   every RMSProp data-parallel variant, including the committed and gated `efficientnetin_rmsdp64`. This is
    `ema.md`'s `emarms` defect a second time, one axis on, and *reading names one at a time cannot
    find it*. **With N markers, check every CONCATENATION, not every marker.** Renamed to `drop`;
    `tests/TestVariantPredicates.lean` now runs all 23 spellings × 3 axes.
@@ -1560,8 +1560,8 @@ a scale reaching the identity path, or a backward that dropped the SKIP cotangen
 
 ### ▶ WHAT LANDED 2026-08-01/02 (7 commits) — read this before assuming anything below is current
 
-* **All five nets now have a gated ImageNet trainer** — `resnet34in`, `vitin`, `cnxin`, `enetin`,
-  `mnv2in` (§2p). **Every one matches its JAX reference param count exactly**: 21,797,672 ·
+* **All five nets now have a gated ImageNet trainer** — `resnet34in`, `vitin`, `convnextin`, `efficientnetin`,
+  `mobilenetv2in` (§2p). **Every one matches its JAX reference param count exactly**: 21,797,672 ·
   5,717,416 · 28,587,592 · 5,288,548 · 3,504,872. Each is gated on DP, residency and an
   end-to-end run on real ImageNet over the shim. **None has a descent run** — the smokes are 40
   steps, which shows they RUN, not that they LEARN.
@@ -1599,7 +1599,7 @@ Three of the four steps are existing certified ops read differently — `momVNex
 (`rmsSqNext_eq_adamVNext`, by `rfl`). Only the ε-inside-the-root normalise had to be built.
 
 * **`Proofs/Codegen/RmsPropStep.lean`** + `rmsBufNextF` at all ten sites + 13 theorems, 3-axiom clean.
-* **Six artifacts**: `{mobilenetv2,efficientnet}_rms`, `{mnv2in,enetin}_rms64`, `…_rmsdp64`.
+* **Six artifacts**: `{mobilenetv2,efficientnet}_rms`, `{mobilenetv2in,efficientnetin}_rms64`, `…_rmsdp64`.
   `[θ|m|v]` reused with `m` = buffer, `v` = mean-square ⇒ **signature byte-identical to each net's
   AdamW render apart from the entry name**; no driver change.
 * **`lake build rms-tie && rms-tie [mobilenetv2|efficientnet]`** — ①②③ ≤ 1.1e-6 on both, with the
@@ -1637,8 +1637,8 @@ Three of the four steps are existing certified ops read differently — `momVNex
   ⚠ **`_global_step` in the emitted reference is 0-BASED** where this driver's `gstep` is 1-based,
   so the epoch is `(gstep−1)/nb`. One step of offset is invisible in a 5004-step epoch — read
   `jax/Jax/Codegen.lean`'s generator, not the prose.
-* **Both DP renders compile and RUN at 4 replicas**, the third owed item. `mnv2in_rmsdp64` /
-  `enetin_rmsdp64` pass the duplicated-batch identity: forward **BIT-EXACT** (34,112 / 42,016 BN
+* **Both DP renders compile and RUN at 4 replicas**, the third owed item. `mobilenetv2in_rmsdp64` /
+  `efficientnetin_rmsdp64` pass the duplicated-batch identity: forward **BIT-EXACT** (34,112 / 42,016 BN
   statistics), buffer norm-rel **7.8e-7 / 8.1e-7**, against sum-not-mean controls firing at
   **2.22 / 2.39** with rc=1 — six orders of separation.
 * ⚠ **`shard-check` CANNOT gate these, and that is a general finding about that harness.** Its known
@@ -6119,15 +6119,15 @@ yet** — every smoke is 40 steps.
 |---|---|---|---|---|---|---|
 | `resnet34in` | `mom256`/`momdp64` | **21,797,672** | ✅ (cifar8 proxy, §2b-quater) | ✅ | 386 (4×64) | 5004 |
 | `vitin` | `adam128`/`adamdp128x4` | **5,717,416** | ✅ bit-exact 17,152,251 | ✅ | 424 (4×128) | 2502 |
-| `cnxin` | `adam`/`adamdp` | **28,587,592** | ✅ bit-exact 85,762,779 | ✅ | 270 (4×32) | 10009 |
-| `enetin` | `adam64`/`adamdp64` | **5,288,548** | ✅ **sharding** 2.06e6 sep | ✅ | 310 (4×64) | 5004 |
-| `mnv2in` | `adam64`/`adamdp64` | **3,504,872** | ✅ **sharding** 2.18e6 sep | ✅ | 294 (4×64) | 5004 |
+| `convnextin` | `adam`/`adamdp` | **28,587,592** | ✅ bit-exact 85,762,779 | ✅ | 270 (4×32) | 10009 |
+| `efficientnetin` | `adam64`/`adamdp64` | **5,288,548** | ✅ **sharding** 2.06e6 sep | ✅ | 310 (4×64) | 5004 |
+| `mobilenetv2in` | `adam64`/`adamdp64` | **3,504,872** | ✅ **sharding** 2.18e6 sep | ✅ | 294 (4×64) | 5004 |
 
 **What each needed, and it varied a lot:**
 
 * **ViT** — nothing but `#eval`s; `nClasses`/`bs`/`replicas` were already parameters.
 * **ConvNeXt** — `nClasses` was a hardcoded literal in ~20 places and `−α/K` was a string
-  independent of it. `cBS` is STILL a private constant in 96 places, which is why `cnxin` renders at
+  independent of it. `cBS` is STILL a private constant in 96 places, which is why `convnextin` renders at
   batch 32 (global 128, 10,009 steps/epoch). **Threading `cBS` would roughly halve its 60-hour run**
   and is the single best pre-run optimisation available.
 * **EfficientNet / mnv2** — `B` and `nClasses` were already parameters; both needed a `slug`
@@ -7494,7 +7494,7 @@ scale-free, so a near-zero-gradient parameter flips sign on a 1-ULP difference a
   FROM ONE STRING.** Path from `verified_mlir/{slug}_{variant}_train_step.mlir`
   (`VerifiedTrain.lean:771`), entry from `m.{slug}_{variant}_train_step` (`:868`). If they disagree
   the artifact is unreachable at EVERY `LEAN_MLIR_VARIANT` — one spelling finds the file and asks
-  for an entry it lacks, the other names the right entry at a missing path. `enetin_emarmsdrop64`
+  for an entry it lacks, the other names the right entry at a missing path. `efficientnetin_emarmsdrop64`
   shipped that way (§0.12): committed, prefix-audited, in the recipe matrix, unloadable. **Every
   gate on it read the file; none opened it through the driver.** `regen_verified_mlir.sh check`
   audits basename == entry now. ⚠ And pin literal `#eval` paths against the function that derives

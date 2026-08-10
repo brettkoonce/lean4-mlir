@@ -50,7 +50,7 @@ def main (args : List String) : IO Unit := do
   -- ▶ Env-selected (net, batch, replicas, variant pair), defaulting to EXACTLY the Imagenette /
   -- AdamW / 2-replica configuration this harness was written for, so the committed result
   -- reproduces with no arguments — which is the gate on the generalisation itself. Added for the
-  -- RMSProp DP render, which exists only at the ImageNet shape (`enetin`, B=64 × 4 replicas).
+  -- RMSProp DP render, which exists only at the ImageNet shape (`efficientnetin`, B=64 × 4 replicas).
   -- ⚠ `shard-check` cannot substitute: its `DP([A|B]) = mean(single(A), single(B))` needs the gated
   -- slot LINEAR in the gradient, which RMSProp's buffer is not. The duplicated-batch identity here
   -- is optimizer-agnostic — both sides see the identical gradient. Mirrors `TestMobilenetV2DpCheck`.

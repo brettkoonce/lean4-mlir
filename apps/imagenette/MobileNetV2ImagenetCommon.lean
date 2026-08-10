@@ -6,7 +6,7 @@ The fifth and last of the scale-tier trainers (§2p). Same certified renderer at
 `B := 64` — four replicas is **global batch 256**, which is `mobilenetV2ImagenetConfig.batchSize`,
 so the 5004 steps/epoch match the reference exactly.
 
-⚠ A batch-BN net: eval goes through `@mnv2in_fwd_eval` with frozen running stats, and the step
+⚠ A batch-BN net: eval goes through `@mobilenetv2in_fwd_eval` with frozen running stats, and the step
 buffer carries a 2×52-tensor stat region. §2g's forward/train-step skew was found on THIS net —
 `mobilenetv2_fwd` was batch-BN against a per-example-BN train step, so the trainer scored a
 different net than it trained (logits rel 1.86). The forwards here come off the same chain the
@@ -21,12 +21,12 @@ this architecture, not as a MobileNetV2 reproduction.
 scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build mobilenetv2-imagenet-verified-xla
-cat .lake/build/mnv2in_adamdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
+cat .lake/build/mobilenetv2in_adamdp64_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
 
 PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 \
   LEAN_MLIR_VARIANT=adamdp64 LEAN_MLIR_BATCH=64 \
   LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
-  .lake/build/bin/mobilenetv2-imagenet-verified-xla data 2>&1 | tee runs/mnv2in_4gpu.log
+  .lake/build/bin/mobilenetv2-imagenet-verified-xla data 2>&1 | tee runs/mobilenetv2in_4gpu.log
 ```
 -/
 

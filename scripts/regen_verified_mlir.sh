@@ -130,8 +130,8 @@ check_manifest() {
 # one spelling finds the file and asks for an entry it does not contain, the other names the right
 # entry at a path that does not exist.
 #
-# ⚠⚠ FOUND 2026-08-03 BY A `#guard`, NOT BY THIS: `enetin_emarmsdrop64_train_step.mlir` declared
-# `@enetin_emarms64drop_train_step` (the batch suffix precedes the regulariser markers in
+# ⚠⚠ FOUND 2026-08-03 BY A `#guard`, NOT BY THIS: `efficientnetin_emarmsdrop64_train_step.mlir` declared
+# `@efficientnetin_emarms64drop_train_step` (the batch suffix precedes the regulariser markers in
 # `enetAdamVariant`, and the path was written by hand the other way round). It had been committed,
 # prefix-audited and carried in the recipe matrix as a shipped ImageNet artifact, and it could not
 # be loaded. It survived because every gate on it READS THE FILE; none of them opens it through the
@@ -282,14 +282,14 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
          # sites are emitted in the forward too (at an all-ones scale, exactly the identity), so
          # the SD train step keeps a prefix partner instead of the audit quietly not covering it.
          ("efficientnet_drop_fwd.mlir", "efficientnet_adamdrop_train_step.mlir"),
-         ("enetin_drop_fwd.mlir",       "enetin_emarms64drop_train_step.mlir"),
+         ("efficientnetin_drop_fwd.mlir",       "efficientnetin_emarms64drop_train_step.mlir"),
          # Classifier dropout (recipe_gaps.md gap C, 2026-08-03). Same design as the SD pair and for
          # the same reason: the dropout site is emitted in the forward too, at the driver's all-ones
          # mask (exactly the identity — 1*x = x in IEEE), so the dropout variants keep a prefix
-         # partner. `enetin_dropdo_fwd` carries BOTH mask families, which is what pairs it with the
+         # partner. `efficientnetin_dropdo_fwd` carries BOTH mask families, which is what pairs it with the
          # full-reference-recipe train step.
          ("efficientnet_do_fwd.mlir", "efficientnet_adamdo_train_step.mlir"),
-         ("enetin_dropdo_fwd.mlir",   "enetin_emarms64dropdo_train_step.mlir"),
+         ("efficientnetin_dropdo_fwd.mlir",   "efficientnetin_emarms64dropdo_train_step.mlir"),
          # ConvNeXt's SD pair, on the BATCHED chain (ConvNeXtRenderB) — where a per-example mask is
          # expressible at all. ⚠ These are the only ConvNeXt artifacts from that chain: the drop-free
          # batched render is tied but NOT swapped, so `convnext_fwd`/`convnext_train_step` above are
@@ -297,7 +297,7 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
          # transpose/reverse), all in the BACKWARD — so each pair is internally consistent and the
          # prefix property is unaffected by which chain produced it.
          ("convnext_drop_fwd.mlir", "convnext_adamdrop_train_step.mlir"),
-         ("cnxin_drop_fwd.mlir",    "cnxin_adamwxclipdrop_train_step.mlir"),
+         ("convnextin_drop_fwd.mlir",    "convnextin_adamwxclipdrop_train_step.mlir"),
          # ViT's SD pair, on the batched chain (ViTRenderB). ⚠ Unlike ConvNeXt's, ViT's batched
          # chain reproduces its committed artifacts byte-for-byte, so these are the same emitter
          # the drop-free vit_fwd/vit_adam_train_step above come from — one renderer, two flags.

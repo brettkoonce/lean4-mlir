@@ -118,7 +118,7 @@ jobs:
           git diff --exit-code -- verified_mlir/mobilenetv2_train_step.mlir verified_mlir/mobilenetv2_reduced_train_step.mlir \
             || { echo "::error::committed verified_mlir/mobilenetv2_*train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2Render.lean)"; exit 1; }
           # MobileNetV2RenderB owns every mnv2 OPTIMIZER render — AdamW, its DP peer, RMSProp,
-          # and the four ImageNet (`mnv2in`) variants. These were unguarded and baselined until
+          # and the four ImageNet (`mobilenetv2in`) variants. These were unguarded and baselined until
           # the RMSProp render landed; guarding the module covers all seven at once, which is why
           # four lines came OUT of scripts/render_guard_baseline.txt rather than three going in.
           # (The step comment above saying the *_adam_train_step variants are "exe-generated" is
@@ -128,11 +128,11 @@ jobs:
               verified_mlir/mobilenetv2_adam_train_step.mlir \
               verified_mlir/mobilenetv2_adamdp_train_step.mlir \
               verified_mlir/mobilenetv2_rms_train_step.mlir \
-              verified_mlir/mnv2in_adam64_train_step.mlir \
-              verified_mlir/mnv2in_adamdp64_train_step.mlir \
-              verified_mlir/mnv2in_rms64_train_step.mlir \
-              verified_mlir/mnv2in_rmsdp64_train_step.mlir \
-            || { echo "::error::committed verified_mlir/{mobilenetv2,mnv2in}_*_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean)"; exit 1; }
+              verified_mlir/mobilenetv2in_adam64_train_step.mlir \
+              verified_mlir/mobilenetv2in_adamdp64_train_step.mlir \
+              verified_mlir/mobilenetv2in_rms64_train_step.mlir \
+              verified_mlir/mobilenetv2in_rmsdp64_train_step.mlir \
+            || { echo "::error::committed verified_mlir/{mobilenetv2,mobilenetv2in}_*_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean)"; exit 1; }
           # MobileNetV4-Conv-S (planning/mnv4_verified.md §3i). Elaborating this module writes
           # ALL THREE artifacts, so all three are diffed — the fwd/fwd_eval/train_step set comes
           # from ONE traversal (`mnv4FwdChainB` switched by `BnMode`), and guarding only the train
@@ -156,17 +156,17 @@ jobs:
               verified_mlir/convnext_adamdp_train_step.mlir \
               verified_mlir/convnext_ema_train_step.mlir \
               verified_mlir/convnext_emadp_train_step.mlir \
-              verified_mlir/cnxin_adam_train_step.mlir \
-              verified_mlir/cnxin_adamdp_train_step.mlir \
-              verified_mlir/cnxin_ema_train_step.mlir \
-              verified_mlir/cnxin_emadp_train_step.mlir \
-              verified_mlir/cnxin_fwd.mlir \
+              verified_mlir/convnextin_adam_train_step.mlir \
+              verified_mlir/convnextin_adamdp_train_step.mlir \
+              verified_mlir/convnextin_ema_train_step.mlir \
+              verified_mlir/convnextin_emadp_train_step.mlir \
+              verified_mlir/convnextin_fwd.mlir \
               verified_mlir/convnext_adamwx_train_step.mlir \
-              verified_mlir/cnxin_adamwx_train_step.mlir \
+              verified_mlir/convnextin_adamwx_train_step.mlir \
               verified_mlir/convnext_adamclip_train_step.mlir \
-              verified_mlir/cnxin_adamwxclip_train_step.mlir \
-              verified_mlir/cnxin_adamdpwxclip_train_step.mlir \
-            || { echo "::error::committed verified_mlir/{convnext,cnxin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
+              verified_mlir/convnextin_adamwxclip_train_step.mlir \
+              verified_mlir/convnextin_adamdpwxclip_train_step.mlir \
+            || { echo "::error::committed verified_mlir/{convnext,convnextin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
           # The STOCHASTIC-DEPTH renders come from a DIFFERENT module — ConvNeXtRenderB, the chain at
           # the batched index N := B, which is the only one where a per-EXAMPLE drop mask is
           # expressible at all (handoff §0.10). It is a separate `lake env lean` because it is a
@@ -175,10 +175,10 @@ jobs:
           git diff --exit-code -- verified_mlir/convnext_adamdrop_train_step.mlir \
               verified_mlir/convnext_adamdpdrop_train_step.mlir \
               verified_mlir/convnext_drop_fwd.mlir \
-              verified_mlir/cnxin_adamwxclipdrop_train_step.mlir \
-              verified_mlir/cnxin_adamdpwxclipdrop_train_step.mlir \
-              verified_mlir/cnxin_drop_fwd.mlir \
-            || { echo "::error::committed verified_mlir/{convnext,cnxin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
+              verified_mlir/convnextin_adamwxclipdrop_train_step.mlir \
+              verified_mlir/convnextin_adamdpwxclipdrop_train_step.mlir \
+              verified_mlir/convnextin_drop_fwd.mlir \
+            || { echo "::error::committed verified_mlir/{convnext,convnextin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
           # ViT's SD renders, from ViTRenderB — the batched chain. ⚠ That chain reproduces ViT's
           # committed drop-free artifacts byte-for-byte (unlike ConvNeXt's, which differs on 78
           # conv-VJP lines), so these come from the same emitter as vit_fwd/vit_adam_train_step.
@@ -211,19 +211,19 @@ jobs:
               verified_mlir/efficientnet_adamdo_train_step.mlir \
               verified_mlir/efficientnet_do_fwd.mlir \
               verified_mlir/efficientnet_do_fwd_eval.mlir \
-              verified_mlir/enetin_emarms64_train_step.mlir \
-              verified_mlir/enetin_emarmsdp64_train_step.mlir \
-              verified_mlir/enetin_emarms64drop_train_step.mlir \
-              verified_mlir/enetin_emarms64dropdo_train_step.mlir \
-              verified_mlir/enetin_emarmsdp64dropdo_train_step.mlir \
-              verified_mlir/enetin_drop_fwd.mlir \
-              verified_mlir/enetin_dropdo_fwd.mlir \
-              verified_mlir/enetin_fwd.mlir verified_mlir/enetin_fwd_eval.mlir \
-              verified_mlir/enetin_adam64_train_step.mlir \
-              verified_mlir/enetin_adamdp64_train_step.mlir \
-              verified_mlir/enetin_rms64_train_step.mlir \
-              verified_mlir/enetin_rmsdp64_train_step.mlir \
-            || { echo "::error::committed verified_mlir/{efficientnet,enetin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean)"; exit 1; }
+              verified_mlir/efficientnetin_emarms64_train_step.mlir \
+              verified_mlir/efficientnetin_emarmsdp64_train_step.mlir \
+              verified_mlir/efficientnetin_emarms64drop_train_step.mlir \
+              verified_mlir/efficientnetin_emarms64dropdo_train_step.mlir \
+              verified_mlir/efficientnetin_emarmsdp64dropdo_train_step.mlir \
+              verified_mlir/efficientnetin_drop_fwd.mlir \
+              verified_mlir/efficientnetin_dropdo_fwd.mlir \
+              verified_mlir/efficientnetin_fwd.mlir verified_mlir/efficientnetin_fwd_eval.mlir \
+              verified_mlir/efficientnetin_adam64_train_step.mlir \
+              verified_mlir/efficientnetin_adamdp64_train_step.mlir \
+              verified_mlir/efficientnetin_rms64_train_step.mlir \
+              verified_mlir/efficientnetin_rmsdp64_train_step.mlir \
+            || { echo "::error::committed verified_mlir/{efficientnet,efficientnetin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean)"; exit 1; }
           lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean
           git diff --exit-code -- verified_mlir/vit_train_step.mlir verified_mlir/vit_fwd.mlir \
               verified_mlir/vit_adam_train_step.mlir \

@@ -359,7 +359,7 @@ every existing `<slug>_*_ckpt_xla.bin` aside before the first run.
 
 ## ✅ THE DP PEERS ARE GATED (2026-08-02) — and "never gate on the shadow" now has three nets
 
-`convnext_emadp` was gated when it landed; `vitin_emadp128x4` and `enetin_emarmsdp64` shipped in
+`convnext_emadp` was gated when it landed; `vitin_emadp128x4` and `efficientnetin_emarmsdp64` shipped in
 v1.2c as a carry-forward and were never checked. Both now are, at **4 replicas**, every region
 bit-exact on the duplicated-batch identity — **22,869,669** floats on ViT and **21,196,213** on
 EfficientNet (the latter including the 4th region *and* 49 BN layers). Sum-not-mean controls fire at

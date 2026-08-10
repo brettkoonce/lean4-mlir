@@ -1,6 +1,12 @@
 module @m {
-  func.func @mnv2in_adam64_train_step(%x: tensor<64x150528xf32>, %sW: tensor<32x3x3x3xf32>, %sg: tensor<32xf32>, %sbt: tensor<32xf32>, %b1dW: tensor<32x1x3x3xf32>, %b1dg: tensor<32xf32>, %b1dbt: tensor<32xf32>, %b1pW: tensor<16x32x1x1xf32>, %b1pg: tensor<16xf32>, %b1pbt: tensor<16xf32>, %b2eW: tensor<96x16x1x1xf32>, %b2eg: tensor<96xf32>, %b2ebt: tensor<96xf32>, %b2dW: tensor<96x1x3x3xf32>, %b2dg: tensor<96xf32>, %b2dbt: tensor<96xf32>, %b2pW: tensor<24x96x1x1xf32>, %b2pg: tensor<24xf32>, %b2pbt: tensor<24xf32>, %b3eW: tensor<144x24x1x1xf32>, %b3eg: tensor<144xf32>, %b3ebt: tensor<144xf32>, %b3dW: tensor<144x1x3x3xf32>, %b3dg: tensor<144xf32>, %b3dbt: tensor<144xf32>, %b3pW: tensor<24x144x1x1xf32>, %b3pg: tensor<24xf32>, %b3pbt: tensor<24xf32>, %b4eW: tensor<144x24x1x1xf32>, %b4eg: tensor<144xf32>, %b4ebt: tensor<144xf32>, %b4dW: tensor<144x1x3x3xf32>, %b4dg: tensor<144xf32>, %b4dbt: tensor<144xf32>, %b4pW: tensor<32x144x1x1xf32>, %b4pg: tensor<32xf32>, %b4pbt: tensor<32xf32>, %b5eW: tensor<192x32x1x1xf32>, %b5eg: tensor<192xf32>, %b5ebt: tensor<192xf32>, %b5dW: tensor<192x1x3x3xf32>, %b5dg: tensor<192xf32>, %b5dbt: tensor<192xf32>, %b5pW: tensor<32x192x1x1xf32>, %b5pg: tensor<32xf32>, %b5pbt: tensor<32xf32>, %b6eW: tensor<192x32x1x1xf32>, %b6eg: tensor<192xf32>, %b6ebt: tensor<192xf32>, %b6dW: tensor<192x1x3x3xf32>, %b6dg: tensor<192xf32>, %b6dbt: tensor<192xf32>, %b6pW: tensor<32x192x1x1xf32>, %b6pg: tensor<32xf32>, %b6pbt: tensor<32xf32>, %b7eW: tensor<192x32x1x1xf32>, %b7eg: tensor<192xf32>, %b7ebt: tensor<192xf32>, %b7dW: tensor<192x1x3x3xf32>, %b7dg: tensor<192xf32>, %b7dbt: tensor<192xf32>, %b7pW: tensor<64x192x1x1xf32>, %b7pg: tensor<64xf32>, %b7pbt: tensor<64xf32>, %b8eW: tensor<384x64x1x1xf32>, %b8eg: tensor<384xf32>, %b8ebt: tensor<384xf32>, %b8dW: tensor<384x1x3x3xf32>, %b8dg: tensor<384xf32>, %b8dbt: tensor<384xf32>, %b8pW: tensor<64x384x1x1xf32>, %b8pg: tensor<64xf32>, %b8pbt: tensor<64xf32>, %b9eW: tensor<384x64x1x1xf32>, %b9eg: tensor<384xf32>, %b9ebt: tensor<384xf32>, %b9dW: tensor<384x1x3x3xf32>, %b9dg: tensor<384xf32>, %b9dbt: tensor<384xf32>, %b9pW: tensor<64x384x1x1xf32>, %b9pg: tensor<64xf32>, %b9pbt: tensor<64xf32>, %b10eW: tensor<384x64x1x1xf32>, %b10eg: tensor<384xf32>, %b10ebt: tensor<384xf32>, %b10dW: tensor<384x1x3x3xf32>, %b10dg: tensor<384xf32>, %b10dbt: tensor<384xf32>, %b10pW: tensor<64x384x1x1xf32>, %b10pg: tensor<64xf32>, %b10pbt: tensor<64xf32>, %b11eW: tensor<384x64x1x1xf32>, %b11eg: tensor<384xf32>, %b11ebt: tensor<384xf32>, %b11dW: tensor<384x1x3x3xf32>, %b11dg: tensor<384xf32>, %b11dbt: tensor<384xf32>, %b11pW: tensor<96x384x1x1xf32>, %b11pg: tensor<96xf32>, %b11pbt: tensor<96xf32>, %b12eW: tensor<576x96x1x1xf32>, %b12eg: tensor<576xf32>, %b12ebt: tensor<576xf32>, %b12dW: tensor<576x1x3x3xf32>, %b12dg: tensor<576xf32>, %b12dbt: tensor<576xf32>, %b12pW: tensor<96x576x1x1xf32>, %b12pg: tensor<96xf32>, %b12pbt: tensor<96xf32>, %b13eW: tensor<576x96x1x1xf32>, %b13eg: tensor<576xf32>, %b13ebt: tensor<576xf32>, %b13dW: tensor<576x1x3x3xf32>, %b13dg: tensor<576xf32>, %b13dbt: tensor<576xf32>, %b13pW: tensor<96x576x1x1xf32>, %b13pg: tensor<96xf32>, %b13pbt: tensor<96xf32>, %b14eW: tensor<576x96x1x1xf32>, %b14eg: tensor<576xf32>, %b14ebt: tensor<576xf32>, %b14dW: tensor<576x1x3x3xf32>, %b14dg: tensor<576xf32>, %b14dbt: tensor<576xf32>, %b14pW: tensor<160x576x1x1xf32>, %b14pg: tensor<160xf32>, %b14pbt: tensor<160xf32>, %b15eW: tensor<960x160x1x1xf32>, %b15eg: tensor<960xf32>, %b15ebt: tensor<960xf32>, %b15dW: tensor<960x1x3x3xf32>, %b15dg: tensor<960xf32>, %b15dbt: tensor<960xf32>, %b15pW: tensor<160x960x1x1xf32>, %b15pg: tensor<160xf32>, %b15pbt: tensor<160xf32>, %b16eW: tensor<960x160x1x1xf32>, %b16eg: tensor<960xf32>, %b16ebt: tensor<960xf32>, %b16dW: tensor<960x1x3x3xf32>, %b16dg: tensor<960xf32>, %b16dbt: tensor<960xf32>, %b16pW: tensor<160x960x1x1xf32>, %b16pg: tensor<160xf32>, %b16pbt: tensor<160xf32>, %b17eW: tensor<960x160x1x1xf32>, %b17eg: tensor<960xf32>, %b17ebt: tensor<960xf32>, %b17dW: tensor<960x1x3x3xf32>, %b17dg: tensor<960xf32>, %b17dbt: tensor<960xf32>, %b17pW: tensor<320x960x1x1xf32>, %b17pg: tensor<320xf32>, %b17pbt: tensor<320xf32>, %hW: tensor<1280x320x1x1xf32>, %hg: tensor<1280xf32>, %hbt: tensor<1280xf32>, %Wd: tensor<1280x1000xf32>, %bd: tensor<1000xf32>, %sWm: tensor<32x3x3x3xf32>, %sgm: tensor<32xf32>, %sbtm: tensor<32xf32>, %b1dWm: tensor<32x1x3x3xf32>, %b1dgm: tensor<32xf32>, %b1dbtm: tensor<32xf32>, %b1pWm: tensor<16x32x1x1xf32>, %b1pgm: tensor<16xf32>, %b1pbtm: tensor<16xf32>, %b2eWm: tensor<96x16x1x1xf32>, %b2egm: tensor<96xf32>, %b2ebtm: tensor<96xf32>, %b2dWm: tensor<96x1x3x3xf32>, %b2dgm: tensor<96xf32>, %b2dbtm: tensor<96xf32>, %b2pWm: tensor<24x96x1x1xf32>, %b2pgm: tensor<24xf32>, %b2pbtm: tensor<24xf32>, %b3eWm: tensor<144x24x1x1xf32>, %b3egm: tensor<144xf32>, %b3ebtm: tensor<144xf32>, %b3dWm: tensor<144x1x3x3xf32>, %b3dgm: tensor<144xf32>, %b3dbtm: tensor<144xf32>, %b3pWm: tensor<24x144x1x1xf32>, %b3pgm: tensor<24xf32>, %b3pbtm: tensor<24xf32>, %b4eWm: tensor<144x24x1x1xf32>, %b4egm: tensor<144xf32>, %b4ebtm: tensor<144xf32>, %b4dWm: tensor<144x1x3x3xf32>, %b4dgm: tensor<144xf32>, %b4dbtm: tensor<144xf32>, %b4pWm: tensor<32x144x1x1xf32>, %b4pgm: tensor<32xf32>, %b4pbtm: tensor<32xf32>, %b5eWm: tensor<192x32x1x1xf32>, %b5egm: tensor<192xf32>, %b5ebtm: tensor<192xf32>, %b5dWm: tensor<192x1x3x3xf32>, %b5dgm: tensor<192xf32>, %b5dbtm: tensor<192xf32>, %b5pWm: tensor<32x192x1x1xf32>, %b5pgm: tensor<32xf32>, %b5pbtm: tensor<32xf32>, %b6eWm: tensor<192x32x1x1xf32>, %b6egm: tensor<192xf32>, %b6ebtm: tensor<192xf32>, %b6dWm: tensor<192x1x3x3xf32>, %b6dgm: tensor<192xf32>, %b6dbtm: tensor<192xf32>, %b6pWm: tensor<32x192x1x1xf32>, %b6pgm: tensor<32xf32>, %b6pbtm: tensor<32xf32>, %b7eWm: tensor<192x32x1x1xf32>, %b7egm: tensor<192xf32>, %b7ebtm: tensor<192xf32>, %b7dWm: tensor<192x1x3x3xf32>, %b7dgm: tensor<192xf32>, %b7dbtm: tensor<192xf32>, %b7pWm: tensor<64x192x1x1xf32>, %b7pgm: tensor<64xf32>, %b7pbtm: tensor<64xf32>, %b8eWm: tensor<384x64x1x1xf32>, %b8egm: tensor<384xf32>, %b8ebtm: tensor<384xf32>, %b8dWm: tensor<384x1x3x3xf32>, %b8dgm: tensor<384xf32>, %b8dbtm: tensor<384xf32>, %b8pWm: tensor<64x384x1x1xf32>, %b8pgm: tensor<64xf32>, %b8pbtm: tensor<64xf32>, %b9eWm: tensor<384x64x1x1xf32>, %b9egm: tensor<384xf32>, %b9ebtm: tensor<384xf32>, %b9dWm: tensor<384x1x3x3xf32>, %b9dgm: tensor<384xf32>, %b9dbtm: tensor<384xf32>, %b9pWm: tensor<64x384x1x1xf32>, %b9pgm: tensor<64xf32>, %b9pbtm: tensor<64xf32>, %b10eWm: tensor<384x64x1x1xf32>, %b10egm: tensor<384xf32>, %b10ebtm: tensor<384xf32>, %b10dWm: tensor<384x1x3x3xf32>, %b10dgm: tensor<384xf32>, %b10dbtm: tensor<384xf32>, %b10pWm: tensor<64x384x1x1xf32>, %b10pgm: tensor<64xf32>, %b10pbtm: tensor<64xf32>, %b11eWm: tensor<384x64x1x1xf32>, %b11egm: tensor<384xf32>, %b11ebtm: tensor<384xf32>, %b11dWm: tensor<384x1x3x3xf32>, %b11dgm: tensor<384xf32>, %b11dbtm: tensor<384xf32>, %b11pWm: tensor<96x384x1x1xf32>, %b11pgm: tensor<96xf32>, %b11pbtm: tensor<96xf32>, %b12eWm: tensor<576x96x1x1xf32>, %b12egm: tensor<576xf32>, %b12ebtm: tensor<576xf32>, %b12dWm: tensor<576x1x3x3xf32>, %b12dgm: tensor<576xf32>, %b12dbtm: tensor<576xf32>, %b12pWm: tensor<96x576x1x1xf32>, %b12pgm: tensor<96xf32>, %b12pbtm: tensor<96xf32>, %b13eWm: tensor<576x96x1x1xf32>, %b13egm: tensor<576xf32>, %b13ebtm: tensor<576xf32>, %b13dWm: tensor<576x1x3x3xf32>, %b13dgm: tensor<576xf32>, %b13dbtm: tensor<576xf32>, %b13pWm: tensor<96x576x1x1xf32>, %b13pgm: tensor<96xf32>, %b13pbtm: tensor<96xf32>, %b14eWm: tensor<576x96x1x1xf32>, %b14egm: tensor<576xf32>, %b14ebtm: tensor<576xf32>, %b14dWm: tensor<576x1x3x3xf32>, %b14dgm: tensor<576xf32>, %b14dbtm: tensor<576xf32>, %b14pWm: tensor<160x576x1x1xf32>, %b14pgm: tensor<160xf32>, %b14pbtm: tensor<160xf32>, %b15eWm: tensor<960x160x1x1xf32>, %b15egm: tensor<960xf32>, %b15ebtm: tensor<960xf32>, %b15dWm: tensor<960x1x3x3xf32>, %b15dgm: tensor<960xf32>, %b15dbtm: tensor<960xf32>, %b15pWm: tensor<160x960x1x1xf32>, %b15pgm: tensor<160xf32>, %b15pbtm: tensor<160xf32>, %b16eWm: tensor<960x160x1x1xf32>, %b16egm: tensor<960xf32>, %b16ebtm: tensor<960xf32>, %b16dWm: tensor<960x1x3x3xf32>, %b16dgm: tensor<960xf32>, %b16dbtm: tensor<960xf32>, %b16pWm: tensor<160x960x1x1xf32>, %b16pgm: tensor<160xf32>, %b16pbtm: tensor<160xf32>, %b17eWm: tensor<960x160x1x1xf32>, %b17egm: tensor<960xf32>, %b17ebtm: tensor<960xf32>, %b17dWm: tensor<960x1x3x3xf32>, %b17dgm: tensor<960xf32>, %b17dbtm: tensor<960xf32>, %b17pWm: tensor<320x960x1x1xf32>, %b17pgm: tensor<320xf32>, %b17pbtm: tensor<320xf32>, %hWm: tensor<1280x320x1x1xf32>, %hgm: tensor<1280xf32>, %hbtm: tensor<1280xf32>, %Wdm: tensor<1280x1000xf32>, %bdm: tensor<1000xf32>, %sWv: tensor<32x3x3x3xf32>, %sgv: tensor<32xf32>, %sbtv: tensor<32xf32>, %b1dWv: tensor<32x1x3x3xf32>, %b1dgv: tensor<32xf32>, %b1dbtv: tensor<32xf32>, %b1pWv: tensor<16x32x1x1xf32>, %b1pgv: tensor<16xf32>, %b1pbtv: tensor<16xf32>, %b2eWv: tensor<96x16x1x1xf32>, %b2egv: tensor<96xf32>, %b2ebtv: tensor<96xf32>, %b2dWv: tensor<96x1x3x3xf32>, %b2dgv: tensor<96xf32>, %b2dbtv: tensor<96xf32>, %b2pWv: tensor<24x96x1x1xf32>, %b2pgv: tensor<24xf32>, %b2pbtv: tensor<24xf32>, %b3eWv: tensor<144x24x1x1xf32>, %b3egv: tensor<144xf32>, %b3ebtv: tensor<144xf32>, %b3dWv: tensor<144x1x3x3xf32>, %b3dgv: tensor<144xf32>, %b3dbtv: tensor<144xf32>, %b3pWv: tensor<24x144x1x1xf32>, %b3pgv: tensor<24xf32>, %b3pbtv: tensor<24xf32>, %b4eWv: tensor<144x24x1x1xf32>, %b4egv: tensor<144xf32>, %b4ebtv: tensor<144xf32>, %b4dWv: tensor<144x1x3x3xf32>, %b4dgv: tensor<144xf32>, %b4dbtv: tensor<144xf32>, %b4pWv: tensor<32x144x1x1xf32>, %b4pgv: tensor<32xf32>, %b4pbtv: tensor<32xf32>, %b5eWv: tensor<192x32x1x1xf32>, %b5egv: tensor<192xf32>, %b5ebtv: tensor<192xf32>, %b5dWv: tensor<192x1x3x3xf32>, %b5dgv: tensor<192xf32>, %b5dbtv: tensor<192xf32>, %b5pWv: tensor<32x192x1x1xf32>, %b5pgv: tensor<32xf32>, %b5pbtv: tensor<32xf32>, %b6eWv: tensor<192x32x1x1xf32>, %b6egv: tensor<192xf32>, %b6ebtv: tensor<192xf32>, %b6dWv: tensor<192x1x3x3xf32>, %b6dgv: tensor<192xf32>, %b6dbtv: tensor<192xf32>, %b6pWv: tensor<32x192x1x1xf32>, %b6pgv: tensor<32xf32>, %b6pbtv: tensor<32xf32>, %b7eWv: tensor<192x32x1x1xf32>, %b7egv: tensor<192xf32>, %b7ebtv: tensor<192xf32>, %b7dWv: tensor<192x1x3x3xf32>, %b7dgv: tensor<192xf32>, %b7dbtv: tensor<192xf32>, %b7pWv: tensor<64x192x1x1xf32>, %b7pgv: tensor<64xf32>, %b7pbtv: tensor<64xf32>, %b8eWv: tensor<384x64x1x1xf32>, %b8egv: tensor<384xf32>, %b8ebtv: tensor<384xf32>, %b8dWv: tensor<384x1x3x3xf32>, %b8dgv: tensor<384xf32>, %b8dbtv: tensor<384xf32>, %b8pWv: tensor<64x384x1x1xf32>, %b8pgv: tensor<64xf32>, %b8pbtv: tensor<64xf32>, %b9eWv: tensor<384x64x1x1xf32>, %b9egv: tensor<384xf32>, %b9ebtv: tensor<384xf32>, %b9dWv: tensor<384x1x3x3xf32>, %b9dgv: tensor<384xf32>, %b9dbtv: tensor<384xf32>, %b9pWv: tensor<64x384x1x1xf32>, %b9pgv: tensor<64xf32>, %b9pbtv: tensor<64xf32>, %b10eWv: tensor<384x64x1x1xf32>, %b10egv: tensor<384xf32>, %b10ebtv: tensor<384xf32>, %b10dWv: tensor<384x1x3x3xf32>, %b10dgv: tensor<384xf32>, %b10dbtv: tensor<384xf32>, %b10pWv: tensor<64x384x1x1xf32>, %b10pgv: tensor<64xf32>, %b10pbtv: tensor<64xf32>, %b11eWv: tensor<384x64x1x1xf32>, %b11egv: tensor<384xf32>, %b11ebtv: tensor<384xf32>, %b11dWv: tensor<384x1x3x3xf32>, %b11dgv: tensor<384xf32>, %b11dbtv: tensor<384xf32>, %b11pWv: tensor<96x384x1x1xf32>, %b11pgv: tensor<96xf32>, %b11pbtv: tensor<96xf32>, %b12eWv: tensor<576x96x1x1xf32>, %b12egv: tensor<576xf32>, %b12ebtv: tensor<576xf32>, %b12dWv: tensor<576x1x3x3xf32>, %b12dgv: tensor<576xf32>, %b12dbtv: tensor<576xf32>, %b12pWv: tensor<96x576x1x1xf32>, %b12pgv: tensor<96xf32>, %b12pbtv: tensor<96xf32>, %b13eWv: tensor<576x96x1x1xf32>, %b13egv: tensor<576xf32>, %b13ebtv: tensor<576xf32>, %b13dWv: tensor<576x1x3x3xf32>, %b13dgv: tensor<576xf32>, %b13dbtv: tensor<576xf32>, %b13pWv: tensor<96x576x1x1xf32>, %b13pgv: tensor<96xf32>, %b13pbtv: tensor<96xf32>, %b14eWv: tensor<576x96x1x1xf32>, %b14egv: tensor<576xf32>, %b14ebtv: tensor<576xf32>, %b14dWv: tensor<576x1x3x3xf32>, %b14dgv: tensor<576xf32>, %b14dbtv: tensor<576xf32>, %b14pWv: tensor<160x576x1x1xf32>, %b14pgv: tensor<160xf32>, %b14pbtv: tensor<160xf32>, %b15eWv: tensor<960x160x1x1xf32>, %b15egv: tensor<960xf32>, %b15ebtv: tensor<960xf32>, %b15dWv: tensor<960x1x3x3xf32>, %b15dgv: tensor<960xf32>, %b15dbtv: tensor<960xf32>, %b15pWv: tensor<160x960x1x1xf32>, %b15pgv: tensor<160xf32>, %b15pbtv: tensor<160xf32>, %b16eWv: tensor<960x160x1x1xf32>, %b16egv: tensor<960xf32>, %b16ebtv: tensor<960xf32>, %b16dWv: tensor<960x1x3x3xf32>, %b16dgv: tensor<960xf32>, %b16dbtv: tensor<960xf32>, %b16pWv: tensor<160x960x1x1xf32>, %b16pgv: tensor<160xf32>, %b16pbtv: tensor<160xf32>, %b17eWv: tensor<960x160x1x1xf32>, %b17egv: tensor<960xf32>, %b17ebtv: tensor<960xf32>, %b17dWv: tensor<960x1x3x3xf32>, %b17dgv: tensor<960xf32>, %b17dbtv: tensor<960xf32>, %b17pWv: tensor<320x960x1x1xf32>, %b17pgv: tensor<320xf32>, %b17pbtv: tensor<320xf32>, %hWv: tensor<1280x320x1x1xf32>, %hgv: tensor<1280xf32>, %hbtv: tensor<1280xf32>, %Wdv: tensor<1280x1000xf32>, %bdv: tensor<1000xf32>, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %stnmui: tensor<32xf32>, %stnvari: tensor<32xf32>, %b1dnmui: tensor<32xf32>, %b1dnvari: tensor<32xf32>, %b1pnmui: tensor<16xf32>, %b1pnvari: tensor<16xf32>, %b2enmui: tensor<96xf32>, %b2envari: tensor<96xf32>, %b2dnmui: tensor<96xf32>, %b2dnvari: tensor<96xf32>, %b2pnmui: tensor<24xf32>, %b2pnvari: tensor<24xf32>, %b3enmui: tensor<144xf32>, %b3envari: tensor<144xf32>, %b3dnmui: tensor<144xf32>, %b3dnvari: tensor<144xf32>, %b3pnmui: tensor<24xf32>, %b3pnvari: tensor<24xf32>, %b4enmui: tensor<144xf32>, %b4envari: tensor<144xf32>, %b4dnmui: tensor<144xf32>, %b4dnvari: tensor<144xf32>, %b4pnmui: tensor<32xf32>, %b4pnvari: tensor<32xf32>, %b5enmui: tensor<192xf32>, %b5envari: tensor<192xf32>, %b5dnmui: tensor<192xf32>, %b5dnvari: tensor<192xf32>, %b5pnmui: tensor<32xf32>, %b5pnvari: tensor<32xf32>, %b6enmui: tensor<192xf32>, %b6envari: tensor<192xf32>, %b6dnmui: tensor<192xf32>, %b6dnvari: tensor<192xf32>, %b6pnmui: tensor<32xf32>, %b6pnvari: tensor<32xf32>, %b7enmui: tensor<192xf32>, %b7envari: tensor<192xf32>, %b7dnmui: tensor<192xf32>, %b7dnvari: tensor<192xf32>, %b7pnmui: tensor<64xf32>, %b7pnvari: tensor<64xf32>, %b8enmui: tensor<384xf32>, %b8envari: tensor<384xf32>, %b8dnmui: tensor<384xf32>, %b8dnvari: tensor<384xf32>, %b8pnmui: tensor<64xf32>, %b8pnvari: tensor<64xf32>, %b9enmui: tensor<384xf32>, %b9envari: tensor<384xf32>, %b9dnmui: tensor<384xf32>, %b9dnvari: tensor<384xf32>, %b9pnmui: tensor<64xf32>, %b9pnvari: tensor<64xf32>, %b10enmui: tensor<384xf32>, %b10envari: tensor<384xf32>, %b10dnmui: tensor<384xf32>, %b10dnvari: tensor<384xf32>, %b10pnmui: tensor<64xf32>, %b10pnvari: tensor<64xf32>, %b11enmui: tensor<384xf32>, %b11envari: tensor<384xf32>, %b11dnmui: tensor<384xf32>, %b11dnvari: tensor<384xf32>, %b11pnmui: tensor<96xf32>, %b11pnvari: tensor<96xf32>, %b12enmui: tensor<576xf32>, %b12envari: tensor<576xf32>, %b12dnmui: tensor<576xf32>, %b12dnvari: tensor<576xf32>, %b12pnmui: tensor<96xf32>, %b12pnvari: tensor<96xf32>, %b13enmui: tensor<576xf32>, %b13envari: tensor<576xf32>, %b13dnmui: tensor<576xf32>, %b13dnvari: tensor<576xf32>, %b13pnmui: tensor<96xf32>, %b13pnvari: tensor<96xf32>, %b14enmui: tensor<576xf32>, %b14envari: tensor<576xf32>, %b14dnmui: tensor<576xf32>, %b14dnvari: tensor<576xf32>, %b14pnmui: tensor<160xf32>, %b14pnvari: tensor<160xf32>, %b15enmui: tensor<960xf32>, %b15envari: tensor<960xf32>, %b15dnmui: tensor<960xf32>, %b15dnvari: tensor<960xf32>, %b15pnmui: tensor<160xf32>, %b15pnvari: tensor<160xf32>, %b16enmui: tensor<960xf32>, %b16envari: tensor<960xf32>, %b16dnmui: tensor<960xf32>, %b16dnvari: tensor<960xf32>, %b16pnmui: tensor<160xf32>, %b16pnvari: tensor<160xf32>, %b17enmui: tensor<960xf32>, %b17envari: tensor<960xf32>, %b17dnmui: tensor<960xf32>, %b17dnvari: tensor<960xf32>, %b17pnmui: tensor<320xf32>, %b17pnvari: tensor<320xf32>, %hnmui: tensor<1280xf32>, %hnvari: tensor<1280xf32>, %onehot: tensor<64x1000xf32>) -> (tensor<32x3x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<16x32x1x1xf32>, tensor<16xf32>, tensor<16xf32>, tensor<96x16x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96x1x3x3xf32>, tensor<96xf32>, tensor<96xf32>, tensor<24x96x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<24x144x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<32x144x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<64x192x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<96x384x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<160x576x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<320x960x1x1xf32>, tensor<320xf32>, tensor<320xf32>, tensor<1280x320x1x1xf32>, tensor<1280xf32>, tensor<1280xf32>, tensor<1280x1000xf32>, tensor<1000xf32>, tensor<32x3x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<16x32x1x1xf32>, tensor<16xf32>, tensor<16xf32>, tensor<96x16x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96x1x3x3xf32>, tensor<96xf32>, tensor<96xf32>, tensor<24x96x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<24x144x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<32x144x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<64x192x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<96x384x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<160x576x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<320x960x1x1xf32>, tensor<320xf32>, tensor<320xf32>, tensor<1280x320x1x1xf32>, tensor<1280xf32>, tensor<1280xf32>, tensor<1280x1000xf32>, tensor<1000xf32>, tensor<32x3x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<16x32x1x1xf32>, tensor<16xf32>, tensor<16xf32>, tensor<96x16x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96x1x3x3xf32>, tensor<96xf32>, tensor<96xf32>, tensor<24x96x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<24x144x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<32x144x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<64x192x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<96x384x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<160x576x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<320x960x1x1xf32>, tensor<320xf32>, tensor<320xf32>, tensor<1280x320x1x1xf32>, tensor<1280xf32>, tensor<1280xf32>, tensor<1280x1000xf32>, tensor<1000xf32>, tensor<f32>, tensor<f32>, tensor<f32>, tensor<32xf32>, tensor<32xf32>, tensor<32xf32>, tensor<32xf32>, tensor<16xf32>, tensor<16xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<320xf32>, tensor<320xf32>, tensor<1280xf32>, tensor<1280xf32>) {
-    // ── MobileNetV2 batch-BN AdamW train step: every line is pretty(verified AST node) ──
+  func.func @mobilenetv2in_adamdp64_train_step(%x: tensor<64x150528xf32>, %sW: tensor<32x3x3x3xf32>, %sg: tensor<32xf32>, %sbt: tensor<32xf32>, %b1dW: tensor<32x1x3x3xf32>, %b1dg: tensor<32xf32>, %b1dbt: tensor<32xf32>, %b1pW: tensor<16x32x1x1xf32>, %b1pg: tensor<16xf32>, %b1pbt: tensor<16xf32>, %b2eW: tensor<96x16x1x1xf32>, %b2eg: tensor<96xf32>, %b2ebt: tensor<96xf32>, %b2dW: tensor<96x1x3x3xf32>, %b2dg: tensor<96xf32>, %b2dbt: tensor<96xf32>, %b2pW: tensor<24x96x1x1xf32>, %b2pg: tensor<24xf32>, %b2pbt: tensor<24xf32>, %b3eW: tensor<144x24x1x1xf32>, %b3eg: tensor<144xf32>, %b3ebt: tensor<144xf32>, %b3dW: tensor<144x1x3x3xf32>, %b3dg: tensor<144xf32>, %b3dbt: tensor<144xf32>, %b3pW: tensor<24x144x1x1xf32>, %b3pg: tensor<24xf32>, %b3pbt: tensor<24xf32>, %b4eW: tensor<144x24x1x1xf32>, %b4eg: tensor<144xf32>, %b4ebt: tensor<144xf32>, %b4dW: tensor<144x1x3x3xf32>, %b4dg: tensor<144xf32>, %b4dbt: tensor<144xf32>, %b4pW: tensor<32x144x1x1xf32>, %b4pg: tensor<32xf32>, %b4pbt: tensor<32xf32>, %b5eW: tensor<192x32x1x1xf32>, %b5eg: tensor<192xf32>, %b5ebt: tensor<192xf32>, %b5dW: tensor<192x1x3x3xf32>, %b5dg: tensor<192xf32>, %b5dbt: tensor<192xf32>, %b5pW: tensor<32x192x1x1xf32>, %b5pg: tensor<32xf32>, %b5pbt: tensor<32xf32>, %b6eW: tensor<192x32x1x1xf32>, %b6eg: tensor<192xf32>, %b6ebt: tensor<192xf32>, %b6dW: tensor<192x1x3x3xf32>, %b6dg: tensor<192xf32>, %b6dbt: tensor<192xf32>, %b6pW: tensor<32x192x1x1xf32>, %b6pg: tensor<32xf32>, %b6pbt: tensor<32xf32>, %b7eW: tensor<192x32x1x1xf32>, %b7eg: tensor<192xf32>, %b7ebt: tensor<192xf32>, %b7dW: tensor<192x1x3x3xf32>, %b7dg: tensor<192xf32>, %b7dbt: tensor<192xf32>, %b7pW: tensor<64x192x1x1xf32>, %b7pg: tensor<64xf32>, %b7pbt: tensor<64xf32>, %b8eW: tensor<384x64x1x1xf32>, %b8eg: tensor<384xf32>, %b8ebt: tensor<384xf32>, %b8dW: tensor<384x1x3x3xf32>, %b8dg: tensor<384xf32>, %b8dbt: tensor<384xf32>, %b8pW: tensor<64x384x1x1xf32>, %b8pg: tensor<64xf32>, %b8pbt: tensor<64xf32>, %b9eW: tensor<384x64x1x1xf32>, %b9eg: tensor<384xf32>, %b9ebt: tensor<384xf32>, %b9dW: tensor<384x1x3x3xf32>, %b9dg: tensor<384xf32>, %b9dbt: tensor<384xf32>, %b9pW: tensor<64x384x1x1xf32>, %b9pg: tensor<64xf32>, %b9pbt: tensor<64xf32>, %b10eW: tensor<384x64x1x1xf32>, %b10eg: tensor<384xf32>, %b10ebt: tensor<384xf32>, %b10dW: tensor<384x1x3x3xf32>, %b10dg: tensor<384xf32>, %b10dbt: tensor<384xf32>, %b10pW: tensor<64x384x1x1xf32>, %b10pg: tensor<64xf32>, %b10pbt: tensor<64xf32>, %b11eW: tensor<384x64x1x1xf32>, %b11eg: tensor<384xf32>, %b11ebt: tensor<384xf32>, %b11dW: tensor<384x1x3x3xf32>, %b11dg: tensor<384xf32>, %b11dbt: tensor<384xf32>, %b11pW: tensor<96x384x1x1xf32>, %b11pg: tensor<96xf32>, %b11pbt: tensor<96xf32>, %b12eW: tensor<576x96x1x1xf32>, %b12eg: tensor<576xf32>, %b12ebt: tensor<576xf32>, %b12dW: tensor<576x1x3x3xf32>, %b12dg: tensor<576xf32>, %b12dbt: tensor<576xf32>, %b12pW: tensor<96x576x1x1xf32>, %b12pg: tensor<96xf32>, %b12pbt: tensor<96xf32>, %b13eW: tensor<576x96x1x1xf32>, %b13eg: tensor<576xf32>, %b13ebt: tensor<576xf32>, %b13dW: tensor<576x1x3x3xf32>, %b13dg: tensor<576xf32>, %b13dbt: tensor<576xf32>, %b13pW: tensor<96x576x1x1xf32>, %b13pg: tensor<96xf32>, %b13pbt: tensor<96xf32>, %b14eW: tensor<576x96x1x1xf32>, %b14eg: tensor<576xf32>, %b14ebt: tensor<576xf32>, %b14dW: tensor<576x1x3x3xf32>, %b14dg: tensor<576xf32>, %b14dbt: tensor<576xf32>, %b14pW: tensor<160x576x1x1xf32>, %b14pg: tensor<160xf32>, %b14pbt: tensor<160xf32>, %b15eW: tensor<960x160x1x1xf32>, %b15eg: tensor<960xf32>, %b15ebt: tensor<960xf32>, %b15dW: tensor<960x1x3x3xf32>, %b15dg: tensor<960xf32>, %b15dbt: tensor<960xf32>, %b15pW: tensor<160x960x1x1xf32>, %b15pg: tensor<160xf32>, %b15pbt: tensor<160xf32>, %b16eW: tensor<960x160x1x1xf32>, %b16eg: tensor<960xf32>, %b16ebt: tensor<960xf32>, %b16dW: tensor<960x1x3x3xf32>, %b16dg: tensor<960xf32>, %b16dbt: tensor<960xf32>, %b16pW: tensor<160x960x1x1xf32>, %b16pg: tensor<160xf32>, %b16pbt: tensor<160xf32>, %b17eW: tensor<960x160x1x1xf32>, %b17eg: tensor<960xf32>, %b17ebt: tensor<960xf32>, %b17dW: tensor<960x1x3x3xf32>, %b17dg: tensor<960xf32>, %b17dbt: tensor<960xf32>, %b17pW: tensor<320x960x1x1xf32>, %b17pg: tensor<320xf32>, %b17pbt: tensor<320xf32>, %hW: tensor<1280x320x1x1xf32>, %hg: tensor<1280xf32>, %hbt: tensor<1280xf32>, %Wd: tensor<1280x1000xf32>, %bd: tensor<1000xf32>, %sWm: tensor<32x3x3x3xf32>, %sgm: tensor<32xf32>, %sbtm: tensor<32xf32>, %b1dWm: tensor<32x1x3x3xf32>, %b1dgm: tensor<32xf32>, %b1dbtm: tensor<32xf32>, %b1pWm: tensor<16x32x1x1xf32>, %b1pgm: tensor<16xf32>, %b1pbtm: tensor<16xf32>, %b2eWm: tensor<96x16x1x1xf32>, %b2egm: tensor<96xf32>, %b2ebtm: tensor<96xf32>, %b2dWm: tensor<96x1x3x3xf32>, %b2dgm: tensor<96xf32>, %b2dbtm: tensor<96xf32>, %b2pWm: tensor<24x96x1x1xf32>, %b2pgm: tensor<24xf32>, %b2pbtm: tensor<24xf32>, %b3eWm: tensor<144x24x1x1xf32>, %b3egm: tensor<144xf32>, %b3ebtm: tensor<144xf32>, %b3dWm: tensor<144x1x3x3xf32>, %b3dgm: tensor<144xf32>, %b3dbtm: tensor<144xf32>, %b3pWm: tensor<24x144x1x1xf32>, %b3pgm: tensor<24xf32>, %b3pbtm: tensor<24xf32>, %b4eWm: tensor<144x24x1x1xf32>, %b4egm: tensor<144xf32>, %b4ebtm: tensor<144xf32>, %b4dWm: tensor<144x1x3x3xf32>, %b4dgm: tensor<144xf32>, %b4dbtm: tensor<144xf32>, %b4pWm: tensor<32x144x1x1xf32>, %b4pgm: tensor<32xf32>, %b4pbtm: tensor<32xf32>, %b5eWm: tensor<192x32x1x1xf32>, %b5egm: tensor<192xf32>, %b5ebtm: tensor<192xf32>, %b5dWm: tensor<192x1x3x3xf32>, %b5dgm: tensor<192xf32>, %b5dbtm: tensor<192xf32>, %b5pWm: tensor<32x192x1x1xf32>, %b5pgm: tensor<32xf32>, %b5pbtm: tensor<32xf32>, %b6eWm: tensor<192x32x1x1xf32>, %b6egm: tensor<192xf32>, %b6ebtm: tensor<192xf32>, %b6dWm: tensor<192x1x3x3xf32>, %b6dgm: tensor<192xf32>, %b6dbtm: tensor<192xf32>, %b6pWm: tensor<32x192x1x1xf32>, %b6pgm: tensor<32xf32>, %b6pbtm: tensor<32xf32>, %b7eWm: tensor<192x32x1x1xf32>, %b7egm: tensor<192xf32>, %b7ebtm: tensor<192xf32>, %b7dWm: tensor<192x1x3x3xf32>, %b7dgm: tensor<192xf32>, %b7dbtm: tensor<192xf32>, %b7pWm: tensor<64x192x1x1xf32>, %b7pgm: tensor<64xf32>, %b7pbtm: tensor<64xf32>, %b8eWm: tensor<384x64x1x1xf32>, %b8egm: tensor<384xf32>, %b8ebtm: tensor<384xf32>, %b8dWm: tensor<384x1x3x3xf32>, %b8dgm: tensor<384xf32>, %b8dbtm: tensor<384xf32>, %b8pWm: tensor<64x384x1x1xf32>, %b8pgm: tensor<64xf32>, %b8pbtm: tensor<64xf32>, %b9eWm: tensor<384x64x1x1xf32>, %b9egm: tensor<384xf32>, %b9ebtm: tensor<384xf32>, %b9dWm: tensor<384x1x3x3xf32>, %b9dgm: tensor<384xf32>, %b9dbtm: tensor<384xf32>, %b9pWm: tensor<64x384x1x1xf32>, %b9pgm: tensor<64xf32>, %b9pbtm: tensor<64xf32>, %b10eWm: tensor<384x64x1x1xf32>, %b10egm: tensor<384xf32>, %b10ebtm: tensor<384xf32>, %b10dWm: tensor<384x1x3x3xf32>, %b10dgm: tensor<384xf32>, %b10dbtm: tensor<384xf32>, %b10pWm: tensor<64x384x1x1xf32>, %b10pgm: tensor<64xf32>, %b10pbtm: tensor<64xf32>, %b11eWm: tensor<384x64x1x1xf32>, %b11egm: tensor<384xf32>, %b11ebtm: tensor<384xf32>, %b11dWm: tensor<384x1x3x3xf32>, %b11dgm: tensor<384xf32>, %b11dbtm: tensor<384xf32>, %b11pWm: tensor<96x384x1x1xf32>, %b11pgm: tensor<96xf32>, %b11pbtm: tensor<96xf32>, %b12eWm: tensor<576x96x1x1xf32>, %b12egm: tensor<576xf32>, %b12ebtm: tensor<576xf32>, %b12dWm: tensor<576x1x3x3xf32>, %b12dgm: tensor<576xf32>, %b12dbtm: tensor<576xf32>, %b12pWm: tensor<96x576x1x1xf32>, %b12pgm: tensor<96xf32>, %b12pbtm: tensor<96xf32>, %b13eWm: tensor<576x96x1x1xf32>, %b13egm: tensor<576xf32>, %b13ebtm: tensor<576xf32>, %b13dWm: tensor<576x1x3x3xf32>, %b13dgm: tensor<576xf32>, %b13dbtm: tensor<576xf32>, %b13pWm: tensor<96x576x1x1xf32>, %b13pgm: tensor<96xf32>, %b13pbtm: tensor<96xf32>, %b14eWm: tensor<576x96x1x1xf32>, %b14egm: tensor<576xf32>, %b14ebtm: tensor<576xf32>, %b14dWm: tensor<576x1x3x3xf32>, %b14dgm: tensor<576xf32>, %b14dbtm: tensor<576xf32>, %b14pWm: tensor<160x576x1x1xf32>, %b14pgm: tensor<160xf32>, %b14pbtm: tensor<160xf32>, %b15eWm: tensor<960x160x1x1xf32>, %b15egm: tensor<960xf32>, %b15ebtm: tensor<960xf32>, %b15dWm: tensor<960x1x3x3xf32>, %b15dgm: tensor<960xf32>, %b15dbtm: tensor<960xf32>, %b15pWm: tensor<160x960x1x1xf32>, %b15pgm: tensor<160xf32>, %b15pbtm: tensor<160xf32>, %b16eWm: tensor<960x160x1x1xf32>, %b16egm: tensor<960xf32>, %b16ebtm: tensor<960xf32>, %b16dWm: tensor<960x1x3x3xf32>, %b16dgm: tensor<960xf32>, %b16dbtm: tensor<960xf32>, %b16pWm: tensor<160x960x1x1xf32>, %b16pgm: tensor<160xf32>, %b16pbtm: tensor<160xf32>, %b17eWm: tensor<960x160x1x1xf32>, %b17egm: tensor<960xf32>, %b17ebtm: tensor<960xf32>, %b17dWm: tensor<960x1x3x3xf32>, %b17dgm: tensor<960xf32>, %b17dbtm: tensor<960xf32>, %b17pWm: tensor<320x960x1x1xf32>, %b17pgm: tensor<320xf32>, %b17pbtm: tensor<320xf32>, %hWm: tensor<1280x320x1x1xf32>, %hgm: tensor<1280xf32>, %hbtm: tensor<1280xf32>, %Wdm: tensor<1280x1000xf32>, %bdm: tensor<1000xf32>, %sWv: tensor<32x3x3x3xf32>, %sgv: tensor<32xf32>, %sbtv: tensor<32xf32>, %b1dWv: tensor<32x1x3x3xf32>, %b1dgv: tensor<32xf32>, %b1dbtv: tensor<32xf32>, %b1pWv: tensor<16x32x1x1xf32>, %b1pgv: tensor<16xf32>, %b1pbtv: tensor<16xf32>, %b2eWv: tensor<96x16x1x1xf32>, %b2egv: tensor<96xf32>, %b2ebtv: tensor<96xf32>, %b2dWv: tensor<96x1x3x3xf32>, %b2dgv: tensor<96xf32>, %b2dbtv: tensor<96xf32>, %b2pWv: tensor<24x96x1x1xf32>, %b2pgv: tensor<24xf32>, %b2pbtv: tensor<24xf32>, %b3eWv: tensor<144x24x1x1xf32>, %b3egv: tensor<144xf32>, %b3ebtv: tensor<144xf32>, %b3dWv: tensor<144x1x3x3xf32>, %b3dgv: tensor<144xf32>, %b3dbtv: tensor<144xf32>, %b3pWv: tensor<24x144x1x1xf32>, %b3pgv: tensor<24xf32>, %b3pbtv: tensor<24xf32>, %b4eWv: tensor<144x24x1x1xf32>, %b4egv: tensor<144xf32>, %b4ebtv: tensor<144xf32>, %b4dWv: tensor<144x1x3x3xf32>, %b4dgv: tensor<144xf32>, %b4dbtv: tensor<144xf32>, %b4pWv: tensor<32x144x1x1xf32>, %b4pgv: tensor<32xf32>, %b4pbtv: tensor<32xf32>, %b5eWv: tensor<192x32x1x1xf32>, %b5egv: tensor<192xf32>, %b5ebtv: tensor<192xf32>, %b5dWv: tensor<192x1x3x3xf32>, %b5dgv: tensor<192xf32>, %b5dbtv: tensor<192xf32>, %b5pWv: tensor<32x192x1x1xf32>, %b5pgv: tensor<32xf32>, %b5pbtv: tensor<32xf32>, %b6eWv: tensor<192x32x1x1xf32>, %b6egv: tensor<192xf32>, %b6ebtv: tensor<192xf32>, %b6dWv: tensor<192x1x3x3xf32>, %b6dgv: tensor<192xf32>, %b6dbtv: tensor<192xf32>, %b6pWv: tensor<32x192x1x1xf32>, %b6pgv: tensor<32xf32>, %b6pbtv: tensor<32xf32>, %b7eWv: tensor<192x32x1x1xf32>, %b7egv: tensor<192xf32>, %b7ebtv: tensor<192xf32>, %b7dWv: tensor<192x1x3x3xf32>, %b7dgv: tensor<192xf32>, %b7dbtv: tensor<192xf32>, %b7pWv: tensor<64x192x1x1xf32>, %b7pgv: tensor<64xf32>, %b7pbtv: tensor<64xf32>, %b8eWv: tensor<384x64x1x1xf32>, %b8egv: tensor<384xf32>, %b8ebtv: tensor<384xf32>, %b8dWv: tensor<384x1x3x3xf32>, %b8dgv: tensor<384xf32>, %b8dbtv: tensor<384xf32>, %b8pWv: tensor<64x384x1x1xf32>, %b8pgv: tensor<64xf32>, %b8pbtv: tensor<64xf32>, %b9eWv: tensor<384x64x1x1xf32>, %b9egv: tensor<384xf32>, %b9ebtv: tensor<384xf32>, %b9dWv: tensor<384x1x3x3xf32>, %b9dgv: tensor<384xf32>, %b9dbtv: tensor<384xf32>, %b9pWv: tensor<64x384x1x1xf32>, %b9pgv: tensor<64xf32>, %b9pbtv: tensor<64xf32>, %b10eWv: tensor<384x64x1x1xf32>, %b10egv: tensor<384xf32>, %b10ebtv: tensor<384xf32>, %b10dWv: tensor<384x1x3x3xf32>, %b10dgv: tensor<384xf32>, %b10dbtv: tensor<384xf32>, %b10pWv: tensor<64x384x1x1xf32>, %b10pgv: tensor<64xf32>, %b10pbtv: tensor<64xf32>, %b11eWv: tensor<384x64x1x1xf32>, %b11egv: tensor<384xf32>, %b11ebtv: tensor<384xf32>, %b11dWv: tensor<384x1x3x3xf32>, %b11dgv: tensor<384xf32>, %b11dbtv: tensor<384xf32>, %b11pWv: tensor<96x384x1x1xf32>, %b11pgv: tensor<96xf32>, %b11pbtv: tensor<96xf32>, %b12eWv: tensor<576x96x1x1xf32>, %b12egv: tensor<576xf32>, %b12ebtv: tensor<576xf32>, %b12dWv: tensor<576x1x3x3xf32>, %b12dgv: tensor<576xf32>, %b12dbtv: tensor<576xf32>, %b12pWv: tensor<96x576x1x1xf32>, %b12pgv: tensor<96xf32>, %b12pbtv: tensor<96xf32>, %b13eWv: tensor<576x96x1x1xf32>, %b13egv: tensor<576xf32>, %b13ebtv: tensor<576xf32>, %b13dWv: tensor<576x1x3x3xf32>, %b13dgv: tensor<576xf32>, %b13dbtv: tensor<576xf32>, %b13pWv: tensor<96x576x1x1xf32>, %b13pgv: tensor<96xf32>, %b13pbtv: tensor<96xf32>, %b14eWv: tensor<576x96x1x1xf32>, %b14egv: tensor<576xf32>, %b14ebtv: tensor<576xf32>, %b14dWv: tensor<576x1x3x3xf32>, %b14dgv: tensor<576xf32>, %b14dbtv: tensor<576xf32>, %b14pWv: tensor<160x576x1x1xf32>, %b14pgv: tensor<160xf32>, %b14pbtv: tensor<160xf32>, %b15eWv: tensor<960x160x1x1xf32>, %b15egv: tensor<960xf32>, %b15ebtv: tensor<960xf32>, %b15dWv: tensor<960x1x3x3xf32>, %b15dgv: tensor<960xf32>, %b15dbtv: tensor<960xf32>, %b15pWv: tensor<160x960x1x1xf32>, %b15pgv: tensor<160xf32>, %b15pbtv: tensor<160xf32>, %b16eWv: tensor<960x160x1x1xf32>, %b16egv: tensor<960xf32>, %b16ebtv: tensor<960xf32>, %b16dWv: tensor<960x1x3x3xf32>, %b16dgv: tensor<960xf32>, %b16dbtv: tensor<960xf32>, %b16pWv: tensor<160x960x1x1xf32>, %b16pgv: tensor<160xf32>, %b16pbtv: tensor<160xf32>, %b17eWv: tensor<960x160x1x1xf32>, %b17egv: tensor<960xf32>, %b17ebtv: tensor<960xf32>, %b17dWv: tensor<960x1x3x3xf32>, %b17dgv: tensor<960xf32>, %b17dbtv: tensor<960xf32>, %b17pWv: tensor<320x960x1x1xf32>, %b17pgv: tensor<320xf32>, %b17pbtv: tensor<320xf32>, %hWv: tensor<1280x320x1x1xf32>, %hgv: tensor<1280xf32>, %hbtv: tensor<1280xf32>, %Wdv: tensor<1280x1000xf32>, %bdv: tensor<1000xf32>, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %stnmui: tensor<32xf32>, %stnvari: tensor<32xf32>, %b1dnmui: tensor<32xf32>, %b1dnvari: tensor<32xf32>, %b1pnmui: tensor<16xf32>, %b1pnvari: tensor<16xf32>, %b2enmui: tensor<96xf32>, %b2envari: tensor<96xf32>, %b2dnmui: tensor<96xf32>, %b2dnvari: tensor<96xf32>, %b2pnmui: tensor<24xf32>, %b2pnvari: tensor<24xf32>, %b3enmui: tensor<144xf32>, %b3envari: tensor<144xf32>, %b3dnmui: tensor<144xf32>, %b3dnvari: tensor<144xf32>, %b3pnmui: tensor<24xf32>, %b3pnvari: tensor<24xf32>, %b4enmui: tensor<144xf32>, %b4envari: tensor<144xf32>, %b4dnmui: tensor<144xf32>, %b4dnvari: tensor<144xf32>, %b4pnmui: tensor<32xf32>, %b4pnvari: tensor<32xf32>, %b5enmui: tensor<192xf32>, %b5envari: tensor<192xf32>, %b5dnmui: tensor<192xf32>, %b5dnvari: tensor<192xf32>, %b5pnmui: tensor<32xf32>, %b5pnvari: tensor<32xf32>, %b6enmui: tensor<192xf32>, %b6envari: tensor<192xf32>, %b6dnmui: tensor<192xf32>, %b6dnvari: tensor<192xf32>, %b6pnmui: tensor<32xf32>, %b6pnvari: tensor<32xf32>, %b7enmui: tensor<192xf32>, %b7envari: tensor<192xf32>, %b7dnmui: tensor<192xf32>, %b7dnvari: tensor<192xf32>, %b7pnmui: tensor<64xf32>, %b7pnvari: tensor<64xf32>, %b8enmui: tensor<384xf32>, %b8envari: tensor<384xf32>, %b8dnmui: tensor<384xf32>, %b8dnvari: tensor<384xf32>, %b8pnmui: tensor<64xf32>, %b8pnvari: tensor<64xf32>, %b9enmui: tensor<384xf32>, %b9envari: tensor<384xf32>, %b9dnmui: tensor<384xf32>, %b9dnvari: tensor<384xf32>, %b9pnmui: tensor<64xf32>, %b9pnvari: tensor<64xf32>, %b10enmui: tensor<384xf32>, %b10envari: tensor<384xf32>, %b10dnmui: tensor<384xf32>, %b10dnvari: tensor<384xf32>, %b10pnmui: tensor<64xf32>, %b10pnvari: tensor<64xf32>, %b11enmui: tensor<384xf32>, %b11envari: tensor<384xf32>, %b11dnmui: tensor<384xf32>, %b11dnvari: tensor<384xf32>, %b11pnmui: tensor<96xf32>, %b11pnvari: tensor<96xf32>, %b12enmui: tensor<576xf32>, %b12envari: tensor<576xf32>, %b12dnmui: tensor<576xf32>, %b12dnvari: tensor<576xf32>, %b12pnmui: tensor<96xf32>, %b12pnvari: tensor<96xf32>, %b13enmui: tensor<576xf32>, %b13envari: tensor<576xf32>, %b13dnmui: tensor<576xf32>, %b13dnvari: tensor<576xf32>, %b13pnmui: tensor<96xf32>, %b13pnvari: tensor<96xf32>, %b14enmui: tensor<576xf32>, %b14envari: tensor<576xf32>, %b14dnmui: tensor<576xf32>, %b14dnvari: tensor<576xf32>, %b14pnmui: tensor<160xf32>, %b14pnvari: tensor<160xf32>, %b15enmui: tensor<960xf32>, %b15envari: tensor<960xf32>, %b15dnmui: tensor<960xf32>, %b15dnvari: tensor<960xf32>, %b15pnmui: tensor<160xf32>, %b15pnvari: tensor<160xf32>, %b16enmui: tensor<960xf32>, %b16envari: tensor<960xf32>, %b16dnmui: tensor<960xf32>, %b16dnvari: tensor<960xf32>, %b16pnmui: tensor<160xf32>, %b16pnvari: tensor<160xf32>, %b17enmui: tensor<960xf32>, %b17envari: tensor<960xf32>, %b17dnmui: tensor<960xf32>, %b17dnvari: tensor<960xf32>, %b17pnmui: tensor<320xf32>, %b17pnvari: tensor<320xf32>, %hnmui: tensor<1280xf32>, %hnvari: tensor<1280xf32>, %onehot: tensor<64x1000xf32>) -> (tensor<32x3x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<16x32x1x1xf32>, tensor<16xf32>, tensor<16xf32>, tensor<96x16x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96x1x3x3xf32>, tensor<96xf32>, tensor<96xf32>, tensor<24x96x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<24x144x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<32x144x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<64x192x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<96x384x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<160x576x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<320x960x1x1xf32>, tensor<320xf32>, tensor<320xf32>, tensor<1280x320x1x1xf32>, tensor<1280xf32>, tensor<1280xf32>, tensor<1280x1000xf32>, tensor<1000xf32>, tensor<32x3x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<16x32x1x1xf32>, tensor<16xf32>, tensor<16xf32>, tensor<96x16x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96x1x3x3xf32>, tensor<96xf32>, tensor<96xf32>, tensor<24x96x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<24x144x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<32x144x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<64x192x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<96x384x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<160x576x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<320x960x1x1xf32>, tensor<320xf32>, tensor<320xf32>, tensor<1280x320x1x1xf32>, tensor<1280xf32>, tensor<1280xf32>, tensor<1280x1000xf32>, tensor<1000xf32>, tensor<32x3x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32xf32>, tensor<16x32x1x1xf32>, tensor<16xf32>, tensor<16xf32>, tensor<96x16x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96x1x3x3xf32>, tensor<96xf32>, tensor<96xf32>, tensor<24x96x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<24x144x1x1xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144x24x1x1xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144x1x3x3xf32>, tensor<144xf32>, tensor<144xf32>, tensor<32x144x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32x192x1x1xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192x32x1x1xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192x1x3x3xf32>, tensor<192xf32>, tensor<192xf32>, tensor<64x192x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64x384x1x1xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384x64x1x1xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384x1x3x3xf32>, tensor<384xf32>, tensor<384xf32>, tensor<96x384x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96x576x1x1xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576x96x1x1xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576x1x3x3xf32>, tensor<576xf32>, tensor<576xf32>, tensor<160x576x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160x960x1x1xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960x160x1x1xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960x1x3x3xf32>, tensor<960xf32>, tensor<960xf32>, tensor<320x960x1x1xf32>, tensor<320xf32>, tensor<320xf32>, tensor<1280x320x1x1xf32>, tensor<1280xf32>, tensor<1280xf32>, tensor<1280x1000xf32>, tensor<1000xf32>, tensor<f32>, tensor<f32>, tensor<f32>, tensor<32xf32>, tensor<32xf32>, tensor<32xf32>, tensor<32xf32>, tensor<16xf32>, tensor<16xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96xf32>, tensor<96xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144xf32>, tensor<24xf32>, tensor<24xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144xf32>, tensor<144xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<32xf32>, tensor<32xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<192xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<64xf32>, tensor<64xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<384xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<96xf32>, tensor<96xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<576xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<160xf32>, tensor<160xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<960xf32>, tensor<320xf32>, tensor<320xf32>, tensor<1280xf32>, tensor<1280xf32>) {
+    // ── MobileNetV2 batch-BN AdamW train step, DATA-PARALLEL over 4 replicas ──
+    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`
+    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted
+    // text outside the faithfulness theorems. Each replica evaluates the same tied graph
+    // at the batch it was rendered for; the collective averages that function's gradients
+    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the
+    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).
     // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.
@@ -6245,26 +6251,33 @@ module @m {
     %ob2 = stablehlo.constant dense<0.001> : tensor<f32>
     %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>
     %wd = stablehlo.constant dense<0.0001> : tensor<f32>
+    %arsumsW = "stablehlo.all_reduce"(%v4901) ({
+    ^bb0(%arasW: tensor<f32>, %arbsW: tensor<f32>):
+      %araddsW = stablehlo.add %arasW, %arbsW : tensor<f32>
+      stablehlo.return %araddsW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32x3x3x3xf32>) -> tensor<32x3x3x3xf32>
+    %arnsW = stablehlo.constant dense<4.0> : tensor<32x3x3x3xf32>
+    %armeansW = stablehlo.divide %arsumsW, %arnsW : tensor<32x3x3x3xf32>
     %v5755 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
     %v5756 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
     %v5757 = stablehlo.multiply %v5755, %sWm : tensor<32x3x3x3xf32>
-    %v5758 = stablehlo.multiply %v5756, %v4901 : tensor<32x3x3x3xf32>
+    %v5758 = stablehlo.multiply %v5756, %armeansW : tensor<32x3x3x3xf32>
     %v5759 = stablehlo.add %v5757, %v5758 : tensor<32x3x3x3xf32>
     %v5760 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
     %v5761 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
     %v5762 = stablehlo.multiply %v5760, %sWv : tensor<32x3x3x3xf32>
-    %v5763 = stablehlo.multiply %v4901, %v4901 : tensor<32x3x3x3xf32>
+    %v5763 = stablehlo.multiply %armeansW, %armeansW : tensor<32x3x3x3xf32>
     %v5764 = stablehlo.multiply %v5761, %v5763 : tensor<32x3x3x3xf32>
     %v5765 = stablehlo.add %v5762, %v5764 : tensor<32x3x3x3xf32>
     %v5766 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
     %v5767 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
     %v5768 = stablehlo.multiply %v5766, %sWm : tensor<32x3x3x3xf32>
-    %v5769 = stablehlo.multiply %v5767, %v4901 : tensor<32x3x3x3xf32>
+    %v5769 = stablehlo.multiply %v5767, %armeansW : tensor<32x3x3x3xf32>
     %v5770 = stablehlo.add %v5768, %v5769 : tensor<32x3x3x3xf32>
     %v5771 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
     %v5772 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
     %v5773 = stablehlo.multiply %v5771, %sWv : tensor<32x3x3x3xf32>
-    %v5774 = stablehlo.multiply %v4901, %v4901 : tensor<32x3x3x3xf32>
+    %v5774 = stablehlo.multiply %armeansW, %armeansW : tensor<32x3x3x3xf32>
     %v5775 = stablehlo.multiply %v5772, %v5774 : tensor<32x3x3x3xf32>
     %v5776 = stablehlo.add %v5773, %v5775 : tensor<32x3x3x3xf32>
     %v5777 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32x3x3x3xf32>
@@ -6282,26 +6295,33 @@ module @m {
     %v5789 = stablehlo.multiply %v5788, %v5781 : tensor<32x3x3x3xf32>
     %v5790 = stablehlo.multiply %v5789, %sW : tensor<32x3x3x3xf32>
     %v5791 = stablehlo.subtract %v5787, %v5790 : tensor<32x3x3x3xf32>
+    %arsumsg = "stablehlo.all_reduce"(%v4919) ({
+    ^bb0(%arasg: tensor<f32>, %arbsg: tensor<f32>):
+      %araddsg = stablehlo.add %arasg, %arbsg : tensor<f32>
+      stablehlo.return %araddsg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnsg = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeansg = stablehlo.divide %arsumsg, %arnsg : tensor<32xf32>
     %v5792 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5793 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5794 = stablehlo.multiply %v5792, %sgm : tensor<32xf32>
-    %v5795 = stablehlo.multiply %v5793, %v4919 : tensor<32xf32>
+    %v5795 = stablehlo.multiply %v5793, %armeansg : tensor<32xf32>
     %v5796 = stablehlo.add %v5794, %v5795 : tensor<32xf32>
     %v5797 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5798 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5799 = stablehlo.multiply %v5797, %sgv : tensor<32xf32>
-    %v5800 = stablehlo.multiply %v4919, %v4919 : tensor<32xf32>
+    %v5800 = stablehlo.multiply %armeansg, %armeansg : tensor<32xf32>
     %v5801 = stablehlo.multiply %v5798, %v5800 : tensor<32xf32>
     %v5802 = stablehlo.add %v5799, %v5801 : tensor<32xf32>
     %v5803 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5804 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5805 = stablehlo.multiply %v5803, %sgm : tensor<32xf32>
-    %v5806 = stablehlo.multiply %v5804, %v4919 : tensor<32xf32>
+    %v5806 = stablehlo.multiply %v5804, %armeansg : tensor<32xf32>
     %v5807 = stablehlo.add %v5805, %v5806 : tensor<32xf32>
     %v5808 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5809 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5810 = stablehlo.multiply %v5808, %sgv : tensor<32xf32>
-    %v5811 = stablehlo.multiply %v4919, %v4919 : tensor<32xf32>
+    %v5811 = stablehlo.multiply %armeansg, %armeansg : tensor<32xf32>
     %v5812 = stablehlo.multiply %v5809, %v5811 : tensor<32xf32>
     %v5813 = stablehlo.add %v5810, %v5812 : tensor<32xf32>
     %v5814 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -6319,26 +6339,33 @@ module @m {
     %v5826 = stablehlo.multiply %v5825, %v5818 : tensor<32xf32>
     %v5827 = stablehlo.multiply %v5826, %sg : tensor<32xf32>
     %v5828 = stablehlo.subtract %v5824, %v5827 : tensor<32xf32>
+    %arsumsbt = "stablehlo.all_reduce"(%v4922) ({
+    ^bb0(%arasbt: tensor<f32>, %arbsbt: tensor<f32>):
+      %araddsbt = stablehlo.add %arasbt, %arbsbt : tensor<f32>
+      stablehlo.return %araddsbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnsbt = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeansbt = stablehlo.divide %arsumsbt, %arnsbt : tensor<32xf32>
     %v5829 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5830 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5831 = stablehlo.multiply %v5829, %sbtm : tensor<32xf32>
-    %v5832 = stablehlo.multiply %v5830, %v4922 : tensor<32xf32>
+    %v5832 = stablehlo.multiply %v5830, %armeansbt : tensor<32xf32>
     %v5833 = stablehlo.add %v5831, %v5832 : tensor<32xf32>
     %v5834 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5835 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5836 = stablehlo.multiply %v5834, %sbtv : tensor<32xf32>
-    %v5837 = stablehlo.multiply %v4922, %v4922 : tensor<32xf32>
+    %v5837 = stablehlo.multiply %armeansbt, %armeansbt : tensor<32xf32>
     %v5838 = stablehlo.multiply %v5835, %v5837 : tensor<32xf32>
     %v5839 = stablehlo.add %v5836, %v5838 : tensor<32xf32>
     %v5840 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5841 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5842 = stablehlo.multiply %v5840, %sbtm : tensor<32xf32>
-    %v5843 = stablehlo.multiply %v5841, %v4922 : tensor<32xf32>
+    %v5843 = stablehlo.multiply %v5841, %armeansbt : tensor<32xf32>
     %v5844 = stablehlo.add %v5842, %v5843 : tensor<32xf32>
     %v5845 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5846 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5847 = stablehlo.multiply %v5845, %sbtv : tensor<32xf32>
-    %v5848 = stablehlo.multiply %v4922, %v4922 : tensor<32xf32>
+    %v5848 = stablehlo.multiply %armeansbt, %armeansbt : tensor<32xf32>
     %v5849 = stablehlo.multiply %v5846, %v5848 : tensor<32xf32>
     %v5850 = stablehlo.add %v5847, %v5849 : tensor<32xf32>
     %v5851 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -6356,26 +6383,33 @@ module @m {
     %v5863 = stablehlo.multiply %v5862, %v5855 : tensor<32xf32>
     %v5864 = stablehlo.multiply %v5863, %sbt : tensor<32xf32>
     %v5865 = stablehlo.subtract %v5861, %v5864 : tensor<32xf32>
+    %arsumb1dW = "stablehlo.all_reduce"(%v4809) ({
+    ^bb0(%arab1dW: tensor<f32>, %arbb1dW: tensor<f32>):
+      %araddb1dW = stablehlo.add %arab1dW, %arbb1dW : tensor<f32>
+      stablehlo.return %araddb1dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32x1x3x3xf32>) -> tensor<32x1x3x3xf32>
+    %arnb1dW = stablehlo.constant dense<4.0> : tensor<32x1x3x3xf32>
+    %armeanb1dW = stablehlo.divide %arsumb1dW, %arnb1dW : tensor<32x1x3x3xf32>
     %v5866 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
     %v5867 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
     %v5868 = stablehlo.multiply %v5866, %b1dWm : tensor<32x1x3x3xf32>
-    %v5869 = stablehlo.multiply %v5867, %v4809 : tensor<32x1x3x3xf32>
+    %v5869 = stablehlo.multiply %v5867, %armeanb1dW : tensor<32x1x3x3xf32>
     %v5870 = stablehlo.add %v5868, %v5869 : tensor<32x1x3x3xf32>
     %v5871 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
     %v5872 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
     %v5873 = stablehlo.multiply %v5871, %b1dWv : tensor<32x1x3x3xf32>
-    %v5874 = stablehlo.multiply %v4809, %v4809 : tensor<32x1x3x3xf32>
+    %v5874 = stablehlo.multiply %armeanb1dW, %armeanb1dW : tensor<32x1x3x3xf32>
     %v5875 = stablehlo.multiply %v5872, %v5874 : tensor<32x1x3x3xf32>
     %v5876 = stablehlo.add %v5873, %v5875 : tensor<32x1x3x3xf32>
     %v5877 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
     %v5878 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
     %v5879 = stablehlo.multiply %v5877, %b1dWm : tensor<32x1x3x3xf32>
-    %v5880 = stablehlo.multiply %v5878, %v4809 : tensor<32x1x3x3xf32>
+    %v5880 = stablehlo.multiply %v5878, %armeanb1dW : tensor<32x1x3x3xf32>
     %v5881 = stablehlo.add %v5879, %v5880 : tensor<32x1x3x3xf32>
     %v5882 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
     %v5883 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
     %v5884 = stablehlo.multiply %v5882, %b1dWv : tensor<32x1x3x3xf32>
-    %v5885 = stablehlo.multiply %v4809, %v4809 : tensor<32x1x3x3xf32>
+    %v5885 = stablehlo.multiply %armeanb1dW, %armeanb1dW : tensor<32x1x3x3xf32>
     %v5886 = stablehlo.multiply %v5883, %v5885 : tensor<32x1x3x3xf32>
     %v5887 = stablehlo.add %v5884, %v5886 : tensor<32x1x3x3xf32>
     %v5888 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32x1x3x3xf32>
@@ -6393,26 +6427,33 @@ module @m {
     %v5900 = stablehlo.multiply %v5899, %v5892 : tensor<32x1x3x3xf32>
     %v5901 = stablehlo.multiply %v5900, %b1dW : tensor<32x1x3x3xf32>
     %v5902 = stablehlo.subtract %v5898, %v5901 : tensor<32x1x3x3xf32>
+    %arsumb1dg = "stablehlo.all_reduce"(%v4827) ({
+    ^bb0(%arab1dg: tensor<f32>, %arbb1dg: tensor<f32>):
+      %araddb1dg = stablehlo.add %arab1dg, %arbb1dg : tensor<f32>
+      stablehlo.return %araddb1dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnb1dg = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeanb1dg = stablehlo.divide %arsumb1dg, %arnb1dg : tensor<32xf32>
     %v5903 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5904 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5905 = stablehlo.multiply %v5903, %b1dgm : tensor<32xf32>
-    %v5906 = stablehlo.multiply %v5904, %v4827 : tensor<32xf32>
+    %v5906 = stablehlo.multiply %v5904, %armeanb1dg : tensor<32xf32>
     %v5907 = stablehlo.add %v5905, %v5906 : tensor<32xf32>
     %v5908 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5909 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5910 = stablehlo.multiply %v5908, %b1dgv : tensor<32xf32>
-    %v5911 = stablehlo.multiply %v4827, %v4827 : tensor<32xf32>
+    %v5911 = stablehlo.multiply %armeanb1dg, %armeanb1dg : tensor<32xf32>
     %v5912 = stablehlo.multiply %v5909, %v5911 : tensor<32xf32>
     %v5913 = stablehlo.add %v5910, %v5912 : tensor<32xf32>
     %v5914 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5915 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5916 = stablehlo.multiply %v5914, %b1dgm : tensor<32xf32>
-    %v5917 = stablehlo.multiply %v5915, %v4827 : tensor<32xf32>
+    %v5917 = stablehlo.multiply %v5915, %armeanb1dg : tensor<32xf32>
     %v5918 = stablehlo.add %v5916, %v5917 : tensor<32xf32>
     %v5919 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5920 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5921 = stablehlo.multiply %v5919, %b1dgv : tensor<32xf32>
-    %v5922 = stablehlo.multiply %v4827, %v4827 : tensor<32xf32>
+    %v5922 = stablehlo.multiply %armeanb1dg, %armeanb1dg : tensor<32xf32>
     %v5923 = stablehlo.multiply %v5920, %v5922 : tensor<32xf32>
     %v5924 = stablehlo.add %v5921, %v5923 : tensor<32xf32>
     %v5925 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -6430,26 +6471,33 @@ module @m {
     %v5937 = stablehlo.multiply %v5936, %v5929 : tensor<32xf32>
     %v5938 = stablehlo.multiply %v5937, %b1dg : tensor<32xf32>
     %v5939 = stablehlo.subtract %v5935, %v5938 : tensor<32xf32>
+    %arsumb1dbt = "stablehlo.all_reduce"(%v4830) ({
+    ^bb0(%arab1dbt: tensor<f32>, %arbb1dbt: tensor<f32>):
+      %araddb1dbt = stablehlo.add %arab1dbt, %arbb1dbt : tensor<f32>
+      stablehlo.return %araddb1dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnb1dbt = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeanb1dbt = stablehlo.divide %arsumb1dbt, %arnb1dbt : tensor<32xf32>
     %v5940 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5941 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5942 = stablehlo.multiply %v5940, %b1dbtm : tensor<32xf32>
-    %v5943 = stablehlo.multiply %v5941, %v4830 : tensor<32xf32>
+    %v5943 = stablehlo.multiply %v5941, %armeanb1dbt : tensor<32xf32>
     %v5944 = stablehlo.add %v5942, %v5943 : tensor<32xf32>
     %v5945 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5946 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5947 = stablehlo.multiply %v5945, %b1dbtv : tensor<32xf32>
-    %v5948 = stablehlo.multiply %v4830, %v4830 : tensor<32xf32>
+    %v5948 = stablehlo.multiply %armeanb1dbt, %armeanb1dbt : tensor<32xf32>
     %v5949 = stablehlo.multiply %v5946, %v5948 : tensor<32xf32>
     %v5950 = stablehlo.add %v5947, %v5949 : tensor<32xf32>
     %v5951 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5952 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5953 = stablehlo.multiply %v5951, %b1dbtm : tensor<32xf32>
-    %v5954 = stablehlo.multiply %v5952, %v4830 : tensor<32xf32>
+    %v5954 = stablehlo.multiply %v5952, %armeanb1dbt : tensor<32xf32>
     %v5955 = stablehlo.add %v5953, %v5954 : tensor<32xf32>
     %v5956 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5957 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v5958 = stablehlo.multiply %v5956, %b1dbtv : tensor<32xf32>
-    %v5959 = stablehlo.multiply %v4830, %v4830 : tensor<32xf32>
+    %v5959 = stablehlo.multiply %armeanb1dbt, %armeanb1dbt : tensor<32xf32>
     %v5960 = stablehlo.multiply %v5957, %v5959 : tensor<32xf32>
     %v5961 = stablehlo.add %v5958, %v5960 : tensor<32xf32>
     %v5962 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -6467,26 +6515,33 @@ module @m {
     %v5974 = stablehlo.multiply %v5973, %v5966 : tensor<32xf32>
     %v5975 = stablehlo.multiply %v5974, %b1dbt : tensor<32xf32>
     %v5976 = stablehlo.subtract %v5972, %v5975 : tensor<32xf32>
+    %arsumb1pW = "stablehlo.all_reduce"(%v4836) ({
+    ^bb0(%arab1pW: tensor<f32>, %arbb1pW: tensor<f32>):
+      %araddb1pW = stablehlo.add %arab1pW, %arbb1pW : tensor<f32>
+      stablehlo.return %araddb1pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<16x32x1x1xf32>) -> tensor<16x32x1x1xf32>
+    %arnb1pW = stablehlo.constant dense<4.0> : tensor<16x32x1x1xf32>
+    %armeanb1pW = stablehlo.divide %arsumb1pW, %arnb1pW : tensor<16x32x1x1xf32>
     %v5977 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
     %v5978 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
     %v5979 = stablehlo.multiply %v5977, %b1pWm : tensor<16x32x1x1xf32>
-    %v5980 = stablehlo.multiply %v5978, %v4836 : tensor<16x32x1x1xf32>
+    %v5980 = stablehlo.multiply %v5978, %armeanb1pW : tensor<16x32x1x1xf32>
     %v5981 = stablehlo.add %v5979, %v5980 : tensor<16x32x1x1xf32>
     %v5982 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
     %v5983 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
     %v5984 = stablehlo.multiply %v5982, %b1pWv : tensor<16x32x1x1xf32>
-    %v5985 = stablehlo.multiply %v4836, %v4836 : tensor<16x32x1x1xf32>
+    %v5985 = stablehlo.multiply %armeanb1pW, %armeanb1pW : tensor<16x32x1x1xf32>
     %v5986 = stablehlo.multiply %v5983, %v5985 : tensor<16x32x1x1xf32>
     %v5987 = stablehlo.add %v5984, %v5986 : tensor<16x32x1x1xf32>
     %v5988 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
     %v5989 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
     %v5990 = stablehlo.multiply %v5988, %b1pWm : tensor<16x32x1x1xf32>
-    %v5991 = stablehlo.multiply %v5989, %v4836 : tensor<16x32x1x1xf32>
+    %v5991 = stablehlo.multiply %v5989, %armeanb1pW : tensor<16x32x1x1xf32>
     %v5992 = stablehlo.add %v5990, %v5991 : tensor<16x32x1x1xf32>
     %v5993 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
     %v5994 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
     %v5995 = stablehlo.multiply %v5993, %b1pWv : tensor<16x32x1x1xf32>
-    %v5996 = stablehlo.multiply %v4836, %v4836 : tensor<16x32x1x1xf32>
+    %v5996 = stablehlo.multiply %armeanb1pW, %armeanb1pW : tensor<16x32x1x1xf32>
     %v5997 = stablehlo.multiply %v5994, %v5996 : tensor<16x32x1x1xf32>
     %v5998 = stablehlo.add %v5995, %v5997 : tensor<16x32x1x1xf32>
     %v5999 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<16x32x1x1xf32>
@@ -6504,26 +6559,33 @@ module @m {
     %v6011 = stablehlo.multiply %v6010, %v6003 : tensor<16x32x1x1xf32>
     %v6012 = stablehlo.multiply %v6011, %b1pW : tensor<16x32x1x1xf32>
     %v6013 = stablehlo.subtract %v6009, %v6012 : tensor<16x32x1x1xf32>
+    %arsumb1pg = "stablehlo.all_reduce"(%v4854) ({
+    ^bb0(%arab1pg: tensor<f32>, %arbb1pg: tensor<f32>):
+      %araddb1pg = stablehlo.add %arab1pg, %arbb1pg : tensor<f32>
+      stablehlo.return %araddb1pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<16xf32>) -> tensor<16xf32>
+    %arnb1pg = stablehlo.constant dense<4.0> : tensor<16xf32>
+    %armeanb1pg = stablehlo.divide %arsumb1pg, %arnb1pg : tensor<16xf32>
     %v6014 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6015 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6016 = stablehlo.multiply %v6014, %b1pgm : tensor<16xf32>
-    %v6017 = stablehlo.multiply %v6015, %v4854 : tensor<16xf32>
+    %v6017 = stablehlo.multiply %v6015, %armeanb1pg : tensor<16xf32>
     %v6018 = stablehlo.add %v6016, %v6017 : tensor<16xf32>
     %v6019 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6020 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6021 = stablehlo.multiply %v6019, %b1pgv : tensor<16xf32>
-    %v6022 = stablehlo.multiply %v4854, %v4854 : tensor<16xf32>
+    %v6022 = stablehlo.multiply %armeanb1pg, %armeanb1pg : tensor<16xf32>
     %v6023 = stablehlo.multiply %v6020, %v6022 : tensor<16xf32>
     %v6024 = stablehlo.add %v6021, %v6023 : tensor<16xf32>
     %v6025 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6026 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6027 = stablehlo.multiply %v6025, %b1pgm : tensor<16xf32>
-    %v6028 = stablehlo.multiply %v6026, %v4854 : tensor<16xf32>
+    %v6028 = stablehlo.multiply %v6026, %armeanb1pg : tensor<16xf32>
     %v6029 = stablehlo.add %v6027, %v6028 : tensor<16xf32>
     %v6030 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6031 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6032 = stablehlo.multiply %v6030, %b1pgv : tensor<16xf32>
-    %v6033 = stablehlo.multiply %v4854, %v4854 : tensor<16xf32>
+    %v6033 = stablehlo.multiply %armeanb1pg, %armeanb1pg : tensor<16xf32>
     %v6034 = stablehlo.multiply %v6031, %v6033 : tensor<16xf32>
     %v6035 = stablehlo.add %v6032, %v6034 : tensor<16xf32>
     %v6036 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<16xf32>
@@ -6541,26 +6603,33 @@ module @m {
     %v6048 = stablehlo.multiply %v6047, %v6040 : tensor<16xf32>
     %v6049 = stablehlo.multiply %v6048, %b1pg : tensor<16xf32>
     %v6050 = stablehlo.subtract %v6046, %v6049 : tensor<16xf32>
+    %arsumb1pbt = "stablehlo.all_reduce"(%v4857) ({
+    ^bb0(%arab1pbt: tensor<f32>, %arbb1pbt: tensor<f32>):
+      %araddb1pbt = stablehlo.add %arab1pbt, %arbb1pbt : tensor<f32>
+      stablehlo.return %araddb1pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<16xf32>) -> tensor<16xf32>
+    %arnb1pbt = stablehlo.constant dense<4.0> : tensor<16xf32>
+    %armeanb1pbt = stablehlo.divide %arsumb1pbt, %arnb1pbt : tensor<16xf32>
     %v6051 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6052 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6053 = stablehlo.multiply %v6051, %b1pbtm : tensor<16xf32>
-    %v6054 = stablehlo.multiply %v6052, %v4857 : tensor<16xf32>
+    %v6054 = stablehlo.multiply %v6052, %armeanb1pbt : tensor<16xf32>
     %v6055 = stablehlo.add %v6053, %v6054 : tensor<16xf32>
     %v6056 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6057 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6058 = stablehlo.multiply %v6056, %b1pbtv : tensor<16xf32>
-    %v6059 = stablehlo.multiply %v4857, %v4857 : tensor<16xf32>
+    %v6059 = stablehlo.multiply %armeanb1pbt, %armeanb1pbt : tensor<16xf32>
     %v6060 = stablehlo.multiply %v6057, %v6059 : tensor<16xf32>
     %v6061 = stablehlo.add %v6058, %v6060 : tensor<16xf32>
     %v6062 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6063 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6064 = stablehlo.multiply %v6062, %b1pbtm : tensor<16xf32>
-    %v6065 = stablehlo.multiply %v6063, %v4857 : tensor<16xf32>
+    %v6065 = stablehlo.multiply %v6063, %armeanb1pbt : tensor<16xf32>
     %v6066 = stablehlo.add %v6064, %v6065 : tensor<16xf32>
     %v6067 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6068 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<16xf32>
     %v6069 = stablehlo.multiply %v6067, %b1pbtv : tensor<16xf32>
-    %v6070 = stablehlo.multiply %v4857, %v4857 : tensor<16xf32>
+    %v6070 = stablehlo.multiply %armeanb1pbt, %armeanb1pbt : tensor<16xf32>
     %v6071 = stablehlo.multiply %v6068, %v6070 : tensor<16xf32>
     %v6072 = stablehlo.add %v6069, %v6071 : tensor<16xf32>
     %v6073 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<16xf32>
@@ -6578,26 +6647,33 @@ module @m {
     %v6085 = stablehlo.multiply %v6084, %v6077 : tensor<16xf32>
     %v6086 = stablehlo.multiply %v6085, %b1pbt : tensor<16xf32>
     %v6087 = stablehlo.subtract %v6083, %v6086 : tensor<16xf32>
+    %arsumb2eW = "stablehlo.all_reduce"(%v4651) ({
+    ^bb0(%arab2eW: tensor<f32>, %arbb2eW: tensor<f32>):
+      %araddb2eW = stablehlo.add %arab2eW, %arbb2eW : tensor<f32>
+      stablehlo.return %araddb2eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96x16x1x1xf32>) -> tensor<96x16x1x1xf32>
+    %arnb2eW = stablehlo.constant dense<4.0> : tensor<96x16x1x1xf32>
+    %armeanb2eW = stablehlo.divide %arsumb2eW, %arnb2eW : tensor<96x16x1x1xf32>
     %v6088 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
     %v6089 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
     %v6090 = stablehlo.multiply %v6088, %b2eWm : tensor<96x16x1x1xf32>
-    %v6091 = stablehlo.multiply %v6089, %v4651 : tensor<96x16x1x1xf32>
+    %v6091 = stablehlo.multiply %v6089, %armeanb2eW : tensor<96x16x1x1xf32>
     %v6092 = stablehlo.add %v6090, %v6091 : tensor<96x16x1x1xf32>
     %v6093 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
     %v6094 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
     %v6095 = stablehlo.multiply %v6093, %b2eWv : tensor<96x16x1x1xf32>
-    %v6096 = stablehlo.multiply %v4651, %v4651 : tensor<96x16x1x1xf32>
+    %v6096 = stablehlo.multiply %armeanb2eW, %armeanb2eW : tensor<96x16x1x1xf32>
     %v6097 = stablehlo.multiply %v6094, %v6096 : tensor<96x16x1x1xf32>
     %v6098 = stablehlo.add %v6095, %v6097 : tensor<96x16x1x1xf32>
     %v6099 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
     %v6100 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
     %v6101 = stablehlo.multiply %v6099, %b2eWm : tensor<96x16x1x1xf32>
-    %v6102 = stablehlo.multiply %v6100, %v4651 : tensor<96x16x1x1xf32>
+    %v6102 = stablehlo.multiply %v6100, %armeanb2eW : tensor<96x16x1x1xf32>
     %v6103 = stablehlo.add %v6101, %v6102 : tensor<96x16x1x1xf32>
     %v6104 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
     %v6105 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
     %v6106 = stablehlo.multiply %v6104, %b2eWv : tensor<96x16x1x1xf32>
-    %v6107 = stablehlo.multiply %v4651, %v4651 : tensor<96x16x1x1xf32>
+    %v6107 = stablehlo.multiply %armeanb2eW, %armeanb2eW : tensor<96x16x1x1xf32>
     %v6108 = stablehlo.multiply %v6105, %v6107 : tensor<96x16x1x1xf32>
     %v6109 = stablehlo.add %v6106, %v6108 : tensor<96x16x1x1xf32>
     %v6110 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96x16x1x1xf32>
@@ -6615,26 +6691,33 @@ module @m {
     %v6122 = stablehlo.multiply %v6121, %v6114 : tensor<96x16x1x1xf32>
     %v6123 = stablehlo.multiply %v6122, %b2eW : tensor<96x16x1x1xf32>
     %v6124 = stablehlo.subtract %v6120, %v6123 : tensor<96x16x1x1xf32>
+    %arsumb2eg = "stablehlo.all_reduce"(%v4669) ({
+    ^bb0(%arab2eg: tensor<f32>, %arbb2eg: tensor<f32>):
+      %araddb2eg = stablehlo.add %arab2eg, %arbb2eg : tensor<f32>
+      stablehlo.return %araddb2eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb2eg = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb2eg = stablehlo.divide %arsumb2eg, %arnb2eg : tensor<96xf32>
     %v6125 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6126 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6127 = stablehlo.multiply %v6125, %b2egm : tensor<96xf32>
-    %v6128 = stablehlo.multiply %v6126, %v4669 : tensor<96xf32>
+    %v6128 = stablehlo.multiply %v6126, %armeanb2eg : tensor<96xf32>
     %v6129 = stablehlo.add %v6127, %v6128 : tensor<96xf32>
     %v6130 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6131 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6132 = stablehlo.multiply %v6130, %b2egv : tensor<96xf32>
-    %v6133 = stablehlo.multiply %v4669, %v4669 : tensor<96xf32>
+    %v6133 = stablehlo.multiply %armeanb2eg, %armeanb2eg : tensor<96xf32>
     %v6134 = stablehlo.multiply %v6131, %v6133 : tensor<96xf32>
     %v6135 = stablehlo.add %v6132, %v6134 : tensor<96xf32>
     %v6136 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6137 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6138 = stablehlo.multiply %v6136, %b2egm : tensor<96xf32>
-    %v6139 = stablehlo.multiply %v6137, %v4669 : tensor<96xf32>
+    %v6139 = stablehlo.multiply %v6137, %armeanb2eg : tensor<96xf32>
     %v6140 = stablehlo.add %v6138, %v6139 : tensor<96xf32>
     %v6141 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6142 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6143 = stablehlo.multiply %v6141, %b2egv : tensor<96xf32>
-    %v6144 = stablehlo.multiply %v4669, %v4669 : tensor<96xf32>
+    %v6144 = stablehlo.multiply %armeanb2eg, %armeanb2eg : tensor<96xf32>
     %v6145 = stablehlo.multiply %v6142, %v6144 : tensor<96xf32>
     %v6146 = stablehlo.add %v6143, %v6145 : tensor<96xf32>
     %v6147 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -6652,26 +6735,33 @@ module @m {
     %v6159 = stablehlo.multiply %v6158, %v6151 : tensor<96xf32>
     %v6160 = stablehlo.multiply %v6159, %b2eg : tensor<96xf32>
     %v6161 = stablehlo.subtract %v6157, %v6160 : tensor<96xf32>
+    %arsumb2ebt = "stablehlo.all_reduce"(%v4672) ({
+    ^bb0(%arab2ebt: tensor<f32>, %arbb2ebt: tensor<f32>):
+      %araddb2ebt = stablehlo.add %arab2ebt, %arbb2ebt : tensor<f32>
+      stablehlo.return %araddb2ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb2ebt = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb2ebt = stablehlo.divide %arsumb2ebt, %arnb2ebt : tensor<96xf32>
     %v6162 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6163 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6164 = stablehlo.multiply %v6162, %b2ebtm : tensor<96xf32>
-    %v6165 = stablehlo.multiply %v6163, %v4672 : tensor<96xf32>
+    %v6165 = stablehlo.multiply %v6163, %armeanb2ebt : tensor<96xf32>
     %v6166 = stablehlo.add %v6164, %v6165 : tensor<96xf32>
     %v6167 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6168 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6169 = stablehlo.multiply %v6167, %b2ebtv : tensor<96xf32>
-    %v6170 = stablehlo.multiply %v4672, %v4672 : tensor<96xf32>
+    %v6170 = stablehlo.multiply %armeanb2ebt, %armeanb2ebt : tensor<96xf32>
     %v6171 = stablehlo.multiply %v6168, %v6170 : tensor<96xf32>
     %v6172 = stablehlo.add %v6169, %v6171 : tensor<96xf32>
     %v6173 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6174 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6175 = stablehlo.multiply %v6173, %b2ebtm : tensor<96xf32>
-    %v6176 = stablehlo.multiply %v6174, %v4672 : tensor<96xf32>
+    %v6176 = stablehlo.multiply %v6174, %armeanb2ebt : tensor<96xf32>
     %v6177 = stablehlo.add %v6175, %v6176 : tensor<96xf32>
     %v6178 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6179 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6180 = stablehlo.multiply %v6178, %b2ebtv : tensor<96xf32>
-    %v6181 = stablehlo.multiply %v4672, %v4672 : tensor<96xf32>
+    %v6181 = stablehlo.multiply %armeanb2ebt, %armeanb2ebt : tensor<96xf32>
     %v6182 = stablehlo.multiply %v6179, %v6181 : tensor<96xf32>
     %v6183 = stablehlo.add %v6180, %v6182 : tensor<96xf32>
     %v6184 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -6689,26 +6779,33 @@ module @m {
     %v6196 = stablehlo.multiply %v6195, %v6188 : tensor<96xf32>
     %v6197 = stablehlo.multiply %v6196, %b2ebt : tensor<96xf32>
     %v6198 = stablehlo.subtract %v6194, %v6197 : tensor<96xf32>
+    %arsumb2dW = "stablehlo.all_reduce"(%v4680) ({
+    ^bb0(%arab2dW: tensor<f32>, %arbb2dW: tensor<f32>):
+      %araddb2dW = stablehlo.add %arab2dW, %arbb2dW : tensor<f32>
+      stablehlo.return %araddb2dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96x1x3x3xf32>) -> tensor<96x1x3x3xf32>
+    %arnb2dW = stablehlo.constant dense<4.0> : tensor<96x1x3x3xf32>
+    %armeanb2dW = stablehlo.divide %arsumb2dW, %arnb2dW : tensor<96x1x3x3xf32>
     %v6199 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
     %v6200 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
     %v6201 = stablehlo.multiply %v6199, %b2dWm : tensor<96x1x3x3xf32>
-    %v6202 = stablehlo.multiply %v6200, %v4680 : tensor<96x1x3x3xf32>
+    %v6202 = stablehlo.multiply %v6200, %armeanb2dW : tensor<96x1x3x3xf32>
     %v6203 = stablehlo.add %v6201, %v6202 : tensor<96x1x3x3xf32>
     %v6204 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
     %v6205 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
     %v6206 = stablehlo.multiply %v6204, %b2dWv : tensor<96x1x3x3xf32>
-    %v6207 = stablehlo.multiply %v4680, %v4680 : tensor<96x1x3x3xf32>
+    %v6207 = stablehlo.multiply %armeanb2dW, %armeanb2dW : tensor<96x1x3x3xf32>
     %v6208 = stablehlo.multiply %v6205, %v6207 : tensor<96x1x3x3xf32>
     %v6209 = stablehlo.add %v6206, %v6208 : tensor<96x1x3x3xf32>
     %v6210 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
     %v6211 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
     %v6212 = stablehlo.multiply %v6210, %b2dWm : tensor<96x1x3x3xf32>
-    %v6213 = stablehlo.multiply %v6211, %v4680 : tensor<96x1x3x3xf32>
+    %v6213 = stablehlo.multiply %v6211, %armeanb2dW : tensor<96x1x3x3xf32>
     %v6214 = stablehlo.add %v6212, %v6213 : tensor<96x1x3x3xf32>
     %v6215 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
     %v6216 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
     %v6217 = stablehlo.multiply %v6215, %b2dWv : tensor<96x1x3x3xf32>
-    %v6218 = stablehlo.multiply %v4680, %v4680 : tensor<96x1x3x3xf32>
+    %v6218 = stablehlo.multiply %armeanb2dW, %armeanb2dW : tensor<96x1x3x3xf32>
     %v6219 = stablehlo.multiply %v6216, %v6218 : tensor<96x1x3x3xf32>
     %v6220 = stablehlo.add %v6217, %v6219 : tensor<96x1x3x3xf32>
     %v6221 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96x1x3x3xf32>
@@ -6726,26 +6823,33 @@ module @m {
     %v6233 = stablehlo.multiply %v6232, %v6225 : tensor<96x1x3x3xf32>
     %v6234 = stablehlo.multiply %v6233, %b2dW : tensor<96x1x3x3xf32>
     %v6235 = stablehlo.subtract %v6231, %v6234 : tensor<96x1x3x3xf32>
+    %arsumb2dg = "stablehlo.all_reduce"(%v4698) ({
+    ^bb0(%arab2dg: tensor<f32>, %arbb2dg: tensor<f32>):
+      %araddb2dg = stablehlo.add %arab2dg, %arbb2dg : tensor<f32>
+      stablehlo.return %araddb2dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb2dg = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb2dg = stablehlo.divide %arsumb2dg, %arnb2dg : tensor<96xf32>
     %v6236 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6237 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6238 = stablehlo.multiply %v6236, %b2dgm : tensor<96xf32>
-    %v6239 = stablehlo.multiply %v6237, %v4698 : tensor<96xf32>
+    %v6239 = stablehlo.multiply %v6237, %armeanb2dg : tensor<96xf32>
     %v6240 = stablehlo.add %v6238, %v6239 : tensor<96xf32>
     %v6241 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6242 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6243 = stablehlo.multiply %v6241, %b2dgv : tensor<96xf32>
-    %v6244 = stablehlo.multiply %v4698, %v4698 : tensor<96xf32>
+    %v6244 = stablehlo.multiply %armeanb2dg, %armeanb2dg : tensor<96xf32>
     %v6245 = stablehlo.multiply %v6242, %v6244 : tensor<96xf32>
     %v6246 = stablehlo.add %v6243, %v6245 : tensor<96xf32>
     %v6247 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6248 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6249 = stablehlo.multiply %v6247, %b2dgm : tensor<96xf32>
-    %v6250 = stablehlo.multiply %v6248, %v4698 : tensor<96xf32>
+    %v6250 = stablehlo.multiply %v6248, %armeanb2dg : tensor<96xf32>
     %v6251 = stablehlo.add %v6249, %v6250 : tensor<96xf32>
     %v6252 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6253 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6254 = stablehlo.multiply %v6252, %b2dgv : tensor<96xf32>
-    %v6255 = stablehlo.multiply %v4698, %v4698 : tensor<96xf32>
+    %v6255 = stablehlo.multiply %armeanb2dg, %armeanb2dg : tensor<96xf32>
     %v6256 = stablehlo.multiply %v6253, %v6255 : tensor<96xf32>
     %v6257 = stablehlo.add %v6254, %v6256 : tensor<96xf32>
     %v6258 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -6763,26 +6867,33 @@ module @m {
     %v6270 = stablehlo.multiply %v6269, %v6262 : tensor<96xf32>
     %v6271 = stablehlo.multiply %v6270, %b2dg : tensor<96xf32>
     %v6272 = stablehlo.subtract %v6268, %v6271 : tensor<96xf32>
+    %arsumb2dbt = "stablehlo.all_reduce"(%v4701) ({
+    ^bb0(%arab2dbt: tensor<f32>, %arbb2dbt: tensor<f32>):
+      %araddb2dbt = stablehlo.add %arab2dbt, %arbb2dbt : tensor<f32>
+      stablehlo.return %araddb2dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb2dbt = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb2dbt = stablehlo.divide %arsumb2dbt, %arnb2dbt : tensor<96xf32>
     %v6273 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6274 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6275 = stablehlo.multiply %v6273, %b2dbtm : tensor<96xf32>
-    %v6276 = stablehlo.multiply %v6274, %v4701 : tensor<96xf32>
+    %v6276 = stablehlo.multiply %v6274, %armeanb2dbt : tensor<96xf32>
     %v6277 = stablehlo.add %v6275, %v6276 : tensor<96xf32>
     %v6278 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6279 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6280 = stablehlo.multiply %v6278, %b2dbtv : tensor<96xf32>
-    %v6281 = stablehlo.multiply %v4701, %v4701 : tensor<96xf32>
+    %v6281 = stablehlo.multiply %armeanb2dbt, %armeanb2dbt : tensor<96xf32>
     %v6282 = stablehlo.multiply %v6279, %v6281 : tensor<96xf32>
     %v6283 = stablehlo.add %v6280, %v6282 : tensor<96xf32>
     %v6284 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6285 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6286 = stablehlo.multiply %v6284, %b2dbtm : tensor<96xf32>
-    %v6287 = stablehlo.multiply %v6285, %v4701 : tensor<96xf32>
+    %v6287 = stablehlo.multiply %v6285, %armeanb2dbt : tensor<96xf32>
     %v6288 = stablehlo.add %v6286, %v6287 : tensor<96xf32>
     %v6289 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6290 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v6291 = stablehlo.multiply %v6289, %b2dbtv : tensor<96xf32>
-    %v6292 = stablehlo.multiply %v4701, %v4701 : tensor<96xf32>
+    %v6292 = stablehlo.multiply %armeanb2dbt, %armeanb2dbt : tensor<96xf32>
     %v6293 = stablehlo.multiply %v6290, %v6292 : tensor<96xf32>
     %v6294 = stablehlo.add %v6291, %v6293 : tensor<96xf32>
     %v6295 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -6800,26 +6911,33 @@ module @m {
     %v6307 = stablehlo.multiply %v6306, %v6299 : tensor<96xf32>
     %v6308 = stablehlo.multiply %v6307, %b2dbt : tensor<96xf32>
     %v6309 = stablehlo.subtract %v6305, %v6308 : tensor<96xf32>
+    %arsumb2pW = "stablehlo.all_reduce"(%v4707) ({
+    ^bb0(%arab2pW: tensor<f32>, %arbb2pW: tensor<f32>):
+      %araddb2pW = stablehlo.add %arab2pW, %arbb2pW : tensor<f32>
+      stablehlo.return %araddb2pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<24x96x1x1xf32>) -> tensor<24x96x1x1xf32>
+    %arnb2pW = stablehlo.constant dense<4.0> : tensor<24x96x1x1xf32>
+    %armeanb2pW = stablehlo.divide %arsumb2pW, %arnb2pW : tensor<24x96x1x1xf32>
     %v6310 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
     %v6311 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
     %v6312 = stablehlo.multiply %v6310, %b2pWm : tensor<24x96x1x1xf32>
-    %v6313 = stablehlo.multiply %v6311, %v4707 : tensor<24x96x1x1xf32>
+    %v6313 = stablehlo.multiply %v6311, %armeanb2pW : tensor<24x96x1x1xf32>
     %v6314 = stablehlo.add %v6312, %v6313 : tensor<24x96x1x1xf32>
     %v6315 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
     %v6316 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
     %v6317 = stablehlo.multiply %v6315, %b2pWv : tensor<24x96x1x1xf32>
-    %v6318 = stablehlo.multiply %v4707, %v4707 : tensor<24x96x1x1xf32>
+    %v6318 = stablehlo.multiply %armeanb2pW, %armeanb2pW : tensor<24x96x1x1xf32>
     %v6319 = stablehlo.multiply %v6316, %v6318 : tensor<24x96x1x1xf32>
     %v6320 = stablehlo.add %v6317, %v6319 : tensor<24x96x1x1xf32>
     %v6321 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
     %v6322 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
     %v6323 = stablehlo.multiply %v6321, %b2pWm : tensor<24x96x1x1xf32>
-    %v6324 = stablehlo.multiply %v6322, %v4707 : tensor<24x96x1x1xf32>
+    %v6324 = stablehlo.multiply %v6322, %armeanb2pW : tensor<24x96x1x1xf32>
     %v6325 = stablehlo.add %v6323, %v6324 : tensor<24x96x1x1xf32>
     %v6326 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
     %v6327 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
     %v6328 = stablehlo.multiply %v6326, %b2pWv : tensor<24x96x1x1xf32>
-    %v6329 = stablehlo.multiply %v4707, %v4707 : tensor<24x96x1x1xf32>
+    %v6329 = stablehlo.multiply %armeanb2pW, %armeanb2pW : tensor<24x96x1x1xf32>
     %v6330 = stablehlo.multiply %v6327, %v6329 : tensor<24x96x1x1xf32>
     %v6331 = stablehlo.add %v6328, %v6330 : tensor<24x96x1x1xf32>
     %v6332 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<24x96x1x1xf32>
@@ -6837,26 +6955,33 @@ module @m {
     %v6344 = stablehlo.multiply %v6343, %v6336 : tensor<24x96x1x1xf32>
     %v6345 = stablehlo.multiply %v6344, %b2pW : tensor<24x96x1x1xf32>
     %v6346 = stablehlo.subtract %v6342, %v6345 : tensor<24x96x1x1xf32>
+    %arsumb2pg = "stablehlo.all_reduce"(%v4725) ({
+    ^bb0(%arab2pg: tensor<f32>, %arbb2pg: tensor<f32>):
+      %araddb2pg = stablehlo.add %arab2pg, %arbb2pg : tensor<f32>
+      stablehlo.return %araddb2pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<24xf32>) -> tensor<24xf32>
+    %arnb2pg = stablehlo.constant dense<4.0> : tensor<24xf32>
+    %armeanb2pg = stablehlo.divide %arsumb2pg, %arnb2pg : tensor<24xf32>
     %v6347 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6348 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6349 = stablehlo.multiply %v6347, %b2pgm : tensor<24xf32>
-    %v6350 = stablehlo.multiply %v6348, %v4725 : tensor<24xf32>
+    %v6350 = stablehlo.multiply %v6348, %armeanb2pg : tensor<24xf32>
     %v6351 = stablehlo.add %v6349, %v6350 : tensor<24xf32>
     %v6352 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6353 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6354 = stablehlo.multiply %v6352, %b2pgv : tensor<24xf32>
-    %v6355 = stablehlo.multiply %v4725, %v4725 : tensor<24xf32>
+    %v6355 = stablehlo.multiply %armeanb2pg, %armeanb2pg : tensor<24xf32>
     %v6356 = stablehlo.multiply %v6353, %v6355 : tensor<24xf32>
     %v6357 = stablehlo.add %v6354, %v6356 : tensor<24xf32>
     %v6358 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6359 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6360 = stablehlo.multiply %v6358, %b2pgm : tensor<24xf32>
-    %v6361 = stablehlo.multiply %v6359, %v4725 : tensor<24xf32>
+    %v6361 = stablehlo.multiply %v6359, %armeanb2pg : tensor<24xf32>
     %v6362 = stablehlo.add %v6360, %v6361 : tensor<24xf32>
     %v6363 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6364 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6365 = stablehlo.multiply %v6363, %b2pgv : tensor<24xf32>
-    %v6366 = stablehlo.multiply %v4725, %v4725 : tensor<24xf32>
+    %v6366 = stablehlo.multiply %armeanb2pg, %armeanb2pg : tensor<24xf32>
     %v6367 = stablehlo.multiply %v6364, %v6366 : tensor<24xf32>
     %v6368 = stablehlo.add %v6365, %v6367 : tensor<24xf32>
     %v6369 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<24xf32>
@@ -6874,26 +6999,33 @@ module @m {
     %v6381 = stablehlo.multiply %v6380, %v6373 : tensor<24xf32>
     %v6382 = stablehlo.multiply %v6381, %b2pg : tensor<24xf32>
     %v6383 = stablehlo.subtract %v6379, %v6382 : tensor<24xf32>
+    %arsumb2pbt = "stablehlo.all_reduce"(%v4728) ({
+    ^bb0(%arab2pbt: tensor<f32>, %arbb2pbt: tensor<f32>):
+      %araddb2pbt = stablehlo.add %arab2pbt, %arbb2pbt : tensor<f32>
+      stablehlo.return %araddb2pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<24xf32>) -> tensor<24xf32>
+    %arnb2pbt = stablehlo.constant dense<4.0> : tensor<24xf32>
+    %armeanb2pbt = stablehlo.divide %arsumb2pbt, %arnb2pbt : tensor<24xf32>
     %v6384 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6385 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6386 = stablehlo.multiply %v6384, %b2pbtm : tensor<24xf32>
-    %v6387 = stablehlo.multiply %v6385, %v4728 : tensor<24xf32>
+    %v6387 = stablehlo.multiply %v6385, %armeanb2pbt : tensor<24xf32>
     %v6388 = stablehlo.add %v6386, %v6387 : tensor<24xf32>
     %v6389 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6390 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6391 = stablehlo.multiply %v6389, %b2pbtv : tensor<24xf32>
-    %v6392 = stablehlo.multiply %v4728, %v4728 : tensor<24xf32>
+    %v6392 = stablehlo.multiply %armeanb2pbt, %armeanb2pbt : tensor<24xf32>
     %v6393 = stablehlo.multiply %v6390, %v6392 : tensor<24xf32>
     %v6394 = stablehlo.add %v6391, %v6393 : tensor<24xf32>
     %v6395 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6396 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6397 = stablehlo.multiply %v6395, %b2pbtm : tensor<24xf32>
-    %v6398 = stablehlo.multiply %v6396, %v4728 : tensor<24xf32>
+    %v6398 = stablehlo.multiply %v6396, %armeanb2pbt : tensor<24xf32>
     %v6399 = stablehlo.add %v6397, %v6398 : tensor<24xf32>
     %v6400 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6401 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6402 = stablehlo.multiply %v6400, %b2pbtv : tensor<24xf32>
-    %v6403 = stablehlo.multiply %v4728, %v4728 : tensor<24xf32>
+    %v6403 = stablehlo.multiply %armeanb2pbt, %armeanb2pbt : tensor<24xf32>
     %v6404 = stablehlo.multiply %v6401, %v6403 : tensor<24xf32>
     %v6405 = stablehlo.add %v6402, %v6404 : tensor<24xf32>
     %v6406 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<24xf32>
@@ -6911,26 +7043,33 @@ module @m {
     %v6418 = stablehlo.multiply %v6417, %v6410 : tensor<24xf32>
     %v6419 = stablehlo.multiply %v6418, %b2pbt : tensor<24xf32>
     %v6420 = stablehlo.subtract %v6416, %v6419 : tensor<24xf32>
+    %arsumb3eW = "stablehlo.all_reduce"(%v4452) ({
+    ^bb0(%arab3eW: tensor<f32>, %arbb3eW: tensor<f32>):
+      %araddb3eW = stablehlo.add %arab3eW, %arbb3eW : tensor<f32>
+      stablehlo.return %araddb3eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144x24x1x1xf32>) -> tensor<144x24x1x1xf32>
+    %arnb3eW = stablehlo.constant dense<4.0> : tensor<144x24x1x1xf32>
+    %armeanb3eW = stablehlo.divide %arsumb3eW, %arnb3eW : tensor<144x24x1x1xf32>
     %v6421 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6422 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6423 = stablehlo.multiply %v6421, %b3eWm : tensor<144x24x1x1xf32>
-    %v6424 = stablehlo.multiply %v6422, %v4452 : tensor<144x24x1x1xf32>
+    %v6424 = stablehlo.multiply %v6422, %armeanb3eW : tensor<144x24x1x1xf32>
     %v6425 = stablehlo.add %v6423, %v6424 : tensor<144x24x1x1xf32>
     %v6426 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6427 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6428 = stablehlo.multiply %v6426, %b3eWv : tensor<144x24x1x1xf32>
-    %v6429 = stablehlo.multiply %v4452, %v4452 : tensor<144x24x1x1xf32>
+    %v6429 = stablehlo.multiply %armeanb3eW, %armeanb3eW : tensor<144x24x1x1xf32>
     %v6430 = stablehlo.multiply %v6427, %v6429 : tensor<144x24x1x1xf32>
     %v6431 = stablehlo.add %v6428, %v6430 : tensor<144x24x1x1xf32>
     %v6432 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6433 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6434 = stablehlo.multiply %v6432, %b3eWm : tensor<144x24x1x1xf32>
-    %v6435 = stablehlo.multiply %v6433, %v4452 : tensor<144x24x1x1xf32>
+    %v6435 = stablehlo.multiply %v6433, %armeanb3eW : tensor<144x24x1x1xf32>
     %v6436 = stablehlo.add %v6434, %v6435 : tensor<144x24x1x1xf32>
     %v6437 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6438 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6439 = stablehlo.multiply %v6437, %b3eWv : tensor<144x24x1x1xf32>
-    %v6440 = stablehlo.multiply %v4452, %v4452 : tensor<144x24x1x1xf32>
+    %v6440 = stablehlo.multiply %armeanb3eW, %armeanb3eW : tensor<144x24x1x1xf32>
     %v6441 = stablehlo.multiply %v6438, %v6440 : tensor<144x24x1x1xf32>
     %v6442 = stablehlo.add %v6439, %v6441 : tensor<144x24x1x1xf32>
     %v6443 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
@@ -6948,26 +7087,33 @@ module @m {
     %v6455 = stablehlo.multiply %v6454, %v6447 : tensor<144x24x1x1xf32>
     %v6456 = stablehlo.multiply %v6455, %b3eW : tensor<144x24x1x1xf32>
     %v6457 = stablehlo.subtract %v6453, %v6456 : tensor<144x24x1x1xf32>
+    %arsumb3eg = "stablehlo.all_reduce"(%v4470) ({
+    ^bb0(%arab3eg: tensor<f32>, %arbb3eg: tensor<f32>):
+      %araddb3eg = stablehlo.add %arab3eg, %arbb3eg : tensor<f32>
+      stablehlo.return %araddb3eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144xf32>) -> tensor<144xf32>
+    %arnb3eg = stablehlo.constant dense<4.0> : tensor<144xf32>
+    %armeanb3eg = stablehlo.divide %arsumb3eg, %arnb3eg : tensor<144xf32>
     %v6458 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6459 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6460 = stablehlo.multiply %v6458, %b3egm : tensor<144xf32>
-    %v6461 = stablehlo.multiply %v6459, %v4470 : tensor<144xf32>
+    %v6461 = stablehlo.multiply %v6459, %armeanb3eg : tensor<144xf32>
     %v6462 = stablehlo.add %v6460, %v6461 : tensor<144xf32>
     %v6463 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6464 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6465 = stablehlo.multiply %v6463, %b3egv : tensor<144xf32>
-    %v6466 = stablehlo.multiply %v4470, %v4470 : tensor<144xf32>
+    %v6466 = stablehlo.multiply %armeanb3eg, %armeanb3eg : tensor<144xf32>
     %v6467 = stablehlo.multiply %v6464, %v6466 : tensor<144xf32>
     %v6468 = stablehlo.add %v6465, %v6467 : tensor<144xf32>
     %v6469 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6470 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6471 = stablehlo.multiply %v6469, %b3egm : tensor<144xf32>
-    %v6472 = stablehlo.multiply %v6470, %v4470 : tensor<144xf32>
+    %v6472 = stablehlo.multiply %v6470, %armeanb3eg : tensor<144xf32>
     %v6473 = stablehlo.add %v6471, %v6472 : tensor<144xf32>
     %v6474 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6475 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6476 = stablehlo.multiply %v6474, %b3egv : tensor<144xf32>
-    %v6477 = stablehlo.multiply %v4470, %v4470 : tensor<144xf32>
+    %v6477 = stablehlo.multiply %armeanb3eg, %armeanb3eg : tensor<144xf32>
     %v6478 = stablehlo.multiply %v6475, %v6477 : tensor<144xf32>
     %v6479 = stablehlo.add %v6476, %v6478 : tensor<144xf32>
     %v6480 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144xf32>
@@ -6985,26 +7131,33 @@ module @m {
     %v6492 = stablehlo.multiply %v6491, %v6484 : tensor<144xf32>
     %v6493 = stablehlo.multiply %v6492, %b3eg : tensor<144xf32>
     %v6494 = stablehlo.subtract %v6490, %v6493 : tensor<144xf32>
+    %arsumb3ebt = "stablehlo.all_reduce"(%v4473) ({
+    ^bb0(%arab3ebt: tensor<f32>, %arbb3ebt: tensor<f32>):
+      %araddb3ebt = stablehlo.add %arab3ebt, %arbb3ebt : tensor<f32>
+      stablehlo.return %araddb3ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144xf32>) -> tensor<144xf32>
+    %arnb3ebt = stablehlo.constant dense<4.0> : tensor<144xf32>
+    %armeanb3ebt = stablehlo.divide %arsumb3ebt, %arnb3ebt : tensor<144xf32>
     %v6495 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6496 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6497 = stablehlo.multiply %v6495, %b3ebtm : tensor<144xf32>
-    %v6498 = stablehlo.multiply %v6496, %v4473 : tensor<144xf32>
+    %v6498 = stablehlo.multiply %v6496, %armeanb3ebt : tensor<144xf32>
     %v6499 = stablehlo.add %v6497, %v6498 : tensor<144xf32>
     %v6500 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6501 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6502 = stablehlo.multiply %v6500, %b3ebtv : tensor<144xf32>
-    %v6503 = stablehlo.multiply %v4473, %v4473 : tensor<144xf32>
+    %v6503 = stablehlo.multiply %armeanb3ebt, %armeanb3ebt : tensor<144xf32>
     %v6504 = stablehlo.multiply %v6501, %v6503 : tensor<144xf32>
     %v6505 = stablehlo.add %v6502, %v6504 : tensor<144xf32>
     %v6506 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6507 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6508 = stablehlo.multiply %v6506, %b3ebtm : tensor<144xf32>
-    %v6509 = stablehlo.multiply %v6507, %v4473 : tensor<144xf32>
+    %v6509 = stablehlo.multiply %v6507, %armeanb3ebt : tensor<144xf32>
     %v6510 = stablehlo.add %v6508, %v6509 : tensor<144xf32>
     %v6511 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6512 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6513 = stablehlo.multiply %v6511, %b3ebtv : tensor<144xf32>
-    %v6514 = stablehlo.multiply %v4473, %v4473 : tensor<144xf32>
+    %v6514 = stablehlo.multiply %armeanb3ebt, %armeanb3ebt : tensor<144xf32>
     %v6515 = stablehlo.multiply %v6512, %v6514 : tensor<144xf32>
     %v6516 = stablehlo.add %v6513, %v6515 : tensor<144xf32>
     %v6517 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144xf32>
@@ -7022,26 +7175,33 @@ module @m {
     %v6529 = stablehlo.multiply %v6528, %v6521 : tensor<144xf32>
     %v6530 = stablehlo.multiply %v6529, %b3ebt : tensor<144xf32>
     %v6531 = stablehlo.subtract %v6527, %v6530 : tensor<144xf32>
+    %arsumb3dW = "stablehlo.all_reduce"(%v4479) ({
+    ^bb0(%arab3dW: tensor<f32>, %arbb3dW: tensor<f32>):
+      %araddb3dW = stablehlo.add %arab3dW, %arbb3dW : tensor<f32>
+      stablehlo.return %araddb3dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144x1x3x3xf32>) -> tensor<144x1x3x3xf32>
+    %arnb3dW = stablehlo.constant dense<4.0> : tensor<144x1x3x3xf32>
+    %armeanb3dW = stablehlo.divide %arsumb3dW, %arnb3dW : tensor<144x1x3x3xf32>
     %v6532 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6533 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6534 = stablehlo.multiply %v6532, %b3dWm : tensor<144x1x3x3xf32>
-    %v6535 = stablehlo.multiply %v6533, %v4479 : tensor<144x1x3x3xf32>
+    %v6535 = stablehlo.multiply %v6533, %armeanb3dW : tensor<144x1x3x3xf32>
     %v6536 = stablehlo.add %v6534, %v6535 : tensor<144x1x3x3xf32>
     %v6537 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6538 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6539 = stablehlo.multiply %v6537, %b3dWv : tensor<144x1x3x3xf32>
-    %v6540 = stablehlo.multiply %v4479, %v4479 : tensor<144x1x3x3xf32>
+    %v6540 = stablehlo.multiply %armeanb3dW, %armeanb3dW : tensor<144x1x3x3xf32>
     %v6541 = stablehlo.multiply %v6538, %v6540 : tensor<144x1x3x3xf32>
     %v6542 = stablehlo.add %v6539, %v6541 : tensor<144x1x3x3xf32>
     %v6543 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6544 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6545 = stablehlo.multiply %v6543, %b3dWm : tensor<144x1x3x3xf32>
-    %v6546 = stablehlo.multiply %v6544, %v4479 : tensor<144x1x3x3xf32>
+    %v6546 = stablehlo.multiply %v6544, %armeanb3dW : tensor<144x1x3x3xf32>
     %v6547 = stablehlo.add %v6545, %v6546 : tensor<144x1x3x3xf32>
     %v6548 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6549 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6550 = stablehlo.multiply %v6548, %b3dWv : tensor<144x1x3x3xf32>
-    %v6551 = stablehlo.multiply %v4479, %v4479 : tensor<144x1x3x3xf32>
+    %v6551 = stablehlo.multiply %armeanb3dW, %armeanb3dW : tensor<144x1x3x3xf32>
     %v6552 = stablehlo.multiply %v6549, %v6551 : tensor<144x1x3x3xf32>
     %v6553 = stablehlo.add %v6550, %v6552 : tensor<144x1x3x3xf32>
     %v6554 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
@@ -7059,26 +7219,33 @@ module @m {
     %v6566 = stablehlo.multiply %v6565, %v6558 : tensor<144x1x3x3xf32>
     %v6567 = stablehlo.multiply %v6566, %b3dW : tensor<144x1x3x3xf32>
     %v6568 = stablehlo.subtract %v6564, %v6567 : tensor<144x1x3x3xf32>
+    %arsumb3dg = "stablehlo.all_reduce"(%v4497) ({
+    ^bb0(%arab3dg: tensor<f32>, %arbb3dg: tensor<f32>):
+      %araddb3dg = stablehlo.add %arab3dg, %arbb3dg : tensor<f32>
+      stablehlo.return %araddb3dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144xf32>) -> tensor<144xf32>
+    %arnb3dg = stablehlo.constant dense<4.0> : tensor<144xf32>
+    %armeanb3dg = stablehlo.divide %arsumb3dg, %arnb3dg : tensor<144xf32>
     %v6569 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6570 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6571 = stablehlo.multiply %v6569, %b3dgm : tensor<144xf32>
-    %v6572 = stablehlo.multiply %v6570, %v4497 : tensor<144xf32>
+    %v6572 = stablehlo.multiply %v6570, %armeanb3dg : tensor<144xf32>
     %v6573 = stablehlo.add %v6571, %v6572 : tensor<144xf32>
     %v6574 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6575 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6576 = stablehlo.multiply %v6574, %b3dgv : tensor<144xf32>
-    %v6577 = stablehlo.multiply %v4497, %v4497 : tensor<144xf32>
+    %v6577 = stablehlo.multiply %armeanb3dg, %armeanb3dg : tensor<144xf32>
     %v6578 = stablehlo.multiply %v6575, %v6577 : tensor<144xf32>
     %v6579 = stablehlo.add %v6576, %v6578 : tensor<144xf32>
     %v6580 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6581 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6582 = stablehlo.multiply %v6580, %b3dgm : tensor<144xf32>
-    %v6583 = stablehlo.multiply %v6581, %v4497 : tensor<144xf32>
+    %v6583 = stablehlo.multiply %v6581, %armeanb3dg : tensor<144xf32>
     %v6584 = stablehlo.add %v6582, %v6583 : tensor<144xf32>
     %v6585 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6586 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6587 = stablehlo.multiply %v6585, %b3dgv : tensor<144xf32>
-    %v6588 = stablehlo.multiply %v4497, %v4497 : tensor<144xf32>
+    %v6588 = stablehlo.multiply %armeanb3dg, %armeanb3dg : tensor<144xf32>
     %v6589 = stablehlo.multiply %v6586, %v6588 : tensor<144xf32>
     %v6590 = stablehlo.add %v6587, %v6589 : tensor<144xf32>
     %v6591 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144xf32>
@@ -7096,26 +7263,33 @@ module @m {
     %v6603 = stablehlo.multiply %v6602, %v6595 : tensor<144xf32>
     %v6604 = stablehlo.multiply %v6603, %b3dg : tensor<144xf32>
     %v6605 = stablehlo.subtract %v6601, %v6604 : tensor<144xf32>
+    %arsumb3dbt = "stablehlo.all_reduce"(%v4500) ({
+    ^bb0(%arab3dbt: tensor<f32>, %arbb3dbt: tensor<f32>):
+      %araddb3dbt = stablehlo.add %arab3dbt, %arbb3dbt : tensor<f32>
+      stablehlo.return %araddb3dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144xf32>) -> tensor<144xf32>
+    %arnb3dbt = stablehlo.constant dense<4.0> : tensor<144xf32>
+    %armeanb3dbt = stablehlo.divide %arsumb3dbt, %arnb3dbt : tensor<144xf32>
     %v6606 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6607 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6608 = stablehlo.multiply %v6606, %b3dbtm : tensor<144xf32>
-    %v6609 = stablehlo.multiply %v6607, %v4500 : tensor<144xf32>
+    %v6609 = stablehlo.multiply %v6607, %armeanb3dbt : tensor<144xf32>
     %v6610 = stablehlo.add %v6608, %v6609 : tensor<144xf32>
     %v6611 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6612 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6613 = stablehlo.multiply %v6611, %b3dbtv : tensor<144xf32>
-    %v6614 = stablehlo.multiply %v4500, %v4500 : tensor<144xf32>
+    %v6614 = stablehlo.multiply %armeanb3dbt, %armeanb3dbt : tensor<144xf32>
     %v6615 = stablehlo.multiply %v6612, %v6614 : tensor<144xf32>
     %v6616 = stablehlo.add %v6613, %v6615 : tensor<144xf32>
     %v6617 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6618 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6619 = stablehlo.multiply %v6617, %b3dbtm : tensor<144xf32>
-    %v6620 = stablehlo.multiply %v6618, %v4500 : tensor<144xf32>
+    %v6620 = stablehlo.multiply %v6618, %armeanb3dbt : tensor<144xf32>
     %v6621 = stablehlo.add %v6619, %v6620 : tensor<144xf32>
     %v6622 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6623 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6624 = stablehlo.multiply %v6622, %b3dbtv : tensor<144xf32>
-    %v6625 = stablehlo.multiply %v4500, %v4500 : tensor<144xf32>
+    %v6625 = stablehlo.multiply %armeanb3dbt, %armeanb3dbt : tensor<144xf32>
     %v6626 = stablehlo.multiply %v6623, %v6625 : tensor<144xf32>
     %v6627 = stablehlo.add %v6624, %v6626 : tensor<144xf32>
     %v6628 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144xf32>
@@ -7133,26 +7307,33 @@ module @m {
     %v6640 = stablehlo.multiply %v6639, %v6632 : tensor<144xf32>
     %v6641 = stablehlo.multiply %v6640, %b3dbt : tensor<144xf32>
     %v6642 = stablehlo.subtract %v6638, %v6641 : tensor<144xf32>
+    %arsumb3pW = "stablehlo.all_reduce"(%v4506) ({
+    ^bb0(%arab3pW: tensor<f32>, %arbb3pW: tensor<f32>):
+      %araddb3pW = stablehlo.add %arab3pW, %arbb3pW : tensor<f32>
+      stablehlo.return %araddb3pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<24x144x1x1xf32>) -> tensor<24x144x1x1xf32>
+    %arnb3pW = stablehlo.constant dense<4.0> : tensor<24x144x1x1xf32>
+    %armeanb3pW = stablehlo.divide %arsumb3pW, %arnb3pW : tensor<24x144x1x1xf32>
     %v6643 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
     %v6644 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
     %v6645 = stablehlo.multiply %v6643, %b3pWm : tensor<24x144x1x1xf32>
-    %v6646 = stablehlo.multiply %v6644, %v4506 : tensor<24x144x1x1xf32>
+    %v6646 = stablehlo.multiply %v6644, %armeanb3pW : tensor<24x144x1x1xf32>
     %v6647 = stablehlo.add %v6645, %v6646 : tensor<24x144x1x1xf32>
     %v6648 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
     %v6649 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
     %v6650 = stablehlo.multiply %v6648, %b3pWv : tensor<24x144x1x1xf32>
-    %v6651 = stablehlo.multiply %v4506, %v4506 : tensor<24x144x1x1xf32>
+    %v6651 = stablehlo.multiply %armeanb3pW, %armeanb3pW : tensor<24x144x1x1xf32>
     %v6652 = stablehlo.multiply %v6649, %v6651 : tensor<24x144x1x1xf32>
     %v6653 = stablehlo.add %v6650, %v6652 : tensor<24x144x1x1xf32>
     %v6654 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
     %v6655 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
     %v6656 = stablehlo.multiply %v6654, %b3pWm : tensor<24x144x1x1xf32>
-    %v6657 = stablehlo.multiply %v6655, %v4506 : tensor<24x144x1x1xf32>
+    %v6657 = stablehlo.multiply %v6655, %armeanb3pW : tensor<24x144x1x1xf32>
     %v6658 = stablehlo.add %v6656, %v6657 : tensor<24x144x1x1xf32>
     %v6659 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
     %v6660 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
     %v6661 = stablehlo.multiply %v6659, %b3pWv : tensor<24x144x1x1xf32>
-    %v6662 = stablehlo.multiply %v4506, %v4506 : tensor<24x144x1x1xf32>
+    %v6662 = stablehlo.multiply %armeanb3pW, %armeanb3pW : tensor<24x144x1x1xf32>
     %v6663 = stablehlo.multiply %v6660, %v6662 : tensor<24x144x1x1xf32>
     %v6664 = stablehlo.add %v6661, %v6663 : tensor<24x144x1x1xf32>
     %v6665 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<24x144x1x1xf32>
@@ -7170,26 +7351,33 @@ module @m {
     %v6677 = stablehlo.multiply %v6676, %v6669 : tensor<24x144x1x1xf32>
     %v6678 = stablehlo.multiply %v6677, %b3pW : tensor<24x144x1x1xf32>
     %v6679 = stablehlo.subtract %v6675, %v6678 : tensor<24x144x1x1xf32>
+    %arsumb3pg = "stablehlo.all_reduce"(%v4524) ({
+    ^bb0(%arab3pg: tensor<f32>, %arbb3pg: tensor<f32>):
+      %araddb3pg = stablehlo.add %arab3pg, %arbb3pg : tensor<f32>
+      stablehlo.return %araddb3pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<24xf32>) -> tensor<24xf32>
+    %arnb3pg = stablehlo.constant dense<4.0> : tensor<24xf32>
+    %armeanb3pg = stablehlo.divide %arsumb3pg, %arnb3pg : tensor<24xf32>
     %v6680 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6681 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6682 = stablehlo.multiply %v6680, %b3pgm : tensor<24xf32>
-    %v6683 = stablehlo.multiply %v6681, %v4524 : tensor<24xf32>
+    %v6683 = stablehlo.multiply %v6681, %armeanb3pg : tensor<24xf32>
     %v6684 = stablehlo.add %v6682, %v6683 : tensor<24xf32>
     %v6685 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6686 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6687 = stablehlo.multiply %v6685, %b3pgv : tensor<24xf32>
-    %v6688 = stablehlo.multiply %v4524, %v4524 : tensor<24xf32>
+    %v6688 = stablehlo.multiply %armeanb3pg, %armeanb3pg : tensor<24xf32>
     %v6689 = stablehlo.multiply %v6686, %v6688 : tensor<24xf32>
     %v6690 = stablehlo.add %v6687, %v6689 : tensor<24xf32>
     %v6691 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6692 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6693 = stablehlo.multiply %v6691, %b3pgm : tensor<24xf32>
-    %v6694 = stablehlo.multiply %v6692, %v4524 : tensor<24xf32>
+    %v6694 = stablehlo.multiply %v6692, %armeanb3pg : tensor<24xf32>
     %v6695 = stablehlo.add %v6693, %v6694 : tensor<24xf32>
     %v6696 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6697 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6698 = stablehlo.multiply %v6696, %b3pgv : tensor<24xf32>
-    %v6699 = stablehlo.multiply %v4524, %v4524 : tensor<24xf32>
+    %v6699 = stablehlo.multiply %armeanb3pg, %armeanb3pg : tensor<24xf32>
     %v6700 = stablehlo.multiply %v6697, %v6699 : tensor<24xf32>
     %v6701 = stablehlo.add %v6698, %v6700 : tensor<24xf32>
     %v6702 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<24xf32>
@@ -7207,26 +7395,33 @@ module @m {
     %v6714 = stablehlo.multiply %v6713, %v6706 : tensor<24xf32>
     %v6715 = stablehlo.multiply %v6714, %b3pg : tensor<24xf32>
     %v6716 = stablehlo.subtract %v6712, %v6715 : tensor<24xf32>
+    %arsumb3pbt = "stablehlo.all_reduce"(%v4527) ({
+    ^bb0(%arab3pbt: tensor<f32>, %arbb3pbt: tensor<f32>):
+      %araddb3pbt = stablehlo.add %arab3pbt, %arbb3pbt : tensor<f32>
+      stablehlo.return %araddb3pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<24xf32>) -> tensor<24xf32>
+    %arnb3pbt = stablehlo.constant dense<4.0> : tensor<24xf32>
+    %armeanb3pbt = stablehlo.divide %arsumb3pbt, %arnb3pbt : tensor<24xf32>
     %v6717 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6718 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6719 = stablehlo.multiply %v6717, %b3pbtm : tensor<24xf32>
-    %v6720 = stablehlo.multiply %v6718, %v4527 : tensor<24xf32>
+    %v6720 = stablehlo.multiply %v6718, %armeanb3pbt : tensor<24xf32>
     %v6721 = stablehlo.add %v6719, %v6720 : tensor<24xf32>
     %v6722 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6723 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6724 = stablehlo.multiply %v6722, %b3pbtv : tensor<24xf32>
-    %v6725 = stablehlo.multiply %v4527, %v4527 : tensor<24xf32>
+    %v6725 = stablehlo.multiply %armeanb3pbt, %armeanb3pbt : tensor<24xf32>
     %v6726 = stablehlo.multiply %v6723, %v6725 : tensor<24xf32>
     %v6727 = stablehlo.add %v6724, %v6726 : tensor<24xf32>
     %v6728 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6729 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6730 = stablehlo.multiply %v6728, %b3pbtm : tensor<24xf32>
-    %v6731 = stablehlo.multiply %v6729, %v4527 : tensor<24xf32>
+    %v6731 = stablehlo.multiply %v6729, %armeanb3pbt : tensor<24xf32>
     %v6732 = stablehlo.add %v6730, %v6731 : tensor<24xf32>
     %v6733 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6734 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<24xf32>
     %v6735 = stablehlo.multiply %v6733, %b3pbtv : tensor<24xf32>
-    %v6736 = stablehlo.multiply %v4527, %v4527 : tensor<24xf32>
+    %v6736 = stablehlo.multiply %armeanb3pbt, %armeanb3pbt : tensor<24xf32>
     %v6737 = stablehlo.multiply %v6734, %v6736 : tensor<24xf32>
     %v6738 = stablehlo.add %v6735, %v6737 : tensor<24xf32>
     %v6739 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<24xf32>
@@ -7244,26 +7439,33 @@ module @m {
     %v6751 = stablehlo.multiply %v6750, %v6743 : tensor<24xf32>
     %v6752 = stablehlo.multiply %v6751, %b3pbt : tensor<24xf32>
     %v6753 = stablehlo.subtract %v6749, %v6752 : tensor<24xf32>
+    %arsumb4eW = "stablehlo.all_reduce"(%v4252) ({
+    ^bb0(%arab4eW: tensor<f32>, %arbb4eW: tensor<f32>):
+      %araddb4eW = stablehlo.add %arab4eW, %arbb4eW : tensor<f32>
+      stablehlo.return %araddb4eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144x24x1x1xf32>) -> tensor<144x24x1x1xf32>
+    %arnb4eW = stablehlo.constant dense<4.0> : tensor<144x24x1x1xf32>
+    %armeanb4eW = stablehlo.divide %arsumb4eW, %arnb4eW : tensor<144x24x1x1xf32>
     %v6754 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6755 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6756 = stablehlo.multiply %v6754, %b4eWm : tensor<144x24x1x1xf32>
-    %v6757 = stablehlo.multiply %v6755, %v4252 : tensor<144x24x1x1xf32>
+    %v6757 = stablehlo.multiply %v6755, %armeanb4eW : tensor<144x24x1x1xf32>
     %v6758 = stablehlo.add %v6756, %v6757 : tensor<144x24x1x1xf32>
     %v6759 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6760 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6761 = stablehlo.multiply %v6759, %b4eWv : tensor<144x24x1x1xf32>
-    %v6762 = stablehlo.multiply %v4252, %v4252 : tensor<144x24x1x1xf32>
+    %v6762 = stablehlo.multiply %armeanb4eW, %armeanb4eW : tensor<144x24x1x1xf32>
     %v6763 = stablehlo.multiply %v6760, %v6762 : tensor<144x24x1x1xf32>
     %v6764 = stablehlo.add %v6761, %v6763 : tensor<144x24x1x1xf32>
     %v6765 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6766 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6767 = stablehlo.multiply %v6765, %b4eWm : tensor<144x24x1x1xf32>
-    %v6768 = stablehlo.multiply %v6766, %v4252 : tensor<144x24x1x1xf32>
+    %v6768 = stablehlo.multiply %v6766, %armeanb4eW : tensor<144x24x1x1xf32>
     %v6769 = stablehlo.add %v6767, %v6768 : tensor<144x24x1x1xf32>
     %v6770 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6771 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
     %v6772 = stablehlo.multiply %v6770, %b4eWv : tensor<144x24x1x1xf32>
-    %v6773 = stablehlo.multiply %v4252, %v4252 : tensor<144x24x1x1xf32>
+    %v6773 = stablehlo.multiply %armeanb4eW, %armeanb4eW : tensor<144x24x1x1xf32>
     %v6774 = stablehlo.multiply %v6771, %v6773 : tensor<144x24x1x1xf32>
     %v6775 = stablehlo.add %v6772, %v6774 : tensor<144x24x1x1xf32>
     %v6776 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144x24x1x1xf32>
@@ -7281,26 +7483,33 @@ module @m {
     %v6788 = stablehlo.multiply %v6787, %v6780 : tensor<144x24x1x1xf32>
     %v6789 = stablehlo.multiply %v6788, %b4eW : tensor<144x24x1x1xf32>
     %v6790 = stablehlo.subtract %v6786, %v6789 : tensor<144x24x1x1xf32>
+    %arsumb4eg = "stablehlo.all_reduce"(%v4270) ({
+    ^bb0(%arab4eg: tensor<f32>, %arbb4eg: tensor<f32>):
+      %araddb4eg = stablehlo.add %arab4eg, %arbb4eg : tensor<f32>
+      stablehlo.return %araddb4eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144xf32>) -> tensor<144xf32>
+    %arnb4eg = stablehlo.constant dense<4.0> : tensor<144xf32>
+    %armeanb4eg = stablehlo.divide %arsumb4eg, %arnb4eg : tensor<144xf32>
     %v6791 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6792 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6793 = stablehlo.multiply %v6791, %b4egm : tensor<144xf32>
-    %v6794 = stablehlo.multiply %v6792, %v4270 : tensor<144xf32>
+    %v6794 = stablehlo.multiply %v6792, %armeanb4eg : tensor<144xf32>
     %v6795 = stablehlo.add %v6793, %v6794 : tensor<144xf32>
     %v6796 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6797 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6798 = stablehlo.multiply %v6796, %b4egv : tensor<144xf32>
-    %v6799 = stablehlo.multiply %v4270, %v4270 : tensor<144xf32>
+    %v6799 = stablehlo.multiply %armeanb4eg, %armeanb4eg : tensor<144xf32>
     %v6800 = stablehlo.multiply %v6797, %v6799 : tensor<144xf32>
     %v6801 = stablehlo.add %v6798, %v6800 : tensor<144xf32>
     %v6802 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6803 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6804 = stablehlo.multiply %v6802, %b4egm : tensor<144xf32>
-    %v6805 = stablehlo.multiply %v6803, %v4270 : tensor<144xf32>
+    %v6805 = stablehlo.multiply %v6803, %armeanb4eg : tensor<144xf32>
     %v6806 = stablehlo.add %v6804, %v6805 : tensor<144xf32>
     %v6807 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6808 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6809 = stablehlo.multiply %v6807, %b4egv : tensor<144xf32>
-    %v6810 = stablehlo.multiply %v4270, %v4270 : tensor<144xf32>
+    %v6810 = stablehlo.multiply %armeanb4eg, %armeanb4eg : tensor<144xf32>
     %v6811 = stablehlo.multiply %v6808, %v6810 : tensor<144xf32>
     %v6812 = stablehlo.add %v6809, %v6811 : tensor<144xf32>
     %v6813 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144xf32>
@@ -7318,26 +7527,33 @@ module @m {
     %v6825 = stablehlo.multiply %v6824, %v6817 : tensor<144xf32>
     %v6826 = stablehlo.multiply %v6825, %b4eg : tensor<144xf32>
     %v6827 = stablehlo.subtract %v6823, %v6826 : tensor<144xf32>
+    %arsumb4ebt = "stablehlo.all_reduce"(%v4273) ({
+    ^bb0(%arab4ebt: tensor<f32>, %arbb4ebt: tensor<f32>):
+      %araddb4ebt = stablehlo.add %arab4ebt, %arbb4ebt : tensor<f32>
+      stablehlo.return %araddb4ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144xf32>) -> tensor<144xf32>
+    %arnb4ebt = stablehlo.constant dense<4.0> : tensor<144xf32>
+    %armeanb4ebt = stablehlo.divide %arsumb4ebt, %arnb4ebt : tensor<144xf32>
     %v6828 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6829 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6830 = stablehlo.multiply %v6828, %b4ebtm : tensor<144xf32>
-    %v6831 = stablehlo.multiply %v6829, %v4273 : tensor<144xf32>
+    %v6831 = stablehlo.multiply %v6829, %armeanb4ebt : tensor<144xf32>
     %v6832 = stablehlo.add %v6830, %v6831 : tensor<144xf32>
     %v6833 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6834 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6835 = stablehlo.multiply %v6833, %b4ebtv : tensor<144xf32>
-    %v6836 = stablehlo.multiply %v4273, %v4273 : tensor<144xf32>
+    %v6836 = stablehlo.multiply %armeanb4ebt, %armeanb4ebt : tensor<144xf32>
     %v6837 = stablehlo.multiply %v6834, %v6836 : tensor<144xf32>
     %v6838 = stablehlo.add %v6835, %v6837 : tensor<144xf32>
     %v6839 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6840 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6841 = stablehlo.multiply %v6839, %b4ebtm : tensor<144xf32>
-    %v6842 = stablehlo.multiply %v6840, %v4273 : tensor<144xf32>
+    %v6842 = stablehlo.multiply %v6840, %armeanb4ebt : tensor<144xf32>
     %v6843 = stablehlo.add %v6841, %v6842 : tensor<144xf32>
     %v6844 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6845 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6846 = stablehlo.multiply %v6844, %b4ebtv : tensor<144xf32>
-    %v6847 = stablehlo.multiply %v4273, %v4273 : tensor<144xf32>
+    %v6847 = stablehlo.multiply %armeanb4ebt, %armeanb4ebt : tensor<144xf32>
     %v6848 = stablehlo.multiply %v6845, %v6847 : tensor<144xf32>
     %v6849 = stablehlo.add %v6846, %v6848 : tensor<144xf32>
     %v6850 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144xf32>
@@ -7355,26 +7571,33 @@ module @m {
     %v6862 = stablehlo.multiply %v6861, %v6854 : tensor<144xf32>
     %v6863 = stablehlo.multiply %v6862, %b4ebt : tensor<144xf32>
     %v6864 = stablehlo.subtract %v6860, %v6863 : tensor<144xf32>
+    %arsumb4dW = "stablehlo.all_reduce"(%v4281) ({
+    ^bb0(%arab4dW: tensor<f32>, %arbb4dW: tensor<f32>):
+      %araddb4dW = stablehlo.add %arab4dW, %arbb4dW : tensor<f32>
+      stablehlo.return %araddb4dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144x1x3x3xf32>) -> tensor<144x1x3x3xf32>
+    %arnb4dW = stablehlo.constant dense<4.0> : tensor<144x1x3x3xf32>
+    %armeanb4dW = stablehlo.divide %arsumb4dW, %arnb4dW : tensor<144x1x3x3xf32>
     %v6865 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6866 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6867 = stablehlo.multiply %v6865, %b4dWm : tensor<144x1x3x3xf32>
-    %v6868 = stablehlo.multiply %v6866, %v4281 : tensor<144x1x3x3xf32>
+    %v6868 = stablehlo.multiply %v6866, %armeanb4dW : tensor<144x1x3x3xf32>
     %v6869 = stablehlo.add %v6867, %v6868 : tensor<144x1x3x3xf32>
     %v6870 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6871 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6872 = stablehlo.multiply %v6870, %b4dWv : tensor<144x1x3x3xf32>
-    %v6873 = stablehlo.multiply %v4281, %v4281 : tensor<144x1x3x3xf32>
+    %v6873 = stablehlo.multiply %armeanb4dW, %armeanb4dW : tensor<144x1x3x3xf32>
     %v6874 = stablehlo.multiply %v6871, %v6873 : tensor<144x1x3x3xf32>
     %v6875 = stablehlo.add %v6872, %v6874 : tensor<144x1x3x3xf32>
     %v6876 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6877 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6878 = stablehlo.multiply %v6876, %b4dWm : tensor<144x1x3x3xf32>
-    %v6879 = stablehlo.multiply %v6877, %v4281 : tensor<144x1x3x3xf32>
+    %v6879 = stablehlo.multiply %v6877, %armeanb4dW : tensor<144x1x3x3xf32>
     %v6880 = stablehlo.add %v6878, %v6879 : tensor<144x1x3x3xf32>
     %v6881 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6882 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
     %v6883 = stablehlo.multiply %v6881, %b4dWv : tensor<144x1x3x3xf32>
-    %v6884 = stablehlo.multiply %v4281, %v4281 : tensor<144x1x3x3xf32>
+    %v6884 = stablehlo.multiply %armeanb4dW, %armeanb4dW : tensor<144x1x3x3xf32>
     %v6885 = stablehlo.multiply %v6882, %v6884 : tensor<144x1x3x3xf32>
     %v6886 = stablehlo.add %v6883, %v6885 : tensor<144x1x3x3xf32>
     %v6887 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144x1x3x3xf32>
@@ -7392,26 +7615,33 @@ module @m {
     %v6899 = stablehlo.multiply %v6898, %v6891 : tensor<144x1x3x3xf32>
     %v6900 = stablehlo.multiply %v6899, %b4dW : tensor<144x1x3x3xf32>
     %v6901 = stablehlo.subtract %v6897, %v6900 : tensor<144x1x3x3xf32>
+    %arsumb4dg = "stablehlo.all_reduce"(%v4299) ({
+    ^bb0(%arab4dg: tensor<f32>, %arbb4dg: tensor<f32>):
+      %araddb4dg = stablehlo.add %arab4dg, %arbb4dg : tensor<f32>
+      stablehlo.return %araddb4dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144xf32>) -> tensor<144xf32>
+    %arnb4dg = stablehlo.constant dense<4.0> : tensor<144xf32>
+    %armeanb4dg = stablehlo.divide %arsumb4dg, %arnb4dg : tensor<144xf32>
     %v6902 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6903 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6904 = stablehlo.multiply %v6902, %b4dgm : tensor<144xf32>
-    %v6905 = stablehlo.multiply %v6903, %v4299 : tensor<144xf32>
+    %v6905 = stablehlo.multiply %v6903, %armeanb4dg : tensor<144xf32>
     %v6906 = stablehlo.add %v6904, %v6905 : tensor<144xf32>
     %v6907 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6908 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6909 = stablehlo.multiply %v6907, %b4dgv : tensor<144xf32>
-    %v6910 = stablehlo.multiply %v4299, %v4299 : tensor<144xf32>
+    %v6910 = stablehlo.multiply %armeanb4dg, %armeanb4dg : tensor<144xf32>
     %v6911 = stablehlo.multiply %v6908, %v6910 : tensor<144xf32>
     %v6912 = stablehlo.add %v6909, %v6911 : tensor<144xf32>
     %v6913 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6914 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6915 = stablehlo.multiply %v6913, %b4dgm : tensor<144xf32>
-    %v6916 = stablehlo.multiply %v6914, %v4299 : tensor<144xf32>
+    %v6916 = stablehlo.multiply %v6914, %armeanb4dg : tensor<144xf32>
     %v6917 = stablehlo.add %v6915, %v6916 : tensor<144xf32>
     %v6918 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6919 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6920 = stablehlo.multiply %v6918, %b4dgv : tensor<144xf32>
-    %v6921 = stablehlo.multiply %v4299, %v4299 : tensor<144xf32>
+    %v6921 = stablehlo.multiply %armeanb4dg, %armeanb4dg : tensor<144xf32>
     %v6922 = stablehlo.multiply %v6919, %v6921 : tensor<144xf32>
     %v6923 = stablehlo.add %v6920, %v6922 : tensor<144xf32>
     %v6924 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144xf32>
@@ -7429,26 +7659,33 @@ module @m {
     %v6936 = stablehlo.multiply %v6935, %v6928 : tensor<144xf32>
     %v6937 = stablehlo.multiply %v6936, %b4dg : tensor<144xf32>
     %v6938 = stablehlo.subtract %v6934, %v6937 : tensor<144xf32>
+    %arsumb4dbt = "stablehlo.all_reduce"(%v4302) ({
+    ^bb0(%arab4dbt: tensor<f32>, %arbb4dbt: tensor<f32>):
+      %araddb4dbt = stablehlo.add %arab4dbt, %arbb4dbt : tensor<f32>
+      stablehlo.return %araddb4dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<144xf32>) -> tensor<144xf32>
+    %arnb4dbt = stablehlo.constant dense<4.0> : tensor<144xf32>
+    %armeanb4dbt = stablehlo.divide %arsumb4dbt, %arnb4dbt : tensor<144xf32>
     %v6939 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6940 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6941 = stablehlo.multiply %v6939, %b4dbtm : tensor<144xf32>
-    %v6942 = stablehlo.multiply %v6940, %v4302 : tensor<144xf32>
+    %v6942 = stablehlo.multiply %v6940, %armeanb4dbt : tensor<144xf32>
     %v6943 = stablehlo.add %v6941, %v6942 : tensor<144xf32>
     %v6944 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6945 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6946 = stablehlo.multiply %v6944, %b4dbtv : tensor<144xf32>
-    %v6947 = stablehlo.multiply %v4302, %v4302 : tensor<144xf32>
+    %v6947 = stablehlo.multiply %armeanb4dbt, %armeanb4dbt : tensor<144xf32>
     %v6948 = stablehlo.multiply %v6945, %v6947 : tensor<144xf32>
     %v6949 = stablehlo.add %v6946, %v6948 : tensor<144xf32>
     %v6950 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6951 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6952 = stablehlo.multiply %v6950, %b4dbtm : tensor<144xf32>
-    %v6953 = stablehlo.multiply %v6951, %v4302 : tensor<144xf32>
+    %v6953 = stablehlo.multiply %v6951, %armeanb4dbt : tensor<144xf32>
     %v6954 = stablehlo.add %v6952, %v6953 : tensor<144xf32>
     %v6955 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6956 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<144xf32>
     %v6957 = stablehlo.multiply %v6955, %b4dbtv : tensor<144xf32>
-    %v6958 = stablehlo.multiply %v4302, %v4302 : tensor<144xf32>
+    %v6958 = stablehlo.multiply %armeanb4dbt, %armeanb4dbt : tensor<144xf32>
     %v6959 = stablehlo.multiply %v6956, %v6958 : tensor<144xf32>
     %v6960 = stablehlo.add %v6957, %v6959 : tensor<144xf32>
     %v6961 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<144xf32>
@@ -7466,26 +7703,33 @@ module @m {
     %v6973 = stablehlo.multiply %v6972, %v6965 : tensor<144xf32>
     %v6974 = stablehlo.multiply %v6973, %b4dbt : tensor<144xf32>
     %v6975 = stablehlo.subtract %v6971, %v6974 : tensor<144xf32>
+    %arsumb4pW = "stablehlo.all_reduce"(%v4308) ({
+    ^bb0(%arab4pW: tensor<f32>, %arbb4pW: tensor<f32>):
+      %araddb4pW = stablehlo.add %arab4pW, %arbb4pW : tensor<f32>
+      stablehlo.return %araddb4pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32x144x1x1xf32>) -> tensor<32x144x1x1xf32>
+    %arnb4pW = stablehlo.constant dense<4.0> : tensor<32x144x1x1xf32>
+    %armeanb4pW = stablehlo.divide %arsumb4pW, %arnb4pW : tensor<32x144x1x1xf32>
     %v6976 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
     %v6977 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
     %v6978 = stablehlo.multiply %v6976, %b4pWm : tensor<32x144x1x1xf32>
-    %v6979 = stablehlo.multiply %v6977, %v4308 : tensor<32x144x1x1xf32>
+    %v6979 = stablehlo.multiply %v6977, %armeanb4pW : tensor<32x144x1x1xf32>
     %v6980 = stablehlo.add %v6978, %v6979 : tensor<32x144x1x1xf32>
     %v6981 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
     %v6982 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
     %v6983 = stablehlo.multiply %v6981, %b4pWv : tensor<32x144x1x1xf32>
-    %v6984 = stablehlo.multiply %v4308, %v4308 : tensor<32x144x1x1xf32>
+    %v6984 = stablehlo.multiply %armeanb4pW, %armeanb4pW : tensor<32x144x1x1xf32>
     %v6985 = stablehlo.multiply %v6982, %v6984 : tensor<32x144x1x1xf32>
     %v6986 = stablehlo.add %v6983, %v6985 : tensor<32x144x1x1xf32>
     %v6987 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
     %v6988 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
     %v6989 = stablehlo.multiply %v6987, %b4pWm : tensor<32x144x1x1xf32>
-    %v6990 = stablehlo.multiply %v6988, %v4308 : tensor<32x144x1x1xf32>
+    %v6990 = stablehlo.multiply %v6988, %armeanb4pW : tensor<32x144x1x1xf32>
     %v6991 = stablehlo.add %v6989, %v6990 : tensor<32x144x1x1xf32>
     %v6992 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
     %v6993 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
     %v6994 = stablehlo.multiply %v6992, %b4pWv : tensor<32x144x1x1xf32>
-    %v6995 = stablehlo.multiply %v4308, %v4308 : tensor<32x144x1x1xf32>
+    %v6995 = stablehlo.multiply %armeanb4pW, %armeanb4pW : tensor<32x144x1x1xf32>
     %v6996 = stablehlo.multiply %v6993, %v6995 : tensor<32x144x1x1xf32>
     %v6997 = stablehlo.add %v6994, %v6996 : tensor<32x144x1x1xf32>
     %v6998 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32x144x1x1xf32>
@@ -7503,26 +7747,33 @@ module @m {
     %v7010 = stablehlo.multiply %v7009, %v7002 : tensor<32x144x1x1xf32>
     %v7011 = stablehlo.multiply %v7010, %b4pW : tensor<32x144x1x1xf32>
     %v7012 = stablehlo.subtract %v7008, %v7011 : tensor<32x144x1x1xf32>
+    %arsumb4pg = "stablehlo.all_reduce"(%v4326) ({
+    ^bb0(%arab4pg: tensor<f32>, %arbb4pg: tensor<f32>):
+      %araddb4pg = stablehlo.add %arab4pg, %arbb4pg : tensor<f32>
+      stablehlo.return %araddb4pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnb4pg = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeanb4pg = stablehlo.divide %arsumb4pg, %arnb4pg : tensor<32xf32>
     %v7013 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7014 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7015 = stablehlo.multiply %v7013, %b4pgm : tensor<32xf32>
-    %v7016 = stablehlo.multiply %v7014, %v4326 : tensor<32xf32>
+    %v7016 = stablehlo.multiply %v7014, %armeanb4pg : tensor<32xf32>
     %v7017 = stablehlo.add %v7015, %v7016 : tensor<32xf32>
     %v7018 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7019 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7020 = stablehlo.multiply %v7018, %b4pgv : tensor<32xf32>
-    %v7021 = stablehlo.multiply %v4326, %v4326 : tensor<32xf32>
+    %v7021 = stablehlo.multiply %armeanb4pg, %armeanb4pg : tensor<32xf32>
     %v7022 = stablehlo.multiply %v7019, %v7021 : tensor<32xf32>
     %v7023 = stablehlo.add %v7020, %v7022 : tensor<32xf32>
     %v7024 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7025 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7026 = stablehlo.multiply %v7024, %b4pgm : tensor<32xf32>
-    %v7027 = stablehlo.multiply %v7025, %v4326 : tensor<32xf32>
+    %v7027 = stablehlo.multiply %v7025, %armeanb4pg : tensor<32xf32>
     %v7028 = stablehlo.add %v7026, %v7027 : tensor<32xf32>
     %v7029 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7030 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7031 = stablehlo.multiply %v7029, %b4pgv : tensor<32xf32>
-    %v7032 = stablehlo.multiply %v4326, %v4326 : tensor<32xf32>
+    %v7032 = stablehlo.multiply %armeanb4pg, %armeanb4pg : tensor<32xf32>
     %v7033 = stablehlo.multiply %v7030, %v7032 : tensor<32xf32>
     %v7034 = stablehlo.add %v7031, %v7033 : tensor<32xf32>
     %v7035 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -7540,26 +7791,33 @@ module @m {
     %v7047 = stablehlo.multiply %v7046, %v7039 : tensor<32xf32>
     %v7048 = stablehlo.multiply %v7047, %b4pg : tensor<32xf32>
     %v7049 = stablehlo.subtract %v7045, %v7048 : tensor<32xf32>
+    %arsumb4pbt = "stablehlo.all_reduce"(%v4329) ({
+    ^bb0(%arab4pbt: tensor<f32>, %arbb4pbt: tensor<f32>):
+      %araddb4pbt = stablehlo.add %arab4pbt, %arbb4pbt : tensor<f32>
+      stablehlo.return %araddb4pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnb4pbt = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeanb4pbt = stablehlo.divide %arsumb4pbt, %arnb4pbt : tensor<32xf32>
     %v7050 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7051 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7052 = stablehlo.multiply %v7050, %b4pbtm : tensor<32xf32>
-    %v7053 = stablehlo.multiply %v7051, %v4329 : tensor<32xf32>
+    %v7053 = stablehlo.multiply %v7051, %armeanb4pbt : tensor<32xf32>
     %v7054 = stablehlo.add %v7052, %v7053 : tensor<32xf32>
     %v7055 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7056 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7057 = stablehlo.multiply %v7055, %b4pbtv : tensor<32xf32>
-    %v7058 = stablehlo.multiply %v4329, %v4329 : tensor<32xf32>
+    %v7058 = stablehlo.multiply %armeanb4pbt, %armeanb4pbt : tensor<32xf32>
     %v7059 = stablehlo.multiply %v7056, %v7058 : tensor<32xf32>
     %v7060 = stablehlo.add %v7057, %v7059 : tensor<32xf32>
     %v7061 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7062 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7063 = stablehlo.multiply %v7061, %b4pbtm : tensor<32xf32>
-    %v7064 = stablehlo.multiply %v7062, %v4329 : tensor<32xf32>
+    %v7064 = stablehlo.multiply %v7062, %armeanb4pbt : tensor<32xf32>
     %v7065 = stablehlo.add %v7063, %v7064 : tensor<32xf32>
     %v7066 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7067 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7068 = stablehlo.multiply %v7066, %b4pbtv : tensor<32xf32>
-    %v7069 = stablehlo.multiply %v4329, %v4329 : tensor<32xf32>
+    %v7069 = stablehlo.multiply %armeanb4pbt, %armeanb4pbt : tensor<32xf32>
     %v7070 = stablehlo.multiply %v7067, %v7069 : tensor<32xf32>
     %v7071 = stablehlo.add %v7068, %v7070 : tensor<32xf32>
     %v7072 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -7577,26 +7835,33 @@ module @m {
     %v7084 = stablehlo.multiply %v7083, %v7076 : tensor<32xf32>
     %v7085 = stablehlo.multiply %v7084, %b4pbt : tensor<32xf32>
     %v7086 = stablehlo.subtract %v7082, %v7085 : tensor<32xf32>
+    %arsumb5eW = "stablehlo.all_reduce"(%v4053) ({
+    ^bb0(%arab5eW: tensor<f32>, %arbb5eW: tensor<f32>):
+      %araddb5eW = stablehlo.add %arab5eW, %arbb5eW : tensor<f32>
+      stablehlo.return %araddb5eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192x32x1x1xf32>) -> tensor<192x32x1x1xf32>
+    %arnb5eW = stablehlo.constant dense<4.0> : tensor<192x32x1x1xf32>
+    %armeanb5eW = stablehlo.divide %arsumb5eW, %arnb5eW : tensor<192x32x1x1xf32>
     %v7087 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7088 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7089 = stablehlo.multiply %v7087, %b5eWm : tensor<192x32x1x1xf32>
-    %v7090 = stablehlo.multiply %v7088, %v4053 : tensor<192x32x1x1xf32>
+    %v7090 = stablehlo.multiply %v7088, %armeanb5eW : tensor<192x32x1x1xf32>
     %v7091 = stablehlo.add %v7089, %v7090 : tensor<192x32x1x1xf32>
     %v7092 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7093 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7094 = stablehlo.multiply %v7092, %b5eWv : tensor<192x32x1x1xf32>
-    %v7095 = stablehlo.multiply %v4053, %v4053 : tensor<192x32x1x1xf32>
+    %v7095 = stablehlo.multiply %armeanb5eW, %armeanb5eW : tensor<192x32x1x1xf32>
     %v7096 = stablehlo.multiply %v7093, %v7095 : tensor<192x32x1x1xf32>
     %v7097 = stablehlo.add %v7094, %v7096 : tensor<192x32x1x1xf32>
     %v7098 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7099 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7100 = stablehlo.multiply %v7098, %b5eWm : tensor<192x32x1x1xf32>
-    %v7101 = stablehlo.multiply %v7099, %v4053 : tensor<192x32x1x1xf32>
+    %v7101 = stablehlo.multiply %v7099, %armeanb5eW : tensor<192x32x1x1xf32>
     %v7102 = stablehlo.add %v7100, %v7101 : tensor<192x32x1x1xf32>
     %v7103 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7104 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7105 = stablehlo.multiply %v7103, %b5eWv : tensor<192x32x1x1xf32>
-    %v7106 = stablehlo.multiply %v4053, %v4053 : tensor<192x32x1x1xf32>
+    %v7106 = stablehlo.multiply %armeanb5eW, %armeanb5eW : tensor<192x32x1x1xf32>
     %v7107 = stablehlo.multiply %v7104, %v7106 : tensor<192x32x1x1xf32>
     %v7108 = stablehlo.add %v7105, %v7107 : tensor<192x32x1x1xf32>
     %v7109 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
@@ -7614,26 +7879,33 @@ module @m {
     %v7121 = stablehlo.multiply %v7120, %v7113 : tensor<192x32x1x1xf32>
     %v7122 = stablehlo.multiply %v7121, %b5eW : tensor<192x32x1x1xf32>
     %v7123 = stablehlo.subtract %v7119, %v7122 : tensor<192x32x1x1xf32>
+    %arsumb5eg = "stablehlo.all_reduce"(%v4071) ({
+    ^bb0(%arab5eg: tensor<f32>, %arbb5eg: tensor<f32>):
+      %araddb5eg = stablehlo.add %arab5eg, %arbb5eg : tensor<f32>
+      stablehlo.return %araddb5eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb5eg = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb5eg = stablehlo.divide %arsumb5eg, %arnb5eg : tensor<192xf32>
     %v7124 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7125 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7126 = stablehlo.multiply %v7124, %b5egm : tensor<192xf32>
-    %v7127 = stablehlo.multiply %v7125, %v4071 : tensor<192xf32>
+    %v7127 = stablehlo.multiply %v7125, %armeanb5eg : tensor<192xf32>
     %v7128 = stablehlo.add %v7126, %v7127 : tensor<192xf32>
     %v7129 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7130 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7131 = stablehlo.multiply %v7129, %b5egv : tensor<192xf32>
-    %v7132 = stablehlo.multiply %v4071, %v4071 : tensor<192xf32>
+    %v7132 = stablehlo.multiply %armeanb5eg, %armeanb5eg : tensor<192xf32>
     %v7133 = stablehlo.multiply %v7130, %v7132 : tensor<192xf32>
     %v7134 = stablehlo.add %v7131, %v7133 : tensor<192xf32>
     %v7135 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7136 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7137 = stablehlo.multiply %v7135, %b5egm : tensor<192xf32>
-    %v7138 = stablehlo.multiply %v7136, %v4071 : tensor<192xf32>
+    %v7138 = stablehlo.multiply %v7136, %armeanb5eg : tensor<192xf32>
     %v7139 = stablehlo.add %v7137, %v7138 : tensor<192xf32>
     %v7140 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7141 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7142 = stablehlo.multiply %v7140, %b5egv : tensor<192xf32>
-    %v7143 = stablehlo.multiply %v4071, %v4071 : tensor<192xf32>
+    %v7143 = stablehlo.multiply %armeanb5eg, %armeanb5eg : tensor<192xf32>
     %v7144 = stablehlo.multiply %v7141, %v7143 : tensor<192xf32>
     %v7145 = stablehlo.add %v7142, %v7144 : tensor<192xf32>
     %v7146 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -7651,26 +7923,33 @@ module @m {
     %v7158 = stablehlo.multiply %v7157, %v7150 : tensor<192xf32>
     %v7159 = stablehlo.multiply %v7158, %b5eg : tensor<192xf32>
     %v7160 = stablehlo.subtract %v7156, %v7159 : tensor<192xf32>
+    %arsumb5ebt = "stablehlo.all_reduce"(%v4074) ({
+    ^bb0(%arab5ebt: tensor<f32>, %arbb5ebt: tensor<f32>):
+      %araddb5ebt = stablehlo.add %arab5ebt, %arbb5ebt : tensor<f32>
+      stablehlo.return %araddb5ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb5ebt = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb5ebt = stablehlo.divide %arsumb5ebt, %arnb5ebt : tensor<192xf32>
     %v7161 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7162 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7163 = stablehlo.multiply %v7161, %b5ebtm : tensor<192xf32>
-    %v7164 = stablehlo.multiply %v7162, %v4074 : tensor<192xf32>
+    %v7164 = stablehlo.multiply %v7162, %armeanb5ebt : tensor<192xf32>
     %v7165 = stablehlo.add %v7163, %v7164 : tensor<192xf32>
     %v7166 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7167 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7168 = stablehlo.multiply %v7166, %b5ebtv : tensor<192xf32>
-    %v7169 = stablehlo.multiply %v4074, %v4074 : tensor<192xf32>
+    %v7169 = stablehlo.multiply %armeanb5ebt, %armeanb5ebt : tensor<192xf32>
     %v7170 = stablehlo.multiply %v7167, %v7169 : tensor<192xf32>
     %v7171 = stablehlo.add %v7168, %v7170 : tensor<192xf32>
     %v7172 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7173 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7174 = stablehlo.multiply %v7172, %b5ebtm : tensor<192xf32>
-    %v7175 = stablehlo.multiply %v7173, %v4074 : tensor<192xf32>
+    %v7175 = stablehlo.multiply %v7173, %armeanb5ebt : tensor<192xf32>
     %v7176 = stablehlo.add %v7174, %v7175 : tensor<192xf32>
     %v7177 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7178 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7179 = stablehlo.multiply %v7177, %b5ebtv : tensor<192xf32>
-    %v7180 = stablehlo.multiply %v4074, %v4074 : tensor<192xf32>
+    %v7180 = stablehlo.multiply %armeanb5ebt, %armeanb5ebt : tensor<192xf32>
     %v7181 = stablehlo.multiply %v7178, %v7180 : tensor<192xf32>
     %v7182 = stablehlo.add %v7179, %v7181 : tensor<192xf32>
     %v7183 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -7688,26 +7967,33 @@ module @m {
     %v7195 = stablehlo.multiply %v7194, %v7187 : tensor<192xf32>
     %v7196 = stablehlo.multiply %v7195, %b5ebt : tensor<192xf32>
     %v7197 = stablehlo.subtract %v7193, %v7196 : tensor<192xf32>
+    %arsumb5dW = "stablehlo.all_reduce"(%v4080) ({
+    ^bb0(%arab5dW: tensor<f32>, %arbb5dW: tensor<f32>):
+      %araddb5dW = stablehlo.add %arab5dW, %arbb5dW : tensor<f32>
+      stablehlo.return %araddb5dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192x1x3x3xf32>) -> tensor<192x1x3x3xf32>
+    %arnb5dW = stablehlo.constant dense<4.0> : tensor<192x1x3x3xf32>
+    %armeanb5dW = stablehlo.divide %arsumb5dW, %arnb5dW : tensor<192x1x3x3xf32>
     %v7198 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7199 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7200 = stablehlo.multiply %v7198, %b5dWm : tensor<192x1x3x3xf32>
-    %v7201 = stablehlo.multiply %v7199, %v4080 : tensor<192x1x3x3xf32>
+    %v7201 = stablehlo.multiply %v7199, %armeanb5dW : tensor<192x1x3x3xf32>
     %v7202 = stablehlo.add %v7200, %v7201 : tensor<192x1x3x3xf32>
     %v7203 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7204 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7205 = stablehlo.multiply %v7203, %b5dWv : tensor<192x1x3x3xf32>
-    %v7206 = stablehlo.multiply %v4080, %v4080 : tensor<192x1x3x3xf32>
+    %v7206 = stablehlo.multiply %armeanb5dW, %armeanb5dW : tensor<192x1x3x3xf32>
     %v7207 = stablehlo.multiply %v7204, %v7206 : tensor<192x1x3x3xf32>
     %v7208 = stablehlo.add %v7205, %v7207 : tensor<192x1x3x3xf32>
     %v7209 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7210 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7211 = stablehlo.multiply %v7209, %b5dWm : tensor<192x1x3x3xf32>
-    %v7212 = stablehlo.multiply %v7210, %v4080 : tensor<192x1x3x3xf32>
+    %v7212 = stablehlo.multiply %v7210, %armeanb5dW : tensor<192x1x3x3xf32>
     %v7213 = stablehlo.add %v7211, %v7212 : tensor<192x1x3x3xf32>
     %v7214 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7215 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7216 = stablehlo.multiply %v7214, %b5dWv : tensor<192x1x3x3xf32>
-    %v7217 = stablehlo.multiply %v4080, %v4080 : tensor<192x1x3x3xf32>
+    %v7217 = stablehlo.multiply %armeanb5dW, %armeanb5dW : tensor<192x1x3x3xf32>
     %v7218 = stablehlo.multiply %v7215, %v7217 : tensor<192x1x3x3xf32>
     %v7219 = stablehlo.add %v7216, %v7218 : tensor<192x1x3x3xf32>
     %v7220 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
@@ -7725,26 +8011,33 @@ module @m {
     %v7232 = stablehlo.multiply %v7231, %v7224 : tensor<192x1x3x3xf32>
     %v7233 = stablehlo.multiply %v7232, %b5dW : tensor<192x1x3x3xf32>
     %v7234 = stablehlo.subtract %v7230, %v7233 : tensor<192x1x3x3xf32>
+    %arsumb5dg = "stablehlo.all_reduce"(%v4098) ({
+    ^bb0(%arab5dg: tensor<f32>, %arbb5dg: tensor<f32>):
+      %araddb5dg = stablehlo.add %arab5dg, %arbb5dg : tensor<f32>
+      stablehlo.return %araddb5dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb5dg = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb5dg = stablehlo.divide %arsumb5dg, %arnb5dg : tensor<192xf32>
     %v7235 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7236 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7237 = stablehlo.multiply %v7235, %b5dgm : tensor<192xf32>
-    %v7238 = stablehlo.multiply %v7236, %v4098 : tensor<192xf32>
+    %v7238 = stablehlo.multiply %v7236, %armeanb5dg : tensor<192xf32>
     %v7239 = stablehlo.add %v7237, %v7238 : tensor<192xf32>
     %v7240 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7241 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7242 = stablehlo.multiply %v7240, %b5dgv : tensor<192xf32>
-    %v7243 = stablehlo.multiply %v4098, %v4098 : tensor<192xf32>
+    %v7243 = stablehlo.multiply %armeanb5dg, %armeanb5dg : tensor<192xf32>
     %v7244 = stablehlo.multiply %v7241, %v7243 : tensor<192xf32>
     %v7245 = stablehlo.add %v7242, %v7244 : tensor<192xf32>
     %v7246 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7247 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7248 = stablehlo.multiply %v7246, %b5dgm : tensor<192xf32>
-    %v7249 = stablehlo.multiply %v7247, %v4098 : tensor<192xf32>
+    %v7249 = stablehlo.multiply %v7247, %armeanb5dg : tensor<192xf32>
     %v7250 = stablehlo.add %v7248, %v7249 : tensor<192xf32>
     %v7251 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7252 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7253 = stablehlo.multiply %v7251, %b5dgv : tensor<192xf32>
-    %v7254 = stablehlo.multiply %v4098, %v4098 : tensor<192xf32>
+    %v7254 = stablehlo.multiply %armeanb5dg, %armeanb5dg : tensor<192xf32>
     %v7255 = stablehlo.multiply %v7252, %v7254 : tensor<192xf32>
     %v7256 = stablehlo.add %v7253, %v7255 : tensor<192xf32>
     %v7257 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -7762,26 +8055,33 @@ module @m {
     %v7269 = stablehlo.multiply %v7268, %v7261 : tensor<192xf32>
     %v7270 = stablehlo.multiply %v7269, %b5dg : tensor<192xf32>
     %v7271 = stablehlo.subtract %v7267, %v7270 : tensor<192xf32>
+    %arsumb5dbt = "stablehlo.all_reduce"(%v4101) ({
+    ^bb0(%arab5dbt: tensor<f32>, %arbb5dbt: tensor<f32>):
+      %araddb5dbt = stablehlo.add %arab5dbt, %arbb5dbt : tensor<f32>
+      stablehlo.return %araddb5dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb5dbt = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb5dbt = stablehlo.divide %arsumb5dbt, %arnb5dbt : tensor<192xf32>
     %v7272 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7273 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7274 = stablehlo.multiply %v7272, %b5dbtm : tensor<192xf32>
-    %v7275 = stablehlo.multiply %v7273, %v4101 : tensor<192xf32>
+    %v7275 = stablehlo.multiply %v7273, %armeanb5dbt : tensor<192xf32>
     %v7276 = stablehlo.add %v7274, %v7275 : tensor<192xf32>
     %v7277 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7278 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7279 = stablehlo.multiply %v7277, %b5dbtv : tensor<192xf32>
-    %v7280 = stablehlo.multiply %v4101, %v4101 : tensor<192xf32>
+    %v7280 = stablehlo.multiply %armeanb5dbt, %armeanb5dbt : tensor<192xf32>
     %v7281 = stablehlo.multiply %v7278, %v7280 : tensor<192xf32>
     %v7282 = stablehlo.add %v7279, %v7281 : tensor<192xf32>
     %v7283 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7284 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7285 = stablehlo.multiply %v7283, %b5dbtm : tensor<192xf32>
-    %v7286 = stablehlo.multiply %v7284, %v4101 : tensor<192xf32>
+    %v7286 = stablehlo.multiply %v7284, %armeanb5dbt : tensor<192xf32>
     %v7287 = stablehlo.add %v7285, %v7286 : tensor<192xf32>
     %v7288 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7289 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7290 = stablehlo.multiply %v7288, %b5dbtv : tensor<192xf32>
-    %v7291 = stablehlo.multiply %v4101, %v4101 : tensor<192xf32>
+    %v7291 = stablehlo.multiply %armeanb5dbt, %armeanb5dbt : tensor<192xf32>
     %v7292 = stablehlo.multiply %v7289, %v7291 : tensor<192xf32>
     %v7293 = stablehlo.add %v7290, %v7292 : tensor<192xf32>
     %v7294 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -7799,26 +8099,33 @@ module @m {
     %v7306 = stablehlo.multiply %v7305, %v7298 : tensor<192xf32>
     %v7307 = stablehlo.multiply %v7306, %b5dbt : tensor<192xf32>
     %v7308 = stablehlo.subtract %v7304, %v7307 : tensor<192xf32>
+    %arsumb5pW = "stablehlo.all_reduce"(%v4107) ({
+    ^bb0(%arab5pW: tensor<f32>, %arbb5pW: tensor<f32>):
+      %araddb5pW = stablehlo.add %arab5pW, %arbb5pW : tensor<f32>
+      stablehlo.return %araddb5pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32x192x1x1xf32>) -> tensor<32x192x1x1xf32>
+    %arnb5pW = stablehlo.constant dense<4.0> : tensor<32x192x1x1xf32>
+    %armeanb5pW = stablehlo.divide %arsumb5pW, %arnb5pW : tensor<32x192x1x1xf32>
     %v7309 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7310 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7311 = stablehlo.multiply %v7309, %b5pWm : tensor<32x192x1x1xf32>
-    %v7312 = stablehlo.multiply %v7310, %v4107 : tensor<32x192x1x1xf32>
+    %v7312 = stablehlo.multiply %v7310, %armeanb5pW : tensor<32x192x1x1xf32>
     %v7313 = stablehlo.add %v7311, %v7312 : tensor<32x192x1x1xf32>
     %v7314 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7315 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7316 = stablehlo.multiply %v7314, %b5pWv : tensor<32x192x1x1xf32>
-    %v7317 = stablehlo.multiply %v4107, %v4107 : tensor<32x192x1x1xf32>
+    %v7317 = stablehlo.multiply %armeanb5pW, %armeanb5pW : tensor<32x192x1x1xf32>
     %v7318 = stablehlo.multiply %v7315, %v7317 : tensor<32x192x1x1xf32>
     %v7319 = stablehlo.add %v7316, %v7318 : tensor<32x192x1x1xf32>
     %v7320 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7321 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7322 = stablehlo.multiply %v7320, %b5pWm : tensor<32x192x1x1xf32>
-    %v7323 = stablehlo.multiply %v7321, %v4107 : tensor<32x192x1x1xf32>
+    %v7323 = stablehlo.multiply %v7321, %armeanb5pW : tensor<32x192x1x1xf32>
     %v7324 = stablehlo.add %v7322, %v7323 : tensor<32x192x1x1xf32>
     %v7325 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7326 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7327 = stablehlo.multiply %v7325, %b5pWv : tensor<32x192x1x1xf32>
-    %v7328 = stablehlo.multiply %v4107, %v4107 : tensor<32x192x1x1xf32>
+    %v7328 = stablehlo.multiply %armeanb5pW, %armeanb5pW : tensor<32x192x1x1xf32>
     %v7329 = stablehlo.multiply %v7326, %v7328 : tensor<32x192x1x1xf32>
     %v7330 = stablehlo.add %v7327, %v7329 : tensor<32x192x1x1xf32>
     %v7331 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
@@ -7836,26 +8143,33 @@ module @m {
     %v7343 = stablehlo.multiply %v7342, %v7335 : tensor<32x192x1x1xf32>
     %v7344 = stablehlo.multiply %v7343, %b5pW : tensor<32x192x1x1xf32>
     %v7345 = stablehlo.subtract %v7341, %v7344 : tensor<32x192x1x1xf32>
+    %arsumb5pg = "stablehlo.all_reduce"(%v4125) ({
+    ^bb0(%arab5pg: tensor<f32>, %arbb5pg: tensor<f32>):
+      %araddb5pg = stablehlo.add %arab5pg, %arbb5pg : tensor<f32>
+      stablehlo.return %araddb5pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnb5pg = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeanb5pg = stablehlo.divide %arsumb5pg, %arnb5pg : tensor<32xf32>
     %v7346 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7347 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7348 = stablehlo.multiply %v7346, %b5pgm : tensor<32xf32>
-    %v7349 = stablehlo.multiply %v7347, %v4125 : tensor<32xf32>
+    %v7349 = stablehlo.multiply %v7347, %armeanb5pg : tensor<32xf32>
     %v7350 = stablehlo.add %v7348, %v7349 : tensor<32xf32>
     %v7351 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7352 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7353 = stablehlo.multiply %v7351, %b5pgv : tensor<32xf32>
-    %v7354 = stablehlo.multiply %v4125, %v4125 : tensor<32xf32>
+    %v7354 = stablehlo.multiply %armeanb5pg, %armeanb5pg : tensor<32xf32>
     %v7355 = stablehlo.multiply %v7352, %v7354 : tensor<32xf32>
     %v7356 = stablehlo.add %v7353, %v7355 : tensor<32xf32>
     %v7357 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7358 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7359 = stablehlo.multiply %v7357, %b5pgm : tensor<32xf32>
-    %v7360 = stablehlo.multiply %v7358, %v4125 : tensor<32xf32>
+    %v7360 = stablehlo.multiply %v7358, %armeanb5pg : tensor<32xf32>
     %v7361 = stablehlo.add %v7359, %v7360 : tensor<32xf32>
     %v7362 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7363 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7364 = stablehlo.multiply %v7362, %b5pgv : tensor<32xf32>
-    %v7365 = stablehlo.multiply %v4125, %v4125 : tensor<32xf32>
+    %v7365 = stablehlo.multiply %armeanb5pg, %armeanb5pg : tensor<32xf32>
     %v7366 = stablehlo.multiply %v7363, %v7365 : tensor<32xf32>
     %v7367 = stablehlo.add %v7364, %v7366 : tensor<32xf32>
     %v7368 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -7873,26 +8187,33 @@ module @m {
     %v7380 = stablehlo.multiply %v7379, %v7372 : tensor<32xf32>
     %v7381 = stablehlo.multiply %v7380, %b5pg : tensor<32xf32>
     %v7382 = stablehlo.subtract %v7378, %v7381 : tensor<32xf32>
+    %arsumb5pbt = "stablehlo.all_reduce"(%v4128) ({
+    ^bb0(%arab5pbt: tensor<f32>, %arbb5pbt: tensor<f32>):
+      %araddb5pbt = stablehlo.add %arab5pbt, %arbb5pbt : tensor<f32>
+      stablehlo.return %araddb5pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnb5pbt = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeanb5pbt = stablehlo.divide %arsumb5pbt, %arnb5pbt : tensor<32xf32>
     %v7383 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7384 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7385 = stablehlo.multiply %v7383, %b5pbtm : tensor<32xf32>
-    %v7386 = stablehlo.multiply %v7384, %v4128 : tensor<32xf32>
+    %v7386 = stablehlo.multiply %v7384, %armeanb5pbt : tensor<32xf32>
     %v7387 = stablehlo.add %v7385, %v7386 : tensor<32xf32>
     %v7388 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7389 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7390 = stablehlo.multiply %v7388, %b5pbtv : tensor<32xf32>
-    %v7391 = stablehlo.multiply %v4128, %v4128 : tensor<32xf32>
+    %v7391 = stablehlo.multiply %armeanb5pbt, %armeanb5pbt : tensor<32xf32>
     %v7392 = stablehlo.multiply %v7389, %v7391 : tensor<32xf32>
     %v7393 = stablehlo.add %v7390, %v7392 : tensor<32xf32>
     %v7394 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7395 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7396 = stablehlo.multiply %v7394, %b5pbtm : tensor<32xf32>
-    %v7397 = stablehlo.multiply %v7395, %v4128 : tensor<32xf32>
+    %v7397 = stablehlo.multiply %v7395, %armeanb5pbt : tensor<32xf32>
     %v7398 = stablehlo.add %v7396, %v7397 : tensor<32xf32>
     %v7399 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7400 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7401 = stablehlo.multiply %v7399, %b5pbtv : tensor<32xf32>
-    %v7402 = stablehlo.multiply %v4128, %v4128 : tensor<32xf32>
+    %v7402 = stablehlo.multiply %armeanb5pbt, %armeanb5pbt : tensor<32xf32>
     %v7403 = stablehlo.multiply %v7400, %v7402 : tensor<32xf32>
     %v7404 = stablehlo.add %v7401, %v7403 : tensor<32xf32>
     %v7405 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -7910,26 +8231,33 @@ module @m {
     %v7417 = stablehlo.multiply %v7416, %v7409 : tensor<32xf32>
     %v7418 = stablehlo.multiply %v7417, %b5pbt : tensor<32xf32>
     %v7419 = stablehlo.subtract %v7415, %v7418 : tensor<32xf32>
+    %arsumb6eW = "stablehlo.all_reduce"(%v3855) ({
+    ^bb0(%arab6eW: tensor<f32>, %arbb6eW: tensor<f32>):
+      %araddb6eW = stablehlo.add %arab6eW, %arbb6eW : tensor<f32>
+      stablehlo.return %araddb6eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192x32x1x1xf32>) -> tensor<192x32x1x1xf32>
+    %arnb6eW = stablehlo.constant dense<4.0> : tensor<192x32x1x1xf32>
+    %armeanb6eW = stablehlo.divide %arsumb6eW, %arnb6eW : tensor<192x32x1x1xf32>
     %v7420 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7421 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7422 = stablehlo.multiply %v7420, %b6eWm : tensor<192x32x1x1xf32>
-    %v7423 = stablehlo.multiply %v7421, %v3855 : tensor<192x32x1x1xf32>
+    %v7423 = stablehlo.multiply %v7421, %armeanb6eW : tensor<192x32x1x1xf32>
     %v7424 = stablehlo.add %v7422, %v7423 : tensor<192x32x1x1xf32>
     %v7425 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7426 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7427 = stablehlo.multiply %v7425, %b6eWv : tensor<192x32x1x1xf32>
-    %v7428 = stablehlo.multiply %v3855, %v3855 : tensor<192x32x1x1xf32>
+    %v7428 = stablehlo.multiply %armeanb6eW, %armeanb6eW : tensor<192x32x1x1xf32>
     %v7429 = stablehlo.multiply %v7426, %v7428 : tensor<192x32x1x1xf32>
     %v7430 = stablehlo.add %v7427, %v7429 : tensor<192x32x1x1xf32>
     %v7431 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7432 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7433 = stablehlo.multiply %v7431, %b6eWm : tensor<192x32x1x1xf32>
-    %v7434 = stablehlo.multiply %v7432, %v3855 : tensor<192x32x1x1xf32>
+    %v7434 = stablehlo.multiply %v7432, %armeanb6eW : tensor<192x32x1x1xf32>
     %v7435 = stablehlo.add %v7433, %v7434 : tensor<192x32x1x1xf32>
     %v7436 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7437 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7438 = stablehlo.multiply %v7436, %b6eWv : tensor<192x32x1x1xf32>
-    %v7439 = stablehlo.multiply %v3855, %v3855 : tensor<192x32x1x1xf32>
+    %v7439 = stablehlo.multiply %armeanb6eW, %armeanb6eW : tensor<192x32x1x1xf32>
     %v7440 = stablehlo.multiply %v7437, %v7439 : tensor<192x32x1x1xf32>
     %v7441 = stablehlo.add %v7438, %v7440 : tensor<192x32x1x1xf32>
     %v7442 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
@@ -7947,26 +8275,33 @@ module @m {
     %v7454 = stablehlo.multiply %v7453, %v7446 : tensor<192x32x1x1xf32>
     %v7455 = stablehlo.multiply %v7454, %b6eW : tensor<192x32x1x1xf32>
     %v7456 = stablehlo.subtract %v7452, %v7455 : tensor<192x32x1x1xf32>
+    %arsumb6eg = "stablehlo.all_reduce"(%v3873) ({
+    ^bb0(%arab6eg: tensor<f32>, %arbb6eg: tensor<f32>):
+      %araddb6eg = stablehlo.add %arab6eg, %arbb6eg : tensor<f32>
+      stablehlo.return %araddb6eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb6eg = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb6eg = stablehlo.divide %arsumb6eg, %arnb6eg : tensor<192xf32>
     %v7457 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7458 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7459 = stablehlo.multiply %v7457, %b6egm : tensor<192xf32>
-    %v7460 = stablehlo.multiply %v7458, %v3873 : tensor<192xf32>
+    %v7460 = stablehlo.multiply %v7458, %armeanb6eg : tensor<192xf32>
     %v7461 = stablehlo.add %v7459, %v7460 : tensor<192xf32>
     %v7462 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7463 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7464 = stablehlo.multiply %v7462, %b6egv : tensor<192xf32>
-    %v7465 = stablehlo.multiply %v3873, %v3873 : tensor<192xf32>
+    %v7465 = stablehlo.multiply %armeanb6eg, %armeanb6eg : tensor<192xf32>
     %v7466 = stablehlo.multiply %v7463, %v7465 : tensor<192xf32>
     %v7467 = stablehlo.add %v7464, %v7466 : tensor<192xf32>
     %v7468 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7469 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7470 = stablehlo.multiply %v7468, %b6egm : tensor<192xf32>
-    %v7471 = stablehlo.multiply %v7469, %v3873 : tensor<192xf32>
+    %v7471 = stablehlo.multiply %v7469, %armeanb6eg : tensor<192xf32>
     %v7472 = stablehlo.add %v7470, %v7471 : tensor<192xf32>
     %v7473 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7474 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7475 = stablehlo.multiply %v7473, %b6egv : tensor<192xf32>
-    %v7476 = stablehlo.multiply %v3873, %v3873 : tensor<192xf32>
+    %v7476 = stablehlo.multiply %armeanb6eg, %armeanb6eg : tensor<192xf32>
     %v7477 = stablehlo.multiply %v7474, %v7476 : tensor<192xf32>
     %v7478 = stablehlo.add %v7475, %v7477 : tensor<192xf32>
     %v7479 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -7984,26 +8319,33 @@ module @m {
     %v7491 = stablehlo.multiply %v7490, %v7483 : tensor<192xf32>
     %v7492 = stablehlo.multiply %v7491, %b6eg : tensor<192xf32>
     %v7493 = stablehlo.subtract %v7489, %v7492 : tensor<192xf32>
+    %arsumb6ebt = "stablehlo.all_reduce"(%v3876) ({
+    ^bb0(%arab6ebt: tensor<f32>, %arbb6ebt: tensor<f32>):
+      %araddb6ebt = stablehlo.add %arab6ebt, %arbb6ebt : tensor<f32>
+      stablehlo.return %araddb6ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb6ebt = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb6ebt = stablehlo.divide %arsumb6ebt, %arnb6ebt : tensor<192xf32>
     %v7494 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7495 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7496 = stablehlo.multiply %v7494, %b6ebtm : tensor<192xf32>
-    %v7497 = stablehlo.multiply %v7495, %v3876 : tensor<192xf32>
+    %v7497 = stablehlo.multiply %v7495, %armeanb6ebt : tensor<192xf32>
     %v7498 = stablehlo.add %v7496, %v7497 : tensor<192xf32>
     %v7499 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7500 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7501 = stablehlo.multiply %v7499, %b6ebtv : tensor<192xf32>
-    %v7502 = stablehlo.multiply %v3876, %v3876 : tensor<192xf32>
+    %v7502 = stablehlo.multiply %armeanb6ebt, %armeanb6ebt : tensor<192xf32>
     %v7503 = stablehlo.multiply %v7500, %v7502 : tensor<192xf32>
     %v7504 = stablehlo.add %v7501, %v7503 : tensor<192xf32>
     %v7505 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7506 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7507 = stablehlo.multiply %v7505, %b6ebtm : tensor<192xf32>
-    %v7508 = stablehlo.multiply %v7506, %v3876 : tensor<192xf32>
+    %v7508 = stablehlo.multiply %v7506, %armeanb6ebt : tensor<192xf32>
     %v7509 = stablehlo.add %v7507, %v7508 : tensor<192xf32>
     %v7510 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7511 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7512 = stablehlo.multiply %v7510, %b6ebtv : tensor<192xf32>
-    %v7513 = stablehlo.multiply %v3876, %v3876 : tensor<192xf32>
+    %v7513 = stablehlo.multiply %armeanb6ebt, %armeanb6ebt : tensor<192xf32>
     %v7514 = stablehlo.multiply %v7511, %v7513 : tensor<192xf32>
     %v7515 = stablehlo.add %v7512, %v7514 : tensor<192xf32>
     %v7516 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -8021,26 +8363,33 @@ module @m {
     %v7528 = stablehlo.multiply %v7527, %v7520 : tensor<192xf32>
     %v7529 = stablehlo.multiply %v7528, %b6ebt : tensor<192xf32>
     %v7530 = stablehlo.subtract %v7526, %v7529 : tensor<192xf32>
+    %arsumb6dW = "stablehlo.all_reduce"(%v3882) ({
+    ^bb0(%arab6dW: tensor<f32>, %arbb6dW: tensor<f32>):
+      %araddb6dW = stablehlo.add %arab6dW, %arbb6dW : tensor<f32>
+      stablehlo.return %araddb6dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192x1x3x3xf32>) -> tensor<192x1x3x3xf32>
+    %arnb6dW = stablehlo.constant dense<4.0> : tensor<192x1x3x3xf32>
+    %armeanb6dW = stablehlo.divide %arsumb6dW, %arnb6dW : tensor<192x1x3x3xf32>
     %v7531 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7532 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7533 = stablehlo.multiply %v7531, %b6dWm : tensor<192x1x3x3xf32>
-    %v7534 = stablehlo.multiply %v7532, %v3882 : tensor<192x1x3x3xf32>
+    %v7534 = stablehlo.multiply %v7532, %armeanb6dW : tensor<192x1x3x3xf32>
     %v7535 = stablehlo.add %v7533, %v7534 : tensor<192x1x3x3xf32>
     %v7536 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7537 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7538 = stablehlo.multiply %v7536, %b6dWv : tensor<192x1x3x3xf32>
-    %v7539 = stablehlo.multiply %v3882, %v3882 : tensor<192x1x3x3xf32>
+    %v7539 = stablehlo.multiply %armeanb6dW, %armeanb6dW : tensor<192x1x3x3xf32>
     %v7540 = stablehlo.multiply %v7537, %v7539 : tensor<192x1x3x3xf32>
     %v7541 = stablehlo.add %v7538, %v7540 : tensor<192x1x3x3xf32>
     %v7542 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7543 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7544 = stablehlo.multiply %v7542, %b6dWm : tensor<192x1x3x3xf32>
-    %v7545 = stablehlo.multiply %v7543, %v3882 : tensor<192x1x3x3xf32>
+    %v7545 = stablehlo.multiply %v7543, %armeanb6dW : tensor<192x1x3x3xf32>
     %v7546 = stablehlo.add %v7544, %v7545 : tensor<192x1x3x3xf32>
     %v7547 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7548 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7549 = stablehlo.multiply %v7547, %b6dWv : tensor<192x1x3x3xf32>
-    %v7550 = stablehlo.multiply %v3882, %v3882 : tensor<192x1x3x3xf32>
+    %v7550 = stablehlo.multiply %armeanb6dW, %armeanb6dW : tensor<192x1x3x3xf32>
     %v7551 = stablehlo.multiply %v7548, %v7550 : tensor<192x1x3x3xf32>
     %v7552 = stablehlo.add %v7549, %v7551 : tensor<192x1x3x3xf32>
     %v7553 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
@@ -8058,26 +8407,33 @@ module @m {
     %v7565 = stablehlo.multiply %v7564, %v7557 : tensor<192x1x3x3xf32>
     %v7566 = stablehlo.multiply %v7565, %b6dW : tensor<192x1x3x3xf32>
     %v7567 = stablehlo.subtract %v7563, %v7566 : tensor<192x1x3x3xf32>
+    %arsumb6dg = "stablehlo.all_reduce"(%v3900) ({
+    ^bb0(%arab6dg: tensor<f32>, %arbb6dg: tensor<f32>):
+      %araddb6dg = stablehlo.add %arab6dg, %arbb6dg : tensor<f32>
+      stablehlo.return %araddb6dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb6dg = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb6dg = stablehlo.divide %arsumb6dg, %arnb6dg : tensor<192xf32>
     %v7568 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7569 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7570 = stablehlo.multiply %v7568, %b6dgm : tensor<192xf32>
-    %v7571 = stablehlo.multiply %v7569, %v3900 : tensor<192xf32>
+    %v7571 = stablehlo.multiply %v7569, %armeanb6dg : tensor<192xf32>
     %v7572 = stablehlo.add %v7570, %v7571 : tensor<192xf32>
     %v7573 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7574 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7575 = stablehlo.multiply %v7573, %b6dgv : tensor<192xf32>
-    %v7576 = stablehlo.multiply %v3900, %v3900 : tensor<192xf32>
+    %v7576 = stablehlo.multiply %armeanb6dg, %armeanb6dg : tensor<192xf32>
     %v7577 = stablehlo.multiply %v7574, %v7576 : tensor<192xf32>
     %v7578 = stablehlo.add %v7575, %v7577 : tensor<192xf32>
     %v7579 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7580 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7581 = stablehlo.multiply %v7579, %b6dgm : tensor<192xf32>
-    %v7582 = stablehlo.multiply %v7580, %v3900 : tensor<192xf32>
+    %v7582 = stablehlo.multiply %v7580, %armeanb6dg : tensor<192xf32>
     %v7583 = stablehlo.add %v7581, %v7582 : tensor<192xf32>
     %v7584 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7585 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7586 = stablehlo.multiply %v7584, %b6dgv : tensor<192xf32>
-    %v7587 = stablehlo.multiply %v3900, %v3900 : tensor<192xf32>
+    %v7587 = stablehlo.multiply %armeanb6dg, %armeanb6dg : tensor<192xf32>
     %v7588 = stablehlo.multiply %v7585, %v7587 : tensor<192xf32>
     %v7589 = stablehlo.add %v7586, %v7588 : tensor<192xf32>
     %v7590 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -8095,26 +8451,33 @@ module @m {
     %v7602 = stablehlo.multiply %v7601, %v7594 : tensor<192xf32>
     %v7603 = stablehlo.multiply %v7602, %b6dg : tensor<192xf32>
     %v7604 = stablehlo.subtract %v7600, %v7603 : tensor<192xf32>
+    %arsumb6dbt = "stablehlo.all_reduce"(%v3903) ({
+    ^bb0(%arab6dbt: tensor<f32>, %arbb6dbt: tensor<f32>):
+      %araddb6dbt = stablehlo.add %arab6dbt, %arbb6dbt : tensor<f32>
+      stablehlo.return %araddb6dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb6dbt = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb6dbt = stablehlo.divide %arsumb6dbt, %arnb6dbt : tensor<192xf32>
     %v7605 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7606 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7607 = stablehlo.multiply %v7605, %b6dbtm : tensor<192xf32>
-    %v7608 = stablehlo.multiply %v7606, %v3903 : tensor<192xf32>
+    %v7608 = stablehlo.multiply %v7606, %armeanb6dbt : tensor<192xf32>
     %v7609 = stablehlo.add %v7607, %v7608 : tensor<192xf32>
     %v7610 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7611 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7612 = stablehlo.multiply %v7610, %b6dbtv : tensor<192xf32>
-    %v7613 = stablehlo.multiply %v3903, %v3903 : tensor<192xf32>
+    %v7613 = stablehlo.multiply %armeanb6dbt, %armeanb6dbt : tensor<192xf32>
     %v7614 = stablehlo.multiply %v7611, %v7613 : tensor<192xf32>
     %v7615 = stablehlo.add %v7612, %v7614 : tensor<192xf32>
     %v7616 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7617 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7618 = stablehlo.multiply %v7616, %b6dbtm : tensor<192xf32>
-    %v7619 = stablehlo.multiply %v7617, %v3903 : tensor<192xf32>
+    %v7619 = stablehlo.multiply %v7617, %armeanb6dbt : tensor<192xf32>
     %v7620 = stablehlo.add %v7618, %v7619 : tensor<192xf32>
     %v7621 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7622 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7623 = stablehlo.multiply %v7621, %b6dbtv : tensor<192xf32>
-    %v7624 = stablehlo.multiply %v3903, %v3903 : tensor<192xf32>
+    %v7624 = stablehlo.multiply %armeanb6dbt, %armeanb6dbt : tensor<192xf32>
     %v7625 = stablehlo.multiply %v7622, %v7624 : tensor<192xf32>
     %v7626 = stablehlo.add %v7623, %v7625 : tensor<192xf32>
     %v7627 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -8132,26 +8495,33 @@ module @m {
     %v7639 = stablehlo.multiply %v7638, %v7631 : tensor<192xf32>
     %v7640 = stablehlo.multiply %v7639, %b6dbt : tensor<192xf32>
     %v7641 = stablehlo.subtract %v7637, %v7640 : tensor<192xf32>
+    %arsumb6pW = "stablehlo.all_reduce"(%v3909) ({
+    ^bb0(%arab6pW: tensor<f32>, %arbb6pW: tensor<f32>):
+      %araddb6pW = stablehlo.add %arab6pW, %arbb6pW : tensor<f32>
+      stablehlo.return %araddb6pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32x192x1x1xf32>) -> tensor<32x192x1x1xf32>
+    %arnb6pW = stablehlo.constant dense<4.0> : tensor<32x192x1x1xf32>
+    %armeanb6pW = stablehlo.divide %arsumb6pW, %arnb6pW : tensor<32x192x1x1xf32>
     %v7642 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7643 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7644 = stablehlo.multiply %v7642, %b6pWm : tensor<32x192x1x1xf32>
-    %v7645 = stablehlo.multiply %v7643, %v3909 : tensor<32x192x1x1xf32>
+    %v7645 = stablehlo.multiply %v7643, %armeanb6pW : tensor<32x192x1x1xf32>
     %v7646 = stablehlo.add %v7644, %v7645 : tensor<32x192x1x1xf32>
     %v7647 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7648 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7649 = stablehlo.multiply %v7647, %b6pWv : tensor<32x192x1x1xf32>
-    %v7650 = stablehlo.multiply %v3909, %v3909 : tensor<32x192x1x1xf32>
+    %v7650 = stablehlo.multiply %armeanb6pW, %armeanb6pW : tensor<32x192x1x1xf32>
     %v7651 = stablehlo.multiply %v7648, %v7650 : tensor<32x192x1x1xf32>
     %v7652 = stablehlo.add %v7649, %v7651 : tensor<32x192x1x1xf32>
     %v7653 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7654 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7655 = stablehlo.multiply %v7653, %b6pWm : tensor<32x192x1x1xf32>
-    %v7656 = stablehlo.multiply %v7654, %v3909 : tensor<32x192x1x1xf32>
+    %v7656 = stablehlo.multiply %v7654, %armeanb6pW : tensor<32x192x1x1xf32>
     %v7657 = stablehlo.add %v7655, %v7656 : tensor<32x192x1x1xf32>
     %v7658 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7659 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
     %v7660 = stablehlo.multiply %v7658, %b6pWv : tensor<32x192x1x1xf32>
-    %v7661 = stablehlo.multiply %v3909, %v3909 : tensor<32x192x1x1xf32>
+    %v7661 = stablehlo.multiply %armeanb6pW, %armeanb6pW : tensor<32x192x1x1xf32>
     %v7662 = stablehlo.multiply %v7659, %v7661 : tensor<32x192x1x1xf32>
     %v7663 = stablehlo.add %v7660, %v7662 : tensor<32x192x1x1xf32>
     %v7664 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32x192x1x1xf32>
@@ -8169,26 +8539,33 @@ module @m {
     %v7676 = stablehlo.multiply %v7675, %v7668 : tensor<32x192x1x1xf32>
     %v7677 = stablehlo.multiply %v7676, %b6pW : tensor<32x192x1x1xf32>
     %v7678 = stablehlo.subtract %v7674, %v7677 : tensor<32x192x1x1xf32>
+    %arsumb6pg = "stablehlo.all_reduce"(%v3927) ({
+    ^bb0(%arab6pg: tensor<f32>, %arbb6pg: tensor<f32>):
+      %araddb6pg = stablehlo.add %arab6pg, %arbb6pg : tensor<f32>
+      stablehlo.return %araddb6pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnb6pg = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeanb6pg = stablehlo.divide %arsumb6pg, %arnb6pg : tensor<32xf32>
     %v7679 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7680 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7681 = stablehlo.multiply %v7679, %b6pgm : tensor<32xf32>
-    %v7682 = stablehlo.multiply %v7680, %v3927 : tensor<32xf32>
+    %v7682 = stablehlo.multiply %v7680, %armeanb6pg : tensor<32xf32>
     %v7683 = stablehlo.add %v7681, %v7682 : tensor<32xf32>
     %v7684 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7685 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7686 = stablehlo.multiply %v7684, %b6pgv : tensor<32xf32>
-    %v7687 = stablehlo.multiply %v3927, %v3927 : tensor<32xf32>
+    %v7687 = stablehlo.multiply %armeanb6pg, %armeanb6pg : tensor<32xf32>
     %v7688 = stablehlo.multiply %v7685, %v7687 : tensor<32xf32>
     %v7689 = stablehlo.add %v7686, %v7688 : tensor<32xf32>
     %v7690 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7691 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7692 = stablehlo.multiply %v7690, %b6pgm : tensor<32xf32>
-    %v7693 = stablehlo.multiply %v7691, %v3927 : tensor<32xf32>
+    %v7693 = stablehlo.multiply %v7691, %armeanb6pg : tensor<32xf32>
     %v7694 = stablehlo.add %v7692, %v7693 : tensor<32xf32>
     %v7695 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7696 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7697 = stablehlo.multiply %v7695, %b6pgv : tensor<32xf32>
-    %v7698 = stablehlo.multiply %v3927, %v3927 : tensor<32xf32>
+    %v7698 = stablehlo.multiply %armeanb6pg, %armeanb6pg : tensor<32xf32>
     %v7699 = stablehlo.multiply %v7696, %v7698 : tensor<32xf32>
     %v7700 = stablehlo.add %v7697, %v7699 : tensor<32xf32>
     %v7701 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -8206,26 +8583,33 @@ module @m {
     %v7713 = stablehlo.multiply %v7712, %v7705 : tensor<32xf32>
     %v7714 = stablehlo.multiply %v7713, %b6pg : tensor<32xf32>
     %v7715 = stablehlo.subtract %v7711, %v7714 : tensor<32xf32>
+    %arsumb6pbt = "stablehlo.all_reduce"(%v3930) ({
+    ^bb0(%arab6pbt: tensor<f32>, %arbb6pbt: tensor<f32>):
+      %araddb6pbt = stablehlo.add %arab6pbt, %arbb6pbt : tensor<f32>
+      stablehlo.return %araddb6pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<32xf32>) -> tensor<32xf32>
+    %arnb6pbt = stablehlo.constant dense<4.0> : tensor<32xf32>
+    %armeanb6pbt = stablehlo.divide %arsumb6pbt, %arnb6pbt : tensor<32xf32>
     %v7716 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7717 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7718 = stablehlo.multiply %v7716, %b6pbtm : tensor<32xf32>
-    %v7719 = stablehlo.multiply %v7717, %v3930 : tensor<32xf32>
+    %v7719 = stablehlo.multiply %v7717, %armeanb6pbt : tensor<32xf32>
     %v7720 = stablehlo.add %v7718, %v7719 : tensor<32xf32>
     %v7721 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7722 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7723 = stablehlo.multiply %v7721, %b6pbtv : tensor<32xf32>
-    %v7724 = stablehlo.multiply %v3930, %v3930 : tensor<32xf32>
+    %v7724 = stablehlo.multiply %armeanb6pbt, %armeanb6pbt : tensor<32xf32>
     %v7725 = stablehlo.multiply %v7722, %v7724 : tensor<32xf32>
     %v7726 = stablehlo.add %v7723, %v7725 : tensor<32xf32>
     %v7727 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7728 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7729 = stablehlo.multiply %v7727, %b6pbtm : tensor<32xf32>
-    %v7730 = stablehlo.multiply %v7728, %v3930 : tensor<32xf32>
+    %v7730 = stablehlo.multiply %v7728, %armeanb6pbt : tensor<32xf32>
     %v7731 = stablehlo.add %v7729, %v7730 : tensor<32xf32>
     %v7732 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7733 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<32xf32>
     %v7734 = stablehlo.multiply %v7732, %b6pbtv : tensor<32xf32>
-    %v7735 = stablehlo.multiply %v3930, %v3930 : tensor<32xf32>
+    %v7735 = stablehlo.multiply %armeanb6pbt, %armeanb6pbt : tensor<32xf32>
     %v7736 = stablehlo.multiply %v7733, %v7735 : tensor<32xf32>
     %v7737 = stablehlo.add %v7734, %v7736 : tensor<32xf32>
     %v7738 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<32xf32>
@@ -8243,26 +8627,33 @@ module @m {
     %v7750 = stablehlo.multiply %v7749, %v7742 : tensor<32xf32>
     %v7751 = stablehlo.multiply %v7750, %b6pbt : tensor<32xf32>
     %v7752 = stablehlo.subtract %v7748, %v7751 : tensor<32xf32>
+    %arsumb7eW = "stablehlo.all_reduce"(%v3655) ({
+    ^bb0(%arab7eW: tensor<f32>, %arbb7eW: tensor<f32>):
+      %araddb7eW = stablehlo.add %arab7eW, %arbb7eW : tensor<f32>
+      stablehlo.return %araddb7eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192x32x1x1xf32>) -> tensor<192x32x1x1xf32>
+    %arnb7eW = stablehlo.constant dense<4.0> : tensor<192x32x1x1xf32>
+    %armeanb7eW = stablehlo.divide %arsumb7eW, %arnb7eW : tensor<192x32x1x1xf32>
     %v7753 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7754 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7755 = stablehlo.multiply %v7753, %b7eWm : tensor<192x32x1x1xf32>
-    %v7756 = stablehlo.multiply %v7754, %v3655 : tensor<192x32x1x1xf32>
+    %v7756 = stablehlo.multiply %v7754, %armeanb7eW : tensor<192x32x1x1xf32>
     %v7757 = stablehlo.add %v7755, %v7756 : tensor<192x32x1x1xf32>
     %v7758 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7759 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7760 = stablehlo.multiply %v7758, %b7eWv : tensor<192x32x1x1xf32>
-    %v7761 = stablehlo.multiply %v3655, %v3655 : tensor<192x32x1x1xf32>
+    %v7761 = stablehlo.multiply %armeanb7eW, %armeanb7eW : tensor<192x32x1x1xf32>
     %v7762 = stablehlo.multiply %v7759, %v7761 : tensor<192x32x1x1xf32>
     %v7763 = stablehlo.add %v7760, %v7762 : tensor<192x32x1x1xf32>
     %v7764 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7765 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7766 = stablehlo.multiply %v7764, %b7eWm : tensor<192x32x1x1xf32>
-    %v7767 = stablehlo.multiply %v7765, %v3655 : tensor<192x32x1x1xf32>
+    %v7767 = stablehlo.multiply %v7765, %armeanb7eW : tensor<192x32x1x1xf32>
     %v7768 = stablehlo.add %v7766, %v7767 : tensor<192x32x1x1xf32>
     %v7769 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7770 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
     %v7771 = stablehlo.multiply %v7769, %b7eWv : tensor<192x32x1x1xf32>
-    %v7772 = stablehlo.multiply %v3655, %v3655 : tensor<192x32x1x1xf32>
+    %v7772 = stablehlo.multiply %armeanb7eW, %armeanb7eW : tensor<192x32x1x1xf32>
     %v7773 = stablehlo.multiply %v7770, %v7772 : tensor<192x32x1x1xf32>
     %v7774 = stablehlo.add %v7771, %v7773 : tensor<192x32x1x1xf32>
     %v7775 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192x32x1x1xf32>
@@ -8280,26 +8671,33 @@ module @m {
     %v7787 = stablehlo.multiply %v7786, %v7779 : tensor<192x32x1x1xf32>
     %v7788 = stablehlo.multiply %v7787, %b7eW : tensor<192x32x1x1xf32>
     %v7789 = stablehlo.subtract %v7785, %v7788 : tensor<192x32x1x1xf32>
+    %arsumb7eg = "stablehlo.all_reduce"(%v3673) ({
+    ^bb0(%arab7eg: tensor<f32>, %arbb7eg: tensor<f32>):
+      %araddb7eg = stablehlo.add %arab7eg, %arbb7eg : tensor<f32>
+      stablehlo.return %araddb7eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb7eg = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb7eg = stablehlo.divide %arsumb7eg, %arnb7eg : tensor<192xf32>
     %v7790 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7791 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7792 = stablehlo.multiply %v7790, %b7egm : tensor<192xf32>
-    %v7793 = stablehlo.multiply %v7791, %v3673 : tensor<192xf32>
+    %v7793 = stablehlo.multiply %v7791, %armeanb7eg : tensor<192xf32>
     %v7794 = stablehlo.add %v7792, %v7793 : tensor<192xf32>
     %v7795 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7796 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7797 = stablehlo.multiply %v7795, %b7egv : tensor<192xf32>
-    %v7798 = stablehlo.multiply %v3673, %v3673 : tensor<192xf32>
+    %v7798 = stablehlo.multiply %armeanb7eg, %armeanb7eg : tensor<192xf32>
     %v7799 = stablehlo.multiply %v7796, %v7798 : tensor<192xf32>
     %v7800 = stablehlo.add %v7797, %v7799 : tensor<192xf32>
     %v7801 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7802 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7803 = stablehlo.multiply %v7801, %b7egm : tensor<192xf32>
-    %v7804 = stablehlo.multiply %v7802, %v3673 : tensor<192xf32>
+    %v7804 = stablehlo.multiply %v7802, %armeanb7eg : tensor<192xf32>
     %v7805 = stablehlo.add %v7803, %v7804 : tensor<192xf32>
     %v7806 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7807 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7808 = stablehlo.multiply %v7806, %b7egv : tensor<192xf32>
-    %v7809 = stablehlo.multiply %v3673, %v3673 : tensor<192xf32>
+    %v7809 = stablehlo.multiply %armeanb7eg, %armeanb7eg : tensor<192xf32>
     %v7810 = stablehlo.multiply %v7807, %v7809 : tensor<192xf32>
     %v7811 = stablehlo.add %v7808, %v7810 : tensor<192xf32>
     %v7812 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -8317,26 +8715,33 @@ module @m {
     %v7824 = stablehlo.multiply %v7823, %v7816 : tensor<192xf32>
     %v7825 = stablehlo.multiply %v7824, %b7eg : tensor<192xf32>
     %v7826 = stablehlo.subtract %v7822, %v7825 : tensor<192xf32>
+    %arsumb7ebt = "stablehlo.all_reduce"(%v3676) ({
+    ^bb0(%arab7ebt: tensor<f32>, %arbb7ebt: tensor<f32>):
+      %araddb7ebt = stablehlo.add %arab7ebt, %arbb7ebt : tensor<f32>
+      stablehlo.return %araddb7ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb7ebt = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb7ebt = stablehlo.divide %arsumb7ebt, %arnb7ebt : tensor<192xf32>
     %v7827 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7828 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7829 = stablehlo.multiply %v7827, %b7ebtm : tensor<192xf32>
-    %v7830 = stablehlo.multiply %v7828, %v3676 : tensor<192xf32>
+    %v7830 = stablehlo.multiply %v7828, %armeanb7ebt : tensor<192xf32>
     %v7831 = stablehlo.add %v7829, %v7830 : tensor<192xf32>
     %v7832 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7833 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7834 = stablehlo.multiply %v7832, %b7ebtv : tensor<192xf32>
-    %v7835 = stablehlo.multiply %v3676, %v3676 : tensor<192xf32>
+    %v7835 = stablehlo.multiply %armeanb7ebt, %armeanb7ebt : tensor<192xf32>
     %v7836 = stablehlo.multiply %v7833, %v7835 : tensor<192xf32>
     %v7837 = stablehlo.add %v7834, %v7836 : tensor<192xf32>
     %v7838 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7839 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7840 = stablehlo.multiply %v7838, %b7ebtm : tensor<192xf32>
-    %v7841 = stablehlo.multiply %v7839, %v3676 : tensor<192xf32>
+    %v7841 = stablehlo.multiply %v7839, %armeanb7ebt : tensor<192xf32>
     %v7842 = stablehlo.add %v7840, %v7841 : tensor<192xf32>
     %v7843 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7844 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7845 = stablehlo.multiply %v7843, %b7ebtv : tensor<192xf32>
-    %v7846 = stablehlo.multiply %v3676, %v3676 : tensor<192xf32>
+    %v7846 = stablehlo.multiply %armeanb7ebt, %armeanb7ebt : tensor<192xf32>
     %v7847 = stablehlo.multiply %v7844, %v7846 : tensor<192xf32>
     %v7848 = stablehlo.add %v7845, %v7847 : tensor<192xf32>
     %v7849 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -8354,26 +8759,33 @@ module @m {
     %v7861 = stablehlo.multiply %v7860, %v7853 : tensor<192xf32>
     %v7862 = stablehlo.multiply %v7861, %b7ebt : tensor<192xf32>
     %v7863 = stablehlo.subtract %v7859, %v7862 : tensor<192xf32>
+    %arsumb7dW = "stablehlo.all_reduce"(%v3684) ({
+    ^bb0(%arab7dW: tensor<f32>, %arbb7dW: tensor<f32>):
+      %araddb7dW = stablehlo.add %arab7dW, %arbb7dW : tensor<f32>
+      stablehlo.return %araddb7dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192x1x3x3xf32>) -> tensor<192x1x3x3xf32>
+    %arnb7dW = stablehlo.constant dense<4.0> : tensor<192x1x3x3xf32>
+    %armeanb7dW = stablehlo.divide %arsumb7dW, %arnb7dW : tensor<192x1x3x3xf32>
     %v7864 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7865 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7866 = stablehlo.multiply %v7864, %b7dWm : tensor<192x1x3x3xf32>
-    %v7867 = stablehlo.multiply %v7865, %v3684 : tensor<192x1x3x3xf32>
+    %v7867 = stablehlo.multiply %v7865, %armeanb7dW : tensor<192x1x3x3xf32>
     %v7868 = stablehlo.add %v7866, %v7867 : tensor<192x1x3x3xf32>
     %v7869 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7870 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7871 = stablehlo.multiply %v7869, %b7dWv : tensor<192x1x3x3xf32>
-    %v7872 = stablehlo.multiply %v3684, %v3684 : tensor<192x1x3x3xf32>
+    %v7872 = stablehlo.multiply %armeanb7dW, %armeanb7dW : tensor<192x1x3x3xf32>
     %v7873 = stablehlo.multiply %v7870, %v7872 : tensor<192x1x3x3xf32>
     %v7874 = stablehlo.add %v7871, %v7873 : tensor<192x1x3x3xf32>
     %v7875 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7876 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7877 = stablehlo.multiply %v7875, %b7dWm : tensor<192x1x3x3xf32>
-    %v7878 = stablehlo.multiply %v7876, %v3684 : tensor<192x1x3x3xf32>
+    %v7878 = stablehlo.multiply %v7876, %armeanb7dW : tensor<192x1x3x3xf32>
     %v7879 = stablehlo.add %v7877, %v7878 : tensor<192x1x3x3xf32>
     %v7880 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7881 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
     %v7882 = stablehlo.multiply %v7880, %b7dWv : tensor<192x1x3x3xf32>
-    %v7883 = stablehlo.multiply %v3684, %v3684 : tensor<192x1x3x3xf32>
+    %v7883 = stablehlo.multiply %armeanb7dW, %armeanb7dW : tensor<192x1x3x3xf32>
     %v7884 = stablehlo.multiply %v7881, %v7883 : tensor<192x1x3x3xf32>
     %v7885 = stablehlo.add %v7882, %v7884 : tensor<192x1x3x3xf32>
     %v7886 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192x1x3x3xf32>
@@ -8391,26 +8803,33 @@ module @m {
     %v7898 = stablehlo.multiply %v7897, %v7890 : tensor<192x1x3x3xf32>
     %v7899 = stablehlo.multiply %v7898, %b7dW : tensor<192x1x3x3xf32>
     %v7900 = stablehlo.subtract %v7896, %v7899 : tensor<192x1x3x3xf32>
+    %arsumb7dg = "stablehlo.all_reduce"(%v3702) ({
+    ^bb0(%arab7dg: tensor<f32>, %arbb7dg: tensor<f32>):
+      %araddb7dg = stablehlo.add %arab7dg, %arbb7dg : tensor<f32>
+      stablehlo.return %araddb7dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb7dg = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb7dg = stablehlo.divide %arsumb7dg, %arnb7dg : tensor<192xf32>
     %v7901 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7902 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7903 = stablehlo.multiply %v7901, %b7dgm : tensor<192xf32>
-    %v7904 = stablehlo.multiply %v7902, %v3702 : tensor<192xf32>
+    %v7904 = stablehlo.multiply %v7902, %armeanb7dg : tensor<192xf32>
     %v7905 = stablehlo.add %v7903, %v7904 : tensor<192xf32>
     %v7906 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7907 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7908 = stablehlo.multiply %v7906, %b7dgv : tensor<192xf32>
-    %v7909 = stablehlo.multiply %v3702, %v3702 : tensor<192xf32>
+    %v7909 = stablehlo.multiply %armeanb7dg, %armeanb7dg : tensor<192xf32>
     %v7910 = stablehlo.multiply %v7907, %v7909 : tensor<192xf32>
     %v7911 = stablehlo.add %v7908, %v7910 : tensor<192xf32>
     %v7912 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7913 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7914 = stablehlo.multiply %v7912, %b7dgm : tensor<192xf32>
-    %v7915 = stablehlo.multiply %v7913, %v3702 : tensor<192xf32>
+    %v7915 = stablehlo.multiply %v7913, %armeanb7dg : tensor<192xf32>
     %v7916 = stablehlo.add %v7914, %v7915 : tensor<192xf32>
     %v7917 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7918 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7919 = stablehlo.multiply %v7917, %b7dgv : tensor<192xf32>
-    %v7920 = stablehlo.multiply %v3702, %v3702 : tensor<192xf32>
+    %v7920 = stablehlo.multiply %armeanb7dg, %armeanb7dg : tensor<192xf32>
     %v7921 = stablehlo.multiply %v7918, %v7920 : tensor<192xf32>
     %v7922 = stablehlo.add %v7919, %v7921 : tensor<192xf32>
     %v7923 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -8428,26 +8847,33 @@ module @m {
     %v7935 = stablehlo.multiply %v7934, %v7927 : tensor<192xf32>
     %v7936 = stablehlo.multiply %v7935, %b7dg : tensor<192xf32>
     %v7937 = stablehlo.subtract %v7933, %v7936 : tensor<192xf32>
+    %arsumb7dbt = "stablehlo.all_reduce"(%v3705) ({
+    ^bb0(%arab7dbt: tensor<f32>, %arbb7dbt: tensor<f32>):
+      %araddb7dbt = stablehlo.add %arab7dbt, %arbb7dbt : tensor<f32>
+      stablehlo.return %araddb7dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<192xf32>) -> tensor<192xf32>
+    %arnb7dbt = stablehlo.constant dense<4.0> : tensor<192xf32>
+    %armeanb7dbt = stablehlo.divide %arsumb7dbt, %arnb7dbt : tensor<192xf32>
     %v7938 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7939 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7940 = stablehlo.multiply %v7938, %b7dbtm : tensor<192xf32>
-    %v7941 = stablehlo.multiply %v7939, %v3705 : tensor<192xf32>
+    %v7941 = stablehlo.multiply %v7939, %armeanb7dbt : tensor<192xf32>
     %v7942 = stablehlo.add %v7940, %v7941 : tensor<192xf32>
     %v7943 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7944 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7945 = stablehlo.multiply %v7943, %b7dbtv : tensor<192xf32>
-    %v7946 = stablehlo.multiply %v3705, %v3705 : tensor<192xf32>
+    %v7946 = stablehlo.multiply %armeanb7dbt, %armeanb7dbt : tensor<192xf32>
     %v7947 = stablehlo.multiply %v7944, %v7946 : tensor<192xf32>
     %v7948 = stablehlo.add %v7945, %v7947 : tensor<192xf32>
     %v7949 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7950 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7951 = stablehlo.multiply %v7949, %b7dbtm : tensor<192xf32>
-    %v7952 = stablehlo.multiply %v7950, %v3705 : tensor<192xf32>
+    %v7952 = stablehlo.multiply %v7950, %armeanb7dbt : tensor<192xf32>
     %v7953 = stablehlo.add %v7951, %v7952 : tensor<192xf32>
     %v7954 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7955 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<192xf32>
     %v7956 = stablehlo.multiply %v7954, %b7dbtv : tensor<192xf32>
-    %v7957 = stablehlo.multiply %v3705, %v3705 : tensor<192xf32>
+    %v7957 = stablehlo.multiply %armeanb7dbt, %armeanb7dbt : tensor<192xf32>
     %v7958 = stablehlo.multiply %v7955, %v7957 : tensor<192xf32>
     %v7959 = stablehlo.add %v7956, %v7958 : tensor<192xf32>
     %v7960 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<192xf32>
@@ -8465,26 +8891,33 @@ module @m {
     %v7972 = stablehlo.multiply %v7971, %v7964 : tensor<192xf32>
     %v7973 = stablehlo.multiply %v7972, %b7dbt : tensor<192xf32>
     %v7974 = stablehlo.subtract %v7970, %v7973 : tensor<192xf32>
+    %arsumb7pW = "stablehlo.all_reduce"(%v3711) ({
+    ^bb0(%arab7pW: tensor<f32>, %arbb7pW: tensor<f32>):
+      %araddb7pW = stablehlo.add %arab7pW, %arbb7pW : tensor<f32>
+      stablehlo.return %araddb7pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64x192x1x1xf32>) -> tensor<64x192x1x1xf32>
+    %arnb7pW = stablehlo.constant dense<4.0> : tensor<64x192x1x1xf32>
+    %armeanb7pW = stablehlo.divide %arsumb7pW, %arnb7pW : tensor<64x192x1x1xf32>
     %v7975 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
     %v7976 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
     %v7977 = stablehlo.multiply %v7975, %b7pWm : tensor<64x192x1x1xf32>
-    %v7978 = stablehlo.multiply %v7976, %v3711 : tensor<64x192x1x1xf32>
+    %v7978 = stablehlo.multiply %v7976, %armeanb7pW : tensor<64x192x1x1xf32>
     %v7979 = stablehlo.add %v7977, %v7978 : tensor<64x192x1x1xf32>
     %v7980 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
     %v7981 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
     %v7982 = stablehlo.multiply %v7980, %b7pWv : tensor<64x192x1x1xf32>
-    %v7983 = stablehlo.multiply %v3711, %v3711 : tensor<64x192x1x1xf32>
+    %v7983 = stablehlo.multiply %armeanb7pW, %armeanb7pW : tensor<64x192x1x1xf32>
     %v7984 = stablehlo.multiply %v7981, %v7983 : tensor<64x192x1x1xf32>
     %v7985 = stablehlo.add %v7982, %v7984 : tensor<64x192x1x1xf32>
     %v7986 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
     %v7987 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
     %v7988 = stablehlo.multiply %v7986, %b7pWm : tensor<64x192x1x1xf32>
-    %v7989 = stablehlo.multiply %v7987, %v3711 : tensor<64x192x1x1xf32>
+    %v7989 = stablehlo.multiply %v7987, %armeanb7pW : tensor<64x192x1x1xf32>
     %v7990 = stablehlo.add %v7988, %v7989 : tensor<64x192x1x1xf32>
     %v7991 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
     %v7992 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
     %v7993 = stablehlo.multiply %v7991, %b7pWv : tensor<64x192x1x1xf32>
-    %v7994 = stablehlo.multiply %v3711, %v3711 : tensor<64x192x1x1xf32>
+    %v7994 = stablehlo.multiply %armeanb7pW, %armeanb7pW : tensor<64x192x1x1xf32>
     %v7995 = stablehlo.multiply %v7992, %v7994 : tensor<64x192x1x1xf32>
     %v7996 = stablehlo.add %v7993, %v7995 : tensor<64x192x1x1xf32>
     %v7997 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64x192x1x1xf32>
@@ -8502,26 +8935,33 @@ module @m {
     %v8009 = stablehlo.multiply %v8008, %v8001 : tensor<64x192x1x1xf32>
     %v8010 = stablehlo.multiply %v8009, %b7pW : tensor<64x192x1x1xf32>
     %v8011 = stablehlo.subtract %v8007, %v8010 : tensor<64x192x1x1xf32>
+    %arsumb7pg = "stablehlo.all_reduce"(%v3729) ({
+    ^bb0(%arab7pg: tensor<f32>, %arbb7pg: tensor<f32>):
+      %araddb7pg = stablehlo.add %arab7pg, %arbb7pg : tensor<f32>
+      stablehlo.return %araddb7pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64xf32>) -> tensor<64xf32>
+    %arnb7pg = stablehlo.constant dense<4.0> : tensor<64xf32>
+    %armeanb7pg = stablehlo.divide %arsumb7pg, %arnb7pg : tensor<64xf32>
     %v8012 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8013 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8014 = stablehlo.multiply %v8012, %b7pgm : tensor<64xf32>
-    %v8015 = stablehlo.multiply %v8013, %v3729 : tensor<64xf32>
+    %v8015 = stablehlo.multiply %v8013, %armeanb7pg : tensor<64xf32>
     %v8016 = stablehlo.add %v8014, %v8015 : tensor<64xf32>
     %v8017 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8018 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8019 = stablehlo.multiply %v8017, %b7pgv : tensor<64xf32>
-    %v8020 = stablehlo.multiply %v3729, %v3729 : tensor<64xf32>
+    %v8020 = stablehlo.multiply %armeanb7pg, %armeanb7pg : tensor<64xf32>
     %v8021 = stablehlo.multiply %v8018, %v8020 : tensor<64xf32>
     %v8022 = stablehlo.add %v8019, %v8021 : tensor<64xf32>
     %v8023 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8024 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8025 = stablehlo.multiply %v8023, %b7pgm : tensor<64xf32>
-    %v8026 = stablehlo.multiply %v8024, %v3729 : tensor<64xf32>
+    %v8026 = stablehlo.multiply %v8024, %armeanb7pg : tensor<64xf32>
     %v8027 = stablehlo.add %v8025, %v8026 : tensor<64xf32>
     %v8028 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8029 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8030 = stablehlo.multiply %v8028, %b7pgv : tensor<64xf32>
-    %v8031 = stablehlo.multiply %v3729, %v3729 : tensor<64xf32>
+    %v8031 = stablehlo.multiply %armeanb7pg, %armeanb7pg : tensor<64xf32>
     %v8032 = stablehlo.multiply %v8029, %v8031 : tensor<64xf32>
     %v8033 = stablehlo.add %v8030, %v8032 : tensor<64xf32>
     %v8034 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64xf32>
@@ -8539,26 +8979,33 @@ module @m {
     %v8046 = stablehlo.multiply %v8045, %v8038 : tensor<64xf32>
     %v8047 = stablehlo.multiply %v8046, %b7pg : tensor<64xf32>
     %v8048 = stablehlo.subtract %v8044, %v8047 : tensor<64xf32>
+    %arsumb7pbt = "stablehlo.all_reduce"(%v3732) ({
+    ^bb0(%arab7pbt: tensor<f32>, %arbb7pbt: tensor<f32>):
+      %araddb7pbt = stablehlo.add %arab7pbt, %arbb7pbt : tensor<f32>
+      stablehlo.return %araddb7pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64xf32>) -> tensor<64xf32>
+    %arnb7pbt = stablehlo.constant dense<4.0> : tensor<64xf32>
+    %armeanb7pbt = stablehlo.divide %arsumb7pbt, %arnb7pbt : tensor<64xf32>
     %v8049 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8050 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8051 = stablehlo.multiply %v8049, %b7pbtm : tensor<64xf32>
-    %v8052 = stablehlo.multiply %v8050, %v3732 : tensor<64xf32>
+    %v8052 = stablehlo.multiply %v8050, %armeanb7pbt : tensor<64xf32>
     %v8053 = stablehlo.add %v8051, %v8052 : tensor<64xf32>
     %v8054 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8055 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8056 = stablehlo.multiply %v8054, %b7pbtv : tensor<64xf32>
-    %v8057 = stablehlo.multiply %v3732, %v3732 : tensor<64xf32>
+    %v8057 = stablehlo.multiply %armeanb7pbt, %armeanb7pbt : tensor<64xf32>
     %v8058 = stablehlo.multiply %v8055, %v8057 : tensor<64xf32>
     %v8059 = stablehlo.add %v8056, %v8058 : tensor<64xf32>
     %v8060 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8061 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8062 = stablehlo.multiply %v8060, %b7pbtm : tensor<64xf32>
-    %v8063 = stablehlo.multiply %v8061, %v3732 : tensor<64xf32>
+    %v8063 = stablehlo.multiply %v8061, %armeanb7pbt : tensor<64xf32>
     %v8064 = stablehlo.add %v8062, %v8063 : tensor<64xf32>
     %v8065 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8066 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8067 = stablehlo.multiply %v8065, %b7pbtv : tensor<64xf32>
-    %v8068 = stablehlo.multiply %v3732, %v3732 : tensor<64xf32>
+    %v8068 = stablehlo.multiply %armeanb7pbt, %armeanb7pbt : tensor<64xf32>
     %v8069 = stablehlo.multiply %v8066, %v8068 : tensor<64xf32>
     %v8070 = stablehlo.add %v8067, %v8069 : tensor<64xf32>
     %v8071 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64xf32>
@@ -8576,26 +9023,33 @@ module @m {
     %v8083 = stablehlo.multiply %v8082, %v8075 : tensor<64xf32>
     %v8084 = stablehlo.multiply %v8083, %b7pbt : tensor<64xf32>
     %v8085 = stablehlo.subtract %v8081, %v8084 : tensor<64xf32>
+    %arsumb8eW = "stablehlo.all_reduce"(%v3456) ({
+    ^bb0(%arab8eW: tensor<f32>, %arbb8eW: tensor<f32>):
+      %araddb8eW = stablehlo.add %arab8eW, %arbb8eW : tensor<f32>
+      stablehlo.return %araddb8eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384x64x1x1xf32>) -> tensor<384x64x1x1xf32>
+    %arnb8eW = stablehlo.constant dense<4.0> : tensor<384x64x1x1xf32>
+    %armeanb8eW = stablehlo.divide %arsumb8eW, %arnb8eW : tensor<384x64x1x1xf32>
     %v8086 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8087 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8088 = stablehlo.multiply %v8086, %b8eWm : tensor<384x64x1x1xf32>
-    %v8089 = stablehlo.multiply %v8087, %v3456 : tensor<384x64x1x1xf32>
+    %v8089 = stablehlo.multiply %v8087, %armeanb8eW : tensor<384x64x1x1xf32>
     %v8090 = stablehlo.add %v8088, %v8089 : tensor<384x64x1x1xf32>
     %v8091 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8092 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8093 = stablehlo.multiply %v8091, %b8eWv : tensor<384x64x1x1xf32>
-    %v8094 = stablehlo.multiply %v3456, %v3456 : tensor<384x64x1x1xf32>
+    %v8094 = stablehlo.multiply %armeanb8eW, %armeanb8eW : tensor<384x64x1x1xf32>
     %v8095 = stablehlo.multiply %v8092, %v8094 : tensor<384x64x1x1xf32>
     %v8096 = stablehlo.add %v8093, %v8095 : tensor<384x64x1x1xf32>
     %v8097 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8098 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8099 = stablehlo.multiply %v8097, %b8eWm : tensor<384x64x1x1xf32>
-    %v8100 = stablehlo.multiply %v8098, %v3456 : tensor<384x64x1x1xf32>
+    %v8100 = stablehlo.multiply %v8098, %armeanb8eW : tensor<384x64x1x1xf32>
     %v8101 = stablehlo.add %v8099, %v8100 : tensor<384x64x1x1xf32>
     %v8102 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8103 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8104 = stablehlo.multiply %v8102, %b8eWv : tensor<384x64x1x1xf32>
-    %v8105 = stablehlo.multiply %v3456, %v3456 : tensor<384x64x1x1xf32>
+    %v8105 = stablehlo.multiply %armeanb8eW, %armeanb8eW : tensor<384x64x1x1xf32>
     %v8106 = stablehlo.multiply %v8103, %v8105 : tensor<384x64x1x1xf32>
     %v8107 = stablehlo.add %v8104, %v8106 : tensor<384x64x1x1xf32>
     %v8108 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
@@ -8613,26 +9067,33 @@ module @m {
     %v8120 = stablehlo.multiply %v8119, %v8112 : tensor<384x64x1x1xf32>
     %v8121 = stablehlo.multiply %v8120, %b8eW : tensor<384x64x1x1xf32>
     %v8122 = stablehlo.subtract %v8118, %v8121 : tensor<384x64x1x1xf32>
+    %arsumb8eg = "stablehlo.all_reduce"(%v3474) ({
+    ^bb0(%arab8eg: tensor<f32>, %arbb8eg: tensor<f32>):
+      %araddb8eg = stablehlo.add %arab8eg, %arbb8eg : tensor<f32>
+      stablehlo.return %araddb8eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb8eg = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb8eg = stablehlo.divide %arsumb8eg, %arnb8eg : tensor<384xf32>
     %v8123 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8124 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8125 = stablehlo.multiply %v8123, %b8egm : tensor<384xf32>
-    %v8126 = stablehlo.multiply %v8124, %v3474 : tensor<384xf32>
+    %v8126 = stablehlo.multiply %v8124, %armeanb8eg : tensor<384xf32>
     %v8127 = stablehlo.add %v8125, %v8126 : tensor<384xf32>
     %v8128 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8129 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8130 = stablehlo.multiply %v8128, %b8egv : tensor<384xf32>
-    %v8131 = stablehlo.multiply %v3474, %v3474 : tensor<384xf32>
+    %v8131 = stablehlo.multiply %armeanb8eg, %armeanb8eg : tensor<384xf32>
     %v8132 = stablehlo.multiply %v8129, %v8131 : tensor<384xf32>
     %v8133 = stablehlo.add %v8130, %v8132 : tensor<384xf32>
     %v8134 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8135 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8136 = stablehlo.multiply %v8134, %b8egm : tensor<384xf32>
-    %v8137 = stablehlo.multiply %v8135, %v3474 : tensor<384xf32>
+    %v8137 = stablehlo.multiply %v8135, %armeanb8eg : tensor<384xf32>
     %v8138 = stablehlo.add %v8136, %v8137 : tensor<384xf32>
     %v8139 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8140 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8141 = stablehlo.multiply %v8139, %b8egv : tensor<384xf32>
-    %v8142 = stablehlo.multiply %v3474, %v3474 : tensor<384xf32>
+    %v8142 = stablehlo.multiply %armeanb8eg, %armeanb8eg : tensor<384xf32>
     %v8143 = stablehlo.multiply %v8140, %v8142 : tensor<384xf32>
     %v8144 = stablehlo.add %v8141, %v8143 : tensor<384xf32>
     %v8145 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -8650,26 +9111,33 @@ module @m {
     %v8157 = stablehlo.multiply %v8156, %v8149 : tensor<384xf32>
     %v8158 = stablehlo.multiply %v8157, %b8eg : tensor<384xf32>
     %v8159 = stablehlo.subtract %v8155, %v8158 : tensor<384xf32>
+    %arsumb8ebt = "stablehlo.all_reduce"(%v3477) ({
+    ^bb0(%arab8ebt: tensor<f32>, %arbb8ebt: tensor<f32>):
+      %araddb8ebt = stablehlo.add %arab8ebt, %arbb8ebt : tensor<f32>
+      stablehlo.return %araddb8ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb8ebt = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb8ebt = stablehlo.divide %arsumb8ebt, %arnb8ebt : tensor<384xf32>
     %v8160 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8161 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8162 = stablehlo.multiply %v8160, %b8ebtm : tensor<384xf32>
-    %v8163 = stablehlo.multiply %v8161, %v3477 : tensor<384xf32>
+    %v8163 = stablehlo.multiply %v8161, %armeanb8ebt : tensor<384xf32>
     %v8164 = stablehlo.add %v8162, %v8163 : tensor<384xf32>
     %v8165 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8166 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8167 = stablehlo.multiply %v8165, %b8ebtv : tensor<384xf32>
-    %v8168 = stablehlo.multiply %v3477, %v3477 : tensor<384xf32>
+    %v8168 = stablehlo.multiply %armeanb8ebt, %armeanb8ebt : tensor<384xf32>
     %v8169 = stablehlo.multiply %v8166, %v8168 : tensor<384xf32>
     %v8170 = stablehlo.add %v8167, %v8169 : tensor<384xf32>
     %v8171 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8172 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8173 = stablehlo.multiply %v8171, %b8ebtm : tensor<384xf32>
-    %v8174 = stablehlo.multiply %v8172, %v3477 : tensor<384xf32>
+    %v8174 = stablehlo.multiply %v8172, %armeanb8ebt : tensor<384xf32>
     %v8175 = stablehlo.add %v8173, %v8174 : tensor<384xf32>
     %v8176 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8177 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8178 = stablehlo.multiply %v8176, %b8ebtv : tensor<384xf32>
-    %v8179 = stablehlo.multiply %v3477, %v3477 : tensor<384xf32>
+    %v8179 = stablehlo.multiply %armeanb8ebt, %armeanb8ebt : tensor<384xf32>
     %v8180 = stablehlo.multiply %v8177, %v8179 : tensor<384xf32>
     %v8181 = stablehlo.add %v8178, %v8180 : tensor<384xf32>
     %v8182 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -8687,26 +9155,33 @@ module @m {
     %v8194 = stablehlo.multiply %v8193, %v8186 : tensor<384xf32>
     %v8195 = stablehlo.multiply %v8194, %b8ebt : tensor<384xf32>
     %v8196 = stablehlo.subtract %v8192, %v8195 : tensor<384xf32>
+    %arsumb8dW = "stablehlo.all_reduce"(%v3483) ({
+    ^bb0(%arab8dW: tensor<f32>, %arbb8dW: tensor<f32>):
+      %araddb8dW = stablehlo.add %arab8dW, %arbb8dW : tensor<f32>
+      stablehlo.return %araddb8dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384x1x3x3xf32>) -> tensor<384x1x3x3xf32>
+    %arnb8dW = stablehlo.constant dense<4.0> : tensor<384x1x3x3xf32>
+    %armeanb8dW = stablehlo.divide %arsumb8dW, %arnb8dW : tensor<384x1x3x3xf32>
     %v8197 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8198 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8199 = stablehlo.multiply %v8197, %b8dWm : tensor<384x1x3x3xf32>
-    %v8200 = stablehlo.multiply %v8198, %v3483 : tensor<384x1x3x3xf32>
+    %v8200 = stablehlo.multiply %v8198, %armeanb8dW : tensor<384x1x3x3xf32>
     %v8201 = stablehlo.add %v8199, %v8200 : tensor<384x1x3x3xf32>
     %v8202 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8203 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8204 = stablehlo.multiply %v8202, %b8dWv : tensor<384x1x3x3xf32>
-    %v8205 = stablehlo.multiply %v3483, %v3483 : tensor<384x1x3x3xf32>
+    %v8205 = stablehlo.multiply %armeanb8dW, %armeanb8dW : tensor<384x1x3x3xf32>
     %v8206 = stablehlo.multiply %v8203, %v8205 : tensor<384x1x3x3xf32>
     %v8207 = stablehlo.add %v8204, %v8206 : tensor<384x1x3x3xf32>
     %v8208 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8209 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8210 = stablehlo.multiply %v8208, %b8dWm : tensor<384x1x3x3xf32>
-    %v8211 = stablehlo.multiply %v8209, %v3483 : tensor<384x1x3x3xf32>
+    %v8211 = stablehlo.multiply %v8209, %armeanb8dW : tensor<384x1x3x3xf32>
     %v8212 = stablehlo.add %v8210, %v8211 : tensor<384x1x3x3xf32>
     %v8213 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8214 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8215 = stablehlo.multiply %v8213, %b8dWv : tensor<384x1x3x3xf32>
-    %v8216 = stablehlo.multiply %v3483, %v3483 : tensor<384x1x3x3xf32>
+    %v8216 = stablehlo.multiply %armeanb8dW, %armeanb8dW : tensor<384x1x3x3xf32>
     %v8217 = stablehlo.multiply %v8214, %v8216 : tensor<384x1x3x3xf32>
     %v8218 = stablehlo.add %v8215, %v8217 : tensor<384x1x3x3xf32>
     %v8219 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
@@ -8724,26 +9199,33 @@ module @m {
     %v8231 = stablehlo.multiply %v8230, %v8223 : tensor<384x1x3x3xf32>
     %v8232 = stablehlo.multiply %v8231, %b8dW : tensor<384x1x3x3xf32>
     %v8233 = stablehlo.subtract %v8229, %v8232 : tensor<384x1x3x3xf32>
+    %arsumb8dg = "stablehlo.all_reduce"(%v3501) ({
+    ^bb0(%arab8dg: tensor<f32>, %arbb8dg: tensor<f32>):
+      %araddb8dg = stablehlo.add %arab8dg, %arbb8dg : tensor<f32>
+      stablehlo.return %araddb8dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb8dg = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb8dg = stablehlo.divide %arsumb8dg, %arnb8dg : tensor<384xf32>
     %v8234 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8235 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8236 = stablehlo.multiply %v8234, %b8dgm : tensor<384xf32>
-    %v8237 = stablehlo.multiply %v8235, %v3501 : tensor<384xf32>
+    %v8237 = stablehlo.multiply %v8235, %armeanb8dg : tensor<384xf32>
     %v8238 = stablehlo.add %v8236, %v8237 : tensor<384xf32>
     %v8239 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8240 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8241 = stablehlo.multiply %v8239, %b8dgv : tensor<384xf32>
-    %v8242 = stablehlo.multiply %v3501, %v3501 : tensor<384xf32>
+    %v8242 = stablehlo.multiply %armeanb8dg, %armeanb8dg : tensor<384xf32>
     %v8243 = stablehlo.multiply %v8240, %v8242 : tensor<384xf32>
     %v8244 = stablehlo.add %v8241, %v8243 : tensor<384xf32>
     %v8245 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8246 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8247 = stablehlo.multiply %v8245, %b8dgm : tensor<384xf32>
-    %v8248 = stablehlo.multiply %v8246, %v3501 : tensor<384xf32>
+    %v8248 = stablehlo.multiply %v8246, %armeanb8dg : tensor<384xf32>
     %v8249 = stablehlo.add %v8247, %v8248 : tensor<384xf32>
     %v8250 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8251 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8252 = stablehlo.multiply %v8250, %b8dgv : tensor<384xf32>
-    %v8253 = stablehlo.multiply %v3501, %v3501 : tensor<384xf32>
+    %v8253 = stablehlo.multiply %armeanb8dg, %armeanb8dg : tensor<384xf32>
     %v8254 = stablehlo.multiply %v8251, %v8253 : tensor<384xf32>
     %v8255 = stablehlo.add %v8252, %v8254 : tensor<384xf32>
     %v8256 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -8761,26 +9243,33 @@ module @m {
     %v8268 = stablehlo.multiply %v8267, %v8260 : tensor<384xf32>
     %v8269 = stablehlo.multiply %v8268, %b8dg : tensor<384xf32>
     %v8270 = stablehlo.subtract %v8266, %v8269 : tensor<384xf32>
+    %arsumb8dbt = "stablehlo.all_reduce"(%v3504) ({
+    ^bb0(%arab8dbt: tensor<f32>, %arbb8dbt: tensor<f32>):
+      %araddb8dbt = stablehlo.add %arab8dbt, %arbb8dbt : tensor<f32>
+      stablehlo.return %araddb8dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb8dbt = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb8dbt = stablehlo.divide %arsumb8dbt, %arnb8dbt : tensor<384xf32>
     %v8271 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8272 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8273 = stablehlo.multiply %v8271, %b8dbtm : tensor<384xf32>
-    %v8274 = stablehlo.multiply %v8272, %v3504 : tensor<384xf32>
+    %v8274 = stablehlo.multiply %v8272, %armeanb8dbt : tensor<384xf32>
     %v8275 = stablehlo.add %v8273, %v8274 : tensor<384xf32>
     %v8276 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8277 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8278 = stablehlo.multiply %v8276, %b8dbtv : tensor<384xf32>
-    %v8279 = stablehlo.multiply %v3504, %v3504 : tensor<384xf32>
+    %v8279 = stablehlo.multiply %armeanb8dbt, %armeanb8dbt : tensor<384xf32>
     %v8280 = stablehlo.multiply %v8277, %v8279 : tensor<384xf32>
     %v8281 = stablehlo.add %v8278, %v8280 : tensor<384xf32>
     %v8282 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8283 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8284 = stablehlo.multiply %v8282, %b8dbtm : tensor<384xf32>
-    %v8285 = stablehlo.multiply %v8283, %v3504 : tensor<384xf32>
+    %v8285 = stablehlo.multiply %v8283, %armeanb8dbt : tensor<384xf32>
     %v8286 = stablehlo.add %v8284, %v8285 : tensor<384xf32>
     %v8287 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8288 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8289 = stablehlo.multiply %v8287, %b8dbtv : tensor<384xf32>
-    %v8290 = stablehlo.multiply %v3504, %v3504 : tensor<384xf32>
+    %v8290 = stablehlo.multiply %armeanb8dbt, %armeanb8dbt : tensor<384xf32>
     %v8291 = stablehlo.multiply %v8288, %v8290 : tensor<384xf32>
     %v8292 = stablehlo.add %v8289, %v8291 : tensor<384xf32>
     %v8293 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -8798,26 +9287,33 @@ module @m {
     %v8305 = stablehlo.multiply %v8304, %v8297 : tensor<384xf32>
     %v8306 = stablehlo.multiply %v8305, %b8dbt : tensor<384xf32>
     %v8307 = stablehlo.subtract %v8303, %v8306 : tensor<384xf32>
+    %arsumb8pW = "stablehlo.all_reduce"(%v3510) ({
+    ^bb0(%arab8pW: tensor<f32>, %arbb8pW: tensor<f32>):
+      %araddb8pW = stablehlo.add %arab8pW, %arbb8pW : tensor<f32>
+      stablehlo.return %araddb8pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64x384x1x1xf32>) -> tensor<64x384x1x1xf32>
+    %arnb8pW = stablehlo.constant dense<4.0> : tensor<64x384x1x1xf32>
+    %armeanb8pW = stablehlo.divide %arsumb8pW, %arnb8pW : tensor<64x384x1x1xf32>
     %v8308 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8309 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8310 = stablehlo.multiply %v8308, %b8pWm : tensor<64x384x1x1xf32>
-    %v8311 = stablehlo.multiply %v8309, %v3510 : tensor<64x384x1x1xf32>
+    %v8311 = stablehlo.multiply %v8309, %armeanb8pW : tensor<64x384x1x1xf32>
     %v8312 = stablehlo.add %v8310, %v8311 : tensor<64x384x1x1xf32>
     %v8313 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8314 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8315 = stablehlo.multiply %v8313, %b8pWv : tensor<64x384x1x1xf32>
-    %v8316 = stablehlo.multiply %v3510, %v3510 : tensor<64x384x1x1xf32>
+    %v8316 = stablehlo.multiply %armeanb8pW, %armeanb8pW : tensor<64x384x1x1xf32>
     %v8317 = stablehlo.multiply %v8314, %v8316 : tensor<64x384x1x1xf32>
     %v8318 = stablehlo.add %v8315, %v8317 : tensor<64x384x1x1xf32>
     %v8319 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8320 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8321 = stablehlo.multiply %v8319, %b8pWm : tensor<64x384x1x1xf32>
-    %v8322 = stablehlo.multiply %v8320, %v3510 : tensor<64x384x1x1xf32>
+    %v8322 = stablehlo.multiply %v8320, %armeanb8pW : tensor<64x384x1x1xf32>
     %v8323 = stablehlo.add %v8321, %v8322 : tensor<64x384x1x1xf32>
     %v8324 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8325 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8326 = stablehlo.multiply %v8324, %b8pWv : tensor<64x384x1x1xf32>
-    %v8327 = stablehlo.multiply %v3510, %v3510 : tensor<64x384x1x1xf32>
+    %v8327 = stablehlo.multiply %armeanb8pW, %armeanb8pW : tensor<64x384x1x1xf32>
     %v8328 = stablehlo.multiply %v8325, %v8327 : tensor<64x384x1x1xf32>
     %v8329 = stablehlo.add %v8326, %v8328 : tensor<64x384x1x1xf32>
     %v8330 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
@@ -8835,26 +9331,33 @@ module @m {
     %v8342 = stablehlo.multiply %v8341, %v8334 : tensor<64x384x1x1xf32>
     %v8343 = stablehlo.multiply %v8342, %b8pW : tensor<64x384x1x1xf32>
     %v8344 = stablehlo.subtract %v8340, %v8343 : tensor<64x384x1x1xf32>
+    %arsumb8pg = "stablehlo.all_reduce"(%v3528) ({
+    ^bb0(%arab8pg: tensor<f32>, %arbb8pg: tensor<f32>):
+      %araddb8pg = stablehlo.add %arab8pg, %arbb8pg : tensor<f32>
+      stablehlo.return %araddb8pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64xf32>) -> tensor<64xf32>
+    %arnb8pg = stablehlo.constant dense<4.0> : tensor<64xf32>
+    %armeanb8pg = stablehlo.divide %arsumb8pg, %arnb8pg : tensor<64xf32>
     %v8345 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8346 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8347 = stablehlo.multiply %v8345, %b8pgm : tensor<64xf32>
-    %v8348 = stablehlo.multiply %v8346, %v3528 : tensor<64xf32>
+    %v8348 = stablehlo.multiply %v8346, %armeanb8pg : tensor<64xf32>
     %v8349 = stablehlo.add %v8347, %v8348 : tensor<64xf32>
     %v8350 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8351 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8352 = stablehlo.multiply %v8350, %b8pgv : tensor<64xf32>
-    %v8353 = stablehlo.multiply %v3528, %v3528 : tensor<64xf32>
+    %v8353 = stablehlo.multiply %armeanb8pg, %armeanb8pg : tensor<64xf32>
     %v8354 = stablehlo.multiply %v8351, %v8353 : tensor<64xf32>
     %v8355 = stablehlo.add %v8352, %v8354 : tensor<64xf32>
     %v8356 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8357 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8358 = stablehlo.multiply %v8356, %b8pgm : tensor<64xf32>
-    %v8359 = stablehlo.multiply %v8357, %v3528 : tensor<64xf32>
+    %v8359 = stablehlo.multiply %v8357, %armeanb8pg : tensor<64xf32>
     %v8360 = stablehlo.add %v8358, %v8359 : tensor<64xf32>
     %v8361 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8362 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8363 = stablehlo.multiply %v8361, %b8pgv : tensor<64xf32>
-    %v8364 = stablehlo.multiply %v3528, %v3528 : tensor<64xf32>
+    %v8364 = stablehlo.multiply %armeanb8pg, %armeanb8pg : tensor<64xf32>
     %v8365 = stablehlo.multiply %v8362, %v8364 : tensor<64xf32>
     %v8366 = stablehlo.add %v8363, %v8365 : tensor<64xf32>
     %v8367 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64xf32>
@@ -8872,26 +9375,33 @@ module @m {
     %v8379 = stablehlo.multiply %v8378, %v8371 : tensor<64xf32>
     %v8380 = stablehlo.multiply %v8379, %b8pg : tensor<64xf32>
     %v8381 = stablehlo.subtract %v8377, %v8380 : tensor<64xf32>
+    %arsumb8pbt = "stablehlo.all_reduce"(%v3531) ({
+    ^bb0(%arab8pbt: tensor<f32>, %arbb8pbt: tensor<f32>):
+      %araddb8pbt = stablehlo.add %arab8pbt, %arbb8pbt : tensor<f32>
+      stablehlo.return %araddb8pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64xf32>) -> tensor<64xf32>
+    %arnb8pbt = stablehlo.constant dense<4.0> : tensor<64xf32>
+    %armeanb8pbt = stablehlo.divide %arsumb8pbt, %arnb8pbt : tensor<64xf32>
     %v8382 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8383 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8384 = stablehlo.multiply %v8382, %b8pbtm : tensor<64xf32>
-    %v8385 = stablehlo.multiply %v8383, %v3531 : tensor<64xf32>
+    %v8385 = stablehlo.multiply %v8383, %armeanb8pbt : tensor<64xf32>
     %v8386 = stablehlo.add %v8384, %v8385 : tensor<64xf32>
     %v8387 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8388 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8389 = stablehlo.multiply %v8387, %b8pbtv : tensor<64xf32>
-    %v8390 = stablehlo.multiply %v3531, %v3531 : tensor<64xf32>
+    %v8390 = stablehlo.multiply %armeanb8pbt, %armeanb8pbt : tensor<64xf32>
     %v8391 = stablehlo.multiply %v8388, %v8390 : tensor<64xf32>
     %v8392 = stablehlo.add %v8389, %v8391 : tensor<64xf32>
     %v8393 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8394 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8395 = stablehlo.multiply %v8393, %b8pbtm : tensor<64xf32>
-    %v8396 = stablehlo.multiply %v8394, %v3531 : tensor<64xf32>
+    %v8396 = stablehlo.multiply %v8394, %armeanb8pbt : tensor<64xf32>
     %v8397 = stablehlo.add %v8395, %v8396 : tensor<64xf32>
     %v8398 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8399 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8400 = stablehlo.multiply %v8398, %b8pbtv : tensor<64xf32>
-    %v8401 = stablehlo.multiply %v3531, %v3531 : tensor<64xf32>
+    %v8401 = stablehlo.multiply %armeanb8pbt, %armeanb8pbt : tensor<64xf32>
     %v8402 = stablehlo.multiply %v8399, %v8401 : tensor<64xf32>
     %v8403 = stablehlo.add %v8400, %v8402 : tensor<64xf32>
     %v8404 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64xf32>
@@ -8909,26 +9419,33 @@ module @m {
     %v8416 = stablehlo.multiply %v8415, %v8408 : tensor<64xf32>
     %v8417 = stablehlo.multiply %v8416, %b8pbt : tensor<64xf32>
     %v8418 = stablehlo.subtract %v8414, %v8417 : tensor<64xf32>
+    %arsumb9eW = "stablehlo.all_reduce"(%v3258) ({
+    ^bb0(%arab9eW: tensor<f32>, %arbb9eW: tensor<f32>):
+      %araddb9eW = stablehlo.add %arab9eW, %arbb9eW : tensor<f32>
+      stablehlo.return %araddb9eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384x64x1x1xf32>) -> tensor<384x64x1x1xf32>
+    %arnb9eW = stablehlo.constant dense<4.0> : tensor<384x64x1x1xf32>
+    %armeanb9eW = stablehlo.divide %arsumb9eW, %arnb9eW : tensor<384x64x1x1xf32>
     %v8419 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8420 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8421 = stablehlo.multiply %v8419, %b9eWm : tensor<384x64x1x1xf32>
-    %v8422 = stablehlo.multiply %v8420, %v3258 : tensor<384x64x1x1xf32>
+    %v8422 = stablehlo.multiply %v8420, %armeanb9eW : tensor<384x64x1x1xf32>
     %v8423 = stablehlo.add %v8421, %v8422 : tensor<384x64x1x1xf32>
     %v8424 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8425 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8426 = stablehlo.multiply %v8424, %b9eWv : tensor<384x64x1x1xf32>
-    %v8427 = stablehlo.multiply %v3258, %v3258 : tensor<384x64x1x1xf32>
+    %v8427 = stablehlo.multiply %armeanb9eW, %armeanb9eW : tensor<384x64x1x1xf32>
     %v8428 = stablehlo.multiply %v8425, %v8427 : tensor<384x64x1x1xf32>
     %v8429 = stablehlo.add %v8426, %v8428 : tensor<384x64x1x1xf32>
     %v8430 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8431 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8432 = stablehlo.multiply %v8430, %b9eWm : tensor<384x64x1x1xf32>
-    %v8433 = stablehlo.multiply %v8431, %v3258 : tensor<384x64x1x1xf32>
+    %v8433 = stablehlo.multiply %v8431, %armeanb9eW : tensor<384x64x1x1xf32>
     %v8434 = stablehlo.add %v8432, %v8433 : tensor<384x64x1x1xf32>
     %v8435 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8436 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8437 = stablehlo.multiply %v8435, %b9eWv : tensor<384x64x1x1xf32>
-    %v8438 = stablehlo.multiply %v3258, %v3258 : tensor<384x64x1x1xf32>
+    %v8438 = stablehlo.multiply %armeanb9eW, %armeanb9eW : tensor<384x64x1x1xf32>
     %v8439 = stablehlo.multiply %v8436, %v8438 : tensor<384x64x1x1xf32>
     %v8440 = stablehlo.add %v8437, %v8439 : tensor<384x64x1x1xf32>
     %v8441 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
@@ -8946,26 +9463,33 @@ module @m {
     %v8453 = stablehlo.multiply %v8452, %v8445 : tensor<384x64x1x1xf32>
     %v8454 = stablehlo.multiply %v8453, %b9eW : tensor<384x64x1x1xf32>
     %v8455 = stablehlo.subtract %v8451, %v8454 : tensor<384x64x1x1xf32>
+    %arsumb9eg = "stablehlo.all_reduce"(%v3276) ({
+    ^bb0(%arab9eg: tensor<f32>, %arbb9eg: tensor<f32>):
+      %araddb9eg = stablehlo.add %arab9eg, %arbb9eg : tensor<f32>
+      stablehlo.return %araddb9eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb9eg = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb9eg = stablehlo.divide %arsumb9eg, %arnb9eg : tensor<384xf32>
     %v8456 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8457 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8458 = stablehlo.multiply %v8456, %b9egm : tensor<384xf32>
-    %v8459 = stablehlo.multiply %v8457, %v3276 : tensor<384xf32>
+    %v8459 = stablehlo.multiply %v8457, %armeanb9eg : tensor<384xf32>
     %v8460 = stablehlo.add %v8458, %v8459 : tensor<384xf32>
     %v8461 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8462 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8463 = stablehlo.multiply %v8461, %b9egv : tensor<384xf32>
-    %v8464 = stablehlo.multiply %v3276, %v3276 : tensor<384xf32>
+    %v8464 = stablehlo.multiply %armeanb9eg, %armeanb9eg : tensor<384xf32>
     %v8465 = stablehlo.multiply %v8462, %v8464 : tensor<384xf32>
     %v8466 = stablehlo.add %v8463, %v8465 : tensor<384xf32>
     %v8467 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8468 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8469 = stablehlo.multiply %v8467, %b9egm : tensor<384xf32>
-    %v8470 = stablehlo.multiply %v8468, %v3276 : tensor<384xf32>
+    %v8470 = stablehlo.multiply %v8468, %armeanb9eg : tensor<384xf32>
     %v8471 = stablehlo.add %v8469, %v8470 : tensor<384xf32>
     %v8472 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8473 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8474 = stablehlo.multiply %v8472, %b9egv : tensor<384xf32>
-    %v8475 = stablehlo.multiply %v3276, %v3276 : tensor<384xf32>
+    %v8475 = stablehlo.multiply %armeanb9eg, %armeanb9eg : tensor<384xf32>
     %v8476 = stablehlo.multiply %v8473, %v8475 : tensor<384xf32>
     %v8477 = stablehlo.add %v8474, %v8476 : tensor<384xf32>
     %v8478 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -8983,26 +9507,33 @@ module @m {
     %v8490 = stablehlo.multiply %v8489, %v8482 : tensor<384xf32>
     %v8491 = stablehlo.multiply %v8490, %b9eg : tensor<384xf32>
     %v8492 = stablehlo.subtract %v8488, %v8491 : tensor<384xf32>
+    %arsumb9ebt = "stablehlo.all_reduce"(%v3279) ({
+    ^bb0(%arab9ebt: tensor<f32>, %arbb9ebt: tensor<f32>):
+      %araddb9ebt = stablehlo.add %arab9ebt, %arbb9ebt : tensor<f32>
+      stablehlo.return %araddb9ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb9ebt = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb9ebt = stablehlo.divide %arsumb9ebt, %arnb9ebt : tensor<384xf32>
     %v8493 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8494 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8495 = stablehlo.multiply %v8493, %b9ebtm : tensor<384xf32>
-    %v8496 = stablehlo.multiply %v8494, %v3279 : tensor<384xf32>
+    %v8496 = stablehlo.multiply %v8494, %armeanb9ebt : tensor<384xf32>
     %v8497 = stablehlo.add %v8495, %v8496 : tensor<384xf32>
     %v8498 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8499 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8500 = stablehlo.multiply %v8498, %b9ebtv : tensor<384xf32>
-    %v8501 = stablehlo.multiply %v3279, %v3279 : tensor<384xf32>
+    %v8501 = stablehlo.multiply %armeanb9ebt, %armeanb9ebt : tensor<384xf32>
     %v8502 = stablehlo.multiply %v8499, %v8501 : tensor<384xf32>
     %v8503 = stablehlo.add %v8500, %v8502 : tensor<384xf32>
     %v8504 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8505 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8506 = stablehlo.multiply %v8504, %b9ebtm : tensor<384xf32>
-    %v8507 = stablehlo.multiply %v8505, %v3279 : tensor<384xf32>
+    %v8507 = stablehlo.multiply %v8505, %armeanb9ebt : tensor<384xf32>
     %v8508 = stablehlo.add %v8506, %v8507 : tensor<384xf32>
     %v8509 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8510 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8511 = stablehlo.multiply %v8509, %b9ebtv : tensor<384xf32>
-    %v8512 = stablehlo.multiply %v3279, %v3279 : tensor<384xf32>
+    %v8512 = stablehlo.multiply %armeanb9ebt, %armeanb9ebt : tensor<384xf32>
     %v8513 = stablehlo.multiply %v8510, %v8512 : tensor<384xf32>
     %v8514 = stablehlo.add %v8511, %v8513 : tensor<384xf32>
     %v8515 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9020,26 +9551,33 @@ module @m {
     %v8527 = stablehlo.multiply %v8526, %v8519 : tensor<384xf32>
     %v8528 = stablehlo.multiply %v8527, %b9ebt : tensor<384xf32>
     %v8529 = stablehlo.subtract %v8525, %v8528 : tensor<384xf32>
+    %arsumb9dW = "stablehlo.all_reduce"(%v3285) ({
+    ^bb0(%arab9dW: tensor<f32>, %arbb9dW: tensor<f32>):
+      %araddb9dW = stablehlo.add %arab9dW, %arbb9dW : tensor<f32>
+      stablehlo.return %araddb9dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384x1x3x3xf32>) -> tensor<384x1x3x3xf32>
+    %arnb9dW = stablehlo.constant dense<4.0> : tensor<384x1x3x3xf32>
+    %armeanb9dW = stablehlo.divide %arsumb9dW, %arnb9dW : tensor<384x1x3x3xf32>
     %v8530 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8531 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8532 = stablehlo.multiply %v8530, %b9dWm : tensor<384x1x3x3xf32>
-    %v8533 = stablehlo.multiply %v8531, %v3285 : tensor<384x1x3x3xf32>
+    %v8533 = stablehlo.multiply %v8531, %armeanb9dW : tensor<384x1x3x3xf32>
     %v8534 = stablehlo.add %v8532, %v8533 : tensor<384x1x3x3xf32>
     %v8535 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8536 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8537 = stablehlo.multiply %v8535, %b9dWv : tensor<384x1x3x3xf32>
-    %v8538 = stablehlo.multiply %v3285, %v3285 : tensor<384x1x3x3xf32>
+    %v8538 = stablehlo.multiply %armeanb9dW, %armeanb9dW : tensor<384x1x3x3xf32>
     %v8539 = stablehlo.multiply %v8536, %v8538 : tensor<384x1x3x3xf32>
     %v8540 = stablehlo.add %v8537, %v8539 : tensor<384x1x3x3xf32>
     %v8541 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8542 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8543 = stablehlo.multiply %v8541, %b9dWm : tensor<384x1x3x3xf32>
-    %v8544 = stablehlo.multiply %v8542, %v3285 : tensor<384x1x3x3xf32>
+    %v8544 = stablehlo.multiply %v8542, %armeanb9dW : tensor<384x1x3x3xf32>
     %v8545 = stablehlo.add %v8543, %v8544 : tensor<384x1x3x3xf32>
     %v8546 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8547 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8548 = stablehlo.multiply %v8546, %b9dWv : tensor<384x1x3x3xf32>
-    %v8549 = stablehlo.multiply %v3285, %v3285 : tensor<384x1x3x3xf32>
+    %v8549 = stablehlo.multiply %armeanb9dW, %armeanb9dW : tensor<384x1x3x3xf32>
     %v8550 = stablehlo.multiply %v8547, %v8549 : tensor<384x1x3x3xf32>
     %v8551 = stablehlo.add %v8548, %v8550 : tensor<384x1x3x3xf32>
     %v8552 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
@@ -9057,26 +9595,33 @@ module @m {
     %v8564 = stablehlo.multiply %v8563, %v8556 : tensor<384x1x3x3xf32>
     %v8565 = stablehlo.multiply %v8564, %b9dW : tensor<384x1x3x3xf32>
     %v8566 = stablehlo.subtract %v8562, %v8565 : tensor<384x1x3x3xf32>
+    %arsumb9dg = "stablehlo.all_reduce"(%v3303) ({
+    ^bb0(%arab9dg: tensor<f32>, %arbb9dg: tensor<f32>):
+      %araddb9dg = stablehlo.add %arab9dg, %arbb9dg : tensor<f32>
+      stablehlo.return %araddb9dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb9dg = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb9dg = stablehlo.divide %arsumb9dg, %arnb9dg : tensor<384xf32>
     %v8567 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8568 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8569 = stablehlo.multiply %v8567, %b9dgm : tensor<384xf32>
-    %v8570 = stablehlo.multiply %v8568, %v3303 : tensor<384xf32>
+    %v8570 = stablehlo.multiply %v8568, %armeanb9dg : tensor<384xf32>
     %v8571 = stablehlo.add %v8569, %v8570 : tensor<384xf32>
     %v8572 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8573 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8574 = stablehlo.multiply %v8572, %b9dgv : tensor<384xf32>
-    %v8575 = stablehlo.multiply %v3303, %v3303 : tensor<384xf32>
+    %v8575 = stablehlo.multiply %armeanb9dg, %armeanb9dg : tensor<384xf32>
     %v8576 = stablehlo.multiply %v8573, %v8575 : tensor<384xf32>
     %v8577 = stablehlo.add %v8574, %v8576 : tensor<384xf32>
     %v8578 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8579 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8580 = stablehlo.multiply %v8578, %b9dgm : tensor<384xf32>
-    %v8581 = stablehlo.multiply %v8579, %v3303 : tensor<384xf32>
+    %v8581 = stablehlo.multiply %v8579, %armeanb9dg : tensor<384xf32>
     %v8582 = stablehlo.add %v8580, %v8581 : tensor<384xf32>
     %v8583 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8584 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8585 = stablehlo.multiply %v8583, %b9dgv : tensor<384xf32>
-    %v8586 = stablehlo.multiply %v3303, %v3303 : tensor<384xf32>
+    %v8586 = stablehlo.multiply %armeanb9dg, %armeanb9dg : tensor<384xf32>
     %v8587 = stablehlo.multiply %v8584, %v8586 : tensor<384xf32>
     %v8588 = stablehlo.add %v8585, %v8587 : tensor<384xf32>
     %v8589 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9094,26 +9639,33 @@ module @m {
     %v8601 = stablehlo.multiply %v8600, %v8593 : tensor<384xf32>
     %v8602 = stablehlo.multiply %v8601, %b9dg : tensor<384xf32>
     %v8603 = stablehlo.subtract %v8599, %v8602 : tensor<384xf32>
+    %arsumb9dbt = "stablehlo.all_reduce"(%v3306) ({
+    ^bb0(%arab9dbt: tensor<f32>, %arbb9dbt: tensor<f32>):
+      %araddb9dbt = stablehlo.add %arab9dbt, %arbb9dbt : tensor<f32>
+      stablehlo.return %araddb9dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb9dbt = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb9dbt = stablehlo.divide %arsumb9dbt, %arnb9dbt : tensor<384xf32>
     %v8604 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8605 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8606 = stablehlo.multiply %v8604, %b9dbtm : tensor<384xf32>
-    %v8607 = stablehlo.multiply %v8605, %v3306 : tensor<384xf32>
+    %v8607 = stablehlo.multiply %v8605, %armeanb9dbt : tensor<384xf32>
     %v8608 = stablehlo.add %v8606, %v8607 : tensor<384xf32>
     %v8609 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8610 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8611 = stablehlo.multiply %v8609, %b9dbtv : tensor<384xf32>
-    %v8612 = stablehlo.multiply %v3306, %v3306 : tensor<384xf32>
+    %v8612 = stablehlo.multiply %armeanb9dbt, %armeanb9dbt : tensor<384xf32>
     %v8613 = stablehlo.multiply %v8610, %v8612 : tensor<384xf32>
     %v8614 = stablehlo.add %v8611, %v8613 : tensor<384xf32>
     %v8615 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8616 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8617 = stablehlo.multiply %v8615, %b9dbtm : tensor<384xf32>
-    %v8618 = stablehlo.multiply %v8616, %v3306 : tensor<384xf32>
+    %v8618 = stablehlo.multiply %v8616, %armeanb9dbt : tensor<384xf32>
     %v8619 = stablehlo.add %v8617, %v8618 : tensor<384xf32>
     %v8620 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8621 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8622 = stablehlo.multiply %v8620, %b9dbtv : tensor<384xf32>
-    %v8623 = stablehlo.multiply %v3306, %v3306 : tensor<384xf32>
+    %v8623 = stablehlo.multiply %armeanb9dbt, %armeanb9dbt : tensor<384xf32>
     %v8624 = stablehlo.multiply %v8621, %v8623 : tensor<384xf32>
     %v8625 = stablehlo.add %v8622, %v8624 : tensor<384xf32>
     %v8626 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9131,26 +9683,33 @@ module @m {
     %v8638 = stablehlo.multiply %v8637, %v8630 : tensor<384xf32>
     %v8639 = stablehlo.multiply %v8638, %b9dbt : tensor<384xf32>
     %v8640 = stablehlo.subtract %v8636, %v8639 : tensor<384xf32>
+    %arsumb9pW = "stablehlo.all_reduce"(%v3312) ({
+    ^bb0(%arab9pW: tensor<f32>, %arbb9pW: tensor<f32>):
+      %araddb9pW = stablehlo.add %arab9pW, %arbb9pW : tensor<f32>
+      stablehlo.return %araddb9pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64x384x1x1xf32>) -> tensor<64x384x1x1xf32>
+    %arnb9pW = stablehlo.constant dense<4.0> : tensor<64x384x1x1xf32>
+    %armeanb9pW = stablehlo.divide %arsumb9pW, %arnb9pW : tensor<64x384x1x1xf32>
     %v8641 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8642 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8643 = stablehlo.multiply %v8641, %b9pWm : tensor<64x384x1x1xf32>
-    %v8644 = stablehlo.multiply %v8642, %v3312 : tensor<64x384x1x1xf32>
+    %v8644 = stablehlo.multiply %v8642, %armeanb9pW : tensor<64x384x1x1xf32>
     %v8645 = stablehlo.add %v8643, %v8644 : tensor<64x384x1x1xf32>
     %v8646 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8647 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8648 = stablehlo.multiply %v8646, %b9pWv : tensor<64x384x1x1xf32>
-    %v8649 = stablehlo.multiply %v3312, %v3312 : tensor<64x384x1x1xf32>
+    %v8649 = stablehlo.multiply %armeanb9pW, %armeanb9pW : tensor<64x384x1x1xf32>
     %v8650 = stablehlo.multiply %v8647, %v8649 : tensor<64x384x1x1xf32>
     %v8651 = stablehlo.add %v8648, %v8650 : tensor<64x384x1x1xf32>
     %v8652 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8653 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8654 = stablehlo.multiply %v8652, %b9pWm : tensor<64x384x1x1xf32>
-    %v8655 = stablehlo.multiply %v8653, %v3312 : tensor<64x384x1x1xf32>
+    %v8655 = stablehlo.multiply %v8653, %armeanb9pW : tensor<64x384x1x1xf32>
     %v8656 = stablehlo.add %v8654, %v8655 : tensor<64x384x1x1xf32>
     %v8657 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8658 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8659 = stablehlo.multiply %v8657, %b9pWv : tensor<64x384x1x1xf32>
-    %v8660 = stablehlo.multiply %v3312, %v3312 : tensor<64x384x1x1xf32>
+    %v8660 = stablehlo.multiply %armeanb9pW, %armeanb9pW : tensor<64x384x1x1xf32>
     %v8661 = stablehlo.multiply %v8658, %v8660 : tensor<64x384x1x1xf32>
     %v8662 = stablehlo.add %v8659, %v8661 : tensor<64x384x1x1xf32>
     %v8663 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
@@ -9168,26 +9727,33 @@ module @m {
     %v8675 = stablehlo.multiply %v8674, %v8667 : tensor<64x384x1x1xf32>
     %v8676 = stablehlo.multiply %v8675, %b9pW : tensor<64x384x1x1xf32>
     %v8677 = stablehlo.subtract %v8673, %v8676 : tensor<64x384x1x1xf32>
+    %arsumb9pg = "stablehlo.all_reduce"(%v3330) ({
+    ^bb0(%arab9pg: tensor<f32>, %arbb9pg: tensor<f32>):
+      %araddb9pg = stablehlo.add %arab9pg, %arbb9pg : tensor<f32>
+      stablehlo.return %araddb9pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64xf32>) -> tensor<64xf32>
+    %arnb9pg = stablehlo.constant dense<4.0> : tensor<64xf32>
+    %armeanb9pg = stablehlo.divide %arsumb9pg, %arnb9pg : tensor<64xf32>
     %v8678 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8679 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8680 = stablehlo.multiply %v8678, %b9pgm : tensor<64xf32>
-    %v8681 = stablehlo.multiply %v8679, %v3330 : tensor<64xf32>
+    %v8681 = stablehlo.multiply %v8679, %armeanb9pg : tensor<64xf32>
     %v8682 = stablehlo.add %v8680, %v8681 : tensor<64xf32>
     %v8683 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8684 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8685 = stablehlo.multiply %v8683, %b9pgv : tensor<64xf32>
-    %v8686 = stablehlo.multiply %v3330, %v3330 : tensor<64xf32>
+    %v8686 = stablehlo.multiply %armeanb9pg, %armeanb9pg : tensor<64xf32>
     %v8687 = stablehlo.multiply %v8684, %v8686 : tensor<64xf32>
     %v8688 = stablehlo.add %v8685, %v8687 : tensor<64xf32>
     %v8689 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8690 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8691 = stablehlo.multiply %v8689, %b9pgm : tensor<64xf32>
-    %v8692 = stablehlo.multiply %v8690, %v3330 : tensor<64xf32>
+    %v8692 = stablehlo.multiply %v8690, %armeanb9pg : tensor<64xf32>
     %v8693 = stablehlo.add %v8691, %v8692 : tensor<64xf32>
     %v8694 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8695 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8696 = stablehlo.multiply %v8694, %b9pgv : tensor<64xf32>
-    %v8697 = stablehlo.multiply %v3330, %v3330 : tensor<64xf32>
+    %v8697 = stablehlo.multiply %armeanb9pg, %armeanb9pg : tensor<64xf32>
     %v8698 = stablehlo.multiply %v8695, %v8697 : tensor<64xf32>
     %v8699 = stablehlo.add %v8696, %v8698 : tensor<64xf32>
     %v8700 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64xf32>
@@ -9205,26 +9771,33 @@ module @m {
     %v8712 = stablehlo.multiply %v8711, %v8704 : tensor<64xf32>
     %v8713 = stablehlo.multiply %v8712, %b9pg : tensor<64xf32>
     %v8714 = stablehlo.subtract %v8710, %v8713 : tensor<64xf32>
+    %arsumb9pbt = "stablehlo.all_reduce"(%v3333) ({
+    ^bb0(%arab9pbt: tensor<f32>, %arbb9pbt: tensor<f32>):
+      %araddb9pbt = stablehlo.add %arab9pbt, %arbb9pbt : tensor<f32>
+      stablehlo.return %araddb9pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64xf32>) -> tensor<64xf32>
+    %arnb9pbt = stablehlo.constant dense<4.0> : tensor<64xf32>
+    %armeanb9pbt = stablehlo.divide %arsumb9pbt, %arnb9pbt : tensor<64xf32>
     %v8715 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8716 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8717 = stablehlo.multiply %v8715, %b9pbtm : tensor<64xf32>
-    %v8718 = stablehlo.multiply %v8716, %v3333 : tensor<64xf32>
+    %v8718 = stablehlo.multiply %v8716, %armeanb9pbt : tensor<64xf32>
     %v8719 = stablehlo.add %v8717, %v8718 : tensor<64xf32>
     %v8720 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8721 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8722 = stablehlo.multiply %v8720, %b9pbtv : tensor<64xf32>
-    %v8723 = stablehlo.multiply %v3333, %v3333 : tensor<64xf32>
+    %v8723 = stablehlo.multiply %armeanb9pbt, %armeanb9pbt : tensor<64xf32>
     %v8724 = stablehlo.multiply %v8721, %v8723 : tensor<64xf32>
     %v8725 = stablehlo.add %v8722, %v8724 : tensor<64xf32>
     %v8726 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8727 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8728 = stablehlo.multiply %v8726, %b9pbtm : tensor<64xf32>
-    %v8729 = stablehlo.multiply %v8727, %v3333 : tensor<64xf32>
+    %v8729 = stablehlo.multiply %v8727, %armeanb9pbt : tensor<64xf32>
     %v8730 = stablehlo.add %v8728, %v8729 : tensor<64xf32>
     %v8731 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8732 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v8733 = stablehlo.multiply %v8731, %b9pbtv : tensor<64xf32>
-    %v8734 = stablehlo.multiply %v3333, %v3333 : tensor<64xf32>
+    %v8734 = stablehlo.multiply %armeanb9pbt, %armeanb9pbt : tensor<64xf32>
     %v8735 = stablehlo.multiply %v8732, %v8734 : tensor<64xf32>
     %v8736 = stablehlo.add %v8733, %v8735 : tensor<64xf32>
     %v8737 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64xf32>
@@ -9242,26 +9815,33 @@ module @m {
     %v8749 = stablehlo.multiply %v8748, %v8741 : tensor<64xf32>
     %v8750 = stablehlo.multiply %v8749, %b9pbt : tensor<64xf32>
     %v8751 = stablehlo.subtract %v8747, %v8750 : tensor<64xf32>
+    %arsumb10eW = "stablehlo.all_reduce"(%v3060) ({
+    ^bb0(%arab10eW: tensor<f32>, %arbb10eW: tensor<f32>):
+      %araddb10eW = stablehlo.add %arab10eW, %arbb10eW : tensor<f32>
+      stablehlo.return %araddb10eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384x64x1x1xf32>) -> tensor<384x64x1x1xf32>
+    %arnb10eW = stablehlo.constant dense<4.0> : tensor<384x64x1x1xf32>
+    %armeanb10eW = stablehlo.divide %arsumb10eW, %arnb10eW : tensor<384x64x1x1xf32>
     %v8752 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8753 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8754 = stablehlo.multiply %v8752, %b10eWm : tensor<384x64x1x1xf32>
-    %v8755 = stablehlo.multiply %v8753, %v3060 : tensor<384x64x1x1xf32>
+    %v8755 = stablehlo.multiply %v8753, %armeanb10eW : tensor<384x64x1x1xf32>
     %v8756 = stablehlo.add %v8754, %v8755 : tensor<384x64x1x1xf32>
     %v8757 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8758 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8759 = stablehlo.multiply %v8757, %b10eWv : tensor<384x64x1x1xf32>
-    %v8760 = stablehlo.multiply %v3060, %v3060 : tensor<384x64x1x1xf32>
+    %v8760 = stablehlo.multiply %armeanb10eW, %armeanb10eW : tensor<384x64x1x1xf32>
     %v8761 = stablehlo.multiply %v8758, %v8760 : tensor<384x64x1x1xf32>
     %v8762 = stablehlo.add %v8759, %v8761 : tensor<384x64x1x1xf32>
     %v8763 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8764 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8765 = stablehlo.multiply %v8763, %b10eWm : tensor<384x64x1x1xf32>
-    %v8766 = stablehlo.multiply %v8764, %v3060 : tensor<384x64x1x1xf32>
+    %v8766 = stablehlo.multiply %v8764, %armeanb10eW : tensor<384x64x1x1xf32>
     %v8767 = stablehlo.add %v8765, %v8766 : tensor<384x64x1x1xf32>
     %v8768 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8769 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v8770 = stablehlo.multiply %v8768, %b10eWv : tensor<384x64x1x1xf32>
-    %v8771 = stablehlo.multiply %v3060, %v3060 : tensor<384x64x1x1xf32>
+    %v8771 = stablehlo.multiply %armeanb10eW, %armeanb10eW : tensor<384x64x1x1xf32>
     %v8772 = stablehlo.multiply %v8769, %v8771 : tensor<384x64x1x1xf32>
     %v8773 = stablehlo.add %v8770, %v8772 : tensor<384x64x1x1xf32>
     %v8774 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
@@ -9279,26 +9859,33 @@ module @m {
     %v8786 = stablehlo.multiply %v8785, %v8778 : tensor<384x64x1x1xf32>
     %v8787 = stablehlo.multiply %v8786, %b10eW : tensor<384x64x1x1xf32>
     %v8788 = stablehlo.subtract %v8784, %v8787 : tensor<384x64x1x1xf32>
+    %arsumb10eg = "stablehlo.all_reduce"(%v3078) ({
+    ^bb0(%arab10eg: tensor<f32>, %arbb10eg: tensor<f32>):
+      %araddb10eg = stablehlo.add %arab10eg, %arbb10eg : tensor<f32>
+      stablehlo.return %araddb10eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb10eg = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb10eg = stablehlo.divide %arsumb10eg, %arnb10eg : tensor<384xf32>
     %v8789 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8790 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8791 = stablehlo.multiply %v8789, %b10egm : tensor<384xf32>
-    %v8792 = stablehlo.multiply %v8790, %v3078 : tensor<384xf32>
+    %v8792 = stablehlo.multiply %v8790, %armeanb10eg : tensor<384xf32>
     %v8793 = stablehlo.add %v8791, %v8792 : tensor<384xf32>
     %v8794 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8795 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8796 = stablehlo.multiply %v8794, %b10egv : tensor<384xf32>
-    %v8797 = stablehlo.multiply %v3078, %v3078 : tensor<384xf32>
+    %v8797 = stablehlo.multiply %armeanb10eg, %armeanb10eg : tensor<384xf32>
     %v8798 = stablehlo.multiply %v8795, %v8797 : tensor<384xf32>
     %v8799 = stablehlo.add %v8796, %v8798 : tensor<384xf32>
     %v8800 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8801 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8802 = stablehlo.multiply %v8800, %b10egm : tensor<384xf32>
-    %v8803 = stablehlo.multiply %v8801, %v3078 : tensor<384xf32>
+    %v8803 = stablehlo.multiply %v8801, %armeanb10eg : tensor<384xf32>
     %v8804 = stablehlo.add %v8802, %v8803 : tensor<384xf32>
     %v8805 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8806 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8807 = stablehlo.multiply %v8805, %b10egv : tensor<384xf32>
-    %v8808 = stablehlo.multiply %v3078, %v3078 : tensor<384xf32>
+    %v8808 = stablehlo.multiply %armeanb10eg, %armeanb10eg : tensor<384xf32>
     %v8809 = stablehlo.multiply %v8806, %v8808 : tensor<384xf32>
     %v8810 = stablehlo.add %v8807, %v8809 : tensor<384xf32>
     %v8811 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9316,26 +9903,33 @@ module @m {
     %v8823 = stablehlo.multiply %v8822, %v8815 : tensor<384xf32>
     %v8824 = stablehlo.multiply %v8823, %b10eg : tensor<384xf32>
     %v8825 = stablehlo.subtract %v8821, %v8824 : tensor<384xf32>
+    %arsumb10ebt = "stablehlo.all_reduce"(%v3081) ({
+    ^bb0(%arab10ebt: tensor<f32>, %arbb10ebt: tensor<f32>):
+      %araddb10ebt = stablehlo.add %arab10ebt, %arbb10ebt : tensor<f32>
+      stablehlo.return %araddb10ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb10ebt = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb10ebt = stablehlo.divide %arsumb10ebt, %arnb10ebt : tensor<384xf32>
     %v8826 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8827 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8828 = stablehlo.multiply %v8826, %b10ebtm : tensor<384xf32>
-    %v8829 = stablehlo.multiply %v8827, %v3081 : tensor<384xf32>
+    %v8829 = stablehlo.multiply %v8827, %armeanb10ebt : tensor<384xf32>
     %v8830 = stablehlo.add %v8828, %v8829 : tensor<384xf32>
     %v8831 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8832 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8833 = stablehlo.multiply %v8831, %b10ebtv : tensor<384xf32>
-    %v8834 = stablehlo.multiply %v3081, %v3081 : tensor<384xf32>
+    %v8834 = stablehlo.multiply %armeanb10ebt, %armeanb10ebt : tensor<384xf32>
     %v8835 = stablehlo.multiply %v8832, %v8834 : tensor<384xf32>
     %v8836 = stablehlo.add %v8833, %v8835 : tensor<384xf32>
     %v8837 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8838 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8839 = stablehlo.multiply %v8837, %b10ebtm : tensor<384xf32>
-    %v8840 = stablehlo.multiply %v8838, %v3081 : tensor<384xf32>
+    %v8840 = stablehlo.multiply %v8838, %armeanb10ebt : tensor<384xf32>
     %v8841 = stablehlo.add %v8839, %v8840 : tensor<384xf32>
     %v8842 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8843 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8844 = stablehlo.multiply %v8842, %b10ebtv : tensor<384xf32>
-    %v8845 = stablehlo.multiply %v3081, %v3081 : tensor<384xf32>
+    %v8845 = stablehlo.multiply %armeanb10ebt, %armeanb10ebt : tensor<384xf32>
     %v8846 = stablehlo.multiply %v8843, %v8845 : tensor<384xf32>
     %v8847 = stablehlo.add %v8844, %v8846 : tensor<384xf32>
     %v8848 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9353,26 +9947,33 @@ module @m {
     %v8860 = stablehlo.multiply %v8859, %v8852 : tensor<384xf32>
     %v8861 = stablehlo.multiply %v8860, %b10ebt : tensor<384xf32>
     %v8862 = stablehlo.subtract %v8858, %v8861 : tensor<384xf32>
+    %arsumb10dW = "stablehlo.all_reduce"(%v3087) ({
+    ^bb0(%arab10dW: tensor<f32>, %arbb10dW: tensor<f32>):
+      %araddb10dW = stablehlo.add %arab10dW, %arbb10dW : tensor<f32>
+      stablehlo.return %araddb10dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384x1x3x3xf32>) -> tensor<384x1x3x3xf32>
+    %arnb10dW = stablehlo.constant dense<4.0> : tensor<384x1x3x3xf32>
+    %armeanb10dW = stablehlo.divide %arsumb10dW, %arnb10dW : tensor<384x1x3x3xf32>
     %v8863 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8864 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8865 = stablehlo.multiply %v8863, %b10dWm : tensor<384x1x3x3xf32>
-    %v8866 = stablehlo.multiply %v8864, %v3087 : tensor<384x1x3x3xf32>
+    %v8866 = stablehlo.multiply %v8864, %armeanb10dW : tensor<384x1x3x3xf32>
     %v8867 = stablehlo.add %v8865, %v8866 : tensor<384x1x3x3xf32>
     %v8868 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8869 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8870 = stablehlo.multiply %v8868, %b10dWv : tensor<384x1x3x3xf32>
-    %v8871 = stablehlo.multiply %v3087, %v3087 : tensor<384x1x3x3xf32>
+    %v8871 = stablehlo.multiply %armeanb10dW, %armeanb10dW : tensor<384x1x3x3xf32>
     %v8872 = stablehlo.multiply %v8869, %v8871 : tensor<384x1x3x3xf32>
     %v8873 = stablehlo.add %v8870, %v8872 : tensor<384x1x3x3xf32>
     %v8874 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8875 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8876 = stablehlo.multiply %v8874, %b10dWm : tensor<384x1x3x3xf32>
-    %v8877 = stablehlo.multiply %v8875, %v3087 : tensor<384x1x3x3xf32>
+    %v8877 = stablehlo.multiply %v8875, %armeanb10dW : tensor<384x1x3x3xf32>
     %v8878 = stablehlo.add %v8876, %v8877 : tensor<384x1x3x3xf32>
     %v8879 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8880 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v8881 = stablehlo.multiply %v8879, %b10dWv : tensor<384x1x3x3xf32>
-    %v8882 = stablehlo.multiply %v3087, %v3087 : tensor<384x1x3x3xf32>
+    %v8882 = stablehlo.multiply %armeanb10dW, %armeanb10dW : tensor<384x1x3x3xf32>
     %v8883 = stablehlo.multiply %v8880, %v8882 : tensor<384x1x3x3xf32>
     %v8884 = stablehlo.add %v8881, %v8883 : tensor<384x1x3x3xf32>
     %v8885 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
@@ -9390,26 +9991,33 @@ module @m {
     %v8897 = stablehlo.multiply %v8896, %v8889 : tensor<384x1x3x3xf32>
     %v8898 = stablehlo.multiply %v8897, %b10dW : tensor<384x1x3x3xf32>
     %v8899 = stablehlo.subtract %v8895, %v8898 : tensor<384x1x3x3xf32>
+    %arsumb10dg = "stablehlo.all_reduce"(%v3105) ({
+    ^bb0(%arab10dg: tensor<f32>, %arbb10dg: tensor<f32>):
+      %araddb10dg = stablehlo.add %arab10dg, %arbb10dg : tensor<f32>
+      stablehlo.return %araddb10dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb10dg = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb10dg = stablehlo.divide %arsumb10dg, %arnb10dg : tensor<384xf32>
     %v8900 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8901 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8902 = stablehlo.multiply %v8900, %b10dgm : tensor<384xf32>
-    %v8903 = stablehlo.multiply %v8901, %v3105 : tensor<384xf32>
+    %v8903 = stablehlo.multiply %v8901, %armeanb10dg : tensor<384xf32>
     %v8904 = stablehlo.add %v8902, %v8903 : tensor<384xf32>
     %v8905 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8906 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8907 = stablehlo.multiply %v8905, %b10dgv : tensor<384xf32>
-    %v8908 = stablehlo.multiply %v3105, %v3105 : tensor<384xf32>
+    %v8908 = stablehlo.multiply %armeanb10dg, %armeanb10dg : tensor<384xf32>
     %v8909 = stablehlo.multiply %v8906, %v8908 : tensor<384xf32>
     %v8910 = stablehlo.add %v8907, %v8909 : tensor<384xf32>
     %v8911 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8912 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8913 = stablehlo.multiply %v8911, %b10dgm : tensor<384xf32>
-    %v8914 = stablehlo.multiply %v8912, %v3105 : tensor<384xf32>
+    %v8914 = stablehlo.multiply %v8912, %armeanb10dg : tensor<384xf32>
     %v8915 = stablehlo.add %v8913, %v8914 : tensor<384xf32>
     %v8916 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8917 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8918 = stablehlo.multiply %v8916, %b10dgv : tensor<384xf32>
-    %v8919 = stablehlo.multiply %v3105, %v3105 : tensor<384xf32>
+    %v8919 = stablehlo.multiply %armeanb10dg, %armeanb10dg : tensor<384xf32>
     %v8920 = stablehlo.multiply %v8917, %v8919 : tensor<384xf32>
     %v8921 = stablehlo.add %v8918, %v8920 : tensor<384xf32>
     %v8922 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9427,26 +10035,33 @@ module @m {
     %v8934 = stablehlo.multiply %v8933, %v8926 : tensor<384xf32>
     %v8935 = stablehlo.multiply %v8934, %b10dg : tensor<384xf32>
     %v8936 = stablehlo.subtract %v8932, %v8935 : tensor<384xf32>
+    %arsumb10dbt = "stablehlo.all_reduce"(%v3108) ({
+    ^bb0(%arab10dbt: tensor<f32>, %arbb10dbt: tensor<f32>):
+      %araddb10dbt = stablehlo.add %arab10dbt, %arbb10dbt : tensor<f32>
+      stablehlo.return %araddb10dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb10dbt = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb10dbt = stablehlo.divide %arsumb10dbt, %arnb10dbt : tensor<384xf32>
     %v8937 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8938 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8939 = stablehlo.multiply %v8937, %b10dbtm : tensor<384xf32>
-    %v8940 = stablehlo.multiply %v8938, %v3108 : tensor<384xf32>
+    %v8940 = stablehlo.multiply %v8938, %armeanb10dbt : tensor<384xf32>
     %v8941 = stablehlo.add %v8939, %v8940 : tensor<384xf32>
     %v8942 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8943 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8944 = stablehlo.multiply %v8942, %b10dbtv : tensor<384xf32>
-    %v8945 = stablehlo.multiply %v3108, %v3108 : tensor<384xf32>
+    %v8945 = stablehlo.multiply %armeanb10dbt, %armeanb10dbt : tensor<384xf32>
     %v8946 = stablehlo.multiply %v8943, %v8945 : tensor<384xf32>
     %v8947 = stablehlo.add %v8944, %v8946 : tensor<384xf32>
     %v8948 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8949 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8950 = stablehlo.multiply %v8948, %b10dbtm : tensor<384xf32>
-    %v8951 = stablehlo.multiply %v8949, %v3108 : tensor<384xf32>
+    %v8951 = stablehlo.multiply %v8949, %armeanb10dbt : tensor<384xf32>
     %v8952 = stablehlo.add %v8950, %v8951 : tensor<384xf32>
     %v8953 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8954 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v8955 = stablehlo.multiply %v8953, %b10dbtv : tensor<384xf32>
-    %v8956 = stablehlo.multiply %v3108, %v3108 : tensor<384xf32>
+    %v8956 = stablehlo.multiply %armeanb10dbt, %armeanb10dbt : tensor<384xf32>
     %v8957 = stablehlo.multiply %v8954, %v8956 : tensor<384xf32>
     %v8958 = stablehlo.add %v8955, %v8957 : tensor<384xf32>
     %v8959 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9464,26 +10079,33 @@ module @m {
     %v8971 = stablehlo.multiply %v8970, %v8963 : tensor<384xf32>
     %v8972 = stablehlo.multiply %v8971, %b10dbt : tensor<384xf32>
     %v8973 = stablehlo.subtract %v8969, %v8972 : tensor<384xf32>
+    %arsumb10pW = "stablehlo.all_reduce"(%v3114) ({
+    ^bb0(%arab10pW: tensor<f32>, %arbb10pW: tensor<f32>):
+      %araddb10pW = stablehlo.add %arab10pW, %arbb10pW : tensor<f32>
+      stablehlo.return %araddb10pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64x384x1x1xf32>) -> tensor<64x384x1x1xf32>
+    %arnb10pW = stablehlo.constant dense<4.0> : tensor<64x384x1x1xf32>
+    %armeanb10pW = stablehlo.divide %arsumb10pW, %arnb10pW : tensor<64x384x1x1xf32>
     %v8974 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8975 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8976 = stablehlo.multiply %v8974, %b10pWm : tensor<64x384x1x1xf32>
-    %v8977 = stablehlo.multiply %v8975, %v3114 : tensor<64x384x1x1xf32>
+    %v8977 = stablehlo.multiply %v8975, %armeanb10pW : tensor<64x384x1x1xf32>
     %v8978 = stablehlo.add %v8976, %v8977 : tensor<64x384x1x1xf32>
     %v8979 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8980 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8981 = stablehlo.multiply %v8979, %b10pWv : tensor<64x384x1x1xf32>
-    %v8982 = stablehlo.multiply %v3114, %v3114 : tensor<64x384x1x1xf32>
+    %v8982 = stablehlo.multiply %armeanb10pW, %armeanb10pW : tensor<64x384x1x1xf32>
     %v8983 = stablehlo.multiply %v8980, %v8982 : tensor<64x384x1x1xf32>
     %v8984 = stablehlo.add %v8981, %v8983 : tensor<64x384x1x1xf32>
     %v8985 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8986 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8987 = stablehlo.multiply %v8985, %b10pWm : tensor<64x384x1x1xf32>
-    %v8988 = stablehlo.multiply %v8986, %v3114 : tensor<64x384x1x1xf32>
+    %v8988 = stablehlo.multiply %v8986, %armeanb10pW : tensor<64x384x1x1xf32>
     %v8989 = stablehlo.add %v8987, %v8988 : tensor<64x384x1x1xf32>
     %v8990 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8991 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
     %v8992 = stablehlo.multiply %v8990, %b10pWv : tensor<64x384x1x1xf32>
-    %v8993 = stablehlo.multiply %v3114, %v3114 : tensor<64x384x1x1xf32>
+    %v8993 = stablehlo.multiply %armeanb10pW, %armeanb10pW : tensor<64x384x1x1xf32>
     %v8994 = stablehlo.multiply %v8991, %v8993 : tensor<64x384x1x1xf32>
     %v8995 = stablehlo.add %v8992, %v8994 : tensor<64x384x1x1xf32>
     %v8996 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64x384x1x1xf32>
@@ -9501,26 +10123,33 @@ module @m {
     %v9008 = stablehlo.multiply %v9007, %v9000 : tensor<64x384x1x1xf32>
     %v9009 = stablehlo.multiply %v9008, %b10pW : tensor<64x384x1x1xf32>
     %v9010 = stablehlo.subtract %v9006, %v9009 : tensor<64x384x1x1xf32>
+    %arsumb10pg = "stablehlo.all_reduce"(%v3132) ({
+    ^bb0(%arab10pg: tensor<f32>, %arbb10pg: tensor<f32>):
+      %araddb10pg = stablehlo.add %arab10pg, %arbb10pg : tensor<f32>
+      stablehlo.return %araddb10pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64xf32>) -> tensor<64xf32>
+    %arnb10pg = stablehlo.constant dense<4.0> : tensor<64xf32>
+    %armeanb10pg = stablehlo.divide %arsumb10pg, %arnb10pg : tensor<64xf32>
     %v9011 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9012 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9013 = stablehlo.multiply %v9011, %b10pgm : tensor<64xf32>
-    %v9014 = stablehlo.multiply %v9012, %v3132 : tensor<64xf32>
+    %v9014 = stablehlo.multiply %v9012, %armeanb10pg : tensor<64xf32>
     %v9015 = stablehlo.add %v9013, %v9014 : tensor<64xf32>
     %v9016 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9017 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9018 = stablehlo.multiply %v9016, %b10pgv : tensor<64xf32>
-    %v9019 = stablehlo.multiply %v3132, %v3132 : tensor<64xf32>
+    %v9019 = stablehlo.multiply %armeanb10pg, %armeanb10pg : tensor<64xf32>
     %v9020 = stablehlo.multiply %v9017, %v9019 : tensor<64xf32>
     %v9021 = stablehlo.add %v9018, %v9020 : tensor<64xf32>
     %v9022 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9023 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9024 = stablehlo.multiply %v9022, %b10pgm : tensor<64xf32>
-    %v9025 = stablehlo.multiply %v9023, %v3132 : tensor<64xf32>
+    %v9025 = stablehlo.multiply %v9023, %armeanb10pg : tensor<64xf32>
     %v9026 = stablehlo.add %v9024, %v9025 : tensor<64xf32>
     %v9027 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9028 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9029 = stablehlo.multiply %v9027, %b10pgv : tensor<64xf32>
-    %v9030 = stablehlo.multiply %v3132, %v3132 : tensor<64xf32>
+    %v9030 = stablehlo.multiply %armeanb10pg, %armeanb10pg : tensor<64xf32>
     %v9031 = stablehlo.multiply %v9028, %v9030 : tensor<64xf32>
     %v9032 = stablehlo.add %v9029, %v9031 : tensor<64xf32>
     %v9033 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64xf32>
@@ -9538,26 +10167,33 @@ module @m {
     %v9045 = stablehlo.multiply %v9044, %v9037 : tensor<64xf32>
     %v9046 = stablehlo.multiply %v9045, %b10pg : tensor<64xf32>
     %v9047 = stablehlo.subtract %v9043, %v9046 : tensor<64xf32>
+    %arsumb10pbt = "stablehlo.all_reduce"(%v3135) ({
+    ^bb0(%arab10pbt: tensor<f32>, %arbb10pbt: tensor<f32>):
+      %araddb10pbt = stablehlo.add %arab10pbt, %arbb10pbt : tensor<f32>
+      stablehlo.return %araddb10pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<64xf32>) -> tensor<64xf32>
+    %arnb10pbt = stablehlo.constant dense<4.0> : tensor<64xf32>
+    %armeanb10pbt = stablehlo.divide %arsumb10pbt, %arnb10pbt : tensor<64xf32>
     %v9048 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9049 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9050 = stablehlo.multiply %v9048, %b10pbtm : tensor<64xf32>
-    %v9051 = stablehlo.multiply %v9049, %v3135 : tensor<64xf32>
+    %v9051 = stablehlo.multiply %v9049, %armeanb10pbt : tensor<64xf32>
     %v9052 = stablehlo.add %v9050, %v9051 : tensor<64xf32>
     %v9053 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9054 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9055 = stablehlo.multiply %v9053, %b10pbtv : tensor<64xf32>
-    %v9056 = stablehlo.multiply %v3135, %v3135 : tensor<64xf32>
+    %v9056 = stablehlo.multiply %armeanb10pbt, %armeanb10pbt : tensor<64xf32>
     %v9057 = stablehlo.multiply %v9054, %v9056 : tensor<64xf32>
     %v9058 = stablehlo.add %v9055, %v9057 : tensor<64xf32>
     %v9059 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9060 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9061 = stablehlo.multiply %v9059, %b10pbtm : tensor<64xf32>
-    %v9062 = stablehlo.multiply %v9060, %v3135 : tensor<64xf32>
+    %v9062 = stablehlo.multiply %v9060, %armeanb10pbt : tensor<64xf32>
     %v9063 = stablehlo.add %v9061, %v9062 : tensor<64xf32>
     %v9064 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9065 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<64xf32>
     %v9066 = stablehlo.multiply %v9064, %b10pbtv : tensor<64xf32>
-    %v9067 = stablehlo.multiply %v3135, %v3135 : tensor<64xf32>
+    %v9067 = stablehlo.multiply %armeanb10pbt, %armeanb10pbt : tensor<64xf32>
     %v9068 = stablehlo.multiply %v9065, %v9067 : tensor<64xf32>
     %v9069 = stablehlo.add %v9066, %v9068 : tensor<64xf32>
     %v9070 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<64xf32>
@@ -9575,26 +10211,33 @@ module @m {
     %v9082 = stablehlo.multiply %v9081, %v9074 : tensor<64xf32>
     %v9083 = stablehlo.multiply %v9082, %b10pbt : tensor<64xf32>
     %v9084 = stablehlo.subtract %v9080, %v9083 : tensor<64xf32>
+    %arsumb11eW = "stablehlo.all_reduce"(%v2862) ({
+    ^bb0(%arab11eW: tensor<f32>, %arbb11eW: tensor<f32>):
+      %araddb11eW = stablehlo.add %arab11eW, %arbb11eW : tensor<f32>
+      stablehlo.return %araddb11eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384x64x1x1xf32>) -> tensor<384x64x1x1xf32>
+    %arnb11eW = stablehlo.constant dense<4.0> : tensor<384x64x1x1xf32>
+    %armeanb11eW = stablehlo.divide %arsumb11eW, %arnb11eW : tensor<384x64x1x1xf32>
     %v9085 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v9086 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v9087 = stablehlo.multiply %v9085, %b11eWm : tensor<384x64x1x1xf32>
-    %v9088 = stablehlo.multiply %v9086, %v2862 : tensor<384x64x1x1xf32>
+    %v9088 = stablehlo.multiply %v9086, %armeanb11eW : tensor<384x64x1x1xf32>
     %v9089 = stablehlo.add %v9087, %v9088 : tensor<384x64x1x1xf32>
     %v9090 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v9091 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v9092 = stablehlo.multiply %v9090, %b11eWv : tensor<384x64x1x1xf32>
-    %v9093 = stablehlo.multiply %v2862, %v2862 : tensor<384x64x1x1xf32>
+    %v9093 = stablehlo.multiply %armeanb11eW, %armeanb11eW : tensor<384x64x1x1xf32>
     %v9094 = stablehlo.multiply %v9091, %v9093 : tensor<384x64x1x1xf32>
     %v9095 = stablehlo.add %v9092, %v9094 : tensor<384x64x1x1xf32>
     %v9096 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v9097 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v9098 = stablehlo.multiply %v9096, %b11eWm : tensor<384x64x1x1xf32>
-    %v9099 = stablehlo.multiply %v9097, %v2862 : tensor<384x64x1x1xf32>
+    %v9099 = stablehlo.multiply %v9097, %armeanb11eW : tensor<384x64x1x1xf32>
     %v9100 = stablehlo.add %v9098, %v9099 : tensor<384x64x1x1xf32>
     %v9101 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v9102 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
     %v9103 = stablehlo.multiply %v9101, %b11eWv : tensor<384x64x1x1xf32>
-    %v9104 = stablehlo.multiply %v2862, %v2862 : tensor<384x64x1x1xf32>
+    %v9104 = stablehlo.multiply %armeanb11eW, %armeanb11eW : tensor<384x64x1x1xf32>
     %v9105 = stablehlo.multiply %v9102, %v9104 : tensor<384x64x1x1xf32>
     %v9106 = stablehlo.add %v9103, %v9105 : tensor<384x64x1x1xf32>
     %v9107 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384x64x1x1xf32>
@@ -9612,26 +10255,33 @@ module @m {
     %v9119 = stablehlo.multiply %v9118, %v9111 : tensor<384x64x1x1xf32>
     %v9120 = stablehlo.multiply %v9119, %b11eW : tensor<384x64x1x1xf32>
     %v9121 = stablehlo.subtract %v9117, %v9120 : tensor<384x64x1x1xf32>
+    %arsumb11eg = "stablehlo.all_reduce"(%v2880) ({
+    ^bb0(%arab11eg: tensor<f32>, %arbb11eg: tensor<f32>):
+      %araddb11eg = stablehlo.add %arab11eg, %arbb11eg : tensor<f32>
+      stablehlo.return %araddb11eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb11eg = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb11eg = stablehlo.divide %arsumb11eg, %arnb11eg : tensor<384xf32>
     %v9122 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9123 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9124 = stablehlo.multiply %v9122, %b11egm : tensor<384xf32>
-    %v9125 = stablehlo.multiply %v9123, %v2880 : tensor<384xf32>
+    %v9125 = stablehlo.multiply %v9123, %armeanb11eg : tensor<384xf32>
     %v9126 = stablehlo.add %v9124, %v9125 : tensor<384xf32>
     %v9127 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9128 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9129 = stablehlo.multiply %v9127, %b11egv : tensor<384xf32>
-    %v9130 = stablehlo.multiply %v2880, %v2880 : tensor<384xf32>
+    %v9130 = stablehlo.multiply %armeanb11eg, %armeanb11eg : tensor<384xf32>
     %v9131 = stablehlo.multiply %v9128, %v9130 : tensor<384xf32>
     %v9132 = stablehlo.add %v9129, %v9131 : tensor<384xf32>
     %v9133 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9134 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9135 = stablehlo.multiply %v9133, %b11egm : tensor<384xf32>
-    %v9136 = stablehlo.multiply %v9134, %v2880 : tensor<384xf32>
+    %v9136 = stablehlo.multiply %v9134, %armeanb11eg : tensor<384xf32>
     %v9137 = stablehlo.add %v9135, %v9136 : tensor<384xf32>
     %v9138 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9139 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9140 = stablehlo.multiply %v9138, %b11egv : tensor<384xf32>
-    %v9141 = stablehlo.multiply %v2880, %v2880 : tensor<384xf32>
+    %v9141 = stablehlo.multiply %armeanb11eg, %armeanb11eg : tensor<384xf32>
     %v9142 = stablehlo.multiply %v9139, %v9141 : tensor<384xf32>
     %v9143 = stablehlo.add %v9140, %v9142 : tensor<384xf32>
     %v9144 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9649,26 +10299,33 @@ module @m {
     %v9156 = stablehlo.multiply %v9155, %v9148 : tensor<384xf32>
     %v9157 = stablehlo.multiply %v9156, %b11eg : tensor<384xf32>
     %v9158 = stablehlo.subtract %v9154, %v9157 : tensor<384xf32>
+    %arsumb11ebt = "stablehlo.all_reduce"(%v2883) ({
+    ^bb0(%arab11ebt: tensor<f32>, %arbb11ebt: tensor<f32>):
+      %araddb11ebt = stablehlo.add %arab11ebt, %arbb11ebt : tensor<f32>
+      stablehlo.return %araddb11ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb11ebt = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb11ebt = stablehlo.divide %arsumb11ebt, %arnb11ebt : tensor<384xf32>
     %v9159 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9160 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9161 = stablehlo.multiply %v9159, %b11ebtm : tensor<384xf32>
-    %v9162 = stablehlo.multiply %v9160, %v2883 : tensor<384xf32>
+    %v9162 = stablehlo.multiply %v9160, %armeanb11ebt : tensor<384xf32>
     %v9163 = stablehlo.add %v9161, %v9162 : tensor<384xf32>
     %v9164 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9165 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9166 = stablehlo.multiply %v9164, %b11ebtv : tensor<384xf32>
-    %v9167 = stablehlo.multiply %v2883, %v2883 : tensor<384xf32>
+    %v9167 = stablehlo.multiply %armeanb11ebt, %armeanb11ebt : tensor<384xf32>
     %v9168 = stablehlo.multiply %v9165, %v9167 : tensor<384xf32>
     %v9169 = stablehlo.add %v9166, %v9168 : tensor<384xf32>
     %v9170 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9171 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9172 = stablehlo.multiply %v9170, %b11ebtm : tensor<384xf32>
-    %v9173 = stablehlo.multiply %v9171, %v2883 : tensor<384xf32>
+    %v9173 = stablehlo.multiply %v9171, %armeanb11ebt : tensor<384xf32>
     %v9174 = stablehlo.add %v9172, %v9173 : tensor<384xf32>
     %v9175 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9176 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9177 = stablehlo.multiply %v9175, %b11ebtv : tensor<384xf32>
-    %v9178 = stablehlo.multiply %v2883, %v2883 : tensor<384xf32>
+    %v9178 = stablehlo.multiply %armeanb11ebt, %armeanb11ebt : tensor<384xf32>
     %v9179 = stablehlo.multiply %v9176, %v9178 : tensor<384xf32>
     %v9180 = stablehlo.add %v9177, %v9179 : tensor<384xf32>
     %v9181 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9686,26 +10343,33 @@ module @m {
     %v9193 = stablehlo.multiply %v9192, %v9185 : tensor<384xf32>
     %v9194 = stablehlo.multiply %v9193, %b11ebt : tensor<384xf32>
     %v9195 = stablehlo.subtract %v9191, %v9194 : tensor<384xf32>
+    %arsumb11dW = "stablehlo.all_reduce"(%v2889) ({
+    ^bb0(%arab11dW: tensor<f32>, %arbb11dW: tensor<f32>):
+      %araddb11dW = stablehlo.add %arab11dW, %arbb11dW : tensor<f32>
+      stablehlo.return %araddb11dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384x1x3x3xf32>) -> tensor<384x1x3x3xf32>
+    %arnb11dW = stablehlo.constant dense<4.0> : tensor<384x1x3x3xf32>
+    %armeanb11dW = stablehlo.divide %arsumb11dW, %arnb11dW : tensor<384x1x3x3xf32>
     %v9196 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v9197 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v9198 = stablehlo.multiply %v9196, %b11dWm : tensor<384x1x3x3xf32>
-    %v9199 = stablehlo.multiply %v9197, %v2889 : tensor<384x1x3x3xf32>
+    %v9199 = stablehlo.multiply %v9197, %armeanb11dW : tensor<384x1x3x3xf32>
     %v9200 = stablehlo.add %v9198, %v9199 : tensor<384x1x3x3xf32>
     %v9201 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v9202 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v9203 = stablehlo.multiply %v9201, %b11dWv : tensor<384x1x3x3xf32>
-    %v9204 = stablehlo.multiply %v2889, %v2889 : tensor<384x1x3x3xf32>
+    %v9204 = stablehlo.multiply %armeanb11dW, %armeanb11dW : tensor<384x1x3x3xf32>
     %v9205 = stablehlo.multiply %v9202, %v9204 : tensor<384x1x3x3xf32>
     %v9206 = stablehlo.add %v9203, %v9205 : tensor<384x1x3x3xf32>
     %v9207 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v9208 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v9209 = stablehlo.multiply %v9207, %b11dWm : tensor<384x1x3x3xf32>
-    %v9210 = stablehlo.multiply %v9208, %v2889 : tensor<384x1x3x3xf32>
+    %v9210 = stablehlo.multiply %v9208, %armeanb11dW : tensor<384x1x3x3xf32>
     %v9211 = stablehlo.add %v9209, %v9210 : tensor<384x1x3x3xf32>
     %v9212 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v9213 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
     %v9214 = stablehlo.multiply %v9212, %b11dWv : tensor<384x1x3x3xf32>
-    %v9215 = stablehlo.multiply %v2889, %v2889 : tensor<384x1x3x3xf32>
+    %v9215 = stablehlo.multiply %armeanb11dW, %armeanb11dW : tensor<384x1x3x3xf32>
     %v9216 = stablehlo.multiply %v9213, %v9215 : tensor<384x1x3x3xf32>
     %v9217 = stablehlo.add %v9214, %v9216 : tensor<384x1x3x3xf32>
     %v9218 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384x1x3x3xf32>
@@ -9723,26 +10387,33 @@ module @m {
     %v9230 = stablehlo.multiply %v9229, %v9222 : tensor<384x1x3x3xf32>
     %v9231 = stablehlo.multiply %v9230, %b11dW : tensor<384x1x3x3xf32>
     %v9232 = stablehlo.subtract %v9228, %v9231 : tensor<384x1x3x3xf32>
+    %arsumb11dg = "stablehlo.all_reduce"(%v2907) ({
+    ^bb0(%arab11dg: tensor<f32>, %arbb11dg: tensor<f32>):
+      %araddb11dg = stablehlo.add %arab11dg, %arbb11dg : tensor<f32>
+      stablehlo.return %araddb11dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb11dg = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb11dg = stablehlo.divide %arsumb11dg, %arnb11dg : tensor<384xf32>
     %v9233 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9234 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9235 = stablehlo.multiply %v9233, %b11dgm : tensor<384xf32>
-    %v9236 = stablehlo.multiply %v9234, %v2907 : tensor<384xf32>
+    %v9236 = stablehlo.multiply %v9234, %armeanb11dg : tensor<384xf32>
     %v9237 = stablehlo.add %v9235, %v9236 : tensor<384xf32>
     %v9238 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9239 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9240 = stablehlo.multiply %v9238, %b11dgv : tensor<384xf32>
-    %v9241 = stablehlo.multiply %v2907, %v2907 : tensor<384xf32>
+    %v9241 = stablehlo.multiply %armeanb11dg, %armeanb11dg : tensor<384xf32>
     %v9242 = stablehlo.multiply %v9239, %v9241 : tensor<384xf32>
     %v9243 = stablehlo.add %v9240, %v9242 : tensor<384xf32>
     %v9244 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9245 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9246 = stablehlo.multiply %v9244, %b11dgm : tensor<384xf32>
-    %v9247 = stablehlo.multiply %v9245, %v2907 : tensor<384xf32>
+    %v9247 = stablehlo.multiply %v9245, %armeanb11dg : tensor<384xf32>
     %v9248 = stablehlo.add %v9246, %v9247 : tensor<384xf32>
     %v9249 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9250 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9251 = stablehlo.multiply %v9249, %b11dgv : tensor<384xf32>
-    %v9252 = stablehlo.multiply %v2907, %v2907 : tensor<384xf32>
+    %v9252 = stablehlo.multiply %armeanb11dg, %armeanb11dg : tensor<384xf32>
     %v9253 = stablehlo.multiply %v9250, %v9252 : tensor<384xf32>
     %v9254 = stablehlo.add %v9251, %v9253 : tensor<384xf32>
     %v9255 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9760,26 +10431,33 @@ module @m {
     %v9267 = stablehlo.multiply %v9266, %v9259 : tensor<384xf32>
     %v9268 = stablehlo.multiply %v9267, %b11dg : tensor<384xf32>
     %v9269 = stablehlo.subtract %v9265, %v9268 : tensor<384xf32>
+    %arsumb11dbt = "stablehlo.all_reduce"(%v2910) ({
+    ^bb0(%arab11dbt: tensor<f32>, %arbb11dbt: tensor<f32>):
+      %araddb11dbt = stablehlo.add %arab11dbt, %arbb11dbt : tensor<f32>
+      stablehlo.return %araddb11dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<384xf32>) -> tensor<384xf32>
+    %arnb11dbt = stablehlo.constant dense<4.0> : tensor<384xf32>
+    %armeanb11dbt = stablehlo.divide %arsumb11dbt, %arnb11dbt : tensor<384xf32>
     %v9270 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9271 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9272 = stablehlo.multiply %v9270, %b11dbtm : tensor<384xf32>
-    %v9273 = stablehlo.multiply %v9271, %v2910 : tensor<384xf32>
+    %v9273 = stablehlo.multiply %v9271, %armeanb11dbt : tensor<384xf32>
     %v9274 = stablehlo.add %v9272, %v9273 : tensor<384xf32>
     %v9275 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9276 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9277 = stablehlo.multiply %v9275, %b11dbtv : tensor<384xf32>
-    %v9278 = stablehlo.multiply %v2910, %v2910 : tensor<384xf32>
+    %v9278 = stablehlo.multiply %armeanb11dbt, %armeanb11dbt : tensor<384xf32>
     %v9279 = stablehlo.multiply %v9276, %v9278 : tensor<384xf32>
     %v9280 = stablehlo.add %v9277, %v9279 : tensor<384xf32>
     %v9281 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9282 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9283 = stablehlo.multiply %v9281, %b11dbtm : tensor<384xf32>
-    %v9284 = stablehlo.multiply %v9282, %v2910 : tensor<384xf32>
+    %v9284 = stablehlo.multiply %v9282, %armeanb11dbt : tensor<384xf32>
     %v9285 = stablehlo.add %v9283, %v9284 : tensor<384xf32>
     %v9286 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9287 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<384xf32>
     %v9288 = stablehlo.multiply %v9286, %b11dbtv : tensor<384xf32>
-    %v9289 = stablehlo.multiply %v2910, %v2910 : tensor<384xf32>
+    %v9289 = stablehlo.multiply %armeanb11dbt, %armeanb11dbt : tensor<384xf32>
     %v9290 = stablehlo.multiply %v9287, %v9289 : tensor<384xf32>
     %v9291 = stablehlo.add %v9288, %v9290 : tensor<384xf32>
     %v9292 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<384xf32>
@@ -9797,26 +10475,33 @@ module @m {
     %v9304 = stablehlo.multiply %v9303, %v9296 : tensor<384xf32>
     %v9305 = stablehlo.multiply %v9304, %b11dbt : tensor<384xf32>
     %v9306 = stablehlo.subtract %v9302, %v9305 : tensor<384xf32>
+    %arsumb11pW = "stablehlo.all_reduce"(%v2916) ({
+    ^bb0(%arab11pW: tensor<f32>, %arbb11pW: tensor<f32>):
+      %araddb11pW = stablehlo.add %arab11pW, %arbb11pW : tensor<f32>
+      stablehlo.return %araddb11pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96x384x1x1xf32>) -> tensor<96x384x1x1xf32>
+    %arnb11pW = stablehlo.constant dense<4.0> : tensor<96x384x1x1xf32>
+    %armeanb11pW = stablehlo.divide %arsumb11pW, %arnb11pW : tensor<96x384x1x1xf32>
     %v9307 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
     %v9308 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
     %v9309 = stablehlo.multiply %v9307, %b11pWm : tensor<96x384x1x1xf32>
-    %v9310 = stablehlo.multiply %v9308, %v2916 : tensor<96x384x1x1xf32>
+    %v9310 = stablehlo.multiply %v9308, %armeanb11pW : tensor<96x384x1x1xf32>
     %v9311 = stablehlo.add %v9309, %v9310 : tensor<96x384x1x1xf32>
     %v9312 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
     %v9313 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
     %v9314 = stablehlo.multiply %v9312, %b11pWv : tensor<96x384x1x1xf32>
-    %v9315 = stablehlo.multiply %v2916, %v2916 : tensor<96x384x1x1xf32>
+    %v9315 = stablehlo.multiply %armeanb11pW, %armeanb11pW : tensor<96x384x1x1xf32>
     %v9316 = stablehlo.multiply %v9313, %v9315 : tensor<96x384x1x1xf32>
     %v9317 = stablehlo.add %v9314, %v9316 : tensor<96x384x1x1xf32>
     %v9318 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
     %v9319 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
     %v9320 = stablehlo.multiply %v9318, %b11pWm : tensor<96x384x1x1xf32>
-    %v9321 = stablehlo.multiply %v9319, %v2916 : tensor<96x384x1x1xf32>
+    %v9321 = stablehlo.multiply %v9319, %armeanb11pW : tensor<96x384x1x1xf32>
     %v9322 = stablehlo.add %v9320, %v9321 : tensor<96x384x1x1xf32>
     %v9323 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
     %v9324 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
     %v9325 = stablehlo.multiply %v9323, %b11pWv : tensor<96x384x1x1xf32>
-    %v9326 = stablehlo.multiply %v2916, %v2916 : tensor<96x384x1x1xf32>
+    %v9326 = stablehlo.multiply %armeanb11pW, %armeanb11pW : tensor<96x384x1x1xf32>
     %v9327 = stablehlo.multiply %v9324, %v9326 : tensor<96x384x1x1xf32>
     %v9328 = stablehlo.add %v9325, %v9327 : tensor<96x384x1x1xf32>
     %v9329 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96x384x1x1xf32>
@@ -9834,26 +10519,33 @@ module @m {
     %v9341 = stablehlo.multiply %v9340, %v9333 : tensor<96x384x1x1xf32>
     %v9342 = stablehlo.multiply %v9341, %b11pW : tensor<96x384x1x1xf32>
     %v9343 = stablehlo.subtract %v9339, %v9342 : tensor<96x384x1x1xf32>
+    %arsumb11pg = "stablehlo.all_reduce"(%v2934) ({
+    ^bb0(%arab11pg: tensor<f32>, %arbb11pg: tensor<f32>):
+      %araddb11pg = stablehlo.add %arab11pg, %arbb11pg : tensor<f32>
+      stablehlo.return %araddb11pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb11pg = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb11pg = stablehlo.divide %arsumb11pg, %arnb11pg : tensor<96xf32>
     %v9344 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9345 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9346 = stablehlo.multiply %v9344, %b11pgm : tensor<96xf32>
-    %v9347 = stablehlo.multiply %v9345, %v2934 : tensor<96xf32>
+    %v9347 = stablehlo.multiply %v9345, %armeanb11pg : tensor<96xf32>
     %v9348 = stablehlo.add %v9346, %v9347 : tensor<96xf32>
     %v9349 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9350 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9351 = stablehlo.multiply %v9349, %b11pgv : tensor<96xf32>
-    %v9352 = stablehlo.multiply %v2934, %v2934 : tensor<96xf32>
+    %v9352 = stablehlo.multiply %armeanb11pg, %armeanb11pg : tensor<96xf32>
     %v9353 = stablehlo.multiply %v9350, %v9352 : tensor<96xf32>
     %v9354 = stablehlo.add %v9351, %v9353 : tensor<96xf32>
     %v9355 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9356 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9357 = stablehlo.multiply %v9355, %b11pgm : tensor<96xf32>
-    %v9358 = stablehlo.multiply %v9356, %v2934 : tensor<96xf32>
+    %v9358 = stablehlo.multiply %v9356, %armeanb11pg : tensor<96xf32>
     %v9359 = stablehlo.add %v9357, %v9358 : tensor<96xf32>
     %v9360 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9361 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9362 = stablehlo.multiply %v9360, %b11pgv : tensor<96xf32>
-    %v9363 = stablehlo.multiply %v2934, %v2934 : tensor<96xf32>
+    %v9363 = stablehlo.multiply %armeanb11pg, %armeanb11pg : tensor<96xf32>
     %v9364 = stablehlo.multiply %v9361, %v9363 : tensor<96xf32>
     %v9365 = stablehlo.add %v9362, %v9364 : tensor<96xf32>
     %v9366 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -9871,26 +10563,33 @@ module @m {
     %v9378 = stablehlo.multiply %v9377, %v9370 : tensor<96xf32>
     %v9379 = stablehlo.multiply %v9378, %b11pg : tensor<96xf32>
     %v9380 = stablehlo.subtract %v9376, %v9379 : tensor<96xf32>
+    %arsumb11pbt = "stablehlo.all_reduce"(%v2937) ({
+    ^bb0(%arab11pbt: tensor<f32>, %arbb11pbt: tensor<f32>):
+      %araddb11pbt = stablehlo.add %arab11pbt, %arbb11pbt : tensor<f32>
+      stablehlo.return %araddb11pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb11pbt = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb11pbt = stablehlo.divide %arsumb11pbt, %arnb11pbt : tensor<96xf32>
     %v9381 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9382 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9383 = stablehlo.multiply %v9381, %b11pbtm : tensor<96xf32>
-    %v9384 = stablehlo.multiply %v9382, %v2937 : tensor<96xf32>
+    %v9384 = stablehlo.multiply %v9382, %armeanb11pbt : tensor<96xf32>
     %v9385 = stablehlo.add %v9383, %v9384 : tensor<96xf32>
     %v9386 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9387 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9388 = stablehlo.multiply %v9386, %b11pbtv : tensor<96xf32>
-    %v9389 = stablehlo.multiply %v2937, %v2937 : tensor<96xf32>
+    %v9389 = stablehlo.multiply %armeanb11pbt, %armeanb11pbt : tensor<96xf32>
     %v9390 = stablehlo.multiply %v9387, %v9389 : tensor<96xf32>
     %v9391 = stablehlo.add %v9388, %v9390 : tensor<96xf32>
     %v9392 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9393 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9394 = stablehlo.multiply %v9392, %b11pbtm : tensor<96xf32>
-    %v9395 = stablehlo.multiply %v9393, %v2937 : tensor<96xf32>
+    %v9395 = stablehlo.multiply %v9393, %armeanb11pbt : tensor<96xf32>
     %v9396 = stablehlo.add %v9394, %v9395 : tensor<96xf32>
     %v9397 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9398 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9399 = stablehlo.multiply %v9397, %b11pbtv : tensor<96xf32>
-    %v9400 = stablehlo.multiply %v2937, %v2937 : tensor<96xf32>
+    %v9400 = stablehlo.multiply %armeanb11pbt, %armeanb11pbt : tensor<96xf32>
     %v9401 = stablehlo.multiply %v9398, %v9400 : tensor<96xf32>
     %v9402 = stablehlo.add %v9399, %v9401 : tensor<96xf32>
     %v9403 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -9908,26 +10607,33 @@ module @m {
     %v9415 = stablehlo.multiply %v9414, %v9407 : tensor<96xf32>
     %v9416 = stablehlo.multiply %v9415, %b11pbt : tensor<96xf32>
     %v9417 = stablehlo.subtract %v9413, %v9416 : tensor<96xf32>
+    %arsumb12eW = "stablehlo.all_reduce"(%v2665) ({
+    ^bb0(%arab12eW: tensor<f32>, %arbb12eW: tensor<f32>):
+      %araddb12eW = stablehlo.add %arab12eW, %arbb12eW : tensor<f32>
+      stablehlo.return %araddb12eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576x96x1x1xf32>) -> tensor<576x96x1x1xf32>
+    %arnb12eW = stablehlo.constant dense<4.0> : tensor<576x96x1x1xf32>
+    %armeanb12eW = stablehlo.divide %arsumb12eW, %arnb12eW : tensor<576x96x1x1xf32>
     %v9418 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9419 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9420 = stablehlo.multiply %v9418, %b12eWm : tensor<576x96x1x1xf32>
-    %v9421 = stablehlo.multiply %v9419, %v2665 : tensor<576x96x1x1xf32>
+    %v9421 = stablehlo.multiply %v9419, %armeanb12eW : tensor<576x96x1x1xf32>
     %v9422 = stablehlo.add %v9420, %v9421 : tensor<576x96x1x1xf32>
     %v9423 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9424 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9425 = stablehlo.multiply %v9423, %b12eWv : tensor<576x96x1x1xf32>
-    %v9426 = stablehlo.multiply %v2665, %v2665 : tensor<576x96x1x1xf32>
+    %v9426 = stablehlo.multiply %armeanb12eW, %armeanb12eW : tensor<576x96x1x1xf32>
     %v9427 = stablehlo.multiply %v9424, %v9426 : tensor<576x96x1x1xf32>
     %v9428 = stablehlo.add %v9425, %v9427 : tensor<576x96x1x1xf32>
     %v9429 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9430 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9431 = stablehlo.multiply %v9429, %b12eWm : tensor<576x96x1x1xf32>
-    %v9432 = stablehlo.multiply %v9430, %v2665 : tensor<576x96x1x1xf32>
+    %v9432 = stablehlo.multiply %v9430, %armeanb12eW : tensor<576x96x1x1xf32>
     %v9433 = stablehlo.add %v9431, %v9432 : tensor<576x96x1x1xf32>
     %v9434 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9435 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9436 = stablehlo.multiply %v9434, %b12eWv : tensor<576x96x1x1xf32>
-    %v9437 = stablehlo.multiply %v2665, %v2665 : tensor<576x96x1x1xf32>
+    %v9437 = stablehlo.multiply %armeanb12eW, %armeanb12eW : tensor<576x96x1x1xf32>
     %v9438 = stablehlo.multiply %v9435, %v9437 : tensor<576x96x1x1xf32>
     %v9439 = stablehlo.add %v9436, %v9438 : tensor<576x96x1x1xf32>
     %v9440 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
@@ -9945,26 +10651,33 @@ module @m {
     %v9452 = stablehlo.multiply %v9451, %v9444 : tensor<576x96x1x1xf32>
     %v9453 = stablehlo.multiply %v9452, %b12eW : tensor<576x96x1x1xf32>
     %v9454 = stablehlo.subtract %v9450, %v9453 : tensor<576x96x1x1xf32>
+    %arsumb12eg = "stablehlo.all_reduce"(%v2683) ({
+    ^bb0(%arab12eg: tensor<f32>, %arbb12eg: tensor<f32>):
+      %araddb12eg = stablehlo.add %arab12eg, %arbb12eg : tensor<f32>
+      stablehlo.return %araddb12eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb12eg = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb12eg = stablehlo.divide %arsumb12eg, %arnb12eg : tensor<576xf32>
     %v9455 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9456 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9457 = stablehlo.multiply %v9455, %b12egm : tensor<576xf32>
-    %v9458 = stablehlo.multiply %v9456, %v2683 : tensor<576xf32>
+    %v9458 = stablehlo.multiply %v9456, %armeanb12eg : tensor<576xf32>
     %v9459 = stablehlo.add %v9457, %v9458 : tensor<576xf32>
     %v9460 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9461 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9462 = stablehlo.multiply %v9460, %b12egv : tensor<576xf32>
-    %v9463 = stablehlo.multiply %v2683, %v2683 : tensor<576xf32>
+    %v9463 = stablehlo.multiply %armeanb12eg, %armeanb12eg : tensor<576xf32>
     %v9464 = stablehlo.multiply %v9461, %v9463 : tensor<576xf32>
     %v9465 = stablehlo.add %v9462, %v9464 : tensor<576xf32>
     %v9466 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9467 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9468 = stablehlo.multiply %v9466, %b12egm : tensor<576xf32>
-    %v9469 = stablehlo.multiply %v9467, %v2683 : tensor<576xf32>
+    %v9469 = stablehlo.multiply %v9467, %armeanb12eg : tensor<576xf32>
     %v9470 = stablehlo.add %v9468, %v9469 : tensor<576xf32>
     %v9471 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9472 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9473 = stablehlo.multiply %v9471, %b12egv : tensor<576xf32>
-    %v9474 = stablehlo.multiply %v2683, %v2683 : tensor<576xf32>
+    %v9474 = stablehlo.multiply %armeanb12eg, %armeanb12eg : tensor<576xf32>
     %v9475 = stablehlo.multiply %v9472, %v9474 : tensor<576xf32>
     %v9476 = stablehlo.add %v9473, %v9475 : tensor<576xf32>
     %v9477 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -9982,26 +10695,33 @@ module @m {
     %v9489 = stablehlo.multiply %v9488, %v9481 : tensor<576xf32>
     %v9490 = stablehlo.multiply %v9489, %b12eg : tensor<576xf32>
     %v9491 = stablehlo.subtract %v9487, %v9490 : tensor<576xf32>
+    %arsumb12ebt = "stablehlo.all_reduce"(%v2686) ({
+    ^bb0(%arab12ebt: tensor<f32>, %arbb12ebt: tensor<f32>):
+      %araddb12ebt = stablehlo.add %arab12ebt, %arbb12ebt : tensor<f32>
+      stablehlo.return %araddb12ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb12ebt = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb12ebt = stablehlo.divide %arsumb12ebt, %arnb12ebt : tensor<576xf32>
     %v9492 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9493 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9494 = stablehlo.multiply %v9492, %b12ebtm : tensor<576xf32>
-    %v9495 = stablehlo.multiply %v9493, %v2686 : tensor<576xf32>
+    %v9495 = stablehlo.multiply %v9493, %armeanb12ebt : tensor<576xf32>
     %v9496 = stablehlo.add %v9494, %v9495 : tensor<576xf32>
     %v9497 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9498 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9499 = stablehlo.multiply %v9497, %b12ebtv : tensor<576xf32>
-    %v9500 = stablehlo.multiply %v2686, %v2686 : tensor<576xf32>
+    %v9500 = stablehlo.multiply %armeanb12ebt, %armeanb12ebt : tensor<576xf32>
     %v9501 = stablehlo.multiply %v9498, %v9500 : tensor<576xf32>
     %v9502 = stablehlo.add %v9499, %v9501 : tensor<576xf32>
     %v9503 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9504 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9505 = stablehlo.multiply %v9503, %b12ebtm : tensor<576xf32>
-    %v9506 = stablehlo.multiply %v9504, %v2686 : tensor<576xf32>
+    %v9506 = stablehlo.multiply %v9504, %armeanb12ebt : tensor<576xf32>
     %v9507 = stablehlo.add %v9505, %v9506 : tensor<576xf32>
     %v9508 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9509 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9510 = stablehlo.multiply %v9508, %b12ebtv : tensor<576xf32>
-    %v9511 = stablehlo.multiply %v2686, %v2686 : tensor<576xf32>
+    %v9511 = stablehlo.multiply %armeanb12ebt, %armeanb12ebt : tensor<576xf32>
     %v9512 = stablehlo.multiply %v9509, %v9511 : tensor<576xf32>
     %v9513 = stablehlo.add %v9510, %v9512 : tensor<576xf32>
     %v9514 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10019,26 +10739,33 @@ module @m {
     %v9526 = stablehlo.multiply %v9525, %v9518 : tensor<576xf32>
     %v9527 = stablehlo.multiply %v9526, %b12ebt : tensor<576xf32>
     %v9528 = stablehlo.subtract %v9524, %v9527 : tensor<576xf32>
+    %arsumb12dW = "stablehlo.all_reduce"(%v2692) ({
+    ^bb0(%arab12dW: tensor<f32>, %arbb12dW: tensor<f32>):
+      %araddb12dW = stablehlo.add %arab12dW, %arbb12dW : tensor<f32>
+      stablehlo.return %araddb12dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576x1x3x3xf32>) -> tensor<576x1x3x3xf32>
+    %arnb12dW = stablehlo.constant dense<4.0> : tensor<576x1x3x3xf32>
+    %armeanb12dW = stablehlo.divide %arsumb12dW, %arnb12dW : tensor<576x1x3x3xf32>
     %v9529 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9530 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9531 = stablehlo.multiply %v9529, %b12dWm : tensor<576x1x3x3xf32>
-    %v9532 = stablehlo.multiply %v9530, %v2692 : tensor<576x1x3x3xf32>
+    %v9532 = stablehlo.multiply %v9530, %armeanb12dW : tensor<576x1x3x3xf32>
     %v9533 = stablehlo.add %v9531, %v9532 : tensor<576x1x3x3xf32>
     %v9534 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9535 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9536 = stablehlo.multiply %v9534, %b12dWv : tensor<576x1x3x3xf32>
-    %v9537 = stablehlo.multiply %v2692, %v2692 : tensor<576x1x3x3xf32>
+    %v9537 = stablehlo.multiply %armeanb12dW, %armeanb12dW : tensor<576x1x3x3xf32>
     %v9538 = stablehlo.multiply %v9535, %v9537 : tensor<576x1x3x3xf32>
     %v9539 = stablehlo.add %v9536, %v9538 : tensor<576x1x3x3xf32>
     %v9540 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9541 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9542 = stablehlo.multiply %v9540, %b12dWm : tensor<576x1x3x3xf32>
-    %v9543 = stablehlo.multiply %v9541, %v2692 : tensor<576x1x3x3xf32>
+    %v9543 = stablehlo.multiply %v9541, %armeanb12dW : tensor<576x1x3x3xf32>
     %v9544 = stablehlo.add %v9542, %v9543 : tensor<576x1x3x3xf32>
     %v9545 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9546 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9547 = stablehlo.multiply %v9545, %b12dWv : tensor<576x1x3x3xf32>
-    %v9548 = stablehlo.multiply %v2692, %v2692 : tensor<576x1x3x3xf32>
+    %v9548 = stablehlo.multiply %armeanb12dW, %armeanb12dW : tensor<576x1x3x3xf32>
     %v9549 = stablehlo.multiply %v9546, %v9548 : tensor<576x1x3x3xf32>
     %v9550 = stablehlo.add %v9547, %v9549 : tensor<576x1x3x3xf32>
     %v9551 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
@@ -10056,26 +10783,33 @@ module @m {
     %v9563 = stablehlo.multiply %v9562, %v9555 : tensor<576x1x3x3xf32>
     %v9564 = stablehlo.multiply %v9563, %b12dW : tensor<576x1x3x3xf32>
     %v9565 = stablehlo.subtract %v9561, %v9564 : tensor<576x1x3x3xf32>
+    %arsumb12dg = "stablehlo.all_reduce"(%v2710) ({
+    ^bb0(%arab12dg: tensor<f32>, %arbb12dg: tensor<f32>):
+      %araddb12dg = stablehlo.add %arab12dg, %arbb12dg : tensor<f32>
+      stablehlo.return %araddb12dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb12dg = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb12dg = stablehlo.divide %arsumb12dg, %arnb12dg : tensor<576xf32>
     %v9566 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9567 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9568 = stablehlo.multiply %v9566, %b12dgm : tensor<576xf32>
-    %v9569 = stablehlo.multiply %v9567, %v2710 : tensor<576xf32>
+    %v9569 = stablehlo.multiply %v9567, %armeanb12dg : tensor<576xf32>
     %v9570 = stablehlo.add %v9568, %v9569 : tensor<576xf32>
     %v9571 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9572 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9573 = stablehlo.multiply %v9571, %b12dgv : tensor<576xf32>
-    %v9574 = stablehlo.multiply %v2710, %v2710 : tensor<576xf32>
+    %v9574 = stablehlo.multiply %armeanb12dg, %armeanb12dg : tensor<576xf32>
     %v9575 = stablehlo.multiply %v9572, %v9574 : tensor<576xf32>
     %v9576 = stablehlo.add %v9573, %v9575 : tensor<576xf32>
     %v9577 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9578 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9579 = stablehlo.multiply %v9577, %b12dgm : tensor<576xf32>
-    %v9580 = stablehlo.multiply %v9578, %v2710 : tensor<576xf32>
+    %v9580 = stablehlo.multiply %v9578, %armeanb12dg : tensor<576xf32>
     %v9581 = stablehlo.add %v9579, %v9580 : tensor<576xf32>
     %v9582 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9583 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9584 = stablehlo.multiply %v9582, %b12dgv : tensor<576xf32>
-    %v9585 = stablehlo.multiply %v2710, %v2710 : tensor<576xf32>
+    %v9585 = stablehlo.multiply %armeanb12dg, %armeanb12dg : tensor<576xf32>
     %v9586 = stablehlo.multiply %v9583, %v9585 : tensor<576xf32>
     %v9587 = stablehlo.add %v9584, %v9586 : tensor<576xf32>
     %v9588 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10093,26 +10827,33 @@ module @m {
     %v9600 = stablehlo.multiply %v9599, %v9592 : tensor<576xf32>
     %v9601 = stablehlo.multiply %v9600, %b12dg : tensor<576xf32>
     %v9602 = stablehlo.subtract %v9598, %v9601 : tensor<576xf32>
+    %arsumb12dbt = "stablehlo.all_reduce"(%v2713) ({
+    ^bb0(%arab12dbt: tensor<f32>, %arbb12dbt: tensor<f32>):
+      %araddb12dbt = stablehlo.add %arab12dbt, %arbb12dbt : tensor<f32>
+      stablehlo.return %araddb12dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb12dbt = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb12dbt = stablehlo.divide %arsumb12dbt, %arnb12dbt : tensor<576xf32>
     %v9603 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9604 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9605 = stablehlo.multiply %v9603, %b12dbtm : tensor<576xf32>
-    %v9606 = stablehlo.multiply %v9604, %v2713 : tensor<576xf32>
+    %v9606 = stablehlo.multiply %v9604, %armeanb12dbt : tensor<576xf32>
     %v9607 = stablehlo.add %v9605, %v9606 : tensor<576xf32>
     %v9608 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9609 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9610 = stablehlo.multiply %v9608, %b12dbtv : tensor<576xf32>
-    %v9611 = stablehlo.multiply %v2713, %v2713 : tensor<576xf32>
+    %v9611 = stablehlo.multiply %armeanb12dbt, %armeanb12dbt : tensor<576xf32>
     %v9612 = stablehlo.multiply %v9609, %v9611 : tensor<576xf32>
     %v9613 = stablehlo.add %v9610, %v9612 : tensor<576xf32>
     %v9614 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9615 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9616 = stablehlo.multiply %v9614, %b12dbtm : tensor<576xf32>
-    %v9617 = stablehlo.multiply %v9615, %v2713 : tensor<576xf32>
+    %v9617 = stablehlo.multiply %v9615, %armeanb12dbt : tensor<576xf32>
     %v9618 = stablehlo.add %v9616, %v9617 : tensor<576xf32>
     %v9619 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9620 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9621 = stablehlo.multiply %v9619, %b12dbtv : tensor<576xf32>
-    %v9622 = stablehlo.multiply %v2713, %v2713 : tensor<576xf32>
+    %v9622 = stablehlo.multiply %armeanb12dbt, %armeanb12dbt : tensor<576xf32>
     %v9623 = stablehlo.multiply %v9620, %v9622 : tensor<576xf32>
     %v9624 = stablehlo.add %v9621, %v9623 : tensor<576xf32>
     %v9625 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10130,26 +10871,33 @@ module @m {
     %v9637 = stablehlo.multiply %v9636, %v9629 : tensor<576xf32>
     %v9638 = stablehlo.multiply %v9637, %b12dbt : tensor<576xf32>
     %v9639 = stablehlo.subtract %v9635, %v9638 : tensor<576xf32>
+    %arsumb12pW = "stablehlo.all_reduce"(%v2719) ({
+    ^bb0(%arab12pW: tensor<f32>, %arbb12pW: tensor<f32>):
+      %araddb12pW = stablehlo.add %arab12pW, %arbb12pW : tensor<f32>
+      stablehlo.return %araddb12pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96x576x1x1xf32>) -> tensor<96x576x1x1xf32>
+    %arnb12pW = stablehlo.constant dense<4.0> : tensor<96x576x1x1xf32>
+    %armeanb12pW = stablehlo.divide %arsumb12pW, %arnb12pW : tensor<96x576x1x1xf32>
     %v9640 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9641 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9642 = stablehlo.multiply %v9640, %b12pWm : tensor<96x576x1x1xf32>
-    %v9643 = stablehlo.multiply %v9641, %v2719 : tensor<96x576x1x1xf32>
+    %v9643 = stablehlo.multiply %v9641, %armeanb12pW : tensor<96x576x1x1xf32>
     %v9644 = stablehlo.add %v9642, %v9643 : tensor<96x576x1x1xf32>
     %v9645 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9646 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9647 = stablehlo.multiply %v9645, %b12pWv : tensor<96x576x1x1xf32>
-    %v9648 = stablehlo.multiply %v2719, %v2719 : tensor<96x576x1x1xf32>
+    %v9648 = stablehlo.multiply %armeanb12pW, %armeanb12pW : tensor<96x576x1x1xf32>
     %v9649 = stablehlo.multiply %v9646, %v9648 : tensor<96x576x1x1xf32>
     %v9650 = stablehlo.add %v9647, %v9649 : tensor<96x576x1x1xf32>
     %v9651 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9652 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9653 = stablehlo.multiply %v9651, %b12pWm : tensor<96x576x1x1xf32>
-    %v9654 = stablehlo.multiply %v9652, %v2719 : tensor<96x576x1x1xf32>
+    %v9654 = stablehlo.multiply %v9652, %armeanb12pW : tensor<96x576x1x1xf32>
     %v9655 = stablehlo.add %v9653, %v9654 : tensor<96x576x1x1xf32>
     %v9656 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9657 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9658 = stablehlo.multiply %v9656, %b12pWv : tensor<96x576x1x1xf32>
-    %v9659 = stablehlo.multiply %v2719, %v2719 : tensor<96x576x1x1xf32>
+    %v9659 = stablehlo.multiply %armeanb12pW, %armeanb12pW : tensor<96x576x1x1xf32>
     %v9660 = stablehlo.multiply %v9657, %v9659 : tensor<96x576x1x1xf32>
     %v9661 = stablehlo.add %v9658, %v9660 : tensor<96x576x1x1xf32>
     %v9662 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
@@ -10167,26 +10915,33 @@ module @m {
     %v9674 = stablehlo.multiply %v9673, %v9666 : tensor<96x576x1x1xf32>
     %v9675 = stablehlo.multiply %v9674, %b12pW : tensor<96x576x1x1xf32>
     %v9676 = stablehlo.subtract %v9672, %v9675 : tensor<96x576x1x1xf32>
+    %arsumb12pg = "stablehlo.all_reduce"(%v2737) ({
+    ^bb0(%arab12pg: tensor<f32>, %arbb12pg: tensor<f32>):
+      %araddb12pg = stablehlo.add %arab12pg, %arbb12pg : tensor<f32>
+      stablehlo.return %araddb12pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb12pg = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb12pg = stablehlo.divide %arsumb12pg, %arnb12pg : tensor<96xf32>
     %v9677 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9678 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9679 = stablehlo.multiply %v9677, %b12pgm : tensor<96xf32>
-    %v9680 = stablehlo.multiply %v9678, %v2737 : tensor<96xf32>
+    %v9680 = stablehlo.multiply %v9678, %armeanb12pg : tensor<96xf32>
     %v9681 = stablehlo.add %v9679, %v9680 : tensor<96xf32>
     %v9682 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9683 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9684 = stablehlo.multiply %v9682, %b12pgv : tensor<96xf32>
-    %v9685 = stablehlo.multiply %v2737, %v2737 : tensor<96xf32>
+    %v9685 = stablehlo.multiply %armeanb12pg, %armeanb12pg : tensor<96xf32>
     %v9686 = stablehlo.multiply %v9683, %v9685 : tensor<96xf32>
     %v9687 = stablehlo.add %v9684, %v9686 : tensor<96xf32>
     %v9688 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9689 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9690 = stablehlo.multiply %v9688, %b12pgm : tensor<96xf32>
-    %v9691 = stablehlo.multiply %v9689, %v2737 : tensor<96xf32>
+    %v9691 = stablehlo.multiply %v9689, %armeanb12pg : tensor<96xf32>
     %v9692 = stablehlo.add %v9690, %v9691 : tensor<96xf32>
     %v9693 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9694 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9695 = stablehlo.multiply %v9693, %b12pgv : tensor<96xf32>
-    %v9696 = stablehlo.multiply %v2737, %v2737 : tensor<96xf32>
+    %v9696 = stablehlo.multiply %armeanb12pg, %armeanb12pg : tensor<96xf32>
     %v9697 = stablehlo.multiply %v9694, %v9696 : tensor<96xf32>
     %v9698 = stablehlo.add %v9695, %v9697 : tensor<96xf32>
     %v9699 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -10204,26 +10959,33 @@ module @m {
     %v9711 = stablehlo.multiply %v9710, %v9703 : tensor<96xf32>
     %v9712 = stablehlo.multiply %v9711, %b12pg : tensor<96xf32>
     %v9713 = stablehlo.subtract %v9709, %v9712 : tensor<96xf32>
+    %arsumb12pbt = "stablehlo.all_reduce"(%v2740) ({
+    ^bb0(%arab12pbt: tensor<f32>, %arbb12pbt: tensor<f32>):
+      %araddb12pbt = stablehlo.add %arab12pbt, %arbb12pbt : tensor<f32>
+      stablehlo.return %araddb12pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb12pbt = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb12pbt = stablehlo.divide %arsumb12pbt, %arnb12pbt : tensor<96xf32>
     %v9714 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9715 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9716 = stablehlo.multiply %v9714, %b12pbtm : tensor<96xf32>
-    %v9717 = stablehlo.multiply %v9715, %v2740 : tensor<96xf32>
+    %v9717 = stablehlo.multiply %v9715, %armeanb12pbt : tensor<96xf32>
     %v9718 = stablehlo.add %v9716, %v9717 : tensor<96xf32>
     %v9719 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9720 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9721 = stablehlo.multiply %v9719, %b12pbtv : tensor<96xf32>
-    %v9722 = stablehlo.multiply %v2740, %v2740 : tensor<96xf32>
+    %v9722 = stablehlo.multiply %armeanb12pbt, %armeanb12pbt : tensor<96xf32>
     %v9723 = stablehlo.multiply %v9720, %v9722 : tensor<96xf32>
     %v9724 = stablehlo.add %v9721, %v9723 : tensor<96xf32>
     %v9725 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9726 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9727 = stablehlo.multiply %v9725, %b12pbtm : tensor<96xf32>
-    %v9728 = stablehlo.multiply %v9726, %v2740 : tensor<96xf32>
+    %v9728 = stablehlo.multiply %v9726, %armeanb12pbt : tensor<96xf32>
     %v9729 = stablehlo.add %v9727, %v9728 : tensor<96xf32>
     %v9730 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9731 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v9732 = stablehlo.multiply %v9730, %b12pbtv : tensor<96xf32>
-    %v9733 = stablehlo.multiply %v2740, %v2740 : tensor<96xf32>
+    %v9733 = stablehlo.multiply %armeanb12pbt, %armeanb12pbt : tensor<96xf32>
     %v9734 = stablehlo.multiply %v9731, %v9733 : tensor<96xf32>
     %v9735 = stablehlo.add %v9732, %v9734 : tensor<96xf32>
     %v9736 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -10241,26 +11003,33 @@ module @m {
     %v9748 = stablehlo.multiply %v9747, %v9740 : tensor<96xf32>
     %v9749 = stablehlo.multiply %v9748, %b12pbt : tensor<96xf32>
     %v9750 = stablehlo.subtract %v9746, %v9749 : tensor<96xf32>
+    %arsumb13eW = "stablehlo.all_reduce"(%v2467) ({
+    ^bb0(%arab13eW: tensor<f32>, %arbb13eW: tensor<f32>):
+      %araddb13eW = stablehlo.add %arab13eW, %arbb13eW : tensor<f32>
+      stablehlo.return %araddb13eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576x96x1x1xf32>) -> tensor<576x96x1x1xf32>
+    %arnb13eW = stablehlo.constant dense<4.0> : tensor<576x96x1x1xf32>
+    %armeanb13eW = stablehlo.divide %arsumb13eW, %arnb13eW : tensor<576x96x1x1xf32>
     %v9751 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9752 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9753 = stablehlo.multiply %v9751, %b13eWm : tensor<576x96x1x1xf32>
-    %v9754 = stablehlo.multiply %v9752, %v2467 : tensor<576x96x1x1xf32>
+    %v9754 = stablehlo.multiply %v9752, %armeanb13eW : tensor<576x96x1x1xf32>
     %v9755 = stablehlo.add %v9753, %v9754 : tensor<576x96x1x1xf32>
     %v9756 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9757 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9758 = stablehlo.multiply %v9756, %b13eWv : tensor<576x96x1x1xf32>
-    %v9759 = stablehlo.multiply %v2467, %v2467 : tensor<576x96x1x1xf32>
+    %v9759 = stablehlo.multiply %armeanb13eW, %armeanb13eW : tensor<576x96x1x1xf32>
     %v9760 = stablehlo.multiply %v9757, %v9759 : tensor<576x96x1x1xf32>
     %v9761 = stablehlo.add %v9758, %v9760 : tensor<576x96x1x1xf32>
     %v9762 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9763 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9764 = stablehlo.multiply %v9762, %b13eWm : tensor<576x96x1x1xf32>
-    %v9765 = stablehlo.multiply %v9763, %v2467 : tensor<576x96x1x1xf32>
+    %v9765 = stablehlo.multiply %v9763, %armeanb13eW : tensor<576x96x1x1xf32>
     %v9766 = stablehlo.add %v9764, %v9765 : tensor<576x96x1x1xf32>
     %v9767 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9768 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v9769 = stablehlo.multiply %v9767, %b13eWv : tensor<576x96x1x1xf32>
-    %v9770 = stablehlo.multiply %v2467, %v2467 : tensor<576x96x1x1xf32>
+    %v9770 = stablehlo.multiply %armeanb13eW, %armeanb13eW : tensor<576x96x1x1xf32>
     %v9771 = stablehlo.multiply %v9768, %v9770 : tensor<576x96x1x1xf32>
     %v9772 = stablehlo.add %v9769, %v9771 : tensor<576x96x1x1xf32>
     %v9773 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
@@ -10278,26 +11047,33 @@ module @m {
     %v9785 = stablehlo.multiply %v9784, %v9777 : tensor<576x96x1x1xf32>
     %v9786 = stablehlo.multiply %v9785, %b13eW : tensor<576x96x1x1xf32>
     %v9787 = stablehlo.subtract %v9783, %v9786 : tensor<576x96x1x1xf32>
+    %arsumb13eg = "stablehlo.all_reduce"(%v2485) ({
+    ^bb0(%arab13eg: tensor<f32>, %arbb13eg: tensor<f32>):
+      %araddb13eg = stablehlo.add %arab13eg, %arbb13eg : tensor<f32>
+      stablehlo.return %araddb13eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb13eg = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb13eg = stablehlo.divide %arsumb13eg, %arnb13eg : tensor<576xf32>
     %v9788 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9789 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9790 = stablehlo.multiply %v9788, %b13egm : tensor<576xf32>
-    %v9791 = stablehlo.multiply %v9789, %v2485 : tensor<576xf32>
+    %v9791 = stablehlo.multiply %v9789, %armeanb13eg : tensor<576xf32>
     %v9792 = stablehlo.add %v9790, %v9791 : tensor<576xf32>
     %v9793 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9794 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9795 = stablehlo.multiply %v9793, %b13egv : tensor<576xf32>
-    %v9796 = stablehlo.multiply %v2485, %v2485 : tensor<576xf32>
+    %v9796 = stablehlo.multiply %armeanb13eg, %armeanb13eg : tensor<576xf32>
     %v9797 = stablehlo.multiply %v9794, %v9796 : tensor<576xf32>
     %v9798 = stablehlo.add %v9795, %v9797 : tensor<576xf32>
     %v9799 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9800 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9801 = stablehlo.multiply %v9799, %b13egm : tensor<576xf32>
-    %v9802 = stablehlo.multiply %v9800, %v2485 : tensor<576xf32>
+    %v9802 = stablehlo.multiply %v9800, %armeanb13eg : tensor<576xf32>
     %v9803 = stablehlo.add %v9801, %v9802 : tensor<576xf32>
     %v9804 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9805 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9806 = stablehlo.multiply %v9804, %b13egv : tensor<576xf32>
-    %v9807 = stablehlo.multiply %v2485, %v2485 : tensor<576xf32>
+    %v9807 = stablehlo.multiply %armeanb13eg, %armeanb13eg : tensor<576xf32>
     %v9808 = stablehlo.multiply %v9805, %v9807 : tensor<576xf32>
     %v9809 = stablehlo.add %v9806, %v9808 : tensor<576xf32>
     %v9810 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10315,26 +11091,33 @@ module @m {
     %v9822 = stablehlo.multiply %v9821, %v9814 : tensor<576xf32>
     %v9823 = stablehlo.multiply %v9822, %b13eg : tensor<576xf32>
     %v9824 = stablehlo.subtract %v9820, %v9823 : tensor<576xf32>
+    %arsumb13ebt = "stablehlo.all_reduce"(%v2488) ({
+    ^bb0(%arab13ebt: tensor<f32>, %arbb13ebt: tensor<f32>):
+      %araddb13ebt = stablehlo.add %arab13ebt, %arbb13ebt : tensor<f32>
+      stablehlo.return %araddb13ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb13ebt = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb13ebt = stablehlo.divide %arsumb13ebt, %arnb13ebt : tensor<576xf32>
     %v9825 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9826 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9827 = stablehlo.multiply %v9825, %b13ebtm : tensor<576xf32>
-    %v9828 = stablehlo.multiply %v9826, %v2488 : tensor<576xf32>
+    %v9828 = stablehlo.multiply %v9826, %armeanb13ebt : tensor<576xf32>
     %v9829 = stablehlo.add %v9827, %v9828 : tensor<576xf32>
     %v9830 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9831 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9832 = stablehlo.multiply %v9830, %b13ebtv : tensor<576xf32>
-    %v9833 = stablehlo.multiply %v2488, %v2488 : tensor<576xf32>
+    %v9833 = stablehlo.multiply %armeanb13ebt, %armeanb13ebt : tensor<576xf32>
     %v9834 = stablehlo.multiply %v9831, %v9833 : tensor<576xf32>
     %v9835 = stablehlo.add %v9832, %v9834 : tensor<576xf32>
     %v9836 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9837 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9838 = stablehlo.multiply %v9836, %b13ebtm : tensor<576xf32>
-    %v9839 = stablehlo.multiply %v9837, %v2488 : tensor<576xf32>
+    %v9839 = stablehlo.multiply %v9837, %armeanb13ebt : tensor<576xf32>
     %v9840 = stablehlo.add %v9838, %v9839 : tensor<576xf32>
     %v9841 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9842 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9843 = stablehlo.multiply %v9841, %b13ebtv : tensor<576xf32>
-    %v9844 = stablehlo.multiply %v2488, %v2488 : tensor<576xf32>
+    %v9844 = stablehlo.multiply %armeanb13ebt, %armeanb13ebt : tensor<576xf32>
     %v9845 = stablehlo.multiply %v9842, %v9844 : tensor<576xf32>
     %v9846 = stablehlo.add %v9843, %v9845 : tensor<576xf32>
     %v9847 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10352,26 +11135,33 @@ module @m {
     %v9859 = stablehlo.multiply %v9858, %v9851 : tensor<576xf32>
     %v9860 = stablehlo.multiply %v9859, %b13ebt : tensor<576xf32>
     %v9861 = stablehlo.subtract %v9857, %v9860 : tensor<576xf32>
+    %arsumb13dW = "stablehlo.all_reduce"(%v2494) ({
+    ^bb0(%arab13dW: tensor<f32>, %arbb13dW: tensor<f32>):
+      %araddb13dW = stablehlo.add %arab13dW, %arbb13dW : tensor<f32>
+      stablehlo.return %araddb13dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576x1x3x3xf32>) -> tensor<576x1x3x3xf32>
+    %arnb13dW = stablehlo.constant dense<4.0> : tensor<576x1x3x3xf32>
+    %armeanb13dW = stablehlo.divide %arsumb13dW, %arnb13dW : tensor<576x1x3x3xf32>
     %v9862 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9863 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9864 = stablehlo.multiply %v9862, %b13dWm : tensor<576x1x3x3xf32>
-    %v9865 = stablehlo.multiply %v9863, %v2494 : tensor<576x1x3x3xf32>
+    %v9865 = stablehlo.multiply %v9863, %armeanb13dW : tensor<576x1x3x3xf32>
     %v9866 = stablehlo.add %v9864, %v9865 : tensor<576x1x3x3xf32>
     %v9867 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9868 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9869 = stablehlo.multiply %v9867, %b13dWv : tensor<576x1x3x3xf32>
-    %v9870 = stablehlo.multiply %v2494, %v2494 : tensor<576x1x3x3xf32>
+    %v9870 = stablehlo.multiply %armeanb13dW, %armeanb13dW : tensor<576x1x3x3xf32>
     %v9871 = stablehlo.multiply %v9868, %v9870 : tensor<576x1x3x3xf32>
     %v9872 = stablehlo.add %v9869, %v9871 : tensor<576x1x3x3xf32>
     %v9873 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9874 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9875 = stablehlo.multiply %v9873, %b13dWm : tensor<576x1x3x3xf32>
-    %v9876 = stablehlo.multiply %v9874, %v2494 : tensor<576x1x3x3xf32>
+    %v9876 = stablehlo.multiply %v9874, %armeanb13dW : tensor<576x1x3x3xf32>
     %v9877 = stablehlo.add %v9875, %v9876 : tensor<576x1x3x3xf32>
     %v9878 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9879 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v9880 = stablehlo.multiply %v9878, %b13dWv : tensor<576x1x3x3xf32>
-    %v9881 = stablehlo.multiply %v2494, %v2494 : tensor<576x1x3x3xf32>
+    %v9881 = stablehlo.multiply %armeanb13dW, %armeanb13dW : tensor<576x1x3x3xf32>
     %v9882 = stablehlo.multiply %v9879, %v9881 : tensor<576x1x3x3xf32>
     %v9883 = stablehlo.add %v9880, %v9882 : tensor<576x1x3x3xf32>
     %v9884 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
@@ -10389,26 +11179,33 @@ module @m {
     %v9896 = stablehlo.multiply %v9895, %v9888 : tensor<576x1x3x3xf32>
     %v9897 = stablehlo.multiply %v9896, %b13dW : tensor<576x1x3x3xf32>
     %v9898 = stablehlo.subtract %v9894, %v9897 : tensor<576x1x3x3xf32>
+    %arsumb13dg = "stablehlo.all_reduce"(%v2512) ({
+    ^bb0(%arab13dg: tensor<f32>, %arbb13dg: tensor<f32>):
+      %araddb13dg = stablehlo.add %arab13dg, %arbb13dg : tensor<f32>
+      stablehlo.return %araddb13dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb13dg = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb13dg = stablehlo.divide %arsumb13dg, %arnb13dg : tensor<576xf32>
     %v9899 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9900 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9901 = stablehlo.multiply %v9899, %b13dgm : tensor<576xf32>
-    %v9902 = stablehlo.multiply %v9900, %v2512 : tensor<576xf32>
+    %v9902 = stablehlo.multiply %v9900, %armeanb13dg : tensor<576xf32>
     %v9903 = stablehlo.add %v9901, %v9902 : tensor<576xf32>
     %v9904 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9905 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9906 = stablehlo.multiply %v9904, %b13dgv : tensor<576xf32>
-    %v9907 = stablehlo.multiply %v2512, %v2512 : tensor<576xf32>
+    %v9907 = stablehlo.multiply %armeanb13dg, %armeanb13dg : tensor<576xf32>
     %v9908 = stablehlo.multiply %v9905, %v9907 : tensor<576xf32>
     %v9909 = stablehlo.add %v9906, %v9908 : tensor<576xf32>
     %v9910 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9911 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9912 = stablehlo.multiply %v9910, %b13dgm : tensor<576xf32>
-    %v9913 = stablehlo.multiply %v9911, %v2512 : tensor<576xf32>
+    %v9913 = stablehlo.multiply %v9911, %armeanb13dg : tensor<576xf32>
     %v9914 = stablehlo.add %v9912, %v9913 : tensor<576xf32>
     %v9915 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9916 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9917 = stablehlo.multiply %v9915, %b13dgv : tensor<576xf32>
-    %v9918 = stablehlo.multiply %v2512, %v2512 : tensor<576xf32>
+    %v9918 = stablehlo.multiply %armeanb13dg, %armeanb13dg : tensor<576xf32>
     %v9919 = stablehlo.multiply %v9916, %v9918 : tensor<576xf32>
     %v9920 = stablehlo.add %v9917, %v9919 : tensor<576xf32>
     %v9921 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10426,26 +11223,33 @@ module @m {
     %v9933 = stablehlo.multiply %v9932, %v9925 : tensor<576xf32>
     %v9934 = stablehlo.multiply %v9933, %b13dg : tensor<576xf32>
     %v9935 = stablehlo.subtract %v9931, %v9934 : tensor<576xf32>
+    %arsumb13dbt = "stablehlo.all_reduce"(%v2515) ({
+    ^bb0(%arab13dbt: tensor<f32>, %arbb13dbt: tensor<f32>):
+      %araddb13dbt = stablehlo.add %arab13dbt, %arbb13dbt : tensor<f32>
+      stablehlo.return %araddb13dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb13dbt = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb13dbt = stablehlo.divide %arsumb13dbt, %arnb13dbt : tensor<576xf32>
     %v9936 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9937 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9938 = stablehlo.multiply %v9936, %b13dbtm : tensor<576xf32>
-    %v9939 = stablehlo.multiply %v9937, %v2515 : tensor<576xf32>
+    %v9939 = stablehlo.multiply %v9937, %armeanb13dbt : tensor<576xf32>
     %v9940 = stablehlo.add %v9938, %v9939 : tensor<576xf32>
     %v9941 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9942 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9943 = stablehlo.multiply %v9941, %b13dbtv : tensor<576xf32>
-    %v9944 = stablehlo.multiply %v2515, %v2515 : tensor<576xf32>
+    %v9944 = stablehlo.multiply %armeanb13dbt, %armeanb13dbt : tensor<576xf32>
     %v9945 = stablehlo.multiply %v9942, %v9944 : tensor<576xf32>
     %v9946 = stablehlo.add %v9943, %v9945 : tensor<576xf32>
     %v9947 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9948 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9949 = stablehlo.multiply %v9947, %b13dbtm : tensor<576xf32>
-    %v9950 = stablehlo.multiply %v9948, %v2515 : tensor<576xf32>
+    %v9950 = stablehlo.multiply %v9948, %armeanb13dbt : tensor<576xf32>
     %v9951 = stablehlo.add %v9949, %v9950 : tensor<576xf32>
     %v9952 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9953 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v9954 = stablehlo.multiply %v9952, %b13dbtv : tensor<576xf32>
-    %v9955 = stablehlo.multiply %v2515, %v2515 : tensor<576xf32>
+    %v9955 = stablehlo.multiply %armeanb13dbt, %armeanb13dbt : tensor<576xf32>
     %v9956 = stablehlo.multiply %v9953, %v9955 : tensor<576xf32>
     %v9957 = stablehlo.add %v9954, %v9956 : tensor<576xf32>
     %v9958 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10463,26 +11267,33 @@ module @m {
     %v9970 = stablehlo.multiply %v9969, %v9962 : tensor<576xf32>
     %v9971 = stablehlo.multiply %v9970, %b13dbt : tensor<576xf32>
     %v9972 = stablehlo.subtract %v9968, %v9971 : tensor<576xf32>
+    %arsumb13pW = "stablehlo.all_reduce"(%v2521) ({
+    ^bb0(%arab13pW: tensor<f32>, %arbb13pW: tensor<f32>):
+      %araddb13pW = stablehlo.add %arab13pW, %arbb13pW : tensor<f32>
+      stablehlo.return %araddb13pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96x576x1x1xf32>) -> tensor<96x576x1x1xf32>
+    %arnb13pW = stablehlo.constant dense<4.0> : tensor<96x576x1x1xf32>
+    %armeanb13pW = stablehlo.divide %arsumb13pW, %arnb13pW : tensor<96x576x1x1xf32>
     %v9973 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9974 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9975 = stablehlo.multiply %v9973, %b13pWm : tensor<96x576x1x1xf32>
-    %v9976 = stablehlo.multiply %v9974, %v2521 : tensor<96x576x1x1xf32>
+    %v9976 = stablehlo.multiply %v9974, %armeanb13pW : tensor<96x576x1x1xf32>
     %v9977 = stablehlo.add %v9975, %v9976 : tensor<96x576x1x1xf32>
     %v9978 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9979 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9980 = stablehlo.multiply %v9978, %b13pWv : tensor<96x576x1x1xf32>
-    %v9981 = stablehlo.multiply %v2521, %v2521 : tensor<96x576x1x1xf32>
+    %v9981 = stablehlo.multiply %armeanb13pW, %armeanb13pW : tensor<96x576x1x1xf32>
     %v9982 = stablehlo.multiply %v9979, %v9981 : tensor<96x576x1x1xf32>
     %v9983 = stablehlo.add %v9980, %v9982 : tensor<96x576x1x1xf32>
     %v9984 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9985 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9986 = stablehlo.multiply %v9984, %b13pWm : tensor<96x576x1x1xf32>
-    %v9987 = stablehlo.multiply %v9985, %v2521 : tensor<96x576x1x1xf32>
+    %v9987 = stablehlo.multiply %v9985, %armeanb13pW : tensor<96x576x1x1xf32>
     %v9988 = stablehlo.add %v9986, %v9987 : tensor<96x576x1x1xf32>
     %v9989 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9990 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
     %v9991 = stablehlo.multiply %v9989, %b13pWv : tensor<96x576x1x1xf32>
-    %v9992 = stablehlo.multiply %v2521, %v2521 : tensor<96x576x1x1xf32>
+    %v9992 = stablehlo.multiply %armeanb13pW, %armeanb13pW : tensor<96x576x1x1xf32>
     %v9993 = stablehlo.multiply %v9990, %v9992 : tensor<96x576x1x1xf32>
     %v9994 = stablehlo.add %v9991, %v9993 : tensor<96x576x1x1xf32>
     %v9995 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96x576x1x1xf32>
@@ -10500,26 +11311,33 @@ module @m {
     %v10007 = stablehlo.multiply %v10006, %v9999 : tensor<96x576x1x1xf32>
     %v10008 = stablehlo.multiply %v10007, %b13pW : tensor<96x576x1x1xf32>
     %v10009 = stablehlo.subtract %v10005, %v10008 : tensor<96x576x1x1xf32>
+    %arsumb13pg = "stablehlo.all_reduce"(%v2539) ({
+    ^bb0(%arab13pg: tensor<f32>, %arbb13pg: tensor<f32>):
+      %araddb13pg = stablehlo.add %arab13pg, %arbb13pg : tensor<f32>
+      stablehlo.return %araddb13pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb13pg = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb13pg = stablehlo.divide %arsumb13pg, %arnb13pg : tensor<96xf32>
     %v10010 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10011 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10012 = stablehlo.multiply %v10010, %b13pgm : tensor<96xf32>
-    %v10013 = stablehlo.multiply %v10011, %v2539 : tensor<96xf32>
+    %v10013 = stablehlo.multiply %v10011, %armeanb13pg : tensor<96xf32>
     %v10014 = stablehlo.add %v10012, %v10013 : tensor<96xf32>
     %v10015 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10016 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10017 = stablehlo.multiply %v10015, %b13pgv : tensor<96xf32>
-    %v10018 = stablehlo.multiply %v2539, %v2539 : tensor<96xf32>
+    %v10018 = stablehlo.multiply %armeanb13pg, %armeanb13pg : tensor<96xf32>
     %v10019 = stablehlo.multiply %v10016, %v10018 : tensor<96xf32>
     %v10020 = stablehlo.add %v10017, %v10019 : tensor<96xf32>
     %v10021 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10022 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10023 = stablehlo.multiply %v10021, %b13pgm : tensor<96xf32>
-    %v10024 = stablehlo.multiply %v10022, %v2539 : tensor<96xf32>
+    %v10024 = stablehlo.multiply %v10022, %armeanb13pg : tensor<96xf32>
     %v10025 = stablehlo.add %v10023, %v10024 : tensor<96xf32>
     %v10026 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10027 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10028 = stablehlo.multiply %v10026, %b13pgv : tensor<96xf32>
-    %v10029 = stablehlo.multiply %v2539, %v2539 : tensor<96xf32>
+    %v10029 = stablehlo.multiply %armeanb13pg, %armeanb13pg : tensor<96xf32>
     %v10030 = stablehlo.multiply %v10027, %v10029 : tensor<96xf32>
     %v10031 = stablehlo.add %v10028, %v10030 : tensor<96xf32>
     %v10032 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -10537,26 +11355,33 @@ module @m {
     %v10044 = stablehlo.multiply %v10043, %v10036 : tensor<96xf32>
     %v10045 = stablehlo.multiply %v10044, %b13pg : tensor<96xf32>
     %v10046 = stablehlo.subtract %v10042, %v10045 : tensor<96xf32>
+    %arsumb13pbt = "stablehlo.all_reduce"(%v2542) ({
+    ^bb0(%arab13pbt: tensor<f32>, %arbb13pbt: tensor<f32>):
+      %araddb13pbt = stablehlo.add %arab13pbt, %arbb13pbt : tensor<f32>
+      stablehlo.return %araddb13pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<96xf32>) -> tensor<96xf32>
+    %arnb13pbt = stablehlo.constant dense<4.0> : tensor<96xf32>
+    %armeanb13pbt = stablehlo.divide %arsumb13pbt, %arnb13pbt : tensor<96xf32>
     %v10047 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10048 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10049 = stablehlo.multiply %v10047, %b13pbtm : tensor<96xf32>
-    %v10050 = stablehlo.multiply %v10048, %v2542 : tensor<96xf32>
+    %v10050 = stablehlo.multiply %v10048, %armeanb13pbt : tensor<96xf32>
     %v10051 = stablehlo.add %v10049, %v10050 : tensor<96xf32>
     %v10052 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10053 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10054 = stablehlo.multiply %v10052, %b13pbtv : tensor<96xf32>
-    %v10055 = stablehlo.multiply %v2542, %v2542 : tensor<96xf32>
+    %v10055 = stablehlo.multiply %armeanb13pbt, %armeanb13pbt : tensor<96xf32>
     %v10056 = stablehlo.multiply %v10053, %v10055 : tensor<96xf32>
     %v10057 = stablehlo.add %v10054, %v10056 : tensor<96xf32>
     %v10058 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10059 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10060 = stablehlo.multiply %v10058, %b13pbtm : tensor<96xf32>
-    %v10061 = stablehlo.multiply %v10059, %v2542 : tensor<96xf32>
+    %v10061 = stablehlo.multiply %v10059, %armeanb13pbt : tensor<96xf32>
     %v10062 = stablehlo.add %v10060, %v10061 : tensor<96xf32>
     %v10063 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10064 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<96xf32>
     %v10065 = stablehlo.multiply %v10063, %b13pbtv : tensor<96xf32>
-    %v10066 = stablehlo.multiply %v2542, %v2542 : tensor<96xf32>
+    %v10066 = stablehlo.multiply %armeanb13pbt, %armeanb13pbt : tensor<96xf32>
     %v10067 = stablehlo.multiply %v10064, %v10066 : tensor<96xf32>
     %v10068 = stablehlo.add %v10065, %v10067 : tensor<96xf32>
     %v10069 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<96xf32>
@@ -10574,26 +11399,33 @@ module @m {
     %v10081 = stablehlo.multiply %v10080, %v10073 : tensor<96xf32>
     %v10082 = stablehlo.multiply %v10081, %b13pbt : tensor<96xf32>
     %v10083 = stablehlo.subtract %v10079, %v10082 : tensor<96xf32>
+    %arsumb14eW = "stablehlo.all_reduce"(%v2267) ({
+    ^bb0(%arab14eW: tensor<f32>, %arbb14eW: tensor<f32>):
+      %araddb14eW = stablehlo.add %arab14eW, %arbb14eW : tensor<f32>
+      stablehlo.return %araddb14eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576x96x1x1xf32>) -> tensor<576x96x1x1xf32>
+    %arnb14eW = stablehlo.constant dense<4.0> : tensor<576x96x1x1xf32>
+    %armeanb14eW = stablehlo.divide %arsumb14eW, %arnb14eW : tensor<576x96x1x1xf32>
     %v10084 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v10085 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v10086 = stablehlo.multiply %v10084, %b14eWm : tensor<576x96x1x1xf32>
-    %v10087 = stablehlo.multiply %v10085, %v2267 : tensor<576x96x1x1xf32>
+    %v10087 = stablehlo.multiply %v10085, %armeanb14eW : tensor<576x96x1x1xf32>
     %v10088 = stablehlo.add %v10086, %v10087 : tensor<576x96x1x1xf32>
     %v10089 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v10090 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v10091 = stablehlo.multiply %v10089, %b14eWv : tensor<576x96x1x1xf32>
-    %v10092 = stablehlo.multiply %v2267, %v2267 : tensor<576x96x1x1xf32>
+    %v10092 = stablehlo.multiply %armeanb14eW, %armeanb14eW : tensor<576x96x1x1xf32>
     %v10093 = stablehlo.multiply %v10090, %v10092 : tensor<576x96x1x1xf32>
     %v10094 = stablehlo.add %v10091, %v10093 : tensor<576x96x1x1xf32>
     %v10095 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v10096 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v10097 = stablehlo.multiply %v10095, %b14eWm : tensor<576x96x1x1xf32>
-    %v10098 = stablehlo.multiply %v10096, %v2267 : tensor<576x96x1x1xf32>
+    %v10098 = stablehlo.multiply %v10096, %armeanb14eW : tensor<576x96x1x1xf32>
     %v10099 = stablehlo.add %v10097, %v10098 : tensor<576x96x1x1xf32>
     %v10100 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v10101 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
     %v10102 = stablehlo.multiply %v10100, %b14eWv : tensor<576x96x1x1xf32>
-    %v10103 = stablehlo.multiply %v2267, %v2267 : tensor<576x96x1x1xf32>
+    %v10103 = stablehlo.multiply %armeanb14eW, %armeanb14eW : tensor<576x96x1x1xf32>
     %v10104 = stablehlo.multiply %v10101, %v10103 : tensor<576x96x1x1xf32>
     %v10105 = stablehlo.add %v10102, %v10104 : tensor<576x96x1x1xf32>
     %v10106 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576x96x1x1xf32>
@@ -10611,26 +11443,33 @@ module @m {
     %v10118 = stablehlo.multiply %v10117, %v10110 : tensor<576x96x1x1xf32>
     %v10119 = stablehlo.multiply %v10118, %b14eW : tensor<576x96x1x1xf32>
     %v10120 = stablehlo.subtract %v10116, %v10119 : tensor<576x96x1x1xf32>
+    %arsumb14eg = "stablehlo.all_reduce"(%v2285) ({
+    ^bb0(%arab14eg: tensor<f32>, %arbb14eg: tensor<f32>):
+      %araddb14eg = stablehlo.add %arab14eg, %arbb14eg : tensor<f32>
+      stablehlo.return %araddb14eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb14eg = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb14eg = stablehlo.divide %arsumb14eg, %arnb14eg : tensor<576xf32>
     %v10121 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10122 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10123 = stablehlo.multiply %v10121, %b14egm : tensor<576xf32>
-    %v10124 = stablehlo.multiply %v10122, %v2285 : tensor<576xf32>
+    %v10124 = stablehlo.multiply %v10122, %armeanb14eg : tensor<576xf32>
     %v10125 = stablehlo.add %v10123, %v10124 : tensor<576xf32>
     %v10126 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10127 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10128 = stablehlo.multiply %v10126, %b14egv : tensor<576xf32>
-    %v10129 = stablehlo.multiply %v2285, %v2285 : tensor<576xf32>
+    %v10129 = stablehlo.multiply %armeanb14eg, %armeanb14eg : tensor<576xf32>
     %v10130 = stablehlo.multiply %v10127, %v10129 : tensor<576xf32>
     %v10131 = stablehlo.add %v10128, %v10130 : tensor<576xf32>
     %v10132 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10133 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10134 = stablehlo.multiply %v10132, %b14egm : tensor<576xf32>
-    %v10135 = stablehlo.multiply %v10133, %v2285 : tensor<576xf32>
+    %v10135 = stablehlo.multiply %v10133, %armeanb14eg : tensor<576xf32>
     %v10136 = stablehlo.add %v10134, %v10135 : tensor<576xf32>
     %v10137 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10138 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10139 = stablehlo.multiply %v10137, %b14egv : tensor<576xf32>
-    %v10140 = stablehlo.multiply %v2285, %v2285 : tensor<576xf32>
+    %v10140 = stablehlo.multiply %armeanb14eg, %armeanb14eg : tensor<576xf32>
     %v10141 = stablehlo.multiply %v10138, %v10140 : tensor<576xf32>
     %v10142 = stablehlo.add %v10139, %v10141 : tensor<576xf32>
     %v10143 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10648,26 +11487,33 @@ module @m {
     %v10155 = stablehlo.multiply %v10154, %v10147 : tensor<576xf32>
     %v10156 = stablehlo.multiply %v10155, %b14eg : tensor<576xf32>
     %v10157 = stablehlo.subtract %v10153, %v10156 : tensor<576xf32>
+    %arsumb14ebt = "stablehlo.all_reduce"(%v2288) ({
+    ^bb0(%arab14ebt: tensor<f32>, %arbb14ebt: tensor<f32>):
+      %araddb14ebt = stablehlo.add %arab14ebt, %arbb14ebt : tensor<f32>
+      stablehlo.return %araddb14ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb14ebt = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb14ebt = stablehlo.divide %arsumb14ebt, %arnb14ebt : tensor<576xf32>
     %v10158 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10159 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10160 = stablehlo.multiply %v10158, %b14ebtm : tensor<576xf32>
-    %v10161 = stablehlo.multiply %v10159, %v2288 : tensor<576xf32>
+    %v10161 = stablehlo.multiply %v10159, %armeanb14ebt : tensor<576xf32>
     %v10162 = stablehlo.add %v10160, %v10161 : tensor<576xf32>
     %v10163 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10164 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10165 = stablehlo.multiply %v10163, %b14ebtv : tensor<576xf32>
-    %v10166 = stablehlo.multiply %v2288, %v2288 : tensor<576xf32>
+    %v10166 = stablehlo.multiply %armeanb14ebt, %armeanb14ebt : tensor<576xf32>
     %v10167 = stablehlo.multiply %v10164, %v10166 : tensor<576xf32>
     %v10168 = stablehlo.add %v10165, %v10167 : tensor<576xf32>
     %v10169 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10170 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10171 = stablehlo.multiply %v10169, %b14ebtm : tensor<576xf32>
-    %v10172 = stablehlo.multiply %v10170, %v2288 : tensor<576xf32>
+    %v10172 = stablehlo.multiply %v10170, %armeanb14ebt : tensor<576xf32>
     %v10173 = stablehlo.add %v10171, %v10172 : tensor<576xf32>
     %v10174 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10175 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10176 = stablehlo.multiply %v10174, %b14ebtv : tensor<576xf32>
-    %v10177 = stablehlo.multiply %v2288, %v2288 : tensor<576xf32>
+    %v10177 = stablehlo.multiply %armeanb14ebt, %armeanb14ebt : tensor<576xf32>
     %v10178 = stablehlo.multiply %v10175, %v10177 : tensor<576xf32>
     %v10179 = stablehlo.add %v10176, %v10178 : tensor<576xf32>
     %v10180 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10685,26 +11531,33 @@ module @m {
     %v10192 = stablehlo.multiply %v10191, %v10184 : tensor<576xf32>
     %v10193 = stablehlo.multiply %v10192, %b14ebt : tensor<576xf32>
     %v10194 = stablehlo.subtract %v10190, %v10193 : tensor<576xf32>
+    %arsumb14dW = "stablehlo.all_reduce"(%v2296) ({
+    ^bb0(%arab14dW: tensor<f32>, %arbb14dW: tensor<f32>):
+      %araddb14dW = stablehlo.add %arab14dW, %arbb14dW : tensor<f32>
+      stablehlo.return %araddb14dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576x1x3x3xf32>) -> tensor<576x1x3x3xf32>
+    %arnb14dW = stablehlo.constant dense<4.0> : tensor<576x1x3x3xf32>
+    %armeanb14dW = stablehlo.divide %arsumb14dW, %arnb14dW : tensor<576x1x3x3xf32>
     %v10195 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v10196 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v10197 = stablehlo.multiply %v10195, %b14dWm : tensor<576x1x3x3xf32>
-    %v10198 = stablehlo.multiply %v10196, %v2296 : tensor<576x1x3x3xf32>
+    %v10198 = stablehlo.multiply %v10196, %armeanb14dW : tensor<576x1x3x3xf32>
     %v10199 = stablehlo.add %v10197, %v10198 : tensor<576x1x3x3xf32>
     %v10200 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v10201 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v10202 = stablehlo.multiply %v10200, %b14dWv : tensor<576x1x3x3xf32>
-    %v10203 = stablehlo.multiply %v2296, %v2296 : tensor<576x1x3x3xf32>
+    %v10203 = stablehlo.multiply %armeanb14dW, %armeanb14dW : tensor<576x1x3x3xf32>
     %v10204 = stablehlo.multiply %v10201, %v10203 : tensor<576x1x3x3xf32>
     %v10205 = stablehlo.add %v10202, %v10204 : tensor<576x1x3x3xf32>
     %v10206 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v10207 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v10208 = stablehlo.multiply %v10206, %b14dWm : tensor<576x1x3x3xf32>
-    %v10209 = stablehlo.multiply %v10207, %v2296 : tensor<576x1x3x3xf32>
+    %v10209 = stablehlo.multiply %v10207, %armeanb14dW : tensor<576x1x3x3xf32>
     %v10210 = stablehlo.add %v10208, %v10209 : tensor<576x1x3x3xf32>
     %v10211 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v10212 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
     %v10213 = stablehlo.multiply %v10211, %b14dWv : tensor<576x1x3x3xf32>
-    %v10214 = stablehlo.multiply %v2296, %v2296 : tensor<576x1x3x3xf32>
+    %v10214 = stablehlo.multiply %armeanb14dW, %armeanb14dW : tensor<576x1x3x3xf32>
     %v10215 = stablehlo.multiply %v10212, %v10214 : tensor<576x1x3x3xf32>
     %v10216 = stablehlo.add %v10213, %v10215 : tensor<576x1x3x3xf32>
     %v10217 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576x1x3x3xf32>
@@ -10722,26 +11575,33 @@ module @m {
     %v10229 = stablehlo.multiply %v10228, %v10221 : tensor<576x1x3x3xf32>
     %v10230 = stablehlo.multiply %v10229, %b14dW : tensor<576x1x3x3xf32>
     %v10231 = stablehlo.subtract %v10227, %v10230 : tensor<576x1x3x3xf32>
+    %arsumb14dg = "stablehlo.all_reduce"(%v2314) ({
+    ^bb0(%arab14dg: tensor<f32>, %arbb14dg: tensor<f32>):
+      %araddb14dg = stablehlo.add %arab14dg, %arbb14dg : tensor<f32>
+      stablehlo.return %araddb14dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb14dg = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb14dg = stablehlo.divide %arsumb14dg, %arnb14dg : tensor<576xf32>
     %v10232 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10233 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10234 = stablehlo.multiply %v10232, %b14dgm : tensor<576xf32>
-    %v10235 = stablehlo.multiply %v10233, %v2314 : tensor<576xf32>
+    %v10235 = stablehlo.multiply %v10233, %armeanb14dg : tensor<576xf32>
     %v10236 = stablehlo.add %v10234, %v10235 : tensor<576xf32>
     %v10237 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10238 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10239 = stablehlo.multiply %v10237, %b14dgv : tensor<576xf32>
-    %v10240 = stablehlo.multiply %v2314, %v2314 : tensor<576xf32>
+    %v10240 = stablehlo.multiply %armeanb14dg, %armeanb14dg : tensor<576xf32>
     %v10241 = stablehlo.multiply %v10238, %v10240 : tensor<576xf32>
     %v10242 = stablehlo.add %v10239, %v10241 : tensor<576xf32>
     %v10243 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10244 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10245 = stablehlo.multiply %v10243, %b14dgm : tensor<576xf32>
-    %v10246 = stablehlo.multiply %v10244, %v2314 : tensor<576xf32>
+    %v10246 = stablehlo.multiply %v10244, %armeanb14dg : tensor<576xf32>
     %v10247 = stablehlo.add %v10245, %v10246 : tensor<576xf32>
     %v10248 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10249 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10250 = stablehlo.multiply %v10248, %b14dgv : tensor<576xf32>
-    %v10251 = stablehlo.multiply %v2314, %v2314 : tensor<576xf32>
+    %v10251 = stablehlo.multiply %armeanb14dg, %armeanb14dg : tensor<576xf32>
     %v10252 = stablehlo.multiply %v10249, %v10251 : tensor<576xf32>
     %v10253 = stablehlo.add %v10250, %v10252 : tensor<576xf32>
     %v10254 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10759,26 +11619,33 @@ module @m {
     %v10266 = stablehlo.multiply %v10265, %v10258 : tensor<576xf32>
     %v10267 = stablehlo.multiply %v10266, %b14dg : tensor<576xf32>
     %v10268 = stablehlo.subtract %v10264, %v10267 : tensor<576xf32>
+    %arsumb14dbt = "stablehlo.all_reduce"(%v2317) ({
+    ^bb0(%arab14dbt: tensor<f32>, %arbb14dbt: tensor<f32>):
+      %araddb14dbt = stablehlo.add %arab14dbt, %arbb14dbt : tensor<f32>
+      stablehlo.return %araddb14dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<576xf32>) -> tensor<576xf32>
+    %arnb14dbt = stablehlo.constant dense<4.0> : tensor<576xf32>
+    %armeanb14dbt = stablehlo.divide %arsumb14dbt, %arnb14dbt : tensor<576xf32>
     %v10269 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10270 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10271 = stablehlo.multiply %v10269, %b14dbtm : tensor<576xf32>
-    %v10272 = stablehlo.multiply %v10270, %v2317 : tensor<576xf32>
+    %v10272 = stablehlo.multiply %v10270, %armeanb14dbt : tensor<576xf32>
     %v10273 = stablehlo.add %v10271, %v10272 : tensor<576xf32>
     %v10274 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10275 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10276 = stablehlo.multiply %v10274, %b14dbtv : tensor<576xf32>
-    %v10277 = stablehlo.multiply %v2317, %v2317 : tensor<576xf32>
+    %v10277 = stablehlo.multiply %armeanb14dbt, %armeanb14dbt : tensor<576xf32>
     %v10278 = stablehlo.multiply %v10275, %v10277 : tensor<576xf32>
     %v10279 = stablehlo.add %v10276, %v10278 : tensor<576xf32>
     %v10280 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10281 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10282 = stablehlo.multiply %v10280, %b14dbtm : tensor<576xf32>
-    %v10283 = stablehlo.multiply %v10281, %v2317 : tensor<576xf32>
+    %v10283 = stablehlo.multiply %v10281, %armeanb14dbt : tensor<576xf32>
     %v10284 = stablehlo.add %v10282, %v10283 : tensor<576xf32>
     %v10285 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10286 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<576xf32>
     %v10287 = stablehlo.multiply %v10285, %b14dbtv : tensor<576xf32>
-    %v10288 = stablehlo.multiply %v2317, %v2317 : tensor<576xf32>
+    %v10288 = stablehlo.multiply %armeanb14dbt, %armeanb14dbt : tensor<576xf32>
     %v10289 = stablehlo.multiply %v10286, %v10288 : tensor<576xf32>
     %v10290 = stablehlo.add %v10287, %v10289 : tensor<576xf32>
     %v10291 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<576xf32>
@@ -10796,26 +11663,33 @@ module @m {
     %v10303 = stablehlo.multiply %v10302, %v10295 : tensor<576xf32>
     %v10304 = stablehlo.multiply %v10303, %b14dbt : tensor<576xf32>
     %v10305 = stablehlo.subtract %v10301, %v10304 : tensor<576xf32>
+    %arsumb14pW = "stablehlo.all_reduce"(%v2323) ({
+    ^bb0(%arab14pW: tensor<f32>, %arbb14pW: tensor<f32>):
+      %araddb14pW = stablehlo.add %arab14pW, %arbb14pW : tensor<f32>
+      stablehlo.return %araddb14pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160x576x1x1xf32>) -> tensor<160x576x1x1xf32>
+    %arnb14pW = stablehlo.constant dense<4.0> : tensor<160x576x1x1xf32>
+    %armeanb14pW = stablehlo.divide %arsumb14pW, %arnb14pW : tensor<160x576x1x1xf32>
     %v10306 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
     %v10307 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
     %v10308 = stablehlo.multiply %v10306, %b14pWm : tensor<160x576x1x1xf32>
-    %v10309 = stablehlo.multiply %v10307, %v2323 : tensor<160x576x1x1xf32>
+    %v10309 = stablehlo.multiply %v10307, %armeanb14pW : tensor<160x576x1x1xf32>
     %v10310 = stablehlo.add %v10308, %v10309 : tensor<160x576x1x1xf32>
     %v10311 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
     %v10312 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
     %v10313 = stablehlo.multiply %v10311, %b14pWv : tensor<160x576x1x1xf32>
-    %v10314 = stablehlo.multiply %v2323, %v2323 : tensor<160x576x1x1xf32>
+    %v10314 = stablehlo.multiply %armeanb14pW, %armeanb14pW : tensor<160x576x1x1xf32>
     %v10315 = stablehlo.multiply %v10312, %v10314 : tensor<160x576x1x1xf32>
     %v10316 = stablehlo.add %v10313, %v10315 : tensor<160x576x1x1xf32>
     %v10317 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
     %v10318 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
     %v10319 = stablehlo.multiply %v10317, %b14pWm : tensor<160x576x1x1xf32>
-    %v10320 = stablehlo.multiply %v10318, %v2323 : tensor<160x576x1x1xf32>
+    %v10320 = stablehlo.multiply %v10318, %armeanb14pW : tensor<160x576x1x1xf32>
     %v10321 = stablehlo.add %v10319, %v10320 : tensor<160x576x1x1xf32>
     %v10322 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
     %v10323 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
     %v10324 = stablehlo.multiply %v10322, %b14pWv : tensor<160x576x1x1xf32>
-    %v10325 = stablehlo.multiply %v2323, %v2323 : tensor<160x576x1x1xf32>
+    %v10325 = stablehlo.multiply %armeanb14pW, %armeanb14pW : tensor<160x576x1x1xf32>
     %v10326 = stablehlo.multiply %v10323, %v10325 : tensor<160x576x1x1xf32>
     %v10327 = stablehlo.add %v10324, %v10326 : tensor<160x576x1x1xf32>
     %v10328 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160x576x1x1xf32>
@@ -10833,26 +11707,33 @@ module @m {
     %v10340 = stablehlo.multiply %v10339, %v10332 : tensor<160x576x1x1xf32>
     %v10341 = stablehlo.multiply %v10340, %b14pW : tensor<160x576x1x1xf32>
     %v10342 = stablehlo.subtract %v10338, %v10341 : tensor<160x576x1x1xf32>
+    %arsumb14pg = "stablehlo.all_reduce"(%v2341) ({
+    ^bb0(%arab14pg: tensor<f32>, %arbb14pg: tensor<f32>):
+      %araddb14pg = stablehlo.add %arab14pg, %arbb14pg : tensor<f32>
+      stablehlo.return %araddb14pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160xf32>) -> tensor<160xf32>
+    %arnb14pg = stablehlo.constant dense<4.0> : tensor<160xf32>
+    %armeanb14pg = stablehlo.divide %arsumb14pg, %arnb14pg : tensor<160xf32>
     %v10343 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10344 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10345 = stablehlo.multiply %v10343, %b14pgm : tensor<160xf32>
-    %v10346 = stablehlo.multiply %v10344, %v2341 : tensor<160xf32>
+    %v10346 = stablehlo.multiply %v10344, %armeanb14pg : tensor<160xf32>
     %v10347 = stablehlo.add %v10345, %v10346 : tensor<160xf32>
     %v10348 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10349 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10350 = stablehlo.multiply %v10348, %b14pgv : tensor<160xf32>
-    %v10351 = stablehlo.multiply %v2341, %v2341 : tensor<160xf32>
+    %v10351 = stablehlo.multiply %armeanb14pg, %armeanb14pg : tensor<160xf32>
     %v10352 = stablehlo.multiply %v10349, %v10351 : tensor<160xf32>
     %v10353 = stablehlo.add %v10350, %v10352 : tensor<160xf32>
     %v10354 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10355 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10356 = stablehlo.multiply %v10354, %b14pgm : tensor<160xf32>
-    %v10357 = stablehlo.multiply %v10355, %v2341 : tensor<160xf32>
+    %v10357 = stablehlo.multiply %v10355, %armeanb14pg : tensor<160xf32>
     %v10358 = stablehlo.add %v10356, %v10357 : tensor<160xf32>
     %v10359 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10360 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10361 = stablehlo.multiply %v10359, %b14pgv : tensor<160xf32>
-    %v10362 = stablehlo.multiply %v2341, %v2341 : tensor<160xf32>
+    %v10362 = stablehlo.multiply %armeanb14pg, %armeanb14pg : tensor<160xf32>
     %v10363 = stablehlo.multiply %v10360, %v10362 : tensor<160xf32>
     %v10364 = stablehlo.add %v10361, %v10363 : tensor<160xf32>
     %v10365 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160xf32>
@@ -10870,26 +11751,33 @@ module @m {
     %v10377 = stablehlo.multiply %v10376, %v10369 : tensor<160xf32>
     %v10378 = stablehlo.multiply %v10377, %b14pg : tensor<160xf32>
     %v10379 = stablehlo.subtract %v10375, %v10378 : tensor<160xf32>
+    %arsumb14pbt = "stablehlo.all_reduce"(%v2344) ({
+    ^bb0(%arab14pbt: tensor<f32>, %arbb14pbt: tensor<f32>):
+      %araddb14pbt = stablehlo.add %arab14pbt, %arbb14pbt : tensor<f32>
+      stablehlo.return %araddb14pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160xf32>) -> tensor<160xf32>
+    %arnb14pbt = stablehlo.constant dense<4.0> : tensor<160xf32>
+    %armeanb14pbt = stablehlo.divide %arsumb14pbt, %arnb14pbt : tensor<160xf32>
     %v10380 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10381 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10382 = stablehlo.multiply %v10380, %b14pbtm : tensor<160xf32>
-    %v10383 = stablehlo.multiply %v10381, %v2344 : tensor<160xf32>
+    %v10383 = stablehlo.multiply %v10381, %armeanb14pbt : tensor<160xf32>
     %v10384 = stablehlo.add %v10382, %v10383 : tensor<160xf32>
     %v10385 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10386 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10387 = stablehlo.multiply %v10385, %b14pbtv : tensor<160xf32>
-    %v10388 = stablehlo.multiply %v2344, %v2344 : tensor<160xf32>
+    %v10388 = stablehlo.multiply %armeanb14pbt, %armeanb14pbt : tensor<160xf32>
     %v10389 = stablehlo.multiply %v10386, %v10388 : tensor<160xf32>
     %v10390 = stablehlo.add %v10387, %v10389 : tensor<160xf32>
     %v10391 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10392 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10393 = stablehlo.multiply %v10391, %b14pbtm : tensor<160xf32>
-    %v10394 = stablehlo.multiply %v10392, %v2344 : tensor<160xf32>
+    %v10394 = stablehlo.multiply %v10392, %armeanb14pbt : tensor<160xf32>
     %v10395 = stablehlo.add %v10393, %v10394 : tensor<160xf32>
     %v10396 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10397 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10398 = stablehlo.multiply %v10396, %b14pbtv : tensor<160xf32>
-    %v10399 = stablehlo.multiply %v2344, %v2344 : tensor<160xf32>
+    %v10399 = stablehlo.multiply %armeanb14pbt, %armeanb14pbt : tensor<160xf32>
     %v10400 = stablehlo.multiply %v10397, %v10399 : tensor<160xf32>
     %v10401 = stablehlo.add %v10398, %v10400 : tensor<160xf32>
     %v10402 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160xf32>
@@ -10907,26 +11795,33 @@ module @m {
     %v10414 = stablehlo.multiply %v10413, %v10406 : tensor<160xf32>
     %v10415 = stablehlo.multiply %v10414, %b14pbt : tensor<160xf32>
     %v10416 = stablehlo.subtract %v10412, %v10415 : tensor<160xf32>
+    %arsumb15eW = "stablehlo.all_reduce"(%v2068) ({
+    ^bb0(%arab15eW: tensor<f32>, %arbb15eW: tensor<f32>):
+      %araddb15eW = stablehlo.add %arab15eW, %arbb15eW : tensor<f32>
+      stablehlo.return %araddb15eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960x160x1x1xf32>) -> tensor<960x160x1x1xf32>
+    %arnb15eW = stablehlo.constant dense<4.0> : tensor<960x160x1x1xf32>
+    %armeanb15eW = stablehlo.divide %arsumb15eW, %arnb15eW : tensor<960x160x1x1xf32>
     %v10417 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10418 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10419 = stablehlo.multiply %v10417, %b15eWm : tensor<960x160x1x1xf32>
-    %v10420 = stablehlo.multiply %v10418, %v2068 : tensor<960x160x1x1xf32>
+    %v10420 = stablehlo.multiply %v10418, %armeanb15eW : tensor<960x160x1x1xf32>
     %v10421 = stablehlo.add %v10419, %v10420 : tensor<960x160x1x1xf32>
     %v10422 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10423 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10424 = stablehlo.multiply %v10422, %b15eWv : tensor<960x160x1x1xf32>
-    %v10425 = stablehlo.multiply %v2068, %v2068 : tensor<960x160x1x1xf32>
+    %v10425 = stablehlo.multiply %armeanb15eW, %armeanb15eW : tensor<960x160x1x1xf32>
     %v10426 = stablehlo.multiply %v10423, %v10425 : tensor<960x160x1x1xf32>
     %v10427 = stablehlo.add %v10424, %v10426 : tensor<960x160x1x1xf32>
     %v10428 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10429 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10430 = stablehlo.multiply %v10428, %b15eWm : tensor<960x160x1x1xf32>
-    %v10431 = stablehlo.multiply %v10429, %v2068 : tensor<960x160x1x1xf32>
+    %v10431 = stablehlo.multiply %v10429, %armeanb15eW : tensor<960x160x1x1xf32>
     %v10432 = stablehlo.add %v10430, %v10431 : tensor<960x160x1x1xf32>
     %v10433 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10434 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10435 = stablehlo.multiply %v10433, %b15eWv : tensor<960x160x1x1xf32>
-    %v10436 = stablehlo.multiply %v2068, %v2068 : tensor<960x160x1x1xf32>
+    %v10436 = stablehlo.multiply %armeanb15eW, %armeanb15eW : tensor<960x160x1x1xf32>
     %v10437 = stablehlo.multiply %v10434, %v10436 : tensor<960x160x1x1xf32>
     %v10438 = stablehlo.add %v10435, %v10437 : tensor<960x160x1x1xf32>
     %v10439 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
@@ -10944,26 +11839,33 @@ module @m {
     %v10451 = stablehlo.multiply %v10450, %v10443 : tensor<960x160x1x1xf32>
     %v10452 = stablehlo.multiply %v10451, %b15eW : tensor<960x160x1x1xf32>
     %v10453 = stablehlo.subtract %v10449, %v10452 : tensor<960x160x1x1xf32>
+    %arsumb15eg = "stablehlo.all_reduce"(%v2086) ({
+    ^bb0(%arab15eg: tensor<f32>, %arbb15eg: tensor<f32>):
+      %araddb15eg = stablehlo.add %arab15eg, %arbb15eg : tensor<f32>
+      stablehlo.return %araddb15eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb15eg = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb15eg = stablehlo.divide %arsumb15eg, %arnb15eg : tensor<960xf32>
     %v10454 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10455 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10456 = stablehlo.multiply %v10454, %b15egm : tensor<960xf32>
-    %v10457 = stablehlo.multiply %v10455, %v2086 : tensor<960xf32>
+    %v10457 = stablehlo.multiply %v10455, %armeanb15eg : tensor<960xf32>
     %v10458 = stablehlo.add %v10456, %v10457 : tensor<960xf32>
     %v10459 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10460 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10461 = stablehlo.multiply %v10459, %b15egv : tensor<960xf32>
-    %v10462 = stablehlo.multiply %v2086, %v2086 : tensor<960xf32>
+    %v10462 = stablehlo.multiply %armeanb15eg, %armeanb15eg : tensor<960xf32>
     %v10463 = stablehlo.multiply %v10460, %v10462 : tensor<960xf32>
     %v10464 = stablehlo.add %v10461, %v10463 : tensor<960xf32>
     %v10465 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10466 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10467 = stablehlo.multiply %v10465, %b15egm : tensor<960xf32>
-    %v10468 = stablehlo.multiply %v10466, %v2086 : tensor<960xf32>
+    %v10468 = stablehlo.multiply %v10466, %armeanb15eg : tensor<960xf32>
     %v10469 = stablehlo.add %v10467, %v10468 : tensor<960xf32>
     %v10470 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10471 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10472 = stablehlo.multiply %v10470, %b15egv : tensor<960xf32>
-    %v10473 = stablehlo.multiply %v2086, %v2086 : tensor<960xf32>
+    %v10473 = stablehlo.multiply %armeanb15eg, %armeanb15eg : tensor<960xf32>
     %v10474 = stablehlo.multiply %v10471, %v10473 : tensor<960xf32>
     %v10475 = stablehlo.add %v10472, %v10474 : tensor<960xf32>
     %v10476 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -10981,26 +11883,33 @@ module @m {
     %v10488 = stablehlo.multiply %v10487, %v10480 : tensor<960xf32>
     %v10489 = stablehlo.multiply %v10488, %b15eg : tensor<960xf32>
     %v10490 = stablehlo.subtract %v10486, %v10489 : tensor<960xf32>
+    %arsumb15ebt = "stablehlo.all_reduce"(%v2089) ({
+    ^bb0(%arab15ebt: tensor<f32>, %arbb15ebt: tensor<f32>):
+      %araddb15ebt = stablehlo.add %arab15ebt, %arbb15ebt : tensor<f32>
+      stablehlo.return %araddb15ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb15ebt = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb15ebt = stablehlo.divide %arsumb15ebt, %arnb15ebt : tensor<960xf32>
     %v10491 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10492 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10493 = stablehlo.multiply %v10491, %b15ebtm : tensor<960xf32>
-    %v10494 = stablehlo.multiply %v10492, %v2089 : tensor<960xf32>
+    %v10494 = stablehlo.multiply %v10492, %armeanb15ebt : tensor<960xf32>
     %v10495 = stablehlo.add %v10493, %v10494 : tensor<960xf32>
     %v10496 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10497 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10498 = stablehlo.multiply %v10496, %b15ebtv : tensor<960xf32>
-    %v10499 = stablehlo.multiply %v2089, %v2089 : tensor<960xf32>
+    %v10499 = stablehlo.multiply %armeanb15ebt, %armeanb15ebt : tensor<960xf32>
     %v10500 = stablehlo.multiply %v10497, %v10499 : tensor<960xf32>
     %v10501 = stablehlo.add %v10498, %v10500 : tensor<960xf32>
     %v10502 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10503 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10504 = stablehlo.multiply %v10502, %b15ebtm : tensor<960xf32>
-    %v10505 = stablehlo.multiply %v10503, %v2089 : tensor<960xf32>
+    %v10505 = stablehlo.multiply %v10503, %armeanb15ebt : tensor<960xf32>
     %v10506 = stablehlo.add %v10504, %v10505 : tensor<960xf32>
     %v10507 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10508 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10509 = stablehlo.multiply %v10507, %b15ebtv : tensor<960xf32>
-    %v10510 = stablehlo.multiply %v2089, %v2089 : tensor<960xf32>
+    %v10510 = stablehlo.multiply %armeanb15ebt, %armeanb15ebt : tensor<960xf32>
     %v10511 = stablehlo.multiply %v10508, %v10510 : tensor<960xf32>
     %v10512 = stablehlo.add %v10509, %v10511 : tensor<960xf32>
     %v10513 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11018,26 +11927,33 @@ module @m {
     %v10525 = stablehlo.multiply %v10524, %v10517 : tensor<960xf32>
     %v10526 = stablehlo.multiply %v10525, %b15ebt : tensor<960xf32>
     %v10527 = stablehlo.subtract %v10523, %v10526 : tensor<960xf32>
+    %arsumb15dW = "stablehlo.all_reduce"(%v2095) ({
+    ^bb0(%arab15dW: tensor<f32>, %arbb15dW: tensor<f32>):
+      %araddb15dW = stablehlo.add %arab15dW, %arbb15dW : tensor<f32>
+      stablehlo.return %araddb15dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960x1x3x3xf32>) -> tensor<960x1x3x3xf32>
+    %arnb15dW = stablehlo.constant dense<4.0> : tensor<960x1x3x3xf32>
+    %armeanb15dW = stablehlo.divide %arsumb15dW, %arnb15dW : tensor<960x1x3x3xf32>
     %v10528 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10529 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10530 = stablehlo.multiply %v10528, %b15dWm : tensor<960x1x3x3xf32>
-    %v10531 = stablehlo.multiply %v10529, %v2095 : tensor<960x1x3x3xf32>
+    %v10531 = stablehlo.multiply %v10529, %armeanb15dW : tensor<960x1x3x3xf32>
     %v10532 = stablehlo.add %v10530, %v10531 : tensor<960x1x3x3xf32>
     %v10533 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10534 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10535 = stablehlo.multiply %v10533, %b15dWv : tensor<960x1x3x3xf32>
-    %v10536 = stablehlo.multiply %v2095, %v2095 : tensor<960x1x3x3xf32>
+    %v10536 = stablehlo.multiply %armeanb15dW, %armeanb15dW : tensor<960x1x3x3xf32>
     %v10537 = stablehlo.multiply %v10534, %v10536 : tensor<960x1x3x3xf32>
     %v10538 = stablehlo.add %v10535, %v10537 : tensor<960x1x3x3xf32>
     %v10539 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10540 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10541 = stablehlo.multiply %v10539, %b15dWm : tensor<960x1x3x3xf32>
-    %v10542 = stablehlo.multiply %v10540, %v2095 : tensor<960x1x3x3xf32>
+    %v10542 = stablehlo.multiply %v10540, %armeanb15dW : tensor<960x1x3x3xf32>
     %v10543 = stablehlo.add %v10541, %v10542 : tensor<960x1x3x3xf32>
     %v10544 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10545 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10546 = stablehlo.multiply %v10544, %b15dWv : tensor<960x1x3x3xf32>
-    %v10547 = stablehlo.multiply %v2095, %v2095 : tensor<960x1x3x3xf32>
+    %v10547 = stablehlo.multiply %armeanb15dW, %armeanb15dW : tensor<960x1x3x3xf32>
     %v10548 = stablehlo.multiply %v10545, %v10547 : tensor<960x1x3x3xf32>
     %v10549 = stablehlo.add %v10546, %v10548 : tensor<960x1x3x3xf32>
     %v10550 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
@@ -11055,26 +11971,33 @@ module @m {
     %v10562 = stablehlo.multiply %v10561, %v10554 : tensor<960x1x3x3xf32>
     %v10563 = stablehlo.multiply %v10562, %b15dW : tensor<960x1x3x3xf32>
     %v10564 = stablehlo.subtract %v10560, %v10563 : tensor<960x1x3x3xf32>
+    %arsumb15dg = "stablehlo.all_reduce"(%v2113) ({
+    ^bb0(%arab15dg: tensor<f32>, %arbb15dg: tensor<f32>):
+      %araddb15dg = stablehlo.add %arab15dg, %arbb15dg : tensor<f32>
+      stablehlo.return %araddb15dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb15dg = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb15dg = stablehlo.divide %arsumb15dg, %arnb15dg : tensor<960xf32>
     %v10565 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10566 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10567 = stablehlo.multiply %v10565, %b15dgm : tensor<960xf32>
-    %v10568 = stablehlo.multiply %v10566, %v2113 : tensor<960xf32>
+    %v10568 = stablehlo.multiply %v10566, %armeanb15dg : tensor<960xf32>
     %v10569 = stablehlo.add %v10567, %v10568 : tensor<960xf32>
     %v10570 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10571 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10572 = stablehlo.multiply %v10570, %b15dgv : tensor<960xf32>
-    %v10573 = stablehlo.multiply %v2113, %v2113 : tensor<960xf32>
+    %v10573 = stablehlo.multiply %armeanb15dg, %armeanb15dg : tensor<960xf32>
     %v10574 = stablehlo.multiply %v10571, %v10573 : tensor<960xf32>
     %v10575 = stablehlo.add %v10572, %v10574 : tensor<960xf32>
     %v10576 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10577 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10578 = stablehlo.multiply %v10576, %b15dgm : tensor<960xf32>
-    %v10579 = stablehlo.multiply %v10577, %v2113 : tensor<960xf32>
+    %v10579 = stablehlo.multiply %v10577, %armeanb15dg : tensor<960xf32>
     %v10580 = stablehlo.add %v10578, %v10579 : tensor<960xf32>
     %v10581 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10582 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10583 = stablehlo.multiply %v10581, %b15dgv : tensor<960xf32>
-    %v10584 = stablehlo.multiply %v2113, %v2113 : tensor<960xf32>
+    %v10584 = stablehlo.multiply %armeanb15dg, %armeanb15dg : tensor<960xf32>
     %v10585 = stablehlo.multiply %v10582, %v10584 : tensor<960xf32>
     %v10586 = stablehlo.add %v10583, %v10585 : tensor<960xf32>
     %v10587 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11092,26 +12015,33 @@ module @m {
     %v10599 = stablehlo.multiply %v10598, %v10591 : tensor<960xf32>
     %v10600 = stablehlo.multiply %v10599, %b15dg : tensor<960xf32>
     %v10601 = stablehlo.subtract %v10597, %v10600 : tensor<960xf32>
+    %arsumb15dbt = "stablehlo.all_reduce"(%v2116) ({
+    ^bb0(%arab15dbt: tensor<f32>, %arbb15dbt: tensor<f32>):
+      %araddb15dbt = stablehlo.add %arab15dbt, %arbb15dbt : tensor<f32>
+      stablehlo.return %araddb15dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb15dbt = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb15dbt = stablehlo.divide %arsumb15dbt, %arnb15dbt : tensor<960xf32>
     %v10602 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10603 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10604 = stablehlo.multiply %v10602, %b15dbtm : tensor<960xf32>
-    %v10605 = stablehlo.multiply %v10603, %v2116 : tensor<960xf32>
+    %v10605 = stablehlo.multiply %v10603, %armeanb15dbt : tensor<960xf32>
     %v10606 = stablehlo.add %v10604, %v10605 : tensor<960xf32>
     %v10607 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10608 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10609 = stablehlo.multiply %v10607, %b15dbtv : tensor<960xf32>
-    %v10610 = stablehlo.multiply %v2116, %v2116 : tensor<960xf32>
+    %v10610 = stablehlo.multiply %armeanb15dbt, %armeanb15dbt : tensor<960xf32>
     %v10611 = stablehlo.multiply %v10608, %v10610 : tensor<960xf32>
     %v10612 = stablehlo.add %v10609, %v10611 : tensor<960xf32>
     %v10613 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10614 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10615 = stablehlo.multiply %v10613, %b15dbtm : tensor<960xf32>
-    %v10616 = stablehlo.multiply %v10614, %v2116 : tensor<960xf32>
+    %v10616 = stablehlo.multiply %v10614, %armeanb15dbt : tensor<960xf32>
     %v10617 = stablehlo.add %v10615, %v10616 : tensor<960xf32>
     %v10618 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10619 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10620 = stablehlo.multiply %v10618, %b15dbtv : tensor<960xf32>
-    %v10621 = stablehlo.multiply %v2116, %v2116 : tensor<960xf32>
+    %v10621 = stablehlo.multiply %armeanb15dbt, %armeanb15dbt : tensor<960xf32>
     %v10622 = stablehlo.multiply %v10619, %v10621 : tensor<960xf32>
     %v10623 = stablehlo.add %v10620, %v10622 : tensor<960xf32>
     %v10624 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11129,26 +12059,33 @@ module @m {
     %v10636 = stablehlo.multiply %v10635, %v10628 : tensor<960xf32>
     %v10637 = stablehlo.multiply %v10636, %b15dbt : tensor<960xf32>
     %v10638 = stablehlo.subtract %v10634, %v10637 : tensor<960xf32>
+    %arsumb15pW = "stablehlo.all_reduce"(%v2122) ({
+    ^bb0(%arab15pW: tensor<f32>, %arbb15pW: tensor<f32>):
+      %araddb15pW = stablehlo.add %arab15pW, %arbb15pW : tensor<f32>
+      stablehlo.return %araddb15pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160x960x1x1xf32>) -> tensor<160x960x1x1xf32>
+    %arnb15pW = stablehlo.constant dense<4.0> : tensor<160x960x1x1xf32>
+    %armeanb15pW = stablehlo.divide %arsumb15pW, %arnb15pW : tensor<160x960x1x1xf32>
     %v10639 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10640 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10641 = stablehlo.multiply %v10639, %b15pWm : tensor<160x960x1x1xf32>
-    %v10642 = stablehlo.multiply %v10640, %v2122 : tensor<160x960x1x1xf32>
+    %v10642 = stablehlo.multiply %v10640, %armeanb15pW : tensor<160x960x1x1xf32>
     %v10643 = stablehlo.add %v10641, %v10642 : tensor<160x960x1x1xf32>
     %v10644 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10645 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10646 = stablehlo.multiply %v10644, %b15pWv : tensor<160x960x1x1xf32>
-    %v10647 = stablehlo.multiply %v2122, %v2122 : tensor<160x960x1x1xf32>
+    %v10647 = stablehlo.multiply %armeanb15pW, %armeanb15pW : tensor<160x960x1x1xf32>
     %v10648 = stablehlo.multiply %v10645, %v10647 : tensor<160x960x1x1xf32>
     %v10649 = stablehlo.add %v10646, %v10648 : tensor<160x960x1x1xf32>
     %v10650 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10651 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10652 = stablehlo.multiply %v10650, %b15pWm : tensor<160x960x1x1xf32>
-    %v10653 = stablehlo.multiply %v10651, %v2122 : tensor<160x960x1x1xf32>
+    %v10653 = stablehlo.multiply %v10651, %armeanb15pW : tensor<160x960x1x1xf32>
     %v10654 = stablehlo.add %v10652, %v10653 : tensor<160x960x1x1xf32>
     %v10655 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10656 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10657 = stablehlo.multiply %v10655, %b15pWv : tensor<160x960x1x1xf32>
-    %v10658 = stablehlo.multiply %v2122, %v2122 : tensor<160x960x1x1xf32>
+    %v10658 = stablehlo.multiply %armeanb15pW, %armeanb15pW : tensor<160x960x1x1xf32>
     %v10659 = stablehlo.multiply %v10656, %v10658 : tensor<160x960x1x1xf32>
     %v10660 = stablehlo.add %v10657, %v10659 : tensor<160x960x1x1xf32>
     %v10661 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
@@ -11166,26 +12103,33 @@ module @m {
     %v10673 = stablehlo.multiply %v10672, %v10665 : tensor<160x960x1x1xf32>
     %v10674 = stablehlo.multiply %v10673, %b15pW : tensor<160x960x1x1xf32>
     %v10675 = stablehlo.subtract %v10671, %v10674 : tensor<160x960x1x1xf32>
+    %arsumb15pg = "stablehlo.all_reduce"(%v2140) ({
+    ^bb0(%arab15pg: tensor<f32>, %arbb15pg: tensor<f32>):
+      %araddb15pg = stablehlo.add %arab15pg, %arbb15pg : tensor<f32>
+      stablehlo.return %araddb15pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160xf32>) -> tensor<160xf32>
+    %arnb15pg = stablehlo.constant dense<4.0> : tensor<160xf32>
+    %armeanb15pg = stablehlo.divide %arsumb15pg, %arnb15pg : tensor<160xf32>
     %v10676 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10677 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10678 = stablehlo.multiply %v10676, %b15pgm : tensor<160xf32>
-    %v10679 = stablehlo.multiply %v10677, %v2140 : tensor<160xf32>
+    %v10679 = stablehlo.multiply %v10677, %armeanb15pg : tensor<160xf32>
     %v10680 = stablehlo.add %v10678, %v10679 : tensor<160xf32>
     %v10681 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10682 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10683 = stablehlo.multiply %v10681, %b15pgv : tensor<160xf32>
-    %v10684 = stablehlo.multiply %v2140, %v2140 : tensor<160xf32>
+    %v10684 = stablehlo.multiply %armeanb15pg, %armeanb15pg : tensor<160xf32>
     %v10685 = stablehlo.multiply %v10682, %v10684 : tensor<160xf32>
     %v10686 = stablehlo.add %v10683, %v10685 : tensor<160xf32>
     %v10687 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10688 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10689 = stablehlo.multiply %v10687, %b15pgm : tensor<160xf32>
-    %v10690 = stablehlo.multiply %v10688, %v2140 : tensor<160xf32>
+    %v10690 = stablehlo.multiply %v10688, %armeanb15pg : tensor<160xf32>
     %v10691 = stablehlo.add %v10689, %v10690 : tensor<160xf32>
     %v10692 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10693 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10694 = stablehlo.multiply %v10692, %b15pgv : tensor<160xf32>
-    %v10695 = stablehlo.multiply %v2140, %v2140 : tensor<160xf32>
+    %v10695 = stablehlo.multiply %armeanb15pg, %armeanb15pg : tensor<160xf32>
     %v10696 = stablehlo.multiply %v10693, %v10695 : tensor<160xf32>
     %v10697 = stablehlo.add %v10694, %v10696 : tensor<160xf32>
     %v10698 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160xf32>
@@ -11203,26 +12147,33 @@ module @m {
     %v10710 = stablehlo.multiply %v10709, %v10702 : tensor<160xf32>
     %v10711 = stablehlo.multiply %v10710, %b15pg : tensor<160xf32>
     %v10712 = stablehlo.subtract %v10708, %v10711 : tensor<160xf32>
+    %arsumb15pbt = "stablehlo.all_reduce"(%v2143) ({
+    ^bb0(%arab15pbt: tensor<f32>, %arbb15pbt: tensor<f32>):
+      %araddb15pbt = stablehlo.add %arab15pbt, %arbb15pbt : tensor<f32>
+      stablehlo.return %araddb15pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160xf32>) -> tensor<160xf32>
+    %arnb15pbt = stablehlo.constant dense<4.0> : tensor<160xf32>
+    %armeanb15pbt = stablehlo.divide %arsumb15pbt, %arnb15pbt : tensor<160xf32>
     %v10713 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10714 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10715 = stablehlo.multiply %v10713, %b15pbtm : tensor<160xf32>
-    %v10716 = stablehlo.multiply %v10714, %v2143 : tensor<160xf32>
+    %v10716 = stablehlo.multiply %v10714, %armeanb15pbt : tensor<160xf32>
     %v10717 = stablehlo.add %v10715, %v10716 : tensor<160xf32>
     %v10718 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10719 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10720 = stablehlo.multiply %v10718, %b15pbtv : tensor<160xf32>
-    %v10721 = stablehlo.multiply %v2143, %v2143 : tensor<160xf32>
+    %v10721 = stablehlo.multiply %armeanb15pbt, %armeanb15pbt : tensor<160xf32>
     %v10722 = stablehlo.multiply %v10719, %v10721 : tensor<160xf32>
     %v10723 = stablehlo.add %v10720, %v10722 : tensor<160xf32>
     %v10724 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10725 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10726 = stablehlo.multiply %v10724, %b15pbtm : tensor<160xf32>
-    %v10727 = stablehlo.multiply %v10725, %v2143 : tensor<160xf32>
+    %v10727 = stablehlo.multiply %v10725, %armeanb15pbt : tensor<160xf32>
     %v10728 = stablehlo.add %v10726, %v10727 : tensor<160xf32>
     %v10729 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10730 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v10731 = stablehlo.multiply %v10729, %b15pbtv : tensor<160xf32>
-    %v10732 = stablehlo.multiply %v2143, %v2143 : tensor<160xf32>
+    %v10732 = stablehlo.multiply %armeanb15pbt, %armeanb15pbt : tensor<160xf32>
     %v10733 = stablehlo.multiply %v10730, %v10732 : tensor<160xf32>
     %v10734 = stablehlo.add %v10731, %v10733 : tensor<160xf32>
     %v10735 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160xf32>
@@ -11240,26 +12191,33 @@ module @m {
     %v10747 = stablehlo.multiply %v10746, %v10739 : tensor<160xf32>
     %v10748 = stablehlo.multiply %v10747, %b15pbt : tensor<160xf32>
     %v10749 = stablehlo.subtract %v10745, %v10748 : tensor<160xf32>
+    %arsumb16eW = "stablehlo.all_reduce"(%v1870) ({
+    ^bb0(%arab16eW: tensor<f32>, %arbb16eW: tensor<f32>):
+      %araddb16eW = stablehlo.add %arab16eW, %arbb16eW : tensor<f32>
+      stablehlo.return %araddb16eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960x160x1x1xf32>) -> tensor<960x160x1x1xf32>
+    %arnb16eW = stablehlo.constant dense<4.0> : tensor<960x160x1x1xf32>
+    %armeanb16eW = stablehlo.divide %arsumb16eW, %arnb16eW : tensor<960x160x1x1xf32>
     %v10750 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10751 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10752 = stablehlo.multiply %v10750, %b16eWm : tensor<960x160x1x1xf32>
-    %v10753 = stablehlo.multiply %v10751, %v1870 : tensor<960x160x1x1xf32>
+    %v10753 = stablehlo.multiply %v10751, %armeanb16eW : tensor<960x160x1x1xf32>
     %v10754 = stablehlo.add %v10752, %v10753 : tensor<960x160x1x1xf32>
     %v10755 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10756 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10757 = stablehlo.multiply %v10755, %b16eWv : tensor<960x160x1x1xf32>
-    %v10758 = stablehlo.multiply %v1870, %v1870 : tensor<960x160x1x1xf32>
+    %v10758 = stablehlo.multiply %armeanb16eW, %armeanb16eW : tensor<960x160x1x1xf32>
     %v10759 = stablehlo.multiply %v10756, %v10758 : tensor<960x160x1x1xf32>
     %v10760 = stablehlo.add %v10757, %v10759 : tensor<960x160x1x1xf32>
     %v10761 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10762 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10763 = stablehlo.multiply %v10761, %b16eWm : tensor<960x160x1x1xf32>
-    %v10764 = stablehlo.multiply %v10762, %v1870 : tensor<960x160x1x1xf32>
+    %v10764 = stablehlo.multiply %v10762, %armeanb16eW : tensor<960x160x1x1xf32>
     %v10765 = stablehlo.add %v10763, %v10764 : tensor<960x160x1x1xf32>
     %v10766 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10767 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v10768 = stablehlo.multiply %v10766, %b16eWv : tensor<960x160x1x1xf32>
-    %v10769 = stablehlo.multiply %v1870, %v1870 : tensor<960x160x1x1xf32>
+    %v10769 = stablehlo.multiply %armeanb16eW, %armeanb16eW : tensor<960x160x1x1xf32>
     %v10770 = stablehlo.multiply %v10767, %v10769 : tensor<960x160x1x1xf32>
     %v10771 = stablehlo.add %v10768, %v10770 : tensor<960x160x1x1xf32>
     %v10772 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
@@ -11277,26 +12235,33 @@ module @m {
     %v10784 = stablehlo.multiply %v10783, %v10776 : tensor<960x160x1x1xf32>
     %v10785 = stablehlo.multiply %v10784, %b16eW : tensor<960x160x1x1xf32>
     %v10786 = stablehlo.subtract %v10782, %v10785 : tensor<960x160x1x1xf32>
+    %arsumb16eg = "stablehlo.all_reduce"(%v1888) ({
+    ^bb0(%arab16eg: tensor<f32>, %arbb16eg: tensor<f32>):
+      %araddb16eg = stablehlo.add %arab16eg, %arbb16eg : tensor<f32>
+      stablehlo.return %araddb16eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb16eg = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb16eg = stablehlo.divide %arsumb16eg, %arnb16eg : tensor<960xf32>
     %v10787 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10788 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10789 = stablehlo.multiply %v10787, %b16egm : tensor<960xf32>
-    %v10790 = stablehlo.multiply %v10788, %v1888 : tensor<960xf32>
+    %v10790 = stablehlo.multiply %v10788, %armeanb16eg : tensor<960xf32>
     %v10791 = stablehlo.add %v10789, %v10790 : tensor<960xf32>
     %v10792 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10793 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10794 = stablehlo.multiply %v10792, %b16egv : tensor<960xf32>
-    %v10795 = stablehlo.multiply %v1888, %v1888 : tensor<960xf32>
+    %v10795 = stablehlo.multiply %armeanb16eg, %armeanb16eg : tensor<960xf32>
     %v10796 = stablehlo.multiply %v10793, %v10795 : tensor<960xf32>
     %v10797 = stablehlo.add %v10794, %v10796 : tensor<960xf32>
     %v10798 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10799 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10800 = stablehlo.multiply %v10798, %b16egm : tensor<960xf32>
-    %v10801 = stablehlo.multiply %v10799, %v1888 : tensor<960xf32>
+    %v10801 = stablehlo.multiply %v10799, %armeanb16eg : tensor<960xf32>
     %v10802 = stablehlo.add %v10800, %v10801 : tensor<960xf32>
     %v10803 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10804 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10805 = stablehlo.multiply %v10803, %b16egv : tensor<960xf32>
-    %v10806 = stablehlo.multiply %v1888, %v1888 : tensor<960xf32>
+    %v10806 = stablehlo.multiply %armeanb16eg, %armeanb16eg : tensor<960xf32>
     %v10807 = stablehlo.multiply %v10804, %v10806 : tensor<960xf32>
     %v10808 = stablehlo.add %v10805, %v10807 : tensor<960xf32>
     %v10809 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11314,26 +12279,33 @@ module @m {
     %v10821 = stablehlo.multiply %v10820, %v10813 : tensor<960xf32>
     %v10822 = stablehlo.multiply %v10821, %b16eg : tensor<960xf32>
     %v10823 = stablehlo.subtract %v10819, %v10822 : tensor<960xf32>
+    %arsumb16ebt = "stablehlo.all_reduce"(%v1891) ({
+    ^bb0(%arab16ebt: tensor<f32>, %arbb16ebt: tensor<f32>):
+      %araddb16ebt = stablehlo.add %arab16ebt, %arbb16ebt : tensor<f32>
+      stablehlo.return %araddb16ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb16ebt = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb16ebt = stablehlo.divide %arsumb16ebt, %arnb16ebt : tensor<960xf32>
     %v10824 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10825 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10826 = stablehlo.multiply %v10824, %b16ebtm : tensor<960xf32>
-    %v10827 = stablehlo.multiply %v10825, %v1891 : tensor<960xf32>
+    %v10827 = stablehlo.multiply %v10825, %armeanb16ebt : tensor<960xf32>
     %v10828 = stablehlo.add %v10826, %v10827 : tensor<960xf32>
     %v10829 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10830 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10831 = stablehlo.multiply %v10829, %b16ebtv : tensor<960xf32>
-    %v10832 = stablehlo.multiply %v1891, %v1891 : tensor<960xf32>
+    %v10832 = stablehlo.multiply %armeanb16ebt, %armeanb16ebt : tensor<960xf32>
     %v10833 = stablehlo.multiply %v10830, %v10832 : tensor<960xf32>
     %v10834 = stablehlo.add %v10831, %v10833 : tensor<960xf32>
     %v10835 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10836 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10837 = stablehlo.multiply %v10835, %b16ebtm : tensor<960xf32>
-    %v10838 = stablehlo.multiply %v10836, %v1891 : tensor<960xf32>
+    %v10838 = stablehlo.multiply %v10836, %armeanb16ebt : tensor<960xf32>
     %v10839 = stablehlo.add %v10837, %v10838 : tensor<960xf32>
     %v10840 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10841 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10842 = stablehlo.multiply %v10840, %b16ebtv : tensor<960xf32>
-    %v10843 = stablehlo.multiply %v1891, %v1891 : tensor<960xf32>
+    %v10843 = stablehlo.multiply %armeanb16ebt, %armeanb16ebt : tensor<960xf32>
     %v10844 = stablehlo.multiply %v10841, %v10843 : tensor<960xf32>
     %v10845 = stablehlo.add %v10842, %v10844 : tensor<960xf32>
     %v10846 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11351,26 +12323,33 @@ module @m {
     %v10858 = stablehlo.multiply %v10857, %v10850 : tensor<960xf32>
     %v10859 = stablehlo.multiply %v10858, %b16ebt : tensor<960xf32>
     %v10860 = stablehlo.subtract %v10856, %v10859 : tensor<960xf32>
+    %arsumb16dW = "stablehlo.all_reduce"(%v1897) ({
+    ^bb0(%arab16dW: tensor<f32>, %arbb16dW: tensor<f32>):
+      %araddb16dW = stablehlo.add %arab16dW, %arbb16dW : tensor<f32>
+      stablehlo.return %araddb16dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960x1x3x3xf32>) -> tensor<960x1x3x3xf32>
+    %arnb16dW = stablehlo.constant dense<4.0> : tensor<960x1x3x3xf32>
+    %armeanb16dW = stablehlo.divide %arsumb16dW, %arnb16dW : tensor<960x1x3x3xf32>
     %v10861 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10862 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10863 = stablehlo.multiply %v10861, %b16dWm : tensor<960x1x3x3xf32>
-    %v10864 = stablehlo.multiply %v10862, %v1897 : tensor<960x1x3x3xf32>
+    %v10864 = stablehlo.multiply %v10862, %armeanb16dW : tensor<960x1x3x3xf32>
     %v10865 = stablehlo.add %v10863, %v10864 : tensor<960x1x3x3xf32>
     %v10866 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10867 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10868 = stablehlo.multiply %v10866, %b16dWv : tensor<960x1x3x3xf32>
-    %v10869 = stablehlo.multiply %v1897, %v1897 : tensor<960x1x3x3xf32>
+    %v10869 = stablehlo.multiply %armeanb16dW, %armeanb16dW : tensor<960x1x3x3xf32>
     %v10870 = stablehlo.multiply %v10867, %v10869 : tensor<960x1x3x3xf32>
     %v10871 = stablehlo.add %v10868, %v10870 : tensor<960x1x3x3xf32>
     %v10872 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10873 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10874 = stablehlo.multiply %v10872, %b16dWm : tensor<960x1x3x3xf32>
-    %v10875 = stablehlo.multiply %v10873, %v1897 : tensor<960x1x3x3xf32>
+    %v10875 = stablehlo.multiply %v10873, %armeanb16dW : tensor<960x1x3x3xf32>
     %v10876 = stablehlo.add %v10874, %v10875 : tensor<960x1x3x3xf32>
     %v10877 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10878 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v10879 = stablehlo.multiply %v10877, %b16dWv : tensor<960x1x3x3xf32>
-    %v10880 = stablehlo.multiply %v1897, %v1897 : tensor<960x1x3x3xf32>
+    %v10880 = stablehlo.multiply %armeanb16dW, %armeanb16dW : tensor<960x1x3x3xf32>
     %v10881 = stablehlo.multiply %v10878, %v10880 : tensor<960x1x3x3xf32>
     %v10882 = stablehlo.add %v10879, %v10881 : tensor<960x1x3x3xf32>
     %v10883 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
@@ -11388,26 +12367,33 @@ module @m {
     %v10895 = stablehlo.multiply %v10894, %v10887 : tensor<960x1x3x3xf32>
     %v10896 = stablehlo.multiply %v10895, %b16dW : tensor<960x1x3x3xf32>
     %v10897 = stablehlo.subtract %v10893, %v10896 : tensor<960x1x3x3xf32>
+    %arsumb16dg = "stablehlo.all_reduce"(%v1915) ({
+    ^bb0(%arab16dg: tensor<f32>, %arbb16dg: tensor<f32>):
+      %araddb16dg = stablehlo.add %arab16dg, %arbb16dg : tensor<f32>
+      stablehlo.return %araddb16dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb16dg = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb16dg = stablehlo.divide %arsumb16dg, %arnb16dg : tensor<960xf32>
     %v10898 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10899 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10900 = stablehlo.multiply %v10898, %b16dgm : tensor<960xf32>
-    %v10901 = stablehlo.multiply %v10899, %v1915 : tensor<960xf32>
+    %v10901 = stablehlo.multiply %v10899, %armeanb16dg : tensor<960xf32>
     %v10902 = stablehlo.add %v10900, %v10901 : tensor<960xf32>
     %v10903 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10904 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10905 = stablehlo.multiply %v10903, %b16dgv : tensor<960xf32>
-    %v10906 = stablehlo.multiply %v1915, %v1915 : tensor<960xf32>
+    %v10906 = stablehlo.multiply %armeanb16dg, %armeanb16dg : tensor<960xf32>
     %v10907 = stablehlo.multiply %v10904, %v10906 : tensor<960xf32>
     %v10908 = stablehlo.add %v10905, %v10907 : tensor<960xf32>
     %v10909 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10910 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10911 = stablehlo.multiply %v10909, %b16dgm : tensor<960xf32>
-    %v10912 = stablehlo.multiply %v10910, %v1915 : tensor<960xf32>
+    %v10912 = stablehlo.multiply %v10910, %armeanb16dg : tensor<960xf32>
     %v10913 = stablehlo.add %v10911, %v10912 : tensor<960xf32>
     %v10914 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10915 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10916 = stablehlo.multiply %v10914, %b16dgv : tensor<960xf32>
-    %v10917 = stablehlo.multiply %v1915, %v1915 : tensor<960xf32>
+    %v10917 = stablehlo.multiply %armeanb16dg, %armeanb16dg : tensor<960xf32>
     %v10918 = stablehlo.multiply %v10915, %v10917 : tensor<960xf32>
     %v10919 = stablehlo.add %v10916, %v10918 : tensor<960xf32>
     %v10920 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11425,26 +12411,33 @@ module @m {
     %v10932 = stablehlo.multiply %v10931, %v10924 : tensor<960xf32>
     %v10933 = stablehlo.multiply %v10932, %b16dg : tensor<960xf32>
     %v10934 = stablehlo.subtract %v10930, %v10933 : tensor<960xf32>
+    %arsumb16dbt = "stablehlo.all_reduce"(%v1918) ({
+    ^bb0(%arab16dbt: tensor<f32>, %arbb16dbt: tensor<f32>):
+      %araddb16dbt = stablehlo.add %arab16dbt, %arbb16dbt : tensor<f32>
+      stablehlo.return %araddb16dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb16dbt = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb16dbt = stablehlo.divide %arsumb16dbt, %arnb16dbt : tensor<960xf32>
     %v10935 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10936 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10937 = stablehlo.multiply %v10935, %b16dbtm : tensor<960xf32>
-    %v10938 = stablehlo.multiply %v10936, %v1918 : tensor<960xf32>
+    %v10938 = stablehlo.multiply %v10936, %armeanb16dbt : tensor<960xf32>
     %v10939 = stablehlo.add %v10937, %v10938 : tensor<960xf32>
     %v10940 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10941 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10942 = stablehlo.multiply %v10940, %b16dbtv : tensor<960xf32>
-    %v10943 = stablehlo.multiply %v1918, %v1918 : tensor<960xf32>
+    %v10943 = stablehlo.multiply %armeanb16dbt, %armeanb16dbt : tensor<960xf32>
     %v10944 = stablehlo.multiply %v10941, %v10943 : tensor<960xf32>
     %v10945 = stablehlo.add %v10942, %v10944 : tensor<960xf32>
     %v10946 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10947 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10948 = stablehlo.multiply %v10946, %b16dbtm : tensor<960xf32>
-    %v10949 = stablehlo.multiply %v10947, %v1918 : tensor<960xf32>
+    %v10949 = stablehlo.multiply %v10947, %armeanb16dbt : tensor<960xf32>
     %v10950 = stablehlo.add %v10948, %v10949 : tensor<960xf32>
     %v10951 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10952 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v10953 = stablehlo.multiply %v10951, %b16dbtv : tensor<960xf32>
-    %v10954 = stablehlo.multiply %v1918, %v1918 : tensor<960xf32>
+    %v10954 = stablehlo.multiply %armeanb16dbt, %armeanb16dbt : tensor<960xf32>
     %v10955 = stablehlo.multiply %v10952, %v10954 : tensor<960xf32>
     %v10956 = stablehlo.add %v10953, %v10955 : tensor<960xf32>
     %v10957 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11462,26 +12455,33 @@ module @m {
     %v10969 = stablehlo.multiply %v10968, %v10961 : tensor<960xf32>
     %v10970 = stablehlo.multiply %v10969, %b16dbt : tensor<960xf32>
     %v10971 = stablehlo.subtract %v10967, %v10970 : tensor<960xf32>
+    %arsumb16pW = "stablehlo.all_reduce"(%v1924) ({
+    ^bb0(%arab16pW: tensor<f32>, %arbb16pW: tensor<f32>):
+      %araddb16pW = stablehlo.add %arab16pW, %arbb16pW : tensor<f32>
+      stablehlo.return %araddb16pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160x960x1x1xf32>) -> tensor<160x960x1x1xf32>
+    %arnb16pW = stablehlo.constant dense<4.0> : tensor<160x960x1x1xf32>
+    %armeanb16pW = stablehlo.divide %arsumb16pW, %arnb16pW : tensor<160x960x1x1xf32>
     %v10972 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10973 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10974 = stablehlo.multiply %v10972, %b16pWm : tensor<160x960x1x1xf32>
-    %v10975 = stablehlo.multiply %v10973, %v1924 : tensor<160x960x1x1xf32>
+    %v10975 = stablehlo.multiply %v10973, %armeanb16pW : tensor<160x960x1x1xf32>
     %v10976 = stablehlo.add %v10974, %v10975 : tensor<160x960x1x1xf32>
     %v10977 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10978 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10979 = stablehlo.multiply %v10977, %b16pWv : tensor<160x960x1x1xf32>
-    %v10980 = stablehlo.multiply %v1924, %v1924 : tensor<160x960x1x1xf32>
+    %v10980 = stablehlo.multiply %armeanb16pW, %armeanb16pW : tensor<160x960x1x1xf32>
     %v10981 = stablehlo.multiply %v10978, %v10980 : tensor<160x960x1x1xf32>
     %v10982 = stablehlo.add %v10979, %v10981 : tensor<160x960x1x1xf32>
     %v10983 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10984 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10985 = stablehlo.multiply %v10983, %b16pWm : tensor<160x960x1x1xf32>
-    %v10986 = stablehlo.multiply %v10984, %v1924 : tensor<160x960x1x1xf32>
+    %v10986 = stablehlo.multiply %v10984, %armeanb16pW : tensor<160x960x1x1xf32>
     %v10987 = stablehlo.add %v10985, %v10986 : tensor<160x960x1x1xf32>
     %v10988 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10989 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
     %v10990 = stablehlo.multiply %v10988, %b16pWv : tensor<160x960x1x1xf32>
-    %v10991 = stablehlo.multiply %v1924, %v1924 : tensor<160x960x1x1xf32>
+    %v10991 = stablehlo.multiply %armeanb16pW, %armeanb16pW : tensor<160x960x1x1xf32>
     %v10992 = stablehlo.multiply %v10989, %v10991 : tensor<160x960x1x1xf32>
     %v10993 = stablehlo.add %v10990, %v10992 : tensor<160x960x1x1xf32>
     %v10994 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160x960x1x1xf32>
@@ -11499,26 +12499,33 @@ module @m {
     %v11006 = stablehlo.multiply %v11005, %v10998 : tensor<160x960x1x1xf32>
     %v11007 = stablehlo.multiply %v11006, %b16pW : tensor<160x960x1x1xf32>
     %v11008 = stablehlo.subtract %v11004, %v11007 : tensor<160x960x1x1xf32>
+    %arsumb16pg = "stablehlo.all_reduce"(%v1942) ({
+    ^bb0(%arab16pg: tensor<f32>, %arbb16pg: tensor<f32>):
+      %araddb16pg = stablehlo.add %arab16pg, %arbb16pg : tensor<f32>
+      stablehlo.return %araddb16pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160xf32>) -> tensor<160xf32>
+    %arnb16pg = stablehlo.constant dense<4.0> : tensor<160xf32>
+    %armeanb16pg = stablehlo.divide %arsumb16pg, %arnb16pg : tensor<160xf32>
     %v11009 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11010 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11011 = stablehlo.multiply %v11009, %b16pgm : tensor<160xf32>
-    %v11012 = stablehlo.multiply %v11010, %v1942 : tensor<160xf32>
+    %v11012 = stablehlo.multiply %v11010, %armeanb16pg : tensor<160xf32>
     %v11013 = stablehlo.add %v11011, %v11012 : tensor<160xf32>
     %v11014 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11015 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11016 = stablehlo.multiply %v11014, %b16pgv : tensor<160xf32>
-    %v11017 = stablehlo.multiply %v1942, %v1942 : tensor<160xf32>
+    %v11017 = stablehlo.multiply %armeanb16pg, %armeanb16pg : tensor<160xf32>
     %v11018 = stablehlo.multiply %v11015, %v11017 : tensor<160xf32>
     %v11019 = stablehlo.add %v11016, %v11018 : tensor<160xf32>
     %v11020 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11021 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11022 = stablehlo.multiply %v11020, %b16pgm : tensor<160xf32>
-    %v11023 = stablehlo.multiply %v11021, %v1942 : tensor<160xf32>
+    %v11023 = stablehlo.multiply %v11021, %armeanb16pg : tensor<160xf32>
     %v11024 = stablehlo.add %v11022, %v11023 : tensor<160xf32>
     %v11025 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11026 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11027 = stablehlo.multiply %v11025, %b16pgv : tensor<160xf32>
-    %v11028 = stablehlo.multiply %v1942, %v1942 : tensor<160xf32>
+    %v11028 = stablehlo.multiply %armeanb16pg, %armeanb16pg : tensor<160xf32>
     %v11029 = stablehlo.multiply %v11026, %v11028 : tensor<160xf32>
     %v11030 = stablehlo.add %v11027, %v11029 : tensor<160xf32>
     %v11031 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160xf32>
@@ -11536,26 +12543,33 @@ module @m {
     %v11043 = stablehlo.multiply %v11042, %v11035 : tensor<160xf32>
     %v11044 = stablehlo.multiply %v11043, %b16pg : tensor<160xf32>
     %v11045 = stablehlo.subtract %v11041, %v11044 : tensor<160xf32>
+    %arsumb16pbt = "stablehlo.all_reduce"(%v1945) ({
+    ^bb0(%arab16pbt: tensor<f32>, %arbb16pbt: tensor<f32>):
+      %araddb16pbt = stablehlo.add %arab16pbt, %arbb16pbt : tensor<f32>
+      stablehlo.return %araddb16pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<160xf32>) -> tensor<160xf32>
+    %arnb16pbt = stablehlo.constant dense<4.0> : tensor<160xf32>
+    %armeanb16pbt = stablehlo.divide %arsumb16pbt, %arnb16pbt : tensor<160xf32>
     %v11046 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11047 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11048 = stablehlo.multiply %v11046, %b16pbtm : tensor<160xf32>
-    %v11049 = stablehlo.multiply %v11047, %v1945 : tensor<160xf32>
+    %v11049 = stablehlo.multiply %v11047, %armeanb16pbt : tensor<160xf32>
     %v11050 = stablehlo.add %v11048, %v11049 : tensor<160xf32>
     %v11051 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11052 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11053 = stablehlo.multiply %v11051, %b16pbtv : tensor<160xf32>
-    %v11054 = stablehlo.multiply %v1945, %v1945 : tensor<160xf32>
+    %v11054 = stablehlo.multiply %armeanb16pbt, %armeanb16pbt : tensor<160xf32>
     %v11055 = stablehlo.multiply %v11052, %v11054 : tensor<160xf32>
     %v11056 = stablehlo.add %v11053, %v11055 : tensor<160xf32>
     %v11057 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11058 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11059 = stablehlo.multiply %v11057, %b16pbtm : tensor<160xf32>
-    %v11060 = stablehlo.multiply %v11058, %v1945 : tensor<160xf32>
+    %v11060 = stablehlo.multiply %v11058, %armeanb16pbt : tensor<160xf32>
     %v11061 = stablehlo.add %v11059, %v11060 : tensor<160xf32>
     %v11062 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11063 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<160xf32>
     %v11064 = stablehlo.multiply %v11062, %b16pbtv : tensor<160xf32>
-    %v11065 = stablehlo.multiply %v1945, %v1945 : tensor<160xf32>
+    %v11065 = stablehlo.multiply %armeanb16pbt, %armeanb16pbt : tensor<160xf32>
     %v11066 = stablehlo.multiply %v11063, %v11065 : tensor<160xf32>
     %v11067 = stablehlo.add %v11064, %v11066 : tensor<160xf32>
     %v11068 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<160xf32>
@@ -11573,26 +12587,33 @@ module @m {
     %v11080 = stablehlo.multiply %v11079, %v11072 : tensor<160xf32>
     %v11081 = stablehlo.multiply %v11080, %b16pbt : tensor<160xf32>
     %v11082 = stablehlo.subtract %v11078, %v11081 : tensor<160xf32>
+    %arsumb17eW = "stablehlo.all_reduce"(%v1672) ({
+    ^bb0(%arab17eW: tensor<f32>, %arbb17eW: tensor<f32>):
+      %araddb17eW = stablehlo.add %arab17eW, %arbb17eW : tensor<f32>
+      stablehlo.return %araddb17eW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960x160x1x1xf32>) -> tensor<960x160x1x1xf32>
+    %arnb17eW = stablehlo.constant dense<4.0> : tensor<960x160x1x1xf32>
+    %armeanb17eW = stablehlo.divide %arsumb17eW, %arnb17eW : tensor<960x160x1x1xf32>
     %v11083 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v11084 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v11085 = stablehlo.multiply %v11083, %b17eWm : tensor<960x160x1x1xf32>
-    %v11086 = stablehlo.multiply %v11084, %v1672 : tensor<960x160x1x1xf32>
+    %v11086 = stablehlo.multiply %v11084, %armeanb17eW : tensor<960x160x1x1xf32>
     %v11087 = stablehlo.add %v11085, %v11086 : tensor<960x160x1x1xf32>
     %v11088 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v11089 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v11090 = stablehlo.multiply %v11088, %b17eWv : tensor<960x160x1x1xf32>
-    %v11091 = stablehlo.multiply %v1672, %v1672 : tensor<960x160x1x1xf32>
+    %v11091 = stablehlo.multiply %armeanb17eW, %armeanb17eW : tensor<960x160x1x1xf32>
     %v11092 = stablehlo.multiply %v11089, %v11091 : tensor<960x160x1x1xf32>
     %v11093 = stablehlo.add %v11090, %v11092 : tensor<960x160x1x1xf32>
     %v11094 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v11095 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v11096 = stablehlo.multiply %v11094, %b17eWm : tensor<960x160x1x1xf32>
-    %v11097 = stablehlo.multiply %v11095, %v1672 : tensor<960x160x1x1xf32>
+    %v11097 = stablehlo.multiply %v11095, %armeanb17eW : tensor<960x160x1x1xf32>
     %v11098 = stablehlo.add %v11096, %v11097 : tensor<960x160x1x1xf32>
     %v11099 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v11100 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
     %v11101 = stablehlo.multiply %v11099, %b17eWv : tensor<960x160x1x1xf32>
-    %v11102 = stablehlo.multiply %v1672, %v1672 : tensor<960x160x1x1xf32>
+    %v11102 = stablehlo.multiply %armeanb17eW, %armeanb17eW : tensor<960x160x1x1xf32>
     %v11103 = stablehlo.multiply %v11100, %v11102 : tensor<960x160x1x1xf32>
     %v11104 = stablehlo.add %v11101, %v11103 : tensor<960x160x1x1xf32>
     %v11105 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960x160x1x1xf32>
@@ -11610,26 +12631,33 @@ module @m {
     %v11117 = stablehlo.multiply %v11116, %v11109 : tensor<960x160x1x1xf32>
     %v11118 = stablehlo.multiply %v11117, %b17eW : tensor<960x160x1x1xf32>
     %v11119 = stablehlo.subtract %v11115, %v11118 : tensor<960x160x1x1xf32>
+    %arsumb17eg = "stablehlo.all_reduce"(%v1690) ({
+    ^bb0(%arab17eg: tensor<f32>, %arbb17eg: tensor<f32>):
+      %araddb17eg = stablehlo.add %arab17eg, %arbb17eg : tensor<f32>
+      stablehlo.return %araddb17eg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb17eg = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb17eg = stablehlo.divide %arsumb17eg, %arnb17eg : tensor<960xf32>
     %v11120 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11121 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11122 = stablehlo.multiply %v11120, %b17egm : tensor<960xf32>
-    %v11123 = stablehlo.multiply %v11121, %v1690 : tensor<960xf32>
+    %v11123 = stablehlo.multiply %v11121, %armeanb17eg : tensor<960xf32>
     %v11124 = stablehlo.add %v11122, %v11123 : tensor<960xf32>
     %v11125 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11126 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11127 = stablehlo.multiply %v11125, %b17egv : tensor<960xf32>
-    %v11128 = stablehlo.multiply %v1690, %v1690 : tensor<960xf32>
+    %v11128 = stablehlo.multiply %armeanb17eg, %armeanb17eg : tensor<960xf32>
     %v11129 = stablehlo.multiply %v11126, %v11128 : tensor<960xf32>
     %v11130 = stablehlo.add %v11127, %v11129 : tensor<960xf32>
     %v11131 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11132 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11133 = stablehlo.multiply %v11131, %b17egm : tensor<960xf32>
-    %v11134 = stablehlo.multiply %v11132, %v1690 : tensor<960xf32>
+    %v11134 = stablehlo.multiply %v11132, %armeanb17eg : tensor<960xf32>
     %v11135 = stablehlo.add %v11133, %v11134 : tensor<960xf32>
     %v11136 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11137 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11138 = stablehlo.multiply %v11136, %b17egv : tensor<960xf32>
-    %v11139 = stablehlo.multiply %v1690, %v1690 : tensor<960xf32>
+    %v11139 = stablehlo.multiply %armeanb17eg, %armeanb17eg : tensor<960xf32>
     %v11140 = stablehlo.multiply %v11137, %v11139 : tensor<960xf32>
     %v11141 = stablehlo.add %v11138, %v11140 : tensor<960xf32>
     %v11142 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11647,26 +12675,33 @@ module @m {
     %v11154 = stablehlo.multiply %v11153, %v11146 : tensor<960xf32>
     %v11155 = stablehlo.multiply %v11154, %b17eg : tensor<960xf32>
     %v11156 = stablehlo.subtract %v11152, %v11155 : tensor<960xf32>
+    %arsumb17ebt = "stablehlo.all_reduce"(%v1693) ({
+    ^bb0(%arab17ebt: tensor<f32>, %arbb17ebt: tensor<f32>):
+      %araddb17ebt = stablehlo.add %arab17ebt, %arbb17ebt : tensor<f32>
+      stablehlo.return %araddb17ebt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb17ebt = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb17ebt = stablehlo.divide %arsumb17ebt, %arnb17ebt : tensor<960xf32>
     %v11157 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11158 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11159 = stablehlo.multiply %v11157, %b17ebtm : tensor<960xf32>
-    %v11160 = stablehlo.multiply %v11158, %v1693 : tensor<960xf32>
+    %v11160 = stablehlo.multiply %v11158, %armeanb17ebt : tensor<960xf32>
     %v11161 = stablehlo.add %v11159, %v11160 : tensor<960xf32>
     %v11162 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11163 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11164 = stablehlo.multiply %v11162, %b17ebtv : tensor<960xf32>
-    %v11165 = stablehlo.multiply %v1693, %v1693 : tensor<960xf32>
+    %v11165 = stablehlo.multiply %armeanb17ebt, %armeanb17ebt : tensor<960xf32>
     %v11166 = stablehlo.multiply %v11163, %v11165 : tensor<960xf32>
     %v11167 = stablehlo.add %v11164, %v11166 : tensor<960xf32>
     %v11168 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11169 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11170 = stablehlo.multiply %v11168, %b17ebtm : tensor<960xf32>
-    %v11171 = stablehlo.multiply %v11169, %v1693 : tensor<960xf32>
+    %v11171 = stablehlo.multiply %v11169, %armeanb17ebt : tensor<960xf32>
     %v11172 = stablehlo.add %v11170, %v11171 : tensor<960xf32>
     %v11173 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11174 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11175 = stablehlo.multiply %v11173, %b17ebtv : tensor<960xf32>
-    %v11176 = stablehlo.multiply %v1693, %v1693 : tensor<960xf32>
+    %v11176 = stablehlo.multiply %armeanb17ebt, %armeanb17ebt : tensor<960xf32>
     %v11177 = stablehlo.multiply %v11174, %v11176 : tensor<960xf32>
     %v11178 = stablehlo.add %v11175, %v11177 : tensor<960xf32>
     %v11179 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11684,26 +12719,33 @@ module @m {
     %v11191 = stablehlo.multiply %v11190, %v11183 : tensor<960xf32>
     %v11192 = stablehlo.multiply %v11191, %b17ebt : tensor<960xf32>
     %v11193 = stablehlo.subtract %v11189, %v11192 : tensor<960xf32>
+    %arsumb17dW = "stablehlo.all_reduce"(%v1699) ({
+    ^bb0(%arab17dW: tensor<f32>, %arbb17dW: tensor<f32>):
+      %araddb17dW = stablehlo.add %arab17dW, %arbb17dW : tensor<f32>
+      stablehlo.return %araddb17dW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960x1x3x3xf32>) -> tensor<960x1x3x3xf32>
+    %arnb17dW = stablehlo.constant dense<4.0> : tensor<960x1x3x3xf32>
+    %armeanb17dW = stablehlo.divide %arsumb17dW, %arnb17dW : tensor<960x1x3x3xf32>
     %v11194 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v11195 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v11196 = stablehlo.multiply %v11194, %b17dWm : tensor<960x1x3x3xf32>
-    %v11197 = stablehlo.multiply %v11195, %v1699 : tensor<960x1x3x3xf32>
+    %v11197 = stablehlo.multiply %v11195, %armeanb17dW : tensor<960x1x3x3xf32>
     %v11198 = stablehlo.add %v11196, %v11197 : tensor<960x1x3x3xf32>
     %v11199 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v11200 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v11201 = stablehlo.multiply %v11199, %b17dWv : tensor<960x1x3x3xf32>
-    %v11202 = stablehlo.multiply %v1699, %v1699 : tensor<960x1x3x3xf32>
+    %v11202 = stablehlo.multiply %armeanb17dW, %armeanb17dW : tensor<960x1x3x3xf32>
     %v11203 = stablehlo.multiply %v11200, %v11202 : tensor<960x1x3x3xf32>
     %v11204 = stablehlo.add %v11201, %v11203 : tensor<960x1x3x3xf32>
     %v11205 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v11206 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v11207 = stablehlo.multiply %v11205, %b17dWm : tensor<960x1x3x3xf32>
-    %v11208 = stablehlo.multiply %v11206, %v1699 : tensor<960x1x3x3xf32>
+    %v11208 = stablehlo.multiply %v11206, %armeanb17dW : tensor<960x1x3x3xf32>
     %v11209 = stablehlo.add %v11207, %v11208 : tensor<960x1x3x3xf32>
     %v11210 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v11211 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
     %v11212 = stablehlo.multiply %v11210, %b17dWv : tensor<960x1x3x3xf32>
-    %v11213 = stablehlo.multiply %v1699, %v1699 : tensor<960x1x3x3xf32>
+    %v11213 = stablehlo.multiply %armeanb17dW, %armeanb17dW : tensor<960x1x3x3xf32>
     %v11214 = stablehlo.multiply %v11211, %v11213 : tensor<960x1x3x3xf32>
     %v11215 = stablehlo.add %v11212, %v11214 : tensor<960x1x3x3xf32>
     %v11216 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960x1x3x3xf32>
@@ -11721,26 +12763,33 @@ module @m {
     %v11228 = stablehlo.multiply %v11227, %v11220 : tensor<960x1x3x3xf32>
     %v11229 = stablehlo.multiply %v11228, %b17dW : tensor<960x1x3x3xf32>
     %v11230 = stablehlo.subtract %v11226, %v11229 : tensor<960x1x3x3xf32>
+    %arsumb17dg = "stablehlo.all_reduce"(%v1717) ({
+    ^bb0(%arab17dg: tensor<f32>, %arbb17dg: tensor<f32>):
+      %araddb17dg = stablehlo.add %arab17dg, %arbb17dg : tensor<f32>
+      stablehlo.return %araddb17dg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb17dg = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb17dg = stablehlo.divide %arsumb17dg, %arnb17dg : tensor<960xf32>
     %v11231 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11232 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11233 = stablehlo.multiply %v11231, %b17dgm : tensor<960xf32>
-    %v11234 = stablehlo.multiply %v11232, %v1717 : tensor<960xf32>
+    %v11234 = stablehlo.multiply %v11232, %armeanb17dg : tensor<960xf32>
     %v11235 = stablehlo.add %v11233, %v11234 : tensor<960xf32>
     %v11236 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11237 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11238 = stablehlo.multiply %v11236, %b17dgv : tensor<960xf32>
-    %v11239 = stablehlo.multiply %v1717, %v1717 : tensor<960xf32>
+    %v11239 = stablehlo.multiply %armeanb17dg, %armeanb17dg : tensor<960xf32>
     %v11240 = stablehlo.multiply %v11237, %v11239 : tensor<960xf32>
     %v11241 = stablehlo.add %v11238, %v11240 : tensor<960xf32>
     %v11242 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11243 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11244 = stablehlo.multiply %v11242, %b17dgm : tensor<960xf32>
-    %v11245 = stablehlo.multiply %v11243, %v1717 : tensor<960xf32>
+    %v11245 = stablehlo.multiply %v11243, %armeanb17dg : tensor<960xf32>
     %v11246 = stablehlo.add %v11244, %v11245 : tensor<960xf32>
     %v11247 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11248 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11249 = stablehlo.multiply %v11247, %b17dgv : tensor<960xf32>
-    %v11250 = stablehlo.multiply %v1717, %v1717 : tensor<960xf32>
+    %v11250 = stablehlo.multiply %armeanb17dg, %armeanb17dg : tensor<960xf32>
     %v11251 = stablehlo.multiply %v11248, %v11250 : tensor<960xf32>
     %v11252 = stablehlo.add %v11249, %v11251 : tensor<960xf32>
     %v11253 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11758,26 +12807,33 @@ module @m {
     %v11265 = stablehlo.multiply %v11264, %v11257 : tensor<960xf32>
     %v11266 = stablehlo.multiply %v11265, %b17dg : tensor<960xf32>
     %v11267 = stablehlo.subtract %v11263, %v11266 : tensor<960xf32>
+    %arsumb17dbt = "stablehlo.all_reduce"(%v1720) ({
+    ^bb0(%arab17dbt: tensor<f32>, %arbb17dbt: tensor<f32>):
+      %araddb17dbt = stablehlo.add %arab17dbt, %arbb17dbt : tensor<f32>
+      stablehlo.return %araddb17dbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<960xf32>) -> tensor<960xf32>
+    %arnb17dbt = stablehlo.constant dense<4.0> : tensor<960xf32>
+    %armeanb17dbt = stablehlo.divide %arsumb17dbt, %arnb17dbt : tensor<960xf32>
     %v11268 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11269 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11270 = stablehlo.multiply %v11268, %b17dbtm : tensor<960xf32>
-    %v11271 = stablehlo.multiply %v11269, %v1720 : tensor<960xf32>
+    %v11271 = stablehlo.multiply %v11269, %armeanb17dbt : tensor<960xf32>
     %v11272 = stablehlo.add %v11270, %v11271 : tensor<960xf32>
     %v11273 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11274 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11275 = stablehlo.multiply %v11273, %b17dbtv : tensor<960xf32>
-    %v11276 = stablehlo.multiply %v1720, %v1720 : tensor<960xf32>
+    %v11276 = stablehlo.multiply %armeanb17dbt, %armeanb17dbt : tensor<960xf32>
     %v11277 = stablehlo.multiply %v11274, %v11276 : tensor<960xf32>
     %v11278 = stablehlo.add %v11275, %v11277 : tensor<960xf32>
     %v11279 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11280 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11281 = stablehlo.multiply %v11279, %b17dbtm : tensor<960xf32>
-    %v11282 = stablehlo.multiply %v11280, %v1720 : tensor<960xf32>
+    %v11282 = stablehlo.multiply %v11280, %armeanb17dbt : tensor<960xf32>
     %v11283 = stablehlo.add %v11281, %v11282 : tensor<960xf32>
     %v11284 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11285 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<960xf32>
     %v11286 = stablehlo.multiply %v11284, %b17dbtv : tensor<960xf32>
-    %v11287 = stablehlo.multiply %v1720, %v1720 : tensor<960xf32>
+    %v11287 = stablehlo.multiply %armeanb17dbt, %armeanb17dbt : tensor<960xf32>
     %v11288 = stablehlo.multiply %v11285, %v11287 : tensor<960xf32>
     %v11289 = stablehlo.add %v11286, %v11288 : tensor<960xf32>
     %v11290 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<960xf32>
@@ -11795,26 +12851,33 @@ module @m {
     %v11302 = stablehlo.multiply %v11301, %v11294 : tensor<960xf32>
     %v11303 = stablehlo.multiply %v11302, %b17dbt : tensor<960xf32>
     %v11304 = stablehlo.subtract %v11300, %v11303 : tensor<960xf32>
+    %arsumb17pW = "stablehlo.all_reduce"(%v1726) ({
+    ^bb0(%arab17pW: tensor<f32>, %arbb17pW: tensor<f32>):
+      %araddb17pW = stablehlo.add %arab17pW, %arbb17pW : tensor<f32>
+      stablehlo.return %araddb17pW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<320x960x1x1xf32>) -> tensor<320x960x1x1xf32>
+    %arnb17pW = stablehlo.constant dense<4.0> : tensor<320x960x1x1xf32>
+    %armeanb17pW = stablehlo.divide %arsumb17pW, %arnb17pW : tensor<320x960x1x1xf32>
     %v11305 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
     %v11306 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
     %v11307 = stablehlo.multiply %v11305, %b17pWm : tensor<320x960x1x1xf32>
-    %v11308 = stablehlo.multiply %v11306, %v1726 : tensor<320x960x1x1xf32>
+    %v11308 = stablehlo.multiply %v11306, %armeanb17pW : tensor<320x960x1x1xf32>
     %v11309 = stablehlo.add %v11307, %v11308 : tensor<320x960x1x1xf32>
     %v11310 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
     %v11311 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
     %v11312 = stablehlo.multiply %v11310, %b17pWv : tensor<320x960x1x1xf32>
-    %v11313 = stablehlo.multiply %v1726, %v1726 : tensor<320x960x1x1xf32>
+    %v11313 = stablehlo.multiply %armeanb17pW, %armeanb17pW : tensor<320x960x1x1xf32>
     %v11314 = stablehlo.multiply %v11311, %v11313 : tensor<320x960x1x1xf32>
     %v11315 = stablehlo.add %v11312, %v11314 : tensor<320x960x1x1xf32>
     %v11316 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
     %v11317 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
     %v11318 = stablehlo.multiply %v11316, %b17pWm : tensor<320x960x1x1xf32>
-    %v11319 = stablehlo.multiply %v11317, %v1726 : tensor<320x960x1x1xf32>
+    %v11319 = stablehlo.multiply %v11317, %armeanb17pW : tensor<320x960x1x1xf32>
     %v11320 = stablehlo.add %v11318, %v11319 : tensor<320x960x1x1xf32>
     %v11321 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
     %v11322 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
     %v11323 = stablehlo.multiply %v11321, %b17pWv : tensor<320x960x1x1xf32>
-    %v11324 = stablehlo.multiply %v1726, %v1726 : tensor<320x960x1x1xf32>
+    %v11324 = stablehlo.multiply %armeanb17pW, %armeanb17pW : tensor<320x960x1x1xf32>
     %v11325 = stablehlo.multiply %v11322, %v11324 : tensor<320x960x1x1xf32>
     %v11326 = stablehlo.add %v11323, %v11325 : tensor<320x960x1x1xf32>
     %v11327 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<320x960x1x1xf32>
@@ -11832,26 +12895,33 @@ module @m {
     %v11339 = stablehlo.multiply %v11338, %v11331 : tensor<320x960x1x1xf32>
     %v11340 = stablehlo.multiply %v11339, %b17pW : tensor<320x960x1x1xf32>
     %v11341 = stablehlo.subtract %v11337, %v11340 : tensor<320x960x1x1xf32>
+    %arsumb17pg = "stablehlo.all_reduce"(%v1744) ({
+    ^bb0(%arab17pg: tensor<f32>, %arbb17pg: tensor<f32>):
+      %araddb17pg = stablehlo.add %arab17pg, %arbb17pg : tensor<f32>
+      stablehlo.return %araddb17pg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<320xf32>) -> tensor<320xf32>
+    %arnb17pg = stablehlo.constant dense<4.0> : tensor<320xf32>
+    %armeanb17pg = stablehlo.divide %arsumb17pg, %arnb17pg : tensor<320xf32>
     %v11342 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11343 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11344 = stablehlo.multiply %v11342, %b17pgm : tensor<320xf32>
-    %v11345 = stablehlo.multiply %v11343, %v1744 : tensor<320xf32>
+    %v11345 = stablehlo.multiply %v11343, %armeanb17pg : tensor<320xf32>
     %v11346 = stablehlo.add %v11344, %v11345 : tensor<320xf32>
     %v11347 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11348 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11349 = stablehlo.multiply %v11347, %b17pgv : tensor<320xf32>
-    %v11350 = stablehlo.multiply %v1744, %v1744 : tensor<320xf32>
+    %v11350 = stablehlo.multiply %armeanb17pg, %armeanb17pg : tensor<320xf32>
     %v11351 = stablehlo.multiply %v11348, %v11350 : tensor<320xf32>
     %v11352 = stablehlo.add %v11349, %v11351 : tensor<320xf32>
     %v11353 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11354 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11355 = stablehlo.multiply %v11353, %b17pgm : tensor<320xf32>
-    %v11356 = stablehlo.multiply %v11354, %v1744 : tensor<320xf32>
+    %v11356 = stablehlo.multiply %v11354, %armeanb17pg : tensor<320xf32>
     %v11357 = stablehlo.add %v11355, %v11356 : tensor<320xf32>
     %v11358 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11359 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11360 = stablehlo.multiply %v11358, %b17pgv : tensor<320xf32>
-    %v11361 = stablehlo.multiply %v1744, %v1744 : tensor<320xf32>
+    %v11361 = stablehlo.multiply %armeanb17pg, %armeanb17pg : tensor<320xf32>
     %v11362 = stablehlo.multiply %v11359, %v11361 : tensor<320xf32>
     %v11363 = stablehlo.add %v11360, %v11362 : tensor<320xf32>
     %v11364 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<320xf32>
@@ -11869,26 +12939,33 @@ module @m {
     %v11376 = stablehlo.multiply %v11375, %v11368 : tensor<320xf32>
     %v11377 = stablehlo.multiply %v11376, %b17pg : tensor<320xf32>
     %v11378 = stablehlo.subtract %v11374, %v11377 : tensor<320xf32>
+    %arsumb17pbt = "stablehlo.all_reduce"(%v1747) ({
+    ^bb0(%arab17pbt: tensor<f32>, %arbb17pbt: tensor<f32>):
+      %araddb17pbt = stablehlo.add %arab17pbt, %arbb17pbt : tensor<f32>
+      stablehlo.return %araddb17pbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<320xf32>) -> tensor<320xf32>
+    %arnb17pbt = stablehlo.constant dense<4.0> : tensor<320xf32>
+    %armeanb17pbt = stablehlo.divide %arsumb17pbt, %arnb17pbt : tensor<320xf32>
     %v11379 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11380 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11381 = stablehlo.multiply %v11379, %b17pbtm : tensor<320xf32>
-    %v11382 = stablehlo.multiply %v11380, %v1747 : tensor<320xf32>
+    %v11382 = stablehlo.multiply %v11380, %armeanb17pbt : tensor<320xf32>
     %v11383 = stablehlo.add %v11381, %v11382 : tensor<320xf32>
     %v11384 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11385 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11386 = stablehlo.multiply %v11384, %b17pbtv : tensor<320xf32>
-    %v11387 = stablehlo.multiply %v1747, %v1747 : tensor<320xf32>
+    %v11387 = stablehlo.multiply %armeanb17pbt, %armeanb17pbt : tensor<320xf32>
     %v11388 = stablehlo.multiply %v11385, %v11387 : tensor<320xf32>
     %v11389 = stablehlo.add %v11386, %v11388 : tensor<320xf32>
     %v11390 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11391 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11392 = stablehlo.multiply %v11390, %b17pbtm : tensor<320xf32>
-    %v11393 = stablehlo.multiply %v11391, %v1747 : tensor<320xf32>
+    %v11393 = stablehlo.multiply %v11391, %armeanb17pbt : tensor<320xf32>
     %v11394 = stablehlo.add %v11392, %v11393 : tensor<320xf32>
     %v11395 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11396 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<320xf32>
     %v11397 = stablehlo.multiply %v11395, %b17pbtv : tensor<320xf32>
-    %v11398 = stablehlo.multiply %v1747, %v1747 : tensor<320xf32>
+    %v11398 = stablehlo.multiply %armeanb17pbt, %armeanb17pbt : tensor<320xf32>
     %v11399 = stablehlo.multiply %v11396, %v11398 : tensor<320xf32>
     %v11400 = stablehlo.add %v11397, %v11399 : tensor<320xf32>
     %v11401 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<320xf32>
@@ -11906,26 +12983,33 @@ module @m {
     %v11413 = stablehlo.multiply %v11412, %v11405 : tensor<320xf32>
     %v11414 = stablehlo.multiply %v11413, %b17pbt : tensor<320xf32>
     %v11415 = stablehlo.subtract %v11411, %v11414 : tensor<320xf32>
+    %arsumhW = "stablehlo.all_reduce"(%v1529) ({
+    ^bb0(%arahW: tensor<f32>, %arbhW: tensor<f32>):
+      %araddhW = stablehlo.add %arahW, %arbhW : tensor<f32>
+      stablehlo.return %araddhW : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<1280x320x1x1xf32>) -> tensor<1280x320x1x1xf32>
+    %arnhW = stablehlo.constant dense<4.0> : tensor<1280x320x1x1xf32>
+    %armeanhW = stablehlo.divide %arsumhW, %arnhW : tensor<1280x320x1x1xf32>
     %v11416 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
     %v11417 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
     %v11418 = stablehlo.multiply %v11416, %hWm : tensor<1280x320x1x1xf32>
-    %v11419 = stablehlo.multiply %v11417, %v1529 : tensor<1280x320x1x1xf32>
+    %v11419 = stablehlo.multiply %v11417, %armeanhW : tensor<1280x320x1x1xf32>
     %v11420 = stablehlo.add %v11418, %v11419 : tensor<1280x320x1x1xf32>
     %v11421 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
     %v11422 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
     %v11423 = stablehlo.multiply %v11421, %hWv : tensor<1280x320x1x1xf32>
-    %v11424 = stablehlo.multiply %v1529, %v1529 : tensor<1280x320x1x1xf32>
+    %v11424 = stablehlo.multiply %armeanhW, %armeanhW : tensor<1280x320x1x1xf32>
     %v11425 = stablehlo.multiply %v11422, %v11424 : tensor<1280x320x1x1xf32>
     %v11426 = stablehlo.add %v11423, %v11425 : tensor<1280x320x1x1xf32>
     %v11427 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
     %v11428 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
     %v11429 = stablehlo.multiply %v11427, %hWm : tensor<1280x320x1x1xf32>
-    %v11430 = stablehlo.multiply %v11428, %v1529 : tensor<1280x320x1x1xf32>
+    %v11430 = stablehlo.multiply %v11428, %armeanhW : tensor<1280x320x1x1xf32>
     %v11431 = stablehlo.add %v11429, %v11430 : tensor<1280x320x1x1xf32>
     %v11432 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
     %v11433 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
     %v11434 = stablehlo.multiply %v11432, %hWv : tensor<1280x320x1x1xf32>
-    %v11435 = stablehlo.multiply %v1529, %v1529 : tensor<1280x320x1x1xf32>
+    %v11435 = stablehlo.multiply %armeanhW, %armeanhW : tensor<1280x320x1x1xf32>
     %v11436 = stablehlo.multiply %v11433, %v11435 : tensor<1280x320x1x1xf32>
     %v11437 = stablehlo.add %v11434, %v11436 : tensor<1280x320x1x1xf32>
     %v11438 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<1280x320x1x1xf32>
@@ -11943,26 +13027,33 @@ module @m {
     %v11450 = stablehlo.multiply %v11449, %v11442 : tensor<1280x320x1x1xf32>
     %v11451 = stablehlo.multiply %v11450, %hW : tensor<1280x320x1x1xf32>
     %v11452 = stablehlo.subtract %v11448, %v11451 : tensor<1280x320x1x1xf32>
+    %arsumhg = "stablehlo.all_reduce"(%v1547) ({
+    ^bb0(%arahg: tensor<f32>, %arbhg: tensor<f32>):
+      %araddhg = stablehlo.add %arahg, %arbhg : tensor<f32>
+      stablehlo.return %araddhg : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<1280xf32>) -> tensor<1280xf32>
+    %arnhg = stablehlo.constant dense<4.0> : tensor<1280xf32>
+    %armeanhg = stablehlo.divide %arsumhg, %arnhg : tensor<1280xf32>
     %v11453 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11454 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11455 = stablehlo.multiply %v11453, %hgm : tensor<1280xf32>
-    %v11456 = stablehlo.multiply %v11454, %v1547 : tensor<1280xf32>
+    %v11456 = stablehlo.multiply %v11454, %armeanhg : tensor<1280xf32>
     %v11457 = stablehlo.add %v11455, %v11456 : tensor<1280xf32>
     %v11458 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11459 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11460 = stablehlo.multiply %v11458, %hgv : tensor<1280xf32>
-    %v11461 = stablehlo.multiply %v1547, %v1547 : tensor<1280xf32>
+    %v11461 = stablehlo.multiply %armeanhg, %armeanhg : tensor<1280xf32>
     %v11462 = stablehlo.multiply %v11459, %v11461 : tensor<1280xf32>
     %v11463 = stablehlo.add %v11460, %v11462 : tensor<1280xf32>
     %v11464 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11465 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11466 = stablehlo.multiply %v11464, %hgm : tensor<1280xf32>
-    %v11467 = stablehlo.multiply %v11465, %v1547 : tensor<1280xf32>
+    %v11467 = stablehlo.multiply %v11465, %armeanhg : tensor<1280xf32>
     %v11468 = stablehlo.add %v11466, %v11467 : tensor<1280xf32>
     %v11469 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11470 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11471 = stablehlo.multiply %v11469, %hgv : tensor<1280xf32>
-    %v11472 = stablehlo.multiply %v1547, %v1547 : tensor<1280xf32>
+    %v11472 = stablehlo.multiply %armeanhg, %armeanhg : tensor<1280xf32>
     %v11473 = stablehlo.multiply %v11470, %v11472 : tensor<1280xf32>
     %v11474 = stablehlo.add %v11471, %v11473 : tensor<1280xf32>
     %v11475 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
@@ -11980,26 +13071,33 @@ module @m {
     %v11487 = stablehlo.multiply %v11486, %v11479 : tensor<1280xf32>
     %v11488 = stablehlo.multiply %v11487, %hg : tensor<1280xf32>
     %v11489 = stablehlo.subtract %v11485, %v11488 : tensor<1280xf32>
+    %arsumhbt = "stablehlo.all_reduce"(%v1550) ({
+    ^bb0(%arahbt: tensor<f32>, %arbhbt: tensor<f32>):
+      %araddhbt = stablehlo.add %arahbt, %arbhbt : tensor<f32>
+      stablehlo.return %araddhbt : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<1280xf32>) -> tensor<1280xf32>
+    %arnhbt = stablehlo.constant dense<4.0> : tensor<1280xf32>
+    %armeanhbt = stablehlo.divide %arsumhbt, %arnhbt : tensor<1280xf32>
     %v11490 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11491 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11492 = stablehlo.multiply %v11490, %hbtm : tensor<1280xf32>
-    %v11493 = stablehlo.multiply %v11491, %v1550 : tensor<1280xf32>
+    %v11493 = stablehlo.multiply %v11491, %armeanhbt : tensor<1280xf32>
     %v11494 = stablehlo.add %v11492, %v11493 : tensor<1280xf32>
     %v11495 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11496 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11497 = stablehlo.multiply %v11495, %hbtv : tensor<1280xf32>
-    %v11498 = stablehlo.multiply %v1550, %v1550 : tensor<1280xf32>
+    %v11498 = stablehlo.multiply %armeanhbt, %armeanhbt : tensor<1280xf32>
     %v11499 = stablehlo.multiply %v11496, %v11498 : tensor<1280xf32>
     %v11500 = stablehlo.add %v11497, %v11499 : tensor<1280xf32>
     %v11501 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11502 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11503 = stablehlo.multiply %v11501, %hbtm : tensor<1280xf32>
-    %v11504 = stablehlo.multiply %v11502, %v1550 : tensor<1280xf32>
+    %v11504 = stablehlo.multiply %v11502, %armeanhbt : tensor<1280xf32>
     %v11505 = stablehlo.add %v11503, %v11504 : tensor<1280xf32>
     %v11506 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11507 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1280xf32>
     %v11508 = stablehlo.multiply %v11506, %hbtv : tensor<1280xf32>
-    %v11509 = stablehlo.multiply %v1550, %v1550 : tensor<1280xf32>
+    %v11509 = stablehlo.multiply %armeanhbt, %armeanhbt : tensor<1280xf32>
     %v11510 = stablehlo.multiply %v11507, %v11509 : tensor<1280xf32>
     %v11511 = stablehlo.add %v11508, %v11510 : tensor<1280xf32>
     %v11512 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<1280xf32>
@@ -12017,26 +13115,33 @@ module @m {
     %v11524 = stablehlo.multiply %v11523, %v11516 : tensor<1280xf32>
     %v11525 = stablehlo.multiply %v11524, %hbt : tensor<1280xf32>
     %v11526 = stablehlo.subtract %v11522, %v11525 : tensor<1280xf32>
+    %arsumWd = "stablehlo.all_reduce"(%v1476) ({
+    ^bb0(%araWd: tensor<f32>, %arbWd: tensor<f32>):
+      %araddWd = stablehlo.add %araWd, %arbWd : tensor<f32>
+      stablehlo.return %araddWd : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<1280x1000xf32>) -> tensor<1280x1000xf32>
+    %arnWd = stablehlo.constant dense<4.0> : tensor<1280x1000xf32>
+    %armeanWd = stablehlo.divide %arsumWd, %arnWd : tensor<1280x1000xf32>
     %v11527 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
     %v11528 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
     %v11529 = stablehlo.multiply %v11527, %Wdm : tensor<1280x1000xf32>
-    %v11530 = stablehlo.multiply %v11528, %v1476 : tensor<1280x1000xf32>
+    %v11530 = stablehlo.multiply %v11528, %armeanWd : tensor<1280x1000xf32>
     %v11531 = stablehlo.add %v11529, %v11530 : tensor<1280x1000xf32>
     %v11532 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
     %v11533 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
     %v11534 = stablehlo.multiply %v11532, %Wdv : tensor<1280x1000xf32>
-    %v11535 = stablehlo.multiply %v1476, %v1476 : tensor<1280x1000xf32>
+    %v11535 = stablehlo.multiply %armeanWd, %armeanWd : tensor<1280x1000xf32>
     %v11536 = stablehlo.multiply %v11533, %v11535 : tensor<1280x1000xf32>
     %v11537 = stablehlo.add %v11534, %v11536 : tensor<1280x1000xf32>
     %v11538 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
     %v11539 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
     %v11540 = stablehlo.multiply %v11538, %Wdm : tensor<1280x1000xf32>
-    %v11541 = stablehlo.multiply %v11539, %v1476 : tensor<1280x1000xf32>
+    %v11541 = stablehlo.multiply %v11539, %armeanWd : tensor<1280x1000xf32>
     %v11542 = stablehlo.add %v11540, %v11541 : tensor<1280x1000xf32>
     %v11543 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
     %v11544 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
     %v11545 = stablehlo.multiply %v11543, %Wdv : tensor<1280x1000xf32>
-    %v11546 = stablehlo.multiply %v1476, %v1476 : tensor<1280x1000xf32>
+    %v11546 = stablehlo.multiply %armeanWd, %armeanWd : tensor<1280x1000xf32>
     %v11547 = stablehlo.multiply %v11544, %v11546 : tensor<1280x1000xf32>
     %v11548 = stablehlo.add %v11545, %v11547 : tensor<1280x1000xf32>
     %v11549 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<1280x1000xf32>
@@ -12054,26 +13159,33 @@ module @m {
     %v11561 = stablehlo.multiply %v11560, %v11553 : tensor<1280x1000xf32>
     %v11562 = stablehlo.multiply %v11561, %Wd : tensor<1280x1000xf32>
     %v11563 = stablehlo.subtract %v11559, %v11562 : tensor<1280x1000xf32>
+    %arsumbd = "stablehlo.all_reduce"(%v1478) ({
+    ^bb0(%arabd: tensor<f32>, %arbbd: tensor<f32>):
+      %araddbd = stablehlo.add %arabd, %arbbd : tensor<f32>
+      stablehlo.return %araddbd : tensor<f32>
+    }) { replica_groups = dense<[[0, 1, 2, 3]]> : tensor<1x4xi64> } : (tensor<1000xf32>) -> tensor<1000xf32>
+    %arnbd = stablehlo.constant dense<4.0> : tensor<1000xf32>
+    %armeanbd = stablehlo.divide %arsumbd, %arnbd : tensor<1000xf32>
     %v11564 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1000xf32>
     %v11565 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1000xf32>
     %v11566 = stablehlo.multiply %v11564, %bdm : tensor<1000xf32>
-    %v11567 = stablehlo.multiply %v11565, %v1478 : tensor<1000xf32>
+    %v11567 = stablehlo.multiply %v11565, %armeanbd : tensor<1000xf32>
     %v11568 = stablehlo.add %v11566, %v11567 : tensor<1000xf32>
     %v11569 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1000xf32>
     %v11570 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1000xf32>
     %v11571 = stablehlo.multiply %v11569, %bdv : tensor<1000xf32>
-    %v11572 = stablehlo.multiply %v1478, %v1478 : tensor<1000xf32>
+    %v11572 = stablehlo.multiply %armeanbd, %armeanbd : tensor<1000xf32>
     %v11573 = stablehlo.multiply %v11570, %v11572 : tensor<1000xf32>
     %v11574 = stablehlo.add %v11571, %v11573 : tensor<1000xf32>
     %v11575 = stablehlo.broadcast_in_dim %b1, dims = [] : (tensor<f32>) -> tensor<1000xf32>
     %v11576 = stablehlo.broadcast_in_dim %ob1, dims = [] : (tensor<f32>) -> tensor<1000xf32>
     %v11577 = stablehlo.multiply %v11575, %bdm : tensor<1000xf32>
-    %v11578 = stablehlo.multiply %v11576, %v1478 : tensor<1000xf32>
+    %v11578 = stablehlo.multiply %v11576, %armeanbd : tensor<1000xf32>
     %v11579 = stablehlo.add %v11577, %v11578 : tensor<1000xf32>
     %v11580 = stablehlo.broadcast_in_dim %b2, dims = [] : (tensor<f32>) -> tensor<1000xf32>
     %v11581 = stablehlo.broadcast_in_dim %ob2, dims = [] : (tensor<f32>) -> tensor<1000xf32>
     %v11582 = stablehlo.multiply %v11580, %bdv : tensor<1000xf32>
-    %v11583 = stablehlo.multiply %v1478, %v1478 : tensor<1000xf32>
+    %v11583 = stablehlo.multiply %armeanbd, %armeanbd : tensor<1000xf32>
     %v11584 = stablehlo.multiply %v11581, %v11583 : tensor<1000xf32>
     %v11585 = stablehlo.add %v11582, %v11584 : tensor<1000xf32>
     %v11586 = stablehlo.broadcast_in_dim %bc1, dims = [] : (tensor<f32>) -> tensor<1000xf32>

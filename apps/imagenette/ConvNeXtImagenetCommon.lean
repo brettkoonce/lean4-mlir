@@ -26,12 +26,12 @@ reference's own 80-epoch no-RandAugment run reached 75.93%; do not compare this 
 scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build convnext-imagenet-verified-xla
-cat .lake/build/cnxin_adamdp_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
+cat .lake/build/convnextin_adamdp_ckpt_xla.bin.epoch 2>/dev/null   # ⚠ READ THIS FIRST (§4)
 
 PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 \
   LEAN_MLIR_VARIANT=adamdp LEAN_MLIR_BATCH=32 \
   LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
-  .lake/build/bin/convnext-imagenet-verified-xla data 2>&1 | tee runs/cnxin_4gpu.log
+  .lake/build/bin/convnext-imagenet-verified-xla data 2>&1 | tee runs/convnextin_4gpu.log
 ```
 -/
 

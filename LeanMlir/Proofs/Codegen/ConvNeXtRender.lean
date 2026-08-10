@@ -819,7 +819,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- parameter is scaled; and under DP the clip goes AFTER the `all_reduce`, so the collective is
     -- hoisted here too and the loop is told (`preAvg`) not to repeat it.
     -- ⚠ At `clip := false` NOT ONE `pretty` CALL HAPPENS in this block, so the fresh-name counter
-    -- does not move and every committed `convnext*`/`cnxin*` artifact re-renders byte-identically.
+    -- does not move and every committed `convnext*`/`convnextin*` artifact re-renders byte-identically.
     let zero1 : Vec 1 := fun _ => 0
     let mut clipCode := ""
     let mut clipped : List (String × String) := []
@@ -1060,7 +1060,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 2)
 
 -- The DATA-PARALLEL peer of the EMA render. One `#eval`: `replicas` and `ema` are both already
--- renderer parameters, so this is the cheap half exactly as `mnv2in_rmsdp64` was (§2h-bis).
+-- renderer parameters, so this is the cheap half exactly as `mobilenetv2in_rmsdp64` was (§2h-bis).
 --
 -- ⚠ The collective and the shadow do not interact, and that is worth stating because it is what
 -- makes the gate meaningful rather than circular: `all_reduce` sits on the GRADIENT, upstream of
@@ -1072,7 +1072,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 2
     (ema := true))
 
--- ── ConvNeXt-T on FULL 1000-class ImageNet, slug `cnxin` — 2026-08-01 ──────────────────────────
+-- ── ConvNeXt-T on FULL 1000-class ImageNet, slug `convnextin` — 2026-08-01 ──────────────────────────
 -- The ConvNeXt peer of `resnet34in_*` (§2k) and `vitin_*` (§2p). `nClasses` is a renderer
 -- parameter as of this change; `cBS` is NOT, so these render at the committed batch of 32 and the
 -- four-replica variant is global batch 128.
@@ -1092,15 +1092,15 @@ end Proofs.StableHLO
 -- decay: §2a-quater's silently-wrong-hyperparameter shape, found while gating `wdExcludeNormBias`
 -- rather than by reading the configs. They stay short of the reference in the ways the docstring
 -- above lists (no `wx`, no clip, one-hot targets); the decay was never one of those ways.
--- The variant that MATCHES the reference is `cnxin_adamdpwxclip` below.
-#eval IO.FS.writeFile "verified_mlir/cnxin_adam_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin"
+-- The variant that MATCHES the reference is `convnextin_adamdpwxclip` below.
+#eval IO.FS.writeFile "verified_mlir/convnextin_adam_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin"
     (wdStr := "0.05"))
-#eval IO.FS.writeFile "verified_mlir/cnxin_adamdp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "cnxin"
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamdp_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "convnextin"
     (wdStr := "0.05"))
-#eval IO.FS.writeFile "verified_mlir/cnxin_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdFaithfulV "cnxin_fwd" 1000)
+#eval IO.FS.writeFile "verified_mlir/convnextin_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdFaithfulV "convnextin_fwd" 1000)
 
 -- ── ▶ v1.4: `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ──────────
 -- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 121 of the 180 params take `%wdz`: every
@@ -1115,8 +1115,8 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/convnext_adamwx_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 1 10 "convnext"
     (ema := false) (wdExclude := true))
-#eval IO.FS.writeFile "verified_mlir/cnxin_adamwx_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin"
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamwx_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05"))
 
 -- ── ▶ v1.4b: GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) ───────────────────────────
@@ -1138,15 +1138,15 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "-0.010000" "32.0" 1 10 "convnext"
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := true) (clipStr := "1.0"))
 -- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`.
-#eval IO.FS.writeFile "verified_mlir/cnxin_adamwxclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin"
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclip_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
 -- ▶ **THE DATA-PARALLEL PEER — the artifact an ImageNet run actually loads.** Until this landed the
 -- DP ImageNet render was three features behind its single-device peer (wrong decay, no `wx`, no
 -- clip), so the shipping recipe existed only in the variant nothing would run. ⚠ The clip sits
 -- AFTER the collective: 180 all_reduces, not 360, all before the norm fold.
-#eval IO.FS.writeFile "verified_mlir/cnxin_adamdpwxclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "cnxin"
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclip_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0"))
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
@@ -1176,9 +1176,9 @@ end Proofs.StableHLO
 
 -- ── ▶ v1.2c: THE IMAGENET EMA PEER (`planning/recipe_gaps.md` v1.2c) ──────────────────────────
 -- ConvNeXt's reference number IS the EMA shadow's — **75.93%**, against a live best of 76.28% — so
--- without this render the `cnxin` pair is not comparable at all, whatever else it carries. The EMA
+-- without this render the `convnextin` pair is not comparable at all, whatever else it carries. The EMA
 -- work landed on `convnext_ema` (Imagenette) and stopped there; found by listing artifacts.
-#eval IO.FS.writeFile "verified_mlir/cnxin_ema_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "cnxin" (ema := true))
-#eval IO.FS.writeFile "verified_mlir/cnxin_emadp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "cnxin" (ema := true))
+#eval IO.FS.writeFile "verified_mlir/convnextin_ema_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin" (ema := true))
+#eval IO.FS.writeFile "verified_mlir/convnextin_emadp_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "convnextin" (ema := true))

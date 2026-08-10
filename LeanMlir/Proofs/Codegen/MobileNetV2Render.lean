@@ -799,16 +799,16 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_fwd_eval.mlir"
   (Proofs.StableHLO.mnv2FwdEvalFaithfulV 32 10 "1.0e-5")
 
--- ── MobileNetV2 on FULL 1000-class ImageNet, slug `mnv2in` — 2026-08-02 ───────────────────────
+-- ── MobileNetV2 on FULL 1000-class ImageNet, slug `mobilenetv2in` — 2026-08-02 ───────────────────────
 -- The forward pair for the fifth and last scale-tier trainer (§2p). `B`/`nClasses` were already
 -- parameters; the `slug` is new, and it is what stops these overwriting the 10-class pair the
 -- 86.73% Imagenette run and the §2g prefix audit depend on. §2g is the reason to be careful here
 -- specifically: `mobilenetv2_fwd` is the artifact that was found to be the WRONG BN WORLD, so this
 -- net has already been burned once by a forward that did not match its train step.
-#eval IO.FS.writeFile "verified_mlir/mnv2in_fwd.mlir"
-  (Proofs.StableHLO.mnv2FwdFaithfulV 64 1000 "1.0e-5" false "mnv2in")
-#eval IO.FS.writeFile "verified_mlir/mnv2in_fwd_eval.mlir"
-  (Proofs.StableHLO.mnv2FwdEvalFaithfulV 64 1000 "1.0e-5" false "mnv2in")
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_fwd.mlir"
+  (Proofs.StableHLO.mnv2FwdFaithfulV 64 1000 "1.0e-5" false "mobilenetv2in")
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_fwd_eval.mlir"
+  (Proofs.StableHLO.mnv2FwdEvalFaithfulV 64 1000 "1.0e-5" false "mobilenetv2in")
 
 -- The reduced 6-block render kept as a demo / stepping-stone (the worked foundation that built the
 -- depthwise SGD core ops); NOT what the trainer reads.

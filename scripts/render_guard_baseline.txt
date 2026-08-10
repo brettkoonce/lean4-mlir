@@ -17,8 +17,8 @@ verified_mlir/cifar8w_bn_mom_train_step.mlir
 verified_mlir/cifar8w_bn_sgd_train_step.mlir
 verified_mlir/cifar8w_mom_train_step.mlir
 verified_mlir/cifar8w_sgd_train_step.mlir
-verified_mlir/mnv2in_fwd.mlir
-verified_mlir/mnv2in_fwd_eval.mlir
+verified_mlir/mobilenetv2in_fwd.mlir
+verified_mlir/mobilenetv2in_fwd_eval.mlir
 verified_mlir/mobilenetv2_fwd.mlir
 verified_mlir/mobilenetv2_fwd_eval.mlir
 verified_mlir/resnet34_adam128_train_step.mlir

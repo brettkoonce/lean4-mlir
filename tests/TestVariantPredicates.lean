@@ -24,7 +24,7 @@ reading names one at a time. The THIRD collision was caught before it shipped, b
    the mean-square would have initialised to 0, which is the exact defect that thread existed to fix.
 2. `planning/stochastic_depth.md` — the drop marker was `"sd"`, and **`rms` ++ `dp` spells `rmsdp`,
    which CONTAINS "sd"**. So the test fired on `rmsdp64` and `emarmsdp64` — every RMSProp
-   data-parallel variant, including the committed and gated `enetin_rmsdp64`. ⚠ The collision was
+   data-parallel variant, including the committed and gated `efficientnetin_rmsdp64`. ⚠ The collision was
    between two OTHER markers meeting, not between the new marker and an old one, which is precisely
    what reading a name at a time cannot show you. Renamed to `"drop"`.
 

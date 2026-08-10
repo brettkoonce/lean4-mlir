@@ -43,9 +43,9 @@ NETS = [
     # verified slug, the jax reference's Main file,          the reference name in its banner, recipe
     ("resnet34in", "MainResnetImagenet.lean",        "ResNet-34 (ImageNet)",         "default"),
     ("vitin",      "MainVitImagenet.lean",           "ViT-Tiny (ImageNet, bf16)",    "default"),
-    ("mnv2in",     "MainMobilenetV2Imagenet.lean",   "MobileNetV2 (ImageNet, bf16)", "default"),
-    ("enetin",     "MainEfficientNetImagenet.lean",  "EfficientNet-B0 (ImageNet, bf16)", "default"),
-    ("cnxin",      "MainConvNeXtImagenet.lean",      "ConvNeXt-T (ImageNet, bf16)",  "default"),
+    ("mobilenetv2in",     "MainMobilenetV2Imagenet.lean",   "MobileNetV2 (ImageNet, bf16)", "default"),
+    ("efficientnetin",     "MainEfficientNetImagenet.lean",  "EfficientNet-B0 (ImageNet, bf16)", "default"),
+    ("convnextin",      "MainConvNeXtImagenet.lean",      "ConvNeXt-T (ImageNet, bf16)",  "default"),
     ("resnet50in", "MainResnet50Imagenet.lean",      "ResNet-50 (ImageNet)",         "default"),
     # ⭐ Same reference and same Main file as `resnet50in`; it is the RECIPE that differs. `short`
     # is timm's RSB-A3 — trainRes 160, testCropRatio 0.95, RandAugment m6, mixup/cutmix — and that
@@ -346,12 +346,12 @@ if "--stream" in sys.argv:
     # KNOWN ANSWER, predicted from the bytes: mnv2's config sets `useAutoAugment := false` and
     # nothing else, so its shim differs from R34's in exactly one comment line ⇒ the streams must be
     # IDENTICAL. This is the inertness half — it says the wiring did not perturb a net it shouldn't.
-    check(train["mnv2in"] == train["resnet34in"],
+    check(train["mobilenetv2in"] == train["resnet34in"],
           "known answer: mnv2 ≡ R34 on train (their shims differ only in the banner)",
-          f"{train['mnv2in'][:16]} vs {train['resnet34in'][:16]}")
+          f"{train['mobilenetv2in'][:16]} vs {train['resnet34in'][:16]}")
     # DISCRIMINATION — and it is the whole claim of this thread: the three nets whose references
     # ask for more augmentation now get a DIFFERENT stream than they did yesterday.
-    for slug in ("vitin", "cnxin", "enetin"):
+    for slug in ("vitin", "convnextin", "efficientnetin"):
         check(train[slug] != train["resnet34in"],
               f"discrimination: {slug}'s train stream ≠ R34's (it did NOT differ before this)",
               f"{train[slug][:16]} vs {train['resnet34in'][:16]}")
@@ -392,12 +392,12 @@ if "--break" in sys.argv:
     print("\n── --break: the negative controls ──")
     # (a) the pre-fix world: every net wired to R34's shim. Gate 0's distinctness must fire, and so
     #     must gate 2 on every net whose augmentation vanishes — i.e. every net whose recipe is
-    #     NOT R34's. That count is 5 as of 2026-08-07: vitin, enetin, cnxin, resnet50in and
+    #     NOT R34's. That count is 5 as of 2026-08-07: vitin, efficientnetin, convnextin, resnet50in and
     #     resnet50in160.
     #     ⚠ It was 3 until R50 was wired, then 4, and 5 once R50 gained its SECOND recipe — the
     #     `short` (RSB-A3) shim at trainRes 160. Both R50 rows share a Main file and a reference
     #     but differ in RECIPE, and the partition keys on the recipe, so they count separately.
-    #     mnv2in still does not count because its config IS R34's (no extra augmentation), which
+    #     mobilenetv2in still does not count because its config IS R34's (no extra augmentation), which
     #     is why gate 2's partition treats them as one class.
     #     Bump this deliberately when a net joins — a wrong constant here makes control A red
     #     and the whole file useless, which is exactly what it did when R50 arrived.
@@ -415,10 +415,10 @@ if "--break" in sys.argv:
     # (b) swap two nets' shims — the counts stay right, only the PARTITION is wrong. This is the
     #     `swap1` control from wdx-tie: a gate checking "five distinct shims exist" passes it.
     swapped = dict(wiring)
-    swapped["vitin"], swapped["cnxin"] = swapped["cnxin"], swapped["vitin"]
+    swapped["vitin"], swapped["convnextin"] = swapped["convnextin"], swapped["vitin"]
     still_distinct = len(set(swapped.values())) == len(swapped)
     swap_fired = 0
-    for slug in ("vitin", "cnxin"):
+    for slug in ("vitin", "convnextin"):
         sites = shim_call_sites(os.path.join(BUILD, swapped[slug]))
         if any(flags_by_slug[slug][f] != sites[f] for f in FEATURES):
             swap_fired += 1

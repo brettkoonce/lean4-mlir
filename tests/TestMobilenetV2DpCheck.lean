@@ -55,7 +55,7 @@ def main (args : List String) : IO Unit := do
   -- (`TestShardCheck.lean` took the same route when it went N-replica).
   --
   -- It exists because the RMSProp DP render (`recipe_gaps.md` v1.2) is rendered ONLY at the
-  -- ImageNet shape, `mnv2in` B=64 × 4 replicas, and there is no bs32 `rmsdp` peer to pair with.
+  -- ImageNet shape, `mobilenetv2in` B=64 × 4 replicas, and there is no bs32 `rmsdp` peer to pair with.
   -- ⚠ `shard-check` cannot stand in for this one: its known answer is
   -- `DP([A|B]) = mean(single(A), single(B))`, which needs the gated slot to be LINEAR in the
   -- gradient — true of AdamW's `m` at `m = 0` (`m' = (1−β₁)·g`) and **false of RMSProp's buffer**

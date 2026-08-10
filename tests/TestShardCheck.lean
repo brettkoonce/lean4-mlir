@@ -65,9 +65,9 @@ private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
 private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "convnext"     => some (convnextVerified,     32)
   -- the 1000-class ImageNet twins (§2p)
-  | "cnxin"        => some (convnextImagenetVerified, 32)
-  | "enetin"       => some (efficientnetImagenetVerified, 64)
-  | "mnv2in"       => some (mobilenetv2ImagenetVerified, 64)
+  | "convnextin"        => some (convnextImagenetVerified, 32)
+  | "efficientnetin"       => some (efficientnetImagenetVerified, 64)
+  | "mobilenetv2in"       => some (mobilenetv2ImagenetVerified, 64)
   | "efficientnet" => some (efficientnetVerified, 32)
   | "mobilenetv2"  => some (mobilenetv2Verified,  32)
   | _              => none

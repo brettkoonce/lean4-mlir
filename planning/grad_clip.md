@@ -257,7 +257,7 @@ for three times.
 
 ## 7. The gates
 
-**Gate 1 — inertness.** Every committed `vit*`/`vitin*`/`convnext*`/`cnxin*` artifact re-renders
+**Gate 1 — inertness.** Every committed `vit*`/`vitin*`/`convnext*`/`convnextin*` artifact re-renders
 **byte-identical**; only the new `clip` paths appear. Free if §4's `clip = false` short-circuit
 holds. ⚠ FORCE the writers with `lake env lean` — a plain `lake build` can leave the `#eval`s unrun
 and the empty diff is then vacuous (§2n).
@@ -357,7 +357,7 @@ declarations **3-axiom clean**.
 **Two `SHlo` ops, not four; no new proof machinery; no driver change.** `Proofs/Codegen/GradClip.lean`
 (3 defs, 9 theorems) + `gradSumSqAccF` / `clipScaleF` + 5 faithfulness theorems in `StableHLO.lean`.
 Four committed artifacts: `vit_adamclip`, `vitin_adam128wxclip`, `convnext_adamclip`,
-`cnxin_adamwxclip`. The Tier E → Tier D re-tiering held.
+`convnextin_adamwxclip`. The Tier E → Tier D re-tiering held.
 
 ### The gates — `lake build clip-tie`, both nets, ⚠ **under `scripts/det_shim.sh`**
 

@@ -152,14 +152,14 @@ shard mask is built per call site (`iree_lean_ffi.c:1022/1040`).
 **5c. Blast radius — 26 train steps and 8 forwards across three nets.**
 
 ```
-convnext, convnext_adam, convnext_adamdp, cnxin_adam, cnxin_adamdp
+convnext, convnext_adam, convnext_adamdp, convnextin_adam, convnextin_adamdp
 vit, vit_adam, vit_adam64, vit_adam128, vit_adamdp, vit_adamdp64,
   vit_adamdp32x4, vit_adamdp128x4, vitin_adam128, vitin_adamdp128x4
 efficientnet, efficientnet_adam, efficientnet_adam128, efficientnet_adamdp,
-  efficientnet_adamdp128, efficientnet_rms, enetin_adam64, enetin_adamdp64,
-  enetin_rms64, enetin_rmsdp64
-+ the 8 forwards (§3): convnext_fwd, cnxin_fwd, vit_fwd, vitin_fwd,
-  efficientnet_fwd{,_eval}, enetin_fwd{,_eval}
+  efficientnet_adamdp128, efficientnet_rms, efficientnetin_adam64, efficientnetin_adamdp64,
+  efficientnetin_rms64, efficientnetin_rmsdp64
++ the 8 forwards (§3): convnext_fwd, convnextin_fwd, vit_fwd, vitin_fwd,
+  efficientnet_fwd{,_eval}, efficientnetin_fwd{,_eval}
 ```
 
 Every one changes **arity**, so every harness that supplies a parameter blob to them moves:
@@ -210,7 +210,7 @@ how the mnv2 swap shipped a 160-param forward past a green tie.**
 `ConvNeXtRenderB.lean` renders the 18 sites, one per block, on the residual branch (between
 `layerScaleCh` and the `addVB`); the backward emits the same constructor on the cotangent between
 `dy` and `layerScaleCh`. Six artifacts, all NEW — `convnext_{adamdrop,adamdpdrop}_train_step`,
-`convnext_drop_fwd`, `cnxin_{adamwxclipdrop,adamdpwxclipdrop}_train_step`, `cnxin_drop_fwd` — so no
+`convnext_drop_fwd`, `convnextin_{adamwxclipdrop,adamdpwxclipdrop}_train_step`, `convnextin_drop_fwd` — so no
 committed artifact moved (0 lines of diff with the writers forced).
 
 | gate | result | its control |
@@ -222,7 +222,7 @@ committed artifact moved (0 lines of diff with the writers forced).
 | gate B (all-zero mask), `droppath-tie --net convnext` | floor 320/320, B1 320/320, **B3 0.259**, **B4 1.104** | the misplaced render, above |
 | gate A (the op, `B ≠ n`) | bit-exact 40/40 | C1 1.29, C2 35/40 |
 | **DP mask shard**, `drop-shard-check convnext` | ① **83,478,846/83,478,846** bit-identical, ②a `%loss` 4.5413 → 4.3645 MOVED | `DROP_FAULT=replicate` fires ① at **81,799,716** moving, rel 1.00005; `PJRT_DP_NO_MASK_SHARD=1` refuses on arity |
-| prefix audit | `convnext_drop_fwd` ⊂ `convnext_adamdrop`, **1580 lines**; same for `cnxin` | — |
+| prefix audit | `convnext_drop_fwd` ⊂ `convnext_adamdrop`, **1580 lines**; same for `convnextin` | — |
 
 **Three findings that outlive the feature:**
 

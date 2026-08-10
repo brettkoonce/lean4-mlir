@@ -655,7 +655,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
     Identical architecture to `mobilenetv2Verified`; only the head moves (1280→1000), which takes
     the count to the JAX reference's 3,504,872.
 
-    ⚠ A batch-BN net, so it needs `@mnv2in_fwd_eval` with frozen running stats, and its DP evidence
+    ⚠ A batch-BN net, so it needs `@mobilenetv2in_fwd_eval` with frozen running stats, and its DP evidence
     comes from `shard-check` (which carries the 2×52-tensor stat region) rather than the plain
     duplicated-batch harness.
 
@@ -668,7 +668,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
     reference uses **RMSProp at LR 0.045**, where this path is AdamW + cosine. -/
 def mobilenetv2ImagenetVerified : VerifiedNetSpec where
   name     := "MobileNetV2 (ImageNet-1k)"
-  slug     := "mnv2in"
+  slug     := "mobilenetv2in"
   inC      := 3
   imageH   := 224
   imageW   := 224
@@ -796,7 +796,7 @@ def efficientnetVerified : VerifiedNetSpec where
     gap than ConvNeXt's or ViT's, and it is on top of the usual missing mixup/cutmix/EMA. -/
 def efficientnetImagenetVerified : VerifiedNetSpec where
   name     := "EfficientNet-B0 (ImageNet-1k)"
-  slug     := "enetin"
+  slug     := "efficientnetin"
   inC      := 3
   imageH   := 224
   imageW   := 224
@@ -917,7 +917,7 @@ def convnextVerified : VerifiedNetSpec where
     so what this trainer actually streamed was RandomResizedCrop + hflip. See `shimScript`. -/
 def convnextImagenetVerified : VerifiedNetSpec where
   name     := "ConvNeXt-T (ImageNet-1k)"
-  slug     := "cnxin"
+  slug     := "convnextin"
   inC      := 3
   imageH   := 224
   imageW   := 224
@@ -943,7 +943,7 @@ def convnextImagenetVerified : VerifiedNetSpec where
   -- is a property of the ARCHITECTURE (18 blocks, one site each) and of `dropPath := 0.1`, neither
   -- of which moves with the class count or the batch. ⚠ Unlike the Imagenette render, this one is a
   -- REFERENCE recipe item — `convNeXtTinyImagenetConfig.dropPath := 0.1`, the ConvNeXt-T paper
-  -- value — so `cnxin_adamdpwxclipdrop` is the first ConvNeXt artifact carrying every
+  -- value — so `convnextin_adamdpwxclipdrop` is the first ConvNeXt artifact carrying every
   -- optimizer-and-regulariser knob its reference sets.
   dropKeeps := (Array.range 18).map (fun i => 1.0 - 0.1 * i.toFloat / 17.0)
 

@@ -103,8 +103,8 @@ def main (args : List String) : IO Unit := do
     | "vit"      => pure vitVerified.toNet
     | "vitin"    => pure vitImagenetVerified.toNet
     | "convnext" => pure convnextVerified.toNet
-    | "cnxin"    => pure convnextImagenetVerified.toNet
-    | other      => throw <| IO.userError s!"VIT_DP_NET={other}: expected `vit`, `vitin`, `convnext` or `cnxin`"
+    | "convnextin"    => pure convnextImagenetVerified.toNet
+    | other      => throw <| IO.userError s!"VIT_DP_NET={other}: expected `vit`, `vitin`, `convnext` or `convnextin`"
   -- The replica count must match what the DP render BAKED into `replica_groups`; a mismatch is
   -- refused by the shim rather than answered wrongly. Env rather than argv because argv[0..2] are
   -- already the (dp, single, batch) triple and a fourth positional would be unreadable.

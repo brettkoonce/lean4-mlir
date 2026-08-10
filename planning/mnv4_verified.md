@@ -621,16 +621,16 @@ the `#eval` writers in `MobileNetV2RenderB.lean` and grepping `runs/` for what e
 | `mobilenetv2_adam_train_step` | B32, 10cls | **89.35%** (`mnv2_adam_80ep_aug06.log`) | **YES** |
 | `mobilenetv2_rms_train_step` | B32, rmsprop | **76.03%** (`mnv2_rms_80ep_aug02.log`) | **YES** |
 | `mobilenetv2_adamdp_train_step` | B32, 2 replicas | DP timing/eval probes only (`runs/xla2h/mnv2_dp_*`) | optional |
-| `mnv2in_adam64_train_step` | B64, 1000cls | — no run exists | no |
-| `mnv2in_adamdp64_train_step` | B64, 4 replicas | — no run exists | no |
-| `mnv2in_rms64_train_step` | B64, rmsprop | — no run exists | no |
-| `mnv2in_rmsdp64_train_step` | B64, 4 rep, rmsprop | — no run exists | no |
+| `mobilenetv2in_adam64_train_step` | B64, 1000cls | — no run exists | no |
+| `mobilenetv2in_adamdp64_train_step` | B64, 4 replicas | — no run exists | no |
+| `mobilenetv2in_rms64_train_step` | B64, rmsprop | — no run exists | no |
+| `mobilenetv2in_rmsdp64_train_step` | B64, 4 rep, rmsprop | — no run exists | no |
 
 ▶ **So it is TWO headline re-runs, not one**: Adam 89.35% *and* RMSProp 76.03%. The DP variant
 shares the identical chain, so it is automatically correct once switched — only its probes would
 want re-timing, and those are cheap.
 
-✅ **The ImageNet tier costs nothing.** All four `mnv2in` artifacts move, but nobody has trained on
+✅ **The ImageNet tier costs nothing.** All four `mobilenetv2in` artifacts move, but nobody has trained on
 them, so there is no number to void. ⚠ And do **not** confuse this with README's ImageNet
 MobileNetV2 **68.33%** — that is the **Tier-4 JAX/baseline** number (`jax/runs/*/RESULTS.md`, the
 unverified emitter), not these artifacts. It is untouched by any of this.
@@ -772,14 +772,14 @@ measuring. **Fix the probe, get the tie, then launch.**
    `mobilenetv2_fwd_eval.mlir` is still symmetric would leave the trained and scored nets
    disagreeing, which is the §3d(b) defect all over again. Both must land together.
 2. **The eval forward — and there are TWO of them**, `mobilenetv2_fwd_eval.mlir` and
-   `mnv2in_fwd_eval.mlir`. Both come from the same slug-parameterised chain, so it is one change
+   `mobilenetv2in_fwd_eval.mlir`. Both come from the same slug-parameterised chain, so it is one change
    covering both. They are written by the **per-example** `MobileNetV2Render`, whose chain uses
    top-level `SHlo` ops (`depthwiseStridedF` etc.) — the expensive kind, 6 of them with the parser
    roundtrip. ▶ **Recommended instead: render them from `MobileNetV2RenderB` using
    `BatchableOp.bnEval`**, which already exists. That needs no new ops, and it *fixes* §3d(b) by
    putting the eval forwards in the same file and world as the train steps they actually partner.
    Cost is a ~120-line chain and getting the 315-input signature right.
-   ⚠ `mnv2in_fwd_eval` must move too even though no `mnv2in` run exists — leaving it symmetric
+   ⚠ `mobilenetv2in_fwd_eval` must move too even though no `mobilenetv2in` run exists — leaving it symmetric
    would plant the train/score mismatch for whoever runs that tier first, which is precisely how
    §3d(b) happened in the first place.
 3. **Verify**: re-run `scripts/mnv2_forward_tie.py`; success is the as-is column at ~1e-6 in the

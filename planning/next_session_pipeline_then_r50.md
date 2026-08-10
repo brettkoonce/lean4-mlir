@@ -302,8 +302,8 @@ one blocker is gradient accumulation.
 | **§2 pipeline** | 377 ms/step | **224**, 1.68× — depth-1 prefetch, bit-identity gated |
 | **§2.4 uint8** | "the next lever" | ⛔ **dropped, measured** — worth 2.5%, see §2.2 |
 | **§1.2 the 6–10× mystery** | cause unknown, blocked 2 nets | ✅ **solved** — it was the producer |
-| **enetin** | 2,023 ms/step | **203** (10.2×) |
-| **cnxin** | 895 ms/step | **235** (3.8×) |
+| **efficientnetin** | 2,023 ms/step | **203** (10.2×) |
+| **convnextin** | 895 ms/step | **235** (3.8×) |
 | **vitin** | 4,348 ms/step | **665** (6.5×) |
 | **§1.1 job configs** | 1 of 6 | ✅ **5 of 6**, each with a `SHIM_WORKERS` precheck |
 | **§3 ResNet-50** | did not exist | ✅ **trains on ImageNet**, phases 1–3 |
@@ -356,9 +356,9 @@ ImageNet scale before tonight, its number would have been ~4× low and believed.
 | net | job config | DP shard gate | regularisers in the DP artifact | throughput | other |
 |---|---|---|---|---|---|
 | **resnet34in** | ✅ `r34-imagenet-4gpu.conf` | ✅ `r34-dp-shard` | ✅ | ✅ **224** ms/step (w=1) | **base camp** |
-| **mnv2in** | ✅ `mnv2-imagenet-4gpu.conf` | ✅ `shard-check mnv2in` | ✅ | ✅ **201** ms/step (w=1; w=4 is WORSE) | ⚠ 80-ep re-run owed since the conv-bias swap |
-| **enetin** | ✅ `enet-imagenet-4gpu.conf` | ✅ `shard-check enetin` | ✅ conf points at `emarmsdp64**dropdo**` | ✅ **203** ms/step (w=8, was 2,061) | |
-| **cnxin** | ✅ `cnx-imagenet-4gpu.conf` | ✅ `shard-check cnxin` | ✅ `cnxin_adamdpwxclipdrop` | ✅ **235** ms/step (w=8, was 895); **batch 32 ⇒ 10,009 steps/epoch, double everyone** | ▶ batch-64 rescope is now the top lever — it is compute-bound at 235 |
+| **mobilenetv2in** | ✅ `mnv2-imagenet-4gpu.conf` | ✅ `shard-check mobilenetv2in` | ✅ | ✅ **201** ms/step (w=1; w=4 is WORSE) | ⚠ 80-ep re-run owed since the conv-bias swap |
+| **efficientnetin** | ✅ `enet-imagenet-4gpu.conf` | ✅ `shard-check efficientnetin` | ✅ conf points at `emarmsdp64**dropdo**` | ✅ **203** ms/step (w=8, was 2,061) | |
+| **convnextin** | ✅ `cnx-imagenet-4gpu.conf` | ✅ `shard-check convnextin` | ✅ `convnextin_adamdpwxclipdrop` | ✅ **235** ms/step (w=8, was 895); **batch 32 ⇒ 10,009 steps/epoch, double everyone** | ▶ batch-64 rescope is now the top lever — it is compute-bound at 235 |
 | **vitin** | ✅ `vit-imagenet-4gpu.conf` | ⛔ **still only `vit-dp-check`, duplicated-batch — structurally blind to shard OFFSET** | ✅ conf points at `adamdp128x4wxclip**drop**` | ⚠ **665** ms/step (w=8, was 4,348) against a **250** floor — still data-bound | ⚠ w=16 is SLOWER (710); 32 cores cannot make the ~2,048 img/s it wants |
 | **resnet50in** | ⛔ none | ⛔ none | ✅ AdamW kit | ⛔ unmeasured | ✅ **the net exists and trains** (§3); ⚠⚠ gradient ungated |
 
@@ -369,7 +369,7 @@ precheck **plus a new one for `SHIM_WORKERS`**, whose failure mode is identical:
 run that reads completely normal, and up to 10× the wall-clock. Both refusals verified against
 negative controls including a wrong-value case.
 
-⭐ **Item 3 needed no `#eval` at all** — `enetin_emarmsdp64dropdo` and
+⭐ **Item 3 needed no `#eval` at all** — `efficientnetin_emarmsdp64dropdo` and
 `vitin_adamdp128x4wxclipdrop` were already on disk beside their under-regularised peers. The
 configs now name them. ⚠ That is a *file exists* check, not a *bake* check: confirm by listing what
 the artifact contains, never off the variant name.
