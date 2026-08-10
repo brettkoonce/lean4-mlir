@@ -1291,19 +1291,16 @@ lean_exe «mnist-mlp-e4m3-verified» where
 -- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
 /-- Shared body of the verified CNN trainer — imported by BOTH the IREE and XLA
     executables so their config and He-init seed cannot drift. -/
-lean_lib «CnnVerifiedCommon» where
-  srcDir := "."
-  roots := #[`apps.mnist.CnnVerifiedCommon]
 
 lean_exe «mnist-cnn-verified» where
   root := `apps.mnist.MainMnistCnnVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 /-- The first CONVOLUTIONAL graph on the XLA ladder — where IREE's ~1%-of-peak
     conv codegen actually bites, unlike the dense-only rungs 0-1. -/
-lean_exe «mnist-cnn-verified-xla» where
-  root := `apps.mnist.MainMnistCnnVerifiedXla
-  moreLinkArgs := xlaLink
+-- The conv rung of the XLA ladder is now a RUN-TIME choice:
+-- `mnist-cnn-verified` serves both lowerers via $LEAN_MLIR_LOWERER, so its
+-- `-xla` peer and their shared-body file are gone.
 
 -- Chapter 4 (low precision): fp8 (E4M3) CNN training on the SAME verified StableHLO.
 -- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
@@ -2830,7 +2827,8 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
     let _ ← rp.wait
   return 0
 
-/-- `lake run mnist-iree` — the verified-MNIST demos (linear/MLP/CNN), ~30 min. -/
+/-- `lake run mnist-iree` — the same three binaries as `lake run mnist`, with the
+    IREE lowerer selected instead of XLA. ~30 min (XLA is 2.3-4.3x faster here). -/
 script «mnist-iree» do
   runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified", "mnist-cnn-verified"]
 
@@ -2880,11 +2878,15 @@ script «imagenette-iree» do
 -- ⚠ Two coverage gaps, both named rather than papered over — see each docstring.
 -- ═══════════════════════════════════════════════════════════════════════
 
-/-- `lake run mnist` — the XLA peers of `lake run mnist-iree`, and an EXACT mirror:
-    all three verified MNIST demos (linear/MLP/CNN) have a `-xla` target. -/
+/-- `lake run mnist` — the three verified MNIST demos (linear/MLP/CNN) on XLA.
+
+    No longer a set of `-xla` PEERS: since the conv rung migrated, this names the
+    SAME three binaries as `lake run mnist-iree`. The only difference between the
+    two scripts is the lowerer `runDemoGroup` puts in the environment, which is
+    the strongest form the G2 comparison can take — one binary, run twice. -/
 script mnist do
   runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified",
-                "mnist-cnn-verified-xla"] (xla := true)
+                "mnist-cnn-verified"] (xla := true)
 
 /-- `lake run cifar` — the XLA peers of `lake run cifar-iree`, and an EXACT mirror since
     2026-07-30: all six of the Chapter-4 optimizer ablation (SGD / Nesterov-momentum / AdamW
@@ -3134,7 +3136,7 @@ def benchTable : List BenchItem :=
     { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist",
       refSecCuda := some 11, probeXla := "mnist-mlp-verified", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
-      transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified-xla", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
+      transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
     { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar",
       refSecCuda := some 540, probeXla := "cifar8-bn-verified-xla", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
     { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
