@@ -11713,37 +11713,35 @@ Tracking Meet Drones Challenge}, IEEE TPAMI~43 (2021).
 \chapter{Getting started}
 \label{app:getting_started}
 
-If you want to just see it run --- train a real neural network, end
-to end, with the Lean $\to$ MLIR $\to$ IREE pipeline from Part 1 --- this
-appendix is the smallest path from zero to a trained model. Four
-tracks are included:
+If you want to just see it run --- train a real neural network, end to end,
+with the Lean $\to$ MLIR $\to$ GPU pipeline from Part 1 --- this appendix is
+the smallest path from zero to a trained model.
 
-\begin{enumerate}
-  \item \textbf{No-GPU Docker demo.} Train MNIST on CPU in $\sim$5
-    minutes. Zero setup beyond Docker. Good if you don't have a GPU
-    and just want to confirm the pipeline works.
-  \item \textbf{Native install (CUDA or ROCm).} Train real image
-    models (ResNet, MobileNet, EfficientNet, ViT) on your GPU.
-    Requires an IREE build step but gives you the full book's
-    training runs.
-  \item \textbf{Lean-only (no IREE).} Read, build, and verify the
-    proofs without running any neural-network training. Covers
-    everything in Part 1 at the proof level.
-  \item \textbf{One-command demo tiers.} With the native setup
-    (Track 2) in place, a single \texttt{lake run mnist-iree},
-    \texttt{cifar-iree}, or \texttt{imagenette-iree} builds and runs a
-    curated, time-budgeted group of \emph{verified} trainers --- no env
-    vars or trainer list to assemble by hand. (Drop the \texttt{-iree}
-    suffix for the XLA/PJRT peers, which are the default tiers.)
-\end{enumerate}
+The thing worth knowing before you start is that \emph{what you have to
+install depends entirely on how far up the scale you want to go}, and the
+steps are not evenly spaced:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\textbf{What you want} & \textbf{What you need} & \textbf{Track} \\[2pt]
+\hline \\[-6pt]
+Read and check the proofs      & Lean. No GPU.                    & 3 \\
+See the pipeline run at all    & Docker.                          & 1 \\
+MNIST / CIFAR / Imagenette     & Lean + one plugin file.          & 2, 4 \\
+Full ImageNet-1k               & the above, plus Python + tfds.   & 5 \\
+\end{tabular}
+\end{center}
+
+Everything in Part 1 of this book is the third row. It needs \emph{no Python
+at run time and no compiler}: you download one shared library and run a Lean
+binary. Only the ImageNet tier (Track 5) needs an interpreter, and it needs
+one because of how its data is streamed, not because of how it computes.
 
 \section*{Track 1: No-GPU Docker demo}
 
-The repository ships a \texttt{Dockerfile} that builds a CPU-only
-MNIST demo in a multi-stage image. Pulls Lean 4, builds IREE's CPU
-runtime, compiles the MLP trainer, and bakes MNIST into the image.
-Once built, the final image is $\sim$300 MB and doesn't require a
-GPU or Python.
+The repository ships a \texttt{Dockerfile} that builds a CPU-only MNIST demo
+in a multi-stage image. Once built, the final image is $\sim$300\,MB and
+doesn't require a GPU or Python.
 
 \begin{verbatim}
 git clone https://github.com/brettkoonce/lean4-mlir.git
@@ -11753,248 +11751,244 @@ docker run --rm lean4-mlir-demo
 \end{verbatim}
 
 Output: the same three-layer MLP shown in Chapter~\ref{chap:mlp}
-(784 $\to$ 512 $\to$ 512 $\to$ 10) trains for 12 epochs on real
-MNIST, converges to $\sim$97.9\% test accuracy. First build takes
-$\sim$10 minutes (dominated by IREE CMake + Ninja); subsequent
+(784 $\to$ 512 $\to$ 512 $\to$ 10) trains for 12 epochs on real MNIST and
+converges to $\sim$97.9\% test accuracy.
+
+\emph{Note:} this image still builds the IREE CPU runtime from source, which
+is what makes the first build take $\sim$10 minutes. Subsequent
 \texttt{docker run} invocations reuse the cached image.
 
-This is the fastest way to verify the Lean-to-MLIR-to-IREE pipeline
-actually works on your hardware before committing to a larger setup.
+\section*{Track 2: Native install (XLA/PJRT)}
 
-\section*{Track 2: Native install (CUDA or ROCm)}
-
-For training the larger networks (ResNet-34, MobileNet v2/v3/v4,
-EfficientNet, ViT) you need a GPU-accelerated IREE runtime. Steps:
+This is the default path and the one every number in this book was measured
+on. There is no compiler to build.
 
 \begin{enumerate}
-  \item \textbf{Install Lean 4.} Uses \texttt{elan} (like
-    \texttt{rustup} for Rust) to manage toolchain versions.
+  \item \textbf{Install Lean 4.} Uses \texttt{elan} (like \texttt{rustup} for
+    Rust) to manage toolchain versions.
 \begin{verbatim}
 curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
   -sSf | sh
 \end{verbatim}
 
-  \item \textbf{Build the IREE runtime} for your GPU backend. See
-    \texttt{IREE\_BUILD.md} in the repo for the full CMake
-    invocation. Once built, the FFI shim in \texttt{ffi/} links
-    against \texttt{libiree\_runtime\_unified.a} from your build
-    tree.
+  \item \textbf{Get an XLA PJRT plugin.} This is one prebuilt shared library.
+    It ships inside the JAX wheels because that is the only place XLA's GPU
+    plugins are packaged --- \emph{nothing imports JAX and no interpreter runs
+    at training time}; the shim opens the \texttt{.so} directly through the
+    PJRT C API.
+\begin{verbatim}
+python3 -m venv .venv && . .venv/bin/activate
+pip install --upgrade "jax[cuda12]"      # NVIDIA
+pip install --upgrade "jax[rocm]"        # AMD (AMD's package index)
+\end{verbatim}
+    The shim looks for the plugin under \texttt{.venv/lib/python3.*/
+    site-packages/jax\_plugins/}, so installing into the repo's own
+    \texttt{.venv} is enough for it to be found. Point at one elsewhere with
+    \texttt{\$PJRT\_PLUGIN}. The ROCm plugin is version-matched to your ROCm
+    install, so it is \texttt{pip install} \emph{with AMD's index}, not a bare
+    one --- but it is still a download, not a build.
 
-  \item \textbf{Fetch data} for the tier(s) you want to run:
+  \item \textbf{Build the FFI shim} (needs only libc and \texttt{dlopen}):
+\begin{verbatim}
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+\end{verbatim}
+
+  \item \textbf{Fetch data} for the tier(s) you want:
 \begin{verbatim}
 ./download_mnist.sh        # MNIST       (mnist tier)
 ./download_cifar.sh        # CIFAR-10    (cifar tier)
 ./download_imagenette.sh   # Imagenette 320px, ~300 MB (imagenette tier)
 \end{verbatim}
 
-  \item \textbf{Build a trainer.}
+  \item \textbf{Build and run a trainer.} No backend environment variables:
+    XLA finds the device.
 \begin{verbatim}
 lake build resnet34-verified-adam
+.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
-
-    The targets are the verified trainers the three demo tiers
-    (Track 4) bundle --- build any one on its own:
-    \begin{itemize}
-      \item \texttt{lake run mnist-iree}: \texttt{mnist-linear-verified},
-        \texttt{mnist-mlp-verified}, \texttt{mnist-cnn-verified}
-      \item \texttt{lake run cifar-iree}: \texttt{cifar8-verified} and
-        \texttt{cifar8-bn-verified}, each in plain-SGD /
-        \texttt{-momentum} / \texttt{-adam} (six in all)
-      \item \texttt{lake run imagenette-iree}: \texttt{resnet34-verified-adam},
-        \texttt{mobilenetv2-verified-adam},
-        \texttt{efficientnet-verified-adam},
-        \texttt{convnext-verified-adam}, \texttt{vit-verified-adam}
-    \end{itemize}
-    (Unverified \texttt{<arch>-train} targets --- \texttt{vgg-train},
-    \texttt{resnet50-train}, \texttt{mobilenet-v3-train},
-    \texttt{efficientnet-v2-train}, etc. --- also build, for
-    architectures outside the verified set.)
-
-  \item \textbf{Run, setting the backend env vars.} The FFI picks
-    up \texttt{IREE\_BACKEND} and \texttt{IREE\_CHIP} at runtime.
-
-    \textbf{NVIDIA / CUDA:}
-\begin{verbatim}
-CUDA_VISIBLE_DEVICES=0 IREE_BACKEND=cuda IREE_CHIP=sm_86 \
-  .lake/build/bin/resnet34-verified-adam
-\end{verbatim}
-
-    (\texttt{sm\_86} is Ampere --- RTX 30-series, A100. Use
-    \texttt{sm\_89} for Ada/RTX 40-series, \texttt{sm\_90} for
-    Hopper/H100.)
-
-    \textbf{AMD / ROCm:}
-\begin{verbatim}
-HIP_VISIBLE_DEVICES=0 IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
-  .lake/build/bin/resnet34-verified-adam
-\end{verbatim}
-
-    (\texttt{gfx1100} is the 7900 XT/XTX. Use \texttt{gfx90a} for
-    the MI200 series, \texttt{gfx942} for MI300.)
-
-    \textbf{CPU fallback:}
-\begin{verbatim}
-IREE_BACKEND=llvm-cpu .lake/build/bin/resnet34-verified-adam
-\end{verbatim}
-
-    (No chip argument. Slower than GPU but useful for debugging
-    trainers without a working GPU setup.)
+    Use \texttt{CUDA\_VISIBLE\_DEVICES} / \texttt{HIP\_VISIBLE\_DEVICES} to
+    pick a card, as with any GPU program.
 \end{enumerate}
 
-\textbf{First-run compile is slow.} IREE spends 10--15 minutes
-compiling a ResNet-sized training step to vmfb. Subsequent runs
-reuse the cached vmfb under \texttt{.lake/build/} unless you
-delete it. The first-compile is a one-time cost per architecture,
-per GPU target.
+\prosesection{Running the same binary on IREE}
 
-\textbf{Shell wrapper.} The repo ships \texttt{run.sh} which sets
-the right env vars and tees output to a log file. Usage:
-\texttt{./run.sh <trainer> [gpu] [backend]} (e.g.\
-\texttt{./run.sh resnet34}; \texttt{./run.sh efficientnet-v2 1
-cuda}).
-
-\section*{Track 3: Proofs only (no IREE needed)}
-
-If you just want to read the book and verify the proofs, you can
-skip IREE entirely. The proofs don't depend on the runtime.
+Every verified trainer is one executable that carries \emph{both} trusted
+lowerers and picks between them at run time. There are no \texttt{-xla}
+targets to build and no separate binaries to keep in step:
 
 \begin{verbatim}
-git clone https://github.com/brettkoonce/lean4-mlir.git
-cd lean4-mlir
-lake exe cache get             # pull ~5 GB of precompiled Mathlib
-lake build ProofsMinimal       # the smallest end-to-end story (~seconds)
-lake build Proofs              # type-checks the ENTIRE VJP proof suite
+.lake/build/bin/resnet34-verified-adam data                   # XLA (default)
+LEAN_MLIR_LOWERER=iree ... resnet34-verified-adam data        # IREE
 \end{verbatim}
 
-\textbf{Start with \texttt{ProofsMinimal}.} The full \texttt{Proofs}
-build type-checks every chapter at once --- the real verification, but a
-lot to meet head-on. \texttt{lake build ProofsMinimal} instead compiles
-just the suite's ``hello world'': the linear softmax classifier ---
-the book's first end-to-end-verified example --- in both halves of its
-claim.
-\begin{itemize}
-  \item \texttt{LinearFaithfulPoC} ($\sim$145 lines) --- the
-    \emph{faithfulness} half: the StableHLO training step the codegen
-    emits is, line for line, the certified softmax--cross-entropy
-    gradient.
-  \item \texttt{SgdDescentLinear} ($\sim$255 lines) --- the
-    \emph{descent} half: one SGD step on that certified gradient
-    provably decreases the loss.
-\end{itemize}
-Their transitive closure \emph{is} the minimum working set: those two
-files plus the shared StableHLO / tensor / float-bridge foundation, and
-nothing per-network beyond the linear case. \textbf{This is the
-jumping-off point for the code.} Open
-\texttt{LeanMlir/Proofs/Foundation/LinearFaithfulPoC.lean} and
-\texttt{SgdDescentLinear.lean} and read them top to bottom: you will
-have seen the entire shape of the argument the rest of the suite scales
-up --- every later chapter is these same two halves at a larger network.
-The \textbf{Start here} section of \texttt{LeanMlir/Proofs/README.md}
-lays out that read order and flags which large files to skip on a first
-pass. Once \texttt{ProofsMinimal} builds green, graduate to the whole
-suite:
+The IREE path additionally needs \texttt{iree-compile} on \texttt{\$PATH}
+(\texttt{pip install iree-base-compiler}), the IREE runtime built per
+\texttt{IREE\_BUILD.md}, and \texttt{ffi/libiree\_ffi.so}. It also wants
+\texttt{IREE\_BACKEND} and \texttt{IREE\_CHIP} --- e.g.
+\texttt{IREE\_BACKEND=rocm IREE\_CHIP=gfx1100}, or \texttt{cuda} with
+\texttt{sm\_86} (Ampere), \texttt{sm\_89} (Ada), \texttt{sm\_90} (Hopper).
+That asymmetry is the point of the section below.
 
-The \texttt{Proofs} target's roots are the apex VJP modules; their
-transitive imports cover every chapter's proof file, so this single
-build type-checks all of it against Lean's kernel --- that is the
-entire verification, no module list to keep current. Because the proof
-suite imports only Mathlib --- never the codegen --- \texttt{Proofs}
-skips the IREE/StableHLO layer entirely; it is also the default target,
-so a bare \texttt{lake build} runs the same check. (\texttt{lake build
-LeanMlir} builds the whole repo instead --- codegen, trainers, and
-proofs.) Every VJP formula is proved against Mathlib's \(\fderiv\) (see
-Appendix~\ref{app:verification}).
+\section*{Track 3: Proofs only (no GPU needed)}
 
-To also run the numerical gradient checks:
+Read, build, and verify the proofs without running any training. Covers
+everything in Part 1 at the proof level, and depends on neither lowerer ---
+the theorems are about the emitted graph, not about anything that executes it.
 
 \begin{verbatim}
-python3 LeanMlir/Proofs/check_jacobians.py
+lake exe cache get      # Mathlib oleans, ~30 s (vs ~45 min from source)
+lake build LeanMlir
 \end{verbatim}
-
-Every closed-form Jacobian formula in the suite has a
-finite-difference test that compares the formula against the
-numerical derivative. The check typically completes in under a
-minute and reports pass/fail per formula.
 
 \section*{Track 4: One-command demo tiers}
 
-Track 2 is the full manual path --- pick a trainer, set the backend
-env vars, run. Once that setup works, you rarely want to assemble a
-trainer list and environment by hand every time. Three Lake
-\texttt{script}s bundle the common cases into one command that builds
-and runs a curated, time-budgeted group of \emph{verified} trainers
-back to back:
+With Track 2 in place, a single command builds and runs a curated,
+time-budgeted group of \emph{verified} trainers --- no environment variables
+or trainer list to assemble by hand.
 
 \begin{verbatim}
-lake run mnist-iree        # verified MNIST: linear, MLP, CNN            (~30 min)
-lake run cifar-iree        # ch.5 cifar8: SGD/momentum/Adam x bn/no-bn   (~1 hr)
-lake run imagenette-iree   # the 5 Part-I nets at 224^2, 80-epoch AdamW  (~37 h)
+lake run mnist        # verified MNIST: linear, MLP, CNN            (~10 min)
+lake run cifar        # ch.4 cifar8: SGD/momentum/Adam x bn/no-bn   (~1 hr)
+lake run imagenette   # the 7 Part-I nets at 224^2, 80-epoch AdamW  (~37 h)
 \end{verbatim}
 
-Each script streams every trainer live and tees it to
-\texttt{<name>.log}. Two conveniences make it genuinely one-click on
-top of the Track 2 install:
+Each has an \texttt{-iree} twin --- \texttt{lake run mnist-iree} and so on ---
+which runs \emph{the same binaries} with the IREE lowerer selected. The tiers
+bundle these targets, and any one builds on its own:
 
 \begin{itemize}
-  \item \textbf{Backend auto-detects.} \texttt{cuda} when an NVIDIA GPU
-    is visible (\texttt{nvidia-smi -L} succeeds), otherwise
-    \texttt{rocm}. Set \texttt{IREE\_BACKEND} to override and
-    \texttt{LEAN\_DEMO\_GPU} to pick the card (default \texttt{0}).
-  \item \textbf{The venv is found for you.} The trainers shell out to
-    \texttt{iree-compile}; the script prepends the project's
-    \texttt{.venv/bin} to \texttt{PATH} for the run, so it resolves
-    without activating the venv first --- the usual one-click footgun.
+  \item \texttt{mnist}: \texttt{mnist-linear-verified},
+    \texttt{mnist-mlp-verified}, \texttt{mnist-cnn-verified}
+  \item \texttt{cifar}: \texttt{cifar8-verified-sgdsched} and
+    \texttt{cifar8-bn-verified-sgdsched}, plus each in
+    \texttt{-momentum} / \texttt{-adam} (six in all)
+  \item \texttt{imagenette}: \texttt{resnet34-verified-adam},
+    \texttt{mobilenetv2-verified-adam}, \texttt{efficientnet-verified-adam},
+    \texttt{convnext-verified-adam}, \texttt{vit-verified-adam},
+    \texttt{mobilenetv4-verified-adam}, \texttt{resnet50-verified-adam}
 \end{itemize}
 
-The tiers escalate by time budget. \texttt{lake run mnist-iree}
-($\sim$30 min) is the quickest end-to-end confirmation that the GPU
-path works; \texttt{lake run cifar-iree} ($\sim$1 hr) is the
-Chapter~\ref{chap:bn} optimizer ablation in full --- the six runs
-(SGD/momentum/AdamW $\times$ BN/no-BN) behind that chapter's accuracy
-curves and table; and \texttt{lake run imagenette-iree} ($\sim$37 h on a
-single 7900 XTX) trains all five Part-I architectures
-(ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Ti) at full
-$224\times224$ --- a deliberate investment, not a quick look. Anything
-beyond these stays a single, deliberate \texttt{run.sh} invocation
-(Track 2).
+(Unverified \texttt{<arch>-train} targets --- \texttt{vgg-train},
+\texttt{mobilenet-v3-train}, \texttt{efficientnet-v2-train} --- also build,
+for architectures outside the verified set.)
 
-\medskip\noindent\textbf{Which tier fits your GPU?} Before committing to one
---- especially the 37-hour Imagenette tier --- run \texttt{lake run
-benchmark}. It briefly times a couple of the verified nets on your card and
-prints how long each chapter and each tier above would take on it:
+\section*{Track 5: ImageNet-1k runners}
+
+The scale tier. Six nets train on full ImageNet-1k off the same certified
+renderer as their Imagenette counterparts:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\textbf{Target} & \textbf{Job config} \\[2pt]
+\hline \\[-6pt]
+\texttt{resnet34-imagenet-verified}     & \texttt{r34-imagenet-4gpu} \\
+\texttt{resnet50-imagenet-verified}     & \texttt{r50-imagenet-4gpu} \\
+\texttt{mobilenetv2-imagenet-verified}  & \texttt{mnv2-imagenet-4gpu} \\
+\texttt{efficientnet-imagenet-verified} & \texttt{enet-imagenet-4gpu} \\
+\texttt{convnext-imagenet-verified}     & \texttt{cnx-imagenet-4gpu} \\
+\texttt{vit-imagenet-verified}          & \texttt{vit-imagenet-4gpu} \\
+\end{tabular}
+\end{center}
+
+\prosesection{This tier needs Python, and only this tier does}
+
+ImageNet data does not sit in a directory the way MNIST and Imagenette do. It
+is streamed from tfds through a \emph{generated} per-net shim --- a Python
+script emitted from that net's own reference \texttt{TrainConfig}, so the
+augmentation the verified trainer consumes is provably the augmentation its
+JAX reference trains on. Generate them before the first run:
 
 \begin{verbatim}
-$ lake run benchmark
-  backend: rocm   gpu: 0
-  ...
-  6  ResNet-34            9.5h
-  10 ViT                  7.8h
-  Full Part-1 training   42.8h
-  lake run mnist-iree 5m | cifar-iree 34m | imagenette-iree 42.2h
+scripts/gen_shims.sh
 \end{verbatim}
 
-\noindent Backend auto-detects (CUDA or ROCm), so the numbers come out scaled
-to whatever card you run it on.
+Each net names its own shim, and the driver \emph{refuses to start} if the
+named file is absent rather than falling back to another net's --- an earlier
+fallback silently gave every net ResNet-34's augmentation.
+
+\prosesection{Running one}
+
+Single device, with the knobs the recipe needs:
+
+\begin{verbatim}
+LEAN_MLIR_VARIANT=mom256 LEAN_MLIR_BATCH=256 LEAN_MLIR_BASE_LR_U=100000 \
+  .lake/build/bin/resnet34-imagenet-verified data
+\end{verbatim}
+
+\texttt{LEAN\_MLIR\_BATCH} \emph{must match the batch its variant was rendered
+at} --- the batch is baked into the graph, not a runtime dimension, so a
+mismatch is a shape error at the first invoke.
+\texttt{LEAN\_MLIR\_BASE\_LR\_U} is the base learning rate in millionths
+(\texttt{100000} = 0.1), integer-encoded because this toolchain has no
+\texttt{String.toFloat?}; the default 0.001 is an \emph{AdamW} rate and will
+under-step a heavy-ball render by $\sim$100$\times$, which looks like a broken
+render rather than a wrong knob.
+
+\prosesection{Running one for a day and a half}
+
+These are multi-day runs, so they go through a supervisor that owns the device
+list, the epoch budget and the restart policy:
+
+\begin{verbatim}
+scripts/supervise.sh r34-imagenet-4gpu
+DRY_RUN=1 scripts/supervise.sh r34-imagenet-4gpu   # print the plan, run nothing
+\end{verbatim}
+
+Data parallelism needs \emph{both} replica knobs --- \texttt{PJRT\_REPLICAS}
+configures the shim's client and compile options, \texttt{LEAN\_MLIR\_REPLICAS}
+makes the Lean driver call the data-parallel invoke --- and setting only one
+fails with a confusing ``compiled for N replicas'' error. The job configs set
+both. Collectives exist only on the PJRT path, so the data-parallel runs are
+XLA-only; the IREE shim refuses a DP entry point outright rather than silently
+running single-device.
+
+\section*{Choosing a lowerer}
+
+Both lowerers consume the same proven StableHLO and are the same trusted tier
+--- neither is verified, and swapping them changes nothing about what is
+proved. They differ in what they are good at:
+
+\begin{itemize}
+  \item \textbf{XLA/PJRT} is faster here, by 2.3$\times$ on the MNIST linear
+    net, 4.3$\times$ on the MLP and 4.9$\times$ on the CNN, because it
+    dispatches convolutions and matmuls to the vendor's hand-tuned kernel
+    libraries. The gap tracks how much work those kernels get.
+  \item \textbf{IREE} generates every kernel itself, which is why it runs where
+    no vendor library exists at all --- Vulkan, Metal, bare CPU, custom
+    accelerators --- and why its runtime is \emph{392$\times$ smaller}
+    (1.3\,MB against the XLA plugin's 505\,MB, which bundles MIOpen, rocBLAS
+    and RCCL).
+\end{itemize}
+
+That size difference is also a trust difference, and Appendix~\ref{app:verification}
+is where it is counted: the fast path asks you to trust a great deal more
+unverified code than the small one does.
 
 \section*{Common troubleshooting}
 
 \begin{itemize}
-  \item \textbf{\texttt{HAL device not found}} on launch --- usually
-    means the IREE runtime wasn't built with the requested backend's
-    HAL driver. CPU fallback (\texttt{IREE\_BACKEND=llvm-cpu}) is
-    the safest diagnostic: if it works on CPU but not GPU, the
-    problem is in your IREE build's HAL drivers, not in the Lean
-    code.
-  \item \textbf{\texttt{lake build} fails with Mathlib cache
-    errors} --- run \texttt{lake exe cache get} to populate the
-    local cache. Without it, the first build compiles all of
-    Mathlib from source ($\sim$45 min). With it, Mathlib oleans are
-    downloaded directly ($\sim$30 seconds).
-  \item \textbf{First IREE compile appears stuck} --- it isn't.
-    ResNet-34's full training-step compile takes 10--15 minutes.
-    Watch RAM usage; if it's climbing steadily the compile is
-    progressing. If you want a faster check, try the MNIST MLP
-    first (compiles in $\sim$30 seconds).
+  \item \textbf{\texttt{no lowerer shim could be loaded}} --- neither
+    \texttt{ffi/libpjrt\_ffi.so} nor \texttt{ffi/libiree\_ffi.so} was found.
+    Build the PJRT one with the \texttt{gcc} line in Track 2; it needs nothing
+    but libc.
+  \item \textbf{\texttt{\$PJRT\_PLUGIN is set but did not load}}, or no plugin
+    found --- the XLA plugin is missing or is built for a different CUDA/ROCm
+    version than the one installed. Installing JAX into the repo's own
+    \texttt{.venv} puts it where the shim looks by default.
+  \item \textbf{\texttt{lake build} fails with Mathlib cache errors} --- run
+    \texttt{lake exe cache get} to populate the local cache. Without it the
+    first build compiles all of Mathlib from source ($\sim$45 min); with it,
+    oleans download in $\sim$30 seconds.
+  \item \textbf{\texttt{iree-compile failed} on ResNet-50} --- expected.
+    R50's rendered maxpool backward is a
+    \texttt{stablehlo.select\_and\_scatter} that IREE does not compile at this
+    size. R50 is an XLA-only net; drop \texttt{LEAN\_MLIR\_LOWERER=iree}.
+  \item \textbf{First IREE compile appears stuck} --- it isn't. ResNet-34's
+    full training-step compile takes 10--15 minutes. Watch RAM; if it is
+    climbing the compile is progressing. The XLA path compiles the same graph
+    in seconds, in process.
+  \item \textbf{A run refuses to start over a missing shim} (ImageNet tier)
+    --- run \texttt{scripts/gen\_shims.sh}. The refusal is deliberate.
 \end{itemize}
 
 \chapter{On Verification}
