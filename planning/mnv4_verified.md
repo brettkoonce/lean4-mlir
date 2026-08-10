@@ -1305,7 +1305,48 @@ names. The dispatch is table-driven; the parameter wiring is not. Same residual 
   ✅ Negative control: `.selectPos` (relu's mask) in the `.swishBack` slot — the plausible slip
   here, since every *other* MNv4 stage is relu — is caught.
 
-* **The head.** GAP + dense; not built.
+* ~~**The head.**~~ ✅ **DONE.** `mnv4Head` = 1×1 conv-bn-relu (`mnv4ExpandLayer` again — conv-bn-relu
+  is conv-bn-relu and the kernel extent is a binder) → `mnv4GapLayer` → `mnv4DenseLayer`.
+  ⭐ **Both new stages tie by `rfl`**: `den .gapBackBatched` is definitionally the row-wise GAP VJP
+  and `den .denseRowBack` is `rowDenseBackFlat`, which is what `batchMap_has_vjp` reduces to. That
+  route goes through a transported equality (`batchMap_eq_rowwiseFlat ▸ …`), so it was **probed
+  rather than assumed** — and discharges definitionally.
+  ⚠ `den .gapBackBatched` evaluates GAP's backward at the point `fun _ => 0`. Sound because GAP is
+  linear (input-independent VJP), which is why the tie holds for *any* `x`; a stage whose VJP
+  depended on its input could not be rendered that way.
+
+▶ **MNv4 is now complete at the block/stage level**: fused stage, all 14 UIB blocks (11 skip + 2
+pre-strided + 1 post-strided), and the head.
+
+## 8e. ⭐ THE SWEEP: which certified forwards have NO backward graph (2026-08-10)
+
+Prompted by the `stemB` find in §8d. **Result: 31 batched certified forwards, 26 tied, and the 5
+holes are all EfficientNet's** — `headFwdB`, `mbExpFwdB`, `mbNoExpFwdB`, `mbStridedFwdB`, plus
+`efficientnetForwardB` (the whole-net forward, which no net has a backward graph for and which is
+the artifact-tie-scale item, not a stage hole).
+
+⭐ So `stemB` was **one of a family**: EfficientNet has a certified forward, a *forward*-graph
+faithfulness, and a VJP for its stem, head and three of its four MBConv variants — and a **backward**
+graph for none of them. Only `mbResidFwdB` (the residual variant) got one. The fold is what
+surfaced this; nothing was red, the theorems simply did not exist.
+
+### ⚠⚠ THE SWEEP TOOK FOUR PASSES, AND THE FIRST THREE WERE ALL WRONG
+
+Worth recording, because it says the naming conventions do not support mechanical auditing:
+
+| pass | result | why it was wrong |
+|---|---|---|
+| 1 | "151 holes" | matched `<X>_has_vjp` against `<X>Back*Graph_faithful`; caught whole-net forwards, primitives, weight-grads and the PC float-bridge world as "stages" |
+| 2 | "6 holes" | narrowed to batched `*B` — but missed the `<X>GraphB_faithful` family entirely (no "Back" in the name) |
+| 3 | "16 holes" | those `*GraphB_faithful` are **FORWARD**-graph theorems (`den (G e) = fwd (den e)`), so the discriminator had to be "does the RHS mention `.backward`" |
+| 4 | **5 holes** ✅ | …and the capture regex terminated at the first `:=`, which is **inside** statements as `(h := h)`. Split on declaration boundaries instead |
+
+⭐ Pass 3 is the one that mattered for honesty: it confirmed §8d's claim that `stemB` had no
+*backward* graph was **correct** — `stemGraphB_faithful` is a forward-graph theorem. Had that gone
+the other way, the previous commit would have overclaimed.
+
+▶ **What to do with the 4 real holes**: they are EfficientNet's, they are exactly the shape
+`stemBackBatchedGraph` closed, and each should be about as cheap. Not done here.
 * ⛔ **None of this is tied to the committed artifact.** Same status as every other net's fold:
   these are certified compositions, not a proof that `mnv4_adam_train_step.mlir` IS this graph.
 

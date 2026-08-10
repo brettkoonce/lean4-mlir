@@ -434,6 +434,68 @@ theorem mnv4FusedStage_faithful (N : Nat) {ic mid oc h w : Nat}
   (mnv4FusedStage N fusedConv project).faithful x hx e
 
 -- ════════════════════════════════════════════════════════════════
+-- § THE HEAD — 1×1 conv-bn-relu → GAP → dense
+-- ════════════════════════════════════════════════════════════════
+
+/-! MNv4's head is `1×1 conv (256 → 1280) → BN → relu → GAP(7×7) → dense`. The conv stage is
+`mnv4ExpandLayer` again (conv-bn-relu is conv-bn-relu, and the kernel extent is a binder), so only
+GAP and the classifier are new.
+
+⭐ **Both tie by `rfl`.** `den` of `.gapBackBatched` is *definitionally* the row-wise GAP VJP, and
+`den` of `.denseRowBack` is `rowDenseBackFlat` — which is what `batchMap_has_vjp` reduces to. The
+`batchMap_has_vjp` route goes through a transported equality (`batchMap_eq_rowwiseFlat ▸ …`), so
+this was worth probing rather than assuming; it discharges definitionally.
+
+⚠ **GAP's VJP is input-independent** and `den .gapBackBatched` exploits that — it evaluates the
+backward at the point `fun _ => 0`. That is sound because GAP is linear, and it is why the tie holds
+for *any* `x`. A stage whose VJP did depend on its input could not be rendered this way. -/
+
+/-- Batched **global average pool** as a `CertLayer`. Globally certified — GAP is linear. -/
+noncomputable def mnv4GapLayer (N : Nat) {c h w : Nat} :
+    CertLayer (N * (c * h * w)) (N * c) where
+  fwd := batchMap N (globalAvgPoolFlat c h w)
+  ok := fun _ => True
+  diff := fun x _ => (batchMap_differentiable (globalAvgPoolFlat c h w)
+    (globalAvgPoolFlat_differentiable c h w)) x
+  vjp := fun x _ => (batchMap_has_vjp (N := N) (globalAvgPoolFlat c h w)
+    (globalAvgPoolFlat_has_vjp c h w) (globalAvgPoolFlat_differentiable c h w)).toHasVJPAt x
+  graph := fun _ e => .gapBackBatched (N := N) (c := c) (h := h) (w := w) e
+  faithful := fun _ _ _ => rfl
+
+/-- Batched **dense classifier** as a `CertLayer`. Globally certified — dense is affine. -/
+noncomputable def mnv4DenseLayer (N : Nat) {a nC : Nat} (W : Mat a nC) (b : Vec nC) :
+    CertLayer (N * a) (N * nC) where
+  fwd := batchMap N (dense W b)
+  ok := fun _ => True
+  diff := fun x _ => (batchMap_differentiable (dense W b) (dense_differentiable W b)) x
+  vjp := fun x _ => (batchMap_has_vjp (N := N) (dense W b) (dense_has_vjp W b)
+    (dense_differentiable W b)).toHasVJPAt x
+  graph := fun _ e => .denseRowBack (N := N) (a := a) (c := nC) "%Wd" W e
+  faithful := fun _ _ _ => rfl
+
+/-- ⭐ **MNv4's head**: the 1×1 conv-bn-relu, then GAP, then the classifier.
+
+    ⚠ Only the conv stage carries a smoothness condition (its relu); GAP and dense are global. So
+    `(mnv4Head …).ok` reduces to the head conv's relu condition alone. -/
+noncomputable def mnv4Head (N : Nat) {c oc h w nC : Nat}
+    (headConv : CertLayer (N * (c * h * w)) (N * (oc * h * w)))
+    (gap : CertLayer (N * (oc * h * w)) (N * oc))
+    (cls : CertLayer (N * oc) (N * nC)) :
+    CertLayer (N * (c * h * w)) (N * nC) :=
+  headConv.comp (gap.comp cls)
+
+/-- ⭐⭐ **The head's backward graph denotes its VJP.** -/
+theorem mnv4Head_faithful (N : Nat) {c oc h w nC : Nat}
+    (headConv : CertLayer (N * (c * h * w)) (N * (oc * h * w)))
+    (gap : CertLayer (N * (oc * h * w)) (N * oc))
+    (cls : CertLayer (N * oc) (N * nC))
+    (x : Vec (N * (c * h * w))) (hx : (mnv4Head N headConv gap cls).ok x)
+    (e : SHlo (N * nC)) :
+    den ((mnv4Head N headConv gap cls).graph x e)
+      = ((mnv4Head N headConv gap cls).vjp x hx).backward (den e) :=
+  (mnv4Head N headConv gap cls).faithful x hx e
+
+-- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ THE DISPATCH READS THE TABLE — `mnv4Blocks`, not the caller
 -- ════════════════════════════════════════════════════════════════
 
