@@ -26,23 +26,24 @@ toolchain on Lean 4.32.2. Full release history in [CHANGELOG.md](CHANGELOG.md).
 
 Train a real, verified neural net end to end — fastest path first.
 
-**No GPU, just Docker (~5 min):**
+**No GPU — check the proofs (~1 min):**
 
 ```bash
 git clone https://github.com/brettkoonce/lean4-mlir.git && cd lean4-mlir
-docker build -t lean4-mlir-demo .
-docker run --rm lean4-mlir-demo
+lake exe cache get           # Mathlib oleans
+lake build ProofsMinimal     # the faithfulness PoC + SGD descent
 ```
 
-Trains the Chapter-2 MNIST MLP on CPU to ~97.9% test accuracy through the
-full Lean → MLIR → IREE pipeline — no GPU, no Python, ~300 MB image. (First
-build ~10 min, dominated by building the IREE CPU runtime; reruns reuse the
-cached image.)
+For an *independent* check, `tests/comparator/run.sh` re-runs Lean's kernel
+typechecker over 52 theorems — and `tests/comparator/Challenge.lean` imports
+Mathlib and nothing else, so the 13 architecture-free ones can be read and
+verified without reading a line of this project.
 
 **With a GPU — one command per tier:**
 
-After a one-time native setup (Lean 4 + an IREE runtime for your backend —
-see [ROCM.md](ROCM.md) / [CUDA.md](CUDA.md), or [Native setup](#native-setup-gpu-training) below):
+After a one-time setup (Lean 4 plus an XLA PJRT plugin — `pip install
+"jax[cuda12]"` or `"jax[rocm]"`, which is a download, not a build; see
+[ROCM.md](ROCM.md) / [CUDA.md](CUDA.md), or [Native setup](#native-setup-gpu-training) below):
 
 ```bash
 ./download_mnist.sh     # fetch MNIST
