@@ -591,6 +591,11 @@ lean_lib «Certs» where
              -- enet and convnext. enet/convnext are globally smooth (ok = True);
              -- r34/mnv2 are `_at` (relu / relu6 kinks). No new proof per net.
              `LeanMlir.Proofs.Foundation.BackNetFolds,
+             -- MobileNetV4's batched UIB backward: the depthwise-bn-RELU stage (the
+             -- one stage the repo lacked — it had relu6 and swish), the four stage
+             -- CertLayers, and ⭐ the FOUR FAMILIES COLLAPSED into one body via
+             -- CertLayer.id' in the absent-depthwise slots. No case split.
+             `LeanMlir.Proofs.Foundation.MobileNetV4BackB0,
              -- ConvNeXt backward-graph faithfulness (den-level): the per-example
              -- (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
              -- separable, so no batched machinery — the block-body backward graph

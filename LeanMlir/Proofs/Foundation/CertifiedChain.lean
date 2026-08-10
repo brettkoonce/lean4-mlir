@@ -96,6 +96,25 @@ noncomputable def comp {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n 
     rw [L₁.faithful x hx.1, L₂.faithful (L₁.fwd x) hx.2]
     rfl
 
+/-- ⭐ **Wrap a layer in an identity skip** — `x ↦ L.fwd x + x`. The backward graph is the additive
+    fan-in `addV (L.graph …) ecot`: the body's input-cotangent plus the skip's verbatim cotangent.
+
+    Certified exactly where the body is (`ok := L.ok`), because an identity skip is smooth
+    everywhere and contributes no new condition. Every residual net in the repo hand-writes this
+    fan-in per block; here it is a combinator, so a residual block is `residual (chain [...])`. -/
+noncomputable def residual {n : Nat} (L : CertLayer n n) : CertLayer n n where
+  fwd := Proofs.residual L.fwd
+  ok := L.ok
+  diff := fun x hx => (L.diff x hx).add differentiable_id.differentiableAt
+  vjp := fun x hx => residual_has_vjp_at L.fwd x (L.diff x hx) (L.vjp x hx)
+  graph := fun x e => .addV (L.graph x e) e
+  faithful := by
+    intro x hx e
+    funext i
+    have hsum : den (SHlo.addV (L.graph x e) e) i = den (L.graph x e) i + den e i := rfl
+    rw [hsum, L.faithful x hx e]
+    rfl
+
 /-- Fold a list of endo-layers into one. **List order is FORWARD execution order**:
     `chain [L₁, L₂, L₃] |>.fwd = L₃.fwd ∘ L₂.fwd ∘ L₁.fwd`. -/
 noncomputable def chain {n : Nat} : List (CertLayer n n) → CertLayer n n

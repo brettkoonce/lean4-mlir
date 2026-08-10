@@ -1176,8 +1176,67 @@ re-run:
 * ⛔ **Still no empirical tie.** R50's forward and gradient have never met an independent oracle —
   there is no `generated_resnet50.py` (10-class). Unchanged by this work, and it is the one axis
   where MNv4 is strong and R50 is not.
-* MNv4's backward is now the whole of the §8 handoff that remains, and it needs its own phase 1
-  (`MobileNetV4BlocksCertified.lean`) — genuinely, this time.
+* ~~MNv4's backward is now the whole of the §8 handoff that remains~~ — ✅ **STARTED, see §8d.**
+
+## 8d. ✅ MNv4's UIB BACKWARD (2026-08-10) — and §8's open question is ANSWERED: the families COLLAPSE
+
+`Foundation/MobileNetV4BackB0.lean`. 3-axiom clean, zero `sorry`.
+
+### ⭐⭐ THE FOUR FAMILIES COLLAPSE — via `CertLayer.id'`
+
+§8 asked whether ExtraDW / IB / ConvNeXt-like / FFN "collapse to one parameterised theorem or need
+a case split", and called it *"the difference between a small file and a large one"*. **They
+collapse.** Both depthwise positions are shape- and channel-preserving (`preDW : ic → ic`,
+`postDW : mid → mid`), so an absent depthwise is not a different composition — it is the **identity
+layer in the same slot**:
+
+| family | pre | post | as a chain |
+|---|---|---|---|
+| ExtraDW | ✓ | ✓ | `chain [preDW, expand, postDW, project]` |
+| ConvNeXt-like | ✓ | ✗ | `chain [preDW, expand, id', project]` |
+| IB / MBConv | ✗ | ✓ | `chain [id', expand, postDW, project]` |
+| FFN | ✗ | ✗ | `chain [id', expand, id', project]` |
+
+`mnv4UibBody` takes the two depthwise slots as `CertLayer` **arguments**; the caller passes `id'`
+where the table says `k = 0`. **One definition, four applications, no case split** — and therefore
+no second dispatch that could silently disagree with the forward's, which is §3's trap exactly.
+⭐ This is §6's *"a family from one constructor"* landing on the proof side, the way §3i records it
+landing on the backward render.
+
+### The one genuinely new piece: a depthwise-bn-RELU stage
+
+Measured first: the repo had batched depthwise stages at **relu6** (`dwbrB`, mnv2) and **swish**
+(`dwbsB`, enet) and **none at plain relu**. ⚠ MNv4 is relu throughout its 14 UIB blocks — *not*
+relu6 — and mnv2 sitting one file over makes that an easy thing to get wrong.
+
+⭐ It cost almost nothing: `bnReluStage_has_vjp_at` (`ResNet34BackB0`) is **generic in the op**, so
+`dwbReluB` is that same lemma at `depthwiseFlat` exactly as `cbReluB` is at `flatConv`. Zero new
+analytic content — one instantiation, plus `.selectPos` where mnv2's graph uses `.selectMid`.
+
+### ✅ VERIFIED TO FAIL on the net's OWN documented hazard
+
+`MobileNetV4RenderB`'s header warns in bold that the activation is relu and not relu6. So the
+injection is the token swap: `.selectMid` where `.selectPos` belongs — same type, same arity, same
+operands. **The proof fails.** That is the third negative control in this thread and the first one
+aimed at a hazard the codebase had already written down.
+
+### ⭐ `CertLayer.residual` — added, and it is generic
+
+Wrapping a layer in an identity skip is now a combinator (`ok` unchanged, since an identity skip is
+smooth everywhere and adds no condition), so a residual block is `residual (chain [...])`. Every
+residual net in the repo hand-writes that fan-in per block; MNv4 is the first to get it for free.
+
+### ▶ WHAT MNv4 STILL OWES
+
+* **The 3 stride-2 blocks.** The strided depthwise-relu stage IS built
+  (`dwbReluBstridedBackBatchedGraph_faithful`); the strided body assembly is not. The render splits
+  these into `uibFwdPreStridedB` / `uibFwdPostStridedB` by *which* depthwise eats the stride, and
+  the proof side will need the same two shapes — a stride-2 body cannot be the stride-1 body with
+  `id'`, because the resolution change is in the TYPE.
+* **The fused stage (stage 0) and the head.** The fused stage is swish, so it is the globally-smooth
+  kind (`ok = True`) and should be cheap; enet's `cbsB` is the stage to reuse.
+* ⛔ **None of this is tied to the committed artifact.** Same status as every other net's fold:
+  these are certified compositions, not a proof that `mnv4_adam_train_step.mlir` IS this graph.
 
 ## 8b. ✅ THE NET-LEVEL FOLD (2026-08-10) — and it is the FIRST one in the repo
 
