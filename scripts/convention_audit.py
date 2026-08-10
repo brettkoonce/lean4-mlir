@@ -40,8 +40,49 @@ Usage:
     JAX_PLATFORMS=cpu python3 scripts/convention_audit.py --net r34
     JAX_PLATFORMS=cpu python3 scripts/convention_audit.py --selftest # must reproduce the ledger
 """
-import argparse, re, sys
+import argparse, contextlib, re, sys, unittest.mock
 import numpy as np
+
+
+# ── The generated ImageNet references import a TF data pipeline the audit never runs ──────────
+#
+# ⚠⚠ This is why the JAX workflow went red the FIRST time it ever ran this audit (2026-08-10).
+# `33c43b0` added the audit to CI but sat unpushed for 43 commits, so it had only ever run on a
+# box with `tensorflow` installed. The generated `*_imagenet*.py` references import `tensorflow`
+# and `tensorflow_datasets` at module scope — line 17 of `generated_resnet50_imagenet.py` — for
+# the tfds streaming pipeline, and `reference_profile` execs everything above `def loss_fn`.
+#
+# ⭐ The audit calls **only `forward()` and `init_params()`, both pure JAX**. TF is incidental to
+# what is being measured, so stubbing it is right and installing ~600 MB of TensorFlow on the
+# runner to type-check a padding profile is not.
+#
+# ⚠ Narrow on purpose, and in two ways: only these two module names, and only when the REAL
+# import fails — so a machine that has TF keeps using it and this path cannot mask a version
+# problem. The post-exec `forward`/`init_params` assertions still run either way, so a stub that
+# broke the reference would surface there rather than passing quietly.
+_DATA_ONLY_DEPS = ("tensorflow", "tensorflow_datasets")
+
+
+@contextlib.contextmanager
+def _stubbed_data_deps():
+    """Install mock modules for the data-pipeline-only imports that are absent here."""
+    stubbed = []
+    for name in _DATA_ONLY_DEPS:
+        if name in sys.modules:
+            continue
+        try:
+            __import__(name)
+        except ImportError:
+            # MagicMock, not a bare module: the reference CALLS these at import time
+            # (`tf.config.set_visible_devices([], 'GPU')`, `tf.constant(...)`), so the stub has
+            # to absorb arbitrary attribute access and calls, not just exist.
+            sys.modules[name] = unittest.mock.MagicMock()
+            stubbed.append(name)
+    try:
+        yield stubbed
+    finally:
+        for name in stubbed:
+            sys.modules.pop(name, None)
 
 # ── the matched pairs. A net with no 10-class generated reference cannot be audited at all, which
 #    is itself a finding and is reported rather than skipped silently. ──────────────────────────
@@ -237,7 +278,10 @@ def reference_profile(ref_py, shape, call=None):
     if cut is None:
         sys.exit(f"{ref_py}: no `def loss_fn` to cut at; the generator's shape changed")
     mod = {}
-    exec("\n".join(src[:cut]), mod)
+    with _stubbed_data_deps() as stubbed:
+        exec("\n".join(src[:cut]), mod)
+    if stubbed:
+        print(f"  ℹ data-pipeline deps stubbed (not installed here): {', '.join(stubbed)}")
     for need in ("forward", "init_params"):
         if need not in mod:
             sys.exit(f"{ref_py}: prefix does not define {need}()")
