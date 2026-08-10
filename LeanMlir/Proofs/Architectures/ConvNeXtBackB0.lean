@@ -120,9 +120,9 @@ noncomputable def cnxResidBlockBackGraph {c cExp h w kH kW : Nat}
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w))
-    (x dy : Vec (c * h * w)) : SHlo (c * h * w) :=
+    (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) : SHlo (c * h * w) :=
   residualBackGraph
-    (cnxBlockBodyBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x (.operand "%dy" dy)) dy
+    (cnxBlockBodyBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x ecot) ecot
 
 /-- **The whole per-example ConvNeXt residual block: backward graph ↔ proven VJP**
     (identity/residual capstone), no hypotheses beyond `0 < εn`. Assembles the body
@@ -134,17 +134,17 @@ theorem cnxResidBlockBackGraph_faithful {c cExp h w kH kW : Nat}
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w))
-    (x dy : Vec (c * h * w)) :
-    den (cnxResidBlockBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x dy)
-      = (convNextBlock_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).backward x dy :=
+    (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) :
+    den (cnxResidBlockBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x ecot)
+      = (convNextBlock_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).backward x (den ecot) :=
   residualBackGraph_faithful
     (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls)
     (convNextBlockBody_differentiable Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
     (convNextBlockBody_has_vjp Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
-    x dy
-    (cnxBlockBodyBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x (.operand "%dy" dy))
+    x ecot
+    (cnxBlockBodyBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x ecot)
     (cnxBlockBodyBackGraph_faithful Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls x
-      (.operand "%dy" dy))
+      ecot)
 
 end Proofs.StableHLO
 
@@ -259,18 +259,18 @@ theorem cnxBlockBodyChBackGraph_faithful {c cExp h w kH kW : Nat}
 
 /-- The whole channel-LN residual block backward graph (block body + identity skip). -/
 noncomputable def cnxResidBlockChBackGraph {c cExp h w kH kW : Nat}
-    (p : CnxBlockParamsCh c cExp h w kH kW) (x dy : Vec (c * h * w)) : SHlo (c * h * w) :=
+    (p : CnxBlockParamsCh c cExp h w kH kW) (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) : SHlo (c * h * w) :=
   residualBackGraph
     (cnxBlockBodyChBackGraph p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
-      (.operand "%dy" dy)) dy
+      ecot) ecot
 
 /-- **The whole channel-LN ConvNeXt residual block: backward graph ↔ proven VJP** — the capstone
     the shipped net was missing, at the block the shipped stages are built from. Assembles the
     body backward graph + the identity skip into `cnxBlockChW_has_vjp`'s backward via
     `residualBackGraph_faithful`, no hypotheses beyond `0 < p.εn`. -/
 theorem cnxResidBlockChBackGraph_faithful {c cExp h w kH kW : Nat}
-    (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) (x dy : Vec (c * h * w)) :
-    den (cnxResidBlockChBackGraph p x dy) = (cnxBlockChW_has_vjp p hε).backward x dy :=
+    (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) :
+    den (cnxResidBlockChBackGraph p x ecot) = (cnxBlockChW_has_vjp p hε).backward x (den ecot) :=
   residualBackGraph_faithful
     (cnxBodyWith (chanLNTensor3 c h w p.εn p.γn p.βn) p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr
       (cnxGlsCh p))
@@ -279,11 +279,11 @@ theorem cnxResidBlockChBackGraph_faithful {c cExp h w kH kW : Nat}
     (cnxBodyWith_has_vjp (chanLNTensor3_diff c h w p.εn p.γn p.βn hε)
       (chanLNTensor3_has_vjp c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
-    x dy
+    x ecot
     (cnxBlockBodyChBackGraph p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
-      (.operand "%dy" dy))
+      ecot)
     (cnxBlockBodyChBackGraph_faithful p.Wdw p.bdw p.εn hε p.γn p.βn p.Wex p.bex p.Wpr p.bpr
-      (cnxGlsCh p) x (.operand "%dy" dy))
+      (cnxGlsCh p) x ecot)
 
 /-- The channel-LN stage-boundary downsample backward graph — the port of the `cnxDownBackGraph`
     §2n dropped. Forward is `flatConvStride2(2×2) ∘ chanLNTensor3`, so the VJP in reverse order is

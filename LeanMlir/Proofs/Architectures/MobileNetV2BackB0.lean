@@ -485,10 +485,10 @@ noncomputable def mnv2ResidBlockBackBatchedGraph {N c mid h w kHd kWd : Nat}
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
     (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c)
-    (x dy : Vec (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+    (x : Vec (N * (c * h * w))) (ecot : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   residualBackGraph
     (mnv2BodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp
-      x (.operand "%dy" dy)) dy
+      x ecot) ecot
 
 /-- **CAPSTONE — the whole batched MobileNetV2 inverted-residual block: backward
     graph ↔ the proven VJP.** The three batched stage backward graphs
@@ -505,31 +505,31 @@ theorem mnv2ResidBlockBackBatchedGraph_faithful {N c mid h w kHd kWd : Nat}
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
     (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c)
-    (x dy : Vec (N * (c * h * w)))
+    (x : Vec (N * (c * h * w))) (ecot : SHlo (N * (c * h * w)))
     (h_se : ∀ k, bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 0 ∧
                  bnBatchLA N mid h w εe γe βe (batchMap N (flatConv We be) x) k ≠ 6)
     (h_sd : ∀ k, bnBatchLA N mid h w εd γd βd
                     (batchMap N (depthwiseFlat Wd bd) (cbrB N (h := h) (w := w) We be εe γe βe x)) k ≠ 0 ∧
                  bnBatchLA N mid h w εd γd βd
                     (batchMap N (depthwiseFlat Wd bd) (cbrB N (h := h) (w := w) We be εe γe βe x)) k ≠ 6) :
-    den (mnv2ResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x dy)
+    den (mnv2ResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x ecot)
       = (residual_has_vjp_at
           (projB N (h := h) (w := w) Wp bp εp γp βp ∘
             dwbrB N (h := h) (w := w) Wd bd εd γd βd ∘ cbrB N (h := h) (w := w) We be εe γe βe)
           x
           (mnv2BodyB_differentiableAt N We be εe hεe γe βe Wd bd εd hεd γd βd Wp bp εp hεp γp βp x h_se h_sd)
-          (mnv2BodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd Wp bp εp hεp γp βp x h_se h_sd)).backward dy := by
+          (mnv2BodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd Wp bp εp hεp γp βp x h_se h_sd)).backward (den ecot) := by
   -- the residual `_at` backward = body backward at cotangent dy + identity skip dy
   have hbody : den (mnv2BodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp
-        x (.operand "%dy" dy))
+        x ecot)
       = (mnv2BodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd
-          Wp bp εp hεp γp βp x h_se h_sd).backward dy :=
+          Wp bp εp hεp γp βp x h_se h_sd).backward (den ecot) :=
     mnv2BodyBackBatchedGraph_faithful We be εe hεe γe βe Wd bd εd hεd γd βd
-      Wp bp εp hεp γp βp x (.operand "%dy" dy) h_se h_sd
+      Wp bp εp hεp γp βp x ecot h_se h_sd
   funext i
-  have hsum : den (mnv2ResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x dy) i
+  have hsum : den (mnv2ResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x ecot) i
       = den (mnv2BodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp
-              x (.operand "%dy" dy)) i + dy i := rfl
+              x ecot) i + den ecot i := rfl
   rw [hsum, hbody]
   rfl
 

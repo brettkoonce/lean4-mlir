@@ -29,8 +29,8 @@ namespace Proofs.StableHLO
     `fBack` that renders the body `f`'s input-cotangent. The identity skip
     contributes the cotangent verbatim (`%dy`); `addV` sums the two paths.
     This is the renderable image of `residual_has_vjp`'s `biPath` backward. -/
-def residualBackGraph {n : Nat} (fBack : SHlo n) (dy : Vec n) : SHlo n :=
-  .addV fBack (.operand "%dy" dy)
+def residualBackGraph {n : Nat} (fBack ecot : SHlo n) : SHlo n :=
+  .addV fBack ecot
 
 /-- **Residual additive-fan-in backward faithfulness (general).**
     If `fBack` denotes the body's VJP backward (`den fBack = hf.backward x dy`),
@@ -41,12 +41,12 @@ def residualBackGraph {n : Nat} (fBack : SHlo n) (dy : Vec n) : SHlo n :=
     terminal `rfl`. -/
 theorem residualBackGraph_faithful {n : Nat}
     (f : Vec n → Vec n) (hf_diff : Differentiable ℝ f) (hf : HasVJP f)
-    (x dy : Vec n) (fBack : SHlo n)
-    (hfb : den fBack = hf.backward x dy) :
-    den (residualBackGraph fBack dy)
-      = (residual_has_vjp f hf_diff hf).backward x dy := by
+    (x : Vec n) (ecot fBack : SHlo n)
+    (hfb : den fBack = hf.backward x (den ecot)) :
+    den (residualBackGraph fBack ecot)
+      = (residual_has_vjp f hf_diff hf).backward x (den ecot) := by
   funext i
-  have hsum : den (residualBackGraph fBack dy) i = den fBack i + dy i := rfl
+  have hsum : den (residualBackGraph fBack ecot) i = den fBack i + den ecot i := rfl
   rw [hsum, hfb]
   -- RHS = `biPath_has_vjp f id`'s backward = `f.backward x dy i + id.backward x dy i`
   -- with `id.backward x dy = dy`; defeq but needs full-transparency unfolding.
@@ -60,11 +60,11 @@ theorem residualBackGraph_faithful {n : Nat}
     faithfulness: a *branching* backward graph proven equal to a composed VJP. -/
 theorem residual_dense_backGraph_faithful {n : Nat}
     (W : Mat n n) (b x dy : Vec n) :
-    den (residualBackGraph (backGraph W dy) dy)
+    den (residualBackGraph (backGraph W dy) (.operand "%dy" dy))
       = (residual_has_vjp (dense W b) (dense_differentiable W b)
           (dense_has_vjp W b)).backward x dy :=
   residualBackGraph_faithful (dense W b) (dense_differentiable W b)
-    (dense_has_vjp W b) x dy (backGraph W dy)
+    (dense_has_vjp W b) x (.operand "%dy" dy) (backGraph W dy)
     (backGraph_faithful (W := W) (b := b) (x := x) dy)
 
 -- ════════════════════════════════════════════════════════════════
@@ -346,7 +346,7 @@ noncomputable def mbconvResidualBackGraph {c cmid h w kHe kWe kHd kWd kHp kWp r 
     (x dy : Vec (c * h * w)) : SHlo (c * h * w) :=
   residualBackGraph
     (mbconvBodyBackGraph We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp x
-      (.operand "%dy" dy)) dy
+      (.operand "%dy" dy)) (.operand "%dy" dy)
 
 /-- **The whole per-example EfficientNet MBConv residual block: backward graph
     ↔ proven VJP, no hypotheses beyond `ε>0`.** Assembles all stage bricks
@@ -365,7 +365,7 @@ theorem mbconvResidual_backGraph_faithful {c cmid h w kHe kWe kHd kWd kHp kWp r 
     (mbconvBody We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp)
     (mbconvBody_differentiable We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
     (mbconvBody_has_vjp We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
-    x dy
+    x (.operand "%dy" dy)
     (mbconvBodyBackGraph We be εe γe βe Wd bd εd γd βd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp x (.operand "%dy" dy))
     (mbconvBodyBackGraph_faithful We be εe γe βe hεe Wd bd εd γd βd hεd
       Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp x (.operand "%dy" dy))
@@ -742,10 +742,10 @@ noncomputable def mbResidBlockBackBatchedGraph {N c mid h w kHd kWd r : Nat}
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
     (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c)
-    (x dy : Vec (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+    (x : Vec (N * (c * h * w))) (ecot : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   residualBackGraph
     (mbBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp
-      x (.operand "%dy" dy)) dy
+      x ecot) ecot
 
 /-- **CAPSTONE — the whole batched EfficientNet MBConv residual block: backward
     graph ↔ the proven `mbResidFwdB_has_vjp`.** The four batched stage backward
@@ -757,10 +757,10 @@ theorem mbResidBlockBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
     (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec c)
-    (x dy : Vec (N * (c * h * w))) :
-    den (mbResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp x dy)
+    (x : Vec (N * (c * h * w))) (ecot : SHlo (N * (c * h * w))) :
+    den (mbResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp x ecot)
       = (mbResidFwdB_has_vjp N We be εe hεe γe βe Wd bd εd hεd γd βd
-          Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp).backward x dy :=
+          Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp).backward x (den ecot) :=
   residualBackGraph_faithful
     (projB N (h := h) (w := w) Wp bp εp γp βp ∘ seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘
       dwbsB N (h := h) (w := w) Wd bd εd γd βd ∘ cbsB N (h := h) (w := w) We be εe γe βe)
@@ -769,10 +769,10 @@ theorem mbResidBlockBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
         ((dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd).comp
           (cbsB_differentiable N (h := h) (w := w) We be εe hεe γe βe))))
     (mbBodyB_has_vjp N We be εe hεe γe βe Wd bd εd hεd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp)
-    x dy
+    x ecot
     (mbBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp
-      x (.operand "%dy" dy))
+      x ecot)
     (mbBodyBackBatchedGraph_faithful We be εe hεe γe βe Wd bd εd hεd γd βd
-      Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp x (.operand "%dy" dy))
+      Wz₁ bz₁ Wz₂ bz₂ Wp bp εp hεp γp βp x ecot)
 
 end Proofs.StableHLO

@@ -267,12 +267,12 @@ noncomputable def r34BasicBlockB_has_vjp_at (N : Nat) {c h w kH₁ kW₁ kH₂ k
 noncomputable def r34BasicBlockBackBatchedGraph {N c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (γ₁ β₁ : Vec c)
     (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (γ₂ β₂ : Vec c)
-    (x dy : Vec (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+    (x : Vec (N * (c * h * w))) (ecot : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   -- pre-relu activation = residual(F)(x); its relu mask gates the incoming `dy`
   let preRelu := residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                   cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x
   -- the relu-masked cotangent flows into BOTH the body fan-in and the skip
-  let masked : SHlo (N * (c * h * w)) := .selectPos "%outR" preRelu (.operand "%dy" dy)
+  let masked : SHlo (N * (c * h * w)) := .selectPos "%outR" preRelu ecot
   .addV
     (r34BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x masked)
     masked
@@ -287,46 +287,46 @@ noncomputable def r34BasicBlockBackBatchedGraph {N c h w kH₁ kW₁ kH₂ kW₂
     threaded through both relu smoothness hypotheses.
 
     Key fact: the outer relu's `.selectPos` mask is applied ONCE to the incoming
-    `dy` (giving `masked = relu_has_vjp_at.backward dy`), and that masked cotangent
+    `dy` (giving `masked = relu_has_vjp_at.backward (den ecot)`), and that masked cotangent
     is what the residual fan-in (`r34BodyBackBatchedGraph` + identity skip) sees —
     exactly matching `vjp_comp_at(residual, relu)`'s structure: first apply relu's
     backward, then residual's backward to the result. -/
 theorem r34BasicBlockBackBatchedGraph_faithful {N c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
     (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec c)
-    (x dy : Vec (N * (c * h * w)))
+    (x : Vec (N * (c * h * w))) (ecot : SHlo (N * (c * h * w)))
     (h_s1 : ∀ k, bnBatchLA N c h w ε₁ γ₁ β₁ (batchMap N (flatConv W₁ b₁) x) k ≠ 0)
     (h_out : ∀ k, residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                     cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
-    den (r34BasicBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x dy)
-      = (r34BasicBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1 h_out).backward dy := by
+    den (r34BasicBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x ecot)
+      = (r34BasicBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1 h_out).backward (den ecot) := by
   -- The masked cotangent denotes relu's backward applied to dy.
   have hmask : den (SHlo.selectPos "%outR"
         (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-          cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))
-      = (relu_has_vjp_at (N * (c * h * w)) _ h_out).backward dy :=
-    selectPos_faithful _ _ h_out (.operand "%dy" dy)
+          cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)
+      = (relu_has_vjp_at (N * (c * h * w)) _ h_out).backward (den ecot) :=
+    selectPos_faithful _ _ h_out ecot
   -- The body backward (fed the masked cotangent) denotes the body VJP at that masked cotangent.
   have hbody : den (r34BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x
         (SHlo.selectPos "%outR"
           (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-            cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)))
+            cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
       = (r34BodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1).backward
-          ((relu_has_vjp_at (N * (c * h * w)) _ h_out).backward dy) := by
+          ((relu_has_vjp_at (N * (c * h * w)) _ h_out).backward (den ecot)) := by
     rw [r34BodyBackBatchedGraph_faithful (hε₁ := hε₁) (hε₂ := hε₂) (h_s1 := h_s1), hmask]
   funext i
   -- LHS unfolds: addV(bodyBack(masked), masked) i = bodyBack(masked) i + masked i.
-  have hsum : den (r34BasicBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x dy) i
+  have hsum : den (r34BasicBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x ecot) i
       = den (r34BodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x
             (SHlo.selectPos "%outR"
               (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))) i
+                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i
         + den (SHlo.selectPos "%outR"
               (residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)) i := rfl
+                cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot) i := rfl
   rw [hsum, hbody, hmask]
-  -- RHS: vjp_comp_at(residual, relu).backward dy = residual.backward (relu.backward dy)
-  --    = bodyBack(relu.backward dy) + (relu.backward dy)  [residual_has_vjp_at = biPath f id]
+  -- RHS: vjp_comp_at(residual, relu).backward (den ecot) = residual.backward (relu.backward (den ecot))
+  --    = bodyBack(relu.backward (den ecot)) + (relu.backward (den ecot))  [residual_has_vjp_at = biPath f id]
   rfl
 
 -- ════════════════════════════════════════════════════════════════
@@ -556,14 +556,14 @@ noncomputable def r34DownBlockBackBatchedGraph {N ic oc h w kH₁ kW₁ kH₂ kW
     (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
     (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) :
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (ecot : SHlo (N * (oc * h * w))) :
     SHlo (N * (ic * (2 * h) * (2 * w))) :=
   -- pre-relu activation = residualProj(proj, F_s)(x); its relu mask gates `dy`
   let preRelu := residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
                   (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                    cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x
   -- the relu-masked cotangent flows into BOTH the body fan-in AND the projection skip
-  let masked : SHlo (N * (oc * h * w)) := .selectPos "%outR" preRelu (.operand "%dy" dy)
+  let masked : SHlo (N * (oc * h * w)) := .selectPos "%outR" preRelu ecot
   .addV
     (projStridedBackBatchedGraph Wp bp εp γp βp x masked)
     (r34DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x masked)
@@ -579,7 +579,7 @@ noncomputable def r34DownBlockBackBatchedGraph {N ic oc h w kH₁ kW₁ kH₂ kW
     `convStridedBackBatched` in the body's conv1 and the whole projection skip.
 
     Key fact: the outer relu's `.selectPos` mask is applied ONCE to the incoming
-    `dy` (giving `masked = relu_has_vjp_at.backward dy`), and that masked cotangent
+    `dy` (giving `masked = relu_has_vjp_at.backward (den ecot)`), and that masked cotangent
     is what BOTH residualProj fan-in operands see — matching
     `vjp_comp_at(residualProj, relu)`'s structure: first relu's backward, then
     `residualProj`'s backward (= `proj.backward + body.backward` at the masked
@@ -588,55 +588,55 @@ theorem r34DownBlockBackBatchedGraph_faithful {N ic oc h w kH₁ kW₁ kH₂ kW�
     (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec oc)
     (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w)))
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (ecot : SHlo (N * (oc * h * w)))
     (h_s1 : ∀ k, bnBatchLA N oc h w ε₁ γ₁ β₁ (batchMap N (flatConvStride2 W₁ b₁) x) k ≠ 0)
     (h_out : ∀ k, residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
                     (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                      cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
-    den (r34DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp x dy)
+    den (r34DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp x ecot)
       = (r34DownBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
-          Wp bp εp hεp γp βp x h_s1 h_out).backward dy := by
+          Wp bp εp hεp γp βp x h_s1 h_out).backward (den ecot) := by
   -- The masked cotangent denotes relu's backward applied to dy.
   have hmask : den (SHlo.selectPos "%outR"
         (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
           (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-           cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))
-      = (relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy :=
-    selectPos_faithful _ _ h_out (.operand "%dy" dy)
+           cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)
+      = (relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot) :=
+    selectPos_faithful _ _ h_out ecot
   -- The body backward (fed the masked cotangent) denotes the body VJP at it.
   have hbody : den (r34DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x
         (SHlo.selectPos "%outR"
           (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
             (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)))
+             cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
       = (r34DownBodyB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1).backward
-          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy) := by
+          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot)) := by
     rw [r34DownBodyBackBatchedGraph_faithful (hε₁ := hε₁) (hε₂ := hε₂) (h_s1 := h_s1), hmask]
   -- The projection-skip backward (same masked cotangent) denotes the skip VJP at it.
   have hproj : den (projStridedBackBatchedGraph Wp bp εp γp βp x
         (SHlo.selectPos "%outR"
           (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
             (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-             cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy)))
+             cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot))
       = (projStridedB_has_vjp N Wp bp εp hεp γp βp).backward x
-          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward dy) := by
+          ((relu_has_vjp_at (N * (oc * h * w)) _ h_out).backward (den ecot)) := by
     rw [projStridedBackBatchedGraph_faithful (hε := hεp), hmask]
   funext i
   -- LHS unfolds: addV(projBack(masked), bodyBack(masked)) i = projBack(masked) i + bodyBack(masked) i.
-  have hsum : den (r34DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp x dy) i
+  have hsum : den (r34DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp x ecot) i
       = den (projStridedBackBatchedGraph Wp bp εp γp βp x
             (SHlo.selectPos "%outR"
               (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
                 (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                 cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))) i
+                 cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i
         + den (r34DownBodyBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x
               (SHlo.selectPos "%outR"
                 (residualProj (projStridedB N (h := h) (w := w) Wp bp εp γp βp)
                   (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
-                   cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) (.operand "%dy" dy))) i := rfl
+                   cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x) ecot)) i := rfl
   rw [hsum, hbody, hproj]
-  -- RHS: vjp_comp_at(residualProj, relu).backward dy = residualProj.backward (relu.backward dy)
-  --   = proj.backward(relu.backward dy) + body.backward(relu.backward dy)
+  -- RHS: vjp_comp_at(residualProj, relu).backward (den ecot) = residualProj.backward (relu.backward (den ecot))
+  --   = proj.backward(relu.backward (den ecot)) + body.backward(relu.backward (den ecot))
   --   [residualProj_has_vjp_at = biPath_has_vjp_at proj body]
   rfl
 

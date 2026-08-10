@@ -1258,12 +1258,70 @@ proof assistant rather than in a renderer.
   *deployment* limit with a *proof* limit is the kind of error that makes a gap look external when
   it is ours to close.
 
-* **The other five nets are NOT folded** — only the machinery is net-agnostic. Each needs the same
-  three steps: the one-line cotangent generalisation (`.operand "%dy" dy` sites: **r34 13, enet 8,
-  convnext 6, mnv2 4** — mechanical), then `CertLayer` instances per block form, then stage/trunk
-  assembly. ⭐ Only the first step is per-net *work*; `comp`/`chain` are already proven. MNv4 is the
-  exception and is much further back: it has **no backward of any kind**, so it needs §8's phases
-  1–3 before a fold is even a question.
+* ~~**The other five nets are NOT folded**~~ — ✅ **the four conv nets are folded, see §8c.**
+  MNv4 remains the exception and is much further back: **no backward of any kind**, so it needs
+  §8's phases 1–3 before a fold is even a question.
+
+## 8c. ✅ ALL FOUR REMAINING CONV NETS FOLDED (2026-08-10)
+
+`Foundation/BackNetFolds.lean` — `CertLayer` instances for **r34** (identity + downsample),
+**mnv2**, **enet** and **convnext** (spatial-LN + channel-LN). 3-axiom clean, zero `sorry`,
+`lake build Certs` green (3916 jobs), and `tests/AuditAxioms.lean` still passes — it `#print
+axioms`-es these capstones by NAME, and the names did not move.
+
+⭐ **The per-net work was making the blocks pluggable, not proving anything.** All four capstones
+took `dy : Vec n` and wrapped it internally, so a block could only be the LAST thing in a graph.
+Generalised to `ecot : SHlo n` (strictly more general — the old statement is this one at
+`ecot := .operand "%dy" dy`). `residualBackGraph` needed the same treatment, which is what
+unblocked mnv2/enet/convnext, since all three build their block from it.
+
+⭐⭐ **Then every `CertLayer` compiled first try**, because `comp`/`chain` were already proven.
+That is the fold paying for itself: five nets, one composition theorem.
+
+### The `ok` field splits the nets by ACTIVATION, and smooth is the STRONGER case
+
+| net | block activation | `ok` |
+|---|---|---|
+| enet | swish | `True` — global `HasVJP`, lifted by `.toHasVJPAt` |
+| convnext | gelu | `True` |
+| r34 | relu (one kink) | 2 clauses — mid-relu + outer post-residual relu |
+| mnv2 | relu6 (**two** kinks) | 2 clauses, each `≠ 0 ∧ ≠ 6` |
+| r50 | relu | 3 clauses — 3 convs ⇒ 2 interior relus + the outer |
+
+⚠ `ok = True` is **not** a weaker certificate — it is stronger: the graph denotes the VJP
+*everywhere*, no side condition to discharge. The `_at` nets carry conditions because relu really
+has no derivative at 0, and `comp` conjoins them at the right activations rather than dropping them.
+
+⚠ **mnv2 has no outer relu** — its block output IS the residual add, unlike r34/r50. Its two `ok`
+clauses cover the expand and depthwise stages and there is none for an output activation. Reading
+r34's shape onto it would invent a hypothesis that does not exist.
+
+### 🔧 Two things worth keeping
+
+1. **The `E`-suffix precedent already existed.** `EfficientNetBackB0` had `seGateBackGraphE` /
+   `seBlockFullBackGraphE`, documented as *"subgraph-cotangent form"* — the same generalisation,
+   done locally for the SE block and never propagated to the capstones. Kept as in-place mutation
+   rather than adding `…E` twins: a duplicate is a second place to keep in sync, which is exactly
+   how `grad_tie.py`'s patch list rotted (§4c(c)).
+2. ⚠ **A parameter-order slip cost a build cycle.** Generalising `residualBackGraph_faithful` I
+   wrote `(x) (fBack ecot)` while every call site passes `(x) (cotangent) (fBack)`. It surfaced as
+   an `Application type mismatch` whose pretty-printer then blew the `whnf` heartbeat limit, so the
+   message showed no types at all. **A heartbeat timeout inside an error message is not a size
+   problem** — read the argument order first.
+
+### ▶ ViT is deliberately NOT folded
+
+Its blocks are per-token `Mat`-shaped with a different backward vocabulary
+(`transformerBlockBackGraph` plus three MH variants), and `ViTBackB0` is the heaviest module in the
+repo (~11 min, ~14 GB — memory `vit-backb0-ci-cost`). Nothing blocks it; it is a separate sitting
+with a real CI budget attached.
+
+### ▶ Stages and trunks exist for r34 and r50 only
+
+`r34Trunk_3463` pins R34's block table (3/4/6/3 — same depths as R50; the nets differ in block
+*form*, basic vs bottleneck, not in stage depth). enet/mnv2/convnext have their layers but no trunk
+written out: a trunk needs the net's block table and resolution ladder spelled out, which is
+per-net bookkeeping rather than proof.
 * **Concrete weights.** `r50Trunk_3463` takes abstract layers, so it checks that R50's arities and
   resolutions compose — not that any particular committed artifact is what got folded. Tying the
   fold to `resnet50_adam_train_step.mlir` is a separate step.

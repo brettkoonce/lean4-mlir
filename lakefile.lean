@@ -587,6 +587,10 @@ lean_lib «Certs» where
              -- R50's blocks as CertLayers + stages + the four-stage trunk. The first
              -- net-level backward fold in the repo; every other *BackB0 stops at a block.
              `LeanMlir.Proofs.Foundation.ResNet50BackNet,
+             -- The other four conv nets folded: CertLayer instances for r34, mnv2,
+             -- enet and convnext. enet/convnext are globally smooth (ok = True);
+             -- r34/mnv2 are `_at` (relu / relu6 kinks). No new proof per net.
+             `LeanMlir.Proofs.Foundation.BackNetFolds,
              -- ConvNeXt backward-graph faithfulness (den-level): the per-example
              -- (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
              -- separable, so no batched machinery — the block-body backward graph
