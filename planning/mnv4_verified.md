@@ -1345,8 +1345,47 @@ Worth recording, because it says the naming conventions do not support mechanica
 *backward* graph was **correct** — `stemGraphB_faithful` is a forward-graph theorem. Had that gone
 the other way, the previous commit would have overclaimed.
 
-▶ **What to do with the 4 real holes**: they are EfficientNet's, they are exactly the shape
-`stemBackBatchedGraph` closed, and each should be about as cheap. Not done here.
+## 8f. ✅ THE HOLES ARE CLOSED — 30/31 (2026-08-10), and the sweep caught my first attempt failing
+
+`Foundation/EfficientNetBackNet.lean`. The sweep now reports **31 batched certified forwards, 30
+tied**; the one remaining is `efficientnetForwardB`, the whole-net forward, which is the artifact-tie
+item rather than a stage hole.
+
+### ⚠⚠ MY FIRST FIX DID NOT WORK, AND RE-RUNNING THE SWEEP IS WHAT SAID SO
+
+I first built `CertLayer` `comp`-chains for the four (`enetMbExp`, `enetMbNoExp`, `enetMbStrided`,
+`enetHead`) — all built, all 3-axiom clean. Then re-ran the sweep: **the same five holes**. The
+chains are stated over *abstract* `CertLayer` arguments, so nothing referenced
+`mbExpFwdB_has_vjp` and friends. They gave the capability, not the tie.
+
+▶ **A fix the measurement does not confirm is not a fix.** The only reason this was caught is that
+the sweep was re-run rather than assumed — the same discipline §4c(a) needed.
+
+### ⭐ AND THE SWEEP HAD OVER-COUNTED: one "hole" was a DUPLICATE NAME
+
+Probing the named forwards found `mbStridedFwdB_has_vjp` and `mbDownBodyB_has_vjp` are
+**definitionally the same object** (`rfl`) — and `mbDownBodyB` already had a certified graph. So
+that row was never a hole; it was two names for one VJP, only one of which a name-keyed sweep could
+see. Corrected verdicts:
+
+| forward | verdict |
+|---|---|
+| `mbStridedFwdB` | ⭐ **never a hole** — duplicate name for `mbDownBodyB_has_vjp` |
+| `mbExpFwdB` | same chain as `mbBodyB_has_vjp`, which bakes in `ic = oc = c`; tied where the types meet |
+| `mbNoExpFwdB` | ⛔ genuine — nothing composed `projB ∘ seB ∘ dwbsB` |
+| `headFwdB` | ⛔ genuine — nothing composed `dense ∘ GAP ∘ cbsB` |
+
+▶ So of §8e's four, **two were real** and two were naming artifacts. A name-keyed audit cannot tell
+one object with two names from two objects — worth remembering before trusting any future count
+from that script.
+
+### What landed
+
+`mbStridedFwdBackBatchedGraph_faithful` and `mbExpFwdBackBatchedGraph_faithful` (restatements
+against the other name), plus genuinely new `mbNoExpBackBatchedGraph{,_faithful}` and
+`headBackBatchedGraph{,_faithful}`. All 3-axiom clean, `lake build Certs` green.
+🔧 Gotcha: `mbExpFwdB_has_vjp` lives in `EfficientNetFullB0`, which was **not** in the import
+closure — the error surfaces as `Function expected at`, not as an unknown identifier.
 * ⛔ **None of this is tied to the committed artifact.** Same status as every other net's fold:
   these are certified compositions, not a proof that `mnv4_adam_train_step.mlir` IS this graph.
 

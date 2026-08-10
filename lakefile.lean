@@ -596,6 +596,10 @@ lean_lib «Certs» where
              -- CertLayers, and ⭐ the FOUR FAMILIES COLLAPSED into one body via
              -- CertLayer.id' in the absent-depthwise slots. No case split.
              `LeanMlir.Proofs.Foundation.MobileNetV4BackB0,
+             -- EfficientNet's four §8e holes closed: mbExp / mbNoExp / mbStrided /
+             -- head as CertLayer comp-chains. Every stage was already certified with a
+             -- backward graph; what was missing was the COMPOSITION.
+             `LeanMlir.Proofs.Foundation.EfficientNetBackNet,
              -- ConvNeXt backward-graph faithfulness (den-level): the per-example
              -- (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
              -- separable, so no batched machinery — the block-body backward graph
