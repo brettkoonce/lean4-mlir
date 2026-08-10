@@ -133,6 +133,7 @@ import LeanMlir.Proofs.Architectures.ConvNeXtBackB0
 import LeanMlir.Proofs.Architectures.ConvNeXtFaithfulPoC
 import LeanMlir.Proofs.Architectures.ConvNeXtTiePoC
 import LeanMlir.Proofs.Architectures.ViTBackB0
+import LeanMlir.Proofs.Foundation.ViTBackNet
 import LeanMlir.Proofs.Foundation.LinearFaithfulPoC
 import LeanMlir.Proofs.Float.E4M3FaithfulPoC
 import LeanMlir.Proofs.Foundation.MlpFaithfulPoC
@@ -3092,6 +3093,29 @@ open Proofs
 #print axioms StableHLO.patchEmbedBack_faithful
 #print axioms StableHLO.patchEmbedBackGraph_faithful
 #print axioms StableHLO.vitNetBackGraph_faithful
+
+-- ViT folded onto the net-agnostic `CertLayer` machinery (ViTBackNet.lean, 2026-08-10) — the
+-- last net onto the fold. GELU/LayerNorm are smooth, so `ok = True` at every depth: the trunk's
+-- backward graph denotes its VJP unconditionally, with no side condition to discharge (the
+-- enet/convnext tier; r34/r50/mnv2/mnv4 carry `_at` hypotheses for their relu kinks).
+-- ⭐ vitTrunkV_graph is the load-bearing one: it proves the GENERIC chain built by
+-- `CertLayer.comp` is ViTBackB0's hand-written depth-k tower `vitBodyBackGraphKMHV` term for
+-- term, so the bespoke induction above is DERIVED from the shared combinator rather than kept
+-- as a second artifact to hold in sync. vitTrunkV_fwd does the same for the forward against the
+-- shipped `vitBodyKVFlat`, which is what stops the chain being "some blocks" instead of ViT's.
+-- Verified to FAIL on two injections that TYPECHECK (blocks are endomorphisms, so the type
+-- checker is no help): reversing the trunk's `comp` order, and swapping the attention/MLP
+-- sublayer nesting inside the block backward.
+-- ⚠ The other five nets' folds (ResNet50BackNet, BackNetFolds, MobileNetV4BackB0,
+-- EfficientNetBackNet) are NOT audited here — this file imports their block capstones but not
+-- their `CertLayer` layers. ViT's being here and theirs not is a gap in this file, not a
+-- difference in those proofs.
+#print axioms StableHLO.vitBlockVLayer
+#print axioms StableHLO.vitTrunkV_eq_chain
+#print axioms StableHLO.vitTrunkV_fwd
+#print axioms StableHLO.vitTrunkV_graph
+#print axioms StableHLO.vitTrunkV_faithful
+#print axioms StableHLO.vitTinyTrunk_is_shipped
 -- ViT-Tiny §1 FOLD (ViTFaithfulPoC) — each emitted param-SGD op `den` = the certified loss-descent
 -- step, for every parameter family of the depth-12 ViT-Tiny train step. veclnGammaSgd (vector-[D] LN
 -- γ, the Σ_tokens dy·x̂ reduce) → vit_render_veclngamma_certified; rowDenseWeightSgd/rowDenseBiasSgd

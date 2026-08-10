@@ -42,6 +42,14 @@ and resolution ladder spelled out and that is per-net bookkeeping, not proof. �
 here: its blocks are per-token `Mat`-shaped with a different backward vocabulary
 (`transformerBlockBackGraph` and three MH variants), and `ViTBackB0` is the heaviest module in the
 repo (~11 min, ~14 GB — memory `vit-backb0-ci-cost`). It is a separate sitting.
+
+✅ **That sitting happened — `Foundation/ViTBackNet.lean` (2026-08-10).** Two corrections it
+forced, both worth reading before trusting this file's framing:
+* ViT was never the *least*-folded net; it was the only one with a concrete whole-net backward
+  graph (stem and head included, at every depth). See `CertifiedChain.lean`'s correction block.
+* The ~11 min / ~14 GB figure is a **2-core CI runner** number. On a workstation `ViTBackB0`
+  rebuilds in seconds, so "budget the CI cost" was not the constraint it looked like, and it is
+  not a reason to defer work on this module.
 -/
 
 namespace Proofs.StableHLO

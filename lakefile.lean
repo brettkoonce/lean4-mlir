@@ -600,6 +600,12 @@ lean_lib «Certs» where
              -- head as CertLayer comp-chains. Every stage was already certified with a
              -- backward graph; what was missing was the COMPOSITION.
              `LeanMlir.Proofs.Foundation.EfficientNetBackNet,
+             -- ViT folded onto the same machinery — the LAST net onto `CertLayer` and the
+             -- only one whose fold covers stem-to-head. ⭐ `vitTrunkV_graph` proves the
+             -- generic chain reproduces ViTBackB0's hand-written depth-k tower TERM FOR
+             -- TERM, so that bespoke induction is derived rather than kept in parallel.
+             -- GELU/LayerNorm are smooth ⇒ `ok = True` at every depth (enet/convnext tier).
+             `LeanMlir.Proofs.Foundation.ViTBackNet,
              -- ConvNeXt backward-graph faithfulness (den-level): the per-example
              -- (batch-1) peer of EfficientNetBackB0. LayerNorm is per-example
              -- separable, so no batched machinery — the block-body backward graph

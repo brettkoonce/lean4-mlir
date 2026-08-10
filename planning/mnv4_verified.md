@@ -1112,7 +1112,7 @@ the main line. **Measured 2026-08-10, not recalled:**
 | mnv2 | ✓ | ✓ `MobileNetV2BackB0` + CertifiedTie | ✓ 6.08e-06 | — |
 | enet | ✓ | ✓ `EfficientNetBackB0` + CertifiedTie | ✓ 1.13e-06 | — |
 | convnext | ✓ | ✓ `ConvNeXtBackB0` + CertifiedTie | — | — |
-| vit | ✓ | ✓ `ViTBackB0` + `ViTMhsaBackCertifiedTie` | — | — |
+| vit | ✓ | ⭐ `ViTBackB0` — **the only genuinely whole-net one**: patchEmbed→tower→LN→classifier at every depth (§8g) | — | — |
 | **r50** | ✓ `Foundation/Resnet50BlocksCertified.lean` | ✅ **DONE 2026-08-10 — `ResNet50BackB0`, all 3 forms** | ⛔ no 10-class reference exists | ⛔ |
 | **mnv4** | ⛔ **missing** | ⛔ **missing** | ✅ 1.423e-06 | ✅ 0/147 |
 
@@ -1519,12 +1519,15 @@ r34's shape onto it would invent a hypothesis that does not exist.
    message showed no types at all. **A heartbeat timeout inside an error message is not a size
    problem** — read the argument order first.
 
-### ▶ ViT is deliberately NOT folded
+### ~~▶ ViT is deliberately NOT folded~~ — ✅ **DONE, see §8g**
 
 Its blocks are per-token `Mat`-shaped with a different backward vocabulary
 (`transformerBlockBackGraph` plus three MH variants), and `ViTBackB0` is the heaviest module in the
 repo (~11 min, ~14 GB — memory `vit-backb0-ci-cost`). Nothing blocks it; it is a separate sitting
 with a real CI budget attached.
+
+⚠ Both stated reasons turned out to be wrong in the same direction — **they made ViT sound behind
+when it was ahead, and expensive when it is cheap.** §8g.
 
 ### ▶ Stages and trunks exist for r34 and r50 only
 
@@ -1614,6 +1617,127 @@ reproduce), and `RESULTS.md`'s R34 90.29% / R50 89.40% **JAX baseline** numbers 
 no longer exists. And no Imagenette net has a matched **recipe** — every JAX baseline is bs192 where every
 verified trainer is bs32 — so no "verified X% vs baseline Y%" pair in the repo is currently
 comparing like with like.
+
+## 8g. ✅ ViT IS FOLDED (2026-08-10) — and it was never the net that was behind
+
+`Foundation/ViTBackNet.lean`. 3-axiom clean, zero `sorry`, `lake build Certs` green (3919 jobs),
+in `tests/AuditAxioms.lean`. **All seven nets are now on `CertLayer`.**
+
+### ⛔⛔ THE LEDGER WAS WRONG ABOUT WHICH NET WAS SHORT, AND IT WAS WRONG IN OUR FAVOUR
+
+`CertifiedChain.lean`'s header said *"Measured before writing this file: **nothing** in
+`LeanMlir/Proofs/` folds those blocks into a stage or a net"*, and §8b called R50's fold *"the
+FIRST one in the repo"*. **Both are false.** `ViTBackB0.lean` has carried, since before either
+file existed and with `#print axioms` on both:
+
+* `vitBodyBackGraphKMHV_den` — a depth-`k` reverse fold of the block backward graph, by induction
+  on `k`, at distinct per-block parameters.
+* `vitNetBackGraph_faithful` — **patchEmbed → tower → final vec-LN → classifier**, denoting
+  `vitForwardKV_has_vjp.backward` at every image, every cotangent, every depth.
+
+▶ So the accurate statement of the other six nets is *block capstones plus an **abstract-layer**
+trunk*: `r50Trunk_3463` and `r34Trunk_3463` take abstract `CertLayer` arguments and cover the
+trunk only — no stem, no pool, no head (§8b records the maxpool gap). **ViT is the only net whose
+backward fold reaches from the image to the logits at concrete weights.** It was filed as the last
+net to fold because a conv-net sweep was generalised to it — the fourth time inference-by-analogy
+has been wrong in this document, and the first time it understated the repo rather than
+overstating it.
+
+⚠ Worth naming the asymmetry: the previous three (§3c, §3d(d), §8a) all *overclaimed*, so the
+correction cost work. This one *underclaimed*, so the correction is free — and that is exactly why
+it survived three sessions. **A ledger error that makes you look worse is not self-correcting.**
+
+### ⭐⭐ THE FOLD IS A THEOREM ABOUT THE OLD PROOF, NOT A REPLACEMENT FOR IT
+
+The obvious move — re-derive ViT's tower generically and leave the bespoke one alongside — creates
+a second artifact stating the same thing, which is how `grad_tie.py`'s patch list rotted (§4c(c)).
+Instead:
+
+| theorem | what it says |
+|---|---|
+| `vitTrunkV_fwd` | the chain's forward **is** the shipped `vitBodyKVFlat` |
+| `vitTrunkV_graph` | the chain's backward graph **is** `vitBodyBackGraphKMHV`, term for term |
+| `vitTrunkV_faithful` | …and it is certified, with no induction on depth in sight |
+
+⭐ So `vitBodyBackGraphKMHV_den`'s hand-written induction is **derived from `CertLayer.comp`**
+rather than trusted beside it. The proof is the two round-trips `unflatten (flatten A) = A` and
+`blockVFlat (flatten A) = flatten (blockV A)` — which is precisely the content `comp` encodes.
+
+### The one piece of per-net work, exactly as the handoff predicted
+
+Making the blocks pluggable: the vec-LN production chain took its cotangent as `dY : Vec n` and
+wrapped it internally as `.operand "%dz"`/`"%dh"`, so a block could only be the LAST thing in a
+graph. Now `ecot : SHlo n` through `transformerMlpBackGraph` → `mlpSublayerV*` →
+`attnSublayerV*` → `transformerBlockV*` → the tower, each faithfulness statement carrying
+`den ecot = Mat.flatten dz`. Every old statement is the new one at `ecot := .operand … `.
+
+⚠ **The handoff said "1 such site"; it is 7.** The count came from grepping capstones; the
+`.operand` wrapping recurs at every level of the sublayer chain.
+
+⭐ It also deleted a seam **inside** the block: `transformerBlockVBackGraphMH` used to feed the
+attention sublayer `den (mlpSublayerVBackGraph …)` — the MLP arm's *value*, re-embedded as a
+constant. The two sublayers now compose as subgraphs.
+⛔ **One seam remains and it is pre-existing**: `attnSublayerVInnerBackGraphMH` still passes
+`den e` into `mhsaBackGraphMH`, whose cotangent is a `Vec`. Inside the attention arm, not between
+blocks, so it does not block composition — but any future attempt to *emit* these graphs rather
+than only denote them has to close it.
+
+### `ok = True` — and the smooth tier is the STRONGER one
+
+GELU and LayerNorm are smooth, so a ViT block has a global `HasVJPMat`, and `vitTrunkV_ok` proves
+the whole depth-`k` trunk is certified unconditionally. For a relu net `comp` would conjoin a
+deepening stack (R50: 3 clauses × 16 blocks); here the conjunction collapses. ⚠ Not weaker than
+the `_at` nets — no side condition to discharge is *more* coverage, not less.
+
+### ✅ VERIFIED TO FAIL — twice, and both injections TYPECHECK
+
+ViT blocks are endomorphisms, so the type checker is no help at all — which is the case §8b calls
+the one a fold is most exposed to.
+
+| injection | result |
+|---|---|
+| reverse the trunk's `comp` order (tail-then-block) | ✅ `vitTrunkV_fwd` / `_graph` / `_eq_chain` all fail |
+| swap the attention/MLP sublayer nesting inside the block backward | ✅ `transformerBlockVBackGraphMH_faithful` fails |
+
+### 🔧 `scripts/vjp_graph_sweep.py` — §8e's sweep, finally written down
+
+§8e ran the VJP-without-backward-graph sweep **by hand, in four passes, three of them wrong**, and
+never committed it — so §8f re-derived it and this session would have re-derived it again. It is
+now a script, at pass 4, with the statement/proof split done by **paren depth** (a named argument
+`(h := h)` is always inside parens, so the first depth-0 `:=` is the real boundary).
+
+Result: **31 batched certified forwards, 30 tied, 1 hole — `efficientnetForwardB`**, reproducing
+§8f's hand-derived ledger exactly. The ViT fold adds no holes. That hole set is now a **ratchet**
+(pinned, verified to fail when falsified), so a future change that opens one exits non-zero.
+
+⚠⚠ **Two things the script deliberately does NOT claim.**
+1. A per-token (`_has_vjp_mat`) cohort exists and is **uncalibrated** — it has never been checked
+   against a hand-derived answer, and `mhsa_g`/`colSlabwise` land in its hole column while being
+   demonstrably consumed on the way to `mhsaBackGraphMH_faithful`. It is behind `--cohort mat`
+   with an explicit banner. **Its numbers are not debt.**
+2. I caught myself widening the name filter twice to make that column look cleaner. That is
+   §4c(a)'s false-green mechanism running live: *a sweep tuned until it passes is measuring the
+   tuner.* The fix was to stop tuning and mark the cohort uncalibrated.
+
+### ▶ WHAT ViT STILL OWES
+
+* **The stem and head as `CertLayer`s.** `vitNetBackGraph_faithful` already covers them by hand,
+  so this is the same "derive the bespoke proof from the generic one" move applied one level up —
+  and it would make ViT the first net whose *fold* runs image → logits. Blocked only by
+  `classifierBackGraph` still taking `dy : Vec nClasses`, and by `finalLNBackGraph` bundling the
+  classifier rather than composing with it.
+* ⛔ **Not tied to the committed artifact.** Same status as every other net's fold: a certified
+  composition, not a proof that `verified_mlir/vit_train_step.mlir` IS this graph.
+* ⚠ **The other five nets' folds are not in `AuditAxioms`** — that file imports their *block*
+  capstones but not their `CertLayer` layers. ViT's being audited and theirs not is a gap in the
+  audit, not a difference in the proofs.
+
+### ⭐ AND THE CI-COST WARNING WAS A CATEGORY ERROR
+
+`ViTBackB0` rebuilds in **~2.6 s** on this box. The famous ~11 min / ~14 GB is a **2-core CI
+runner** figure (memory `vit-backb0-ci-cost` says so; it was read as a property of the module).
+Three sessions deferred this work partly on that number. ▶ **A cost measured on one machine is not
+a property of the code** — and "budget the CI cost" deterred nothing but the work.
 
 ---
 

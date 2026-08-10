@@ -2,12 +2,24 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # `CertLayer` — composing certified backward graphs, so a NET is one object
 
-Every `*BackB0` file in this repo stops at a **block** capstone: `r34DownBlockBackBatchedGraph_-
+Every **conv** net's `*BackB0` file stops at a **block** capstone: `r34DownBlockBackBatchedGraph_-
 faithful`, `mnv2ResidBlockBackBatchedGraph_faithful`, `mbResidBlockBackBatchedGraph_faithful`,
-`cnxDownChBackGraph_faithful`, and (2026-08-10) R50's three. Measured before writing this file:
-**nothing in `LeanMlir/Proofs/` folds those blocks into a stage or a net.** So "the whole-net
-composed backward" as §8 of `planning/mnv4_verified.md` uses the phrase means *block* capstones —
-which is real, and is not a net.
+`cnxDownChBackGraph_faithful`, and (2026-08-10) R50's three. So "the whole-net composed backward"
+as §8 of `planning/mnv4_verified.md` uses the phrase means *block* capstones — which is real, and
+is not a net.
+
+⛔ **CORRECTION (2026-08-10).** An earlier version of this paragraph said *"Measured before
+writing this file: nothing in `LeanMlir/Proofs/` folds those blocks into a stage or a net."*
+**That was wrong, and ViT is the counterexample.** `ViTBackB0.lean` has carried
+`vitBodyBackGraphKMHV_den` (a depth-`k` reverse fold of the block backward graph, by induction on
+`k`) and `vitNetBackGraph_faithful` (patchEmbed → tower → final vec-LN → classifier, at every
+depth) the whole time, both in `tests/AuditAxioms.lean`. The measurement that produced that
+sentence swept the conv nets and generalised — the same inference-by-analogy the MNv4 planning doc
+records being wrong three times.
+
+What ViT genuinely lacked was not a fold but a **reusable** one: its tower was a bespoke induction
+that no other net could use and that reused nothing. `ViTBackNet.lean` closes that, and proves the
+generic chain reproduces the bespoke tower term for term rather than replacing it.
 
 ⭐ **The obstacle was never the mathematics; it was that the chaining was open-coded.** Look at any
 `<body>BackBatchedGraph_faithful`: it builds `G₁ x (G₂ (f₁ x) e)`, rewrites with the two component
