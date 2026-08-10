@@ -31,6 +31,16 @@ jobs:
         # drift-guard debt at its baseline so it can shrink but never grow.
         run: python3 scripts/check_render_coverage.py
 
+      - name: verified_mlir/ audit suite (writers, pairings, entry names)
+        # `scripts/regen_verified_mlir.sh check` writes nothing and needs no Lean, no GPU and no
+        # JAX — it reads the committed artifacts. It has existed for a while and CI never ran it,
+        # which is how its own blind spot survived: `check_fwd_prefix` pairs each forward with the
+        # SGD train step (same renderer, always matches) and never with the ADAM one, the artifact
+        # every quoted verified number is trained by. `check_adam_prefix` now forms that pairing —
+        # 4 nets pair cleanly, 3 are recorded splits (§3d(b)) — and a divergence that is NOT on the
+        # recorded list fails here.
+        run: scripts/regen_verified_mlir.sh check
+
       - name: Install elan
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y

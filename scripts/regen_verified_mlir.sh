@@ -21,6 +21,11 @@
 #   scripts/regen_verified_mlir.sh tests        # only the hand-written renders
 #   scripts/regen_verified_mlir.sh check        # write nothing; just run the writer audit
 #
+# ⚠ `check` runs TWO prefix audits, and the second is the one that matters: `check_fwd_prefix`
+# pairs each forward with the SGD train step (which shares its renderer and therefore always
+# matches), while `check_adam_prefix` pairs it with the ADAM train step — the artifact every quoted
+# verified number is actually trained by. Only the second can see §3d(b).
+#
 # After regenerating, `git diff verified_mlir/` should be EMPTY. A non-empty diff means either
 # you changed a renderer (intended) or two writers disagree (not intended) — see `check`.
 set -euo pipefail
@@ -167,6 +172,90 @@ if bad:
     sys.exit(1)
 print(f"  OK — all {n} audited artifacts declare the entry their filename names")
 PY
+}
+
+# ── ⛔ THE PAIRING THE CHECK ABOVE NEVER FORMED: forward vs the ADAM train step ──
+# `check_fwd_prefix` pairs `<net>_fwd` with `<net>_train_step` — the SGD one. For the five original
+# nets both came out of the SAME per-example renderer, so that pairing matches by construction and
+# reports OK. It never pairs a forward with the **Adam** train step, which is the artifact every
+# quoted verified number is actually trained by. So the audit went green for a year while
+# `mobilenetv2_fwd` (per-example BN) sat next to `mobilenetv2_adam_train_step` (batch BN) —
+# different functions, same net name (planning/mnv4_verified.md §3d(b)).
+#
+# ⚠ The check is not FALSE. It is just not about the artifact anyone trains on. That is the lesson
+# worth keeping: when a guard goes green, check WHAT PAIRING IT FORMED.
+#
+# Measured 2026-08-10: 4 of the 7 pairs already hold, so this is real new coverage and not just a
+# list of known failures. The 3 that do not are recorded below and are non-fatal; a divergence NOT
+# on that list fails the check.
+check_adam_prefix() {
+  echo "── forward ⊂ ADAM train-step prefix check (§3d(b)) ──"
+  python3 - <<'PY_INNER'
+import sys
+
+PAIRS = [("resnet34_fwd.mlir",     "resnet34_adam_train_step.mlir"),
+         ("resnet50_fwd.mlir",     "resnet50_adam_train_step.mlir"),
+         ("mobilenetv2_fwd.mlir",  "mobilenetv2_adam_train_step.mlir"),
+         ("efficientnet_fwd.mlir", "efficientnet_adam_train_step.mlir"),
+         ("convnext_fwd.mlir",     "convnext_adam_train_step.mlir"),
+         ("vit_fwd.mlir",          "vit_adam_train_step.mlir"),
+         ("mnv4_fwd.mlir",         "mnv4_adam_train_step.mlir")]
+
+# ── the ratchet. May SHRINK, never grow: a new entry means a forward and the graph that trains it
+#    drifted apart with this audit green, which is the exact failure §3d(b) is about.
+#    ⚠ NONE of these make a quoted number wrong — traced (§3d(c)) and re-confirmed 2026-08-10 for
+#    all three: the driver compiles `<net>_fwd` unconditionally but scores through
+#    `<net>_fwd_eval` (`VerifiedTrain.lean:1617`, `useRunning = hasBn && !batchStatEval`), and the
+#    run logs say so outright. The per-example artifact is compiled and never invoked. But that is
+#    a runtime `if`, not an invariant — and `LEAN_MLIR_EVAL_BATCHSTATS=1` routes eval straight
+#    through the divergent artifact, which is then a different ARCHITECTURE, not just different
+#    statistics.
+KNOWN_SPLIT = {
+  "resnet34_fwd.mlir":    "per-example BN vs the batch-BN Adam step — two renderers (ResNet34Render vs ResNet34RenderB)",
+  "resnet50_fwd.mlir":    "per-example BN vs the batch-BN Adam step — same two-renderer split",
+  "mobilenetv2_fwd.mlir": "per-example BN vs the batch-BN Adam step — same two-renderer split",
+}
+
+def body(lines, what):
+    for i, l in enumerate(lines):
+        if l.strip().startswith("%v0 = "):
+            return lines[i:]
+    raise ValueError(f"{what}: no `%v0 = ` line — not a pretty(AST) render?")
+
+rc, ok, known, resolved = 0, 0, 0, []
+for fwd, ts in PAIRS:
+    try:
+        fl = open(f"verified_mlir/{fwd}").read().split("\n")
+        tl = open(f"verified_mlir/{ts}").read().split("\n")
+    except FileNotFoundError:
+        print(f"  SKIP {fwd} / {ts}: not rendered"); continue
+    fb = body(fl, fwd)
+    fb = fb[: next(i for i, l in enumerate(fb) if l.strip().startswith("return"))]
+    tb = body(tl, ts)[: len(fb)]
+    if fb == tb:
+        ok += 1
+        if fwd in KNOWN_SPLIT:
+            resolved.append(fwd)
+            print(f"  ✓ RESOLVED — {fwd} is now a {len(fb)}-line prefix of {ts}")
+            print(f"      drop it from KNOWN_SPLIT in this script; the list may shrink, never grow")
+        else:
+            print(f"  OK — {fwd} is a byte-identical {len(fb)}-line prefix of {ts}")
+    elif fwd in KNOWN_SPLIT:
+        known += 1
+        bad = next((i for i, (a, b) in enumerate(zip(fb, tb)) if a != b), len(fb))
+        print(f"  ⚠ KNOWN SPLIT — {fwd} diverges from {ts} at body line {bad}")
+        print(f"      {KNOWN_SPLIT[fwd]}")
+    else:
+        bad = next((i for i, (a, b) in enumerate(zip(fb, tb)) if a != b), len(fb))
+        print(f"  ✗ {fwd} DIVERGES from {ts} at body line {bad}  — NOT a known split")
+        print(f"      fwd: {fb[bad][:110] if bad < len(fb) else '<eof>'}")
+        print(f"      ts : {tb[bad][:110] if bad < len(tb) else '<eof>'}")
+        print(f"      the net that scores is not the net that trains. Fix it, or — only if the")
+        print(f"      split is deliberate — add it to KNOWN_SPLIT with the reason.")
+        rc = 1
+print(f"  {ok} paired, {known} known-split, {len(PAIRS) - ok - known} unaccounted")
+sys.exit(rc)
+PY_INNER
 }
 
 # ── the train/eval tie: the eval forward must BE the forward the trainer differentiates ──
@@ -324,6 +413,8 @@ if [ "$WHAT" = "check" ]; then
   echo
   check_fwd_prefix || rc=1
   echo
+  check_adam_prefix || rc=1
+  echo
   check_no_malformed || rc=1
   echo
   check_no_empty_slot || rc=1
@@ -384,6 +475,8 @@ echo
 check_writers || true
 echo
 check_fwd_prefix || true
+echo
+check_adam_prefix || true
 echo
 check_no_malformed || true
 echo
