@@ -1226,13 +1226,44 @@ Wrapping a layer in an identity skip is now a combinator (`ok` unchanged, since 
 smooth everywhere and adds no condition), so a residual block is `residual (chain [...])`. Every
 residual net in the repo hand-writes that fan-in per block; MNv4 is the first to get it for free.
 
-### ▶ WHAT MNv4 STILL OWES
+### ✅ THE 3 STRIDE-2 BLOCKS — DONE, and the collapse deliberately does NOT extend to them
 
-* **The 3 stride-2 blocks.** The strided depthwise-relu stage IS built
-  (`dwbReluBstridedBackBatchedGraph_faithful`); the strided body assembly is not. The render splits
-  these into `uibFwdPreStridedB` / `uibFwdPostStridedB` by *which* depthwise eats the stride, and
-  the proof side will need the same two shapes — a stride-2 body cannot be the stride-1 body with
-  `id'`, because the resolution change is in the TYPE.
+`mnv4UibPreStridedBody` (blocks 1, 11) and `mnv4UibPostStridedBody` (block 3), plus
+`mnv4DWReluStridedLayer` and `mnv4BlockLadder` pinning the 56→28→14→7 / 48→80→160→256 ladder.
+
+⚠⚠ **At stride 1 an absent depthwise is `id'` because the slot is shape-preserving. At stride 2 the
+depthwise carrying the stride maps `(2h,2w) ↦ (h,w)` — a different TYPE — so it cannot be an
+identity, and *which* depthwise carries it decides the resolution every later stage runs at:**
+
+| form | blocks | eats the stride | expand runs at |
+|---|---|---|---|
+| pre-strided | 1 (48→80), 11 (160→256) | the **pre**-DW | `h`, already reduced |
+| post-strided | 3 (80→160) | the **post**-DW | `2h`, not yet reduced |
+
+⭐ The proof side reproduced the render's `uibFwdPreStridedB` / `uibFwdPostStridedB` split
+*independently*, for the same stated reason ("a stride-polymorphic block cannot typecheck"). That
+is small but real evidence the split is architectural and not a renderer artifact.
+✅ Verified: handing the post-strided body a stride-1 post-depthwise is **rejected by the type
+checker** — measured, not asserted. And all three stride-2 blocks change channels, so none has a
+skip; the block IS the body.
+
+### ⛔⛔ THE LIMIT OF THE COLLAPSE — and it is the trap §3 named
+
+**The family dispatch is NOT protected by anything here.** `mnv4UibBody` takes its depthwise slots
+as arguments, so passing `id'` where block 4's real pre-DW belongs is **well-typed and still
+certified** — the graph and the VJP both move with the caller's arguments, so the theorem stays
+true *about the wrong net*. Types catch the stride split (above) precisely because resolution is in
+the type; they catch nothing about `k = 0` vs `k > 0`, because that slot is shape-preserving — the
+very property that made the collapse possible.
+
+▶ So the collapse buys **one dispatch instead of two** (no proof-side table that could disagree
+with the forward's), which is worth having. It does **not** pin the block table. Closing that means
+instantiating the layers *from* `mnv4Blocks` rather than from a caller — the same list the render
+folds over — so a transcription error is a typo in one place. That is the natural next step and it
+applies to `r50Trunk_3463` / `r34Trunk_3463` equally: those pin arities and resolutions, not which
+block is which.
+
+### ▶ WHAT MNv4 STILL OWES
 * **The fused stage (stage 0) and the head.** The fused stage is swish, so it is the globally-smooth
   kind (`ok = True`) and should be cheap; enet's `cbsB` is the stage to reuse.
 * ⛔ **None of this is tied to the committed artifact.** Same status as every other net's fold:

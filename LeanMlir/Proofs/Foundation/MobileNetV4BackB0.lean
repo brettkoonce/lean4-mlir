@@ -268,4 +268,115 @@ noncomputable def mnv4Stage14 (N : Nat) {c mid : Nat}
     CertLayer (N * (c * 14 * 14)) (N * (c * 14 * 14)) :=
   CertLayer.chain [extraDW, extraDW, convNeXt, ib, convNeXt, ffn, extraDW]
 
+-- ════════════════════════════════════════════════════════════════
+-- § THE STRIDE-2 BLOCKS — and why `id'` CANNOT collapse these
+-- ════════════════════════════════════════════════════════════════
+
+/-! ⚠⚠ **The stride-1 collapse does not extend here, and the reason is the TYPE.**
+
+At stride 1 an absent depthwise is `id'` because the slot is shape-preserving. At stride 2 the
+depthwise that carries the stride maps `(2h, 2w) ↦ (h, w)` — a *different type* — so it cannot be
+replaced by an identity, and **which** depthwise carries it decides the resolution every later
+stage runs at. That is not a dispatch detail; it is two genuinely different compositions:
+
+| form | blocks | who eats the stride | expand runs at |
+|---|---|---|---|
+| **pre-strided** | 1 (48→80), 11 (160→256) | the **pre**-DW | `h` (already reduced) |
+| **post-strided** | 3 (80→160) | the **post**-DW | `2h` (not yet reduced) |
+
+⭐ This mirrors the render exactly — `uibFwdPreStridedB` / `uibFwdPostStridedB` are two functions
+for the same reason (`MobileNetV4RenderB`: *"a stride-polymorphic block cannot typecheck"*). The
+proof side reproducing that split independently is a small piece of evidence that the split is real
+and not a renderer artifact.
+
+⚠ All three stride-2 blocks change channels (`ic ≠ oc`), so **none has a skip**: the block IS the
+body, with no `CertLayer.residual` wrapper. Adding one would not typecheck, which is the good case.
+-/
+
+/-- The STRIDE-2 depthwise-bn-relu stage as a `CertLayer` — the depthwise that carries a UIB
+    block's stride. Not an endomorphism (that is the whole point), so it composes via `comp`. -/
+noncomputable def mnv4DWReluStridedLayer (N : Nat) {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    CertLayer (N * (c * (2 * h) * (2 * w))) (N * (c * h * w)) where
+  fwd := dwbReluBstrided N (h := h) (w := w) W b ε γ β
+  ok := fun x => ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0
+  diff := fun x hx => dwbReluBstrided_differentiableAt N W b ε hε γ β x hx
+  vjp := fun x hx => dwbReluBstrided_has_vjp_at N W b ε hε γ β x hx
+  graph := fun x e => dwbReluBstridedBackBatchedGraph W b ε γ β x e
+  faithful := fun x hx e => dwbReluBstridedBackBatchedGraph_faithful W b ε hε γ β x e hx
+
+/-- **Pre-strided UIB body** — MNv4 blocks 1 and 11. The pre-DW carries the stride, so everything
+    downstream of it runs at the REDUCED resolution `h`.
+
+    ⭐ `postDW` is still a slot: blocks 1 and 11 both have `postDWk > 0`, but passing `id'` here is
+    well-typed and expresses a pre-strided ConvNeXt-family block, so the collapse still applies to
+    the *stride-1* slot even though it cannot apply to the strided one. -/
+noncomputable def mnv4UibPreStridedBody (N : Nat) {ic mid oc h w : Nat}
+    (preDW : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (ic * h * w)))
+    (expand : CertLayer (N * (ic * h * w)) (N * (mid * h * w)))
+    (postDW : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
+    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w))) :
+    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
+  preDW.comp (expand.comp (postDW.comp project))
+
+/-- **Post-strided UIB body** — MNv4 block 3 (80→160), the only one. No pre-DW, so the EXPAND runs
+    at the full `2h` resolution and the post-DW does the reduction.
+
+    ⚠ Note what this costs: the expand here is a 1×1 over `mid = ic·expand` channels at `2h×2w`,
+    i.e. 4× the spatial positions of the pre-strided form. Reading the pre-strided body onto this
+    block would be a type error, which is the good case — but reading the *render* wrongly would
+    not have been, which is why `MobileNetV4RenderB` splits the two. -/
+noncomputable def mnv4UibPostStridedBody (N : Nat) {ic mid oc h w : Nat}
+    (expand : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * (2 * h) * (2 * w))))
+    (postDW : CertLayer (N * (mid * (2 * h) * (2 * w))) (N * (mid * h * w)))
+    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w))) :
+    CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
+  expand.comp (postDW.comp project)
+
+/-- ⭐ **The pre-strided block's backward graph denotes its VJP.** No skip (channels change), so the
+    block IS the body. Immediate from `CertLayer.faithful`. -/
+theorem mnv4UibPreStridedBody_faithful (N : Nat) {ic mid oc h w : Nat}
+    (preDW : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (ic * h * w)))
+    (expand : CertLayer (N * (ic * h * w)) (N * (mid * h * w)))
+    (postDW : CertLayer (N * (mid * h * w)) (N * (mid * h * w)))
+    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w)))
+    (x : Vec (N * (ic * (2 * h) * (2 * w))))
+    (hx : (mnv4UibPreStridedBody N preDW expand postDW project).ok x)
+    (e : SHlo (N * (oc * h * w))) :
+    den ((mnv4UibPreStridedBody N preDW expand postDW project).graph x e)
+      = ((mnv4UibPreStridedBody N preDW expand postDW project).vjp x hx).backward (den e) :=
+  (mnv4UibPreStridedBody N preDW expand postDW project).faithful x hx e
+
+/-- ⭐ **The post-strided block's backward graph denotes its VJP.** -/
+theorem mnv4UibPostStridedBody_faithful (N : Nat) {ic mid oc h w : Nat}
+    (expand : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * (2 * h) * (2 * w))))
+    (postDW : CertLayer (N * (mid * (2 * h) * (2 * w))) (N * (mid * h * w)))
+    (project : CertLayer (N * (mid * h * w)) (N * (oc * h * w)))
+    (x : Vec (N * (ic * (2 * h) * (2 * w))))
+    (hx : (mnv4UibPostStridedBody N expand postDW project).ok x)
+    (e : SHlo (N * (oc * h * w))) :
+    den ((mnv4UibPostStridedBody N expand postDW project).graph x e)
+      = ((mnv4UibPostStridedBody N expand postDW project).vjp x hx).backward (den e) :=
+  (mnv4UibPostStridedBody N expand postDW project).faithful x hx e
+
+/-- **MNv4's full block ladder, as a type-level check on `mnv4Blocks`.**
+
+    The spatial ladder is 56 → 28 → 14 → 7 with the reductions at blocks 1, 3 and 11, and the
+    channel ladder is 48 → 80 → 160 → 256. Written with nested doublings (`2*(2*(2*h))`) for the
+    reason `r50Trunk` documents: Nat multiplication is not definitionally associative in a
+    variable, so `8*h` would not line the stage types up.
+
+    If any block's stride, resolution or channel count were transcribed wrongly this would not
+    elaborate — the same role `r50Trunk_3463` and `r34Trunk_3463` play for their nets. -/
+noncomputable def mnv4BlockLadder (N : Nat) {c₀ c₁ c₂ c₃ h w : Nat}
+    (blk1  : CertLayer (N * (c₀ * (2*(2*(2*h))) * (2*(2*(2*w)))))
+                       (N * (c₁ * (2*(2*h)) * (2*(2*w)))))
+    (blk2  : CertLayer (N * (c₁ * (2*(2*h)) * (2*(2*w)))) (N * (c₁ * (2*(2*h)) * (2*(2*w)))))
+    (blk3  : CertLayer (N * (c₁ * (2*(2*h)) * (2*(2*w)))) (N * (c₂ * (2*h) * (2*w))))
+    (mid14 : CertLayer (N * (c₂ * (2*h) * (2*w))) (N * (c₂ * (2*h) * (2*w))))
+    (blk11 : CertLayer (N * (c₂ * (2*h) * (2*w))) (N * (c₃ * h * w)))
+    (tail  : CertLayer (N * (c₃ * h * w)) (N * (c₃ * h * w))) :
+    CertLayer (N * (c₀ * (2*(2*(2*h))) * (2*(2*(2*w))))) (N * (c₃ * h * w)) :=
+  blk1.comp (blk2.comp (blk3.comp (mid14.comp (blk11.comp tail))))
+
 end Proofs.StableHLO
