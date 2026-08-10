@@ -1,48 +1,31 @@
 import LeanMlir.VerifiedNets
 
-/-! # Shared body of the verified ResNet-50 / **full ImageNet-1k** trainer
+/-! # `resnet50-imagenet-verified` — ResNet-50 on full ImageNet-1k, verified renderer → XLA/PJRT
 
-R50 phase 3 (`planning/next_session_pipeline_then_r50.md` §3.3). Same certified renderer as every
-other net here, at `nClasses := 1000` — the bottleneck blocks are `ResNet50RenderB.lean`, their
-VJPs are `Resnet50BlocksCertified.lean`, and the three artifacts are three `#eval`s of the same
-renderer, exactly as R34's were.
+R50 phase 3. Nothing new was needed in the renderer to reach ImageNet scale — `nClasses`, `B`,
+`replicas`, `opt` and `slug` are all parameters of `resnet50TrainStepFaithfulB`, so the four
+artifacts are four `#eval`s. What was needed was the three bottleneck block VJPs (phase 1) and the
+renderer itself (phase 2).
 
-Data comes from the generated tfds shim (`VerifiedData.imagenet`), R50's own
-(`generated_resnet50_imagenet_shim.py`), so this side does no augmentation: one definition of the
-transform and it is the reference's.
-
-⚠⚠ **THIS IS NOT RSB-A3, AND MUST NOT BE DESCRIBED AS IT.** `jax/MainResnet50Imagenet.lean`'s
-`rsb-faithful` recipe reached 76.66% top-1 with **LAMB at effective batch 2048** (512 micro × 4
-gradient-accumulation steps), **BCE-with-logits**, mixup/cutmix, and 160-train/224-eval. This
-driver has AdamW at bs256 and no gradient accumulation — `grep gradAccum LeanMlir/VerifiedTrain.lean`
-still returns 0. `planning/rsb_a2_resnet50.md` records LAMB at bs512 giving **40.8% against 78.1%**,
-so batch size is not a detail here. What this is: a verified R50 that exists, trains, and is gated
-at the certified AdamW kit — §3.3's "real value even if §4 never runs".
-
-⚠ **Claim ceiling**, unchanged from R34's: the proof-carrying tier stops at Imagenette. What is
-inherited is *provenance* plus whatever a pair agreement shows. "One architecture, two independent
-lowerings, agreeing" — never "proven".
-
-⚠⚠ **AND R50 HAS NO INCUMBENT RENDER TO TIE AGAINST** (§3.2). Every other net's swap onto the
-verified renderer was licensed by a bit-exact numeric tie against the hand-written artifact it
-replaced; there is no such artifact here, so that license does not exist. Before any number is
-quoted off this trainer, one of these has to be run AND NAMED:
-  * `tests/vjp_oracle/run.sh bottleneck` — licenses the identity bottleneck's VJP against JAX's
-    `value_and_grad`. ⚠ Its case is `.bottleneckBlock 8 8 1 1`, i.e. **no projection**, so it
-    covers neither projection form and specifically not the stride-1 one.
-  * a loss-sequence agreement against `jax/MainResnet50Imagenet.lean` at matched init — the only
-    check that exercises the whole-net wiring, and the evidence class R34's ImageNet number rests
-    on.
-`tests/TestR50Contract.lean` already pins the parameter contract (161 tensors, 25,557,032 params,
-shapes elementwise) but that is a *layout* gate, not a *gradient* one.
-
-Prerequisites, in order:
+⚠ Read `Resnet50ImagenetCommon`'s two warnings before quoting anything from this: it is NOT
+RSB-A3 (no LAMB, no bs2048, no gradient accumulation), and R50 has no incumbent render to tie
+against, so the swap license every other net had does not exist here.
 
 ```bash
-scripts/gen_shims.sh                       # R50's OWN data shim
-lake build resnet50-imagenet-verified-xla
-lake env lean tests/TestR50Contract.lean   # the layout gate
+scripts/gen_shims.sh
+gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+lake build resnet50-imagenet-verified
+lake env lean tests/TestR50Contract.lean
+CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
+  PJRT_FFI_RESIDENT=1 SHIM_WORKERS=1 LEAN_MLIR_SKIP_EVAL=1 LEAN_MLIR_G2_STEPS=40 \
+  .lake/build/bin/resnet50-imagenet-verified data
 ```
+
+**One file, one binary, either lowerer.** The proven graph goes to whichever
+trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
+`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). The `-xla` suffix is
+gone from the target name because it no longer distinguishes anything: the
+backend is a run-time choice about transport, not a different program.
 -/
 
 /-- 100 epochs — RSB-A3's own reference schedule at effective batch 2048. Raised from 30 on
@@ -101,3 +84,5 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
   net.toNet.trainAdamSched
     { resnet50ImagenetConfig with batchSize := bs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
+
+def main (argv : List String) : IO Unit := runResnet50Imagenet argv

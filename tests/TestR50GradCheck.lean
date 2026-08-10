@@ -14,7 +14,7 @@ the swap. Neither has been run."*
 `tests/vjp_oracle/run.sh` drives `NetSpec.train`, i.e. `LeanMlir/MlirCodegen.lean`'s
 `emitBottleneckBlock` — a different lowering from `Proofs/Codegen/ResNet50RenderB.lean`, which is
 what `verified_mlir/resnet50in_*_train_step.mlir` is rendered from and what
-`resnet50-imagenet-verified-xla` actually runs. Those cases are still worth adding (they cover
+`resnet50-imagenet-verified` actually runs. Those cases are still worth adding (they cover
 `apps/baselines/MainResnet50Train.lean`) and they are not this.
 
 This drives **the committed bytes** and needs no second framework, because the train step returns

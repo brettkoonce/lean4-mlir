@@ -47,7 +47,7 @@ Two commits. **R50's gradient is gated and gradient accumulation exists, is cert
 ### The gradient gate — and §3.2 named the wrong two checks
 
 ⚠⚠ **§3.2's `vjp_oracle` cases would have gated the WRONG EMITTER.** `tests/vjp_oracle/run.sh`
-drives `NetSpec.train`, i.e. `MlirCodegen.emitBottleneckBlock`; `resnet50-imagenet-verified-xla`
+drives `NetSpec.train`, i.e. `MlirCodegen.emitBottleneckBlock`; `resnet50-imagenet-verified`
 runs `ResNet50RenderB`. Different lowerings. ▶ Those cases are still worth adding — they cover
 `apps/baselines/MainResnet50Train.lean` — and they are not the R50 gate.
 
@@ -653,7 +653,7 @@ ungated.** Before any number is quoted:
 
 ### 3.3 ✅ Phase 3 DONE (partly) — it trains
 
-`resnet50-imagenet-verified-xla` + `apps/imagenette/Resnet50ImagenetCommon.lean`. Single-GPU smoke:
+`resnet50-imagenet-verified` + `apps/imagenette/Resnet50ImagenetCommon.lean`. Single-GPU smoke:
 483 resident tensors (292.5 MB), 53 BN layers / 53,120 stat floats, losses **7.609 / 7.461 / 7.671**
 against ln(1000) = 6.91 — the excess is label smoothing plus this net's mixup soft targets (R34
 starts at 7.14 with mixup off).

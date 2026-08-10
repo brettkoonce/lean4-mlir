@@ -51,7 +51,7 @@ would let them be measured together **did not exist until now**.
 CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=lambaccdp8x64bce LEAN_MLIR_RES=160 \
   LEAN_MLIR_MAX_STEPS=120 PJRT_FFI_RESIDENT=1 LEAN_MLIR_SKIP_EVAL=1 SHIM_WORKERS=8 \
-  .lake/build/bin/resnet50-imagenet-verified-xla data
+  .lake/build/bin/resnet50-imagenet-verified data
 ```
 
 ⚠ **AND RUN IT TWICE — with and without `LEAN_MLIR_BENCH_SYNTH=1`.** That gap is the whole point:
@@ -81,7 +81,7 @@ Copy `enet-imagenet-4gpu.conf`; it is the best-commented one. What this job must
 ```bash
 DEVS="0,2,3,4"                       # idx1 (bus 02) and idx5 (bus 62) threw BadTLP
 EPOCHS=100
-CMD=(.lake/build/bin/resnet50-imagenet-verified-xla data)
+CMD=(.lake/build/bin/resnet50-imagenet-verified data)
 ENV_EXTRA=(
   PJRT_REPLICAS=4  LEAN_MLIR_REPLICAS=4
   LEAN_MLIR_VARIANT=lambaccdp8x64bce
