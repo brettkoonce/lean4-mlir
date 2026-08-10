@@ -945,6 +945,48 @@ which is what actually produces a train step to run.
 
 ---
 
+## 4b. ⭐ THE CONVENTION AUDIT (2026-08-10) — stop finding these one session at a time
+
+`scripts/convention_audit.py`. Six render/reference divergences have now been found across four
+nets, each costing a session. They are not six bugs — they are **two gaps spelled twice**: the JAX
+`.convBn` emitter hardcodes `jax.nn.relu` with no activation parameter, and padding is stated
+independently on each side (the generator hands XLA the string `'SAME'`; the renderer picks an op
+*token*, and `VLayer` cannot express `Padding` at all — §7.1).
+
+The audit instruments `jax.lax` and runs the reference's `forward()` once on a 2×3×224×224 zero
+input, reads the same facts out of the committed `.mlir`, and diffs the convention profiles. **No
+GPU, no training, no gradients** — seconds per net. Current state:
+
+| net | verdict |
+|---|---|
+| **mnv4** | ✅ clean |
+| **enet** | ⛔ activation — reference calls relu exactly TWICE (stem, head) where the render is swish |
+| **mnv2** | ⛔ activation (render relu6, reference relu) + BN self-split |
+| **r34** | ⛔ padding (7 strided convs + the maxpool) + BN self-split |
+
+⚠ **`--selftest` is the load-bearing part.** It asserts the audit reproduces the known ledger; an
+audit that cannot rediscover the findings that motivated it is worse than none, because its green
+is what people would trust. Writing it caught two design errors immediately:
+
+1. **The forward that pairs with training is not always `<slug>_fwd`.** On mnv2 it is `fwd_eval` —
+   §3h switched the Adam path and both eval forwards to XLA `SAME` and deliberately left the SGD
+   pair symmetric, so `mobilenetv2_fwd` is a self-consistent *different* net and auditing it reports
+   a true-but-irrelevant failure.
+2. ⭐ **Presence is not enough for activations; the COUNT is the signal.** EfficientNet's reference
+   uses relu twice and swish everywhere else, so both sides "have swish" and a presence test calls
+   it clean. Only the relu *site count* (2 vs 0) sees it.
+
+⭐⭐ And the audit immediately corrected this doc: **enet's stem padding was already fixed** and
+re-run 2026-08-08 (`runs/enet_adam_80ep_xlapad_aug08.log`, **89.76%**) while the hand-kept ledger
+still called it open. That is the argument for the script over a list in a markdown file.
+
+▶ Remaining, and now both are one-liners against a known list rather than discoveries:
+`.convBn` needs an activation parameter (closes enet + mnv2), and the ResNet-family generator needs
+symmetric padding (closes r34 — the render is the paper-faithful side there, torchvision's
+`Conv2d(3,64,7,stride=2,padding=3)` / `MaxPool2d(3,2,padding=1)`).
+
+---
+
 ## 5. WHAT WOULD MAKE THIS NOT WORTH DOING
 
 * ~~The forward tie cannot be made to pass.~~ **Retired 2026-08-08** — it passes at 1.8e-6 modulo
