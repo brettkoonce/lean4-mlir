@@ -1854,58 +1854,63 @@ block-back faithfulness statement is stated through `Mat.flatten`/`Mat.unflatten
     `dotOut Wcls` is the dense head's input-VJP (`Mat.mulVec Wcls`), scattered by
     `clsPadF` into row 0 of a zero `[N+1,D]` (the CLS-slice's input-VJP). -/
 noncomputable def classifierBackGraph (N D nClasses : Nat)
-    (Wcls : Mat D nClasses) (dy : Vec nClasses) : SHlo ((N+1)*D) :=
-  .clsPadF (N := N) (.dotOut "%Wcls" Wcls (.operand "%dy" dy))
+    (Wcls : Mat D nClasses) (ecot : SHlo nClasses) : SHlo ((N+1)*D) :=
+  .clsPadF (N := N) (.dotOut "%Wcls" Wcls ecot)
 
 /-- **Classifier backward-graph faithfulness (Stage 1).** Denotes the proven
     `classifier_flat_has_vjp.backward` at any input `v` (dense + CLS-slice are
-    both linear, so the saved activation is irrelevant). -/
+    both linear, so the saved activation is irrelevant).
+
+    ⭐ Over a cotangent SUBGRAPH, like `patchEmbedBackGraph_faithful` at the other end of the
+    net — the head is the LAST layer of the forward and therefore the FIRST of the backward, so
+    this is the one place where a `Vec` cotangent was genuinely natural. Generalizing it anyway
+    is what lets the head be a `CertLayer` and the whole net be one `comp` chain. -/
 theorem classifierBackGraph_faithful (N D nClasses : Nat)
     (Wcls : Mat D nClasses) (bcls : Vec nClasses)
-    (v : Vec ((N + 1) * D)) (dy : Vec nClasses) :
-    den (classifierBackGraph N D nClasses Wcls dy)
-      = (classifier_flat_has_vjp N D nClasses Wcls bcls).backward v dy := by
+    (v : Vec ((N + 1) * D)) (ecot : SHlo nClasses) :
+    den (classifierBackGraph N D nClasses Wcls ecot)
+      = (classifier_flat_has_vjp N D nClasses Wcls bcls).backward v (den ecot) := by
   funext idx
-  -- LHS: clsPadFlat N D (Mat.mulVec Wcls dy)
-  show clsPadFlat N D (fun i => ∑ j, Wcls i j * dy j) idx = _
-  -- RHS: classifier_flat_has_vjp.backward = cls_slice.back v (dense.back _ dy)
-  --    = cls_slice_flat_has_vjp.backward v (Mat.mulVec Wcls dy)
-  show clsPadFlat N D (fun i => ∑ j, Wcls i j * dy j) idx
-      = (cls_slice_flat_has_vjp N D).backward v (Mat.mulVec Wcls dy) idx
+  -- LHS: clsPadFlat N D (Mat.mulVec Wcls (den ecot))
+  show clsPadFlat N D (fun i => ∑ j, Wcls i j * den ecot j) idx = _
+  -- RHS: classifier_flat_has_vjp.backward = cls_slice.back v (dense.back _ ·)
+  --    = cls_slice_flat_has_vjp.backward v (Mat.mulVec Wcls (den ecot))
+  show clsPadFlat N D (fun i => ∑ j, Wcls i j * den ecot j) idx
+      = (cls_slice_flat_has_vjp N D).backward v (Mat.mulVec Wcls (den ecot)) idx
   show (let p := finProdFinEquiv.symm idx
-        if p.1 = (0 : Fin (N + 1)) then (fun i => ∑ j, Wcls i j * dy j) p.2 else 0)
+        if p.1 = (0 : Fin (N + 1)) then (fun i => ∑ j, Wcls i j * den ecot j) p.2 else 0)
       = (let p := finProdFinEquiv.symm idx
-         if p.1 = (0 : Fin (N + 1)) then Mat.mulVec Wcls dy p.2 else 0)
+         if p.1 = (0 : Fin (N + 1)) then Mat.mulVec Wcls (den ecot) p.2 else 0)
   rfl
 
 -- ── Stage 2: Final vec-LN backward graph (over N+1 tokens) ──
 
 /-- The final (pre-head) vector-LN backward graph over `(N+1)` tokens. REUSES the
-    vec-LN LN-back fragment (`lnRowBack(γ=1) ∘ rowScaleF γF`) chained onto the
-    classifier back. The bias backward (identity) drops out; `X` is the saved
-    pre-LN input (the body output). -/
-noncomputable def finalLNBackGraph (N D nClasses : Nat) (ε : ℝ) (γF : Vec D)
-    (Wcls : Mat D nClasses)
-    (X : Vec ((N+1)*D)) (dy : Vec nClasses) : SHlo ((N+1)*D) :=
-  .lnRowBack "%gF" "%XF" "ε" ε 1 X
-    (.rowScaleF "%gFv" γF (classifierBackGraph N D nClasses Wcls dy))
+    vec-LN LN-back fragment (`lnRowBack(γ=1) ∘ rowScaleF γF`). The bias backward (identity)
+    drops out; `X` is the saved pre-LN input (the body output).
+
+    ⚠ **This used to bundle the classifier back inside it** — it took `dy : Vec nClasses` and
+    called `classifierBackGraph` itself, so the final LN and the head were one indivisible
+    thing. They are now separate graphs composed at the call site, which is what lets each be
+    its own `CertLayer`. Bundling two stages into one node is the same mistake as wrapping a
+    cotangent as an operand: it works exactly until something needs to sit between them. -/
+noncomputable def finalLNBackGraph (N D : Nat) (ε : ℝ) (γF : Vec D)
+    (X : Vec ((N+1)*D)) (ecot : SHlo ((N+1)*D)) : SHlo ((N+1)*D) :=
+  .lnRowBack "%gF" "%XF" "ε" ε 1 X (.rowScaleF "%gFv" γF ecot)
 
 /-- **Final vec-LN backward-graph faithfulness (Stage 2).** Denotes the bridged
-    per-token vec-LN VJP back of the classifier back, at the saved body output `X`. -/
-theorem finalLNBackGraph_faithful (N D nClasses : Nat) (ε : ℝ) (γF βF : Vec D) (hε : 0 < ε)
-    (Wcls : Mat D nClasses) (bcls : Vec nClasses)
-    (X : Mat (N+1) D) (dy : Vec nClasses) :
-    den (finalLNBackGraph N D nClasses ε γF Wcls (Mat.flatten X) dy)
+    per-token vec-LN VJP back of whatever cotangent subgraph it is fed, at the saved
+    body output `X`. -/
+theorem finalLNBackGraph_faithful (N D : Nat) (ε : ℝ) (γF βF : Vec D) (hε : 0 < ε)
+    (X : Mat (N+1) D) (ecot : SHlo ((N+1)*D)) :
+    den (finalLNBackGraph N D ε γF (Mat.flatten X) ecot)
       = Mat.flatten ((layerNormVec_per_token_has_vjp_mat (N+1) D ε γF βF hε).backward X
-          (Mat.unflatten
-            ((classifier_flat_has_vjp N D nClasses Wcls bcls).backward (Mat.flatten X) dy))) := by
+          (Mat.unflatten (den ecot))) := by
   simp only [finalLNBackGraph, lnRowBack_faithful, rowScaleF_faithful]
-  rw [classifierBackGraph_faithful N D nClasses Wcls bcls (Mat.flatten X) dy]
-  -- The classifier-back cotangent is a raw Vec; present it as `Mat.flatten (unflatten ·)`
-  -- so the vec-LN LN-back bridge (which expects a flattened Mat cotangent) applies.
-  -- Rewrite ONLY the LHS `rowScaleFlat`-fed cotangent (NOT the RHS's `Mat.unflatten`).
-  set cb : Vec ((N + 1) * D) :=
-    (classifier_flat_has_vjp N D nClasses Wcls bcls).backward (Mat.flatten X) dy with hcb
+  -- Present the incoming cotangent as `Mat.flatten (unflatten ·)` so the vec-LN LN-back
+  -- bridge (which expects a flattened Mat cotangent) applies. LHS only — the RHS already
+  -- carries its own `Mat.unflatten`.
+  set cb : Vec ((N + 1) * D) := den ecot with hcb
   conv_lhs => rw [show cb = Mat.flatten (Mat.unflatten cb) from (Mat.flatten_unflatten cb).symm]
   rw [rowVecLNBack_eq_backward (βv := βF) ε γF hε X (Mat.unflatten cb)]
 
@@ -2071,10 +2076,11 @@ noncomputable def vitNetBackGraph
     (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
     (γF : Vec ((hm1+1) * d)) (Wcls : Mat ((hm1+1) * d) nClasses)
     (embOut : Mat (N+1) ((hm1+1) * d)) (bodyOut : Mat (N+1) ((hm1+1) * d))
-    (dy : Vec nClasses) : SHlo (ic*H*W) :=
+    (ecot : SHlo nClasses) : SHlo (ic*H*W) :=
   patchEmbedBackGraph ic H W patchSize N ((hm1+1) * d) Wc
     (vitBodyBackGraphKMHV ε k ps embOut
-      (finalLNBackGraph N ((hm1+1) * d) nClasses ε γF Wcls (Mat.flatten bodyOut) dy))
+      (finalLNBackGraph N ((hm1+1) * d) ε γF (Mat.flatten bodyOut)
+        (classifierBackGraph N ((hm1+1) * d) nClasses Wcls ecot)))
 
 set_option maxHeartbeats 1000000 in
 /-- **Whole-net backward-graph faithfulness (capstone).** The reverse-composed
@@ -2093,16 +2099,17 @@ theorem vitNetBackGraph_faithful
     (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
     (γF βF : Vec ((hm1+1) * d))
     (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
-    (x : Vec (ic * H * W)) (dy : Vec nClasses) :
+    (x : Vec (ic * H * W)) (ecot : SHlo nClasses) :
     den (vitNetBackGraph ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
           (Mat.unflatten
             (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
           (Mat.unflatten
             (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps
               (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
-          dy)
+          ecot)
       = (vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
-          Wc bc cls pos ε hε ps γF βF Wcls bcls).backward x dy := by
+          Wc bc cls pos ε hε ps γF βF Wcls bcls).backward x (den ecot) := by
+  set dy : Vec nClasses := den ecot with hdy
   -- Abbreviate the forward stages exactly as `vitForwardKV_has_vjp`'s proof does.
   set PE := patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos with hPE
   set BODY := vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps with hBODY
@@ -2135,11 +2142,15 @@ theorem vitNetBackGraph_faithful
   -- finalLN graph's den = flatten of the vec-LN per-token back of the classifier back,
   -- at the saved body output bodyOut = unflatten (BODY (PE x)).
   have hLNgraph :
-      den (finalLNBackGraph N ((hm1+1) * d) nClasses ε γF Wcls
-            (Mat.flatten (Mat.unflatten (BODY (PE x)))) dy)
+      den (finalLNBackGraph N ((hm1+1) * d) ε γF
+            (Mat.flatten (Mat.unflatten (BODY (PE x))))
+            (classifierBackGraph N ((hm1+1) * d) nClasses Wcls ecot))
         = Mat.flatten (Mat.unflatten cClsf) := by
-    rw [finalLNBackGraph_faithful N ((hm1+1) * d) nClasses ε γF βF hε Wcls bcls
-          (Mat.unflatten (BODY (PE x))) dy]
+    rw [finalLNBackGraph_faithful N ((hm1+1) * d) ε γF βF hε
+          (Mat.unflatten (BODY (PE x)))
+          (classifierBackGraph N ((hm1+1) * d) nClasses Wcls ecot),
+      classifierBackGraph_faithful N ((hm1+1) * d) nClasses Wcls bcls
+          (LNF (BODY (PE x))) ecot]
     -- `unflatten cClsf = (lnVec).backward (unflatten (BODY (PE x))) (unflatten (classifier.back …))`:
     -- `cClsf = hasVJPMat_to_hasVJP.backward (BODY (PE x)) cc = flatten ((lnVec).backward (unflatten (BODY (PE x))) (unflatten cc))`
     -- (definitional), so `unflatten cClsf` cancels via `Mat.unflatten_flatten` (a LEMMA, not rfl).
@@ -2157,19 +2168,17 @@ theorem vitNetBackGraph_faithful
                 (LNF (BODY (PE x))) dy)))) = _
       rw [Mat.unflatten_flatten]
     rw [hcc]
-    -- Remaining: the two sides differ only in the classifier-back's saved activation
-    -- (`flatten (unflatten (BODY (PE x)))` vs `LNF (BODY (PE x))`). The classifier VJP
-    -- backward IGNORES its activation (`vjp_comp` of two activation-free linear backs),
-    -- so they are equal — close by the activation-independence equation.
-    have hclsf_indep : ∀ a b : Vec ((N + 1) * ((hm1+1) * d)),
-        (classifier_flat_has_vjp N ((hm1+1) * d) nClasses Wcls bcls).backward a dy
-          = (classifier_flat_has_vjp N ((hm1+1) * d) nClasses Wcls bcls).backward b dy :=
-      fun _ _ => rfl
-    rw [hclsf_indep (Mat.flatten (Mat.unflatten (BODY (PE x)))) (LNF (BODY (PE x)))]
+    -- ⭐ An `hclsf_indep` step used to live here — the classifier VJP ignores its saved
+    -- activation, so the two legs (`flatten (unflatten (BODY (PE x)))` vs `LNF (BODY (PE x))`)
+    -- had to be reconciled. It existed ONLY because `finalLNBackGraph` bundled the classifier
+    -- and therefore hard-coded which activation the head was differentiated at. Splitting the
+    -- two stages lets `classifierBackGraph_faithful` be instantiated at the right activation
+    -- directly, and the step disappears. **Un-bundling made the proof shorter, not longer.**
   -- Feed hLNgraph to the tower den (Stage 3), at embOut = unflatten (PE x).
   rw [vitBodyBackGraphKMHV_den ε hε k ps (Mat.unflatten (PE x))
-        (finalLNBackGraph N ((hm1+1) * d) nClasses ε γF Wcls
-          (Mat.flatten (Mat.unflatten (BODY (PE x)))) dy)
+        (finalLNBackGraph N ((hm1+1) * d) ε γF
+          (Mat.flatten (Mat.unflatten (BODY (PE x))))
+          (classifierBackGraph N ((hm1+1) * d) nClasses Wcls ecot))
         (Mat.unflatten cClsf) hLNgraph]
   -- tower den RHS = tail.backward (flatten (unflatten (PE x))) (flatten (unflatten cClsf));
   -- round-trips cancel to BODY.backward (PE x) cClsf.

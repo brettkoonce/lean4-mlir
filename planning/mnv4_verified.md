@@ -1621,7 +1621,8 @@ comparing like with like.
 ## 8g. ✅ ViT IS FOLDED (2026-08-10) — and it was never the net that was behind
 
 `Foundation/ViTBackNet.lean`. 3-axiom clean, zero `sorry`, `lake build Certs` green (3919 jobs),
-in `tests/AuditAxioms.lean`. **All seven nets are now on `CertLayer`.**
+in `tests/AuditAxioms.lean`. **All seven nets are now on `CertLayer`, and ViT's fold is the only
+one that runs image → logits** (stem + trunk + final LN + head — see the stem/head section below).
 
 ### ⛔⛔ THE LEDGER WAS WRONG ABOUT WHICH NET WAS SHORT, AND IT WAS WRONG IN OUR FAVOUR
 
@@ -1719,13 +1720,40 @@ Result: **31 batched certified forwards, 30 tied, 1 hole — `efficientnetForwar
    §4c(a)'s false-green mechanism running live: *a sweep tuned until it passes is measuring the
    tuner.* The fix was to stop tuning and mark the cohort uncalibrated.
 
+### ✅ …AND THE STEM AND HEAD ARE FOLDED TOO — the first IMAGE → LOGITS fold in the repo
+
+`vitPatchEmbedLayer` / `vitFinalLNLayer` / `vitClassifierLayer`, and `vitNetLayer` =
+`stem ∘ trunk ∘ finalLN ∘ head` by `comp` alone. **No other net's fold leaves the trunk**:
+r50/r34's stems are blocked on a den-level faithfulness gap for the batched `maxPool3s2BackB`
+graph (§8b) and their heads are unbuilt. ViT has neither obstacle — an affine patchify conv and a
+CLS-slice-plus-dense are **linear**, so both backward graphs are activation-independent, which is
+literally what their `graph := fun _ e => …` records.
+
+⭐⭐⭐ `vitNetBackGraph_faithful_via_fold` then **derives §8's whole-net capstone** from
+`CertLayer.faithful` — and closes it against the *shipped* `vitForwardKV_has_vjp`, not merely
+some VJP of the same map.
+⚠ That last step does **not** go through `hasVJPAt_backward_det`: the fold's VJP is a
+`vjp_comp_at` chain and the shipped one a `vjp_comp` chain, so the two witnesses sit at
+syntactically different `f`s and transporting one along the forward equality lands in the wrong
+type. It goes through the two `correct` fields instead — both backwards are the same `pdiv`
+contraction, and the contractions agree because the forwards do. **Uniqueness-of-VJP is the tool
+here, not rewriting.**
+
+⭐ **Un-bundling made the proof SHORTER.** `finalLNBackGraph` used to call `classifierBackGraph`
+itself, which hard-coded the activation the head was differentiated at and forced an
+`hclsf_indep` step in `vitNetBackGraph_faithful` to reconcile the two legs. Splitting them lets
+the head's faithfulness be instantiated at the right activation directly and that step
+**disappears**. ▶ Bundling two stages into one graph node is the same mistake as wrapping a
+cotangent as an operand: it works right up until something needs to sit between them.
+
+✅ **A third negative control, and it also typechecks**: differentiating the final LN at its
+**output** instead of its input. LN is an endomorphism so the types are identical; the proof
+fails at both `vitFinalLNLayer` and `vitNetLayer_graph`. ⚠ This is the injection the stem and head
+are *immune* to — their graphs legitimately ignore the activation — which is why the LN is where
+the control has to be aimed.
+
 ### ▶ WHAT ViT STILL OWES
 
-* **The stem and head as `CertLayer`s.** `vitNetBackGraph_faithful` already covers them by hand,
-  so this is the same "derive the bespoke proof from the generic one" move applied one level up —
-  and it would make ViT the first net whose *fold* runs image → logits. Blocked only by
-  `classifierBackGraph` still taking `dy : Vec nClasses`, and by `finalLNBackGraph` bundling the
-  classifier rather than composing with it.
 * ⛔ **Not tied to the committed artifact.** Same status as every other net's fold: a certified
   composition, not a proof that `verified_mlir/vit_train_step.mlir` IS this graph.
 * ⚠ **The other five nets' folds are not in `AuditAxioms`** — that file imports their *block*

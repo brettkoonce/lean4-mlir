@@ -44,6 +44,21 @@ constant. The two sublayers now compose as subgraphs, and so do successive block
 attention arm, not between blocks, so it does not block composition — but it is the next thing to
 generalize if the graphs are ever to be emitted rather than only denoted.
 
+## ⭐⭐ AND THE FOLD RUNS IMAGE → LOGITS — the first one in the repo that does
+
+`r50Trunk_3463` / `r34Trunk_3463` cover the four bottleneck stages and stop. §8b records why: the
+R50 stem is blocked on a **proof** gap (no den-level faithfulness for the batched `maxPool3s2BackB`
+graph — a pool is kinked wherever a window ties), and the head is simply unbuilt. ViT has neither
+obstacle, because its stem is an affine patchify conv and its head is a CLS slice plus a dense —
+both linear, so both backward graphs are activation-independent.
+
+So `vitNetLayer = stem ∘ trunk ∘ finalLN ∘ head` is one `CertLayer`, assembled by `comp` alone,
+and `vitNetBackGraph_faithful_via_fold` re-derives `ViTBackB0`'s whole-net capstone from it —
+including that the fold's VJP **is** the shipped `vitForwardKV_has_vjp`, not merely another VJP of
+the same map. ⚠ That last step does not go through `hasVJPAt_backward_det` (the two witnesses live
+at syntactically different `f`s and transport lands in the wrong type); it goes through the
+`correct` fields, since both backwards are the same `pdiv` contraction.
+
 ## The tier: `ok = True`, and that is the STRONGER certificate
 
 GELU and LayerNorm are smooth everywhere, so a ViT block has a **global** `HasVJPMat`, lifted
@@ -183,6 +198,201 @@ theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
       (v : Vec (Np1 * ((hm1+1) * d))), (vitTrunkV (Np1 := Np1) ε hε k ps).ok v
   | 0, _, _ => trivial
   | k + 1, ps, _v => ⟨trivial, vitTrunkV_ok ε hε k (fun i => ps i.succ) _⟩
+
+-- ════════════════════════════════════════════════════════════════
+-- § ⭐⭐ THE STEM AND THE HEAD — so the fold runs IMAGE → LOGITS
+-- ════════════════════════════════════════════════════════════════
+
+/-! No other net has this. `r50Trunk_3463` / `r34Trunk_3463` cover the four bottleneck stages
+and stop: §8b records the stem as blocked on a **proof** gap (no den-level faithfulness for the
+batched `maxPool3s2BackB` graph — a pool is kinked wherever a window ties), and the head is
+simply unbuilt. ViT has neither obstacle: its stem is an affine patchify conv and its head is
+GAP-free (a CLS slice + dense), so both are linear and their backward graphs are
+activation-independent. -/
+
+/-- **The patch-embedding stem as a `CertLayer`.** ⭐ Its `graph` ignores the saved activation
+    entirely — patchEmbed is affine, so the input-VJP is the same linear map everywhere. That is
+    exactly why ViT's stem is free where R50's is blocked on a maxpool. -/
+noncomputable def vitPatchEmbedLayer (ic H W patchSize N D : Nat)
+    (Wc : Kernel4 D ic patchSize patchSize) (bc cls : Vec D) (pos : Mat (N + 1) D) :
+    CertLayer (ic * H * W) ((N + 1) * D) where
+  fwd := patchEmbed_flat ic H W patchSize N D Wc bc cls pos
+  ok := fun _ => True
+  diff := fun x _ => (patchEmbed_flat_diff ic H W patchSize N D Wc bc cls pos) x
+  vjp := fun x _ => (patchEmbed_flat_has_vjp ic H W patchSize N D Wc bc cls pos).toHasVJPAt x
+  graph := fun _ e => patchEmbedBackGraph ic H W patchSize N D Wc e
+  faithful := fun x _ e =>
+    patchEmbedBackGraph_faithful ic H W patchSize N D Wc bc cls pos x e
+
+/-- **The final (pre-head) vector-LN as a `CertLayer`.** Smooth, so `ok = True`. -/
+noncomputable def vitFinalLNLayer (N D : Nat) (ε : ℝ) (γF βF : Vec D) (hε : 0 < ε) :
+    CertLayer ((N + 1) * D) ((N + 1) * D) where
+  fwd := fun v => Mat.flatten (fun n => layerNormVec D ε γF βF ((Mat.unflatten v) n))
+  ok := fun _ => True
+  diff := fun x _ => (layerNormVec_per_token_flat_diff (N + 1) D ε γF βF hε) x
+  vjp := fun x _ =>
+    (hasVJPMat_to_hasVJP (layerNormVec_per_token_has_vjp_mat (N + 1) D ε γF βF hε)).toHasVJPAt x
+  graph := fun v e => finalLNBackGraph N D ε γF v e
+  faithful := by
+    intro v _ e
+    have h := finalLNBackGraph_faithful N D ε γF βF hε (Mat.unflatten v) e
+    rw [Mat.flatten_unflatten] at h
+    exact h
+
+/-- **The classifier head as a `CertLayer`** — CLS-slice then dense, both linear, so the graph
+    ignores its activation for the same reason the stem's does. -/
+noncomputable def vitClassifierLayer (N D nClasses : Nat)
+    (Wcls : Mat D nClasses) (bcls : Vec nClasses) :
+    CertLayer ((N + 1) * D) nClasses where
+  fwd := classifier_flat N D nClasses Wcls bcls
+  ok := fun _ => True
+  diff := fun x _ => (classifier_flat_diff N D nClasses Wcls bcls) x
+  vjp := fun x _ => (classifier_flat_has_vjp N D nClasses Wcls bcls).toHasVJPAt x
+  graph := fun _ e => classifierBackGraph N D nClasses Wcls e
+  faithful := fun v _ e => classifierBackGraph_faithful N D nClasses Wcls bcls v e
+
+/-- ⭐⭐ **THE WHOLE NET AS ONE `CertLayer`** — stem, depth-`k` trunk, final LN, head, composed
+    by `comp` alone. Image in, logits out, and the backward graph and its faithfulness come with
+    it. **The first net in the repo whose fold is the entire network.** -/
+noncomputable def vitNetLayer (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
+    (ε : ℝ) (hε : 0 < ε)
+    (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
+    (pos : Mat (N + 1) ((hm1+1) * d))
+    (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
+    (γF βF : Vec ((hm1+1) * d))
+    (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses) :
+    CertLayer (ic * H * W) nClasses :=
+  (vitPatchEmbedLayer ic H W patchSize N ((hm1+1) * d) Wc bc cls pos).comp
+    ((vitTrunkV (Np1 := N + 1) ε hε k ps).comp
+      ((vitFinalLNLayer N ((hm1+1) * d) ε γF βF hε).comp
+        (vitClassifierLayer N ((hm1+1) * d) nClasses Wcls bcls)))
+
+/-- The whole-net layer's forward **is** the shipped `vitForwardKV`. -/
+theorem vitNetLayer_fwd (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
+    (ε : ℝ) (hε : 0 < ε)
+    (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
+    (pos : Mat (N + 1) ((hm1+1) * d))
+    (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
+    (γF βF : Vec ((hm1+1) * d))
+    (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
+    (x : Vec (ic * H * W)) :
+    (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+        Wc bc cls pos ps γF βF Wcls bcls).fwd x
+      = vitForwardKV ic H W patchSize N mlpDim (hm1+1) d nClasses k
+          Wc bc cls pos ε ps γF βF Wcls bcls x := by
+  show (vitClassifierLayer N ((hm1+1) * d) nClasses Wcls bcls).fwd
+        ((vitFinalLNLayer N ((hm1+1) * d) ε γF βF hε).fwd
+          ((vitTrunkV (Np1 := N + 1) ε hε k ps).fwd
+            (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))) = _
+  rw [vitTrunkV_fwd ε hε k ps (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)]
+  rfl
+
+/-- ⭐⭐ **The whole-net chain's backward graph IS `vitNetBackGraph`.** The stem/trunk/LN/head
+    version of `vitTrunkV_graph`: `ViTBackB0`'s hand-composed whole-net graph is what
+    `CertLayer.comp` produces, so `vitNetBackGraph_faithful` is a consequence of the shared
+    combinator rather than a parallel result. The saved activations `comp` threads
+    automatically are exactly the ones that theorem pins by hand. -/
+theorem vitNetLayer_graph (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
+    (ε : ℝ) (hε : 0 < ε)
+    (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
+    (pos : Mat (N + 1) ((hm1+1) * d))
+    (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
+    (γF βF : Vec ((hm1+1) * d))
+    (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
+    (x : Vec (ic * H * W)) (e : SHlo nClasses) :
+    (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+        Wc bc cls pos ps γF βF Wcls bcls).graph x e
+      = vitNetBackGraph ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
+          (Mat.unflatten (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
+          (Mat.unflatten
+            (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps
+              (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
+          e := by
+  set PE := patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x with hPE
+  show patchEmbedBackGraph ic H W patchSize N ((hm1+1) * d) Wc
+        ((vitTrunkV (Np1 := N + 1) ε hε k ps).graph PE
+          (finalLNBackGraph N ((hm1+1) * d) ε γF
+            ((vitTrunkV (Np1 := N + 1) ε hε k ps).fwd PE)
+            (classifierBackGraph N ((hm1+1) * d) nClasses Wcls e))) = _
+  rw [vitTrunkV_fwd ε hε k ps PE]
+  -- The trunk's graph is stated at a FLATTENED saved activation; `PE` is a raw `Vec`, so
+  -- present it as `flatten (unflatten ·)` — the same round-trip `vitTrunkV_graph` consumes.
+  conv_lhs => rw [show PE = Mat.flatten (Mat.unflatten PE) from (Mat.flatten_unflatten PE).symm]
+  rw [vitTrunkV_graph ε hε k ps (Mat.unflatten PE)]
+  show _ = patchEmbedBackGraph ic H W patchSize N ((hm1+1) * d) Wc
+        (vitBodyBackGraphKMHV ε k ps (Mat.unflatten PE)
+          (finalLNBackGraph N ((hm1+1) * d) ε γF
+            (Mat.flatten (Mat.unflatten
+              (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps PE)))
+            (classifierBackGraph N ((hm1+1) * d) nClasses Wcls e)))
+  -- ⚠ Both sides carry a `flatten ∘ unflatten` on the body output — the LHS's arrived from the
+  -- `conv_lhs` round-trip above, the RHS's from `vitNetBackGraph`'s own `Mat.flatten bodyOut`.
+  -- A bare `rw` cancels only the first and leaves the goal looking mismatched; cancel both.
+  simp only [Mat.flatten_unflatten]
+
+/-- The whole net is certified at **every** input — `ok = True` end to end, because every stage
+    is smooth (affine stem, GELU/LN blocks, LN, affine head). No side condition anywhere. -/
+theorem vitNetLayer_ok (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
+    (ε : ℝ) (hε : 0 < ε)
+    (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
+    (pos : Mat (N + 1) ((hm1+1) * d))
+    (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
+    (γF βF : Vec ((hm1+1) * d))
+    (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
+    (x : Vec (ic * H * W)) :
+    (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+      Wc bc cls pos ps γF βF Wcls bcls).ok x :=
+  ⟨trivial, vitTrunkV_ok ε hε k ps _, trivial, trivial⟩
+
+/-- ⭐⭐⭐ **`vitNetBackGraph_faithful`, DERIVED.** ViTBackB0 proves that statement directly, by
+    unfolding three `vjp_comp` backward rules and bridging Vec↔Mat by hand at each seam. Here it
+    falls out of `CertLayer.faithful` at `vitNetLayer` plus `vitNetLayer_graph` — the composition
+    argument is `comp`'s, proven once for all seven nets, and the only ViT-specific input is the
+    forward equality.
+
+    So the whole-net capstone is now available two ways, and the generic one carries no ViT
+    reasoning at all. -/
+theorem vitNetBackGraph_faithful_via_fold
+    (ic H W patchSize N mlpDim hm1 d nClasses k : Nat) (ε : ℝ) (hε : 0 < ε)
+    (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
+    (pos : Mat (N + 1) ((hm1+1) * d))
+    (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
+    (γF βF : Vec ((hm1+1) * d))
+    (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
+    (x : Vec (ic * H * W)) (e : SHlo nClasses) :
+    den (vitNetBackGraph ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
+          (Mat.unflatten (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
+          (Mat.unflatten
+            (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps
+              (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
+          e)
+      = (vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
+          Wc bc cls pos ε hε ps γF βF Wcls bcls).backward x (den e) := by
+  rw [← vitNetLayer_graph ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+        Wc bc cls pos ps γF βF Wcls bcls x e,
+    (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+        Wc bc cls pos ps γF βF Wcls bcls).faithful x
+      (vitNetLayer_ok ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+        Wc bc cls pos ps γF βF Wcls bcls x) e]
+  -- ⚠ The fold's VJP is a `vjp_comp_at` chain; the shipped one is a `vjp_comp` chain. Different
+  -- TERMS for the same map, so `hasVJPAt_backward_det` cannot be applied directly (its two
+  -- witnesses must be at a syntactically shared `f`), and transporting one along `hfe` lands in
+  -- the wrong type. Go through what makes both of them VJPs instead: each `correct` field says
+  -- the backward IS the `pdiv` contraction, and the two `pdiv`s agree because the forwards do.
+  have hfe : (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+        Wc bc cls pos ps γF βF Wcls bcls).fwd
+      = vitForwardKV ic H W patchSize N mlpDim (hm1+1) d nClasses k
+          Wc bc cls pos ε ps γF βF Wcls bcls :=
+    funext (vitNetLayer_fwd ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+      Wc bc cls pos ps γF βF Wcls bcls)
+  funext i
+  rw [((vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+        Wc bc cls pos ps γF βF Wcls bcls).vjp x
+      (vitNetLayer_ok ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+        Wc bc cls pos ps γF βF Wcls bcls x)).correct (den e) i,
+    (vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
+      Wc bc cls pos ε hε ps γF βF Wcls bcls).correct x (den e) i,
+    hfe]
 
 -- ════════════════════════════════════════════════════════════════
 -- § ViT-Tiny's depth, as a check rather than prose

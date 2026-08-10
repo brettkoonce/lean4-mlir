@@ -3116,6 +3116,29 @@ open Proofs
 #print axioms StableHLO.vitTrunkV_graph
 #print axioms StableHLO.vitTrunkV_faithful
 #print axioms StableHLO.vitTinyTrunk_is_shipped
+
+-- ⭐⭐ THE WHOLE NET AS ONE `CertLayer` — stem (patchify conv), depth-k trunk, final vec-LN and
+-- head, composed by `comp` alone. The first fold in the repo that runs IMAGE → LOGITS: r50/r34's
+-- trunks cover the bottleneck stages only, their stems blocked on a den-level faithfulness gap
+-- for the batched maxPool3s2 backward graph (§8b) and their heads unbuilt. ViT has neither
+-- obstacle — its stem is an affine patchify conv and its head a CLS slice + dense, so both
+-- backward graphs are activation-independent, which is exactly what `vitPatchEmbedLayer`'s and
+-- `vitClassifierLayer`'s `graph := fun _ e => …` records.
+-- ⭐⭐⭐ vitNetBackGraph_faithful_via_fold DERIVES the whole-net capstone printed above from
+-- `CertLayer.faithful` + vitNetLayer_graph, and closes it against the SHIPPED whole-net VJP
+-- (`vitForwardKV_has_vjp`) rather than merely some VJP of the same map — via the two `correct`
+-- fields, since the fold's `vjp_comp_at` chain and the shipped `vjp_comp` chain are different
+-- terms and transport lands in the wrong type.
+-- Verified to FAIL on a third typechecking injection: differentiating the final LN at its OUTPUT
+-- instead of its input (LN is an endomorphism, so the types are identical) breaks both
+-- vitFinalLNLayer's faithfulness and vitNetLayer_graph.
+#print axioms StableHLO.vitPatchEmbedLayer
+#print axioms StableHLO.vitFinalLNLayer
+#print axioms StableHLO.vitClassifierLayer
+#print axioms StableHLO.vitNetLayer_fwd
+#print axioms StableHLO.vitNetLayer_graph
+#print axioms StableHLO.vitNetLayer_ok
+#print axioms StableHLO.vitNetBackGraph_faithful_via_fold
 -- ViT-Tiny §1 FOLD (ViTFaithfulPoC) — each emitted param-SGD op `den` = the certified loss-descent
 -- step, for every parameter family of the depth-12 ViT-Tiny train step. veclnGammaSgd (vector-[D] LN
 -- γ, the Σ_tokens dy·x̂ reduce) → vit_render_veclngamma_certified; rowDenseWeightSgd/rowDenseBiasSgd
