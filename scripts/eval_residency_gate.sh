@@ -43,7 +43,7 @@ mkdir -p "$OUT"
 
 BINS=("$@")
 if [ ${#BINS[@]} -eq 0 ]; then
-  BINS=(mnist-linear-verified-xla mnist-mlp-verified-xla mnist-cnn-verified-xla)
+  BINS=(mnist-linear-verified mnist-mlp-verified-xla mnist-cnn-verified-xla)
 fi
 
 [ -f scripts/det_shim.sh ] || { echo "run from the repo root"; exit 2; }

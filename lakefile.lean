@@ -1144,13 +1144,6 @@ lean_exe «mnist-linear-train» where
 -- Trains MNIST-linear on the VERIFIED-rendered StableHLO
 -- (`verified_mlir/`, = Proofs.StableHLO.linearTrainStepModuleV) through the
 -- real Lean/IREE FFI. See MainMnistLinearVerified.lean.
-/-- Shared body of the verified linear trainer, imported by BOTH the IREE and
-    XLA executables so their config cannot drift (which would invalidate the G2
-    comparison). Needs its own lib target: `apps/` modules are otherwise only
-    reachable as executable roots, and an import of one would not get built. -/
-lean_lib «LinearVerifiedCommon» where
-  srcDir := "."
-  roots := #[`apps.mnist.LinearVerifiedCommon]
 
 lean_exe «mnist-linear-verified» where
   root := `apps.mnist.MainMnistLinearVerified
@@ -1171,12 +1164,10 @@ private def xlaLink : Array String :=
   #["-L", "./ffi", "-lpjrt_ffi", "-ldl", "-Wl,-rpath,./ffi",
     "-Wl,--allow-shlib-undefined"]
 
-/-- Rung 0 of the XLA ladder: the Chapter-2 linear classifier, trained on the
-    verified-rendered StableHLO through XLA instead of IREE. Compare against
-    `mnist-linear-verified` (gate G2 — same params, not just same forward). -/
-lean_exe «mnist-linear-verified-xla» where
-  root := `apps.mnist.MainMnistLinearVerifiedXla
-  moreLinkArgs := xlaLink
+-- Rung 0 of the XLA ladder is now a RUN-TIME choice, not a second executable:
+-- `mnist-linear-verified` serves both lowerers via $LEAN_MLIR_LOWERER, so its
+-- `-xla` peer and their shared-body file are both gone. G2 is now the SAME
+-- binary run twice, which is a stronger comparison than two binaries.
 
 -- Phase-3 PGD adversarial attack on the verified linear net (planning/robustness.md):
 -- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
@@ -2822,10 +2813,17 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
   -- The IREE trainers shell out to `iree-compile`; put the project venv on PATH so
   -- `lake run` works without pre-activating it (the usual one-click footgun).
   let venvBin := (← IO.currentDir) / ".venv" / "bin"
+  -- Name the lowerer explicitly for BOTH groups. Migrated binaries (those on
+  -- `lowererLink`) pick their backend from this at run time and DEFAULT to XLA,
+  -- so without it `lake run *-iree` would silently run XLA the moment a target
+  -- migrates. Un-migrated binaries ignore it — their backend is still the link
+  -- line — so this is correct during the transition and after it.
+  let lowerer := if xla then "xla" else "iree"
   let runEnv ← do
     if ← System.FilePath.pathExists (venvBin / "iree-compile") then
-      pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
-    else pure #[]
+      pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}"),
+             ("LEAN_MLIR_LOWERER", some lowerer)]
+    else pure #[("LEAN_MLIR_LOWERER", some lowerer)]
   for n in names do
     IO.println s!"\n━━━ {n}: build ━━━"
     let bp ← IO.Process.spawn { cmd := "lake", args := #["build", n] }
@@ -2890,7 +2888,7 @@ script «imagenette-iree» do
 /-- `lake run mnist` — the XLA peers of `lake run mnist-iree`, and an EXACT mirror:
     all three verified MNIST demos (linear/MLP/CNN) have a `-xla` target. -/
 script mnist do
-  runDemoGroup ["mnist-linear-verified-xla", "mnist-mlp-verified-xla",
+  runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified-xla",
                 "mnist-cnn-verified-xla"] (xla := true)
 
 /-- `lake run cifar` — the XLA peers of `lake run cifar-iree`, and an EXACT mirror since
@@ -3137,7 +3135,7 @@ structure BenchItem where
     are the affected pair. Treat them as ±6%, not as exact. -/
 def benchTable : List BenchItem :=
   [ { chapter := "1  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist",
-      refSecCuda := some 3, probeXla := "mnist-linear-verified-xla", epochs := 12 },      -- IREE 535ms × 12   | XLA 239ms × 12
+      refSecCuda := some 3, probeXla := "mnist-linear-verified", epochs := 12 },      -- IREE 535ms × 12   | XLA 239ms × 12
     { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist",
       refSecCuda := some 11, probeXla := "mnist-mlp-verified-xla", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
