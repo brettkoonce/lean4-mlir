@@ -169,7 +169,6 @@ before accumulation existed; its gradient is certified by `lake build r50-gradch
 
   let mkRun (v : String) : IO (ByteArray → IO ByteArray) := do
     let sess ← mkSession s!"verified_mlir/{net.slug}_{v}_train_step.mlir"
-                         s!".lake/build/r50_accum_tie_{v}.vmfb"
     pure (fun buf => IreeSession.mlpTrainStepV sess s!"m.{net.slug}_{v}_train_step" x buf
             (if v == variant then accShapes else admShapes) y
             bs.toUSize net.d0.toUSize net.nClasses.toUSize)

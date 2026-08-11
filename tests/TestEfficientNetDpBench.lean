@@ -132,11 +132,11 @@ backend {← IreeSession.backendName}"
 
   IO.println "  compiling A (1 replica)…"; (← IO.getStdout).flush
   let ca0 ← IO.monoMsNow
-  let sessA ← mkSession pathA ".lake/build/enet_dp_bench_a.vmfb"
+  let sessA ← mkSession pathA
   let compA := (← IO.monoMsNow) - ca0
   IO.println s!"  compiling B ({repB} replica(s))…"; (← IO.getStdout).flush
   let cb0 ← IO.monoMsNow
-  let sessB ← mkSession pathB ".lake/build/enet_dp_bench_b.vmfb"
+  let sessB ← mkSession pathB
   let compB := (← IO.monoMsNow) - cb0
   IO.println s!"  compile: A {compA} ms, B {compB} ms"
 

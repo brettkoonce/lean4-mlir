@@ -162,7 +162,7 @@ private def ablateMode (net : VerifiedNet) (ckpt : String) : IO Unit := do
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
   for p in [vmfb, s!".lake/build/conv_bias_ablate_{target}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  let sess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir" vmfb
+  let sess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
   let run (p : ByteArray) : IO ByteArray :=
     IreeSession.forwardF32 sess s!"m.{net.slug}_fwd" p net.shapesBA x xsh
       bs.toUSize net.nClasses.toUSize
@@ -261,7 +261,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     for q in [vmfb, s!".lake/build/cbz_tie_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists q then IO.FS.removeFile q
-    let sess ← mkSession path vmfb
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess s!"m.{net.slug}_adam_train_step" x buf shp y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oA ← run ref "a" bufA shpA
@@ -402,7 +402,7 @@ Run it against the pre-swap layout (the point is to compare the two).")
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     for q in [vmfb, s!".lake/build/cbz_fwd_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists q then IO.FS.removeFile q
-    let sess ← mkSession path vmfb
+    let sess ← mkSession path
     IreeSession.forwardF32 sess s!"m.{fn}" buf shp x xsh bs.toUSize net.nClasses.toUSize
   let la ← run ref "a" bufA shpA
   let lb ← run candidate "b" bufB shpB
@@ -479,7 +479,7 @@ backend {← IreeSession.backendName}"
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
   for p in [vmfb, s!".lake/build/conv_bias_zero_{target}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  let sess ← mkSession path vmfb
+  let sess ← mkSession path
   IO.println "  running one step…"; (← IO.getStdout).flush
   let out ← IreeSession.mlpTrainStepV sess "m.resnet34_adam_train_step" x pbuf shapes y
     bs.toUSize net.d0.toUSize net.nClasses.toUSize

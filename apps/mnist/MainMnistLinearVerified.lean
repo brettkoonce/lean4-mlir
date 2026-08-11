@@ -4,8 +4,9 @@ import LeanMlir.VerifiedNets
 
 Trains the Chapter-1 linear classifier on the StableHLO that the **verified
 renderer** emits — `verified_mlir/linear_train_step.mlir`, which is
-`Proofs.StableHLO.linearTrainStepModuleV` = `pretty (emit g)`, the text whose
-denotation is machine-proven equal to the Mathlib `fderiv` math
+`Proofs.StableHLO.linTrainStepFaithfulV` = `pretty` of proven `SHlo` nodes
+throughout, the text whose denotation is machine-proven equal to the Mathlib
+`fderiv` math
 (`LeanMlir/Proofs/Codegen/StableHLO.lean`, audited 3-axiom-clean). The forward,
 softmax-CE cotangent, parameter gradients, and SGD update are all the
 proof-backed ops.

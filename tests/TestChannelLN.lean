@@ -261,7 +261,7 @@ private def benchMode : IO Unit := do
       let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
       for p in [vmfb, s!".lake/build/chln_bench_{C'}_{tag}_{target}.vmfb"] do
         if ← System.FilePath.pathExists p then IO.FS.removeFile p
-      let sess ← mkSession path vmfb
+      let sess ← mkSession path
       let params := if routeA then F32.concat #[g, bt] else F32.concat #[g0, bt0]
       let shapes := if routeA then packShapes #[#[C'], #[C']] else packShapes #[#[], #[]]
       -- ⚠ `IO.monoMsNow` is INTEGER milliseconds, and one invoke of the small stages lands at
@@ -307,7 +307,7 @@ def main (args : List String) : IO Unit := do
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     for p in [vmfb, s!".lake/build/chln_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession path vmfb
+    let sess ← mkSession path
     IreeSession.forwardF32 sess s!"m.{fn}" params shapes x (packXShape #[BS, C*S])
       BS.toUSize (C*S).toUSize
   -- gate 1+2: the chain compiles, and it computes the closed form
@@ -339,7 +339,7 @@ either way gate 2 means nothing.")
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     for p in [vmfb, s!".lake/build/chln_b{which}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession path vmfb
+    let sess ← mkSession path
     -- `%x` rides the x slot; `%g` and `%dy` ride the packed params, in signature order.
     IreeSession.forwardF32 sess s!"m.chln_{which}" (F32.concat #[g, dy])
       (packShapes #[#[C], #[BS, C*S]]) x (packXShape #[BS, C*S])

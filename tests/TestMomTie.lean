@@ -82,7 +82,7 @@ backend {← IreeSession.backendName}"
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     for p in [vmfb, s!".lake/build/mom_tie_{variant}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession s!"verified_mlir/{slug}_{variant}_train_step.mlir" vmfb
+    let sess ← mkSession s!"verified_mlir/{slug}_{variant}_train_step.mlir"
     IreeSession.mlpTrainStepV sess s!"m.{slug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 

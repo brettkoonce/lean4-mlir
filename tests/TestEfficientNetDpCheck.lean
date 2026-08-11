@@ -121,7 +121,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   let y2 := (Array.replicate replicas y1).foldl (· ++ ·) ByteArray.empty
 
   IO.println "  running single-device…"; (← IO.getStdout).flush
-  let s1 ← mkSession sgPath ".lake/build/enet_dp_a.vmfb"
+  let s1 ← mkSession sgPath
   let o1 ← IreeSession.mlpTrainStepV s1 s!"m.{net.slug}_{vSg}_train_step" x1 pbuf shapes y1
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
@@ -130,7 +130,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   for p in [".lake/build/enet_dp_b.vmfb",
             s!".lake/build/enet_dp_b_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  let s2 ← mkSession dpPath ".lake/build/enet_dp_b.vmfb"
+  let s2 ← mkSession dpPath
   let o2 ← IreeSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" x2 pbuf shapes y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 

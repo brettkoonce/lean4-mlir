@@ -112,7 +112,7 @@ backend {← IreeSession.backendName}"
     y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
 
   let runOne (path tag : String) : IO ByteArray := do
-    let sess ← mkSession path s!".lake/build/sgd_tie_{slug}_{tag}.vmfb"
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess s!"m.{slug}_train_step" x θ shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 

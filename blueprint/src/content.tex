@@ -1430,12 +1430,9 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
   let d0 := net.d0
   let d1 := net.nClasses
 
-    -- 1. One session per committed render. The second path is a legacy
-  --    artifact-cache slot that XLA does not use.
+      -- 1. One session per committed render
   let tsSess  <- mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
-                           s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdSess <- mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
-                           s!".lake/build/{net.slug}_fwd_v.vmfb"
 
   -- 2. Data, then zero-initialised parameters
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) <-
@@ -1466,13 +1463,11 @@ Walking through the numbered sections:
 \textbf{1. Sessions.} \texttt{mkSession} takes the path to a committed
 \texttt{.mlir}, hands it to the shim, and gets back something callable.
 XLA compiles the StableHLO in process, which is the 782\,ms the run
-reported, and the second argument is a legacy artifact-cache slot it does
-not use.
+reported.
 
-Two names in this listing are historical residue rather than description.
-The session type is called \texttt{IreeSession} and the cache slot ends
-in \texttt{.vmfb}, both from an earlier backend. They are on the list to
-rename. What the code opens is the XLA shim.
+One name in this listing is historical residue rather than description.
+The session type is called \texttt{IreeSession}, from an earlier backend,
+and it is on the list to rename. What the code opens is the XLA shim.
 
 \textbf{2. Data and initialisation.} \texttt{loadData} mmaps the on-disk
 binaries into \texttt{F32Array} buffers. \texttt{trainImg} holds

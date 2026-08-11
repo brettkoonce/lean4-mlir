@@ -105,7 +105,7 @@ mean over B·K = {bs * nc}, backend {← IreeSession.backendName}"
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     for p in [vmfb, s!".lake/build/r50_bce_tie_{variant}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir" vmfb
+    let sess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
     -- lr = 0 so θ' is untouched; only `m'` (the gradient) and `%loss` are read.
     let tl ← F32.write3 (← F32.const 3 0.0) 0 0.0 0.1 0.001
     IreeSession.mlpTrainStepV sess s!"m.{net.slug}_{variant}_train_step" x

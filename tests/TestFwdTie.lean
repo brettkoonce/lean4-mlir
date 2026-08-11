@@ -129,7 +129,7 @@ def main (args : List String) : IO Unit := do
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     for p in [vmfb, s!".lake/build/fwd_tie_{fn}_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession path vmfb
+    let sess ← mkSession path
     IreeSession.forwardF32 sess s!"m.{fn}" params shapes x xsh
       bs.toUSize net.nClasses.toUSize
   let la ← runOne pathA "a"

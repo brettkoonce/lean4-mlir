@@ -124,7 +124,7 @@ adam | sgd | mom (e.g. adam, bn_mom, w_sgd, w_bn_adam)"
     for p in [s!".lake/build/c8_opt_{slug}_{tag}.vmfb",
               s!".lake/build/c8_opt_{slug}_{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession path s!".lake/build/c8_opt_{slug}_{tag}.vmfb"
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess s!"m.{netSlug}_train_step" xb pbuf shapes yb
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oa ← runOne pathA "a" x y

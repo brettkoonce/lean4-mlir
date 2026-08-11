@@ -116,7 +116,7 @@ backend {← IreeSession.backendName}"
   for p in [s!".lake/build/{net.slug}_dpshard.vmfb",
             s!".lake/build/{net.slug}_dpshard_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  let sess ← mkSession dpPath s!".lake/build/{net.slug}_dpshard.vmfb"
+  let sess ← mkSession dpPath
   let run (x y : ByteArray) : IO ByteArray :=
     IreeSession.mlpTrainStepVDP sess fn x pbuf shapes y
       (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize

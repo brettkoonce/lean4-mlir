@@ -245,7 +245,7 @@ private def runOne (which : String) (params shapes xIn xSh : ByteArray) (nOut : 
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
   for p in [vmfb, s!".lake/build/k1_{which}_{target}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  let sess ← mkSession path vmfb
+  let sess ← mkSession path
   IreeSession.forwardF32 sess s!"m.k1_{which}" params shapes xIn xSh 1 nOut.toUSize
 
 def main : IO Unit := do

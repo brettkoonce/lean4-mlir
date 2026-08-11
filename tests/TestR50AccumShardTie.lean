@@ -167,9 +167,7 @@ artifact to itself and pass unconditionally"
   let dpShapes  := packShapes (pShapes ++ pShapes ++ pShapes
                                ++ #[#[], #[], #[]] ++ bnStatShapes)
   let accSess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
-                          ".lake/build/r50_accshard_acc.vmfb"
   let dpSess  ← mkSession s!"verified_mlir/{net.slug}_{peer}_train_step.mlir"
-                          ".lake/build/r50_accshard_dp.vmfb"
 
   /- One accumulation cycle over `batches`, applying on the last micro-batch. -/
   let cycle (batches : Array (ByteArray × ByteArray)) : IO ByteArray := do

@@ -59,7 +59,7 @@ def main (args : List String) : IO Unit := do
     y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
 
   let runOne (path tag : String) : IO ByteArray := do
-    let sess ← mkSession path s!".lake/build/c8_adam_tie_{tag}.vmfb"
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess "m.cifar8_adam_train_step" x pbuf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oa ← runOne pathA "a"

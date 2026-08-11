@@ -113,7 +113,7 @@ xseed {xseed}{if reverseB then ", B batch REVERSED (control)" else ""}, backend 
     let vmfbT := s!".lake/build/convnext_adam_tie_{tag}_{target}.vmfb"
     for p in [vmfb, vmfbT] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession path vmfb
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess "m.convnext_adam_train_step" x pbuf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running A…"; (← IO.getStdout).flush

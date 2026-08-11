@@ -188,7 +188,7 @@ the signature list says {ds}")
     for p in [vmfb, s!".lake/build/clip_tie_{cn.slug}_{variant}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let src := path.getD s!"verified_mlir/{cn.slug}_{variant}_train_step.mlir"
-    let sess ← mkSession src vmfb
+    let sess ← mkSession src
     IreeSession.mlpTrainStepV sess s!"m.{cn.slug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 

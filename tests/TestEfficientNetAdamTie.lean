@@ -110,7 +110,7 @@ check. Pass the retired render as the first argument for that."
     let vmfbT := s!".lake/build/enet_adam_tie_{tag}_{target}.vmfb"
     for p in [vmfb, vmfbT] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession path vmfb
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess "m.efficientnet_adam_train_step" x pbuf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running A…"; (← IO.getStdout).flush

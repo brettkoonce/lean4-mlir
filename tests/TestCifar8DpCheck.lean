@@ -79,11 +79,11 @@ def main (args : List String) : IO Unit := do
     y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
 
   IO.println "  running A (single device, batch 256)…"; (← IO.getStdout).flush
-  let sessA ← mkSession single ".lake/build/c8_dp_single.vmfb"
+  let sessA ← mkSession single
   let oa ← IreeSession.mlpTrainStepV sessA "m.cifar8_adam_train_step" x pbuf shapes y
     gbs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println s!"  running B (data-parallel, {replicas} × {gbs / replicas})…"; (← IO.getStdout).flush
-  let sessB ← mkSession dp ".lake/build/c8_dp_dp.vmfb"
+  let sessB ← mkSession dp
   let ob ← IreeSession.mlpTrainStepVDP sessB "m.cifar8_adamdp_train_step" x pbuf shapes y
     gbs.toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 

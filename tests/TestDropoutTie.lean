@@ -86,7 +86,7 @@ private def freshSession (path tag : String) : IO IreeSession := do
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
   for p in [vmfb, s!".lake/build/dropout_tie_{tag}_{target}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  mkSession path vmfb
+  mkSession path
 
 -- ════════════════════════════════════════════════════════════════
 -- § GATE A — the known answer. Does the mask multiply PER ELEMENT?

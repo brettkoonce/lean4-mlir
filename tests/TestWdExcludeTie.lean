@@ -166,7 +166,7 @@ the signature list says {ds}")
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let dflt := s!"verified_mlir/{wn.slug}_{variant}_train_step.mlir"
     let path := if variant == "adamwx" then cand.getD dflt else dflt
-    let sess ← mkSession path vmfb
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess s!"m.{wn.slug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   if cand.isSome then IO.println s!"  ⚠ CANDIDATE wx render: {cand.get!}"

@@ -91,7 +91,7 @@ def main (args : List String) : IO Unit := do
     for p in [s!".lake/build/{tag}.vmfb",
               s!".lake/build/{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  let s1 ← mkSession "verified_mlir/convnext_adam_train_step.mlir" ".lake/build/cnx_shard_a.vmfb"
+  let s1 ← mkSession "verified_mlir/convnext_adam_train_step.mlir"
   IO.println "  single-device on shard A…"; (← IO.getStdout).flush
   let oA ← IreeSession.mlpTrainStepV s1 "m.convnext_adam_train_step" xA pbuf shapes yA
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
@@ -99,7 +99,7 @@ def main (args : List String) : IO Unit := do
   let oB ← IreeSession.mlpTrainStepV s1 "m.convnext_adam_train_step" xB pbuf shapes yB
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  data-parallel on [A | B]…"; (← IO.getStdout).flush
-  let s2 ← mkSession dpPath ".lake/build/cnx_shard_b.vmfb"
+  let s2 ← mkSession dpPath
   let oD ← IreeSession.mlpTrainStepVDP s2 "m.convnext_adamdp_train_step" xAB pbuf shapes yAB
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 

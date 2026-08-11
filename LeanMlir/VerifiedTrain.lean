@@ -188,29 +188,36 @@ private def compileVmfb (mlirPath outPath : String) : IO Unit := do
     throw (IO.userError s!"iree-compile failed:\n{r.stderr.take 2000}")
 
 /-- Open a session for one Lean-emitted graph, on whichever backend this binary
-    was linked against (`planning/xla_pjrt_ladder.md`).
+    dlopened (`planning/xla_pjrt_ladder.md`).
 
-    * **IREE** — `iree-compile` the `.mlir` to `outVmfb`, then load that.
-    * **XLA** — hand the `.mlir` straight to PJRT; XLA compiles it in-process,
-      so `outVmfb` is never produced.
+    * **XLA** — hand the `.mlir` straight to PJRT, which compiles it in-process.
+      Nothing is written to disk.
+    * **IREE** — `iree-compile` the `.mlir` to a cache file first, then load that.
 
-    Both consume the *same* `verified_mlir/*.mlir` — the emitter, the NetSpec,
-    and the §1a ties are identical. Only the trusted lowerer differs. -/
-def mkSession (mlirPath outVmfb : String) : IO IreeSession := do
+    The cache path is *derived* from `mlirPath` rather than passed in. All 58
+    call sites used to supply one and every one of them computed the same thing
+    from the same slug, so the argument was a second place for the name to be
+    wrong and no place for it to be right. Deriving it also makes collisions
+    impossible: two graphs cannot land on one cache file, which is the failure
+    the target scoping below exists to prevent from the other direction.
+
+    Both backends consume the *same* `verified_mlir/*.mlir` — the emitter, the
+    spec, and the §1a ties are identical. Only the trusted lowerer differs. -/
+def mkSession (mlirPath : String) : IO IreeSession := do
   if (← IreeSession.backendName) == "xla" then
     IO.println s!"  xla/pjrt {mlirPath}"
     IreeSession.create mlirPath
   else
-    -- Scope the .vmfb by IREE target. `compileVmfb` reuses any existing file that
-    -- is newer than the .mlir, so a shared path lets an `IREE_BACKEND=rocm`
+    -- Scope the cache by IREE target. `compileVmfb` reuses any existing file that
+    -- is newer than the .mlir, so an unscoped path lets an `IREE_BACKEND=rocm`
     -- artifact be picked up by an `IREE_BACKEND=llvm-cpu` run (and vice versa).
     -- That matters now that llvm-cpu is used as an independent numerical
     -- reference — see planning/xla_pjrt_ladder.md §8, rung 3.
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
-    let vmfbPath := if outVmfb.endsWith ".vmfb"
-                    then (outVmfb.dropEnd 5).toString ++ s!"_{target}.vmfb" else outVmfb
-    compileVmfb mlirPath vmfbPath
-    IreeSession.create vmfbPath
+    let base := (mlirPath.splitOn "/").getLastD mlirPath
+    let stem := if base.endsWith ".mlir" then base.dropRight 5 else base
+    compileVmfb mlirPath s!".lake/build/{stem}_{target}.vmfb"
+    IreeSession.create s!".lake/build/{stem}_{target}.vmfb"
 
 /-- Init one parameter from its `(dims, initKind)` spec, matching the JAX reference's
     initialisers — they are the oracle these nets are paired against:
@@ -603,9 +610,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   IO.println (if (← IreeSession.backendName) == "xla"
               then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
-                          s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
-                          s!".lake/build/{net.slug}_fwd_v.vmfb"
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     if synth then mkSynthData net.data d0 bs else loadData net dataDir
@@ -942,7 +947,6 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
-                          s!".lake/build/{net.slug}_{variant}_ts.vmfb"
   -- ⭐ PER-VARIANT forward resolution (`planning/mnv4_verified.md` §3d(b)).
   --
   -- The train step above is variant-resolved and this was NOT: every variant of a slug loaded the
@@ -959,10 +963,9 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   let fwdVariant := s!"{net.mlirDir}/{net.slug}_{variant}_fwd.mlir"
   let fwdPath := if (← System.FilePath.pathExists fwdVariant) then fwdVariant
                  else s!"{net.mlirDir}/{net.slug}_fwd.mlir"
-  let fwdSess ← mkSession fwdPath s!".lake/build/{net.slug}_{variant}_fwd_v.vmfb"
+  let fwdSess ← mkSession fwdPath
   let fwdEvalSess ← if hasBn then
       mkSession s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
-                s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
     else pure fwdSess
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   -- ⚠ `mkSynthData` must be sized at the GLOBAL batch, not `bs`. Under data
@@ -1781,9 +1784,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   IO.println (if (← IreeSession.backendName) == "xla"
               then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
-                          s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
-                          s!".lake/build/{net.slug}_fwd_v.vmfb"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
     loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"

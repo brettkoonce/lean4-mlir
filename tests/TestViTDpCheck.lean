@@ -197,11 +197,11 @@ backend {← IreeSession.backendName}"
     y2 := y2 ++ y1
 
   IO.println "  running single-device…"; (← IO.getStdout).flush
-  let s1 ← mkSession sgPath ".lake/build/vit_dp_a.vmfb"
+  let s1 ← mkSession sgPath
   let o1 ← IreeSession.mlpTrainStepV s1 (← entryOf sgPath) x1 pbuf shapes y1
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
-  let s2 ← mkSession dpPath ".lake/build/vit_dp_b.vmfb"
+  let s2 ← mkSession dpPath
   let o2 ← IreeSession.mlpTrainStepVDP s2 (← entryOf dpPath) x2 pbuf shapes y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize 0 0
 

@@ -131,11 +131,11 @@ backend {← IreeSession.backendName}"
   -- ── compile both (timed — B is 1.68× the ops, so this is a dev-loop cost worth naming) ────
   IO.println "  compiling A…"; (← IO.getStdout).flush
   let ca0 ← IO.monoMsNow
-  let sessA ← mkSession pathA ".lake/build/r34_adam_bench_a.vmfb"
+  let sessA ← mkSession pathA
   let compA := (← IO.monoMsNow) - ca0
   IO.println "  compiling B…"; (← IO.getStdout).flush
   let cb0 ← IO.monoMsNow
-  let sessB ← mkSession pathB ".lake/build/r34_adam_bench_b.vmfb"
+  let sessB ← mkSession pathB
   let compB := (← IO.monoMsNow) - cb0
   IO.println s!"  compile: A {compA} ms, B {compB} ms  ({(compB.toFloat / compA.toFloat)}×)"
 

@@ -89,7 +89,7 @@ migration check. Pass the retired render as the first argument for that."
     y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
 
   let runOne (path tag : String) : IO ByteArray := do
-    let sess ← mkSession path s!".lake/build/r34_adam_tie_{tag}.vmfb"
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess "m.resnet34_adam_train_step" x pbuf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running A…"; (← IO.getStdout).flush

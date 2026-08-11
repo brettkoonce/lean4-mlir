@@ -242,7 +242,6 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
   --    runs the identical program, so `L(θ+δ)` and `L(θ−δ)` differ by the perturbation and not by
   --    a per-process algorithm choice (the effect `scripts/det_shim.sh` exists for) ──
   let sess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
-                       s!".lake/build/r50_gradcheck_{variant}.vmfb"
   let fn := s!"m.{net.slug}_{variant}_train_step"
   -- lr, 1−β₁¹, 1−β₂¹ at t = 1; then `%aup = 1`, `%akeep = 0` on the accumulating render.
   let tl ← if accOn then do

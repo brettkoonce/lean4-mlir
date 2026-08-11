@@ -184,7 +184,7 @@ this gate cannot distinguish a sharded mask from a replicated one")
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     for p in [vmfb, s!".lake/build/drop_shard_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-    let sess ← mkSession dpPath vmfb
+    let sess ← mkSession dpPath
     let buf := F32.concat #[θ, z, z, tl, bnSlots, masks]
     IreeSession.mlpTrainStepVDP sess (← entryOf dpPath) x buf shapes y
       gbs.toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize 0

@@ -133,7 +133,7 @@ def main (args : List String) : IO Unit := do
   let entry := s!"m.{net.slug}_adam_train_step"
   let run (tag : String) (y : ByteArray) : IO ByteArray := do
     IO.println s!"  running {tag}…"; (← IO.getStdout).flush
-    let s ← mkSession path s!".lake/build/{net.slug}_soft_{tag}.vmfb"
+    let s ← mkSession path
     IreeSession.mlpTrainStepV s entry x pbuf shapes y
       bs.toUSize net.d0.toUSize nc.toUSize
   let oA ← run "a" yA

@@ -143,7 +143,7 @@ backend {← IreeSession.backendName}"
     for p in [s!".lake/build/{tag}.vmfb",
               s!".lake/build/{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
-  let s1 ← mkSession sgPath s!".lake/build/{net.slug}_shard_a.vmfb"
+  let s1 ← mkSession sgPath
   let mut outs : Array ByteArray := #[]
   for i in [0:replicas] do
     IO.println s!"  single-device on shard {i}…"; (← IO.getStdout).flush
@@ -151,7 +151,7 @@ backend {← IreeSession.backendName}"
       xs[i]! pbuf shapes ys[i]! bs.toUSize net.d0.toUSize net.nClasses.toUSize)
   let oA := outs[0]!
   IO.println s!"  data-parallel on the {replicas}-way shard…"; (← IO.getStdout).flush
-  let s2 ← mkSession dpPath s!".lake/build/{net.slug}_shard_b.vmfb"
+  let s2 ← mkSession dpPath
   let oD ← IreeSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" xAB pbuf shapes yAB
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 

@@ -95,7 +95,7 @@ def main (args : List String) : IO Unit := do
     IO.eprintln "internal: duplicate construction is wrong"; IO.Process.exit 1
 
   let runOne (path fn tag : String) (x y : ByteArray) (b : Nat) : IO ByteArray := do
-    let sess ← mkSession path s!".lake/build/r34_batch_{tag}.vmfb"
+    let sess ← mkSession path
     IreeSession.mlpTrainStepV sess fn x pbuf shapes y
       b.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running bs32…"; (← IO.getStdout).flush
