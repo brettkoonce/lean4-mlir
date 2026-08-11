@@ -1,8 +1,9 @@
 # SIGSEGV in `RocmCommandBuffer::LaunchGraph` during steady-state training (gfx1100, ROCm 7.2)
 
-**Status: open, no workaround found.** Not our code: reproduces with a
-30-line pure-JAX script (`repro.py`) that touches nothing from this
-project. Filed here because it blocks the phase-4 (PJRT) trainers on
+**Status: open, no workaround found. Confirmed ROCm-specific.** Not our
+code: reproduces with a 30-line pure-JAX script (`repro.py`) that touches
+nothing from this project, and does **not** reproduce on CUDA with the
+identical JAX version. Filed here because it blocks the phase-4 (PJRT) trainers on
 ROCm, and because this repo's own crash reports kept pointing at our FFI
 shim until the control below ruled it out.
 
@@ -96,6 +97,27 @@ Same failure, same rate, with and without our code in the process. This
 supersedes the earlier note in this repo that "not repo code" was
 unproven.
 
+## CUDA control: clean
+
+Same `repro.py`, same jax/jaxlib 0.10.2, different backend. RTX 4060 Ti
+16 GB, driver 575.57.08, CUDA 12.9, `jax-cuda12-pjrt` 0.10.2, Linux
+6.8.0-137, Python 3.12.3.
+
+| test | ROCm gfx1100 | CUDA 4060 Ti |
+|---|---|---|
+| `repro.py` (pure JAX) | 0 of 6 complete, died epochs 1–11 | **6 of 6 complete**, all 12 epochs |
+| `mnist-mlp-verified` (repo + our shim) | 0 of 6 complete | **6 of 6 complete**, 12 epochs, 97.83% every run |
+
+33,696 dispatches on CUDA with zero failures. The JAX version matches
+exactly on both sides, so the backend is the only variable.
+
+The repo trainer result also exercises `ffi/pjrt_ffi.c` heavily and
+cleanly, which independently rules the shim out rather than merely
+failing to implicate it. And the CUDA runs are bit-identical across all
+six, so that path is deterministic.
+
+**This localises the bug to the ROCm / XLA-ROCm backend.**
+
 ## Things tried that do not fix it
 
 | knob | result |
@@ -114,13 +136,13 @@ the corruption starts rather than merely where it is noticed.
 ## Impact here
 
 Blocks the phase-4 (PJRT) path on ROCm for anything larger than the
-Chapter 1 linear model. `lake run mnist` cannot complete: the linear net
-usually survives, the MLP and CNN do not.
+Chapter 1 linear model. `lake run mnist` cannot complete there: the
+linear net usually survives, the MLP and CNN do not.
+
+CUDA is unaffected, so book work that needs captured training logs
+should be done on an NVIDIA box until this is resolved upstream.
 
 ## Not yet tried
 
-- The same repro on CUDA. Everything in this project was shaken out on
-  NVIDIA first, so a clean CUDA run would localise this to the ROCm
-  backend and make the upstream report much sharper.
 - An older `jax-rocm7-*` (0.10.0, 0.10.1) to find where it entered.
 - `AMD_LOG_LEVEL=4` around the failing dispatch.
