@@ -1,0 +1,14 @@
+I0811 17:42:39.523137  722864 service.cc:178] XLA service 0x756e540c1470 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I0811 17:42:39.523161  722864 service.cc:194]   StreamExecutor [0]: Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.26015; Runtime: 7.2.26015; Toolkit: 7.2.26015; DNN: 0.0.0)
+I0811 17:42:39.624983  722864 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0811 17:42:39.625005  722864 gpu_helpers.cc:158] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+I0811 17:42:39.625017  722864 gpu_helpers.cc:201] XLA backend will use up to 6438256640 bytes on device 0 for CollectiveBFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+I0811 17:42:39.877490  722897 amdgpu_backend.cc:176] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 6 outputs, 1 replica) in 5364 ms
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 37 ms
+MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mlp_train_step.mlir
+  xla/pjrt verified_mlir/mlp_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats), mean-loss SGD lr=0.100000, He init
+timeout: the monitored command dumped core
