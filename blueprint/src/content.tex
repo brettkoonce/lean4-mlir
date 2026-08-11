@@ -11717,8 +11717,7 @@ If you want to just see it run --- train a real neural network, end to end,
 with the Lean $\to$ MLIR $\to$ GPU pipeline from Part 1 --- this appendix is
 the smallest path from zero to a trained model.
 
-The thing worth knowing before you start is that \emph{what you have to
-install depends entirely on how far up the scale you want to go}, and the
+What you install depends on how far up the scale you want to go, and the
 steps are not evenly spaced:
 
 \begin{center}
@@ -11731,18 +11730,17 @@ Full ImageNet-1k               & the above, plus Python + tfds.   & 4 \\
 \end{tabular}
 \end{center}
 
-Everything in Part 1 of this book is the middle row. It needs \emph{no Python
-at run time and no compiler}: you download one shared library and run a Lean
-binary. Only the ImageNet tier (Track 4) needs an interpreter, and it needs
-one because of how its data is streamed, not because of how it computes.
+Everything in Part 1 of this book is the middle row. It needs no Python at
+run time and no compiler: you download one shared library and run a Lean
+binary. Only the ImageNet tier (Track 4) needs an interpreter, and only to
+stream data.
 
 \section*{Track 1: Proofs only (no GPU needed)}
 
 Read, build, and check the proofs without running any training. This track
-depends on neither lowerer --- the theorems are about the emitted graph, not
-about anything that executes it --- and it comes at three levels of
-independence, which are worth distinguishing because they ask you to trust
-different amounts.
+needs neither lowerer: the theorems are about the emitted graph, not about
+anything that executes it. It comes at three levels, each asking you to trust
+less than the last.
 
 \prosesection{Level 1 --- build a proof}
 
@@ -11768,32 +11766,31 @@ else; Appendix~\ref{app:verification} is the accounting.
 
 \texttt{\#print axioms} and \texttt{lake build} both run through Lean's
 elaborator, so they share a trust path with whatever the elaborator did.
-\texttt{tests/comparator/} re-runs Lean's kernel typechecker \emph{independently}
-over 52 theorems, sandboxed, verifying each one's axiom closure statically:
+\texttt{tests/comparator/} re-runs Lean's kernel typechecker independently over
+52 theorems, sandboxed, verifying each one's axiom closure statically:
 
 \begin{verbatim}
 tests/comparator/run.sh
 \end{verbatim}
 
-The part worth knowing about is how it splits. \texttt{Challenge.lean}
+It splits in two. \texttt{Challenge.lean}
 \textbf{imports Mathlib and nothing else} --- the 13 architecture-free
 theorems (Chapter~\ref{chap:tensor}'s \texttt{pdiv} calculus rules and
 Chapter~\ref{chap:attention}'s matrix-level ones), with the handful of
 definitions they need copied inline, and \texttt{chk\_pdiv\_is\_fderiv} pinning
-\texttt{pdiv} to Mathlib's \texttt{fderiv} by \texttt{rfl}. \emph{A reviewer can
-read that one file and know exactly what is claimed without reading a line of
-this project.} Copying the definitions is safe here in a way copying an
+\texttt{pdiv} to Mathlib's \texttt{fderiv} by \texttt{rfl}. A reviewer can read
+that one file and know what is claimed without reading a line of this project.
+Copying the definitions is safe here in a way copying an
 architecture would not be: comparator compares the challenge and solution
 statements bit-identically, so a copy that drifted would fail the run rather
 than quietly prove something weaker.
 
-The other 39 live in \texttt{ChallengeArch.lean} and \emph{do} import the
-project, because each is a statement about a specific network --- ``ResNet-34's
+The other 39 live in \texttt{ChallengeArch.lean} and do import the project,
+because each is a statement about a specific network --- ``ResNet-34's
 rendered backward equals its Fréchet derivative'' cannot be phrased without
-ResNet-34 in scope. That division is the point: once the \texttt{fderiv} pin
-and the structural rules are checked over Mathlib alone, the architecture
-theorems are applications of them, and what you must additionally trust is the
-forward functions and nothing else.
+ResNet-34 in scope. Once the \texttt{fderiv} pin and the structural rules are
+checked over Mathlib alone, the architecture theorems are applications of them,
+and what you must additionally trust is the forward functions and nothing else.
 
 \section*{Track 2: Native install (XLA/PJRT)}
 
@@ -11808,23 +11805,21 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
   -sSf | sh
 \end{verbatim}
 
-  \item \textbf{Get an XLA PJRT plugin.} This is one prebuilt shared library.
-    It ships inside the JAX wheels because that is the only place XLA's GPU
-    plugins are packaged --- \emph{nothing imports JAX and no interpreter runs
-    at training time}; the shim opens the \texttt{.so} directly through the
-    PJRT C API.
+  \item \textbf{Get an XLA PJRT plugin} --- one prebuilt shared library. It
+    ships under a JAX name because that is the only place XLA's GPU plugins are
+    packaged, but these wheels carry the plugin and nothing else --- not
+    \texttt{jax}, not \texttt{jaxlib} --- and the shim opens the \texttt{.so}
+    directly through the PJRT C API, so no interpreter runs at training time.
 \begin{verbatim}
 python3 -m venv .venv && . .venv/bin/activate
 pip install jax-cuda12-pjrt     # NVIDIA -- the PJRT plugin ONLY
 pip install jax-rocm7-pjrt      # AMD    -- no jax, no jaxlib
 \end{verbatim}
-    Those packages carry the PJRT plugin and \emph{nothing else} --- not
-    \texttt{jax}, not \texttt{jaxlib}, so ``no interpreter at training time'' is
-    structural rather than a promise. The shim looks under
-    \texttt{.venv/lib/python3.*/site-packages/jax\_plugins/}, which is exactly
-    where that command puts it; \texttt{\$PJRT\_PLUGIN} points elsewhere. The
-    plugin is version-matched to your CUDA/ROCm install, and it is a 500\,MB
-    download rather than a build.
+    The shim looks under
+    \texttt{.venv/lib/python3.*/site-packages/jax\_plugins/}, which is where
+    that command puts it; \texttt{\$PJRT\_PLUGIN} points elsewhere. The plugin
+    is version-matched to your CUDA/ROCm install: a 500\,MB download, not a
+    build.
 
   \item \textbf{Build the FFI shim} (needs only libc and \texttt{dlopen}):
 \begin{verbatim}
@@ -11850,9 +11845,8 @@ lake build resnet34-verified-adam
 
 \prosesection{Running the same binary on IREE}
 
-Every verified trainer is one executable that carries \emph{both} trusted
-lowerers and picks between them at run time. There are no \texttt{-xla}
-targets to build and no separate binaries to keep in step:
+Every verified trainer is one executable carrying both trusted lowerers,
+picking between them at run time:
 
 \begin{verbatim}
 .lake/build/bin/resnet34-verified-adam data                   # XLA (default)
@@ -11865,13 +11859,11 @@ The IREE path additionally needs \texttt{iree-compile} on \texttt{\$PATH}
 \texttt{IREE\_BACKEND} and \texttt{IREE\_CHIP} --- e.g.
 \texttt{IREE\_BACKEND=rocm IREE\_CHIP=gfx1100}, or \texttt{cuda} with
 \texttt{sm\_86} (Ampere), \texttt{sm\_89} (Ada), \texttt{sm\_90} (Hopper).
-That asymmetry is the point of the section below.
 
 \section*{Track 3: One-command demo tiers}
 
-With Track 2 in place, a single command builds and runs a curated,
-time-budgeted group of \emph{verified} trainers --- no environment variables
-or trainer list to assemble by hand.
+With Track 2 in place, one command builds and runs a time-budgeted group of
+verified trainers.
 
 \begin{verbatim}
 lake run mnist        # verified MNIST: linear, MLP, CNN             (~1 min)
@@ -11879,16 +11871,15 @@ lake run cifar        # ch.4 cifar8: SGD/momentum/Adam x bn/no-bn   (~15 min)
 lake run imagenette   # the Part-I nets at 224^2, 80-epoch AdamW      (~7 h)
 \end{verbatim}
 
-Those are XLA wall-clocks on one 7900 XTX, and they are the reason the default
-moved. The same three tiers on IREE take $\sim$5~minutes, $\sim$34~minutes and
-$\sim$42~hours --- the whole MNIST tier now finishes in under a minute, and
-Imagenette drops from most of two days to an afternoon. The Imagenette figure
-covers the five nets with recorded timings; MobileNetV4 and ResNet-50 joined
-the tier more recently and are not in that total, so budget somewhat more.
+Those are XLA wall-clocks on one 7900 XTX, and they are why the default moved:
+the same three tiers on IREE take $\sim$5~minutes, $\sim$34~minutes and
+$\sim$42~hours. The Imagenette figure covers the five nets with recorded
+timings; MobileNetV4 and ResNet-50 joined the tier more recently and are not in
+that total, so budget somewhat more.
 
 Each has an \texttt{-iree} twin --- \texttt{lake run mnist-iree} and so on ---
-which runs \emph{the same binaries} with the IREE lowerer selected. The tiers
-bundle these targets, and any one builds on its own:
+which runs the same binaries with the IREE lowerer selected. The tiers bundle
+these targets, and any one builds on its own:
 
 \begin{itemize}
   \item \texttt{mnist}: \texttt{mnist-linear-verified},
@@ -11923,7 +11914,7 @@ renderer as their Imagenette counterparts:
 \prosesection{This tier needs Python, and only this tier does}
 
 ImageNet data does not sit in a directory the way MNIST and Imagenette do. It
-is streamed from tfds through a \emph{generated} per-net shim --- a Python
+is streamed from tfds through a generated per-net shim --- a Python
 script emitted from that net's own reference \texttt{TrainConfig}, so the
 augmentation the verified trainer consumes is provably the augmentation its
 JAX reference trains on. Generate them before the first run:
@@ -11932,9 +11923,9 @@ JAX reference trains on. Generate them before the first run:
 scripts/gen_shims.sh
 \end{verbatim}
 
-Each net names its own shim, and the driver \emph{refuses to start} if the
-named file is absent rather than falling back to another net's --- an earlier
-fallback silently gave every net ResNet-34's augmentation.
+Each net names its own shim, and the driver refuses to start if the named file
+is absent rather than falling back to another net's --- an earlier fallback
+silently gave every net ResNet-34's augmentation.
 
 \prosesection{Running one}
 
@@ -11945,12 +11936,12 @@ LEAN_MLIR_VARIANT=mom256 LEAN_MLIR_BATCH=256 LEAN_MLIR_BASE_LR_U=100000 \
   .lake/build/bin/resnet34-imagenet-verified data
 \end{verbatim}
 
-\texttt{LEAN\_MLIR\_BATCH} \emph{must match the batch its variant was rendered
-at} --- the batch is baked into the graph, not a runtime dimension, so a
-mismatch is a shape error at the first invoke.
+\texttt{LEAN\_MLIR\_BATCH} must match the batch its variant was rendered at:
+the batch is baked into the graph, not a runtime dimension, so a mismatch is a
+shape error at the first invoke.
 \texttt{LEAN\_MLIR\_BASE\_LR\_U} is the base learning rate in millionths
 (\texttt{100000} = 0.1), integer-encoded because this toolchain has no
-\texttt{String.toFloat?}; the default 0.001 is an \emph{AdamW} rate and will
+\texttt{String.toFloat?}. The default 0.001 is an AdamW rate and will
 under-step a heavy-ball render by $\sim$100$\times$, which looks like a broken
 render rather than a wrong knob.
 
@@ -11964,7 +11955,7 @@ scripts/supervise.sh r34-imagenet-4gpu
 DRY_RUN=1 scripts/supervise.sh r34-imagenet-4gpu   # print the plan, run nothing
 \end{verbatim}
 
-Data parallelism needs \emph{both} replica knobs --- \texttt{PJRT\_REPLICAS}
+Data parallelism needs both replica knobs --- \texttt{PJRT\_REPLICAS}
 configures the shim's client and compile options, \texttt{LEAN\_MLIR\_REPLICAS}
 makes the Lean driver call the data-parallel invoke --- and setting only one
 fails with a confusing ``compiled for N replicas'' error. The job configs set
@@ -11984,15 +11975,14 @@ proved. They differ in what they are good at:
     dispatches convolutions and matmuls to the vendor's hand-tuned kernel
     libraries. The gap tracks how much work those kernels get.
   \item \textbf{IREE} generates every kernel itself, which is why it runs where
-    no vendor library exists at all --- Vulkan, Metal, bare CPU, custom
-    accelerators --- and why its runtime is \emph{392$\times$ smaller}
-    (1.3\,MB against the XLA plugin's 505\,MB, which bundles MIOpen, rocBLAS
-    and RCCL).
+    no vendor library exists --- Vulkan, Metal, bare CPU, custom accelerators
+    --- and why its runtime is 392$\times$ smaller (1.3\,MB against the XLA
+    plugin's 505\,MB, which bundles MIOpen, rocBLAS and RCCL).
 \end{itemize}
 
-That size difference is also a trust difference, and Appendix~\ref{app:verification}
-is where it is counted: the fast path asks you to trust a great deal more
-unverified code than the small one does.
+That size difference is also a trust difference, counted in
+Appendix~\ref{app:verification}: the fast path asks you to trust far more
+unverified code.
 
 \section*{Common troubleshooting}
 
@@ -12003,10 +11993,10 @@ unverified code than the small one does.
     but libc.
   \item \textbf{\texttt{\$PJRT\_PLUGIN is set but did not load}}, or no plugin
     found --- the XLA plugin is missing or is built for a different CUDA/ROCm
-    version than the one installed. Installing JAX into the repo's own
-    \texttt{.venv} puts it where the shim looks by default.
-  \item \textbf{\texttt{HAL device not found}} on an IREE run --- IREE has
-    \emph{two} knobs and they must agree: \texttt{IREE\_BACKEND} is the
+    version than the one installed. Installing the plugin wheel into the repo's
+    own \texttt{.venv}, as in Track 2, puts it where the shim looks by default.
+  \item \textbf{\texttt{HAL device not found}} on an IREE run --- IREE has two
+    knobs and they must agree: \texttt{IREE\_BACKEND} is the
     \emph{compile} target and \texttt{IREE\_DEVICE} is the \emph{runtime}
     device. Setting only \texttt{IREE\_BACKEND=llvm-cpu} compiles for CPU and
     then looks for a GPU to run it on, which reports as this error naming a
@@ -12026,7 +12016,7 @@ unverified code than the small one does.
     climbing the compile is progressing. The XLA path compiles the same graph
     in seconds, in process.
   \item \textbf{A run refuses to start over a missing shim} (ImageNet tier)
-    --- run \texttt{scripts/gen\_shims.sh}. The refusal is deliberate.
+    --- run \texttt{scripts/gen\_shims.sh}.
 \end{itemize}
 
 \chapter{On Verification}
