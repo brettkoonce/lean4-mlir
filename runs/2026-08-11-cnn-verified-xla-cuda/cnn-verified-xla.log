@@ -1,0 +1,70 @@
+I0811 20:24:12.170839  933761 service.cc:178] XLA service 0x79b8dc48ab10 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0811 20:24:12.170860  933761 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0811 20:24:12.172389  933761 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0811 20:24:12.172420  933761 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0811 20:24:12.172460  933761 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0811 20:24:12.179271  933761 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+I0811 20:24:12.810093  933796 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 72 bytes spill stores, 72 bytes spill loads
+
+I0811 20:24:12.836429  933794 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 56 bytes spill stores, 56 bytes spill loads
+
+I0811 20:24:13.024253  933804 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 296 bytes spill stores, 296 bytes spill loads
+
+I0811 20:24:13.058572  933785 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 256 bytes spill stores, 256 bytes spill loads
+
+I0811 20:24:13.127575  933795 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 208 bytes spill stores, 208 bytes spill loads
+
+I0811 20:24:13.214587  933774 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 176 bytes spill stores, 176 bytes spill loads
+
+I0811 20:24:13.233005  933793 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+I0811 20:24:13.257788  933777 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 224 bytes spill stores, 224 bytes spill loads
+
+I0811 20:24:13.329254  933789 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 712 bytes spill stores, 712 bytes spill loads
+
+I0811 20:24:13.339936  933797 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 360 bytes spill stores, 360 bytes spill loads
+
+I0811 20:24:13.345158  933801 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 224 bytes spill stores, 224 bytes spill loads
+
+I0811 20:24:13.370325  933799 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 40 bytes spill stores, 40 bytes spill loads
+
+I0811 20:24:13.595625  933790 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 396 bytes spill stores, 396 bytes spill loads
+
+I0811 20:24:13.636284  933787 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 424 bytes spill stores, 424 bytes spill loads
+
+I0811 20:24:13.670316  933786 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 412 bytes spill stores, 412 bytes spill loads
+
+I0811 20:24:13.745045  933801 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 224 bytes spill stores, 224 bytes spill loads
+
+I0811 20:24:13.795276  933774 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 344 bytes spill stores, 344 bytes spill loads
+
+I0811 20:24:13.824467  933805 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 444 bytes spill stores, 444 bytes spill loads
+
+I0811 20:24:13.847093  933796 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 32 bytes spill stores, 32 bytes spill loads
+
+I0811 20:24:13.918054  933804 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 8332 bytes spill stores, 8508 bytes spill loads
+
+I0811 20:24:14.029158  933803 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 432 bytes spill stores, 432 bytes spill loads
+
+I0811 20:24:14.453832  933778 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 32 bytes spill stores, 32 bytes spill loads
+
+I0811 20:24:14.492597  933792 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 72 bytes spill stores, 72 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 10 outputs, 1 replica) in 2655 ms
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 389 ms
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cnn_train_step.mlir
+  xla/pjrt verified_mlir/cnn_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD lr=0.100000, He init
+  epoch 1: test_acc = 9551/10000 = 95.510000% (4723ms)
+  epoch 2: test_acc = 9728/10000 = 97.280000% (4939ms)
+  epoch 3: test_acc = 9794/10000 = 97.940000% (4822ms)
+  epoch 4: test_acc = 9835/10000 = 98.350000% (4208ms)
+  epoch 5: test_acc = 9848/10000 = 98.480000% (4718ms)
+  epoch 6: test_acc = 9852/10000 = 98.520000% (4898ms)
+  epoch 7: test_acc = 9858/10000 = 98.580000% (5256ms)
+  epoch 8: test_acc = 9864/10000 = 98.640000% (5292ms)
+  epoch 9: test_acc = 9860/10000 = 98.600000% (7671ms)
+  epoch 10: test_acc = 9872/10000 = 98.720000% (9510ms)
+done (trained MNIST-CNN via the proof-rendered StableHLO).
