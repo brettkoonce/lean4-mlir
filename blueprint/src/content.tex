@@ -1645,7 +1645,7 @@ machine-checked scheme}.
 
 In Chapter \ref{chap:tensor} we defined a function \(\pdiv\) that
 captures the partial derivative of any sufficiently smooth function.
-We proved that three structural rules---chain, sum, product---suffice
+We proved that three structural rules, chain and sum and product, suffice
 to compose new partials out of old ones. That was machinery without
 a target. This chapter picks the target: we're going to compute
 the partial derivative of every component of a small image classifier,
@@ -1665,7 +1665,7 @@ output jiggle?}
 For a scalar function \(f : \mathbb{R} \to \mathbb{R}\) the answer
 is a single number: the derivative. For our networks, no function
 is scalar-in scalar-out. The smallest layer maps an input vector
-to an output vector---\(n\) numbers in, \(m\) numbers out. ``Jiggle
+to an output vector, so \(n\) numbers in and \(m\) numbers out. ``Jiggle
 the input'' now means: pick a direction in \(\mathbb{R}^n\) and
 push slightly along it. ``The output jiggles'' now means: a vector
 in \(\mathbb{R}^m\). The full picture of \emph{how every output
@@ -1695,15 +1695,15 @@ Now jiggle \(x_i\) by \(\varepsilon\). Of the \(n\) terms in the
 sum, only the \(k = i\) term notices, and it changes by
 \(W_{ji}\,\varepsilon\). So \(\partial y_j / \partial x_i = W_{ji}\).
 The Jacobian of \(y = Wx + b\) with respect to \(x\) \emph{is the
-weight matrix \(W\) itself}. No new structure, no surprise---the
+weight matrix \(W\) itself}. No new structure and no surprise, because the
 Jacobian of a linear map is the linear map, written as a matrix.
 
 We will do the same exercise for the partial with respect to \(W\),
 and we will get an analogous answer: the dependence is local, the
 entries of the Jacobian are just \(x_{i'}\, \delta_{jj'}\). These
-two---input-Jacobian and weight-Jacobian---are the only objects
+two, the input-Jacobian and the weight-Jacobian, are the only objects
 we need for a dense layer. Theorems \ref{ax:pdiv_dense} and
-\ref{ax:pdiv_dense_W} below formalize them; we have already done
+\ref{ax:pdiv_dense_W} below formalize them. We have already done
 the substantive work.
 
 \prosesection{ReLU: the piecewise case}
@@ -1713,9 +1713,9 @@ coordinatewise. Its Jacobian is a diagonal matrix: each output
 coordinate depends only on the matching input coordinate. The
 diagonal entry is \(1\) where \(x_i > 0\) and \(0\) where
 \(x_i < 0\). At \(x_i = 0\) the function is not differentiable in
-the classical sense---the slope jumps from \(0\) to \(1\). For
+the classical sense, because the slope jumps from \(0\) to \(1\). For
 our purposes this matters less than you might fear. Theorem
-\ref{ax:pdiv_relu} states the Jacobian at smooth points; the
+\ref{ax:pdiv_relu} states the Jacobian at smooth points, and the
 codegen substitutes the standard subgradient convention at the
 kink and we move on. The kink is the only place in the chapter
 where ``differentiable'' becomes slightly subtle.
@@ -1749,7 +1749,7 @@ Training does not multiply Jacobians together directly. The loss
 is a scalar, and the quantity we actually want is ``how does
 \emph{each} parameter affect that scalar?'' That quantity is the
 Jacobian of the loss with respect to the parameters \emph{transposed}
-and applied to the upstream gradient---a \textbf{vector-Jacobian
+and applied to the upstream gradient, which is a \textbf{vector-Jacobian
 product}, or VJP. Concretely: the upstream gradient is a vector
 \(dy\), and we want to compute the corresponding \(dx\) and \(dW\).
 For a dense layer the answers fall out by transposing the picture
@@ -2096,14 +2096,14 @@ MNIST is the standard testbed for image-recognition learning. It's a
 collection of 28$\times$28 grayscale images of handwritten digits
 0--9: 60\,000 training images and 10\,000 test images, each with a
 label indicating which digit was drawn. The dataset has been around
-since 1998 --- at 784 pixels per image and 10 classes, MNIST is small
+since 1998. At 784 pixels per image and 10 classes, MNIST is small
 enough that you can train a competitive model on a laptop CPU in
 minutes while still having a nontrivial learning problem.
 
 Our goal in this chapter is to correctly classify a held-out test
 digit based on a model trained from the 60\,000 training digits.
 We're going to ignore the 2D spatial structure of the image entirely
-for now --- just flatten each 28$\times$28 image into a 784-dim
+for now, so just flatten each 28$\times$28 image into a 784-dim
 vector and treat it as a plain supervised-learning classification
 problem. This is the \textbf{multilayer perceptron} (MLP). Chapter
 \ref{chap:cnn} revisits MNIST with convolutions that respect the
@@ -2139,12 +2139,81 @@ image. The two hidden layers let the network learn nonlinear
 features. The final layer maps to 10-dimensional logits, one per
 digit class.
 
+\subsection*{The verified spec and program}
+
+The network above is a \texttt{VerifiedNetSpec}, the same object type
+Chapter~\ref{chap:tensor} used for the linear model, now with two hidden
+layers and ReLU between them:
+
+\begin{verbatim}
+def mlpVerified : VerifiedNetSpec where
+  name     := "MNIST-MLP"
+  slug     := "mlp"
+  inC      := 1
+  imageH   := 28
+  imageW   := 28
+  nClasses := 10
+  data     := .mnist
+  layers   := [.dense 784 512, .relu,
+               .dense 512 512, .relu,
+               .dense 512 10]
+\end{verbatim}
+
+Five entries where Chapter~\ref{chap:tensor} had one, and nothing else
+about the type changes. The \texttt{slug} binds the spec to
+\texttt{verified\_mlir/mlp\_train\_step.mlir} and
+\texttt{verified\_mlir/mlp\_fwd.mlir}, and
+\texttt{Proofs.MlpRender.mlpTrainStepFaithfulV} is what emits the train
+step.
+
+The tie back to the proofs has the same shape as before. In
+\texttt{LeanMlir/Proofs/Foundation/SpecVJP.lean}:
+
+\begin{verbatim}
+noncomputable def mlpVerified_has_vjp (W0 b0 W1 b1 W2 b2) :
+    HasVJP (denoteMLP mlpVerified.layers W0 b0 W1 b1 W2 b2) := ...
+\end{verbatim}
+
+Again the VJP is proved for the denotation of the spec's own
+\texttt{layers} field, and that is the field the trainer reads to build
+its graph. The whole program is short enough to print:
+
+\begin{verbatim}
+import LeanMlir.VerifiedNets
+
+def mlpConfig : VerifiedConfig where
+  epochs    := 12
+  batchSize := 128
+
+def main (argv : List String) : IO Unit :=
+  mlpVerified.train mlpConfig (argv.head?.getD "data")
+\end{verbatim}
+
+That is \texttt{apps/mnist/MainMnistMlpVerified.lean}. The only
+difference from Chapter~\ref{chap:tensor}'s driver is \texttt{.train} in
+place of \texttt{.trainLinear}, because the MLP carries six parameter
+tensors packed together rather than a separate \texttt{W0} and
+\texttt{b0}.
+
+XLA compiles that train step in about 5.4 seconds and the forward in
+about 40 milliseconds. The train step takes roughly seven times as long
+to compile as Chapter~\ref{chap:tensor}'s, which is the cost of six
+parameter tensors and two ReLU subgradients rather than one dense layer.
+
+\subsection*{The earlier unverified path}
+
+The rest of this section is the older route. It is kept because it is
+what the numbers below were measured on, and because it reports
+per-batch loss, which the verified trainer does not. It uses the
+unverified \texttt{NetSpec} and the ablation runner rather than the
+rendered graph above.
+
 \subsection*{Code: the full training program}
 
 The entire training program in Lean is about twenty-five lines. This
-is the old-school SGD baseline --- the exact config the Swift for
-TensorFlow book used in its Chapter 1 (SGD with learning rate 0.1,
-12 epochs, no regularization tricks). In our repo this config is
+is the old-school SGD baseline, the exact config the Swift for
+TensorFlow book used in its Chapter 1: SGD at learning rate 0.1, 12
+epochs, no regularization tricks. In our repo this config is
 \texttt{s4tfBaseline} in \texttt{MainAblation.lean}:
 
 \begin{verbatim}
@@ -2182,7 +2251,7 @@ def main (args : List String) : IO Unit :=
 Walking through the numbered sections:
 
 \textbf{1. The import.} One line. \texttt{LeanMlir} is the framework
-implemented in the \texttt{LeanMlir/} directory of the repo --- it
+implemented in the \texttt{LeanMlir/} directory of the repo, and it
 exposes \texttt{NetSpec}, \texttt{TrainConfig}, and the
 \texttt{train} method. Everything downstream in this chapter and
 the next is a specialization of this framework.
@@ -2192,32 +2261,32 @@ structure: a name, input dimensions, and a list of \texttt{Layer}
 values. Our three layers are \texttt{.dense 784 512 .relu},
 \texttt{.dense 512 512 .relu}, \texttt{.dense 512 10 .identity}.
 Read left-to-right: input size, output size, activation. That's the
-entire model definition --- no class, no forward-pass function, no
-\texttt{@differentiable} attribute. The forward pass is derivable
+entire model definition, with no class, no forward-pass function, and
+no \texttt{@differentiable} attribute. The forward pass is derivable
 from the layer list, and the backward pass is \emph{proved} correct
 (see the theorems earlier in this chapter).
 
 \textbf{3. The training hyperparameters.} Plain SGD at learning rate
 0.1, batch size 128, 12 epochs. No Adam, no weight decay, no cosine
 schedule, no warmup, no augmentation, no label smoothing. This is
-the deliberately minimal ``Chapter 1'' baseline --- the Swift for
-TensorFlow book shipped exactly this config as its reference
-example, and it's a pedagogically useful starting point because
-every later chapter's tweak --- training-recipe (Adam, cosine,
-warmup, weight decay, augmentation, label smoothing) and
-architectural (BN, residuals) --- then has a clean baseline to
-measure against. The repo's
+the deliberately minimal ``Chapter 1'' baseline. The Swift for
+TensorFlow book shipped exactly this config as its reference example,
+and it makes a useful starting point because every later chapter's
+tweak then has a clean baseline to measure against, both the
+training-recipe ones (Adam, cosine, warmup, weight decay,
+augmentation, label smoothing) and the architectural ones (BN,
+residuals). The repo's
 \texttt{MainAblation.lean} ships a dozen other configs beside this
 one so you can run each ablation and see the delta.
 
 \textbf{4. The program entry point.} One line. Call
 \texttt{mnistMlp.train} with the config, the data directory (default
 \texttt{data/}), and the dataset kind (\texttt{.mnist}). Everything
-inside \texttt{.train} (walked through in Chapter~\ref{chap:tensor},
-``What's inside \texttt{.train}?'') --- data loading, mini-batching,
-forward-pass MLIR generation, IREE compilation, gradient-descent
-loop, evaluation loop, logging --- is already formalized in the
-framework. The user-facing program is just ``specify the network,
+inside \texttt{.train} is already in the framework: data loading,
+mini-batching, the rendered training step, the gradient-descent loop,
+the evaluation loop, and logging. Chapter~\ref{chap:tensor}'s ``What's
+inside \texttt{.train}?'' walks the verified version of that driver line
+by line. The user-facing program is just ``specify the network,
 specify the knobs, run.''
 
 That's the whole thing. The parts people usually have to write by
@@ -2272,11 +2341,8 @@ Saved params + BN stats.
 Twelve epochs, about 9~seconds per epoch, $\sim$110~seconds total.
 Training loss drops from $2.44$ at step 0 (random-initialization
 cross-entropy on 10 classes: $\log 10 \approx 2.303$, plus a bit of
-noise) down below $10^{-3}$ by the end. Final test accuracy lands at
-\textbf{98.57\%}, which is the going rate for a three-layer MLP on
-MNIST with plain SGD. The matching CPU run via the
-Docker image in Appendix~\ref{app:getting_started} takes about 5
-minutes and lands at the same accuracy.
+noise) down below $10^{-3}$ by the end. Final test accuracy lands at \textbf{98.57\%}, which is the going rate
+for a three-layer MLP on MNIST with plain SGD.
 
 \begin{center}
 \begin{tikzpicture}
@@ -2300,8 +2366,8 @@ minutes and lands at the same accuracy.
 
 \noindent MNIST MLP ($784{\to}512{\to}512{\to}10$), SGD~0.1, 12 epochs,
 log-scale loss (\texttt{logs/ablation\_mlp-sgd.log}). Per-epoch training
-loss falls $\sim$200$\times$ from the first epoch to below $10^{-3}$; final
-test accuracy 98.57\%.
+loss falls $\sim$200$\times$ from the first epoch to below $10^{-3}$, and
+final test accuracy is 98.57\%.
 
 Chapter 1 (\texttt{MNIST 2D CNN}) runs the same \texttt{s4tfBaseline}
 config against a CNN architecture for a direct apples-to-apples
@@ -2312,9 +2378,9 @@ benchmark the deltas against this baseline.
 \section{Return on width}
 
 The $512{\to}512$ hidden size is a convention, not a measurement. Because
-the verified renderer is parametric in the layer dimensions --- the same
+the verified renderer is parametric in the layer dimensions, so the same
 \texttt{mlp\_has\_vjp} theorem covers every width, being polymorphic in
-$d_0,d_1,d_2,d_3$ --- we can sweep the hidden width and train each point on
+$d_0,d_1,d_2,d_3$ carry through, we can sweep the hidden width and train each point on
 its own proof-rendered StableHLO. The \texttt{mnist-mlp-grid} driver does
 exactly this: it renders $784{\to}d{\to}d{\to}10$ from the faithful emitter
 and trains it end to end. Sweeping $d$ over the powers of two from 8 to 4096
@@ -2351,21 +2417,21 @@ and trains it end to end. Sweeping $d$ over the powers of two from 8 to 4096
 scale), 12-epoch SGD on the proof-rendered StableHLO
 (\texttt{runs/mlp\_grid\_results.tsv}). The curve flattens hard after
 $\sim$64 neurons: widening $8{\to}64$ buys $+5.8$ points, but $64{\to}4096$
---- $64\times$ the width, $364\times$ the parameters --- buys only $+0.8$.
+at $64\times$ the width and $364\times$ the parameters, buys only $+0.8$.
 A $32{\to}32$ MLP already reaches 96.2\% at 26K parameters, $760\times$
 smaller than the $4096{\to}4096$ net (98.0\%). The canonical
-$512{\to}512$ sits comfortably on the plateau; anything past it is paying
+$512{\to}512$ sits comfortably on the plateau, and anything past it is paying
 for the third decimal place. Off the diagonal there is a cliff worth
-noting: a $784{\to}8{\to}4096{\to}10$ net collapses to chance (9.8\%) ---
+noting. A $784{\to}8{\to}4096{\to}10$ net collapses to chance (9.8\%),
 a narrow layer feeding a wide one starves the wide layer of signal and it
 never trains under fixed-learning-rate SGD.
 
 \section{MLIR: Dense}
 
 \noindent\textbf{What is already proven.} \texttt{mlpForward} is the
-three-dense-layer network; \texttt{mlp\_has\_vjp\_at} proves its
+three-dense-layer network, and \texttt{mlp\_has\_vjp\_at} proves its
 reverse-mode derivative (the vector--Jacobian product) by chaining the
-per-layer chain rule \texttt{vjp\_comp\_at}; the parameter gradients are
+per-layer chain rule \texttt{vjp\_comp\_at}. The parameter gradients are
 pinned by \texttt{dense\_weight\_grad\_correct} and
 \texttt{dense\_bias\_grad\_correct}, and the loss gradient by
 \texttt{softmaxCE\_grad}. So \emph{what} the gradient is, is not in
@@ -2389,11 +2455,11 @@ v \text{ else } 0)$, and the bridge theorem
   [\![\texttt{emitMlpBack}]\!](dy)
   = \texttt{mlp\_has\_vjp\_at}.\mathrm{backward}(dy)
 \]
-says the denotation of that graph is the proven derivative; the forward,
+says the denotation of that graph is the proven derivative. The forward,
 the loss cotangent, and the parameter gradients are covered the same way.
 The printer walks the graph and emits one \texttt{stablehlo} op per node:
 
-Here is exactly what the printer emits for that graph --- nothing
+Here is exactly what the printer emits for that graph, with nothing
 hand-written, one \texttt{stablehlo} op per IR node (default
 \texttt{precision} attributes elided for the page):
 
@@ -2424,23 +2490,24 @@ func.func @mlp_back(%dy: tensor<2x2xf32>, %W0: tensor<4x3xf32>,
 \noindent Read it against the graph: each \texttt{dot\_general}
 (\texttt{\%bk0}, \texttt{\%bk4}, \texttt{\%bk8}) is a
 \texttt{dotGeneral}\,$W$ node, whose denotation is
-$\texttt{Mat.mulVec}\,W$; each \texttt{compare GT} + \texttt{select}
+$\texttt{Mat.mulVec}\,W$. Each \texttt{compare GT} + \texttt{select}
 pair (\texttt{\%bk2}/\texttt{\%bk3}, \texttt{\%bk6}/\texttt{\%bk7}) is a
-\texttt{selectPos}\,$p$ node --- the ReLU subgradient. The bridge
+\texttt{selectPos}\,$p$ node, which is the ReLU subgradient. The bridge
 theorem is precisely the claim that this text computes
 \texttt{mlp\_has\_vjp\_at}'s backward.
 
 \medskip\noindent\textbf{Caveats.}
 \begin{itemize}
   \item \textbf{ReLU is a smooth-point bridge.} Where a pre-activation is
-    exactly zero ReLU has no derivative; the emitted \texttt{compare GT 0}
+    exactly zero ReLU has no derivative. The emitted \texttt{compare GT 0}
     sends that case to $0$, and the bridge is permitted to fail on that
     measure-zero set.
-  \item \textbf{Representative scale.} Shown small; the trained net is
+  \item \textbf{Representative scale.} Shown small. The trained net is
     $784{\to}512{\to}512{\to}10$.
-  \item \textbf{Trusted surface.} The printer's faithfulness, IREE's
-    lowering, and \texttt{float32} $\approx \mathbb{R}$ are tested, not
-    proved; the full accounting is in Appendix~\ref{sec:verified_codegen}.
+  \item \textbf{Trusted surface.} The printer's faithfulness, the
+    lowerer's translation, and \texttt{float32} $\approx \mathbb{R}$ are
+    tested rather than proved. Appendix~\ref{sec:verified_codegen} has the
+    full accounting.
 \end{itemize}
 
 \chapter{MNIST: 2D CNN}
