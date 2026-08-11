@@ -271,35 +271,35 @@ Let's find out.
 
 \textbf{Part 1: The framework (Chapters 1--9).} One new primitive per
 chapter, proved correct as we go. The first half pins down the
-composition rules --- chain, additive fan-in, product --- on dense
-layers, convolution, and normalization. The second half climbs the
-ladder to ViT.
+composition rules (chain, additive fan-in, product) on dense layers,
+convolution, and normalization. The second half climbs the ladder to ViT.
 
 \begin{itemize}
-  \item \textbf{Chapter 1: MNIST: linear classifier} --- Chain rule, sum rule, product
-    rule for partial derivatives; every backward in the book is a VJP
-    (vector-Jacobian product) composed from these. The book's hardest
-    chapter --- it builds the whole pipeline (foundation calculus
-    \(\to\) VJP framework \(\to\) forward/loss/backward/SGD \(\to\) GPU),
-    used by the MNIST linear classifier, proven and trained.
-    Everything after is just adding a layer.
-  \item \textbf{Chapter 2: MNIST: 1D MLP} --- ReLU and hidden layers on
-    top of Chapter 1's dense layer: the first \emph{multi-layer}
+  \item \textbf{Chapter 1: MNIST: linear classifier.} Chain rule, sum
+    rule, and product rule for partial derivatives. Every backward in the
+    book is a VJP (vector-Jacobian product) composed from these. This is
+    the book's hardest chapter, because it builds the whole pipeline
+    (foundation calculus \(\to\) VJP framework \(\to\)
+    forward/loss/backward/SGD \(\to\) GPU) and then uses it on the MNIST
+    linear classifier, proven and trained. Everything after is just
+    adding a layer.
+  \item \textbf{Chapter 2: MNIST: 1D MLP.} ReLU and hidden layers on top
+    of Chapter 1's dense layer, which gives us the first multi-layer
     backward pass.
-  \item \textbf{Chapter 3: MNIST: 2D CNN} --- Convolution, max pooling. The
-    backward pass of conv is another conv with a reversed kernel.
-  \item \textbf{Chapter 4: CIFAR with BatchNorm} --- The first dense Jacobian
+  \item \textbf{Chapter 3: MNIST: 2D CNN.} Convolution and max pooling.
+    The backward pass of conv is another conv with a reversed kernel.
+  \item \textbf{Chapter 4: CIFAR with BatchNorm.} The first dense Jacobian
     with a clean closed form. Three terms, one cancellation, and you
     never have to derive it again.
-  \item \textbf{Chapter 5: ResNet-34} --- Residual connections. Gradients from
-    two paths add at the input.
-  \item \textbf{Chapter 6: MobileNetV2} --- Depthwise convolution. Same as
+  \item \textbf{Chapter 5: ResNet-34.} Residual connections. Gradients
+    from two paths add at the input.
+  \item \textbf{Chapter 6: MobileNetV2.} Depthwise convolution. Same as
     regular conv, but diagonal in the channel dimension.
-  \item \textbf{Chapter 7: EfficientNet} --- Squeeze-and-excitation. The
+  \item \textbf{Chapter 7: EfficientNet.} Squeeze-and-excitation. The
     product rule: main path times gate, gradients from both paths add.
-  \item \textbf{Chapter 8: ConvNeXt} --- LayerNorm, Batchnorm in
+  \item \textbf{Chapter 8: ConvNeXt.} LayerNorm, which is Batchnorm in
     disguise. GELU activation function. Data augmentation strategies.
-  \item \textbf{Chapter 9: Vision Transformer} --- Self-attention. Softmax
+  \item \textbf{Chapter 9: Vision Transformer.} Self-attention. Softmax
     in the middle of the network, three-way fan-in at the input. The
     capstone.
 \end{itemize}
@@ -315,19 +315,19 @@ the complete proof framework as a reference (C).
 
 \subsection*{Theorem and definition budget per chapter}
 
-If you're planning how much of the book to read, here's the size of what
-each chapter \emph{proves about gradients}. Each proves a handful of
-\emph{VJP contracts} --- machine-checked theorems that a layer's backward
-function computes the right gradient (formally
-\(\texttt{backward}\,x\,dy\,i = \sum_j \pdiv f\,x\,i\,j \cdot dy_j\): the
-backward equals that layer's \(\pdiv\)-Jacobian contracted against the
-incoming cotangent, which the Foundations chapter builds up from scratch).
-Across Chapters~1--9 there are \textbf{40 contracts} --- one per layer,
-operator, and whole-network architecture --- plus \textbf{8 witnesses}:
-concrete end-to-end instances (a specific net at specific weights), kept
-in their own column as sanity checks rather than citable contracts. Even
-Chapter~1's toolkit is used straight away by a proven model, so no chapter
-is pure scaffolding.
+If you're planning how much of the book to read, here is the size of what
+each chapter proves about gradients. Each one proves a handful of VJP
+contracts, which are machine-checked theorems that a layer's backward
+function computes the right gradient. Formally that means
+\(\texttt{backward}\,x\,dy\,i = \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), so
+the backward equals that layer's \(\pdiv\)-Jacobian contracted against
+the incoming cotangent, which the Foundations chapter builds up from
+scratch. Across Chapters~1--9 there are \textbf{40 contracts}, one per
+layer, operator, and whole-network architecture. There are also
+\textbf{8 witnesses}, which are concrete end-to-end instances at specific
+weights, kept in their own column as sanity checks rather than citable
+contracts. Even Chapter~1's toolkit is used straight away by a proven
+model, so no chapter is pure scaffolding.
 
 \begin{center}
 \small
@@ -350,66 +350,66 @@ Chapter & Contracts & Witnesses & New primitive / result \\
 \end{tabular}
 \end{center}
 
-That's the ladder at a glance; Figure~\ref{fig:spines} in
+That's the ladder at a glance. Figure~\ref{fig:spines} in
 Appendix~\ref{app:verification} draws it as three architecture spines,
 every node a Lean theorem, each tracing back to the Chapter~1 calculus.
-The per-chapter detail lives where the work does --- each chapter names
-its contracts as it proves them --- and how the claims are
-\emph{checked} (the audits, the bridge theorems, the hardware oracles)
-is Appendix~\ref{app:verification}'s subject. It reads most naturally
-once you've been through the Foundations chapter, so it's safe to skip
-on a first pass.
+The per-chapter detail lives where the work does, because each chapter
+names its contracts as it proves them. Appendix~\ref{app:verification}
+covers how those claims get checked, through the audits, the bridge
+theorems, and the hardware oracles. It reads most naturally once you've
+been through the Foundations chapter, so it's safe to skip on a first
+pass.
 
 \subsection*{Roadmap: skip to your target architecture}
 
 Every theorem and definition in the book carries a
-\texttt{\textbackslash uses\{\}} annotation, so the dependency graph
-from ``which target architecture do I care about?'' back to which
-foundation pieces you need is explicit --- we get it for free from
-doing the proofs in Lean. Chapter~1 itself is short enough that
-the right answer for every target is ``just read all of it''
-(11 theorems + 1 definition, mostly chain rule and fan-in
-variants). The interesting subsetting decision is which later
-chapters to read, and whether you need Chapter~9's matrix-machinery
-section.
+\texttt{\textbackslash uses\{\}} annotation, so the dependency graph from
+``which target architecture do I care about?'' back to the foundation
+pieces you need is explicit. We get it for free from doing the proofs in
+Lean. Chapter~1 itself is short enough that the right answer for every
+target is ``just read all of it'' (11 theorems and 1 definition, mostly
+chain rule and fan-in variants). The interesting subsetting decision is
+which later chapters to read, and whether you need Chapter~9's
+matrix-machinery section.
 
 \textbf{Target: MLP (Ch~\ref{chap:mlp}).} Ch~1 + Ch~\ref{chap:mlp}.
 The MLP backward pass uses chain rule, additive fan-in, identity,
-and the Dense Jacobians (which are themselves built from this
-chapter's finite-sum + const + reindex).
+and the Dense Jacobians, which are themselves built from this
+chapter's finite-sum, const, and reindex rules.
 
 \textbf{Target: CNN, with or without BN (Ch \ref{chap:cnn}--\ref{chap:bn}).}
 Ch~1 + Ch~\ref{chap:mlp}--\ref{chap:bn}. CNN adds Conv2d and MaxPool
-VJPs proved from this chapter's foundation; BN adds the
+VJPs proved from this chapter's foundation, and BN adds the
 inverse-stddev smoothness chain.
 
 \textbf{Target: ResNet-34 (Ch~\ref{chap:residual}).} Ch~1--\ref{chap:residual}.
-Adds one theorem on top of CNN+BN: the residual additive-fan-in VJP.
-\emph{This is a great stopping point.} ResNet-34 was state of the
-art for years and still routinely gets 90\% on Imagenette; its
+Adds one theorem on top of CNN+BN, the residual additive-fan-in VJP.
+This is a great stopping point. ResNet-34 was state of the
+art for years and still routinely gets 90\% on Imagenette, and its
 bigger brother ResNet-50 is the standard benchmark (🐐) for
 production image classification. If your destination is a real
-image classifier that works, Ch
-2--\ref{chap:residual} is a complete reading list; Chs
-\ref{chap:depthwise}--\ref{chap:attention} are strictly skippable.
+image classifier that works, Ch~2--\ref{chap:residual} is a complete
+reading list and Chs \ref{chap:depthwise}--\ref{chap:attention} are
+strictly skippable.
 
 \textbf{Target: MobileNetV2 (Ch~\ref{chap:depthwise}).} ResNet
-subset $+$ Ch~\ref{chap:depthwise}. Adds depthwise conv VJPs (same
-recipe as Ch~\ref{chap:cnn} with one fewer summation level).
+subset $+$ Ch~\ref{chap:depthwise}. Adds depthwise conv VJPs, the same
+recipe as Ch~\ref{chap:cnn} with one fewer summation level.
 
 \textbf{Target: EfficientNet (Ch~\ref{chap:se}).} MobileNet subset
-$+$ Ch~\ref{chap:se}. Adds the SE block VJP (squeeze-and-excitation
-as elementwise product over global pool + 1$\times$1 convs).
+$+$ Ch~\ref{chap:se}. Adds the SE block VJP, which is
+squeeze-and-excitation as an elementwise product over global pool and
+1$\times$1 convs.
 
 \textbf{Target: ConvNeXt (Ch~\ref{chap:layernorm}).} EfficientNet
 subset $+$ Ch~\ref{chap:layernorm}. Adds GELU and LayerNorm as new
-operator primitives; both proved from Ch~1 foundation rules.
+operator primitives, both proved from Ch~1 foundation rules.
 
 \textbf{Target: Attention / ViT (Ch~\ref{chap:attention}).}
 Everything above plus Ch~\ref{chap:attention}. This is the only
-chapter that needs matrix-level machinery (matmul Jacobians and
+chapter that needs matrix-level machinery, meaning matmul Jacobians and
 VJPs in both factor positions, transpose, scalar-scale, row-wise
-lifting, 3D extensions); they're gathered in
+lifting, and 3D extensions. They're gathered in
 \S\ref{sec:matrix_machinery} at the start of Ch~\ref{chap:attention},
 just before the attention proofs that use them. Every earlier
 chapter routes around the matrix kit entirely.
@@ -423,19 +423,19 @@ architectures catch your eye.
 
 If you're coming to this book from \emph{Convolutional Neural
 Networks with Swift for TensorFlow}, you already know most of the
-architectures and the forward-pass intuition: VGG, ResNet,
+architectures and the forward-pass intuition. VGG, ResNet,
 MobileNet, and EfficientNet are all familiar, and you've built and
 trained them at least once.
 
 Chapters~\ref{chap:layernorm} and~\ref{chap:attention} will be new
 material even on the forward-pass side. I shipped the final draft
-of the first book in July 2020; in late August the grapevine started
+of the first book in July 2020. In late August the grapevine started
 whispering that something attention-shaped was coming, and the ViT
 paper landed on arXiv that October. Everything in this book that
-looks like a transformer --- LayerNorm, GELU, multi-head attention
---- postdates the first book and will be genuinely new for you. Otherwise,
-this book is the same architectures brought under the additional
-scrutiny of a formal backward pass.
+looks like a transformer postdates the first book and will be genuinely
+new for you, including LayerNorm, GELU, and multi-head attention.
+Otherwise, this book is the same architectures brought under the
+additional scrutiny of a formal backward pass.
 
 Concretely, that means:
 
@@ -448,27 +448,27 @@ Concretely, that means:
   backward pass.
 
 \item \textbf{Chapter 1 is the new material for you.} The
-  tensor-calculus chapter is what the first book didn't have --- where the
-  gradients get formalized. If you only read one chapter thoroughly,
-  make it this one.
+  tensor-calculus chapter is what the first book didn't have. It's
+  where the gradients get formalized. If you only read one chapter
+  thoroughly, make it this one.
 
 \item \textbf{Training recipe upgraded.} The first book's codegen
   trained with SGD (momentum 0.9, learning rate 0.002) and no other
-  tricks --- one recipe held constant across architectures for
-  consistency. This book adopts the modern recipe --- Adam, cosine
+  tricks, one recipe held constant across architectures for
+  consistency. This book adopts the modern recipe. Adam, cosine
   decay, linear warmup, weight decay, label smoothing, and basic
-  data augmentation are how this book's
-  Imagenette results were achieved. That full recipe is assembled and
-  ablated in Chapter~\ref{chap:residual} (ResNet) and ran against each
+  data augmentation are how this book's Imagenette results were
+  achieved. That full recipe is assembled and ablated in
+  Chapter~\ref{chap:residual} (ResNet) and ran against each
   architecture after as a common baseline. Later chapters add full
   ImageNet recipes, trained through a Lean 4 \(\to\) JAX bridge, with
   modern data augmentations.
 
 \item \textbf{The codegen is new.} The first book's Swift-for-TensorFlow
-  pipeline is replaced with Lean 4 \(\to\) StableHLO MLIR \(\to\) IREE
-  \(\to\) GPU. Mostly doesn't affect the math; it changes where the
-  gradients are computed (at codegen time in Lean, not at runtime
-  by a framework).
+  pipeline is replaced with Lean 4 \(\to\) StableHLO MLIR \(\to\) XLA
+  \(\to\) GPU. That mostly doesn't affect the math. It changes where the
+  gradients are computed, at codegen time in Lean rather than at runtime
+  by a framework.
 \end{itemize}
 
 Practical reading style: work through Chapter~\ref{chap:tensor}
@@ -483,71 +483,71 @@ cites \(\to\) move on.'' The dependency DAG is your friend.
 
 Backprop has exactly one job: compute the gradient of the loss with
 respect to every parameter. That gradient is the del operator
-\(\nabla\mathcal{L}\) --- the vector of partials
-\(\partial\mathcal{L}/\partial\theta\) --- so before a single layer, we
-need a rigorous, machine-checkable notion of ``the derivative of this
-function at this point.''
+\(\nabla\mathcal{L}\), the vector of partials
+\(\partial\mathcal{L}/\partial\theta\). So before we write a single
+layer, we need a rigorous, machine-checkable notion of ``the derivative
+of this function at this point.''
 
-Mathlib supplies it as the Fréchet derivative, \(\fderiv\): the
-\emph{best linear approximation} --- the continuous linear map \(D\)
-with \(f(x+h) \approx f(x) + D\,h\) --- defined over any normed space,
-not just \(\R^n\). For a layer \(f : \Vect{n} \to \Vect{m}\),
+Mathlib supplies it as the Fréchet derivative, \(\fderiv\). It is the
+best linear approximation, the continuous linear map \(D\) with
+\(f(x+h) \approx f(x) + D\,h\), and it is defined over any normed space
+rather than only \(\R^n\). For a layer \(f : \Vect{n} \to \Vect{m}\),
 \(\fderiv\,\R\,f\,x\) is the linear map whose matrix is the Jacobian.
 
 We read individual partials off it. A single \((i,j)\) Jacobian entry is
-\(\pdiv\,f\,x\,i\,j = \big(\fderiv\,\R\,f\,x\,(e_i)\big)_j\) --- apply
-\(\fderiv\,\R\,f\,x\) to the \(i\)-th basis vector \(e_i\) and take
-component \(j\). So the Jacobian and the gradient \(\nabla\mathcal{L}\)
+\(\pdiv\,f\,x\,i\,j = \big(\fderiv\,\R\,f\,x\,(e_i)\big)_j\), so you
+apply \(\fderiv\,\R\,f\,x\) to the \(i\)-th basis vector \(e_i\) and take
+component \(j\). The Jacobian and the gradient \(\nabla\mathcal{L}\)
 you already picture are assembled entry-by-entry from \(\pdiv\), and
 \(\pdiv\) is \(\fderiv\) underneath. Every layer in this book is built on
 this one accessor.
 
-Because \(\pdiv\) is \emph{defined} from \(\fderiv\) rather than
-assumed, the structural rules --- chain, sum, product --- are theorems
-proved from Mathlib's API, not axioms we ask you to trust. Earlier
-drafts of this book took the other route and axiomatized those eight
-rules as opaque facts; the current foundation flips it, and every
-later-chapter axiom has been pruned the same way: \(\texttt{conv2d}\),
-multi-head SDPA, patch embedding, the BN inverse-stddev broadcast,
-GELU, the softmax Jacobian, and every transformer-level composition
-chain are defined concretely and proved from the foundation. The cost
-is mild --- a \(\Differentiable\) hypothesis propagates through each
-chapter. The benefit is that
-\(\texttt{\#print axioms vit\_full\_has\_vjp}\) bottoms out at Lean core
-(\texttt{propext}, \texttt{Classical.choice}, \texttt{Quot.sound}) and
-nothing else --- no thumb on the scale. Appendix~\ref{app:verification}
-shows how that claim is independently audited.
+Because \(\pdiv\) is defined from \(\fderiv\) rather than assumed, the
+structural rules of chain, sum, and product are theorems proved from
+Mathlib's API rather than axioms we ask you to trust. Earlier drafts of
+this book took the other route and axiomatized those eight rules as
+opaque facts. The current foundation flips that, and every later-chapter
+axiom has been pruned the same way. \(\texttt{conv2d}\), multi-head SDPA,
+patch embedding, the BN inverse-stddev broadcast, GELU, the softmax
+Jacobian, and every transformer-level composition chain are defined
+concretely and proved from the foundation. The cost is mild, because a
+\(\Differentiable\) hypothesis propagates through each chapter. The
+benefit is that \(\texttt{\#print axioms vit\_full\_has\_vjp}\) bottoms
+out at Lean core (\texttt{propext}, \texttt{Classical.choice},
+\texttt{Quot.sound}) and nothing else. No thumb on the scale.
+Appendix~\ref{app:verification} shows how that claim is independently
+audited.
 
 \subsection*{What about non-smooth points?}
 
-ReLU is $\max(0, x)$, which has no derivative at $x=0$; absolute value
-flunks the same test for the same reason; maxPool over a window
+ReLU is $\max(0, x)$, which has no derivative at $x=0$. Absolute value
+flunks the same test for the same reason. maxPool over a window
 has no derivative when two entries tie. Mathlib's \(\fderiv\)
 correctly declines to return a value at these points, but ML
-frameworks have to return \emph{something}, so they all pick a
+frameworks have to return something, so they all pick a
 convention. PyTorch and JAX both use $0$ as ReLU's subgradient at
 the kink and break maxPool ties by the lowest index.
-Those choices aren't theorems --- they're conventions that make
+Those choices aren't theorems. They're conventions that make
 backprop computable everywhere.
 
 We make those conventions formal. For a non-smooth $f$, we don't
-try to prove a closed-form \(\HasVJP\) from \(\fderiv\) (which would
-fail at the singular set). Instead we define the \(\HasVJP\) directly,
+try to prove a closed-form \(\HasVJP\) from \(\fderiv\), which would
+fail at the singular set. Instead we define the \(\HasVJP\) directly,
 with backward function
 $\mathrm{backward}(x, dy)_i := \sum_j \pdiv\, f\, x\, i\, j \cdot dy_j$.
-The \texttt{correct} field then holds by \texttt{rfl} --- by
-definition, that's exactly what \texttt{backward} computes. Wherever
-$f$ \emph{is} smooth, \(\pdiv\) agrees with \(\fderiv\) (proved);
-at the non-smooth points, \(\pdiv\) takes the standard convention by
-definition. We call this the \emph{canonical pdiv-derived witness}
+The \texttt{correct} field then holds by \texttt{rfl}, because by
+definition that is exactly what \texttt{backward} computes. Wherever
+$f$ is smooth, \(\pdiv\) agrees with \(\fderiv\), and that agreement is
+proved. At the non-smooth points \(\pdiv\) takes the standard convention
+by definition. We call this the canonical pdiv-derived witness
 pattern, and it shows up by name in the next few chapters for ReLU,
 maxPool, and the depthwise input VJP.
 
-The codegen then substitutes the same subgradient/argmax convention
+The codegen then substitutes the same subgradient and argmax convention
 every framework already uses. The benefit isn't a different numerical
-result --- it's a paper trail that says ``yes, we know exactly which
-choice we made at each non-smooth point, and the typechecker has
-verified the algebra around it.''
+result. It's a paper trail that says we know exactly which choice we made
+at each non-smooth point, and the typechecker has verified the algebra
+around it.
 
 \section*{Why VJPs, not Jacobians?}
 
@@ -561,23 +561,23 @@ Jacobian of the output with respect to the input is the matrix
 product $J_L \cdot J_{L-1} \cdots J_1$.
 
 This is correct and totally impractical. For a 512-dimensional hidden
-layer, each $J_k$ is a $512 \times 512$ matrix; multiplying two of
+layer, each $J_k$ is a $512 \times 512$ matrix, and multiplying two of
 them is $\sim 1.3 \times 10^8$ flops. ResNet-34 has 34 of these
-layers, ViT has more. You'd be materializing intermediate matrices
+layers and ViT has more. You'd be materializing intermediate matrices
 that are bigger than the network itself, and most of whose entries
 you never need.
 
 The fix is to notice what you actually want. Training minimizes a
 scalar loss $\mathcal{L}$, so the only output gradient you ever need
-is $\nabla \mathcal{L} \in \Vect{m}$ --- a single vector. Apply that
+is $\nabla \mathcal{L} \in \Vect{m}$, a single vector. Apply that
 vector to the chain on the left:
 \[
   (\nabla \mathcal{L})^T \cdot J_L \cdot J_{L-1} \cdots J_1.
 \]
 Read this right-to-left. Start with one $m$-dimensional vector.
 Multiply on the right by $J_L$, get a vector. Multiply by $J_{L-1}$,
-get a vector. Continue. At every step you carry a vector --- never a
-matrix --- and its dimension matches the layer's input or output
+get a vector. Continue. At every step you carry a vector and never a
+matrix, and its dimension matches the layer's input or output
 shape.
 
 The single step
@@ -587,23 +587,23 @@ The single step
 is the \emph{vector--Jacobian product}, or \textbf{VJP}. It takes the
 gradient flowing in from above and produces the gradient flowing out
 below. The cost is $O(mn)$ per layer instead of $O(d^3)$ for a
-matrix--matrix product, and you never form $J_f$ at all --- you just
+matrix--matrix product, and you never form $J_f$ at all. You just
 need a function that, given $v$, returns $v^T J_f$. That function
-is the \textbf{backward function}; together with $f$ itself, it
+is the \textbf{backward function}, and together with $f$ itself it
 implements one layer's contribution to backpropagation.
 
 This is what reverse-mode automatic differentiation does, mechanically,
-for any program. The same right-to-left vector-pass story --- forward
+for any program. It's the same right-to-left vector-pass story: forward
 to compute activations, backward to compute gradients, both linear in
 the number of layers.
 
 \textbf{What \(\HasVJP\) packages.} A \(\HasVJP\) record for $f$ holds
 two things:
 \begin{itemize}
-  \item a \texttt{backward} function $\Vect{m} \to \Vect{n}$;
-  \item a \texttt{correct} field --- a proof that
+  \item a \texttt{backward} function $\Vect{m} \to \Vect{n}$
+  \item a \texttt{correct} field, which is a proof that
   $\mathrm{backward}(v)_j = \sum_i v_i \cdot \pdiv\, f\, x\, i\, j$,
-  i.e. that the function really does compute $v^T J_f$.
+  meaning that the function really does compute $v^T J_f$
 \end{itemize}
 In Lean that's exactly three lines:
 \begin{verbatim}
@@ -613,17 +613,16 @@ structure HasVJP (f : Vec m → Vec n) where
 \end{verbatim}
 A structure with two fields: a function, and a proof obligation about
 that function. Constructing a \(\HasVJP\) for some $f$ means writing
-both --- you don't get the record without the proof.
+both. You don't get the record without the proof.
 
-The correctness field is the whole point: the backward function
-\emph{is} the kernel that ships into the codegen, and the proof is the
-guarantee that what it computes matches what its name claims. Every
-later chapter proves a closed-form \(\HasVJP\) for a layer family
-(dense, conv, BN, attention, $\ldots$). Unlike autograd, which records
-each forward op on a tape and replays its derivative at backward time,
-we ship the closed form: codegen reads off the \texttt{backward}
-field and emits a single fused StableHLO kernel --- no tape, no
-replay.
+The correctness field is the whole point. The backward function is the
+kernel that ships into the codegen, and the proof is the guarantee that
+what it computes matches what its name claims. Every later chapter proves
+a closed-form \(\HasVJP\) for a layer family (dense, conv, BN, attention,
+$\ldots$). Autograd records each forward op on a tape and replays its
+derivative at backward time. We ship the closed form instead: codegen
+reads off the \texttt{backward} field and emits a single fused StableHLO
+kernel, with no tape and no replay.
 
 \chapter{MNIST: linear classifier}
 \label{chap:tensor}
