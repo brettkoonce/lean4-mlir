@@ -122,7 +122,7 @@ def main (argv : List String) : IO Unit := do
   let nExc := sig.length - nDec
   IO.println s!"wdExcludeNormBias — {wn.slug}, the timm no_weight_decay render (v1.4)"
   IO.println s!"  {sig.length} params, {nDec} decayed / {nExc} excluded, bs {bs}, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   -- ⚠ TWO ROUTES TO THE SAME LAYOUT, checked. the signature list names the params and drives the
   -- render's `%wd`/`%wdz` choice; `net.specs` is the LAYOUT the driver packs a blob from. They are
@@ -167,7 +167,7 @@ the signature list says {ds}")
     let dflt := s!"verified_mlir/{wn.slug}_{variant}_train_step.mlir"
     let path := if variant == "adamwx" then cand.getD dflt else dflt
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess s!"m.{wn.slug}_{variant}_train_step" x buf shapes y
+    LowererSession.mlpTrainStepV sess s!"m.{wn.slug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   if cand.isSome then IO.println s!"  ⚠ CANDIDATE wx render: {cand.get!}"
   let oA ← run "adam"

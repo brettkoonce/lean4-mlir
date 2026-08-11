@@ -95,7 +95,7 @@ private def nonFinite (a : ByteArray) (n : Nat) : Nat := Id.run do
 /-- Compile `src` fresh. Deletes both the bare and the `_$IREE_BACKEND`-scoped `.vmfb` first (§4):
     `compileVmfb` reuses any output newer than the `.mlir`, keyed on the output path and an mtime
     rather than on the source, so a second run under one tag silently reuses the first binary. -/
-private def freshSession (path tag : String) : IO IreeSession := do
+private def freshSession (path tag : String) : IO LowererSession := do
   let vmfb := s!".lake/build/droppath_tie_{tag}.vmfb"
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
   for p in [vmfb, s!".lake/build/droppath_tie_{tag}_{target}.vmfb"] do
@@ -176,7 +176,7 @@ private def gateOp (doBreak : Bool) : IO Unit := do
   IO.println "── GATE A — the known answer: does a supplied scale multiply the branch by exactly that?"
   let keeps := efficientnetVerified.dropKeeps
   let maskVals := opMask keeps
-  IO.println s!"  B {OB}, n {ON} (n ≠ B on purpose), backend {← IreeSession.backendName}"
+  IO.println s!"  B {OB}, n {ON} (n ≠ B on purpose), backend {← LowererSession.backendName}"
   IO.println s!"  mask (per example) = {maskVals}"
   IO.println s!"    ↑ 1/keep at sites 0/4/8 of the real ramp {keeps.size} sites, plus both endpoints \
 and three interior values"
@@ -185,7 +185,7 @@ and three interior values"
   let path := "/tmp/droppath_op.mlir"
   IO.FS.writeFile path opModule
   let sess ← freshSession path "op"
-  let y ← IreeSession.forwardF32 sess "m.dp" s (packShapes #[#[OB]]) x
+  let y ← LowererSession.forwardF32 sess "m.dp" s (packShapes #[#[OB]]) x
             (packXShape #[OB, ON]) OB.toUSize ON.toUSize
   let n := OB * ON
   if nonFinite y n > 0 then
@@ -275,7 +275,7 @@ B3 and B4 are the load-bearing pair: B2 alone is satisfied by both placements.
 -/
 
 private structure NetRun where
-  sess   : IreeSession
+  sess   : LowererSession
   params : ByteArray      -- params (+ BN stats when eval), WITHOUT the trailing masks
   shapes : ByteArray      -- the matching shape table, masks included
   bs     : Nat
@@ -348,7 +348,7 @@ private def gateNet (dn : DropNet) (isEval : Bool) (cand : Option String) : IO U
   let bs := 32
   let sites := dn.sites
   IO.println s!"  {net.specs.size} params, {sites.length} drop sites {sites}, bs {bs}, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   -- ── one deterministic (θ, x) every run sees ──
   let mut parts : Array ByteArray := #[]
@@ -380,7 +380,7 @@ backend {← IreeSession.backendName}"
   let runAt (r : NetRun) (xx : ByteArray) (masks : Array (Array Float)) : IO ByteArray := do
     let mut cells : Array ByteArray := #[r.params]
     for m in masks do cells := cells.push (← mkVec m)
-    IreeSession.forwardF32 r.sess s!"m.{fn}" (F32.concat cells) r.shapes xx
+    LowererSession.forwardF32 r.sess s!"m.{fn}" (F32.concat cells) r.shapes xx
       (packXShape #[r.bs, net.d0]) r.bs.toUSize r.nOut.toUSize
 
   let ones  := (List.replicate sites.length (uniform bs 1.0)).toArray
@@ -407,7 +407,7 @@ identity."
 
   -- ── B1: the ones mask is the exact identity, against the DROP-FREE committed forward ──
   let rRef ← freshSession s!"verified_mlir/{refFn}.mlir" "ref"
-  let yRef ← IreeSession.forwardF32 rRef s!"m.{refFn}" params (packShapes shapeList) x
+  let yRef ← LowererSession.forwardF32 rRef s!"m.{refFn}" params (packShapes shapeList) x
                (packXShape #[bs, net.d0]) bs.toUSize net.nClasses.toUSize
   let (d1, m1, e1) := cmpBufs yOnesA yRef n
   IO.println s!"  B1  ones mask vs drop-free @{refFn} : max abs {d1}   bit-exact {e1}/{n}   \

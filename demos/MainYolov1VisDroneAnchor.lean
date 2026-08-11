@@ -71,7 +71,7 @@ def inferDump (dataDir outDir : String) : IO Unit := do
     if ← System.FilePath.pathExists bnPath then IO.FS.readBinFile bnPath
     else F32.const spec.nBnStats.toUSize 0.0
   let evalParams := params.append bnStats
-  let sess ← IreeSession.create evalVmfb
+  let sess ← LowererSession.create evalVmfb
   let (valImg, _t, nVal) ← F32.loadDetBinAnchor (dataDir ++ "/val.bin")
                              spec.imageH.toUSize gH.toUSize gW.toUSize A.toUSize
   IO.println s!"  loaded {nVal} val records ({flat}-wide output); dumping logits"
@@ -90,7 +90,7 @@ def inferDump (dataDir outDir : String) : IO Unit := do
     if real < batch then
       let lastImg := F32.sliceImages valImg (start + real - 1) 1 pixelsPerImage
       for _ in [:batch - real] do imgs := imgs ++ lastImg
-    let logitsB ← IreeSession.forwardF32 sess spec.evalFnName
+    let logitsB ← LowererSession.forwardF32 sess spec.evalFnName
                     evalParams evalShapesBA imgs xShape batch.toUSize nOut
     logitsAll := logitsAll ++ logitsB.extract 0 (real * rowBytes)
   IO.FS.writeBinFile s!"{outDir}/logits.bin" logitsAll

@@ -73,7 +73,7 @@ def main : IO Unit := do
   IO.println s!"{net.name} — DP SHARD DISCRIMINATION ({replicas} replicas x bs {bs})"
   IO.println s!"  render : {dpPath}"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
@@ -118,7 +118,7 @@ backend {← IreeSession.backendName}"
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
   let sess ← mkSession dpPath
   let run (x y : ByteArray) : IO ByteArray :=
-    IreeSession.mlpTrainStepVDP sess fn x pbuf shapes y
+    LowererSession.mlpTrainStepVDP sess fn x pbuf shapes y
       (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
   IO.println "  invoking A…"; (← IO.getStdout).flush
   let oA ← run xA yA

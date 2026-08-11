@@ -71,17 +71,17 @@ private def runIree (mlirPath outPath : String) : IO Bool := do
     this binary was linked against (`planning/detector_pjrt_port.md`).
 
     * **IREE** — `iree-compile` turns `{pfx}_{suffix}.mlir` into a `.vmfb`, and
-      that `.vmfb` is what `IreeSession.create` loads.
+      that `.vmfb` is what `LowererSession.create` loads.
     * **XLA** — PJRT compiles the `.mlir` in-process, so no `.vmfb` is ever
       produced and the `.mlir` *is* the artifact.
 
-    Every `pathExists` guard and `IreeSession.create` call below routes through
+    Every `pathExists` guard and `LowererSession.create` call below routes through
     this. The guards are the reason it exists: they are what decide whether eval
     runs at all, and with a hardcoded `.vmfb` path they go silently false on XLA
     — training would look perfectly healthy and simply stop reporting val
     metrics, which is a much worse failure than not loading. -/
 def graphArtifact (pfx suffix : String) : IO String := do
-  if (← IreeSession.backendName) == "xla"
+  if (← LowererSession.backendName) == "xla"
   then return s!"{pfx}_{suffix}.mlir"
   else return s!"{pfx}_{suffix}.vmfb"
 
@@ -92,7 +92,7 @@ private def runIreeCached (mlirPath outPath mlir : String) : IO (Bool × Bool) :
   -- XLA/PJRT has no ahead-of-time compile step — the `.mlir` goes straight to
   -- the runtime. Report (not-newly-compiled, succeeded) so every caller's
   -- logging and its `IO.Process.exit 1` on failure stay exactly as they are.
-  if (← IreeSession.backendName) == "xla" then return (false, true)
+  if (← LowererSession.backendName) == "xla" then return (false, true)
   let key ← cacheKey mlir
   let hashPath := outPath ++ ".hash"
   let vmfbExists ← System.FilePath.pathExists outPath
@@ -503,7 +503,7 @@ private def datasetIO : DatasetKind → DatasetIO
 
     `spec` must have been compiled via `compileVmfbs` first. -/
 def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
-    (dataDir : String) (sess : IreeSession) : IO Unit := do
+    (dataDir : String) (sess : LowererSession) : IO Unit := do
   let pfx := spec.buildPrefix
   let batchN : Nat := cfg.batchSize
   let batch  : USize := cfg.batchSize.toUSize
@@ -906,7 +906,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                   -- target-only). The FPN codegen sig is x + %y_fpn:[B,Ntot,1,1] +
                   -- lr + t — identical to the single-target DDPM protocol — so
                   -- reuse that FFI verbatim (outC=Ntot, outH=outW=1), no mask.
-                  IreeSession.trainStepAdamF32Ddpm sess spec.trainFnName
+                  LowererSession.trainStepAdamF32Ddpm sess spec.trainFnName
                     packed allShapes xba xSh yArg lr globalStep.toFloat bnShapes batch
                     fpnNtot.toUSize 1 1
                 else if useYolov1Run then do
@@ -919,7 +919,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                     -- (yoloAugment is single-box-format only).
                     let A := cfg.anchors.length
                     let yMsk ← F32.const (batch * gHu * gWu) 0.0
-                    IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
+                    LowererSession.trainStepAdamF32Yolov1 sess spec.trainFnName
                       packed allShapes xba xSh yArg yMsk lr globalStep.toFloat bnShapes batch
                       gHu gWu (A * 15).toUSize
                   else do
@@ -935,7 +935,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                       else do
                         let (yTgt, yMsk) ← F32.detSplitBatch yArg batch gHu gWu (30 : USize)
                         pure (xba, yTgt, yMsk)
-                  IreeSession.trainStepAdamF32Yolov1 sess spec.trainFnName
+                  LowererSession.trainStepAdamF32Yolov1 sess spec.trainFnName
                     packed allShapes xAug xSh yTgtAug yMskAug lr globalStep.toFloat bnShapes batch
                     gHu gWu (30 : USize)
                 else if useSeg then do
@@ -943,14 +943,14 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                   -- expects int32 LE [B, H, W]. yArg here is the raw uint8
                   -- batch slice (sliceLabels with bytesPerRecord = H*W).
                   let yI32 ← F32.maskU8ToI32 yArg
-                  IreeSession.trainStepAdamF32Seg sess spec.trainFnName
+                  LowererSession.trainStepAdamF32Seg sess spec.trainFnName
                     packed allShapes xba xSh yI32 lr globalStep.toFloat bnShapes batch
                     spec.imageH.toUSize spec.imageW.toUSize
                 else if useSoftLabels then
-                  IreeSession.trainStepAdamF32Soft sess spec.trainFnName
+                  LowererSession.trainStepAdamF32Soft sess spec.trainFnName
                     packed allShapes xba xSh yArg lr globalStep.toFloat bnShapes batch nClassesNat.toUSize
                 else
-                  IreeSession.trainStepAdamF32 sess spec.trainFnName
+                  LowererSession.trainStepAdamF32 sess spec.trainFnName
                     packed allShapes xba xSh yArg lr globalStep.toFloat bnShapes batch
       let ts1 ← IO.monoMsNow
       let loss := F32.extractLoss out nT
@@ -1019,7 +1019,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
        -- IoU_c = conf[c][c] / (row_c + col_c − conf[c][c]).
        let evalVmfb ← graphArtifact pfx "fwd_eval"
        if ← System.FilePath.pathExists evalVmfb then
-         let evalSess ← IreeSession.create evalVmfb
+         let evalSess ← LowererSession.create evalVmfb
          let (valImg, valLbl, nVal) ← dio.loadVal dataDir
          let evalBatch := batchN
          let evalSteps := nVal / evalBatch
@@ -1038,7 +1038,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          let mut conf : Array Nat := Array.replicate (NC * NC) 0
          for bi in [:evalSteps] do
            let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch dio.valPixels
-           let logits ← IreeSession.forwardF32 evalSess spec.evalFnName
+           let logits ← LowererSession.forwardF32 evalSess spec.evalFnName
                            evalParams evalShapesBA xba evalXSh evalBatch.toUSize outElems
            let maskSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
            let cb ← F32.segConfusion logits maskSlice
@@ -1120,7 +1120,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
      else
       let evalVmfb ← graphArtifact pfx "fwd_eval"
       if ← System.FilePath.pathExists evalVmfb then
-        let evalSess ← IreeSession.create evalVmfb
+        let evalSess ← LowererSession.create evalVmfb
         let (valImg, valLbl, nVal) ← dio.loadVal dataDir
         let evalBatch := batchN
         let evalSteps := nVal / evalBatch
@@ -1155,7 +1155,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                         dio.valAugmentBatch xbaRaw evalBatch.toUSize (epoch * 100000 + bi * 31 + k)
                       else
                         dio.valPreprocessBatch xbaRaw evalBatch.toUSize
-            let logits ← IreeSession.forwardF32 evalSess spec.evalFnName
+            let logits ← LowererSession.forwardF32 evalSess spec.evalFnName
                             evalParams evalShapesBA xba evalXSh evalBatch.toUSize nClasses
             let mom : Float := 1.0 / (k.toFloat + 1.0)
             logitsAcc ← F32.ema logitsAcc logits mom
@@ -1178,7 +1178,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   if cfg.useSWAG && swagDeviations.size > 0 then
     let evalVmfb ← graphArtifact pfx "fwd_eval"
     if ← System.FilePath.pathExists evalVmfb then
-      let evalSess ← IreeSession.create evalVmfb
+      let evalSess ← LowererSession.create evalVmfb
       let (valImg, valLbl, nVal) ← dio.loadVal dataDir
       let evalBatch := batchN
       let evalSteps := nVal / evalBatch
@@ -1196,7 +1196,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         for bi in [:evalSteps] do
           let xbaRaw := F32.sliceImages valImg (bi * evalBatch) evalBatch dio.valPixels
           let xba ← dio.valPreprocessBatch xbaRaw evalBatch.toUSize
-          let logits ← IreeSession.forwardF32 evalSess spec.evalFnName
+          let logits ← LowererSession.forwardF32 evalSess spec.evalFnName
                           sampledEvalParams evalShapesBA xba evalXSh evalBatch.toUSize nClasses
           let mom : Float := 1.0 / (k.toFloat + 1.0)
           logitsAccs := logitsAccs.set! bi (← F32.ema logitsAccs[bi]! logits mom)
@@ -1254,7 +1254,7 @@ def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     IO.eprintln s!"ERROR: no eval graph at {evalVmfb}"
     IO.eprintln "  (run a training cycle first to emit it, or call compileVmfbs)"
     IO.Process.exit 1
-  let evalSess ← IreeSession.create evalVmfb
+  let evalSess ← LowererSession.create evalVmfb
   IO.eprintln "  eval session loaded"
 
   let (valImg, valLbl, nVal) ← dio.loadVal dataDir
@@ -1269,7 +1269,7 @@ def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   for bi in [:evalSteps] do
     let xbaRaw := F32.sliceImages valImg (bi * evalBatch) evalBatch dio.valPixels
     let xba ← dio.valPreprocessBatch xbaRaw evalBatch.toUSize
-    let logits ← IreeSession.forwardF32 evalSess spec.evalFnName
+    let logits ← LowererSession.forwardF32 evalSess spec.evalFnName
                     evalParams evalShapesBA xba evalXSh evalBatch.toUSize nClasses
     let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
     for i in [:evalBatch] do
@@ -1311,7 +1311,7 @@ def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
     spec.evalOnly cfg ds dataDir
   | none => do
     let trainVmfb ← spec.compileVmfbs cfg useSeg
-    let sess ← IreeSession.create trainVmfb
+    let sess ← LowererSession.create trainVmfb
     IO.eprintln "  session loaded"
     spec.runTraining cfg ds dataDir sess
 

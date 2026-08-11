@@ -126,7 +126,7 @@ artifact to itself and pass unconditionally"
   IO.println s!"  acc(x1..x{k})  ==  DP([x1|..|x{k}])   ({k} micro-batches of {bs} vs {k} replicas x {bs})"
   IO.println s!"  accumulation : verified_mlir/{net.slug}_{variant}_train_step.mlir"
   IO.println s!"  data-parallel: verified_mlir/{net.slug}_{peer}_train_step.mlir"
-  IO.println s!"  {net.specs.size} params ({nP} floats), lr {lr}, backend {← IreeSession.backendName}"
+  IO.println s!"  {net.specs.size} params ({nP} floats), lr {lr}, backend {← LowererSession.backendName}"
 
   -- ── one (θ, m, v) both sides see. m and v are non-zero: at m = v = 0 the β₁/β₂ passthrough
   --    terms vanish and a render that dropped them would still tie. ──
@@ -179,7 +179,7 @@ artifact to itself and pass unconditionally"
                    (if applyNow then 1.0 else 0.0) (if i == 0 then 0.0 else 1.0) 0.0
       buf ← F32.blit buf (4 * nP + 3).toUSize pair 0 2
       buf ← F32.blit buf (4 * nP + 5).toUSize bnIn 0 nBnStats.toUSize
-      buf ← IreeSession.mlpTrainStepV accSess s!"m.{net.slug}_{variant}_train_step"
+      buf ← LowererSession.mlpTrainStepV accSess s!"m.{net.slug}_{variant}_train_step"
               batches[i]!.1 buf accShapes batches[i]!.2
               bs.toUSize net.d0.toUSize net.nClasses.toUSize
     return buf
@@ -188,7 +188,7 @@ artifact to itself and pass unconditionally"
   let accOut ← cycle ((Array.range k).map (fun i => (xs[i]!, ys[i]!)))
   IO.println s!"  one {k}-replica data-parallel step on their concatenation…"; (← IO.getStdout).flush
   let dpBuf := F32.concat #[θ, mIn, vIn, ← F32.write3 (← F32.const 3 0.0) 0 lr bc1 bc2, bnIn]
-  let dpOut ← IreeSession.mlpTrainStepVDP dpSess s!"m.{net.slug}_{peer}_train_step"
+  let dpOut ← LowererSession.mlpTrainStepVDP dpSess s!"m.{net.slug}_{peer}_train_step"
                 xAll dpBuf dpShapes yAll (k * bs).toUSize net.d0.toUSize net.nClasses.toUSize
                 k.toUSize
   -- ⟂ the control: the DUPLICATED batch, i.e. exactly what `r50-accum-tie` runs.

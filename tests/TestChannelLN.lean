@@ -271,7 +271,7 @@ private def benchMode : IO Unit := do
       let one : IO Float := do
         let t0 ← IO.monoMsNow
         for _ in [0:inner] do
-          let o ← IreeSession.forwardF32 sess "m.lnbench" params shapes x
+          let o ← LowererSession.forwardF32 sess "m.lnbench" params shapes x
                     (packXShape #[benchBS, C'*S']) benchBS.toUSize (C'*S').toUSize
           if o.size == 0 then throw (IO.userError "empty bench output")
         let t1 ← IO.monoMsNow
@@ -294,7 +294,7 @@ sites are chained here, so no transpose can fuse into a conv consumer)."
 def main (args : List String) : IO Unit := do
   if args.contains "--bench" then benchMode; return
   IO.println "§2m ConvNeXt — does transpose ∘ row-LN ∘ per-channel affine = channel LayerNorm?"
-  IO.println s!"  B {BS}, C {C}, S {S} (a site is Vec (C·S) = {C*S}), backend {← IreeSession.backendName}"
+  IO.println s!"  B {BS}, C {C}, S {S} (a site is Vec (C·S) = {C*S}), backend {← LowererSession.backendName}"
   -- inputs: x varies across BOTH axes (a constant channel would hide an axis mix-up), γ/β non-trivial
   let x  ← F32.heInit 4242 nX.toUSize 1.0
   let g  ← F32.scaleShift (← F32.heInit 77 C.toUSize 0.4) 1.0 1.0    -- γ ≈ 1 ± 0.4
@@ -308,7 +308,7 @@ def main (args : List String) : IO Unit := do
     for p in [vmfb, s!".lake/build/chln_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession path
-    IreeSession.forwardF32 sess s!"m.{fn}" params shapes x (packXShape #[BS, C*S])
+    LowererSession.forwardF32 sess s!"m.{fn}" params shapes x (packXShape #[BS, C*S])
       BS.toUSize (C*S).toUSize
   -- gate 1+2: the chain compiles, and it computes the closed form
   let yA ← run chainModule "chain" (F32.concat #[g, bt]) (packShapes #[#[C], #[C]]) "chln"
@@ -341,7 +341,7 @@ either way gate 2 means nothing.")
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession path
     -- `%x` rides the x slot; `%g` and `%dy` ride the packed params, in signature order.
-    IreeSession.forwardF32 sess s!"m.chln_{which}" (F32.concat #[g, dy])
+    LowererSession.forwardF32 sess s!"m.chln_{which}" (F32.concat #[g, dy])
       (packShapes #[#[C], #[BS, C*S]]) x (packXShape #[BS, C*S])
       (if which == "dx" then BS else 1).toUSize (if which == "dx" then C*S else nOut).toUSize
   let ydx ← runB "dx" nX

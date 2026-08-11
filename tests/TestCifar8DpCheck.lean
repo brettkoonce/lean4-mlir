@@ -54,7 +54,7 @@ def main (args : List String) : IO Unit := do
   IO.println "cifar8 data-parallel exact check (no BN ⇒ the decomposition is an identity)"
   IO.println s!"  A = {single}   (1 device × {gbs})"
   IO.println s!"  B = {dp}   ({replicas} replicas × {gbs / replicas})"
-  IO.println s!"  {net.specs.size} params ({net.nParams} floats), backend {← IreeSession.backendName}"
+  IO.println s!"  {net.specs.size} params ({net.nParams} floats), backend {← LowererSession.backendName}"
 
   -- ── identical inputs for both ─────────────────────────────────────────────────────────────
   let mut θparts : Array ByteArray := #[]
@@ -80,11 +80,11 @@ def main (args : List String) : IO Unit := do
 
   IO.println "  running A (single device, batch 256)…"; (← IO.getStdout).flush
   let sessA ← mkSession single
-  let oa ← IreeSession.mlpTrainStepV sessA "m.cifar8_adam_train_step" x pbuf shapes y
+  let oa ← LowererSession.mlpTrainStepV sessA "m.cifar8_adam_train_step" x pbuf shapes y
     gbs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println s!"  running B (data-parallel, {replicas} × {gbs / replicas})…"; (← IO.getStdout).flush
   let sessB ← mkSession dp
-  let ob ← IreeSession.mlpTrainStepVDP sessB "m.cifar8_adamdp_train_step" x pbuf shapes y
+  let ob ← LowererSession.mlpTrainStepVDP sessB "m.cifar8_adamdp_train_step" x pbuf shapes y
     gbs.toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 
   if oa.size != ob.size then

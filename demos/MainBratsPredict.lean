@@ -324,8 +324,8 @@ def main (args : List String) : IO Unit := do
   -- rendering them together.
   let mut logitsList : List ByteArray := []
   for (vmfb, ep) in vmfbs.zip evalParamsList do
-    let sess ← IreeSession.create vmfb
-    let lg ← IreeSession.forwardF32 sess spec.evalFnName
+    let sess ← LowererSession.create vmfb
+    let lg ← LowererSession.forwardF32 sess spec.evalFnName
                 ep evalShapes xba xShape evalBatch.toUSize outElems
     logitsList := logitsList ++ [lg]
   IO.eprintln s!"  rendering PPM ..."

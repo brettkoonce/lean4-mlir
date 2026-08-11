@@ -98,7 +98,7 @@ def asSegLabels (ids : ByteArray) : ByteArray := ids
 
 /-- Mean per-token CE (nats) over fixed val chunks — the in-graph
     one-hot path, so the model input is [B, T] f32 ids. -/
-def evalValLoss (sess : IreeSession) (spec : NetSpec)
+def evalValLoss (sess : LowererSession) (spec : NetSpec)
     (packed allShapes xShape bnShapes : ByteArray)
     (valTokens : ByteArray) (nValTokens : USize)
     (batch T : Nat) (nBatches : Nat) : IO Float := do
@@ -111,7 +111,7 @@ def evalValLoss (sess : IreeSession) (spec : NetSpec)
     let inputIds  := chunks.extract 0 inputBytes
     let targetIds := chunks.extract inputBytes (2 * inputBytes)
     let xba ← F32.idsToFloats inputIds
-    let outBA ← IreeSession.trainStepAdamF32Seg sess spec.trainFnName
+    let outBA ← LowererSession.trainStepAdamF32Seg sess spec.trainFnName
                   packed allShapes xba xShape (asSegLabels targetIds) 0.0 1.0
                   bnShapes batch.toUSize T.toUSize 1
     tot := tot + F32.read outBA nT3.toUSize
@@ -124,7 +124,7 @@ def runTrain (c : StoriesCfg) (steps batch : Nat) (lrMax : Float) : IO (ByteArra
   IO.eprintln s!"compiling train step (B={batch}, T={T}, V={vocabSize}, params={spec.totalParams}) ..."
   let _ ← spec.compileVmfbs cfg (useSeg := true)
   let pfx := spec.buildPrefix
-  let trainSess ← IreeSession.create s!"{pfx}_train_step.vmfb"
+  let trainSess ← LowererSession.create s!"{pfx}_train_step.vmfb"
 
   IO.eprintln "loading data/tinystories/{train,val}.bin ..."
   let (tokens, nTokens) ← F32.loadTokenStream "data/tinystories/train.bin"
@@ -153,7 +153,7 @@ def runTrain (c : StoriesCfg) (steps batch : Nat) (lrMax : Float) : IO (ByteArra
     let targetIds := chunks.extract inputBytes (2 * inputBytes)
     let xba ← F32.idsToFloats inputIds
     let t : Float := (step + 1).toFloat
-    let outBA ← IreeSession.trainStepAdamF32Seg trainSess spec.trainFnName
+    let outBA ← LowererSession.trainStepAdamF32Seg trainSess spec.trainFnName
                   packed allShapes xba xShape (asSegLabels targetIds) lr t
                   bnShapes batch.toUSize T.toUSize 1
     packed := outBA.extract 0 (nT3 * 4)
@@ -219,7 +219,7 @@ def runSample (c : StoriesCfg) (nToks : Nat) (temperature : Float) (topK : Nat)
   let evalCfg : TrainConfig := { trainConfig with batchSize := 1 }
   let _ ← spec.compileVmfbs evalCfg (useSeg := true)
   let pfx := spec.buildPrefix
-  let sess ← IreeSession.create s!"{pfx}_fwd_eval.vmfb"
+  let sess ← LowererSession.create s!"{pfx}_fwd_eval.vmfb"
   let params ← IO.FS.readBinFile s!"{pfx}_params.bin"
   let bnPad ← F32.const spec.nBnStats.toUSize 0.0
   let evalParams := params.append bnPad
@@ -243,7 +243,7 @@ def runSample (c : StoriesCfg) (nToks : Nat) (temperature : Float) (topK : Nat)
       idsBA := idsBA.push (id % 256).toUInt8 |>.push ((id / 256) % 256).toUInt8
                   |>.push ((id / 65536) % 256).toUInt8 |>.push ((id / 16777216) % 256).toUInt8
     let xba ← F32.idsToFloats idsBA
-    let logitsFlat ← IreeSession.forwardF32 sess spec.evalFnName
+    let logitsFlat ← LowererSession.forwardF32 sess spec.evalFnName
                        evalParams evalShapesBA xba xShape 1 outElems
     let baseIdx := (curLen - 1) * vocabSize
     let logits := readFloats logitsFlat baseIdx vocabSize

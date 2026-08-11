@@ -98,7 +98,7 @@ got: '{slug}'"; IO.Process.exit 1
   IO.println s!"  single   : {sgPath}"
   IO.println s!"  DP render: {dpPath}"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   -- The BATCH-BN nets carry running-stat inputs AND return the batch statistics, so their arity is
   -- 2·(BN layers) wider on both sides than the `[θ|m|v|lr,bc1,bc2]` core. Omitting them is not a
@@ -147,12 +147,12 @@ backend {← IreeSession.backendName}"
   let mut outs : Array ByteArray := #[]
   for i in [0:replicas] do
     IO.println s!"  single-device on shard {i}…"; (← IO.getStdout).flush
-    outs := outs.push (← IreeSession.mlpTrainStepV s1 s!"m.{net.slug}_{vSg}_train_step"
+    outs := outs.push (← LowererSession.mlpTrainStepV s1 s!"m.{net.slug}_{vSg}_train_step"
       xs[i]! pbuf shapes ys[i]! bs.toUSize net.d0.toUSize net.nClasses.toUSize)
   let oA := outs[0]!
   IO.println s!"  data-parallel on the {replicas}-way shard…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath
-  let oD ← IreeSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" xAB pbuf shapes yAB
+  let oD ← LowererSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" xAB pbuf shapes yAB
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 
   let nP := net.nParams

@@ -226,7 +226,7 @@ def asSegLabels (ids : ByteArray) : ByteArray := ids
     val stream, via the train-step vmfb with the updated state
     discarded (the loss output is computed on the *incoming* params,
     so this is a pure eval — no separate eval codegen needed). -/
-def evalValLoss (sess : IreeSession) (spec : NetSpec) (useIds : Bool)
+def evalValLoss (sess : LowererSession) (spec : NetSpec) (useIds : Bool)
     (packed allShapes xShape bnShapes : ByteArray)
     (valTokens : ByteArray) (nValTokens : USize)
     (batch T : Nat) (nBatches : Nat) : IO Float := do
@@ -242,7 +242,7 @@ def evalValLoss (sess : IreeSession) (spec : NetSpec) (useIds : Bool)
     let targetIds := chunks.extract inputBytes (2 * inputBytes)
     let xba ← if useIds then F32.idsToFloats inputIds
               else F32.tokenOneHot inputIds batch.toUSize T.toUSize vocabSize.toUSize
-    let outBA ← IreeSession.trainStepAdamF32Seg sess spec.trainFnName
+    let outBA ← LowererSession.trainStepAdamF32Seg sess spec.trainFnName
                   packed allShapes xba xShape (asSegLabels targetIds) 0.0 1.0
                   bnShapes batch.toUSize T.toUSize 1
     tot := tot + F32.read outBA nT3.toUSize
@@ -258,7 +258,7 @@ def runXeval (g : GptCfg) (evalT : Nat) : IO Float := do
   let cfg : TrainConfig := { trainConfig with batchSize := 32, learningRate := 0.0 }
   IO.eprintln s!"compiling eval @ T={evalT} (model={g.key}, params={spec.totalParams}) ..."
   let _ ← spec.compileVmfbs cfg (useSeg := true)
-  let sess ← IreeSession.create s!"{spec.buildPrefix}_train_step.vmfb"
+  let sess ← LowererSession.create s!"{spec.buildPrefix}_train_step.vmfb"
   let ckptPath := s!"{(mkSpec g).buildPrefix}_params.bin"
   let params ← IO.FS.readBinFile ckptPath
   let expected := spec.totalParams * 4
@@ -284,7 +284,7 @@ def runTinyGptTrain (g : GptCfg) (steps : Nat) (batch : Nat) (lrMax : Float)
   let _ ← spec.compileVmfbs cfg (useSeg := true)
   let pfx := spec.buildPrefix
   let trainVmfb := s!"{pfx}_train_step.vmfb"
-  let trainSess ← IreeSession.create trainVmfb
+  let trainSess ← LowererSession.create trainVmfb
 
   IO.eprintln "loading data/shakespeare/{train,val}.bin ..."
   let (tokens, nTokens) ← F32.loadTokenStream "data/shakespeare/train.bin"
@@ -318,7 +318,7 @@ def runTinyGptTrain (g : GptCfg) (steps : Nat) (batch : Nat) (lrMax : Float)
     let xba ← if g.ids then F32.idsToFloats inputIds
               else F32.tokenOneHot inputIds batch.toUSize T.toUSize vocabSize.toUSize
     let t : Float := (step + 1).toFloat
-    let outBA ← IreeSession.trainStepAdamF32Seg trainSess spec.trainFnName
+    let outBA ← LowererSession.trainStepAdamF32Seg trainSess spec.trainFnName
                   packed allShapes xba xShape (asSegLabels targetIds) lr t
                   bnShapes batch.toUSize T.toUSize 1
     packed := outBA.extract 0 (nT3 * 4)
@@ -369,7 +369,7 @@ def runTinyGptSample (g : GptCfg) (paramsPath : String) (nChars : Nat)
   let _ ← spec.compileVmfbs evalCfg (useSeg := true)
   let pfx := spec.buildPrefix
   let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
-  let sess ← IreeSession.create evalVmfb
+  let sess ← LowererSession.create evalVmfb
 
   let params ← IO.FS.readBinFile paramsPath
   -- Append zero-byte BN stats (no BN in this spec).
@@ -400,7 +400,7 @@ def runTinyGptSample (g : GptCfg) (paramsPath : String) (nChars : Nat)
   let outElems : USize := (T * vocabSize).toUSize
   for stepN in [:nChars] do
     let xba ← packContext context T vocabSize g.ids
-    let logitsFlat ← IreeSession.forwardF32 sess spec.evalFnName
+    let logitsFlat ← LowererSession.forwardF32 sess spec.evalFnName
                        evalParams evalShapesBA xba xShape 1 outElems
     -- logitsFlat layout: [1, T*V] row-major in (t, v); read the last
     -- REAL position.

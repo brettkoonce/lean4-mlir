@@ -69,7 +69,7 @@ def main : IO Unit := do
   IO.println s!"  under test  verified_mlir/{net.slug}_adam64bce_train_step.mlir"
   IO.println s!"  peer        verified_mlir/{net.slug}_adam64_train_step.mlir  (softmax-CE, ⟂①)"
   IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, {nc} classes, \
-mean over B·K = {bs * nc}, backend {← IreeSession.backendName}"
+mean over B·K = {bs * nc}, backend {← LowererSession.backendName}"
 
   -- ── θ, with the CLASSIFIER WEIGHT ZEROED so the logits are exactly `bd` ──
   let mut θparts : Array ByteArray := #[]
@@ -108,7 +108,7 @@ mean over B·K = {bs * nc}, backend {← IreeSession.backendName}"
     let sess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
     -- lr = 0 so θ' is untouched; only `m'` (the gradient) and `%loss` are read.
     let tl ← F32.write3 (← F32.const 3 0.0) 0 0.0 0.1 0.001
-    IreeSession.mlpTrainStepV sess s!"m.{net.slug}_{variant}_train_step" x
+    LowererSession.mlpTrainStepV sess s!"m.{net.slug}_{variant}_train_step" x
       (F32.concat #[θ, z, z, tl, bnIn]) shapes y bs.toUSize net.d0.toUSize nc.toUSize
   let oB ← run "adam64bce"
   let oC ← run "adam64"

@@ -64,7 +64,7 @@ def main (args : List String) : IO Unit := do
   IO.println s!"  A = {path32}   (B = {bs})"
   IO.println s!"  B = {path256}  (B = {bs256}, fed {reps} identical copies of A's batch)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers \
-({nBnStats} stat floats), backend {← IreeSession.backendName}"
+({nBnStats} stat floats), backend {← LowererSession.backendName}"
 
   -- ── the shared parameter blob: identical bytes to both renders ──
   let mut θparts : Array ByteArray := #[]
@@ -96,7 +96,7 @@ def main (args : List String) : IO Unit := do
 
   let runOne (path fn tag : String) (x y : ByteArray) (b : Nat) : IO ByteArray := do
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess fn x pbuf shapes y
+    LowererSession.mlpTrainStepV sess fn x pbuf shapes y
       b.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running bs32…"; (← IO.getStdout).flush
   let oa ← runOne path32 "m.resnet34_adam_train_step" "a" x32 y32 bs

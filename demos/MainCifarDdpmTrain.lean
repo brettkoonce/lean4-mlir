@@ -106,7 +106,7 @@ private def floatToU8 (v : Float) : UInt8 :=
 /-- Render a fixed-seed 4×4 DDIM sample grid from `evalParams` (raw
     weights + matching BN running stats) to `outPath`. 50 DDIM steps,
     seed fixed so grids are comparable across epochs. -/
-private def sampleGrid (spec : NetSpec) (evalSess : IreeSession)
+private def sampleGrid (spec : NetSpec) (evalSess : LowererSession)
     (evalParams evalShapes : ByteArray) (alphaBar : ByteArray)
     (outPath : String) : IO Unit := do
   let B : Nat := 16
@@ -125,7 +125,7 @@ private def sampleGrid (spec : NetSpec) (evalSess : IreeSession)
     let tPrev : Nat := if k + 1 < nSteps then T - 1 - (k + 1) * stride else 0
     let xCond ← Ddpm.prependTChannelScalar x B.toUSize imgC.toUSize
                   H.toUSize W.toUSize t.toUSize T.toUSize
-    let eps ← IreeSession.forwardF32 evalSess spec.evalFnName
+    let eps ← LowererSession.forwardF32 evalSess spec.evalFnName
                 evalParams evalShapes xCond xShape B.toUSize nPix.toUSize
     let aBarT := alphaBarF t
     let aBarP := if k + 1 < nSteps then alphaBarF tPrev else 0.9999
@@ -204,8 +204,8 @@ def main (args : List String) : IO Unit := do
   let adamV ← F32.const nP.toUSize 0.0
   let alphaBar ← Ddpm.cosineSchedule 1000
 
-  let sess ← IreeSession.create vmfbPath
-  let evalSess ← IreeSession.create evalVmfb
+  let sess ← LowererSession.create vmfbPath
+  let evalSess ← LowererSession.create evalVmfb
 
   let nPix : Nat := 3 * spec.imageH * spec.imageW
   let Tmax : Nat := 1000
@@ -252,7 +252,7 @@ def main (args : List String) : IO Unit := do
       let (eps, tba) := ddpmRest
       let xtCond ← Ddpm.prependTChannel xt tba batch imgC outH outW Tmax.toUSize
       let packed := (p.append m).append v
-      let out ← IreeSession.trainStepAdamF32Ddpm sess spec.trainFnName
+      let out ← LowererSession.trainStepAdamF32Ddpm sess spec.trainFnName
                   packed allShapes xtCond xSh eps
                   lr globalStep.toFloat
                   bnShapes batch imgC outH outW

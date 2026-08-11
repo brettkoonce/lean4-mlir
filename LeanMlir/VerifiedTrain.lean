@@ -203,10 +203,10 @@ private def compileVmfb (mlirPath outPath : String) : IO Unit := do
 
     Both backends consume the *same* `verified_mlir/*.mlir` — the emitter, the
     spec, and the §1a ties are identical. Only the trusted lowerer differs. -/
-def mkSession (mlirPath : String) : IO IreeSession := do
-  if (← IreeSession.backendName) == "xla" then
+def mkSession (mlirPath : String) : IO LowererSession := do
+  if (← LowererSession.backendName) == "xla" then
     IO.println s!"  xla/pjrt {mlirPath}"
-    IreeSession.create mlirPath
+    LowererSession.create mlirPath
   else
     -- Scope the cache by IREE target. `compileVmfb` reuses any existing file that
     -- is newer than the .mlir, so an unscoped path lets an `IREE_BACKEND=rocm`
@@ -217,7 +217,7 @@ def mkSession (mlirPath : String) : IO IreeSession := do
     let base := (mlirPath.splitOn "/").getLastD mlirPath
     let stem := if base.endsWith ".mlir" then base.dropRight 5 else base
     compileVmfb mlirPath s!".lake/build/{stem}_{target}.vmfb"
-    IreeSession.create s!".lake/build/{stem}_{target}.vmfb"
+    LowererSession.create s!".lake/build/{stem}_{target}.vmfb"
 
 /-- Init one parameter from its `(dims, initKind)` spec, matching the JAX reference's
     initialisers — they are the oracle these nets are paired against:
@@ -607,7 +607,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println (if (← IreeSession.backendName) == "xla"
+  IO.println (if (← LowererSession.backendName) == "xla"
               then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
@@ -680,13 +680,13 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
       let xbRaw := if synth then trainImg else F32.sliceImages trainImg (bi * bs) bs trainPix
       let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
       let yb := if synth then trainLbl else F32.sliceLabels trainLbl (bi * bs) bs
-      params ← IreeSession.mlpTrainStepV tsSess tsFn
+      params ← LowererSession.mlpTrainStepV tsSess tsFn
                   xb params shapes yb bs.toUSize d0.toUSize nc.toUSize nResident
     -- Bring the parameters back to host for eval and for the G2 dump. Without
     -- residency this is the copy `params` already was, so the line is inert;
     -- with it, this is the ONE d2h per epoch that remains. It is placed outside
     -- the `if !synth` because the dump below reads `params` whether or not eval ran.
-    params ← IreeSession.readParams tsSess params (net.nParams * 4).toUSize
+    params ← LowererSession.readParams tsSess params (net.nParams * 4).toUSize
     let mut correct := 0
     if !synth then          -- synth probe: skip eval (no eval split on disk)
       for bi in [0:nbt] do
@@ -694,7 +694,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
         -- Hold the parameters on device across the eval batches (§2d.3). `ep+1` is
         -- the generation token: `params` changes exactly once per epoch and this
         -- says so, so the held set cannot go stale.
-        let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
+        let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
                         xb xShape bs.toUSize nc.toUSize
                         nResident (ep + 1).toUSize
         for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
@@ -731,8 +731,8 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_adam_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"             fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
@@ -761,13 +761,13 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
       let xbRaw := F32.sliceImages trainImg (bi * bs) bs trainPix
       let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      params ← IreeSession.mlpTrainStepV tsSess tsFn
+      params ← LowererSession.mlpTrainStepV tsSess tsFn
                   xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
     let thetaCur := params.extract 0 pBytes
     let mut correct := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn thetaCur fwdShapes
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn thetaCur fwdShapes
                       xb xShape bs.toUSize nc.toUSize
       for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
         let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
@@ -937,7 +937,7 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println (if (← IreeSession.backendName) == "xla"
+  IO.println (if (← LowererSession.backendName) == "xla"
               then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
   -- Running-stats BN: when `bnChannels` is non-empty the adam train step carries per-layer batch
   -- mean/var out in passthrough slots (so #out=#in), the driver EMAs them into `runningBnStats`,
@@ -1214,7 +1214,7 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- resume from an IREE checkpoint (and vice versa), silently fusing two
   -- trajectories into one and making any G2/G3 comparison meaningless — while
   -- looking completely normal on screen. See planning/xla_pjrt_ladder.md §3.
-  let backend ← IreeSession.backendName
+  let backend ← LowererSession.backendName
   let ckptPath := s!".lake/build/{net.slug}_{variant}_ckpt{if backend == "xla" then "_xla" else ""}.bin"
   let epPath := ckptPath ++ ".epoch"
   let mut startEpoch := 0
@@ -1640,9 +1640,9 @@ gate's control, not a configuration.")
         -- between them replicates". `planning/stochastic_depth.md` §5b predicted this; it was true
         -- of the shim before any DP drop render existed to expose it. At `nDrop = 0` the argument
         -- is inert and every non-SD DP run is byte-identical to before.
-        then IreeSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
+        then LowererSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
                gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize nResident nShardTail.toUSize
-        else IreeSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
+        else LowererSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
                bs.toUSize d0.toUSize nc.toUSize nResident
       -- the train step emits the smoothed-CE loss in the slot after [θ'|m'|v']
       let stepLoss := F32.read out (nRegions * net.nParams).toUSize
@@ -1695,7 +1695,7 @@ gate's control, not a configuration.")
     -- happens at all — `readParams` is `pbuf.extract 0 mvBytes` whenever the
     -- parameters are host-resident, and the read-back otherwise, so the
     -- frequency is unchanged either way and this line reads the same.
-    thetamv ← IreeSession.readParams tsSess pbuf mvBytes.toUSize
+    thetamv ← LowererSession.readParams tsSess pbuf mvBytes.toUSize
     -- ▶ EVAL AND THE CHECKPOINT SCORE THE SHADOW, not the live weights — which is what the
     -- reference does (`evalArgs`/`params_to_file` read `ema_params`) and the whole point of the
     -- feature: ConvNeXt's 75.93% IS the shadow's number. The shadow is region 4, so it starts at
@@ -1732,7 +1732,7 @@ gate's control, not a configuration.")
       -- count is the tensor count of `evalShapes`, which for a BN net is the
       -- params PLUS the two running-stat slots per layer — all of them are inputs
       -- with no output counterpart, so all of them can be held.
-      let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
+      let logits ← LowererSession.forwardF32 evalSess evalFn evalParams evalShapes
                       xb xShape evalBs.toUSize nc.toUSize
                       evalResident (ep + 1).toUSize
       for j in [0:min evalBs (nEval - bi * evalBs)] do   -- score real rows only, not the pad
@@ -1781,7 +1781,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   -- The blurbs name IREE because every net used to. Only this path is
   -- backend-agnostic so far, so correct it here rather than rewriting ~30
   -- strings for nets that have not been ported (xla_pjrt_ladder.md §2).
-  IO.println (if (← IreeSession.backendName) == "xla"
+  IO.println (if (← LowererSession.backendName) == "xla"
               then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
@@ -1825,7 +1825,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      let out ← IreeSession.linearTrainStepV tsSess tsFn
+      let out ← LowererSession.linearTrainStepV tsSess tsFn
                   xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize nResident
       packed := out
       -- The per-step split is what the COPYING path needs: `W0`/`b0` are separate
@@ -1837,14 +1837,14 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
       b0 := out.extract (d0 * d1 * 4) pBytes
     -- Bring the parameters back for eval and the G2 dump. Inert without residency
     -- (it is the copy `packed` already was); with it, the one d2h per epoch.
-    packed ← IreeSession.readParams tsSess packed pBytes.toUSize
+    packed ← LowererSession.readParams tsSess packed pBytes.toUSize
     W0 := packed.extract 0 (d0 * d1 * 4)
     b0 := packed.extract (d0 * d1 * 4) pBytes
     let params := packed
     let mut correct := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
                       xb xShape bs.toUSize d1.toUSize
                       nResident (ep + 1).toUSize
       for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
@@ -2748,8 +2748,8 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -2769,7 +2769,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      let out ← IreeSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+      let out ← LowererSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
       theta := out.extract 0 (nP * 4)
   -- split θ (func-arg order: W0 b0 W1 b1 W2 b2)
   let W0 := theta.extract 0 (d0*hN*4)
@@ -2778,7 +2778,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   let mut clean := 0
   for bi in [0:nbt] do
     let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-    let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+    let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
     for j in [0:min bs (nEval - bi * bs)] do
       if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
         clean := clean + 1
@@ -2790,7 +2790,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
       let alpha := 2.5 * eps / K.toFloat
       IO.FS.writeFile ".lake/build/mlp_pgd_step.mlir" (genMlpPgdStep bs d0 hN d1 eps alpha linf)
       compileVmfb ".lake/build/mlp_pgd_step.mlir" ".lake/build/mlp_pgd_step.vmfb"
-      let pgdSess ← IreeSession.create ".lake/build/mlp_pgd_step.vmfb"
+      let pgdSess ← LowererSession.create ".lake/build/mlp_pgd_step.vmfb"
       let mut correct := 0
       for bi in [0:nbt] do
         let x0 := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -2798,8 +2798,8 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
         let pgdParams := F32.concat #[theta, oh, x0]
         let mut x := x0
         for _ in [0:K] do
-          x ← IreeSession.forwardF32 pgdSess "m.mlp_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
-        let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
+          x ← LowererSession.forwardF32 pgdSess "m.mlp_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+        let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
         for j in [0:min bs (nEval - bi * bs)] do
           if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
             correct := correct + 1
@@ -2818,7 +2818,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   let mut cert15 := 0
   for bi in [0:nbt] do
     let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-    let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+    let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
     for j in [0:min bs (nEval - bi * bs)] do
       let mut top := -1.0e30
       let mut sec := -1.0e30
@@ -2862,8 +2862,8 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -2878,7 +2878,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
     let alpha := 2.5 * eps / K.toFloat
     IO.FS.writeFile ".lake/build/mlp_pgd_step.mlir" (genMlpPgdStep bs d0 hN d1 eps alpha linf)
     compileVmfb ".lake/build/mlp_pgd_step.mlir" ".lake/build/mlp_pgd_step.vmfb"
-    let pgdSess ← IreeSession.create ".lake/build/mlp_pgd_step.vmfb"
+    let pgdSess ← LowererSession.create ".lake/build/mlp_pgd_step.vmfb"
     let mut correct := 0
     for bi in [0:nbt] do
       let x0 := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -2886,8 +2886,8 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
       let pgdParams := F32.concat #[theta, oh, x0]
       let mut x := x0
       for _ in [0:K] do
-        x ← IreeSession.forwardF32 pgdSess "m.mlp_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
+        x ← LowererSession.forwardF32 pgdSess "m.mlp_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
           correct := correct + 1
@@ -2909,7 +2909,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
       for bi in [0:nb] do
         let xb := F32.sliceImages trainImg (bi * bs) bs d0
         let yb := F32.sliceLabels trainLbl (bi * bs) bs
-        theta ← IreeSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+        theta ← LowererSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
         step := step + 1
         if cap < 1.0e8 && step % projEvery == 0 then
           theta ← projectSpectral theta net.specs cap
@@ -2929,7 +2929,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
     let mut c10 := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         let mut top := -1.0e30
         let mut sec := -1.0e30
@@ -2975,8 +2975,8 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -2999,7 +2999,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
     let mut c := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn th shapes xb xShape bs.toUSize d1.toUSize
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn th shapes xb xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
           c := c + 1
@@ -3009,7 +3009,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      theta ← IreeSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+      theta ← LowererSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
     let acc ← evalAcc theta
     if acc > bestAcc then bestAcc := acc; bestTheta := theta
     IO.println s!"    epoch {ep + 1}/{cfg.epochs}: acc = {acc}%"
@@ -3023,7 +3023,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
       let alpha := 2.5 * eps / K.toFloat
       IO.FS.writeFile s!".lake/build/{net.slug}_pgd_step.mlir" (genKernel bs eps alpha linf)
       compileVmfb s!".lake/build/{net.slug}_pgd_step.mlir" s!".lake/build/{net.slug}_pgd_step.vmfb"
-      let pgdSess ← IreeSession.create s!".lake/build/{net.slug}_pgd_step.vmfb"
+      let pgdSess ← LowererSession.create s!".lake/build/{net.slug}_pgd_step.vmfb"
       let mut correct := 0
       for bi in [0:nbt] do
         let x0 := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -3031,8 +3031,8 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
         let pgdParams := F32.concat #[theta, oh, x0]
         let mut x := x0
         for _ in [0:K] do
-          x ← IreeSession.forwardF32 pgdSess s!"m.{net.slug}_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
-        let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
+          x ← LowererSession.forwardF32 pgdSess s!"m.{net.slug}_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+        let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
         for j in [0:min bs (nEval - bi * bs)] do
           if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
             correct := correct + 1
@@ -3068,7 +3068,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
     let mut cert15 := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         let mut top := -1.0e30
         let mut sec := -1.0e30
@@ -3127,8 +3127,8 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -3142,7 +3142,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
     let alpha := 2.5 * eps / K.toFloat
     IO.FS.writeFile s!".lake/build/{net.slug}_pgd_step.mlir" (genKernel bs eps alpha linf)
     compileVmfb s!".lake/build/{net.slug}_pgd_step.mlir" s!".lake/build/{net.slug}_pgd_step.vmfb"
-    let pgdSess ← IreeSession.create s!".lake/build/{net.slug}_pgd_step.vmfb"
+    let pgdSess ← LowererSession.create s!".lake/build/{net.slug}_pgd_step.vmfb"
     let mut correct := 0
     for bi in [0:nbt] do
       let x0 := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -3150,8 +3150,8 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
       let pgdParams := F32.concat #[theta, oh, x0]
       let mut x := x0
       for _ in [0:K] do
-        x ← IreeSession.forwardF32 pgdSess s!"m.{net.slug}_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
+        x ← LowererSession.forwardF32 pgdSess s!"m.{net.slug}_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes x xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
           correct := correct + 1
@@ -3174,7 +3174,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
       for bi in [0:nb] do
         let xb := F32.sliceImages trainImg (bi * bs) bs d0
         let yb := F32.sliceLabels trainLbl (bi * bs) bs
-        theta ← IreeSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+        theta ← LowererSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
         step := step + 1
         if cap < 1.0e8 && step % projEvery == 0 then
           theta ← projectSpectral theta net.specs cap
@@ -3182,7 +3182,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
       let mut c := 0
       for bi in [0:nbt] do
         let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-        let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+        let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
         for j in [0:min bs (nEval - bi * bs)] do
           if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
             c := c + 1
@@ -3211,7 +3211,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
     let mut cR3 := 0      -- certified @ L2 0.5
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes xb xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         let mut top := -1.0e30
         let mut sec := -1.0e30
@@ -3384,8 +3384,8 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   -- `trainPix`/`crop`: Imagenette train ships at 256² and is center-cropped to 224² per batch
   -- (the val/eval split is already 224² = d0, so certify reads it directly). For MNIST/CIFAR
   -- crop=false and trainPix=d0, so the crop below is a no-op.
@@ -3462,11 +3462,11 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
         let yb := F32.sliceLabels trainLbl (bi * bs) bs
         let xbN ← F32.addGaussianTiled xb 0 (bs*d0).toUSize 1 sigma nseed
         nseed := nseed + 1
-        theta ← IreeSession.mlpTrainStepV tsSess tsFn xbN theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+        theta ← LowererSession.mlpTrainStepV tsSess tsFn xbN theta shapes yb bs.toUSize d0.toUSize d1.toUSize
       let mut c := 0
       for bi in [0:evalBatches] do
         let xb := F32.sliceImages evalImg (bi * bs) bs d0
-        let logits ← IreeSession.forwardF32 fwdSess fwdFn theta shapes xb (net.xShape bs) bs.toUSize d1.toUSize
+        let logits ← LowererSession.forwardF32 fwdSess fwdFn theta shapes xb (net.xShape bs) bs.toUSize d1.toUSize
         for j in [0:bs] do
           if (F32.argmaxN logits (j*d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi*bs+j) then c := c+1
       let acc := c.toFloat/(evalBatches*bs).toFloat*100.0
@@ -3481,7 +3481,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
       let mut counts : Array Nat := Array.replicate d1 0
       for ci in [0:nBat] do
         let xN ← F32.addGaussianTiled base off.toUSize d0.toUSize bs.toUSize sigma (sd + ci.toUSize)
-        let logits ← IreeSession.forwardF32 fwdSess fwdFn th shapes xN (net.xShape bs) bs.toUSize d1.toUSize
+        let logits ← LowererSession.forwardF32 fwdSess fwdFn th shapes xN (net.xShape bs) bs.toUSize d1.toUSize
         for j in [0:bs] do
           let a := (F32.argmaxN logits (j*d1).toUSize d1.toUSize).toNat
           counts := counts.set! a (counts[a]! + 1)
@@ -3584,8 +3584,8 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -3600,14 +3600,14 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      let out ← IreeSession.linearTrainStepV tsSess tsFn xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize
+      let out ← LowererSession.linearTrainStepV tsSess tsFn xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize
       W0 := out.extract 0 (d0 * d1 * 4)
       b0 := out.extract (d0 * d1 * 4) ((d0 * d1 + d1) * 4)
   -- clean accuracy
   let mut clean := 0
   for bi in [0:nbt] do
     let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-    let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes xb xShape bs.toUSize d1.toUSize
+    let logits ← LowererSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes xb xShape bs.toUSize d1.toUSize
     for j in [0:min bs (nEval - bi * bs)] do
       if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
         clean := clean + 1
@@ -3618,7 +3618,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
     let alpha := 2.5 * eps / K.toFloat
     IO.FS.writeFile ".lake/build/linear_pgd_step.mlir" (genLinearPgdStep bs d0 d1 eps alpha true)
     compileVmfb ".lake/build/linear_pgd_step.mlir" ".lake/build/linear_pgd_step.vmfb"
-    let pgdSess ← IreeSession.create ".lake/build/linear_pgd_step.vmfb"
+    let pgdSess ← LowererSession.create ".lake/build/linear_pgd_step.vmfb"
     let pgdShapes := packShapes #[#[d0, d1], #[d1], #[bs, d1], #[bs, d0]]
     let mut correct := 0
     for bi in [0:nbt] do
@@ -3627,8 +3627,8 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
       let pgdParams := F32.concat #[W0, b0, oh, x0]
       let mut x := x0
       for _ in [0:K] do
-        x ← IreeSession.forwardF32 pgdSess "m.linear_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes x xShape bs.toUSize d1.toUSize
+        x ← LowererSession.forwardF32 pgdSess "m.linear_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes x xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
           correct := correct + 1
@@ -3642,7 +3642,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   let mut cert15 := 0
   for bi in [0:nbt] do
     let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-    let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes xb xShape bs.toUSize d1.toUSize
+    let logits ← LowererSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes xb xShape bs.toUSize d1.toUSize
     for j in [0:min bs (nEval - bi * bs)] do
       let mut top := -1.0e30
       let mut sec := -1.0e30
@@ -3665,7 +3665,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
     let alpha := 2.5 * eps / K.toFloat
     IO.FS.writeFile ".lake/build/linear_pgd_step.mlir" (genLinearPgdStep bs d0 d1 eps alpha false)
     compileVmfb ".lake/build/linear_pgd_step.mlir" ".lake/build/linear_pgd_step.vmfb"
-    let pgdSess ← IreeSession.create ".lake/build/linear_pgd_step.vmfb"
+    let pgdSess ← LowererSession.create ".lake/build/linear_pgd_step.vmfb"
     let pgdShapes := packShapes #[#[d0, d1], #[d1], #[bs, d1], #[bs, d0]]
     let mut correct := 0
     for bi in [0:nbt] do
@@ -3674,8 +3674,8 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
       let pgdParams := F32.concat #[W0, b0, oh, x0]
       let mut x := x0
       for _ in [0:K] do
-        x ← IreeSession.forwardF32 pgdSess "m.linear_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes x xShape bs.toUSize d1.toUSize
+        x ← LowererSession.forwardF32 pgdSess "m.linear_pgd_step" pgdParams pgdShapes x xShape bs.toUSize d0.toUSize
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn (W0 ++ b0) shapes x xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
           correct := correct + 1
@@ -3706,8 +3706,8 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
     loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
@@ -3728,7 +3728,7 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
       let xb := F32.sliceImages trainImgQ (bi * bs) bs d0     -- E4M3 activations
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
       let Wq := F32E4M3.quantPerColumn mW d0 d1               -- E4M3 weight operand
-      let out ← IreeSession.linearTrainStepV tsSess tsFn
+      let out ← LowererSession.linearTrainStepV tsSess tsFn
                   xb Wq mb yb bs.toUSize d0.toUSize d1.toUSize
       let Wout := out.extract 0 (d0 * d1 * 4)
       let bout := out.extract (d0 * d1 * 4) ((d0 * d1 + d1) * 4)
@@ -3738,7 +3738,7 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
     let mut correct := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
                       xb xShape bs.toUSize d1.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         let pred := (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat
@@ -3778,8 +3778,8 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
@@ -3806,13 +3806,13 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
       let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
       let paramsQ := F32E4M3.quantPackedParams params net.specs   -- E4M3 weight operands
-      let out ← IreeSession.mlpTrainStepV tsSess tsFn
+      let out ← LowererSession.mlpTrainStepV tsSess tsFn
                   xb paramsQ shapes yb bs.toUSize d0.toUSize nc.toUSize
       params := F32E4M3.addDelta params out paramsQ              -- master += (out − paramsQ)
     let mut correct := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 fwdSess fwdFn params shapes
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
                       xb xShape bs.toUSize nc.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
@@ -3848,11 +3848,11 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let fwdEvalVmfb := s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" tsVmfb
   compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"             fwdVmfb
-  let tsSess  ← IreeSession.create tsVmfb
-  let fwdSess ← IreeSession.create fwdVmfb
+  let tsSess  ← LowererSession.create tsVmfb
+  let fwdSess ← LowererSession.create fwdVmfb
   let fwdEvalSess ← if hasBn then do
       compileVmfb s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir" fwdEvalVmfb
-      IreeSession.create fwdEvalVmfb
+      LowererSession.create fwdEvalVmfb
     else pure fwdSess
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     loadData net dataDir
@@ -3925,7 +3925,7 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
         | .cifar => F32.randomHFlip xbRaw bs.toUSize 3 32 32 augSeed
         | _ => pure xbRaw
       let yb := F32.sliceLabels curLbl (bi * bs) bs
-      let out ← IreeSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
+      let out ← LowererSession.mlpTrainStepV tsSess tsFn xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
       let stepLoss := F32.read out (3 * net.nParams).toUSize
       epochLossSum := epochLossSum + stepLoss
       lastLr := lrt
@@ -3957,7 +3957,7 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
     let mut correct := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← IreeSession.forwardF32 evalSess evalFn evalParams evalShapes
+      let logits ← LowererSession.forwardF32 evalSess evalFn evalParams evalShapes
                       xb xShape bs.toUSize nc.toUSize
       for j in [0:min bs (nEval - bi * bs)] do
         let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat

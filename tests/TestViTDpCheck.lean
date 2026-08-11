@@ -160,7 +160,7 @@ def main (args : List String) : IO Unit := do
   IO.println s!"  DP     : {dpPath} ({replicas} replicas, \
 global {bs * replicas} = the same {bs} examples {replicas}×)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), no BN, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
@@ -198,11 +198,11 @@ backend {← IreeSession.backendName}"
 
   IO.println "  running single-device…"; (← IO.getStdout).flush
   let s1 ← mkSession sgPath
-  let o1 ← IreeSession.mlpTrainStepV s1 (← entryOf sgPath) x1 pbuf shapes y1
+  let o1 ← LowererSession.mlpTrainStepV s1 (← entryOf sgPath) x1 pbuf shapes y1
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath
-  let o2 ← IreeSession.mlpTrainStepVDP s2 (← entryOf dpPath) x2 pbuf shapes y2
+  let o2 ← LowererSession.mlpTrainStepVDP s2 (← entryOf dpPath) x2 pbuf shapes y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize 0 0
 
   if o1.size != o2.size then

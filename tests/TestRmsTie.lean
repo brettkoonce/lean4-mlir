@@ -80,7 +80,7 @@ def main (argv : List String) : IO Unit := do
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   IO.println s!"recipe_gaps v1.2 gate — RMSProp (TF flavour) vs the AdamW gradient oracle — {slug}"
   IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, ρ {ρ}, ε {ε}, wd {wd}, lr {lr}, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   -- ── one (θ, x, onehot) both renders see ──
   let mut θparts : Array ByteArray := #[]
@@ -103,7 +103,7 @@ backend {← IreeSession.backendName}"
     for p in [vmfb, s!".lake/build/rms_tie_{netSlug}_{variant}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession s!"verified_mlir/{netSlug}_{variant}_train_step.mlir"
-    IreeSession.mlpTrainStepV sess s!"m.{netSlug}_{variant}_train_step" x buf shapes y
+    LowererSession.mlpTrainStepV sess s!"m.{netSlug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 
   -- ── the ORACLE: AdamW from m = v = 0 ⇒ m' = 0.1·g ⇒ g = 10·m' ──

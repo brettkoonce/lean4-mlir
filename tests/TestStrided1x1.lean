@@ -246,7 +246,7 @@ private def runOne (which : String) (params shapes xIn xSh : ByteArray) (nOut : 
   for p in [vmfb, s!".lake/build/k1_{which}_{target}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
   let sess ← mkSession path
-  IreeSession.forwardF32 sess s!"m.k1_{which}" params shapes xIn xSh 1 nOut.toUSize
+  LowererSession.forwardF32 sess s!"m.k1_{which}" params shapes xIn xSh 1 nOut.toUSize
 
 def main : IO Unit := do
   -- ── gate 1: it renders, and the committed 3×3 renders beside it as the control ──
@@ -258,7 +258,7 @@ def main : IO Unit := do
 
   -- ── gate 2: it computes what `den` says, on device ──
   let ctl := (← IO.getEnv "K1_CONTROL").getD ""
-  IO.println s!"\n══ known answer, backend {← IreeSession.backendName} ═══════════"
+  IO.println s!"\n══ known answer, backend {← LowererSession.backendName} ═══════════"
   if ctl != "" then
     IO.println s!"  ⚠ K1_CONTROL={ctl} — the REFERENCE is perturbed; gates SHOULD go red"
   let x    ← F32.heInit 987654 nX.toUSize 1.0

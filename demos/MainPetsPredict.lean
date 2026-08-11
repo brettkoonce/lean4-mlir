@@ -120,9 +120,9 @@ def main (args : List String) : IO Unit := do
   let xShape := spec.xShape evalBatch
   let evalShapes := spec.evalShapesBA
   IO.eprintln s!"  running eval forward (batch={evalBatch}, rendering {nVis}) ..."
-  let sess ← IreeSession.create evalVmfb
+  let sess ← LowererSession.create evalVmfb
   let outClasses : USize := imgPixels.toUSize
-  let logits ← IreeSession.forwardF32 sess spec.evalFnName
+  let logits ← LowererSession.forwardF32 sess spec.evalFnName
                   evalParams evalShapes xba xShape evalBatch.toUSize outClasses
   IO.eprintln s!"  logits {logits.size} bytes; rendering PPM ..."
   -- Layout: 3 panels per image (input | true | pred), each H × W. 4 images

@@ -84,7 +84,7 @@ def main : IO Unit := do
   IO.println s!"  train: {nTrain} images ({trainRaw.size} raw bytes)"
 
   IO.println "Loading IREE train_step..."
-  let trainSess ← IreeSession.create ".lake/build/cifar_train_step.vmfb"
+  let trainSess ← LowererSession.create ".lake/build/cifar_train_step.vmfb"
   IO.println "  ready"
 
   IO.println "Initializing 2.4M params..."
@@ -126,7 +126,7 @@ def main : IO Unit := do
         let recOff := (bi*batchN + si) * 3073  -- record offset in raw
         for pi in [:3072] do
           xb := xb.push (trainRaw[recOff + 1 + pi]!.toNat.toFloat / 255.0)
-      let out ← IreeSession.trainStepPacked trainSess "jit_cifar_train_step.main"
+      let out ← LowererSession.trainStepPacked trainSess "jit_cifar_train_step.main"
                   p shapes xb xSh yb lr batch
       epochLoss := epochLoss + out[CifarLayout.lossIdx]!
       p := dropLoss out CifarLayout.nParams

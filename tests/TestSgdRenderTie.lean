@@ -96,7 +96,7 @@ by dividing by that side's lr."
     IO.println "  NOTE: both sides are the same file — this is an A-vs-A determinism run, NOT a \
 migration check."
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   -- ── θ, in func-arg order, from the driver's init ──
   let mut θparts : Array ByteArray := #[]
@@ -113,7 +113,7 @@ backend {← IreeSession.backendName}"
 
   let runOne (path tag : String) : IO ByteArray := do
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess s!"m.{slug}_train_step" x θ shapes y
+    LowererSession.mlpTrainStepV sess s!"m.{slug}_train_step" x θ shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 
   -- ── the determinism floor: A against itself, in this same process ──

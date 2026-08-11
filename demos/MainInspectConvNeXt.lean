@@ -35,7 +35,7 @@ def main : IO Unit := do
   let evalParams := p.append runningBnStats
 
   IO.println s!"loading eval session from {evalVmfb}..."
-  let evalSess ← IreeSession.create evalVmfb
+  let evalSess ← LowererSession.create evalVmfb
 
   IO.println "loading Imagenette val..."
   let (valImg, valLbl, nVal) ← F32.loadImagenette "data/imagenette/val.bin"
@@ -59,7 +59,7 @@ def main : IO Unit := do
   IO.println "running eval forward..."
   for bi in [:evalSteps] do
     let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch valPixels
-    let logits ← IreeSession.forwardF32 evalSess "convnext_t_gelu_convnext_tiny_gelu_eval.forward_eval"
+    let logits ← LowererSession.forwardF32 evalSess "convnext_t_gelu_convnext_tiny_gelu_eval.forward_eval"
                     evalParams evalShapesBA xba evalXSh evalBatch.toUSize nClasses
     if bi == 0 then firstBatchLogits := logits
     let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch

@@ -61,7 +61,7 @@ def main (args : List String) : IO Unit := do
     IO.println "  NOTE: both paths are the same file — this is an A-vs-A determinism run, NOT a \
 migration check. Pass the retired render as the first argument for that."
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers \
-({nBnStats} stat floats), bs {bs}, backend {← IreeSession.backendName}"
+({nBnStats} stat floats), bs {bs}, backend {← LowererSession.backendName}"
 
   -- ── θ (driver init), m (centred noise), v (POSITIVE — it sits under a sqrt) ──
   let mut θparts : Array ByteArray := #[]
@@ -90,7 +90,7 @@ migration check. Pass the retired render as the first argument for that."
 
   let runOne (path tag : String) : IO ByteArray := do
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess "m.resnet34_adam_train_step" x pbuf shapes y
+    LowererSession.mlpTrainStepV sess "m.resnet34_adam_train_step" x pbuf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running A…"; (← IO.getStdout).flush
   let oa ← runOne pathA "a"

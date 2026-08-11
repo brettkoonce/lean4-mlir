@@ -94,7 +94,7 @@ def main (args : List String) : IO Unit := do
   -- invoke, not a silent pass, but it is still a per-net fact rather than a constant.
   let bs  := if slug.startsWith "cifar8" then 128 else 32
   IO.println s!"@{fn} tie: A={pathA}  B={pathB}"
-  IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, backend {← IreeSession.backendName}"
+  IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, backend {← LowererSession.backendName}"
 
   -- ── one deterministic (θ, x) both renders see ──
   let mut parts : Array ByteArray := #[]
@@ -130,7 +130,7 @@ def main (args : List String) : IO Unit := do
     for p in [vmfb, s!".lake/build/fwd_tie_{fn}_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession path
-    IreeSession.forwardF32 sess s!"m.{fn}" params shapes x xsh
+    LowererSession.forwardF32 sess s!"m.{fn}" params shapes x xsh
       bs.toUSize net.nClasses.toUSize
   let la ← runOne pathA "a"
   let lb ← runOne pathB "b"

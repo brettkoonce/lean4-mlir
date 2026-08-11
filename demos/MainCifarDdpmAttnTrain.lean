@@ -120,7 +120,7 @@ def main (args : List String) : IO Unit := do
 
   let alphaBar ← Ddpm.cosineSchedule 1000
 
-  let sess ← IreeSession.create vmfbPath
+  let sess ← LowererSession.create vmfbPath
   IO.eprintln "  session loaded"
 
   -- Per-image element count: 3 channels × 32 × 32 = 3072 floats.
@@ -155,7 +155,7 @@ def main (args : List String) : IO Unit := do
       let xtCond ← Ddpm.prependSinCosT xt tba batch imgC outH outW nFreq.toUSize Tmax.toUSize
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
-      let out ← IreeSession.trainStepAdamF32Ddpm sess spec.trainFnName
+      let out ← LowererSession.trainStepAdamF32Ddpm sess spec.trainFnName
                   packed allShapes xtCond xSh eps
                   cfg.learningRate globalStep.toFloat
                   bnShapes batch imgC outH outW

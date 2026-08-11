@@ -121,7 +121,7 @@ def runBigramTrain (epochs : Nat) (batch : Nat) (seqLen : Nat) : IO (ByteArray �
   let _ ← spec.compileVmfbs cfg
   let pfx := spec.buildPrefix
   let trainVmfb := s!"{pfx}_train_step.vmfb"
-  let trainSess ← IreeSession.create trainVmfb
+  let trainSess ← LowererSession.create trainVmfb
 
   IO.eprintln "loading data/shakespeare/train.bin ..."
   let (tokens, nTokens) ← F32.loadTokenStream "data/shakespeare/train.bin"
@@ -156,7 +156,7 @@ def runBigramTrain (epochs : Nat) (batch : Nat) (seqLen : Nat) : IO (ByteArray �
       -- targets are int32 [B*seqLen]; that's our `y`.
       let lr := cfg.learningRate
       let t : Float := (globalStep + 1).toFloat
-      let outBA ← IreeSession.trainStepAdamF32 trainSess spec.trainFnName
+      let outBA ← LowererSession.trainStepAdamF32 trainSess spec.trainFnName
                     packed allShapes xba xShape targetIds lr t bnShapes (batch * seqLen).toUSize
       packed := outBA.extract 0 (nT * 4)
       let loss := F32.read outBA nT.toUSize
@@ -177,7 +177,7 @@ def runBigramSample (paramsPath : String) (nChars : Nat)
   let _ ← spec.compileVmfbs evalCfg
   let pfx := spec.buildPrefix
   let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
-  let sess ← IreeSession.create evalVmfb
+  let sess ← LowererSession.create evalVmfb
 
   let params ← IO.FS.readBinFile paramsPath
   -- The eval forward also wants a (zero-sized for no-BN) bn-stats append.
@@ -203,7 +203,7 @@ def runBigramSample (paramsPath : String) (nChars : Nat)
     for v in [:vocabSize] do
       let f := if v == lastId then (1.0 : Float) else (0.0 : Float)
       xba := xba.append (← F32.const 1 f)
-    let logits ← IreeSession.forwardF32 sess spec.evalFnName
+    let logits ← LowererSession.forwardF32 sess spec.evalFnName
                     evalParams evalShapesBA xba xShape 1 nClasses
     let arr := readFloats logits vocabSize
     let seedU : USize := (tokIds.length * 7919 + 1).toUSize

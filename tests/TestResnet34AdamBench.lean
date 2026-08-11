@@ -101,7 +101,7 @@ def main (args : List String) : IO Unit := do
   IO.println s!"  A (first)  = {pathA}  (@{fnA}, bs {bsA}, {opsA} stablehlo ops)"
   IO.println s!"  B (second) = {pathB}  (@{fnB}, bs {bsB}, {opsB} stablehlo ops)"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {net.bnChannels.size} BN layers, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
   IO.println s!"  {warmup} warmup + {rounds} timed rounds, interleaved A,B,A,B…"
 
   -- ── inputs: byte-identical to tests/TestResnet34AdamTie.lean ──────────────────────────────
@@ -139,9 +139,9 @@ backend {← IreeSession.backendName}"
   let compB := (← IO.monoMsNow) - cb0
   IO.println s!"  compile: A {compA} ms, B {compB} ms  ({(compB.toFloat / compA.toFloat)}×)"
 
-  let step (sess : IreeSession) (fn : String) (x y : ByteArray) (b : Nat) : IO Nat := do
+  let step (sess : LowererSession) (fn : String) (x y : ByteArray) (b : Nat) : IO Nat := do
     let t0 ← IO.monoMsNow
-    let out ← IreeSession.mlpTrainStepV sess s!"m.{fn}" x pbuf shapes y
+    let out ← LowererSession.mlpTrainStepV sess s!"m.{fn}" x pbuf shapes y
       b.toUSize net.d0.toUSize net.nClasses.toUSize
     let t1 ← IO.monoMsNow
     -- touch the result so nothing can be elided, and guard against a silently empty return

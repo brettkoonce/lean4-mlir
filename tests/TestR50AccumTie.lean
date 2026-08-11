@@ -140,7 +140,7 @@ artifact to itself and pass unconditionally"
   IO.println s!"  under test  verified_mlir/{net.slug}_{variant}_train_step.mlir   (4 regions [θ|m|v|G])"
   IO.println s!"  peer        verified_mlir/{net.slug}_{peer}_train_step.mlir      (3 regions, committed \
 before accumulation existed; its gradient is certified by `lake build r50-gradcheck`)"
-  IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, lr {lr}, backend {← IreeSession.backendName}"
+  IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, lr {lr}, backend {← LowererSession.backendName}"
 
   -- ── one (θ, m, v, x, y) both renders see ──
   let mut θparts : Array ByteArray := #[]
@@ -169,7 +169,7 @@ before accumulation existed; its gradient is certified by `lake build r50-gradch
 
   let mkRun (v : String) : IO (ByteArray → IO ByteArray) := do
     let sess ← mkSession s!"verified_mlir/{net.slug}_{v}_train_step.mlir"
-    pure (fun buf => IreeSession.mlpTrainStepV sess s!"m.{net.slug}_{v}_train_step" x buf
+    pure (fun buf => LowererSession.mlpTrainStepV sess s!"m.{net.slug}_{v}_train_step" x buf
             (if v == variant then accShapes else admShapes) y
             bs.toUSize net.d0.toUSize net.nClasses.toUSize)
   let runAcc ← mkRun variant

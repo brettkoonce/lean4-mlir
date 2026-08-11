@@ -57,7 +57,7 @@ def main (args : List String) : IO Unit := do
     IO.println "  NOTE: both paths are the same file — an A-vs-A determinism run, NOT a migration \
 check."
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), no BN, bs {bs}, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   -- ── the packed [θ|m|v|lr,bc1,bc2] blob, byte-identical to both sides ──
   let mut θparts : Array ByteArray := #[]
@@ -81,7 +81,7 @@ backend {← IreeSession.backendName}"
 
   let runOne (path tag : String) : IO ByteArray := do
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess "m.vit_adam_train_step" x pbuf shapes y
+    LowererSession.mlpTrainStepV sess "m.vit_adam_train_step" x pbuf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running A…"; (← IO.getStdout).flush
   let oa ← runOne pathA "a"

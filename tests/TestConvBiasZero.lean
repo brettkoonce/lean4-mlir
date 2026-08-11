@@ -164,7 +164,7 @@ private def ablateMode (net : VerifiedNet) (ckpt : String) : IO Unit := do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
   let sess ← mkSession s!"verified_mlir/{net.slug}_fwd.mlir"
   let run (p : ByteArray) : IO ByteArray :=
-    IreeSession.forwardF32 sess s!"m.{net.slug}_fwd" p net.shapesBA x xsh
+    LowererSession.forwardF32 sess s!"m.{net.slug}_fwd" p net.shapesBA x xsh
       bs.toUSize net.nClasses.toUSize
   let la ← run θ
   let lb ← run θnb
@@ -262,7 +262,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
     for q in [vmfb, s!".lake/build/cbz_tie_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists q then IO.FS.removeFile q
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess s!"m.{net.slug}_adam_train_step" x buf shp y
+    LowererSession.mlpTrainStepV sess s!"m.{net.slug}_adam_train_step" x buf shp y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oA ← run ref "a" bufA shpA
   let oA2 ← run ref "a2" bufA shpA        -- the A-vs-A determinism floor (§4)
@@ -403,7 +403,7 @@ Run it against the pre-swap layout (the point is to compare the two).")
     for q in [vmfb, s!".lake/build/cbz_fwd_{tag}_{target}.vmfb"] do
       if ← System.FilePath.pathExists q then IO.FS.removeFile q
     let sess ← mkSession path
-    IreeSession.forwardF32 sess s!"m.{fn}" buf shp x xsh bs.toUSize net.nClasses.toUSize
+    LowererSession.forwardF32 sess s!"m.{fn}" buf shp x xsh bs.toUSize net.nClasses.toUSize
   let la ← run ref "a" bufA shpA
   let lb ← run candidate "b" bufB shpB
   let mut maxD := 0.0; let mut maxM := 0.0; let mut exact := 0; let mut nonFinite := 0
@@ -451,7 +451,7 @@ note the LAYOUT must match it too, so check out the pre-swap tree to do that pro
   IO.println s!"§2l step B — conv-bias gradients, from m = v = 0 (so m' = (1−β₁)·g)"
   IO.println s!"  render  {path}"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   -- θ at the driver's own init; m = v = 0 EXACTLY, which is what makes m' the gradient.
   let mut θparts : Array ByteArray := #[]
@@ -481,7 +481,7 @@ backend {← IreeSession.backendName}"
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
   let sess ← mkSession path
   IO.println "  running one step…"; (← IO.getStdout).flush
-  let out ← IreeSession.mlpTrainStepV sess "m.resnet34_adam_train_step" x pbuf shapes y
+  let out ← LowererSession.mlpTrainStepV sess "m.resnet34_adam_train_step" x pbuf shapes y
     bs.toUSize net.d0.toUSize net.nClasses.toUSize
 
   -- ── read the m' region: [θ' | m' | v' | loss,bc1,bc2 | bnstat] ──

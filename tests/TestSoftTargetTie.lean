@@ -134,7 +134,7 @@ def main (args : List String) : IO Unit := do
   let run (tag : String) (y : ByteArray) : IO ByteArray := do
     IO.println s!"  running {tag}…"; (← IO.getStdout).flush
     let s ← mkSession path
-    IreeSession.mlpTrainStepV s entry x pbuf shapes y
+    LowererSession.mlpTrainStepV s entry x pbuf shapes y
       bs.toUSize net.d0.toUSize nc.toUSize
   let oA ← run "a" yA
   let oB ← run "b" yB

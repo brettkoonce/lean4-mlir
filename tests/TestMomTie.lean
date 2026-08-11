@@ -57,7 +57,7 @@ def main : IO Unit := do
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   IO.println "§2k's owed gate — heavy-ball momentum vs the AdamW gradient oracle"
   IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, μ {μ}, wd {wd}, lr {lr}, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
 
   -- ── one (θ, x, onehot) both renders see ──
   let mut θparts : Array ByteArray := #[]
@@ -83,7 +83,7 @@ backend {← IreeSession.backendName}"
     for p in [vmfb, s!".lake/build/mom_tie_{variant}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession s!"verified_mlir/{slug}_{variant}_train_step.mlir"
-    IreeSession.mlpTrainStepV sess s!"m.{slug}_{variant}_train_step" x buf shapes y
+    LowererSession.mlpTrainStepV sess s!"m.{slug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 
   -- ── the ORACLE: AdamW from m = v = 0 ⇒ m' = 0.1·g ⇒ g = 10·m' ──

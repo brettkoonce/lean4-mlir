@@ -73,7 +73,7 @@ def main (args : List String) : IO Unit := do
       F32.const spec.nBnStats.toUSize 0.0
   let evalParams := params.append bnStats
 
-  let sess ← IreeSession.create evalVmfb
+  let sess ← LowererSession.create evalVmfb
   IO.println s!"  session loaded"
 
   -- Load val images.
@@ -119,7 +119,7 @@ def main (args : List String) : IO Unit := do
       let lastImg := F32.sliceImages valImg (start + real - 1) 1 pixelsPerImage
       for _ in [:batch - real] do
         imgs := imgs ++ lastImg
-    let logitsB ← IreeSession.forwardF32 sess spec.evalFnName
+    let logitsB ← LowererSession.forwardF32 sess spec.evalFnName
                     evalParams evalShapesBA imgs xShape batch.toUSize nClasses
     -- Keep only the `real` rows (drop padding).
     logitsAll := logitsAll ++ logitsB.extract 0 (real * rowBytes)

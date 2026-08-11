@@ -74,8 +74,8 @@ def main : IO Unit := do
   IO.println s!"  train: {nTrain} images, test: {nTest} images"
 
   IO.println "Loading IREE modules..."
-  let trainSess ← IreeSession.create ".lake/build/train_step.vmfb"
-  let evalSess  ← IreeSession.create ".lake/build/mnist_mlp.vmfb"
+  let trainSess ← LowererSession.create ".lake/build/train_step.vmfb"
+  let evalSess  ← LowererSession.create ".lake/build/mnist_mlp.vmfb"
   IO.println "  sessions ready"
 
   -- Init params via He
@@ -101,7 +101,7 @@ def main : IO Unit := do
     for bi in [:batchesPerEpoch] do
       let xb := MnistData.sliceImages trainImages (bi*batchSize) batchSize
       let yb := MnistData.sliceLabels trainLabelsB (bi*batchSize) batchSize
-      let out ← IreeSession.mlpTrainStep trainSess params xb yb lr batch
+      let out ← LowererSession.mlpTrainStep trainSess params xb yb lr batch
       epochLoss := epochLoss + out[MlpLayout.lossIdx]!
       params := dropLoss out
     let tTrain ← IO.monoMsNow
@@ -118,7 +118,7 @@ def main : IO Unit := do
     let mut correct : Nat := 0
     for bi in [:testBatches] do
       let xb := MnistData.sliceImages testImages (bi*batchSize) batchSize
-      let logits ← IreeSession.mlpForward evalSess xb W0' b0' W1' b1' W2' b2' batch
+      let logits ← LowererSession.mlpForward evalSess xb W0' b0' W1' b1' W2' b2' batch
       for i in [:batchSize] do
         let pred := argmax10 logits (i*10)
         let gt := testLabelsRaw[8 + bi*batchSize + i]!.toNat

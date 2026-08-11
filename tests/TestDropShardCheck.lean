@@ -105,7 +105,7 @@ hold, so swap-invariance stops being a bit-exactness claim.")
   IO.println "stochastic-depth SHARD gate — duplicated batch, ASYMMETRIC mask, halves swapped"
   IO.println s!"  DP     : {dpPath} ({replicas} replicas × bs {bs} = global {gbs})"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), {nDrop} drop sites, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
   if (← IO.getEnv "PJRT_DP_NO_MASK_SHARD") == some "1" then
     IO.println "  ⚠ FAULT INJECTED: PJRT_DP_NO_MASK_SHARD=1 — the masks are REPLICATED"
   -- ⚠⚠ TWO CONTROLS, AND THEY SHOW DIFFERENT THINGS.
@@ -186,7 +186,7 @@ this gate cannot distinguish a sharded mask from a replicated one")
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession dpPath
     let buf := F32.concat #[θ, z, z, tl, bnSlots, masks]
-    IreeSession.mlpTrainStepVDP sess (← entryOf dpPath) x buf shapes y
+    LowererSession.mlpTrainStepVDP sess (← entryOf dpPath) x buf shapes y
       gbs.toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize 0
       (if faultRep then 0 else nDrop).toUSize
 

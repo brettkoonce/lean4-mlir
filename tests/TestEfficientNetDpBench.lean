@@ -101,7 +101,7 @@ def main (args : List String) : IO Unit := do
 {opsB} ops{if bIsDP then s!" — the extra {opsB - opsA} are the {net.specs.size} collectives" else ""})"
   IO.println s!"  {net.specs.size} params ({net.nParams} floats = {net.nParams * 3 * 4 / 1048576} \
 MiB of [θ|m|v] per replica per step), {net.bnChannels.size} BN layers, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
   IO.println s!"  {warmup} warmup + {rounds} timed rounds, interleaved A,B,A,B…, SYNTHETIC inputs \
 (no data loader — see §3)"
   (← IO.getStdout).flush
@@ -142,7 +142,7 @@ backend {← IreeSession.backendName}"
 
   let stepA : IO Nat := do
     let t0 ← IO.monoMsNow
-    let out ← IreeSession.mlpTrainStepV sessA s!"m.{fnA}" x1 pbuf shapes y1
+    let out ← LowererSession.mlpTrainStepV sessA s!"m.{fnA}" x1 pbuf shapes y1
       imgPerStepA.toUSize net.d0.toUSize net.nClasses.toUSize
     let t1 ← IO.monoMsNow
     if out.size == 0 then throw (IO.userError "empty step output (A)")
@@ -150,10 +150,10 @@ backend {← IreeSession.backendName}"
   let stepB : IO Nat := do
     let t0 ← IO.monoMsNow
     let out ← if bIsDP then
-        IreeSession.mlpTrainStepVDP sessB s!"m.{fnB}" x2 pbuf shapes y2
+        LowererSession.mlpTrainStepVDP sessB s!"m.{fnB}" x2 pbuf shapes y2
           imgPerStepB.toUSize net.d0.toUSize net.nClasses.toUSize repB.toUSize
       else
-        IreeSession.mlpTrainStepV sessB s!"m.{fnB}" x2 pbuf shapes y2
+        LowererSession.mlpTrainStepV sessB s!"m.{fnB}" x2 pbuf shapes y2
           imgPerStepB.toUSize net.d0.toUSize net.nClasses.toUSize
     let t1 ← IO.monoMsNow
     if out.size == 0 then throw (IO.userError "empty step output (B)")

@@ -2,15 +2,15 @@
 
     Links to `libiree_ffi.so` (thin wrapper) + IREE runtime via the Lean shim
     in `ffi/iree_lean_ffi.c`. Exposes:
-      - `IreeSession.create` — load a .vmfb, bind to CUDA device
-      - `IreeSession.mlpForward` — MLP-specific forward pass (MNIST shape) -/
+      - `LowererSession.create` — load a .vmfb, bind to CUDA device
+      - `LowererSession.mlpForward` — MLP-specific forward pass (MNIST shape) -/
 
 /-- Opaque handle to an IREE runtime session (module + device). -/
-private opaque IreeSessionPointed : NonemptyType
-def IreeSession : Type := IreeSessionPointed.type
-instance : Nonempty IreeSession := IreeSessionPointed.property
+private opaque LowererSessionPointed : NonemptyType
+def LowererSession : Type := LowererSessionPointed.type
+instance : Nonempty LowererSession := LowererSessionPointed.property
 
-namespace IreeSession
+namespace LowererSession
 
 /-- Load a `.vmfb` bytecode module onto the default CUDA device.
 
@@ -19,7 +19,7 @@ namespace IreeSession
     separate `iree-compile` step. Use `VerifiedNet.mkSession` rather than
     calling this directly; it picks the right path per `backendName`. -/
 @[extern "lean_iree_session_create"]
-opaque create (path : @& String) : IO IreeSession
+opaque create (path : @& String) : IO LowererSession
 
 /-- `"iree"` or `"xla"` — which shim this binary was linked against. Detected by
     probing for a symbol only `libpjrt_ffi.so` defines, so it cannot disagree
@@ -33,7 +33,7 @@ opaque backendName : IO String
     Returns the logits as a `batch×10` flattened `FloatArray`. -/
 @[extern "lean_iree_mlp_forward"]
 opaque mlpForward
-  (sess : @& IreeSession)
+  (sess : @& LowererSession)
   (x : @& FloatArray)
   (W0 : @& FloatArray) (b0 : @& FloatArray)
   (W1 : @& FloatArray) (b1 : @& FloatArray)
@@ -46,7 +46,7 @@ opaque mlpForward
     FloatArray of length 669707; `result[669706]` is the loss. -/
 @[extern "lean_iree_mlp_train_step"]
 opaque mlpTrainStep
-  (sess : @& IreeSession)
+  (sess : @& LowererSession)
   (params : @& FloatArray)
   (x : @& FloatArray)
   (y : @& ByteArray)
@@ -56,7 +56,7 @@ opaque mlpTrainStep
 /-- Generic train step. Shapes are packed ByteArrays (see `packShapes`). -/
 @[extern "lean_iree_train_step_packed"]
 opaque trainStepPacked
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (params : @& FloatArray) (shapes : @& ByteArray)
   (x : @& FloatArray) (xShape : @& ByteArray)
   (y : @& ByteArray)
@@ -66,7 +66,7 @@ opaque trainStepPacked
     No Float64↔Float32 conversion at the boundary. -/
 @[extern "lean_iree_train_step_f32"]
 opaque trainStepF32
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
   (y : @& ByteArray)
@@ -77,7 +77,7 @@ opaque trainStepF32
     bnShapes: packed [n_bn_layers, oc0, oc1, ...] for BN stat output sizes. -/
 @[extern "lean_iree_train_step_adam_f32"]
 opaque trainStepAdamF32
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
   (y : @& ByteArray)
@@ -90,7 +90,7 @@ opaque trainStepAdamF32
     `useSoftLabels := true`. Used by the mixup/cutmix path. -/
 @[extern "lean_iree_train_step_adam_f32_softlabel"]
 opaque trainStepAdamF32Soft
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
   (ySoft : @& ByteArray)
@@ -103,7 +103,7 @@ opaque trainStepAdamF32Soft
     `useSeg := true`. -/
 @[extern "lean_iree_train_step_adam_f32_seg"]
 opaque trainStepAdamF32Seg
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
   (ySeg : @& ByteArray)
@@ -116,7 +116,7 @@ opaque trainStepAdamF32Seg
     produced with `useDdpm := true`. Loss is per-pixel MSE. -/
 @[extern "lean_iree_train_step_adam_f32_ddpm"]
 opaque trainStepAdamF32Ddpm
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
   (yDdpm : @& ByteArray)
@@ -135,7 +135,7 @@ opaque trainStepAdamF32Ddpm
     `2*5 + 20 = 30`; `gridH = gridW = 7`. -/
 @[extern "lean_iree_train_step_adam_f32_yolov1"]
 opaque trainStepAdamF32Yolov1
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
   (yYolo : @& ByteArray)
@@ -164,7 +164,7 @@ opaque trainStepAdamF32Yolov1
     this is unaffected. -/
 @[extern "lean_iree_forward_f32"]
 opaque forwardF32
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (params : @& ByteArray) (shapes : @& ByteArray)
   (x : @& ByteArray) (xShape : @& ByteArray)
   (batch : USize) (nClasses : USize)
@@ -180,7 +180,7 @@ opaque forwardF32
     whole parameter set, since this graph returns exactly its two param inputs. -/
 @[extern "lean_iree_linear_train_step"]
 opaque linearTrainStepV
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (x : @& ByteArray) (W0 : @& ByteArray) (b0 : @& ByteArray) (y : @& ByteArray)
   (batch : USize) (d0 : USize) (d1 : USize)
   (nResident : USize := 0) : IO ByteArray
@@ -211,7 +211,7 @@ opaque linearTrainStepV
     which is garbage rather than a link error. A rename makes it a link error. -/
 @[extern "lean_iree_mlp_train_step_v_dp2"]
 opaque mlpTrainStepVDP
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (x : @& ByteArray) (params : @& ByteArray) (shapes : @& ByteArray) (y : @& ByteArray)
   (batch : USize) (d0 : USize) (d3 : USize) (replicas : USize)
   (nResident : USize := 0) (nShardTail : USize := 0) : IO ByteArray
@@ -238,7 +238,7 @@ opaque mlpTrainStepVDP
     it unwritten. -/
 @[extern "lean_iree_mlp_train_step_v"]
 opaque mlpTrainStepV
-  (sess : @& IreeSession) (fnName : @& String)
+  (sess : @& LowererSession) (fnName : @& String)
   (x : @& ByteArray) (params : @& ByteArray) (shapes : @& ByteArray) (y : @& ByteArray)
   (batch : USize) (d0 : USize) (d3 : USize)
   (nResident : USize := 0) : IO ByteArray
@@ -255,9 +255,9 @@ opaque mlpTrainStepV
     once-per-epoch before any of this. -/
 @[extern "lean_iree_read_params"]
 opaque readParams
-  (sess : @& IreeSession) (packed : @& ByteArray) (nBytes : USize) : IO ByteArray
+  (sess : @& LowererSession) (packed : @& ByteArray) (nBytes : USize) : IO ByteArray
 
-end IreeSession
+end LowererSession
 
 /- Sizes for the packed-params layout. -/
 namespace MlpLayout

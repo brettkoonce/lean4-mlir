@@ -83,7 +83,7 @@ def main (args : List String) : IO Unit := do
   let mut x ← Ddpm.sampleNoise (B * nPix).toUSize 0xc0ffee
   let nTotal : USize := (B * nPix).toUSize
 
-  let sess ← IreeSession.create evalVmfb
+  let sess ← LowererSession.create evalVmfb
   IO.eprintln s!"  sampling: {nSteps} DDIM steps, batch {B}"
   for k in [:nSteps] do
     let t := stepTs[k]!
@@ -91,7 +91,7 @@ def main (args : List String) : IO Unit := do
     let xCond ← Ddpm.prependSinCosTScalar x B.toUSize imgC.toUSize
                   spec.imageH.toUSize spec.imageW.toUSize t.toUSize
                   nFreq.toUSize T.toUSize
-    let eps ← IreeSession.forwardF32 sess spec.evalFnName
+    let eps ← LowererSession.forwardF32 sess spec.evalFnName
                 evalParams evalShapes xCond xShape B.toUSize nPix.toUSize
     let aBarT := alphaBarF t
     let aBarP := if k + 1 < nSteps then alphaBarF tPrev else 0.9999

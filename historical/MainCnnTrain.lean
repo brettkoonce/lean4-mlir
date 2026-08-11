@@ -57,8 +57,8 @@ def main : IO Unit := do
   IO.println s!"  train: {nTrain}, test: {nTest}"
 
   IO.println "Loading IREE modules..."
-  let trainSess ← IreeSession.create ".lake/build/cnn_train_step.vmfb"
-  let evalSess  ← IreeSession.create ".lake/build/mnist_cnn.vmfb"
+  let trainSess ← LowererSession.create ".lake/build/cnn_train_step.vmfb"
+  let evalSess  ← LowererSession.create ".lake/build/mnist_cnn.vmfb"
   IO.println "  ready"
 
   -- He-init packed params: conv weights use fan_in = ic * k * k
@@ -92,7 +92,7 @@ def main : IO Unit := do
     for bi in [:bpE] do
       let xb := MnistData.sliceImages trainImages (bi*batchN) batchN
       let yb := MnistData.sliceLabels trainLabelsB (bi*batchN) batchN
-      let out ← IreeSession.trainStepPacked trainSess "jit_cnn_train_step.main"
+      let out ← LowererSession.trainStepPacked trainSess "jit_cnn_train_step.main"
                   p shapes xb xSh yb lr batch
       epochLoss := epochLoss + out[CnnLayout.lossIdx]!
       p := dropLoss out CnnLayout.nParams

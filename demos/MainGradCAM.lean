@@ -214,7 +214,7 @@ def main (args : List String) : IO Unit := do
 
   let camVmfb ← compileCamVmfb spec evalBatch
   IO.eprintln s!"  cam vmfb: {camVmfb}"
-  let camSess ← IreeSession.create camVmfb
+  let camSess ← LowererSession.create camVmfb
   let evalShapesBA := spec.evalShapesBA
   let xShape := spec.xShape evalBatch
   let camFnName := s!"{spec.sanitizedName}_cam.forward_cam"
@@ -222,7 +222,7 @@ def main (args : List String) : IO Unit := do
     | some (c, h, w) => c * h * w
     | none => 0
   IO.eprintln s!"  invoking {camFnName} (batch={evalBatch}, lastConv elems = {lcSize})"
-  let lastConv ← IreeSession.forwardF32 camSess camFnName
+  let lastConv ← LowererSession.forwardF32 camSess camFnName
                     evalParams evalShapesBA xba xShape evalBatch.toUSize lcSize.toUSize
   IO.eprintln s!"  forward_cam returned {lastConv.size} bytes"
 

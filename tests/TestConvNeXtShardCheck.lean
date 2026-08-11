@@ -61,7 +61,7 @@ def main (args : List String) : IO Unit := do
   IO.println "ConvNeXt-T SHARDING gate — asymmetric batch"
   IO.println s!"  DP( [xA | xB] )  ==  mean( single(xA), single(xB) )   ({replicas} replicas x bs {bs})"
   IO.println s!"  DP render: {dpPath}"
-  IO.println s!"  {net.specs.size} params ({net.nParams} floats), backend {← IreeSession.backendName}"
+  IO.println s!"  {net.specs.size} params ({net.nParams} floats), backend {← LowererSession.backendName}"
 
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
@@ -93,14 +93,14 @@ def main (args : List String) : IO Unit := do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
   let s1 ← mkSession "verified_mlir/convnext_adam_train_step.mlir"
   IO.println "  single-device on shard A…"; (← IO.getStdout).flush
-  let oA ← IreeSession.mlpTrainStepV s1 "m.convnext_adam_train_step" xA pbuf shapes yA
+  let oA ← LowererSession.mlpTrainStepV s1 "m.convnext_adam_train_step" xA pbuf shapes yA
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  single-device on shard B…"; (← IO.getStdout).flush
-  let oB ← IreeSession.mlpTrainStepV s1 "m.convnext_adam_train_step" xB pbuf shapes yB
+  let oB ← LowererSession.mlpTrainStepV s1 "m.convnext_adam_train_step" xB pbuf shapes yB
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  data-parallel on [A | B]…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath
-  let oD ← IreeSession.mlpTrainStepVDP s2 "m.convnext_adamdp_train_step" xAB pbuf shapes yAB
+  let oD ← LowererSession.mlpTrainStepVDP s2 "m.convnext_adamdp_train_step" xAB pbuf shapes yAB
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
 
   let nP := net.nParams

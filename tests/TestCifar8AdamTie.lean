@@ -34,7 +34,7 @@ def main (args : List String) : IO Unit := do
   let net := cifar8Verified.toNet
   let bs  := 128                       -- the baked batch of the committed render
   IO.println s!"@cifar8_adam_train_step tie: A={pathA}  B={pathB}"
-  IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, backend {← IreeSession.backendName}"
+  IO.println s!"  {net.specs.size} params ({net.nParams} floats), bs {bs}, backend {← LowererSession.backendName}"
 
   -- ── θ (driver init), m (centred noise), v (POSITIVE — it is under a sqrt) ──
   let mut θparts : Array ByteArray := #[]
@@ -60,7 +60,7 @@ def main (args : List String) : IO Unit := do
 
   let runOne (path tag : String) : IO ByteArray := do
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess "m.cifar8_adam_train_step" x pbuf shapes y
+    LowererSession.mlpTrainStepV sess "m.cifar8_adam_train_step" x pbuf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oa ← runOne pathA "a"
   let ob ← runOne pathB "b"

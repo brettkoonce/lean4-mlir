@@ -84,7 +84,7 @@ def main : IO Unit := do
   IO.println s!"  under test  verified_mlir/{net.slug}_lamb64_train_step.mlir"
   IO.println s!"  oracle      verified_mlir/{net.slug}_adam64_train_step.mlir  (g = 10·m' at m = v = 0)"
   IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, lr {lr}, eps {ε}, wd {wd}, \
-bc1 {bc1} bc2 {bc2} (t = 10), backend {← IreeSession.backendName}"
+bc1 {bc1} bc2 {bc2} (t = 10), backend {← LowererSession.backendName}"
 
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
@@ -121,7 +121,7 @@ bc1 {bc1} bc2 {bc2} (t = 10), backend {← IreeSession.backendName}"
     for p in [vmfb, s!".lake/build/r50_lamb_tie_{variant}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession s!"verified_mlir/{net.slug}_{variant}_train_step.mlir"
-    IreeSession.mlpTrainStepV sess s!"m.{net.slug}_{variant}_train_step" x buf shapes y
+    LowererSession.mlpTrainStepV sess s!"m.{net.slug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 
   -- ── the ORACLE: AdamW from m = v = 0 ⇒ m' = 0.1·g ⇒ g = 10·m' ──

@@ -1448,7 +1448,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      let out <- IreeSession.linearTrainStepV tsSess tsFn
+      let out <- LowererSession.linearTrainStepV tsSess tsFn
                    xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize nResident
       W0 := out.extract 0 (d0 * d1 * 4)
       b0 := out.extract (d0 * d1 * 4) pBytes
@@ -1464,10 +1464,6 @@ Walking through the numbered sections:
 \texttt{.mlir}, hands it to the shim, and gets back something callable.
 XLA compiles the StableHLO in process, which is the 782\,ms the run
 reported.
-
-One name in this listing is historical residue rather than description.
-The session type is called \texttt{IreeSession}, from an earlier backend,
-and it is on the list to rename. What the code opens is the XLA shim.
 
 \textbf{2. Data and initialisation.} \texttt{loadData} mmaps the on-disk
 binaries into \texttt{F32Array} buffers. \texttt{trainImg} holds

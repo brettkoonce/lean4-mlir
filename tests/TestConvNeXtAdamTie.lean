@@ -68,7 +68,7 @@ def main (args : List String) : IO Unit := do
     IO.println "  NOTE: both paths are the same file — an A-vs-A determinism run, NOT a migration \
 check. Pass the retired render as the first argument for that."
   IO.println s!"  {net.specs.size} params ({net.nParams} floats), NO BatchNorm (LayerNorm), bs {bs}, \
-xseed {xseed}{if reverseB then ", B batch REVERSED (control)" else ""}, backend {← IreeSession.backendName}"
+xseed {xseed}{if reverseB then ", B batch REVERSED (control)" else ""}, backend {← LowererSession.backendName}"
 
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
@@ -114,7 +114,7 @@ xseed {xseed}{if reverseB then ", B batch REVERSED (control)" else ""}, backend 
     for p in [vmfb, vmfbT] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess "m.convnext_adam_train_step" x pbuf shapes y
+    LowererSession.mlpTrainStepV sess "m.convnext_adam_train_step" x pbuf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running A…"; (← IO.getStdout).flush
   let oa ← runOne pathA "a" x0 y0

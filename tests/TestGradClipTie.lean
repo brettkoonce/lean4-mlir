@@ -141,7 +141,7 @@ def main (argv : List String) : IO Unit := do
   let ob1   : Float := 0.1        -- 1 − β₁, so `m' = ob1·g` at m = 0
   let hiPath := (optArg "--hi").getD s!".lake/build/clip_hi_{cn.slug}.mlir"
   IO.println s!"grad clip — {cn.slug}, global-norm clipping at CLIP = {clipC} (v1.4b)"
-  IO.println s!"  {sig.length} params / {P} coords, bs {bs}, backend {← IreeSession.backendName}"
+  IO.println s!"  {sig.length} params / {P} coords, bs {bs}, backend {← LowererSession.backendName}"
 
   -- ⚠ TWO ROUTES TO THE SAME LAYOUT, checked — `wdx-tie`'s check, kept for §2m's reason: the
   -- signature list drives the render's per-param loop while `net.specs` drives the driver's blob,
@@ -189,7 +189,7 @@ the signature list says {ds}")
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let src := path.getD s!"verified_mlir/{cn.slug}_{variant}_train_step.mlir"
     let sess ← mkSession src
-    IreeSession.mlpTrainStepV sess s!"m.{cn.slug}_{variant}_train_step" x buf shapes y
+    LowererSession.mlpTrainStepV sess s!"m.{cn.slug}_{variant}_train_step" x buf shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 
   if cand.isSome then IO.println s!"  ⚠ CANDIDATE clip render: {cand.get!}"

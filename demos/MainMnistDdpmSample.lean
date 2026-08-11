@@ -104,7 +104,7 @@ def main (args : List String) : IO Unit := do
   let nTotal : USize := (B * nPix).toUSize
 
   -- ── Sampling loop ──
-  let sess ← IreeSession.create evalVmfb
+  let sess ← LowererSession.create evalVmfb
   IO.eprintln s!"  sampling: {nSteps} DDIM steps, batch {B}"
   for k in [:nSteps] do
     let t := stepTs[k]!
@@ -115,7 +115,7 @@ def main (args : List String) : IO Unit := do
                   spec.imageH.toUSize spec.imageW.toUSize t.toUSize T.toUSize
     -- Forward: ε_θ = model(x_t conditioned on t). nClasses = nPix because
     -- model output is [B, 1, 28, 28] = B * 784 floats per batch.
-    let eps ← IreeSession.forwardF32 sess spec.evalFnName
+    let eps ← LowererSession.forwardF32 sess spec.evalFnName
                 evalParams evalShapes xCond xShape B.toUSize nPix.toUSize
     -- DDIM coefs
     let aBarT := alphaBarF t

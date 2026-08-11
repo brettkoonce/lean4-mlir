@@ -211,7 +211,7 @@ def main : IO Unit := do
   IO.println "§3.2's owed gate — ResNet-50's GRADIENT on the committed train step"
   IO.println s!"  artifact verified_mlir/{net.slug}_{variant}_train_step.mlir"
   IO.println s!"  {nT} params ({nP} floats), bs {bs}, {net.bnChannels.size} BN layers, \
-backend {← IreeSession.backendName}"
+backend {← LowererSession.backendName}"
   IO.println s!"  tier 1 |cos∠| ≤ {tolExact}   ·   tier 2 h = {h}, rel ≤ {tol}"
 
   -- ── the tensor→float offset table, so a group is a slice ──
@@ -251,7 +251,7 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
     else F32.write3 (← F32.const 3 0.0) 0 lr 0.1 0.001
   let mut nInvokes := 0
   let runAt (θx : ByteArray) : IO ByteArray :=
-    IreeSession.mlpTrainStepV sess fn x
+    LowererSession.mlpTrainStepV sess fn x
       (F32.concat (if accOn then #[θx, z, z, z, tl, bnIn] else #[θx, z, z, tl, bnIn])) shapes y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 

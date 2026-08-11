@@ -87,7 +87,7 @@ adam | sgd | mom (e.g. adam, bn_mom, w_sgd, w_bn_adam)"
   let nP  := net.nParams
   let lr  := 0.001; let β₁ := 0.9; let μ := 0.9
   IO.println s!"@{netSlug}_train_step tie: A={pathA}  B={pathB}"
-  IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, backend {← IreeSession.backendName}"
+  IO.println s!"  {net.specs.size} params ({nP} floats), bs {bs}, backend {← LowererSession.backendName}"
 
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
@@ -125,7 +125,7 @@ adam | sgd | mom (e.g. adam, bn_mom, w_sgd, w_bn_adam)"
               s!".lake/build/c8_opt_{slug}_{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let sess ← mkSession path
-    IreeSession.mlpTrainStepV sess s!"m.{netSlug}_train_step" xb pbuf shapes yb
+    LowererSession.mlpTrainStepV sess s!"m.{netSlug}_train_step" xb pbuf shapes yb
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oa ← runOne pathA "a" x y
   let ob ← runOne pathB "b" x y

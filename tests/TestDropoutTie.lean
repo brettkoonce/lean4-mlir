@@ -81,7 +81,7 @@ private def die (msg : String) : IO α := throw (IO.userError msg)
 /-- Compile fresh — delete both the bare and the backend-scoped `.vmfb` first (§4): `compileVmfb`
     keys its cache on the output path and an mtime, never on the source, so a second run under one
     tag silently reuses the first binary. That bites exactly when running a control. -/
-private def freshSession (path tag : String) : IO IreeSession := do
+private def freshSession (path tag : String) : IO LowererSession := do
   let vmfb := s!".lake/build/dropout_tie_{tag}.vmfb"
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
   for p in [vmfb, s!".lake/build/dropout_tie_{tag}_{target}.vmfb"] do
@@ -175,7 +175,7 @@ private def gateOp (doBreak : Bool) : IO Unit := do
   IO.println "── GATE A — the known answer: does the mask multiply PER ELEMENT?"
   let keep := (efficientnetVerified.dropoutKeep.map (·.1)).getD 0.8
   let maskVals := opMask keep
-  IO.println s!"  B {OB}, n {ON} (n ≠ B on purpose), keep {keep}, backend {← IreeSession.backendName}"
+  IO.println s!"  B {OB}, n {ON} (n ≠ B on purpose), keep {keep}, backend {← LowererSession.backendName}"
   IO.println s!"  mask varies WITHIN every example — 1/keep = {1.0 / keep}, both endpoints, two \
 interior values, rotated per example"
   let x ← F32.heInit 20260803 (OB * ON).toUSize 1.0
@@ -183,7 +183,7 @@ interior values, rotated per example"
   let path := "/tmp/dropout_op.mlir"
   IO.FS.writeFile path opModule
   let sess ← freshSession path "op"
-  let y ← IreeSession.forwardF32 sess "m.do" m (packShapes #[#[OB, ON]]) x
+  let y ← LowererSession.forwardF32 sess "m.do" m (packShapes #[#[OB, ON]]) x
             (packXShape #[OB, ON]) OB.toUSize ON.toUSize
   let n := OB * ON
   if nonFinite y n > 0 then
