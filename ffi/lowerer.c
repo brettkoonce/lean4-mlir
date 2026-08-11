@@ -45,11 +45,30 @@ static int load_once(void);
 // "no 'func.func @' in module". So the question itself must resolve the backend.
 const char* lowerer_active_name(void) { load_once(); return g_active; }
 
-// Relative entries resolve against the CWD, which for every runner in this repo
-// is the repo root (the trainers already read `verified_mlir/` and `data/` that
-// way). The bare soname lets an installed copy be found via LD_LIBRARY_PATH.
-static const char* const kXlaPaths[]  = { "./ffi/libpjrt_ffi.so", "libpjrt_ffi.so" };
-static const char* const kIreePaths[] = { "./ffi/libiree_ffi.so", "libiree_ffi.so" };
+// ⚠⚠ THE BARE SONAME MUST COME FIRST, and the order is the whole point.
+//
+// `dlopen("name.so")` consults $LD_LIBRARY_PATH; `dlopen("./ffi/name.so")` does
+// not -- it is a path, so the loader takes it literally. With the relative entry
+// first, the repo copy ALWAYS won and LD_LIBRARY_PATH could never be honoured,
+// which silently disabled every gate that injects a purpose-built shim that way:
+// `tests/prefetch_tie.sh` and `scripts/residency_gate_all.sh` both point
+// LD_LIBRARY_PATH at a deterministic, autotuning-off build (`scripts/det_shim.sh`)
+// and neither was getting it. Measured 2026-08-11: prefetch_tie's A1-vs-A2
+// control failed at ~145 M differing bytes -- the documented signature of "the
+// deterministic shim did not take" -- and passed at 0 with the order fixed.
+// It fails loudly rather than passing wrongly, but the gates were unusable.
+//
+// This regressed when the lowerer moved from link-time to dlopen: a LINKED
+// binary resolves its DT_NEEDED soname through LD_LIBRARY_PATH, so the gates
+// worked by construction before and quietly stopped after.
+//
+// Bare-first costs nothing in the normal case: no LD_LIBRARY_PATH entry means
+// the bare dlopen simply fails and the relative entry answers, which is how
+// every ordinary run already resolves. Relative entries resolve against the CWD,
+// which for every runner in this repo is the repo root (the trainers already
+// read `verified_mlir/` and `data/` that way).
+static const char* const kXlaPaths[]  = { "libpjrt_ffi.so", "./ffi/libpjrt_ffi.so" };
+static const char* const kIreePaths[] = { "libiree_ffi.so", "./ffi/libiree_ffi.so" };
 
 static void* try_paths(const char* const* paths, int n) {
   for (int i = 0; i < n; i++) {
@@ -139,8 +158,17 @@ static int load_once(void) {
   // Report what actually loaded, not what was asked for: the marker is defined
   // only by the PJRT shim, so it is the ground truth `lean_iree_backend_name`
   // has always relied on.
+  //
+  // ⚠ THIS USED TO BE GUARDED BY `if (!(so && *so))`, which exempted the one path
+  // that most needs the ground truth. $LEAN_MLIR_LOWERER_SO left `g_active` at
+  // "custom", the Lean driver matches that against "xla" and gets no, so pointing
+  // the override at a PJRT shim ran the IREE path and died in `iree-compile` --
+  // even with $LEAN_MLIR_LOWERER=xla also set, since the branch above never ran.
+  // The guard contradicted the comment it sat under: "custom" is what was ASKED,
+  // and the marker is what LOADED. Unconditional now, so an explicit .so is
+  // classified by what it exports, exactly like an implicitly-found one.
   if (bind_all(h)) { g_active = "none"; return 1; }
-  if (!(so && *so)) g_active = lowerer_pjrt_marker ? "xla" : "iree";
+  g_active = lowerer_pjrt_marker ? "xla" : "iree";
 
   *(void**)(&s_session_create) = dlsym(h, "iree_ffi_session_create");
   if (!s_session_create) {
