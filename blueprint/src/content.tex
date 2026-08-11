@@ -31,15 +31,15 @@ headed.}
 On the next-to-last page of my first book, I wrote that I dreamed of a
 future where we could take our code and compile it for whatever backend
 we desire, via MLIR. I meant it as a wishlist item, something I expected
-to happen eventually but not soon enough to matter for that book.
+to happen eventually but not soon enough to matter for that work.
 
 It turned out ``eventually'' was about five years.
 
 This is the book I wanted to write back then and couldn't. The tools
 weren't ready. Lean 4 was still in development, MLIR was a research
 project, and driving a GPU still meant going through Python. All three
-have changed, and the thing I wished for is sitting in a GitHub repo
-today, training ResNets on a single GPU, with machine-checked proofs that
+are production-quality now, and the thing I wished for is sitting in a
+GitHub repo, training ResNets on a single GPU, with machine-checked proofs that
 every gradient is correct.
 
 \section*{What this book is about}
@@ -49,8 +49,9 @@ This book teaches you how backpropagation actually works.
 You already know the hand-wave version. Compute gradients, update
 weights, repeat. If you've trained a model you've called
 \texttt{.backward()} a thousand times, but what you probably haven't done
-is open the hood, look at what \texttt{.backward()} computes layer by
-layer, and check that it's mathematically correct.
+is open the hood, look at what \texttt{.backward()} is actually
+computing layer by layer, and verify that the computation is
+mathematically correct.
 
 That's what we're going to do. We'll take every layer in the modern
 stack: dense, ReLU, convolution, pooling, batch normalization, residual
@@ -94,8 +95,7 @@ but exploitably structured:
   \item \textbf{Sparse Toeplitz.} Convolutions have a block-sparse Jacobian
     with a sliding-window structure, and the backward pass is another
     convolution with a reversed kernel.
-  \item \textbf{Binary selection.} Max pooling routes the gradient to
-    whichever input happened to be the max.
+  \item \textbf{Binary selection.} Max pooling routes the gradient to whichever input was the max.
   \item \textbf{Rank-1 correction to diagonal.} Softmax, batch norm, and layer
     norm all have dense Jacobians with a clean closed form, because each
     one is a diagonal plus a rank-1 outer product.
@@ -130,14 +130,14 @@ backpropagation. The Lean is there for the reader who wants to check me.
 
 This is not a beginner's book. If you're looking for your first
 introduction to neural networks there are several good ones, including my
-first book, fast.ai's free courses, and plenty of good material all over
-the web. Come back to this one when you've trained something and want to
+first book, fast.ai's free courses, and plenty of good resources all
+over the web. Come back to this one when you've trained something and want to
 understand what you did.
 
 This is also not a research textbook, and I'm not trying to write
 Goodfellow or Bishop. The proofs here are for credibility, not for
 theoretical depth, and if you want the full formal story then Mathlib is
-open source and you can extend it. What this book adds is the bridge from
+open-source and you can extend it. What this book adds is the bridge from
 the math to the actual GPU code, and the assurance that they agree.
 
 If you're me from ten years ago, interested in ML, willing to put in the
