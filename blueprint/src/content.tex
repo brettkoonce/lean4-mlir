@@ -254,7 +254,7 @@ and a lot of bookkeeping. The tools to verify this claim finally exist,
 and you're holding the result.
 
 Three of my favorite citations of the first book are from high school
-students, and I don't think it's an accident that teenagers are
+students, and I don't think it's by accident that teenagers are
 publishing results. The barriers to doing real ML research used to be
 infrastructure. Compute, data, institutional access. Those barriers have
 mostly fallen, and what remains is the smaller barrier of understanding
@@ -629,21 +629,92 @@ kernel, with no tape and no replay.
 
 A VJP (vector-Jacobian product) is the backward function for a layer:
 takes an upstream gradient, returns the downstream one. Every backward
-function in this book is a VJP built by composing the foundation
-here --- the partial-derivative function \(\pdiv\) (defined via
-Mathlib's \(\fderiv\)), its three structural rules (chain, sum,
-product), and three VJP record types (\(\HasVJP\),
+function in this book is a VJP built by composing the foundation here.
+That foundation is the partial-derivative function \(\pdiv\) (defined
+via Mathlib's \(\fderiv\)), its three structural rules of chain, sum,
+and product, and three VJP record types (\(\HasVJP\),
 \(\HasVJPMat\), \(\HasVJPthree\), one per tensor rank) that bundle a
 backward function with its correctness claim.
 
 This is the technically hardest chapter in the book, by design. Going
-from nothing to a complete trained model --- the \(\pdiv\) calculus,
-the VJP framework, a forward pass, a loss, a backward pass, an SGD
-step, all the way down to the GPU --- is the entire machinery, built in a single
-chapter. We do it on the smallest possible network (one matrix multiply: the
+from nothing to a complete trained model is the entire machinery, and we
+build all of it here: the \(\pdiv\) calculus, the VJP framework, a
+forward pass, a loss, a backward pass, an SGD step, all the way down to
+the GPU. We do it on the smallest possible network (one matrix multiply: the
 MNIST linear classifier) to demonstrate the pattern. Once that machinery exists, every later
 chapter is just adding a layer: one new primitive dropped into the
 same forward / loss / backward / optimize loop.
+
+\section{Run it first}
+
+Before any of the math, train the thing. Four commands and about three
+seconds of GPU time:
+
+\begin{verbatim}
+lake exe cache get                            # Mathlib oleans, ~30 s
+./download_mnist.sh                           # ~11 MB
+lake build mnist-linear-verified
+./.lake/build/bin/mnist-linear-verified data
+\end{verbatim}
+
+On one 7900 XTX (ROCm, gfx1100), from
+\texttt{runs/2026-08-11-linear-verified-xla/}. XLA's startup banner is
+the only thing removed:
+
+\begin{verbatim}
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir
+             (@linear_train_step, 2 outputs, 1 replica) in 782 ms
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir
+             (@linear_fwd, 1 outputs, 1 replica) in 23 ms
+MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
+  train 60000, test 10000; dense 784->10, bs 128, SGD
+  epoch 1: test_acc = 8977/10000 = 89.770000% (306ms)
+  epoch 2: test_acc = 9082/10000 = 90.820000% (240ms)
+  epoch 3: test_acc = 9124/10000 = 91.240000% (241ms)
+  epoch 4: test_acc = 9156/10000 = 91.560000% (257ms)
+  epoch 5: test_acc = 9167/10000 = 91.670000% (270ms)
+  epoch 6: test_acc = 9176/10000 = 91.760000% (271ms)
+  epoch 7: test_acc = 9186/10000 = 91.860000% (271ms)
+  epoch 8: test_acc = 9194/10000 = 91.940000% (272ms)
+  epoch 9: test_acc = 9198/10000 = 91.980000% (270ms)
+  epoch 10: test_acc = 9198/10000 = 91.980000% (269ms)
+  epoch 11: test_acc = 9203/10000 = 92.030000% (268ms)
+  epoch 12: test_acc = 9210/10000 = 92.100000% (272ms)
+done (trained MNIST-Linear via the proof-rendered StableHLO).
+\end{verbatim}
+
+Twelve epochs at about 270\,ms each, and 92.10\% on the full
+10,000-image test set. That is the going rate for a linear classifier on
+MNIST, and LeCun's original 1998 benchmark put a comparable model at
+around 92\%.
+
+Here is the part that matters. That run did not execute a
+reimplementation of the network this chapter describes. It executed
+\texttt{verified\_mlir/linear\_train\_step.mlir}, which is the text
+\texttt{Proofs.StableHLO.linTrainStepFaithfulV} emits. Every line of that
+file is \texttt{pretty} of a proven graph node, and
+\texttt{LinearFaithfulPoC} proves that the two outputs denote the
+certified loss-descent step derived from the Mathlib \(\fderiv\) math. The
+forward pass, the softmax cross-entropy cotangent, the parameter
+gradients, and the SGD update are all proof-backed operations. Every
+theorem in the rest of this chapter is about the graph that just
+trained.
+
+The two compile lines are worth a second look. XLA took the StableHLO
+and compiled it in process in under a second, with no separate compiler
+invocation and nothing left on disk.
+
+To run all three MNIST chapters at once:
+
+\begin{verbatim}
+lake run mnist
+\end{verbatim}
+
+That builds and trains this linear model, Chapter~\ref{chap:mlp}'s MLP,
+and Chapter~\ref{chap:cnn}'s CNN, in about a minute.
+
+\section{How it works}
 
 The next twelve theorems all reduce to a single definition
 (\(\pdiv\)) plus chain rule, sum rule, and product rule. Before
@@ -678,8 +749,7 @@ we drop you into the deep end, here's the shape of what's coming:
 Read top-to-bottom, this is the order things get proved.
 Read bottom-to-top, this is what every theorem in Chapters
 3--9 unfolds to. (Ch~\ref{chap:attention} attention adds
-matrix-level machinery on top; see
-\S\ref{sec:matrix_machinery}.) The full clickable dependency
+matrix-level machinery on top. See \S\ref{sec:matrix_machinery}.) The full clickable dependency
 graph is in the blueprint web view.
 
 \paragraph{How the proofs are written.}
@@ -688,9 +758,9 @@ The proofs in this book follow Lamport's structured style
 Write a 21\textsuperscript{st} Century Proof}}).
 Hypotheses are named up front in an \Assume{}/\Prove{} header, with the
 matching Lean hypothesis name in brackets. The proof is a numbered
-sequence of steps; each step carries its own \textsc{proof} naming
-exactly the facts it follows from; the final step is always \Qed{} ---
-the explanation of why the steps prove the goal. In equational chains,
+sequence of steps. Each step carries its own \textsc{proof} naming
+exactly the facts it follows from, and the final step is always \Qed{},
+which explains why the steps prove the goal. In equational chains,
 \(\prev\) stands for the expression established by the previous step.
 Each step mirrors one tactic block of the corresponding Lean proof, so
 the informal argument can be audited against the formal one step by
@@ -1077,8 +1147,6 @@ Mechanical; see \leandocref{Proofs.identity\_has\_vjp}.
 
 \section{Example: MNIST linear classifier}
 
-\phasethreenote
-
 The smallest network that learns: a single dense layer mapping
 784-dim images to 10-dim logits, trained with softmax cross-entropy
 and plain SGD. About 7,850 parameters. \(\sim\)92\% test accuracy
@@ -1114,37 +1182,69 @@ For an input image \(x \in \R^{784}\) and true class index
   \ell(W, b;\, x, t) &= -\log \hat{y}_t
     &&\text{(cross-entropy on the true class)}
 \end{align*}
-The trainable parameters are \(W\) and \(b\) --- 7,850 floats total.
+The trainable parameters are \(W\) and \(b\), which is 7,850 floats
+in total.
 
-\paragraph{The same thing, in NetSpec.}
+\paragraph{The same thing, as a \texttt{VerifiedNetSpec}.}
 \begin{verbatim}
-def mnistLinear : NetSpec where
-  name   := "MNIST-Linear"
-  imageH := 28
-  imageW := 28
-  layers := [.dense 784 10 .identity]
+def linearVerified : VerifiedNetSpec where
+  name     := "MNIST-Linear"
+  slug     := "linear"
+  inC      := 1
+  imageH   := 28
+  imageW   := 28
+  nClasses := 10
+  data     := .mnist
+  layers   := [.dense 784 10]
 \end{verbatim}
 
-The \texttt{.identity} activation means the layer outputs raw
-logits \(z = W x + b\); softmax + cross-entropy are added by
-\texttt{.train} since this is a classification task. The four-line
-\texttt{NetSpec} above describes exactly the function on the
-previous page.
+The layer emits raw logits \(z = W x + b\). Softmax and cross-entropy
+are added by the training driver, because this is a classification
+task. The \texttt{slug} names the committed render, so this spec is
+bound to \texttt{verified\_mlir/linear\_train\_step.mlir} and
+\texttt{linear\_fwd.mlir}, which are the two files the run at the top of
+the chapter compiled.
 
-\paragraph{Training program and run command.}
+That binding is why the type exists. The spec lives in
+\texttt{LeanMlir/VerifiedNets.lean} rather than beside the trainer,
+because the theorem and the program have to name the same object. In
+\texttt{LeanMlir/Proofs/Foundation/SpecVJP.lean}:
+
 \begin{verbatim}
-def main (args : List String) : IO Unit :=
-  mnistLinear.train mnistLinearConfig (args.head?.getD "data") .mnist
+noncomputable def linearVerified_has_vjp (W : Mat 784 10) (b : Vec 10) :
+    HasVJP (denoteLinear linearVerified.layers W b) :=
+  dense_has_vjp W b
 \end{verbatim}
 
-In our repo this is the standalone trainer
-\texttt{mnist-linear-train} (\texttt{MainMnistLinearTrain.lean}),
-matching the per-chapter trainer pattern every later chapter uses.
-Build and run it with
+Read the type. The VJP is proved for the denotation of
+\texttt{linearVerified.layers}, and that is the same field the trainer
+reads to build its graph. Copy the layer list into a second definition
+and the proof would be about a different network than the one that runs.
+
+\paragraph{The whole program.}
+The trainer is 53 lines including its docstring, so here it is entire,
+with the comments stripped:
+
 \begin{verbatim}
-lake build mnist-linear-train
-./.lake/build/bin/mnist-linear-train
+import LeanMlir.VerifiedNets
+
+def linearConfig : VerifiedConfig where
+  epochs    := 12
+  batchSize := 128
+
+def main (argv : List String) : IO Unit :=
+  linearVerified.trainLinear linearConfig (argv.head?.getD "data")
 \end{verbatim}
+
+That is \texttt{apps/mnist/MainMnistLinearVerified.lean}, all of it. One
+spec, one config, one call. The GPU backend does not appear in it at all,
+because the shim is opened with \texttt{dlopen} at run time.
+
+Notice also what \texttt{linearConfig} does not carry: a learning rate.
+The real rate is baked into
+\texttt{verified\_mlir/linear\_train\_step.mlir} at render time, so the
+recipe that trains is the recipe the proofs describe, and the two cannot
+drift apart.
 
 \paragraph{The gradient, in math.}
 Backpropagation through this network produces a single outer
@@ -1156,74 +1256,89 @@ product:
 where \(e_t \in \R^{10}\) is the one-hot vector for the true
 class. Ch~1's theorems (chain rule + identity Jacobian/VJP) plus
 the Dense Jacobian and softmax-CE gradient (formalized in
-Ch~\ref{chap:mlp}, both \emph{themselves} proved from this
-chapter's foundation rules) are what guarantees these formulas
-are correct; \texttt{linear-sgd}'s codegen emits exactly these as
-fused MLIR.
+Ch~\ref{chap:mlp}, both themselves proved from this chapter's
+foundation rules) are what guarantee these formulas are correct. The
+verified renderer emits exactly these as fused StableHLO, and that
+rendering is \texttt{verified\_mlir/linear\_train\_step.mlir}, the file
+the run at the top of the chapter compiled.
 
 \paragraph{Results.}
-Captured verbatim from \texttt{runs/2026-05-05-linear-sgd/linear-sgd.log}
-on an AMD 7900 XTX (ROCm, gfx1100):
-
-\begin{verbatim}
-$ ./.lake/build/bin/mnist-linear-train
-MNIST-Linear: 7850 params
-training: 468 batches/epoch, batch=128, SGD, lr=0.100000
-  step 0/468: loss=2.301343 (11ms)
-Epoch  1/12: loss=0.381019 lr=0.100000 (932ms)
-Epoch  2/12: loss=0.300518 lr=0.100000 (969ms)
-Epoch  3/12: loss=0.289204 lr=0.100000 (934ms)
-Epoch  4/12: loss=0.282829 lr=0.100000 (964ms)
-Epoch  5/12: loss=0.277735 lr=0.100000 (995ms)
-Epoch  6/12: loss=0.273606 lr=0.100000 (977ms)
-Epoch  7/12: loss=0.271623 lr=0.100000 (961ms)
-Epoch  8/12: loss=0.268908 lr=0.100000 (930ms)
-Epoch  9/12: loss=0.265967 lr=0.100000 (969ms)
-Epoch 10/12: loss=0.265967 lr=0.100000 (969ms)
-  val accuracy: 9219/9984 = 92.34%
-Epoch 11/12: loss=0.265719 lr=0.100000 (949ms)
-Epoch 12/12: loss=0.263504 lr=0.100000 (967ms)
-  val accuracy: 9175/9984 = 91.90%
-Saved params.
-\end{verbatim}
-
-Twelve epochs, about 1~second per epoch, $\sim$12~seconds total.
-Loss drops from \(\log 10 \approx 2.30\) at step~0 (random
-init for 10 classes) to $0.26$ by epoch~12. Final test accuracy
-\textbf{91.90\%}, which is the going rate for a linear classifier
-on MNIST (LeCun's original 1998 benchmark put a comparable model
-at \(\sim\)92\%). Adding hidden layers and ReLU
-(Ch~\ref{chap:mlp}) bumps this to 98.57\% on the same dataset and
-the same recipe; that delta of $\sim$6.7 points is the value of
+The run at the top of this chapter is this network. Accuracy climbs from
+89.77\% after one epoch to 92.10\% after twelve, and the curve is
+essentially flat from epoch~9 on, which is what a model with no hidden
+layer looks like once it has learned everything it can. Adding hidden
+layers and ReLU in Chapter~\ref{chap:mlp} takes the same dataset and the
+same recipe to 98.57\%. That gap of about 6.5 points is the value of
 non-linearity on this task.
 
 \paragraph{Where this goes.}
-Every architecture in Part~2 extends this template the same way.
-Ch~\ref{chap:mlp} stacks dense layers and inserts ReLU between
-them (one new operator VJP); Ch~\ref{chap:cnn} swaps the dense
-forward for conv2d (one new operator VJP); Ch~\ref{chap:bn} adds
-BatchNorm (one new operator VJP); Ch~\ref{chap:residual} adds the
-residual skip (additive fan-in, Theorem~\ref{thm:biPath_has_vjp},
-no new operator); Ch~\ref{chap:depthwise} factors standard conv
-into depthwise plus pointwise (one new operator VJP, recombined
-through the chain rule); Ch~\ref{chap:se} adds the SE
-channel-attention block (elementwise product plus GAP plus dense,
-one new VJP composed from pieces we already have);
-Ch~\ref{chap:layernorm} replaces ReLU with GELU
-(one new operator); Ch~\ref{chap:attention} adds attention (new
-matrix-level machinery plus softmax-VJP chains). The structural
-rules from this chapter \emph{never change}; later chapters add
-operator-specific theorems and compose them through the chain rule
-we just proved. The training loop that runs all of them is the
-same hundred lines of Lean, walked through next.
+Every architecture in Part~2 extends this template the same way, one
+new primitive at a time:
+
+\begin{itemize}
+  \item Ch~\ref{chap:mlp} stacks dense layers and inserts ReLU between
+    them. One new operator VJP.
+  \item Ch~\ref{chap:cnn} swaps the dense forward for conv2d. One new
+    operator VJP.
+  \item Ch~\ref{chap:bn} adds BatchNorm. One new operator VJP.
+  \item Ch~\ref{chap:residual} adds the residual skip. Additive fan-in,
+    Theorem~\ref{thm:biPath_has_vjp}, and no new operator at all.
+  \item Ch~\ref{chap:depthwise} factors standard conv into depthwise
+    plus pointwise. One new operator VJP, recombined through the chain
+    rule.
+  \item Ch~\ref{chap:se} adds the SE channel-attention block, which is
+    an elementwise product over global pooling and dense layers. One new
+    VJP composed from pieces we already have.
+  \item Ch~\ref{chap:layernorm} replaces ReLU with GELU. One new
+    operator.
+  \item Ch~\ref{chap:attention} adds attention, which needs new
+    matrix-level machinery and softmax-VJP chains.
+\end{itemize}
+ The structural
+rules from this chapter never change. Later chapters add
+operator-specific theorems and compose them through the chain rule we
+just proved. The driver that runs all of them is the same Lean either
+way, and it is shorter than you would expect, which is the subject of
+\S\ref{sec:mlp_inside_train}.
 
 \section{MLIR: Linear}
 
-The backward pass of the linear classifier is one operation: with the loss
-cotangent $dy = \mathrm{softmax}(\mathrm{logits}) - \text{onehot}$, the input
-gradient is $dx = dy\,W^{\!\top}$, a single matrix multiply. Here is exactly
-what the code generator emits for it (at a small representative size; nothing
-hand-written, one \texttt{stablehlo} op):
+The StableHLO in this section is the artifact the proofs are about, and
+it is what XLA compiles and runs. Nothing between the theorem and the GPU
+rewrites it.
+
+The forward half is short enough to print whole. This is
+\texttt{verified\_mlir/linear\_fwd.mlir} exactly as committed, and it is
+one of the two files the run at the top of the chapter compiled:
+
+\begin{verbatim}
+module @m {
+  func.func @linear_fwd(%x: tensor<128x784xf32>,
+                        %W0: tensor<784x10xf32>,
+                        %b0: tensor<10xf32>) -> tensor<128x10xf32> {
+    %v0 = stablehlo.dot_general %x, %W0,
+            contracting_dims = [1] x [0],
+            precision = [DEFAULT, DEFAULT]
+            : (tensor<128x784xf32>, tensor<784x10xf32>)
+              -> tensor<128x10xf32>
+    %v1 = stablehlo.broadcast_in_dim %b0, dims = [1]
+            : (tensor<10xf32>) -> tensor<128x10xf32>
+    %v2 = stablehlo.add %v0, %v1 : tensor<128x10xf32>
+    return %v2 : tensor<128x10xf32>
+  }
+}
+\end{verbatim}
+
+Three operations for \(z = Wx + b\): a contraction, a broadcast of the
+bias across the batch, and an add. The shapes are the real ones, batch
+128 against 784 inputs and 10 classes, because this file is the render
+that trains and not an illustration of one.
+
+The backward pass is one operation. With the loss cotangent
+$dy = \mathrm{softmax}(\mathrm{logits}) - \text{onehot}$, the input
+gradient is $dx = dy\,W^{\!\top}$, a single matrix multiply. Here is
+what the code generator emits for it, shown at a small representative
+size so the shapes stay readable:
 
 \begin{verbatim}
 func.func @linear_back(%dy: tensor<2x3xf32>, %W0: tensor<4x3xf32>)
@@ -1234,260 +1349,184 @@ func.func @linear_back(%dy: tensor<2x3xf32>, %W0: tensor<4x3xf32>)
 }
 \end{verbatim}
 
-\noindent That \texttt{dot\_general}, contracting the output axis of $dy$
-against the output axis of $W$, \emph{is} multiplication by $W^{\!\top}$ ---
-which is, by a machine-checked theorem, the linear layer's exact reverse-mode
+\noindent That \texttt{dot\_general} contracts the output axis of $dy$ against the
+output axis of $W$, which is multiplication by $W^{\!\top}$, and by a
+machine-checked theorem that is the linear layer's exact reverse-mode
 derivative. Everything else in this book scales that one move up. Each
-architecture chapter closes with an ``MLIR: \emph{operator}'' section that
-takes the chapter's new operator --- convolution, BatchNorm, the residual
-fan-in, depthwise convolution, squeeze-excitation, layer scale, attention ---
-and shows that \emph{its} emitted backward is likewise the rendering of a
-proven derivative. Each of those listings is shown at a small representative
-size --- a few channels, tokens, or units of width. The per-operator proof
-beneath is dimension-parameterized and the printer emits the identical graph
-at production scale, so each section just states its toy shape and moves on.
-The shared machinery underneath them --- the denoted
-intermediate representation, the bridge theorems that tie it to the proofs,
-the printer that turns it into the text above, and the execution oracle that
-checks the result on the GPU --- is the subject of
-Appendix~\ref{app:verification}.
+architecture chapter closes with an ``MLIR: operator'' section that takes
+the chapter's new operator and shows that its emitted backward is
+likewise the rendering of a proven derivative. Those operators are
+convolution, BatchNorm, the residual fan-in, depthwise convolution,
+squeeze-excitation, layer scale, and attention.
+
+Each of those listings is shown at a small representative size, meaning a
+few channels, tokens, or units of width. The per-operator proof beneath
+is dimension-parameterized and the printer emits the identical graph at
+production scale, so each section states its toy shape and moves on.
+Appendix~\ref{app:verification} covers the shared machinery underneath
+them: the denoted intermediate representation, the bridge theorems that
+tie it to the proofs, the printer that turns it into the text above, and
+the execution oracle that checks the result on the GPU.
 
 \section{What's inside \texttt{.train}?}
 \label{sec:mlp_inside_train}
 
-The section above treated \texttt{mnistLinear.train} as a black box.
-You specified the network, you specified the hyperparameters,
-training happened. That's deliberately the user-facing interface,
-but there's no magic: the training loop is real code, $\sim$100 lines
-of Lean in \texttt{LeanMlir/Train.lean}. Every chapter in this book
-uses the same loop. The only thing that varies chapter to chapter is
-the \texttt{NetSpec} and \texttt{TrainConfig} values handed to it;
-never the loop itself.
+The section above treated \texttt{linearVerified.trainLinear} as a black
+box. You named the network, you named the epochs and the batch size, and
+training happened. That is deliberately the user-facing interface, but
+there is no magic underneath it. The driver is ordinary Lean in
+\texttt{LeanMlir/VerifiedTrain.lean}, and the interesting thing about it
+is how little it does.
 
 \paragraph{The training loop, the way a math book would write it.}
 \begin{verbatim}
-Algorithm: Mini-batch SGD with Adam optimizer
-Input:  spec (architecture f_θ), cfg (hyperparameters),
-        dataset D = (X_train, y_train, X_val, y_val)
-Output: trained parameters θ
+Algorithm: Mini-batch SGD, with the step compiled into the graph
+Input:  net (a VerifiedNetSpec), cfg (epochs, batch size),
+        dataset D = (X_train, y_train, X_test, y_test)
+Output: trained parameters (W, b)
 
-// 1. Load training data
-(X_train, y_train) ← load(D)
-B ← cfg.batchSize, E ← cfg.epochs, α ← cfg.learningRate
+// 1. Open sessions over the two committed renders
+ts  <- session(verified_mlir/<slug>_train_step.mlir)
+fwd <- session(verified_mlir/<slug>_fwd.mlir)
 
-// 2. Initialize parameters + Adam moment buffers
-θ ← spec.heInit()
-m, v ← 0                                  // Adam 1st and 2nd moment
+// 2. Load data; zero-initialise the parameters
+(X, y), (Xt, yt) <- load(D)
+(W, b) <- 0
 
-// 3. Epoch loop: shuffle, schedule LR, train, log
-for epoch = 1 to E:
-    (X, y) ← shuffle(X_train, y_train)
-    α_t ← schedule(α, epoch)              // cosine + warmup
+// 3. Epoch loop
+for epoch = 1 to cfg.epochs:
 
-    // 4. Batch loop: forward + loss + backward + optimizer
+    // 4. Batch loop: ONE call per batch
     for each mini-batch (x, t) of size B:
-        ŷ ← f_θ(x)                         // forward
-        L ← ℓ(ŷ, t)                        // loss
-        g ← ∇_θ L                          // backward — Ch 1's VJP machinery
-        (θ, m, v) ← Adam(θ, m, v, g, α_t)  // optimizer step
-    log(epoch, mean_loss)
+        (W, b) <- ts(x, W, b, onehot(t))
 
-    // 5. Validation every 10 epochs
-    if epoch ≡ 0 mod 10:
-        eval(θ, X_val, y_val)
-
-// 6. Save trained parameters
-save(θ)
-return θ
+    // 5. Evaluate on the whole test set
+    eval(fwd, W, b, Xt, yt)
 \end{verbatim}
 
-The only line that needs proof machinery is
-\(g \leftarrow \nabla_\theta L\) --- that's exactly what Ch~1's
-theorems just established. Everything else is data plumbing
-(loaders, epoch counters, the SGD/Adam update). For
-\texttt{mnistLinear} above, that gradient is a single outer product;
-for ResNet-34 it would be the chain rule applied through 34 layers;
-the loop is the same in either case. Each later chapter swaps in a
-different \(f_\theta\); the loop never changes.
+\paragraph{What is missing from that loop, and where it went.}
+Compare it to the loop any framework tutorial shows you. There is no
+gradient variable. There is no optimizer call. There is no
+learning-rate schedule. Those three lines were not dropped, they moved
+into \texttt{verified\_mlir/linear\_train\_step.mlir}, which is where
+they can be proved. The loop above cannot get the update rule wrong,
+because it does not implement the update rule.
+
+That is the difference between this driver and a conventional one, and
+it is worth being precise about what it buys. A bug in a hand-written
+optimizer is a bug you find by watching the loss curve look strange. A
+bug in the rendered optimizer is a bug that fails a theorem at build
+time. Moving the arithmetic into the graph moves it inside the reach of
+the proofs.
 
 \paragraph{The same loop, in Lean.}
-The Lean realization of the algorithm above is one hundred lines
-in \texttt{LeanMlir/Train.lean}. The \texttt{// 1} through
-\texttt{// 6} comments below match the same labels in the
-pseudocode --- read them in parallel.
+Here is the real thing, abridged. Elisions are marked, and the full
+function is \texttt{VerifiedNet.trainLinear}:
 
 \begin{verbatim}
-def runTraining (spec : NetSpec) (cfg : TrainConfig)
-    (ds : DatasetKind) (dataDir : String)
-    (sess : IreeSession) : IO Unit := do
-  -- 1. Load training data
-  let batchN := cfg.batchSize
-  let dio    := datasetIO ds
-  let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
+def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
+    (dataDir : String) : IO Unit := do
+  let bs := cfg.batchSize
+  let d0 := net.d0
+  let d1 := net.nClasses
 
-  -- 2. Initialize parameters + Adam moment buffers
-  let mut p ← spec.heInitParams                        -- He-init weights
-  let mut m ← F32.const (F32.size p).toUSize 0.0        -- Adam 1st moment
-  let mut v ← F32.const (F32.size p).toUSize 0.0        -- Adam 2nd moment
+    -- 1. One session per committed render. The second path is a legacy
+  --    artifact-cache slot that XLA does not use.
+  let tsSess  <- mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+                           s!".lake/build/{net.slug}_ts_v.vmfb"
+  let fwdSess <- mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
+                           s!".lake/build/{net.slug}_fwd_v.vmfb"
 
-  let bpE := nTrain / batchN
-  let nP  := spec.totalParams
-  let mut globalStep : Nat := 0
+  -- 2. Data, then zero-initialised parameters
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) <-
+    loadData net dataDir
+  let mut W0 <- F32.const (d0 * d1).toUSize 0.0
+  let mut b0 <- F32.const d1.toUSize 0.0
+  let nb := nTrain / bs
 
-  -- 3. Epoch loop: shuffle, schedule LR, train, log
-  for epoch in [:cfg.epochs] do
-    let (sImg, sLbl) ← F32.shuffle trainImg trainLbl
-                         nTrain.toUSize dio.trainPixels.toUSize
-                         (epoch + 42).toUSize
+  -- 3. Epoch loop
+  for ep in [0:cfg.epochs] do
 
-    let lr : Float :=                                   -- cosine + warmup
-      if epoch < cfg.warmupEpochs then
-        cfg.learningRate * (epoch.toFloat + 1.0)
-          / cfg.warmupEpochs.toFloat
-      else if cfg.cosineDecay then
-        cfg.learningRate * 0.5 * (1.0 + Float.cos (
-          3.14159265 * (epoch.toFloat - cfg.warmupEpochs.toFloat)
-                     / (cfg.epochs.toFloat - cfg.warmupEpochs.toFloat)))
-      else cfg.learningRate
+    -- 4. Batch loop: forward, loss, backward, SGD -- one call
+    for bi in [0:nb] do
+      let xb := F32.sliceImages trainImg (bi * bs) bs d0
+      let yb := F32.sliceLabels trainLbl (bi * bs) bs
+      let out <- IreeSession.linearTrainStepV tsSess tsFn
+                   xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize nResident
+      W0 := out.extract 0 (d0 * d1 * 4)
+      b0 := out.extract (d0 * d1 * 4) pBytes
 
-    -- 4. Batch loop: forward + loss + backward + optimizer in ONE call
-    let mut epochLoss : Float := 0.0
-    for bi in [:bpE] do
-      globalStep := globalStep + 1
-      let xba := F32.sliceImages sImg (bi * batchN) batchN dio.trainPixels
-      let yb  := F32.sliceLabels sLbl (bi * batchN) batchN
-      let packed := (p.append m).append v
-
-      let out ← IreeSession.trainStepAdamF32 sess spec.trainFnName
-                  packed spec.shapesBA xba (spec.xShape batchN) yb
-                  lr globalStep.toFloat spec.bnShapesBA batchN.toUSize
-
-      epochLoss := epochLoss + F32.extractLoss out (3 * nP)
-      p := F32.slice out 0           nP                 -- updated params
-      m := F32.slice out nP          nP                 -- updated m
-      v := F32.slice out (2 * nP)    nP                 -- updated v
-
-    IO.eprintln s!"Epoch {epoch+1}/{cfg.epochs}: " ++
-                s!"loss={epochLoss / bpE.toFloat} lr={lr}"
-
-    -- 5. Validation every 10 epochs: forward-only vmfb over val set
-    if (epoch + 1) % 10 == 0 || epoch + 1 == cfg.epochs then
-      let evalSess ← IreeSession.create
-                       s!"{spec.buildPrefix}_fwd_eval.vmfb"
-      let (valImg, valLbl, nVal) ← dio.loadVal dataDir
-      let mut correct : Nat := 0
-      for bi in [:nVal / batchN] do
-        let xba := F32.sliceImages valImg (bi * batchN) batchN dio.valPixels
-        let logits ← IreeSession.forwardF32 evalSess spec.evalFnName
-                       p spec.evalShapesBA xba (spec.xShape batchN)
-                       batchN.toUSize spec.numClasses.toUSize
-        for i in [:batchN] do
-          let pred  := F32.argmax10 logits (i * spec.numClasses).toUSize
-          let label := (F32.sliceLabels valLbl (bi * batchN) batchN)
-                         .data[i * 4]!.toNat
-          if pred.toNat == label then correct := correct + 1
-      let acc := correct.toFloat / nVal.toFloat * 100.0
-      IO.eprintln s!"  val accuracy: {correct}/{nVal} = {acc}%"
-
-  -- 6. Save trained parameters
-  IO.FS.writeBinFile s!"{spec.buildPrefix}_params.bin" p
-  IO.eprintln "Saved params."
+    -- 5. Evaluate on the full test set, every epoch
+    ...                       -- argmax the fwd session over evalImg
+    IO.println s!"  epoch {ep+1}: test_acc = {correct}/{nEval} = ..."
 \end{verbatim}
 
 Walking through the numbered sections:
 
-\textbf{1. Load training data.} \texttt{datasetIO ds} returns a
-per-dataset I/O helper (MNIST, CIFAR-10, Imagenette) that knows how
-to mmap the on-disk binary files into \texttt{F32Array} buffers.
-\texttt{trainImg} holds the flattened pixel data; \texttt{trainLbl}
-holds integer class labels. Nothing ML-specific yet — this is just
-``put the data somewhere the GPU can reach.''
+\textbf{1. Sessions.} \texttt{mkSession} takes the path to a committed
+\texttt{.mlir}, hands it to the shim, and gets back something callable.
+XLA compiles the StableHLO in process, which is the 782\,ms the run
+reported, and the second argument is a legacy artifact-cache slot it does
+not use.
 
-\textbf{2. Initialize parameters and optimizer state.} He
-initialization (\texttt{spec.heInitParams}) produces a
-random-but-scaled weight vector. Adam's first and second moment
-buffers start at zero. Everything is a flat \texttt{F32Array};
-reshape logic happens per-layer inside the compiled vmfb, not
-here. Three buffers --- \texttt{p}, \texttt{m}, \texttt{v} --- plus
-a running step counter.
+Two names in this listing are historical residue rather than description.
+The session type is called \texttt{IreeSession} and the cache slot ends
+in \texttt{.vmfb}, both from an earlier backend. They are on the list to
+rename. What the code opens is the XLA shim.
 
-\textbf{3. Epoch loop.} Shuffle the data once per epoch with a
-deterministic seed (\texttt{epoch + 42}) so runs are reproducible.
-Compute the learning rate: linear warmup for the first
-\texttt{warmupEpochs}, then cosine decay (if enabled) over the
-rest of training. If neither warmup nor cosine is on --- the
-\texttt{s4tfBaseline} case we used in the first example ---
-\texttt{lr} is just \texttt{cfg.learningRate} constant. Warmup
-handles the transformer-style fragile-early-gradient problem;
-cosine is the standard don't-overfit-at-the-end schedule.
+\textbf{2. Data and initialisation.} \texttt{loadData} mmaps the on-disk
+binaries into \texttt{F32Array} buffers. \texttt{trainImg} holds
+flattened pixels and \texttt{trainLbl} holds integer class labels.
+Weights start at zero rather than He-initialised, which is fine for a
+model with no hidden layer and no symmetry to break.
 
-\textbf{4. Batch loop --- the core of training.} For each mini-batch:
-slice the current epoch's images and labels, concatenate
-\texttt{(params, m, v)} into one flat buffer, and call
-\texttt{IreeSession.trainStepAdamF32}. That \emph{one call} does
-\emph{everything}: forward pass through every layer, cross-entropy
-loss, backward pass (the VJP of every layer you've proved in
-earlier sections), Adam update of parameters and moment buffers.
-Whether that update is Adam or plain SGD + momentum is baked into
-the vmfb at codegen time by \texttt{cfg.useAdam} (step~1); the call
-name stays \texttt{trainStepAdamF32} either way.
-All of it executes as one pre-compiled \texttt{stablehlo} vmfb on
-the GPU. The framework unpacks the updated \texttt{(p, m, v)} from
-the output buffer and loops.
+\textbf{3. Epoch loop.} Twelve passes over the training set. Notice what
+is not here: no learning-rate computation, because the rate is baked
+into the render.
 
-The entire Lean $\to$ MLIR $\to$ IREE pipeline's value proposition
-lives in this one line. There is no Python. There is no graph
-construction per-step. There is no autograd interpreter. The
-training step was compiled once, at startup, and every subsequent
-step is a single dispatched vmfb call. That's why training at
-batch 128 runs at $\sim$20\,ms per step on a consumer GPU
-(7900 XTX), $\sim$80\,ms on a 4060 Ti.
+\textbf{4. Batch loop, the core of training.} Slice a batch of images
+and labels, then call \texttt{linearTrainStepV}. That one call does
+everything: the forward pass, the cross-entropy loss, the backward pass
+built from the VJPs proved earlier in this chapter, and the SGD update.
+It returns the new parameters packed as \texttt{[W0|b0]}.
 
-\textbf{5. Validation.} Every 10 epochs (and always at the end) we
-swap in the forward-only eval vmfb, which uses BN's \emph{running}
-statistics (not the per-batch estimates training uses). Loop over
-the val set, forward-pass each batch, argmax the logits, compare
-to labels, count correct. Print accuracy. The eval vmfb is a
-separate compiled artifact because BN behaves differently at
-inference and we don't want that branching inside the hot training
-loop.
+This one line is where the whole pipeline pays off. There is no Python.
+There is no per-step graph construction. There is no autograd
+interpreter walking a tape. The training step was compiled once at
+startup, in 782\,ms, and every batch after that is a single dispatched
+call. Chapter~1's run does 468 of those per epoch and finishes an epoch
+in about 270\,ms including a full pass over the 10,000 test images.
 
-\textbf{6. Save.} Write the parameter buffer to disk as a raw
-\texttt{.bin} blob so it can be loaded later for inference,
-fine-tuning, or cross-run comparison.
+\textbf{5. Validation.} Every epoch, not every tenth, because a forward
+pass over the test set is cheap next to the training epoch. The
+forward-only render is a separate artifact rather than a branch inside
+the training graph, which matters more in Chapter~\ref{chap:bn} where
+BatchNorm has to use running statistics at inference and per-batch
+estimates during training.
 
-That's the whole function. Seventy-odd lines of Lean doing what
-most Python deep-learning tutorials present as an elaborate black
-box. The reason it's short is that everything heavyweight —
-forward pass, loss, backward pass, optimizer update — is one
-compiled vmfb executing on the GPU. Lean's role here isn't to
-\emph{compute} gradients; it's to \emph{specify} what the training
-step is, \emph{prove} that specification is mathematically correct
-(the theorems earlier in this chapter and in subsequent chapters),
-and \emph{invoke} the IREE-compiled implementation. Three separate
-concerns, cleanly factored.
+That is the whole function. The reason it is short is that everything
+heavyweight lives in one compiled graph on the GPU. Lean's job here is
+not to compute gradients. It is to specify what the training step is,
+prove that specification correct, and invoke it. Three concerns, cleanly
+separated, and only the middle one is unusual.
 
-Every chapter after this one hands a different \texttt{NetSpec} to
-this same loop. Only the NetSpec changes; the loop is literally
-the same hundred lines each time. That's the framework pitch in
-concrete form: once the loop is written (and proved correct one
-layer at a time), every architecture in the book and every
-architecture in the bestiary runs through it with no further
-infrastructure code. And it all runs on your hardware:
-Appendix~\ref{app:getting_started} walks you through the toolchain setup,
-and if you're impatient, there's a Docker image that gets you from zero
-to training MNIST in one command.
-
+Every chapter after this one hands a different \texttt{VerifiedNetSpec}
+to the same driver. Only the spec changes. That is the framework pitch
+in concrete form: once the driver is written and the layers are proved
+one at a time, every architecture in the book runs through it with no
+further infrastructure code. It all runs on your hardware, and
+Appendix~\ref{app:getting_started} walks you through the toolchain
+setup.
 \section{MLIR: Training Step}
 \label{sec:mlir_training_step}
 
-Section~\ref{sec:mlp_inside_train} made a claim about the inner call:
-\emph{one} dispatched \texttt{stablehlo} vmfb does the forward pass, the loss,
-the backward pass, \emph{and} the optimizer update --- no tape, no per-step
-graph construction. The ``MLIR: Linear'' section
-above rendered a single operator's backward in isolation; here is the
-\emph{whole} thing the linear classifier compiles to. It is short enough to
-show essentially in full --- only the default \texttt{precision} attributes are
+Section~\ref{sec:mlp_inside_train} made a claim about the inner call. One
+dispatched StableHLO graph does the forward pass, the loss, the backward
+pass, and the optimizer update, with no tape and no per-step graph
+construction. The ``MLIR: Linear'' section
+above rendered a single operator's backward in isolation. Here is the
+whole thing the linear classifier compiles to. It is short enough to show
+essentially in full, with only the default \texttt{precision} attributes
 dropped and the long type signatures wrapped for the page:
 
 \begin{verbatim}
@@ -1531,33 +1570,41 @@ func.func @linear_train_step(
 \noindent One function, one straight line of dataflow, no control flow: the
 signature takes the parameters and a batch of data and returns the
 \emph{updated} parameters, $(\theta,\,\text{data}) \mapsto \theta'$. Read it in
-four bands. The first (\texttt{\%v0}--\texttt{\%v8}) fuses the forward pass and
-the loss cotangent --- \texttt{dot\_general} for the logits, the
-\texttt{exp}/\texttt{reduce}/\texttt{divide} softmax, and the \texttt{subtract
-\%onehot} that yields $dy = \partial\mathrm{CE}/\partial\text{logits}$; that
-whole band is the rendering of a single verified graph, \texttt{lossCotGraph},
-certified equal to the softmax--cross-entropy gradient by
-\texttt{lossCotGraph\_isCEgrad}. The second band is the backward pass --- the
-\texttt{dot\_general \%x, \%v8} is exactly the move from the ``MLIR: Linear''
-section, $x^{\!\top} dy$, now serving as the weight gradient, and the
-\texttt{reduce} sums $dy$ over the batch for the bias gradient. The third band
-is the optimizer: scale each gradient by the learning rate and subtract. There
-is no fourth band --- no copy-back, no separate update kernel. Forward, loss,
+four bands. The first (\texttt{\%v0}--\texttt{\%v8}) fuses the forward pass and the
+loss cotangent, so it holds \texttt{dot\_general} for the logits, the
+\texttt{exp}/\texttt{reduce}/\texttt{divide} softmax, and the
+\texttt{subtract \%onehot} that yields
+$dy = \partial\mathrm{CE}/\partial\text{logits}$. That whole band is the
+rendering of a single verified graph, \texttt{lossCotGraph}, certified
+equal to the softmax--cross-entropy gradient by
+\texttt{lossCotGraph\_isCEgrad}. The second band is the backward pass.
+Its \texttt{dot\_general \%x, \%v8} is exactly the move from the ``MLIR:
+Linear'' section, $x^{\!\top} dy$, now serving as the weight gradient,
+and the \texttt{reduce} sums $dy$ over the batch for the bias gradient.
+The third band is the optimizer: scale each gradient by the learning rate
+and subtract. There is no fourth band, no copy-back, and no separate
+update kernel. Forward, loss,
 backward, and step are one compiled function, which is exactly why
 \S~\ref{sec:mlp_inside_train}'s loop can treat a training step as a single
 dispatch.
 
-\medskip\noindent Two honest notes. \textbf{This is SGD, not Adam.} The
-\texttt{mnistLinear} example runs the \texttt{s4tfBaseline} configuration ---
-plain $\theta' = \theta - \alpha\nabla$ at a constant learning rate --- so the
-update band is three ops per tensor. Turning on \texttt{cfg.useAdam} grows that
-band (the first- and second-moment buffers enter and leave the signature and an
-\texttt{rsqrt} appears) but changes nothing above it; the deeper chapters'
-steps carry that Adam tail, the early ones do not. \textbf{The learning rate is
-folded in.} The weight-gradient \texttt{dot\_general} contracts the batch axis,
-so $dW_0$ is a batch \emph{sum}, not a mean; the constant \texttt{0.00078125}
-is $\alpha/N = 0.1/128$, the per-sample rate that turns that sum back into the
-mean update. Everything else in the listing is, line for line, the rendering of
+\medskip\noindent \textbf{Why SGD here.} \texttt{linearVerified} trains
+with plain $\theta' = \theta - \alpha\nabla$ at a constant learning rate,
+which is three operations per tensor and is exactly what
+\texttt{sgdW\_descends\_certified\_grad} and its bias twin prove. Adam is
+available in this framework and the deeper chapters use it, but it costs
+about three times the graph. The CIFAR network of
+Chapter~\ref{chap:bn}, rendered both ways, goes from 365 StableHLO
+operations under SGD to 1,113 under Adam, because the first- and
+second-moment buffers enter and leave the signature and an
+\texttt{rsqrt} appears. None of that extra machinery is proved in this
+chapter. Starting with the optimizer whose proof you have just read is
+the reason to start here.
+\textbf{The learning rate is folded in.} The weight-gradient
+\texttt{dot\_general} contracts the batch axis, so $dW_0$ is a batch sum
+rather than a mean. The constant \texttt{0.00078125} is
+$\alpha/N = 0.1/128$, the per-sample rate that turns that sum back into
+the mean update. Everything else in the listing is, line for line, the rendering of
 a theorem proved earlier in this chapter.
 
 \medskip\noindent That one function is the only heavy thing in the loop that
@@ -1568,33 +1615,33 @@ drives it. Stripped of logging, the shuffle, and the schedule, the whole of
 p := heInit(spec)                      // params (+ zeroed Adam buffers)
 for epoch in 0..E:
   for batch in shuffle(data):
-    p := train_step_vmfb(p, batch, lr) // <- the function above
-  if epoch % 10 == 0: eval(p)          // forward-only vmfb
+        p := train_step(p, batch)         // <- the function above
+    eval(p)                             // the forward-only render
 save(p)
 \end{verbatim}
 
 \noindent Six lines of host control flow around one compiled dispatch. The
-loop shuffles, schedules the learning rate, and counts epochs --- it never
-computes a gradient or touches a tensor. The lone \texttt{train\_step\_vmfb}
-call is the function above, and it is the only place arithmetic happens.
+loop counts epochs and slices batches. It never computes a gradient or
+touches a tensor. The lone \texttt{train\_step} call is the function
+above, and it is the only place arithmetic happens.
 
 \medskip\noindent\textbf{Where this stands.} The scheme above covers more
-than the linear classifier: the shallow chapters' train steps (MLP, CNN,
-CIFAR$\pm$BN) are closed both ways, and all five Part~I architectures ---
-ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT --- are proved at
-full architecture: machine-checked forward graphs throughout; whole-network
-backward at full depth, with the non-triviality seal (that the proven backward
-is nonzero at a witness) at full depth for all five; three classical axioms.
+than the linear classifier. The shallow chapters' train steps (MLP, CNN,
+CIFAR$\pm$BN) are closed both ways, and all five Part~I architectures are
+proved at full architecture: ResNet-34, MobileNetV2, EfficientNet-B0,
+ConvNeXt-T, and ViT. That means machine-checked forward graphs
+throughout, whole-network backward at full depth, the non-triviality seal
+at full depth for all five (which is that the proven backward is nonzero
+at a witness), and three classical axioms.
 All five committed training steps were then re-rendered
 at the production trainers' exact signatures and \emph{tied}: every parameter
 update is proved to consume the cotangent its own backward pass delivers,
-threaded through the real forward, and each agrees on GPU to float rounding. The
-one open gap: the
-theorems are over $\mathbb{R}$, the GPU runs \texttt{float32}. Part~II's
-bestiary is deliberately lighter --- decomposed into the same proved
-primitives, not carried to whole-step closes. The book's official claim is
-exactly this, no more and no less: \emph{every architecture in Part~I
-trained end-to-end under one machine-checked scheme}.
+threaded through the real forward, and each agrees on GPU to float rounding. There is one open gap. The theorems are over $\mathbb{R}$ and the GPU
+runs \texttt{float32}. Part~II's bestiary is deliberately lighter,
+decomposed into the same proved primitives but not carried to whole-step
+closes. The book's official claim is exactly this, no more and no less:
+\emph{every architecture in Part~I trained end-to-end under one
+machine-checked scheme}.
 
 \chapter{MNIST: 1D MLP}
 \label{chap:mlp}

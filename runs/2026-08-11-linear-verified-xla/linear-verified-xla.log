@@ -1,0 +1,26 @@
+I0811 16:34:55.668748  704802 service.cc:178] XLA service 0x7bcd180c1030 initialized for platform ROCM (this does not guarantee that XLA will be used). Devices:
+I0811 16:34:55.668771  704802 service.cc:194]   StreamExecutor [0]: Radeon RX 7900 XTX, AMDGPU ISA version: gfx1100 (Driver: 7.2.26015; Runtime: 7.2.26015; Toolkit: 7.2.26015; DNN: 0.0.0)
+I0811 16:34:55.772216  704802 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0811 16:34:55.772240  704802 gpu_helpers.cc:158] XLA backend allocating 17.99GiB (19314769920 bytes) on device 0 for BFCAllocator.
+I0811 16:34:55.772255  704802 gpu_helpers.cc:201] XLA backend will use up to 6438256640 bytes on device 0 for CollectiveBFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+I0811 16:34:56.018914  704846 amdgpu_backend.cc:176] TF_XLA_HSACO_CACHE_DIR is not set: HSACO file cache is disabled!
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir (@linear_train_step, 2 outputs, 1 replica) in 782 ms
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 23 ms
+MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/linear_train_step.mlir
+  xla/pjrt verified_mlir/linear_fwd.mlir
+  train 60000, test 10000; dense 784->10, bs 128, SGD
+  epoch 1: test_acc = 8977/10000 = 89.770000% (306ms)
+  epoch 2: test_acc = 9082/10000 = 90.820000% (240ms)
+  epoch 3: test_acc = 9124/10000 = 91.240000% (241ms)
+  epoch 4: test_acc = 9156/10000 = 91.560000% (257ms)
+  epoch 5: test_acc = 9167/10000 = 91.670000% (270ms)
+  epoch 6: test_acc = 9176/10000 = 91.760000% (271ms)
+  epoch 7: test_acc = 9186/10000 = 91.860000% (271ms)
+  epoch 8: test_acc = 9194/10000 = 91.940000% (272ms)
+  epoch 9: test_acc = 9198/10000 = 91.980000% (270ms)
+  epoch 10: test_acc = 9198/10000 = 91.980000% (269ms)
+  epoch 11: test_acc = 9203/10000 = 92.030000% (268ms)
+  epoch 12: test_acc = 9210/10000 = 92.100000% (272ms)
+done (trained MNIST-Linear via the proof-rendered StableHLO).
