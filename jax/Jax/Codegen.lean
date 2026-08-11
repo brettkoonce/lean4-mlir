@@ -3284,12 +3284,49 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    # num_parallel_calls=AUTOTUNE makes the draw order vary. enable_op_determinism then REFUSES\n" ++
   "    # to run sample_distorted_bounding_box without a non-zero op-level seed, which is what\n" ++
   "    # AUG_SEED supplies (installed above, at module scope). Verify with SHIM_HASH, do not assume.\n" ++
-  "    tf.config.experimental.enable_op_determinism()\n" ++
+  "    #\n" ++
+  "    # ⚠ IT IS EXPENSIVE IN ISOLATION AND FREE IN SITU, AND THE SECOND HALF IS WHY IT STAYS ON.\n" ++
+  "    # `enable_op_determinism()` serializes the tf.data map: MEASURED 2026-08-11 on ares (ViT shim,\n" ++
+  "    # bs128, marginal over 100 batches, SHIM_HASH so no transport is involved) — 120 img/s at\n" ++
+  "    # 116-125% CPU with it ON against 639 img/s at 386-470% CPU with it OFF. 5.3x, and the CPU%\n" ++
+  "    # is the mechanism: a 32-core box runs this pipeline on ~1.2 cores under determinism and ~4.7\n" ++
+  "    # without. `enable_op_determinism` is emitted HERE and nowhere else, so the JAX reference\n" ++
+  "    # trainer this shim mirrors has never paid it.\n" ++
+  "    #\n" ++
+  "    # ⛔ AND YET IT DOES NOT MOVE THE STEP. Same day, ViT/ImageNet 4x bs128 end-to-end: 567 ms/step\n" ++
+  "    # with determinism ON, 592 OFF — i.e. nothing, at 5.3x the producer speed. The producer was\n" ++
+  "    # never the binding constraint; the consumer was reading ONE handle at a time while the other\n" ++
+  "    # seven producers slept in write() (70% of the box idle). The real fix was depth-n prefetch\n" ++
+  "    # (`LeanMlir/VerifiedTrain.lean`, 567 -> 287 ms/step), and it is orthogonal to this line.\n" ++
+  "    # ▶ THE LESSON, since it cost a session: an isolated component measurement (SHIM_HASH) tells\n" ++
+  "    # you a component's CAPACITY, not what limits the pipeline. Capacity is irrelevant when the\n" ++
+  "    # consumer pulls one batch and walks away.\n" ++
+  "    #\n" ++
+  "    # ▶ So the default STAYS ON, for two reasons that survive the measurement: it costs nothing\n" ++
+  "    # end-to-end, and `tests/prefetch_tie.sh`'s A1-vs-A2 control needs a REPLAYABLE producer\n" ++
+  "    # stream — turning this off makes that control fail and every verdict downstream unreadable.\n" ++
+  "    # What determinism buys is replay, not fidelity: the ops, magnitudes, probabilities and policy\n" ++
+  "    # are identical either way and only the ORDER of random draws moves. SHIM_DETERMINISM=0 opts\n" ++
+  "    # out (for a producer-bound net, should one ever be measured); =1 forces it on.\n" ++
+  "    _det_env = os.environ.get('SHIM_DETERMINISM')\n" ++
+  "    _det = True if _det_env is None else (_det_env == '1')\n" ++
+  "    if _det:\n" ++
+  "        tf.config.experimental.enable_op_determinism()\n" ++
   "    tf.random.set_seed(seed)\n" ++
   -- SHIM_SHARD='i/N' streams only shard i of N. The transform is untouched; only which examples
   -- this process emits changes. Measured 2026-08-01 (bs128, marginal): 1 process 1,527 img/s,
   -- 2 processes 1.71x, 4 processes 2.36x on a 32-core box — so two clear the ~1,940 img/s a
   -- 4-replica ViT step wants, and no C loader is needed.
+  --
+  -- ⚠⚠ **DO NOT SIZE `SHIM_WORKERS` OFF THIS ROW — OR OFF ANY ISOLATED PRODUCER NUMBER.** Re-measured
+  -- 2026-08-11, same box, same units (bs128, marginal, SHIM_HASH): the generated ViT shim produced
+  -- **120 img/s**, 13x under this row, because `enable_op_determinism` above serializes the map;
+  -- with it off, **639 img/s**. Neither number predicts the step time. The ViT job sat at 567
+  -- ms/step against a 249 ms floor at BOTH producer speeds, because the consumer drained one handle
+  -- at a time and the rest slept in `write()`. What fixed it was depth-n prefetch in
+  -- `LeanMlir/VerifiedTrain.lean` (567 -> 287 ms/step, 1.98x) — a consumer change, with the
+  -- producers untouched.
+  -- ▶ This row measures CAPACITY. The step is set by whether the consumer lets that capacity run.
   "    shard = None\n" ++
   "    _sh = os.environ.get('SHIM_SHARD')\n" ++
   "    if _sh:\n" ++
