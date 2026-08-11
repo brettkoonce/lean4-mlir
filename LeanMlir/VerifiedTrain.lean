@@ -1364,13 +1364,35 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- behind compute. ✅ Delivered: **377 → 224 ms/step, 1.68×** (30 epochs 15.7 h → 9.3 h), 5 ms
   -- off that ceiling. Bit-identity gated by `tests/prefetch_tie.sh`.
   --
-  -- ⚠⚠ **DEPTH 1 IS THE CORRECTNESS CONDITION, NOT A SIMPLIFICATION**, and it is bought below by
-  -- issuing read `i+1` only AFTER waiting on read `i`: exactly one read is ever outstanding, so
-  -- the handles are touched by one thread at a time and strictly in issue order. Two concurrent
-  -- reads on one handle would interleave and corrupt both batches — a pipe is a stream, not a
-  -- message queue — and the resident path's generation counter (`res_gen`, `ffi/pjrt_ffi.c`)
-  -- requires strict step order. With `SHIM_WORKERS=n` the natural depth is n, one in flight PER
-  -- HANDLE, never two on one; that generalisation is not built here.
+  -- ⭐⭐ **DEPTH n, ONE READ IN FLIGHT PER HANDLE (2026-08-11).** The correctness condition was never
+  -- "one read outstanding" — it is **one read outstanding PER HANDLE**, because the hazard is two
+  -- concurrent reads interleaving on ONE pipe (a pipe is a stream, not a message queue). Depth 1
+  -- bought that by having one outstanding read globally, which is sufficient and, at
+  -- `SHIM_WORKERS=n`, far stronger than necessary: it drains ONE producer while the other n−1 sit
+  -- blocked in `write()` with 64 KB buffered — 0.08% of a batch — sleeping through the compute the
+  -- prefetch exists to hide.
+  --
+  -- ⭐ MEASURED 2026-08-11, ViT/ImageNet 4×bs128, `SHIM_WORKERS=8`: the box ran **70% IDLE** (22 of
+  -- 32 cores) at 783 ms/step against a 249 ms synthetic floor, with the eight producers drawing
+  -- ~10 cores between them. Not slow, not contended — **throttled**, exactly the signature this
+  -- comment recorded for R34 before depth 1 existed ("258% CPU on a 32-core box"). A zero-cost
+  -- producer through the SAME pipes at the SAME depth ran 248 ms, so the plumbing and the 308 MB
+  -- of transport were never the problem: 5 ms of the step. Capacity was not the problem either —
+  -- making each producer 5.3× faster (`SHIM_DETERMINISM=0`) moved the step 0%.
+  --
+  -- ▶ So the generalisation this comment used to defer is the fix, and it is the ONLY lever the
+  -- evidence points at. Step s reads handle `s % n`; the next step on that handle is `s + n`, so
+  -- the refill is issued into the slot the wait just freed. Per handle the read SEQUENCE is
+  -- unchanged (handle h still serves steps h, h+n, h+2n, … in that order, same bytes for the same
+  -- step) — only *when* each read is issued moves earlier, which is precisely what
+  -- `tests/prefetch_tie.sh` gates. The resident path's `res_gen` (`ffi/pjrt_ffi.c`) still sees
+  -- strict step order because the INVOKES are still strictly ordered; only the reads overlap.
+  --
+  -- ⚠ It stays lock-free by CONSTRUCTION, not by guarding: each slot's task exclusively owns one
+  -- handle, so "two reads on one pipe" is unrepresentable rather than checked for.
+  -- ⚠ `LEAN_MLIR_PREFETCH_DEPTH=1` restores the old global-depth-1 behaviour exactly, as the A/B
+  -- control. Absent ⇒ depth n = `SHIM_WORKERS`, i.e. depth 1 for the single-producer default, so
+  -- every non-sharded net is byte- AND schedule-identical to before this change.
   --
   -- ⚠ Shim path only. Imagenette/CIFAR augment host-side off `augSeed` inside the loop and have
   -- no pipe to drain.
@@ -1385,17 +1407,30 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   let prefetch := match ← IO.getEnv "LEAN_MLIR_PREFETCH" with
     | some v => v != "0" && v.toLower != "off" && v != "false"
     | none   => true
+  -- The prefetch DEPTH: one read in flight per producer handle. Defaults to `SHIM_WORKERS`, which
+  -- is 1 for every non-sharded net — so the default is byte- and schedule-identical to depth 1
+  -- there, and only the sharded ImageNet jobs see a change. Clamped to [1, n] because a depth above
+  -- n would need two reads on one handle, which is the one thing that is never allowed.
+  let pfDepth := match (← IO.getEnv "LEAN_MLIR_PREFETCH_DEPTH").bind (·.toNat?) with
+    | some d => max 1 (min d imgStreams.size)
+    | none   => max 1 imgStreams.size
   if !imgStreams.isEmpty then
     -- ⚠ ANNOUNCED. §0.9's finding, and 2026-08-05's: a throughput setting that prints nothing when
     -- OFF is how `PJRT_FFI_RESIDENT` let a 16 h benchmark and a 26 h production config diverge for
-    -- a week. Both states say so.
+    -- a week. Both states say so. ⚠ The DEPTH is announced too, and for the same reason: depth 1
+    -- with 8 workers looks identical on screen to depth 8 and runs 3× slower.
     IO.println (if prefetch
-      then "  ▸ SHIM PREFETCH: ON (depth 1 — step i+1's read is issued before step i's invoke, so \
-the producer fills the pipe during compute). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64."
+      then s!"  ▸ SHIM PREFETCH: ON (depth {pfDepth} over {imgStreams.size} producer handle(s) — \
+each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every \
+producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on \
+R34/ImageNet 4×bs64 for depth 1."
       else "  ▸ SHIM PREFETCH: OFF (LEAN_MLIR_PREFETCH=0) — the read blocks the step. This is the \
 gate's control, not a configuration.")
-  -- The one batch in flight. `none` on the first step of the run and on the non-shim path.
-  let mut inflight : Option (Task (Except IO.Error (ByteArray × ByteArray))) := none
+  -- One in-flight read per producer handle, indexed BY HANDLE (`step % nStreams`), so the slot a
+  -- wait frees is exactly the slot its refill goes into. `none` = that handle has no read pending:
+  -- true for every slot on the first step, and for the tail slots at the end of the run.
+  let mut inflight : Array (Option (Task (Except IO.Error (ByteArray × ByteArray)))) :=
+    Array.replicate (max 1 imgStreams.size) none
   for ep in [startEpoch:nEpochs] do
     let mut epochLossSum := 0.0
     let mut lastLr := 0.0
@@ -1534,30 +1569,45 @@ gate's control, not a configuration.")
           -- — 150,120 of them over a 30-epoch run. Pooled lands 5 ms above the 219 ms synth floor,
           -- and that residual is the real path allocating a fresh 154 MB `ByteArray` per step
           -- where synth reuses one buffer.
-          let t ← match inflight with
+          -- ⚠ The step index runs unbroken across the epoch boundary — `ep * nb + bi + 1` at the
+          -- end of epoch e is exactly `ep' * nb + 0` for e+1 — which is what keeps the round-robin
+          -- continuous. The train iterator `.repeat()`s inside the shim and never ends, so there
+          -- is no per-epoch restart to resynchronise against.
+          let s := ep * nb + bi
+          let nStr := inflight.size
+          let slot := s % nStr
+          let t ← match inflight[slot]! with
             | some t => pure t
-            | none   => IO.asTask (readShimBatchRR imgStreams (ep * nb + bi) gbs flat shimNC)
+            | none   => IO.asTask (readShimBatchRR imgStreams s gbs flat shimNC)
                           Task.Priority.default
           let r ← IO.wait t
+          -- The wait FREES this handle's slot. Marking it before the refill loop is what makes
+          -- "the slot I just consumed" the slot step `s + n` goes into, without special-casing it.
+          inflight := inflight.set! slot none
           -- ⚠⚠ HERE, and the position is load-bearing at both ends. BEFORE the invoke below is the
-          -- entire point — the reader drains the pipe during compute instead of sleeping through
-          -- it. AFTER the wait above is the depth-1 correctness condition: one read outstanding,
-          -- one thread on the handles, issue order preserved. Moving this line earlier would put
+          -- entire point — the readers drain the pipes during compute instead of sleeping through
+          -- them. AFTER the wait above is the correctness condition: a handle's next read is issued
+          -- only once its previous read has been consumed, so there is never more than one read on
+          -- one pipe and per-handle issue order is preserved. Moving this above the wait would put
           -- two reads on one pipe and interleave them.
-          -- ⚠ Not on the LAST step of the LAST epoch: that read would never be consumed, and it
-          -- would leave a pool worker blocked in `read()` on a live producer while `main`
-          -- returns. The condition spans the epoch boundary rather than stopping at `bi + 1 < nb`,
-          -- so the overlap survives it — `ep * nb + bi + 1` at the end of epoch e is exactly
-          -- `ep' * nb + 0` for e+1, which is what makes the round-robin continuous.
-          -- ⚠ The `LEAN_MLIR_MAX_STEPS` probe still `return`s mid-loop with one read outstanding;
-          -- that path is a measurement, not a training run, and it exits through the same reap.
-          if bi + 1 < nb || ep + 1 < nEpochs then
-            inflight := some (← IO.asTask
-              (readShimBatchRR imgStreams (ep * nb + bi + 1) gbs flat shimNC) Task.Priority.default)
-          else
-            inflight := none
-          -- ⚠ Unwrapped AFTER the next read is issued, so a mid-epoch read error still leaves the
-          -- pipeline in a consistent state — it throws here with exactly one orphaned task, which
+          -- ⚠ Not past the LAST step of the LAST epoch: such a read would never be consumed, and it
+          -- would leave a pool worker blocked in `read()` on a live producer while `main` returns.
+          -- ⚠ At depth n the loop below issues exactly ONE read on a steady step (into the slot the
+          -- wait just freed, for step `s + n`); on the FIRST step every slot is free, so it issues
+          -- n and primes all n producers at once. That is the whole priming story — no separate
+          -- pre-loop pass, and the resume path (`startEpoch > 0`) primes identically on its first
+          -- step rather than needing to know it resumed.
+          -- ⚠ The `LEAN_MLIR_MAX_STEPS` probe still `return`s mid-loop with reads outstanding; that
+          -- path is a measurement, not a training run, and it exits through the same reap.
+          for j in [1:pfDepth+1] do
+            let sj := s + j
+            if sj < nEpochs * nb then
+              let sl := sj % nStr
+              if (inflight[sl]!).isNone then
+                inflight := inflight.set! sl (some (← IO.asTask
+                  (readShimBatchRR imgStreams sj gbs flat shimNC) Task.Priority.default))
+          -- ⚠ Unwrapped AFTER the next reads are issued, so a mid-epoch read error still leaves the
+          -- pipeline in a consistent state — it throws here with at most n orphaned tasks, which
           -- the process exit reaps. Unwrapping first would throw with nothing in flight and make
           -- the failure depend on where in the step it happened.
           let (i, l) ← IO.ofExcept r
