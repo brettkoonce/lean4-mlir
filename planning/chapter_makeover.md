@@ -263,31 +263,42 @@ genuinely could not be done here.
 
 ### 5.5 "Ablation: what each ingredient contributes" (`content.tex` ~4735)
 
-**The expensive one.** Seven runs — full recipe plus six leave-one-out
-variants — on ResNet-34 / Imagenette at **80 epochs each**, same init and
-batch order. Budget hours, not minutes; the Imagenette tier is quoted at
-~7 h for five nets on one 7900 XTX, so seven R34 runs is a comparable
-order. Check `lake run imagenette` timings on your card before starting,
-and consider running it detached.
+**Do not re-run this. Label it instead.**
 
-The whole section is quantitative and every claim moves:
+Seven runs — full recipe plus six leave-one-out variants — on ResNet-34 /
+Imagenette at 80 epochs each. That is hours of GPU time, and it would buy
+provenance hygiene and nothing scientific: both lowerers consume the
+*same* proven StableHLO, so the deltas this section measures are
+lowerer-independent by construction. What changes between IREE and XLA is
+wall-clock, and this section does not report wall-clock.
 
-- the table (7 rows: val accuracy and $\Delta$ vs full)
-- "augmentation is by far the largest single contribution ($-7.58$
-  points, more than $2\times$ any other knob)"
-- "cosine decay and Adam are roughly tied ($-3.48$ and $-3.25$)"
-- "the contributions are essentially additive. Sum of all six
-  leave-one-out deltas: $-17.38$ points" against the bare-recipe delta
+So mark it rather than repeat it. Add `\phasethreenote` at the top of the
+section, which already says exactly the right thing:
 
-If the new numbers change the *ordering* of the ablations, the three
-"observations worth naming" are conclusions, not decoration — rewrite
-them to match what the data says rather than preserving the current
-story. That is the one place in this doc where the prose must follow the
-measurement rather than the style guide.
+> *Which trainer is this?* This demo runs on the phase-3 verified-IREE
+> path — the proven graph, compiled by IREE and executed on the GPU —
+> which is what the numbers below were measured on. It has a phase-4
+> (PJRT) peer already built, and phase 4 is where it is headed.
 
-Confirm which driver produces these variants before starting; the
-recipe knobs live in the rendered graph, so an ablation is a different
-render per variant rather than a runtime flag.
+That macro's whole purpose is stated in its own source comment: the set
+of these markers is the map of what phase 4 still has to absorb. Tagging
+5.5 puts it honestly on that map instead of silently implying the numbers
+came off the current default. Same treatment for any other expensive
+measured section where the conclusion is lowerer-independent.
+
+Two caveats for whoever does this:
+
+- The macro's prose contains em-dashes, so it is due the same voice pass
+  as everything else. Fix it at the definition (`content.tex` ~21) and
+  every use benefits. `\imagenetphasenote` beside it has the same problem.
+- If you *do* eventually re-run it, the whole section is quantitative and
+  every claim moves with the table: "augmentation is by far the largest
+  single contribution ($-7.58$, more than $2\times$ any other knob)",
+  "cosine decay and Adam are roughly tied ($-3.48$ and $-3.25$)", and
+  "sum of all six leave-one-out deltas: $-17.38$ points". Those three
+  "observations worth naming" are conclusions, not decoration — if the
+  ordering changes they get rewritten to match the data rather than
+  preserved.
 
 ---
 
