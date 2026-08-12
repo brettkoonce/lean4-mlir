@@ -5118,26 +5118,19 @@ data that's bigger.
 
 The phase-2 JAX path (\texttt{jax/MainResnetImagenet.lean}, via
 \texttt{lake build resnet34-imagenet}) wires \texttt{.imagenet} through
-tfds streaming, and it is still here. It is no longer the only way to
-get an ImageNet number, though, so its role has changed from
-\emph{the} trainer to the independent reference the verified path is
-checked against, which is what the next section does with it.
+tfds streaming. What follows documents that trainer: how a paper-faithful
+ImageNet recipe is assembled, and what each choice in it is for.
 
-\textbf{Compute budget.} Both paths run on the same box: four NVIDIA
-RTX 4060 Ti, consumer hardware, CUDA/cuDNN. The verified path trains
-\texttt{resnet34Imagenet} at global batch 256 as $4 \times 64$, one
-epoch over the 1.28M-image training set in about 31 minutes at fp32,
-so the 30-epoch schedule lands at roughly $15.5$ wall-clock hours.
-The JAX reference runs the same recipe through tfds streaming with
-sharding via \texttt{Mesh + NamedSharding(P('batch'))}, and in bf16 it
-is about three times quicker per epoch, which is what made it the
-practical trainer for as long as it was the only one.
+\textbf{Compute budget.} Four NVIDIA RTX 4060 Ti, consumer hardware,
+CUDA/cuDNN, streaming through tfds with sharding via
+\texttt{Mesh + NamedSharding(P('batch'))}. At global batch 256 in bf16 one
+epoch over the 1.28M-image training set takes about $10.5$ minutes, so the
+full 90-epoch schedule lands at roughly $16$ wall-clock hours.
 
 The parameter checkpoint (\texttt{jax\_r34\_imagenet.bin}, 87\,MB, 37
-param groups) is written via the same \texttt{params\_to\_file} emit
-the verified path consumes, so weights move between the two byte-for-byte
-with no conversion step. That shared format is what makes the epoch-by-epoch
-comparison in \S\ref{sec:r34_phase4} possible at all.
+param groups) is written via the same \texttt{params\_to\_file} emit every
+other path in this book consumes, so weights move between implementations
+byte-for-byte with no conversion step.
 
 The recipe trims the paper's 90 epochs to 30 (SGD with momentum
 $0.9$, batch 256, cosine LR with a 5-epoch warmup from peak $0.1$,
@@ -5148,17 +5141,7 @@ flip, $\ell_2$ weight decay $10^{-4}$), a deliberate trade for
 roughly $95\%$ of the paper's $\sim$73\% headline at $\sim$1/3 the
 compute.
 
-\textbf{The JAX reference, and the longer schedule.} Everything from
-here to \S\ref{sec:r34_phase4} is the phase-2 (Lean$\to$JAX) trainer. It
-is no longer the path this book recommends, and the verified numbers in
-\S\ref{sec:r34_phase4} are the ones to read as the result. Two things
-keep it in the chapter. It is the independent implementation the verified
-run is checked against, and it is the only 90-epoch ImageNet schedule
-either path has actually completed, so it is where the full-schedule
-number lives until a 90-epoch verified run exists (about 28 hours of
-this box, on the throughput measured today).
-
-\medskip\noindent\textbf{bf16 and the full 90-epoch run.} Bf16 mixed
+\textbf{bf16 and the full 90-epoch run.} Bf16 mixed
 precision roughly halves the wait. On a second box (four usable
 NVIDIA RTX 4060 Ti, CUDA/cuDNN), the same \texttt{resnet34Imagenet}
 spec with \texttt{bf16 := true} casts both the matmuls and the
@@ -5264,50 +5247,39 @@ At ImageNet scale, on the same four-card box as the bf16 run above:
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
 4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$30.9 min & 30 & $\sim$15.5 hr & $\mathbf{70.74\%}$ & $\mathbf{90.14\%}$ \\
-2$\times$ 7900 XTX (ROCm) & fp32 & ---            & 30 & $\sim$20 hr   & --- & --- \\
+4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$18.6 min & 90 & $\sim$27.9 hr & --- & --- \\
+2$\times$ 7900 XTX (ROCm) & fp32 & ---            & 90 & ---           & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent ResNet-34 / ImageNet-1k on the phase-4 path: 35{,}311 of 49{,}920
-validation images, global batch 256 as $4 \times 64$, heavy-ball momentum
-with coupled $\ell_2$, cosine schedule with 5-epoch warmup at peak $0.1$,
-weight decay $10^{-4}$, label smoothing $0.1$
-(\texttt{runs/r34in\_verified\_30ep\_2026-08-05/}).
+\noindent Global batch 256 as $4 \times 64$, heavy-ball momentum with coupled
+$\ell_2$, cosine with a 5-epoch warmup at peak $0.1$, weight decay $10^{-4}$,
+label smoothing $0.1$. The completed row is
+\texttt{runs/r34in\_verified\_30ep\_2026-08-05/}, and its evidence is that both
+lowerers were run from the same initialization on the same box: at epoch~5 the
+two sets of weights scored \textbf{17{,}312} and \textbf{17{,}313} correct of
+49{,}920, one image apart. The proof-carrying tier stops at Imagenette, so the
+phrasing is \emph{one architecture, two independent lowerings, agreeing}, never
+``proven at ImageNet scale''.
 
-\medskip\noindent The 7900 XTX row carries a projected wall-clock for the
-two-card ROCm box and no accuracies, and the blanks there are not waiting on
-scheduling. A verified trainer does not currently survive a run on ROCm: a
-command-buffer fault kills it, at 11 deaths in 11 attempts on gfx1100 against 6
-clean runs in 6 on CUDA at the identical JAX version. The repro and the upstream
-report are in
-\texttt{upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/}. The
-row stays because the schedule is worth knowing and because the fault is
-somebody's bug to fix rather than a property of the architecture, but until it
-is fixed those two columns cannot be filled.
+\medskip\noindent The 90-epoch row is the paper schedule and is a
+\texttt{[TODO]}. It runs with:
 
-\medskip\noindent Read the accuracy carefully, because the epoch counts
-differ. This is a 30-epoch run and the phase-2 bf16 number above is a
-90-epoch one, so $70.74\%$ against $72.02\%$ is not the two lowerers
-disagreeing by $1.3$ points. It is a third of the training schedule
-costing $1.3$ points, which is about what a third of a cosine schedule
-should cost.
+\begin{verbatim}
+CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
+  SHIM_WORKERS=8 PJRT_FFI_RESIDENT=1 \
+  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 LEAN_MLIR_EPOCHS=90 \
+  .lake/build/bin/resnet34-imagenet-verified data
+\end{verbatim}
 
-\medskip\noindent\textbf{The evidence is the agreement, not the endpoint.}
-Comparing final accuracies across different schedules proves little. The
-load-bearing check is that both lowerers were run on the same box from the
-same initialization and their trajectories were diffed. At epoch~5 the two
-sets of weights scored \textbf{17{,}312} and \textbf{17{,}313} correct out
-of 49{,}920. One image apart, on fifty thousand. Training losses agreed to
-$0.055$ nats at epochs 1, 2, 5 and 6.
-
-\medskip\noindent That is the claim this section makes, and it is worth
-being exact about its ceiling. The proof-carrying tier of this book stops
-at Imagenette. What the ImageNet run inherits is provenance, because it
-executes \texttt{pretty(provenGraph)} off the same renderer the theorems
-are about, plus the agreement above. So the honest phrasing is \emph{one
-architecture, two independent lowerings, agreeing to one image at epoch
-five}, and never ``proven at ImageNet scale.''
+\noindent \texttt{LEAN\_MLIR\_EPOCHS} sets the schedule rather than capping
+it, which matters because the cosine anneals over \texttt{cfg.epochs}: capping
+a 30-epoch config at 90 would run 30 epochs, while setting 90 re-shapes the
+decay. The 7900 XTX row is blank rather than pending, because a verified trainer
+does not currently survive ROCm (11 deaths in 11 attempts on gfx1100 against 6
+clean in 6 on CUDA). The repro is in
+\texttt{upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/}.
 
 \prosesection{A reasonable stopping point}
 
@@ -5440,11 +5412,33 @@ eval@224.
 GPU & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
 \hline
 4$\times$ 4060 Ti (fp32)  & Ghost-BN (64) & $\sim$20.6 min & $\sim$34.1 hr & $\mathbf{77.43\%}$ & $\mathbf{93.60\%}$ \\
+4$\times$ 4060 Ti (fp32)  & Ghost-BN (64) & ---            & ---           & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent 100 epochs. The run logged zero thermal duty-cycle cooldowns and
+\noindent The first row is RSB-A3 at 100 epochs. The second is the same
+network on the \emph{2018} recipe at 90 epochs, which is a \texttt{[TODO]} and
+is the row that makes the comparison below a controlled one: it is bit-for-bit
+the ResNet-34 configuration of \S\ref{sec:r34_phase4} with the bottleneck
+backbone substituted, so the only difference between it and the A3 row is the
+recipe. It runs with:
+
+\begin{verbatim}
+CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
+  SHIM_WORKERS=8 PJRT_FFI_RESIDENT=1 \
+  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 LEAN_MLIR_EPOCHS=90 \
+  LEAN_MLIR_BASE_LR_U=100000 \
+  .lake/build/bin/resnet50-imagenet-verified data
+\end{verbatim}
+
+\noindent \texttt{momdp64} is the heavy-ball render at four replicas of 64,
+the same global 256 the ResNet-34 run uses, and \texttt{BASE\_LR\_U=100000} is
+peak $0.1$ in the driver's micro-unit encoding. The single-device
+\texttt{mom256} peer exists too but does not fit: it wants 14.6\,GiB for the
+device-to-host copy on a 16\,GB card.
+
+\medskip\noindent The A3 run logged zero thermal duty-cycle cooldowns and
 zero PCIe/AER interruptions. There is no ROCm peer row here for the same
 reason the one in \S\ref{sec:r34_phase4} is empty, which is the
 command-buffer fault recorded there. Every verified number in this chapter is
@@ -5480,22 +5474,22 @@ of expected effect:
 
 \subsection*{What A3 changes from the 2018 recipe}
 
-The ResNet-34 trainer above is a \emph{2018-era} recipe: the original
-paper's SGD-with-momentum plus the ``bag of tricks'' polish (cosine
-schedule, warmup, label smoothing, random-resized-crop). RSB-A3 is the
-\emph{2021} ``ResNet Strikes Back'' recipe (Wightman et al.). The
-architecture aside (basic block vs.\ bottleneck), every training knob
-that A3 sets differently is one lever of the three-year jump in how
-these networks are trained. The backbone code and the \texttt{.train}
-entry point are identical, and only the \texttt{TrainConfig} differs. Here
-is the full diff:
+The 2018-recipe row above is the original paper's SGD-with-momentum plus the
+``bag of tricks'' polish (cosine schedule, warmup, label smoothing,
+random-resized-crop). RSB-A3 is the \emph{2021} ``ResNet Strikes Back'' recipe
+(Wightman et al.). Both rows are ResNet-50, which is the point: every knob that
+A3 sets differently is one lever of the three-year jump in how these networks
+are trained, and holding the architecture fixed is what stops the comparison
+confounding the recipe with the backbone. The spec, the render and the entry
+point are identical between them, and only the arguments differ. Here is the
+full diff:
 
 \begin{center}
 \begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
 \hline
-Knob & ResNet-34 (2018) & RSB-A3 (2021) & What the A3 choice buys \\
+Knob & ResNet-50 (2018) & RSB-A3 (2021) & What the A3 choice buys \\
 \hline
-Backbone      & basic block, 21.8\,M   & bottleneck, 25.6\,M          & deeper net at similar cost; $1\times1$--$3\times3$--$1\times1$ bottleneck \\
+Backbone      & bottleneck, 25.6\,M    & bottleneck, 25.6\,M          & unchanged, which is what makes the rest of this table a recipe diff \\
 Optimizer     & SGD + momentum $0.9$   & LAMB                          & layer-wise adaptive LR, designed for very large batches \\
 Effective batch & 256                  & 2048 ($512\times4$ accum)     & the large-batch regime LAMB targets; grad-accum fits it on 16\,GB \\
 Peak LR       & $0.1$                  & $0.008$ @ bs2048              & LAMB's trust-ratio scale --- not comparable to SGD's $0.1$ \\

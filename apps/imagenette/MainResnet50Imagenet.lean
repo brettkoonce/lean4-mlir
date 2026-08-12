@@ -62,6 +62,11 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.001
+  -- ⚠ `LEAN_MLIR_EPOCHS` SETS the schedule where `LEAN_MLIR_MAX_EPOCHS` only CAPS it
+  -- (`min n cfg.epochs`, and this file's own docstring above spells out why that distinction
+  -- bites). `totalSteps := cfg.epochs * nb / accK` is what the cosine anneals over, so this is
+  -- the knob that reaches the 90-epoch 2018 tier from a 100-epoch A3 default.
+  let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD resnet50ImagenetConfig.epochs
   -- ▶ `LEAN_MLIR_RES` picks the TRAIN resolution, which is not a knob but a choice of NET SPEC:
   -- it selects the slug (`resnet50in` vs `resnet50in160`), hence the artifact family, `d0`, and
   -- the shim. `planning/next_session_rsb_a3.md` §2. ⚠ REFUSES on any other value rather than
@@ -82,7 +87,7 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
   -- than reusing `net.d0` (`fwdRenderedShape`/`evalD0` in `VerifiedTrain.lean`). The refusal that
   -- stood here until then is gone; the run announces "EVAL RES SPLIT" instead.
   net.toNet.trainAdamSched
-    { resnet50ImagenetConfig with batchSize := bs }
+    { resnet50ImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 
 def main (argv : List String) : IO Unit := runResnet50Imagenet argv

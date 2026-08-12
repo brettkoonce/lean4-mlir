@@ -962,6 +962,22 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
     Proofs.StableHLO.R34Opt.adamw "resnet50in")
 
+-- ⭐ THE 2018 RECIPE, so R50 and R34 can be compared with ONLY the network swapped.
+-- Heavy-ball momentum + coupled L2 at global batch 256, which is exactly
+-- `resnet34in_mom256`'s configuration (`ResNet34RenderB.lean`) with the bottleneck backbone
+-- substituted. Everything the two runs differ by is the architecture, which is what makes the
+-- 2018-vs-A3 comparison in the book a recipe comparison rather than a confounded one.
+--
+-- ⚠ `mom256` is a SINGLE-device render at batch 256, matching R34's. The data-parallel peer is
+-- `momdp64` (4 replicas x 64) if a 4-GPU run is wanted; both are the same global batch.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_mom256_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 256 1000 "1.0e-05" 1
+    Proofs.StableHLO.R34Opt.heavyBall "resnet50in")
+
+#eval IO.FS.writeFile "verified_mlir/resnet50in_momdp64_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    Proofs.StableHLO.R34Opt.heavyBall "resnet50in")
+
 -- ⭐⭐ GRADIENT ACCUMULATION — `planning/next_session_pipeline_then_r50.md` §4's blocker.
 --
 -- A FOURTH parameter region `G` and two runtime scalars, so one graph is both phases. `k` is in the

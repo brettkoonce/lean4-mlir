@@ -43,12 +43,18 @@ def resnet34ImagenetConfig : VerifiedConfig where
 def runResnet34Imagenet (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "mom256"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD resnet34ImagenetConfig.batchSize
+  -- ⚠ `LEAN_MLIR_EPOCHS` SETS the schedule; `LEAN_MLIR_MAX_EPOCHS` only ever CAPS it
+  -- (`min n cfg.epochs`), so the latter cannot reach the 90-epoch paper tier from a 30-epoch
+  -- default. The distinction matters beyond the loop count: `totalSteps := cfg.epochs * nb / accK`
+  -- is what the cosine anneals over, so setting 90 here re-shapes the schedule, where capping at 90
+  -- would silently keep annealing over 30.
+  let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD resnet34ImagenetConfig.epochs
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.1        -- the reference rate; unlike the Imagenette driver this net has no
                            -- AdamW variant, so an Adam default here would only ever be wrong.
   resnet34ImagenetVerified.toNet.trainAdamSched
-    { resnet34ImagenetConfig with batchSize := bs }
+    { resnet34ImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 
 def main (argv : List String) : IO Unit := runResnet34Imagenet argv
