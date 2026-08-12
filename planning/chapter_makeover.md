@@ -1,11 +1,12 @@
 # Chapter makeover: porting a chapter to the verified XLA path
 
 **Who this is for.** An agent working on a CUDA box, picking up
-**chapter 8 (ConvNeXt-T)** and then the rest. Chapters 1–7 are done.
+**chapter 9 (Vision Transformer)** and then the Bestiary. Chapters 1–8 are done.
 
-▶ **START AT §4a-sexies**, the ch8 handoff. Read §4a-quinquies (the ch7 post-mortem)
-first — it is where the traps ch8 inherits were found. Before touching anything, read ch5's §5.3 (`sec:verified_trainer_pattern`) and
-then chapter 7 in `blueprint/src/content.tex` — §5.3 is the spec and ch7 is the most
+▶ **START AT §4a-septies**, the ch8 post-mortem — it is the most recent worked example
+and it is where the traps ch9 inherits were found, then §4a-octies, the ch9 scoping.
+Before touching anything, read ch5's §5.3 (`sec:verified_trainer_pattern`) and then
+chapter 8 in `blueprint/src/content.tex` — §5.3 is the spec and **ch8** is the most
 recent worked example of applying it. §1 and §2 of this doc are the shape and the voice
 rules; §5 is the verification discipline and is non-negotiable.
 
@@ -188,8 +189,8 @@ Chapter-wide ranking, to pick what's next:
 | MobileNetV2 (ch6) | 0.0 | 0 | **DONE** |
 | EfficientNet (ch7) | 0.0 | 0 | **DONE** — max sentence 64 w |
 | Bestiary | 8.1 | 58 | 110 em-dash raw, the biggest single job left |
-| Vision Transformer (ch9) | 7.1 | 16 | 46 em-dash raw |
-| ConvNeXt (ch8) | 6.1 | 16 | **▶ NEXT** — 31 em-dash raw; max sentence is **68 w, not 142** (§4a-sexies) |
+| Vision Transformer (ch9) | 7.1 | 16 | **▶ NEXT** — 46 em-dash raw; needs a ViT XLA capture, no `LEAN_MLIR_EPOCHS`, stale cumulative table |
+| ConvNeXt (ch8) | 0.0 | 0 | **DONE** — max sentence **53 w**, the book's best |
 
 ▶ Measure with `scripts/measure_prose.py '\chapter{ConvNeXt}'`, which is the §3 script with
 all three of its false-join bugs fixed (it now replaces stripped environments with a full
@@ -605,7 +606,7 @@ The two changes are individually harmless and jointly make the net unprobeable.
 
 ---
 
-## 4a-quinquies. ▶▶ START HERE: Chapter 7, EfficientNet-B0: DONE (2026-08-12)
+## 4a-quinquies. Chapter 7, EfficientNet-B0: DONE (2026-08-12)
 
 48 em-dashes / 12 prose semicolons → **0 / 0**. Max sentence 75 → **64 w** (ch5 is 64, ch6
 is 56). `\phasethreenote` uses 3 → 2. latexmk 0 errors, **0 undefined refs**. ch7 is now
@@ -787,7 +788,280 @@ caveat, and check it in both directions.
 
 ---
 
-## 4a-sexies. ▶▶ NEXT: Chapter 8, ConvNeXt-T
+## 4a-septies. ▶▶ READ FIRST: Chapter 8, ConvNeXt-T: DONE (2026-08-12)
+
+31 em-dashes / 16 prose semicolons → **0 / 0**. Max sentence 68 → **53 w**, the best in the
+book (ch1/ch2 are 52–54, ch5/ch7 finished at 64). `\phasethreenote` uses 2 → **1** (only ch9
+left). latexmk 0 errors, **0 undefined refs**. ch8 is **IREE-free**: 0 hits for
+`IREE|vmfb|gfx1100`. All 8 chapters pass `verify_excerpt.py`; ch1–ch7 re-measured at 0/0, so
+nothing regressed.
+
+### ⭐ §8.1 is a fresh 80-epoch XLA capture, and ConvNeXt LOSES the Imagenette column
+
+`runs/2026-08-12-convnext-imagenette-xla-cuda/`, one 4060 Ti, `convnext-verified-adam`:
+**85.07% top-1 / 97.30% top-5 in 1 h 19 m**, best epoch 85.22%. 58.9 s/epoch, 196 ms/step.
+
+| net | params | MLIR | ms/step | total | top-1 | top-5 |
+|---|---|---|---|---|---|---|
+| ResNet-34 | 21.29M | 729 KB | 220 | 1.5 h | 89.71 | 98.27 |
+| MobileNetV2 | 2.24M | 1,047 KB | 90 | 35 min | 89.25 | **98.68** |
+| EfficientNet-B0 | 4.02M | 1,316 KB | 103 | 41 min | **89.96** | 98.45 |
+| ConvNeXt-T | **27.83M** | 985 KB | 196 | 1.3 h | 85.07 | 97.30 |
+
+⚠⚠ **This is the first chapter where the XLA re-run did NOT move the number.** ch6 gained
++2.16, ch7 gained +2.38; ConvNeXt went 84.94 → 85.07, i.e. **+0.13**. Do not expect the
+re-run to be a win by default — here it confirmed the retired figure instead.
+
+⭐ **The result is the chapter's thesis, not a defect.** The biggest net in the column finishes
+last, 4.9 points behind B0 at 6.9× the parameters, because 27.83M params over 9,469 images on
+*somebody else's* recipe is exactly what ConvNeXt's paper predicts. §8.5's ImageNet section is
+the control: same architecture, full DeiT pack, 300 epochs → 81.10%, beating everything in the
+book. Written that way rather than apologised for.
+
+⚠ **Two existing bullets INVERTED and had to be rewritten, not renumbered:**
+1. "ConvNeXt-T is the slowest per step (2030 ms vs EnetB0's 940)" — on XLA it is **196 ms
+   against R34's 220**, so it is no longer slowest. The phase-3 ordering reversed.
+2. "The MLIR is mid-pack at 790 KB" — the artifact is **985 KB** (984,788 B). 790 KB was the
+   retired SCALAR-LN net, same vintage as the `27826186` param count in the deleted IREE block.
+   ▶ The book's KB column is 1000-byte units; check with `stat -c%s`.
+
+### ⚠ The lakefile estimate was wrong AGAIN, in the direction this doc said it wouldn't be
+
+§4a-sexies argued ConvNeXt's `XLA 1h54m01s` was "likely accurate" because someone had re-run it
+against the channel-LN net. Actual: **1 h 19 m, ~30% pessimistic.** Better than ch6's 3× and
+ch7's 2.3×, but still wrong. ▶ **Treat every lakefile bench comment as an upper bound, with no
+exceptions.** Four for four now.
+
+### ⭐⭐ ch8 GAINED a phase-4 subsection — it had none
+
+`sec:convnext_phase4`, mirroring `sec:r34_phase4` / `sec:mnv2_phase4` / `sec:enet_phase4`.
+ch5, ch6 and ch7 all had one; ch8 did not, and this doc did not notice. It carries the
+`convnextin` spec, the two DP gates, the marker inventory, and the 4× throughput row at
+`TBD`. ▶ **ch9 is owed the same check** — do not assume the subsection exists.
+
+⚠ **Its throughput row is confounded TWO ways, not one.** ch7's phase-4 row differed from
+phase 2 only in precision (fp32 vs bf16) at the same global 256. ConvNeXt's *also* differs in
+batch: the verified render is bs32/device, so 4 replicas give global **128** against phase 2's
+256, and 10,009 steps/epoch against 5,004. The subsection says so. Do not read 37.2 min/ep
+against 14.9 as an architecture result.
+
+### ⚠⚠ FOUR stale things in code that this doc predicted would be clean
+
+§4a-sexies said ch8 was "in the best starting position of any chapter so far" and listed three
+things to "verify, then move on". The params and the epoch match were fine. These were not:
+
+| where | defect |
+|---|---|
+| `VerifiedNets.lean:866` | pointed at `Proofs.convNextForwardTC_has_vjp_correct` — **a symbol that does not exist** (real: `convNextForwardTCh_...`). Same docstring said "scalar-LN" (§2m made it channel LN) and listed a **head LayerNorm the layer list does not contain** |
+| `VerifiedNets.lean` (ImageNet spec) | claimed mixup/cutmix/drop-path/EMA/clip/`wdExcludeNormBias` were "none of which exist on the verified path" — **contradicting its own `dropKeeps` note 20 lines below.** Four of six are render variants; `convnextin_adamdpwxclipdrop` combines three. EMA exists but is combined with none of them |
+| `MainConvNeXtVerifiedAdam.lean` | tie described as **bit-exact on 83,434,629 floats**. Real: **83,478,849** (3 × 27,826,282 + 3; the old figure is 3 × 27,811,543, the scalar-LN net), and it is **not** bit-exact — θ 27,826,272/27,826,282 at norm-rel 3.7e-9. Also a docstring **sentence that stops mid-clause** ("the only path to") and a `Run (GPU): IREE_BACKEND=rocm` line |
+| `lakefile.lean:1828` | see below |
+
+▶ **A docstring is gated by nothing.** Every one of these typesets, compiles and reads current.
+
+### ⭐⭐ SETTLED by running: `ireeLink` on the tie targets is INERT
+
+ch7 left this open ("either the docstring is stale or the tie runs on the wrong backend, and
+telling those apart means RUNNING the gate"). Ran it. **Both halves of the docstring were
+wrong and the consequence does not bite:** the ireeLink-built `convnext-adam-tie` printed
+`[pjrt_ffi] XLA backend: PJRT 0.112` and tied on XLA. Reason: `ireeLink` only adds
+`-liree_ffi` to the link line, while `ffi/lowerer.c` **dlopens** whichever shim
+`$LEAN_MLIR_LOWERER` names, so link args stopped selecting the backend. Moved to
+`lowererLink`, re-ran, same result (0/180 spread, 83,478,849 floats).
+▶ **`efficientnet-adam-tie` carries the identical stale docstring and the same fix applies** —
+one command settles it, and the mechanism is now known.
+
+### ⭐ `LEAN_MLIR_EPOCHS` added to `MainConvNeXtImagenet.lean`, and VERIFIED BY RUNNING
+
+Unset → `Epoch 1/300`; `LEAN_MLIR_EPOCHS=1` → `Epoch 1/1`. At the committed `epochs := 300`
+the net was genuinely unprobeable before this. ⚠ **`MainViTImagenet.lean` still has 0 hits —
+ch9 inherits it.**
+
+### ▶ brett's call 2026-08-12: the 80-epoch ImageNet tier is DELETED
+
+Same move as ch6's 90-epoch tier. Gone: the table row, the `†` footnote, the 78.13%/94.05%
+paragraph, its 80-point plot and caption. ⚠ **Four more passages leaned on it and had to be
+rewritten rather than cut**, and one was in ANOTHER CHAPTER:
+
+- **ch6, line ~6567** claimed MNv4's 75.48% "clears ConvNeXt-T's 80-epoch 75.93%-class
+  territory". Against the surviving 81.10% that claim **reverses**, so it is deleted, not
+  re-pointed. ▶ This is the §4a-old trap firing again: `grep` the whole book for every number
+  you delete, not just the chapter.
+- The compute-budget duty cycle described the 80-ep run's **two** rests after epochs 30/60; the
+  300-ep run had **nine**.
+- The recipe-diff `Epochs` row was "300 (80 = validation tier)" with a "+2.97 from 80→300" delta.
+- "climbed **monotonically** across all 80 epochs" — the 300-ep curve wobbles at fine grain
+  (80.97 → 80.80 near epoch 230), so the surviving claim is "no erosion and no divergence".
+
+⭐ The phase-2 listing still reads `epochs := 80` because that **is** `jax/MainConvNeXtImagenet.lean`,
+with `convNeXtTinyImagenetConfigFull := { … with epochs := 300 }` directly below. Changing it to
+match the prose would make it fiction again, which is the ch4 lesson in reverse.
+
+### Things that genuinely were fine
+
+- **The full-depth global VJP fold is real.** `convNextForwardTCh_has_vjp`
+  (`ConvNeXtFullT.lean:270`, a `noncomputable def` — a `^theorem` grep MISSES it) chains stem →
+  all 18 blocks → 3 downsamples → GAP → dense; `_correct` at :341; 0 sorries in all 9 ConvNeXt
+  proof files. Global, not MobileNetV2's pointwise `_at`, because GELU is smooth. ch8 carried no
+  "representative scale" caveat to delete, and §8.1 now makes the strong claim.
+- **No variant-predicate bug.** Both ConvNeXt drivers delegate to `trainAdamSched` instead of
+  hand-rolling the predicate copies that produced ch7's live bug, and none of the 17 rendered
+  variant names collides with the `rms`/`drop`/`do`/`acc` substring tests or the `ema` prefix.
+- **Params and the epoch match** were right as predicted: 180 tensors / 27,826,282 scalars, and
+  `convnextImagenetConfig.epochs := 300` already matched the phase-2 Full tier.
+- **`ch9`/`ch10` in the spec docstrings is an internally consistent off-by-one** against the book
+  (R34 is `ch6` there). Not a bug — do not "fix" it.
+
+### ▶ Left open, deliberately
+
+- **Phase 4 not run.** `sec:convnext_phase4` prints 223 ms/step → 37.2 min/ep → ~186 h (7.8 d)
+  for 300 epochs on 4× 4060 Ti with Val top-1 **TBD**, sourced from the 2026-08-11 measured
+  table below. That row is a 4× measurement of `convnextin`; the arithmetic checks against the
+  spec's own 10,009 steps/epoch.
+- **ch9 and the Bestiary still carry the stale cumulative table** with R34 at 518 KB / 1400 ms /
+  9.5 h / 90.29% and B0 at 7.16M. ch8's is now re-measured; **ch9's is not**, and all four of its
+  rows are known (above).
+
+---
+
+## 4a-octies. ▶▶ NEXT: Chapter 9, Vision Transformer
+
+**ch9 is `content.tex` 8604–10164**, 1,560 lines, the longest chapter in the book. Baseline
+with `scripts/measure_prose.py '\chapter{Vision Transformer}'`:
+**46 em-dashes, 16 prose semicolons, max sentence 61 w.**
+
+⭐ **The prose job is the em-dashes only.** 61 w is already under ch5's and ch7's finished 64,
+so there is no long-sentence hunt. But 46 em-dashes is the largest count of any chapter made
+over so far (ch8 was 31, ch6 51, ch5 57).
+
+### 1. §9.1 "Run it first" — one command, and the estimate says MEASURED
+
+```bash
+lake build vit-verified-adam
+CUDA_VISIBLE_DEVICES=0 PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
+  ./.lake/build/bin/vit-verified-adam data \
+  > runs/<date>-vit-imagenette-xla-cuda/vit-imagenette-xla.log 2>&1
+```
+
+`vit-verified-adam` is already on `lowererLink` (lakefile 2138). lakefile 2949 reads
+`XLA 0.97h = MEASURED 80-epoch wall 3491s`, i.e. **~58 min**.
+
+⚠⚠ **Budget ~1 h but do not trust the estimate.** §4a-sexies argued ch8's estimate was
+reliable because someone had re-measured it, and it still came in **30% pessimistic**. Four
+lakefile bench comments have now been checked against reality and **four were wrong**
+(3×, 2.3×, 1.3×, and this one unknown). Treat it as an upper bound.
+⚠ Clear `.lake/build/vit_adam_ckpt_xla*` first and between probes, or set `LEAN_MLIR_CKPT_TAG`.
+▶ **ASK BEFORE STARTING** (`user_runtime_prefs`).
+
+### 2. ⭐⭐ ch9 CAN make ch7/ch8's strong full-depth claim — checked, not assumed
+
+**`vitForward2_has_vjp` (`Proofs/Architectures/ViTFwdGraph.lean:91`) with
+`vitForward2_has_vjp_correct` at :174** is the whole-net VJP by `vjp_comp`, and
+**`vitForwardKV_has_vjp`** (`ViTDepthK.lean`) generalises it to depth `k`.
+**0 real sorries** in `Attention.lean`, `ViTFwdGraph.lean` and `ViTDepthK.lean`.
+
+⚠ **`grep -c '\bsorry\b'` LIES on `Attention.lean` — it returns 5.** All five are the word
+inside docstrings that say there are none ("proved, no sorry", "zero sorry's"). Count
+term-position occurrences, not the word. I nearly wrote "ViT has 5 sorries" into this
+handoff on the strength of that grep.
+
+▶ So the three-way split from §4a-sexies becomes four-way: **ENet, ConvNeXt and ViT have
+full-depth folds; MobileNetV2 alone is at representative depth**, and relu6's kink is why.
+
+### 3. ⚠⚠ ViT's collectives are gated ONE way, unlike every other net
+
+`tests/TestViTDpCheck.lean` exists. **There is no `TestViTShardCheck.lean`, and
+`tests/TestShardCheck.lean`'s net table has no `vit` or `vitin` row** — it covers
+`convnext`, `convnextin`, `efficientnet`, `efficientnetin`, `mobilenetv2`, `mobilenetv2in`
+and stops. So ViT has exactly the gate that hands both replicas the SAME rows and is
+structurally blind to a shard-offset bug, and nothing that closes it.
+
+▶ **Do not let ch9 write "tied" as if it were one property** (ch7 §7.4 and ch8's phase-4
+subsection both say it correctly). ▶ Adding a `| "vit" => some (vitVerified, 32)` row to
+`TestShardCheck.lean`'s match is close to a one-liner, and it is the cheapest real
+strengthening available in this chapter.
+
+### 4. The fiction to replace (real line numbers)
+
+| line | what is there now | replace with |
+|---|---|---|
+| 9786 | `def vitTiny : NetSpec` | `vitVerified : VerifiedNetSpec` (slug `vit`, `VerifiedNets.lean:994`), §5.3 shape |
+| 9797 | `def vitTinyConfig : TrainConfig` | `VerifiedConfig` + `trainAdamSched` entry |
+| 9810 | `vitTiny.train vitTinyConfig` | ⚠ `.train` again |
+| 9836 | `$ IREE_BACKEND=rocm IREE_CHIP=gfx1100` log | the §9.1 capture. **ch9's IREE holdout** |
+| 9975 | `def vitTinyImagenet : NetSpec` | keep as the labelled phase-2 reference, **but diff it against `jax/MainViTImagenet.lean` first** |
+| 9986 | `def vitTinyImagenetConfig : TrainConfig` | ditto |
+| 10005–10007 | "Same `.train` entry point as every other chapter" | the verified vocabulary |
+| 10142 | Part-1 summary: "The same `NetSpec` / `TrainConfig` /…" | ⚠ this one summarises the WHOLE of Part 1 and every other chapter now uses the verified vocabulary |
+| 8612 | prose "…earned its own `has_vjp` theorem" via `NetSpec` | check the sentence, not just the listing |
+| 9700 | `\phasethreenote` | delete once §9.x is XLA. **This is the LAST use in the book** (1 → 0) |
+
+⚠ **ch8's hardest-won lesson applies to 9975/9986**: this doc told ch7 and ch8 to "keep the
+phase-2 listing as the reference"; ch7's had silently drifted, ch8's had not. **Diff it
+line-by-line against `jax/MainViTImagenet.lean` before keeping it** — it is a 10-minute check
+and it has gone both ways.
+
+### 5. ⚠ ch9 owns the LAST stale cumulative table, and all five rows are known
+
+Line ~9874. It still reads R34 `518 KB / 1400 ms / 9.5 h / 90.29%`, MNv2 `741 KB / 830 ms`,
+B0 `7.16M / 938 KB / 940 ms / 87.58%`, ConvNeXt `790 KB / 2030 ms / 13.3 h / 84.94%`, ViT
+`5.53M / 742 KB / 360 ms / 2.3 h / 71.70%`. **Four of five are now re-measured** (ch8 §8.4's
+table is the current one to extend):
+
+| net | params | MLIR | ms/step | total | top-1 | top-5 |
+|---|---|---|---|---|---|---|
+| ResNet-34 | 21.29M | 729 KB | 220 | 1.5 h | 89.71 | 98.27 |
+| MobileNetV2 | 2.24M | 1,047 KB | 90 | 35 min | 89.25 | **98.68** |
+| EfficientNet-B0 | 4.02M | 1,316 KB | 103 | 41 min | **89.96** | 98.45 |
+| ConvNeXt-T | 27.83M | 985 KB | 196 | 1.3 h | 85.07 | 97.30 |
+| ViT-Tiny | ? | ? | ? | ? | ? | ? |
+
+▶ MLIR sizes: `stat -c%s verified_mlir/<slug>_adam_train_step.mlir`, **1000-byte units**.
+▶ ms/step is the epoch wall-clock ÷ 295 batches, so it includes each epoch's val pass.
+⚠ Re-derive ViT's params from the spec (`vitVerified`), do not trust the 5.53M in the table —
+ch7's printed count was 78% wrong and ch8's MLIR size was 20% wrong, both from this vintage.
+
+### 6. ⚠ What ch9 inherits, all confirmed present
+
+1. **`MainViTImagenet.lean` has NO `LEAN_MLIR_EPOCHS`** (0 hits — the last driver missing it;
+   ch7 added ENet's, ch8 added ConvNeXt's). With `vitImagenetConfig.epochs := 300` committed
+   the net is **unprobeable**. Copy R50's spelling, and **verify by running** — ch8's probe was
+   `Epoch 1/300` unset versus `Epoch 1/1` with the knob.
+2. **`vit-adam-tie` (lakefile 1791) is the ORIGIN of the stale "is an IREE binary" docstring** —
+   lakefile 1805 literally justifies EfficientNet's by saying "for `vit-adam-tie`'s reason".
+   ⭐ **ch8 already settled the mechanism**: `ireeLink` is INERT because `ffi/lowerer.c` dlopens
+   the shim `$LEAN_MLIR_LOWERER` names, so the tie runs on XLA regardless. Fix is
+   `ireeLink` → `lowererLink` plus an honest docstring; ch8 did it and re-ran to confirm.
+   ▶ Three targets now carry this: `vit-adam-tie`, `efficientnet-adam-tie`, and whatever else
+   `grep -n 'is an IREE binary' lakefile.lean` turns up.
+3. **`vitImagenetConfig.epochs := 300` matches** the phase-2 300-epoch tier, so the
+   match-phase-2 rule is satisfied out of the box. ⚠ But ch9 prints **two** bolded ImageNet
+   pairs (65.64/87.06 and 70.28/90.05) — work out which is the headline before quoting, and
+   see whether brett wants the lower tier dropped as he did for ch6's 90-ep and ch8's 80-ep.
+4. **ch9 has NO phase-4 subsection** (`sec:vit_phase4` → 0 hits), same gap ch8 had. ch5, ch6,
+   ch7 and now ch8 all have one. Add it at the END, before the recipe-diff subsection.
+   Measured 4× throughput for the table: **287 ms/step, 12.0 min/ep, ~60 h (2.5 d) at 300 ep**.
+   ⚠ ViT's verified render is bs128 (`vitin_adam128`, `adamdp128x4`), so check whether the
+   phase-4 row is confounded against phase 2 the way ch8's was (fp32-vs-bf16 AND batch).
+5. **Variant markers are as dense as ConvNeXt's**: `wx`, `clip`, `drop`, `ema`, `dp`, plus
+   batch suffixes, up to `vitin_adamdp128x4wxclipdrop`. ▶ Test every CONCATENATION against
+   `tests/TestVariantPredicates.lean`, not each marker alone. ⭐ ch8 found ConvNeXt clean
+   because both its drivers delegate to `trainAdamSched` rather than hand-rolling the
+   predicate; check whether ViT's do the same.
+
+### 7. Verification, in order
+
+`scripts/verify_excerpt.py` over EVERY chapter → `latexmk` 0 errors AND 0 undefined refs →
+`measure_prose.py` to 0/0 → typecheck touched Lean → **never a number you did not measure** →
+re-measure the chapters you did NOT touch → `cp blueprint/src/print.pdf
+blueprint/lean4-mlir-blueprint.pdf`, because §7 says the gate and the PDF you open are
+different files.
+⚠ Deleting a number reaches into other chapters: ch8's 80-epoch cut orphaned a claim in **ch6**
+1,700 lines away, and re-pointing it would have REVERSED it. `grep` the whole book per number.
+
+---
+
+## 4a-sexies. Chapter 8 scoping (superseded by §4a-septies, kept for what it got right)
 
 **ch8 is `content.tex` 7658–8438.** Baseline with `scripts/measure_prose.py`:
 **31 em-dashes, 16 prose semicolons, max sentence 68 w.**
@@ -1322,7 +1596,15 @@ Three ways out, and it needs brett's decision, not ours:
 
 ## 7. Known-stale, book-wide
 
-- ✅ **Chapters 1–7 are IREE-free** as of 2026-08-12. ch7's holdout was its Results block's
+- ✅ **Chapters 1–8 are IREE-free** as of 2026-08-12. ch8's holdout was its Results block's
+  `IREE_BACKEND=rocm … gfx1100` log, replaced by the XLA capture in `sec:convnext_runit`.
+  ▶ **49 hits remain in the book**, and brett asked for them gone: ch9 (5), Bestiary (5),
+  appendix B (22), appendix C (14), plus one each in ch1/ch4/ch5 and 4 in the preamble macros.
+  ⚠ Three categories, and only one is a copy edit: (a) prose mentions, cheap; (b) **numbers that
+  need a re-run** — ch1's 7900 XTX log, ch4's gfx1100 curve, ch9's whole IREE Results block,
+  the Bestiary's gfx1100 ViT timing; (c) **appendix C, which ARGUES from IREE** and is §6's open
+  question needing brett's decision, not a find-and-replace.
+- ✅ **Chapters 1–7 were IREE-free** as of 2026-08-12. ch7's holdout was its Results block's
   `IREE_BACKEND=rocm … gfx1100` log, replaced by the XLA capture in `sec:enet_runit`; the
   chapter now has 0 hits for `IREE|vmfb|gfx1100`. ch6's last holdout had also contained a
   **fabricated line** (`Epoch 2/80: loss=(dropping) lr=0.000667`). The two mentions left in

@@ -858,12 +858,20 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
 #guard efficientnetVerified.toSpecs == EfficientNetLayout.specs
 
 /-- ch9 **ConvNeXt-T** on Imagenette 224²: 4×4-s4 patchify → [3,3,9,3] ConvNeXt blocks @
-    [96,192,384,768] (depthwise 7×7 → scalar-LN → 1×1 expand → GELU → 1×1 project → layerScale)
-    with 3 between-stage (LN + 2×2-s2) downsamples (56→28→14→7) → GAP → LN → dense. 180 params.
+    [96,192,384,768] (depthwise 7×7 → channel-LN → 1×1 expand → GELU → 1×1 project → layerScale)
+    with 3 between-stage (LN + 2×2-s2) downsamples (56→28→14→7) → GAP → dense.
+    **180 param tensors, 27,826,282 scalars** (28,587,592 at K = 1000, the JAX reference's count).
     Tied at the FULL spec in `Proofs/SpecVJP.lean` (`convnextVerified_denote_eq` →
     `convNextForwardTCh`, the committed channel-LN config, + rung E
     `convnextVerified_fwd_faithful`); the full-depth REAL VJP is
-    `Proofs.convNextForwardTC_has_vjp_correct` (ConvNeXtFullT.lean). -/
+    `Proofs.convNextForwardTCh_has_vjp_correct` (ConvNeXtFullT.lean:341), whose `HasVJP` is
+    `Proofs.convNextForwardTCh_has_vjp` (:270) — GLOBAL, not the pointwise `_at` form MobileNetV2
+    is stuck with, because GELU is smooth where relu6 kinks. Its only hypotheses are the 22 LN
+    positivities (stem + 18 blocks + 3 downsamples; there is no head LN).
+    ⚠ Three things above were stale or wrong until 2026-08-12 and all three typeset fine: the LN
+    was described as scalar (§2m made it channel LN on all 22 sites), a head LN was listed that
+    the layer list does not contain, and the VJP pointer named `convNextForwardTC_...`, a symbol
+    that does not exist. A docstring is not gated by anything. -/
 def convnextVerified : VerifiedNetSpec where
   name     := "ConvNeXt-T"
   slug     := "convnext"
@@ -915,9 +923,21 @@ def convnextVerified : VerifiedNetSpec where
     actually tracks. Threading `cBS` is a separate refactor, not a prerequisite.
 
     ⚠ **Claim ceiling**: the proof-carrying tier stops at Imagenette; what carries here is
-    provenance plus whatever the pair comparison shows (§5). And this is **not** the ConvNeXt paper
-    recipe — `convNeXtTinyImagenetConfig` also has mixup 0.8, cutmix 1.0, stochastic depth 0.1,
-    EMA 0.9999, grad clip 1.0 and `wdExcludeNormBias`, none of which exist on the verified path.
+    provenance plus whatever the pair comparison shows (§5).
+
+    ⚠⚠ **This docstring used to end "none of which exist on the verified path", and that was WRONG
+    by four of six as of 2026-08-12** — it contradicted this spec's own `dropKeeps` note twenty
+    lines below. `convNeXtTinyImagenetConfig`'s extra knobs are mixup 0.8, cutmix 1.0, stochastic
+    depth 0.1, EMA 0.9999, grad clip 1.0 and `wdExcludeNormBias`, and they land as follows:
+    * `wdExcludeNormBias`, grad clip and stochastic depth are RENDER VARIANTS (`wx`, `clip`,
+      `drop`), all three combined in `convnextin_adamdpwxclipdrop`.
+    * EMA is a render variant too (`convnextin_ema`, `convnextin_emadp`), but it is **not** combined
+      with the `wx`/`clip`/`drop` stack in any committed artifact, so no single ConvNeXt render
+      carries all five at once.
+    * Mixup and CutMix are data-side and ride the PRODUCER's `SHIM_MIX`, never the graph.
+    ▶ The general lesson (`chapter_makeover.md` §4a-quater): `ls verified_mlir/ | grep <marker>`
+    before concluding a feature is absent. A missing constructor in the spec language is not
+    evidence, because these are variants, not layers.
     ⚠ The pipeline augs (RandAugment geometric, random erasing) come across via the shim — **as of
     2026-08-02**. This line used to say "do come across free" and it was a statement about the
     CAPABILITY: `generateShim` honoured the flags, but the driver spawned R34's shim for every net,

@@ -6563,10 +6563,8 @@ $\mathbf{92.37\%}$ top-5 on the full 50{,}000-image validation split
 whole six-year argument in two rows: $\mathbf{+4.04}$ points over
 MobileNetV2's paper-faithful $71.44\%$, from $2.8\times$ the
 parameters and \emph{less than half} the epochs, $100$ against
-$350$ and $16$ wall-clock hours against $45$. It also clears
-ConvNeXt-T's 80-epoch $75.93\%$-class territory at a third of the
-parameters, which is the comparison the UIB template is really
-making. By 2024 the mobile line is not trading accuracy for size so
+$350$ and $16$ wall-clock hours against $45$.
+By 2024 the mobile line is not trading accuracy for size so
 much as reaching the same accuracy with a block that happens to be
 cheap.
 
@@ -7702,11 +7700,111 @@ in isolation. The full list:
 The result: a model that's pure convolution top to bottom, doesn't
 contain a single attention operation, and matches or beats Swin-T
 on ImageNet at the same compute budget. The conclusion of the
-paper isn't ``convolutions are back''---it's ``the architectural
+paper isn't ``convolutions are back.'' It's ``the architectural
 gap between ResNet and Swin was mostly the training recipe, not
 the receptive field.'' Most of what looked like transformer
 superiority was modernization that hadn't been back-ported to the
 convnet baseline.
+
+\section{Run it first}
+\label{sec:convnext_runit}
+
+Before the two new primitives, train the network that needs them. Four
+commands, and the heaviest per-epoch net in the book still finishes
+inside an hour and a half:
+
+\begin{verbatim}
+lake exe cache get                            # Mathlib oleans, ~30 s
+./download_imagenette.sh                      # ~1.5 GB
+lake build convnext-verified-adam
+./.lake/build/bin/convnext-verified-adam data
+\end{verbatim}
+
+On one RTX 4060 Ti (CUDA 12.9), from
+\texttt{runs/2026-08-12-convnext-imagenette-xla-cuda/}. XLA's startup
+banner is removed, the network description line is wrapped, and the
+middle of the run is elided:
+
+\begin{verbatim}
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/convnext_adam_train_step.mlir
+             (@convnext_adam_train_step, 543 outputs, 1 replica)
+             in 6176 ms
+[pjrt_ffi] compiled verified_mlir/convnext_fwd.mlir
+             (@convnext_fwd, 1 outputs, 1 replica) in 473 ms
+ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN →
+  [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN +
+  GELU + layerScale + 3 downsamples 56→7 → GAP → dense)
+  via the VERIFIED renderer → XLA/PJRT → GPU
+  train 9469, val 3925; bs 32, ConvNeXt-T adam
+    (cosine+warmup 3ep, baseLR 0.001000), He init
+[pjrt_ffi] RESIDENT: @convnext_adam_train_step holds 540 parameter
+             tensors (318.4 MB) on 1 device; they stop crossing PCIe
+             from here
+Epoch 1/80: loss=2.322982 lr=0.000333
+  epoch 1: val_acc = 1485/3925 = 37.834395%  top5 = 2973/3925 = 75.745223%
+Epoch 2/80: loss=1.974630 lr=0.000667
+  epoch 2: val_acc = 1977/3925 = 50.369427%  top5 = 3485/3925 = 88.789809%
+Epoch 3/80: loss=1.691063 lr=0.001000
+  epoch 3: val_acc = 2078/3925 = 52.942675%  top5 = 3571/3925 = 90.980892%
+Epoch 4/80: loss=1.461296 lr=0.001000
+  epoch 4: val_acc = 2295/3925 = 58.471338%  top5 = 3661/3925 = 93.273885%
+Epoch 79/80: loss=0.501143 lr=0.000000
+  epoch 79: val_acc = 3339/3925 = 85.070064%  top5 = 3819/3925 = 97.299363%
+Epoch 80/80: loss=0.501138 lr=0.000000
+  epoch 80: val_acc = 3339/3925 = 85.070064%  top5 = 3819/3925 = 97.299363%
+done (trained ConvNeXt-T adam + cosine/warmup via packed threading).
+\end{verbatim}
+
+Eighty epochs at about 59 seconds each, one hour and nineteen minutes in
+total, and \textbf{85.07\%} top-1 with \textbf{97.30\%} top-5 on
+Imagenette's 3,925-image validation split. The best epoch reached
+$85.22\%$. That is the \emph{lowest} top-1 in this book's Imagenette
+column, from much the largest network in it, and
+\S\ref{sec:convnext_results} is about why that is the expected answer
+rather than a defect.
+
+\medskip\noindent\textbf{Two compile lines, where the previous three
+chapters each had three.} ResNet-34, MobileNetV2 and EfficientNet-B0 all
+emit a third artifact, \texttt{<slug>\_fwd\_eval}, because BatchNorm
+behaves differently in training and in evaluation and the evaluation
+forward has to read frozen running statistics. ConvNeXt has no
+BatchNorm. LayerNorm computes its statistics from the activation in
+front of it every time, so there is nothing to freeze, and the training
+forward and the evaluation forward are the same function. The chapter's
+central swap pays for itself in the build before it pays for itself in
+the mathematics.
+
+\medskip\noindent That also shows in the first four epochs. Top-1 climbs
+37.8, 50.4, 52.9, 58.5, smoothly. Chapter~\ref{chap:se} had to explain a
+jump at epoch 4, where B0's running statistics were averaging over
+weights that were still moving fast and the evaluation forward was
+briefly using statistics that no longer described the network. No such
+step exists here, because no such statistics exist here.
+
+Here is the part that matters. That run did not execute a
+reimplementation of the network this chapter describes. It executed
+\texttt{verified\_mlir/convnext\_adam\_train\_step.mlir}, which is
+\texttt{pretty(provenGraph)} off the renderer. Every LayerNorm in it
+backpropagates by Theorem~\ref{thm:layerNorm_has_vjp}, every GELU by
+Theorem~\ref{thm:gelu_has_vjp}, every layer scale by its own diagonal
+adjoint, every depthwise convolution by
+Chapter~\ref{chap:depthwise}'s, and every residual skip by
+Chapter~\ref{chap:residual}'s additive fan-in.
+
+\medskip\noindent\textbf{And the fold holds at full depth.}
+\texttt{convNextForwardTCh\_has\_vjp} chains the patchify stem, all
+\emph{eighteen} ConvNeXt blocks, the three downsamples, the pool and the
+head through \texttt{vjp\_comp}, with
+\texttt{convNextForwardTCh\_has\_vjp\_correct} carrying it back to the
+forward the spec denotes. It assumes 22 positive LayerNorm epsilons and
+nothing else. Unlike Chapter~\ref{chap:depthwise}, which folds a
+representative stem-plus-two-blocks because relu6's kink makes a
+whole-network statement false, this one is a single global
+\texttt{HasVJP} over the entire network, and it can be because GELU is smooth
+everywhere. So for ConvNeXt the accurate sentence is the strong one:
+every operation in the graph that just trained carries a proved
+backward, and their composition into the whole network carries one too.
 
 \prosesection{Two new primitives}
 
@@ -7721,7 +7819,7 @@ small batches (memory-constrained training) and for variable-length
 sequences (where ``the batch axis'' isn't a clean concept). LayerNorm
 solves both by flipping the axis: normalize per-sample across the
 feature dimension instead. Same three-term Jacobian cancellation as
-BN (Chapter~\ref{chap:bn}), same closed-form backward; just a
+BN (Chapter~\ref{chap:bn}), same closed-form backward. Just a
 different reduction axis. Theorem~\ref{thm:layerNorm_has_vjp} states
 this formally.
 
@@ -7756,33 +7854,33 @@ residual unit:
 Two pieces: the \emph{inverted bottleneck}
 ($1 \times 1$ expand 4$\times$, depthwise spatial conv at the wide
 point, $1 \times 1$ project) is exactly the MobileNetV2 inverted
-residual from Chapter~\ref{chap:depthwise}---ConvNeXt is paying the
+residual from Chapter~\ref{chap:depthwise}. ConvNeXt is paying the
 MobileNet idea forward. \emph{LayerScale} (Touvron et al.\ 2021) is
 a learnable per-channel scalar \(\gamma\) initialized to \(10^{-6}\)
 that multiplies the block's contribution before the residual add,
 keeping the block near-identity at init in the same spirit as
 ResNet's residual. The spec's \texttt{.convNextStage} primitive
-emits \(N\) of these blocks at fixed channel width; the
+emits \(N\) of these blocks at fixed channel width. The
 \texttt{.convNextDownsample} primitive emits the LN + $2 \times 2$
 stride-2 conv that transitions between stages.
 
 \prosesection{ConvNeXt-T is four stages, ResNet-style}
 
 The full ConvNeXt-T spec is the same stem--stages--head template
-as ResNet-34: a $4 \times 4$ stride-4 ``patchify'' stem replaces
-the $7 \times 7$ stride-2 stem; four stages with block counts
+as ResNet-34. A $4 \times 4$ stride-4 ``patchify'' stem replaces
+the $7 \times 7$ stride-2 stem. Four stages with block counts
 \((3, 3, 9, 3)\) at channel widths \((96, 192, 384, 768)\) replace
-the ResNet stages; a final global-average-pool plus 768-to-10
+the ResNet stages. A final global-average-pool plus 768-to-10
 dense replaces the head. Total: 27.8M parameters, comparable to
 ResNet-50. Every architectural primitive in the spec is now
-codegen-backed and has a proved VJP; none of the math in this
+codegen-backed and has a proved VJP. None of the math in this
 chapter is genuinely new beyond the LayerNorm-axis rotation and
 the GELU smoothness.
 
-The bigger pedagogical point---and the one the example section
-below makes concrete---is that with a modernized convnet
-backbone, the dominant axis of variation between runs becomes the
-\emph{training recipe}, not the architecture. The chapter
+With a modernized convnet backbone, the dominant axis of
+variation between runs becomes the \emph{training recipe}, not
+the architecture. The example section below makes that
+concrete. The chapter
 closes by putting the full recipe side-by-side with the 2018
 ResNet-34 recipe of
 Chapter~\ref{chap:residual}, knob by knob: the four-year jump in
@@ -7907,8 +8005,6 @@ through a projection, convert back to the scalar derivative.}
 \section{Example: ConvNeXt-T on Imagenette}
 \label{sec:convnext_example}
 
-\phasethreenote
-
 ConvNeXt (Liu et al.\ 2022,
 \href{https://arxiv.org/abs/2201.03545}{arXiv:2201.03545}) was the
 ``ConvNets strike back'' paper: a deliberate back-port of design
@@ -7918,7 +8014,7 @@ depthwise $7 \times 7$ convs at lower channel counts, LayerNorm
 instead of BatchNorm, GELU instead of ReLU, and an inverted-
 bottleneck-style $4\times$ expansion in every block. None of those
 ingredients are transformer-specific. The architecture below is
-pure convolution top to bottom; the modernization is in the
+pure convolution top to bottom. The modernization is in the
 \emph{recipe}, not the receptive field.
 
 ConvNeXt-T is the smallest variant in the paper, $\sim$28M params
@@ -7930,11 +8026,11 @@ regime is different but the architectural story still holds.
 \subsection*{The architecture}
 
 ConvNeXt-Tiny replaces the convolutional stages with
-\texttt{.convNextStage} blocks at four widths ($96, 192, 384, 768$;
-depths $3, 3, 9, 3$), glued by \texttt{.convNextDownsample} transitions
+\texttt{.convNextStage} blocks at four widths ($96, 192, 384, 768$)
+and depths ($3, 3, 9, 3$), glued by \texttt{.convNextDownsample} transitions
 (LayerNorm $+$ $2 \times 2$ stride-2 conv). A $4 \times 4$ stride-4
 patchify stem and a global-average-pool head bracket the stack. The
-inset shows one ConvNeXt block --- an inverted bottleneck with a single
+inset shows one ConvNeXt block: an inverted bottleneck with a single
 LayerNorm and GELU, scaled by a learnable $\gamma$ before the residual
 add.
 
@@ -7997,145 +8093,167 @@ add.
 \end{tikzpicture}
 \end{center}
 
+\subsection*{The verified trainer}
+
+\S\ref{sec:verified_trainer_pattern} is the pattern, and every chapter
+since Chapter~\ref{chap:depthwise} has reused it. ConvNeXt drops one of
+its four annotated points. There is no \texttt{bnChannels} here, because
+there is no BatchNorm.
+
 \begin{verbatim}
--- 1
 import LeanMlir
 
--- 2
-def convNextTiny : NetSpec where
-  name   := "ConvNeXt-T-GELU"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 96 4 4 .same,                          -- patchify stem 224→56
-    .convNextStage 96 3 .ln .gelu,                   -- 3 blocks @ 96 ch
-    .convNextDownsample 96 192,                      -- LN + 2×2 stride 2 → 28
-    .convNextStage 192 3 .ln .gelu,                  -- 3 blocks @ 192 ch
-    .convNextDownsample 192 384,                     -- → 14
-    .convNextStage 384 9 .ln .gelu,                  -- 9 blocks @ 384 ch
-    .convNextDownsample 384 768,                     -- → 7
-    .convNextStage 768 3 .ln .gelu,                  -- 3 blocks @ 768 ch
-    .globalAvgPool,
-    .dense 768 10 .identity
-  ]
+-- 1. The network. `slug` names the committed render. No `bnChannels`:
+--    LayerNorm keeps no running statistics, so nothing has to be
+--    threaded from training into evaluation.
+def convnextVerified : VerifiedNetSpec where
+  name     := "ConvNeXt-T"
+  slug     := "convnext"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .conv 3 96 4 4, .layerNorm 96,       -- patchify 4x4/s4 + stem LN
+    .convNextBlockCh 96,  .convNextBlockCh 96,  .convNextBlockCh 96,
+    .layerNorm 96,  .conv 96 192 2 2,    -- downsample  96->192, 56->28
+    .convNextBlockCh 192, .convNextBlockCh 192, .convNextBlockCh 192,
+    .layerNorm 192, .conv 192 384 2 2,   -- downsample 192->384, 28->14
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+    .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
+    .layerNorm 384, .conv 384 768 2 2,   -- downsample 384->768, 14->7
+    .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
+    .globalAvgPool, .dense 768 10 ]      -- head
+  -- Stochastic depth, read only by the `*drop` variants: one global
+  -- block index, keep_i = 1 - 0.1*i/17 at all eighteen blocks.
+  dropKeeps := (Array.range 18).map (fun i =>
+                 1.0 - 0.1 * i.toFloat / 17.0)
 
--- 3
-def convNextTinyConfig : TrainConfig where
-  learningRate   := 0.001
-  batchSize      := 32
-  epochs         := 80
-  useAdam        := true
-  weightDecay    := 0.0001
-  cosineDecay    := true
-  warmupEpochs   := 3
-  augment        := true
-  labelSmoothing := 0.1
+-- 2. The schedule. ResNet-34's, MobileNetV2's and B0's, unchanged.
+def convnextAdamConfig : VerifiedConfig where
+  epochs    := 80
+  batchSize := 32
 
--- 4
-def main (args : List String) : IO Unit :=
-  convNextTiny.train convNextTinyConfig
-    (args.head?.getD "data/imagenette")
+-- 3. The entry point: AdamW, cosine with a 3-epoch warmup,
+--    baseLR 1e-3.
+def main (argv : List String) : IO Unit :=
+  convnextVerified.toNet.trainAdamSched
+    convnextAdamConfig (argv.head?.getD "data")
+    0.001 0.9 0.999 3 "adam"
 \end{verbatim}
 
-The structure follows the paper's macro-design prescription:
+\noindent The structure follows the paper's macro-design prescription:
 4 stages with block counts $(3, 3, 9, 3)$ and channels doubling on
 every downsample $(96 \to 192 \to 384 \to 768)$, with the heavy
-9-block stage at the $14 \times 14$ / 384-channel resolution.
-\texttt{.convNextStage} is $N$ ConvNeXt blocks (DW $7\times 7$ +
-LN over channels + $1\times 1$ expand $4\times$ + GELU + $1\times 1$
-project + LayerScale + residual). The stem is a $4 \times 4$
-stride-4 conv (mirrored from ViT's patch-embed), not the
-$7 \times 7$ stride-2 stem of a ResNet --- one of the seven
-modernization-recipe items called out in the paper. The same base
+9-block stage at the $14 \times 14$ / 384-channel resolution. The stem
+is a $4 \times 4$ stride-4 conv (mirrored from ViT's patch-embed), not
+the $7 \times 7$ stride-2 stem of a ResNet, and that is one of the
+seven modernization-recipe items called out in the paper. The same base
 recipe as the EnetB0 chapter (Adam @ 0.001, cosine, warmup-3,
 WD 1e-4, label smoothing 0.1) keeps the cross-architecture
 comparison clean.
 
+\textbf{\texttt{.convNextBlockCh c} is one block, not a stage.} There is
+no repeat count, so the eighteen blocks are eighteen entries and the
+stage boundaries are visible as the places where the width changes.
+\texttt{Ch} names the norm: the LayerNorm inside the block reduces over
+the \texttt{c} channels at each spatial position, which is ConvNeXt's
+real normalization rather than the scalar reduction the bare name
+suggests.
+
+\textbf{The stem and the downsamples are spelled out, not packaged.} A
+\texttt{.convNextDownsample 96 192} is two entries here, a
+\texttt{.layerNorm 96} and a \texttt{.conv 96 192 2 2}, and the patchify
+stem is likewise a \texttt{.conv} followed by a \texttt{.layerNorm}. The
+spec's job is the \emph{parameter layout}, not the block vocabulary, so
+it names weights rather than concepts.
+
+\textbf{180 parameter tensors, 27,826,282 scalars.}
+\texttt{convnextVerified.toSpecs} is kernel-\texttt{\#guard}ed against
+\texttt{ConvNeXtLayout.specs}, an independently audited hand-list, and
+the ImageNet spec of \S\ref{sec:convnext_imagenet} is pinned to this one
+at everything but its head. At 1000 classes the count is 28,587,592,
+which is the JAX reference's own figure exactly. So the listing above is
+not a description of the network that got trained, it is the object the
+renderer consumed.
+
+\textbf{Twenty-two LayerNorms are the entire hypothesis budget.} One in
+the stem, one per block, one per downsample, and no head LN.
+Theorem~\ref{thm:layerNorm_has_vjp} wants $\varepsilon > 0$ at each, and
+those 22 positivities are the only assumptions anywhere in the chain.
+
 \subsection*{Results}
+\label{sec:convnext_results}
 
-\begin{verbatim}
-$ IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
-    ./.lake/build/bin/ablation convnext-tiny-gelu
-ConvNeXt-T-GELU: 27826186 params
-Generating train step MLIR...
-  790422 chars
-Compiling vmfbs...
-  forward compiled
-  eval forward compiled
-  train step compiled
-  session loaded
-  train: 9469 images
-  27826186 params + m + v (318 MB)
-training: 295 batches/epoch, batch=32, Adam, lr=0.001000,
-          cosine warmup=3, label_smooth=0.1, wd=1e-4
-  BN layers: 1, BN stat floats: 192
-  step 0/295: loss=2.453635 (2030ms)
-Epoch 10/80: loss=0.959386 lr=0.000985 (596s/epoch)
-Epoch 20/80: loss=0.581696 lr=0.000897
-Epoch 40/80: loss=0.522144 lr=0.000551
-Epoch 60/80: loss=0.504293 lr=0.000173
-Epoch 80/80: loss=0.501892 lr=0.000000
-Saved params + BN stats.
-
-$ LEAN_MLIR_EVAL_ONLY=1 \
-    ./.lake/build/bin/ablation convnext-tiny-gelu
-EVAL ONLY  ConvNeXt-T-GELU: 3316/3904 = 84.94%
-\end{verbatim}
-
-Final val accuracy \textbf{84.94\%} on Imagenette, wall time
-$\sim$13.3 hours, train loss plateaus at the same $\sim$0.50
-label-smoothing floor as ResNet-34 / MobileNet V2 / EfficientNet-B0.
-Extending the comparison table from the EfficientNet chapter:
+\S\ref{sec:convnext_runit} has the run: 80 epochs at about 59 seconds
+each, one hour and nineteen minutes, $\mathbf{85.07\%}$ top-1 and
+$\mathbf{97.30\%}$ top-5, with the loss settling on the same
+${\sim}0.50$ label-smoothing floor as the three chapters before it. The
+four-chapter comparison, same dataset, same recipe, same eighty epochs,
+all four measured on the verified XLA path:
 
 \begin{center}
-\begin{tabular}{l r r r r r}
+\begin{tabular}{l r r r r r r}
 \hline
-Model            & Params  & MLIR     & Step time & Total    & Val acc \\
+Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
-ResNet-34        & 21.29M  & 518 KB   & 1400 ms   & 9.5 h    & 90.29\% \\
-MobileNet V2     &  2.24M  & 741 KB   &  830 ms   & 5.4 h    & 87.09\% \\
-EfficientNet-B0  &  7.16M  & 938 KB   &  940 ms   & 6.2 h    & 87.58\% \\
-ConvNeXt-T       & 27.83M  & 790 KB   & 2030 ms   & 13.3 h   & 84.94\% \\
+ResNet-34        & 21.29M  & 729\,KB    & 220 ms    & 1.5 h    & 89.71\% & 98.27\% \\
+MobileNetV2      &  2.24M  & 1{,}047\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
+EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & \textbf{89.96\%} & 98.45\% \\
+ConvNeXt-T       & \textbf{27.83M} & 985\,KB & 196 ms & 1.3 h  & 85.07\% & 97.30\% \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent As in Chapter~\ref{chap:se}, every row is a phase-3 IREE
-measurement. The ResNet-34 and MobileNet V2 rows have been re-measured
-on the verified XLA path in \S\ref{sec:r34_runit} and
-\S\ref{sec:mnv2_runit}.
+\noindent \textbf{Provenance.} All four rows are verified-XLA
+measurements on one RTX 4060 Ti, from \S\ref{sec:r34_runit},
+\S\ref{sec:mnv2_runit}, \S\ref{sec:enet_runit} and
+\S\ref{sec:convnext_runit}. Step time is the epoch wall-clock divided by
+the 295 batches in it, so it includes each epoch's validation pass.
 
 \begin{itemize}
-  \item \textbf{ConvNeXt-T is the slowest per step} (2030 ms vs
-    EnetB0's 940 ms) because depthwise $7 \times 7$ convs at the
-    early stages plus LayerNorm-over-channels touch every spatial
-    position twice per block. The MLIR is mid-pack at 790 KB ---
-    smaller than EnetB0 because there's no SE machinery, larger than
-    ResNet-34 because LayerScale and per-stage downsamples bulk up
-    the per-block emit.
-  \item \textbf{84.94\% is below EnetB0's 87.58\%} on the same
-    base recipe. Two things contribute: (a) ConvNeXt-T at 28M
-    params has 4$\times$ EnetB0's parameter count and our 9.5K
-    training images don't have the data scale to fill that
-    capacity without aug; (b) the ConvNeXt paper trains with the
-    full DeiT recipe (Mixup, CutMix, RandAugment, Random Erasing)
-    where the modernization actually lives. The Data Augmentation
-    section below layers those in one at a time --- with the right
-    knob, ConvNeXt-T's accuracy at this scale passes EnetB0.
-  \item \textbf{The architecture is fine, the recipe is the lever.}
-    The 84.94\% number we land here vs the paper's 82.1\% top-1
-    on ImageNet-1K is the same model getting different scores on
-    different datasets, not a code-correctness issue.
+  \item \textbf{The largest network in the column finishes last}, and by
+    a clear margin: $85.07\%$ against EfficientNet-B0's $89.96\%$, from
+    $6.9\times$ the parameters. Two things contribute. ConvNeXt-T carries
+    27.83M parameters against 9,469 training images, which is not the
+    data scale that capacity wants. And the recipe here is the shared
+    one, Adam at $10^{-3}$ with cosine and label smoothing, which is
+    deliberately \emph{not} the recipe ConvNeXt was designed around.
+  \item \textbf{That is the chapter's thesis arriving as a result rather
+    than a claim.} ConvNeXt's paper argues the modernization lives in the
+    training recipe, so a ConvNeXt run on somebody else's recipe should
+    underperform, and it does. \S\ref{sec:convnext_imagenet} is the
+    control: the same architecture, given the full DeiT pack and 300
+    epochs, reaches $81.10\%$ on ImageNet-1k and beats every other
+    network in this book. The architecture was never the variable.
+  \item \textbf{It is no longer the slowest per step.} At 196 ms
+    ConvNeXt-T sits under ResNet-34's 220 ms, which reverses the ordering
+    the phase-3 numbers showed, where ConvNeXt was slowest by $1.45\times$.
+    The depthwise $7 \times 7$ and the channel LayerNorms still touch
+    every spatial position twice per block, but that costs less than
+    ResNet-34's dense $3 \times 3$ stacks once both graphs go through the
+    same compiler.
+  \item \textbf{The MLIR is mid-pack at 985\,KB}, above ResNet-34's 729
+    and below MobileNetV2's 1,047 and EfficientNet-B0's 1,316. Block
+    count is not what separates them, since ConvNeXt's eighteen is more
+    than either. What separates them is what one block costs to emit:
+    ConvNeXt spends three convolutions and a single LayerNorm per block,
+    while an inverted residual spends three convolutions and three
+    BatchNorms, and an MBConv adds the squeeze-excitation pair on top of
+    that. One normalization per block instead of one per layer was item
+    seven on the modernization list, and it is visible in the file size.
 \end{itemize}
 
 \section{MLIR: Layer Scale}
 
 Layer scale is a per-channel learnable diagonal,
-$\mathrm{layerScale}(\gamma, x) = \gamma \odot x$ --- the simplest operator in
-this series. Its Jacobian is diagonal, so it is its own adjoint:
+$\mathrm{layerScale}(\gamma, x) = \gamma \odot x$, and it is the simplest
+operator in this series. Its Jacobian is diagonal, so it is its own adjoint:
 \texttt{layerScale\_has\_vjp} proves $\mathrm{back}(x, dy) = \gamma \odot dy$,
 the backward multiplying by the \emph{same} $\gamma$ the forward did. There is
-nothing to bridge past that identity --- the emitted graph is two
+nothing to bridge past that identity, so the emitted graph is two
 \texttt{multiply}s against one tensor:
 
 \begin{verbatim}
@@ -8149,25 +8267,25 @@ nothing to bridge past that identity --- the emitted graph is two
 \noindent The forward \texttt{multiply \%gls, \%pr} and the backward
 \texttt{multiply \%gls, \%dOut} are the same op against the same $\gamma$
 tensor: a diagonal map is its own transpose, so its VJP is itself. The
-identity skip is the residual fan-in of Chapter~\ref{chap:residual}; the
-surrounding GELU, LayerNorm, and convolution backwards reuse their bridges ---
-and, uniquely in this book, every one is unconditional (the only hypothesis
+identity skip is the residual fan-in of Chapter~\ref{chap:residual}. The
+surrounding GELU, LayerNorm, and convolution backwards reuse their bridges.
+Uniquely in this book, every one is unconditional (the only hypothesis
 anywhere is LayerNorm's $\epsilon > 0$). The full block is
 $\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
 \mathrm{gelu} \circ \mathrm{expand} \circ \mathrm{LN} \circ
 \mathrm{depthwise})$, composed by \texttt{convNextBlock\_has\_vjp}.
 
 \section{ImageNet recipe}
+\label{sec:convnext_imagenet}
 
 \imagenetphasenote
 
-ConvNeXt's architecture first reached this book through the phase-3
-IREE backend --- the Imagenette example earlier in this chapter. The
-phase-2 port wires the two ConvNeXt-specific layers
-(\texttt{.convNextStage},
-\texttt{.convNextDownsample}) into the JAX codegen; because that path
+ConvNeXt's architecture reached this book through the Imagenette
+example earlier in this chapter. The phase-2 port wires the two
+ConvNeXt-specific layers (\texttt{.convNextStage},
+\texttt{.convNextDownsample}) into the JAX codegen. Because that path
 differentiates with \texttt{jax.value\_and\_grad}, only the forward
-had to be written --- the backward comes for free. The spec mirrors
+had to be written, and the backward comes for free. The spec mirrors
 \texttt{jax/MainConvNeXtImagenet.lean}:
 
 \begin{verbatim}
@@ -8218,131 +8336,95 @@ def convNeXtTinyImagenetConfigFull : TrainConfig :=
 \end{verbatim}
 
 Unlike MobileNet and EfficientNet, ConvNeXt trains with AdamW and a
-small decoupled weight decay, not SGD --- the modernized-convnet
+small decoupled weight decay, not SGD. The modernized-convnet
 recipe is the architecture's whole thesis. \texttt{bf16Conv} pays off
 especially here: the $7\times7$ depthwise is $\sim2.3\times$ faster
 in bfloat16 (a large kernel has enough arithmetic for the tensor
 cores to bite, unlike the $3\times3$ depthwise, which is a wash), and
-the inverted-bottleneck $1\times1$s are matmuls that love it; the
+the inverted-bottleneck $1\times1$s are matmuls that love it. The
 channel LayerNorm and GELU stay in fp32.
 
-Every element of the paper recipe is now wired and on: the faithful
-patchify stem (\texttt{.convNextStem}: $4\times4$ stride-4 conv $\to$
-channel-LayerNorm, no BN/ReLU), \textbf{stochastic depth} (drop-path 0.1)
-and \textbf{EMA} (decay 0.9999) --- together ${<}5\%$ per epoch ---
-\textbf{decoupled weight decay that excludes the norm/bias/LayerScale
-1-D params} (\texttt{wdExcludeNormBias}, timm's \texttt{no\_weight\_decay}),
-and the \textbf{full DeiT-style augmentation pack}: Mixup $\alpha0.8$,
-CutMix $\alpha1.0$, Random Erasing $p0.25$, and geometric RandAugment
-($N{=}2$, $M{=}9$, \texttt{mstd0.5-inc1}). The peak LR is
-$2.5\mathrm{e}{-}4$ (the $4\mathrm{e}{-}3$@4096 official value linearly
-scaled to batch 256) over a 20-epoch warmup. No architectural or recipe
-deviation from the paper remains --- the only knob still short of the
-headline is the schedule: the run below is 80 epochs, the validation tier
-of an $80\to300$ ladder.
+Every element of the paper recipe is now wired and on:
 
-\textbf{Compute budget.} ConvNeXt-T is the heaviest of the three
-($28.6$M parameters --- the canonical count, verified by an
-init/forward/backward/save/reload round-trip). The run below used
+\begin{itemize}
+  \item the faithful patchify stem (\texttt{.convNextStem}:
+    $4\times4$ stride-4 conv $\to$ channel-LayerNorm, no BN/ReLU)
+  \item \textbf{stochastic depth} (drop-path 0.1) and \textbf{EMA}
+    (decay 0.9999), together ${<}5\%$ per epoch
+  \item \textbf{decoupled weight decay that excludes the
+    norm/bias/LayerScale 1-D params} (\texttt{wdExcludeNormBias},
+    timm's \texttt{no\_weight\_decay})
+  \item the \textbf{full DeiT-style augmentation pack}: Mixup
+    $\alpha0.8$, CutMix $\alpha1.0$, Random Erasing $p0.25$, and
+    geometric RandAugment ($N{=}2$, $M{=}9$, \texttt{mstd0.5-inc1})
+\end{itemize}
+
+\noindent The peak LR is $2.5\mathrm{e}{-}4$ (the
+$4\mathrm{e}{-}3$@4096 official value linearly scaled to batch 256)
+over a 20-epoch warmup. No architectural or recipe deviation from the
+paper remains, and the schedule is no longer short of it either. The
+run below is the full 300-epoch tier.
+
+\textbf{Compute budget.} ConvNeXt-T is the heaviest of the three at
+$28.6$M parameters, the canonical count, verified by an
+init/forward/backward/save/reload round-trip. The run below used
 \emph{four} of the six RTX 4060 Ti (CUDA, bf16, batch 256 = 4$\times$64):
 after the input-pipeline pass (device-side prefetch double-buffering, so
 the host loop no longer blocks on each step's host-to-device copy)
 steady-state throughput is $\sim$177\,ms per step, about $14.9$ minutes
-per epoch --- the most expensive per-epoch of any net in this book,
+per epoch. That is the most expensive per-epoch of any net in this book,
 driven by the $7\times7$ depthwise and the channel LayerNorms. Being
 compute-bound, ConvNeXt is one of only two nets that still scales to six
 GPUs ($\sim$136\,ms/step, $\sim$1.3$\times$) rather than saturating the
-host loop the way the lighter nets do; we ran it on four anyway, trading
+host loop the way the lighter nets do. We ran it on four anyway, trading
 $\sim$23\% throughput for thermal headroom and staying off the two
 AER-prone cards (idx 1, 5) so the run could go unattended. A
-\textbf{thermal duty cycle} --- a 30-minute cooldown after epochs 30 and
-60, each resuming bit-for-bit from a full-state checkpoint (params $+$
-optimizer $+$ EMA $+$ step, so the cosine schedule and Adam moments are
-untouched) --- held the box stable start to finish with zero AER kills.
+\textbf{thermal duty cycle} held the box stable start to finish with
+zero AER kills: nine 30-minute cooldowns, each resuming bit-for-bit from
+a full-state checkpoint (params $+$ optimizer $+$ EMA $+$ step, so the
+cosine schedule and Adam moments are untouched).
 
 \begin{center}
 \begin{tabular}{l l r r r r}
 \hline
 GPU & Epochs & Per epoch & Wall-clock & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti & 80 & $\sim$14.9 min & $\sim$20 hr$^{\dagger}$ & $\mathbf{78.13\%}$ & $\mathbf{94.05\%}$ \\
-4$\times$ 4060 Ti & 300 & $\sim$14.9 min & $\sim$75 hr$^{\ddagger}$ & $\mathbf{81.10\%}$ & $\mathbf{95.37\%}$ \\
+4$\times$ 4060 Ti & 300 & $\sim$14.9 min & $\sim$75 hr$^{\dagger}$ & $\mathbf{81.10\%}$ & $\mathbf{95.37\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent ($^{\dagger}$CUDA, bf16; $\sim$20\,hr pure training ---
-$\sim$21\,hr actual wall-clock (measured $19{:}35\to16{:}37$, $21$\,h
-$01$\,m) including the two 30-minute thermal rests. $^{\ddagger}$The
-300-epoch run measured $\sim$75\,hr pure training / $\sim$80\,hr actual
-wall-clock across nine thermal rests plus one benign watchdog restart --- a
-corrected CPU-cache event mis-read as a PCIe fault, with no real hardware
-fault the entire run.)
-The 80-epoch run reached $\mathbf{78.13\%}$ top-1 / $\mathbf{94.05\%}$
-top-5 on the held-out validation pass --- the strongest result in this
-book's sweep by a widening margin, ahead of EfficientNet-B0 ($72.3\%$)
-and ResNet-34 ($72.1\%$). It also clears the prior base-augmentation
-80-epoch run ($75.93\%$) by $+2.2\%$: the full DeiT pack, weight-decay
-masking, and 20-epoch warmup are now all in, and the only remaining gap
-to ConvNeXt-T's $\sim$82\% headline is the 300-epoch schedule, not the
-architecture or the recipe. The validation curve tells the augmentation
-story directly --- a deliberately slow start (Mixup and CutMix blend
-labels, so the net under-trains for the first $\sim$20 epochs, compounded
-by the EMA shadow lagging the live weights), then a climb that, unlike
-the base-augmentation run, never plateaus:
+\noindent ($^{\dagger}$CUDA, bf16. $\sim$75\,hr pure training and
+$\sim$80\,hr actual wall-clock across nine thermal rests plus one benign
+watchdog restart, a corrected CPU-cache event mis-read as a PCIe fault,
+with no real hardware fault the entire run.)
 
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=81, ymin=0, ymax=95,
-    xtick={0,10,20,30,40,50,60,70,80}, ytick={20,40,60,80},
-    legend pos=south east, legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small}, label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,0.13) (2,0.38) (3,0.67) (4,0.99) (5,1.45) (6,2.26) (7,3.45) (8,5.36) (9,8.15) (10,11.86) (11,16.05) (12,20.82) (13,26.20) (14,31.47) (15,36.63) (16,41.00) (17,44.94) (18,48.19) (19,51.24) (20,54.24) (21,56.90) (22,59.44) (23,61.52) (24,63.14) (25,64.57) (26,65.83) (27,66.82) (28,67.67) (29,68.29) (30,69.01) (31,69.75) (32,70.27) (33,70.76) (34,71.16) (35,71.68) (36,72.09) (37,72.46) (38,72.81) (39,73.18) (40,73.55) (41,73.77) (42,74.02) (43,74.27) (44,74.46) (45,74.80) (46,75.08) (47,75.24) (48,75.40) (49,75.58) (50,75.79) (51,76.02) (52,76.24) (53,76.34) (54,76.45) (55,76.53) (56,76.69) (57,76.84) (58,77.02) (59,77.20) (60,77.15) (61,77.27) (62,77.43) (63,77.45) (64,77.52) (65,77.60) (66,77.62) (67,77.65) (68,77.72) (69,77.84) (70,77.97) (71,78.02) (72,78.05) (73,78.06) (74,78.14) (75,78.10) (76,78.15) (77,78.15) (78,78.15) (79,78.13) (80,78.13)
-};
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,0.56) (2,1.60) (3,2.62) (4,3.68) (5,5.20) (6,7.23) (7,10.34) (8,15.17) (9,21.49) (10,28.01) (11,34.89) (12,42.25) (13,49.65) (14,56.26) (15,61.70) (16,66.21) (17,69.91) (18,73.29) (19,76.04) (20,78.37) (21,80.46) (22,82.37) (23,83.90) (24,85.14) (25,86.14) (26,86.98) (27,87.60) (28,88.16) (29,88.59) (30,89.00) (31,89.39) (32,89.70) (33,90.05) (34,90.31) (35,90.52) (36,90.79) (37,91.03) (38,91.23) (39,91.43) (40,91.62) (41,91.77) (42,91.94) (43,92.01) (44,92.12) (45,92.20) (46,92.30) (47,92.47) (48,92.54) (49,92.64) (50,92.74) (51,92.82) (52,92.91) (53,92.99) (54,93.14) (55,93.18) (56,93.27) (57,93.34) (58,93.35) (59,93.45) (60,93.52) (61,93.58) (62,93.60) (63,93.66) (64,93.75) (65,93.78) (66,93.82) (67,93.87) (68,93.89) (69,93.94) (70,93.97) (71,93.95) (72,94.01) (73,94.02) (74,94.03) (75,94.04) (76,94.03) (77,94.04) (78,94.05) (79,94.05) (80,94.05)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\end{center}
+The full 300-epoch tier (\texttt{convnext-tiny-imagenet full},
+\texttt{convNeXtTinyImagenetConfigFull}) reached $\mathbf{81.10\%}$ top-1
+and $\mathbf{95.37\%}$ top-5 on the held-out validation pass. That is the
+strongest result in this book's sweep by a wide margin, ahead of
+EfficientNet-B0 ($72.3\%$) and ResNet-34 ($72.1\%$), and it lands within
+$\sim$1\% of ConvNeXt-T's $82.1\%$ paper headline from a from-scratch
+Lean$\to$JAX-codegen reimplementation. The residual $\sim$1\% is the
+usual EMA-eval / test-crop / augmentation-detail territory, not the
+architecture or the recipe.
 
-\noindent ConvNeXt-T / ImageNet-1k validation accuracy per epoch
-(bf16, 4$\times$ 4060 Ti, full DeiT augmentation pack). The two
-30-minute thermal rests (after epochs 30 and 60) are invisible here:
-each resumes bit-for-bit, so accuracy is continuous across them.
+The validation curve tells the augmentation story directly: a
+deliberately slow start, since Mixup and CutMix blend labels, so the net
+under-trains for the first $\sim$20 epochs, compounded by the EMA shadow
+lagging the live weights. Then it climbs for the rest of the schedule
+without an overfitting turn, which is what the heavy-regularization
+regime predicts and what makes the long schedule worth buying.
 
 \textbf{Learning-rate robustness.} The full pack was also a test of
 whether ConvNeXt's AdamW recipe is as learning-rate-robust as
 EfficientNet's RMSProp (Chapter~\ref{chap:se}) proved fragile. It is: at
 the $2.5\mathrm{e}{-}4$ peak with global-norm gradient clipping at $1.0$,
-top-1 climbed monotonically across all 80 epochs with no erosion or
-divergence --- the opposite of B0's RMSProp blow-up. AdamW's bounded,
+top-1 climbed across the whole 300-epoch schedule with no erosion and no
+divergence, the opposite of B0's RMSProp blow-up. AdamW's bounded,
 decoupled step plus the grad-clip makes the peak LR a non-event, which is
 what lets the heavy augmentation run to schedule instead of destabilizing
 it early.
-
-\textbf{300-epoch canonical run --- done.} The full tier
-(\texttt{convnext-tiny-imagenet full}, \texttt{convNeXtTinyImagenetConfigFull}:
-identical config to the $78.13\%$ run above, only \texttt{epochs := 300})
-reached $\mathbf{81.10\%}$ top-1 / $\mathbf{95.37\%}$ top-5 --- $+2.97\%$
-top-1 over the 80-epoch run, and within $\sim$1\% of ConvNeXt-T's $82.1\%$
-paper headline, from a from-scratch Lean$\to$JAX-codegen reimplementation.
-The 80-epoch curve's refusal to plateau was the right tell: the extra 220
-epochs of cosine decay converted directly into accuracy rather than
-overfitting, exactly as the heavy-augmentation regime predicts. The
-residual $\sim$1\% is the usual EMA-eval / test-crop / augmentation-detail
-territory, not the architecture or the recipe. Wall-clock $\sim$80\,hr on
-the four clean GPUs across nine duty-cycle rests, with zero real hardware
-faults the entire run.
 
 \begin{center}
 \begin{tikzpicture}
@@ -8371,9 +8453,92 @@ faults the entire run.
 \noindent ConvNeXt-T / ImageNet-1k validation accuracy per epoch over the
 full 300-epoch schedule (bf16, 4$\times$ 4060 Ti). Top-1 climbs to
 $81.10\%$ and top-5 to $95.37\%$ with no late-schedule plateau or
-overfitting dip; the nine 30-minute thermal rests are invisible, each
-resuming bit-for-bit. Against the 80-epoch curve above, the extra 220
-epochs of cosine decay are pure gain.
+overfitting dip. The nine 30-minute thermal rests are invisible, each
+resuming bit-for-bit.
+
+\subsection*{Phase 4: the verified trainer}
+\label{sec:convnext_phase4}
+
+Everything above this point is the phase-2 Lean$\to$JAX trainer. The
+phase-4 peer, which trains the same network through the proof-rendered
+StableHLO that \S\ref{sec:convnext_runit} ran at Imagenette scale,
+exists and builds. It is
+\texttt{apps/imagenette/MainConvNeXtImagenet.lean}, built as
+\texttt{lake build convnext-imagenet-verified}:
+
+\begin{verbatim}
+-- Identical backbone, 1000 classes instead of 10.
+def convnextImagenetVerified : VerifiedNetSpec where
+  name       := "ConvNeXt-T (ImageNet-1k)"
+  slug       := "convnextin"
+  nClasses   := 1000
+  data       := .imagenet
+  shimScript := "generated_convnext_tiny_imagenet_shim.py"
+  layers     := [ ... the Imagenette stack, 1000-class head ... ]
+
+-- 300 epochs, because that is the schedule the phase-2 number
+-- above was measured on. Batch is 32 PER DEVICE.
+def convnextImagenetConfig : VerifiedConfig where
+  epochs    := 300
+  batchSize := 32
+\end{verbatim}
+
+\noindent The head is the only parameter shape that moves, from
+$768 \times 10$ to $768 \times 1000$, which takes the count from
+27,826,282 to \textbf{28,587,592}. Three kernel \texttt{\#guard}s hold
+the two specs together at everything else: equal
+\texttt{toSpecs.size}, equal \texttt{toSpecs.pop.pop}, and a
+\texttt{back!} of \texttt{(\#[1000], 2)}.
+
+\medskip\noindent\textbf{The collectives are gated by two gates, and
+they prove different things.}
+\texttt{tests/TestConvNeXtDpCheck.lean} pins the data-parallel forward
+bit-exactly against its single-device peer. That gate hands both
+replicas the same rows, so it is structurally blind to a shard-offset
+bug, and \texttt{tests/TestConvNeXtShardCheck.lean} closes exactly that
+hole by giving the replicas genuinely different data. ConvNeXt is where
+the shard check was written before being generalized to the other nets,
+so this is the one chapter where both gates are native rather than
+inherited.
+
+\medskip\noindent\textbf{Four of the paper's six extra knobs are
+rendered, and one combination is missing.} Weight-decay exclusion, grad
+clipping and stochastic depth are render variants, spelled \texttt{wx},
+\texttt{clip} and \texttt{drop}, and
+\texttt{convnextin\_adamdpwxclipdrop} carries all three at once on top
+of AdamW and the four-way all-reduce. EMA is a render variant too
+(\texttt{convnextin\_emadp}), but no committed artifact combines it with
+the other three, so there is no single graph carrying the whole
+regularizer stack. Mixup and CutMix never enter the graph at all,
+because they are data-side and ride the shim.
+
+\medskip\noindent\textbf{What it has not done is run.} No phase-4
+ImageNet result exists for this network, which is why every accuracy
+above comes from phase 2. What is measured is the throughput, and the
+schedule follows from it:
+
+\begin{center}
+\begin{tabular}{l r r r r}
+\hline
+Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
+\hline
+4$\times$ 4060 Ti (CUDA)  & 223 & 37.2 & $\sim$186 h (7.8 d) & TBD \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent That is 10,009 steps per epoch, against the reference's 5,004.
+\textbf{Do not read 37.2 minutes against the phase-2 rows' 14.9 as an
+architecture result}, because two things differ at once and neither is
+the network. The verified path is fp32 throughout, with no bf16 artifact
+anywhere in \texttt{verified\_mlir/}, while every phase-2 row in this
+section was measured in bf16. And the verified render's batch is 32 per
+device, so four replicas give a global 128 against phase 2's 256. The
+batch is 32 because \texttt{cBS} is still a private constant in the
+renderer while \texttt{nClasses} became a parameter, which is a refactor
+rather than a limit.
+
+\noindent\textbf{[TODO: run \texttt{convnext-imagenet-verified}.]}
 
 \subsection*{What the ConvNeXt recipe changes from the 2018 recipe}
 
@@ -8381,14 +8546,15 @@ The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
 \emph{2018-era} recipe: the original paper's SGD-with-momentum plus
 the ``bag of tricks'' polish (cosine schedule, warmup, label
 smoothing, random-resized-crop). The config above is the \emph{2022}
-ConvNeXt recipe --- DeiT's transformer-training playbook applied to a
+ConvNeXt recipe, DeiT's transformer-training playbook applied to a
 convnet. Where Chapter~\ref{chap:residual}'s RSB-A3 side quest showed
 the 2018$\to$2021 jump on a \emph{fixed} ResNet, this table shows the
-2018$\to$2022 jump with the block modernized in step --- and since
+2018$\to$2022 jump with the block modernized in step. Since
 ``the recipe is the thesis'' is this architecture's whole argument,
-the diff below is the chapter in table form. The \texttt{.train}
-entry point is identical; every row is a one-line \texttt{NetSpec} or
-\texttt{TrainConfig} change:
+the diff below is the chapter in table form. The
+\texttt{trainAdamSched} entry point is identical in both columns, and
+every row is a one-line change to the \texttt{VerifiedNetSpec}, the
+\texttt{VerifiedConfig}, or the arguments beside them:
 
 \begin{center}
 \begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
@@ -8399,7 +8565,7 @@ Backbone      & basic block, 21.8\,M   & ConvNeXt block, 28.6\,M       & BN+ReLU
 Optimizer     & SGD + momentum $0.9$   & AdamW                         & decoupled decay + per-parameter step scale; LR-robust where B0's RMSProp proved fragile \\
 Peak LR       & $0.1$                  & $2.5\mathrm{e}{-4}$           & linearly scaled from the official $4\mathrm{e}{-3}$@4096 --- AdamW's scale, not comparable to SGD's $0.1$ \\
 Warmup        & 5 epochs               & 20 epochs                     & heavy augmentation + adaptive optimizer want a long, gentle ramp \\
-Epochs        & 90                     & 300 (80 = validation tier)    & heavy regularization converts the extra schedule straight into accuracy ($+2.97$ top-1 from 80$\to$300) \\
+Epochs        & 90                     & 300                           & heavy regularization needs a long schedule to pay, and converts it straight into accuracy rather than into overfitting \\
 Loss          & softmax cross-entropy  & CE over soft targets          & unlike A3's BCE switch, ConvNeXt keeps CE --- the softening comes from the Mixup/CutMix labels \\
 Weight decay  & $10^{-4}$, all params  & $0.05$, skip 1-D params       & $500\times$ stronger, never on norm/bias/LayerScale (timm's \texttt{no\_weight\_decay}) \\
 Augmentation  & RRC + hflip            & full DeiT pack                & RandAugment + Mixup + CutMix + Random Erasing --- where the modernization actually lives \\
@@ -8423,9 +8589,9 @@ Random Erasing (Zhong et al.\ 2017,
 RandAugment (Cubuk et al.\ 2019,
 \href{https://arxiv.org/abs/1909.13719}{arXiv:1909.13719}). All four
 are implemented as data-only kernels that mutate the input tensor
-before the graph sees it --- tier 1 in our codegen scope, no MLIR
+before the graph sees it, tier 1 in our codegen scope, no MLIR
 plumbing required. Mixup and CutMix route through a soft-label
-train-step variant since they produce fractional labels; Random
+train-step variant since they produce fractional labels. Random
 Erasing and RandAugment leave labels alone.
 
 The through-line is the same \emph{regularize harder, train bigger}

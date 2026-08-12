@@ -38,8 +38,16 @@ def runConvNeXtImagenet (argv : List String) : IO Unit := do
                           -- ⚠ this run is at global 128, so the linear-scaling rule would put it
                           -- near 1.25e-4; 2.5e-4 is kept to match the reference knob and left as
                           -- the thing to tune first if it under- or over-steps.
+  -- ⚠ `LEAN_MLIR_EPOCHS` SETS the schedule where `LEAN_MLIR_MAX_EPOCHS` only CAPS it
+  -- (`min n cfg.epochs`). `totalSteps := cfg.epochs * nb / accK` is what the cosine anneals over,
+  -- so EPOCHS=80 is a complete 80-epoch experiment while MAX_EPOCHS=80 is a PREFIX of the committed
+  -- 300-epoch decay stopped with the LR high. Without this knob the committed count is also
+  -- unprobeable: at `epochs := 300` a short smoke run cannot be asked for at all. Spelled as in
+  -- `MainResnet50Imagenet.lean`.
+  -- ⚠ Clear checkpoints when switching schedules; resuming across them fuses two LR curves silently.
+  let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD convnextImagenetConfig.epochs
   convnextImagenetVerified.toNet.trainAdamSched
-    { convnextImagenetConfig with batchSize := bs }
+    { convnextImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 20 variant
     -- warmup 20 epochs, not 5: `convNeXtTinyImagenetConfig.warmupEpochs := 20` is a ConvNeXt-paper
     -- value and differs from every other net in this repo.

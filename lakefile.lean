@@ -1825,10 +1825,18 @@ lean_exe «mobilenetv2-adam-tie» where
 
     **ViT-grade, not EfficientNet-grade**: ConvNeXt has no BatchNorm, so there is no `bnstat`
     forward-only region and `%loss` is the only direct read of the forward — which is why it is
-    gated rather than reported. ireeLink, because `convnext-verified-adam` is an IREE binary. -/
+    gated rather than reported.
+
+    ⚠ This said "ireeLink, because `convnext-verified-adam` is an IREE binary" until 2026-08-12,
+    and BOTH halves were wrong. The trainer is on `lowererLink` and defaults to XLA (line ~2120),
+    and the `ireeLink` here was **inert**: `ffi/lowerer.c` dlopens the shim `$LEAN_MLIR_LOWERER`
+    names, so link args stopped selecting the backend. Settled by RUNNING it — the ireeLink build
+    printed `[pjrt_ffi] XLA backend: PJRT 0.112` and tied on XLA. Moved to `lowererLink` so the
+    line says what happens. ▶ `efficientnet-adam-tie` carries the identical stale docstring
+    (`chapter_makeover.md` §4a-quinquies "Open"); the same one-command check settles it. -/
 lean_exe «convnext-adam-tie» where
   root := `tests.TestConvNeXtAdamTie
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 /-- §2d.1 gate on the bs256 re-render: feed it 8 identical copies of one bs32 batch. Batch-BN
     statistics and the mean-CE cotangent are then exactly the bs32 render's, so all 68M returned
