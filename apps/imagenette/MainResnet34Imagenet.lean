@@ -30,12 +30,24 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 gone from the target name because it no longer distinguishes anything.
 -/
 
-/-- 30 epochs at batch 256 — the `resnet34ImagenetConfigShort` tier on the JAX side, i.e. the
-    validation subrun rather than the 90-epoch paper recipe. At the measured bs256 rate that is
-    ~28 h on one 7900 XTX (~17 h on two), against the reference's ~5 h for the same tier on 4 CUDA
-    cards at bf16. 5-epoch warmup matches the reference; the schedule is cosine as everywhere here. -/
+/-- **90 epochs at batch 256 — He et al.'s own schedule.** Raised from 30 on 2026-08-12: 30 was
+    the validation subrun, and now that `LEAN_MLIR_EPOCHS` exists the paper tier is the honest
+    default and the short tier is the opt-in. ~27.9 h on four CUDA cards at the measured
+    18.6 min/epoch. 5-epoch warmup matches the reference; cosine as everywhere here.
+
+    ⚠ **`epochs` is the SCHEDULE, not just the loop bound.** `totalSteps := cfg.epochs * nb / accK`
+    is what the cosine anneals over, so this number changes the learning-rate curve and not only
+    how long the run lasts:
+      `LEAN_MLIR_EPOCHS=30`     → a complete, fully-annealed 30-epoch experiment.
+      `LEAN_MLIR_MAX_EPOCHS=30` → epochs 0..29 of the 90-epoch cosine, checkpointed at 30, which
+                                  is a PREFIX of a longer run and not comparable to the above.
+    The completed 30-epoch result in the book (`runs/r34in_verified_30ep_2026-08-05/`) is the
+    former: it was rendered and scheduled at 30 and annealed fully.
+
+    ⚠ Delete `.lake/build/resnet34in_*_ckpt_xla.bin{,.epoch}` before switching schedules. Resuming
+    a 30-epoch checkpoint into a 90-epoch cosine silently fuses two learning-rate curves. -/
 def resnet34ImagenetConfig : VerifiedConfig where
-  epochs    := 30
+  epochs    := 90
   batchSize := 256
 
 /-- Entry point. Defaults to the `mom256` variant — the ImageNet artifact — rather than `adam`,

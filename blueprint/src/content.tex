@@ -5022,18 +5022,14 @@ the leave-one-out chain.
 \imagenetphasenote
 
 The Imagenette runs above all trained on $\sim$9.5K images for 80
-epochs. This section is the same 21.8M-parameter network on 1.28M
-images and 1000 classes, and \textbf{it reaches $\mathbf{70.74\%}$
-top-1 / $\mathbf{90.14\%}$ top-5 in 30 epochs, on the verified path},
-which is the number to take away from this chapter. The architecture is
-unchanged. Only the dataset, the output head width, and the training
-schedule differ.
+epochs. This section is the same 21.8M-parameter network on 1.28M images
+and 1000 classes, trained on the paper's 90-epoch schedule. The
+architecture is unchanged. Only the dataset, the output head width, and
+the training schedule differ.
 
-Thirty epochs is a deliberate trim of the paper's ninety, bought at
-roughly a point of top-1 for a third of the compute, and it is the tier
-this book runs because it is the one that fits on the hardware this book
-is written on. The 90-epoch schedule appears later in the section as a
-reference point, measured on the JAX path.
+Ninety epochs at global batch 256 is what He et al.\ ran and what every
+number in this section is aiming at, on both the verified path and the
+JAX reference. It costs about $28$ hours on the four-card box.
 
 Here is the trainer, and it is the real one:
 
@@ -5065,9 +5061,9 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
 #guard resnet34ImagenetVerified.toSpecs.pop.pop == resnet34Verified.toSpecs.pop.pop
 #guard resnet34ImagenetVerified.toSpecs.back!  == (#[1000], 2)
 
--- 2. 30 epochs at batch 256.
+-- 2. 90 epochs at batch 256 — the paper schedule.
 def resnet34ImagenetConfig : VerifiedConfig where
-  epochs    := 30
+  epochs    := 90
   batchSize := 256
 
 -- 3. The entry point. Heavy-ball momentum, cosine with a 5-epoch warmup
@@ -5132,14 +5128,14 @@ param groups) is written via the same \texttt{params\_to\_file} emit every
 other path in this book consumes, so weights move between implementations
 byte-for-byte with no conversion step.
 
-The recipe trims the paper's 90 epochs to 30 (SGD with momentum
-$0.9$, batch 256, cosine LR with a 5-epoch warmup from peak $0.1$,
-label smoothing $0.1$, Inception-style random-resized-crop
-(sampling $8$--$100\%$ of the image area at a $\frac{3}{4}$--$\frac{4}{3}$
-aspect ratio, then resizing to $224\times224$) plus a horizontal
-flip, $\ell_2$ weight decay $10^{-4}$), a deliberate trade for
-roughly $95\%$ of the paper's $\sim$73\% headline at $\sim$1/3 the
-compute.
+The recipe in full: SGD with momentum $0.9$ at batch 256, cosine LR with a
+5-epoch warmup from peak $0.1$, label smoothing $0.1$, Inception-style
+random-resized-crop (sampling $8$--$100\%$ of the image area at a
+$\frac{3}{4}$--$\frac{4}{3}$ aspect ratio, then resizing to
+$224\times224$) plus a horizontal flip, and $\ell_2$ weight decay
+$10^{-4}$. Every one of those is either the original paper or the ``bag of
+tricks'' polish that became standard after it, and
+\S\ref{sec:r50_a3_vs_2018} is the table that says which is which.
 
 \textbf{bf16 and the full 90-epoch run.} Bf16 mixed
 precision roughly halves the wait. On a second box (four usable
@@ -5263,22 +5259,23 @@ two sets of weights scored \textbf{17{,}312} and \textbf{17{,}313} correct of
 phrasing is \emph{one architecture, two independent lowerings, agreeing}, never
 ``proven at ImageNet scale''.
 
-\medskip\noindent The 90-epoch row is the paper schedule and is a
-\texttt{[TODO]}. It runs with:
+\medskip\noindent The 90-epoch row is the paper schedule, is the driver's
+default, and is a \texttt{[TODO]}. It runs with:
 
 \begin{verbatim}
 CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   SHIM_WORKERS=8 PJRT_FFI_RESIDENT=1 \
-  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 LEAN_MLIR_EPOCHS=90 \
+  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 \
   .lake/build/bin/resnet34-imagenet-verified data
 \end{verbatim}
 
-\noindent \texttt{LEAN\_MLIR\_EPOCHS} sets the schedule rather than capping
-it, which matters because the cosine anneals over \texttt{cfg.epochs}: capping
-a 30-epoch config at 90 would run 30 epochs, while setting 90 re-shapes the
-decay. The 7900 XTX row is blank rather than pending, because a verified trainer
-does not currently survive ROCm (11 deaths in 11 attempts on gfx1100 against 6
-clean in 6 on CUDA). The repro is in
+\noindent The completed 30-epoch row was its own fully-annealed schedule, not
+the first third of this one, which is a distinction worth keeping straight:
+\texttt{LEAN\_MLIR\_EPOCHS=30} re-shapes the cosine to finish at 30, while
+\texttt{LEAN\_MLIR\_MAX\_EPOCHS=30} would stop a 90-epoch decay a third of
+the way down and leave the learning rate high. The 7900 XTX row is blank rather
+than pending, because a verified trainer does not currently survive ROCm (11
+deaths in 11 attempts on gfx1100 against 6 clean in 6 on CUDA). The repro is in
 \texttt{upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/}.
 
 \prosesection{A reasonable stopping point}
@@ -5473,6 +5470,7 @@ of expected effect:
 \end{itemize}
 
 \subsection*{What A3 changes from the 2018 recipe}
+\label{sec:r50_a3_vs_2018}
 
 The 2018-recipe row above is the original paper's SGD-with-momentum plus the
 ``bag of tricks'' polish (cosine schedule, warmup, label smoothing,
