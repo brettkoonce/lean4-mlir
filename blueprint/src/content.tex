@@ -4933,48 +4933,85 @@ the leave-one-out chain.
 \imagenetphasenote
 
 The Imagenette runs above all trained on $\sim$9.5K images for 80
-epochs. The headline ResNet result, 21.8M parameters reaching
-74.4\% top-1 on full 1000-class ImageNet, comes from a different
-recipe: 1.28M training images, 90 epochs, paper-recipe SGD with
-momentum. The architecture is unchanged, and only the dataset, the
-output head width, and the training schedule differ. Here's what
-the loop looks like:
+epochs. This section is the same 21.8M-parameter network on 1.28M
+images and 1000 classes, and \textbf{it reaches $\mathbf{70.74\%}$
+top-1 / $\mathbf{90.14\%}$ top-5 in 30 epochs, on the verified path},
+which is the number to take away from this chapter. The architecture is
+unchanged. Only the dataset, the output head width, and the training
+schedule differ.
+
+Thirty epochs is a deliberate trim of the paper's ninety, bought at
+roughly a point of top-1 for a third of the compute, and it is the tier
+this book runs because it is the one that fits on the hardware this book
+is written on. The 90-epoch schedule appears later in the section as a
+reference point, measured on the JAX path.
+
+Here is the trainer, and it is the real one:
 
 \begin{verbatim}
--- 1. Same backbone, 1000 classes instead of 10.
-def resnet34Imagenet : NetSpec where
-  name   := "ResNet-34 (ImageNet)"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 64 7 2 .same,
-    .maxPool 3 2,
-    .residualBlock  64  64 3 1,
-    .residualBlock  64 128 4 2,
-    .residualBlock 128 256 6 2,
-    .residualBlock 256 512 3 2,
+-- 1. Same backbone as the Imagenette net, 1000 classes instead of 10.
+def resnet34ImagenetVerified : VerifiedNetSpec where
+  name     := "ResNet-34 (ImageNet-1k)"
+  slug     := "resnet34in"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  shimScript := "generated_resnet34_imagenet_shim.py"
+  layers   := [
+    .convBnNB 3 64 7 2,          -- 7x7-s2 stem -> BN -> relu    224->112
+    .maxPool 3 2,                -- He et al. 3x3-s2, OVERLAPPING 112->56
+    .residualStage  64  64 3 1,  -- stage1: 3 identity            @56
+    .residualStage  64 128 4 2,  -- stage2: downsample + 3        56->28
+    .residualStage 128 256 6 2,  -- stage3: downsample + 5        28->14
+    .residualStage 256 512 3 2,  -- stage4: downsample + 2        14->7
     .globalAvgPool,
-    .dense 512 1000 .identity      -- 1000-class head
-  ]
+    .dense 512 1000 ]
+  bnChannels := #[64, 64,64, 64,64, ... ]   -- all 36, in forward order
 
--- 2. Paper recipe (SGD + momentum) plus modern polish.
-def resnet34ImagenetConfig : TrainConfig where
-  learningRate := 0.1
-  batchSize    := 256
-  epochs       := 90
-  useAdam      := false             -- paper: SGD + momentum
-  momentum     := 0.9
-  weightDecay  := 1e-4
-  cosineDecay  := true              -- replaces paper's step decay at ep 30/60
-  warmupEpochs := 5                 -- modern addition
-  augment      := true              -- random-resized-crop + horizontal flip
-  labelSmoothing := 0.1             -- modern addition
+-- The head is the ONLY thing that may differ from the 10-class net.
+-- Anything else moving means the spec drifted from its Imagenette twin.
+#guard resnet34ImagenetVerified.toSpecs.size == resnet34Verified.toSpecs.size
+#guard resnet34ImagenetVerified.toSpecs.pop.pop == resnet34Verified.toSpecs.pop.pop
+#guard resnet34ImagenetVerified.toSpecs.back!  == (#[1000], 2)
 
--- 3. Same .train entry point as every other chapter.
-def main (args : List String) : IO Unit :=
-  resnet34Imagenet.train resnet34ImagenetConfig
-    (args.head?.getD "data/imagenet") .imagenet
+-- 2. 30 epochs at batch 256.
+def resnet34ImagenetConfig : VerifiedConfig where
+  epochs    := 30
+  batchSize := 256
+
+-- 3. The entry point. Heavy-ball momentum, cosine with a 5-epoch warmup
+--    at peak 0.1, weight decay 1e-4, label smoothing 0.1.
+def main (argv : List String) : IO Unit :=
+  resnet34ImagenetVerified.toNet.trainAdamSched
+    resnet34ImagenetConfig (argv.head?.getD "data") 0.1 0.9 0.999 5 "mom256"
 \end{verbatim}
+
+\noindent That is \texttt{apps/imagenette/MainResnet34Imagenet.lean}, built as
+\texttt{lake build resnet34-imagenet-verified}, and it is the program the
+numbers in \S\ref{sec:r34_phase4} came from. Three things in it are worth
+pulling out, because they are what makes the listing a claim rather than a
+description.
+
+\textbf{The \texttt{slug} is the artifact.} \texttt{resnet34in} names
+\texttt{verified\_mlir/resnet34in\_mom256\_train\_step.mlir}, which is
+\texttt{pretty(provenGraph)} off the same renderer every earlier chapter used.
+Scaling to ImageNet needed nothing new in it. \texttt{nClasses}, the batch, the
+optimizer and the slug are all ordinary parameters, so the ImageNet artifacts
+are three \texttt{\#eval}s of machinery that was already proved. What had to be
+built was the data path, not the compiler.
+
+\textbf{The \texttt{\#guard}s pin it to the Imagenette net.} The 1000-class
+spec must be the 10-class one with a different head, and the three guards fail
+the build if any other parameter shape moves. That is what licenses reading the
+Imagenette chapter's theorems as being about this network's body.
+
+\textbf{The \texttt{shimScript} is per-net and load-bearing.} It names this
+net's own generated augmentation shim. Every net used to stream ResNet-34's,
+which meant an augmentation mismatch could hide inside a fair-looking
+comparison. Here it is the same shim the JAX reference consumes, which is what
+makes the two a matched pair rather than two separate stories.
 
 \textbf{This now runs on the verified path.} When this chapter was
 first written it did not. ImageNet needs a C-side streaming reader for
