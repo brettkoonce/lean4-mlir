@@ -32,6 +32,12 @@ EXES=(
   # `shimScript` to this name, so without a row here the spec points at a file nothing
   # writes — `spawnShim` REFUSES rather than falling back, which is the whole §0.9 design.
   "resnet50-imagenet:default:generated_resnet50_imagenet_shim.py"
+  # ⭐ MNv4 joined 2026-08-12 with `mnv4ImagenetVerified`. ⚠ The exe here is the faithful
+  # **Conv-M** reference, while the verified spec that names this shim is **Conv-S** — deliberate,
+  # and safe, because a shim carries AUGMENTED BATCHES and not weights. What crosses over is the
+  # MNv4-family data pipeline (RandAugment, the 224² crop), which both sizes share. Nothing about
+  # Conv-M's block table reaches the verified net through it.
+  "mobilenet-v4-imagenet:default:generated_mobilenet_v4_imagenet_shim.py"
   # ⭐ RSB-A3's 160²-train shim, for `resnet50Imagenet160Verified` (2026-08-06).
   # `short` IS timm's A3: `trainRes := 160`, `testCropRatio := 0.95`, RandAugment m6, mixup/cutmix.
   # ⚠ ONE shim, TWO widths — `Jax/Codegen.lean` applies `trainRes` only on the TRAIN path, while

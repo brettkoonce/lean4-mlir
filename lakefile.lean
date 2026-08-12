@@ -1522,6 +1522,20 @@ lean_exe «mobilenetv2-imagenet-verified» where
   root := `apps.imagenette.MainMobileNetV2Imagenet
   moreLinkArgs := lowererLink
 
+/-- **MobileNetV4-Conv-S on full 1000-class ImageNet** — the sixth scale-tier trainer (2026-08-12).
+    `nClasses := 1000, B := 64`; four replicas would be global 256. Batch-BN, so it has a
+    `_fwd_eval` peer and a running-stat region.
+
+    ⚠⚠ **Conv-S, not the Conv-M the chapter's 75.51% belongs to.** Different network, no published
+    ImageNet target for this block table. A run here is a first measurement.
+
+    ⚠ Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there,
+    AdamW @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet
+    — see `planning/chapter_makeover.md`'s MNv4 phase-4 gap list. -/
+lean_exe «mnv4-imagenet-verified» where
+  root := `apps.imagenette.MainMobilenetV4Imagenet
+  moreLinkArgs := lowererLink
+
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
     textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it

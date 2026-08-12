@@ -51,6 +51,14 @@ NETS = [
     # is timm's RSB-A3 — trainRes 160, testCropRatio 0.95, RandAugment m6, mixup/cutmix — and that
     # recipe's shim is the only one that can feed `resnet50Imagenet160Verified` (d0 = 76,800).
     ("resnet50in160", "MainResnet50Imagenet.lean",   "ResNet-50 (ImageNet)",         "short"),
+    # ⭐ MNv4 joined 2026-08-12. ⚠⚠ THE ONE ROW WHERE THE VERIFIED NET IS A DIFFERENT SIZE FROM ITS
+    # REFERENCE: `mnv4ImagenetVerified` is Conv-**S** (4.1M trunk), the reference here is
+    # Conv-**M** (~9.7M). That is sound for a SHIM pairing, which is all this file gates — a shim
+    # emits augmented batches and never weights, so what crosses over is the MNv4-family data
+    # pipeline both sizes share. It is NOT sound for accuracy: never quote Conv-M's ImageNet
+    # number against a Conv-S run. Stated here because this table is where someone looks to find
+    # out what a verified net is a port of.
+    ("mnv4in",     "MainMobilenetV4Imagenet.lean",   "MobileNetV4-Conv-M (ImageNet, bf16)", "default"),
 ]
 
 FAILS = []

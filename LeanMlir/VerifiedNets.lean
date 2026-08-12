@@ -1153,6 +1153,72 @@ def mobilenetv4Verified : VerifiedNetSpec where
   (mobilenetv4Verified.toSpecs.filterMap (fun (d, _) => if d.size == 4 then some d[0]! else none))
 #guard mobilenetv4Verified.bnChannels.size == 52
 
+/-- **MobileNetV4-Conv-S on full 1000-class ImageNet** — the sixth scale-tier spec, built the way
+    `resnet50ImagenetVerified` was: identical trunk to `mobilenetv4Verified`, only the head moves
+    (1280→1000).
+
+    ⚠⚠ **THIS IS Conv-S, AND THE CHAPTER'S 75.51% IS Conv-M.** The two are different networks
+    (4.1M vs ~9.7M, and a different block table). `jax/MainMobilenetV4Imagenet.lean` is the faithful
+    Conv-M and owns that number; this spec is the 1000-class head on the block table the repo
+    actually renders and `#guard`s. ▶ **Never quote the Conv-M ImageNet number against a run of
+    this spec.** Conv-S has no published ImageNet target of its own here, which is exactly why the
+    blueprint's phase-4 row is a `TBD` rather than a gap-to-reference.
+
+    ⚠ A batch-BN net, so it needs `@mnv4in_fwd_eval` with frozen running stats. Same
+    pre/post-DW-swap invisibility as its Imagenette peer: `toSpecs` cannot see the order, so the
+    forward tie is what pins it. -/
+def mnv4ImagenetVerified : VerifiedNetSpec where
+  name     := "MobileNetV4-Conv-S (ImageNet-1k)"
+  slug     := "mnv4in"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  -- ⚠ Generated from the Conv-M reference recipe (`gen_shims.sh`'s `mobilenet-v4-imagenet:default`).
+  -- That is correct and deliberate: a shim supplies AUGMENTED BATCHES, not weights, so what it
+  -- carries across is the MNv4-family data pipeline (RandAugment, the 224² crop), which is shared
+  -- by both sizes. Nothing about Conv-M's block table reaches this net through it.
+  shimScript := "generated_mobilenet_v4_imagenet_shim.py"
+  layers   := [
+    .convBnNB 3 32 3 2,
+    .fusedMbConvNB 32 48 4 3 2,
+    .uib  48  80 4 2 3 5,
+    .uib  80  80 2 1 3 3,
+    .uib  80 160 6 2 0 3,
+    .uib 160 160 4 1 3 3,
+    .uib 160 160 4 1 3 5,
+    .uib 160 160 4 1 5 0,
+    .uib 160 160 4 1 0 3,
+    .uib 160 160 4 1 3 0,
+    .uib 160 160 4 1 0 0,
+    .uib 160 160 4 1 3 3,
+    .uib 160 256 6 2 5 5,
+    .uib 256 256 4 1 5 5,
+    .uib 256 256 4 1 0 3,
+    .uib 256 256 4 1 3 0,
+    .convBnNB 256 1280 1 1,
+    .globalAvgPool,
+    .dense 1280 1000 ]
+  blurb := "MobileNetV4-Conv-S on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the MNv4 reference augmentation"
+  bnChannels := mobilenetv4Verified.bnChannels
+
+-- Exactly one parameter shape may differ (the head), and the BN layout must be IDENTICAL — the
+-- running-stat region is positional, so a drift there misaligns every frozen statistic at eval.
+-- Same three-way pin `mobilenetv2ImagenetVerified` carries.
+#guard mnv4ImagenetVerified.toSpecs.size == mobilenetv4Verified.toSpecs.size
+#guard mnv4ImagenetVerified.toSpecs.pop.pop == mobilenetv4Verified.toSpecs.pop.pop
+#guard mnv4ImagenetVerified.toSpecs.back! == (#[1000], 2)
+#guard mnv4ImagenetVerified.bnChannels == mobilenetv4Verified.bnChannels
+-- 4,124,426 − (1280·10 + 10) + (1280·1000 + 1000). The head is the only term that moves, so this
+-- is the Imagenette count with its head swapped and nothing else — which is the whole claim above,
+-- stated as arithmetic rather than as a comment.
+#guard (mnv4ImagenetVerified.toSpecs.foldl
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 5392616
+-- The same stat-alignment gate the Imagenette spec carries, re-run against the 1000-class layout.
+#guard mnv4ImagenetVerified.bnChannels ==
+  (mnv4ImagenetVerified.toSpecs.filterMap (fun (d, _) => if d.size == 4 then some d[0]! else none))
+
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- ⭐⭐ THE INVARIANT THAT LICENSES `loadData`'s `trainPix := net.d0` (`VerifiedTrain.lean`,
 -- the `.imagenet` branch). Placed here because it needs EVERY `.imagenet` spec in scope.
@@ -1175,5 +1241,6 @@ def mobilenetv4Verified : VerifiedNetSpec where
 #guard efficientnetImagenetVerified.d0 == 3*224*224
 #guard convnextImagenetVerified.d0     == 3*224*224
 #guard resnet50ImagenetVerified.d0     == 3*224*224
+#guard mnv4ImagenetVerified.d0         == 3*224*224
 -- The one net that is DELIBERATELY not 224, and the reason `evalD0` is still open.
 #guard resnet50Imagenet160Verified.d0  == 3*160*160

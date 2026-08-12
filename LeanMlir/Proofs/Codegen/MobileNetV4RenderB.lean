@@ -1190,3 +1190,30 @@ end Proofs.StableHLO
 -- the two are the same net (§3e), and the forward tie measured 1.423e-06 against it unpatched.
 #eval IO.FS.writeFile "verified_mlir/mnv4_adam_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 32 10 "1.0e-5")
+
+-- ── The 1000-class ImageNet artifacts, for `mnv4ImagenetVerified` (slug `mnv4in`). ─────────────
+-- Same renderer, same block table, same chain as the three above — the ONLY deltas are
+-- `nClasses` 10 → 1000, B 32 → 64 and the slug, which is why this is three `#eval`s and not a new
+-- proof chain. Exactly how `resnet50in` was added on top of `resnet50`.
+--
+-- ⭐ B = 64 PER DEVICE, so `mnv4AdamVariant 64 1` is `"adam64"` and the artifact, the
+-- `@mnv4in_adam64_train_step` entry point and the driver's default `LEAN_MLIR_VARIANT` are one
+-- string. Four replicas of 64 give the global 256 the other ImageNet drivers use.
+--
+-- ⚠ The forwards are rendered at B = 64 too, because the driver scores eval through them at the
+-- train batch. Any other batch needs re-rendered forwards or `LEAN_MLIR_SKIP_EVAL=1`, and would
+-- otherwise be a shape error at the first invoke.
+--
+-- ⚠⚠ **NO DP VARIANT IS RENDERED.** `mnv4AdamVariant 64 2` would be `"adamdp64"`, and the
+-- renderer takes the `replicas` argument that would produce it, but nothing has tied MNv4's
+-- collectives — there is no `mnv4` row in `shard-check` and no dp-check peer. Rendering one here
+-- would put an untied artifact on disk that looks as trustworthy as the rest. It is listed as a
+-- known gap in `planning/chapter_makeover.md` instead.
+#eval IO.FS.writeFile "verified_mlir/mnv4in_fwd.mlir"
+  (Proofs.StableHLO.mnv4FwdFaithfulV 64 1000 "1.0e-5" "mnv4in")
+
+#eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval.mlir"
+  (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in")
+
+#eval IO.FS.writeFile "verified_mlir/mnv4in_adam64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in")
