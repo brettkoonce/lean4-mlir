@@ -5269,15 +5269,6 @@ CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   .lake/build/bin/resnet34-imagenet-verified data
 \end{verbatim}
 
-\noindent The completed 30-epoch row was its own fully-annealed schedule, not
-the first third of this one, which is a distinction worth keeping straight:
-\texttt{LEAN\_MLIR\_EPOCHS=30} re-shapes the cosine to finish at 30, while
-\texttt{LEAN\_MLIR\_MAX\_EPOCHS=30} would stop a 90-epoch decay a third of
-the way down and leave the learning rate high. The 7900 XTX row is blank rather
-than pending, because a verified trainer does not currently survive ROCm (11
-deaths in 11 attempts on gfx1100 against 6 clean in 6 on CUDA). The repro is in
-\texttt{upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/}.
-
 \prosesection{A reasonable stopping point}
 
 For the fastest path through this book, the route is roughly:
@@ -5490,6 +5481,7 @@ Peak LR       & $0.1$                  & $0.008$ @ bs2048              & LAMB's 
 Epochs        & 90                     & 100                           & essentially the same budget (A3 is the cheap RSB tier) \\
 Loss          & softmax cross-entropy  & BCE-with-logits, multi-hot    & treats classes independently; matches mixed soft targets \\
 Label smoothing & $0.1$                & $0.0$                         & subsumed --- BCE over soft mixup labels already softens targets \\
+Augmentation  & RRC + hflip            & RRC + hflip                   & unchanged, and it is the BASE both recipes train on; the two rows below are what A3 layers on top of it \\
 Mixup / CutMix & none                  & $\alpha\,0.1$ / $\alpha\,1.0$ & interpolate/paste samples $\to$ soft multi-hot targets, strong regularizer \\
 RandAugment   & none                   & \texttt{m6 N2 mstd0.5 inc1}   & automated heavy color+geometric augmentation policy \\
 Weight decay  & $10^{-4}$, all params  & $0.02$, skip BN $\gamma/\beta$ + bias & $200\times$ stronger, but never decays scale/shift/bias params \\
@@ -5500,8 +5492,8 @@ BN statistics & global over batch      & Ghost-BN over 512             & side-ef
 \end{center}
 
 \noindent What carries over unchanged: cosine LR decay, the 5-epoch
-warmup, random-resized-crop + horizontal flip as the base augmentation,
-bf16 matmul and convolution, and running-BN evaluation. The through-line
+warmup, the base augmentation in the row above, bf16 matmul and
+convolution, and running-BN evaluation. The through-line
 of the 2018$\to$2021 shift is \emph{regularize harder, train bigger}:
 heavier augmentation (RandAugment + Mixup + CutMix), a loss that accepts
 soft targets (BCE), an order-of-magnitude more weight decay applied
