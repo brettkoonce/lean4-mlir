@@ -4407,6 +4407,88 @@ what a shallow one represents?'' It provably could. The question
 was: why is optimizing 12 free-form layers to recover identity
 so much harder than just leaving identity there?
 
+\section{Run it first}
+\label{sec:r34_runit}
+
+Before any of the math, train the thing. Four commands and about an hour
+and a half of GPU time:
+
+\begin{verbatim}
+lake exe cache get                            # Mathlib oleans, ~30 s
+./download_imagenette.sh                      # ~1.5 GB
+lake build resnet34-verified-adam
+./.lake/build/bin/resnet34-verified-adam data
+\end{verbatim}
+
+On one RTX 4060 Ti (CUDA 12.9), from
+\texttt{runs/2026-08-12-r34-imagenette-xla-cuda/}. XLA's startup banner is
+removed, the network description line is wrapped, and epochs 5 through 75
+are elided:
+
+\begin{verbatim}
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/resnet34_adam_train_step.mlir
+             (@resnet34_adam_train_step, 405 outputs, 1 replica) in 4952 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir
+             (@resnet34_fwd, 1 outputs, 1 replica) in 409 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir
+             (@resnet34_fwd_eval, 1 outputs, 1 replica) in 195 ms
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→
+  [3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts,
+  no conv biases; 56→28→14→7→GAP→dense)
+  via the VERIFIED renderer → XLA/PJRT → GPU
+  train 9469, val 3925; bs 32, ResNet-34 adam
+    (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
+Epoch 1/80: loss=2.049761 lr=0.000333
+  epoch 1: val_acc = 1083/3925 = 27.592357%  top5 = 2601/3925 = 66.267516%
+Epoch 2/80: loss=1.530066 lr=0.000667
+  epoch 2: val_acc = 1363/3925 = 34.726115%  top5 = 3024/3925 = 77.044586%
+Epoch 3/80: loss=1.388131 lr=0.001000
+  epoch 3: val_acc = 2250/3925 = 57.324841%  top5 = 3554/3925 = 90.547771%
+Epoch 4/80: loss=1.300556 lr=0.001000
+  epoch 4: val_acc = 2510/3925 = 63.949045%  top5 = 3642/3925 = 92.789809%
+Epoch 76/80: loss=0.502019 lr=0.000007
+  epoch 76: val_acc = 3522/3925 = 89.732484%  top5 = 3858/3925 = 98.292994%
+Epoch 79/80: loss=0.502105 lr=0.000000
+  epoch 79: val_acc = 3522/3925 = 89.732484%  top5 = 3857/3925 = 98.267516%
+Epoch 80/80: loss=0.502114 lr=0.000000
+  epoch 80: val_acc = 3521/3925 = 89.707006%  top5 = 3857/3925 = 98.267516%
+done (trained ResNet-34 via the proof-rendered StableHLO).
+\end{verbatim}
+
+Eighty epochs at about 65 seconds each, roughly an hour and a half in total,
+and \textbf{89.71\%} top-1 with \textbf{98.27\%} top-5 on Imagenette's
+3,925-image validation split. The best epoch reached $89.86\%$. That is a
+thirty-four-layer network trained from scratch on ten thousand photographs,
+which is a different kind of problem from the handwritten digits three
+chapters back.
+
+Here is the part that matters. That run did not execute a reimplementation of
+the network this chapter describes. It executed
+\texttt{verified\_mlir/resnet34\_adam\_train\_step.mlir}, which is
+\texttt{pretty(provenGraph)} off the renderer, and every one of the sixteen
+residual blocks in it computes the additive fan-in backward that
+Theorem~\ref{thm:residual_has_vjp} proves. The thirty-six BatchNorms compute the
+three-term backward of Chapter~\ref{chap:bn}, and the convolutions compute the
+backward of Chapter~\ref{chap:cnn}. Every theorem in the rest of this chapter is
+about the graph that just trained.
+
+Three compile lines rather than the two earlier chapters showed, and the third
+is the interesting one. \texttt{@resnet34\_fwd\_eval} is a \emph{separate}
+forward, because BatchNorm behaves differently at training time than at
+evaluation time. Training normalizes each batch by its own statistics, while
+evaluation has to use the running averages accumulated over training, and the
+line \texttt{running-stats BN: 36 layers, 17024 stat floats} is the driver
+saying it is threading those averages out of the train step and into the eval
+forward. A net that skips this reports chance forever, since the eval forward
+normalizes by statistics nobody ever computed.
+
+The final loss settles at $0.502$ and stops. That is not the optimizer giving
+up. It is the label-smoothing floor derived in \S\ref{sec:r34_recipe}: with
+$\varepsilon = 0.1$ over ten classes the smallest attainable cross-entropy is
+about $0.485$, so a run that lands at $0.502$ has essentially converged.
+
 \prosesection{The residual block: ask for the difference, not the function}
 
 Their fix was a one-line architectural change. Instead of asking
@@ -4803,6 +4885,7 @@ Chapters~\ref{chap:cnn} and~\ref{chap:bn}. Only the fan-in is new here.
 \end{itemize}
 
 \section{What's in the production recipe?}
+\label{sec:r34_recipe}
 
 Six ingredients first appear here, none of which are layers. They
 all live in \texttt{TrainConfig} or training code. They don't touch
