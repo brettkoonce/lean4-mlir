@@ -1676,9 +1676,9 @@ removed and two long lines are wrapped:
 \begin{verbatim}
 [pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
 [pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir
-             (@mlp_train_step, 6 outputs, 1 replica) in 2398 ms
+             (@mlp_train_step, 7 outputs, 1 replica) in 2103 ms
 [pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir
-             (@mlp_fwd, 1 outputs, 1 replica) in 122 ms
+             (@mlp_fwd, 1 outputs, 1 replica) in 118 ms
 MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
   xla/pjrt verified_mlir/mlp_train_step.mlir
   xla/pjrt verified_mlir/mlp_fwd.mlir
@@ -2485,9 +2485,9 @@ removed and one long line is wrapped:
 \begin{verbatim}
 [pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
 [pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir
-             (@cnn_train_step, 10 outputs, 1 replica) in 2655 ms
+             (@cnn_train_step, 11 outputs, 1 replica) in 2490 ms
 [pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir
-             (@cnn_fwd, 1 outputs, 1 replica) in 389 ms
+             (@cnn_fwd, 1 outputs, 1 replica) in 383 ms
 MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
   xla/pjrt verified_mlir/cnn_train_step.mlir
   xla/pjrt verified_mlir/cnn_fwd.mlir
@@ -4454,7 +4454,7 @@ Epoch 79/80: loss=0.502105 lr=0.000000
   epoch 79: val_acc = 3522/3925 = 89.732484%  top5 = 3857/3925 = 98.267516%
 Epoch 80/80: loss=0.502114 lr=0.000000
   epoch 80: val_acc = 3521/3925 = 89.707006%  top5 = 3857/3925 = 98.267516%
-done (trained ResNet-34 via the proof-rendered StableHLO).
+done (trained ResNet-34 adam + cosine/warmup via packed threading).
 \end{verbatim}
 
 Eighty epochs at about 65 seconds each, roughly an hour and a half in total,
@@ -5627,6 +5627,23 @@ representative scale. That is the same ``representative scale'' caveat
 the MLIR sections of this book carry throughout, stated here where the
 network is first deep enough for the gap to be worth naming.
 
+\medskip\noindent\textbf{[TODO: prove the fold at full depth for this
+network.]} Chapter~\ref{chap:se} does have it, so the gap is worth
+closing and the shape of the answer is known:
+\texttt{efficientnetForwardB\_full\_has\_vjp} chains a stem, all sixteen
+MBConv blocks and a head through \texttt{vjp\_comp}. \emph{But that proof
+does not transfer by copying}, and the reason is this network's
+activation. That theorem is a \emph{global} statement, which it
+can be because swish is smooth everywhere. MobileNetV2 uses relu6, which
+has a kink, and a global VJP through a kink is false. So the full-depth
+version here has to keep the pointwise \texttt{\_at} form that
+\texttt{mobilenetv2\_has\_vjp\_at} already has. The axis to move is the
+depth, from two blocks to seventeen, and not the pointwise-to-global one.
+\texttt{MobileNetV2FullPaper.lean} already carries the four block shapes
+and the full seventeen-block forward chain. What it lacks are the
+per-block differentiability and VJP lemmas that EfficientNet's eight
+\texttt{mb*W\_has\_vjp} / \texttt{mb*W\_differentiable} peers supply.
+
 The three compile lines are the same three Chapter~\ref{chap:residual}
 showed, and for the same reason. \texttt{@mobilenetv2\_fwd\_eval} is a
 separate forward because BatchNorm evaluates differently than it trains,
@@ -6665,7 +6682,7 @@ since no data-parallel variant is rendered for MobileNetV4 yet.}
 \prosesection{A convolution treats every channel equally}
 
 By the time a feature map reaches a deep stage of a CNN, each
-channel is a learned ``feature detector'' for something specific---a
+channel is a learned ``feature detector'' for something specific: a
 headlight, a curve, a fur texture, a leaf edge. A standard
 \(3 \times 3\) convolution that consumes this feature map treats
 every one of those channels as equally important contributors to
@@ -6689,6 +6706,112 @@ its core it is a learned per-channel attention mechanism that
 predates the transformer-era ``attention'' by four years and
 informs every post-2018 vision architecture.
 
+\section{Run it first}
+\label{sec:enet_runit}
+
+Before the attention mechanism, train the network that uses it. Four
+commands, and less GPU time than either of the two previous chapters:
+
+\begin{verbatim}
+lake exe cache get                            # Mathlib oleans, ~30 s
+./download_imagenette.sh                      # ~1.5 GB
+lake build efficientnet-verified-adam
+./.lake/build/bin/efficientnet-verified-adam data
+\end{verbatim}
+
+On one RTX 4060 Ti (CUDA 12.9), from
+\texttt{runs/2026-08-12-enet-imagenette-xla-cuda/}. XLA's startup banner
+is removed, the network description line is wrapped, and the middle of
+the run is elided:
+
+\begin{verbatim}
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir
+             (@efficientnet_adam_train_step, 740 outputs, 1 replica)
+             in 10603 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir
+             (@efficientnet_fwd, 1 outputs, 1 replica) in 635 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir
+             (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 454 ms
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k],
+  swish + squeeze-excite + batch-norm, 5 downsamples 224→7 →
+  head 320→1280 → GAP → dense)
+  via the VERIFIED renderer → XLA/PJRT → GPU
+  train 9469, val 3925; bs 32, EfficientNet-B0 adam
+    (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 49 layers, 42016 stat floats
+    → eval via @efficientnet_fwd_eval
+Epoch 1/80: loss=2.048415 lr=0.000333
+  epoch 1: val_acc = 698/3925 = 17.783439%  top5 = 2753/3925 = 70.140127%
+Epoch 2/80: loss=1.633202 lr=0.000667
+  epoch 2: val_acc = 1356/3925 = 34.547771%  top5 = 2831/3925 = 72.127389%
+Epoch 3/80: loss=1.421186 lr=0.001000
+  epoch 3: val_acc = 1529/3925 = 38.955414%  top5 = 3113/3925 = 79.312102%
+Epoch 4/80: loss=1.281925 lr=0.001000
+  epoch 4: val_acc = 2520/3925 = 64.203822%  top5 = 3667/3925 = 93.426752%
+Epoch 79/80: loss=0.504021 lr=0.000000
+  epoch 79: val_acc = 3535/3925 = 90.063694%  top5 = 3865/3925 = 98.471338%
+Epoch 80/80: loss=0.504361 lr=0.000000
+  epoch 80: val_acc = 3531/3925 = 89.961783%  top5 = 3864/3925 = 98.445860%
+done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).
+\end{verbatim}
+
+Eighty epochs at about 30 seconds each, forty and a half minutes in
+total, and \textbf{89.96\%} top-1 with \textbf{98.45\%} top-5 on
+Imagenette's 3,925-image validation split. The best epoch reached
+$90.14\%$. That is the highest top-1 in this book's Imagenette column:
+ResNet-34 finished at $89.71\%$ and MobileNetV2 at $89.25\%$ on the same
+data, the same recipe and the same eighty epochs. EfficientNet-B0 does it
+with $5.3\times$ fewer parameters than ResNet-34 and in less than half
+the wall-clock.
+
+The first four epochs are worth a glance. Top-1 climbs 17.8, 34.5, 39.0,
+then jumps to 64.2. The learning rate is still warming up through epoch
+3, and the BatchNorm running statistics are averaging over weights that
+are moving fast, so the evaluation forward is using statistics that no
+longer describe what is being evaluated. It resolves once the schedule
+reaches its peak and never recurs.
+
+Here is the part that matters. That run did not execute a
+reimplementation of the network this chapter describes. It executed
+\texttt{verified\_mlir/efficientnet\_adam\_train\_step.mlir}, which is
+\texttt{pretty(provenGraph)} off the renderer. Every squeeze-excitation
+gate in it backpropagates by the product rule
+Theorem~\ref{thm:seBlock_has_vjp} proves, every depthwise convolution by
+Chapter~\ref{chap:depthwise}'s, every BatchNorm by
+Chapter~\ref{chap:bn}'s, and every residual skip by
+Chapter~\ref{chap:residual}'s additive fan-in.
+
+\medskip\noindent\textbf{And here this chapter can say something
+Chapter~\ref{chap:depthwise} could not.} There, the theorem folding the
+per-operation rules into a single statement about the whole network was
+proved for a representative stem-plus-two-blocks, not for all seventeen.
+EfficientNet's fold is proved at full depth.
+\texttt{efficientnetForwardB\_full\_has\_vjp} chains the stem, all
+\emph{sixteen} MBConv blocks and the head through \texttt{vjp\_comp},
+batched over \(N\), with a positive-\(\varepsilon\) hypothesis for each
+BatchNorm and nothing else assumed. So for this network the accurate
+sentence is the strong one: every operation in the graph that just
+trained carries a proved backward, and their composition into the whole
+network carries one too.
+
+What buys that is the activation. Swish is smooth everywhere, so the
+statement can be global. MobileNetV2's relu6 has a kink, which is why
+Chapter~\ref{chap:depthwise}'s fold is pointwise and why closing it there
+is a different job rather than the same one at a different size.
+
+The three compile lines are the same three the two previous chapters
+showed. \texttt{@efficientnet\_fwd\_eval} is a separate forward because
+BatchNorm evaluates differently than it trains, and
+\texttt{running-stats BN: 49 layers, 42016 stat floats} is the driver
+threading the running averages out of the train step and into it. The
+train step reports 740 outputs, which is what 213 parameter tensors plus
+their Adam moments plus the batch statistics plus the report-only loss
+come to.
+
+To run this net alongside the other six at the same scale and recipe, see
+\S\ref{sec:enet_imagenet} for what changes at ImageNet scale.
+
 \prosesection{Three steps, one tensor product}
 
 An SE block on a feature map \(x \in \mathbb{R}^{B \times C \times H \times W}\)
@@ -6697,7 +6820,7 @@ runs three operations in sequence:
 \begin{enumerate}
 \item \textbf{Squeeze.} Global-average-pool across spatial
   dimensions: \(s_c = \frac{1}{HW} \sum_{i,j} x_{c, i, j}\). Result
-  is a \(B \times C\) tensor---one scalar per image per channel,
+  is a \(B \times C\) tensor: one scalar per image per channel,
   summarizing the channel's overall activity.
 
 \item \textbf{Excite.} Push \(s\) through a tiny two-layer MLP with
@@ -6711,12 +6834,12 @@ runs three operations in sequence:
 \item \textbf{Apply.} Multiply the original feature map by the
   gates, broadcast across the spatial axes:
   \(y_{c, i, j} = g_c \cdot x_{c, i, j}\). Channels with gate near
-  1 pass through; channels with gate near 0 are suppressed.
+  1 pass through, and channels with gate near 0 are suppressed.
 \end{enumerate}
 
 That's it. The MLP operates on a \([B, C]\) tensor, not
-\([B, C, H, W]\), so it's tiny---\(C^2 / r + C/r + C\) parameters
-per block, vs millions for a standard conv at the same width.
+\([B, C, H, W]\), so it's tiny, at \(C^2 / r + C/r + C\) parameters
+per block against millions for a standard conv at the same width.
 
 \prosesection{From the framework: it's an elementwise product}
 
@@ -6734,7 +6857,7 @@ elementwise product (Chapter~\ref{chap:tensor}). We already
 proved the VJP of dense (Chapter~\ref{chap:mlp}). We already
 proved the VJP of identity, and an additive fan-in collapses to
 the same product-rule structure as elementwise. Theorem
-\ref{thm:seBlock_has_vjp} is one line of composition; it
+\ref{thm:seBlock_has_vjp} is one line of composition, and it
 introduces no new analytic dependencies.
 
 \prosesection{Attention in Disguise}
@@ -6765,11 +6888,11 @@ EfficientNet-B0 (Tan \& Le 2019,
 the architectural level, MobileNet-V2 with two changes:
 
 \begin{enumerate}
-\item Every \texttt{.mbConv} block contains an SE sub-module after
-  the depthwise conv. That's the \texttt{useSE = true} flag in the
-  spec.
+\item Every MBConv block contains an SE sub-module after
+  the depthwise conv. The verified spec spells that as its own
+  constructor, \texttt{.mbConvSENB}, rather than as a flag.
 \item Swish (\(x \cdot \sigma(x)\)) replaces ReLU as the activation.
-  Smoother gradient, modest empirical lift, no new VJP structure---
+  Smoother gradient, modest empirical lift, and no new VJP structure,
   just chain rule through a sigmoid.
 \end{enumerate}
 
@@ -6778,8 +6901,8 @@ jointly scale depth, width, and input resolution by a single
 coefficient \(\phi\) and you get the EfficientNet family
 B0 through B7, with B7 reaching ImageNet state-of-the-art at the
 time. At the B0 baseline (the one in this book), the architectural
-lift over MobileNet-V2 is essentially SE plus Swish; the compound
-scaling story lives in the B0$\to$B7 progression that we don't
+lift over MobileNet-V2 is essentially SE plus Swish. The compound
+scaling story lives in the B0$\to$B7 progression, which we don't
 fit on Imagenette because the dataset is too small for the
 return-on-scaling to show up.
 
@@ -6830,20 +6953,18 @@ return-on-scaling to show up.
 \section{Example: EfficientNet-B0 on Imagenette}
 \label{sec:se_efficientnet_example}
 
-\phasethreenote
-
 Squeeze-and-Excitation by itself is one of the smallest architectural
 contributions in deep learning. Take a feature map, compute a
 per-channel scalar by global-average-pooling it, pass those scalars
 through a tiny two-layer MLP with a sigmoid at the end, multiply
 those sigmoid outputs back into the original feature map
-per-channel. That's it. It's a learned per-channel reweighting --- a
-particularly simple form of attention, predating the transformer-era
+per-channel. That's it. It's a learned per-channel reweighting, a
+particularly simple form of attention that predates the transformer-era
 use of ``attention'' by four years (Hu et al.\ 2018, Squeeze-and-
 Excitation Networks).
 
 EfficientNet (Tan \& Le 2019) bolts SE into every
-\texttt{.mbConv} block in what's otherwise a MobileNet-V2-shaped
+MBConv block in what's otherwise a MobileNet-V2-shaped
 architecture. The paper's actual contribution is \emph{compound
 scaling} (tune depth, width, and input resolution together) but
 the B0 baseline's architectural novelty over MobileNet V2 is
@@ -6853,9 +6974,9 @@ essentially ``add SE blocks.''
 
 EfficientNet-B0 is the MobileNetV2 column with Squeeze-and-Excitation
 in every block: the same $3 \times 3$ stride-2 stem, seven stages of
-\texttt{.mbConv} blocks (kernel sizes mixing $3 \times 3$ and
+MBConv blocks (kernel sizes mixing $3 \times 3$ and
 $5 \times 5$ depthwise), the $1 \times 1$ lift to 1280, global average
-pool, and dense head. The inset shows one MBConv block --- an inverted
+pool, and dense head. The inset shows one MBConv block, an inverted
 residual with an SE gate (highlighted) inserted before the project.
 
 \begin{center}
@@ -6915,157 +7036,190 @@ residual with an SE gate (highlighted) inserted before the project.
 \end{tikzpicture}
 \end{center}
 
+\subsection*{The verified trainer}
+
+\S\ref{sec:verified_trainer_pattern} is the pattern and
+Chapter~\ref{chap:depthwise} was the first chapter to reuse it. Everything
+that carries weight there carries the same weight here, and only the
+\texttt{layers} list and the \texttt{bnChannels} that follows from it
+are new:
+
 \begin{verbatim}
--- 1
 import LeanMlir
 
--- 2
-def efficientNetB0 : NetSpec where
-  name   := "EfficientNet-B0"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 32 3 2 .same,                          -- stem 224→112
-    .mbConv  32  16 1 3 1 1 true,                    -- 112
-    .mbConv  16  24 6 3 2 2 true,                    -- 112→56
-    .mbConv  24  40 6 5 2 2 true,                    -- 56→28
-    .mbConv  40  80 6 3 2 3 true,                    -- 28→14
-    .mbConv  80 112 6 5 1 3 true,                    -- 14
-    .mbConv 112 192 6 5 2 4 true,                    -- 14→7
-    .mbConv 192 320 6 3 1 1 true,                    -- 7
-    .convBn 320 1280 1 1 .same,                      -- 1×1 to 1280
+-- 1. The network. `slug` names the committed render, `bnChannels`
+--    drives BN threading, `NB` means the BN-followed convs carry
+--    no bias.
+def efficientnetVerified : VerifiedNetSpec where
+  name     := "EfficientNet-B0"
+  slug     := "efficientnet"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .convBnNB 3 32 3 2,             -- stem 3x3-s2   224->112
+    .mbConvSENB  32   32  16  8 3,  -- stage 1, t=1 (no expand)
+    .mbConvSENB  16   96  24  4 3,  -- stage 2       112->56
+    .mbConvSENB  24  144  24  6 3,
+    .mbConvSENB  24  144  40  6 5,  -- stage 3        56->28
+    .mbConvSENB  40  240  40 10 5,
+    .mbConvSENB  40  240  80 10 3,  -- stage 4        28->14
+    .mbConvSENB  80  480  80 20 3,
+    .mbConvSENB  80  480  80 20 3,
+    .mbConvSENB  80  480 112 20 5,  -- stage 5           @14
+    .mbConvSENB 112  672 112 28 5,
+    .mbConvSENB 112  672 112 28 5,
+    .mbConvSENB 112  672 192 28 5,  -- stage 6        14->7
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 192 48 5,
+    .mbConvSENB 192 1152 320 48 3,  -- stage 7            @7
+    .convBnNB 320 1280 1 1,         -- head, 1x1 to 1280
     .globalAvgPool,
-    .dense 1280 10 .identity
-  ]
+    .dense 1280 10 ]
+  bnChannels := #[32, 32,16, 96,96,24, ... ]  -- all 49, in order
 
--- 3
-def efficientNetB0Config : TrainConfig where
-  learningRate   := 0.001
-  batchSize      := 32
-  epochs         := 80
-  useAdam        := true
-  weightDecay    := 0.0001
-  cosineDecay    := true
-  warmupEpochs   := 3
-  augment        := true
-  labelSmoothing := 0.1
+-- 2. The schedule. ResNet-34's and MobileNetV2's, unchanged.
+def efficientnetAdamConfig : VerifiedConfig where
+  epochs    := 80
+  batchSize := 32
 
--- 4
-def main (args : List String) : IO Unit :=
-  efficientNetB0.train efficientNetB0Config
-    (args.head?.getD "data/imagenette")
+-- 3. The entry point: AdamW, cosine with a 3-epoch warmup,
+--    baseLR 1e-3.
+def main (argv : List String) : IO Unit :=
+  efficientnetVerified.toNet.trainAdamSched
+    efficientnetAdamConfig (argv.head?.getD "data")
+    0.001 0.9 0.999 3 "adam"
 \end{verbatim}
 
-The \texttt{.mbConv} primitive takes
-\texttt{(ic, oc, expandRatio, kernel, stride, nBlocks, useSE)}.
-Kernel sizes vary by stage (EfficientNet uses a mix of
-$3 \times 3$ and $5 \times 5$ depthwise convs), and \texttt{useSE
-= true} in every block here turns on the Squeeze-and-Excitation
-sub-module. Every SE block multiplies the input by the sigmoid
-output of its two-layer MLP: that's exactly \S~\ref{thm:seBlock_has_vjp}
-composed with \S~\ref{thm:elemwiseProduct_has_vjp} and the already-
-proved dense VJPs from Chapter~\ref{chap:mlp}. No new math in this
-chapter beyond the SE block itself.
+\noindent \texttt{.mbConvSENB ic mid oc r k} is one block, not a stage:
+there is no repeat count, so the sixteen blocks are sixteen lines and the
+stage boundaries are visible as the places where the input width changes.
+It takes the \emph{expanded} width \texttt{mid} rather than a ratio \(t\),
+which is why the widths read straight off the paper's table, and
+\texttt{k} is the depthwise kernel, mixing $3 \times 3$ and $5 \times 5$
+by stage. The expand $1 \times 1$ is skipped exactly when
+\texttt{mid == ic}, which is stage 1 and its $t=1$.
+
+\textbf{\texttt{r} is the squeeze width, and it is sized off
+\texttt{ic}.} Every block in the listing has \texttt{r == ic/4}: 32 gives
+8, 16 gives 4, 192 gives 48. That is the correctness note this chapter
+returns to in \S\ref{sec:enet_imagenet} from the other direction, and it
+is worth reading here first, because sizing the squeeze off the
+$6\times$-larger \texttt{mid} instead is the difference between B0's
+canonical 5.29M parameters and an inflated 8.4M. The spec is where that
+choice is made once and visibly.
+
+\textbf{There is no stride argument, and that is deliberate.} B0's
+downsampling pattern is fixed by the architecture rather than chosen per
+block, so it lives in the renderer, which emits \texttt{b1} as
+no-expand, \texttt{b2}, \texttt{b4}, \texttt{b6} and \texttt{b12} as
+strided, and the remaining nine as residual. The spec's job is the
+\emph{parameter layout}, and \texttt{efficientnetVerified.toSpecs} is
+kernel-\texttt{\#guard}ed against an independently audited hand-list. So
+the listing above is not a description of the network that got trained,
+it is the object the renderer consumed.
+
+\textbf{Forty-nine BatchNorms, and the list is not three per block.}
+Every MBConv normalizes after its expand, depthwise and project convs,
+which would be $16 \times 3 + 2$ for the stem and head, or 50. Stage 1
+has $t=1$ and therefore no expand conv, so it contributes two entries
+rather than three, and the real count is 49. \texttt{bnChannels} exists
+to get that right: the running-stat region is positional, and an
+off-by-one misaligns every frozen statistic downstream of it at
+evaluation time.
+
+\textbf{The squeeze-excite biases stay.} \texttt{NB} drops the bias from
+every convolution a BatchNorm follows, because the BatchNorm's own shift
+absorbs it. SE's two $1 \times 1$s are followed by a sigmoid gate rather
+than a BatchNorm, so nothing absorbs theirs and they are kept. The rule
+is about what comes \emph{after} a convolution, not about the
+convolution.
+
+Every SE block multiplies the input by the sigmoid output of its
+two-layer MLP: that is exactly \S~\ref{thm:seBlock_has_vjp} composed with
+\S~\ref{thm:elemwiseProduct_has_vjp} and the already-proved dense VJPs
+from Chapter~\ref{chap:mlp}. No new math in this chapter beyond the SE
+block itself.
 
 \subsection*{Results}
 
-\begin{verbatim}
-$ IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
-    ./.lake/build/bin/efficientnet-train
-EfficientNet-B0: 7155658 params
-Generating train step MLIR...
-  938160 chars
-Compiling vmfbs...
-  forward compiled
-  eval forward compiled
-  train step compiled
-  session loaded
-  train: 9469 images (256×256)
-  7155658 params + m + v (81 MB)
-training: 295 batches/epoch, batch=32, Adam, lr=0.001000,
-          cosine, label_smooth=0.1, wd=1e-4
-  BN layers: 49, BN stat floats: 42016
-  step 0/295: loss=2.345573 (956ms)
-Epoch 10/80: loss=0.947504 lr=0.000985 (280713ms)
-  val accuracy (running BN): 3077/3904 = 78.82%
-Epoch 20/80: loss=0.711379 lr=0.000897 (280782ms)
-  val accuracy (running BN): 3208/3904 = 82.17%
-Epoch 40/80: loss=0.548946 lr=0.000551 (280416ms)
-  val accuracy (running BN): 3363/3904 = 86.14%
-Epoch 60/80: loss=0.512627 lr=0.000173 (281250ms)
-  val accuracy (running BN): 3410/3904 = 87.35%
-Epoch 80/80: loss=0.503827 lr=0.000000 (281927ms)
-  val accuracy (running BN): 3419/3904 = 87.58%
-\end{verbatim}
-
-(Full log in \texttt{logs/effnet\_se.log}.)
-
-Final val accuracy \textbf{87.58\%} on Imagenette, wall time about
-\textbf{6.2 hours}, loss plateaus at the same $\sim$0.50
-label-smoothing floor as ResNet-34 and MobileNet V2. Three-chapter
-comparison, same dataset, same training recipe:
+\S\ref{sec:enet_runit} has the run: 80 epochs at about 30 seconds each,
+forty and a half minutes, $\mathbf{89.96\%}$ top-1 and $\mathbf{98.45\%}$
+top-5, with the loss settling on the same ${\sim}0.50$ label-smoothing
+floor as ResNet-34 and MobileNetV2. The three-chapter comparison, same
+dataset, same recipe, same eighty epochs, and now all three measured on
+the verified XLA path:
 
 \begin{center}
-\begin{tabular}{l r r r r r}
+\begin{tabular}{l r r r r r r}
 \hline
-Model            & Params  & MLIR     & Step time & Total   & Val acc \\
+Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
-ResNet-34        & 21.29M  & 518 KB   & 1400 ms   & 9.5 h   & 90.29\% \\
-MobileNet V2     &  2.24M  & 741 KB   &  830 ms   & 5.4 h   & 87.09\% \\
-EfficientNet-B0  &  7.16M  & 938 KB   &  940 ms   & 6.2 h   & 87.58\% \\
+ResNet-34        & 21.29M  & 729\,KB    & 220 ms    & 1.5 h    & 89.71\% & 98.27\% \\
+MobileNetV2      &  2.24M  & 1{,}047\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
+EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & \textbf{89.96\%} & 98.45\% \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent \textbf{Provenance.} Every row above is a phase-3 measurement,
-taken on IREE before the XLA port and kept together so the comparison
-stays like-for-like. Two of the rows have since been re-measured on the
-verified XLA path and moved: ResNet-34 in \S\ref{sec:r34_runit} and
-MobileNet V2 in \S\ref{sec:mnv2_runit}, where the render sizes in
-particular are much larger, because they are now
-\texttt{pretty(provenGraph)} rather than the older hand-written
-emitter's output. The remaining rows move when their own chapters are
-re-measured.
+\noindent \textbf{Provenance.} All three rows are verified-XLA
+measurements on one RTX 4060 Ti, from \S\ref{sec:r34_runit},
+\S\ref{sec:mnv2_runit} and \S\ref{sec:enet_runit}. The render sizes are
+much larger than the phase-3 numbers this table used to carry, because
+they are now \texttt{pretty(provenGraph)} rather than the older
+hand-written emitter's output. Step time is the epoch wall-clock divided
+by the 295 batches in it, so it includes each epoch's validation pass.
 
-- \textbf{EfficientNet-B0 is 3.2$\times$ the parameters of MobileNet V2}
-  for a 0.5 percentage-point accuracy lift (87.58\% vs 87.09\%). On a
-  pure params-vs-accuracy curve, SE is an expensive addition --- the
-  parameter cost comes from the two-layer MLP in every SE sub-block,
-  and every \texttt{.mbConv} in B0 has one. Seven stages $\times$
-  1--4 blocks each = 16+ SE blocks across the network.
+\begin{itemize}
+\item \textbf{EfficientNet-B0 has the best top-1 in the column}, at
+  $89.96\%$ against ResNet-34's $89.71\%$ and MobileNetV2's $89.25\%$. It
+  gets there with $5.3\times$ fewer parameters than ResNet-34 and in less
+  than half the time. MobileNetV2 keeps top-5 by two tenths, which is the
+  one place the larger model does not win.
 
-- \textbf{938\,KB of MLIR} is the largest yet --- more than either
-  ResNet-34 (518\,KB) or MobileNet V2 (741\,KB). The extra ops come
-  from SE's per-channel attention: each SE block emits a GAP, two
-  denses, a sigmoid, and an elementwise-multiply. Over 16 blocks
-  that's non-trivial StableHLO.
+\item \textbf{SE and Swish buy $+0.71$ top-1 over MobileNetV2 for
+  $1.80\times$ the parameters} (4.02M against 2.24M). That is a real
+  return rather than a bargain: the cost is the two-layer MLP inside
+  every one of the sixteen MBConv blocks. Whether $1.8\times$ the
+  parameters is worth seven tenths of a point is a judgement, but it is a
+  much better trade than it looks on the ImageNet leaderboard, where B0
+  is usually compared against far larger models.
 
-- \textbf{Per-step time is 940\,ms}, intermediate between R34 and
-  MNv2. SE's extra ops slow things down vs plain depthwise-separable,
-  but the core is still depthwise-separable so it remains cheaper
-  than ResNet-34's full convs.
+\item \textbf{1{,}316\,KB of MLIR is the largest render in the book},
+  ahead of MobileNetV2's 1{,}047\,KB and ResNet-34's 729\,KB. The extra
+  ops are SE's: each block emits a global-average-pool, two denses, a
+  sigmoid and an elementwise multiply, and then the product-rule backward
+  for all of it. Sixteen blocks of that is a lot of StableHLO.
 
-- \textbf{The lift isn't from SE alone.} EfficientNet's paper thesis
-  is that \emph{compound scaling} --- tuning depth, width, and
-  resolution jointly with a scaling coefficient --- produces the
-  ImageNet state-of-the-art. At the B0 baseline shown here, SE gives
-  a modest bump; the real wins come at B3--B7 where the compound
-  scaling compounds. Our Imagenette example sits at B0 because the
-  dataset is 10-class Imagenette, not 1000-class ImageNet, and the
-  return-on-scaling saturates much earlier.
+\item \textbf{103\,ms per step sits between the two}, slower than
+  MobileNetV2's 90\,ms because of exactly those extra ops, and far
+  quicker than ResNet-34's 220\,ms because the core is still a depthwise
+  sandwich rather than full convolutions.
+
+\item \textbf{The lift is not from SE alone.} EfficientNet's paper thesis
+  is \emph{compound scaling}, tuning depth, width and resolution together
+  with one coefficient to reach the ImageNet state of the art. At the B0
+  baseline shown here SE gives a modest bump, and the real wins arrive at
+  B3--B7 where the scaling compounds. This example sits at B0 because the
+  dataset is 10-class Imagenette rather than 1000-class ImageNet, and the
+  return on scaling saturates much earlier.
+\end{itemize}
 
 Every post-2018 vision architecture has some variant of SE in it
 (MobileNet V3, EfficientNetV2, ConvNeXt, RegNetZ) because the
 accuracy-per-parameter cost is low when you compound it with other
-scaling tricks. The other architectural contribution
-EfficientNet shipped --- the \emph{Swish} activation
-$\mathrm{swish}(x) = x \cdot \sigma(x)$ --- is orthogonal to SE.
+scaling tricks. The other architectural contribution EfficientNet shipped
+is the \emph{Swish} activation $\mathrm{swish}(x) = x \cdot \sigma(x)$,
+which is orthogonal to SE.
 
 \section{MLIR: Squeeze-and-Excitation}
 
 \noindent\textbf{What is already proven.} Squeeze-excitation is an
 elementwise product $\mathrm{se}(x) = x \odot g(x)$, where the per-channel
-gate $g(x)$ is itself a small sub-network of the same input $x$ ---
+gate $g(x)$ is itself a small sub-network of the same input $x$:
 global-average-pool, dense, swish, dense, sigmoid, broadcast. Because the
 gate depends on $x$, the VJP is a \emph{product rule}, not a plain scaling:
 \texttt{seBlock\_has\_vjp} proves
@@ -7078,9 +7232,9 @@ concrete gate (the GAP--dense--swish--dense--sigmoid chain) and
 \texttt{mbconvBody\_has\_vjp} composes the whole MBConv.
 
 \medskip\noindent\textbf{The gap and how we close it.} The emitted graph
-realizes \texttt{seBlock\_has\_vjp}'s product-rule backward in full --- both
-terms --- each piece of the gate carrying the swish, sigmoid, and dense
-bridges of the previous chapters. Here is the fan-in, with the excite
+realizes \texttt{seBlock\_has\_vjp}'s product-rule backward in full. Both
+terms are there, and each piece of the gate carries the swish, sigmoid, and
+dense bridges of the previous chapters. Here is the fan-in, with the excite
 sub-network's internal VJP elided to its one comment line (the SE block runs
 on the MBConv's four mid-channels):
 
@@ -7098,37 +7252,44 @@ on the MBConv's four mid-channels):
 %gdds = stablehlo.add %gdleft, %gdgate_sp : tensor<1x4x4x4xf32>
 \end{verbatim}
 
-\noindent Read it against the product rule: \texttt{\%gdleft} is
-$g(x)\odot dy$, the term a naive generator would stop at; \texttt{\%gdgate}
-reduces $x \odot dy$ over the spatial axes --- the adjoint of the gate's
-broadcast, i.e.\ the cotangent on the per-channel gate values --- which then
-flows back through the excite MLP and the global-average-pool to
-\texttt{\%gdgate\_sp}; and \texttt{\%gdds = \%gdleft + \%gdgate\_sp} adds the
-two. That final \texttt{add} \emph{is} the product rule: the gradient that
-passes straight through the channel, plus the gradient that re-tunes the
-gate, summed.
+\noindent Read it against the product rule:
+
+\begin{itemize}
+  \item \texttt{\%gdleft} is $g(x)\odot dy$, the term a naive generator
+    would stop at.
+  \item \texttt{\%gdgate} reduces $x \odot dy$ over the spatial axes. That
+    reduction is the adjoint of the gate's broadcast, so it is the
+    cotangent on the per-channel gate values, and it flows back through the
+    excite MLP and the global-average-pool to \texttt{\%gdgate\_sp}.
+  \item \texttt{\%gdds = \%gdleft + \%gdgate\_sp} adds the two.
+\end{itemize}
+
+\noindent That final \texttt{add} \emph{is} the product rule: the gradient
+that passes straight through the channel, plus the gradient that re-tunes
+the gate, summed.
 
 \medskip\noindent As with attention, the listing shows the new structural
-move --- the product-rule fan-in --- and elides the work behind it: the
+move (the product-rule fan-in) and elides the work behind it: the
 \texttt{// gate VJP} comment stands for the excite MLP's own backward
 (sigmoid, dense, swish, dense), each carried by this chapter's bridges and
 composed in \texttt{seBlockFull\_has\_vjp}.
 
 \medskip\noindent\textbf{Caveats.}
 \begin{itemize}
-  \item \textbf{The SE fan-in carries no kink condition} --- swish and
-    sigmoid are smooth everywhere; the only smooth-point caveats in an
+  \item \textbf{The SE fan-in carries no kink condition.} Swish and
+    sigmoid are smooth everywhere, and the only smooth-point caveats in an
     MBConv come from its BatchNorms ($\epsilon > 0$).
   \item \textbf{Representative scale} (four mid-channels, two in the squeeze).
 \end{itemize}
 
 \section{ImageNet recipe}
+\label{sec:enet_imagenet}
 
 \imagenetphasenote
 
 As with ResNet-34 (Chapter~\ref{chap:residual}) and MobileNet-V2,
-the B0 backbone scales to full 1000-class ImageNet unchanged --- the
-MBConv stack stays put, the head widens to 1000, the schedule grows.
+the B0 backbone scales to full 1000-class ImageNet unchanged. The
+MBConv stack stays put, the head widens to 1000, and the schedule grows.
 The spec mirrors \texttt{jax/MainEfficientNetImagenet.lean}:
 
 \begin{verbatim}
@@ -7151,155 +7312,129 @@ def efficientNetB0Imagenet : NetSpec where
     .dense 1280 1000 .identity      -- 1000-class head
   ]
 
--- SGD recipe (mirrors MobileNet-V2); small weight decay, bf16 conv on.
+-- The paper's own recipe: RMSProp in TensorFlow's form, exponential
+-- LR decay, AutoAugment, stochastic depth, EMA, bf16 conv on.
 def efficientNetB0ImagenetConfig : TrainConfig where
-  learningRate := 0.1
-  batchSize    := 256
-  epochs       := 80               -- validation tier of an 80->300 ladder
-  useAdam      := false             -- SGD + momentum
-  momentum     := 0.9
-  weightDecay  := 1e-5              -- small: protects depthwise/SE params
-  cosineDecay    := true
+  learningRate   := 0.016   -- 0.256@4096, linearly scaled to bs 256
+  batchSize      := 256
+  epochs         := 80      -- a short check; `Full` below is the 350
+                            -- this section reports
+  optimizer      := .rmsprop
+  momentum       := 0.9     -- mu, for the RMSProp momentum buffer
+  rmspropDecay   := 0.9     -- rho, the running mean-square decay
+  rmspropEps     := 1e-3
+  gradClipNorm   := 0.0     -- OFF: the paper uses none
+  weightDecay    := 1e-5    -- small: protects depthwise/SE params
+  cosineDecay      := false -- replaced by the paper's exp decay
+  expLRDecayRate   := 0.97  -- x0.97 every 2.4 epochs, after warmup
+  expLRDecayEpochs := 2.4
+  dropout          := 0.2   -- classifier dropout
   warmupEpochs   := 5
   augment        := true
+  useAutoAugment := true    -- the full ImageNet policy
   labelSmoothing := 0.1
   bf16           := true
-  bf16Conv       := true            -- reaches the MBConv expand/dw/project
-  useEMA         := true            -- weight averaging, decay 0.9999
-  dropPath       := 0.2             -- stochastic depth (B0 drop-connect rate)
+  bf16Conv       := true    -- reaches the MBConv expand/dw/project
+  useEMA         := true    -- weight averaging, decay 0.9999
+  dropPath       := 0.2     -- stochastic depth (B0 drop-connect rate)
+  runningBN      := true    -- eval on running stats, not batch stats
+
+-- The 350-epoch tier is the same recipe, longer.
+def efficientNetB0ImagenetConfigFull : TrainConfig :=
+  { efficientNetB0ImagenetConfig with epochs := 350 }
 \end{verbatim}
 
+\noindent The number this section reports is the \texttt{full} recipe,
+the 350-epoch one. The \texttt{default} at 80 epochs is a shorter
+validation pass over the identical configuration, useful for checking
+that a change trains at all before committing a week of GPU time to it.
+
 Two details are specific to EfficientNet. First, \texttt{bf16Conv}
-casts the MBConv block's heavy convolutions --- the $1\times1$
-expand, the depthwise, the $1\times1$ project --- but deliberately
+casts the MBConv block's heavy convolutions (the $1\times1$
+expand, the depthwise, the $1\times1$ project) but deliberately
 leaves the squeeze-excitation $1\times1$s in fp32: SE acts on a
 globally-pooled $1\times1$ tensor where there is no throughput to
 win, and its sigmoid gate is precision-sensitive. The payoff is the
 same $\sim2\times$ MBConv-block speedup MobileNet sees, from exactly
 the convolutions worth casting.
 
-Second --- a correctness note worth surfacing --- the SE bottleneck
-is sized off the block's \emph{input} channels ($c/4$), not the
-$6\times$-larger expanded width. An earlier version of the codegen
-sized it off the expanded width and inflated B0 from its canonical
-$5.3$M parameters to $8.4$M; sizing the squeeze correctly restores
-the faithful $\mathbf{5.29}$M-parameter B0.
+Second, the SE bottleneck is sized off the block's \emph{input}
+channels ($c/4$), not the $6\times$-larger expanded width. An earlier
+version of the codegen sized it off the expanded width and inflated B0
+from its canonical $5.3$M parameters to $8.4$M. Sizing the squeeze
+correctly restores the faithful $\mathbf{5.29}$M-parameter B0, which is
+the count \S\ref{sec:se_efficientnet_example}'s spec derives today.
 
-\textbf{Augmentation.} Like MobileNet-V2, the run uses base aug only:
-Inception-style random-resized-crop (sampling 8--100\% of the image
-area at a 3/4--4/3 aspect ratio, resized to $224\times224$) plus a
-random horizontal flip, with label smoothing $0.1$ in the loss;
-validation center-crops. The heavier pack EfficientNet's headline
-recipe leans on --- Mixup, CutMix, RandAugment, Random Erasing --- is
-wired into the phase-2 Lean$\to$JAX trainer (emitted into the generated
-\texttt{tf.data} pipeline, each knob gated on a config flag, RandAugment in
-a color-only or full geometric variant, plus AutoAugment) but left off at
-this validation tier.
-
-\textbf{Compute budget.} This was the first run on all \emph{six} RTX
-4060 Ti (CUDA, bf16, batch 252 = 6$\times$42), steady-state
-$\sim$90\,ms per step, about $8.0$ minutes per epoch --- so the
-80-epoch run took $\sim$10.5 wall-clock hours. Six GPUs only buy
-$\sim$1.17$\times$ over four here (the same B0 ran $\sim$102\,ms/step
-on four): with the model held at batch 256, the bottleneck moves off
-the GPUs and onto the host data pipeline, which cannot decode and
-augment fast enough to keep six cards fed (they sit at ${\sim}65\%$
-utilization). It is not an interconnect limit --- the gradient
-all-reduce is a couple milliseconds of a $\sim$90\,ms step.
+\textbf{Augmentation.} The base is Inception-style random-resized-crop
+(sampling 8--100\% of the image area at a 3/4--4/3 aspect ratio, resized
+to $224\times224$) plus a random horizontal flip, with label smoothing
+$0.1$ in the loss, and validation center-crops. On top of that the run
+turns on \textbf{AutoAugment}, the full ImageNet policy including its
+geometric operations, which is the learned augmentation B0's recipe calls
+for. The heavier pack (Mixup, CutMix, RandAugment, Random Erasing) is
+wired into the phase-2 Lean$\to$JAX trainer, emitted into the generated
+\texttt{tf.data} pipeline with each knob gated on a config flag, and left
+off here because the 2019 recipe reaches for AutoAugment instead.
 
 \begin{center}
 \begin{tabular}{l l r r r r}
 \hline
 GPU & Epochs & Per epoch & Wall-clock & Val top-1 & Val top-5 \\
 \hline
-6$\times$ 4060 Ti & 80 (SGD) & $\sim$8.0 min & $\sim$10.5 hr & $72.31\%$ & $90.31\%$ \\
 4$\times$ 4060 Ti & 350 (RMSProp) & $\sim$8.6 min & $\sim$55.5 hr & $\mathbf{76.80\%}$ & $\mathbf{93.26\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent (CUDA, bf16. Two recipes: the 80-epoch SGD validation tier,
-and the faithful 350-epoch RMSProp full run --- the paper recipe end to
-end, discussed below.) The 80-epoch run reached
-$\mathbf{72.31\%}$ top-1 / $\mathbf{90.31\%}$ top-5 on the full
-50{,}000-image validation split --- a strong result for this tier,
-edging ResNet-34's $72.0\%$ at roughly a quarter of the parameters
-($5.3$M vs $21.8$M). It sits under EfficientNet's headline ${\sim}77\%$
-because it is a stripped validation tier: SGD, crop/flip only, 80 epochs.
-The faithful recipe --- RMSProp, AutoAugment, stochastic depth, EMA,
-350 epochs --- closes that gap (the 350-epoch row above, curve and story
-below), but getting RMSProp to train at all took two bug fixes. The
-80-epoch validation curve:
+\noindent (CUDA, bf16, batch 256.) That is the paper recipe end to end,
+and it reached $\mathbf{76.80\%}$ top-1 / $\mathbf{93.26\%}$ top-5 on the
+full 50{,}000-image validation split against EfficientNet-B0's published
+$77.1\%\,/\,93.3\%$. Getting there took two bug fixes, and neither was
+where we first looked.
 
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=81, ymin=0, ymax=95,
-    xtick={0,10,20,30,40,50,60,70,80}, ytick={20,40,60,80},
-    legend pos=south east, legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small}, label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(2,4.20) (3,16.40) (4,28.61) (5,38.10) (6,44.90) (7,49.72) (12,61.12) (13,62.18) (14,62.93) (15,63.78) (19,66.16) (20,66.60) (21,67.11) (22,67.44) (26,68.45) (27,68.48) (28,68.72) (29,68.98) (34,69.90) (35,70.02) (36,70.16) (37,70.35) (42,71.00) (43,71.03) (44,71.09) (45,71.33) (49,71.64) (50,71.73) (51,71.72) (52,71.79) (57,71.97) (58,72.02) (59,72.04) (60,72.08) (66,72.33) (67,72.36) (68,72.37) (69,72.37) (70,72.40) (71,72.40) (72,72.36) (73,72.39) (74,72.41) (76,72.38) (77,72.44) (78,72.41) (79,72.45) (80,72.43)
-};
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(2,12.99) (3,36.42) (4,53.69) (5,64.01) (6,70.51) (7,74.62) (12,83.34) (13,84.14) (14,84.76) (15,85.31) (19,86.76) (20,87.04) (21,87.32) (22,87.54) (26,88.21) (27,88.28) (28,88.41) (29,88.49) (34,89.00) (35,89.05) (36,89.18) (37,89.28) (42,89.64) (43,89.70) (44,89.70) (45,89.75) (49,89.93) (50,89.98) (51,90.07) (52,90.12) (57,90.18) (58,90.17) (59,90.22) (60,90.25) (66,90.26) (67,90.34) (68,90.31) (69,90.32) (70,90.30) (71,90.33) (72,90.34) (73,90.35) (74,90.34) (76,90.36) (77,90.33) (78,90.34) (79,90.34) (80,90.33)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\end{center}
-
-\noindent EfficientNet-B0 / ImageNet-1k validation accuracy per epoch
-(bf16, 6$\times$ 4060 Ti).
-
-\textbf{RMSProp --- a cautionary result that was really a bug.}
+\textbf{RMSProp: a cautionary result that was really a bug.}
 EfficientNet's native optimizer is RMSProp ($\rho=0.9$, $\mu=0.9$,
 $\varepsilon=10^{-3}$), and re-running B0 with it exposed what looked
 like a learning-rate sensitivity absent from MobileNet-V2's RMSProp: at
 the MobileNet-style peak $\mathrm{lr}=0.045$ the loss diverged by epoch
 6, and even at the paper's linear-scaled $\mathrm{lr}=0.016$ ($0.256$ at
-batch $4096 \to 0.016$ at batch $256$) top-1 \emph{eroded} --- peaking
+batch $4096 \to 0.016$ at batch $256$) top-1 \emph{eroded}, peaking
 $\sim$31\% near epoch 4, then decaying to $\sim$19\% and stalling. The
 obvious workaround was to lower the peak to $\sim$0.01, and for a while
 we did. But the learning rate was not the culprit: our RMSProp was not
 \emph{TensorFlow's} RMSProp, the variant EfficientNet actually trained
-with. Two differences --- $\varepsilon$ added \emph{outside} the square
+with. Two differences inflate the effective step by up to
+$\sim$30$\times$ when the running mean-square is small, which is exactly
+the erosion observed. $\varepsilon$ is added \emph{outside} the square
 root ($\sqrt{\mathrm{sq}}+\varepsilon$) rather than inside
-($\sqrt{\mathrm{sq}+\varepsilon}$), and the mean-square accumulator
-initialized to $0$ rather than $1$ --- inflate the effective step by up
-to $\sim$30$\times$ when the running mean-square is small, which is
-exactly the erosion observed. This also explains the MobileNet-V2
+($\sqrt{\mathrm{sq}+\varepsilon}$), and the mean-square accumulator is
+initialized to $0$ rather than $1$. This also explains the MobileNet-V2
 contrast: its $\varepsilon=1.0$ is large enough to swamp the
-misplacement, so the same bug left it unscathed --- MNv2 trained fine on
+misplacement, so the same bug left it unscathed. MNv2 trained fine on
 the buggy optimizer while B0 did not. Correcting both to the TensorFlow
 form (\texttt{timm}'s \texttt{RMSpropTF}) let B0 train stably at the
 paper's real $0.016$ with no gradient clipping and no lowered LR.
 
 A second bug surfaced once the optimizer was fixed: with the paper's
-weight EMA (decay $0.9999$) on, evaluation blew up --- validation loss to
-$10^{8}$ --- because the EMA shadowed only the weights, and eval then
+weight EMA (decay $0.9999$) on, evaluation blew up and validation loss
+reached $10^{8}$, because the EMA shadowed only the weights, and eval then
 paired those averaged weights with the \emph{live} BatchNorm running
 statistics. Shadowing the BN buffers with the same EMA (\texttt{ema\_bn})
 fixed it. ConvNeXt uses the identical EMA and never hit this: LayerNorm
 has no running buffers to desynchronize, so the bug is specific to
 BatchNorm nets trained with weight averaging.
 
-\textbf{The faithful 350-epoch run.} With both fixed, the full tier ---
-the paper recipe end to end: RMSProp at $0.016$, AutoAugment, stochastic
-depth, EMA, exponential LR decay --- reached $\mathbf{76.80\%}$ top-1 /
-$\mathbf{93.26\%}$ top-5, against EfficientNet-B0's paper
-$77.1\%\,/\,93.3\%$: within $0.3\%$ top-1 and essentially exact on top-5.
-A faithful, from-scratch reproduction with no hacks --- real RMSProp,
-real LR, real EMA. It ran $\sim$55.5\,hr on four 4060 Ti (350 epochs plus
-eleven 30-minute thermal rests, zero AER). The validation curve --- note
-the deliberate slow start, the weight EMA at $0.9999$ lagging near-init
-weights until $\sim$epoch 8 before catching up sharply:
+\textbf{The faithful 350-epoch run.} With both fixed, the full tier
+reached $\mathbf{76.80\%}$ top-1 / $\mathbf{93.26\%}$ top-5, against
+EfficientNet-B0's paper $77.1\%\,/\,93.3\%$: within $0.3\%$ top-1 and
+essentially exact on top-5. That tier is the paper recipe end to end,
+with RMSProp at $0.016$, AutoAugment, stochastic depth, EMA and
+exponential LR decay. A faithful, from-scratch reproduction with no
+hacks: real RMSProp, real LR, real EMA. It ran $\sim$55.5\,hr on four
+4060 Ti (350 epochs plus eleven 30-minute thermal rests, zero AER). In
+the validation curve below, the deliberate slow start is the weight EMA
+at $0.9999$ lagging near-init weights until $\sim$epoch 8 before catching
+up sharply:
 
 \begin{center}
 \begin{tikzpicture}
@@ -7328,8 +7463,116 @@ weights until $\sim$epoch 8 before catching up sharply:
 \noindent EfficientNet-B0 / ImageNet-1k validation accuracy per epoch,
 faithful 350-epoch RMSProp run (bf16, 4$\times$ 4060 Ti). The EMA slow
 start (near-zero through $\sim$epoch 7) is the weight average lagging the
-live weights, not a training failure; final $76.80\%\,/\,93.26\%$ matches
-the paper's $77.1\%\,/\,93.3\%$.
+live weights, not a training failure, and the final
+$76.80\%\,/\,93.26\%$ matches the paper's $77.1\%\,/\,93.3\%$.
+
+\subsection*{Phase 4: the verified trainer}
+\label{sec:enet_phase4}
+
+Everything above this point is the phase-2 Lean$\to$JAX trainer. The
+phase-4 peer, which trains the same network through the proof-rendered
+StableHLO that \S\ref{sec:enet_runit} ran at Imagenette scale, exists and
+builds. It is \texttt{apps/imagenette/MainEfficientNetImagenet.lean},
+built as \texttt{lake build efficientnet-imagenet-verified}:
+
+\begin{verbatim}
+-- Same MBConv + SE backbone, 1000 classes instead of 10.
+def efficientnetImagenetVerified : VerifiedNetSpec where
+  name       := "EfficientNet-B0 (ImageNet-1k)"
+  slug       := "efficientnetin"
+  nClasses   := 1000
+  data       := .imagenet
+  shimScript := "generated_efficientnet_b0_imagenet_shim.py"
+  layers     := [ ... the Imagenette stack, 1000-class head ... ]
+
+-- 350 epochs at 64 PER DEVICE; four replicas give the global 256.
+-- 350 because that is the schedule the phase-2 number above was
+-- measured on.
+def efficientnetImagenetConfig : VerifiedConfig where
+  epochs    := 350
+  batchSize := 64
+
+def main (argv : List String) : IO Unit :=
+  efficientnetImagenetVerified.toNet.trainAdamSched
+    efficientnetImagenetConfig (argv.head?.getD "data") ... variant
+\end{verbatim}
+
+\noindent \texttt{slug} names
+\texttt{verified\_mlir/efficientnetin\_<variant>\_train\_step.mlir}, the
+rendered graph, and \texttt{shimScript} names this net's own augmentation
+shim, which matters more here than it does for MobileNetV2 because
+EfficientNet's phase-2 config turns on the full AutoAugment policy and
+streaming another net's shim would drop it. The head is the only
+parameter shape that moves, from $1280 \times 10$ to $1280 \times 1000$,
+which takes the count from 4,020,358 to \textbf{5,288,548}. That second
+number is B0's canonical $5.29$M, the count the correctly-sized squeeze
+restores.
+
+\medskip\noindent\textbf{This is the first chapter whose phase-4 row could
+be measured rather than estimated.} The full paper recipe is already
+rendered, and it is rendered data-parallel:
+\texttt{efficientnetin\_emarmsdp64dropdo\_train\_step.mlir} carries EMA,
+RMSProp, the four-way gradient all-reduce, stochastic depth and
+classifier dropout in one graph. Unlike the MobileNetV4 case
+Chapter~\ref{chap:depthwise} closes on, this net's collectives are gated
+rather than trusted, and by two gates rather than one.
+\texttt{tests/TestEfficientNetDpCheck.lean} pins the data-parallel
+forward bit-exactly against its single-device peer. That gate hands both
+replicas the same rows, so it is structurally blind to a shard-offset
+bug, and the \texttt{shard-check} row for \texttt{efficientnet} closes
+exactly that hole: it gives the replicas genuinely different data and
+checks $\mathrm{DP}([x_A|x_B])$ against the mean of two single-device
+steps.
+
+\medskip\noindent\textbf{The variant name is two independent axes, and
+that has bitten once.} The optimizer axis and the EMA axis are spelled
+separately, so RMSProp-with-EMA is \texttt{emarms}, which does not
+\emph{begin} with \texttt{rms}. A driver that tested the variant with a
+prefix rather than a substring classified all six \texttt{emarms}
+artifacts as non-RMSProp and handed them AdamW's $10^{-3}$ and a cosine
+schedule, while the shared trainer's own test, which is a substring,
+correctly initialized the RMSProp mean-square to $1.0$. The result was a
+run with RMSProp's state, AdamW's learning rate and the wrong schedule,
+which descends and prints an entirely normal-looking log.
+\texttt{tests/TestVariantPredicates.lean} is the table of these
+collisions and this was its first entry.
+
+\medskip\noindent\textbf{The schedule is 350 epochs because the run it
+has to match is.} The phase-2 result this net is measured against is the
+paper-faithful 350-epoch tier at $76.80\%$, and \texttt{totalSteps} is
+what the schedule anneals over, so 80 against 350 is a different
+learning-rate curve end to end rather than a shorter version of the same
+one. There is a second reason here that MobileNetV2 did not have: no
+momentum render exists for \texttt{efficientnetin} at all. The committed
+variants are the AdamW family and the RMSProp family, so the 350-epoch
+RMSProp tier above is the only phase-2 number these artifacts can be
+pointed at.
+
+\medskip\noindent\textbf{What it has not done is run.} No phase-4
+ImageNet result exists for this network, which is why every accuracy
+above comes from phase 2. What is measured is the throughput, and the
+schedule follows from it:
+
+\begin{center}
+\begin{tabular}{l r r r r}
+\hline
+Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
+\hline
+4$\times$ 4060 Ti (CUDA)  & 371 & 30.9 & $\sim$180.5 h (7.5 d) & TBD \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Set that against the $\sim$8.6 minutes per epoch the phase-2
+350-epoch row reports on the same four cards, and the gap is not a
+property of either network. The verified path is fp32 throughout, with no
+bf16 artifact anywhere in \texttt{verified\_mlir/}, while every phase-2
+row in this section was measured in bf16 with the MBConv convolutions
+cast. The two columns measure the same architecture at different
+precisions, so the ratio between them is the cost of the missing cast and
+nothing else.
+
+\noindent\textbf{[TODO: run \texttt{efficientnet-imagenet-verified}.]}
 
 \subsection*{What the EfficientNet recipe changes from the 2018 recipe}
 
@@ -7340,9 +7583,10 @@ random-resized-crop). The 350-epoch run above is the \emph{2019}
 EfficientNet recipe (Tan \& Le), reproduced end to end.
 Chapter~\ref{chap:residual}'s RSB-A3 side quest shows what 2021 does
 to the 2018 baseline, and Chapter~\ref{chap:layernorm} closes with
-2022's version; this table is the 2019 rung of the same ladder. The
-\texttt{.train} entry point is identical; every row is a one-line
-\texttt{NetSpec} or \texttt{TrainConfig} change:
+2022's version. This table is the 2019 rung of the same ladder. The
+\texttt{trainAdamSched} entry point is identical in both columns, and
+every row is a one-line change to the \texttt{VerifiedNetSpec}, the
+\texttt{VerifiedConfig}, or the arguments beside them:
 
 \begin{center}
 \begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
@@ -7353,7 +7597,7 @@ Backbone      & basic block, 21.8\,M   & MBConv + SE + Swish, 5.3\,M  & depthwis
 Optimizer     & SGD + momentum $0.9$   & RMSProp (TF form)             & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}10^{-3}$ --- and the exact variant is load-bearing (below) \\
 Peak LR       & $0.1$                  & $0.016$                       & linearly scaled from the official $0.256$@4096 --- RMSProp's scale, not comparable to SGD's $0.1$ \\
 LR schedule   & cosine to zero         & exponential, $\times0.97$ every 2.4 epochs & the paper's staircase anneal, after the same 5-epoch warmup \\
-Epochs        & 90                     & 350                           & the long-schedule regime the regularizers need --- $+4.5$ top-1 over the 80-epoch validation tier \\
+Epochs        & 90                     & 350                           & the long-schedule regime the regularizers need, and the row the exponential decay above makes non-negotiable \\
 Weight decay  & $10^{-4}$, all params  & $10^{-5}$                     & $10\times$ \emph{weaker} --- depthwise and SE parameters are decay-sensitive \\
 Augmentation  & RRC + hflip            & + AutoAugment                 & the learned ImageNet policy --- 2019's forerunner of ConvNeXt's DeiT pack \\
 Stochastic depth & none                & drop-path $0.2$               & randomly drops whole residual branches per step, at B0's drop-connect rate \\
@@ -7366,8 +7610,8 @@ EMA           & none                   & decay $0.9999$                & evaluat
 label smoothing $0.1$, the 5-epoch warmup, random-resized-crop +
 horizontal flip as the base augmentation, batch 256, train and eval
 both at $224$, bf16 matmul and convolution (the SE $1\times1$s in
-fp32) --- and, unlike every later recipe in this ladder, no gradient
-clipping.
+fp32), and no gradient clipping, which is unlike every later recipe in
+this ladder.
 
 The two quietest rows carry the chapter's two debugging lessons.
 ``RMSProp (TF form)'' is doing real work: as recounted above,
@@ -7375,14 +7619,14 @@ TensorFlow's $\varepsilon$-outside-the-square-root and mean-square
 init of $1$ are the difference between training stably at the
 paper's $0.016$ and eroding to $\sim$19\%. And the EMA row only
 evaluates correctly because the BN running statistics are shadowed
-alongside the weights (\texttt{ema\_bn}) --- averaged weights
+alongside the weights (\texttt{ema\_bn}). Averaged weights
 against live BN statistics is an eval blow-up, a failure mode
 specific to BatchNorm nets trained with weight averaging.
 
 The through-line of the 2018$\to$2019 shift is \emph{smaller,
 longer, more automated}: a quarter of the parameters trained for
 $4\times$ the epochs, with a learned augmentation policy, stochastic
-depth, and averaged weights supplying the regularization --- and a
+depth, and averaged weights supplying the regularization. It is also a
 reminder that ``the paper recipe'' includes the optimizer's exact
 semantics, not just its hyperparameters.
 
@@ -7399,8 +7643,8 @@ $88.4\%$ top-1 on ImageNet, a state-of-the-art mark at the time. The
 recipe: train a teacher on labeled ImageNet, use the teacher to
 pseudo-label JFT-300M ($\sim$300M unlabeled images), then train a
 larger student on the combined dataset with heavy augmentation
-(RandAugment, dropout, stochastic depth) --- the ``noise'' the title
-refers to. Iterate.
+(RandAugment, dropout, stochastic depth), which is the ``noise'' the
+title refers to. Iterate.
 
 \textbf{EfficientDet}
 (\href{https://arxiv.org/abs/1911.09070}{Tan et al.\ 2020}).
@@ -9732,8 +9976,8 @@ CNN, ResNet, MobileNet, EfficientNet, ViT) has a machine-checked
 backward pass. The same \texttt{NetSpec} / \texttt{TrainConfig} /
 \texttt{.train} pipeline trains all of them with at most
 config-level changes. The MLIR each emits is between 20\,KB (MLP)
-and 938\,KB (EfficientNet-B0), and IREE compiles all of them the
-same way.
+and 1{,}316\,KB (EfficientNet-B0), and the lowerer compiles all of
+them the same way.
 
 The bestiary in Part 2 then shows that \emph{every other
 architecture you've seen in modern deep learning} --- UNet, DETR,
