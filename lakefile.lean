@@ -1407,7 +1407,7 @@ lean_exe «cifar8w-bn-ablation» where
 -- scripts/regen_verified_mlir.sh.
 lean_exe «resnet34-verified» where
   root := `apps.imagenette.MainResnet34Verified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 
 lean_exe «resnet34-verified-adam» where
@@ -2067,7 +2067,7 @@ lean_exe «resnet34-adam-bench» where
 -- (tests/TestMobilenetV2{Train,Fwd}.lean); 30 params.
 lean_exe «mobilenetv2-verified» where
   root := `apps.imagenette.MainMobilenetV2Verified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 
 lean_exe «mobilenetv2-verified-adam» where
@@ -2080,7 +2080,7 @@ lean_exe «mobilenetv2-verified-adam» where
 -- on VERIFIED-rendered StableHLO (tests/TestEfficientNet{Train,Fwd}.lean); 262 params.
 lean_exe «efficientnet-verified» where
   root := `apps.imagenette.MainEfficientNetVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 
 lean_exe «efficientnet-verified-adam» where
@@ -2093,7 +2093,7 @@ lean_exe «efficientnet-verified-adam» where
 -- VERIFIED-rendered StableHLO (tests/TestConvNeXt{Train,Fwd}.lean); 180 params.
 lean_exe «convnext-verified» where
   root := `apps.imagenette.MainConvNeXtVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Randomized-smoothing certificate on the verified ConvNeXt-T (Imagenette 224²): the deep / real-
 -- resolution rung of the depth-INDEPENDENT cert (Cohen 2019). LayerNorm ⇒ per-sample fwd, so the
@@ -2110,7 +2110,7 @@ lean_exe «convnext-verified-adam» where
 
 lean_exe «vit-verified» where
   root := `apps.imagenette.MainViTVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 
 lean_exe «vit-verified-adam» where

@@ -92,6 +92,18 @@ structure VerifiedNet where
       where the transport belongs; print it with `printBlurb`, never with `IO.println` directly,
       so the banner names the lowerer that actually ran. -/
   blurb    : String
+  /-- **Does `<slug>_train_step.mlir` return the trailing report-only `%loss` scalar?**
+
+      A per-RENDER fact, not a driver-wide one. `VerifiedNet.train` used to append the slot
+      unconditionally, which was true only of `mlp` and `cnn` (the two re-rendered for the
+      chapter-2/3 loss carve-out) and wrong for every other net on this driver — `resnet34`,
+      `cifar8`, `cifar8_bn`, `cifar`, `cifar_bn`, `mobilenetv2`, `efficientnet`, `convnext`,
+      `vit`. Those all return parameters only, so the driver offered one destination too many
+      and the G4 arity gate refused to run them.
+
+      A wrong value here cannot corrupt anything: G4 compares the module's real output count
+      against what the driver supplies and refuses on any mismatch. -/
+  lossSlot : Bool := false
   /-- Per-BN-layer channel counts, in forward order (empty for LayerNorm / no-BN nets). When
       non-empty, `trainAdamSched` threads running BN stats: the adam train step carries per-layer
       batch mean/var out in passthrough slots, the driver EMAs them, and eval uses
@@ -694,8 +706,11 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   -- ⚠ The packed blob is `[θ | loss]`, so every parameter tensor still LEADS it and
   -- the resident prefix is unchanged — residency retains the first `nResident`
   -- tensors and the host now reads exactly one float off the tail.
-  let tsShapes := packShapes (net.paramShapes ++ #[#[]])
-  params := F32.concat #[params, ← F32.const 1 0.0]
+  -- ⚠ Gated on `net.lossSlot`: only the renders that actually emit the scalar get the extra
+  -- destination. See the field's docstring for the nine nets this was silently wrong for.
+  let tsShapes := packShapes (if net.lossSlot then net.paramShapes ++ #[#[]] else net.paramShapes)
+  if net.lossSlot then
+    params := F32.concat #[params, ← F32.const 1 0.0]
   for ep in [0:nEpochs] do
     let tEp0 ← IO.monoMsNow
     let mut epochLossSum := 0.0
@@ -705,7 +720,8 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
       let yb := if synth then trainLbl else F32.sliceLabels trainLbl (bi * bs) bs
       params ← LowererSession.mlpTrainStepV tsSess tsFn
                   xb params tsShapes yb bs.toUSize d0.toUSize nc.toUSize nResident
-      epochLossSum := epochLossSum + (F32.read params net.nParams.toUSize)
+      if net.lossSlot then
+        epochLossSum := epochLossSum + (F32.read params net.nParams.toUSize)
     -- Bring the parameters back to host for eval and for the G2 dump. Without
     -- residency this is the copy `params` already was, so the line is inert;
     -- with it, this is the ONE d2h per epoch that remains. It is placed outside
@@ -732,7 +748,11 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
           if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
-    IO.println s!"  epoch {ep + 1}: loss = {epochLossSum / nb.toFloat}, {evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
+    -- ⚠ Only nets whose render carries the `%loss` scalar have a loss to report. Printing
+    -- `loss = 0.000000` for the others would put a fabricated number in a captured log, so
+    -- the field is omitted instead. See `VerifiedNet.lossSlot`.
+    let lossField := if net.lossSlot then s!"loss = {epochLossSum / nb.toFloat}, " else ""
+    IO.println s!"  epoch {ep + 1}: {lossField}{evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
   -- Gate G2 (`planning/xla_pjrt_ladder.md` §3): dump the packed params so the IREE
   -- and XLA builds can be diffed tensor-for-tensor. He init runs in Lean from a

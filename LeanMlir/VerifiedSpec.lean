@@ -286,6 +286,9 @@ structure VerifiedNetSpec where
       there is no default and why an empty one refuses instead of falling back. Required on every
       `.imagenet` spec; meaningless on the others. -/
   shimScript : String := ""
+  /-- Does `<slug>_train_step.mlir` return the trailing report-only `%loss` scalar? Per-RENDER,
+      and only the `mlp` / `cnn` chapter-2/3 renders carry it. See `VerifiedNet.lossSlot`. -/
+  lossSlot : Bool := false
 
 namespace VerifiedNetSpec
 
@@ -301,7 +304,7 @@ def toNet (s : VerifiedNetSpec) : VerifiedNet :=
   { name := s.name, slug := s.slug, specs := s.toSpecs, d0 := s.d0,
     nClasses := s.nClasses, data := s.data, blurb := s.blurb, bnChannels := s.bnChannels,
     dropKeeps := s.dropKeeps, dropoutKeep := s.dropoutKeep, shimScript := s.shimScript,
-    mlirDir := s.mlirDir }
+    mlirDir := s.mlirDir, lossSlot := s.lossSlot }
 
 /-- Train end-to-end (delegates to the shared `VerifiedNet.train` driver). -/
 def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=

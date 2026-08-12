@@ -74,6 +74,8 @@ def mlpVerified : VerifiedNetSpec where
   data     := .mnist
   layers   := [.dense 784 512, .relu, .dense 512 512, .relu, .dense 512 10]
   blurb    := "MNIST-MLP via the VERIFIED renderer (784→512→512→10) → %LOWERER% → GPU"
+  -- The chapter-2/3 loss carve-out: this render returns a trailing report-only `%loss`.
+  lossSlot := true
 
 -- Shape tie: W₀:[784,512] b₀:[512] | W₁:[512,512] b₁:[512] | W₂:[512,10] b₂:[10].
 #guard mlpVerified.toSpecs ==
@@ -123,6 +125,8 @@ def cnnVerified : VerifiedNetSpec where
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 6272 512, .relu, .dense 512 512, .relu, .dense 512 10]
   blurb    := "MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → %LOWERER% → GPU"
+  -- The chapter-2/3 loss carve-out: this render returns a trailing report-only `%loss`.
+  lossSlot := true
 
 -- Shape tie: conv0[32,1,3,3]+b | conv1[32,32,3,3]+b | dense 6272→512→512→10 (+biases).
 #guard cnnVerified.toSpecs ==
