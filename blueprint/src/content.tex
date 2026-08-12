@@ -4403,7 +4403,7 @@ right observation: if the
 compute the identity}, the 32-layer network would have at least
 the 20-layer's performance, because it could replicate it
 exactly. So the question was not ``can a deep network represent
-what a shallow one represents?''---it provably could. The question
+what a shallow one represents?'' It provably could. The question
 was: why is optimizing 12 free-form layers to recover identity
 so much harder than just leaving identity there?
 
@@ -4416,7 +4416,7 @@ function \(y = f(x) + x\). The block's job is no longer to
 \emph{add} to the current representation. At initialization, with
 randomly-small \(f\), each block is approximately the identity,
 and a stack of 16 such blocks is approximately a stack of
-16 identities---which is to say, approximately the input. The
+16 identities, which is to say, approximately the input. The
 network starts out near-identity at every depth and only gradually
 takes on structure as \(f\) trains. The optimization problem
 becomes ``what residual should each block add'' instead of ``what
@@ -4425,13 +4425,13 @@ dramatically easier.
 
 The change to the architecture is one \texttt{+} sign. The change
 to the training dynamics is the difference between ``18 layers is
-about as deep as we can go'' and ``152 layers trains stably; let
+about as deep as we can go'' and ``152 layers trains stably, so let
 us also add another zero on the ImageNet leaderboard.''
 
 \prosesection{Why the proof is a one-liner}
 
 From the framework's perspective, what is a residual block?
-\(\mathrm{residual}(x) = f(x) + \mathrm{id}(x)\)---a sum of two
+\(\mathrm{residual}(x) = f(x) + \mathrm{id}(x)\), a sum of two
 functions sharing the same input. We already proved in
 Chapter~\ref{chap:tensor} that the VJP of an additive fan-in is
 ``send the upstream gradient through both branches and add.'' We
@@ -4444,7 +4444,7 @@ fan-in lemma, with \(\mathrm{id}\) plugged into one slot.
 That is Theorem~\ref{thm:residual_has_vjp} below, and its proof
 is one line. This chapter has \emph{exactly one theorem}, and
 that theorem is mechanical. The engineering revolution was not
-in the math---it was in the realization that this
+in the math. It was in the realization that this
 operation was the missing piece for training deep
 networks. The fact that the framework absorbs the new
 architecture without any new math is the value proposition: once
@@ -4467,7 +4467,7 @@ Two pieces of this template are new and worth naming:
 
 \begin{enumerate}
 \item \textbf{The 7$\times$7 stride-2 stem.} Earlier chapters'
-  networks operated at full input resolution; ResNet aggressively
+  networks operated at full input resolution. ResNet aggressively
   downsamples at the input so the bulk of compute happens at lower
   spatial resolution. The stem is one big conv that gets us from
   224$\times$224 to 56$\times$56 in a single step.
@@ -4531,7 +4531,7 @@ fan-in pattern, persist.
 
 Same template as the MNIST and CIFAR chapters, but at the scale the
 architecture was designed for. ResNet-34 on 224$\times$224
-Imagenette --- 10 classes, real photographs, the transition point
+Imagenette: 10 classes, real photographs, the transition point
 from ``classroom dataset'' to ``actual image recognition.''
 
 The residual block itself is the whole trick: instead of $y = f(x)$,
@@ -4700,13 +4700,13 @@ Epoch 80/80: loss=0.502586 lr=0.000000 (427151ms)
 
 Eighty epochs, about 425~seconds per epoch on the 7900 XTX ($\sim$7
 minutes), total wall time around \textbf{9.5 hours}. Final test
-accuracy \textbf{90.29\%} on Imagenette --- the going rate for
+accuracy \textbf{90.29\%} on Imagenette, the going rate for
 scratch-trained ResNet-34 at this resolution and data size.
 
 Some numbers worth noticing:
 
 - \textbf{21.3M params}, but only about 517\,KB of MLIR
-  (517\,912 chars) for the entire training step --- roughly
+  (517\,912 chars) for the entire training step, roughly
   25$\times$ the MLP, 24$\times$ the no-BN CIFAR CNN. The network
   deepened by 10$\times$ more layers, but the emitted compute only
   grew linearly in depth: IREE's code generation is per-op, not
@@ -4717,7 +4717,7 @@ Some numbers worth noticing:
   \texttt{.residualBlock} stages (their $3 \times 3$ convs at 64,
   128, 256, 512 channels are where the FLOPs live). The first
   block alone at 64 channels does $3 \times 3 \times 64 \times 64$
-  per output spatial location --- about $3.4 \times 10^8$ FLOPs per
+  per output spatial location, about $3.4 \times 10^8$ FLOPs per
   forward image, times the batch of 32, times three blocks at that
   width, times 295 batches per epoch, times two (forward and
   backward).
@@ -4726,7 +4726,7 @@ Some numbers worth noticing:
   label-smoothing floor: with $\epsilon = 0.1$ and 10 classes, the
   minimum possible cross-entropy against a smoothed target is
   $-0.9 \log 0.9 - 0.1 \log (0.1/9) \approx 0.485$. The 0.50 value
-  at epoch 80 means the model has essentially converged; more
+  at epoch 80 means the model has essentially converged. More
   epochs would mostly just extend training time without budging the
   loss.
 
@@ -4741,7 +4741,7 @@ Some numbers worth noticing:
 \section{MLIR: Residual}
 
 \noindent\textbf{What is already proven.} A residual block is
-$\mathrm{residual}(x) = f(x) + x$ --- an additive fan-in, where $f$ is the
+$\mathrm{residual}(x) = f(x) + x$, an additive fan-in, where $f$ is the
 conv\,$\to$\,BN\,$\to$\,relu\,$\to$\,conv\,$\to$\,BN inner block. As
 Theorem~\ref{thm:residual_has_vjp} states, its reverse-mode derivative is
 the additive-fan-in rule with the identity in one slot: \emph{send the
@@ -4750,7 +4750,7 @@ upstream gradient through both branches and add}.
 (a one-line proof: the fan-in lemma with the identity's VJP plugged into
 one slot), and the inner $f$'s VJP is the convolution and BatchNorm
 backward already proven in Chapters~\ref{chap:cnn} and~\ref{chap:bn}. The
-whole block --- and a tower of sixteen of them --- composes by the chain
+whole block, and a tower of sixteen of them, composes by the chain
 rule \texttt{vjp\_comp\_at} (\S~\ref{thm:vjp_comp}).
 
 \medskip\noindent\textbf{The gap and how we close it.} The residual
@@ -4759,9 +4759,9 @@ given a denotation valued in the proofs' own tensor type, shown equal to
 \texttt{residual\_has\_vjp\_at}'s backward, and the structural move is
 visible in the emitted text. The forward
 saves $\texttt{add} = f(x) + x$ and the block output
-$\texttt{relu}(\texttt{add})$; the backward first pushes the incoming
+$\texttt{relu}(\texttt{add})$. The backward first pushes the incoming
 cotangent back through that relu (a \texttt{compare}/\texttt{select} at the
-post-add, giving \texttt{\%dadd}), and then --- this is the fan-in --- sends
+post-add, giving \texttt{\%dadd}), and then, and this is the fan-in, sends
 \texttt{\%dadd} through \emph{both} branches and adds (the inner block's
 forward and $f$-backward elided, as they are the conv/BN nodes of
 Chapters~\ref{chap:cnn}--\ref{chap:bn}):
@@ -4780,31 +4780,31 @@ return %dx : tensor<1x2x4x4xf32>
 \end{verbatim}
 
 \noindent Read it against the theorem: \texttt{\%dadd} is the cotangent at
-the fan-in, and it appears \emph{twice} in the last two lines --- once as
+the fan-in, and it appears \emph{twice} in the last two lines, once as
 the input to $f$'s backward (\texttt{\%dF}, the gradient through the
 residual function) and once added directly (\texttt{\%dx = \%dF + \%dadd},
 the gradient straight down the identity skip). That single
 \texttt{stablehlo.add} \emph{is} ``send the gradient through both branches
 and add'': the skip term is the same \texttt{\%dadd} the block term started
 from, which is why the gradient survives all sixteen blocks instead of
-attenuating away. The inner $f$ backward that computes \texttt{\%dF} --- the
-convolution and BatchNorm input-VJPs --- is bridged op by op exactly as in
-Chapters~\ref{chap:cnn} and~\ref{chap:bn}; only the fan-in is new here.
+attenuating away. The inner $f$ backward that computes \texttt{\%dF}, the
+convolution and BatchNorm input-VJPs, is bridged op by op exactly as in
+Chapters~\ref{chap:cnn} and~\ref{chap:bn}. Only the fan-in is new here.
 
 \medskip\noindent\textbf{Caveats.}
 \begin{itemize}
-  \item \textbf{The fan-in \texttt{add} is unconditional} --- addition is
+  \item \textbf{The fan-in \texttt{add} is unconditional}, because addition is
     linear, so that bridge holds at every input.
   \item \textbf{The post-add ReLU is a smooth-point bridge} (no
     pre-activation exactly zero), and the two BatchNorms inside $f$ carry
     their own $\epsilon > 0$ conditions from Chapter~\ref{chap:bn}.
-  \item \textbf{Representative scale} --- a two-channel block at $4\times4$;
-    the same \texttt{\%dadd} fan-in repeats for all sixteen blocks.
+  \item \textbf{Representative scale}, a two-channel block at $4\times4$. The
+    same \texttt{\%dadd} fan-in repeats for all sixteen blocks.
 \end{itemize}
 
 \section{What's in the production recipe?}
 
-Six ingredients first appear here, none of which are layers --- they
+Six ingredients first appear here, none of which are layers. They
 all live in \texttt{TrainConfig} or training code. They don't touch
 the network, but they're what moves a scratch-trained model from 72.82\%
 (plain SGD + momentum, no other tricks) to 90.29\%.
@@ -4821,11 +4821,11 @@ forgiving of learning-rate choice.
 \href{https://arxiv.org/abs/1608.03983}{arXiv:1608.03983}).
 After warmup, the learning rate decays from its peak to near-zero
 following $\mathrm{lr}(t) = \mathrm{lr}_{\max} \cdot \tfrac{1}{2}(1 +
-\cos(\pi t / T))$. Smoother than step schedules; consistently produces
+\cos(\pi t / T))$. Smoother than step schedules, and consistently produces
 slightly better final losses in practice. Paired with warmup and
 \href{https://www.fast.ai/posts/2018-04-30-dawnbench-fastai.html}{progressive
 resizing} (Howard et al., 2018), this was the winning recipe at
-Stanford's DAWNBench in 2018; the lineage traces back to Leslie
+Stanford's DAWNBench in 2018. The lineage traces back to Leslie
 Smith's cyclical learning rates (Smith 2015,
 \href{https://arxiv.org/abs/1506.01186}{arXiv:1506.01186}).
 Popularized for ImageNet-scale training by He et al.\ 2018's
@@ -4837,7 +4837,7 @@ Popularized for ImageNet-scale training by He et al.\ 2018's
 ramps the learning rate from zero to its
 peak over the first few epochs (3 for ResNet-34). Stabilizes early
 training when gradients are still reorganizing randomly-initialized
-weights. Becomes essential for larger models and larger batches --- by
+weights. Becomes essential for larger models and larger batches, and by
 ViT-Tiny in Chapter~\ref{chap:attention} it's a necessity.
 
 \textbf{Weight decay}. Adds a small L2 shrink to all trainable weights
@@ -4849,7 +4849,7 @@ actually ships in modern
 pipelines, and it's what \texttt{TrainConfig.weightDecay} implements.
 
 \textbf{Augmentation}. Our pipeline does random crops ($256 \to 224$)
-and random horizontal flips on Imagenette; hflip only on CIFAR;
+and random horizontal flips on Imagenette, hflip only on CIFAR, and
 nothing on MNIST. Lives in the data pipeline, not the network. We
 will explore data augmentation strategies in upcoming chapters.
 
@@ -4863,7 +4863,7 @@ Explains the \textbf{0.50 loss floor} in the Results section above:
 $-0.9 \log 0.9 - 0.1 \log (0.1/9) \approx 0.485$.
 
 Every chapter after this one uses the same six ingredients. The
-\texttt{NetSpec} changes; the recipe stays.
+\texttt{NetSpec} changes, and the recipe stays.
 
 \section{Ablation: what each ingredient contributes}
 \label{sec:r34_ablation}
@@ -4872,7 +4872,7 @@ So how much does each ingredient actually earn? We ran the full
 recipe plus six leave-one-out variants on ResNet-34 Imagenette, 80
 epochs each, same init and batch order. Each ablation row keeps
 everything except the one named component, so the lift measures
-that component's contribution given everything else is present ---
+that component's contribution given everything else is present. It is
 an honest answer to ``is this piece pulling its weight?'' rather
 than the order-dependent story you'd get from an additive ladder.
 
@@ -4898,22 +4898,22 @@ Three observations worth naming:
 \textbf{Augmentation is by far the largest single contribution}
 ($-$7.58 points, more than 2$\times$ any other knob). Imagenette
 has just 9469 training images for a 21M-parameter network, so
-without augmentation the model overfits hard --- training loss
+without augmentation the model overfits hard, and training loss
 drops below $0.001$ while val accuracy stalls. Augmentation is
 doing most of the work that the rest of the recipe gets credit
 for.
 
 \textbf{Cosine decay and Adam are roughly tied for largest
 non-augmentation contribution} ($-$3.48 and $-$3.25 points). They
-operate on different axes --- cosine shapes the learning-rate
-trajectory, Adam shapes the per-parameter update magnitude --- but
+operate on different axes, with cosine shaping the learning-rate
+trajectory and Adam the per-parameter update magnitude, but
 their late-training influence on val accuracy is comparable.
 
 \textbf{The contributions are essentially additive.} Sum of all
 six leave-one-out deltas: $-17.38$ points. Bare-recipe delta vs
 full: $-17.47$ points. The two agree to within rounding, suggesting
-the modern recipe's ingredients aren't significantly interacting ---
-each one buys roughly the same lift independently of which others
+the modern recipe's ingredients aren't significantly interacting.
+Each one buys roughly the same lift independently of which others
 are present. Weight decay and label smoothing are the smallest
 contributors ($-$0.61 and $-$1.05) but show the
 overfit-then-catch-up signature mid-training (e.g., no-WD lands
@@ -4933,10 +4933,10 @@ the leave-one-out chain.
 \imagenetphasenote
 
 The Imagenette runs above all trained on $\sim$9.5K images for 80
-epochs. The headline ResNet result --- 21.8M parameters reaching
-74.4\% top-1 on full 1000-class ImageNet --- comes from a different
+epochs. The headline ResNet result, 21.8M parameters reaching
+74.4\% top-1 on full 1000-class ImageNet, comes from a different
 recipe: 1.28M training images, 90 epochs, paper-recipe SGD with
-momentum. The architecture is unchanged; only the dataset, the
+momentum. The architecture is unchanged, and only the dataset, the
 output head width, and the training schedule differ. Here's what
 the loop looks like:
 
@@ -4981,13 +4981,13 @@ runs via \texttt{lake build resnet34-imagenet}) wires
 \texttt{.imagenet} through tfds streaming. The phase-3 IREE path
 shown in the snippet above still needs a C-side streaming reader
 for the 1.28M-image training set (Imagenette's 9.5K fits in a
-single \texttt{ByteArray}; ImageNet doesn't) --- until that lands,
+single \texttt{ByteArray}, and ImageNet doesn't). Until that lands,
 the phase-3 dispatcher panics with a ``use phase 2'' note when
 handed \texttt{.imagenet}. What's worth noting is that everything
-else --- the architecture, the \texttt{.train} invocation, the
-recipe knobs --- is identical across both paths; only the
+else is identical across both paths, including the architecture, the
+\texttt{.train} invocation, and the recipe knobs. Only the
 data-loading layer differs. The framework isn't doing anything
-fundamentally different at ImageNet scale; it's just the data
+fundamentally different at ImageNet scale. It's just the data
 that's bigger.
 
 \textbf{Compute budget.} The phase-2 (Lean$\to$JAX) path trains
@@ -4996,13 +4996,13 @@ that's bigger.
 sharding via \texttt{Mesh + NamedSharding(P('batch'))} with RCCL
 preloaded). At batch 256 (128 per device), one epoch over the
 1.28M-image training set runs in about 24 minutes of compute plus
-a 10-second val pass; a 30-epoch run finishes in roughly 15
+a 10-second val pass, and a 30-epoch run finishes in roughly 15
 wall-clock hours including first-epoch JIT compile. Final result
 on the standard 50K-image validation split is $\mathbf{69.26\%}$
 top-1 (val\_loss $1.232$). The parameter checkpoint
 (\texttt{jax\_r34\_imagenet.bin}, 87\,MB, 37 param groups) is
 written via the same \texttt{params\_to\_file} emit that phase-3
-IREE consumes --- so the JAX-trained weights drop into a phase-3
+IREE consumes, so the JAX-trained weights drop into a phase-3
 \texttt{TrainConfig.bootstrapBackbone} field byte-for-byte without
 a separate conversion step.
 
@@ -5011,7 +5011,7 @@ $0.9$, batch 256, cosine LR with a 5-epoch warmup from peak $0.1$,
 label smoothing $0.1$, Inception-style random-resized-crop
 (sampling $8$--$100\%$ of the image area at a $\frac{3}{4}$--$\frac{4}{3}$
 aspect ratio, then resizing to $224\times224$) plus a horizontal
-flip, $\ell_2$ weight decay $10^{-4}$) --- a deliberate trade for
+flip, $\ell_2$ weight decay $10^{-4}$), a deliberate trade for
 roughly $95\%$ of the paper's $\sim$73\% headline at $\sim$1/3 the
 compute.
 
@@ -5021,10 +5021,10 @@ NVIDIA RTX 4060 Ti, CUDA/cuDNN), the same \texttt{resnet34Imagenet}
 spec with \texttt{bf16 := true} casts both the matmuls and the
 convolutions to bfloat16 while keeping fp32 master weights. NVIDIA's
 tensor cores run bf16 convolution about $1.6\times$ faster than
-fp32 --- the opposite of AMD's MIOpen, where bf16 conv is a wash,
+fp32, the opposite of AMD's MIOpen, where bf16 conv is a wash,
 which is why conv precision is gated behind its own
 \texttt{bf16Conv} flag (matmul-only bf16 helps transformers on
-either vendor; bf16 conv only pays off on cuDNN). The wall-clock
+either vendor, and bf16 conv only pays off on cuDNN). The wall-clock
 difference over a full 90-epoch run, batch 256 across the four
 GPUs:
 
@@ -5044,20 +5044,20 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 
 \noindent ResNet-34 / ImageNet-1k: per-epoch throughput and final
 validation for the completed runs (ROCm at 30 epochs, CUDA at the full
-90; the MI300X row is a single-GPU batch-1024 run on gfx942). The A100
+90, and the MI300X row is a single-GPU batch-1024 run on gfx942). The A100
 row is a wall-clock estimate, accuracies pending.
 \textsuperscript{\dag}\,MI300X used batch 1024 / lr 0.4 (linear
 large-batch scaling) vs batch 256 / lr 0.1 for the other rows, so its
-$+1.9$-point top-1 over the 4060\,Ti bf16 row is the large-batch scaling,
-not the hardware; a matched batch-256 run for an apples-to-apples
+$+1.9$-point top-1 over the 4060\,Ti bf16 row is the large-batch scaling
+rather than the hardware. A matched batch-256 run for an apples-to-apples
 hardware comparison is still to do.
 
 The bf16 run finished all 90 epochs in about 16 wall-clock hours
 and reached $\mathbf{72.02\%}$ top-1 / $\mathbf{90.62\%}$ top-5 on
-the full 50{,}000-image validation split --- squarely on the
+the full 50{,}000-image validation split, squarely on the
 paper's ResNet-34 mark, in bf16, on consumer GPUs. (fp32 was
 measured at the matched $1.6\times$-slower throughput but not run
-to completion; bf16 does not cost final accuracy here.) The
+to completion, and bf16 does not cost final accuracy here.) The
 $1.6\times$ figure tracks a microbenchmark of the bare conv
 operator at this network's stage-1 shape almost exactly, so the
 speedup is the convolution itself going through tensor cores, not
@@ -5097,19 +5097,19 @@ to zero.
 
 \noindent ResNet-34 / ImageNet-1k validation accuracy per epoch
 (bf16, 4$\times$ 4060 Ti). The kink near epoch~5 is the end of
-warmup; the steady late climb is the cosine anneal.
+warmup, and the steady late climb is the cosine anneal.
 
 \prosesection{Phase 4: the PJRT bridge}
 
-Every ImageNet recipe in this book opens with the same caveat --- the
+Every ImageNet recipe in this book opens with the same caveat. The
 numbers come from the phase-2 (Lean$\to$JAX) trainer, and whether the
 verified codegen path can reach this scale is an open question. Phase 4
 is a second trusted lowerer, \texttt{ffi/pjrt\_ffi.c}, implementing the
 same C surface as the IREE (phase 3) shim and handing the graph to XLA
-through the PJRT C API. Nothing above the shim changes --- the
+through the PJRT C API. Nothing above the shim changes. The
 backend is whichever \texttt{.so} the binary linked, and backend
 detection is a weak symbol, so a binary cannot disagree with the library
-it linked --- and there is no Python at run time. What the trainer
+it linked. There is no Python at run time. What the trainer
 executes is \texttt{pretty(provenGraph)}: the same rendered artifact the
 proofs reason about, not a hand-written emitter.
 
@@ -5135,7 +5135,7 @@ For the fastest path through this book, the route is roughly:
 
 \begin{itemize}
   \item The intro chapters \& Ch 1: framework setup (mandatory context).
-  \item Ch 2--3: MLP and CNN worked examples --- the simplest cases
+  \item Ch 2--3: MLP and CNN worked examples, the simplest cases
     of the framework reaching real architectures.
   \item Skim Ch~\ref{chap:bn} (BatchNorm). It's structurally the
     hardest chapter and the prose says so up front. The math is
@@ -5145,13 +5145,13 @@ For the fastest path through this book, the route is roughly:
     time running as many MNIST and CIFAR demos as possible.
   \item Read this chapter (Ch~\ref{chap:residual}, ResNet-34).
     Residual blocks are where the chain rule shows it can carry
-    composition through arbitrarily deep architectures; the proof
+    composition through arbitrarily deep architectures, and the proof
     reduces to one additive-fan-in lemma you've already seen. Run
     the ResNet-50 RSB-A3 ImageNet training demo locally and/or in
     the cloud ($\sim$6--9\,hrs, $\sim$\$15 in compute).
   \item Stop here. Assume Chapters \ref{chap:depthwise}--\ref{chap:attention}
     (MobileNet, EfficientNet, ConvNeXt, ViT) and the Bestiary
-    (Ch~\ref{chap:bestiary}) are correct --- they all reuse the
+    (Ch~\ref{chap:bestiary}) are correct, because they all reuse the
     same framework with new operators slotting into the same proof
     tree. Appendix~\ref{app:verification} walks through how that
     claim is auditable if you ever want to spot-check it.
@@ -5175,7 +5175,7 @@ ships it as a full ImageNet demo
 effective batch 2048 (via gradient accumulation), BCE over
 Mixup/CutMix soft targets, RandAugment, train@160 / eval@224. On the
 same proven-backward bottleneck codegen it reached $\mathbf{77.22\%}$
-top-1 / $\mathbf{93.34\%}$ top-5 at 100 epochs --- within $0.9$ points
+top-1 / $\mathbf{93.34\%}$ top-5 at 100 epochs, within $0.9$ points
 of the paper's $78.1\%$, reproducing (and slightly beating) an earlier
 $76.66\%$ / $93.03\%$ run to within run-to-run noise.
 
@@ -5183,12 +5183,12 @@ $76.66\%$ / $93.03\%$ run to within run-to-run noise.
 four usable NVIDIA RTX 4060 Ti (CUDA, bf16 matmul and convolution) as
 the ResNet-34 bf16 run, at effective batch 2048. Four 16\,GB cards
 cannot hold that batch on one device, so it is split $4\times512$ across
-the GPUs and accumulated $4\times$ to reach 2048 --- which means
+the GPUs and accumulated $4\times$ to reach 2048, which means
 BatchNorm normalizes over each $512$-image micro-batch (``Ghost-BN''),
 not the full $2048$. A single $\sim$80\,GB A100 holds the whole batch,
 so the \texttt{true-2048} recipe (no gradient accumulation) normalizes
 BatchNorm over all $2048$ images at once. Same network, same effective
-batch --- the only difference is the BN statistic group, which is the
+batch, and the only difference is the BN statistic group, which is the
 axis this comparison isolates:
 
 \begin{center}
@@ -5204,18 +5204,18 @@ GPU & BN regime & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \end{center}
 
 \noindent ResNet-50 / RSB-A3, 100 epochs: the 4-GPU run splits the
-batch and normalizes BatchNorm per $512$-image shard; the A100
+batch and normalizes BatchNorm per $512$-image shard, and the A100
 \texttt{true-2048} row normalizes over the full $2048$. The
 $\sim$17\,hr wall-clock includes three 30-minute thermal duty-cycle
-cooldowns (the 4060 Ti box is duty-cycled on long runs); the run itself
+cooldowns (the 4060 Ti box is duty-cycled on long runs), and the run itself
 logged zero PCIe/AER interruptions across all 100 epochs.
 \textsuperscript{\dag}\,MI300X row is a projected single-device rerun
-($\sim$7.2\,hr, no gradient accumulation); its per-epoch time and
+($\sim$7.2\,hr, no gradient accumulation), and its per-epoch time and
 accuracies are pending the run.
 
 \textbf{What the A100 row tests.} Removing the Ghost-BN approximation
 barely moves the needle: \texttt{true-2048} lands at $77.00\%$ against
-Ghost-BN's $77.22\%$ --- a $\sim$0.2-point difference, and slightly
+Ghost-BN's $77.22\%$, a $\sim$0.2-point difference, and slightly
 \emph{lower}, well inside run-to-run noise. Normalizing BatchNorm over
 the full $2048$ neither helps nor hurts, so the BN-sharding regime is
 \emph{not} where the residual $\sim$1 point to the paper's $78.1\%$
@@ -5224,20 +5224,20 @@ hides.
 \textbf{Where it does hide: the resize.} That gap turns out to be an
 evaluation artifact, not a training one. Both rows here are scored
 through this repo's \texttt{tf.image.resize} preprocessing, whereas the
-timm reference reports $78.1\%$ through PIL's bicubic resize --- and the
+timm reference reports $78.1\%$ through PIL's bicubic resize, and the
 two resamplers are not interchangeable. Port these weights into a
-standard PIL-resize eval and they fall to $\sim$74.4\%; port the
+standard PIL-resize eval and they fall to $\sim$74.4\%. Port the
 reference \texttt{a3\_in1k} weights \emph{into this pipeline} and
 \emph{they} fall to $\sim$74\%. The ranking flips with the resize
 library: each network scores best on the resampler it trained with,
 because it partly fits that resampler's specific aliasing. So the honest
 reading is that the two recipes sit within a couple of points, and which
-one ``wins'' is decided by the eval pipeline --- not that this run is a
+one ``wins'' is decided by the eval pipeline, not that this run is a
 point short.
 
-\textbf{[TODO --- resize/eval reconciliation.]} Put \texttt{true-2048}
-and the timm reference on one ruler --- a single fixed resampler, or a
-bit-exact \texttt{tf.image.resize} match in the reference eval --- before
+\textbf{[TODO, resize/eval reconciliation.]} Put \texttt{true-2048}
+and the timm reference on one ruler, either a single fixed resampler or a
+bit-exact \texttt{tf.image.resize} match in the reference eval, before
 reading anything into the $77.00\%$ vs $78.1\%$ gap.
 
 \emph{Changed since the $76.66\%$ first run:} RandAugment is now
@@ -5245,7 +5245,7 @@ timm-literal (\texttt{rand-m6-mstd0.5-inc1}).
 
 \subsection*{Phase 4: RSB-A3 on the verified path}
 
-The same recipe on the \emph{verified} codegen path --- not a
+The same recipe on the \emph{verified} codegen path, which is not a
 hand-written emitter but \texttt{pretty(provenGraph)}, the rendered MLIR
 the proofs reason about, lowered through \texttt{ffi/pjrt\_ffi.c} to XLA
 over the PJRT C API with no Python at run time. The artifact is
@@ -5267,33 +5267,33 @@ GPU & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
 
 \noindent 100 epochs each. The 4060~Ti run logged zero thermal
 duty-cycle cooldowns and zero PCIe/AER interruptions. The 7900~XTX row
-is the ROCm rerun and is pending; note it needs its \emph{own} render ---
-the artifact above bakes four replicas, so holding effective batch 2048
+is the ROCm rerun and is pending. Note it needs its \emph{own} render,
+because the artifact above bakes four replicas, so holding effective batch 2048
 on two cards means a 2-replica graph at $k = 16$ rather than a runtime
 flag.
 
-\textbf{[TODO --- missing for a full A3 implementation.]} This finished
+\textbf{[TODO, missing for a full A3 implementation.]} This finished
 ahead of the phase-2 reference above ($77.22\%$ / $93.34\%$) while
 lacking the following, so quote it as \emph{the A3 recipe on the verified
-path, with these deltas} --- not as ``RSB-A3 reproduced''. In rough order
+path, with these deltas}, not as ``RSB-A3 reproduced''. In rough order
 of expected effect:
 
 \begin{itemize}
-  \item \texttt{wdExcludeNormBias} absent --- BN $\gamma/\beta$ and biases
+  \item \texttt{wdExcludeNormBias} absent, so BN $\gamma/\beta$ and biases
     are decayed at $\mathrm{wd} = 0.02$ where timm skips them. Largest
-    single delta; the ConvNeXt and ViT renders already carry the
+    single delta, and the ConvNeXt and ViT renders already carry the
     mechanism, so this is a port.
-  \item Ghost-BN group is 64 against the reference's 512 --- no collective
+  \item Ghost-BN group is 64 against the reference's 512, because no collective
     touches the batch statistics. Needs a cross-replica reduction or a
     larger per-replica batch (which is baked into the signature).
   \item BN running-statistic momentum is not compensated for accumulation
     ($0.99$ per micro-batch at $k = 8$, against the reference's
-    $0.99^{1/k}$). Evaluation-only, plausibly \emph{understates} top-1;
+    $0.99^{1/k}$). Evaluation-only, plausibly \emph{understates} top-1, and a
     one-line fix.
-  \item fp32, not bf16 --- most of the $2\times$ wall-clock gap.
+  \item fp32, not bf16, which is most of the $2\times$ wall-clock gap.
   \item $0.08\%$ of each epoch is dropped (5000 of 5004 micro-batches,
     since $8 \nmid 5004$).
-  \item Mixup $\lambda$ is drawn host-side from NumPy --- agreement with
+  \item Mixup $\lambda$ is drawn host-side from NumPy, so agreement with
     the reference is distributional, never per-step.
   \item \emph{Verification, not recipe:} the gradient check's tier-1B
     identity does not survive CE$\to$BCE ($\|g\|$ falls $90\times$ and the
@@ -5309,7 +5309,7 @@ schedule, warmup, label smoothing, random-resized-crop). RSB-A3 is the
 architecture aside (basic block vs.\ bottleneck), every training knob
 that A3 sets differently is one lever of the three-year jump in how
 these networks are trained. The backbone code and the \texttt{.train}
-entry point are identical; only the \texttt{TrainConfig} differs. Here
+entry point are identical, and only the \texttt{TrainConfig} differs. Here
 is the full diff:
 
 \begin{center}
@@ -5340,7 +5340,7 @@ of the 2018$\to$2021 shift is \emph{regularize harder, train bigger}:
 heavier augmentation (RandAugment + Mixup + CutMix), a loss that accepts
 soft targets (BCE), an order-of-magnitude more weight decay applied
 selectively, and a large-batch optimizer (LAMB) to make the longer,
-noisier training converge --- with FixRes buying back the compute the
+noisier training converge, with FixRes buying back the compute the
 extra epochs would cost. Every one of these is a one-line
 \texttt{TrainConfig} change on the same verified backbone.
 
