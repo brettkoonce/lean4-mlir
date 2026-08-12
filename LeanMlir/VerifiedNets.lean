@@ -713,7 +713,8 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
 
 /-- ch8 **EfficientNet-B0** on Imagenette 224²: 3×3-s2 stem → 16 MBConv blocks (`[t,c,n,s,k]`
     B0 config; expand 1×1 [skip when t=1] → depthwise k×k → squeeze-excite → project 1×1, all
-    BN + swish) → 1×1 head (320→1280) → GAP → dense. 262 params. The 16 `mbConvSE ic mid oc r k`
+    BN + swish) → 1×1 head (320→1280) → GAP → dense. 213 param tensors, 4,020,358 scalars (the
+    1000-class peer below is 5,288,548, i.e. B0's canonical 5.29M). The 16 `mbConvSE ic mid oc r k`
     args are the B0 generator unrolled (mid=t·ic, r=ic/4, ic threads stage→stage). Tied at the
     FULL spec in `Proofs/SpecVJP.lean` (`efficientnetVerified_denote_eq` →
     `efficientnetForwardB_full`, batched ∀N, + rung E `efficientnetVerified_fwd_faithful`);
@@ -851,7 +852,9 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
 #guard efficientnetImagenetVerified.toSpecs.back! == (#[1000], 2)
 #guard efficientnetImagenetVerified.bnChannels == efficientnetVerified.bnChannels
 
--- Derived layout (262 params) == the audited hand-list EfficientNetLayout.specs.
+-- Derived layout (213 param TENSORS, 4,020,358 scalars) == the audited hand-list
+-- EfficientNetLayout.specs. ⚠ The count read 262 here for a long time and no gate saw it, because
+-- the `#guard` below compares the two ARRAYS, not either one against a number.
 #guard efficientnetVerified.toSpecs == EfficientNetLayout.specs
 
 /-- ch9 **ConvNeXt-T** on Imagenette 224²: 4×4-s4 patchify → [3,3,9,3] ConvNeXt blocks @
