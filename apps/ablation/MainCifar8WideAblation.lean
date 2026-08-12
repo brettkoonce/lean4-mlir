@@ -9,7 +9,11 @@ sequence — SGD / Nesterov-momentum / AdamW — all on the identical controlled
 varies. Renders: `LeanMlir/Proofs/Codegen/CnnRender.lean` at `d1 := 512` (§2i, 2026-07-30 —
 `tests/TestCifar8WideTrain.lean` until then). 40 epochs, bs 128.
 
-Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8w-ablation data`
+Run (GPU): `.lake/build/bin/cifar8w-ablation data`
+
+**One file, one binary, either lowerer.** The proven graph goes to whichever trusted lowerer
+`$LEAN_MLIR_LOWERER` selects — XLA/PJRT by default, IREE with `=iree` — resolved by dlopen at
+run time (`ffi/lowerer.h`).
 -/
 
 def cfg : VerifiedConfig where

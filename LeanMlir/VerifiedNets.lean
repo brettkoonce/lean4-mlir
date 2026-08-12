@@ -56,7 +56,7 @@ def linearVerified : VerifiedNetSpec where
   nClasses := 10
   data     := .mnist
   layers   := [.dense 784 10]
-  blurb    := "MNIST-Linear via the VERIFIED renderer (pretty∘emit) → IREE FFI → GPU"
+  blurb    := "MNIST-Linear via the VERIFIED renderer (pretty∘emit) → %LOWERER% → GPU"
 
 -- Shape tie: the derived param layout is W:[784,10] (He) + b:[10] (zeros).
 #guard linearVerified.toSpecs == #[(#[784, 10], 0), (#[10], 2)]
@@ -73,7 +73,7 @@ def mlpVerified : VerifiedNetSpec where
   nClasses := 10
   data     := .mnist
   layers   := [.dense 784 512, .relu, .dense 512 512, .relu, .dense 512 10]
-  blurb    := "MNIST-MLP via the VERIFIED renderer (784→512→512→10) → IREE FFI → GPU"
+  blurb    := "MNIST-MLP via the VERIFIED renderer (784→512→512→10) → %LOWERER% → GPU"
 
 -- Shape tie: W₀:[784,512] b₀:[512] | W₁:[512,512] b₁:[512] | W₂:[512,10] b₂:[10].
 #guard mlpVerified.toSpecs ==
@@ -103,7 +103,7 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
   nClasses := 10
   data     := .mnist
   layers   := [.dense 784 d₁, .relu, .dense d₁ d₂, .relu, .dense d₂ 10]
-  blurb    := s!"MNIST-MLP-{d₁}x{d₂} via the VERIFIED renderer (784→{d₁}→{d₂}→10) → IREE FFI → GPU"
+  blurb    := s!"MNIST-MLP-{d₁}x{d₂} via the VERIFIED renderer (784→{d₁}→{d₂}→10) → %LOWERER% → GPU"
 
 -- `mlpG 512 512` is exactly the canonical `mlpVerified` architecture.
 #guard (mlpG 512 512).toSpecs == mlpVerified.toSpecs
@@ -122,7 +122,7 @@ def cnnVerified : VerifiedNetSpec where
   data     := .mnist
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 6272 512, .relu, .dense 512 512, .relu, .dense 512 10]
-  blurb    := "MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → IREE FFI → GPU"
+  blurb    := "MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → %LOWERER% → GPU"
 
 -- Shape tie: conv0[32,1,3,3]+b | conv1[32,32,3,3]+b | dense 6272→512→512→10 (+biases).
 #guard cnnVerified.toSpecs ==
@@ -154,7 +154,7 @@ def cnnG (d : Nat) : VerifiedNetSpec where
   data     := .mnist
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 6272 d, .relu, .dense d d, .relu, .dense d 10]
-  blurb    := s!"MNIST-CNN-fc{d} via the VERIFIED renderer (conv32→conv32→pool→{d}→{d}→10) → IREE FFI → GPU"
+  blurb    := s!"MNIST-CNN-fc{d} via the VERIFIED renderer (conv32→conv32→pool→{d}→{d}→10) → %LOWERER% → GPU"
 
 -- `cnnG 512` is exactly the canonical `cnnVerified` architecture.
 #guard (cnnG 512).toSpecs == cnnVerified.toSpecs
@@ -173,7 +173,7 @@ def cifarVerified : VerifiedNetSpec where
   layers   := [.conv 3 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
                .conv 32 64 3 1, .relu, .conv 64 64 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 4096 512, .relu, .dense 512 512, .relu, .dense 512 10]
-  blurb    := "CIFAR-10 CNN via the VERIFIED renderer (3→32→32→pool→32→64→64→pool→512→512→10) → IREE FFI → GPU"
+  blurb    := "CIFAR-10 CNN via the VERIFIED renderer (3→32→32→pool→32→64→64→pool→512→512→10) → %LOWERER% → GPU"
 
 #guard cifarVerified.toSpecs ==
   #[(#[32, 3, 3, 3], 0), (#[32], 2), (#[32, 32, 3, 3], 0), (#[32], 2),
@@ -194,7 +194,7 @@ def cifarBnVerified : VerifiedNetSpec where
   layers   := [.conv 3 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
                .conv 32 64 3 1, .bnPerChannel 64, .relu, .conv 64 64 3 1, .bnPerChannel 64, .relu, .maxPool 2 2, .flatten,
                .dense 4096 512, .relu, .dense 512 512, .relu, .dense 512 10]
-  blurb    := "CIFAR-10 CNN + per-channel BatchNorm via the VERIFIED renderer (conv→BN→relu ×4, 2 pools, 512→512→10) → IREE FFI → GPU"
+  blurb    := "CIFAR-10 CNN + per-channel BatchNorm via the VERIFIED renderer (conv→BN→relu ×4, 2 pools, 512→512→10) → %LOWERER% → GPU"
 
 -- conv{W,b} then per-channel BN{γ:[c],β:[c]} ×4, then 3 dense{W,b}.
 #guard cifarBnVerified.toSpecs ==
@@ -221,7 +221,7 @@ def cifar8Verified : VerifiedNetSpec where
                .conv 16 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
                .conv 32 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 128 64, .relu, .dense 64 64, .relu, .dense 64 10]
-  blurb    := "Deeper CIFAR-10 CNN (8 convs, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb    := "Deeper CIFAR-10 CNN (8 convs, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU"
 
 #guard cifar8Verified.toSpecs ==
   #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
@@ -247,7 +247,7 @@ def cifar8BnVerified : VerifiedNetSpec where
                .conv 16 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
                .conv 32 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2, .flatten,
                .dense 128 64, .relu, .dense 64 64, .relu, .dense 64 10]
-  blurb    := "Deeper CIFAR-10 CNN + per-channel BatchNorm (8× conv→BN→relu, [16,16,32,32], 4 pools → 128→64→64→10) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb    := "Deeper CIFAR-10 CNN + per-channel BatchNorm (8× conv→BN→relu, [16,16,32,32], 4 pools → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU"
 
 -- conv{W,b} then per-channel BN{γ:[c],β:[c]} ×8, then 3 dense{W,b}.
 #guard cifar8BnVerified.toSpecs ==
@@ -290,7 +290,7 @@ def cifar8BnG (d : Nat) : VerifiedNetSpec where
                .conv 16 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
                .conv 32 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2, .flatten,
                .dense 128 d, .relu, .dense d d, .relu, .dense d 10]
-  blurb    := s!"CIFAR-CNN8-BN-fc{d} via the VERIFIED renderer (8× conv→BN→relu [16,16,32,32] → 128→{d}→{d}→10, AdamW) → IREE FFI → GPU"
+  blurb    := s!"CIFAR-CNN8-BN-fc{d} via the VERIFIED renderer (8× conv→BN→relu [16,16,32,32] → 128→{d}→{d}→10, AdamW) → %LOWERER% → GPU"
 
 -- `cifar8BnG 64` is exactly the canonical `cifar8BnVerified` architecture.
 #guard (cifar8BnG 64).toSpecs == cifar8BnVerified.toSpecs
@@ -312,7 +312,7 @@ def cifar8wVerified : VerifiedNetSpec where
                .conv 16 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
                .conv 32 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
-  blurb    := "Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb    := "Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → %LOWERER% → GPU"
 
 #guard cifar8wVerified.toSpecs ==
   #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
@@ -335,7 +335,7 @@ def cifar8wBnVerified : VerifiedNetSpec where
                .conv 16 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
                .conv 32 32 3 1, .bnPerChannel 32, .relu, .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2, .flatten,
                .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
-  blurb    := "Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb    := "Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → %LOWERER% → GPU"
 
 #guard cifar8wBnVerified.toSpecs ==
   #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16], 1), (#[16], 2),
@@ -371,7 +371,7 @@ def resnet34Verified : VerifiedNetSpec where
     .residualStage 256 512 3 2,  -- stage4: downsample + 2        14→7
     .globalAvgPool,
     .dense 512 10 ]
-  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 36 BN layers in forward order (stem; then per basic block 2, per downsample block 3) — the
   -- running-stats layout for trainAdamSched + @resnet34_fwd_eval. Matches TestResnet34Train.bnLayers.
   bnChannels := #[64,
@@ -420,7 +420,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
     .residualStage 256 512 3 2,  -- stage4: downsample + 2        14→7
     .globalAvgPool,
     .dense 512 1000 ]
-  blurb := "ResNet-34 on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  blurb := "ResNet-34 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   -- Same 36 BN layers, same order — the architecture is unchanged above the head.
   bnChannels := #[64,
     64,64, 64,64, 64,64,
@@ -634,7 +634,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
     .convBnNB 320 1280 1 1,         -- head (no conv bias — §2m)
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 52 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN,
   -- but b1 is t=1 → NO expand, so only depthwise-BN/project-BN; head) — running-stats layout for
   -- trainAdamSched + @mobilenetv2_fwd_eval. Matches TestMobilenetV2TrainPC.bnLayers. True batch-norm
@@ -691,7 +691,7 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
     .convBnNB 320 1280 1 1,
     .globalAvgPool,
     .dense 1280 1000 ]
-  blurb := "MobileNetV2 on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  blurb := "MobileNetV2 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   bnChannels := #[32,
     32,16,  96,96,24, 144,144,24,  144,144,32, 192,192,32, 192,192,32,
     192,192,64, 384,384,64, 384,384,64, 384,384,64,
@@ -743,7 +743,7 @@ def efficientnetVerified : VerifiedNetSpec where
     .convBnNB 320 1280 1 1,         -- head 1×1 (320→1280)
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 49 BN layers in forward order (stem; per MBConv: expand-BN [t≠1 only], depthwise-BN, project-BN;
   -- head) — running-stats layout for trainAdamSched + @efficientnet_fwd_eval. Printed by
   -- TestEfficientNetTrain.bnChannelsList; true batch-norm makes batch-BN eval degenerate on sorted val.
@@ -826,7 +826,7 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
     .convBnNB 320 1280 1 1,
     .globalAvgPool,
     .dense 1280 1000 ]
-  blurb := "EfficientNet-B0 on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  blurb := "EfficientNet-B0 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
     480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
     1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
@@ -877,7 +877,7 @@ def convnextVerified : VerifiedNetSpec where
     .layerNorm 384, .conv 384 768 2 2,                                 -- downsample 384→768 14→7
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,  -- stage 4 (3) @7
     .globalAvgPool, .dense 768 10 ]                                    -- head: GAP → dense
-  blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → dense) via the VERIFIED renderer → IREE FFI → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 sites (§2m); the count matches the JAX reference at 28,587,592 for K=1000"
+  blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 sites (§2m); the count matches the JAX reference at 28,587,592 for K=1000"
   -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*drop` variants.
   -- `keep_i = 1 − 0.1·i/(18−1)` at EVERY block — ConvNeXt has one site per block and every block
   -- carries a residual, so unlike EfficientNet there is no skip guard and the site list is
@@ -938,7 +938,7 @@ def convnextImagenetVerified : VerifiedNetSpec where
     .layerNorm 384, .conv 384 768 2 2,
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
     .globalAvgPool, .dense 768 1000 ]
-  blurb := "ConvNeXt-T on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  blurb := "ConvNeXt-T on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   -- The ImageNet peer of `convnextVerified.dropKeeps`. IDENTICAL, and that is the content: the ramp
   -- is a property of the ARCHITECTURE (18 blocks, one site each) and of `dropPath := 0.1`, neither
   -- of which moves with the class count or the batch. ⚠ Unlike the Imagenette render, this one is a
@@ -990,7 +990,7 @@ def vitVerified : VerifiedNetSpec where
     .transformerBlock 192 768,
     .layerNorm 192,               -- final LayerNorm (per-channel [192])
     .dense 192 10 ]               -- CLS-head 192→10
-  blurb := "ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → IREE FFI → GPU"
+  blurb := "ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → %LOWERER% → GPU"
   -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*drop` variants.
   -- ⚠⚠ **24 ENTRIES FOR 12 KEEPS, AND THE PAIRING IS THE CONTENT.** ViT drops each block's TWO
   -- residual branches INDEPENDENTLY (`ka, km = jax.random.split(drop_key)`) but at the SAME keep
@@ -1058,7 +1058,7 @@ def vitImagenetVerified : VerifiedNetSpec where
     .transformerBlock 192 768,
     .layerNorm 192,               -- final LayerNorm (per-channel [192])
     .dense 192 1000 ]             -- CLS-head 192→1000
-  blurb := "ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
+  blurb := "ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   -- The ImageNet peer of `vitVerified.dropKeeps`. IDENTICAL — the ramp is a property of the
   -- ARCHITECTURE (12 blocks, 2 sites each) and of `dropPath := 0.1`, neither of which moves with the
   -- class count. ⚠ Here it IS a reference recipe item (`vitTinyImagenetConfig.dropPath`, the DeiT
@@ -1119,7 +1119,7 @@ def mobilenetv4Verified : VerifiedNetSpec where
     .convBnNB 256 1280 1 1,             -- head
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "MobileNetV4-Conv-S on Imagenette 224² (stem-s2 → fused MBConv → 14 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv-BN-relu → GAP → dense) via the VERIFIED renderer → XLA/PJRT → GPU"
+  blurb := "MobileNetV4-Conv-S on Imagenette 224² (stem-s2 → fused MBConv → 14 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv-BN-relu → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 52 BN layers in forward order: stem; the fused stage's k×k-BN and project-BN; then per UIB
   -- block pre-DW-BN (if preDWk≠0) / expand-BN / post-DW-BN (if postDWk≠0) / project-BN; head.
   -- ⚠ The `if`s are the `k = 0` family dispatch, so this list's LENGTH varies per block (2, 3 or 4)

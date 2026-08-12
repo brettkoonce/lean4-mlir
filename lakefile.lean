@@ -1395,11 +1395,11 @@ lean_exe «cifar8-bn-verified-sgdsched» where
 -- momentum / AdamW in sequence on the controlled pipeline. Render: tests/TestCifar8WideTrain.lean.
 lean_exe «cifar8w-ablation» where
   root := `apps.ablation.MainCifar8WideAblation
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar8w-bn-ablation» where
   root := `apps.ablation.MainCifar8WideBnAblation
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
 -- VERIFIED-rendered StableHLO; 146 params. Train step AND eval forward both come from

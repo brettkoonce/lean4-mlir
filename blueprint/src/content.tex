@@ -3232,15 +3232,15 @@ whole CNN backward is covered, op by op.
 
 This chapter is the bridge between the MNIST chapters and the
 deep-network chapters that follow. Chapter~\ref{chap:cnn} did MNIST
-with a two-convolution net and a 2$\times$512 dense head;
+with a two-convolution net and a 2$\times$512 dense head.
 Chapter~\ref{chap:residual} (ResNet-34) goes thirty-four layers deep.
-The network here sits exactly in between --- it keeps MNIST's
+The network here sits exactly in between. It keeps MNIST's
 \emph{same} 2$\times$512 head and the same conv/ReLU/max-pool
 machinery, but stacks the convolutions four stages deep (eight in all)
 on a harder dataset (CIFAR-10). That is the first point in the book
 where depth is enough to make two things bite: \textbf{BatchNorm starts
-to earn its keep, and the choice of optimizer starts to matter} --- and
-the depth itself is what ResNet then scales to thirty-four layers. So
+to earn its keep, and the choice of optimizer starts to matter}. The
+depth itself is what ResNet then scales to thirty-four layers. So
 the chapter has two jobs: prove the one new operator (BatchNorm), and
 use the deeper net to measure what actually governs training
 (\S\ref{sec:bn_cifar_example}).
@@ -3248,38 +3248,40 @@ use the deeper net to measure what actually governs training
 Proving BN is also what makes this \textbf{structurally the hardest
 chapter in the book}. BN's
 inverse-stddev term \(1/\sqrt{\sigma^2 + \varepsilon}\) has a
-gradient that blows up as \(\sigma^2 \to 0\); proving the
+gradient that blows up as \(\sigma^2 \to 0\). Proving the
 backward pass exists and is bounded requires
 \texttt{ContinuousLinearMap}-based real-analysis machinery from
 Mathlib that none of the previous chapters needed.
 \textbf{If you're new to formal math, skim the proofs and trust
-them} --- the takeaways are concrete:
+them}. The takeaways are concrete:
 
 \begin{itemize}
 \item BN's gradient has a closed-form 3-term formula
   (Theorem~\ref{thm:bnNormalize_has_vjp}).
 \item The formula needs \(\varepsilon > 0\) to stay bounded
   (Theorem~\ref{ax:bnIstdBroadcast_diff}).
-\item BN's payoff is \emph{speed}: a deeper network reaches the same
-  accuracy in far fewer epochs with it than without. The example in
-  \S\ref{sec:bn_cifar_example} measures that directly.
+\item BN's payoff is \emph{speed} and \emph{stability}: a deeper
+  network reaches the same accuracy in far fewer epochs with it than
+  without, and under a strong optimizer the un-normalized net does not
+  reliably finish training at all. The example in
+  \S\ref{sec:bn_cifar_example} measures both directly.
 \end{itemize}
 
 The proofs themselves use Mathlib's \texttt{HasFDerivAt.sqrt},
 \texttt{(hasDerivAt\_inv).comp\_hasFDerivAt}, and a centering CLM
 chained through the chain rule from Ch~\ref{chap:tensor}. They're
 correct (the Lean kernel checks them) and they're available in
-\texttt{Proofs/BatchNorm.lean} for the curious; you do not need to
+\texttt{Proofs/BatchNorm.lean} for the curious. You do not need to
 understand them line-by-line to use BN as a layer or to follow the
 rest of the book. \textbf{Ch~\ref{chap:residual} (ResNet-34) is
-the easiest chapter in the book and follows immediately --- this
+the easiest chapter in the book and follows immediately. This
 is a localized difficulty spike, not the new normal.}
 
 \prosesection{What BN actually is}
 
 BatchNorm (Ioffe \& Szegedy, 2015) takes a batch of activations,
-\(x\), and does three things in sequence. Each is one line of code;
-together they are the layer.
+\(x\), and does three things in sequence. Each is one line of code.
+Together they are the layer.
 
 \begin{enumerate}
 \item \textbf{Center.} Compute the batch mean
@@ -3301,10 +3303,95 @@ Chapter~\ref{chap:tensor} gives us three Jacobians to multiply,
 and the ``BN three-term backward'' is exactly that
 product written out.
 
+\section{Run it first}
+\label{sec:bn_runit}
+
+Before any of the math, train the thing. Four commands and about
+thirteen minutes of GPU time:
+
+\begin{verbatim}
+lake exe cache get                            # Mathlib oleans, ~30 s
+./download_cifar.sh                           # ~170 MB
+lake build cifar8w-bn-ablation
+./.lake/build/bin/cifar8w-bn-ablation data
+\end{verbatim}
+
+That one binary runs the same network three times, once per optimizer.
+Here is the second of the three, on one RTX 4060 Ti (CUDA 12.9), from
+\texttt{runs/2026-08-12-cifar8w-6arm-xla-cuda/cifar8w-bn-p1.log}. XLA's
+startup banner is removed, the per-step loss lines are dropped, and
+epochs 8 through 34 are elided:
+
+\begin{verbatim}
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/cifar8w_bn_mom_train_step.mlir
+             (@cifar8w_bn_mom_train_step, 117 outputs, 1 replica) in 1215 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_bn_fwd.mlir
+             (@cifar8w_bn_fwd, 1 outputs, 1 replica) in 261 ms
+════════ cifar8w-BN (wide head) — Nesterov momentum (μ.9, lr 0.02) ════════
+Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head
+  (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_bn_mom_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_bn_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN mom
+    (cosine+warmup 3ep, baseLR 0.020000), He init
+Epoch 1/40: loss=1.958118 lr=0.006667
+  epoch 1: test_acc = 4209/10000 = 42.090000%  top5 = 8952/10000 = 89.520000%
+Epoch 2/40: loss=1.418591 lr=0.013333
+  epoch 2: test_acc = 5474/10000 = 54.740000%  top5 = 9449/10000 = 94.490000%
+Epoch 3/40: loss=1.167188 lr=0.020000
+  epoch 3: test_acc = 6022/10000 = 60.220000%  top5 = 9523/10000 = 95.230000%
+Epoch 4/40: loss=0.992680 lr=0.019964
+  epoch 4: test_acc = 6499/10000 = 64.990000%  top5 = 9694/10000 = 96.940000%
+Epoch 5/40: loss=0.882675 lr=0.019856
+  epoch 5: test_acc = 6876/10000 = 68.760000%  top5 = 9726/10000 = 97.260000%
+Epoch 6/40: loss=0.811264 lr=0.019677
+  epoch 6: test_acc = 6997/10000 = 69.970000%  top5 = 9771/10000 = 97.710000%
+Epoch 7/40: loss=0.756665 lr=0.019429
+  epoch 7: test_acc = 7208/10000 = 72.080000%  top5 = 9784/10000 = 97.840000%
+Epoch 35/40: loss=0.258739 lr=0.000888
+  epoch 35: test_acc = 7759/10000 = 77.590000%  top5 = 9836/10000 = 98.360000%
+Epoch 36/40: loss=0.251148 lr=0.000571
+  epoch 36: test_acc = 7738/10000 = 77.380000%  top5 = 9832/10000 = 98.320000%
+Epoch 37/40: loss=0.247924 lr=0.000323
+  epoch 37: test_acc = 7750/10000 = 77.500000%  top5 = 9840/10000 = 98.400000%
+Epoch 38/40: loss=0.246187 lr=0.000144
+  epoch 38: test_acc = 7753/10000 = 77.530000%  top5 = 9839/10000 = 98.390000%
+Epoch 39/40: loss=0.241790 lr=0.000036
+  epoch 39: test_acc = 7751/10000 = 77.510000%  top5 = 9841/10000 = 98.410000%
+Epoch 40/40: loss=0.243040 lr=0.000000
+  epoch 40: test_acc = 7748/10000 = 77.480000%  top5 = 9840/10000 = 98.400000%
+done (trained CIFAR-CNN8-wide-BN mom + cosine/warmup via packed threading).
+\end{verbatim}
+
+Forty epochs at about six seconds each, and 77.48\% on the full
+10,000-image CIFAR-10 test set, 98.40\% inside the top five. CIFAR-10
+is a much harder problem than MNIST, so this is the first chapter where
+the headline accuracy drops out of the nineties.
+
+Here is the part that matters. That run did not execute a
+reimplementation of the network this chapter describes. It executed
+\texttt{verified\_mlir/cifar8w\_bn\_mom\_train\_step.mlir}, which is the
+text \texttt{Proofs.StableHLO} emits for this net, and
+\texttt{Proofs/Cifar8Close.lean} proves that each of its parameter
+updates denotes the certified softmax cross-entropy loss-descent step
+derived from the Mathlib \(\fderiv\) math. Every BatchNorm in it computes
+the three-term backward this chapter proves. Every theorem in the rest
+of the chapter is about the graph that just trained.
+
+The two compile lines carry the whole in-process story. The train step
+and the eval forward are handed to XLA once, as text, and compiled in
+about 1.5 seconds together, after which all forty epochs run without
+leaving the process.
+
+\S\ref{sec:bn_cifar_example} runs this same binary and its no-BN peer
+across all three optimizers, which is where the chapter's measurements
+come from. \texttt{lake run cifar} does the narrow-head tier.
+
 \prosesection{The centering term has an indirect path}
 
 When you
-jiggle a single input \(x_i\), you do not only jiggle \(x_i\)---you
+jiggle a single input \(x_i\), you do not only jiggle \(x_i\). You
 also jiggle the batch mean \(\mu\), and \(\mu\) appears in every
 sample's centered value \(x_k - \mu\). So jiggling \(x_i\) by
 \(\varepsilon\) shifts every centered value by \(-\varepsilon/n\)
@@ -3314,7 +3401,7 @@ sample's centered value \(x_k - \mu\). So jiggling \(x_i\) by
 \frac{\partial (x_j - \mu)}{\partial x_i} \;=\; \delta_{ij} - \frac{1}{n}.
 \]
 
-The \(\delta_{ij}\) is the direct effect; the \(-1/n\) is the
+The \(\delta_{ij}\) is the direct effect. The \(-1/n\) is the
 indirect effect through \(\mu\). Theorem \ref{ax:pdiv_bnCentered}
 states this formally. Forgetting the \(-1/n\) is the most common
 hand-derivation mistake on BN, and is exactly what the formal
@@ -3343,12 +3430,12 @@ centered value, scaled by the cube of the inverse standard
 deviation. Theorem \ref{ax:pdiv_bnIstdBroadcast} states this.
 
 Notice what happens to the formula as \(\sigma^2 \to 0\):
-\(\mathrm{istd} \to 1/\sqrt{\varepsilon}\), bounded; without \(\varepsilon\)
+\(\mathrm{istd} \to 1/\sqrt{\varepsilon}\), bounded. Without \(\varepsilon\)
 the gradient diverges. Theorem \ref{ax:bnIstdBroadcast_diff} is
 the formal statement that \(\varepsilon > 0\) is sufficient to
 make this term differentiable. This is the \emph{one place in
 the book} where the math actually requires real-analysis machinery
-beyond chain-sum-product; everything else in the framework reduces
+beyond chain-sum-product. Everything else in the framework reduces
 to those three rules.
 
 \prosesection{The three-term backward}
@@ -3368,11 +3455,11 @@ Three terms inside the parentheses, one per forward step's
 indirect effect:
 
 \begin{itemize}
-\item \(n\,dy\)---the direct effect, every sample's upstream gradient.
-\item \(-\sum_k dy_k\)---the centering correction, subtracts the
+\item \(n\,dy\): the direct effect, every sample's upstream gradient.
+\item \(-\sum_k dy_k\): the centering correction, subtracts the
   total upstream gradient because shifting the mean shifts every
   sample.
-\item \(-\hat{x} \cdot \sum_k (dy_k\,\hat{x}_k)\)---the normalization
+\item \(-\hat{x} \cdot \sum_k (dy_k\,\hat{x}_k)\): the normalization
   correction, subtracts the projection of the upstream gradient onto
   \(\hat{x}\), because rescaling by the inverse stddev couples
   every sample's gradient through the shared divisor.
@@ -3380,10 +3467,10 @@ indirect effect:
 
 Theorem \ref{thm:bnNormalize_has_vjp} formalizes this. Every
 production BN implementation (PyTorch, JAX, TensorFlow, custom
-CUDA kernels) computes this exact expression. The \emph{value} of
-the formal proof is not that we discovered the formula---it has
-been known since 2015---but that the Lean kernel mechanically
-verifies we are computing the right thing at every training step.
+CUDA kernels) computes this exact expression. The formula has been
+known since 2015. The \emph{value} of the formal proof is that the
+Lean kernel mechanically verifies we are computing the right thing
+at every training step.
 
 \prosesection{The affine step is dense-with-broadcasting}
 
@@ -3394,7 +3481,7 @@ exactly the dense-Jacobian computation from
 Chapter~\ref{chap:mlp}, just lifted to a tensor shape and
 broadcast across spatial dimensions. Theorem
 \ref{ax:pdiv_bnAffine} and Theorem \ref{thm:bnAffine_has_vjp}
-are essentially corollaries of the dense theorems; the new content
+are essentially corollaries of the dense theorems. The new content
 here is zero.
 
 \prosesection{Putting it together}
@@ -3403,7 +3490,7 @@ Theorem \ref{thm:bn_has_vjp} is the composition:
 \(\mathrm{bn} = \mathrm{affine} \circ \mathrm{normalize}\), with VJPs
 chained via the same \(\mathrm{vjp\_comp}\) rule from
 Chapter~\ref{chap:tensor}. The 3-term backward is the
-centerpiece; affine is a corollary; composition is a one-line
+centerpiece, affine is a corollary, and composition is a one-line
 proof. The structural story of the chapter is: one new
 Mathlib-level analytic dependency (sqrt and recip
 differentiability), one formula, and the rest is the same
@@ -3688,46 +3775,54 @@ the two elementary Jacobians into one formula; contracting with
 \section{Example: training dynamics on CIFAR}
 \label{sec:bn_cifar_example}
 
-\phasethreenote
-
 Chapter~\ref{chap:cnn} did MNIST with two convolutions and a
 2$\times$512 dense head. This chapter keeps that \emph{exact} head and
-the same conv/ReLU/max-pool machinery, but --- CIFAR-10 being a
-genuinely harder problem --- stacks the convolutions four stages deep:
-eight $3 \times 3$ convolutions in all. \textbf{Same head, four times
+the same conv/ReLU/max-pool machinery, but stacks the convolutions four
+stages deep, eight $3 \times 3$ convolutions in all, because CIFAR-10 is
+a genuinely harder problem. \textbf{Same head, four times
 the body.} That extra depth is the whole point of the chapter: it is
 where BatchNorm starts to pay, where the optimizer starts to matter,
 and the same depth ResNet-34 will scale to thirty-four layers. It also
-lets us ask a sharper question than ``does it train?'' --- \emph{what
-governs how it trains?}
+lets us ask a sharper question than ``does it train?'' We can ask
+\emph{what governs how it trains?}
 
-Two levers govern the answer --- \textbf{normalization} and the
-\textbf{optimizer} --- and a third knob, the width of the head, turns
+Two levers govern the answer, \textbf{normalization} and the
+\textbf{optimizer}, and a third knob, the width of the head, turns
 out not to. We move each against an \emph{identical, machine-checked
-gradient}, holding everything else fixed (same architecture, same data
-pipeline --- per-epoch shuffle, random horizontal flip, cosine
-learning-rate schedule with warmup --- same 40 epochs). The findings,
+gradient}, holding everything else fixed: same architecture, same 40
+epochs, and the same data pipeline (per-epoch shuffle, random horizontal
+flip, cosine learning-rate schedule with warmup). The findings,
 stated up front so the graphs are no surprise:
 
 \begin{itemize}
-\item \textbf{Normalization buys speed.} BatchNorm (dropped between each
-  conv and its ReLU) reaches a given accuracy in markedly fewer epochs;
-  at convergence it lands level-to-slightly-above the un-normalized net.
-  An accelerator first of all.
+\item \textbf{Normalization buys stability, and speed on the way.}
+  BatchNorm (dropped between each conv and its ReLU) reaches a given
+  accuracy in markedly fewer epochs. It also keeps the net alive: the
+  un-normalized net's training loss went to \texttt{NaN} in six of our
+  fourteen runs, and the normalized net's never did.
 \item \textbf{The optimizer moves the ceiling most.} Trading plain SGD
-  for SGD-with-momentum is worth three to four points of final accuracy
-  --- more than anything else here. Adam is roughly a wash with plain
-  SGD; its per-coordinate adaptivity earns little it can keep.
+  for SGD-with-momentum is worth about two points of final accuracy,
+  more than anything else here. AdamW sits between the two, and its
+  per-coordinate adaptivity earns less than momentum does.
 \item \textbf{The head barely matters.} This 2$\times$512 head carries
   about 25$\times$ the parameters of a narrow 64-wide one, yet trains to
-  within a point of it --- the convolutional \emph{body}, not the head,
+  within a point of it. The convolutional \emph{body}, not the head,
   is doing the work. That is also why we can borrow MNIST's head
   wholesale: it was never the bottleneck.
 \end{itemize}
 
-\noindent Every run below shares one proof-rendered backward pass; only
-the BN layers or the rendered optimizer tail change. The numbers are
+\noindent Every run below shares one proof-rendered backward pass, and
+only the BN layers or the rendered optimizer tail change. The numbers are
 from that verified training step running on a GPU.
+
+\medskip\noindent\textbf{On repeatability.} Convolutional networks do not
+reproduce run to run on CUDA, because XLA selects convolution algorithms
+per process, so two runs of the identical command differ. Every accuracy
+in this section is therefore the \emph{median} of five independent runs
+of the same command at the same seed (four for the AdamW rows), and each
+table states the observed range alongside it. That spread is about a
+point, which is wide enough to swallow small differences, so the text
+below only ranks gaps that are clearly outside it.
 
 \subsection*{Architecture}
 
@@ -3738,7 +3833,7 @@ input to a $2 \times 2 \times 32$ feature grid, which flattens to 128
 and runs through the \emph{same} 2$\times$512 dense head as that net
 (only the first layer changes width, $6272$ vs.\ $128$, because the
 deeper stack pools the grid down further). Eight convolutions is four
-times the MNIST net's two --- and that growth in depth, not width, is
+times the MNIST net's two, and that growth in depth, not width, is
 the lineage ResNet-34 (Ch~\ref{chap:residual}) carries to thirty-four
 layers.
 
@@ -3790,7 +3885,7 @@ layers.
 \end{tikzpicture}
 \end{center}
 
-\noindent The \texttt{ConvBN} boxes are the with-BN variant; the no-BN
+\noindent The \texttt{ConvBN} boxes are the with-BN variant. The no-BN
 net is identical with each \texttt{ConvBN} replaced by a plain
 \texttt{Conv2D~+~ReLU}. Both specs are written out next.
 
@@ -3799,67 +3894,90 @@ net is identical with each \texttt{ConvBN} replaced by a plain
 Eight $3 \times 3$ convolutions in four stages (channel widths
 $16, 16, 32, 32$, a max-pool after each stage), then the 2$\times$512
 dense head lifted straight from the MNIST CNN. Without BN, each
-convolution is followed by a plain ReLU; with
+convolution is followed by a plain ReLU. With
 BN, a per-channel BatchNorm sits between the convolution and the ReLU.
 That one keyword per conv layer is the entire difference.
 
 Without BN:
 
 \begin{verbatim}
-def cifar8NoBn : NetSpec where
-  name := "CIFAR-CNN8-noBN"
-  imageH := 32
-  imageW := 32
-  layers := [
-    .conv2d 3  16 3 .same .relu,  .conv2d 16 16 3 .same .relu, .maxPool 2 2,
-    .conv2d 16 16 3 .same .relu,  .conv2d 16 16 3 .same .relu, .maxPool 2 2,
-    .conv2d 16 32 3 .same .relu,  .conv2d 32 32 3 .same .relu, .maxPool 2 2,
-    .conv2d 32 32 3 .same .relu,  .conv2d 32 32 3 .same .relu, .maxPool 2 2,
-    .flatten,
-    .dense 128 512 .relu, .dense 512 512 .relu, .dense 512 10 .identity
-  ]
+def cifar8wVerified : VerifiedNetSpec where
+  name     := "CIFAR-CNN8-wide"
+  slug     := "cifar8w"
+  inC      := 3
+  imageH   := 32
+  imageW   := 32
+  nClasses := 10
+  data     := .cifar
+  layers   := [.conv 3 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
+               .conv 16 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
+               .conv 16 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
+               .conv 32 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
+               .flatten,
+               .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
 \end{verbatim}
 
 With BN:
 
 \begin{verbatim}
-def cifar8Bn : NetSpec where
-  name := "CIFAR-CNN8-BN"
-  imageH := 32
-  imageW := 32
-  layers := [
-    .convBn 3  16 3 1 .same,  .convBn 16 16 3 1 .same, .maxPool 2 2,
-    .convBn 16 16 3 1 .same,  .convBn 16 16 3 1 .same, .maxPool 2 2,
-    .convBn 16 32 3 1 .same,  .convBn 32 32 3 1 .same, .maxPool 2 2,
-    .convBn 32 32 3 1 .same,  .convBn 32 32 3 1 .same, .maxPool 2 2,
-    .flatten,
-    .dense 128 512 .relu, .dense 512 512 .relu, .dense 512 10 .identity
-  ]
+def cifar8wBnVerified : VerifiedNetSpec where
+  name     := "CIFAR-CNN8-wide-BN"
+  slug     := "cifar8w_bn"
+  inC      := 3
+  imageH   := 32
+  imageW   := 32
+  nClasses := 10
+  data     := .cifar
+  layers   := [.conv 3 16 3 1, .bnPerChannel 16, .relu,
+               .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
+               .conv 16 16 3 1, .bnPerChannel 16, .relu,
+               .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
+               .conv 16 32 3 1, .bnPerChannel 32, .relu,
+               .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
+               .conv 32 32 3 1, .bnPerChannel 32, .relu,
+               .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
+               .flatten,
+               .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
 \end{verbatim}
 
-The diff: eight \texttt{.conv2d $\cdots$ .relu} layers become eight
-\texttt{.convBn $\cdots$} layers. The dense head, the max-pools, and
-the training config are all identical. Both nets are verified end to
-end --- forward, gradient, and the rendered StableHLO training step
-are machine-checked (\texttt{Proofs/CifarCNN.lean},
-\texttt{Proofs/Cifar8Close.lean}) --- and both run through the same
-IREE FFI path on the GPU.
+The diff is eight \texttt{.bnPerChannel} entries, one inserted between
+each convolution and its ReLU. The dense head, the max-pools, and the
+training config are all identical.
+
+\medskip\noindent\textbf{The spec-to-proof tie.} These are
+\texttt{VerifiedNetSpec}s, which is what makes the listing above load
+bearing rather than descriptive. The \texttt{slug} names the committed
+render, so \texttt{cifar8w\_bn} is
+\texttt{verified\_mlir/cifar8w\_bn\_\{mom,sgd,adam\}\_train\_step.mlir},
+the files the run in \S\ref{sec:bn_runit} handed to XLA. The
+\texttt{layers} list folds to a parameter layout through
+\texttt{toSpecs}, and a \texttt{\#guard} in the same file pins that
+layout against the one the renderer emits, so a spec that drifts from
+its render fails the build rather than training something else. The
+gradient itself is \texttt{Proofs.cifarCnn8\_has\_vjp\_at}, proved once
+and \emph{parametrically in the head width}, which is why the wide head
+here and the narrow one behind \texttt{lake run cifar} need no separate
+proof between them. \texttt{cifarCnn8\_has\_vjp\_at\_correct}
+(\texttt{Proofs/Architectures/CifarCNN.lean}) is the statement that its
+backward is the derivative, and \texttt{Proofs/Cifar8Close.lean} carries
+that through to the emitted training step. Both nets run the same
+XLA/PJRT path on the GPU.
 
 \subsection*{Lever 1: normalization}
 
 Fix the optimizer at plain SGD and toggle BN. Both nets train for 40
-epochs on the shared pipeline; per-epoch test accuracy, from the
-verified runs
-(\texttt{runs/ablation\_cifar8/\{nobn,bn\}\_sgdsched.log}):
+epochs on the shared pipeline. Per-epoch test accuracy, the median of
+five runs each, from the verified runs in
+\texttt{runs/2026-08-12-cifar8w-6arm-xla-cuda/}:
 
 \begin{center}
 \begin{tikzpicture}
 \begin{axis}[
     width=0.92\linewidth, height=6.5cm,
     xlabel={Epoch}, ylabel={Test accuracy (\%)},
-    xmin=0, xmax=41, ymin=28, ymax=78,
+    xmin=0, xmax=41, ymin=20, ymax=78,
     xtick={0,5,10,15,20,25,30,35,40},
-    ytick={30,40,50,60,70},
+    ytick={20,30,40,50,60,70},
     legend pos=south east,
     legend cell align={left},
     grid=major, grid style={gray!18},
@@ -3868,11 +3986,11 @@ verified runs
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,36.51) (2,44.34) (3,50.14) (4,54.30) (5,60.84) (6,63.31) (7,62.39) (8,66.26) (9,66.06) (10,67.92) (11,69.88) (12,70.40) (13,71.39) (14,68.93) (15,71.61) (16,72.27) (17,72.36) (18,71.83) (19,73.11) (20,73.41) (21,73.02) (22,73.87) (23,73.72) (24,72.99) (25,73.69) (26,73.23) (27,73.66) (28,73.87) (29,74.08) (30,73.91) (31,73.85) (32,74.14) (33,74.22) (34,74.20) (35,74.24) (36,74.12) (37,74.28) (38,74.24) (39,74.15) (40,74.23)
+(1,34.04) (2,45.34) (3,49.90) (4,53.53) (5,61.36) (6,63.69) (7,66.54) (8,68.53) (9,66.08) (10,70.15) (11,70.67) (12,71.10) (13,72.08) (14,71.85) (15,72.67) (16,73.51) (17,73.89) (18,73.69) (19,73.34) (20,74.25) (21,74.21) (22,74.66) (23,74.86) (24,74.57) (25,74.58) (26,74.68) (27,75.12) (28,74.77) (29,74.98) (30,75.00) (31,74.84) (32,75.09) (33,75.02) (34,75.00) (35,74.92) (36,74.94) (37,74.98) (38,75.09) (39,74.99) (40,75.00)
 };
 \addlegendentry{with BN}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,33.90) (2,28.36) (3,34.98) (4,47.56) (5,51.55) (6,51.41) (7,57.98) (8,58.01) (9,58.40) (10,62.19) (11,62.64) (12,64.23) (13,65.03) (14,64.50) (15,64.94) (16,67.52) (17,68.46) (18,68.73) (19,68.52) (20,70.13) (21,70.42) (22,69.69) (23,70.82) (24,70.15) (25,70.32) (26,70.59) (27,71.44) (28,71.06) (29,71.97) (30,71.99) (31,71.61) (32,72.16) (33,72.26) (34,71.96) (35,72.34) (36,72.24) (37,72.40) (38,72.42) (39,72.39) (40,72.39)
+(1,24.01) (2,30.24) (3,29.12) (4,43.11) (5,46.74) (6,51.55) (7,55.02) (8,56.59) (9,56.09) (10,60.52) (11,61.88) (12,61.81) (13,64.33) (14,64.89) (15,65.68) (16,64.54) (17,67.67) (18,67.97) (19,68.97) (20,69.50) (21,69.81) (22,69.56) (23,70.67) (24,70.49) (25,70.89) (26,71.91) (27,71.67) (28,71.86) (29,72.27) (30,72.29) (31,72.40) (32,72.26) (33,72.57) (34,72.43) (35,72.43) (36,72.53) (37,72.61) (38,72.75) (39,72.66) (40,72.64)
 };
 \addlegendentry{no BN}
 \end{axis}
@@ -3881,26 +3999,29 @@ verified runs
 
 \noindent CIFAR-10, wide 8-conv net, plain SGD (lr~0.1,
 cosine${+}$warmup) on the shared pipeline, 40 epochs, BN vs no-BN,
-through the verified renderer
-(\texttt{runs/ablation\_cifar8w/\{nobn,bn\}.log}, the SGD phase).
+through the verified renderer. Median of $n{=}5$ runs per curve. The
+final points span $74.5$ to $75.6$ with BN and $71.6$ to $73.4$
+without (\texttt{runs/2026-08-12-cifar8w-6arm-xla-cuda/}, the SGD phase).
 
-\noindent BN leads from the second epoch --- 44\% to the bare net's
-28\% --- and keeps the lead the whole way, finishing about two points
-up (74\% vs 72\%); the un-normalized net traces the same arc roughly a
-dozen epochs behind. Most of that is \emph{speed} (the curves are the
-same shape, shifted left), but at this depth on plain SGD it is also a
-small, real convergence margin --- the conditioning the three-term
+\noindent BN leads from the first epoch, 34\% to the bare net's
+24\%, and keeps the lead the whole way, finishing about two and a half
+points up (75.0\% vs 72.6\%). The un-normalized net traces the same arc
+roughly ten epochs behind. Most of that is \emph{speed}, since the curves
+are the same shape shifted left, but at this depth on plain SGD it is
+also a real convergence margin, and it is larger than the run-to-run
+spread on either curve. The conditioning that the three-term
 backward (\S\ref{thm:bnNormalize_has_vjp}) buys is worth more the deeper
 the stack, exactly the trend that makes BN standard equipment by
-ResNet's thirty-four layers. That margin is largest precisely for plain
-SGD; under momentum and Adam (next) both nets already train well enough
-that BN's lead all but vanishes.
+ResNet's thirty-four layers. Under momentum and AdamW, next, the
+un-normalized net trains fast enough to close most of the accuracy gap,
+and pays for it in a way plain SGD never exposed.
 
 \subsection*{Lever 2: the optimizer}
 
 Now hold the architecture fixed and change only the update rule. Three
 optimizers, each at its own tuned learning rate, all on the identical
-pipeline and the same 40 epochs (final \% / best \%):
+pipeline and the same 40 epochs. Median final accuracy, with the
+observed range across runs:
 
 \begin{center}
 \begin{tabular}{l c c c}
@@ -3908,27 +4029,49 @@ pipeline and the same 40 epochs (final \% / best \%):
        & SGD & momentum & AdamW \\
        & (lr 0.1) & ($\mu$ 0.9, lr 0.02) & (lr $10^{-3}$) \\
 \hline
-no BN  & 72.4 / 72.4 & \textbf{76.7 / 76.9} & 73.6 / 73.7 \\
-BN     & 74.2 / 74.3 & \textbf{77.1 / 77.1} & 73.3 / 73.4 \\
+no BN  & 72.6 {\footnotesize (1.8)} & \emph{diverged} & 73.7 {\footnotesize (1.0)} \\
+BN     & 75.0 {\footnotesize (1.1)} & \textbf{77.1} {\footnotesize (0.8)} & 74.4 {\footnotesize (0.8)} \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Momentum wins outright --- three to four points over plain
-SGD in both nets, and the best result on the board (BN${+}$momentum,
-77\%). Plain SGD and Adam are a rough tie: Adam's per-coordinate
-second-moment scaling earns nothing it can keep here, even with the wide
-head's extra parameters to exploit. And reading \emph{down} the columns
-recovers Lever~1 --- BN helps most under plain SGD ($\approx{+}1.8$) and
-its margin shrinks to nothing under momentum and Adam, which already
-condition the gradient well. Normalization, in other words, mostly
-compensates for a weak optimizer; give it a good one and the depth
-alone carries the net.
+\noindent $n=5$ per cell, $n=4$ for the AdamW column. Parenthesised
+figures are the range from lowest run to highest.
 
-\medskip\noindent The Lever-1 graph drew this for the SGD column ---
-fixed optimizer, BN toggled. The same per-epoch picture for the other
-two columns, on the same axes, is what reading \emph{down} the table
-looks like drawn out:
+\noindent Momentum with BN is the best result on the board at 77.1\%,
+about two points over plain SGD and two and a half over AdamW, and every
+one of those gaps is wider than the spread within a cell. AdamW lands
+between the two: its per-coordinate second-moment scaling is worth
+something over plain SGD, but less than momentum is, even with the wide
+head's extra parameters to exploit. Reading \emph{down} the columns
+recovers Lever~1, and BN is ahead in all three ($+2.4$ under SGD,
+$+0.7$ under AdamW, and under momentum the comparison does not finish).
+
+\medskip\noindent\textbf{The empty cell is the finding.} Un-normalized
+plus momentum did not fail to reach a good accuracy. It reached one and
+then destroyed it. In all five runs the training loss fell normally to
+about $0.27$ and then went to \texttt{NaN} between epochs 29 and 34, at a
+learning rate the cosine schedule had already decayed to roughly
+$0.002$. Three of the five collapsed to 10\% by epoch 40, which is chance
+on ten classes. The other two happened to be evaluated before the damage
+propagated and still reported about 76\%. There is no honest single
+number for that cell, so the table does not print one. The same thing
+happened once in four AdamW runs without BN. Across all fourteen
+un-normalized runs the loss went to \texttt{NaN} six times, and across
+all fourteen normalized ones it never did.
+
+\noindent That is the sharper version of Lever~1. On plain SGD, BN buys
+speed and a couple of points. Give the net a stronger optimizer and BN
+stops looking like an accelerator and starts looking like the thing
+holding the net together, which is what deep normalization is actually
+for. It is the same instability an eight-layer stack without
+normalization has always been prone to, and it is why the next chapter's
+thirty-four layers do not attempt it.
+
+\medskip\noindent The Lever-1 graph drew this for the SGD column, with
+the optimizer fixed and BN toggled. The same per-epoch picture for the
+other two columns, on the same axes, is what reading \emph{down} the
+table looks like drawn out:
 
 \begin{center}
 \begin{tikzpicture}
@@ -3948,13 +4091,17 @@ looks like drawn out:
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,43.86) (2,55.08) (3,60.85) (4,64.31) (5,67.17) (6,70.11) (7,71.45) (8,72.60) (9,72.77) (10,73.21) (11,74.21) (12,73.47) (13,74.56) (14,74.60) (15,75.14) (16,75.62) (17,75.57) (18,75.62) (19,76.66) (20,76.63) (21,76.23) (22,76.19) (23,75.88) (24,76.01) (25,76.41) (26,75.99) (27,76.85) (28,76.68) (29,76.70) (30,76.63) (31,76.65) (32,76.79) (33,76.80) (34,76.99) (35,77.04) (36,76.92) (37,76.99) (38,76.93) (39,77.01) (40,77.08)
+(1,42.09) (2,54.19) (3,60.19) (4,64.99) (5,68.44) (6,69.97) (7,71.09) (8,72.64) (9,72.64) (10,73.18) (11,74.39) (12,73.94) (13,74.88) (14,75.28) (15,75.29) (16,75.71) (17,75.93) (18,76.14) (19,76.33) (20,76.46) (21,76.52) (22,76.81) (23,76.55) (24,76.93) (25,76.73) (26,76.97) (27,76.53) (28,77.03) (29,76.84) (30,77.06) (31,77.12) (32,77.15) (33,77.12) (34,77.28) (35,77.04) (36,77.14) (37,77.17) (38,77.19) (39,77.16) (40,77.14)
 };
 \addlegendentry{with BN}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,39.65) (2,49.78) (3,54.17) (4,59.18) (5,64.09) (6,65.48) (7,67.74) (8,68.40) (9,67.12) (10,69.62) (11,70.27) (12,72.04) (13,71.82) (14,71.47) (15,71.36) (16,72.83) (17,73.02) (18,73.77) (19,73.16) (20,74.77) (21,75.10) (22,74.88) (23,75.34) (24,75.44) (25,76.24) (26,75.53) (27,76.10) (28,76.68) (29,76.68) (30,76.76) (31,76.85) (32,76.60) (33,76.69) (34,76.60) (35,76.78) (36,76.61) (37,76.55) (38,76.63) (39,76.77) (40,76.70)
+(1,35.54) (2,44.58) (3,49.30) (4,55.05) (5,59.42) (6,61.24) (7,63.40) (8,66.31) (9,66.93) (10,68.08) (11,70.46) (12,70.07) (13,70.98) (14,70.05) (15,71.74) (16,72.92) (17,73.62) (18,73.00) (19,73.75) (20,73.70) (21,74.04) (22,74.74) (23,74.51) (24,74.86) (25,75.06) (26,75.39) (27,75.50) (28,75.76)
 };
-\addlegendentry{no BN}
+\addlegendentry{no BN (diverges)}
+\addplot[red!70!black, dashed, line width=0.8pt, forget plot, mark=none]
+  coordinates {(29,28) (29,78)};
+\node[anchor=south west, font=\footnotesize, red!70!black, align=left]
+  at (axis cs:29.4,30) {loss $\to$ \texttt{NaN}\\epochs 29--34, 5/5};
 \end{axis}
 \end{tikzpicture}
 \end{center}
@@ -3977,36 +4124,44 @@ looks like drawn out:
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,33.63) (2,44.98) (3,51.91) (4,57.84) (5,60.84) (6,63.50) (7,65.32) (8,65.34) (9,67.08) (10,68.37) (11,68.88) (12,69.65) (13,70.75) (14,70.49) (15,72.12) (16,72.41) (17,71.72) (18,72.01) (19,71.86) (20,72.54) (21,72.78) (22,73.29) (23,72.56) (24,73.19) (25,72.32) (26,73.04) (27,73.30) (28,73.20) (29,73.15) (30,73.21) (31,73.36) (32,73.30) (33,73.42) (34,73.37) (35,73.38) (36,73.29) (37,73.40) (38,73.41) (39,73.36) (40,73.35)
+(1,37.47) (2,48.90) (3,54.76) (4,60.14) (5,63.52) (6,65.25) (7,66.35) (8,67.81) (9,68.91) (10,69.78) (11,70.69) (12,70.52) (13,71.40) (14,71.78) (15,72.38) (16,72.56) (17,72.81) (18,72.97) (19,73.48) (20,73.34) (21,73.56) (22,74.03) (23,74.00) (24,74.11) (25,73.67) (26,74.18) (27,74.09) (28,74.16) (29,73.94) (30,74.26) (31,74.22) (32,74.39) (33,74.34) (34,74.25) (35,74.37) (36,74.35) (37,74.33) (38,74.37) (39,74.37) (40,74.36)
 };
 \addlegendentry{with BN}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,40.87) (2,47.06) (3,53.37) (4,58.26) (5,59.70) (6,61.16) (7,63.41) (8,65.70) (9,65.20) (10,68.51) (11,68.28) (12,67.93) (13,69.26) (14,70.59) (15,70.54) (16,71.65) (17,72.09) (18,71.44) (19,71.59) (20,73.10) (21,73.06) (22,73.27) (23,73.46) (24,73.00) (25,72.68) (26,73.11) (27,72.95) (28,73.45) (29,73.58) (30,73.21) (31,73.44) (32,73.51) (33,73.58) (34,73.70) (35,73.45) (36,73.66) (37,73.52) (38,73.52) (39,73.57) (40,73.57)
+(1,39.45) (2,47.36) (3,53.02) (4,55.78) (5,58.40) (6,62.29) (7,62.87) (8,64.10) (9,66.28) (10,66.87) (11,68.08) (12,67.87) (13,68.86) (14,69.89) (15,70.46) (16,70.68) (17,71.20) (18,71.15) (19,71.95) (20,71.79) (21,71.89) (22,72.13) (23,72.29) (24,72.62) (25,72.87) (26,73.14) (27,73.49) (28,73.12) (29,73.17) (30,73.21) (31,73.42) (32,73.47) (33,73.31) (34,73.44) (35,73.60) (36,73.61) (37,73.68) (38,73.55) (39,73.68) (40,73.71)
 };
 \addlegendentry{no BN}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent Same wide 8-conv net, same shared pipeline, same 40 epochs ---
+\noindent Same wide 8-conv net, same shared pipeline, same 40 epochs, and
 only the optimizer changes from the SGD panel above
-(\texttt{runs/ablation\_cifar8w/\{nobn,bn\}.log}, the momentum and AdamW
-phases). Under \textbf{momentum} BN still takes the early lead --- 44\% to
-40\% at epoch~1, and a visible margin through the first dozen epochs --- but
-the un-normalized net pulls level around epoch~28 and both finish at 77\%,
-BN ahead by only a couple of tenths. Under \textbf{AdamW} even that early
-gap is gone: the two curves are tangled from the first epoch and the no-BN
-net actually ends a hair in front ($73.6$ vs $73.4$), because Adam's
-per-coordinate second-moment scaling already conditions the step that BN
-would otherwise smooth. Read top-to-bottom --- SGD, then momentum, then
-Adam --- the blue--orange gap collapses panel by panel: the same
-``BN helps most under a weak optimizer'' story the table tells in two
-columns of numbers, now drawn epoch by epoch.
+(\texttt{runs/2026-08-12-cifar8w-6arm-xla-cuda/}, the momentum and AdamW
+phases). Medians as before, over the runs that finished.
+
+\noindent Under \textbf{momentum} BN takes the early lead, 42\% to
+36\% at epoch~1, and the un-normalized net spends the next twenty-five
+epochs closing it, reaching $75.8$ against BN's $77.0$ by epoch~28. Then
+it stops. The orange curve ends where it does because the training loss
+went to \texttt{NaN} in every one of the five runs between epochs 29 and
+34, and there is nothing after that worth plotting. Under \textbf{AdamW}
+both nets run the full forty epochs, BN ahead by about seven tenths the
+whole way ($74.4$ vs $73.7$), which is inside the run-to-run spread and
+is not a gap the text ranks. One of the four un-normalized AdamW runs
+also went to \texttt{NaN}.
+
+\noindent Read top-to-bottom, SGD then momentum then AdamW, the accuracy
+gap between the curves does narrow panel by panel, exactly the old
+``BN helps most under a weak optimizer'' reading. The momentum panel is
+where that reading breaks. The gap narrows right up to the point the
+un-normalized net destroys itself, which means the two curves converging
+was never evidence that BN had stopped mattering.
 
 The reason we can make this comparison \emph{and trust it} is that the
 optimizer is one swappable rendered tail. The forward pass, the
 softmax--cross-entropy loss, the backward pass, and every parameter
-gradient are the same proof-rendered graph in each column; only the
+gradient are the same proof-rendered graph in each column. Only the
 final per-parameter update op changes:
 
 \begin{itemize}
@@ -4020,39 +4175,47 @@ final per-parameter update op changes:
 \noindent Each tail is emitted onto the \emph{same} certified gradient
 (\texttt{emitSgd}, \texttt{emitMomentum}, \texttt{ViTRender.emitAdamV}),
 so the ablation is honest in the strong sense: identical, machine-checked
-gradients with different arithmetic stacked on top --- and for plain
+gradients with different arithmetic stacked on top. And for plain
 SGD, that the binary32 step actually decreases the loss is itself a
 proved theorem.
 
+\noindent It is worth being precise about what that does and does not
+cover, because the momentum column just exercised the gap. The proofs
+say the emitted graph computes the gradient this chapter derives, and
+they say it in exact real arithmetic. They say nothing about whether
+forty epochs of binary32 updates stay in range. A verified gradient is
+not a guarantee of numerical stability, and the un-normalized momentum
+run is what that distinction looks like when it bites.
+
 \medskip\noindent\textbf{One honest note on the comparison.} The first
-time we ran this, the optimizers looked far more separated --- momentum
-and Adam beat SGD by some ten points. That gap was mostly an artifact:
+time we ran this, the optimizers looked far more separated, with momentum
+and Adam beating SGD by some ten points. That gap was mostly an artifact:
 the momentum and Adam runs happened to go through a data pipeline with
 shuffling and flip augmentation that the plain-SGD baseline lacked.
-Holding the pipeline genuinely fixed --- the table above --- collapsed
+Holding the pipeline genuinely fixed, as the table above does, collapsed
 the difference to the few points that are really about the
 optimizer. It is exactly the kind of mistake a verified gradient does
-\emph{not} catch: the math was correct in every run; the experiment
+\emph{not} catch. The math was correct in every run, and the experiment
 design was what needed fixing. An ablation measures the thing you varied
-only if everything else is held constant --- and ``everything else''
+only if everything else is held constant, and ``everything else''
 includes the parts that live outside the network.
 
 \subsection*{Does the head width matter?}
 
-Almost not at all --- which is exactly why we could borrow MNIST's head
+Almost not at all, which is exactly why we could borrow MNIST's head
 untouched. The 2$\times$512 head carries about $334{,}000$ of the net's
-$374{,}000$ parameters; swap it for a narrow 64-wide head ($13{,}000$
-params, whole net down to $53{,}000$) and the same six runs land within
-a point either way --- best-of-board $77.1\%$ wide vs $77.2\%$ narrow,
-with the optimizer ordering unchanged. Seven times the parameters buys
-no accuracy, and only about $1.4\times$ the wall-clock per epoch
-(${\approx}14$ vs ${\approx}10$ seconds on a gfx1100): the eight
-convolutions over the $32 \times 32$ maps dominate the compute, while
-the head --- big as it is --- is cheap matmul. That is the lesson the
+$374{,}000$ parameters. Swap it for a narrow 64-wide head ($13{,}000$
+params, whole net down to $53{,}000$) and the best cell on the board
+barely moves: BN with momentum gives $77.1\%$ wide against $77.1\%$
+narrow, and the optimizer ordering is unchanged. Seven times the
+parameters buys no accuracy, and costs about $1.6\times$ the wall-clock
+per epoch (${\approx}6.3$ vs ${\approx}3.9$ seconds on an RTX 4060 Ti).
+The eight convolutions over the $32 \times 32$ maps dominate the compute,
+while the head is cheap matmul however big it is. That is the lesson the
 bridge makes concrete: at this scale the \emph{depth} of the
 convolutional body is the lever, not the width of the classifier on top.
 It is why the head can stay MNIST's, and why the next chapter spends its
-budget on \emph{more convolution} --- thirty-four layers of it --- not a
+budget on thirty-four layers of \emph{more convolution} rather than a
 bigger head.
 
 The two-point comparison above (64 vs 512) is worth drawing out in full,
@@ -4092,7 +4255,7 @@ gfx1100s, the whole curve is one short run:
 \noindent Dense-head width sweep for the 8-conv cifar8 net with per-channel
 BatchNorm, AdamW, 25 epochs, conv backbone held at $[16,16,32,32]$
 (\texttt{runs/cifar8bn\_grid\_results.tsv}). Past a 16-wide head the curve is
-essentially flat --- everything from $d{=}16$ to $d{=}4096$ lands inside a
+essentially flat, and everything from $d{=}16$ to $d{=}4096$ lands inside a
 single point ($71.1$ to $72.2\%$), and the $256\times$ wider head buys
 nothing, while its $17$M-parameter classifier just overfits (train loss
 $0.03$, test unmoved). The only real drop is at $d{=}8$ ($66.8\%$), where the
@@ -4100,33 +4263,37 @@ $128{\to}8$ first layer throttles the 128-dim feature map the convolutions
 produce. The canonical $d{=}64$ (circled) sits squarely on the plateau: the
 head width genuinely does not matter here, which is the whole reason the net
 could borrow MNIST's classifier untouched. (Absolute accuracy is a couple of
-points below the 40-epoch board above --- this is a 25-epoch single-optimizer
-sweep --- but the \emph{shape} is the point.)
+points below the 40-epoch board above, because this is a 25-epoch
+single-optimizer sweep, but the \emph{shape} is the point.)
 
 \subsection*{Why the levers work}
 
-Both levers do the same underlying thing --- they make each step's
-gradient a more reliable guide to the next --- by attacking different
-sources of noise. Each layer is tuned for the distribution of its
+Both levers do the same underlying thing by attacking different sources
+of noise. They make each step's gradient a more reliable guide to the
+next. Each layer is tuned for the distribution of its
 inputs, but those inputs are the outputs of every layer below, which
-shift every step; so each layer chases a moving target, and the step
+shift every step, so each layer chases a moving target, and the step
 that helps one layer can wreck the next. \textbf{BN} removes the moving
 part by pinning every layer's input to mean-zero, unit-variance before
-the learnable $\gamma,\beta$ get a say --- Ioffe \& Szegedy framed this
+the learnable $\gamma,\beta$ get a say. Ioffe \& Szegedy framed this
 as reducing ``internal covariate shift,'' while Santurkar et al.\ (2018)
 argued the sharper effect is a smoother loss landscape.
 \textbf{Momentum} attacks a different noise: by averaging successive
 gradients it cancels the mini-batch jitter and accumulates the
 consistent direction. Both make the per-step direction more trustworthy,
-and reliable progress compounds across epochs --- precisely what the
-curve and the table measure. (On larger networks, and with true
-batch-statistic normalization, BN's effect is stronger still --- it
-opens up learning rates that diverge without it --- but at this depth,
-what we can honestly measure and verify is the speed, so that is the
-claim we make here.) That is why every image architecture since 2015
-bakes a normalization layer in by default, and why the optimizer is the
-first knob any practitioner reaches for: between them they decide not
-whether the net can learn this data, but how many passes it takes.
+and reliable progress compounds across epochs, which is what the
+curves and the table measure.
+
+The two levers interact, and the momentum column is where that shows.
+Momentum makes each step longer and more consistent, which is why it wins
+on accuracy, and a longer step through eight unnormalized layers is also
+exactly what runs the activations out of binary32 range. Normalization is
+what makes the aggressive optimizer survivable. That is the standard
+account of why the two arrived together, and why every image architecture
+since 2015 bakes a normalization layer in by default. At larger depth
+the effect is stronger still, and it is what opens up the learning rates
+that diverge without it. Between them the two levers decide not only how
+many passes the net needs, but whether it finishes them at all.
 
 \section{MLIR: BatchNorm}
 
@@ -4143,18 +4310,18 @@ reverse-mode derivative is the three-term formula of
 (the rank-1 wringer) with \texttt{bnAffine\_has\_vjp} (the $\gamma\,dy$
 half). The one subtlety, isolated in \S~\ref{ax:bnIstdBroadcast_diff}, is
 that the inverse-stddev term carries an $\mathrm{istd}^3$ that needs
-$\varepsilon > 0$ to stay differentiable --- the single place in the book
-where the math reaches past chain-sum-product into real analysis.
+$\varepsilon > 0$ to stay differentiable. That is the single place in the
+book where the math reaches past chain-sum-product into real analysis.
 
 \medskip\noindent\textbf{The gap and how we close it.} The three-term
-backward is not elementwise --- the two $\sum_k$ reductions couple every
-coordinate to every other. The emitted backward graph is given a denotation
-in the proofs' own vector type, and
+backward is not elementwise, because the two $\sum_k$ reductions couple
+every coordinate to every other. The emitted backward graph is given a
+denotation in the proofs' own vector type, and
 \texttt{bn\_back\_bridge} proves that denotation equal to
-\texttt{bn\_has\_vjp}'s backward --- the emitted reduce/broadcast/elementwise
+\texttt{bn\_has\_vjp}'s backward. The emitted reduce/broadcast/elementwise
 graph \emph{is}, by machine check, the three-term formula. Here is what the
-printer emits (the forward-statistic recompute --- mean, variance,
-\texttt{rsqrt}, normalize --- elided to its one comment line; $n=4$):
+printer emits, with the forward-statistic recompute (mean, variance,
+\texttt{rsqrt}, normalize) elided to its one comment line, at $n=4$:
 
 \begin{verbatim}
 // forward stats recomputed: %mu, %istd, %xhat = (x-mu)*istd
@@ -4179,29 +4346,29 @@ printer emits (the forward-statistic recompute --- mean, variance,
 return %dx : tensor<2x4xf32>
 \end{verbatim}
 
-\noindent Read it against the formula: \texttt{\%dxhat} is the affine
-backward $\gamma\,dy$; each \texttt{reduce} along \texttt{dimensions = [1]}
+\noindent Read it against the formula. \texttt{\%dxhat} is the affine
+backward $\gamma\,dy$, and each \texttt{reduce} along \texttt{dimensions = [1]}
 followed by a \texttt{broadcast\_in\_dim} is one of the cross-coordinate
 sums ($\sum_k dy_k$ as \texttt{\%sdx}, $\sum_k\hat{x}_k\,dy_k$ as
-\texttt{\%sxdx}); \texttt{\%i1} assembles $n\,dy - \sum dy$ (the direct term
+\texttt{\%sxdx}). \texttt{\%i1} assembles $n\,dy - \sum dy$ (the direct term
 minus the centering correction), \texttt{\%i2} subtracts the rank-1
 normalization correction $\hat{x}\sum\hat{x}\,dy$, and \texttt{\%dx} scales
 the whole bracket by $\mathrm{istd}/n$. The graph folds $\gamma$ into
 \texttt{\%dxhat} up front, which is why that leading scale is
-$\mathrm{istd}/n$ and not $\mathrm{istd}\,\gamma/n$ --- the same formula,
-$\gamma$ pulled inside the parenthesis. The bridge theorem is precisely the
-claim that this text computes \texttt{bn\_has\_vjp}'s backward.
+$\mathrm{istd}/n$ and not $\mathrm{istd}\,\gamma/n$. It is the same
+formula with $\gamma$ pulled inside the parenthesis. The bridge theorem is
+precisely the claim that this text computes \texttt{bn\_has\_vjp}'s backward.
 
 \medskip\noindent Because LayerNorm is BatchNorm along a different axis, the
 very same emitted graph denotes the LayerNorm backward
-(\texttt{layernorm\_back\_bridge} is literally \texttt{bn\_back\_bridge}) ---
-the normalization sitting inside the residual, depthwise, and ConvNeXt blocks
-built on this foundation.
+(\texttt{layernorm\_back\_bridge} is literally \texttt{bn\_back\_bridge}).
+That is the normalization sitting inside the residual, depthwise, and
+ConvNeXt blocks built on this foundation.
 
 \medskip\noindent\textbf{Caveats.}
 \begin{itemize}
   \item \textbf{Needs $\varepsilon > 0$.} The inverse-stddev term carries an
-    $\mathrm{istd}^3$; given $\varepsilon > 0$ the bridge is unconditional
+    $\mathrm{istd}^3$. Given $\varepsilon > 0$ the bridge is unconditional
     (smooth everywhere, with no smooth-point exclusion, unlike ReLU and
     max-pool).
   \item \textbf{Representative scale} ($n = 4$).

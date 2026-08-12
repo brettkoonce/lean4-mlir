@@ -165,14 +165,14 @@ Chapter-wide ranking, to pick what's next:
 | MNIST: linear classifier (ch1) | 0.0 | 26 (all in proofs) | done |
 | MNIST: 1D MLP (ch2) | 0.0 | 0 | **DONE** |
 | MNIST: 2D CNN (ch3) | 0.0 | 0 | **DONE** |
+| CIFAR with BatchNorm (ch4) | 0.0 | 0 | **DONE** |
 | On Verification (app C) | 19.3 | 28 | **needs an argument rethink, see §6** |
 | Data availability (app A) | 17.8 | 14 | |
 | Getting started (app B) | 17.0 | 8 | flourishes cut, joinery not |
 | EfficientNet | 15.8 | 20 | |
 | MobileNetV2 | 14.4 | 22 | |
-| CIFAR with BatchNorm | 14.2 | 59 | |
 | Bestiary | 12.7 | 70 | |
-| ResNet-34 | 12.6 | 33 | |
+| ResNet-34 (ch5) | 12.6 | 33 | **▶ NEXT** (57 em-dash / 30 semi raw count) |
 | ConvNeXt | 11.9 | 31 | |
 | Vision Transformer | 8.7 | 59 | |
 
@@ -223,9 +223,99 @@ chapter 4 needs none of that plumbing.
 
 ---
 
-## 4a. ▶▶ NEXT: Chapter 4, CIFAR with BatchNorm
+## 4a. Chapter 4, CIFAR with BatchNorm: DONE (2026-08-12)
 
-**The prose is the big job here**, much bigger than ch2 or ch3:
+Shipped. 0 em-dashes / 0 prose semicolons (from 60/27), max sentence 91 → 70 w,
+`\phasethreenote` removed (markers 6 → 5), `latexmk` 0 errors.
+
+⚠⚠ **THIS DOC WAS WRONG ABOUT THE DATA, and it cost the whole GPU budget.** §4a
+said the ch4 measured work was "already banked" in
+`runs/2026-08-11-cifar8-6arm-xla-cuda/`. That log is the **narrow-head**
+(`128→64→64→10`) net that `lake run cifar` runs. Chapter 4's board is the
+**wide 2×512-head** net (`cifar8w`), which was still on IREE via
+`cifar8w-ablation`. They are different networks and the doc never said so.
+▶ Before trusting any "already measured" pointer, `grep` the log's own banner
+line for the architecture and diff it against what the chapter claims.
+
+**The port.** `ireeLink` → `lowererLink` on `cifar8w-ablation` and
+`cifar8w-bn-ablation` was the whole code change — `trainAdamSched` and all eight
+`cifar8w*` renders were already in place. Re-measured at **n=5** (n=4 AdamW) in
+`runs/2026-08-12-cifar8w-6arm-xla-cuda/`.
+
+⭐ **`LEAN_MLIR_CKPT_TAG` is new and §3c depends on it.** Every pass of one
+(net, variant, backend) shared ONE checkpoint path, so the parallel sweeps §3c
+mandates could not be run: concurrent passes clobber each other's blob, and a
+later pass resumes from an earlier one's finished epoch 40 and trains **nothing**
+while printing a normal-looking log. Set it to the pass index. Also: clear stale
+`.lake/build/<slug>_*_ckpt_xla*.bin{,.epoch}` before any re-measurement — the
+first attempt here silently trained zero epochs off July checkpoints.
+
+⭐ **The result changed, for the better.** BN's payoff at this depth is
+**stability**, not the sub-noise "wash" the old IREE board showed:
+
+| arm | n | median | range | diverged |
+|---|---|---|---|---|
+| SGD, no BN | 5 | 72.64 | 1.77 | 0/5 |
+| SGD, BN | 5 | 75.00 | 1.13 | 0/5 |
+| momentum, no BN | 5 | — | — | **5/5 NaN** |
+| momentum, BN | 5 | **77.14** | 0.77 | 0/5 |
+| AdamW, no BN | 4 | 73.71 | 0.97 | **1/4 NaN** |
+| AdamW, BN | 4 | 74.36 | 0.83 | 0/4 |
+
+The un-normalized net's loss goes to `NaN` in 6 of 14 runs; the BN net's in 0 of
+14. It trains normally to loss ≈0.27, then dies between epochs 29 and 34 at an
+lr the cosine had already decayed to ≈0.002, and 3 of 5 collapse to 10%. This is
+**not new** — `robustness_handoff.md:140` and `render_close_handoff.md:67` both
+recorded "BN avoids the divergence entirely" for the plain-SGD case. What moved
+on XLA is *which* optimizer exposes it. The momentum cell prints *diverged*
+rather than a number.
+
+▶ **OPEN, deliberately not chased:** whether the wide-head no-BN momentum NaN is
+XLA-specific or a property of the recipe. An IREE run of the same arm answers it
+in one command (`LEAN_MLIR_LOWERER=iree`); it was started and killed. All five
+logs are kept.
+
+### Also landed: the blurb pattern
+
+`VerifiedNetSpec.blurb` hard-coded its transport, so the banner described the
+build rather than the run. Three of seven print sites patched it with
+`.replace "IREE FFI" "XLA/PJRT"` and **four printed it raw**, so nets on
+`trainAdamPacked` and the three E4M3 trainers announced IREE while training on
+XLA. Blurbs now carry the literal `%LOWERER%` and `VerifiedNet.printBlurb`
+resolves it once. No committed book log was affected (checked). ▶ Use
+`printBlurb`, never `IO.println net.blurb`.
+
+### Chapter 4's specs were fiction
+
+§4.4 printed `cifar8NoBn`/`cifar8Bn` as `NetSpec` — **names that exist nowhere in
+the codebase**, in a layer syntax (`.conv2d 3 16 3 .same .relu`) the real type
+does not use. Replaced with the actual `cifar8wVerified` / `cifar8wBnVerified`
+`VerifiedNetSpec`s plus the §1.4 spec-to-proof tie (slug → committed render,
+`toSpecs` `#guard`, and `cifarCnn8_has_vjp_at` being parametric in head width,
+which is why wide and narrow share one proof). ▶ **Worth checking in every
+remaining chapter**: a listing that predates the verified types still typesets
+fine and reads as current.
+
+---
+
+## 4a-bis. ▶▶ NEXT: Chapter 5, ResNet-34
+
+57 em-dashes, 30 prose semicolons, comparable to ch4's 60/27. Carries one
+`\phasethreenote` (§5.2 Imagenette) and two `\imagenetphasenote` (§5.7, §5.8).
+§5.5's ablation is the one §4b says to **label, not re-run**. Note ch4's own text
+calls this "the easiest chapter in the book."
+
+⚠ Do not read "we're doing to JAX what we did to IREE" as retiring JAX. Confirmed
+2026-08-12: the reference implementations stay, and the work is bringing PJRT to
+**parity** with them. IREE was a swappable engine because both lowerers eat the
+same proven StableHLO; JAX is the oracle `vjp_oracle` diffs 14 layer families
+against.
+
+---
+
+## 4a-old. The original ch4 scoping (kept for the numbers it got right)
+
+**The prose was the big job here**, much bigger than ch2 or ch3:
 
 | chapter | em-dashes | prose-semicolon lines | max sentence |
 |---|---|---|---|

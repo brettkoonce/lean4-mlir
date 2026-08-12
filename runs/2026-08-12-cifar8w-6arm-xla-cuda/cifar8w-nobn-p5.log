@@ -1,0 +1,1039 @@
+I0812 01:34:32.949441 1083419 service.cc:178] XLA service 0x779cf448a820 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0812 01:34:32.949478 1083419 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0812 01:34:32.950972 1083419 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0812 01:34:32.951001 1083419 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0812 01:34:32.951034 1083419 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0812 01:34:32.958945 1083419 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+I0812 01:34:33.550121 1083465 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 256 bytes spill stores, 256 bytes spill loads
+
+I0812 01:34:33.906052 1083456 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 256 bytes spill stores, 256 bytes spill loads
+
+I0812 01:34:34.005413 1083459 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 320 bytes spill stores, 320 bytes spill loads
+
+I0812 01:34:34.053432 1083469 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 176 bytes spill stores, 176 bytes spill loads
+
+I0812 01:34:34.076595 1083466 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 192 bytes spill stores, 192 bytes spill loads
+
+I0812 01:34:34.288117 1083468 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 424 bytes spill stores, 424 bytes spill loads
+
+I0812 01:34:34.293738 1083470 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 412 bytes spill stores, 412 bytes spill loads
+
+I0812 01:34:34.352456 1083461 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 444 bytes spill stores, 444 bytes spill loads
+
+I0812 01:34:34.381988 1083474 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 6392 bytes spill stores, 7388 bytes spill loads
+
+I0812 01:34:34.436793 1083450 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 320 bytes spill stores, 320 bytes spill loads
+
+I0812 01:34:34.440094 1083453 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 428 bytes spill stores, 428 bytes spill loads
+
+I0812 01:34:34.489016 1083454 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 416 bytes spill stores, 416 bytes spill loads
+
+I0812 01:34:34.530877 1083463 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 160 bytes spill stores, 160 bytes spill loads
+
+I0812 01:34:35.039887 1083461 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 192 bytes spill stores, 192 bytes spill loads
+
+I0812 01:34:35.331011 1083475 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 32 bytes spill stores, 32 bytes spill loads
+
+I0812 01:34:35.524224 1083468 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 40 bytes spill stores, 40 bytes spill loads
+
+I0812 01:34:35.606636 1083464 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 36 bytes spill stores, 36 bytes spill loads
+
+I0812 01:34:35.884651 1083453 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 712 bytes spill stores, 712 bytes spill loads
+
+I0812 01:34:36.343127 1083460 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 544 bytes spill stores, 544 bytes spill loads
+
+I0812 01:34:36.420299 1083452 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 44 bytes spill stores, 44 bytes spill loads
+
+I0812 01:34:36.473611 1083471 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 192 bytes spill stores, 192 bytes spill loads
+
+I0812 01:34:36.726837 1083469 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 44 bytes spill stores, 44 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/cifar8w_sgd_train_step.mlir (@cifar8w_sgd_train_step, 69 outputs, 1 replica) in 4097 ms
+I0812 01:34:37.560448 1083456 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 40 bytes spill stores, 40 bytes spill loads
+
+I0812 01:34:37.570229 1083451 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 40 bytes spill stores, 40 bytes spill loads
+
+I0812 01:34:37.808423 1083446 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 812 bytes spill stores, 812 bytes spill loads
+
+I0812 01:34:38.016992 1083468 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 6668 bytes spill stores, 8424 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/cifar8w_fwd.mlir (@cifar8w_fwd, 1 outputs, 1 replica) in 1149 ms
+════════ cifar8w (wide head) — SGD (lr 0.1) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_sgd_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide sgd (cosine+warmup 3ep, baseLR 0.100000), He init
+  step 0/390: loss=2.315248
+  step 1/390: loss=2.306343
+  step 2/390: loss=2.313901
+  step 100/390: loss=2.295691
+  step 200/390: loss=2.211205
+  step 300/390: loss=2.348281
+Epoch 1/40: loss=2.219646 lr=0.033333
+  epoch 1: test_acc = 2401/10000 = 24.010000%  top5 = 7705/10000 = 77.050000%
+  step 0/390: loss=2.116609
+  step 1/390: loss=2.088349
+  step 2/390: loss=2.077998
+  step 100/390: loss=1.917335
+  step 200/390: loss=2.081574
+  step 300/390: loss=1.989504
+Epoch 2/40: loss=2.009462 lr=0.066667
+  epoch 2: test_acc = 2922/10000 = 29.220000%  top5 = 8247/10000 = 82.470000%
+  step 0/390: loss=1.862362
+  step 1/390: loss=1.987940
+  step 2/390: loss=1.862792
+  step 100/390: loss=1.877167
+  step 200/390: loss=1.867903
+  step 300/390: loss=1.722375
+Epoch 3/40: loss=1.875260 lr=0.100000
+  epoch 3: test_acc = 2911/10000 = 29.110000%  top5 = 8090/10000 = 80.900000%
+  step 0/390: loss=2.013964
+  step 1/390: loss=1.765341
+  step 2/390: loss=1.646725
+  step 100/390: loss=1.741078
+  step 200/390: loss=1.632989
+  step 300/390: loss=1.553762
+Epoch 4/40: loss=1.674889 lr=0.099820
+  epoch 4: test_acc = 3316/10000 = 33.160000%  top5 = 8292/10000 = 82.920000%
+  step 0/390: loss=1.822520
+  step 1/390: loss=1.868166
+  step 2/390: loss=1.802749
+  step 100/390: loss=1.469651
+  step 200/390: loss=1.371518
+  step 300/390: loss=1.463877
+Epoch 5/40: loss=1.513806 lr=0.099281
+  epoch 5: test_acc = 4758/10000 = 47.580000%  top5 = 9256/10000 = 92.560000%
+  step 0/390: loss=1.444792
+  step 1/390: loss=1.293745
+  step 2/390: loss=1.463797
+  step 100/390: loss=1.336650
+  step 200/390: loss=1.506031
+  step 300/390: loss=1.272587
+Epoch 6/40: loss=1.392573 lr=0.098387
+  epoch 6: test_acc = 4886/10000 = 48.860000%  top5 = 9321/10000 = 93.210000%
+  step 0/390: loss=1.380240
+  step 1/390: loss=1.324214
+  step 2/390: loss=1.314970
+  step 100/390: loss=1.342682
+  step 200/390: loss=1.315626
+  step 300/390: loss=1.282900
+Epoch 7/40: loss=1.317519 lr=0.097144
+  epoch 7: test_acc = 5411/10000 = 54.110000%  top5 = 9397/10000 = 93.970000%
+  step 0/390: loss=1.289897
+  step 1/390: loss=1.255790
+  step 2/390: loss=1.068469
+  step 100/390: loss=1.177760
+  step 200/390: loss=1.054686
+  step 300/390: loss=1.366856
+Epoch 8/40: loss=1.242066 lr=0.095561
+  epoch 8: test_acc = 5676/10000 = 56.760000%  top5 = 9515/10000 = 95.150000%
+  step 0/390: loss=1.082441
+  step 1/390: loss=1.212613
+  step 2/390: loss=1.073360
+  step 100/390: loss=1.103621
+  step 200/390: loss=1.211817
+  step 300/390: loss=1.198711
+Epoch 9/40: loss=1.182746 lr=0.093651
+  epoch 9: test_acc = 5461/10000 = 54.610000%  top5 = 9401/10000 = 94.010000%
+  step 0/390: loss=1.207646
+  step 1/390: loss=1.258086
+  step 2/390: loss=1.013451
+  step 100/390: loss=1.124625
+  step 200/390: loss=1.263278
+  step 300/390: loss=1.108123
+Epoch 10/40: loss=1.133565 lr=0.091425
+  epoch 10: test_acc = 6008/10000 = 60.080000%  top5 = 9576/10000 = 95.760000%
+  step 0/390: loss=0.947237
+  step 1/390: loss=0.971199
+  step 2/390: loss=1.145155
+  step 100/390: loss=1.084359
+  step 200/390: loss=1.051566
+  step 300/390: loss=1.001959
+Epoch 11/40: loss=1.080215 lr=0.088902
+  epoch 11: test_acc = 6118/10000 = 61.180000%  top5 = 9585/10000 = 95.850000%
+  step 0/390: loss=0.889342
+  step 1/390: loss=1.015516
+  step 2/390: loss=1.000171
+  step 100/390: loss=1.100682
+  step 200/390: loss=1.090274
+  step 300/390: loss=1.059488
+Epoch 12/40: loss=1.040279 lr=0.086098
+  epoch 12: test_acc = 6118/10000 = 61.180000%  top5 = 9557/10000 = 95.570000%
+  step 0/390: loss=1.014341
+  step 1/390: loss=1.083928
+  step 2/390: loss=0.970964
+  step 100/390: loss=1.047098
+  step 200/390: loss=0.903292
+  step 300/390: loss=1.128399
+Epoch 13/40: loss=1.002121 lr=0.083034
+  epoch 13: test_acc = 6454/10000 = 64.540000%  top5 = 9637/10000 = 96.370000%
+  step 0/390: loss=0.958080
+  step 1/390: loss=0.976035
+  step 2/390: loss=1.062035
+  step 100/390: loss=0.926829
+  step 200/390: loss=0.776146
+  step 300/390: loss=0.871924
+Epoch 14/40: loss=0.963040 lr=0.079732
+  epoch 14: test_acc = 6515/10000 = 65.150000%  top5 = 9657/10000 = 96.570000%
+  step 0/390: loss=0.778940
+  step 1/390: loss=0.827169
+  step 2/390: loss=0.914638
+  step 100/390: loss=0.958091
+  step 200/390: loss=0.960553
+  step 300/390: loss=0.870094
+Epoch 15/40: loss=0.928667 lr=0.076215
+  epoch 15: test_acc = 6220/10000 = 62.200000%  top5 = 9611/10000 = 96.110000%
+  step 0/390: loss=0.760460
+  step 1/390: loss=0.574563
+  step 2/390: loss=0.806794
+  step 100/390: loss=0.796140
+  step 200/390: loss=1.098156
+  step 300/390: loss=0.957604
+Epoch 16/40: loss=0.896408 lr=0.072510
+  epoch 16: test_acc = 6379/10000 = 63.790000%  top5 = 9610/10000 = 96.100000%
+  step 0/390: loss=0.923428
+  step 1/390: loss=0.809319
+  step 2/390: loss=0.933542
+  step 100/390: loss=0.893830
+  step 200/390: loss=0.891413
+  step 300/390: loss=0.925597
+Epoch 17/40: loss=0.858765 lr=0.068643
+  epoch 17: test_acc = 6673/10000 = 66.730000%  top5 = 9683/10000 = 96.830000%
+  step 0/390: loss=0.837013
+  step 1/390: loss=0.973866
+  step 2/390: loss=0.794717
+  step 100/390: loss=0.796759
+  step 200/390: loss=0.861926
+  step 300/390: loss=0.752099
+Epoch 18/40: loss=0.829262 lr=0.064641
+  epoch 18: test_acc = 6783/10000 = 67.830000%  top5 = 9694/10000 = 96.940000%
+  step 0/390: loss=0.785149
+  step 1/390: loss=0.803337
+  step 2/390: loss=0.794872
+  step 100/390: loss=0.860266
+  step 200/390: loss=0.752632
+  step 300/390: loss=1.017939
+Epoch 19/40: loss=0.798391 lr=0.060534
+  epoch 19: test_acc = 6846/10000 = 68.460000%  top5 = 9714/10000 = 97.140000%
+  step 0/390: loss=0.868075
+  step 1/390: loss=0.737904
+  step 2/390: loss=0.642746
+  step 100/390: loss=0.776613
+  step 200/390: loss=0.774844
+  step 300/390: loss=0.675924
+Epoch 20/40: loss=0.771563 lr=0.056351
+  epoch 20: test_acc = 6854/10000 = 68.540000%  top5 = 9733/10000 = 97.330000%
+  step 0/390: loss=0.828451
+  step 1/390: loss=0.767698
+  step 2/390: loss=0.719788
+  step 100/390: loss=0.614120
+  step 200/390: loss=0.708375
+  step 300/390: loss=0.638977
+Epoch 21/40: loss=0.746224 lr=0.052122
+  epoch 21: test_acc = 6812/10000 = 68.120000%  top5 = 9738/10000 = 97.380000%
+  step 0/390: loss=0.596146
+  step 1/390: loss=0.675880
+  step 2/390: loss=0.715346
+  step 100/390: loss=0.763740
+  step 200/390: loss=0.644395
+  step 300/390: loss=0.793465
+Epoch 22/40: loss=0.716418 lr=0.047878
+  epoch 22: test_acc = 6956/10000 = 69.560000%  top5 = 9737/10000 = 97.370000%
+  step 0/390: loss=0.576760
+  step 1/390: loss=0.831371
+  step 2/390: loss=0.695649
+  step 100/390: loss=0.584305
+  step 200/390: loss=0.702478
+  step 300/390: loss=0.743802
+Epoch 23/40: loss=0.689452 lr=0.043649
+  epoch 23: test_acc = 6882/10000 = 68.820000%  top5 = 9712/10000 = 97.120000%
+  step 0/390: loss=0.740593
+  step 1/390: loss=0.545946
+  step 2/390: loss=0.652490
+  step 100/390: loss=0.634309
+  step 200/390: loss=0.599003
+  step 300/390: loss=0.704143
+Epoch 24/40: loss=0.658546 lr=0.039466
+  epoch 24: test_acc = 6926/10000 = 69.260000%  top5 = 9720/10000 = 97.200000%
+  step 0/390: loss=0.573508
+  step 1/390: loss=0.706255
+  step 2/390: loss=0.528850
+  step 100/390: loss=0.666646
+  step 200/390: loss=0.632538
+  step 300/390: loss=0.479451
+Epoch 25/40: loss=0.633822 lr=0.035359
+  epoch 25: test_acc = 6966/10000 = 69.660000%  top5 = 9737/10000 = 97.370000%
+  step 0/390: loss=0.503917
+  step 1/390: loss=0.674221
+  step 2/390: loss=0.733996
+  step 100/390: loss=0.435636
+  step 200/390: loss=0.559695
+  step 300/390: loss=0.619853
+Epoch 26/40: loss=0.609317 lr=0.031357
+  epoch 26: test_acc = 7030/10000 = 70.300000%  top5 = 9746/10000 = 97.460000%
+  step 0/390: loss=0.511136
+  step 1/390: loss=0.527684
+  step 2/390: loss=0.649171
+  step 100/390: loss=0.731878
+  step 200/390: loss=0.798524
+  step 300/390: loss=0.473522
+Epoch 27/40: loss=0.584087 lr=0.027490
+  epoch 27: test_acc = 7139/10000 = 71.390000%  top5 = 9762/10000 = 97.620000%
+  step 0/390: loss=0.523711
+  step 1/390: loss=0.667920
+  step 2/390: loss=0.617311
+  step 100/390: loss=0.602933
+  step 200/390: loss=0.368836
+  step 300/390: loss=0.553406
+Epoch 28/40: loss=0.558679 lr=0.023785
+  epoch 28: test_acc = 7096/10000 = 70.960000%  top5 = 9771/10000 = 97.710000%
+  step 0/390: loss=0.576182
+  step 1/390: loss=0.657636
+  step 2/390: loss=0.498561
+  step 100/390: loss=0.574936
+  step 200/390: loss=0.523721
+  step 300/390: loss=0.526245
+Epoch 29/40: loss=0.534333 lr=0.020268
+  epoch 29: test_acc = 7092/10000 = 70.920000%  top5 = 9767/10000 = 97.670000%
+  step 0/390: loss=0.558244
+  step 1/390: loss=0.654478
+  step 2/390: loss=0.601663
+  step 100/390: loss=0.433413
+  step 200/390: loss=0.487900
+  step 300/390: loss=0.524534
+Epoch 30/40: loss=0.513546 lr=0.016966
+  epoch 30: test_acc = 7123/10000 = 71.230000%  top5 = 9772/10000 = 97.720000%
+  step 0/390: loss=0.516733
+  step 1/390: loss=0.503323
+  step 2/390: loss=0.493487
+  step 100/390: loss=0.632020
+  step 200/390: loss=0.423887
+  step 300/390: loss=0.593479
+Epoch 31/40: loss=0.489315 lr=0.013902
+  epoch 31: test_acc = 7129/10000 = 71.290000%  top5 = 9775/10000 = 97.750000%
+  step 0/390: loss=0.485883
+  step 1/390: loss=0.379434
+  step 2/390: loss=0.369126
+  step 100/390: loss=0.429033
+  step 200/390: loss=0.489728
+  step 300/390: loss=0.400050
+Epoch 32/40: loss=0.465929 lr=0.011098
+  epoch 32: test_acc = 7195/10000 = 71.950000%  top5 = 9766/10000 = 97.660000%
+  step 0/390: loss=0.392142
+  step 1/390: loss=0.490979
+  step 2/390: loss=0.510997
+  step 100/390: loss=0.415194
+  step 200/390: loss=0.503573
+  step 300/390: loss=0.539099
+Epoch 33/40: loss=0.450363 lr=0.008575
+  epoch 33: test_acc = 7158/10000 = 71.580000%  top5 = 9763/10000 = 97.630000%
+  step 0/390: loss=0.389833
+  step 1/390: loss=0.465497
+  step 2/390: loss=0.337265
+  step 100/390: loss=0.457890
+  step 200/390: loss=0.546187
+  step 300/390: loss=0.479460
+Epoch 34/40: loss=0.433932 lr=0.006349
+  epoch 34: test_acc = 7140/10000 = 71.400000%  top5 = 9754/10000 = 97.540000%
+  step 0/390: loss=0.488732
+  step 1/390: loss=0.384132
+  step 2/390: loss=0.496831
+  step 100/390: loss=0.321174
+  step 200/390: loss=0.234071
+  step 300/390: loss=0.481361
+Epoch 35/40: loss=0.412584 lr=0.004439
+  epoch 35: test_acc = 7172/10000 = 71.720000%  top5 = 9750/10000 = 97.500000%
+  step 0/390: loss=0.415385
+  step 1/390: loss=0.328242
+  step 2/390: loss=0.534677
+  step 100/390: loss=0.405548
+  step 200/390: loss=0.404643
+  step 300/390: loss=0.445594
+Epoch 36/40: loss=0.406182 lr=0.002856
+  epoch 36: test_acc = 7153/10000 = 71.530000%  top5 = 9753/10000 = 97.530000%
+  step 0/390: loss=0.311426
+  step 1/390: loss=0.322738
+  step 2/390: loss=0.370323
+  step 100/390: loss=0.430945
+  step 200/390: loss=0.424439
+  step 300/390: loss=0.432587
+Epoch 37/40: loss=0.395596 lr=0.001613
+  epoch 37: test_acc = 7161/10000 = 71.610000%  top5 = 9758/10000 = 97.580000%
+  step 0/390: loss=0.341131
+  step 1/390: loss=0.484650
+  step 2/390: loss=0.280735
+  step 100/390: loss=0.506911
+  step 200/390: loss=0.402478
+  step 300/390: loss=0.500184
+Epoch 38/40: loss=0.386862 lr=0.000719
+  epoch 38: test_acc = 7160/10000 = 71.600000%  top5 = 9755/10000 = 97.550000%
+  step 0/390: loss=0.406277
+  step 1/390: loss=0.471239
+  step 2/390: loss=0.354804
+  step 100/390: loss=0.281458
+  step 200/390: loss=0.379033
+  step 300/390: loss=0.385929
+Epoch 39/40: loss=0.382981 lr=0.000180
+  epoch 39: test_acc = 7161/10000 = 71.610000%  top5 = 9761/10000 = 97.610000%
+  step 0/390: loss=0.327895
+  step 1/390: loss=0.390200
+  step 2/390: loss=0.362843
+  step 100/390: loss=0.352783
+  step 200/390: loss=0.417852
+  step 300/390: loss=0.367993
+Epoch 40/40: loss=0.385075 lr=0.000000
+  epoch 40: test_acc = 7162/10000 = 71.620000%  top5 = 9762/10000 = 97.620000%
+I0812 01:36:15.472603 1083419 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0812 01:36:15.472665 1083419 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0812 01:36:15.472685 1083419 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/cifar8w_mom_train_step.mlir (@cifar8w_mom_train_step, 69 outputs, 1 replica) in 931 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_fwd.mlir (@cifar8w_fwd, 1 outputs, 1 replica) in 176 ms
+done (trained CIFAR-CNN8-wide sgd + cosine/warmup via packed threading).
+════════ cifar8w (wide head) — Nesterov momentum (μ.9, lr 0.02) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_mom_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide mom (cosine+warmup 3ep, baseLR 0.020000), He init
+  step 0/390: loss=2.315248
+  step 1/390: loss=2.306347
+  step 2/390: loss=2.313919
+  step 100/390: loss=2.287533
+  step 200/390: loss=2.133998
+  step 300/390: loss=1.964353
+Epoch 1/40: loss=2.102056 lr=0.006667
+  epoch 1: test_acc = 3760/10000 = 37.600000%  top5 = 8663/10000 = 86.630000%
+  step 0/390: loss=1.745188
+  step 1/390: loss=1.874454
+  step 2/390: loss=1.892655
+  step 100/390: loss=1.583010
+  step 200/390: loss=1.592782
+  step 300/390: loss=1.837836
+Epoch 2/40: loss=1.730015 lr=0.013333
+  epoch 2: test_acc = 4169/10000 = 41.690000%  top5 = 8901/10000 = 89.010000%
+  step 0/390: loss=1.703502
+  step 1/390: loss=1.748574
+  step 2/390: loss=1.713604
+  step 100/390: loss=1.530994
+  step 200/390: loss=1.554936
+  step 300/390: loss=1.429215
+Epoch 3/40: loss=1.485700 lr=0.020000
+  epoch 3: test_acc = 4968/10000 = 49.680000%  top5 = 9338/10000 = 93.380000%
+  step 0/390: loss=1.504120
+  step 1/390: loss=1.354985
+  step 2/390: loss=1.253102
+  step 100/390: loss=1.360770
+  step 200/390: loss=1.263997
+  step 300/390: loss=1.248475
+Epoch 4/40: loss=1.328519 lr=0.019964
+  epoch 4: test_acc = 5390/10000 = 53.900000%  top5 = 9474/10000 = 94.740000%
+  step 0/390: loss=1.223060
+  step 1/390: loss=1.357676
+  step 2/390: loss=1.270074
+  step 100/390: loss=1.199431
+  step 200/390: loss=1.269208
+  step 300/390: loss=1.202899
+Epoch 5/40: loss=1.190999 lr=0.019856
+  epoch 5: test_acc = 5888/10000 = 58.880000%  top5 = 9569/10000 = 95.690000%
+  step 0/390: loss=1.192666
+  step 1/390: loss=0.958513
+  step 2/390: loss=1.147819
+  step 100/390: loss=1.035195
+  step 200/390: loss=1.293430
+  step 300/390: loss=1.034452
+Epoch 6/40: loss=1.098399 lr=0.019677
+  epoch 6: test_acc = 6124/10000 = 61.240000%  top5 = 9629/10000 = 96.290000%
+  step 0/390: loss=0.922398
+  step 1/390: loss=1.110188
+  step 2/390: loss=1.185893
+  step 100/390: loss=1.037138
+  step 200/390: loss=1.025541
+  step 300/390: loss=1.021075
+Epoch 7/40: loss=1.028208 lr=0.019429
+  epoch 7: test_acc = 6340/10000 = 63.400000%  top5 = 9666/10000 = 96.660000%
+  step 0/390: loss=0.999348
+  step 1/390: loss=0.900570
+  step 2/390: loss=0.901164
+  step 100/390: loss=0.882070
+  step 200/390: loss=0.959609
+  step 300/390: loss=0.986605
+Epoch 8/40: loss=0.967525 lr=0.019112
+  epoch 8: test_acc = 6529/10000 = 65.290000%  top5 = 9667/10000 = 96.670000%
+  step 0/390: loss=0.946278
+  step 1/390: loss=0.808082
+  step 2/390: loss=0.758700
+  step 100/390: loss=0.867519
+  step 200/390: loss=0.866945
+  step 300/390: loss=0.909713
+Epoch 9/40: loss=0.918658 lr=0.018730
+  epoch 9: test_acc = 6611/10000 = 66.110000%  top5 = 9660/10000 = 96.600000%
+  step 0/390: loss=0.850541
+  step 1/390: loss=0.925832
+  step 2/390: loss=0.765894
+  step 100/390: loss=0.889152
+  step 200/390: loss=1.129681
+  step 300/390: loss=0.873815
+Epoch 10/40: loss=0.871658 lr=0.018285
+  epoch 10: test_acc = 6800/10000 = 68.000000%  top5 = 9737/10000 = 97.370000%
+  step 0/390: loss=0.697315
+  step 1/390: loss=0.690663
+  step 2/390: loss=1.013755
+  step 100/390: loss=0.791005
+  step 200/390: loss=0.839627
+  step 300/390: loss=0.738827
+Epoch 11/40: loss=0.835030 lr=0.017780
+  epoch 11: test_acc = 6958/10000 = 69.580000%  top5 = 9721/10000 = 97.210000%
+  step 0/390: loss=0.752945
+  step 1/390: loss=0.764833
+  step 2/390: loss=0.773146
+  step 100/390: loss=0.822256
+  step 200/390: loss=0.700058
+  step 300/390: loss=0.824898
+Epoch 12/40: loss=0.804396 lr=0.017220
+  epoch 12: test_acc = 7020/10000 = 70.200000%  top5 = 9751/10000 = 97.510000%
+  step 0/390: loss=0.749371
+  step 1/390: loss=0.844633
+  step 2/390: loss=0.671032
+  step 100/390: loss=0.798072
+  step 200/390: loss=0.804093
+  step 300/390: loss=0.936459
+Epoch 13/40: loss=0.777206 lr=0.016607
+  epoch 13: test_acc = 7014/10000 = 70.140000%  top5 = 9739/10000 = 97.390000%
+  step 0/390: loss=0.909404
+  step 1/390: loss=0.699637
+  step 2/390: loss=0.722525
+  step 100/390: loss=0.597775
+  step 200/390: loss=0.628354
+  step 300/390: loss=0.818833
+Epoch 14/40: loss=0.748243 lr=0.015946
+  epoch 14: test_acc = 6943/10000 = 69.430000%  top5 = 9738/10000 = 97.380000%
+  step 0/390: loss=0.662160
+  step 1/390: loss=0.695697
+  step 2/390: loss=0.908227
+  step 100/390: loss=0.815017
+  step 200/390: loss=0.732046
+  step 300/390: loss=0.747353
+Epoch 15/40: loss=0.724262 lr=0.015243
+  epoch 15: test_acc = 7139/10000 = 71.390000%  top5 = 9771/10000 = 97.710000%
+  step 0/390: loss=0.533423
+  step 1/390: loss=0.572834
+  step 2/390: loss=0.633484
+  step 100/390: loss=0.612839
+  step 200/390: loss=0.731208
+  step 300/390: loss=0.655159
+Epoch 16/40: loss=0.695158 lr=0.014502
+  epoch 16: test_acc = 7203/10000 = 72.030000%  top5 = 9756/10000 = 97.560000%
+  step 0/390: loss=0.627366
+  step 1/390: loss=0.705796
+  step 2/390: loss=0.785386
+  step 100/390: loss=0.716078
+  step 200/390: loss=0.753712
+  step 300/390: loss=0.747814
+Epoch 17/40: loss=0.672419 lr=0.013729
+  epoch 17: test_acc = 7331/10000 = 73.310000%  top5 = 9782/10000 = 97.820000%
+  step 0/390: loss=0.664748
+  step 1/390: loss=0.707086
+  step 2/390: loss=0.537901
+  step 100/390: loss=0.632491
+  step 200/390: loss=0.638578
+  step 300/390: loss=0.626872
+Epoch 18/40: loss=0.650426 lr=0.012928
+  epoch 18: test_acc = 7300/10000 = 73.000000%  top5 = 9802/10000 = 98.020000%
+  step 0/390: loss=0.606627
+  step 1/390: loss=0.702232
+  step 2/390: loss=0.476528
+  step 100/390: loss=0.708573
+  step 200/390: loss=0.390415
+  step 300/390: loss=0.630013
+Epoch 19/40: loss=0.619753 lr=0.012107
+  epoch 19: test_acc = 7300/10000 = 73.000000%  top5 = 9774/10000 = 97.740000%
+  step 0/390: loss=0.738620
+  step 1/390: loss=0.608571
+  step 2/390: loss=0.476547
+  step 100/390: loss=0.734577
+  step 200/390: loss=0.587991
+  step 300/390: loss=0.566319
+Epoch 20/40: loss=0.602852 lr=0.011270
+  epoch 20: test_acc = 7335/10000 = 73.350000%  top5 = 9783/10000 = 97.830000%
+  step 0/390: loss=0.604664
+  step 1/390: loss=0.660067
+  step 2/390: loss=0.474336
+  step 100/390: loss=0.433557
+  step 200/390: loss=0.569598
+  step 300/390: loss=0.620223
+Epoch 21/40: loss=0.579228 lr=0.010424
+  epoch 21: test_acc = 7353/10000 = 73.530000%  top5 = 9811/10000 = 98.110000%
+  step 0/390: loss=0.453179
+  step 1/390: loss=0.627924
+  step 2/390: loss=0.640715
+  step 100/390: loss=0.588446
+  step 200/390: loss=0.606126
+  step 300/390: loss=0.554288
+Epoch 22/40: loss=0.555036 lr=0.009576
+  epoch 22: test_acc = 7452/10000 = 74.520000%  top5 = 9812/10000 = 98.120000%
+  step 0/390: loss=0.480820
+  step 1/390: loss=0.519437
+  step 2/390: loss=0.424982
+  step 100/390: loss=0.430095
+  step 200/390: loss=0.645906
+  step 300/390: loss=0.653781
+Epoch 23/40: loss=0.526330 lr=0.008730
+  epoch 23: test_acc = 7409/10000 = 74.090000%  top5 = 9810/10000 = 98.100000%
+  step 0/390: loss=0.581060
+  step 1/390: loss=0.480851
+  step 2/390: loss=0.515088
+  step 100/390: loss=0.398725
+  step 200/390: loss=0.455382
+  step 300/390: loss=0.545803
+Epoch 24/40: loss=0.503240 lr=0.007893
+  epoch 24: test_acc = 7442/10000 = 74.420000%  top5 = 9796/10000 = 97.960000%
+  step 0/390: loss=0.396917
+  step 1/390: loss=0.470387
+  step 2/390: loss=0.491013
+  step 100/390: loss=0.529392
+  step 200/390: loss=0.379247
+  step 300/390: loss=0.446082
+Epoch 25/40: loss=0.475004 lr=0.007072
+  epoch 25: test_acc = 7362/10000 = 73.620000%  top5 = 9796/10000 = 97.960000%
+  step 0/390: loss=0.507129
+  step 1/390: loss=0.476630
+  step 2/390: loss=0.493283
+  step 100/390: loss=0.345956
+  step 200/390: loss=0.507712
+  step 300/390: loss=0.399576
+Epoch 26/40: loss=0.450312 lr=0.006271
+  epoch 26: test_acc = 7520/10000 = 75.200000%  top5 = 9825/10000 = 98.250000%
+  step 0/390: loss=0.338433
+  step 1/390: loss=0.497523
+  step 2/390: loss=0.375959
+  step 100/390: loss=0.468832
+  step 200/390: loss=0.532384
+  step 300/390: loss=0.336167
+Epoch 27/40: loss=0.422892 lr=0.005498
+  epoch 27: test_acc = 7508/10000 = 75.080000%  top5 = 9818/10000 = 98.180000%
+  step 0/390: loss=0.367306
+  step 1/390: loss=0.471916
+  step 2/390: loss=0.466903
+  step 100/390: loss=0.444516
+  step 200/390: loss=0.266359
+  step 300/390: loss=0.403086
+Epoch 28/40: loss=0.391309 lr=0.004757
+  epoch 28: test_acc = 7559/10000 = 75.590000%  top5 = 9816/10000 = 98.160000%
+  step 0/390: loss=0.363095
+  step 1/390: loss=0.393713
+  step 2/390: loss=0.233760
+  step 100/390: loss=0.256773
+  step 200/390: loss=0.418571
+  step 300/390: loss=0.302749
+Epoch 29/40: loss=0.365321 lr=0.004054
+  epoch 29: test_acc = 7528/10000 = 75.280000%  top5 = 9813/10000 = 98.130000%
+  step 0/390: loss=0.310540
+  step 1/390: loss=0.436826
+  step 2/390: loss=0.395263
+  step 100/390: loss=0.236148
+  step 200/390: loss=0.281284
+  step 300/390: loss=0.275160
+Epoch 30/40: loss=0.337142 lr=0.003393
+  epoch 30: test_acc = 7528/10000 = 75.280000%  top5 = 9810/10000 = 98.100000%
+  step 0/390: loss=0.332379
+  step 1/390: loss=0.294207
+  step 2/390: loss=0.399970
+  step 100/390: loss=0.419617
+  step 200/390: loss=0.258177
+  step 300/390: loss=0.324645
+Epoch 31/40: loss=0.304120 lr=0.002780
+  epoch 31: test_acc = 7538/10000 = 75.380000%  top5 = 9803/10000 = 98.030000%
+  step 0/390: loss=0.235365
+  step 1/390: loss=0.182364
+  step 2/390: loss=0.317903
+  step 100/390: loss=0.194707
+  step 200/390: loss=0.333295
+  step 300/390: loss=0.258222
+Epoch 32/40: loss=0.280037 lr=0.002220
+  epoch 32: test_acc = 7574/10000 = 75.740000%  top5 = 9817/10000 = 98.170000%
+  step 0/390: loss=0.180611
+  step 1/390: loss=0.253106
+  step 2/390: loss=0.262297
+  step 100/390: loss=0.269754
+  step 200/390: loss=0.248234
+  step 300/390: loss=0.327756
+Epoch 33/40: loss=0.250159 lr=0.001715
+  epoch 33: test_acc = 7540/10000 = 75.400000%  top5 = 9823/10000 = 98.230000%
+  step 0/390: loss=0.200376
+  step 1/390: loss=0.262615
+  step 2/390: loss=0.185453
+  step 100/390: loss=0.230548
+  step 200/390: loss=0.293776
+  step 300/390: loss=0.246481
+Epoch 34/40: loss=NaN lr=0.001270
+  epoch 34: test_acc = 7531/10000 = 75.310000%  top5 = 9809/10000 = 98.090000%
+  step 0/390: loss=0.249721
+  step 1/390: loss=0.145288
+  step 2/390: loss=0.208482
+  step 100/390: loss=0.179854
+  step 200/390: loss=0.162919
+  step 300/390: loss=0.193088
+Epoch 35/40: loss=NaN lr=0.000888
+  epoch 35: test_acc = 7544/10000 = 75.440000%  top5 = 9823/10000 = 98.230000%
+  step 0/390: loss=0.213216
+  step 1/390: loss=0.196796
+  step 2/390: loss=0.323476
+  step 100/390: loss=0.218673
+  step 200/390: loss=0.122169
+  step 300/390: loss=0.249245
+Epoch 36/40: loss=NaN lr=0.000571
+  epoch 36: test_acc = 7524/10000 = 75.240000%  top5 = 9819/10000 = 98.190000%
+  step 0/390: loss=0.162835
+  step 1/390: loss=0.170252
+  step 2/390: loss=0.188750
+  step 100/390: loss=0.269722
+  step 200/390: loss=0.133455
+  step 300/390: loss=0.146537
+Epoch 37/40: loss=NaN lr=0.000323
+  epoch 37: test_acc = 7543/10000 = 75.430000%  top5 = 9810/10000 = 98.100000%
+  step 0/390: loss=0.131944
+  step 1/390: loss=0.180691
+  step 2/390: loss=0.111583
+  step 100/390: loss=0.216602
+  step 200/390: loss=0.162987
+  step 300/390: loss=0.194669
+Epoch 38/40: loss=NaN lr=0.000144
+  epoch 38: test_acc = 7561/10000 = 75.610000%  top5 = 9814/10000 = 98.140000%
+  step 0/390: loss=0.141559
+  step 1/390: loss=0.202044
+  step 2/390: loss=0.170035
+  step 100/390: loss=0.103633
+  step 200/390: loss=0.162540
+  step 300/390: loss=0.195156
+Epoch 39/40: loss=NaN lr=0.000036
+  epoch 39: test_acc = 7555/10000 = 75.550000%  top5 = 9819/10000 = 98.190000%
+  step 0/390: loss=0.092662
+  step 1/390: loss=0.138461
+  step 2/390: loss=0.187532
+  step 100/390: loss=0.126801
+  step 200/390: loss=0.122283
+  step 300/390: loss=0.126478
+Epoch 40/40: loss=NaN lr=0.000000
+  epoch 40: test_acc = 7555/10000 = 75.550000%  top5 = 9820/10000 = 98.200000%
+I0812 01:37:58.856543 1083419 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0812 01:37:58.856610 1083419 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0812 01:37:58.856631 1083419 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/cifar8w_adam_train_step.mlir (@cifar8w_adam_train_step, 69 outputs, 1 replica) in 376 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_fwd.mlir (@cifar8w_fwd, 1 outputs, 1 replica) in 179 ms
+done (trained CIFAR-CNN8-wide mom + cosine/warmup via packed threading).
+════════ cifar8w (wide head) — AdamW (lr 1e-3) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_adam_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  step 0/390: loss=2.315248
+  step 1/390: loss=2.306333
+  step 2/390: loss=2.313817
+  step 100/390: loss=2.205937
+  step 200/390: loss=1.912792
+  step 300/390: loss=1.888905
+Epoch 1/40: loss=1.980162 lr=0.000333
+  epoch 1: test_acc = 3970/10000 = 39.700000%  top5 = 8909/10000 = 89.090000%
+  step 0/390: loss=1.648935
+  step 1/390: loss=1.730976
+  step 2/390: loss=1.677571
+  step 100/390: loss=1.516721
+  step 200/390: loss=1.531821
+  step 300/390: loss=1.588300
+Epoch 2/40: loss=1.556266 lr=0.000667
+  epoch 2: test_acc = 4761/10000 = 47.610000%  top5 = 9281/10000 = 92.810000%
+  step 0/390: loss=1.413062
+  step 1/390: loss=1.475469
+  step 2/390: loss=1.418790
+  step 100/390: loss=1.416048
+  step 200/390: loss=1.398196
+  step 300/390: loss=1.369337
+Epoch 3/40: loss=1.402321 lr=0.001000
+  epoch 3: test_acc = 5234/10000 = 52.340000%  top5 = 9409/10000 = 94.090000%
+  step 0/390: loss=1.391971
+  step 1/390: loss=1.246002
+  step 2/390: loss=1.142122
+  step 100/390: loss=1.279539
+  step 200/390: loss=1.206004
+  step 300/390: loss=1.298125
+Epoch 4/40: loss=1.274323 lr=0.000998
+  epoch 4: test_acc = 5479/10000 = 54.790000%  top5 = 9423/10000 = 94.230000%
+  step 0/390: loss=1.194127
+  step 1/390: loss=1.427172
+  step 2/390: loss=1.174653
+  step 100/390: loss=1.119842
+  step 200/390: loss=1.156972
+  step 300/390: loss=1.046921
+Epoch 5/40: loss=1.174848 lr=0.000993
+  epoch 5: test_acc = 5768/10000 = 57.680000%  top5 = 9579/10000 = 95.790000%
+  step 0/390: loss=1.188511
+  step 1/390: loss=0.971382
+  step 2/390: loss=1.097163
+  step 100/390: loss=1.028804
+  step 200/390: loss=1.338735
+  step 300/390: loss=1.130001
+Epoch 6/40: loss=1.093885 lr=0.000984
+  epoch 6: test_acc = 6195/10000 = 61.950000%  top5 = 9588/10000 = 95.880000%
+  step 0/390: loss=1.018296
+  step 1/390: loss=0.981632
+  step 2/390: loss=1.033719
+  step 100/390: loss=0.934151
+  step 200/390: loss=0.948804
+  step 300/390: loss=1.001331
+Epoch 7/40: loss=1.031048 lr=0.000971
+  epoch 7: test_acc = 6264/10000 = 62.640000%  top5 = 9647/10000 = 96.470000%
+  step 0/390: loss=1.052314
+  step 1/390: loss=0.916820
+  step 2/390: loss=0.719793
+  step 100/390: loss=0.886412
+  step 200/390: loss=0.914886
+  step 300/390: loss=1.132678
+Epoch 8/40: loss=0.980536 lr=0.000956
+  epoch 8: test_acc = 6452/10000 = 64.520000%  top5 = 9653/10000 = 96.530000%
+  step 0/390: loss=0.867499
+  step 1/390: loss=0.921808
+  step 2/390: loss=0.820381
+  step 100/390: loss=0.820305
+  step 200/390: loss=0.835261
+  step 300/390: loss=0.980444
+Epoch 9/40: loss=0.933607 lr=0.000937
+  epoch 9: test_acc = 6593/10000 = 65.930000%  top5 = 9693/10000 = 96.930000%
+  step 0/390: loss=0.855285
+  step 1/390: loss=0.904545
+  step 2/390: loss=0.805322
+  step 100/390: loss=0.985718
+  step 200/390: loss=1.052514
+  step 300/390: loss=0.841930
+Epoch 10/40: loss=0.886622 lr=0.000914
+  epoch 10: test_acc = 6724/10000 = 67.240000%  top5 = 9733/10000 = 97.330000%
+  step 0/390: loss=0.721984
+  step 1/390: loss=0.800010
+  step 2/390: loss=0.924406
+  step 100/390: loss=0.828106
+  step 200/390: loss=0.783888
+  step 300/390: loss=0.771565
+Epoch 11/40: loss=0.849980 lr=0.000889
+  epoch 11: test_acc = 6903/10000 = 69.030000%  top5 = 9737/10000 = 97.370000%
+  step 0/390: loss=0.849766
+  step 1/390: loss=0.602999
+  step 2/390: loss=0.699849
+  step 100/390: loss=0.880172
+  step 200/390: loss=0.728089
+  step 300/390: loss=0.798783
+Epoch 12/40: loss=0.828485 lr=0.000861
+  epoch 12: test_acc = 6664/10000 = 66.640000%  top5 = 9706/10000 = 97.060000%
+  step 0/390: loss=0.800179
+  step 1/390: loss=0.955414
+  step 2/390: loss=0.708839
+  step 100/390: loss=0.705774
+  step 200/390: loss=0.758463
+  step 300/390: loss=0.913902
+Epoch 13/40: loss=0.793273 lr=0.000830
+  epoch 13: test_acc = 6921/10000 = 69.210000%  top5 = 9754/10000 = 97.540000%
+  step 0/390: loss=0.798217
+  step 1/390: loss=0.732147
+  step 2/390: loss=0.845655
+  step 100/390: loss=0.721440
+  step 200/390: loss=0.584136
+  step 300/390: loss=0.802499
+Epoch 14/40: loss=0.757154 lr=0.000797
+  epoch 14: test_acc = 6984/10000 = 69.840000%  top5 = 9756/10000 = 97.560000%
+  step 0/390: loss=0.622379
+  step 1/390: loss=0.706852
+  step 2/390: loss=0.765739
+  step 100/390: loss=0.835504
+  step 200/390: loss=0.727341
+  step 300/390: loss=0.675882
+Epoch 15/40: loss=0.739125 lr=0.000762
+  epoch 15: test_acc = 6983/10000 = 69.830000%  top5 = 9755/10000 = 97.550000%
+  step 0/390: loss=0.578230
+  step 1/390: loss=0.527853
+  step 2/390: loss=0.714744
+  step 100/390: loss=0.611703
+  step 200/390: loss=0.831382
+  step 300/390: loss=0.619356
+Epoch 16/40: loss=0.709549 lr=0.000725
+  epoch 16: test_acc = 7122/10000 = 71.220000%  top5 = 9743/10000 = 97.430000%
+  step 0/390: loss=0.714323
+  step 1/390: loss=0.688449
+  step 2/390: loss=0.733606
+  step 100/390: loss=0.779894
+  step 200/390: loss=0.625507
+  step 300/390: loss=0.688645
+Epoch 17/40: loss=0.682989 lr=0.000686
+  epoch 17: test_acc = 7162/10000 = 71.620000%  top5 = 9790/10000 = 97.900000%
+  step 0/390: loss=0.694451
+  step 1/390: loss=0.632941
+  step 2/390: loss=0.643589
+  step 100/390: loss=0.596058
+  step 200/390: loss=0.608075
+  step 300/390: loss=0.603008
+Epoch 18/40: loss=0.656161 lr=0.000646
+  epoch 18: test_acc = 7149/10000 = 71.490000%  top5 = 9799/10000 = 97.990000%
+  step 0/390: loss=0.552904
+  step 1/390: loss=0.770367
+  step 2/390: loss=0.531533
+  step 100/390: loss=0.741195
+  step 200/390: loss=0.491253
+  step 300/390: loss=0.787661
+Epoch 19/40: loss=0.630486 lr=0.000605
+  epoch 19: test_acc = 7147/10000 = 71.470000%  top5 = 9787/10000 = 97.870000%
+  step 0/390: loss=0.675382
+  step 1/390: loss=0.536797
+  step 2/390: loss=0.430406
+  step 100/390: loss=0.585022
+  step 200/390: loss=0.595054
+  step 300/390: loss=0.577291
+Epoch 20/40: loss=0.604180 lr=0.000564
+  epoch 20: test_acc = 7103/10000 = 71.030000%  top5 = 9773/10000 = 97.730000%
+  step 0/390: loss=0.554108
+  step 1/390: loss=0.615744
+  step 2/390: loss=0.520682
+  step 100/390: loss=0.489769
+  step 200/390: loss=0.430700
+  step 300/390: loss=0.531439
+Epoch 21/40: loss=0.578167 lr=0.000521
+  epoch 21: test_acc = 7311/10000 = 73.110000%  top5 = 9802/10000 = 98.020000%
+  step 0/390: loss=0.478844
+  step 1/390: loss=0.514562
+  step 2/390: loss=0.646123
+  step 100/390: loss=0.589668
+  step 200/390: loss=0.572194
+  step 300/390: loss=0.581965
+Epoch 22/40: loss=0.554102 lr=0.000479
+  epoch 22: test_acc = 7175/10000 = 71.750000%  top5 = 9775/10000 = 97.750000%
+  step 0/390: loss=0.500724
+  step 1/390: loss=0.640993
+  step 2/390: loss=0.502354
+  step 100/390: loss=0.330871
+  step 200/390: loss=0.677175
+  step 300/390: loss=0.540179
+Epoch 23/40: loss=0.527985 lr=0.000436
+  epoch 23: test_acc = 7305/10000 = 73.050000%  top5 = 9781/10000 = 97.810000%
+  step 0/390: loss=0.486785
+  step 1/390: loss=0.487342
+  step 2/390: loss=0.403898
+  step 100/390: loss=0.524079
+  step 200/390: loss=0.471355
+  step 300/390: loss=0.556405
+Epoch 24/40: loss=0.497535 lr=0.000395
+  epoch 24: test_acc = 7303/10000 = 73.030000%  top5 = 9787/10000 = 97.870000%
+  step 0/390: loss=0.370210
+  step 1/390: loss=0.533235
+  step 2/390: loss=0.426443
+  step 100/390: loss=0.438820
+  step 200/390: loss=0.444453
+  step 300/390: loss=0.471746
+Epoch 25/40: loss=0.472247 lr=0.000354
+  epoch 25: test_acc = 7362/10000 = 73.620000%  top5 = 9800/10000 = 98.000000%
+  step 0/390: loss=0.410905
+  step 1/390: loss=0.478070
+  step 2/390: loss=0.554803
+  step 100/390: loss=0.464891
+  step 200/390: loss=0.413792
+  step 300/390: loss=0.510544
+Epoch 26/40: loss=0.443542 lr=0.000314
+  epoch 26: test_acc = 7365/10000 = 73.650000%  top5 = 9783/10000 = 97.830000%
+  step 0/390: loss=0.324241
+  step 1/390: loss=0.361310
+  step 2/390: loss=0.504622
+  step 100/390: loss=0.409978
+  step 200/390: loss=0.476085
+  step 300/390: loss=0.249546
+Epoch 27/40: loss=0.417433 lr=0.000275
+  epoch 27: test_acc = 7378/10000 = 73.780000%  top5 = 9796/10000 = 97.960000%
+  step 0/390: loss=0.456641
+  step 1/390: loss=0.366007
+  step 2/390: loss=0.443387
+  step 100/390: loss=0.419421
+  step 200/390: loss=0.363971
+  step 300/390: loss=0.501729
+Epoch 28/40: loss=0.396706 lr=0.000238
+  epoch 28: test_acc = 7328/10000 = 73.280000%  top5 = 9783/10000 = 97.830000%
+  step 0/390: loss=0.358324
+  step 1/390: loss=0.366718
+  step 2/390: loss=0.337291
+  step 100/390: loss=0.244221
+  step 200/390: loss=0.453286
+  step 300/390: loss=0.329348
+Epoch 29/40: loss=0.371321 lr=0.000203
+  epoch 29: test_acc = 7418/10000 = 74.180000%  top5 = 9797/10000 = 97.970000%
+  step 0/390: loss=0.266774
+  step 1/390: loss=0.437959
+  step 2/390: loss=0.514039
+  step 100/390: loss=0.420255
+  step 200/390: loss=0.401822
+  step 300/390: loss=0.304833
+Epoch 30/40: loss=0.347192 lr=0.000170
+  epoch 30: test_acc = 7382/10000 = 73.820000%  top5 = 9791/10000 = 97.910000%
+  step 0/390: loss=0.295439
+  step 1/390: loss=0.424877
+  step 2/390: loss=0.312899
+  step 100/390: loss=0.382165
+  step 200/390: loss=0.308963
+  step 300/390: loss=0.318129
+Epoch 31/40: loss=0.327405 lr=0.000139
+  epoch 31: test_acc = 7392/10000 = 73.920000%  top5 = 9806/10000 = 98.060000%
+  step 0/390: loss=0.294693
+  step 1/390: loss=0.308098
+  step 2/390: loss=0.333294
+  step 100/390: loss=0.305073
+  step 200/390: loss=0.359699
+  step 300/390: loss=0.236606
+Epoch 32/40: loss=0.308206 lr=0.000111
+  epoch 32: test_acc = 7388/10000 = 73.880000%  top5 = 9801/10000 = 98.010000%
+  step 0/390: loss=0.302294
+  step 1/390: loss=0.329743
+  step 2/390: loss=0.320098
+  step 100/390: loss=0.401718
+  step 200/390: loss=0.229859
+  step 300/390: loss=0.296604
+Epoch 33/40: loss=0.293722 lr=0.000086
+  epoch 33: test_acc = 7390/10000 = 73.900000%  top5 = 9796/10000 = 97.960000%
+  step 0/390: loss=0.292298
+  step 1/390: loss=0.216763
+  step 2/390: loss=0.229001
+  step 100/390: loss=0.366792
+  step 200/390: loss=0.436229
+  step 300/390: loss=0.186902
+Epoch 34/40: loss=0.275865 lr=0.000063
+  epoch 34: test_acc = 7398/10000 = 73.980000%  top5 = 9807/10000 = 98.070000%
+  step 0/390: loss=0.326021
+  step 1/390: loss=0.171016
+  step 2/390: loss=0.256034
+  step 100/390: loss=0.253561
+  step 200/390: loss=0.177122
+  step 300/390: loss=0.316319
+Epoch 35/40: loss=0.265985 lr=0.000044
+  epoch 35: test_acc = 7411/10000 = 74.110000%  top5 = 9801/10000 = 98.010000%
+  step 0/390: loss=0.264737
+  step 1/390: loss=0.220090
+  step 2/390: loss=0.322273
+  step 100/390: loss=0.254685
+  step 200/390: loss=0.216028
+  step 300/390: loss=0.336066
+Epoch 36/40: loss=0.255913 lr=0.000029
+  epoch 36: test_acc = 7407/10000 = 74.070000%  top5 = 9800/10000 = 98.000000%
+  step 0/390: loss=0.208618
+  step 1/390: loss=0.248051
+  step 2/390: loss=0.257095
+  step 100/390: loss=0.247116
+  step 200/390: loss=0.264512
+  step 300/390: loss=0.267881
+Epoch 37/40: loss=0.246898 lr=0.000016
+  epoch 37: test_acc = 7412/10000 = 74.120000%  top5 = 9800/10000 = 98.000000%
+  step 0/390: loss=0.266752
+  step 1/390: loss=0.309541
+  step 2/390: loss=0.188912
+  step 100/390: loss=0.323929
+  step 200/390: loss=0.293931
+  step 300/390: loss=0.230083
+Epoch 38/40: loss=0.242074 lr=0.000007
+  epoch 38: test_acc = 7400/10000 = 74.000000%  top5 = 9802/10000 = 98.020000%
+  step 0/390: loss=0.197097
+  step 1/390: loss=0.368202
+  step 2/390: loss=0.208914
+  step 100/390: loss=0.234363
+  step 200/390: loss=0.282325

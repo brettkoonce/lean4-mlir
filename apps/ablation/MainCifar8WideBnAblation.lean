@@ -8,7 +8,11 @@ head) run SGD / Nesterov-momentum / AdamW in sequence on the same controlled pip
 train=eval (eval via `@cifar8w_bn_fwd`). Renders: `LeanMlir/Proofs/Codegen/CnnRender.lean` at
 `d1 := 512`, the forward from `StableHLO.cifar8BnFwdModuleV` (§2i, 2026-07-30). 40 ep, bs 128.
 
-Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar8w-bn-ablation data`
+Run (GPU): `.lake/build/bin/cifar8w-bn-ablation data`
+
+**One file, one binary, either lowerer.** The proven graph goes to whichever trusted lowerer
+`$LEAN_MLIR_LOWERER` selects — XLA/PJRT by default, IREE with `=iree` — resolved by dlopen at
+run time (`ffi/lowerer.h`).
 -/
 
 def cfg : VerifiedConfig where

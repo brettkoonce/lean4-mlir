@@ -88,7 +88,9 @@ structure VerifiedNet where
   nClasses : Nat := 10
   /-- Dataset / loader selector. -/
   data     : VerifiedData
-  /-- One-line intro printed at startup (the prose banner). -/
+  /-- One-line intro printed at startup (the prose banner). Carries the literal `%LOWERER%`
+      where the transport belongs; print it with `printBlurb`, never with `IO.println` directly,
+      so the banner names the lowerer that actually ran. -/
   blurb    : String
   /-- Per-BN-layer channel counts, in forward order (empty for LayerNorm / no-BN nets). When
       non-empty, `trainAdamSched` threads running BN stats: the adam train step carries per-layer
@@ -600,15 +602,25 @@ private def mkSynthData (data : VerifiedData) (d0 bs : Nat) :
   let lbl ← F32.const bs.toUSize 0.0               -- bs int32 zero labels (4 bytes each)
   pure (img, lbl, nTr, img, lbl, bs, px, crop)
 
+/-- Print the startup banner with `%LOWERER%` resolved to the lowerer that actually ran.
+
+    Every net's `blurb` used to hard-code its transport, so the banner was a claim about the
+    build rather than about the run. Three of the seven print sites patched it at run time with
+    a `.replace "IREE FFI" "XLA/PJRT"` and the other four printed it raw, which meant a net whose
+    blurb still said IREE announced IREE while training on XLA. The placeholder moves the decision
+    to one place, and every caller is correct by construction. -/
+def VerifiedNet.printBlurb (net : VerifiedNet) : IO Unit := do
+  let transport := if (← LowererSession.backendName) == "xla" then "XLA/PJRT" else "IREE FFI"
+  IO.println (net.blurb.replace "%LOWERER%" transport)
+
 /-- Train a `VerifiedNet` end-to-end on its proof-rendered StableHLO: compile both
-    MLIRs → IREE sessions → load data → He/spec init → SGD train + eval loop. The
+    MLIRs → lowerer sessions → load data → He/spec init → SGD train + eval loop. The
     SGD update (and lr) are baked into `<slug>_train_step.mlir`; we only feed batches. -/
 def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println (if (← LowererSession.backendName) == "xla"
-              then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
+  net.printBlurb
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
@@ -743,7 +755,7 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println net.blurb
+  net.printBlurb
   let tsVmfb  := s!".lake/build/{net.slug}_adam_ts.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
   compileVmfb s!"{net.mlirDir}/{net.slug}_adam_train_step.mlir" tsVmfb
@@ -954,8 +966,7 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println (if (← LowererSession.backendName) == "xla"
-              then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
+  net.printBlurb
   -- Running-stats BN: when `bnChannels` is non-empty the adam train step carries per-layer batch
   -- mean/var out in passthrough slots (so #out=#in), the driver EMAs them into `runningBnStats`,
   -- and eval uses `<slug>_fwd_eval.mlir` (affine BN with the running stats) — class-batch-independent
@@ -1231,8 +1242,16 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- resume from an IREE checkpoint (and vice versa), silently fusing two
   -- trajectories into one and making any G2/G3 comparison meaningless — while
   -- looking completely normal on screen. See planning/xla_pjrt_ladder.md §3.
+  -- LEAN_MLIR_CKPT_TAG appends a run-scoped suffix. Without it every pass of the same
+  -- (net, variant, backend) shares ONE checkpoint path, so the parallel sweeps
+  -- planning/chapter_makeover.md §3c mandates for conv nets cannot be run: concurrent
+  -- passes clobber each other's blob, and a later pass resumes from an earlier one's
+  -- finished epoch 40 and trains nothing at all. Set it to the pass index.
   let backend ← LowererSession.backendName
-  let ckptPath := s!".lake/build/{net.slug}_{variant}_ckpt{if backend == "xla" then "_xla" else ""}.bin"
+  let ckptTag := match ← IO.getEnv "LEAN_MLIR_CKPT_TAG" with
+    | some t => if t.isEmpty then "" else "_" ++ t
+    | none   => ""
+  let ckptPath := s!".lake/build/{net.slug}_{variant}_ckpt{if backend == "xla" then "_xla" else ""}{ckptTag}.bin"
   let epPath := ckptPath ++ ".epoch"
   let mut startEpoch := 0
   if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
@@ -1795,11 +1814,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
-  -- The blurbs name IREE because every net used to. Only this path is
-  -- backend-agnostic so far, so correct it here rather than rewriting ~30
-  -- strings for nets that have not been ported (xla_pjrt_ladder.md §2).
-  IO.println (if (← LowererSession.backendName) == "xla"
-              then net.blurb.replace "IREE FFI" "XLA/PJRT" else net.blurb)
+  net.printBlurb
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
@@ -3717,7 +3732,7 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
-  IO.println net.blurb
+  net.printBlurb
   IO.println "  [fp8 E4M3] fp32 master · per-column W / per-tensor x → E4M3 grid · fp32 accumulate"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
   let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
@@ -3788,7 +3803,7 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println net.blurb
+  net.printBlurb
   IO.println "  [fp8 E4M3] fp32 master · per-slot weight quant (dense per-col / conv per-channel) + per-tensor input · fp32 accumulate"
   IO.println "  note: depth>1 ⇒ intermediate activations & cotangents stay fp32 (inside the kernel); weights + input are E4M3"
   let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
@@ -3855,7 +3870,7 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
-  IO.println net.blurb
+  net.printBlurb
   IO.println s!"  [fp8 E4M3] fp32 master [θ|m|v] · per-slot θ quant + per-tensor input · fp32 accumulate ({variant})"
   let hasBn := !net.bnChannels.isEmpty
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
