@@ -4976,35 +4976,42 @@ def main (args : List String) : IO Unit :=
     (args.head?.getD "data/imagenet") .imagenet
 \end{verbatim}
 
-Today, the phase-2 JAX path (\texttt{jax/MainResnetImagenet.lean},
-runs via \texttt{lake build resnet34-imagenet}) wires
-\texttt{.imagenet} through tfds streaming. The phase-3 IREE path
-shown in the snippet above still needs a C-side streaming reader
-for the 1.28M-image training set (Imagenette's 9.5K fits in a
-single \texttt{ByteArray}, and ImageNet doesn't). Until that lands,
-the phase-3 dispatcher panics with a ``use phase 2'' note when
-handed \texttt{.imagenet}. What's worth noting is that everything
-else is identical across both paths, including the architecture, the
-\texttt{.train} invocation, and the recipe knobs. Only the
-data-loading layer differs. The framework isn't doing anything
-fundamentally different at ImageNet scale. It's just the data
-that's bigger.
+\textbf{This now runs on the verified path.} When this chapter was
+first written it did not. ImageNet needs a C-side streaming reader for
+the 1.28M-image training set, because Imagenette's 9.5K fits in a single
+\texttt{ByteArray} and ImageNet does not, and until that landed the
+verified dispatcher refused \texttt{.imagenet} outright and sent you to
+the JAX trainer. The reader exists now, so the numbers below are the
+rendered graph training on full ImageNet rather than a promise that it
+could. \S\ref{sec:r34_phase4} is the result.
 
-\textbf{Compute budget.} The phase-2 (Lean$\to$JAX) path trains
-\texttt{resnet34Imagenet} on two AMD Radeon RX 7900 XTX GPUs
-(consumer hardware: gfx1100, ROCm 7.2, JAX 0.10.0, multi-GPU
-sharding via \texttt{Mesh + NamedSharding(P('batch'))} with RCCL
-preloaded). At batch 256 (128 per device), one epoch over the
-1.28M-image training set runs in about 24 minutes of compute plus
-a 10-second val pass, and a 30-epoch run finishes in roughly 15
-wall-clock hours including first-epoch JIT compile. Final result
-on the standard 50K-image validation split is $\mathbf{69.26\%}$
-top-1 (val\_loss $1.232$). The parameter checkpoint
-(\texttt{jax\_r34\_imagenet.bin}, 87\,MB, 37 param groups) is
-written via the same \texttt{params\_to\_file} emit that phase-3
-IREE consumes, so the JAX-trained weights drop into a phase-3
-\texttt{TrainConfig.bootstrapBackbone} field byte-for-byte without
-a separate conversion step.
+Both paths share everything above the data loader: the architecture, the
+\texttt{.train} invocation, and every recipe knob. The framework isn't
+doing anything fundamentally different at ImageNet scale. It's just the
+data that's bigger.
+
+The phase-2 JAX path (\texttt{jax/MainResnetImagenet.lean}, via
+\texttt{lake build resnet34-imagenet}) wires \texttt{.imagenet} through
+tfds streaming, and it is still here. It is no longer the only way to
+get an ImageNet number, though, so its role has changed from
+\emph{the} trainer to the independent reference the verified path is
+checked against, which is what the next section does with it.
+
+\textbf{Compute budget.} Both paths run on the same box: four NVIDIA
+RTX 4060 Ti, consumer hardware, CUDA/cuDNN. The verified path trains
+\texttt{resnet34Imagenet} at global batch 256 as $4 \times 64$, one
+epoch over the 1.28M-image training set in about 31 minutes at fp32,
+so the 30-epoch schedule lands at roughly $15.5$ wall-clock hours.
+The JAX reference runs the same recipe through tfds streaming with
+sharding via \texttt{Mesh + NamedSharding(P('batch'))}, and in bf16 it
+is about three times quicker per epoch, which is what made it the
+practical trainer for as long as it was the only one.
+
+The parameter checkpoint (\texttt{jax\_r34\_imagenet.bin}, 87\,MB, 37
+param groups) is written via the same \texttt{params\_to\_file} emit
+the verified path consumes, so weights move between the two byte-for-byte
+with no conversion step. That shared format is what makes the epoch-by-epoch
+comparison in \S\ref{sec:r34_phase4} possible at all.
 
 The recipe trims the paper's 90 epochs to 30 (SGD with momentum
 $0.9$, batch 256, cosine LR with a 5-epoch warmup from peak $0.1$,
@@ -5015,7 +5022,17 @@ flip, $\ell_2$ weight decay $10^{-4}$), a deliberate trade for
 roughly $95\%$ of the paper's $\sim$73\% headline at $\sim$1/3 the
 compute.
 
-\textbf{bf16 and the full 90-epoch run.} Bf16 mixed
+\textbf{The JAX reference, and the longer schedule.} Everything from
+here to \S\ref{sec:r34_phase4} is the phase-2 (Lean$\to$JAX) trainer. It
+is no longer the path this book recommends, and the verified numbers in
+\S\ref{sec:r34_phase4} are the ones to read as the result. Two things
+keep it in the chapter. It is the independent implementation the verified
+run is checked against, and it is the only 90-epoch ImageNet schedule
+either path has actually completed, so it is where the full-schedule
+number lives until a 90-epoch verified run exists (about 28 hours of
+this box, on the throughput measured today).
+
+\medskip\noindent\textbf{bf16 and the full 90-epoch run.} Bf16 mixed
 precision roughly halves the wait. On a second box (four usable
 NVIDIA RTX 4060 Ti, CUDA/cuDNN), the same \texttt{resnet34Imagenet}
 spec with \texttt{bf16 := true} casts both the matmuls and the
@@ -5033,7 +5050,6 @@ GPUs:
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-2$\times$ 7900 XTX (ROCm) & fp32 & $\sim$24.2 min & 30 & $\sim$15 hr & $\mathbf{69.26\%}$ & --- \\
 4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$16.8 min & 90 & $\sim$25 hr & --- & --- \\
 4$\times$ 4060 Ti (CUDA)  & bf16 & $\sim$10.5 min & 90 & $\sim$16 hr & $\mathbf{72.02\%}$ & $\mathbf{90.62\%}$ \\
 1$\times$ A100 (CUDA)     & bf16 & --- & 90 & $\sim$9 hr & --- & --- \\
@@ -5043,8 +5059,8 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \end{center}
 
 \noindent ResNet-34 / ImageNet-1k: per-epoch throughput and final
-validation for the completed runs (ROCm at 30 epochs, CUDA at the full
-90, and the MI300X row is a single-GPU batch-1024 run on gfx942). The A100
+validation for the completed runs (CUDA at the full 90, and the MI300X
+row is a single-GPU batch-1024 run on gfx942). The A100
 row is a wall-clock estimate, accuracies pending.
 \textsuperscript{\dag}\,MI300X used batch 1024 / lr 0.4 (linear
 large-batch scaling) vs batch 256 / lr 0.1 for the other rows, so its
@@ -5100,10 +5116,11 @@ to zero.
 warmup, and the steady late climb is the cosine anneal.
 
 \prosesection{Phase 4: the PJRT bridge}
+\label{sec:r34_phase4}
 
-Every ImageNet recipe in this book opens with the same caveat. The
-numbers come from the phase-2 (Lean$\to$JAX) trainer, and whether the
-verified codegen path can reach this scale is an open question. Phase 4
+Earlier printings of this chapter asked whether the verified codegen path
+could reach ImageNet scale at all. It can, and the rest of this section is
+that run. Phase 4
 is a second trusted lowerer, \texttt{ffi/pjrt\_ffi.c}, implementing the
 same C surface as the IREE (phase 3) shim and handing the graph to XLA
 through the PJRT C API. Nothing above the shim changes. The
@@ -5120,14 +5137,39 @@ At ImageNet scale, on the same four-card box as the bf16 run above:
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-2$\times$ 7900 XTX (ROCm) & fp32 & ---           & 30 & $\sim$20 hr  & --- & --- \\
 4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$30.9 min & 30 & $\sim$15.5 hr & $\mathbf{70.74\%}$ & $\mathbf{90.14\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent ResNet-34 / ImageNet-1k on the phase-4 path, on the two rigs
-this book measures on.
+\noindent ResNet-34 / ImageNet-1k on the phase-4 path: 35{,}311 of 49{,}920
+validation images, global batch 256 as $4 \times 64$, heavy-ball momentum
+with coupled $\ell_2$, cosine schedule with 5-epoch warmup at peak $0.1$,
+weight decay $10^{-4}$, label smoothing $0.1$
+(\texttt{runs/r34in\_verified\_30ep\_2026-08-05/}).
+
+\medskip\noindent Read the accuracy carefully, because the epoch counts
+differ. This is a 30-epoch run and the phase-2 bf16 number above is a
+90-epoch one, so $70.74\%$ against $72.02\%$ is not the two lowerers
+disagreeing by $1.3$ points. It is a third of the training schedule
+costing $1.3$ points, which is about what a third of a cosine schedule
+should cost.
+
+\medskip\noindent\textbf{The evidence is the agreement, not the endpoint.}
+Comparing final accuracies across different schedules proves little. The
+load-bearing check is that both lowerers were run on the same box from the
+same initialization and their trajectories were diffed. At epoch~5 the two
+sets of weights scored \textbf{17{,}312} and \textbf{17{,}313} correct out
+of 49{,}920. One image apart, on fifty thousand. Training losses agreed to
+$0.055$ nats at epochs 1, 2, 5 and 6.
+
+\medskip\noindent That is the claim this section makes, and it is worth
+being exact about its ceiling. The proof-carrying tier of this book stops
+at Imagenette. What the ImageNet run inherits is provenance, because it
+executes \texttt{pretty(provenGraph)} off the same renderer the theorems
+are about, plus the agreement above. So the honest phrasing is \emph{one
+architecture, two independent lowerings, agreeing to one image at epoch
+five}, and never ``proven at ImageNet scale.''
 
 \prosesection{A reasonable stopping point}
 
@@ -5260,17 +5302,18 @@ eval@224.
 GPU & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
 \hline
 4$\times$ 4060 Ti (fp32)  & Ghost-BN (64) & $\sim$20.6 min & $\sim$34.1 hr & $\mathbf{77.43\%}$ & $\mathbf{93.60\%}$ \\
-2$\times$ 7900 XTX (fp32) & Ghost-BN (64) & ---            & ---           & ---                & ---                \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent 100 epochs each. The 4060~Ti run logged zero thermal
-duty-cycle cooldowns and zero PCIe/AER interruptions. The 7900~XTX row
-is the ROCm rerun and is pending. Note it needs its \emph{own} render,
-because the artifact above bakes four replicas, so holding effective batch 2048
-on two cards means a 2-replica graph at $k = 16$ rather than a runtime
-flag.
+\noindent 100 epochs. The run logged zero thermal duty-cycle cooldowns and
+zero PCIe/AER interruptions. There is no ROCm peer row, because the
+verified trainers do not survive a run on ROCm. A command-buffer fault
+kills them, reproducibly, at a rate of 11 deaths in 11 attempts on gfx1100
+against 6 clean runs in 6 on CUDA at the identical JAX version. The repro
+and the upstream report are in
+\texttt{upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/}.
+Every verified number in this chapter is therefore CUDA.
 
 \textbf{[TODO, missing for a full A3 implementation.]} This finished
 ahead of the phase-2 reference above ($77.22\%$ / $93.34\%$) while
