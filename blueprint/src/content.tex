@@ -5264,6 +5264,7 @@ At ImageNet scale, on the same four-card box as the bf16 run above:
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
 4$\times$ 4060 Ti (CUDA)  & fp32 & $\sim$30.9 min & 30 & $\sim$15.5 hr & $\mathbf{70.74\%}$ & $\mathbf{90.14\%}$ \\
+2$\times$ 7900 XTX (ROCm) & fp32 & ---            & 30 & $\sim$20 hr   & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
@@ -5273,6 +5274,17 @@ validation images, global batch 256 as $4 \times 64$, heavy-ball momentum
 with coupled $\ell_2$, cosine schedule with 5-epoch warmup at peak $0.1$,
 weight decay $10^{-4}$, label smoothing $0.1$
 (\texttt{runs/r34in\_verified\_30ep\_2026-08-05/}).
+
+\medskip\noindent The 7900 XTX row carries a projected wall-clock for the
+two-card ROCm box and no accuracies, and the blanks there are not waiting on
+scheduling. A verified trainer does not currently survive a run on ROCm: a
+command-buffer fault kills it, at 11 deaths in 11 attempts on gfx1100 against 6
+clean runs in 6 on CUDA at the identical JAX version. The repro and the upstream
+report are in
+\texttt{upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/}. The
+row stays because the schedule is worth knowing and because the fault is
+somebody's bug to fix rather than a property of the architecture, but until it
+is fixed those two columns cannot be filled.
 
 \medskip\noindent Read the accuracy carefully, because the epoch counts
 differ. This is a 30-epoch run and the phase-2 bf16 number above is a
@@ -5433,13 +5445,10 @@ GPU & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
 \end{center}
 
 \noindent 100 epochs. The run logged zero thermal duty-cycle cooldowns and
-zero PCIe/AER interruptions. There is no ROCm peer row, because the
-verified trainers do not survive a run on ROCm. A command-buffer fault
-kills them, reproducibly, at a rate of 11 deaths in 11 attempts on gfx1100
-against 6 clean runs in 6 on CUDA at the identical JAX version. The repro
-and the upstream report are in
-\texttt{upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/}.
-Every verified number in this chapter is therefore CUDA.
+zero PCIe/AER interruptions. There is no ROCm peer row here for the same
+reason the one in \S\ref{sec:r34_phase4} is empty, which is the
+command-buffer fault recorded there. Every verified number in this chapter is
+CUDA.
 
 \textbf{[TODO, missing for a full A3 implementation.]} This finished
 ahead of the phase-2 reference above ($77.22\%$ / $93.34\%$) while
