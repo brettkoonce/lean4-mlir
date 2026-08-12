@@ -5341,13 +5341,14 @@ batch, and the only difference is the BN statistic group, which is the
 axis this comparison isolates:
 
 \begin{center}
-\begin{tabular}{l l r r r r r}
+\begin{tabular}{l l l r r r r r}
 \hline
-GPU & BN regime & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
+GPU & Recipe & BN regime & Per epoch & Ep. & Total & top-1 & top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA, bf16)   & Ghost-BN (512)   & $\sim$9.1 min & 100 & $\sim$17 hr & $\mathbf{77.22\%}$ & $\mathbf{93.34\%}$ \\
-1$\times$ A100 (bf16, true-2048) & full-batch (2048) & $\sim$6.3 min & 100 & $\sim$10.5 hr & $\mathbf{77.00\%}$ & $\mathbf{93.15\%}$ \\
-1$\times$ MI300X (bf16, true-2048) & full-batch (2048) & --- & 100 & $\sim$7.2 hr\textsuperscript{\dag} & --- & --- \\
+4$\times$ 4060 Ti (bf16)  & RSB-A3 & Ghost-BN (512)  & $\sim$9.1 min & 100 & $\sim$17 hr & $\mathbf{77.22\%}$ & $\mathbf{93.34\%}$ \\
+1$\times$ A100 (bf16)     & RSB-A3 & full (2048)     & $\sim$6.3 min & 100 & $\sim$10.5 hr & $\mathbf{77.00\%}$ & $\mathbf{93.15\%}$ \\
+1$\times$ MI300X (bf16)   & RSB-A3 & full (2048)     & ---           & 100 & $\sim$7.2 hr\textsuperscript{\dag} & --- & --- \\
+4$\times$ 4060 Ti (bf16)  & 2018   & global (256)    & ---           & 90  & ---          & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
@@ -5361,6 +5362,12 @@ logged zero PCIe/AER interruptions across all 100 epochs.
 \textsuperscript{\dag}\,MI300X row is a projected single-device rerun
 ($\sim$7.2\,hr, no gradient accumulation), and its per-epoch time and
 accuracies are pending the run.
+
+\medskip\noindent The last row is the \textbf{2018 recipe} on the same
+network, a \texttt{[TODO]} on the JAX side exactly as its verified peer in
+\S\ref{sec:r50_phase4} is. It is what makes the recipe comparison symmetric:
+both paths get both recipes, so a difference between two rows is attributable to
+the one thing that changed between them.
 
 \textbf{What the A100 row tests.} Removing the Ghost-BN approximation
 barely moves the needle: \texttt{true-2048} lands at $77.00\%$ against
@@ -5393,6 +5400,7 @@ reading anything into the $77.00\%$ vs $78.1\%$ gap.
 timm-literal (\texttt{rand-m6-mstd0.5-inc1}).
 
 \subsection*{Phase 4: RSB-A3 on the verified path}
+\label{sec:r50_phase4}
 
 The same recipe on the \emph{verified} codegen path, which is not a
 hand-written emitter but \texttt{pretty(provenGraph)}, the rendered MLIR
@@ -5404,19 +5412,19 @@ per-replica batch 64 for an effective batch of 2048, train@160 /
 eval@224.
 
 \begin{center}
-\begin{tabular}{l l r r r r}
+\begin{tabular}{l l l r r r r}
 \hline
-GPU & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
+GPU & Recipe & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (fp32)  & Ghost-BN (64) & $\sim$20.6 min & $\sim$34.1 hr & $\mathbf{77.43\%}$ & $\mathbf{93.60\%}$ \\
-4$\times$ 4060 Ti (fp32)  & Ghost-BN (64) & ---            & ---           & --- & --- \\
+4$\times$ 4060 Ti (fp32)  & RSB-A3 (100 ep) & Ghost-BN (64) & $\sim$20.6 min & $\sim$34.1 hr & $\mathbf{77.43\%}$ & $\mathbf{93.60\%}$ \\
+4$\times$ 4060 Ti (fp32)  & 2018 (90 ep)    & Ghost-BN (64) & ---            & ---           & --- & --- \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The first row is RSB-A3 at 100 epochs. The second is the same
-network on the \emph{2018} recipe at 90 epochs, which is a \texttt{[TODO]} and
-is the row that makes the comparison below a controlled one: it is bit-for-bit
+\noindent The second row is the same network on the \emph{2018} recipe, a
+\texttt{[TODO]}, and it is the row that makes the comparison below a controlled
+one: it is bit-for-bit
 the ResNet-34 configuration of \S\ref{sec:r34_phase4} with the bottleneck
 backbone substituted, so the only difference between it and the A3 row is the
 recipe. It runs with:
@@ -5428,18 +5436,6 @@ CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_BASE_LR_U=100000 \
   .lake/build/bin/resnet50-imagenet-verified data
 \end{verbatim}
-
-\noindent \texttt{momdp64} is the heavy-ball render at four replicas of 64,
-the same global 256 the ResNet-34 run uses, and \texttt{BASE\_LR\_U=100000} is
-peak $0.1$ in the driver's micro-unit encoding. The single-device
-\texttt{mom256} peer exists too but does not fit: it wants 14.6\,GiB for the
-device-to-host copy on a 16\,GB card.
-
-\medskip\noindent The A3 run logged zero thermal duty-cycle cooldowns and
-zero PCIe/AER interruptions. There is no ROCm peer row here for the same
-reason the one in \S\ref{sec:r34_phase4} is empty, which is the
-command-buffer fault recorded there. Every verified number in this chapter is
-CUDA.
 
 \textbf{[TODO, missing for a full A3 implementation.]} This finished
 ahead of the phase-2 reference above ($77.22\%$ / $93.34\%$) while
