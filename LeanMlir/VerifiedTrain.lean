@@ -674,19 +674,36 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
     | some n => min n cfg.epochs
     | none   => cfg.epochs
+  -- ⭐ THE LOSS SLOT. The train-step render returns a trailing report-only `%loss`
+  -- scalar (`MlpRender`, and the `%lslot` note there for why it is also an input).
+  -- `tsShapes` therefore declares ONE more tensor than `shapes`: a rank-0 scalar,
+  -- spelled `#[]`. `shapes` stays parameter-only because the eval forward below
+  -- takes it and has no such slot.
+  -- ⚠ The packed blob is `[θ | loss]`, so every parameter tensor still LEADS it and
+  -- the resident prefix is unchanged — residency retains the first `nResident`
+  -- tensors and the host now reads exactly one float off the tail.
+  let tsShapes := packShapes (net.paramShapes ++ #[#[]])
+  params := F32.concat #[params, ← F32.const 1 0.0]
   for ep in [0:nEpochs] do
     let tEp0 ← IO.monoMsNow
+    let mut epochLossSum := 0.0
     for bi in [0:nb] do
       let xbRaw := if synth then trainImg else F32.sliceImages trainImg (bi * bs) bs trainPix
       let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
       let yb := if synth then trainLbl else F32.sliceLabels trainLbl (bi * bs) bs
       params ← LowererSession.mlpTrainStepV tsSess tsFn
-                  xb params shapes yb bs.toUSize d0.toUSize nc.toUSize nResident
+                  xb params tsShapes yb bs.toUSize d0.toUSize nc.toUSize nResident
+      epochLossSum := epochLossSum + (F32.read params net.nParams.toUSize)
     -- Bring the parameters back to host for eval and for the G2 dump. Without
     -- residency this is the copy `params` already was, so the line is inert;
     -- with it, this is the ONE d2h per epoch that remains. It is placed outside
     -- the `if !synth` because the dump below reads `params` whether or not eval ran.
     params ← LowererSession.readParams tsSess params (net.nParams * 4).toUSize
+    -- ⚠ `readParams` returns the PARAMETER prefix only, so the loss slot the step
+    -- writes is dropped here. Put it back, or the next epoch feeds `tsShapes`
+    -- (nParams+1 tensors) a blob holding nParams and the shim walks off the end.
+    -- The value is irrelevant going in; the step overwrites it.
+    params := F32.concat #[params, ← F32.const 1 0.0]
     let mut correct := 0
     if !synth then          -- synth probe: skip eval (no eval split on disk)
       for bi in [0:nbt] do
@@ -703,7 +720,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
           if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
+    IO.println s!"  epoch {ep + 1}: loss = {epochLossSum / nb.toFloat}, {evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
     (← IO.getStdout).flush
   -- Gate G2 (`planning/xla_pjrt_ladder.md` §3): dump the packed params so the IREE
   -- and XLA builds can be diffed tensor-for-tensor. He init runs in Lean from a

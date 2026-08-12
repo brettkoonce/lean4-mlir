@@ -1,5 +1,5 @@
 module @m {
-  func.func @cnn_train_step(%x: tensor<128x784xf32>, %W1: tensor<32x1x3x3xf32>, %b1: tensor<32xf32>, %W2: tensor<32x32x3x3xf32>, %b2: tensor<32xf32>, %W3: tensor<6272x512xf32>, %b3: tensor<512xf32>, %W4: tensor<512x512xf32>, %b4: tensor<512xf32>, %W5: tensor<512x10xf32>, %b5: tensor<10xf32>, %onehot: tensor<128x10xf32>) -> (tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<6272x512xf32>, tensor<512xf32>, tensor<512x512xf32>, tensor<512xf32>, tensor<512x10xf32>, tensor<10xf32>) {
+  func.func @cnn_train_step(%x: tensor<128x784xf32>, %W1: tensor<32x1x3x3xf32>, %b1: tensor<32xf32>, %W2: tensor<32x32x3x3xf32>, %b2: tensor<32xf32>, %W3: tensor<6272x512xf32>, %b3: tensor<512xf32>, %W4: tensor<512x512xf32>, %b4: tensor<512xf32>, %W5: tensor<512x10xf32>, %b5: tensor<10xf32>, %lslot: tensor<f32>, %onehot: tensor<128x10xf32>) -> (tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<6272x512xf32>, tensor<512xf32>, tensor<512x512xf32>, tensor<512xf32>, tensor<512x10xf32>, tensor<10xf32>, tensor<f32>) {
     // ── cnn train step: every line is pretty(verified AST node) ──
     %v0 = stablehlo.reshape %x : (tensor<128x784xf32>) -> tensor<128x1x28x28xf32>
     %v1 = stablehlo.convolution(%v0, %W1)
@@ -147,6 +147,19 @@ module @m {
     %v68 = stablehlo.constant dense<0.00078125> : tensor<10xf32>
     %v69 = stablehlo.multiply %v67, %v68 : tensor<10xf32>
     %v70 = stablehlo.subtract %b5, %v69 : tensor<10xf32>
-    return %v112, %v118, %v97, %v103, %v83, %v88, %v74, %v79, %v65, %v70 : tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<6272x512xf32>, tensor<512xf32>, tensor<512x512xf32>, tensor<512xf32>, tensor<512x10xf32>, tensor<10xf32>
+    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──
+    %lz = stablehlo.constant dense<0.0> : tensor<f32>
+    %lex = stablehlo.exponential %v30 : tensor<128x10xf32>
+    %lsum = stablehlo.reduce(%lex init: %lz) applies stablehlo.add across dimensions = [1] : (tensor<128x10xf32>, tensor<f32>) -> tensor<128xf32>
+    %lsmb = stablehlo.broadcast_in_dim %lsum, dims = [0] : (tensor<128xf32>) -> tensor<128x10xf32>
+    %lsm = stablehlo.divide %lex, %lsmb : tensor<128x10xf32>
+    %llog = stablehlo.log %lsm : tensor<128x10xf32>
+    %lohll = stablehlo.multiply %onehot, %llog : tensor<128x10xf32>
+    %lrow = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : (tensor<128x10xf32>, tensor<f32>) -> tensor<128xf32>
+    %lsum2 = stablehlo.reduce(%lrow init: %lz) applies stablehlo.add across dimensions = [0] : (tensor<128xf32>, tensor<f32>) -> tensor<f32>
+    %lbf = stablehlo.constant dense<128.0> : tensor<f32>
+    %lossm = stablehlo.divide %lsum2, %lbf : tensor<f32>
+    %loss = stablehlo.negate %lossm : tensor<f32>
+    return %v112, %v118, %v97, %v103, %v83, %v88, %v74, %v79, %v65, %v70, %loss : tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<6272x512xf32>, tensor<512xf32>, tensor<512x512xf32>, tensor<512xf32>, tensor<512x10xf32>, tensor<10xf32>, tensor<f32>
   }
 }

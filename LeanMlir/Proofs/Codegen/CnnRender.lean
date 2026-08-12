@@ -177,7 +177,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
   let zNC : Vec nClasses := fun _ => 0
   let zT2 : Tensor3 c (2*h) (2*w) := fun _ _ _ => 0      -- conv-2 input (ac1) placeholder
   let zTx : Tensor3 ic (2*h) (2*w) := fun _ _ _ => 0     -- conv-1 input (image) placeholder
-  let act : StateM Nat (String × (String × String × String × String × String × String × String × String × String × String)) := do
+  let act : StateM Nat (String × String × String × String × String × String × String × String × String × String × String × String) := do
     -- ═══ forward (proof-rendered, flat) ═══
     let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*h) (w := 2*w) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zC))
@@ -214,13 +214,34 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
     pure (cHc1 ++ cAc1 ++ cHc2 ++ cAc2 ++ cPool ++ cH3 ++ cA3 ++ cH4 ++ cA4 ++ cLog ++ cDy ++
             cDy4 ++ cDy3 ++ cDx3 ++ cDac2 ++ cDhc2 ++ cDac1 ++ cDhc1 ++
             cW1g ++ cb1g ++ cW2g ++ cb2g ++ cW3 ++ cb3 ++ cW4 ++ cb4 ++ cW5 ++ cb5,
-          nW1g, nb1g, nW2g, nb2g, nW3, nb3, nW4, nb4, nW5, nb5)
-  let (body, n1W, n1b, n2W, n2b, n3W, n3b, n4W, n4b, n5W, n5b) := act.run' 0
+          nW1g, nb1g, nW2g, nb2g, nW3, nb3, nW4, nb4, nW5, nb5, nLog)
+  let (body, n1W, n1b, n2W, n2b, n3W, n3b, n4W, n4b, n5W, n5b, nLog) := act.run' 0
+  -- ⚠⚠ `%loss` IS REPORT-ONLY — a DECLARED CARVE-OUT, exactly as in `MlpRender` and as
+  -- ConvNeXt/EfficientNet/R50 already do. Hand-written text, not `pretty` of a `den`
+  -- node. APPENDED, never woven in: it reads only the logits and `%onehot` and adds
+  -- only `%l*` names, so the ten proven parameter outputs are byte-identical and
+  -- `CnnFaithfulPoC` is untouched. `%lslot` is the unused input that keeps the C
+  -- entry's single shape list symmetric (see `MlpRender` for the full argument).
+  let lossCode :=
+    "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+    s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    %lex = stablehlo.exponential {nLog} : {ty [B,nClasses]}\n" ++
+    s!"    %lsum = stablehlo.reduce(%lex init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+    s!"    %lsmb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [B]}) -> {ty [B,nClasses]}\n" ++
+    s!"    %lsm = stablehlo.divide %lex, %lsmb : {ty [B,nClasses]}\n" ++
+    s!"    %llog = stablehlo.log %lsm : {ty [B,nClasses]}\n" ++
+    s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
+    s!"    %lrow = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+    s!"    %lsum2 = stablehlo.reduce(%lrow init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
+    s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+    s!"    %lossm = stablehlo.divide %lsum2, %lbf : tensor<f32>\n" ++
+    s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
   "module @m {\n" ++
-  s!"  func.func @cnn_train_step(%x: {ty [B,ic*(2*h)*(2*w)]}, %W1: {ty [c,ic,kH,kW]}, %b1: {ty [c]}, %W2: {ty [c,c,kH,kW]}, %b2: {ty [c]}, %W3: {ty [flat,d1]}, %b3: {ty [d1]}, %W4: {ty [d1,d1]}, %b4: {ty [d1]}, %W5: {ty [d1,nClasses]}, %b5: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
+  s!"  func.func @cnn_train_step(%x: {ty [B,ic*(2*h)*(2*w)]}, %W1: {ty [c,ic,kH,kW]}, %b1: {ty [c]}, %W2: {ty [c,c,kH,kW]}, %b2: {ty [c]}, %W3: {ty [flat,d1]}, %b3: {ty [d1]}, %W4: {ty [d1,d1]}, %b4: {ty [d1]}, %W5: {ty [d1,nClasses]}, %b5: {ty [nClasses]}, %lslot: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}, tensor<f32>) " ++ "{\n" ++
   "    // ── cnn train step: every line is pretty(verified AST node) ──\n" ++
   body ++
-  s!"    return {n1W}, {n1b}, {n2W}, {n2b}, {n3W}, {n3b}, {n4W}, {n4b}, {n5W}, {n5b} : {ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
+  lossCode ++
+  s!"    return {n1W}, {n1b}, {n2W}, {n2b}, {n3W}, {n3b}, {n4W}, {n4b}, {n5W}, {n5b}, %loss : {ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}, tensor<f32>\n" ++
   "  }\n}\n"
 
 /-- Structured **CIFAR CNN** train-step renderer (`@cifar_train_step`): the Chapter-4 peer of

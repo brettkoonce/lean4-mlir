@@ -93,7 +93,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   let z₁ : Vec d₁ := fun _ => 0
   let z₂ : Vec d₂ := fun _ => 0
   let z₃ : Vec d₃ := fun _ => 0
-  let act : StateM Nat (String × String × String × String × String × String × String) := do
+  let act : StateM Nat (String × String × String × String × String × String × String × String) := do
     let (cp0, np0) ← pretty B (denseF "%W0" "%b0" W₀ b₀ (.operand "%x" x))
     let (ca0, na0) ← pretty B (.reluF (.operand np0 z₁))
     let (cp1, np1) ← pretty B (denseF "%W1" "%b1" W₁ b₁ (.operand na0 z₁))
@@ -110,13 +110,48 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
     let (cb0, nb0) ← pretty B (SHlo.biasSgd "%b0" lrStr z₁ 0 (.operand nc0 z₁))
     pure (cp0 ++ ca0 ++ cp1 ++ ca1 ++ clog ++ cdy ++ cc1 ++ cc0 ++
             cW2 ++ cb2 ++ cW1 ++ cb1 ++ cW0 ++ cb0,
-          nW0, nb0, nW1, nb1, nW2, nb2)
-  let (body, nW0, nb0, nW1, nb1, nW2, nb2) := act.run' 0
+          nW0, nb0, nW1, nb1, nW2, nb2, nlog)
+  let (body, nW0, nb0, nW1, nb1, nW2, nb2, nlog) := act.run' 0
+  -- ⚠⚠ `%loss` IS REPORT-ONLY, AND IT IS A DECLARED CARVE-OUT. Every other line of
+  -- this module is `pretty` of a `den`-certified AST node; the block below is
+  -- hand-written text, exactly as ConvNeXt/EfficientNet/R50 already emit theirs.
+  -- It exists because the demo loops had **no loss slot at all**, which is why
+  -- chapters 2 and 3 had to borrow their loss curves from the old *unverified*
+  -- ablation runner — theorems about one program, plot from another.
+  --
+  -- ⭐ It is APPENDED, never woven in. It reads only the logits and `%onehot` and
+  -- introduces only `%l*` names, so the six proven parameter outputs are
+  -- byte-identical to what this renderer emitted before it existed and
+  -- `MlpFaithfulPoC` is untouched. Verified by diffing the render.
+  -- ⚠ It must stay the LAST output: the driver keeps the leading parameter tensors
+  -- device-resident and reads only the tail (`VerifiedTrain.lean`, handoff §2d.3).
+  let lossCode :=
+    "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+    s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    %lex = stablehlo.exponential {nlog} : {ty [B,d₃]}\n" ++
+    s!"    %lsum = stablehlo.reduce(%lex init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,d₃]}, tensor<f32>) -> {ty [B]}\n" ++
+    s!"    %lsmb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [B]}) -> {ty [B,d₃]}\n" ++
+    s!"    %lsm = stablehlo.divide %lex, %lsmb : {ty [B,d₃]}\n" ++
+    s!"    %llog = stablehlo.log %lsm : {ty [B,d₃]}\n" ++
+    s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B,d₃]}\n" ++
+    s!"    %lrow = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,d₃]}, tensor<f32>) -> {ty [B]}\n" ++
+    s!"    %lsum2 = stablehlo.reduce(%lrow init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
+    s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+    s!"    %lossm = stablehlo.divide %lsum2, %lbf : tensor<f32>\n" ++
+    s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
   "module @m {\n" ++
-  s!"  func.func @mlp_train_step(%x: {ty [B,d₀]}, %W0: {ty [d₀,d₁]}, %b0: {ty [d₁]}, %W1: {ty [d₁,d₂]}, %b1: {ty [d₂]}, %W2: {ty [d₂,d₃]}, %b2: {ty [d₃]}, %onehot: {ty [B,d₃]}) -> ({ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}) " ++ "{\n" ++
+  -- ⚠ `%lslot` is an UNUSED INPUT, and it is load-bearing for the ABI rather than the
+  -- math. The shared C entry (`lean_iree_mlp_train_step_v`) reads ONE shape list and
+  -- uses it for both the input slice walk and the output destinations, so the two
+  -- lists must have equal length. `trainAdamSched` already lives with this: `%lr`
+  -- goes in and the loss comes back in that slot. This is the same trick at the
+  -- smallest possible size, so the loss can be returned without touching the C ABI
+  -- that every other net's tie and DP harness depends on.
+  s!"  func.func @mlp_train_step(%x: {ty [B,d₀]}, %W0: {ty [d₀,d₁]}, %b0: {ty [d₁]}, %W1: {ty [d₁,d₂]}, %b1: {ty [d₂]}, %W2: {ty [d₂,d₃]}, %b2: {ty [d₃]}, %lslot: tensor<f32>, %onehot: {ty [B,d₃]}) -> ({ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}, tensor<f32>) " ++ "{\n" ++
   "    // ── mlp train step: every line is pretty(verified AST node) ──\n" ++
   body ++
-  s!"    return {nW0}, {nb0}, {nW1}, {nb1}, {nW2}, {nb2} : {ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}\n" ++
+  lossCode ++
+  s!"    return {nW0}, {nb0}, {nW1}, {nb1}, {nW2}, {nb2}, %loss : {ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}, tensor<f32>\n" ++
   "  }\n}\n"
 
 -- Regenerate `verified_mlir/mlp_train_step.mlir` (what MainMnistMlpVerified trains on)
