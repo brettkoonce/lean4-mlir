@@ -5535,6 +5535,115 @@ neighborhood. The channel mixing can be approximated by a much
 cheaper operation. If we separate them, we get parameter
 efficiency without losing much expressive power.
 
+\section{Run it first}
+\label{sec:mnv2_runit}
+
+Before the factorization, train the factorized network. Four commands,
+and about the same GPU time Chapter~\ref{chap:residual} asked for:
+
+\begin{verbatim}
+lake exe cache get                            # Mathlib oleans, ~30 s
+./download_imagenette.sh                      # ~1.5 GB
+lake build mobilenetv2-verified-adam
+./.lake/build/bin/mobilenetv2-verified-adam data
+\end{verbatim}
+
+On one RTX 4060 Ti (CUDA 12.9), from
+\texttt{runs/2026-08-12-mnv2-imagenette-xla-cuda/}. XLA's startup banner
+is removed, the network description line is wrapped, and the middle of
+the run is elided:
+
+\begin{verbatim}
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_adam_train_step.mlir
+             (@mobilenetv2_adam_train_step, 581 outputs, 1 replica) in 8101 ms
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd.mlir
+             (@mobilenetv2_fwd, 1 outputs, 1 replica) in 665 ms
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd_eval.mlir
+             (@mobilenetv2_fwd_eval, 1 outputs, 1 replica) in 250 ms
+MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks,
+  full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 →
+  head conv-BN-relu6 → GAP → dense)
+  via the VERIFIED renderer → XLA/PJRT → GPU
+  train 9469, val 3925; bs 32, MobileNetV2 adam
+    (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
+Epoch 1/80: loss=2.121050 lr=0.000333
+  epoch 1: val_acc = 947/3925 = 24.127389%  top5 = 2392/3925 = 60.942675%
+Epoch 2/80: loss=1.784318 lr=0.000667
+  epoch 2: val_acc = 680/3925 = 17.324841%  top5 = 2357/3925 = 60.050955%
+Epoch 3/80: loss=1.590689 lr=0.001000
+  epoch 3: val_acc = 1596/3925 = 40.662420%  top5 = 3423/3925 = 87.210191%
+Epoch 4/80: loss=1.446373 lr=0.001000
+  epoch 4: val_acc = 1851/3925 = 47.159236%  top5 = 3428/3925 = 87.337580%
+Epoch 79/80: loss=0.517682 lr=0.000000
+  epoch 79: val_acc = 3506/3925 = 89.324841%  top5 = 3874/3925 = 98.700637%
+Epoch 80/80: loss=0.517213 lr=0.000000
+  epoch 80: val_acc = 3503/3925 = 89.248408%  top5 = 3873/3925 = 98.675159%
+done (trained MobileNetV2 adam + cosine/warmup via packed threading).
+\end{verbatim}
+
+Eighty epochs at about 26 seconds each, thirty-five minutes in total, and
+\textbf{89.25\%} top-1 with \textbf{98.68\%} top-5 on Imagenette's
+3,925-image validation split. The best epoch reached $89.32\%$. Set that
+against Chapter~\ref{chap:residual}, which ran the same data, the same
+recipe and the same number of epochs through a network with
+$9.5\times$ the parameters and finished at $89.71\%$ top-1 and $98.27\%$
+top-5. MobileNetV2 gives up less than half a point of top-1, picks up
+four tenths of top-5, and does it in thirty-five minutes against an hour
+and a half.
+
+Epoch 2 is worth a glance before moving on. Validation accuracy
+\emph{falls}, from $24.1\%$ to $17.3\%$, while the training loss drops
+normally from $2.12$ to $1.78$. That is the warmup: the learning rate is
+still climbing toward its peak at epoch 3, and the BatchNorm running
+statistics are two epochs old and averaging over a network whose weights
+are moving fast. The evaluation forward is using statistics that no
+longer describe the thing being evaluated. It corrects itself by epoch 3
+and never recurs.
+
+Here is the part that matters. That run did not execute a
+reimplementation of the network this chapter describes. It executed
+\texttt{verified\_mlir/mobilenetv2\_adam\_train\_step.mlir}, which is
+\texttt{pretty(provenGraph)} off the renderer. Every depthwise
+convolution in it backpropagates by the rule
+Theorem~\ref{ax:depthwise_has_vjp3} proves, every pointwise convolution
+by Chapter~\ref{chap:cnn}'s, every BatchNorm by Chapter~\ref{chap:bn}'s,
+and every residual skip by Chapter~\ref{chap:residual}'s additive
+fan-in. Those per-operation theorems are unconditional and hold at any
+width or depth, so they cover all seventeen blocks.
+
+One scope note, because this is the chapter where the distinction starts
+to bite. The theorem that folds those rules into a single statement about
+the \emph{whole} network, \texttt{mobilenetv2\_has\_vjp\_at}, is proved
+for a representative net of the stem plus two inverted-residual blocks
+plus the head, not for all seventeen. What ties the full 17-block spec to
+the paper's architecture is a separate denotational result about the
+forward, \texttt{mobilenetv2Verified\_denote\_eq}, with
+\texttt{mobilenetv2Verified\_fwd\_faithful} above it. So the accurate
+sentence is that every operation in the graph that just trained carries a
+proved backward, and the fold of all of them is witnessed at
+representative scale. That is the same ``representative scale'' caveat
+the MLIR sections of this book carry throughout, stated here where the
+network is first deep enough for the gap to be worth naming.
+
+The three compile lines are the same three Chapter~\ref{chap:residual}
+showed, and for the same reason. \texttt{@mobilenetv2\_fwd\_eval} is a
+separate forward because BatchNorm evaluates differently than it trains,
+and \texttt{running-stats BN: 52 layers, 34112 stat floats} is the driver
+threading the running averages out of the train step and into it. This
+network has 52 BatchNorms against ResNet-34's 36, which is what a block
+built from three convolutions instead of two costs.
+
+To run this net alongside the other six at the same scale and recipe:
+
+\begin{verbatim}
+lake run imagenette
+\end{verbatim}
+
+That is the whole Part-I tier at $224^2$, and it is an afternoon rather
+than the minute \texttt{lake run mnist} takes.
+
 \prosesection{Depthwise: one kernel per channel, no cross-channel sum}
 
 A \emph{depthwise} convolution does the spatial half on its own,
@@ -5551,7 +5660,7 @@ x_{c,\,i+k_h,\,j+k_w}.
 \]
 
 Only one summation level (over the kernel positions), not two. No
-mixing between channels at all---channel \(c\) of the output only
+mixing between channels at all. Channel \(c\) of the output only
 ever looks at channel \(c\) of the input. The weight tensor is
 shape \([C, k, k]\) instead of \([C_\text{out}, C_\text{in}, k, k]\):
 
@@ -5561,8 +5670,8 @@ shape \([C, k, k]\) instead of \([C_\text{out}, C_\text{in}, k, k]\):
 \text{standard weights: } C_\text{out} \times C_\text{in} \times 3 \times 3.
 \]
 
-For a typical \(C_\text{in} = C_\text{out} = 64\) layer, that's 576
-weights vs 36{,}864 weights---a 64$\times$ reduction. The Jacobian
+For a typical \(C_\text{in} = C_\text{out} = 64\) layer, that is 576
+weights against 36{,}864, a 64$\times$ reduction. The Jacobian
 from Chapter \ref{chap:cnn} simplifies in step: one fewer \(\Sigma\)
 level means the depthwise input-VJP is a slightly simpler
 reversed-kernel convolution, the weight VJP is a slightly simpler
@@ -5572,12 +5681,12 @@ Theorems \ref{ax:depthwise_has_vjp3} through
 
 \prosesection{The depthwise-separable sandwich}
 
-A depthwise conv alone never lets channels see each other. That's
-a problem---the whole point of stacking convolutions is to build
-hierarchical features that combine information across channels.
+A depthwise conv alone never lets channels see each other. That is
+a problem, because the whole point of stacking convolutions is to
+build hierarchical features that combine information across channels.
 The fix is to follow each depthwise with a \emph{pointwise}
 \(1 \times 1\) convolution, which is purely cross-channel mixing
-(no spatial structure---each output pixel is a learned linear
+(no spatial structure, since each output pixel is a learned linear
 combination of the same input pixel's channels). That two-step
 combination,
 
@@ -5587,11 +5696,11 @@ combination,
 \text{pointwise}\ 1 \times 1,
 \]
 
-is called a \emph{depthwise-separable convolution}, and it's what
+is called a \emph{depthwise-separable convolution}, and it is what
 replaces the standard \(3 \times 3\) conv in MobileNet and
 everywhere downstream. A standard \(3 \times 3\) over 64$\to$64
-costs 36{,}864 weights; the separable version costs 576 (depthwise)
-+ 4{,}096 (pointwise) = 4{,}672. Eight times fewer.
+costs 36{,}864 weights. The separable version costs 576 (depthwise)
+plus 4{,}096 (pointwise), for 4{,}672. Eight times fewer.
 
 \prosesection{Inverted residual: depthwise at the wide point}
 
@@ -5601,7 +5710,7 @@ the expensive spatial conv, project back up for the residual).
 MobileNetV2 flips it: \emph{narrow $\to$ wide $\to$ narrow}, with
 the depthwise spatial conv at the wide expansion. The intuition
 is that depthwise is so cheap that you can afford to make it
-\emph{wider}; the narrow bottleneck channels carry the actual
+\emph{wider}. The narrow bottleneck channels carry the actual
 information across the residual.
 
 Concretely, an inverted-residual block with input channels \(C_\text{in}\),
@@ -5618,27 +5727,31 @@ output channels \(C_\text{out}\), and expansion ratio \(t\):
   equals 1
 \end{enumerate}
 
-This is the \texttt{.invertedResidual ic oc t stride n} primitive
-in the spec---one Layer constructor that emits all three convs,
-the BN+ReLU between them, and the conditional residual add. The
-VJP for the whole block composes the depthwise VJP from this
-chapter with the standard conv2d VJPs from
-Chapter~\ref{chap:cnn}, the BN VJP from
-Chapter~\ref{chap:bn}, and the additive fan-in for the residual
-from Chapter~\ref{chap:residual}. Once again, no new math beyond
-the foundation rules---just the depthwise primitive plus
-composition.
+This is the \texttt{.invertedResidualNB ic mid oc stride} primitive
+in the spec, one layer constructor that emits all three convs, the
+BN and relu6 between them, and the conditional residual add. It
+takes the expanded width \texttt{mid} directly rather than the ratio
+\(t\), so a block is written the way it is shaped rather than the way
+it is parameterized, and the \texttt{NB} suffix says the three convs
+carry no bias, since the BatchNorm immediately after each one
+subsumes it. The VJP for the whole block composes the depthwise VJP
+from this chapter with the standard conv2d VJPs from
+Chapter~\ref{chap:cnn}, the BN VJP from Chapter~\ref{chap:bn}, and
+the additive fan-in for the residual from
+Chapter~\ref{chap:residual}. Once again there is no new math beyond
+the foundation rules, only the depthwise primitive plus composition.
 
 \prosesection{Stacking the blocks}
 
 MobileNetV2 stacks 17 inverted-residual blocks across seven stages
 (at depths 1, 2, 3, 4, 3, 3, 1) with widths progressing from 16 to
 320 channels, then a final \(1 \times 1\) to 1280 channels, global
-average pool, and a 1280-to-10 dense head---the same stem-stages-head
-template as ResNet-34. Total: 2.24M parameters, 9.5$\times$ fewer
-than ResNet-34, at a modest accuracy cost (87\% vs 90\% on
-Imagenette in the example below). For mobile and embedded
-deployment that trade is the whole reason MobileNet exists.
+average pool, and a 1280-to-10 dense head. That is the same
+stem-stages-head template as ResNet-34. Total: 2.24M parameters,
+9.5$\times$ fewer than ResNet-34, at a modest accuracy cost
+($89.25\%$ against ResNet-34's $89.71\%$ on Imagenette, both
+measured in this book). For mobile and embedded deployment that
+trade is the whole reason MobileNet exists.
 
 \section{The theorems}
 
@@ -5771,14 +5884,12 @@ Same three steps as the conv2d bias VJP
 \section{Example: MobileNet V2 on Imagenette}
 \label{sec:depthwise_mnv2_example}
 
-\phasethreenote
-
-Depthwise convolution on its own is rarely used directly --- you
+Depthwise convolution on its own is rarely used directly. You
 almost always see it wrapped in a \emph{depthwise-separable}
 sandwich: $1 \times 1$ expand, $3 \times 3$ depthwise, $1 \times 1$
 project, with a residual connection around the whole thing. That
 sandwich is the inverted-residual block that defines MobileNet V2,
-and it's how depthwise convolutions got their fame.
+and it is how depthwise convolutions got their fame.
 
 The point of depthwise is \emph{parameter efficiency}. A normal
 $3 \times 3$ conv over 64 channels uses $3 \times 3 \times 64
@@ -5792,9 +5903,9 @@ $3 \times 3$. MobileNet V2 is 17 of these blocks together.
 
 The same vertical column as ResNet-34, now built from
 inverted-residual blocks: a $3 \times 3$ stride-2 stem, seven stages of
-\texttt{.invertedResidual} blocks (17 in all, widths $16$ to $320$,
+\texttt{.invertedResidualNB} blocks (17 in all, widths $16$ to $320$,
 expansion $t{=}6$ except the first), a $1 \times 1$ lift to 1280
-channels, global average pool, and a dense head --- and \emph{no}
+channels, global average pool, and a dense head. There are \emph{no}
 max-pools, since every downsample is folded into a strided block. The
 inset shows one inverted-residual block: the cheap depthwise spatial mix
 happens at the wide point.
@@ -5861,117 +5972,138 @@ happens at the wide point.
 \end{tikzpicture}
 \end{center}
 
+\subsection*{The verified trainer}
+
+\S\ref{sec:verified_trainer_pattern} is the pattern and this is the
+first chapter to reuse it, so read the two together. Everything that
+carries weight there carries the same weight here, and only the
+\texttt{layers} list and the \texttt{bnChannels} that follows from it
+are new:
+
 \begin{verbatim}
--- 1
 import LeanMlir
 
--- 2
-def mobilenetV2 : NetSpec where
-  name   := "MobileNet-v2"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 32 3 2 .same,                    -- stem 224→112
-    .invertedResidual  32  16 1 1 1,           -- 112, expand 1×
-    .invertedResidual  16  24 6 2 2,           -- 112→56, t=6
-    .invertedResidual  24  32 6 2 3,           -- 56→28, t=6
-    .invertedResidual  32  64 6 2 4,           -- 28→14, t=6
-    .invertedResidual  64  96 6 1 3,           -- 14, t=6
-    .invertedResidual  96 160 6 2 3,           -- 14→7, t=6
-    .invertedResidual 160 320 6 1 1,           -- 7, t=6
-    .convBn 320 1280 1 1 .same,                -- 1×1 to 1280
+-- 1. The network. `slug` names the committed render, `bnChannels`
+--    drives BN threading, `NB` means the convs carry no bias.
+def mobilenetv2Verified : VerifiedNetSpec where
+  name     := "MobileNetV2"
+  slug     := "mobilenetv2"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .convBnNB 3 32 3 2,                   -- stem       224->112
+    .invertedResidualNB  32   32  16 1,   -- stage 1, t=1   @112
+    .invertedResidualNB  16   96  24 2,   -- stage 2    112->56
+    .invertedResidualNB  24  144  24 1,
+    .invertedResidualNB  24  144  32 2,   -- stage 3     56->28
+    .invertedResidualNB  32  192  32 1,   --   x2
+    .invertedResidualNB  32  192  64 2,   -- stage 4     28->14
+    .invertedResidualNB  64  384  64 1,   --   x3
+    .invertedResidualNB  64  384  96 1,   -- stage 5        @14
+    .invertedResidualNB  96  576  96 1,   --   x2
+    .invertedResidualNB  96  576 160 2,   -- stage 6      14->7
+    .invertedResidualNB 160  960 160 1,   --   x2
+    .invertedResidualNB 160  960 320 1,   -- stage 7         @7
+    .convBnNB 320 1280 1 1,               -- head, 1x1 to 1280
     .globalAvgPool,
-    .dense 1280 10 .identity
-  ]
+    .dense 1280 10 ]
+  bnChannels := #[32, 32,16, 96,96,24, ... ]  -- all 52, in order
 
--- 3
-def mobilenetV2Config : TrainConfig where
-  learningRate   := 0.001
-  batchSize      := 32
-  epochs         := 80
-  useAdam        := true
-  weightDecay    := 0.0001
-  cosineDecay    := true
-  warmupEpochs   := 3
-  augment        := true
-  labelSmoothing := 0.1
+-- 2. The schedule. Identical to ResNet-34's, deliberately.
+def mobilenetv2AdamConfig : VerifiedConfig where
+  epochs    := 80
+  batchSize := 32
 
--- 4
-def main (args : List String) : IO Unit :=
-  mobilenetV2.train mobilenetV2Config (args.head?.getD "data/imagenette")
+-- 3. The entry point: AdamW, cosine with a 3-epoch warmup, baseLR 1e-3.
+def main (argv : List String) : IO Unit :=
+  mobilenetv2Verified.toNet.trainAdamSched
+    mobilenetv2AdamConfig (argv.head?.getD "data") 0.001 0.9 0.999 3 "adam"
 \end{verbatim}
 
-The \texttt{.invertedResidual} primitive takes
-\texttt{(ic, oc, expandRatio, stride, nBlocks)}. Internally each
-block is: $1 \times 1$ conv to \texttt{ic*expandRatio} channels,
-$3 \times 3$ depthwise at that width, $1 \times 1$ project to
-\texttt{oc}, plus a residual skip when \texttt{ic == oc} and
-\texttt{stride == 1}. The VJP is
-\S~\ref{ax:depthwise_has_vjp3} for the depthwise conv composed with
-the existing dense / BN / biPath theorems we already proved.
-Training config is identical to ResNet-34's
-(Appendix~\ref{app:getting_started}): Adam + cosine + warmup + wd
-+ augmentation + label smoothing, the same production recipe.
+\noindent Lines marked \texttt{x2} or \texttt{x3} appear that many times
+in the source. The spec has no repeat count, because one constructor is
+one block: \texttt{.invertedResidualNB ic mid oc stride} takes the
+\emph{expanded} width \texttt{mid} rather than a ratio \(t\), so the
+widths read straight off the paper's table and the stage boundaries are
+visible as the places where \texttt{stride} is 2. Internally each block
+is a $1 \times 1$ conv to \texttt{mid} channels, a $3 \times 3$
+depthwise at that width, a $1 \times 1$ project to \texttt{oc}, and a
+residual skip when \texttt{ic == oc} and \texttt{stride == 1}. Its VJP
+is \S~\ref{ax:depthwise_has_vjp3} for the depthwise conv composed with
+the dense, BN and biPath theorems already proved.
+
+\textbf{Fifty-two BatchNorms, and the list is not three per block.} Every
+inverted-residual block normalizes after each of its three convs, which
+would be $17 \times 3 + 2$ for the stem and head, or 53. The first block
+has expansion $t{=}1$, so it has no expand conv at all and contributes
+two entries rather than three, and the real count is 52. That is the kind
+of detail \texttt{bnChannels} exists to get right: the running-stat region
+is positional, and an off-by-one there misaligns every frozen statistic
+downstream of it at evaluation time.
+
+\textbf{The recipe is ResNet-34's, unchanged.} Eighty epochs at batch 32,
+AdamW at $10^{-3}$, cosine with a three-epoch warmup, label smoothing
+$0.1$, the same augmentation. That is on purpose. Holding the recipe fixed
+is what makes the accuracy in \S\ref{sec:mnv2_runit} a comparison between
+two \emph{architectures} rather than between two training setups, and it
+is the same move Chapter~\ref{chap:bn} used to compare optimizers against
+one proven gradient. MobileNetV2's own optimizer is RMSProp, which
+\S\ref{sec:mnv2_imagenet} comes back to, and it is rendered at this shape
+too: \texttt{LEAN\_MLIR\_VARIANT=rms} loads
+\texttt{mobilenetv2\_rms\_train\_step.mlir} instead.
 
 \subsection*{Results}
 
-\begin{verbatim}
-$ IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
-    ./.lake/build/bin/mobilenet-v2-train
-MobileNet-v2: 2236682 params
-Generating train step MLIR...
-  741020 chars
-Compiling vmfbs...
-  forward compiled
-  eval forward (fixed BN) compiled
-  compiled
-  session loaded
-  train: 9469 images (256×256)
-  2236682 params + m + v (25 MB)
-training: 295 batches/epoch, batch=32, Adam, lr=0.001000,
-          cosine, label_smooth=0.1, wd=1e-4
-  BN layers: 52, BN stat floats: 34112
-  step 0/295: loss=2.327938 (832ms)
-Epoch  1/80: loss=1.968284 lr=0.000333 (243839ms)
-Epoch  2/80: loss=(dropping) lr=0.000667 ...
-...
-Epoch 79/80: loss=0.532640 lr=0.000002 (244123ms)
-Epoch 80/80: loss=0.532729 lr=0.000000 (244070ms)
-  val accuracy (running BN): 3400/3904 = 87.09%
-\end{verbatim}
+\S\ref{sec:mnv2_runit} has the run: 80 epochs at about 26
+seconds each on one RTX 4060 Ti, finishing at \textbf{89.25\%}
+top-1 and \textbf{98.68\%} top-5 on Imagenette's 3,925-image
+validation split. Against Chapter~\ref{chap:residual}'s ResNet-34 at
+$89.71\%$ on the same data and the same recipe, that is
+\textbf{0.46 points of top-1} for \textbf{9.5$\times$ fewer parameters}
+(2.24M against 21.3M). That is the depthwise-separable trade, and on
+this evidence it is a better one than the architecture's reputation
+suggests. Rather than reprint the log, here is what is worth noticing
+in it.
 
-(Full log in \texttt{logs/mnv2\_train.log}.)
+- \textbf{2.24M parameters, and 1.05\,MB of MLIR} (1\,047\,327 chars)
+  for the AdamW training step. ResNet-34 emitted 729\,KB with $9.5\times$
+  the parameters, so the smaller network renders the \emph{larger}
+  program. Emission is per-op, and the separable block trades one
+  convolution for three, each with its own BatchNorm. Parameter count
+  went down and operation count went up, and the text follows the
+  second.
 
-Final val accuracy \textbf{87.09\%} --- 3.2 points below ResNet-34's
-90.29\% on the same dataset and training config, at \textbf{9.5$\times$
-fewer parameters} (2.24M vs 21.29M). That's the depthwise-separable
-trade: you give up a couple of accuracy points to get an order-of-
-magnitude reduction in parameter count.
+- \textbf{Per-step time is about 90\,ms} at batch 32, against
+  ResNet-34's 220\,ms at the same batch and the same 295 steps to the
+  epoch, so the whole run takes thirty-five minutes rather than an hour
+  and a half. That is a real $2.4\times$, and it is also well short of
+  what the parameter count promises: $9.5\times$ fewer weights buys
+  $2.4\times$ the throughput, not $9.5\times$. Depthwise convolution is
+  memory-bound. It does nine multiply-accumulates per output element
+  where the standard $3 \times 3$ it replaces does $9 C_\text{in}$, so
+  the kernel spends its time moving activations rather than multiplying
+  them, and arithmetic was never the whole bottleneck.
+  \S\ref{sec:mnv2_imagenet} sees the same sub-proportional scaling at
+  ImageNet.
 
-- \textbf{Per-step time is faster}, not slower: 830\,ms vs
-  ResNet-34's 1400\,ms. Even though the network has \emph{more}
-  layers (17 inverted-residual blocks $\times$ 3 sub-layers each =
-  51+ internal conv layers, vs ResNet-34's 34), the depthwise convs
-  are so cheap that overall throughput improves. Fewer parameters
-  \emph{and} faster training, at a modest accuracy cost.
+- \textbf{Three artifacts, not one.} The train step is accompanied by
+  \texttt{mobilenetv2\_fwd} (143\,476 chars) and
+  \texttt{mobilenetv2\_fwd\_eval} (111\,150 chars), the second existing
+  only because BatchNorm evaluates differently than it trains. It is
+  the concrete cost of the \texttt{bnChannels} line in the spec above.
 
-- \textbf{MLIR is actually bigger}, not smaller: 741\,020 chars vs
-  ResNet-34's 517\,912. That's counterintuitive --- the network has
-  fewer params but emits more StableHLO. The reason: each
-  depthwise-separable block has three separate convs (expand,
-  depthwise, project) plus their BN ops, so there are more
-  \emph{operations} even though each operation has fewer weights.
-  IREE emits per-op, so the char count tracks op count, not param
-  count.
-
-- \textbf{52 BN layers}, up from ResNet-34's 36. Same reason ---
-  more internal conv layers means more BN-after-conv
-  pairs. Each one still proves its VJP via
+- \textbf{52 BN layers}, up from ResNet-34's 36, for the same reason
+  the MLIR is bigger: more internal convolutions means more
+  BN-after-conv pairs. Each one still proves its VJP via
   \S~\ref{thm:bn_has_vjp}.
 
-- \textbf{9.5$\times$ fewer parameters, 5.4 hours total
-  training} vs ResNet-34's 9.5 hours. The speedup comes entirely
-  from the smaller per-step time; the epoch count is the same.
+- \textbf{Final loss plateaus near 0.50} again, and for the same reason
+  it did in Chapter~\ref{chap:residual}. The label-smoothing floor at
+  $\varepsilon = 0.1$ over ten classes is about $0.485$, so this run has
+  essentially converged rather than stalled.
 
 \section{MLIR: Depthwise Convolution}
 
@@ -5982,8 +6114,9 @@ reverse-mode derivative (\S~\ref{ax:depthwise_has_vjp3},
 the channel transpose the full-conv VJP of Chapter~\ref{chap:cnn} needs:
 with no $\sum_{c_\text{in}}$ to take the adjoint of, there is no in/out
 channel axis to swap. The inverted-residual block composes this with the
-pointwise convs, BatchNorm, and relu6; \texttt{mobilenetv2\_has\_vjp\_at}
-chains the whole network through \texttt{vjp\_comp\_at}.
+pointwise convs, BatchNorm, and relu6, and
+\texttt{mobilenetv2\_has\_vjp\_at} chains the whole network through
+\texttt{vjp\_comp\_at}.
 
 \medskip\noindent\textbf{The gap and how we close it.} The emitted graph
 is denoted and shown equal to \texttt{depthwise\_has\_vjp3}'s backward. Here
@@ -6007,28 +6140,29 @@ func.func @dw_back(%dy: tensor<1x2x4x4xf32>, %W: tensor<2x3x3xf32>)
 }
 \end{verbatim}
 
-\noindent Read it against Chapter~\ref{chap:cnn}'s \texttt{conv\_back}: that
+\noindent Read it against Chapter~\ref{chap:cnn}'s \texttt{conv\_back}. That
 one began with a \texttt{transpose \%W, dims = [1, 0, 2, 3]} to swap the in-
-and out-channel axes before reversing; this one has \emph{no transpose}. The
-\texttt{reshape} only adds the singleton input-channel axis the grouped form
-expects ($[c,k,k] \to [c,1,k,k]$), the \texttt{reverse} flips the two
-spatial axes, and \texttt{feature\_group\_count = 2} --- equal to the channel
-count --- tells the convolution to run each channel through its own filter,
-no mixing. That single attribute \emph{is} the depthwise structure; the
+and out-channel axes before reversing, and this one has \emph{no transpose}.
+The \texttt{reshape} only adds the singleton input-channel axis the grouped
+form expects ($[c,k,k] \to [c,1,k,k]$), the \texttt{reverse} flips the two
+spatial axes, and \texttt{feature\_group\_count = 2}, equal to the channel
+count, tells the convolution to run each channel through its own filter with
+no mixing. That single attribute \emph{is} the depthwise structure, and the
 bridge theorem is the claim that this graph computes
 \texttt{depthwise\_has\_vjp3}'s backward.
 
 \medskip\noindent\textbf{Caveats.}
 \begin{itemize}
-  \item \textbf{The depthwise convolution bridge is unconditional} --- it is
-    linear.
-  \item \textbf{relu6 is a smooth-point bridge} --- MobileNetV2's clamp to
+  \item \textbf{The depthwise convolution bridge is unconditional}, because
+    it is linear.
+  \item \textbf{relu6 is a smooth-point bridge.} MobileNetV2's clamp to
     $[0,6]$ has no derivative where a pre-activation sits exactly at $0$ or
     $6$, and the bridge may fail only on that measure-zero set.
   \item \textbf{Representative scale} (two channels at $4\times4$).
 \end{itemize}
 
 \section{ImageNet recipe}
+\label{sec:mnv2_imagenet}
 
 \imagenetphasenote
 
@@ -6036,8 +6170,9 @@ The Imagenette run above trained on $\sim$9.5K images. The same
 backbone scales to full 1000-class ImageNet exactly the way
 ResNet-34 did in Chapter~\ref{chap:residual}: the inverted-residual
 stack is unchanged, only the head widens to 1000 and the dataset and
-schedule grow. The spec mirrors
-\texttt{jax/MainMobilenetV2Imagenet.lean}:
+schedule grow. Everything in this section up to
+\S\ref{sec:mnv2_phase4} was measured on the phase-2 (Lean$\to$JAX)
+trainer, whose spec and recipe are:
 
 \begin{verbatim}
 -- Same inverted-residual backbone, 1000 classes instead of 10.
@@ -6080,112 +6215,74 @@ def mobilenetV2ImagenetConfig : TrainConfig where
 
 The one knob specific to MobileNet is \texttt{bf16Conv}. ResNet's
 convolutions cast to bfloat16 the instant the flag is on, but
-MobileNet's compute lives inside inverted-residual blocks --- a
+MobileNet's compute lives inside inverted-residual blocks (a
 $1\times1$ expansion, a depthwise $3\times3$, a $1\times1$
-projection --- whose convolutions originally ran in fp32 regardless.
+projection) whose convolutions originally ran in fp32 regardless.
 Routing them through the same \texttt{convdt} cast as the plain
-convolutions is what lets bf16 reach the bulk of the network: the
+convolutions is what lets bf16 reach the bulk of the network. The
 payoff is the whole inverted-residual block running $\sim2\times$
 faster on cuDNN, where the $1\times1$s (which are really matmuls)
 love bfloat16 and the depthwise $3\times3$ is a wash. The weight
-decay also drops to $4\times10^{-5}$ --- MobileNet's depthwise
-filters are tiny ($9$ weights per channel), and the $10^{-4}$ that
+decay also drops to $4\times10^{-5}$, because MobileNet's depthwise
+filters are tiny at nine weights per channel, and the $10^{-4}$ that
 suits ResNet over-regularizes them.
 
-\textbf{Compute budget.} On six RTX 4060 Ti (CUDA, bf16, batch
-$252$ across the six GPUs), steady-state throughput is
-$\sim$89\,ms per step, about $7.5$ minutes per epoch --- so the full
-90-epoch schedule completed in roughly 11 wall-clock hours. Even at
-this throughput the wall-clock win over the $9.5\times$-larger ResNet-34 is
-modest: depthwise convolution is memory-bound and
+\textbf{Compute budget.} On four RTX 4060 Ti (CUDA, bf16, batch 256),
+steady-state throughput is about $6.6$ minutes per epoch, so the
+paper's 350-epoch schedule takes roughly 45 wall-clock hours. The
+wall-clock win over the $9.5\times$-larger ResNet-34 is real but
+sub-proportional, exactly as \S\ref{sec:mnv2_runit} measured at small
+scale: depthwise convolution is memory-bound and
 low-arithmetic-intensity, so MobileNet's order-of-magnitude FLOP
-saving does not translate into a proportional wall-clock advantage on
-this hardware.
+saving buys a factor of two or three on this hardware rather than a
+factor of nine.
 
 \begin{center}
 \begin{tabular}{l l r r r r r}
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-6$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.5 min & 90 (cosine) & $\sim$11 hr & $68.77\%$ & $88.53\%$ \\
 4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$6.6 min & 350 (exp-decay) & $\sim$45 hr & $\mathbf{71.44\%}$ & $\mathbf{90.34\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent (The 350-epoch row is the paper-faithful full tier,
-discussed below. Its per-epoch time is \emph{lower} than the
-90-epoch run's despite using two fewer GPUs: that run predated the
-pinned-environment rebuild, and the newer cuDNN selects better
-bf16 kernels for the $1\times1$ convolutions than the stack the
-six-GPU run used.)
-The full 90-epoch run --- now on MobileNetV2's native
-RMSProp ($\rho=0.9$, $\mu=0.9$, $\varepsilon=1.0$) with crop/flip
-augmentation, the paper recipe --- completed at $\mathbf{68.77\%}$
-top-1 / $\mathbf{88.53\%}$ top-5 on the full 50{,}000-image
-validation split (EMA weights). That is only $+0.44$ over the earlier
-SGD run at the same schedule ($68.33\%$ / $88.17\%$): swapping in the
-paper's optimizer barely moved the needle, so the remaining few points
-to the $\sim$71\% paper number are the \emph{schedule} --- the paper
-trains far longer with RMSProp's exponential-decay LR and a heavier
-augmentation stack --- not the optimizer, precision, or pipeline. The
-RMSProp peak LR of $0.045$ took off cleanly with no collapse: the
-large $\varepsilon=1.0$ keeps the adaptive step well-damped (in sharp
-contrast to EfficientNet's $\varepsilon=10^{-3}$ in
-Chapter~\ref{chap:se}, which is far more LR-sensitive), so
-the $\sim$0.02 fallback was never needed. The validation curve has the
-usual shape --- a fast warmup climb, a long middle, and a final lift
-as the cosine schedule anneals to zero:
+\noindent The RMSProp peak LR of $0.045$ took off cleanly
+with no collapse, because the large $\varepsilon=1.0$ keeps the
+adaptive step well-damped (in sharp contrast to EfficientNet's
+$\varepsilon=10^{-3}$ in Chapter~\ref{chap:se}, which is far more
+LR-sensitive), so the $\sim$0.02 fallback was never needed.
 
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Validation accuracy (\%)},
-    xmin=0, xmax=91, ymin=0, ymax=95,
-    xtick={0,15,30,45,60,75,90}, ytick={20,40,60,80},
-    legend pos=south east, legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small}, label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(5,34.43) (6,39.02) (7,42.76) (8,45.35) (13,52.59) (14,53.58) (15,53.83) (16,54.63) (21,56.73) (22,57.33) (23,57.39) (24,57.80) (29,58.78) (30,59.21) (31,59.71) (32,60.04) (37,60.77) (38,61.47) (39,61.20) (40,61.67) (45,61.99) (46,62.73) (47,62.80) (48,62.88) (53,63.73) (54,64.23) (55,64.22) (56,64.65) (61,65.26) (62,65.51) (63,65.44) (64,65.87) (69,66.64) (70,66.76) (71,67.16) (72,67.37) (75,67.60) (84,68.61) (85,68.75) (86,68.73) (87,68.84) (88,68.86) (89,68.84) (90,68.83)
-};
-\addlegendentry{top-1}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(5,60.54) (6,65.37) (7,68.80) (8,71.29) (13,77.44) (14,78.10) (15,78.59) (16,78.85) (21,80.74) (22,80.87) (23,81.23) (24,81.70) (29,82.27) (30,82.46) (31,82.71) (32,83.10) (37,83.59) (38,83.99) (39,83.70) (40,84.19) (45,84.49) (46,84.83) (47,84.94) (48,84.98) (53,85.58) (54,85.64) (55,85.64) (56,86.07) (61,86.45) (62,86.52) (63,86.65) (64,86.85) (69,87.27) (70,87.47) (71,87.56) (72,87.67) (75,87.84) (84,88.51) (85,88.53) (86,88.62) (87,88.60) (88,88.64) (89,88.63) (90,88.63)
-};
-\addlegendentry{top-5}
-\end{axis}
-\end{tikzpicture}
-\end{center}
-
-\noindent MobileNetV2 / ImageNet-1k validation accuracy per epoch
-(bf16, 6$\times$ 4060 Ti, RMSProp).
+\medskip\noindent Two evaluations get reported for a run like this and
+they are not the same measurement, so it is worth saying which is which
+once. The \emph{curve} below is the in-loop evaluation the trainer runs
+at the end of an epoch, on the 49{,}920 validation images that survive
+batching, using the live weights. The \emph{headline} is an offline pass
+over the full 50{,}000 images using the EMA weights. The second is the
+number to quote against a paper, and the first is the one to read for
+shape.
 
 \subsection*{The paper-faithful tier: 350 epochs}
 
-The 90-epoch run above is a validation tier, and it is not merely a
-shorter version of the paper recipe --- it differs on three rows at
-once. The \texttt{full} recipe fixes all three: label smoothing
-$0.1\to0$ (Sandler et al.\ used none), cosine $\to$ the paper's
-exponential decay ($\times0.98$ per epoch), and $90\to350$ epochs.
+The recipe above is the paper's, and the schedule is the part of it that
+is easiest to get wrong. Sandler et al.\ use no label smoothing, an
+exponential decay of $\times0.98$ per epoch, and on the order of 350
+epochs, and those three go together rather than being independently
+adjustable. Shortening the schedule forces the other two.
 
-The third change is what forces the first two. Under
+The reason is that under
 $\times 0.98$/epoch the learning rate after $90$ epochs is still
-$0.045 \times 0.98^{85} \approx 8.1\times10^{-3}$ --- barely annealed,
+$0.045 \times 0.98^{85} \approx 8.1\times10^{-3}$, barely annealed,
 with none of the end-of-schedule polish a cosine run has already
-collected by then. That is precisely why the short tier substituted
-cosine: the paper's schedule is not a sensible thing to truncate. Only
-over $350$ epochs does the exponential reach
+collected by then. Only over $350$ epochs does the exponential reach
 $0.045 \times 0.98^{345} \approx 4.2\times10^{-5}$ and behave as
-intended.
+intended. So a shortened run of this recipe has to substitute cosine to
+be worth anything at all, which is a different experiment rather than a
+cheaper version of the same one.
 
 Run end to end on four 4060 Ti it lands at $\mathbf{71.44\%}$ top-1
-/ $\mathbf{90.34\%}$ top-5 on the full 50{,}000-image validation
-split --- $\mathbf{+2.67}$ over the 90-epoch tier, and
-$\mathbf{0.56}$ points short of the paper's $72.0\%$:
+and $\mathbf{90.34\%}$ top-5 on the full 50{,}000-image validation
+split, $\mathbf{0.56}$ points short of the paper's $72.0\%$:
 
 \begin{center}
 \begin{tikzpicture}
@@ -6214,54 +6311,129 @@ $\mathbf{0.56}$ points short of the paper's $72.0\%$:
 \noindent MobileNetV2 / ImageNet-1k, paper-faithful 350-epoch
 exponential-decay run (bf16, 4$\times$ 4060 Ti, RMSProp).
 
-Read against the 90-epoch curve above, the two tell the story of
-the schedule directly. At epoch $90$ this run is at $66.31\%$ ---
-$2.5$ points \emph{behind} the cosine tier at the same epoch,
-because it is deliberately still hot. It passes the short tier's
-final number around epoch $120$, and everything after that is
-territory the 90-epoch schedule could not reach at all. The last
-$150$ epochs are worth only $\sim0.7$ points, though: the curve is
-flat from about epoch $250$, so the gap that remains is no longer
-schedule.
+The curve says where the budget went. Two thirds of the final accuracy
+is in place by epoch $50$, the run is still climbing at $150$, and it is
+flat from about epoch $250$ onward, so the last $100$ epochs are worth
+almost nothing and the schedule is genuinely exhausted rather than cut
+short. Whatever the remaining gap to the paper is, it is not length.
 
-That residual $0.56$ is the honest part of the result. The
-hypothesis this chapter carried --- that the whole $-3.23$ gap was
-training budget --- is now measured, and it was \emph{mostly} right:
-schedule bought $2.67$ of the $3.23$. What is left is small enough
-to sit inside the known recipe deviations rather than needing a new
-explanation. Two are documented and shared across every net in this
-book: the resize is not antialiased on either the train or eval path
-(timm's is; worth $\sim0.2$ points), and the running-BN decay is
-fixed at $0.99$ where PyTorch's default works out to $0.9$. Neither
-is worth a retrain of the sweep to chase.
+That residual $0.56$ is the honest part of the result. It is small
+enough to sit inside the known recipe deviations rather than needing a
+new explanation. Two of those are documented and shared across every net
+in this book. The resize is not antialiased on either the train or eval
+path, where timm's is, worth $\sim0.2$ points. The running-BN decay is
+fixed at $0.99$ where PyTorch's default works out to $0.9$. Neither is
+worth a retrain of the sweep to chase.
+
+\subsection*{Phase 4: the verified trainer}
+\label{sec:mnv2_phase4}
+
+Everything above this point is the phase-2 Lean$\to$JAX trainer. The
+phase-4 peer, which trains the same network through the proof-rendered
+StableHLO that \S\ref{sec:mnv2_runit} ran at Imagenette scale, exists and
+builds. It is
+\texttt{apps/imagenette/MainMobileNetV2Imagenet.lean}, built as
+\texttt{lake build mobilenetv2-imagenet-verified}:
+
+\begin{verbatim}
+-- Same inverted-residual backbone, 1000 classes instead of 10.
+def mobilenetv2ImagenetVerified : VerifiedNetSpec where
+  name       := "MobileNetV2 (ImageNet-1k)"
+  slug       := "mobilenetv2in"
+  nClasses   := 1000
+  data       := .imagenet
+  shimScript := "generated_mobilenet_v2_imagenet_shim.py"
+  layers     := [ ... the Imagenette stack, 1000-class head ... ]
+
+-- 350 epochs at 64 PER DEVICE; four replicas give the global 256.
+-- 350 because that is the schedule the phase-2 number above was measured on.
+def mobilenetv2ImagenetConfig : VerifiedConfig where
+  epochs    := 350
+  batchSize := 64
+
+def main (argv : List String) : IO Unit :=
+  mobilenetv2ImagenetVerified.toNet.trainAdamSched
+    mobilenetv2ImagenetConfig (argv.head?.getD "data") ... variant
+\end{verbatim}
+
+\noindent \texttt{slug} names
+\texttt{verified\_mlir/mobilenetv2in\_<variant>\_train\_step.mlir}, the
+rendered graph, and \texttt{shimScript} names this net's own augmentation
+shim rather than ResNet-34's, both for the reasons
+\S\ref{sec:r34_phase4} gives. The head is the only parameter shape that
+moves, from $1280 \times 10$ to $1280 \times 1000$, which takes the count
+from 2.24M to \textbf{3,504,872} and matches the JAX reference exactly.
+The BatchNorm layout is required to be byte-identical to the Imagenette
+net's, and a \texttt{\#guard} enforces it, because the running-stat region
+is positional and a drift there would misalign every frozen statistic at
+evaluation.
+
+\textbf{The variant selects the optimizer, and one of them is the
+paper's.} At \texttt{rms64} the driver loads
+\texttt{mobilenetv2in\_rms64\_train\_step.mlir}, which has the recipe
+tabulated below rendered into it: RMSProp at $\rho = 0.9$, $\mu = 0.9$,
+$\varepsilon = 1.0$ and coupled weight decay $4 \times 10^{-5}$, at peak
+LR $0.045$ with a 5-epoch warmup and $\times 0.98$ per epoch after it.
+Those constants live in \texttt{mnv2RmsSchedule} and
+\texttt{mnv2RmsHyper}, shared with the Imagenette peer so the two cannot
+carry different values. At \texttt{adam64} it is AdamW at $10^{-3}$
+instead, which is the default because it matches the other four
+ImageNet drivers.
+
+\medskip\noindent\textbf{The schedule is 350 epochs because the run it
+has to match is.} The point of a phase-4 run is not to train this network
+once, it is to reproduce the phase-2 result on the verified path, and the
+phase-2 result above is the paper-faithful 350-epoch exponential-decay
+tier at $71.44\%$. A 300-epoch phase-4 run would not answer that
+question. \texttt{totalSteps} is what the schedule anneals over, so 300
+against 350 is a different learning-rate curve end to end rather than a
+shorter version of the same one, and the two numbers would not be
+comparable.
+
+\medskip\noindent\textbf{What it has not done is run.} No phase-4
+ImageNet result exists for this network, which is why every accuracy
+above comes from phase 2. What is measured is the throughput, and the
+schedule follows from it:
+
+\begin{center}
+\begin{tabular}{l r r r r}
+\hline
+Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
+\hline
+4$\times$ 4060 Ti (CUDA)  & 188 & 15.7 & $\sim$91.5 h (3.8 d) & TBD \\
+2$\times$ 7900 XTX (ROCm) & --- & ---  & ---                  & TBD \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\textbf{[TODO: run \texttt{mobilenetv2-imagenet-verified}.]}
 
 \subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
 
 The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
 \emph{2018-era} recipe of the SGD lineage: momentum, cosine polish,
 label smoothing. MobileNetV2 is a 2018 paper too, but from the other
-side of a fork: Google's TensorFlow/Inception training tradition ---
-RMSProp with a huge $\varepsilon$, an exponential LR staircase, a
+side of a fork. Google's TensorFlow and Inception training tradition
+runs RMSProp with a huge $\varepsilon$, an exponential LR staircase, a
 tiny weight decay, and nothing beyond crop and flip on the data
 side. So this diff is not a time jump but two contemporary recipes
-side by side --- and the base that the next chapter's 2019
-EfficientNet recipe is built on. The \texttt{.train} entry point is
-identical; every row is a one-line \texttt{NetSpec} or
-\texttt{TrainConfig} change:
+side by side, and it is the base that the next chapter's 2019
+EfficientNet recipe is built on. The entry point is the same on both
+paths, and every row below is one argument or one field:
 
 \begin{center}
 \begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
 \hline
 Knob & ResNet-34 (2018) & MobileNetV2 (2018) & What the MNv2 choice buys \\
 \hline
-Backbone      & basic block, 21.8\,M   & inverted residual, 3.5\,M     & depthwise $3\times3$ at the wide point between $1\times1$s --- $1/6$ the parameters \\
-Optimizer     & SGD + momentum $0.9$   & RMSProp                       & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}1.0$ --- the huge $\varepsilon$ keeps the adaptive step damped (B0 shrinks it to $10^{-3}$ and pays for it) \\
-Peak LR       & $0.1$                  & $0.045$                       & RMSProp's scale --- not comparable to SGD's $0.1$ \\
+Backbone      & basic block, 21.8\,M   & inverted residual, 3.5\,M     & depthwise $3\times3$ at the wide point between $1\times1$s, at $1/6$ the parameters \\
+Optimizer     & SGD + momentum $0.9$   & RMSProp                       & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}1.0$, where the huge $\varepsilon$ keeps the adaptive step damped (B0 shrinks it to $10^{-3}$ and pays for it) \\
+Peak LR       & $0.1$                  & $0.045$                       & RMSProp's scale, not comparable to SGD's $0.1$ \\
 LR schedule   & cosine to zero         & exponential, $\times0.98$ per epoch & the TF-lineage staircase the whole family inherits \\
-Epochs        & 90                     & $\sim$300--400                & the long-haul schedule; most of the $-3.2$-point gap above is this \\
-Weight decay  & $10^{-4}$, all params  & $4\times10^{-5}$              & depthwise filters are 9 weights per channel --- $10^{-4}$ over-regularizes them \\
+Epochs        & 90                     & $\sim$300--400                & the long-haul schedule, and the row the exponential decay above makes non-negotiable \\
+Weight decay  & $10^{-4}$, all params  & $4\times10^{-5}$              & depthwise filters are 9 weights per channel, and $10^{-4}$ over-regularizes them \\
 Label smoothing & $0.1$                & none                          & Sandler et al.\ used no smoothing at all \\
-Augmentation  & RRC + hflip            & RRC + hflip                   & unchanged --- no learned policy, no mixing; the leanest recipe in this book \\
+Augmentation  & RRC + hflip            & RRC + hflip                   & unchanged, with no learned policy and no mixing, the leanest recipe in this book \\
 \hline
 \end{tabular}
 \end{center}
@@ -6270,29 +6442,21 @@ Augmentation  & RRC + hflip            & RRC + hflip                   & unchang
 at $224$, running-BN evaluation, bf16 matmul and convolution, and our
 5-epoch warmup (an addition to both papers).
 
-One honesty note: the $68.77\%$ run above is the 90-epoch validation
-tier and predates two of these rows --- it ran the cosine schedule
-with label smoothing $0.1$. The paper-faithful full tier (exponential
-decay, no smoothing, 350 epochs) is the $71.44\%$ measured earlier in
-this section, and it settles the expectation those rows carried: the
-gap was training budget, not model or optimizer, for $2.67$ of its
-$3.23$ points.
-
-The through-line of this fork: nothing here regularizes harder ---
+The through-line of this fork is that nothing here regularizes harder.
 MobileNetV2's recipe is the SGD recipe's contemporary, tuned for a
 network $1/6$ the size, and its distinctive knobs (adaptive
 optimizer, staircase decay, tiny selective-in-spirit weight decay)
 are the ones EfficientNet inherits and ConvNeXt eventually replaces
 wholesale. The 2019--2022 tables that follow all diff against the
-same 2018 SGD column; this one shows where their other half came
+same 2018 SGD column. This one shows where their other half came
 from.
 
-The general pattern ---  deeper + narrower + per-channel conv +
-surrounding $1 \times 1$ expansion --- carries forward to MobileNet
-V3 and the EfficientNet family. All of those add their own small
-modifications on top (SE blocks, Swish activations, compound scaling)
-but the core depthwise-separable scaffolding is exactly what this
-chapter formalized.
+The general pattern is deeper and narrower, with a per-channel conv
+between surrounding $1 \times 1$ expansions, and it carries forward to
+MobileNet V3 and the EfficientNet family. All of those add their own
+small modifications on top (SE blocks, Swish activations, compound
+scaling) but the core depthwise-separable scaffolding is exactly what
+this chapter formalized.
 
 \section{Side quest: MobileNet V4}
 
@@ -6302,20 +6466,20 @@ Six years on, MobileNetV4 (Qin et al.\ 2024,
 \href{https://arxiv.org/abs/2404.10518}{arXiv:2404.10518}) revisits
 this chapter's block. Its central move is the \emph{universal
 inverted bottleneck} (UIB): take the inverted residual and make two
-depthwise positions optional --- one before the expansion, one after
-it. Four instantiations fall out of that one template: both
-depthwise convs on (\emph{ExtraDW}), only the leading one
-(\emph{ConvNeXt} --- this chapter's sandwich rearranged into
-Chapter~\ref{chap:layernorm}'s block shape), neither (a plain
-\emph{FFN} --- two $1\times1$s), or only the inner one (exactly
-MobileNetV2's block). The \texttt{jax/} folder ships the faithful
+depthwise positions optional, one before the expansion and one after
+it. Four instantiations fall out of that one template. Both
+depthwise convs on is \emph{ExtraDW}. Only the leading one is
+\emph{ConvNeXt}, this chapter's sandwich rearranged into
+Chapter~\ref{chap:layernorm}'s block shape. Neither is a plain
+\emph{FFN} of two $1\times1$s. Only the inner one is exactly
+MobileNetV2's block. The \texttt{jax/} folder ships the faithful
 Conv-Medium as a full ImageNet trainer
 (\texttt{jax/MainMobilenetV4Imagenet.lean}), transcribed block for
 block from timm's \texttt{mobilenetv4\_conv\_medium}: $\sim$9.7M
 parameters, a fused-IB stage at high resolution, then 21 UIB blocks
 whose per-block instantiation is visible right in the
-\texttt{NetSpec} --- and the same \texttt{.train} entry point as
-every other net in this book. What changed from 2018 to 2024 is at
+\texttt{NetSpec}, driven by the same entry point as every other net
+in this book. What changed from 2018 to 2024 is at
 least as much recipe as architecture:
 
 \begin{center}
@@ -6325,13 +6489,13 @@ Knob & MobileNetV2 (2018) & MNv4-Conv-M (2024) & What the v4 choice buys \\
 \hline
 Block         & inverted residual      & UIB (+ fused IB stage)        & the two optional depthwise slots subsume MNv2's block, ConvNeXt's, and an FFN in one template \\
 Parameters    & 3.5\,M                 & 9.7\,M                        & ``mobile'' now means fits-the-phone, not smallest-possible \\
-Paper top-1   & $72.0\%$               & $79.9\%$                      & non-distilled; distillation pushes the family higher still \\
+Paper top-1   & $72.0\%$               & $79.9\%$                      & non-distilled, and distillation pushes the family higher still \\
 Optimizer     & RMSProp ($\varepsilon{=}1.0$) & AdamW $\beta(0.9, 0.999)$ & the TF-lineage staircase gives way to the transformer-era default \\
 Peak LR       & $0.045$ @ 256          & $0.004$ @ 4096                & effective batch 4096 (run here as $512 \times 8$ grad-accum) \\
 LR schedule   & exponential, $\times0.98$ per epoch & cosine, 5-epoch warmup & the anneal every post-2020 recipe in this book uses \\
 Epochs        & $\sim$300--400         & 500                           & the family's long-haul habit, taken further \\
-Weight decay  & $4\times10^{-5}$       & $0.1$, skip norm/bias         & $2500\times$ stronger, applied selectively --- AdamW makes heavy decay usable \\
-Augmentation  & RRC + hflip            & + RandAugment (N2, m15, p0.7) & heavy learned augmentation; still no Mixup/CutMix for Conv-M \\
+Weight decay  & $4\times10^{-5}$       & $0.1$, skip norm/bias         & $2500\times$ stronger, applied selectively, because AdamW makes heavy decay usable \\
+Augmentation  & RRC + hflip            & + RandAugment (N2, m15, p0.7) & heavy learned augmentation, and still no Mixup/CutMix for Conv-M \\
 Label smoothing & none                 & $0.1$                         & standard by 2024 \\
 Stochastic depth & none                & drop-path $0.075$             & linear ramp over the 21 UIB blocks \\
 EMA           & none                   & decay $0.9999$, warmup-corrected & weight averaging (with the BN buffers shadowed, per Ch~\ref{chap:se}'s lesson) \\
@@ -6342,27 +6506,28 @@ EMA           & none                   & decay $0.9999$, warmup-corrected & weig
 \noindent The direction of travel matches the recipe tables closing
 Chapters~\ref{chap:se} and~\ref{chap:layernorm}: by 2024 the mobile
 lineage has converged on the same transformer-era training
-recipe as everything else --- AdamW at large effective batch,
-cosine, heavy selective decay, RandAugment, EMA --- while the block
+recipe as everything else (AdamW at large effective batch,
+cosine, heavy selective decay, RandAugment, EMA) while the block
 template generalized enough to absorb its rivals.
 
 \textbf{One trap in that EMA row.} Seeding the shadow at the
 initialization and decaying it away leaves $d^{\,t}$ of that
-initialization behind --- and since a random network and a trained one
-are not joined by a low-loss path, even a few percent of it puts the
-average at \emph{chance}, not merely behind. Conv-M trips this where
-longer runs do not: gradient accumulation leaves it only $312$ steps
-per epoch, so $31{,}200$ total against a time constant of $10{,}000$.
-The fix is TensorFlow's, which this family's reference implementations
-assume --- ramp the decay, $d_t = \min\!\big(d,\ (1+t)/(10+t)\big)$.
+initialization behind. A random network and a trained one are not
+joined by a low-loss path, so even a few percent of it puts the
+average at \emph{chance} rather than merely behind. Conv-M trips this
+where longer runs do not, because gradient accumulation leaves it only
+$312$ steps per epoch, so $31{,}200$ total against a time constant of
+$10{,}000$. The fix is TensorFlow's, which this family's reference
+implementations assume: ramp the decay,
+$d_t = \min\!\big(d,\ (1+t)/(10+t)\big)$.
 
-\texttt{mobilenet-v4-imagenet} ships two tiers: \textbf{100 epochs}
-(recipe \texttt{default} --- a reduced-regularization confidence
-tier: wd $0.05$, dropout $0.1$, RandAugment m9, since the paper's
-full pack underfits short schedules) and \textbf{500 epochs}
-(recipe \texttt{full} --- the paper recipe end to end). The
-100-epoch tier is run here; the $79.9\%$ headline is a 500-epoch
-number:
+\texttt{mobilenet-v4-imagenet} ships two tiers. \textbf{100 epochs}
+(recipe \texttt{default}) is a reduced-regularization confidence
+tier at wd $0.05$, dropout $0.1$ and RandAugment m9, since the paper's
+full pack underfits short schedules. \textbf{500 epochs}
+(recipe \texttt{full}) is the paper recipe end to end. The
+100-epoch tier is the one run here, and the $79.9\%$ headline is a
+500-epoch number:
 
 \begin{center}
 \begin{tabular}{l l r r r r r}
@@ -6375,16 +6540,16 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \end{tabular}
 \end{center}
 
-\noindent The 100-epoch tier lands at $\mathbf{75.48\%}$ top-1 /
+\noindent The 100-epoch tier lands at $\mathbf{75.48\%}$ top-1 and
 $\mathbf{92.37\%}$ top-5 on the full 50{,}000-image validation split
 (EMA weights). Set against this chapter's other half that is the
 whole six-year argument in two rows: $\mathbf{+4.04}$ points over
 MobileNetV2's paper-faithful $71.44\%$, from $2.8\times$ the
-parameters and \emph{less than half} the epochs --- $100$ against
-$350$, $16$ wall-clock hours against $45$. It also clears
+parameters and \emph{less than half} the epochs, $100$ against
+$350$ and $16$ wall-clock hours against $45$. It also clears
 ConvNeXt-T's 80-epoch $75.93\%$-class territory at a third of the
 parameters, which is the comparison the UIB template is really
-making: by 2024 the mobile line is not trading accuracy for size so
+making. By 2024 the mobile line is not trading accuracy for size so
 much as reaching the same accuracy with a block that happens to be
 cheap.
 
@@ -6416,14 +6581,83 @@ cheap.
 reduced-regularization tier (bf16, 4$\times$ 4060 Ti, AdamW,
 effective batch $4096$ via $512\times8$ gradient accumulation).
 
-\textbf{[TODO --- 500 epochs.]} \texttt{mobilenet-v4-imagenet full}.
-The tier above is \emph{detuned} by construction --- wd $0.05$ against
-the paper's $0.1$, dropout $0.1$ against $0.2$, RandAugment $m9$
-against $m15$ --- so its $75.48\%$ is not a reproduction of
-$79.9\%$. Its accuracy is flat over the last ten epochs
-($75.41 \to 75.51 \to 75.51$): the schedule is exhausted, and the
+\textbf{[TODO, 500 epochs.]} \texttt{mobilenet-v4-imagenet full}.
+The tier above is \emph{detuned} by construction, at wd $0.05$ against
+the paper's $0.1$, dropout $0.1$ against $0.2$, and RandAugment $m9$
+against $m15$, so its $75.48\%$ is not a reproduction of
+$79.9\%$. Its in-loop curve is flat over the last ten epochs
+($75.41 \to 75.51 \to 75.51$). The schedule is exhausted, and the
 remaining points live in the regularization the \texttt{full} tier
 restores.
+
+\subsection*{Phase 4: MobileNetV4 on the verified path}
+\label{sec:mnv4_phase4}
+
+Everything above in this side quest is the phase-2 Lean$\to$JAX trainer
+running the faithful Conv-Medium. The phase-4 peer exists as of this
+writing, and the first thing to say about it is what it is \emph{not}.
+
+\textbf{It is Conv-S, and the numbers above are Conv-M.} The block table
+this book renders and proves against is
+MobileNetV4-Conv-Small, 4.1M parameters, the one
+\texttt{mobilenetv4Verified} trains on Imagenette. Conv-M is a different
+network at $\sim$9.7M, and it lives in \texttt{jax/} with no verified
+peer. The ImageNet spec is therefore Conv-S with a 1000-class head,
+built the way \S\ref{sec:mnv2_phase4} built MobileNetV2's and the way
+Chapter~\ref{chap:residual} built ResNet-50's: the trunk is copied
+unchanged from the Imagenette spec, a \texttt{\#guard} pins every
+parameter shape but the head against it, and the head moves
+$1280{\times}10 \to 1280{\times}1000$, taking the count from
+$4{,}124{,}426$ to $\mathbf{5{,}392{,}616}$. \textbf{So the $75.48\%$
+above is not this network's target and must not be read as one.} Conv-S
+has no published ImageNet number here at all, which is why the row below
+has no gap-to-reference column.
+
+\begin{verbatim}
+def mnv4ImagenetVerified : VerifiedNetSpec where
+  name       := "MobileNetV4-Conv-S (ImageNet-1k)"
+  slug       := "mnv4in"
+  nClasses   := 1000
+  data       := .imagenet
+  shimScript := "generated_mobilenet_v4_imagenet_shim.py"
+  layers     := [ ... the Imagenette UIB stack, 1000-class head ... ]
+
+def main (argv : List String) : IO Unit :=
+  mnv4ImagenetVerified.toNet.trainAdamSched
+    { mnv4ImagenetConfig with batchSize := bs, epochs := epochs }
+    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
+\end{verbatim}
+
+\noindent That is \texttt{apps/imagenette/MainMobilenetV4Imagenet.lean},
+built as \texttt{lake build mnv4-imagenet-verified}. The renders come
+from the same chain and the same block table as the three 10-class
+artifacts, differing only in \texttt{nClasses}, the batch and the slug,
+which is why adding them was three \texttt{\#eval} lines rather than a
+new proof chain.
+
+\textbf{It runs.} All three artifacts compile under PJRT, the shim feeds
+it, and a first step lands at loss $6.99$ against $\ln 1000 = 6.91$,
+with evaluation at $0.106\%$ top-1 over the 49{,}920-image validation
+split, which is $1/1000$ to two figures. Those are the numbers a
+correctly wired 1000-class network produces before it has learned
+anything, and they are the whole of what has been measured about its
+accuracy so far.
+
+\begin{center}
+\begin{tabular}{l r r r r}
+\hline
+Box & ms/step & min/epoch & 100 epochs & Val top-1 \\
+\hline
+4$\times$ 4060 Ti (CUDA), global 256 & $\sim$147\,* & $\sim$12.3\,* & $\sim$20 h (0.9 d)\,* & TBD \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent {\small *\,Estimated, not measured: scaled from this network's
+measured single-card throughput by MobileNetV2's four-card efficiency,
+since no data-parallel variant is rendered for MobileNetV4 yet.}
+
+\medskip\noindent\textbf{[TODO: run \texttt{mnv4-imagenet-verified}.]}
 
 \chapter{EfficientNet}
 \label{chap:se}
@@ -6782,6 +7016,16 @@ EfficientNet-B0  &  7.16M  & 938 KB   &  940 ms   & 6.2 h   & 87.58\% \\
 \hline
 \end{tabular}
 \end{center}
+
+\noindent \textbf{Provenance.} Every row above is a phase-3 measurement,
+taken on IREE before the XLA port and kept together so the comparison
+stays like-for-like. Two of the rows have since been re-measured on the
+verified XLA path and moved: ResNet-34 in \S\ref{sec:r34_runit} and
+MobileNet V2 in \S\ref{sec:mnv2_runit}, where the render sizes in
+particular are much larger, because they are now
+\texttt{pretty(provenGraph)} rather than the older hand-written
+emitter's output. The remaining rows move when their own chapters are
+re-measured.
 
 - \textbf{EfficientNet-B0 is 3.2$\times$ the parameters of MobileNet V2}
   for a 0.5 percentage-point accuracy lift (87.58\% vs 87.09\%). On a
@@ -7611,6 +7855,11 @@ ConvNeXt-T       & 27.83M  & 790 KB   & 2030 ms   & 13.3 h   & 84.94\% \\
 \hline
 \end{tabular}
 \end{center}
+
+\noindent As in Chapter~\ref{chap:se}, every row is a phase-3 IREE
+measurement. The ResNet-34 and MobileNet V2 rows have been re-measured
+on the verified XLA path in \S\ref{sec:r34_runit} and
+\S\ref{sec:mnv2_runit}.
 
 \begin{itemize}
   \item \textbf{ConvNeXt-T is the slowest per step} (2030 ms vs
@@ -9222,6 +9471,11 @@ ViT-Tiny         &  5.53M  & 742 KB   &  360 ms   & 2.3 h   & 71.70\% \\
 \hline
 \end{tabular}
 \end{center}
+
+\noindent As in Chapter~\ref{chap:se}, every row is a phase-3 IREE
+measurement. The ResNet-34 and MobileNet V2 rows have been re-measured
+on the verified XLA path in \S\ref{sec:r34_runit} and
+\S\ref{sec:mnv2_runit}.
 
 ViT-Tiny is the fastest-per-step and the lowest-accuracy. That's
 the data-hunger effect: 9469 training images is tiny for a

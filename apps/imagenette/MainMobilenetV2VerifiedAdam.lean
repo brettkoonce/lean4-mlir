@@ -24,8 +24,9 @@ non-empty, so the generic `trainAdamSched` threads per-layer EMA batch stats and
 `@mobilenetv2_fwd_eval` (affine BN with the running stats), class-batch-independent on the sorted
 val set. Weight decay is applied uniformly (incl. BN/bias), matching the ViT path.
 
-Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-verified-adam data` (loader reads
-`data/imagenette`). For the XLA/PJRT lowerer — measurably faster on this box, and the only path to
+Run (GPU): `.lake/build/bin/mobilenetv2-verified-adam data` (loader reads `data/imagenette`).
+XLA/PJRT is the default lowerer; `LEAN_MLIR_LOWERER=iree` selects the other one. The captured
+80-epoch run the blueprint's §6.1 prints is `runs/2026-08-12-mnv2-imagenette-xla-cuda/`.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
