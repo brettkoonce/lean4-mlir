@@ -170,8 +170,8 @@ Chapter-wide ranking, to pick what's next:
 | On Verification (app C) | 17.8 | 36 | **needs an argument rethink, see §6** |
 | Getting started (app B) | 17.0 | 8 | flourishes cut, joinery not |
 | Data availability (app A) | 16.4 | 14 | |
-| EfficientNet (ch7) | 10.5 | 12 | 48 em-dash raw |
-| MobileNetV2 (ch6) | 9.4 | 10 | **▶ NEXT** — 51 em-dash raw, max sentence 87 w |
+| MobileNetV2 (ch6) | 0.0 | 0 | **DONE** |
+| EfficientNet (ch7) | 10.5 | 12 | **▶ NEXT** — 48 em-dash raw |
 | Bestiary | 8.1 | 58 | 110 em-dash raw, the biggest single job left |
 | Vision Transformer (ch9) | 7.1 | 16 | 46 em-dash raw |
 | ConvNeXt (ch8) | 6.1 | 16 | 31 em-dash raw, but one 142-word sentence |
@@ -179,11 +179,14 @@ Chapter-wide ranking, to pick what's next:
 Re-measured 2026-08-12 with the §3 script, so these supersede the older
 per-1k figures above. ▶ Max sentence is the metric this doc keeps forgetting:
 ch1/ch2 sit at 52–54 words, ch5 finished at 94, ConvNeXt has a 142.
-| ConvNeXt | 11.9 | 31 | |
-| Vision Transformer | 8.7 | 59 | |
 
-Watch the `max sentence length` too — several chapters have single
-sentences over 100 words (MNIST 2D CNN has one at 133).
+⚠ **The §3 script over-counts max sentence**, two ways, and both inflate it.
+It does not strip `enumerate`/`itemize`, so a lead-in plus all its list items
+reads as one sentence; and its split regex `(?<=[.!?])\s+` does not fire after
+`.)`, so a sentence ending in a parenthetical swallows the next one. Strip the
+list environments and normalise `.)` → `).` before splitting. Re-measured that
+way: ch2 55, ch4 70, ch5 96, ch6 63 (and ch6's 63 is itself a colon lead-in
+joined across a table, so its real max is ~55).
 
 ---
 
@@ -372,7 +375,229 @@ section, and the phase-2 sections get eaten one at a time.
 
 ---
 
-## 4a-ter. ▶▶ NEXT: Chapter 6, MobileNetV2
+## 4a-quater. Chapter 6, MobileNetV2: DONE (2026-08-12)
+
+51 em-dashes / 10 prose semicolons → **0 / 0**. Max sentence 87 → 55 w.
+`\phasethreenote` markers 4 → 3. latexmk 0 errors, 0 undefined refs.
+
+⭐ **§6.1 is a fresh 80-epoch XLA capture** (`runs/2026-08-12-mnv2-imagenette-xla-cuda/`),
+and the result is much better than the retired IREE number the chapter had:
+**89.25% top-1 / 98.68% top-5 in 35 minutes** on one 4060 Ti, against the old
+87.09%. Run `mobilenetv2-verified-adam` (NOT `mobilenetv2-verified`, which is one
+of the three `.train` drivers that report chance). ~26 s/epoch, ~90 ms/step.
+
+▶ **That reframes the chapter's thesis.** MNv2 is 0.46 points of top-1 behind
+R34 (89.71%), not 3.2, and it BEATS R34 on top-5 (98.68 vs 98.27) at 9.5× fewer
+parameters and 2.4× the throughput. The old "you give up a couple of points"
+framing was an artifact of the stale IREE run.
+
+⚠ **The lakefile's own estimate was 3× too slow** (`probeXla ... epochs := 80` says
+XLA 1h25m; actual 35 min). That comment is annotated "measured on the PRE-§2m net",
+i.e. before the 52 conv biases were dropped. Don't budget off it.
+
+⭐ **What replaced the fiction.** §6.3 printed `mobilenetV2 : NetSpec` +
+`TrainConfig`; now it is the real `mobilenetv2Verified : VerifiedNetSpec` +
+`trainAdamSched` in §5.3's shape. ⚠ The *prose* was wrong too, not just the
+listing: it described `.invertedResidual ic oc t stride n` (the phase-2
+`Types.lean` `Layer`), where the verified type is `.invertedResidualNB ic mid oc
+stride` — expanded width, not ratio, and one constructor is one block.
+▶ **Check the prose around every listing you replace, not just the listing.**
+
+**§6.4 restructured on brett's instruction (2026-08-12):**
+
+- The **90-epoch/cosine tier is deleted** — table row, its 44-line plot, the
+  68.77%/88.53% prose, the +0.44-over-SGD comparison, and the "One honesty note"
+  paragraph. ⚠ Four other passages leaned on it and had to be rewritten, not just
+  cut: the 350-ep tier's opening ("The 90-epoch run above is a validation tier"),
+  its "+2.67 over the 90-epoch tier", the "−3.23 gap was training budget" analysis,
+  and the recipe-diff table's Epochs row.
+- **Phase 4 is now its own labelled subsection at the END** (`sec:mnv2_phase4`),
+  immediately before "What the MobileNetV2 recipe changes", mirroring ch5 where
+  `sec:r34_phase4` also closes the ImageNet section. Its lead-in flipped from
+  "why the numbers below are still JAX" to "What it has not done is run".
+
+### ⭐⭐ A phase-4 config's job is to MATCH ITS PHASE-2 RUN (brett, 2026-08-12)
+
+`mobilenetv2ImagenetConfig.epochs` was **300**; it is now **350**. The phase-2 number this net is
+measured against is the paper-faithful **350-epoch** tier (71.44% / 90.34%), so a 300-epoch
+phase-4 run answers a question nobody asked. `totalSteps := cfg.epochs * nb / accK` is what the
+schedule anneals over, so 300 vs 350 is a **different LR curve end to end**, not a prefix — the
+two results would not be comparable, which defeats the entire point of running phase 4.
+
+▶ **This is a rule, not an MNv2 fix. Check it for every remaining chapter**: the phase-4
+`VerifiedConfig` must carry the epoch count of the phase-2 tier whose number the chapter prints.
+I had originally *documented* the 300/350 disagreement in a two-column schedule table, which was
+the wrong instinct — the disagreement was a bug in the config, not a fact about the world.
+▶ **When a listing and the section it belongs to disagree, fix the listing before you annotate
+it.** ch6's table is now one column, 350 epochs, ~91.5 h.
+
+MNv4's driver is already consistent with this rule at 100 epochs, matching the Conv-M tier-2
+schedule its section reports. ⚠ ch7/ch8/ch9 are unchecked.
+
+⭐ **The MNv2 ImageNet driver can run the PAPER's optimizer**, which the parked
+commit did not know. `LEAN_MLIR_VARIANT=rms64` loads
+`mobilenetv2in_rms64_train_step.mlir` with RMSProp ρ.9/μ.9/ε1.0, wd 4e-5, peak
+0.045, ×0.98/epoch baked in, off `mnv2RmsSchedule` + `mnv2RmsHyper` (shared with
+the Imagenette peer so they cannot drift). `adam64` is only the default.
+
+### ⚠ Numbers that look wrong and are NOT — check provenance before "fixing"
+
+The ImageNet headlines disagree with their own training logs, and both are right:
+
+| | headline (quoted) | in-loop log (plotted) |
+|---|---|---|
+| MNv2 90ep | 68.77 / 88.53 | 68.39 / 88.15 @ 49,920 |
+| MNv2 350ep | 71.44 / 90.34 | 71.46 / 90.33 @ 49,920 |
+| MNv4-Conv-M 100ep | 75.48 / 92.37 | 75.51 / 92.37 @ 49,664 |
+
+**The headline is an offline full-50k EMA eval; the curve is the in-loop eval over
+the batch-divisible subset with live weights.** `planning/paper_faithfulness.md:153`
+documents this for the 90ep row ("offline full-50k EMA eval"). I nearly "corrected"
+75.48 → 75.51 before finding it. ▶ ch6 now states the distinction once, in §6.4.
+
+### ⚠⚠ The cross-chapter comparison table is stale in THREE places
+
+`ch7 / ch8 / ch9` each carry a cumulative table whose R34 row still reads
+`21.29M / 518 KB / 1400 ms / 9.5 h / 90.29%`. **Chapter 5's pass missed it**, and
+ch6's would have made it worse. Mixing vintages inside one table breaks the
+like-for-like comparison that is its whole point, so all three now carry a
+provenance note (§5.5's "label it instead") pointing at `sec:r34_runit` and
+`sec:mnv2_runit`. ▶ **Re-measure these rows as each chapter is made over.** Real
+values so far: R34 729 KB / 220 ms / ~1.5 h / 89.71%; MNv2 1,047 KB / 90 ms /
+35 min / 89.25%.
+
+### ⚠ The whole-net VJP fold is NOT proved at full depth
+
+`mobilenetv2_has_vjp_at` is proved for **stem + 2 inverted-residual blocks + head**,
+not all 17 (`VerifiedNets.lean:619` says so; the theorem's binders only go to ₂).
+The full 17-block tie is *denotational* and about the **forward**
+(`mobilenetv2Verified_denote_eq`, `mobilenetv2Verified_fwd_faithful`). The
+per-operation VJP theorems ARE unconditional and do cover all 17. §6.1 now says
+exactly that. ▶ **Same check is owed by ch7 and ch8** — `efficientnet_has_vjp` is
+flagged "representative" at `VerifiedNets.lean:720`.
+
+### ⭐ MNv4 ImageNet phase 4: BUILT AND RUNNING (2026-08-12)
+
+`mnv4-imagenet-verified` exists and trains. Built exactly the way R50's was, in four pieces:
+
+1. `mnv4ImagenetVerified : VerifiedNetSpec` (slug `mnv4in`, `VerifiedNets.lean`) — Conv-S trunk
+   copied from `mobilenetv4Verified`, head `1280×10 → 1280×1000`, params
+   4,124,426 → **5,392,616**. Carries MNv2's three-way `#guard` pin (`toSpecs.size`,
+   `toSpecs.pop.pop`, `back! == (#[1000], 2)`), the param-count guard, the stat-alignment guard,
+   and the `d0 == 3*224*224` row in the cross-net `.imagenet` invariant.
+2. Three `#eval`s in `MobileNetV4RenderB.lean` → `mnv4in_{fwd,fwd_eval,adam64}_train_step.mlir`.
+   The renderer already took `slug` and `replicas` as defaulted args, so this was three lines.
+3. `apps/imagenette/MainMobilenetV4Imagenet.lean` + `lean_exe mnv4-imagenet-verified`.
+4. `gen_shims.sh` row `mobilenet-v4-imagenet:default:generated_mobilenet_v4_imagenet_shim.py`,
+   shim generated (23,786 bytes).
+
+**Verified working end to end**: all three artifacts compile under PJRT (9.9 s / 0.4 s / 0.3 s),
+shim feeds it, first step loss **6.99** against ln 1000 = 6.91, eval **0.106%** top-1 over
+49,920 val = 1/1000. **114 ms/step** single device at bs64 (marginal over 40 steps, so start-up
+and the 28 GB val drain cancel) → 38.1 min/epoch → 63.5 h for 100 epochs on ONE card.
+
+⚠ **That single-card figure is NOT in the book, on brett's instruction (2026-08-12), and the
+reason generalises.** Every other ImageNet row in ch6 — including the Conv-M tier's ~9.0 min/epoch
+/ ~16 h — was measured at **4× on this same box**. Printing a 1-GPU row next to them invites the
+reader to diff 63.5 h against 16 h and conclude something about the architectures, when the only
+real difference is the card count. The blueprint table therefore carries the 4× row alone, all
+`TBD`. ▶ **Match the box to the rows already on the page, or the table lies by arithmetic.** The
+114 ms/step measurement is kept HERE because it is what someone budgeting the run needs.
+
+⚠ **The stale-checkpoint trap bit again, and it looked like success.** The first throughput probe
+resumed from the previous probe's finished epoch-1 checkpoint, trained ZERO steps, printed no
+step lines and still printed `done (trained ...)` with exit 0. Two probes 40 steps apart came
+back 0.34 s apart, which is the only reason it was caught. ▶ `rm -f
+.lake/build/mnv4in_adam64_ckpt_xla*` between probes, or set `LEAN_MLIR_CKPT_TAG`.
+
+⚠⚠ **It is Conv-S; the chapter's 75.48%/92.37% is Conv-M.** Different networks (4.1M vs ~9.7M,
+different block tables). Conv-S has NO published ImageNet target, so a run here is a first
+measurement, not a reproduction. The blueprint's §6.5 phase-4 subsection says this in bold and
+leaves its Val top-1 column `TBD`. The shim is generated from the **Conv-M** reference recipe and
+that is fine and deliberate — a shim carries augmented batches, not weights.
+
+### ▶ What is NOT implemented on the PJRT/verified side (all checked against code, not guessed)
+
+| gap | status | evidence |
+|---|---|---|
+| **Data parallel** | **not rendered** | `mnv4AdamVariant 64 2` names `adamdp64` and the renderer takes `replicas`, but MNv4 has no `shard-check` row (`convnext\|efficientnet\|mobilenetv2` only) and no `TestMnv4DpCheck.lean`. Deliberately NOT emitted: an untied collective artifact would look as trustworthy as the tied ones. → single-device only, hence 63.5 h |
+| **Drop-path / stochastic depth** | **exists, not wired into UIB** | `LeanMlir/Proofs/Codegen/DropPath.lean` is a shared module and ENet/ConvNeXt render `*_adamdrop_*` variants off it. `MobileNetV4RenderB.lean` has 0 hits for it and `mnv4AdamVariant` takes only `(B, replicas)`, so there is no marker to ask for it. ⚠ `jax/MainMobilenetV4Imagenet.lean:114` says the reference side is not wired either (`dropPath := 0.075 -- NB: not yet wired into UIB`), so this gap is on BOTH paths |
+| **Classifier dropout** | **exists, not wired into UIB** | the `"do"` marker, rendered for ENet (`efficientnet_adamdo_train_step.mlir`). Same story: no MNv4 hook. Reference uses 0.1 (tier-2) / 0.2 (paper) |
+| **RandAugment m15** | **not expressible** | shim's `default` recipe is m9; `jax/...:113` notes "codegen clamps M to 0–10", so the paper's 15 cannot be asked for |
+| **Effective batch 4096** | renderable, not rendered | `accK` grad-accum exists and R50 has `resnet50in_acc4x64_train_step.mlir`, so the machinery is there; no accumulating `mnv4in` variant was emitted. Driver runs bs64 @ LR 1e-3 against the reference's 4096 @ 0.004 |
+| **bf16** | **whole verified path is fp32** | 0 bf16 artifacts in `verified_mlir/`; `mnv4in` train step is 18,706 × `f32`, 0 × `bf16`. Not MNv4-specific — ch5's phase-4 table says fp32 too |
+
+**Implemented and working**, so not gaps: EMA with the TF warmup correction
+`min(d, (1+t)/(10+t))` (`VerifiedTrain.lean:1560` — the exact fix §6.5's "One trap in that EMA
+row" describes), cosine + warmup, AdamW + coupled decay, BN running-stat threading (52 layers,
+42,592 stat floats), gradient accumulation, and the phase-2 gradient tie
+(`scripts/grad_tie.py --net mnv4`).
+
+⚠ **Two of those rows I got wrong on the first pass and the regen gate caught it.** I had written
+drop-path and dropout as "absent from the spec language" on the strength of `VLayer` having no
+constructor for them. They are not layers — they are *render variants*, selected by the `"drop"`
+and `"do"` markers in `enetAdamVariant`, off the shared `Proofs/Codegen/DropPath.lean`. So the
+mechanism exists and is proven for MBConv and ConvNeXt blocks, and the MNv4 gap is wiring it into
+UIB plus giving `mnv4AdamVariant` the markers. That is a much smaller job than building it, and
+the wrong version of this note would have sent someone off to write one from scratch. ▶ **Look
+for a render VARIANT before concluding a feature is missing**; `ls verified_mlir/ | grep <marker>`
+answers it in one command.
+
+▶ **Cheapest next step, and it is now the blocking one**: render `mnv4in_adamdp64` and add the
+`shard-check`/dp-check rows. That is what fills in the blueprint's 4× row at all — without it
+the net simply cannot be run in the configuration the chapter reports everything else in, and a
+single-card run would produce a number that cannot be printed beside the others.
+
+### ▶ 4-GPU time ESTIMATE: ~20 h for 100 epochs (2026-08-12)
+
+Derived without rendering the untied DP artifact, by borrowing **MobileNetV2's** measured
+parallel efficiency — closest architecture, same box, same batch, same shim:
+
+| net | 1× bs64 | 4× global 256 | speedup |
+|---|---|---|---|
+| MobileNetV2 | 146 ms/step → 48.7 min/ep | 188 ms/step → 15.7 min/ep *(measured 2026-08-11)* | **3.10× (78% eff)** |
+| MNv4-Conv-S | 114 ms/step → 38.1 min/ep *(measured)* | ~147 ms/step → **~12.3 min/ep** *(est.)* | assumed same |
+
+→ **100 epochs ≈ 20 h (0.9 d) on 4× 4060 Ti.**
+
+⚠ **Two things this estimate is NOT.** (1) It is a second-order extrapolation — MNv4's own 4×
+ms/step has never been measured, because the artifact that would allow it does not exist. That is
+why the **blueprint row stays `TBD`**: the book's other schedule columns extrapolate from a
+ms/step measured *on that net*, and this one cannot. (2) It is **fp32 at global 256**, against the
+phase-2 Conv-M row's **bf16 at effective batch 4096**. That is why this estimate (12.3 min/ep) is
+*slower* than the Conv-M tier's measured 9.0 min/ep despite Conv-S being the smaller net — the
+verified path has no bf16 at all. Do not read the two as a Conv-S-vs-Conv-M speed comparison.
+
+⭐ MNv4-Conv-S is **faster per step than MNv2** single-device (114 vs 146 ms) despite more
+parameters (5.4M vs 3.5M). That is the UIB design goal working as advertised: the block was
+chosen for latency on real hardware, not for parameter count.
+
+### ⚠⚠ `mobilenetv2-imagenet-verified` HAD NO `LEAN_MLIR_EPOCHS` — fixed
+
+Measuring the above hit it. The R50 and MNv4 ImageNet drivers both read `LEAN_MLIR_EPOCHS`;
+MNv2's did not, and **silently ignored it**, so `EPOCHS=1` ran the full committed schedule. With
+`G2_STEPS=20` that is 350 epochs of 20 steps, and the probe ran until it was killed 10 minutes
+later, having written a checkpoint at epoch 179. Combined with the 350-epoch change above, a
+short probe of this net was simply impossible. Now added, matching R50's spelling.
+
+▶ **When you change a committed `epochs`, check the driver actually has the knob to override it.**
+The two changes are individually harmless and jointly make the net unprobeable.
+
+---
+
+## 4a-ter. ▶▶ NEXT: Chapter 7, EfficientNet (was: chapter 6, now done)
+
+48 em-dashes raw, 12 prose semicolons. Apply the §5.3 pattern; the real spec is
+`efficientnetImagenetVerified` (slug `efficientnetin`), exe
+`efficientnet-imagenet-verified`. `efficientnet-verified-adam` is the Imagenette
+"Run it first" target and it goes through `trainAdamSched`, so it can be run the
+way ch6's was. Its §6.4-equivalent has an 80-epoch tier where MNv2 had 350.
+⚠ It also owns the `\phasethreenote` at content.tex ~6702 and the first of the
+three stale comparison tables.
+
+**The ch6 material below is kept for the parts still unused.**
+
+## 4a-ter-old. Chapter 6, MobileNetV2 (scoping, now superseded)
 
 51 em-dashes, 10 prose semicolons, max sentence 87 w. Carries one
 `\imagenetphasenote`. Smaller prose job than ch4 or ch5.
