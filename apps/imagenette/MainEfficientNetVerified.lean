@@ -17,7 +17,23 @@ through the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, batch-nor
 Each op fragment is a proven-faithful emitter (swish/sigmoid/SE/depthwise k×k/batch-norm);
 the whole-net VJP `efficientnet_has_vjp` is a representative witness (full B/C deferred).
 
-Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/efficientnet-verified data`
+Run (GPU): `.lake/build/bin/efficientnet-verified data`
+
+⚠⚠ **THIS DRIVER CANNOT PRODUCE A MEANINGFUL ACCURACY ON THIS NET.** Measured
+2026-08-12 on XLA/CUDA: `387/3925 = 9.859873%` on every epoch, byte identical, which is
+chance on Imagenette's ten classes. It is a constant predictor, not a slow
+curve.
+
+`efficientnetVerified` carries BatchNorm, and **running-statistic threading lives only in
+`VerifiedNet.trainAdamSched`**, not in `VerifiedNet.train`. This driver trains
+parameters but never accumulates BN running stats, then evaluates through
+`@efficientnet_fwd` (which needs them) rather than `@efficientnet_fwd_eval`.
+
+▶ For a real number use `efficientnet-verified-adam`. ▶ This binary is still a useful
+structural smoke test (compile, train-step arity, packed-parameter round trip).
+Do not quote its accuracy. The same defect affects `resnet34-verified` and is
+recorded there too; fixing it means teaching `.train` the BN threading
+`trainAdamSched` already has.
 -/
 
 def efficientnetConfig : VerifiedConfig where

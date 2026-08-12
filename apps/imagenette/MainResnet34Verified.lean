@@ -28,7 +28,33 @@ n = B·H·W), i.e. eval scored a different function than training optimised; see
 `planning/xla_pjrt_handoff.md` §2a. (The AdamW sibling `resnet34-verified-adam` is the true
 batch-norm path, and evals through `@resnet34_fwd_eval` with EMA'd running stats.)
 
-Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/resnet34-verified data`
+Run (GPU): `.lake/build/bin/resnet34-verified data`
+
+⚠⚠ **THIS DRIVER CANNOT PRODUCE A MEANINGFUL ACCURACY ON THIS NET, and the
+number it prints is not a slow-learning curve — it is a constant predictor.**
+Measured 2026-08-12 on XLA/CUDA, all ten epochs: `390/3925 = 9.936306%`, byte
+identical every epoch, which is chance on Imagenette's ten classes.
+
+The cause is structural. `resnet34Verified` carries 36 BatchNorm layers, and
+**running-statistic threading lives only in `VerifiedNet.trainAdamSched`**, not
+in `VerifiedNet.train`. So this driver trains parameters but never accumulates
+BN running stats, then evaluates through `@resnet34_fwd` — which needs them —
+instead of `@resnet34_fwd_eval`. The forward sees garbage statistics and returns
+the same class for every image.
+
+▶ **For a real number on this net use `resnet34-verified-adam`**, which goes
+through `trainAdamSched`, announces `running-stats BN: 36 layers, 17024 stat
+floats → eval via @resnet34_fwd_eval`, and reaches 22.2% top-1 after one epoch
+against this driver's flat 9.94% after ten.
+
+▶ This binary remains useful as a **structural smoke test**: it exercises
+compile, the 110-output train step, and the packed-parameter round trip. Do not
+quote its accuracy. Fixing it means teaching `.train` the same BN threading
+`trainAdamSched` has, at which point this note comes out.
+
+**One file, one binary, either lowerer.** The proven graph goes to whichever
+trusted lowerer `$LEAN_MLIR_LOWERER` selects — XLA/PJRT by default, IREE with
+`=iree` — resolved by dlopen at run time (`ffi/lowerer.h`).
 -/
 
 def resnet34Config : VerifiedConfig where

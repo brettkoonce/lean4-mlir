@@ -20,7 +20,23 @@ via the packed-params `VerifiedNet.train` driver (per-channel BN, He-init, mean-
 The whole-net VJP witness `mobilenetv2_has_vjp_at` is still a representative stem+2-block net
 (the nonzero-Jacobian seal is therefore representative; the den-tie above is at the full net).
 
-Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-verified data`
+Run (GPU): `.lake/build/bin/mobilenetv2-verified data`
+
+⚠⚠ **THIS DRIVER CANNOT PRODUCE A MEANINGFUL ACCURACY ON THIS NET.** Measured
+2026-08-12 on XLA/CUDA: `387/3925 = 9.859873%` on every epoch, byte identical, which is
+chance on Imagenette's ten classes. It is a constant predictor, not a slow
+curve.
+
+`mobilenetv2Verified` carries BatchNorm, and **running-statistic threading lives only in
+`VerifiedNet.trainAdamSched`**, not in `VerifiedNet.train`. This driver trains
+parameters but never accumulates BN running stats, then evaluates through
+`@mobilenetv2_fwd` (which needs them) rather than `@mobilenetv2_fwd_eval`.
+
+▶ For a real number use `mobilenetv2-verified-adam`. ▶ This binary is still a useful
+structural smoke test (compile, train-step arity, packed-parameter round trip).
+Do not quote its accuracy. The same defect affects `resnet34-verified` and is
+recorded there too; fixing it means teaching `.train` the BN threading
+`trainAdamSched` already has.
 -/
 
 def mobilenetv2Config : VerifiedConfig where
