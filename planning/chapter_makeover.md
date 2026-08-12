@@ -166,13 +166,19 @@ Chapter-wide ranking, to pick what's next:
 | MNIST: 1D MLP (ch2) | 0.0 | 0 | **DONE** |
 | MNIST: 2D CNN (ch3) | 0.0 | 0 | **DONE** |
 | CIFAR with BatchNorm (ch4) | 0.0 | 0 | **DONE** |
-| On Verification (app C) | 19.3 | 28 | **needs an argument rethink, see §6** |
-| Data availability (app A) | 17.8 | 14 | |
+| ResNet-34 (ch5) | 0.0 | 0 | **DONE** |
+| On Verification (app C) | 17.8 | 36 | **needs an argument rethink, see §6** |
 | Getting started (app B) | 17.0 | 8 | flourishes cut, joinery not |
-| EfficientNet | 15.8 | 20 | |
-| MobileNetV2 | 14.4 | 22 | |
-| Bestiary | 12.7 | 70 | |
-| ResNet-34 (ch5) | 12.6 | 33 | **▶ NEXT** (57 em-dash / 30 semi raw count) |
+| Data availability (app A) | 16.4 | 14 | |
+| EfficientNet (ch7) | 10.5 | 12 | 48 em-dash raw |
+| MobileNetV2 (ch6) | 9.4 | 10 | **▶ NEXT** — 51 em-dash raw, max sentence 87 w |
+| Bestiary | 8.1 | 58 | 110 em-dash raw, the biggest single job left |
+| Vision Transformer (ch9) | 7.1 | 16 | 46 em-dash raw |
+| ConvNeXt (ch8) | 6.1 | 16 | 31 em-dash raw, but one 142-word sentence |
+
+Re-measured 2026-08-12 with the §3 script, so these supersede the older
+per-1k figures above. ▶ Max sentence is the metric this doc keeps forgetting:
+ch1/ch2 sit at 52–54 words, ch5 finished at 94, ConvNeXt has a 142.
 | ConvNeXt | 11.9 | 31 | |
 | Vision Transformer | 8.7 | 59 | |
 
@@ -298,18 +304,129 @@ fine and reads as current.
 
 ---
 
-## 4a-bis. ▶▶ NEXT: Chapter 5, ResNet-34
+## 4a-bis. Chapter 5, ResNet-34: DONE (2026-08-12)
 
-57 em-dashes, 30 prose semicolons, comparable to ch4's 60/27. Carries one
-`\phasethreenote` (§5.2 Imagenette) and two `\imagenetphasenote` (§5.7, §5.8).
-§5.5's ablation is the one §4b says to **label, not re-run**. Note ch4's own text
-calls this "the easiest chapter in the book."
+57 em-dashes / 30 prose semicolons → **0 / 0**. `\phasethreenote` markers 5 → 4.
+latexmk 0 errors. Commits `bf248a6` … `bbcce23`.
+
+⭐⭐ **§5.3 IS NOW THE REFERENCE TRAINER PATTERN — `\label{sec:verified_trainer_pattern}`.**
+This is the thing to reuse. It is the real `resnet34Verified : VerifiedNetSpec` +
+`VerifiedConfig` + `trainAdamSched` entry point, with the four annotated points
+every later chapter copies:
+
+- **`slug` names the artifact.** The trainer LOADS
+  `verified_mlir/<slug>_<variant>_train_step.mlir`; it does not build a net from
+  the spec at run time. The spec says which file and is `#guard`ed against it.
+- **`bnChannels` drives BN statistic threading**, and getting it wrong reports
+  chance forever (measured, see the bug list below).
+- **`trainAdamSched`, not `.train`** — the latter has no BN threading.
+- **The recipe is arguments, not architecture**, which is what lets one proven
+  gradient serve every optimizer comparison.
+
+⚠ §5.3 previously printed a `NetSpec`/`TrainConfig` listing matching no code and
+an `IREE_BACKEND=rocm … gfx1100` log. Both gone. **Check every remaining chapter
+for the same thing**: a pre-verified-era listing typesets fine and reads current.
+
+What else landed: §5.1 "Run it first" from a fresh 80-epoch XLA capture
+(`runs/2026-08-12-r34-imagenette-xla-cuda/`, 89.71% / 98.27%, ~65 s/epoch);
+§5.7 restructured so the verified path is the result and JAX is the reference,
+now describing the **90-epoch paper recipe** (the driver default moved 30 → 90);
+§5.8 comparing **R50-to-R50** so the A3-vs-2018 table is a recipe diff rather
+than one confounded with a backbone diff.
+
+### ⚠ The two `[TODO]` runs are real commands, not aspirations
+
+Both verified to start and print `Epoch 1/90`. Neither has been run.
+
+```bash
+# R34 / ImageNet, 90 ep — ~27.9 h. 90 is now the driver default.
+CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
+  SHIM_WORKERS=8 PJRT_FFI_RESIDENT=1 \
+  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 \
+  .lake/build/bin/resnet34-imagenet-verified data
+
+# R50 / ImageNet on the 2018 recipe, 90 ep — the controlled peer for §5.8.
+CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
+  SHIM_WORKERS=8 PJRT_FFI_RESIDENT=1 \
+  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 LEAN_MLIR_EPOCHS=90 \
+  LEAN_MLIR_BASE_LR_U=100000 \
+  .lake/build/bin/resnet50-imagenet-verified data
+```
+
+⭐ **`LEAN_MLIR_EPOCHS` is new and it SETS where `LEAN_MLIR_MAX_EPOCHS` only
+CAPS** (`min n cfg.epochs`). Not cosmetic: `totalSteps := cfg.epochs * nb / accK`
+is what the cosine anneals over, so `EPOCHS=30` is a complete 30-epoch experiment
+while `MAX_EPOCHS=30` is a PREFIX of a 90-epoch decay stopped with the LR high.
+⚠ Clear checkpoints when switching schedules; resuming across them fuses two LR
+curves silently.
+
+⚠ `resnet50in_mom256` (single device, bs256) **OOMs** — 14.64 GiB for the d2h on
+a 16 GB card. `momdp64` (4×64, same global 256) is the runnable one. Found by
+running it.
 
 ⚠ Do not read "we're doing to JAX what we did to IREE" as retiring JAX. Confirmed
 2026-08-12: the reference implementations stay, and the work is bringing PJRT to
-**parity** with them. IREE was a swappable engine because both lowerers eat the
-same proven StableHLO; JAX is the oracle `vjp_oracle` diffs 14 layer families
-against.
+**parity** with them. The migration model brett described: run the phase-4
+trainer, redo the phase-2 section's graph with that data, move it to the phase-4
+section, and the phase-2 sections get eaten one at a time.
+
+---
+
+## 4a-ter. ▶▶ NEXT: Chapter 6, MobileNetV2
+
+51 em-dashes, 10 prose semicolons, max sentence 87 w. Carries one
+`\imagenetphasenote`. Smaller prose job than ch4 or ch5.
+
+**Apply the §5.3 pattern.** The chapter still prints `mobilenetV2Imagenet :
+NetSpec` + `TrainConfig`; the real spec is `mobilenetv2ImagenetVerified`
+(slug `mobilenetv2in`) and the exe is `mobilenetv2-imagenet-verified`, already on
+`lowererLink` and building.
+
+⭐ **There is parked work for exactly this.** Two tags hold a first pass at ch6–9
+that was dropped on 2026-08-12 to nail the pattern on ch5 first:
+
+- `parked/ch6-9-verified-trainers` — verified listings + per-chapter schedule
+  tables with a blank 2×7900 XTX row for estimates
+- `parked/mnv2-enet-350ep` — MNv2/ENet costed at the 350-epoch schedule
+
+`git cherry-pick` them, then reconcile against §5.3's shape, which is newer and
+better than what those commits used.
+
+⚠ **No verified ImageNet run exists for MNv2, ENet, ConvNeXt or ViT.** All four
+trainers build; none has been run to completion. So a ported chapter shows a
+verified trainer above phase-2 JAX numbers, which is honest only if the chapter
+says so. The parked commits did say so.
+
+Measured schedule, 4×4060 Ti at eight loader workers (2026-08-11):
+
+| net | ms/step | min/ep | 350 ep |
+|---|---|---|---|
+| MobileNetV2 | 188 | 15.7 | ~91.5 h (3.8 d) |
+| EfficientNet-B0 | 371 | 30.9 | ~180.5 h (7.5 d) |
+| ConvNeXt-T | 223 | 37.2 | ~186 h (7.8 d) at 300 ep |
+| ViT-Tiny | 287 | 12.0 | ~60 h (2.5 d) at 300 ep |
+
+### ⭐ And while in this chapter: MNv4 needs the R50 treatment
+
+`mobilenetv4Verified` is **Conv-S on Imagenette** (10 classes, slug `mnv4`), and
+that is all there is: renders `mnv4_{adam_train_step,fwd,fwd_eval}`, exe
+`mobilenetv4-verified-adam` (80 ep, bs32). **There is no ImageNet spec, render or
+driver.** Building one is the same three steps R50 just took:
+
+1. `mnv4ImagenetVerified : VerifiedNetSpec` — slug `mnv4in`, `nClasses := 1000`,
+   `data := .imagenet`, its own `shimScript`, `#guard`s pinning it to the
+   10-class spec at everything but the head.
+2. The renders, as `#eval`s in the MNv4 renderer, exactly as
+   `resnet50in_{mom256,momdp64}` were two lines in `ResNet50RenderB.lean`.
+   ⚠ Emit with `lake build <module>`, NOT `lake env lean` — that file segfaults
+   under `lake env lean` at baseline (rc 139), which is pre-existing.
+3. `mnv4-imagenet-verified` exe + driver with the `LEAN_MLIR_EPOCHS` knob.
+
+⚠⚠ **The reference is Conv-M, the repo's spec is Conv-S.** The 100-epoch JAX
+reference (75.51%) lives OUTSIDE the repo at `/home/skoonce/mnv4_convm_100ep`, so
+repo searches miss it, and it is a **different network** from what
+`mobilenetv4Verified` renders. Decide which of the two the ImageNet spec should
+be before writing it, and do not quote the Conv-M number against a Conv-S run.
 
 ---
 
@@ -488,6 +605,48 @@ Non-negotiable, in order:
 4. Never put a number on the page you did not measure. If a run cannot be
    captured, leave the section out and say so — do not synthesise a log.
 
+### ⚠⚠ Three bugs the chapter work uncovered (2026-08-12), all found by RUNNING
+
+Every one was invisible to reading and to `lake build`. Two printed
+plausible-looking output; one refused loudly. The lesson is the same in all
+three: **run the binary the chapter claims to document, before documenting it.**
+
+1. **The loss slot was driver-wide, should be per-render** (`ff1ef3d`).
+   `3f404e8` taught `VerifiedNet.train` to append a `%loss` destination
+   unconditionally, but only `mlp` and `cnn` were re-rendered to return one.
+   Nine nets — `resnet34`, `cifar8`, `cifar8_bn`, `cifar`, `cifar_bn`,
+   `mobilenetv2`, `efficientnet`, `convnext`, `vit` — could not run at all. The
+   G4 arity gate refused every one, which is exactly what it is for. Fixed with
+   `VerifiedNetSpec.lossSlot`.
+2. **One checkpoint path per (net, variant, backend)**, so §3c's mandated
+   parallel sweeps silently trained NOTHING: concurrent passes clobber each
+   other, and a later pass resumes from an earlier one's finished epoch 40.
+   Fixed with `LEAN_MLIR_CKPT_TAG`. ▶ Also clear stale
+   `.lake/build/<slug>_*_ckpt_xla*.bin{,.epoch}` before any re-measurement.
+3. **`.train` cannot evaluate a BN net** (`0be3357`, documented not fixed).
+   Running-stat threading lives ONLY in `trainAdamSched`. `resnet34-verified`,
+   `mobilenetv2-verified` and `efficientnet-verified` all report **exactly
+   chance**, byte-identical every epoch (390/3925 = 9.936306%), because they
+   evaluate through `@<slug>_fwd` without statistics anyone computed. Exactly the
+   three nets with `bnChannels`. ▶ The fix is teaching `.train` the same
+   threading; it wants its own commit and its own trajectory diff.
+
+⚠ Also fixed: the epoch line no longer prints `loss = 0.000000` for a net with no
+loss slot, it omits the field. A fabricated zero in a captured log is the one
+thing this book cannot ship.
+
+### ⚠ Verify hand-assembled log excerpts against the source
+
+Writing §5.1 I **fabricated two log lines** — epoch 4's loss and epoch 76's —
+while hand-eliding the middle of a run, and caught them only by diffing the
+excerpt against the log before committing. Elision is exactly where invented
+numbers get in. The check is cheap:
+
+```python
+log = set(l.rstrip() for l in open(LOGFILE))
+# every quoted `Epoch n/N:` / `  epoch n:` line in the .tex must be in `log`
+```
+
 ### Traps
 
 - **`\subsection*{Code: the full training program}` appears in both ch2
@@ -531,6 +690,17 @@ Three ways out, and it needs brett's decision, not ours:
 
 ## 7. Known-stale, book-wide
 
+- ✅ **Chapters 1–5 are IREE-free** as of 2026-08-12. ch5's last holdout was
+  §5.3's `IREE_BACKEND=rocm … gfx1100` log, replaced by the XLA capture. The two
+  mentions left in ch5 are legitimate (PJRT implements "the same C surface as the
+  IREE shim"; gfx1100 in the ROCm fault note).
+- ⚠ **98 targets are still on `ireeLink`** against 31 on `lowererLink`. The swap
+  is one line per target and the migration comment in `lakefile.lean` says so,
+  but ▶ **swapping the link does not mean the binary works** — that is how the
+  loss-slot and BN-threading bugs surfaced. Port, then RUN.
+- ⚠ **`VerifiedNetSpec.blurb` carries `%LOWERER%`** and is resolved by
+  `VerifiedNet.printBlurb`. Never `IO.println net.blurb` — that was the bug where
+  four print sites announced IREE while training on XLA.
 - ~74 `iree`/`vmfb` references remain outside chapters 1–2, concentrated
   in appendix B (18) and appendix C (13). Brett wants IREE gone from the
   book; removing it from the *repo* is a separate and much larger
