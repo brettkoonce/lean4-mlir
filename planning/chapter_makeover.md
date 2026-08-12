@@ -1,8 +1,18 @@
 # Chapter makeover: porting a chapter to the verified XLA path
 
-**Who this is for.** An agent working on a CUDA box, picking up chapter 2
-and then the rest. Chapter 1 is done and is the worked example — read it
-in `blueprint/src/content.tex` before starting, it is the spec.
+**Who this is for.** An agent working on a CUDA box, picking up
+**chapter 7 (EfficientNet-B0)** and then the rest. Chapters 1–6 are done.
+
+▶ **START AT §4a-ter**, which is the full ch7 handoff. Before touching anything, read
+ch5's §5.3 (`sec:verified_trainer_pattern`) and then chapter 6 in
+`blueprint/src/content.tex` — §5.3 is the spec and ch6 is the most recent worked example
+of applying it. §1 and §2 of this doc are the shape and the voice rules; §5 is the
+verification discipline and is non-negotiable.
+
+⚠ **The single most expensive lesson in this document, learned four separate times:
+RUN THE BINARY THE CHAPTER CLAIMS TO DOCUMENT, BEFORE DOCUMENTING IT.** Every real defect
+found in ch4, ch5 and ch6 was invisible to reading and to `lake build`, and two of them
+printed normal-looking output while doing nothing at all.
 
 **Why CUDA.** The verified trainers cannot complete a run on ROCm. See
 `upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/`:
@@ -585,15 +595,96 @@ The two changes are individually harmless and jointly make the net unprobeable.
 
 ---
 
-## 4a-ter. ▶▶ NEXT: Chapter 7, EfficientNet (was: chapter 6, now done)
+## 4a-ter. ▶▶ START HERE: Chapter 7, EfficientNet-B0
 
-48 em-dashes raw, 12 prose semicolons. Apply the §5.3 pattern; the real spec is
-`efficientnetImagenetVerified` (slug `efficientnetin`), exe
-`efficientnet-imagenet-verified`. `efficientnet-verified-adam` is the Imagenette
-"Run it first" target and it goes through `trainAdamSched`, so it can be run the
-way ch6's was. Its §6.4-equivalent has an 80-epoch tier where MNv2 had 350.
-⚠ It also owns the `\phasethreenote` at content.tex ~6702 and the first of the
-three stale comparison tables.
+**Read ch5 §5.3 (`sec:verified_trainer_pattern`) and ch6 first — they are the mold, and
+ch6 is the most recent worked example.** Baseline: 48 em-dashes, 12 prose semicolons,
+max sentence 81 w. ch7 is `content.tex` 6662–7413.
+
+▶ **This chapter is mostly a RUN plus a COPY.** The pattern is settled, the code exists,
+and ch7 is in a *better* starting position than ch6 was. What follows is the whole job.
+
+### 1. §7.1 "Run it first" — one command, ~1.6 h
+
+```bash
+lake build efficientnet-verified-adam
+CUDA_VISIBLE_DEVICES=0 PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
+  ./.lake/build/bin/efficientnet-verified-adam data \
+  > runs/<date>-enet-imagenette-xla-cuda/enet-imagenette-xla.log 2>&1
+```
+
+`efficientnet-verified-adam` goes through `trainAdamSched` (80 ep, bs 32, AdamW 1e-3,
+cosine + 3-ep warmup, 49 BN layers), so it threads BN properly and needs no plumbing.
+lakefile's own bench row (line ~2937) says **XLA 1h34m** against IREE 6.2 h.
+⚠ **Clear `.lake/build/efficientnet_adam_ckpt_xla*` first** and between any probes.
+⚠ Verify every quoted log line against the source before committing the excerpt.
+
+### 2. The fiction to replace (offsets are +lines from `\chapter{EfficientNet}`)
+
+| where | what is there now | replace with |
+|---|---|---|
+| +262 | `def efficientNetB0 : NetSpec` | `efficientnetVerified : VerifiedNetSpec`, §5.3 shape |
+| +281 | `def efficientNetB0Config : TrainConfig` | `VerifiedConfig` + `trainAdamSched` entry point |
+| +312 | `$ IREE_BACKEND=rocm IREE_CHIP=gfx1100` log | the §7.1 capture, or a pointer to it |
+| +475 | `def efficientNetB0Imagenet : NetSpec` | keep as the labelled **phase-2** reference |
+| +494 | `def efficientNetB0ImagenetConfig` | ditto |
+| +172 | `\phasethreenote` | delete once §7.3's numbers are XLA (markers 3 → 2) |
+
+⚠ **Check the prose AROUND each listing, not just the listing** — that is what bit ch6,
+where the surrounding paragraph described a constructor signature from the phase-2 type.
+
+### 3. §7.x ImageNet → a phase-4 subsection at the END
+
+Same move as ch6: phase-2 material stays where it is, and a
+`\subsection*{Phase 4: ...}` with its own `\label` goes immediately before the
+recipe-diff subsection, mirroring `sec:r34_phase4` / `sec:mnv2_phase4` / `sec:mnv4_phase4`.
+
+⭐⭐ **AND HERE ch7 IS BETTER OFF THAN EVERY CHAPTER SO FAR: the full paper recipe is
+ALREADY RENDERED, DATA-PARALLEL, AND TIED.** `efficientnetin_emarmsdp64dropdo_train_step.mlir`
+is EMA + RMSProp + DP@64 + drop-path + dropout — the paper recipe end to end, on four
+cards. ENet's collectives ARE tied (`shard-check` has an `efficientnet` row,
+`tests/TestEfficientNetDpCheck.lean` exists), unlike MNv4's. So **ch7's phase-4 row can be
+MEASURED rather than estimated** — it is the first chapter where that is true.
+
+Phase-2 target to match: **76.80% top-1 / 93.26% top-5**, 350 epochs RMSProp, ~8.6 min/ep,
+~55.5 h on 4× 4060 Ti (content.tex ~7216, ~7295). Against B0's paper 77.1 / 93.3.
+⚠ That is a ~2-day run. **ASK BEFORE STARTING IT.**
+
+### 4. ⚠ Two gaps ch7 inherits, both of which ch6 hit and fixed
+
+1. **`efficientnetImagenetConfig.epochs := 80`, but the phase-2 tier it must reproduce is
+   350.** Apply the match-phase-2 rule (see the MNv2 entry above): a phase-4 config must
+   carry the epoch count of the phase-2 tier its chapter prints, or the run answers a
+   question nobody asked. ⚠ Note the driver's 80 is *also* a real tier ENet documents, so
+   decide deliberately rather than by reflex, and say which in the listing.
+2. **`MainEfficientNetImagenet.lean` has NO `LEAN_MLIR_EPOCHS`** (0 hits; R50 and MNv4
+   have it, MNv2 got it in `092001c`). Without it a 350-epoch config is **unprobeable** —
+   exactly the trap that cost ten minutes on MNv2. Add it in the same commit as any epoch
+   change, copying R50's spelling.
+
+### 5. The stale cross-chapter table
+
+ch7 owns the **first** of the three cumulative comparison tables whose ResNet-34 row still
+reads `518 KB / 1400 ms / 9.5 h / 90.29%`. All three now carry a provenance note instead of
+correct numbers. Re-measure ENet's own row while you are in the chapter, and the R34 and
+MNv2 rows are already known: R34 729 KB / 220 ms / ~1.5 h / 89.71%, MNv2 1,047 KB / 90 ms /
+35 min / 89.25%.
+
+### 6. ⚠ ch7-specific trap: this is the EMA chapter
+
+The EMA warmup defect is ch7's own material (content.tex ~7290 discusses it) and it is in
+memory as `ema_warmup_bug`: a shadow seeded at random init and decayed away leaves `d^t` of
+that init behind, which puts the average at **chance** rather than merely behind on short or
+grad-accumulated runs, and **pre-fix `.bin` checkpoints hold poisoned weights**. Do not
+re-derive it, do not trust an old ENet EMA checkpoint, and note that the `emarms` variant
+marker collisions (`planning/ema.md`) are the reason the markers are spelled `drop` and `do`
+rather than `sd` and `dropout`.
+
+### 7. Verification, in order
+
+Same as §5: latexmk 0 errors → 0 em-dash / 0 prose semicolons in prose (script in §3, and
+mind its two over-counting bugs) → typecheck any Lean touched → regen/shim gates if any
+artifact or spec moved → **never a number you did not measure**.
 
 **The ch6 material below is kept for the parts still unused.**
 
@@ -915,10 +1006,20 @@ Three ways out, and it needs brett's decision, not ours:
 
 ## 7. Known-stale, book-wide
 
-- ✅ **Chapters 1–5 are IREE-free** as of 2026-08-12. ch5's last holdout was
-  §5.3's `IREE_BACKEND=rocm … gfx1100` log, replaced by the XLA capture. The two
-  mentions left in ch5 are legitimate (PJRT implements "the same C surface as the
-  IREE shim"; gfx1100 in the ROCm fault note).
+- ✅ **Chapters 1–6 are IREE-free** as of 2026-08-12. ch6's last holdout was its
+  Results block, an `IREE_BACKEND=rocm … gfx1100` log that also contained a
+  **fabricated line** (`Epoch 2/80: loss=(dropping) lr=0.000667`), replaced by the
+  XLA capture. The two mentions left in ch5 are legitimate (PJRT implements "the same
+  C surface as the IREE shim"; gfx1100 in the ROCm fault note).
+  ▶ **ch7 is next and still has one at +312.**
+- ⚠⚠ **`latexmk` AND THE PDF YOU READ ARE DIFFERENT FILES.** §5's gate builds
+  `blueprint/src/print.pdf` in place. The copy that gets opened is
+  `blueprint/lean4-mlir-blueprint.pdf`, and `blueprint/README.md` says the intended
+  command is `leanblueprint pdf`, which writes somewhere else again. Measured
+  2026-08-12: the read copy had drifted **seven days** while four rounds of "latexmk 0
+  errors" were all true and none of them visible. ▶ Either point §5's gate at
+  `leanblueprint pdf`, or copy `src/print.pdf` over the other two after building. Both
+  are build outputs and are deliberately left untracked.
 - ⚠ **98 targets are still on `ireeLink`** against 31 on `lowererLink`. The swap
   is one line per target and the migration comment in `lakefile.lean` says so,
   but ▶ **swapping the link does not mean the binary works** — that is how the
