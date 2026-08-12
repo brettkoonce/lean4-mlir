@@ -1,13 +1,18 @@
 # Chapter makeover: porting a chapter to the verified XLA path
 
 **Who this is for.** An agent working on a CUDA box, picking up
-**chapter 7 (EfficientNet-B0)** and then the rest. Chapters 1–6 are done.
+**chapter 8 (ConvNeXt-T)** and then the rest. Chapters 1–7 are done.
 
-▶ **START AT §4a-ter**, which is the full ch7 handoff. Before touching anything, read
-ch5's §5.3 (`sec:verified_trainer_pattern`) and then chapter 6 in
-`blueprint/src/content.tex` — §5.3 is the spec and ch6 is the most recent worked example
-of applying it. §1 and §2 of this doc are the shape and the voice rules; §5 is the
-verification discipline and is non-negotiable.
+▶ **START AT §4a-sexies**, the ch8 handoff. Read §4a-quinquies (the ch7 post-mortem)
+first — it is where the traps ch8 inherits were found. Before touching anything, read ch5's §5.3 (`sec:verified_trainer_pattern`) and
+then chapter 7 in `blueprint/src/content.tex` — §5.3 is the spec and ch7 is the most
+recent worked example of applying it. §1 and §2 of this doc are the shape and the voice
+rules; §5 is the verification discipline and is non-negotiable.
+
+⚠⚠ **RUN `scripts/verify_excerpt.py` OVER EVERY CHAPTER BEFORE YOU TOUCH ONE.** It found
+**five bad log lines in three chapters this doc had already marked DONE** (§4a-quinquies).
+One was outright fabricated. A "DONE" mark in the table below means the prose was passed,
+not that the numbers were re-verified.
 
 ⚠ **The single most expensive lesson in this document, learned four separate times:
 RUN THE BINARY THE CHAPTER CLAIMS TO DOCUMENT, BEFORE DOCUMENTING IT.** Every real defect
@@ -181,10 +186,15 @@ Chapter-wide ranking, to pick what's next:
 | Getting started (app B) | 17.0 | 8 | flourishes cut, joinery not |
 | Data availability (app A) | 16.4 | 14 | |
 | MobileNetV2 (ch6) | 0.0 | 0 | **DONE** |
-| EfficientNet (ch7) | 10.5 | 12 | **▶ NEXT** — 48 em-dash raw |
+| EfficientNet (ch7) | 0.0 | 0 | **DONE** — max sentence 64 w |
 | Bestiary | 8.1 | 58 | 110 em-dash raw, the biggest single job left |
 | Vision Transformer (ch9) | 7.1 | 16 | 46 em-dash raw |
-| ConvNeXt (ch8) | 6.1 | 16 | 31 em-dash raw, but one 142-word sentence |
+| ConvNeXt (ch8) | 6.1 | 16 | **▶ NEXT** — 31 em-dash raw; max sentence is **68 w, not 142** (§4a-sexies) |
+
+▶ Measure with `scripts/measure_prose.py '\chapter{ConvNeXt}'`, which is the §3 script with
+all three of its false-join bugs fixed (it now replaces stripped environments with a full
+stop, and normalises `.)`, `.''` and `.}` before splitting). The raw §3 script over-reports
+max sentence by 10–30%.
 
 Re-measured 2026-08-12 with the §3 script, so these supersede the older
 per-1k figures above. ▶ Max sentence is the metric this doc keeps forgetting:
@@ -595,7 +605,305 @@ The two changes are individually harmless and jointly make the net unprobeable.
 
 ---
 
-## 4a-ter. ▶▶ START HERE: Chapter 7, EfficientNet-B0
+## 4a-quinquies. ▶▶ START HERE: Chapter 7, EfficientNet-B0: DONE (2026-08-12)
+
+48 em-dashes / 12 prose semicolons → **0 / 0**. Max sentence 75 → **64 w** (ch5 is 64, ch6
+is 56). `\phasethreenote` uses 3 → 2. latexmk 0 errors, **0 undefined refs**. ch7 is now
+**IREE-free**: 0 hits for `IREE|vmfb|gfx1100` in the chapter.
+
+### ⭐ §7.1 is a fresh 80-epoch XLA capture, and B0 WINS the Imagenette column
+
+`runs/2026-08-12-enet-imagenette-xla-cuda/`, one 4060 Ti, `efficientnet-verified-adam`:
+**89.96% top-1 / 98.45% top-5 in 40.5 minutes**, best epoch 90.14%. 30.4 s/epoch,
+103 ms/step. Against the retired IREE number the chapter had (87.58% in 6.2 h) that is
+**+2.4 points and 9× faster**.
+
+| net | params | MLIR | ms/step | total | top-1 | top-5 |
+|---|---|---|---|---|---|---|
+| ResNet-34 | 21.29M | 729 KB | 220 | 1.5 h | 89.71 | 98.27 |
+| MobileNetV2 | 2.24M | 1,047 KB | 90 | 35 min | 89.25 | **98.68** |
+| EfficientNet-B0 | **4.02M** | 1,316 KB | 103 | 41 min | **89.96** | 98.45 |
+
+⚠ **The lakefile's own bench row said XLA 1h34m; actual 40.5 min.** Third chapter running
+where that estimate is 2–3× pessimistic (ch6's was 3×). Do not budget off it.
+
+### ⭐⭐ The chapter's parameter count was wrong and it INVERTED a conclusion
+
+ch7 printed **7.16M** params for the Imagenette B0. The verified spec derives
+**4,020,358**. The 7.16M is a **pre-fix** number from when the codegen sized the SE
+bottleneck off the expanded width — a bug *the same chapter describes two sections later*,
+where it correctly quotes the fixed 5.29M for the 1000-class net. The chapter was carrying
+the buggy count and the fixed count simultaneously.
+
+Cross-checked: `efficientnetImagenetVerified` = **5,288,548** = B0's canonical 5.29M,
+`mobilenetv2Verified` = 2,236,682, `resnet34Verified` = 21,289,802. The last two match the
+book exactly, so only ENet's row was stale.
+
+▶ **This changed the analysis, not just the number.** The old bullet read "EfficientNet-B0
+is 3.2× the parameters of MobileNet V2 for a 0.5 point lift — SE is an expensive addition."
+Real figures: **1.80×** the parameters for **+0.71** top-1, and B0 takes the top-1 crown
+from R34 at 5.3× fewer parameters. Rewritten, not renumbered.
+
+### ⚠⚠ FIVE BAD LOG LINES IN THREE CHAPTERS THIS DOC CALLED DONE
+
+`scripts/verify_excerpt.py` checks every quoted `Epoch n/N:` / `epoch n:` / `[pjrt_ffi]` /
+`done (` line in a .tex range against the real log, handling the book's line-wrapping. It
+audited 112 quoted lines across ch1–ch6 and found:
+
+| chapter | defect | mode |
+|---|---|---|
+| ch5 | `done (trained ResNet-34 via the proof-rendered StableHLO)` — **the binary never printed this**; it printed `done (trained ResNet-34 adam + cosine/warmup via packed threading)` | **fabrication** |
+| ch2 | compile lines said `6 outputs / 2398 ms / 122 ms`; log says `7 outputs / 2103 ms / 118 ms` | stale carryover |
+| ch3 | compile lines said `10 outputs / 2655 ms / 389 ms`; log says `11 outputs / 2490 ms / 383 ms` | stale carryover |
+
+All fixed; all seven chapters now verify clean.
+
+▶ **The two modes need different defences and §5 only covers one.** §5 says to diff the
+excerpt when you ELIDE a run, which catches fabrication. It does not catch staleness,
+because a stale line was genuine when pasted and nothing about eliding draws the eye to it.
+**Re-capturing a run silently invalidates every quoted line, not just the ones you edited.**
+⚠ The ch2/ch3 tell was that the *prose* already had the right answer: ch2 says
+`MlpFaithfulPoC` proves "each of the six parameter outputs" plus a trailing report-only
+`%loss`, i.e. 7 total — the prose had been updated and the pasted log had not, and the two
+sat contradicting each other in the same section.
+
+### ⚠⚠ A LIVE DRIVER BUG that blocked the one thing ch7 was supposed to be able to do
+
+`MainEfficientNetImagenet.lean` tested `variant.startsWith "rms"`. The paper-recipe variants
+are spelled **`emarms…`**, which does not start with `rms`. Six committed artifacts —
+including `efficientnetin_emarmsdp64dropdo`, the exact one this doc wanted for ch7's
+phase-4 row — would have run with **RMSProp's state** (the shared trainer's own test is a
+substring, so it initialised the mean-square to 1.0 correctly) and **AdamW's 1e-3 with a
+cosine schedule** instead of the paper's 0.016 with ×0.97 every 2.4 epochs. It descends and
+prints a normal-looking log.
+
+⚠ `tests/TestVariantPredicates.lean` exists FOR this collision class and records it as case
+1 — but it defines a `private def rmsOn` **copy** of the predicate, so it proves the
+predicate is right and never gated a single driver. Fixed here; **verified by running**
+(`lr=0.003200` = 0.016/5 after, against 0.0002 before — 16× apart).
+
+▶ **Two more drivers still carry the prefix test**, latent only because no `emarms`
+artifact exists for their net yet: `MainMobileNetV2Imagenet.lean:52` and
+`MainMobilenetV2VerifiedAdam.lean:71`. Render one MNv2 EMA variant and they go live.
+
+### ⭐ ch7's whole-net VJP IS proved at full depth — unlike ch6
+
+This doc told ch7 it owed ch6's "representative scale" apology because
+`efficientnet_has_vjp` is flagged representative. That is true of *that* theorem, but
+there is another one: **`efficientnetForwardB_full_has_vjp`**
+(`Proofs/Architectures/EfficientNetFullB0.lean:381`) chains stem → **all 16 MBConv blocks**
+→ head through `vjp_comp`, batched over N, closing on `exact vjp_comp _ _ f16 dH e16 vH`.
+Zero `sorry` in all three ENet proof files. §7.1 now makes the strong claim.
+
+▶ **ch8 is owed the same check before it repeats ch6's caveat.** Look for a
+`*FullT*`/`*Full*` file beside the representative theorem, not just the theorem the spec's
+docstring names.
+
+### Code changes, all typechecked
+
+1. **`efficientnetImagenetConfig.epochs` 80 → 350.** brett approved 2026-08-12. Forced, not
+   preferred: **there is no momentum/SGD render for `efficientnetin`** (only the AdamW and
+   RMSProp families), so the 80-epoch SGD tier is unreproducible on the verified path and
+   the 350-epoch RMSProp tier is the only phase-2 number these artifacts can target.
+2. **`LEAN_MLIR_EPOCHS` added** to `MainEfficientNetImagenet.lean` (R50's spelling), in the
+   same commit as the epoch change. ⚠ **`MainConvNeXtImagenet.lean` and
+   `MainViTImagenet.lean` still have 0 hits — ch8 and ch9 inherit this.**
+3. `VerifiedNets.lean` / `MainEfficientNetVerified.lean`: the layout comment said "262
+   params"; `toSpecs.size` is **213**. ⚠ No gate could see it — the `#guard` compares
+   `toSpecs == EfficientNetLayout.specs`, array against array, so the number in the comment
+   beside it was never an operand.
+
+### ▶ Phase 4: NOT run, deliberately
+
+brett's call 2026-08-12: use the already-measured **371 ms/step → 30.9 min/ep → ~180.5 h
+(7.5 d)** for 350 epochs on 4× 4060 Ti rather than probe or run it. `sec:enet_phase4`
+prints that with Val top-1 **TBD**. ⚠ The subsection states plainly that the verified path
+is fp32 while every phase-2 row is bf16, so 30.9 min/ep must not be read against phase 2's
+8.6 min/ep as an architecture result.
+
+⭐ ENet's collectives ARE gated, by two gates that prove different things:
+`TestEfficientNetDpCheck.lean` pins the DP forward bit-exactly but hands both replicas the
+SAME rows, so it is structurally blind to a shard-offset bug; the `shard-check efficientnet`
+row closes exactly that by giving them different data. ▶ Do not write "tied" as if it were
+one property.
+
+### ⚠ The phase-2 ImageNet listing had drifted too — check ch8's
+
+This doc said to KEEP ch7's phase-2 config listing as the reference. It is real code, but
+the book printed `learningRate := 0.1`, `useAdam := false`, `cosineDecay := true` while
+claiming to mirror `jax/MainEfficientNetImagenet.lean`, which now holds **RMSProp at 0.016**
+with exponential decay, AutoAugment and classifier dropout. Both book tiers come from that
+one config today (`default` 80 ep, `full` 350 ep). Fixed, plus a note that the 80-epoch SGD
+row is a real measurement of a recipe the listing no longer reproduces.
+▶ **"Keep as the phase-2 reference" is not the same as "it is accurate."**
+
+### ▶▶ TODO: FIX — MobileNetV2's whole-net VJP fold is still 2 blocks of 17
+
+Raised by brett 2026-08-12, reading ch7's §7.1 contrast paragraph. `mobilenetv2_has_vjp_at`
+(`Proofs/Architectures/MobileNetV2.lean:489`) binds stem + `We₁/Wd₁/Wp₁` + `We₂/Wd₂/Wp₂` +
+head. **Two** inverted-residual blocks; the net has seventeen. ch6's §6.1 states this out
+loud and ch7's §7.1 now contrasts against it, so closing it edits the book in two places.
+
+⚠⚠ **The obvious plan — "copy `EfficientNetFullB0.lean`" — DOES NOT TRANSFER, and the
+reason is load-bearing.** `efficientnetForwardB_full_has_vjp` is a **global** `HasVJP` over
+all 16 blocks, and it can be global only because EfficientNet's activation is **swish**,
+smooth everywhere (ch7's MLIR caveat: the SE fan-in carries no kink condition, and the only
+smooth-point hypotheses are the BatchNorms' `0 < ε`). MobileNetV2 is **relu6**. A global
+`HasVJP` through a kink is FALSE. `MobileNetV2FullPaper.lean`'s own header already says
+this: "relu6 is kinked, so the whole-net input-VJP stays pointwise-only (the repo standard
+for relu-family nets)" — which is why that file delivers forward + faithfulness for all 17
+and stops.
+
+▶ **So there are two axes and only one is movable.** Depth (2 → 17) is the gap. Pointwise →
+global is not, and must stay the `_at` form. Anyone who conflates them will spend the day
+proving something untrue.
+
+**What exists already**, so this is assembly rather than new mathematics:
+
+- `MobileNetV2FullPaper.lean` has the four block shapes (`ivNoExpW`, `ivExpOnlyW`,
+  `ivResidW`, `ivStridedW`) and the full 17-block chain `mobilenetv2ForwardPaper`, 0 sorries.
+- The per-operation VJPs it would compose (depthwise, pointwise, BN, additive skip) are all
+  proved and unconditional.
+- EfficientNet shows the target shape: eight lemmas
+  `mb{NoExp,Exp,Resid,Strided}W_{has_vjp,differentiable}` chained by `vjp_comp`.
+- The `iv*` peers of those eight are the missing piece: **zero of them exist today.**
+
+⭐ Note this is the SECOND time a "representative scale" caveat turned out to be worth
+re-checking, and the two went opposite ways: ch7's was **understated** (the full-depth
+theorem existed and nobody had found it), ch6's is **real**. Check the code, not the
+caveat, and check it in both directions.
+
+### ▶ Open, not chased
+
+- **`lakefile.lean:1805`** documents `efficientnet-adam-tie` as `ireeLink` because
+  "`efficientnet-verified-adam` is an IREE binary, and a tie must run on the backend the
+  trainer actually uses." That premise is now false — the trainer is on `lowererLink` and
+  defaults to XLA. Either the docstring is stale or the tie runs on the wrong backend, and
+  telling those apart means RUNNING the gate, not editing it.
+- **Cheap hardening that closes classes, not instances**: a `#guard` on the *printed*
+  quantity (`scalarParams efficientnetVerified.toSpecs == 4020358`) would have caught the
+  262; having the drivers import one shared `rmsOn` instead of hand-rolling three copies
+  would have collapsed them into the one `TestVariantPredicates` already covers.
+
+---
+
+## 4a-sexies. ▶▶ NEXT: Chapter 8, ConvNeXt-T
+
+**ch8 is `content.tex` 7658–8438.** Baseline with `scripts/measure_prose.py`:
+**31 em-dashes, 16 prose semicolons, max sentence 68 w.**
+
+⚠ **This doc has claimed for weeks that ch8 has "one 142-word sentence." It does not.**
+That came from the raw §3 script, which welds sentences across stripped environments and
+across `.)`. The real max is 68 w, which is 4 w over ch5/ch7's finished 64. So ch8's prose
+job is the em-dashes and semicolons, not a monster sentence hunt.
+
+▶ **ch8 is in the best starting position of any chapter so far.** Three of the things that
+cost ch7 the most time are already correct here. Check them rather than assume, but expect
+them to pass.
+
+### 1. §8.1 "Run it first" — one command, and the estimate is probably RIGHT this time
+
+```bash
+lake build convnext-verified-adam
+CUDA_VISIBLE_DEVICES=0 PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
+  ./.lake/build/bin/convnext-verified-adam data \
+  > runs/<date>-convnext-imagenette-xla-cuda/convnext-imagenette-xla.log 2>&1
+```
+
+`convnext-verified-adam` is already on `lowererLink`. lakefile line 2939 says IREE 13.3 h
+against **XLA 1h54m01s**.
+
+⭐ **Unlike ch6's and ch7's, this estimate is likely accurate**, and the reason is in the
+comment beside it: `⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the
+channel-LN net at 6841s`. Somebody actually re-measured it against the current net. ch6's
+and ch7's were 3× and 2.3× pessimistic because they were never re-run after the net
+changed. ▶ So budget ~2 h, but **ASK BEFORE STARTING** (`user_runtime_prefs`), and note
+ConvNeXt is the heaviest per-epoch net in the book.
+
+⚠ Clear `.lake/build/convnext_adam_ckpt_xla*` first and between probes, or set
+`LEAN_MLIR_CKPT_TAG`.
+
+### 2. ⭐⭐ DO NOT repeat ch6's "representative scale" caveat — ConvNeXt has the full fold
+
+**`convNextForwardTCh_has_vjp` (`Proofs/Architectures/ConvNeXtFullT.lean:270`), with
+`convNextForwardTCh_has_vjp_correct` at :341. 0 sorries in the file.** It has the full
+per-block ladder underneath it too: `cnxBodyWith_has_vjp`, `cnxBlockChW_has_vjp`,
+`convNextStageChK_has_vjp`, `cnxDownChW_has_vjp`.
+
+And it can be a **global** statement for the same reason EfficientNet's can: GELU is smooth
+and LayerNorm has no running buffers or kink. So ch8 gets ch7's strong sentence, not ch6's
+apology. ▶ **The three-way split now reads: ENet and ConvNeXt have full-depth global folds;
+MobileNetV2 is the only one still at representative depth, and its relu6 kink is why (see
+the TODO above).** If ch8's prose currently carries a representative-scale caveat, delete
+it — it is wrong.
+
+### 3. The fiction to replace (real line numbers, not offsets)
+
+| line | what is there now | replace with |
+|---|---|---|
+| 8005 | `def convNextTiny : NetSpec` | `convnextVerified : VerifiedNetSpec`, §5.3 shape |
+| 8023 | `def convNextTinyConfig : TrainConfig` | `VerifiedConfig` + `trainAdamSched` entry |
+| 8036 | `convNextTiny.train convNextTinyConfig` | ⚠ `.train` again — `trainAdamSched` is the real entry |
+| 8057 | `$ IREE_BACKEND=rocm IREE_CHIP=gfx1100` log | the §8.1 capture. **ch8's last IREE holdout** |
+| 8175 | `def convNeXtTinyImagenet : NetSpec` | keep as the labelled phase-2 reference, **but diff it against `jax/MainConvNeXtImagenet.lean` first** |
+| 8193 | `def convNeXtTinyImagenetConfig : TrainConfig` | ditto |
+| 8390 | "`.train` entry point is identical; every row is a one-line `NetSpec` or `TrainConfig` change" | the verified vocabulary, as ch7's now reads |
+| 7910 | `\phasethreenote` | delete once §8.x's numbers are XLA (uses 2 → 1) |
+
+⚠ **§4a-quinquies' hardest-won lesson applies to row 8175/8193**: this doc told ch7 to
+"keep the phase-2 listing as the reference" and it had silently drifted from the file it
+claimed to mirror. **Diff the book's listing against `jax/MainConvNeXtImagenet.lean` line
+by line before keeping it.** That file today has `learningRate := 2.5e-4`, `epochs := 80`,
+`cosineDecay := true`, `gradClipNorm := 1.0`, `useEMA := true`, `dropPath := 0.1`, and a
+`convNeXtTinyImagenetConfigFull` at `epochs := 300`.
+
+### 4. ⭐ Things ch7 had to fix that ch8 already has right — VERIFY, then move on
+
+- **Parameter count matches.** `convnextVerified` derives **180 tensors / 27,826,282
+  scalars**, and the book's comparison table already says 27.83M. (`convnextImagenetVerified`
+  is 28,587,592.) ch7's was 78% wrong; this one is fine.
+- **`convnextImagenetConfig.epochs := 300` already matches** the phase-2 `Full` tier, so the
+  match-phase-2 rule is satisfied out of the box. ⚠ But ch8 prints **two** bolded tiers
+  (80 ep → 78.13/94.05, 300 ep → 81.10/95.37). Decide which is the chapter's headline and
+  make sure 300 is it, or the config is matching the wrong one.
+- **The DP collectives are gated, both ways**: `tests/TestConvNeXtDpCheck.lean` AND
+  `tests/TestConvNeXtShardCheck.lean` exist (ConvNeXt is where `shard-check` was
+  generalised from). ▶ Describe them as ch7's §7.4 now does — the dp-check pins the forward
+  bit-exactly but hands both replicas the SAME rows, and shard-check is what closes the
+  shard-offset hole. They are not one property.
+
+### 5. ⚠ What ch8 still inherits and must fix
+
+1. **`MainConvNeXtImagenet.lean` has NO `LEAN_MLIR_EPOCHS`** (0 hits, same as ViT). With
+   `epochs := 300` committed, the net is **unprobeable** — you cannot ask for a short smoke
+   run. Add it copying R50's spelling, exactly as ch7 did.
+2. **`lakefile.lean:1828` says "ireeLink, because `convnext-verified-adam` is an IREE
+   binary."** That premise is false — line 2120 puts it on `lowererLink`. This is the SAME
+   stale docstring ch7 found on `efficientnet-adam-tie` (§4a-quinquies "Open"). ▶ Whether
+   the docstring is stale or the tie runs on the wrong backend can only be settled by
+   RUNNING the gate.
+3. **The variant markers are denser here than anywhere else**: `wx`, `clip`, `drop`, `ema`,
+   `dp`, in combinations up to `convnextin_adamdpwxclipdrop`. ▶ Before trusting any driver's
+   variant predicate, check it against `tests/TestVariantPredicates.lean`'s rule — **with N
+   markers the collisions are between PAIRS, so test every CONCATENATION.** ch7's live bug
+   was exactly this class and the test file never gated a driver because each driver
+   hand-rolls its own copy of the predicate.
+4. **ch8 owns the second of the three cumulative comparison tables.** Its ConvNeXt row reads
+   `27.83M / 790 KB / 2030 ms / 13.3 h / 84.94%`. Params are right; the other four are
+   phase-3 IREE. Re-measure while you are in the chapter. The other three rows are known:
+   R34 729 KB / 220 ms / 1.5 h / 89.71%, MNv2 1,047 KB / 90 ms / 35 min / 89.25%, ENet-B0
+   1,316 KB / 103 ms / 41 min / 89.96%.
+
+### 6. Verification, in order
+
+`scripts/verify_excerpt.py` over EVERY chapter → `latexmk` 0 errors AND 0 undefined refs →
+`scripts/measure_prose.py` to 0/0 → typecheck any Lean touched → **never a number you did
+not measure**. ⚠ And re-measure the chapters you did NOT touch: ch7's TODO note silently
+regressed ch6 from 0 to 2 prose semicolons, caught only by re-running the script on ch6.
+
+---
+
+## 4a-ter. Chapter 7 scoping (superseded by §4a-quinquies, kept for what it got right)
 
 **Read ch5 §5.3 (`sec:verified_trainer_pattern`) and ch6 first — they are the mold, and
 ch6 is the most recent worked example.** Baseline: 48 em-dashes, 12 prose semicolons,
@@ -951,17 +1259,25 @@ three: **run the binary the chapter claims to document, before documenting it.**
 loss slot, it omits the field. A fabricated zero in a captured log is the one
 thing this book cannot ship.
 
-### ⚠ Verify hand-assembled log excerpts against the source
+### ⚠⚠ Verify hand-assembled log excerpts against the source — THIS IS NOW A SCRIPT, RUN IT
 
 Writing §5.1 I **fabricated two log lines** — epoch 4's loss and epoch 76's —
 while hand-eliding the middle of a run, and caught them only by diffing the
 excerpt against the log before committing. Elision is exactly where invented
-numbers get in. The check is cheap:
+numbers get in. **A third one got past that pass and shipped**, and two more chapters
+carried stale lines; see §4a-quinquies. So this is no longer a habit, it is a gate:
 
-```python
-log = set(l.rstrip() for l in open(LOGFILE))
-# every quoted `Epoch n/N:` / `  epoch n:` line in the .tex must be in `log`
+```bash
+scripts/verify_excerpt.py blueprint/src/content.tex <logfile> <tex-start> <tex-end>
 ```
+
+It checks every quoted `Epoch n/N:` / `epoch n:` / `[pjrt_ffi]` / `done (` line, rejoins
+the book's wrapped continuation lines before comparing, and exits non-zero on any miss.
+Run it over **every** chapter, not just the one you touched.
+
+⚠ It has two failure modes to catch and only one is fabrication. The other is **stale
+carryover**: a line that was genuine when pasted and was invalidated by a later re-capture.
+Nothing about eliding draws your eye to those, and they survive any number of prose passes.
 
 ### Traps
 
@@ -1006,12 +1322,14 @@ Three ways out, and it needs brett's decision, not ours:
 
 ## 7. Known-stale, book-wide
 
-- ✅ **Chapters 1–6 are IREE-free** as of 2026-08-12. ch6's last holdout was its
-  Results block, an `IREE_BACKEND=rocm … gfx1100` log that also contained a
-  **fabricated line** (`Epoch 2/80: loss=(dropping) lr=0.000667`), replaced by the
-  XLA capture. The two mentions left in ch5 are legitimate (PJRT implements "the same
-  C surface as the IREE shim"; gfx1100 in the ROCm fault note).
-  ▶ **ch7 is next and still has one at +312.**
+- ✅ **Chapters 1–7 are IREE-free** as of 2026-08-12. ch7's holdout was its Results block's
+  `IREE_BACKEND=rocm … gfx1100` log, replaced by the XLA capture in `sec:enet_runit`; the
+  chapter now has 0 hits for `IREE|vmfb|gfx1100`. ch6's last holdout had also contained a
+  **fabricated line** (`Epoch 2/80: loss=(dropping) lr=0.000667`). The two mentions left in
+  ch5 are legitimate (PJRT implements "the same C surface as the IREE shim"; gfx1100 in the
+  ROCm fault note).
+  ▶ **ch8 is next.** Note the fabricated-line problem was NOT confined to IREE blocks —
+  see §4a-quinquies, where three chapters' XLA captures were also wrong.
 - ⚠⚠ **`latexmk` AND THE PDF YOU READ ARE DIFFERENT FILES.** §5's gate builds
   `blueprint/src/print.pdf` in place. The copy that gets opened is
   `blueprint/lean4-mlir-blueprint.pdf`, and `blueprint/README.md` says the intended
