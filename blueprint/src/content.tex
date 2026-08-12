@@ -1268,7 +1268,7 @@ The run at the top of this chapter is this network. Accuracy climbs from
 essentially flat from epoch~9 on, which is what a model with no hidden
 layer looks like once it has learned everything it can. Adding hidden
 layers and ReLU in Chapter~\ref{chap:mlp} takes the same dataset and the
-same recipe to 98.57\%. That gap of about 6.5 points is the value of
+same recipe to 97.83\%. That gap of about 5.7 points is the value of
 non-linearity on this task.
 
 \paragraph{Where this goes.}
@@ -1657,6 +1657,7 @@ the same question, asked about a different building block:
 output jiggle?}
 
 \section{Run it first}
+\label{sec:mlp_runit}
 
 Before any of the math, train the thing. Four commands and about ten
 seconds of GPU time:
@@ -1683,22 +1684,22 @@ MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
   xla/pjrt verified_mlir/mlp_fwd.mlir
   train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats),
     mean-loss SGD lr=0.100000, He init
-  epoch 1: test_acc = 9199/10000 = 91.990000% (880ms)
-  epoch 2: test_acc = 9525/10000 = 95.250000% (883ms)
-  epoch 3: test_acc = 9635/10000 = 96.350000% (903ms)
-  epoch 4: test_acc = 9690/10000 = 96.900000% (879ms)
-  epoch 5: test_acc = 9714/10000 = 97.140000% (827ms)
-  epoch 6: test_acc = 9733/10000 = 97.330000% (803ms)
-  epoch 7: test_acc = 9749/10000 = 97.490000% (843ms)
-  epoch 8: test_acc = 9765/10000 = 97.650000% (857ms)
-  epoch 9: test_acc = 9764/10000 = 97.640000% (864ms)
-  epoch 10: test_acc = 9775/10000 = 97.750000% (846ms)
-  epoch 11: test_acc = 9774/10000 = 97.740000% (846ms)
-  epoch 12: test_acc = 9783/10000 = 97.830000% (823ms)
+  epoch 1: loss = 0.413492, test_acc = 9199/10000 = 91.990000% (849ms)
+  epoch 2: loss = 0.191197, test_acc = 9525/10000 = 95.250000% (901ms)
+  epoch 3: loss = 0.139092, test_acc = 9635/10000 = 96.350000% (902ms)
+  epoch 4: loss = 0.109095, test_acc = 9690/10000 = 96.900000% (938ms)
+  epoch 5: loss = 0.088633, test_acc = 9714/10000 = 97.140000% (903ms)
+  epoch 6: loss = 0.073492, test_acc = 9733/10000 = 97.330000% (904ms)
+  epoch 7: loss = 0.061921, test_acc = 9749/10000 = 97.490000% (931ms)
+  epoch 8: loss = 0.052623, test_acc = 9765/10000 = 97.650000% (943ms)
+  epoch 9: loss = 0.045073, test_acc = 9764/10000 = 97.640000% (903ms)
+  epoch 10: loss = 0.038765, test_acc = 9775/10000 = 97.750000% (919ms)
+  epoch 11: loss = 0.033494, test_acc = 9774/10000 = 97.740000% (946ms)
+  epoch 12: loss = 0.028984, test_acc = 9783/10000 = 97.830000% (942ms)
 done (trained MNIST-MLP via the proof-rendered StableHLO).
 \end{verbatim}
 
-Twelve epochs at about 850\,ms each, and 97.83\% on the full
+Twelve epochs at about 900\,ms each, and 97.83\% on the full
 10,000-image test set. Adding two hidden layers to
 Chapter~\ref{chap:tensor}'s linear model buys 5.7 points of accuracy at
 about three times the wall clock per epoch.
@@ -1707,10 +1708,13 @@ Here is the part that matters. That run did not execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/mlp\_train\_step.mlir}, which is the text
 \texttt{Proofs.StableHLO.mlpTrainStepFaithfulV} emits. Every line of
-that file is \texttt{pretty} of a proven graph node, and
-\texttt{MlpFaithfulPoC} proves that each of the six outputs denotes the
-certified gradient-descent step derived from the Mathlib \(\fderiv\)
-math. The two hidden layers, their ReLUs, the softmax cross-entropy
+that file is \texttt{pretty} of a proven graph node, with one marked
+exception, and \texttt{MlpFaithfulPoC} proves that each of the six
+parameter outputs denotes the certified gradient-descent step derived from
+the Mathlib \(\fderiv\) math. The exception is the trailing
+\texttt{\%loss} scalar, which the module labels \texttt{REPORT-ONLY} in a
+comment of its own. It exists so the trainer can print the loss you see
+above, it is read by nothing else, and no theorem depends on it. The two hidden layers, their ReLUs, the softmax cross-entropy
 cotangent, the six parameter gradients, and the SGD update are all
 proof-backed operations. Every theorem in the rest of this chapter is
 about the graph that just trained.
@@ -2145,7 +2149,6 @@ inner derivative; the \(1/p_\ell\) from \(\log\) cancels the
 \section{Example: MNIST MLP}
 \label{sec:mlp_mnist_example}
 
-\phasethreenote
 
 The theorems above are the calculus. Here is a concrete architecture
 built from those pieces: a three-layer fully-connected classifier for
@@ -2261,149 +2264,10 @@ about 40 milliseconds. The train step takes roughly seven times as long
 to compile as Chapter~\ref{chap:tensor}'s, which is the cost of six
 parameter tensors and two ReLU subgradients rather than one dense layer.
 
-\subsection*{The earlier unverified path}
-
-The rest of this section is the older route. It is kept because it is
-what the numbers below were measured on, and because it reports
-per-batch loss, which the verified trainer does not. It uses the
-unverified \texttt{NetSpec} and the ablation runner rather than the
-rendered graph above.
-
-\subsection*{Code: the full training program}
-
-The entire training program in Lean is about twenty-five lines. This
-is the old-school SGD baseline, the exact config the Swift for
-TensorFlow book used in its Chapter 1: SGD at learning rate 0.1, 12
-epochs, no regularization tricks. In our repo this config is
-\texttt{s4tfBaseline} in \texttt{MainAblation.lean}:
-
-\begin{verbatim}
--- 1
-import LeanMlir
-
--- 2
-def mnistMlp : NetSpec where
-  name   := "MNIST-MLP"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .dense 784 512 .relu,
-    .dense 512 512 .relu,
-    .dense 512  10 .identity
-  ]
-
--- 3
-def s4tfBaseline : TrainConfig where
-  learningRate   := 0.1    -- old-school SGD learning rate
-  batchSize      := 128
-  epochs         := 12
-  useAdam        := false  -- plain SGD, no momentum, no moment buffers
-  weightDecay    := 0.0
-  cosineDecay    := false
-  warmupEpochs   := 0
-  augment        := false
-  labelSmoothing := 0.0
-
--- 4
-def main (args : List String) : IO Unit :=
-  mnistMlp.train s4tfBaseline (args.head?.getD "data") .mnist
-\end{verbatim}
-
-Walking through the numbered sections:
-
-\textbf{1. The import.} One line. \texttt{LeanMlir} is the framework
-implemented in the \texttt{LeanMlir/} directory of the repo, and it
-exposes \texttt{NetSpec}, \texttt{TrainConfig}, and the
-\texttt{train} method. Everything downstream in this chapter and
-the next is a specialization of this framework.
-
-\textbf{2. The architecture.} \texttt{NetSpec} is a plain data
-structure: a name, input dimensions, and a list of \texttt{Layer}
-values. Our three layers are \texttt{.dense 784 512 .relu},
-\texttt{.dense 512 512 .relu}, \texttt{.dense 512 10 .identity}.
-Read left-to-right: input size, output size, activation. That's the
-entire model definition, with no class, no forward-pass function, and
-no \texttt{@differentiable} attribute. The forward pass is derivable
-from the layer list, and the backward pass is \emph{proved} correct
-(see the theorems earlier in this chapter).
-
-\textbf{3. The training hyperparameters.} Plain SGD at learning rate
-0.1, batch size 128, 12 epochs. No Adam, no weight decay, no cosine
-schedule, no warmup, no augmentation, no label smoothing. This is
-the deliberately minimal ``Chapter 1'' baseline. The Swift for
-TensorFlow book shipped exactly this config as its reference example,
-and it makes a useful starting point because every later chapter's
-tweak then has a clean baseline to measure against, both the
-training-recipe ones (Adam, cosine, warmup, weight decay,
-augmentation, label smoothing) and the architectural ones (BN,
-residuals). The repo's
-\texttt{MainAblation.lean} ships a dozen other configs beside this
-one so you can run each ablation and see the delta.
-
-\textbf{4. The program entry point.} One line. Call
-\texttt{mnistMlp.train} with the config, the data directory (default
-\texttt{data/}), and the dataset kind (\texttt{.mnist}). Everything
-inside \texttt{.train} is already in the framework: data loading,
-mini-batching, the rendered training step, the gradient-descent loop,
-the evaluation loop, and logging. Chapter~\ref{chap:tensor}'s ``What's
-inside \texttt{.train}?'' walks the verified version of that driver line
-by line. The user-facing program is just ``specify the network,
-specify the knobs, run.''
-
-That's the whole thing. The parts people usually have to write by
-hand every time (the training loop, the eval loop, the gradient-
-computation machinery) are hidden inside the framework because
-\emph{they were the same every time}. The correctness of what's
-inside \texttt{.train} is what the proof chapters prove.
-
 \subsection*{Results}
 
-Build the ablation runner and invoke it with the \texttt{mlp-sgd}
-config. Output below is from a real run, captured verbatim from
-\texttt{logs/ablation\_mlp-sgd.log}, on an AMD 7900 XTX (ROCm,
-gfx1100):
-
-\begin{verbatim}
-$ lake build ablation
-$ IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
-    ./.lake/build/bin/ablation mlp-sgd
-Ablation: mlp-sgd
-  spec: MNIST-MLP, optimizer: SGD
-  lr: 0.100000, cosine: false, wd: 0.000000
-  aug: false, label_smooth: 0.000000
-MNIST-MLP-mlp-sgd: 669706 params
-Generating train step MLIR...
-  10375 chars
-Compiling vmfbs...
-  forward compiled
-  eval forward compiled
-  train step compiled
-  session loaded
-  train: 60000 images (784 floats/image)
-training: 468 batches/epoch, batch=128, SGD, lr=0.100000
-  step 0/468: loss=2.437782 (34ms)
-Epoch  1/12: loss=0.218235 lr=0.100000 (9417ms)
-Epoch  2/12: loss=0.082146 lr=0.100000 (9269ms)
-Epoch  3/12: loss=0.050954 lr=0.100000 (9280ms)
-Epoch  4/12: loss=0.035614 lr=0.100000 (9171ms)
-Epoch  5/12: loss=0.025503 lr=0.100000 (9119ms)
-Epoch  6/12: loss=0.017866 lr=0.100000 (9118ms)
-Epoch  7/12: loss=0.011806 lr=0.100000 (9153ms)
-Epoch  8/12: loss=0.009618 lr=0.100000 (9169ms)
-Epoch  9/12: loss=0.005895 lr=0.100000 (9250ms)
-Epoch 10/12: loss=0.003566 lr=0.100000 (9262ms)
-  val accuracy: 9795/9984 = 98.11%
-Epoch 11/12: loss=0.002229 lr=0.100000 (9114ms)
-Epoch 12/12: loss=0.000999 lr=0.100000 (9093ms)
-  val accuracy: 9841/9984 = 98.57%
-Saved params + BN stats.
-\end{verbatim}
-
-Twelve epochs, about 9~seconds per epoch, $\sim$110~seconds total.
-Training loss drops from $2.44$ at step 0 (random-initialization
-cross-entropy on 10 classes: $\log 10 \approx 2.303$, plus a bit of
-noise) down below $10^{-3}$ by the end. Final test accuracy lands at \textbf{98.57\%}, which is the going rate
-for a three-layer MLP on MNIST with plain SGD.
+The run in \S\ref{sec:mlp_runit} is the result. Its per-epoch training
+loss, on a log scale:
 
 \begin{center}
 \begin{tikzpicture}
@@ -2411,7 +2275,7 @@ for a three-layer MLP on MNIST with plain SGD.
     width=0.92\linewidth, height=6.5cm,
     xlabel={Epoch}, ylabel={Training loss},
     ymode=log,
-    xmin=0, xmax=13, ymin=0.0007, ymax=0.4,
+    xmin=0, xmax=13, ymin=0.02, ymax=0.5,
     xtick={0,2,4,6,8,10,12},
     grid=major, grid style={gray!18},
     tick label style={font=\small},
@@ -2419,22 +2283,23 @@ for a three-layer MLP on MNIST with plain SGD.
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,0.218235) (2,0.082146) (3,0.050954) (4,0.035614) (5,0.025503) (6,0.017866) (7,0.011806) (8,0.009618) (9,0.005895) (10,0.003566) (11,0.002229) (12,0.000999)
+(1,0.413492) (2,0.191197) (3,0.139092) (4,0.109095) (5,0.088633) (6,0.073492) (7,0.061921) (8,0.052623) (9,0.045073) (10,0.038765) (11,0.033494) (12,0.028984)
 };
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
 \noindent MNIST MLP ($784{\to}512{\to}512{\to}10$), SGD~0.1, 12 epochs,
-log-scale loss (\texttt{logs/ablation\_mlp-sgd.log}). Per-epoch training
-loss falls $\sim$200$\times$ from the first epoch to below $10^{-3}$, and
-final test accuracy is 98.57\%.
+log-scale mean training loss per epoch
+(\texttt{runs/2026-08-11-mlp-verified-xla-cuda/}). The loss falls
+$14\times$ across the run, and test accuracy ends at 97.83\%.
 
-Chapter 1 (\texttt{MNIST 2D CNN}) runs the same \texttt{s4tfBaseline}
-config against a CNN architecture for a direct apples-to-apples
-comparison. Later chapters switch to the modern recipe (Adam + cosine + warmup
-+ weight decay + label smoothing + data augmentation) once we can
-benchmark the deltas against this baseline.
+Both numbers come off the same binary this chapter's theorems describe.
+An earlier edition reported 98.57\% here, measured with an unverified
+ablation runner that shared the architecture but not the proof-rendered
+graph, and that runner was kept because it was the only thing that
+printed a loss. The verified train step now returns one, so the second
+program is gone.
 
 \section{Return on width}
 
@@ -2601,6 +2466,7 @@ into the architecture, priors that the data has but the MLP
 threw away.
 
 \section{Run it first}
+\label{sec:cnn_runit}
 
 Before any of the math, train the thing. Four commands and about a
 minute of GPU time:
@@ -2627,20 +2493,20 @@ MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XL
   xla/pjrt verified_mlir/cnn_fwd.mlir
   train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats),
     mean-loss SGD lr=0.100000, He init
-  epoch 1: test_acc = 9551/10000 = 95.510000% (4723ms)
-  epoch 2: test_acc = 9728/10000 = 97.280000% (4939ms)
-  epoch 3: test_acc = 9794/10000 = 97.940000% (4822ms)
-  epoch 4: test_acc = 9835/10000 = 98.350000% (4208ms)
-  epoch 5: test_acc = 9848/10000 = 98.480000% (4718ms)
-  epoch 6: test_acc = 9852/10000 = 98.520000% (4898ms)
-  epoch 7: test_acc = 9858/10000 = 98.580000% (5256ms)
-  epoch 8: test_acc = 9864/10000 = 98.640000% (5292ms)
-  epoch 9: test_acc = 9860/10000 = 98.600000% (7671ms)
-  epoch 10: test_acc = 9872/10000 = 98.720000% (9510ms)
+  epoch 1: loss = 0.348858, test_acc = 9465/10000 = 94.650000% (5922ms)
+  epoch 2: loss = 0.094931, test_acc = 9740/10000 = 97.400000% (6063ms)
+  epoch 3: loss = 0.056737, test_acc = 9807/10000 = 98.070000% (5795ms)
+  epoch 4: loss = 0.038233, test_acc = 9829/10000 = 98.290000% (4608ms)
+  epoch 5: loss = 0.026337, test_acc = 9844/10000 = 98.440000% (5533ms)
+  epoch 6: loss = 0.017761, test_acc = 9834/10000 = 98.340000% (5663ms)
+  epoch 7: loss = 0.015211, test_acc = 9830/10000 = 98.300000% (4770ms)
+  epoch 8: loss = 0.009691, test_acc = 9869/10000 = 98.690000% (4957ms)
+  epoch 9: loss = 0.035910, test_acc = 9836/10000 = 98.360000% (4486ms)
+  epoch 10: loss = 0.014582, test_acc = 9875/10000 = 98.750000% (4618ms)
 done (trained MNIST-CNN via the proof-rendered StableHLO).
 \end{verbatim}
 
-Ten epochs at about 5 seconds each, and 98.72\% on the full
+Ten epochs at about 5 seconds each, and 98.75\% on the full
 10,000-image test set. Two convolutions in front of
 Chapter~\ref{chap:mlp}'s classifier buy 0.9 points over the MLP's
 97.83\%, and they do it with 3.5M parameters against the MLP's 670K.
@@ -2651,7 +2517,10 @@ reimplementation of the network this chapter describes. It executed
 \texttt{Proofs.StableHLO.cnnTrainStepFaithfulV} emits, and
 \texttt{CnnFaithfulPoC} proves that each of the ten parameter updates
 denotes the certified softmax cross-entropy loss-descent step derived
-from the Mathlib \(\fderiv\) math. Both convolutions, the max pool, the
+from the Mathlib \(\fderiv\) math. The module carries one line that is
+not \texttt{pretty} of a proven node, the trailing \texttt{\%loss} scalar,
+and it says so in its own comment. It feeds the printed loss above and
+nothing else. Both convolutions, the max pool, the
 three dense layers, and the SGD update are all proof-backed operations.
 Every theorem in the rest of this chapter is about the graph that just
 trained.
@@ -3007,7 +2876,6 @@ reindex factor and the saved input \(x\) is the constant.}
 \section{Example: MNIST 2D CNN}
 \label{sec:cnn_mnist_example}
 
-\phasethreenote
 
 The MLP in Chapter~\ref{chap:mlp} crushed MNIST by flattening the
 image into a 784-dim vector and throwing dense layers at it. That
@@ -3134,40 +3002,8 @@ chapter. \texttt{mnistCnnNoBn.train s4tfBaseline} replaces
 
 \subsection*{Results}
 
-Build and run via the ablation framework:
-
-\begin{verbatim}
-$ IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
-    ./.lake/build/bin/ablation cnn-nobn-sgd
-Ablation: cnn-nobn-sgd
-  spec: MNIST-CNN-noBN, optimizer: SGD
-  lr: 0.100000, cosine: false, wd: 0.000000
-  aug: false, label_smooth: 0.000000
-MNIST-CNN-noBN-cnn-nobn-sgd: 3489130 params
-Generating train step MLIR...
-  21884 chars
-Compiling vmfbs...
-  forward compiled
-  eval forward compiled
-  train step compiled
-  session loaded
-  train: 60000 images (784 floats/image)
-training: 468 batches/epoch, batch=128, SGD, lr=0.100000
-  step 0/468: loss=2.436... (75ms)
-Epoch  1/12: loss=0.196587 lr=0.100000 (39327ms)
-Epoch  2/12: loss=0.043851 lr=0.100000 (39243ms)
-...
-Epoch 12/12: loss=(small)   lr=0.100000 (~39000ms)
-  val accuracy: 9898/9984 = 98.98%
-\end{verbatim}
-
-(Full log in \texttt{logs/ablation\_cnn-nobn-sgd.log}.)
-Twelve epochs, about 40~seconds per epoch on the 7900 XTX, $\sim$8
-minutes total. Final test accuracy: \textbf{98.98\%}, up from the
-MLP's 98.57\% on the same data, same optimizer, same number of
-epochs. The delta is 0.4 percentage points --- not huge, but
-consistent and free: the convolution just finds spatial features the
-MLP couldn't see.
+The run in \S\ref{sec:cnn_runit} is the result. Its per-epoch training
+loss, against Chapter~\ref{chap:mlp}'s MLP on the same recipe:
 
 \begin{center}
 \begin{tikzpicture}
@@ -3175,7 +3011,7 @@ MLP couldn't see.
     width=0.92\linewidth, height=6.5cm,
     xlabel={Epoch}, ylabel={Training loss},
     ymode=log,
-    xmin=0, xmax=13, ymin=0.0007, ymax=0.4,
+    xmin=0, xmax=13, ymin=0.008, ymax=0.5,
     xtick={0,2,4,6,8,10,12},
     legend pos=north east,
     legend cell align={left},
@@ -3185,21 +3021,30 @@ MLP couldn't see.
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,0.218235) (2,0.082146) (3,0.050954) (4,0.035614) (5,0.025503) (6,0.017866) (7,0.011806) (8,0.009618) (9,0.005895) (10,0.003566) (11,0.002229) (12,0.000999)
+(1,0.413492) (2,0.191197) (3,0.139092) (4,0.109095) (5,0.088633) (6,0.073492) (7,0.061921) (8,0.052623) (9,0.045073) (10,0.038765) (11,0.033494) (12,0.028984)
 };
-\addlegendentry{MLP}
+\addlegendentry{MLP (12 epochs)}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,0.196587) (2,0.043851) (3,0.025374) (4,0.014667) (5,0.009847) (6,0.008109) (7,0.008859) (8,0.005455) (9,0.008056) (10,0.005157) (11,0.004191) (12,0.001768)
+(1,0.348858) (2,0.094931) (3,0.056737) (4,0.038233) (5,0.026337) (6,0.017761) (7,0.015211) (8,0.009691) (9,0.035910) (10,0.014582)
 };
-\addlegendentry{CNN}
+\addlegendentry{CNN (10 epochs)}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent MNIST, same SGD~0.1 / 12-epoch recipe, log-scale training loss
-(\texttt{logs/ablation\_\{mlp,cnn-nobn\}-sgd.log}). The CNN converges
-faster early (half the MLP's loss by epoch~2); both bottom out near $10^{-3}$
-train loss, but the CNN generalizes better --- 98.98\% vs 98.57\% test.
+\noindent MNIST, SGD~0.1, log-scale mean training loss per epoch
+(\texttt{runs/2026-08-11-\{mlp,cnn\}-verified-xla-cuda/}). The CNN is
+below the MLP from the second epoch onward and reaches in 10 epochs a
+loss the MLP does not reach in 12. Test accuracy is 98.75\% against the
+MLP's 97.83\%. The bump at the CNN's ninth epoch is ordinary SGD at
+$\text{lr}=0.1$ rather than a measurement artifact, and the accuracy
+trace in \S\ref{sec:cnn_runit} dips at the same epoch.
+
+Both curves come off the binaries these chapters' theorems describe. An
+earlier edition plotted an unverified ablation runner here, which shared
+the architectures but not the proof-rendered graphs, and reported 98.98\%
+against 98.57\%. It was kept because it was the only thing that printed a
+loss. The verified train steps now return one.
 
 \subsection*{Why this network is still 99\% dense-head}
 
