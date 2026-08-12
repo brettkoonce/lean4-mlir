@@ -163,7 +163,8 @@ Chapter-wide ranking, to pick what's next:
 |---|---|---|---|
 | Introduction, How this book is organized, Foundations | 0.0 | 0 | done |
 | MNIST: linear classifier (ch1) | 0.0 | 26 (all in proofs) | done |
-| MNIST: 1D MLP (ch2) | 0.0 | 0 | prose done, run pending |
+| MNIST: 1D MLP (ch2) | 0.0 | 0 | **DONE** |
+| MNIST: 2D CNN (ch3) | 0.0 | 0 | **DONE** |
 | On Verification (app C) | 19.3 | 28 | **needs an argument rethink, see §6** |
 | Data availability (app A) | 17.8 | 14 | |
 | Getting started (app B) | 17.0 | 8 | flourishes cut, joinery not |
@@ -173,7 +174,6 @@ Chapter-wide ranking, to pick what's next:
 | Bestiary | 12.7 | 70 | |
 | ResNet-34 | 12.6 | 33 | |
 | ConvNeXt | 11.9 | 31 | |
-| MNIST: 2D CNN | 9.8 | 39 | |
 | Vision Transformer | 8.7 | 59 | |
 
 Watch the `max sentence length` too — several chapters have single
@@ -181,47 +181,129 @@ sentences over 100 words (MNIST 2D CNN has one at 133).
 
 ---
 
-## 4. Chapter 2: what is left
+## 4. Chapters 2 and 3: DONE (2026-08-11/12)
 
-Done already (commit `7a9a1dd`):
+Both shipped. Commits `e9a7081`, `8620eb8`, `3f404e8`, `b9402ac`, plus the
+`IreeSession` rename `1d34920`. What landed, so you can copy the shape for
+chapter 4:
 
-- Prose voice pass, 25 em-dashes and 11 semicolons → 0 and 0
-- New "The verified spec and program" subsection: `mlpVerified`, the
-  spec-to-proof tie (`mlpVerified_has_vjp` over `denoteMLP
-  mlpVerified.layers`), the whole 44-line driver
-- Old listing relabelled "The earlier unverified path"
-- Two factual fixes (the `.train` pointer, the Caveats trusted-surface bullet)
-- The book's last Docker reference killed
+- §2.1 / §3.1 **Run it first** from real CUDA logs
+  (`runs/2026-08-11-{mlp,cnn}-verified-xla-cuda/`): MLP 12 epochs 97.83%,
+  CNN 10 epochs 98.75%.
+- The width sweeps re-measured on XLA (§2.4 at n=1, §3.5 at **n=5**).
+- The unverified ablation runner **deleted** from both chapters, its loss
+  plots kept and repointed at verified data.
+- Voice pass: ch1/ch2/ch3 all now 0 em-dashes, 0 prose semicolons.
+- `\phasethreenote` removed from both (markers 8 → 6).
+- `IreeSession` → `LowererSession`, 269 sites, and chapter 1's apology
+  paragraph for the name deleted with it.
 
-**What you do:**
+### ⚠ PLACEMENT: this doc told you the wrong thing, and it cost a rewrite
 
-1. **Capture the run.** On CUDA:
-   ```
-   lake build mnist-mlp-verified
-   CUDA_VISIBLE_DEVICES=0 .lake/build/bin/mnist-mlp-verified data \
-     2>&1 | tee runs/<date>-mlp-verified-xla/mlp-verified-xla.log
-   ```
-   Expect 12 epochs, ~97.83% — that is what the CUDA control produced,
-   bit-identically across six runs.
-2. **Add §2.1 "Run it first"** per the recipe in §1, before
-   `\section{The theorems}`. Copy chapter 1's section and adapt.
-3. **Replace the historical results.** The current results block runs the
-   *unverified* ablation runner through IREE at ~9.4 s/epoch and reports
-   98.57%. Once §2.1 has a real log, demote or delete it the way chapter
-   1 did. Note the loss plot (`tikzpicture`, per-epoch training loss)
-   depends on those numbers — the verified trainer does **not** print
-   per-batch loss, so either drop the plot or keep it labelled as the
-   historical run. Brett's call; ask.
-4. **Strip the remaining IREE.** 2 mentions left, both in the historical
-   results verbatim (`IREE_BACKEND=rocm`, `Compiling vmfbs...`). They go
-   with the results block.
-5. **`NetSpec` → `VerifiedNetSpec`.** 6 hits, 2 are the substring inside
-   `VerifiedNetSpec`; the rest are the historical listing.
-6. **Remove `\phasethreenote`** (line ~2085) once the trainer completes a
-   run. Its text claims the numbers were measured on the phase-3
-   verified-IREE path, which stops being true. The macro's own comment
-   says the set of these markers maps what phase 4 still has to absorb —
-   9 chapters originally, 8 after chapter 1, 7 after this.
+§4 step 2 said to put "Run it first" *before* `\section{The theorems}`.
+Following that literally put the demo **130 lines deep** in chapter 2,
+behind six prosesections of Jacobian teaching, against chapter 1's 21.
+That defeats the ordering principle §1 calls the whole point.
+
+▶ **Put it after the FIRST prosesection.** Chapter 2 opens in 22 lines now,
+chapter 3 in 27. Do the same for chapter 4.
+
+### ⭐ The loss carve-out — you do NOT need to repeat this for CIFAR
+
+Chapters 2 and 3 could not plot a verified loss because `mlp`/`cnn_train_step`
+returned parameters and nothing else. `3f404e8` added a trailing `%loss`
+scalar to both renderers as a **declared report-only carve-out** (banner in
+the emitted MLIR, same as ConvNeXt/EfficientNet/R50) plus a `%lslot` unused
+input to keep the shared C entry's single shape list symmetric.
+
+**cifar8 already returns a loss** — `lake run cifar` prints
+`Epoch 40/40: loss=0.400674 lr=...` today, because those nets run through
+`trainAdamSched`, which already reads the scalar off the packed tail. So
+chapter 4 needs none of that plumbing.
+
+---
+
+## 4a. ▶▶ NEXT: Chapter 4, CIFAR with BatchNorm
+
+**The prose is the big job here**, much bigger than ch2 or ch3:
+
+| chapter | em-dashes | prose-semicolon lines | max sentence |
+|---|---|---|---|
+| ch2 (was) | 25 | 11 | — |
+| ch3 (was) | 32 | 22 | 92 w |
+| **ch4 (now)** | **60** | **82** | **91 w** |
+
+⚠ Measure with the script in §3, and **exclude theorem/proof/definition
+bodies** — in ch3, 35 of 71 sites were inside them and are out of scope.
+⚠ `\;=\;` and `\;+\;` are LaTeX math spacing, not prose semicolons. A naive
+`count(';')` counts them; `(?<!\\);` does not.
+
+**The measured work is already done.** The six-arm ablation was re-run on
+XLA on 2026-08-11 and lives in
+`runs/2026-08-11-cifar8-6arm-xla-cuda/cifar8-6arm-xla.log` — 40 epochs each,
+`lake run cifar`, RTX 4060 Ti:
+
+| arm | BN | top-1 | top-5 | final loss |
+|---|---|---|---|---|
+| sgdsched | — | 72.47 | 97.57 | 0.5463 |
+| sgdsched | ✓ | 74.49 | 97.83 | 0.4029 |
+| momentum | — | **77.30** | 98.24 | 0.3639 |
+| momentum | ✓ | 77.11 | **98.33** | 0.2958 |
+| adam | — | 73.98 | 98.21 | 0.4941 |
+| adam | ✓ | 73.80 | 97.72 | 0.4014 |
+
+What the data says, for the prose: momentum wins by ~3 points over both SGD
+and AdamW; BN helps plain SGD (+2.02) but is a wash under momentum (−0.19)
+and AdamW (−0.18), while reaching a markedly lower *training* loss in every
+pair. So BN fits harder without generalising better at this scale.
+
+⚠⚠ **Run-to-run spread is ~1 point on these arms** — `bn-adam` measured
+72.84% and 73.80% on the same seed and schedule. So the BN deltas on the
+momentum and adam rows are inside the noise and must NOT be reported as
+ordered. The momentum advantage is well outside it. If the chapter wants to
+rank the BN pairs, that needs n≥3 (see §3c).
+
+**Steps:**
+
+1. `\section{Run it first}` after the first prosesection, from a fresh
+   `lake run cifar` capture or the log above.
+2. Voice pass, prose only.
+3. Re-point any figure/table at the XLA numbers; rewrite the interpretive
+   sentences to match, since several will move.
+4. Remove ch4's `\phasethreenote` once its numbers are XLA (markers 6 → 5).
+5. `grep` the *other* chapters for numbers you changed. Deleting ch2's 98.57%
+   left **chapter 1** quoting it 1,000 lines away.
+
+---
+
+## 3c. ⚠⚠ REPRODUCIBILITY — the lesson that cost the most time
+
+**Conv nets do not reproduce run to run on CUDA.** `tests/prefetch_tie.sh`'s
+header records why: XLA picks convolution algorithms **per process**, so two
+runs of an identical command differ. Dense-only graphs (the MLP) are exact.
+
+Measured on the CNN head sweep, five passes:
+
+    d=512   96.66  97.94  98.49  98.58  98.66     range 2.00
+    d=4096  93.52  98.08  98.75  98.79  98.81     range 5.29
+    other eight widths                            range <= 0.4
+
+▶ **A single pass twice led to a wrong conclusion this session.** Pass 1 said
+d=4096 scored 93.52% against the book's 98.96%, and it was one commit away
+from being written up as a refuted number. Re-running gave 98.76%. The truth
+is bimodality: one bad draw in five, four clustered near 98.7.
+
+**Rules that follow:**
+- Any conv-net number that a claim rests on: **n≥3, plot the median.** Means
+  get dragged by the outlier and draw a fake dip exactly where the net is
+  least stable.
+- State n and the observed range in the caption.
+- The MLP needs n=1. Say which regime you are in.
+- **Sweeps are parallel.** Four passes on GPUs 0/2/3/4 cost the wall time of
+  one. Avoid 1 and 5 (PCIe AER, per `scripts/jobs/*.conf`).
+- ⚠ Do not drop a point because it misbehaved. Dropping inconvenient data is
+  how the unreproducible numbers got into the book. Keep it, plot the median,
+  and say it is bimodal.
 
 ---
 
@@ -364,7 +446,10 @@ Three ways out, and it needs brett's decision, not ours:
   book; removing it from the *repo* is a separate and much larger
   decision (`ffi/iree_ffi.c` is 765 lines, `lakefile.lean` has 226
   references and 3 `lake run *-iree` scripts).
-- `IreeSession` is still the session type name on the XLA path. Chapter 1
-  says so out loud rather than pretending otherwise. It is on the rename
-  list.
+- ~~`IreeSession` is still the session type name~~ ✅ **DONE** (`1d34920`):
+  renamed `LowererSession` across 269 sites, and chapter 1's paragraph
+  apologising for the name is deleted. ▶ Still IREE-named and left for a
+  follow-up: the module file `LeanMlir/IreeRuntime.lean` (7 imports + the
+  lakefile), and **31 driver docstrings** that still say
+  `Run (GPU): IREE_BACKEND=rocm ...` when XLA is the default.
 - Docker references: 0 remaining. Done.
