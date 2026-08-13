@@ -400,15 +400,20 @@ if "--break" in sys.argv:
     print("\n── --break: the negative controls ──")
     # (a) the pre-fix world: every net wired to R34's shim. Gate 0's distinctness must fire, and so
     #     must gate 2 on every net whose augmentation vanishes — i.e. every net whose recipe is
-    #     NOT R34's. That count is 5 as of 2026-08-07: vitin, efficientnetin, convnextin, resnet50in and
-    #     resnet50in160.
-    #     ⚠ It was 3 until R50 was wired, then 4, and 5 once R50 gained its SECOND recipe — the
+    #     NOT R34's. That count is 6 as of 2026-08-12: vitin, efficientnetin, convnextin, resnet50in,
+    #     resnet50in160 and mnv4in.
+    #     ⚠ It was 3 until R50 was wired, then 4, then 5 once R50 gained its SECOND recipe — the
     #     `short` (RSB-A3) shim at trainRes 160. Both R50 rows share a Main file and a reference
     #     but differ in RECIPE, and the partition keys on the recipe, so they count separately.
+    #     6 since MNv4 joined the table (2026-08-12) with its own shim and a recipe that is not
+    #     R34's; the other five were unchanged by that, which is how the bump was confirmed benign.
     #     mobilenetv2in still does not count because its config IS R34's (no extra augmentation), which
     #     is why gate 2's partition treats them as one class.
     #     Bump this deliberately when a net joins — a wrong constant here makes control A red
     #     and the whole file useless, which is exactly what it did when R50 arrived.
+    #     ▶ Confirm the bump before making it: list the firing slugs, not just their count. A count
+    #     that moves because an EXISTING net changed class is a regression wearing this bug's
+    #     clothes, and the two are indistinguishable from the number alone.
     r34 = os.path.join(BUILD, "generated_resnet34_imagenet_shim.py")
     faux = {s: "generated_resnet34_imagenet_shim.py" for s, _, _, _ in NETS}
     distinct_fired = len(set(faux.values())) != len(faux)
@@ -417,9 +422,9 @@ if "--break" in sys.argv:
         if any(flags_by_slug[slug][f] != shim_call_sites(r34)[f] for f in FEATURES))
     print(f"    pre-fix wiring (every net → R34's shim): distinctness fires = {distinct_fired}, "
           f"partition fires on {partition_fired} nets")
-    check(distinct_fired and partition_fired == 5,
-          "control A: the pre-fix wiring is REJECTED, on exactly the 5 affected nets",
-          f"distinct={distinct_fired}, partition fired on {partition_fired} (want 5)")
+    check(distinct_fired and partition_fired == 6,
+          "control A: the pre-fix wiring is REJECTED, on exactly the 6 affected nets",
+          f"distinct={distinct_fired}, partition fired on {partition_fired} (want 6)")
     # (b) swap two nets' shims — the counts stay right, only the PARTITION is wrong. This is the
     #     `swap1` control from wdx-tie: a gate checking "five distinct shims exist" passes it.
     swapped = dict(wiring)
