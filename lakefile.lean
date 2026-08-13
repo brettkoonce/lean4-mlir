@@ -1113,6 +1113,16 @@ lean_exe «blueprint-checkdecls» where
   root := `tests.BlueprintCheckDecls
   supportInterpreter := true
 
+/-- `docstring-checkrefs` — the docstring peer of `blueprint-checkdecls`. That gate resolves
+    every `\lean{}` the blueprint cites; this one resolves every `` `Ident` `` a DOCSTRING
+    cites, against the same environment. The blueprint came through five rewrites intact and
+    the docstrings did not, and the difference was never style: the blueprint had a gate.
+    ⚠ Resolution is `Environment.find?`, not a regex — see the file header for why the regex
+    version was abandoned at an 8.7% false-positive floor. -/
+lean_exe «docstring-checkrefs» where
+  root := `tests.DocstringCheckRefs
+  supportInterpreter := true
+
 lean_exe «ablation» where
   root := `apps.ablation.MainAblation
   moreLinkArgs := ireeLink

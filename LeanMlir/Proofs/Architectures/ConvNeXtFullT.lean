@@ -265,7 +265,7 @@ noncomputable def convNextForwardTCh (w : CnxTWeightsCh) (x : Vec (3 * 224 * 224
                       (flatConvStride4 (h := 56) (w := 56) w.sW w.sb x))))))))))
 
 /-- **The channel-LN ConvNeXt-T has a (correct) VJP — at every input.** Same shape and the same
-    hypothesis count as `convNextForwardT_has_vjp`: 22 LN positivities (stem + 18 blocks via the
+    hypothesis count as `convNextForwardTCh_has_vjp`: 22 LN positivities (stem + 18 blocks via the
     per-stage `∀ i` + 3 downsamples), no head LN. Chain-stated to keep the blocks opaque. -/
 noncomputable def convNextForwardTCh_has_vjp (w : CnxTWeightsCh)
     (hsε : 0 < w.sε)
@@ -317,7 +317,7 @@ noncomputable def convNextForwardTCh_has_vjp (w : CnxTWeightsCh)
   have f9 := gap_diff.comp f8
   exact vjp_comp _ _ f9 (dense_differentiable w.Wd w.bd) e9 (dense_has_vjp w.Wd w.bd)
 
-/-- The nested↔chain bridge (see `convNextForwardT_eq_chain` for why the proof shape matters —
+/-- The nested↔chain bridge (see `convNextForwardTCh_eq_chain` for why the proof shape matters —
     a `simp`/`rfl` proof of this statement dies in the kernel on the recursive stage folds). -/
 theorem convNextForwardTCh_eq_chain (w : CnxTWeightsCh) (x : Vec (3 * 224 * 224)) :
     convNextForwardTCh w x =

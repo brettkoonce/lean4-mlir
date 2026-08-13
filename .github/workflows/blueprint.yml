@@ -234,6 +234,19 @@ jobs:
         run: |
           lake exe blueprint-checkdecls blueprint/lean_decls
 
+      - name: Check Lean declarations cited in DOCSTRINGS
+        # The peer of the step above, and the reason it exists: the blueprint came
+        # through five rewrites intact and the docstrings did not, because only the
+        # blueprint had a gate. A rename that orphans a `\lean{}` goes red; a rename
+        # that orphans a `` `Ident` `` in a docstring was invisible — the file still
+        # compiles and doc-gen4 still renders prose about a symbol that is not there.
+        # Runs here rather than in proofs.yml because this job has already built the
+        # corpus these citations resolve against.
+        # ⚠ scripts/docstring_ref_baseline.txt is DEBT, not an exception list, and may
+        # shrink but never grow. A new entry means a citation just rotted with CI green.
+        run: |
+          lake exe docstring-checkrefs
+
       - name: Build blueprint PDF
         # Don't block the web deploy if PDF fails, but surface detailed
         # diagnostics so we can fix it.

@@ -165,7 +165,7 @@ def cnnG (d : Nat) : VerifiedNetSpec where
 
 /-- The Chapter-4 CIFAR-10 CNN (no BN): conv 3→32 → relu → conv 32→32 → relu → maxpool
     → conv 32→64 → relu → conv 64→64 → relu → maxpool → flatten(4096) → dense 4096→512
-    → relu → dense 512→512 → relu → dense 512→10. VJP: `cifarCnn_has_vjp` (Proofs/SpecVJP). -/
+    → relu → dense 512→512 → relu → dense 512→10. VJP: `cifarCnn_has_vjp_at` (Proofs/SpecVJP). -/
 def cifarVerified : VerifiedNetSpec where
   name     := "CIFAR-CNN"
   slug     := "cifar"
@@ -988,7 +988,7 @@ def convnextImagenetVerified : VerifiedNetSpec where
     blocks (dim 192, 3 heads, MLP 768), final per-channel LayerNorm, CLS-slice dense head 192→10.
     200 params. Tied at the FULL spec in `Proofs/SpecVJP.lean` (`vitVerified_denote_eq` →
     `vitForwardKV` depth-12 distinct-param vector-LN, retiring the old weight-shared
-    scalar-LN caveats), with the REAL whole-net VJP `Proofs.vitVerified_has_vjp`
+    scalar-LN caveats), with the REAL whole-net VJP `vitVerified_has_vjp`
     (all-smooth, `0 < ε` only) and rung E `vitVerified_fwd_faithful` (the depth-12
     multi-head vector-LN graph `vitFwdGraphKMHV`). -/
 def vitVerified : VerifiedNetSpec where

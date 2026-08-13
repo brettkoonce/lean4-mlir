@@ -1,6 +1,6 @@
 import LeanMlir
 
-/-! VJP oracle: conv — tests `conv2d_has_vjp` + `flatten_has_vjp`. -/
+/-! VJP oracle: conv — tests `conv2d_has_vjp3` + `flatten_has_vjp`. -/
 
 def convOnly : NetSpec where
   name   := "vjp-oracle-conv"

@@ -462,7 +462,7 @@ noncomputable def efficientnetForwardB_full_has_vjp (N : Nat) (w : B0Weights)
 /-- **`efficientnetForwardB_full` = the `∘`-chain of the VJP's statement** — the
     kernel-checked bridge between the nested-application and composition forms,
     closing the form-gap this file shipped with. PROOF-SHAPE MATTERS (the ConvNeXt-T
-    `convNextForwardT_eq_chain` lesson): equation-lemma `rw` + 17 `comp_apply`
+    `convNextForwardTCh_eq_chain` lesson): equation-lemma `rw` + 17 `comp_apply`
     rewrites close syntactically; a `simp`/`rfl` proof of the same statement makes
     the kernel reduce the block bodies (no reducibility, no defeq cache) and
     deterministically time out. -/

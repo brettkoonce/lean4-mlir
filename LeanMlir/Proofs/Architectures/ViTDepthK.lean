@@ -276,7 +276,7 @@ theorem vitForwardKV_has_vjp_correct
     Jacobian-transpose contracted with the cotangent, at **every** input image —
     UNCONDITIONAL except `0 < ε` (softmax / GELU / vector-LN are kink-free, so no
     smoothness witness is needed, and the statement is generic in the weights, so
-    it is non-degenerate by construction). The ViT peer of `convNextForwardT_has_vjp`
+    it is non-degenerate by construction). The ViT peer of `convNextForwardTCh_has_vjp`
     (18-block ConvNeXt-T) and `efficientnetForwardB_full_has_vjp` (16-block
     EfficientNet-B0): a full-spec, real-architecture whole-network backward. -/
 theorem vitTiny_has_vjp_correct
