@@ -111,9 +111,37 @@ jobs:
               verified_mlir/cifar_train_step.mlir verified_mlir/cifar_bn_train_step.mlir \
               verified_mlir/cifar8_train_step.mlir verified_mlir/cifar8_bn_train_step.mlir \
             || { echo "::error::committed verified_mlir/{cnn,cifar,cifar_bn,cifar8,cifar8_bn}_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/CnnRender.lean)"; exit 1; }
+          # ⭐ The two forwards come from THIS module, not RenderB, and were baselined while the
+          # train step beside them was guarded — so `resnet34_fwd` could drift away from the graph
+          # `resnet34_train_step` differentiates, with CI green. Elaborating already wrote them.
           lake env lean LeanMlir/Proofs/Codegen/ResNet34Render.lean
-          git diff --exit-code -- verified_mlir/resnet34_train_step.mlir \
-            || { echo "::error::committed verified_mlir/resnet34_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ResNet34Render.lean)"; exit 1; }
+          git diff --exit-code -- \
+              verified_mlir/resnet34_train_step.mlir \
+              verified_mlir/resnet34_fwd.mlir \
+              verified_mlir/resnet34_fwd_eval.mlir \
+            || { echo "::error::committed verified_mlir/resnet34_{train_step,fwd,fwd_eval}.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ResNet34Render.lean)"; exit 1; }
+          # ResNet34RenderB — the OPTIMIZER renders (AdamW at four batches, its DP peers, heavy-ball)
+          # and all four ImageNet (`resnet34in`) artifacts. This module was not elaborated here at
+          # all, so its whole output sat baselined-and-unguarded; the 2-GPU ImageNet render landing
+          # is what surfaced it. Same argument the mnv2 and ConvNeXt steps already make: one
+          # `lake env lean` runs every `#eval` in the file whether or not the result is diffed, so
+          # diffing the full set costs nothing and takes ELEVEN lines out of
+          # scripts/render_guard_baseline.txt, which is the only direction that file may move.
+          lake env lean LeanMlir/Proofs/Codegen/ResNet34RenderB.lean
+          git diff --exit-code -- \
+              verified_mlir/resnet34_adam_train_step.mlir \
+              verified_mlir/resnet34_adam64_train_step.mlir \
+              verified_mlir/resnet34_adam128_train_step.mlir \
+              verified_mlir/resnet34_adam256_train_step.mlir \
+              verified_mlir/resnet34_adamdp_train_step.mlir \
+              verified_mlir/resnet34_adamdp128_train_step.mlir \
+              verified_mlir/resnet34_mom_train_step.mlir \
+              verified_mlir/resnet34in_fwd.mlir \
+              verified_mlir/resnet34in_fwd_eval.mlir \
+              verified_mlir/resnet34in_mom256_train_step.mlir \
+              verified_mlir/resnet34in_momdp64_train_step.mlir \
+              verified_mlir/resnet34in_momdp128_train_step.mlir \
+            || { echo "::error::committed verified_mlir/{resnet34,resnet34in}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ResNet34RenderB.lean)"; exit 1; }
           lake env lean LeanMlir/Proofs/Codegen/MobileNetV2Render.lean
           git diff --exit-code -- verified_mlir/mobilenetv2_train_step.mlir verified_mlir/mobilenetv2_reduced_train_step.mlir \
             || { echo "::error::committed verified_mlir/mobilenetv2_*train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2Render.lean)"; exit 1; }
@@ -132,6 +160,7 @@ jobs:
               verified_mlir/mobilenetv2in_adamdp64_train_step.mlir \
               verified_mlir/mobilenetv2in_rms64_train_step.mlir \
               verified_mlir/mobilenetv2in_rmsdp64_train_step.mlir \
+              verified_mlir/mobilenetv2in_rmsdp128_train_step.mlir \
             || { echo "::error::committed verified_mlir/{mobilenetv2,mobilenetv2in}_*_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean)"; exit 1; }
           # MobileNetV4-Conv-S (planning/mnv4_verified.md §3i). Elaborating this module writes
           # ALL THREE artifacts, so all three are diffed — the fwd/fwd_eval/train_step set comes
@@ -196,6 +225,7 @@ jobs:
               verified_mlir/vitin_adamwxclipdrop_train_step.mlir \
               verified_mlir/vitin_drop_fwd.mlir \
               verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir \
+              verified_mlir/vitin_adamdp256x2wxclipdrop_train_step.mlir \
             || { echo "::error::committed verified_mlir/{vit,vitin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean)"; exit 1; }
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set
@@ -223,6 +253,7 @@ jobs:
               verified_mlir/efficientnetin_emarms64drop_train_step.mlir \
               verified_mlir/efficientnetin_emarms64dropdo_train_step.mlir \
               verified_mlir/efficientnetin_emarmsdp64dropdo_train_step.mlir \
+              verified_mlir/efficientnetin_emarmsdp128dropdo_train_step.mlir \
               verified_mlir/efficientnetin_drop_fwd.mlir \
               verified_mlir/efficientnetin_dropdo_fwd.mlir \
               verified_mlir/efficientnetin_fwd.mlir verified_mlir/efficientnetin_fwd_eval.mlir \
@@ -278,6 +309,7 @@ jobs:
               verified_mlir/resnet50in160_lambdp64bce_train_step.mlir \
               verified_mlir/resnet50in160_lambacc4x64bce_train_step.mlir \
               verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir \
+              verified_mlir/resnet50in160_lambaccdp8x128bce_train_step.mlir \
               verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir \
               verified_mlir/resnet50in_mom256_train_step.mlir \
               verified_mlir/resnet50in_momdp64_train_step.mlir \

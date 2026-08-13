@@ -912,6 +912,20 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 64 1000 "1.0e-05" 4
     Proofs.StableHLO.R34Opt.heavyBall "resnet34in")
 
+-- **The 2-GPU data-parallel peer**, at `B := 128` PER REPLICA so the global batch is 128×2 = 256 —
+-- the same global batch, the same 5004 steps/epoch and the same recipe as `mom256` and `momdp64`
+-- above. That is the whole point: the phase-4 table in §5.7 compares wall-clock across boxes, so a
+-- 2-card row is only readable if the recipe underneath it is the one the 4-card row ran. Rendering
+-- 64 per replica would have been the smaller change and the wrong number — global batch 128, 10,008
+-- steps/epoch, and a run that needs an LR rescale before it means anything.
+--
+-- `B` and `replicas` are both true parameters, so this composes the two `#eval`s above and adds no
+-- renderer code — the same "one `#eval`" the 4-GPU peer was. bs128/card fits a 24 GB 7900 XTX with
+-- room: the single-device `mom256` render above is bs256 and §2d.1 measured it fitting on one.
+#eval IO.FS.writeFile "verified_mlir/resnet34in_momdp128_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 128 1000 "1.0e-05" 2
+    Proofs.StableHLO.R34Opt.heavyBall "resnet34in")
+
 #eval IO.FS.writeFile "verified_mlir/resnet34in_fwd.mlir"
   (Proofs.StableHLO.resnet34FwdFaithfulV 256 1000 "1.0e-05" "resnet34in")
 
@@ -936,3 +950,7 @@ end Proofs.StableHLO
 -- Pinned because the driver derives `LEAN_MLIR_VARIANT` from `(B, replicas)` while the `#eval`
 -- above hardcodes the path, and an "entry mismatch" at run time is the failure they drift into.
 #guard Proofs.StableHLO.r34AdamVariant 64 4 .heavyBall == "momdp64"
+-- The 2-GPU ImageNet render. Same rule, and worth pinning separately: `momdp64` and `momdp128`
+-- differ only in the per-replica batch, so a slug that dropped `B` would collide two artifacts
+-- rendered at different replica counts onto one path — the last-writer-wins race §2a found.
+#guard Proofs.StableHLO.r34AdamVariant 128 2 .heavyBall == "momdp128"

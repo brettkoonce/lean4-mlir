@@ -553,6 +553,18 @@ def vitDropFwdBanner : String :=
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128))
 
+-- The **2-GPU** peer: 256 per replica × 2 = the same global 512 the 128×4 render above trains at,
+-- so the recipe, the steps/epoch and the LR are unchanged and the two wall-clocks are comparable.
+-- ⚠ ViT is the one net whose slug spells the replica count (`128x4` → `256x2`), so BOTH numbers
+-- move here and the name is passed explicitly rather than derived — which also means the entry
+-- name, the artifact path and `LEAN_MLIR_VARIANT` are three copies of one string. `vbB` is the
+-- fourth and is easiest to miss: it must track the per-replica batch or the render disagrees with
+-- its own geometry.
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp256x2wxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp256x2wxclipdrop_train_step" "256.0" 2 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 256))
+
 #eval IO.FS.writeFile "verified_mlir/vitin_drop_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitin_drop_fwd" 1000 (sd := true))
 

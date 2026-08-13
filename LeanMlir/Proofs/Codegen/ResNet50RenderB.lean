@@ -1090,6 +1090,15 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
 
+-- The **2-GPU** peer of the 4-replica render above: `B := 128` per replica at the same `k = 8`, so
+-- the global batch stays 128×2×8 = 2048 and the recipe is untouched. ⚠ Note what does NOT stay the
+-- same: Ghost-BN normalises per micro-batch, so this run's BN regime is 128-image ghosts against
+-- the 4×64 render's 64-image ones. For a wall-clock measurement that is immaterial; for any
+-- accuracy claim it is a different regime and must be said out loud (§4.1's delta list).
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x128bce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 2
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+
 -- ⚠ `k = 4` at ONE replica, the peer `r50-accum-tie` actually runs against (its gate is written at
 -- k = 4). Rendering only k = 8 would leave the composed optimizer's accumulation ungated at the k
 -- the gate uses.

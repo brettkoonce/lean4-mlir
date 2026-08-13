@@ -949,6 +949,13 @@ end Proofs.StableHLO
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in" .rmsprop)
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in" .rmsprop)
+-- The **2-GPU** peer of the line above: `B := 128` per replica, so the global batch is still
+-- 128×2 = 256 and the recipe, the steps/epoch and the LR all stay exactly what the 4×64 config
+-- runs. That is what makes a 2-card wall-clock comparable to the 4-card one rather than a new
+-- experiment. The batch is in the slug (`rmsdp128` vs `rmsdp64`), so the two artifacts cannot
+-- collide even though both are `dp` renders of the same optimizer.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp128_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 128 1000 "1.0e-5" 2 false "mobilenetv2in" .rmsprop)
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
 -- call ("entry mismatch"). These pin the literal path above against `mnv2AdamVariant`, so a rename
@@ -962,6 +969,7 @@ end Proofs.StableHLO
 -- genuinely different functions).
 #guard Proofs.StableHLO.mnv2AdamVariant 64 1 .rmsprop == "rms64"
 #guard Proofs.StableHLO.mnv2AdamVariant 64 4 .rmsprop == "rmsdp64"
+#guard Proofs.StableHLO.mnv2AdamVariant 128 2 .rmsprop == "rmsdp128"
 #guard Proofs.StableHLO.mnv2AdamVariant 64 1 .adamw   == "adam64"
 -- The interface contract, checked at elaboration: 210 parameters and 104 BN stat slots ⇒
 -- 1 + 3×210 + 3 + 104 + 1 = 739 inputs and 3×210 + 3 + 104 = 737 outputs.

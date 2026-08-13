@@ -1726,6 +1726,16 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
 
+-- The **2-GPU** peer: 2 replicas × batch 128 = the same global 256 =
+-- `efficientNetB0ImagenetConfig.batchSize`, so it keeps the geometry the 4×64 render above has and
+-- stays comparable to it row for row. ⚠ Both regularisers ride along explicitly (`sd`, `cd`) — the
+-- defect this block documents is a DP render silently sitting a feature behind its single-device
+-- peer, and the way to not repeat it is to copy the flag list, not to trust that a default matches.
+-- The batch is in the slug, so `emarmsdp128dropdo` cannot overwrite `emarmsdp64dropdo`.
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp128dropdo_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 128 1000 "1.0e-5"
+    "0.100000" "" "128.0" 2 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
+
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_dropdo_fwd.mlir"
   (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "efficientnetin_dropdo"
     (sd := true) (cd := true))
@@ -1741,6 +1751,7 @@ end Proofs.StableHLO
 -- ⭐ The SHIPPING DP spelling. `rmsdp` (not `rms`) because replicas > 1, then the batch, then both
 -- regulariser markers — the artifact an ImageNet run at 4 replicas actually loads.
 #guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop true true true == "emarmsdp64dropdo"
+#guard Proofs.StableHLO.enetAdamVariant 128 2 .rmsprop true true true == "emarmsdp128dropdo"
 -- ⭐ The collision checks, in the driver's own predicate (`variant.splitOn "drop"`), stated as the
 -- two facts that would break if the marker were spelled `"dropout"`:
 --   a dropout-ONLY variant must NOT look like a stochastic-depth one …
