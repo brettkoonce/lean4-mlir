@@ -51,8 +51,15 @@ def runViTImagenet (argv : List String) : IO Unit := do
     | none   => 0.0005   -- `vitTinyImagenetConfig.learningRate`, the DeiT batch-512 rate. The
                          -- Imagenette ViT driver's 3e-4 is tuned for global batch 32 and would
                          -- under-step this by ~1.7x.
+  -- ⚠ `LEAN_MLIR_EPOCHS` SETS the schedule where `LEAN_MLIR_MAX_EPOCHS` only CAPS it
+  -- (`min n cfg.epochs`). `totalSteps := cfg.epochs * nb / accK` is what the cosine anneals over,
+  -- so `EPOCHS=30` is a complete 30-epoch experiment while `MAX_EPOCHS=30` is a PREFIX of the
+  -- committed 300-epoch decay stopped with the LR still high. ⚠ Clear checkpoints when switching
+  -- schedules; resuming across them fuses two LR curves silently. Without this knob a 300-epoch
+  -- commitment makes the net unprobeable, which is what it was before 2026-08-12.
+  let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD vitImagenetConfig.epochs
   vitImagenetVerified.toNet.trainAdamSched
-    { vitImagenetConfig with batchSize := bs }
+    { vitImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 
 def main (argv : List String) : IO Unit := runViTImagenet argv

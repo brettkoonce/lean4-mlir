@@ -1,12 +1,12 @@
 # Chapter makeover: porting a chapter to the verified XLA path
 
 **Who this is for.** An agent working on a CUDA box, picking up
-**chapter 9 (Vision Transformer)** and then the Bestiary. Chapters 1–8 are done.
+**the Bestiary**. Chapters 1–9 are done, and Part 1 is finished.
 
-▶ **START AT §4a-septies**, the ch8 post-mortem — it is the most recent worked example
-and it is where the traps ch9 inherits were found, then §4a-octies, the ch9 scoping.
+▶ **START AT §4a-nonies**, the ch9 post-mortem — it is the most recent worked example
+and the only one where the XLA re-run came in BELOW the retired number.
 Before touching anything, read ch5's §5.3 (`sec:verified_trainer_pattern`) and then
-chapter 8 in `blueprint/src/content.tex` — §5.3 is the spec and **ch8** is the most
+chapter 9 in `blueprint/src/content.tex` — §5.3 is the spec and **ch9** is the most
 recent worked example of applying it. §1 and §2 of this doc are the shape and the voice
 rules; §5 is the verification discipline and is non-negotiable.
 
@@ -188,9 +188,9 @@ Chapter-wide ranking, to pick what's next:
 | Data availability (app A) | 16.4 | 14 | |
 | MobileNetV2 (ch6) | 0.0 | 0 | **DONE** |
 | EfficientNet (ch7) | 0.0 | 0 | **DONE** — max sentence 64 w |
-| Bestiary | 8.1 | 58 | 110 em-dash raw, the biggest single job left |
-| Vision Transformer (ch9) | 7.1 | 16 | **▶ NEXT** — 46 em-dash raw; needs a ViT XLA capture, no `LEAN_MLIR_EPOCHS`, stale cumulative table |
-| ConvNeXt (ch8) | 0.0 | 0 | **DONE** — max sentence **53 w**, the book's best |
+| Bestiary | 8.1 | 58 | **▶ NEXT** — 110 em-dash raw, the biggest single job left, and the only one now |
+| Vision Transformer (ch9) | 0.0 | 0 | **DONE** — max sentence **52 w**, the book's best |
+| ConvNeXt (ch8) | 0.0 | 0 | **DONE** — max sentence 53 w |
 
 ▶ Measure with `scripts/measure_prose.py '\chapter{ConvNeXt}'`, which is the §3 script with
 all three of its false-join bugs fixed (it now replaces stripped environments with a full
@@ -788,7 +788,195 @@ caveat, and check it in both directions.
 
 ---
 
-## 4a-septies. ▶▶ READ FIRST: Chapter 8, ConvNeXt-T: DONE (2026-08-12)
+## 4a-nonies. ▶▶ READ FIRST: Chapter 9, Vision Transformer: DONE (2026-08-12)
+
+46 em-dashes / 16 prose semicolons → **0 / 0**. Max sentence 61 → **52 w, the best in the
+book** (ch8 53, ch1/ch2 52–54). latexmk 0 errors, **0 undefined refs**. All nine chapters
+pass `verify_excerpt.py` and re-measure at 0/0, so nothing regressed.
+
+⭐⭐ **`\phasethreenote` IS NOW ZERO BOOK-WIDE.** ch9 held the last use. The marker set was
+the map of what phase 4 still had to absorb, and it is empty.
+
+### ⚠⚠ THE XLA RE-RUN LOST 3 POINTS — the first time this has happened
+
+`runs/2026-08-12-vit-imagenette-xla-cuda/`, one 4060 Ti, `vit-verified-adam`:
+**68.74% top-1 / 90.42% top-5 in 24 minutes**, best epoch 68.92%. 17.9 s/epoch, 61 ms/step.
+The retired IREE figure was **71.70%**.
+
+| chapter | retired | XLA re-run | delta |
+|---|---|---|---|
+| ch6 MNv2 | 87.09 | 89.25 | **+2.16** |
+| ch7 ENet-B0 | 87.58 | 89.96 | **+2.38** |
+| ch8 ConvNeXt | 84.94 | 85.07 | +0.13 |
+| **ch9 ViT** | **71.70** | **68.74** | **−2.96** |
+
+▶ **So the re-run is not a win generator.** Three chapters in a row it went up, flat, then
+down. Do not write the "and the number improved" paragraph before you have the number.
+
+⚠ **Part of the gap is a different denominator, and it is nowhere near all of it.** The old
+log scored **3,904** images (= 122 × 32, the batch-divisible truncation); the current eval
+scores all **3,925**. That is worth at most 21/3925 = 0.53 points, so it does not explain
+2.96. ▶ Check the val COUNT in any log you compare against, not just the percentage.
+
+### ⭐⭐ ViT IS BIT-EXACTLY REPRODUCIBLE ON CUDA — the first net since the MLP
+
+Measured three times per §3c, expecting a spread. **All three passes came back IDENTICAL**:
+the same `68.738854% / 90.420382%` at epoch 80 and **all 160 epoch lines byte-for-byte
+equal**, across three separate processes on three different cards.
+
+**Why, and it is checkable in one command:** §3c's mechanism is XLA picking *convolution*
+algorithms per process. Count the ops in the train step —
+
+| net | `stablehlo.convolution` | `stablehlo.dot_general` |
+|---|---|---|
+| ViT | **2** | **435** |
+| ConvNeXt | 173 | 3 |
+| MobileNetV2 | 155 | 3 |
+| ResNet-34 | 107 | 3 |
+
+ViT's only convolution is the patch embed (16×16 at stride 16, non-overlapping), so there is
+almost no surface for the per-process selection to vary. It behaves like the dense-only MLP.
+
+▶▶ **This CHANGES what the 3-point gap means.** It is not a draw from a distribution — there
+is no distribution. So the difference from 71.70% is a real difference between two setups
+(lowerer, vendor, artifact vintage) and NOT run-to-run noise. §9's Results says exactly that
+and explicitly does **not** attribute it to any one cause, because this session did not
+separate them.
+
+▶ **n≥3 is still the right reflex, and here it paid off by returning a stronger claim than
+expected rather than a median.** Do not assume §3c's spread applies to an attention net.
+
+⚠ Passes 2 and 3 ran concurrently on GPUs 2/3 with `LEAN_MLIR_CKPT_TAG=p2|p3`, so **their
+wall-clock is NOT a throughput measurement** — two concurrent runs contend on the shim and
+the host and ran visibly slower per epoch. The 17.9 s/epoch and 61 ms/step in the book are
+from **pass 1 alone**, which had the box to itself. ▶ Time from a solo run, accuracy from all
+three.
+
+### ⭐ The top-5 column goes the WRONG WAY, and it is real
+
+Top-1 climbs the whole run (35.2 → 68.7). Top-5 peaks at **94.88% at epoch 25** and then
+falls to **90.42%**, 4.5 points down. On ten classes top-5 is a weak question, so what the
+divergence measures is a net getting more confident about its top choice while its ranking
+of the rest decays. §9.1 says exactly that and ties it to the data-hunger thesis. ▶ It is
+not a bug and it is not a checkpoint mix-up; both later passes reproduce the shape.
+
+### ⚠⚠ THE MLIR NEARLY DOUBLED AT AN IDENTICAL PARAMETER COUNT
+
+The chapter's table said ViT's artifact was **742 KB**; it is **1,281,531 B = 1,282 KB**.
+And the old log's own header says `742145 chars`, so 742 KB was genuine when written.
+⚠ **The parameter count did not move**: 5,526,346 then, 5,526,346 now. So this is NOT ch8's
+"retired scalar-LN net" story, where the count moved with the size. Something in the
+renderer got more explicit while the parameter layout stayed put. ▶ **Do not infer a spec
+change from an artifact-size change, in either direction** — check `scalarParams` before
+concluding the net moved.
+
+⭐ 5.53M in the book was **right**, unlike ch7's 78%-wrong count. Two of ch9's four stale
+table cells were fine and two were not, which is the argument for re-deriving all of them
+rather than spot-checking.
+
+### ⭐ ViT is the FASTEST net in Part 1, by a lot
+
+61 ms/step against MobileNetV2's 90, at 2.5× the parameters. The whole Imagenette column,
+now all measured on the verified XLA path, one 4060 Ti, 80 epochs:
+
+| net | params | MLIR | ms/step | total | top-1 | top-5 |
+|---|---|---|---|---|---|---|
+| ResNet-34 | 21.29M | 729 KB | 220 | 1.5 h | 89.71 | 98.27 |
+| MobileNetV2 | 2.24M | 1,047 KB | 90 | 35 min | 89.25 | **98.68** |
+| EfficientNet-B0 | 4.02M | 1,316 KB | 103 | 41 min | **89.96** | 98.45 |
+| ConvNeXt-T | 27.83M | 985 KB | 196 | 1.3 h | 85.07 | 97.30 |
+| ViT-Tiny | 5.53M | 1,282 KB | **61** | **24 min** | 68.74 | 90.42 |
+
+⚠ **The lakefile estimate was wrong for the FIFTH time in five.** `refSecCuda := 2560`
+(43 min) against an actual **24 min**, i.e. 1.8× pessimistic. The tally is now 3×, 2.3×,
+1.3×, 1.8×, and ch8's re-measured one was still 30% off. ▶ **There are no accurate lakefile
+bench comments. Treat every one as an upper bound.**
+
+### ⭐⭐ `repeatedAug := 3` LANDED AND THE BOOK NEVER NOTICED (brett confirmed 2026-08-12)
+
+ch9's "Distance to the paper" said repeated augmentation was the largest remaining gap and
+that **"our pipeline does not"** do it. `jax/MainVitImagenet.lean:61` carries
+`repeatedAug := 3` today, and `jax/Jax/Codegen.lean:425` emits real pipeline code for it.
+Commit `11e7bac`, **2026-07-26**. The 300-epoch 70.28% run finished ~**2026-07-04**.
+
+▶ **So the honest statement is "untested here", not "missing"**, and the two are a whole
+different sentence. Rewritten that way, plus `repeatedAug := 3` and `valEveryEpochs := 5`
+added to the printed listing.
+⚠ `planning/paper_faithfulness.md:26` and `:120` still say **DEFERRED** and are now stale on
+this point. Not fixed here, because they also carry the true caveat that the codegen ships a
+stream-level `flat_map(repeat K)` **approximation** of timm's index-level RASampler.
+
+▶▶ **This is the THIRD chapter where "keep the phase-2 listing as the reference" hid a
+drift** (ch7's had drifted, ch8's had not, ch9's had). The check is ten minutes and it has
+now gone both ways twice. **Diff the listing against the file it claims to mirror, always.**
+
+### ▶ brett's call 2026-08-12: the 80-epoch ImageNet tier is DELETED
+
+Third time, after ch6's 90-ep and ch8's 80-ep. Gone: two table rows (the fp32 80-ep row had
+no result at all) and the 65.64%/87.06% pair.
+⭐ **This one orphaned NOTHING.** `grep` over the whole book found 65.64 and 87.06 only in
+ch9, unlike ch8's cut which reached into ch6 1,700 lines away. Still grep first; the cost is
+one command and the failure is silent.
+
+### ⭐⭐ ch9 GAINED `sec:vit_phase4`, and its row is confounded ONE way, not two
+
+ch5–ch8 all had a phase-4 subsection; ch9 did not. Added at the end, before the Part-1
+summary. 287 ms/step → 12.0 min/ep → **~60 h (2.5 d)** at 300 epochs, Val top-1 **TBD**
+(brett's call: print the estimate, do not run it).
+
+⭐ **The batch MATCHES, which ConvNeXt's did not.** `vitImagenetConfig.batchSize := 128` per
+device × 4 replicas = global **512** = `vitTinyImagenetConfig.batchSize` exactly, and 2,502
+steps/epoch matches the reference's own figure. ch8's row differed in precision AND batch;
+this one differs only in **fp32 vs bf16**. So 12.0 min/ep against phase 2's 7.6 is close to
+a clean read of what dropping bf16 costs. ▶ §4a-octies flagged this as unchecked — it is now
+checked, and it came out better than feared.
+
+### ✅ Things settled by RUNNING
+
+1. **`LEAN_MLIR_EPOCHS` added to `MainViTImagenet.lean`** — the last driver in the book
+   without it. Verified: unset → `Epoch 1/300`, `EPOCHS=1` → `Epoch 1/1` + `done (...)`.
+   ⭐ First-step loss **7.08** against ln 1000 = 6.91, so the init is sane too.
+2. **`TestShardCheck.lean` gained a `vit` row** — the cheapest real strengthening in the
+   chapter, and it PASSES: TEST **5.0e-8** vs CONTROL **0.585**, 11.7 million× apart, over
+   5,526,346 floats on 2 GPUs. ViT was gated only by `TestViTDpCheck`, which hands both
+   replicas the same rows and is structurally blind to a shard offset. ⚠ The row covers
+   `vit`; **`vitin` is still uncovered**, and the phase-4 subsection says so out loud.
+3. **`vit-adam-tie` and `efficientnet-adam-tie` moved `ireeLink` → `lowererLink`**, closing
+   the last two of the three stale "is an IREE binary" docstrings. `vit-adam-tie` was the
+   ORIGIN — ENet's cited "for `vit-adam-tie`'s reason". Both re-run on XLA and tie:
+   ViT **bit-exact on all 16,579,041 floats** (stronger than ConvNeXt's 27,826,272/282),
+   ENet forward bit-exact via `bnstat` over 12,103,093. ⚠ ViT's old docstring was wrong
+   **twice**: `vit-verified-adam` is not an IREE binary, and the `miopenStatusUnknownError`
+   it cited was a **ROCm** fault, not an XLA one. ▶ `grep -n 'is an IREE binary' lakefile.lean`
+   now returns only the two historical notes.
+
+### ⭐ ch9 makes the strong full-depth claim, as predicted
+
+`vitForward2_has_vjp` + `_correct`, generalised to depth k by `vitForwardKV_has_vjp`. Only
+hypothesis is `0 < ε` at the LayerNorms. Global, not MobileNetV2's pointwise `_at`, because
+softmax, GELU and LayerNorm are all smooth. **MobileNetV2 remains the only net at
+representative depth**, and relu6's kink is why (the §4a-quinquies TODO is still open).
+
+### ▶ Left open, deliberately
+
+- **Phase 4 not run** (~60 h). `sec:vit_phase4` prints the estimate with Val top-1 `TBD`.
+- **`vitin` has no shard-check row.** The `vit` row is a one-liner; `vitin` needs a
+  4-replica invocation and its own artifact pair. The chapter states the gap.
+- **The Bestiary is the only job left**, and it still carries the phase-2
+  `NetSpec`/`TrainConfig` vocabulary throughout. ⚠ Its "(Ch 9, ViT-Tiny)" pointer at ~10189
+  names `.patchEmbed` + `.transformerEncoder`, which ch9 no longer prints — the verified
+  spec spells the patch embed as `.conv 3 192 16 16`. Same situation ch5–ch8 left behind,
+  and it resolves when the Bestiary is ported, not before.
+
+⭐ **The stale cumulative table is GONE BOOK-WIDE, and §4a-septies was wrong that the
+Bestiary had one.** `grep` for `518 KB|1400 ms|90.29|7.16M|84.94|741 KB|938 KB|790 KB` now
+returns two hits, both ch5's ablation table, which §4b says to LABEL rather than re-run and
+which is a different measurement entirely. ch9 owned the last one. ▶ Verify a "still carries
+X" claim in this doc before budgeting for it; two of them this session were already false.
+
+---
+
+## 4a-septies. Chapter 8, ConvNeXt-T: DONE (2026-08-12)
 
 31 em-dashes / 16 prose semicolons → **0 / 0**. Max sentence 68 → **53 w**, the best in the
 book (ch1/ch2 are 52–54, ch5/ch7 finished at 64). `\phasethreenote` uses 2 → **1** (only ch9
@@ -924,7 +1112,7 @@ match the prose would make it fiction again, which is the ch4 lesson in reverse.
 
 ---
 
-## 4a-octies. ▶▶ NEXT: Chapter 9, Vision Transformer
+## 4a-octies. Chapter 9 scoping (superseded by §4a-nonies, kept for what it got right)
 
 **ch9 is `content.tex` 8604–10164**, 1,560 lines, the longest chapter in the book. Baseline
 with `scripts/measure_prose.py '\chapter{Vision Transformer}'`:
@@ -1570,27 +1758,110 @@ Nothing about eliding draws your eye to those, and they survive any number of pr
 
 ---
 
-## 6. The open question: Appendix C
+## 6. Appendix B + C: RESOLVED (2026-08-13, brett's steer)
 
-Not a copy pass. Appendix C argues trust by runtime size — IREE at 1.3 MB
-against the XLA plugin's 505 MB, "the fast path asks you to trust a great
-deal more unverified code than the small one does." That was right when
-IREE was the default. The book now recommends XLA everywhere, so the
-appendix argues against the book's own choice, and a reader who follows
-the setup instructions then reads the trust accounting finds it
-condemning what they just installed.
+⚠⚠ **THIS SECTION'S OWN PREMISE WAS WRONG IN THREE WAYS.** It said "Appendix C
+argues trust by runtime size… the appendix argues against the book's own choice."
+Checked, and:
 
-Three ways out, and it needs brett's decision, not ours:
+1. **The size argument is in Appendix B, not C** (`content.tex` ~13275). **Appendix C
+   never counts runtime size at all.** B ended with "counted in
+   Appendix~\ref{app:verification}" — a forward reference to a claim the destination
+   does not make.
+2. **B contradicted itself in ten lines**: "the same trusted tier — swapping them
+   changes nothing about what is proved", then "That size difference is also a trust
+   difference."
+3. **There was no conflict with the book's default at all.** The TRAINERS run XLA;
+   the ORACLES run IREE. Different questions. A reader installing XLA was never being
+   condemned by the trust accounting, because the trust accounting is about two
+   independent compilers agreeing, not about which lowerer you train with.
 
-1. Size was never the right metric — what you trust is whether the
-   lowerer preserves StableHLO semantics, neither is verified, and 400× is
-   a red herring the appendix should retire.
-2. Size still counts and XLA is a deliberate trade — keep the number,
-   state plainly that the default buys speed at a real cost in trusted
-   surface, and that IREE remains the smaller-TCB option.
-3. Something else.
+### ⚠⚠ I concluded IREE was dead at HEAD. It is not. brett corrected it.
 
-**Ask before rewriting it.**
+Two failures made it look retired, and both are shallow:
+
+- **`iree-compile` is not on this repo's PATH.** It exists at
+  `/home/skoonce/lean/klawd_max_power/lean4-jax/.venv/bin/iree-compile` (3.12.0rc20260428).
+  Also at `~/lean4-mlir/.venv/bin` and `~/lean4-mlir-job/iree-bin`.
+- **`ffi/libiree_ffi.so` was STALE** (April), exporting 6 symbols and missing
+  `iree_ffi_train_step_adam_seg`, which `ffi/lowerer.c:101` marks `REQ` — so the loader
+  rejected the whole shim with "not a usable shim". The function has been in
+  `ffi/iree_ffi.c:693` the whole time.
+
+▶▶ **THE REBUILD IS TWO COMMANDS** (`IREE_BUILD.md` §4a/4b), takes seconds, and the
+archives are already built at `/home/skoonce/lean/klawd_max_power/iree-build/`:
+
+```bash
+export IREE_SRC=/home/skoonce/lean/klawd_max_power/iree
+export IREE_BUILD=/home/skoonce/lean/klawd_max_power/iree-build
+cd ffi && gcc -fPIC -O2 -c iree_ffi.c -I"$IREE_SRC/runtime/src" \
+  -I"$IREE_BUILD/runtime/src" -DIREE_ALLOCATOR_SYSTEM_CTL=iree_allocator_libc_ctl
+gcc -shared -o libiree_ffi.so iree_ffi.o \
+  -Wl,--whole-archive "$IREE_BUILD/runtime/src/iree/runtime/libiree_runtime_unified.a" \
+  -Wl,--no-whole-archive -Wl,--start-group \
+    "$IREE_BUILD"/build_tools/third_party/flatcc/libflatcc_{runtime,parsing}.a \
+  -Wl,--end-group -lm -lpthread -ldl
+```
+
+Rebuilt → 10 exports, and `mnist-mlp-verified` trains through IREE to **92.02%**.
+⚠ `ffi/*.so` is gitignored, so the stale artifact is a LOCAL rot, not a committed one,
+and every fresh clone hits it. ▶ **Do not conclude IREE is retired from a failed run.
+Check PATH and rebuild the shim first.**
+
+### ⭐⭐ The vjp_oracle is IREE-ONLY, which is the whole point
+
+`./.lake/build/bin/vjp-oracle-dense` under XLA:
+
+```
+[pjrt_ffi] train_step_adam is not implemented on the XLA backend yet — use the IREE build
+```
+
+Under IREE it runs clean (92.05%). So the cross-check's compiler independence is **fully
+intact and cannot silently degrade** — the XLA path refuses rather than quietly agreeing
+with itself. ⚠ I had assumed `ireeLink`-is-inert (the ch8 finding) meant the oracle had
+drifted onto XLA. It has not: inert LINK args still leave the SHIM to refuse, and here it
+does. ▶ **`ireeLink` being inert does not mean a target runs on XLA — check what the shim
+supports.**
+
+### ▶ brett's posture (2026-08-13), and the rewrite follows from it
+
+> "am not in love with iree at this point in time. it adds value as being literally a
+> different lowerer but don't want to put more cycles"
+
+So the appendix now makes the **narrow, low-maintenance claim**: IREE is the differential
+compiler for the oracle suite, nothing more. That needs IREE to compile the oracle's small
+nets and nothing else — no feature parity, no keeping pace with the trainers, no new
+cycles. The old framing (a co-equal lowerer you might train on) is what generated pressure
+to maintain it.
+
+**What landed:**
+
+- **Appendix B** — cut the size-as-trust sentence and its dangling forward ref. Added
+  **"The size gap is not a trust gap"**: XLA's 505 MB is mostly vendor kernel libraries it
+  *calls*, IREE *generates* those kernels, both unverified, so the small runtime
+  **relocates** the trusted base rather than shrinking it. Bytes measure packaging, not
+  risk. Plus **"You do not need IREE to train"**: XLA runs every net; IREE is for
+  reproducing the verification, and some oracle binaries are IREE-only.
+- **Appendix C** — added the named property: **"the two sides do not share a compiler"**,
+  closing on *"IREE is not kept because it is small. It is kept because it is not XLA."*
+- **The asymmetry stated once, factually, with no call to action**: the oracles exercise
+  IREE's lowering, so the default training path's lowering carries less of that particular
+  evidence. Every other layer is unaffected, since the proofs, bridges and float32 budgets
+  are statements about the graph, and both lowerers consume identical proven StableHLO.
+- **Four stale mentions generalised** to "the lowerer" (`13334`, `13629`, `13594`, `13650`)
+  and the "primary … → IREE pipeline" line fixed. ⭐ Most of C's IREE mentions were
+  **correct** — they describe the oracle — so this was surgical, not a de-IREE sweep.
+
+latexmk 0 errors, 0 undefined refs.
+
+### ▶ Still open on the appendices
+
+- **The VOICE PASS is untouched.** Appendix C is **77 em-dashes / 26 prose semicolons**,
+  Appendix B **25 / 9**. This session did the ARGUMENT, not the prose. ⚠ Do not read
+  "Appendix C resolved" as "Appendix C done".
+- **Nothing gates IREE, so the shim will rot again.** It went stale for months and was
+  only caught by trying to run it. The cheap guard is one oracle case in CI; the
+  zero-cycle guard is the rebuild recipe above, which is why it is written out here.
 
 ---
 

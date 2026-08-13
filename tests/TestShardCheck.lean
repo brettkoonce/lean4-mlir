@@ -70,12 +70,18 @@ private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "mobilenetv2in"       => some (mobilenetv2ImagenetVerified, 64)
   | "efficientnet" => some (efficientnetVerified, 32)
   | "mobilenetv2"  => some (mobilenetv2Verified,  32)
+  -- ViT, added 2026-08-12. It had `tests/TestViTDpCheck.lean` and nothing else, which is the gate
+  -- that hands both replicas the SAME rows: `all_reduce(add)/N` is an identity on a duplicated
+  -- batch, so that check is structurally blind to a shard-offset bug. This row is what closes it,
+  -- by giving the replicas genuinely different data. ⚠ ViT has no BatchNorm, so the identity holds
+  -- exactly here rather than approximately (the reason R34 is absent, above).
+  | "vit"          => some (vitVerified,          32)
   | _              => none
 
 def main (args : List String) : IO Unit := do
   let slug := args.head?.getD ""
   let some (spec, bs) := netOf slug
-    | do IO.eprintln s!"usage: shard-check <convnext|efficientnet|mobilenetv2> [<dpPath>]\n\
+    | do IO.eprintln s!"usage: shard-check <convnext|efficientnet|mobilenetv2|vit> [<dpPath>]\n\
 got: '{slug}'"; IO.Process.exit 1
   let net := spec.toNet
   -- $SHARD_REPLICAS generalises the construction: `ds.shard`-style, N shards each with genuinely

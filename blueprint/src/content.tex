@@ -8607,25 +8607,127 @@ regularization pay.
 \prosesection{Where Part 1 has been heading}
 
 Every previous chapter has introduced a new architectural primitive
-and proved its backward pass. Convolution, BatchNorm, residual,
-depthwise, SE, LayerNorm, GELU---each one slotted into the
-\texttt{NetSpec} type and earned its own \texttt{has\_vjp} theorem.
+and proved its backward pass. Each one slotted into the
+\texttt{VerifiedNetSpec} type and earned its own \texttt{has\_vjp}
+theorem, and that includes convolution, BatchNorm, residual,
+depthwise, SE, LayerNorm and GELU.
 This chapter does the same for attention, but it also does
 something larger: it composes \emph{every} layer the framework has
 proved so far into one machine-checked backward pass over a
 complete state-of-the-art image classifier.
 
 The destination is Theorem~\ref{thm:vit_body_has_vjp_mat} at the
-end of the chapter. It says, roughly: the full ViT
-backbone---patch embedding, twelve transformer blocks, final
-LayerNorm---is a \(\HasVJPMat\). The proof composes everything
+end of the chapter. It says, roughly: the full ViT backbone is a
+\(\HasVJPMat\), and that backbone is the patch embedding, twelve
+transformer blocks and a final LayerNorm. The proof composes everything
 this chapter introduces, plus most of what the previous chapters
 introduced, into a single tower of \texttt{vjpMat\_comp}
 applications. Read the proof's dependency list and you see a tour
 of Part 1: dense, residual, layer norm, GELU, softmax, matrix
 multiply, plus the eight or ten matrix-machinery lemmas this
-chapter sets up. None of them is new in its own right; what's new
+chapter sets up. None of them is new in its own right. What's new
 is how high the composition rule can be pushed.
+
+\section{Run it first}
+\label{sec:vit_runit}
+
+Before any of the attention mathematics, train the network that needs
+it. Four commands, and the last network in Part 1 is also the quickest
+one in it:
+
+\begin{verbatim}
+lake exe cache get                        # Mathlib oleans, ~30 s
+./download_imagenette.sh                  # ~1.5 GB
+lake build vit-verified-adam
+./.lake/build/bin/vit-verified-adam data
+\end{verbatim}
+
+On one RTX 4060 Ti (CUDA 12.9), from
+\texttt{runs/2026-08-12-vit-imagenette-xla-cuda/}. XLA's startup banner
+is removed, the network description line is wrapped, the per-step lines
+are dropped, and the middle of the run is elided:
+
+\begin{verbatim}
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir
+             (@vit_adam_train_step, 603 outputs, 1 replica)
+             in 6104 ms
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir
+             (@vit_fwd, 1 outputs, 1 replica) in 1644 ms
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer
+  blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10)
+  via the VERIFIED renderer → XLA/PJRT → GPU
+  train 9469, val 3925; bs 32, ViT-Tiny adam
+    (cosine+warmup 5ep, baseLR 0.000300), He init
+[pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter
+             tensors (63.2 MB) on 1 device; they stop crossing PCIe
+             from here
+Epoch 1/80: loss=2.127541 lr=0.000060
+  epoch 1: val_acc = 1381/3925 = 35.184713%  top5 = 3121/3925 = 79.515924%
+Epoch 2/80: loss=1.869707 lr=0.000120
+  epoch 2: val_acc = 1619/3925 = 41.248408%  top5 = 3350/3925 = 85.350318%
+Epoch 3/80: loss=1.750333 lr=0.000180
+  epoch 3: val_acc = 1591/3925 = 40.535032%  top5 = 3362/3925 = 85.656051%
+Epoch 30/80: loss=1.004060 lr=0.000225
+  epoch 30: val_acc = 2571/3925 = 65.503185%  top5 = 3698/3925 = 94.216561%
+Epoch 79/80: loss=0.515797 lr=0.000000
+  epoch 79: val_acc = 2698/3925 = 68.738854%  top5 = 3551/3925 = 90.471338%
+Epoch 80/80: loss=0.515159 lr=0.000000
+  epoch 80: val_acc = 2698/3925 = 68.738854%  top5 = 3549/3925 = 90.420382%
+done (trained ViT-Tiny adam + cosine/warmup via packed threading).
+\end{verbatim}
+
+Eighty epochs at about 18 seconds each, twenty-four minutes in total,
+and \textbf{68.74\%} top-1 with \textbf{90.42\%} top-5 on Imagenette's
+3,925-image validation split. The best epoch reached $68.92\%$. That is
+the fastest network in this book's Imagenette column by a wide margin
+and also the least accurate one in it, and
+\S\ref{sec:attention_vit_example} is about why both halves of that
+sentence are the same fact.
+
+\medskip\noindent\textbf{Two compile lines, and the second one is the
+whole eval story.} Like ConvNeXt and unlike the three BatchNorm
+chapters, ViT emits no \texttt{vit\_fwd\_eval}. LayerNorm computes its
+statistics from the activation in front of it every time, so there is
+nothing to freeze and the training forward and the evaluation forward
+are the same function.
+
+\medskip\noindent\textbf{The top-5 column goes the wrong way, and that
+is the chapter's result in miniature.} Top-1 climbs the whole run, 35.2
+to 68.7. Top-5 climbs to $94.88\%$ at epoch 25 and then \emph{falls},
+finishing 4.5 points down at $90.42\%$. On a ten-class problem top-5 is
+a weak question, so what that divergence measures is a network growing
+more confident about its top choice while its ranking of the remaining
+classes decays. A transformer with 5.5M parameters and 9,469 training
+images has enough capacity to memorize its way to a better top-1 and
+not enough signal to keep the tail honest, which is
+\S\ref{sec:attention_vit_example}'s data-hunger argument showing up
+inside a single run rather than across the comparison table.
+
+Here is the part that matters. That run did not execute a
+reimplementation of the network this chapter describes. It executed
+\texttt{verified\_mlir/vit\_adam\_train\_step.mlir}, which is
+\texttt{pretty(provenGraph)} off the renderer. Every softmax in it
+backpropagates by Theorem~\ref{thm:softmax_has_vjp}, every scaled
+dot-product attention by \S\S\ref{thm:sdpa_back_Q_correct}--%
+\ref{thm:sdpa_back_V_correct}, every LayerNorm by
+Chapter~\ref{chap:layernorm}'s, every GELU by that chapter's, and every
+residual skip by Chapter~\ref{chap:residual}'s additive fan-in.
+
+\medskip\noindent\textbf{And the fold holds at full depth.}
+\texttt{vitForward2\_has\_vjp} chains the patch embedding, all
+\emph{twelve} transformer blocks, the final LayerNorm and the head
+through \texttt{vjp\_comp}, with \texttt{vitForward2\_has\_vjp\_correct}
+carrying it back to the forward the spec denotes, and
+\texttt{vitForwardKV\_has\_vjp} generalizes it to depth $k$. Its only
+hypothesis is $\varepsilon > 0$ at the LayerNorms. Unlike
+Chapter~\ref{chap:depthwise}, which folds a representative
+stem-plus-two-blocks because relu6's kink makes a whole-network
+statement false, this one is a single global \texttt{HasVJP} over the
+entire network, and it can be because softmax, GELU and LayerNorm are
+all smooth. So ViT gets the strong sentence: every operation in the
+graph that just trained carries a proved backward, and their
+composition into the whole network carries one too.
 
 \prosesection{Attention in one equation}
 
@@ -8643,8 +8745,8 @@ each represented as a \(d\)-vector):
 
 Both halves are wrapped in a LayerNorm + residual sandwich
 (exactly the same template as ConvNeXt's blocks from
-Chapter~\ref{chap:layernorm}; the layout transferred to convnets
-in 2022 actually came from transformers in 2017).
+Chapter~\ref{chap:layernorm}, and the layout that transferred to
+convnets in 2022 actually came from transformers in 2017).
 
 The interesting half is the first one. \emph{Scaled dot-product
 attention} computes, for queries \(Q\), keys \(K\), and values
@@ -8665,7 +8767,7 @@ large \(d_h\). \emph{Multi-head} attention just runs several copies
 of this in parallel on lower-dimensional projections, concatenating
 the outputs.
 
-Each token---meaning each row of \(X\)---ends up looking at every
+Each token, meaning each row of \(X\), ends up looking at every
 other token. That's the qualitative break from CNNs:
 convolutions look only at a local neighborhood, attention looks
 everywhere. The receptive field is global from the first layer.
@@ -8673,7 +8775,7 @@ everywhere. The receptive field is global from the first layer.
 \prosesection{Why this chapter has thirty theorems}
 
 The math of attention is matrix algebra. Chapter~\ref{chap:tensor}'s
-foundation rules---chain, sum, product, identity---were stated and
+foundation rules (chain, sum, product, identity) were stated and
 proved for \emph{vector} functions. Before we can prove backward
 passes through \(Q K^\top\) and the row-wise softmax, we need the
 matrix-level lifts of those rules: chain rule on matrices,
@@ -8688,12 +8790,12 @@ the cost once, reuse forever.
 
 The second section (\textbf{Attention proofs}, \(\sim\)15 theorems)
 applies the matrix machinery to the actual attention math. Row-wise
-softmax---a per-row softmax applied to the \(N \times N\) score
-matrix---has the well-known closed-form Jacobian \(p_i(\delta_{ij}
-- p_i)\); we prove the row-wise lifting that says this holds across
-matrices. Scaled dot-product attention's backward decomposes into
-three matmul-backward applications (one for each of \(Q\), \(K\),
-\(V\)) plus the row-wise softmax backward; we prove each. Then
+softmax (a per-row softmax applied to the \(N \times N\) score
+matrix) has the well-known closed-form Jacobian \(p_i(\delta_{ij}
+- p_i)\), and we prove the row-wise lifting that says this holds
+across matrices. Scaled dot-product attention's backward decomposes
+into three matmul-backward applications (one for each of \(Q\),
+\(K\), \(V\)) plus the row-wise softmax backward, and we prove each. Then
 multi-head, then the attention sublayer (with residual), then the
 MLP sublayer (with residual), then a single transformer block,
 then a \(k\)-deep transformer tower, then the full ViT body. Each
@@ -8708,14 +8810,14 @@ architectural piece used by any Part-1 network has a machine-checked
 backward}. Once we land Theorem~\ref{thm:vit_body_has_vjp_mat}, the
 sentence ``the gradient computed by this trainer is the
 mathematically correct one'' is no longer a hope or a folklore
-result---it is a theorem the Lean kernel verifies on every
+result. It is a theorem the Lean kernel verifies on every
 build.
 
 The empirical-side payoff comes after the theorems, in the Example
 section: ViT-Tiny trained on Imagenette underperforms the
 ConvNets, fairly dramatically, because 9{,}469 training images is
 too small for a transformer's lack of inductive bias. That's
-informative on its own terms --- the data-hungry-transformer story
+informative on its own terms: the data-hungry-transformer story
 made concrete.
 
 \section{Matrix-level machinery}
@@ -8730,7 +8832,7 @@ below is the matrix lift of a vector-level theorem from Ch
 \ref{chap:tensor}, proved by composing the vector version with the
 row-projection \(\mathrm{ContinuousLinearMap}\). The Lean proofs all
 live in \texttt{Proofs/Tensor.lean} alongside their vector
-counterparts; we collect them here because Ch~\ref{chap:attention}
+counterparts. We collect them here because Ch~\ref{chap:attention}
 is the first and only chapter to use them.
 
 \begin{definition}[Matrix VJP record]
@@ -9697,25 +9799,23 @@ link. \Qed{}
 \section{Example: ViT-Tiny on Imagenette}
 \label{sec:attention_vit_example}
 
-\phasethreenote
-
 This is the capstone. Every layer proved in the preceding chapters
---- dense, ReLU, softmax cross-entropy, convolution, maxPool,
-batch norm, residual, depthwise conv, squeeze-and-excitation, layer
-norm, GELU, and the attention mechanism itself --- composes into
-this one architecture. If the \texttt{NetSpec} below compiles and
-the VJP of its body is proved (\S~\ref{thm:vit_body_has_vjp_mat}),
-then every layer in modern deep learning you've seen in this book
-has its backward pass machine-checked.
+composes into this one architecture, and that list runs dense, ReLU,
+softmax cross-entropy, convolution, maxPool, batch norm, residual,
+depthwise conv, squeeze-and-excitation, layer norm, GELU, and the
+attention mechanism itself. If the \texttt{VerifiedNetSpec} below
+compiles and the VJP of its body is proved
+(\S~\ref{thm:vit_body_has_vjp_mat}), then every layer in modern deep
+learning you've seen in this book has its backward pass
+machine-checked.
 
 ViT-Tiny (Dosovitskiy et al.\ 2020) was the smallest Vision
 Transformer variant in the original paper. It's also the least
-data-hungry --- the big ViT variants start beating ConvNets at
+data-hungry, and the big ViT variants start beating ConvNets only at
 ImageNet-21K scale and above. On a 9469-image Imagenette training
-set, ViT-Tiny \emph{underperforms} the ResNet-34 / MobileNet V2 /
-EfficientNet-B0 from earlier chapters. That's part of the teaching
-point: transformers are not a universal improvement, they are a
-different scaling regime.
+set, ViT-Tiny \emph{underperforms} every ConvNet in Part 1. That's
+part of the teaching point: transformers are not a universal
+improvement, they are a different scaling regime.
 
 \subsection*{The architecture}
 
@@ -9723,8 +9823,8 @@ ViT-Tiny is the shortest spec in Part 1: \texttt{.patchEmbed} chops the
 image into $16 \times 16$ patches and projects each to a 192-dim token
 (196 of them, plus a prepended CLS token), \texttt{.transformerEncoder}
 runs twelve pre-norm blocks, and a final LayerNorm feeds the CLS token
-to a dense head. The inset shows one of the twelve transformer blocks
---- two residual sub-blocks, attention then MLP, each pre-normed.
+to a dense head. The inset shows one of the twelve transformer blocks,
+which is two residual sub-blocks, attention then MLP, each pre-normed.
 
 \begin{center}
 \begin{tikzpicture}[
@@ -9778,134 +9878,175 @@ to a dense head. The inset shows one of the twelve transformer blocks
 \end{tikzpicture}
 \end{center}
 
+\subsection*{The verified trainer}
+
+\S\ref{sec:verified_trainer_pattern} is the pattern, and every chapter
+since Chapter~\ref{chap:depthwise} has reused it. ViT drops the same one
+of its four annotated points that ConvNeXt does. There is no
+\texttt{bnChannels} here, because there is no BatchNorm.
+
 \begin{verbatim}
--- 1
 import LeanMlir
 
--- 2
-def vitTiny : NetSpec where
-  name   := "ViT-Tiny"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .patchEmbed 3 192 16 196,              -- (224/16)^2 = 196 patches
-    .transformerEncoder 192 3 768 12,      -- dim=192, 3 heads, mlp=768, 12 blocks
-    .dense 192 10 .identity                -- classification head
-  ]
+-- 1. The network. `slug` names the committed render. No `bnChannels`:
+--    LayerNorm keeps no running statistics, so nothing has to be
+--    threaded from training into evaluation.
+def vitVerified : VerifiedNetSpec where
+  name     := "ViT-Tiny"
+  slug     := "vit"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 10
+  data     := .imagenette
+  layers   := [
+    .conv 3 192 16 16,          -- patch embed 16x16/s16, 224 -> 14x14 = 196
+    .param #[192] 2,            -- CLS token
+    .param #[197, 192] 2,       -- positional embedding, 196 + 1
+    .transformerBlock 192 768,  -- 12 pre-norm blocks @ dim 192, MLP 768
+    .transformerBlock 192 768,  .transformerBlock 192 768,
+    .transformerBlock 192 768,  .transformerBlock 192 768,
+    .transformerBlock 192 768,  .transformerBlock 192 768,
+    .transformerBlock 192 768,  .transformerBlock 192 768,
+    .transformerBlock 192 768,  .transformerBlock 192 768,
+    .layerNorm 192,             -- final LayerNorm, per-channel
+    .dense 192 10 ]             -- CLS-head 192 -> 10
+  -- Stochastic depth, read only by the `*drop` variants. TWENTY-FOUR
+  -- entries for TWELVE blocks: ViT drops a block's two residual
+  -- branches independently, at one keep shared by the pair.
+  dropKeeps := (Array.range 24).map (fun s =>
+                 1.0 - 0.1 * (s / 2).toFloat / 11.0)
 
--- 3
-def vitTinyConfig : TrainConfig where
-  learningRate   := 0.0003     -- 3× smaller than the ConvNets
-  batchSize      := 32
-  epochs         := 80
-  useAdam        := true
-  weightDecay    := 0.0001
-  cosineDecay    := true
-  warmupEpochs   := 5          -- longer warmup too
-  augment        := true
-  labelSmoothing := 0.1
+-- 2. The schedule. Note it is NOT the other four nets' schedule.
+def vitAdamConfig : VerifiedConfig where
+  epochs    := 80
+  batchSize := 32
 
--- 4
-def main (args : List String) : IO Unit :=
-  vitTiny.train vitTinyConfig (args.head?.getD "data/imagenette")
+-- 3. The entry point: AdamW, cosine with a 5-epoch warmup,
+--    baseLR 3e-4.
+def main (argv : List String) : IO Unit :=
+  vitVerified.toNet.trainAdamSched
+    vitAdamConfig (argv.head?.getD "data")
+    0.0003 0.9 0.999 5 "adam"
 \end{verbatim}
 
-Three layers. The entire model body is
-\texttt{patchEmbed}, \texttt{transformerEncoder}, \texttt{dense}.
-\texttt{.patchEmbed 3 192 16 196} chops the $224 \times 224 \times 3$
-image into $14 \times 14 = 196$ non-overlapping $16 \times 16$
-patches, linear-projects each to 192 dimensions, and prepends a
-learned $\mathrm{CLS}$ token. \texttt{.transformerEncoder 192 3 768
-12} runs 12 standard encoder blocks (multi-head self-attention + MLP
-+ LayerNorm + residual, twice per block). \texttt{.dense 192 10
-.identity} classifies off the CLS token. Every one of those sub-ops
-has its backward pass proved --- the composition of all of them is
-\S~\ref{thm:vit_body_has_vjp_mat}, the grand-finale theorem of Part
-1.
+\noindent The body is a patch embedding, twelve blocks and a head. The
+patch embed is spelled \texttt{.conv 3 192 16 16}, a $16 \times 16$
+kernel at stride 16, which chops the $224 \times 224 \times 3$ image
+into $14 \times 14 = 196$ non-overlapping patches and projects each to
+192 dimensions. That it is a convolution rather than a distinct
+primitive is the point: a patch embedding \emph{is} a strided
+convolution whose kernel equals its stride, so it reuses
+Chapter~\ref{chap:cnn}'s proved backward and needs nothing new.
+
+\textbf{The CLS token and the positional embedding are
+\texttt{.param} entries.} They are learned weights that no layer
+computes from an input, and the spec's job is the \emph{parameter
+layout}, so it names them rather than folding them into a block. The
+$197$ is $196$ patches plus the prepended CLS row.
+
+\textbf{\texttt{.transformerBlock 192 768} is one block, not a stage.}
+There is no repeat count, so twelve blocks are twelve entries, exactly
+as ConvNeXt's eighteen were eighteen. Each carries the pre-norm
+sandwich drawn in the inset above: LayerNorm, MHSA, residual,
+LayerNorm, MLP, residual.
+
+\textbf{200 parameter tensors, 5,526,346 scalars.}
+\texttt{vitVerified.toSpecs} is kernel-\texttt{\#guard}ed against
+\texttt{ViTLayout.specs}, an independently audited hand-list, and the
+ImageNet spec of \S\ref{sec:vit_imagenet} is pinned to this one at
+everything but its head. At 1000 classes the count is 5,717,416. So the
+listing above is not a description of the network that got trained, it
+is the object the renderer consumed.
+
+\textbf{Twenty-four keeps for twelve blocks, and the pairing is the
+content.} ViT drops each block's attention branch and MLP branch
+independently, but at the same keep probability, so sites $2i$ and
+$2i+1$ share $\mathrm{keep}_i = 1 - 0.1i/11$. The driver needs one
+entry per \emph{site} because it draws one Bernoulli stream per mask
+input. Deriving twenty-four evenly spaced keeps from the site ordinal
+instead would silently unpair them, and no structural check would
+notice.
 
 Note the learning rate is 0.0003 (a third of what the ConvNets
 used) and warmup is 5 epochs (longer than the ConvNets' 3). ViTs
-need gentler optimization schedules --- the attention
+need gentler optimization schedules, because the attention
 softmax is prone to collapse if gradients push logits too hard
 early, and warmup keeps the first few epochs slow enough to avoid
 that failure mode.
 
 \subsection*{Results}
+\label{sec:vit_results}
 
-\begin{verbatim}
-$ IREE_BACKEND=rocm IREE_CHIP=gfx1100 \
-    ./.lake/build/bin/vit-tiny-train
-ViT-Tiny: 5526346 params
-Generating train step MLIR...
-  742145 chars
-Compiling vmfbs...
-  forward compiled
-  eval forward compiled
-  train step compiled
-  session loaded
-  train: 9469 images (256×256)
-  5526346 params + m + v (63 MB)
-training: 295 batches/epoch, batch=32, Adam, lr=0.000300,
-          cosine, label_smooth=0.1, wd=1e-4
-  no BN (LayerNorm only)
-  step 0/295: loss=2.302585 (366ms)
-Epoch 10/80: loss=1.552973 lr=0.000298 (102247ms)
-  val accuracy: 2121/3904 = 54.33%
-Epoch 20/80: loss=1.384668 lr=0.000275 (100662ms)
-  val accuracy: 2258/3904 = 57.84%
-Epoch 40/80: loss=1.178420 lr=0.000172 (102352ms)
-  val accuracy: 2642/3904 = 67.67%
-Epoch 60/80: loss=1.042742 lr=0.000054 (102175ms)
-  val accuracy: 2779/3904 = 71.18%
-Epoch 80/80: loss=0.986243 lr=0.000000 (102234ms)
-  val accuracy: 2799/3904 = 71.70%
-\end{verbatim}
-
-(Full log in \texttt{logs/vit\_train.log}.)
-
-Final val accuracy \textbf{71.70\%} on Imagenette, wall time
-\textbf{$\sim$2.3 hours} --- the fastest of any Imagenette-scale
-model in Part 1. Expanding the comparison table from the
-ConvNeXt chapter:
+\S\ref{sec:vit_runit} has the run: 80 epochs at about 18 seconds each,
+twenty-four minutes, $\mathbf{68.74\%}$ top-1 and $\mathbf{90.42\%}$
+top-5. That completes the Part-1 column, and every row of it is now a
+measurement on the verified XLA path at the same dataset, the same
+eighty epochs, and one RTX 4060 Ti:
 
 \begin{center}
-\begin{tabular}{l r r r r r}
+\begin{tabular}{l r r r r r r}
 \hline
-Model            & Params  & MLIR     & Step time & Total   & Val acc \\
+Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
-ResNet-34        & 21.29M  & 518 KB   & 1400 ms   & 9.5 h   & 90.29\% \\
-MobileNet V2     &  2.24M  & 741 KB   &  830 ms   & 5.4 h   & 87.09\% \\
-EfficientNet-B0  &  7.16M  & 938 KB   &  940 ms   & 6.2 h   & 87.58\% \\
-ConvNeXt-T       & 27.83M  & 790 KB   & 2030 ms   & 13.3 h  & 84.94\% \\
-ViT-Tiny         &  5.53M  & 742 KB   &  360 ms   & 2.3 h   & 71.70\% \\
+ResNet-34        & 21.29M  & 729\,KB    & 220 ms    & 1.5 h    & 89.71\% & 98.27\% \\
+MobileNet V2     &  2.24M  & 1{,}047\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
+EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & \textbf{89.96\%} & 98.45\% \\
+ConvNeXt-T       & 27.83M  & 985\,KB    & 196 ms    & 1.3 h    & 85.07\% & 97.30\% \\
+ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{61 ms} & \textbf{24 min} & 68.74\% & 90.42\% \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent As in Chapter~\ref{chap:se}, every row is a phase-3 IREE
-measurement. The ResNet-34 and MobileNet V2 rows have been re-measured
-on the verified XLA path in \S\ref{sec:r34_runit} and
-\S\ref{sec:mnv2_runit}.
+\noindent Step time is the epoch wall-clock divided by 295 batches, so
+it includes each epoch's validation pass. MLIR sizes are the committed
+\texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units.
 
-ViT-Tiny is the fastest-per-step and the lowest-accuracy. That's
-the data-hunger effect: 9469 training images is tiny for a
-transformer. The ViT paper reached ImageNet-competitive accuracy
-only when trained on ImageNet-21K (14M images) or JFT-300M (300M
-images); at Imagenette scale the ConvNets' inductive bias (locality,
-translation equivariance) actively helps, and the ViT has to learn
-those properties from data it doesn't have.
+ViT-Tiny is the fastest per step by a factor of $1.5$ over the next
+network and the lowest-accuracy by more than sixteen points. That gap
+is the data-hunger effect: 9,469 training images is tiny for a
+transformer. The ViT paper reached ImageNet-competitive accuracy only
+when trained on ImageNet-21K (14M images) or JFT-300M (300M images). At
+Imagenette scale the ConvNets' inductive bias, locality and translation
+equivariance, actively helps, and the ViT has to learn those properties
+from data it doesn't have. \S\ref{sec:vit_imagenet} is the control:
+the same architecture on 1.28M images reaches $70.28\%$ over a
+\emph{thousand} classes, which is the regime the design was for.
+
+\medskip\noindent\textbf{A note on the number, because it moved.} An
+earlier edition of this chapter reported $71.70\%$ here, measured on the
+retired IREE path against a 3,904-image validation subset rather than
+the full 3,925. That subset is worth at most half a point, so it does
+not account for the difference. Chapter~\ref{chap:cnn}'s width sweep is
+where this book first had to take run-to-run spread seriously, so this
+number was measured three times before being printed.
+
+\medskip\noindent All three passes came back \emph{bit-identical}, on
+three different cards: the same $68.738854\%$ and $90.420382\%$ at epoch
+80, and the same 160 epoch lines the whole way down. That makes ViT the
+first network since the dense-only graphs of Chapter~\ref{chap:mlp} to
+reproduce exactly, and for the same reason. XLA selects convolution
+algorithms per process, which is what moves the convnet chapters'
+numbers by a point or two between runs. This graph holds 435
+\texttt{dot\_general}s and \emph{two} convolutions, so there is almost
+nothing for that selection to vary. What that buys is a sharper reading
+of the gap rather than an explanation of it: the difference from the
+retired figure is not run-to-run spread, because on this path there is
+no spread. It is a difference between two measurement setups that
+differ in lowerer, in vendor, and in the vintage of the artifact, and
+this chapter does not separate those.
 
 \section{MLIR: Attention}
 
 \noindent\textbf{What is already proven.} Scaled dot-product
 attention is $\mathrm{sdpa}(Q,K,V) = \mathrm{softmax}(QK^{\!\top}/\sqrt{d})\,V$.
-Its reverse-mode derivative produces three gradients --- $dQ$, $dK$, $dV$ ---
+Its reverse-mode derivative produces three gradients ($dQ$, $dK$, $dV$),
 each proven separately (\S\S~\ref{thm:sdpa_back_Q_correct}--%
 \ref{thm:sdpa_back_V_correct}, \texttt{sdpa\_back\_Q/K/V}), all built on the
 softmax backward, which couples every position to every other
 (\S~\ref{thm:softmax_has_vjp}). Because $Q$, $K$, and $V$ are three linear
 projections of the \emph{same} input $a$, the input gradient is a three-way
-fan-in, $da = dQ\,W_q^{\!\top} + dK\,W_k^{\!\top} + dV\,W_v^{\!\top}$;
+fan-in, $da = dQ\,W_q^{\!\top} + dK\,W_k^{\!\top} + dV\,W_v^{\!\top}$.
 \texttt{sdpa\_has\_vjp\_mat3} bundles the three, and
 \texttt{transformerAttnSublayer\_has\_vjp\_mat} composes the whole sublayer
 (LayerNorm, the QKV projections, attention, the output projection, the
@@ -9915,7 +10056,7 @@ residual) through \texttt{vjp\_comp\_at}.
 is non-elementwise and the three projections are coupled. The emitted graph
 denotes \texttt{transformerAttnSublayer\_has\_vjp\_mat}'s backward. Here is
 the three-way fan-in at the input (two tokens, model dimension four, single
-head; the SDPA backward that produces $dQ,dK,dV$ elided to its comment):
+head, with the SDPA backward that produces $dQ,dK,dV$ elided to its comment):
 
 \begin{verbatim}
 // dQ,dK,dV = SDPA.back(dOut . Wo^T)  (softmax-weighted attention grads)
@@ -9932,43 +10073,46 @@ head; the SDPA backward that produces $dQ,dK,dV$ elided to its comment):
 
 \noindent Read it against the fan-in: each \texttt{dot\_general} carries one
 of the attention gradients back through its projection ($dQ$ through $W_q$,
-and so on, contracting the model axis); the two \texttt{add}s sum the three.
-This is the residual fan-in of Chapter~\ref{chap:residual} with three
-branches instead of one --- attention reads the input thrice, so the gradient
-returns thrice and adds. The softmax-weighted $dQ,dK,dV$ that feed the
+and so on, contracting the model axis), and the two \texttt{add}s sum the
+three. This is the residual fan-in of Chapter~\ref{chap:residual} with three
+branches instead of one, because attention reads the input thrice, so the
+gradient returns thrice and adds. The softmax-weighted $dQ,dK,dV$ that feed the
 \texttt{dot\_general}s come from the proven \texttt{sdpa\_back\_Q/K/V}, and
 the surrounding LayerNorm and output projection chain through their bridges.
 
 \medskip\noindent One honesty note: the hard part of attention is in that
-first comment. This listing is the \emph{projection} fan-in --- three linear
-adjoints and two adds --- while the softmax backward that couples every token
+first comment. This listing is the \emph{projection} fan-in (three linear
+adjoints and two adds), while the softmax backward that couples every token
 to every other (\texttt{softmax\_has\_vjp}, \S~\ref{sec:attention_proofs}) is
 what \texttt{// SDPA.back} stands in for. We show the fan-in because it is the
-new \emph{structural} move; the coupled core is carried by the proofs of
+new \emph{structural} move. The coupled core is carried by the proofs of
 \S~\ref{sec:attention_proofs}.
 
 \medskip\noindent With attention pinned, the verified-codegen thread covers
-every operator in the modern vision stack --- dense, convolution, BatchNorm,
-residual, depthwise, squeeze-excite, layer scale, and attention --- each
-emitted as the rendering of a machine-checked derivative, from the same three
-pieces: denoted IR, bridge theorem, printer.
+every operator in the modern vision stack, and that means dense, convolution,
+BatchNorm, residual, depthwise, squeeze-excite, layer scale and attention.
+Each is emitted as the rendering of a machine-checked derivative, from the
+same three pieces: denoted IR, bridge theorem, printer.
 
 \medskip\noindent\textbf{Caveats.}
 \begin{itemize}
-  \item \textbf{The attention bridge is unconditional} --- softmax and the
+  \item \textbf{The attention bridge is unconditional.} Softmax and the
     linear projections are smooth everywhere, with no smooth-point clause.
   \item \textbf{Representative scale} (two tokens, $d = 4$, one head).
 \end{itemize}
 
 \section{ImageNet recipe}
+\label{sec:vit_imagenet}
 
 \imagenetphasenote
 
 The Imagenette ViT-Tiny above trained on $\sim$9.5K images. The
-full 1000-class run is the same architecture --- patch16, embed
-192, 12 transformer blocks, 3 heads, $\sim$5.7M parameters --- with
-a 1000-class head, the \texttt{.imagenet} dataset, and the
-DeiT-flavored training recipe. Here's what the loop looks like:
+full 1000-class run is the same architecture with a 1000-class head,
+the \texttt{.imagenet} dataset, and the DeiT-flavored training recipe,
+so it is still patch16, embed 192, 12 transformer blocks and 3 heads,
+at 5{,}717{,}416 parameters. This is the \textbf{phase-2 reference}
+implementation, \texttt{jax/MainVitImagenet.lean}, quoted as it stands
+today:
 
 \begin{verbatim}
 -- 1. Same ViT-Tiny backbone, 1000-class head.
@@ -10001,42 +10145,44 @@ def vitTinyImagenetConfig : TrainConfig where
   dropPath          := 0.1           -- stochastic depth (linear 0 -> 0.1)
   useEMA            := true          -- model EMA decay 0.99996 (eval on shadow)
   bf16              := true          -- bf16 matmul compute
+  valEveryEpochs    := 5             -- ImageNet val is data-loading-bound
+  repeatedAug       := 3             -- DeiT Repeated Augmentation (see below)
 
--- 3. Same .train entry point as every other chapter.
+-- 3. The phase-2 reference driver. The verified path's entry point is
+--    trainAdamSched, in the phase-4 subsection at the end of this chapter.
 def main (args : List String) : IO Unit :=
   vitTinyImagenet.train vitTinyImagenetConfig
     (args.head?.getD "data/imagenet") .imagenet
 \end{verbatim}
 
-As with the ResNet-34 ImageNet run (Ch~\ref{chap:residual}), the
-phase-2 JAX path (\texttt{jax/MainVitImagenet.lean}, via
-\texttt{lake build vit-tiny-imagenet}) wires \texttt{.imagenet}
-through tfds streaming; the phase-3 IREE path awaits the same
-C-side streaming reader for the 1.28M-image set. Only the
-data-loading layer differs --- the spec, the recipe knobs, and the
-\texttt{.train} invocation are identical.
+As with the ResNet-34 ImageNet run (Ch~\ref{chap:residual}), that
+driver wires \texttt{.imagenet} through tfds streaming. The verified
+path reads the same 1.28M-image stream through a generated shim of
+its own, and it has a trainer built and running at this scale.
+\S\ref{sec:vit_phase4} is that side of it. The numbers in this
+section are the reference implementation's.
 
 \textbf{The stability knob.} ViT-Tiny is where the recipe stops
 being optional. At the proper DeiT learning rate (peak $5\times
 10^{-4}$ for batch 512) the model \emph{collapses to chance} the
-moment warmup ramps the LR past ${\sim}1.6\times 10^{-4}$ --- train
-loss pins at $\ln(1000)\approx 6.9$ and never recovers. This is the
+moment warmup ramps the LR past ${\sim}1.6\times 10^{-4}$, with train
+loss pinned at $\ln(1000)\approx 6.9$ and never recovering. This is the
 well-known no-grad-clip transformer instability, sharpened here by
 the 1000-class softmax and bf16 gradient noise. The fix is one
 field: \texttt{gradClipNorm := 1.0}, global-norm gradient clipping,
 the DeiT default. With it, the very LR that collapsed without it
 trains cleanly through warmup and on to convergence.
 
-\textbf{bf16 and the run.} ViT is matmul-bound --- patch embed,
-attention QKV/scores/output, the MLP, the head are all dense
-matrix multiplies, with no convolution to speak of. So unlike the
+\textbf{bf16 and the run.} ViT is matmul-bound, because the patch
+embed, the attention QKV/scores/output, the MLP and the head are all
+dense matrix multiplies, with no convolution to speak of. So unlike the
 ResNet case, the relevant precision flag is \texttt{bf16} alone
 (matmul compute in bfloat16, fp32 master weights, fp32
-LayerNorm/softmax/GELU); there is no \texttt{bf16Conv} to set.
+LayerNorm/softmax/GELU), and there is no \texttt{bf16Conv} to set.
 bf16 matmul runs through the same NVIDIA tensor cores. Measured on
 the same four RTX 4060 Ti (CUDA) at batch 512, bf16 is
 $\mathbf{1.48\times}$ faster per step than fp32 ($176$ vs $260$\,ms
-steady-state) --- a smaller multiple than the convnet's
+steady-state), a smaller multiple than the convnet's
 $1.6\times$, since ViT-Tiny's matmuls are narrow (embed $192$) and
 spend proportionally more time in the fp32 LayerNorm/softmax that
 bf16 leaves untouched. On the ROCm box the effect is
@@ -10045,8 +10191,8 @@ $\mathbf{2.75\times}$ compute speedup on the full ViT-Tiny step
 ($428 \to 156$\,ms for forward + backward + AdamW at batch
 $256$/GPU), diluting to ${\sim}2\times$ end-to-end once the fp32
 LayerNorm/softmax and the tfds pipeline fold back in. The convnets
-see no such lift on gfx1100 --- MIOpen's bf16 convolution is no
-faster than fp32 there --- but ViT is all matmul, so the win is
+see no such lift on gfx1100, because MIOpen's bf16 convolution is no
+faster than fp32 there, but ViT is all matmul, so the win is
 real. The runs:
 
 \begin{center}
@@ -10054,27 +10200,28 @@ real. The runs:
 \hline
 GPU & Precision & Per epoch & Epochs & Wall-clock & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA) & fp32 & $\sim$11.1 min & 80 & $\sim$15 hr & --- & --- \\
-4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 80 & $\sim$11 hr & $\mathbf{65.64\%}$ & $\mathbf{87.06\%}$ \\
 4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 300 & $\sim$41 hr & --- & --- \\
 2$\times$ 7900 XTX (ROCm) & bf16 & $\sim$10 min & 300 & $\sim$50 hr & $\mathbf{70.28\%}$ & $\mathbf{90.05\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
+\noindent The CUDA row is the measured per-epoch rate carried out to the
+full schedule rather than a completed run, which is why it reports no
+accuracy. The result below is the ROCm one.
+
 The full 300-epoch DeiT-Ti recipe reached $\mathbf{70.28\%}$ top-1 /
-$\mathbf{90.05\%}$ top-5 on the full 50{,}000-image validation split
---- up from the 80-epoch ancestor's $65.64\%$ / $87.06\%$. That lands
-within ${\sim}2$ points of the ${\sim}72\%$ ViT-Tiny is capable of; the
-remaining gap is the one recipe knob still left on the table (repeated
-augmentation) plus two minor deviations (strict Mixup/CutMix alternation
-instead of a random switch, and Random-Erase to zero rather than to
-noise). The headline is a \emph{300-epoch} DeiT result with the full
-distillation-free recipe, and the point here is the pipeline (proven
-attention backward $\to$ DeiT recipe $\to$ stable bf16 training to a
-sensible ImageNet number), not a SOTA chase. The validation curve shows
-the familiar shape --- fast climb through warmup, a long middle, a
-final lift as the cosine schedule anneals to zero:
+$\mathbf{90.05\%}$ top-5 on the full 50{,}000-image validation split.
+That lands within ${\sim}2$ points of the ${\sim}72\%$ ViT-Tiny is
+capable of, and the remaining gap is the one recipe knob that run did
+not have (repeated augmentation) plus two minor deviations (strict
+Mixup/CutMix alternation instead of a random switch, and Random-Erase
+to zero rather than to noise). The headline is a \emph{300-epoch} DeiT
+result with the full distillation-free recipe, and the point here is
+the pipeline (proven attention backward $\to$ DeiT recipe $\to$ stable
+bf16 training to a sensible ImageNet number), not a SOTA chase. The
+validation curve shows the familiar shape, a fast climb through warmup,
+a long middle, and a final lift as the cosine schedule anneals to zero:
 
 \begin{center}
 \begin{tikzpicture}
@@ -10104,61 +10251,150 @@ final lift as the cosine schedule anneals to zero:
 \end{center}
 
 \noindent ViT-Tiny / ImageNet-1k validation accuracy per epoch (bf16,
-2$\times$ RX 7900 XTX, ROCm; sampled every 5 epochs across the 300-epoch
+2$\times$ RX 7900 XTX, ROCm, sampled every 5 epochs across the 300-epoch
 run).
 
 \textbf{Distance to the paper.} DeiT-Ti reaches $72.2\%$ without
-distillation; our $70.28\%$ is ${\sim}2$ points short, and the
+distillation. Our $70.28\%$ is ${\sim}2$ points short, and the
 accounting is mundane. The largest single item is \emph{repeated
-augmentation} --- DeiT samples each image in a batch three times
+augmentation}, where DeiT samples each image in a batch three times
 under different augmentations, which disproportionately helps the
-data-hungry tiny models; our pipeline does not, and it is the
-obvious next lever. The rest is augmentation-fidelity drift ---
-RandomResizedCrop and Random-Erasing are a from-scratch
-\texttt{tf.data} reimplementation rather than timm's exact code (our
-RandAugment now matches timm's \texttt{rand-m9-mstd0.5-inc1} op-set
-literally) --- plus a few small knobs (batch $512$ vs.\ $1024$, the
-gradient clipping we add for stability, Random-Erase to zero rather
-than to noise). None of it is a bug: the loss curve is textbook
-DeiT. The further $+2.3$ points to DeiT-Ti's $74.5\%$ headline are a
-different thing entirely --- the \emph{distillation} variant (a
-second ``distillation token'' trained against a strong CNN teacher),
-which we do not implement.
+data-hungry tiny models. The run that produced $70.28\%$ did not have
+it. The recipe does now, as the \texttt{repeatedAug := 3} in the
+listing above, and it landed after that run had already finished. So
+repeated augmentation is the obvious next lever, and the accurate
+statement about it is that it is untested here rather than missing.
+The rest is augmentation-fidelity drift, since RandomResizedCrop and
+Random-Erasing are a from-scratch \texttt{tf.data} reimplementation
+rather than timm's exact code (our RandAugment now matches timm's
+\texttt{rand-m9-mstd0.5-inc1} op-set literally), plus a few small
+knobs (batch $512$ vs.\ $1024$, the gradient clipping we add for
+stability, Random-Erase to zero rather than to noise). None of it is
+a bug: the loss curve is textbook DeiT. The further $+2.3$ points to
+DeiT-Ti's $74.5\%$ headline are a different thing entirely, the
+\emph{distillation} variant (a second ``distillation token'' trained
+against a strong CNN teacher), which we do not implement.
 
-\textbf{[TODO --- run w/ config.]} \texttt{vit-tiny-imagenet},
-\textbf{300 epochs} (a re-run of the $70.28\%$ above). \emph{Changed
-since that number:} RandAugment is now timm-literal
-(\texttt{rand-m9-mstd0.5-inc1}: SolarizeAdd$+$Invert op-set, per-op
-apply prob $0.5$, bilinear geometric interpolation, relative
-translate). \emph{Still open:} repeated augmentation ($3\times$, the
-largest remaining lever) stays deferred. Re-running with the
-timm-faithful RandAugment --- and, once built, repeated augmentation ---
-is the path to close the $\sim$2 points to DeiT-Ti's $72.2\%$.
+\textbf{[TODO: re-run on the current config.]}
+\texttt{vit-tiny-imagenet}, \textbf{300 epochs}, a re-run of the
+$70.28\%$ above. \emph{Changed since that number:} RandAugment is now
+timm-literal (\texttt{rand-m9-mstd0.5-inc1}: SolarizeAdd$+$Invert
+op-set, per-op apply prob $0.5$, bilinear geometric interpolation,
+relative translate), and repeated augmentation is now in the recipe at
+$3\times$. Re-running with both is the path to close the $\sim$2 points
+to DeiT-Ti's $72.2\%$.
+
+\subsection*{Phase 4: the verified trainer}
+\label{sec:vit_phase4}
+
+Everything above this point is the phase-2 Lean$\to$JAX trainer. The
+phase-4 peer, which trains the same network through the proof-rendered
+StableHLO that \S\ref{sec:vit_runit} ran at Imagenette scale, exists and
+builds. It is \texttt{apps/imagenette/MainViTImagenet.lean}, built as
+\texttt{lake build vit-imagenet-verified}:
+
+\begin{verbatim}
+-- Identical backbone, 1000 classes instead of 10.
+def vitImagenetVerified : VerifiedNetSpec where
+  name       := "ViT-Tiny (ImageNet-1k)"
+  slug       := "vitin"
+  nClasses   := 1000
+  data       := .imagenet
+  shimScript := "generated_vit_tiny_imagenet_shim.py"
+  layers     := [ ... the Imagenette stack, 1000-class head ... ]
+
+-- 300 epochs, because that is the schedule the phase-2 number
+-- above was measured on. Batch is 128 PER DEVICE, so four
+-- replicas give the reference's global 512 exactly.
+def vitImagenetConfig : VerifiedConfig where
+  epochs    := 300
+  batchSize := 128
+\end{verbatim}
+
+\noindent The head is the only parameter shape that moves, from
+$192 \times 10$ to $192 \times 1000$, which takes the count from
+5,526,346 to \textbf{5,717,416}. The same three kernel \texttt{\#guard}s
+that hold ConvNeXt's two specs together hold these: equal
+\texttt{toSpecs.size}, equal \texttt{toSpecs.pop.pop}, and a
+\texttt{back!} of \texttt{(\#[1000], 2)}.
+
+\medskip\noindent\textbf{The collectives are gated one way here, and it
+is worth saying which.} \texttt{tests/TestViTDpCheck.lean} pins the
+data-parallel step against its single-device peer by handing both
+replicas the \emph{same} rows, where the all-reduce mean is an
+identity. ViT has no BatchNorm, so that identity is exact rather than
+approximate. But a gate built on duplicated rows is structurally blind
+to a shard-offset bug, and the check that closes that hole works by
+giving the replicas genuinely different data. That one now covers the
+Imagenette \texttt{vit} spec, and it does not yet cover \texttt{vitin}.
+Two gates that sound alike are not one property, and this chapter has
+one and a half of them rather than ConvNeXt's two.
+
+\medskip\noindent\textbf{The regularizer knobs are render variants, and
+the same combination is missing here as there.} Weight-decay exclusion,
+grad clipping and stochastic depth are spelled \texttt{wx},
+\texttt{clip} and \texttt{drop}, and
+\texttt{vitin\_adamdp128x4wxclipdrop} carries all three at once on top
+of AdamW and the four-way all-reduce. EMA is a variant too
+(\texttt{vitin\_emadp128x4}), but no committed artifact combines it with
+the other three. Mixup, CutMix and repeated augmentation never enter the
+graph at all, because they are data-side and ride the shim.
+
+\medskip\noindent\textbf{What it has not done is run.} No phase-4
+ImageNet result exists for this network, which is why every accuracy
+above comes from phase 2. What is measured is the throughput, and the
+schedule follows from it:
+
+\begin{center}
+\begin{tabular}{l r r r r}
+\hline
+Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
+\hline
+4$\times$ 4060 Ti (CUDA)  & 287 & 12.0 & $\sim$60 h (2.5 d) & TBD \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent At global batch 512 that is 2,502 steps per epoch, which is
+the reference's own figure. \textbf{One thing differs between this row
+and the phase-2 rows above, and it is not the network}: the verified
+path is fp32 throughout, with no bf16 artifact anywhere in
+\texttt{verified\_mlir/}, while every phase-2 row in this section was
+measured in bf16. The batch does \emph{not} differ, unlike
+Chapter~\ref{chap:layernorm}'s phase-4 row, where the render's smaller
+per-device batch confounded the comparison a second way. So 12.0
+minutes per epoch against phase 2's 7.6 is close to a clean read of what
+dropping to fp32 costs on this box. At 12.0 minutes it is also the
+fastest phase-4 epoch in Part 1, ahead of MobileNetV2's 15.7 and
+ResNet-34's 18.6, though the 300-epoch schedule still makes it a longer
+run in total than Chapter~\ref{chap:residual}'s ninety.
+
+\noindent\textbf{[TODO: run \texttt{vit-imagenet-verified}.]}
 
 \subsection*{What Part 1 has established}
 
 Every layer primitive shipped in Part 1's trainers (MLP,
-CNN, ResNet, MobileNet, EfficientNet, ViT) has a machine-checked
-backward pass. The same \texttt{NetSpec} / \texttt{TrainConfig} /
-\texttt{.train} pipeline trains all of them with at most
-config-level changes. The MLIR each emits is between 20\,KB (MLP)
-and 1{,}316\,KB (EfficientNet-B0), and the lowerer compiles all of
-them the same way.
+CNN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT) has a
+machine-checked backward pass. The same \texttt{VerifiedNetSpec} /
+\texttt{VerifiedConfig} / \texttt{trainAdamSched} pipeline trains all
+of them with at most config-level changes. The MLIR each emits is
+between 7\,KB (MLP) and 1{,}316\,KB (EfficientNet-B0), and the
+lowerer compiles all of them the same way.
 
 The bestiary in Part 2 then shows that \emph{every other
-architecture you've seen in modern deep learning} --- UNet, DETR,
+architecture you've seen in modern deep learning} composes from the
+same small set of primitives plus a handful of
+architecture-specific bundled layers. That list runs UNet, DETR,
 Mask R-CNN, DCGAN, CycleGAN, Pix2Pix, DDPM, Stable Diffusion, VAE,
 AlphaGo, AlphaZero, MuZero, Mamba, BERT, GPT, Whisper, CLIP, LLaVA,
-SAM, SegFormer, DeepLab v3+, Nyström-former, QANet, Evoformer ---
-composes from the same small set of primitives plus a handful of
-architecture-specific bundled layers. Three rules (chain, additive
+SAM, SegFormer, DeepLab v3+, Nyström-former, QANet and Evoformer. Three rules (chain, additive
 fan-in, multiplicative fan-in). Five Jacobian tricks (diagonal,
 sparse Toeplitz, binary selection, rank-1 correction, outer
 product).
 
 That's the whole framework. Part~2's bestiary takes the same set
 of primitives and tours how they compose into every well-known
-modern architecture --- a survey of the field expressed in the
+modern architecture, a survey of the field expressed in the
 proven kit, with a small library of bundled idioms for the patterns
 that recur.
 
@@ -13035,14 +13271,28 @@ proved. They differ in what they are good at:
     dispatches convolutions and matmuls to the vendor's hand-tuned kernel
     libraries. The gap tracks how much work those kernels get.
   \item \textbf{IREE} generates every kernel itself, which is why it runs where
-    no vendor library exists --- Vulkan, Metal, bare CPU, custom accelerators
-    --- and why its runtime is 392$\times$ smaller (1.3\,MB against the XLA
-    plugin's 505\,MB, which bundles MIOpen, rocBLAS and RCCL).
+    no vendor library exists, including Vulkan, Metal, bare CPU and custom
+    accelerators. That is also why its runtime is 392$\times$ smaller: 1.3\,MB
+    against the XLA plugin's 505\,MB, which bundles MIOpen, rocBLAS and RCCL.
 \end{itemize}
 
-That size difference is also a trust difference, counted in
-Appendix~\ref{app:verification}: the fast path asks you to trust far more
-unverified code.
+\noindent\textbf{The size gap is not a trust gap.} It is tempting to read
+1.3\,MB against 505\,MB as one lowerer asking you to trust less code, and the
+reading does not survive contact with what the two actually do. Most of the
+XLA plugin is vendor kernel libraries it \emph{calls}, where IREE
+\emph{generates} those kernels instead. Both bodies of code are unverified. Choosing the small
+runtime relocates the trusted base rather than shrinking it, so bytes on disk
+are measuring packaging, not risk.
+
+\medskip\noindent\textbf{You do not need IREE to train.} XLA is the default and
+runs every network in this book. What IREE is needed for is
+\emph{reproducing the verification}: the differential oracles of
+Appendix~\ref{app:verification} run the Lean-side pipeline through IREE and
+compare against a JAX reference running through XLA, and it is the fact that
+those are two independent compilers that makes the comparison worth anything.
+Some oracle binaries are IREE-only for that reason and will refuse to start on
+the XLA backend. So a training run wants one lowerer, and a full verification
+run wants both.
 
 \section*{Common troubleshooting}
 
@@ -13095,12 +13345,12 @@ reverse-mode derivative. \textbf{By construction} (structural): the
 StableHLO the GPU runs is not written but \emph{printed} from the same
 datatype the proofs reason about, with a bridge theorem pinning it to the
 proven formula, so the code cannot drift from the math.
-\textbf{Cross-checked} (empirical): what cannot be proven --- IREE's
-lowering, GPU transcendentals, \texttt{float32} rounding beyond its
-theorem layer (\S~\ref{sec:float32}) --- is watched by independent
-oracles that must agree before the hardware is believed. Each kind
-catches what the others structurally cannot; this appendix walks the
-mechanisms, grouped by kind.
+\textbf{Cross-checked} (empirical): what cannot be proven is watched by
+independent oracles that must agree before the hardware is believed, and
+that means the lowerer's translation of the proven text into machine code,
+the GPU transcendentals, and \texttt{float32} rounding beyond its theorem
+layer (\S~\ref{sec:float32}). Each kind catches what the others structurally
+cannot. This appendix walks the mechanisms, grouped by kind.
 
 One property makes the whole edifice auditable: \textbf{every chapter is
 pure composition}. Every primitive either inherits from Mathlib's
@@ -13341,7 +13591,7 @@ epistemic.
 The proofs above answer whether the \emph{mathematics} is right --- the
 hand-derived VJPs, their proofs, and the elaborator that accepted them. They
 say nothing about a different gap. The GPU never runs the Lean functions; it
-runs a block of emitted \texttt{stablehlo} that IREE compiles once per
+runs a block of emitted \texttt{stablehlo} that the lowerer compiles once per
 training program. A code generator can be handed a correct proof and still
 emit an operation that contracts the wrong axis, transposes backwards, or
 silently drops a term --- and the only thing traditionally linking the proof
@@ -13390,14 +13640,14 @@ and bounded:
     \emph{syntactic} half is now partly closed --- the emitted text lexes and
     parses back to the proven op-graph (\texttt{StableHLOLex.lean},
     \texttt{StableHLOParse.lean}) --- leaving a formal StableHLO
-    \emph{semantics}, which does not yet exist; that IREE lowers the text
-    correctly; and that \texttt{float32} approximates $\mathbb{R}$, the last
+    \emph{semantics}, which does not yet exist; that the lowerer compiles the
+    text correctly; and that \texttt{float32} approximates $\mathbb{R}$, the last
     now a conditional theorem validated on real silicon
     (\S~\ref{sec:float32}) rather than a bare assumption.
 \end{itemize}
 So the gradient the GPU computes is, by a machine-checked theorem, the
-network's exact reverse-mode derivative over $\mathbb{R}$ --- up to one
-printer, IREE, and floating point. Where a conventional generator leaves
+network's exact reverse-mode derivative over $\mathbb{R}$, up to one
+printer, one lowerer, and floating point. Where a conventional generator leaves
 thousands of lines of string-building linked to the proof by nothing at all,
 the unproven surface here is a single printer, tested end to end.
 
@@ -13544,10 +13794,20 @@ the proven gradient'' is a theorem about a value, not a hope about a comment.
 
 \section{Cross-checked}
 
-Because IREE cannot itself be proven, and GPU transcendentals have no
-IEEE specification, the last stretch --- from proven math to executed
-kernel --- is covered by independent oracles that must agree before the
+Neither lowerer can itself be proven, and GPU transcendentals have no
+IEEE specification, so the last stretch from proven math to executed
+kernel is covered by independent oracles that must agree before the
 hardware is believed. Each watches a different failure mode.
+
+\medskip\noindent\textbf{The property that makes this work is that the two
+sides do not share a compiler.} The Lean-side pipeline of the oracles below
+lowers through IREE, and the reference pipeline is JAX, which lowers through XLA.
+Different code generation, different runtime, different kernels, and different
+authors. Agreement between them is evidence precisely because a bug would have
+to occur twice, in the same direction, in two unrelated compilers. This is
+IREE's real job in the project, and it is not the one the runtime-size
+comparison in Appendix~\ref{app:getting_started} might suggest. IREE is not
+kept because it is small. It is kept because it is not XLA.
 
 \subsection{Finite-difference gradient checks}
 
@@ -13598,27 +13858,39 @@ those gaps and for end-to-end pipeline verification, the next oracle takes over.
 A separate Lean \(\to\) JAX \(\to\) XLA pipeline
 (\texttt{jax/Jax/Codegen.lean}, \(\sim 1100\) lines) produces an
 idiomatic JAX training script from the same \texttt{NetSpec} the
-primary Lean \(\to\) StableHLO MLIR \(\to\) IREE pipeline consumes.
-XLA is the compiler JAX uses to produce GPU code (the same backend
-that powers TensorFlow and other frameworks); IREE is its Lean-side
-counterpart. The two stacks are independent end to end ---
-different codegen, different runtime, different kernels --- which
-is why agreement between them is a meaningful cross-check. Running
-both from identical initial parameters on identical batches gives
-us a pair of trace files, one per stack, that should agree modulo
-float32 rounding if both pipelines compute the same math.
+Lean \(\to\) StableHLO MLIR pipeline consumes. XLA is the compiler
+JAX uses to produce GPU code, the same backend that powers
+TensorFlow and other frameworks. For this comparison the Lean side
+is lowered by IREE, so the two stacks are independent end to end,
+with different code generation, different runtime and different
+kernels, and that is why agreement between them is a meaningful
+cross-check. Running both from identical initial parameters on
+identical batches gives us a pair of trace files, one per stack,
+that should agree modulo float32 rounding if both pipelines compute
+the same math.
 
 The agreement is very tight. For the MNIST MLP, step-1 losses agree
-to \(\sim 2 \times 10^{-7}\) --- float32 ULP --- across the
-JAX-CPU-vs-IREE-ROCm comparison, and phase-3 IREE output is
+to \(\sim 2 \times 10^{-7}\), which is float32 ULP, across the
+JAX-CPU-vs-IREE-ROCm comparison, and the IREE output is
 \textbf{bit-identical across AMD and NVIDIA hardware} at step 1.
 For the MNIST CNN with batch norm, step-1 agrees to
 \(\sim 10^{-4}\), looser because variance reductions over
 \(\sim 100\)k-element tensors amplify cross-compiler reduction-tree
-differences --- both pipelines do correct math; they just sum it
+differences. Both pipelines do correct math, they just sum it
 in different orders. Full results are committed to the repo as
 reproducible JSON-Lines traces; see
 \texttt{traces/CROSS\_BACKEND\_RESULTS.md}.
+
+\medskip\noindent\textbf{One asymmetry, stated plainly.} The trainers in this
+book default to XLA, while the oracles above lower the Lean side through IREE.
+That is deliberate, because an oracle that shared a compiler with its own
+reference would not be checking the compiler at all. The consequence is worth
+being clear about: it is IREE's translation of the proven text that these
+oracles exercise directly, so the default training path's lowering carries less
+of this particular kind of evidence than the path the oracles run. Every other
+layer is unaffected, since the proofs, the bridge theorems and the
+\texttt{float32} budgets are statements about the graph rather than about any
+compiler, and both lowerers consume the identical proven StableHLO.
 
 Layered on top of the end-to-end trace diff is a per-axiom
 differential test in \texttt{tests/vjp\_oracle/}, which compares

@@ -1784,13 +1784,19 @@ lean_exe «sgd-render-tie» where
     `[θ|m|v|lr,bc1,bc2]`, every returned float compared. ViT has no BN, so there is no forward-only
     region: the gate is the gradient AND `%loss` (the only direct read of the forward).
 
-    **ireeLink, not xlaLink** — unlike the R34/cifar8 ties. `vit-verified-adam` is an IREE binary,
-    so the ViT AdamW graph has only ever run under IREE; on XLA/PJRT it dies in the patch-embed
-    weight-grad convolution with `miopenStatusUnknownError` (this box is MIOpen-conv-weak). A tie
-    must run on the backend the trainer actually uses anyway. -/
+    **`lowererLink` since 2026-08-12, and the docstring it replaces was wrong twice over.** That
+    text read "ireeLink, not xlaLink — `vit-verified-adam` is an IREE binary, so the ViT AdamW graph
+    has only ever run under IREE; on XLA/PJRT it dies in the patch-embed weight-grad convolution
+    with `miopenStatusUnknownError`." `vit-verified-adam` moved to `lowererLink` and defaults to
+    XLA, and the MIOpen failure was a **ROCm** fault, not an XLA one: the same graph trains this
+    net end to end on CUDA. ⚠ Note the link arg was never what selected the backend anyway —
+    `ireeLink` only adds `-liree_ffi` to the link line, while `ffi/lowerer.c` **dlopens** whichever
+    shim `$LEAN_MLIR_LOWERER` names, so the ireeLink-built gate was already tying on XLA. ConvNeXt
+    settled that by running it (its own docstring, below). This is the target that originated the
+    stale claim: `efficientnet-adam-tie`'s docstring cited "`vit-adam-tie`'s reason". -/
 lean_exe «vit-adam-tie» where
   root := `tests.TestViTAdamTie
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 /-- EfficientNet-B0 AdamW step-3 gate: one AdamW step through two renders of
     `@efficientnet_adam_train_step` — the hand-written emitter in `tests/TestEfficientNetTrain.lean`
@@ -1802,11 +1808,14 @@ lean_exe «vit-adam-tie» where
     the whole forward chain BIT-EXACTLY and separates a forward disagreement from a backward one in
     one run. `%loss` is still gated, but as a cross-check rather than the only forward evidence.
 
-    **ireeLink, not xlaLink**, for `vit-adam-tie`'s reason: `efficientnet-verified-adam` is an IREE
-    binary, and a tie must run on the backend the trainer actually uses. -/
+    **`lowererLink` since 2026-08-12**, closing the last of the three targets that carried the
+    stale "is an IREE binary" premise. It cited `vit-adam-tie`'s reason, and that reason was
+    retired at the same time: `efficientnet-verified-adam` is itself on `lowererLink` and defaults
+    to XLA. The link arg never selected the backend, since `ffi/lowerer.c` dlopens the shim
+    `$LEAN_MLIR_LOWERER` names. -/
 lean_exe «efficientnet-adam-tie» where
   root := `tests.TestEfficientNetAdamTie
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 /-- MobileNetV2 AdamW gate (§2f, the last net on the scorecard): one AdamW step through two renders
     of `@mobilenetv2_adam_train_step` — the hand-written emitter in `tests/TestMobilenetV2TrainPC.lean`
@@ -1910,7 +1919,7 @@ lean_exe «convnext-shard-check» where
   root := `tests.TestConvNeXtShardCheck
   moreLinkArgs := xlaLink
 
-/-- `shard-check <convnext|efficientnet|mobilenetv2> [<dpPath>]` — the asymmetric-batch SHARDING
+/-- `shard-check <convnext|efficientnet|mobilenetv2|vit> [<dpPath>]` — the asymmetric-batch SHARDING
     gate for every net with a DP render, generalised from `convnext-shard-check` (handoff §5's
     "still open" item). The `*-dp-check` gates hand both replicas the SAME rows, so they are
     structurally blind to a shard-offset bug; this one gives them different data and checks
