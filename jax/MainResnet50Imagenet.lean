@@ -101,6 +101,40 @@ def resnet50ImagenetConfigShort : TrainConfig :=
       trainRes      := 160      -- A3: train @160×160
       testCropRatio := 0.95 }   -- A3: eval @224, center-crop ratio 0.95
 
+/-- **The 2018 recipe** — the ResNet-50 side of the blueprint's A3-vs-2018 recipe diff
+    (`sec:r50_a3_vs_2018`), and the phase-2 peer of the verified `momdp64` run. It is the
+    original paper's SGD-with-momentum plus the "bag of tricks" polish: cosine decay, 5-epoch
+    warmup, label smoothing, random-resized-crop.
+
+    ⚠ **Every field here is set to the blueprint table's 2018 column**, not inherited by
+    accident. `resnet50ImagenetConfig` is RSB-A2, so the deltas are large and each one is a
+    row of that table: SGD+momentum 0.9 (not LAMB), bs 256 (not 2048-effective), lr 0.1 (not
+    0.008@2048), 90 epochs (not 300), softmax CE (not BCE), label smoothing 0.1 (not 0.0),
+    wd 1e-4 on ALL params (not 0.02 skipping norm/bias), no Mixup, no CutMix, no RandAugment,
+    no repeated aug, no stochastic depth, no EMA, and train/eval both at 224 (not 160/224).
+
+    ⚠⚠ **The 224 train resolution is the wall-clock story.** A3 trains at 160, so it is
+    ~2x cheaper per step (FixRes); this recipe pays that back. Do not read a 2018-vs-A3
+    per-epoch difference as an optimizer result. -/
+def resnet50ImagenetConfig2018 : TrainConfig :=
+  { resnet50ImagenetConfig with
+      optimizer      := .sgd
+      momentum       := 0.9      -- heavy-ball; `.sgd` + momentum > 0 is SGD-with-momentum
+      learningRate   := 0.1      -- the 2018 peak LR at batch 256
+      batchSize      := 256
+      epochs         := 90
+      weightDecay    := 0.0001   -- 1e-4 on ALL params (no skip-list)
+      lossKind       := .classCE -- softmax cross-entropy, not BCE
+      labelSmoothing := 0.1
+      useMixup       := false
+      useCutmix      := false
+      useRandAugment := false
+      repeatedAug    := 1
+      dropPath       := 0.0
+      useEMA         := false
+      trainRes       := 224      -- no FixRes split: train and eval both at 224
+      testCropRatio  := 0.875 }
+
 /-- Optimizer-regime probe (diagnosing the ~41% RSB-A3 result). Same A3 recipe
     but swaps LAMB→AdamW (LAMB is a large-batch optimizer; we run bs512) and adds
     the timm no_weight_decay skip-list (BN γ/β + biases excluded from wd). NB on
@@ -235,7 +269,10 @@ def resnet50ImagenetRecipes : List Recipe := [
     desc := "RSB-A1 600ep at effective bs2048 (80.4% target); 2× the A2 wall clock" },
   { name := "adam-probe",   cfg := resnet50ImagenetConfigAdamProbe,
     out := "generated_resnet50_imagenet_adamprobe.py",
-    desc := "A3 optimizer probe: AdamW + no-weight-decay on norm/bias" }
+    desc := "A3 optimizer probe: AdamW + no-weight-decay on norm/bias" },
+  { name := "2018",         cfg := resnet50ImagenetConfig2018,
+    out := "generated_resnet50_imagenet_2018.py",
+    desc := "the 2018 recipe: SGD+mom 0.9, 90 ep, bs256, lr 0.1, CE+LS, 224/224" }
 ]
 
 def main (args : List String) : IO Unit :=
