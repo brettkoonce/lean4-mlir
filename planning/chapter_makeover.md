@@ -183,12 +183,12 @@ Chapter-wide ranking, to pick what's next:
 | MNIST: 2D CNN (ch3) | 0.0 | 0 | **DONE** |
 | CIFAR with BatchNorm (ch4) | 0.0 | 0 | **DONE** |
 | ResNet-34 (ch5) | 0.0 | 0 | **DONE** |
-| On Verification (app C) | 17.8 | 36 | **needs an argument rethink, see §6** |
-| Getting started (app B) | 17.0 | 8 | flourishes cut, joinery not |
-| Data availability (app A) | 16.4 | 14 | |
+| On Verification (app C) | 0.0 | 0 | **DONE** — argument overhauled AND voice pass, max sentence 72 w |
+| Getting started (app B) | 0.0 | 0 | **DONE** — max sentence 46 w |
+| Data availability (app A) | 0.0 | 0 | **DONE** — max sentence 47 w |
 | MobileNetV2 (ch6) | 0.0 | 0 | **DONE** |
 | EfficientNet (ch7) | 0.0 | 0 | **DONE** — max sentence 64 w |
-| Bestiary | 8.1 | 58 | **▶ NEXT** — 110 em-dash raw, the biggest single job left, and the only one now |
+| Bestiary | 8.1 | 58 | **▶ NEXT, AND THE ONLY JOB LEFT** — 110 em-dash raw. Everything else in the book is 0/0 |
 | Vision Transformer (ch9) | 0.0 | 0 | **DONE** — max sentence **52 w**, the book's best |
 | ConvNeXt (ch8) | 0.0 | 0 | **DONE** — max sentence 53 w |
 
@@ -1854,14 +1854,34 @@ to maintain it.
 
 latexmk 0 errors, 0 undefined refs.
 
+### ✅ The appendix VOICE PASS also landed (same day)
+
+All three appendices are now **0 em-dash / 0 prose semicolon**, from 23/14 (A), 25/8 (B)
+and 77/25 (C). Max sentence: A 47 w, B 46 w, C 72 w.
+
+⚠ **§2's "Register by section type" says "Appendix C's trust accounting likewise" is left
+alone with theorem bodies.** Read as protecting the PRECISE REGISTER (diction, hedges,
+qualifications), not the punctuation, on the grounds that a voice pass changes punctuation
+and clause order and never words. The §2 word-frequency check confirms it: **64 word-count
+deltas across all three appendices, every one explainable** as a connective replacing an
+em-dash (`because` +7, `meaning` +4, `since` +3), the two new `itemize` blocks in A, or the
+new troubleshooting entry in B. **Zero content-word substitutions.** ▶ If brett meant that
+carve-out more broadly, C is the one to revert.
+
+⭐ **Appendix A's two worst offenders became lists**, per §2 pattern 4: the four-dataset
+opener (3 semicolon-joined clauses) and the "Demo datasets" paragraph (a SIX-item
+semicolon chain running 300+ words). Both were lists pretending to be sentences.
+
+⭐ **Appendix B gained a troubleshooting entry for the stale-shim trap** — the reader-facing
+version of what cost this session an hour. That is the zero-cycle guard: a fresh clone has
+no `ffi/libiree_ffi.so` at all, and a months-old one is rejected whole, and both now have an
+answer in the book instead of only in this doc.
+
 ### ▶ Still open on the appendices
 
-- **The VOICE PASS is untouched.** Appendix C is **77 em-dashes / 26 prose semicolons**,
-  Appendix B **25 / 9**. This session did the ARGUMENT, not the prose. ⚠ Do not read
-  "Appendix C resolved" as "Appendix C done".
-- **Nothing gates IREE, so the shim will rot again.** It went stale for months and was
-  only caught by trying to run it. The cheap guard is one oracle case in CI; the
-  zero-cycle guard is the rebuild recipe above, which is why it is written out here.
+- **Nothing gates IREE, so the shim can still rot.** It went stale for months and was
+  only caught by trying to run it. The cheap guard is one oracle case in CI. The
+  zero-cycle guards are the rebuild recipe above and the new Appendix B entry.
 
 ---
 
