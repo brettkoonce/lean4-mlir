@@ -10,11 +10,18 @@ XTX)** and **IREE 3.11.0rc + ROCm/HIP + gfx1100**. None of the bugs
 here are our code. They're filed upstream, reproduced locally, and
 the workaround for each is documented in the relevant folder's README.
 
+⚠ "None of these are our code" is not the same as "all of these are
+upstream bugs." The 2026-08 LaunchGraph entry was neither: it was a
+**stale system ROCm** under a newer wheel, and it sat in the open table
+for two days reading as an AMD defect. Before filing anything from this
+directory, check `cat /opt/rocm/.info/version` against the wheel's
+release date — that one command would have closed it immediately.
+
 ## Currently open
 
 | folder | upstream | status |
 |---|---|---|
-| [`2026-08-jax-rocm-command-buffer-launchgraph-segv/`](2026-08-jax-rocm-command-buffer-launchgraph-segv/) | openxla/xla or ROCm (to file) | SIGSEGV in `RocmCommandBuffer::LaunchGraph` after a nondeterministic number of steady-state dispatches. **ROCm-specific, confirmed**: pure-JAX repro dies 11/11 on gfx1100 and is 6/6 clean on CUDA at the identical JAX version. Blocks phase-4 on ROCm above the Ch1 linear net; CUDA is safe to build on. |
+| [`2026-08-vit-imagenet-rocm-first-step-abort/`](2026-08-vit-imagenet-rocm-first-step-abort/) | none (NOT minimally reproducible) | ViT-Tiny/ImageNet aborts at the FIRST invoke on gfx1100 (`free(): invalid next size`, or SIGSEGV). Narrowed to the patch-embed conv via `GemmFwdRest` — but that conv **passes in isolation** (`ruled_out.py`, 4 negative controls), so no upstream report yet. Not the LaunchGraph bug: survives ROCm 7.2.4, both plugins, 1 and 2 replicas. |
 | [`2026-06-iree-cuda-fp8-nvptx-lowering/`](2026-06-iree-cuda-fp8-nvptx-lowering/) | iree-org/iree (to file) | f8E4M3FN/E5M2 don't lower on CUDA/NVPTX (`unrealized_conversion_cast` i8↔f8); CPU + fp32 OK. Repros on rc20260428 **and** rc20260623. |
 | [`2026-06-jax-rocm-miopen-im2col-hiprtc/`](2026-06-jax-rocm-miopen-im2col-hiprtc/) | ROCm/MIOpen (to file) | `MIOpenIm2d2Col.cpp` fails to hiprtc-compile (`get_global_id` undeclared) → `miopenStatusUnknownError`. **Reproduced 2026-07-28**, reversing the 06-24 "not reproducible" call: the trigger is an interior-dilated `pad` **fused into** the conv; standalone it works. 20-line repro. |
 
@@ -22,6 +29,7 @@ the workaround for each is documented in the relevant folder's README.
 
 | folder | upstream issue | fixed at |
 |---|---|---|
+| [`2026-08-jax-rocm-command-buffer-launchgraph-segv/`](2026-08-jax-rocm-command-buffer-launchgraph-segv/) | none — **not an upstream bug** | system ROCm `7.2.0` → **`7.2.4`**. A newer `jax-rocm7-plugin` against a stale `/opt/rocm` corrupts memory in steady state; same soname, different build. The control: the identical untouched venv went 0/6 → 6/6 with only `/opt/rocm` changed. ⚠ Does NOT cover ViT — see the open row above. |
 | [`2026-04-rocm-miopen-conv-segv/`](2026-04-rocm-miopen-conv-segv/) | [ROCm/MIOpen#3955](https://github.com/ROCm/MIOpen/issues/3955) | `jax 0.10.0` / `jaxlib 0.10.0` / `jax-rocm7-{pjrt,plugin} 0.9.1.post4` |
 | [`2026-04-jax-jit-conv-backward-segv/`](2026-04-jax-jit-conv-backward-segv/) | [ROCm/jax#745](https://github.com/ROCm/jax/issues/745) | `jax 0.10.0` / `jaxlib 0.10.0` / `jax-rocm7-{pjrt,plugin} 0.9.1.post4` |
 | [`2026-04-jax-rocm-multigpu-mesh-hang/`](2026-04-jax-rocm-multigpu-mesh-hang/) | [ROCm/jax#746](https://github.com/ROCm/jax/issues/746) | `jax 0.10.0` / `jaxlib 0.10.0` / `jax-rocm7-{pjrt,plugin} 0.9.1.post4` |

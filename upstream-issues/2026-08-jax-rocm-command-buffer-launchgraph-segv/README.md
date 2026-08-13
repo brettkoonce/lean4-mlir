@@ -1,148 +1,108 @@
-# SIGSEGV in `RocmCommandBuffer::LaunchGraph` during steady-state training (gfx1100, ROCm 7.2)
+# SIGSEGV in `RocmCommandBuffer::LaunchGraph` during steady-state training (gfx1100)
 
-**Status: open, no workaround found. Confirmed ROCm-specific.** Not our
-code: reproduces with a 30-line pure-JAX script (`repro.py`) that touches
-nothing from this project, and does **not** reproduce on CUDA with the
-identical JAX version. Filed here because it blocks the phase-4 (PJRT) trainers on
-ROCm, and because this repo's own crash reports kept pointing at our FFI
-shim until the control below ruled it out.
+**Status: RESOLVED 2026-08-13 — not a bug in JAX, XLA or ROCm. The system ROCm
+userspace was four point releases behind the wheel.** Upgrading `/opt/rocm`
+7.2.0 → **7.2.4** fixes it outright. Nothing was filed upstream, and nothing
+should be: see "What to file instead" for the one part that is still worth
+reporting.
 
-## Summary
+Keep `repro.py`. It is now a regression check: if this ever comes back, it
+tells you in 25 seconds.
 
-A jitted training loop segfaults after a nondeterministic number of
-steps. It is not a compile-time failure and not a first-iteration
-failure. Compilation succeeds, training runs correctly for anywhere from
-a few hundred to several thousand dispatches, and then the process dies
-with SIGSEGV inside AMD's HSA runtime, reached through XLA's ROCm
-command-buffer (HIP graph) path.
+## The one-line version
 
-The probability of surviving to the end scales inversely with how much
-work the graph does. A single dense layer (2 outputs) usually finishes;
-a 3-layer MLP (6 outputs) essentially never does.
+A newer `jax-rocm7-plugin` against an older `/opt/rocm` corrupts memory in
+steady state. Same soname, different build. Nothing fails at load; it trains
+for thousands of dispatches and then dies somewhere unrelated.
 
-## Environment
+## What settles it
 
-- GPU: 2x AMD Radeon RX 7900 XTX (gfx1100, RDNA 3)
-- ROCm: 7.2.0 (driver/runtime/toolkit 7.2.26015)
-- OS: Linux 7.0.0-28-generic
-- Python: 3.12.3
-- jax / jaxlib: 0.10.2
-- jax-rocm7-pjrt / jax-rocm7-plugin: 0.10.2
+Same box, same `repro.py`, same afternoon:
 
-Note this is *newer* than the stack in
-`2026-04-jax-jit-conv-backward-segv/`, which 0.10.0 fixed. This is a
-different crash: that one was at compile time in the backward pass, this
-one is at run time in steady state.
+| jax stack | ROCm **7.2.0** | ROCm **7.2.4** |
+|---|---|---|
+| 0.10.0 + plugin 0.9.1.post4 | 6 of 6 complete | 6 of 6 |
+| 0.10.2 + plugin 0.10.2 | **0 of 6** (died epochs 1–11) | **6 of 6** |
+| 0.11.0 + plugin 0.11.0 | **1 of 6** | **6 of 6** |
 
-## Reproducer
+The middle row is the control that closes it. That is the *same venv*,
+untouched — not reinstalled, not repinned. It died 11 of 11 before and is
+6 of 6 after, with only `/opt/rocm` changed underneath it. One variable.
+
+The verified trainers agree: `mnist-mlp-verified` 6/6 and `mnist-cnn-verified`
+3/3 on 7.2.4, both plugins, at CUDA-identical accuracy.
+
+## Where the original diagnosis went wrong
+
+The first pass concluded "confirmed ROCm-specific" from a clean CUDA control
+at the identical JAX version. That control was sound and its conclusion was
+still wrong, because the *stacks underneath* the two backends were not
+comparable: the CUDA box's userspace was current and this one's was not. The
+comparison read as "ROCm vs CUDA" while actually being "stale vs fresh."
+
+**The variable nobody moved was the one under `/opt`.** Both plugins resolved
+every NEEDED library — `ldd` shows zero "not found" — so nothing pointed at
+the userspace. Resolution success is not version compatibility.
+
+Cheap check worth running first, next time: compare `cat /opt/rocm/.info/version`
+against the wheel's release date. Ours was seven months apart.
+
+## Reproducing the failure (if you need to)
+
+Requires a ROCm older than the wheel — e.g. `apt/7.2` with plugin ≥ 0.10.2.
 
 ```
 HIP_VISIBLE_DEVICES=0 python repro.py
 ```
 
-784-512-512-10 MLP, SGD, batch 128, 468 steps/epoch, 12 epochs, jitted
-eval between epochs, random data. Prints the epoch it reached.
+784-512-512-10 MLP, SGD, batch 128, 468 steps/epoch, 12 epochs, jitted eval
+between epochs, random data. Prints the epoch it reached. Two signatures, both
+memory corruption surfacing wherever the damaged region is next touched:
 
-**11 of 11 runs died**, at epochs 1, 1, 1, 2, 2, 3, 3, 3, 6, 7, 11. One
-earlier run of an identical script did complete 12/12, so the failure is
-probabilistic rather than certain.
+* SIGSEGV (139) inside `libhsa-runtime64` via `RocmCommandBuffer::LaunchGraph`
+  → `GpuCommandBuffer::Submit` → `CommandBufferThunk::ExecuteOnStream`
+* glibc `free(): invalid next size (normal)` abort (134)
 
-## Backtrace
+`librocprofiler-sdk` appears between HIP and XLA in the backtrace and is a
+passenger — `HSA_TOOLS_LIB=` changes nothing. Of every knob tried, only
+`--xla_gpu_enable_command_buffer=` moved the survival point, and it did not
+fix it.
 
-Thread is the main dispatch thread; the same signature appears on a
-`py_xla_callback` thread when the crash lands in the D2H path instead.
+## The fix
 
 ```
-Thread 3 "mnist-mlp-verif" received signal SIGSEGV.
-#0  ?? () from /opt/rocm/lib/libhsa-runtime64.so.1
-#1  ?? () from /opt/rocm/lib/libhsa-runtime64.so.1
-#2  ?? () from /opt/rocm/lib/libhsa-runtime64.so.1
-#3  ?? () from /opt/rocm/lib/libhsa-runtime64.so.1
-#4  ?? () from /opt/rocm/lib/libhsa-runtime64.so.1
-#5  ?? () from /opt/rocm/lib/libamdhip64.so.7
-...
-#11 ?? () from /opt/rocm/lib/libamdhip64.so.7
-#12 ?? () from /opt/rocm/lib/librocprofiler-sdk.so.1
-#13 ?? () from /opt/rocm/lib/librocprofiler-sdk.so.1
-#14 stream_executor::gpu::RocmCommandBuffer::LaunchGraph(stream_executor::Stream*)
-#15 stream_executor::gpu::GpuCommandBuffer::Submit(stream_executor::Stream*)
-#16 xla::gpu::CommandBufferThunk::ExecuteOnStream(...)
-#17 xla::gpu::ThunkExecutor::ExecuteOnStream(...)
-#18 xla::gpu::GpuExecutable::ExecuteThunksImpl(...)
-...
-#24 xla::CommonPjRtLoadedExecutable::ExecuteHelperOnSingleDevice(...)
+sudo sed -i 's|rocm/apt/7\.2 |rocm/apt/7.2.4 |' /etc/apt/sources.list.d/rocm.list
+sudo apt update && sudo apt install rocm
 ```
 
-`librocprofiler-sdk` sits between HIP and XLA at frames 12-13, i.e. it
-has hooked the HIP graph launch. It is **not** the cause: see below.
+No reboot: with no `amdgpu-dkms` installed the kernel driver is untouched.
+⚠ **7.2.4 is the last release of the classic apt line.** There is no 7.3+;
+the numbering jumps to TheRock (7.9.0 preview → 7.14.0), which is a different
+distribution, not an upgrade. Going past 7.2.4 means adopting TheRock's whole
+userspace.
 
-A second signature, seen on longer ImageNet runs, is a glibc
-`free(): invalid next size (normal)` abort (exit 134) rather than a
-SIGSEGV. Both appear from the same workloads, which is consistent with
-one memory-corruption bug surfacing at whichever point next touches the
-damaged region.
+## What to file instead
 
-## What rules out our code
+One real defect survives this: **the `jax-rocm7-*` wheels declare no minimum
+ROCm version and check nothing at load.** They install cleanly, resolve every
+library by soname, train for thousands of dispatches, and then corrupt memory.
+A metadata constraint or a startup version check would have turned this into
+one error message.
 
-`repro.py` is pure JAX. No Lean, no `ffi/pjrt_ffi.c`, no `verified_mlir/`,
-nothing from this project on the path. Measured back to back on the same
-box, same GPU, same session:
+That report is hardware-agnostic — it is about which ROCm installations the
+wheels support, not about which GPU you own, so "that's an RDNA thing" is not
+a responsive answer to it.
 
-| binary | complete runs |
-|---|---|
-| `repro.py` (pure JAX, no repo code) | 0 of 6 |
-| `mnist-mlp-verified` (repo, via our PJRT shim) | 0 of 6 |
+## Not covered by this fix
 
-Same failure, same rate, with and without our code in the process. This
-supersedes the earlier note in this repo that "not repo code" was
-unproven.
+**ViT-Tiny still cannot train on ROCm** and its crash wears one of the two
+signatures above, so do not read this page as clearing it. It is a separate,
+older fault: see
+[`../2026-08-vit-imagenet-rocm-first-step-abort/`](../2026-08-vit-imagenet-rocm-first-step-abort/).
 
-## CUDA control: clean
+## Environment
 
-Same `repro.py`, same jax/jaxlib 0.10.2, different backend. RTX 4060 Ti
-16 GB, driver 575.57.08, CUDA 12.9, `jax-cuda12-pjrt` 0.10.2, Linux
-6.8.0-137, Python 3.12.3.
-
-| test | ROCm gfx1100 | CUDA 4060 Ti |
-|---|---|---|
-| `repro.py` (pure JAX) | 0 of 6 complete, died epochs 1–11 | **6 of 6 complete**, all 12 epochs |
-| `mnist-mlp-verified` (repo + our shim) | 0 of 6 complete | **6 of 6 complete**, 12 epochs, 97.83% every run |
-
-33,696 dispatches on CUDA with zero failures. The JAX version matches
-exactly on both sides, so the backend is the only variable.
-
-The repo trainer result also exercises `ffi/pjrt_ffi.c` heavily and
-cleanly, which independently rules the shim out rather than merely
-failing to implicate it. And the CUDA runs are bit-identical across all
-six, so that path is deterministic.
-
-**This localises the bug to the ROCm / XLA-ROCm backend.**
-
-## Things tried that do not fix it
-
-| knob | result |
-|---|---|
-| `XLA_FLAGS=--xla_gpu_enable_command_buffer=` (disable HIP graphs) | Survives longer (reached epochs 2, 3, 5, 10) but still dies |
-| `HSA_TOOLS_LIB=` (unhook rocprofiler) | No effect; rocprofiler is a passenger, not the cause |
-| `HSA_ENABLE_SDMA=0` | No effect. An early 2-of-3 result looked promising and did not survive 5 more trials |
-| `GPU_MAX_HW_QUEUES=1` | No effect |
-| `AMD_SERIALIZE_KERNEL=3` | No effect |
-| Second GPU (`HIP_VISIBLE_DEVICES=1`) | No effect |
-
-Disabling command buffers is the only knob that measurably moves the
-survival point, which is weak evidence that the HIP-graph path is where
-the corruption starts rather than merely where it is noticed.
-
-## Impact here
-
-Blocks the phase-4 (PJRT) path on ROCm for anything larger than the
-Chapter 1 linear model. `lake run mnist` cannot complete there: the
-linear net usually survives, the MLP and CNN do not.
-
-CUDA is unaffected, so book work that needs captured training logs
-should be done on an NVIDIA box until this is resolved upstream.
-
-## Not yet tried
-
-- An older `jax-rocm7-*` (0.10.0, 0.10.1) to find where it entered.
-- `AMD_LOG_LEVEL=4` around the failing dispatch.
+- 2× AMD Radeon RX 7900 XTX (gfx1100, RDNA 3), Linux 7.0.0-28-generic, Python 3.12.3
+- Broken: ROCm 7.2.0 (7.2.26015) + jax/jaxlib 0.10.2 or 0.11.0 with matching plugin
+- Fixed: ROCm 7.2.4 (7.2.53211, MIOpen 3.5.1.70204, rocBLAS 5.2.0.70204) + the same wheels
+- CUDA control (clean throughout): RTX 4060 Ti, driver 575.57.08, CUDA 12.9, `jax-cuda12-pjrt` 0.10.2

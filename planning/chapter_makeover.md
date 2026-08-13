@@ -20,11 +20,23 @@ RUN THE BINARY THE CHAPTER CLAIMS TO DOCUMENT, BEFORE DOCUMENTING IT.** Every re
 found in ch4, ch5 and ch6 was invisible to reading and to `lake build`, and two of them
 printed normal-looking output while doing nothing at all.
 
-**Why CUDA.** The verified trainers cannot complete a run on ROCm. See
-`upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/`:
-confirmed ROCm-specific, 11 of 11 deaths on gfx1100 against 6 of 6 clean
-on CUDA at the identical JAX version. Anything needing a captured
-training log has to happen on NVIDIA. Do not try to work around AMD here.
+**Why CUDA — SUPERSEDED 2026-08-13. The reason is gone; the chapters' CUDA
+logs are still fine.** This section used to read: "the verified trainers cannot
+complete a run on ROCm … confirmed ROCm-specific, 11 of 11 deaths on gfx1100
+against 6 of 6 clean on CUDA at the identical JAX version." That was a correct
+measurement with a wrong conclusion. The variable was not the backend, it was
+the **system ROCm userspace**, four point releases behind the wheel. On ROCm
+7.2.4 the verified trainers run here: `mnist-mlp-verified` 6/6,
+`mnist-cnn-verified` 3/3, and R34/R50/MNv2/ConvNeXt all train on ImageNet at
+2 GPUs. See `upstream-issues/2026-08-jax-rocm-command-buffer-launchgraph-segv/`,
+now marked resolved.
+
+⚠ Two things this does NOT license. **ViT-Tiny still cannot run on ROCm** — a
+separate, older fault that survives 7.2.4
+(`upstream-issues/2026-08-vit-imagenet-rocm-first-step-abort/`). And the
+captured logs already in the chapters are CUDA logs; re-running them on ROCm
+would change the numbers, so this is permission to use either box going
+forward, not a reason to redo finished work.
 
 ---
 
