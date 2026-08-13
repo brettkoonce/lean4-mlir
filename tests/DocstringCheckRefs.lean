@@ -230,7 +230,15 @@ unsafe def main (args : List String) : IO UInt32 := do
   let baseline ← if update then pure #[]
     else if ← baselinePath.pathExists then do
       let lines ← IO.FS.lines baselinePath
-      pure (lines.filter fun l => !l.trim.isEmpty && !l.trim.startsWith "#")
+      -- A line is `name` or `name  # why it is here`. The trailing comment is the point:
+      -- the first version of this file was a bare list, which made a PROPOSED name
+      -- ("you'd need to add `globalAvgPool_has_vjp`") indistinguishable from a stale
+      -- citation, and the header then had to describe all of them as one thing and was
+      -- wrong about most.
+      pure <| lines.filterMap fun l =>
+        let body := (l.splitOn "#").headD ""
+        let t := body.trim
+        if t.isEmpty then none else some t
     else pure #[]
 
   let (elanInstall?, leanInstall?, lakeInstall?) ← findInstall?

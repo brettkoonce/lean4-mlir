@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 The companion to `E4M3FaithfulPoC.lean`. Where the fp8 render-tie is **proven but
 un-lowered** (IREE's CUDA backend can't emit f8 — see
 `upstream-issues/2026-06-iree-cuda-fp8-nvptx-lowering/`), bf16 is the inverse: its
-mixed-precision *accuracy* bound exists (`FloatBridge.dense_close_mixed`,
+mixed-precision *accuracy* bound exists (`dense_close_mixed`,
 `u_leaf = 2⁻⁸`) and it **does lower on CUDA** (a `bf16`-in / `f32`-accumulate
 `dot_general` compiles for `sm_86`/`sm_89`), but its proof was **untied** — nothing
 connected the emitted bf16 graph to that bound. This file closes the structural
@@ -29,7 +29,7 @@ the same ingredient fp8's depth-> 1 in-graph quant (planning §5) would use.
 
 **Accuracy companion (separate, already exists).** Instantiate this tie's abstract
 `rnd` at bf16 round-to-nearest and feed `|rnd x − x| ≤ 2⁻⁸|x|` into
-`FloatBridge.dense_close_mixed` (`u_leaf = 2⁻⁸`, `u_acc = 2⁻²⁴` for the fp32
+`dense_close_mixed` (`u_leaf = 2⁻⁸`, `u_acc = 2⁻²⁴` for the fp32
 accumulate). Render-tie (here) ∘ accuracy (there) = the tied-and-lowered bf16
 forward — the thing fp8 can prove but not run, and bf16 can now do both.
 

@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Float.FloatComposeBridge
 
 /-! # BN backward as a composable `FloatClose` MAP (A3 1c)
 
-The BN-backward keystone (`BnBackFloatBridge.bnGradInput_close`) bounds the float input-gradient
+The BN-backward keystone (`bnGradInput_close`) bounds the float input-gradient
 *per entry, at a fixed cotangent* `dy` (with `Cdy` bounding `dy`). To slot BatchNorm-back into a
 whole-net `.comp` backward chain it must become a `FloatClose A B f fF L` over the **cotangent**:
 on `dy` within magnitude `A`, the float map `bnGradInputF` is within `L e` of the real

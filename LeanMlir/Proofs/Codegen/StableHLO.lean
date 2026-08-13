@@ -1916,7 +1916,7 @@ theorem dotInBf16_eq_dotIn_rounded {m n : Nat} (rnd : ℝ → ℝ) (s : String) 
     depth > 1: rounding an *intermediate* activation is now an in-graph op whose
     denotation is exactly post-composition with `rnd`. No bf16 specifics appear here —
     bf16 round-to-nearest is one instance, and the accuracy half is supplied separately
-    by `FloatBridge.dense_close_mixed` at `u_leaf = 2⁻⁸`. -/
+    by `dense_close_mixed` at `u_leaf = 2⁻⁸`. -/
 @[simp] theorem den_convertF {n : Nat} (rnd : ℝ → ℝ) (e : SHlo n) :
     den (.convertF rnd e) = fun i => rnd (den e i) := rfl
 /-- The round node composed with `den` as a function, the form the tie proofs want. -/
