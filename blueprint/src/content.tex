@@ -5368,24 +5368,48 @@ the full $2048$ neither helps nor hurts, so the BN-sharding regime is
 \emph{not} where the residual $\sim$1 point to the paper's $78.1\%$
 hides.
 
-\textbf{Where it does hide: the resize.} That gap turns out to be an
-evaluation artifact, not a training one. Both rows here are scored
-through this repo's \texttt{tf.image.resize} preprocessing, whereas the
-timm reference reports $78.1\%$ through PIL's bicubic resize, and the
-two resamplers are not interchangeable. Port these weights into a
-standard PIL-resize eval and they fall to $\sim$74.4\%. Port the
-reference \texttt{a3\_in1k} weights \emph{into this pipeline} and
-\emph{they} fall to $\sim$74\%. The ranking flips with the resize
-library: each network scores best on the resampler it trained with,
-because it partly fits that resampler's specific aliasing. So the honest
-reading is that the two recipes sit within a couple of points, and which
-one ``wins'' is decided by the eval pipeline, not that this run is a
-point short.
+\textbf{Part of it is the resize, and the part is now measured.} Both
+rows here are scored through this repo's \texttt{tf.image.resize}
+preprocessing, whereas the timm reference reports $78.1\%$ through PIL's
+bicubic resize, which antialiases where ours does not. Scoring the
+$77.22\%$ checkpoint through the full PIL protocol instead gives
+$\mathbf{76.25\%}$: the resampler is worth about \textbf{nine tenths of
+a point} on this network. Two things follow, and the second is the more
+useful one.
 
-\textbf{[TODO, resize/eval reconciliation.]} Put \texttt{true-2048}
-and the timm reference on one ruler, either a single fixed resampler or a
-bit-exact \texttt{tf.image.resize} match in the reference eval, before
-reading anything into the $77.00\%$ vs $78.1\%$ gap.
+First, this is a \emph{mismatch} penalty rather than a verdict on either
+resampler. Each network partly fits the aliasing of the one it trained
+under, so moving only the evaluation side is expected to lose accuracy;
+the intermediate arm, antialiasing the evaluation crop alone, sits
+between the two at $76.70\%$. The matched-antialiased arm --- both sides
+moved, and retrained --- has not been run, so whether timm's convention
+is \emph{better} or merely \emph{different} is genuinely open.
+
+Second, ResNet-50 is about $3.6\times$ more sensitive to this than the
+other networks in the book, where the same three-way comparison spans
+$0.25$ points (\S\ref{chap:layernorm}, \S\ref{chap:attention}). The plausible
+mechanism is the recipe itself: A3's centre-crop ratio of $0.95$ keeps
+$8\%$ more of the frame than the $0.875$ used elsewhere, so more of each
+image survives to be resampled, on a recipe whose whole trick is
+test-time object scale.
+
+\noindent So the honest reading is that the two sit within about a point
+of each other, and that roughly nine tenths of that point is the
+evaluation pipeline rather than the recipe --- but not that the ranking
+inverts, which is a stronger claim and one nothing here has tested.
+
+\textbf{[TODO, the reverse direction.]} What remains unmeasured is
+carrying the reference \emph{into} this pipeline: port the
+\texttt{a3\_in1k} weights to the layout of
+\texttt{init\_params\_from\_file} and score them both ways. If they lose
+about the same nine tenths going the other direction, the two
+conventions are equivalent and matching timm buys comparability rather
+than accuracy; if they lose much less, its pipeline is genuinely the
+better one and the matched-antialiased retrain is worth its cost. The
+control that makes the answer believable is scoring the ported weights
+through timm's own \texttt{validate.py} first and reproducing its
+published number --- without it, ``they fall to $\sim$74\%'' and ``the
+port is wrong'' look identical.
 
 \emph{Changed since the $76.66\%$ first run:} RandAugment is now
 timm-literal (\texttt{rand-m6-mstd0.5-inc1}).
@@ -12877,6 +12901,56 @@ streams through \texttt{tfds.as\_numpy}, so TFDS's \texttt{tf.data}
 pipeline carries the loading (parallel shard reads, JPEG decode,
 prefetch, all engineered to scale), and we inherit that performance work
 for free.
+
+\medskip\noindent\textbf{How the ImageNet numbers are validated.} Every
+top-1 and top-5 in this book follows the validation protocol of
+\texttt{timm}'s ``ResNet Strikes Back'' work, which is the reference the
+ImageNet recipes are ported from, so that a number here and a number
+there are answers to the same question. Concretely, four things are
+matched, and each was checked against \texttt{timm} rather than assumed:
+
+\begin{itemize}
+  \item \textbf{The denominator is all 50{,}000 validation images.} This
+    is worth stating because it moved: the loaders previously took
+    \texttt{drop\_remainder=True} on the validation split and scored
+    $49{,}920$, discarding $80$ images. A top-1 over a different
+    denominator is not an error bar, it is a different measurement.
+  \item \textbf{The centre-crop ratio is read from \texttt{timm}'s own
+    model configuration}, not from a global default.
+    \texttt{resnet50.a1\_in1k}, \texttt{a2\_in1k} and \texttt{a3\_in1k}
+    all resolve \texttt{crop\_pct} $= 0.95$; the $2018$ torchvision
+    weights (\texttt{tv\_in1k}) resolve $0.875$. Both values appear in
+    this book, attached to the recipe each belongs to.
+  \item \textbf{The field of view is identical.} We decode a centred
+    square of side $\mathrm{crop\_pct} \cdot \min(h,w)$ and resize it to
+    the evaluation resolution; \texttt{timm} resizes the whole image so
+    its shorter side is $\mathrm{img\_size}/\mathrm{crop\_pct}$ and then
+    centre-crops. The two orders end on the same pixels, and the
+    ordering itself is measured at $0.02$--$0.04$ points.
+  \item \textbf{Top-5 is the true label's rank}, matching the
+    reference's own $\sum \mathbb{1}[\ell_i > \ell_y] < 5$, and the
+    train/test resolution split is the recipe's (RSB-A3 trains at $160$
+    and evaluates at $224$).
+\end{itemize}
+
+\noindent One axis is deliberately \emph{not} matched, and it is
+recorded here rather than left for a reader to discover.
+\texttt{timm} resamples through PIL, which antialiases when
+downscaling; we resample through \texttt{tf.image.resize} with
+\texttt{antialias=False}, on both the training crop and the evaluation
+crop. That is self-consistent --- a network is trained and scored under
+one resampler --- but it is not \texttt{timm}'s. Measured on the RSB-A3
+ResNet-50 of \S\ref{sec:r50_phase4}, scoring the same weights through
+the full PIL protocol instead of ours costs $0.90$ points; on
+ConvNeXt-T and ViT-Ti it costs $0.25$. \emph{That figure is a mismatch
+penalty and not a verdict on either resampler:} the model has partly
+fitted the aliasing of the one it trained under, so changing only the
+evaluation side is expected to lose accuracy, and a matched-antialiased
+arm --- both sides moved, and retrained --- has not been run, so its
+sign is unknown. Until it has, quoting our numbers against
+\texttt{timm}'s published ones carries this term, and the honest
+statement is that the two sit within about a point of each other on a
+ruler that is shared in every respect but the resampler.
 
 \medskip\noindent\textbf{Demo datasets.} The \texttt{demos/} trainers step
 past image classification into the three other task families in the book,
