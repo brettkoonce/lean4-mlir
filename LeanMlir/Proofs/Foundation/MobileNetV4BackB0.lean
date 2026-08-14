@@ -576,25 +576,48 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
 -- dispatch counts in PROSE; these turn that prose into checks. A wrong `preDWk` is exactly §3's
 -- silent defect — same ops, same channel counts, same types, different net — and it now fails at
 -- `lake env lean`.
+-- ⚠⚠ **REWRITTEN FOR CONV-M (2026-08-14).** `ed5a797` swapped the verified net from Conv-S to
+-- Conv-M and left every number below asserting Conv-S's 14 rows, so the corpus build went red on
+-- the first push that carried it.
+--
+-- ▶ **The replacements were NOT re-read off `mnv4Blocks`** — that would make them restate their own
+-- input and gate nothing at all. Every one was extracted from **timm 1.0.28**, the pinned spec, by
+-- instantiating `mobilenetv4_conv_medium` and walking `model.blocks[1:4]`, reading `dw_start` /
+-- `pw_exp` / `dw_mid` / `pw_proj` off each `UniversalInvertedResidual`. All 21 rows agree with timm
+-- exactly on `(ic, oc, expand, preDWk, postDWk, h, stride2)`, so the TABLE was right and only these
+-- guards were stale. ⚠ Note the naming: our `postDWk` is timm's `dw_mid`, not a third convolution.
 #guard mnv4Blocks.map (·.family) =
-  [.extraDW, .extraDW, .ib, .extraDW, .extraDW, .convNeXtLike, .ib, .convNeXtLike, .ffn,
-   .extraDW, .extraDW, .extraDW, .ib, .convNeXtLike]
+  [.extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .convNeXtLike, .ffn,
+   .convNeXtLike, .extraDW, .extraDW, .extraDW, .extraDW, .ffn, .convNeXtLike, .extraDW,
+   .extraDW, .ffn, .ffn, .convNeXtLike]
+-- ⭐⭐ **CONV-M USES NO `ib` BLOCK AT ALL**, where Conv-S used three. Stated on its own because it
+-- is the one family fact a reader carrying the old table over would be confidently wrong about.
+#guard mnv4Blocks.all (fun s => s.family != .ib)
+#guard (mnv4Blocks.filter (fun s => s.family == .extraDW)).length = 13
+#guard (mnv4Blocks.filter (fun s => s.family == .convNeXtLike)).length = 4
+#guard (mnv4Blocks.filter (fun s => s.family == .ffn)).length = 4
 
--- The render documents its three forward functions as covering 11 / 2 / 1 blocks. Same split,
--- recomputed from the table rather than trusted: skip (ic = oc, stride 1), pre-strided, post-strided.
-#guard (mnv4Blocks.filter (fun s => s.ic == s.oc && !s.stride2)).length = 11
-#guard (mnv4Blocks.filter (fun s => s.stride2 && s.preDWk != 0)).length = 2
-#guard (mnv4Blocks.filter (fun s => s.stride2 && s.preDWk == 0)).length = 1
+-- The three forward functions' split: skip (ic = oc, stride 1), pre-strided, post-strided.
+-- Recomputed from the table rather than trusted. ⚠ Conv-S was 11 / 2 / 1; Conv-M is 18 / 3 / 0.
+#guard (mnv4Blocks.filter (fun s => s.ic == s.oc && !s.stride2)).length = 18
+#guard (mnv4Blocks.filter (fun s => s.stride2 && s.preDWk != 0)).length = 3
+-- ⚠⚠ **ZERO, where Conv-S had one.** Every Conv-M stride-2 block carries a start-DW, so the
+-- POST-STRIDED forward has no rows in the shipped table. The arm is kept because the dispatch is
+-- total and Conv-S remains expressible — but nothing here exercises it, so a green corpus is not
+-- coverage of that path. ▶ Read this before concluding the three forwards are all gated.
+#guard (mnv4Blocks.filter (fun s => s.stride2 && s.preDWk == 0)).length = 0
 -- and those three are ALL of them — no row falls through the dispatch.
-#guard mnv4Blocks.length = 14
+#guard mnv4Blocks.length = 21
 
 -- The spatial ladder 56 → 28 → 14 → 7 (`h` is each block's OUTPUT size) and the stride flags.
-#guard mnv4Blocks.map (·.h) = [28, 28, 14, 14, 14, 14, 14, 14, 14, 14, 7, 7, 7, 7]
+#guard mnv4Blocks.map (·.h) =
+  [28, 28, 14, 14, 14, 14, 14, 14, 14, 14, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7]
 #guard mnv4Blocks.map (·.stride2) =
-  [true, false, true, false, false, false, false, false, false, false, true, false, false, false]
+  [true, false, true, false, false, false, false, false, false, false,
+   true, false, false, false, false, false, false, false, false, false, false]
 -- Every stride-2 block changes channels, which is why none of the three has a skip.
 #guard mnv4Blocks.all (fun s => !s.stride2 || s.ic != s.oc)
--- ...and every stride-1 block preserves them, which is why all eleven do.
+-- ...and every stride-1 block preserves them, which is why all eighteen do.
 #guard mnv4Blocks.all (fun s => s.stride2 || s.ic == s.oc)
 
 -- ════════════════════════════════════════════════════════════════

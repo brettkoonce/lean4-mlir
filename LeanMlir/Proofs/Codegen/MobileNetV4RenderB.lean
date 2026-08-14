@@ -87,7 +87,7 @@ private def fusedSig (p : String) (ic oc expand k : Nat) : List (String × List 
 /-- **One row of the MobileNetV4-Conv-M block table.** `h` is the block's OUTPUT spatial size, so
     a `stride2` block reads its input at `2h`. -/
 structure UibSpec where
-  /-- parameter-name prefix: `"1"` … `"14"`. -/
+  /-- parameter-name prefix: `"1"` … `"21"` (Conv-M; Conv-S ran to `"14"`). -/
   p : String
   ic : Nat
   oc : Nat
@@ -104,13 +104,19 @@ deriving Inhabited, DecidableEq
 
     ⭐⭐ Everything downstream folds over this list: the parameter signature, the BN stat slots, the
     forward chain, the backward chain and the running-statistic recomputes. Before it existed the
-    same 14 rows were hand-written FOUR times, and §3/§7.2's whole point is that a divergence
+    same rows were hand-written FOUR times, and §3/§7.2's whole point is that a divergence
     between two such readings is invisible — same ops, same channel counts, same types, different
     net. One table means a dispatch error is a typo in one place rather than a mismatch nothing
     checks.
 
-    Families in order: ExtraDW, ExtraDW, IB, ExtraDW, ExtraDW, ConvNeXt, IB, ConvNeXt, FFN,
-    ExtraDW, ExtraDW, ExtraDW, IB, ConvNeXt. Spatial ladder 56 → 28 → 14 → 7. -/
+    Families in order (Conv-**M**): ExtraDW ×7, ConvNeXt, FFN, ConvNeXt, ExtraDW ×4, FFN, ConvNeXt,
+    ExtraDW ×2, FFN ×2, ConvNeXt — 13 ExtraDW / 4 ConvNeXt / 4 FFN, and **no IB at all**, where
+    Conv-S used three. Spatial ladder 56 → 28 → 14 → 7.
+
+    ⚠ Verified against **timm 1.0.28** (`mobilenetv4_conv_medium`, walking `model.blocks[1:4]`):
+    all 21 rows agree on `(ic, oc, expand, preDWk, postDWk, h, stride2)`. The `#guard`s in
+    `Proofs/Foundation/MobileNetV4BackB0.lean` pin that reading; they are derived from timm rather
+    than re-read off this table, or they would gate nothing. -/
 def mnv4Blocks : List UibSpec :=
   [ ⟨"1",   48,  80, 4, 3, 5, 28, true⟩,   -- ExtraDW  56→28
     ⟨"2",   80,  80, 2, 3, 3, 28, false⟩,  -- ExtraDW  28
