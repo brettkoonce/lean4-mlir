@@ -6,6 +6,11 @@ done or running). This file is the **fidelity ledger** — the thing to quote a 
 
 ▶ **Read §0 before quoting any number. Read §5 before deciding what to fix.**
 
+▶▶ **NEXT SESSION STARTS AT `planning/next_session_verified_trainer_code.md`** (2026-08-14). Three
+of this file's deltas closed that day and the framing changed: every net needs re-running anyway
+(a RandAugment Posterize fix moved the training distribution), so the work is CODE — the full-val
+eval tool, R50's `sd`/`ema`/`wdStr`, and `cBS` — not runs.
+
 ---
 
 ## 0. WHAT THE RUN IS

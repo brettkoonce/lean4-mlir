@@ -11,6 +11,10 @@ Measured 2026-07-25 on ares (6× RTX 4060 Ti, 16 GB; JAX 0.10.2 CUDA).
 
 ---
 
+▶▶ **Sequel: `planning/next_session_verified_trainer_code.md`** — what to BUILD next (the
+full-val eval tool, R50's missing recipe flags, and `cBS`, which this file's own measurements
+promoted to the top infrastructure item).
+
 ## STATUS (2026-08-14) — the two sides are at different places
 
 ⚠ **This doc was written about the JAX (phase-2) side and everything below the
