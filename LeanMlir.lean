@@ -42,6 +42,7 @@ import LeanMlir.Proofs.Architectures.ViTVecLN
 import LeanMlir.Proofs.Architectures.ViTMultiHead
 import LeanMlir.Proofs.Architectures.ViTDepthK
 import LeanMlir.Proofs.Architectures.MobileNetV2FullPaper
+import LeanMlir.Proofs.Architectures.MobileNetV2FullVJP
 import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 -- ℝ→Float32 bridge, Tier 1: standard-model rounding bounds for the toy nets.
 import LeanMlir.Proofs.Float.FloatBridge

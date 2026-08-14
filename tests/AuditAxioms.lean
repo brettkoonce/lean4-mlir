@@ -63,6 +63,7 @@ import LeanMlir.Proofs.Architectures.ViTMultiHead
 import LeanMlir.Proofs.Architectures.ViTMultiHeadChain
 import LeanMlir.Proofs.Architectures.ViTDepthK
 import LeanMlir.Proofs.Architectures.MobileNetV2FullPaper
+import LeanMlir.Proofs.Architectures.MobileNetV2FullVJP
 import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Codegen.TreeReduceBridge
@@ -1389,14 +1390,29 @@ open Proofs
 -- machinery over the REAL [t,c,n,s] table — 17 bottlenecks at 224^2 (4 stride-2 downsamples,
 -- 10 identity skips, 2 stage-first s=1 widenings, and the t=1 NO-EXPAND first block, the one
 -- genuinely-new shape) + stem 3->32 + head 320->1280. The EfficientNetFullB0 enumeration recipe;
--- forward + graph + faithfulness (relu6 is kinked, so the whole-net input-VJP stays
--- pointwise-only — the repo standard for relu-family nets, same as full ResNet-34). The
--- MobileNetV2Close/ChainClose param bridges are dim-polymorphic and cover the paper shapes.
+-- forward + graph + faithfulness. The MobileNetV2Close/ChainClose param bridges are
+-- dim-polymorphic and cover the paper shapes.
 #print axioms StableHLO.ivNoExpGraphW_faithful
 #print axioms StableHLO.ivExpOnlyGraphW_faithful
 #print axioms StableHLO.ivResidGraphW_faithful
 #print axioms StableHLO.ivStridedGraphW_faithful
 #print axioms StableHLO.mobilenetv2FwdGraphPaper_faithful
+
+-- ============ ...and its whole-net VJP at all 17 (MobileNetV2FullVJP.lean) ============
+-- The full-depth fold, replacing mobilenetv2_has_vjp_at's stem + TWO blocks + head. Chained
+-- from the per-block body VJPs (invresBodyPC_has_vjp_at / invresBodyStridedPC_has_vjp_at,
+-- built in MobileNetV2BackCertifiedTie as the §B tie targets) via vjp_comp_at, one hypothesis
+-- bundle per block. POINTWISE (`_at`), and necessarily so: relu6 is kinked, so each of the 35
+-- activation sites carries a `≠ 0 ∧ ≠ 6` side condition at its running activation —
+-- efficientnetForwardB_full_has_vjp is global only because swish is smooth everywhere.
+#print axioms ivNoExpW_has_vjp_at
+#print axioms ivExpOnlyW_has_vjp_at
+#print axioms ivResidW_has_vjp_at
+#print axioms ivStridedW_has_vjp_at
+#print axioms convBnRelu6StridedPC_has_vjp_at
+#print axioms mobilenetv2ForwardPaper_eq_chain
+#print axioms mobilenetv2_full_has_vjp_at
+#print axioms mobilenetv2_full_has_vjp_at_correct
 
 -- ============ Full ConvNeXt-T [3,3,9,3] (ConvNeXtFullT.lean) ============
 -- The last flagship without a full-architecture close. Stage depth-k (CnxBlockParamsCh +

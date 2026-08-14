@@ -475,18 +475,16 @@ theorem mobilenetv2Rep_denote_eq
 /-- **The representative spec carries the math.** The strided 6-block MobileNetV2 spec's
     denotation has a VJP, the canonical `pdiv`-derived witness.
 
-    ⚠⚠ **The honest strided chain-rule fold WOULD be `mobilenetv2_full_has_vjp_at`, and it
-    does not exist.** This docstring used to name it in the present tense, as though it were
-    a pointer to a theorem; a reader following it found nothing. It is the same gap the
-    blueprint records as *"[TODO: prove the fold at full depth for this network]"*, beside
-    `mobilenetv2_has_vjp_at`, which folds stem + **two** inverted-residual blocks + head
-    rather than all seventeen.
+    The honest strided chain-rule fold is `mobilenetv2_full_has_vjp_at`
+    (`MobileNetV2FullVJP.lean`), which folds stem + all **seventeen** bottlenecks + head over
+    the paper `[t,c,n,s]` table. ⚠ Read it, not `mobilenetv2_has_vjp_at`, which is the
+    representative-depth fold: stem + **two** inverted-residual blocks + head.
 
-    ▶ **It does not close by copying EfficientNet's**, and that is the trap worth naming
-    here rather than rediscovering. `efficientnetForwardB_full_has_vjp` is a GLOBAL `HasVJP`
-    over all sixteen MBConv blocks, and it can be global because swish is smooth everywhere.
-    MobileNetV2 is relu6, and a global VJP through a kink is false. So the full-depth version
-    must keep the pointwise `_at` form this net already has: the axis to move is DEPTH
+    ▶ **It did not close by copying EfficientNet's**, and that is the trap worth naming here
+    rather than rediscovering. `efficientnetForwardB_full_has_vjp` is a GLOBAL `HasVJP` over
+    all sixteen MBConv blocks, and it can be global because swish is smooth everywhere.
+    MobileNetV2 is relu6, and a global VJP through a kink is false, so the full-depth version
+    keeps the pointwise `_at` form this net already had: the axis that moved is DEPTH
     (2 → 17), not pointwise → global. Anyone who conflates the two will spend the day proving
     something untrue. -/
 noncomputable def mobilenetv2Rep_has_vjp

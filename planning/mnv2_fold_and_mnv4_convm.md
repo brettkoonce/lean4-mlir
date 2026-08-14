@@ -6,18 +6,81 @@
 and in both the cost is concentrated in one step you can measure in an hour before
 committing to the rest.
 
-They are independent. Do either first.
+Job 1 is **DONE** (2026-08-14). Job 2 is open, and independent of it.
 
 | job | what it closes | measured scope | risk sits in |
 |---|---|---|---|
-| **1. MNv2 fold** | the book's "representative scale" caveat, stated in ch6 §6.1 and contrasted in ch7 §7.1 | ~400–550 lines of Lean against a 531-line worked example | the 8 block lemmas |
+| **1. MNv2 fold** ✅ | the book's "representative scale" caveat, stated in ch6 §6.1 and contrasted in ch7 §7.1 | **611 lines**, landed | not where this doc said — see the post-mortem |
 | **2. MNv4 Conv-M** | the verified net is Conv-**S** while ch6 §6.5 prints Conv-**M**'s 75.48%/92.37% | two hand-written lists + a head + 4 `#guard`s | the two-conv head |
 
 ---
 
-## Job 1 — prove `mobilenetv2_full_has_vjp_at` at all seventeen blocks
+## Job 1 — prove `mobilenetv2_full_has_vjp_at` at all seventeen blocks — ✅ DONE 2026-08-14
 
-### What it is
+Landed as `LeanMlir/Proofs/Architectures/MobileNetV2FullVJP.lean` (611 lines, 0 sorries,
+3-axiom-clean, builds in ~2.5 s). `mobilenetv2_full_has_vjp_at` folds stem + 17 bottlenecks +
+head; `mobilenetv2_full_has_vjp_at_correct` ties the backward to the `pdiv`-contracted Jacobian
+of `mobilenetv2ForwardPaper` itself through `mobilenetv2ForwardPaper_eq_chain`. ch6 §6.1 and
+ch7 §7.1 rewritten, the SpecVJP baseline line deleted, `VerifiedNets.lean`'s caveat updated.
+
+### ⚠⚠ POST-MORTEM — read this before trusting a scope estimate in this doc
+
+**The two headline claims below about cost were both wrong, in opposite directions.** Recorded
+because the same two mistakes are available on any other net in this repo.
+
+1. **"MobileNetV2 has no `ivResidFwdB_has_vjp` to delegate to" is FALSE, and it was the whole
+   estimate.** The grep that established it searched EfficientNet's naming convention
+   (`iv[A-Za-z]*Fwd[A-Za-z]*_has_vjp`). MobileNetV2 does not put `Fwd` in the name. The
+   delegation targets existed the whole time as `invresBodyPC_has_vjp_at` and
+   `invresBodyStridedPC_has_vjp_at` (`MobileNetV2BackCertifiedTie.lean:125,250`), built there
+   as the §B float-bridge tie targets. So the eight block lemmas ARE EfficientNet-style
+   three-liners: the de-risk probe this doc asks for landed at **5 lines**, not 10 and not 60.
+   ▶ **A negative grep is evidence about the pattern, not about the repo.** Search for the
+   *concept* across naming conventions before pricing work off its absence.
+
+2. **The real cost was somewhere this doc never mentions: stating the hypotheses.** Seventeen
+   blocks carry 33 relu6 sites plus the stem's and the head's — **35 kink conditions, each of
+   which must be stated AT its running activation**, and by block 5 the activation is an
+   unreadable nested term. Claim ⭐1 below ("takes only BN-epsilon hypotheses and **no explicit
+   smooth-point binders** — the `_at` form absorbs the kink") is simply not what
+   `mobilenetv2_has_vjp_at` does: read `MobileNetV2.lean:502–534`, which spells out five
+   `h_stem`/`h_b1e`/`h_b1d`/`h_b2e`/`h_b2d` binders inline. The `_at` form absorbs nothing; it
+   relocates the kink condition into a binder. At 2 blocks that is invisible and at 17 it is
+   the design problem. The fix that made it tractable: name the running activations
+   (`mnv2StemW`, `mnv2Pre1 … mnv2Pre17`, each one `∘` deeper) and bundle the conditions per
+   block (`IVSmoothAt` / `IVStridedSmoothAt` / `IVNoExpSmoothAt`, plus `IVPos`/`IVNoExpPos` for
+   the epsilons), which turns 35 + 52 loose binders into 19 + 19 bundles.
+
+3. **What actually had to be written from scratch** was small and not on this doc's list: the
+   differentiability peers of the two body VJPs, and the per-channel STRIDED stem stage
+   `convBnRelu6StridedPC_*`. `MobileNetV2.lean`'s `convBnRelu6Strided_*` is the *global*-
+   `bnForward` twin, not the `bnPerChannelTensor3` one the paper-spec net renders.
+
+### ⚠⚠ The one genuine trap, and this doc does not mention it either
+
+**`rfl` is not uniformly safe in the `_eq_chain` bridge, and 16 of the 17 layers hide it.**
+Three proof shapes were measured:
+
+| shape | result |
+|---|---|
+| one-step `rfl` on the whole chain | elaborator recursion depth blown (fails in 2 s) |
+| one-step `simp only [<19 defs>, Function.comp_apply]` | elaborates in ~140 s into a term the **kernel** rejects, deterministic timeout |
+| per-layer peel by `rfl` | instant peeling block off block, **~80 s then kernel timeout** peeling block 1 off the STEM |
+| per-layer peel by `rw [<def>, Function.comp_apply]` | ✅ whole file 2.5 s |
+
+The stem is the one layer whose body carries a type ascription: `flatConvStride2 (h := 112)
+(w := 112)` has natural domain `Vec (3 * (2 * 112) * (2 * 112))` while `mnv2StemW` declares
+`Vec (3 * 224 * 224)`. At that seam the kernel stops matching heads and descends into the block
+body. Going through `rw` never unfolds the inner layer at all, so it closes on syntactically
+identical terms. ▶ **Any net whose stem is strided has this seam.** EfficientNet's
+`eq_chain` docstring warns about `rfl`/`simp` generically; the specific reason is this.
+
+### The original scoping, kept for the record
+
+Everything from here to the Job 2 divider is the pre-flight estimate. Read it against the
+post-mortem above; the two disagree, and the post-mortem is the measured one.
+
+#### What it is
 
 `mobilenetv2_has_vjp_at` (`Proofs/Architectures/MobileNetV2.lean:489`) folds **stem +
 two inverted-residual blocks + head**. The network has seventeen. The book says so out

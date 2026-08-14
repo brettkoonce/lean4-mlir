@@ -23,35 +23,25 @@ Per-block (ic→oc, mid=t·ic, spatial, kind):
   b8  64→64   mid384 @14  resid          b17 160→320 mid960 @7   exp(no-resid, s=1)
   b9  64→64   mid384 @14  resid
 
-Like ResNet-34's full net (`ResNet34RenderPC`), the deliverable is forward + graph +
-faithfulness — relu6 is kinked, so the whole-net input-VJP stays pointwise-only (the
-repo standard for relu-family nets); the param-grad close is already covered: every
+Like ResNet-34's full net (`ResNet34RenderPC`), the deliverable HERE is forward + graph +
+faithfulness; the param-grad close is already covered: every
 `MobileNetV2Close`/`MobileNetV2ChainClose` bridge is dim-polymorphic and applies at the
 paper shapes verbatim.
 
-▶▶ **TODO: fix — the whole-net VJP FOLD is still only at representative depth.**
-`Proofs.mobilenetv2_has_vjp_at` (`MobileNetV2.lean:489`) binds a stem, TWO
-inverted-residual blocks (`We₁/Wd₁/Wp₁`, `We₂/Wd₂/Wp₂`) and a head. Not seventeen. The
-blueprint says so out loud in ch6's §6.1 and ch7's §7.1 contrasts against it, so closing
-this changes the book.
+**The whole-net input-VJP at all seventeen now exists**, one file over:
+`Proofs.mobilenetv2_full_has_vjp_at` (`MobileNetV2FullVJP.lean`), folded over the
+`IVW`/`IVWNoExp` bundles and the four block wrappers defined below. It replaces
+`Proofs.mobilenetv2_has_vjp_at` (`MobileNetV2.lean:489`), which binds a stem, TWO
+inverted-residual blocks and a head.
 
-⚠ **Do NOT just copy `EfficientNetFullB0.lean`'s recipe — it does not transfer, and the
-reason is the paragraph above.** That file's `efficientnetForwardB_full_has_vjp` is a
-GLOBAL `HasVJP` over all 16 blocks, and it can be global only because EfficientNet's
-activation is **swish**, which is smooth everywhere (ch7's own MLIR caveat says the SE
-fan-in carries no kink condition and the only smooth-point hypotheses are the BatchNorms'
-`0 < ε`). MobileNetV2 is **relu6**. A global `HasVJP` through a kink is false, so the
-full-depth statement here has to be the POINTWISE `_at` form, away from the kink, exactly
-as `mobilenetv2_has_vjp_at` already is. The axis to move is DEPTH (2 → 17), not
-pointwise → global.
-
-The scaffolding for the depth axis is already in this file — `ivNoExpW`, `ivExpOnlyW`,
-`ivResidW`, `ivStridedW` are the four block shapes and `mobilenetv2ForwardPaper` is the
-17-block chain. What is missing is their differentiability/VJP peers. EfficientNet has
-eight such lemmas (`mb{NoExp,Exp,Resid,Strided}W_{has_vjp,differentiable}`); the `iv*`
-peers here are zero, and the per-operation VJPs they would be assembled from (depthwise,
-pointwise, BN, the additive skip) all exist already. So this is assembly plus the kink
-side-conditions, not new mathematics.
+⚠ That fold is POINTWISE (`HasVJPAt`), and that is not a limitation waiting to be lifted.
+relu6 is **kinked**, so a global `HasVJP` through it is false and each of the 35 activation
+sites carries a `≠ 0 ∧ ≠ 6` side condition at its running activation.
+`EfficientNetFullB0.lean`'s `efficientnetForwardB_full_has_vjp` is a GLOBAL `HasVJP` over
+all 16 blocks only because EfficientNet's activation is **swish**, smooth everywhere (ch7's
+MLIR caveat: the SE fan-in carries no kink condition, and the only smooth-point hypotheses
+are the BatchNorms' `0 < ε`). Pointwise-only is the repo standard for relu-family nets,
+same as full ResNet-34. The axis the fold moved was DEPTH (2 → 17), not pointwise → global.
 -/
 
 namespace Proofs

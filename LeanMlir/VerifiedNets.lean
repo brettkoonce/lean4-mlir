@@ -615,9 +615,11 @@ def resnet50Imagenet160Verified : VerifiedNetSpec where
     blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
     relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense.
     (Tied at the FULL paper spec in `Proofs/SpecVJP.lean`: `mobilenetv2Verified_denote_eq`
-    → `mobilenetv2ForwardPaper`, + rung E `mobilenetv2Verified_fwd_faithful`. The honest
-    pointwise VJP-fold witness `Proofs.mobilenetv2_has_vjp_at` remains the representative
-    stem+2-block net, see planning doc.) -/
+    → `mobilenetv2ForwardPaper`, + rung E `mobilenetv2Verified_fwd_faithful`. The VJP fold
+    is at full depth too: `Proofs.mobilenetv2_full_has_vjp_at` covers stem + all 17 blocks +
+    head. ⚠ It is POINTWISE, and stays that way — relu6 is kinked, so each of the 35
+    activation sites carries a `≠ 0 ∧ ≠ 6` side condition. `Proofs.mobilenetv2_has_vjp_at`
+    is the older stem+2-block fold.) -/
 def mobilenetv2Verified : VerifiedNetSpec where
   name     := "MobileNetV2"
   slug     := "mobilenetv2"

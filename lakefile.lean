@@ -215,6 +215,11 @@ lean_lib «Certs» where
              -- Paper-spec full MobileNetV2 (all 17 [t,c,n,s] bottlenecks): forward
              -- graph + faithfulness.
              `LeanMlir.Proofs.Architectures.MobileNetV2FullPaper,
+             -- ...and its whole-net input-VJP at all 17, folded over the same weight
+             -- bundles. Pointwise (`_at`) — relu6 is kinked, so unlike EfficientNet-B0's
+             -- swish the global form is unavailable. Imports MobileNetV2BackCertifiedTie
+             -- for the per-block body VJPs it delegates to.
+             `LeanMlir.Proofs.Architectures.MobileNetV2FullVJP,
              -- ℝ→Float32 bridge, Tier 1: standard-model rounding (hypothesis-style,
              -- no axioms) + forward error bounds for the linear/MLP nets
              -- (dot/dense budgets, ReLU exact-in-float Lipschitz pass-through).

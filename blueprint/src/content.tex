@@ -5615,34 +5615,23 @@ width or depth, so they cover all seventeen blocks.
 
 One scope note, because this is the chapter where the distinction starts
 to bite. The theorem that folds those rules into a single statement about
-the \emph{whole} network, \texttt{mobilenetv2\_has\_vjp\_at}, is proved
-for a representative net of the stem plus two inverted-residual blocks
-plus the head, not for all seventeen. What ties the full 17-block spec to
-the paper's architecture is a separate denotational result about the
+the \emph{whole} network is \texttt{mobilenetv2\_full\_has\_vjp\_at}, in
+\texttt{MobileNetV2FullVJP.lean}, and it covers the stem, all seventeen
+bottlenecks and the head. What ties the full 17-block spec
+to the paper's architecture is a separate denotational result about the
 forward, \texttt{mobilenetv2Verified\_denote\_eq}, with
-\texttt{mobilenetv2Verified\_fwd\_faithful} above it. So the accurate
-sentence is that every operation in the graph that just trained carries a
-proved backward, and the fold of all of them is witnessed at
-representative scale. That is the same ``representative scale'' caveat
-the MLIR sections of this book carry throughout, stated here where the
-network is first deep enough for the gap to be worth naming.
+\texttt{mobilenetv2Verified\_fwd\_faithful} above it.
 
-\medskip\noindent\textbf{[TODO: prove the fold at full depth for this
-network.]} Chapter~\ref{chap:se} does have it, so the gap is worth
-closing and the shape of the answer is known:
-\texttt{efficientnetForwardB\_full\_has\_vjp} chains a stem, all sixteen
-MBConv blocks and a head through \texttt{vjp\_comp}. \emph{But that proof
-does not transfer by copying}, and the reason is this network's
-activation. That theorem is a \emph{global} statement, which it
-can be because swish is smooth everywhere. MobileNetV2 uses relu6, which
-has a kink, and a global VJP through a kink is false. So the full-depth
-version here has to keep the pointwise \texttt{\_at} form that
-\texttt{mobilenetv2\_has\_vjp\_at} already has. The axis to move is the
-depth, from two blocks to seventeen, and not the pointwise-to-global one.
-\texttt{MobileNetV2FullPaper.lean} already carries the four block shapes
-and the full seventeen-block forward chain. What it lacks are the
-per-block differentiability and VJP lemmas that EfficientNet's eight
-\texttt{mb*W\_has\_vjp} / \texttt{mb*W\_differentiable} peers supply.
+The full-depth fold is \emph{pointwise}. It holds at a given input, and
+it carries one side condition per activation site saying that the value
+entering relu6 is neither $0$ nor $6$. There are thirty-five such sites,
+and the reason for every one of them is that relu6 has two kinks. The
+network is differentiable away from them and is not differentiable at
+them, so a statement quantified over all inputs would be false.
+Chapter~\ref{chap:se} does fold EfficientNet-B0 over all inputs with
+\texttt{efficientnetForwardB\_full\_has\_vjp}, and it can do that because
+swish is smooth everywhere. The axis that moved here was the depth, from
+two blocks to seventeen, and not the pointwise-to-global one.
 
 The three compile lines are the same three Chapter~\ref{chap:residual}
 showed, and for the same reason. \texttt{@mobilenetv2\_fwd\_eval} is a
@@ -6132,7 +6121,7 @@ the channel transpose the full-conv VJP of Chapter~\ref{chap:cnn} needs:
 with no $\sum_{c_\text{in}}$ to take the adjoint of, there is no in/out
 channel axis to swap. The inverted-residual block composes this with the
 pointwise convs, BatchNorm, and relu6, and
-\texttt{mobilenetv2\_has\_vjp\_at} chains the whole network through
+\texttt{mobilenetv2\_full\_has\_vjp\_at} chains the whole network through
 \texttt{vjp\_comp\_at}.
 
 \medskip\noindent\textbf{The gap and how we close it.} The emitted graph
@@ -6781,22 +6770,22 @@ Chapter~\ref{chap:bn}'s, and every residual skip by
 Chapter~\ref{chap:residual}'s additive fan-in.
 
 \medskip\noindent\textbf{And here this chapter can say something
-Chapter~\ref{chap:depthwise} could not.} There, the theorem folding the
-per-operation rules into a single statement about the whole network was
-proved for a representative stem-plus-two-blocks, not for all seventeen.
-EfficientNet's fold is proved at full depth.
+Chapter~\ref{chap:depthwise} could not.} Both networks have a fold proved
+at full depth, and the two folds are not equally strong.
 \texttt{efficientnetForwardB\_full\_has\_vjp} chains the stem, all
 \emph{sixteen} MBConv blocks and the head through \texttt{vjp\_comp},
 batched over \(N\), with a positive-\(\varepsilon\) hypothesis for each
-BatchNorm and nothing else assumed. So for this network the accurate
-sentence is the strong one: every operation in the graph that just
-trained carries a proved backward, and their composition into the whole
-network carries one too.
+BatchNorm and nothing else assumed. It holds at every input. So for this
+network the accurate sentence is the strong one: every operation in the
+graph that just trained carries a proved backward, and their composition
+into the whole network carries one too.
 
 What buys that is the activation. Swish is smooth everywhere, so the
-statement can be global. MobileNetV2's relu6 has a kink, which is why
-Chapter~\ref{chap:depthwise}'s fold is pointwise and why closing it there
-is a different job rather than the same one at a different size.
+statement can quantify over all inputs. MobileNetV2's relu6 has two
+kinks, so Chapter~\ref{chap:depthwise}'s seventeen-block fold has to name
+a point and assume the thirty-five activations there stay away from them.
+What separates the two chapters now is that hypothesis rather than the
+depth.
 
 The three compile lines are the same three the two previous chapters
 showed. \texttt{@efficientnet\_fwd\_eval} is a separate forward because
