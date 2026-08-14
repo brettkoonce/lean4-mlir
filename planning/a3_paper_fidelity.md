@@ -230,7 +230,8 @@ cancellation there at all** — the two inner products do not oppose each other,
 suggested fix ("normalise per-site by ‖g_γ‖·‖γ‖") is both already implemented (the statistic *is* a
 cosine) and beside the point.
 
-**(b) ⚠⚠ THE CONTROL CHECK IS A BUG, and its own comment says so.** `TestR50GradCheck.lean` reads:
+**(b) ✅ CLOSED 2026-08-14 — the control check was a bug, and its own comment said so.**
+`TestR50GradCheck.lean` read:
 
 > ⚠ The control is a SEPARATION statement, **not an order statistic on one site**. Requiring the
 > weakest of 21 violations to clear a fixed multiple is brittle …
@@ -242,13 +243,27 @@ it. ▶ Under BCE this makes the gate's answer **depend on which run you happene
 reps clear the separation and 1 does not. Under CE it passes 3/3 but with only 2.4× headroom in the
 worst rep. The median is stable to 1.02–1.05× and is what the comment asks for.
 
-▶ **Still open, and it is now a DECISION rather than an investigation:**
-* fix (b) — make the control check the quantile its comment specifies. Repairs the irreproducibility
-  and strengthens CE. Uncontroversial: it is the code matching its own stated intent.
-* then choose for (a): re-calibrate `tolExact` per loss with the separation stated (the identity does
-  hold to 7.6e-4 with 40× separation), or record tier 1 B as CE-only. ⚠ **Do NOT simply raise
-  `R50_GC_EXACT_U`** — that is the move that turns a gate into a decoration, and (b) must be fixed
-  first or any recalibration is fitted to noise.
+✅ **The verdict now uses the 10th-percentile violation** (`ctlQ10`, index `size/10` = 2 of 21),
+which is what the comment asks for. Re-measured, three reps per variant, before → after:
+
+| | separation, before (min) | separation, after (10th pct) |
+|---|---|---|
+| `adam64` | 27.6×, 12.0×, 30.8× → 3/3 | **34.3×, 88.6×, 88.6× → 3/3** |
+| `adam64bce` | 0.6×, 6.3×, 6.3× → **2/3, irreproducible** | **12.3×, 15.1×, 12.3× → 3/3** |
+
+▶ The BCE verdict is reproducible again and CE's headroom over the 5× rule went from 2.4× to 6.9×.
+⚠ The single weakest violation is still REPORTED, and so is whether the populations strictly
+separate — but neither is thrown on. A run whose `populations strictly separate?` line reads `NO` is
+not evidence of a wrong render.
+
+▶ **(a) REMAINS OPEN — deliberately, and it is a DECISION rather than an investigation.** BCE still
+fails the gate on `tolExact = 3e-4` against a stable 7.6e-4 residual. The options are to
+re-calibrate the tolerance per loss with the separation stated (the identity does hold, to 7.6e-4,
+with a 42–45× median separation) or to record tier 1 B as explicitly CE-only and have it ABSTAIN on
+BCE instead of throwing "the cotangent is wrong" — which is what it does today, and which is a false
+accusation on a render nothing has found fault with. ⚠ **Do NOT simply raise `R50_GC_EXACT_U`**:
+that is the move that turns a gate into a decoration. Re-measure with
+`scripts/r50_gradcheck_stability.py` after any change.
 
 ⚠ Unchanged and still true: the composition passes tier 1 A (2.2e-05) and tier 2 (rel ≤ 0.207 vs
 0.30, scale control live at 0.99). Also affects `lamb64bce`. **No evidence at any point that the
