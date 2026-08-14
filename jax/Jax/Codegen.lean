@@ -34,7 +34,7 @@ def _aa_blend(a, b, f):  # a,b float32 HWC; returns uint8
 def _aa_transform(img, vec):
     # img uint8 HWC. vec: 8-param projective transform (output->input).
     # ⚠⚠ BILINEAR, AND THIS IS A KNOWN DEVIATION AS OF 2026-08-14. The comment here used to claim
-    # BILINEAR was "timm's default geometric interpolation"; it is not. timm resolves the resample
+    # BILINEAR was \"timm's default geometric interpolation\"; it is not. timm resolves the resample
     # mode from the MODEL's data config -- `resolve_data_config` for resnet50 gives
     # interpolation='bicubic', and `transforms_factory` then sets `aa_params['interpolation'] =
     # str_to_pil_interp('bicubic')`, so timm's geometric RandAugment ops run BICUBIC. (Only when

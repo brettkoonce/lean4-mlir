@@ -184,6 +184,69 @@ def xShape (n : VerifiedNet) (batch : Nat) : ByteArray := packXShape #[batch, n.
 
 end VerifiedNet
 
+/-! ## `LEAN_MLIR_VARIANT`'s axis predicates — ONE definition each
+
+`variant` encodes five independent axes and every consumer recovers each with a string test on
+the name. `tests/TestVariantPredicates.lean` is the table of what each must read, and its
+docstring is the history: the naming has collided three times, each time between a PAIR of
+markers meeting rather than between a new marker and an old one.
+
+⚠⚠ **THEY LIVE HERE BECAUSE THE TEST USED TO PIN COPIES.** `trainAdamSched` computed all five
+inline and `TestVariantPredicates` declared its own `private def` of each, so the table gated a
+transcription of the driver rather than the driver: an edit to the real predicate could not turn
+that file red. That is `next_session_verified_trainer_code.md` §5's lesson one level up — a gate
+on *a* definition is not a gate on *the* definition — and `scoreCheckpoint` needing the same
+region arithmetic is what made a third copy the alternative.
+
+▶ The `&& !net.dropKeeps.isEmpty` / `&& net.dropoutKeep.isSome` conjuncts stay at the call sites:
+those are facts about the NET, not about the name, and folding them in here would make the
+predicate untestable from a string alone. -/
+namespace VerifiedVariant
+
+/-- EMA shadow — a FOURTH `[θ|m|v|ema]` blob region, 5 scalars not 3. -/
+def emaOn (v : String) : Bool := v.startsWith "ema"
+
+/-- RMSProp — the mean-square slot initialises to **1.0**, not 0.
+    ⚠ SUBSTRING, not prefix: the RMSProp+EMA spelling is `emarms`, which does not start with
+    "rms" (`planning/ema.md`'s defect). -/
+def rmsOn (v : String) : Bool := (v.splitOn "rms").length > 1
+
+/-- Stochastic depth — N extra `tensor<Bxf32>` scale inputs.
+    ⚠ The marker is `drop` and not `sd` because `rms` ++ `dp` spells `rmsdp`, which contains
+    "sd" (`planning/stochastic_depth.md`'s defect). -/
+def sdOn (v : String) : Bool := (v.splitOn "drop").length > 1
+
+/-- Classifier dropout — ONE extra `tensor<B×wxf32>` mask input.
+    ⚠ The marker is `do` and not `dropout` because `dropout` contains `drop`, so a dropout-only
+    variant would read as a stochastic-depth one (`recipe_gaps.md` gap C). -/
+def cdOn (v : String) : Bool := (v.splitOn "do").length > 1
+
+/-- Gradient accumulation — a FOURTH `[θ|m|v|G]` region, 5 scalars.
+    ⚠⚠ SUBSTRING, not prefix: RSB-A3's composed optimizer is `lambaccdp8x64bce`, where `lamb` ++
+    `acc` puts the marker in the MIDDLE. -/
+def accOn (v : String) : Bool := (v.splitOn "acc").length > 1
+
+/-- `k`, read back out of the name. The graph has `1/k` BAKED in and the driver decides the apply
+    cadence; a disagreement does not fail, it trains at a silently wrong effective learning rate.
+    Parsed from AFTER the marker, not from a fixed offset — see `accOn`. -/
+def accK (v : String) : Nat :=
+  if accOn v then
+    let after := (v.splitOn "acc").getD 1 ""
+    let after := if after.startsWith "dp" then after.drop 2 else after
+    ((after.takeWhile (· != 'x')).toNat?).getD 0
+  else 1
+
+/-- Blob regions: `[θ|m|v]`, plus a fourth for the EMA shadow or the gradient accumulator.
+    ⚠ A 3-region file loaded by a 4-region driver (or the reverse) misaligns EVERY parameter, so
+    every consumer of a checkpoint sizes off this rather than off a literal. -/
+def nRegions (v : String) : Nat := if emaOn v || accOn v then 4 else 3
+
+/-- Rank-0 scalar slots in the blob tail: `lr,bc₁,bc₂`, plus `%emad,%oemad` (EMA) or
+    `%aup,%akeep` (accumulation). -/
+def nScalars (v : String) : Nat := if emaOn v || accOn v then 5 else 3
+
+end VerifiedVariant
+
 /-- iree-compile one `.mlir` → `.vmfb`, surfacing failures. Skips when the `.vmfb` is already
     newer than the `.mlir` (a content-stable cache): avoids the ~minutes-long 224² recompile, and
     lets two same-net runs share one GPU-pair safely — they only *read* the cached vmfb (concurrent
@@ -562,8 +625,15 @@ def readShimBatchRR (hs : Array IO.FS.Handle) (k batch flat : Nat) (nclasses : N
 /-- Load the train + eval splits for a dataset. Returns
     `(trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop?)` where
     `trainPix` is the stored per-example width of the *training* images (256² for
-    Imagenette, `d0` otherwise) and `crop?` requests the 256²→224² center-crop. -/
-private def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0) :
+    Imagenette, `d0` otherwise) and `crop?` requests the 256²→224² center-crop.
+
+    `evalOnly` skips the TRAIN split entirely — for `scoreCheckpoint`, which never touches it.
+    ⚠ It is INERT on `.imagenet`, whose train split was never preloaded (it streams off the shim),
+    and that is exactly why it is worth having on the others: Imagenette's is 9,469 × 256² × 3 f32
+    = **7.4 GB** read and held for a job that only scores 3,925 val images. `nTrain` comes back 0
+    under it, so a caller that starts using it gets a division rather than a plausible epoch. -/
+private def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0)
+    (evalOnly : Bool := false) :
     IO (ByteArray × ByteArray × Nat × ByteArray × ByteArray × Nat × Nat × Bool) := do
   let d0 := net.d0
   -- `evalD0` is the EVAL forward's rendered input width, read off the artifact by the caller. It is
@@ -580,19 +650,23 @@ private def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0) 
     -- set LEAN_MLIR_IMAGENETTE_TRAIN=224 to load 224²/no-crop (else: "short read").
     -- px also feeds trainPix (3·px²) and crop := (px == 256).
     let px := ((← IO.getEnv "LEAN_MLIR_IMAGENETTE_TRAIN").bind (·.toNat?)).getD 256
-    let (trI, trL, nTr) ← F32.loadImagenetteSized (idir ++ "/train.bin") px.toUSize
+    let (trI, trL, nTr) ← if evalOnly then pure (ByteArray.empty, ByteArray.empty, 0)
+                          else F32.loadImagenetteSized (idir ++ "/train.bin") px.toUSize
     let (evI, evL, nEv) ← F32.loadImagenette (idir ++ "/val.bin")
     return (trI, trL, nTr, evI, evL, nEv, 3 * px * px, px == 256)
   | .mnist =>
-    let (trI, nTr) ← F32.loadIdxImages (dataDir ++ "/train-images-idx3-ubyte")
-    let (trL, _)   ← F32.loadIdxLabels (dataDir ++ "/train-labels-idx1-ubyte")
+    let (trI, nTr) ← if evalOnly then pure (ByteArray.empty, 0)
+                     else F32.loadIdxImages (dataDir ++ "/train-images-idx3-ubyte")
+    let (trL, _)   ← if evalOnly then pure (ByteArray.empty, 0)
+                     else F32.loadIdxLabels (dataDir ++ "/train-labels-idx1-ubyte")
     let (evI, nEv) ← F32.loadIdxImages (dataDir ++ "/t10k-images-idx3-ubyte")
     let (evL, _)   ← F32.loadIdxLabels (dataDir ++ "/t10k-labels-idx1-ubyte")
     return (trI, trL, nTr, evI, evL, nEv, d0, false)
   | .cifar =>
     let cdir := dataDir ++ "/cifar-10"
     let trainPaths := (List.range 5).map (fun i => s!"{cdir}/data_batch_{i+1}.bin")
-    let (trI, trL, nTr) ← loadCifarSplit trainPaths
+    let (trI, trL, nTr) ← if evalOnly then pure (ByteArray.empty, ByteArray.empty, 0)
+                          else loadCifarSplit trainPaths
     let (evI, evL, nEv) ← loadCifarSplit [s!"{cdir}/test_batch.bin"]
     return (trI, trL, nTr, evI, evL, nEv, d0, false)
   | .imagenet =>
@@ -695,6 +769,26 @@ private def mkSynthData (data : VerifiedData) (d0 bs : Nat) :
   let img ← F32.const (bs * px).toUSize 0.1
   let lbl ← F32.const bs.toUSize 0.0               -- bs int32 zero labels (4 bytes each)
   pure (img, lbl, nTr, img, lbl, bs, px, crop)
+
+/-- **Where this (net, variant) writes and resumes its checkpoint.**
+
+    Scoped by BACKEND: without the suffix an XLA run would happily resume from an IREE checkpoint
+    and vice versa, silently fusing two trajectories into one while looking completely normal on
+    screen (`planning/xla_pjrt_ladder.md` §3). `$LEAN_MLIR_CKPT_TAG` appends a run-scoped suffix —
+    without it every pass of the same (net, variant, backend) shares ONE path, so the parallel
+    sweeps `planning/chapter_makeover.md` §3c mandates cannot be run: concurrent passes clobber
+    each other's blob, and a later pass resumes from an earlier one's finished epoch 40.
+
+    ⚠ **A function because `scoreCheckpoint` has to land on the SAME path the trainer wrote**, and
+    "score the checkpoint the run just finished" is that tool's zero-argument case. Two spellings
+    of this string would not fail — they would score a file that is not there, or worse, an older
+    one from a different tag. -/
+def VerifiedNet.ckptPathFor (net : VerifiedNet) (variant : String) : IO String := do
+  let backend ← LowererSession.backendName
+  let ckptTag := match ← IO.getEnv "LEAN_MLIR_CKPT_TAG" with
+    | some t => if t.isEmpty then "" else "_" ++ t
+    | none   => ""
+  return s!".lake/build/{net.slug}_{variant}_ckpt{if backend == "xla" then "_xla" else ""}{ckptTag}.bin"
 
 /-- Print the startup banner with `%LOWERER%` resolved to the lowerer that actually ran.
 
@@ -997,7 +1091,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- failure is not loud: the mean-square would initialise to 0 instead of 1.0, i.e. exactly the
   -- much-larger-first-step defect the RMSProp driver work exists to fix, reintroduced by a naming
   -- interaction. The variant strings are pinned by `#guard`s beside each renderer's `#eval`s.
-  let rmsprop := (variant.splitOn "rms").length > 1
+  let rmsprop := VerifiedVariant.rmsOn variant
   -- "ema"/"emadp" = the EMA-shadow render (`planning/ema.md`), whose blob carries a FOURTH region:
   -- `[θ|m|v|ema]`, with the scalar tail 3 → 5 (`%emad`, `%oemad`). Everything below that indexes the
   -- blob is written against `nRegions`/`nScalars` rather than a literal 3, because a 4-region graph
@@ -1005,7 +1099,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   --
   -- ⚠ Keyed off the variant PREFIX, the same reverse-of-`cnxAdamVariant` reading `rmsprop` uses,
   -- and pinned upstream by the `#guard`s beside that renderer's `#eval`s.
-  let emaOn := variant.startsWith "ema"
+  let emaOn := VerifiedVariant.emaOn variant
   -- ⭐⭐ GRADIENT ACCUMULATION (`planning/next_session_pipeline_then_r50.md` §4). "acc<k>x<B>" /
   -- "accdp<k>x<B>" is the `.adamwAccum` render: a FOURTH region `G` holding the running gradient
   -- sum, and two extra scalars `%aup`/`%akeep` deciding, per micro-batch, whether this invoke
@@ -1023,12 +1117,8 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- `emaOn && accOn` refusal below reachable at all — under the prefix test `accOn "emaacc…"` was
   -- false, so that throw could never fire and the combination would have silently dropped
   -- accumulation. Both counterfactuals are pinned in `TestVariantPredicates`.
-  let accOn := (variant.splitOn "acc").length > 1
-  let accK := if accOn then
-      let after := (variant.splitOn "acc").getD 1 ""
-      let after := if after.startsWith "dp" then after.drop 2 else after
-      ((after.takeWhile (· != 'x')).toNat?).getD 0
-    else 1
+  let accOn := VerifiedVariant.accOn variant
+  let accK := VerifiedVariant.accK variant
   if accOn && accK < 1 then
     throw <| IO.userError s!"variant '{variant}' contains 'acc' but no accumulation count could \
 be read from it — the name must spell acc<k>x<B> or accdp<k>x<B> (optionally after an optimizer \
@@ -1038,8 +1128,8 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   if emaOn && accOn then
     throw <| IO.userError "variant selects BOTH the EMA shadow and gradient accumulation, and they \
 occupy the same fourth region of [θ|m|v|·]. Render one or the other."
-  let nRegions := if emaOn || accOn then 4 else 3
-  let nScalars := if emaOn || accOn then 5 else 3
+  let nRegions := VerifiedVariant.nRegions variant
+  let nScalars := VerifiedVariant.nScalars variant
   -- "…drop" = the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the graph takes one
   -- extra `tensor<Bxf32>` per drop site, carrying `bernoulli(keep_i)/keep_i` per example.
   --
@@ -1050,14 +1140,14 @@ occupy the same fourth region of [θ|m|v|·]. Render one or the other."
   -- that takes none. Caught by running the predicate table (`tests/TestVariantPredicates.lean`)
   -- rather than reading names one at a time; with three markers the collisions are between PAIRS.
   -- This is `planning/ema.md`'s `emarms` defect a second time, one axis further on.
-  let sdOn := (variant.splitOn "drop").length > 1 && !net.dropKeeps.isEmpty
+  let sdOn := VerifiedVariant.sdOn variant && !net.dropKeeps.isEmpty
   let nDrop := if sdOn then net.dropKeeps.size else 0
   -- ▶ CLASSIFIER DROPOUT. ⚠⚠ The marker is `"do"` and NOT `"dropout"`, and that is forced by the
   -- line above: `"dropout"` contains `"drop"`, so a dropout-only variant would set `sdOn` and this
   -- driver would pack nine mask slots into a graph that has none. Collision #3 on this naming, and
   -- the first caught before it shipped — `tests/TestVariantPredicates.lean` runs the pairwise table
   -- rather than reasoning about it, and pins the counterfactual (`sdOn "adamdropout" == true`).
-  let cdOn := (variant.splitOn "do").length > 1 && net.dropoutKeep.isSome
+  let cdOn := VerifiedVariant.cdOn variant && net.dropoutKeep.isSome
   let doKeep := (net.dropoutKeep.map (·.1)).getD 1.0
   let doWidth := if cdOn then (net.dropoutKeep.map (·.2)).getD 0 else 0
   -- ⚠ The per-example TAIL the DP shim shards is BOTH mask families — nine `tensor<gbs>` scales
@@ -1339,21 +1429,10 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   let warmSteps := (warmupEpochs * nb / accK).toFloat
   -- Auto checkpoint/resume: each epoch writes [θ|m|v] + the next-epoch counter;
   -- on startup, resume from the latest checkpoint if present (survives reaps).
-  -- Delete `.lake/build/<slug>_adam_ckpt.bin{,.epoch}` to start fresh.
-  -- Checkpoint path is BACKEND-SCOPED. Without the suffix an XLA run would happily
-  -- resume from an IREE checkpoint (and vice versa), silently fusing two
-  -- trajectories into one and making any G2/G3 comparison meaningless — while
-  -- looking completely normal on screen. See planning/xla_pjrt_ladder.md §3.
-  -- LEAN_MLIR_CKPT_TAG appends a run-scoped suffix. Without it every pass of the same
-  -- (net, variant, backend) shares ONE checkpoint path, so the parallel sweeps
-  -- planning/chapter_makeover.md §3c mandates for conv nets cannot be run: concurrent
-  -- passes clobber each other's blob, and a later pass resumes from an earlier one's
-  -- finished epoch 40 and trains nothing at all. Set it to the pass index.
-  let backend ← LowererSession.backendName
-  let ckptTag := match ← IO.getEnv "LEAN_MLIR_CKPT_TAG" with
-    | some t => if t.isEmpty then "" else "_" ++ t
-    | none   => ""
-  let ckptPath := s!".lake/build/{net.slug}_{variant}_ckpt{if backend == "xla" then "_xla" else ""}{ckptTag}.bin"
+  -- Delete `.lake/build/<slug>_<variant>_ckpt*.bin{,.epoch}` to start fresh.
+  -- ▶ The PATH — backend scoping and `$LEAN_MLIR_CKPT_TAG` — is `ckptPathFor`, shared with
+  -- `scoreCheckpoint` so the tool that reads this file cannot spell its name differently.
+  let ckptPath ← net.ckptPathFor variant
   let epPath := ckptPath ++ ".epoch"
   let mut startEpoch := 0
   if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
@@ -1928,6 +2007,144 @@ gate's control, not a configuration.")
       IO.println s!"  wrote final [θ|m|v] ({thetamv.size} bytes) → {path}"
   | none => pure ()
   IO.println s!"done (trained {net.name} {variant} + {schedName}/warmup via packed threading)."
+
+/-- **Score a checkpoint, standalone** — the eval half of `trainAdamSched` with no training in
+    front of it (`planning/next_session_verified_trainer_code.md` §2).
+
+    Until this existed a verified accuracy could only be produced *in training*, and only for the
+    weights that happened to be live at that moment. The JAX side has six `eval_*_full50k.py`; this
+    is the verified peer, and it is a FACTORING job rather than new machinery — no new MLIR, no new
+    ops, no renderer work. Every piece already existed inside the eval half:
+
+    | need | reused |
+    |---|---|
+    | drain the val split | `loadData` (all 50,000 as of `ccca380`) |
+    | the eval graph | `mkSession` on `<slug>_fwd_eval`, or the `_fwd` chain for the LN nets |
+    | eval batch AND width | `fwdRenderedShape`, one parse of one declaration |
+    | batching a short tail | `F32.sliceImagesPad` + `min evalBs (nEval − bi·evalBs)` |
+    | forward | `LowererSession.forwardF32` |
+    | metrics | `F32.argmaxN` (top-1), `F32.rankOf` (top-5) |
+
+    ⭐ **THE GATE IS AN EQUALITY, NOT A SMOKE TEST.** For the same checkpoint at the same region,
+    the number printed here must equal the one the training run printed for that epoch — same
+    denominator, same batching, same graph. It is available today on ConvNeXt and ViT, which have
+    `nBnStats = 0` and therefore carry their whole eval state in the checkpoint.
+
+    ⚠⚠ **BN NETS ARE REFUSED, LOUDLY, AND THAT IS THE POINT.** The checkpoint is exactly
+    `[θ|m|v(|ema)]`; the BN running mean/var are NOT in it — they are "reset per process and
+    rebuilt within an epoch" (see `runningBnStats`). In-training eval works because the statistics
+    have been accumulating all epoch. A fresh process reading a `.bin` has ZEROS, and
+    `@<slug>_fwd_eval` then normalises by them: not a slightly-off number, garbage that still
+    prints as a plausible-looking percentage. So R50/R34/MNv2/EfficientNet/MNv4 throw here rather
+    than score, until §2b lands the stats in the checkpoint (format) plus `--recalibrate` (the
+    fallback, and the only one of the two that can reach A3's finished checkpoint).
+
+    ⭐ `region` is what one checkpoint cannot otherwise yield: the driver picks live-or-shadow at
+    TRAIN time (`emaLiveBn`), so an EMA run reports one of the two numbers and discards the other.
+    timm reports the shadow and RSB-A2 sets `emaDecay := 0.9999`, so without this an A2 result is
+    not quotable the way its reference is. `"auto"` = the shadow when the variant has one, matching
+    what the training run would have scored; `"live"` and `"ema"` name it explicitly. -/
+def VerifiedNet.scoreCheckpoint (net : VerifiedNet) (dataDir : String) (variant : String)
+    (ckptPath : String) (region : String := "auto") : IO Unit := do
+  let emaOn := VerifiedVariant.emaOn variant
+  let nRegions := VerifiedVariant.nRegions variant
+  let hasBn := !net.bnChannels.isEmpty
+  let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
+  net.printBlurb
+  IO.println s!"  SCORING A CHECKPOINT — no training. {net.name} {variant}, {ckptPath}"
+  -- ⛔⛔ THE BN BLOCKER, asserted before anything expensive happens (§2b). Refuse ahead of the
+  -- ~30 GB val drain and the compile, not after: the whole failure being prevented is a number
+  -- that looks like a number.
+  if hasBn then
+    throw <| IO.userError s!"{net.name} has {net.bnChannels.size} batch-norm layers \
+({nBnStats} running-stat floats) and the checkpoint does not contain them — it is exactly \
+[θ|m|v{if emaOn then "|ema" else ""}]. A fresh process would normalise @{net.slug}_fwd_eval by \
+ZEROS and print a plausible-looking percentage off garbage.\n\
+  Two exits, neither of them retroactive on its own (planning/next_session_verified_trainer_code.md \
+§2b): (a) append the {nBnStats} stat floats to the checkpoint format — clean going forward, but A3's \
+finished checkpoint does not contain them; (b) --recalibrate, ~100-200 training batches forward to \
+re-accumulate the statistics, which DOES reach an existing checkpoint and is a different estimate \
+from the run's own.\n\
+  Scoring works today on the LayerNorm nets (ConvNeXt, ViT), which carry no running state."
+  -- The region to score. ⚠ `"ema"` on a variant with no fourth region is a REFUSAL and not a
+  -- fallback to live: the request and the artifact disagree, and quietly answering the other
+  -- question is how a live-weight number gets quoted as a shadow one.
+  let regIdx ← match region with
+    | "auto" => pure (if emaOn then 3 else 0)
+    | "live" => pure 0
+    | "ema"  =>
+      if !emaOn then
+        throw <| IO.userError s!"region 'ema' asked of variant '{variant}', which has no EMA \
+shadow — its blob is {nRegions} regions [θ|m|v] and there is nothing in slot 4 to score. Use \
+'live', or score a checkpoint written by an ema* variant."
+      else pure 3
+    | r => throw <| IO.userError s!"unknown region '{r}' — one of auto | live | ema"
+  -- Forward resolution, IDENTICAL to `trainAdamSched`'s: the per-variant `_fwd` wins when it
+  -- exists, `<slug>_fwd.mlir` is the fallback. ⚠ The FUNCTION is `@<slug>_fwd` either way — the
+  -- variant artifact re-renders the same entry name.
+  let fwdVariant := s!"{net.mlirDir}/{net.slug}_{variant}_fwd.mlir"
+  let fwdPath := if (← System.FilePath.pathExists fwdVariant) then fwdVariant
+                 else s!"{net.mlirDir}/{net.slug}_fwd.mlir"
+  if !(← System.FilePath.pathExists fwdPath) then
+    throw <| IO.userError s!"no forward artifact for {net.slug}: tried {fwdVariant} and {fwdPath}"
+  -- ⚠ REFUSE rather than fall back to `(bs, net.d0)`. The training driver can default there
+  -- because it has a `cfg.batchSize` the user chose; this tool has no such input, so a guess
+  -- would be a silent mis-slice of the val buffer (RSB-A3: 224² rows read as 160²).
+  let (evalBs, evalD0) ← match ← fwdRenderedShape fwdPath with
+    | some s => pure s
+    | none => throw <| IO.userError s!"could not read `%x: tensor<BxWxf32>` off {fwdPath} — the \
+eval batch and the eval WIDTH both come from that one declaration, and neither is guessable here."
+  if evalD0 != net.d0 then
+    IO.println s!"  ▸ EVAL RES SPLIT: net d0 {net.d0}, eval d0 {evalD0} (batch {evalBs}) — read \
+off @{net.slug}_fwd"
+  -- The checkpoint, and its size guard — the same one `trainAdamSched` applies on resume, for the
+  -- same reason: the blob has no header, no fingerprint and no region count, so a layout mismatch
+  -- does not fail, it misaligns every parameter and scores silent garbage.
+  if !(← System.FilePath.pathExists ckptPath) then
+    throw <| IO.userError s!"no checkpoint at {ckptPath}"
+  let thetamv ← IO.FS.readBinFile ckptPath
+  let pBytes := net.nParams * 4
+  let mvBytes := nRegions * pBytes
+  if thetamv.size != mvBytes then
+    throw <| IO.userError s!"checkpoint {ckptPath} is {thetamv.size} bytes but variant \
+'{variant}' wants {mvBytes} ({nRegions} regions x {net.nParams} params x 4). It was written by a \
+different blob layout — most likely across the EMA/accumulation boundary, since those variants \
+carry a 4th region."
+  let theta := thetamv.extract (regIdx * pBytes) ((regIdx + 1) * pBytes)
+  IO.println s!"  region {regIdx} of {nRegions} \
+({if regIdx == 3 then "the EMA SHADOW" else "the live weights"}), {net.nParams} params"
+  (← IO.getStdout).flush
+  let sess ← mkSession fwdPath
+  -- ⚠ `evalOnly := true` — this tool never touches the train split, and on Imagenette reading it
+  -- anyway is 7.4 GB held for nothing. Inert on `.imagenet`, which streams.
+  let (_, _, _, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir evalD0 (evalOnly := true)
+  let nc := net.nClasses
+  let nbt := (nEval + evalBs - 1) / evalBs   -- ceil: the last partial batch is zero-padded
+  let xShape := packXShape #[evalBs, evalD0]
+  let fwdShapes := net.shapesBA
+  let mut correct := 0
+  let mut correct5 := 0
+  for bi in [0:nbt] do
+    let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs evalD0 nEval
+    -- Hold the parameters on device across every batch — one push, not `nbt` of them. `gen` is a
+    -- constant because θ never changes here, which is the whole difference from the training loop.
+    let logits ← LowererSession.forwardF32 sess s!"m.{net.slug}_fwd" theta fwdShapes
+                    xb xShape evalBs.toUSize nc.toUSize
+                    net.paramShapes.size.toUSize 1
+    for j in [0:min evalBs (nEval - bi * evalBs)] do   -- score real rows only, not the pad
+      let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
+      let lbl  := F32.readLabel evalLbl (bi * evalBs + j)
+      if pred == lbl then correct := correct + 1
+      if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
+        correct5 := correct5 + 1
+  let acc := correct.toFloat / nEval.toFloat * 100.0
+  let acc5 := correct5.toFloat / nEval.toFloat * 100.0
+  -- ⭐ Printed in the SAME shape as the in-training line, so the equality gate is a literal
+  -- comparison of two strings rather than an arithmetic one.
+  IO.println s!"  checkpoint: acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%"
+  if nEval != 50000 && net.data == .imagenet then
+    IO.println s!"  ⚠ val is {nEval} of ImageNet's 50,000 — this is NOT over timm's denominator"
+  (← IO.getStdout).flush
 
 /-- Train driver for the **2-parameter linear** path (Chapter 1). The verified
     `@<slug>_train_step` takes `W0`/`b0` as *separate* arguments (`linearTrainStepV`),

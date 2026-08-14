@@ -45,56 +45,22 @@ the wrong spelling turned out to be unloadable. A hand-written table of derived 
     lake env lean tests/TestVariantPredicates.lean
 -/
 
-private def emaOn (v : String) : Bool := v.startsWith "ema"
-private def rmsOn (v : String) : Bool := (v.splitOn "rms").length > 1
-private def sdOn  (v : String) : Bool := (v.splitOn "drop").length > 1
-/-- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C, 2026-08-03) — a FOURTH axis, and the first one
-    since `sd` that the driver must actually predicate on: it adds one `tensor<B×1280xf32>` input,
-    so a misfire is an arity error at best and a mis-walked blob at worst.
+/-! ⚠⚠ **THIS FILE USED TO PIN COPIES, WHICH IS WHY IT NOW OPENS `VerifiedVariant` (2026-08-14).**
 
-    ⚠⚠ **THE MARKER IS `"do"`, NOT `"dropout"`, AND THAT IS FORCED BY `sdOn` ABOVE.** `"dropout"`
-    CONTAINS `"drop"`, so a dropout-only variant would read as a stochastic-depth one and the
-    driver would try to pack nine mask slots the graph does not have. That is collision #3, and it
-    is the first one that was predicted rather than discovered — because this file existed. -/
-private def cdOn  (v : String) : Bool := (v.splitOn "do").length > 1
+Every predicate below was declared here as a `private def` transcribing what `trainAdamSched`
+computed inline. So the table gated *a* definition of each axis and not *the* definition: an edit
+to the driver's own `variant.startsWith "ema"` could not turn this file red, and the two could
+drift exactly the way `emarmsdrop64` drifted from `emarms64drop` — the drift this file's own
+closing rule warns about, one level up from names to logic.
 
-/-- ⭐⭐ GRADIENT ACCUMULATION (`planning/next_session_pipeline_then_r50.md` §4, 2026-08-05) — a
-    FIFTH axis, and the second one after `ema` that changes the number of blob REGIONS: `acc<k>x<B>`
-    carries `[θ|m|v|G]`, 4 regions and 5 scalars. A misfire misaligns every parameter.
-
-    ⚠⚠ **DEFECT #4, 2026-08-06: THIS WAS A PREFIX TEST AND THE REASONING FOR IT WAS WRONG.** The
-    docstring here used to read *"the marker LEADS, so there is no concatenation that can spell it
-    accidentally"* — and then RSB-A3's composed optimizer spelled **`lambaccdp8x64bce`**, where
-    `lamb` ++ `acc` puts the marker in the middle. `startsWith "acc"` is FALSE there, so the driver
-    would have packed THREE regions into a FOUR-region graph.
-
-    ▶ This is the file's own rule turned on the file itself: *a collision lives in a CONCATENATION*,
-    and "the marker leads" is an assumption about which OTHER markers exist, not a property of the
-    marker. It held only while no optimizer name preceded `acc`. ⚠ It is also the fourth instance
-    and the second one caught before shipping — the G4 gate would have refused the arity ("755
-    outputs, caller supplied 594 destinations"), so it was loud, but loud is not the same as caught.
-
-    ⭐ The substring test additionally FIXES the `ema` × `acc` limit rather than merely recording
-    it. Under the prefix test `accOn "emaacc4x64"` was `false`, so the driver's
-    `if emaOn && accOn then throw` could **never fire** — the combination the driver claims to
-    refuse would have run as EMA with the accumulation silently dropped. Now both read true and the
-    refusal actually happens. See the pinned counterfactual below. -/
-private def accOn (v : String) : Bool := (v.splitOn "acc").length > 1
-
-/-- `k`, read back out of the name. ⚠⚠ **This parse is load-bearing and it is the reason `k` is in
-    the name at all.** The graph has `1/k` BAKED into `%ob1`/`%ob2`; the driver decides the apply
-    cadence. A disagreement does not fail — it trains at a silently wrong effective learning rate.
-    `ResNet50RenderB` `#guard`s the round trip on the producing side; this is the consuming side.
-
-    ⚠ Parsed from AFTER the marker rather than from a fixed offset, for the same reason `accOn` is
-    a substring test: `v.drop 3` assumed the name starts with `acc`, which `lambaccdp8x64bce` does
-    not. Splitting on the marker makes the parse independent of what precedes it. -/
-private def accK (v : String) : Nat :=
-  if accOn v then
-    let after := (v.splitOn "acc").getD 1 ""
-    let after := if after.startsWith "dp" then after.drop 2 else after
-    ((after.takeWhile (· != 'x')).toNat?).getD 0
-  else 1
+▶ The five predicates and `accK` now live in `LeanMlir/VerifiedTrain.lean`'s `VerifiedVariant`
+namespace, with their history in their docstrings; `trainAdamSched` and
+`VerifiedNet.scoreCheckpoint` both consume them, and so does this table. That is
+`next_session_verified_trainer_code.md` §5's lesson applied here: *a gate on "the feature is
+enabled" is not a gate on "the feature is correct"* — and a gate on a transcription is not a gate
+on the thing transcribed.
+-/
+open VerifiedVariant
 
 /-- Every variant string any renderer can produce today, with what each axis MUST read.
     Grown from the `*AdamVariant` functions, not from the artifacts — an artifact that does not
@@ -333,10 +299,20 @@ private def accumSpellings : List String :=
 #guard emaOn "lambdp64" == false
 #guard cdOn  "lambdp64" == false
 
+-- ⭐ THE REGION ARITHMETIC ITSELF, and it is what `scoreCheckpoint` reads a checkpoint's size
+-- against. `nRegions` is the one place `[θ|m|v]` becomes `[θ|m|v|·]`, so this pins that it agrees
+-- with the two axes that cause it — the derived fact and its causes, rather than the derived fact
+-- alone. ⚠ The 4-region cases are exactly EMA ∪ accumulation, stated as a partition for §0.4
+-- finding 5's reason: a count would not notice a spelling that lands in neither.
+#guard table.all (fun (v, e, _, _) => nRegions v == (if e || accOn v then 4 else 3))
+#guard table.all (fun (v, _, _, _) => (nRegions v == 4) == (nScalars v == 5))
+#guard nRegions "lambaccdp8x64bce" == 4    -- the spelling that falsified the prefix test
+#guard nRegions "adamdp128x4wxclipdrop" == 3
+
 #eval do
   IO.println "── variant predicates ──"
   for (v, e, r, s) in table do
-    let regions := if e || accOn v then 4 else 3
+    let regions := nRegions v
     let kNote := if accOn v then s!" k={accK v}" else ""
     IO.println s!"  {v} — ema={e} rms={r} drop={s} dropout={cdOn v} accum={accOn v}{kNote} \
 → {regions} blob regions"

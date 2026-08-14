@@ -75,6 +75,18 @@ def resnet50ImagenetConfig : TrainConfig where
   bf16           := true
   bf16Conv       := true     -- CUDA/cuDNN: bf16 conv ~1.6× faster (R50 is conv-bound, ares is its home); slower-but-correct on ROCm
   runningBN      := true     -- paper-faithful eval (gap A) + bottleneck running-BN
+  -- ⚠⚠ **0.95, NOT the emitter's 0.875 default — added 2026-08-14, and it is an A2/A1 RECIPE FIX.**
+  -- Unset, `Jax/Codegen.lean` falls back to `_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING)` = 0.875, so every
+  -- recipe built on this config — the bs512 A2 `default`, `a2-true-2048`, `a2-accum` and (through
+  -- it) `a1` — evaluated on an 8% narrower field of view than its reference. READ off timm rather
+  -- than assumed: `timm.get_pretrained_cfg('resnet50.a{1,2,3}_in1k').crop_pct` is **0.95** for all
+  -- three tiers (only `tv_in1k`, the 2018 torchvision weights, is 0.875 — which is why the 2018
+  -- recipe below correctly sets that value explicitly).
+  -- ⭐ `rsb-faithful`/`short` (A3) already set 0.95 themselves, so this is INERT for them and for
+  -- the 2018 recipe; it changes only the A2/A1 family, none of which has been run. On a FixRes
+  -- recipe the eval crop is not a detail — object scale at test time is the thing the train/test
+  -- resolution split is exploiting.
+  testCropRatio  := 0.95
 
 #eval resnet50Imagenet.validate!
 

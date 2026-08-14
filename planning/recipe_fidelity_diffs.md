@@ -17,7 +17,21 @@ MobileNetV4-Conv-M.
 
 ## Cross-cutting (affects several nets)
 
-### C1. Resize is not antialiased — **~0.2 pt, MEASURED**
+### C1. Resize is not antialiased — **~0.2 pt, MEASURED (⚠ on two nets, and now we know why)**
+
+⚠⚠ **SCOPE, added 2026-08-14 — the table below covers ViT-Ti and ConvNeXt-T and could not have
+covered anything else.** `eval_preproc_ab.py` called `m.forward(params, x)`, which is the emitted
+signature for a **LayerNorm** net; every BatchNorm net's forward is
+`forward(params, x, bn, training, …)` and raised `TypeError`. So R50, MobileNetV2, EfficientNet
+and MNv4 were never measured here — the coverage was decided by an arity mismatch rather than by a
+choice, and neither this doc nor the script said so. ▶ Both that and a crop_pct bug that hit
+**only RSB-A3** are fixed; see `planning/resize_eval_reconciliation.md` §2, which also shows this
+number is the one with an instrument behind it where blueprint §5.8's ~2.6 pt is not.
+⭐ The `timm` arm's PIL equivalence is now MEASURED rather than assumed (flat at ~0.30/255 from
+0.7× to 11.7× downscale), so the ruler below is a real one.
+⚠ But the aliasing penalty is **not uniform in image size** — `antialias=False` tracks PIL at 0.31
+with no downscale and 13.73 at 11.7× — so "0.2 pt" is an average over a skewed distribution, not a
+per-image constant.
 
 Every `tf.image.resize` in the emitter runs with the default `antialias=False`, on
 both the train RandomResizedCrop and the eval centre-crop. timm/PIL antialiases both.

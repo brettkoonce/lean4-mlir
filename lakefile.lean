@@ -1603,6 +1603,23 @@ lean_exe «mnv4-imagenet-verified» where
   root := `apps.imagenette.MainMobilenetV4Imagenet
   moreLinkArgs := lowererLink
 
+/-- **Score a finished checkpoint, standalone** — `planning/next_session_verified_trainer_code.md`
+    §2, the verified peer of the JAX side's six `eval_*_full50k.py`.
+
+        LEAN_MLIR_VARIANT=<v> .lake/build/bin/score-checkpoint <net> [dataDir]
+
+    Until this existed a verified accuracy could only be produced in-training, for whichever
+    weights were live at that moment — so a finished run could not be re-scored, and an EMA run
+    reported one of {live, shadow} and discarded the other. `LEAN_MLIR_REGION` picks.
+
+    ⭐ Its gate is an EQUALITY, not a smoke test: the same checkpoint at the same region must score
+    exactly what the training run printed for the epoch that wrote it.
+    ⚠ ConvNeXt and ViT only. The BN nets refuse, loudly, because the checkpoint is exactly
+    `[θ|m|v(|ema)]` and the running mean/var are not in it (§2b). -/
+lean_exe «score-checkpoint» where
+  root := `apps.tools.MainScoreCheckpoint
+  moreLinkArgs := lowererLink
+
 /-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
     textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it

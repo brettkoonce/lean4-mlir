@@ -59,7 +59,40 @@ the format changes and interface changes now rather than after a fresh set of nu
 `eval_*_full50k.py`; the verified side has none, so a verified number can only be produced
 in-training and only for the weights that were live at that moment.
 
-### 2a. Part 2 first — the script, which is a factoring job
+### 2a. ✅ LANDED 2026-08-14 — `VerifiedNet.scoreCheckpoint` + `lake build score-checkpoint`
+
+    LEAN_MLIR_VARIANT=<v> .lake/build/bin/score-checkpoint <net> [dataDir]
+    # LEAN_MLIR_CKPT (default: ckptPathFor, i.e. the file the run just wrote)
+    # LEAN_MLIR_REGION  auto | live | ema
+
+The factoring below, exactly as planned — no new MLIR, no new ops, no renderer work. What it
+turned into beyond the plan:
+
+* ⭐ **`VerifiedVariant`** — the five variant-axis predicates (`emaOn`/`rmsOn`/`sdOn`/`cdOn`/
+  `accOn`) plus `accK`/`nRegions`/`nScalars` now live once, in `VerifiedTrain.lean`.
+  `trainAdamSched` computed all five inline and `tests/TestVariantPredicates.lean` declared its own
+  `private def` of each — so that table gated a **transcription** of the driver, not the driver, and
+  an edit to the real predicate could not turn it red. It now opens the shared namespace: 61
+  spellings against the definitions that actually run. ▶ §5's lesson one level up.
+* ⭐ **`ckptPathFor`** — the backend-scoped, `$LEAN_MLIR_CKPT_TAG`-suffixed path is one function,
+  shared with the trainer, so "score the checkpoint the run just wrote" cannot land on a different
+  name than the one that wrote it.
+* `loadData` takes `evalOnly`, which skips a 7.4 GB Imagenette train read for a job that scores
+  3,925 val images. Inert on `.imagenet` (it streams).
+
+⚠ **The equality gate is written but NOT YET RUN**: this box's pinned venv broke on 2026-08-14
+(`nvidia-cudnn-cu13 9.20.0.48` installed over `nvidia-cudnn-cu12 9.23.2.1` — same
+`nvidia/cudnn/lib/` directory, clobbered in place), and JAX cannot execute a conv on it at all,
+so nothing GPU-side ran. The three refusal paths were exercised and are correct. Repair is
+`pip install --force-reinstall nvidia-cudnn-cu12==9.23.2.1` in `.venv`.
+
+▶ The gate, when the box is back — ConvNeXt-T Imagenette, `.lake/build/convnext_adam_ckpt_xla.bin`
+at epoch 80, whose training run printed
+`epoch 80: val_acc = 3339/3925 = 85.070064%  top5 = 3819/3925 = 97.299363%`
+(`runs/2026-08-12-convnext-imagenette-xla-cuda/`). `score-checkpoint convnext data` must print
+those same counts.
+
+### 2a (original plan). Part 2 first — the script, which is a factoring job
 
 Everything needed already exists inside `trainAdamSched`'s eval half:
 

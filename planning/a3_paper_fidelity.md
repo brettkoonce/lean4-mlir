@@ -316,6 +316,16 @@ difference of ~0.4–2.4/255 on the geometric ops only, and it is now a MEASURED
 than an open question. Closing it properly would need a hand-written Catmull-Rom affine sampler in
 TF, not a flag.
 
+▶ **The EVAL resize is a separate question with its own doc as of 2026-08-14** —
+`planning/resize_eval_reconciliation.md`, which scopes blueprint §5.8's open
+`[TODO, resize/eval reconciliation]`. Short version: the ~2.6 pt that §5.8 attributes to PIL-vs-TF
+has no instrument behind it, the instrument that does exist measures ~0.2 pt, and it turned out
+that instrument **could not run on any BatchNorm net** (arity) and scored **RSB-A3 at crop 0.875
+where the trainer evaluates at 0.95**. Both fixed; the decisive three-arm run is now one GPU-hour
+against `/home/skoonce/resnet/r50_a3_rerun/ckpt_e100.bin`.
+⚠ That work also closed a real A1/A2 recipe gap found on the way — timm's `resnet50.a{1,2}_in1k`
+resolve `crop_pct = 0.95` and our A1/A2 configs were evaluating at 0.875.
+
 ### (superseded) The interpolation as a third difference We always use BILINEAR for the
 geometric ops. timm resolves the resample mode from the MODEL's data config:
 `resolve_data_config` for resnet50 returns `interpolation='bicubic'`, and `transforms_factory` then
