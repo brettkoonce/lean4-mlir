@@ -18,10 +18,15 @@ geometry, different resampler". A smooth image with one hard edge can: a wrong t
 large INTERIOR error, a resampling difference shows error only where the gradient is steep.
 ▶ Never validate a resampler on noise.
 
-⚠ What this does NOT cover, and it is the open question the angle worry should have been about:
-the geometric INTERPOLATION CHOICE. We always use BILINEAR. timm's RandAugment takes its resample
-mode from `hparams['interpolation']`, which without an explicit `-i` flag in the arg string is a
-per-call RANDOM choice over (BILINEAR, BICUBIC). Settling that needs timm's source, not PIL's.
+⭐⭐ THE INTERPOLATION QUESTION IS SETTLED HERE TOO, AND THE ANSWER IS "KEEP BILINEAR" (see
+`interp_check()` at the bottom). timm resolves the resample mode from the MODEL's data config, and
+resnet50 gives bicubic -- so timm's geometric ops really do run PIL-BICUBIC, and ours run
+TF-BILINEAR. The obvious fix is to ask TF for BICUBIC. **Measured, that makes it ~60x worse.**
+`ImageProjectiveTransformV3` accepts a BICUBIC attr and genuinely implements *something*, but that
+something agrees with neither PIL kernel -- it sits ~21-29 mean |Δ| from both, where TF-BILINEAR
+sits at 0.36-2.5 from PIL-BICUBIC. ⚠ And the row that decides it: PIL-BILINEAR vs PIL-BICUBIC, the
+GENUINE bilinear/bicubic gap, is only 0.23-2.4 -- so TF-BILINEAR is already AT the floor that any
+correct bilinear implementation would hit. There is nothing left to win and a lot to lose.
 ⚠ Also uncovered: the ORDER and PROBABILITY of ops, the magnitude mappings (`_RA_INC`), and the
 photometric ops. This file is about geometry alone.
 """
@@ -77,3 +82,34 @@ for d in (30.,-21.,7.5):
     cmp(f"Rotate {d}", ours_rot(d), pil_rot(d))
 print("\n  (a genuinely different TRANSFORM shows large INTERIOR error on a smooth image;")
 print("   a resampling/fill difference shows near-zero interior and error only at the frame)")
+
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+#  interp_check — is asking TF for BICUBIC an improvement? (2026-08-14: no, ~60x worse)
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+def interp_check():
+    print("\n── would switching the geometric ops to TF BICUBIC move us toward timm? ──")
+    print("   timm's target for resnet50 is PIL-BICUBIC (resolve_data_config -> 'bicubic').")
+    rng2 = np.random.default_rng(1)
+    nat = np.clip(np.stack([127+50*np.sin(2*np.pi*xx/W)]*3,-1) + rng2.normal(0,12,(H,W,3)),
+                  0,255).astype(np.uint8)
+    for label, im in (("pure smooth", np.clip(np.stack([sm]*3,-1),0,255).astype(np.uint8)),
+                      ("smooth+noise", nat)):
+        Pi = Image.fromarray(im); Fi = (FILL,)*3
+        pb = np.array(Pi.rotate(21., resample=Image.BILINEAR, fillcolor=Fi)).astype(np.int32)
+        pc = np.array(Pi.rotate(21., resample=Image.BICUBIC,  fillcolor=Fi)).astype(np.int32)
+        def tfr(mode):
+            th=21.*np.pi/180.; cs,sn=np.cos(th),np.sin(th); Hf,Wf=float(H),float(W)
+            xo=((Wf-1.)-(cs*(Wf-1.)-sn*(Hf-1.)))/2.; yo=((Hf-1.)-(sn*(Wf-1.)+cs*(Hf-1.)))/2.
+            o=tf.raw_ops.ImageProjectiveTransformV3(
+                images=tf.expand_dims(tf.cast(im,tf.float32),0),
+                transforms=tf.constant([[cs,-sn,xo,sn,cs,yo,0.,0.]],dtype=tf.float32),
+                output_shape=tf.constant([H,W]),fill_value=float(FILL),
+                interpolation=mode,fill_mode='CONSTANT')
+            return np.array(tf.cast(tf.clip_by_value(o[0],0.,255.),tf.uint8)).astype(np.int32)
+        print(f"  {label:13} TF-BILINEAR→PIL-BICUBIC {np.abs(tfr('BILINEAR')-pc).mean():7.3f}"
+              f" | TF-BICUBIC→PIL-BICUBIC {np.abs(tfr('BICUBIC')-pc).mean():7.3f}"
+              f" | PIL-BILINEAR→PIL-BICUBIC {np.abs(pb-pc).mean():7.3f}")
+    print("  ▶ the last column is the GENUINE bilinear/bicubic gap. TF-BILINEAR already sits at it;")
+    print("    TF's BICUBIC is a third kernel that agrees with neither. Keep BILINEAR.")
+
+interp_check()

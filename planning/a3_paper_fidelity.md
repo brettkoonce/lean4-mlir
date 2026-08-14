@@ -280,7 +280,38 @@ augmentation PARTITION — *which* ops are on — and never by the ARGUMENT each
 partition was right the whole time. ▶ A gate on "is the feature enabled" is not a gate on "is the
 feature correct", and this repo now has one of each.
 
-⛔ **AND THE INTERPOLATION IS A THIRD DIFFERENCE, still open.** We always use BILINEAR for the
+### ✅ …and the interpolation, MEASURED 2026-08-14 — the answer is KEEP BILINEAR
+
+The plan was to flip the geometric ops to BICUBIC and eat a full re-run. **Measured, that makes
+fidelity ~60× worse.** Rotate 21°, our shim's exact call including its clip:
+
+| image | TF-BILINEAR → PIL-BICUBIC | TF-BICUBIC → PIL-BICUBIC | PIL-BILINEAR → PIL-BICUBIC |
+|---|---|---|---|
+| pure smooth | **0.56** | 32.15 | *0.39* |
+| smooth + noise | **2.53** | 29.47 | *2.41* |
+
+⭐⭐ **The right-hand column is the whole argument.** It is the GENUINE bilinear-vs-bicubic gap —
+PIL against itself, the most that switching interpolation could ever be worth. It is 0.39–2.41 of
+255. **Our TF-BILINEAR is already sitting at that floor** (0.56 / 2.53), i.e. as close to timm's
+bicubic as a correct bilinear implementation can get. There is nothing left to win.
+
+⚠⚠ And TF's BICUBIC is not the thing to win it with. `ImageProjectiveTransformV3` *accepts* a
+`BICUBIC` attr and genuinely computes something different — but that something agrees with neither
+PIL kernel, sitting ~29–32 from both. It is a third resampler. Asking for it would have moved us
+from 0.56 to 32.
+
+▶ **The general shape, and it is worth carrying:** "our X is bilinear, theirs is bicubic" sounds
+like a fidelity gap and is really a bound on one. Before paying for a change, measure what the
+change could possibly buy — here, the reference's own two kernels differ by less than our current
+error bar, so the gap was never the thing to fix. The two magnitude mappings above, which cost
+nothing to check, were worth 7 of 11 magnitudes.
+
+⚠ Still true and still not matched: we are BILINEAR where timm is BICUBIC. That is a real
+difference of ~0.4–2.4/255 on the geometric ops only, and it is now a MEASURED, BOUNDED one rather
+than an open question. Closing it properly would need a hand-written Catmull-Rom affine sampler in
+TF, not a flag.
+
+### (superseded) The interpolation as a third difference We always use BILINEAR for the
 geometric ops. timm resolves the resample mode from the MODEL's data config:
 `resolve_data_config` for resnet50 returns `interpolation='bicubic'`, and `transforms_factory` then
 sets `aa_params['interpolation'] = str_to_pil_interp('bicubic')` — so **timm's geometric
