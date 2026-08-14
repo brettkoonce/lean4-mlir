@@ -39,12 +39,12 @@ def main : IO Unit := do
     if got == want then IO.println s!"  ✓ {what}: {got}"; pure true
     else IO.println s!"  ✗ {what}: got {got}, want {want}"; pure false
 
-  -- ── the interface contract: 158 params × (θ, m, v) + the scalars + 104 stat slots ──
+  -- ── the interface contract: 233 params × (θ, m, v) + the scalars + 154 stat slots ──
   let nP := (mnv4ShapeList nClasses).length
   let nS := mnv4StatShapeList.length
-  if !(← chk "parameters" nP 158) then bad := bad + 1
-  if !(← chk "BN stat slots" nS 104) then bad := bad + 1
-  -- inputs = %x + 3·158 + lr/bc1/bc2 + 104 + %onehot ; outputs = 3·158 + 3 + 104
+  if !(← chk "parameters" nP 233) then bad := bad + 1
+  if !(← chk "BN stat slots" nS 154) then bad := bad + 1
+  -- inputs = %x + 3·233 + lr/bc1/bc2 + 154 + %onehot ; outputs = 3·233 + 3 + 154
   let hdr := (m.splitOn "func.func @").getD 1 ""
   let argSig := (hdr.splitOn ") -> (").getD 0 ""
   let nIn := (argSig.splitOn ": tensor").length - 1
@@ -84,7 +84,7 @@ def main : IO Unit := do
   -- the render carries mu AND var per layer, so halve it by taking every other entry
   let renderBnLayers := (renderBn.zipIdx.filterMap
     (fun (c, i) => if i % 2 == 0 then some c else none))
-  if !(← chk "spec bnChannels == render stat widths (52 layers)"
+  if !(← chk "spec bnChannels == render stat widths (77 layers)"
         (if specBn == renderBnLayers then 1 else 0) 1) then
     IO.println s!"    spec {specBn.length} entries vs render {renderBnLayers.length}"
     bad := bad + 1
@@ -97,8 +97,8 @@ def main : IO Unit := do
   if !(← chk "eval forward binds every stat slot (0 missing)" missing 0) then bad := bad + 1
 
   -- ── ⭐ THE ACTIVATION-PAIRING GATE: every activation is masked by its OWN backward ──
-  -- The forward has 36 relu + 1 swish (`mnv4-fwd-smoke` pins those). So the whole train step must
-  -- show 36 `maximum` (the relus) paired with 36 `select` (their `selectPosB` masks), and
+  -- The forward has 54 relu + 1 swish (`mnv4-fwd-smoke` pins those). So the whole train step must
+  -- show 54 `maximum` (the relus) paired with 54 `select` (their `selectPosB` masks), and
   -- `logistic` exactly twice — once forward in the swish, once in `swishBackB`.
   --
   -- ⚠ This is what catches masking the swish site with `selectPos`: that renders 37 selects and
@@ -106,7 +106,7 @@ def main : IO Unit := do
   -- cannot see it (it never looks at a backward) and neither can the arity checks above.
   let n (pat : String) : Nat := (lines.filter (fun l => (l.splitOn pat).length > 1)).length
   let nRelu := n "stablehlo.maximum"
-  if !(← chk "relu forwards" nRelu 36) then bad := bad + 1
+  if !(← chk "relu forwards" nRelu 54) then bad := bad + 1
   if !(← chk "selectPos masks (= one per relu)" (n "stablehlo.select") nRelu) then bad := bad + 1
   if !(← chk "logistic (swish fwd + swishBack)" (n "stablehlo.logistic") 2) then bad := bad + 1
 

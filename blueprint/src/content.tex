@@ -6599,27 +6599,32 @@ restores.
 
 Everything above in this side quest is the phase-2 Lean$\to$JAX trainer
 running the faithful Conv-Medium. The phase-4 peer exists as of this
-writing, and the first thing to say about it is what it is \emph{not}.
+writing, and it renders the same network.
 
-\textbf{It is Conv-S, and the numbers above are Conv-M.} The block table
-this book renders and proves against is
-MobileNetV4-Conv-Small, 4.1M parameters, the one
-\texttt{mobilenetv4Verified} trains on Imagenette. Conv-M is a different
-network at $\sim$9.7M, and it lives in \texttt{jax/} with no verified
-peer. The ImageNet spec is therefore Conv-S with a 1000-class head,
-built the way \S\ref{sec:mnv2_phase4} built MobileNetV2's and the way
-Chapter~\ref{chap:residual} built ResNet-50's: the trunk is copied
-unchanged from the Imagenette spec, a \texttt{\#guard} pins every
+It did not always. The block table this book rendered and proved against
+used to be MobileNetV4-Conv-Small at 4.1M parameters, so the ImageNet
+spec was Conv-S carrying a 1000-class head and the $75.48\%$ above was a
+different network's number. Both the verified spec and its \texttt{jax/}
+peer now carry the Conv-M table: 21 UIB blocks in place of 14, and a head
+that goes $256 \to 960 \to 1280$ in two convolutions in place of one. The
+spec is still built the way \S\ref{sec:mnv2_phase4} built MobileNetV2's
+and the way Chapter~\ref{chap:residual} built ResNet-50's. The trunk is
+copied unchanged from the Imagenette spec, a \texttt{\#guard} pins every
 parameter shape but the head against it, and the head moves
 $1280{\times}10 \to 1280{\times}1000$, taking the count from
-$4{,}124{,}426$ to $\mathbf{5{,}392{,}616}$. \textbf{So the $75.48\%$
-above is not this network's target and must not be read as one.} Conv-S
-has no published ImageNet number here at all, which is why the row below
-has no gap-to-reference column.
+$8{,}447{,}322$ to $\mathbf{9{,}715{,}512}$, which is the $\sim$9.7M
+Conv-M is quoted at.
+
+\textbf{So the $75.48\%$ above is now this network's target.} It is not
+this network's result. Nothing has been run on the verified path since
+the conversion, so the row below still has no measurement in it, and what
+blocks one is unchanged by the conversion: there is no data-parallel
+render, so the spec is single-device while every other ImageNet row in
+this book was measured at $4\times$.
 
 \begin{verbatim}
 def mnv4ImagenetVerified : VerifiedNetSpec where
-  name       := "MobileNetV4-Conv-S (ImageNet-1k)"
+  name       := "MobileNetV4-Conv-M (ImageNet-1k)"
   slug       := "mnv4in"
   nClasses   := 1000
   data       := .imagenet

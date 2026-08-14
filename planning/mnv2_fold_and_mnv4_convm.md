@@ -6,12 +6,13 @@
 and in both the cost is concentrated in one step you can measure in an hour before
 committing to the rest.
 
-Job 1 is **DONE** (2026-08-14). Job 2 is open, and independent of it.
+Both jobs are **DONE** (2026-08-14), source-side. Job 2 owes two GPU ties, tracked in
+`planning/mnv4_convm_ties_todo.md`.
 
 | job | what it closes | measured scope | risk sits in |
 |---|---|---|---|
 | **1. MNv2 fold** ✅ | the book's "representative scale" caveat, stated in ch6 §6.1 and contrasted in ch7 §7.1 | **611 lines**, landed | not where this doc said — see the post-mortem |
-| **2. MNv4 Conv-M** | the verified net is Conv-**S** while ch6 §6.5 prints Conv-**M**'s 75.48%/92.37% | two hand-written lists + a head + 4 `#guard`s | the two-conv head |
+| **2. MNv4 Conv-M** ✅ | the verified net was Conv-**S** while ch6 §6.5 prints Conv-**M**'s 75.48%/92.37% | **7 guards, 3 layer tables, a 2-conv head across 7 renderer sites** | the head was right; the JAX peer was the surprise |
 
 ---
 
@@ -180,7 +181,50 @@ Do not start with the chain. The chain is the part that is known to work.
 
 ---
 
-## Job 2 — convert the verified MobileNetV4 from Conv-S to Conv-M
+## Job 2 — convert the verified MobileNetV4 from Conv-S to Conv-M — ✅ DONE 2026-08-14
+
+Landed: `mobilenetv4Verified` and `mnv4ImagenetVerified` are Conv-M (233 param tensors,
+**8,447,322** at 10 classes / **9,715,512** at 1000, the ~9.7M Conv-M is quoted at), the renderer
+carries the 21-block table and the two-conv head, all six artifacts re-rendered, ch6 §6.5's
+mismatch note replaced. Both smokes, the writer audit, the drift guard and the axiom audit green.
+
+### ⚠⚠ What this doc got wrong about Job 2
+
+1. **"Four `#guard`s" is seven, and they are in three files.** The doc names the four in
+   `VerifiedNets.lean:1166–1177` and says `mnv4in`'s are relative so need no edit. But
+   `mnv4in` also carries an ABSOLUTE param-count guard (`== 5392616`), and the RENDERER carries
+   two more (`mnv4ShapeList.length == 158`, `mnv4StatShapeList.length == 104`). Then the two smoke
+   tests hard-code another eight counts between them. ▶ Do not trust a guard inventory taken by
+   reading one file.
+
+2. **⭐ The head was NOT the risk the doc predicted.** It said "if anything is going to fight, it
+   is here, not in the 7 extra blocks", and recommended doing it first. Doing it first was right,
+   but it did not fight: the seven renderer sites (signature, BN stat sig, forward record, forward
+   chain, backward chain, wgrad list, emit order) are each a mechanical mirror of the conv already
+   there, and it went green in one pass.
+
+3. **The real surprise: the ties reference a DIFFERENT JAX spec than you think.** There are two,
+   and only one was Conv-M. `jax/MainMobilenetV4Imagenet.lean` is faithful Conv-M (1000-class).
+   `jax/MainMobilenetV4.lean` is the 10-class demo and was Conv-S-SIZED **while being named
+   `"MobileNet V4-Medium"`**. `scripts/grad_tie.py` and `scripts/mnv4_forward_tie.py` both read
+   `generated_mobilenet_v4.py`, which comes from the SECOND one. So converting only the verified
+   side would have left phase 2's gate silently comparing two different networks. That file was
+   converted in the same commit, and `RESULTS.md`'s 84.58% retagged as the superseded Conv-S table.
+
+4. **`mnv4ZbWidths` needed two new entries** (320 = 160·2 and 512 = 256·2, from the expand-2 FFN
+   and ConvNeXt blocks Conv-S does not have). Not mentioned; `mnv4-fwd-smoke`'s unbound-`%zb`
+   check would have caught it.
+
+### ⭐ The cross-check worth reusing
+
+`jax/MainMobilenetV4.lean`'s `totalParams` reads **8,447,322** and `mobilenetv4Verified`'s
+`#guard` derives **8,447,322** from `VLayer.toSpecs`. Two independent implementations, same count,
+no GPU needed. That pins the block table and the head. It does NOT pin block ORDER or the
+backward's dispatch, which is what the ties in `planning/mnv4_convm_ties_todo.md` are still owed
+for. Same trick worked for `bnChannels`: derive the 77-entry list by `#eval`, construct it
+independently by hand, and compare.
+
+### The original scoping, kept for the record
 
 ### Why
 

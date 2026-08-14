@@ -34,7 +34,7 @@ ExtraDW puts a depthwise on *both* sides of the pointwise expand.
 (c*h*w)` have different INPUT types, so a stride-polymorphic block cannot typecheck — the same
 reason `MobileNetV2RenderB` splits `irFwdStridedB` from `irFwdSkipB`. The stride-2 case splits
 again by **which depthwise consumes the stride**, because that decides the spatial size the expand
-runs at. Read off the Conv-S table (`jax/MainMobilenetV4.lean`), which lands cleanly:
+runs at. Read off the Conv-M table (`jax/MainMobilenetV4.lean`), which lands cleanly:
 
 | | stride | `ic` vs `oc` | function |
 |---|---|---|---|
@@ -84,7 +84,7 @@ private def fusedSig (p : String) (ic oc expand k : Nat) : List (String × List 
   (if expand == 1 then [] else
      [(s!"%f{p}pW", [oc, mid, 1, 1]), (s!"%f{p}pg", [oc]), (s!"%f{p}pbt", [oc])])
 
-/-- **One row of the MobileNetV4-Conv-S block table.** `h` is the block's OUTPUT spatial size, so
+/-- **One row of the MobileNetV4-Conv-M block table.** `h` is the block's OUTPUT spatial size, so
     a `stride2` block reads its input at `2h`. -/
 structure UibSpec where
   /-- parameter-name prefix: `"1"` … `"14"`. -/
@@ -114,21 +114,28 @@ deriving Inhabited, DecidableEq
 def mnv4Blocks : List UibSpec :=
   [ ⟨"1",   48,  80, 4, 3, 5, 28, true⟩,   -- ExtraDW  56→28
     ⟨"2",   80,  80, 2, 3, 3, 28, false⟩,  -- ExtraDW  28
-    ⟨"3",   80, 160, 6, 0, 3, 14, true⟩,   -- IB       28→14
+    ⟨"3",   80, 160, 6, 3, 5, 14, true⟩,   -- ExtraDW  28→14
     ⟨"4",  160, 160, 4, 3, 3, 14, false⟩,  -- ExtraDW  14
-    ⟨"5",  160, 160, 4, 3, 5, 14, false⟩,  -- ExtraDW  14
-    ⟨"6",  160, 160, 4, 5, 0, 14, false⟩,  -- ConvNeXt 14
-    ⟨"7",  160, 160, 4, 0, 3, 14, false⟩,  -- IB       14
+    ⟨"5",  160, 160, 4, 3, 3, 14, false⟩,  -- ExtraDW  14
+    ⟨"6",  160, 160, 4, 3, 5, 14, false⟩,  -- ExtraDW  14
+    ⟨"7",  160, 160, 4, 3, 3, 14, false⟩,  -- ExtraDW  14
     ⟨"8",  160, 160, 4, 3, 0, 14, false⟩,  -- ConvNeXt 14
-    ⟨"9",  160, 160, 4, 0, 0, 14, false⟩,  -- FFN      14
-    ⟨"10", 160, 160, 4, 3, 3, 14, false⟩,  -- ExtraDW  14
+    ⟨"9",  160, 160, 2, 0, 0, 14, false⟩,  -- FFN      14
+    ⟨"10", 160, 160, 4, 3, 0, 14, false⟩,  -- ConvNeXt 14
     ⟨"11", 160, 256, 6, 5, 5,  7, true⟩,   -- ExtraDW  14→7
     ⟨"12", 256, 256, 4, 5, 5,  7, false⟩,  -- ExtraDW  7
-    ⟨"13", 256, 256, 4, 0, 3,  7, false⟩,  -- IB       7
-    ⟨"14", 256, 256, 4, 3, 0,  7, false⟩ ] -- ConvNeXt 7
+    ⟨"13", 256, 256, 4, 3, 5,  7, false⟩,  -- ExtraDW  7
+    ⟨"14", 256, 256, 4, 3, 5,  7, false⟩,  -- ExtraDW  7
+    ⟨"15", 256, 256, 4, 0, 0,  7, false⟩,  -- FFN      7
+    ⟨"16", 256, 256, 4, 3, 0,  7, false⟩,  -- ConvNeXt 7
+    ⟨"17", 256, 256, 2, 3, 5,  7, false⟩,  -- ExtraDW  7
+    ⟨"18", 256, 256, 4, 5, 5,  7, false⟩,  -- ExtraDW  7
+    ⟨"19", 256, 256, 4, 0, 0,  7, false⟩,  -- FFN      7
+    ⟨"20", 256, 256, 4, 0, 0,  7, false⟩,  -- FFN      7
+    ⟨"21", 256, 256, 2, 5, 0,  7, false⟩ ] -- ConvNeXt 7
 
-/-- **The MobileNetV4-Conv-S parameter inputs**, in func-arg order: stem (3), the fused stage, the
-    14 UIB blocks, the head conv, the classifier. Single source for the signature and the return
+/-- **The MobileNetV4-Conv-M parameter inputs**, in func-arg order: stem (3), the fused stage, the
+    21 UIB blocks, the TWO head convs, the classifier. Single source for the signature and the return
     order, the same role `r50ShapeList` plays for R50.
 
     ⚠ This list and `VLayer.toSpecs` are TWO HAND-WRITTEN READINGS of the same layout — the
@@ -138,7 +145,8 @@ def mnv4ShapeList (nClasses : Nat) : List (String × List Nat) :=
   [("%sW", [32, 3, 3, 3]), ("%sg", [32]), ("%sbt", [32])] ++
   fusedSig "0" 32 48 4 3 ++
   mnv4Blocks.flatMap (fun b => uibSig b.p b.ic b.oc b.expand b.preDWk b.postDWk) ++
-  [("%hW", [1280, 256, 1, 1]), ("%hg", [1280]), ("%hbt", [1280])] ++
+  [("%h1W", [960, 256, 1, 1]), ("%h1g", [960]), ("%h1bt", [960])] ++
+  [("%hW", [1280, 960, 1, 1]), ("%hg", [1280]), ("%hbt", [1280])] ++
   [("%Wd", [1280, nClasses]), ("%bd", [nClasses])]
 
 /-- The same list as MLIR types. Derived, so the shapes have one definition. -/
@@ -176,6 +184,7 @@ def mnv4StatShapeList : List (String × List Nat) :=
   bnStatSig4 "stn" 32 ++
   fusedStatSig "0" 32 48 4 ++
   mnv4Blocks.flatMap (fun b => uibStatSig b.p b.ic b.oc b.expand b.preDWk b.postDWk) ++
+  bnStatSig4 "h1n" 960 ++
   bnStatSig4 "hn" 1280
 
 /-- The stat slots as MLIR types. Derived, so the widths have one definition. -/
@@ -421,17 +430,20 @@ structure Mnv4FwdRec where
   f0 : UibFwdB          -- the fused stage
   blocks : List UibFwdB -- the 14 UIB blocks, in table order
   inputs : List String  -- each block's input SSA, same order
-  hc : String           -- head conv out (= head-BN input)
+  h1c : String          -- head conv 1 out (256→960)  (= its BN input)
+  h1n : String          -- head BN 1 out              (= its relu pre-activation)
+  h1r : String          -- head relu 1 out            (= head conv 2's input)
+  hc : String           -- head conv 2 out (960→1280) (= head-BN input)
   hn : String           -- head BN out   (= head-relu pre-activation)
   hr : String           -- head relu out
   gap : String          -- GAP out (= dense input)
   last : String         -- the last block's output (= head conv input)
 deriving Inhabited
 
-/-- **The MobileNetV4-Conv-S forward chain**, batch BN, at `N := B`, 224² → 10 classes.
+/-- **The MobileNetV4-Conv-M forward chain**, batch BN, at `N := B`, 224² → 10 classes.
 
-    Transcribed 1:1 from `jax/MainMobilenetV4.lean` — the Conv-S-sized demo that `RESULTS.md`'s
-    **84.58%** belongs to, NOT faithful Conv-M (~9.7M, no accuracy run). Spatial ladder:
+    Transcribed 1:1 from `jax/MainMobilenetV4.lean`, which is the faithful Conv-M table as of
+    2026-08-14 (`RESULTS.md`'s **84.58%** belongs to the SUPERSEDED Conv-S table). Spatial ladder:
 
     ```
       224 --stem s2--> 112 --fused s2--> 56 --uib s2--> 28 --uib s2--> 14 --uib s2--> 7 --GAP--> 1
@@ -488,16 +500,24 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     inputs := inputs ++ [cur]
     cur := r.o
 
-  -- ═══ head: 1×1 conv (256→1280) → batch BN → relu → GAP(7×7) → dense ═══
+  -- ═══ head, TWO convs (Conv-M's `cn_r1_k1_s1_c960` then `conv_head` to 1280):
+  --     1×1 (256→960) → BN → relu → 1×1 (960→1280) → BN → relu → GAP(7×7) → dense ═══
   let z7     : Vec (B*(256*7*7)) := fun _ => 0
-  let zHk    : Kernel4 1280 256 1 1 := fun _ _ _ _ => 0
+  let zH1k   : Kernel4 960 256 1 1 := fun _ _ _ _ => 0
+  let z960   : Vec 960 := fun _ => 0
+  let zH17   : Vec (B*(960*7*7)) := fun _ => 0
+  let zHk    : Kernel4 1280 960 1 1 := fun _ _ _ _ => 0
   let z1280  : Vec 1280 := fun _ => 0
   let zH7    : Vec (B*(1280*7*7)) := fun _ => 0
   let z1280b : Vec (B*1280) := fun _ => 0
   let zWd    : Mat 1280 nClasses := fun _ _ => 0
   let zNC    : Vec nClasses := fun _ => 0
+  let (cH1c, nH1c) ← pretty B (.batchOp (N := B)
+    (.conv (ic := 256) (oc := 960) (h := 7) (w := 7) "%h1W" "%zb960" zH1k z960) (.operand cur z7))
+  let (cH1n, nH1n) ← mnv4Bn B 960 7 mode epsStr "%h1g" "%h1bt" "h1n" nH1c
+  let (cH1r, nH1r) ← pretty B (.batchOp (N := B) (.relu (n := 960*7*7)) (.operand nH1n zH17))
   let (cHc, nHc) ← pretty B (.batchOp (N := B)
-    (.conv (ic := 256) (oc := 1280) (h := 7) (w := 7) "%hW" "%zb1280" zHk z1280) (.operand cur z7))
+    (.conv (ic := 960) (oc := 1280) (h := 7) (w := 7) "%hW" "%zb1280" zHk z1280) (.operand nH1r zH17))
   let (cHn, nHn) ← mnv4Bn B 1280 7 mode epsStr "%hg" "%hbt" "hn" nHc
   let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu (n := 1280*7*7)) (.operand nHn zH7))
   let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
@@ -505,18 +525,20 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
   let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
     (.operand nGap z1280b))
 
-  pure { code := cStc ++ cStn ++ cStr ++ f0.code ++ bcode ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+  pure { code := cStc ++ cStn ++ cStr ++ f0.code ++ bcode ++
+                 cH1c ++ cH1n ++ cH1r ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
          logits := nLog, stc := nStc, stn := nStn, str := nStr,
          f0 := f0, blocks := blocks, inputs := inputs,
+         h1c := nH1c, h1n := nH1n, h1r := nH1r,
          hc := nHc, hn := nHn, hr := nHr, gap := nGap, last := cur }
 
 /-- Every distinct channel width a bias-free conv in this net binds `%zb{c}` at: the stem, the fused
     stage's two convs, each block's pre-DW (`ic`), expand and post-DW (`mid`) and project (`oc`), and
     the head. Derived by hand and pinned by `mnv4-fwd-smoke`, which fails on an unbound `%zb`. -/
 def mnv4ZbWidths : List Nat :=
-  [32, 48, 80, 128, 160, 192, 256, 480, 640, 960, 1024, 1280]
+  [32, 48, 80, 128, 160, 192, 256, 320, 480, 512, 640, 960, 1024, 1280]
 
-/-- **`@mnv4_fwd`** — the MobileNetV4-Conv-S forward as one MLIR module.
+/-- **`@mnv4_fwd`** — the MobileNetV4-Conv-M forward as one MLIR module.
 
     `%x` plus `mnv4SigList`'s parameters in `VLayer.toSpecs` order, logits `[B, nClasses]`. Every
     conv is bias-free, so the proven conv ops' bias operands bind to the `%zb{c}` zero constants the
@@ -534,7 +556,7 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   let r := (mnv4FwdChainB B nClasses epsStr .train).run' 0
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── MobileNetV4-Conv-S forward: every line is pretty(verified AST node) ──\n" ++
+  "    // ── MobileNetV4-Conv-M forward: every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude false mnv4ZbWidths ++ r.code ++
   s!"    return {r.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -553,7 +575,7 @@ def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   let r := (mnv4FwdChainB B nClasses epsStr .eval).run' 0
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── MobileNetV4-Conv-S eval forward (running-stats BN): every line is pretty(AST node) ──\n" ++
+  "    // ── MobileNetV4-Conv-M eval forward (running-stats BN): every line is pretty(AST node) ──\n" ++
   zeroBiasPrelude false mnv4ZbWidths ++ r.code ++
   s!"    return {r.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -929,7 +951,7 @@ def mnv4AdamVariant (B replicas : Nat) : String :=
 -- ════════════════════════════════════════════════════════════════
 
 set_option maxRecDepth 4000000 in
-/-- **MobileNetV4-Conv-S AdamW train step, batch BN, rendered from the verified AST at `N := B`.**
+/-- **MobileNetV4-Conv-M AdamW train step, batch BN, rendered from the verified AST at `N := B`.**
 
     583 inputs (`%x`, 158 θ, 158 m, 158 v, `%lr`/`%bc1`/`%bc2`, 104 running-stat slots, `%onehot`)
     and 581 outputs (158 θ', 158 m', 158 v', `%loss`/`%bc1`/`%bc2`, 104 batch stats). Parameter
@@ -960,7 +982,11 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let z112  : Vec (B*(32*112*112)) := fun _ => 0
     let z112p : Vec (B*(32*(112*112))) := fun _ => 0
     let z7     : Vec (B*(256*7*7)) := fun _ => 0
-    let zHk    : Kernel4 1280 256 1 1 := fun _ _ _ _ => 0
+    let zH1k   : Kernel4 960 256 1 1 := fun _ _ _ _ => 0
+    let z960   : Vec 960 := fun _ => 0
+    let zH17   : Vec (B*(960*7*7)) := fun _ => 0
+    let zH17p  : Vec (B*(960*(7*7))) := fun _ => 0
+    let zHk    : Kernel4 1280 960 1 1 := fun _ _ _ _ => 0
     let z1280  : Vec 1280 := fun _ => 0
     let zH7    : Vec (B*(1280*7*7)) := fun _ => 0
     let zH7p   : Vec (B*(1280*(7*7))) := fun _ => 0
@@ -969,6 +995,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let zNCb   : Vec (B*(1*nClasses)) := fun _ => 0
     let zNCp   : Vec (B*nClasses) := fun _ => 0
     let nStc := fwd.stc; let nStn := fwd.stn
+    let nH1c := fwd.h1c; let nH1n := fwd.h1n
     let nHc := fwd.hc; let nHn := fwd.hn; let nGap := fwd.gap; let nLog := fwd.logits
     -- ═══ label-smoothed softmax-CE cotangent, COMPOSED from kit ops (α = 0.1, K = nClasses):
     --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. Every line is a verified node. ═══
@@ -979,7 +1006,8 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
     let (cD2,  nD2)  ← pretty B (.shiftB negAlphaKStr 0 (.operand nD1 zNCb))
     let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
-    -- ═══ head backward + the 5 head/dense gradients (bias-free conv ⇒ no `hb`) ═══
+    -- ═══ head backward + the 8 head/dense gradients (bias-free convs ⇒ no `hb`).
+    --     TWO conv-BN-relu stages now, unwound outermost-first: 960→1280, then 256→960. ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
       (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
     let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) nGap z1280b (.operand nDy zNCp))
@@ -989,17 +1017,29 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cDhm, nDhm) ← pretty B (.selectPosB nHn zH7 (.operand nDgp zH7))
     let (cDhn, nDhn) ← pretty B (.bnBatchBack (N := B) (oc := 1280) (h := 7) (w := 7)
       "%hg" nHc epsStr 0 z1280 zH7p (.operand nDhm zH7p))
-    let (cDhx, nDhx) ← pretty B (.convBackBatched (N := B) (ic := 256) (oc := 1280) (h := 7) (w := 7)
+    let (cDhx, nDhx) ← pretty B (.convBackBatched (N := B) (ic := 960) (oc := 1280) (h := 7) (w := 7)
       "%hW" zHk z1280 (.operand nDhn zH7))
-    let (cHW, nHW) ← pretty B (.convWeightGradB (N := B) (ic := 256) (oc := 1280) (h := 7) (w := 7)
-      fwd.last z1280 z7 zHk (.operand nDhn zH7))
+    let (cHW, nHW) ← pretty B (.convWeightGradB (N := B) (ic := 960) (oc := 1280) (h := 7) (w := 7)
+      fwd.h1r z1280 zH17 zHk (.operand nDhn zH7))
     let (cHg, nHg) ← pretty B (.bnGammaGradB (N := B) (oc := 1280) (h := 7) (w := 7)
       nHc epsStr 0 zH7p (.operand nDhm zH7p))
     let (cHt, nHt) ← pretty B (.bnBetaGradB (N := B) (oc := 1280) (h := 7) (w := 7)
       (.operand nDhm zH7p))
+    -- the first head conv's stage: relu mask at `h1n`, BN back, then input/weight grads at 256→960
+    let (cDh1m, nDh1m) ← pretty B (.selectPosB nH1n zH17 (.operand nDhx zH17))
+    let (cDh1n, nDh1n) ← pretty B (.bnBatchBack (N := B) (oc := 960) (h := 7) (w := 7)
+      "%h1g" nH1c epsStr 0 z960 zH17p (.operand nDh1m zH17p))
+    let (cDh1x, nDh1x) ← pretty B (.convBackBatched (N := B) (ic := 256) (oc := 960) (h := 7) (w := 7)
+      "%h1W" zH1k z960 (.operand nDh1n zH17))
+    let (cH1W, nH1W) ← pretty B (.convWeightGradB (N := B) (ic := 256) (oc := 960) (h := 7) (w := 7)
+      fwd.last z960 z7 zH1k (.operand nDh1n zH17))
+    let (cH1g, nH1g) ← pretty B (.bnGammaGradB (N := B) (oc := 960) (h := 7) (w := 7)
+      nH1c epsStr 0 zH17p (.operand nDh1m zH17p))
+    let (cH1t, nH1t) ← pretty B (.bnBetaGradB (N := B) (oc := 960) (h := 7) (w := 7)
+      (.operand nDh1m zH17p))
     -- ═══ backward: ONE fold over `mnv4Blocks` reversed, dispatched by the same row the
     --     forward used, so a family can never be differentiated as a different family ═══
-    let mut dy := nDhx
+    let mut dy := nDh1x
     let mut gcode := ""
     let mut blockPs : List (List PGradV4) := []
     for (b, f, xin) in (mnv4Blocks.zip (fwd.blocks.zip fwd.inputs)).reverse.map
@@ -1056,12 +1096,14 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     for (b, f) in mnv4Blocks.zip fwd.blocks do
       let (c, n) ← uibStats b f
       qcode := qcode ++ c; qnames := qnames ++ n
+    let (cQh1, qh1) ← bnStat 960 7 nH1c
     let (cQh, qh) ← bnStat 1280 7 nHc
     -- ═══ the 158 parameter gradients in func-arg order ═══
     let stemPs : List PGradV4 :=
       [⟨"sW", nsW, [32,3,3,3]⟩, ⟨"sg", nsg, [32]⟩, ⟨"sbt", nst, [32]⟩]
     let headPs : List PGradV4 :=
-      [⟨"hW", nHW, [1280,256,1,1]⟩, ⟨"hg", nHg, [1280]⟩, ⟨"hbt", nHt, [1280]⟩,
+      [⟨"h1W", nH1W, [960,256,1,1]⟩, ⟨"h1g", nH1g, [960]⟩, ⟨"h1bt", nH1t, [960]⟩,
+       ⟨"hW", nHW, [1280,960,1,1]⟩, ⟨"hg", nHg, [1280]⟩, ⟨"hbt", nHt, [1280]⟩,
        ⟨"Wd", nWdg, [1280, nClasses]⟩, ⟨"bd", nbdg, [nClasses]⟩]
     let allPs : List PGradV4 := stemPs ++ g0.ps ++ blockPs.flatten ++ headPs
     -- ═══ AdamW: one proven triple per parameter ═══
@@ -1076,8 +1118,8 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       mNames := mNames ++ [nM]
       vNames := vNames ++ [nV]
     -- ═══ assemble ═══
-    let statCode := cQs ++ cQ0c ++ cQ0p ++ qcode ++ cQh
-    let statNames : List String := qs ++ q0c ++ q0p ++ qnames ++ qh
+    let statCode := cQs ++ cQ0c ++ cQ0p ++ qcode ++ cQh1 ++ cQh
+    let statNames : List String := qs ++ q0c ++ q0p ++ qnames ++ qh1 ++ qh
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
     -- `pretty` of an AST node and says so in the emitted text — the same carve-out
     -- `resnet34`/`mobilenetv2`'s `%loss` takes. The SMOOTHED cross-entropy, matching the
@@ -1102,6 +1144,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let body := fwd.code ++
       cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
       cDgi ++ cWdg ++ cbdg ++ cDgp ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHg ++ cHt ++
+      cDh1m ++ cDh1n ++ cDh1x ++ cH1W ++ cH1g ++ cH1t ++
       gcode ++ g0.code ++ cDsm ++ cDsn ++ csW ++ csg ++ cst ++ statCode
     let pTypes : List String := allPs.map (fun g => ty g.ds)
     let statTypes : List String := mnv4StatSigList.map (·.2)
@@ -1110,9 +1153,9 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
     pure <|
       (if replicas ≤ 1 then
-        "    // ── MobileNetV4-Conv-S batch-BN AdamW train step: every line is pretty(AST node) ──\n"
+        "    // ── MobileNetV4-Conv-M batch-BN AdamW train step: every line is pretty(AST node) ──\n"
        else
-        s!"    // ── MobileNetV4-Conv-S batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        s!"    // ── MobileNetV4-Conv-M batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
         "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT, emitted text outside\n" ++
         "    // the faithfulness theorems. NOTE this does NOT equal a single-device step at the\n" ++
@@ -1144,11 +1187,11 @@ end Proofs.StableHLO
 -- § The layout contract, checked at elaboration
 -- ════════════════════════════════════════════════════════════════
 
--- 158 parameters and 104 BN stat slots ⇒ the train step is
--- 1 + 3×158 + 3 + 104 + 1 = 583 inputs and 3×158 + 3 + 104 = 581 outputs, and the eval forward is
--- 1 + 158 + 104 = 263 inputs. `mnv4-fwd-smoke` ties the 158 to `VLayer.toSpecs` shape-for-shape.
-#guard (Proofs.StableHLO.mnv4ShapeList 10).length == 158
-#guard Proofs.StableHLO.mnv4StatShapeList.length == 104
+-- 233 parameters and 154 BN stat slots (= 2 × 77 BN layers) ⇒ the train step is
+-- 1 + 3×233 + 3 + 154 + 1 = 858 inputs and 3×233 + 3 + 154 = 856 outputs, and the eval forward is
+-- 1 + 233 + 154 = 388 inputs. `mnv4-fwd-smoke` ties the 233 to `VLayer.toSpecs` shape-for-shape.
+#guard (Proofs.StableHLO.mnv4ShapeList 10).length == 233
+#guard Proofs.StableHLO.mnv4StatShapeList.length == 154
 
 -- ⭐⭐ **THE STAT-ALIGNMENT GATE, and it is the strong one.** Every conv in this net is
 -- BN-followed, so the BN stat slots must be, in order, two per conv weight at that conv's OUTPUT

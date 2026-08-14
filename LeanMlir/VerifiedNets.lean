@@ -1102,17 +1102,22 @@ def vitImagenetVerified : VerifiedNetSpec where
 #guard vitImagenetVerified.toSpecs.pop.pop == vitVerified.toSpecs.pop.pop
 #guard vitImagenetVerified.toSpecs.back! == (#[1000], 2)
 
-/-! ### MobileNetV4-Conv-S — the Universal Inverted Bottleneck (`planning/mnv4_verified.md`) -/
+/-! ### MobileNetV4-Conv-M — the Universal Inverted Bottleneck (`planning/mnv4_verified.md`) -/
 
-/-- **MobileNetV4-Conv-S on Imagenette 224²** — the sixth Imagenette net, and the one that makes a
+/-- **MobileNetV4-Conv-M on Imagenette 224²** — the sixth Imagenette net, and the one that makes a
     point the others cannot: its whole trunk is **one parameterised block**. `uib`'s `k = 0` omits a
     depthwise, so the same constructor renders all four MNv4 families — ExtraDW (both DWs), IB /
     MBConv (post only), ConvNeXt-like (pre only) and FFN (neither) — and the fused stage is the only
     other block form in the net.
 
-    ⚠ **This is the Conv-S-SIZED demo (4.1M), not faithful Conv-M (~9.7M).** `RESULTS.md`'s
-    **84.58%** belongs to this block table; Conv-M has no accuracy run at all, so chasing it here
-    would mean having no target (`planning/mnv4_verified.md` §1).
+    ⚠ **Converted Conv-S → Conv-M on 2026-08-14** (14 UIB blocks → 21, one 1×1 head conv → two,
+    4.1M → 8.4M at 10 classes), so that `mnv4ImagenetVerified` below can target the Conv-M number
+    ch6 §6.5 prints. `RESULTS.md`'s **84.58%** belongs to the SUPERSEDED Conv-S table and is tagged
+    there as such; this spec has no Imagenette accuracy run of its own yet.
+
+    ⚠ The two specs move together and cannot diverge: `mnv4ImagenetVerified` takes its
+    `bnChannels` from this one and `#guard`s its `toSpecs` against it. `jax/MainMobilenetV4.lean`
+    moved in the same commit, because the ties read ITS generated output.
 
     ⚠⚠ **A pre/post-DW swap is invisible to everything in this file.** Same `k`, same channels ⇒
     same `toSpecs`, so the `#guard`s below pass on a spec that swaps them, and at stride 1 both
@@ -1121,7 +1126,7 @@ def vitImagenetVerified : VerifiedNetSpec where
     only thing that pins the BACKWARD's dispatch is `scripts/grad_tie.py --net mnv4`. Same invisibility
     class as R50's stride-on-the-3×3. -/
 def mobilenetv4Verified : VerifiedNetSpec where
-  name     := "MobileNetV4-Conv-S"
+  name     := "MobileNetV4-Conv-M"
   slug     := "mnv4"
   inC      := 3
   imageH   := 224
@@ -1133,41 +1138,53 @@ def mobilenetv4Verified : VerifiedNetSpec where
     .fusedMbConvNB 32 48 4 3 2,         -- fused stage, 112→56 — ⚠ SWISH, not relu (§ Phase 1b)
     .uib  48  80 4 2 3 5,               -- ExtraDW  56→28
     .uib  80  80 2 1 3 3,               -- ExtraDW  28
-    .uib  80 160 6 2 0 3,               -- IB       28→14
+    .uib  80 160 6 2 3 5,               -- ExtraDW  28→14
+    .uib 160 160 4 1 3 3,               -- ExtraDW  14
     .uib 160 160 4 1 3 3,               -- ExtraDW  14
     .uib 160 160 4 1 3 5,               -- ExtraDW  14
-    .uib 160 160 4 1 5 0,               -- ConvNeXt 14
-    .uib 160 160 4 1 0 3,               -- IB       14
-    .uib 160 160 4 1 3 0,               -- ConvNeXt 14
-    .uib 160 160 4 1 0 0,               -- FFN      14
     .uib 160 160 4 1 3 3,               -- ExtraDW  14
+    .uib 160 160 4 1 3 0,               -- ConvNeXt 14
+    .uib 160 160 2 1 0 0,               -- FFN      14
+    .uib 160 160 4 1 3 0,               -- ConvNeXt 14
     .uib 160 256 6 2 5 5,               -- ExtraDW  14→7
     .uib 256 256 4 1 5 5,               -- ExtraDW  7
-    .uib 256 256 4 1 0 3,               -- IB       7
+    .uib 256 256 4 1 3 5,               -- ExtraDW  7
+    .uib 256 256 4 1 3 5,               -- ExtraDW  7
+    .uib 256 256 4 1 0 0,               -- FFN      7
     .uib 256 256 4 1 3 0,               -- ConvNeXt 7
-    .convBnNB 256 1280 1 1,             -- head
+    .uib 256 256 2 1 3 5,               -- ExtraDW  7
+    .uib 256 256 4 1 5 5,               -- ExtraDW  7
+    .uib 256 256 4 1 0 0,               -- FFN      7
+    .uib 256 256 4 1 0 0,               -- FFN      7
+    .uib 256 256 2 1 5 0,               -- ConvNeXt 7
+    .convBnNB 256 960 1 1,              -- head conv 1 (Conv-M `cn_r1_k1_s1_c960`)
+    .convBnNB 960 1280 1 1,             -- head conv 2 (`conv_head`, num_features)
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "MobileNetV4-Conv-S on Imagenette 224² (stem-s2 → fused MBConv → 14 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv-BN-relu → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
+  blurb := "MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → two head convs 256→960→1280 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 52 BN layers in forward order: stem; the fused stage's k×k-BN and project-BN; then per UIB
   -- block pre-DW-BN (if preDWk≠0) / expand-BN / post-DW-BN (if postDWk≠0) / project-BN; head.
   -- ⚠ The `if`s are the `k = 0` family dispatch, so this list's LENGTH varies per block (2, 3 or 4)
   -- — which is exactly why it is `#guard`ed against `toSpecs` below rather than eyeballed.
   bnChannels := #[32,
     128, 48,
-    48, 192, 192, 80,        80, 160, 160, 80,        480, 480, 160,
-    160, 640, 640, 160,      160, 640, 640, 160,      160, 640, 160,
-    640, 640, 160,           160, 640, 160,           640, 160,
-    160, 640, 640, 160,
-    160, 960, 960, 256,      256, 1024, 1024, 256,    1024, 1024, 256,
-    256, 1024, 256,
-    1280]
+    48, 192, 192, 80,        80, 160, 160, 80,        80, 480, 480, 160,
+    160, 640, 640, 160,      160, 640, 640, 160,      160, 640, 640, 160,
+    160, 640, 640, 160,      160, 640, 160,           320, 160,
+    160, 640, 160,
+    160, 960, 960, 256,      256, 1024, 1024, 256,    256, 1024, 1024, 256,
+    256, 1024, 1024, 256,    1024, 256,               256, 1024, 256,
+    256, 512, 512, 256,      256, 1024, 1024, 256,    1024, 256,
+    1024, 256,               256, 512, 256,
+    960, 1280]
 
--- 158 parameter tensors — the same count `mnv4-fwd-smoke` ties to `mnv4ShapeList` shape-for-shape,
--- and 4,124,426 parameters, which is `RESULTS.md`'s 4.1M.
-#guard mobilenetv4Verified.toSpecs.size == 158
+-- 233 parameter tensors — the same count `mnv4-fwd-smoke` ties to `mnv4ShapeList` shape-for-shape,
+-- and 8,447,322 parameters. ⭐ `jax/MainMobilenetV4.lean`'s `totalParams` reads 8447322 too, from
+-- a wholly independent implementation, which is the cross-check that the Conv-M transcription is
+-- the same net on both sides.
+#guard mobilenetv4Verified.toSpecs.size == 233
 #guard (mobilenetv4Verified.toSpecs.foldl
-          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 4124426
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 8447322
 -- ⭐ Every conv in this net is BN-followed, so the BN channel list must be, in forward order, the
 -- OUTPUT channel count of every conv weight — which is the kernel's first dimension for a regular
 -- conv `[oc,ic,kH,kW]` and for a depthwise `[c,1,k,k]` alike. This pins `bnChannels`'s length,
@@ -1176,22 +1193,25 @@ def mobilenetv4Verified : VerifiedNetSpec where
 -- still match and the wrong layer's statistics simply flow into the wrong `@mnv4_fwd_eval` slot.
 #guard mobilenetv4Verified.bnChannels ==
   (mobilenetv4Verified.toSpecs.filterMap (fun (d, _) => if d.size == 4 then some d[0]! else none))
-#guard mobilenetv4Verified.bnChannels.size == 52
+#guard mobilenetv4Verified.bnChannels.size == 77
 
-/-- **MobileNetV4-Conv-S on full 1000-class ImageNet** — the sixth scale-tier spec, built the way
+/-- **MobileNetV4-Conv-M on full 1000-class ImageNet** — the sixth scale-tier spec, built the way
     `resnet50ImagenetVerified` was: identical trunk to `mobilenetv4Verified`, only the head moves
     (1280→1000).
 
-    ⚠⚠ **THIS IS Conv-S, AND THE CHAPTER'S 75.51% IS Conv-M.** The two are different networks
-    (4.1M vs ~9.7M, and a different block table). `jax/MainMobilenetV4Imagenet.lean` is the faithful
-    Conv-M and owns that number; this spec is the 1000-class head on the block table the repo
-    actually renders and `#guard`s. ▶ **Never quote the Conv-M ImageNet number against a run of
-    this spec.** Conv-S has no published ImageNet target of its own here, which is exactly why the
-    blueprint's phase-4 row is a `TBD` rather than a gap-to-reference.
+    ⭐ **This IS Conv-M as of 2026-08-14, so it is now comparable to the chapter's 75.51%.** That
+    number comes from the 100-epoch JAX reference behind `jax/MainMobilenetV4Imagenet.lean` (the run
+    lives OUTSIDE the repo, at `/home/skoonce/mnv4_convm_100ep`), and this spec is the 1000-class
+    head on the same block table. `#guard`ed at 9,715,512 parameters, the ~9.7M Conv-M is quoted at.
+
+    ⚠ Comparable is not measured. The blueprint's phase-4 row stays `TBD` until this spec is
+    actually run, and the blocking item for a printable row is unchanged by the conversion: there is
+    no data-parallel render, so it is single-device and every other ImageNet row was measured at 4×.
 
     ⚠ A batch-BN net, so it needs `@mnv4in_fwd_eval` with frozen running stats. Same
     pre/post-DW-swap invisibility as its Imagenette peer: `toSpecs` cannot see the order, so the
-    forward tie is what pins it. -/
+    forward tie is what pins it — and that tie has NOT been re-run since the Conv-M conversion
+    (`planning/mnv4_convm_ties_todo.md`). -/
 def mnv4ImagenetVerified : VerifiedNetSpec where
   name     := "MobileNetV4-Conv-S (ImageNet-1k)"
   slug     := "mnv4in"
@@ -1208,21 +1228,29 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
   layers   := [
     .convBnNB 3 32 3 2,
     .fusedMbConvNB 32 48 4 3 2,
-    .uib  48  80 4 2 3 5,
+.uib  48  80 4 2 3 5,
     .uib  80  80 2 1 3 3,
-    .uib  80 160 6 2 0 3,
+    .uib  80 160 6 2 3 5,
+    .uib 160 160 4 1 3 3,
     .uib 160 160 4 1 3 3,
     .uib 160 160 4 1 3 5,
-    .uib 160 160 4 1 5 0,
-    .uib 160 160 4 1 0 3,
-    .uib 160 160 4 1 3 0,
-    .uib 160 160 4 1 0 0,
     .uib 160 160 4 1 3 3,
+    .uib 160 160 4 1 3 0,
+    .uib 160 160 2 1 0 0,
+    .uib 160 160 4 1 3 0,
     .uib 160 256 6 2 5 5,
     .uib 256 256 4 1 5 5,
-    .uib 256 256 4 1 0 3,
+    .uib 256 256 4 1 3 5,
+    .uib 256 256 4 1 3 5,
+    .uib 256 256 4 1 0 0,
     .uib 256 256 4 1 3 0,
-    .convBnNB 256 1280 1 1,
+    .uib 256 256 2 1 3 5,
+    .uib 256 256 4 1 5 5,
+    .uib 256 256 4 1 0 0,
+    .uib 256 256 4 1 0 0,
+    .uib 256 256 2 1 5 0,
+    .convBnNB 256 960 1 1,
+    .convBnNB 960 1280 1 1,
     .globalAvgPool,
     .dense 1280 1000 ]
   blurb := "MobileNetV4-Conv-S on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the MNv4 reference augmentation"
@@ -1235,11 +1263,11 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
 #guard mnv4ImagenetVerified.toSpecs.pop.pop == mobilenetv4Verified.toSpecs.pop.pop
 #guard mnv4ImagenetVerified.toSpecs.back! == (#[1000], 2)
 #guard mnv4ImagenetVerified.bnChannels == mobilenetv4Verified.bnChannels
--- 4,124,426 − (1280·10 + 10) + (1280·1000 + 1000). The head is the only term that moves, so this
+-- 8,447,322 − (1280·10 + 10) + (1280·1000 + 1000). The head is the only term that moves, so this
 -- is the Imagenette count with its head swapped and nothing else — which is the whole claim above,
--- stated as arithmetic rather than as a comment.
+-- stated as arithmetic rather than as a comment. 9,715,512 is the ~9.7M Conv-M is quoted at.
 #guard (mnv4ImagenetVerified.toSpecs.foldl
-          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 5392616
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 9715512
 -- The same stat-alignment gate the Imagenette spec carries, re-run against the 1000-class layout.
 #guard mnv4ImagenetVerified.bnChannels ==
   (mnv4ImagenetVerified.toSpecs.filterMap (fun (d, _) => if d.size == 4 then some d[0]! else none))

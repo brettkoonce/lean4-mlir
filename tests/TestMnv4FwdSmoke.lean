@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 
 /-! # MNv4 forward-chain structural smoke (`planning/mnv4_verified.md` phase 3)
 
-Renders `mnv4FwdChainB` and counts the ops it emitted against what the Conv-S block table
+Renders `mnv4FwdChainB` and counts the ops it emitted against what the Conv-M block table
 says it should have. This catches a **family dispatch** error — an FFN block that emitted
 depthwises, or a ConvNeXt-like block that emitted two — because those change the counts.
 
@@ -15,19 +15,24 @@ forgotten.
 
 open Proofs.StableHLO
 
-/-- Expected `feature_group_count = c` multiset over the 20 depthwise convs, derived by hand from
-    the Conv-S table: a pre-DW groups at `ic`, a post-DW at `mid = ic * expand`. This is the strong
-    half of the gate — it pins each depthwise to a BLOCK, where a bare total would not. -/
+/-- Expected `feature_group_count = c` multiset over the 30 depthwise convs, derived by hand from
+    the Conv-M table: a pre-DW groups at `ic`, a post-DW at `mid = ic * expand`. This is the strong
+    half of the gate — it pins each depthwise to a BLOCK, where a bare total would not.
+
+    ⚠ `dwTot` below sums only the widths NAMED here, so a width missing from this list is invisible
+    to the total rather than a failure. That is how the Conv-S → Conv-M swap first read as
+    "29 of 30": every listed width matched and b17's 512 simply was not being counted. -/
 def expectedDwGroups : List (Nat × Nat) :=
   [ (48, 1),    -- b1 pre  (ic 48)
     (192, 1),   -- b1 post (48*4)
-    (80, 1),    -- b2 pre
-    (160, 7),   -- b2 post (80*2) + pre of b4,b5,b6,b8,b10,b11
+    (80, 2),    -- b2,b3 pre
+    (160, 8),   -- b2 post (80*2) + pre of b4,b5,b6,b7,b8,b10,b11
     (480, 1),   -- b3 post (80*6)
-    (640, 4),   -- post of b4,b5,b7,b10 (160*4)
+    (640, 4),   -- post of b4,b5,b6,b7 (160*4)
     (960, 1),   -- b11 post (160*6)
-    (256, 2),   -- b12,b14 pre
-    (1024, 2) ] -- b12,b13 post (256*4)
+    (256, 7),   -- pre of b12,b13,b14,b16,b17,b18,b21
+    (512, 1),   -- b17 post (256*2)
+    (1024, 4) ] -- post of b12,b13,b14,b18 (256*4)
 
 def main : IO Unit := do
   let fwd := (mnv4FwdChainB 2 10 "1.0e-05").run' 0
@@ -51,12 +56,12 @@ def main : IO Unit := do
   let chk (what : String) (got want : Nat) : IO Bool := do
     if got == want then IO.println s!"  ✓ {what}: {got}"; pure true
     else IO.println s!"  ✗ {what}: got {got}, want {want}"; pure false
-  if !(← chk "regular convs (fgc = 1)" (grp 1) 32) then bad := bad + 1
+  if !(← chk "regular convs (fgc = 1)" (grp 1) 47) then bad := bad + 1
   if !(← chk "swish (fused stage only)" (n "stablehlo.logistic") 1) then bad := bad + 1
-  if !(← chk "relu" (n "stablehlo.maximum") 36) then bad := bad + 1
+  if !(← chk "relu" (n "stablehlo.maximum") 54) then bad := bad + 1
   -- (No skip-add count: `addVB` emits a bare `stablehlo.add`, indistinguishable from the many
   -- adds inside each expanded batch-BN. 273 of them, so the check would be noise, not a gate.)
-  if !(← chk "total convs" fgcs.length 52) then bad := bad + 1
+  if !(← chk "total convs" fgcs.length 77) then bad := bad + 1
   -- Per-block depthwise widths: the strong check.
   let mut dwTot := 0
   for (c, want) in expectedDwGroups do
@@ -64,7 +69,7 @@ def main : IO Unit := do
     dwTot := dwTot + got
     if got != want then
       IO.println s!"  ✗ depthwise @ groups={c}: got {got}, want {want}"; bad := bad + 1
-  if !(← chk "depthwise total" dwTot 20) then bad := bad + 1
+  if !(← chk "depthwise total" dwTot 30) then bad := bad + 1
 
   -- ── the module wrapper: self-containment and the layout tie ──
   let m := mnv4FwdFaithfulV 2 10 "1.0e-05"
@@ -108,4 +113,4 @@ def main : IO Unit := do
   if bad != 0 then
     IO.eprintln s!"MNV4 FORWARD SMOKE FAILED ({bad} mismatches)"
     IO.Process.exit 1
-  IO.println "  ✓ mnv4 forward chain: op counts and per-block depthwise widths match the Conv-S table"
+  IO.println "  ✓ mnv4 forward chain: op counts and per-block depthwise widths match the Conv-M table"

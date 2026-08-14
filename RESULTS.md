@@ -19,7 +19,7 @@ Hardware: AMD Radeon 7900 XTX (gfx1100) via ROCm 7.2 / IREE.
 | EfficientNet-B0 | 7.2M | **87.58%** | MBConv with swish + sigmoid SE |
 | MobileNetV2 | 2.2M | **87.09%** | depthwise separable + inverted residual |
 | MobileNetV3-Large | 3.0M | **86.48%** | exact h-swish + h-sigmoid SE |
-| MobileNetV4-Medium | 4.1M | **84.58%** | Universal Inverted Bottleneck (15 blocks, 4 variants from 1 primitive) |
+| MobileNetV4-Conv-S | 4.1M | **84.58%** | Universal Inverted Bottleneck (14 blocks, 4 variants from 1 primitive) |
 | ViT-Tiny | 5.5M | **71.70%** | patch embed + 12 transformer blocks (data-hungry) |
 
 ## MNIST (10 classes, 28×28 grayscale)
@@ -418,12 +418,20 @@ GELU. 5-epoch warmup. Imagenette is too small for ViT to really shine
 | 70 | 71.75% |
 | 80 | **71.70%** |
 
-### MobileNetV4-Medium
+### MobileNetV4-Conv-S
 
-15 Universal Inverted Bottleneck (UIB) blocks expressing all four
+14 Universal Inverted Bottleneck (UIB) blocks expressing all four
 block types (ExtraDW, IB / standard MBConv, ConvNeXt, FFN) from a
 single parameterized primitive. The "stop adding new block types"
 philosophy in action.
+
+⚠ **This run is the Conv-S-sized table, and the spec it ran has since been replaced.** It was
+labelled "MobileNetV4-Medium" here and in `jax/MainMobilenetV4.lean`, but at 4.1M and 14 blocks
+it was Conv-S-sized, not Conv-M. On 2026-08-14 both that spec and its verified peer
+`mobilenetv4Verified` were converted to the real Conv-M table (21 blocks, two head convs, 8.4M at
+10 classes) so the ImageNet spec could target the Conv-M number ch6 §6.5 prints. The number below
+is kept because it was really measured; it just no longer describes the spec in the file, and
+Conv-M has no Imagenette run of its own yet.
 
 | Epoch | Val acc |
 |---|---|
