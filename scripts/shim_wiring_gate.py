@@ -39,6 +39,32 @@ BUILD = os.path.join(ROOT, "jax", ".lake", "build")
 #    by reading it, not by fitting it).
 #    ⚠ The 4th column is the RECIPE the verified net ports, added 2026-08-06. It is "default" for
 #    every net that existed before, which is what this file hardcoded — see `read_recipe`.
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+#  SIZE VARIANTS — verified nets that DELIBERATELY share a base net's shim (added 2026-08-14)
+#
+#  ⚠⚠ THIS GATE WENT RED WHEN ViT-S LANDED AND NOBODY NOTICED, because `NETS` is a hand-list and
+#  gate 0 asserted `len(imagenet_slugs) == len(NETS)`. b9ea36f took the count 8 → 10 and fc0a492
+#  took it 10 → 12; the gate has been failing since, and it is not run by proofs.yml.
+#
+#  ⭐ But the fix is NOT to bump a number. `vitsin`/`vitbin`/`convnextsin`/`convnextbin` are the
+#  SAME architecture family at a different width or depth, and neither DeiT nor ConvNeXt changes
+#  the DATA pipeline across model sizes — so sharing the base net's shim is the correct wiring, and
+#  gate 0's old "all resolve to DISTINCT shims" invariant is simply the wrong property once size
+#  variants exist. It is replaced below by something stronger: the BASE nets must still be
+#  pairwise distinct, AND each variant must name EXACTLY its declared base's shim. A copy-paste
+#  that pointed ConvNeXt-S at ViT's shim was caught by distinctness before and is caught by this
+#  now; a copy-paste that points it at ConvNeXt-T's is correct and was rejected before.
+#
+#  ⚠ The size that matters here is the DATA size, not the parameter count: a variant that changed
+#  train resolution or augmentation would need its own row in NETS, not an entry here. That is why
+#  `resnet50in160` is a full NETS row (recipe `short`, trainRes 160) and not a variant.
+SIZE_VARIANTS = {
+    "vitsin":      "vitin",        # ViT-S: DeiT applies one recipe across Ti/S/B
+    "vitbin":      "vitin",        # ViT-B: same
+    "convnextsin": "convnextin",   # ConvNeXt-S: paper varies stochastic depth, not the pipeline
+    "convnextbin": "convnextin",   # ConvNeXt-B: same
+}
+
 NETS = [
     # verified slug, the jax reference's Main file,          the reference name in its banner, recipe
     ("resnet34in", "MainResnetImagenet.lean",        "ResNet-34 (ImageNet)",         "default"),
@@ -204,20 +230,32 @@ def shim_mix_default(path):
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 #  Gate 0 — the wiring is a bijection
 # ──────────────────────────────────────────────────────────────────────────────────────────────
-print("── gate 0: every .imagenet net names its OWN shim, all distinct, all on disk ──")
+print("── gate 0: every .imagenet net names a shim — base nets distinct, size variants share their base ──")
 wiring, imagenet_slugs = read_shim_scripts()
-check(len(imagenet_slugs) == len(NETS),
-      f"{len(NETS)} .imagenet nets in VerifiedNets.lean",
-      f"found {len(imagenet_slugs)}: {imagenet_slugs}")
+expected_slugs = {s for s, _, _, _ in NETS} | set(SIZE_VARIANTS)
+check(set(imagenet_slugs) == expected_slugs,
+      f"{len(expected_slugs)} .imagenet nets in VerifiedNets.lean ({len(NETS)} base + "
+      f"{len(SIZE_VARIANTS)} size variants)",
+      f"found {len(imagenet_slugs)}: unexpected {sorted(set(imagenet_slugs) - expected_slugs)}, "
+      f"missing {sorted(expected_slugs - set(imagenet_slugs))}")
 for slug, _, _, _ in NETS:
     s = wiring.get(slug)
     check(bool(s), f"{slug}: shimScript is set",
           "MISSING — the driver would refuse at spawn" if not s else s)
 present = [wiring[s] for s, _, _, _ in NETS if wiring.get(s)]
-# THE property the defect violated: five nets resolved to ONE shim. Distinctness is what says the
-# fix landed, and a duplicated entry (copy-paste between two nets) is otherwise silent.
-check(len(set(present)) == len(present), "all resolve to DISTINCT shims",
+# THE property the original defect violated: five nets resolved to ONE shim. Distinctness across
+# the BASE nets is what says that fix is still landed, and a duplicated entry (copy-paste between
+# two unrelated nets) is otherwise silent.
+check(len(set(present)) == len(present), "the BASE nets resolve to DISTINCT shims",
       f"{len(set(present))} distinct of {len(present)}")
+# …and each size variant must name EXACTLY its base's shim. This is the half that replaces blanket
+# distinctness: sharing is legal, but only with the net it is a size variant OF. Pointing
+# ConvNeXt-S at ViT's shim is as wrong as the original defect and fires here.
+for var, base in sorted(SIZE_VARIANTS.items()):
+    got, want = wiring.get(var), wiring.get(base)
+    check(got is not None and got == want,
+          f"{var}: shares {base}'s shim",
+          f"names {got!r}, but {base} names {want!r}" if got != want else "")
 for slug, _, _, _ in NETS:
     s = wiring.get(slug)
     if s:

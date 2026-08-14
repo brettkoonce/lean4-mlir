@@ -435,7 +435,18 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
       "        ds = ds.shuffle(8192, seed=43, reshuffle_each_iteration=True)\n"
      else "") ++
     "    ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)\n" ++
-    "    ds = ds.batch(batch_size, drop_remainder=True)\n" ++
+    -- ⚠⚠ `drop_remainder` is TRUE ON TRAIN AND FALSE ON VALIDATION, and the asymmetry is the
+    -- point (2026-08-14). On TRAIN it must stay: the train batch is baked into the graph
+    -- (`%x: tensor<64x150528xf32>`), so a short final batch is a shape error, and the stream is
+    -- `.repeat()`ed anyway so nothing is lost. On VALIDATION it was silently discarding the tail —
+    -- 50,000 batched at 256 gives 195 full batches and **80 images thrown away**, so every top-1
+    -- this repo has quoted is over 49,920 rather than ImageNet's 50,000. timm's `validate.py`
+    -- scores all 50,000, and a number over a different denominator is not comparable to one that
+    -- does, however small the difference.
+    -- ⭐ It costs no MLIR: the driver zero-pads a short tail up to the eval graph's baked width
+    -- (`F32.sliceImagesPad`) and scores only the real rows, so the forward still sees a full
+    -- batch. See `VerifiedTrain.readShimBatchPartial`.
+    "    ds = ds.batch(batch_size, drop_remainder=training)\n" ++
     "    ds = ds.prefetch(tf.data.AUTOTUNE)\n" ++
     "    return tfds.as_numpy(ds)\n" ++
     "\n" ++

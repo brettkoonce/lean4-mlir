@@ -465,6 +465,56 @@ def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
   let img ← readExact h (4 * batch * flat)
   pure (img, lbl)
 
+/-- Read up to `n` bytes, returning **what actually arrived** instead of throwing at EOF.
+    The peer of `readExact`, and the only difference is which of "short read" and "clean end of
+    stream" it treats as the error. -/
+def readUpTo (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
+  let mut acc := ByteArray.empty
+  while acc.size < n do
+    let chunk ← h.read (USize.ofNat (n - acc.size))
+    if chunk.size == 0 then break
+    acc := acc ++ chunk
+  pure acc
+
+/-- **One shim batch, tolerating a SHORT FINAL BATCH** — the validation-split reader.
+
+    ⚠⚠ **Why this exists (2026-08-14).** The val pipeline used `drop_remainder=True`, so ImageNet's
+    50,000 images batched at 256 gave 195 full batches and **80 images were thrown away**. Every
+    top-1 this repo has quoted for an ImageNet net is therefore over **49,920**, where timm's
+    `validate.py` scores all 50,000 — a difference of 0.16% that is not an error bar, it is a
+    different denominator. The shim now sets `drop_remainder=training`, which puts a partial batch
+    on the wire that `readExact` refuses by construction ("shim closed the pipe after N of M
+    bytes"). This reader accepts it.
+
+    Returns `(img, lbl, rows)` where `rows ≤ batch`, and `rows = 0` means the stream ended cleanly.
+
+    ⚠ It reads LABELS FIRST, matching the wire order, and infers `rows` from the label read — the
+    label record is 4 bytes (or `4·nclasses`) against the image's `4·flat`, so a truncated stream
+    is far more likely to be caught mid-image than mid-label. Inferring from the SMALLER record and
+    then demanding exactly that many image bytes turns a torn write into a loud failure instead of
+    a silently short batch.
+
+    ⭐ **No MLIR changes.** The eval graph keeps its baked batch width: `F32.sliceImagesPad`
+    zero-pads the tail up to it and the eval loop scores `min bs (nEval − bi·bs)` real rows, so the
+    pad never reaches the accuracy count. That is safe because eval normalises PER EXAMPLE
+    everywhere — running-stat BN through `@<slug>_fwd_eval`, LayerNorm through `@<slug>_fwd`.
+    ⚠ The one exception is `LEAN_MLIR_EVAL_BATCHSTATS=1`, which scores through `@<slug>_fwd` with
+    BATCH statistics: there the zero rows WOULD shift the real rows' normalisation. That flag is a
+    declared diagnostic, and the drain refuses to keep the tail under it. -/
+def readShimBatchPartial (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
+    : IO (ByteArray × ByteArray × Nat) := do
+  let lblRec := if nclasses > 0 then 4 * nclasses else 4
+  let lbl ← readUpTo h (lblRec * batch)
+  if lbl.size == 0 then pure (ByteArray.empty, ByteArray.empty, 0)
+  else if lbl.size % lblRec != 0 then
+    throw <| IO.userError s!"shim sent {lbl.size} label bytes, not a multiple of the {lblRec}-byte \
+record — the stream is torn, not merely short"
+  else
+    let rows := lbl.size / lblRec
+    -- The images for a batch the shim has already committed to: exact, not `readUpTo`.
+    let img ← readExact h (4 * rows * flat)
+    pure (img, lbl, rows)
+
 /-- Spawn `n` shim processes over disjoint shards of one split, and read them round-robin.
 
     **Why this exists.** One shim process tops out at ~1,530 img/s (measured 2026-08-01, bs128,
@@ -565,15 +615,26 @@ private def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0) 
     let evalFlat := evalD0
     let flat := evalFlat
     let vb := 256
-    let nB := 195
+    -- ⚠⚠ **NO LONGER A HARDCODED 195, 2026-08-14.** This read `nB := 195` — "what
+    -- `drop_remainder` leaves of 50,000" — so the drain stopped at 49,920 and **80 val images were
+    -- silently discarded**, on every ImageNet net, in every number this repo has quoted.
+    -- `validate.py` in timm scores all 50,000, so ours were over a different denominator: not an
+    -- error bar, a different measurement. `nB` is now an UPPER BOUND and the terminator is the
+    -- closed pipe, which is what the comment below always claimed it was.
+    --
+    -- ⚠ The bound is deliberately loose (`196` = ⌈50000/256⌉, +1 of slack) and the loop exits on
+    -- `rows = 0`. A tight equality here is the same fragility being removed: `.batch(256)` over
+    -- 50,000 gives 196 batches only at THIS `vb`, and `vb` is a local constant that has changed
+    -- before.
+    let nB := 196
     -- ⚠ The VAL split takes the same per-net shim as train. It streams the center-crop path
     -- (`training=False` ⇒ no RRC, no AutoAugment/RandAugment, no erasing), so the two nets whose
     -- pipelines differ only in TRAIN augmentation drain an identical val set — but the crop rule
     -- itself is per-config (`testCropRatio`), so the script still has to be the net's own.
     let h ← spawnShim net.shimScript "validation" vb flat 0
     IO.println "  imagenet: draining the val split into RAM (~30 GB, one time)…"
-    -- Reserve the exact final size and append each batch as it lands, rather than collecting all
-    -- 195 chunks and folding `(· ++ ·)` over them at the end. The fold cost ~45 GB of pure
+    -- Reserve the final size and append each batch as it lands, rather than collecting all
+    -- ~196 chunks and folding `(· ++ ·)` over them at the end. The fold cost ~45 GB of pure
     -- overhead on a 28 GiB result: the chunk array stayed live for the whole fold (30 GB) WHILE
     -- the accumulator grew beside it, and `++` is `copySlice … (exact := false)`, i.e. it DOUBLES
     -- capacity when it grows — so the last few appends allocated a 2× buffer before freeing the
@@ -582,12 +643,33 @@ private def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0) 
     let mut evI := ByteArray.emptyWithCapacity (nB * vb * flat * 4)
     let mut evL := ByteArray.emptyWithCapacity (nB * vb * 4)
     let mut n := 0
-    -- The validation iterator neither shuffles nor repeats, so it ends; `readShimBatch` throws on
-    -- the closed pipe and that IS the terminator. 195 is what drop_remainder leaves of 50,000.
+    -- The validation iterator neither shuffles nor repeats, so it ends; the closed pipe IS the
+    -- terminator, and `readShimBatchPartial` reports it as `rows = 0` rather than throwing.
+    -- ▶ `LEAN_MLIR_EVAL_BATCHSTATS=1` scores through `@<slug>_fwd` with BATCH statistics, where
+    -- the zero-padded tail of a partial final batch would shift the real rows' normalisation. It
+    -- is a declared diagnostic, so the tail is DROPPED under it rather than silently mis-scored —
+    -- and the drop is announced, because a denominator that changes with a debug flag is exactly
+    -- the kind of thing that gets quoted later without the flag.
+    let dropTail := (← IO.getEnv "LEAN_MLIR_EVAL_BATCHSTATS").isSome
+    let mut ended := false
     for _ in [0:nB] do
-      let (i, l) ← readShimBatch h vb flat
-      evI := evI ++ i; evL := evL ++ l; n := n + vb
+      if !ended then
+        let (i, l, rows) ← readShimBatchPartial h vb flat
+        if rows == 0 then ended := true
+        else if rows < vb && dropTail then
+          IO.println s!"  ⚠ LEAN_MLIR_EVAL_BATCHSTATS: dropping the {rows}-image tail — batch-stat \
+scoring cannot see a zero-padded batch. This run's eval denominator is {n}, not 50,000."
+          ended := true
+        else
+          evI := evI ++ i; evL := evL ++ l; n := n + rows
     IO.println s!"  imagenet: val ready — {n} images, {evI.size / 1048576} MB"
+    -- ⭐ ANNOUNCED, because it is the denominator every top-1 from this run divides by, and it
+    -- moved on 2026-08-14 (49,920 → 50,000). A number quoted against the old denominator is not
+    -- comparable to one quoted against timm's, and nothing else in the output says which was used.
+    if n != 50000 then
+      IO.println s!"  ⚠ val is {n} of ImageNet's 50,000 — top-1 here is NOT over timm's denominator"
+    else
+      IO.println "  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)"
     -- ▶ `trainPix` is `net.d0`, the width of the images the TRAIN stream carries — 150,528 for every
     -- 224 net (so this is INERT for all of them: `net.d0 == 3*224*224` exactly) and 76,800 for the
     -- 160 net. It is deliberately not `evalFlat`; see the warning above.
@@ -1719,7 +1801,29 @@ gate's control, not a configuration.")
         -- averaged ~10 batches against the reference's ~100 — 10× noisier. It is EVAL-ONLY,
         -- so it depressed every reported top-1 without touching a single gradient, and it
         -- bit hardest early, when the activation statistics are still moving fast.
-        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.01)
+        --
+        -- ⚠⚠ **AND COMPENSATED FOR GRADIENT ACCUMULATION, 2026-08-14** — the second half of that
+        -- same 2026-08-04 fix, which was not made at the time (`a3_paper_fidelity.md` §2.3).
+        -- This EMA fires once per MICRO-batch, so at `k` micro-batches per optimizer step the
+        -- stats decay by `0.99^k` per step where the reference's decay by 0.99. At the A3 run's
+        -- k = 8 that is 0.923 against 0.99 — our running estimates were ~8x fresher, and
+        -- correspondingly noisier, PER OPTIMIZER STEP.
+        --
+        -- The reference compensates explicitly and its generated script says so: *"BN momentum
+        -- compensated for gradient accumulation (K=4): per-micro momentum = 0.99**(1/K) -> K
+        -- updates compose to ~one 0.99/step update"*. `m` here is the weight on the NEW batch,
+        -- i.e. `1 - momentum`, so the compensated form is `1 - 0.99^(1/k)`: at k = 8 that is
+        -- 0.001256, and at k = 1 it is EXACTLY 0.01 — so every non-accumulating run is
+        -- bit-identical across this change, which is why the guard is `accOn` and not a version.
+        --
+        -- ⚠ EVAL-ONLY, on no gradient path. That is what makes it safe to change between runs and
+        -- ALSO what let it hide for eight days: nothing about the loss curve moves. ▶ Do NOT apply
+        -- it mid-run — the reported eval shifts, so a curve spanning the change develops a
+        -- discontinuity that belongs to the metric rather than to the model.
+        -- ▶ Direction: this delta plausibly made our reported top-1 UNDERSTATED, which matters
+        -- because the A3 result (77.43%) is quoted as beating its JAX reference.
+        let bnMom := if accOn then 1.0 - Float.pow 0.99 (1.0 / accK.toFloat) else 0.01
+        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else bnMom)
         -- ▶ `ema_bn` — the BN running buffers get their OWN shadow, and on a batch-BN net this is
         -- not optional decoration. The reference's own words: eval pairs EMA weights with
         -- EMA-LAGGED stats, "avoiding the weights/stats mismatch that blows up early eval". EMA
@@ -3998,6 +4102,10 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
         -- averaged ~10 batches against the reference's ~100 — 10× noisier. It is EVAL-ONLY,
         -- so it depressed every reported top-1 without touching a single gradient, and it
         -- bit hardest early, when the activation statistics are still moving fast.
+        -- ⚠ NO accumulation compensation here, and that is correct rather than an omission:
+        -- this fp8 trainer has no `accK` — it does not implement gradient accumulation at all —
+        -- so k = 1 and the compensated form `1 − 0.99^(1/k)` is exactly this 0.01. If an
+        -- accumulation path is ever added here, copy `bnMom` from `trainAdamSched`.
         runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.01)
         bnFirst := false
     IO.println s!"Epoch {ep + 1}/{nEpochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"

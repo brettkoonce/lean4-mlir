@@ -55,7 +55,7 @@ config or the generated shim, not against the recipe matrix.
 Ordered by expected impact. **Quote a final number against this list, never as "RSB-A3
 reproduced"** — `ResNet50RenderB.lean:990` says the same thing at the render site.
 
-### 2.1 ⛔⛔ `wdExcludeNormBias` — BN γ/β and biases are decayed
+### 2.1 ✅ CLOSED 2026-08-14 — `wdExcludeNormBias` (was ⛔⛔, the largest delta)
 
 **What:** timm's `no_weight_decay` skip-list excludes all 1-D params (BN γ, BN β, every bias) from
 decay, decaying only ≥2-D weight matrices. We decay everything, at wd = 0.02.
@@ -77,6 +77,17 @@ layout is already fully enumerated (161 θ), and the predicate is purely structu
 ⚠ Read `ConvNeXtRender.lean:1092` first: gating this flag is what surfaced a
 "silently-wrong-hyperparameter shape" there, so the port has a known trap.
 **Cost:** moderate. Render + re-gate + a tie against the 1-replica peer.
+
+✅ **DONE 2026-08-14.** `optOne` took a trailing `wdName` (defaulted to `"%wd"`, so every committed
+R34/R50 artifact re-renders byte-identically), `r34WdDecays` is the plain rank test, `wdzConst`
+emits the zero, and `r34AdamVariant` gained a trailing `wx`. Two new artifacts:
+`resnet50in160_lambaccdp8x64wxbce` (4 replicas) and `lambacc8x64wxbce` (its 1-replica gate peer).
+⭐ **The split is 54 decayed / 107 excluded of 161**, and both halves decompose structurally: 53
+conv weights + 1 dense weight decayed; 53 BN layers × 2 (γ, β) + 1 dense bias excluded.
+⚠ The `wx` renders are NEW artifacts beside the old ones, not replacements — the 77.43% result
+belongs to the graph that produced it, and re-pointing that slug would make a finished 34-hour run
+unreproducible. ⚠ NOT YET RUN: this changes the trajectory, so it is comparable to A3 only by a
+fresh run.
 
 ### 2.2 ⛔ Ghost-BN normalises over **64**; the reference normalises over **512**
 
@@ -107,7 +118,7 @@ ep25 lead.
 not estimated: *"needs a big-memory card (~80 GB; a 48 GB card is borderline/OOM)"*
 (`MainResnet50Imagenet.lean:131`).
 
-### 2.3 ⛔ BN running-stat momentum is **not compensated for accumulation**
+### 2.3 ✅ CLOSED 2026-08-14 — BN running-stat momentum vs accumulation (was ⛔)
 
 **What:** we apply the BN running-stat EMA once per *micro-batch* at m = 0.01 (momentum 0.99), with
 k = 8 micro-batches per optimizer step. So per optimizer step our stats decay by 0.99⁸ ≈ **0.923**
@@ -130,6 +141,11 @@ compensation is the second half of that fix and was not made.
 `(if bnFirst then 1.0 else 1.0 - Float.pow 0.99 (1.0 / accK.toFloat))` — at k=8 that is m ≈
 0.001256. ⚠ Do **not** apply mid-run: it changes reported eval, so leg 2's curve would develop a
 discontinuity at the point of change.
+
+✅ **DONE 2026-08-14**, exactly as prescribed: `bnMom := if accOn then 1 − 0.99^(1/k) else 0.01`.
+At k = 1 that is exactly 0.01, so every non-accumulating run is bit-identical across the change —
+which is why the guard is `accOn` rather than a version. ⚠ The fp8 peer (`trainAdamSchedE4M3`)
+keeps a bare 0.01 and that is correct, not an oversight: it implements no accumulation, so k = 1.
 
 ▶ **Note the direction.** This delta plausibly makes our reported top-1 *understated*, which is
 worth stating explicitly given that we are currently ahead of the reference.
@@ -161,6 +177,18 @@ artifacts, and 8× below A3's. Nothing gated it; it descends and reports a numbe
 * **eval denominators differ**: ours 49,920 (195×256), the reference's 49,664 (97×512), against
   ImageNet's 50,000. Both drop a tail; ours drops less. ≤0.7%, but it means the two top-1 figures
   are over slightly different denominators.
+  ✅ **OURS CLOSED 2026-08-14 — the verified path now scores all 50,000**, which is timm's
+  denominator. The shim batches the VAL split with `drop_remainder=training` (train keeps `True`;
+  its batch is baked into the graph), the drain terminates on the closed pipe instead of a
+  hardcoded `nB := 195`, and `readShimBatchPartial` accepts the short final batch that creates.
+  ⭐ **No MLIR changed**: `F32.sliceImagesPad` already zero-padded a short tail to the eval graph's
+  baked width and the loop already scored real rows only, so the forward still sees a full batch.
+  Safe because eval normalises per example everywhere (running-stat BN, or LayerNorm).
+  ⚠ `LEAN_MLIR_EVAL_BATCHSTATS=1` is the exception — it scores through `@_fwd` with BATCH stats,
+  where the zero pad WOULD shift the real rows — so the drain drops the tail under that flag and
+  announces the denominator it used.
+  ⚠⚠ **Every ImageNet top-1 quoted before this date, including the 77.43%, is over 49,920.** The
+  drain now announces which denominator it used, because nothing else in the output did.
 
 ---
 
@@ -204,6 +232,41 @@ precisely in that endgame. Do not extrapolate leg 2 from its midpoint.
 per-epoch data exists only for epochs 76–100 (`epochs_final_attempt_76-100.tsv`).
 
 ---
+
+## 4b. ✅ GEOMETRIC AUGMENTATION vs timm — MEASURED 2026-08-14, and it corrected the worry
+
+The standing concern was that our RandAugment geometry, written in TensorFlow
+(`tf.raw_ops.ImageProjectiveTransformV3`), used a different angle/matrix convention from timm's,
+which calls PIL. timm's geometric ops are thin PIL wrappers, so PIL **is** the reference here.
+`scripts/geo_aug_pil_diff.py` diffs them:
+
+| op | mean \|Δ\| of 255 (smooth image) |
+|---|---|
+| ShearX / ShearY | 0.20 – 0.48 |
+| TranslateX | 0.04 – 0.19 |
+| Rotate (±30°, ±21°, 7.5°) | 0.07 – 0.20 |
+
+**The geometry matches.** Maxima land on a deliberately-planted hard edge, i.e. sub-pixel
+resampling, not a different transform. Our rotate agrees with PIL's DEFAULT centre; forcing PIL to
+the `((w−1)/2, (h−1)/2)` centre our formula nominally names makes it *much worse*, so TF's and
+PIL's pixel-coordinate conventions differ by half a pixel and our offset already compensates.
+
+⚠⚠ **THE METHOD IS THE FINDING, because the first run of this test said the opposite.** On RANDOM
+NOISE the same comparison reports 85–93% of pixels differing at mean \|Δ\| ≈ 10 — which reads as
+broken geometry and is not. On uncorrelated noise a half-pixel resampling difference makes every
+pixel disagree by an arbitrary amount, so noise cannot separate "wrong transform" from "same
+transform, different resampler". ▶ **Never validate a resampler on noise.** A smooth image with one
+hard edge separates them: a wrong transform shows large INTERIOR error, a resampler shows error
+only where the gradient is steep.
+
+⛔ **What this does NOT settle, and it is the better version of the original worry: the geometric
+INTERPOLATION CHOICE.** We always use BILINEAR. timm takes its resample mode from
+`hparams['interpolation']`, which — absent an explicit `-i` in the arg string — is believed to be a
+per-call RANDOM choice over (BILINEAR, BICUBIC). That cannot be checked against PIL; it needs
+timm's own source, which is not installed here. ▶ `pip install timm` into `.venv` and read
+`timm/data/auto_augment.py` is the whole remaining step.
+⚠ Also uncovered by this test: op ORDER and per-op probability, the `_RA_INC` magnitude mappings,
+and every photometric op. This is about geometry alone.
 
 ## 5. RECOMMENDED ORDER
 

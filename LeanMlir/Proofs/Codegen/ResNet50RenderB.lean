@@ -500,7 +500,24 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- downward (`imgSize/2`, `imgSize/4`, …) Lean would have to prove `2*(imgSize/4) = imgSize/2`,
     -- which is false for odd inputs and not definitional for a variable. Written as `q4 := 2*q5`,
     -- `q3 := 2*q4`, … every such equation holds by zeta-reduction and nothing needs a proof.
-    (q : Nat := 7) : String :=
+    (q : Nat := 7)
+    -- ▶ **`wdExcludeNormBias` — timm's `no_weight_decay` skip-list** (`a3_paper_fidelity.md` §2.1),
+    -- the largest recipe delta the RSB-A3 run shipped with and a REQUIREMENT of RSB-A2. It excludes
+    -- every 1-D parameter — BN γ, BN β, every bias — from decay, decaying only ≥2-D weights.
+    --
+    -- ⚠⚠ THE A3 RUN DID NOT HAVE IT. Its reference (`resnet50ImagenetConfigRSBFaithful`) sets
+    -- `wdExcludeNormBias := true`; the live artifact has zero `%wdz`. So 77.43% was reached while
+    -- decaying BN γ/β at wd = 0.02. Decay on a pre-BN conv weight is renormalised away by BN and
+    -- acts only as an effective-LR control; decay on γ is not, because γ scales the layer's output
+    -- directly — and the effect concentrates at low LR, i.e. in the cosine endgame.
+    --
+    -- ⭐ It needs NO new op and NO driver change: the decay is an operand NAME on every optimizer
+    -- (`adamWParamF`, `lambDirF`, `momVNextF`), so excluding a parameter binds that name to a zero
+    -- constant. Same arity, same types, same regions — exactly how ConvNeXt and ViT do it.
+    -- ⚠ TRAILING, and it must reach `r34AdamVariant` too: this net DERIVES its entry name from the
+    -- variant, so a flag that reaches the renderer but not the name produces an artifact whose
+    -- declared entry disagrees with its own path.
+    (wdExclude : Bool := false) : String :=
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
@@ -650,7 +667,10 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut vNames : List String := []
     let mut aNames : List String := []
     for g in allPs do
-      let (c, nT, nM, nV, nA) ← optOne opt B replicas g
+      -- ⚠ The decay operand comes from the SAME `PGrad` that names the site, so the parameter
+      -- whose shape decides exclusion is the parameter being updated — §2e's slot rule. Reading
+      -- the shape off a parallel list is how this class of bug ships.
+      let (c, nT, nM, nV, nA) ← optOne opt B replicas g (r34WdName wdExclude g.nm g.ds)
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]
@@ -731,7 +751,8 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
         "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5).\n") ++
-      zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt ++ adamCode ++
+      zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt ++
+      wdzConst wdExclude ++ adamCode ++
       (if bce then lossCodeBce else lossCode) ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r50SigList nClasses
@@ -755,7 +776,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let inner : String := go.run' 0
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
-  let fname := s!"{slug}_{r34AdamVariant B replicas opt}{vSuffix}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude}{vSuffix}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1042,6 +1063,24 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb == "lamb64"
 #guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.adamwAccum 4) == "acc4x64"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8) == "accdp8x64"
+-- ▶ the `wx` spellings. ⚠ `wx` trails the BATCH and precedes the `bce` suffix the caller appends,
+-- so the shipping A3-fidelity name is `lambaccdp8x64wxbce`. Pinned because this net DERIVES its
+-- entry name from the variant: a marker that moved would produce an artifact whose declared entry
+-- disagrees with its own path, which the shim refuses outright rather than running the wrong graph.
+#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb true == "lamb64wx"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) true
+         == "lambaccdp8x64wx"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8) true
+         == "lambacc8x64wx"
+-- …and the flag OFF must still spell exactly what every committed artifact is named.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) false
+         == "lambaccdp8x64"
+-- The rank test, spelled out on the shapes it actually decides.
+#guard Proofs.StableHLO.r34WdDecays "conv1w" [64,3,7,7] == true      -- conv weight: decayed
+#guard Proofs.StableHLO.r34WdDecays "bn1g" [64] == false             -- BN γ: excluded
+#guard Proofs.StableHLO.r34WdDecays "bn1b" [64] == false             -- BN β: excluded
+#guard Proofs.StableHLO.r34WdDecays "fcb" [1000] == false            -- dense bias: excluded
+#guard Proofs.StableHLO.r34WdDecays "fcw" [2048,1000] == true        -- dense weight: decayed
 -- ⚠ The driver reads `k` back OUT of this string (`VerifiedTrain`'s `accK`). Pin the round trip
 -- here, where the name is produced, rather than trusting two parsers to agree.
 #guard ((Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8)).drop 5
@@ -1089,6 +1128,37 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+
+-- ── ▶ `wx` — timm `no_weight_decay`, CLOSING `a3_paper_fidelity.md` §2.1 (2026-08-14) ──────────
+-- The A3 recipe's LARGEST open delta, and the one its own ledger ranked "most likely to move the
+-- final number". `resnet50ImagenetConfigRSBFaithful` sets `wdExcludeNormBias := true`; the render
+-- above does not, so the 77.43% run decayed all 161 parameters — BN γ, BN β and every bias
+-- included — at wd = 0.02.
+--
+-- ⚠⚠ **THIS IS A DIFFERENT FUNCTION, NOT A FIXED ONE, WHICH IS WHY IT GETS ITS OWN NAME.** The
+-- `wx` renders are new artifacts beside the old ones rather than in place of them: the 77.43%
+-- result belongs to the graph that produced it, and silently re-pointing that slug at a graph with
+-- different decay semantics would make an already-quoted number unreproducible. §2a's
+-- last-writer-wins race, in the one place where the loser is a finished 34-hour run.
+--
+-- ⭐ The exclusion is the PLAIN RANK TEST (`r34WdDecays`, `ds.length ≥ 2`), so it needs no name
+-- carve-out: ResNet has no positional parameter for ViT's `pos` rule to apply to. What it excludes
+-- here is every BN γ/β and every conv/dense bias.
+--
+-- ⚠ NOT YET RUN, and the ledger's warning applies in full: this changes the trajectory, so it can
+-- only be compared to A3 by a fresh run, never by resuming one.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
+    (wdExclude := true))
+-- Its single-device peer, for the same reason the non-`wx` pair has one: `r50-accum-tie` and
+-- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only `wx` would be
+-- ungateable — and `wx` is exactly the axis worth gating, since it changes 105 of 161 decay
+-- operands and nothing about the arity.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
+    (wdExclude := true))
 
 -- The **2-GPU** peer of the 4-replica render above: `B := 128` per replica at the same `k = 8`, so
 -- the global batch stays 128×2×8 = 2048 and the recipe is untouched. ⚠ Note what does NOT stay the

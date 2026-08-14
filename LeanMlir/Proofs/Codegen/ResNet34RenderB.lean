@@ -308,7 +308,14 @@ def accumScalarConsts (k : Nat) : String :=
 -- tail over its own parameter list. Duplicating it there would put AdamW/heavy-ball semantics
 -- in two places, which is the double-writer failure this repo keeps paying for. Visibility does
 -- not change emitted bytes, so every committed R34 artifact is untouched.
-def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
+def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
+    -- ⚠ TRAILING and DEFAULTED to `"%wd"`, so every existing call site is unchanged and every
+    -- committed R34/R50 artifact re-renders byte-identically. The caller decides per PARAMETER
+    -- whether this is `"%wd"` or the zero constant `"%wdz"` — timm's `no_weight_decay` skip-list
+    -- (`a3_paper_fidelity.md` §2.1), which ConvNeXt and ViT already implement this exact way.
+    -- ⭐ It needs NO new op: `adamWParamF`/`lambDirF`/`momVNextF` all take the decay as an OPERAND
+    -- NAME, so excluding a parameter is binding that name to a zero rather than changing a graph.
+    (wdName : String := "%wd") :
     StateM Nat (String × String × String × String × Option String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
@@ -319,7 +326,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
     let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
     let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                      "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gr)
+                      "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName g.ds 0 0 0 0 0 0 0 z z z gr)
     pure (arS ++ cM ++ cV ++ cT, nT, nM, nV, none)
   | .lamb =>
     -- ⭐⭐ LAMB, in four ops per parameter, TWO of which are new (`planning/rsb_a3_r50_verified.md`
@@ -330,7 +337,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     -- ⚠ ε OUTSIDE the root and the decay INSIDE `r` — both placements are load-bearing and both
     -- have a plausible wrong neighbour (RMSProp-TF's `√(v̂+ε)`, AdamW's decay after the ratio).
     let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                      "%b2" "%ob2" "%bc1" "%bc2" "%eps" "%wd" g.ds 0 0 0 0 0 0 z z z gr)
+                      "%b2" "%ob2" "%bc1" "%bc2" "%eps" wdName g.ds 0 0 0 0 0 0 z z z gr)
     -- ② `‖θ‖²`, THIS parameter's own. ⚠ Seeded at `%lzero` and never folded across parameters —
     -- that single-leaf fold is the entire difference from the global-norm clip, whose whole
     -- semantic content is that ONE scalar is shared (`Proofs.clipFactor_shared` against
@@ -371,7 +378,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gt)
     let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gt)
     let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                      "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" "%wd" g.ds 0 0 0 0 0 0 0 z z z gt)
+                      "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName g.ds 0 0 0 0 0 0 0 z z z gt)
     pure (arS ++ cG ++ cM ++ cV ++ cT, nT, nM, nV, some nG)
   | .lambAccum _ =>
     -- ⭐⭐ **RSB-A3's optimizer.** Structurally: `.adamwAccum`'s ① accumulator, then `.lamb`'s tail
@@ -387,7 +394,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     -- ② LAMB's four ops, **byte-identical to `.lamb`'s except that they consume `Gt` rather than
     -- `g`** — the same substitution `.adamwAccum` makes to AdamW's three.
     let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                      "%b2" "%ob2" "%bc1" "%bc2" "%eps" "%wd" g.ds 0 0 0 0 0 0 z z z gt)
+                      "%b2" "%ob2" "%bc1" "%bc2" "%eps" wdName g.ds 0 0 0 0 0 0 z z z gt)
     -- ⚠ `‖θ‖²` reads θ ALONE — no gradient, so accumulation cannot reach it and this line is
     -- character-for-character `.lamb`'s.
     let (cN, nN) ← pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
@@ -411,7 +418,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     -- *reading* of the two slots differs. NOTE this is COUPLED (into the gradient, so it flows
     -- through the velocity), not AdamW's DECOUPLED `−lr·wd·θ` — that difference is the whole
     -- reason `.adamw` cannot stand in for the reference recipe.
-    let (cD, nD) ← pretty B (.momVNextF s!"%{g.nm}" "%wd" g.ds 0 z gr)
+    let (cD, nD) ← pretty B (.momVNextF s!"%{g.nm}" wdName g.ds 0 z gr)
     let gwd : SHlo n := .operand nD z
     -- ② velocity, `v' = μ·v + g`.
     let (cV, nV) ← pretty B (.momVNextF s!"%{g.nm}v" "%mu" g.ds 0 z gwd)
@@ -424,6 +431,33 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad) :
     -- `m` rides through untouched, so the packed `[θ|m|v]` signature is shared with `.adamw` and
     -- the driver is byte-identical across variants (the `CnnRender.optTail` `.sgd` convention).
     pure (arS ++ cD ++ cV ++ cT, nT, s!"%{g.nm}m", nV, none)
+
+/-- **Does this parameter get weight decay?** timm's `no_weight_decay` rule, and it is the PLAIN
+    RANK TEST with no name carve-out — every 1-D parameter is excluded: BN γ, BN β and every bias.
+
+    ⚠ Identical to `cnxWdDecays` by construction rather than by coincidence: the rule is timm's,
+    not the net's, and ConvNeXt's own docstring records that its ViT-style `nm != "pos"` carve-out
+    does not apply to a net with no positional parameter. ResNet has none either.
+
+    ⚠⚠ **This is `a3_paper_fidelity.md` §2.1, open since the A3 run.** The live A3 artifact has
+    ZERO `%wdz` occurrences against ConvNeXt's 123 — so the 77.43% run decayed BN γ/β and every
+    bias at wd = 0.02 where its reference (`resnet50ImagenetConfigRSBFaithful`, which sets
+    `wdExcludeNormBias := true`) did not. Decay on pre-BN conv weights is renormalised away by BN
+    and acts only as an effective-LR control; decay on γ/β is not, because γ directly scales the
+    layer's output. The effect concentrates at low LR — i.e. in the cosine endgame. -/
+def r34WdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
+
+/-- The decay operand for one parameter: the real `%wd`, or the zero constant when excluded. -/
+def r34WdName (wdExclude : Bool) (nm : String) (ds : List Nat) : String :=
+  if wdExclude && !r34WdDecays nm ds then "%wdz" else "%wd"
+
+/-- The `%wdz` declaration an excluding render needs. ⚠ Emitted only when the flag is on, so at
+    `wdExclude := false` not one byte moves and every committed artifact is untouched. -/
+def wdzConst (wdExclude : Bool) : String :=
+  if wdExclude then
+    "    // ── timm no_weight_decay (wdExcludeNormBias): 1-D params take %wdz, not %wd ──\n" ++
+    "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  else ""
 
 /-- The optimizer's baked constants. `.adamw` is byte-for-byte the committed block; `.heavyBall`
     emits only what it reads, so there are no dead constants in the momentum artifact.
@@ -507,7 +541,14 @@ def optConstsB (opt : R34Opt) : String :=
     `#guard`s at the bottom pin those literal paths against this function.
 
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes. -/
-def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw) : String :=
+def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
+    -- ▶ `wx` = timm `no_weight_decay`. TRAILING and defaulted, so every existing spelling is
+    -- unchanged. ⚠ It must reach this function: R50 DERIVES its entry name from the variant, so a
+    -- flag that reached the renderer but not here produces an artifact whose declared entry
+    -- disagrees with its own path — the shim then refuses the call outright. ConvNeXt shipped
+    -- exactly that defect twice (`wx`, then `clip`); the `#guard`s below pin every spelling.
+    -- ⚠ It needs NO driver predicate: excluding a parameter changes no arity, type or region.
+    (wdExclude : Bool := false) : String :=
   (match opt with
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
    | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp"
@@ -525,7 +566,13 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw) : String :=
    -- ⚠ `dp` goes INSIDE, right after `acc`, matching `.adamwAccum`'s placement exactly — so the
    -- `k` parse is one rule for both, not two.
    | .lambAccum k => (if replicas ≤ 1 then "lambacc" else "lambaccdp") ++ toString k ++ "x") ++
-  (if B == 32 then "" else toString B)
+  (if B == 32 then "" else toString B) ++
+  -- ▶ `wx` TRAILS THE BATCH, so it composes with every optimizer spelling and with the `bce`
+  -- suffix the R50 renders append after it — `lambaccdp8x64bcewx` would be wrong; the R50 caller
+  -- passes `vSuffix := "bce"` AFTER this, giving `lambaccdp8x64wxbce`. ⚠ The order is a choice and
+  -- the `#guard`s below are what make it a fixed one, because `cnxAdamVariant` learned the hard way
+  -- that a marker's POSITION is as load-bearing as its presence.
+  (if wdExclude then "wx" else "")
 
 set_option maxRecDepth 4000000 in
 /-- **ResNet-34 `[3,4,6,3]` AdamW train step, batch-BN, rendered from the verified AST at `N := B`.**
