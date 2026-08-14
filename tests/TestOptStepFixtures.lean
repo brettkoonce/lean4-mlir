@@ -92,7 +92,7 @@ private def optStepModule (fname : String) (opt : R34Opt)
 
     | slug | reference | how |
     |---|---|---|
-    | `lamb` | `generated_resnet50_imagenet.py` | LAMB, no mask, no clip, no accum — exact |
+    | `lambclip` | `generated_resnet50_imagenet.py` | LAMB + clip, no mask, no accum — exact. ⚠ This row was `lamb` (unclipped) until CI caught that the reference now clips: D1 reached the JAX side too, so NO unclipped LAMB reference exists any more |
     | `lambwxclip` | `generated_resnet50_imagenet_a2accum.py` | the same code at `_K = 1`, which IS the no-accumulation case (`grads = _gsum/1`) |
     | `lambacc4wxclip` | `…a2accum.py` | `_K = 4`, the config's own `GRAD_ACCUM` — exact |
     | `lambacc8wxclip` | `…a2accum.py` | `_K = 8`, RSB-A3's k. The extracted region is k-agnostic |
@@ -109,7 +109,7 @@ private def optStepModule (fname : String) (opt : R34Opt)
     do. ▶ It wants a config that generates it, not a transcription. -/
 private def variants : List (String × R34Opt × Bool × Bool × String) :=
   [ -- (slug, optimizer, wdExclude, gradClip, wdStr)
-    ("lamb",           .lamb,        false, false, "")   -- the trust ratio alone
+    ("lambclip",       .lamb,        false, true,  "")   -- trust ratio + clip, NO wx mask
   , ("lambwxclip",     .lamb,        true,  true,  "")   -- + D2 mask + D1 clip, no accumulation
   , ("lambacc4wxclip", .lambAccum 4, true,  true,  "")   -- ⭐ D1 × accumulation at the config's k
   , ("lambacc8wxclip", .lambAccum 8, true,  true,  "")   -- ⭐⭐ RSB-A3's actual composition

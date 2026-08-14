@@ -118,7 +118,10 @@ SHAPES = [(4, 3, 2, 2), (5,), (6, 4)]
 # (fixture slug, reference file, _K). See TestOptStepFixtures.lean's `variants` docstring for why
 # each row maps onto the reference it does.
 VARIANTS = [
-    ("lamb",           "generated_resnet50_imagenet.py",          1, False),
+    # ⚠ Was `lamb`, unclipped, until CI caught that this reference now CLIPS — D1 reached the JAX
+    # side as well, so no unclipped LAMB reference exists any more. It is also the only row without
+    # the `wx` mask, which is why it earns its place beside `lambwxclip`.
+    ("lambclip",       "generated_resnet50_imagenet.py",          1, False),
     ("lambwxclip",     "generated_resnet50_imagenet_a2accum.py",  1, False),
     ("lambacc4wxclip", "generated_resnet50_imagenet_a2accum.py",  4, True),
     ("lambacc8wxclip", "generated_resnet50_imagenet_a2accum.py",  8, True),
@@ -141,6 +144,28 @@ VARIANTS = [
 # reference. Both are f32-exact rearrangements in principle and reassociations in practice, so this
 # is a tight relative tolerance rather than a bit-exactness claim.
 RTOL = 2e-6
+
+
+def assert_references_fresh(paths):
+    """⚠⚠ REFUSE to run against a reference older than the Lean that emits it.
+
+    This file's header already WARNED that `generated_*.py` is a build product and goes stale. The
+    warning did not work: the `lamb` row was tied against a months-stale reference locally, passed,
+    and only failed once CI regenerated and found the reference had gained D1's clip. A comment is
+    not a gate — so this is the gate.
+    """
+    srcs = ["jax/MainResnet50Imagenet.lean", "jax/Jax/Codegen.lean"]
+    newest = max(os.path.getmtime(s) for s in srcs if os.path.exists(s))
+    stale = [p for p in paths
+             if os.path.exists(os.path.join(REF_DIR, p))
+             and os.path.getmtime(os.path.join(REF_DIR, p)) < newest]
+    if stale:
+        sys.exit("STALE REFERENCES — older than the Lean that emits them:\n  " +
+                 "\n  ".join(stale) +
+                 "\n\nRegenerate, then re-run:\n"
+                 "  (cd jax && lake build resnet50-imagenet &&\n"
+                 "   for r in default a2-accum a1 adam-probe; do\n"
+                 "     lake exe resnet50-imagenet $r /nonexistent >/dev/null 2>&1 || true; done)")
 
 
 def extract_ref_optimizer(path):
@@ -274,6 +299,7 @@ def main():
     G0 = [f32(*s) * 5.0 for s in SHAPES]
     dg = [f32(*s) * 5.0 for s in SHAPES]
 
+    assert_references_fresh(sorted({ref for _, ref, _, _ in VARIANTS}))
     print("── one-step optimizer tie (planning/verified_optimizer_parity.md §5) ──")
     gnorm = np.sqrt(sum(float(np.sum((a + b) ** 2)) for a, b in zip(G0, dg)))
     print(f"  ‖Gt‖ = {gnorm:.3f}   (clip threshold k·C; the clip is ACTIVE in every clip row)")
