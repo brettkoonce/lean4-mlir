@@ -118,7 +118,13 @@ private def variants : List (String × R34Opt × Bool × Bool × String) :=
     -- `WD = 0.010000`, so a `wdStr` that failed to reach the constant block would show up as a
     -- wrong θ' here and nowhere else. ⚠ The slug carries `wd001` because `wdVariantMark` puts it
     -- there: two renders differing only in a baked constant must not share a path.
-  , ("lambacc8wxclipwd001", .lambAccum 8, true, true, "0.01") ]
+  , ("lambacc8wxclipwd001", .lambAccum 8, true, true, "0.01")
+    -- ⭐⭐ **`.adamw`, AND IT IS ONLY EXPRESSIBLE BECAUSE OF THE ROW ABOVE.** The gap this file
+    -- recorded was that no generated reference baked R50's AdamW constants. `adam-probe` bakes
+    -- `eps = 1e-8` (the render's) and `wd = 0.02` (NOT the render's 1e-4), so before `wdStr` made
+    -- the decay a render parameter, closing it would have meant hand-writing a reference — the one
+    -- thing this file refuses to do. ▶ A knob paying for a gate two features later.
+  , ("adamwxclipwd002", .adamw, true, true, "0.02") ]
 
 def main : IO Unit := do
   IO.println "── optimizer-step fixtures (planning/verified_optimizer_parity.md §5) ──"

@@ -322,10 +322,12 @@ gradient half `vjp_oracle` already covers — and `scripts/opt_step_tie.py` runs
 against the reference's own optimizer lines. Seconds, on CPU. Result:
 
 ```
-✓ lamb            K=1  ref=r50.py           worst rel 8.05e-08
-✓ lambwxclip      K=1  ref=r50_a2accum.py   worst rel 8.71e-08
-✓ lambacc4wxclip  K=4  ref=r50_a2accum.py   worst rel 1.09e-07
-✓ lambacc8wxclip  K=8  ref=r50_a2accum.py   worst rel 1.09e-07
+✓ lamb                K=1  ref=r50.py            worst rel 8.05e-08
+✓ lambwxclip          K=1  ref=r50_a2accum.py    worst rel 8.71e-08
+✓ lambacc4wxclip      K=4  ref=r50_a2accum.py    worst rel 1.09e-07
+✓ lambacc8wxclip      K=8  ref=r50_a2accum.py    worst rel 1.09e-07
+✓ lambacc8wxclipwd001 K=8  ref=r50_a1.py         worst rel 1.09e-07   ⭐ the wdStr row
+✓ adamwxclipwd002     K=1  ref=r50_adamprobe.py  worst rel 8.71e-08   ⭐ .adamw, gap closed
 ```
 
 ⭐ **Two things make it a gate rather than a decoration**, and both are the lessons this repo keeps
@@ -346,10 +348,16 @@ accumulating rows**, which is what the `k = 1` control exists to say. Under the 
 worst rows are `G'[0..2] (RAW)`, so the gate names the accumulator rather than leaving a bisect. The
 table is in the script's header.
 
-⚠ **`.adamw` is not covered**, and it is a real gap: no generated reference bakes R50's AdamW
-constants (`%eps = 1e-8`, `%wd = 1e-4`) — the Adam-family references in the tree are EfficientNet's
-and MNv2's TF-RMSProp recipes. Closing it wants a config that GENERATES that reference, not a
-transcription written into the harness.
+✅ **`.adamw` IS now covered (2026-08-14), and `wdStr` is what closed it.** The obstacle was that no
+generated reference baked R50's AdamW constants. The `adam-probe` recipe bakes `eps = 1e-8` (the
+render's) and `wd = 0.02` (NOT the render's 1e-4 default), so the row was only expressible once the
+decay became a render PARAMETER — a knob paying for a gate two features later. Pointed at the LAMB
+reference instead it fails at **1.1e+00** against the 1e-7 floor.
+
+⚠ Still uncovered: **`.heavyBall`** (no generated reference uses the render's coupled-L2 heavy ball;
+`2018` is SGD+momentum but its update is a different function) and **`.adamwAccum`** (no config
+composes AdamW with accumulation — `.lambAccum` is the one RSB renders). Both want a config that
+generates them, not a transcription in the harness.
 
 ▶ **What this now buys the rest of §3.** `wdStr`, `ema` and `sd` are all code changes to the same
 optimizer stage, and each one now has a place to prove itself in seconds instead of in a run: add a

@@ -61,9 +61,10 @@ localises to the accumulation arithmetic rather than to the clip itself. Under �
 `worst 3` is `G'[0..2] (RAW)`, i.e. the gate names the accumulator region rather than leaving a
 reader to bisect.
 
-| **③ `wdStr` not reaching the constant block** (the `wd001` row run against the wd = 0.02 reference) | ✓ | ✓ | ✓ | ✓, and `wd001` **9.5e-05 ✗** |
+| **③ the AdamW row pointed at the LAMB reference** | — | — | — | `adamwxclipwd002` **1.1e+00 ✗** |
+| **④ `wdStr` not reaching the constant block** (the `wd001` row run against the wd = 0.02 reference) | ✓ | ✓ | ✓ | ✓, and `wd001` **9.5e-05 ✗** |
 
-▶ ③ localises perfectly on its own: the worst rows are `θ'[2]` and `θ'[0]`, the two DECAYING
+▶ ④ localises perfectly on its own: the worst rows are `θ'[2]` and `θ'[0]`, the two DECAYING
 parameters, while `θ'[1]` — the rank-1 one `wx` excludes from decay — is untouched. A decay knob
 that failed to reach the graph could not produce that pattern by accident.
 
@@ -73,10 +74,14 @@ the two literals, this pins that the literals are used on the right tensor in th
 
 ## ⚠ Coverage this does NOT have
 
-`.adamw` is not gated: no generated reference bakes R50's AdamW constants (`%eps = 1e-8`,
-`%wd = 1e-4`), and the Adam-family references in the tree are EfficientNet's and MNv2's TF-RMSProp
-recipes. Gating it would mean hand-writing the reference, which is the thing this file refuses to
-do. It wants a config that generates it.
+✅ `.adamw` IS now gated (2026-08-14), via the `adam-probe` recipe — which bakes eps 1e-8 like the
+render and wd 0.02 unlike it, so the row is only expressible because `wdStr` made the decay a render
+PARAMETER. Before that, gating `.adamw` would have meant hand-writing a reference, which is the one
+thing this file refuses to do.
+
+⚠ Still uncovered: `.heavyBall` (no generated reference uses it — `2018` is SGD+momentum but its
+update is not the render's coupled-L2 heavy ball) and `.adamwAccum` (no config composes AdamW with
+accumulation; `.lambAccum` is the one RSB renders). Both want a config that generates them.
 
 Usage:
     lake build opt-step-fixtures && .lake/build/bin/opt-step-fixtures
@@ -92,7 +97,8 @@ reference is worth nothing, and nothing on disk says which you have. Regenerate 
 green run:
 
     (cd jax && lake build resnet50-imagenet &&
-     for r in default a2-accum; do lake exe resnet50-imagenet $r /nonexistent >/dev/null 2>&1 || true; done)
+     for r in default a2-accum a1 adam-probe; do
+       lake exe resnet50-imagenet $r /nonexistent >/dev/null 2>&1 || true; done)
 
 The `optimizer` job in `.github/workflows/jax.yml` does exactly this, every run, for this reason.
 """
@@ -121,6 +127,12 @@ VARIANTS = [
     # a code-reading claim into a measurement. ⚠ Nothing else about the row differs from
     # `lambacc8wxclip`, so a failure here and not there localises to the decay alone.
     ("lambacc8wxclipwd001", "generated_resnet50_imagenet_a1.py",  8, True),
+    # ⭐⭐ THE `.adamw` GAP, CLOSED 2026-08-14 — and `wdStr` is what closed it. The obstacle was that
+    # no generated reference baked R50's AdamW constants; `adam-probe` bakes eps 1e-8 (matching the
+    # render) but wd 0.02 (against the render's 1e-4 default), so before the decay was a render
+    # PARAMETER this row could not have existed without hand-writing a reference. Now the fixture
+    # renders `.adamw` at wdStr = "0.02" and the two agree by construction rather than by luck.
+    ("adamwxclipwd002", "generated_resnet50_imagenet_adamprobe.py", 1, False),
 ]
 
 # Tolerance. The two sides run the SAME arithmetic in the same f32 order for the most part, but not
@@ -144,17 +156,29 @@ def extract_ref_optimizer(path):
     passes for the wrong reason.
     """
     src = open(os.path.join(REF_DIR, path)).read().split("\n")
-    try:
-        i0 = next(i for i, l in enumerate(src)
-                  if l.strip().startswith("grads = jax.tree.map(lambda _a: _a / _K"))
-    except StopIteration:
-        i0 = next(i for i, l in enumerate(src) if l.strip() == "m, v, t = opt_state")
+    # The span STARTS at the earliest line that transforms `grads` without calling the model, so the
+    # clip is included when there is one. ⚠ Getting this wrong is silent in one direction: starting
+    # below the clip would tie a clipped render against an unclipped reference and report a real-
+    # looking mismatch, which is §3.1's shape one file over.
+    starts = ["grads = jax.tree.map(lambda _a: _a / _K",   # accumulation: the mean, then the clip
+              "gn = jnp.sqrt(",                            # clip, no accumulation
+              "m, v, t = opt_state"]                       # neither
+    i0 = None
+    for pat in starts:
+        hit = [i for i, l in enumerate(src) if l.strip().startswith(pat)]
+        if hit:
+            i0 = hit[0]
+            break
+    assert i0 is not None, f"{path}: no optimizer-span start anchor matched"
+    # …and ENDS at the parameter update. ⚠ `jax.tree.map(_lamb, …)` for LAMB, but AdamW inlines its
+    # lambda (`jax.tree.map(lambda p, mi, vi, msk: …)`), so the anchor is the assignment, not the
+    # callee — matched at or after i0 so an earlier `params = …` cannot be picked up.
     i1 = next(i for i, l in enumerate(src)
-              if l.strip().startswith("params = jax.tree.map(_lamb"))
+              if i >= i0 and l.strip().startswith("params = jax.tree.map("))
     span = src[i0:i1 + 1]
     assert not any("value_and_grad" in l for l in span), \
         f"{path}: the extracted span reached the model call — the anchors moved"
-    assert sum(1 for l in span if l.strip().startswith("params = jax.tree.map(_lamb")) == 1
+    assert sum(1 for l in span if l.strip().startswith("params = jax.tree.map(")) == 1
     # dedent the function body by its own indent so it can exec at module level
     pad = len(span[0]) - len(span[0].lstrip())
     body = "\n".join(l[pad:] if l.strip() else "" for l in span)

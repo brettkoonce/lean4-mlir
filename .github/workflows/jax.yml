@@ -393,13 +393,17 @@ jobs:
           set -e
           lake exe cache get || true
           lake build resnet50-imagenet
-          # `default` is LAMB with no mask and no clip; `a2-accum` is LAMB + no_weight_decay + the
-          # global-norm clip + accumulation. Between them they cover every row the tie runs.
-          for r in default a2-accum; do
+          # One recipe per optimizer shape the tie compares against, and each row needs its own:
+          #   default     LAMB, no mask, no clip, no accumulation
+          #   a2-accum    LAMB + no_weight_decay + global-norm clip + accumulation (wd 0.02)
+          #   a1          the same at RSB-A1's wd 0.01 — the `wdStr` row
+          #   adam-probe  AdamW + no_weight_decay + clip at eps 1e-8, wd 0.02 — the `.adamw` row
+          for r in default a2-accum a1 adam-probe; do
             lake exe resnet50-imagenet "$r" /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true
           done
           missing=0
-          for f in generated_resnet50_imagenet.py generated_resnet50_imagenet_a2accum.py; do
+          for f in generated_resnet50_imagenet.py generated_resnet50_imagenet_a2accum.py \
+                   generated_resnet50_imagenet_a1.py generated_resnet50_imagenet_adamprobe.py; do
             if [ ! -s ".lake/build/$f" ]; then echo "::error::$f was not emitted"; missing=1; fi
           done
           [ "$missing" -eq 0 ]
