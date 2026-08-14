@@ -315,6 +315,15 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "import tensorflow_datasets as tfds\n\n" ++
     "_IMG_SIZE = 224\n" ++
     "_CROP_PADDING = 32\n" ++
+    -- ⭐ **ONE name for the eval crop ratio**, so nothing downstream has to know which of the two
+    -- ways it was configured. It used to be spelled inline in `_imagenet_decode_center_crop` as
+    -- either the literal `testCropRatio` or `_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING)`, and a consumer
+    -- that knew only the second branch read 0.875 off a trainer evaluating at 0.95 —
+    -- `jax/scripts/eval_preproc_ab.py`, on RSB-A3, the one net it mattered for.
+    "_CROP_PCT = " ++
+      (if cfg.testCropRatio > 0.0 then toString cfg.testCropRatio ++
+         "   # explicit test crop ratio (timm resnet50.a1/a2/a3_in1k = 0.95)\n"
+       else "_IMG_SIZE / (_IMG_SIZE + _CROP_PADDING)   # 224/256 = 0.875, timm's default\n") ++
     (if cfg.trainRes > 0 then "_TRAIN_SIZE = " ++ toString cfg.trainRes ++
        "   # RSB-A3 train resolution; eval stays _IMG_SIZE (forward infers from flat len)\n" else "") ++
     "_MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float32)\n" ++
@@ -346,9 +355,16 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    th, tw, _ = tf.unstack(bbox_size)\n" ++
     "    window = tf.stack([oy, ox, th, tw])\n" ++
     "    img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)\n" ++
+    -- ⚠⚠ `antialias=True` HERE TOO, and the training side is the half that costs a re-run.
+    -- timm's RandomResizedCrop resamples through PIL, which antialiases; ours did not. Matching
+    -- eval alone would be worse than matching neither — the network partly fits the aliasing of
+    -- the resampler it trained under, so the two sides have to move together.
+    -- ▶ Note this only bites on crops that DOWNSCALE to the train resolution. `antialias` is a
+    -- no-op when upsampling (measured: 0.3106 vs 0.3107 at 0.70×), and RandomResizedCrop's area
+    -- range reaches down to 0.08, so a fair share of draws are upsamples where nothing changes.
     "    img = tf.image.resize([img], " ++
       (if cfg.trainRes > 0 then "[_TRAIN_SIZE, _TRAIN_SIZE]" else "[_IMG_SIZE, _IMG_SIZE]") ++ ",\n" ++
-    "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
+    "                          method=tf.image.ResizeMethod.BICUBIC, antialias=True)[0]\n" ++
     "    img = tf.image.random_flip_left_right(img, seed=_AUG_SEED)\n" ++
     (if cfg.useAutoAugment then "    img = _autoaugment(img)\n" else "") ++
     (if cfg.useRandAugment && cfg.randAugmentGeometric then
@@ -366,23 +382,31 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
       "    img = tf.clip_by_value(img, 0.0, 255.0)\n"
      else "") ++
     "    return img\n\n" ++
+    -- ⭐⭐ **timm's VALIDATION PROTOCOL, not the Google/TPU "Inception" one.** timm resizes the WHOLE
+    -- image so its shorter side is `img_size / crop_pct`, then centre-crops `img_size`; the older
+    -- form here cropped a centred square straight out of the JPEG and resized that. The field of
+    -- view is identical either way, so the ordering is worth 0.02–0.04 pt — but `antialias=True`
+    -- is not: PIL antialiases when downscaling and TF's default does not, and on RSB-A3 that gap
+    -- measured **0.90 pt** (77.15 → 76.25 on the same weights).
+    -- ⚠ `antialias=True` is what makes this PIL rather than merely PIL-shaped, and it is measured
+    -- rather than asserted: TF bicubic with antialias tracks PIL bicubic at mean |Δ| ≈ 0.30/255,
+    -- FLAT from 0.7× to 11.7× downscale. Without it the error grows with the ratio — 0.31 at 1.0×,
+    -- 2.54 at 3.9×, 13.73 at 11.7× — i.e. it was concentrated on the biggest images in the set.
+    -- ⚠ It costs a full `decode_jpeg` where the old form could `decode_and_crop_jpeg`, because the
+    -- resize now precedes the crop. Eval only, and eval is a small share of a run.
     "def _imagenet_decode_center_crop(image_bytes):\n" ++
-    "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
+    "    img = tf.io.decode_jpeg(image_bytes, channels=3)\n" ++
+    "    shape = tf.shape(img)\n" ++
     "    h, w = shape[0], shape[1]\n" ++
-    (if cfg.testCropRatio > 0.0 then
-      "    padded = tf.cast((" ++ toString cfg.testCropRatio ++
-        " * tf.cast(tf.minimum(h, w), tf.float32)), tf.int32)   # explicit test crop ratio (RSB-A3 0.95)\n"
-     else
-      "    padded = tf.cast(\n" ++
-      "        ((_IMG_SIZE / (_IMG_SIZE + _CROP_PADDING)) *\n" ++
-      "         tf.cast(tf.minimum(h, w), tf.float32)), tf.int32)\n") ++
-    "    oy = (h - padded) // 2\n" ++
-    "    ox = (w - padded) // 2\n" ++
-    "    window = tf.stack([oy, ox, padded, padded])\n" ++
-    "    img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)\n" ++
-    "    img = tf.image.resize([img], [_IMG_SIZE, _IMG_SIZE],\n" ++
-    "                          method=tf.image.ResizeMethod.BICUBIC)[0]\n" ++
-    "    return img\n\n" ++
+    "    target = tf.cast(tf.round(_IMG_SIZE / _CROP_PCT), tf.int32)\n" ++
+    "    scale = tf.cast(target, tf.float32) / tf.cast(tf.minimum(h, w), tf.float32)\n" ++
+    "    nh = tf.cast(tf.round(tf.cast(h, tf.float32) * scale), tf.int32)\n" ++
+    "    nw = tf.cast(tf.round(tf.cast(w, tf.float32) * scale), tf.int32)\n" ++
+    "    img = tf.image.resize(img, [nh, nw], method=tf.image.ResizeMethod.BICUBIC,\n" ++
+    "                          antialias=True)   # PIL-equivalent; see the emitter's note\n" ++
+    "    oy = (nh - _IMG_SIZE) // 2\n" ++
+    "    ox = (nw - _IMG_SIZE) // 2\n" ++
+    "    return tf.image.crop_to_bounding_box(img, oy, ox, _IMG_SIZE, _IMG_SIZE)\n\n" ++
     (if cfg.randomErasing then
       "def _random_erase(img):\n" ++
       "    # Zero a random box (≈mean post-normalize) with prob p. tf-graph-friendly.\n" ++

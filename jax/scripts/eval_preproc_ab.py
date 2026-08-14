@@ -60,12 +60,16 @@ def _crop_pct_of(mod):
     Recovered by reading rather than by fitting, and the fallback is asserted to be the branch that
     is actually present -- so a third branch appearing later fails here instead of scoring quietly.
     """
+    # ⭐ Current trainers emit `_CROP_PCT` as ONE module constant, whichever way it was configured,
+    # so there is nothing to parse. The two branches below are for trainers generated before that.
+    if hasattr(mod, "_CROP_PCT"):
+        return float(mod._CROP_PCT), "_CROP_PCT (emitted constant)"
     src = inspect.getsource(mod._imagenet_decode_center_crop)
     lit = re.search(r"padded\s*=\s*tf\.cast\(\(\s*([0-9]*\.[0-9]+)\s*\*", src)
     if lit:
-        return float(lit.group(1)), "testCropRatio (explicit in the emitted trainer)"
+        return float(lit.group(1)), "testCropRatio (legacy inline literal)"
     if "_CROP_PADDING" in src:
-        return S / (S + mod._CROP_PADDING), "_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING)"
+        return S / (S + mod._CROP_PADDING), "_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING) (legacy)"
     raise SystemExit(
         "could not recover the eval crop ratio from _imagenet_decode_center_crop -- it matches "
         "neither emitted branch. Read the function and extend `_crop_pct_of`; do NOT let this "
@@ -180,14 +184,23 @@ ds = tfds.load("imagenet2012", split="validation",
 
 def _pp(ex):
     b = ex["image"]
-    if MODE == "tf-current":
-        img = pp_tf(b, antialias=False)
+    if MODE == "shipped":
+        # ⭐ **THE TRAINER'S OWN FUNCTION, not a re-implementation of it.** Every other arm here
+        # describes an alternative; this one has to BE the thing under test, or the script drifts
+        # from the emitter and starts A/B-ing its own memory of it. That is not hypothetical: the
+        # `tf-current` arm below was written as "what we ship" and stopped being so the moment the
+        # emitter moved to timm's protocol, while its name went on claiming otherwise.
+        # ▶ With the emitter now on timm's protocol, `shipped` and `timm` must agree EXACTLY. That
+        # equality is the check that the conversion landed.
+        img = m._imagenet_decode_center_crop(b)
+    elif MODE == "tf-current":
+        img = pp_tf(b, antialias=False)     # the LEGACY protocol (crop→resize, aliased)
     elif MODE == "tf-aa":
-        img = pp_tf(b, antialias=True)
+        img = pp_tf(b, antialias=True)      # legacy order, antialiased
     elif MODE == "timm":
         img = pp_timm(b)
     else:
-        raise SystemExit(f"unknown MODE {MODE}")
+        raise SystemExit(f"unknown MODE {MODE} — one of shipped | tf-current | tf-aa | timm")
     img = tf.cast(img, tf.float32)
     img = (img - m._MEAN_RGB) / m._STD_RGB
     img = tf.transpose(img, [2, 0, 1])

@@ -24,6 +24,18 @@ and executed on the GPU --- which is what the numbers below were measured
 on. It has a phase-4 (PJRT) peer already built, and phase 4 is where it is
 headed.}
 
+% Placed at the head of every section that quotes an ImageNet accuracy. The
+% emitters moved onto timm's validation protocol and resampler after all of
+% these were measured (appendix A), so the numbers and the protocol the book
+% describes are one re-run out of step. One macro, so the caveat cannot be
+% attached to some result tables and forgotten on others.
+\newcommand{\imagenettimmnote}{\textbf{[TODO: run with timm tweaks.]} The
+numbers in this section were measured before the trainers moved onto
+\texttt{timm}'s validation protocol and its antialiased resampler
+(appendix~\ref{app:data}). That change moves the training distribution as
+well as the evaluation, so it needs a re-run rather than a re-score, and
+none of it is reflected below.}
+
 \chapter*{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 \label{chap:introduction}
@@ -5019,6 +5031,8 @@ the leave-one-out chain.
 
 \section{ImageNet recipe}
 
+\imagenettimmnote
+
 \imagenetphasenote
 
 The Imagenette runs above all trained on $\sim$9.5K images for 80
@@ -5305,6 +5319,8 @@ convolutions.
 
 \section{Side quest: ResNet-50, RSB-A3 (100 epochs)}
 
+\imagenettimmnote
+
 \imagenetphasenote
 
 The basic block ResNet-34 is built from generalizes to the
@@ -5368,48 +5384,14 @@ the full $2048$ neither helps nor hurts, so the BN-sharding regime is
 \emph{not} where the residual $\sim$1 point to the paper's $78.1\%$
 hides.
 
-\textbf{Part of it is the resize, and the part is now measured.} Both
-rows here are scored through this repo's \texttt{tf.image.resize}
-preprocessing, whereas the timm reference reports $78.1\%$ through PIL's
-bicubic resize, which antialiases where ours does not. Scoring the
-$77.22\%$ checkpoint through the full PIL protocol instead gives
-$\mathbf{76.25\%}$: the resampler is worth about \textbf{nine tenths of
-a point} on this network. Two things follow, and the second is the more
-useful one.
-
-First, this is a \emph{mismatch} penalty rather than a verdict on either
-resampler. Each network partly fits the aliasing of the one it trained
-under, so moving only the evaluation side is expected to lose accuracy;
-the intermediate arm, antialiasing the evaluation crop alone, sits
-between the two at $76.70\%$. The matched-antialiased arm --- both sides
-moved, and retrained --- has not been run, so whether timm's convention
-is \emph{better} or merely \emph{different} is genuinely open.
-
-Second, ResNet-50 is about $3.6\times$ more sensitive to this than the
-other networks in the book, where the same three-way comparison spans
-$0.25$ points (\S\ref{chap:layernorm}, \S\ref{chap:attention}). The plausible
-mechanism is the recipe itself: A3's centre-crop ratio of $0.95$ keeps
-$8\%$ more of the frame than the $0.875$ used elsewhere, so more of each
-image survives to be resampled, on a recipe whose whole trick is
-test-time object scale.
-
-\noindent So the honest reading is that the two sit within about a point
-of each other, and that roughly nine tenths of that point is the
-evaluation pipeline rather than the recipe --- but not that the ranking
-inverts, which is a stronger claim and one nothing here has tested.
-
-\textbf{[TODO, the reverse direction.]} What remains unmeasured is
-carrying the reference \emph{into} this pipeline: port the
-\texttt{a3\_in1k} weights to the layout of
-\texttt{init\_params\_from\_file} and score them both ways. If they lose
-about the same nine tenths going the other direction, the two
-conventions are equivalent and matching timm buys comparability rather
-than accuracy; if they lose much less, its pipeline is genuinely the
-better one and the matched-antialiased retrain is worth its cost. The
-control that makes the answer believable is scoring the ported weights
-through timm's own \texttt{validate.py} first and reproducing its
-published number --- without it, ``they fall to $\sim$74\%'' and ``the
-port is wrong'' look identical.
+\textbf{[TODO: run with timm tweaks.]} Both rows above were measured
+before the trainers moved onto timm's validation protocol and its
+resampler (appendix~\ref{app:data}), and before two optimizer
+corrections read out of timm's own source: LAMB's gradient clip, which
+timm enables by default and we did not, and its guard excluding the
+\texttt{no\_weight\_decay} group from layer adaptation, which we had
+been applying to every parameter. All four are in the emitters now,
+none has been run, and none of the numbers here reflects any of them.
 
 \emph{Changed since the $76.66\%$ first run:} RandAugment is now
 timm-literal (\texttt{rand-m6-mstd0.5-inc1}).
@@ -6192,6 +6174,8 @@ bridge theorem is the claim that this graph computes
 \end{itemize}
 
 \section{ImageNet recipe}
+
+\imagenettimmnote
 \label{sec:mnv2_imagenet}
 
 \imagenetphasenote
@@ -6489,6 +6473,8 @@ scaling) but the core depthwise-separable scaffolding is exactly what
 this chapter formalized.
 
 \section{Side quest: MobileNet V4}
+
+\imagenettimmnote
 
 \imagenetphasenote
 
@@ -7311,6 +7297,8 @@ composed in \texttt{seBlockFull\_has\_vjp}.
 \end{itemize}
 
 \section{ImageNet recipe}
+
+\imagenettimmnote
 \label{sec:enet_imagenet}
 
 \imagenetphasenote
@@ -7659,6 +7647,8 @@ reminder that ``the paper recipe'' includes the optimizer's exact
 semantics, not just its hyperparameters.
 
 \section{Side quests}
+
+\imagenettimmnote
 \label{sec:enet_side_quests}
 
 Two EfficientNet follow-ups extended the family in orthogonal
@@ -8306,6 +8296,8 @@ $\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
 \mathrm{depthwise})$, composed by \texttt{convNextBlock\_has\_vjp}.
 
 \section{ImageNet recipe}
+
+\imagenettimmnote
 \label{sec:convnext_imagenet}
 
 \imagenetphasenote
@@ -10132,6 +10124,8 @@ same three pieces: denoted IR, bridge theorem, printer.
 \end{itemize}
 
 \section{ImageNet recipe}
+
+\imagenettimmnote
 \label{sec:vit_imagenet}
 
 \imagenetphasenote
@@ -12931,26 +12925,26 @@ matched, and each was checked against \texttt{timm} rather than assumed:
     reference's own $\sum \mathbb{1}[\ell_i > \ell_y] < 5$, and the
     train/test resolution split is the recipe's (RSB-A3 trains at $160$
     and evaluates at $224$).
+  \item \textbf{The resampler is \texttt{timm}'s.} Validation resizes
+    the whole image so its shorter side is
+    $\mathrm{img\_size}/\mathrm{crop\_pct}$ and only then centre-crops,
+    which is \texttt{timm}'s order rather than the Google/TPU
+    ``Inception'' crop-then-resize; and both that resize and the
+    training \texttt{RandomResizedCrop} run \emph{antialiased}, because
+    PIL antialiases when downscaling and \texttt{tf.image.resize} does
+    not by default. The two have to move together: a network partly
+    fits the aliasing of the resampler it trained under, so matching
+    only the evaluation side would be worse than matching neither.
+    Antialiased \texttt{tf.image.resize} agrees with PIL to a mean
+    $|\Delta|$ of $0.30$ of $255$, flat across the whole range of
+    downscale ratios ImageNet's validation set spans.
 \end{itemize}
 
-\noindent One axis is deliberately \emph{not} matched, and it is
-recorded here rather than left for a reader to discover.
-\texttt{timm} resamples through PIL, which antialiases when
-downscaling; we resample through \texttt{tf.image.resize} with
-\texttt{antialias=False}, on both the training crop and the evaluation
-crop. That is self-consistent --- a network is trained and scored under
-one resampler --- but it is not \texttt{timm}'s. Measured on the RSB-A3
-ResNet-50 of \S\ref{sec:r50_phase4}, scoring the same weights through
-the full PIL protocol instead of ours costs $0.90$ points; on
-ConvNeXt-T and ViT-Ti it costs $0.25$. \emph{That figure is a mismatch
-penalty and not a verdict on either resampler:} the model has partly
-fitted the aliasing of the one it trained under, so changing only the
-evaluation side is expected to lose accuracy, and a matched-antialiased
-arm --- both sides moved, and retrained --- has not been run, so its
-sign is unknown. Until it has, quoting our numbers against
-\texttt{timm}'s published ones carries this term, and the honest
-statement is that the two sit within about a point of each other on a
-ruler that is shared in every respect but the resampler.
+\noindent \textbf{[TODO: run with timm tweaks.]} The protocol above is
+what the trainers emit today. Every ImageNet accuracy printed in this
+book predates it and was measured under the older preprocessing, so the
+numbers and the protocol description are one re-run out of step. They
+are marked where they appear.
 
 \medskip\noindent\textbf{Demo datasets.} The \texttt{demos/} trainers step
 past image classification into the three other task families in the book,
