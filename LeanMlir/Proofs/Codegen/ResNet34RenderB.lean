@@ -283,6 +283,16 @@ def accumScalarConsts (k : Nat) : String :=
   s!"    %aob2k = stablehlo.constant dense<{fmt12 ((1.0 - 0.999) / (kf * kf))}> : tensor<f32>\n" ++
   "    %ob2 = stablehlo.multiply %aup, %aob2k : tensor<f32>\n"
 
+/-- **Is this parameter in timm's `no_weight_decay` group?**, recovered from the ONE name
+    `r34WdName` produces rather than passed alongside it.
+
+    ⚠⚠ Derived and not a second argument, on purpose. The skip-list now controls TWO things —
+    whether the decay term enters `r` (`%wdz`) and whether the trust ratio applies at all
+    (`recipe_fidelity_diffs.md` D2) — and a caller threading a `Bool` beside the name is exactly the
+    two-writers shape that lets them disagree: a parameter decayed but not adapted, or the reverse.
+    One name, one predicate, both consumers downstream of it. -/
+def wdNameExcludes (wdName : String) : Bool := wdName != "%wd"
+
 /-- `(θ', m', v')` for one parameter, from its un-fused gradient.
 
     For `.adamw` the three ops are the proven `adamMNextF`/`adamVNextF`/`adamWParamF`
@@ -342,8 +352,21 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- that single-leaf fold is the entire difference from the global-norm clip, whose whole
     -- semantic content is that ONE scalar is shared (`Proofs.clipFactor_shared` against
     -- `Proofs.lambScale_not_shared`). The two features emit nearly the same lines.
-    let (cN, nN) ← pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
-                              (.operand s!"%{g.nm}" z))
+    -- ⭐⭐ **D2: the no_weight_decay group is NOT layer-adapted, and the fix is to SKIP this op.**
+    -- timm reads `if weight_decay != 0 or group['always_adapt']:` before computing the ratio, so an
+    -- excluded parameter takes a plain Adam step at `trust = 1`. Feeding `%lzero` here — the same
+    -- zero this op would otherwise seed from — makes `wn2 = 0`, and `Proofs.lambTrust_zero_weight`
+    -- (`lambTrust 0 rn2 = 1`, already `@[simp]`) says that IS 1. ▶ No new op, no new constructor,
+    -- no new theorem; the excluded params emit one op FEWER than before.
+    -- ⚠ The existing zero-norm guard does not already cover this. It fires at `‖θ‖ = 0` exactly,
+    -- i.e. step one, where every BN β and bias starts; from step two the parameter is
+    -- small-but-nonzero and `‖θ‖/‖r‖` collapses to ~0.01–0.1 against timm's 1.0. That is why
+    -- `lambTrust_zero_weight` could hold on both sides while both were wrong.
+    -- ⚠ INERT unless the skip-list is on: with `wdExclude := false` every `wdName` is `"%wd"`, so
+    -- this takes the `else` and every committed non-`wx` artifact re-renders byte-identically.
+    let (cN, nN) ← if wdNameExcludes wdName then pure ("", "%lzero")
+                   else pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
+                                   (.operand s!"%{g.nm}" z))
     -- ③ `trust · r`, with `‖r‖²` reduced inside the op from its own tensor child.
     let (cS, nS) ← pretty B (.lambScaleF (n := n) g.ds (.operand nN z1) (.operand nR z))
     -- ④ `θ' = θ − lr·(trust·r)` — `sgdParamF`, an op that already exists, applied to the scaled
@@ -396,9 +419,11 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                       "%b2" "%ob2" "%bc1" "%bc2" "%eps" wdName g.ds 0 0 0 0 0 0 z z z gt)
     -- ⚠ `‖θ‖²` reads θ ALONE — no gradient, so accumulation cannot reach it and this line is
-    -- character-for-character `.lamb`'s.
-    let (cN, nN) ← pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
-                              (.operand s!"%{g.nm}" z))
+    -- character-for-character `.lamb`'s, INCLUDING its D2 skip: an excluded parameter feeds
+    -- `%lzero` so `lambTrust 0 _ = 1`. See the `.lamb` branch above for why.
+    let (cN, nN) ← if wdNameExcludes wdName then pure ("", "%lzero")
+                   else pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
+                                   (.operand s!"%{g.nm}" z))
     let (cS, nS) ← pretty B (.lambScaleF (n := n) g.ds (.operand nN z1) (.operand nR z))
     -- ④ `θ' = θ − lr·(trust·r)`. ⭐ THIS is where the accumulate phase is frozen: `%lr = 0` makes it
     -- `θ − 0·(…) = θ` exactly. LAMB's decay is inside `r`, which the zero multiplies away, so there

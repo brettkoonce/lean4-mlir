@@ -34,7 +34,11 @@ REPO = Path(__file__).resolve().parent.parent
 GOLDEN = REPO / "tests" / "bestiary_params.yml"
 REPORT = REPO / "tests" / "bestiary_timm_report.md"
 
-DEFAULT_TIMM_PY = "/tmp/timm-venv/bin/python"
+# ⭐ The PINNED reference env (`requirements-timm-lock.txt`), not a scratch venv in /tmp. timm is
+# the specification the ImageNet recipes are implemented against, so which timm has to survive a
+# reboot. ⚠ It is deliberately NOT the main `.venv`: timm drags in torch, and torch pulls
+# `nvidia-cudnn-cu13`, which overwrites the pinned cu12 cuDNN in place and breaks every JAX conv.
+DEFAULT_TIMM_PY = str(REPO / ".venv-timm" / "bin" / "python")
 
 
 def load_golden(path: Path) -> dict[str, dict[str, int]]:

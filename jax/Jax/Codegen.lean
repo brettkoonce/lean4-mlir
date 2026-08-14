@@ -2488,6 +2488,22 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
      else "        r = mi / (jnp.sqrt(vi) + EPS)\n") ++
     "        wn = jnp.sqrt(jnp.sum(p * p)); rn = jnp.sqrt(jnp.sum(r * r))\n" ++
     "        trust = jnp.where(wn > 0, jnp.where(rn > 0, wn / rn, 1.0), 1.0)\n" ++
+    -- ⭐⭐ **timm GUARDS LAYER ADAPTATION BY THE WEIGHT-DECAY GROUP** — `Lamb.step` reads
+    -- `if weight_decay != 0 or group['always_adapt']:` and otherwise leaves `trust = 1`. So the
+    -- `no_weight_decay` group (BN γ/β, biases) takes a PLAIN ADAM step in the reference, and
+    -- applying the ratio to it is a one-sided error: those tensors are zero-initialised, so ‖p‖
+    -- starts tiny while ‖r‖ ≈ √C, and trust collapses to ~0.01–0.1 against timm's 1.0. **BN β and
+    -- the biases are under-trained by one to two orders of magnitude early in training.**
+    -- ⚠ The zero-norm guard above does NOT cover this. It fires only at ‖p‖ = 0 exactly, i.e. step
+    -- one; from step two on the parameter is small-but-nonzero and the ratio bites. That is why a
+    -- `lambTrust 0 rn2 = 1` theorem can hold on both sides while this stays wrong on both.
+    -- ⚠ `WD_MASK` is the same partition timm's group is (1 where decayed, 0 where excluded), so
+    -- reusing it reproduces the reference's semantics exactly rather than approximating them.
+    -- ▶ Scoped to `wdExclude`: with no skip-list every parameter IS decayed, so timm adapts all of
+    -- them and the unguarded ratio is already correct. `recipe_fidelity_diffs.md` D2.
+    (if wdExclude then
+      "        trust = jnp.where(msk > 0, trust, 1.0)   # timm: no_weight_decay group is NOT adapted\n"
+     else "") ++
     "        return p - lr * trust * r\n" ++
     (if wdExclude then "    params = jax.tree.map(_lamb, params, mc, vc, WD_MASK)\n"
      else "    params = jax.tree.map(_lamb, params, mc, vc)\n") ++

@@ -103,7 +103,7 @@ added to the update *before* the trust-ratio norms, as in timm.
 **Faithful (config-level):** per-step cosine, RRC area (0.08,1.0) aspect (3/4,4/3), no
 random erasing, ls 0, sd 0, EMA off, repeated-aug off, crop_pct 0.95, 160/224 split.
 
-### D1. Missing gradient clipping — **NEW [verified]**
+### D1. ✅ CLOSED 2026-08-14 — gradient clipping
 
 timm's `Lamb.__init__` defaults `max_grad_norm=1.0` and clips the global grad norm
 *inside the optimizer* every step. The emitted trainer has no clipping (`gradClipNorm`
@@ -115,7 +115,20 @@ again — so a uniform rescale largely cancels. The residual is second-order: th
 factor varies per step, so `m` and `v` accumulate differently-scaled gradients. Real, but
 I would not expect it to carry the −1.44 alone.
 
-### D2. Trust ratio applied to zero-weight-decay params — **NEW [verified], the best candidate**
+**Fix**: `gradClipNorm := 1.0` on `resnet50ImagenetConfig`, inherited by every LAMB recipe
+(A3 `rsb-faithful`/`short`, A2 `default`/`a2-accum`/`a2-true-2048`, A1); the 2018 recipe
+sets it back to `0.0` because it is SGD+momentum and torchvision clips nothing.
+
+⭐ **The placement was already right and is worth recording.** timm computes
+`clip_global_norm = (global_norm / max_grad_norm).clamp_(min=1.0)` then `grad.div_(...)`,
+i.e. multiply by `min(1, max_norm/gn)` — algebraically our emitted
+`g * jnp.minimum(1.0, C / (gn + 1e-6))`. And the emitter puts `clipLine` *after*
+`grads = _gsum / _K` on the accumulation path, so it clips ONCE PER OPTIMIZER STEP on the
+averaged gradient, which is where timm's optimizer-internal clip sits. A clip per
+micro-batch would have been a different operator. Both read off timm 1.0.28's source, not
+assumed.
+
+### D2. ✅ CLOSED 2026-08-14 — trust ratio applied to zero-weight-decay params (was the best candidate)
 
 timm guards layer adaptation with `if weight_decay != 0 or group['always_adapt']:`. The
 `no_weight_decay` group (BN γ/β, biases) therefore gets a **plain Adam step, trust = 1**.
@@ -129,6 +142,28 @@ unaffected (init 1.0 ⇒ ‖p‖≈‖r‖≈√C ⇒ trust ≈ 1).
 
 Fix is a one-line guard: reuse `WD_MASK` to force `trust = 1` where the mask is 0, which
 reproduces timm's group semantics exactly.
+
+**Closed on BOTH paths, and the verified one turned out to be the cheaper of the two.**
+
+* JAX (`Jax/Codegen.lean`): one emitted line,
+  `trust = jnp.where(msk > 0, trust, 1.0)`, scoped to `wdExclude` — with no skip-list every
+  parameter is decayed, so timm adapts all of them and the unguarded ratio is already right.
+* Verified (`Proofs/Codegen/ResNet34RenderB.lean`, shared with R50): **skip the
+  `gradSumSqAccF` that computes `‖θ‖²` and feed `%lzero` instead.** Then `wn2 = 0`, and
+  `Proofs.lambTrust_zero_weight` — `lambTrust 0 rn2 = 1`, already `@[simp]` — says that IS
+  1. ⭐ No new op, no new constructor, no new theorem, and the excluded parameters emit one
+  op *fewer*: the two `wx` LAMB artifacts went 161 → 54 `‖θ‖²` seeds, which is exactly R50's
+  54 weight tensors (53 convs + fc) against 107 excluded (53 BN γ/β pairs + fc bias).
+
+⚠ **The existing zero-norm guard did NOT already cover this**, and the distinction is the
+whole content of the bug. `lambTrust 0 _ = 1` fires at `‖θ‖ = 0` *exactly*, i.e. step one,
+where every BN β and bias starts. From step two the parameter is small-but-nonzero and the
+ratio bites. So a theorem named for the guard held on both sides while both were wrong —
+a reminder that a proven lemma is a statement about the case it names, not about the
+neighbourhood of that case.
+
+⚠ Only the two `wx` LAMB renders changed; every other committed artifact re-renders
+byte-identically, which is the cheap self-check that the edit is scoped.
 
 ### D3. Known/documented (unchanged)
 
@@ -301,8 +336,9 @@ Also: C2 (BN momentum 0.99 vs timm 0.9), C3, C1.
 
 Ranked by (likely points) ÷ (cost to test):
 
-1. **D2** — R50 LAMB trust ratio on zero-wd params. One-line guard, clear direction,
-   shares an A3 arm (~10–11 hr) with D1.
+1. ✅ ~~**D2** — R50 LAMB trust ratio on zero-wd params~~ **CLOSED 2026-08-14 on both
+   paths.** Still unmeasured: it needs an A3 arm (~10–11 hr JAX / ~34 hr verified), which
+   it shares with D1. ▶ Both are in the code now, so that arm is a scheduling decision.
 2. **D7** — ViT init. Already shipped as `deit-init`, never run. An 80ep ViT-Ti A/B is
    ~6 hr per arm.
 3. **D12** — MNv4 RandAugment M scale. Free to check, and it gates the 500ep `full` run.

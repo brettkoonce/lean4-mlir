@@ -36,11 +36,25 @@ def ours_from_shim():
         out[name] = eval(f"lambda m: {body}", env)
     return out
 
+TIMM_VENV = ".venv-timm"          # the pinned reference env, `requirements-timm-lock.txt`
+
+
 def main():
     try:
         import timm.data.auto_augment as A
     except ImportError:
-        sys.exit("timm not installed — `.venv/bin/pip install timm`")
+        sys.exit(
+            "timm not importable. It lives in the PINNED REFERENCE ENV, not the main .venv:\n"
+            f"    {TIMM_VENV}/bin/python scripts/randaug_timm_diff.py\n"
+            "Build it from requirements-timm-lock.txt (that file's header has the two commands).\n"
+            "⚠ Do NOT `pip install timm` into the main .venv — it pulls nvidia-cudnn-cu13, which\n"
+            "  overwrites the pinned cu12 cuDNN in place and breaks every JAX convolution.")
+    # ⚠⚠ **THE VERSION IS PART OF THE CLAIM, so it is printed rather than assumed.** This gate says
+    # "our magnitude mappings equal timm's"; that sentence is only meaningful against a stated timm,
+    # and `requirements-timm-lock.txt` is where the repo pins which one. A mismatch here and there
+    # means the gate is green against something other than the specification.
+    import timm
+    print(f"── timm {timm.__version__} (pinned reference; see requirements-timm-lock.txt) ──")
     h = dict(A._HPARAMS_DEFAULT)
     o = ours_from_shim()
     # our name -> timm's level_to_arg for the `inc` variant RSB selects

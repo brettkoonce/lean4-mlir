@@ -87,6 +87,21 @@ def resnet50ImagenetConfig : TrainConfig where
   -- recipe the eval crop is not a detail — object scale at test time is the thing the train/test
   -- resolution split is exploiting.
   testCropRatio  := 0.95
+  -- ⚠⚠ **timm's `Lamb.__init__` DEFAULTS `max_grad_norm = 1.0` and clips the global gradient norm
+  -- INSIDE the optimizer, every step.** We had no clipping at all (`grep -c "gn = jnp.sqrt"` = 0),
+  -- so every LAMB recipe here ran unclipped against a reference that clips. `recipe_fidelity_diffs.md`
+  -- D1.
+  -- ⭐ The placement already matches: the emitter puts `clipLine` after `grads = _gsum / _K` on the
+  -- accumulation path, i.e. ONCE PER OPTIMIZER STEP on the averaged gradient — which is where timm
+  -- applies it. A clip per micro-batch would be a different operator.
+  -- ⚠ Expected effect is modest and the reason is worth keeping: LAMB's update is approximately
+  -- invariant to a uniform gradient rescale (Adam divides by √v, then the trust ratio renormalises
+  -- again), so the clip largely cancels. The residual is second-order — the factor varies per step,
+  -- so `m` and `v` accumulate differently-scaled gradients. Do not expect this to carry the gap to
+  -- 78.1 on its own; `wdExcludeNormBias` and the D2 trust guard are the one-sided ones.
+  -- ⚠ INHERITED BY EVERY DERIVED RECIPE, so the 2018 recipe below — SGD+momentum, whose torchvision
+  -- reference clips nothing — sets it back to 0 explicitly.
+  gradClipNorm   := 1.0
 
 #eval resnet50Imagenet.validate!
 
@@ -136,6 +151,10 @@ def resnet50ImagenetConfig2018 : TrainConfig :=
       batchSize      := 256
       epochs         := 90
       weightDecay    := 0.0001   -- 1e-4 on ALL params (no skip-list)
+      -- ⚠ BACK TO 0, because the base above turned it on for timm's **Lamb** default and this
+      -- recipe is SGD+momentum. torchvision's 2018 reference clips nothing, so inheriting the clip
+      -- would make the A3-vs-2018 comparison a two-variable one.
+      gradClipNorm   := 0.0
       lossKind       := .classCE -- softmax cross-entropy, not BCE
       labelSmoothing := 0.1
       useMixup       := false
