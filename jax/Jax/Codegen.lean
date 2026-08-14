@@ -32,8 +32,17 @@ def _aa_blend(a, b, f):  # a,b float32 HWC; returns uint8
     return tf.cast(tf.clip_by_value(a + f * (b - a), 0.0, 255.0), tf.uint8)
 
 def _aa_transform(img, vec):
-    # img uint8 HWC. vec: 8-param projective transform (output->input). BILINEAR
-    # (timm's default geometric interpolation; NEAREST was the earlier deviation).
+    # img uint8 HWC. vec: 8-param projective transform (output->input).
+    # ⚠⚠ BILINEAR, AND THIS IS A KNOWN DEVIATION AS OF 2026-08-14. The comment here used to claim
+    # BILINEAR was "timm's default geometric interpolation"; it is not. timm resolves the resample
+    # mode from the MODEL's data config -- `resolve_data_config` for resnet50 gives
+    # interpolation='bicubic', and `transforms_factory` then sets `aa_params['interpolation'] =
+    # str_to_pil_interp('bicubic')`, so timm's geometric RandAugment ops run BICUBIC. (Only when
+    # interpolation is unset or 'random' does it use `_RANDOM_INTERPOLATION`, a per-call choice
+    # over BILINEAR/BICUBIC -- which is also not what we do.) Measured against timm 1.0.28.
+    # ▶ NOT changed here, because it is a behaviour change for every net rather than a
+    # transcription bug: the magnitude mappings beside it WERE transcription bugs and are fixed.
+    # `planning/a3_paper_fidelity.md` §4b carries the evidence and the decision.
     H = tf.shape(img)[0]; W = tf.shape(img)[1]
     images = tf.expand_dims(tf.cast(img, tf.float32), 0)
     transforms = tf.reshape(tf.cast(vec, tf.float32), [1, 8])
@@ -112,8 +121,17 @@ def _aa_enh(m): return (1.0 + tf.where(tf.random.uniform([]) < 0.5, 1.0, -1.0) *
 def _aa_she(m): return (m/_AA_MAX)*0.3
 def _aa_trn(m): return (m/_AA_MAX)*0.45   # timm translate_pct=0.45 (fraction of dim, applied in _aa_translate_*)
 def _aa_rot(m): return (m/_AA_MAX)*30.0
-def _aa_pos(m): return (int(4 - (m/_AA_MAX)*4) if _RA_INC else int((m/_AA_MAX)*4))
-def _aa_sol(m): return (int(256 - (m/_AA_MAX)*256) if _RA_INC else int((m/_AA_MAX)*256))
+# ⚠⚠ THE TRUNCATION HAPPENS BEFORE THE SUBTRACTION, NOT AFTER — fixed 2026-08-14 against
+# timm 1.0.28's own source. timm builds the `inc` mappings by NEGATING the already-integer
+# decreasing one: `_posterize_increasing = 4 - _posterize(level)` where `_posterize` is
+# `int((level/10)*4)`. Writing it as `int(4 - (level/10)*4)` truncates on the other side of the
+# subtraction and lands one step lower at 7 of the 11 integer magnitudes.
+#   Posterize @ m=7: timm keeps 4-int(2.8) = 2 MSBs; we kept int(1.2) = 1. A WHOLE BIT more
+#   posterisation, at RSB-A2's own magnitude — the only one of these that is visible.
+#   Solarize  @ m=7: timm 256-int(179) = 77; we had int(76.8) = 76. One threshold unit of 256.
+# Both are the same transcription error, and `scripts/randaug_timm_diff.py` is what found it.
+def _aa_pos(m): return ((4 - int((m/_AA_MAX)*4)) if _RA_INC else int((m/_AA_MAX)*4))
+def _aa_sol(m): return ((256 - min(256, int((m/_AA_MAX)*256))) if _RA_INC else int((m/_AA_MAX)*256))
 def _aa_sad(m): return int((m/_AA_MAX)*110)   # timm SolarizeAdd: add in [0,110], unsigned, inc-invariant
 
 _AA_OPS = {

@@ -259,12 +259,38 @@ transform, different resampler". ▶ **Never validate a resampler on noise.** A 
 hard edge separates them: a wrong transform shows large INTERIOR error, a resampler shows error
 only where the gradient is steep.
 
-⛔ **What this does NOT settle, and it is the better version of the original worry: the geometric
-INTERPOLATION CHOICE.** We always use BILINEAR. timm takes its resample mode from
-`hparams['interpolation']`, which — absent an explicit `-i` in the arg string — is believed to be a
-per-call RANDOM choice over (BILINEAR, BICUBIC). That cannot be checked against PIL; it needs
-timm's own source, which is not installed here. ▶ `pip install timm` into `.venv` and read
-`timm/data/auto_augment.py` is the whole remaining step.
+### ✅ …and then timm was installed (1.0.28), which found a REAL one
+
+`scripts/randaug_timm_diff.py` evaluates our `_aa_*` magnitude mappings — read out of the generated
+shim by regex, not restated — against timm's own `level_to_arg` functions at every integer
+magnitude. **Two of six were wrong, in the same way, since they were written:**
+
+| | timm @ m=7 | ours (was) | |
+|---|---|---|---|
+| **Posterize** | keep **2** MSBs | keep **1** | ⛔ a whole bit, at RSB's own magnitude |
+| **Solarize** | 77 | 76 | 1 threshold unit of 256 — invisible |
+
+⭐ **One root cause: which side of the subtraction the truncation happens on.** timm builds each
+`inc` mapping by negating the already-INTEGER decreasing one — `4 - int((m/10)·4)` — where we wrote
+`int(4 − (m/10)·4)`. That lands one step lower at **7 of the 11** integer magnitudes. Fixed
+2026-08-14; the gate has an anti-vacuity control (it fires on the pre-fix shim, 8/11 magnitudes).
+
+⚠⚠ **Nothing could have caught this.** `shim_wiring_gate.py` compares the shim to the reference by
+augmentation PARTITION — *which* ops are on — and never by the ARGUMENT each op is called with. The
+partition was right the whole time. ▶ A gate on "is the feature enabled" is not a gate on "is the
+feature correct", and this repo now has one of each.
+
+⛔ **AND THE INTERPOLATION IS A THIRD DIFFERENCE, still open.** We always use BILINEAR for the
+geometric ops. timm resolves the resample mode from the MODEL's data config:
+`resolve_data_config` for resnet50 returns `interpolation='bicubic'`, and `transforms_factory` then
+sets `aa_params['interpolation'] = str_to_pil_interp('bicubic')` — so **timm's geometric
+RandAugment runs BICUBIC**. (Only with interpolation unset or `'random'` does it use
+`_RANDOM_INTERPOLATION`, a per-call BILINEAR/BICUBIC choice — also not what we do.) The shim's own
+comment claimed BILINEAR *was* timm's default; that comment was wrong and is corrected.
+▶ **Not changed**, because unlike the two above it is a behaviour change for every net rather than
+a transcription bug — it needs a decision and ideally a probe, not a patch.
+⚠ resnet50's resolved `crop_pct` is **0.95**, which is what we already use — checked at the same
+time, so the eval crop is confirmed rather than assumed.
 ⚠ Also uncovered by this test: op ORDER and per-op probability, the `_RA_INC` magnitude mappings,
 and every photometric op. This is about geometry alone.
 
