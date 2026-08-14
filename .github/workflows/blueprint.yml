@@ -10,6 +10,12 @@ on:
     paths:
       - 'blueprint/**'
       - 'LeanMlir/**'
+      # ⚠ The SITE ROOT. `home_page/*` is copied straight into `public/`, so everything here is
+      # published content — and it was missing from this list, which is the same latency the note
+      # below records three instances of. A file added here (the Google Search Console
+      # verification token, `index.html`, `404.html`) would sit unpublished until some unrelated
+      # push happened to touch `blueprint/**` or `LeanMlir/**`. Fourth instance; added 2026-08-14.
+      - 'home_page/**'
       - 'Bestiary/**'
       - 'lakefile.lean'
       - 'lean-toolchain'
