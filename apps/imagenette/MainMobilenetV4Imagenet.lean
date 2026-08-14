@@ -1,19 +1,22 @@
 import LeanMlir.VerifiedNets
 
-/-! # `mnv4-imagenet-verified` — MobileNetV4-Conv-S on full ImageNet-1k, verified → XLA
+/-! # `mnv4-imagenet-verified` — MobileNetV4-Conv-M on full ImageNet-1k, verified → XLA
 
 The sixth scale-tier trainer, and the last of the Imagenette nets to get one. Built the way
 `resnet50-imagenet-verified` was: the Imagenette block table with a 1000-class head
 (`mnv4ImagenetVerified`, slug `mnv4in`), rendered by the SAME chain as the 10-class artifacts
 (`Proofs/Codegen/MobileNetV4RenderB.lean`), driven by the generic `VerifiedNet.trainAdamSched`.
 
-⚠⚠ **Conv-S, NOT Conv-M.** `jax/MainMobilenetV4Imagenet.lean` is the faithful Conv-Medium
-(~9.7M) and owns the 75.51% / 92.37% ImageNet reference. This is Conv-S (4.1M trunk, 5.4M with
-the 1000-class head) — a DIFFERENT network. There is no published ImageNet target for this block
-table, so a run of this driver is a first measurement rather than a reproduction. Do not quote
-Conv-M's number against it.
+⭐ **Conv-M as of 2026-08-14**, so this driver and `jax/MainMobilenetV4Imagenet.lean` are the
+same network at last, and the reference's 75.48% / 92.37% is this driver's target. 9,715,512
+parameters. ⚠ Target, not result: nothing has been run to convergence on this path.
 
-⚠ Optimizer does NOT match the MNv4 reference either: AdamW at 1e-3 here, where the paper is
+⚠⚠ **There is no 4× render, and that is what blocks a printable phase-4 row.** `adamdp64` is
+named by `mnv4AdamVariant 64 2` and the renderer would emit it, but MNv4 has no `shard-check` row
+and no dp-check peer, so nothing ties its collectives and it is not rendered. Every other ImageNet
+row in the book was measured at 4×, so a single-card figure here is not comparable to them.
+
+⚠ Optimizer does NOT match the MNv4 reference: AdamW at 1e-3 here, where the paper is
 AdamW at 0.004 on effective batch 4096 with drop-path, EMA and RandAugment m15. Those live in the
 reference `TrainConfig`, and the ones that are not yet expressible on this path are listed in
 `planning/chapter_makeover.md` under the MNv4 phase-4 gaps.

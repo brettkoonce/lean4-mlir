@@ -581,6 +581,56 @@ answers it in one command.
 the net simply cannot be run in the configuration the chapter reports everything else in, and a
 single-card run would produce a number that cannot be printed beside the others.
 
+### ✅ 4-GPU time MEASURED: 24.6 h for 100 epochs, Conv-M (2026-08-14)
+
+**Superseded the estimate below by measuring it.** All four numbers are same-session, same box,
+same method (the driver's own `LEAN_MLIR_MAX_STEPS` steady-state probe, median of 112 steps after
+8 warmup), fp32, PJRT/XLA, 6× RTX 4060 Ti with 4 used:
+
+| net | 1× bs64 | 4× global 256 | speedup |
+|---|---|---|---|
+| MNv4-**Conv-M** | **126 ms/step** → 42.0 min/ep | **177 ms/step** → **14.8 min/ep** | **2.85× (71%)** |
+| MobileNetV2 | **138 ms/step** → 46.0 min/ep | **201 ms/step** → 16.8 min/ep | 2.75× (69%) |
+
+→ **100 epochs = 24.6 h on 4× 4060 Ti** (1× would be 70.1 h). 20,018 steps/ep at bs 64;
+5,004 steps/ep at global 256.
+
+⚠ **The 4× MNv4 number required rendering `mnv4in_adamdp64_train_step.mlir`, which is NOT
+committed.** It was rendered locally (`mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4
+"mnv4in"`, 234 `all_reduce` ops), measured, and deleted. Committing it is a separate decision: its
+collectives still have no `shard-check` row and no dp-check peer, which is the same blocking item
+as before. **So this is a measured wall clock on an artifact that does not ship.**
+
+⚠ Both env vars are needed for a real DP run, and getting one wrong fails SILENTLY-ish:
+`LEAN_MLIR_REPLICAS=4` sizes the global batch in the driver, and `PJRT_REPLICAS=4` is what the FFI
+compiles for. With only the first, the driver prints `DATA-PARALLEL: 4 replicas` and steps at
+global 256 while the executable is 1-replica on one GPU. The FFI does say so
+(`resident invoke asked for 4 replicas but … was compiled for 1`), but the driver's own banner
+still reads 4. ▶ Check `compiled … (N replicas)` in the log, not the DATA-PARALLEL line.
+
+### ⭐ What the two superseded estimation methods would have said
+
+Kept because the error is instructive, and both are the kind of reasoning that looks sound:
+
+| method | predicted 4× | actual | error |
+|---|---|---|---|
+| borrow MNv2's 3.10× (the estimate below) | 162 ms/step → 22.6 h | 177 ms → 24.6 h | −8% |
+| additive: scale MNv2's +63 ms all-reduce by Conv-M's 2.77× gradient volume | 301 ms/step → 41.8 h | 177 ms → 24.6 h | **+70%** |
+
+The additive model is the seductive one: Conv-M really does all-reduce 2.77× the bytes MNv2 does
+(9,715,512 vs 3,504,872 params). It is badly wrong because most of MNv2's +63 ms is not
+all-reduce at all — at 4× the host feeds 256 images per step instead of 64, and that cost scales
+with BATCH, not with model size. ▶ **Do not decompose a measured delta into a mechanism you did
+not measure separately.** Conv-M's DP efficiency (71%) is in fact slightly BETTER than MNv2's
+(69%) despite the larger gradients, which neither model predicts.
+
+⭐ Cross-check against phase 2: the JAX Conv-M reference measured **9.0 min/ep** at 4× (bf16,
+effective batch 4096) against this **14.8 min/ep** (fp32, global 256). A 1.64× ratio, in the
+direction and rough size the missing bf16 explains.
+
+<details>
+<summary>The superseded 2026-08-12 estimate, kept for the record</summary>
+
 ### ▶ 4-GPU time ESTIMATE: ~20 h for 100 epochs (2026-08-12)
 
 Derived without rendering the untied DP artifact, by borrowing **MobileNetV2's** measured
@@ -604,6 +654,8 @@ verified path has no bf16 at all. Do not read the two as a Conv-S-vs-Conv-M spee
 ⭐ MNv4-Conv-S is **faster per step than MNv2** single-device (114 vs 146 ms) despite more
 parameters (5.4M vs 3.5M). That is the UIB design goal working as advertised: the block was
 chosen for latency on real hardware, not for parameter count.
+
+</details>
 
 ### ⚠⚠ `mobilenetv2-imagenet-verified` HAD NO `LEAN_MLIR_EPOCHS` — fixed
 

@@ -1213,7 +1213,7 @@ def mobilenetv4Verified : VerifiedNetSpec where
     forward tie is what pins it — and that tie has NOT been re-run since the Conv-M conversion
     (`planning/mnv4_convm_ties_todo.md`). -/
 def mnv4ImagenetVerified : VerifiedNetSpec where
-  name     := "MobileNetV4-Conv-S (ImageNet-1k)"
+  name     := "MobileNetV4-Conv-M (ImageNet-1k)"
   slug     := "mnv4in"
   inC      := 3
   imageH   := 224

@@ -68,6 +68,23 @@ two-conv head is new code (`MobileNetV4RenderB.lean`: a second `convBackBatched`
 `convWeightGradB` / BN-back triple), and `mnv4-train-smoke` only counts it — it cannot see a wrong
 contraction. **Nothing yet has checked the new head's gradient numerically.**
 
+## 2b. ⭐ The IREE binaries are NOT where the scripts look — this pairing works
+
+Both scripts hardcode/default to paths that do not exist. What is actually on the box:
+
+```
+compiler: /home/skoonce/lean4-mlir/.venv/bin/iree-compile            (3.12.0rc20260428)
+runtime:  /home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module
+```
+
+Verified together on a trivial stablehlo.add module: compiles and returns `4xf32=11 22 33 44`.
+
+⚠ **Do NOT use `/home/skoonce/src/iree-build/tools/iree-run-module`** with that compiler. It
+fails with `import function hal.command_buffer.dispatch signature mismatch between m and source
+hal` — a runtime/compiler version skew, which reads like a broken module rather than a bad
+pairing. The repo `.venv` has no `iree` package at all (`.venv/bin/iree-compile` does not exist),
+so `mnv4_forward_tie.py`'s `IREE_C` and `grad_tie.py` both need pointing at the paths above.
+
 ## 3. R50 — outstanding before this work
 
 The R50 IREE run was already owed and is unrelated to the Conv-M conversion. Carried here so the
@@ -77,9 +94,9 @@ two are scheduled together rather than rediscovered separately.
 
 ## Environment notes, so the run does not fail on setup
 
-- `iree-run-module` is **not** in this repo's `.venv` (only `iree-compile` is). It ships with the
-  lean4-jax venv: `/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module`, which is
-  the path `scripts/mnv4_forward_tie.py` already defaults to.
+- ⚠ The repo `.venv` has NO iree at all, and `scripts/mnv4_forward_tie.py`'s default
+  `IREE_RUN_MODULE` (`/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module`) does not
+  exist either — checked 2026-08-14. Use the pairing in §2b above.
 - Use `--iree-cuda-target=sm_86` on RTX 40-series; `sm_89` is broken in IREE 3.11 (issue #21122).
 - ⚠ Ask before starting anything long. This box has crashed on long runs before.
 
