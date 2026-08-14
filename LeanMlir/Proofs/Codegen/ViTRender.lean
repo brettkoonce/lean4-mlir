@@ -59,6 +59,8 @@ def vitTiDims : VitDims := ⟨196, 3, 64, 768, by decide⟩
 /-- ViT-Small: `D = 384 = 6 × 64`, MLP 1536. Same depth and same patch grid as Tiny — S widens
     only, which is why it needs no new proof and no new block chain. -/
 def vitSDims : VitDims := ⟨196, 6, 64, 1536, by decide⟩
+/-- ViT-Base (DeiT-B): `D = 768 = 12 × 64`, MLP 3072. Still depth 12 and still 16×16 patches. -/
+def vitBDims : VitDims := ⟨196, 12, 64, 3072, by decide⟩
 
 #guard vitTiDims.tok == 197
 #guard vitTiDims.d == 192

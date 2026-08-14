@@ -1152,6 +1152,50 @@ def vitSImagenetVerified : VerifiedNetSpec where
 #guard (vitSImagenetVerified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 22050664
 
+/-- **ViT-Base (DeiT-B) on full ImageNet-1k.** `D = 768 = 12 heads × 64`, MLP 3072, still depth 12
+    and still 16×16 patches. Added by handing the renderer a third `VitDims`; nothing else moved.
+
+    ⚠ **Per-device batch 32, not 128**, and that is a memory fact rather than a recipe choice: the
+    phase-2 JAX probe measured ViT-B OOM at 4×128 on these 16 GB cards in bf16, and this path is
+    fp32. 32×4 = global 128, so this is NOT the DeiT global 512 the S and Ti drivers train at, and
+    the LR would need the linear-scaling adjustment before any run is quotable. -/
+def vitBImagenetVerified : VerifiedNetSpec where
+  name     := "ViT-Base (ImageNet-1k)"
+  slug     := "vitbin"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  shimScript := "generated_vit_tiny_imagenet_shim.py"
+  layers   := [
+    .conv 3 768 16 16,
+    .param #[768] 2,
+    .param #[197, 768] 2,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .transformerBlock 768 3072,
+    .layerNorm 768,
+    .dense 768 1000 ]
+  blurb := "ViT-Base on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU"
+  dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
+
+-- 86,567,656 parameters, DeiT-B's published 86.57M, in the SAME 200 tensors as Ti and S. Three
+-- widths, one renderer, one theorem. `jax/MainVitBImagenet.lean` emits the same count from an
+-- independent implementation (`planning/vit_convnext_sb_scaleup.md`).
+#guard vitBImagenetVerified.toSpecs.size == vitImagenetVerified.toSpecs.size
+#guard (vitBImagenetVerified.toSpecs.foldl
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 86567656
+
 -- The two ViT specs must differ in EXACTLY one parameter shape — the head. Anything else moving
 -- means the ImageNet spec drifted from the Imagenette one it is supposed to be the 1000-class twin
 -- of. This is the guard §2l wished it had had on R34: `resnet34Verified.toSpecs == specs` FIRED on
@@ -1355,4 +1399,5 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
 #guard mnv4ImagenetVerified.d0         == 3*224*224
 -- The one net that is DELIBERATELY not 224, and the reason `evalD0` is still open.
 #guard resnet50Imagenet160Verified.d0  == 3*160*160
+
 

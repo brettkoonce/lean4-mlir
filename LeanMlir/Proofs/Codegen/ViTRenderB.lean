@@ -620,6 +620,16 @@ def vitDropFwdBanner : String :=
 #eval IO.FS.writeFile "verified_mlir/vitsin_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitsin_fwd" 1000 (V := Proofs.StableHLO.vitSDims))
 
+-- ViT-Base, same three artifacts. ⚠ Per-device batch 32, not 128: the phase-2 JAX probe measured
+-- ViT-B OOM at 4×128 on these 16 GB cards IN bf16, and this path is fp32.
+#eval IO.FS.writeFile "verified_mlir/vitbin_adamdp32x4wxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp32x4wxclipdrop_train_step" "32.0" 4 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 32) (V := Proofs.StableHLO.vitBDims))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vitbin_fwd" 1000 (V := Proofs.StableHLO.vitBDims))
+
 -- The 2-replica peer, and the replica count is not a choice: `drop-shard-check`'s known answer is
 -- exact only at TWO (f32 addition is commutative; above two the collective is a tree and
 -- associativity does not hold).

@@ -227,6 +227,8 @@ jobs:
               verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir \
               verified_mlir/vitsin_drop_fwd.mlir \
               verified_mlir/vitsin_fwd.mlir \
+              verified_mlir/vitbin_adamdp32x4wxclipdrop_train_step.mlir \
+              verified_mlir/vitbin_fwd.mlir \
               verified_mlir/vitsin_adamdp128x4wxclipdrop_train_step.mlir \
               verified_mlir/vitin_adamdp256x2wxclipdrop_train_step.mlir \
             || { echo "::error::committed verified_mlir/{vit,vitin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean)"; exit 1; }

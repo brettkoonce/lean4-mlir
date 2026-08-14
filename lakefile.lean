@@ -1512,6 +1512,12 @@ lean_exe «vits-imagenet-verified» where
   root := `apps.imagenette.MainViTSImagenet
   moreLinkArgs := lowererLink
 
+/-- **ViT-Base (DeiT-B) on ImageNet-1k** — 86,567,656 parameters. ⚠ Per-device batch 32 (global
+    128, NOT the DeiT 512) because ViT-B OOMs at 4×128 on 16 GB cards. Renders; unmeasured. -/
+lean_exe «vitb-imagenet-verified» where
+  root := `apps.imagenette.MainViTBImagenet
+  moreLinkArgs := lowererLink
+
 
 /-- **ConvNeXt-T on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000`;
     batch stays 32 per device (`cBS` is still private), so four replicas is global 128 and 10,009
