@@ -1501,6 +1501,17 @@ lean_exe «vit-imagenet-verified» where
   root := `apps.imagenette.MainViTImagenet
   moreLinkArgs := lowererLink
 
+/-- **ViT-Small on ImageNet-1k** — ViT-Tiny widened (D 384 = 6 heads × 64, MLP 1536, same depth
+    12), 22,050,664 parameters. The first net added by widening rather than by a new chain: the
+    proof side needed nothing, since `vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k`
+    and global (GELU/softmax/LayerNorm carry no kink).
+    ⚠ FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
+    `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer.
+    ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
+lean_exe «vits-imagenet-verified» where
+  root := `apps.imagenette.MainViTSImagenet
+  moreLinkArgs := lowererLink
+
 
 /-- **ConvNeXt-T on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000`;
     batch stays 32 per device (`cBS` is still private), so four replicas is global 128 and 10,009

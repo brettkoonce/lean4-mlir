@@ -58,15 +58,8 @@ MLP 768; depth 12. -/
 -- ⚠ ConvNeXt has the same shape (`cBS`, a private constant, 104 uses) and handoff §5 calls making
 -- it a parameter "the whole prerequisite" for the stronger split-identity gate. Same move, and it
 -- is cheap: the bodies do not move.
-private def vbTk : Nat := 196        -- patch tokens (the token axis is `vbTk + 1`)
-private def vbTok : Nat := 197       -- tokens including CLS
-private def vbD : Nat := 192         -- model dim
-private def vbH : Nat := 3           -- heads
-private def vbHd : Nat := 64         -- head dim (vbH * vbHd = vbD)
-private def vbM : Nat := 768         -- MLP hidden
-
-#guard vbTok == vbTk + 1
-#guard vbH * vbHd == vbD
+-- (`VitDims` and the Ti/S instances live in `ViTRender.lean`: the parameter-signature
+-- builders there need them too, and this file imports that one.)
 
 private def zVb {n : Nat} : Vec n := fun _ => 0
 private def zMb {a b : Nat} : Mat a b := fun _ _ => 0
@@ -79,7 +72,10 @@ private def zKb {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 
     ⚠ `m := vbTok` is the TOKEN count PER EXAMPLE and `N := vbB` is the batch. Collapsing those two
     into one index is exactly the defect this file exists to remove. -/
-private def vlnFwdB (vbB : Nat) (gName btName xin : String) : StateM Nat (String × String) := do
+private def vlnFwdB (V : VitDims) (vbB : Nat) (gName btName xin : String) :
+    StateM Nat (String × String) := do
+  let vbTok := V.tok
+  let vbD := V.d
   let (c1, a) ← pretty vbB (.batchOp (N := vbB)
       (.lnRow (m := vbTok) (n := vbD) "%one" "%zero" vEPS 0 1 0)
       (.operand xin (zVb : Vec (vbB*(vbTok*vbD)))))
@@ -102,14 +98,19 @@ set_option maxRecDepth 8000 in
     `Qₖ·Kₖᵀ` — its own `Q` against its own `K`. A descriptor would hand every example operand 0's
     left factor, and a `den` reading the batched index as one big matrix would multiply the whole
     batch together; **both type-check and both emit the identical `dot_general`**. -/
-private def vBlockFwdB (vbB : Nat) (pfx xin : String) (drop : Option Nat := none) :
+private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Option Nat := none) :
     StateM Nat (String × BSaves) := do
+  let vbTok := V.tok
+  let vbD := V.d
+  let vbH := V.heads
+  let vbHd := V.hd
+  let vbM := V.m
   -- `drop = some i` is the BLOCK index; the two mask ordinals are `vitSiteIdx i 0` (attention) and
   -- `vitSiteIdx i 1` (MLP). ⚠ They must be DIFFERENT inputs at the SAME keep — one mask per block
   -- halves the noise and no structural check sees it (`stochastic_depth.md` §6.3).
   let dpA := drop.map (fun i => dpName (vitSiteIdx i 0))
   let dpM := drop.map (fun i => dpName (vitSiteIdx i 1))
-  let (c1, ln1) ← vlnFwdB vbB s!"%{pfx}g1" s!"%{pfx}bt1" xin
+  let (c1, ln1) ← vlnFwdB V vbB s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let qkv := fun (w b : String) => pretty vbB (.batchOp (N := vbB)
       (.denseRow (N := vbTok) (a := vbD) (c := vbD) w b (zMb : Mat vbD vbD) (zVb : Vec vbD))
       (.operand ln1 (zVb : Vec (vbB*(vbTok*vbD)))))
@@ -121,9 +122,10 @@ private def vBlockFwdB (vbB : Nat) (pfx xin : String) (drop : Option Nat := none
   let mut qss : Array String := #[]; let mut kss : Array String := #[]; let mut vss : Array String := #[]
   let mut scs : Array String := #[]; let mut sms : Array String := #[]
   for hh in [0:vbH] do
-    -- ⚠ `Nat.mod_lt` rather than `omega`: `vbH` is a `private def`, so omega sees an opaque
-    -- `Nat` and cannot discharge `hh % vbH < vbH` the way it does for the literal 3.
-    let h : Fin vbH := ⟨hh % vbH, Nat.mod_lt _ (by decide)⟩
+    -- ⚠ `Nat.mod_lt` rather than `omega`, and the positivity now comes from the RECORD: `vbH` was
+    -- a `private def` (omega saw an opaque `Nat`), and is now a field, so `by decide` cannot close
+    -- `0 < V.heads` either. That is the whole reason `VitDims` carries `heads_pos`.
+    let h : Fin vbH := ⟨hh % vbH, Nat.mod_lt _ V.heads_pos⟩
     let hslice := fun (src : String) => pretty vbB (.batchOp (N := vbB)
         (.headSlice (N := vbTok) (heads := vbH) (d := vbHd) h)
         (.operand src (zVb : Vec (vbB*(vbTok*(vbH*vbHd))))))
@@ -165,7 +167,7 @@ private def vBlockFwdB (vbB : Nat) (pfx xin : String) (drop : Option Nat := none
     | none   => pure ("", o)
   let (ch, hres) ← pretty vbB (.addVB (.operand xin (zVb : Vec (vbB*(vbTok*vbD))))
       (.operand oD (zVb : Vec (vbB*(vbTok*vbD)))))
-  let (c2, ln2) ← vlnFwdB vbB s!"%{pfx}g2" s!"%{pfx}bt2" hres
+  let (c2, ln2) ← vlnFwdB V vbB s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty vbB (.batchOp (N := vbB)
       (.denseRow (N := vbTok) (a := vbD) (c := vbM) s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
         (zMb : Mat vbD vbM) (zVb : Vec vbM))
@@ -194,7 +196,11 @@ set_option maxRecDepth 8000 in
     ⚠ Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := vbB` and
     the batch is an index of the AST rather than a number only `pretty` knows. That is the entire
     content of the move; the emitted text is unchanged, which the tie checks. -/
-def vitFwd12B (vbB : Nat) (nClasses : Nat) (sd : Bool := false) : StateM Nat (String × FwdSaves) := do
+def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false) :
+    StateM Nat (String × FwdSaves) := do
+  let vbTk := V.tk
+  let vbTok := V.tok
+  let vbD := V.d
   let (ce, embed) ← pretty vbB (.batchOp (N := vbB)
       (.patchEmbed (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD)
         "%wConv" "%bConv" "%cls" "%pos"
@@ -204,9 +210,9 @@ def vitFwd12B (vbB : Nat) (nClasses : Nat) (sd : Bool := false) : StateM Nat (St
   let mut cur := embed
   let mut blocks : Array BSaves := #[]
   for i in [0:vDEPTH] do
-    let (cb, sv) ← vBlockFwdB vbB s!"b{i}_" cur (if sd then some i else none)
+    let (cb, sv) ← vBlockFwdB V vbB s!"b{i}_" cur (if sd then some i else none)
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
-  let (cf, fl) ← vlnFwdB vbB "%gF" "%btF" cur
+  let (cf, fl) ← vlnFwdB V vbB "%gF" "%btF" cur
   -- ⚠ `(N := vbTk)` is the PATCH count (196), so the operand's token axis is 197 and the result is
   -- one `[192]` row per example. Passing the batch here instead type-checks and keeps example 0.
   let (cs, sl) ← pretty vbB (.batchOp (N := vbB) (.clsSlice (N := vbTk) (D := vbD))
@@ -226,10 +232,15 @@ def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10)
     (sd : Bool := false)
     -- ⚠ `vbB` LAST and defaulted, so every existing positional call site is untouched and the
     -- committed artifacts re-render byte-identically at 32. See the note on `vbB` above.
-    (vbB : Nat := 32) : String :=
-  let (body, sv) := (vitFwd12B vbB nClasses sd).run' 0
+    (vbB : Nat := 32) (V : VitDims := vitTiDims) : String :=
+  let vbTok := V.tok
+  let vbD := V.d
+  let (body, sv) := (vitFwd12B V vbB nClasses sd).run' 0
   let res := sv.logits
-  let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
+  -- ⚠ `fun i => blkArgSig i V`, NOT `.map blkArgSig`: the bare form passes only `i` and lets
+  -- `V` fall back to its Tiny default, which renders a ViT-S body under a ViT-Tiny block
+  -- signature. It type-checks and the artifact is wrong. Caught by shape-checking the emit.
+  let blkSigs := String.intercalate ", " ((List.range vDEPTH).map (fun i => blkArgSig i V))
   let argSig := s!"%x: {ty [vbB, 3*224*224]}, %wConv: {ty [vbD,3,16,16]}, %bConv: {ty [vbD]}, " ++
     s!"%cls: {ty [vbD]}, %pos: {ty [vbTok,vbD]}, " ++ blkSigs ++
     s!", %gF: {ty [vbD]}, %btF: {ty [vbD]}, %Wc: {ty [vbD,nClasses]}, %bc: {ty [nClasses]}" ++
@@ -264,8 +275,10 @@ end Proofs.StableHLO
 namespace Proofs.StableHLO
 
 /-- One **vector-LN backward** site, batched. Returns `(code, dxin, dγ, dβ)`. -/
-private def vlnBackB (vbB : Nat) (gName btName xin dyOut : String) :
+private def vlnBackB (V : VitDims) (vbB : Nat) (gName btName xin dyOut : String) :
     StateM Nat (String × String × String × String) := do
+  let vbTok := V.tok
+  let vbD := V.d
   let (cb, nb) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
       (.operand dyOut (zVb : Vec (vbB*(vbTok*vbD)))))
   let (cg, ng) ← pretty vbB (.veclnGammaGradB (N := vbB) (R := vbTok) (D := vbD) xin vEPS 0
@@ -285,8 +298,13 @@ set_option maxRecDepth 8000 in
     `dvs = smᵀ·dpv`, `dqs = dqk·ks`, `dkt = qsᵀ·dqk` — four matmuls, every one with BOTH operands
     per-example. A descriptor would pair example `k`'s cotangent with example 0's saved activation:
     it type-checks, it emits the identical `dot_general`, and it trains. -/
-private def vBlockBackB (vbB : Nat) (pfx : String) (sv : BSaves) (dyOut : String) (drop : Option Nat := none) :
-    StateM Nat (String × String × List String) := do
+private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (dyOut : String)
+    (drop : Option Nat := none) : StateM Nat (String × String × List String) := do
+  let vbTok := V.tok
+  let vbD := V.d
+  let vbH := V.heads
+  let vbHd := V.hd
+  let vbM := V.m
   let p := pfx
   let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
   let dpA := drop.map (fun i => dpName (vitSiteIdx i 0))
@@ -318,7 +336,7 @@ private def vBlockBackB (vbB : Nat) (pfx : String) (sv : BSaves) (dyOut : String
       sv.ln2 zTok (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
   let (c7, nbfc1) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbM)
       (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
-  let (c8, dhresLn2, ng2, nbt2) ← vlnBackB vbB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
+  let (c8, dhresLn2, ng2, nbt2) ← vlnBackB V vbB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
   let (c9, dhres) ← pretty vbB (.addVB (.operand dyOut zTok) (.operand dhresLn2 zTok))
   -- ─ Attention sublayer back ─
   -- ▶ The ATTENTION branch's site, same shape: `hres = xin + s⊙o` ⇒ `do = s ⊙ dhres`, and the
@@ -340,7 +358,7 @@ private def vBlockBackB (vbB : Nat) (pfx : String) (sv : BSaves) (dyOut : String
   let zAtt : Vec (vbB*(vbTok*vbTok)) := fun _ => 0
   let zHdT : Vec (vbB*(vbHd*vbTok)) := fun _ => 0
   for hh in [0:vbH] do
-    let h : Fin vbH := ⟨hh % vbH, Nat.mod_lt _ (by decide)⟩
+    let h : Fin vbH := ⟨hh % vbH, Nat.mod_lt _ V.heads_pos⟩
     let (ca, dpv) ← pretty vbB (.batchOp (N := vbB)
         (.headSlice (N := vbTok) (heads := vbH) (d := vbHd) h)
         (.operand dacc (zVb : Vec (vbB*(vbTok*(vbH*vbHd))))))
@@ -392,7 +410,7 @@ private def vBlockBackB (vbB : Nat) (pfx : String) (sv : BSaves) (dyOut : String
   let (cV, dln1v, nWv, nbv) ← qkvBack s!"%{p}Wv" dvAcc
   let (cs1, dln1a) ← pretty vbB (.addVB (.operand dln1q zTok) (.operand dln1k zTok))
   let (cs2, dln1) ← pretty vbB (.addVB (.operand dln1a zTok) (.operand dln1v zTok))
-  let (cl1, dxinLn1, ng1, nbt1) ← vlnBackB vbB s!"%{p}g1" s!"%{p}bt1" sv.xin dln1
+  let (cl1, dxinLn1, ng1, nbt1) ← vlnBackB V vbB s!"%{p}g1" s!"%{p}bt1" sv.xin dln1
   let (cx, dxin) ← pretty vbB (.addVB (.operand dhres zTok) (.operand dxinLn1 zTok))
   let names := [ng1, nbt1, nWq, nbq, nWk, nbk, nWv, nbv, nWo, nbo, ng2, nbt2,
                 nWfc1, nbfc1, nWfc2, nbfc2]
@@ -404,8 +422,12 @@ set_option maxRecDepth 16000 in
     `(code, gradients-in-func-arg-order, softmaxSSA)`, the same shape, so the AdamW tail in
     `ViTRender.lean` can consume either. -/
 def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String × String) := none)
-    (sd : Bool := false) : StateM Nat (String × List String × String) := do
-    let (fwd, sv) ← vitFwd12B vbB nClasses sd
+    (sd : Bool := false) (V : VitDims := vitTiDims) :
+    StateM Nat (String × List String × String) := do
+    let vbTk := V.tk
+    let vbTok := V.tok
+    let vbD := V.d
+    let (fwd, sv) ← vitFwd12B V vbB nClasses sd
     let zCls : Vec (vbB*nClasses) := fun _ => 0
     let (cSm, nSm) ← pretty vbB (.batchOp (N := vbB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := vbB) (.expe (n := nClasses)) (.operand sv.logits zCls)))
@@ -432,13 +454,13 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     let (cbc, nbc) ← pretty vbB (.biasGradB (N := vbB) (n := nClasses) (.operand nDy zCls))
     let (cPad, dfln) ← pretty vbB (.batchOp (N := vbB) (.clsPad (N := vbTk) (D := vbD))
         (.operand dcls (zVb : Vec (vbB*vbD))))
-    let (cFln, dflnIn, ngF, nbtF) ← vlnBackB vbB "%gF" "%btF" sv.flnIn dfln
+    let (cFln, dflnIn, ngF, nbtF) ← vlnBackB V vbB "%gF" "%btF" sv.flnIn dfln
     let mut code := fwd ++ cDy ++ cDc ++ cWc ++ cbc ++ cPad ++ cFln
     let mut dcur := dflnIn
     let mut blkNames : Array (List String) := #[]
     for j in [0:vDEPTH] do
       let i := vDEPTH - 1 - j
-      let (cb, dx, names) ← vBlockBackB vbB s!"b{i}_" (sv.blocks[i]!) dcur (if sd then some i else none)
+      let (cb, dx, names) ← vBlockBackB V vbB s!"b{i}_" (sv.blocks[i]!) dcur (if sd then some i else none)
       code := code ++ cb; dcur := dx; blkNames := blkNames.push names
     -- patch-embed params
     let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
@@ -484,7 +506,7 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
     (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false)
     -- ⚠ LAST and defaulted, for `vitFwdRenderB`'s reason.
-    (vbB : Nat := 32) : String :=
+    (vbB : Nat := 32) (V : VitDims := vitTiDims) : String :=
   let alphaStr := fmt6 alpha
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   -- ⚠⚠ `sd` IS SPELLED ONCE AND REACHES BOTH HALVES FROM HERE — the traversal (which places the 24
@@ -492,7 +514,8 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
   -- signature). Letting a caller set them independently is the shape of defect this thread keeps
   -- finding; here there is nothing to keep in step.
   vitAdamTrainStepFaithful funcName bStr replicas vbB nClasses alpha ema wdExclude wdStr clip clipStr
-    (traversal := some (vitBackAllB vbB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd))
+    (traversal := some (vitBackAllB vbB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd V))
+    (V := V)
     (sd := sd)
 
 end Proofs.StableHLO
@@ -567,6 +590,35 @@ def vitDropFwdBanner : String :=
 
 #eval IO.FS.writeFile "verified_mlir/vitin_drop_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitin_drop_fwd" 1000 (sd := true))
+
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- § ViT-**Small** on ImageNet-1k — the same renderer at `vitSDims`
+-- ════════════════════════════════════════════════════════════════════════════════════════
+--
+-- ⭐ **Nothing above this line changed to add these two artifacts except the `V` parameter.** S is
+-- Tiny widened: `D = 384 = 6 × 64` instead of `192 = 3 × 64`, MLP 1536 instead of 768. Same depth
+-- (12), same patch grid (196 + CLS), same block chain, same backward. That is why the proof side
+-- needs nothing: `vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k` and it is a GLOBAL
+-- `HasVJP`, since GELU/softmax/LayerNorm carry no kink.
+--
+-- ⚠ Only the DP train step and the forward are rendered, and that is the complete set for this
+-- net: ViT has no BatchNorm, so there is no running-stat eval forward to pair with them. The
+-- 10-class `vit_*` artifacts stay ViT-Tiny — they come from the per-example renderer, which is
+-- still pinned at Tiny by ~154 dim literals (`ViTRender.lean`). Widening THAT is a separate job.
+#eval IO.FS.writeFile "verified_mlir/vitsin_adamdp128x4wxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitsin_adamdp128x4wxclipdrop_train_step" "128.0" 4 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims))
+
+#eval IO.FS.writeFile "verified_mlir/vitsin_drop_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vitsin_drop_fwd" 1000 (sd := true) (V := Proofs.StableHLO.vitSDims))
+
+-- ⚠ The driver loads `<slug>_fwd.mlir` by NAME for its eval pass, so the `*_drop_fwd` above does
+-- not satisfy it — `vitsin_drop_fwd` declares the 24 `%dp<n>` mask inputs an eval forward has no
+-- values for. ViT-Tiny has both and so must S. Found by running the trainer, which failed with
+-- `cannot open verified_mlir/vitsin_fwd.mlir`; no build-time check covers an artifact NAME.
+#eval IO.FS.writeFile "verified_mlir/vitsin_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vitsin_fwd" 1000 (V := Proofs.StableHLO.vitSDims))
 
 -- The 2-replica peer, and the replica count is not a choice: `drop-shard-check`'s known answer is
 -- exact only at TWO (f32 addition is commutative; above two the collective is a tree and

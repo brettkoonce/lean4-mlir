@@ -1094,6 +1094,64 @@ def vitImagenetVerified : VerifiedNetSpec where
   -- value), where on Imagenette it is a gate vehicle.
   dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
 
+/-- **ViT-Small on full ImageNet-1k** — the first net in this repo added by WIDENING an existing
+    one rather than by writing a new chain.
+
+    ⭐⭐ **Nothing on the proof side was needed.** `Proofs.vitForwardKV_has_vjp` is already
+    `∀ heads d_head mlpDim k`, and it is a GLOBAL `HasVJP` rather than the pointwise `_at` form the
+    relu-family nets carry, because GELU/softmax/LayerNorm have no kink. So S is covered by the
+    same theorem that covers Tiny, at different arguments.
+
+    S is Tiny widened and nothing else: `D = 384 = 6 heads × 64` against Tiny's `192 = 3 × 64`, MLP
+    1536 against 768. Same depth (12), same 16×16 patch grid (196 tokens + CLS), same block
+    structure. `d_head` stays 64 — ViT widens by adding heads.
+
+    ⚠ **ImageNet only, and deliberately.** The 10-class `vit_*` artifacts come from the
+    per-example renderer (`ViTRender.lean`), which is still pinned at Tiny by ~154 dimension
+    literals. Only the BATCHED renderer was parameterised, and it is the one that writes the
+    ImageNet artifacts. There is no ViT-S Imagenette peer and this spec does not imply one.
+
+    ⚠ No accuracy has been measured. The artifacts render and the shapes tie; nothing has trained. -/
+def vitSImagenetVerified : VerifiedNetSpec where
+  name     := "ViT-Small (ImageNet-1k)"
+  slug     := "vitsin"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  shimScript := "generated_vit_tiny_imagenet_shim.py"
+  layers   := [
+    .conv 3 384 16 16,            -- patch embed 16×16/s16 (3→384)   224→14×14=196
+    .param #[384] 2,              -- CLS token  [384]
+    .param #[197, 384] 2,         -- positional embedding  [197,384]
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .transformerBlock 384 1536,
+    .layerNorm 384,               -- final LayerNorm (per-channel [384])
+    .dense 384 1000 ]             -- CLS-head 384→1000
+  blurb := "ViT-Small on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (Tiny widened: D 384 = 6 heads x 64, MLP 1536, same depth 12)"
+  -- Identical to Tiny's: the ramp is a property of the DEPTH (12 blocks, 2 sites each) and of
+  -- `dropPath := 0.1`. Width does not enter it, which is why widening needs no new ramp.
+  dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
+
+-- 200 parameter tensors, the SAME count as ViT-Tiny — S widens every tensor and adds none, which
+-- is the whole claim of the depth-k/width-generic renderer stated as arithmetic. 22,050,664
+-- parameters against Tiny's 5,717,416; ViT-S/16 is quoted at ~22M.
+#guard vitSImagenetVerified.toSpecs.size == vitImagenetVerified.toSpecs.size
+#guard vitSImagenetVerified.toSpecs.size == 200
+#guard (vitSImagenetVerified.toSpecs.foldl
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 22050664
+
 -- The two ViT specs must differ in EXACTLY one parameter shape — the head. Anything else moving
 -- means the ImageNet spec drifted from the Imagenette one it is supposed to be the 1000-class twin
 -- of. This is the guard §2l wished it had had on R34: `resnet34Verified.toSpecs == specs` FIRED on
@@ -1297,3 +1355,4 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
 #guard mnv4ImagenetVerified.d0         == 3*224*224
 -- The one net that is DELIBERATELY not 224, and the reason `evalD0` is still open.
 #guard resnet50Imagenet160Verified.d0  == 3*160*160
+

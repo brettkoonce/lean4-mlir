@@ -29,6 +29,41 @@ def vSCALE : String := "0.125"
 private def vLR : String := "0.1"
 def vDEPTH : Nat := 12
 
+/-- **The width knobs of a ViT.** Was six `private def` constants pinned at ViT-Tiny; a record
+    so one renderer serves Ti/S/B instead of one size per file.
+
+    ⭐ `d` and `tok` are DERIVED, not stored, and that is what keeps the bodies unchanged.
+    `d = heads * hd` definitionally, so the places the old code wrote `vbD` and the places it
+    wrote `vbH * vbHd` (the head-slice operand types) are still the same type with no rewriting
+    and no `Nat` lemma. Stored as a field with a `heads * hd = d` proof they would only be
+    PROPOSITIONALLY equal and every one of those sites would need a cast. -/
+structure VitDims where
+  /-- patch tokens; the token axis is `tk + 1` for CLS. -/
+  tk : Nat
+  heads : Nat
+  /-- per-head dim. ViT keeps this at 64 across Ti/S/B and widens by adding heads. -/
+  hd : Nat
+  /-- MLP hidden width. -/
+  m : Nat
+  /-- Needed for the `Fin heads` in the attention loop. Was `by decide` against the literal 3. -/
+  heads_pos : 0 < heads
+
+/-- Model dim. Derived so it is DEFEQ to `heads * hd` — see the note on `VitDims`. -/
+def VitDims.d (V : VitDims) : Nat := V.heads * V.hd
+/-- Tokens including CLS. -/
+def VitDims.tok (V : VitDims) : Nat := V.tk + 1
+
+/-- ViT-Tiny: `D = 192 = 3 × 64`, MLP 768. The default everywhere, so every existing call site
+    and every committed artifact is untouched by the parameterisation. -/
+def vitTiDims : VitDims := ⟨196, 3, 64, 768, by decide⟩
+/-- ViT-Small: `D = 384 = 6 × 64`, MLP 1536. Same depth and same patch grid as Tiny — S widens
+    only, which is why it needs no new proof and no new block chain. -/
+def vitSDims : VitDims := ⟨196, 6, 64, 1536, by decide⟩
+
+#guard vitTiDims.tok == 197
+#guard vitTiDims.d == 192
+#guard vitSDims.d == 384
+
 private def zVv {n : Nat} : Vec n := fun _ => 0
 private def zMm {a b : Nat} : Mat a b := fun _ _ => 0
 private def zKk {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
@@ -195,16 +230,17 @@ private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Nat (String × FwdSave
   pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, fln := fl, clsTok := sl, logits })
 
 /-- Per-block func-arg signature (committed forward order). -/
-def blkArgSig (i : Nat) : String :=
+def blkArgSig (i : Nat) (V : VitDims := vitTiDims) : String :=
+  let d := V.d; let m := V.m
   String.intercalate ", "
-    [s!"%b{i}_g1: {ty [192]}", s!"%b{i}_bt1: {ty [192]}",
-     s!"%b{i}_Wq: {ty [192,192]}", s!"%b{i}_bq: {ty [192]}",
-     s!"%b{i}_Wk: {ty [192,192]}", s!"%b{i}_bk: {ty [192]}",
-     s!"%b{i}_Wv: {ty [192,192]}", s!"%b{i}_bv: {ty [192]}",
-     s!"%b{i}_Wo: {ty [192,192]}", s!"%b{i}_bo: {ty [192]}",
-     s!"%b{i}_g2: {ty [192]}", s!"%b{i}_bt2: {ty [192]}",
-     s!"%b{i}_Wfc1: {ty [192,768]}", s!"%b{i}_bfc1: {ty [768]}",
-     s!"%b{i}_Wfc2: {ty [768,192]}", s!"%b{i}_bfc2: {ty [192]}"]
+    [s!"%b{i}_g1: {ty [d]}", s!"%b{i}_bt1: {ty [d]}",
+     s!"%b{i}_Wq: {ty [d,d]}", s!"%b{i}_bq: {ty [d]}",
+     s!"%b{i}_Wk: {ty [d,d]}", s!"%b{i}_bk: {ty [d]}",
+     s!"%b{i}_Wv: {ty [d,d]}", s!"%b{i}_bv: {ty [d]}",
+     s!"%b{i}_Wo: {ty [d,d]}", s!"%b{i}_bo: {ty [d]}",
+     s!"%b{i}_g2: {ty [d]}", s!"%b{i}_bt2: {ty [d]}",
+     s!"%b{i}_Wfc1: {ty [d,m]}", s!"%b{i}_bfc1: {ty [m]}",
+     s!"%b{i}_Wfc2: {ty [m,d]}", s!"%b{i}_bfc2: {ty [d]}"]
 
 /-- **ViT-Tiny depth-12 forward rendered ENTIRELY from the verified AST.** Every line is `pretty` of a
     verified `SHlo` node; `den(graph) = vitForward` by `vitFwdGraphMHV_faithful` (at depth-12). The
@@ -448,19 +484,23 @@ def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
 
     `nClasses` is a real parameter as of 2026-07-31: it was the literal 10 here and in ~28 other
     places, which pinned the whole render to Imagenette and blocked the matched pair with
-    `jax/MainVitImagenet.lean` (a 1000-class ViT-Tiny that already exists). -/
-def vitParamSig (nClasses : Nat := 10) : List (String × List Nat) :=
-  [("wConv", [192,3,16,16]), ("bConv", [192]), ("cls", [192]), ("pos", [197,192])] ++
+    `jax/MainVitImagenet.lean` (a 1000-class ViT-Tiny that already exists).
+
+    ⚠ `V` is TRAILING and defaulted to ViT-Tiny, for the same reason `vbB` is: every existing
+    call site is untouched and every committed artifact re-renders byte-identically. -/
+def vitParamSig (nClasses : Nat := 10) (V : VitDims := vitTiDims) : List (String × List Nat) :=
+  let d := V.d; let m := V.m; let tok := V.tok
+  [("wConv", [d,3,16,16]), ("bConv", [d]), ("cls", [d]), ("pos", [tok,d])] ++
   (List.range vDEPTH).flatMap (fun i =>
-    [(s!"b{i}_g1", [192]), (s!"b{i}_bt1", [192]),
-     (s!"b{i}_Wq", [192,192]), (s!"b{i}_bq", [192]),
-     (s!"b{i}_Wk", [192,192]), (s!"b{i}_bk", [192]),
-     (s!"b{i}_Wv", [192,192]), (s!"b{i}_bv", [192]),
-     (s!"b{i}_Wo", [192,192]), (s!"b{i}_bo", [192]),
-     (s!"b{i}_g2", [192]), (s!"b{i}_bt2", [192]),
-     (s!"b{i}_Wfc1", [192,768]), (s!"b{i}_bfc1", [768]),
-     (s!"b{i}_Wfc2", [768,192]), (s!"b{i}_bfc2", [192])]) ++
-  [("gF", [192]), ("btF", [192]), ("Wc", [192,nClasses]), ("bc", [nClasses])]
+    [(s!"b{i}_g1", [d]), (s!"b{i}_bt1", [d]),
+     (s!"b{i}_Wq", [d,d]), (s!"b{i}_bq", [d]),
+     (s!"b{i}_Wk", [d,d]), (s!"b{i}_bk", [d]),
+     (s!"b{i}_Wv", [d,d]), (s!"b{i}_bv", [d]),
+     (s!"b{i}_Wo", [d,d]), (s!"b{i}_bo", [d]),
+     (s!"b{i}_g2", [d]), (s!"b{i}_bt2", [d]),
+     (s!"b{i}_Wfc1", [d,m]), (s!"b{i}_bfc1", [m]),
+     (s!"b{i}_Wfc2", [m,d]), (s!"b{i}_bfc2", [d])]) ++
+  [("gF", [d]), ("btF", [d]), ("Wc", [d,nClasses]), ("bc", [nClasses])]
 
 -- ════════════════════════════════════════════════════════════════
 -- ── ▶ `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ────────────────
@@ -716,6 +756,8 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     -- increment 7 measured exactly this and found the tail was FREE.
     -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument.
     (traversal : Option (StateM Nat (String × List String × String)) := none)
+    -- ⚠ TRAILING + defaulted, so the Tiny call sites and their artifacts are untouched.
+    (V : VitDims := vitTiDims)
     -- ⚠ STOCHASTIC DEPTH is a signature/variant flag here and a site-placement flag in the
     -- TRAVERSAL. `ViTRenderB` is the only caller that sets either and it spells `sd` once, passing
     -- it to both. If they ever disagreed the failure is LOUD both ways: sites without inputs emit
@@ -755,8 +797,8 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       -- 1. the collective, hoisted — emits NOTHING at `replicas ≤ 1`, so the single-device clip
       --    render is unaffected by this branch existing.
       let mut avg : List String := []
-      for i in [0:(vitParamSig nClasses).length] do
-        let (nm, ds) := (vitParamSig nClasses)[i]!
+      for i in [0:(vitParamSig nClasses V).length] do
+        let (nm, ds) := (vitParamSig nClasses V)[i]!
         let (arS, gAvg) := ViTRender.emitGradAllReduce (gradNames[i]!) ds nm replicas
         clipCode := clipCode ++ arS
         avg := avg ++ [gAvg]
@@ -765,16 +807,16 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       --    `gradSumSqAccF`, one leaf per parameter — an ordinary `SHlo` TREE, not a shared DAG
       --    node, because every gradient is already an `.operand` leaf and nothing is recomputed.
       let mut total : SHlo 1 := .operand "%zero" zero1
-      for i in [0:(vitParamSig nClasses).length] do
-        let (_, ds) := (vitParamSig nClasses)[i]!
+      for i in [0:(vitParamSig nClasses V).length] do
+        let (_, ds) := (vitParamSig nClasses V)[i]!
         let n := ds.foldl (· * ·) 1
         total := .gradSumSqAccF (n := n) ds total (.operand (avgNames[i]!) (fun _ => 0))
       let (cN, normSSA) ← pretty bs total
       clipCode := clipCode ++ cN
       -- 3. the rescale, one per parameter, every site reading the SAME `normSSA` and the same
       --    `clipStr`/`epsStr` — which is what makes the factor shared (`clipShared_faithful`).
-      for i in [0:(vitParamSig nClasses).length] do
-        let (_, ds) := (vitParamSig nClasses)[i]!
+      for i in [0:(vitParamSig nClasses V).length] do
+        let (_, ds) := (vitParamSig nClasses V)[i]!
         let n := ds.foldl (· * ·) 1
         let z : Vec n := fun _ => 0
         let (cS, sSSA) ← pretty bs (.clipScaleF (n := n) clipStr "0.000001" 0 0 ds
@@ -787,8 +829,8 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     let mut mN : List String := []
     let mut vN : List String := []
     let mut eN : List String := []
-    for i in [0:(vitParamSig nClasses).length] do
-      let (nm, ds) := (vitParamSig nClasses)[i]!
+    for i in [0:(vitParamSig nClasses V).length] do
+      let (nm, ds) := (vitParamSig nClasses V)[i]!
       -- The wd operand is chosen from the SAME `vitParamSig` entry that names the site, never a
       -- parallel list — §2e's silent-slot rule: a misaligned mask would decay the wrong 126 params
       -- and nothing in the arity, the types or the prefix audit would notice.
@@ -823,7 +865,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       s!"    %lbfc = stablehlo.constant dense<{bs}.0> : tensor<f32>\n" ++
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-    let pTy := (vitParamSig nClasses).map (fun (_, ds) => ty ds)
+    let pTy := (vitParamSig nClasses V).map (fun (_, ds) => ty ds)
     -- ⚠ THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
     -- The driver does `pbuf := out` — each step's output IS the next step's input (§2d.3's no-copy
     -- handover) — so a return list that dropped the shadow, or carried fewer scalars than the
@@ -861,10 +903,10 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
        else "") ++
       code ++ vitAdamConsts wdExclude wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
-  let pSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
-  let mSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}m: {ty ds}"))
-  let vSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}v: {ty ds}"))
-  let eSig := String.intercalate ", " ((vitParamSig nClasses).map (fun (nm, ds) => s!"%{nm}e: {ty ds}"))
+  let pSig := String.intercalate ", " ((vitParamSig nClasses V).map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
+  let mSig := String.intercalate ", " ((vitParamSig nClasses V).map (fun (nm, ds) => s!"%{nm}m: {ty ds}"))
+  let vSig := String.intercalate ", " ((vitParamSig nClasses V).map (fun (nm, ds) => s!"%{nm}v: {ty ds}"))
+  let eSig := String.intercalate ", " ((vitParamSig nClasses V).map (fun (nm, ds) => s!"%{nm}e: {ty ds}"))
   let argSig := s!"%x: {ty [bs, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
     (if ema then ", " ++ eSig else "") ++
     ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
@@ -873,7 +915,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     -- layout and `vitFwdRenderB`'s placement. Mid-list they capture an existing positional slot.
     vitDropSig bs sd ++
     s!", %onehot: {ty [bs, nClasses]}"
-  let pTy := (vitParamSig nClasses).map (fun (_, ds) => ty ds)
+  let pTy := (vitParamSig nClasses V).map (fun (_, ds) => ty ds)
   let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
