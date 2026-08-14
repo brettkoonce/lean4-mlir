@@ -752,6 +752,13 @@ row is a real measurement of a recipe the listing no longer reproduces.
 
 ### ▶▶ TODO: FIX — MobileNetV2's whole-net VJP fold is still 2 blocks of 17
 
+▶ **SCOPED 2026-08-14 in `planning/mnv2_fold_and_mnv4_convm.md`**, with the measurement
+this section was missing: the eight `iv*W` lemmas are NOT EfficientNet's three-liners,
+because MNv2 has no per-block forward VJP to delegate to (`grep` for
+`iv*Fwd*_has_vjp` returns nothing). ~400–550 lines against a 531-line template, and the
+whole estimate turns on writing ONE lemma first. That doc also carries the MNv4
+Conv-S → Conv-M conversion.
+
 Raised by brett 2026-08-12, reading ch7's §7.1 contrast paragraph. `mobilenetv2_has_vjp_at`
 (`Proofs/Architectures/MobileNetV2.lean:489`) binds stem + `We₁/Wd₁/Wp₁` + `We₂/Wd₂/Wp₂` +
 head. **Two** inverted-residual blocks; the net has seventeen. ch6's §6.1 states this out
