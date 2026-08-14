@@ -165,7 +165,34 @@ library" remains untested.
 
 ## 3. WHAT IT WOULD TAKE TO CLOSE THE TODO
 
-### Tier 1 — ✅ MOSTLY DONE (§2e). What remains is one full-50k pass, ≈1 GPU-hour
+### ⛔⛔ FIRST, A CORRECTION TO THIS SECTION — the old checkpoints are NOT re-scoreable
+
+Written 2026-08-14, after the conversion landed. Tier 1 below says "re-score the finished run",
+and **that does not work**, for a reason unrelated to preprocessing.
+
+`d078a6d` (2026-08-04) changed strided convolutions from XLA `'SAME'` to symmetric `(k-1)//2`
+padding. The A3 checkpoints date from **2026-07-10**. So today's emitter builds a *different
+network* from the one those weights were trained in, and the same checkpoint scores:
+
+| forward | stem padding | top-1 (2,000 imgs) |
+|---|---|---|
+| `generated_…_short.py`, 2026-08-03, still `padding='SAME'` | XLA SAME | **77.150** ← tracks the run's 77.22 |
+| regenerated today | symmetric | **75.200** |
+
+▶ **−1.95 pt, silent.** The number simply comes out lower and plausible; nothing announces it.
+
+⭐ This is what makes §2e's 0.90 pt the SOUND measurement — it ran against the stale artifact,
+which happened to match the checkpoint. Any re-score from here must either pin a pre-`d078a6d`
+forward or accept that it is measuring a different net.
+
+⭐⭐ **And the general lesson, which is bigger than this file.** A checkpoint outlives the artifact
+it was trained on. The VERIFIED path has a gate for exactly that — `score-checkpoint`'s equality
+check, which re-scores a committed checkpoint through the current render and demands the training
+run's own counts. The JAX path has none, which is precisely why this sat unseen for ten days. ▶ The
+cheapest fix is the JAX peer of that gate: one checkpoint, one expected number, run on every
+emitter change.
+
+### Tier 1 — ✅ MOSTLY DONE (§2e), and ⚠ read the correction above before re-scoring
 
 Everything needed exists as of today.
 
