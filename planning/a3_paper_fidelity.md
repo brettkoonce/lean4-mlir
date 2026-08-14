@@ -199,15 +199,60 @@ artifacts, and 8× below A3's. Nothing gated it; it descends and reports a numbe
 
 ## 3. VERIFICATION DEBT (distinct from recipe fidelity)
 
-### 3.1 ⛔⛔ `r50-gradcheck` tier 1 B does not survive BCE
-Pre-existing, localised by a 2×2 to the **loss alone**: ‖g‖ is 197.5 under CE and 2.18 under BCE,
-and tier 1 B measures a cancellation residual, so it degrades against a 90× smaller gradient. The
-gate genuinely *cannot decide* at BCE — its passing sites (0.000757) sit above the weakest
-deliberate control violation (0.000545), so no tolerance separates the populations.
-▶ **Do NOT raise `R50_GC_EXACT_U`.** Either build a conditioning-robust tier 1 B (normalise per-site
-by ‖g_γ‖·‖γ‖, or run the identity at a scaled loss), or record explicitly that tier 1 B is CE-only.
-The composition passes tier 1 A (0.000017) and tier 2 (rel ≤ 0.230 vs 0.30, control live at 0.997).
-⚠ Also affects `adam64bce` and `lamb64bce`.
+### 3.1 ⛔⛔ `r50-gradcheck` tier 1 B does not survive BCE — **MEASURED 2026-08-14, and it is TWO problems**
+
+    lake build r50-gradcheck && scripts/r50_gradcheck_stability.py
+
+The original entry recorded ONE sample of each number — a passing site at 0.000757 against a weakest
+control violation of 0.000545 — and concluded "no tolerance separates the populations", diagnosing a
+**cancellation residual degrading against a 90× smaller gradient**. Three repetitions per variant say
+that is not what is happening. ⚠ Every input is seeded, so the base point is fixed; what moves is the
+GPU execution (the base LOSS differs in its 6th digit, ‖g‖ by ~2e-3 relative, and
+`XLA_FLAGS=--xla_gpu_deterministic_ops=true` does **not** fix it — measured).
+
+| | `adam64` (CE) | `adam64bce` |
+|---|---|---|
+| ‖g‖ | 197.5 … 197.9 | 2.17646 … 2.18015 |
+| tier 1 A worst | 8e-06 … 3.2e-05 | 2.2e-05 (1.00×) |
+| **tier 1 B worst** | 5.6e-05 … 7.2e-05 | **0.000757 … 0.000765 (1.01×)** |
+| ⟂ weakest violation | 0.00073 … 0.002006 (**2.75×**) | 0.000454 … 0.004774 (**10.5×**) |
+| ⟂ median violation | 0.025375 … 0.025803 (1.02×) | 0.030664 … 0.032088 (1.05×) |
+| separation, weakest/passing (gate wants >5×) | 27.9×, 12.0×, 33.8× → 3/3 | **0.6×, 6.3×, 6.3× → 2/3** |
+| separation, median/passing (gate wants >100×) | 352×, 423×, 458× → 3/3 | 40×, 42×, 42× → 0/3 |
+
+**(a) Tier 1 B is NOT noise-dominated under BCE — it is one of the most stable numbers in the
+report.** 0.000757…0.000765, a 1% spread. So the "cancellation residual" story is wrong: the
+identity is being satisfied to a *reproducible* 7.6e-4, separated from the control population by a
+*reproducible* 40× on the median. What fails is the **fixed `tolExact = 3e-4`**, which was calibrated
+at CE where the same residual is 7e-5. ⚠ The per-site conditioning dump (`R50_GC_DIAG=1`, added with
+this measurement) settles the mechanism too: at the worst site `cos/κ = 1.000000`, i.e. **there is no
+cancellation there at all** — the two inner products do not oppose each other, so the ledger's
+suggested fix ("normalise per-site by ‖g_γ‖·‖γ‖") is both already implemented (the statistic *is* a
+cosine) and beside the point.
+
+**(b) ⚠⚠ THE CONTROL CHECK IS A BUG, and its own comment says so.** `TestR50GradCheck.lean` reads:
+
+> ⚠ The control is a SEPARATION statement, **not an order statistic on one site**. Requiring the
+> weakest of 21 violations to clear a fixed multiple is brittle …
+
+and the line immediately below it is `if bC <= 5.0 * max wA wB`, where `bC` is `bestOf ctl` — the
+MINIMUM over the 21 sites, exactly the order statistic the comment rules out. That minimum is the
+least stable number in the whole report (2.75× under CE, 10.5× under BCE), and the verdict rests on
+it. ▶ Under BCE this makes the gate's answer **depend on which run you happened to do** — 2 of 3
+reps clear the separation and 1 does not. Under CE it passes 3/3 but with only 2.4× headroom in the
+worst rep. The median is stable to 1.02–1.05× and is what the comment asks for.
+
+▶ **Still open, and it is now a DECISION rather than an investigation:**
+* fix (b) — make the control check the quantile its comment specifies. Repairs the irreproducibility
+  and strengthens CE. Uncontroversial: it is the code matching its own stated intent.
+* then choose for (a): re-calibrate `tolExact` per loss with the separation stated (the identity does
+  hold to 7.6e-4 with 40× separation), or record tier 1 B as CE-only. ⚠ **Do NOT simply raise
+  `R50_GC_EXACT_U`** — that is the move that turns a gate into a decoration, and (b) must be fixed
+  first or any recalibration is fitted to noise.
+
+⚠ Unchanged and still true: the composition passes tier 1 A (2.2e-05) and tier 2 (rel ≤ 0.207 vs
+0.30, scale control live at 0.99). Also affects `lamb64bce`. **No evidence at any point that the
+BCE render's backward is wrong** — every failure here is the gate's calibration, not the render's.
 
 ### 3.2 ✅ CLOSED 2026-08-14 — `tests/r50_dp_render_tie.py` now carries the composed pairs
 

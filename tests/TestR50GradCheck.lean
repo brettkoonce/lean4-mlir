@@ -280,6 +280,25 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
       pn2 := pn2 +         F32.dotSlice θ    fo.toUSize        θ    fo.toUSize        fl.toUSize
     return s.abs / max (Float.sqrt gn2 * Float.sqrt pn2) 1e-30
 
+  -- ⚠⚠ **THE CONDITIONING OF THE IDENTITY, and it is what `a3_paper_fidelity.md` §3.1 is about.**
+  --
+  -- `cosine` reports `|Σ_t ⟨g_t,θ_t⟩| / (‖g‖‖θ‖)`, and for identity **B** that numerator is a
+  -- CANCELLATION: `⟨g_γ,γ⟩` and `⟨g_β,β⟩` are each large and must sum to zero. `kappa` measures how
+  -- much — `(|⟨g_γ,γ⟩| + |⟨g_β,β⟩|) / (‖g‖‖θ‖)`, in `[0,1]` — so the cosine cannot resolve anything
+  -- below roughly `eps_f32 · κ · √n` no matter how right the render is.
+  --
+  -- ▶ Identity **A** has no such term: it is a SINGLE inner product `⟨g_W,W⟩`, so κ ≈ |cos| and its
+  -- floor is the plain fp32 one. That asymmetry is the whole reason B degrades under BCE while A
+  -- does not — measured, not assumed: at BCE, A's worst is 2.2e-05 and B's is 7.65e-04.
+  let kappa (ts : Array Nat) : Float := Id.run do
+    let mut a := 0.0; let mut gn2 := 0.0; let mut pn2 := 0.0
+    for t in ts do
+      let (fo, fl) := (offs[t]!, offs[t+1]! - offs[t]!)
+      a   := a + (gScale * F32.dotSlice out0 (nP + fo).toUSize θ fo.toUSize fl.toUSize).abs
+      gn2 := gn2 + gScale * gScale * F32.dotSlice out0 (nP+fo).toUSize out0 (nP+fo).toUSize fl.toUSize
+      pn2 := pn2 +         F32.dotSlice θ fo.toUSize θ fo.toUSize fl.toUSize
+    return a / max (Float.sqrt gn2 * Float.sqrt pn2) 1e-30
+
   -- A: the 53 BN-followed conv kernels.  B: the 33 BN affines whose scale the next conv removes.
   -- CONTROL: `bn3`/`bnp` feed the residual add and `Wd` has no BN after it — 21 sites where the
   -- invariance is FALSE and the cosine must therefore be large.
@@ -322,6 +341,16 @@ BNs + the head)"
   let ctlMed := ctlSorted[ctlSorted.size / 2]!
   IO.println s!"             weakest violation {bC} at {atC};  median {ctlMed};  strongest \
 {ctlSorted.back!}"
+  -- ▶ The per-site conditioning dump, behind `R50_GC_DIAG=1`. Read it before touching `tolExact`:
+  -- a site whose |cos| is high AND whose κ is high is unresolved, not wrong.
+  if (← IO.getEnv "R50_GC_DIAG").isSome then
+    IO.println "  ── conditioning (R50_GC_DIAG) ──   site            |cos∠|         κ      cos/κ"
+    for (ts, nm) in idB do
+      let c := cosine ts; let k := kappa ts
+      IO.println s!"                                    B  {nm}\t{c}\t{k}\t{c / max k 1e-30}"
+    for (ts, nm) in ctl do
+      let c := cosine ts; let k := kappa ts
+      IO.println s!"                                    ⟂  {nm}\t{c}\t{k}\t{c / max k 1e-30}"
 
   -- ════════════════════════════════════════════════════════════════
   -- § TIER 2 — the adjoint probe, per group
