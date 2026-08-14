@@ -16,6 +16,11 @@ broadcast_has_vjp            # SE.lean:140, same sentence, the adjoint of GAP
 cnn_has_vjp_at3              # CNN.lean:2337 explicitly "(future)"
 r34_float_close              # Resnet34FloatBridge.lean:22 "the remaining work for a whole-net …"
 convWGrad_faithful           # StableHLO.lean:7885, a theorem that would validate the wgrad render
+mobilenetv2_full_has_vjp_at  # SpecVJP.lean — the theorem the blueprint's "[TODO: prove the fold at
+                             # full depth for this network]" (content.tex:5630) would produce.
+                             # ⚠ Was DEBT until 2026-08-14: the docstring named it in the PRESENT
+                             # tense, so the Lean side claimed a fold the blueprint openly says is
+                             # unproved. Reworded, so it is now honestly future work.
 
 # ── OUT OF SCOPE: exists, but in a lib this gate does not import.
 #    Widening the import set to reach it costs more than the check is worth here.
@@ -28,8 +33,5 @@ chk_relu_has_vjp_correct     # real, tests/comparator/ChallengeArch.lean — com
 cnnVerified_has_vjp_at       # MainMnistCnnVerified.lean:16 — cnn_has_vjp_at? cnnConcrete_has_vjp_at?
 flatten_has_vjp              # MainVjpOracleConv.lean:3 — no flatten VJP exists under any name
 maxPool_has_vjp              # MainVjpOracleConvPool.lean — maxPool2_has_vjp3 is the likely referent
-Proofs.mobilenetv2_full_has_vjp_at  # SpecVJP.lean; mobilenetv2_has_vjp_at exists, _full_ does not.
-                                    # ⚠ Baselined AS CITED, prefix included — the match is on the
-                                    # cited string, so the bare name would not have covered it.
 convStrided_faithful         # TestStrided1x1.lean
 kernel_faithfulness_probe    # TreeReduceBridge.lean:33 — the .py script, cited bare elsewhere

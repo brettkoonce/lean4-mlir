@@ -473,8 +473,22 @@ theorem mobilenetv2Rep_denote_eq
         Wh bh εh γh βh Wfc bfc := rfl
 
 /-- **The representative spec carries the math.** The strided 6-block MobileNetV2 spec's
-    denotation has a VJP — the canonical `pdiv`-derived witness (the honest strided
-    chain-rule fold is `Proofs.mobilenetv2_full_has_vjp_at`). -/
+    denotation has a VJP, the canonical `pdiv`-derived witness.
+
+    ⚠⚠ **The honest strided chain-rule fold WOULD be `mobilenetv2_full_has_vjp_at`, and it
+    does not exist.** This docstring used to name it in the present tense, as though it were
+    a pointer to a theorem; a reader following it found nothing. It is the same gap the
+    blueprint records as *"[TODO: prove the fold at full depth for this network]"*, beside
+    `mobilenetv2_has_vjp_at`, which folds stem + **two** inverted-residual blocks + head
+    rather than all seventeen.
+
+    ▶ **It does not close by copying EfficientNet's**, and that is the trap worth naming
+    here rather than rediscovering. `efficientnetForwardB_full_has_vjp` is a GLOBAL `HasVJP`
+    over all sixteen MBConv blocks, and it can be global because swish is smooth everywhere.
+    MobileNetV2 is relu6, and a global VJP through a kink is false. So the full-depth version
+    must keep the pointwise `_at` form this net already has: the axis to move is DEPTH
+    (2 → 17), not pointwise → global. Anyone who conflates the two will spend the day proving
+    something untrue. -/
 noncomputable def mobilenetv2Rep_has_vjp
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (εs γs βs : ℝ)
     (We1 : Kernel4 64 16 1 1) (be1 : Vec 64) (εe1 γe1 βe1 : ℝ)
