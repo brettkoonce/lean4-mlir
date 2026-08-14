@@ -465,7 +465,18 @@ if "--break" in sys.argv:
           f"distinct={distinct_fired}, partition fired on {partition_fired} (want 6)")
     # (b) swap two nets' shims — the counts stay right, only the PARTITION is wrong. This is the
     #     `swap1` control from wdx-tie: a gate checking "five distinct shims exist" passes it.
-    swapped = dict(wiring)
+    # ⚠⚠ BASE NETS ONLY, and that is the fix `ccca380` needed and did not get. `wiring` covers the
+    # SIZE_VARIANTS too, and those SHARE their base's shim deliberately (gate 0 says so in as many
+    # words: "convnextbin: shares convnextin's shim"). So distinctness over the full wiring is False
+    # BY CONSTRUCTION, and this control — whose whole point is "distinctness passes the swap, the
+    # partition catches it" — could no longer state its own premise.
+    #
+    # ⚠ Note what the failure looked like: `distinct=False, partition fired on 2 (want 2)`. The
+    # half that does the work was right; only the premise was wrong, so the control was reporting a
+    # weakness in the gate it exists to justify. Same shape as control A's constant when MNv4 joined
+    # (`008fb38`) — a net-roster change that this file has to be told about.
+    # ▶ `swapped` is now built the way control A's `faux` already was: over NETS, not over wiring.
+    swapped = {s: wiring[s] for s, _, _, _ in NETS}
     swapped["vitin"], swapped["convnextin"] = swapped["convnextin"], swapped["vitin"]
     still_distinct = len(set(swapped.values())) == len(swapped)
     swap_fired = 0
