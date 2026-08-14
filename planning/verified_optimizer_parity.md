@@ -232,8 +232,22 @@ On `resnet50in160_lambacc8x64wxclipbce`:
 
 Ordered by cost. All three have working precedents; none needs a new `SHlo` op.
 
-* **`wdStr`** — thread the decay VALUE as a render parameter, so A1's `0.01` costs a re-render
-  rather than a new op. ⚠ It stays a baked `stablehlo.constant` either way: ConvNeXt's
+* **`wdStr`** — ✅ **DONE 2026-08-14.** `optWdDefault` (1e-4 for the AdamW family, 0.02 for LAMB's),
+  `optWdStr` (the override, empty = the optimizer's own), `optConstsB opt wdStr`, and a trailing
+  `wdStr` on `resnet50TrainStepFaithfulB`. Byte-inert: all 176 artifacts unchanged.
+  ⚠⚠ **It had to reach the NAME, which §3 did not anticipate.** `%wd` is a baked constant, so an A1
+  render (0.01) and an A3 render (0.02) at the same optimizer/batch/replicas would otherwise both be
+  `lambaccdp8x64wxclipbce` — the last-writer-wins race §2a already cost this repo an artifact.
+  `wdVariantMark` appends `wd001`, and it is PER-OPTIMIZER because the same value means different
+  things to the two families (0.02 is LAMB's default and a 200× override for AdamW).
+  ⭐ **And it is a MEASURED knob, not a threaded string**: `scripts/opt_step_tie.py` gained a
+  `lambacc8wxclipwd001` row against `generated_resnet50_imagenet_a1.py`, which bakes `WD = 0.010000`.
+  Pointed at the wd = 0.02 reference instead it fails at 9.5e-05 against a 1e-7 floor, and the worst
+  rows are `θ'[0]` and `θ'[2]` — the two DECAYING parameters, with the rank-1 one `wx` excludes
+  untouched. A decay knob that never reached the graph could not produce that pattern.
+  ▶ ⚠ A full A1 render still needs `sd` and `ema` below; this removes the decay from that list.
+  (original note: thread the decay VALUE as a render parameter, so A1's `0.01` costs a re-render
+  rather than a new op.) ⚠ It stays a baked `stablehlo.constant` either way: ConvNeXt's
   `convnextAdamConsts (wdExclude) (wdStr := "0.0001")` emits
   `%wd = stablehlo.constant dense<{wdStr}>` (`ConvNeXtRender.lean:844,854`). So this is a
   *parameterised constant*, not a runtime operand — copy that shape verbatim. Cheapest of the three.

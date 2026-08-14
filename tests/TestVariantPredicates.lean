@@ -156,6 +156,14 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- search followed by a `takeWhile` and is the thing defect #4 already got wrong once.
   , ("lambacc8x64wxclipbce", false, false, false)
   , ("lambaccdp8x64wxclipbce", false, false, false)
+    -- ▶▶ The `wdStr` axis (2026-08-14): RSB-A1's decay 0.01 against A3's 0.02. ⚠ `%wd` is a BAKED
+    -- constant, so the VALUE has to reach the name or two graphs share one path — `wdVariantMark`.
+    -- ⚠⚠ A SIXTH placement, and the first marker that carries DIGITS OF ITS OWN after the batch's:
+    -- `…64wxclipbcewd001` puts a second run of digits at the very end, and the `k` parse works by
+    -- finding "acc"/"accdp" and taking the digits up to the "x". "The trailing digits cannot reach
+    -- the leading ones" is exactly the reasoning defect #4 falsified, so it is RUN.
+  , ("lambaccdp8x64wxclipbcewd001", false, false, false)
+  , ("lambacc8x64wxclipbcewd001", false, false, false)
     -- ▶ LAMB (`r34AdamVariant .lamb`). ⚠ It needs NO driver predicate — three regions, the same
     -- `[θ|m|v]` signature as `adam`, because the trust ratio is computed inside the graph from θ
     -- and the direction and needs no extra state. So it is here for `wx`/`clip`'s reason: to prove
@@ -243,7 +251,9 @@ private def accumSpellings : List String :=
    -- 4-region graph — which is exactly what the prefix test did.
    "lambacc8x64bce", "lambaccdp8x64bce", "lambacc4x64bce", "lambaccdp4x64",
    -- D1's clipped peers — same 4-region graph, one more trailing marker
-   "lambacc8x64wxclipbce", "lambaccdp8x64wxclipbce"]
+   "lambacc8x64wxclipbce", "lambaccdp8x64wxclipbce",
+   -- the A1-decay peers — same 4-region graph, one more trailing marker
+   "lambaccdp8x64wxclipbcewd001", "lambacc8x64wxclipbcewd001"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- ⚠ and accumulation must disturb NONE of the other four axes. `acc4x64` contains no "ema" prefix,
@@ -305,6 +315,23 @@ private def accumSpellings : List String :=
 #guard nRegions "lambaccdp8x64wxclipbce" == 4
 #guard nScalars "lambaccdp8x64wxclipbce" == 5
 -- ⚠ and `clip` in this bracketed placement must invent none of the four axes it is not
+-- ⚠⚠ `k` SURVIVES THE DECAY MARKER TOO, and this is the one with digits in it. `wd001` appends a
+-- second numeric run AFTER the batch, so if the parse ever became "the last digits" or "all the
+-- digits" rather than "the digits between acc and x", these are what say so.
+#guard accK "lambaccdp8x64wxclipbcewd001" == 8
+#guard accK "lambacc8x64wxclipbcewd001" == 8
+#guard accK "lambaccdp8x64wxclipbcewd001" != 1
+#guard accK "lambaccdp8x64wxclipbcewd001" != 64
+#guard accOn "lambaccdp8x64wxclipbcewd001" == true
+#guard nRegions "lambaccdp8x64wxclipbcewd001" == 4
+-- ⚠ and `wd` must invent none of the five axes. ⭐ The one worth running rather than reasoning
+-- about: `wd001` ends in digits and begins with `w`, and `do` is the two-character marker that has
+-- already collided once. `w`+`d` is not `d`+`o`, but that is the argument `rms`+`dp` ⊇ "sd" broke.
+#guard cdOn  "lambaccdp8x64wxclipbcewd001" == false
+#guard sdOn  "lambaccdp8x64wxclipbcewd001" == false
+#guard rmsOn "lambaccdp8x64wxclipbcewd001" == false
+#guard emaOn "lambaccdp8x64wxclipbcewd001" == false
+
 #guard emaOn "lambaccdp8x64wxclipbce" == false
 #guard rmsOn "lambaccdp8x64wxclipbce" == false
 #guard sdOn  "lambaccdp8x64wxclipbce" == false

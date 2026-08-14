@@ -579,6 +579,48 @@ def clipZeroConst (gradClip : Bool) : String :=
     "    %czero = stablehlo.constant dense<0.0> : tensor<f32>\n"
   else ""
 
+/-- **The weight decay each optimizer bakes when the caller does not override it.**
+
+    ⚠ The two families genuinely differ, and by 200×: AdamW's `1e-4` against LAMB's `0.02`, the
+    latter off timm's a3 arg string (`lamb-cosine-lr0.008-wd0.02-…`). `optConstsB`'s `.lamb` arm
+    records what reusing AdamW's number here would produce — a LAMB that is structurally right and
+    200× off on the decay.
+
+    ▶ It exists so that `wdStr` can mean "the optimizer's own value" by DEFAULT rather than by the
+    caller restating a number that is already decided by the constructor — the two-writers shape
+    `bce`/`vSuffix` was just removed for (`a3_paper_fidelity.md` §3.3). -/
+def optWdDefault : R34Opt → String
+  | .adamw | .heavyBall | .adamwAccum _ => "0.0001"
+  | .lamb  | .lambAccum _              => "0.02"
+
+/-- **The decay actually baked**: the caller's override, or `optWdDefault`. Empty means default.
+
+    ⚠⚠ **`%wd` IS A BAKED `stablehlo.constant`, NOT A RUNTIME OPERAND — this parameterises the
+    literal, it does not make the decay schedulable.** Unlike `%lr`, which stays a `tensor<f32>`
+    argument so one graph serves a whole cosine, changing the decay is a RE-RENDER. That is the same
+    shape `ConvNeXtRender.convnextAdamConsts` already has (`wdStr := "0.0001"`, with the ImageNet
+    render passing `0.05`), copied rather than re-invented.
+
+    ▶ Why it exists: RSB-**A1** uses wd = 0.01 where A3 uses 0.02
+    (`planning/verified_optimizer_parity.md` §3), so A1 costs a re-render rather than a new op. -/
+def optWdStr (opt : R34Opt) (wdStr : String := "") : String :=
+  if wdStr.isEmpty then optWdDefault opt else wdStr
+
+/-- **The variant marker for a NON-DEFAULT decay**, and it is not optional bookkeeping.
+
+    ⚠⚠ **Two renders that differ only in a baked constant MUST NOT share a path.** `%wd` lives in
+    the artifact, so an A1 render (0.01) and an A3 render (0.02) at the same optimizer, batch and
+    replica count would otherwise both be `lambaccdp8x64wxclipbce` — the last-writer-wins race
+    §2a cost this repo a committed artifact once already. `scripts/regen_verified_mlir.sh check`
+    would catch it as a two-writer collision, but a collision that cannot be SPELLED is better than
+    one that is merely detected (§3.3's lesson, one feature over).
+
+    ▶ Spelling: `wd` ++ the digits with the point removed, so `0.01` → `wd001` and `0.005` →
+    `wd0005`. Mechanical, and unambiguous because the leading `0` is kept. ⚠ Empty at the default,
+    so every committed artifact keeps its name and its bytes. -/
+def wdVariantMark (opt : R34Opt) (wdStr : String := "") : String :=
+  if wdStr.isEmpty || wdStr == optWdDefault opt then "" else "wd" ++ wdStr.replace "." ""
+
 /-- **The WHOLE optimizer stage for a net: the hoisted global-norm clip, then `optOne` per
     parameter.** Returns `(code, θ', m', v', G')`, with `G'` empty unless the optimizer accumulates.
 
@@ -697,7 +739,10 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
 
     `%wd` is baked rather than a runtime arg because weight decay is not scheduled — unlike `%lr`,
     which stays a `tensor<f32>` argument so one graph serves the whole cosine schedule. -/
-def optConstsB (opt : R34Opt) : String :=
+def optConstsB (opt : R34Opt) (wdStr : String := "") : String :=
+  -- ⚠ ONE binding, used by every arm below, so the two families cannot drift apart in how they
+  -- honour the override — `optWdStr` owns "the caller's value or this optimizer's default".
+  let wd := optWdStr opt wdStr
   match opt with
   | .adamw =>
     "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
@@ -705,10 +750,10 @@ def optConstsB (opt : R34Opt) : String :=
     "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
     "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
     "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-    "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
   | .heavyBall =>
     "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
-    "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n"
+    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
   | .lamb =>
     -- ⚠ **`%eps` is 1e-6, NOT AdamW's 1e-8**, and `%wd` is 0.02, NOT 1e-4. Both come off timm's a3
     -- arg string (`lamb-cosine-lr0.008-wd0.02-…`), which `jax/MainResnet50Imagenet.lean` decodes in
@@ -721,7 +766,7 @@ def optConstsB (opt : R34Opt) : String :=
     "    %b2 = stablehlo.constant dense<0.999> : tensor<f32>\n" ++
     "    %ob2 = stablehlo.constant dense<0.001> : tensor<f32>\n" ++
     "    %eps = stablehlo.constant dense<1.0e-6> : tensor<f32>\n" ++
-    "    %wd = stablehlo.constant dense<0.02> : tensor<f32>\n" ++
+    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n" ++
     "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n"
   | .adamwAccum k =>
     -- ⚠ **A TRUSTED CARVE-OUT, and deliberately the smallest one that does the job**: eight lines of
@@ -743,7 +788,7 @@ def optConstsB (opt : R34Opt) : String :=
     -- ⚠ `fmt12`, not `fmt6` — see `accumScalarConsts`, which now owns those eight lines so that
     -- `.lambAccum` emits the SAME mechanism rather than a second copy of it.
     "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
-    "    %wd = stablehlo.constant dense<0.0001> : tensor<f32>\n" ++
+    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n" ++
     accumScalarConsts k
   | .lambAccum k =>
     -- ⭐⭐ **THE COMPOSITION, AND IT IS EXACTLY "LAMB's CONSTANTS + THE SHARED ACCUMULATOR".**
@@ -755,7 +800,7 @@ def optConstsB (opt : R34Opt) : String :=
     -- ▶ `%b1`/`%ob1`/`%b2`/`%ob2` are COMPUTED from `%aup`, not baked, which is the only difference
     -- from `.lamb`'s constant block and is precisely what `accumScalarConsts` supplies.
     "    %eps = stablehlo.constant dense<1.0e-6> : tensor<f32>\n" ++
-    "    %wd = stablehlo.constant dense<0.02> : tensor<f32>\n" ++
+    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n" ++
     "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     accumScalarConsts k
 
@@ -804,7 +849,12 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     -- every committed artifact keeps its name and its bytes.
     -- ⚠ It TRAILS `wx` and `clip`, which is the order the hand-passed suffix already produced —
     -- `lambaccdp8x64wxclipbce`. Preserved deliberately; the `#guard`s below pin it.
-    (bce : Bool := false) : String :=
+    (bce : Bool := false)
+    -- ▶▶ A NON-DEFAULT weight decay, and it must reach the name for the reason `wdVariantMark`
+    -- gives: `%wd` is BAKED, so two renders differing only in it would otherwise collide on one
+    -- artifact path. Empty = the optimizer's own default = no marker = every committed name
+    -- unchanged. ⚠ It goes LAST because it is the newest axis and §2m's rule is unconditional.
+    (wdStr : String := "") : String :=
   (match opt with
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
    | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp"
@@ -836,7 +886,10 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
   -- below are what make it a fixed one.
   (if gradClip then "clip" else "") ++
   -- ▶ `bce` LAST, which is where the hand-passed `vSuffix` put it. See this parameter's note.
-  (if bce then "bce" else "")
+  (if bce then "bce" else "") ++
+  -- ▶ …and the decay marker after even that, because it is the newest axis and appending is the
+  -- only placement that leaves all four existing spellings untouched. Empty at the default.
+  wdVariantMark opt wdStr
 
 set_option maxRecDepth 4000000 in
 /-- **ResNet-34 `[3,4,6,3]` AdamW train step, batch-BN, rendered from the verified AST at `N := B`.**

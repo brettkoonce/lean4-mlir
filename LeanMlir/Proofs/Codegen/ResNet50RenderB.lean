@@ -497,6 +497,14 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- would notice. `r34AdamVariant` now derives the marker from this flag; read its `bce` note for
     -- the measurement that licensed the removal (12 sites, 12 suffixes, no other value ever).
     (bce : Bool := false)
+    -- ▶▶ **A NON-DEFAULT WEIGHT DECAY** (`planning/verified_optimizer_parity.md` §3, the `wdStr`
+    -- item): empty means this optimizer's own value — `optWdDefault`, 1e-4 for the AdamW family and
+    -- 0.02 for LAMB's — so every committed artifact keeps its bytes. RSB-**A1** wants 0.01 where A3
+    -- wants 0.02, and this is what makes that a re-render rather than a new op.
+    -- ⚠⚠ It is a BAKED `stablehlo.constant`, not a runtime operand: unlike `%lr`, the decay is not
+    -- schedulable and changing it means re-rendering. ⚠ It reaches `r34AdamVariant`, because two
+    -- renders differing only in a baked constant must not share a path — see `wdVariantMark`.
+    (wdStr : String := "")
     -- ⭐⭐ RESOLUTION, and it is parameterised by the FINAL feature size rather than by the input.
     -- `q = 7` is 224 (every committed artifact, byte for byte); `q = 5` is RSB-A3's **160**.
     --
@@ -773,7 +781,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
         "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5).\n") ++
-      zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt ++
+      zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt wdStr ++
       wdzConst wdExclude ++ clipZeroConst gradClip ++ adamCode ++
       (if bce then lossCodeBce else lossCode) ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
@@ -798,7 +806,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let inner : String := go.run' 0
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
-  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip bce}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip bce wdStr}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1304,6 +1312,33 @@ end Proofs.StableHLO
 -- nothing but "entry mismatch" to say why.
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
          true true true != "lambaccdp8x64bcewxclip"
+
+-- ⭐⭐ **THE `wdStr` AXIS** (`verified_optimizer_parity.md` §3, RSB-A1's 0.01 against A3's 0.02).
+-- ⚠ `%wd` is a BAKED constant, so two renders differing only in it must not share an artifact path
+-- — `wdVariantMark` is what makes that collision unspellable rather than merely detectable by the
+-- writer audit. These pin the spelling and, more importantly, both directions of "default".
+#guard Proofs.StableHLO.optWdStr Proofs.StableHLO.R34Opt.lamb == "0.02"
+#guard Proofs.StableHLO.optWdStr Proofs.StableHLO.R34Opt.adamw == "0.0001"
+#guard Proofs.StableHLO.optWdStr (Proofs.StableHLO.R34Opt.lambAccum 8) "0.01" == "0.01"
+-- ⚠ The DEFAULT, whether reached by omission or by the caller spelling it out, must produce NO
+-- marker — otherwise `lambaccdp8x64bce` and `lambaccdp8x64bcewd002` would be the same graph under
+-- two names, which is the collision in the other direction.
+#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.R34Opt.lambAccum 8) == ""
+#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.R34Opt.lambAccum 8) "0.02" == ""
+#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.R34Opt.adamw "0.0001" == ""
+-- ⚠ …and a non-default one must produce a marker that carries the VALUE, not merely a flag: the
+-- point is that 0.01 and 0.005 land on different paths, so `wd` alone would not do.
+#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.R34Opt.lambAccum 8) "0.01" == "wd001"
+#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.R34Opt.lambAccum 8) "0.005" == "wd0005"
+#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.R34Opt.adamw "0.02" == "wd002"
+-- ⚠ AND THE SAME VALUE MEANS DIFFERENT THINGS TO THE TWO FAMILIES: 0.02 is LAMB's default (no
+-- marker) and a 200x override for AdamW (marker). The mark is per-optimizer for that reason.
+#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.R34Opt.lamb "0.02" == ""
+-- ▶ The full A1 spelling, end to end.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" == "lambaccdp8x64wxclipbcewd001"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.02" == "lambaccdp8x64wxclipbce"
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdFaithfulV 64 1000 "1.0e-05" "resnet50in160" (q := 5))

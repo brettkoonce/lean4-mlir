@@ -57,7 +57,11 @@ private def fixtureParams : List (String × List Nat) :=
     accumulator slots keep the `%pI` / `%pIm` / `%pIv` / `%pIa` spelling `optOne` emits against —
     those names are a CONTRACT with the optimizer, not a local choice. -/
 private def optStepModule (fname : String) (opt : R34Opt)
-    (wdExclude : Bool := false) (gradClip : Bool := false) (clipNorm : Float := 1.0) : String :=
+    (wdExclude : Bool := false) (gradClip : Bool := false) (clipNorm : Float := 1.0)
+    -- ⚠ `wdStr` reaches ONLY the constant block: the per-parameter ops name `%wd` as an operand, so
+    -- overriding the decay changes one `stablehlo.constant` and nothing else. That is exactly the
+    -- property `optWdStr`'s docstring claims, and this fixture is where it gets measured.
+    (wdStr : String := "") : String :=
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let ps : List PGrad := fixtureParams.map (fun (n, ds) => ⟨n, s!"%d{n}", ds⟩)
   let (body, thetaN, mN, vN, aN) := (optAllParams opt 1 1 ps wdExclude gradClip clipNorm).run' 0
@@ -76,7 +80,7 @@ private def optStepModule (fname : String) (opt : R34Opt)
   s!"  func.func @{fname}({sig}) -> ({outTys}) " ++ "{\n" ++
   -- ⚠ Same constant prelude the real render emits, from the same three functions — a hand-written
   -- `%b1 = 0.9` here would make the gate measure this file's transcription of the recipe.
-  optConstsB opt ++ wdzConst wdExclude ++ clipZeroConst gradClip ++ body ++
+  optConstsB opt wdStr ++ wdzConst wdExclude ++ clipZeroConst gradClip ++ body ++
   s!"    return {retVals} : {outTys}\n" ++
   "  }\n}\n"
 
@@ -103,18 +107,24 @@ private def optStepModule (fname : String) (opt : R34Opt)
     in the tree are EfficientNet's and MNv2's TF-RMSProp recipes at `EPS = 1e-3`/`1.0`. Gating
     `.adamw` here would mean writing the reference by hand, which is the thing this file refuses to
     do. ▶ It wants a config that generates it, not a transcription. -/
-private def variants : List (String × R34Opt × Bool × Bool) :=
-  [ -- (slug, optimizer, wdExclude, gradClip)
-    ("lamb",           .lamb,        false, false)   -- the trust ratio alone
-  , ("lambwxclip",     .lamb,        true,  true)    -- + D2 mask + D1 clip, no accumulation
-  , ("lambacc4wxclip", .lambAccum 4, true,  true)    -- ⭐ D1 × accumulation at the config's k
-  , ("lambacc8wxclip", .lambAccum 8, true,  true) ]  -- ⭐⭐ RSB-A3's actual composition
+private def variants : List (String × R34Opt × Bool × Bool × String) :=
+  [ -- (slug, optimizer, wdExclude, gradClip, wdStr)
+    ("lamb",           .lamb,        false, false, "")   -- the trust ratio alone
+  , ("lambwxclip",     .lamb,        true,  true,  "")   -- + D2 mask + D1 clip, no accumulation
+  , ("lambacc4wxclip", .lambAccum 4, true,  true,  "")   -- ⭐ D1 × accumulation at the config's k
+  , ("lambacc8wxclip", .lambAccum 8, true,  true,  "")   -- ⭐⭐ RSB-A3's actual composition
+    -- ⭐ RSB-**A1**'s decay, 0.01 against A3's 0.02 — the `wdStr` knob, and the row that makes it a
+    -- MEASURED knob rather than a threaded string. Its reference is `…_a1.py`, which bakes
+    -- `WD = 0.010000`, so a `wdStr` that failed to reach the constant block would show up as a
+    -- wrong θ' here and nowhere else. ⚠ The slug carries `wd001` because `wdVariantMark` puts it
+    -- there: two renders differing only in a baked constant must not share a path.
+  , ("lambacc8wxclipwd001", .lambAccum 8, true, true, "0.01") ]
 
 def main : IO Unit := do
   IO.println "── optimizer-step fixtures (planning/verified_optimizer_parity.md §5) ──"
-  for (slug, opt, wx, clip) in variants do
+  for (slug, opt, wx, clip, wd) in variants do
     let fname := s!"opt_step_{slug}"
-    let m := optStepModule fname opt wx clip
+    let m := optStepModule fname opt wx clip 1.0 wd
     let path := s!".lake/build/{fname}.mlir"
     IO.FS.writeFile path m
     IO.println s!"  wrote {path} ({(m.splitOn "\n").length} lines)"

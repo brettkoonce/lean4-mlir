@@ -61,6 +61,12 @@ localises to the accumulation arithmetic rather than to the clip itself. Under �
 `worst 3` is `G'[0..2] (RAW)`, i.e. the gate names the accumulator region rather than leaving a
 reader to bisect.
 
+| **③ `wdStr` not reaching the constant block** (the `wd001` row run against the wd = 0.02 reference) | ✓ | ✓ | ✓ | ✓, and `wd001` **9.5e-05 ✗** |
+
+▶ ③ localises perfectly on its own: the worst rows are `θ'[2]` and `θ'[0]`, the two DECAYING
+parameters, while `θ'[1]` — the rank-1 one `wx` excludes from decay — is untouched. A decay knob
+that failed to reach the graph could not produce that pattern by accident.
+
 ⚠ ① is ALSO caught statically, before this file runs — the `#guard`s under `clipNormStr` in
 `ResNet34RenderB.lean` refuse to build. That is defence in depth and not redundancy: the guards pin
 the two literals, this pins that the literals are used on the right tensor in the right order.
@@ -110,6 +116,11 @@ VARIANTS = [
     ("lambwxclip",     "generated_resnet50_imagenet_a2accum.py",  1, False),
     ("lambacc4wxclip", "generated_resnet50_imagenet_a2accum.py",  4, True),
     ("lambacc8wxclip", "generated_resnet50_imagenet_a2accum.py",  8, True),
+    # ⭐ RSB-A1's decay: 0.01 against A3's 0.02, the `wdStr` knob. Its reference is a1.py, which
+    # bakes WD = 0.010000 — so this row is what turns "the string reaches the constant block" from
+    # a code-reading claim into a measurement. ⚠ Nothing else about the row differs from
+    # `lambacc8wxclip`, so a failure here and not there localises to the decay alone.
+    ("lambacc8wxclipwd001", "generated_resnet50_imagenet_a1.py",  8, True),
 ]
 
 # Tolerance. The two sides run the SAME arithmetic in the same f32 order for the most part, but not
