@@ -41,7 +41,31 @@ PAIRS = [
      "verified_mlir/resnet50in_adamdp64_train_step.mlir"),
     ("verified_mlir/resnet50in_acc4x64_train_step.mlir",
      "verified_mlir/resnet50in_accdp4x64_train_step.mlir"),
+    # ▶▶ `a3_paper_fidelity.md` §3.2, closed 2026-08-14. These three were the composed RSB-A3
+    # renders, and the FIRST of them is the artifact the 77.43% run actually trained on — so until
+    # now the gradcheck's verdict reached the graph that produced this repo's headline number by
+    # nothing at all. ⚠ They are `resnet50in160`, a different NET SPEC (q = 5) and not a suffix,
+    # which is why the name normaliser below had to learn the resolution.
+    ("verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir",
+     "verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir"),
+    ("verified_mlir/resnet50in160_lambacc8x64wxbce_train_step.mlir",
+     "verified_mlir/resnet50in160_lambaccdp8x64wxbce_train_step.mlir"),
+    # ⭐⭐ D1's pair, and it is the one that made this check say something NEW rather than more of
+    # the same. Every pair above all-reduces inside `optOne`, per parameter, interleaved with that
+    # parameter's optimizer ops. The clip render HOISTS all 161 collectives to the top of the
+    # optimizer stage — they must precede the norm fold — so the DP and single-device files differ
+    # in WHERE the carve-out sits, not merely in whether it is present. That the substitution still
+    # lands line for line is a real result: the clip changed the collective's PLACEMENT without
+    # changing the program it is a carve-out from.
+    ("verified_mlir/resnet50in160_lambacc8x64wxclipbce_train_step.mlir",
+     "verified_mlir/resnet50in160_lambaccdp8x64wxclipbce_train_step.mlir"),
 ]
+# ⚠ NOT COVERED, and each for a stated reason rather than by omission:
+#   `lambaccdp8x128bce` — B = 128 per replica, so its single-device peer would be a different
+#       baked batch; there is no matched-B pair to make.
+#   `lambacc4x64bce`    — k = 4, no DP peer rendered.
+#   `accdp8x64`         — the pre-existing note above: same renderer, different baked constant,
+#       which is an inheritance argument rather than a check.
 # Overridable so the NEGATIVE CONTROL can be run: point B at a mutated copy and this must FAIL.
 if len(sys.argv) == 3:
     PAIRS = [(sys.argv[1], sys.argv[2])]
@@ -88,11 +112,16 @@ def check(A: str, B: str) -> int:
 
     # 2. Normalise. In A the gradient SSA becomes @G<P>; in B %armean<P> becomes the same token.
     #    Comments and the function name differ by design and are dropped/normalised.
-    fname = re.compile(r'resnet50in_\w+_train_step')
-    an = [fname.sub('resnet50in_OPT', l) for l in a if not COMMENT.match(l)]
+    # ⚠ The RESOLUTION is captured and KEPT (`\1`), not normalised away with the optimizer. The
+    # 224 net (`resnet50in`) and the 160 net (`resnet50in160`) are different NET SPECS — q = 7 vs
+    # q = 5 — so a pair that crossed them must fail on this line rather than be smoothed into
+    # agreement. It would fail on the tensor shapes too; this makes it fail for the RIGHT reason,
+    # on line 1, instead of reporting ten thousand differing lines.
+    fname = re.compile(r'resnet50in(\d*)_\w+_train_step')
+    an = [fname.sub(r'resnet50in\1_OPT', l) for l in a if not COMMENT.match(l)]
     for p, g in grads.items():
         an = [sub_ssa(l, g, f'@G{p}') for l in an]
-    bn = [fname.sub('resnet50in_OPT', l) for l in b if not COMMENT.match(l) and not AR_LINE.match(l)]
+    bn = [fname.sub(r'resnet50in\1_OPT', l) for l in b if not COMMENT.match(l) and not AR_LINE.match(l)]
     for p in grads:
         bn = [sub_ssa(l, f'%armean{p}', f'@G{p}') for l in bn]
 

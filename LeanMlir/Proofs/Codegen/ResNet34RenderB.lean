@@ -790,7 +790,21 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     -- emission would produce an artifact whose declared entry disagrees with its own path and the
     -- shim would refuse the call outright.
     -- ⚠ Like `wx` it needs NO driver predicate: the clip adds ops, not arity, types or regions.
-    (gradClip : Bool := false) : String :=
+    (gradClip : Bool := false)
+    -- ▶▶ `bce` = BCE-with-logits instead of smoothed CE — RSB-A2/A3's loss, and the reason the
+    -- recipe's lr is what it is. ⚠⚠ **IT IS A PARAMETER HERE BECAUSE IT USED NOT TO BE**
+    -- (`a3_paper_fidelity.md` §3.3, closed 2026-08-14): `resnet50TrainStepFaithfulB` carried a
+    -- `bce : Bool` that swapped the loss AND a separate `vSuffix : String` that the caller had to
+    -- spell `"bce"` by hand, so the FLAG and the NAME were two writers for one fact and could
+    -- disagree with nothing noticing — on the artifact the 77.43% run depends on. Measured before
+    -- removing it: 12 call sites passed `bce := true`, 12 passed `vSuffix := "bce"`, and no call
+    -- site ever passed a `vSuffix` that was not `"bce"`. So the string was a restatement of the
+    -- Bool, and deriving it here makes the disagreement unspellable rather than merely unobserved.
+    -- ⭐ Pure refactor: `{variant}{vSuffix}` and `{variant-with-bce}` are the same characters, so
+    -- every committed artifact keeps its name and its bytes.
+    -- ⚠ It TRAILS `wx` and `clip`, which is the order the hand-passed suffix already produced —
+    -- `lambaccdp8x64wxclipbce`. Preserved deliberately; the `#guard`s below pin it.
+    (bce : Bool := false) : String :=
   (match opt with
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
    | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp"
@@ -809,9 +823,9 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
    -- `k` parse is one rule for both, not two.
    | .lambAccum k => (if replicas ≤ 1 then "lambacc" else "lambaccdp") ++ toString k ++ "x") ++
   (if B == 32 then "" else toString B) ++
-  -- ▶ `wx` TRAILS THE BATCH, so it composes with every optimizer spelling and with the `bce`
-  -- suffix the R50 renders append after it — `lambaccdp8x64bcewx` would be wrong; the R50 caller
-  -- passes `vSuffix := "bce"` AFTER this, giving `lambaccdp8x64wxbce`. ⚠ The order is a choice and
+  -- ▶ `wx` TRAILS THE BATCH, so it composes with every optimizer spelling and with the `clip` and
+  -- `bce` markers appended after it — `lambaccdp8x64bcewx` would be wrong; the order below gives
+  -- `lambaccdp8x64wxclipbce`. ⚠ The order is a choice and
   -- the `#guard`s below are what make it a fixed one, because `cnxAdamVariant` learned the hard way
   -- that a marker's POSITION is as load-bearing as its presence.
   (if wdExclude then "wx" else "") ++
@@ -820,7 +834,9 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
   -- keeps a reader from having to know which net a slug came from. With R50's `bce` appended after,
   -- the RSB-A3 composition reads `lambaccdp8x64wxclipbce`. ⚠ The order is a CHOICE; the `#guard`s
   -- below are what make it a fixed one.
-  (if gradClip then "clip" else "")
+  (if gradClip then "clip" else "") ++
+  -- ▶ `bce` LAST, which is where the hand-passed `vSuffix` put it. See this parameter's note.
+  (if bce then "bce" else "")
 
 set_option maxRecDepth 4000000 in
 /-- **ResNet-34 `[3,4,6,3]` AdamW train step, batch-BN, rendered from the verified AST at `N := B`.**

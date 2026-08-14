@@ -488,9 +488,15 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet50in")
     -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument.
     -- `bce` swaps the LOSS (and therefore the cotangent) for BCE-with-logits — RSB-A2/A3's, and the
-    -- reason the recipe's lr is what it is. `vSuffix` appends to `r34AdamVariant`'s name so the
-    -- artifact, the entry point and `LEAN_MLIR_VARIANT` stay one string.
-    (bce : Bool := false) (vSuffix : String := "")
+    -- reason the recipe's lr is what it is. It also names the artifact: `r34AdamVariant` appends
+    -- the `bce` marker, so the entry point, the path and `LEAN_MLIR_VARIANT` stay ONE string
+    -- derived from ONE flag.
+    -- ⚠⚠ `vSuffix` IS GONE (`a3_paper_fidelity.md` §3.3, closed 2026-08-14). It was a `String` the
+    -- caller had to spell `"bce"` by hand alongside this `Bool`, i.e. two writers for one fact on
+    -- the artifact the 77.43% run depends on — the name and the loss could disagree and nothing
+    -- would notice. `r34AdamVariant` now derives the marker from this flag; read its `bce` note for
+    -- the measurement that licensed the removal (12 sites, 12 suffixes, no other value ever).
+    (bce : Bool := false)
     -- ⭐⭐ RESOLUTION, and it is parameterised by the FINAL feature size rather than by the input.
     -- `q = 7` is 224 (every committed artifact, byte for byte); `q = 5` is RSB-A3's **160**.
     --
@@ -792,7 +798,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let inner : String := go.run' 0
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
-  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip}{vSuffix}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip bce}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1053,11 +1059,11 @@ end Proofs.StableHLO
 -- other.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_adam64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.adamw "resnet50in" (bce := true) (vSuffix := "bce"))
+    Proofs.StableHLO.R34Opt.adamw "resnet50in" (bce := true))
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lamb64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.lamb "resnet50in" (bce := true) (vSuffix := "bce"))
+    Proofs.StableHLO.R34Opt.lamb "resnet50in" (bce := true))
 
 -- ⭐⭐ LAMB — RSB-A3's optimizer (`planning/rsb_a3_r50_verified.md` §2.3). THREE regions, same
 -- `[θ|m|v]` signature as `adam64`, because the trust ratio is computed inside the graph from θ and
@@ -1118,7 +1124,7 @@ end Proofs.StableHLO
 -- resolution parameterisation at `q = 5` — the part with the dependent-type risk.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lamb64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+    Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (q := 5))
 
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- ⭐⭐⭐ **RSB-A3 ITSELF — LAMB × BCE × ACCUMULATION × 4 REPLICAS, AT 160.** The composition
@@ -1139,11 +1145,11 @@ end Proofs.StableHLO
 -- render would be ungateable. Same k, same loss, same resolution; only `replicas` differs.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
 
 -- ── ▶ `wx` — timm `no_weight_decay`, CLOSING `a3_paper_fidelity.md` §2.1 (2026-08-14) ──────────
 -- The A3 recipe's LARGEST open delta, and the one its own ledger ranked "most likely to move the
@@ -1165,7 +1171,7 @@ end Proofs.StableHLO
 -- only be compared to A3 by a fresh run, never by resuming one.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxbce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true))
 -- Its single-device peer, for the same reason the non-`wx` pair has one: `r50-accum-tie` and
 -- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only `wx` would be
@@ -1173,7 +1179,7 @@ end Proofs.StableHLO
 -- operands and nothing about the arity.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxbce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true))
 
 -- ⭐⭐ **D1 — `wx` PLUS THE GLOBAL-NORM GRADIENT CLIP**, and this pair is the first R50 render that
@@ -1195,7 +1201,7 @@ end Proofs.StableHLO
 -- by a fresh run, never by resuming one.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxclipbce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true))
 -- Its single-device peer, for the reason the `wx` pair has one: `r50-accum-tie` and
 -- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only clip would be
@@ -1204,7 +1210,7 @@ end Proofs.StableHLO
 -- check that only asks whether the gradients got smaller.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxclipbce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true))
 
 -- The **2-GPU** peer of the 4-replica render above: `B := 128` per replica at the same `k = 8`, so
@@ -1214,14 +1220,14 @@ end Proofs.StableHLO
 -- accuracy claim it is a different regime and must be said out loud (§4.1's delta list).
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x128bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 2
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
 
 -- ⚠ `k = 4` at ONE replica, the peer `r50-accum-tie` actually runs against (its gate is written at
 -- k = 4). Rendering only k = 8 would leave the composed optimizer's accumulation ungated at the k
 -- the gate uses.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc4x64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in160" (bce := true) (q := 5))
 
 -- ⚠ `lambdp64bce` — LAMB + BCE at 4 replicas, NO accumulation. It exists for ONE reason: it is the
 -- peer `r50-accum-shard-tie` needs. That gate's identity is `acc(x1..xk) == DP([x1|..|xk])`, so the
@@ -1230,7 +1236,7 @@ end Proofs.StableHLO
 -- ▶ §3's "needs a `lambdp64` peer rendered", at the composition's resolution.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambdp64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5))
+    Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (q := 5))
 
 -- ⚠⚠ THE NAME ROUND TRIP FOR THE COMPOSED VARIANT, pinned on the PRODUCING side — the driver reads
 -- `k` back out of this exact string with a substring parse, and a disagreement is silent (a wrong
@@ -1266,6 +1272,38 @@ end Proofs.StableHLO
 -- still carries `8x` between "accdp" and the batch, exactly as the un-clipped spelling does.
 #guard ("lambaccdp8x64wxclipbce".startsWith "acc") == false
 #guard (("lambaccdp8x64wxclipbce".splitOn "acc").length > 1) == true
+
+-- ⭐⭐ **§3.3 CLOSED: the `bce` marker is DERIVED, and these are what make that mean something.**
+-- It used to be a `vSuffix : String` the caller spelled by hand beside a `bce : Bool` that swapped
+-- the loss — two writers for one fact, on the artifact the 77.43% run trained on, with nothing
+-- checking they agreed. Now one flag produces both, so the ONLY thing left to pin is the spelling.
+-- ⚠ These are the full four-marker compositions, in order: optimizer, k, batch, `wx`, `clip`, `bce`.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true == "lambaccdp8x64wxclipbce"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true == "lambacc8x64wxclipbce"
+-- ⚠ The RSB-A3 run's own artifact, pinned character for character: no `wx`, no `clip`, `bce` only.
+-- This is the name whose graph produced 77.43%, and it must not move.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         false false true == "lambaccdp8x64bce"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         false false true == "lambacc8x64bce"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         false false true == "lambacc4x64bce"
+#guard Proofs.StableHLO.r34AdamVariant 128 2 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         false false true == "lambaccdp8x128bce"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.R34Opt.lamb
+         false false true == "lambdp64bce"
+-- ⚠ And `bce` OFF must leave every non-BCE spelling untouched — the half that says the new
+-- parameter is inert, which is what let it be added without moving a byte.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         false false false == "lambaccdp8x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb false false false == "lamb64"
+-- ⚠⚠ `bce` LAST, and this is the counterfactual: the marker must not land before `wx`/`clip`.
+-- `lambaccdp8x64bcewx` is what a wrong order produces, and the shim would refuse the call with
+-- nothing but "entry mismatch" to say why.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true != "lambaccdp8x64bcewxclip"
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdFaithfulV 64 1000 "1.0e-05" "resnet50in160" (q := 5))

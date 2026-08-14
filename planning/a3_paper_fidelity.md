@@ -209,14 +209,53 @@ by ‖g_γ‖·‖γ‖, or run the identity at a scaled loss), or record explic
 The composition passes tier 1 A (0.000017) and tier 2 (rel ≤ 0.230 vs 0.30, control live at 0.997).
 ⚠ Also affects `adam64bce` and `lamb64bce`.
 
-### 3.2 `r50_dp_render_tie.py` — the composed pair is not wired in
-`lambacc8x64bce` / `lambaccdp8x64bce` exist and are not in the (1-replica, 4-replica) tie.
+### 3.2 ✅ CLOSED 2026-08-14 — `tests/r50_dp_render_tie.py` now carries the composed pairs
 
-### 3.3 The `bce` axis is still a loose `Bool`
-`bce` is a trailing `Bool` on `resnet50TrainStepFaithfulB` while `lamb`/`accum` are constructors of
-`R34Opt`, and the variant string is `r34AdamVariant` **plus** a hand-passed `vSuffix := "bce"` — so
-the name and the flag can disagree with nothing noticing, and the artifact this run depends on ends
-in `bce`. Mitigated by `#guard`s on the produced names, not closed.
+**What it was:** `lambacc8x64bce` / `lambaccdp8x64bce` existed and were not in the (1-replica,
+4-replica) tie — so `r50-gradcheck`'s verdict reached **the graph that produced 77.43%** by nothing
+at all. The tie ran on `adam64` and `acc4x64` only.
+
+✅ Five pairs now, all green. Two fixes were needed and the second was a latent bug:
+
+1. the three composed pairs added — `lambacc8x64bce`, `…wxbce`, `…wxclipbce` — each against its DP
+   peer;
+2. ⚠ the name normaliser read `resnet50in_\w+_train_step`, which **does not match
+   `resnet50in160`**, so every 160-resolution pair failed on line 1 no matter how right it was.
+   Now `resnet50in(\d*)_…` with the resolution **captured and kept**, so a pair that crossed the
+   224 and 160 nets — different NET SPECS, q = 7 vs q = 5 — still fails, on line 1, for the right
+   reason instead of on ten thousand shape lines.
+
+⭐ **D1's pair made the check say something new.** Every earlier pair all-reduces inside `optOne`,
+per parameter, interleaved with that parameter's optimizer ops. The clip render HOISTS all 161
+collectives to the top of the optimizer stage — they must precede the norm fold — so the two files
+differ in *where* the carve-out sits, not merely in whether it is present. It still ties line for
+line: **16 996 of 16 997 lines** before the regex fix, and all of them after. The clip changed the
+collective's PLACEMENT without changing the program it is a carve-out from.
+
+⚠ Negative control re-run on the new pair: one op mutated (`multiply` → `add` inside a `clipScale`)
+is caught, rc 1. ⚠ Still NOT covered, each for a stated reason in the file: `lambaccdp8x128bce`
+(no matched-B single-device peer), `lambacc4x64bce` (no DP peer), `accdp8x64` (inheritance
+argument, not a check).
+
+### 3.3 ✅ CLOSED 2026-08-14 — the `bce` axis derives its own name
+
+**What it was:** `bce` was a trailing `Bool` on `resnet50TrainStepFaithfulB` that swapped the loss,
+*and* the caller separately hand-spelled `vSuffix := "bce"` to name the artifact — two writers for
+one fact, on the artifact this run depends on, with nothing checking they agreed.
+
+✅ `r34AdamVariant` took a trailing `bce : Bool` and now emits the marker itself; `vSuffix` is gone
+from the train step. **Measured before removing it:** 12 call sites passed `bce := true`, 12 passed
+`vSuffix := "bce"`, and no call site ever passed a `vSuffix` that was not `"bce"` — so the string
+was a restatement of the Bool, and the removal is a pure refactor (every committed artifact keeps
+its name and its bytes). The disagreement is now *unspellable* rather than merely unobserved.
+
+⚠ The forwards (`resnet50FwdFaithfulV`, `resnet50FwdEvalFaithfulV`) keep their own `vSuffix`. That
+one is a genuine independent suffix — a forward has no loss to swap — and every call site leaves it
+at the default.
+
+▶ `#guard`s pin the full four-marker order (`wx`, `clip`, `bce`), both halves of the inertness, the
+RSB-A3 run's own `lambaccdp8x64bce` character for character, and the counterfactual that `bce` must
+not land before `wx`/`clip`.
 
 ---
 
@@ -354,7 +393,16 @@ and every photometric op. This is about geometry alone.
    measured against the 56 ms allreduce term.
 5. **§2.4, bf16.** Chase only if throughput becomes the constraint; it is a 2× lever, not a
    fidelity one, and it changes numerics.
-6. §3.2 / §3.3 — hygiene, any time.
+6. ~~§3.2 / §3.3 — hygiene, any time.~~ ✅ **both done 2026-08-14**, and "hygiene" undersold §3.2:
+   the tie was not merely missing the composed pairs, its name normaliser could not match a
+   `resnet50in160` artifact at all, so wiring them in without reading it would have produced a
+   confident red on a correct render.
+
+⭐ **Also closed 2026-08-14, and NOT in this list because it was not known when the list was
+written: D1, timm's `Lamb.max_grad_norm`.** Every LAMB artifact above — including the one that ran —
+is `Lamb(max_grad_norm=None)`, a different optimizer from the one the recipe names. See
+`planning/verified_optimizer_parity.md` §2. It is a **new §2 delta on the finished run**, not a
+verification item: `resnet50in160_lambaccdp8x64wxclipbce` is a fresh artifact and has never stepped.
 
 ⚠ **Nothing in §2 may be applied to the run in flight.** Every one of them changes either the
 trajectory or the reported eval, and a mid-cosine change makes the whole run unquotable.
