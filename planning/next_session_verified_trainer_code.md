@@ -154,12 +154,41 @@ Of the four recipe knobs RSB-A2 needs beyond A3, **one landed today** and three 
 | knob | A3 | A2 | verified status |
 |---|---|---|---|
 | `wdExcludeNormBias` | (missing) | required | ✅ **done `ccca380`** — `wx` renders exist |
+| LAMB grad clip | 1.0 | 1.0 | ⛔ **NEW 2026-08-14** — `r34AdamVariant` has no clip axis; see below |
 | stochastic depth | 0.0 | **0.05** | ⛔ **R50 has no `sd` flag at all** |
 | EMA | off | **0.9999** | ⛔ **R50 has no `ema` flag** (no 4th region) |
 | weight decay | 0.02 | 0.02 (**A1: 0.01**) | ⛔ `%wd` is a BAKED constant — A1 needs `wdStr` |
 
 ⭐ **All three have working precedents to copy**: ConvNeXt and ViT both carry `sd` and `ema`;
 ConvNeXt carries `wdStr`. None needs a new `SHlo` op.
+
+### 3a-bis. ⚠ THE GRAD CLIP — what "baked into the next run" does and does NOT cover (2026-08-14)
+
+The timm-fidelity work split cleanly in two, and it is worth knowing which half is automatic.
+
+⭐ **The DATA path IS automatic.** The verified `.imagenet` trainers do no augmentation at all —
+batches arrive pre-transformed over a pipe from that net's own `generated_*_imagenet_shim.py`,
+emitted by the SAME `JaxCodegen` the reference trainer uses. So timm's validation protocol and the
+antialiased resampler reached the verified path with no verified-side change whatsoever.
+⚠ **But the shims are BUILD PRODUCTS.** They were stale (14:59, pre-change) until
+`scripts/gen_shims.sh` was re-run; all seven now carry `antialias=True` and `_CROP_PCT`, and
+`shim_wiring_gate.py` is green. ▶ *Run `gen_shims.sh` after ANY `Jax/Codegen.lean` change* — this is
+`§1`'s warning in the other direction, and the file on disk is the one that trains.
+
+⛔ **The OPTIMIZER path is NOT.** `D2` (the trust-ratio guard) was fixed on both sides together, but
+`D1`, timm's `Lamb` default `max_grad_norm = 1.0`, exists only on the JAX side. `r34AdamVariant`'s
+axes are `(opt, B, replicas, wdExclude)` — **there is no clip axis** — and no `resnet50in160_*`
+artifact carries one. What it needs, and none of it is deep:
+
+* a trailing defaulted `gradClip` flag on `r34AdamVariant`, spelled like `wx` (⚠ it must reach that
+  function, not just the renderer: R50 derives its ENTRY NAME from the variant, and ConvNeXt shipped
+  exactly that defect twice);
+* the emission — a global `gradSumSqAccF` fold across every parameter, then `clipScaleF` per
+  parameter. ⭐ `ConvNeXtRender.lean:944,951` is the working copy, and `GradClip.lean` already
+  carries the 12 theorems, so **no new op and no new proof**;
+* the rendered artifacts (`lambaccdp8x64wxclipbce` and peers);
+* **no driver work** — a clip changes no arity, type or region, which is why
+  `TestVariantPredicates` already has `clip` rows proving it disturbs none of the five axes.
 
 ⚠ **Stochastic depth is the biggest of the three** and the one with a real design question: where
 the site goes in a bottleneck, and whether every block gets one. R50 has 16 blocks, so the ramp
