@@ -1453,6 +1453,16 @@ lean_exe «mnv4-train-smoke» where
 lean_exe «r34-train-b2» where
   root := `tests.TestR34TrainB2
 
+/-- Emits the **optimizer stage alone** — one step as a function of `(θ, g, m, v, G)` — for each of
+    seven variants, which is what `scripts/opt_step_tie.py` diffs against the reference optimizer.
+    `planning/verified_optimizer_parity.md` §5's gate: `vjp_oracle` ties the two implementations at
+    the GRADIENT, and nothing tied them at the UPDATE until this.
+
+    ⚠ The body is `optAllParams`, the same call `resnet50TrainStepFaithfulB` makes — so this gates
+    the shipped emission and not a copy of it. Sole writer of `.lake/build/opt_step_*.mlir`. -/
+lean_exe «opt-step-fixtures» where
+  root := `tests.TestOptStepFixtures
+
 
 /-- Phase 4 of `planning/mnv4_verified.md`: 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
     IREE peer exists yet, and the body is backend-agnostic if one is wanted. -/

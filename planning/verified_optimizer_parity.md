@@ -209,13 +209,14 @@ which is correct but invites dropping the second word.)
 are now in the drift-guard step of `.github/workflows/proofs.yml`. That gate works; do not skip it
 on the assumption that a new render is automatically covered.
 
-⭐ And the numeric one, which is the only gate that would catch a clip applied in the wrong place:
-`tests/vjp_oracle` / the R50 gradient check against the reference. A clip on unreduced gradients
-still trains, still descends, and is a different optimizer. ⚠ **Still not run** — see §5, which D1
-has made more pressing rather than less: the accumulation threshold is `k·C` by an algebraic
-argument (`Proofs.clipFactor_accum`), and while the argument is now machine-checked, *that the
-render instantiates it at the right `k` and on the right tensor* is checked only by reading the
-emitted MLIR. What was read, on `resnet50in160_lambacc8x64wxclipbce`:
+⭐⭐ And the numeric one, which is the only gate that can see a clip applied in the wrong place — a
+clip on unreduced or unaccumulated gradients still trains, still descends, and is a different
+optimizer. ▶ **This now exists: §5b, `scripts/opt_step_tie.py`.** It ties the rendered optimizer to
+the reference's own at ~1e-7 on four variants, and both of D1's decisions were reverted to confirm
+it turns red. Run it before believing any change to the optimizer stage.
+
+⚠ The emitted MLIR was also read directly, and that reading is what the gate was built to replace.
+On `resnet50in160_lambacc8x64wxclipbce`:
 
 * one `%czero`-seeded fold, and **every** `clipScale` block re-roots the *same* summed scalar —
   `Proofs.clipFactor_shared`'s property, present;
@@ -289,17 +290,54 @@ tolerance, per variant. That is the same shape as `score-checkpoint`'s equality 
 number the other side would print, and demand it — which is the pattern that has caught the most
 this month.
 
-⭐⭐ **D1 SHARPENED THIS, and it is now the top item on this doc rather than a closing thought.**
+## ✅ 5b. THE ONE-STEP UPDATE DIFF — **BUILT 2026-08-14**
 
-The gap is not that the two optimizers might drift. It is that **the verified side has now made a
-semantic decision the reference never had to make** — the reference divides by `k` and clips; the
-render folds on the sum and scales the threshold. Those agree by `Proofs.clipFactor_accum`, which is
-machine-checked, but the theorem covers the *algebra*, not the *wiring*: that the render passes the
-same `k` to `clipNormStr` as `accumScalarConsts` folds into `%ob1`/`%ob2`, on the same tensor, in the
-same order. Today that is checked by **reading the emitted MLIR** (§2d) and by `#guard`s on the two
-literals. Both are real checks. Neither is the one that would survive someone changing `k`.
+    lake build opt-step-fixtures && .lake/build/bin/opt-step-fixtures
+    .venv/bin/python scripts/opt_step_tie.py
 
-▶ The one-step update diff would close it in the form this repo trusts: `optOne`'s output against the
-reference's optimizer on one `(θ, g, state)`, per variant, **including a `k > 1` row** — because the
-accumulating path is now the one with arithmetic in it. Everything else in §3 is a code change; this
-is the gate that would tell you whether any of them landed.
+D1 is what forced this. The gap was never just that the two optimizers *might* drift — it is that
+**the verified side has now made a semantic decision the reference never had to make**: the
+reference divides by `k` and clips, the render folds on the sum and scales the threshold. Those
+agree by `Proofs.clipFactor_accum`, which is machine-checked — but the theorem covers the *algebra*,
+not the *wiring*: that the render passes the same `k` to `clipNormStr` as `accumScalarConsts` folds
+into `%ob1`/`%ob2`, on the same tensor, in the same order.
+
+**What it is.** `tests/TestOptStepFixtures.lean` emits the optimizer stage ALONE — one step as a
+function of `(θ, g, m, v, G)`, gradients as function ARGUMENTS so the update is isolated from the
+gradient half `vjp_oracle` already covers — and `scripts/opt_step_tie.py` runs it through XLA
+against the reference's own optimizer lines. Seconds, on CPU. Result:
+
+```
+✓ lamb            K=1  ref=r50.py           worst rel 8.05e-08
+✓ lambwxclip      K=1  ref=r50_a2accum.py   worst rel 8.71e-08
+✓ lambacc4wxclip  K=4  ref=r50_a2accum.py   worst rel 1.09e-07
+✓ lambacc8wxclip  K=8  ref=r50_a2accum.py   worst rel 1.09e-07
+```
+
+⭐ **Two things make it a gate rather than a decoration**, and both are the lessons this repo keeps
+re-learning:
+
+1. **It drives the SHIPPED emission.** `optAllParams` was factored out of
+   `resnet50TrainStepFaithfulB` (byte-identically) so the fixture calls the same function the real
+   render calls. §5's own point one level down: *a gate on a copy is not a gate on the thing copied.*
+2. **The reference is EXECUTED, not re-implemented** — the optimizer lines are extracted from
+   `generated_resnet50_imagenet*.py` and `exec`d verbatim, no line edited, added or skipped. The
+   variants were chosen to match references that ship, which is why the list is four rows and not
+   the seven a coverage instinct would have written.
+
+⭐⭐ **And it was shown to fail.** Both of D1's new decisions were reverted and re-run: dropping the
+`k` scaling gives **1.8e-01 / 2.1e-01**, and returning the clipped total as region 4 gives
+**9.4e-01 / 8.8e-01** — six orders above the 1e-7 floor, and in both cases **only on the
+accumulating rows**, which is what the `k = 1` control exists to say. Under the second the reported
+worst rows are `G'[0..2] (RAW)`, so the gate names the accumulator rather than leaving a bisect. The
+table is in the script's header.
+
+⚠ **`.adamw` is not covered**, and it is a real gap: no generated reference bakes R50's AdamW
+constants (`%eps = 1e-8`, `%wd = 1e-4`) — the Adam-family references in the tree are EfficientNet's
+and MNv2's TF-RMSProp recipes. Closing it wants a config that GENERATES that reference, not a
+transcription written into the harness.
+
+▶ **What this now buys the rest of §3.** `wdStr`, `ema` and `sd` are all code changes to the same
+optimizer stage, and each one now has a place to prove itself in seconds instead of in a run: add a
+config that generates the reference, add a fixture row, and the diff either ties or names the
+tensor it disagrees on.

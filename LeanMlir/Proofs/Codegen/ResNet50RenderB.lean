@@ -687,103 +687,14 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let allPs : List PGrad := stemPs ++
       b1.ps ++ b2.ps ++ b3.ps ++ b4.ps ++ b5.ps ++ b6.ps ++ b7.ps ++ b8.ps ++
       b9.ps ++ b10.ps ++ b11.ps ++ b12.ps ++ b13.ps ++ b14.ps ++ b15.ps ++ b16.ps ++ headPs
-    -- ═══ D1: the GLOBAL-norm gradient clip, hoisted out of the per-parameter tail ═══
-    --
-    -- ⚠⚠ **THE ORDER IS THE SEMANTICS, and there are two orderings to get right, not one.**
-    --
-    --   ① the clip goes AFTER the `all_reduce`. Each replica holds a PARTIAL gradient; clipping
-    --      those and then averaging is a clip of nothing in particular. `optOne` all-reduces per
-    --      parameter, so under the clip the collective is hoisted here and `optOne` is told
-    --      (`preAvg`) not to repeat it.
-    --   ② the clip goes AFTER the ACCUMULATION. The reference is explicit
-    --      (`jax/Jax/Codegen.lean:2439`): `grads = _gsum / _K` and only THEN the clip line, so the
-    --      norm is of the MEAN over the k micro-batches. Clipping the micro-batch gradient instead
-    --      would clip k times per optimizer step against a threshold meant for their mean — again
-    --      something that trains and descends. So the accumulator is hoisted here too, and the
-    --      threshold moves to `k·C` to read the fold on `Gt` as a fold on `Gt/k` (`clipNormStr`).
-    --
-    -- ▶ Neither ordering is visible to a gate that only checks "the gradients got smaller", which is
-    -- why `Proofs.clipFactor_shared` is the statement to drive and why it has to be driven in the
-    -- CLIPPING regime — the identity-below-threshold gate is structurally blind to placement.
-    --
-    -- ⚠ At `gradClip := false` NOT ONE `pretty` CALL HAPPENS in this block, so the fresh-name
-    -- counter does not move and every committed `resnet50in*` artifact re-renders byte-identically.
-    let z1 : Vec 1 := fun _ => 0
-    let accK := optAccumK opt
-    let mut clipCode := ""
-    let mut clipped : List (String × String) := []
-    let mut accRaw : List (String × String) := []
-    if gradClip then
-      -- ① average across replicas first. At `replicas ≤ 1` this emits nothing and threads the name
-      -- through, so the single-device clip render carries no collective at all.
-      let mut avg : List (String × String) := []
-      for g in allPs do
-        let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
-        clipCode := clipCode ++ arS
-        avg := avg ++ [(g.nm, gAvg)]
-      -- ② accumulate, when the optimizer accumulates. `Gt = akeep·G + g`, the SAME `momVNextF`
-      -- instantiation `optOne` would have emitted — moved, not duplicated, and handed back to it by
-      -- name so the fourth region still reports the RAW total.
-      -- ⚠ On an ACCUMULATE micro-batch the clip is computed on a PARTIAL `Gt` and then discarded:
-      -- `%lr = 0` freezes θ and `%b1 = %b2 = 1` / `%ob1 = %ob2 = 0` make both moments exact
-      -- passthroughs, so only the APPLY micro-batch's factor — the one taken on the full sum — can
-      -- reach a weight. That is what makes ② expressible without a second buffer.
-      let mut src : List (String × String) := avg
-      if accOn then
-        let mut acc : List (String × String) := []
-        for g in allPs do
-          let n := g.ds.foldl (· * ·) 1
-          let z : Vec n := fun _ => 0
-          let gAvg := (avg.lookup g.nm).getD g.grad
-          let (cG, nG) ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z (.operand gAvg z))
-          clipCode := clipCode ++ cG
-          acc := acc ++ [(g.nm, nG)]
-        accRaw := acc
-        src := acc
-      -- ③ ONE scalar, folded across every parameter before any of them is scaled. The fold must run
-      -- to completion first — that is the global-vs-local distinction, made structural by
-      -- `Proofs.clipScale` taking the factor as a PARAMETER it cannot compute from its own tensor.
-      let mut total : SHlo 1 := .operand "%czero" z1
-      for g in allPs do
-        let n := g.ds.foldl (· * ·) 1
-        let gS := (src.lookup g.nm).getD g.grad
-        total := .gradSumSqAccF (n := n) g.ds total (.operand gS (fun _ => 0))
-      let (cN, normSSA) ← pretty B total
-      clipCode := clipCode ++ cN
-      -- ④ scale each parameter's gradient by that one shared factor.
-      for g in allPs do
-        let n := g.ds.foldl (· * ·) 1
-        let z : Vec n := fun _ => 0
-        let gS := (src.lookup g.nm).getD g.grad
-        let (cS, sSSA) ← pretty B (.clipScaleF (n := n) (clipNormStr clipNorm accK) (clipEpsStr accK)
-                            0 0 g.ds (.operand normSSA z1) (.operand gS z))
-        clipCode := clipCode ++ cS
-        clipped := clipped ++ [(g.nm, sSSA)]
-    -- ═══ the optimizer: one proven triple per parameter, `optOne` shared with R34 ═══
-    let mut adamCode := clipCode
-    let mut thetaN : List String := []
-    let mut mNames : List String := []
-    let mut vNames : List String := []
-    let mut aNames : List String := []
-    for g in allPs do
-      -- ⚠ The decay operand comes from the SAME `PGrad` that names the site, so the parameter
-      -- whose shape decides exclusion is the parameter being updated — §2e's slot rule. Reading
-      -- the shape off a parallel list is how this class of bug ships.
-      -- ⚠ Under the clip the gradient `optOne` consumes is the CLIPPED one, while `accIn` names the
-      -- unclipped accumulator it must still return: see `optOne`'s note for why those two names
-      -- cannot collapse into one.
-      let gIn : PGrad :=
-        if gradClip then { g with grad := (clipped.lookup g.nm).getD g.grad } else g
-      let (c, nT, nM, nV, nA) ← optOne opt B replicas gIn (r34WdName wdExclude g.nm g.ds)
-                                  (preAvg := gradClip) (accIn := accRaw.lookup g.nm)
-      adamCode := adamCode ++ c
-      thetaN := thetaN ++ [nT]
-      mNames := mNames ++ [nM]
-      vNames := vNames ++ [nV]
-      -- ⭐ The accumulator's output name, present only under `.adamwAccum`. It becomes the FOURTH
-      -- region of the packed blob — the same shape the EMA renders use, so the driver's
-      -- `nRegions = 4` path is reused rather than a second one being written.
-      match nA with | some a => aNames := aNames ++ [a] | none => pure ()
+    -- ═══ the optimizer stage: D1's hoisted global-norm clip, then one proven triple per
+    -- parameter. ⚠ `optAllParams` is IMPORTED from `ResNet34RenderB`, not written here — read its
+    -- docstring for the two orderings the clip has to respect (after the all_reduce AND after the
+    -- accumulation), and for why it is a function at all: `tests/TestOptStepFixtures.lean` drives
+    -- the SAME call for `planning/verified_optimizer_parity.md` §5's one-step update gate, so the
+    -- gate exercises this emission rather than a second copy of it. ═══
+    let (adamCode, thetaN, mNames, vNames, aNames) ←
+      optAllParams opt B replicas allPs wdExclude gradClip clipNorm
     let statCode := cSt0 ++ cSt1 ++ cSt2 ++ cSt3 ++ cSt4 ++ cSt5 ++ cSt6 ++ cSt7 ++ cSt8 ++
       cSt9 ++ cSt10 ++ cSt11 ++ cSt12 ++ cSt13 ++ cSt14 ++ cSt15 ++ cSt16
     let statNames := st0.1 :: st0.2 :: (st1 ++ st2 ++ st3 ++ st4 ++ st5 ++ st6 ++ st7 ++ st8 ++

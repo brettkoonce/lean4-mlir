@@ -37,6 +37,14 @@ on:
       - 'verified_mlir/**'
       - 'scripts/convention_audit.py'
       - 'scripts/convention_baseline.txt'
+      # The one-step optimizer tie reads BOTH sides: the renderer that emits the optimizer stage
+      # and the harness that diffs it. ⚠ `ResNet34RenderB.lean` is where `optOne`/`optAllParams`
+      # live, so an optimizer change lands there and NOWHERE this workflow otherwise watches —
+      # the same omission the six convention divergences got in through.
+      - 'LeanMlir/Proofs/Codegen/ResNet34RenderB.lean'
+      - 'LeanMlir/Proofs/Codegen/GradClip.lean'
+      - 'tests/TestOptStepFixtures.lean'
+      - 'scripts/opt_step_tie.py'
   pull_request:
     paths:
       - 'jax/**'
@@ -55,6 +63,14 @@ on:
       - 'verified_mlir/**'
       - 'scripts/convention_audit.py'
       - 'scripts/convention_baseline.txt'
+      # The one-step optimizer tie reads BOTH sides: the renderer that emits the optimizer stage
+      # and the harness that diffs it. ⚠ `ResNet34RenderB.lean` is where `optOne`/`optAllParams`
+      # live, so an optimizer change lands there and NOWHERE this workflow otherwise watches —
+      # the same omission the six convention divergences got in through.
+      - 'LeanMlir/Proofs/Codegen/ResNet34RenderB.lean'
+      - 'LeanMlir/Proofs/Codegen/GradClip.lean'
+      - 'tests/TestOptStepFixtures.lean'
+      - 'scripts/opt_step_tie.py'
   workflow_dispatch:
 
 jobs:
@@ -323,5 +339,93 @@ jobs:
             echo ""
             echo '```'
             grep -E '^  (r34|r50|mnv2|mnv4|enet) |RATCHET|✓ selftest|NEW DIVERGENCE' /tmp/audit.log || true
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+  optimizer:
+    name: One-step optimizer tie (§5)
+    # ⭐⭐ Does the VERIFIED rendered optimizer take the same step as its JAX reference?
+    #
+    # `oracle` and `grad_tie.py` tie the two implementations at the GRADIENT; nothing tied them at
+    # the UPDATE until 2026-08-14. planning/verified_optimizer_parity.md §5: the two paths share a
+    # data pipeline BY CONSTRUCTION and share an optimizer BY NOBODY'S CONSTRUCTION — two hand-
+    # maintained implementations that happen to agree. D1 (timm's `Lamb.max_grad_norm`, which every
+    # LAMB artifact rendered before that date ignored) is what a drift between them looks like.
+    #
+    # No GPU, no training, no gradients: three tensors of 48/5/24 floats through XLA on CPU, against
+    # the reference's own optimizer lines exec'd verbatim out of the generated .py. Seconds.
+    #
+    # ⚠ The references are REGENERATED here rather than trusted from cache. The on-disk copies go
+    # stale — the local ones were four commits behind `f8cd3a9` when this job was written, and while
+    # that diff was confined to the eval pipeline, a stale reference is exactly what a tie must not
+    # measure against.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+            jax/.lake/build
+          key: lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
+            lake-jax-
+
+      - name: Install jax (CPU)
+        run: python3 -m pip install --quiet "jax[cpu]"
+
+      - name: Emit the generated references
+        # ⚠ Same `|| true` as the convention job, for the same reason: `runJax` writes the .py and
+        # THEN spawns python to train it, with no emit-only flag. The explicit existence check
+        # afterwards is what keeps "the command failed" (the expected path) from hiding a real
+        # emit failure.
+        working-directory: jax
+        run: |
+          set -e
+          lake exe cache get || true
+          lake build resnet50-imagenet
+          # `default` is LAMB with no mask and no clip; `a2-accum` is LAMB + no_weight_decay + the
+          # global-norm clip + accumulation. Between them they cover every row the tie runs.
+          for r in default a2-accum; do
+            lake exe resnet50-imagenet "$r" /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true
+          done
+          missing=0
+          for f in generated_resnet50_imagenet.py generated_resnet50_imagenet_a2accum.py; do
+            if [ ! -s ".lake/build/$f" ]; then echo "::error::$f was not emitted"; missing=1; fi
+          done
+          [ "$missing" -eq 0 ]
+
+      - name: Emit the optimizer-stage fixtures
+        # ⚠ The body of these is `optAllParams`, the SAME call `resnet50TrainStepFaithfulB` makes,
+        # so this gates the shipped emission rather than a copy of it.
+        run: |
+          set -e
+          lake exe cache get || true
+          lake build opt-step-fixtures
+          .lake/build/bin/opt-step-fixtures
+
+      - name: One-step optimizer tie
+        run: |
+          set -o pipefail
+          JAX_PLATFORMS=cpu python3 scripts/opt_step_tie.py 2>&1 | tee /tmp/opt_tie.log
+          {
+            echo ""
+            echo "## One-step optimizer tie"
+            echo ""
+            echo "Rendered optimizer vs the reference's own, on the same \`(θ, g, m, v, G)\`."
+            echo "A green tie does **not** mean the nets agree — that is \`grad_tie.py\`. It means"
+            echo "the UPDATE agrees, which nothing else in CI looks at."
+            echo ""
+            echo '```'
+            grep -E '✓|✗|worst|‖Gt‖' /tmp/opt_tie.log || true
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
