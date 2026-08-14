@@ -9,6 +9,28 @@ that needed doing was infrastructure around the runs, listed at the bottom.
 
 Measured 2026-07-25 on ares (6× RTX 4060 Ti, 16 GB; JAX 0.10.2 CUDA).
 
+---
+
+## STATUS (2026-08-14) — the two sides are at different places
+
+⚠ **This doc was written about the JAX (phase-2) side and everything below the
+next section is about THAT side.** All four JAX trainers landed in `f35c4d6`
+(2026-07-26). The VERIFIED (Lean render → StableHLO → PJRT) side is newer and
+only half done:
+
+| model | JAX phase 2 | verified / PJRT |
+|---|---|---|
+| ViT-Ti | ✅ | ✅ `vitin` |
+| **ViT-S** | ✅ Jul 26 | ✅ **Aug 14** `vitsin` |
+| **ViT-B** | ✅ Jul 26 | ✅ **Aug 14** `vitbin` (global 128 only, see §Verified) |
+| **ConvNeXt-S** | ✅ Jul 26 | ⛔ **next session** |
+| **ConvNeXt-B** | ✅ Jul 26 | ⛔ **next session** |
+
+▶ **Read the "Verified side" section before starting ConvNeXt.** The JAX answer
+("pure parameter changes") does NOT transfer to the verified side unmodified,
+because the verified renderers hardcode their dimensions where the JAX emitter
+derives them.
+
 ## The specs are parameter-only
 
 | new file | change vs the existing demo |
@@ -236,3 +258,183 @@ already holds the sweep accuracy lead at 75.93%, so S is the most likely to move
 the headline number. ViT-S 80ep (13.5 hr) is the cheapest new data point and the
 clean apples-to-apples against ViT-Ti's 65.6%. The B variants at 300 epochs are
 ~5-day runs each and should wait until an S result confirms the recipe.
+
+
+---
+
+# The VERIFIED side (Lean render → StableHLO → PJRT)
+
+Everything above is phase-2 JAX. This section is the verified peer, and the
+short version is that the JAX conclusion does not carry: the JAX emitter derives
+every width at runtime, while the verified renderers were written *at* one size.
+
+## ✅ ViT-S and ViT-B — DONE 2026-08-14 (`b9ea36f`, `9affd2f`)
+
+**What it took: parameterising one renderer.** `ViTRenderB.lean` had six
+`private def` width constants pinned at Tiny. They became a `VitDims` record
+threaded as a TRAILING DEFAULTED parameter — the same move the file's own header
+records for `vbB` (batch) and calls "the whole prerequisite". Three instances now
+exist (`vitTiDims`, `vitSDims`, `vitBDims`) and one renderer serves all three.
+
+⭐ **The proof side needed NOTHING.** `Proofs.vitForwardKV_has_vjp` is already
+`∀ heads d_head mlpDim k` and is a GLOBAL `HasVJP`, not the pointwise `_at` form
+the relu-family nets carry, because GELU/softmax/LayerNorm have no kink. One
+theorem covers Ti/S/B at different arguments.
+
+⭐ **Two design decisions that made the bodies not move**, both worth copying:
+- `d` and `tok` are DERIVED (`d = heads * hd`), not stored fields. So the sites
+  that wrote `vbD` and the sites that wrote `vbH * vbHd` (head-slice operands)
+  remain the same type with no cast. Stored with a `heads * hd = d` proof field
+  they would be only PROPOSITIONALLY equal and every such site would need one.
+- `heads_pos : 0 < heads` is a field because the attention loop builds a
+  `Fin heads`; `by decide` closed that against the literal 3 and cannot close it
+  against a record field.
+
+**Cross-check, no GPU needed:** the verified specs derive **22,050,664** and
+**86,567,656** from `VLayer.toSpecs`, matching this doc's JAX emitted counts and
+published DeiT-S/DeiT-B exactly — in the SAME 200 parameter tensors as Tiny. S
+and B widen every tensor and add none.
+
+### Measured on the verified path (4× 4060 Ti, fp32, driver's own steady-state probe)
+
+| model | config | ms/step | min/epoch | 300 ep |
+|---|---|---|---|---|
+| ViT-S | 4×128 = global 512 | **525** | 21.9 | 109.5 h |
+| ViT-B | 4×32 = global 128 | **432** | 72.1 | ~360 h |
+
+For reference this doc's JAX ViT-S at 4× measured 313 ms/step compute-only
+(~345 live at its stated ~10% pipeline tax), so verified fp32 is ~1.5× the JAX
+bf16 peer — the same ratio MNv4-Conv-M showed.
+
+### ⚠⚠ ViT-B cannot reach the DeiT recipe on this box, and it is measured
+
+Rendered at 4×128 and run: **OOM on all four devices**, asking 11.90 GiB against
+the 11.68 GiB a 16 GB card's BFC allocator gets. This doc predicted it for bf16;
+fp32 is worse. That probe artifact was deleted, not committed.
+
+Reaching global 512 needs GRADIENT ACCUMULATION, and **ViT has no accumulation
+render** — only R50 does (`resnet50in_accdp4x64_train_step.mlir` and peers).
+`ViTRenderB`'s ten `acc` hits are the *attention* accumulator, a different thing.
+That is a renderer feature, and it is the real remaining work for a quotable
+ViT-B. ▶ **A TPU would delete this item entirely** (v3 is 16 GB/core, v4 32), and
+the FFI is plugin-agnostic — `$PJRT_PLUGIN` always wins — so it is closer to an
+env var than a port. See the end of this section.
+
+### ⚠ Traps hit, none of which the build catches
+
+1. **A bare `.map f` silently defaults the new parameter.**
+   `(List.range vDEPTH).map blkArgSig` passes only `i`, so `V` fell back to Tiny
+   and a ViT-S *body* rendered under a ViT-Tiny *block signature*. It type-checks
+   and the artifact is wrong. Caught by shape-checking the emitted MLIR
+   (`%wConv` was 384 while `%b0_Wfc1` was still 192×768). ▶ After adding a
+   defaulted parameter, grep for bare point-free call sites of every function
+   that took it.
+2. **The driver loads `<slug>_fwd.mlir` BY NAME.** `vitsin_drop_fwd` does not
+   satisfy it — the drop forward declares 24 `%dp<n>` mask inputs an eval forward
+   has no values for. Caught by running the trainer, not by any build-time check.
+3. **The trailing-defaulted parameter must reach the SIGNATURE builders too.**
+   The batched train step delegates its parameter list to `vitParamSig` and
+   `blkArgSig` in the per-example file; without threading `V` there the body is S
+   and the func signature is Ti.
+
+⭐ **The gate that made all of this safe: byte-identity.** After the
+parameterisation, `scripts/regen_verified_mlir.sh proofs` must leave
+`git diff verified_mlir/` EMPTY. It did. That is what says the refactor was inert
+before any new artifact was added. ▶ Run it before adding the new instance, not
+after — it separates "the refactor broke something" from "the new size is wrong".
+
+### ⚠ What ViT-S/B is NOT
+
+- **ImageNet only.** The 10-class `vit_*` artifacts come from the per-example
+  `ViTRender.lean`, still pinned at Tiny by ~154 dimension literals. Only the
+  BATCHED renderer was parameterised. There is no ViT-S/B Imagenette peer.
+- **Nothing trained.** Artifacts render, shapes tie to `VLayer.toSpecs`, param
+  counts are `#guard`ed, a few steps run. No accuracy, and the forward/gradient
+  numeric ties against the JAX peers have not been run.
+- Expected if trained (the only calibration point that exists): this repo's JAX
+  ViT-Ti reached **70.28%** against DeiT-Ti's 72.2%, a 1.9-point recipe gap the
+  book attributes to repeated augmentation, Mixup/CutMix alternation, and
+  Random-Erase-to-zero. If that carries, ViT-S ≈ 77.5–78% against DeiT-S's 79.8%
+  — but the missing items are all REGULARISATION and S has 4× Tiny's capacity, so
+  the gap plausibly widens rather than holds.
+
+---
+
+## ⛔ NEXT SESSION: ConvNeXt-S and ConvNeXt-B on the verified side
+
+### The shape of the job
+
+Same as ViT: parameterise `ConvNeXtRenderB.lean` (the batched renderer), then
+instantiate. Confirmed reachable — the recipe-complete variants come from there:
+
+| variant | writer |
+|---|---|
+| `convnextin_adamdpwxclipdrop` (DP, drop, wd-exclude, clip) | **ConvNeXtRenderB** |
+| `convnextin_adamwxclipdrop` | **ConvNeXtRenderB** |
+| `convnextin_adamdp`, `convnextin_adam` (the driver's DEFAULT) | ConvNeXtRender (per-example) |
+
+⚠ The driver defaults to `LEAN_MLIR_VARIANT=adam`, which the per-example
+renderer owns. As with ViT, target the `*drop` DP variants and say so in the app
+docstring rather than silently shipping a driver whose default variant does not
+exist for the new size.
+
+### ⭐ ConvNeXt-**S** is the easy one, and it is easier than ViT-S was
+
+ConvNeXt-S is **pure depth**: `[3,3,9,3] → [3,3,27,3]`, dims UNCHANGED at
+`[96,192,384,768]`. That matters more than it sounds:
+
+- The renderer already folds over the depth table in BOTH directions
+  (`for si in [0:4] do ... for j in [0:bDepths[si]!]`, reversed in the backward).
+- **The hardcoded dimension literals stay correct**, because no dimension moves.
+- So S may need only `cDepths`/`bDepths` changed plus the counts, with no
+  record-parameterisation at all. ▶ **Try that first**; it may be a one-array job.
+
+⚠ Things that DO move with depth, and are easy to miss:
+- `cnxDropTotal := cDepths.foldl (· + ·) 0` — 18 → 36 stochastic-depth sites.
+  Derived, so it follows, but the spec's `dropKeeps` array is sized by it and the
+  drop signature declares one input per site.
+- Every `#guard` on parameter counts, `toSpecs.size`, and the BN/LN channel list.
+- The two hand-written readings pattern: derive the new counts by `#eval` and let
+  the `#guard` confirm, exactly as MNv4's 77-entry `bnChannels` was done.
+
+### ⚠⚠ ConvNeXt-**B** is where the dim literals bite
+
+B is depth AND width: dims `[96,192,384,768] → [128,256,512,1024]`. The batched
+renderer does not route the final-stage width through `bDims`:
+
+```
+ConvNeXtRenderB.lean:173  (.gap (c := 768) (h := 7) (w := 7))
+                  :176  (.dense "%Wd" "%bd" (zMB : Mat 768 nClasses) zVB)
+                  :395  (.dotOut "%Wd" (zMB : Mat 768 nClasses))
+                  :397  (.weightGradB (m := 768) (n := nClasses) ...)
+                  :403  %dgi = reshape ... ty [bB,768] -> ty [bB,768,1,1]
+                  :404  %dgb = broadcast_in_dim ... -> ty [bB,768,7,7]
+```
+
+Twelve `768` occurrences in the batched renderer and fifteen in the per-example
+one, concentrated in the head and the GAP backward; `96` appears 13 and 21 times.
+Against that, the tables are used symbolically only 10 times (RenderB) and 15
+(Render). ▶ **So the literals outnumber the symbolic uses** — this is NOT the
+clean 6-constants-and-2-literals situation `ViTRenderB` was in, and the estimate
+should be set accordingly. Thread them through `bDims[3]!` (and `bDims[0]!`)
+FIRST, verify byte-identity at ConvNeXt-T, and only then add the B instance.
+
+### ⚠ `cBS` is still a private constant
+
+`ConvNeXtRender.lean:41  private def cBS : Nat := 32`. This doc's ViT header note
+called making it a parameter "the whole prerequisite" for the stronger
+split-identity gate, and it has not been done. It is the same move as `vbB` and
+`VitDims`, and it may be worth doing in the same pass since the file is open.
+
+### Suggested order
+
+1. ConvNeXt-S by changing `bDepths`/`cDepths` alone. Byte-identity at T must hold
+   before and after adding the S artifacts.
+2. Only if S needs it, introduce a `CnxDims` record (the `VitDims` shape: derived
+   fields, positivity where a `Fin` needs it).
+3. Thread the head/GAP-backward literals through the table.
+4. ConvNeXt-B instance.
+5. Probe both with `LEAN_MLIR_MAX_STEPS` before promising a wall clock. This
+   doc's JAX rows say ConvNeXt-B needs `accum` on 4 cards even in bf16 — expect
+   the verified fp32 path to need it more, and ConvNeXt has no accumulation
+   render either.
