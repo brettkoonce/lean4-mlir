@@ -6616,11 +6616,9 @@ $8{,}447{,}322$ to $\mathbf{9{,}715{,}512}$, which is the $\sim$9.7M
 Conv-M is quoted at.
 
 \textbf{So the $75.48\%$ above is now this network's target.} It is not
-this network's result. Nothing has been run on the verified path since
-the conversion, so the row below still has no measurement in it, and what
-blocks one is unchanged by the conversion: there is no data-parallel
-render, so the spec is single-device while every other ImageNet row in
-this book was measured at $4\times$.
+this network's result. The row below reports a measured wall clock and a
+\texttt{TBD} accuracy, because the network has been timed and has not
+been trained to convergence.
 
 \begin{verbatim}
 def mnv4ImagenetVerified : VerifiedNetSpec where
@@ -6657,14 +6655,28 @@ accuracy so far.
 \hline
 Box & ms/step & min/epoch & 100 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA), global 256 & $\sim$147\,* & $\sim$12.3\,* & $\sim$20 h (0.9 d)\,* & TBD \\
+4$\times$ 4060 Ti (CUDA), global 256 & 177 & 14.8 & 24.6 h (1.0 d) & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent {\small *\,Estimated, not measured: scaled from this network's
-measured single-card throughput by MobileNetV2's four-card efficiency,
-since no data-parallel variant is rendered for MobileNetV4 yet.}
+\noindent {\small Measured 2026-08-14, fp32, with the driver's own
+steady-state probe (median of 112 steps after 8 warmup). The four-card
+number needed MobileNetV4's data-parallel train step, which this book does
+not ship: its collectives have no \texttt{shard-check} peer, so nothing
+ties them. It was rendered locally, timed, and deleted. The wall clock is
+therefore real and the artifact it was measured on is not in the tree. For
+scale, one card takes $126$\,ms/step and $70.1$ hours, a four-card speedup
+of $2.85\times$.}
+
+\medskip\noindent The previous printing of this row estimated
+$\sim$12.3 min/epoch and $\sim$20 h by scaling this network's single-card
+throughput by MobileNetV2's four-card efficiency. That was $8\%$ optimistic.
+A second and more mechanical-looking estimate, scaling MobileNetV2's
+measured all-reduce cost by Conv-M's $2.77\times$ larger gradients, gave
+$41.8$ h and was wrong by $70\%$. Most of the four-card overhead is not
+all-reduce at all. At global 256 the host feeds four times as many images
+per step, and that cost grows with the batch rather than with the model.
 
 \medskip\noindent\textbf{[TODO: run \texttt{mnv4-imagenet-verified}.]}
 
