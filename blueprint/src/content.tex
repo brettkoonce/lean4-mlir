@@ -5439,103 +5439,48 @@ ahead of the phase-2 reference above ($77.22\%$ / $93.34\%$) while
 lacking the following, so quote it as \emph{the A3 recipe on the verified
 path, with these deltas}, not as ``RSB-A3 reproduced''.
 
-\medskip\noindent\emph{Closed since that run, in the emitters and
-\textbf{not} exercised.} Every one changes the trajectory, so none of them
-can be compared to the $77.43\%$ except by a fresh run --- which is
-required in any case, since the Posterize correction below moved the
-training distribution for both paths at once. The artifact that now most
-nearly implements the recipe is
-\texttt{resnet50in160\_lambaccdp8x64wxclipbce\_train\_step}, and it has
-never taken a step.
+\medskip\noindent\emph{Now in, none of it run.} Each changes the
+trajectory, so comparison against the $77.43\%$ needs a fresh run. The
+artifact that now most nearly implements the recipe is
+\texttt{resnet50in160\_lambaccdp8x64wxclipbce\_train\_step}.
 
 \begin{itemize}
-  \item \texttt{wdExcludeNormBias}, the largest single delta: BN
-    $\gamma/\beta$ and every bias were decayed at $\mathrm{wd} = 0.02$
-    where timm skips them. Ported from the ConvNeXt and ViT renders as
-    predicted --- a second decay constant $\%\mathtt{wdz}$ bound to zero,
-    since every optimizer takes the decay as an operand \emph{name}. The
-    split is 54 decayed / 107 excluded of 161, and both halves decompose
-    structurally: 53 conv weights $+$ 1 dense weight against 53 BN layers
-    $\times$ 2 $+$ 1 dense bias.
-  \item \textbf{LAMB's gradient clip}, which timm enables by default
-    (\texttt{Lamb.max\_grad\_norm} $= 1.0$) and which no LAMB artifact
-    here had --- so every LAMB number in this document, including the
-    $77.43\%$, was produced by
-    \texttt{Lamb(max\_grad\_norm=None)}, a different optimizer from the
-    one the recipe names. Two orderings had to be right rather than one:
-    the clip follows the all-reduce (clipping partial per-replica
-    gradients clips nothing in particular) \emph{and} follows the
-    accumulation, because the reference clips the mean over the $k$
-    micro-batches. The graph never materializes that mean --- the $1/k$
-    is folded into the moment coefficients --- so the fold runs on the
-    accumulated sum against a threshold scaled to $kC$, which is exactly
-    the reference's factor by
-    $\min(1, kC/(\|G\| + k\varepsilon)) = \min(1, C/(\|G\|/k +
-    \varepsilon))$. That identity is proved rather than asserted
-    (\texttt{Proofs.clipFactor\_accum}).
-  \item The \texttt{no\_weight\_decay} group is no longer layer-adapted,
-    matching timm's guard: an excluded parameter takes a plain Adam step
-    at trust $= 1$. On the verified side this \emph{removed} an op rather
-    than adding one, since feeding the existing zero constant lands on an
-    already-proved lemma.
-  \item BN running-statistic momentum is now compensated for
-    accumulation. Evaluation-only, and plausibly means the $77.43\%$ is
-    slightly \emph{understated}.
-  \item Evaluation now scores all $50{,}000$ validation images, which is
-    timm's denominator. \textbf{Every ImageNet top-1 quoted in this
-    document, the $77.43\%$ included, is over $49{,}920$.}
-  \item RandAugment's Posterize kept one MSB too few at RSB's own $m = 6$,
-    and the trainers have since moved onto timm's validation protocol and
+  \item \texttt{wdExcludeNormBias} --- BN $\gamma/\beta$ and biases no
+    longer decayed; 54 decayed / 107 excluded of 161. Largest single delta.
+  \item \textbf{LAMB's gradient clip} (timm's \texttt{max\_grad\_norm}
+    $= 1.0$ default). Every LAMB number here, the $77.43\%$ included, was
+    produced without it. Applied after the all-reduce \emph{and} after the
+    accumulation, at threshold $kC$ (\texttt{Proofs.clipFactor\_accum}).
+  \item The \texttt{no\_weight\_decay} group is no longer layer-adapted.
+  \item BN running-statistic momentum compensated for accumulation.
+    Evaluation-only; plausibly means the $77.43\%$ is understated.
+  \item Evaluation scores all $50{,}000$ images. \textbf{Every top-1 in
+    this document is over $49{,}920$.}
+  \item RandAugment Posterize, plus timm's validation protocol and
     resampler (appendix~\ref{app:data}).
+  \item \emph{Verification:} the optimizer is now tied to the reference at
+    the \emph{update} as well as the gradient --- six variants to
+    $\sim\!10^{-7}$.
 \end{itemize}
 
-\medskip\noindent\emph{Still outstanding}, in rough order of expected
-effect:
+\medskip\noindent\emph{Still out}, in rough order of expected effect:
 
 \begin{itemize}
-  \item Ghost-BN group is 64 against the reference's 512, because no
-    collective touches the batch statistics. Needs a cross-replica
-    reduction or a larger per-replica batch (which is baked into the
-    signature). \emph{Weaker evidence than it was:} the phase-3 row above
-    puts a true single-forward $2048$ at $77.00\%$ against Ghost-BN's
-    $77.22\%$, so across $512 \to 2048$ the BN group is worth nothing and
-    is possibly slightly negative. That does not settle $64 \to 512$,
-    which is the range this row sits in, but it is the only direct
-    measurement of the axis and it does not point at a lever.
-  \item fp32, not bf16, which is most of the $2\times$ wall-clock gap and
-    is a throughput lever rather than a fidelity one.
-  \item $0.08\%$ of each epoch is dropped (5000 of 5004 micro-batches,
-    since $8 \nmid 5004$). Structural to $k$: changing it changes the
-    effective batch.
-  \item Mixup $\lambda$ is drawn host-side from NumPy, so agreement with
-    the reference is distributional, never per-step. Not fixable without
-    reimplementing the generator.
-  \item \emph{Verification, not recipe:} the gradient check's tier-1B
-    identity is not decided under BCE. \textbf{The earlier diagnosis here
-    was wrong and is worth correcting}, because it was recorded from a
-    single sample: tier-1B does \emph{not} degrade into a cancellation
-    residual. Its value under BCE is one of the stablest numbers in the
-    report ($7.57$--$7.71 \times 10^{-4}$ over repeated runs, a $2\%$
-    spread), and at the worst site the two inner products do not oppose
-    each other at all, so there is no cancellation to blame. What failed
-    was a fixed tolerance calibrated at CE, where the same residual is
-    $7 \times 10^{-5}$ --- against a separation from the control
-    population that stays at $42$--$45\times$. A second, independent
-    fault \emph{was} found and fixed: the control verdict rested on the
-    minimum over 21 sites, the least reproducible number in the report,
-    so the answer depended on which run one happened to do. It now uses
-    the tenth percentile and is stable under both losses. Tier-1A and
-    tier-2 pass throughout, and nothing has ever indicated a fault in the
-    render itself.
+  \item Ghost-BN group 64 against the reference's 512; no collective
+    touches the batch statistics. \emph{Weaker than it looks:} phase~3
+    above puts true-$2048$ at $77.00\%$ against Ghost-BN 512's $77.22\%$,
+    so $512 \to 2048$ buys nothing. Untested at $64 \to 512$.
+  \item fp32, not bf16 --- most of the $2\times$ wall clock, a throughput
+    lever rather than a fidelity one.
+  \item $0.08\%$ of each epoch dropped ($8 \nmid 5004$); structural to $k$.
+  \item Mixup $\lambda$ drawn host-side from NumPy, so agreement is
+    distributional, never per-step.
+  \item \emph{Verification, not recipe:} tier-1B is undecided under BCE.
+    The cause is a CE-calibrated tolerance, \emph{not} the cancellation
+    residual claimed here previously --- repeated runs refute that
+    (tier-1B is stable to $2\%$, and its separation from the control
+    population holds at $42$--$45\times$). Tier-1A and tier-2 pass.
 \end{itemize}
-
-\noindent The optimizer is also now tied to the reference at the
-\emph{update}, which nothing previously checked: the adjoint machinery
-above compares the two implementations at the \emph{gradient}, while the
-optimizer was two hand-maintained implementations that happened to agree.
-One step of each on the same $(\theta, g, m, v, G)$ agrees to
-$\sim\!10^{-7}$ across six variants, and reverting each of the clip's
-design decisions moves that to $10^{-1}$.
 
 \subsection*{What A3 changes from the 2018 recipe}
 \label{sec:r50_a3_vs_2018}
