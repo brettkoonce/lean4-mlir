@@ -147,6 +147,15 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- `bce`, so `acc` here is bracketed on BOTH sides — a placement no other marker has had.
   , ("lambacc8x64bce", false, false, false), ("lambaccdp8x64bce", false, false, false)
   , ("lambacc4x64bce", false, false, false), ("lambaccdp4x64", false, false, false)
+    -- ▶▶ D1 (2026-08-14): the same composed optimizer WITH the global-norm clip, which is the
+    -- optimizer timm's `Lamb` actually is (`max_grad_norm = 1.0` by default). ⚠⚠ This is a FIFTH
+    -- placement for `clip`: on ConvNeXt it trails everything, on ViT it meets a digit, and here it
+    -- is BRACKETED — `wx` before it and `bce` after — inside a name that also carries `acc` and its
+    -- `k`. The load-bearing question is not whether `clip` reads as an axis (it is not one) but
+    -- whether inserting it between `wx` and `bce` disturbs the `k` PARSE, which is a substring
+    -- search followed by a `takeWhile` and is the thing defect #4 already got wrong once.
+  , ("lambacc8x64wxclipbce", false, false, false)
+  , ("lambaccdp8x64wxclipbce", false, false, false)
     -- ▶ LAMB (`r34AdamVariant .lamb`). ⚠ It needs NO driver predicate — three regions, the same
     -- `[θ|m|v]` signature as `adam`, because the trust ratio is computed inside the graph from θ
     -- and the direction and needs no extra state. So it is here for `wx`/`clip`'s reason: to prove
@@ -232,7 +241,9 @@ private def accumSpellings : List String :=
   ["acc4x64", "accdp8x64", "acc2x128",
    -- the composed spellings; they MUST be in this partition or the driver reads 3 regions for a
    -- 4-region graph — which is exactly what the prefix test did.
-   "lambacc8x64bce", "lambaccdp8x64bce", "lambacc4x64bce", "lambaccdp4x64"]
+   "lambacc8x64bce", "lambaccdp8x64bce", "lambacc4x64bce", "lambaccdp4x64",
+   -- D1's clipped peers — same 4-region graph, one more trailing marker
+   "lambacc8x64wxclipbce", "lambaccdp8x64wxclipbce"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- ⚠ and accumulation must disturb NONE of the other four axes. `acc4x64` contains no "ema" prefix,
@@ -281,6 +292,23 @@ private def accumSpellings : List String :=
 -- and the trailing `bce` must not leak into `k` any more than the batch does
 #guard accK "lambacc8x64bce" == 8
 #guard accK "lambacc8x64bce" != 64
+-- ⚠⚠ **AND `k` SURVIVES D1's TWO EXTRA TRAILING MARKERS.** `wx` ++ `clip` sits between the batch
+-- and `bce`, so `k`'s digits are now followed by `x64wxclipbce` rather than `x64bce`. The parse
+-- takes digits between `acc`/`accdp` and the `x`, so neither marker can reach them — but "the
+-- suffix cannot reach the prefix" is precisely the reasoning defect #4 falsified, so it is run.
+#guard accK "lambaccdp8x64wxclipbce" == 8
+#guard accK "lambacc8x64wxclipbce" == 8
+#guard accK "lambacc8x64wxclipbce" != 64
+#guard accOn "lambaccdp8x64wxclipbce" == true
+-- ⚠ and the 4-region arithmetic, which is what a checkpoint's size is read against: adding `clip`
+-- must not turn RSB-A3's 4-region graph into a 3-region read.
+#guard nRegions "lambaccdp8x64wxclipbce" == 4
+#guard nScalars "lambaccdp8x64wxclipbce" == 5
+-- ⚠ and `clip` in this bracketed placement must invent none of the four axes it is not
+#guard emaOn "lambaccdp8x64wxclipbce" == false
+#guard rmsOn "lambaccdp8x64wxclipbce" == false
+#guard sdOn  "lambaccdp8x64wxclipbce" == false
+#guard cdOn  "lambaccdp8x64wxclipbce" == false
 -- ⚠ and the digits AFTER the `x` are the batch, never `k` — `acc2x128` is k = 2 at batch 128, not
 -- k = 2128 and not k = 128. The `takeWhile` is what makes that true; this is the check that says so.
 #guard accK "acc2x128" != 128

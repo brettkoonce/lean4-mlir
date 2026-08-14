@@ -517,7 +517,34 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- ⚠ TRAILING, and it must reach `r34AdamVariant` too: this net DERIVES its entry name from the
     -- variant, so a flag that reaches the renderer but not the name produces an artifact whose
     -- declared entry disagrees with its own path.
-    (wdExclude : Bool := false) : String :=
+    (wdExclude : Bool := false)
+    -- ▶▶ **`gradClip` — timm's `Lamb.max_grad_norm`, D1** (`planning/recipe_fidelity_diffs.md`,
+    -- `planning/verified_optimizer_parity.md` §2). `timm.optim.lamb.Lamb.__init__` DEFAULTS it to
+    -- `1.0` and clips the global gradient norm inside the optimizer on every step, so a LAMB render
+    -- without it is not the optimizer the recipe names — read from source, not assumed:
+    --
+    -- ```python
+    -- clip_global_norm = (global_norm / max_grad_norm).clamp_(min=1.0)   # _get_clip_grad_norm
+    -- grad.div_(clip_global_norm)                                        # step()
+    -- ```
+    --
+    -- which is `g · min(1, C/‖g‖)` — algebraically `clipScaleF`, and the reference side's
+    -- `g * jnp.minimum(1.0, C / (gn + 1e-6))`.
+    --
+    -- ⚠⚠ **THE NORM IS GLOBAL — ONE SCALAR ACROSS ALL 161 PARAMETERS.** That is the entire semantic
+    -- content, and it is what a per-parameter check cannot see: a per-parameter clip compiles,
+    -- renders, trains and descends (`Proofs.clipFactor_shared` against `Proofs.lambScale_not_shared`,
+    -- which is LAMB's genuinely per-tensor ratio sitting three ops away in the same graph).
+    --
+    -- ⚠ TRAILING, and it reaches `r34AdamVariant` — this net DERIVES its entry name from the
+    -- variant, and `cnxAdamVariant` records ConvNeXt shipping that exact defect twice.
+    (gradClip : Bool := false)
+    -- ⚠ The threshold is a BAKED constant, like `%wd` and unlike `%lr`: it lives in the artifact, so
+    -- changing it is a re-render. Fine for timm's fixed `1.0`; worth knowing before anyone sweeps it.
+    -- ⚠ A `Float` where `ConvNeXtRender`'s peer is a `String`, because this one is ARITHMETIC —
+    -- under accumulation the baked threshold is `k·C` (`clipNormStr`, and read its note before
+    -- touching this: the reference clips the MEAN accumulated gradient).
+    (clipNorm : Float := 1.0) : String :=
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
@@ -660,8 +687,80 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let allPs : List PGrad := stemPs ++
       b1.ps ++ b2.ps ++ b3.ps ++ b4.ps ++ b5.ps ++ b6.ps ++ b7.ps ++ b8.ps ++
       b9.ps ++ b10.ps ++ b11.ps ++ b12.ps ++ b13.ps ++ b14.ps ++ b15.ps ++ b16.ps ++ headPs
+    -- ═══ D1: the GLOBAL-norm gradient clip, hoisted out of the per-parameter tail ═══
+    --
+    -- ⚠⚠ **THE ORDER IS THE SEMANTICS, and there are two orderings to get right, not one.**
+    --
+    --   ① the clip goes AFTER the `all_reduce`. Each replica holds a PARTIAL gradient; clipping
+    --      those and then averaging is a clip of nothing in particular. `optOne` all-reduces per
+    --      parameter, so under the clip the collective is hoisted here and `optOne` is told
+    --      (`preAvg`) not to repeat it.
+    --   ② the clip goes AFTER the ACCUMULATION. The reference is explicit
+    --      (`jax/Jax/Codegen.lean:2439`): `grads = _gsum / _K` and only THEN the clip line, so the
+    --      norm is of the MEAN over the k micro-batches. Clipping the micro-batch gradient instead
+    --      would clip k times per optimizer step against a threshold meant for their mean — again
+    --      something that trains and descends. So the accumulator is hoisted here too, and the
+    --      threshold moves to `k·C` to read the fold on `Gt` as a fold on `Gt/k` (`clipNormStr`).
+    --
+    -- ▶ Neither ordering is visible to a gate that only checks "the gradients got smaller", which is
+    -- why `Proofs.clipFactor_shared` is the statement to drive and why it has to be driven in the
+    -- CLIPPING regime — the identity-below-threshold gate is structurally blind to placement.
+    --
+    -- ⚠ At `gradClip := false` NOT ONE `pretty` CALL HAPPENS in this block, so the fresh-name
+    -- counter does not move and every committed `resnet50in*` artifact re-renders byte-identically.
+    let z1 : Vec 1 := fun _ => 0
+    let accK := optAccumK opt
+    let mut clipCode := ""
+    let mut clipped : List (String × String) := []
+    let mut accRaw : List (String × String) := []
+    if gradClip then
+      -- ① average across replicas first. At `replicas ≤ 1` this emits nothing and threads the name
+      -- through, so the single-device clip render carries no collective at all.
+      let mut avg : List (String × String) := []
+      for g in allPs do
+        let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
+        clipCode := clipCode ++ arS
+        avg := avg ++ [(g.nm, gAvg)]
+      -- ② accumulate, when the optimizer accumulates. `Gt = akeep·G + g`, the SAME `momVNextF`
+      -- instantiation `optOne` would have emitted — moved, not duplicated, and handed back to it by
+      -- name so the fourth region still reports the RAW total.
+      -- ⚠ On an ACCUMULATE micro-batch the clip is computed on a PARTIAL `Gt` and then discarded:
+      -- `%lr = 0` freezes θ and `%b1 = %b2 = 1` / `%ob1 = %ob2 = 0` make both moments exact
+      -- passthroughs, so only the APPLY micro-batch's factor — the one taken on the full sum — can
+      -- reach a weight. That is what makes ② expressible without a second buffer.
+      let mut src : List (String × String) := avg
+      if accOn then
+        let mut acc : List (String × String) := []
+        for g in allPs do
+          let n := g.ds.foldl (· * ·) 1
+          let z : Vec n := fun _ => 0
+          let gAvg := (avg.lookup g.nm).getD g.grad
+          let (cG, nG) ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z (.operand gAvg z))
+          clipCode := clipCode ++ cG
+          acc := acc ++ [(g.nm, nG)]
+        accRaw := acc
+        src := acc
+      -- ③ ONE scalar, folded across every parameter before any of them is scaled. The fold must run
+      -- to completion first — that is the global-vs-local distinction, made structural by
+      -- `Proofs.clipScale` taking the factor as a PARAMETER it cannot compute from its own tensor.
+      let mut total : SHlo 1 := .operand "%czero" z1
+      for g in allPs do
+        let n := g.ds.foldl (· * ·) 1
+        let gS := (src.lookup g.nm).getD g.grad
+        total := .gradSumSqAccF (n := n) g.ds total (.operand gS (fun _ => 0))
+      let (cN, normSSA) ← pretty B total
+      clipCode := clipCode ++ cN
+      -- ④ scale each parameter's gradient by that one shared factor.
+      for g in allPs do
+        let n := g.ds.foldl (· * ·) 1
+        let z : Vec n := fun _ => 0
+        let gS := (src.lookup g.nm).getD g.grad
+        let (cS, sSSA) ← pretty B (.clipScaleF (n := n) (clipNormStr clipNorm accK) (clipEpsStr accK)
+                            0 0 g.ds (.operand normSSA z1) (.operand gS z))
+        clipCode := clipCode ++ cS
+        clipped := clipped ++ [(g.nm, sSSA)]
     -- ═══ the optimizer: one proven triple per parameter, `optOne` shared with R34 ═══
-    let mut adamCode := ""
+    let mut adamCode := clipCode
     let mut thetaN : List String := []
     let mut mNames : List String := []
     let mut vNames : List String := []
@@ -670,7 +769,13 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       -- ⚠ The decay operand comes from the SAME `PGrad` that names the site, so the parameter
       -- whose shape decides exclusion is the parameter being updated — §2e's slot rule. Reading
       -- the shape off a parallel list is how this class of bug ships.
-      let (c, nT, nM, nV, nA) ← optOne opt B replicas g (r34WdName wdExclude g.nm g.ds)
+      -- ⚠ Under the clip the gradient `optOne` consumes is the CLIPPED one, while `accIn` names the
+      -- unclipped accumulator it must still return: see `optOne`'s note for why those two names
+      -- cannot collapse into one.
+      let gIn : PGrad :=
+        if gradClip then { g with grad := (clipped.lookup g.nm).getD g.grad } else g
+      let (c, nT, nM, nV, nA) ← optOne opt B replicas gIn (r34WdName wdExclude g.nm g.ds)
+                                  (preAvg := gradClip) (accIn := accRaw.lookup g.nm)
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]
@@ -752,7 +857,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
         "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5).\n") ++
       zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt ++
-      wdzConst wdExclude ++ adamCode ++
+      wdzConst wdExclude ++ clipZeroConst gradClip ++ adamCode ++
       (if bce then lossCodeBce else lossCode) ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r50SigList nClasses
@@ -776,7 +881,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let inner : String := go.run' 0
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
-  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude}{vSuffix}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip}{vSuffix}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1160,6 +1265,37 @@ end Proofs.StableHLO
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
     (wdExclude := true))
 
+-- ⭐⭐ **D1 — `wx` PLUS THE GLOBAL-NORM GRADIENT CLIP**, and this pair is the first R50 render that
+-- is the optimizer timm's arg string actually names. `timm.optim.lamb.Lamb` defaults
+-- `max_grad_norm = 1.0` and clips every step; every LAMB artifact above this line does not clip, so
+-- each of them is `Lamb(max_grad_norm=None)` — a different optimizer, run by a real 34-hour job.
+--
+-- ⚠⚠ **A NEW ARTIFACT BESIDE THE OLD ONES, NOT A FIX OF THEM** — the `wx` renders' own reason, one
+-- delta on: the 77.43% result belongs to the graph that produced it, and re-pointing a slug at a
+-- graph with different gradient semantics makes an already-quoted number unreproducible.
+--
+-- ⚠⚠ **THE CLIP IS ON THE MEAN ACCUMULATED GRADIENT**, which is why the threshold this bakes is
+-- `k·C = 8.0` and not `1.0`. The reference (`jax/Jax/Codegen.lean:2439`) forms `_gsum / _K` and
+-- clips THAT; this graph never materialises the mean, so the fold runs on `Gt` and the threshold
+-- moves with it — `min(1, kC/(‖Gt‖ + kε)) = min(1, C/(‖Gt‖/k + ε))`, equal by algebra, no new op.
+-- ▶ Read `clipNormStr` before changing either constant.
+--
+-- ⚠ NOT YET RUN. Like `wx` before it this changes the trajectory, so it can only be compared to A3
+-- by a fresh run, never by resuming one.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxclipbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
+    (wdExclude := true) (gradClip := true))
+-- Its single-device peer, for the reason the `wx` pair has one: `r50-accum-tie` and
+-- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only clip would be
+-- ungateable — and the clip is exactly the axis worth gating, because the ONE thing that
+-- distinguishes it from a per-parameter clip (`Proofs.clipFactor_shared`) is invisible to every
+-- check that only asks whether the gradients got smaller.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxclipbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (vSuffix := "bce") (q := 5)
+    (wdExclude := true) (gradClip := true))
+
 -- The **2-GPU** peer of the 4-replica render above: `B := 128` per replica at the same `k = 8`, so
 -- the global batch stays 128×2×8 = 2048 and the recipe is untouched. ⚠ Note what does NOT stay the
 -- same: Ghost-BN normalises per micro-batch, so this run's BN regime is 128-image ghosts against
@@ -1196,6 +1332,29 @@ end Proofs.StableHLO
 -- cannot drift back to something the prefix test would have accepted by accident.
 #guard ("lambaccdp8x64bce".startsWith "acc") == false
 #guard (("lambaccdp8x64bce".splitOn "acc").length > 1) == true
+
+-- ⚠⚠ **D1's spelling, pinned on the PRODUCING side.** `clip` TRAILS `wx` and both precede the
+-- `bce` the R50 caller appends — `lambaccdp8x64wxclipbce`. The order is a CHOICE (ConvNeXt's,
+-- reused rather than re-decided) and these are what make it a fixed one; `cnxAdamVariant` learned
+-- twice that a marker's POSITION is as load-bearing as its presence.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) true true
+         == "lambaccdp8x64wxclip"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8) true true
+         == "lambacc8x64wxclip"
+-- ⚠ The two flags are INDEPENDENT axes, so pin `clip` without `wx` too — otherwise nothing stops
+-- the spelling from becoming "wxclip" as a single fused marker that only ever appears together.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) false true
+         == "lambaccdp8x64clip"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb false true == "lamb64clip"
+-- ⚠ And the inertness of the flag on the NAME, which is the half of §2c's defect that the entry
+-- point sees: clip off must reproduce the committed spelling exactly.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) true false
+         == "lambaccdp8x64wx"
+-- ⚠⚠ THE ROUND TRIP THE DRIVER ACTUALLY MAKES: it parses `k` back out of this string, and the new
+-- trailing markers must not disturb that parse. `lambaccdp8x64wxclipbce` still splits on "acc" and
+-- still carries `8x` between "accdp" and the batch, exactly as the un-clipped spelling does.
+#guard ("lambaccdp8x64wxclipbce".startsWith "acc") == false
+#guard (("lambaccdp8x64wxclipbce".splitOn "acc").length > 1) == true
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdFaithfulV 64 1000 "1.0e-05" "resnet50in160" (q := 5))

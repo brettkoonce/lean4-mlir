@@ -325,10 +325,36 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- (`a3_paper_fidelity.md` §2.1), which ConvNeXt and ViT already implement this exact way.
     -- ⭐ It needs NO new op: `adamWParamF`/`lambDirF`/`momVNextF` all take the decay as an OPERAND
     -- NAME, so excluding a parameter is binding that name to a zero rather than changing a graph.
-    (wdName : String := "%wd") :
+    (wdName : String := "%wd")
+    -- ⚠ **`preAvg` — the caller has already all-reduced (and clipped) this gradient**, so the
+    -- collective must not be emitted a second time. The global-norm clip needs EVERY gradient at
+    -- once while this function is per parameter, and under DP the clip must come AFTER the
+    -- `all_reduce` (the reference clips the combined gradient; clipping per replica clips 161
+    -- PARTIAL gradients — a different function that still trains and still descends). So at
+    -- `gradClip := true` the caller hoists both and sets this. `ConvNeXtRender.convnextAdamOne`
+    -- carries the identical flag for the identical reason; `planning/grad_clip.md` §4.
+    -- ⭐ It needs no interface change beyond the flag: `emitGradAllReduce` at `replicas ≤ 1` emits
+    -- NOTHING and threads its input name straight through, so forcing 1 here is exactly "skip it".
+    (preAvg : Bool := false)
+    -- ⚠⚠ **`accIn` — the caller has already emitted the ACCUMULATOR too, and this is its RAW
+    -- output name.** Only the accumulating optimizers read it, and only under the clip.
+    --
+    -- The reference clips the MEAN ACCUMULATED gradient, not the micro-batch one
+    -- (`jax/Jax/Codegen.lean:2439` — `grads = _gsum / _K` and only THEN the clip line), so the fold
+    -- has to run on `Gt`, which is computed here, per parameter. The caller therefore hoists the
+    -- `momVNextF` as well, folds the norm across all 161 of them, clips, and passes the clipped
+    -- total back in `g.grad` while naming the UNCLIPPED one here.
+    --
+    -- ⚠⚠ **The two must stay distinct, and that is the whole subtlety.** `%<p>a` rides out as the
+    -- fourth region and is the carry the NEXT micro-batch accumulates onto; the reference's carry
+    -- (`_gsum`) is raw, clipped only on the way into the optimizer. Returning the clipped total
+    -- here would compound the clip across the k micro-batches of every cycle — a contraction that
+    -- trains and descends and is not the recipe.
+    (accIn : Option String := none) :
     StateM Nat (String × String × String × String × Option String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
+  let replicas := if preAvg then 1 else replicas
   let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
   let gr : SHlo n := .operand gAvg z
   match opt with
@@ -387,8 +413,14 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- ⚠ `%akeep` is 0 on the FIRST micro-batch of a cycle and 1 after, so the cycle RESETS by
     -- dropping the previous total rather than by a separate zeroing pass — which is why one scalar
     -- and one op suffice, and why there is no "clear the accumulator" step that could be skipped.
-    let (cG, nG) ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
-    let gt : SHlo n := .operand nG z
+    -- ⚠ Under `accIn` the caller emitted this op itself (it needed `Gt` to fold the global norm),
+    -- and `gr` is already the CLIPPED total — so the tail reads `gr` while the fourth region still
+    -- reports the raw `Gt`. See `accIn`'s note: those two must not collapse into one name.
+    let (cG, nG, gt) ← match accIn with
+      | some a => pure ("", a, gr)
+      | none   => do
+          let (c, nm') ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
+          pure (c, nm', (.operand nm' z : SHlo n))
     -- ② the moments and the parameter, **byte-identical to `.adamw`'s** except that they consume
     -- `Gt` rather than `g`. The `1/k` that turns a SUM into a MEAN is not applied here: it is folded
     -- into `%ob1 = (1−β₁)/k` and `%ob2 = (1−β₂)/k²` by `optConstsB`, because `v` is QUADRATIC in the
@@ -412,8 +444,14 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- uses, for the same reason (`Proofs.momVNext μ v g = μ·v + g` at `(μ := %akeep, v := G)`).
     -- ⚠ It is upstream of the optimizer and does not know which one follows: that independence is
     -- the whole reason this composition is a constructor and not a redesign.
-    let (cG, nG) ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
-    let gt : SHlo n := .operand nG z
+    -- ⚠ Same `accIn` carve-out as `.adamwAccum`'s, and this is the arm RSB-A3 actually renders:
+    -- timm's `Lamb` is the optimizer whose `max_grad_norm = 1.0` default makes the clip mandatory
+    -- (D1), so `.lambAccum` + clip is the composition that has to be right.
+    let (cG, nG, gt) ← match accIn with
+      | some a => pure ("", a, gr)
+      | none   => do
+          let (c, nm') ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
+          pure (c, nm', (.operand nm' z : SHlo n))
     -- ② LAMB's four ops, **byte-identical to `.lamb`'s except that they consume `Gt` rather than
     -- `g`** — the same substitution `.adamwAccum` makes to AdamW's three.
     let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
@@ -482,6 +520,63 @@ def wdzConst (wdExclude : Bool) : String :=
   if wdExclude then
     "    // ── timm no_weight_decay (wdExcludeNormBias): 1-D params take %wdz, not %wd ──\n" ++
     "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  else ""
+
+/-- **How many micro-batches the optimizer accumulates over** — `k` for the two accumulating
+    constructors and `1` for every other, so a caller can ask the question without a second `match`
+    that could disagree with `accOn`'s.
+
+    ⚠ It exists for the CLIP (`clipNormStr`/`clipEpsStr` below), which is the first feature whose
+    emitted constants depend on `k` from OUTSIDE `accumScalarConsts`. -/
+def optAccumK : R34Opt → Nat
+  | .adamwAccum k => k
+  | .lambAccum k  => k
+  | _             => 1
+
+/-- **The clip threshold as the render bakes it, `k·C`** — and the `k` is not a typo.
+
+    ⚠⚠ **THE REFERENCE CLIPS THE MEAN ACCUMULATED GRADIENT, NOT THE MICRO-BATCH ONE.**
+    `jax/Jax/Codegen.lean:2439` is unambiguous about the order:
+
+    ```python
+    grads = jax.tree.map(lambda _a: _a / _K, _gsum)   # the MEAN over k micro-batches
+    loss  = jnp.mean(_ls)
+    gn    = jnp.sqrt(sum(jnp.sum(g * g) for g in jax.tree.leaves(grads)))
+    grads = jax.tree.map(lambda g: g * jnp.minimum(1.0, C / (gn + 1e-6)), grads)
+    ```
+
+    This render never materialises that mean: `optOne`'s accumulator carries the SUM `Gt`, and the
+    `1/k` is folded into `%ob1 = (1−β₁)/k` and `%ob2 = (1−β₂)/k²` downstream (`accumScalarConsts`,
+    and it is split that way because `v` is QUADRATIC in the gradient). So the fold here runs on
+    `Gt`, whose norm is `k·‖mean‖`, and the threshold must move with it:
+
+    `min(1, kC / (‖Gt‖ + k·ε))  =  min(1, C / (‖Gt‖/k + ε))`
+
+    — the reference's factor on the mean, exactly, with no new op and no division emitted. ▶ And the
+    factor is then applied to `Gt` rather than to the mean, which is the same thing for the same
+    reason: scaling commutes with the `1/k` the moments fold in afterwards.
+
+    ⭐ `fmt12`, not `fmt6`, for `accumScalarConsts`' stated reason — these are baked literals in the
+    optimizer, where nothing downstream would question a truncated one. At `k = 1` this is the
+    identity and emits the plain threshold. -/
+def clipNormStr (clipNorm : Float) (k : Nat) : String := fmt12 (clipNorm * k.toFloat)
+
+/-- The clip's `ε`, scaled by the same `k` and for the same reason — see `clipNormStr`.
+
+    ⚠ It is NOT cosmetic and it does not cancel: the reference's `+ 1e-6` is what keeps the factor
+    from being `0/0` at a zero gradient (`Proofs.clipDenom_pos`), and leaving it unscaled while the
+    numerator scales would shift the factor by `k` in exactly the regime the guard exists for. -/
+def clipEpsStr (k : Nat) : String := fmt12 (0.000001 * k.toFloat)
+
+/-- The rank-0 zero that seeds the global-norm fold. ⚠ Its own name rather than `%lzero`: that one
+    exists only under the two LAMB constructors (`optConstsB`), and the clip is an independent axis
+    that has to work over `.adamw` too. Emitted only when the flag is on, so at `gradClip := false`
+    not one byte moves and every committed artifact is untouched — the same discipline `wdzConst`
+    keeps one function up. -/
+def clipZeroConst (gradClip : Bool) : String :=
+  if gradClip then
+    "    // ── timm Lamb.max_grad_norm (D1): seed of the GLOBAL squared-norm fold ──\n" ++
+    "    %czero = stablehlo.constant dense<0.0> : tensor<f32>\n"
   else ""
 
 /-- The optimizer's baked constants. `.adamw` is byte-for-byte the committed block; `.heavyBall`
@@ -573,7 +668,16 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     -- disagrees with its own path — the shim then refuses the call outright. ConvNeXt shipped
     -- exactly that defect twice (`wx`, then `clip`); the `#guard`s below pin every spelling.
     -- ⚠ It needs NO driver predicate: excluding a parameter changes no arity, type or region.
-    (wdExclude : Bool := false) : String :=
+    (wdExclude : Bool := false)
+    -- ▶ `clip` = timm `Lamb.max_grad_norm` (D1), the GLOBAL-norm gradient clip. TRAILING and
+    -- defaulted, exactly as `wx` is, so every existing spelling is unchanged.
+    -- ⚠ It must reach THIS function and not merely the renderer — the same rule `wx` states above,
+    -- and `cnxAdamVariant`'s docstring records ConvNeXt shipping that defect twice (once for `wx`,
+    -- once for `clip`). R50 derives its entry name from this string, so a flag that stopped at the
+    -- emission would produce an artifact whose declared entry disagrees with its own path and the
+    -- shim would refuse the call outright.
+    -- ⚠ Like `wx` it needs NO driver predicate: the clip adds ops, not arity, types or regions.
+    (gradClip : Bool := false) : String :=
   (match opt with
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
    | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp"
@@ -597,7 +701,13 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
   -- passes `vSuffix := "bce"` AFTER this, giving `lambaccdp8x64wxbce`. ⚠ The order is a choice and
   -- the `#guard`s below are what make it a fixed one, because `cnxAdamVariant` learned the hard way
   -- that a marker's POSITION is as load-bearing as its presence.
-  (if wdExclude then "wx" else "")
+  (if wdExclude then "wx" else "") ++
+  -- ▶ `clip` TRAILS `wx`, which is `cnxAdamVariant`'s order (`wx` ++ `clip`) followed deliberately
+  -- rather than re-chosen — the two nets spell the same two flags, and one rule for both is what
+  -- keeps a reader from having to know which net a slug came from. With R50's `bce` appended after,
+  -- the RSB-A3 composition reads `lambaccdp8x64wxclipbce`. ⚠ The order is a CHOICE; the `#guard`s
+  -- below are what make it a fixed one.
+  (if gradClip then "clip" else "")
 
 set_option maxRecDepth 4000000 in
 /-- **ResNet-34 `[3,4,6,3]` AdamW train step, batch-BN, rendered from the verified AST at `N := B`.**
@@ -1026,3 +1136,31 @@ end Proofs.StableHLO
 -- differ only in the per-replica batch, so a slug that dropped `B` would collide two artifacts
 -- rendered at different replica counts onto one path — the last-writer-wins race §2a found.
 #guard Proofs.StableHLO.r34AdamVariant 128 2 .heavyBall == "momdp128"
+-- ⚠ **THE TWO TRAILING FLAG AXES ARE INERT ON EVERY NAME ABOVE**, and that is what the defaults
+-- buy: R34 renders no `wx` and no `clip` artifact, so passing them explicitly as `false` must
+-- reproduce the legacy spellings character for character. `ResNet50RenderB.lean`'s guards pin the
+-- ON spellings, since R50 is the net that renders them.
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw false false == "adam"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 .heavyBall false false == "momdp64"
+-- ⚠ And the ORDER, pinned here beside the function that decides it rather than only at the call
+-- site: `wx` then `clip`, both after the batch. Getting this backwards renders an artifact whose
+-- declared entry disagrees with its path, which the shim reports only as "entry mismatch".
+#guard Proofs.StableHLO.r34AdamVariant 64 1 .adamw true true == "adam64wxclip"
+
+-- ⭐⭐ **D1's TWO BAKED CONSTANTS, pinned against the theorem that licenses them.**
+-- `Proofs.clipFactor_accum` says `min(1, kc/(√(k²s) + kε)) = min(1, c/(√s + ε))`, i.e. that folding
+-- the norm on the accumulated SUM and scaling BOTH constants by `k` reproduces the reference's clip
+-- of the MEAN exactly. These are that identity's `k = 8` instance as the render actually emits it,
+-- and they are the line a reader checks when `dense<8.000000000000>` looks like a wrong threshold.
+#guard Proofs.StableHLO.clipNormStr 1.0 8 == "8.000000000000"
+#guard Proofs.StableHLO.clipEpsStr 8 == "0.000008000000"
+-- ⚠ `k = 1` — no accumulation — must leave both at the reference's own values, which is what makes
+-- the scaling inert on a non-accumulating clip render.
+#guard Proofs.StableHLO.clipNormStr 1.0 1 == "1.000000000000"
+#guard Proofs.StableHLO.clipEpsStr 1 == "0.000001000000"
+-- ⚠ and `optAccumK` is the SINGLE source of the `k` those two read, so pin that it agrees with the
+-- constructor rather than being a second parse of the variant string.
+#guard Proofs.StableHLO.optAccumK (Proofs.StableHLO.R34Opt.lambAccum 8) == 8
+#guard Proofs.StableHLO.optAccumK (Proofs.StableHLO.R34Opt.adamwAccum 4) == 4
+#guard Proofs.StableHLO.optAccumK Proofs.StableHLO.R34Opt.lamb == 1
+#guard Proofs.StableHLO.optAccumK Proofs.StableHLO.R34Opt.adamw == 1

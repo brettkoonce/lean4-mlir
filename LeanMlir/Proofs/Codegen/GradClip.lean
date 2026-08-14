@@ -164,4 +164,62 @@ theorem clipGrad_id_below (c ε sTotal : ℝ) (g : Vec n)
     (h : Real.sqrt sTotal + ε ≤ c) (hε : 0 < ε) : clipGrad c ε sTotal g = g := by
   simp [clipGrad, clipFactor_eq_one_below c ε sTotal h hε]
 
+-- ════════════════════════════════════════════════════════════════
+-- § THE CLIP UNDER GRADIENT ACCUMULATION — why the render bakes `k·C`, not `C`
+-- ════════════════════════════════════════════════════════════════
+
+/-! ⚠⚠ **THE REFERENCE CLIPS THE MEAN ACCUMULATED GRADIENT.** `jax/Jax/Codegen.lean:2439` forms
+`grads = _gsum / _K` and only THEN emits the clip line, so under accumulation the norm is of the
+MEAN over the k micro-batches — not of any one of them, and not of their sum.
+
+The verified render never materialises that mean. `optOne`'s accumulator carries the SUM `Gt`, and
+the `1/k` is folded into `%ob1 = (1−β₁)/k` and `%ob2 = (1−β₂)/k²` downstream (`accumScalarConsts`,
+split that way because `v` is quadratic in the gradient). So `ResNet50RenderB` folds the norm on
+`Gt` and bakes `k·C` and `k·ε` instead — `clipNormStr`/`clipEpsStr`.
+
+▶ **These two theorems are what that substitution rests on**, and they are here rather than in a
+comment because "algebraically equal" is exactly the kind of claim this repo has been wrong about
+before. Nothing else in the file would notice: `k·C` on the sum and `C` on the mean agree on every
+OTHER statement here — both scale, neither amplifies, both are the identity below threshold — and
+they differ only in *which* gradient they are the clip of. -/
+
+/-- `∑ᵢ (k·gᵢ)² = k²·∑ᵢ gᵢ²` — the reason the fold on `Gt` reads `k²` times the fold on the mean,
+    and therefore the reason the threshold has to move by `k` rather than by `k²`. -/
+theorem gradSumSq_smul (k : ℝ) (g : Vec n) :
+    gradSumSq (fun i => k * g i) = k ^ 2 * gradSumSq g := by
+  simp only [gradSumSq, mul_pow, Finset.mul_sum]
+
+/-- ▶▶ **THE SUBSTITUTION, AS AN EQUALITY OF FACTORS.** Clipping a `k`-times-larger norm against a
+    `k`-times-larger threshold and a `k`-times-larger `ε` gives back *the identical factor*:
+
+    `min(1, kc/(√(k²s) + kε))  =  min(1, c/(√s + ε))`
+
+    ⚠ `ε` has to scale too, and this is the statement that says so — with `ε` left alone the two
+    sides differ, in precisely the near-zero-gradient regime the `+ε` guard exists for. That is why
+    `clipEpsStr` takes `k` at all, which otherwise looks like a typo.
+
+    ⚠ No hypothesis on `s`: `Real.sqrt` sends negatives to 0, and `k² · s` is negative exactly when
+    `s` is, so both sides degenerate together. -/
+theorem clipFactor_accum (c ε s k : ℝ) (hk : 0 < k) :
+    clipFactor (k * c) (k * ε) (k ^ 2 * s) = clipFactor c ε s := by
+  have hsq : Real.sqrt (k ^ 2 * s) = k * Real.sqrt s := by
+    rw [Real.sqrt_mul (sq_nonneg k), Real.sqrt_sq_eq_abs, abs_of_pos hk]
+  rw [clipFactor, clipFactor, hsq, ← mul_add, mul_div_mul_left _ _ (ne_of_gt hk)]
+
+/-- ▶▶ **AND THE SAME STATEMENT ON THE VECTOR**: clipping the SUM with the scaled constants is
+    exactly `k` times clipping the MEAN with the reference's. Since everything downstream of the
+    clip divides by `k` (the `%ob1`/`%ob2` fold), that `k` cancels and the render steps on the
+    reference's clipped mean gradient.
+
+    ⚠ The scaling commutes only because `clipScale`'s factor is a PARAMETER rather than something
+    computed from the tensor it scales — a per-parameter clip, which recomputes the factor from each
+    `g`, does not satisfy this. `clipFactor_shared` is the same distinction seen from the other
+    side. -/
+theorem clipGrad_accum (c ε s k : ℝ) (hk : 0 < k) (g : Vec n) :
+    clipGrad (k * c) (k * ε) (k ^ 2 * s) (fun i => k * g i)
+      = fun i => k * clipGrad c ε s g i := by
+  funext i
+  simp only [clipGrad, clipScale, clipFactor_accum c ε s k hk]
+  ring
+
 end Proofs

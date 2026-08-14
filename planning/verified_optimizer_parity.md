@@ -29,7 +29,7 @@ stale for the whole afternoon of 2026-08-14 until `scripts/gen_shims.sh` ran. �
 |---|---|---|---|
 | `wdExcludeNormBias` | ✅ | ✅ `ccca380` | `%wdz` vs `%wd` per parameter |
 | **D2** trust-ratio guard | ✅ | ✅ 2026-08-14 | done on both sides together |
-| **D1** LAMB grad clip | ✅ 2026-08-14 | ⛔ **§2** | timm's `Lamb` default `max_grad_norm = 1.0` |
+| **D1** LAMB grad clip | ✅ 2026-08-14 | ✅ 2026-08-14 | **§2** — and §2b-bis is the part this doc had wrong |
 | stochastic depth | ✅ | ⛔ §3 | RSB-A2 needs `0.05`; R50 has no `sd` flag |
 | EMA | ✅ | ⛔ §3 | RSB-A2 needs `0.9999`; R50 has no 4th region |
 | runtime weight decay | ✅ | ⛔ §3 | `%wd` is a BAKED constant; A1 needs `0.01` |
@@ -41,7 +41,18 @@ because feeding `%lzero` for an excluded parameter lands on `Proofs.lambTrust_ze
 
 ---
 
-## 2. ▶ D1 — THE GRADIENT CLIP. Start here; it is the only one timm requires.
+## 2. ✅ D1 — THE GRADIENT CLIP. **DONE 2026-08-14.** Read §2b-bis before trusting §2b.
+
+**Shipped**: `resnet50in160_lambaccdp8x64wxclipbce_train_step.mlir` and its single-device peer.
+`gradClip` on `resnet50TrainStepFaithfulB`, the `clip` axis on `r34AdamVariant`, `preAvg`/`accIn` on
+`optOne`, and `clipNormStr`/`clipEpsStr`/`clipZeroConst`/`optAccumK` beside `wdzConst`. Inertness
+held: with the flag off **every one of the 174 committed artifacts re-rendered byte-identically**,
+and the two new files are additions beside the old ones, never a re-pointing of a run's slug.
+
+⚠ The estimate below was right about the proof work and wrong about the difficulty. The clip needed
+no new op, constructor or driver change exactly as §2a said — and then §2b's actual recipe was
+unsafe for the one variant RSB-A3 renders. §2b-bis is what happened; it is left in full because the
+*shape* of the miss is the reusable part.
 
 `timm.optim.lamb.Lamb.__init__` defaults `max_grad_norm = 1.0` and clips the global gradient norm
 inside the optimizer every step. Read from source, not assumed:
@@ -98,7 +109,60 @@ re-renders byte-identically**. That is how D2 was validated — only the two `wx
 
 ⚠ `clipStr` is a **baked string constant**, like `%wd` and unlike `%lr`. The clip norm lives in the
 artifact, so changing it is a re-render. Fine for timm's fixed `1.0`; worth knowing before anyone
-tries to sweep it.
+tries to sweep it. ⭐ It shipped as a **`Float`** rather than a `String`, unlike ConvNeXt's, for
+§2b-bis's reason: under accumulation the baked threshold is arithmetic in `k`, not a literal.
+
+### 2b-bis. ⚠⚠ WHAT §2b MISSED — there are TWO orderings, and it named one
+
+§2b says: all-reduce in the caller, fold, clip, then `optOne` with `replicas := 1`. That is right
+for `.adamw`/`.lamb`/`.heavyBall` and **wrong for `.adamwAccum`/`.lambAccum`** — which is
+`lambAccum 8`, i.e. the only optimizer RSB-A3 and RSB-A2 ever render. Under §2b's recipe the clip
+lands on the **micro-batch** gradient, before the accumulator.
+
+The reference settles it, and it is worth quoting rather than paraphrasing
+(`jax/Jax/Codegen.lean:2439-2441`):
+
+```python
+grads = jax.tree.map(lambda _a: _a / _K, _gsum)   # the MEAN over k micro-batches
+loss  = jnp.mean(_ls)
+gn    = jnp.sqrt(sum(jnp.sum(g * g) for g in jax.tree.leaves(grads)))
+grads = jax.tree.map(lambda g: g * jnp.minimum(1.0, C / (gn + 1e-6)), grads)
+```
+
+The clip is on the **mean accumulated** gradient. So the second ordering is *the clip goes after the
+accumulation*, and it forces two things §2b did not anticipate:
+
+1. **The accumulator hoists too.** `Gt` is computed per parameter inside `optOne`, and the fold needs
+   every parameter's `Gt` at once — so `optOne` grew `accIn` beside `preAvg`, and the caller emits
+   the `momVNextF` itself.
+2. **⚠⚠ The fourth region must keep the RAW `Gt`, not the clipped one.** The reference's carry
+   (`_gsum`) is raw and is clipped only on the way into the optimizer. Returning the clipped total
+   as `%<p>a` would compound the clip across every one of the k micro-batches — a contraction that
+   trains, descends, and is not the recipe. That is why `accIn` names the raw accumulator while
+   `g.grad` carries the clipped one, and why they cannot collapse into one name.
+
+⭐ **The threshold moves with the fold.** The graph never materialises the mean (the `1/k` is folded
+into `%ob1`/`%ob2`, split because `v` is quadratic), so the fold runs on `Gt = k·mean` and the baked
+constants become `k·C` and `k·ε`:
+
+`min(1, kC/(‖Gt‖ + kε)) = min(1, C/(‖Gt‖/k + ε))`
+
+▶ That identity is **`Proofs.clipFactor_accum`**, with `Proofs.clipGrad_accum` as its vector form and
+`Proofs.gradSumSq_smul` underneath — added to `GradClip.lean` rather than left as a comment, because
+"algebraically equal" is the class of claim this repo has been wrong about before, and because
+**every other theorem in that file is blind to it**: `k·C`-on-the-sum and `C`-on-the-mean both scale,
+neither amplifies, and both are the identity below threshold. ⚠ Note `ε` scales too — leaving it
+alone breaks the identity in exactly the near-zero regime the guard exists for.
+
+⚠ On an ACCUMULATE micro-batch the clip is taken on a partial `Gt` and then discarded (`%lr = 0`,
+`%b1 = %b2 = 1`, `%ob1 = %ob2 = 0`), so only the APPLY micro-batch's factor can reach a weight. That
+is what makes this expressible without a second buffer, and it is worth knowing before anyone reads
+the partial-sum clip as a bug.
+
+▶ **The generalisable lesson, and it is §0's boundary again.** A knob that is "just wiring" on the
+optimizer still has to be placed against **every other optimizer axis already in the graph**, not
+just against the one it was specified with. D1 was specified against `Lamb`; it shipped against
+`Lamb × accumulation × data-parallel`, and two of those three interactions changed the answer.
 
 ### 2c. The variant name — the defect ConvNeXt shipped twice
 
@@ -119,22 +183,47 @@ docstring records that ConvNeXt shipped exactly this defect **twice** — once f
 Follow ConvNeXt's order — `wxclip` — for `lambaccdp8x64wxclipbce`. ⚠ The order is a *choice*, and the
 `#guard`s are what make it a fixed one.
 
-### 2d. Artifacts and gates
+### 2d. Artifacts and gates — ✅ all green 2026-08-14
 
 New renders need a literal `IO.FS.writeFile "verified_mlir/…"` writer in `Proofs/Codegen/`, which is
 what `scripts/regen_verified_mlir.sh check` pins. Then:
 
 ```
-lake build LeanMlir Proofs
+lake build Proofs                       # ⚠ NOT `lake build LeanMlir` — see below
 scripts/regen_verified_mlir.sh          # only the NEW files should appear
 scripts/regen_verified_mlir.sh check
 scripts/check_render_coverage.py
 lake env lean tests/TestVariantPredicates.lean
 ```
 
+⚠⚠ **`lake build LeanMlir` DOES NOT BUILD THESE RENDERERS, and it exits 0.** `lean_lib LeanMlir` has
+`roots := #[LeanMlir]`, but `LeanMlir.Proofs.Codegen.*` reaches the build only through the `Proofs`
+lib's explicit root list. A `LeanMlir`-only build of an edited renderer reports *"Build completed
+successfully"* while re-elaborating nothing — and since the `#eval` writers run at elaboration time,
+`git diff verified_mlir/` is then clean *because nothing was written*, which reads exactly like the
+byte-identity result you were looking for. ▶ Confirm by mtime, not by exit code: the artifacts must
+carry the timestamp of the build you just ran. (The line above said `lake build LeanMlir Proofs`,
+which is correct but invites dropping the second word.)
+
+⭐ `check_render_coverage.py` **caught the two new artifacts as unguarded** and named the fix — they
+are now in the drift-guard step of `.github/workflows/proofs.yml`. That gate works; do not skip it
+on the assumption that a new render is automatically covered.
+
 ⭐ And the numeric one, which is the only gate that would catch a clip applied in the wrong place:
 `tests/vjp_oracle` / the R50 gradient check against the reference. A clip on unreduced gradients
-still trains, still descends, and is a different optimizer.
+still trains, still descends, and is a different optimizer. ⚠ **Still not run** — see §5, which D1
+has made more pressing rather than less: the accumulation threshold is `k·C` by an algebraic
+argument (`Proofs.clipFactor_accum`), and while the argument is now machine-checked, *that the
+render instantiates it at the right `k` and on the right tensor* is checked only by reading the
+emitted MLIR. What was read, on `resnet50in160_lambacc8x64wxclipbce`:
+
+* one `%czero`-seeded fold, and **every** `clipScale` block re-roots the *same* summed scalar —
+  `Proofs.clipFactor_shared`'s property, present;
+* `dense<8.000000000000>` / `dense<0.000008000000>` — the `k = 8` instance;
+* the clipped value feeds the moments and `lambDirF`, while the **raw** accumulator is what appears
+  in the return list at index 484 = 161·3 + 1, i.e. region 4;
+* at 4 replicas: exactly **161** `all_reduce` ops (one per parameter, not two), each *before* its
+  accumulator, which consumes `%armean*` and not the raw gradient.
 
 ---
 
@@ -168,9 +257,11 @@ Ordered by cost. All three have working precedents; none needs a new `SHlo` op.
 
 ## 4. SUGGESTED ORDER
 
-1. **D1, the clip** (§2). It is the only timm-required item, it needs no proof work, and the
-   all-reduce fix (§2b) is the whole of its difficulty.
-2. **`wdStr`** — cheap, unblocks A1.
+1. ~~**D1, the clip** (§2).~~ ✅ **done 2026-08-14.** ⚠ The estimate — "no proof work, and the
+   all-reduce fix is the whole of its difficulty" — was wrong twice over: the accumulation ordering
+   was a second, unnamed difficulty (§2b-bis), and it *did* want proof work, three theorems of it,
+   because the fix rests on an algebraic identity rather than on a placement.
+2. **`wdStr`** — cheap, unblocks A1. ▶ **Next.**
 3. **`ema` × accumulation** — decide the fourth-region conflict *before* rendering anything.
 4. **`sd`**, with the misplacement control.
 5. The A2/A1 `#eval`s, which are then a slug and a `q`.
@@ -178,6 +269,11 @@ Ordered by cost. All three have working precedents; none needs a new `SHlo` op.
 ⚠ None of §2 or §3 produces a number. Every one of them is a code change awaiting the same re-run
 that `next_session_verified_trainer_code.md` §1 already mandates — which is the point: when the
 compute question is answered, the runs should be a scheduling decision.
+
+⚠ D1 does not change that, and it adds a **third** un-run RSB-A3 render beside the two `wx` ones. It
+is worth saying plainly: `resnet50in160_lambaccdp8x64wxclipbce` is now the artifact that most nearly
+implements the recipe on paper, and it has never executed a step. Nothing about it can be compared
+to 77.43% except by a fresh run.
 
 ---
 
@@ -192,3 +288,18 @@ follow-up, and cheaper than it sounds: one step of each optimizer on the same `(
 tolerance, per variant. That is the same shape as `score-checkpoint`'s equality gate — re-derive the
 number the other side would print, and demand it — which is the pattern that has caught the most
 this month.
+
+⭐⭐ **D1 SHARPENED THIS, and it is now the top item on this doc rather than a closing thought.**
+
+The gap is not that the two optimizers might drift. It is that **the verified side has now made a
+semantic decision the reference never had to make** — the reference divides by `k` and clips; the
+render folds on the sum and scales the threshold. Those agree by `Proofs.clipFactor_accum`, which is
+machine-checked, but the theorem covers the *algebra*, not the *wiring*: that the render passes the
+same `k` to `clipNormStr` as `accumScalarConsts` folds into `%ob1`/`%ob2`, on the same tensor, in the
+same order. Today that is checked by **reading the emitted MLIR** (§2d) and by `#guard`s on the two
+literals. Both are real checks. Neither is the one that would survive someone changing `k`.
+
+▶ The one-step update diff would close it in the form this repo trusts: `optOne`'s output against the
+reference's optimizer on one `(θ, g, state)`, per variant, **including a `k > 1` row** — because the
+accumulating path is now the one with arithmetic in it. Everything else in §3 is a code change; this
+is the gate that would tell you whether any of them landed.
