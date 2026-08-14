@@ -41,9 +41,44 @@ namespace Proofs.StableHLO
 private def cBS : Nat := 32
 private def cEPS : String := "1.0e-6"
 private def cLR : String := "0.1"
-private def cDepths : Array Nat := #[3, 3, 9, 3]
-private def cDims   : Array Nat := #[96, 192, 384, 768]
+/-- The SPATIAL table, and it is the one thing that is NOT a size parameter: 224 with a 4×4/s4
+    patchify stem gives 56/28/14/7 at every ConvNeXt size. T, S and B differ in depth and width
+    only, so this stays a constant and the `7`s in the GAP backward stay literals. -/
 private def cSpats  : Array Nat := #[56, 28, 14, 7]
+
+/-- **The ConvNeXt size — depths and channel dims TOGETHER, in one record.**
+
+    ⚠⚠ **They are bundled deliberately, and this is the lesson ConvNeXt-B taught that ConvNeXt-S
+    did not.** S is pure depth, so it was served by a bare `Array Nat` of depths — and that shape
+    admits `(depths := S, dims := T)`, which is not a ConvNeXt of any size but type-checks, renders
+    and trains. B moves BOTH, so a second bare array would have made the mismatch reachable in the
+    direction that matters. One record, three instances, and a caller cannot spell a net that does
+    not exist. Same reasoning as `VitDims`, arrived at from the opposite direction: ViT bundled to
+    keep `d = heads * hd` definitional, this bundles to keep two tables from drifting.
+
+    ⚠ `deriving DecidableEq` is load-bearing: `ConvNeXtRenderB` restates these and `#guard`s the
+    restatement against them, and `cnxModelName` matches on the whole record rather than on the
+    block count — which is what stops B (36 blocks, like S) from introducing itself as an S. -/
+structure CnxDims where
+  depths : Array Nat
+  dims   : Array Nat
+  deriving DecidableEq, Repr, Inhabited
+
+/-- ConvNeXt-**T**: `[3,3,9,3]` @ `[96,192,384,768]`, 28.6 M at K=1000. The DEFAULT everywhere, so
+    every pre-existing call site is unchanged and every committed artifact re-renders byte-identical. -/
+def cnxTiny  : CnxDims := { depths := #[3, 3,  9, 3], dims := #[ 96, 192, 384,  768] }
+/-- ConvNeXt-**S**: T deepened — stage 3 goes 9 → 27, dims UNCHANGED. 50.2 M at K=1000. -/
+def cnxSmall : CnxDims := { depths := #[3, 3, 27, 3], dims := #[ 96, 192, 384,  768] }
+/-- ConvNeXt-**B**: S's depth AND a wider net — `[128,256,512,1024]`. 88.6 M at K=1000.
+    ⚠ B is the size that made the dims a parameter: it shares S's depth table exactly, so anything
+    keying on block count alone cannot tell them apart. -/
+def cnxBase  : CnxDims := { depths := #[3, 3, 27, 3], dims := #[128, 256, 512, 1024] }
+
+-- The expansion ratio is 4 at every stage and every size (`e := 4 * c` at the call sites), and the
+-- depthwise kernel is 7×7 at every size. Neither is a parameter, and neither moves T → S → B.
+#guard cnxSmall.dims == cnxTiny.dims          -- S deepens only …
+#guard cnxBase.depths == cnxSmall.depths      -- … and B widens S rather than deepening it again
+#guard cnxBase.dims != cnxTiny.dims
 
 private def zK {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 private def zD {c kh kw : Nat} : DepthwiseKernel c kh kw := fun _ _ _ => 0
@@ -86,36 +121,85 @@ private def zT {c h w : Nat} : Tensor3 c h w := fun _ _ _ => 0
 -- emitted, because the train-step renderer here owns the signature and the variant name and would
 -- otherwise need a second copy — `ConvNeXtRenderB` imports this file, not the other way round.
 
-/-- Total ConvNeXt-T blocks = the reference's `totalDrop`, i.e. the ramp DENOMINATOR is this
-    minus 1. Derived from the stage table this file traverses, not restated beside it. -/
-def cnxDropTotal : Nat := cDepths.foldl (· + ·) 0
+/-- Total ConvNeXt blocks = the reference's `totalDrop`, i.e. the ramp DENOMINATOR is this
+    minus 1. Derived from the stage table the render traverses, not restated beside it — which is
+    what makes it follow `D` to 36 at ConvNeXt-S without a second edit. -/
+def cnxDropTotal (V : CnxDims := cnxTiny) : Nat := V.depths.foldl (· + ·) 0
 
 /-- **The ramp index of stage `si`'s block `j`** — the reference's `dbi`, which counts blocks over
     the WHOLE net. The single source for the drop-site numbering: the forward calls it walking the
     stages forwards, the backward walking them backwards, and they cannot disagree. -/
-def cnxBlockIdx (si j : Nat) : Nat :=
-  ((List.range si).map (fun k => cDepths[k]!)).foldl (· + ·) 0 + j
+def cnxBlockIdx (si j : Nat) (V : CnxDims := cnxTiny) : Nat :=
+  ((List.range si).map (fun k => V.depths[k]!)).foldl (· + ·) 0 + j
 
 /-- The number of per-example drop-path scale inputs an SD ConvNeXt render takes: one per block. -/
-def cnxDropSites : Nat := cnxDropTotal
+def cnxDropSites (V : CnxDims := cnxTiny) : Nat := cnxDropTotal V
 
 #guard cnxDropTotal == 18
 #guard cnxDropSites == 18
 -- The 18 `(stage, block)` pairs map onto `0 … 17` exactly once each — i.e. `cnxBlockIdx` really is
 -- a numbering of the blocks and not merely an increasing function of them.
-#guard ((List.range 4).flatMap (fun si => (List.range cDepths[si]!).map (cnxBlockIdx si))) ==
-         List.range 18
+-- ⚠ `fun j => cnxBlockIdx si j`, NOT the point-free `cnxBlockIdx si`. That is the ViT-S trap
+-- (`vit_convnext_sb_scaleup.md` §Traps 1) as a rule rather than an anecdote: a bare partial
+-- application of a function that gained a trailing defaulted parameter silently takes the DEFAULT,
+-- so this guard would keep checking ConvNeXt-T's numbering while the render used S's.
+#guard ((List.range 4).flatMap (fun si => (List.range cnxTiny.depths[si]!).map (fun j => cnxBlockIdx si j)))
+         == List.range 18
 -- Stage boundaries, spelled out because "index 0 at the top of each stage" is the wrong reading
 -- this is here to prevent.
 #guard cnxBlockIdx 1 0 == 3
 #guard cnxBlockIdx 2 0 == 6
 #guard cnxBlockIdx 3 0 == 15
 
+-- ▶ The ConvNeXt-**S** peers of all six. The ramp is `0 … 35` over 36 blocks, and stage 3 is where
+-- every added block lands — so stage 3 still starts at 6 and stage 4 starts at 33, not 15. A render
+-- that kept T's numbering would put 36 sites on a 17-denominator ramp: it compiles, runs, descends
+-- and trains a different objective, which is the §2k shape this table exists to make checkable.
+#guard cnxDropTotal cnxSmall == 36
+#guard ((List.range 4).flatMap
+          (fun si => (List.range cnxSmall.depths[si]!).map (fun j => cnxBlockIdx si j cnxSmall)))
+         == List.range 36
+#guard cnxBlockIdx 1 0 cnxSmall == 3
+#guard cnxBlockIdx 2 0 cnxSmall == 6
+#guard cnxBlockIdx 3 0 cnxSmall == 33
+-- ▶ ConvNeXt-**B** shares S's depth table exactly, so its ramp is the SAME 36 sites at the SAME
+-- indices. Guarded rather than assumed: it is the one place where B being "S with wider stages"
+-- is a fact about the drop sites and not just about the parameter shapes.
+#guard cnxDropTotal cnxBase == 36
+#guard cnxBlockIdx 3 0 cnxBase == cnxBlockIdx 3 0 cnxSmall
+
+/-- **The model name a render's banner claims, DERIVED from the stage table it was rendered at.**
+
+    ⚠ A banner is a render's own description of what it did, and the one thing worse than not
+    having one is having one that lies — `cnxDropFwdBanner`'s own note says exactly that about
+    reusing a drop-free banner on an SD artifact. Passing the name as a second parameter beside `D`
+    would be two writers for one fact, the shape (§2k's `α/K`, the `wx` variant marker) that has
+    shipped a real defect in this net three times. So it is read off `D`.
+
+    ⚠⚠ **It matches on the WHOLE RECORD, not on the block count, and that is not fussiness.**
+    This function keyed on `cnxDropTotal` while ConvNeXt-S was the only new size, and B broke it:
+    B is `[3,3,27,3]` too, so 36 blocks names S and B alike and every B artifact would have opened
+    by calling itself a ConvNeXt-S. Caught by the guards below, which is why they enumerate all
+    three rather than spot-checking one. An unrecognised table gets a name that SAYS it is
+    unrecognised, rather than falling back to "ConvNeXt-T" the way a `getD` would. -/
+def cnxModelName (V : CnxDims := cnxTiny) : String :=
+  if V == cnxTiny then "ConvNeXt-T"
+  else if V == cnxSmall then "ConvNeXt-S"
+  else if V == cnxBase then "ConvNeXt-B"
+  else s!"ConvNeXt-?({cnxDropTotal V} blocks @ {V.dims})"
+
+#guard cnxModelName == "ConvNeXt-T"
+#guard cnxModelName cnxSmall == "ConvNeXt-S"
+#guard cnxModelName cnxBase == "ConvNeXt-B"
+-- ⚠ The anti-collision guard: S and B have the SAME depth table, so a name derived from the block
+-- count cannot separate them. This is the check that failed when it was `match cnxDropTotal V`.
+#guard cnxModelName cnxSmall != cnxModelName cnxBase
+
 /-- The `%dp<i>: tensor<Bxf32>` inputs an SD render appends to its signature — one per block, in
     ramp-index order, which is the order the driver's `dropScales` writes them into the blob.
     Empty when off, which is what keeps every committed artifact byte-identical. -/
-def cnxDropSig (B : Nat) (sd : Bool) : String :=
-  if sd then String.join ((List.range cnxDropSites).map (fun i => s!", {dpName i}: {ty [B]}"))
+def cnxDropSig (B : Nat) (sd : Bool) (V : CnxDims := cnxTiny) : String :=
+  if sd then String.join ((List.range (cnxDropSites V)).map (fun i => s!", {dpName i}: {ty [B]}"))
   else ""
 
 -- ── The two hand-written weight-grad emitters that used to live here (`rs4`, `patchWGrad`
@@ -374,18 +458,20 @@ private def blkParams (pfx : String) (c e : Nat) : List (String × List Nat) :=
 
 /-- `nClasses` defaults to 10 (Imagenette) so every existing call site is unchanged; the ImageNet
     renders pass 1000. Only the head moves — 180 of the 182 entries are class-independent. -/
-private def allParams (nClasses : Nat := 10) : List (String × List Nat) := Id.run do
+private def allParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
+    : List (String × List Nat) := Id.run do
+  let c0 := V.dims[0]!
   let mut ps : List (String × List Nat) :=
-    [("psW", [96,3,4,4]), ("psb", [96]), ("psng", [96]), ("psnbt", [96])]
+    [("psW", [c0,3,4,4]), ("psb", [c0]), ("psng", [c0]), ("psnbt", [c0])]
   for si in [0:4] do
-    let c := cDims[si]!
+    let c := V.dims[si]!
     let e := 4 * c
-    for j in [0:cDepths[si]!] do
+    for j in [0:V.depths[si]!] do
       ps := ps ++ blkParams s!"s{si}b{j}" c e
     if si < 3 then
       ps := ps ++ [(s!"d{si}ng", [c]), (s!"d{si}nbt", [c]),
-                   (s!"d{si}W", [cDims[si+1]!, c, 2, 2]), (s!"d{si}b", [cDims[si+1]!])]
-  ps := ps ++ [("Wd", [768,nClasses]), ("bd", [nClasses])]
+                   (s!"d{si}W", [V.dims[si+1]!, c, 2, 2]), (s!"d{si}b", [V.dims[si+1]!])]
+  ps := ps ++ [("Wd", [V.dims[3]!,nClasses]), ("bd", [nClasses])]
   return ps
 
 -- ── ▶ `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ────────────────
@@ -408,9 +494,9 @@ private def allParams (nClasses : Nat := 10) : List (String × List Nat) := Id.r
 def cnxWdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
 
 /-- The decayed / excluded split, as the renderer computes it. -/
-def cnxWdCounts (nClasses : Nat := 10) : Nat × Nat :=
-  let d := ((allParams nClasses).filter (fun (nm, ds) => cnxWdDecays nm ds)).length
-  (d, (allParams nClasses).length - d)
+def cnxWdCounts (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : Nat × Nat :=
+  let d := ((allParams nClasses V).filter (fun (nm, ds) => cnxWdDecays nm ds)).length
+  (d, (allParams nClasses V).length - d)
 
 -- ⭐ The reference's OWN `_wd_mask` over its OWN `init_params` for
 -- `generated_convnext_tiny_imagenet.py` reports **180 tensors: 59 decayed, 121 excluded**, every
@@ -418,6 +504,10 @@ def cnxWdCounts (nClasses : Nat := 10) : Nat × Nat :=
 -- disagree — §2m's `toSpecs == Layout.specs` move applied to a recipe knob.
 #guard cnxWdCounts 10 == (59, 121)
 #guard cnxWdCounts 1000 == (59, 121)
+-- ▶ ConvNeXt-S: 18 more blocks × (3 decayed / 6 excluded) on top of T's split. The RULE is
+-- untouched — it is a plain rank test and depth cannot reach it — so this guard is checking that
+-- the depth parameter reaches `allParams` at all, which is the thing that would silently not.
+#guard cnxWdCounts 1000 cnxSmall == (113, 229)
 -- 18 blocks × (dW, eW, pW decayed; db, ng, nbt, eb, pb, lg excluded) = 54/108, + stem 1/3,
 -- + 3 downsamples 1/3 each, + head 1/1.
 #guard cnxWdDecays "s0b0dW" [96,1,7,7] == true    -- depthwise 7×7
@@ -429,7 +519,8 @@ def cnxWdCounts (nClasses : Nat := 10) : Nat × Nat :=
     outside it that legitimately needs the list — `tests/TestWdExcludeTie.lean`, which must read
     the SAME names and shapes the renderer chose `%wd`/`%wdz` from. Exposing an alias rather than
     dropping `private` keeps the surface one definition wide. -/
-def cnxAllParams (nClasses : Nat := 10) : List (String × List Nat) := allParams nClasses
+def cnxAllParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : List (String × List Nat) :=
+  allParams nClasses V
 
 -- ════════════════════════════════════════════════════════════════
 -- § The shared forward chain (the forward render and both train steps emit this)
@@ -458,34 +549,35 @@ set_option maxRecDepth 8000 in
     LayerNorm, which reduces over the channel/spatial axes of ONE example and never over the batch.
     So the forward is already class-batch-independent: train == eval, and `@convnext_fwd` is the
     only forward artifact this net needs (unlike the BN nets, which need a frozen-stats peer). -/
-private def convNextFwdChain (nClasses : Nat := 10) : StateM Nat CFwd := do
+private def convNextFwdChain (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
+    : StateM Nat CFwd := do
   let (cS, stemC) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
-    (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
+    (zK : Kernel4 (V.dims[0]!) 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
   -- §2m: the reference's `convnext_stem` is patchify conv → channel-LN. The PRE-§2m render had
   -- NO stem LN, and had a head LN the reference does not — the two nearly cancel in the parameter
   -- count (+2×768 − 2×96 = +1,344 out of 28.6M), which is why the count alone never caught it.
-  let (cSln, stem) ← lnFwdSite "%psng" "%psnbt" stemC 96 56
+  let (cSln, stem) ← lnFwdSite "%psng" "%psnbt" stemC V.dims[0]! 56
   let mut fwd := cS ++ cSln
   let mut cur := stem
   let mut blksAll : Array (Array FNames) := #[]
   let mut downLn : Array String := #[]
   let mut downIn : Array String := #[]
   for si in [0:4] do
-    let c := cDims[si]!; let e := 4 * c; let h := cSpats[si]!
+    let c := V.dims[si]!; let e := 4 * c; let h := cSpats[si]!
     let mut blks : Array FNames := #[]
-    for j in [0:cDepths[si]!] do
+    for j in [0:V.depths[si]!] do
       let (code, bn) ← fwdBlock s!"s{si}b{j}" cur c e h
       fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
     blksAll := blksAll.push blks
     if si < 3 then
       downIn := downIn.push cur
-      let (code, n, o) ← fwdDown s!"d{si}" cur c cDims[si+1]! cSpats[si+1]!
+      let (code, n, o) ← fwdDown s!"d{si}" cur c V.dims[si+1]! cSpats[si+1]!
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
-  let (cG, gap) ← pretty cBS (.gapF (c := 768) (h := 7) (w := 7) (.operand cur zV))
+  let (cG, gap) ← pretty cBS (.gapF (c := V.dims[3]!) (h := 7) (w := 7) (.operand cur zV))
   -- §2m: the reference goes GAP → dense with no norm between — the head LN is GONE
   -- (its 2×768 params move to the stem, at 2×96).
   let (cHn, hn) := ("", gap)
-  let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat 768 nClasses) zV (.operand hn zV))
+  let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat (V.dims[3]!) nClasses) zV (.operand hn zV))
   pure { code := fwd ++ cG ++ cHn ++ cLog,
          blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := hn, logits := logits }
@@ -501,12 +593,16 @@ set_option maxRecDepth 8000 in
     PREFIX of `convnext_train_step.mlir`'s, ending exactly where the loss begins — which is what
     `scripts/regen_verified_mlir.sh check` audits. -/
 def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
-    : String := Id.run do
-  let F : CFwd := (convNextFwdChain nClasses).run' 0
+    (V : CnxDims := cnxTiny) : String := Id.run do
+  let F : CFwd := (convNextFwdChain nClasses V).run' 0
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}"))
+    (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}"))
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [cBS,nClasses]} " ++ "{\n" ++
-    "    // ── ConvNeXt-T forward: every line is pretty(verified AST node) ──\n" ++
+    -- ⚠ The size comes from `cnxModelName V`, not from a literal: at `V = cnxTiny` this is the
+    -- byte-identical "ConvNeXt-T" every committed artifact carries, and at ConvNeXt-S the banner
+    -- cannot go on claiming T. `cnxFwdPerExampleBanner` restates this line for the batched tie, so
+    -- the two must agree — which they do at the default, and the tie is a T-only gate.
+    s!"    // ── {cnxModelName V} forward: every line is pretty(verified AST node) ──\n" ++
     chLnPrelude ++ F.code ++
     s!"    return {F.logits} : {ty [cBS,nClasses]}\n" ++ "  }\n}\n"
 
@@ -531,11 +627,11 @@ set_option maxRecDepth 8000 in
     softmax is now `pretty`d on its own line instead of nested inside the `.sub` so that `%loss` can
     read it, but `.operand` is a leaf that emits nothing, so the fresh-name sequence is unchanged. -/
 def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none)
-    (nClasses : Nat := 10) :
+    (nClasses : Nat := 10) (V : CnxDims := cnxTiny) :
     StateM Nat (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain `convNextFwdFaithfulV` emits, so `@convnext_fwd` and the two
     --     train steps cannot drift into computing different functions (§2a) ═══
-    let F : CFwd ← convNextFwdChain nClasses
+    let F : CFwd ← convNextFwdChain nClasses V
     let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (zV : Vec nClasses))))
     let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (zV : Vec nClasses)) (.operand "%onehot" zV))
     let blksAll := F.blksAll
@@ -558,34 +654,38 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
           let (c4, n4) ← pretty cBS (.divConstB (N := 1) (n := nClasses) bStr 0 (.operand n3 (zV : Vec (1 * nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ backward: head cotangent chain + param-SGD ═══
-    let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat 768 nClasses) (.operand dyName zV))
+    let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat (V.dims[3]!) nClasses) (.operand dyName zV))
     let (cHnB, cot_gap) := ("", cot_hn)
     let (cWd, nWd) ← if adam then
-        pretty cBS (.weightGrad (m := 768) (n := nClasses) hn (zV : Vec 768) (.operand dyName (zV : Vec nClasses)))
-      else pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec 768) (zM : Mat 768 nClasses) 0 (.operand dyName zV))
+        pretty cBS (.weightGrad (m := V.dims[3]!) (n := nClasses) hn (zV : Vec (V.dims[3]!)) (.operand dyName (zV : Vec nClasses)))
+      else pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec (V.dims[3]!)) (zM : Mat (V.dims[3]!) nClasses) 0 (.operand dyName zV))
     let (cBd, nBd) ← if adam then
         pretty cBS (.biasGrad (n := nClasses) (.operand dyName (zV : Vec nClasses)))
       else pretty cBS (.biasSgd "%bd" cLR (zV : Vec nClasses) 0 (.operand dyName zV))
     let mut updMap : List (String × String) := [("Wd", nWd), ("bd", nBd)]
+    let cD := V.dims[3]!
     let mut bwd := cDyC ++ cDd ++ cHnB ++
       cWd ++ cBd ++
-      s!"    %dgi = stablehlo.reshape {cot_gap} : ({ty [cBS,768]}) -> {ty [cBS,768,1,1]}\n" ++
-      s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [cBS,768,1,1]}) -> {ty [cBS,768,7,7]}\n" ++
-      s!"    %dgn = stablehlo.constant dense<49.0> : {ty [cBS,768,7,7]}\n" ++
-      s!"    %dgd = stablehlo.divide %dgb, %dgn : {ty [cBS,768,7,7]}\n" ++
-      s!"    %dgapf = stablehlo.reshape %dgd : ({ty [cBS,768,7,7]}) -> {ty [cBS, 768*7*7]}\n"
+      -- ⚠ HAND-WRITTEN TEXT (a declared §5 carve-out), so the width here is threaded by hand and
+      -- nothing type-checks it. `cD` is the head width; the `7`s and the `49.0` are SPATIAL and
+      -- correctly stay literals at every size (224 / patchify-4 / three /2 downsamples = 7×7).
+      s!"    %dgi = stablehlo.reshape {cot_gap} : ({ty [cBS,cD]}) -> {ty [cBS,cD,1,1]}\n" ++
+      s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [cBS,cD,1,1]}) -> {ty [cBS,cD,7,7]}\n" ++
+      s!"    %dgn = stablehlo.constant dense<49.0> : {ty [cBS,cD,7,7]}\n" ++
+      s!"    %dgd = stablehlo.divide %dgb, %dgn : {ty [cBS,cD,7,7]}\n" ++
+      s!"    %dgapf = stablehlo.reshape %dgd : ({ty [cBS,cD,7,7]}) -> {ty [cBS, cD*7*7]}\n"
     let mut dy := "%dgapf"
     for si' in [0:4] do
       let si := 3 - si'
-      let c := cDims[si]!; let e := 4 * c; let h := cSpats[si]!
-      for j' in [0:cDepths[si]!] do
-        let j := cDepths[si]! - 1 - j'
+      let c := V.dims[si]!; let e := 4 * c; let h := cSpats[si]!
+      for j' in [0:V.depths[si]!] do
+        let j := V.depths[si]! - 1 - j'
         let b := (blksAll[si]!)[j]!
         let (code, cot_xin, cot_p, cot_e, cot_n, cot_d) ← bwdBlock s!"s{si}b{j}" dy b c e h
         let (pcode, pairs) ← blockParamSgd adam s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dy c e h
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_xin
       if si > 0 then
-        let ci := cDims[si-1]!; let h2 := cSpats[si]!
+        let ci := V.dims[si-1]!; let h2 := cSpats[si]!
         let (code, cot_n, cot_x) ← bwdDown s!"d{si-1}" dy (downIn[si-1]!) ci c h2
         let (pcode, pairs) ← downParamSgd adam s!"d{si-1}" (downLn[si-1]!) (downIn[si-1]!) cot_n dy ci c h2
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_x
@@ -597,19 +697,19 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     -- SGD path still wraps it in the hand-written `sgd` helper, so SGD is certified-gradient +
     -- hand-written-update there.
     -- §2m: back through the stem LN before the stem conv's own gradients see the cotangent.
-    let (cg, ng) ← lnGammaTail adam "%psng" F.stemC dy 96 56
-    let (cb, nb) ← lnBetaTail adam "%psnbt" dy 96 56
-    let (cx, dx) ← lnBackSite "%psng" F.stemC dy 96 56
+    let (cg, ng) ← lnGammaTail adam "%psng" F.stemC dy V.dims[0]! 56
+    let (cb, nb) ← lnBetaTail adam "%psnbt" dy V.dims[0]! 56
+    let (cx, dx) ← lnBackSite "%psng" F.stemC dy V.dims[0]! 56
     bwd := bwd ++ cg ++ cb ++ cx
     updMap := updMap ++ [("psng", ng), ("psnbt", nb)]
     dy := dx
     let (cPsb, nPsb) ← if adam then
-        pretty cBS (.convBiasGrad (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) (.operand dy zV))
-      else pretty cBS (.convBiasSgd "%psb" cLR (zK : Kernel4 96 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec 96) 0 (.operand dy zV))
-    let (cPsW, nPsW) ← pretty cBS (.convStride4WeightGrad (ic := 3) (oc := 96) (h := 56) (w := 56)
-      (kH := 4) (kW := 4) "%x" (zV : Vec 96) (zV : Vec (3*(2*(2*56))*(2*(2*56))))
-      (zK : Kernel4 96 3 4 4) (.operand dy (zV : Vec (96*56*56))))
-    bwd := bwd ++ cPsW ++ (if adam then "" else sgdOf nPsW "psW" (ty [96,3,4,4])) ++ cPsb
+        pretty cBS (.convBiasGrad (zK : Kernel4 (V.dims[0]!) 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec (V.dims[0]!)) (.operand dy zV))
+      else pretty cBS (.convBiasSgd "%psb" cLR (zK : Kernel4 (V.dims[0]!) 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec (V.dims[0]!)) 0 (.operand dy zV))
+    let (cPsW, nPsW) ← pretty cBS (.convStride4WeightGrad (ic := 3) (oc := V.dims[0]!) (h := 56) (w := 56)
+      (kH := 4) (kW := 4) "%x" (zV : Vec (V.dims[0]!)) (zV : Vec (3*(2*(2*56))*(2*(2*56))))
+      (zK : Kernel4 (V.dims[0]!) 3 4 4) (.operand dy (zV : Vec (V.dims[0]!*56*56))))
+    bwd := bwd ++ cPsW ++ (if adam then "" else sgdOf nPsW "psW" (ty [V.dims[0]!,3,4,4])) ++ cPsb
     updMap := updMap ++ [("psW", if adam then nPsW else "%psWn"), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
 
@@ -623,13 +723,13 @@ set_option maxRecDepth 8000 in
     into `lr` — so the committed `cLR = 0.1` is an effective 0.1, the house convention spelled
     differently (§2a-quinquies). -/
 def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
-    (nClasses : Nat := 10) : String := Id.run do
-  let (body, updMap, _) := (convNextBackAll false none nClasses).run' 0
+    (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : String := Id.run do
+  let (body, updMap, _) := (convNextBackAll false none nClasses V).run' 0
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}") ++ ["%onehot: " ++ ty [cBS,nClasses]])
-  let retTyL := String.intercalate ", " ((allParams nClasses).map (fun p => ty p.2))
+    (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}") ++ ["%onehot: " ++ ty [cBS,nClasses]])
+  let retTyL := String.intercalate ", " ((allParams nClasses V).map (fun p => ty p.2))
   let retVals := String.intercalate ", "
-    ((allParams nClasses).map (fun (nm, _) => (updMap.lookup nm).getD s!"%{nm}n"))
+    ((allParams nClasses V).map (fun (nm, _) => (updMap.lookup nm).getD s!"%{nm}n"))
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
@@ -800,6 +900,13 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- leave an unused argument (an arity mismatch at the driver). Neither is silent, which is the
     -- §2m property.
     (sd : Bool := false)
+    -- ⚠ THE STAGE TABLE, and it is TRAILING and DEFAULTED for the same reason every flag above is.
+    -- `[3,3,9,3]` is ConvNeXt-T; `cnxSmall` = `[3,3,27,3]` is ConvNeXt-S. It must reach the
+    -- SIGNATURE (via `allParams`) as well as the traversal — the ViT-S trap 3 — and when a caller
+    -- passes `traversal`, `D` here governs the signature while the traversal carries its own copy.
+    -- `convNextAdamTrainStepFaithfulB` spells it ONCE and hands the same array to both, exactly as
+    -- it does with `sd`; nothing else may set them independently.
+    (V : CnxDims := cnxTiny)
     : String := Id.run do
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
   -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
@@ -808,7 +915,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- (≈87 against ln(1000)=6.9) caught it. The empty-string default keeps every existing call site
   -- byte-identical while making the K=1000 spelling impossible to get wrong.
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
-  let trav := traversal.getD (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses)
+  let trav := traversal.getD (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses V)
   let (body, gradMap, nSm) := trav.run' 0
   let go : StateM Nat String := do
     -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`) — ConvNeXt's half. Structurally the
@@ -825,19 +932,19 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let mut clipped : List (String × String) := []
     if clip then
       let mut avg : List (String × String) := []
-      for (nm, ds) in allParams nClasses do
+      for (nm, ds) in allParams nClasses V do
         let g := (gradMap.lookup nm).getD s!"%d{nm}"
         let (arS, gAvg) := ViTRender.emitGradAllReduce g ds nm replicas
         clipCode := clipCode ++ arS
         avg := avg ++ [(nm, gAvg)]
       let mut total : SHlo 1 := .operand "%zero" zero1
-      for (nm, ds) in allParams nClasses do
+      for (nm, ds) in allParams nClasses V do
         let n := ds.foldl (· * ·) 1
         let g := (avg.lookup nm).getD s!"%d{nm}"
         total := .gradSumSqAccF (n := n) ds total (.operand g (fun _ => 0))
       let (cN, normSSA) ← pretty cBS total
       clipCode := clipCode ++ cN
-      for (nm, ds) in allParams nClasses do
+      for (nm, ds) in allParams nClasses V do
         let n := ds.foldl (· * ·) 1
         let z : Vec n := fun _ => 0
         let g := (avg.lookup nm).getD s!"%d{nm}"
@@ -850,7 +957,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let mut mN : List String := []
     let mut vN : List String := []
     let mut eN : List String := []
-    for (nm, ds) in allParams nClasses do
+    for (nm, ds) in allParams nClasses V do
       let g0 := (gradMap.lookup nm).getD s!"%d{nm}"
       let g := if clip then (clipped.lookup nm).getD g0 else g0
       -- The wd operand comes from the SAME `allParams` entry that names the site (§2e's slot rule).
@@ -888,7 +995,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       s!"    %lbfc = stablehlo.constant dense<{cBS}.0> : tensor<f32>\n" ++
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-    let pTy := (allParams nClasses).map (fun p => ty p.2)
+    let pTy := (allParams nClasses V).map (fun p => ty p.2)
     -- ⚠ THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
     -- The driver does `pbuf := out` — each step's output IS the next step's input (§2d.3's no-copy
     -- handover) — so a return list that dropped the shadow, or carried fewer scalars than the
@@ -902,8 +1009,8 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- EfficientNet's first attempt at this omitted them and G4 refused the call before a single
     -- step ran ("returns 740 outputs, caller supplied 749 destinations"). Loud, and the right way
     -- round.
-    let dpNames := if sd then (List.range cnxDropSites).map dpName else []
-    let dpTys   := if sd then (List.range cnxDropSites).map (fun _ => ty [cBS]) else []
+    let dpNames := if sd then (List.range (cnxDropSites V)).map dpName else []
+    let dpTys   := if sd then (List.range (cnxDropSites V)).map (fun _ => ty [cBS]) else []
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
                      ++ (if ema then ["%emad", "%oemad"] else []) ++ dpNames
     let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
@@ -914,12 +1021,12 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
         -- Updated 2026-07-29. This banner used to carve out the stem 4x4/s4 and the 2x2/s2
         -- downsample WEIGHT GRADIENTS as hand-written — true when it was written, false since
         -- `9bb00f5` (§2f-bis) closed both, so the emitted artifact was UNDER-describing itself.
-        "    // ── ConvNeXt-T AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
-        "    // All 180 params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample\n" ++
+        s!"    // ── {cnxModelName V} AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
+        s!"    // All {(allParams nClasses V).length} params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample\n" ++
         "    // WEIGHT GRADIENTS — the two documented gaps, closed 2026-07-28 (new cert\n" ++
         "    // flatConvStride4_weight_grad_has_vjp; emit-side odd/even split sWGradGeom).\n"
        else
-        s!"    // ── ConvNeXt-T AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        s!"    // ── {cnxModelName V} AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every line is pretty(verified AST node) EXCEPT the per-parameter `%arsum*`\n" ++
         "    // all_reduce / `%armean*` blocks: those are a TRUSTED CARVE-OUT (handoff §5), emitted\n" ++
         "    // text outside the faithfulness theorems. Each replica evaluates the same tied graph\n" ++
@@ -933,10 +1040,10 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- names 0..k, so the Adam ops must start at k — otherwise they collide with the backward's SSAs.
   let used := (trav.run 0).2
   let inner : String := go.run' used
-  let pSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}"))
-  let mSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}m: {ty d}"))
-  let vSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}v: {ty d}"))
-  let eSig := String.intercalate ", " ((allParams nClasses).map (fun (nm, d) => s!"%{nm}e: {ty d}"))
+  let pSig := String.intercalate ", " ((allParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}"))
+  let mSig := String.intercalate ", " ((allParams nClasses V).map (fun (nm, d) => s!"%{nm}m: {ty d}"))
+  let vSig := String.intercalate ", " ((allParams nClasses V).map (fun (nm, d) => s!"%{nm}v: {ty d}"))
+  let eSig := String.intercalate ", " ((allParams nClasses V).map (fun (nm, d) => s!"%{nm}e: {ty d}"))
   let argSig := ("%x: " ++ ty [cBS, 3*224*224]) ++ ", " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
     (if ema then ", " ++ eSig else "") ++
     ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
@@ -945,14 +1052,14 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- driver's blob layout (`[θ|m|v|scalars|drops]`, `%x` and `%onehot` passed separately) and
     -- `convNextFwdRenderB`'s placement. Inserted mid-list they would capture an existing positional
     -- slot — the mnv2 `convBias` failure (§2m), silent until the driver mis-walks the blob.
-    cnxDropSig cBS sd ++
+    cnxDropSig cBS sd V ++
     ", %onehot: " ++ ty [cBS,nClasses]
-  let pTy := (allParams nClasses).map (fun p => ty p.2)
+  let pTy := (allParams nClasses V).map (fun p => ty p.2)
   let retTyL := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
        ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
        ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
-       ++ (if sd then (List.range cnxDropSites).map (fun _ => ty [cBS]) else []))
+       ++ (if sd then (List.range (cnxDropSites V)).map (fun _ => ty [cBS]) else []))
   -- ⚠ The slug is load-bearing exactly as it is on R34 (§2k) and ViT (§2p): a 1000-class render
   -- emitted under the `convnext` slug would collide with the artifacts the 84.41% Imagenette run,
   -- the prefix audit and every `convnext-adam-tie` invocation depend on.
@@ -1182,3 +1289,37 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 1 1000 "convnextin" (ema := true))
 #eval IO.FS.writeFile "verified_mlir/convnextin_emadp_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithful "0.100000" "" "32.0" 4 1000 "convnextin" (ema := true))
+
+-- ════════════════════════════════════════════════════════════════
+-- § ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` (`planning/vit_convnext_sb_scaleup.md`)
+-- ════════════════════════════════════════════════════════════════
+--
+-- **The eval forward, and it is the ONLY thing this file renders for S.** The train steps are in
+-- `ConvNeXtRenderB.lean`, because the `drop` variants are batched-only — the per-example render
+-- cannot express a per-EXAMPLE mask at all (that is the whole reason that file exists).
+--
+-- ⚠⚠ IT IS LOAD-BEARING AND IT IS EASY TO OMIT. `VerifiedTrain` resolves the eval forward as
+-- `<slug>_<variant>_fwd.mlir` if present else **`<slug>_fwd.mlir`**, BY NAME — so a net whose only
+-- forward is `convnextsin_drop_fwd.mlir` trains fine and then dies at the first eval on a missing
+-- file. That is ViT-S trap 2 (`vit_convnext_sb_scaleup.md` §Traps), which no build-time check
+-- covers because no build-time check reads a filename.
+--
+-- ⚠ ConvNeXt needs no `_fwd_eval` peer and must not grow one, for S exactly as for T: LayerNorm
+-- reduces within one example and never across the batch, so this forward is already
+-- class-batch-independent.
+#eval IO.FS.writeFile "verified_mlir/convnextsin_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdFaithfulV "convnextsin_fwd" 1000 Proofs.StableHLO.cnxSmall)
+
+-- ── ▶ ConvNeXt-**B**, slug `convnextbin` — the eval forward ─────────────────────────────────────
+-- B is S's depth at `[128,256,512,1024]`. Unlike S, it moves the STEM (96 → 128) and the HEAD
+-- (768 → 1024), which is every dimension literal this file used to hardcode — see `CnxDims`.
+--
+-- ⚠⚠ **The `%dgi`/`%dgb`/`%dgn`/`%dgd`/`%dgapf` GAP backward is HAND-WRITTEN TEXT** (a declared §5
+-- carve-out on both renderers), so its width is threaded by hand and NOTHING type-checks it. At T
+-- and S it read `768` correctly by accident of the dims not moving; at B a missed `768` there
+-- would emit a graph whose GAP cotangent is 768-wide against a 1024-wide stage — which the lowerer
+-- WOULD reject, but only after the artifact was written and committed. The byte-identity gate at T
+-- and S is what says the threading did not disturb the sizes that were already right; the shape
+-- audit of the emitted B artifact is what says the new one is.
+#eval IO.FS.writeFile "verified_mlir/convnextbin_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdFaithfulV "convnextbin_fwd" 1000 Proofs.StableHLO.cnxBase)

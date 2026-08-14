@@ -202,7 +202,9 @@ jobs:
               verified_mlir/convnext_adamclip_train_step.mlir \
               verified_mlir/convnextin_adamwxclip_train_step.mlir \
               verified_mlir/convnextin_adamdpwxclip_train_step.mlir \
-            || { echo "::error::committed verified_mlir/{convnext,convnextin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
+              verified_mlir/convnextsin_fwd.mlir \
+              verified_mlir/convnextbin_fwd.mlir \
+            || { echo "::error::committed verified_mlir/{convnext,convnextin,convnextsin,convnextbin}_* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRender.lean)"; exit 1; }
           # The STOCHASTIC-DEPTH renders come from a DIFFERENT module — ConvNeXtRenderB, the chain at
           # the batched index N := B, which is the only one where a per-EXAMPLE drop mask is
           # expressible at all (handoff §0.10). It is a separate `lake env lean` because it is a
@@ -214,7 +216,13 @@ jobs:
               verified_mlir/convnextin_adamwxclipdrop_train_step.mlir \
               verified_mlir/convnextin_adamdpwxclipdrop_train_step.mlir \
               verified_mlir/convnextin_drop_fwd.mlir \
-            || { echo "::error::committed verified_mlir/{convnext,convnextin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
+              verified_mlir/convnextsin_drop_fwd.mlir \
+              verified_mlir/convnextsin_adamwxclipdrop_train_step.mlir \
+              verified_mlir/convnextsin_adamdpwxclipdrop_train_step.mlir \
+              verified_mlir/convnextbin_drop_fwd.mlir \
+              verified_mlir/convnextbin_adamwxclipdrop_train_step.mlir \
+              verified_mlir/convnextbin_adamdpwxclipdrop_train_step.mlir \
+            || { echo "::error::committed verified_mlir/{convnext,convnextin,convnextsin,convnextbin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
           # ViT's SD renders, from ViTRenderB — the batched chain. ⚠ That chain reproduces ViT's
           # committed drop-free artifacts byte-for-byte (unlike ConvNeXt's, which differs on 78
           # conv-VJP lines), so these come from the same emitter as vit_fwd/vit_adam_train_step.

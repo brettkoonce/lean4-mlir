@@ -51,15 +51,24 @@ private def zMB {a b : Nat} : Mat a b := fun _ _ => 0
     against a second copy of the shapes. -/
 private def bB : Nat := 32
 private def bEPS : String := "1.0e-6"
-private def bDepths : Array Nat := #[3, 3, 9, 3]
-private def bDims   : Array Nat := #[96, 192, 384, 768]
 private def bSpats  : Array Nat := #[56, 28, 14, 7]
+
+-- The three sizes, RESTATED (not imported) and `#guard`ed against `ConvNeXtRender`'s — the same
+-- discipline `bB`/`bEPS` carry, kept because the byte tie is meant to test the RENDER rather than
+-- the constants. ⚠ Restating a RECORD is what makes that discipline still work now that a size is
+-- two tables: an `#[3,3,27,3]` that drifted into the wrong `dims` would be caught by one `==`.
+private def bTiny  : CnxDims := { depths := #[3, 3,  9, 3], dims := #[ 96, 192, 384,  768] }
+private def bSmall : CnxDims := { depths := #[3, 3, 27, 3], dims := #[ 96, 192, 384,  768] }
+private def bBase  : CnxDims := { depths := #[3, 3, 27, 3], dims := #[128, 256, 512, 1024] }
+#guard bTiny  == cnxTiny
+#guard bSmall == cnxSmall
+#guard bBase  == cnxBase
 
 -- ⚠ The stochastic-depth site table (`cnxDropTotal`, `cnxBlockIdx`, `cnxDropSig`) lives in
 -- `ConvNeXtRender.lean` — the train-step renderer there owns the signature and the variant name, and
--- this file imports it rather than the reverse. It is derived from THAT file's `cDepths`; this guard
+-- this file imports it rather than the reverse. It is derived from THAT file's `cnxTiny`; this guard
 -- is what says the two stage tables have not drifted, which the ramp indices below depend on.
-#guard bDepths.foldl (· + ·) 0 == cnxDropTotal
+#guard bTiny.depths.foldl (· + ·) 0 == cnxDropTotal
 
 /-! ## The sites, one per per-example site in `ConvNeXtRender.lean` -/
 
@@ -146,34 +155,39 @@ set_option maxRecDepth 8000 in
     (`stochastic_depth.md` §3): at eval the driver supplies an all-ones mask, so they are the exact
     identity, and the `forward ⊂ train-step` prefix audit keeps a partner for the SD render instead
     of quietly not covering it. -/
-def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false) : StateM Nat CFwd := do
+def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
+    (V : CnxDims := bTiny) : StateM Nat CFwd := do
   let (cS, stemC) ← pretty bB (.batchOp (N := bB)
-      (.convStride4 (h := 56) (w := 56) "%psW" "%psb" (zKB : Kernel4 96 3 4 4) zVB)
+      (.convStride4 (h := 56) (w := 56) "%psW" "%psb" (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB)
       (.operand "%x" (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56)))))))
-  let (cSln, stem) ← lnFwdSiteB "%psng" "%psnbt" stemC 96 56
+  let (cSln, stem) ← lnFwdSiteB "%psng" "%psnbt" stemC V.dims[0]! 56
   let mut fwd := cS ++ cSln
   let mut cur := stem
   let mut blksAll : Array (Array FNames) := #[]
   let mut downLn : Array String := #[]
   let mut downIn : Array String := #[]
   for si in [0:4] do
-    let c := bDims[si]!; let e := 4 * c; let h := bSpats[si]!
+    let c := V.dims[si]!; let e := 4 * c; let h := bSpats[si]!
     let mut blks : Array FNames := #[]
-    for j in [0:bDepths[si]!] do
-      -- ⚠ `cnxBlockIdx si j`, NOT `j`: the ramp counts blocks over the whole net (denominator 17).
-      -- The backward calls the same function walking the stages in reverse, which is why it is a
-      -- function of `(si, j)` rather than a counter either loop carries.
-      let (code, bn) ← fwdBlockB s!"s{si}b{j}" cur c e h (if sd then some (cnxBlockIdx si j) else none)
+    for j in [0:V.depths[si]!] do
+      -- ⚠ `cnxBlockIdx si j V`, NOT `j`: the ramp counts blocks over the whole net (denominator 17
+      -- at T, 35 at S). The backward calls the same function walking the stages in reverse, which is
+      -- why it is a function of `(si, j)` rather than a counter either loop carries.
+      -- ⚠⚠ AND `D` MUST BE PASSED. Dropping it takes the ConvNeXt-T default silently: at S that
+      -- pairs stage 3's 27 blocks with T's stage-3 numbering and stage 4 with indices 15..17 that
+      -- another stage already owns — duplicate mask sites on a graph that compiles and descends.
+      let (code, bn) ← fwdBlockB s!"s{si}b{j}" cur c e h
+                          (if sd then some (cnxBlockIdx si j V) else none)
       fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
     blksAll := blksAll.push blks
     if si < 3 then
       downIn := downIn.push cur
-      let (code, n, o) ← fwdDownB s!"d{si}" cur c bDims[si+1]! bSpats[si+1]!
+      let (code, n, o) ← fwdDownB s!"d{si}" cur c V.dims[si+1]! bSpats[si+1]!
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
-  let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := 768) (h := 7) (w := 7))
+  let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := V.dims[3]!) (h := 7) (w := 7))
       (.operand cur zVB))
   let (cLog, logits) ← pretty bB (.batchOp (N := bB)
-      (.dense "%Wd" "%bd" (zMB : Mat 768 nClasses) zVB) (.operand gap zVB))
+      (.dense "%Wd" "%bd" (zMB : Mat (V.dims[3]!) nClasses) zVB) (.operand gap zVB))
   pure { code := fwd ++ cG ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := gap, logits := logits }
 
@@ -188,15 +202,17 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
     -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument
     -- at every call site, which is how the mnv2 `convBias` threading went wrong.
     (sd : Bool := false)
+    (V : CnxDims := bTiny)
     : String := Id.run do
-  let F : CFwd := (convNextFwdChainB nClasses sd).run' 0
+  let F : CFwd := (convNextFwdChainB nClasses sd V).run' 0
   let body := F.code; let logits := F.logits
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [bB, 3*224*224]) :: (cnxAllParams nClasses).map (fun (nm, d) => s!"%{nm}: {ty d}"))
+    (("%x: " ++ ty [bB, 3*224*224]) ::
+      (cnxAllParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}"))
     -- ⚠ The mask inputs go LAST, after every parameter, matching the train step's placement and the
     -- driver's blob layout. Anywhere else and they capture an existing positional slot — the mnv2
     -- `convBias` failure (§2m), silent until the driver mis-walks the blob.
-    ++ cnxDropSig bB sd
+    ++ cnxDropSig bB sd V
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [bB,nClasses]} " ++ "{\n" ++
     banner ++
     chLnPrelude ++ body ++
@@ -364,10 +380,10 @@ set_option maxRecDepth 8000 in
     move neither improves nor degrades it — but note it is parameterised by `bB` and therefore
     already batch-correct, which is why it needs no peer. -/
 def convNextBackAllB (smooth : Option (String × String × String) := none) (nClasses : Nat := 10)
-    (sd : Bool := false) :
+    (sd : Bool := false) (V : CnxDims := bTiny) :
     StateM Nat (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain the byte-tied `convNextFwdChainB` emits ═══
-    let F : CFwd ← convNextFwdChainB nClasses sd
+    let F : CFwd ← convNextFwdChainB nClasses sd V
     let (cSm, nSm) ← pretty bB (.batchOp (N := bB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := bB) (.expe (n := nClasses))
           (.operand F.logits (zVB : Vec (bB*nClasses)))))
@@ -392,56 +408,60 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
               (.operand n3 (zVB : Vec (bB*nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ head ═══
-    let (cDd, cot_gap) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (zMB : Mat 768 nClasses))
+    let (cDd, cot_gap) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (zMB : Mat (V.dims[3]!) nClasses))
         (.operand dyName zVB))
-    let (cWd, nWd) ← pretty bB (.weightGradB (N := bB) (m := 768) (n := nClasses) F.hn
-        (zVB : Vec (bB*768)) (.operand dyName (zVB : Vec (bB*nClasses))))
+    let (cWd, nWd) ← pretty bB (.weightGradB (N := bB) (m := V.dims[3]!) (n := nClasses) F.hn
+        (zVB : Vec (bB*V.dims[3]!)) (.operand dyName (zVB : Vec (bB*nClasses))))
     let (cBd, nBd) ← pretty bB (.biasGradB (N := bB) (n := nClasses)
         (.operand dyName (zVB : Vec (bB*nClasses))))
     let mut updMap : List (String × String) := [("Wd", nWd), ("bd", nBd)]
+    let bD := V.dims[3]!
     let mut bwd := cDyC ++ cDd ++ cWd ++ cBd ++
-      s!"    %dgi = stablehlo.reshape {cot_gap} : ({ty [bB,768]}) -> {ty [bB,768,1,1]}\n" ++
-      s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [bB,768,1,1]}) -> {ty [bB,768,7,7]}\n" ++
-      s!"    %dgn = stablehlo.constant dense<49.0> : {ty [bB,768,7,7]}\n" ++
-      s!"    %dgd = stablehlo.divide %dgb, %dgn : {ty [bB,768,7,7]}\n" ++
-      s!"    %dgapf = stablehlo.reshape %dgd : ({ty [bB,768,7,7]}) -> {ty [bB, 768*7*7]}\n"
+      -- ⚠ HAND-WRITTEN TEXT (the §5 carve-out this docstring declares), so `bD` is threaded by
+      -- hand and nothing type-checks it. The `7`s and the `49.0` are SPATIAL and stay literals at
+      -- every size; only the channel width moves.
+      s!"    %dgi = stablehlo.reshape {cot_gap} : ({ty [bB,bD]}) -> {ty [bB,bD,1,1]}\n" ++
+      s!"    %dgb = stablehlo.broadcast_in_dim %dgi, dims = [0, 1, 2, 3] : ({ty [bB,bD,1,1]}) -> {ty [bB,bD,7,7]}\n" ++
+      s!"    %dgn = stablehlo.constant dense<49.0> : {ty [bB,bD,7,7]}\n" ++
+      s!"    %dgd = stablehlo.divide %dgb, %dgn : {ty [bB,bD,7,7]}\n" ++
+      s!"    %dgapf = stablehlo.reshape %dgd : ({ty [bB,bD,7,7]}) -> {ty [bB, bD*7*7]}\n"
     let mut dy := "%dgapf"
     for si' in [0:4] do
       let si := 3 - si'
-      let c := bDims[si]!; let e := 4 * c; let h := bSpats[si]!
-      for j' in [0:bDepths[si]!] do
-        let j := bDepths[si]! - 1 - j'
+      let c := V.dims[si]!; let e := 4 * c; let h := bSpats[si]!
+      for j' in [0:V.depths[si]!] do
+        let j := V.depths[si]! - 1 - j'
         let b := (F.blksAll[si]!)[j]!
         -- ⚠ `cnxBlockIdx si j` again, from the SAME function the forward called. This loop runs the
         -- stages and the blocks BACKWARDS, so a counter carried by either loop would have to be run
         -- in reverse to name the same sites — the mismatch would pair every backward site with the
         -- wrong forward mask, which typechecks and trains.
         let (code, cot_xin, cot_p, cot_e, cot_n, cot_d, dyd) ←
-          bwdBlockB s!"s{si}b{j}" dy b c e h (if sd then some (cnxBlockIdx si j) else none)
+          bwdBlockB s!"s{si}b{j}" dy b c e h (if sd then some (cnxBlockIdx si j V) else none)
         -- ⚠ `dyd`, not `dy` — LayerScale's γ gradient reads the cotangent at the LayerScale OUTPUT,
         -- which the drop site scales. See `bwdBlockB`.
         let (pcode, pairs) ← blockParamGradB s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dyd c e h
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_xin
       if si > 0 then
-        let ci := bDims[si-1]!; let h2 := bSpats[si]!
+        let ci := V.dims[si-1]!; let h2 := bSpats[si]!
         let (code, cot_n, cot_x) ← bwdDownB s!"d{si-1}" dy (F.downIn[si-1]!) ci c h2
         let (pcode, pairs) ← downParamGradB s!"d{si-1}" (F.downLn[si-1]!) (F.downIn[si-1]!)
             cot_n dy ci c h2
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_x
     -- ═══ stem: back through the stem LN, then the patchify conv's own gradients ═══
-    let (cg, ng) ← lnGammaTailB "%psng" F.stemC dy 96 56
-    let (cb, nb) ← lnBetaTailB dy 96 56
-    let (cx, dx) ← lnBackSiteB "%psng" F.stemC dy 96 56
+    let (cg, ng) ← lnGammaTailB "%psng" F.stemC dy V.dims[0]! 56
+    let (cb, nb) ← lnBetaTailB dy V.dims[0]! 56
+    let (cx, dx) ← lnBackSiteB "%psng" F.stemC dy V.dims[0]! 56
     bwd := bwd ++ cg ++ cb ++ cx
     updMap := updMap ++ [("psng", ng), ("psnbt", nb)]
     dy := dx
-    let (cPsb, nPsb) ← pretty bB (.convBiasGradB (N := bB) (ic := 3) (oc := 96) (h := 56) (w := 56)
-        (kH := 4) (kW := 4) (zKB : Kernel4 96 3 4 4) (zVB : Vec (bB*(3*56*56))) (zVB : Vec 96)
+    let (cPsb, nPsb) ← pretty bB (.convBiasGradB (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56) (w := 56)
+        (kH := 4) (kW := 4) (zKB : Kernel4 (V.dims[0]!) 3 4 4) (zVB : Vec (bB*(3*56*56))) (zVB : Vec (V.dims[0]!))
         (.operand dy zVB))
-    let (cPsW, nPsW) ← pretty bB (.convStride4WeightGradB (N := bB) (ic := 3) (oc := 96) (h := 56)
-        (w := 56) (kH := 4) (kW := 4) "%x" (zVB : Vec 96)
-        (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (zKB : Kernel4 96 3 4 4)
-        (.operand dy (zVB : Vec (bB*(96*56*56)))))
+    let (cPsW, nPsW) ← pretty bB (.convStride4WeightGradB (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56)
+        (w := 56) (kH := 4) (kW := 4) "%x" (zVB : Vec (V.dims[0]!))
+        (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (zKB : Kernel4 (V.dims[0]!) 3 4 4)
+        (.operand dy (zVB : Vec (bB*(V.dims[0]!*56*56)))))
     bwd := bwd ++ cPsW ++ cPsb
     updMap := updMap ++ [("psW", nPsW), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
@@ -459,7 +479,8 @@ set_option maxRecDepth 8000 in
 def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false) (wdExclude : Bool := false) (wdStr : String := "0.0001")
-    (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false) : String :=
+    (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false)
+    (V : CnxDims := bTiny) : String :=
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
   convNextAdamTrainStepFaithful alphaStr negAlphaKStr bStr replicas nClasses slug ema
     wdExclude wdStr clip clipStr
@@ -467,8 +488,12 @@ def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
     -- 18 sites) and the wrapper (which declares the 18 inputs, the 18 pass-through outputs and the
     -- `drop` variant name). Letting a caller set them independently is the shape of defect this
     -- file's own thread keeps finding; here there is nothing to keep in step.
-    (traversal := some (convNextBackAllB (some (alphaStr, negAK, bStr)) nClasses sd))
-    (sd := sd)
+    -- ⚠⚠ `D` IS THE SECOND SUCH PARAMETER and it is spelled once for the same reason: the traversal
+    -- decides how many blocks are EMITTED, the wrapper decides how many parameters are DECLARED,
+    -- and a disagreement between them is an arity mismatch the driver reports as a blob-walk
+    -- failure rather than anything that names the depth table.
+    (traversal := some (convNextBackAllB (some (alphaStr, negAK, bStr)) nClasses sd V))
+    (sd := sd) (V := V)
 
 /-- The per-example render's own banner, so the tie can demand **byte-identity** rather than
     "identical apart from a comment". ⚠ Worth the parameter: a tie that compares modulo one line is
@@ -480,9 +505,13 @@ def cnxFwdPerExampleBanner : String :=
 /-- The SD forward's banner. Its own, and not `cnxFwdPerExampleBanner`, because these bytes ARE a
     different render and a banner claiming otherwise is the `VerifiedNets` docstring defect (§0.9
     finding 3) in the artifact itself. -/
-def cnxDropFwdBanner : String :=
-  "    // ── ConvNeXt-T forward at the BATCHED index N := B, with STOCHASTIC DEPTH ──\n" ++
-  "    // 18 drop sites, one per block, on the RESIDUAL BRANCH (between LayerScale and the\n" ++
+def cnxDropFwdBanner (V : CnxDims := bTiny) : String :=
+  -- ⚠ Both the SIZE and the SITE COUNT are derived from `D`. They were literals ("ConvNeXt-T",
+  -- "18") until ConvNeXt-S landed, and a literal here is precisely the thing this docstring warns
+  -- about one line up: at S the artifact would open by announcing itself as a net with half its
+  -- blocks. At the default both render byte-identically to the literals they replace.
+  s!"    // ── {cnxModelName V} forward at the BATCHED index N := B, with STOCHASTIC DEPTH ──\n" ++
+  s!"    // {cnxDropTotal V} drop sites, one per block, on the RESIDUAL BRANCH (between LayerScale and the\n" ++
   "    // skip add). Emitted in the forward too, at an all-ones mask supplied by the driver:\n" ++
   "    // exactly the identity (Proofs.dropPath_ones_id), so this stays a byte-prefix of the\n" ++
   "    // SD train step and the forward-subset-train-step audit keeps a partner.\n"
@@ -564,6 +593,78 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/convnextin_drop_fwd.mlir"
   (Proofs.StableHLO.convNextFwdRenderB "convnextin_drop_fwd" 1000
     Proofs.StableHLO.cnxDropFwdBanner (sd := true))
+
+-- ── ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` ────────────────────────────────────────────
+-- `planning/vit_convnext_sb_scaleup.md`. The second net here added by RESHAPING an existing
+-- renderer rather than writing a chain, and the cheapest of the three so far: ViT-S needed six
+-- width constants become a record, while ConvNeXt-S is **pure depth** — `[3,3,9,3] → [3,3,27,3]`
+-- with the dims unchanged — so one `Array Nat` threaded as a trailing defaulted parameter covers
+-- it, and every hardcoded `96`/`768` in the head and the GAP backward stays correct untouched.
+--
+-- ⭐ **The proof side needed nothing**, for the same reason ViT's did not: the certificates the
+-- ops carry are per-SITE and stage-generic, so 18 more blocks is 18 more uses of theorems that
+-- already quantify over `c`, `e` and `h`. Depth was never a hypothesis.
+--
+-- 342 parameter tensors and **50,222,152** scalars at K = 1000 — the published ConvNeXt-S figure,
+-- and the count `jax/MainConvNeXtSImagenet.lean` emits from an independent implementation.
+--
+-- ⚠ **BOTH the single-device and the DP peer**, which is §0.5's rule and the reason ConvNeXt-T
+-- carries both: an ImageNet run loads the DP render, and DP renders are exactly the ones that
+-- silently fall behind. `wx` ++ `clip` ++ `drop` is `convNeXtTinyImagenetConfig` entire, and it is
+-- the recipe ConvNeXt-S inherits — the paper changes the stochastic-depth RATE with the size (S is
+-- 0.4 at 300 epochs against T's 0.1), and that rate is DATA (`dropKeeps` in the spec), not a
+-- render knob, so both sizes render from this one call.
+--
+-- ⚠ NOTHING HAS BEEN TRAINED. These render, the shapes tie, the counts are `#guard`ed. No
+-- accuracy, and no wall clock beyond a step probe.
+#eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextsin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall))
+#eval IO.FS.writeFile "verified_mlir/convnextsin_adamdpwxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextsin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall))
+-- The SD train step's PREFIX PARTNER — the same reason `convnextin_drop_fwd` exists. It is not the
+-- forward the driver evals through (that is `convnextsin_fwd.mlir`, written by `ConvNeXtRender`);
+-- it is what keeps the `forward ⊂ train-step` structural audit from having nothing to pair the SD
+-- render with. Spending that gate is how `resnet34_fwd` and `mobilenetv2_fwd` came to score nets
+-- they had not trained.
+#eval IO.FS.writeFile "verified_mlir/convnextsin_drop_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB "convnextsin_drop_fwd" 1000
+    (Proofs.StableHLO.cnxDropFwdBanner Proofs.StableHLO.cnxSmall)
+    (sd := true) (V := Proofs.StableHLO.cnxSmall))
+
+-- ── ▶ ConvNeXt-**B** on ImageNet, slug `convnextbin` ────────────────────────────────────────────
+-- The size that made the DIMS a parameter. B is S's depth table at `[128,256,512,1024]`, so it
+-- shares S's 36 drop sites and its 342 parameter tensors and differs only in every width —
+-- 88,589,416 scalars at K = 1000, the published 88.59M and the count
+-- `jax/MainConvNeXtBImagenet.lean` emits independently.
+--
+-- ⭐ **The proof side needed nothing here either**, and B is the stronger evidence for that claim
+-- than S was: S reused theorems at the SAME widths, where B instantiates them at four widths none
+-- of the committed artifacts had ever used. The certificates are generic in `c`/`e`/`h`, so this
+-- is arithmetic, not a new obligation.
+--
+-- ⚠⚠ **B IS THE SIZE THAT BREAKS ANYTHING KEYED ON BLOCK COUNT.** It has 36 blocks exactly like S,
+-- so `cnxModelName` had to start matching on the whole `CnxDims` record — it keyed on
+-- `cnxDropTotal` while S was the only new size, and every B artifact would have opened by calling
+-- itself a ConvNeXt-S. The guard beside that function is what caught it.
+--
+-- ⚠ NOTHING HAS BEEN TRAINED, and see the app docstring before quoting any wall clock: B at bs32
+-- fp32 is the first ConvNeXt size where fitting is a real question rather than a formality.
+#eval IO.FS.writeFile "verified_mlir/convnextbin_adamwxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextbin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase))
+#eval IO.FS.writeFile "verified_mlir/convnextbin_adamdpwxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextbin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase))
+#eval IO.FS.writeFile "verified_mlir/convnextbin_drop_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB "convnextbin_drop_fwd" 1000
+    (Proofs.StableHLO.cnxDropFwdBanner Proofs.StableHLO.cnxBase)
+    (sd := true) (V := Proofs.StableHLO.cnxBase))
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the call
 -- ("entry mismatch"). ⚠ These matter MORE for `drop` than for `wx` or `clip`, because `drop` also

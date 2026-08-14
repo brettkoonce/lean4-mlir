@@ -976,6 +976,151 @@ def convnextImagenetVerified : VerifiedNetSpec where
   -- optimizer-and-regulariser knob its reference sets.
   dropKeeps := (Array.range 18).map (fun i => 1.0 - 0.1 * i.toFloat / 17.0)
 
+/-- **ConvNeXt-Small on full ImageNet-1k** — the second net here added by RESHAPING an existing
+    renderer rather than by writing a new chain, and the cheapest of them.
+
+    ⭐ **S is PURE DEPTH.** `[3,3,9,3] → [3,3,27,3]`, dims UNCHANGED at `[96,192,384,768]`. Where
+    ViT-S needed six width constants turned into a record, ConvNeXt-S needed one `Array Nat`
+    threaded as a trailing defaulted parameter: the renderer already folded over the stage table in
+    both directions, and because no dimension moves, its hardcoded `96`/`768` literals (the head
+    and the GAP backward) stay correct untouched. Every ConvNeXt-T artifact re-renders
+    byte-identical, which is what says the parameterisation was inert.
+
+    ⭐ **The proof side needed nothing**, for a different reason than ViT's: the certificates here
+    are per-SITE and already generic in `c`/`e`/`h`, so 18 more blocks is 18 more uses of theorems
+    that were never indexed by depth. Depth was not a hypothesis.
+
+    **342 parameter tensors, 50,222,152 scalars** — the published ConvNeXt-S figure, and the count
+    `jax/MainConvNeXtSImagenet.lean` emits from an independent implementation.
+
+    ⚠ **ImageNet only, deliberately** — as with ViT-S. There is no ConvNeXt-S Imagenette peer and
+    this spec does not imply one.
+
+    ⚠⚠ **The stochastic-depth rate is the ONE recipe knob that moves with size, and it is data.**
+    The ConvNeXt paper uses 0.4 for S at 300 epochs against T's 0.1, so `dropKeeps` below is NOT
+    the Tiny ramp with more entries — it is a steeper ramp over 36 sites. That is exactly why the
+    ramp lives in the SPEC and not in the renderer: the render is `sd : Bool` and reads its scales
+    from the driver's blob, so a rate change costs no artifact. ▶ The 80-epoch tier wants 0.2, not
+    0.4 (`planning/vit_convnext_sb_scaleup.md`: the paper values underfit at 80 epochs) — set it
+    with the driver's `LEAN_MLIR_DROP_RATE_U` (micro-units: `200000` = 0.2) rather than by editing
+    this line — the rate is data the driver supplies per step, so changing it costs no artifact.
+
+    ⚠ **Nothing has been trained.** The artifacts render, the shapes tie, the count is `#guard`ed.
+    No accuracy is claimed and none has been measured. -/
+def convnextSImagenetVerified : VerifiedNetSpec where
+  name     := "ConvNeXt-S (ImageNet-1k)"
+  slug     := "convnextsin"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  -- ⚠ ConvNeXt-T's shim, and that is correct rather than lazy: the shim is the DATA pipeline
+  -- (RandAugment m9/mstd0.5/inc1 + random erasing p0.25), which the paper does not change between
+  -- T and S. Only the model and the drop rate move.
+  shimScript := "generated_convnext_tiny_imagenet_shim.py"
+  layers   := [
+    .conv 3 96 4 4, .layerNorm 96,
+    .convNextBlockCh 96, .convNextBlockCh 96, .convNextBlockCh 96,
+    .layerNorm 96, .conv 96 192 2 2,
+    .convNextBlockCh 192, .convNextBlockCh 192, .convNextBlockCh 192,
+    .layerNorm 192, .conv 192 384 2 2 ] ++
+    -- stage 3: 27 blocks @384, the only thing that differs from `convnextImagenetVerified`.
+    -- Spelled as a `replicate` rather than 27 copy-pasted lines: at this length a hand-list is a
+    -- place for an off-by-one that the parameter count would catch only if someone read it.
+    List.replicate 27 (VLayer.convNextBlockCh 384) ++
+  [ .layerNorm 384, .conv 384 768 2 2,
+    .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
+    .globalAvgPool, .dense 768 1000 ]
+  blurb := "ConvNeXt-Small on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (ConvNeXt-T deepened: stage 3 goes 9 → 27 blocks, dims unchanged at [96,192,384,768], 50.2M params)"
+  -- ▶ 36 sites, denominator 35, and **rate 0.4** — the ConvNeXt paper's S value at 300 epochs,
+  -- against T's 0.1. ⚠ This is the first `dropKeeps` in the repo that is not its Tiny peer's: the
+  -- ramp SHAPE is architectural (one site per block, global index) but the RATE is per-size recipe.
+  -- Copying T's 0.1 here would have been the silent-hyperparameter shape (§2a-quater) — it renders,
+  -- trains and descends, at a regularisation strength the reference does not use for this size.
+  dropKeeps := (Array.range 36).map (fun i => 1.0 - 0.4 * i.toFloat / 35.0)
+
+-- 342 parameter tensors and 50,222,152 scalars: ConvNeXt-T's 180/28,587,592 plus 18 stage-3 blocks
+-- at 9 tensors and 1,201,920 scalars each. S DEEPENS — it is the first net here added by adding
+-- tensors rather than widening the ones that were there, which is the arithmetic ViT-S's
+-- "same 200 tensors" claim is the mirror image of.
+#guard convnextSImagenetVerified.toSpecs.size == 342
+#guard convnextSImagenetVerified.toSpecs.size == convnextImagenetVerified.toSpecs.size + 18 * 9
+#guard (convnextSImagenetVerified.toSpecs.foldl
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 50222152
+-- ⚠ The guards that tie this spec to the RENDERER's own depth table — that `cnxAllParams` at
+-- `cnxSmall` is these same 342 tensors, and that `dropKeeps` has one entry per rendered site —
+-- live in `tests/TestDropPathRamp.lean`, beside ConvNeXt-T's. They cannot live here: this module
+-- is BELOW `Proofs/Codegen` in the import graph, which is the same reason `convnextVerified`'s ramp
+-- is checked against `cnxBlockIdx` over there rather than next to its own definition.
+-- ⚠ The ramp must NOT be Tiny's: 0.4 against 0.1 is a real recipe difference, so the last keep
+-- is 0.6 here and 0.9 there. A guard on the SIZE alone would pass on a copied Tiny ramp.
+#guard (convnextSImagenetVerified.dropKeeps[35]! - 0.6).abs < 1e-9
+#guard (convnextImagenetVerified.dropKeeps[17]! - 0.9).abs < 1e-9
+
+/-- **ConvNeXt-Base on full ImageNet-1k** — ConvNeXt-S's depth at `[128,256,512,1024]`.
+
+    ⚠⚠ **B is the size that made the DIMS a renderer parameter.** S was pure depth, so it never
+    touched a dimension literal; B moves the stem (96 → 128), the head (768 → 1024) and every
+    stage, which is all ~27 literals the two renderers had hardcoded. Depths and dims are now one
+    `Proofs.StableHLO.CnxDims` record precisely so that `(S depths, T dims)` — a net that exists
+    nowhere but type-checks and trains — cannot be spelled.
+
+    ⚠ **B shares S's depth table EXACTLY** (`[3,3,27,3]`, 36 blocks), so anything keying on block
+    count cannot tell them apart. That is not hypothetical: the renderer's banner function did key
+    on block count, and every B artifact would have introduced itself as a ConvNeXt-S.
+
+    **342 parameter tensors, 88,589,416 scalars** — the same tensor COUNT as S (B widens, it does
+    not add), the published 88.59M, and the count `jax/MainConvNeXtBImagenet.lean` emits from an
+    independent implementation.
+
+    ⭐ **The proof side needed nothing, and B is better evidence of that than S was**: S reused the
+    per-site certificates at the same widths, where B instantiates them at four widths no committed
+    artifact had ever used. They are generic in `c`/`e`/`h`; width was never a hypothesis either.
+
+    ⚠ Stochastic depth is **0.5** — the ConvNeXt paper's B value at 300 epochs, against S's 0.4 and
+    T's 0.1. Third distinct rate, and still data rather than a render knob.
+
+    ⚠ **Nothing has been trained.** Renders, shapes tie, count is `#guard`ed. No accuracy. -/
+def convnextBImagenetVerified : VerifiedNetSpec where
+  name     := "ConvNeXt-B (ImageNet-1k)"
+  slug     := "convnextbin"
+  inC      := 3
+  imageH   := 224
+  imageW   := 224
+  nClasses := 1000
+  data     := .imagenet
+  -- ConvNeXt-T's shim: the paper does not change the DATA pipeline across T/S/B, only the model
+  -- and the drop rate. Same reasoning as ConvNeXt-S's.
+  shimScript := "generated_convnext_tiny_imagenet_shim.py"
+  layers   := [
+    .conv 3 128 4 4, .layerNorm 128,
+    .convNextBlockCh 128, .convNextBlockCh 128, .convNextBlockCh 128,
+    .layerNorm 128, .conv 128 256 2 2,
+    .convNextBlockCh 256, .convNextBlockCh 256, .convNextBlockCh 256,
+    .layerNorm 256, .conv 256 512 2 2 ] ++
+    List.replicate 27 (VLayer.convNextBlockCh 512) ++
+  [ .layerNorm 512, .conv 512 1024 2 2,
+    .convNextBlockCh 1024, .convNextBlockCh 1024, .convNextBlockCh 1024,
+    .globalAvgPool, .dense 1024 1000 ]
+  blurb := "ConvNeXt-Base on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (ConvNeXt-S's [3,3,27,3] depth at [128,256,512,1024], 88.6M params)"
+  -- 36 sites, denominator 35, rate **0.5** — the paper's B value. ⚠ Same ramp SHAPE as S, different
+  -- rate: the shape is architectural, the rate is per-size recipe. Three sizes, three rates.
+  dropKeeps := (Array.range 36).map (fun i => 1.0 - 0.5 * i.toFloat / 35.0)
+
+-- Same 342 tensors as S — B widens every one and adds none, which is the width-generic claim
+-- stated as arithmetic. 88,589,416 scalars against S's 50,222,152.
+#guard convnextBImagenetVerified.toSpecs.size == convnextSImagenetVerified.toSpecs.size
+#guard convnextBImagenetVerified.toSpecs.size == 342
+#guard (convnextBImagenetVerified.toSpecs.foldl
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 88589416
+-- ⚠ And every shape must actually MOVE. S and B have identical tensor counts and identical drop
+-- ramps in shape, so a spec that accidentally copied S's widths would pass both guards above.
+#guard convnextBImagenetVerified.toSpecs != convnextSImagenetVerified.toSpecs
+#guard convnextBImagenetVerified.dropKeeps.size == convnextSImagenetVerified.dropKeeps.size
+#guard (convnextBImagenetVerified.dropKeeps[35]! - 0.5).abs < 1e-9
+#guard (convnextBImagenetVerified.dropKeeps[35]! - convnextSImagenetVerified.dropKeeps[35]!).abs > 1e-3
+
 -- The two ConvNeXt specs must differ in EXACTLY one parameter shape — the head. Anything else
 -- moving means the ImageNet spec drifted from the Imagenette one it is the 1000-class twin of.
 #guard convnextImagenetVerified.toSpecs.size == convnextVerified.toSpecs.size

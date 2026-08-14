@@ -298,11 +298,25 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_train_step.mlir"),
          # prefix property is unaffected by which chain produced it.
          ("convnext_drop_fwd.mlir", "convnext_adamdrop_train_step.mlir"),
          ("convnextin_drop_fwd.mlir",    "convnextin_adamwxclipdrop_train_step.mlir"),
+         # ConvNeXt-S (planning/vit_convnext_sb_scaleup.md). ⚠ A NEW SIZE NEEDS ITS OWN ROW: this
+         # list is by artifact NAME, so a net added by widening/deepening a parameterised renderer
+         # gets no coverage from its Tiny peer's row. The S pair is what would catch a depth
+         # parameter reaching the traversal but not the signature — the emitted forward and the
+         # emitted train step would then disagree on where the body starts.
+         ("convnextsin_drop_fwd.mlir",   "convnextsin_adamwxclipdrop_train_step.mlir"),
+         ("convnextbin_drop_fwd.mlir",   "convnextbin_adamwxclipdrop_train_step.mlir"),
          # ViT's SD pair, on the batched chain (ViTRenderB). ⚠ Unlike ConvNeXt's, ViT's batched
          # chain reproduces its committed artifacts byte-for-byte, so these are the same emitter
          # the drop-free vit_fwd/vit_adam_train_step above come from — one renderer, two flags.
          ("vit_drop_fwd.mlir",   "vit_adamdrop_train_step.mlir"),
          ("vitin_drop_fwd.mlir", "vitin_adamwxclipdrop_train_step.mlir")]
+         # ⚠⚠ **`vitsin_drop_fwd` HAS NO ROW AND CANNOT GET ONE**, found 2026-08-14 while adding
+         # ConvNeXt-S's. It is rendered at `vbB = 32` while ViT-S's only train step is at 128, so
+         # the two disagree on line 0 of the body (`tensor<32x150528>` vs `tensor<128x150528>`) —
+         # a BATCH difference, not a semantic one. The prefix gate is byte-exact by construction,
+         # so it cannot span a batch, and ViT-S has no bs-32 train step to pair with because it
+         # renders only the 4×128 DP variant. ConvNeXt-S is unaffected: `cBS` is 32 on both sides.
+         # ▶ The fix is a bs-32 ViT-S train step (or a bs-128 SD forward), not an entry here.
 
 def body(lines, what):
     """The pretty(AST) body: everything from the first `%v0 = ` definition on.

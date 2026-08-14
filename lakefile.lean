@@ -1531,6 +1531,41 @@ lean_exe «convnext-imagenet-verified» where
   root := `apps.imagenette.MainConvNeXtImagenet
   moreLinkArgs := lowererLink
 
+/-- **ConvNeXt-Small on ImageNet-1k** — ConvNeXt-T DEEPENED (stage 3 goes 9 → 27 blocks, dims
+    UNCHANGED at [96,192,384,768]), 342 param tensors / 50,222,152 scalars, the published 50.22M.
+
+    The second net added by reshaping a renderer rather than writing a chain, and cheaper than
+    ViT-S was: S is pure depth, so one `Array Nat` threaded as a trailing defaulted parameter
+    covers it and every hardcoded dimension literal stays correct. The proof side needed nothing —
+    ConvNeXt's certificates are per-site and generic in `c`/`e`/`h`, so depth was never a
+    hypothesis. Every ConvNeXt-T artifact re-renders byte-identical.
+
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (it reuses ConvNeXt-T's, which
+    is correct — the paper does not change the data pipeline between T and S).
+    ⚠ Stochastic depth is **0.4**, the paper's S value, not Tiny's 0.1 — the one recipe knob that
+    moves with model size. Use `LEAN_MLIR_DROP_RATE_U=200000` on the 80-epoch tier.
+    ⚠ Both `adamwxclipdrop` (single device, the default) and `adamdpwxclipdrop` (4 replicas) are
+    rendered, so unlike `vits-imagenet-verified` a plain invocation runs.
+    ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
+lean_exe «convnexts-imagenet-verified» where
+  root := `apps.imagenette.MainConvNeXtSImagenet
+  moreLinkArgs := lowererLink
+
+/-- **ConvNeXt-Base on ImageNet-1k** — ConvNeXt-S's depth `[3,3,27,3]` at `[128,256,512,1024]`,
+    342 param tensors / 88,589,416 scalars, the published 88.59M.
+
+    ⚠⚠ B is the size that made the DIMS a renderer parameter: it moves the stem (96→128), the head
+    (768→1024) and every stage, i.e. all ~27 dimension literals the two renderers hardcoded. Depths
+    and dims are now one `CnxDims` record so `(S depths, T dims)` cannot be spelled. Byte-identity
+    holds at BOTH ConvNeXt-T and ConvNeXt-S across that refactor, which is what licenses it.
+    ⚠ B shares S's depth table, so anything keyed on block count cannot separate them — the banner
+    function did, and every B artifact would have called itself a ConvNeXt-S.
+    ⚠ Stochastic depth is 0.5 (paper value for B; S is 0.4, T is 0.1).
+    ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
+lean_exe «convnextb-imagenet-verified» where
+  root := `apps.imagenette.MainConvNeXtBImagenet
+  moreLinkArgs := lowererLink
+
 
 /-- **EfficientNet-B0 on full 1000-class ImageNet**. Same certified renderer at `nClasses := 1000,
     B := 64`; four replicas is global 256, the reference's batch. The first ImageNet net here with

@@ -23,13 +23,20 @@ only half done:
 | ViT-Ti | ✅ | ✅ `vitin` |
 | **ViT-S** | ✅ Jul 26 | ✅ **Aug 14** `vitsin` |
 | **ViT-B** | ✅ Jul 26 | ✅ **Aug 14** `vitbin` (global 128 only, see §Verified) |
-| **ConvNeXt-S** | ✅ Jul 26 | ⛔ **next session** |
-| **ConvNeXt-B** | ✅ Jul 26 | ⛔ **next session** |
+| ConvNeXt-T | ✅ | ✅ `convnextin` |
+| **ConvNeXt-S** | ✅ Jul 26 | ✅ **Aug 14** `convnextsin` |
+| **ConvNeXt-B** | ✅ Jul 26 | ✅ **Aug 14** `convnextbin` |
 
-▶ **Read the "Verified side" section before starting ConvNeXt.** The JAX answer
-("pure parameter changes") does NOT transfer to the verified side unmodified,
-because the verified renderers hardcode their dimensions where the JAX emitter
-derives them.
+⭐ **All four are done.** ConvNeXt-B was the last one and the only one that needed
+the dimension literals threaded; everything below the ViT section is the record.
+
+▶ **The JAX answer ("pure parameter changes") did NOT transfer to the verified
+side unmodified**, because the verified renderers hardcode their dimensions where
+the JAX emitter derives them. It transferred for ConvNeXt-**S** (pure depth, so it
+never touches a dimension literal); ConvNeXt-**B** is the case it does not cover,
+and closing it cost ~27 literals across the two renderers. ⭐ **The final answer,
+now that all four are done: the model is free, the RENDERER is the work, and the
+work is proportional to how many dimensions move — not to how many parameters.**
 
 ## The specs are parameter-only
 
@@ -360,12 +367,315 @@ after — it separates "the refactor broke something" from "the new size is wron
 
 ---
 
-## ⛔ NEXT SESSION: ConvNeXt-S and ConvNeXt-B on the verified side
+## ✅ ConvNeXt-S — DONE 2026-08-14
+
+**The prediction below was right, and it was the cheapest of the three.** S is
+pure depth (`[3,3,9,3] → [3,3,27,3]`, dims unchanged), so it needed **one
+`Array Nat` threaded as a trailing defaulted parameter** through both renderers —
+no record, no dims work, and every hardcoded `96`/`768` left alone because no
+dimension moves. ViT-S needed six constants become a `VitDims`; this needed a
+loop bound.
+
+⭐ **The proof side needed nothing, for a DIFFERENT reason than ViT-S.** ViT's was
+that `vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k`. ConvNeXt's is
+more basic: its certificates are per-SITE and already generic in `c`/`e`/`h`, so
+18 more blocks is 18 more uses of theorems that were never indexed by depth.
+Depth was not a hypothesis. ▶ **Deepening is structurally cheaper than widening**
+on this codebase, and that is the transferable finding.
+
+**342 parameter tensors, 50,222,152 scalars** at K=1000 — this doc's own JAX
+emitted count and the published ConvNeXt-S figure, to the digit. T's 180 /
+28,587,592 plus 18 stage-3 blocks at 9 tensors / 1,201,920 scalars each.
+
+### What was threaded
+
+| file | what took the parameter |
+|---|---|
+| `ConvNeXtRender.lean` | `cnxDropTotal`, `cnxBlockIdx`, `cnxDropSites`, `cnxDropSig`, `allParams`, `cnxWdCounts`, `convNextFwdChain`, `convNextFwdFaithfulV`, `convNextBackAll`, `convNextTrainStepFaithfulV`, `convNextAdamTrainStepFaithful` |
+| `ConvNeXtRenderB.lean` | `convNextFwdChainB`, `convNextFwdRenderB`, `convNextBackAllB`, `convNextAdamTrainStepFaithfulB`, `cnxDropFwdBanner` |
+
+⭐ **Byte-identity held before the new instance was added** — all 22 committed
+`convnext*`/`convnextin*` artifacts re-render unchanged, which is what says the
+parameterisation was inert. Run it in that order; it separates "the refactor
+broke something" from "the new size is wrong".
+
+### Artifacts (4, slug `convnextsin`)
+
+`convnextsin_adamwxclipdrop_train_step.mlir` (1 replica),
+`convnextsin_adamdpwxclipdrop_train_step.mlir` (4 replicas),
+`convnextsin_drop_fwd.mlir` (the SD prefix partner),
+`convnextsin_fwd.mlir` (the eval forward — see the traps).
+
+### Measured, single GPU, fp32 — and ConvNeXt-T run identically as the control
+
+`LEAN_MLIR_MAX_STEPS=20` on **one** 4060 Ti, `adamwxclipdrop`, batch 32,
+40,036 steps/epoch. The T row is the same probe on the same card in the same
+session, which is what makes the ratio mean anything:
+
+| model | ms/step | init loss | compile | resident θ+m+v | h/epoch (1 GPU) |
+|---|---|---|---|---|---|
+| ConvNeXt-T | 167 | 7.84 | 8.1 s | 561 out | 1.86 |
+| **ConvNeXt-S** | **280** | **8.09** | 11.9 s | 1065 out, 574.7 MiB | **3.11** |
+
+**S costs 1.68× T per step.** The JAX bf16 peers in this doc's own 6-GPU table
+are 130 → 208 ms, a ratio of **1.60** — so the deepening costs the same relative
+amount on both paths, and the fp32 tax is a constant factor, not something that
+grows with depth.
+
+⭐ **Running the T control is what makes the init loss readable.** S starts at
+8.09 against `ln(1000) = 6.91`, which looks high on its own — but T starts at
+7.84 on the same probe, so the offset is this repo's init scheme at K=1000 and
+not something the deepening introduced. A number this shape is exactly the kind
+that gets quoted as a bug or waved through as fine, depending on nothing.
+
+### Measured, 4 GPUs, `adamdpwxclipdrop` — global 128, 10,009 steps/epoch
+
+Same probe, `PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4`, T again as the control:
+
+| model | 1×32 | 4×32 | DP tax | min/epoch | 80 ep | 300 ep |
+|---|---|---|---|---|---|---|
+| ConvNeXt-T | 167 ms | **220 ms** | +53 ms (1.32×) | 37 | 49 h (2.0 d) | 184 h (7.6 d) |
+| **ConvNeXt-S** | 280 ms | **366 ms** | +86 ms (1.31×) | **61** | **81 h (3.4 d)** | **305 h (12.7 d)** |
+
+⭐⭐ **THE DP TAX IS EXACTLY GRADIENT BYTES OVER A 3.5 GB/s LINK, and that is the
+most useful number in this doc.** S all-reduces 50,222,152 f32 = 200.9 MB per
+device per step; ring traffic is `2·(N−1)/N ·size` = 301 MB, and 301 MB / 86 ms
+= **3.50 GB/s**. Feeding T's 114.4 MB through the *same* constant predicts
+49 ms; **measured 53 ms**. Two nets, one line, no fitting.
+
+▶ **So the collective is PCIe-bound, not algorithmic**, and on NVLink (300–900
+GB/s) it goes to ~1 ms. A machine with NVLink deletes 24% of this wall clock
+before a single kernel gets faster. That is a hardware choice, not a code change.
+
+### ⚠⚠ TF32 buys 10%, so this net is NOT tensor-FLOP bound — buy BANDWIDTH
+
+The render carries **no `precision_config`**, so XLA is free to use TF32 on
+Ampere+/Ada. `NVIDIA_TF32_OVERRIDE=0` turns it off driver-wide, which measures
+what it was worth:
+
+| | ms/step (1×32) |
+|---|---|
+| TF32 on (default) | 280 |
+| TF32 off | 308 |
+
+**10%.** Against ~2× peak-FLOP headroom, that says the convolutions are not the
+bottleneck — the 335 `stablehlo.convolution`s are outnumbered by 6562
+`multiply`, 5607 `broadcast_in_dim`, 4236 `add`, 695 `transpose` and 896
+`reduce`, which is ConvNeXt's channel-LN chain plus the depthwise convs, all
+memory-bound. Achieved 5.97 TFLOPS/card = 27% of the 4060 Ti's 22.06 fp32 peak.
+
+▶ **Consequence for hardware, and it is counter-intuitive: an A100 is a weak
+choice for this net and an H100 is worse value than its price implies.** A100's
+non-tensor fp32 is 19.5 TFLOPS — *below* a 4060 Ti's 22.06 — so its advantage
+here is its 2039 GB/s (7.1×) memory bandwidth, not its 156 TFLOPS of TF32, which
+this graph can only reach for 10% of its time. Rank candidates by GB/s and by
+interconnect, not by tensor TFLOPS.
+
+⚠ And at **batch 32 per device** a large card is starved regardless: the kernels
+are too small to saturate an 80 GB part, so much of the bandwidth advantage will
+not land either. **`cBS` being a private constant is the real blocker to using
+big hardware well** — see the §`cBS` note below, which is now the highest-value
+item in this file rather than a tidy-up.
+
+### Host RAM: 36.5 GB peak, and it is the val drain
+
+Sampled RSS over the whole process tree during the 4-GPU probe: **36.5 GB peak**
+(ConvNeXt-T 35.4 GB — so it is the DATA, not the model). Almost all of it is the
+unconditional ImageNet validation drain (~28 GB, `imagenet_smoke_knobs`), which
+`LEAN_MLIR_SKIP_EVAL` does not skip. ▶ **A rental with 32 GB of host RAM will
+OOM on the host before the first step, whatever its GPU is.** Budget ≥ 64 GB.
+
+Device memory: fits inside the 11.68 GiB a 16 GB card's BFC allocator gets — the
+run is the proof. ⚠ The exact peak is NOT measured: the shim exposes no
+`peak_bytes_in_use`, and `nvidia-smi` shows the 75% preallocation rather than
+use. It is also not currently actionable, because the batch is baked and cannot
+be traded against the headroom.
+
+### ⚠ Renting: what the two measurements above imply (EXTRAPOLATED, not measured)
+
+Scaled from the one measured point by **memory bandwidth** (justified by the TF32
+result) with the all-reduce priced at each machine's interconnect. Compute derated
+0.55 on the 80 GB parts because bs32 cannot fill them. **Every number in this
+table is an extrapolation from a single 4060 Ti; treat the ORDERING as the
+finding and the magnitudes as ±2×**, biased optimistic on the big cards (AMP
+halves memory traffic on a bandwidth-bound net and these runs are fp32).
+
+| 8× | ms/step | of which all-reduce | 80 ep | 300 ep |
+|---|---|---|---|---|
+| RTX 4090 (PCIe) | ~180 | **~100 ms (56%)** | 20 h | 75 h |
+| L40S (PCIe) | ~194 | ~100 ms | 22 h | 81 h |
+| A100 80G SXM (NVLink) | ~73 | ~1 ms | 8 h | 31 h |
+| H100 80G SXM (NVLink) | ~45 | ~1 ms | 5 h | 19 h |
+| *4× RTX 4060 Ti (measured)* | *366* | *86 ms (24%)* | *81 h* | *305 h* |
+
+⭐ **The headline is the all-reduce column, not the compute column.** On a
+PCIe-only 8×4090 box the collective becomes **the majority of the step** — 8
+replicas raise ring traffic to `2·(7/8)·200.9` = 352 MB per device against a link
+this repo has measured at 3.5 GB/s. Buying more consumer cards buys a bigger
+collective. NVLink is worth more here than any FLOP number on the spec sheet.
+
+⚠ **8 replicas × 32 = global 256 is EXACTLY the ConvNeXt paper's batch**, which
+also makes the driver's `learningRate := 2.5e-4` correct rather than ~2× high as
+it is at the global 128 this box runs. So 8 cards is the right count for recipe
+reasons independently of speed — 5,004 steps/epoch, the reference's own figure.
+
+▶ **The 80-epoch tier is the experiment to buy first** (~$100 either way, and
+ConvNeXt-T already holds this repo's sweep accuracy lead at 75.93%), with
+`LEAN_MLIR_DROP_RATE_U=200000`. The 300-epoch run is 4× the money for the
+paper's schedule.
+
+### ⚠ Traps, and only one was ViT's
+
+1. **The banners were LITERALS.** `"ConvNeXt-T"` and `"18 drop sites"` are
+   emitted INTO the artifact, so an S render would have opened by announcing
+   itself as a net with half its blocks. Fixed by deriving the name from the
+   depth table (`cnxModelName`) rather than passing it — a second parameter
+   beside `D` is two writers for one fact. ▶ **Grep the renderer for its own
+   model name before adding a size**; nothing gates a banner.
+2. **`cnxBlockIdx si j D` must be spelled with `D` at every site**, and the
+   `#guard` that checks the numbering had a point-free `.map (cnxBlockIdx si)`
+   that would silently keep checking T. This is ViT-S trap 1 exactly, and it is
+   worth stating as the rule: *after adding a defaulted parameter, grep for bare
+   point-free call sites of every function that took it.*
+3. **The eval forward is loaded BY NAME** (`<slug>_fwd.mlir`), so
+   `convnextsin_drop_fwd` does not satisfy it — ViT-S trap 2, avoided by
+   rendering `convnextsin_fwd.mlir` from the per-example renderer, as
+   `convnextin` already does.
+4. **The drop RATE moves with model size and nothing derives it.** The ConvNeXt
+   paper uses 0.4 for S against T's 0.1. It is DATA (`dropKeeps` in the spec),
+   not a render knob — so copying Tiny's ramp would have rendered, trained and
+   descended at ¼ the reference's regularisation. `tests/TestDropPathRamp.lean`
+   now gates the S ramp against `cnxBlockIdx` at the S table AND against not
+   being Tiny's.
+
+### ⚠ Found while doing it: ViT-S's SD forward has no prefix partner
+
+`regen_verified_mlir.sh`'s `check_fwd_prefix` pairs a forward with a train step
+byte-exactly. `vitsin_drop_fwd` is rendered at `vbB = 32` while ViT-S's only
+train step is at 128, so they disagree on body line 0 (`tensor<32x150528>` vs
+`tensor<128x150528>`) — a BATCH difference, not a semantic one, and the gate
+cannot span it. **ViT-S is therefore the one net whose SD forward nothing
+audits.** ConvNeXt-S is unaffected (`cBS` is 32 on both sides) and its row is in
+the list. ▶ The fix is a bs-32 ViT-S train step or a bs-128 SD forward, not an
+entry in that table. Recorded in the script beside where the row would go.
+
+---
+
+## ✅ ConvNeXt-B — DONE 2026-08-14
+
+**The doc predicted the shape of this one and got it right: the literals were the
+job.** B is S's depth table (`[3,3,27,3]` — *identical*, 36 blocks) at
+`[128,256,512,1024]`, so nothing about the traversal changed and everything about
+the widths did.
+
+**342 parameter tensors — the same count as S — and 88,589,416 scalars.** The
+published 88.59M, and this doc's own JAX emitted count. B widens every tensor and
+adds none, which is the mirror of ViT-S's "same 200 tensors" claim.
+
+⭐ **The proof side needed nothing, and B is the stronger evidence for that than S
+was.** S reused the per-site certificates at the SAME widths; B instantiates them
+at four widths no committed artifact had ever used. They are generic in
+`c`/`e`/`h`. Neither depth nor width was ever a hypothesis.
+
+### What it cost: one record, ~27 literals
+
+`D : Array Nat` (S's depth table) became **`CnxDims`**, a record of `depths` and
+`dims`, with `cnxTiny`/`cnxSmall`/`cnxBase`. ⚠ **The bundling is the point**: two
+bare arrays admit `(S depths, T dims)` — a net that exists nowhere, yet
+type-checks, renders and trains. One record makes it unspellable.
+
+Threaded literals, all of them in three places: the **stem** (96 → `dims[0]`, in
+`allParams`, the patchify conv/LN, and the stem backward's bias+weight grads),
+the **head** (768 → `dims[3]`, in `gap`/`dense`/`dotOut`/`weightGrad`), and the
+**hand-written GAP backward**.
+
+⚠⚠ **The GAP backward is a declared §5 carve-out — hand-written TEXT on both
+renderers, so nothing type-checks its width.** `%dgi`/`%dgb`/`%dgn`/`%dgd`/`%dgapf`
+had `768` baked into five interpolated type strings. At T and S they were right by
+accident of the dims not moving. This is the one place a missed literal would have
+produced a graph the *lowerer* rejects rather than the compiler — i.e. after the
+artifact was written and committed. Verified on the emitted B artifact:
+`tensor<32x1024x7x7>` throughout and `1024*7*7 = 50176`.
+
+### ⚠⚠ The trap B sprang that S could not
+
+**`cnxModelName` keyed on the BLOCK COUNT.** With S as the only new size that was
+fine — 18 → T, 36 → S. B has **36 blocks too**, so every B artifact would have
+opened by introducing itself as a ConvNeXt-S, in the banner the renderer emits
+into the file. Now it matches on the whole `CnxDims` record, and the guard beside
+it compares S's name to B's rather than spot-checking either.
+
+▶ **The general form: a derived label must key on everything that varies, and
+"everything" grows when a second axis is added.** Deriving the name instead of
+passing it (the S lesson) was necessary and not sufficient.
+
+### ⭐ The gate: byte-identity at T **and** S
+
+The dims refactor had to leave BOTH earlier sizes untouched — all 22 committed
+`convnext*`/`convnextin*` artifacts, and the four `convnextsin_*` files, checked
+by hash across the change. Both held before a single B artifact was written. That
+is a strictly stronger gate than S had, and it is the whole reason a ~27-literal
+edit inside a hand-written text block was safe to make.
+
+### Artifacts (4, slug `convnextbin`)
+
+`convnextbin_adamwxclipdrop_train_step.mlir` (1 replica),
+`convnextbin_adamdpwxclipdrop_train_step.mlir` (4 replicas),
+`convnextbin_drop_fwd.mlir` (SD prefix partner — a byte-identical 2984-line
+prefix, same as S's), `convnextbin_fwd.mlir` (the eval forward).
+
+Stochastic depth is **0.5** — the paper's B value, against S's 0.4 and T's 0.1.
+Three sizes, three rates, all of them data rather than render knobs.
+
+---
+
+## ⭐⭐ Measured: all three ConvNeXt sizes, one box, one probe
+
+`LEAN_MLIR_MAX_STEPS`, 4060 Ti, fp32, batch 32/device, `*wxclipdrop`.
+
+| model | params | 1×32 | 4×32 | DP tax | **predicted tax** | min/epoch | 80 ep | 300 ep |
+|---|---|---|---|---|---|---|---|---|
+| ConvNeXt-T | 28.6 M | 167 ms | 220 ms | 53 ms | 49 ms | 37 | 49 h | 184 h |
+| ConvNeXt-S | 50.2 M | 280 ms | 366 ms | 86 ms | 86 ms | 61 | 81 h | 305 h |
+| **ConvNeXt-B** | **88.6 M** | **408 ms** | **539 ms** | **131 ms** | **152 ms** | **90** | **120 h (5.0 d)** | **450 h (18.7 d)** |
+
+⭐⭐ **THE DP TAX IS PREDICTED BY ONE CONSTANT ACROSS A 3× RANGE OF GRADIENT
+VOLUME.** The rule — ring traffic `2·(N−1)/N ·(params × 4 B)` over a **3.5 GB/s**
+effective link — was fitted on ConvNeXt-S alone and then predicted T to 8% and B
+to 14%, in the direction that says bigger messages amortize slightly better
+(B's implied rate is 4.06 GB/s against S's 3.50). ▶ **The collective is a
+bandwidth line, not an algorithmic cost**, so on NVLink all three taxes go to
+~1 ms and B alone gets back 24% of its wall clock.
+
+⭐ **B FITS at bs32, and that is not obvious** — ViT-B, at a comparable 86.6 M,
+OOMs on this box (11.90 of 11.68 GiB) and needs gradient accumulation ConvNeXt
+does not have either. ConvNeXt-B ran first time: resident θ+m+v is **1013.8 MiB**
+and the activations clear the 11.68 GiB budget. The difference is the batch —
+ViT-B was rendered at 128/device where ConvNeXt is at 32 — which is another way
+of saying `cBS` is the axis everything on this net turns on.
+
+Init loss rises with size: T 7.84, S 8.09, B 8.98 against `ln(1000) = 6.91`. All
+three sit above it, so the offset is this repo's init scheme rather than anything
+the scale-up introduced — which is only knowable because T was re-probed as a
+control in the same session.
+
+Host RAM: 36.5 GB peak (S), 35.4 GB (T) — dominated by the unconditional ~28 GB
+val drain, so it barely moves with model size. Budget ≥64 GB on any rental.
+
+---
+
+## Appendix: the ConvNeXt-B plan as written BEFORE it was done
+
+Kept because the estimate was accurate and that is worth being able to check.
+⚠ Everything below is superseded by the section above.
 
 ### The shape of the job
 
 Same as ViT: parameterise `ConvNeXtRenderB.lean` (the batched renderer), then
-instantiate. Confirmed reachable — the recipe-complete variants come from there:
+instantiate. ⭐ **The depth half is already done** — `D` is threaded through both
+renderers and `#eval`-tested at two tables. What remains is the DIMS, which is
+the expensive half. Confirmed reachable — the recipe-complete variants come from
+there:
 
 | variant | writer |
 |---|---|
@@ -378,24 +688,12 @@ renderer owns. As with ViT, target the `*drop` DP variants and say so in the app
 docstring rather than silently shipping a driver whose default variant does not
 exist for the new size.
 
-### ⭐ ConvNeXt-**S** is the easy one, and it is easier than ViT-S was
+### ✅ The depth half is already threaded (ConvNeXt-S, above)
 
-ConvNeXt-S is **pure depth**: `[3,3,9,3] → [3,3,27,3]`, dims UNCHANGED at
-`[96,192,384,768]`. That matters more than it sounds:
-
-- The renderer already folds over the depth table in BOTH directions
-  (`for si in [0:4] do ... for j in [0:bDepths[si]!]`, reversed in the backward).
-- **The hardcoded dimension literals stay correct**, because no dimension moves.
-- So S may need only `cDepths`/`bDepths` changed plus the counts, with no
-  record-parameterisation at all. ▶ **Try that first**; it may be a one-array job.
-
-⚠ Things that DO move with depth, and are easy to miss:
-- `cnxDropTotal := cDepths.foldl (· + ·) 0` — 18 → 36 stochastic-depth sites.
-  Derived, so it follows, but the spec's `dropKeeps` array is sized by it and the
-  drop signature declares one input per site.
-- Every `#guard` on parameter counts, `toSpecs.size`, and the BN/LN channel list.
-- The two hand-written readings pattern: derive the new counts by `#eval` and let
-  the `#guard` confirm, exactly as MNv4's 77-entry `bnChannels` was done.
+`D : Array Nat := cDepths` / `:= bDepths` is a trailing defaulted parameter on
+every function listed in the ConvNeXt-S table, and `cnxDepthsS` exercises it. So
+**B does not need any depth work at all** — `[3,3,27,3]` is already a rendered,
+gated table. What B adds is the dims, and only the dims.
 
 ### ⚠⚠ ConvNeXt-**B** is where the dim literals bite
 
@@ -419,22 +717,42 @@ clean 6-constants-and-2-literals situation `ViTRenderB` was in, and the estimate
 should be set accordingly. Thread them through `bDims[3]!` (and `bDims[0]!`)
 FIRST, verify byte-identity at ConvNeXt-T, and only then add the B instance.
 
-### ⚠ `cBS` is still a private constant
+### ⭐⭐ `cBS` is still a private constant — and it is now the TOP item, not a tidy-up
 
 `ConvNeXtRender.lean:41  private def cBS : Nat := 32`. This doc's ViT header note
 called making it a parameter "the whole prerequisite" for the stronger
-split-identity gate, and it has not been done. It is the same move as `vbB` and
-`VitDims`, and it may be worth doing in the same pass since the file is open.
+split-identity gate. **The 2026-08-14 measurements promoted it from hygiene to
+the main blocker on ever running these nets economically**, for two independent
+reasons:
+
+1. **It starves big hardware.** bs32 kernels cannot fill an A100/H100, so most of
+   what you would rent is unusable. The bandwidth advantage that the TF32 result
+   says is the ONLY advantage that matters here is the part bs32 fails to collect.
+2. **It is the only lever on the all-reduce.** The collective cost is per STEP
+   and independent of batch (342 gradients either way), while the step count
+   falls linearly with batch. Going bs32 → bs128 per device cuts the number of
+   all-reduces per epoch 4×. On the PCIe box that is 24% of wall clock; on an
+   8×4090 rental it is 56%.
+
+▶ Do `cBS` BEFORE ConvNeXt-B. B is bigger and will hit both walls harder, and the
+threading is the same trailing-defaulted-parameter move `D` just took — with the
+same byte-identity gate at T and now S.
 
 ### Suggested order
 
-1. ConvNeXt-S by changing `bDepths`/`cDepths` alone. Byte-identity at T must hold
-   before and after adding the S artifacts.
-2. Only if S needs it, introduce a `CnxDims` record (the `VitDims` shape: derived
-   fields, positivity where a `Fin` needs it).
-3. Thread the head/GAP-backward literals through the table.
-4. ConvNeXt-B instance.
-5. Probe both with `LEAN_MLIR_MAX_STEPS` before promising a wall clock. This
-   doc's JAX rows say ConvNeXt-B needs `accum` on 4 cards even in bf16 — expect
-   the verified fp32 path to need it more, and ConvNeXt has no accumulation
-   render either.
+1. ~~ConvNeXt-S by changing `bDepths`/`cDepths` alone~~ — **done**, and it was
+   the one-array job predicted.
+2. Thread the DIMS: a second `Array Nat` beside `D`, or fold both into a
+   `CnxDims` record now that there are two tables to keep in step. ⚠ The record
+   is the better shape here for a reason ViT's was not: `cnxModelName` already
+   has to key on depth alone and therefore **cannot distinguish B from S**
+   (both are `[3,3,27,3]`) — it must take the dims in the same pass, or B's
+   artifacts will introduce themselves as ConvNeXt-S in their own banners.
+3. Byte-identity at ConvNeXt-T **and now at ConvNeXt-S** — two sizes must come
+   back unchanged, which is a strictly stronger gate than the one S had.
+4. ConvNeXt-B instance. Its drop rate is **0.5** at 300 epochs (T 0.1, S 0.4),
+   and it is data, not a render knob.
+5. Probe with `LEAN_MLIR_MAX_STEPS` before promising a wall clock. This doc's JAX
+   rows say ConvNeXt-B needs `accum` on 4 cards even in bf16 — expect the
+   verified fp32 path to need it more, and **ConvNeXt has no accumulation render
+   either**, the same wall ViT-B hit.

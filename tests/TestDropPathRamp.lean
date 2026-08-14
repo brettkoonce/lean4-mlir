@@ -88,6 +88,68 @@ private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard convnextImagenetVerified.dropKeeps == convnextVerified.dropKeeps
 
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
+--  ▶ ConvNeXt-**S** — the same seam again, and now the SIZE is what moves
+--
+--  ⚠⚠ Two things change together here and only one of them is architectural. The site COUNT goes
+--  18 → 36 because stage 3 deepens (that follows from `cnxSmall`, and the renderer derives it).
+--  The RATE goes 0.1 → 0.4 because the ConvNeXt paper sets stochastic depth per model size, and
+--  NOTHING derives that — it is a recipe number this spec asserts. So the two guards below are of
+--  genuinely different kinds: the first says the renderer and the spec agree about the net, the
+--  second says the spec did not silently inherit Tiny's regularisation strength.
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+
+-- One spec entry per RENDERED site, read through the renderer's own depth table.
+#guard convnextSImagenetVerified.dropKeeps.size == cnxDropSites cnxSmall
+#guard convnextSImagenetVerified.dropKeeps.size == 36
+
+-- The renderer's parameter list and the spec's layer list must be the same 342 tensors — the
+-- `toSpecs == Layout.specs` move (§2m) carried across the depth parameter. This is what fires if
+-- `cnxSmall` and the spec's layer list ever disagree about WHICH stage deepens: both would still
+-- have 36 blocks and 342 tensors, but the shapes would differ.
+#guard (cnxAllParams 1000 cnxSmall).map (fun (_, ds) => ds.toArray) ==
+         (convnextSImagenetVerified.toSpecs.map (fun (d, _) => d)).toList
+
+-- The ramp itself, at rate 0.4 over 36 sites, through `cnxBlockIdx` at the S table. ⚠ Stage 3
+-- starts at 33 here and at 15 for Tiny — passing `cnxSmall` is the whole content of these lines,
+-- and omitting it silently takes the T default (the ViT-S trap, mechanised).
+#guard ((Array.range (cnxDropSites cnxSmall)).zip convnextSImagenetVerified.dropKeeps).all
+         (fun (i, k) => ((k - refKeep 0.4 i (cnxDropTotal cnxSmall)).abs) < 1e-9)
+#guard (convnextSImagenetVerified.dropKeeps[cnxBlockIdx 2 0 cnxSmall]! - refKeep 0.4 6 36).abs < 1e-9
+#guard (convnextSImagenetVerified.dropKeeps[cnxBlockIdx 3 0 cnxSmall]! - refKeep 0.4 33 36).abs < 1e-9
+-- …and Tiny's stage-3 start must NOT agree with it, or the line above is vacuous.
+#guard (convnextSImagenetVerified.dropKeeps[cnxBlockIdx 3 0]! - refKeep 0.4 33 36).abs > 1e-3
+
+-- ⭐ THE RATE IS NOT INHERITED. Block 0 still keeps exactly 1.0, but the deepest block keeps 0.6
+-- where Tiny's keeps 0.9 — the ConvNeXt paper's per-size stochastic depth (S 0.4, T 0.1). A guard
+-- on the ramp's SIZE alone passes on a copied Tiny ramp; this one does not.
+#guard convnextSImagenetVerified.dropKeeps[0]! == 1.0
+#guard (convnextSImagenetVerified.dropKeeps[35]! - 0.6).abs < 1e-9
+#guard (convnextSImagenetVerified.dropKeeps[35]! - convnextVerified.dropKeeps[17]!).abs > 1e-3
+
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+--  ▶ ConvNeXt-**B** — and here the seam is that NOTHING about the ramp moves
+--
+--  ⚠⚠ B shares S's depth table exactly, so the site COUNT, the indices and the ramp SHAPE are
+--  identical. The only thing that differs is the RATE (0.5 vs 0.4), which no gate can derive. So
+--  the two guards below are: "B's sites really are S's sites" (checked through the renderer's own
+--  `cnxBlockIdx` at B's record) and "B's rate really is not S's" — and it is the second that a
+--  copy-paste of the S spec would fail, since the first would pass on it.
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+
+#guard convnextBImagenetVerified.dropKeeps.size == cnxDropSites cnxBase
+#guard cnxBlockIdx 3 0 cnxBase == cnxBlockIdx 3 0 cnxSmall
+#guard ((Array.range (cnxDropSites cnxBase)).zip convnextBImagenetVerified.dropKeeps).all
+         (fun (i, k) => ((k - refKeep 0.5 i (cnxDropTotal cnxBase)).abs) < 1e-9)
+#guard convnextBImagenetVerified.dropKeeps[0]! == 1.0
+#guard (convnextBImagenetVerified.dropKeeps[35]! - 0.5).abs < 1e-9
+
+-- The renderer's parameter list == the spec's layer list, at B's widths. ⚠ This is the guard that
+-- would fire if the spec's hand-written layer list and `cnxBase.dims` disagreed — and unlike S's
+-- peer it is load-bearing, because B is where those widths are written out by hand in two places.
+#guard (cnxAllParams 1000 cnxBase).map (fun (_, ds) => ds.toArray) ==
+         (convnextBImagenetVerified.toSpecs.map (fun (d, _) => d)).toList
+
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
 --  ▶ ViT-Tiny — a THIRD shape of the same seam, and the trap moves again
 --
 --  EfficientNet's hazard is the SITE ORDINAL (9 sites over 16 blocks). ConvNeXt's is the STAGE
