@@ -1,106 +1,101 @@
-# ViT-Tiny/ImageNet aborts at the FIRST training step on gfx1100
+# SIGSEGV at the first jitted step on gfx1100 — XLA's ROCm command-buffer path
 
-**Status: OPEN, NOT MINIMALLY REPRODUCIBLE, NOT FILED.** Narrowed to one
-convolution and four dead ends closed, but the isolated conv passes, so there
-is no upstream report to write yet. Everything below is what is measured;
-the one thing this page does *not* claim is a root cause.
-
-**This is not the LaunchGraph bug.** That one was a stale ROCm userspace and
-is fixed at 7.2.4
-([`../2026-08-jax-rocm-command-buffer-launchgraph-segv/`](../2026-08-jax-rocm-command-buffer-launchgraph-segv/)).
-This one survives that fix and is older. It shares a crash *signature*, which
-is exactly why it needs its own page — otherwise "7.2.4 fixed it" reads as
-covering ViT, and it does not.
-
-## Symptom
-
-`vit-imagenet-verified` dies at the **first invoke**, after the residency line
-and before any step timing. No error message — the process is simply gone.
+**Status: OPEN, REPRODUCED IN 60 LINES OF PURE JAX, READY TO FILE.**
+`XLA_FLAGS=--xla_gpu_enable_command_buffer=` is a complete workaround.
 
 ```
-[pjrt_ffi] RESIDENT: @vitin_adam128wxclip_train_step holds 600 parameter tensors (65.4 MB)
-free(): invalid next size (normal)          # exit 134
+python repro.py 8 1 f32 noconv noattn                       -> SIGSEGV, 3 of 3
+XLA_FLAGS=--xla_gpu_enable_command_buffer= python repro.py … -> survives, 3 of 3
 ```
-or, at batch 32 and on the 2-replica render, exit 139 (SIGSEGV). Same
-corruption, different thing next to the damaged region.
 
-## What is ruled out (measured 2026-08-13, all on ROCm 7.2.4)
+Batch **8**. One transformer block. **No convolution and no attention.** It dies
+on the first execution of the jitted train step, before any output.
 
-| suspect | control | result |
+## Two corrections to the earlier version of this page
+
+This folder previously said the trigger was MIOpen's `GemmFwdRest` under-sizing
+its workspace for the ViT patch-embed convolution. **That was wrong**, and the
+way it was wrong is worth keeping:
+
+1. **It is not the convolution.** MIOpen logs that conv immediately before the
+   abort, which made it the obvious suspect. But `repro.py noconv noattn`
+   removes every convolution *and* all attention and still crashes, and
+   `ruled_out.py` issues that exact conv four ways — bare, tokenised, under
+   grad, and with the driver's flat input — and all four pass. The MIOpen line
+   is the last thing logged before the graph launch, not the thing that fails.
+2. **It is not ViT-specific.** Nothing in the minimum is characteristic of a
+   transformer beyond "several matmuls, LayerNorm, GELU and a softmax CE, under
+   `grad`, in one jitted step."
+
+Both errors came from the same move: treating the last line in a log as the
+cause. The command-buffer knob is what actually separates crash from survive.
+
+## Relationship to the LaunchGraph report
+
+Same subsystem, and the sibling report
+[`../2026-08-jax-rocm-command-buffer-launchgraph-segv/`](../2026-08-jax-rocm-command-buffer-launchgraph-segv/)
+is genuinely resolved (it was a stale `/opt/rocm`; 7.2.4 fixes it, verified over
+five ImageNet nets and thousands of steps). **This one survives that fix.**
+
+So the honest summary of the ROCm command-buffer path on this box: fixed for
+the workloads that used to break it, still broken for a graph shape that a
+one-block transformer reaches immediately. Whatever 7.2.4 repaired, it was not
+all of it.
+
+Note the difference in *when*: the LaunchGraph bug needed hundreds to thousands
+of dispatches. This one is the **first** execution, every time.
+
+## What is measured
+
+All on ROCm **7.2.4**, jax/jaxlib **0.11.0** + `jax-rocm7-{plugin,pjrt}` 0.11.0,
+gfx1100.
+
+| variant | command buffers ON | OFF |
 |---|---|---|
-| data parallelism / collectives | 1 replica (`adam128wxclip`) vs 2 (`adamdp256x2wxclipdrop`) | **both die** |
-| plugin version | 0.9.1.post4 vs 0.11.0 | **both die**, identical message |
-| stale ROCm userspace | 7.2.4, where every other net is clean | **still dies** |
-| batch size | 32 and 128 | **both die** |
-| MIOpen's GEMM conv path | `MIOPEN_DEBUG_CONV_GEMM=0` | **still dies** |
-| the patch-embed conv in isolation | `ruled_out.py {bare,tokens,grad,flat}` | **all four PASS** |
+| `repro.py 8 1 f32 noconv noattn` | SIGSEGV 3/3 | survives 3/3 |
+| `repro.py 128 12 f32` (full ViT-Tiny) | SIGSEGV | survives |
+| `repro.py 512 12 bf16` | SIGSEGV | — |
+| this repo's JAX ViT-Tiny ImageNet reference (1899 lines) | SIGSEGV at first `pjit` | — |
+| `../2026-08-…-launchgraph-segv/repro.py` (MLP) | survives 12/12 | — |
 
-And it is not "ROCm can't do this repo": R34, R50, MNv2 and ConvNeXt all train
-on this box on the same day, on the same stack, for thousands of steps.
+Not batch size (8 through 512 all crash), not depth (1 through 12), not dtype
+(f32 and bf16), not autotuning (`--xla_gpu_autotune_level=0` does not help),
+not the GPU (the MLP control passes on the same device immediately after).
 
-## The fingerprint
+Individually, every ingredient passes under `grad` + jit — 3D matmul, LayerNorm
+over a 3D tensor, GELU, the 4D patchify transpose, a 1000-class softmax head.
+Only the combination in one jitted step fails, which is consistent with this
+being about the shape of the emitted command buffer rather than any one kernel.
 
-With `MIOPEN_ENABLE_LOGGING=1 MIOPEN_LOG_LEVEL=5`, the last MIOpen call logged
-before the abort is the ViT patch-embed convolution, forward:
-
-```
-wDesc     = {192, 3, 16, 16}, packed          # 16x16 patches, 3 -> 192
-xDesc     = {128, 3, 224, 224}, packed
-convDesc  = conv2d, padding {0,0}, stride {16,16}, dilation {1,1}
-yDesc     = {128, 192, 14, 14}, packed
-solution_id = 91  ->  solver GemmFwdRest ("convolution, non 1x1")
-workSpace = 602112 bytes
-[KernDb] database not present
-free(): invalid next size (normal)
-```
-
-⚠ **The forward, not the weight-grad.** `lakefile.lean` describes this net as
-dying "in the patch-embed weight-grad convolution with
-`miopenStatusUnknownError`"; neither half matches what is logged here. No
-`miopenStatus` error is returned at all — the heap is simply corrupt.
-
-**An observation, explicitly NOT a proven cause:** `workSpace` is **602112
-bytes at batch 32 and at batch 128** — identical. That is `(3·16·16)·(14·14)`
-floats, the im2col buffer for exactly *one* image, and it does not scale with
-N. That looks like an under-sized workspace for a batched im2col. It is not
-sufficient on its own, because `ruled_out.py` issues the same conv at the same
-shapes through the same solver and passes. Either the trigger needs the
-surrounding graph, or the workspace is a red herring.
-
-## Where to look next
-
-The sibling issue
-[`../2026-06-jax-rocm-miopen-im2col-hiprtc/`](../2026-06-jax-rocm-miopen-im2col-hiprtc/)
-went the same way — standalone conv fine, and the trigger turned out to be an
-interior-dilated `pad` **fused into** the conv. It also notes "a latent
-*no-workspace* limitation in MIOpen's GEMM solver," which may be this. The
-obvious next step is to bisect the ViT graph rather than the conv: emit the
-train step, cut it down, and find the smallest fused neighbourhood that still
-aborts.
-
-## Reproducing
-
-Needs this repo (no standalone reproducer exists yet — that is the open work):
+Python-level fault location, identical for the minimum and the 1899-line
+reference:
 
 ```
-lake build vit-imagenet-verified
-HIP_VISIBLE_DEVICES=0 LEAN_MLIR_VARIANT=adam128wxclip LEAN_MLIR_BATCH=128 \
-  PJRT_FFI_RESIDENT=1 LEAN_MLIR_SKIP_EVAL=1 \
-  .lake/build/bin/vit-imagenet-verified data
+Fatal Python error: Segmentation fault
+  File ".../jax/_src/interpreters/pxla.py", line 420 in __call__
+  File ".../jax/_src/pjit.py", line 1222 in _pjit_call_impl_python
 ```
 
-Add `MIOPEN_ENABLE_LOGGING=1 MIOPEN_LOG_LEVEL=5` for the fingerprint above.
-`ruled_out.py` needs only JAX.
+## Still open here
 
-## Impact
+**The repo's own `vit-imagenet-verified` trainer is NOT fixed by the
+workaround** — it still aborts with `free(): invalid next size` at
+`--xla_gpu_enable_command_buffer=`, where pure-JAX ViT survives. The shim sets
+no command-buffer compile options, and the flag demonstrably changes behaviour
+in-process, so this looks like a second, distinct failure in the verified path
+rather than the flag being ignored. Unresolved; do not assume the workaround
+unblocks ViT on the verified path until that is chased.
 
-ViT-Tiny is the one net in the verified ImageNet set that cannot run on this
-box at all. It is unaffected on CUDA, where the same graph trains end to end,
-so ViT work belongs on the NVIDIA box until this is understood.
+## Filing
+
+Belongs with **openxla/xla** (ROCm command buffers), not MIOpen. `repro.py` has
+no repo code, no Lean, no FFI shim, and the workaround identifies the
+subsystem. Worth stating in the report that the same box runs ResNet-34,
+ResNet-50, MobileNetV2 and ConvNeXt on ImageNet for thousands of steps with
+command buffers enabled — this is a graph-shape trigger, not "ROCm is broken."
 
 ## Environment
 
 - 2× AMD Radeon RX 7900 XTX (gfx1100, RDNA 3), Linux 7.0.0-28-generic
-- ROCm **7.2.4** (7.2.53211; MIOpen 3.5.1.70204, rocBLAS 5.2.0.70204)
-- jax/jaxlib 0.11.0 + `jax-rocm7-{plugin,pjrt}` 0.11.0 — and reproduced on
-  0.9.1.post4 before it was removed
+- ROCm 7.2.4 (7.2.53211; MIOpen 3.5.1.70204, rocBLAS 5.2.0.70204)
+- jax/jaxlib 0.11.0 + `jax-rocm7-{plugin,pjrt}` 0.11.0, Python 3.12.3

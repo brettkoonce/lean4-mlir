@@ -21,7 +21,7 @@ release date — that one command would have closed it immediately.
 
 | folder | upstream | status |
 |---|---|---|
-| [`2026-08-vit-imagenet-rocm-first-step-abort/`](2026-08-vit-imagenet-rocm-first-step-abort/) | none (NOT minimally reproducible) | ViT-Tiny/ImageNet aborts at the FIRST invoke on gfx1100 (`free(): invalid next size`, or SIGSEGV). Narrowed to the patch-embed conv via `GemmFwdRest` — but that conv **passes in isolation** (`ruled_out.py`, 4 negative controls), so no upstream report yet. Not the LaunchGraph bug: survives ROCm 7.2.4, both plugins, 1 and 2 replicas. |
+| [`2026-08-vit-imagenet-rocm-first-step-abort/`](2026-08-vit-imagenet-rocm-first-step-abort/) | openxla/xla (READY to file) | SIGSEGV at the **first** execution of a jitted train step, in XLA's ROCm command-buffer path. **60-line pure-JAX repro**, deterministic 3/3, minimum is B=8 / one block / **no conv and no attention**. `XLA_FLAGS=--xla_gpu_enable_command_buffer=` is a complete workaround. ⚠ Survives the 7.2.4 fix below — same subsystem, different trigger. ⚠ Does NOT unblock the repo's own ViT trainer, which fails a second way. |
 | [`2026-06-iree-cuda-fp8-nvptx-lowering/`](2026-06-iree-cuda-fp8-nvptx-lowering/) | iree-org/iree (to file) | f8E4M3FN/E5M2 don't lower on CUDA/NVPTX (`unrealized_conversion_cast` i8↔f8); CPU + fp32 OK. Repros on rc20260428 **and** rc20260623. |
 | [`2026-06-jax-rocm-miopen-im2col-hiprtc/`](2026-06-jax-rocm-miopen-im2col-hiprtc/) | ROCm/MIOpen (to file) | `MIOpenIm2d2Col.cpp` fails to hiprtc-compile (`get_global_id` undeclared) → `miopenStatusUnknownError`. **Reproduced 2026-07-28**, reversing the 06-24 "not reproducible" call: the trigger is an interior-dilated `pad` **fused into** the conv; standalone it works. 20-line repro. |
 
