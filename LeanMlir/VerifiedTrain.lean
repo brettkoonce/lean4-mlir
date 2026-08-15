@@ -493,14 +493,18 @@ mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND i
     (pre.get! off).toNat ||| ((pre.get! (off+1)).toNat <<< 8) |||
     ((pre.get! (off+2)).toNat <<< 16) ||| ((pre.get! (off+3)).toNat <<< 24)
   let ver := rd32 4; let sBatch := rd32 8; let sFlat := rd32 12
-  let wantVer := if nclasses > 0 then 2 else 1
+  -- ⚠⚠ v3/v4, not v1/v2: every batch now carries an int32 ROW COUNT before its labels. v1/v2 had
+  -- no way to express a short final batch — see `readShimBatchPartial`. Refusing an old shim here
+  -- is the point: a v1 stream read as v3 would take the first four label bytes as a row count.
+  let wantVer := if nclasses > 0 then 4 else 3
   if ver != wantVer then
     throw <| IO.userError s!"imagenet shim: wire version {ver}, expected {wantVer} \
-(nclasses={nclasses} ⇒ v{wantVer}). A v1 shim cannot serve soft targets and a v2 record read as v1 \
-slides off by a factor of nClasses on every batch, so this refuses rather than reading garbage."
-  -- v2 appends `nclasses` to the preamble, so it is 20 bytes rather than 16. Read the tail HERE,
+(nclasses={nclasses} ⇒ v{wantVer}). A v3 shim cannot serve soft targets and a v4 record read as v3 \
+slides off by a factor of nClasses on every batch, so this refuses rather than reading garbage. \
+⚠ v1/v2 are the PRE-ROW-COUNT framing — regenerate with scripts/gen_shims.sh."
+  -- v4 appends `nclasses` to the preamble, so it is 20 bytes rather than 16. Read the tail HERE,
   -- not at the first record: the alignment error a missed field causes is silent and cumulative.
-  if ver == 2 then
+  if ver == 4 then
     let pre2 ← readExact h 4
     let sNC := (pre2.get! 0).toNat ||| ((pre2.get! 1).toNat <<< 8) |||
                ((pre2.get! 2).toNat <<< 16) ||| ((pre2.get! 3).toNat <<< 24)
@@ -514,7 +518,7 @@ the render wants batch={batch} flat={flat} — refusing rather than reading misa
   -- banner said nothing about which one — so a run streaming the wrong augmentation looked exactly
   -- like a run streaming the right one. This line is what makes the wiring readable from a log.
   IO.println s!"  imagenet shim: {script} — {split} split, batch {sBatch}, {sFlat} floats/img \
-(seed {seed}){if nclasses > 0 then s!", wire v2 soft targets [{batch}x{nclasses}]" else ""}"
+(seed {seed}){if nclasses > 0 then s!", wire v{ver} soft targets [{batch}x{nclasses}]" else ""}"
   pure h
 
 /-- One batch off the wire: `int32[batch]` labels then `float32[batch*flat]` images, in that order
@@ -524,6 +528,16 @@ def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
   -- `nclasses = 0` ⇒ v1: `int32[batch]`. Otherwise v2: `float32[batch*nclasses]`. The FFI accepts
   -- either without a flag — `lean_fill_targets` dispatches on the buffer's SIZE — so nothing
   -- downstream of here changes shape.
+  -- ⚠ The int32 row count precedes every batch (wire v3/v4). This reader wants FULL batches — the
+  -- train stream repeats forever, so a short one here is a torn write, not a tail. Checked rather
+  -- than skipped: reading past a wrong count is the silent reframing v3 exists to prevent.
+  let pre ← readExact h 4
+  let rows := (pre.get! 0).toNat ||| ((pre.get! 1).toNat <<< 8) |||
+              ((pre.get! 2).toNat <<< 16) ||| ((pre.get! 3).toNat <<< 24)
+  if rows != batch then
+    throw <| IO.userError s!"imagenet shim: batch declares {rows} rows, this reader wants {batch}. \
+A short batch on a repeating stream is a torn write; use `readShimBatchPartial` for a split that \
+ends (the val drain)."
   let lbl ← readExact h (if nclasses > 0 then 4 * batch * nclasses else 4 * batch)
   let img ← readExact h (4 * batch * flat)
   pure (img, lbl)
@@ -567,14 +581,28 @@ def readUpTo (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
 def readShimBatchPartial (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
     : IO (ByteArray × ByteArray × Nat) := do
   let lblRec := if nclasses > 0 then 4 * nclasses else 4
-  let lbl ← readUpTo h (lblRec * batch)
-  if lbl.size == 0 then pure (ByteArray.empty, ByteArray.empty, 0)
-  else if lbl.size % lblRec != 0 then
-    throw <| IO.userError s!"shim sent {lbl.size} label bytes, not a multiple of the {lblRec}-byte \
-record — the stream is torn, not merely short"
+  -- ⚠⚠ THE ROW COUNT IS READ, NOT INFERRED — and that is the whole of the v3 framing.
+  -- This used to do `readUpTo (lblRec * batch)` and divide the byte count by the record size. A
+  -- pipe does not preserve write boundaries, so at a PARTIAL tail that read ran straight through
+  -- the labels and into the images: ImageNet val's 80-row tail is 320 label bytes, the read took
+  -- 320 + 704, inferred rows = 256, and then demanded a full batch that was 704 bytes short of
+  -- arriving. The reported "closed the pipe after 48168256 of 154140672 bytes" was exactly that.
+  -- ▶ A `readUpTo` of 4 bytes is unambiguous in a way one of `lblRec * batch` can never be: at a
+  -- clean end it returns 0, and otherwise the count says how much follows.
+  let pre ← readUpTo h 4
+  if pre.size == 0 then pure (ByteArray.empty, ByteArray.empty, 0)
+  else if pre.size != 4 then
+    throw <| IO.userError s!"shim sent {pre.size} bytes of the 4-byte row count — the stream is \
+torn, not merely short"
   else
-    let rows := lbl.size / lblRec
-    -- The images for a batch the shim has already committed to: exact, not `readUpTo`.
+    let rows := (pre.get! 0).toNat ||| ((pre.get! 1).toNat <<< 8) |||
+                ((pre.get! 2).toNat <<< 16) ||| ((pre.get! 3).toNat <<< 24)
+    if rows == 0 || rows > batch then
+      throw <| IO.userError s!"shim declared {rows} rows, outside 1…{batch} — refusing rather than \
+reading a misframed batch"
+    -- Both sides EXACT now: the shim has committed to `rows`, so a short read of either block is a
+    -- torn write and must be loud.
+    let lbl ← readExact h (lblRec * rows)
     let img ← readExact h (4 * rows * flat)
     pure (img, lbl, rows)
 

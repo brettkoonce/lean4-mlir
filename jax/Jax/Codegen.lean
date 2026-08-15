@@ -3328,8 +3328,13 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "#  reference trainer consumes, streamed to stdout for the verified XLA trainer.\n" ++
   "#\n" ++
   "#  Wire format — a 16-byte preamble once, then one record per batch:\n" ++
-  "#      preamble : b'LMSH' | int32 version=1 | int32 batch | int32 flat_len\n" ++
-  "#      record   : int32[batch] labels | float32[batch*flat_len] images (CHW, normalized)\n" ++
+  "#      preamble : b'LMSH' | int32 version=3 | int32 batch | int32 flat_len\n" ++
+  "#                 (version=4 appends | int32 nclasses, for soft targets)\n" ++
+  "#      record   : int32 rows | int32[rows] labels | float32[rows*flat_len] images (CHW, norm)\n" ++
+  "#  `rows` <= batch, and it is EXPLICIT because a partial final batch (drop_remainder=False on\n" ++
+  "#  the val split, so all 50,000 images are scored) cannot be recovered from read lengths: a\n" ++
+  "#  pipe does not preserve write boundaries, so a reader inferring the count from a short label\n" ++
+  "#  read walks into the image block. v1/v2 had no count and did exactly that.\n" ++
   "#  The preamble exists so a shape mismatch fails LOUDLY at the reader instead of\n" ++
   "#  silently misaligning every subsequent batch (the shim's G4).\n" ++
   "#\n" ++
@@ -3548,13 +3553,24 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        return\n" ++
   "    out = sys.stdout.buffer\n" ++
   "    out.write(b'LMSH')\n" ++
+  -- ⚠⚠ WIRE v3/v4: every batch is PREFIXED with its int32 row count. v1/v2 were not, and could
+  -- not express a SHORT FINAL BATCH -- the reader inferred `rows` from how many label bytes a
+  -- `readUpTo` returned, and a pipe does not preserve write boundaries, so at a partial tail that
+  -- read ran straight past the labels into the images. Measured on ImageNet val: the tail is 80
+  -- labels (320 B) + 80 images, `readUpTo(4*256)` swallowed 320 + 704 B, inferred rows = 256, then
+  -- demanded a full batch and found 48,168,256 of 154,140,672 bytes left. Exactly the observed
+  -- failure. `drop_remainder=training` (2026-08-14, to score all 50,000) is what put a partial
+  -- batch on the wire; this is the framing that can carry one.
+  -- ⭐ The count is authoritative: the reader no longer INFERS the row count from a read length,
+  -- so a torn stream is a mismatch rather than a silent reframing.
   "    if nclasses > 0:\n" ++
-  "        out.write(np.array([2, batch, flat, nclasses], dtype=np.int32).tobytes())\n" ++
+  "        out.write(np.array([4, batch, flat, nclasses], dtype=np.int32).tobytes())\n" ++
   "    else:\n" ++
-  "        out.write(np.array([1, batch, flat], dtype=np.int32).tobytes())\n" ++
+  "        out.write(np.array([3, batch, flat], dtype=np.int32).tobytes())\n" ++
   "    out.flush()\n" ++
   "    for i, (x, y) in enumerate(it):\n" ++
   "        xo, to = _emit(x, y, i)\n" ++
+  "        out.write(np.array([to.shape[0]], dtype=np.int32).tobytes())\n" ++
   "        out.write(to.tobytes())\n" ++
   "        out.write(xo.tobytes())\n" ++
   "        out.flush()\n\n" ++
