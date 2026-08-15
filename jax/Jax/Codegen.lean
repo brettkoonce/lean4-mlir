@@ -131,7 +131,17 @@ def _aa_rot(m): return (m/_AA_MAX)*30.0
 #   Solarize  @ m=7: timm 256-int(179) = 77; we had int(76.8) = 76. One threshold unit of 256.
 # Both are the same transcription error, and `scripts/randaug_timm_diff.py` is what found it.
 def _aa_pos(m): return ((4 - int((m/_AA_MAX)*4)) if _RA_INC else int((m/_AA_MAX)*4))
-def _aa_sol(m): return ((256 - min(256, int((m/_AA_MAX)*256))) if _RA_INC else int((m/_AA_MAX)*256))
+# ⚠⚠ NO `min(256, ...)` HERE, and it must not come back. d96c7fa added one as a guard and it
+# BROKE EVERY IMAGENET TRAINING RUN: under mstd > 0 (RSB sets 0.5) the magnitude reaching this is
+# a symbolic tf.Tensor, and Python's `min` forces a bool on it -- OperatorNotAllowedInGraphError,
+# raised while TRACING, so the shim emits ZERO bytes and the driver dies at `imagenet shim closed
+# the pipe`. `_aa_pos` above has no `min`, which is why Posterize traced fine and Solarize did not.
+# The guard was redundant anyway: `_randaugment` already does
+# `tf.clip_by_value(tf.random.normal([], m, mstd), 0.0, _AA_MAX)`, so m <= _AA_MAX and
+# (m/_AA_MAX)*256 <= 256 by construction. Removing it changes no number -- it is timm's own
+# `_solarize_increasing_level_to_arg` (256 - int((level/_LEVEL_DENOM)*256), no clamp; timm clamps
+# the LEVEL upstream exactly as we clamp the magnitude).
+def _aa_sol(m): return ((256 - int((m/_AA_MAX)*256)) if _RA_INC else int((m/_AA_MAX)*256))
 def _aa_sad(m): return int((m/_AA_MAX)*110)   # timm SolarizeAdd: add in [0,110], unsigned, inc-invariant
 
 _AA_OPS = {
