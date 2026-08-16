@@ -67,6 +67,41 @@ static int g_client_refs = 0;
 static int g_replicas = 1;
 static PJRT_Device* g_devices[8];
 
+// 1 when the loaded plugin reports a ROCm platform. Read from
+// PJRT_Client_PlatformName at client creation — the plugin's own answer, not a
+// guess from the .so path, because $PJRT_PLUGIN can name anything.
+static int g_platform_rocm = 0;
+
+// ⚠⚠ **XLA's ROCm command buffers CORRUPT MEMORY on gfx1100 for some graph
+// shapes**, so this defaults ON for ROCm and OFF for CUDA.
+//
+// The failure: a SIGSEGV inside libamdhip64 via
+// `RocmCommandBuffer::LaunchGraph`, or a glibc `free(): invalid next size`
+// abort, at the FIRST execution of the compiled step. Reproduced in 60 lines of
+// pure JAX at batch 8 with one transformer block, no convolution and no
+// attention — `upstream-issues/2026-08-vit-imagenet-rocm-first-step-abort/`.
+// It is not ours, not ViT-specific, and not the same bug as the stale-userspace
+// one 7.2.4 fixed (that one needed thousands of dispatches; this is the first).
+//
+// ⭐ **What it costs: nothing measurable.** ResNet-34, ImageNet, 2× 7900 XTX:
+// 298.2 ms/step disabled vs 299.5 enabled, i.e. −0.4%, inside the noise of ten
+// windows. That measurement is why this is a plain default rather than an
+// opt-in knob — an opt-in that costs nothing is a knob nobody should have to
+// find. ⚠ It also means ViT-Tiny trains here at all: 252.3 ms/step on two
+// cards, against not starting.
+//
+// CUDA is untouched. The bug is in the ROCm command-buffer implementation, and
+// the four-card CUDA box's numbers were all measured with them enabled.
+//
+// `$PJRT_COMMAND_BUFFERS` overrides in both directions — `=1` forces them on
+// (to re-check the bug upstream, or on a fixed ROCm), `=0` forces them off on
+// CUDA. Anything else uses the platform default.
+static int command_buffers_disabled(void) {
+  const char* e = getenv("PJRT_COMMAND_BUFFERS");
+  if (e && *e) return atoi(e) == 0;
+  return g_platform_rocm;
+}
+
 // ─── device-resident parameters (handoff §2d.3) ────────────────────────────
 //
 // A contiguous run of input tensors whose device buffers SURVIVE the call: the
@@ -523,10 +558,35 @@ static int ensure_client(void) {
     for (int i = 0; i < g_replicas; i++) g_devices[i] = da.addressable_devices[i];
   }
 
+  // Ask the plugin what platform it is. Anything that fails or does not say
+  // "rocm" leaves g_platform_rocm at 0, i.e. the CUDA/stock behaviour — a
+  // detection miss must not silently disable command buffers on a backend
+  // where they work.
+  {
+    PJRT_Client_PlatformName_Args pn = {0};
+    pn.struct_size = PJRT_Client_PlatformName_Args_STRUCT_SIZE;
+    pn.client = g_client;
+    if (g_api->PJRT_Client_PlatformName(&pn) == NULL && pn.platform_name) {
+      g_platform_rocm = (strstr(pn.platform_name, "rocm") != NULL);
+      if (trace_enabled())
+        fprintf(stderr, "[pjrt_ffi] platform: %.*s\n",
+                (int)pn.platform_name_size, pn.platform_name);
+    }
+  }
+
   fprintf(stderr, "[pjrt_ffi] XLA backend: PJRT %d.%d, %zu device(s)\n",
           g_api->pjrt_api_version.major_version,
           g_api->pjrt_api_version.minor_version,
           da.num_addressable_devices);
+  // ⚠ Announced on BOTH paths, deliberately. A line printed only when a
+  // setting is ON makes its absence the signal, and an absent line in a
+  // 5,000-line log is how PJRT_FFI_RESIDENT ran wrong for a week (§2d.3).
+  fprintf(stderr, "[pjrt_ffi] command buffers: %s%s\n",
+          command_buffers_disabled() ? "DISABLED" : "enabled",
+          getenv("PJRT_COMMAND_BUFFERS") && *getenv("PJRT_COMMAND_BUFFERS")
+            ? " ($PJRT_COMMAND_BUFFERS)"
+            : (g_platform_rocm ? " (ROCm default — see command_buffers_disabled())"
+                               : " (CUDA default)"));
   return 0;
 }
 
@@ -613,7 +673,8 @@ iree_ffi_session_t* iree_ffi_session_create(const char* path) {
   // argument lists when local device count is 2".
   int reps = (g_replicas > 1 && strstr(mlir, "all_reduce")) ? g_replicas : 1;
   size_t optlen = 0;
-  const unsigned char* optbuf = pjrt_compile_options_for(reps, &optlen);
+  const unsigned char* optbuf =
+      pjrt_compile_options_for(reps, command_buffers_disabled(), &optlen);
   if (!optbuf) {
     fprintf(stderr, "[pjrt_ffi] no compile options for %d replicas "
                     "(regenerate ffi/pjrt_compile_options.h with that count)\n",

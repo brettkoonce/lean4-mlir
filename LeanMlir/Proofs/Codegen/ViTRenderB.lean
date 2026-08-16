@@ -588,6 +588,17 @@ def vitDropFwdBanner : String :=
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 256))
 
+-- ⚠ **256 per replica does not RUN on gfx1100**: MIOpen refuses the patch-embed convolution at
+-- that batch — `Failed to enqueue convolution on stream: miopenStatusUnknownError`, a returned
+-- status rather than a crash, on the first step. 128 per replica is the same net at half the
+-- per-card batch (global 256 instead of 512), which is what this render is for: it keeps ViT
+-- runnable on two cards while the 256 variant stays as the recipe-matched artifact for boxes whose
+-- MIOpen accepts it. The two differ ONLY in `B` (and `vbB`, which must track it).
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x2wxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x2wxclipdrop_train_step" "128.0" 2 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128))
+
 #eval IO.FS.writeFile "verified_mlir/vitin_drop_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitin_drop_fwd" 1000 (sd := true))
 

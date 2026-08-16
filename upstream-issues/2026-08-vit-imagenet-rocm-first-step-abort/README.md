@@ -76,15 +76,29 @@ Fatal Python error: Segmentation fault
   File ".../jax/_src/pjit.py", line 1222 in _pjit_call_impl_python
 ```
 
-## Still open here
+## Resolved here — and there was no second bug
 
-**The repo's own `vit-imagenet-verified` trainer is NOT fixed by the
-workaround** — it still aborts with `free(): invalid next size` at
-`--xla_gpu_enable_command_buffer=`, where pure-JAX ViT survives. The shim sets
-no command-buffer compile options, and the flag demonstrably changes behaviour
-in-process, so this looks like a second, distinct failure in the verified path
-rather than the flag being ignored. Unresolved; do not assume the workaround
-unblocks ViT on the verified path until that is chased.
+An earlier version of this page said the repo's own `vit-imagenet-verified` was
+"NOT fixed by the workaround", because it kept aborting with
+`XLA_FLAGS=--xla_gpu_enable_command_buffer=` set, and inferred a second,
+distinct failure. Wrong. **`$XLA_FLAGS` cannot reach a verified trainer at
+all**: `ffi/pjrt_ffi.c` hands `PJRT_Client_Compile` a *pre-serialized*
+`CompileOptionsProto` (`ffi/pjrt_compile_options.h`), which overrides the
+environment. The gdb backtrace was byte-identical with and without the flag —
+still `RocmCommandBuffer::LaunchGraph` — which should have been read as "the
+flag did nothing" rather than "a different bug."
+
+With the option actually baked into the blob, **ViT-Tiny trains on ROCm**:
+252.3 ms/step on two cards (2×128, global 256), 21.0 min/epoch, ~105 h for the
+300-epoch schedule. The repo now disables command buffers by default on ROCm
+(`command_buffers_disabled()`), so this is the shipped behaviour, and
+`PJRT_COMMAND_BUFFERS=1` puts the crash back for anyone verifying the bug.
+
+⚠ One ViT limit is unrelated to this and still stands: **MIOpen refuses the
+patch-embed convolution at 256 images per replica** — `Failed to enqueue
+convolution on stream: miopenStatusUnknownError`, a returned status, not a
+crash. So the recipe-matched 2×256 (global 512) render does not run here and
+2×128 is the runnable peer.
 
 ## Filing
 
