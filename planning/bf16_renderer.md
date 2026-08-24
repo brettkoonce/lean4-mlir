@@ -4,29 +4,65 @@ Scoped 2026-08-01 on ares (6× RTX 4060 Ti, CUDA 12.9).
 
 ---
 
-## ⭐ STATUS 2026-08-24 — ResNet-34 IS DONE AND RUNNING; four claims below are REFUTED
+## ⭐⭐ STATUS 2026-08-24 — FIVE NETS WIRED. READ THIS BLOCK, THEN §15 IF YOU ARE DOING ConvNeXt.
 
-Branch `bf16/verified-conv-ops`. **The verified R34 trains on ImageNet in bf16 at 1.41× end to
-end** (222 → 157 ms/step, 4×bs64 on four 4060 Ti), with losses tracking the f32 arm step-for-step
-to the 3rd–4th decimal — and **R50 now does too, at 1.55×** (360 → 232 ms/step, same box, same
-4×bs64, both arms measured back to back in one session).
+Branch `bf16/verified-conv-ops`. Five nets render and train in bf16 on real ImageNet, every one
+gate-1 and gate-2 green. **The speedups are NOT interchangeable and the differences are the
+interesting part** — read the replica column before quoting any number.
+
+| net | artifact variant | R | f32 → bf16 ms/step | speedup | § |
+|---|---|---|---|---|---|
+| ResNet-34 | `momdp64bf16` | 4 | 222 → 157 | 1.41× | §STATUS |
+| ResNet-50 | `momdp64bf16` | 4 | 360 → 232 | **1.55×** | §10.1 |
+| MobileNetV2 | `adamdp64bf16` | 4 | 191 → 139 | 1.37× | §12 |
+| MobileNetV2 | `adam64bf16` | **1** | 136 → 71 | **1.92×** | §13.2 |
+| MobileNetV4-Conv-M | `adam64bf16` | **1** | 120 → 64 | **1.88×** | §13.1 |
+| EfficientNet-B0 | `rms64bf16` | **1** | 163 → 149 | ⛔ **1.09×** | §14 |
+
+⚠⚠ **THE TWO RESULTS THAT MATTER MOST, both measured this session:**
+
+1. **A 4-replica bf16 number is a SYSTEM result, not a renderer result** (§13.2). MobileNetV2 is
+   **1.92× on one GPU and 1.37× on four — same graph**. The loss is the shim feed first and the
+   f32 all-reduce second. On one GPU the verified renderer is at PARITY with the JAX reference
+   (1.92× vs 1.94×). ▶ Check `SHIM_WORKERS` before ever blaming the emit.
+2. **The f32 carve-outs (BN, activations, SE, dense, optimizer) are NOT a fixed tax — their cost
+   is architecture-dependent** (§14). They cost MobileNetV2 nothing and EfficientNet-B0 almost
+   everything. ▶ Do NOT order future bf16 work by §9.1's JAX-side speedups: B0 is the largest
+   there (2.41×) and the smallest here.
+
+### The op kit as it now stands — 19 bf16 ops
+
+```
+flatConvFBf16                                            per-example forward (CNN rung)
+convBf16  convStridedBf16  convStridedXlaBf16            batched forward
+depthwiseBf16  depthwiseStridedBf16  depthwiseStridedXlaBf16
+convBackBatchedBf16  convStridedBackBatchedBf16          dgrad
+depthwiseBackBatchedBf16  depthwiseStridedBackBatchedBf16  depthwiseStridedXlaBackBatchedBf16
+convWeightGradBBf16  convStridedWeightGradBBf16  convStridedXlaWeightGradBBf16   wgrad
+depthwiseWeightGradBBf16  depthwiseStridedWeightGradBBf16  depthwiseStridedXlaWeightGradBBf16
+dotInBf16                                                dense (depth-1 PoC shape)
+```
+
+⚠ **Every BIAS gradient stays f32 in every net** — `Σ_{batch,spatial} dy` is a reduction, not a
+contraction, so there is nothing for a tensor core to do. Same for BN, the loss, the dense head
+and the whole optimizer tail.
+
+### Proof side
 
 | what | state |
 |---|---|
-| 7 bf16 conv ops (per-example fwd, batched fwd ×2, dgrad ×2, wgrad ×2) | ✅ `StableHLO.lean` |
 | `flatConvFBf16_faithful` / `_id` | ✅ the op adds rounding and nothing else |
 | `conv_close_mixed` | ✅ `Proofs/Float/ConvMixedFloatBridge.lean` |
-| R34 render wired + `resnet34in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green |
-| R50 render wired + `resnet50in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green, **1.55×** |
-| MNv2 render + 8 new ops (incl. the first GROUPED bf16 convs) | ✅ gates green; **1.92× on 1 GPU**, 1.37× at 4; §12–13 |
-| MNv4 render + 3 new ops | ✅ gates green, **1.88×** (1 GPU); §13 |
-| EfficientNet-B0 render, **zero** new ops | ✅ gates green, but only **1.09×** — §14 |
-| ViT, ConvNeXt | ⛔ not started — §10 is the plan |
-| whole-net composition (`ConvMixedComposeBridge.lean`) | ✅ the conv is `FloatClose`; §11 |
-| the 90-epoch run | ⛔ not started |
+| `depthwise_close_mixed` | ✅ `Proofs/Float/DepthwiseMixedFloatBridge.lean`, §12.3 |
+| whole-net composition — the mixed conv is `FloatClose` | ✅ `ConvMixedComposeBridge.lean`, §11 |
+| a full training run on ANY of the five | ⛔ not started |
 
-⚠ **Read §9 before trusting anything below it.** Four of this document's load-bearing claims
-were refuted by measurement on 2026-08-24. The reasoning is kept; the conclusions moved.
+### ⚠ Read the correction sections before trusting anything older
+
+§9 refutes four load-bearing claims from the original scoping. §12.1 is refuted by §13.2. §14
+refutes §9.1's expectation for B0. The reasoning is kept in place; the conclusions moved.
+
+---
 
 ## Why
 
@@ -777,7 +813,31 @@ and the optimizer in f32. On MobileNetV2 those carve-outs cost **nothing** (1.92
 worst case measured.** That is the actionable finding, and it is the opposite of what §10.2's
 ordering assumed when it put the depthwise nets first for having "the biggest payoff".
 
-### 14.3 ⚠ WHY — labelled as HYPOTHESIS, because it is not measured
+### 14.3 ⚠ WHY — OPEN. The swish/SE reading below was NOT accepted; chase the OPS instead
+
+▶▶ **STEER, 2026-08-24: EfficientNet is a different problem and wants a different investigation —
+at the OP level, not at the "which tensors stayed f32" level.** The hypothesis below is recorded
+because it is what the structural evidence suggested, **not** because it is the working theory.
+Do not open §14.3 by building bf16 swish/SE ops.
+
+▶ **What a fresh look should establish first**, in order:
+1. **Which ops actually consume B0's step.** Time B0's conv work in isolation at its own layer
+   shapes (the §9.4 method), and profile the step to attribute the rest per op kind. Everything
+   below is inference until this exists.
+2. **Whether B0's bf16 convs are even fast.** Gate 2 proves the operands are bf16; it proves
+   NOTHING about whether cuDNN picked a good kernel for those shapes. §9.1 already found one
+   depthwise shape where bf16 was **0.50×** — kernel selection, not bandwidth. B0's depthwise
+   set (3×3 and 5×5 at many widths, plus SE) is the most varied in the repo and is exactly where
+   a per-shape bf16 regression would hide.
+3. **Whether the emit shape is right for B0's shapes specifically** — the §9.2 fold was found once
+   for conv and once for grouped conv; a third variant is not impossible.
+
+⚠ The 1.09× is solid and reproducible (real 1.09×, synth 1.10×) and gate 2 is green. The open
+question is not *whether* B0 underperforms but *which ops* make it so.
+
+---
+
+#### The structural evidence, and the hypothesis it suggested (NOT the working theory)
 
 What *is* measured, structurally: B0 carries **194 `stablehlo.logistic`** where MobileNetV2 carries
 **zero** — the swish activations and the SE sigmoid gates. The elementwise-op-per-convolution ratio
@@ -799,3 +859,68 @@ addressed.
 2. If the share is small, build bf16 twins for `swishB`/`swishBackB` and the full-resolution parts
    of `seBlock`/`seBackBatched`, and re-measure. ⚠ That widens the bf16 surface beyond
    convolution for the first time and needs its own accuracy story — do not start it before (1).
+
+---
+
+## 15. ⭐⭐ NEXT SESSION — ConvNeXt. **Exactly two new ops.** Everything else is already built.
+
+Surveyed 2026-08-24 against `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` (the batched render —
+`ConvNeXtRender.lean` is the per-example/fused-SGD peer and is NOT what the ImageNet artifacts use).
+
+### 15.1 The op audit — what ConvNeXt uses, and what is missing
+
+| ConvNeXt-T site | op | bf16 twin |
+|---|---|---|
+| block 7×7 depthwise | `.depthwise` | ✅ built for MNv2 |
+| block 1×1 expand (c→4c) | `.conv` at kH=kW=1 | ✅ |
+| block 1×1 project (4c→c) | `.conv` at kH=kW=1 | ✅ |
+| stage downsample 2×2/s2 | `.convStrided` | ✅ |
+| **patchify stem 4×4/s4** | **`.convStride4`** | ⛔ **NEW** |
+| dgrads | `convBackBatched`, `convStridedBackBatched`, `depthwiseBackBatched` | ✅ |
+| wgrads | `convWeightGradB`, `convStridedWeightGradB`, `depthwiseWeightGradB` | ✅ |
+| **stem wgrad** | **`.convStride4WeightGradB`** | ⛔ **NEW** |
+| bias grads ×4 | `*BiasGradB` | — stays f32, as in every net |
+| classifier head | `.dotOut` / `.weightGradB` | — stays f32, as in every net |
+
+⭐ **`convStride4` has NO dgrad** — it is the stem, so there is no input gradient. Two ops, not
+three. ▶ §10.3's guess that ConvNeXt's "large 1×1s are matmuls in disguise" needing new
+matmul ops is **wrong for this render**: they are `.conv` at kH=kW=1 and already covered. The
+only true matmul is the classifier head, which stays f32 like everyone else's.
+
+### 15.2 ⚠⚠ The three traps this net specifically carries
+
+1. **`convStrided`'s ASYMMETRIC pad at an EVEN kernel.** ConvNeXt's 2×2/s2 downsample is the only
+   even strided kernel in the repo, and `convStridedBackBatched`'s pad `[[kH-1-pH, pH], …]` is
+   only observably different there — the symmetric spelling agrees at every odd kernel and is
+   wrong at k=2. ✅ `convStridedBackBatchedBf16` already preserves it verbatim; **do not "tidy"
+   it**, and re-read the comment on that emit case before touching anything nearby.
+2. **The entry-name bug has now shipped FOUR times and ConvNeXt owns two of them** (`wx`, then
+   `clip`). It has three distinct routes, all seen: (a) the flag never reaches the variant
+   function; (b) it reaches the variant function but the variant's returned STRING never appends
+   the marker (EfficientNet, §14); (c) the artifact path and the `#eval` disagree. ▶ `#guard` the
+   variant spelling AND the slug against `cdOn`/`accOn`/`emaOn` before rendering.
+3. **`cdOn` is a substring test for `"do"`.** ConvNeXt's own variants already carry `do`/`drop`
+   markers, so check the composed slug, not just the `bf16` suffix.
+
+### 15.3 The recipe, unchanged from §10.4 and now proven over five nets
+
+1. Build the two ops (ctor → `denOp`/`den` → `batchOpDescr`/`skel` → emit). Mirror
+   `convStridedBf16` exactly; the emit shape is **bf16 operands, bf16-TYPED result, convert back**.
+   ⚠ That is the CONV shape. `dotInBf16` uses a **different** shape (bf16 operands, f32 result) and
+   it is correct for `dot_general` — §9.2. Do not unify them.
+2. Gate 2 on ONE op standalone before wiring. Cost: 15 minutes; it has paid twice.
+3. Thread `bf16 : Bool := false` as a TRAILING defaulted parameter everywhere, including the
+   variant-name function AND its return string.
+4. Render single-device first (§13.2) — a 1-GPU pair is what isolates the renderer.
+5. Gate 1 (`git status verified_mlir/`), gate 2 on BOTH arms, op-histogram diff (must differ only
+   by `3 × nconv` converts), then a 40-step probe with `LEAN_MLIR_CKPT_TAG` set.
+
+### 15.4 Also open, in rough priority order
+
+* **EfficientNet-B0's 1.09×** — §14.3. The most interesting open question on this branch.
+* **The R34/R50 single-GPU renders** — one `#eval` each at `replicas := 1`. This is the
+  measurement that would tell us whether their 4-replica numbers are also mostly system overhead
+  (§13.3). Cheap, and it closes an inference this document currently carries.
+* **ViT** — §10.3, and it is the one that genuinely needs new op KINDS: attention is
+  activation × activation, where every bf16 op built so far is weight × activation.
+* **A full training run** on any of the five. Nothing has been trained to convergence in bf16.
