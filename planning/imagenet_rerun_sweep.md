@@ -11,6 +11,30 @@ are cheap and one of them gates everything.
 
 ---
 
+## ⭐ STATUS 2026-08-22 — the ResNet half of the sweep is DONE
+
+Four runs landed 2026-08-16 → 08-22, all post-C2/C3/C4/C5/C6 and all scored over **50,000**.
+These are directly comparable to each other and supersede every number below that predates them.
+
+| run | ours | reference | Δ |
+|---|---|---|---|
+| R50 `2018`, JAX, 90 ep | **76.95 / 93.44** | ~76.1 torchvision | +0.85 |
+| R50 RSB-A3, **JAX reference**, 100 ep | **78.26 / 93.79** | 78.052 / 93.780 (`timm resnet50.a3_in1k`) | +0.21 |
+| R50 RSB-A3, **VERIFIED** `wxclip`, 100 ep | **77.91 / 93.84** | — | −0.35 vs the reference above |
+| R34 `2018`, JAX, 90 ep | **74.16 / 91.92** | 73.298 / 91.422 (`timm resnet34.tv_in1k`) | +0.86 |
+
+⚠ **The verified-vs-reference −0.35 is NOT one-variable.** The reference normalises BN over 512,
+the verified path over 64 — an 8× difference in the Ghost-BN group. See
+`inflight_r50_queue.md` §4.
+
+⚠ **§5's ordering and §6's table below are the pre-run state** and are kept for the reasoning,
+not the numbers. Blueprint §5.7 and §5.8 carry the current figures.
+
+▶ Still open: the **verified** 2018 peers (R50 and R34), MNv4/B0/MNv2 re-trains, and the whole
+C1-blocked ViT/ConvNeXt family.
+
+---
+
 ## 0. THE ONE-LINE VERSION
 
 `d96c7fa` (Posterize) moved the training distribution for every RandAugment net, and its Solarize
@@ -29,9 +53,18 @@ Separately, `f8cd3a9` + `ccca380` changed how *every* net is evaluated.
 | C3 | **timm validation protocol + resampler** | `f8cd3a9` | **every** ImageNet net | resize/crop/antialias changed ⇒ eval moved |
 | C4 | **eval denominator 49,920 → 50,000** | `ccca380` | **every** ImageNet net | every quoted top-1 was over the wrong denominator |
 | C5 | **wire framing v1/v2 → v3/v4** | `db61adf` | **every** ImageNet net | the val drain could not read a partial batch; the run died at startup |
+| C6 | **strided conv `SAME` → symmetric `(k-1)//2` padding** | `d078a6d` (2026-08-04) | **every** net with a strided conv | ⛔ **the emitted NETWORK changed** — every checkpoint written before 2026-08-04 is a different architecture from what the emitter builds today |
 
 ⚠ **C1 and C5 are not fidelity deltas, they are hard blockers.** A run either started or it did not.
 C2/C3/C4 are the ones that make old numbers incomparable rather than impossible.
+
+⚠⚠ **C6 was missing from this table when it was opened, and it is the one that decides whether a
+re-score is legitimate at all** (§5.4). It is not an eval change and not a training-distribution
+change: it changes the forward graph, so old weights scored through today's emitter are being run
+in *a network they were never trained in*. `f8cd3a9`'s own commit message measured it on R50-A3 —
+**77.150% through the matching 2026-08-03 forward vs 75.200% through the regenerated one, a silent
+−1.95 pt** — and concluded that "the checkpoint outlives the artifact it was trained on" is
+unguarded on the JAX path. Measured again 2026-08-15, see §6.
 
 ### 1a. Who is in C1's blast radius, measured not assumed
 
@@ -134,8 +167,67 @@ not a batch job. Order by what unblocks a *claim*, not by net.
    principle only eval moved. ⚠ But C4 changes the denominator, so a re-score is not optional; if a
    checkpoint survives, **re-scoring is far cheaper than re-training** — see
    `score-checkpoint` (`f62a3a9`). ▶ Check for surviving checkpoints before booking GPU time.
+
+   ⛔ **CORRECTED 2026-08-15 — this step as written does not produce the number it promises.** Every
+   surviving checkpoint predates C6 (R50-A3 Jul 10, B0 Jul 18, MNv2 Jul 30, MNv4 Jul 31; C6 landed
+   Aug 4), so scoring one through today's emitter measures C3+C4+C6 together and reports it as
+   C3/C4. Worse, a *clean* C3/C4-only re-score is not reachable by regenerating at any commit:
+   C6 (Aug 4) precedes C3 (Aug 14), so no emitter revision exists that has the new eval protocol
+   and the old network. **The numbers in §6 are what a re-score can actually deliver; a
+   C3/C4-only figure needs a re-train.** This is the same conclusion `f8cd3a9` reached for the
+   blueprint ("the change moves the training distribution, so it needs a re-run rather than a
+   re-score") — it applies to the eval half too, for a different reason.
 5. **ViT / ConvNeXt families** — C1-blocked, so nothing exists to compare against; these are first
    runs in all but name and should go last unless a specific claim needs them.
 
 ⚠ **Do not start (2) before (3)'s reference is scheduled.** The whole value of the verified number
 is that it sits beside a reference measured under the same rules.
+
+---
+
+## 6. ⭐ THE RE-SCORE PASS, RUN 2026-08-15
+
+Three surviving checkpoints scored over all 50,000 with `jax/scripts/eval_full50k.py` (new; the
+one writer, replacing six drifted `eval_<net>_full50k.py` copies — three still carried ResNet-34's
+docstring, `eval_enet_full50k.py` had never learned the `bn`/`training` args, and none had learned
+`take`). It reads the state-tuple layout out of the generating module's own `save_train_state`
+call and checks the derived leaf count against the `.npz`, so a checkpoint/module mismatch refuses
+instead of mis-assigning arrays.
+
+| net | ckpt | in-training (49,920) | re-scored (50,000) | Δ |
+|---|---|---|---|---|
+| **MNv2** 350 ep | Jul 30 | 71.46 / 90.33 | **71.26 / 90.12** | −0.20 |
+| **EfficientNet-B0** 350 ep | Jul 18 | 76.80 / 93.26 | **76.75 / 93.17** | −0.05 |
+| **R50 RSB-A3 JAX ref** | Jul 10 | 77.22 / 93.34 | **74.62 / 91.75** | **−2.60** |
+
+⚠ **Each Δ is C3+C4+C6 together, not C3/C4** — see §5.4's correction. The R50 outlier is the
+signature: `f8cd3a9` measured C6 alone at −1.95 pt on this exact checkpoint and the sound resize
+figure at −0.90, and −1.95 − 0.90 ≈ −2.85 brackets the −2.60 observed here. MNv2 and B0 barely
+move, so C6 costs *them* little — but "little" is measured, not assumed, and only for these two.
+
+### 6a. ⭐ The equality gate, which is why the above is trustworthy
+
+`generated_mobilenet_v2_imagenet_full.py` (2026-07-28) survived in `.lake/build/` — a **pre-C6,
+pre-C3 module matching MNv2's checkpoint**. Scored through it, the checkpoint gives
+**71.46 / 90.33**, against the run's own `[Epoch 350] val_top1=0.7146 val_top5=0.9033`. Exact on
+both metrics. That is the gate `f8cd3a9` said the JAX path lacks, and it is what separates "the
+re-score pipeline is correct and C6 is real" from "something in the loader is broken".
+
+▶ `eval_full50k.py` tolerates a 4-argument `eval_batch` specifically so this gate can be run
+against stale modules; it refuses a batch width that would leave an unmaskable tail.
+
+### 6b. What could not be re-scored
+
+* **R34** — ✅ **RESOLVED 2026-08-22 by a re-train**, which is what this bullet said it needed.
+  The JAX `.bin` (May 31) has **no companion `.state.npz`**, so there were no BN running stats to
+  eval with, and it predated C6 besides. ⚠ Note §2.2 credits R34's number to
+  `runs/r34in_30ep_4gpu_sup*.log`, but that is the **verified** path (70.71% over 49,920), not a
+  JAX run — and `score-checkpoint` refuses BN nets by construction.
+  ▶ Re-run on the **same 90-epoch 2018 recipe** under the current emitter:
+  **74.16 / 91.92**, 14 h 49 m, artifacts at `/home/skoonce/r34_2018_90ep/` (this one HAS its
+  `.state.npz`). That is **+2.14** over the superseded 72.02 %, on an unchanged recipe — the whole
+  delta is C3/C4/C6. `jax/runs/r34_imagenet_bf16_90ep/RESULTS.md` is marked superseded.
+
+* **MNv4-Conv-M** — checkpoint and state both survive at `/home/skoonce/mnv4_convm_100ep/`, and
+  `eval_full50k.py` should drive it as-is, but it was descoped from this pass. It is C2-affected
+  anyway, so a re-score was never going to be its final number.
