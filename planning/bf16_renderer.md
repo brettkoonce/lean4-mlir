@@ -76,11 +76,20 @@ and the whole optimizer tail.
 | whole-net composition — the mixed conv is `FloatClose` | ✅ `ConvMixedComposeBridge.lean`, §11 |
 | a full training run on ANY of the six | ⛔ not started |
 
+### ▶ ViT was surveyed, measured and NOT built — §17
+
+Six ops scoped, all three emit shapes settled, then §16.3's method run **before** writing them: the
+established emit shape buys **1.03×** at ViT's rendered batch of 32. ViT's whole win (1.71× at
+B=32, 1.93× at B=128) is in keeping activations bf16 BETWEEN ops, which the bundle-the-cast-inside-
+the-op design cannot do. ▶ That is the type-system decision this document deferred at scoping, and
+it is the same one ConvNeXt's remaining headroom needs (§16.3).
+
 ### ⚠ Read the correction sections before trusting anything older
 
 §9 refutes four load-bearing claims from the original scoping. §12.1 is refuted by §13.2. §14
 refutes §9.1's expectation for B0. §16.2 adds a residency axis that every ms/step above §16 was
-taken without stating. The reasoning is kept in place; the conclusions moved.
+taken without stating. §17 refutes §10.3's "the OPS are the work" for ViT. The reasoning is kept in
+place; the conclusions moved.
 
 ---
 
@@ -508,6 +517,13 @@ cover it. Needs a new bundled op, and the four SDPA backward matmuls each need o
 
 ▶ The accuracy side may come free: `dot_close_mixed` already rounds BOTH operands, so it does
 not care that neither is a weight. The OPS are the work, not the theorem.
+
+⛔⛔ **"THE OPS ARE THE WORK" IS REFUTED FOR ViT — §17, measured 2026-08-24.** Both sentences above
+survive: `matmulFB` really is the new kind, and the theorem really does come free. But building
+those ops in the established emit shape buys **1.03×** at ViT's rendered batch, because ViT's
+matmuls are skinny and bandwidth-bound and the f32 boundary between ops costs what the tensor cores
+save. Its whole 1.71–1.93× lives in keeping activations bf16 ACROSS ops. ▶ The work is neither the
+ops nor the theorem — it is the type-system decision (Option 2) this document deferred at scoping.
 
 ConvNeXt is partly §10.2 (depthwise) and partly this (large 1×1s that are matmuls in disguise).
 
@@ -1113,8 +1129,14 @@ Bare-device timings of the already-committed pairs, taken with the same tool:
   its verdict.
 * ⚠ **R34 and R50 have NOT been checked this way** and hold 21.8M / 25.6M parameters — nearer
   ConvNeXt's blob than MNv2's. Their 4-replica numbers may be carrying a residency tax nobody has
-  measured. ▶ That is now the cheapest open item on this branch: two bare-device timings, no
-  render, no proof, no training.
+  measured.
+  ⛔ **AND IT IS NOT "just run the script" — TRIED 2026-08-24 AND IT CANNOT WORK AS IS.** The only
+  bf16 R34/R50 renders are `momdp64`, i.e. **4-replica**: they carry `all_reduce`, so compiling
+  them for one device drives XLA's conv autotuner into a core dump rather than a clean refusal.
+  ▶ The prerequisite is the render §13.3 already named — `resnet34in_mom64bf16` /
+  `resnet50in_mom64bf16` at `replicas := 1`, one `#eval` each, no new ops and no new proof — and
+  the bare-device timing follows. MNv2, B0 and ConvNeXt were checkable because their bf16 renders
+  are single-device to begin with.
 
 ### 16.5 What ConvNeXt did NOT need
 
@@ -1135,7 +1157,117 @@ Bare-device timings of the already-committed pairs, taken with the same tool:
 
 ---
 
-## 17. Still open, in rough priority order
+## 17. ⛔⛔ ViT — SURVEYED AND MEASURED, **NOT BUILT**, and the measurement is why
+
+Six ops were scoped and the emit shape for every one of them was settled. Then §16.3's method was
+run **prospectively** — before writing any of them — and it says the six ops in the established
+emit shape would buy **1.03×** at the batch ViT actually renders at. §15.3 step 2 exists to stop a
+wasted render; this is the same discipline one level up, stopping a wasted *op set*.
+
+### 17.1 The op audit — six ops, and one of them is a new KIND
+
+Surveyed against `ViTRenderB.lean` (the batched render; `ViTRender.lean` is the per-example peer,
+the same split ConvNeXt has). ViT-Tiny: B = **32**, 197 tokens, D = 192 = 3 × 64, MLP 768, depth 12.
+
+| ViT site | op | bf16 twin |
+|---|---|---|
+| patch embed 16×16/s16 | `patchEmbed` (a **convolution**) | ⛔ NEW |
+| its weight grad | `patchEmbedWeightGradB` | ⛔ NEW |
+| Q/K/V/O/fc1/fc2 — 6 per block × 12 | `denseRow` | ⛔ NEW |
+| their input-VJPs | `denseRowBack` | ⛔ NEW |
+| their weight grads | `rowDenseWeightGradB` | ⛔ NEW |
+| **attention QKᵀ and P·V**, + the 4 backward matmuls | `matmulFB` | ⛔ NEW — **activation × activation** |
+| classifier head | `dense`/`dotOut`/`weightGradB` | — stays f32, as in every net |
+| LN, GELU, softmax, transposes, slices, AdamW tail | — | — stays f32 |
+
+⭐ §10.3's claim that `matmulFB` is the genuinely new kind is **right**: every bf16 op built for the
+five convnets is weight × activation, and `dotInBf16` bundles the rounding of a *constant* weight.
+▶ And §10.3's other claim — that the accuracy side comes free — is also right: `dot_close_mixed`
+rounds BOTH operands and never asks which is a weight.
+
+### 17.2 ⭐ The emit shape, settled by measurement for all THREE forms
+
+Standalone, at ViT's own shapes, before any Lean (§15.3 step 2):
+
+| form | shape | `bf16 → f32` result | `bf16 → bf16` result + convert |
+|---|---|---|---|
+| `denseRow` | `[32,197,192] × [192,768]` | ✅ reaches (as a **cuBLAS** gemm) | ✅ reaches (as a fused `dot`) |
+| `matmulFB` | `[32,197,64] × [32,64,197]`, batched | ✅ reaches | ✅ reaches |
+| `patchEmbed` | 16×16/s16 convolution | ⛔ **FOLDS to f32** | ✅ reaches |
+
+▶ **§9.2's split holds exactly, at a fourth and fifth op form**: `dot_general` is unaffected by the
+result type and `convolution` is not. Batching dims buy no exemption, and neither does
+activation × activation. That is now checked at dot (dense), conv (stride 1/2/4), grouped conv, and
+batched dot — the rule is general.
+
+### 17.3 ⛔⛔ THE MEASUREMENT THAT STOPPED THE BUILD
+
+The **whole f32 ViT-Tiny train step is 29.95 ms** on the bare device
+(`vitin_adamwxclipdrop`, B = 32), and its **matmul set alone is 27.0 ms — about 90 %**. ViT really
+is matmul-bound, exactly as §10.3 and rung 4 assumed. So the ops are pointed at the right 90 %.
+
+Then, the same matmul set timed three ways — every arm gate-2 checked (387 dots, 3655 bf16-typed
+values in the bf16 arms, so the bf16 genuinely reached the hardware):
+
+| B | f32 | **bf16 in the verified emit shape** | bf16 **throughout** (the JAX reference's world) |
+|---|---|---|---|
+| **32** (what ViT renders at) | 26.9 | 26.2 — **1.03×** | 15.7 — **1.71×** |
+| 128 | 136.7 | 129.0 — **1.06×** | 70.9 — **1.93×** |
+| 256 | 317.0 | 280.7 — 1.13× | — |
+
+⭐ The "throughout" column brackets §9.1's independently-measured JAX-side **1.57×** for ViT-Tiny,
+which is what says this model of the two worlds is the right one.
+
+▶▶ **The entire ViT bf16 win lives in keeping activations bf16 ACROSS op boundaries, and the
+verified emit shape cannot do that.** Six ops built the established way would capture 0.7 ms of an
+11.2 ms prize.
+
+### 17.4 ⭐⭐ WHY ViT DIFFERS FROM THE CONVNETS — and why this is the net that forces the deferred decision
+
+The f32 boundary is not new; §16.3 measured it costing ConvNeXt 2.70× → 1.68×. What is new is how
+much of the saving survives it:
+
+| net | saving with converts free to fuse | saving through the f32 boundary | **kept** |
+|---|---|---|---|
+| ConvNeXt-T conv work | 70.3 ms | 45.1 ms | **64 %** |
+| ViT-Tiny matmul work (B=32) | 11.2 ms | 0.7 ms | **6 %** |
+
+⚠ The explanation is arithmetic intensity, and it is REASONING FROM THESE NUMBERS rather than a
+separate measurement: a convolution reuses each loaded input across many output positions, so a
+cast amortises over a lot of arithmetic; ViT's matmuls are **skinny** (contracting dim 192, or 768
+at the MLP), so they are bandwidth-bound on the activations and an f32→bf16→f32 round trip at every
+op costs about what the tensor cores save.
+
+▶▶ **So ViT is where the original scoping's Option 1 runs out.** That scoping offered two routes
+and chose the cheap one:
+
+> 1. **A bf16 `dotIn` variant** … No dtype in the type system; the cast lives inside the op.
+>    Probably the right first move.
+> 2. **A dtype index on `SHlo`.** Principled … but it touches every op and every existing proof.
+
+Option 1 has now carried **six nets** and it was the right call every time. ViT is the first net
+where it does not work: bundling the cast inside each op *forces* the f32 boundary, and for ViT the
+f32 boundary is the whole cost. ▶ **Getting ViT's 1.7–1.9× needs activations that stay bf16 between
+ops — i.e. the IR carrying a dtype (Option 2), or a narrower version of it.** That is a design
+project, not an op-writing project, and it should be scoped as one.
+
+⭐ **And it is the same project ConvNeXt's remaining headroom needs** (§16.3: 1.30× → ~1.40×, "the
+boundary converts, and only them"). One decision serves both nets — which is a much better reason
+to take it on than either net alone.
+
+### 17.5 ⚠ What would make ViT worth doing in the CURRENT shape
+
+Nothing measured here does. For completeness, the two things that would change the answer:
+
+* **A bigger batch.** ViT renders at B = 32 because `vB` is a private constant (ConvNeXt has the
+  same constraint at 32). The verified-emit speedup rises 1.03 → 1.06 → 1.13× at B = 32 → 128 →
+  256, so even at 8× the batch it is still under 1.2×. Batch alone does not rescue it.
+* **Hardware whose bf16 tensor-core advantage over fp32 is larger than Ada's.** ⚠ INFERENCE, not
+  measurement; no such card was tested — the same caveat §9.1 attaches to its version of this.
+
+---
+
+## 18. Still open, in rough priority order
 
 * **R34/R50 bare-device timings** — §16.4. Two runs of one script, no render and no proof, and
   they close the last unmeasured inference about the four-replica numbers.
@@ -1144,7 +1276,13 @@ Bare-device timings of the already-committed pairs, taken with the same tool:
   device step per op kind the way ConvNeXt's is attributed, and the answer falls out.
 * **ConvNeXt's boundary converts** — §16.3 puts the prize at 1.30× → ~1.40× and says it needs no
   new ops. The first net where this lever is measured rather than argued.
-* **ViT** — §10.3, and it remains the one that genuinely needs new op KINDS: attention is
-  activation × activation, where every bf16 op built so far is weight × activation.
+* ⛔ **ViT is NOT on this list any more — see §17.** It was surveyed (six ops, all three emit
+  shapes settled) and then MEASURED before building, and the six ops in the established shape buy
+  **1.03×**. Its win needs activations that stay bf16 between ops, which is the type-system
+  decision the original scoping deferred. ▶ The successor item is the one below.
+* ⭐⭐ **The boundary converts — the deferred `SHlo` dtype decision.** §16.3 measured them costing
+  ConvNeXt 2.70× → 1.68× on its conv work, and §17.3 measured them costing ViT its entire win
+  (1.71× → 1.03×). One project, two nets, and the first bf16 item on this branch that is a design
+  question rather than an op-writing one.
 * **A full training run** on any of the six. Nothing has been trained to convergence in bf16, and
   every accuracy claim on this branch is still a three-step loss comparison.
