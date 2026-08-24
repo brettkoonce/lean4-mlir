@@ -4,33 +4,50 @@ Scoped 2026-08-01 on ares (6× RTX 4060 Ti, CUDA 12.9).
 
 ---
 
-## ⭐⭐ STATUS 2026-08-24 — FIVE NETS WIRED. READ THIS BLOCK, THEN §15 IF YOU ARE DOING ConvNeXt.
+## ⭐⭐ STATUS 2026-08-24 — SIX NETS WIRED. READ THIS BLOCK, THEN §16 BEFORE QUOTING ANY ms/step.
 
-Branch `bf16/verified-conv-ops`. Five nets render and train in bf16 on real ImageNet, every one
+Branch `bf16/verified-conv-ops`. Six nets render and train in bf16 on real ImageNet, every one
 gate-1 and gate-2 green. **The speedups are NOT interchangeable and the differences are the
-interesting part** — read the replica column before quoting any number.
+interesting part** — read the replica AND residency columns before quoting any number.
 
-| net | artifact variant | R | f32 → bf16 ms/step | speedup | § |
-|---|---|---|---|---|---|
-| ResNet-34 | `momdp64bf16` | 4 | 222 → 157 | 1.41× | §STATUS |
-| ResNet-50 | `momdp64bf16` | 4 | 360 → 232 | **1.55×** | §10.1 |
-| MobileNetV2 | `adamdp64bf16` | 4 | 191 → 139 | 1.37× | §12 |
-| MobileNetV2 | `adam64bf16` | **1** | 136 → 71 | **1.92×** | §13.2 |
-| MobileNetV4-Conv-M | `adam64bf16` | **1** | 120 → 64 | **1.88×** | §13.1 |
-| EfficientNet-B0 | `rms64bf16` | **1** | 163 → 149 | ⛔ **1.09×** | §14 |
+| net | artifact variant | R | resident | f32 → bf16 ms/step | speedup | § |
+|---|---|---|---|---|---|---|
+| ResNet-34 | `momdp64bf16` | 4 | ? | 222 → 157 | 1.41× | §STATUS |
+| ResNet-50 | `momdp64bf16` | 4 | on | 360 → 232 | **1.55×** | §10.1 |
+| MobileNetV2 | `adamdp64bf16` | 4 | ? | 191 → 139 | 1.37× | §12 |
+| MobileNetV2 | `adam64bf16` | **1** | ? | 136 → 71 | **1.92×** | §13.2 |
+| MobileNetV4-Conv-M | `adam64bf16` | **1** | ? | 120 → 64 | **1.88×** | §13.1 |
+| EfficientNet-B0 | `rms64bf16` | **1** | ? | 163 → 149 | ⛔ **1.09×** | §14 |
+| ConvNeXt-T | `adamwxclipdropbf16` | **1** | **on** | 165 → 128 | **1.29×** | §16 |
+| ConvNeXt-T | *same graph* | **1** | **off** | 312 → 280 | 1.11× | §16.2 |
 
-⚠⚠ **THE TWO RESULTS THAT MATTER MOST, both measured this session:**
+⚠ **`?` means the probe did not record it**, not "off" — the column is new with §16 and only R50's
+§10.1 and ConvNeXt's §16 state it. ⭐ For MNv2 and B0 the bare-device timings in §16.4 bound how
+much it can have mattered (both trainer numbers sit ~12 ms above their device step, on parameter
+blobs of 42 MB and 64 MB against ConvNeXt's 327 MB), so neither figure moves much either way. R34
+and R50 hold 21.8M and 25.6M parameters and have NOT been checked — they are the ones to re-probe.
+
+⚠⚠ **THE THREE RESULTS THAT MATTER MOST:**
 
 1. **A 4-replica bf16 number is a SYSTEM result, not a renderer result** (§13.2). MobileNetV2 is
    **1.92× on one GPU and 1.37× on four — same graph**. The loss is the shim feed first and the
    f32 all-reduce second. On one GPU the verified renderer is at PARITY with the JAX reference
    (1.92× vs 1.94×). ▶ Check `SHIM_WORKERS` before ever blaming the emit.
-2. **The f32 carve-outs (BN, activations, SE, dense, optimizer) are NOT a fixed tax — their cost
+2. **`PJRT_FFI_RESIDENT=1` IS OFF BY DEFAULT AND IT IS A THIRD WAY TO MEASURE THE SYSTEM** (§16.2,
+   new 2026-08-24). ConvNeXt-T is **1.29× resident and 1.11× not — same graph, same GPU, same
+   batch.** Its 540 parameter tensors are 327 MB, and without residency that crosses PCIe every
+   step: 154 ms of a 312 ms step is not the graph at all. ⚠⚠ **`LEAN_MLIR_BENCH_SYNTH` DOES NOT
+   CONTROL FOR THIS** — it removes the data FEED, not the parameter round trip, so §14.1's synth
+   check on B0 ruled out less than it was read as ruling out. ▶ Quote a number only with its
+   residency state, and prefer the bare-device timing (`scripts/`-style direct execute) when what
+   you mean is "the renderer".
+3. **The f32 carve-outs (BN, activations, SE, dense, optimizer) are NOT a fixed tax — their cost
    is architecture-dependent** (§14). They cost MobileNetV2 nothing and EfficientNet-B0 almost
-   everything. ▶ Do NOT order future bf16 work by §9.1's JAX-side speedups: B0 is the largest
-   there (2.41×) and the smallest here.
+   everything. ⭐ B0's 1.09× is now CONFIRMED on the bare device (150.98 → 136.00 = 1.10×, §16.4),
+   so it is a real property of that net and not a driver artifact. ▶ Do NOT order future bf16 work
+   by §9.1's JAX-side speedups: B0 is the largest there (2.41×) and the smallest here.
 
-### The op kit as it now stands — 19 bf16 ops
+### The op kit as it now stands — 21 bf16 ops
 
 ```
 flatConvFBf16                                            per-example forward (CNN rung)
@@ -40,6 +57,8 @@ convBackBatchedBf16  convStridedBackBatchedBf16          dgrad
 depthwiseBackBatchedBf16  depthwiseStridedBackBatchedBf16  depthwiseStridedXlaBackBatchedBf16
 convWeightGradBBf16  convStridedWeightGradBBf16  convStridedXlaWeightGradBBf16   wgrad
 depthwiseWeightGradBBf16  depthwiseStridedWeightGradBBf16  depthwiseStridedXlaWeightGradBBf16
+convStride4Bf16                                          ConvNeXt's 4×4/s4 patchify stem
+convStride4WeightGradBBf16                               its wgrad — the stem has NO dgrad
 dotInBf16                                                dense (depth-1 PoC shape)
 ```
 
@@ -55,12 +74,13 @@ and the whole optimizer tail.
 | `conv_close_mixed` | ✅ `Proofs/Float/ConvMixedFloatBridge.lean` |
 | `depthwise_close_mixed` | ✅ `Proofs/Float/DepthwiseMixedFloatBridge.lean`, §12.3 |
 | whole-net composition — the mixed conv is `FloatClose` | ✅ `ConvMixedComposeBridge.lean`, §11 |
-| a full training run on ANY of the five | ⛔ not started |
+| a full training run on ANY of the six | ⛔ not started |
 
 ### ⚠ Read the correction sections before trusting anything older
 
 §9 refutes four load-bearing claims from the original scoping. §12.1 is refuted by §13.2. §14
-refutes §9.1's expectation for B0. The reasoning is kept in place; the conclusions moved.
+refutes §9.1's expectation for B0. §16.2 adds a residency axis that every ms/step above §16 was
+taken without stating. The reasoning is kept in place; the conclusions moved.
 
 ---
 
@@ -773,6 +793,16 @@ reaches the reference's speedup. Any 4-replica bf16 number on this box should be
 *system* result — pipeline and collective included — not as a statement about the renderer, and
 raising `SHIM_WORKERS` is the first thing to try before touching the emit.
 
+▶▶ **RESOLVED 2026-08-24 — §16.3, and both sides were right.** The doubt this section casts on
+§9.5 is settled by architecture rather than by one of them being wrong. MobileNetV2's convolutions
+sit next to each other, so XLA fuses its boundary converts away and they cost nothing — §13.2's
+finding. ConvNeXt's have a **LayerNorm between every pair**, so its converts can never fuse, and
+measured on ConvNeXt's own conv set they turn **2.70× into 1.68×** — §9.5's claim, now with a
+number. ▶ The lever is real and it is per-net; do not generalise either measurement.
+
+▶ And this section named a third system term without knowing it. §16.2 adds it: the **parameter
+round trip**, off by default, and the first thing to check on any net with a large parameter blob.
+
 ---
 
 ## 14. ⛔ EFFICIENTNET-B0 — ZERO new ops, every gate green, and **1.09×**. The worst result yet.
@@ -794,6 +824,13 @@ Single-device (per §13.2 — a 1-GPU pair is what isolates the renderer), B = 6
 ⚠ **`LEAN_MLIR_BENCH_SYNTH=1` gives 163 → 148 = 1.10×** — indistinguishable. Unlike MNv2's
 4-replica number (§13.2), this is **not** the data pipeline. B0's step is compute-bound and bf16
 genuinely buys ~9 %.
+
+⚠⚠ **THE SYNTH CONTROL IS WEAKER THAN THIS PARAGRAPH READS — §16.2.** `BENCH_SYNTH` removes the
+data FEED and leaves the **parameter round trip** untouched, and that round trip is off-by-default
+(`PJRT_FFI_RESIDENT`) and cost ConvNeXt 154 ms of a 312 ms step. So "not the data pipeline" was
+established; "therefore the graph" was not. ✅ **The verdict survives anyway**: §16.4 timed B0's
+two artifacts as bare device executables and got **151.0 → 136.0 = 1.10×**. B0's 1.09× is real,
+and this section's conclusion stands on a measurement it did not originally have.
 
 Gate 1 green. Gate 2 **146/146 convolutions bf16** (32 grouped); f32 control 146/146 f32; the
 **179 `dot_general`s carry ZERO bf16**, confirming the SE gates and classifier stayed f32 by
@@ -862,7 +899,7 @@ addressed.
 
 ---
 
-## 15. ⭐⭐ NEXT SESSION — ConvNeXt. **Exactly two new ops.** Everything else is already built.
+## 15. ✅ ConvNeXt — THE SURVEY, and it was right. **Exactly two new ops.** Result in §16.
 
 Surveyed 2026-08-24 against `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` (the batched render —
 `ConvNeXtRender.lean` is the per-example/fused-SGD peer and is NOT what the ImageNet artifacts use).
@@ -915,12 +952,199 @@ only true matmul is the classifier head, which stays f32 like everyone else's.
 5. Gate 1 (`git status verified_mlir/`), gate 2 on BOTH arms, op-histogram diff (must differ only
    by `3 × nconv` converts), then a 40-step probe with `LEAN_MLIR_CKPT_TAG` set.
 
-### 15.4 Also open, in rough priority order
+### 15.4 ✅ THE SURVEY HELD — every prediction in §15.1–15.3 was confirmed by the build
 
-* **EfficientNet-B0's 1.09×** — §14.3. The most interesting open question on this branch.
-* **The R34/R50 single-GPU renders** — one `#eval` each at `replicas := 1`. This is the
-  measurement that would tell us whether their 4-replica numbers are also mostly system overhead
-  (§13.3). Cheap, and it closes an inference this document currently carries.
-* **ViT** — §10.3, and it is the one that genuinely needs new op KINDS: attention is
+* **Two ops, not three.** `convStride4Bf16` and `convStride4WeightGradBBf16`. The "`convStride4`
+  has NO dgrad" call was right: it is the stem, `%x` is its input, there is no input gradient.
+* **§10.3's "large 1×1s are matmuls in disguise" was wrong for this render**, as §15.1 said. The
+  block 1×1s are `.conv` at `kH = kW = 1` and `convBf16` covers them. The artifact's only three
+  `dot_general`s are the classifier head and its two grads, all f32 by design.
+* **Trap 1 (the even-kernel asymmetric pad) held** — see §16.1's geometry check.
+* **Trap 2 (the entry name) did not fire.** Threading `bf16` into `cnxAdamVariant`'s signature AND
+  its returned string, and into both halves of `convNextAdamTrainStepFaithfulB`, was enough; both
+  artifacts declared the right entry on the first render.
+
+---
+
+## 16. ✅ ConvNeXt-T — **1.29×**, two new ops, and the measurement that had to be redone
+
+`convnextin_adamwxclipdropbf16_train_step.mlir` (single device) and
+`convnextin_adamdpwxclipdropbf16_train_step.mlir` (4 replicas, §0.5's rule). Two new ops, exactly
+as §15.1 predicted. Gate 1 green — every committed artifact re-renders byte-identically, and
+`convnext-fwd-b-tie` is unmoved.
+
+### 16.1 The gates
+
+| gate | result |
+|---|---|
+| **1** — nothing else moved | ✅ `git status verified_mlir/` shows only the two new files |
+| **entry name** | ✅ both declare `@convnextin_adam…bf16_train_step`, first render |
+| **2** — bf16 reached the hardware | ✅ **173/173 convolutions with all operands bf16**; f32 control **173/173 f32** |
+| **2b** — the head stayed f32 | ✅ the 3 `dot_general`s carry **zero** bf16 |
+| **histogram** | ✅ identical across **all 21** `stablehlo` op kinds, differing only by **519 `convert` = 173 × 3** |
+| **geometry** | ✅ the two arms' convolution `window` specs are the **same multiset** — 5 distinct specs, 173 sites |
+| **3** — accuracy | ✅ instantiation, no new theorem (below) |
+| losses, first 3 steps | ✅ agree to **0.0005 % / 0.026 % / 0.004 %** — well inside one bf16 ulp (2⁻⁸ = 0.39 %) |
+
+⭐ **The standalone gate-2 check (§15.3 step 2) paid for the third time.** Before a line of Lean:
+at the stem's own shape (B=32, 3→96, 224²→56², 4×4/s4) and at the stem wgrad's
+(`[3,B,224,224] × [96,B,221,221] → [3,96,4,4]`), `bf16 operands → f32-TYPED result` **folds to
+pure f32** and `bf16 operands → bf16-TYPED result → convert` reaches the hardware. **Stride buys no
+exemption from §9.2** any more than grouping did (§12.2). There is no third emit variant — which
+is the answer to §14.3's item 3, at least for stride.
+
+⭐ **Trap 1 held, and it is visible in the geometry check.** The 5 distinct window specs include
+`pad = [[1, 0], [1, 0]]` at 3 sites — the 2×2/s2 downsample's **dgrad**, `[[kH-1-pH, pH]]` at
+`k = 2`, the repo's only site where the asymmetric spelling differs observably from the symmetric
+one. `convStridedBackBatchedBf16` preserved it verbatim.
+
+▶ **Gate 3 is an instantiation, not work**, for the reason R50's was (§10.1): `conv_close_mixed` is
+stated over arbitrary `ic`/`kH`/`kW`, and a stride-4 output *is* a `conv2d` output read at the
+decimated position `4i+1` — decimation selects which outputs survive, it never changes what one
+output computes. That is the same argument stride-2 already rides on. `M.u = 2⁻²⁴` / `L.u = 2⁻⁸`
+(arithmetic outside Lean, quoted as illustration):
+
+    layer                          fan-in n   fan-in term   leaf term   convBr
+    stem 4×4/s4, ic=3                    48     2.94e-06     7.83e-03   0.0078
+    7×7 depthwise (every block)          49     3.00e-06     7.83e-03   0.0078
+    1×1 expand, ic=96                    96     5.83e-06     7.83e-03   0.0078
+    2×2/s2 downsample, ic=384          1536     9.23e-05     7.83e-03   0.0079
+    1×1 project, ic=3072 (widest)      3072     1.85e-04     7.83e-03   0.0080
+
+ConvNeXt's widest fan-in (3072) is smaller than R34/R50's 4608, so §9.3's separation is if anything
+wider here: the leaf term beats the fan-in term by **42×** at the widest layer and **2659×** at the
+stem. ⚠ Set the accumulate to bf16 as well and `(1+u)^(n+1) − 1` at n = 3072 is **1.6e5**, i.e.
+vacuous — the whole argument for bf16-**mixed**, restated at a sixth net's fan-ins.
+
+### 16.2 ⛔⛔ THE MEASUREMENT, AND THE FIRST ONE WAS WRONG — `PJRT_FFI_RESIDENT` IS OFF BY DEFAULT
+
+Single device (§13.2: a 1-GPU pair is what isolates the renderer), B = 32, AdamW + wx + clip + drop,
+real ImageNet, `LEAN_MLIR_MAX_STEPS=40` (median of steps 9..40):
+
+| arm | resident | ms/step | speedup |
+|---|---|---|---|
+| `adamwxclipdrop` (f32) | **off** | 312 | |
+| `adamwxclipdropbf16` | **off** | 280 | 1.11× |
+| `adamwxclipdrop` (f32) | **on** | 165 | |
+| `adamwxclipdropbf16` | **on** | **128** | **1.29×** |
+| *the bare device executable, no driver at all* | — | 157.6 → 120.9 | **1.30×** |
+
+⚠⚠ **The 1.11× is a SYSTEM result and it is a NEW way to get one.** §13.2 named two — the shim
+feed and the f32 all-reduce. This is a third: **the parameter round trip.** ConvNeXt-T holds
+**540 parameter tensors, 327.2 MB**; without `PJRT_FFI_RESIDENT=1` they cross PCIe every step, and
+**154 ms of that 312 ms step is not the graph**. Turn residency on and the trainer's number
+(1.29×) lands on the bare-device number (1.30×) — i.e. the driver is then accounted for entirely.
+
+⚠⚠ **AND `LEAN_MLIR_BENCH_SYNTH` DOES NOT CONTROL FOR IT.** Synthetic input gave 312 → 275 = 1.13×,
+indistinguishable from real — which is *true* and says nothing about residency, because
+`BENCH_SYNTH` removes the data FEED and leaves the parameter traffic untouched. §14.1 used exactly
+that control on B0 and read it as "the pipeline is not the excuse"; that reading happens to survive
+(§16.4), but the control was weaker than the sentence claimed. ▶ **The check that actually
+separates renderer from driver is timing the compiled artifact directly**, with no trainer around
+it. It takes one script and it should now be the default for any bf16 claim.
+
+▶ **ConvNeXt is the first net on this branch where residency binds**, and the reason is size, not
+architecture: 28.6M parameters against MobileNetV2's 3.5M and B0's 5.3M — 327 MB per step against
+42 and 64.
+
+### 16.3 ⭐⭐ THE FULL ATTRIBUTION OF A STEP — the first on this branch, and the method §14.3 asked for
+
+§14.3 item 1 said: *time the conv work in isolation at the net's own layer shapes, and profile the
+rest per op kind; everything else is inference until this exists.* Done, for ConvNeXt, against the
+**157.6 ms bare-device f32 step**:
+
+| term | ms | share |
+|---|---|---|
+| **convolutions**, fwd+bwd, at ConvNeXt-T's own 58 sites | **111.7** | **71 %** |
+| channel-LayerNorm × 22 sites | 8.1 | 5 % |
+| GELU × 18 sites | 9.1 | 6 % |
+| LayerScale × 18 sites | 2.5 | 2 % |
+| AdamW + global-norm clip, 180 tensors / 28,587,592 scalars | 4.9 | 3 % |
+| **accounted** | **136.2** | **86 %** |
+
+⭐ **The isolated conv stack lowers to exactly 173 convolutions fwd+bwd — the artifact's own
+count.** That is what licenses reading 111.7 ms as "the artifact's conv work" rather than as a
+lookalike.
+
+⚠ One attempt at the carve-out row was **wrong and looked plausible**: broadcasting a single
+scalar into every site let XLA fold the whole stack away and reported 22 LayerNorms in 1.56 ms.
+Real independent inputs per site is what makes this a measurement.
+
+⭐⭐ **And it MEASURES §9.5's boundary converts for the first time.** The same conv stack, two ways:
+
+| conv-only arm | fwd+bwd | speedup | converts in the optimized HLO |
+|---|---|---|---|
+| converts free to fuse across layers | 111.7 → 41.3 | **2.70×** | 290 |
+| f32 boundary **forced** (as LayerNorm forces it) | 111.7 → 66.5 | **1.68×** | 347 |
+| the artifact | — | — | **519** = 3 × 173 |
+
+▶ **The boundary converts cost ConvNeXt 25 ms of conv time — 2.70× becomes 1.68×.** §9.5 claimed
+this was "the next perf lever" and §13.3 put that claim in doubt after MNv2 showed it costing
+nothing. Both are right, and the resolution is architecture: MNv2's convs sit next to each other,
+ConvNeXt's have a LayerNorm between every pair, so its converts can never fuse away. ⚠ It is
+still the SECOND-order term here — see the ceiling below.
+
+**The ceilings, so nobody chases the wrong lever:**
+
+* If bf16 made every convolution **free**: 157.6 → 45.9 = **3.4×**. Conv is 71 % of ConvNeXt's
+  device step, so the carve-outs are NOT what caps this net — unlike B0.
+* At the boundary-constrained conv speedup (1.68×): 157.6 → 112.5 = **1.40×**. Realized **1.30×**;
+  the residue is the artifact's 519 converts against the barrier arm's 347.
+* ▶ So ConvNeXt's remaining bf16 headroom is **the boundary converts, and only them** — worth
+  perhaps 1.30× → 1.40×, and needing **no new ops**, only a decision about where the converts sit.
+  Building bf16 LayerNorm/GELU twins would chase 13 % of the step for a new accuracy story.
+
+### 16.4 ⭐ THE CROSS-CHECKS — the method validated, and §14's B0 conclusion CONFIRMED
+
+Bare-device timings of the already-committed pairs, taken with the same tool:
+
+| net | device f32 → bf16 | device speedup | what its trainer probe reported |
+|---|---|---|---|
+| MobileNetV2 `adam64` | 123.0 → 58.4 | **2.11×** | 1.92× (§13.2) |
+| EfficientNet-B0 `rms64` | 151.0 → 136.0 | **1.10×** | ⛔ 1.09× (§14) |
+| ConvNeXt-T `adamwxclipdrop` | 157.6 → 120.9 | **1.30×** | 1.11× off / 1.29× on |
+
+* **MNv2 validates the method**: its device number sits 12 ms under its trainer number and moves
+  the speedup 1.92 → 2.11×, i.e. *better* than the JAX reference's 1.94×. Small blob, small driver
+  tax.
+* ⭐ **B0's 1.09× is CONFIRMED, not refuted.** On the bare device it is 1.10×. So §14's conclusion
+  — that B0's f32 carve-outs eat nearly the whole win — stands on its own, and §14.3 remains the
+  open question it was. What §16.2 corrects is only the *strength* of §14.1's synth control, not
+  its verdict.
+* ⚠ **R34 and R50 have NOT been checked this way** and hold 21.8M / 25.6M parameters — nearer
+  ConvNeXt's blob than MNv2's. Their 4-replica numbers may be carrying a residency tax nobody has
+  measured. ▶ That is now the cheapest open item on this branch: two bare-device timings, no
+  render, no proof, no training.
+
+### 16.5 What ConvNeXt did NOT need
+
+* **No new theorem.** `conv_close_mixed` covers the stem by instantiation (§16.1);
+  `depthwise_close_mixed` is stated over arbitrary `kH`/`kW`, so the **7×7** depthwise is an
+  instance at n = 49 exactly as MNv4's 5×5 was at n = 25.
+* **No `convStride4BackBatchedBf16`.** The stem has no input gradient.
+* **No new matmul op.** §10.3's ConvNeXt half is retired; its ViT half stands.
+* **No driver change.** `bf16` adds no marker the driver's substring predicates read
+  (`emaOn`/`cdOn`/`accOn`), which the `#guard`s check on the full concatenations.
+
+### 16.6 ⚠ What is NOT measured
+
+* **The DP arm.** `convnextin_adamdpwxclipdropbf16` renders and its gates are the single-device
+  ones; it has not been probed. Per §13.2 a 4-replica number is a system result anyway, and per
+  §16.2 this net now has a third system term to control for.
+* **Anything about convergence.** Three steps of loss agreement is not training.
+
+---
+
+## 17. Still open, in rough priority order
+
+* **R34/R50 bare-device timings** — §16.4. Two runs of one script, no render and no proof, and
+  they close the last unmeasured inference about the four-replica numbers.
+* **EfficientNet-B0's 1.09×** — §14.3, confirmed on device by §16.4 and still unexplained. Now
+  approachable with §16.3's method, which did not exist when §14.3 was written: attribute B0's
+  device step per op kind the way ConvNeXt's is attributed, and the answer falls out.
+* **ConvNeXt's boundary converts** — §16.3 puts the prize at 1.30× → ~1.40× and says it needs no
+  new ops. The first net where this lever is measured rather than argued.
+* **ViT** — §10.3, and it remains the one that genuinely needs new op KINDS: attention is
   activation × activation, where every bf16 op built so far is weight × activation.
-* **A full training run** on any of the five. Nothing has been trained to convergence in bf16.
+* **A full training run** on any of the six. Nothing has been trained to convergence in bf16, and
+  every accuracy claim on this branch is still a three-step loss comparison.

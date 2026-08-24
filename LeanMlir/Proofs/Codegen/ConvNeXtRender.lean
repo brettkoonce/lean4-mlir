@@ -810,7 +810,13 @@ private def convnextAdamOne (replicas : Nat) (nm : String) (ds : List Nat) (grad
     AdamW trainer runs, whose blob has three. That is §2a's last-writer-wins race, and here it would
     also be an arity mismatch the driver could not survive. -/
 def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := false)
-    (clip : Bool := false) (sd : Bool := false) : String :=
+    (clip : Bool := false) (sd : Bool := false)
+    -- ▶ `bf16` LAST — the newest axis, so appending leaves every committed spelling untouched.
+    -- ⚠⚠ THREADING IT INTO THIS SIGNATURE IS HALF THE JOB. EfficientNet's bf16 render added the
+    -- parameter here and then forgot the `++` on the returned string, so the variant still spelled
+    -- `rms64` while the artifact path said `rms64bf16` — the entry-name defect arriving by a NEW
+    -- route (not "the flag never reached the name function" but "the name function ignored it").
+    (bf16 : Bool := false) : String :=
   (if ema then "ema" else "adam") ++ (if replicas ≤ 1 then "" else "dp")
     -- `wx` = timm no_weight_decay; TRAILING, and checked against every CONCATENATION in
     -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
@@ -834,6 +840,16 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- ⚠ Unlike `wx`, this flag is NOT free of the driver: it changes the arity (18 extra inputs and
     -- 18 pass-through outputs), so `tests/TestVariantPredicates.lean` runs every CONCATENATION.
     ++ (if sd then "drop" else "")
+    -- ▶ `bf16` LAST, after even the `drop` marker, for the reason each marker before it is where it
+    -- is: appending is the only placement that leaves every committed spelling byte-identical.
+    -- ⚠ Marker-collision check, the `emarms`/`rmsdp`-contains-"sd" hazard one axis on. The driver
+    -- reads variant strings as SUBSTRINGS: `emaOn` is `startsWith "ema"`, `cdOn` is
+    -- `splitOn "do"`, `accOn` is `splitOn "acc"`. `bf16` trips none of them — it is not a prefix,
+    -- and it contains no "do", no "acc" and no "sd". The `#guard`s at the bottom of
+    -- `ConvNeXtRenderB.lean` run the CONCATENATIONS, which is where a collision would actually
+    -- appear. ⚠ Note `drop` itself is safe on `cdOn` for a reason easy to misread: "drop" is
+    -- d-r-o-p, so it does not contain the substring "do".
+    ++ (if bf16 then "bf16" else "")
 
 /-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe.
 
@@ -907,6 +923,16 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- `convNextAdamTrainStepFaithfulB` spells it ONCE and hands the same array to both, exactly as
     -- it does with `sd`; nothing else may set them independently.
     (V : CnxDims := cnxTiny)
+    -- ⚠⚠ **`bf16` HERE IS NAME-ONLY.** This function renders the AdamW TAIL and the wrapper; it
+    -- does not place a single convolution. The arithmetic is decided entirely by `traversal`, so
+    -- this flag exists to keep the entry NAME in step with a traversal the caller already chose.
+    -- Setting it without passing a bf16 traversal produces an f32 graph under a `bf16` name, which
+    -- nothing would catch. ⚠ It is therefore governed by the same rule `sd` is: spelled ONCE, by
+    -- `convNextAdamTrainStepFaithfulB`, which hands the same Bool to both halves. Do not set it at
+    -- a call site that does not also pass a bf16 traversal — and note this file's own per-example
+    -- `convNextBackAll` has NO bf16 threading at all, deliberately (§13.2: the batched render is
+    -- the one an ImageNet run loads).
+    (bf16 : Bool := false)
     : String := Id.run do
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
   -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
@@ -1074,7 +1100,9 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- ⚠ `sd` is the THIRD flag that must reach it, and unlike the other two it also changes the
   -- ARITY — so a variant name that dropped it would put an 18-input-wider graph behind the plain
   -- `adam` path's artifact name and checkpoint. `#guard`s below pin every spelling.
-  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd}_train_step"
+  -- ⚠ `bf16` is the FOURTH flag that must reach the variant here, after `wdExclude`, `clip` and
+  -- `sd`. Three of those four have already shipped a defect on this exact line across the repo.
+  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd bf16}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++

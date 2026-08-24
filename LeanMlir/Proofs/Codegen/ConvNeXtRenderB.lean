@@ -44,6 +44,12 @@ private def zVB {n : Nat} : Vec n := fun _ => 0
 private def zKB {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 private def zDB {c kh kw : Nat} : DepthwiseKernel c kh kw := fun _ _ _ => 0
 private def zMB {a b : Nat} : Mat a b := fun _ _ => 0
+/-- The abstract rounding the bf16 ops carry. ⚠ It is `id` in the RENDER for the reason every other
+    net's is: `skel`/`pretty` never look at it (the emitted text is decided by the tag), and the
+    accuracy statement is made in `Proofs/Float/*MixedFloatBridge.lean` where `rnd` is instantiated
+    at bf16 round-to-nearest and fed the `|rnd x − x| ≤ 2⁻⁸|x|` hypothesis. A render that baked a
+    concrete rounding here would be claiming the emitter knows about it, which it does not. -/
+private def zrndB : ℝ → ℝ := fun r => r
 
 /-- Batch, eps and the stage table — read from the per-example renderer's own constants where they
     are public, restated where they are `private`. ⚠ Restated, not re-derived: if these drift the
@@ -109,19 +115,29 @@ private def lnFwdSiteB (gN btN xin : String) (c h : Nat) :
     ⚠ At `drop = none` **no `pretty` call happens**, so the fresh-name counter does not move and the
     drop-free chain re-renders byte-identically. That is what keeps `convnext-fwd-b-tie` and the
     committed artifacts free of this feature. -/
-private def fwdBlockB (pfx xin : String) (c e h : Nat) (drop : Option Nat := none) :
+private def fwdBlockB (pfx xin : String) (c e h : Nat) (drop : Option Nat := none)
+    -- ⚠ TRAILING and defaulted, the `wx`/`clip`/`sd` idiom: every existing call site re-renders
+    -- byte-identically, which is gate 1 for free.
+    (bf16 : Bool := false) :
     StateM Nat (String × FNames) := do
   let (k1, d) ← pretty bB (.batchOp (N := bB)
-      (.depthwise (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB)
+      (if bf16 then .depthwiseBf16 (h := h) (w := h) zrndB s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB
+       else .depthwise (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB)
       (.operand xin zVB))
   let (k2, n) ← lnFwdSiteB s!"%{pfx}ng" s!"%{pfx}nbt" d c h
+  -- ⚠ The block's 1×1s are `.conv` at `kH = kW = 1`, so they take `convBf16` — NOT a new matmul op.
+  -- §10.3's guess that ConvNeXt's "large 1×1s are matmuls in disguise" needing new activation ×
+  -- activation ops is wrong for THIS render; the only true matmul is the classifier head, which
+  -- stays f32 like every other net's.
   let (k3, e') ← pretty bB (.batchOp (N := bB)
-      (.conv (h := h) (w := h) s!"%{pfx}eW" s!"%{pfx}eb" (zKB : Kernel4 e c 1 1) zVB)
+      (if bf16 then .convBf16 (h := h) (w := h) zrndB s!"%{pfx}eW" s!"%{pfx}eb" (zKB : Kernel4 e c 1 1) zVB
+       else .conv (h := h) (w := h) s!"%{pfx}eW" s!"%{pfx}eb" (zKB : Kernel4 e c 1 1) zVB)
       (.operand n zVB))
   let (k4, g) ← pretty bB (.batchOp (N := bB) (.gelu (n := e*h*h))
       (.operand e' (zVB : Vec (bB*(e*h*h)))))
   let (k5, p) ← pretty bB (.batchOp (N := bB)
-      (.conv (h := h) (w := h) s!"%{pfx}pW" s!"%{pfx}pb" (zKB : Kernel4 c e 1 1) zVB)
+      (if bf16 then .convBf16 (h := h) (w := h) zrndB s!"%{pfx}pW" s!"%{pfx}pb" (zKB : Kernel4 c e 1 1) zVB
+       else .conv (h := h) (w := h) s!"%{pfx}pW" s!"%{pfx}pb" (zKB : Kernel4 c e 1 1) zVB)
       (.operand g zVB))
   let (k6, ls) ← pretty bB (.batchOp (N := bB)
       (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (zVB : Vec c)) (.operand p zVB))
@@ -133,11 +149,14 @@ private def fwdBlockB (pfx xin : String) (c e h : Nat) (drop : Option Nat := non
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ kD ++ k7, ⟨xin, d, n, e', g, p, bout⟩)
 
 /-- One **downsample** forward, batched: channel-LN then 2×2/s2 conv. -/
-private def fwdDownB (pfx xin : String) (ci co h2 : Nat) :
+private def fwdDownB (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool := false) :
     StateM Nat (String × String × String) := do
   let (k1, n) ← lnFwdSiteB s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
+  -- ⚠ SYMMETRIC pad (`convStrided`, not `convStridedXla`) — ConvNeXt is torchvision-origin. Both
+  -- spellings give the same output size at every kernel, so only a forward tie separates them.
   let (k2, o) ← pretty bB (.batchOp (N := bB)
-      (.convStrided (h := h2) (w := h2) s!"%{pfx}W" s!"%{pfx}b" (zKB : Kernel4 co ci 2 2) zVB)
+      (if bf16 then .convStridedBf16 (h := h2) (w := h2) zrndB s!"%{pfx}W" s!"%{pfx}b" (zKB : Kernel4 co ci 2 2) zVB
+       else .convStrided (h := h2) (w := h2) s!"%{pfx}W" s!"%{pfx}b" (zKB : Kernel4 co ci 2 2) zVB)
       (.operand n zVB))
   pure (k1 ++ k2, n, o)
 
@@ -156,9 +175,13 @@ set_option maxRecDepth 8000 in
     identity, and the `forward ⊂ train-step` prefix audit keeps a partner for the SD render instead
     of quietly not covering it. -/
 def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
-    (V : CnxDims := bTiny) : StateM Nat CFwd := do
+    (V : CnxDims := bTiny) (bf16 : Bool := false) : StateM Nat CFwd := do
+  -- ⭐ **The 4×4/s4 patchify stem — one of ConvNeXt's two genuinely new bf16 ops.** Its emit keeps
+  -- `convStride4`'s pad-one-less rule (`[[0,0]]` at k=4), which is NOT the symmetric pad every
+  -- other forward conv uses; `BatchableOp.convStride4Bf16` carries the note.
   let (cS, stemC) ← pretty bB (.batchOp (N := bB)
-      (.convStride4 (h := 56) (w := 56) "%psW" "%psb" (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB)
+      (if bf16 then .convStride4Bf16 (h := 56) (w := 56) zrndB "%psW" "%psb" (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB
+       else .convStride4 (h := 56) (w := 56) "%psW" "%psb" (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB)
       (.operand "%x" (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56)))))))
   let (cSln, stem) ← lnFwdSiteB "%psng" "%psnbt" stemC V.dims[0]! 56
   let mut fwd := cS ++ cSln
@@ -177,12 +200,12 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
       -- pairs stage 3's 27 blocks with T's stage-3 numbering and stage 4 with indices 15..17 that
       -- another stage already owns — duplicate mask sites on a graph that compiles and descends.
       let (code, bn) ← fwdBlockB s!"s{si}b{j}" cur c e h
-                          (if sd then some (cnxBlockIdx si j V) else none)
+                          (if sd then some (cnxBlockIdx si j V) else none) bf16
       fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
     blksAll := blksAll.push blks
     if si < 3 then
       downIn := downIn.push cur
-      let (code, n, o) ← fwdDownB s!"d{si}" cur c V.dims[si+1]! bSpats[si+1]!
+      let (code, n, o) ← fwdDownB s!"d{si}" cur c V.dims[si+1]! bSpats[si+1]! bf16
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := V.dims[3]!) (h := 7) (w := 7))
       (.operand cur zVB))
@@ -203,8 +226,13 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
     -- at every call site, which is how the mnv2 `convBias` threading went wrong.
     (sd : Bool := false)
     (V : CnxDims := bTiny)
+    -- ⭐ bf16, TRAILING per the same rule. ⚠ No bf16 FORWARD artifact is written today — this
+    -- parameter exists so the forward chain the train step differentiates is one function, not
+    -- two. A bf16 eval forward would need its own prefix partner and its own gate; the train step
+    -- is where the payoff is and where §15 scoped the work.
+    (bf16 : Bool := false)
     : String := Id.run do
-  let F : CFwd := (convNextFwdChainB nClasses sd V).run' 0
+  let F : CFwd := (convNextFwdChainB nClasses sd V bf16).run' 0
   let body := F.code; let logits := F.logits
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [bB, 3*224*224]) ::
@@ -287,7 +315,8 @@ private def lnBetaTailB (cot : String) (c h : Nat) : StateM Nat (String × Strin
     against an undropped cotangent. It type-checks, trains and descends: 18 of 180 gradients wrong
     by a per-example factor, on the parameter stochastic depth is *about*. At `drop = none` this is
     `dy` itself, so nothing moves. -/
-private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Option Nat := none) :
+private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Option Nat := none)
+    (bf16 : Bool := false) :
     StateM Nat (String × String × String × String × String × String × String) := do
   let (kD, dyd) ← match drop with
     | some i => pretty bB (.dropPathB (N := bB) (n := c*h*h) (dpName i) (fun _ => 0 : Vec bB)
@@ -295,22 +324,39 @@ private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Optio
     | none   => pure ("", dy)
   let (k1, cot_p) ← pretty bB (.batchOp (N := bB)
       (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (zVB : Vec c)) (.operand dyd zVB))
-  let (k2, cot_g) ← pretty bB (.convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}pW"
+  let (k2, cot_g) ← pretty bB (if bf16 then
+      .convBackBatchedBf16 (N := bB) (h := h) (w := h) zrndB s!"%{pfx}pW"
+        (zKB : Kernel4 c e 1 1) zVB (.operand cot_p zVB)
+    else .convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}pW"
       (zKB : Kernel4 c e 1 1) zVB (.operand cot_p zVB))
   let (k3, cot_e) ← pretty bB (.geluBackB b.e (zVB : Vec (bB*(e*h*h))) (.operand cot_g zVB))
-  let (k4, cot_n) ← pretty bB (.convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}eW"
+  let (k4, cot_n) ← pretty bB (if bf16 then
+      .convBackBatchedBf16 (N := bB) (h := h) (w := h) zrndB s!"%{pfx}eW"
+        (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB)
+    else .convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}eW"
       (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB))
   let (k5, cot_d) ← lnBackSiteB s!"%{pfx}ng" b.d cot_n c h
-  let (k6, cot_main) ← pretty bB (.depthwiseBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}dW"
+  let (k6, cot_main) ← pretty bB (if bf16 then
+      .depthwiseBackBatchedBf16 (N := bB) (h := h) (w := h) zrndB s!"%{pfx}dW"
+        (zDB : DepthwiseKernel c 7 7) zVB (.operand cot_d zVB)
+    else .depthwiseBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}dW"
       (zDB : DepthwiseKernel c 7 7) zVB (.operand cot_d zVB))
   let (k7, cot_xin) ← pretty bB (.addVB (.operand cot_main (zVB : Vec (bB*(c*h*h))))
       (.operand dy zVB))
   pure (kD ++ k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, cot_xin, cot_p, cot_e, cot_n, cot_d, dyd)
 
 /-- One **downsample** backward. -/
-private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) :
+private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) (bf16 : Bool := false) :
     StateM Nat (String × String × String) := do
-  let (k1, cot_n) ← pretty bB (.convStridedBackBatched (N := bB) (h := h2) (w := h2) s!"%{pfx}W"
+  -- ⚠⚠ **THE 2×2/s2 ASYMMETRIC-PAD TRAP (§15.2 trap 1).** `convStridedBackBatched`'s dgrad pad is
+  -- `[[kH-1-pH, pH], …]`, which agrees with the symmetric spelling at every ODD kernel and is
+  -- wrong at `k = 2` — and ConvNeXt's downsample is the repo's ONLY even strided kernel, so this
+  -- is the only site in the repo where the difference is observable at all.
+  -- `convStridedBackBatchedBf16` preserves it verbatim; do not "tidy" it.
+  let (k1, cot_n) ← pretty bB (if bf16 then
+      .convStridedBackBatchedBf16 (N := bB) (h := h2) (w := h2) zrndB s!"%{pfx}W"
+        (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2))))
+    else .convStridedBackBatched (N := bB) (h := h2) (w := h2) s!"%{pfx}W"
       (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
   let (k2, cot_x) ← lnBackSiteB s!"%{pfx}ng" xin cot_n ci (2*h2)
   pure (k1 ++ k2, cot_n, cot_x)
@@ -320,17 +366,29 @@ private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) :
     renderer until the swap, since `%lr` is a runtime operand on the AdamW path and a baked literal
     on the SGD one (§2a-quater's silent-hyperparameter hazard). -/
 private def blockParamGradB (pfx : String) (b : FNames)
-    (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) :
+    (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat)
+    -- ⚠ `bf16` reaches the WEIGHT grads only. Every BIAS grad below stays f32 in every net:
+    -- `Σ_{batch,spatial} dy` is a reduction, not a contraction, so there is nothing for a tensor
+    -- core to do. Same for the two LN tails, which are reductions too.
+    (bf16 : Bool := false) :
     StateM Nat (String × List (String × String)) := do
   let (cLg, nLg) ← pretty bB (.layerScaleChGammaGradB (N := bB) (c := c) (h := h) (w := h) b.p
       (zVB : Vec (bB*(c*h*h))) (.operand dy zVB))
-  let (cPw, nPw) ← pretty bB (.convWeightGradB (N := bB) (ic := e) (oc := c) (h := h) (w := h)
+  let (cPw, nPw) ← pretty bB (if bf16 then
+      .convWeightGradBBf16 (N := bB) (ic := e) (oc := c) (h := h) (w := h)
+        (kH := 1) (kW := 1) zrndB b.g (zVB : Vec c) (zVB : Vec (bB*(e*h*h))) (zKB : Kernel4 c e 1 1)
+        (.operand cot_p zVB)
+    else .convWeightGradB (N := bB) (ic := e) (oc := c) (h := h) (w := h)
       (kH := 1) (kW := 1) b.g (zVB : Vec c) (zVB : Vec (bB*(e*h*h))) (zKB : Kernel4 c e 1 1)
       (.operand cot_p zVB))
   let (cPb, nPb) ← pretty bB (.convBiasGradB (N := bB) (ic := e) (oc := c) (h := h) (w := h)
       (kH := 1) (kW := 1) (zKB : Kernel4 c e 1 1) (zVB : Vec (bB*(e*h*h))) (zVB : Vec c)
       (.operand cot_p zVB))
-  let (cEw, nEw) ← pretty bB (.convWeightGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
+  let (cEw, nEw) ← pretty bB (if bf16 then
+      .convWeightGradBBf16 (N := bB) (ic := c) (oc := e) (h := h) (w := h)
+        (kH := 1) (kW := 1) zrndB b.n (zVB : Vec e) (zVB : Vec (bB*(c*h*h))) (zKB : Kernel4 e c 1 1)
+        (.operand cot_e zVB)
+    else .convWeightGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
       (kH := 1) (kW := 1) b.n (zVB : Vec e) (zVB : Vec (bB*(c*h*h))) (zKB : Kernel4 e c 1 1)
       (.operand cot_e zVB))
   let (cEb, nEb) ← pretty bB (.convBiasGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
@@ -338,7 +396,11 @@ private def blockParamGradB (pfx : String) (b : FNames)
       (.operand cot_e zVB))
   let (cNg, nNg) ← lnGammaTailB s!"%{pfx}ng" b.d cot_n c h
   let (cNb, nNb) ← lnBetaTailB cot_n c h
-  let (cDw, nDw) ← pretty bB (.depthwiseWeightGradB (N := bB) (c := c) (h := h) (w := h)
+  let (cDw, nDw) ← pretty bB (if bf16 then
+      .depthwiseWeightGradBBf16 (N := bB) (c := c) (h := h) (w := h)
+        (kH := 7) (kW := 7) zrndB b.xin (zVB : Vec c) (zVB : Vec (bB*(c*h*h)))
+        (zDB : DepthwiseKernel c 7 7) (.operand cot_d zVB)
+    else .depthwiseWeightGradB (N := bB) (c := c) (h := h) (w := h)
       (kH := 7) (kW := 7) b.xin (zVB : Vec c) (zVB : Vec (bB*(c*h*h)))
       (zDB : DepthwiseKernel c 7 7) (.operand cot_d zVB))
   let (cDb, nDb) ← pretty bB (.depthwiseBiasGradB (N := bB) (c := c) (h := h) (w := h)
@@ -350,14 +412,23 @@ private def blockParamGradB (pfx : String) (b : FNames)
      (s!"{pfx}lg", nLg)])
 
 /-- The **parameter gradients of one downsample**. -/
-private def downParamGradB (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat) :
+private def downParamGradB (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat)
+    (bf16 : Bool := false) :
     StateM Nat (String × List (String × String)) := do
   let (cB, nB) ← pretty bB (.convStridedBiasGradB (N := bB) (ic := ci) (oc := co) (h := h2)
       (w := h2) (kH := 2) (kW := 2) (zKB : Kernel4 co ci 2 2)
       (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zVB : Vec co) (.operand dy zVB))
   let (cNg, nNg) ← lnGammaTailB s!"%{pfx}ng" downIn cot_n ci (2*h2)
   let (cNb, nNb) ← lnBetaTailB cot_n ci (2*h2)
-  let (wcode, nW) ← pretty bB (.convStridedWeightGradB (N := bB) (ic := ci) (oc := co) (h := h2)
+  -- ⚠ The wgrad pad is `[[p-1, p+1], …]`, the OPPOSITE shift from the dgrad's `[[p+1, p-1], …]`
+  -- in `bwdDownB`. `convStridedWeightGradBBf16` keeps its f32 peer's geometry verbatim;
+  -- `scripts/xla_pad_op_check.py` caught this pair being "fixed by symmetry" once already.
+  let (wcode, nW) ← pretty bB (if bf16 then
+      .convStridedWeightGradBBf16 (N := bB) (ic := ci) (oc := co) (h := h2)
+        (w := h2) (kH := 2) (kW := 2) zrndB downLn (zVB : Vec co)
+        (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zKB : Kernel4 co ci 2 2)
+        (.operand dy (zVB : Vec (bB*(co*h2*h2))))
+    else .convStridedWeightGradB (N := bB) (ic := ci) (oc := co) (h := h2)
       (w := h2) (kH := 2) (kW := 2) downLn (zVB : Vec co)
       (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zKB : Kernel4 co ci 2 2)
       (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
@@ -380,10 +451,17 @@ set_option maxRecDepth 8000 in
     move neither improves nor degrades it — but note it is parameterised by `bB` and therefore
     already batch-correct, which is why it needs no peer. -/
 def convNextBackAllB (smooth : Option (String × String × String) := none) (nClasses : Nat := 10)
-    (sd : Bool := false) (V : CnxDims := bTiny) :
+    (sd : Bool := false) (V : CnxDims := bTiny)
+    -- ⭐⭐ **bf16**, TRAILING and defaulted, so every existing render is byte-identical (gate 1).
+    -- It reaches every CONVOLUTION — the stem, the block 1×1s, the 7×7 depthwise, the 2×2/s2
+    -- downsamples and their dgrads and wgrads — and NOTHING else. LayerNorm, GELU, LayerScale,
+    -- every bias gradient, the classifier head and the whole AdamW tail stay f32, which is the
+    -- carve-out every bf16 render in this repo makes. ⚠ §14 measured that those carve-outs are
+    -- NOT a fixed tax: they cost MobileNetV2 nothing and EfficientNet-B0 almost everything.
+    (bf16 : Bool := false) :
     StateM Nat (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain the byte-tied `convNextFwdChainB` emits ═══
-    let F : CFwd ← convNextFwdChainB nClasses sd V
+    let F : CFwd ← convNextFwdChainB nClasses sd V bf16
     let (cSm, nSm) ← pretty bB (.batchOp (N := bB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := bB) (.expe (n := nClasses))
           (.operand F.logits (zVB : Vec (bB*nClasses)))))
@@ -437,16 +515,16 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
         -- in reverse to name the same sites — the mismatch would pair every backward site with the
         -- wrong forward mask, which typechecks and trains.
         let (code, cot_xin, cot_p, cot_e, cot_n, cot_d, dyd) ←
-          bwdBlockB s!"s{si}b{j}" dy b c e h (if sd then some (cnxBlockIdx si j V) else none)
+          bwdBlockB s!"s{si}b{j}" dy b c e h (if sd then some (cnxBlockIdx si j V) else none) bf16
         -- ⚠ `dyd`, not `dy` — LayerScale's γ gradient reads the cotangent at the LayerScale OUTPUT,
         -- which the drop site scales. See `bwdBlockB`.
-        let (pcode, pairs) ← blockParamGradB s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dyd c e h
+        let (pcode, pairs) ← blockParamGradB s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dyd c e h bf16
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_xin
       if si > 0 then
         let ci := V.dims[si-1]!; let h2 := bSpats[si]!
-        let (code, cot_n, cot_x) ← bwdDownB s!"d{si-1}" dy (F.downIn[si-1]!) ci c h2
+        let (code, cot_n, cot_x) ← bwdDownB s!"d{si-1}" dy (F.downIn[si-1]!) ci c h2 bf16
         let (pcode, pairs) ← downParamGradB s!"d{si-1}" (F.downLn[si-1]!) (F.downIn[si-1]!)
-            cot_n dy ci c h2
+            cot_n dy ci c h2 bf16
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_x
     -- ═══ stem: back through the stem LN, then the patchify conv's own gradients ═══
     let (cg, ng) ← lnGammaTailB "%psng" F.stemC dy V.dims[0]! 56
@@ -458,7 +536,15 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     let (cPsb, nPsb) ← pretty bB (.convBiasGradB (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56) (w := 56)
         (kH := 4) (kW := 4) (zKB : Kernel4 (V.dims[0]!) 3 4 4) (zVB : Vec (bB*(3*56*56))) (zVB : Vec (V.dims[0]!))
         (.operand dy zVB))
-    let (cPsW, nPsW) ← pretty bB (.convStride4WeightGradB (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56)
+    -- ⭐ **The stem weight grad — ConvNeXt's second and last new bf16 op.** ⚠ There is no
+    -- `convStride4BackBatched` and no bf16 twin of one: this is the patchify stem, its input is
+    -- `%x`, and there is no input gradient to compute. TWO new ops for this net, not three.
+    let (cPsW, nPsW) ← pretty bB (if bf16 then
+        .convStride4WeightGradBBf16 (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56)
+          (w := 56) (kH := 4) (kW := 4) zrndB "%x" (zVB : Vec (V.dims[0]!))
+          (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (zKB : Kernel4 (V.dims[0]!) 3 4 4)
+          (.operand dy (zVB : Vec (bB*(V.dims[0]!*56*56))))
+      else .convStride4WeightGradB (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56)
         (w := 56) (kH := 4) (kW := 4) "%x" (zVB : Vec (V.dims[0]!))
         (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (zKB : Kernel4 (V.dims[0]!) 3 4 4)
         (.operand dy (zVB : Vec (bB*(V.dims[0]!*56*56)))))
@@ -480,7 +566,16 @@ def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false) (wdExclude : Bool := false) (wdStr : String := "0.0001")
     (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false)
-    (V : CnxDims := bTiny) : String :=
+    (V : CnxDims := bTiny)
+    -- ⭐⭐ **bf16**, TRAILING and spelled ONCE HERE — exactly as `sd` and `V` are, and for the same
+    -- reason. It has to reach TWO places that a caller must never be able to set independently:
+    -- the TRAVERSAL (which decides the arithmetic) and `cnxAdamVariant` (which decides the entry
+    -- NAME and therefore the artifact path). ⚠⚠ That second half is the defect this net has now
+    -- shipped TWICE (`wx`, then `clip`) and R34 and EfficientNet once each: a flag that reaches
+    -- the emission but not the name writes `…bf16_train_step.mlir` declaring
+    -- `@convnextin_adamwxclipdrop_train_step`, and the driver refuses at load. The `#guard`s at
+    -- the bottom of this file pin every spelling.
+    (bf16 : Bool := false) : String :=
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
   convNextAdamTrainStepFaithful alphaStr negAlphaKStr bStr replicas nClasses slug ema
     wdExclude wdStr clip clipStr
@@ -492,8 +587,11 @@ def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
     -- decides how many blocks are EMITTED, the wrapper decides how many parameters are DECLARED,
     -- and a disagreement between them is an arity mismatch the driver reports as a blob-walk
     -- failure rather than anything that names the depth table.
-    (traversal := some (convNextBackAllB (some (alphaStr, negAK, bStr)) nClasses sd V))
-    (sd := sd) (V := V)
+    (traversal := some (convNextBackAllB (some (alphaStr, negAK, bStr)) nClasses sd V bf16))
+    -- ⚠⚠ AND HERE. `bf16` reaching the traversal above but not this line is the entry-name defect
+    -- in its most convincing form — the graph really would be bf16, every gate-2 check would pass,
+    -- and only the artifact's declared name would be wrong.
+    (sd := sd) (V := V) (bf16 := bf16)
 
 /-- The per-example render's own banner, so the tie can demand **byte-identity** rather than
     "identical apart from a comment". ⚠ Worth the parameter: a tie that compares modulo one line is
@@ -594,6 +692,48 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextFwdRenderB "convnextin_drop_fwd" 1000
     Proofs.StableHLO.cnxDropFwdBanner (sd := true))
 
+-- ── ⭐⭐ THE bf16 PEERS — `adamwxclipdropbf16` (`planning/bf16_renderer.md` §15) ─────────────────
+-- ConvNeXt is the sixth net on the bf16 render path and it needed **exactly two new ops**:
+-- `convStride4Bf16` (the 4×4/s4 patchify stem) and `convStride4WeightGradBBf16` (its weight grad).
+-- Everything else — the 7×7 depthwise, the block 1×1s, the 2×2/s2 downsamples, and every dgrad and
+-- wgrad among them — came from the MobileNetV2 (8 ops) and MobileNetV4 (3 ops) work unchanged.
+--
+-- ⭐ **There is no third op**: `convStride4` is the STEM, so it has no input gradient to compute.
+-- §10.3's guess that ConvNeXt's "large 1×1s are matmuls in disguise" needing new activation ×
+-- activation ops is wrong for THIS render — they are `.conv` at `kH = kW = 1` and `convBf16`
+-- already covers them. The only true matmul is the classifier head, which stays f32.
+--
+-- ⚠ Both new emit shapes were gate-2'd STANDALONE before a line of this was written (§10.4 step 1,
+-- §15.3 step 2), on the exact stem shapes: `bf16 operands → f32-typed result` FOLDS to pure f32 at
+-- stride 4 exactly as it does at stride 1, stride 2 and grouped, and `bf16 operands → bf16-TYPED
+-- result → convert` reaches the hardware. Stride buys no exemption from §9.2. That check cost
+-- fifteen minutes and has now paid three times.
+--
+-- ⚠ What stays f32, here as in every other bf16 render: LayerNorm, GELU, LayerScale, the drop-path
+-- masks, every BIAS gradient (`Σ_{batch,spatial} dy` is a reduction, not a contraction — nothing
+-- for a tensor core to do), the classifier head, and the whole AdamW tail including the clip fold.
+-- §14 measured that this carve-out is NOT a fixed tax: it cost MobileNetV2 nothing (1.92× verified
+-- against a 1.94× JAX reference) and EfficientNet-B0 almost everything (1.09×). Which one ConvNeXt
+-- resembles is a measurement, not a prediction.
+--
+-- ⚠ SINGLE-DEVICE IS THE ARM THAT MEANS ANYTHING (§13.2). MobileNetV2 measures 1.92× on one GPU
+-- and 1.37× on four from the SAME GRAPH — the loss is the shim feed first and the f32 all-reduce
+-- second, neither of which is a statement about the renderer. Read any 4-replica number here as a
+-- SYSTEM result and check `SHIM_WORKERS` before ever blaming the emit.
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true))
+-- ▶ The DP peer, per §0.5's rule: an ImageNet run loads the DP render, and DP renders are exactly
+-- the ones that silently fall behind their single-device peers. ConvNeXt's collectives are already
+-- tied (unlike MNv4's, which is why THAT net rendered single-device only), so this inherits nothing
+-- untied. ⚠ The clip still sits AFTER the collective: 180 all_reduces, not 360, all before the norm
+-- fold — and all of them f32, which is the §13.2 tax this artifact will pay.
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true))
+
 -- ── ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` ────────────────────────────────────────────
 -- `planning/vit_convnext_sb_scaleup.md`. The second net here added by RESHAPING an existing
 -- renderer rather than writing a chain, and the cheapest of the three so far: ViT-S needed six
@@ -682,3 +822,27 @@ end Proofs.StableHLO
 -- that do, so the property is checked here too rather than assumed to be EfficientNet's problem.
 #guard ((Proofs.StableHLO.cnxAdamVariant 1).splitOn "drop").length == 1
 #guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true).splitOn "drop").length == 2
+
+-- ⭐ The bf16 marker. ⚠ ConvNeXt DERIVES its entry name from the variant, and this net has now
+-- shipped the entry-name defect TWICE (`wx`, then `clip`) out of the four times it has occurred in
+-- the repo. `bf16` had to reach BOTH `convNextAdamTrainStepFaithfulB`'s traversal AND
+-- `cnxAdamVariant`'s returned STRING — and EfficientNet's bf16 render proved the second half is
+-- its own failure mode (the flag reached the name function's SIGNATURE and the function ignored
+-- it). These run the full concatenations, which is where a collision or a dropped marker appears.
+#guard Proofs.StableHLO.cnxAdamVariant 1 false true true true true == "adamwxclipdropbf16"
+#guard Proofs.StableHLO.cnxAdamVariant 4 false true true true true == "adamdpwxclipdropbf16"
+-- ⚠ And the marker must disturb NONE of the driver's substring predicates. `emaOn` is
+-- `startsWith "ema"`, `cdOn` is `splitOn "do"`, `accOn` is `splitOn "acc"`. ▶ Note `drop` itself
+-- is safe on `cdOn` for a reason that is easy to misread as luck: "drop" is d-r-o-p, so it does
+-- not contain the substring "do". `bf16` adds no "do", no "acc", no "sd" and no "ema" prefix —
+-- but it is checked rather than argued, because `rmsdp` containing "sd" is exactly the collision
+-- between two OTHER markers that no placement rule would have predicted.
+#guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true true).splitOn "do").length == 1
+#guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true true).splitOn "acc").length == 1
+#guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true true).splitOn "sd").length == 1
+#guard !(Proofs.StableHLO.cnxAdamVariant 4 false true true true true).startsWith "ema"
+-- ⚠ And it must not BREAK `drop`'s own detection by appending after it.
+#guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true true).splitOn "drop").length == 2
+-- ⚠ At `bf16 := false` every committed spelling is untouched — the gate-1 property, stated on the
+-- name as well as on the bytes.
+#guard Proofs.StableHLO.cnxAdamVariant 4 false true true true false == "adamdpwxclipdrop"

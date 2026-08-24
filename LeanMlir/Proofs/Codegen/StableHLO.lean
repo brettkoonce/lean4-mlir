@@ -287,6 +287,21 @@ inductive BatchableOp : Nat → Nat → Type where
   | convStride4 {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)
       : BatchableOp (ic*(2*(2*h))*(2*(2*w))) (oc*h*w)
+  -- ⭐ **The bf16 stem** — ConvNeXt's 4×4/s4 patchify, and the only STRIDE-4 conv in the kit. Same
+  -- emit discipline as every other conv here: bf16 operands, **bf16-TYPED result**, convert back,
+  -- bias in f32.
+  --
+  -- ⚠ `convStride4`'s **pad-one-less** rule is preserved verbatim: the denotation reads the stride-1
+  -- SAME conv at the offset positions `4i+1`, so the emitted pad is `(k-1)/2 − 1`, which at the 4×4
+  -- stem is `[[0,0]]` — the paper's left-aligned window, and NOT the symmetric `(k-1)/2` every other
+  -- forward conv emits. Copying `convBf16`'s pad here renders a different net at identical shapes.
+  --
+  -- ⚠ Measured on this exact shape (B=32, 3→96, 224²→56², 4×4/s4) BEFORE this op was written: the
+  -- §9.2 fold fires at stride 4 exactly as at stride 1, stride 2 and grouped — a bf16-operand
+  -- convolution with an f32-TYPED result compiles to pure f32. Stride buys no exemption either.
+  | convStride4Bf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (bias : Vec oc)
+      : BatchableOp (ic*(2*(2*h))*(2*(2*w))) (oc*h*w)
   | layerScaleCh {c h w : Nat} (γName : String) (γ : Vec c)  : BatchableOp (c*h*w) (c*h*w)
   | dotOut {m n : Nat} (wName : String) (W : Mat m n)        : BatchableOp n m
   | expe {n : Nat}                                          : BatchableOp n n
@@ -707,6 +722,16 @@ inductive SHlo : Nat → Type where
   --    is one row. ⚠ That is why the row count `R` is an explicit index here: reading `rowDense`'s
   --    own `N` as the batch is precisely the confusion the batched index exists to prevent.
   | convStride4WeightGradB {N ic oc h w kH kW : Nat} (xName : String)
+      (b : Vec oc) (x : Vec (N * (ic*(2*(2*h))*(2*(2*w))))) (W : Kernel4 oc ic kH kW)
+      : SHlo (N * (oc*h*w)) → SHlo (oc*ic*kH*kW)
+  -- ⭐ Its **bf16** peer, and ConvNeXt's second and last new op. As with `convWeightGradBBf16`, the
+  -- wgrad is the transpose-trick convolution (the batch IS the contraction dim), so the whole `Σ_n`
+  -- is ONE emitted convolution and therefore ONE bf16 store — which is why the outer `rnd` sits
+  -- outside the sum, not inside it.
+  -- ⭐ **There is no `convStride4BackBatchedBf16` and there must not be one.** `convStride4` is the
+  -- patchify STEM, so its input is `%x` and there is no input gradient to compute. Two new ops for
+  -- this net, not three.
+  | convStride4WeightGradBBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
       (b : Vec oc) (x : Vec (N * (ic*(2*(2*h))*(2*(2*w))))) (W : Kernel4 oc ic kH kW)
       : SHlo (N * (oc*h*w)) → SHlo (oc*ic*kH*kW)
   | layerScaleChGammaGradB {N c h w : Nat} (xName : String) (x : Vec (N*(c*h*w)))
@@ -1554,6 +1579,12 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .gelu (n := n) => gelu n
   | _, _, .transpose (m := m) (n := n) => transposeFlat m n
   | _, _, .convStride4 _ _ W bias => flatConvStride4 W bias
+  -- ⚠ `convBf16`'s exact shape at the stride-4 forward: the outer `rnd` is the bf16 STORE (the
+  -- bf16-typed conv result), the inner two are the operand casts, and the bias is added AFTER at
+  -- the accumulate precision — exactly as emitted.
+  | _, _, .convStride4Bf16 (h := h) (w := w) rnd _ _ W bias =>
+      fun x i => rnd (flatConvStride4 (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
+                 + Tensor3.flatten (fun o _ _ => bias o) i
   | _, _, .layerScaleCh (c := c) (h := h) (w := w) _ γ =>
       fun v => layerScale (fun k => γ (chanIdx c h w k)) v
   -- Per-EXAMPLE softmax: the denominator is that example's own sum, which is the whole point of
@@ -1918,6 +1949,14 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         (flatConvStride4_weight_grad_has_vjp b
             (batchSlice N (ic*(2*(2*h))*(2*(2*w))) x n)).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
+  -- The bf16 peer. ⚠ `rnd` OUTSIDE the `Σ_n`: the emit contracts the batch inside one convolution
+  -- and stores its bf16 result once, so a rounding per summand would claim a coarser computation
+  -- than the hardware performs — the same reason `convWeightGradBBf16` is written this way.
+  | _, .convStride4WeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
+      fun idx => rnd (∑ n : Fin N,
+        (flatConvStride4_weight_grad_has_vjp b
+            (fun j => rnd (batchSlice N (ic*(2*(2*h))*(2*(2*w))) x n j))).backward
+          (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
   | _, .layerScaleChGammaGradB (N := N) (c := c) (h := h) (w := w) _ x e =>
       fun cc => ∑ n : Fin N, ∑ k : Fin (c*h*w),
         (if chanIdx c h w k = cc
@@ -4440,6 +4479,11 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   | .transpose (m := m) (n := n) => ("transposeP", [], [N, m, n])
   | .convStride4 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
       ("convStride4P", [wN, bN], [N, ic, oc, h, w, kH, kW])
+  -- ⚠ A DISTINCT tag, for the reason every other bf16 conv tag is distinct: the emitted TEXT
+  -- differs (two operand converts, a bf16 result type, a convert back), so sharing a Raw with the
+  -- f32 tag would make two different graphs indistinguishable after `skel`.
+  | .convStride4Bf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
+      ("convStride4PBf16", [wN, bN], [N, ic, oc, h, w, kH, kW])
   | .layerScaleCh (c := c) (h := h) (w := w) gN _ => ("layerScaleChP", [gN], [N, c, h, w])
   | .dotOut (m := m) (n := n) wN _ => ("dotOutP", [wN], [N, m, n])
   | .expe (n := n) => ("expeP", [], [N, n])
@@ -4550,6 +4594,8 @@ def skel : {k : Nat} → SHlo k → Raw
   -- the denotation — the exact conflation this whole thread exists to remove.
   | _, .convStride4WeightGradB (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .batched "convStride4WeightGrad" [xN] [ic, oc, h, w, kH, kW] (skel e)
+  | _, .convStride4WeightGradBBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ xN _ _ _ e =>
+      .batched "convStride4WeightGradBf16" [xN] [ic, oc, h, w, kH, kW] (skel e)
   | _, .layerScaleChGammaGradB (c := c) (h := h) (w := w) xN _ e =>
       .batched "layerScaleChGammaGrad" [xN] [c, h, w] (skel e)
   | _, .veclnGammaGradB (R := R) (D := D) xN es _ _ e =>
@@ -6988,6 +7034,29 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
             s!"    {ob} = stablehlo.add {cv}, {bb} : {ty [B,oc,h,w']}\n" ++
             s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
+      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed result reads
+      -- identically and compiles to pure f32 — measured on THIS shape (4×4/s4) before the op was
+      -- written, so stride 4 buys no exemption from §9.2 any more than grouping did.
+      -- ⚠⚠ The pad is `convStride4P`'s `(k-1)/2 − 1`, NOT `convBf16`'s `(k-1)/2`. At the 4×4 stem
+      -- that is `[[0,0]]`. The two spellings produce the same output SIZE, so nothing structural
+      -- separates them — do not "tidy" this to match the other bf16 convs.
+      | "convStride4PBf16", [w, b], [_N, ic, oc, h, w', kH, kW] => do
+          let pH := (kH - 1) / 2 - 1; let pW := (kW - 1) / 2 - 1
+          let xn ← fresh; let xb ← fresh; let wb ← fresh; let cv ← fresh; let cf ← fresh
+          let bb ← fresh; let ob ← fresh; let o ← fresh
+          pure (
+            s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*(2*(2*h))*(2*(2*w'))]}) -> {ty [B,ic,2*(2*h),2*(2*w')]}\n" ++
+            s!"    {xb} = stablehlo.convert {xn} : ({ty [B,ic,2*(2*h),2*(2*w')]}) -> {tyBf16 [B,ic,2*(2*h),2*(2*w')]}\n" ++
+            s!"    {wb} = stablehlo.convert {w} : ({ty [oc,ic,kH,kW]}) -> {tyBf16 [oc,ic,kH,kW]}\n" ++
+            s!"    {cv} = stablehlo.convolution({xb}, {wb})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [4, 4], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyBf16 [B,ic,2*(2*h),2*(2*w')]}, {tyBf16 [oc,ic,kH,kW]}) -> {tyBf16 [B,oc,h,w']}\n" ++
+            s!"    {cf} = stablehlo.convert {cv} : ({tyBf16 [B,oc,h,w']}) -> {ty [B,oc,h,w']}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
+            s!"    {ob} = stablehlo.add {cf}, {bb} : {ty [B,oc,h,w']}\n" ++
+            s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
       | "gelu", [], [_N, n] => do
           let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
           let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
@@ -7260,6 +7329,36 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
             s!" : ({ty [ic,B,4*h,4*w]}, {ty [oc,B,extH,extW]}) -> {ty [ic,oc,kH,kW]}\n" ++
             s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
+      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back — measured on this exact
+      -- shape (`[3,B,224,224]` × `[96,B,221,221]` → `[3,96,4,4]`) before the op was written.
+      -- ⚠ Every geometry number is `convStride4WeightGrad`'s verbatim: the `interior = 3`
+      -- upsample, the `4h−3` extent with NO trailing row, and the `lo = p−1` / `hi = kH−3−p`
+      -- window. Only the four dtypes and the two converts move. ⚠ The `stablehlo.pad`'s zero stays
+      -- f32 — it pads the cotangent BEFORE the cast, so it is an f32 tensor at that point.
+      | "convStride4WeightGradBf16", [xN], [ic, oc, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let extH := 4 * h - 3; let extW := 4 * w - 3
+          let loH := pH - 1; let hiH := kH - 3 - pH
+          let loW := pW - 1; let hiW := kW - 3 - pW
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh
+          let dt ← fresh; let xb ← fresh; let db ← fresh; let raw ← fresh; let rf ← fresh
+          let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(4*h)*(4*w)]}) -> {ty [B,ic,4*h,4*w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 0, 0], interior = [0, 0, 3, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,extH,extW]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,4*h,4*w]}) -> {ty [ic,B,4*h,4*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
+            s!"    {xb} = stablehlo.convert {xt} : ({ty [ic,B,4*h,4*w]}) -> {tyBf16 [ic,B,4*h,4*w]}\n" ++
+            s!"    {db} = stablehlo.convert {dt} : ({ty [oc,B,extH,extW]}) -> {tyBf16 [oc,B,extH,extW]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xb}, {db})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{loH}, {hiH}], [{loW}, {hiW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyBf16 [ic,B,4*h,4*w]}, {tyBf16 [oc,B,extH,extW]}) -> {tyBf16 [ic,oc,kH,kW]}\n" ++
+            s!"    {rf} = stablehlo.convert {raw} : ({tyBf16 [ic,oc,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.transpose {rf}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
       | "convBiasGrad", [], [_N, oc, h, w] => do
           let dr ← fresh; let z ← fresh; let o ← fresh
           pure (
