@@ -6,9 +6,10 @@ Scoped 2026-08-01 on ares (6× RTX 4060 Ti, CUDA 12.9).
 
 ## ⭐ STATUS 2026-08-24 — ResNet-34 IS DONE AND RUNNING; four claims below are REFUTED
 
-Branch `bf16/verified-conv-ops`, three commits. **The verified R34 trains on ImageNet in bf16
-at 1.41× end to end** (222 → 157 ms/step, 4×bs64 on four 4060 Ti), with losses tracking the f32
-arm step-for-step to the 3rd–4th decimal.
+Branch `bf16/verified-conv-ops`. **The verified R34 trains on ImageNet in bf16 at 1.41× end to
+end** (222 → 157 ms/step, 4×bs64 on four 4060 Ti), with losses tracking the f32 arm step-for-step
+to the 3rd–4th decimal — and **R50 now does too, at 1.55×** (360 → 232 ms/step, same box, same
+4×bs64, both arms measured back to back in one session).
 
 | what | state |
 |---|---|
@@ -16,7 +17,8 @@ arm step-for-step to the 3rd–4th decimal.
 | `flatConvFBf16_faithful` / `_id` | ✅ the op adds rounding and nothing else |
 | `conv_close_mixed` | ✅ `Proofs/Float/ConvMixedFloatBridge.lean` |
 | R34 render wired + `resnet34in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green |
-| R50, MNv2, B0, MNv4, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
+| R50 render wired + `resnet50in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green, **1.55×** |
+| MNv2, B0, MNv4, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
 | whole-NET error bound; the 90-epoch run | ⛔ not started |
 
 ⚠ **Read §9 before trusting anything below it.** Four of this document's load-bearing claims
@@ -366,17 +368,61 @@ next perf lever and does NOT need new ops — only a decision about where the co
 Three categories, and they are genuinely different amounts of work. ⚠ "Mechanical" applies to
 exactly one of them.
 
-### 10.1 ResNet-50 — mechanical, no new ops, no new proof. Do this first.
+### 10.1 ✅ ResNet-50 — DONE 2026-08-24, and it WAS mechanical. **1.55×**, better than R34.
 
-Bottleneck blocks are 1×1 and 3×3 convs, i.e. **the same `BatchableOp.conv` at different
-`kH`/`kW`**. Nothing new is needed:
+The prediction in this section held: no new op, no new theorem, `bf16 : Bool := false` threaded
+through `ResNet50RenderB` and one `#eval`. 35 conv sites became a two-way choice, 32 block calls
+were threaded, and R34's diff (`2739e34`) was followed line for line.
 
-* the ops exist (`convBf16`, `convStridedBf16`, the dgrad/wgrad twins)
-* `conv_close_mixed` is stated over arbitrary `ic`/`kH`/`kW`, so R50's layers are instances
-* the work is `bf16 : Bool := false` threaded through `ResNet50RenderB` and one `#eval`
+MEASURED, real ImageNet, `CUDA_VISIBLE_DEVICES=0,2,3,4`, `PJRT_REPLICAS=4`, 4×bs64 = global 256,
+`LEAN_MLIR_MAX_STEPS=40` (median of steps 9..40), residency on, prefetch depth 8:
 
-▶ **Follow R34's diff exactly** (`2739e34`). And read §10.4 first — the entry-name trap is the
-one thing that will bite.
+| arm | ms/step | step 0 | step 1 | step 2 |
+|---|---|---|---|---|
+| `momdp64` (f32) | 360 | 7.517632 | 7.527534 | 7.629933 |
+| `momdp64bf16` | **232** | 7.526365 | 7.536716 | 7.625086 |
+| | **1.55×** | | | |
+
+⭐ **1.55× beats R34's 1.41×, and the direction is the expected one.** R50 is more conv-dominated
+than R34 — the bottleneck's 1×1s are the layers tensor cores like best — so the f32 remainder this
+render does not touch (BN, the residual adds, the loss, the heavy-ball tail, the all-reduce, the
+shim feed; §9.5) is a smaller fraction of a heavier net.
+
+⚠ **The loss agreement is LOOSER than R34's and that is worth stating rather than glossing.**
+R34's arms matched to the 3rd–4th decimal; R50's match to ~**0.12 % relative** at step 0 and
+0.06 % at step 2. Both are well inside one bf16 ulp (`2⁻⁸` = 0.39 %), and step 0 is a pure forward
+comparison — no update has happened yet — so the whole difference is 53 conv layers of bf16
+rounding composing. R50 stores through 53 bf16-typed conv results where R34 stores through 36,
+which is the shape of the net rather than a defect. Both arms trace the same non-monotone
+7.52 → 7.53 → 7.63 through step 2, which is the signal that says it is the same graph.
+
+▶ **Gate 2, the one that actually needed checking, is green on a shape R34 never had.**
+`scripts/bf16_gate2.py` resolves 158/158 convolutions with all operands bf16 in the OPTIMIZED HLO;
+the f32 control arm reports 158/158 f32. **34 of those forward sites are stride-1 1×1 convs**
+(`convBf16` at `kH = kW = 1`, so `pad = 0`) — R50's characteristic layer and the one thing about
+this render that was not already exercised by R34, whose only 1×1s are its strided projections.
+XLA neither folded them nor rewrote them into `dot_general`.
+
+⭐ A structural check backs the loss comparison: the two artifacts have **identical counts across
+all 24 `stablehlo` op kinds**, differing only by 474 added `stablehlo.convert` — exactly
+158 convs × 3 (two operand casts, one result cast back). Same graph, one node kind added.
+
+▶ **Gate 3 is an instantiation, not work.** `conv_close_mixed` is stated over arbitrary
+`ic`/`kH`/`kW`. At R50's fan-ins, `convBr` at `M.u = 2⁻²⁴` / `L.u = 2⁻⁸` (arithmetic outside Lean,
+quoted as illustration):
+
+    layer                    fan-in n   fan-in term   leaf term   convBr
+    1×1, ic=64                     64     3.9e-06     7.83e-03    0.0078
+    stem 7×7, ic=3                147     8.9e-06     7.83e-03    0.0078
+    3×3, ic=512 (widest)         4608     2.8e-04     7.83e-03    0.0081
+    1×1, ic=2048 (widest 1×1)    2048     1.2e-04     7.83e-03    0.0080
+
+R50's WIDEST fan-in is 4608 — the same as R34's — so the §9.3 numbers carry over unchanged, and
+its characteristic 1×1s all sit BELOW its 3×3s. The leaf term still dominates by ~28×.
+
+⚠ Still not done for R50, exactly as for R34: the whole-NET error bound (`FloatComposeBridge`) and
+a full training run. The 40-step probe says the graph is right and fast; it does not say what it
+converges to.
 
 ### 10.2 MobileNetV2 / EfficientNet-B0 / MNv4 — new op KIND, biggest payoff
 
@@ -419,6 +465,9 @@ Per net, in order:
    the driver refused at load with an entry mismatch. `r34AdamVariant`'s own docstring warns
    about this for `wx` and `clip` and records ConvNeXt shipping it twice. **bf16 made three.**
    ▶ The failure is LOUD — the driver refuses rather than running the wrong graph.
+   ✅ **R50 followed this and it did not bite** — `resnet50TrainStepFaithfulB` passes `bf16` to
+   `r34AdamVariant` alongside `wdExclude`/`gradClip`/`bce`/`wdStr`, and the artifact declared
+   `@resnet50in_momdp64bf16_train_step` on the first render. Three defects, then one clean one.
 4. **Guard the slug against the DRIVER's variant predicates.** They read the same string to
    size the checkpoint blob. `cdOn` is a substring test for `"do"`; a false positive silently
    adds a region. `#guard` that the new slug contains no `acc`, no `ema`, no `do`.
