@@ -1,6 +1,13 @@
 # ResNet-34 / ImageNet-1k — 90-epoch bf16 run (2026-05-30 → 2026-05-31)
 
-**Final (canonical, full 50,000-image validation on `r34_imagenet_bf16.bin`):**
+> ⚠ **SUPERSEDED 2026-08-22.** This run predates timm's validation protocol +
+> antialiased resampler, and the strided-conv `SAME` → symmetric `(k-1)//2` padding
+> fix (which changed the emitted *network*, so this checkpoint cannot simply be
+> re-scored). The **same recipe** re-run under the current emitter reaches
+> **74.16% / 91.92%** in ~14.8 h — see `/home/skoonce/r34_2018_90ep/` and blueprint
+> §5.7. Everything below is retained as the record of the original run.
+
+**Final (as measured 2026-05-31, full 50,000-image validation on `r34_imagenet_bf16.bin`):**
 
 | Metric | Value |
 |--------|-------|

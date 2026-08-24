@@ -1,0 +1,63 @@
+I0802 14:43:03.701314 3679643 service.cc:178] XLA service 0x7d38984890f0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0802 14:43:03.701375 3679643 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0802 14:43:03.703105 3679643 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0802 14:43:03.703132 3679643 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0802 14:43:03.703171 3679643 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0802 14:43:03.710035 3679643 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+I0802 14:43:06.766856 3679664 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 64 bytes spill stores, 64 bytes spill loads
+
+I0802 14:43:06.991122 3679656 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_976', 96 bytes spill stores, 64 bytes spill loads
+
+I0802 14:43:07.071144 3679673 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_975', 4 bytes spill stores, 4 bytes spill loads
+
+I0802 14:43:07.276260 3679673 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+I0802 14:43:07.324220 3679669 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0802 14:43:07.554350 3679664 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_580', 12 bytes spill stores, 12 bytes spill loads
+
+I0802 14:43:07.704120 3679674 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 9124 bytes spill stores, 9032 bytes spill loads
+
+I0802 14:43:07.723208 3679686 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_978', 112 bytes spill stores, 80 bytes spill loads
+
+I0802 14:43:07.910595 3679676 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_977', 32 bytes spill stores, 32 bytes spill loads
+
+I0802 14:43:08.043910 3679683 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 4 bytes spill stores, 4 bytes spill loads
+
+I0802 14:43:08.114981 3679672 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_216', 12 bytes spill stores, 12 bytes spill loads
+
+I0802 14:43:08.370892 3679661 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 100 bytes spill stores, 64 bytes spill loads
+
+I0802 14:43:08.435869 3679680 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_589', 12 bytes spill stores, 12 bytes spill loads
+
+I0802 14:43:08.451467 3679678 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 64 bytes spill stores, 64 bytes spill loads
+
+I0802 14:43:08.654650 3679685 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 100 bytes spill stores, 72 bytes spill loads
+
+I0802 14:43:08.700491 3679682 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 100 bytes spill stores, 64 bytes spill loads
+
+I0802 14:43:08.734751 3679660 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_975', 272 bytes spill stores, 192 bytes spill loads
+
+I0802 14:43:08.752303 3679673 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_438', 8 bytes spill stores, 8 bytes spill loads
+
+I0802 14:43:09.037710 3679677 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9884 bytes spill stores, 9800 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vit_ema_train_step.mlir (@vit_ema_train_step, 805 outputs, 1 replica) in 6307 ms
+I0802 14:43:10.999439 3679659 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+
+I0802 14:43:11.119211 3679669 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 804 bytes spill stores, 548 bytes spill loads
+
+I0802 14:43:11.213274 3679671 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 12 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 1694 ms
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_ema_train_step.mlir
+  xla/pjrt verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 32, ViT-Tiny ema (cosine+warmup 5ep, baseLR 0.000300), He init
+  ▸ EMA: 4th blob region [θ|m|v|ema], shadow starts AT the weights, decay min(0.000000, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW.
+[pjrt_ffi] RESIDENT: @vit_ema_train_step holds 800 parameter tensors (84.3 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.441128
+  step 1/295: loss=3.421460
+  step 2/295: loss=2.856790
+  PROBE: 51 ms/step (median of 4 steps 9..12, ViT-Tiny)

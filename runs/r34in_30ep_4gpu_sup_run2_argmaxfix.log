@@ -1,0 +1,5 @@
+[sup] 2026-08-04 18:12:28 START job=r34-imagenet-4gpu devs=0,2,3,4 epochs=30 rest_after=[none] temp_max=78 stall=1800s logs=/tmp/supervise_r34-imagenet-4gpu
+[sup] 2026-08-04 18:12:28 cmd: .lake/build/bin/resnet34-imagenet-verified-xla data
+[sup] 2026-08-04 18:12:28 attempt 1: resuming at epoch 2/30 (next rest: 999)
+[sup] 2026-08-04 18:12:28   launched PID=515836 PGID=515836
+[sup] 2026-08-04 19:17:25 supervisor exiting — taking the run down (PID=515836 PGID=515836)

@@ -1,0 +1,56 @@
+I0804 09:14:33.165882  344865 service.cc:178] XLA service 0x7c6fc4489560 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0804 09:14:33.165989  344865 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0804 09:14:33.167895  344865 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0804 09:14:33.167923  344865 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0804 09:14:33.167958  344865 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0804 09:14:33.174955  344865 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+I0804 09:14:34.708018  344884 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 8 bytes spill stores, 8 bytes spill loads
+
+I0804 09:14:34.906733  344898 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34_adam_train_step.mlir (@resnet34_adam_train_step, 405 outputs, 1 replica) in 4992 ms
+I0804 09:14:38.378184  344894 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 8 bytes spill stores, 8 bytes spill loads
+
+I0804 09:14:38.394672  344890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir (@resnet34_fwd, 1 outputs, 1 replica) in 402 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir (@resnet34_fwd_eval, 1 outputs, 1 replica) in 188 ms
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet34_adam_train_step.mlir
+  xla/pjrt verified_mlir/resnet34_fwd.mlir
+  xla/pjrt verified_mlir/resnet34_fwd_eval.mlir
+  train 9469, val 3925; bs 32, ResNet-34 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
+  step 0/295: loss=3.566133
+  step 1/295: loss=3.725182
+  step 2/295: loss=3.410646
+  step 100/295: loss=2.226500
+  step 200/295: loss=1.640005
+Epoch 1/80: loss=2.014015 lr=0.000333
+  epoch 1: val_acc = 1651/3925 = 42.063694%
+  step 0/295: loss=1.682776
+  step 1/295: loss=1.622526
+  step 2/295: loss=1.264610
+  step 100/295: loss=1.376843
+  step 200/295: loss=1.330033
+Epoch 2/80: loss=1.487901 lr=0.000667
+  epoch 2: val_acc = 2127/3925 = 54.191083%
+  step 0/295: loss=1.386077
+  step 1/295: loss=1.701546
+  step 2/295: loss=1.289891
+  step 100/295: loss=1.253933
+  step 200/295: loss=1.257743
+Epoch 3/80: loss=1.318061 lr=0.001000
+  epoch 3: val_acc = 2405/3925 = 61.273885%
+  step 0/295: loss=1.402482
+  step 1/295: loss=0.896078
+  step 2/295: loss=1.265223
+  step 100/295: loss=1.321553
+  step 200/295: loss=1.290288
+Epoch 4/80: loss=1.230441 lr=0.001000
+  epoch 4: val_acc = 2719/3925 = 69.273885%
+  step 0/295: loss=1.058680
+  step 1/295: loss=1.201540
+  step 2/295: loss=1.193805
+  step 100/295: loss=1.293641

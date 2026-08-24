@@ -1,0 +1,35 @@
+I0802 17:31:14.392251 3742072 service.cc:178] XLA service 0x761fd8489560 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0802 17:31:14.392352 3742072 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0802 17:31:14.394224 3742072 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0802 17:31:14.394253 3742072 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0802 17:31:14.394292 3742072 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0802 17:31:14.401086 3742072 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+E0802 17:31:17.327331 3742097 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0802 17:31:17.747118 3742109 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_347', 12 bytes spill stores, 12 bytes spill loads
+
+E0802 17:31:17.907695 3742107 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0802 17:31:17.955989 3742100 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_319', 12 bytes spill stores, 12 bytes spill loads
+
+E0802 17:31:19.654459 3742088 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0802 17:31:20.111070 3742108 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0802 17:31:21.190747 3742115 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0802 17:31:22.431940 3742106 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/efficientnet_adamsd_train_step.mlir (@efficientnet_adamsd_train_step, 749 outputs, 1 replica) in 10510 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir (@efficientnet_fwd, 1 outputs, 1 replica) in 611 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 427 ms
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/efficientnet_adamsd_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
+  train 9469, val 3925; bs 32, EfficientNet-B0 adamsd (cosine+warmup 3ep, baseLR 0.001000), He init
+  ▸ STOCHASTIC DEPTH: 9 drop sites, keeps #[0.973000, 0.947000, 0.920000, 0.907000, 0.880000, 0.867000, 0.840000, 0.827000, 0.813000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnet_fwd_eval
+[pjrt_ffi] RESIDENT: @efficientnet_adamsd_train_step holds 639 parameter tensors (46.0 MB) on 1 device; they stop crossing PCIe from here
+  step 0/3: loss=2.464909
+  step 1/3: loss=2.208447
+  step 2/3: loss=2.399365
+Epoch 1/80: loss=2.357574 lr=0.000333
+  epoch 1: val_acc = 0/3925 = 0.000000%
+  wrote final [θ|m|v] (48244296 bytes) → /tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/003a50f7-a948-4ca1-9b57-172c55b66672/scratchpad/sd_sd_rate02.bin
+done (trained EfficientNet-B0 adamsd + cosine/warmup via packed threading).

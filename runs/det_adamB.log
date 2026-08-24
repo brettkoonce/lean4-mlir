@@ -1,0 +1,24 @@
+I0802 17:32:47.324004 3746697 service.cc:178] XLA service 0x7d25684890f0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0802 17:32:47.324092 3746697 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0802 17:32:47.325994 3746697 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0802 17:32:47.326023 3746697 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0802 17:32:47.326059 3746697 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0802 17:32:47.333064 3746697 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir (@efficientnet_adam_train_step, 740 outputs, 1 replica) in 5687 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir (@efficientnet_fwd, 1 outputs, 1 replica) in 1562 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 1373 ms
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/efficientnet_adam_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
+  train 9469, val 3925; bs 32, EfficientNet-B0 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnet_fwd_eval
+[pjrt_ffi] RESIDENT: @efficientnet_adam_train_step holds 639 parameter tensors (46.0 MB) on 1 device; they stop crossing PCIe from here
+  step 0/3: loss=2.414983
+  step 1/3: loss=2.182725
+  step 2/3: loss=2.505452
+Epoch 1/80: loss=2.367720 lr=0.000333
+  epoch 1: val_acc = 0/3925 = 0.000000%
+  wrote final [θ|m|v] (48244296 bytes) → /tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/003a50f7-a948-4ca1-9b57-172c55b66672/scratchpad/det_adamB.bin
+done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).

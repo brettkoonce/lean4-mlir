@@ -1,0 +1,91 @@
+I0802 14:50:01.739364 3689157 service.cc:178] XLA service 0x7b92ac489560 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0802 14:50:01.739459 3689157 service.cc:194]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0802 14:50:01.741008 3689157 se_gpu_pjrt_client.cc:1358] Using BFC allocator.
+I0802 14:50:01.741036 3689157 gpu_helpers.cc:158] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0802 14:50:01.741070 3689157 gpu_helpers.cc:201] XLA backend will use up to 4181721088 bytes on device 0 for CollectiveBFCAllocator.
+I0802 14:50:01.748122 3689157 cuda_dnn.cc:436] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+I0802 14:50:04.484401 3689199 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 64 bytes spill stores, 64 bytes spill loads
+
+I0802 14:50:04.562627 3689180 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_975', 4 bytes spill stores, 4 bytes spill loads
+
+I0802 14:50:04.753800 3689188 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+I0802 14:50:04.840637 3689179 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_976', 96 bytes spill stores, 64 bytes spill loads
+
+I0802 14:50:04.936848 3689191 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 100 bytes spill stores, 64 bytes spill loads
+
+I0802 14:50:04.985592 3689190 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_580', 12 bytes spill stores, 12 bytes spill loads
+
+I0802 14:50:05.482796 3689176 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 9124 bytes spill stores, 9032 bytes spill loads
+
+I0802 14:50:05.584360 3689195 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_438', 8 bytes spill stores, 8 bytes spill loads
+
+I0802 14:50:05.699455 3689174 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_589', 12 bytes spill stores, 12 bytes spill loads
+
+I0802 14:50:06.176761 3689181 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 100 bytes spill stores, 72 bytes spill loads
+
+I0802 14:50:06.185251 3689178 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_978', 112 bytes spill stores, 80 bytes spill loads
+
+I0802 14:50:06.315054 3689201 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 64 bytes spill stores, 64 bytes spill loads
+
+I0802 14:50:06.330716 3689174 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 4 bytes spill stores, 4 bytes spill loads
+
+I0802 14:50:06.453307 3689186 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 72 bytes spill stores, 40 bytes spill loads
+
+I0802 14:50:06.525409 3689187 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_977', 32 bytes spill stores, 32 bytes spill loads
+
+I0802 14:50:06.626481 3689175 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 100 bytes spill stores, 64 bytes spill loads
+
+I0802 14:50:06.675309 3689197 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_216', 12 bytes spill stores, 12 bytes spill loads
+
+I0802 14:50:06.797126 3689185 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9884 bytes spill stores, 9800 bytes spill loads
+
+I0802 14:50:06.995883 3689199 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_975', 272 bytes spill stores, 192 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vit_adam_train_step.mlir (@vit_adam_train_step, 603 outputs, 1 replica) in 6154 ms
+I0802 14:50:08.889804 3689184 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+
+I0802 14:50:08.994251 3689173 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 12 bytes spill stores, 4 bytes spill loads
+
+I0802 14:50:09.006514 3689177 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 804 bytes spill stores, 548 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/vit_fwd.mlir (@vit_fwd, 1 outputs, 1 replica) in 1770 ms
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/vit_adam_train_step.mlir
+  xla/pjrt verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 32, ViT-Tiny adam (cosine+warmup 5ep, baseLR 0.000300), He init
+[pjrt_ffi] RESIDENT: @vit_adam_train_step holds 600 parameter tensors (63.2 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.441128
+  step 1/295: loss=3.421460
+  step 2/295: loss=2.856790
+  step 100/295: loss=2.061066
+  step 200/295: loss=1.987742
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.102756 lr=0.000060
+  epoch 1: val_acc = 1595/3925 = 40.636943%
+  step 0/295: loss=1.812489
+  step 1/295: loss=1.760628
+  step 2/295: loss=1.817532
+  step 100/295: loss=1.748898
+  step 200/295: loss=1.659440
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.791624 lr=0.000120
+  epoch 2: val_acc = 1685/3925 = 42.929936%
+  step 0/295: loss=1.848022
+  step 1/295: loss=1.926811
+  step 2/295: loss=1.876948
+  step 100/295: loss=1.546343
+  step 200/295: loss=1.639507
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.658023 lr=0.000180
+  epoch 3: val_acc = 1900/3925 = 48.407643%
+  step 0/295: loss=1.711705
+  step 1/295: loss=1.516748
+  step 2/295: loss=1.817599
+  step 100/295: loss=1.569662
+  step 200/295: loss=1.298200
+[pjrt_ffi] RESIDENT: @vit_fwd holds 200 parameter tensors (21.1 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.578948 lr=0.000240
+  epoch 4: val_acc = 2027/3925 = 51.643312%
+done (trained ViT-Tiny adam + cosine/warmup via packed threading).
