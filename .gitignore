@@ -11,7 +11,10 @@ __pycache__/
 # Blueprint build artifacts
 blueprint/web/
 blueprint/print/
+blueprint/build/
 blueprint/lean_decls
+# The rendered PDF is a build product; CI produces it.
+blueprint/*.pdf
 blueprint/src/*.aux
 blueprint/src/*.paux
 blueprint/src/*.out
@@ -52,6 +55,8 @@ demos/figures/*.ppm
 # Demo inference dumps moved from figures/ to runs/ (2026-07-26). The logit
 # dumps are large and regenerable; curated .ppm/.png/.log/.tsv stay tracked.
 runs/**/*.bin
+# Per-epoch resume markers are checkpoint state, not curated artifacts.
+runs/**/*.epoch
 
 # Claude Code agent state — per-machine session/memory data, not repo content.
 # One file (an agent memory from an UNRELATED project path,
