@@ -995,6 +995,16 @@ end Proofs.StableHLO
 -- `adamdp64` would name both a 2- and a 4-replica render at B=64. Only the 4-replica one exists.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adam64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in")
+
+-- ⭐ **The SINGLE-DEVICE bf16 peer**, and it exists to answer one question the 4-replica numbers
+-- cannot: **how much of the bf16 win does the f32 all-reduce eat?** `adamdp64bf16` measured 1.37×
+-- at 4 replicas while MNv4 — which renders no DP variant at all — measured 1.88× at 1. Those two
+-- differ in BOTH architecture and replica count, so neither explains the other. This render holds
+-- the architecture fixed and moves only the replica count. ▶ Not a recipe; a control.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adam64bf16_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in"
+    Proofs.StableHLO.OptKind.adamw true)
+#guard Proofs.StableHLO.mnv2AdamVariant 64 1 Proofs.StableHLO.OptKind.adamw true == "adam64bf16"
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adamdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in")
 

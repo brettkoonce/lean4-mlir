@@ -18,8 +18,9 @@ to the 3rd–4th decimal — and **R50 now does too, at 1.55×** (360 → 232 ms
 | `conv_close_mixed` | ✅ `Proofs/Float/ConvMixedFloatBridge.lean` |
 | R34 render wired + `resnet34in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green |
 | R50 render wired + `resnet50in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green, **1.55×** |
-| MNv2 render + 8 new ops (incl. the first GROUPED bf16 convs) | ✅ gates green, **1.37×**; §12 |
-| B0, MNv4, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
+| MNv2 render + 8 new ops (incl. the first GROUPED bf16 convs) | ✅ gates green; **1.92× on 1 GPU**, 1.37× at 4; §12–13 |
+| MNv4 render + 3 new ops | ✅ gates green, **1.88×** (1 GPU); §13 |
+| B0, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
 | whole-net composition (`ConvMixedComposeBridge.lean`) | ✅ the conv is `FloatClose`; §11 |
 | the 90-epoch run | ⛔ not started |
 
@@ -597,6 +598,13 @@ MNv2 holds **40.1 MB** of parameters where R50 holds 292.5 MB. It is memory-boun
 `stablehlo.convert` nodes cost relatively more than they do in a compute-bound net. ▶ **This is
 the first net where chasing §9.5's boundary converts would clearly pay more than adding ops.**
 
+⛔⛔ **THE PARAGRAPH ABOVE IS REFUTED — §13.2.** The same graph measures **1.92× on ONE GPU**,
+which is within noise of the JAX-side 1.94×. The verified emit's boundary converts cost MNv2
+almost nothing; the 1.37× is the **data pipeline and the f32 collective**, not the converts and
+not memory-boundedness. The "39 % of the win captured" figure is an artifact of the 4-replica
+configuration, not a property of the renderer. ⚠ It also puts §9.5's whole "the boundary converts
+are most of the remainder" reading in doubt — see §13.3.
+
 Losses agree to **0.10 % / 0.06 % / 0.14 %** relative over the first three steps — the same
 ~0.1 % band R50 showed, and inside one bf16 ulp (2⁻⁸ = 0.39 %).
 
@@ -656,3 +664,74 @@ import … DepthwiseMixedFloatBridge failed,
 `depthwiseConv2d_eq_dense` all existed; the new file now imports them and is shorter for it.
 ⚠ When a `conv*`/`dw*` helper looks missing, **grep before defining** — twice now the collision
 was with a lemma that already did the job.
+
+---
+
+## 13. ✅ MNv4 — 1.88×; and ⛔ THE MEASUREMENT THAT REFUTES §12.1 AND CASTS DOUBT ON §9.5
+
+### 13.1 MobileNetV4-Conv-M — three new ops, and MNv2 had already built the rest
+
+`mnv4in_adam64bf16_train_step.mlir`. 47 conv/depthwise call sites threaded; **only three new ops**
+(`depthwiseStridedBf16` and its dgrad/wgrad) because MNv4's UIB blocks use the **symmetric-pad**
+`depthwiseStrided` family where MNv2 used the XLA-`SAME` one. Everything else — the stride-1
+depthwise, the 1×1s, `convStridedXla` — came from §12 unchanged.
+
+⚠ **SINGLE-DEVICE, deliberately.** MNv4 renders no DP variant at all: nothing has tied its
+collectives, and a bf16 DP artifact would inherit that untied status while looking as trustworthy
+as the rest. The precision axis does not get to quietly introduce the replica axis.
+
+| arm | ms/step | step 0 | step 1 | step 2 |
+|---|---|---|---|---|
+| `adam64` (f32), 1 GPU | 120 | 6.960926 | 7.108018 | 7.074213 |
+| `adam64bf16`, 1 GPU | **64** | 6.953143 | 7.115940 | 7.072668 |
+| | **1.88×** | | | |
+
+Gate 1 green; gate 2 **230/230 convolutions bf16, 60 of them grouped**, f32 control 230/230 f32;
+histograms differ only by 690 `convert` = 230 × 3. Losses agree to 0.11 / 0.11 / 0.02 %.
+Gate 3 needs nothing new: `depthwise_close_mixed` is stated over arbitrary `kH`/`kW`, so MNv4's
+**5×5** depthwise is an instance (n = 25, bracket still 0.0078).
+
+### 13.2 ⛔⛔ THE CONTROL THAT CHANGES THE STORY — MNv2 at 1 GPU is **1.92×**
+
+MNv4's 1.88× and MNv2's 1.37× differ in **both** architecture and replica count, so neither
+explains the other. `mobilenetv2in_adam64bf16` was rendered purely as a control — same net, same
+graph, replica count the only variable:
+
+| MNv2 arm | f32 | bf16 | speedup |
+|---|---|---|---|
+| 1 GPU, real data | 136 | 71 | **1.92×** |
+| 4 GPU, **synthetic** input | 150 | 89 | 1.69× |
+| 4 GPU, real data | 191 | 139 | 1.37× |
+
+Per-step cost, decomposed:
+
+| term | f32 | bf16 |
+|---|---|---|
+| compute (1 GPU) | 136 | 71 |
+| + collective + DP overhead | +14 | +18 |
+| + shim feed | +41 | +50 |
+
+▶ **MNv2's bf16 arm on one GPU is 1.92×, against the 1.94× §9.1 measured on the JAX-codegen
+module.** The verified renderer is at parity. §12.1's explanation — boundary converts, memory
+boundedness — is **wrong**; the loss is the data pipeline first and the f32 all-reduce second.
+⚠ Note both non-compute terms are LARGER in the bf16 arm (18 vs 14, 50 vs 41): they are f32 and
+host-side, they do not shrink, and a faster GPU step simply spends longer waiting on them. At
+4×bs64 the bf16 arm needs **1,842 img/s** from the shim, which is the regime
+`next_session_a3_the_run.md` §1 warns about by name.
+
+### 13.3 ⚠ WHAT THIS DOES AND DOES NOT SAY ABOUT §9.5 AND THE OTHER NETS
+
+§9.5 attributes the verified path's gap to JAX to the boundary converts ("most of the remainder
+has a name"). For MNv2 that is now measured to be **false**. ⚠ But R34's 1.41× and R50's 1.55×
+are **4-replica** numbers, and no single-GPU bf16 render exists for either — so whether their gap
+is also mostly pipeline-and-collective is **INFERENCE, NOT MEASUREMENT**, and this document has
+been burned by exactly that kind of extrapolation before (§9).
+
+▶ **The experiment that would settle it, named so it can be run:** render
+`resnet34in_mom64bf16` / `resnet50in_mom64bf16` at `replicas := 1` and probe them on one GPU
+against their f32 peers. One `#eval` each, no new ops, no new proof.
+
+⭐ **The actionable conclusion that IS measured:** on a single device the verified bf16 path
+reaches the reference's speedup. Any 4-replica bf16 number on this box should be read as a
+*system* result — pipeline and collective included — not as a statement about the renderer, and
+raising `SHIM_WORKERS` is the first thing to try before touching the emit.
