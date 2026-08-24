@@ -25,9 +25,15 @@ BACKEND="${BACKEND:-cuda}"                   # cuda = 4x 4060Ti (this box) | roc
 JAX_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV_PY="${VENV_PY:-/home/skoonce/lean/klawd_max_power/lean4-jax/.venv/bin/python}"
 CKPT_BASE="${CKPT_BASE:-/home/skoonce/r50_rsb_a3_imagenet}"   # -> _e{N}.bin + _e{N}.state.npz
-PY=.lake/build/generated_resnet50_imagenet_short.py
-RUNLOG=/tmp/r50_a3_imagenet.log              # full training stdout (current attempt)
-MASTER=/tmp/r50_a3_imagenet_master.log       # supervisor narration (persists across attempts)
+# The generated trainer to supervise. Overridable because NOTHING below is A3-specific —
+# resume, the AER watchdog and the thermal duty cycle are properties of this box, not of a
+# recipe — and the 2026-08-15 re-run sweep needs the same supervision for the `2018` recipe.
+# A copy of this file per recipe is how the eval_*_full50k.py scripts drifted apart.
+PY="${PY:-.lake/build/generated_resnet50_imagenet_short.py}"
+PYNAME="$(basename "$PY")"
+TAG="${TAG:-${PYNAME%.py}}"                  # names the two supervisor logs
+RUNLOG=/tmp/${TAG}.log                       # full training stdout (current attempt)
+MASTER=/tmp/${TAG}_master.log                # supervisor narration (persists across attempts)
 # Cumulative trainer stdout for the WHOLE run --- appended live (never truncated),
 # kept next to the checkpoints so it survives /tmp clears and host resets, not just
 # resumes. RUNLOG stays per-attempt so the detection greps below do not match stale
@@ -46,10 +52,10 @@ cd "$JAX_DIR" || { echo "no jax dir: $JAX_DIR"; exit 1; }
 if [ "$BACKEND" = "rocm" ]; then
   DEV_ENV=(HIP_VISIBLE_DEVICES=0,1 LD_PRELOAD=/opt/rocm/lib/librccl.so.1)
 else
-  DEV_ENV=(CUDA_VISIBLE_DEVICES=0,2,3,4)
+  DEV_ENV=(CUDA_VISIBLE_DEVICES="${CUDA_DEVS:-0,2,3,4}")
 fi
 
-echo "[sup] $(date '+%F %T') START R50-RSB-A3 ($BACKEND); ckpt=$CKPT_BASE; every=$CKPT_EVERY; cooldown@[$COOLDOWN_AT] ${COOLDOWN_SECS}s; jax_dir=$JAX_DIR" | tee -a "$MASTER"
+echo "[sup] $(date '+%F %T') START $TAG ($BACKEND) py=$PY devs=${CUDA_DEVS:-0,2,3,4}; ckpt=$CKPT_BASE; every=$CKPT_EVERY; cooldown@[$COOLDOWN_AT] ${COOLDOWN_SECS}s; jax_dir=$JAX_DIR" | tee -a "$MASTER"
 
 attempt=0
 while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
@@ -91,7 +97,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
 
   result="unknown"
   while kill -0 "$PYPID" 2>/dev/null; do
-    if journalctl -k --since "$START" 2>/dev/null | grep -qiE "BadTLP|Hardware Error|AER:"; then
+    if journalctl -k --since "$START" 2>/dev/null | grep -iE "BadTLP|AER:|Uncorrected|Fatal" | grep -qivE "no action required"; then
       echo "[sup] $(date '+%T') !!! AER detected — killing PID=$PYPID" | tee -a "$MASTER"
       kill -9 "$PYPID" 2>/dev/null; sleep 2
       result="aer"; break
@@ -116,7 +122,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
     exit 0
   fi
 
-  pkill -9 -f "generated_resnet50_imagenet_short.py" 2>/dev/null
+  pkill -9 -f "$PYNAME" 2>/dev/null
 
   if [ "$result" = "cooldown" ]; then
     echo "[sup] $(date '+%T') ❄️  GPUs idle — cooling ${COOLDOWN_SECS}s before resuming past epoch $NEXT_COOL" | tee -a "$MASTER"
