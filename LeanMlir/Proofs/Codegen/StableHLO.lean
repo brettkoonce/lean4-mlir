@@ -149,6 +149,14 @@ inductive BatchableOp : Nat → Nat → Type where
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
   | convStrided {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
+  -- ⭐ The **bf16** peers of `conv`/`convStrided` — the batched forward convs every ResNet
+  -- render actually uses (`.batchOp (.conv …)`), as distinct from the per-example
+  -- `flatConvFBf16`. Same emit discipline: bf16 operands, **bf16-typed result**, convert back,
+  -- then the bias in f32. See `flatConvFBf16` for why the result type is load-bearing.
+  | convBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
+  | convStridedBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
   -- ⭐ The **XLA `'SAME'`** stride-2 conv — same shape as `convStrided`, different padding, and
   -- the two are NOT interchangeable. `convStrided` pads symmetrically `((k-1)/2` each side), which
   -- is He et al./torchvision and is what R34/R50/ConvNeXt's references do. This one pads
@@ -356,6 +364,26 @@ inductive SHlo : Nat → Type where
   -- 2×2 max-pool forward (`reduce_window`). Vec-indexed via the proofs'
   -- flattened forms `flatConv`/`maxPoolFlat`.
   | flatConvF  {ic oc h w kH kW : Nat} (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc)                    : SHlo (ic*h*w) → SHlo (oc*h*w)
+  -- ⭐ The **bf16** peer of `flatConvF`: bf16 conv operands, f32 bias add.
+  --
+  -- ⚠⚠ Its emit is NOT `dotInBf16`'s shape and must not be "made consistent" with it.
+  -- Measured on ares 2026-08-24 (jax 0.11.0 and 0.10.2 alike, and NOT rescued by
+  -- `xla_allow_excess_precision=false`): a `convolution` with bf16 operands and an
+  -- **f32-typed result** has its converts DELETED — cuDNN receives f32 parameters and the
+  -- optimized HLO contains no convert at all. That is `convertF`'s round-trip fold, one op
+  -- over. `dot_general` is genuinely unaffected, which is why `dotInBf16` may keep an f32
+  -- result and this may not. The shape that survives is a **bf16-TYPED result** followed by
+  -- a separate convert back — what `jax/Jax/Codegen.lean`'s `conv2d` already emits, and why
+  -- the JAX lowerer gets bf16 on ImageNet and the verified path does not.
+  --
+  -- ▶ So the value is rounded TWICE and `den` says so: once per operand (bf16 in) and once
+  -- on the accumulated sum (bf16 store; the MAC itself accumulates in f32). `dotInBf16`'s
+  -- `den` carries no outer rounding because its result really does stay f32 — copying it
+  -- here would claim MORE precision than the hardware delivers, which is the unsound
+  -- direction for an accuracy bound.
+  -- ▶ The bias is added after the convert back, in f32, exactly as the emit orders it.
+  | flatConvFBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)                    : SHlo (ic*h*w) → SHlo (oc*h*w)
   | maxPoolF   {c h w : Nat}                                    : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
   -- ⭐ The **3×3/s2** peer of `maxPoolF` — He et al.'s ResNet stem pool, at the PER-EXAMPLE index
@@ -861,6 +889,17 @@ inductive SHlo : Nat → Type where
   | convStridedBackBatched {N ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * (2 * h) * (2 * w)))
+  -- ⭐ The **bf16** input-VJP peers. These are where the money is: the backward is ~60% of the
+  -- conv step (measured on R34's own layer shapes, `planning/bf16_renderer.md`), and unlike JAX
+  -- — which autodiffs the backward FROM the cast forward and so inherits bf16 for free — every
+  -- hand-written VJP here needs its own bf16 twin. dgrad is itself a convolution, so it takes
+  -- the same emit shape and the same `den` discipline as the forward.
+  | convBackBatchedBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+      SHlo (N * (oc * h * w)) → SHlo (N * (ic * h * w))
+  | convStridedBackBatchedBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+      SHlo (N * (oc * h * w)) → SHlo (N * (ic * (2 * h) * (2 * w)))
   -- Batched depthwise input-VJP: `batchMap N` of the proven per-example
   -- depthwise input-grad (activation-independent — depthwise conv is linear).
   | depthwiseBackBatched {N c h w kH kW : Nat} (wName : String)
@@ -937,6 +976,15 @@ inductive SHlo : Nat → Type where
       (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW)
                                                           : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
   | convStridedWeightGradB {N ic oc h w kH kW : Nat} (xName : String)
+      (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
+                                                          : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
+  -- ⭐ The **bf16** weight-grad peers. wgrad is the transpose-trick convolution (batch as the
+  -- contraction dim), so the whole `Σ_n` is ONE emitted convolution and therefore ONE bf16
+  -- store — which is why the outer `rnd` sits outside the sum, not inside it.
+  | convWeightGradBBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
+      (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW)
+                                                          : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
+  | convStridedWeightGradBBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
       (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
                                                           : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
   -- Stride-INDEPENDENT (`Σ_{batch,spatial} dy`), so both bias grads `skel` to ONE Raw and share
@@ -1410,6 +1458,12 @@ def chanIdx (c h w : Nat) (k : Fin (c * h * w)) : Fin c :=
 noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .conv _ _ W bias => flatConv W bias
   | _, _, .convStrided _ _ W bias => flatConvStride2 W bias
+  | _, _, .convBf16 (h := h) (w := w) rnd _ _ W bias =>
+      fun x i => rnd (flatConv (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
+                 + Tensor3.flatten (fun o _ _ => bias o) i
+  | _, _, .convStridedBf16 (h := h) (w := w) rnd _ _ W bias =>
+      fun x i => rnd (flatConvStride2 (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
+                 + Tensor3.flatten (fun o _ _ => bias o) i
   | _, _, .convStridedXla _ _ W bias => flatConvStride2Xla W bias
   | _, _, .depthwise _ _ W bias => depthwiseFlat W bias
   | _, _, .depthwiseStrided _ _ W bias => depthwiseStride2Flat W bias
@@ -1586,6 +1640,16 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun idx => ∑ n : Fin N,
         (flatConvStride2_weight_grad_has_vjp b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
+  | _, .convWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
+      fun idx => rnd (∑ n : Fin N,
+        (conv2d_weight_grad_has_vjp b
+          (Tensor3.unflatten (fun j => rnd (batchSlice N (ic*h*w) x n j)))).backward
+          (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
+  | _, .convStridedWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
+      fun idx => rnd (∑ n : Fin N,
+        (flatConvStride2_weight_grad_has_vjp b
+          (fun j => rnd (batchSlice N (ic*(2*h)*(2*w)) x n j))).backward
+          (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
   | _, .convBiasGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) W x b e =>
       fun o => ∑ n : Fin N,
         (conv2d_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward b
@@ -1690,6 +1754,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .selectMid _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
   | _, .convertF rnd e => fun i => rnd (den e i)
   | _, .flatConvF _ _ W b e => flatConv W b (den e)
+  -- Operands rounded, the accumulated sum rounded (bf16 store), bias added after in f32.
+  | _, .flatConvFBf16 rnd _ _ W b e =>
+      fun i => rnd (flatConv (fun o c kh kw => rnd (W o c kh kw)) 0 (fun j => rnd (den e j)) i)
+               + Tensor3.flatten (fun o _ _ => b o) i
   | _, .maxPoolF (c := c) (h := h) (w := w) e => maxPoolFlat c h w (den e)
   | _, .maxPool3s2F (c := c) (h := h) (w := w) e => maxPool3s2Flat c h w (den e)
   | _, .convBack _ W b v e => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v (den e)
@@ -1845,6 +1913,14 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       batchMap N (fun dy => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
   | _, .convStridedBackBatched (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (flatConvStride2_has_vjp W b).backward (fun _ => 0) dy) (den e)
+  | _, .convBackBatchedBf16 (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) rnd _ W b e =>
+      batchMap N (fun dy i => rnd ((hasVJP3_to_hasVJP
+        (conv2d_has_vjp3 (fun o c a d => rnd (W o c a d)) b)).backward
+          (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
+  | _, .convStridedBackBatchedBf16 (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) rnd _ W b e =>
+      batchMap N (fun dy i => rnd ((flatConvStride2_has_vjp
+        (fun o c a d => rnd (W o c a d)) b).backward
+          (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
   | _, .depthwiseStridedBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
@@ -2572,6 +2648,32 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
 theorem flatConvF_faithful {ic oc h w kH kW : Nat} (wN bN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*h*w)) :
     den (.flatConvF wN bN W b e) = flatConv W b (den e) := rfl
+
+/-- **bf16 conv forward faithfulness.** The bf16 `stablehlo.convolution` op denotes the
+    proven `flatConv` on ROUNDED operands, with the accumulated sum rounded and the bias
+    added afterwards in f32 — i.e. exactly what the emitted graph computes.
+
+    ⚠ Contrast `flatConvF_faithful`, which has no rounding, and `dotInBf16`, which rounds
+    the operands but NOT the result. The outer `rnd` here is not decoration: the emit gives
+    the convolution a bf16-typed result, so the hardware stores the accumulator rounded. -/
+theorem flatConvFBf16_faithful {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*h*w)) :
+    den (.flatConvFBf16 rnd wN bN W b e)
+      = fun i => rnd (flatConv (fun o c kh kw => rnd (W o c kh kw)) 0
+                               (fun j => rnd (den e j)) i)
+                 + Tensor3.flatten (fun o _ _ => b o) i := rfl
+
+/-- **The bundling is inert at the identity rounding.** At `rnd = id` the bf16 op denotes
+    exactly what `flatConvF` does. The `dotInBf16_eq_dotIn_rounded` analogue: it says the op
+    adds ROUNDING and nothing else — no reassociation, no dropped bias, no moved padding.
+    Without it, "the emit is bf16" and "the emit is the same conv" are two separate hopes. -/
+theorem flatConvFBf16_id {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*h*w)) :
+    den (.flatConvFBf16 id wN bN W b e) = den (.flatConvF (h := h) (w := w) wN bN W b e) := by
+  funext i
+  simp only [flatConvFBf16_faithful, flatConvF_faithful, id_eq, flatConv, conv2d,
+             Tensor3.flatten, Tensor3.unflatten, Pi.zero_apply, zero_add]
+  ring
 
 /-- **Max-pool forward faithfulness.** The (flattened) `reduce_window(max)` op
     denotes the proven `maxPoolFlat`. -/
@@ -4096,6 +4198,7 @@ inductive Raw where
   | selectMid  (x : String) (n : Nat)      : Raw → Raw
   | convertF   (n : Nat)                   : Raw → Raw
   | flatConvF  (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
+  | flatConvFBf16 (w b : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | maxPoolF   (c h w : Nat)               : Raw → Raw
   | convBack   (w : String) (ic oc h w' kH kW : Nat) : Raw → Raw
   | maxPoolBack (x : String) (c h w : Nat) : Raw → Raw
@@ -4185,6 +4288,13 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
       ("conv", [wN, bN], [N, ic, oc, h, w, kH, kW])
   | .convStrided (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
       ("convStrided", [wN, bN], [N, ic, oc, h, w, kH, kW])
+  -- ⚠ DISTINCT tags, for the `convStridedXla` reason one case down and one more: the emitted
+  -- TEXT differs (converts + a bf16 result type), so sharing a Raw with the f32 tag would make
+  -- two different graphs indistinguishable after `skel`.
+  | .convBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
+      ("convBf16", [wN, bN], [N, ic, oc, h, w, kH, kW])
+  | .convStridedBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
+      ("convStridedBf16", [wN, bN], [N, ic, oc, h, w, kH, kW])
   -- ⚠ A DISTINCT tag, deliberately. Aliasing this onto "convStrided" (the way the bias-grads
   -- legitimately alias, because their emitted text is stride-independent) would be wrong here:
   -- the emitted `pad` differs, so the two tags must not share a Raw.
@@ -4277,6 +4387,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .convertF _ e          => .convertF k (skel e)
   | _, .flatConvF (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ e =>
       .flatConvF wN bN ic oc h w kH kW (skel e)
+  | _, .flatConvFBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ e =>
+      .flatConvFBf16 wN bN ic oc h w kH kW (skel e)
   | _, .maxPoolF (c := c) (h := h) (w := w) e => .maxPoolF c h w (skel e)
   | _, .convBack (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ _ e =>
       .convBack wN ic oc h w kH kW (skel e)
@@ -4466,6 +4578,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convBackBatched" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedBackBatched (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ e =>
       .batched "convStridedBackBatched" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convBackBatchedBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN _ _ e =>
+      .batched "convBackBatchedBf16" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convStridedBackBatchedBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN _ _ e =>
+      .batched "convStridedBackBatchedBf16" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ e =>
       .batched "depthwiseBackBatched" [wN] [N, c, h, w, kH, kW] (skel e)
   | _, .depthwiseStridedBackBatched (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ e =>
@@ -4492,6 +4608,10 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convWeightGrad" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .batched "convStridedWeightGrad" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ xN _ _ _ e =>
+      .batched "convWeightGradBf16" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convStridedWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ xN _ _ _ e =>
+      .batched "convStridedWeightGradBf16" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedXlaWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .batched "convStridedXlaWeightGrad" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convBiasGradB (N := N) (oc := oc) (h := h) (w := w) _ _ _ e =>
@@ -4613,6 +4733,7 @@ inductive Tok where
   | selectMid  (x : String) (n : Nat)      : Tok
   | convertF   (n : Nat)                   : Tok
   | flatConvF  (w b : String) (ic oc h w' kH kW : Nat) : Tok
+  | flatConvFBf16 (w b : String) (ic oc h w' kH kW : Nat) : Tok
   | maxPoolF   (c h w : Nat)               : Tok
   | convBack   (w : String) (ic oc h w' kH kW : Nat) : Tok
   | maxPoolBack (x : String) (c h w : Nat) : Tok
@@ -4710,6 +4831,7 @@ def toToks : Raw → List Tok
   | .selectMid x n e => toToks e ++ [.selectMid x n]
   | .convertF n e    => toToks e ++ [.convertF n]
   | .flatConvF w b ic oc h w' kH kW e => toToks e ++ [.flatConvF w b ic oc h w' kH kW]
+  | .flatConvFBf16 w b ic oc h w' kH kW e => toToks e ++ [.flatConvFBf16 w b ic oc h w' kH kW]
   | .maxPoolF c h w e => toToks e ++ [.maxPoolF c h w]
   | .convBack w ic oc h w' kH kW e => toToks e ++ [.convBack w ic oc h w' kH kW]
   | .maxPoolBack x c h w e => toToks e ++ [.maxPoolBack x c h w]
@@ -5101,6 +5223,25 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
         s!" : ({ty [B,ic,h,w']}, {ty [oc,ic,kH,kW]}) -> {ty [B,oc,h,w']}\n" ++
         s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
         s!"    {ob} = stablehlo.add {cv}, {bb} : {ty [B,oc,h,w']}\n" ++
+        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
+  -- ⚠ The convolution's RESULT is bf16-typed. An f32-typed result here reads as the same
+  -- computation and compiles to pure f32 — see the constructor's note. Do not "simplify".
+  | .flatConvFBf16 w b ic oc h w' kH kW, r :: st => do
+      let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+      let xn ← fresh; let xb ← fresh; let wb ← fresh; let cv ← fresh
+      let cf ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
+      pure (
+        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, ic*h*w']}) -> {ty [B,ic,h,w']}\n" ++
+        s!"    {xb} = stablehlo.convert {xn} : ({ty [B,ic,h,w']}) -> {tyBf16 [B,ic,h,w']}\n" ++
+        s!"    {wb} = stablehlo.convert {w} : ({ty [oc,ic,kH,kW]}) -> {tyBf16 [oc,ic,kH,kW]}\n" ++
+        s!"    {cv} = stablehlo.convolution({xb}, {wb})\n" ++
+        "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+        s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+        "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+        s!" : ({tyBf16 [B,ic,h,w']}, {tyBf16 [oc,ic,kH,kW]}) -> {tyBf16 [B,oc,h,w']}\n" ++
+        s!"    {cf} = stablehlo.convert {cv} : ({tyBf16 [B,oc,h,w']}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
+        s!"    {ob} = stablehlo.add {cf}, {bb} : {ty [B,oc,h,w']}\n" ++
         s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
   | .maxPoolF c h w, r :: st => do
       let xn ← fresh; let ninf ← fresh; let p ← fresh; let o ← fresh
@@ -6193,6 +6334,25 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
+      | "convBf16", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let xr ← fresh; let xb ← fresh; let wb ← fresh; let cc ← fresh; let cf ← fresh
+          let bb ← fresh; let ca ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, ic*h*w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {xb} = stablehlo.convert {xr} : ({ty [B,ic,h,w]}) -> {tyBf16 [B,ic,h,w]}\n" ++
+            s!"    {wb} = stablehlo.convert {wN} : ({ty [oc,ic,kH,kW]}) -> {tyBf16 [oc,ic,kH,kW]}\n" ++
+            s!"    {cc} = stablehlo.convolution({xb}, {wb})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyBf16 [B,ic,h,w]}, {tyBf16 [oc,ic,kH,kW]}) -> {tyBf16 [B,oc,h,w]}\n" ++
+            s!"    {cf} = stablehlo.convert {cc} : ({tyBf16 [B,oc,h,w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {ca} = stablehlo.add {cf}, {bb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
       | "convStrided", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
           let p := (kH - 1) / 2
           let xr ← fresh; let cc ← fresh; let bb ← fresh; let ca ← fresh; let o ← fresh
@@ -6211,6 +6371,25 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       -- an even input, which is the only input shape this token's type admits (`2*h`, `2*w`).
       -- Everything else is byte-identical to "convStrided", which is the point: the ONLY
       -- difference between the two nets is these four numbers.
+      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
+      | "convStridedBf16", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let xr ← fresh; let xb ← fresh; let wb ← fresh; let cc ← fresh; let cf ← fresh
+          let bb ← fresh; let ca ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+            s!"    {xb} = stablehlo.convert {xr} : ({ty [B,ic,2*h,2*w]}) -> {tyBf16 [B,ic,2*h,2*w]}\n" ++
+            s!"    {wb} = stablehlo.convert {wN} : ({ty [oc,ic,kH,kW]}) -> {tyBf16 [oc,ic,kH,kW]}\n" ++
+            s!"    {cc} = stablehlo.convolution({xb}, {wb})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [2, 2], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyBf16 [B,ic,2*h,2*w]}, {tyBf16 [oc,ic,kH,kW]}) -> {tyBf16 [B,oc,h,w]}\n" ++
+            s!"    {cf} = stablehlo.convert {cc} : ({tyBf16 [B,oc,h,w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {ca} = stablehlo.add {cf}, {bb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
       | "convStridedXla", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
           let p := (kH - 1) / 2
           let lo := p - 1
@@ -6741,6 +6920,26 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
             s!" : ({ty [ic,B,h,w]}, {ty [oc,B,h,w]}) -> {ty [ic,oc,kH,kW]}\n" ++
             s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
+      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
+      | "convWeightGradBf16", [xN], [_N, ic, oc, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh
+          let xb ← fresh; let db ← fresh; let raw ← fresh; let rf ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*h*w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,h,w]}) -> {ty [ic,B,h,w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,oc,h,w]}) -> {ty [oc,B,h,w]}\n" ++
+            s!"    {xb} = stablehlo.convert {xt} : ({ty [ic,B,h,w]}) -> {tyBf16 [ic,B,h,w]}\n" ++
+            s!"    {db} = stablehlo.convert {dt} : ({ty [oc,B,h,w]}) -> {tyBf16 [oc,B,h,w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xb}, {db})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyBf16 [ic,B,h,w]}, {tyBf16 [oc,B,h,w]}) -> {tyBf16 [ic,oc,kH,kW]}\n" ++
+            s!"    {rf} = stablehlo.convert {raw} : ({tyBf16 [ic,oc,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.transpose {rf}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
       | "convStridedWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] => do
           -- odd/even split via `sWGradGeom`; odd is byte-for-byte the old inline formula.
           let (upH, extH, loH, hiH) := sWGradGeom kH h
@@ -6760,6 +6959,29 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
             s!" : ({ty [ic,B,2*h,2*w]}, {ty [oc,B,extH,extW]}) -> {ty [ic,oc,kH,kW]}\n" ++
             s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
+      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
+      | "convStridedWeightGradBf16", [xN], [_N, ic, oc, h, w, kH, kW] => do
+          let (upH, extH, loH, hiH) := sWGradGeom kH h
+          let (upW, extW, loW, hiW) := sWGradGeom kW w
+          let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
+          let xb ← fresh; let db ← fresh; let raw ← fresh; let rf ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*(2*h)*(2*w)]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {du} = stablehlo.pad {dr}, {z}, low = [0, 0, 0, 0], high = [0, 0, {upH}, {upW}], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,extH,extW]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,2*h,2*w]}) -> {ty [ic,B,2*h,2*w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
+            s!"    {xb} = stablehlo.convert {xt} : ({ty [ic,B,2*h,2*w]}) -> {tyBf16 [ic,B,2*h,2*w]}\n" ++
+            s!"    {db} = stablehlo.convert {dt} : ({ty [oc,B,extH,extW]}) -> {tyBf16 [oc,B,extH,extW]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xb}, {db})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{loH}, {hiH}], [{loW}, {hiW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyBf16 [ic,B,2*h,2*w]}, {tyBf16 [oc,B,extH,extW]}) -> {tyBf16 [ic,oc,kH,kW]}\n" ++
+            s!"    {rf} = stablehlo.convert {raw} : ({tyBf16 [ic,oc,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.transpose {rf}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
       -- ⭐ The XLA-`SAME` conv weight grad. Same `sWGradGeom` extents; only the correlation pad
       -- shifts by one (`loH-1`, `hiH+1`), so the saved input is read at `2·ho + 1 + kh - p`.
       | "convStridedXlaWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] => do
@@ -6978,6 +7200,25 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
             s!" : ({ty [B,oc,h,w]}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,h,w]}) -> {ty [B, ic*h*w]}\n", o :: st)
+      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
+      | "convBackBatchedBf16", [wN], [_N, ic, oc, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let dyr ← fresh; let rev ← fresh; let wt ← fresh; let db ← fresh; let wb ← fresh
+          let dx ← fresh; let xf ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {wt} = stablehlo.transpose {rev}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {db} = stablehlo.convert {dyr} : ({ty [B,oc,h,w]}) -> {tyBf16 [B,oc,h,w]}\n" ++
+            s!"    {wb} = stablehlo.convert {wt} : ({ty [ic,oc,kH,kW]}) -> {tyBf16 [ic,oc,kH,kW]}\n" ++
+            s!"    {dx} = stablehlo.convolution({db}, {wb})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyBf16 [B,oc,h,w]}, {tyBf16 [ic,oc,kH,kW]}) -> {tyBf16 [B,ic,h,w]}\n" ++
+            s!"    {xf} = stablehlo.convert {dx} : ({tyBf16 [B,ic,h,w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {xf} : ({ty [B,ic,h,w]}) -> {ty [B, ic*h*w]}\n", o :: st)
       | "convStridedBackBatched", [wN], [_N, ic, oc, h, w, kH, kW] => do
           -- stride-2 conv input-VJP: upsample dy (zero-interleave to 2h×2w) then the
           -- stride-1 conv input-VJP. Produces dx at the 2h×2w input resolution.
@@ -7003,6 +7244,28 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
             s!" : ({ty [B,oc,2*h,2*w]}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,2*h,2*w]}\n" ++
             s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,2*h,2*w]}) -> {ty [B, ic*(2*h)*(2*w)]}\n", o :: st)
+      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
+      -- ⚠ ASYMMETRIC pad, exactly as the f32 peer above — the bf16 twin must not "tidy" it.
+      | "convStridedBackBatchedBf16", [wN], [_N, ic, oc, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let dyr ← fresh; let z ← fresh; let up ← fresh; let rev ← fresh; let wt ← fresh
+          let ub ← fresh; let wb ← fresh; let dx ← fresh; let xf ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+            s!"    {up} = stablehlo.pad {dyr}, {z}, low = [0, 0, 0, 0], high = [0, 0, 1, 1], interior = [0, 0, 1, 1] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [B,oc,2*h,2*w]}\n" ++
+            s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {wt} = stablehlo.transpose {rev}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {ub} = stablehlo.convert {up} : ({ty [B,oc,2*h,2*w]}) -> {tyBf16 [B,oc,2*h,2*w]}\n" ++
+            s!"    {wb} = stablehlo.convert {wt} : ({ty [ic,oc,kH,kW]}) -> {tyBf16 [ic,oc,kH,kW]}\n" ++
+            s!"    {dx} = stablehlo.convolution({ub}, {wb})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{kH - 1 - pH}, {pH}], [{kW - 1 - pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyBf16 [B,oc,2*h,2*w]}, {tyBf16 [ic,oc,kH,kW]}) -> {tyBf16 [B,ic,2*h,2*w]}\n" ++
+            s!"    {xf} = stablehlo.convert {dx} : ({tyBf16 [B,ic,2*h,2*w]}) -> {ty [B,ic,2*h,2*w]}\n" ++
+            s!"    {o} = stablehlo.reshape {xf} : ({ty [B,ic,2*h,2*w]}) -> {ty [B, ic*(2*h)*(2*w)]}\n", o :: st)
       | "depthwiseBackBatched", [wN], [_N, c, h, w, kH, kW] => do
           -- depthwise input-VJP: dx = depthwise_conv(dy, reverse(W,[2,3])), fgc=c,
           -- same-pad p (no transpose — one input channel per group).

@@ -76,6 +76,8 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .selectMid x n :: ts, e :: st => parseStack ts (.selectMid x n e :: st)
   | .flatConvF w b ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.flatConvF w b ic oc h w' kH kW e :: st)
+  | .flatConvFBf16 w b ic oc h w' kH kW :: ts, e :: st =>
+      parseStack ts (.flatConvFBf16 w b ic oc h w' kH kW e :: st)
   | .maxPoolF c h w :: ts, e :: st => parseStack ts (.maxPoolF c h w e :: st)
   | .convBack w ic oc h w' kH kW :: ts, e :: st =>
       parseStack ts (.convBack w ic oc h w' kH kW e :: st)
@@ -216,6 +218,7 @@ theorem parseStack_toToks (r : Raw) :
   | relu6F n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | selectMid x n e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | flatConvF w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
+  | flatConvFBf16 w b ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | maxPoolF c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | convBack w ic oc h w' kH kW e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
   | maxPoolBack x c h w e ih => intro ts st; simp only [toToks, List.append_assoc, ih]; rfl
