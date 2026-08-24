@@ -20,7 +20,8 @@ to the 3rd–4th decimal — and **R50 now does too, at 1.55×** (360 → 232 ms
 | R50 render wired + `resnet50in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green, **1.55×** |
 | MNv2 render + 8 new ops (incl. the first GROUPED bf16 convs) | ✅ gates green; **1.92× on 1 GPU**, 1.37× at 4; §12–13 |
 | MNv4 render + 3 new ops | ✅ gates green, **1.88×** (1 GPU); §13 |
-| B0, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
+| EfficientNet-B0 render, **zero** new ops | ✅ gates green, but only **1.09×** — §14 |
+| ViT, ConvNeXt | ⛔ not started — §10 is the plan |
 | whole-net composition (`ConvMixedComposeBridge.lean`) | ✅ the conv is `FloatClose`; §11 |
 | the 90-epoch run | ⛔ not started |
 
@@ -735,3 +736,66 @@ against their f32 peers. One `#eval` each, no new ops, no new proof.
 reaches the reference's speedup. Any 4-replica bf16 number on this box should be read as a
 *system* result — pipeline and collective included — not as a statement about the renderer, and
 raising `SHIM_WORKERS` is the first thing to try before touching the emit.
+
+---
+
+## 14. ⛔ EFFICIENTNET-B0 — ZERO new ops, every gate green, and **1.09×**. The worst result yet.
+
+`efficientnetin_rms64bf16_train_step.mlir`. 23 conv/depthwise call sites threaded and **not one new
+op**: every kind B0 uses on its AdamW/RMSProp path already had a bf16 twin from §12 (MNv2, 8 ops)
+and §13 (MNv4, 3 ops). That part went exactly as §10.2 predicted.
+
+### 14.1 The measurement, and the pipeline is NOT the excuse
+
+Single-device (per §13.2 — a 1-GPU pair is what isolates the renderer), B = 64, RMSProp:
+
+| arm | ms/step | step 0 | step 1 | step 2 |
+|---|---|---|---|---|
+| `rms64` (f32) | 163 | 6.946810 | 6.946942 | 6.965819 |
+| `rms64bf16` | **149** | 6.945035 | 6.946255 | 6.963548 |
+| | **1.09×** | | | |
+
+⚠ **`LEAN_MLIR_BENCH_SYNTH=1` gives 163 → 148 = 1.10×** — indistinguishable. Unlike MNv2's
+4-replica number (§13.2), this is **not** the data pipeline. B0's step is compute-bound and bf16
+genuinely buys ~9 %.
+
+Gate 1 green. Gate 2 **146/146 convolutions bf16** (32 grouped); f32 control 146/146 f32; the
+**179 `dot_general`s carry ZERO bf16**, confirming the SE gates and classifier stayed f32 by
+design. Histograms differ only by 438 `convert` = 146 × 3. Losses agree to ≤ 0.03 %.
+
+▶ So the graph is right, the bf16 reached the hardware, and the answer is still 1.09×.
+
+### 14.2 ⛔ This REFUTES §9.1's expectation for B0 — it was the biggest payoff and is now the least
+
+§9.1 records **2.41×** for EfficientNet-B0, the largest of the three nets it measured, on the
+repo's own **JAX-codegen** modules where `bf16Conv := true` routes the WHOLE net through bf16.
+The verified render converts back to f32 after every conv and keeps BN, swish, SE, the dense head
+and the optimizer in f32. On MobileNetV2 those carve-outs cost **nothing** (1.92× verified vs
+1.94× JAX, §13.2). On B0 they cost nearly everything.
+
+▶ **The carve-outs are not a fixed tax — their cost is architecture-dependent, and B0 is the
+worst case measured.** That is the actionable finding, and it is the opposite of what §10.2's
+ordering assumed when it put the depthwise nets first for having "the biggest payoff".
+
+### 14.3 ⚠ WHY — labelled as HYPOTHESIS, because it is not measured
+
+What *is* measured, structurally: B0 carries **194 `stablehlo.logistic`** where MobileNetV2 carries
+**zero** — the swish activations and the SE sigmoid gates. The elementwise-op-per-convolution ratio
+is otherwise similar (49 vs 43), so this is **not** simply "B0 has more elementwise work"; it is
+that B0's f32 remainder contains full-resolution **swish** and **SE gating** where MNv2's contains
+relu6.
+
+⚠⚠ **The causal claim — that the f32 swish/SE remainder is what eats the win — is INFERENCE.**
+Op counts are not timings, and this document has been burned by exactly that kind of extrapolation
+(§9). ▶ Also worth noting: §10.2 justifies keeping SE in f32 because "its 1×1s act on 1×1-spatial
+pooled tensors, where there is no bf16 win". That reasoning covers the SE **matmuls** only.
+`seBlock` / `seBackBatched` are BUNDLED ops that also perform the GAP and a **full-resolution gate
+multiply** over `[B,c,h,w]` — which is not pooled-tensor work, and which that justification never
+addressed.
+
+▶ **Two experiments that would settle it, cheapest first:**
+1. Time B0's conv work in isolation at its own layer shapes, the way §9.4 did for R34. That gives
+   the conv share of the step directly and needs no new ops.
+2. If the share is small, build bf16 twins for `swishB`/`swishBackB` and the full-resolution parts
+   of `seBlock`/`seBackBatched`, and re-measure. ⚠ That widens the bf16 surface beyond
+   convolution for the first time and needs its own accuracy story — do not start it before (1).
