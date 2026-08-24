@@ -80,6 +80,7 @@ import LeanMlir.Proofs.Codegen.BnInputBridge
 import LeanMlir.Proofs.Codegen.Resnet34BlockBridge
 import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
+import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
 import LeanMlir.Proofs.Codegen.AdjointChainBridge
 import LeanMlir.Proofs.Architectures.AdjointChainResidual
 import LeanMlir.Proofs.Certificates.GeluLipschitz
@@ -3997,3 +3998,14 @@ open Proofs
 #print axioms Proofs.floatClose_r50_stages_mixed
 #print axioms Proofs.convMixedBudget_affine
 #print axioms Proofs.layerBudget_affine
+
+-- ⭐ The bf16-mixed DEPTHWISE (DepthwiseMixedFloatBridge.lean, 2026-08-24). §10.2 predicted this
+-- would be the same instantiation at a smaller fan-in, and it is: a depthwise output IS a dot
+-- product of length kH·kW (one channel, no ic sum), so `depthwise_close_mixed` is
+-- `dot_close_mixed_uniform` at n = 9 plus the bf16 store and the f32 bias add.
+-- ⚠ The fan-in drops 461× against R50's widest conv and `dwBr` moves 3.5% (0.0078 vs 0.0081) —
+-- because the fan-in rides the ACCUMULATE precision while the flat leaf term is what costs. A
+-- depthwise layer is not meaningfully more accurate in bf16; it is the same 0.8%.
+#print axioms Proofs.depthwiseConv2d_eq_dw_dot
+#print axioms Proofs.dw_sum_pair
+#print axioms Proofs.FloatModel.depthwise_close_mixed

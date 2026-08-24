@@ -48,6 +48,7 @@ import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
+import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
 -- Inexact-gradient descent over ℝ: the keystone the float budgets plug into.
 import LeanMlir.Proofs.Training.SgdDescent
 import LeanMlir.Proofs.Training.SgdDescentLinear

@@ -18,7 +18,8 @@ to the 3rd–4th decimal — and **R50 now does too, at 1.55×** (360 → 232 ms
 | `conv_close_mixed` | ✅ `Proofs/Float/ConvMixedFloatBridge.lean` |
 | R34 render wired + `resnet34in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green |
 | R50 render wired + `resnet50in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green, **1.55×** |
-| MNv2, B0, MNv4, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
+| MNv2 render + 8 new ops (incl. the first GROUPED bf16 convs) | ✅ gates green, **1.37×**; §12 |
+| B0, MNv4, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
 | whole-net composition (`ConvMixedComposeBridge.lean`) | ✅ the conv is `FloatClose`; §11 |
 | the 90-epoch run | ⛔ not started |
 
@@ -426,7 +427,7 @@ its characteristic 1×1s all sit BELOW its 3×3s. The leaf term still dominates 
 graph is right and fast; it does not say what it converges to. ✅ The whole-net error bound is
 no longer on this list — see §11.
 
-### 10.2 MobileNetV2 / EfficientNet-B0 / MNv4 — new op KIND, biggest payoff
+### 10.2 ✅ MobileNetV2 — DONE 2026-08-24 (§12). EfficientNet-B0 / MNv4 — new op KIND
 
 1.94× and 2.41× measured (§9.1), so these are worth more than R34. But they need
 **depthwise bf16 twins**: `BatchableOp.depthwise` / `.depthwiseStrided` / `.depthwiseStridedXla`
@@ -564,3 +565,94 @@ worst-case forward-error analysis composed depth-first — every term assumes th
 RATIO. A non-vacuous ABSOLUTE number needs a different analysis — probabilistic rounding, or one
 that exploits BN renormalising the activation scale at every layer — not a tighter conv lemma.
 Saying otherwise would be the kind of claim §9 exists to correct.
+
+---
+
+## 12. ✅ MOBILENETV2 — 1.37×, the first GROUPED bf16 convs, and the number is BELOW R34's
+
+`mobilenetv2in_adamdp64bf16_train_step.mlir`. Eight new ops in `StableHLO.lean`; render threaded
+the same way R34/R50 were. Gate 1 green (only the new file), gate 2 green on both arms.
+
+### 12.1 The measurement — and it is the WEAKEST of the three nets so far
+
+4×bs64 on four 4060 Ti, real ImageNet, `LEAN_MLIR_MAX_STEPS=40` (median of steps 9..40):
+
+| arm | ms/step | step 0 | step 1 | step 2 |
+|---|---|---|---|---|
+| `adamdp64` (f32) | 191 | 6.974680 | 7.041726 | 7.012378 |
+| `adamdp64bf16` | **139** | 6.981724 | 7.046127 | 7.002637 |
+| | **1.37×** | | | |
+
+⚠⚠ **1.37× is below R34's 1.41× and R50's 1.55×, and FAR below the 1.94× §9.1 recorded for
+MNv2.** That is not a contradiction — §9.1's 1.94× was measured on the repo's **JAX-codegen**
+modules, which keep activations bf16 across layer boundaries. The verified emit converts back to
+f32 after **every** conv (§9.5), and that overhead is proportionally worst on the lightest net:
+
+| net | verified | JAX-side | share of the available win captured |
+|---|---|---|---|
+| ResNet-34 | 1.41× | 1.92× | 45 % |
+| MobileNetV2 | **1.37×** | 1.94× | **39 %** |
+
+MNv2 holds **40.1 MB** of parameters where R50 holds 292.5 MB. It is memory-bound, so 465 extra
+`stablehlo.convert` nodes cost relatively more than they do in a compute-bound net. ▶ **This is
+the first net where chasing §9.5's boundary converts would clearly pay more than adding ops.**
+
+Losses agree to **0.10 % / 0.06 % / 0.14 %** relative over the first three steps — the same
+~0.1 % band R50 showed, and inside one bf16 ulp (2⁻⁸ = 0.39 %).
+
+### 12.2 ⭐ The first GROUPED bf16 convolutions, and §9.2 has no exception for them
+
+Before writing any Lean, a hand-built StableHLO module at a real MNv2 depthwise layer
+(c = 144, 56², 3×3, `feature_group_count = 144`) was compiled three ways:
+
+| emit shape | result |
+|---|---|
+| f32 | operands f32 (control) |
+| bf16 operands → **f32-typed** result | ⛔ **FOLDED to f32** |
+| bf16 operands → **bf16-typed** result + convert | ✅ bf16 reaches the hardware |
+
+Identical to the ordinary-conv finding. **Grouping buys no exemption**, and §10.4 step 1 ("ops
+first, gate 2 before wiring") is what made this a 15-minute check instead of a wasted render.
+
+Eight new ops: `convStridedXlaBf16`, `depthwiseBf16`, `depthwiseStridedXlaBf16`,
+`depthwiseBackBatchedBf16`, `depthwiseStridedXlaBackBatchedBf16`, `depthwiseWeightGradBBf16`,
+`depthwiseStridedXlaWeightGradBBf16`, `convStridedXlaWeightGradBBf16`. Each keeps its f32 peer's
+padding verbatim — notably the `[p+1, p-1]` dgrad shift that is the OPPOSITE of the weight grads'
+`[p-1, p+1]`, which `scripts/xla_pad_op_check.py` caught being "fixed by symmetry" once already.
+
+Whole-net gate 2: **155/155 convolutions with bf16 operands**, of which **34 are grouped**; the
+f32 control reports 155/155 f32. Op histograms match on every kind, differing only by 465 added
+`convert` = 155 × 3.
+
+### 12.3 ✅ `depthwise_close_mixed` — §10.2 said "expect it to be easier", and it was
+
+`LeanMlir/Proofs/Float/DepthwiseMixedFloatBridge.lean`, no `sorryAx`. A depthwise output IS a dot
+product of length `kH·kW` — one channel, no `ic` sum — so it is `dot_close_mixed_uniform` at that
+fan-in plus the bf16 store and the f32 bias add.
+
+⭐ **The fan-in shrinks 461× and the bound moves 3.5 %:**
+
+| layer | fan-in n | fan-in term | leaf term | bracket |
+|---|---|---|---|---|
+| depthwise 3×3 (every MNv2 block) | 9 | 6.01e-07 | 7.83e-03 | 0.0078 |
+| R50 3×3, ic=512 | 4608 | 2.77e-04 | 7.83e-03 | 0.0081 |
+
+▶ A depthwise layer is **not** meaningfully more accurate in bf16 than a dense conv — it is the
+same 0.8 %. The fan-in rides the fp32 accumulate; the flat leaf term is what costs. That is §9.3's
+separation, now confirmed at both ends of the fan-in range.
+
+### 12.4 ⚠⚠ THE DUPLICATE-NAME TRAP FIRED AGAIN, one section after being documented
+
+§11.1 records `Proofs.convWindow` colliding and breaking `lake build LeanMlir` for three commits.
+The first draft of `DepthwiseMixedFloatBridge` defined `Proofs.dwWindow` — which
+`DepthwiseFloatBridge` **already declares, with the identical type and meaning**. Same refusal:
+
+```
+import … DepthwiseMixedFloatBridge failed,
+  environment already contains 'Proofs.dwWindow' from LeanMlir.Proofs.Float.DepthwiseFloatBridge
+```
+
+▶ **The fix was to REUSE, not to rename.** `dwWindow`, `dwKernelMat` and
+`depthwiseConv2d_eq_dense` all existed; the new file now imports them and is shorter for it.
+⚠ When a `conv*`/`dw*` helper looks missing, **grep before defining** — twice now the collision
+was with a lemma that already did the job.
