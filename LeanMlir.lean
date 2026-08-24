@@ -46,6 +46,7 @@ import LeanMlir.Proofs.Architectures.MobileNetV2FullVJP
 import LeanMlir.Proofs.Architectures.ConvNeXtFullT
 -- ℝ→Float32 bridge, Tier 1: standard-model rounding bounds for the toy nets.
 import LeanMlir.Proofs.Float.FloatBridge
+import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 -- Inexact-gradient descent over ℝ: the keystone the float budgets plug into.
 import LeanMlir.Proofs.Training.SgdDescent
 import LeanMlir.Proofs.Training.SgdDescentLinear
