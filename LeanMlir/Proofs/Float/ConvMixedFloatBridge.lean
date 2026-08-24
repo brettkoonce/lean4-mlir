@@ -53,8 +53,18 @@ theorem Tensor3.flatten_mul {c h w : Nat} (A B : Tensor3 c h w) (k : Fin (c*h*w)
       = Tensor3.flatten (fun i j l => A i j l * B i j l) k := rfl
 
 /-- The `kH × kW` receptive field `conv2d` reads at output pixel `(hi, wi)`, zero outside —
-    `conv2d`'s own `if hpad …` branch, lifted out so the conv's fan-in is a `Tensor3`. -/
-noncomputable def convWindow {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
+    `conv2d`'s own `if hpad …` branch, lifted out so the conv's fan-in is a `Tensor3`.
+
+    ⚠⚠ **The `3` suffix is NOT decoration — it is what makes this file importable.**
+    `SgdDescentCnn.lean` already declares `Proofs.convWindow` for the SAME receptive field at
+    the FLAT type `Vec (ic*kH*kW)`. Two constants cannot share a full name, so while this one
+    was also called `convWindow` the two could not coexist in one environment: `lake build
+    LeanMlir` failed outright at
+    `import … ConvMixedFloatBridge failed, environment already contains 'Proofs.convWindow'`,
+    which is exactly the import a whole-net bound has to make. ▶ The `Tensor3` shape is
+    deliberate and stays — `conv2d_eq_flat_dot` needs `Tensor3.sum_flatten` — so the name
+    moved rather than the type. -/
+noncomputable def convWindow3 {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
     (hi : Fin h) (wi : Fin w) : Tensor3 ic kH kW :=
   fun c kh kw =>
     let pH := (kH - 1) / 2
@@ -76,7 +86,7 @@ theorem conv2d_eq_flat_dot {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b 
     (x : Tensor3 ic h w) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
     conv2d W b x o hi wi
       = b o + ∑ k, Tensor3.flatten (convSlice W o) k
-                   * Tensor3.flatten (convWindow kH kW x hi wi) k := by
+                   * Tensor3.flatten (convWindow3 kH kW x hi wi) k := by
   simp only [conv2d]
   congr 1
   simp only [Tensor3.flatten_mul]
@@ -96,7 +106,7 @@ noncomputable def convBr (M L : FloatModel) (n : Nat) : ℝ :=
 /-- `Σ|kernel·window|` over the receptive field — the magnitude the bound scales. -/
 noncomputable def convFanS {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
     (x : Tensor3 ic h w) (o : Fin oc) (hi : Fin h) (wi : Fin w) : ℝ :=
-  ∑ k, |Tensor3.flatten (convSlice W o) k * Tensor3.flatten (convWindow kH kW x hi wi) k|
+  ∑ k, |Tensor3.flatten (convSlice W o) k * Tensor3.flatten (convWindow3 kH kW x hi wi) k|
 
 namespace FloatModel
 variable (M : FloatModel)
@@ -113,7 +123,7 @@ noncomputable def convMixed (L : FloatModel) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Tensor3 ic h w) : Tensor3 oc h w :=
   fun o hi wi =>
     M.add (L.rnd (M.dotMixed L (Tensor3.flatten (convSlice W o))
-                               (Tensor3.flatten (convWindow kH kW x hi wi)))) (b o)
+                               (Tensor3.flatten (convWindow3 kH kW x hi wi)))) (b o)
 
 /-- ⭐⭐ **Mixed-precision convolution forward error.** Three terms, one per rounding the
     emitted graph performs: the dot (`convBr`, fan-in `ic·kH·kW`), the bf16 STORE of the
@@ -133,7 +143,7 @@ theorem conv_close_mixed (L : FloatModel) {ic oc h w kH kW : Nat}
   have hMu := M.u_nonneg
   have hLu := L.u_nonneg
   set ker := Tensor3.flatten (convSlice W o) with hker
-  set win := Tensor3.flatten (convWindow kH kW x hi wi) with hwin
+  set win := Tensor3.flatten (convWindow3 kH kW x hi wi) with hwin
   set S := convFanS W x o hi wi with hS
   set br := convBr M L (ic*kH*kW) with hbr
   set p := M.dotMixed L ker win with hp

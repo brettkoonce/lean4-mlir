@@ -79,6 +79,7 @@ import LeanMlir.Proofs.Float.Resnet34FloatBridge
 import LeanMlir.Proofs.Codegen.BnInputBridge
 import LeanMlir.Proofs.Codegen.Resnet34BlockBridge
 import LeanMlir.Proofs.Float.FloatComposeBridge
+import LeanMlir.Proofs.Float.ConvMixedComposeBridge
 import LeanMlir.Proofs.Codegen.AdjointChainBridge
 import LeanMlir.Proofs.Architectures.AdjointChainResidual
 import LeanMlir.Proofs.Certificates.GeluLipschitz
@@ -3974,3 +3975,25 @@ open Proofs
 #print axioms Proofs.MlpCanonical.w0_grad_close
 #print axioms Proofs.MlpCanonical.inputGrad_floatBridges
 #print axioms Proofs.MlpCanonical.train_step_tied_certified
+
+-- ⭐⭐ The bf16-MIXED conv, composed (ConvMixedComposeBridge.lean, 2026-08-24). `conv_close_mixed`
+-- bounds ONE conv at an exactly-represented input; a whole-net bound needs an error MODULUS, which
+-- is `FloatClose`. `floatClose_flatConvMixed` is that instance — and because `FloatClose` says
+-- nothing about precision, every existing combinator (relu / BN / maxpool / GAP / residual /
+-- iterate / comp) folds a bf16 conv unchanged. `floatClose_r50_stages_mixed` is literally
+-- `floatClose_r34_stages`: R50 has the SAME [3,4,6,3] depths, differing only in block internals.
+--
+-- ⚠ `convMixedBudget_affine` + `layerBudget_affine` are the honest part: both budgets are affine
+-- in the inherited error, both slopes are `fan-in·w·(1+ε)`, and bf16 only moves ε (2.7e-4 → 1.2e-2
+-- at n=4608). The composed bf16 certificate is ~1.86× the f32 one at R50's depth — and BOTH are
+-- vacuous in absolute terms, because the shared `n·w` factor exceeds 1 at every real layer.
+#print axioms Proofs.convFanS_le
+#print axioms Proofs.conv2d_sub_abs_le
+#print axioms Proofs.FloatModel.convMixed_close_prop
+#print axioms Proofs.FloatModel.flatConvMixed_close
+#print axioms Proofs.floatClose_flatConvMixed
+#print axioms Proofs.floatClose_reluConvMixed
+#print axioms Proofs.floatClose_convMixed_twice
+#print axioms Proofs.floatClose_r50_stages_mixed
+#print axioms Proofs.convMixedBudget_affine
+#print axioms Proofs.layerBudget_affine

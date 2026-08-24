@@ -19,7 +19,8 @@ to the 3rd–4th decimal — and **R50 now does too, at 1.55×** (360 → 232 ms
 | R34 render wired + `resnet34in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green |
 | R50 render wired + `resnet50in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green, **1.55×** |
 | MNv2, B0, MNv4, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
-| whole-NET error bound; the 90-epoch run | ⛔ not started |
+| whole-net composition (`ConvMixedComposeBridge.lean`) | ✅ the conv is `FloatClose`; §11 |
+| the 90-epoch run | ⛔ not started |
 
 ⚠ **Read §9 before trusting anything below it.** Four of this document's load-bearing claims
 were refuted by measurement on 2026-08-24. The reasoning is kept; the conclusions moved.
@@ -343,8 +344,9 @@ R34's layers: **0.0078** (stem, n=147) → **0.0081** (stage-4, n=4608). The fan
 `((1+u)^(n+1) − 1)` at n=4608 is **6.4e7**, i.e. vacuous. That contrast is the whole argument
 for bf16-mixed over bf16, now at real fan-ins rather than in the abstract.
 
-⚠ It bounds ONE conv against exact ℝ. A whole-net bound needs `FloatComposeBridge` and is not
-started.
+⚠ It bounds ONE conv against exact ℝ at an EXACTLY-REPRESENTED input. A whole-net bound needs an
+error MODULUS, not a single-layer error. ✅ **DONE 2026-08-24 — `ConvMixedComposeBridge.lean`,
+§11 below**, and the answer to "how bad is the composed bf16 bound" is ~1.86× the f32 one.
 
 ### 9.4 ⚠ "Forward-only captures about a sixth — expect ~1.2×" — measured 1.09×
 
@@ -420,9 +422,9 @@ quoted as illustration):
 R50's WIDEST fan-in is 4608 — the same as R34's — so the §9.3 numbers carry over unchanged, and
 its characteristic 1×1s all sit BELOW its 3×3s. The leaf term still dominates by ~28×.
 
-⚠ Still not done for R50, exactly as for R34: the whole-NET error bound (`FloatComposeBridge`) and
-a full training run. The 40-step probe says the graph is right and fast; it does not say what it
-converges to.
+⚠ Still not done for R50, exactly as for R34: a full training run. The 40-step probe says the
+graph is right and fast; it does not say what it converges to. ✅ The whole-net error bound is
+no longer on this list — see §11.
 
 ### 10.2 MobileNetV2 / EfficientNet-B0 / MNv4 — new op KIND, biggest payoff
 
@@ -491,3 +493,74 @@ arithmetic — so either order works, and neither blocks the other.
 
 If the goal is "match the JAX reference on R34/ImageNet", note it needs **both**: the JAX 4× number
 is bf16 *and* device-resident, and this session measured the verified path missing both.
+
+---
+
+## 11. ✅ THE WHOLE-NET BOUND — done 2026-08-24, and the answer is a factor of 1.86
+
+`LeanMlir/Proofs/Float/ConvMixedComposeBridge.lean`. No `sorryAx`; the three standard Mathlib
+axioms only, audited in `tests/AuditAxioms.lean`.
+
+### 11.1 ⛔ First, a BUG this uncovered: `lake build LeanMlir` had been broken since `b956efa`
+
+`ConvMixedFloatBridge` declared `Proofs.convWindow` for the receptive field at type
+`Tensor3 ic kH kW`. `SgdDescentCnn` **already** declared `Proofs.convWindow` for the same field at
+type `Vec (ic·kH·kW)`. Two constants cannot share a full name, so the root module failed outright:
+
+```
+import LeanMlir.Proofs.Float.ConvMixedFloatBridge failed,
+  environment already contains 'Proofs.convWindow' from LeanMlir.Proofs.Training.SgdDescentCnn
+```
+
+▶ **`conv_close_mixed` was therefore unreachable from the rest of the float stack** — which is
+exactly why no composition had happened. It was not that the composition was hard; the file could
+not be imported alongside the thing it had to compose with. The R34/R50 render work never noticed
+because neither `ResNet50RenderB` nor the trainer imports that file. ⚠ Renamed to `convWindow3`;
+the `Tensor3` shape is load-bearing (`conv2d_eq_flat_dot` needs `Tensor3.sum_flatten`), so the
+name moved rather than the type. **`lake build LeanMlir` is green again.**
+
+### 11.2 ⭐⭐ The backbone is PRECISION-AGNOSTIC — that is why this was one instance, not a rewrite
+
+`FloatClose A B f fF L` says only: inputs bounded by `A` give outputs bounded by `B`, and an
+input error `e` gives an output error `≤ L e`. **It never mentions how `fF` rounds.** So
+`floatClose_relu`, `floatClose_bn`, `floatClose_maxPool3s2`, `floatClose_gap`,
+`floatClose_residualBlock`, `floatClose_iterate` and `FloatClose.comp` accept a bf16 conv verbatim.
+
+⭐ `floatClose_r50_stages_mixed` is *literally* `floatClose_r34_stages` — **R50 has the same
+`[3,4,6,3]` stage depths as R34**; the nets differ in what a block contains, not in how many
+blocks a stage stacks. The depth fold needed no R50-specific theorem at all.
+
+Three things did have to be proved, none of which the `e = 0` bound gives:
+
+| lemma | what it does |
+|---|---|
+| `convFanS_le` | replaces the data-dependent `Σ|kernel·window|` by the closed form `n·w·A` |
+| `conv2d_sub_abs_le` | **the real conv is `n·w`-Lipschitz** — how a predecessor's error crosses the layer |
+| `convMixed_close_prop` | the two combined, at an input both perturbed (`E`) and bounded (`A`) |
+
+⚠ The budget is evaluated at **`A + E`, not `A`**: the float conv runs on the perturbed input, so
+its own rounding scales with the perturbed magnitude. Writing `A` there understates it — the
+unsound direction.
+
+### 11.3 ⭐⭐ What bf16 actually costs the whole-net bound — and the part that is vacuous
+
+Both budgets are **affine in the inherited error** (`convMixedBudget_affine`, `layerBudget_affine`),
+and both slopes factor as `n·w·(1 + ε)`:
+
+| arm | ε at `n = 4608` | gain factor |
+|---|---|---|
+| f32 (`layerBudget`) | `(1+2⁻²⁴)^(n+2) − 1` = **2.75e-4** | 1.000275 |
+| bf16-mixed (`convMixedBudget`) | `br + u_leaf(1+br) + u_acc(1+u_leaf)(1+br)` = **1.20e-2** | 1.012043 |
+
+▶ **bf16 does not change the growth RATE — it moves a `1+ε` factor.** Compounded:
+**1.52× at R34's 36 conv layers, 1.86× at R50's 53.** Under a factor of two on the certificate,
+for a 1.41×/1.55× speedup. That is the useful result of this section.
+
+⚠⚠ **AND BOTH BOUNDS ARE VACUOUS IN ABSOLUTE TERMS.** The shared `n·w` factor is ~230 at
+`n = 4608, w' ≈ 0.05`, so `gain^53` is astronomical for f32 and bf16 alike. This is a property of
+worst-case forward-error analysis composed depth-first — every term assumes the adversarial sign —
+**not** a property of bf16, and the repo's existing f32 whole-net bridges
+(`Resnet34WholeFloatBridge`) carry exactly the same factor. ▶ The meaningful statement is the
+RATIO. A non-vacuous ABSOLUTE number needs a different analysis — probabilistic rounding, or one
+that exploits BN renormalising the activation scale at every layer — not a tighter conv lemma.
+Saying otherwise would be the kind of claim §9 exists to correct.
