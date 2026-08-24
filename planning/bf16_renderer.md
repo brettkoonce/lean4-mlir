@@ -1,6 +1,26 @@
 # bf16_renderer.md — bf16 on the verified render path, as a ladder from mnist-linear
 
-Scoped 2026-08-01 on ares (6× RTX 4060 Ti, CUDA 12.9). **NOT started.**
+Scoped 2026-08-01 on ares (6× RTX 4060 Ti, CUDA 12.9).
+
+---
+
+## ⭐ STATUS 2026-08-24 — ResNet-34 IS DONE AND RUNNING; four claims below are REFUTED
+
+Branch `bf16/verified-conv-ops`, three commits. **The verified R34 trains on ImageNet in bf16
+at 1.41× end to end** (222 → 157 ms/step, 4×bs64 on four 4060 Ti), with losses tracking the f32
+arm step-for-step to the 3rd–4th decimal.
+
+| what | state |
+|---|---|
+| 7 bf16 conv ops (per-example fwd, batched fwd ×2, dgrad ×2, wgrad ×2) | ✅ `StableHLO.lean` |
+| `flatConvFBf16_faithful` / `_id` | ✅ the op adds rounding and nothing else |
+| `conv_close_mixed` | ✅ `Proofs/Float/ConvMixedFloatBridge.lean` |
+| R34 render wired + `resnet34in_momdp64bf16_train_step.mlir` | ✅ gate 1 and gate 2 green |
+| R50, MNv2, B0, MNv4, ViT, ConvNeXt | ⛔ not started — §10 is the plan |
+| whole-NET error bound; the 90-epoch run | ⛔ not started |
+
+⚠ **Read §9 before trusting anything below it.** Four of this document's load-bearing claims
+were refuted by measurement on 2026-08-24. The reasoning is kept; the conclusions moved.
 
 ## Why
 
@@ -101,6 +121,9 @@ Only running it caught this.
 
 ## ▶ The proof gap that gates the money
 
+✅ **CLOSED 2026-08-24 — `Proofs/Float/ConvMixedFloatBridge.lean`, and it was not the big item
+this section claims. See §9.3.** The text below is kept for the reasoning that motivated it.
+
 `FloatBridge` has `dot_close_mixed` / `dense_close_mixed`. It has **no `conv_close_mixed`.** The
 mixed-precision accuracy story covers dense only.
 
@@ -135,6 +158,10 @@ Three conclusions, and the third reorders the ladder:
 3. **⚠ bf16 DEPTHWISE conv is 0.50× — twice as SLOW.** MobileNetV2, EfficientNet, MNv4 and ConvNeXt
    are all depthwise-dominated, so they capture far less of the win than R34, which is all standard
    convs and is therefore the best case rather than a typical one.
+   ⛔⛔ **THE CONCLUSION IN THIS POINT IS REFUTED — see §9.1.** The 0.50× is a real number for the
+   shape it was taken at and an unrepresentative one for any real net: at MNv2's own depthwise
+   layers it is 0.86×, depthwise is ~13% of the step, and MNv2/B0 measure **1.94× / 2.41×** whole-
+   step — *more* than R34. Do not read this point as a reason to skip those nets.
 
 Point 3 independently confirms a decision already in the code: `LeanMlir/Types.lean` on `bf16Conv`
 says *"Depthwise/separable convs (MobileNet/EfficientNet) still stay fp32."* That was asserted
@@ -143,6 +170,11 @@ without a number; it now has one, on CUDA. (The AMD note that bf16 conv is slowe
 
 **Consequence: prioritise R34/dense/ViT, and do NOT expect the depthwise nets to pay.** Any bf16
 renderer must keep depthwise on the fp32 path, exactly as the JAX side already does.
+
+⛔⛔ **BOTH SENTENCES ARE WRONG — §9.1.** The depthwise nets pay MORE than R34 (1.94× / 2.41×),
+and the JAX side does NOT keep depthwise on the fp32 path: `MainMobilenetV2Imagenet.lean` and
+`MainEfficientNetImagenet.lean` both set `bf16Conv := true` and route `depthwise_conv` through
+`convdt`. This paragraph asserted the JAX behaviour without checking it, and got it backwards.
 
 ## The ladder
 
@@ -157,6 +189,17 @@ template: `mnist-linear-e4m3-verified` → `mnist-mlp-e4m3-verified` → `mnist-
 | **2** | mnist-cnn / cifar | **`conv_close_mixed`** — the big one | conv path emits bf16 operands, f32 accumulate |
 | **3** | cifar8 / R34 | compose rung 2 over the block structure | reuse |
 | **4** | ViT | possibly none beyond rung 1 — matmul-bound | reuse |
+
+⛔ **THE LADDER WAS NOT THE ROUTE TAKEN, and the reader should know that before following it.**
+The work went straight to rung 3 (R34/ImageNet) in 2026-08-24, skipping rungs 0–2 entirely,
+because the ops needed for R34 turned out to be the same ops rungs 2–3 would have built and the
+accuracy theorem turned out to be an instantiation rather than a new result (§9.3). Rung 2's
+"the big one" is closed; rung 4's guess ("possibly none beyond rung 1") is right on the THEOREM
+and wrong on the OPS — ViT's attention is activation × activation and needs a bundled op that
+does not exist (§10.3).
+
+▶ The ladder is still the right shape for a *proof-first* route. It was not the right shape for
+a *payoff-first* one, and payoff-first is what got a net training. §10 is the plan that replaced it.
 
 **Backward is a separate axis and is NOT in the table.** Every rung above is the *forward*. The
 train step also carries the VJPs (`convBack`, `bnBack`, `denseRowBack`, the `*Sgd` tail folds). JAX
@@ -219,6 +262,176 @@ transfer-bound, nowhere near tensor-core-bound. Do not read `1.00×` at rung 0 a
 help" — read it as "this rung's gate is gates 1/3/4, not gate 2". The first rung where a wall-clock
 move should appear at all is rung 2, and the first where it should be *large* is rung 3. This is
 worth writing down because the fp8 thread had the mirror-image confusion available to it.
+
+## 9. ⚠⚠ WHAT THIS DOCUMENT GOT WRONG — measured 2026-08-24
+
+Four corrections. Each is stated against the section that made the claim, so the reasoning
+above stays readable as the reasoning it was.
+
+### 9.1 ⛔ "bf16 depthwise is 0.50×, so do NOT expect the depthwise nets to pay" — REFUTED
+
+§"Per-op-class measurements" point 3 concluded MobileNetV2 / EfficientNet / MNv4 / ConvNeXt
+"capture far less of the win" and told the reader not to expect them to pay. **They pay more
+than ResNet-34 does.** Whole train steps, real ImageNet, one 4060 Ti, the repo's own generated
+modules with only `DT`/`CONV_DT` differing:
+
+| net | fp32 | bf16 | speedup |
+|---|---|---|---|
+| ResNet-34 | 141.3 ms | 73.7 ms | 1.92× |
+| **MobileNetV2** | 125.95 ms | 64.75 ms | **1.94×** |
+| **EfficientNet-B0** | 139.83 ms | 57.98 ms | **2.41×** |
+
+Two things made the original reading wrong:
+
+* **The 0.50× was one unrepresentative shape** (a generic 256-channel depthwise). At MNv2's
+  OWN depthwise layers the figure is **0.86×** forward+backward — a modest loss, not a rout.
+* **Depthwise is only ~13% of the step.** ~16 ms of MNv2's 126 ms. The 1×1 expand/project
+  convs dominate and win big, which is exactly what `jax/MainMobilenetV2Imagenet.lean` already
+  said ("the 3×3 depthwise is a wash but harmless") while setting `bf16Conv := true`. ▶ The
+  net config and this planning doc disagreed for three weeks, and **the config was right**.
+
+⭐ A control arm settles it: `bf16` with `bf16Conv := false` on MNv2 measured **126.03 ms,
+exactly 1.00×**. MNv2 is all convolution with no matmul to speak of, so the conv flag is the
+only one that does anything there.
+
+⭐ **And the depthwise loss is KERNEL SELECTION, not bandwidth or hardware.** Depthwise is
+memory-bound; against the 4060 Ti's 288 GB/s peak, fp32 achieves 93 / 86 / 77 % across three
+MNv2 layers while bf16 achieves only 45 / 44 / 58 %. cuDNN has an excellent fp32 depthwise
+kernel on Ada and a poor bf16 one. Nothing fundamental — and on hardware whose bf16 tensor-core
+advantage over fp32 is larger than Ada's, the compute-bound layers that carry the win should
+gain more, not less. ⚠ That last sentence is INFERENCE, not measurement; no such card was tested.
+
+### 9.2 ⛔ "The ONLY emit shape that reaches tensor cores: operands bf16, result f32" — HALF WRONG
+
+`dotInBf16`'s emitter comment says this, and `StableHLO.lean` still carries it. Measured on
+jax 0.11.0 and 0.10.2 alike, and NOT rescued by `xla_allow_excess_precision=false`:
+
+| op | bf16 operands → **f32** result | bf16 operands → **bf16** result + convert |
+|---|---|---|
+| `dot_general` | ✅ bf16 reaches the hardware | ✅ reaches |
+| `convolution` | ⛔ **FOLDED to f32** — cuDNN gets f32 params, zero converts | ✅ reaches |
+
+True for dot, false for conv. Six ops copying `dotInBf16`'s shape would have shipped correct
+proofs attached to graphs running fp32 — precisely the failure §"The trap" exists to prevent,
+recurring inside the fix for the original trap. The shape that survives is a **bf16-TYPED
+result then a separate convert**, which is what `jax/Jax/Codegen.lean`'s `conv2d` already
+emits, and why the JAX lowerer gets bf16 on ImageNet and the verified path did not.
+
+⚠⚠ **Check this by resolving the OPERAND SSA names in the optimized HLO.** The op line carries
+only the RESULT type, and grepping it reports "bf16 reached" for a graph that folded. That
+mistake was made twice in one session before the checker was written.
+
+▶ Consequence for the `den`: a bf16-typed result means the hardware rounds the OUTPUT too
+(f32 MAC accumulate, bf16 store), so the conv ops' `den` carries an OUTER rounding that
+`dotInBf16`'s does not. Copying `den_dotInBf16` would claim more precision than the hardware
+delivers — the unsound direction for an accuracy bound.
+
+### 9.3 ✅ "`conv_close_mixed` — the single biggest item in this document" — DONE, and it was not big
+
+§"The proof gap that gates the money" called it "a genuinely new accuracy theorem, not
+plumbing". It is `dot_close_mixed_uniform` instantiated at fan-in `ic·kH·kW`, because **a
+convolution output IS a dot product over its flattened receptive field**
+(`conv2d_eq_flat_dot`, via `Tensor3.sum_flatten`). Plus one leaf rounding for the bf16 store
+and one accumulate rounding for the bias — three terms, one per rounding the emit performs.
+`LeanMlir/Proofs/Float/ConvMixedFloatBridge.lean`, builds in 3.3 s, no `sorryAx`.
+
+⭐ Non-vacuous, and the fan-in is not what costs. `convBr` at fp32 accumulate / bf16 leaf on
+R34's layers: **0.0078** (stem, n=147) → **0.0081** (stage-4, n=4608). The fan-in term is
+2.8e-4 against the leaf's 7.83e-3 — a ~28× gap. Set the accumulate to bf16 as well and
+`((1+u)^(n+1) − 1)` at n=4608 is **6.4e7**, i.e. vacuous. That contrast is the whole argument
+for bf16-mixed over bf16, now at real fan-ins rather than in the abstract.
+
+⚠ It bounds ONE conv against exact ℝ. A whole-net bound needs `FloatComposeBridge` and is not
+started.
+
+### 9.4 ⚠ "Forward-only captures about a sixth — expect ~1.2×" — measured 1.09×
+
+Close enough in spirit (the conclusion "do not ship forward-only" stands, and is stronger),
+but the number was optimistic. Measured on R34's own layer shapes: conv work alone is 1.68×
+fwd+bwd, and forward-only is **1.09×**. The backward is **59.9%** of the fp32 conv step.
+
+### 9.5 ▶ Where the remaining gap to JAX is
+
+The verified R34 gets 1.41× end to end where JAX's whole step gets 1.92×. Most of the
+difference is nameable, not mysterious: the verified emit **converts back to f32 after every
+conv**, so activations cross layer boundaries in f32. JAX keeps them bf16 and lets XLA fuse the
+converts into neighbours. The rest is BN, the residual adds, the loss, the heavy-ball tail, the
+4-replica all-reduce and the shim feed, all f32 in both. ▶ Chasing the boundary converts is the
+next perf lever and does NOT need new ops — only a decision about where the converts sit.
+
+---
+
+## 10. ⭐ THE PLAN FOR THE REMAINING NETS
+
+Three categories, and they are genuinely different amounts of work. ⚠ "Mechanical" applies to
+exactly one of them.
+
+### 10.1 ResNet-50 — mechanical, no new ops, no new proof. Do this first.
+
+Bottleneck blocks are 1×1 and 3×3 convs, i.e. **the same `BatchableOp.conv` at different
+`kH`/`kW`**. Nothing new is needed:
+
+* the ops exist (`convBf16`, `convStridedBf16`, the dgrad/wgrad twins)
+* `conv_close_mixed` is stated over arbitrary `ic`/`kH`/`kW`, so R50's layers are instances
+* the work is `bf16 : Bool := false` threaded through `ResNet50RenderB` and one `#eval`
+
+▶ **Follow R34's diff exactly** (`2739e34`). And read §10.4 first — the entry-name trap is the
+one thing that will bite.
+
+### 10.2 MobileNetV2 / EfficientNet-B0 / MNv4 — new op KIND, biggest payoff
+
+1.94× and 2.41× measured (§9.1), so these are worth more than R34. But they need
+**depthwise bf16 twins**: `BatchableOp.depthwise` / `.depthwiseStrided` / `.depthwiseStridedXla`
+plus `depthwiseBackBatched` and the depthwise weight-grads. Same emit discipline as the conv
+ops — bf16 operands, bf16-typed result, convert back — and `feature_group_count = c` unchanged.
+
+⚠ The accuracy side needs a `depthwise_close_mixed`, but it should go the way
+`conv_close_mixed` did: a depthwise output is a dot product over a fan-in of `kH·kW` (one
+channel, no `ic` sum), so it is the same instantiation at a much smaller `n`. Expect it to be
+easier, not harder.
+
+⚠ EfficientNet leaves its squeeze-excitation 1×1s in fp32 on purpose — they act on
+1×1-spatial pooled tensors, where there is no bf16 win. Keep that.
+
+### 10.3 ViT / ConvNeXt — genuine design work, do last
+
+ViT's attention uses `matmulFB`: **activation × activation**, where every bf16 op built so far
+is weight × activation. `dotInBf16` bundles the rounding of a constant weight and does not
+cover it. Needs a new bundled op, and the four SDPA backward matmuls each need one.
+
+▶ The accuracy side may come free: `dot_close_mixed` already rounds BOTH operands, so it does
+not care that neither is a weight. The OPS are the work, not the theorem.
+
+ConvNeXt is partly §10.2 (depthwise) and partly this (large 1×1s that are matmuls in disguise).
+
+### 10.4 ⚠⚠ THE RECIPE, and the trap that bit on R34's first run
+
+Per net, in order:
+
+1. **Ops first, gate 2 before wiring.** Emit one op standalone, compile it, and resolve the
+   convolution's operand dtypes in the optimized HLO. Do not proceed on a grep of the op line.
+2. **Thread `bf16 : Bool := false` as a TRAILING defaulted parameter**, the `wx`/`clip` idiom.
+   Every existing render then re-renders byte-identical and gate 1 holds for free.
+3. **⚠⚠ PASS THE FLAG TO THE VARIANT-NAME DERIVATION, not just to the block renderers.**
+   `resnet34AdamTrainStepFaithfulB` derives its entry name from `r34AdamVariant`. Passing
+   `bf16` to the renderers but not to THAT call wrote an artifact to
+   `…momdp64bf16_train_step.mlir` that declared `@resnet34in_momdp64_train_step` inside, and
+   the driver refused at load with an entry mismatch. `r34AdamVariant`'s own docstring warns
+   about this for `wx` and `clip` and records ConvNeXt shipping it twice. **bf16 made three.**
+   ▶ The failure is LOUD — the driver refuses rather than running the wrong graph.
+4. **Guard the slug against the DRIVER's variant predicates.** They read the same string to
+   size the checkpoint blob. `cdOn` is a substring test for `"do"`; a false positive silently
+   adds a region. `#guard` that the new slug contains no `acc`, no `ema`, no `do`.
+5. **Check gate 1**: rebuild the render module and confirm `git status verified_mlir/` shows
+   only the new file.
+6. **Probe on real ImageNet** with `LEAN_MLIR_MAX_STEPS=40` — steady-state ms/step, then exits
+   without the val drain. ⚠ Set `LEAN_MLIR_CKPT_TAG` or a finished run's checkpoint will make
+   the probe exit instantly at "resuming from checkpoint at epoch 90".
+7. **Compare the losses**, not only the time. The bf16 and f32 arms should agree to the 3rd–4th
+   decimal on the first steps from the same init. That is the cheapest correctness signal there
+   is, and it is what says the graph is the same graph.
+
+---
 
 ## Sequencing against the other open lever
 
