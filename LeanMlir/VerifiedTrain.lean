@@ -4297,7 +4297,14 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let mut bnFirst := true
   let totalSteps := (cfg.epochs * nb).toFloat
   let warmSteps := (warmupEpochs * nb).toFloat
-  let ckptPath := s!".lake/build/{net.slug}_{variant}_e4m3_ckpt.bin"   -- distinct from the fp32 runs
+  -- ⚠⚠ Route through `ckptPathFor`, do NOT hand-build this. It read
+  --     s!".lake/build/{net.slug}_{variant}_e4m3_ckpt.bin"
+  -- which is distinct from the fp32 runs (the point) but ALSO ignores `$LEAN_MLIR_CKPT_TAG`
+  -- and the backend scoping that `ckptPathFor` applies. That silently broke an n=5 sweep on
+  -- 2026-08-25: every seed of the fp8 arm resolved to ONE file, so seeds 2-5 printed
+  -- "▸ resuming from fp8 checkpoint at epoch 40" and re-reported seed 1's result. The
+  -- `_e4m3` suffix moves into the variant, which keeps fp32 and fp8 apart AND gains the tag.
+  let ckptPath ← net.ckptPathFor s!"{variant}_e4m3"
   let epPath := ckptPath ++ ".epoch"
   let mut startEpoch := 0
   if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
