@@ -1815,6 +1815,11 @@ wrong conclusion. **The pattern is worth a gate**: nothing in this repo checks t
   ConvNeXt's conv work at 2.70× with converts free and 1.68× with an f32 boundary forced, over its
   whole 173-conv set. §20.3's 6-conv block-interior probe does not reproduce that gap. Find out
   **which** of the artifact's 519 converts cost anything, per-convert, before concluding either way.
+* ⭐⭐ **CIFAR IN bf16 AND fp8 — ✅ SCOPED 2026-08-25 in `planning/cifar_lowprec_stability.md`.**
+  The cheapest answer to the item below: CIFAR converges in HOURS where the seven need 18.6 h to
+  15.6 d (§21), and cifar8's 23 convs + 9 dots all already have bf16 twins, so it needs no new ops.
+  ⭐ It also closes `fp8_lowering.md`'s blocking gate, which this session opened by measurement —
+  XLA lowers f8E4M3FN to real fp8 silicon at 2.71× f32, where IREE could not lower it at all.
 * **A full training run** on any of the seven. Nothing has been trained to convergence in bf16, and
   every accuracy claim on this branch is still a three-step loss comparison — except ViT's, which is
   a 627-output comparison on identical seeded inputs (§19.2) and is stronger but still not training.

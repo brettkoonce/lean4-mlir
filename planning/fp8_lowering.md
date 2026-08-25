@@ -4,6 +4,29 @@ Stash of notes + a handoff for the **fp8-lowering** project (best done on a CUDA
 box). The fp8 *numerics + proofs* are done and emulated; the open work is executing on
 real fp8 tensor cores. This doc captures the state, the design, and the step order.
 
+## 0.0 ⭐⭐⭐ THE BLOCKING GATE IS OPEN — 2026-08-25, ON XLA. See `planning/cifar_lowprec_stability.md`.
+
+§4's step 1 made everything conditional: *"does IREE's CUDA backend lower `dot_general` f8E4M3FN→f32
+to the Ada fp8 MMA, and is it faster than fp32? … If IREE's f8 path is immature, that gates
+everything."* It was immature, it still is, and **the question has now been answered on the other
+backend**: PJRT/XLA lowers f8E4M3FN to **`__cublas$lt$matmul$f8`** (dots) and
+**`__cudnn$convForwardGraph`** (convs), at **2.71× f32** on a 4096³ gemm and **3.43×** on a 1×1 conv.
+
+⭐ **Both gaps in `upstream-issues/2026-06-iree-cuda-fp8-nvptx-lowering/` are gone on XLA** — the f8
+type survives, and it does NOT `extf` to a fp32 matmul. That issue remains a true IREE bug and is no
+longer a statement about this repo's engine.
+
+⚠ Three traps found in the same session, all recorded in the successor doc's §2.3: the **result
+type** is load-bearing for f8 conv (f8→f32 is 1.17×, f8→f8 is 3.43×); **f8E5M2 silently widens** and
+never reaches the fp8 units; and **int4 is 367× SLOWER than f32** (no INT4 MMA after Ampere) while
+4-bit float needs Blackwell.
+
+▶ **§3's design table is unchanged and still correct** — only its "lowering" column now targets XLA
+rather than IREE. §4's step order is superseded from step 1 onward. §2's emulated accuracy table is
+untouched and becomes the **validation target**.
+
+---
+
 ## 0. TL;DR
 
 - **fp8 today = emulation.** The E4M3 trainers round weights+input to the E4M3 grid
