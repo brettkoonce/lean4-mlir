@@ -131,8 +131,32 @@ genuinely new work and is the cheaper half (§4).
 cifar8's train step is **23 `stablehlo.convolution` + 9 `stablehlo.dot_general`** at batch 128.
 Every one of those kinds already has a bf16 twin among the 27 ops (`bf16_renderer.md` §STATUS).
 
-* **Ops:** none new. Possibly one, if cifar8 uses a conv geometry no ImageNet net does — check
-  before assuming.
+* ⛔⛔ **"Ops: none new" was WRONG — and the guessed cause was wrong too.** Checked 2026-08-25.
+  cifar8's BACKWARD needs `convBackBf16` and `dotOutBf16`, and **neither exists**. The cause is
+  not conv geometry, it is **op family**:
+
+  | | `convBack` | `convBackBatched` | `dotOut` |
+  |---|---|---|---|
+  | `CnnRender.lean` (cifar8 + mnist-cnn) | **28** | 0 | **18** |
+  | all 7 ImageNet `*RenderB.lean` | **0** | 3–18 each | 0–1 |
+
+  CIFAR renders the **per-example** backward ops; every ImageNet net renders the **batched**
+  ones. The 27 bf16 ops were built for ImageNet, so bf16 twins exist ONLY for the batched
+  family (`convBackBatchedBf16`, `denseRowBackBf16` — but no `convBackBf16`, no `dotOutBf16`).
+  ▶ Writing the two missing ops would be **CIFAR-only work rehearsing a technique ImageNet
+  never runs**, which defeats the point of §1.
+
+* ⭐⭐ **THE FIX IS UNIFICATION, AND IT IS SEMANTICALLY FREE.** Migrate `CnnRender` to the
+  batched family instead. Both denote the SAME proven VJP (`StableHLO.lean` l.2016 vs l.2200):
+
+      convBack:         (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v (den e)
+      convBackBatched:  batchMap N (… (conv2d_has_vjp3 W b)).backward (fun _ => 0) …
+
+  The only difference is the primal argument (`v` vs zero), and l.2990 states why that is free:
+  *"conv is linear, so this is a global VJP"* — the input-VJP ignores the primal. l.2205 shows
+  the bf16 twin is that same VJP with `rnd` on the weight, so bf16 drops in once CIFAR is on the
+  batched op. ▶ Cost: **0 new verified ops**, and CIFAR ends up on the ops ImageNet actually
+  runs — a real rehearsal. Risk: re-gate the cifar8 §1a tie. Chosen 2026-08-25.
 * **Render:** thread `bf16 : Bool := false` through `CnnRender.lean`, the `wx`/`clip`/`sd` idiom.
   Gate 1 is then free.
 * ⚠ **Give the dots bf16-TYPED results** (§20.1), not `dotInBf16`'s f32-result shape, which is a
@@ -187,9 +211,7 @@ Every one of those kinds already has a bf16 twin among the 27 ops (`bf16_rendere
    gate that leans on the *optional* `pjrt_ffi_invoke_f32_dp` dlsym — passes at norm-rel 7e-6.
    ⚠ Numbered 0, not 1, because §4.2 shows it gated nothing: the ireeLink exes were already running
    on XLA. It is hygiene (a binary no longer needs a shim *present* to start), not a prerequisite.
-1. **Re-baseline fp32 CIFAR on THIS box, on XLA.** §3's table is gfx1100-under-IREE. Without a
-   same-box, same-backend fp32 arm there is nothing to compare to. Cheapest step, and now the first
-   one that produces a number.
+1. ✅ **Re-baseline fp32 CIFAR on THIS box, on XLA — DONE 2026-08-25.** §5.2 has the table.
 2. **bf16 CIFAR** — no new ops, no new proof. Expect it to be undramatic; that is the point. Gate:
    final test accuracy within noise of step 1's fp32, across all three optimizers.
 3. **fp8 CIFAR, fixed scales.** Emit f8 types on the dense path first (§3b's own scope), then conv.
@@ -201,6 +223,60 @@ Every one of those kinds already has a bf16 twin among the 27 ops (`bf16_rendere
 (`bf16_renderer.md` §19.4). ViT's stem weight gradient is 0.19× its f32 peer with every gate green;
 fp8 conv already shows a 3× swing on result type alone. CIFAR's convs are small (16×3×3×3), which is
 *exactly* the regime where kernel selection is least likely to have a good fp8 path.
+
+### 5.2 ⭐ MEASURED — fp32 vs fp8, same box, same backend (2026-08-25)
+
+ares, 1× RTX 4060 Ti, PJRT 0.114, `LEAN_MLIR_LOWERER=xla`, seed 1, bs 128. This is the first
+comparison of these two arms on ONE machine and ONE backend; §3's table is gfx1100-under-IREE and
+the two are not comparable.
+
+| optimizer | fp32 @20 | fp8 E4M3 @20 | penalty | §3 said (gfx1100/IREE) |
+|---|---|---|---|---|
+| plain SGD (const lr) | 60.26 % | 63.47 / 64.07 % | ⚠ **+3.2 to +3.8** | fp8 63.5 / fp32 65.7 (−2.2) |
+| AdamW (cosine) | 71.92 % | 71.87 % | **−0.05** | fp8 71.4 / fp32 72.1 (−0.7) |
+| Nesterov-mom (cosine) | 74.25 % | 74.28 % | **+0.03** | fp8 75.4 / fp32 75.1 (≈0) |
+
+⭐ **AdamW and Nesterov reproduce §3's story**: once the optimizer carries an fp32 master, the fp8
+penalty is ~zero. Both are *smaller* here than §3 measured.
+
+⚠⚠ **The plain-SGD arm does NOT reconcile and must not be quoted.** The fp8 arm matches §3 almost
+exactly (63.47 vs 63.5); the **fp32** arm is 5.4 pt BELOW §3's 65.7. So the fp32 plain-SGD arm is
+the outlier, not the fp8 one, and "fp8 beats fp32" is not a supportable claim. ▶ Repeat it before
+anyone uses it.
+
+⚠ **Run-to-run spread on this path is ~0.6–0.7 pt**: two from-scratch runs of the SAME momentum
+binary at the SAME seed gave 76.82 % / 76.09 % @40. Treat any single delta of that size as noise.
+⚠ The fp8 trainers CHECKPOINT AND RESUME — a re-run silently no-ops ("resuming from fp8 checkpoint
+at epoch 40"). Delete `.lake/build/<slug>_<variant>_e4m3_ckpt.bin*` between configs.
+
+⚠ These are the EMULATED fp8 numerics (host-side E4M3 rounding into an fp32 graph). No f8 type
+reaches the StableHLO and there is no speedup — that is step 3, still unbuilt.
+
+MNIST fp8, same box/backend, for the record: linear **92.14 %** @12, MLP **97.84 %** @12, CNN
+**98.73 %** @10. ⚠ The MLP and CNN required a fix — `trainE4M3` supplied N destinations for a graph
+returning N+1 on the two nets with `lossSlot := true`, which the PJRT shim's G4 arity gate caught
+and IREE never would have.
+
+### 5.3 ⛔ bf16 BUYS NO SPEED AT CIFAR'S SHAPES — build the row for stability only
+
+Standalone f32-vs-bf16 at cifar8's own eight conv shapes (B=128, 3×3, [16,16,32,32], 32→16→8→4→2):
+
+| | f32 ms | bf16 ms | speedup |
+|---|---|---|---|
+| stem 3→16 32² | 0.060 | 0.099 | **0.60×** |
+| **whole conv stack** | **0.497** | **0.574** | ⛔ **0.87×** |
+
+⛔ **bf16 is SLOWER than f32 across the entire cifar8 conv stack.** At ≤32 channels and 4²–32²
+spatial these convs are launch-bound, not compute-bound: the tensor cores buy nothing and the
+converts cost. This is §5's own warning, confirmed.
+
+⭐ **The harness was controlled** — the same script gives **1.81×** on a large 3×3 (256→256, 28²,
+B=32), so it does find bf16 wins where they exist. ⚠ It gave 0.52× on ConvNeXt's 1×1 where §2.2
+measured 1.84×, so its 1×1 path is an artifact; trust it for 3×3, which is all CIFAR uses.
+
+▶ **Consequence:** the bf16 CIFAR row is a **stability / technique-rehearsal** result and must
+never be quoted as a speed one, nor used to estimate ImageNet bf16 throughput
+(`bf16_renderer.md` has the real per-net numbers).
 
 ---
 
