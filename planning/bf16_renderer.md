@@ -26,8 +26,11 @@ replica AND residency columns before quoting any number.
 ⭐⭐ **ALL SEVEN NOW HAVE A 4-GPU NUMBER ON REAL IMAGENET AND AN END-TO-END COST — §21.** Every net
 gained a DP bf16 render (three did not have one). Totals: **f32 533.9 h (22.2 d), bf16 425.3 h
 (17.7 d)** of continuous 4-GPU compute — bf16 saves **4.5 days, 20 %**. ⛔ ConvNeXt alone is 157 h of
-that, because it is the only net at global batch 128 and runs 10,009 steps/epoch for 300 epochs; its
-cheapest speedup is a bigger batch, not bf16.
+that, because it is the only net at global batch 128 and runs 10,009 steps/epoch for 300 epochs.
+⛔⛔ **And raising its batch does NOT fix that — §21.5, measured**: bf16 costs 200 MiB rather than
+saving any, 12.2 of 16.4 GB is already used at bs32, and the block interior's per-image cost is FLAT
+from batch 8 to 128 (1.03×). The GPU is saturated at 32; the step count is a recipe-vs-hardware
+fact, not a private constant.
 
 ⚠ **`?` means the probe did not record it**, not "off" — the column is new with §16 and only R50's
 §10.1 and ConvNeXt's §16 state it. ⭐ For MNv2 and B0 the bare-device timings in §16.4 bound how
@@ -1682,8 +1685,62 @@ all-reduce included. The RENDERER numbers are the single-device/bare-device ones
   contributes 2.4 h.
 * ⛔ **ConvNeXt is the most expensive net by a wide margin** — 184 h f32, 157 h bf16 — because it
   is the only one at global batch 128, so it runs **10,009 steps/epoch for 300 epochs**. Its ms/step
-  is mid-pack; its batch is what costs. ▶ The cheapest available speedup for ConvNeXt is not bf16,
-  it is a bigger batch, and `cBS` being a private constant is what stands in the way.
+  is mid-pack; its step COUNT is what costs.
+  ⛔⛔ **AND THE OBVIOUS FIX DOES NOT WORK — §21.5.** An earlier draft of this bullet said "the
+  cheapest available speedup for ConvNeXt is a bigger batch, and `cBS` being a private constant is
+  what stands in the way". **Measured 2026-08-25 and it is wrong on all three counts**: bf16 does
+  not free the memory, the memory is not there anyway, and the compute is already saturated at 32.
+
+### 21.5 ⛔⛔ "CAN WE JUST RAISE ConvNeXt's BATCH?" — MEASURED, AND THE ANSWER IS NO
+
+The obvious reading of §21's table is that ConvNeXt's 10,009 steps/epoch is the problem and a bigger
+batch is the fix. Three measurements, and each one independently kills it.
+
+**1. bf16 does not free memory — it costs a little.** Peak GPU-0 memory during a 4×bs32 step:
+
+| arm | peak | of 16,380 MiB |
+|---|---|---|
+| `adamdpwxclipdrop` (f32) | 12,220 MiB | 75 % |
+| `adamdpwxclipdropbf16` | **12,420 MiB** | 76 % |
+
+▶ **+200 MiB, not −.** The emit converts back to f32 after every op, so the f32 activation is still
+materialised and the bf16 copies and converts are *additional*. ⚠ This is worth stating plainly
+because "bf16 halves activation memory" is true of a bf16-throughout net and **false of this one** —
+and §20.3 measured that going bf16-throughout buys no speed here either.
+
+**2. The memory is not there anyway.** 12.2 GB at bs32 on a 16.4 GB card leaves ~4 GB. Params +
+optimizer are ~0.4 GB, so activations are ~11.8 GB ≈ **369 MB per image**. Batch 64 would need
+~24 GB. ⚠ That is an extrapolation from one point, not a second measurement — but the sign is not
+in doubt. The largest batch that fits is ~40.
+
+**3. Even with infinite memory it would barely help, because the compute is ALREADY SATURATED at
+batch 32.** ConvNeXt's own stage-1 block interior, timed across batch:
+
+| B | f32 ms | ms/image | bf16 ms | ms/image |
+|---|---|---|---|---|
+| 8 | 2.11 | 263.5 | 0.71 | 88.8 |
+| 16 | 4.30 | 268.6 | 2.36 | 147.4 |
+| **32** | 8.46 | **264.5** | 4.75 | **148.5** |
+| 64 | 16.45 | 257.0 | 9.25 | 144.5 |
+| 128 | 32.88 | 256.9 | 18.26 | 142.7 |
+
+▶ **Per-image cost is flat: 32 → 128 buys 1.03× (f32) / 1.04× (bf16).** Doubling the batch halves
+the step count and doubles the step, and the two cancel. What a bigger batch amortises is only the
+FIXED per-step overhead — the all_reduce (parameter-sized, genuinely batch-independent) and the
+launch. That is ~58 ms of ConvNeXt's 216 (216 trainer 4×bs32 against 157.6 bare-device 1×bs32,
+§16.2), and only part of it is fixed: the shim feed inside it scales with batch. At the ~40 the
+memory actually allows, the saving is a couple of percent.
+
+⭐ **So `bB`/`cBS` being private constants is NOT what stands between ConvNeXt and a cheaper run**,
+and the 140-site refactor should not be sold that way. (ViT already did that refactor — `vbB`, 194
+sites, renders at 32/128/256 — so the precedent exists and the cost is known. It is just not the
+lever here.)
+
+▶ **What actually drives ConvNeXt's 157 h is the recipe**: the paper's 300-epoch schedule at a
+global batch of 128 rather than the paper's 4096, i.e. ~32× the paper's step count. On four
+consumer 16 GB cards that is a hardware fact, not a config one. The levers that remain are fewer
+epochs (a different experiment) or gradient accumulation (which changes the effective batch and the
+LR schedule without changing the step count, so it costs *more* wall-clock, not less).
 
 ### 21.4 ⛔ A THIRD STALE BINARY, found by this probe
 
