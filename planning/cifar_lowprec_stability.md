@@ -141,12 +141,26 @@ Every one of those kinds already has a bf16 twin among the 27 ops (`bf16_rendere
 
 ### 4.2 fp8 CIFAR — the real work, and it is NOT the ops
 
-* **Link mode, and this is a one-line-per-exe change rather than a port.** The CIFAR exes are
-  `moreLinkArgs := ireeLink`, which puts `libiree_ffi.so` on the link line. Its successor
-  `lowererLink` (`#["-ldl"]`) makes `ffi/lowerer.c` dlopen whichever of `libpjrt_ffi.so` /
-  `libiree_ffi.so` `$LEAN_MLIR_LOWERER` names, so **one executable serves both backends**. ▶ Switch
-  the CIFAR exes to `lowererLink` FIRST — until that lands, none of them can reach the fp8 path,
-  because IREE is where fp8 does not lower.
+* ✅ **Link mode — DONE 2026-08-25, and the reason this document gave for it was wrong.**
+  BOTH shim link modes are retired: `ireeLink` (95 sites) and `xlaLink` (32 sites) are gone, defs
+  and all, and the lakefile now has **exactly one** link mode across all 167 executables —
+  `lowererLink = #["-ldl"]`. `ffi/lowerer.c` dlopens whichever of `libpjrt_ffi.so` /
+  `libiree_ffi.so` `$LEAN_MLIR_LOWERER` names, so **one executable serves both backends**.
+  ⚠ **But this was never the fp8 blocker.** This bullet read "until that lands, none of them can
+  reach the fp8 path, because IREE is where fp8 does not lower" — that is the SAME stale premise
+  the lakefile's three "is an IREE binary" docstrings carried (`vit-adam-tie`, `convnext-adam-tie`,
+  `mobilenetv2-adam-tie`), and it is wrong for the same reason: **`-liree_ffi` never selected a
+  backend.** `ffi/lowerer.h` (≈l.137) `#define`s every `iree_ffi_*` entry point to the corresponding
+  dlopen'd `lowerer_*` pointer, so nothing in the executable ever resolved against that library —
+  `nm -D --undefined-only` on the ireeLink-built `cifar8-verified` listed no `iree_ffi_*` symbol at
+  all. The ireeLink CIFAR exes were **already defaulting to XLA**, and therefore already had the
+  fp8 path open. Verified by running the migrated `cifar8-verified`: it comes up on
+  `PJRT CUDA / 6× RTX 4060 Ti` by default and still selects the IREE shim under
+  `LEAN_MLIR_LOWERER=iree`.
+  ▶ What the flag actually did was stamp `DT_NEEDED: libiree_ffi.so` + `RUNPATH ./ffi`, so the
+  binary refused to *start* on a box without the IREE shim while doing all its work through XLA.
+  That is the whole delta the migration buys, and it is worth having — but **no step below was
+  gated on it**, and step 1 should not be sequenced as if it were.
 * **Emit f8 types.** `fp8_lowering.md` §3's table is still the design and is unchanged by this
   document, except that its "lowering" column now targets XLA rather than IREE.
 * ⚠⚠ **SCALING IS THE ENGINEERING, not the emit.** E4M3's max is 448 and its min normal is ~2⁻⁶.
@@ -167,9 +181,15 @@ Every one of those kinds already has a bf16 twin among the 27 ops (`bf16_rendere
 
 ## 5. ▶ STEP ORDER, by risk
 
+0. ✅ **Link mode — DONE 2026-08-25.** `ireeLink` (95 sites) and `xlaLink` (32) both retired →
+   one `lowererLink` across all 167 exes. The migrated `cifar8-verified` comes up on PJRT CUDA by
+   default and still takes the IREE shim under `LEAN_MLIR_LOWERER=iree`; `cifar8-dp-check` — the
+   gate that leans on the *optional* `pjrt_ffi_invoke_f32_dp` dlsym — passes at norm-rel 7e-6.
+   ⚠ Numbered 0, not 1, because §4.2 shows it gated nothing: the ireeLink exes were already running
+   on XLA. It is hygiene (a binary no longer needs a shim *present* to start), not a prerequisite.
 1. **Re-baseline fp32 CIFAR on THIS box, on XLA.** §3's table is gfx1100-under-IREE. Without a
-   same-box, same-backend fp32 arm there is nothing to compare to. Cheapest step, and it also
-   proves the link-mode switch works.
+   same-box, same-backend fp32 arm there is nothing to compare to. Cheapest step, and now the first
+   one that produces a number.
 2. **bf16 CIFAR** — no new ops, no new proof. Expect it to be undramatic; that is the point. Gate:
    final test accuracy within noise of step 1's fp32, across all three optimizers.
 3. **fp8 CIFAR, fixed scales.** Emit f8 types on the dense path first (§3b's own scope), then conv.

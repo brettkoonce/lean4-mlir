@@ -67,8 +67,15 @@ private def runIree (mlirPath outPath : String) : IO Bool := do
     return false
   return true
 
-/-- Path of the runnable artifact for one emitted graph, on whichever backend
-    this binary was linked against (`planning/detector_pjrt_port.md`).
+/-- Path of the runnable artifact for one emitted graph, on whichever backend is
+    ACTIVE AT RUN TIME (`planning/detector_pjrt_port.md`).
+
+    ⚠ This said "whichever backend this binary was linked against" until 2026-08-25, and as of
+    that date nothing is linked against a backend at all: `ireeLink`/`xlaLink` are retired and
+    every executable is on `lowererLink`, with `ffi/lowerer.c` dlopening the shim
+    `$LEAN_MLIR_LOWERER` names. The dispatch below was always the real mechanism — it reads
+    `LowererSession.backendName`, not the link line — so the behaviour is unchanged; only the
+    sentence was wrong.
 
     * **IREE** — `iree-compile` turns `{pfx}_{suffix}.mlir` into a `.vmfb`, and
       that `.vmfb` is what `LowererSession.create` loads.

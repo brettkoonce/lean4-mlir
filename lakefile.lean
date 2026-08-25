@@ -1069,61 +1069,86 @@ extern_lib libireeffi pkg := do
   buildStaticLib (pkg.staticLibDir / nameToStaticLib "ireeffi") #[shimO, f32O, lowO]
 
 -- ═══════════════════════════════════════════════════════════════════
--- Phase 3 trainers (Lean → MLIR → IREE → GPU)
+-- Phase 3 trainers (Lean → StableHLO → XLA/PJRT (default) or IREE → GPU)
 -- ═══════════════════════════════════════════════════════════════════
 
-private def ireeLink : Array String :=
-  #["-L", "./ffi", "-liree_ffi", "-ldl", "-Wl,-rpath,./ffi",
-    "-Wl,--allow-shlib-undefined"]
+/-- No shim on the link line at all. `ffi/lowerer.c` dlopens whichever of
+    `libpjrt_ffi.so` / `libiree_ffi.so` `$LEAN_MLIR_LOWERER` selects (XLA by
+    default, `=iree` for the other), so ONE executable serves both backends and
+    a box that has only one of the two shims still starts.
 
-/-- The successor to `ireeLink`/`xlaLink`: no shim on the link line at all.
-    `ffi/lowerer.c` dlopens whichever of `libpjrt_ffi.so` / `libiree_ffi.so`
-    `$LEAN_MLIR_LOWERER` selects, so ONE executable serves both backends and a
-    box that has only one of the two shims still starts. Migrating a target is
-    just `ireeLink`/`xlaLink` → `lowererLink`; its `-xla` peer then deletes. -/
+    **`ireeLink` is retired as of 2026-08-25** — all 95 remaining call sites
+    moved here, and the def is gone. It read
+    `#["-L", "./ffi", "-liree_ffi", "-ldl", "-Wl,-rpath,./ffi", "-Wl,--allow-shlib-undefined"]`,
+    and the `-liree_ffi` in it was **inert on every one of those targets**:
+    `lowerer.h` (≈l.137) `#define`s every `iree_ffi_*` entry point to the
+    corresponding dlopen'd `lowerer_*` pointer, so nothing in the executable
+    ever resolved against that library. Confirmed by construction rather than
+    by argument — `nm -D --undefined-only` on the ireeLink-built `cifar8-verified`
+    lists no `iree_ffi_*` symbol at all. What the flag DID do was stamp a
+    `DT_NEEDED: libiree_ffi.so` + `RUNPATH ./ffi` on the binary, so an
+    ireeLink target refused to *start* on a box without the IREE shim while
+    doing all its actual work through XLA. That is the whole delta, and it is
+    why the three "is an IREE binary" docstrings below (`vit-adam-tie`,
+    `convnext-adam-tie`, `mobilenetv2-adam-tie`) were each wrong.
+
+    **`xlaLink` is retired too, same day, same reason** — its 32 call sites are here as well.
+    It read `#["-L", "./ffi", "-lpjrt_ffi", ...]` and was inert by the identical mechanism: the
+    four `pjrt_ffi_*` entry points are `#define`d onto `lowerer_pjrt_*` OPT-dlsym pointers.
+    ⚠⚠ The check that says so has a trap in it. `nm -D` on the ON-DISK `sgd-render-tie` and
+    `mobilenetv2-dp-check` showed 12 and 14 undefined `iree_ffi_*`/`pjrt_ffi_*` symbols — which
+    looks exactly like "the link line is load-bearing". They were Aug-1 and Aug-2 binaries,
+    predating the lowerer's dlopen refactor, still on the old direct-link + weak-symbol scheme.
+    `lake build` them and both drop to ZERO, matching `shard-check` (Aug 12, already 0). ▶ This is
+    `stale lean_exe gates` in a new costume: **rebuild before you measure a binary**, or you will
+    read a month-old link scheme as today's.
+
+    ▶ `ffi/libpjrt_ffi.so` and `ffi/libiree_ffi.so` are both still REQUIRED — dlopen'd at startup.
+    Retiring the link modes moved the failure from link time to run time; it did not remove the
+    dependency. `ensurePjrtShim` builds the PJRT one on demand. -/
 private def lowererLink : Array String := #["-ldl"]
 
 lean_exe «resnet34-train» where
   root := `apps.baselines.MainResnetTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «resnet50-train» where
   root := `apps.baselines.MainResnet50Train
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mobilenet-v2-train» where
   root := `apps.baselines.MainMobilenetV2Train
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mobilenet-v3-train» where
   root := `apps.baselines.MainMobilenetV3Train
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «efficientnet-train» where
   root := `apps.baselines.MainEfficientNetTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «efficientnet-v2-train» where
   root := `apps.baselines.MainEfficientNetV2Train
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «convnext-tiny-train» where
   root := `apps.baselines.MainConvNeXtTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vit-tiny-train» where
   root := `apps.baselines.MainVitTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Muon (Newton–Schulz polar projection) on the 2D weights, AdamW on the rest.
 -- Same ViT-Tiny + recipe as vit-tiny-train → a compute-matched A/B. See planning/muon.md.
 lean_exe «vit-tiny-muon-train» where
   root := `apps.baselines.MainVitMuonTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vit-tiny-shampoo-train» where
   root := `apps.baselines.MainVitShampooTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 /-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware
     blueprint declaration check (checkdecls minus the `CertsHeavy` lib, whose
@@ -1144,31 +1169,31 @@ lean_exe «docstring-checkrefs» where
 
 lean_exe «ablation» where
   root := `apps.ablation.MainAblation
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vgg-train» where
   root := `apps.baselines.MainVggTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mnist-cnn-train» where
   root := `apps.baselines.MainMnistCnnTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar-bn-train» where
   root := `apps.baselines.MainCifarCnnBnTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mnist-mlp-train» where
   root := `apps.baselines.MainMnistMlpTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mnist-mlp-shampoo-train» where
   root := `apps.baselines.MainMnistMlpShampooTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mnist-linear-train» where
   root := `apps.baselines.MainMnistLinearTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Trains MNIST-linear on the VERIFIED-rendered StableHLO
 -- (`verified_mlir/`, = Proofs.StableHLO.linearTrainStepModuleV) through the
@@ -1185,13 +1210,13 @@ lean_exe «mnist-linear-verified» where
 -- which trusted lowerer consumes the emitted StableHLO. `libpjrt_ffi.so` exports
 -- the identical C surface as `libiree_ffi.so`, so nothing above the shim moves.
 --
--- Build the shim first (it is not built by lake — it only needs libc + dlopen):
+-- Build the shim (it is not built by lake — it only needs libc + dlopen):
 --   gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
+-- ⚠ Still required, but at RUN time, not link time: since `xlaLink` was retired
+-- (2026-08-25) nothing names the shim on a link line, so a missing shim is now a
+-- dlopen failure when the trainer starts rather than a link error when it builds.
+-- `ensurePjrtShim` (below) is what keeps that from biting on a fresh clone.
 -- ═══════════════════════════════════════════════════════════════════
-
-private def xlaLink : Array String :=
-  #["-L", "./ffi", "-lpjrt_ffi", "-ldl", "-Wl,-rpath,./ffi",
-    "-Wl,--allow-shlib-undefined"]
 
 -- Rung 0 of the XLA ladder is now a RUN-TIME choice, not a second executable:
 -- `mnist-linear-verified` serves both lowerers via $LEAN_MLIR_LOWERER, so its
@@ -1202,54 +1227,54 @@ private def xlaLink : Array String :=
 -- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
 lean_exe «mnist-linear-pgd» where
   root := `apps.mnist.MainMnistLinearPgd
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Phase-3 PGD attack on the verified MLP (planning/robustness.md): input gradient =
 -- the proven mlpInputGrad VJP; certificate = the loose product of layer spectral norms.
 lean_exe «mnist-mlp-pgd» where
   root := `apps.mnist.MainMnistMlpPgd
-  moreLinkArgs := ireeLink
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
+  moreLinkArgs := lowererLink
 
 -- Phase-3 PGD attack on the verified CNN (planning/robustness_ladder.md, the conv rung):
 -- input gradient = the proven conv/maxpool input-VJP; certificate = the conv-aware product.
 lean_exe «mnist-cnn-pgd» where
   root := `apps.mnist.MainMnistCnnPgd
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Spectral-norm-constrained MLP training (planning/robustness_ladder.md, the gap-shrinking
 -- lever): projected SGD onto ‖Wᵢ‖₂ ≤ c shrinks the global L = ∏‖Wᵢ‖₂, turning the vacuous
 -- product certificate non-vacuous — the empirical face of lipschitz_margin_certified_radius.
 lean_exe «mnist-mlp-spectral» where
   root := `apps.mnist.MainMnistMlpSpectral
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Spectral-norm-constrained CNN training (planning/robustness_ladder.md): the conv sibling —
 -- caps the dense ‖Wᵢ‖₂ and the conv tap-sum bound; a 5-layer product + loose conv-norm make
 -- certifying the conv net harder than the MLP (tighter c, more clean cost).
 lean_exe «mnist-cnn-spectral» where
   root := `apps.mnist.MainMnistCnnSpectral
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Phase-3 PGD attack on the verified CIFAR-10 CNN (planning/robustness_ladder.md, the deeper
 -- conv rung): input gradient = the proven 4-conv/2-pool input-VJP (genCifarPgdStep); cert = the
 -- 7-layer conv-aware product. Reuses the generic attackPgdConvNet driver.
 lean_exe «cifar-pgd» where
   root := `apps.cifar.MainCifarPgd
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Spectral-norm-constrained CIFAR-10 CNN training (planning/robustness_ladder.md): the 7-layer
 -- product compounds the loose conv bound harder still — tightest caps, smallest certified radii.
 lean_exe «cifar-spectral» where
   root := `apps.cifar.MainCifarSpectral
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Phase-3 PGD attack on the verified CIFAR-10 CNN + (instance) BatchNorm: genCifarBnPgdStep runs
 -- the proven input-VJP through 4 instance-norm layers (the BN grad-input 3-term formula). Cert
 -- N/A (instance-norm Lipschitz is data-dependent) — the attack rung only.
 lean_exe «cifar-bn-pgd» where
   root := `apps.cifar.MainCifarBnPgd
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Randomized-smoothing certificate (planning/robustness_ladder.md §3, Cohen 2019): the
 -- DEPTH-INDEPENDENT cert. Forward-only Monte-Carlo over the proof-rendered fwd (no kernel, no
@@ -1257,24 +1282,24 @@ lean_exe «cifar-bn-pgd» where
 -- net trained with matched Gaussian augmentation. Non-vacuous where the spectral product is hopeless.
 lean_exe «mnist-mlp-smooth» where
   root := `apps.mnist.MainMnistMlpSmooth
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mnist-cnn-smooth» where
   root := `apps.mnist.MainMnistCnnSmooth
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- The deep-net payoff: smoothing certifies a non-vacuous L2 radius on the 7-layer CIFAR CNN where
 -- the conv-aware spectral product was 942K-loose (cert 0%). Same forward-only procedure, any depth.
 lean_exe «cifar-smooth» where
   root := `apps.cifar.MainCifarSmooth
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
 -- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
 -- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).
 lean_exe «mnist-linear-e4m3-verified» where
   root := `apps.mnist.MainMnistLinearE4M3Verified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
 -- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
@@ -1294,27 +1319,27 @@ lean_exe «mnist-mlp-verified» where
 -- the 784→d₁→d₂→10 MLP on the faithful verified StableHLO (the size-sweep demo).
 lean_exe «mnist-mlp-grid» where
   root := `apps.mnist.MainMnistMlpGrid
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- FC-width-parametric MNIST CNN: `mnist-cnn-grid <fc-width> [epochs]` holds the conv
 -- stack at 32 channels and sweeps the dense head (…→d→d→10) on the faithful StableHLO.
 lean_exe «mnist-cnn-grid» where
   root := `apps.mnist.MainMnistCnnGrid
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- FC-head-parametric cifar8-BN (AdamW): `cifar8-bn-grid <fc-width> [epochs]` holds the
 -- 8-conv [16,16,32,32] backbone and sweeps the dense head (128→d→d→10) on the verified
 -- renders (tests/TestCifar8AdamTrain.lean), trained via trainAdamSched "adam".
 lean_exe «cifar8-bn-grid» where
   root := `apps.cifar.MainCifar8BnGrid
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Chapter 3 (low precision): fp8 (E4M3) MLP training on the SAME verified StableHLO.
 -- fp32 master, per-column weight quant + per-tensor input, fp32 accumulate.
 -- fp8 weights+input, fp32 intermediates. See MainMnistMlpE4M3Verified.lean.
 lean_exe «mnist-mlp-e4m3-verified» where
   root := `apps.mnist.MainMnistMlpE4M3Verified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
 -- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
@@ -1336,32 +1361,32 @@ lean_exe «mnist-cnn-verified» where
 -- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainMnistCnnE4M3Verified.lean.
 lean_exe «mnist-cnn-e4m3-verified» where
   root := `apps.mnist.MainMnistCnnE4M3Verified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Chapter 5: trains the CIFAR-10 CNN (no BN) on the VERIFIED-rendered StableHLO
 -- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepText).
 lean_exe «cifar-verified» where
   root := `apps.cifar.MainCifarVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Chapter 5 (low precision): fp8 (E4M3) CIFAR-10 training on the SAME verified StableHLO.
 -- fp32 master, conv per-channel / dense per-column weight quant + per-tensor input,
 -- fp32 accumulate. fp8 weights+input, fp32 intermediates. See MainCifarE4M3Verified.lean.
 lean_exe «cifar-e4m3-verified» where
   root := `apps.cifar.MainCifarE4M3Verified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Chapter 5 (BatchNorm): trains the CIFAR-10 CNN + per-example BN on the
 -- VERIFIED-rendered StableHLO (Proofs.StableHLO.cifarBnTrainStepText).
 lean_exe «cifar-bn-verified» where
   root := `apps.cifar.MainCifarBnVerified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Deeper 8-conv CIFAR-10 CNN (no BN; [16,16,32,32], 4 pools) on the VERIFIED-rendered
 -- StableHLO (verified_mlir/cifar8_train_step.mlir = Proofs.StableHLO.cifar8TrainStepText).
 lean_exe «cifar8-verified» where
   root := `apps.cifar.MainCifar8Verified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 
 lean_exe «cifar8-bn-verified» where
@@ -1392,15 +1417,15 @@ lean_exe «cifar8-verified-momentum» where
 -- fp32 master). Same verified train-step MLIR as their fp32 peers.
 lean_exe «cifar8-e4m3-verified» where
   root := `apps.cifar.MainCifar8E4M3Verified
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar8-e4m3-verified-momentum» where
   root := `apps.cifar.MainCifar8E4M3VerifiedMomentum
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar8-e4m3-verified-adam» where
   root := `apps.cifar.MainCifar8E4M3VerifiedAdam
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 
 lean_exe «cifar8-bn-verified-momentum» where
@@ -1658,7 +1683,7 @@ lean_exe «score-checkpoint» where
     reports a perfect match, which is exactly what running a negative control looks like. -/
 lean_exe «fwd-tie» where
   root := `tests.TestFwdTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §0.2 ▶2, the batched-index move: the ConvNeXt forward rendered at `N := B` must emit the
     committed `verified_mlir/convnext_fwd.mlir` BYTE FOR BYTE. No GPU — it is a string compare, so
@@ -1693,7 +1718,7 @@ lean_exe «vit-fwd-b-tie» where
         lake build channel-ln && HIP_VISIBLE_DEVICES=0 .lake/build/bin/channel-ln -/
 lean_exe «channel-ln» where
   root := `tests.TestChannelLN
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2l step 1: does the emitter spell a **1×1 strided** conv, and does it compute the right one?
 
@@ -1708,7 +1733,7 @@ lean_exe «channel-ln» where
         lake build strided-1x1 && HIP_VISIBLE_DEVICES=0 .lake/build/bin/strided-1x1 -/
 lean_exe «strided-1x1» where
   root := `tests.TestStrided1x1
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2l step B: are the R34 conv biases inert? §2l argues dropping them is layout-only because
     every conv is BN-followed and BN removes the bias — this MEASURES it. One step of the committed
@@ -1719,7 +1744,7 @@ lean_exe «strided-1x1» where
         lake build conv-bias-zero && HIP_VISIBLE_DEVICES=0 .lake/build/bin/conv-bias-zero -/
 lean_exe «conv-bias-zero» where
   root := `tests.TestConvBiasZero
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2k's owed numeric gate: is `resnet34_mom_train_step` really heavy-ball with COUPLED L2?
 
@@ -1732,7 +1757,7 @@ lean_exe «conv-bias-zero» where
         lake build r34-mom-tie && HIP_VISIBLE_DEVICES=0 .lake/build/bin/r34-mom-tie -/
 lean_exe «r34-mom-tie» where
   root := `tests.TestMomTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- **recipe_gaps v1.2's gate — the RMSProp render, numerically certified.** The `r34-mom-tie`
     construction (§2k) pointed at MobileNetV2's RMSProp tail: recover the gradient from the AdamW
@@ -1746,7 +1771,7 @@ lean_exe «r34-mom-tie» where
         lake build rms-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/rms-tie -/
 lean_exe «rms-tie» where
   root := `tests.TestRmsTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- **Stochastic depth — the two gates that cover the op's INTERIOR** (`stochastic_depth.md` §7).
     Everything gated when the feature landed pins an ENDPOINT: `dropPath = 0` re-renders every
@@ -1773,7 +1798,7 @@ lean_exe «rms-tie» where
         .lake/build/bin/droppath-tie --net --cand <misplaced.mlir>   # gate B goes red, rc=1 -/
 lean_exe «droppath-tie» where
   root := `tests.TestDropPathTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- ▶ **Classifier dropout's two gates** (`recipe_gaps.md` gap C) — the ones its endpoint checks
     structurally cannot make. Gate A: the mask multiplies PER ELEMENT, against a host-computed
@@ -1790,7 +1815,7 @@ lean_exe «droppath-tie» where
         .lake/build/bin/dropout-tie --net /tmp/f.mlir              # goes red, rc=1 -/
 lean_exe «dropout-tie» where
   root := `tests.TestDropoutTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- **recipe_gaps v1.4's gate — `wdExcludeNormBias`, the timm/DeiT `no_weight_decay` render.**
     `vit_adamwx` is `vit_adam` with decoupled decay switched off for the 126 params timm excludes
@@ -1811,7 +1836,7 @@ lean_exe «dropout-tie» where
         lake build wdx-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/wdx-tie -/
 lean_exe «wdx-tie» where
   root := `tests.TestWdExcludeTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- v1.4b: **global-norm gradient clipping**, ONE harness for ViT and ConvNeXt (`clip-tie <net>`).
     The reference's `g * min(1, CLIP/(‖g‖+1e-6))` with ‖g‖ taken across EVERY parameter.
@@ -1831,7 +1856,7 @@ lean_exe «wdx-tie» where
         CUDA_VISIBLE_DEVICES=0 .lake/build/bin/clip-tie vit -/
 lean_exe «clip-tie» where
   root := `tests.TestGradClipTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- `stochastic_depth.md` §5b, the gate that document left open: **the drop mask is SHARDED, not
     replicated.** The mask is per-EXAMPLE and rides in the PARAMETER blob, where the DP shim's rule
@@ -1850,7 +1875,7 @@ lean_exe «clip-tie» where
         PJRT_DP_NO_MASK_SHARD=1 … .lake/build/bin/drop-shard-check    # the control, rc=1 -/
 lean_exe «drop-shard-check» where
   root := `tests.TestDropShardCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
@@ -1861,14 +1886,14 @@ lean_exe «drop-shard-check» where
     every compile (§4), unlike `cifar8-adam-tie`. -/
 lean_exe «cifar8-opt-tie» where
   root := `tests.TestCifar8OptTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2a-ter guard: one AdamW step through two renders of `@cifar8_adam_train_step`, same packed
     `[θ|m|v|lr|bc1|bc2]`, every returned float compared. ⚠ Compares θ' among other things and does
     NOT delete its `.vmfb`; prefer `cifar8-opt-tie`, which recovers the gradient and deletes. -/
 lean_exe «cifar8-adam-tie» where
   root := `tests.TestCifar8AdamTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2b step-5 guard: one AdamW step through two renders of `@resnet34_adam_train_step` — the
     hand-written emitter vs the batched `pretty(provenGraph)` — same packed
@@ -1876,7 +1901,7 @@ lean_exe «cifar8-adam-tie» where
     purpose: the two are the same function but not the same graph. -/
 lean_exe «resnet34-adam-tie» where
   root := `tests.TestResnet34AdamTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2a-quinquies guard: one SGD step through two renders of `@<slug>_train_step` — the `tests/`
     emitter vs `pretty(provenGraph)` — on one shared θ, comparing the recovered GRADIENT
@@ -1885,7 +1910,7 @@ lean_exe «resnet34-adam-tie» where
     `tests/` emitter: afterwards the comparison no longer exists. -/
 lean_exe «sgd-render-tie» where
   root := `tests.TestSgdRenderTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- ViT AdamW step-3 gate: one AdamW step through two renders of `@vit_adam_train_step` — the
     hand-written emitter the driver writes at startup vs `pretty(provenGraph)` — same packed
@@ -1929,12 +1954,18 @@ lean_exe «efficientnet-adam-tie» where
     of `@mobilenetv2_adam_train_step` — the hand-written emitter in `tests/TestMobilenetV2TrainPC.lean`
     against `Proofs/Codegen/MobileNetV2RenderB.lean`'s `pretty(provenGraph)` — comparing all
     returned floats per region. 52 BN layers give a `bnstat` region that pins the forward
-    bit-exactly, and the gate covers SPREAD as well as magnitude (§2f-bis). IREE-linked, because
-    `mobilenetv2-verified-adam` is. Deletes its `.vmfb` before every compile (§2e's false-PASS
-    trap). -/
+    bit-exactly, and the gate covers SPREAD as well as magnitude (§2f-bis). Deletes its `.vmfb`
+    before every compile (§2e's false-PASS trap).
+
+    **`lowererLink` since 2026-08-25** — the third and last of the stale "is an IREE binary"
+    docstrings, which `convnext-adam-tie` flagged as open. This one read "IREE-linked, because
+    `mobilenetv2-verified-adam` is", and BOTH halves were wrong the same way ConvNeXt's were:
+    `mobilenetv2-verified-adam` has been on `lowererLink` since 2026-08-12 (line ~2225), and the
+    `ireeLink` here never selected a backend anyway — `lowerer.h` macro-redirects the whole
+    `iree_ffi_*` surface onto dlopen'd pointers, so the flag resolved nothing. -/
 lean_exe «mobilenetv2-adam-tie» where
   root := `tests.TestMobilenetV2AdamTie
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 /-- ConvNeXt-T AdamW gate (§2f): one AdamW step through two renders of `@convnext_adam_train_step`
     — the hand-written emitter in `tests/TestConvNeXtTrain.lean` vs `pretty(provenGraph)` — same
@@ -1949,8 +1980,9 @@ lean_exe «mobilenetv2-adam-tie» where
     and the `ireeLink` here was **inert**: `ffi/lowerer.c` dlopens the shim `$LEAN_MLIR_LOWERER`
     names, so link args stopped selecting the backend. Settled by RUNNING it — the ireeLink build
     printed `[pjrt_ffi] XLA backend: PJRT 0.112` and tied on XLA. Moved to `lowererLink` so the
-    line says what happens. ▶ `efficientnet-adam-tie` carries the identical stale docstring
-    (`chapter_makeover.md` §4a-quinquies "Open"); the same one-command check settles it. -/
+    line says what happens. ▶ CLOSED 2026-08-25: `efficientnet-adam-tie` carried the identical
+    stale docstring (`chapter_makeover.md` §4a-quinquies "Open") and so did `mobilenetv2-adam-tie`;
+    both are on `lowererLink` now, and `ireeLink` itself no longer exists. -/
 lean_exe «convnext-adam-tie» where
   root := `tests.TestConvNeXtAdamTie
   moreLinkArgs := lowererLink
@@ -1960,14 +1992,14 @@ lean_exe «convnext-adam-tie» where
     floats must AGREE — an exact known-answer check, not a tolerance argument. -/
 lean_exe «resnet34-batch-check» where
   root := `tests.TestResnet34BatchCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- ViT DP gate: ViT has no BN, so giving both replicas the SAME batch makes `all_reduce(add)/2`
     the identity — the data-parallel step must reproduce the single-device one exactly. Needs two
     GPUs and the XLA backend. -/
 lean_exe «vit-dp-check» where
   root := `tests.TestViTDpCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- Soft-target gate: the committed renders are AFFINE in their `%onehot` input, so a mixed
     target gives the mixed gradient and mixup/cutmix need **no new cotangent**. Measures
@@ -1976,7 +2008,7 @@ lean_exe «vit-dp-check» where
     every time and a vacuity refusal. Retires §2p's claim that a `softLabelCE` render was needed. -/
 lean_exe «soft-target-tie» where
   root := `tests.TestSoftTargetTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- EfficientNet DP gate. Giving both replicas the SAME batch makes `all_reduce(add)/2` the
     identity, so the data-parallel step must reproduce the single-device one exactly. BatchNorm does
@@ -1988,7 +2020,7 @@ lean_exe «soft-target-tie» where
     forward-only region that must come back BIT-EXACT. Needs two GPUs and the XLA backend. -/
 lean_exe «efficientnet-dp-check» where
   root := `tests.TestEfficientNetDpCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- The mnv2 peer of `efficientnet-dp-check`, gated by the same EXACT duplicated-batch identity:
     both replicas get the same 32 examples, so their BN groups are identical by construction,
@@ -1999,7 +2031,7 @@ lean_exe «efficientnet-dp-check» where
     PJRT path, which is why `mobilenetv2-verified-adam` (§2h) had to come first. -/
 lean_exe «mobilenetv2-dp-check» where
   root := `tests.TestMobilenetV2DpCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- The ConvNeXt peer, gated by the same EXACT duplicated-batch identity — and the one net that
     needs no BatchNorm caveat to justify it: LayerNorm reduces within an example, never across the
@@ -2013,7 +2045,7 @@ lean_exe «mobilenetv2-dp-check» where
     come first. -/
 lean_exe «convnext-dp-check» where
   root := `tests.TestConvNeXtDpCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- The SHARDING gate — what `convnext-dp-check` cannot see. That gate hands both replicas the same
     rows, so a shard-offset bug leaves the halves identical and it still passes bit-exact; it
@@ -2025,7 +2057,7 @@ lean_exe «convnext-dp-check» where
     `m' = (1-β₁)·g` is exactly linear in the gradient while θ' and v' are not. Needs two GPUs. -/
 lean_exe «convnext-shard-check» where
   root := `tests.TestConvNeXtShardCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- `shard-check <convnext|efficientnet|mobilenetv2|vit> [<dpPath>]` — the asymmetric-batch SHARDING
     gate for every net with a DP render, generalised from `convnext-shard-check` (handoff §5's
@@ -2034,7 +2066,7 @@ lean_exe «convnext-shard-check» where
     `DP([xA|xB]) == mean(single(xA), single(xB))`. Needs two GPUs and the XLA backend. -/
 lean_exe «shard-check» where
   root := `tests.TestShardCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- `argmax-check` — the class-count gate on `F32.argmaxN`, the eval scorer every trainer here
     reads its top-1 through. Needs no GPU and no backend: pure host arithmetic on a synthetic
@@ -2063,7 +2095,7 @@ lean_exe «label-check» where
     single-device bs64 peer. TEST + a CONTROL that must fire. Needs 4 GPUs and the XLA backend. -/
 lean_exe «r34-dp-shard» where
   root := `tests.TestR34DpShard
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- `r50-gradcheck` — **the gate R50's backward never had**
     (`planning/next_session_pipeline_then_r50.md` §3.2). Phases 1–3 shipped a net that renders,
@@ -2093,7 +2125,7 @@ lean_exe «r34-dp-shard» where
         lake build r50-gradcheck && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-gradcheck -/
 lean_exe «r50-gradcheck» where
   root := `tests.TestR50GradCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- `r50-accum-tie` — **gradient accumulation, numerically certified**
     (`planning/next_session_pipeline_then_r50.md` §4's blocker). The `.adamwAccum` render carries a
@@ -2117,7 +2149,7 @@ lean_exe «r50-gradcheck» where
         lake build r50-accum-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-accum-tie -/
 lean_exe «r50-accum-tie» where
   root := `tests.TestR50AccumTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- `r50-accum-shard-tie` — accumulation over **DIFFERENT** micro-batches, which `r50-accum-tie`
     is structurally blind to (it runs k micro-steps on the same batch, so every micro-gradient is
@@ -2138,7 +2170,7 @@ lean_exe «r50-accum-tie» where
         CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 .lake/build/bin/r50-accum-shard-tie -/
 lean_exe «r50-accum-shard-tie» where
   root := `tests.TestR50AccumShardTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- `r50-lamb-tie` — **LAMB, numerically certified.** `planning/rsb_a3_r50_verified.md` §2.3's LAMB
     row is the ONE line that file flags as an estimate rather than a measurement ("2–3 ops"). Built,
@@ -2159,7 +2191,7 @@ lean_exe «r50-accum-shard-tie» where
         lake build r50-lamb-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-lamb-tie -/
 lean_exe «r50-lamb-tie» where
   root := `tests.TestR50LambTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- `r50-bce-tie` — **BCE-with-logits, numerically certified** (§4's loss row). RSB-A2/A3 do not
     train with softmax CE: every class is an independent sigmoid, `reduction='mean'` over B×K.
@@ -2176,7 +2208,7 @@ lean_exe «r50-lamb-tie» where
         lake build r50-bce-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-bce-tie -/
 lean_exe «r50-bce-tie» where
   root := `tests.TestR50BceTie
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
@@ -2185,13 +2217,13 @@ lean_exe «r50-bce-tie» where
     device-resident parameters. Needs two GPUs and the XLA backend. -/
 lean_exe «efficientnet-dp-bench» where
   root := `tests.TestEfficientNetDpBench
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2b-quater gate: the collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
     2×128 + all_reduce must equal 1×256 to fp rounding. Needs two GPUs and the XLA backend. -/
 lean_exe «cifar8-dp-check» where
   root := `tests.TestCifar8DpCheck
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 /-- §2b tail: step-time bench for the same two renders the tie compares. The batched render is
     1.68× the emitted ops (10014 vs 5971) because `pretty` has no CSE and the batched backward ops
@@ -2199,7 +2231,7 @@ lean_exe «cifar8-dp-check» where
     are compiled in one process and their steps interleaved, so the comparison is drift-free. -/
 lean_exe «resnet34-adam-bench» where
   root := `tests.TestResnet34AdamBench
-  moreLinkArgs := xlaLink
+  moreLinkArgs := lowererLink
 
 -- ch7 C4: small MobileNetV2 (inverted-residual blocks: depthwise conv + relu6 +
 -- per-channel BN) trained on VERIFIED-rendered StableHLO
@@ -2239,7 +2271,7 @@ lean_exe «convnext-verified» where
 -- generic smoothCertify driver applies unchanged. σ via SMOOTH_SIGMA_MILLI (split across 2 GPUs).
 lean_exe «convnext-smooth» where
   root := `apps.imagenette.MainConvNeXtSmooth
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 
 lean_exe «convnext-verified-adam» where
@@ -2259,87 +2291,87 @@ lean_exe «vit-verified-adam» where
 
 lean_exe «cifar-cnn-train» where
   root := `apps.baselines.MainCifarCnnTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «autoencoder-pets-train» where
   root := `demos.MainAutoencoderPetsTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «unet-pets-train» where
   root := `demos.MainUnetPetsTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «unet-brats-train» where
   root := `demos.MainUnetBratsTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «unet-brats-r34» where
   root := `demos.MainUnetBratsR34
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «grad-fd-probe» where
   root := `demos.MainGradFdProbe
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «pets-predict» where
   root := `demos.MainPetsPredict
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «brats-predict» where
   root := `demos.MainBratsPredict
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «gradcam» where
   root := `demos.MainGradCAM
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «bigram-shakespeare» where
   root := `demos.MainBigramShakespeare
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «flash-probe» where
   root := `demos.MainFlashProbe
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «seg-loss-probe» where
   root := `demos.MainSegLossProbe
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- DIoU box-loss forward probe (detection infra brick #1); FD-checked by
 -- scripts/diou_probe_check.py against scripts/diou_grad_check.py.
 lean_exe «diou-loss-probe» where
   root := `demos.MainDiouLossProbe
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Anchor-YOLO-loss probe (brick #2, A anchors); FD-checked by
 -- scripts/anchor_loss_probe_check.py.
 lean_exe «anchor-loss-probe» where
   root := `demos.MainAnchorLossProbe
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- FPN-neck (top-down multi-scale merge) probe (brick #3); FD-checked by
 -- scripts/fpn_neck_probe_check.py against scripts/fpn_neck_check.py's oracle.
 lean_exe «fpn-neck-probe» where
   root := `demos.MainFpnNeckProbe
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- FPN multi-scale-loss probe (brick #3, bites 4+6); FD-checked by
 -- scripts/fpn_loss_probe_check.py against a numpy Σ-of-per-scale-anchor-loss ref.
 lean_exe «fpn-loss-probe» where
   root := `demos.MainFpnLossProbe
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Whole-FPN-detector probe (bite 7 de-risk): neck+heads+concat+loss+DAG backward,
 -- γ=0 so every grad is FD-checkable; validated by scripts/fpn_detect_probe_check.py.
 lean_exe «fpn-detect-probe» where
   root := `demos.MainFpnDetectProbe
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Emit-only: dump the r34FpnDet train-step MLIR for eyeball / iree-compile
 -- --compile-to=input parse check (planning/yolo_fpn.md bite 7 wiring).
 lean_exe «fpn-train-emit» where
   root := `demos.MainFpnTrainEmit
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 
 lean_exe «yolov1-visdrone-fpn» where
@@ -2349,70 +2381,70 @@ lean_exe «yolov1-visdrone-fpn» where
 
 lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «tinystories» where
   root := `demos.MainTinyStories
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mnist-ddpm-train» where
   root := `demos.MainMnistDdpmTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «mnist-ddpm-sample» where
   root := `demos.MainMnistDdpmSample
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-train» where
   root := `demos.MainCifarDdpmTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-sample» where
   root := `demos.MainCifarDdpmSample
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-attn-train» where
   root := `demos.MainCifarDdpmAttnTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-attn-sample» where
   root := `demos.MainCifarDdpmAttnSample
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-sincos-train» where
   root := `demos.MainCifarDdpmSincosTrain
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-sincos-sample» where
   root := `demos.MainCifarDdpmSincosSample
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- YOLOv1 cat/dog head detector on Oxford-IIIT Pets (2×2 mosaic, R34 backbone
 -- bootstrap, focal objectness). See planning/yolo_final.md.
 lean_exe «yolov1-pets-train-bootstrap» where
   root := `demos.MainYolov1PetsTrainBootstrap
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Inference dump (logits + images + IDs) for scripts/yolo_render.py.
 lean_exe «yolov1-pets-infer» where
   root := `demos.MainYolov1PetsInfer
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).
 -- The resolution rung above the 224/7×7 WS-A baseline; planning/yolo_drone.md.
 lean_exe «yolov1-visdrone448» where
   root := `demos.MainYolov1VisDrone448
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Stride-16 "finer grid" variant: 448 input / 28×28 grid (the different-head hedge).
 lean_exe «yolov1-visdrone448s16» where
   root := `demos.MainYolov1VisDrone448S16
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Anchor-based detector: 448 / 14×14 grid, A=6 anchors (brick #2, emitAnchorYoloLoss).
 lean_exe «yolov1-visdrone-anchor» where
   root := `demos.MainYolov1VisDroneAnchor
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- ═══════════════════════════════════════════════════════════════════
 -- VJP oracle — one binary per axiom under test.
@@ -2422,59 +2454,59 @@ lean_exe «yolov1-visdrone-anchor» where
 
 lean_exe «vjp-oracle-dense» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleDense
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-dense-relu» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleDenseRelu
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-conv» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleConv
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-convbn» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleConvBn
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-conv-pool» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleConvPool
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-residual» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleResidual
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-depthwise» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleDepthwise
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-attention» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleAttention
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-mbconv» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleMbConv
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-global-avg-pool» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleGlobalAvgPool
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-bottleneck» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleBottleneck
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-mbconv-v3» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleMbConvV3
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-fused-mbconv» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleFusedMb
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «vjp-oracle-uib» where
   root := `tests.vjp_oracle.phase3.MainVjpOracleUib
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- ═══════════════════════════════════════════════════════════════════
 -- Tests + benchmarks
@@ -2487,7 +2519,7 @@ lean_exe «vjp-oracle-uib» where
 -- Hermetic — no data files, no GPU. See planning/post_shuffle_fix.md §3.
 lean_exe «test-shuffle-pairing» where
   root := `tests.TestShufflePairing
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 -- Checks every DatasetIO's declared `trainPixels` / `labelBytesPerRecord`
 -- against what its C loader actually allocates. Skips absent datasets, so it
@@ -2495,18 +2527,18 @@ lean_exe «test-shuffle-pairing» where
 -- its preprocessing script changes.
 lean_exe «test-dataset-record-sizes» where
   root := `tests.TestDatasetRecordSizes
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «test-unet-forward» where
   root := `tests.TestUnetForward
 
 lean_exe «test-yolov1-mutex» where
   root := `tests.TestYolov1Mutex
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «inspect-convnext» where
   root := `demos.MainInspectConvNeXt
-  moreLinkArgs := ireeLink
+  moreLinkArgs := lowererLink
 
 lean_exe «test-resnet-residual» where
   root := `tests.TestResnetResidual
@@ -2664,10 +2696,12 @@ private def detectBackend : IO String := do
     pure (if o.exitCode == 0 then "cuda" else "rocm")
   catch _ => pure "rocm"
 
-/-- `ffi/libpjrt_ffi.so` is **not** a lake target — it is the gcc one-liner documented above
-    `xlaLink`. Build it when it is missing or older than its source, so `lake run <group>-xla`
-    works from a fresh clone instead of failing at link time, and so an edited shim cannot be
-    silently run stale (the `.vmfb`-cache hazard's cousin — see planning/xla_pjrt_handoff.md §4). -/
+/-- `ffi/libpjrt_ffi.so` is **not** a lake target — it is the gcc one-liner documented at the head
+    of the XLA/PJRT section. Build it when it is missing or older than its source, so
+    `lake run <group>-xla` works from a fresh clone instead of failing at startup (⚠ at STARTUP
+    since `xlaLink` was retired — the shim is dlopen'd, not linked, so its absence is no longer
+    caught at build time), and so an edited shim cannot be silently run stale (the `.vmfb`-cache
+    hazard's cousin — see planning/xla_pjrt_handoff.md §4). -/
 private def ensurePjrtShim : IO Bool := do
   let src : System.FilePath := "ffi/pjrt_ffi.c"
   let so  : System.FilePath := "ffi/libpjrt_ffi.so"
