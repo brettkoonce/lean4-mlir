@@ -124,13 +124,30 @@ blocker is a hardcoded `.vmfb`.
 ### 4.3 Tier 2 — driver only, specialised FFI already ported (4)
 
 `cifar-ddpm-train`, `cifar-ddpm-attn-train`, `cifar-ddpm-sincos-train`, `mnist-ddpm-train`.
-They use `trainStepAdamF32Ddpm`, which the FPN port implemented. Same edit as tier 1: swap the
-hardcoded `.vmfb`, drop the local `iree-compile` (it is already conditional inside
-`Train.lean:runIreeCached`, which returns early on XLA).
+They use `trainStepAdamF32Ddpm`, which the FPN port implemented. The edit: replace the hardcoded
+`.vmfb` with **`Train.graphArtifact pfx suffix`** (the demos' helper — the verified trainers use
+`VerifiedTrain.mkSession` instead; do not mix them up), and delete the local `iree-compile`
+subprocess, which is already redundant because `Train.lean:runIreeCached` returns early on XLA.
 
-⭐ **These are the highest-value cheap wins** — a DDPM trainer is a real training workload, so
-this tier converts "13 demos edited" into an actual XLA-vs-IREE speed and correctness datapoint
-without touching the shim.
+⭐ **The edit is proven, not hypothesised — UPDATED 2026-08-25.** Exactly this swap was landed on
+the three fp8 trainers (`trainE4M3`, `trainAdamSchedE4M3`, `trainLinearE4M3`), which were IREE-only
+for the identical reason: they printed the "XLA/PJRT" banner and then died in `iree-compile`. The
+swap worked first time and the f32 artifacts stayed byte-identical. ▶ Use that commit as the
+template; the tier-1/2 demos are the same shape of change.
+
+⚠⚠ **EXPECT THE EDIT TO BE CHEAP AND THEN EXPECT G4 VIOLATIONS — that is the point, not a
+setback.** The moment the fp8 MLP/CNN could reach XLA, the PJRT shim's G4 arity guard caught a
+latent marshalling bug IREE had never surfaced (the driver supplied N output destinations for a
+graph returning N+1). These demo drivers hand-roll their marshalling too, so the same class of
+bug is *likely* here. Budget for it: the port is a few lines, and the bugs it exposes are the
+actual work — and the actual value, since they were wrong on IREE too and nothing was checking.
+
+⚠ **Correction to this section's stated payoff.** It previously promised "an actual XLA-vs-IREE
+speed and correctness datapoint". That is NOT obtainable on this box as configured: `iree-compile`
+is not on PATH (it resolves only via `.venv/bin` inside `runDemoGroup`), so the IREE arm of any
+such comparison cannot be run here. ▶ The port still stands on its own — these demos gain XLA, and
+gate A still checks IREE is unchanged *by construction* (every changed expression evaluates to the
+same string) — but a measured cross-backend comparison needs the IREE toolchain fixed first.
 
 ### 4.4 Tier 3 — ⛔ needs a new PJRT entry point (12)
 
