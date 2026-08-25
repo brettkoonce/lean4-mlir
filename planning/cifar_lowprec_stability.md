@@ -311,6 +311,29 @@ MNIST fp8, same box/backend, for the record: linear **92.14 %** @12, MLP **97.84
 returning N+1 on the two nets with `lossSlot := true`, which the PJRT shim's G4 arity gate caught
 and IREE never would have.
 
+### 5.2d ⭐⭐ THE BATCHED MIGRATION IS TIED (2026-08-25)
+
+`cifar8-opt-tie adam <V render> <B render>` — one shared θ, one shared batch, comparing the
+RECOVERED GRADIENT (`g = (m' − β₁·m)/(1−β₁)`), never θ′:
+
+| | |
+|---|---|
+| B vs V, recovered gradient | norm-rel **1.86e-8**, max abs 9.3e-8 (gradients up to 5.0) |
+| bit-exact coordinates | **52587 / 52858** |
+| `%loss` | 7.833551 on both sides |
+| ⭐ **reorder control** (V vs V, batch reversed) | **476.7e-9** |
+
+⭐⭐ **The two renders differ 25× LESS than one render differs from ITSELF** under a
+semantics-preserving batch permutation. That is the strongest form this gate takes, and it is the
+one `detector_pjrt_port.md` §9 argues for: a fixed-θ single step, not a training trajectory
+(trajectories diverge legitimately from chaos — see the B-vs-V curves, which agree only to within
+V's own 1.7 pt run-to-run spread).
+
+▶ The migration to the batched family is therefore SETTLED, not merely plausible, and the
+"semantically free" argument from §4.1 is now backed by measurement as well as by the denotations.
+
+---
+
 ### 5.3 ⛔ bf16 BUYS NO SPEED AT CIFAR'S SHAPES — build the row for stability only
 
 Standalone f32-vs-bf16 at cifar8's own eight conv shapes (B=128, 3×3, [16,16,32,32], 32→16→8→4→2):
