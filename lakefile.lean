@@ -1422,6 +1422,21 @@ lean_exe «cifar8-verified-momentum» where
 -- under precision, which is the CIFAR chapter's whole claim.
 -- The batched-render GATE: same net/hyperparameters/init as cifar8-verified-adam, on the
 -- `…FaithfulB` artifact. The two renders denote the same function, so the curves must agree.
+-- ── §4.3 "Lever 3: precision": the wide-head (d1=512) 3×3 sweep ──
+-- One net (the one Levers 1-2 measure), three optimizers, three precisions. f32 and bf16 come
+-- from ONE renderer differing only in the emit; fp8 is host-side and rides the f32 graph.
+lean_exe «cifar8wb-ablation» where
+  root := `apps.ablation.MainCifar8WideBatchedAblation
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8wb-bf16-ablation» where
+  root := `apps.ablation.MainCifar8WideBf16Ablation
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8w-fp8-ablation» where
+  root := `apps.ablation.MainCifar8WideFp8Ablation
+  moreLinkArgs := lowererLink
+
 lean_exe «cifar8b-verified-adam» where
   root := `apps.cifar.MainCifar8bVerifiedAdam
   moreLinkArgs := lowererLink

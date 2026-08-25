@@ -2144,6 +2144,38 @@ private def c8wPacked (opt : Proofs.StableHLO.CifarOpt) (entry : String) : Strin
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0) 1 opt).replace "@cifar8_adam_train_step" s!"@{entry}"
 
+/-- Wide-head (d1=512) peer of `c8wPacked` on the **BATCHED** op family, with a bf16 switch.
+    Same net, same hyperparameters, same packed signature as `c8wPacked`; the only differences are
+    the op family (`…FaithfulB`) and the `bf16` flag. This is what the §4.3 "Lever 3: precision"
+    sweep trains on, so f32 and bf16 come from ONE renderer and differ only in the emit — which is
+    what makes that lever a controlled comparison rather than two nets.
+
+    ⚠ Unlike the `…V` bf16 artifacts, bf16 here reaches the BACKWARD too (23/23 convolutions,
+    vs 8/23), because the batched family is the one the 27 bf16 ops were built for. -/
+private def c8wbPacked (opt : Proofs.StableHLO.CifarOpt) (bf16 : Bool) (entry : String) : String :=
+  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 512 10 3 3
+    "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) 1 opt (bf16 := bf16)).replace "@cifar8b_adam_train_step" s!"@{entry}"
+
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_adam_train_step.mlir"      (c8wbPacked .adamw    false "cifar8wb_adam_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_mom_train_step.mlir"       (c8wbPacked .nesterov false "cifar8wb_mom_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_sgd_train_step.mlir"       (c8wbPacked .sgd      false "cifar8wb_sgd_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bf16adam_train_step.mlir"  (c8wbPacked .adamw    true  "cifar8wb_bf16adam_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bf16mom_train_step.mlir"   (c8wbPacked .nesterov true  "cifar8wb_bf16mom_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bf16sgd_train_step.mlir"   (c8wbPacked .sgd      true  "cifar8wb_bf16sgd_train_step")
+
+-- Eval forward for the batched wide slug: the f32 `cifar8w_fwd` renamed. The forward graph does
+-- not change with the op family or with bf16 (you train low-precision and evaluate in f32), and
+-- copying rather than re-rendering means it cannot drift from what the f32 arms evaluate against.
+#eval do
+  let fwd ← IO.FS.readFile "verified_mlir/cifar8w_fwd.mlir"
+  IO.FS.writeFile "verified_mlir/cifar8wb_fwd.mlir" (fwd.replace "@cifar8w_fwd" "@cifar8wb_fwd")
+
 private def c8wBnPacked (opt : Proofs.StableHLO.CifarOpt) (from_ entry : String) : String :=
   (Proofs.StableHLO.cifar8BnTrainStepFaithfulV 128 3 16 16 32 32 2 2 512 10 3 3
     "1.0e-05" "0.00078125"

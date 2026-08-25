@@ -259,6 +259,7 @@ def cifar8bVerified : VerifiedNetSpec :=
     slug  := "cifar8b"
     blurb := "Deeper CIFAR-10 CNN (8 convs, BATCHED op family, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU" }
 
+
 #guard cifar8Verified.toSpecs ==
   #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
     (#[16, 16, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
@@ -350,6 +351,20 @@ def cifar8wVerified : VerifiedNetSpec where
                .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
   blurb    := "Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → %LOWERER% → GPU"
 
+
+/-- **Wide head (d1=512) on the BATCHED op family** — the net the §4.3 "Lever 3: precision"
+    sweep trains. Same net as `cifar8wVerified` (the one Levers 1–2 already measure); only the
+    slug differs, so it loads `verified_mlir/cifar8wb_<variant>_train_step.mlir`.
+
+    ⭐ Both the f32 and the bf16 arms of Lever 3 come from THIS slug and ONE renderer
+    (`c8wbPacked`), differing only in the emit — which is what keeps the lever a controlled
+    comparison. The fp8 arm rides the f32 graph (host-side E4M3), so it needs no artifact of
+    its own; that asymmetry is real and is stated in the lever's text. -/
+def cifar8wbVerified : VerifiedNetSpec :=
+  { cifar8wVerified with
+    name  := "CIFAR-CNN8-wide-batched"
+    slug  := "cifar8wb"
+    blurb := "Wide-head CIFAR-10 CNN (8 convs, BATCHED op family, d1=512) via the VERIFIED renderer → %LOWERER% → GPU" }
 #guard cifar8wVerified.toSpecs ==
   #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
     (#[16, 16, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
