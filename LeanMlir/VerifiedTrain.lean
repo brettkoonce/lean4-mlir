@@ -4103,12 +4103,11 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
   let d1 := net.nClasses
   net.printBlurb
   IO.println "  [fp8 E4M3] fp32 master · per-column W / per-tensor x → E4M3 grid · fp32 accumulate"
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
+  -- ⭐ `mkSession` — the fp8 peer of `trainE4M3`/`trainAdamSchedE4M3` above, and IREE-only for
+  -- the same reason until 2026-08-25. ⚠ The other `compileVmfb` call sites left in this file are
+  -- the PGD / spectral / smoothing trainers, which are a separate (non-fp8) port.
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
     loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
@@ -4175,12 +4174,14 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   net.printBlurb
   IO.println "  [fp8 E4M3] fp32 master · per-slot weight quant (dense per-col / conv per-channel) + per-tensor input · fp32 accumulate"
   IO.println "  note: depth>1 ⇒ intermediate activations & cotangents stay fp32 (inside the kernel); weights + input are E4M3"
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
+  -- ⭐ `mkSession`, not `compileVmfb` + `LowererSession.create`. The fp8 arms were the last
+  -- trainers still hardcoding a `.vmfb`, which made them IREE-ONLY: on XLA they printed the
+  -- "XLA/PJRT" banner and then died in `iree-compile`. Nothing about that was fp8-specific —
+  -- it is the same hardcoded-artifact bug class `planning/demo_xla_port.md` §3 catalogues for
+  -- the demos. `mkSession` hands the `.mlir` straight to PJRT and keeps the IREE compile path
+  -- byte-identical, so both backends now serve the fp8 numerics.
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
@@ -4244,16 +4245,14 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let hasBn := !net.bnChannels.isEmpty
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
-  let tsVmfb  := s!".lake/build/{net.slug}_{variant}_ts.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  let fwdEvalVmfb := s!".lake/build/{net.slug}_fwd_eval_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"             fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
-  let fwdEvalSess ← if hasBn then do
-      compileVmfb s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir" fwdEvalVmfb
-      LowererSession.create fwdEvalVmfb
+  -- ⭐ `mkSession` — see `trainE4M3` above for why these were IREE-only until 2026-08-25.
+  -- ⚠ Deliberately NOT adopting `trainAdamSched`'s per-variant forward resolution
+  -- (`<slug>_<variant>_fwd.mlir` with a `<slug>_fwd.mlir` fallback): that would change WHICH
+  -- graph the fp8 arms evaluate against, which is a numerics change, not a backend port.
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
+  let fwdEvalSess ← if hasBn then
+      mkSession s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
     else pure fwdSess
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     loadData net dataDir
