@@ -356,6 +356,20 @@ lean_lib «Certs» where
              -- — concrete stem/maxpool/GAP/dense endpoints, stem BN + 16 blocks supplied as
              -- FloatBridges. Closes the forward/backward whole-net asymmetry.
              `LeanMlir.Proofs.Float.Resnet34WholeFloatBridge,
+             -- ⭐⭐ The bf16-MIXED float bridges (`planning/bf16_renderer.md` §9.3, §11, §12.3), and
+             -- both are APEXES: `ConvMixedComposeBridge` transitively imports `ConvMixedFloatBridge`
+             -- and `DepthwiseMixedFloatBridge` imports `DepthwiseFloatBridge`, so these two lines
+             -- cover all four. `conv_close_mixed` is `dot_close_mixed_uniform` instantiated at
+             -- fan-in `ic·kH·kW` (a conv output IS a dot product over its flattened receptive
+             -- field); the compose bridge is what makes the mixed conv `FloatClose`, i.e. usable by
+             -- `floatClose_relu`/`_bn`/`_residualBlock`/`.comp` — the fold that says bf16 costs
+             -- 1.86× the f32 certificate at R50's 53 conv layers.
+             -- ⚠⚠ THESE WERE AUDITED BY `tests/AuditAxioms.lean` WITHOUT BEING ROOTS OF EITHER LIB,
+             -- which is precisely the gap `scripts/check_audit_coverage.py` exists to catch: locally
+             -- it hides behind stale dev `.olean`s and the axiom gate looks green, while a fresh CI
+             -- runner never builds the object at all. It bit at `5f27766^` and it bit again here.
+             `LeanMlir.Proofs.Float.ConvMixedComposeBridge,
+             `LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge,
              -- §B integrity tie: the r34 IDENTITY-BLOCK backward float bridge targets the CERTIFIED
              -- VJP. Same-vocabulary (per-channel BN, non-batched) target rblkPC_has_vjp_at — built
              -- here, mirrors resblock_has_vjp_at — + the conv-leaf tie (convFlatBack_eq_vjp_backward,
