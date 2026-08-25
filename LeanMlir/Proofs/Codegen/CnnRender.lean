@@ -1004,7 +1004,8 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
     (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))))
     -- Trailing + defaulted so every existing positional call site is unchanged.
-    (replicas : Nat := 1) (opt : CifarOpt := .adamw) : String :=
+    (replicas : Nat := 1) (opt : CifarOpt := .adamw) (bf16 : Bool := false) : String :=
+  let zrnd : ℝ → ℝ := fun r => r   -- identity, as the ImageNet renderers pass it
   let s4h := 2*h; let s4w := 2*w
   let s3h := 2*s4h; let s3w := 2*s4w
   let s2h := 2*s3h; let s2w := 2*s3w
@@ -1030,24 +1031,24 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
   let go : StateM Nat String := do
     -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
-    let (cHc1, nHc1) ← pretty B (.flatConvF (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁ (.operand "%x" x))
+    let (cHc1, nHc1) ← pretty B (if bf16 then .flatConvFBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁ (.operand "%x" x) else .flatConvF (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zS1c1))
-    let (cHc2, nHc2) ← pretty B (.flatConvF (h := s1h) (w := s1w) "%W2" "%cb2" W₂ b₂ (.operand nAc1 zS1c1))
+    let (cHc2, nHc2) ← pretty B (if bf16 then .flatConvFBf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂ (.operand nAc1 zS1c1) else .flatConvF (h := s1h) (w := s1w) "%W2" "%cb2" W₂ b₂ (.operand nAc1 zS1c1))
     let (cAc2, nAc2) ← pretty B (.reluF (.operand nHc2 zS1c1))
     let (cP1, nPool1) ← pretty B (.maxPoolF (c := c1) (h := s2h) (w := s2w) (.operand nAc2 zS1c1))
-    let (cHc3, nHc3) ← pretty B (.flatConvF (h := s2h) (w := s2w) "%W3" "%cb3" W₃ b₃ (.operand nPool1 zS2c1))
+    let (cHc3, nHc3) ← pretty B (if bf16 then .flatConvFBf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃ (.operand nPool1 zS2c1) else .flatConvF (h := s2h) (w := s2w) "%W3" "%cb3" W₃ b₃ (.operand nPool1 zS2c1))
     let (cAc3, nAc3) ← pretty B (.reluF (.operand nHc3 zS2c2))
-    let (cHc4, nHc4) ← pretty B (.flatConvF (h := s2h) (w := s2w) "%W4" "%cb4" W₄ b₄ (.operand nAc3 zS2c2))
+    let (cHc4, nHc4) ← pretty B (if bf16 then .flatConvFBf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄ (.operand nAc3 zS2c2) else .flatConvF (h := s2h) (w := s2w) "%W4" "%cb4" W₄ b₄ (.operand nAc3 zS2c2))
     let (cAc4, nAc4) ← pretty B (.reluF (.operand nHc4 zS2c2))
     let (cP2, nPool2) ← pretty B (.maxPoolF (c := c2) (h := s3h) (w := s3w) (.operand nAc4 zS2c2))
-    let (cHc5, nHc5) ← pretty B (.flatConvF (h := s3h) (w := s3w) "%W5" "%cb5" W₅ b₅ (.operand nPool2 zS3c2))
+    let (cHc5, nHc5) ← pretty B (if bf16 then .flatConvFBf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅ (.operand nPool2 zS3c2) else .flatConvF (h := s3h) (w := s3w) "%W5" "%cb5" W₅ b₅ (.operand nPool2 zS3c2))
     let (cAc5, nAc5) ← pretty B (.reluF (.operand nHc5 zS3c3))
-    let (cHc6, nHc6) ← pretty B (.flatConvF (h := s3h) (w := s3w) "%W6" "%cb6" W₆ b₆ (.operand nAc5 zS3c3))
+    let (cHc6, nHc6) ← pretty B (if bf16 then .flatConvFBf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆ (.operand nAc5 zS3c3) else .flatConvF (h := s3h) (w := s3w) "%W6" "%cb6" W₆ b₆ (.operand nAc5 zS3c3))
     let (cAc6, nAc6) ← pretty B (.reluF (.operand nHc6 zS3c3))
     let (cP3, nPool3) ← pretty B (.maxPoolF (c := c3) (h := s4h) (w := s4w) (.operand nAc6 zS3c3))
-    let (cHc7, nHc7) ← pretty B (.flatConvF (h := s4h) (w := s4w) "%W7" "%cb7" W₇ b₇ (.operand nPool3 zS4c3))
+    let (cHc7, nHc7) ← pretty B (if bf16 then .flatConvFBf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇ (.operand nPool3 zS4c3) else .flatConvF (h := s4h) (w := s4w) "%W7" "%cb7" W₇ b₇ (.operand nPool3 zS4c3))
     let (cAc7, nAc7) ← pretty B (.reluF (.operand nHc7 zS4c4))
-    let (cHc8, nHc8) ← pretty B (.flatConvF (h := s4h) (w := s4w) "%W8" "%cb8" W₈ b₈ (.operand nAc7 zS4c4))
+    let (cHc8, nHc8) ← pretty B (if bf16 then .flatConvFBf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈ (.operand nAc7 zS4c4) else .flatConvF (h := s4h) (w := s4w) "%W8" "%cb8" W₈ b₈ (.operand nAc7 zS4c4))
     let (cAc8, nAc8) ← pretty B (.reluF (.operand nHc8 zS4c4))
     let (cP4, nPool4) ← pretty B (.maxPoolF (c := c4) (h := h) (w := w) (.operand nAc8 zS4c4))
     let (cH9, nH9) ← pretty B (denseF "%W9" "%b9" W₉ b₉ (.operand nPool4 zPc4))
@@ -1722,22 +1723,58 @@ end Proofs.StableHLO
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0))
 
--- ⭐ bf16 peer of the line above (`planning/cifar_lowprec_stability.md` §4.1). SAME renderer,
--- SAME arguments, `bf16 := true` — so the two artifacts differ ONLY in the eight forward convs'
--- emit (`flatConvFBf16` vs `flatConvF`), which is exactly the claim being demonstrated.
--- ⚠ FORWARD ONLY for now: cifar8's backward is on the PER-EXAMPLE `convBack`/`dotOut`, and the
--- 27 bf16 ops were built for ImageNet's BATCHED family, so `convBackBf16`/`dotOutBf16` do not
--- exist. See §4.1 for why the fix is unification rather than two new CIFAR-only ops.
--- ⚠⚠ Do NOT expect a speedup: §5.3 measured bf16 at 0.87× across cifar8's conv stack. This
--- artifact exists to show the MATH scales across precision, not the throughput.
+-- ═══ bf16 CIFAR — the third precision of the §5.2 optimizer sweep ═══════════════════════════
+-- SAME renderers, SAME arguments, `bf16 := true`. Each artifact therefore differs from its f32
+-- peer ONLY in the eight forward convs' emit (`flatConvFBf16` vs `flatConvF`) — which is exactly
+-- the claim: the OPTIMIZER ORDERING (SGD < AdamW < Nesterov) is invariant under precision. The
+-- f32 peers stay byte-identical, which is the gate that the threading is a no-op at the default.
+--
+-- Slug is `cifar8_bf16`, so `VerifiedTrain.mkSession` resolves
+--   `{slug}_train_step.mlir` / `{slug}_{variant}_train_step.mlir` / `{slug}_fwd.mlir`
+-- exactly as it does for the f32 and fp8 arms. Func symbols are renamed to match, because the
+-- driver calls `m.{slug}_{variant}_train_step` by name.
+--
+-- ⚠ FORWARD ONLY: cifar8's backward is on the PER-EXAMPLE `convBack`/`dotOut` and the 27 bf16
+-- ops were built for ImageNet's BATCHED family, so `convBackBf16`/`dotOutBf16` do not exist.
+-- planning/cifar_lowprec_stability.md §4.1 has why the fix is unification, not two new ops.
+-- ⚠⚠ NO SPEEDUP, by design — §5.3 measured bf16 at 0.87× across cifar8's conv stack. These
+-- artifacts demonstrate that the MATH scales across precision, never the throughput.
 #eval IO.FS.writeFile "verified_mlir/cifar8_bf16_train_step.mlir"
-  (Proofs.StableHLO.cifar8TrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"
+  ((Proofs.StableHLO.cifar8TrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (fun _ => 0) (bf16 := true))
+    (fun _ => 0) (bf16 := true)).replace "@cifar8_train_step" "@cifar8_bf16_train_step")
+
+#eval IO.FS.writeFile "verified_mlir/cifar8_bf16_mom_train_step.mlir"
+  ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+    "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) 1 .nesterov (bf16 := true)).replace "@cifar8_adam_train_step" "@cifar8_bf16_mom_train_step")
+
+#eval IO.FS.writeFile "verified_mlir/cifar8_bf16_adam_train_step.mlir"
+  ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+    "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) 1 .adamw (bf16 := true)).replace "@cifar8_adam_train_step" "@cifar8_bf16_adam_train_step")
+
+-- The eval forward stays f32 — you train in bf16 and evaluate in f32, so this is the f32
+-- `cifar8_fwd` renamed to the bf16 slug rather than a re-render. Making that a copy (not a
+-- second renderer call) is deliberate: it cannot drift from the artifact the f32 arm evaluates.
+#eval do
+  let fwd ← IO.FS.readFile "verified_mlir/cifar8_fwd.mlir"
+  IO.FS.writeFile "verified_mlir/cifar8_bf16_fwd.mlir"
+    (fwd.replace "@cifar8_fwd" "@cifar8_bf16_fwd")
 
 -- Regenerate `verified_mlir/cifar8_bn_train_step.mlir` (what MainCifar8BnVerified trains on)
 -- from the faithful renderer; den-certified by the existing generics (CifarPoC.conv{W,B}_den,

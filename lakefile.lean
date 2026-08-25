@@ -1415,6 +1415,23 @@ lean_exe «cifar8-verified-momentum» where
 -- fp8 (E4M3) optimizer sweep on the cifar8 CNN: the SGD / Nesterov-momentum / Adam
 -- demos run through the E4M3 host-quant path (fp8 weights+input, fp32 accumulate,
 -- fp32 master). Same verified train-step MLIR as their fp32 peers.
+-- ── bf16 arm of the §5.2 optimizer sweep (planning/cifar_lowprec_stability.md) ──
+-- Same net, same init, same hyperparameters as the fp32 arms; `cifar8Bf16Verified`'s slug
+-- points at the bf16-rendered artifacts. ⚠ FORWARD-only bf16, and NO speedup by design
+-- (§5.3: 0.87× at cifar8's shapes) — these exist to show the optimizer ORDERING is invariant
+-- under precision, which is the CIFAR chapter's whole claim.
+lean_exe «cifar8-bf16-verified» where
+  root := `apps.cifar.MainCifar8Bf16Verified
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bf16-verified-momentum» where
+  root := `apps.cifar.MainCifar8Bf16VerifiedMomentum
+  moreLinkArgs := lowererLink
+
+lean_exe «cifar8-bf16-verified-adam» where
+  root := `apps.cifar.MainCifar8Bf16VerifiedAdam
+  moreLinkArgs := lowererLink
+
 lean_exe «cifar8-e4m3-verified» where
   root := `apps.cifar.MainCifar8E4M3Verified
   moreLinkArgs := lowererLink

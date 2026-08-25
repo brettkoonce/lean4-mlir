@@ -224,7 +224,54 @@ Every one of those kinds already has a bf16 twin among the 27 ops (`bf16_rendere
 fp8 conv already shows a 3× swing on result type alone. CIFAR's convs are small (16×3×3×3), which is
 *exactly* the regime where kernel selection is least likely to have a good fp8 path.
 
-### 5.2 ⭐ MEASURED — fp32 vs fp8, same box, same backend (2026-08-25)
+### 5.2 ⭐⭐⭐ MEASURED — THE 3×3 SWEEP: the optimizer ordering is INVARIANT under precision
+
+ares, 1× RTX 4060 Ti, PJRT 0.114, `LEAN_MLIR_LOWERER=xla`, seed 1, bs 128, same net and same
+init in every cell (the bf16 arm is a SLUG change only, §4.1).
+
+**Test accuracy @20 / @40 epochs:**
+
+| optimizer | fp32 | bf16 (fwd convs) | fp8 E4M3 (emulated) |
+|---|---|---|---|
+| plain SGD (const lr) | 60.26 / 62.86 | 63.16 / 66.29 | 63.47–64.07 / — |
+| AdamW (cosine) | 71.92 / **75.50** | 71.79 / 74.86 | 71.87 / 74.74 |
+| Nesterov-mom (cosine) | **74.25** / **76.91** | **73.72** / **77.61** | **74.28** / 76.09–76.82 |
+
+⭐⭐ **THE RESULT: `SGD < AdamW < Nesterov` holds in ALL THREE precisions, at both 20 and 40
+epochs.** That is the CIFAR chapter's claim — optimizers scale — extended to say the **math scales
+with them**. The precision changes the arithmetic, not the ranking.
+
+⭐ And the two arms with an fp32 master agree ACROSS precisions to within the noise floor: AdamW
+spreads 0.13 pt @20 (71.92 / 71.79 / 71.87) and Nesterov 0.56 pt @20 — both at or under the
+measured ~0.6–0.7 pt run-to-run spread (§5.2a). Three different arithmetics, one curve.
+
+#### 5.2a ⚠ The one arm that does not reconcile, and the noise floor
+
+⚠⚠ **plain SGD's fp32 cell is an OUTLIER — do not quote "low precision beats fp32".** bf16
+(63.16) and fp8 (63.47) agree with each other and with §3's fp8 (63.5); it is **fp32** (60.26)
+that sits ~3 pt below all of them and ~5 pt below §3's fp32 (65.7). Two independent low-precision
+arms agreeing against one fp32 arm points at the fp32 arm. ▶ Repeat it before anyone uses it.
+▶ Note this dents an ABSOLUTE-accuracy claim only — plain SGD is last in every column, so the
+ordering result above is untouched by it.
+
+⚠ **Noise floor ~0.6–0.7 pt**: two from-scratch runs of the SAME momentum binary at the SAME seed
+gave 76.82 % / 76.09 % @40. Treat any single delta of that size as noise.
+⚠ The fp8 trainers CHECKPOINT AND RESUME — a re-run silently no-ops ("resuming from fp8
+checkpoint at epoch 40"). Delete `.lake/build/<slug>_<variant>_e4m3_ckpt.bin*` between configs.
+
+#### 5.2b The three precisions are NOT the same kind of object
+
+| | where the precision lives | speedup |
+|---|---|---|
+| fp32 | — | baseline |
+| **bf16** | **IN the graph** — `flatConvFBf16`, bf16-typed conv result | ⛔ none, §5.3 |
+| **fp8** | **host-side** — E4M3 rounding into an fp32 graph | ⛔ none (emulated) |
+
+⚠ Neither low-precision arm is faster, for different reasons: bf16 because cifar8's convs are
+launch-bound (§5.3), fp8 because no f8 type reaches the StableHLO at all (step 3, unbuilt). The
+sweep is a statement about NUMERICS, not throughput.
+
+### 5.2c fp32 vs fp8 against §3's cross-machine table
 
 ares, 1× RTX 4060 Ti, PJRT 0.114, `LEAN_MLIR_LOWERER=xla`, seed 1, bs 128. This is the first
 comparison of these two arms on ONE machine and ONE backend; §3's table is gfx1100-under-IREE and

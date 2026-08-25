@@ -227,6 +227,25 @@ def cifar8Verified : VerifiedNetSpec where
                .dense 128 64, .relu, .dense 64 64, .relu, .dense 64 10]
   blurb    := "Deeper CIFAR-10 CNN (8 convs, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU"
 
+/-- **bf16 peer of `cifar8Verified`** — identical net, identical layers, identical parameter
+    layout; the ONLY difference is the slug, which points `mkSession` at the bf16-rendered
+    artifacts (`verified_mlir/cifar8_bf16{,_mom,_adam}_train_step.mlir`, emitted by the same
+    renderers with `bf16 := true`).
+
+    ⭐ Being a slug change and nothing else is the point: the fp32, fp8 and bf16 arms train the
+    SAME network with the SAME initialisation, so a difference between them is a difference in
+    PRECISION and not in the model. That is what makes the §5.2 optimizer-ordering comparison a
+    controlled one.
+
+    ⚠ The eval forward (`cifar8_bf16_fwd.mlir`) is the f32 `cifar8_fwd` renamed — you train in
+    bf16 and evaluate in f32. ⚠ The bf16 is FORWARD-ONLY (cifar8's backward is on the per-example
+    `convBack`/`dotOut`, which have no bf16 twin); see planning/cifar_lowprec_stability.md §4.1. -/
+def cifar8Bf16Verified : VerifiedNetSpec :=
+  { cifar8Verified with
+    name  := "CIFAR-CNN8-bf16"
+    slug  := "cifar8_bf16"
+    blurb := "Deeper CIFAR-10 CNN (8 convs, bf16 FORWARD convs, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU" }
+
 #guard cifar8Verified.toSpecs ==
   #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
     (#[16, 16, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
