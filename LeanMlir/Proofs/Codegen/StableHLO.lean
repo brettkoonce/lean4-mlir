@@ -1019,6 +1019,10 @@ inductive SHlo : Nat → Type where
   | convBackBatchedBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * h * w))
+  -- fp8 (E4M3) peer. Same denotation shape as the bf16 one — `rnd` is the whole difference.
+  | convBackBatchedF8 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
+      (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+      SHlo (N * (oc * h * w)) → SHlo (N * (ic * h * w))
   | convStridedBackBatchedBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * (2 * h) * (2 * w)))
@@ -1119,6 +1123,10 @@ inductive SHlo : Nat → Type where
   -- contraction dim), so the whole `Σ_n` is ONE emitted convolution and therefore ONE bf16
   -- store — which is why the outer `rnd` sits outside the sum, not inside it.
   | convWeightGradBBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
+      (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW)
+                                                          : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
+  -- fp8 (E4M3) peer of the batched conv weight-gradient.
+  | convWeightGradBF8 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
       (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW)
                                                           : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
   | convStridedWeightGradBBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
@@ -1894,6 +1902,11 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         (conv2d_weight_grad_has_vjp b
           (Tensor3.unflatten (fun j => rnd (batchSlice N (ic*h*w) x n j)))).backward
           (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
+  | _, .convWeightGradBF8 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
+      fun idx => rnd (∑ n : Fin N,
+        (conv2d_weight_grad_has_vjp b
+          (Tensor3.unflatten (fun j => rnd (batchSlice N (ic*h*w) x n j)))).backward
+          (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
   | _, .convStridedWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
         (flatConvStride2_weight_grad_has_vjp b
@@ -2219,6 +2232,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .convStridedBackBatched (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) _ W b e =>
       batchMap N (fun dy => (flatConvStride2_has_vjp W b).backward (fun _ => 0) dy) (den e)
   | _, .convBackBatchedBf16 (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) rnd _ W b e =>
+      batchMap N (fun dy i => rnd ((hasVJP3_to_hasVJP
+        (conv2d_has_vjp3 (fun o c a d => rnd (W o c a d)) b)).backward
+          (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
+  | _, .convBackBatchedF8 (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) rnd _ W b e =>
       batchMap N (fun dy i => rnd ((hasVJP3_to_hasVJP
         (conv2d_has_vjp3 (fun o c a d => rnd (W o c a d)) b)).backward
           (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
@@ -4942,6 +4959,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convStridedBackBatched" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convBackBatchedBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN _ _ e =>
       .batched "convBackBatchedBf16" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convBackBatchedF8 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN _ _ e =>
+      .batched "convBackBatchedF8" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedBackBatchedBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN _ _ e =>
       .batched "convStridedBackBatchedBf16" [wN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) (kH := kH) (kW := kW) wN _ _ e =>
@@ -4978,6 +4997,8 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convStridedWeightGrad" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ xN _ _ _ e =>
       .batched "convWeightGradBf16" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
+  | _, .convWeightGradBF8 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ xN _ _ _ e =>
+      .batched "convWeightGradF8" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ xN _ _ _ e =>
       .batched "convStridedWeightGradBf16" [xN] [N, ic, oc, h, w, kH, kW] (skel e)
   | _, .convStridedXlaWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
@@ -7500,6 +7521,24 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!" : ({tyBf16 [ic,B,h,w]}, {tyBf16 [oc,B,h,w]}) -> {tyBf16 [ic,oc,kH,kW]}\n" ++
             s!"    {rf} = stablehlo.convert {raw} : ({tyBf16 [ic,oc,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
             s!"    {o} = stablehlo.transpose {rf}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
+      | "convWeightGradF8", [xN], [_N, ic, oc, h, w, kH, kW] => do
+          let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
+          let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh
+          let xb ← fresh; let db ← fresh; let raw ← fresh; let rf ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, ic*h*w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {xt} = stablehlo.transpose {xr}, dims = [1, 0, 2, 3] : ({ty [B,ic,h,w]}) -> {ty [ic,B,h,w]}\n" ++
+            s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,oc,h,w]}) -> {ty [oc,B,h,w]}\n" ++
+            s!"    {xb} = stablehlo.convert {xt} : ({ty [ic,B,h,w]}) -> {tyF8 [ic,B,h,w]}\n" ++
+            s!"    {db} = stablehlo.convert {dt} : ({ty [oc,B,h,w]}) -> {tyF8 [oc,B,h,w]}\n" ++
+            s!"    {raw} = stablehlo.convolution({xb}, {db})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{pH}, {pH}], [{pW}, {pW}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyF8 [ic,B,h,w]}, {tyF8 [oc,B,h,w]}) -> {tyF8 [ic,oc,kH,kW]}\n" ++
+            s!"    {rf} = stablehlo.convert {raw} : ({tyF8 [ic,oc,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {o} = stablehlo.transpose {rf}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
       | "convStridedWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] => do
           -- odd/even split via `sWGradGeom`; odd is byte-for-byte the old inline formula.
           let (upH, extH, loH, hiH) := sWGradGeom kH h
@@ -7832,6 +7871,23 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
             s!" : ({tyBf16 [B,oc,h,w]}, {tyBf16 [ic,oc,kH,kW]}) -> {tyBf16 [B,ic,h,w]}\n" ++
             s!"    {xf} = stablehlo.convert {dx} : ({tyBf16 [B,ic,h,w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {xf} : ({ty [B,ic,h,w]}) -> {ty [B, ic*h*w]}\n", o :: st)
+      | "convBackBatchedF8", [wN], [_N, ic, oc, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let dyr ← fresh; let rev ← fresh; let wt ← fresh; let db ← fresh; let wb ← fresh
+          let dx ← fresh; let xf ← fresh; let o ← fresh
+          pure (
+            s!"    {dyr} = stablehlo.reshape {r} : ({ty [B, oc*h*w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [oc,ic,kH,kW]}\n" ++
+            s!"    {wt} = stablehlo.transpose {rev}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
+            s!"    {db} = stablehlo.convert {dyr} : ({ty [B,oc,h,w]}) -> {tyF8 [B,oc,h,w]}\n" ++
+            s!"    {wb} = stablehlo.convert {wt} : ({ty [ic,oc,kH,kW]}) -> {tyF8 [ic,oc,kH,kW]}\n" ++
+            s!"    {dx} = stablehlo.convolution({db}, {wb})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyF8 [B,oc,h,w]}, {tyF8 [ic,oc,kH,kW]}) -> {tyF8 [B,ic,h,w]}\n" ++
+            s!"    {xf} = stablehlo.convert {dx} : ({tyF8 [B,ic,h,w]}) -> {ty [B,ic,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {xf} : ({ty [B,ic,h,w]}) -> {ty [B, ic*h*w]}\n", o :: st)
       | "convStridedBackBatched", [wN], [_N, ic, oc, h, w, kH, kW] => do
           -- stride-2 conv input-VJP: upsample dy (zero-interleave to 2h×2w) then the

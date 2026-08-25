@@ -125,6 +125,46 @@ in fp32. An in-graph f8 conv rounds the same operands but the *accumulate* is wh
 
 ---
 
+## 3.3 ⭐⭐ MEASURED 2026-08-25: what actually lowers, and where scaling becomes mandatory
+
+`convF8`, `convBackBatchedF8` and `convWeightGradBF8` built (the clone surface of §2.2 was exactly
+as predicted — denotations byte-identical to their bf16 peers). Then measured with
+`cifar8-opt-tie` against the f32 batched render on one shared θ:
+
+| fp8 coverage | f8-typed convs | recovered-gradient norm-rel vs f32 | `%loss` |
+|---|---|---|---|
+| forward only | 8/23 | **0.101** | 7.606 vs 7.834 |
+| forward + input-VJP | 15/23 | ⚠ **0.756** | 7.606 vs 7.833 |
+| + weight-gradient | 23/23 | ⛔ **does not compile** | — |
+
+### ⛔⛔ THERE IS NO fp8 `convBackwardFilter` ON sm_89
+
+    __cudnn$convBackwardFilter ... f8e4m3fn[16,3,3,3] ...
+    No supported configs found for this instruction.
+    Client_Compile: Failed to get configs for: 6 out of 88 instructions
+
+The weight gradient has **no fp8 cuDNN config at all** — it is a library/hardware limit, not an
+emit bug (the f32 control compiles; only the f8 bw-filter instructions fail). ▶ §2 of
+`cifar_lowprec_stability.md` gated **forward conv and gemm only**, so this was never covered.
+`convBackwardData` (the input-VJP) *does* lower. ▶ Any fp8 R34 plan must budget the weight
+gradient in f32 or bf16, or re-express it as a `dot_general` (cublasLt f8 works where cuDNN
+does not) — that is a design question, not a detail.
+
+### ⚠⚠ THE BACKWARD NEEDS SCALES; THE FORWARD MAY NOT
+
+Unscaled, the forward alone costs **0.101** relative on the gradient — the order E4M3's 6.25 %
+per-element roundoff predicts, i.e. working as designed. Adding the unscaled input-VJP takes it
+to **0.756**, which is broken.
+
+▶ The asymmetry is the finding, and it is the expected one: **cotangents are small**. E4M3's min
+normal is ~2⁻⁶ ≈ 0.0156, so gradient values below that underflow, while forward activations are
+O(1) and sit comfortably inside the range. This is why real fp8 training loss-scales the
+backward. ▶ It means §4's "try fixed calibrated scales first" should be read as **mandatory on
+the backward, optional on the forward** — and it is now an empirical claim on this net, not a
+guess.
+
+---
+
 ## 4. ⚠⚠ SCALING IS THE PROJECT, NOT THE EMIT
 
 E4M3's max is **448** and its min normal is ~2⁻⁶. XLA's fp8 gemm takes scale operands; asked for
