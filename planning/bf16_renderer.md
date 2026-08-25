@@ -76,6 +76,13 @@ and the whole optimizer tail.
 | whole-net composition — the mixed conv is `FloatClose` | ✅ `ConvMixedComposeBridge.lean`, §11 |
 | a full training run on ANY of the six | ⛔ not started |
 
+### ▶▶ THE SUCCESSOR PROJECT IS SCOPED — `planning/bf16_dtype_ir.md` (2026-08-25)
+
+Letting activations STAY bf16 between ops. It is what ConvNeXt's remaining 1.30× → ~1.40× needs
+(§16.3) and what ViT's 1.03× → ~1.7× needs (§17.3) — one project, two nets. ⭐ The route is a
+defaulted `dt : Dtype` FIELD plus a dtype-carrying emit stack, **not** an index on `SHlo`, because
+the emitted text is not theorem-tied and that makes it ~zero proof work. Start at that file's §8.
+
 ### ▶ ViT was surveyed, measured and NOT built — §17
 
 Six ops scoped, all three emit shapes settled, then §16.3's method run **before** writing them: the
@@ -1248,8 +1255,16 @@ and chose the cheap one:
 Option 1 has now carried **six nets** and it was the right call every time. ViT is the first net
 where it does not work: bundling the cast inside each op *forces* the f32 boundary, and for ViT the
 f32 boundary is the whole cost. ▶ **Getting ViT's 1.7–1.9× needs activations that stay bf16 between
-ops — i.e. the IR carrying a dtype (Option 2), or a narrower version of it.** That is a design
-project, not an op-writing project, and it should be scoped as one.
+ops.** That is a design project, not an op-writing project, and it should be scoped as one.
+
+⚠ **THE SENTENCE ABOVE ORIGINALLY SAID "i.e. the IR carrying a dtype (Option 2)" AND THAT WAS TOO
+STRONG — corrected 2026-08-25, `planning/bf16_dtype_ir.md` §2.** What forces the f32 boundary is
+Option 1 **as practised** — every bf16 op built so far takes f32 in and gives f32 out. A
+`bf16-in / bf16-out` variant bundles its casts exactly as today and forces no boundary. The real
+question is what stops a bf16-producing op being wired to an f32-consuming one, and that has a
+cheap answer (a defaulted `dt` FIELD + a dtype-carrying emit stack, no proof churn) as well as an
+expensive one (an index on `SHlo`: 236 constructors, 230 theorems, 65 files). ▶ The overstatement
+mattered because it made the cheap route look unavailable.
 
 ⭐ **And it is the same project ConvNeXt's remaining headroom needs** (§16.3: 1.30× → ~1.40×, "the
 boundary converts, and only them"). One decision serves both nets — which is a much better reason
@@ -1280,9 +1295,11 @@ Nothing measured here does. For completeness, the two things that would change t
   shapes settled) and then MEASURED before building, and the six ops in the established shape buy
   **1.03×**. Its win needs activations that stay bf16 between ops, which is the type-system
   decision the original scoping deferred. ▶ The successor item is the one below.
-* ⭐⭐ **The boundary converts — the deferred `SHlo` dtype decision.** §16.3 measured them costing
-  ConvNeXt 2.70× → 1.68× on its conv work, and §17.3 measured them costing ViT its entire win
-  (1.71× → 1.03×). One project, two nets, and the first bf16 item on this branch that is a design
-  question rather than an op-writing one.
+* ⭐⭐ **The boundary converts — ✅ SCOPED 2026-08-25 in `planning/bf16_dtype_ir.md`.** §16.3
+  measured them costing ConvNeXt 2.70× → 1.68× on its conv work, and §17.3 measured them costing
+  ViT its entire win (1.71× → 1.03×). One project, two nets, and the first bf16 item on this branch
+  that is a design question rather than an op-writing one. ▶ First increment: ConvNeXt's
+  expand → GELU → project, three op kinds, with a gate that INVERTS the usual one — the convert
+  count must FALL.
 * **A full training run** on any of the six. Nothing has been trained to convergence in bf16, and
   every accuracy claim on this branch is still a three-step loss comparison.
