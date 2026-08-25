@@ -150,6 +150,33 @@ emit bug (the f32 control compiles; only the f8 bw-filter instructions fail). �
 gradient in f32 or bf16, or re-express it as a `dot_general` (cublasLt f8 works where cuDNN
 does not) — that is a design question, not a detail.
 
+#### ⭐⭐ …BUT THE GEMM FORM OF THE SAME GRADIENT DOES WORK, ON THIS HARDWARE
+
+Measured immediately after, at cifar8's s3c2 weight-grad shape (`dL/dW = dYᵀ·X`, i.e. the im2col
+`dot_general` M=B·H·W=8192, K=ic·kH·kW=288, N=oc=32):
+
+| operands | kernel |
+|---|---|
+| f32 | fusion/triton |
+| bf16 | fusion/triton |
+| **f8E4M3** | **`__cublas$lt$matmul$f8`** |
+
+⭐ **So the fp8 weight gradient is NOT blocked by the silicon — it is blocked by
+`__cudnn$convBackwardFilter` specifically.** cublasLt's f8 path is present on the same sm_89 card
+and takes this shape. ▶ The fix is to emit the weight gradient as a `dot_general` rather than a
+`convolution`, which is a design choice available TODAY and does not wait on new hardware.
+
+⚠ It is not free: an im2col form is a **different op** (same mathematics, different accumulation
+order and a materialised `[B·H·W, ic·kH·kW]` matrix), so it needs its own verified constructor and
+its own faithfulness argument — it cannot be a retyping of `convWeightGradB`. Budget it as a new
+op, not a flag.
+
+⚠ Whether a Blackwell part (sm_120, e.g. a 5060) has the cuDNN conv path is **unknown and not
+worth assuming**: the failure is XLA's autotuner finding no cuDNN engine config, so it needs both
+cuDNN to ship bw-filter fp8 engines for that arch AND XLA to plumb them. ▶ It is a measurement, not
+an inference — and one worth making, since §2.2's `f4E2M1FN` result ("needs Blackwell") is waiting
+on the same box.
+
 ### ⚠⚠ THE BACKWARD NEEDS SCALES; THE FORWARD MAY NOT
 
 Unscaled, the forward alone costs **0.101** relative on the gradient — the order E4M3's 6.25 %
