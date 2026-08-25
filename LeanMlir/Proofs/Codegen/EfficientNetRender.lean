@@ -1618,6 +1618,16 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop)
 
+-- ⭐ **The 4-replica bf16 peer** — the DP arm of §14's `rms64bf16`, so B0 can be probed at the same
+-- 4×bs64 geometry as R34/R50/MNv2 rather than only single-device.
+-- ⚠⚠ Read its ms/step as a SYSTEM number, not a renderer one (`bf16_renderer.md` §13.2): a
+-- 4-replica figure carries the shim feed and the f32 all-reduce. B0's RENDERER number is the
+-- single-device 1.09× (§14), confirmed on the bare device at 1.10× (§16.4), and that is the one
+-- that says what the emit is worth.
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_rmsdp64bf16_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (bf16 := true))
+
 -- Pin the two literal artifact paths above against the name the renderer actually emits. If a
 -- variant is renamed this fails at `lake build` instead of at run time as an "entry mismatch".
 #guard Proofs.StableHLO.enetAdamVariant 32 1 == "adam"

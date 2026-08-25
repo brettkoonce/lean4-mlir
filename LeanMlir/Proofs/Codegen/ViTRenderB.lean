@@ -797,6 +797,22 @@ def vitDropFwdBanner : String :=
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128))
 
+-- ⭐ **The 4-replica bf16 peer of the shipping DP render**, at the same 128×4 = global 512 geometry.
+-- ⚠⚠ A 4-replica ms/step is a SYSTEM result (§13.2) — shim feed and f32 all-reduce included. ViT's
+-- RENDERER number is the single-device bare-device **1.46×** (§20), and that is what the emit is
+-- worth. This artifact exists so the net can be scheduled and costed at the geometry an ImageNet
+-- run actually uses, not to restate the speedup.
+-- ⚠ `bf16Conv`/`bf16ConvW` stay at their measured defaults (both false) — §19.1's stem weight
+-- gradient is 0.19× its f32 peer and the replica axis does not change that.
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (bf16 := true))
+#guard "vitin_adamdp128x4wxclipdropbf16_train_step" ==
+  "vitin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16" ++ "_train_step"
+#guard ((Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").splitOn "do").length == 1
+#guard ((Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").splitOn "drop").length == 2
+
 -- The **2-GPU** peer: 256 per replica × 2 = the same global 512 the 128×4 render above trains at,
 -- so the recipe, the steps/epoch and the LR are unchanged and the two wall-clocks are comparable.
 -- ⚠ ViT is the one net whose slug spells the replica count (`128x4` → `256x2`), so BOTH numbers

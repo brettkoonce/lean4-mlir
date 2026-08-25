@@ -4,7 +4,7 @@ Scoped 2026-08-01 on ares (6× RTX 4060 Ti, CUDA 12.9).
 
 ---
 
-## ⭐⭐ STATUS 2026-08-25 — SEVEN NETS WIRED. READ THIS BLOCK, THEN §16, §19 AND §20 BEFORE QUOTING ANY ms/step.
+## ⭐⭐ STATUS 2026-08-25 — SEVEN NETS WIRED, ALL SEVEN COSTED AT 4 GPUs (§21). READ THIS BLOCK, THEN §16, §19 AND §20 BEFORE QUOTING ANY ms/step.
 
 Branch `bf16/verified-conv-ops`. Seven nets render in bf16, every one gate-1 and gate-2 green.
 **The speedups are NOT interchangeable and the differences are the interesting part** — read the
@@ -22,6 +22,12 @@ replica AND residency columns before quoting any number.
 | ConvNeXt-T | *same graph* | **1** | **off** | 312 → 280 | 1.11× | §16.2 |
 | ViT-Tiny | `adamwxclipdropbf16` | **1** | *bare device* | 29.9 → 20.5 | **1.46×** | §20 |
 | ViT-Tiny | *all six ops on* | **1** | *bare device* | 29.9 → 57.2 | ⛔⛔ **0.52×** | §19.1 |
+
+⭐⭐ **ALL SEVEN NOW HAVE A 4-GPU NUMBER ON REAL IMAGENET AND AN END-TO-END COST — §21.** Every net
+gained a DP bf16 render (three did not have one). Totals: **f32 533.9 h (22.2 d), bf16 425.3 h
+(17.7 d)** of continuous 4-GPU compute — bf16 saves **4.5 days, 20 %**. ⛔ ConvNeXt alone is 157 h of
+that, because it is the only net at global batch 128 and runs 10,009 steps/epoch for 300 epochs; its
+cheapest speedup is a bigger batch, not bf16.
 
 ⚠ **`?` means the probe did not record it**, not "off" — the column is new with §16 and only R50's
 §10.1 and ConvNeXt's §16 state it. ⭐ For MNv2 and B0 the bare-device timings in §16.4 bound how
@@ -1609,6 +1615,90 @@ line of type-system work.
 
 ---
 
+## 21. ⭐⭐ ALL SEVEN NETS AT 4 GPUs ON REAL IMAGENET — and what a full run would cost
+
+Measured 2026-08-25. `CUDA_VISIBLE_DEVICES=0,2,3,4` (the AER-clean four, per `scripts/jobs/*.conf`),
+`PJRT_REPLICAS=4`, `PJRT_FFI_RESIDENT=1`, `SHIM_WORKERS=8`, real ImageNet, `LEAN_MLIR_MAX_STEPS=40`
+(median of steps 9..40), `LEAN_MLIR_CKPT_TAG` set so no finished checkpoint short-circuits the probe.
+
+| net | steps/epoch | epochs | f32 ms | bf16 ms | speedup | f32 end-to-end | bf16 end-to-end |
+|---|---|---|---|---|---|---|---|
+| ResNet-34 | 5,004 | 90 | 225 | 164 | 1.37× | 29.1 h | **21.5 h** |
+| ResNet-50 | 5,004 | 100 | 359 | 233 | **1.54×** | 50.9 h | **33.4 h** |
+| MobileNetV2 | 5,004 | 350 | 195 | 129 | **1.51×** | 98.5 h | **66.4 h** |
+| MobileNetV4-M | 5,004 | 100 | 177 | 126 | 1.40× | 25.6 h | **18.6 h** |
+| EfficientNet-B0 | 5,004 | 350 | 186 | 181 | ⛔ 1.03× | 94.1 h | 91.7 h |
+| ConvNeXt-T | 10,009 | 300 | 217 | 184 | 1.18× | 184.1 h | **156.6 h** |
+| ViT-Tiny | 2,502 | 300 | 232 | 163 | 1.42× | 51.5 h | **37.1 h** |
+| **all seven** | | | | | **1.26×** | **533.9 h (22.2 d)** | **425.3 h (17.7 d)** |
+
+▶ **bf16 saves 4.5 days of continuous 4-GPU compute across the seven, 20 %.**
+
+### 21.1 How the end-to-end numbers are built, and what they do NOT include
+
+`steps/epoch × epochs × ms/step`, plus a measured **37.5 s/epoch** for eval and the checkpoint.
+Steps/epoch is the driver's own figure, read off its `step 0/N` line, not derived. Epochs are each
+net's `*ImagenetConfig.epochs` (⚠ three of the `scripts/jobs/*.conf` files run a SHORTER tier —
+R34 30, B0 80, MNv2 300 — so those confs are cheaper than the table by the obvious ratio).
+
+⭐ **The 30 GB val drain is ONE-TIME, not per-epoch** — the driver says so (`draining the val split
+into RAM (~30 GB, one time)`) and the measurement confirms it: 1 epoch of 20 steps + eval was 142 s,
+3 epochs 226 s, so the marginal epoch is 42 s of which 4.5 s is the 20 train steps. ⚠ Eval also runs
+on **1 replica** (`@<slug>_fwd_eval`, 1 replica in the log), so it does not scale with the four.
+
+⚠ **NOT included, and all three push the real wall-clock UP:**
+* **Thermal governance.** The confs run under `supervise.sh` with `TEMP_MAX=78 / TEMP_RESUME=62`;
+  a sustained multi-day run rests. Nothing here models that, and these probes ran from a 30 °C idle.
+* **The 37.5 s/epoch eval figure is R34's.** ConvNeXt's and ViT's forwards are heavier; their eval
+  cost is larger and was not measured separately.
+* **Restarts.** `supervise.sh` exists because these runs get reaped and resumed.
+
+### 21.2 ⚠ Three nets needed a 4-replica bf16 render that did not exist
+
+§13.1/§14/§19 rendered MNv4, B0 and ViT single-device only. Added here so all seven can be costed at
+the same geometry: `efficientnetin_rmsdp64bf16`, `vitin_adamdp128x4wxclipdropbf16`, and — with a
+caveat — `mnv4in_adamdp64` / `mnv4in_adamdp64bf16`.
+
+⛔⛔ **MNv4's DP pair carries §13.1's caveat and it has NOT been lifted.** That section declined a DP
+render because **nothing has tied MNv4's collectives**, and that is still true. These two exist to
+answer "what would a run cost", which is a question about `all_reduce`'s COST, not its correctness.
+**Do not train off them.** The single-device `adam64`/`adam64bf16` pair remains this net's only
+trainable render. The artifacts say so at their `#eval`.
+
+⚠ A 4-replica ms/step is a **system** result in all seven rows (§13.2) — shim feed and f32
+all-reduce included. The RENDERER numbers are the single-device/bare-device ones in §14, §16 and §20.
+
+### 21.3 ⭐ What the 4-replica figures say that the single-device ones did not
+
+* **R50 reproduces exactly** — 359 → 233 = 1.54× against §10.1's 360 → 232 = 1.55×.
+* **MNv2 is 1.51× here against §12.1's 1.37×**, same geometry. The difference is `SHIM_WORKERS`:
+  §12's probe did not set it and this one uses 8. ▶ That is §13.2's "check `SHIM_WORKERS` before
+  ever blaming the emit", now costing 0.14× on a committed number.
+* **ViT holds up best under DP** — 1.42× at 4 replicas against 1.46× on the bare device, i.e. it
+  loses almost nothing to the system. It is also the only net whose global batch is 512, so it runs
+  the fewest steps per epoch of the seven.
+* **B0 is 1.03× at 4 replicas against 1.09× single-device** — the worst result on the branch gets
+  worse with replicas, and §14.3 is still open. ▶ Of the 108.7 h bf16 saves across the seven, B0
+  contributes 2.4 h.
+* ⛔ **ConvNeXt is the most expensive net by a wide margin** — 184 h f32, 157 h bf16 — because it
+  is the only one at global batch 128, so it runs **10,009 steps/epoch for 300 epochs**. Its ms/step
+  is mid-pack; its batch is what costs. ▶ The cheapest available speedup for ConvNeXt is not bf16,
+  it is a bigger batch, and `cBS` being a private constant is what stands in the way.
+
+### 21.4 ⛔ A THIRD STALE BINARY, found by this probe
+
+`vit-imagenet-verified` was dated 2026-08-12 and failed both ViT probes outright:
+`imagenet shim: wire version 3, expected 1 (nclasses=0 ⇒ v1)` — the shim wire format had been
+bumped and the binary never rebuilt. A `lake build` fixed it in 1 s and both arms then ran.
+
+▶ That is the **third** stale-artifact defect in two days: `vit-fwd-b-tie` printing green from an
+Aug-3 binary (§19.2b), `AuditAxioms.lean` erroring on a missing constant and exiting 0 (§19.2b), and
+now this. ⭐ Unlike the other two this one FAILED LOUDLY, which is why it cost a minute rather than a
+wrong conclusion. **The pattern is worth a gate**: nothing in this repo checks that a committed
+`lean_exe` still builds before its output is trusted.
+
+---
+
 ## 18. Still open, in rough priority order
 
 * **R34/R50 bare-device timings** — §16.4. Two runs of one script, no render and no proof, and
@@ -1625,8 +1715,11 @@ line of type-system work.
   standing for B0's 1.09×**, and it is cheap: time each op standalone at the net's own shapes.
 * ⭐ **ViT IS BUILT — §19/§20**, at **1.46×** on the bare device with its two convolutions
   deliberately left f32 and its dots writing bf16-typed results.
-* **A trainer probe on ViT's bf16 arm.** §19.6: the 1.23× is bare-device, so nothing yet says the
-  driver loads this artifact. One 40-step run with `LEAN_MLIR_CKPT_TAG` set.
+* ✅ **A trainer probe on ViT's bf16 arm — DONE (§21)**: 232 → 163 ms/step at 4×bs128 on real
+  ImageNet, so the driver does load it. ⭐ Its DP arm keeps 1.42× against the bare device's 1.46×,
+  the smallest system loss of the seven.
+* ⭐ **A gate that a committed `lean_exe` still BUILDS.** Three stale-artifact defects in two days
+  (§19.2b ×2, §21.4), one of which printed green for three weeks. Nothing checks this.
 * ⛔⛔ **The boundary converts — SCOPED, THEN CANCELLED BY ITS OWN TEST (§20.3).** Do not start
   `planning/bf16_dtype_ir.md`. ⚠ Its §5.1 gate ("the convert count must FALL") is separately
   measured-wrong: ViT's count went 864 → 1224 and the step got 1.19× faster (§20.2).

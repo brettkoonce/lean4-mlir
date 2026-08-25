@@ -1362,6 +1362,26 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adam64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in" true)
 
+-- ⚠⚠⚠ **THE 4-REPLICA PAIR, AND IT CARRIES A CAVEAT THE OTHER NETS' DP RENDERS DO NOT.**
+-- The block above says MNv4 renders no DP variant because **nothing has tied its collectives**.
+-- That is still true. These two exist for ONE purpose — to cost this net at the 4×bs64 geometry the
+-- other six are scheduled at, i.e. to answer "how long would a run take", which is a question about
+-- `all_reduce`'s COST and not about its correctness.
+-- ⛔ **Do not train off these.** A trained result from an untied collective is not a verified
+-- result, and these artifacts look exactly as trustworthy as the ones that are. The single-device
+-- `adam64`/`adam64bf16` pair above remains this net's only trainable render.
+-- ▶ What would lift the caveat is the same thing it always was: a DP tie for MNv4's collectives,
+-- the way R34/R50/MNv2/ConvNeXt have one.
+#eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 "mnv4in")
+#eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64bf16_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 "mnv4in" true)
+#guard Proofs.StableHLO.mnv4AdamVariant 64 4 == "adamdp64"
+#guard Proofs.StableHLO.mnv4AdamVariant 64 4 true == "adamdp64bf16"
+#guard ("adamdp64bf16".splitOn "do").length == 1
+#guard ("adamdp64bf16".splitOn "acc").length == 1
+#guard !"adamdp64bf16".startsWith "ema"
+
 -- ⭐ The bf16 marker, and the wiring that actually breaks: the entry name derives from
 -- `mnv4AdamVariant`, so `bf16` must reach THAT call and not merely the block renderers.
 #guard Proofs.StableHLO.mnv4AdamVariant 64 1 true == "adam64bf16"
