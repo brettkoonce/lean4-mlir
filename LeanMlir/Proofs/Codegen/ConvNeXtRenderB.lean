@@ -797,6 +797,21 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextbin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxBase))
+
+-- ⭐⭐ **The bf16 peer of B** — rendered to answer the memory question the docstring above calls
+-- "a real question rather than a formality" at this size, and to give the B row of
+-- `planning/bf16_renderer.md` §21.6 a measured `peak_memory_in_bytes` rather than an extrapolation
+-- from T. ⚠⚠ Read that section before assuming bf16 helps: on ConvNeXt-**T** it moves peak memory
+-- by a few per cent, because this emit converts back to f32 after every op and so keeps the f32
+-- activation alive anyway. bf16 here is a SPEED change, not a memory one.
+#eval IO.FS.writeFile "verified_mlir/convnextbin_adamwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextbin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/convnextbin_adamdpwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextbin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/convnextbin_adamdpwxclipdrop_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextbin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
