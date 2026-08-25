@@ -608,6 +608,40 @@ def resnet50Imagenet160Verified : VerifiedNetSpec where
 #guard resnet50Imagenet160Verified.d0 == 76800
 #guard resnet50ImagenetVerified.d0 == 150528
 
+/-- **ResNet-50 at 224², streaming the 2018 recipe's augmentation.** The SAME NET as
+    `resnet50ImagenetVerified` — same slug, same renders, same artifacts, same `d0`. The only
+    difference is which shim it streams, and that difference is the entire reason it exists.
+
+    ⛔ **WHY.** `shimScript` is a field on the NET, not on the recipe. Until this spec, the only
+    224² R50 net pointed at `generated_resnet50_imagenet_shim.py` — emitted from the `default`
+    recipe, which is **RSB-A2** and calls `_randaugment(img, 2, 7.0, 0.5)` UNCONDITIONALLY on the
+    train path. A verified 2018 run therefore trained 2018's optimizer and schedule on A2's
+    augmentation: neither recipe, and not comparable to the JAX 2018 number it exists to sit
+    beside. Caught 2026-08-24 as a mean −4.90 top-1 gap against the JAX per-epoch curve over
+    epochs 1–10, and the run was killed at epoch 13.
+
+    ⚠ `scripts/shim_wiring_gate.py` CANNOT catch this class — it checks that each NET streams its
+    own shim rather than R34's, and there is no per-RECIPE slot for it to check. The last guard
+    below is the substitute: it asserts this spec does not carry A2's shim.
+
+    ⚠ The shared `slug` is DELIBERATE. `resnet50in_momdp64_train_step` and `resnet50in_fwd_eval`
+    are the artifacts a 2018 run executes; a fresh slug would orphan them. What changes is the
+    data those artifacts are fed, which is precisely what a shim is. -/
+def resnet50Imagenet2018Verified : VerifiedNetSpec :=
+  { resnet50ImagenetVerified with
+      name       := "ResNet-50 (ImageNet-1k, 2018 recipe)",
+      shimScript := "generated_resnet50_imagenet_2018_shim.py",
+      blurb      := "ResNet-50 on full 1000-class ImageNet with the 2018 recipe's augmentation \
+                     (random-resized-crop + hflip, no RandAugment), via the VERIFIED renderer." }
+
+-- ▶ It must be the SAME NET as the 224 spec in every way a render or an artifact can see.
+#guard resnet50Imagenet2018Verified.toSpecs == resnet50ImagenetVerified.toSpecs
+#guard resnet50Imagenet2018Verified.d0 == 150528
+#guard resnet50Imagenet2018Verified.slug == resnet50ImagenetVerified.slug
+-- ⭐ AND THE ONE THING THAT MUST DIFFER — the bug this spec exists to make unrepresentable.
+#guard resnet50Imagenet2018Verified.shimScript != resnet50ImagenetVerified.shimScript
+#guard resnet50Imagenet2018Verified.shimScript == "generated_resnet50_imagenet_2018_shim.py"
+
 -- ▶ The cross-net form of this invariant needs every `.imagenet` spec in scope, so it lives at the
 -- END of this file (search "trainPix := net.d0").
 

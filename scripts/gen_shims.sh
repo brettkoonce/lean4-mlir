@@ -44,6 +44,18 @@ EXES=(
   # eval keeps the hardcoded `_IMG_SIZE = 224`. So this file emits 76,800 floats/img on train and
   # 150,528 on val, which is A3's split and is why the driver needs its own `evalD0` (§2.3).
   "resnet50-imagenet:short:generated_resnet50_imagenet_short_shim.py"
+  # ⭐ The 2018 recipe's shim, for `resnet50Imagenet2018Verified` (2026-08-24).
+  # ⛔ WHY THIS ROW EXISTS. `shimScript` is a field on the NET, and until this row the only 224²
+  # R50 net pointed at the `default` shim — which is RSB-A2's, and calls
+  # `_randaugment(img, 2, 7.0, 0.5)` UNCONDITIONALLY on the train path. A verified 2018 run
+  # therefore trained 2018's optimizer and schedule on A2's augmentation: neither recipe, and not
+  # comparable to the JAX 2018 number it exists to sit beside. Caught 2026-08-24 by a mean −4.90
+  # top-1 gap against the JAX per-epoch curve over epochs 1–10; the run was killed at epoch 13.
+  # ⚠ `shim_wiring_gate.py` cannot catch this class: it checks each NET streams its own shim
+  # rather than R34's, and there is no per-RECIPE slot for it to check.
+  # This shim is random-resized-crop + bicubic/antialias + hflip and nothing else, which is what
+  # `resnet50ImagenetConfig2018` (`useRandAugment := false`, CE+LS) specifies.
+  "resnet50-imagenet:2018:generated_resnet50_imagenet_2018_shim.py"
 )
 
 echo "── generating $(( ${#EXES[@]} )) per-net ImageNet shims ──"

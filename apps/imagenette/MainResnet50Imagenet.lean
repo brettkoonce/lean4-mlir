@@ -72,16 +72,38 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
   -- the shim. `planning/next_session_rsb_a3.md` §2. ⚠ REFUSES on any other value rather than
   -- falling back to 224 — a silent fallback here is a run that looks correct and trains the wrong
   -- resolution, which is the §0.9 shim-fallback failure one layer up.
+  -- ▶ `LEAN_MLIR_RECIPE` picks the AUGMENTATION. Like `LEAN_MLIR_RES` it is not a knob but a
+  -- choice of NET SPEC: it selects `shimScript`, hence what the producer actually streams.
+  -- ⛔ WHY IT EXISTS. `shimScript` is a field on the NET, so before this the only 224² spec
+  -- carried the `default` (RSB-A2) shim, which calls `_randaugment(img, 2, 7.0, 0.5)`
+  -- unconditionally. A verified 2018 run trained 2018's optimizer on A2's augmentation — neither
+  -- recipe, and not comparable to the JAX 2018 number it exists to sit beside. Caught 2026-08-24
+  -- as a mean −4.90 top-1 gap against the JAX per-epoch curve; that run was killed at epoch 13.
+  -- ⚠ REFUSES on any other value, for the same reason the resolution dispatch does: a silent
+  -- fallback here is a run that looks correct and trains the wrong augmentation.
+  let recipe := ((← IO.getEnv "LEAN_MLIR_RECIPE").getD "default").trim
   let net ← match (← IO.getEnv "LEAN_MLIR_RES") with
-    | none       => pure resnet50ImagenetVerified
-    | some "224" => pure resnet50ImagenetVerified
-    | some "160" => pure resnet50Imagenet160Verified
+    | none | some "224" =>
+        match recipe with
+        | "default" => pure resnet50ImagenetVerified
+        | "2018"    => pure resnet50Imagenet2018Verified
+        | r => throw <| IO.userError s!"LEAN_MLIR_RECIPE={r}: at 224² only `default` (RSB-A2's \
+            RandAugment) and `2018` (random-resized-crop + hflip, no RandAugment) have shims. \
+            Naming another needs a row in scripts/gen_shims.sh AND a VerifiedNetSpec carrying it."
+    | some "160" =>
+        if recipe == "default" then pure resnet50Imagenet160Verified
+        else throw <| IO.userError s!"LEAN_MLIR_RECIPE={recipe} with LEAN_MLIR_RES=160: 160² IS \
+            RSB-A3's train resolution and streams A3's own shim. The 2018 recipe is 224/224, so \
+            these two selectors cannot both be set away from their defaults."
     | some r     => throw <| IO.userError s!"LEAN_MLIR_RES={r}: only 160 and 224 are rendered. \
         160 is RSB-A3's train resolution (slug resnet50in160, d0 76800); 224 is the default \
         (slug resnet50in, d0 150528). Rendering another needs a new VerifiedNetSpec + artifacts."
   -- ⚠ ANNOUNCED, both states. Which resolution a run trained at is not recoverable from the loss
   -- curve, and this repo has now twice paid for a throughput/shape setting that printed nothing.
+  -- ⚠ ANNOUNCED, and the shim is now part of it. Which AUGMENTATION a run trained on is no more
+  -- recoverable from a loss curve than which resolution was, and this repo has now paid for both.
   IO.println s!"  ▸ TRAIN RES: {net.imageH}×{net.imageW} (slug {net.slug}, d0 {net.d0}, shim {net.shimScript})"
+  IO.println s!"  ▸ RECIPE: {recipe} — augmentation comes from {net.shimScript}"
   -- ✅ The 160 net is EVALUABLE as of 2026-08-06. Its shim emits A3's split — 76,800 floats/img on
   -- train, 150,528 on val — and the driver now reads the eval width off `@<slug>_fwd_eval` rather
   -- than reusing `net.d0` (`fwdRenderedShape`/`evalD0` in `VerifiedTrain.lean`). The refusal that
