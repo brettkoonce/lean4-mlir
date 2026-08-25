@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 
 /-! # The mixed-precision conv as a `FloatClose` — the whole-net bf16 bound
 
-`ConvMixedFloatBridge.conv_close_mixed` bounds **one** bf16-mixed convolution against exact ℝ at
+`FloatModel.conv_close_mixed` bounds **one** bf16-mixed convolution against exact ℝ at
 an **exactly-represented input**. That is not enough to compose: a net feeds each layer the
 *previous* layer's already-perturbed output, so what a fold needs is an error **modulus** — a map
 from inherited input error to output error — plus a magnitude bound to thread forward. That pair

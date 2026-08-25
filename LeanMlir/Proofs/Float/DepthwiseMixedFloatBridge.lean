@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Float.DepthwiseFloatBridge
 
 /-! # `depthwise_close_mixed` — the bf16-mixed DEPTHWISE convolution against exact ℝ
 
-The depthwise peer of `ConvMixedFloatBridge.conv_close_mixed`, and — as
+The depthwise peer of `FloatModel.conv_close_mixed`, and — as
 `planning/bf16_renderer.md` §10.2 predicted — it is the same instantiation at a much smaller
 fan-in, not a new result. **A depthwise output is a dot product of length `kH·kW`**: one channel,
 no `ic` sum (`depthwiseConv2d_eq_dw_dot`). So it is `dot_close_mixed_uniform` at that fan-in, plus
