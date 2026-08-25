@@ -65,16 +65,6 @@ def vitTinyImagenetConfig : TrainConfig where
 
 #eval vitTinyImagenet.validate!
 
-/-- Quick validation subrun: identical recipe at the 80-epoch tier (the proven
-    historical point — that schedule reached 65.6%). The `short` recipe arg;
-    writes a separate `_short.py` so it never clobbers the 300-epoch official
-    run. -/
-def vitTinyImagenetConfigShort : TrainConfig :=
-  { vitTinyImagenetConfig with epochs := 80, repeatedAug := 1 }
-  -- repeatedAug pinned back to 1: this tier's job is comparability with the
-  -- 65.6% 80-epoch run, which had no repeated-aug. The `default` 300ep recipe
-  -- is the paper-faithful one.
-
 /-- **ViT-Ti with timm/DeiT weight init** — the `default` recipe plus
     `vitInit := true`. The generic emitter path gives every transformer Linear
     Xavier-uniform, which at ViT-Ti is **3.6x wider** than timm's
@@ -102,9 +92,6 @@ def vitTinyImagenetRecipes : List Recipe := [
   { name := "default", cfg := vitTinyImagenetConfig,
     out := "generated_vit_tiny_imagenet.py",
     desc := "full DeiT-Ti 300-epoch schedule, bs512, AdamW + full DeiT aug + EMA" },
-  { name := "short",   cfg := vitTinyImagenetConfigShort,
-    out := "generated_vit_tiny_imagenet_short.py",
-    desc := "80-epoch tier (the proven historical point, reached 65.6%)" },
   { name := "deit-init", cfg := vitTinyImagenetConfigDeitInit,
     out := "generated_vit_tiny_imagenet_deitinit.py",
     desc := "300ep + timm trunc_normal(0.02) init — the A/B against Xavier-uniform" }
