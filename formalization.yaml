@@ -240,7 +240,7 @@ automation:
       cost:
         wall_time: ""        # not precisely tracked; project developed over months
         spend_usd: ""        # not tracked
-        hardware: "two GPU workstations for training + codegen validation across both vendor stacks — 6x RTX 4060 Ti (NVIDIA/CUDA) and 2x Radeon RX 7900 XTX (AMD/ROCm, gfx1100); API for proof work"
+        hardware: "three GPU workstations for training + codegen validation across both vendor stacks — 4x RTX 4060 Ti and 4x RTX 3060 (NVIDIA/CUDA), 2x Radeon RX 7900 XTX (AMD/ROCm, gfx1100); API for proof work"
       prompting_notes: >-
         Mixed interactive + agentic. Proof development, codegen, the audit, and
         the empirical training runs were all done with AI assistance.
