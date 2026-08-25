@@ -6563,7 +6563,8 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 188 & 15.7 & $\sim$91.5 h (3.8 d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & 129 & 10.8 & $\sim$66.4 h (2.8 d) & TBD \\
+4$\times$ 3060 (CUDA)     &  99 &  8.3 & $\sim$51.8 h (2.2 d) & TBD \\
 2$\times$ 7900 XTX (ROCm) & --- & ---  & ---                  & TBD \\
 \hline
 \end{tabular}
@@ -6810,32 +6811,33 @@ anything, and they are the whole of what has been measured about its
 accuracy so far.
 
 \begin{center}
-\begin{tabular}{l r r r r}
+\begin{tabular}{l r r l r r}
 \hline
-Box & ms/step & min/epoch & 100 epochs & Val top-1 \\
+Box & ms/step & min/epoch & Epochs & Total & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA), global 256 & 177 & 14.8 & 24.6 h (1.0 d) & TBD \\
+4$\times$ 4060 Ti (CUDA), global 256 & 126 & 10.5 & 100 (reduced-reg) & 18.6 h (0.8 d) & TBD \\
+4$\times$ 4060 Ti (CUDA), global 256 & 126 & 10.5 & 500 (paper)       & 92.8 h (3.9 d) & TBD \\
+4$\times$ 3060 (CUDA), global 256    & 109 &  9.1 & 100 (reduced-reg) & 16.2 h (0.7 d) & TBD \\
+4$\times$ 3060 (CUDA), global 256    & 109 &  9.1 & 500 (paper)       & 81.0 h (3.4 d) & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent {\small Measured 2026-08-14, fp32, with the driver's own
-steady-state probe (median of 112 steps after 8 warmup). The four-card
-number needed MobileNetV4's data-parallel train step, which this book does
-not ship: its collectives have no \texttt{shard-check} peer, so nothing
-ties them. It was rendered locally, timed, and deleted. The wall clock is
-therefore real and the artifact it was measured on is not in the tree. For
-scale, one card takes $126$\,ms/step and $70.1$ hours, a four-card speedup
-of $2.85\times$.}
+\noindent {\small Measured bf16 with the four-replica probe, as a median
+over steady-state steps. Both four-replica renders are in the tree ---
+\texttt{mnv4in\_adamdp64\_train\_step} and its \texttt{bf16} arm --- so
+the artifact these numbers were taken on is one the reader can rebuild.
+\textbf{What has not changed is the reason not to train on it}:
+MobileNetV4's collectives have no \texttt{shard-check} peer, so nothing
+ties them. Cost a schedule from this row; do not quote an accuracy off it
+until they are tied.}
 
-\medskip\noindent The previous printing of this row estimated
-$\sim$12.3 min/epoch and $\sim$20 h by scaling this network's single-card
-throughput by MobileNetV2's four-card efficiency. That was $8\%$ optimistic.
-A second and more mechanical-looking estimate, scaling MobileNetV2's
-measured all-reduce cost by Conv-M's $2.77\times$ larger gradients, gave
-$41.8$ h and was wrong by $70\%$. Most of the four-card overhead is not
-all-reduce at all. At global 256 the host feeds four times as many images
-per step, and that cost grows with the batch rather than with the model.
+\medskip\noindent Most of the four-card overhead here is not all-reduce.
+At global 256 the host feeds four times as many images per step, and that
+cost grows with the batch rather than with the model. The evidence is that
+an estimate built the other way --- scaling MobileNetV2's measured
+all-reduce cost by Conv-M's $2.77\times$ larger gradients --- missed the
+measured figure by $70\%$.
 
 \medskip\noindent\textbf{[TODO: run \texttt{mnv4-imagenet-verified}.]}
 
@@ -7723,19 +7725,19 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 371 & 30.9 & $\sim$180.5 h (7.5 d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & 181 & 15.1 & $\sim$91.7 h (3.8 d) & TBD \\
+4$\times$ 3060 (CUDA)     & 151 & 12.6 & $\sim$77.1 h (3.2 d) & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent Set that against the $\sim$8.6 minutes per epoch the phase-2
-350-epoch row reports on the same four cards, and the gap is not a
-property of either network. The verified path is fp32 throughout, with no
-bf16 artifact anywhere in \texttt{verified\_mlir/}, while every phase-2
-row in this section was measured in bf16 with the MBConv convolutions
-cast. The two columns measure the same architecture at different
-precisions, so the ratio between them is the cost of the missing cast and
-nothing else.
+350-epoch row reports on the same four cards. \textbf{The precision
+difference that used to explain this gap is gone}: the verified renders
+now carry a bf16 arm, and the row above is measured on it, so both
+columns are bf16 over the same architecture. Roughly $1.8\times$ per
+epoch survives that change. What is left is the lowerer, not the cast
+and not the network.
 
 \noindent\textbf{[TODO: run \texttt{efficientnet-imagenet-verified}.]}
 
@@ -8693,21 +8695,23 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 223 & 37.2 & $\sim$186 h (7.8 d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & 184 & 30.7 & $\sim$156.6 h (6.5 d) & TBD \\
+4$\times$ 3060 (CUDA)     & 161 & 26.9 & $\sim$137.4 h (5.7 d) & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent That is 10,009 steps per epoch, against the reference's 5,004.
-\textbf{Do not read 37.2 minutes against the phase-2 rows' 14.9 as an
-architecture result}, because two things differ at once and neither is
-the network. The verified path is fp32 throughout, with no bf16 artifact
-anywhere in \texttt{verified\_mlir/}, while every phase-2 row in this
-section was measured in bf16. And the verified render's batch is 32 per
-device, so four replicas give a global 128 against phase 2's 256. The
-batch is 32 because \texttt{cBS} is still a private constant in the
-renderer while \texttt{nClasses} became a parameter, which is a refactor
-rather than a limit.
+\textbf{One thing differs between this row and the phase-2 rows, and it is
+not the network}: the verified render's batch is 32 per device, so four
+replicas give a global 128 against phase 2's 256. Both still see the same
+1.28M images per epoch, which is why the minutes-per-epoch column compares
+even though the step counts do not. The batch is 32 because \texttt{cBS}
+is still a private constant in the renderer while \texttt{nClasses} became
+a parameter, which is a refactor rather than a limit. Precision no longer
+differs --- the verified renders gained a bf16 arm and the row above is
+measured on it --- so the remaining gap, about $2\times$ per epoch, is the
+lowerer.
 
 \noindent\textbf{[TODO: run \texttt{convnext-imagenet-verified}.]}
 
@@ -10523,23 +10527,22 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 287 & 12.0 & $\sim$60 h (2.5 d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & 163 &  6.8 & $\sim$37.1 h (1.5 d) & TBD \\
+4$\times$ 3060 (CUDA)     & 159 &  6.6 & $\sim$36.3 h (1.5 d) & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent At global batch 512 that is 2,502 steps per epoch, which is
-the reference's own figure. \textbf{One thing differs between this row
-and the phase-2 rows above, and it is not the network}: the verified
-path is fp32 throughout, with no bf16 artifact anywhere in
-\texttt{verified\_mlir/}, while every phase-2 row in this section was
-measured in bf16. The batch does \emph{not} differ, unlike
-Chapter~\ref{chap:layernorm}'s phase-4 row, where the render's smaller
-per-device batch confounded the comparison a second way. So 12.0
-minutes per epoch against phase 2's 7.6 is close to a clean read of what
-dropping to fp32 costs on this box. At 12.0 minutes it is also the
-fastest phase-4 epoch in Part 1, ahead of MobileNetV2's 15.7 and
-ResNet-34's 18.6, though the 300-epoch schedule still makes it a longer
+the reference's own figure. \textbf{Nothing confounds this
+comparison.} The batch does \emph{not} differ, unlike Chapter~\ref{chap:layernorm}'s
+phase-4 row, where the render's smaller per-device batch confounded it a
+second way; and precision no longer differs either, since the verified
+renders gained a bf16 arm and the row above is measured on it. What that
+leaves is the one place in Part 1 where the verified row is the
+\emph{faster} of the two, at 6.8 minutes per epoch against phase 2's 7.6.
+It is also the fastest phase-4 epoch in Part 1, ahead of MobileNetV2's
+10.8 and ResNet-34's 18.6, though the 300-epoch schedule still makes it a longer
 run in total than Chapter~\ref{chap:residual}'s ninety.
 
 \noindent\textbf{[TODO: run \texttt{vit-imagenet-verified}.]}
