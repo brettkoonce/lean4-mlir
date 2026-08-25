@@ -1420,6 +1420,12 @@ lean_exe «cifar8-verified-momentum» where
 -- points at the bf16-rendered artifacts. ⚠ FORWARD-only bf16, and NO speedup by design
 -- (§5.3: 0.87× at cifar8's shapes) — these exist to show the optimizer ORDERING is invariant
 -- under precision, which is the CIFAR chapter's whole claim.
+-- The batched-render GATE: same net/hyperparameters/init as cifar8-verified-adam, on the
+-- `…FaithfulB` artifact. The two renders denote the same function, so the curves must agree.
+lean_exe «cifar8b-verified-adam» where
+  root := `apps.cifar.MainCifar8bVerifiedAdam
+  moreLinkArgs := lowererLink
+
 lean_exe «cifar8-bf16-verified» where
   root := `apps.cifar.MainCifar8Bf16Verified
   moreLinkArgs := lowererLink

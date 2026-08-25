@@ -246,6 +246,19 @@ def cifar8Bf16Verified : VerifiedNetSpec :=
     slug  := "cifar8_bf16"
     blurb := "Deeper CIFAR-10 CNN (8 convs, bf16 FORWARD convs, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU" }
 
+/-- **`cifar8` on the BATCHED op family** (`cifar8AdamTrainStepFaithfulB`). Same net, same
+    layers, same parameter layout as `cifar8Verified`; only the slug differs, so this trains on
+    `verified_mlir/cifar8b_adam_train_step.mlir`.
+
+    ⭐ Its reason to exist is a GATE: the batched and per-example renders denote the same
+    function, so their f32 training runs must agree. Any divergence is a bug in the migration,
+    and it is much cheaper to catch here than inside a bf16 result. -/
+def cifar8bVerified : VerifiedNetSpec :=
+  { cifar8Verified with
+    name  := "CIFAR-CNN8-batched"
+    slug  := "cifar8b"
+    blurb := "Deeper CIFAR-10 CNN (8 convs, BATCHED op family, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU" }
+
 #guard cifar8Verified.toSpecs ==
   #[(#[16, 3, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),
     (#[16, 16, 3, 3], 0), (#[16], 2), (#[16, 16, 3, 3], 0), (#[16], 2),

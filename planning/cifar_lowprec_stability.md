@@ -242,8 +242,15 @@ epochs.** That is the CIFAR chapter's claim — optimizers scale — extended to
 with them**. The precision changes the arithmetic, not the ranking.
 
 ⭐ And the two arms with an fp32 master agree ACROSS precisions to within the noise floor: AdamW
-spreads 0.13 pt @20 (71.92 / 71.79 / 71.87) and Nesterov 0.56 pt @20 — both at or under the
-measured ~0.6–0.7 pt run-to-run spread (§5.2a). Three different arithmetics, one curve.
+spreads 0.13 pt @20 (71.92 / 71.79 / 71.87) and Nesterov 0.56 pt @20.
+
+⚠ **CORRECTED 2026-08-25: do not read those spreads as precision.** They are well INSIDE the
+noise, not evidence of tight agreement. The run-to-run spread is optimizer-dependent and larger
+than first stated: two from-scratch runs of the SAME AdamW binary at the SAME seed gave
+71.92 / 70.72 @20 and 75.50 / 73.79 @40 — i.e. **1.20 pt @20 and 1.71 pt @40**, against the
+0.6–0.7 pt measured on the momentum arm. So AdamW's 0.13 pt cross-precision spread is luck at
+n=1, not resolution. ▶ The ORDERING conclusion is untouched — the gaps BETWEEN optimizers are
+2–14 pt, far above even the 1.71 pt floor — but any per-cell accuracy claim needs n≥5.
 
 #### 5.2a ⚠ The one arm that does not reconcile, and the noise floor
 

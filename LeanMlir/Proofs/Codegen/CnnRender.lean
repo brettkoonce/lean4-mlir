@@ -1450,7 +1450,7 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let inner : String := go.run' 0
   -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention (see ResNet34RenderB:
   -- a mismatch here is refused by the shim as "entry mismatch", not silently mis-run).
-  let fname := if replicas ≤ 1 then "cifar8_adam_train_step" else "cifar8_adamdp_train_step"
+  let fname := if replicas ≤ 1 then "cifar8b_adam_train_step" else "cifar8b_adamdp_train_step"
   let msfx := sfx "m"
   let vsfx := sfx "v"
   "module @m {\n" ++
@@ -2042,6 +2042,14 @@ end Proofs.StableHLO
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0) 1 .adamw (bf16 := true))
+
+-- Eval forward for the batched slug. The forward graph is IDENTICAL either way (the batch was
+-- always in the MLIR; only the Lean-side type changed), so this is the f32 `cifar8_fwd` renamed
+-- rather than a re-render — it cannot drift from what the `…V` arms evaluate against, which is
+-- exactly what makes the B-vs-V training comparison a controlled one.
+#eval do
+  let fwd ← IO.FS.readFile "verified_mlir/cifar8_fwd.mlir"
+  IO.FS.writeFile "verified_mlir/cifar8b_fwd.mlir" (fwd.replace "@cifar8_fwd" "@cifar8b_fwd")
 
 #eval IO.FS.writeFile "verified_mlir/cifar8_bf16_adam_train_step.mlir"
   ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
