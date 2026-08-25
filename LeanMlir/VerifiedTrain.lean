@@ -4190,6 +4190,18 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
+  -- ⭐ The TRAIN STEP declares one more tensor than the forward when the graph emits a loss:
+  -- a rank-0 scalar after the params. Same construction as the fp32 `train` (see the `tsShapes`
+  -- line in that function) — this path passed plain `shapes` to both, so on the two nets with
+  -- `lossSlot := true` (`mlpVerified`, `cnnVerified`) it supplied N destinations for a graph
+  -- returning N+1 and the PJRT shim's G4 arity gate refused to run:
+  --     G4 VIOLATION: @mlp_train_step returns 7 outputs, caller supplied 6
+  --     G4 VIOLATION: @cnn_train_step returns 11 outputs, caller supplied 10
+  -- cifar8 leaves `lossSlot` false, which is the only reason the CIFAR fp8 arms ever ran.
+  -- ⚠ `shapes` (no loss slot) stays correct for `forwardF32` below — the eval graph returns
+  -- logits only. The two must NOT be unified.
+  -- The extra trailing float is never read back: `F32E4M3.addDelta` iterates `F32.size master`.
+  let tsShapes := packShapes (if net.lossSlot then net.paramShapes ++ #[#[]] else net.paramShapes)
   let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
@@ -4209,7 +4221,7 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
       let paramsQ := F32E4M3.quantPackedParams params net.specs   -- E4M3 weight operands
       let out ← LowererSession.mlpTrainStepV tsSess tsFn
-                  xb paramsQ shapes yb bs.toUSize d0.toUSize nc.toUSize
+                  xb paramsQ tsShapes yb bs.toUSize d0.toUSize nc.toUSize
       params := F32E4M3.addDelta params out paramsQ              -- master += (out − paramsQ)
     let mut correct := 0
     for bi in [0:nbt] do
