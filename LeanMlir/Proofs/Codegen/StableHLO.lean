@@ -155,6 +155,16 @@ inductive BatchableOp : Nat → Nat → Type where
   -- then the bias in f32. See `flatConvFBf16` for why the result type is load-bearing.
   | convBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
+  -- ⭐ **fp8 (E4M3) peer of `convBf16`** — identical shape, identical denotation, one different
+  -- type string. Measured 2026-08-25 (`planning/fp8_in_graph.md` §1) to lower at cifar8's own
+  -- conv shapes: every layer reaches `__cudnn$convForwardGraph` with f8 values surviving into
+  -- the optimized HLO. ⚠ f8 operands, **f8-TYPED result**, convert back — an f32 result is
+  -- 1.17× where the f8 result is 3.43× (§2.3), the same result-type rule as bf16 at a third
+  -- precision. ⚠⚠ UNSCALED: E4M3's max is 448, so this is only sound where the operands are
+  -- known to fit. See §4 — scales are the next rung, and `e4m3_render_faithful` already covers
+  -- the scaled form for any `q`/`sx`/`sW`.
+  | convF8 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
+      (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
   | convStridedBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
   -- ⭐ The **XLA `'SAME'`** stride-2 conv — same shape as `convStrided`, different padding, and
@@ -1650,6 +1660,14 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .conv _ _ W bias => flatConv W bias
   | _, _, .convStrided _ _ W bias => flatConvStride2 W bias
   | _, _, .convBf16 (h := h) (w := w) rnd _ _ W bias =>
+      fun x i => rnd (flatConv (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
+                 + Tensor3.flatten (fun o _ _ => bias o) i
+  -- ⭐ Byte-identical to `convBf16`'s denotation above, and that is the point: the meaning of a
+  -- low-precision op is "round the operands, round the result", which is already parametric in
+  -- `rnd`. Passing E4M3 rounding instead of bf16 rounding is the whole semantic difference, so
+  -- the accuracy bounds INSTANTIATE rather than needing restatement (`fp8E4M3 : FloatModel` at
+  -- u = 2⁻⁴ is already in `Binary32Instance.lean`).
+  | _, _, .convF8 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (flatConv (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
                  + Tensor3.flatten (fun o _ _ => bias o) i
   | _, _, .convStridedBf16 (h := h) (w := w) rnd _ _ W bias =>
@@ -4385,6 +4403,13 @@ def tyI1 (dims : List Nat) : String :=
 def tyBf16 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["bf16"]) ++ ">"
 
+/-- fp8 peer of `tyBf16`. **E4M3 only** — `planning/cifar_lowprec_stability.md` §2.3 measured
+    that `f8E5M2` compiles, lowers to a plain `__cublas$lt$matmul`, and leaves ZERO `f8e5m2`
+    values in the optimized HLO: the type is silently widened away. Only E4M3 reaches the fp8
+    units on sm_89, so there is deliberately no E5M2 spelling here. -/
+def tyF8 (dims : List Nat) : String :=
+  "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["f8E4M3FN"]) ++ ">"
+
 /-- Fresh SSA name `%v{k}`. -/
 def fresh : StateM Nat String := do
   let k ← get; set (k + 1); pure s!"%v{k}"
@@ -4592,6 +4617,10 @@ def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List Str
   -- two different graphs indistinguishable after `skel`.
   | .convBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
       ("convBf16", [wN, bN], [N, ic, oc, h, w, kH, kW])
+  -- DISTINCT tag for the same reason `convBf16` has one: the emitted TEXT differs (f8 converts
+  -- and an f8 result type), so sharing a Raw would make two different graphs indistinguishable.
+  | .convF8 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
+      ("convF8", [wN, bN], [N, ic, oc, h, w, kH, kW])
   | .convStridedBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
       ("convStridedBf16", [wN, bN], [N, ic, oc, h, w, kH, kW])
   -- ⚠ A DISTINCT tag, deliberately. Aliasing this onto "convStrided" (the way the bias-grads
@@ -6697,6 +6726,25 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
             s!" : ({tyBf16 [B,ic,h,w]}, {tyBf16 [oc,ic,kH,kW]}) -> {tyBf16 [B,oc,h,w]}\n" ++
             s!"    {cf} = stablehlo.convert {cc} : ({tyBf16 [B,oc,h,w]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
+            s!"    {ca} = stablehlo.add {cf}, {bb} : {ty [B,oc,h,w]}\n" ++
+            s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
+      -- fp8 (E4M3) emit: byte-for-byte `convBf16`'s shape with `tyF8` in place of
+      -- `tyBf16`. f8 operands, f8-TYPED conv result, convert back, bias added in f32.
+      | "convF8", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
+          let p := (kH - 1) / 2
+          let xr ← fresh; let xb ← fresh; let wb ← fresh; let cc ← fresh; let cf ← fresh
+          let bb ← fresh; let ca ← fresh; let o ← fresh
+          pure (
+            s!"    {xr} = stablehlo.reshape {r} : ({ty [B, ic*h*w]}) -> {ty [B,ic,h,w]}\n" ++
+            s!"    {xb} = stablehlo.convert {xr} : ({ty [B,ic,h,w]}) -> {tyF8 [B,ic,h,w]}\n" ++
+            s!"    {wb} = stablehlo.convert {wN} : ({ty [oc,ic,kH,kW]}) -> {tyF8 [oc,ic,kH,kW]}\n" ++
+            s!"    {cc} = stablehlo.convolution({xb}, {wb})\n" ++
+            "      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],\n" ++
+            s!"      window = " ++ "{" ++ s!"stride = [1, 1], pad = [[{p}, {p}], [{p}, {p}]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]" ++ "}\n" ++
+            "      {batch_group_count = 1 : i64, feature_group_count = 1 : i64}" ++
+            s!" : ({tyF8 [B,ic,h,w]}, {tyF8 [oc,ic,kH,kW]}) -> {tyF8 [B,oc,h,w]}\n" ++
+            s!"    {cf} = stablehlo.convert {cc} : ({tyF8 [B,oc,h,w]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {ca} = stablehlo.add {cf}, {bb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)

@@ -1244,7 +1244,7 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
     (x : Vec (B*(ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))))
     -- Trailing + defaulted so every existing positional call site is unchanged.
-    (replicas : Nat := 1) (opt : CifarOpt := .adamw) (bf16 : Bool := false) : String :=
+    (replicas : Nat := 1) (opt : CifarOpt := .adamw) (bf16 : Bool := false) (fp8 : Bool := false) : String :=
   let zrnd : ℝ → ℝ := fun r => r   -- identity, as the ImageNet renderers pass it
   let s4h := 2*h; let s4w := 2*w
   let s3h := 2*s4h; let s3w := 2*s4w
@@ -1290,24 +1290,24 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
   let go : StateM Nat String := do
     -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
-    let (cHc1, nHc1) ← pretty B (if bf16 then .batchOp (N := B) (.convBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else .batchOp (N := B) (.conv (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
+    let (cHc1, nHc1) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else if bf16 then .batchOp (N := B) (.convBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else .batchOp (N := B) (.conv (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.batchOp (N := B) .relu (.operand nHc1 bS1c1))
-    let (cHc2, nHc2) ← pretty B (if bf16 then .batchOp (N := B) (.convBf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1) else .batchOp (N := B) (.conv (h := s1h) (w := s1w) "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1))
+    let (cHc2, nHc2) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1) else if bf16 then .batchOp (N := B) (.convBf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1) else .batchOp (N := B) (.conv (h := s1h) (w := s1w) "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1))
     let (cAc2, nAc2) ← pretty B (.batchOp (N := B) .relu (.operand nHc2 bS1c1))
     let (cP1, nPool1) ← pretty B (.batchOp (N := B) (.maxPool (c := c1) (h := s2h) (w := s2w)) (.operand nAc2 bS1c1))
-    let (cHc3, nHc3) ← pretty B (if bf16 then .batchOp (N := B) (.convBf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1) else .batchOp (N := B) (.conv (h := s2h) (w := s2w) "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1))
+    let (cHc3, nHc3) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1) else if bf16 then .batchOp (N := B) (.convBf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1) else .batchOp (N := B) (.conv (h := s2h) (w := s2w) "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1))
     let (cAc3, nAc3) ← pretty B (.batchOp (N := B) .relu (.operand nHc3 bS2c2))
-    let (cHc4, nHc4) ← pretty B (if bf16 then .batchOp (N := B) (.convBf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2) else .batchOp (N := B) (.conv (h := s2h) (w := s2w) "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2))
+    let (cHc4, nHc4) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2) else if bf16 then .batchOp (N := B) (.convBf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2) else .batchOp (N := B) (.conv (h := s2h) (w := s2w) "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2))
     let (cAc4, nAc4) ← pretty B (.batchOp (N := B) .relu (.operand nHc4 bS2c2))
     let (cP2, nPool2) ← pretty B (.batchOp (N := B) (.maxPool (c := c2) (h := s3h) (w := s3w)) (.operand nAc4 bS2c2))
-    let (cHc5, nHc5) ← pretty B (if bf16 then .batchOp (N := B) (.convBf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2) else .batchOp (N := B) (.conv (h := s3h) (w := s3w) "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2))
+    let (cHc5, nHc5) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2) else if bf16 then .batchOp (N := B) (.convBf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2) else .batchOp (N := B) (.conv (h := s3h) (w := s3w) "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2))
     let (cAc5, nAc5) ← pretty B (.batchOp (N := B) .relu (.operand nHc5 bS3c3))
-    let (cHc6, nHc6) ← pretty B (if bf16 then .batchOp (N := B) (.convBf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3) else .batchOp (N := B) (.conv (h := s3h) (w := s3w) "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3))
+    let (cHc6, nHc6) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3) else if bf16 then .batchOp (N := B) (.convBf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3) else .batchOp (N := B) (.conv (h := s3h) (w := s3w) "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3))
     let (cAc6, nAc6) ← pretty B (.batchOp (N := B) .relu (.operand nHc6 bS3c3))
     let (cP3, nPool3) ← pretty B (.batchOp (N := B) (.maxPool (c := c3) (h := s4h) (w := s4w)) (.operand nAc6 bS3c3))
-    let (cHc7, nHc7) ← pretty B (if bf16 then .batchOp (N := B) (.convBf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3) else .batchOp (N := B) (.conv (h := s4h) (w := s4w) "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3))
+    let (cHc7, nHc7) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3) else if bf16 then .batchOp (N := B) (.convBf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3) else .batchOp (N := B) (.conv (h := s4h) (w := s4w) "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3))
     let (cAc7, nAc7) ← pretty B (.batchOp (N := B) .relu (.operand nHc7 bS4c4))
-    let (cHc8, nHc8) ← pretty B (if bf16 then .batchOp (N := B) (.convBf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4) else .batchOp (N := B) (.conv (h := s4h) (w := s4w) "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4))
+    let (cHc8, nHc8) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4) else if bf16 then .batchOp (N := B) (.convBf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4) else .batchOp (N := B) (.conv (h := s4h) (w := s4w) "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4))
     let (cAc8, nAc8) ← pretty B (.batchOp (N := B) .relu (.operand nHc8 bS4c4))
     let (cP4, nPool4) ← pretty B (.batchOp (N := B) (.maxPool (c := c4) (h := h) (w := w)) (.operand nAc8 bS4c4))
     let (cH9, nH9) ← pretty B (.batchOp (N := B) (.dense "%W9" "%b9" W₉ b₉) (.operand nPool4 bPc4))
@@ -2023,6 +2023,21 @@ end Proofs.StableHLO
 -- the `…V` artifacts above (bf16 forward convs only), these carry bf16 through the BACKWARD as
 -- well — `convBackBatchedBf16` + `convWeightGradBBf16` — because those twins exist for the
 -- batched family and not for the per-example one. Zero new verified ops; see §4.1.
+-- ⭐ THE FIRST ARTIFACT IN THIS REPO CONTAINING AN f8 TYPE. Forward convs only for now
+-- (`convBackBatchedF8` / `convWeightGradBF8` do not exist yet — planning/fp8_in_graph.md §6
+-- step 1), and UNSCALED, so this is a lowering probe rather than a trainable arm: E4M3 maxes
+-- at 448 and XLA synthesises scale = 1.0 when given no scale operand (§4).
+#eval IO.FS.writeFile "verified_mlir/cifar8b_fp8_adam_train_step.mlir"
+  ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 64 10 3 3
+    "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) 1 .adamw (bf16 := false) (fp8 := true)).replace
+      "@cifar8b_adam_train_step" "@cifar8b_fp8_adam_train_step")
+
 #eval IO.FS.writeFile "verified_mlir/cifar8b_adam_train_step.mlir"
   (Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
