@@ -263,13 +263,16 @@ inductive BatchableOp : Nat → Nat → Type where
   -- dimension. The descriptor form exists so the batch can move to `N`.
   | softmaxRow {m n : Nat}                                 : BatchableOp (m*n) (m*n)
   | denseRowBack {rows a c : Nat} (wName : String) (W : Mat a c) : BatchableOp (rows*c) (rows*a)
-  -- ⭐ bf16 peer of `denseRowBack` — ViT's input-VJP through Q/K/V/O/fc1/fc2. ⚠⚠ It is a
-  -- `dot_general`, so it takes `dotInBf16`'s emit shape (bf16 operands, **f32-typed result**) and
-  -- NOT the conv shape. `planning/bf16_renderer.md` §9.2 measured the split and §17.2 re-checked
-  -- it at ViT's own `[32,197,192] × [192,768]`: the result type is load-bearing for `convolution`
-  -- and inert for `dot_general`. Do not "unify" the two shapes.
-  -- ▶ Consequence for `den`: an f32 result means the hardware does NOT round the output, so there
-  -- is no outer rounding here — only the two operand casts. That is the opposite of `convBf16`.
+  -- ⭐ bf16 peer of `denseRowBack` — ViT's input-VJP through Q/K/V/O/fc1/fc2.
+  -- ⚠⚠ **bf16 operands, bf16-TYPED RESULT, convert back — the CONV shape, and this is a CHANGE.**
+  -- `planning/bf16_renderer.md` §9.2 measured that `dot_general` reaches the tensor cores with
+  -- EITHER result type and concluded the result type was "inert" for dot. That is true of
+  -- CORRECTNESS and **false of SPEED**, which nobody had measured: on ViT's own MLP chain the
+  -- f32-result shape is 1.18× over f32 and the bf16-result shape is **1.60×** (§20.1). The f32
+  -- result makes the gemm write twice the bytes and takes a worse epilogue.
+  -- ▶ Consequence for `den`: a bf16-typed result means the hardware DOES round the output, so
+  -- there is an outer `rnd` here exactly as in `convBf16`. Omitting it would claim precision the
+  -- hardware does not deliver — the unsound direction.
   | denseRowBackBf16 {rows a c : Nat} (rnd : ℝ → ℝ) (wName : String) (W : Mat a c)
       : BatchableOp (rows*c) (rows*a)
   -- ── ViT / ConvNeXt: the row-indexed and pointwise forward forms (§0.2 ▶2, the batched-index
@@ -333,9 +336,10 @@ inductive BatchableOp : Nat → Nat → Type where
   | denseRow {N a c : Nat} (wName bName : String) (W : Mat a c) (b : Vec c)
       : BatchableOp (N*a) (N*c)
   -- ⭐ bf16 peer of `denseRow` — the six per-block matmuls (Q/K/V/O/fc1/fc2) that are 90 % of a
-  -- ViT step (§17.3). `dot_general` shape: bf16 operands, **f32-typed result**, bias added after
-  -- at the accumulate precision. No outer rounding in `den` for the reason `denseRowBackBf16`
-  -- states — the store is f32 here, unlike every conv op in this file.
+  -- ViT step (§17.3). bf16 operands, **bf16-typed result**, convert back, then the bias in f32.
+  -- ⚠ The outer `rnd` in `den` is the bf16 STORE and the bias is added AFTER it, at the accumulate
+  -- precision, exactly as emitted — `convBf16`'s shape. See `denseRowBackBf16` for why the result
+  -- type changed from f32 and what it was worth.
   | denseRowBf16 {N a c : Nat} (rnd : ℝ → ℝ) (wName bName : String) (W : Mat a c) (b : Vec c)
       : BatchableOp (N*a) (N*c)
   | patchEmbed {ic H W P N D : Nat} (wName bName clsName posName : String)
@@ -383,6 +387,12 @@ inductive SHlo : Nat → Type where
   -- by WIDTH only and has no element type, so "the value is bf16 here" is unsayable. The
   -- op keeps its result f32 (the accumulate), so the index stays honest — the same
   -- bundling `flatConvF` already uses for conv+bias.
+  -- ⚠⚠ **ITS f32-TYPED RESULT IS A PoC ARTEFACT, NOT A RECOMMENDATION.** `dotInBf16` is the
+  -- depth-1 dense proof-of-concept and is rendered by NO net. §9.2 measured that `dot_general`
+  -- reaches the tensor cores with either result type and read that as "the result type is inert
+  -- for dot"; that is true of CORRECTNESS and false of SPEED (§20.1 — an f32 result makes the gemm
+  -- write twice the bytes, worth ~1.2× on a real chain). ▶ ViT's dot ops take the **bf16-typed
+  -- result** shape for that reason. Do not copy this constructor's shape into a new op.
   | dotInBf16  {m n : Nat} (rnd : ℝ → ℝ) (wName : String) (W : Mat m n) : SHlo m → SHlo n
   | dotOut     {m n : Nat} (wName : String) (W : Mat m n)       : SHlo n → SHlo m
   | addBcast   {n : Nat} (bName : String) (b : Vec n)           : SHlo n → SHlo n
@@ -806,8 +816,9 @@ inductive SHlo : Nat → Type where
   -- round two activations. §10.3 called this the genuinely new KIND and it was right.
   -- ▶ The accuracy side comes free anyway: `dot_close_mixed` rounds BOTH operands and never asks
   -- which one is a weight, so this needs no theorem the dense case did not already have.
-  -- ⚠ `dot_general` shape (bf16 operands, f32-typed result), re-checked at ViT's own batched
-  -- `[32,197,64] × [32,64,197]` in §17.2 — batching dims buy no exemption in either direction.
+  -- ⚠ bf16 operands, **bf16-typed result**, convert back — see `denseRowBackBf16` for why that is
+  -- not `dotInBf16`'s shape any more. Re-checked at ViT's own batched `[32,197,64] × [32,64,197]`
+  -- in §17.2: batching dims buy no exemption in either direction.
   | matmulFBBf16 {N m k n : Nat} (rnd : ℝ → ℝ)
       : SHlo (N*(m*k)) → SHlo (N*(k*n)) → SHlo (N*(m*n))
   -- ⚠ A saved-activation backward, so it takes the WHOLE-batch `preAct` and hands example `k` its
@@ -826,8 +837,12 @@ inductive SHlo : Nat → Type where
   | rowDenseWeightGradB {N tk a c : Nat} (xName : String) (x : Vec (N*(tk*a)))
       : SHlo (N*(tk*c)) → SHlo (a*c)
   -- ⭐ bf16 peer — the weight gradient of the six per-block denses. `dot_general` contracting BOTH
-  -- the batch and the token axis (`[0,1] x [0,1]`), so the batch sum happens inside a dot with an
-  -- **f32-typed result**: operands rounded, no outer rounding.
+  -- the batch and the token axis (`[0,1] x [0,1]`), so the batch sum happens inside one dot.
+  -- ⚠⚠ **THE ONE ViT DOT THAT KEEPS ITS f32 RESULT, deliberately.** §20.1's win comes from a
+  -- gemm writing half the bytes, and this gemm's result is the WEIGHT `[a,c]` — 147K elements
+  -- against the activations' 4.8M — so there is no bandwidth to save. What a bf16 store would buy
+  -- is nothing and what it would cost is precision on the optimizer's input. ▶ Hence no outer
+  -- rounding in `den`: operands rounded, f32 accumulate, f32 store.
   -- ⚠ The BIAS gradient beside it (`rowDenseBiasGradB`) stays f32 in every net, for the reason it
   -- does in all six: `Σ dy` is a reduction, not a contraction, and there is no tensor core in it.
   | rowDenseWeightGradBBf16 {N tk a c : Nat} (rnd : ℝ → ℝ) (xName : String) (x : Vec (N*(tk*a)))
@@ -1670,12 +1685,11 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .maxPool3s2 (c := c) (h := h) (w := w) => maxPool3s2Flat c h w
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
-  -- ⚠ TWO roundings, not three. The emit gives this `dot_general` an f32-TYPED result, so the
-  -- hardware does not round the output — only the two operand casts are real. `convBf16`'s
-  -- outer `rnd` would be WRONG here, and claiming it would be claiming a rounding that the
-  -- emitted graph does not perform (harmless for soundness, but false about the artifact).
+  -- ⚠ THREE roundings: the two operand casts and the **bf16 STORE**. The emit gives this
+  -- `dot_general` a bf16-TYPED result (§20.1 — it is worth 1.18× → 1.60× and §9.2 had only ever
+  -- checked that shape for correctness), so the hardware rounds the output too.
   | _, _, .denseRowBackBf16 (rows := rows) (a := a) (c := c) rnd _ W =>
-      fun dy => rowDenseBackFlat rows a c (fun i j => rnd (W i j)) (fun j => rnd (dy j))
+      fun dy i => rnd (rowDenseBackFlat rows a c (fun p q => rnd (W p q)) (fun j => rnd (dy j)) i)
   -- The five ViT/ConvNeXt row/pointwise forms — each denotes the SAME per-example function its
   -- descriptor-less peer does (`.geluF`, `.transposeF`, `.lnRowF`, `.rowScaleF`, `.rowBiasF`),
   -- which is what makes the batched node a `batchMap` of a proven map rather than a new function.
@@ -1702,10 +1716,15 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   -- (`.denseRowF`, `.patchEmbedF`, `.clsSliceF`, `.clsPadF`, `.headSliceF`, `.headPadF`), which is
   -- what makes the batched node a `batchMap` of a proven map rather than a new function.
   | _, _, .denseRow (N := N) (a := a) (c := c) _ _ W b => rowDenseFlat N a c W b
-  -- ⚠ The BIAS is NOT rounded: `rowDenseFlat` adds it after the contraction, and the emit adds
-  -- it after the convert-back, in f32. Rounding it here would describe a different graph.
+  -- ⚠ `convBf16`'s exact shape, one op class over: the outer `rnd` is the bf16 STORE of the
+  -- `dot_general`'s bf16-typed result, the inner two are the operand casts, and the BIAS is added
+  -- AFTER — outside the rounding, at the accumulate precision — because the emit adds it after the
+  -- convert-back. Rounding the bias here, or folding it inside via `rowDenseFlat`'s own `b`
+  -- argument, would describe a different graph.
   | _, _, .denseRowBf16 (N := N) (a := a) (c := c) rnd _ _ W b =>
-      fun x => rowDenseFlat N a c (fun i j => rnd (W i j)) b (fun j => rnd (x j))
+      fun x => rowBiasFlat N c b
+        (fun i => rnd (rowDenseFlat N a c (fun p q => rnd (W p q)) (fun _ => 0)
+                        (fun j => rnd (x j)) i))
   | _, _, .patchEmbed (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ _ _ Wc bc cls pos =>
       patchEmbedFlat ic H W P N D Wc bc cls pos
   -- ⚠⚠ The rounding placement lives in `patchEmbedFlatBf16`, next to `patchEmbedFlat`, because it
@@ -2089,11 +2108,11 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   --    operand of a binary op, not a saved activation. Its body never cared.
   | _, .matmulFB (N := N) (m := m) (k := k) (n := n) a b =>
       batchMapAux N (matMulFlat m k n) (den a) (den b)
-  -- ⚠ BOTH operands rounded and NO outer rounding — the f32-result `dot_general` shape. This is
-  -- the activation × activation case, so `rnd` lands on two running values rather than on a weight
-  -- and a value; `batchMapAux` is unchanged because it never cared which operand was which.
+  -- ⚠ BOTH operands rounded AND an outer bf16 store — the bf16-typed-result shape (§20.1). This is
+  -- the activation × activation case, so all three roundings land on running values rather than on
+  -- a weight; `batchMapAux` is unchanged because it never cared which operand was which.
   | _, .matmulFBBf16 (N := N) (m := m) (k := k) (n := n) rnd a b =>
-      batchMapAux N (fun u v => matMulFlat m k n (fun j => rnd (u j)) (fun j => rnd (v j)))
+      batchMapAux N (fun u v i => rnd (matMulFlat m k n (fun j => rnd (u j)) (fun j => rnd (v j)) i))
         (den a) (den b)
   | _, .softmaxRowBackB (N := N) (m := m) (n := n) _ preAct e =>
       batchMapAux N (rowSoftmaxBackFlat m n) preAct (den e)
@@ -2102,8 +2121,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         Mat.flatten (fun i j => ∑ t : Fin tk,
           batchSlice tk a (batchSlice N (tk*a) x b) t i
             * batchSlice tk c (batchSlice N (tk*c) (den e) b) t j) idx
-  -- ⚠ The emitted `dot_general` contracts `[0,1] x [0,1]` — batch AND token in one op — with an
-  -- f32-typed result, so both `∑`s ride the f32 accumulate and only the two leaf reads round.
+  -- ⚠ The emitted `dot_general` contracts `[0,1] x [0,1]` — batch AND token in one op — and keeps
+  -- its f32-typed result deliberately (see the constructor), so both `∑`s ride the f32 accumulate,
+  -- only the two leaf reads round, and there is NO outer store rounding. ⭐ It is now the only bf16
+  -- dot in the kit shaped this way, which is exactly why the constructor says why.
   | _, .rowDenseWeightGradBBf16 (N := N) (tk := tk) (a := a) (c := c) rnd _ x e =>
       fun idx => ∑ b : Fin N,
         Mat.flatten (fun i j => ∑ t : Fin tk,
@@ -7280,18 +7301,20 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, rows*c]}) -> {ty [B,rows,c]}\n" ++
             s!"    {dg} = stablehlo.dot_general {dn}, {wN}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({ty [B,rows,c]}, {ty [a,c]}) -> {ty [B,rows,a]}\n" ++
             s!"    {o} = stablehlo.reshape {dg} : ({ty [B,rows,a]}) -> {ty [B, rows*a]}\n", o :: st)
-      -- ⚠ bf16 operands, **f32-typed `dot_general` result**, and NO convert back — the dot shape,
-      -- not the conv one. `dot_general` reaches the tensor cores regardless of its result type
-      -- (§9.2, re-measured at ViT's own shapes in §17.2), so the cheapest correct spelling is to
-      -- accumulate straight into f32. Copying `convBf16`'s convert-back here would add a node that
-      -- buys nothing and costs a round trip.
+      -- ⚠⚠ bf16 operands, **bf16-TYPED result**, convert back — the CONV shape, applied to a dot.
+      -- §9.2 established that `dot_general` reaches the tensor cores with EITHER result type and
+      -- read that as "the result type is inert for dot". It is inert for CORRECTNESS and it is not
+      -- inert for SPEED: an f32 result makes the gemm write twice the bytes and take a worse
+      -- epilogue. Measured on ViT's own MLP chain (§20.1): f32-result 1.18×, bf16-result **1.60×**.
+      -- ▶ So the convert-back is not "a node that buys nothing" — it is most of the win.
       | "denseRowBackPBf16", [wN], [_N, rows, a, c] => do
-          let dn ← fresh; let db ← fresh; let wb ← fresh; let dg ← fresh; let o ← fresh
+          let dn ← fresh; let db ← fresh; let wb ← fresh; let dg ← fresh; let df ← fresh; let o ← fresh
           pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, rows*c]}) -> {ty [B,rows,c]}\n" ++
             s!"    {db} = stablehlo.convert {dn} : ({ty [B,rows,c]}) -> {tyBf16 [B,rows,c]}\n" ++
             s!"    {wb} = stablehlo.convert {wN} : ({ty [a,c]}) -> {tyBf16 [a,c]}\n" ++
-            s!"    {dg} = stablehlo.dot_general {db}, {wb}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({tyBf16 [B,rows,c]}, {tyBf16 [a,c]}) -> {ty [B,rows,a]}\n" ++
-            s!"    {o} = stablehlo.reshape {dg} : ({ty [B,rows,a]}) -> {ty [B, rows*a]}\n", o :: st)
+            s!"    {dg} = stablehlo.dot_general {db}, {wb}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({tyBf16 [B,rows,c]}, {tyBf16 [a,c]}) -> {tyBf16 [B,rows,a]}\n" ++
+            s!"    {df} = stablehlo.convert {dg} : ({tyBf16 [B,rows,a]}) -> {ty [B,rows,a]}\n" ++
+            s!"    {o} = stablehlo.reshape {df} : ({ty [B,rows,a]}) -> {ty [B, rows*a]}\n", o :: st)
       -- ══ ViT increment 1: the six batch-invariant forms. Every one is byte-for-byte its
       --    per-example peer's emit with the TOKEN count read off the tag (`tk`) instead of off the
       --    SHlo index — which is the whole content of the move, since `B` was always `pretty`'s.
@@ -7304,17 +7327,19 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [c]}) -> {ty [B,tk,c]}\n" ++
             s!"    {ob} = stablehlo.add {dg}, {bb} : {ty [B,tk,c]}\n" ++
             s!"    {o} = stablehlo.reshape {ob} : ({ty [B,tk,c]}) -> {ty [B, tk*c]}\n", o :: st)
-      -- ⚠ The dot shape again: bf16 operands, f32-typed result, bias added after in f32. This is
-      -- the op that carries ViT — six sites per block × 12 blocks.
+      -- ⚠⚠ bf16-TYPED result then convert back, per `denseRowBackPBf16`'s note — and this is the op
+      -- that carries ViT, six sites per block × 12 blocks. The BIAS is added after the convert, in
+      -- f32, which is what `den`'s outer `rnd` sits inside of.
       | "denseRowPBf16", [wN, bN], [_N, tk, a, c] => do
-          let xn ← fresh; let xb ← fresh; let wb ← fresh; let dg ← fresh
+          let xn ← fresh; let xb ← fresh; let wb ← fresh; let dg ← fresh; let df ← fresh
           let bb ← fresh; let ob ← fresh; let o ← fresh
           pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, tk*a]}) -> {ty [B,tk,a]}\n" ++
             s!"    {xb} = stablehlo.convert {xn} : ({ty [B,tk,a]}) -> {tyBf16 [B,tk,a]}\n" ++
             s!"    {wb} = stablehlo.convert {wN} : ({ty [a,c]}) -> {tyBf16 [a,c]}\n" ++
-            s!"    {dg} = stablehlo.dot_general {xb}, {wb}, contracting_dims = [2] x [0], precision = [DEFAULT, DEFAULT] : ({tyBf16 [B,tk,a]}, {tyBf16 [a,c]}) -> {ty [B,tk,c]}\n" ++
+            s!"    {dg} = stablehlo.dot_general {xb}, {wb}, contracting_dims = [2] x [0], precision = [DEFAULT, DEFAULT] : ({tyBf16 [B,tk,a]}, {tyBf16 [a,c]}) -> {tyBf16 [B,tk,c]}\n" ++
+            s!"    {df} = stablehlo.convert {dg} : ({tyBf16 [B,tk,c]}) -> {ty [B,tk,c]}\n" ++
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [c]}) -> {ty [B,tk,c]}\n" ++
-            s!"    {ob} = stablehlo.add {dg}, {bb} : {ty [B,tk,c]}\n" ++
+            s!"    {ob} = stablehlo.add {df}, {bb} : {ty [B,tk,c]}\n" ++
             s!"    {o} = stablehlo.reshape {ob} : ({ty [B,tk,c]}) -> {ty [B, tk*c]}\n", o :: st)
       | "patchEmbedP", [wN, bN, clsN, posN], [_N, ic, H, W, P, tk, D] => do
           let hp := H / P; let wp := W / P
@@ -8520,13 +8545,15 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       -- ⚠ Both operand converts are on VALUES, not on a weight — nothing in the emit cares, and
       -- neither does `dot_close_mixed`, which rounds both sides.
       | "matmulFBf16", [m, k, n] => do
-          let an ← fresh; let bn ← fresh; let ab ← fresh; let bb ← fresh; let mm ← fresh; let o ← fresh
+          let an ← fresh; let bn ← fresh; let ab ← fresh; let bb ← fresh
+          let mm ← fresh; let mf ← fresh; let o ← fresh
           pure (s!"    {an} = stablehlo.reshape {a} : ({ty [B, m*k]}) -> {ty [B,m,k]}\n" ++
             s!"    {bn} = stablehlo.reshape {b} : ({ty [B, k*n]}) -> {ty [B,k,n]}\n" ++
             s!"    {ab} = stablehlo.convert {an} : ({ty [B,m,k]}) -> {tyBf16 [B,m,k]}\n" ++
             s!"    {bb} = stablehlo.convert {bn} : ({ty [B,k,n]}) -> {tyBf16 [B,k,n]}\n" ++
-            s!"    {mm} = stablehlo.dot_general {ab}, {bb}, batching_dims = [0] x [0], contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({tyBf16 [B,m,k]}, {tyBf16 [B,k,n]}) -> {ty [B,m,n]}\n" ++
-            s!"    {o} = stablehlo.reshape {mm} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+            s!"    {mm} = stablehlo.dot_general {ab}, {bb}, batching_dims = [0] x [0], contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({tyBf16 [B,m,k]}, {tyBf16 [B,k,n]}) -> {tyBf16 [B,m,n]}\n" ++
+            s!"    {mf} = stablehlo.convert {mm} : ({tyBf16 [B,m,n]}) -> {ty [B,m,n]}\n" ++
+            s!"    {o} = stablehlo.reshape {mf} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
       | _, _ => pure (s!"    // MALFORMED batched2 {tag} {info}\n", a :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 

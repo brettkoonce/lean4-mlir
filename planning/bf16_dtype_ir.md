@@ -1,12 +1,54 @@
-# bf16_dtype_ir.md — letting activations STAY bf16 between ops
+# bf16_dtype_ir.md — letting activations STAY bf16 between ops ⛔ **CANCELLED, see §0**
 
 Scoped 2026-08-25 on ares (6× RTX 4060 Ti, CUDA 12.9), out of `planning/bf16_renderer.md` §16.3
-and §17. **Read this file before writing any code; read `bf16_renderer.md` §16–§17 for the
-measurements that motivate it, and §19 for what changed when ViT was built anyway.**
+and §17. **Cancelled the same day by its own §8 step 3 refutation test — read §0 first, and do not
+plan off the rest of this file without it.** The measurements are reproducible:
+`.venv/bin/python scripts/bf16_boundary_probe.py`.
 
 ---
 
-## 0. ⭐⭐ THE ONE-PARAGRAPH VERSION
+## 0. ⛔⛔⛔ VERDICT 2026-08-25 — **DO NOT BUILD THIS. ITS OWN §8 STEP 3 REFUTED IT.**
+
+§8 step 3 says to hand-build the bf16-through block before writing any Lean, and that if it does
+not beat the bf16-with-boundary block *"this project is not worth doing and the honest outcome is
+to write that down here."* It was run, on both nets this document was scoped for, and it does not
+beat it:
+
+| chain | f32 | bf16 with the f32 boundary | **bf16 THROUGH** (this project) |
+|---|---|---|---|
+| ConvNeXt-T block interior, `conv1×1 → GELU → conv1×1` ×3, stage-1 shapes — **§8 step 3 verbatim** | 8.42 ms | **4.76 ms (1.77×)** | 4.79 ms (1.76×) |
+| ViT pass-through, `dot → slice → transpose → dot` ×36 | 2.34 ms | **1.58 ms (1.48×)** | 1.59 ms (1.47×) |
+
+⚠ In the pass-through case the two arms compile to **the same 73 converts**. XLA already propagates
+bf16 downstream once the PRODUCING op writes it; spelling the dtype in the emitter changes nothing,
+because the emitter was never what forced the boundary.
+
+⭐⭐ **WHAT ACTUALLY FORCED IT WAS THE PRODUCING OP'S RESULT TYPE, AND FIXING THAT NEEDED NONE OF
+THIS DOCUMENT.** `bf16_renderer.md` §20.1: a `dot_general` with bf16 operands and an **f32-typed
+result** — the shape `dotInBf16` established and §9.2 called "inert for dot" — makes the gemm write
+twice the bytes. §9.2 had measured that result type for CORRECTNESS (bf16 reaches the tensor cores
+either way) and never for SPEED. Giving ViT's dots **bf16-typed results** took the net from 1.23× to
+**1.46×**: one line per emit, an outer `rnd` per `den`, no `Dtype`, no `emitTok` change, no proof
+work. The convolution ops had this shape already, forced on them by §9.2's correctness finding.
+
+⚠⚠ **WHAT IS AND IS NOT REFUTED.** Refuted: the ROUTE (§4's Route B, and a fortiori Route A) and the
+premise that the emitter must carry dtypes to keep values bf16. **Not** refuted: §16.3's measurement
+that ConvNeXt's conv work is 2.70× with converts free and 1.68× with an f32 boundary forced across
+its whole 173-conv set — that experiment and the 6-conv probe above are not the same experiment.
+▶ The open question that survives is a **profiling** one, not a type-system one: *which* of
+ConvNeXt's 519 converts cost anything, per-convert. See `bf16_renderer.md` §18.
+
+⚠ **§5.1's gate is also measured-wrong** and should not be reused: it makes a FALLING convert count
+the criterion, and ViT's count went 864 → 1224 while the step got 1.19× faster (§20.2). Convert
+COUNT is not a proxy for convert COST.
+
+▶ **The rest of this document is kept as the reasoning it was** — a correctly-scoped project, with
+its own refutation test written into it, that the test then cancelled. That is the discipline
+working, not failing. §3.1's cost analysis and §3.2's rounding rules remain correct and reusable.
+
+---
+
+## 1. ⭐⭐ THE ONE-PARAGRAPH VERSION (as scoped, before §0's verdict)
 
 Seven nets render in bf16 on the verified path. Every one of them **converts back to f32 after
 every operation**, because the bf16 ops bundle their casts internally: `f32 in → bf16 operands →
@@ -20,7 +62,7 @@ text is not theorem-tied, which makes that route cost ~zero proof work. §4 has 
 
 ---
 
-## 1. Why — the two measurements that force it
+## 1b. Why — the two measurements that were thought to force it
 
 Both from `bf16_renderer.md`, both taken 2026-08-24 on this box, both gate-2 checked (the bf16
 really did reach the hardware in every arm):

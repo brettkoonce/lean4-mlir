@@ -119,6 +119,12 @@ def main():
     ap.add_argument("--against", help="the f32 peer, to also report a speedup")
     ap.add_argument("--expect", default="bf16", choices=["bf16", "f32"],
                     help="dtype every convolution operand must have (default bf16)")
+    ap.add_argument("--dot-results", action="store_true",
+                    help="also report each bf16 dot's RESULT dtype. Not a correctness check — bf16 "
+                         "reaches the hardware either way — but an f32 result costs ~1.2x on a real "
+                         "chain (bf16_renderer.md §20.1), so a bf16 dot with an f32 result is a "
+                         "PERFORMANCE defect worth seeing. Some are deliberate: ViT's weight "
+                         "gradients keep f32 results because their output is a small weight.")
     ap.add_argument("--dots", action="store_true",
                     help="ALSO resolve every dot/gemm's operand dtypes and print the breakdown. "
                          "Required for matmul-bound nets (ViT): their convolution count is 2 and a "
@@ -157,8 +163,20 @@ def main():
         print(f"\n  {len(dots)} dot/gemm instructions (fused ones included):")
         for k in sorted(tally, key=lambda k: -tally[k]):
             print(f"       {tally[k]:5d}  operands {k}")
-        print("  ▶ A dot's RESULT is f32 by design in this emit shape (§9.2), so the result type")
-        print("    says nothing. These are the OPERANDS, resolved per computation.")
+        print("  ▶ These are the OPERANDS, resolved per computation. A dot's RESULT type is a")
+        print("    SEPARATE question and it is not a correctness one: bf16 reaches the tensor")
+        print("    cores either way (§9.2), but an f32 result makes the gemm write twice the")
+        print("    bytes and cost ~1.2x on a real chain (§20.1). Check it with --dot-results.")
+
+    if a.dot_results:
+        txt = exe.hlo_modules()[0].to_string()
+        nb = len(re.findall(r"=\s*bf16\[[^\]]*\][^=]*?\bdot\(", txt))
+        nf = len(re.findall(r"=\s*f32\[[^\]]*\][^=]*?\bdot\(", txt))
+        print(f"\n  dot RESULT dtypes: {nb} bf16, {nf} f32")
+        if nf:
+            print(f"  ⚠ {nf} dot(s) accumulate straight into f32. That is correct and it is not")
+            print(f"    free — see §20.1. Deliberate for small weight-gradient results; a defect")
+            print(f"    for anything producing a large activation.")
 
     if a.against:
         jax, jex, np, *_ = ctxs

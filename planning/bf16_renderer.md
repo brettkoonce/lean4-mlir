@@ -4,7 +4,7 @@ Scoped 2026-08-01 on ares (6× RTX 4060 Ti, CUDA 12.9).
 
 ---
 
-## ⭐⭐ STATUS 2026-08-25 — SEVEN NETS WIRED. READ THIS BLOCK, THEN §16 AND §19 BEFORE QUOTING ANY ms/step.
+## ⭐⭐ STATUS 2026-08-25 — SEVEN NETS WIRED. READ THIS BLOCK, THEN §16, §19 AND §20 BEFORE QUOTING ANY ms/step.
 
 Branch `bf16/verified-conv-ops`. Seven nets render in bf16, every one gate-1 and gate-2 green.
 **The speedups are NOT interchangeable and the differences are the interesting part** — read the
@@ -20,7 +20,7 @@ replica AND residency columns before quoting any number.
 | EfficientNet-B0 | `rms64bf16` | **1** | ? | 163 → 149 | ⛔ **1.09×** | §14 |
 | ConvNeXt-T | `adamwxclipdropbf16` | **1** | **on** | 165 → 128 | **1.29×** | §16 |
 | ConvNeXt-T | *same graph* | **1** | **off** | 312 → 280 | 1.11× | §16.2 |
-| ViT-Tiny | `adamwxclipdropbf16` | **1** | *bare device* | 29.9 → 24.4 | **1.23×** | §19 |
+| ViT-Tiny | `adamwxclipdropbf16` | **1** | *bare device* | 29.9 → 20.5 | **1.46×** | §20 |
 | ViT-Tiny | *all six ops on* | **1** | *bare device* | 29.9 → 57.2 | ⛔⛔ **0.52×** | §19.1 |
 
 ⚠ **`?` means the probe did not record it**, not "off" — the column is new with §16 and only R50's
@@ -29,7 +29,7 @@ much it can have mattered (both trainer numbers sit ~12 ms above their device st
 blobs of 42 MB and 64 MB against ConvNeXt's 327 MB), so neither figure moves much either way. R34
 and R50 hold 21.8M and 25.6M parameters and have NOT been checked — they are the ones to re-probe.
 
-⚠⚠ **THE FOUR RESULTS THAT MATTER MOST:**
+⚠⚠ **THE FIVE RESULTS THAT MATTER MOST:**
 
 1. **A 4-replica bf16 number is a SYSTEM result, not a renderer result** (§13.2). MobileNetV2 is
    **1.92× on one GPU and 1.37× on four — same graph**. The loss is the shim feed first and the
@@ -51,7 +51,16 @@ and R50 hold 21.8M and 25.6M parameters and have NOT been checked — they are t
    standalone op against its f32 peer at the net's own shape** — §19.4 adds it to the recipe, §9.1
    predicted this class ("kernel selection, not bandwidth") and §14.3 item 2 asked for the check by
    name. Turned off, ViT is **1.23×**.
-4. **The f32 carve-outs (BN, activations, SE, dense, optimizer) are NOT a fixed tax — their cost
+4. ⭐⭐⭐ **A bf16 DOT'S RESULT TYPE IS A CORRECTNESS NON-ISSUE AND A ~1.2× PERFORMANCE ISSUE**
+   (§20.1, new 2026-08-25). §9.2 measured that `dot_general` reaches the tensor cores with either
+   result type and that was read as "inert for dot". Inert for correctness; **not** for speed — an
+   f32 result makes the gemm write twice the bytes. Giving ViT's dots bf16-typed results took it
+   from 1.23× to **1.46×** with no dtype in the IR, no new op and no new theorem.
+   ⛔⛔ **And that measurement REFUTES the successor project** (§20.3): once the producing op writes
+   bf16, XLA already propagates it across the intervening ops, so a dtype-carrying emit stack buys
+   ~0 % on both nets it was scoped for. ▶ `planning/bf16_dtype_ir.md` is now a record of a
+   correctly-scoped project that measurement cancelled — read its §0 before planning off it.
+5. **The f32 carve-outs (BN, activations, SE, dense, optimizer) are NOT a fixed tax — their cost
    is architecture-dependent** (§14). They cost MobileNetV2 nothing and EfficientNet-B0 almost
    everything. ⭐ B0's 1.09× is now CONFIRMED on the bare device (150.98 → 136.00 = 1.10×, §16.4),
    so it is a real property of that net and not a driver artifact. ▶ Do NOT order future bf16 work
@@ -95,12 +104,18 @@ and the whole optimizer tail.
 | ViT's six ops | ✅ nothing new needed — `dot_close_mixed` rounds BOTH operands and never asks which is a weight (§19.5) |
 | a full training run on ANY of the seven | ⛔ not started |
 
-### ▶▶ THE SUCCESSOR PROJECT IS SCOPED — `planning/bf16_dtype_ir.md` (2026-08-25)
+### ⛔⛔ THE SUCCESSOR PROJECT WAS SCOPED AND THEN CANCELLED BY MEASUREMENT — §20.3
 
-Letting activations STAY bf16 between ops. It is what ConvNeXt's remaining 1.30× → ~1.40× needs
-(§16.3) and what ViT's 1.03× → ~1.7× needs (§17.3) — one project, two nets. ⭐ The route is a
-defaulted `dt : Dtype` FIELD plus a dtype-carrying emit stack, **not** an index on `SHlo`, because
-the emitted text is not theorem-tied and that makes it ~zero proof work. Start at that file's §8.
+`planning/bf16_dtype_ir.md` scoped letting activations STAY bf16 between ops, on the strength of
+§16.3 and §17.3. Its own §8 step 3 said to hand-build the bf16-through block first and that failing
+to beat the bf16-with-boundary block would mean *"this project is not worth doing and the honest
+outcome is to write that down"*. **Run on both nets it was scoped for, it does not beat it** —
+1.77× vs 1.76× on ConvNeXt's block interior, 1.48× vs 1.47× on ViT's pass-through chain, with the
+pass-through arms compiling to the *same* 73 converts.
+
+⭐ **The thing that WAS worth doing turned out to need none of it**: the producing op's RESULT TYPE
+(§20.1). Once a dot writes bf16, XLA propagates it downstream on its own. ▶ Do not start that
+project. Do §18's first item instead — profile each net's bf16 ops against their f32 peers.
 
 ### ▶ ViT was surveyed, measured, NOT built — and then BUILT anyway at 1.23× — §17, then §19
 
@@ -112,9 +127,8 @@ artifact many boundary converts fuse into the LayerNorm/GELU/softmax between the
 ⛔⛔ **And building it surfaced the branch's first bf16 op that is SLOWER than its f32 peer in a real
 net** — the stem weight gradient, 0.19×, §19.1. Read that before wiring any new op kind.
 
-▶ ViT's remaining headroom is still the boundary converts: 1.71× at B=32 with activations staying
-bf16 between ops, against 1.23× realized. That is the successor project below, unchanged in
-direction and with a better starting point than §17 assumed.
+▶ ⭐ And ViT then went to **1.46×** (§20) on one change — the dots' result type — which needed no
+type-system work and which §9.2 had measured for correctness and never for speed.
 
 ### ⚠ Read the correction sections before trusting anything older
 
@@ -1486,6 +1500,115 @@ on the artifact, not an estimate of it**.
 
 ---
 
+## 20. ⭐⭐ ViT-Tiny at **1.46×** — and the successor project's premise is REFUTED
+
+Stage 2 of the ViT work. §19 wired the six ops in the established emit shape and got 1.23×. This
+section changes **one thing** — the dot's result type — and gets **1.46×**, and then measures that
+the scoped `bf16_dtype_ir.md` project would buy **nothing more**.
+
+### 20.1 ⭐⭐⭐ THE FINDING: §9.2 MEASURED THE DOT RESULT TYPE FOR CORRECTNESS AND NEVER FOR SPEED
+
+§9.2's table says `dot_general` reaches the tensor cores with a bf16-typed result **or** an f32 one,
+and `convolution` only with a bf16 one. That is exactly right, and it was read as *"the result type
+is inert for dot"*. **It is inert for correctness and it is not inert for speed.**
+
+Standalone, ViT-Tiny's own MLP chain (`dot → bias → GELU → dot`, ×12, B=32, D=192, M=768), each arm
+gate-2 checked:
+
+| arm | ms | speedup |
+|---|---|---|
+| f32 | 2.77 | 1.00× |
+| `boundary` — bf16 operands, **f32** result (what §19 shipped, and `dotInBf16`'s shape) | 2.35 | 1.18× |
+| **`bf16out` — bf16 operands, bf16-TYPED result, convert back** | **1.70** | **1.63×** |
+| `elemonly` — f32 result, but the GELU runs bf16 | 1.73 | 1.60× |
+| `through` — bf16 result **and** bf16 GELU | 1.72 | 1.61× |
+
+▶ **The whole difference is the dot's result type.** An f32 result makes the gemm write twice the
+bytes and take a worse epilogue. ⚠ And it needs **no dtype in the IR** — it is a one-line change in
+each op's emit plus an outer `rnd` in its `den`, i.e. `convBf16`'s shape applied to a dot.
+
+**On the artifact**, changing `denseRowBf16`, `denseRowBackBf16` and `matmulFBBf16` to bf16-typed
+results (bare device, B = 32, median of 25):
+
+| arm | ms/step | vs f32 |
+|---|---|---|
+| f32 | 29.91 | — |
+| §19, f32-result dots | 24.32 | 1.23× |
+| **§20, bf16-result dots** | **20.52** | **1.46×** |
+
+⚠ `rowDenseWeightGradBBf16` **keeps its f32 result deliberately** — its output is the weight
+`[a,c]`, 147K elements against the activations' 4.8M, so there is no bandwidth to save and a bf16
+store would only cost precision on the optimizer's input. It is the only bf16 dot in the kit shaped
+that way, and its constructor says so.
+
+⭐ Gates: histograms identical bar the converts; **384/387 dot/gemm instructions with all operands
+bf16**; 2/2 convolutions f32 by design; **627 outputs on identical seeded inputs, worst relative
+deviation 4.86e-04** against a 3.91e-3 ulp (§19's was 4.00e-04 — the added bf16 store costs 21 % of
+the deviation budget and stays 8× inside it).
+
+⚠ `dotInBf16`'s f32-result shape is now annotated as a PoC artefact rather than a template. It is
+rendered by **no** net, and the six convnets carry **zero** bf16 dots (their dense heads and SE
+gates are f32 by design), so this finding is ViT-specific in effect — but the next net with a bf16
+matmul would have inherited it.
+
+### 20.2 ⛔⛔ AND §5.1's GATE IS MEASURED-WRONG: THE CONVERT COUNT WENT **UP**
+
+`bf16_dtype_ir.md` §5.1 makes the increment's gate *"the op histogram differs … by **fewer**
+`stablehlo.convert`"*, and calls a count that does not fall proof that "the round trip is still
+there and the increment did nothing".
+
+ViT's convert count went **864 → 1224** and the step got **1.19× faster**. The extra 360 are exactly
+one convert-back per bf16-out dot site (72 + 72 + 216), and they are the *point*, not a symptom.
+
+▶ **Replace that gate with the bare-device wall clock plus the numeric check.** Convert COUNT is
+not a proxy for convert COST — and in the standalone chains the correlation is actively inverted:
+`through` had 132 converts against `boundary`'s 48 and beat it by 1.37×.
+
+### 20.3 ⛔⛔⛔ THE SUCCESSOR PROJECT IS REFUTED BY ITS OWN PRESCRIBED TEST
+
+`bf16_dtype_ir.md` §8 step 3 says to hand-build the bf16-through block before writing any Lean, and
+that *"if the hand-built bf16-through block does not beat the bf16-with-boundary block at
+ConvNeXt's real shapes, this project is not worth doing and the honest outcome is to write that
+down here."* **Run on both nets it was scoped for, it does not beat it.**
+
+**ConvNeXt-T block interior** — `conv1×1 → GELU → conv1×1`, ×3, at stage-1 shapes
+(c=96, 4c=384, 56², B=32), which is §8 step 3 verbatim and §5's named first increment:
+
+| arm | ms | speedup | converts |
+|---|---|---|---|
+| f32 | 8.42 | 1.00× | 0 |
+| `bf16out` — **what ConvNeXt already ships** | **4.76** | **1.77×** | 14 |
+| `through` — the project's proposal, no f32 in the middle | 4.79 | 1.76× | 26 |
+
+**ViT pass-through chain** — `dot → slice → transpose → dot`, ×36:
+
+| arm | ms | speedup | converts |
+|---|---|---|---|
+| f32 | 2.34 | 1.00× | 0 |
+| `bf16out` — what §20.1 now ships | **1.58** | **1.48×** | 73 |
+| `through` — slice and transpose typed bf16 | 1.59 | 1.47× | 73 |
+
+▶ **XLA already propagates bf16 across the intervening ops once the PRODUCING op writes bf16.** In
+the pass-through case the two arms compile to *the same 73 converts*. Spelling the dtype explicitly
+in the emitter buys nothing because the emitter was never what was forcing the boundary — the
+**f32 result type** was, and that is fixed in §20.1 without any type-system work at all.
+
+⚠⚠ **WHAT THIS DOES AND DOES NOT REFUTE.** It refutes the *route*: a `dt : Dtype` field plus a
+dtype-carrying `emitTok` stack (Route B) is measured at ~0 % on both nets it was scoped for, so the
+196-constructor Route A is a fortiori not worth it. It does **not** refute §16.3's measurement that
+ConvNeXt's conv work is 2.70× with converts free and 1.68× with an f32 boundary forced — that
+experiment forced barriers over the whole 173-conv set and mine is 6 pointwise convs at one stage's
+shapes. ▶ The reconciliation worth having is: **which of §16.3's 519 converts are actually costing
+anything**, measured per-convert rather than in aggregate. That is a profiling question now, not a
+type-system one.
+
+⭐ **And the cheap thing to do instead is already named**: §18's first item, profiling each net's
+bf16 ops against their f32 peers (§19.1's method). ViT's stem wgrad was 0.19× and its dots were
+leaving 1.19× on the table — both found by measurement, neither by any gate, and neither needing a
+line of type-system work.
+
+---
+
 ## 18. Still open, in rough priority order
 
 * **R34/R50 bare-device timings** — §16.4. Two runs of one script, no render and no proof, and
@@ -1500,17 +1623,17 @@ on the artifact, not an estimate of it**.
   never been run on any net on this branch. §9.1 found a 0.50× depthwise shape and §14.3 item 2
   asked for exactly this on B0 and never got it. ▶ **It is also the most likely explanation still
   standing for B0's 1.09×**, and it is cheap: time each op standalone at the net's own shapes.
-* ⭐ **ViT IS BUILT — §19**, at **1.23×** on the bare device with its two convolutions deliberately
-  left f32. Its remaining headroom is the boundary converts (1.23× → ~1.7×), which is the successor
-  project below and now has a wired net to flip rather than a net to write from scratch.
+* ⭐ **ViT IS BUILT — §19/§20**, at **1.46×** on the bare device with its two convolutions
+  deliberately left f32 and its dots writing bf16-typed results.
 * **A trainer probe on ViT's bf16 arm.** §19.6: the 1.23× is bare-device, so nothing yet says the
   driver loads this artifact. One 40-step run with `LEAN_MLIR_CKPT_TAG` set.
-* ⭐⭐ **The boundary converts — ✅ SCOPED 2026-08-25 in `planning/bf16_dtype_ir.md`.** §16.3
-  measured them costing ConvNeXt 2.70× → 1.68× on its conv work, and they cost ViT the gap between
-  its realized 1.23× (§19) and the 1.71× §17.3 measured for bf16 throughout. One project, two nets, and the first bf16 item on this branch
-  that is a design question rather than an op-writing one. ▶ First increment: ConvNeXt's
-  expand → GELU → project, three op kinds, with a gate that INVERTS the usual one — the convert
-  count must FALL.
+* ⛔⛔ **The boundary converts — SCOPED, THEN CANCELLED BY ITS OWN TEST (§20.3).** Do not start
+  `planning/bf16_dtype_ir.md`. ⚠ Its §5.1 gate ("the convert count must FALL") is separately
+  measured-wrong: ViT's count went 864 → 1224 and the step got 1.19× faster (§20.2).
+  ▶ **What remains genuinely open** is narrower and is a profiling question: §16.3 measured
+  ConvNeXt's conv work at 2.70× with converts free and 1.68× with an f32 boundary forced, over its
+  whole 173-conv set. §20.3's 6-conv block-interior probe does not reproduce that gap. Find out
+  **which** of the artifact's 519 converts cost anything, per-convert, before concluding either way.
 * **A full training run** on any of the seven. Nothing has been trained to convergence in bf16, and
   every accuracy claim on this branch is still a three-step loss comparison — except ViT's, which is
   a 627-output comparison on identical seeded inputs (§19.2) and is stronger but still not training.
