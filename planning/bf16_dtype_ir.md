@@ -2,18 +2,19 @@
 
 Scoped 2026-08-25 on ares (6× RTX 4060 Ti, CUDA 12.9), out of `planning/bf16_renderer.md` §16.3
 and §17. **Read this file before writing any code; read `bf16_renderer.md` §16–§17 for the
-measurements that motivate it.**
+measurements that motivate it, and §19 for what changed when ViT was built anyway.**
 
 ---
 
 ## 0. ⭐⭐ THE ONE-PARAGRAPH VERSION
 
-Six nets render and train in bf16 on the verified path. Every one of them **converts back to f32
-after every operation**, because the bf16 ops bundle their casts internally: `f32 in → bf16
-operands → compute → f32 out`. That was the right first design and it carried six nets. It is also
-now measured to be what caps them: it costs ConvNeXt **2.70× → 1.68×** on its conv work (§16.3) and
-it costs ViT **1.71× → 1.03×**, i.e. essentially everything (§17.3). This document scopes letting a
-value stay bf16 from one op to the next. ▶ **The recommended route is a defaulted `dt : Dtype`
+Seven nets render in bf16 on the verified path. Every one of them **converts back to f32 after
+every operation**, because the bf16 ops bundle their casts internally: `f32 in → bf16 operands →
+compute → f32 out`. That was the right first design and it carried all seven. It is also now
+measured to be what caps them: it costs ConvNeXt **2.70× → 1.68×** on its conv work (§16.3), and it
+is the gap between ViT's realized **1.23×** (§19) and the **1.71×** the same matmuls reach with
+activations staying bf16 (§17.3). This document scopes letting a value stay bf16 from one op to the
+next. ▶ **The recommended route is a defaulted `dt : Dtype`
 FIELD on the ops plus a dtype-carrying emit stack — not an index on `SHlo`** — because the emitted
 text is not theorem-tied, which makes that route cost ~zero proof work. §4 has the numbers.
 
@@ -29,6 +30,13 @@ really did reach the hardware in every arm):
 | ConvNeXt-T | its own 173 convolutions, fwd+bwd | 111.7 → 41.3 = **2.70×** | 111.7 → 66.5 = **1.68×** | 64 % |
 | ViT-Tiny | its own 387 matmuls, fwd+bwd, B=32 | 26.9 → 15.7 = **1.71×** | 26.9 → 26.2 = **1.03×** | **6 %** |
 
+⚠⚠ **ViT'S ROW IS AN ISOLATED-STACK MEASUREMENT AND THE ARTIFACT BEAT IT — 1.23×, NOT 1.03×**
+(`bf16_renderer.md` §19, built 2026-08-25). The six ops now exist and the net is wired. In isolation
+every boundary convert is paid; in the real net many fuse into the LayerNorm, GELU and softmax that
+sit between the matmuls. ▶ **So this project's ViT prize is 1.23× → ~1.7×, not 1.03× → ~1.7×** —
+smaller than scoped, and starting from a wired net instead of a blank one, which is the bigger
+change. ⭐ Read any isolated op-set timing here as a LOWER BOUND on the artifact.
+
 ⭐ ViT's "converts free" column brackets the independently-measured JAX-side 1.57× for ViT-Tiny
 (§9.1), which is what says this model of the two worlds is the right one.
 
@@ -41,9 +49,14 @@ about what the tensor cores save.
 **The prize, if this lands:**
 
 * ConvNeXt-T: **1.30× → ~1.40×** (§16.3's ceiling, at the boundary-constrained conv speedup).
-* ViT-Tiny: **1.03× → ~1.7×**, and only then are §17.1's six ops worth writing at all.
+* ViT-Tiny: **1.23× → ~1.7×**. ⭐ §17.1's six ops are WRITTEN (§19.3) and gate-2 correct, so this
+  project no longer has to build them first — it has to give them bf16-in/bf16-out forms.
 * EfficientNet-B0's 1.09× is **not** known to be helped — §14.3 is still open and its cause has not
   been attributed. Do not fold it into this project's justification.
+  ⭐⭐ **AND §19.1 GIVES IT A NEW PRIME SUSPECT THAT IS NOT THIS PROJECT**: ViT's stem weight
+  gradient is **0.19×** its f32 peer purely through cuDNN kernel selection, with every gate green.
+  B0's depthwise set is the most varied in the repo, that check has never been run on it, and it is
+  cheap. ▶ Run it before assuming B0 needs anything here.
 
 ---
 
@@ -184,8 +197,12 @@ Reasons, in order:
    form), `gelu` (needs bf16-in/bf16-out), `convBf16` again (needs a bf16-IN form).
 3. **ConvNeXt is already measured end to end** (§16.2/§16.3), so there is a denominator: 157.6 ms
    f32 / 120.9 ms bf16 on the bare device, conv work 71 % of the step, ceiling ~1.40×.
-4. ⚠ **ViT is the bigger prize and the wrong place to start**: it needs §17.1's six ops *as well*,
-   so a failure there cannot be attributed to this project or to those ops.
+4. ⚠ **ViT is the bigger prize and was the wrong place to start** — *when this was written*. It
+   needed §17.1's six ops as well, so a failure there could not be attributed to this project or to
+   those ops. ⭐ **That objection is now spent: the six ops are built, gate-2 correct and measured at
+   1.23× (§19), so ViT has a clean baseline to flip against.** ConvNeXt is still the recommended
+   first increment — it is where the biggest activation lives and its attribution is complete
+   (§16.3) — but ViT is now a legitimate second, not a blocked one.
 
 ### 5.1 The gate that is new, and it inverts the usual one
 
@@ -222,7 +239,14 @@ deserves the same suspicion.
 5. **The entry-name bug, if any variant marker is added.** It has shipped **five times** across
    this repo by three distinct routes (`bf16_renderer.md` §15.2). If this work introduces a slug,
    `#guard` the variant function's returned STRING, not just its signature.
-6. ⚠ **Master weights stay f32.** Casting a *weight* per op is cheap (weights are small next to
+6. ⚠⚠ **A bf16 op can be SLOWER than its f32 peer, and no gate here will see it.** ViT's stem
+   weight gradient is **0.19×** — `bf16_renderer.md` §19.1 — because cuDNN has a direct f32 kernel
+   for its 209×209 transpose-trick window and no bf16 one. §5.1's gates check the convert count and
+   the wall clock of the WHOLE step; a single pathological op can be buried by them if the rest
+   improves. ▶ This project widens the bf16 surface to LayerNorm/GELU-adjacent shapes that have
+   never been timed in bf16 — **profile each new op standalone against its f32 peer at the net's own
+   shape**, per §19.4's added recipe step, before wiring it.
+7. ⚠ **Master weights stay f32.** Casting a *weight* per op is cheap (weights are small next to
    activations) and the optimizer state must not degrade — the rule every net here already follows.
 
 ---
@@ -230,7 +254,8 @@ deserves the same suspicion.
 ## 7. What this project is NOT
 
 * **Not a fix for EfficientNet-B0.** §14.3 is open and unattributed; B0's 1.09× is confirmed on the
-  bare device (§16.4) and nothing here predicts it improves. Attribute B0 first, with §16.3's
+  bare device (§16.4) and nothing here predicts it improves. ⭐ §19.1 makes per-op kernel selection
+  the cheaper hypothesis to test first. Attribute B0 first, with §16.3's
   method, before claiming this helps it.
 * **Not a training run.** Nothing on this branch has been trained to convergence in bf16, and this
   work does not change that.

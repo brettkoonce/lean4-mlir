@@ -65,6 +65,12 @@ private def zVb {n : Nat} : Vec n := fun _ => 0
 private def zMb {a b : Nat} : Mat a b := fun _ _ => 0
 private def zKb {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 
+/-- The abstract rounding ViT's six bf16 ops carry. ⚠ `id` in the RENDER, for the reason
+    `ConvNeXtRenderB.zrndB` is: `skel`/`pretty` never look at it (the emitted text is decided by the
+    tag), and the accuracy statement is made where `rnd` is instantiated at bf16 round-to-nearest.
+    A render that baked a concrete rounding here would claim the emitter knows about it. -/
+private def vzrnd : ℝ → ℝ := fun r => r
+
 /-! ## The sites, one per per-example site in `ViTRender.lean` -/
 
 /-- One **vector-LN** site, batched: `lnRow(1,0) → rowScale γ → rowBias β` on the `[197,192]` token
@@ -98,7 +104,13 @@ set_option maxRecDepth 8000 in
     `Qₖ·Kₖᵀ` — its own `Q` against its own `K`. A descriptor would hand every example operand 0's
     left factor, and a `den` reading the batched index as one big matrix would multiply the whole
     batch together; **both type-check and both emit the identical `dot_general`**. -/
-private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Option Nat := none) :
+private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Option Nat := none)
+    -- ⭐ bf16 TRAILING and defaulted, the `wx`/`clip`/`sd` idiom — so every existing call site
+    -- elaborates unchanged and every committed artifact re-renders byte-identically (gate 1).
+    -- ⚠ It reaches the SIX matmuls and the TWO SDPA products only. LN, GELU, softmax, the
+    -- transposes, the head slices/pads, the residual adds and the whole AdamW tail stay f32 —
+    -- the same carve-out every bf16 render in this repo makes.
+    (bf16 : Bool := false) :
     StateM Nat (String × BSaves) := do
   let vbTok := V.tok
   let vbD := V.d
@@ -112,7 +124,10 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
   let dpM := drop.map (fun i => dpName (vitSiteIdx i 1))
   let (c1, ln1) ← vlnFwdB V vbB s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let qkv := fun (w b : String) => pretty vbB (.batchOp (N := vbB)
-      (.denseRow (N := vbTok) (a := vbD) (c := vbD) w b (zMb : Mat vbD vbD) (zVb : Vec vbD))
+      (if bf16 then
+        .denseRowBf16 (N := vbTok) (a := vbD) (c := vbD) vzrnd w b (zMb : Mat vbD vbD) (zVb : Vec vbD)
+       else
+        .denseRow (N := vbTok) (a := vbD) (c := vbD) w b (zMb : Mat vbD vbD) (zVb : Vec vbD))
       (.operand ln1 (zVb : Vec (vbB*(vbTok*vbD)))))
   let (cq, q) ← qkv s!"%{pfx}Wq" s!"%{pfx}bq"
   let (ck, k) ← qkv s!"%{pfx}Wk" s!"%{pfx}bk"
@@ -134,16 +149,26 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
     let (cvs, vs) ← hslice v
     let (ckt, kt) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbHd))
         (.operand ks (zVb : Vec (vbB*(vbTok*vbHd)))))
-    let (cmm, qk) ← pretty vbB (.matmulFB (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok)
-        (.operand qs (zVb : Vec (vbB*(vbTok*vbHd))))
-        (.operand kt (zVb : Vec (vbB*(vbHd*vbTok)))))
+    let (cmm, qk) ← pretty vbB (if bf16 then
+        .matmulFBBf16 (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok) vzrnd
+          (.operand qs (zVb : Vec (vbB*(vbTok*vbHd))))
+          (.operand kt (zVb : Vec (vbB*(vbHd*vbTok))))
+      else
+        .matmulFB (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok)
+          (.operand qs (zVb : Vec (vbB*(vbTok*vbHd))))
+          (.operand kt (zVb : Vec (vbB*(vbHd*vbTok)))))
     let (csc, sc) ← pretty vbB (.scaleB (N := vbB) (n := vbTok*vbTok) vSCALE 0
         (.operand qk (zVb : Vec (vbB*(vbTok*vbTok)))))
     let (csm, sm) ← pretty vbB (.batchOp (N := vbB) (.softmaxRow (m := vbTok) (n := vbTok))
         (.operand sc (zVb : Vec (vbB*(vbTok*vbTok)))))
-    let (cpv, pv) ← pretty vbB (.matmulFB (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
-        (.operand sm (zVb : Vec (vbB*(vbTok*vbTok))))
-        (.operand vs (zVb : Vec (vbB*(vbTok*vbHd)))))
+    let (cpv, pv) ← pretty vbB (if bf16 then
+        .matmulFBBf16 (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd) vzrnd
+          (.operand sm (zVb : Vec (vbB*(vbTok*vbTok))))
+          (.operand vs (zVb : Vec (vbB*(vbTok*vbHd))))
+      else
+        .matmulFB (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
+          (.operand sm (zVb : Vec (vbB*(vbTok*vbTok))))
+          (.operand vs (zVb : Vec (vbB*(vbTok*vbHd)))))
     let (cpd, pd) ← pretty vbB (.batchOp (N := vbB)
         (.headPad (N := vbTok) (heads := vbH) (d := vbHd) h)
         (.operand pv (zVb : Vec (vbB*(vbTok*vbHd)))))
@@ -156,8 +181,12 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
           (.operand pd (zVb : Vec (vbB*(vbTok*vbD)))))
       code := code ++ cad; acc := s
   let (co, o) ← pretty vbB (.batchOp (N := vbB)
-      (.denseRow (N := vbTok) (a := vbD) (c := vbD) s!"%{pfx}Wo" s!"%{pfx}bo"
-        (zMb : Mat vbD vbD) (zVb : Vec vbD))
+      (if bf16 then
+        .denseRowBf16 (N := vbTok) (a := vbD) (c := vbD) vzrnd s!"%{pfx}Wo" s!"%{pfx}bo"
+          (zMb : Mat vbD vbD) (zVb : Vec vbD)
+       else
+        .denseRow (N := vbTok) (a := vbD) (c := vbD) s!"%{pfx}Wo" s!"%{pfx}bo"
+          (zMb : Mat vbD vbD) (zVb : Vec vbD))
       (.operand acc (zVb : Vec (vbB*(vbTok*vbD)))))
   -- ▶ SITE 1 of 2: the ATTENTION branch, between the out-dense and the skip add. The reference's
   -- `x = x + _drop_branch(mhsa(…), ka, keep_prob)` — the drop scales `mhsa`, never `x`.
@@ -169,14 +198,22 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
       (.operand oD (zVb : Vec (vbB*(vbTok*vbD)))))
   let (c2, ln2) ← vlnFwdB V vbB s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty vbB (.batchOp (N := vbB)
-      (.denseRow (N := vbTok) (a := vbD) (c := vbM) s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
-        (zMb : Mat vbD vbM) (zVb : Vec vbM))
+      (if bf16 then
+        .denseRowBf16 (N := vbTok) (a := vbD) (c := vbM) vzrnd s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
+          (zMb : Mat vbD vbM) (zVb : Vec vbM)
+       else
+        .denseRow (N := vbTok) (a := vbD) (c := vbM) s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
+          (zMb : Mat vbD vbM) (zVb : Vec vbM))
       (.operand ln2 (zVb : Vec (vbB*(vbTok*vbD)))))
   let (cg, g) ← pretty vbB (.batchOp (N := vbB) (.gelu (n := vbTok*vbM))
       (.operand f1 (zVb : Vec (vbB*(vbTok*vbM)))))
   let (cf2, f2) ← pretty vbB (.batchOp (N := vbB)
-      (.denseRow (N := vbTok) (a := vbM) (c := vbD) s!"%{pfx}Wfc2" s!"%{pfx}bfc2"
-        (zMb : Mat vbM vbD) (zVb : Vec vbD))
+      (if bf16 then
+        .denseRowBf16 (N := vbTok) (a := vbM) (c := vbD) vzrnd s!"%{pfx}Wfc2" s!"%{pfx}bfc2"
+          (zMb : Mat vbM vbD) (zVb : Vec vbD)
+       else
+        .denseRow (N := vbTok) (a := vbM) (c := vbD) s!"%{pfx}Wfc2" s!"%{pfx}bfc2"
+          (zMb : Mat vbM vbD) (zVb : Vec vbD))
       (.operand g (zVb : Vec (vbB*(vbTok*vbM)))))
   -- ▶ SITE 2 of 2: the MLP branch, between fc2 and the skip add.
   let (cdM, f2D) ← match dpM with
@@ -196,21 +233,37 @@ set_option maxRecDepth 8000 in
     ⚠ Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := vbB` and
     the batch is an index of the AST rather than a number only `pretty` knows. That is the entire
     content of the move; the emitted text is unchanged, which the tie checks. -/
-def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false) :
+def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
+    -- ⭐ bf16 TRAILING, per the same rule. ⚠ The classifier head below stays f32 in every net —
+    -- one `[192,1000]` dense against 12 blocks of six, and it is where the loss is read.
+    (bf16 : Bool := false)
+    -- ⭐⭐ **`bf16Conv` IS A SEPARATE AXIS FROM `bf16`, AND ON ViT IT MUST BE `false`** — measured,
+    -- not assumed. See `vitBackAllB`'s note: the stem's WEIGHT GRADIENT has no usable bf16 cuDNN
+    -- kernel at ViT's shape and costs more than every dot in the net gains. The name matches the
+    -- JAX side's own per-net knob (`TrainConfig.bf16Conv`), which has always been separate from
+    -- `bf16` for exactly this class of reason.
+    (bf16Conv : Bool := false) :
     StateM Nat (String × FwdSaves) := do
   let vbTk := V.tk
   let vbTok := V.tok
   let vbD := V.d
+  -- ⭐ **The 16×16/s16 patchify stem — the ONE `convolution` in this net**, and therefore the one
+  -- op here that takes the conv emit shape (bf16-TYPED result + convert) rather than the dot one.
   let (ce, embed) ← pretty vbB (.batchOp (N := vbB)
-      (.patchEmbed (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD)
-        "%wConv" "%bConv" "%cls" "%pos"
-        (zKb : Kernel4 vbD 3 16 16) (zVb : Vec vbD) (zVb : Vec vbD) (zMb : Mat vbTok vbD))
+      (if bf16 && bf16Conv then
+        .patchEmbedBf16 (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD) vzrnd
+          "%wConv" "%bConv" "%cls" "%pos"
+          (zKb : Kernel4 vbD 3 16 16) (zVb : Vec vbD) (zVb : Vec vbD) (zMb : Mat vbTok vbD)
+       else
+        .patchEmbed (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD)
+          "%wConv" "%bConv" "%cls" "%pos"
+          (zKb : Kernel4 vbD 3 16 16) (zVb : Vec vbD) (zVb : Vec vbD) (zMb : Mat vbTok vbD))
       (.operand "%x" (zVb : Vec (vbB*(3*224*224)))))
   let mut code := ce
   let mut cur := embed
   let mut blocks : Array BSaves := #[]
   for i in [0:vDEPTH] do
-    let (cb, sv) ← vBlockFwdB V vbB s!"b{i}_" cur (if sd then some i else none)
+    let (cb, sv) ← vBlockFwdB V vbB s!"b{i}_" cur (if sd then some i else none) bf16
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
   let (cf, fl) ← vlnFwdB V vbB "%gF" "%btF" cur
   -- ⚠ `(N := vbTk)` is the PATCH count (196), so the operand's token axis is 197 and the result is
@@ -232,10 +285,15 @@ def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10)
     (sd : Bool := false)
     -- ⚠ `vbB` LAST and defaulted, so every existing positional call site is untouched and the
     -- committed artifacts re-render byte-identically at 32. See the note on `vbB` above.
-    (vbB : Nat := 32) (V : VitDims := vitTiDims) : String :=
+    (vbB : Nat := 32) (V : VitDims := vitTiDims)
+    -- ⭐ bf16, and NO bf16 forward artifact is written today — exactly ConvNeXt's choice (§16.5's
+    -- peer). The parameter exists so this render can be tied against a bf16 train step if one ever
+    -- needs a `forward ⊂ train-step` partner; writing an artifact nothing loads is the
+    -- silent-hyperparameter hazard this file warns about two comments up.
+    (bf16 : Bool := false) (bf16Conv : Bool := false) : String :=
   let vbTok := V.tok
   let vbD := V.d
-  let (body, sv) := (vitFwd12B V vbB nClasses sd).run' 0
+  let (body, sv) := (vitFwd12B V vbB nClasses sd bf16 bf16Conv).run' 0
   let res := sv.logits
   -- ⚠ `fun i => blkArgSig i V`, NOT `.map blkArgSig`: the bare form passes only `i` and lets
   -- `V` fall back to its Tiny default, which renders a ViT-S body under a ViT-Tiny block
@@ -299,7 +357,14 @@ set_option maxRecDepth 8000 in
     per-example. A descriptor would pair example `k`'s cotangent with example 0's saved activation:
     it type-checks, it emits the identical `dot_general`, and it trains. -/
 private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (dyOut : String)
-    (drop : Option Nat := none) : StateM Nat (String × String × List String) := do
+    (drop : Option Nat := none)
+    -- ⭐ bf16 TRAILING. ⚠ It reaches the six input-VJPs, the six WEIGHT gradients and the four SDPA
+    -- backward matmuls. Every BIAS gradient beside them stays f32, in this net as in all six:
+    -- `Σ dy` is a reduction, not a contraction, and there is nothing for a tensor core to do.
+    -- ⚠⚠ And the backward is where the money is — §9.4 measured it at ~60 % of a conv step and the
+    -- forward-only arm at 1.09×. A render that flipped only `vBlockFwdB` would look wired and buy
+    -- almost nothing.
+    (bf16 : Bool := false) : StateM Nat (String × String × List String) := do
   let vbTok := V.tok
   let vbD := V.d
   let vbH := V.heads
@@ -321,19 +386,33 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
                               (.operand dyOut zTok))
     | none   => pure ("", dyOut)
   let (c1, dg) ← pretty vbB (.batchOp (N := vbB)
-      (.denseRowBack (rows := vbTok) (a := vbM) (c := vbD) s!"%{p}Wfc2" (zMb : Mat vbM vbD))
+      (if bf16 then
+        .denseRowBackBf16 (rows := vbTok) (a := vbM) (c := vbD) vzrnd s!"%{p}Wfc2" (zMb : Mat vbM vbD)
+       else
+        .denseRowBack (rows := vbTok) (a := vbM) (c := vbD) s!"%{p}Wfc2" (zMb : Mat vbM vbD))
       (.operand dyD zTok))
-  let (c2, nWfc2) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbM) (c := vbD)
-      sv.g (zVb : Vec (vbB*(vbTok*vbM))) (.operand dyD zTok))
+  let (c2, nWfc2) ← pretty vbB (if bf16 then
+      .rowDenseWeightGradBBf16 (N := vbB) (tk := vbTok) (a := vbM) (c := vbD) vzrnd
+        sv.g (zVb : Vec (vbB*(vbTok*vbM))) (.operand dyD zTok)
+    else
+      .rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbM) (c := vbD)
+        sv.g (zVb : Vec (vbB*(vbTok*vbM))) (.operand dyD zTok))
   let (c3, nbfc2) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
       (.operand dyD zTok))
   let (c4, df1) ← pretty vbB (.geluBackB sv.f1 (zVb : Vec (vbB*(vbTok*vbM)))
       (.operand dg (zVb : Vec (vbB*(vbTok*vbM)))))
   let (c5, dln2) ← pretty vbB (.batchOp (N := vbB)
-      (.denseRowBack (rows := vbTok) (a := vbD) (c := vbM) s!"%{p}Wfc1" (zMb : Mat vbD vbM))
+      (if bf16 then
+        .denseRowBackBf16 (rows := vbTok) (a := vbD) (c := vbM) vzrnd s!"%{p}Wfc1" (zMb : Mat vbD vbM)
+       else
+        .denseRowBack (rows := vbTok) (a := vbD) (c := vbM) s!"%{p}Wfc1" (zMb : Mat vbD vbM))
       (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
-  let (c6, nWfc1) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbM)
-      sv.ln2 zTok (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
+  let (c6, nWfc1) ← pretty vbB (if bf16 then
+      .rowDenseWeightGradBBf16 (N := vbB) (tk := vbTok) (a := vbD) (c := vbM) vzrnd
+        sv.ln2 zTok (.operand df1 (zVb : Vec (vbB*(vbTok*vbM))))
+    else
+      .rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbM)
+        sv.ln2 zTok (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
   let (c7, nbfc1) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbM)
       (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
   let (c8, dhresLn2, ng2, nbt2) ← vlnBackB V vbB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
@@ -346,10 +425,17 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
                               (.operand dhres zTok))
     | none   => pure ("", dhres)
   let (c10, dacc) ← pretty vbB (.batchOp (N := vbB)
-      (.denseRowBack (rows := vbTok) (a := vbD) (c := vbD) s!"%{p}Wo" (zMb : Mat vbD vbD))
+      (if bf16 then
+        .denseRowBackBf16 (rows := vbTok) (a := vbD) (c := vbD) vzrnd s!"%{p}Wo" (zMb : Mat vbD vbD)
+       else
+        .denseRowBack (rows := vbTok) (a := vbD) (c := vbD) s!"%{p}Wo" (zMb : Mat vbD vbD))
       (.operand dhD zTok))
-  let (c11, nWo) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbD)
-      sv.att zTok (.operand dhD zTok))
+  let (c11, nWo) ← pretty vbB (if bf16 then
+      .rowDenseWeightGradBBf16 (N := vbB) (tk := vbTok) (a := vbD) (c := vbD) vzrnd
+        sv.att zTok (.operand dhD zTok)
+    else
+      .rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbD)
+        sv.att zTok (.operand dhD zTok))
   let (c12, nbo) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
       (.operand dhD zTok))
   let mut code := cdM ++ c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++ c9 ++ cdA ++ c10 ++ c11 ++ c12
@@ -364,22 +450,38 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
         (.operand dacc (zVb : Vec (vbB*(vbTok*(vbH*vbHd))))))
     let (cb, vsT) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbHd))
         (.operand (sv.vss[hh]!) zHd))
-    let (cc, dsm) ← pretty vbB (.matmulFB (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok)
-        (.operand dpv zHd) (.operand vsT zHdT))
+    let (cc, dsm) ← pretty vbB (if bf16 then
+        .matmulFBBf16 (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok) vzrnd
+          (.operand dpv zHd) (.operand vsT zHdT)
+      else
+        .matmulFB (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok)
+          (.operand dpv zHd) (.operand vsT zHdT))
     let (cd, smT) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbTok))
         (.operand (sv.sms[hh]!) zAtt))
-    let (ce, dvs) ← pretty vbB (.matmulFB (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
-        (.operand smT zAtt) (.operand dpv zHd))
+    let (ce, dvs) ← pretty vbB (if bf16 then
+        .matmulFBBf16 (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd) vzrnd
+          (.operand smT zAtt) (.operand dpv zHd)
+      else
+        .matmulFB (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
+          (.operand smT zAtt) (.operand dpv zHd))
     let (cf, dsc) ← pretty vbB (.softmaxRowBackB (N := vbB) (m := vbTok) (n := vbTok)
         (sv.scs[hh]!) zAtt (.operand dsm zAtt))
     let (cg2, dqk) ← pretty vbB (.scaleB (N := vbB) (n := vbTok*vbTok) vSCALE 0
         (.operand dsc zAtt))
-    let (ch, dqs) ← pretty vbB (.matmulFB (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
-        (.operand dqk zAtt) (.operand (sv.kss[hh]!) zHd))
+    let (ch, dqs) ← pretty vbB (if bf16 then
+        .matmulFBBf16 (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd) vzrnd
+          (.operand dqk zAtt) (.operand (sv.kss[hh]!) zHd)
+      else
+        .matmulFB (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
+          (.operand dqk zAtt) (.operand (sv.kss[hh]!) zHd))
     let (ci, qsT) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbHd))
         (.operand (sv.qss[hh]!) zHd))
-    let (cj, dkt) ← pretty vbB (.matmulFB (N := vbB) (m := vbHd) (k := vbTok) (n := vbTok)
-        (.operand qsT zHdT) (.operand dqk zAtt))
+    let (cj, dkt) ← pretty vbB (if bf16 then
+        .matmulFBBf16 (N := vbB) (m := vbHd) (k := vbTok) (n := vbTok) vzrnd
+          (.operand qsT zHdT) (.operand dqk zAtt)
+      else
+        .matmulFB (N := vbB) (m := vbHd) (k := vbTok) (n := vbTok)
+          (.operand qsT zHdT) (.operand dqk zAtt))
     let (ck, dks) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbHd) (n := vbTok))
         (.operand dkt zHdT))
     let hpad := fun (src : String) => pretty vbB (.batchOp (N := vbB)
@@ -398,10 +500,17 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
   -- Q/K/V dense backward
   let qkvBack := fun (w acc : String) => do
     let (c1', dln) ← pretty vbB (.batchOp (N := vbB)
-        (.denseRowBack (rows := vbTok) (a := vbD) (c := vbD) w (zMb : Mat vbD vbD))
+        (if bf16 then
+          .denseRowBackBf16 (rows := vbTok) (a := vbD) (c := vbD) vzrnd w (zMb : Mat vbD vbD)
+         else
+          .denseRowBack (rows := vbTok) (a := vbD) (c := vbD) w (zMb : Mat vbD vbD))
         (.operand acc zTok))
-    let (c2', nW) ← pretty vbB (.rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbD)
-        sv.ln1 zTok (.operand acc zTok))
+    let (c2', nW) ← pretty vbB (if bf16 then
+        .rowDenseWeightGradBBf16 (N := vbB) (tk := vbTok) (a := vbD) (c := vbD) vzrnd
+          sv.ln1 zTok (.operand acc zTok)
+      else
+        .rowDenseWeightGradB (N := vbB) (tk := vbTok) (a := vbD) (c := vbD)
+          sv.ln1 zTok (.operand acc zTok))
     let (c3', nb') ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
         (.operand acc zTok))
     pure (c1' ++ c2' ++ c3', dln, nW, nb')
@@ -422,12 +531,40 @@ set_option maxRecDepth 16000 in
     `(code, gradients-in-func-arg-order, softmaxSSA)`, the same shape, so the AdamW tail in
     `ViTRender.lean` can consume either. -/
 def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String × String) := none)
-    (sd : Bool := false) (V : VitDims := vitTiDims) :
+    (sd : Bool := false) (V : VitDims := vitTiDims)
+    -- ⭐⭐ bf16, TRAILING and defaulted, so every existing render is byte-identical (gate 1).
+    -- ⚠ The loss, the softmax, the label smoothing, the classifier head and its two gradients, the
+    -- LN/GELU/softmax backwards, every bias gradient, the global-norm clip and the whole AdamW tail
+    -- stay f32 — the carve-out every bf16 render in this repo makes. §14 measured that those
+    -- carve-outs are NOT a fixed tax: they cost MobileNetV2 nothing and EfficientNet-B0 almost
+    -- everything, so what they cost ViT is a question for the measurement, not for this comment.
+    (bf16 : Bool := false)
+    -- ⭐⭐⭐ **ViT'S TWO CONVOLUTIONS GET THEIR OWN FLAG AND IT DEFAULTS TO `false`. MEASURED.**
+    -- Turning the stem and its weight gradient bf16 alongside the dots makes the whole step
+    -- **0.52×** — nearly twice as SLOW as f32 — and an `nsys` profile says why in one line: the
+    -- bf16 arm's `__cudnn$convBackwardFilter` lowers to
+    -- `sm80_xmma_wgrad_implicit_gemm_indexed_bf16bf16_bf16f32_f32_nhwckrsc_nhwc_*` at ~30 ms,
+    -- where the f32 arm's same op lowers to `conv2d_grouped_direct_kernel<float>` at ~5.8 ms.
+    --
+    -- ▶ The shape is why. This wgrad is the transpose trick — `[3,B,224,224] × [192,B,209,209]`
+    -- with the DILATED cotangent as the filter — so cuDNN sees a 209×209 window. It has a direct
+    -- f32 kernel for that and no bf16 one, so bf16 falls back to implicit GEMM over a window 170×
+    -- larger than any real kernel, plus an NCHW→NHWC layout transform.
+    --
+    -- ⚠⚠ **THIS IS §9.1's DEPTHWISE FINDING ON A NEW OP, AND IT IS THE SAME LESSON**: gate 2 proves
+    -- the operands are bf16; it proves NOTHING about whether cuDNN picked a good kernel for the
+    -- shape. §14.3 item 2 asked for exactly this check on EfficientNet-B0 and it had never been run
+    -- on any net. ViT is where it finally fired.
+    (bf16Conv : Bool := false)
+    -- ⚠ And the stem's FORWARD is split from its WEIGHT GRADIENT, because the two do not behave the
+    -- same and lumping them would have hidden which one costs. See the probe numbers in
+    -- `planning/bf16_renderer.md` §18.
+    (bf16ConvW : Bool := false) :
     StateM Nat (String × List String × String) := do
     let vbTk := V.tk
     let vbTok := V.tok
     let vbD := V.d
-    let (fwd, sv) ← vitFwd12B V vbB nClasses sd
+    let (fwd, sv) ← vitFwd12B V vbB nClasses sd bf16 bf16Conv
     let zCls : Vec (vbB*nClasses) := fun _ => 0
     let (cSm, nSm) ← pretty vbB (.batchOp (N := vbB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := vbB) (.expe (n := nClasses)) (.operand sv.logits zCls)))
@@ -460,13 +597,23 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     let mut blkNames : Array (List String) := #[]
     for j in [0:vDEPTH] do
       let i := vDEPTH - 1 - j
-      let (cb, dx, names) ← vBlockBackB V vbB s!"b{i}_" (sv.blocks[i]!) dcur (if sd then some i else none)
+      let (cb, dx, names) ← vBlockBackB V vbB s!"b{i}_" (sv.blocks[i]!) dcur
+        (if sd then some i else none) bf16
       code := code ++ cb; dcur := dx; blkNames := blkNames.push names
     -- patch-embed params
     let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
-    let (cwC, nwConv) ← pretty vbB (.patchEmbedWeightGradB (N := vbB) (ic := 3) (H := 224) (W := 224)
-        (P := 16) (tk := vbTk) (D := vbD) "%ximg" (zVb : Vec (vbB*(3*224*224)))
-        (.operand dcur zTok))
+    -- ⭐ **The stem weight grad — ViT's second and last `convolution`.** ⚠ There is no
+    -- `patchEmbedBack` in this traversal and therefore no bf16 twin of one: the stem's input is
+    -- `%x`, so it has no input gradient. ConvNeXt's `convStride4` exactly (§16.5), and the reason
+    -- this net needs six ops rather than seven.
+    let (cwC, nwConv) ← pretty vbB (if bf16 && bf16ConvW then
+        .patchEmbedWeightGradBBf16 (N := vbB) (ic := 3) (H := 224) (W := 224)
+          (P := 16) (tk := vbTk) (D := vbD) vzrnd "%ximg" (zVb : Vec (vbB*(3*224*224)))
+          (.operand dcur zTok)
+      else
+        .patchEmbedWeightGradB (N := vbB) (ic := 3) (H := 224) (W := 224)
+          (P := 16) (tk := vbTk) (D := vbD) "%ximg" (zVb : Vec (vbB*(3*224*224)))
+          (.operand dcur zTok))
     let (cbC, nbConv) ← pretty vbB (.patchEmbedBiasGradB (N := vbB) (tk := vbTk) (c := vbD)
         (.operand dcur zTok))
     let (cClSl, dclsRow) ← pretty vbB (.batchOp (N := vbB) (.clsSlice (N := vbTk) (D := vbD))
@@ -506,7 +653,19 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
     (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false)
     -- ⚠ LAST and defaulted, for `vitFwdRenderB`'s reason.
-    (vbB : Nat := 32) (V : VitDims := vitTiDims) : String :=
+    (vbB : Nat := 32) (V : VitDims := vitTiDims)
+    -- ⭐⭐ bf16, TRAILING and defaulted.
+    -- ⚠⚠ **ViT's ENTRY-NAME ROUTE IS THE THIRD ONE, NOT THE FIRST TWO.** `cnxAdamVariant` DERIVES
+    -- ConvNeXt's entry name from its variant, so a flag that misses that call writes a mismatched
+    -- artifact; `vitAdamTrainStepFaithful` takes `funcName` EXPLICITLY, so here the risk is route
+    -- (c) — the artifact PATH and the `#eval`'s `funcName` disagreeing. The `#guard`s under the
+    -- bf16 `#eval` pin the two spellings against each other, which is the check that fits this
+    -- route. `planning/bf16_renderer.md` §15.2 enumerates all three.
+    (bf16 : Bool := false)
+    -- ⭐ `bf16Conv`, defaulted `false`. ⚠ It adds NO variant marker: it is not a recipe choice, it
+    -- is a measured statement that this net's two convolutions have no usable bf16 kernel, and a
+    -- marker would invite someone to flip it. `vitBackAllB` carries the measurement.
+    (bf16Conv : Bool := false) (bf16ConvW : Bool := false) : String :=
   let alphaStr := fmt6 alpha
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   -- ⚠⚠ `sd` IS SPELLED ONCE AND REACHES BOTH HALVES FROM HERE — the traversal (which places the 24
@@ -514,7 +673,9 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
   -- signature). Letting a caller set them independently is the shape of defect this thread keeps
   -- finding; here there is nothing to keep in step.
   vitAdamTrainStepFaithful funcName bStr replicas vbB nClasses alpha ema wdExclude wdStr clip clipStr
-    (traversal := some (vitBackAllB vbB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd V))
+    -- ⚠⚠ AND HERE. `bf16` reaching this traversal is what makes the graph bf16; nothing else in
+    -- this function's body needs it, because the AdamW tail is parameter-space and stays f32.
+    (traversal := some (vitBackAllB vbB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd V bf16 bf16Conv bf16ConvW))
     (V := V)
     (sd := sd)
 
@@ -557,6 +718,66 @@ def vitDropFwdBanner : String :=
   (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamwxclipdrop_train_step" "32.0" 1 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true))
+
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- § ⭐⭐ THE bf16 ARM — `planning/bf16_renderer.md` §17, and read §17.3 before quoting a number
+-- ════════════════════════════════════════════════════════════════════════════════════════
+--
+-- ⚠⚠ **THIS RENDER WAS MEASURED BEFORE IT WAS BUILT AND THE MEASUREMENT SAID 1.03×.** §17.3 timed
+-- ViT-Tiny's own 387 matmuls three ways at B = 32: f32 26.9 ms, bf16 in THIS emit shape 26.2 ms
+-- (1.03×), bf16 with activations staying bf16 BETWEEN ops 15.7 ms (1.71×). ViT's matmuls are skinny
+-- (contracting dim 192, or 768 at the MLP) and bandwidth-bound on the activations, so the
+-- f32→bf16→f32 round trip at every op costs about what the tensor cores save. That is NOT true of
+-- the convnets — §16.3 measured ConvNeXt keeping 64 % of its saving through the same boundary,
+-- because a convolution reuses each loaded input across many output positions.
+--
+-- ▶ So this arm exists to CONFIRM the predicted 1.03× on a real artifact and to give the successor
+-- project (`planning/bf16_dtype_ir.md`) a wired net to flip. It is not a shipping recipe, and the
+-- honest reading of its ms/step is "the six ops are correct", not "ViT is faster now".
+--
+-- ⚠ **SINGLE-DEVICE ONLY, deliberately** — §13.2: a 1-GPU pair is what isolates the RENDERER, and
+-- a 4-replica number is a system result carrying the shim feed, the f32 all-reduce and (§16.2) the
+-- parameter round trip. No bf16 DP peer is rendered: ViT's shipping DP artifact is the 128×4 one,
+-- and at 1.03× there is nothing to ship. An artifact nothing loads is the silent-hyperparameter
+-- hazard this file warns about 40 lines up, and rendering one ahead of a result would be it.
+--
+-- ⚠⚠ **THE ENTRY NAME.** ViT takes `funcName` explicitly rather than deriving it from
+-- `vitAdamVariant`, so the defect route here is (c) — the artifact PATH and this string
+-- disagreeing — not (a)/(b), which are ConvNeXt's and EfficientNet's. The `#guard`s below pin the
+-- two spellings against each other and against the driver's three substring predicates.
+#eval IO.FS.writeFile "verified_mlir/vitin_adamwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamwxclipdropbf16_train_step" "32.0" 1 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true))
+
+-- ⚠ **HOW THE `bf16Conv`/`bf16ConvW` DEFAULTS WERE ESTABLISHED, so the claim can be re-run rather
+-- than believed.** Three probe renders, identical to the `#eval` above except for the two flags,
+-- written outside `verified_mlir/` and timed with `scripts/bf16_device_step.py` against the f32
+-- peer (bare device, B = 32, median of 25). They are NOT committed: a probe under `verified_mlir/`
+-- is what gate 1 watches and what the driver loads, and one living there is the
+-- silent-hyperparameter hazard this file warns about 60 lines up.
+--
+--     (bf16Conv := false) (bf16ConvW := false)   24.39 ms   1.23x   ← what is rendered above
+--     (bf16Conv := true)  (bf16ConvW := false)   24.64 ms   1.21x   ← stem forward: ~free, no gain
+--     (bf16Conv := false) (bf16ConvW := true)    57.22 ms   0.52x   ← THE WEIGHT GRADIENT ALONE
+--     (bf16Conv := true)  (bf16ConvW := true)    57.29 ms   0.52x
+--                              f32 control       29.89 ms
+--
+-- ▶ **One op, one site, and it costs more than every dot in the net gains.** The stem forward is
+-- within noise either way; the weight gradient is +32.8 ms on a 29.89 ms step.
+
+-- ── The entry-name guards, route (c). ────────────────────────────────────────────────────────
+-- ⚠ The bf16 slug is the f32 one with `bf16` APPENDED, so every committed spelling is untouched.
+#guard "vitin_adamwxclipdropbf16_train_step" ==
+  "vitin_" ++ Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16" ++ "_train_step"
+-- ⚠ And the DRIVER's three substring predicates, which size the checkpoint blob off this string.
+-- `cdOn` is a test for `"do"`, not for `"cd"` — a false positive silently adds a blob region.
+#guard !(Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").startsWith "ema"
+#guard ((Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").splitOn "do").length == 1
+#guard ((Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").splitOn "acc").length == 1
+-- ⚠ `drop` must survive the append: the driver reads it to declare the 24 mask inputs, and the
+-- bf16 arm has the same 24 sites as its f32 peer.
+#guard ((Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").splitOn "drop").length == 2
 -- ▶▶ **THE SHIPPING DATA-PARALLEL RENDER — the artifact an ImageNet run actually loads.**
 -- Found 2026-08-03 by listing what each artifact BAKES: `vitin_adamdp128x4wxclip` (201 all_reduce)
 -- declares **zero** `%dp<n>` mask inputs, while `vitin_adamwxclipdrop` (24 inputs, 0 all_reduce,

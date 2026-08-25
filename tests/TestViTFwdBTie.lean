@@ -69,7 +69,13 @@ forms diverged from its per-example peer, which this whole-net diff cannot."
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let smooth : Option (String × String × String) := some ("0.1", "-0.01", "32.0")
   let (wantCode, wantNames, wantSm) := (Proofs.StableHLO.vitBackAll 32 10 "0.003125" true smooth).run' 0
-  let (gotCode, gotNames, gotSm) := (vitBackAllB 10 smooth).run' 0
+  -- ⚠⚠ `32` IS THE BATCH AND IT WAS MISSING. `vitBackAllB` gained a LEADING `vbB` when ViT stopped
+  -- being batch-32-only, and this call was never updated — so this target has failed to BUILD ever
+  -- since, and `.lake/build/bin/vit-fwd-b-tie` kept passing because the binary on disk was stale
+  -- (dated 2026-08-03, i.e. older than the parameter). ▶ A tie that reports ✅ from a stale binary
+  -- is worse than one that fails: `lake build vit-fwd-b-tie` exits 1 and the runner still prints
+  -- three green lines. Run the BUILD, not just the binary.
+  let (gotCode, gotNames, gotSm) := (vitBackAllB 32 10 smooth).run' 0
   IO.println "── ViT: the batched-index BACKWARD vs the per-example traversal ──"
   IO.println s!"  per-example : {wantCode.length} chars, {wantNames.length} gradients, softmax {wantSm}"
   IO.println s!"  batched     : {gotCode.length} chars, {gotNames.length} gradients, softmax {gotSm}"

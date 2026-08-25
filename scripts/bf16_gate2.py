@@ -59,12 +59,72 @@ def conv_operand_dtypes(exe):
             out.append((("cudnn" if "cudnn" in s else "hlo"), [types.get(n, "?") for n in names]))
     return out
 
+def _computations(txt):
+    """[(header, [body lines])] — one entry per HLO computation, entry included.
+
+    Needed because XLA puts a matmul-heavy net's dots inside `gemm_fusion_dot.*_computation`
+    fusions, where the operands are that computation's PARAMETERS and their dtypes are declared in
+    its header. A single global name->dtype map (which the convolution path above can afford, since
+    cuDNN custom-calls stay in the entry) would miss every one of them.
+    """
+    out, cur, body = [], None, []
+    for line in txt.splitlines():
+        if re.match(r"^\s*(ENTRY\s+)?[%\w.\-]+\s*\(.*\{\s*$", line) and " = " not in line:
+            if cur is not None:
+                out.append((cur, body))
+            cur, body = line.strip(), []
+        elif cur is not None:
+            body.append(line)
+    if cur is not None:
+        out.append((cur, body))
+    return out
+
+def dot_operand_dtypes(exe):
+    """[(kind, [operand dtypes])] for every DOT in the optimized HLO, fused ones included.
+
+    ⚠⚠ SAME REASON THIS FILE DOES NOT GREP. A `dot` line carries only its RESULT type, and for a
+    `dot_general` the result type is f32 BY DESIGN in this repo's emit shape (bf16 operands, f32
+    accumulate — `planning/bf16_renderer.md` §9.2). So on a matmul-bound net, grepping result types
+    reports "no bf16 anywhere" for a perfectly good bf16 graph, which is the mirror image of the
+    convolution mistake above. Only the OPERANDS answer the question.
+    """
+    txt = exe.hlo_modules()[0].to_string()
+    out = []
+    for header, body in _computations(txt):
+        types = {}
+        # the computation's own parameters, declared in its header as `name: dtype[dims]`
+        sig = re.search(r"\((.*)\)", header)
+        if sig:
+            for nm, dt in re.findall(r"([%\w.\-]+):\s*([a-z0-9]+)\[", sig.group(1)):
+                types[nm] = dt
+                types["%" + nm.lstrip("%")] = dt
+        for line in body:
+            m = re.match(r"\s*(?:ROOT\s+)?(%[\w.\-]+) = ([a-z0-9]+)\[", line.strip())
+            if m:
+                types[m.group(1)] = m.group(2)
+        for line in body:
+            s = line.strip()
+            is_gemm = "__cublas" in s and "custom-call" in s
+            if not (is_gemm or re.search(r"=\s*\S+\s+dot\(", s)):
+                continue
+            g = re.search(r"(?:custom-call|dot)\(([^)]*)\)", s)
+            if g:
+                names = [o.strip() for o in g.group(1).split(",")][:2]
+                out.append((("cublas" if is_gemm else "dot"), [types.get(n, "?") for n in names]))
+    return out
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mlir")
     ap.add_argument("--against", help="the f32 peer, to also report a speedup")
     ap.add_argument("--expect", default="bf16", choices=["bf16", "f32"],
                     help="dtype every convolution operand must have (default bf16)")
+    ap.add_argument("--dots", action="store_true",
+                    help="ALSO resolve every dot/gemm's operand dtypes and print the breakdown. "
+                         "Required for matmul-bound nets (ViT): their convolution count is 2 and a "
+                         "conv-only gate would report green while saying nothing about the 90%% of "
+                         "the step that is dots. Prints counts rather than asserting, because a net "
+                         "legitimately keeps some dots in f32 (every classifier head here does).")
     a = ap.parse_args()
     ctxs = _lazy()
 
@@ -86,6 +146,19 @@ def main():
     what = ("bf16 reached the hardware in every convolution" if a.expect == "bf16"
             else "every convolution is f32, as expected of the control arm")
     print(f"  ✅ GATE 2: {what}")
+
+    if a.dots:
+        dots = dot_operand_dtypes(exe)
+        tally = {}
+        for k, d in dots:
+            key = "all bf16" if all(x == "bf16" for x in d) else (
+                  "all f32" if all(x == "f32" for x in d) else "MIXED " + "/".join(d))
+            tally[key] = tally.get(key, 0) + 1
+        print(f"\n  {len(dots)} dot/gemm instructions (fused ones included):")
+        for k in sorted(tally, key=lambda k: -tally[k]):
+            print(f"       {tally[k]:5d}  operands {k}")
+        print("  ▶ A dot's RESULT is f32 by design in this emit shape (§9.2), so the result type")
+        print("    says nothing. These are the OPERANDS, resolved per computation.")
 
     if a.against:
         jax, jex, np, *_ = ctxs

@@ -4,11 +4,11 @@ Scoped 2026-08-01 on ares (6× RTX 4060 Ti, CUDA 12.9).
 
 ---
 
-## ⭐⭐ STATUS 2026-08-24 — SIX NETS WIRED. READ THIS BLOCK, THEN §16 BEFORE QUOTING ANY ms/step.
+## ⭐⭐ STATUS 2026-08-25 — SEVEN NETS WIRED. READ THIS BLOCK, THEN §16 AND §19 BEFORE QUOTING ANY ms/step.
 
-Branch `bf16/verified-conv-ops`. Six nets render and train in bf16 on real ImageNet, every one
-gate-1 and gate-2 green. **The speedups are NOT interchangeable and the differences are the
-interesting part** — read the replica AND residency columns before quoting any number.
+Branch `bf16/verified-conv-ops`. Seven nets render in bf16, every one gate-1 and gate-2 green.
+**The speedups are NOT interchangeable and the differences are the interesting part** — read the
+replica AND residency columns before quoting any number.
 
 | net | artifact variant | R | resident | f32 → bf16 ms/step | speedup | § |
 |---|---|---|---|---|---|---|
@@ -20,6 +20,8 @@ interesting part** — read the replica AND residency columns before quoting any
 | EfficientNet-B0 | `rms64bf16` | **1** | ? | 163 → 149 | ⛔ **1.09×** | §14 |
 | ConvNeXt-T | `adamwxclipdropbf16` | **1** | **on** | 165 → 128 | **1.29×** | §16 |
 | ConvNeXt-T | *same graph* | **1** | **off** | 312 → 280 | 1.11× | §16.2 |
+| ViT-Tiny | `adamwxclipdropbf16` | **1** | *bare device* | 29.9 → 24.4 | **1.23×** | §19 |
+| ViT-Tiny | *all six ops on* | **1** | *bare device* | 29.9 → 57.2 | ⛔⛔ **0.52×** | §19.1 |
 
 ⚠ **`?` means the probe did not record it**, not "off" — the column is new with §16 and only R50's
 §10.1 and ConvNeXt's §16 state it. ⭐ For MNv2 and B0 the bare-device timings in §16.4 bound how
@@ -27,7 +29,7 @@ much it can have mattered (both trainer numbers sit ~12 ms above their device st
 blobs of 42 MB and 64 MB against ConvNeXt's 327 MB), so neither figure moves much either way. R34
 and R50 hold 21.8M and 25.6M parameters and have NOT been checked — they are the ones to re-probe.
 
-⚠⚠ **THE THREE RESULTS THAT MATTER MOST:**
+⚠⚠ **THE FOUR RESULTS THAT MATTER MOST:**
 
 1. **A 4-replica bf16 number is a SYSTEM result, not a renderer result** (§13.2). MobileNetV2 is
    **1.92× on one GPU and 1.37× on four — same graph**. The loss is the shim feed first and the
@@ -41,13 +43,21 @@ and R50 hold 21.8M and 25.6M parameters and have NOT been checked — they are t
    check on B0 ruled out less than it was read as ruling out. ▶ Quote a number only with its
    residency state, and prefer the bare-device timing (`scripts/`-style direct execute) when what
    you mean is "the renderer".
-3. **The f32 carve-outs (BN, activations, SE, dense, optimizer) are NOT a fixed tax — their cost
+3. ⛔⛔ **GATE 2 IS NOT A STATEMENT ABOUT SPEED, AND ON ViT THAT COST 32.8 ms** (§19.1, new
+   2026-08-25). ViT's patchify-stem WEIGHT GRADIENT in bf16 is **0.19× its f32 peer** — one op, one
+   site, +32.8 ms on a 29.89 ms step — because its transpose-trick shape gives cuDNN a **209×209
+   window** for which it has a direct f32 kernel and no bf16 one. Every gate was green on that arm:
+   gate 1 clean, gate 2 green, histograms identical, losses inside an ulp. ▶ **Profile the
+   standalone op against its f32 peer at the net's own shape** — §19.4 adds it to the recipe, §9.1
+   predicted this class ("kernel selection, not bandwidth") and §14.3 item 2 asked for the check by
+   name. Turned off, ViT is **1.23×**.
+4. **The f32 carve-outs (BN, activations, SE, dense, optimizer) are NOT a fixed tax — their cost
    is architecture-dependent** (§14). They cost MobileNetV2 nothing and EfficientNet-B0 almost
    everything. ⭐ B0's 1.09× is now CONFIRMED on the bare device (150.98 → 136.00 = 1.10×, §16.4),
    so it is a real property of that net and not a driver artifact. ▶ Do NOT order future bf16 work
    by §9.1's JAX-side speedups: B0 is the largest there (2.41×) and the smallest here.
 
-### The op kit as it now stands — 21 bf16 ops
+### The op kit as it now stands — 27 bf16 ops
 
 ```
 flatConvFBf16                                            per-example forward (CNN rung)
@@ -60,7 +70,15 @@ depthwiseWeightGradBBf16  depthwiseStridedWeightGradBBf16  depthwiseStridedXlaWe
 convStride4Bf16                                          ConvNeXt's 4×4/s4 patchify stem
 convStride4WeightGradBBf16                               its wgrad — the stem has NO dgrad
 dotInBf16                                                dense (depth-1 PoC shape)
+
+denseRowBf16  denseRowBackBf16  rowDenseWeightGradBBf16    ViT's six per-block matmuls
+matmulFBBf16                                             SDPA QKᵀ / P·V — ACTIVATION × ACTIVATION
+patchEmbedBf16  patchEmbedWeightGradBBf16                ⛔ BUILT, GATE-2 CORRECT, DELIBERATELY OFF
 ```
+
+⛔⛔ **The last two are not used by any render and that is a measurement, not an omission** — ViT's
+stem weight gradient in bf16 is 0.19× its f32 peer (§19.1). They are kept because the ops and the
+emit shape are right; what is wrong is cuDNN's kernel for one shape.
 
 ⚠ **Every BIAS gradient stays f32 in every net** — `Σ_{batch,spatial} dy` is a reduction, not a
 contraction, so there is nothing for a tensor core to do. Same for BN, the loss, the dense head
@@ -74,7 +92,8 @@ and the whole optimizer tail.
 | `conv_close_mixed` | ✅ `Proofs/Float/ConvMixedFloatBridge.lean` |
 | `depthwise_close_mixed` | ✅ `Proofs/Float/DepthwiseMixedFloatBridge.lean`, §12.3 |
 | whole-net composition — the mixed conv is `FloatClose` | ✅ `ConvMixedComposeBridge.lean`, §11 |
-| a full training run on ANY of the six | ⛔ not started |
+| ViT's six ops | ✅ nothing new needed — `dot_close_mixed` rounds BOTH operands and never asks which is a weight (§19.5) |
+| a full training run on ANY of the seven | ⛔ not started |
 
 ### ▶▶ THE SUCCESSOR PROJECT IS SCOPED — `planning/bf16_dtype_ir.md` (2026-08-25)
 
@@ -83,13 +102,19 @@ Letting activations STAY bf16 between ops. It is what ConvNeXt's remaining 1.30�
 defaulted `dt : Dtype` FIELD plus a dtype-carrying emit stack, **not** an index on `SHlo`, because
 the emitted text is not theorem-tied and that makes it ~zero proof work. Start at that file's §8.
 
-### ▶ ViT was surveyed, measured and NOT built — §17
+### ▶ ViT was surveyed, measured, NOT built — and then BUILT anyway at 1.23× — §17, then §19
 
-Six ops scoped, all three emit shapes settled, then §16.3's method run **before** writing them: the
-established emit shape buys **1.03×** at ViT's rendered batch of 32. ViT's whole win (1.71× at
-B=32, 1.93× at B=128) is in keeping activations bf16 BETWEEN ops, which the bundle-the-cast-inside-
-the-op design cannot do. ▶ That is the type-system decision this document deferred at scoping, and
-it is the same one ConvNeXt's remaining headroom needs (§16.3).
+§17 scoped six ops, settled all three emit shapes, ran §16.3's method **before** writing them, and
+stopped the build at a predicted **1.03×**. ⭐ **The artifact measures 1.23×** — §17.3's isolated
+op-set model was a lower bound on the real net, not an estimate of it (§19.7), because in the
+artifact many boundary converts fuse into the LayerNorm/GELU/softmax between the matmuls.
+
+⛔⛔ **And building it surfaced the branch's first bf16 op that is SLOWER than its f32 peer in a real
+net** — the stem weight gradient, 0.19×, §19.1. Read that before wiring any new op kind.
+
+▶ ViT's remaining headroom is still the boundary converts: 1.71× at B=32 with activations staying
+bf16 between ops, against 1.23× realized. That is the successor project below, unchanged in
+direction and with a better starting point than §17 assumed.
 
 ### ⚠ Read the correction sections before trusting anything older
 
@@ -1166,6 +1191,14 @@ Bare-device timings of the already-committed pairs, taken with the same tool:
 
 ## 17. ⛔⛔ ViT — SURVEYED AND MEASURED, **NOT BUILT**, and the measurement is why
 
+> ⛔⛔ **SUPERSEDED 2026-08-25 — IT WAS BUILT, AND IT IS 1.23×, NOT 1.03×. SEE §19.** This section's
+> op audit (§17.1) and emit shapes (§17.2) were confirmed exactly by the build. Its *decision* —
+> stop, the established shape buys 1.03× — rested on §17.3's isolated op-set timing, and the
+> artifact beat it (§19.7): an isolated stack pays the f32 boundary in full, while the real net
+> fuses many of those converts into the LayerNorm/GELU/softmax that sit between its matmuls.
+> ▶ §17.4's conclusion still stands and is the successor project: ViT's remaining 1.23× → ~1.7×
+> is in keeping activations bf16 BETWEEN ops. The reasoning below is kept as the reasoning it was.
+
 Six ops were scoped and the emit shape for every one of them was settled. Then §16.3's method was
 run **prospectively** — before writing any of them — and it says the six ops in the established
 emit shape would buy **1.03×** at the batch ViT actually renders at. §15.3 step 2 exists to stop a
@@ -1229,6 +1262,12 @@ which is what says this model of the two worlds is the right one.
 verified emit shape cannot do that.** Six ops built the established way would capture 0.7 ms of an
 11.2 ms prize.
 
+⛔⛔ **MEASURED WRONG — the six ops were built and the artifact is 1.23×, not 1.03× (§19).** The
+table above is a correct measurement OF THE ISOLATED MATMUL SET and a wrong prediction of the net:
+in isolation every boundary convert is paid, and in the artifact many fuse into the LayerNorm, GELU
+and softmax between the matmuls. ▶ Read an isolated op-set timing as a **lower bound** on the
+artifact. The "throughout" column is unaffected and is still what the successor project targets.
+
 ### 17.4 ⭐⭐ WHY ViT DIFFERS FROM THE CONVNETS — and why this is the net that forces the deferred decision
 
 The f32 boundary is not new; §16.3 measured it costing ConvNeXt 2.70× → 1.68×. What is new is how
@@ -1282,6 +1321,171 @@ Nothing measured here does. For completeness, the two things that would change t
 
 ---
 
+## 19. ✅ ViT-Tiny — **BUILT after all, and 1.23×**. §17 predicted 1.03× and was wrong twice over.
+
+`vitin_adamwxclipdropbf16_train_step.mlir` (single device, B = 32). Six ops, exactly the set §17.1
+scoped. ⚠⚠ **And the headline result of this section is NOT the speedup — it is the op that had to
+be turned OFF to get it.**
+
+### 19.1 ⛔⛔ THE FINDING: ViT's STEM WEIGHT GRADIENT HAS NO USABLE bf16 cuDNN KERNEL
+
+Bare device, `scripts/bf16_device_step.py`, B = 32, median of 25, f32 control **29.89 ms**:
+
+| arm | `bf16Conv` | `bf16ConvW` | ms/step | speedup |
+|---|---|---|---|---|
+| **shipping** | false | false | **24.39** | **1.23×** |
+| stem forward bf16 too | true | false | 24.64 | 1.21× |
+| stem **wgrad** bf16 too | false | **true** | **57.22** | ⛔ **0.52×** |
+| both convolutions bf16 | true | true | 57.29 | ⛔ 0.52× |
+
+▶ **One op, one site, +32.8 ms on a 29.89 ms step.** The first render of this net turned all six ops
+on and measured **0.52× — nearly twice as SLOW as f32** — with every gate green: gate 1 clean, gate
+2 green on both arms, op histograms identical but for the converts, losses inside an ulp. Nothing
+structural saw it and nothing structural could have.
+
+⭐ **An `nsys` profile named it in one line.** The bf16 arm's `__cudnn$convBackwardFilter` lowers to
+`sm80_xmma_wgrad_implicit_gemm_indexed_bf16bf16_bf16f32_f32_nhwckrsc_nhwc_*` at **~30 ms**; the f32
+arm's same op lowers to `conv2d_grouped_direct_kernel<float>` at **~5.8 ms**.
+
+⚠ **The shape is why, and it is specific to the transpose-trick wgrad.** That convolution is
+`[3,B,224,224] × [192,B,209,209] → [3,192,16,16]` — the DILATED cotangent as the filter — so cuDNN
+sees a **209×209 window**. It has a direct f32 kernel for that and no bf16 one, so bf16 falls back
+to implicit GEMM over a window ~170× larger than any real kernel, plus an NCHW→NHWC layout
+transform the f32 path does not pay. ▶ The stem FORWARD (16×16/s16, an ordinary shape) is fine —
+24.39 vs 24.64 ms, i.e. free and no gain. It is the weight gradient alone.
+
+⚠⚠ **THIS IS §9.1's DEPTHWISE FINDING ON A NEW OP CLASS, AND §14.3 ITEM 2 ASKED FOR EXACTLY THIS
+CHECK.** §9.1: *"the depthwise loss is KERNEL SELECTION, not bandwidth or hardware."* §14.3 item 2:
+*"Gate 2 proves the operands are bf16; it proves NOTHING about whether cuDNN picked a good kernel
+for those shapes."* That check had never actually been run on any net. ViT is where it fired, and
+it fired at **13× on a single op**. ▶ **Add it to the recipe** — §19.4.
+
+### 19.2 The gates, and what they did and did not catch
+
+| gate | result |
+|---|---|
+| **1** — nothing else moved | ✅ `git status verified_mlir/` shows only the new file |
+| **entry name** | ✅ `@vitin_adamwxclipdropbf16_train_step`, first render, `#guard`ed against the path |
+| **2** — bf16 reached the hardware | ✅ **384 of 387 dot/gemm instructions with all operands bf16** |
+| **2b** — the head stayed f32 | ✅ the remaining **3** are the classifier head and its two gradients |
+| **2c** — the convolutions | ✅ **2/2 f32, deliberately** — §19.1 |
+| **histogram** | ✅ identical across every `stablehlo` op kind, differing only by **864 `convert` = 432 bf16 dot sites × 2** |
+| **numeric** | ✅ 627 outputs on identical seeded inputs: worst relative deviation **4.00e-04**, aggregate 3.89e-06, **zero** outputs beyond one bf16 ulp (2⁻⁸ = 3.91e-3) |
+| **3** — accuracy | ✅ instantiation, no new theorem (§19.5) |
+| a training run | ⛔ not started, as on all seven nets |
+
+⚠⚠ **EVERY ONE OF THOSE GATES WAS ALSO GREEN ON THE 0.52× ARM.** They check that the graph is the
+same graph and that bf16 reached the hardware. Neither is a statement about speed, and this is the
+first net where that gap cost something rather than being a caveat.
+
+⭐ **A note on the numeric gate, which is new here.** §10.4 step 7's check is the trainer's first
+three losses. This one runs both artifacts on identical seeded inputs and compares **all 627
+outputs**, so a divergence anywhere in the traversal shows rather than only one that moves the loss.
+⚠ 200 outputs contain non-finite entries — a random second-moment state makes the AdamW tail
+`rsqrt` a negative — which is the SYNTHETIC INPUT's doing, not the graph's; the check asserts both
+arms agree on exactly which entries are finite rather than skipping them silently. The first draft
+of that script did skip them silently (`nan > worst` is `False`) and reported a `nan` aggregate,
+which is how the hole was found.
+
+### 19.2b ⛔⛔ A THIRD GATE WAS GREEN FROM A STALE BINARY — `vit-fwd-b-tie`, since 2026-08-14
+
+Running the ViT byte tie to confirm gate 1 printed three ✅ lines **from a binary dated 2026-08-03**.
+`lake build vit-fwd-b-tie` had exited 1 the whole time:
+
+```
+tests/TestViTFwdBTie.lean:72: Application type mismatch: the argument `smooth` … expected ℕ
+```
+
+`vitBackAllB` gained a **leading** `vbB` when ViT stopped being batch-32-only (the `128x4`/`256x2`
+renders), and this one call site was never updated. So the target has failed to BUILD since, while
+`.lake/build/bin/vit-fwd-b-tie` sat on disk reporting byte-identity for a render three weeks old.
+
+▶ **Fixed** (`vitBackAllB 32 10 smooth`), and it now passes fresh: forward, backward, gradient
+list and whole train step all byte-identical, which is what actually confirms this section's gate 1.
+
+⚠⚠ **The lesson generalises past ViT: run the BUILD, not the binary.** A tie whose binary is stale
+is worse than one that fails, because it prints green. Every `lean_exe` gate in this repo has the
+same failure mode, and nothing checks for it. ⭐ Note the shape it shares with §19.1: both are
+checks that *look* green and are not measuring what the reader thinks. That is two in one net.
+
+⚠ **And a fourth, found the same way and NOT fixed here**: `tests/AuditAxioms.lean:4010` does
+`#print axioms Proofs.dw_sum_pair` on a constant that **exists nowhere in the repo** — it is a
+depthwise helper (§12.3) that was renamed or inlined and the audit line was left behind. The audit
+reports `error(lean.unknownIdentifier)` and still **exits 0**, so CI would not notice. Left alone
+because the right fix is to name the lemma that replaced it, and guessing would be worse than the
+dangling line. ▶ Unrelated to ViT; belongs to whoever owns `DepthwiseMixedFloatBridge`.
+
+### 19.3 The six ops, and the two that are built-but-off
+
+| ViT site | op | emit shape | in the shipping render |
+|---|---|---|---|
+| Q/K/V/O/fc1/fc2, ×12 | `denseRowBf16` | dot: bf16 operands, **f32** result | ✅ |
+| their input-VJPs | `denseRowBackBf16` | dot | ✅ |
+| their weight grads | `rowDenseWeightGradBBf16` | dot, contracting batch AND token | ✅ |
+| SDPA `QKᵀ`/`P·V` + 4 backward | `matmulFBBf16` | batched dot | ✅ |
+| patchify stem 16×16/s16 | `patchEmbedBf16` | conv: **bf16-typed** result + convert | ⛔ off — free, no gain |
+| its weight grad | `patchEmbedWeightGradBBf16` | conv | ⛔⛔ off — **§19.1** |
+
+⭐ **`matmulFBBf16` is the kit's first ACTIVATION × ACTIVATION bf16 op**, and §10.3's two predictions
+about it both held: it really is the new KIND, and the theorem really does come free
+(`dot_close_mixed` rounds both operands and never asks which is a weight).
+
+⭐ **§9.2's split held at a sixth and seventh op form.** `dot_general` is unaffected by its result
+type; `convolution` is not. Now checked at dense, batched dense, conv stride 1/2/4/16, and grouped
+conv. ⚠ The two conv ops are kept, gate-2 correct and unused: they are the right ops in the right
+emit shape, and what is wrong is cuDNN's kernel for one of their shapes, which is not something the
+renderer can spell its way out of.
+
+### 19.4 ⚠⚠ THE RECIPE GAINS A STEP, and it is the one this net needed
+
+§10.4/§15.3's recipe has carried seven nets. It is missing the check that would have caught §19.1
+before a full render:
+
+> **1b. PROFILE the standalone op, not just gate-2 it.** After confirming the operands are bf16,
+> time the op against its f32 peer AT THE NET'S OWN SHAPE. A bf16 op that is *slower* than its f32
+> peer is not hypothetical: §9.1 measured 0.50× on a depthwise shape and §19.1 measured **0.19×** on
+> ViT's stem wgrad. ▶ Cost: minutes. It has now been skipped seven times and been wrong once, and
+> the once was worth 32.8 ms on a 29.89 ms step.
+
+⭐ And the per-op-class flag that made §19.1 attributable is worth copying: `bf16Conv` and
+`bf16ConvW` are separate from `bf16` and from each other, so a single render can be bisected by op
+class instead of guessed at. The name matches the JAX side's own `TrainConfig.bf16Conv`, which has
+always been separate for this class of reason.
+
+### 19.5 What ViT did NOT need
+
+* **No new theorem.** `dot_close_mixed` rounds both operands, so the activation × activation case is
+  an instance rather than a result. The dot ops' `den` carries **two** roundings and no outer one —
+  the f32-typed result means the hardware does not round the output, which is the opposite of every
+  conv op in the kit and the thing to get right when copying one.
+* **No `patchEmbedBackBf16`.** The stem's input is `%x`; it has no input gradient. ConvNeXt's
+  `convStride4` exactly (§16.5), and the reason this net needs six ops and not seven.
+* **No new `Raw`/`Tok`.** `matmulFBBf16` rides the generic binary `.batched2` skeleton that
+  `addVB`/`subB` already use; the two weight grads ride `.batched`. So `parse_toToks` is untouched.
+* **No driver change**, and no variant marker for the two conv flags — they are a measured fact
+  about cuDNN, not a recipe choice, and a marker would invite someone to flip them.
+
+### 19.6 ⚠ What is NOT measured
+
+* **A trainer run.** The 1.23× is bare-device (§16.2's rule). No trainer probe and no loss-agreement
+  run on real ImageNet has been done, so nothing here says the driver loads this artifact.
+* **The DP arm.** Not rendered, deliberately — §13.2 makes a 4-replica number a system result, and
+  at 1.23× there is nothing to ship.
+* **Anything about convergence**, as on all seven nets.
+
+### 19.7 ⭐ AND §17.3's PROSPECTIVE MEASUREMENT WAS WRONG IN THE FAVOURABLE DIRECTION
+
+§17.3 timed ViT's matmul set in isolation and predicted **1.03×** for the established emit shape,
+which is why §17 stopped the build. The artifact measures **1.23×**. ▶ The model was of the right
+thing and got the number wrong: in the isolated stack the f32 boundary was paid in full, and in the
+real net many of those converts fuse into the LayerNorm/GELU/softmax elementwise ops that sit
+between the matmuls. ⚠ So a prospective measurement bought a wrong decision here — but it also cost
+almost nothing and the same discipline is what settled the emit shapes (§17.2) correctly. The
+lesson is not "stop measuring prospectively", it is that **an isolated op-set model is a lower bound
+on the artifact, not an estimate of it**.
+
+---
+
 ## 18. Still open, in rough priority order
 
 * **R34/R50 bare-device timings** — §16.4. Two runs of one script, no render and no proof, and
@@ -1291,15 +1495,22 @@ Nothing measured here does. For completeness, the two things that would change t
   device step per op kind the way ConvNeXt's is attributed, and the answer falls out.
 * **ConvNeXt's boundary converts** — §16.3 puts the prize at 1.30× → ~1.40× and says it needs no
   new ops. The first net where this lever is measured rather than argued.
-* ⛔ **ViT is NOT on this list any more — see §17.** It was surveyed (six ops, all three emit
-  shapes settled) and then MEASURED before building, and the six ops in the established shape buy
-  **1.03×**. Its win needs activations that stay bf16 between ops, which is the type-system
-  decision the original scoping deferred. ▶ The successor item is the one below.
+* ⭐⭐ **PROFILE THE OTHER SIX NETS' bf16 OPS AGAINST THEIR f32 PEERS — new, and §19.1 is why.**
+  ViT's stem weight gradient is **0.19×** its f32 peer with every gate green, and that check has
+  never been run on any net on this branch. §9.1 found a 0.50× depthwise shape and §14.3 item 2
+  asked for exactly this on B0 and never got it. ▶ **It is also the most likely explanation still
+  standing for B0's 1.09×**, and it is cheap: time each op standalone at the net's own shapes.
+* ⭐ **ViT IS BUILT — §19**, at **1.23×** on the bare device with its two convolutions deliberately
+  left f32. Its remaining headroom is the boundary converts (1.23× → ~1.7×), which is the successor
+  project below and now has a wired net to flip rather than a net to write from scratch.
+* **A trainer probe on ViT's bf16 arm.** §19.6: the 1.23× is bare-device, so nothing yet says the
+  driver loads this artifact. One 40-step run with `LEAN_MLIR_CKPT_TAG` set.
 * ⭐⭐ **The boundary converts — ✅ SCOPED 2026-08-25 in `planning/bf16_dtype_ir.md`.** §16.3
-  measured them costing ConvNeXt 2.70× → 1.68× on its conv work, and §17.3 measured them costing
-  ViT its entire win (1.71× → 1.03×). One project, two nets, and the first bf16 item on this branch
+  measured them costing ConvNeXt 2.70× → 1.68× on its conv work, and they cost ViT the gap between
+  its realized 1.23× (§19) and the 1.71× §17.3 measured for bf16 throughout. One project, two nets, and the first bf16 item on this branch
   that is a design question rather than an op-writing one. ▶ First increment: ConvNeXt's
   expand → GELU → project, three op kinds, with a gate that INVERTS the usual one — the convert
   count must FALL.
-* **A full training run** on any of the six. Nothing has been trained to convergence in bf16, and
-  every accuracy claim on this branch is still a three-step loss comparison.
+* **A full training run** on any of the seven. Nothing has been trained to convergence in bf16, and
+  every accuracy claim on this branch is still a three-step loss comparison — except ViT's, which is
+  a 627-output comparison on identical seeded inputs (§19.2) and is stronger but still not training.
