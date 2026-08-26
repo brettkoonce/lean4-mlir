@@ -4254,7 +4254,7 @@ pipeline. Median of five runs, with the observed range:
 \hline
 SGD (lr 0.1)          & 72.6 {\footnotesize (1.2)} & 72.5 {\footnotesize (2.6)} & 72.2 {\footnotesize (3.3)} \\
 AdamW (lr $10^{-3}$)  & 74.3 {\footnotesize (2.3)} & 73.9 {\footnotesize (2.1)} & 74.3 {\footnotesize (1.5)} \\
-momentum ($\mu$ 0.9)  & \emph{diverged} & \textbf{76.0} {\footnotesize (1.1)} & \emph{diverged} \\
+momentum ($\mu$ 0.9)  & \emph{diverged} & \emph{diverged} & \emph{diverged} \\
 \hline
 \end{tabular}
 \end{center}
@@ -4266,14 +4266,25 @@ rows, the medians agree to within half a point --- 72.6/72.5/72.2 and
 74.3/73.9/74.3 --- which is well inside the spread \emph{within} a single cell.
 Sixteen-bit and eight-bit arithmetic land on the same curve as fp32.
 
-\medskip\noindent\textbf{The diverged cells are Lever~1 again, not a precision
-effect.} The momentum row loses a run to \texttt{NaN} in fp32 \emph{and} in fp8,
-one of five each, collapsing to 10\% --- chance on ten classes. That is the same
-un-normalized instability the empty cell in Lever~2 records, reproduced here
-independently in two arithmetics, so the honest reading is that the network is
-what is fragile, not the number format. The bf16 column happens to lose none;
-with one failure in five as the base rate that is not evidence bf16 stabilizes
-anything, and we do not claim it does.
+\medskip\noindent\textbf{The whole momentum row is Lever~1 again, and the
+accuracies are what mislead.} In \emph{all three} arithmetics, every one of the
+five momentum runs sent its training loss to \texttt{NaN} --- fifteen runs out of
+fifteen. Only two of them had visibly collapsed to 10\% by the time epoch~40 was
+evaluated; the other thirteen still reported something around 76\%, which is
+precisely the trap Lever~2 warns about, and precisely why the loss and not the
+accuracy is the thing to read. Had we scored this row on test accuracy alone, we
+would have printed a best-in-table 76.0 for bf16 and called it a win.
+
+\noindent That the failure is identical across fp32, bf16 and fp8 is the point.
+The un-normalized eight-layer stack with momentum is unstable as a
+\emph{network}; the number format neither causes it nor cures it. Reduced
+precision is being blamed for nothing here, and credited with nothing either.
+
+\noindent AdamW is a milder version of the same story: two of five fp32 runs and
+one of five in each low-precision column touch \texttt{NaN} without ever
+collapsing, matching the ``once in four'' Lever~2 saw. Plain SGD is clean in all
+fifteen runs. So the ordering the table reports rests on the two rows that
+finish healthy, and the third row is reported as diverged rather than scored.
 
 \medskip\noindent\textbf{What the two low-precision columns actually are}, since
 they are not the same kind of object. The bf16 arm is genuine reduced precision

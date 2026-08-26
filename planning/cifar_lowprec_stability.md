@@ -275,7 +275,7 @@ Median of 5 seeds at epoch 40, `(observed range)`. This is the net Levers 1–2 
 |---|---|---|---|
 | SGD (lr 0.1) | 72.61 (1.17) | 72.54 (2.59) | 72.18 (3.31) |
 | AdamW (lr 1e-3) | 74.29 (2.32) | 73.94 (2.08) | 74.28 (1.47) |
-| Nesterov (μ0.9) | ⚠ **diverged** (66.51) | **75.99** (1.09) | ⚠ **diverged** (66.31) |
+| Nesterov (μ0.9) | ⛔ **diverged** | ⛔ **diverged** | ⛔ **diverged** |
 
 ⭐⭐ **The ranking is invariant**: SGD < AdamW < Nesterov in every column. Medians agree ACROSS
 precisions to within half a point (72.61/72.54/72.18 and 74.29/74.28/73.94) — well inside the
@@ -285,9 +285,21 @@ spread WITHIN a single cell.
 including the *divergence*: one of five momentum runs collapsed to **10.00 %** — chance on ten
 classes — which is exactly what Lever 2's empty cell records.
 
-⚠⚠ **And fp8 lost a momentum run too, independently.** Two arithmetics diverging the same way
-says the NETWORK is fragile, not the number format. ▶ bf16 lost none, but with a 1-in-5 base rate
-that is NOT evidence bf16 stabilises anything — do not claim it.
+⛔⛔ **CORRECTED — READ THE LOSS, NOT THE ACCURACY.** The first pass scored this table on test
+accuracy and printed `75.99 (1.09)` for bf16 momentum, bolded as the best cell in the table. The
+per-step loss says otherwise: **15 of 15 momentum runs sent the loss to NaN — 5/5 in EVERY
+arithmetic.** Only 2 had visibly collapsed to 10 % by the epoch-40 eval; the other 13 still
+reported ~76 %. That is exactly the trap the LaTeX §4.3 Lever 2 documents, and it caught this
+analysis too.
+
+▶ **The failure is identical across fp32, bf16 and fp8**, which is the real finding: the
+un-normalised 8-layer stack with momentum is unstable as a NETWORK, and the number format neither
+causes nor cures it. ▶ The earlier hedge ("bf16 lost none, don't claim it stabilises anything")
+was right for the wrong reason — bf16 NaN'd just as often, it simply had not collapsed yet.
+
+⚠ AdamW is a milder case of the same: 2/5 f32 and 1/5 in each low-precision column touch NaN
+without collapsing (Lever 2 saw "once in four"). Plain SGD is clean in all 15. So the ordering
+rests on the two rows that finish healthy.
 
 ⚠ This supersedes §5.2's narrow-head n=1 table for any quotable number. That table is kept
 because it is what the batched-migration and fp8 work were gated against.
