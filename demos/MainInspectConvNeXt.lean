@@ -25,7 +25,7 @@ def imagenetteClasses : Array String := #[
 
 def main : IO Unit := do
   let pfx := s!".lake/build/convnext_t_gelu_convnext_tiny_gelu"
-  let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+  let evalVmfb ← NetSpec.graphArtifact pfx "fwd_eval"
   let paramsPath := s!"{pfx}_params.bin"
   let bnPath := s!"{pfx}_bn_stats.bin"
 

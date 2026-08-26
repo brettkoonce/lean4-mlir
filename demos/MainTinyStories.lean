@@ -124,7 +124,7 @@ def runTrain (c : StoriesCfg) (steps batch : Nat) (lrMax : Float) : IO (ByteArra
   IO.eprintln s!"compiling train step (B={batch}, T={T}, V={vocabSize}, params={spec.totalParams}) ..."
   let _ ← spec.compileVmfbs cfg (useSeg := true)
   let pfx := spec.buildPrefix
-  let trainSess ← LowererSession.create s!"{pfx}_train_step.vmfb"
+  let trainSess ← LowererSession.create (← NetSpec.graphArtifact pfx "train_step")
 
   IO.eprintln "loading data/tinystories/{train,val}.bin ..."
   let (tokens, nTokens) ← F32.loadTokenStream "data/tinystories/train.bin"
@@ -219,7 +219,7 @@ def runSample (c : StoriesCfg) (nToks : Nat) (temperature : Float) (topK : Nat)
   let evalCfg : TrainConfig := { trainConfig with batchSize := 1 }
   let _ ← spec.compileVmfbs evalCfg (useSeg := true)
   let pfx := spec.buildPrefix
-  let sess ← LowererSession.create s!"{pfx}_fwd_eval.vmfb"
+  let sess ← LowererSession.create (← NetSpec.graphArtifact pfx "fwd_eval")
   let params ← IO.FS.readBinFile s!"{pfx}_params.bin"
   let bnPad ← F32.const spec.nBnStats.toUSize 0.0
   let evalParams := params.append bnPad

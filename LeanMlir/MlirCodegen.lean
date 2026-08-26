@@ -7334,8 +7334,31 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       code := code ++ s!"    %d_logits_ddpm = stablehlo.divide %ddpm_2diff, %ddpm_Nb : {outTy}\n"
       gradSSA := "%d_logits_ddpm"
       gradShape := curShape
+    | [b2, n2] =>
+      -- ═══════════ DDPM on a RANK-2 output — `planning/diffusion_2d_demo.md`
+      -- Identical math to the 4-D case above; only the shape differs. A dense
+      -- denoiser (2-D toy distributions: the model is an MLP, not a UNet) ends
+      -- in `.dense`, so its output is [B, N] and the 4-D match fell through to
+      -- a comment — emitting a train step with NO loss and NO gradient, which
+      -- compiled and trained nothing. Reduce over both axes rather than four.
+      let outTy := tensorTy curShape
+      let nElems := b2 * n2
+      code := code ++ "\n    // ================ DDPM MSE (rank-2) ================\n"
+      code := code ++ s!"    %ddpm_diff = stablehlo.subtract {logitsSSA}, %y_ddpm : {outTy}\n"
+      code := code ++ s!"    %ddpm_sq = stablehlo.multiply %ddpm_diff, %ddpm_diff : {outTy}\n"
+      code := code ++ s!"    %ddpm_sum = stablehlo.reduce(%ddpm_sq init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+      code := code ++ s!"           : ({outTy}, tensor<f32>) -> tensor<f32>\n"
+      code := code ++ s!"    %ddpm_N = stablehlo.constant dense<{nElems}.0> : tensor<f32>\n"
+      code := code ++ s!"    %loss = stablehlo.divide %ddpm_sum, %ddpm_N : tensor<f32>\n"
+      code := code ++ s!"    // ─── MSE backward: d_logits = 2 (logits - y) / N ───\n"
+      code := code ++ s!"    %ddpm_two = stablehlo.constant dense<2.0> : {outTy}\n"
+      code := code ++ s!"    %ddpm_2diff = stablehlo.multiply %ddpm_diff, %ddpm_two : {outTy}\n"
+      code := code ++ s!"    %ddpm_Nb = stablehlo.broadcast_in_dim %ddpm_N, dims = [] : (tensor<f32>) -> {outTy}\n"
+      code := code ++ s!"    %d_logits_ddpm = stablehlo.divide %ddpm_2diff, %ddpm_Nb : {outTy}\n"
+      gradSSA := "%d_logits_ddpm"
+      gradShape := curShape
     | _ =>
-      code := code ++ s!"    // useDdpm=true but curShape is not 4D: {curShape}\n"
+      code := code ++ s!"    // useDdpm=true but curShape is neither 4D nor 2D: {curShape}\n"
   else if useSeg then
     match curShape with
     | [_, segNC, segH, segW] =>

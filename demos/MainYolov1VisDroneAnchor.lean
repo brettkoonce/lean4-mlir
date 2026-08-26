@@ -61,7 +61,7 @@ def inferDump (dataDir outDir : String) : IO Unit := do
   let gW := spec.imageW / spec.detStride
   let A := visdroneAnchors6.length
   let flat : Nat := A * 15 * gH * gW           -- 17640
-  let evalVmfb := s!"{spec.buildPrefix}_fwd_eval.vmfb"
+  let evalVmfb ← NetSpec.graphArtifact spec.buildPrefix "fwd_eval"
   let paramsPath := s!"{spec.buildPrefix}_params.bin"
   let bnPath := s!"{spec.buildPrefix}_bn_stats.bin"
   if !(← System.FilePath.pathExists evalVmfb) then

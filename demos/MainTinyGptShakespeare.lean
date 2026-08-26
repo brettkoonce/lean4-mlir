@@ -258,7 +258,7 @@ def runXeval (g : GptCfg) (evalT : Nat) : IO Float := do
   let cfg : TrainConfig := { trainConfig with batchSize := 32, learningRate := 0.0 }
   IO.eprintln s!"compiling eval @ T={evalT} (model={g.key}, params={spec.totalParams}) ..."
   let _ ← spec.compileVmfbs cfg (useSeg := true)
-  let sess ← LowererSession.create s!"{spec.buildPrefix}_train_step.vmfb"
+  let sess ← LowererSession.create (← NetSpec.graphArtifact spec.buildPrefix "train_step")
   let ckptPath := s!"{(mkSpec g).buildPrefix}_params.bin"
   let params ← IO.FS.readBinFile ckptPath
   let expected := spec.totalParams * 4
@@ -283,7 +283,7 @@ def runTinyGptTrain (g : GptCfg) (steps : Nat) (batch : Nat) (lrMax : Float)
   IO.eprintln s!"compiling train step (model={g.key}, B={batch}, T={T}, V={vocabSize}, params={spec.totalParams}) ..."
   let _ ← spec.compileVmfbs cfg (useSeg := true)
   let pfx := spec.buildPrefix
-  let trainVmfb := s!"{pfx}_train_step.vmfb"
+  let trainVmfb ← NetSpec.graphArtifact pfx "train_step"
   let trainSess ← LowererSession.create trainVmfb
 
   IO.eprintln "loading data/shakespeare/{train,val}.bin ..."
@@ -368,7 +368,7 @@ def runTinyGptSample (g : GptCfg) (paramsPath : String) (nChars : Nat)
   let evalCfg : TrainConfig := { trainConfig with batchSize := 1 }
   let _ ← spec.compileVmfbs evalCfg (useSeg := true)
   let pfx := spec.buildPrefix
-  let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+  let evalVmfb ← NetSpec.graphArtifact pfx "fwd_eval"
   let sess ← LowererSession.create evalVmfb
 
   let params ← IO.FS.readBinFile paramsPath

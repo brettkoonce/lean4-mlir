@@ -120,7 +120,7 @@ def runBigramTrain (epochs : Nat) (batch : Nat) (seqLen : Nat) : IO (ByteArray �
   IO.eprintln s!"compiling vmfbs for {spec.name} (V={vocabSize}, batch={batch}) ..."
   let _ ← spec.compileVmfbs cfg
   let pfx := spec.buildPrefix
-  let trainVmfb := s!"{pfx}_train_step.vmfb"
+  let trainVmfb ← NetSpec.graphArtifact pfx "train_step"
   let trainSess ← LowererSession.create trainVmfb
 
   IO.eprintln "loading data/shakespeare/train.bin ..."
@@ -176,7 +176,7 @@ def runBigramSample (paramsPath : String) (nChars : Nat)
   let evalCfg : TrainConfig := { bigramConfig with batchSize := 1 }
   let _ ← spec.compileVmfbs evalCfg
   let pfx := spec.buildPrefix
-  let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+  let evalVmfb ← NetSpec.graphArtifact pfx "fwd_eval"
   let sess ← LowererSession.create evalVmfb
 
   let params ← IO.FS.readBinFile paramsPath
@@ -219,7 +219,7 @@ def runBigramSample (paramsPath : String) (nChars : Nat)
         b := b.push ((id / 256) % 256).toUInt8
         b := b.push ((id / 65536) % 256).toUInt8
         b := b.push ((id / 16777216) % 256).toUInt8
-        return b)
+        pure b)
     pure buf)) tokIds.length vocab
 
 def main (args : List String) : IO Unit := do

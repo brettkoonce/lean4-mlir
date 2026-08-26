@@ -232,12 +232,12 @@ def main (args : List String) : IO Unit := do
   let bnPaths := match positional[2]? with
     | some p => [p]
     | none => prefixes.map (fun p => s!"{p}{suffix}_bn_stats.bin")
-  let vmfbs := prefixes.map (fun p => s!"{p}_fwd_eval.vmfb")
+  let vmfbs ← prefixes.mapM (fun p => NetSpec.graphArtifact p "fwd_eval")
   IO.FS.createDirAll (System.FilePath.mk outPath).parent.get!.toString
   for p in paramPaths ++ bnPaths ++ vmfbs do
     if !(← System.FilePath.pathExists p) then
       IO.eprintln s!"missing artifact: {p}"
-      IO.eprintln "  (run lake exe unet-brats-train first to produce checkpoint + vmfb)"
+      IO.eprintln "  (run lake exe unet-brats-train first to produce checkpoint + graph)"
       IO.Process.exit 1
   let mut evalParamsList : List ByteArray := []
   for (pp, bp) in paramPaths.zip bnPaths do

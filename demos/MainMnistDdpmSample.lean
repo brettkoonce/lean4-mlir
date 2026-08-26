@@ -39,6 +39,9 @@ def tinyDdpmUnet : NetSpec where
   ]
 
 private def runIree (mlirPath outPath : String) : IO Bool := do
+  -- XLA/PJRT has no ahead-of-time compile step: the `.mlir` IS the artifact
+  -- the runtime loads. Mirrors `Train.lean`'s `runIreeCached` guard.
+  if (← LowererSession.backendName) == "xla" then return true
   let args ← ireeCompileArgs mlirPath outPath
   let compiler ← if (← System.FilePath.pathExists ".venv/bin/iree-compile")
                  then pure ".venv/bin/iree-compile" else pure "iree-compile"
@@ -61,7 +64,7 @@ def main (args : List String) : IO Unit := do
 
   -- ── Compile the eval forward vmfb (fixedBN=true) if not cached ──
   let evalMlirPath := s!"{pfx}_fwd_eval.mlir"
-  let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+  let evalVmfb ← NetSpec.graphArtifact pfx "fwd_eval"
   let B : Nat := 16
   let nPix : Nat := spec.imageH * spec.imageW
   if !(← System.FilePath.pathExists evalVmfb) then

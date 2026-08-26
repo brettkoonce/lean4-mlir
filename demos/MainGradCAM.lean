@@ -133,7 +133,7 @@ private def argmaxN (ba : ByteArray) (n : Nat) : Nat := Id.run do
 private def compileCamVmfb (spec : NetSpec) (batchSize : Nat) : IO String := do
   let pfx := spec.buildPrefix
   let mlirPath := s!"{pfx}_fwd_cam.mlir"
-  let vmfbPath := s!"{pfx}_fwd_cam.vmfb"
+  let vmfbPath ← NetSpec.graphArtifact pfx "fwd_cam"
   let mlir := MlirCodegen.generateForwardCam spec batchSize
   IO.FS.writeFile mlirPath mlir
   if (← System.FilePath.pathExists vmfbPath) then

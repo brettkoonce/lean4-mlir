@@ -25,6 +25,9 @@ def tinyCifarDdpm : NetSpec where
   ]
 
 private def runIree (mlirPath outPath : String) : IO Bool := do
+  -- XLA/PJRT has no ahead-of-time compile step: the `.mlir` IS the artifact
+  -- the runtime loads. Mirrors `Train.lean`'s `runIreeCached` guard.
+  if (← LowererSession.backendName) == "xla" then return true
   let args ← ireeCompileArgs mlirPath outPath
   let compiler ← if (← System.FilePath.pathExists ".venv/bin/iree-compile")
                  then pure ".venv/bin/iree-compile" else pure "iree-compile"
@@ -48,7 +51,7 @@ def main (args : List String) : IO Unit := do
   IO.FS.createDirAll ".lake/build"
   let pfx := spec.buildPrefix
   let evalMlirPath := s!"{pfx}_fwd_eval.mlir"
-  let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+  let evalVmfb ← NetSpec.graphArtifact pfx "fwd_eval"
   let B : Nat := 16
   let imgC : Nat := 3
   let nPix : Nat := imgC * spec.imageH * spec.imageW

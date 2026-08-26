@@ -62,7 +62,7 @@ def inferDump (dataDir outDir : String) : IO Unit := do
   let gH := spec.imageH / spec.detStride
   let gW := spec.imageW / spec.detStride
   let flat : Nat := 30 * gH * gW            -- 23520
-  let evalVmfb := s!"{spec.buildPrefix}_fwd_eval.vmfb"
+  let evalVmfb ← NetSpec.graphArtifact spec.buildPrefix "fwd_eval"
   let paramsPath := s!"{spec.buildPrefix}_params.bin"
   let bnPath := s!"{spec.buildPrefix}_bn_stats.bin"
   if !(← System.FilePath.pathExists evalVmfb) then

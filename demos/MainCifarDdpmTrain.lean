@@ -174,6 +174,9 @@ def main (args : List String) : IO Unit := do
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
 
   let compileMlir : String → String → IO Bool := fun mlirPath outPath => do
+    -- XLA/PJRT has no ahead-of-time compile step: the `.mlir` IS the artifact
+    -- the runtime loads. Mirrors `Train.lean`'s `runIreeCached` guard.
+    if (← LowererSession.backendName) == "xla" then return true
     let args ← ireeCompileArgs mlirPath outPath
     let compiler ← if (← System.FilePath.pathExists ".venv/bin/iree-compile")
                    then pure ".venv/bin/iree-compile" else pure "iree-compile"
@@ -182,13 +185,13 @@ def main (args : List String) : IO Unit := do
       IO.eprintln s!"iree-compile failed: {r.stderr.take 3000}"
       return false
     return true
-  let vmfbPath := s!"{pfx}_train_step.vmfb"
+  let vmfbPath ← NetSpec.graphArtifact pfx "train_step"
   unless (← compileMlir s!"{pfx}_train_step.mlir" vmfbPath) do IO.Process.exit 1
   IO.eprintln "  train step compiled"
 
   -- Eval forward for periodic sampling (batch 16, matches sampleGrid).
   let evalMlirPath := s!"{pfx}_fwd_eval.mlir"
-  let evalVmfb := s!"{pfx}_fwd_eval.vmfb"
+  let evalVmfb ← NetSpec.graphArtifact pfx "fwd_eval"
   IO.FS.writeFile evalMlirPath (MlirCodegen.generateEval spec 16)
   unless (← compileMlir evalMlirPath evalVmfb) do IO.Process.exit 1
   IO.eprintln "  eval forward compiled"

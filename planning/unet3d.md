@@ -39,6 +39,28 @@ a 3D UNet needs and compiles all of them clean to gfx1100:
 | bias grad | `reduce` across `[0,2,3,4]` | compiles |
 | trilinear factor | `dot_general` on a rank-5 operand | compiles |
 
+### ⭐ Re-measured on XLA/PJRT, 2026-08-26 — the answer did not change
+
+The table above was measured against `iree-compile --iree-hal-target-backends=rocm`,
+i.e. the backend this project has since moved off. Re-run through the shim the
+repo now actually uses (`ffi/libpjrt_ffi.so`, PJRT 0.114, CUDA 12.9, one 4060 Ti),
+every one of the five still compiles clean:
+
+| op | IREE / ROCm gfx1100 | XLA / PJRT sm_89 |
+|---|---|---|
+| `conv3d` forward | compiles | **compiles, 397 ms** |
+| `conv3d` dx | compiles | **compiles, 54 ms** |
+| `maxPool3d` | compiles | **compiles, 37 ms** |
+| bias grad | compiles | **compiles, 42 ms** |
+| trilinear factor | compiles | **compiles, 239 ms** |
+
+▶ So this doc's central finding survives the backend migration: rank-5 is not
+the blocker, on either lowerer. ⭐ And the migration makes the caveat below
+*cheaper to close* than it was — XLA compiles in-process with no AOT step, so
+going from "it compiles" to "it runs and here is the throughput" no longer needs
+a working `iree-compile` on the box. Phase 0 is now a smaller ask than when it
+was written.
+
 Caveat worth stating plainly: **compiling is not running.** The spike proves
 op support and shape legality, not numerical correctness or speed. A rank-5
 conv that lowers to a catastrophically slow loop nest is still a compile

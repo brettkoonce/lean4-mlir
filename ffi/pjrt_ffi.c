@@ -758,13 +758,24 @@ static int entry_matches(const char* fn_name, const char* entry) {
   return strcmp(want, entry) == 0;
 }
 
-int iree_ffi_invoke_f32(
+// The typed core behind `iree_ffi_invoke_f32`. `input_types` is either NULL —
+// meaning every input is f32, the only case that existed before 2026-08-26 — or
+// an `n_inputs`-long array of `PJRT_Buffer_Type` values.
+//
+// It exists for ONE reason: a per-pixel segmentation graph takes an int32 label
+// tensor (`%y_seg: tensor<BxHxWxi32>`), and every buffer here was hardcoded to
+// `PJRT_Buffer_Type_F32`. Splitting the dtype out is preferable to a second copy
+// of this function: this is the trusted shim's hot path, and two copies of it
+// would drift. Element WIDTH is unchanged (f32 and s32 are both 4 bytes), so the
+// sizing, the accounting and the d2h side are untouched.
+static int invoke_typed(
     iree_ffi_session_t* sess,
     const char* fn_name,
     int n_inputs,
     const int32_t* input_ranks,
     const int64_t* input_dims_flat,
     const float* const* input_data,
+    const int32_t* input_types,
     int n_outputs,
     const int64_t* output_totals,
     float* const* output_data) {
@@ -823,7 +834,7 @@ int iree_ffi_invoke_f32(
       a.struct_size = PJRT_Client_BufferFromHostBuffer_Args_STRUCT_SIZE;
       a.client = g_client;
       a.data = input_data[i];
-      a.type = PJRT_Buffer_Type_F32;
+      a.type = input_types ? (PJRT_Buffer_Type)input_types[i] : PJRT_Buffer_Type_F32;
       a.dims = &input_dims_flat[off];
       a.num_dims = (size_t)input_ranks[i];
       a.host_buffer_semantics =
@@ -984,6 +995,21 @@ cleanup:
   free(in);
   free(out);
   return rc;
+}
+
+// Public entry, unchanged for every existing caller: all inputs f32.
+int iree_ffi_invoke_f32(
+    iree_ffi_session_t* sess,
+    const char* fn_name,
+    int n_inputs,
+    const int32_t* input_ranks,
+    const int64_t* input_dims_flat,
+    const float* const* input_data,
+    int n_outputs,
+    const int64_t* output_totals,
+    float* const* output_data) {
+  return invoke_typed(sess, fn_name, n_inputs, input_ranks, input_dims_flat,
+                      input_data, NULL, n_outputs, output_totals, output_data);
 }
 
 // ─── data-parallel invoke ──────────────────────────────────────────────────
@@ -1705,15 +1731,106 @@ int iree_ffi_train_step_adam(
   return not_ported("train_step_adam");
 }
 
+// Adam train step for per-pixel segmentation (and, through the same ride, the
+// per-token CE the GPT drivers use). Ported 2026-08-26 against the
+// `train_step_adam_ddpm` template directly below; the two differ in exactly one
+// place that matters, and it is the reason this needed `invoke_typed`:
+//
+//   ddpm  %y : tensor<b x oC x oH x oW x f32>   -- a noise target, f32
+//   seg   %y : tensor<b x H  x W  x i32>        -- a per-pixel LABEL, int32
+//
+// The label tensor is int32 on the wire and int32 in the graph. Handing it to
+// the old all-f32 upload path would have reinterpreted the label bits as floats
+// and trained silently against garbage, which is the failure this shim exists to
+// make impossible — hence a real dtype rather than a cast at the boundary.
 int iree_ffi_train_step_adam_seg(
     iree_ffi_session_t* s, const char* f, int b, int H, int W, int np,
     const int32_t* pr, const int64_t* pd, const int64_t* ps, const float* pp,
     int xr, const int64_t* xd, const float* x, const int32_t* y, float lr, float t,
     float* po, float* lo, int nb, const int64_t* bs, float* bo) {
-  (void)s;(void)f;(void)b;(void)H;(void)W;(void)np;(void)pr;(void)pd;(void)ps;(void)pp;
-  (void)xr;(void)xd;(void)x;(void)y;(void)lr;(void)t;(void)po;(void)lo;
-  (void)nb;(void)bs;(void)bo;
-  return not_ported("train_step_adam_seg");
+
+  if (np < 0 || xr < 0 || nb < 0) return 1;
+  const int have_bn   = (bo && nb > 0) ? 1 : 0;
+  const int n_inputs  = np + 4;                       // params, x, y, lr, t
+  const int n_outputs = np + 1 + (have_bn ? nb * 2 : 0);
+
+  // Total rank across every input: the params, x, y (rank 3), and two rank-0
+  // scalars which contribute no dims.
+  int64_t n_dims = 0;
+  for (int i = 0; i < np; i++) {
+    if (pr[i] < 0) return 1;
+    n_dims += pr[i];
+  }
+  n_dims += xr + 3;
+
+  int32_t*      ranks = (int32_t*)     malloc((size_t)n_inputs  * sizeof(*ranks));
+  int32_t*      types = (int32_t*)     malloc((size_t)n_inputs  * sizeof(*types));
+  int64_t*      dims  = (int64_t*)     malloc((size_t)(n_dims ? n_dims : 1) * sizeof(*dims));
+  const float** ins   = (const float**)malloc((size_t)n_inputs  * sizeof(*ins));
+  int64_t*      totes = (int64_t*)     malloc((size_t)n_outputs * sizeof(*totes));
+  float**       outs  = (float**)      malloc((size_t)n_outputs * sizeof(*outs));
+  if (!ranks || !types || !dims || !ins || !totes || !outs) {
+    free(ranks); free(types); free(dims); free(ins); free(totes); free(outs);
+    fprintf(stderr, "[pjrt_ffi] train_step_adam_seg: out of memory\n");
+    return 1;
+  }
+
+  // lr and t are passed by value; invoke uploads from the pointers we hand it,
+  // so they need addresses that outlive the call below.
+  float lr_v = lr, t_v = t;
+
+  // ── inputs ──
+  int      di   = 0;   // cursor into `dims`
+  int64_t  poff = 0;   // cursor into the packed param buffer
+  for (int i = 0; i < np; i++) {
+    ranks[i] = pr[i];
+    types[i] = PJRT_Buffer_Type_F32;
+    for (int k = 0; k < pr[i]; k++) dims[di + k] = pd[di + k];
+    ins[i]   = pp + poff;
+    di      += pr[i];
+    poff    += ps[i];
+  }
+  ranks[np] = xr;
+  types[np] = PJRT_Buffer_Type_F32;
+  for (int k = 0; k < xr; k++) dims[di + k] = xd[k];
+  ins[np]   = x;
+  di       += xr;
+
+  // The one int32 input. `y` is `const int32_t*`; `ins` is `const float**`
+  // purely because that is the array type the invoke path takes — the bytes are
+  // never read as float, because `types[np+1]` says S32.
+  ranks[np + 1] = 3;
+  types[np + 1] = PJRT_Buffer_Type_S32;
+  dims[di + 0] = b; dims[di + 1] = H; dims[di + 2] = W;
+  ins[np + 1]   = (const float*)y;
+  di           += 3;
+
+  ranks[np + 2] = 0;  types[np + 2] = PJRT_Buffer_Type_F32;  ins[np + 2] = &lr_v;
+  ranks[np + 3] = 0;  types[np + 3] = PJRT_Buffer_Type_F32;  ins[np + 3] = &t_v;
+
+  // ── outputs ── (all f32: updated params, the loss scalar, then BN stats)
+  int64_t ooff = 0;
+  for (int i = 0; i < np; i++) {
+    totes[i] = ps[i];
+    outs[i]  = po + ooff;
+    ooff    += ps[i];
+  }
+  totes[np] = 1;
+  outs[np]  = lo;
+  if (have_bn) {
+    int64_t boff = 0;
+    for (int i = 0; i < nb * 2; i++) {
+      totes[np + 1 + i] = bs[i];
+      outs[np + 1 + i]  = bo + boff;
+      boff             += bs[i];
+    }
+  }
+
+  int rc = invoke_typed(s, f, n_inputs, ranks, dims, ins, types,
+                        n_outputs, totes, outs);
+
+  free(ranks); free(types); free(dims); free(ins); free(totes); free(outs);
+  return rc;
 }
 
 int iree_ffi_train_step_adam_softlabel(
