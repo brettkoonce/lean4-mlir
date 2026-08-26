@@ -1,0 +1,124 @@
+name: Prune stale Actions caches
+
+# ⭐ WHY THIS EXISTS
+#
+# The heavy workflows use the rolling-cache idiom:
+#
+#     key:          lake-certs-${{ hashFiles(...) }}-${{ github.run_id }}
+#     restore-keys: lake-certs-${{ hashFiles(...) }}-
+#
+# The `run_id` suffix is deliberate and correct — `actions/cache` will not overwrite an
+# existing exact key, so without it the cache would be written once and then never refresh
+# as the build products move. The cost is that EVERY run writes a brand-new entry and
+# nothing ever removes the old one. GitHub only reclaims space by LRU at the ~10 GB
+# per-repo cap.
+#
+# Measured 2026-08-26: `lake-certs-` alone held FOUR near-identical 2.13 GB copies (8.5 GB
+# of a 10.09 GB budget, 6.38 GB of it pure duplication), and the cap was full. The victim
+# is whichever cache is written least often — here `blueprint`, whose `.lake` tree carries
+# the locally-rebuilt Mathlib doc-gen4 corpus. Evicting it turns a ~25 min blueprint run
+# into a ~85 min cold rebuild, which is exactly the bimodal history the run list shows:
+#
+#     26m  87m  85m  82m  78m  25m
+#
+# certs.yml's own comment records an earlier round of this ("stop the workflows blowing
+# GitHub's ~10 GB cache budget ... which was evicting everything"); narrowing the cached
+# path helped but did not address the per-run growth, so it came back.
+#
+# ▶ This keeps only the NEWEST entry per key-group, where a group is the key with its
+# trailing numeric run-id stripped. That preserves the rolling-cache behaviour exactly —
+# each run still writes a fresh entry and restores from the prefix — while bounding total
+# usage to roughly one copy per group.
+
+on:
+  workflow_run:
+    # Fire after the cache-writing workflows finish, so the superseded entry is removed
+    # promptly rather than sitting until the next schedule tick.
+    workflows: ["Certify Corpus", "Certify Heavy Corpus", "Verify Proofs",
+                "Comparator (independent kernel re-check)", "JAX subproject",
+                "Compile blueprint"]
+    types: [completed]
+  schedule:
+    # Backstop: catches anything the workflow_run trigger missed (renamed workflows,
+    # runs on forks, manual cache writes).
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "How many entries to keep per key-group"
+        type: string
+        default: "1"
+      dry_run:
+        description: "List what would be deleted without deleting"
+        type: boolean
+        default: false
+
+permissions:
+  actions: write        # required to DELETE caches
+  contents: read
+
+concurrency:
+  # Never prune concurrently with itself — two runs could both decide the same entry is
+  # the newest survivor and race on the others.
+  group: cache-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune superseded caches (keep newest per key-group)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ inputs.keep || '1' }}
+          DRY: ${{ inputs.dry_run && '1' || '' }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess, collections
+
+          repo, keep, dry = os.environ["REPO"], int(os.environ["KEEP"] or 1), bool(os.environ.get("DRY"))
+
+          def gh(*args):
+              return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
+
+          caches = []
+          page = 1
+          while True:
+              out = json.loads(gh("api", f"repos/{repo}/actions/caches?per_page=100&page={page}"))
+              batch = out.get("actions_caches", [])
+              if not batch:
+                  break
+              caches += batch
+              page += 1
+
+          total = sum(c["size_in_bytes"] for c in caches)
+          print(f"{len(caches)} caches, {total/1e9:.2f} GB total (cap ~10 GB)\n")
+
+          # Group by key with the trailing run-id stripped: `lake-certs-<hash>-123456789`
+          # and `lake-certs-<hash>-987654321` are the same rolling cache.
+          groups = collections.defaultdict(list)
+          for c in caches:
+              groups[re.sub(r"-\d{6,}$", "", c["key"])].append(c)
+
+          freed = 0
+          for prefix, entries in sorted(groups.items()):
+              entries.sort(key=lambda c: c["created_at"], reverse=True)
+              survivors, doomed = entries[:keep], entries[keep:]
+              if not doomed:
+                  continue
+              print(f"{prefix}  ({len(entries)} entries, keeping {len(survivors)})")
+              for c in doomed:
+                  gb = c["size_in_bytes"] / 1e9
+                  if dry:
+                      print(f"    would delete id={c['id']}  {gb:.2f} GB  {c['created_at']}")
+                  else:
+                      subprocess.run(["gh", "api", "-X", "DELETE",
+                                      f"repos/{repo}/actions/caches/{c['id']}"],
+                                     capture_output=True, text=True)
+                      print(f"    deleted      id={c['id']}  {gb:.2f} GB  {c['created_at']}")
+                  freed += c["size_in_bytes"]
+
+          verb = "would free" if dry else "freed"
+          print(f"\n{verb} {freed/1e9:.2f} GB -> ~{(total-freed)/1e9:.2f} GB remaining")
+          PY
