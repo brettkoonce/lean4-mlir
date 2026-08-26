@@ -360,6 +360,24 @@ jobs:
           } > public/build-logs/filesystem.txt
           ls -la public/ public/build-logs/
 
+      - name: Generate sitemap.xml + robots.txt
+        # Generated, never committed: blueprint/ and docs/ are build products, so a
+        # static sitemap would be stale the moment leanblueprint or doc-gen4 emits a
+        # different page set. The script deliberately lists only OUR doc namespaces —
+        # public/docs/ carries a locally rebuilt Mathlib, and pointing crawlers at a
+        # duplicate of Mathlib's own docs would both blow the 50k-URL cap and invite a
+        # duplicate-content penalty. See scripts/gen_sitemap.py.
+        run: |
+          # Derived from the repo rather than hardcoded, so a rename or a fork still
+          # emits correct <loc>s. Matches `gh api repos/:owner/:repo/pages -q .html_url`.
+          BASE="https://${GITHUB_REPOSITORY%%/*}.github.io/${GITHUB_REPOSITORY#*/}"
+          echo "base URL: $BASE"
+          python3 scripts/gen_sitemap.py public "$BASE"
+          echo '--- sitemap.xml (first 20 lines) ---'
+          head -20 public/sitemap.xml
+          echo '--- robots.txt ---'
+          cat public/robots.txt
+
       # ⭐ `upload-pages-artifact` above is NOT a normal artifact: it produces the special
       # `github-pages` tarball that only `deploy-pages` consumes, which is why nothing on a
       # run page was downloadable. These are plain `upload-artifact` steps so every run
