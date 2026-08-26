@@ -3814,8 +3814,9 @@ lets us ask a sharper question than ``does it train?'' We can ask
 \emph{what governs how it trains?}
 
 Two levers govern the answer, \textbf{normalization} and the
-\textbf{optimizer}, and a third knob, the width of the head, turns
-out not to. We move each against an \emph{identical, machine-checked
+\textbf{optimizer}; a third, the \textbf{arithmetic} the whole thing is
+computed in, turns out not to move it at all --- which is its own kind of
+finding --- and a knob, the width of the head, does not either. We move each against an \emph{identical, machine-checked
 gradient}, holding everything else fixed: same architecture, same 40
 epochs, and the same data pipeline (per-epoch shuffle, random horizontal
 flip, cosine learning-rate schedule with warmup). The findings,
@@ -3831,6 +3832,14 @@ stated up front so the graphs are no surprise:
   for SGD-with-momentum is worth about two points of final accuracy,
   more than anything else here. AdamW sits between the two, and its
   per-coordinate adaptivity earns less than momentum does.
+\item \textbf{The arithmetic does not move the ranking.} Recomputing the
+  whole ladder in bf16 and in fp8 leaves the optimizer ordering exactly
+  where it was, with medians agreeing to within half a point --- less than
+  the spread between repeated runs of a single configuration. The
+  eight-layer stack is fragile, and the same runs show it, but it is
+  fragile in fp32 too. What breaks the network is depth without
+  normalization, not the number format.
+
 \item \textbf{The head barely matters.} This 2$\times$512 head carries
   about 25$\times$ the parameters of a narrow 64-wide one, yet trains to
   within a point of it. The convolutional \emph{body}, not the head,
@@ -4226,6 +4235,64 @@ optimizer. It is exactly the kind of mistake a verified gradient does
 design was what needed fixing. An ablation measures the thing you varied
 only if everything else is held constant, and ``everything else''
 includes the parts that live outside the network.
+
+\subsection*{Lever 3: the arithmetic}
+
+Levers 1 and 2 changed the \emph{network} and the \emph{update rule}. This one
+changes neither. It holds both fixed and changes only the number format the
+convolutions are computed in, which is the sharpest version of the chapter's
+question: if the optimizer ranking is a fact about optimization, it should
+survive being computed in a different arithmetic.
+
+Three precisions, the same three optimizers, the same 40 epochs and the same
+pipeline. Median of five runs, with the observed range:
+
+\begin{center}
+\begin{tabular}{l c c c}
+\hline
+          & fp32 & bf16 & fp8 (E4M3) \\
+\hline
+SGD (lr 0.1)          & 72.6 {\footnotesize (1.2)} & 72.5 {\footnotesize (2.6)} & 72.2 {\footnotesize (3.3)} \\
+AdamW (lr $10^{-3}$)  & 74.3 {\footnotesize (2.3)} & 73.9 {\footnotesize (2.1)} & 74.3 {\footnotesize (1.5)} \\
+momentum ($\mu$ 0.9)  & \emph{diverged} & \textbf{76.0} {\footnotesize (1.1)} & \emph{diverged} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent $n=5$ per cell. Reading \emph{down} each column recovers Lever~2, and
+it recovers it three times: SGD is last, AdamW is second, momentum is first, in
+every arithmetic. \textbf{The ranking is invariant.} Reading \emph{across} the
+rows, the medians agree to within half a point --- 72.6/72.5/72.2 and
+74.3/73.9/74.3 --- which is well inside the spread \emph{within} a single cell.
+Sixteen-bit and eight-bit arithmetic land on the same curve as fp32.
+
+\medskip\noindent\textbf{The diverged cells are Lever~1 again, not a precision
+effect.} The momentum row loses a run to \texttt{NaN} in fp32 \emph{and} in fp8,
+one of five each, collapsing to 10\% --- chance on ten classes. That is the same
+un-normalized instability the empty cell in Lever~2 records, reproduced here
+independently in two arithmetics, so the honest reading is that the network is
+what is fragile, not the number format. The bf16 column happens to lose none;
+with one failure in five as the base rate that is not evidence bf16 stabilizes
+anything, and we do not claim it does.
+
+\medskip\noindent\textbf{What the two low-precision columns actually are}, since
+they are not the same kind of object. The bf16 arm is genuine reduced precision
+\emph{in the graph}: all twenty-three convolutions of the training step --- the
+forward, the input gradient and the weight gradient --- carry bf16 operands and a
+bf16-typed result, and only the parameter updates stay in fp32. The fp8 arm is
+\emph{emulated}: weights and inputs are projected onto the E4M3 grid, but the
+graph itself is fp32 and accumulation is fp32. It is the right arithmetic and
+the wrong hardware path, which is enough for a statement about numerics and not
+enough for one about speed.
+
+\medskip\noindent\textbf{And there is no speed claim here.} At this network's
+size the convolutions are launch-bound --- sixteen to thirty-two channels on
+grids from $32^2$ down to $4^2$ --- so the tensor cores that make bf16 and fp8
+worth having on ImageNet-scale models sit idle. Measured directly, bf16 runs at
+$0.87\times$ fp32 across this conv stack: slightly \emph{slower}. The payoff for
+low precision is a story about ResNet-34 and beyond (Ch~\ref{chap:residual});
+what CIFAR can show is that the mathematics survives the trip, and that is what
+this lever is for.
 
 \subsection*{Does the head width matter?}
 

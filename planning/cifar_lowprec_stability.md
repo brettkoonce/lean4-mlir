@@ -266,6 +266,32 @@ gave 76.82 % / 76.09 % @40. Treat any single delta of that size as noise.
 ⚠ The fp8 trainers CHECKPOINT AND RESUME — a re-run silently no-ops ("resuming from fp8
 checkpoint at epoch 40"). Delete `.lake/build/<slug>_<variant>_e4m3_ckpt.bin*` between configs.
 
+#### 5.2a-bis ⭐⭐⭐ THE DEFINITIVE RUN — wide head (d1=512), n=5, and it is now in the book
+
+Median of 5 seeds at epoch 40, `(observed range)`. This is the net Levers 1–2 of the LaTeX
+§4.3 already measure, so the columns are readable against the published table:
+
+| optimizer | fp32 | bf16 | fp8 E4M3 |
+|---|---|---|---|
+| SGD (lr 0.1) | 72.61 (1.17) | 72.54 (2.59) | 72.18 (3.31) |
+| AdamW (lr 1e-3) | 74.29 (2.32) | 73.94 (2.08) | 74.28 (1.47) |
+| Nesterov (μ0.9) | ⚠ **diverged** (66.51) | **75.99** (1.09) | ⚠ **diverged** (66.31) |
+
+⭐⭐ **The ranking is invariant**: SGD < AdamW < Nesterov in every column. Medians agree ACROSS
+precisions to within half a point (72.61/72.54/72.18 and 74.29/74.28/73.94) — well inside the
+spread WITHIN a single cell.
+
+⭐ **The fp32 column reproduces the blueprint's Lever 2 "no BN" row** (its SGD 72.6, AdamW 73.7),
+including the *divergence*: one of five momentum runs collapsed to **10.00 %** — chance on ten
+classes — which is exactly what Lever 2's empty cell records.
+
+⚠⚠ **And fp8 lost a momentum run too, independently.** Two arithmetics diverging the same way
+says the NETWORK is fragile, not the number format. ▶ bf16 lost none, but with a 1-in-5 base rate
+that is NOT evidence bf16 stabilises anything — do not claim it.
+
+⚠ This supersedes §5.2's narrow-head n=1 table for any quotable number. That table is kept
+because it is what the batched-migration and fp8 work were gated against.
+
 #### 5.2b The three precisions are NOT the same kind of object
 
 | | where the precision lives | speedup |
