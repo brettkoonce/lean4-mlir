@@ -63,7 +63,17 @@ def artifact_writers() -> dict[str, list[str]]:
 
     Matches `#eval IO.FS.writeFile "verified_mlir/…"`, allowing the path to sit
     on the following line (several renderers wrap it that way).
+
+    ⚠ ALSO matches the `#eval do … IO.FS.writeFile "…"` block form. That form was
+    invisible here until 2026-08-26, which is this checker's own failure mode: three
+    committed artifacts (`cifar8{_bf16,b,wb}_fwd.mlir`) were written by `#eval do`
+    blocks, so they were neither drift-guarded NOR baselined and the check still
+    reported OK. A writer the scanner cannot see is exactly the gap the scanner
+    exists to close, so the window is bounded rather than unbounded: only writes
+    within WINDOW chars of an `#eval` count, which keeps helper `def`s that write
+    to scratch paths from being mistaken for elaboration-time artifact writers.
     """
+    WINDOW = 400
     out: dict[str, list[str]] = {}
     for path in sorted(CODEGEN.glob("*.lean")):
         if path.stem in SCRATCH_ONLY:
@@ -71,7 +81,10 @@ def artifact_writers() -> dict[str, list[str]]:
         text = path.read_text()
         # collapse the `#eval IO.FS.writeFile\n  "path"` wrap before matching
         flat = re.sub(r"\s+", " ", text)
-        hits = re.findall(r'#eval\s+IO\.FS\.writeFile\s+"([^"]+)"', flat)
+        hits = [m.group(1)
+                for ev in re.finditer(r'#eval\b', flat)
+                for m in re.finditer(r'IO\.FS\.writeFile\s+"([^"]+)"',
+                                     flat[ev.start(): ev.start() + WINDOW])]
         committed = [h for h in hits if not h.startswith("/tmp")]
         if committed:
             out[path.stem] = sorted(set(committed))
