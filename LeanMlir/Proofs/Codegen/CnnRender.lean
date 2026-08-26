@@ -2048,15 +2048,19 @@ end Proofs.StableHLO
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0) 1 .adamw)
 
+-- ⚠ The entry symbol MUST match the file stem: `regen_verified_mlir.sh check` fails any
+-- artifact whose declared `@name` differs from its path, because the driver resolves the
+-- entry as `m.{slug}_{variant}_train_step` and so could never load it.
 #eval IO.FS.writeFile "verified_mlir/cifar8b_bf16_adam_train_step.mlir"
-  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 64 10 3 3
+  ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (fun _ => 0) 1 .adamw (bf16 := true))
+    (fun _ => 0) 1 .adamw (bf16 := true)).replace
+      "@cifar8b_adam_train_step" "@cifar8b_bf16_adam_train_step")
 
 -- Eval forward for the batched slug. The forward graph is IDENTICAL either way (the batch was
 -- always in the MLIR; only the Lean-side type changed), so this is the f32 `cifar8_fwd` renamed
