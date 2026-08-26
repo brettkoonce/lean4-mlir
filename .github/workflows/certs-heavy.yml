@@ -41,7 +41,17 @@ on:
       - 'lakefile.lean'
       - '.github/workflows/certs-heavy.yml'
   schedule:
-    - cron: '47 9 * * 0'   # weekly, Sunday 09:47 UTC — drift guard
+    # Bi-weekly drift guard: the 1st and 15th at 09:47 UTC. Cron has no native
+    # fortnightly, so day-of-month is the usual spelling (~14-16 day spacing).
+    # Was weekly (Sunday) until 2026-08-26.
+    # ⚠ This is NOT what governs how often this workflow runs. Over the last 30
+    # runs the split was 24 push / 5 schedule, so the `paths` filter above is the
+    # real cadence — and `lakefile.lean` in it is why: ANY exe added, link-mode
+    # change or target rename fires the heavy corpus, none of which touch a
+    # certificate. Halving the cron moves 5 runs in 30; dropping `lakefile.lean`
+    # would move the other 24. Left in place deliberately — a lakefile change CAN
+    # change what `CertsHeavy` builds — but the cost is now written down.
+    - cron: '47 9 1,15 * *'
   workflow_dispatch:
 
 jobs:
