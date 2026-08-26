@@ -1,0 +1,25 @@
+I0826 16:02:03.898122 2218243 service.cc:154] XLA service 0x7d48f872cf60 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0826 16:02:03.898167 2218243 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0826 16:02:03.899568 2218243 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0826 16:02:03.899596 2218243 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0826 16:02:03.906258 2218243 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir (@linear_train_step, 2 outputs, 1 replica) in 714 ms
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 97 ms
+MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/linear_train_step.mlir
+  xla/pjrt verified_mlir/linear_fwd.mlir
+  train 60000, test 10000; dense 784->10, bs 128, SGD
+  epoch 1: test_acc = 8977/10000 = 89.770000% (166ms)
+  epoch 2: test_acc = 9081/10000 = 90.810000% (196ms)
+  epoch 3: test_acc = 9124/10000 = 91.240000% (232ms)
+  epoch 4: test_acc = 9157/10000 = 91.570000% (224ms)
+  epoch 5: test_acc = 9167/10000 = 91.670000% (198ms)
+  epoch 6: test_acc = 9176/10000 = 91.760000% (215ms)
+  epoch 7: test_acc = 9186/10000 = 91.860000% (249ms)
+  epoch 8: test_acc = 9194/10000 = 91.940000% (264ms)
+  epoch 9: test_acc = 9198/10000 = 91.980000% (268ms)
+  epoch 10: test_acc = 9198/10000 = 91.980000% (265ms)
+  epoch 11: test_acc = 9203/10000 = 92.030000% (269ms)
+  epoch 12: test_acc = 9210/10000 = 92.100000% (276ms)
+done (trained MNIST-Linear via the proof-rendered StableHLO).

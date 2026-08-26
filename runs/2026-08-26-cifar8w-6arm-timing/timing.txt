@@ -1,0 +1,4 @@
+START 2026-08-26T17:40:44+00:00
+cifar8w-ablation rc=0 wall=374s
+cifar8w-bn-ablation rc=0 wall=757s
+END 2026-08-26T17:59:35+00:00

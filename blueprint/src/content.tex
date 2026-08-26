@@ -137,7 +137,7 @@ That's it. Three rules, five tricks. Every architecture in this book
 decomposes into some combination of those eight things, and that includes
 the MLP, the CNN, ResNet, MobileNet, EfficientNet, and the Vision
 Transformer. So does every architecture in the bestiary at the end, which
-covers U-Net, DETR, Mamba, GAN, VAE, diffusion models, CLIP, and
+covers U-Net, YOLO, Mamba, GAN, VAE, diffusion models, CLIP, and
 GPT-style decoders. There is no ninth.
 
 I didn't set out to prove this. I set out to train a ResNet with verified
@@ -236,7 +236,7 @@ vision, and you've also seen every primitive for modern language models,
 because transformers are the same architecture in both domains.
 
 The bestiary at the end demonstrates that the same primitives cover
-detection (DETR), segmentation (U-Net), generation (diffusion models),
+detection (YOLO), segmentation (U-Net), generation (diffusion models),
 self-supervised learning (MAE, CLIP), sequence modeling (Mamba), and
 multi-modal models (LLaVA). Image recognition is the on-ramp. The whole
 modern stack is the destination.
@@ -490,8 +490,8 @@ Concretely, that means:
   achieved. That full recipe is assembled and ablated in
   Chapter~\ref{chap:residual} (ResNet) and ran against each
   architecture after as a common baseline. Later chapters add full
-  ImageNet recipes, trained through a Lean 4 \(\to\) JAX bridge, with
-  modern data augmentations.
+  ImageNet recipes, trained through paired Lean 4 \(\to\) JAX and Lean 4
+  \(\to\) PJRT trainers, with modern data augmentations.
 
 \item \textbf{The codegen is new.} The first book's Swift-for-TensorFlow
   pipeline is replaced with Lean 4 \(\to\) StableHLO MLIR \(\to\) XLA
@@ -589,7 +589,7 @@ $J_h = J_g \cdot J_f$. So if your network is $L$ layers stacked, the
 Jacobian of the output with respect to the input is the matrix
 product $J_L \cdot J_{L-1} \cdots J_1$.
 
-This is correct and totally impractical. For a 512-dimensional hidden
+This is both correct and totally impractical. For a 512-dimensional hidden
 layer, each $J_k$ is a $512 \times 512$ matrix, and multiplying two of
 them is $\sim 1.3 \times 10^8$ flops. ResNet-34 has 34 of these
 layers and ViT has more. You'd be materializing intermediate matrices
@@ -686,39 +686,41 @@ lake build mnist-linear-verified
 ./.lake/build/bin/mnist-linear-verified data
 \end{verbatim}
 
-On one 7900 XTX (ROCm, gfx1100), from
-\texttt{runs/2026-08-11-linear-verified-xla/}. XLA's startup banner is
-the only thing removed:
+On one RTX 4060 Ti (CUDA 12.9), from
+\texttt{runs/2026-08-26-linear-verified-xla-cuda/}. XLA's startup banner is
+removed and two long lines are wrapped:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
 [pjrt_ffi] compiled verified_mlir/linear_train_step.mlir
-             (@linear_train_step, 2 outputs, 1 replica) in 782 ms
+             (@linear_train_step, 2 outputs, 1 replica) in 714 ms
 [pjrt_ffi] compiled verified_mlir/linear_fwd.mlir
-             (@linear_fwd, 1 outputs, 1 replica) in 23 ms
+             (@linear_fwd, 1 outputs, 1 replica) in 97 ms
 MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/linear_train_step.mlir
+  xla/pjrt verified_mlir/linear_fwd.mlir
   train 60000, test 10000; dense 784->10, bs 128, SGD
-  epoch 1: test_acc = 8977/10000 = 89.770000% (306ms)
-  epoch 2: test_acc = 9082/10000 = 90.820000% (240ms)
-  epoch 3: test_acc = 9124/10000 = 91.240000% (241ms)
-  epoch 4: test_acc = 9156/10000 = 91.560000% (257ms)
-  epoch 5: test_acc = 9167/10000 = 91.670000% (270ms)
-  epoch 6: test_acc = 9176/10000 = 91.760000% (271ms)
-  epoch 7: test_acc = 9186/10000 = 91.860000% (271ms)
-  epoch 8: test_acc = 9194/10000 = 91.940000% (272ms)
-  epoch 9: test_acc = 9198/10000 = 91.980000% (270ms)
-  epoch 10: test_acc = 9198/10000 = 91.980000% (269ms)
-  epoch 11: test_acc = 9203/10000 = 92.030000% (268ms)
-  epoch 12: test_acc = 9210/10000 = 92.100000% (272ms)
+  epoch 1: test_acc = 8977/10000 = 89.770000% (166ms)
+  epoch 2: test_acc = 9081/10000 = 90.810000% (196ms)
+  epoch 3: test_acc = 9124/10000 = 91.240000% (232ms)
+  epoch 4: test_acc = 9157/10000 = 91.570000% (224ms)
+  epoch 5: test_acc = 9167/10000 = 91.670000% (198ms)
+  epoch 6: test_acc = 9176/10000 = 91.760000% (215ms)
+  epoch 7: test_acc = 9186/10000 = 91.860000% (249ms)
+  epoch 8: test_acc = 9194/10000 = 91.940000% (264ms)
+  epoch 9: test_acc = 9198/10000 = 91.980000% (268ms)
+  epoch 10: test_acc = 9198/10000 = 91.980000% (265ms)
+  epoch 11: test_acc = 9203/10000 = 92.030000% (269ms)
+  epoch 12: test_acc = 9210/10000 = 92.100000% (276ms)
 done (trained MNIST-Linear via the proof-rendered StableHLO).
 \end{verbatim}
 
-Twelve epochs at about 270\,ms each, and 92.10\% on the full
+Twelve epochs at about 235\,ms each, and 92.10\% on the full
 10,000-image test set. That is the going rate for a linear classifier on
 MNIST, and LeCun's original 1998 benchmark put a comparable model at
 around 92\%.
 
-Here is the part that matters. That run did not execute a
+That run did not execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/linear\_train\_step.mlir}, which is the text
 \texttt{Proofs.StableHLO.linTrainStepFaithfulV} emits. Every line of that
@@ -1234,6 +1236,25 @@ bound to \texttt{verified\_mlir/linear\_train\_step.mlir} and
 \texttt{linear\_fwd.mlir}, which are the two files the run at the top of
 the chapter compiled.
 
+\paragraph{What \texttt{.dense 784 10} contributes.} Layers are
+constructors of a \texttt{VLayer} inductive, and one function,
+\texttt{toSpecs}, says what each contributes to the parameter list as
+\texttt{(dims, initKind)} pairs --- \texttt{0} is He(fan-in), \texttt{1}
+is ones, \texttt{2} is zeros:
+
+\begin{verbatim}
+def toSpecs : VLayer -> Array (Array Nat × Nat)
+  | dense ic oc => #[(#[ic,oc],0),(#[oc],2)]
+  | ...
+\end{verbatim}
+
+\noindent Two tensors: a $784 \times 10$ weight matrix initialised
+He(fan-in), and a length-10 bias initialised to zero. That is this
+network's entire parameter list, and \texttt{d0}, the input width the
+render needs, is derived from the same list rather than declared
+separately. Every chapter after this one adds an arm to that match.
+None of them changes this one, so this is the last time you will see it.
+
 That binding is why the type exists. The spec lives in
 \texttt{LeanMlir/VerifiedNets.lean} rather than beside the trainer,
 because the theorem and the program have to name the same object. In
@@ -1449,8 +1470,9 @@ time. Moving the arithmetic into the graph moves it inside the reach of
 the proofs.
 
 \paragraph{The same loop, in Lean.}
-Here is the real thing, abridged. Elisions are marked, and the full
-function is \texttt{VerifiedNet.trainLinear}:
+Here is the real thing, \texttt{VerifiedNet.trainLinear}, in full. Only
+the per-epoch timing and two environment-variable overrides are dropped;
+every line that computes the answer is here:
 
 \begin{verbatim}
 def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
@@ -1459,7 +1481,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
   let d0 := net.d0
   let d1 := net.nClasses
 
-      -- 1. One session per committed render
+  -- 1. One session per committed render
   let tsSess  <- mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess <- mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
 
@@ -1468,7 +1490,12 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
     loadData net dataDir
   let mut W0 <- F32.const (d0 * d1).toUSize 0.0
   let mut b0 <- F32.const d1.toUSize 0.0
-  let nb := nTrain / bs
+  let nb     := nTrain / bs
+  let nbt    := (nEval + bs - 1) / bs   -- ceil: last eval batch is zero-padded
+  let pBytes := (d0 * d1 + d1) * 4
+  let shapes := net.shapesBA            -- packed [W0|b0] layout for the forward
+  let xShape := net.xShape bs
+  let mut packed := W0 ++ b0
 
   -- 3. Epoch loop
   for ep in [0:cfg.epochs] do
@@ -1479,19 +1506,30 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
       let out <- LowererSession.linearTrainStepV tsSess tsFn
                    xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize nResident
+      packed := out
       W0 := out.extract 0 (d0 * d1 * 4)
       b0 := out.extract (d0 * d1 * 4) pBytes
 
     -- 5. Evaluate on the full test set, every epoch
-    ...                       -- argmax the fwd session over evalImg
-    IO.println s!"  epoch {ep+1}: test_acc = {correct}/{nEval} = ..."
+    let params <- LowererSession.readParams tsSess packed pBytes.toUSize
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
+      let logits <- LowererSession.forwardF32 fwdSess fwdFn params shapes
+                      xb xShape bs.toUSize d1.toUSize nResident (ep+1).toUSize
+      for j in [0:min bs (nEval - bi * bs)] do  -- real rows only, not the pad
+        let pred := (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat
+        if pred == F32.readLabel evalLbl (bi * bs + j) then
+          correct := correct + 1
+    let acc := correct.toFloat / nEval.toFloat * 100.0
+    IO.println s!"  epoch {ep+1}: test_acc = {correct}/{nEval} = {acc}%"
 \end{verbatim}
 
 Walking through the numbered sections:
 
 \textbf{1. Sessions.} \texttt{mkSession} takes the path to a committed
 \texttt{.mlir}, hands it to the shim, and gets back something callable.
-XLA compiles the StableHLO in process, which is the 782\,ms the run
+XLA compiles the StableHLO in process, which is the 714\,ms the run
 reported.
 
 \textbf{2. Data and initialisation.} \texttt{loadData} mmaps the on-disk
@@ -1513,12 +1551,21 @@ It returns the new parameters packed as \texttt{[W0|b0]}.
 This one line is where the whole pipeline pays off. There is no Python.
 There is no per-step graph construction. There is no autograd
 interpreter walking a tape. The training step was compiled once at
-startup, in 782\,ms, and every batch after that is a single dispatched
+startup, in 714\,ms, and every batch after that is a single dispatched
 call. Chapter~1's run does 468 of those per epoch and finishes an epoch
-in about 270\,ms including a full pass over the 10,000 test images.
+in about 235\,ms including a full pass over the 10,000 test images.
 
 \textbf{5. Validation.} Every epoch, not every tenth, because a forward
-pass over the test set is cheap next to the training epoch. The
+pass over the test set is cheap next to the training epoch. Two details
+are worth naming now because every later chapter inherits them. The
+eval loop reads the parameters back with \texttt{readParams} rather than
+using the \texttt{W0}/\texttt{b0} it already has, because under device
+residency those two are stale by design and \texttt{packed} is the
+authoritative copy. And \texttt{nbt} rounds \emph{up}: the last eval
+batch is zero-padded to \texttt{bs} and the inner loop scores only the
+real rows, so a test set whose size is not a multiple of the batch size
+is fully scored rather than silently truncated. Ten thousand images and
+a batch of 128 would otherwise drop the last 16. The
 forward-only render is a separate artifact rather than a branch inside
 the training graph, which matters more in Chapter~\ref{chap:bn} where
 BatchNorm has to use running statistics at inference and per-batch
@@ -1656,8 +1703,11 @@ at a witness), and three classical axioms.
 All five committed training steps were then re-rendered
 at the production trainers' exact signatures and \emph{tied}: every parameter
 update is proved to consume the cotangent its own backward pass delivers,
-threaded through the real forward, and each agrees on GPU to float rounding. There is one open gap. The theorems are over $\mathbb{R}$ and the GPU
-runs \texttt{float32}. Part~II's bestiary is deliberately lighter,
+threaded through the real forward, and each agrees on GPU to float rounding. There is one open gap, and it is narrower than it used to be. The
+theorems are over $\mathbb{R}$; the GPU runs a finite precision. What sits
+between them is not a \texttt{float32}-specific argument but a budget over
+an arbitrary rounding model (\S~\ref{sec:precision}), which
+\texttt{float32}, bf16-mixed and fp8-E4M3 all instantiate. Part~II's bestiary is deliberately lighter,
 decomposed into the same proved primitives but not carried to whole-step
 closes. The book's official claim is exactly this, no more and no less:
 \emph{every architecture in Part~I trained end-to-end under one
@@ -1680,7 +1730,10 @@ side able to recognize handwritten digits.
 To say the same thing more concretely: a neural network is a long
 chain of functions, and ``training'' means using the partials of
 those functions to nudge their parameters in a direction that
-reduces a loss. Every theorem in this chapter is the answer to
+reduces a loss. Two different motions, and this book keeps two words for
+them: you \emph{nudge} a parameter to move the loss, and you
+\emph{jiggle} an input to find out what would move it. Every theorem in
+this chapter is the answer to
 the same question, asked about a different building block:
 \emph{if I jiggle this input by} \(\varepsilon\), \emph{how does the
 output jiggle?}
@@ -1733,7 +1786,8 @@ Twelve epochs at about 900\,ms each, and 97.83\% on the full
 Chapter~\ref{chap:tensor}'s linear model buys 5.7 points of accuracy at
 about three times the wall clock per epoch.
 
-Here is the part that matters. That run did not execute a
+The same claim, now with two hidden layers under it. That run did not
+execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/mlp\_train\_step.mlir}, which is the text
 \texttt{Proofs.StableHLO.mlpTrainStepFaithfulV} emits. Every line of
@@ -1745,8 +1799,7 @@ the Mathlib \(\fderiv\) math. The exception is the trailing
 comment of its own. It exists so the trainer can print the loss you see
 above, it is read by nothing else, and no theorem depends on it. The two hidden layers, their ReLUs, the softmax cross-entropy
 cotangent, the six parameter gradients, and the SGD update are all
-proof-backed operations. Every theorem in the rest of this chapter is
-about the graph that just trained.
+proof-backed operations.
 
 The two compile lines are worth a second look. XLA took the StableHLO
 and compiled it in process in about two and a half seconds, with no
@@ -1760,9 +1813,13 @@ For a scalar function \(f : \mathbb{R} \to \mathbb{R}\) the answer
 is a single number: the derivative. For our networks, no function
 is scalar-in scalar-out. The smallest layer maps an input vector
 to an output vector, so \(n\) numbers in and \(m\) numbers out. ``Jiggle
-the input'' now means: pick a direction in \(\mathbb{R}^n\) and
-push slightly along it. ``The output jiggles'' now means: a vector
-in \(\mathbb{R}^m\). The full picture of \emph{how every output
+the input'' now means: pick a direction in \(\mathbb{R}^n\) and push a
+small distance along it. The textbook word for that is a
+\emph{perturbation}, and it is the word
+Appendix~\ref{app:verification} switches to once the size of the jiggle
+has to be \emph{bounded} rather than imagined. Same motion, and the
+informal name is kept here only because nothing yet depends on how big it
+is. ``The output jiggles'' now means: a vector in \(\mathbb{R}^m\). The full picture of \emph{how every output
 coordinate responds to every input coordinate} is an \(m \times n\)
 table of numbers, one slope per (output, input) pair. That table
 is the \textbf{Jacobian}. There is nothing more to it. It is
@@ -2258,6 +2315,19 @@ about the type changes. The \texttt{slug} binds the spec to
 \texttt{Proofs.MlpRender.mlpTrainStepFaithfulV} is what emits the train
 step.
 
+\paragraph{What \texttt{.relu} contributes.} Nothing:
+
+\begin{verbatim}
+  | relu => #[]
+\end{verbatim}
+
+\noindent ReLU carries no parameters, so its \texttt{toSpecs} arm is the
+empty array and the five-entry \texttt{layers} list above still yields
+six tensors --- three weight matrices and three biases, the
+\texttt{6 params, 669706 floats} the run reported. A layer with no state
+is still a layer: it holds a position in the list because the
+\emph{render} needs it in order, not because the optimizer does.
+
 The tie back to the proofs has the same shape as before. In
 \texttt{LeanMlir/Proofs/Foundation/SpecVJP.lean}:
 
@@ -2460,9 +2530,11 @@ theorem is precisely the claim that this text computes
     measure-zero set.
   \item \textbf{Representative scale.} Shown small. The trained net is
     $784{\to}512{\to}512{\to}10$.
-  \item \textbf{Trusted surface.} The printer's faithfulness, the
-    lowerer's translation, and \texttt{float32} $\approx \mathbb{R}$ are
-    tested rather than proved. Appendix~\ref{sec:verified_codegen} has the
+  \item \textbf{Trusted surface.} The printer's faithfulness and the
+    lowerer's translation are tested rather than proved. Rounding
+    $\approx \mathbb{R}$ is no longer on this list: it is a theorem layer
+    over an arbitrary rounding model (\S~\ref{sec:precision}), conditional on
+    two measured constants rather than assumed outright. Appendix~\ref{sec:verified_codegen} has the
     full accounting.
 \end{itemize}
 
@@ -2539,7 +2611,7 @@ Ten epochs at about 5 seconds each, and 98.75\% on the full
 Chapter~\ref{chap:mlp}'s classifier buy 0.9 points over the MLP's
 97.83\%, and they do it with 3.5M parameters against the MLP's 670K.
 
-Here is the part that matters. That run did not execute a
+The claim survives convolution. That run did not execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/cnn\_train\_step.mlir}, which is the text
 \texttt{Proofs.StableHLO.cnnTrainStepFaithfulV} emits, and
@@ -2550,8 +2622,6 @@ not \texttt{pretty} of a proven node, the trailing \texttt{\%loss} scalar,
 and it says so in its own comment. It feeds the printed loss above and
 nothing else. Both convolutions, the max pool, the
 three dense layers, and the SGD update are all proof-backed operations.
-Every theorem in the rest of this chapter is about the graph that just
-trained.
 
 \prosesection{Three properties baked into a convolution}
 
@@ -2955,55 +3025,48 @@ up in Chapter~\ref{chap:bn}.
 \subsection*{Code: the full training program}
 
 Same format as the MLP chapter. The only thing that changes from
-Chapter~\ref{chap:mlp}'s training program is the \texttt{NetSpec}.
-The hyperparameters stay exactly the same \texttt{s4tfBaseline} config.
+Chapter~\ref{chap:mlp}'s training program is the \texttt{layers} list.
+This is the spec \S\ref{sec:cnn_runit} actually ran.
 
 \begin{verbatim}
 -- 1
 import LeanMlir
 
 -- 2
-def mnistCnnNoBn : NetSpec where
-  name   := "MNIST-CNN-noBN"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .conv2d 1 32 3 .same .relu,
-    .conv2d 32 32 3 .same .relu,
-    .maxPool 2 2,
-    .flatten,
-    .dense 6272 512 .relu,
-    .dense 512 512 .relu,
-    .dense 512  10 .identity
-  ]
+def cnnVerified : VerifiedNetSpec where
+  name     := "MNIST-CNN"
+  slug     := "cnn"
+  inC      := 1
+  imageH   := 28
+  imageW   := 28
+  nClasses := 10
+  data     := .mnist
+  layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
+               .flatten,
+               .dense 6272 512, .relu, .dense 512 512, .relu, .dense 512 10]
 
--- 3 (identical to the MLP chapter's s4tfBaseline)
-def s4tfBaseline : TrainConfig where
-  learningRate   := 0.1
-  batchSize      := 128
-  epochs         := 12
-  useAdam        := false
-  weightDecay    := 0.0
-  cosineDecay    := false
-  warmupEpochs   := 0
-  augment        := false
-  labelSmoothing := 0.0
+-- 3
+def cnnConfig : VerifiedConfig where
+  epochs    := 10
+  batchSize := 128
 
 -- 4
-def main (args : List String) : IO Unit :=
-  mnistCnnNoBn.train s4tfBaseline (args.head?.getD "data") .mnist
+def main (argv : List String) : IO Unit :=
+  cnnVerified.train cnnConfig (argv.head?.getD "data")
 \end{verbatim}
 
 Walking through the numbered sections:
 
 \textbf{1. The import.} Same as Chapter~\ref{chap:mlp}.
 
-\textbf{2. The architecture.} Seven layers: two \texttt{.conv2d}
-layers at 32 channels, one \texttt{.maxPool}, \texttt{.flatten},
-three \texttt{.dense} layers down to 10. Each \texttt{.conv2d}
-takes in-channels, out-channels, kernel size, padding and activation,
-which is five parameters and no classes. Same data-first style as the
-MLP spec.
+\textbf{2. The architecture.} Eleven entries: two \texttt{.conv}
+layers at 32 channels, a \texttt{.maxPool}, a \texttt{.flatten}, three
+\texttt{.dense} layers down to 10, and four \texttt{.relu}s between
+them. \texttt{.conv ic oc k stride} takes in-channels, out-channels,
+kernel size and stride --- no activation argument, because activations
+are their own entries here rather than a field on the layer that
+precedes them. That is why Chapter~\ref{chap:mlp}'s five-entry list
+became eleven and not seven.
 
 The \texttt{.conv2d} backward pass is the theorem from earlier in
 this chapter (\S~\ref{ax:conv2d_has_vjp3}): the input VJP is
@@ -3015,17 +3078,39 @@ Chapter~\ref{chap:mlp} (\S~\ref{thm:dense_has_vjp}). Adding
 convolution to the model introduces no new training-loop code, only
 new layer types, which the framework already knows how to compose.
 
-\textbf{3. The training hyperparameters.} Literally the same
-\texttt{s4tfBaseline} config as the MLP chapter, which is SGD 0.1, 12
-epochs, no regularization and no augmentation. That's the
+\textbf{3. The training hyperparameters.} Ten epochs at batch 128,
+SGD, no regularization and no augmentation. Note what a
+\texttt{VerifiedConfig} does \emph{not} carry: the learning rate. It is
+baked into \texttt{verified\_mlir/cnn\_train\_step.mlir}, which is
+\S\ref{sec:mlp_inside_train}'s point in a second chapter --- the rate is
+inside the reach of the proofs, so it cannot be set to one thing and
+trained at another. That's the
 framework's pitch made concrete: swap the architecture, keep the
 trainer. The ablation framework gives you access to the same
 variant configs (\texttt{adamOnly}, \texttt{fullRecipe}, etc.)
 without any more changes on your side.
 
 \textbf{4. The program entry point.} One line, same as the MLP
-chapter. \texttt{mnistCnnNoBn.train s4tfBaseline} replaces
-\texttt{mnistMlp.train s4tfBaseline}. That's the whole diff.
+chapter. \texttt{cnnVerified.train cnnConfig} replaces
+\texttt{mlpVerified.train mlpConfig}. That's the whole diff.
+
+\paragraph{What \texttt{.conv}, \texttt{.maxPool} and \texttt{.flatten}
+contribute.} Three more arms on Chapter~\ref{chap:tensor}'s
+\texttt{toSpecs}, and only one of them carries parameters:
+
+\begin{verbatim}
+  | conv ic oc k _ => #[(#[oc,ic,k,k],0),(#[oc],2)]   -- W, bias
+  | maxPool _ _    => #[]
+  | flatten        => #[]
+\end{verbatim}
+
+\noindent Pooling and flattening are pure reshapes of data, so they have
+nothing to initialise --- which is the parameter-list statement of the
+same fact the backward passes above make: \texttt{maxPool2}'s VJP routes
+gradient without owning any, and \texttt{flatten}'s is a reshape. Fold
+the eleven-entry list through those arms and you get the
+\texttt{10 params, 3489130 floats} the run printed: two conv kernels and
+their biases, three dense matrices and theirs.
 
 \subsection*{Results}
 
@@ -3396,15 +3481,15 @@ Forty epochs at about six seconds each, and 77.48\% on the full
 is a much harder problem than MNIST, so this is the first chapter where
 the headline accuracy drops out of the nineties.
 
-Here is the part that matters. That run did not execute a
+BatchNorm's backward is the first in this book you can't read off by
+inspection. That run did not execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/cifar8w\_bn\_mom\_train\_step.mlir}, which is the
 text \texttt{Proofs.StableHLO} emits for this net, and
 \texttt{Proofs/Cifar8Close.lean} proves that each of its parameter
 updates denotes the certified softmax cross-entropy loss-descent step
 derived from the Mathlib \(\fderiv\) math. Every BatchNorm in it computes
-the three-term backward this chapter proves. Every theorem in the rest
-of the chapter is about the graph that just trained.
+the three-term backward this chapter proves.
 
 The two compile lines carry the whole in-process story. The train step
 and the eval forward are handed to XLA once, as text, and compiled in
@@ -3413,7 +3498,7 @@ leaving the process.
 
 \S\ref{sec:bn_cifar_example} runs this same binary and its no-BN peer
 across all three optimizers, which is where the chapter's measurements
-come from. \texttt{lake run cifar} does the narrow-head tier.
+come from, and \texttt{lake run cifar} is those two binaries.
 
 \prosesection{The centering term has an indirect path}
 
@@ -3980,6 +4065,25 @@ The diff is eight \texttt{.bnPerChannel} entries, one inserted between
 each convolution and its ReLU. The dense head, the max-pools, and the
 training config are all identical.
 
+\paragraph{What \texttt{.bnPerChannel} contributes.} One arm, and the
+only new one this chapter needs --- \texttt{.conv}, \texttt{.maxPool},
+\texttt{.flatten}, \texttt{.dense} and \texttt{.relu} are all
+Chapter~\ref{chap:cnn}'s, unchanged:
+
+\begin{verbatim}
+  | bnPerChannel oc => #[(#[oc],1),(#[oc],2)]   -- gamma (ones), beta (zeros)
+\end{verbatim}
+
+\noindent This is where \texttt{initKind} stops being bookkeeping.
+BatchNorm's $\gamma$ initialises to \emph{ones} and $\beta$ to zeros, so
+a freshly built net's BN is the identity and the surrounding
+convolutions see exactly what they would have seen without it. Zero-init
+$\gamma$ instead and the whole trunk outputs $\beta$ regardless of its
+input. Note also what is \emph{not} here: the running mean and variance.
+Those are statistics, not parameters --- no gradient reaches them --- which
+is why they are threaded separately through \texttt{bnChannels} rather
+than living in this list.
+
 \medskip\noindent\textbf{The spec-to-proof tie.} These are
 \texttt{VerifiedNetSpec}s, which is what makes the listing above load
 bearing rather than descriptive. The \texttt{slug} names the committed
@@ -3991,9 +4095,9 @@ the files the run in \S\ref{sec:bn_runit} handed to XLA. The
 layout against the one the renderer emits, so a spec that drifts from
 its render fails the build rather than training something else. The
 gradient itself is \texttt{Proofs.cifarCnn8\_has\_vjp\_at}, proved once
-and \emph{parametrically in the head width}, which is why the wide head
-here and the narrow one behind \texttt{lake run cifar} need no separate
-proof between them. \texttt{cifarCnn8\_has\_vjp\_at\_correct}
+and \emph{parametrically in the head width}, which is why the
+$512$-wide head here and the $64$-wide one behind \texttt{cifar8-bn-verified}
+need no separate proof between them. \texttt{cifarCnn8\_has\_vjp\_at\_correct}
 (\texttt{Proofs/Architectures/CifarCNN.lean}) is the statement that its
 backward is the derivative, and \texttt{Proofs/Cifar8Close.lean} carries
 that through to the emitted training step. Both nets run the same
@@ -4520,7 +4624,7 @@ and a half of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_imagenette.sh                      # ~1.5 GB
+./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
 lake build resnet34-verified-adam
 ./.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
@@ -4569,7 +4673,8 @@ thirty-four-layer network trained from scratch on ten thousand photographs,
 which is a different kind of problem from the handwritten digits three
 chapters back.
 
-Here is the part that matters. That run did not execute a reimplementation of
+Thirty-four layers on, nothing about the claim has changed. That run did
+not execute a reimplementation of
 the network this chapter describes. It executed
 \texttt{verified\_mlir/resnet34\_adam\_train\_step.mlir}, which is
 \texttt{pretty(provenGraph)} off the renderer, and every one of the sixteen
@@ -4867,6 +4972,63 @@ momentum pair, the warmup length and the variant string are all passed in.
 Swapping AdamW for momentum is a different \emph{argument} against the same
 proven gradient, which is exactly what Chapter~\ref{chap:bn} used to measure
 optimizers against each other.
+
+\medskip\noindent\textbf{What \texttt{.residualStage} expands to.} It is a
+constructor, not a magic word, and the whole of it is twelve lines in
+\texttt{LeanMlir/VerifiedSpec.lean}. Every layer reports the parameter
+tensors it contributes as \texttt{(dims, initKind)} pairs, where
+\texttt{0} is He(fan-in), \texttt{1} is ones ($\gamma$) and \texttt{2} is
+zeros ($\beta$ and biases):
+
+\begin{verbatim}
+/-- identity basic block @ `c`: two conv->BN->relu units, no projection. -/
+private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
+  #[(#[c,c,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2)]
+
+/-- downsampling basic block `cin->c`: two conv->BN->relu + the 1x1
+    option-B projection shortcut (He et al. §3.3). -/
+private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
+  #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
+    (#[c,cin,1,1],0),(#[c],1),(#[c],2)]
+
+private def stageSpec (ic oc count stride : Nat)
+    : Array (Array Nat × Nat) := Id.run do
+  let mut a := if stride != 1 || ic != oc then downBlk ic oc else idBlk oc
+  for _ in [0:count-1] do a := a ++ idBlk oc
+  return a
+
+def toSpecs : VLayer -> Array (Array Nat × Nat)
+  | dense ic oc             => #[(#[ic,oc],0),(#[oc],2)]      -- Ch. 1
+  | relu                    => #[]                            -- Ch. 2
+  | conv ic oc k _          => #[(#[oc,ic,k,k],0),(#[oc],2)]  -- Ch. 3
+  | maxPool _ _             => #[]                            -- Ch. 3
+  | flatten                 => #[]                            -- Ch. 3
+  | bnPerChannel oc         => #[(#[oc],1),(#[oc],2)]         -- Ch. 4
+  | residualStage ic oc n s => stageSpec ic oc n s            -- here
+  | globalAvgPool           => #[]                            -- here
+  | bottleneckStage i o n s => bottleneckStageSpec i o n s    -- R50, below
+  | ...                        -- 12 more, one per later chapter's block
+\end{verbatim}
+
+\noindent Read it against the spec above. \texttt{.residualStage 64 128 4 2}
+carries \texttt{stride = 2}, so the condition fires: the first block is a
+\texttt{downBlk} --- two $3\times3$ convs plus the $1\times1$ projection that
+lets the skip cross a channel change --- and the other three are
+\texttt{idBlk}s. Nine tensors plus three sixes, twenty-seven in the stage.
+\texttt{.residualStage 64 64 3 1} has \texttt{stride = 1} and
+\texttt{ic = oc}, so the condition is false, no projection is emitted, and
+all three blocks are identity: eighteen tensors. That one-line conditional is
+the entire difference between a stage that changes shape and one that does
+not, and it is the same dispatch \texttt{.bottleneckStage} uses for
+ResNet-50.
+
+\medskip\noindent It also lets you check the spec against itself. Counting
+BatchNorms out of those twelve lines --- one for the stem, then
+$3 \times 2$, $3 + 3 \times 2$, $3 + 5 \times 2$ and $3 + 2 \times 2$ for
+the four stages --- gives $1 + 6 + 9 + 13 + 7 = 36$, which is exactly the
+length \texttt{bnChannels} declares and the thirty-six BatchNorms
+\S\ref{sec:residual_r34_example} says the graph computes. Nothing in the
+listing is asserted twice; the second number is derived from the first.
 
 \medskip\noindent This is the first chapter that uses the full production recipe (Adam + cosine
 + warmup + weight decay + augmentation + label smoothing) rather
@@ -5646,26 +5808,23 @@ and much the largest known asymmetry between them, and this run is fp32
 where the reference is bf16. Attributing the $0.35$ to the verified codegen
 requires closing those first.
 
-\medskip\noindent\emph{Now in, and in the $77.91\%$ above.} Each changes
-the trajectory, which is why the earlier $77.43\%$ is superseded rather than
-comparable: the evaluation, the network and two optimizer terms all moved
-between them.
+\medskip\noindent\emph{In, and in the $77.91\%$ above.} What this run
+carries that a bare A3 transcription would not:
 
 \begin{itemize}
-  \item \texttt{wdExcludeNormBias} --- BN $\gamma/\beta$ and biases no
-    longer decayed; 54 decayed / 107 excluded of 161. Largest single delta.
+  \item \texttt{wdExcludeNormBias} --- BN $\gamma/\beta$ and biases are not
+    decayed; 54 decayed / 107 excluded of 161. Largest single contributor.
   \item \textbf{LAMB's gradient clip} (timm's \texttt{max\_grad\_norm}
-    $= 1.0$ default). The superseded $77.43\%$ was produced without it;
-    the $77.91\%$ has it. Applied after the all-reduce \emph{and} after the
+    $= 1.0$ default), applied after the all-reduce \emph{and} after the
     accumulation, at threshold $kC$ (\texttt{Proofs.clipFactor\_accum}).
-  \item The \texttt{no\_weight\_decay} group is no longer layer-adapted.
+  \item The \texttt{no\_weight\_decay} group is not layer-adapted.
   \item BN running-statistic momentum compensated for accumulation.
-    Evaluation-only; plausibly means the $77.43\%$ is understated.
+    Evaluation-only.
   \item Evaluation scores all $50{,}000$ images. \textbf{Every top-1
     outside this chapter is still over $49{,}920$.}
   \item RandAugment Posterize, plus timm's validation protocol and
     resampler (appendix~\ref{app:data}).
-  \item \emph{Verification:} the optimizer is now tied to the reference at
+  \item \emph{Verification:} the optimizer is tied to the reference at
     the \emph{update} as well as the gradient --- six variants to
     $\sim\!10^{-7}$.
 \end{itemize}
@@ -5735,6 +5894,37 @@ noisier training converge, with FixRes buying back the compute the
 extra epochs would cost. Every one of these is a one-line
 \texttt{TrainConfig} change on the same verified backbone.
 
+\subsection*{What A2 and A1 would cost}
+\label{sec:r50_a2_a1_cost}
+
+A3 is the cheap tier. The other two exist as recipes --- \texttt{a2-accum}
+and \texttt{a1}, selected positionally (\texttt{resnet50-imagenet a2-accum
+data}) --- smoke-tested rather than trained. What stops them is the budget:
+
+\begin{center}
+\begin{tabular}{@{}l c c l l@{}}
+\hline
+tier & epochs & train res & verified wall clock & top-1 \\
+\hline
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
+A2 (\texttt{a2-accum})     & 300 & $224$ & \texttt{[todo: bf16 renderer + benchmarks]} & --- \\
+A1 (\texttt{a1})           & 600 & $224$ & \texttt{[todo: bf16 renderer + benchmarks]} & --- \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Four 4060\,Ti, effective batch 2048 as $512\times4$. Only the A3
+row has been run on the verified path --- it is \S\ref{sec:r50_phase4}'s
+fp32 result. A2 and A1 render and step but have no benchmark, and the reason
+is the same one \S\ref{sec:convnext_sb} and \S\ref{sec:vit_sb} hit: the only
+bf16 R50 render is \texttt{resnet50in\_momdp64bf16}, the 2018 recipe's, so the
+LAMB\,+\,BCE tiers have no bf16 twin to time. What is known without running
+them: accumulation is per-epoch free and holds peak at the bs512 figure, so
+both tiers fit a 12\,GB card where the single-forward \texttt{a2-true-2048}
+would want $\sim$160\,GB, and running A2 at bs512 with a scaled LR instead is not a cheap
+A2 but the starved-LAMB regime that gave A3 $40.8\%$ in place of $78.1\%$. The
+papers quote $79.8\%$ and $80.4\%$.
+
 \chapter{MobileNetV2}
 \label{chap:depthwise}
 
@@ -5776,7 +5966,7 @@ and about the same GPU time Chapter~\ref{chap:residual} asked for:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_imagenette.sh                      # ~1.5 GB
+./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
 lake build mobilenetv2-verified-adam
 ./.lake/build/bin/mobilenetv2-verified-adam data
 \end{verbatim}
@@ -5835,7 +6025,7 @@ are moving fast. The evaluation forward is using statistics that no
 longer describe the thing being evaluated. It corrects itself by epoch 3
 and never recurs.
 
-Here is the part that matters. That run did not execute a
+Depthwise separability doesn't weaken it. That run did not execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/mobilenetv2\_adam\_train\_step.mlir}, which is
 \texttt{pretty(provenGraph)} off the renderer. Every depthwise
@@ -6283,6 +6473,25 @@ of detail \texttt{bnChannels} exists to get right: the running-stat region
 is positional, and an off-by-one there misaligns every frozen statistic
 downstream of it at evaluation time.
 
+\textbf{And the arm shows you the 52.} \texttt{.invertedResidualNB} is
+one more entry on Chapter~\ref{chap:tensor}'s \texttt{toSpecs}, and the
+$t{=}1$ carve-out above is not prose --- it is the conditional:
+
+\begin{verbatim}
+  | invertedResidualNB ic mid oc _ =>          -- Ch. 6
+    (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[])
+    ++ #[(#[mid,1,3,3],0),(#[mid],1),(#[mid],2),      -- depthwise 3x3 + BN
+         (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]       -- project 1x1 + BN
+\end{verbatim}
+
+\noindent \texttt{mid != ic} is exactly ``$t \neq 1$''. When it holds the
+block contributes nine tensors and three BatchNorms; when it fails the
+expand conv is not emitted at all and the block contributes six and two.
+Sixteen blocks at three plus one at two, plus the stem and the head, is
+the 52. The depthwise kernel is \texttt{[mid,1,3,3]} --- one filter per
+channel, which is the whole of Theorem~\ref{ax:depthwise_has_vjp3}'s
+subject written as a shape.
+
 \textbf{The recipe is ResNet-34's, unchanged.} Eighty epochs at batch 32,
 AdamW at $10^{-3}$, cosine with a three-epoch warmup, label smoothing
 $0.1$, the same augmentation. That is on purpose. Holding the recipe fixed
@@ -6552,19 +6761,22 @@ split, $\mathbf{0.56}$ points short of the paper's $72.0\%$:
 \noindent MobileNetV2 / ImageNet-1k, paper-faithful 350-epoch
 exponential-decay run (bf16, 4$\times$ 4060 Ti, RMSProp).
 
-The curve says where the budget went. Two thirds of the final accuracy
-is in place by epoch $50$, the run is still climbing at $150$, and it is
-flat from about epoch $250$ onward, so the last $100$ epochs are worth
-almost nothing and the schedule is genuinely exhausted rather than cut
-short. Whatever the remaining gap to the paper is, it is not length.
+Two thirds of the final accuracy is in place by epoch $50$, the run is
+still climbing at $150$, and it is flat from about epoch $250$ onward, so
+the last $100$ epochs are worth almost nothing and the schedule is
+genuinely exhausted rather than cut short.
 
-That residual $0.56$ is the honest part of the result. It is small
-enough to sit inside the known recipe deviations rather than needing a
-new explanation. Two of those are documented and shared across every net
-in this book. The resize is not antialiased on either the train or eval
-path, where timm's is, worth $\sim0.2$ points. The running-BN decay is
-fixed at $0.99$ where PyTorch's default works out to $0.9$. Neither is
-worth a retrain of the sweep to chase.
+That residual $0.56$ is provisional rather than explained, and the marker
+at the top of this section is why: these numbers predate \texttt{timm}'s
+validation protocol and its antialiased resampler, and that change moves
+the training distribution as well as the evaluation
+(appendix~\ref{app:data}). Two known deviations are the candidates, both
+shared across every net in this book --- the resize is not antialiased on
+either the train or eval path where timm's is, and the running-BN decay is
+fixed at $0.99$ where PyTorch's default works out to $0.9$. No points are
+attributed to either one here, because the first is precisely what the
+re-run changes, and a split quoted now would be a split of a number the
+re-run replaces.
 
 \subsection*{Phase 4: the verified trainer}
 \label{sec:mnv2_phase4}
@@ -6701,6 +6913,7 @@ scaling) but the core depthwise-separable scaffolding is exactly what
 this chapter formalized.
 
 \section{Side quest: MobileNet V4}
+\label{sec:mnv4_side_quest}
 
 \imagenettimmnote
 
@@ -6839,13 +7052,7 @@ Everything above in this side quest is the phase-2 Lean$\to$JAX trainer
 running the faithful Conv-Medium. The phase-4 peer exists as of this
 writing, and it renders the same network.
 
-It did not always. The block table this book rendered and proved against
-used to be MobileNetV4-Conv-Small at 4.1M parameters, so the ImageNet
-spec was Conv-S carrying a 1000-class head and the $75.48\%$ above was a
-different network's number. Both the verified spec and its \texttt{jax/}
-peer now carry the Conv-M table: 21 UIB blocks in place of 14, and a head
-that goes $256 \to 960 \to 1280$ in two convolutions in place of one. The
-spec is still built the way \S\ref{sec:mnv2_phase4} built MobileNetV2's
+The spec is built the way \S\ref{sec:mnv2_phase4} built MobileNetV2's
 and the way Chapter~\ref{chap:residual} built ResNet-50's. The trunk is
 copied unchanged from the Imagenette spec, a \texttt{\#guard} pins every
 parameter shape but the head against it, and the head moves
@@ -6853,7 +7060,7 @@ $1280{\times}10 \to 1280{\times}1000$, taking the count from
 $8{,}447{,}322$ to $\mathbf{9{,}715{,}512}$, which is the $\sim$9.7M
 Conv-M is quoted at.
 
-\textbf{So the $75.48\%$ above is now this network's target.} It is not
+\textbf{The $75.48\%$ above is this network's target.} It is not
 this network's result. The row below reports a measured wall clock and a
 \texttt{TBD} accuracy, because the network has been timed and has not
 been trained to convergence.
@@ -6957,7 +7164,7 @@ commands, and less GPU time than either of the two previous chapters:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_imagenette.sh                      # ~1.5 GB
+./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
 lake build efficientnet-verified-adam
 ./.lake/build/bin/efficientnet-verified-adam data
 \end{verbatim}
@@ -7015,7 +7222,8 @@ are moving fast, so the evaluation forward is using statistics that no
 longer describe what is being evaluated. It resolves once the schedule
 reaches its peak and never recurs.
 
-Here is the part that matters. That run did not execute a
+Squeeze-excitation is the first place the product rule carries real
+weight. That run did not execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/efficientnet\_adam\_train\_step.mlir}, which is
 \texttt{pretty(provenGraph)} off the renderer. Every squeeze-excitation
@@ -7025,23 +7233,17 @@ Chapter~\ref{chap:depthwise}'s, every BatchNorm by
 Chapter~\ref{chap:bn}'s, and every residual skip by
 Chapter~\ref{chap:residual}'s additive fan-in.
 
-\medskip\noindent\textbf{And here this chapter can say something
-Chapter~\ref{chap:depthwise} could not.} Both networks have a fold proved
-at full depth, and the two folds are not equally strong.
+\medskip\noindent\textbf{And this fold holds at every input.}
 \texttt{efficientnetForwardB\_full\_has\_vjp} chains the stem, all
 \emph{sixteen} MBConv blocks and the head through \texttt{vjp\_comp},
-batched over \(N\), with a positive-\(\varepsilon\) hypothesis for each
-BatchNorm and nothing else assumed. It holds at every input. So for this
-network the accurate sentence is the strong one: every operation in the
-graph that just trained carries a proved backward, and their composition
-into the whole network carries one too.
-
-What buys that is the activation. Swish is smooth everywhere, so the
-statement can quantify over all inputs. MobileNetV2's relu6 has two
-kinks, so Chapter~\ref{chap:depthwise}'s seventeen-block fold has to name
-a point and assume the thirty-five activations there stay away from them.
-What separates the two chapters now is that hypothesis rather than the
-depth.
+batched over \(N\), assuming a positive \(\varepsilon\) at each BatchNorm
+and nothing else --- so every operation in the graph that just trained
+carries a proved backward, and their composition into the whole network
+carries one too. What buys that is swish. It is smooth, so the statement
+quantifies over all inputs, where Chapter~\ref{chap:depthwise}'s fold had
+to name a point and assume its thirty-five relu6 activations stayed off
+the kink. Depth was never the obstacle, the activation was --- and every
+network after this one is smooth.
 
 The three compile lines are the same three the two previous chapters
 showed. \texttt{@efficientnet\_fwd\_eval} is a separate forward because
@@ -7105,9 +7307,8 @@ introduces no new analytic dependencies.
 
 \prosesection{Attention in Disguise}
 
-The mechanism is worth naming clearly: SE \emph{looks at the entire
-feature map}, produces \emph{a content-dependent re-weighting}, and
-\emph{applies it back to the data}. That is a learned attention
+SE looks at the entire feature map, produces a content-dependent
+re-weighting, and applies it back to the data. That is a learned attention
 operation in the standard sense. The reduction is over the spatial
 axes (so each token-equivalent is a channel, not a patch), but the
 shape is the same: a query (GAP summary) attending over a
@@ -7354,6 +7555,24 @@ is worth reading here first, because sizing the squeeze off the
 $6\times$-larger \texttt{mid} instead is the difference between B0's
 canonical 5.29M parameters and an inflated 8.4M. The spec is where that
 choice is made once and visibly.
+
+\textbf{The arm, and where the SE gate lives in it.}
+
+\begin{verbatim}
+  | mbConvSENB ic mid oc r k =>                -- Ch. 7
+    (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[])
+    ++ #[(#[mid,1,k,k],0),(#[mid],1),(#[mid],2),     -- depthwise kxk + BN
+         (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),   -- SE: squeeze, excite
+         (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]     -- project 1x1 + BN
+\end{verbatim}
+
+\noindent Same \texttt{mid != ic} conditional as
+Chapter~\ref{chap:depthwise}'s, with four tensors inserted in the middle:
+\texttt{[mid,r]} down to the squeeze width and \texttt{[r,mid]} back up,
+each with a bias. Those two are the only convs in the block that
+\emph{keep} their biases, because they are not BN-followed --- the gate
+ends in a sigmoid, not a normalizer. That asymmetry is visible in the
+arm and nowhere else in the spec.
 
 \textbf{There is no stride argument, and that is deliberate.} B0's
 downsampling pattern is fixed by the architecture rather than chosen per
@@ -7880,7 +8099,7 @@ semantics, not just its hyperparameters.
 \imagenettimmnote
 \label{sec:enet_side_quests}
 
-Two EfficientNet follow-ups extended the family in orthogonal
+Three EfficientNet follow-ups extended the family in orthogonal
 directions:
 
 \textbf{Noisy Student}
@@ -7901,6 +8120,24 @@ features by fusing each spatial resolution with both its coarser
 and finer neighbors via weighted-sum cross-scale connections. The
 detection head is a small per-anchor MLP predicting class plus box
 coordinates, applied at every BiFPN output level.
+
+\textbf{EfficientNetV2}
+(\href{https://arxiv.org/abs/2104.00298}{Tan \& Le 2021}).
+Two changes, one to the block and one to the schedule.
+\emph{Fused MBConv} replaces the early stages' expand-$1\times1$ plus
+depthwise $k\times k$ with a single regular $k\times k$ convolution ---
+more FLOPs, less wall clock, because depthwise convolution is cheap in
+arithmetic and expensive in memory traffic, and at low resolution the
+traffic dominates. That is the same trade Chapter~\ref{chap:depthwise}
+made in the other direction, and it is worth noticing that the answer
+flips with the feature-map size rather than being a property of the
+operator. \emph{Progressive learning} then raises the image size across
+training and raises the regularization with it, on the argument that a
+fixed augmentation strength is wrong for both ends of a resolution ramp;
+the pair trains up to $4\times$ faster than V1 at $6.8\times$ fewer
+parameters, with V2-S at $83.9\%$ top-1. The fused block is already in
+the kit as \texttt{.fusedMbConvNB} (\S\ref{sec:mnv4_side_quest}) --- it is
+MobileNetV4's stage 0 --- so V2 needs no new primitive, only a spec.
 
 \chapter{ConvNeXt}
 \label{chap:layernorm}
@@ -7964,7 +8201,7 @@ inside an hour and a half:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_imagenette.sh                      # ~1.5 GB
+./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
 lake build convnext-verified-adam
 ./.lake/build/bin/convnext-verified-adam data
 \end{verbatim}
@@ -8031,7 +8268,8 @@ weights that were still moving fast and the evaluation forward was
 briefly using statistics that no longer described the network. No such
 step exists here, because no such statistics exist here.
 
-Here is the part that matters. That run did not execute a
+Three new operations this chapter, still three rules. That run did not
+execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/convnext\_adam\_train\_step.mlir}, which is
 \texttt{pretty(provenGraph)} off the renderer. Every LayerNorm in it
@@ -8412,6 +8650,24 @@ the \texttt{c} channels at each spatial position, which is ConvNeXt's
 real normalization rather than the scalar reduction the bare name
 suggests.
 
+\textbf{The arm, and the one tensor with no partner.}
+
+\begin{verbatim}
+  | layerNorm d      => #[(#[d],1),(#[d],2)]           -- Ch. 8: gamma, beta
+  | convNextBlockCh c =>                               -- Ch. 8
+    #[(#[c,1,7,7],0),(#[c],2),(#[c],1),(#[c],2),       -- dw 7x7 + LN(gamma,beta)
+      (#[4*c,c,1,1],0),(#[4*c],2),                     -- expand 1x1 (4x)
+      (#[c,4*c,1,1],0),(#[c],2),                       -- project 1x1
+      (#[c],1)]                                        -- layer scale
+\end{verbatim}
+
+\noindent Eight of those nine tensors pair off into weight-and-bias or
+$\gamma$-and-$\beta$. The ninth, the trailing \texttt{(\#[c],1)}, has no
+partner: layer scale is a single learned per-channel multiplier with
+nothing added after it, initialised to ones so a fresh block is the
+identity on its residual branch. It is the smallest parameter in the
+chapter and the one whose backward is a pure diagonal.
+
 \textbf{The stem and the downsamples are spelled out, not packaged.} A
 \texttt{.convNextDownsample 96 192} is two entries here, a
 \texttt{.layerNorm 96} and a \texttt{.conv 96 192 2 2}, and the patchify
@@ -8612,9 +8868,10 @@ Every element of the paper recipe is now wired and on:
 
 \noindent The peak LR is $2.5\mathrm{e}{-}4$ (the
 $4\mathrm{e}{-}3$@4096 official value linearly scaled to batch 256)
-over a 20-epoch warmup. No architectural or recipe deviation from the
-paper remains, and the schedule is no longer short of it either. The
-run below is the full 300-epoch tier.
+over a 20-epoch warmup. No \emph{architectural} deviation from the paper
+remains, and the schedule is no longer short of it either. The resampler
+and validation protocol still differ, which is what the marker at the top
+of this section is about. The run below is the full 300-epoch tier.
 
 \textbf{Compute budget.} ConvNeXt-T is the heaviest of the three at
 $28.6$M parameters, the canonical count, verified by an
@@ -8656,9 +8913,10 @@ and $\mathbf{95.37\%}$ top-5 on the held-out validation pass. That is the
 strongest result in this book's sweep by a wide margin, ahead of
 EfficientNet-B0 ($72.3\%$) and ResNet-34 ($72.1\%$), and it lands within
 $\sim$1\% of ConvNeXt-T's $82.1\%$ paper headline from a from-scratch
-Lean$\to$JAX-codegen reimplementation. The residual $\sim$1\% is the
-usual EMA-eval / test-crop / augmentation-detail territory, not the
-architecture or the recipe.
+Lean$\to$JAX-codegen reimplementation. The residual $\sim$1\% is
+EMA-eval / test-crop / augmentation-detail territory rather than
+architecture --- and test-crop is one of the things the pending re-run
+moves, so read that as the candidate list, not a settled split.
 
 The validation curve tells the augmentation story directly: a
 deliberately slow start, since Mixup and CutMix blend labels, so the net
@@ -8854,6 +9112,57 @@ LAMB (the batch stays moderate), stochastic depth and EMA from the
 ViT toolkit, and a $3\times$ longer schedule to let the
 regularization pay.
 
+\section{Side quest: ConvNeXt-S and ConvNeXt-B}
+\label{sec:convnext_sb}
+
+Scaling ConvNeXt-T is two moves. \textbf{S} deepens stage 3 from 9 blocks to
+27 and touches nothing else. \textbf{B} does that \emph{and} widens every
+stage, $96/192/384/768 \to 128/256/512/1024$. On the JAX side both are pure
+parameter edits. On the verified side they are not the same job at all, and
+the difference is the useful finding:
+
+\begin{center}
+\begin{tabular}{@{}l c c l@{}}
+\hline
+model & params & renderer work & verified cost \\
+\hline
+ConvNeXt-T & $28.6$\,M         & ---                     & $167$\,ms/step (fp32) \\
+ConvNeXt-S & $50{,}222{,}152$  & \textbf{none}           & $280$\,ms/step (fp32) \\
+ConvNeXt-B & $88{,}589{,}416$  & ${\sim}27$ literals     & \texttt{[todo: bf16 renderer + benchmarks]} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Both param counts are \texttt{\#guard}ed against the reference's
+$50.22$\,M and $88.59$\,M. The two step figures are the verified renders
+measured on one 4060\,Ti, fp32, batch 32, \texttt{adamwxclipdrop}, with T run
+as the control in the same session; B has no benchmark yet.
+
+\medskip\noindent S costs \emph{nothing} in the renderer because depth is
+already a loop --- 27 blocks is the same code as 9. B costs about twenty-seven
+threaded dimension literals across two renderers, because those hardcode
+widths where the JAX emitter derives them. So the work is proportional to
+\emph{how many dimensions move}, not to how many parameters: B has $1.8\times$
+S's parameters and nearly all of the cost, while S has $1.8\times$ T's and
+none of it. That is worth stating plainly because it is the boundary of the
+``one spec, any size'' claim this chapter makes everywhere else --- the spec
+really is free, and the renderer is where a new shape gets paid for.
+
+\medskip\noindent \textbf{The bf16 renders are half-done.}
+\texttt{convnextbin} carries its bf16 twins; \texttt{convnextsin} does not, an
+accident of B landing after S rather than anything about the shape. Closing it
+is a per-net emit and not new operator work --- every bf16 twin these nets need
+already exists --- and T's bf16 render runs $1.29\times$ its fp32 peer, so it is
+worth about a fifth of the wall clock. S costs $1.68\times$ T per step on the
+verified path, which is the deepening and nothing else.
+
+\medskip\noindent \textbf{Status: rendered, not trained.} Artifacts emit,
+shapes tie to \texttt{VLayer.toSpecs}, param counts are \texttt{\#guard}ed
+and a few steps run under \texttt{convnexts-imagenet-verified} and
+\texttt{convnextb-imagenet-verified}. No accuracy, and the numeric ties
+against the JAX peers have not been run. On four cards B needs gradient
+accumulation even in bf16.
+
 \chapter{Vision Transformer}
 \label{chap:attention}
 
@@ -8890,7 +9199,7 @@ one in it:
 
 \begin{verbatim}
 lake exe cache get                        # Mathlib oleans, ~30 s
-./download_imagenette.sh                  # ~1.5 GB
+./download_imagenette.sh                  # 330 MB dl, 2.4 GB unpacked
 lake build vit-verified-adam
 ./.lake/build/bin/vit-verified-adam data
 \end{verbatim}
@@ -8957,7 +9266,8 @@ not enough signal to keep the tail honest, which is
 \S\ref{sec:attention_vit_example}'s data-hunger argument showing up
 inside a single run rather than across the comparison table.
 
-Here is the part that matters. That run did not execute a
+Attention is where you would expect this to break. That run did not
+execute a
 reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/vit\_adam\_train\_step.mlir}, which is
 \texttt{pretty(provenGraph)} off the renderer. Every softmax in it
@@ -8967,18 +9277,16 @@ dot-product attention by \S\S\ref{thm:sdpa_back_Q_correct}--%
 Chapter~\ref{chap:layernorm}'s, every GELU by that chapter's, and every
 residual skip by Chapter~\ref{chap:residual}'s additive fan-in.
 
-\medskip\noindent\textbf{And the fold holds at full depth.}
+\medskip\noindent\textbf{And the fold holds at every depth.}
 \texttt{vitForward2\_has\_vjp} chains the patch embedding, all
 \emph{twelve} transformer blocks, the final LayerNorm and the head
 through \texttt{vjp\_comp}, with \texttt{vitForward2\_has\_vjp\_correct}
 carrying it back to the forward the spec denotes, and
 \texttt{vitForwardKV\_has\_vjp} generalizes it to depth $k$. Its only
-hypothesis is $\varepsilon > 0$ at the LayerNorms. Unlike
-Chapter~\ref{chap:depthwise}, which folds a representative
-stem-plus-two-blocks because relu6's kink makes a whole-network
-statement false, this one is a single global \texttt{HasVJP} over the
-entire network, and it can be because softmax, GELU and LayerNorm are
-all smooth. So ViT gets the strong sentence: every operation in the
+hypothesis is $\varepsilon > 0$ at the LayerNorms. It is a single global
+\texttt{HasVJP} over the entire network for the same reason
+Chapter~\ref{chap:layernorm}'s is --- softmax, GELU and LayerNorm are all
+smooth --- so ViT gets the strong sentence too: every operation in the
 graph that just trained carries a proved backward, and their
 composition into the whole network carries one too.
 
@@ -10204,6 +10512,28 @@ as ConvNeXt's eighteen were eighteen. Each carries the pre-norm
 sandwich drawn in the inset above: LayerNorm, MHSA, residual,
 LayerNorm, MLP, residual.
 
+\textbf{The arm, and why sixteen tensors is the whole block.}
+
+\begin{verbatim}
+  | param dims kind    => #[(dims, kind)]              -- Ch. 9: CLS, pos-embed
+  | transformerBlock d m =>                            -- Ch. 9
+    #[(#[d],1),(#[d],2),                               -- LN1
+      (#[d,d],0),(#[d],2), (#[d,d],0),(#[d],2),        -- Wq, Wk
+      (#[d,d],0),(#[d],2), (#[d,d],0),(#[d],2),        -- Wv, Wo
+      (#[d],1),(#[d],2),                               -- LN2
+      (#[d,m],0),(#[m],2), (#[m,d],0),(#[d],2)]        -- MLP d->m->d
+\end{verbatim}
+
+\noindent \texttt{.param} is the escape hatch: a bare learned tensor with
+no layer around it, which is how the CLS token and the positional
+embedding get into the list at all. Everything else here is a dense
+layer wearing a different name --- the four attention projections are
+\texttt{[d,d]} matrices with biases, indistinguishable in the parameter
+list from Chapter~\ref{chap:tensor}'s \texttt{.dense}. What makes them
+attention is the \emph{graph}, not the shapes. Sixteen tensors a block,
+twelve blocks, plus the patch embed, the two \texttt{.param}s, the final
+LayerNorm and the head: 200.
+
 \textbf{200 parameter tensors, 5,526,346 scalars.}
 \texttt{vitVerified.toSpecs} is kernel-\texttt{\#guard}ed against
 \texttt{ViTLayout.specs}, an independently audited hand-list, and the
@@ -10266,28 +10596,17 @@ from data it doesn't have. \S\ref{sec:vit_imagenet} is the control:
 the same architecture on 1.28M images reaches $70.28\%$ over a
 \emph{thousand} classes, which is the regime the design was for.
 
-\medskip\noindent\textbf{A note on the number, because it moved.} An
-earlier edition of this chapter reported $71.70\%$ here, measured on the
-retired IREE path against a 3,904-image validation subset rather than
-the full 3,925. That subset is worth at most half a point, so it does
-not account for the difference. Chapter~\ref{chap:cnn}'s width sweep is
-where this book first had to take run-to-run spread seriously, so this
-number was measured three times before being printed.
-
-\medskip\noindent All three passes came back \emph{bit-identical}, on
-three different cards: the same $68.738854\%$ and $90.420382\%$ at epoch
-80, and the same 160 epoch lines the whole way down. That makes ViT the
-first network since the dense-only graphs of Chapter~\ref{chap:mlp} to
-reproduce exactly, and for the same reason. XLA selects convolution
-algorithms per process, which is what moves the convnet chapters'
-numbers by a point or two between runs. This graph holds 435
-\texttt{dot\_general}s and \emph{two} convolutions, so there is almost
-nothing for that selection to vary. What that buys is a sharper reading
-of the gap rather than an explanation of it: the difference from the
-retired figure is not run-to-run spread, because on this path there is
-no spread. It is a difference between two measurement setups that
-differ in lowerer, in vendor, and in the vintage of the artifact, and
-this chapter does not separate those.
+\medskip\noindent\textbf{It reproduces exactly.} Chapter~\ref{chap:cnn}'s
+width sweep is where this book first had to take run-to-run spread
+seriously, so this number was measured three times before being printed,
+and all three passes came back \emph{bit-identical} on three different
+cards: the same $68.738854\%$ and $90.420382\%$ at epoch 80, and the same
+160 epoch lines the whole way down. That makes ViT the first network since
+the dense-only graphs of Chapter~\ref{chap:mlp} to reproduce exactly, and
+for the same reason. XLA selects convolution algorithms per process, which
+is what moves the convnet chapters' numbers by a point or two between
+runs. This graph holds 435 \texttt{dot\_general}s and \emph{two}
+convolutions, so there is almost nothing for that selection to vary.
 
 \section{MLIR: Attention}
 
@@ -10468,10 +10787,11 @@ accuracy. The result below is the ROCm one.
 The full 300-epoch DeiT-Ti recipe reached $\mathbf{70.28\%}$ top-1 /
 $\mathbf{90.05\%}$ top-5 on the full 50{,}000-image validation split.
 That lands within ${\sim}2$ points of the ${\sim}72\%$ ViT-Tiny is
-capable of, and the remaining gap is the one recipe knob that run did
-not have (repeated augmentation) plus two minor deviations (strict
-Mixup/CutMix alternation instead of a random switch, and Random-Erase
-to zero rather than to noise). The headline is a \emph{300-epoch} DeiT
+capable of. The candidates for the remaining gap are the one recipe knob
+that run did not have (repeated augmentation) plus two minor deviations
+(strict Mixup/CutMix alternation instead of a random switch, and
+Random-Erase to zero rather than to noise) --- candidates rather than an
+accounting, since this section's numbers predate the resampler change. The headline is a \emph{300-epoch} DeiT
 result with the full distillation-free recipe, and the point here is
 the pipeline (proven attention backward $\to$ DeiT recipe $\to$ stable
 bf16 training to a sensible ImageNet number), not a SOTA chase. The
@@ -10638,7 +10958,7 @@ lowerer compiles all of them the same way.
 The bestiary in Part 2 then shows that \emph{every other
 architecture you've seen in modern deep learning} composes from the
 same small set of primitives plus a handful of
-architecture-specific bundled layers. That list runs UNet, DETR,
+architecture-specific bundled layers. That list runs UNet, YOLO, DETR,
 Mask R-CNN, DCGAN, CycleGAN, Pix2Pix, DDPM, Stable Diffusion, VAE,
 AlphaGo, AlphaZero, MuZero, Mamba, BERT, GPT, Whisper, CLIP, LLaVA,
 SAM, SegFormer, DeepLab v3+, Nyström-former, QANet and Evoformer. Three rules (chain, additive
@@ -10651,6 +10971,54 @@ of primitives and tours how they compose into every well-known
 modern architecture, a survey of the field expressed in the
 proven kit, with a small library of bundled idioms for the patterns
 that recur.
+
+\section{Side quest: ViT-S and ViT-B}
+\label{sec:vit_sb}
+
+ViT scales on one axis where ConvNeXt scaled on two. Tiny, Small and Base are
+the same twelve blocks at a wider model dimension: $D = 192/3$ heads,
+$384/6$, $768/12$, with the MLP at $4D$ throughout. Depth never moves.
+
+\begin{center}
+\begin{tabular}{@{}l c c l@{}}
+\hline
+model & $D$ / heads & params & verified cost \\
+\hline
+ViT-Ti & $192$ / 3  & $5.7$\,M         & \S\ref{sec:vit_imagenet} \\
+ViT-S  & $384$ / 6  & $22{,}050{,}664$ & \texttt{[todo: bf16 renderer + benchmarks]} \\
+ViT-B  & $768$ / 12 & $86{,}567{,}656$ & \texttt{[todo: bf16 renderer + benchmarks]} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The param counts \texttt{\#guard} against DeiT-S's $22.05$\,M and
+DeiT-B's $86.57$\,M. Neither variant has been benchmarked on the verified path,
+and \texttt{vitbin} renders at global batch 128 only --- the one place in
+Part~I where a model's size, not its recipe, dictates how it must be run.
+
+\medskip\noindent Where \S\ref{sec:convnext_sb} found a split between free and
+costly, ViT is uniformly the costly kind: every variant moves $D$, so every
+variant moves dimension literals. The batched renderer is parameterised and
+carries all three; \texttt{ViTRender.lean}, the per-example peer, is still
+pinned at Tiny by roughly $154$ of them, which is why there is no ViT-S or
+ViT-B Imagenette demo to sit beside \S\ref{sec:vit_runit}'s.
+
+\medskip\noindent \textbf{Neither has a bf16 render yet.} ViT-Tiny's bf16
+twin runs $1.46\times$ its fp32 peer --- the largest bf16 payoff of any net in
+Part~I, and most of it from one line, the dots' result type
+(\S\ref{sec:precision}) --- and neither S nor B has one. So a third of the
+verified wall clock for both is sitting behind a per-net emit that needs no
+new proved operator, and until it lands there is nothing honest to put in the
+cost column. Of the four variants in this chapter and
+\S\ref{sec:convnext_sb}, only ConvNeXt-B is ported.
+
+\medskip\noindent \textbf{Status: rendered, not trained}, the same as ConvNeXt's
+pair --- \texttt{vits-imagenet-verified} and \texttt{vitb-imagenet-verified}
+emit, tie and step. The only accuracy calibration that exists is this repo's
+ViT-Ti at $70.28\%$ against DeiT-Ti's $72.2\%$, a $1.9$-point recipe gap
+(\S\ref{sec:vit_imagenet}). DeiT quotes $79.8\%$ for S and $81.8\%$ for B; every
+item missing from that $1.9$ is \emph{regularization} and S has four times
+Tiny's capacity, so the gap plausibly widens rather than holds.
 
 \chapter{Bestiary of Architectures}
 \label{chap:bestiary}
@@ -13170,15 +13538,6 @@ matched, and each was checked against \texttt{timm} rather than assumed:
     downscale ratios ImageNet's validation set spans.
 \end{itemize}
 
-\noindent \textbf{[TODO: run with timm tweaks.]} The protocol above is
-what the trainers emit today. \textbf{Chapter~\ref{chap:residual} has been
-re-run against it} --- both ResNet-34 and ResNet-50, on both the phase-2 and
-the verified paths --- and its numbers score all $50{,}000$ validation images.
-Every other ImageNet accuracy in this book predates the protocol and was
-measured under the older preprocessing, so those numbers and this description
-are one re-run out of step. Those sections say so in one line at their head;
-a section with no such line has been re-run.
-
 \medskip\noindent\textbf{Demo datasets.} The \texttt{demos/} trainers step
 past image classification into the three other task families in the book,
 which are detection, segmentation and language, and each pulls a dataset of
@@ -13451,7 +13810,7 @@ gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 \begin{verbatim}
 ./download_mnist.sh        # MNIST       (mnist tier)
 ./download_cifar.sh        # CIFAR-10    (cifar tier)
-./download_imagenette.sh   # Imagenette 320px, ~300 MB (imagenette tier)
+./download_imagenette.sh   # Imagenette 320px, 330 MB (imagenette tier)
 \end{verbatim}
 
   \item \textbf{Build and run a trainer.} No backend environment variables:
@@ -13482,13 +13841,14 @@ The IREE path additionally needs \texttt{iree-compile} on \texttt{\$PATH}
 \texttt{sm\_86} (Ampere), \texttt{sm\_89} (Ada), \texttt{sm\_90} (Hopper).
 
 \section*{Track 3: One-command demo tiers}
+\label{sec:getting_started_track3}
 
 With Track 2 in place, one command builds and runs a time-budgeted group of
 verified trainers.
 
 \begin{verbatim}
 lake run mnist        # verified MNIST: linear, MLP, CNN             (~1 min)
-lake run cifar        # ch.4 cifar8: SGD/momentum/Adam x bn/no-bn   (~15 min)
+lake run cifar        # ch.4 cifar8w: SGD/momentum/Adam x bn/no-bn  (~19 min)
 lake run imagenette   # the Part-I nets at 224^2, 80-epoch AdamW      (~7 h)
 \end{verbatim}
 
@@ -13499,40 +13859,45 @@ timings. MobileNetV4 and ResNet-50 joined the tier more recently and are not in
 that total, so budget somewhat more.
 
 Each has an \texttt{-iree} twin (\texttt{lake run mnist-iree} and so on)
-which runs the same binaries with the IREE lowerer selected. The tiers bundle
-these targets, and any one builds on its own:
+which runs the same binaries with the IREE lowerer selected ---
+\texttt{imagenette-iree} covers the five nets with recorded IREE timings, not
+all seven. The tiers bundle these targets, and any one builds on its own:
 
 \begin{itemize}
   \item \texttt{mnist}: \texttt{mnist-linear-verified},
     \texttt{mnist-mlp-verified}, \texttt{mnist-cnn-verified}
-  \item \texttt{cifar}: \texttt{cifar8-verified-sgdsched} and
-    \texttt{cifar8-bn-verified-sgdsched}, plus each in
-    \texttt{-momentum} / \texttt{-adam} (six in all)
-  \item \texttt{imagenette}: \texttt{resnet34-verified-adam},
-    \texttt{mobilenetv2-verified-adam}, \texttt{efficientnet-verified-adam},
-    \texttt{convnext-verified-adam}, \texttt{vit-verified-adam},
-    \texttt{mobilenetv4-verified-adam}, \texttt{resnet50-verified-adam}
+  \item \texttt{cifar}: \texttt{cifar8w-ablation} and
+    \texttt{cifar8w-bn-ablation}, each running SGD / momentum / AdamW in
+    sequence --- six arms in two binaries
+  \item \texttt{imagenette}, in chapter order, each side quest after the
+    chapter it belongs to: \texttt{resnet34-verified-adam},
+    \texttt{resnet50-verified-adam}, \texttt{mobilenetv2-verified-adam},
+    \texttt{mobilenetv4-verified-adam}, \texttt{efficientnet-verified-adam},
+    \texttt{convnext-verified-adam}, \texttt{vit-verified-adam}
 \end{itemize}
 
 \section*{Track 4: ImageNet-1k runners}
 
-The scale tier. Six nets train on full ImageNet-1k off the same certified
-renderer as their Imagenette counterparts:
+The scale tier. Seven nets train on full ImageNet-1k off the same certified
+renderer as their Imagenette counterparts, in the chapter order
+\S\ref{sec:getting_started_track3} uses:
 
 \begin{center}
 \begin{tabular}{@{}ll@{}}
 \textbf{Target} & \textbf{Job config} \\[2pt]
 \hline \\[-6pt]
-\texttt{resnet34-imagenet-verified}     & \texttt{r34-imagenet-4gpu} \\
-\texttt{resnet50-imagenet-verified}     & \texttt{r50-imagenet-4gpu} \\
+\texttt{resnet34-imagenet-verified} (2018) & \texttt{r34-imagenet-4gpu} \\
+\texttt{resnet50-imagenet-verified}     & \texttt{r50-imagenet-4gpu} (a3) \\
+\texttt{resnet50-imagenet-verified}     & \texttt{r50-2018-4gpu} \\
 \texttt{mobilenetv2-imagenet-verified}  & \texttt{mnv2-imagenet-4gpu} \\
+\texttt{mnv4-imagenet-verified}         & \withheld \\
 \texttt{efficientnet-imagenet-verified} & \texttt{enet-imagenet-4gpu} \\
 \texttt{convnext-imagenet-verified}     & \texttt{cnx-imagenet-4gpu} \\
 \texttt{vit-imagenet-verified}          & \texttt{vit-imagenet-4gpu} \\
 \end{tabular}
 \end{center}
 
-\prosesection{This tier needs Python, and only this tier does}
+\prosesection{This tier needs Python}
 
 ImageNet data does not sit in a directory the way MNIST and Imagenette do. It
 is streamed from tfds through a generated per-net shim, a Python
@@ -13679,8 +14044,8 @@ proven formula, so the code cannot drift from the math.
 \textbf{Cross-checked} (empirical): what cannot be proven is watched by
 independent oracles that must agree before the hardware is believed, and
 that means the lowerer's translation of the proven text into machine code,
-the GPU transcendentals, and \texttt{float32} rounding beyond its theorem
-layer (\S~\ref{sec:float32}). Each kind catches what the others structurally
+the GPU transcendentals, and finite-precision rounding beyond its theorem
+layer (\S~\ref{sec:precision}). Each kind catches what the others structurally
 cannot. This appendix walks the mechanisms, grouped by kind.
 
 One property makes the whole edifice auditable: \textbf{every chapter is
@@ -13848,14 +14213,16 @@ The Verified VJP Proofs suite proves \textbf{70 VJP correctness
 theorems}, one per layer, operator, and whole-network architecture,
 each asserting backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\), on
 top of the foundation \(\pdiv\) calculus and the
-differentiability/forward/witness machinery they rest on, plus 41
-architecture definitions in the bestiary, across 199 Lean proof files,
-with zero project axioms. The axiom audit
-(\texttt{tests/AuditAxioms.lean}) re-checks \textbf{1{,}457 theorems} in
-all (the VJP contracts plus the forward-graph faithfulness, render,
-cotangent-chain, backward-tie, and \texttt{float32} results,
-\S~\ref{sec:float32}), every one closing under the same three
-core axioms: \(\texttt{\#print axioms vit\_full\_has\_vjp}\) shows only
+differentiability/forward/witness machinery they rest on, plus the 41
+architecture definitions in the bestiary --- and \textbf{zero project
+axioms} anywhere in it. That last figure is the one that matters, because
+it is the only one that cannot quietly grow. The axiom audit
+(\texttt{tests/AuditAxioms.lean}) re-checks \emph{every} theorem in the
+suite (the VJP contracts plus the forward-graph faithfulness, render,
+cotangent-chain, backward-tie, and finite-precision results,
+\S~\ref{sec:precision}) --- that file is the live count, quoted here
+deliberately as a property rather than a number --- and every one closes
+under the same three core axioms: \(\texttt{\#print axioms vit\_full\_has\_vjp}\) shows only
 Lean core (\texttt{propext}, \texttt{Classical.choice},
 \texttt{Quot.sound}), nothing project-level beneath those. (Earlier
 drafts axiomatized shortcuts for the kinked operators, and every one has
@@ -13893,26 +14260,6 @@ The 51-theorem coverage is illustrative rather than exhaustive, since
 the same recipe scales to any subset of the proof suite, and the
 same allowlist applies because every theorem in the project closes
 the same way.
-
-\paragraph{How much lives below the named layer.} The dependency
-graph accompanying this blueprint currently shows roughly a hundred nodes, one
-per named theorem or definition, hand-linked by
-\texttt{\textbackslash uses} annotations. The compiled environment is
-bigger: just over 5{,}000 project constants once compiler-generated
-names are filtered out. That gap is not padding. It is the substrate
-the named layer stands on. Measured mechanically (with a
-constant-level dependency explorer, in the repo's
-\texttt{atlas-integration} branch), the ViT capstone
-\texttt{vit\_body\_has\_vjp\_mat} alone transitively depends on 101
-project constants, and only 25 of those are named theorems in this
-book. The other 76 are the working parts a reader never needs by
-name: \texttt{Mat} and its flatten/unflatten round-trip lemmas, the
-\texttt{HasVJP}/\texttt{HasVJPMat} structures themselves, forward
-functions, reindexing glue. Every one of the 101 type-checks
-sorry-free on the same three-axiom trust kernel as the named layer.
-The audits above make no distinction between spine and substrate,
-which is the point: the blueprint's curation is pedagogical, not
-epistemic.
 
 \section{By construction: the code is the math}
 
@@ -13972,9 +14319,9 @@ and bounded:
     and parses back to the proven op-graph (\texttt{StableHLOLex.lean},
     \texttt{StableHLOParse.lean}). That leaves three things trusted: a formal
     StableHLO \emph{semantics}, which does not yet exist, that the lowerer
-    compiles the text correctly, and that \texttt{float32} approximates
-    $\mathbb{R}$. The last of those is now a conditional theorem validated on
-    real silicon (\S~\ref{sec:float32}) rather than a bare assumption.
+    compiles the text correctly, and that the hardware's rounding
+    approximates $\mathbb{R}$ within the modelled unit roundoff. The last of those is now a conditional theorem validated on
+    real silicon (\S~\ref{sec:precision}) rather than a bare assumption.
 \end{itemize}
 So the gradient the GPU computes is, by a machine-checked theorem, the
 network's exact reverse-mode derivative over $\mathbb{R}$, up to one
@@ -14220,7 +14567,7 @@ being clear about: it is IREE's translation of the proven text that these
 oracles exercise directly, so the default training path's lowering carries less
 of this particular kind of evidence than the path the oracles run. Every other
 layer is unaffected, since the proofs, the bridge theorems and the
-\texttt{float32} budgets are statements about the graph rather than about any
+rounding budgets are statements about the graph rather than about any
 compiler, and both lowerers consume the identical proven StableHLO.
 
 Layered on top of the end-to-end trace diff is a per-axiom
@@ -14244,7 +14591,7 @@ that reaches past the proofs to IREE's lowering itself. And the
 \textbf{margin probe} (\texttt{scripts/margin\_probe.py}) re-runs a real
 training trajectory in coupled \texttt{f32}/\texttt{f64} and checks that
 the run stays inside the float theorems' hypotheses, with no flipped ReLU
-mask and no logit drift past \(\delta\) (\S~\ref{sec:float32}). It is
+mask and no logit drift past \(\delta\) (\S~\ref{sec:precision}). It is
 what keeps the conditional theorems honest about actual training rather
 than hypothetical nets.
 
@@ -14255,17 +14602,19 @@ deductive proof is blind to a miscompile, an empirical diff is blind to a
 measure-zero kink, and a faithful bridge is blind to a wrong formula it
 renders perfectly. Verified code generation straddles two
 of the kinds: its bridge is structural, its oracle empirical. The
-\texttt{float32} theorem layer, next, straddles the other pair: its
+finite-precision theorem layer, next, straddles the other pair: its
 budgets are deductive, its interface constants (\(u\), \(e_{\exp}\),
 \(\delta\)) empirical.
 
-\section{Float32}
-\label{sec:float32}
+\section{Finite precision}
+\label{sec:precision}
 
 Every theorem in this book is over exact reals, and the GPU computes in
-binary32. Until recently that gap lived entirely in the empirical layer,
-where the oracles agree to 1--2 ULP. It is now a theorem layer, and it has
-two halves of different reach. Keeping them apart is the honest part.
+finite precision. Until recently that gap lived entirely in the empirical
+layer, where the oracles agree to 1--2 ULP. It is now a theorem layer, and
+it has two halves of different reach. Keeping them apart is the honest
+part --- as is keeping the layer's \emph{generality} apart from its
+\emph{usefulness}, which \S~\ref{par:precision_reach} below returns to.
 The \emph{closeness} half
 (\(|\,\text{float op} - \text{real op}\,| \le\) budget) is
 architecture-complete: \texttt{FloatBridge.lean} and the per-net
@@ -14273,7 +14622,7 @@ architecture-complete: \texttt{FloatBridge.lean} and the per-net
 and backward, from the MNIST linear classifier to ViT-Tiny, and (by the
 composition theorem below) these per-operator budgets fold into a
 \emph{depth-linear whole-network} certificate that stays below the logit scale
-on all eight committed renders. The
+on eight of the nine committed renders. The
 \emph{descent} half (a rounded step provably \emph{decreases the loss})
 closes only for the shallow nets
 (\texttt{SgdDescent\{Linear,Mlp,Cnn,Cifar\}.lean}). The way the chain avoids
@@ -14302,6 +14651,53 @@ because GPU transcendentals have no IEEE specification.
 \(e_{\exp}\) is precisely the constant the VJP oracle
 (\S~\ref{sec:jax_pipeline}) measures, so the deductive and empirical
 layers meet at a named interface instead of a hand-wave.
+
+\paragraph{How far the model reaches, and where it stops being useful.}
+\label{par:precision_reach}
+Because \(u\) is a parameter, nothing in the chain is
+\texttt{float32}-specific. \texttt{Binary32Instance.lean} constructs the
+rounding operator as round-to-nearest on the \(p\)-bit-significand grid
+and instantiates it twice: \texttt{binary32} at \(p = 23\),
+\(u_{32} = 2^{-24}\), and \texttt{fp8E4M3} at \(p = 3\),
+\(u_{\mathrm{e4m3}} = 2^{-4}\). Every whole-network bridge quantifies over
+\texttt{(M : FloatModel)}, so ResNet-34's certificate is not a statement
+about binary32 that happens to be proved --- it is a statement about
+\emph{any} rounding model, of which binary32 is one instance.
+
+\medskip\noindent That generality is free. Usefulness is not, and the two
+should not be confused. The dot-product budget carries the classical
+fan-in factor \((1+u)^{n+1} - 1\), which goes vacuous once \(n\,u\)
+approaches 1 --- a wall at \(n \approx 1/u\). At \(u_{32}\) that wall sits
+near \(1.7 \times 10^{7}\) and no layer in this book comes close. At pure
+bf16 (\(u = 2^{-8}\)) it sits at \(n \approx 256\), and ResNet-34's
+\(3\times3\) convolution at 512 channels has fan-in 4608. The budget is
+still true there. It is also worthless there.
+
+\medskip\noindent Which is why the low-precision result is stated
+\emph{mixed} rather than pure. \texttt{dotMixed} rounds the operands
+through a leaf model \(L\) (bf16 \(2^{-8}\), or fp8-E4M3 \(2^{-4}\)) and
+accumulates through \(M\) at \(u_{\mathrm{acc}}\), which is the shape the
+hardware actually runs: low-precision inputs, fp32 accumulator.
+\texttt{dot\_close\_mixed} then splits the error in two, and the split is
+the whole point --- the leaf precision contributes a \emph{flat}
+\((2u_{\mathrm{leaf}} + u_{\mathrm{leaf}}^2)\sum|x_i y_i|\) term that is
+\textbf{not} fan-in amplified, while the amplification rides entirely on
+\(u_{\mathrm{acc}}\). The wall stays at \(1/u_{\mathrm{acc}}\) no matter
+how coarse the leaf is. That is exactly why bf16-mixed is non-vacuous
+where pure bf16 is not, and it is carried to convolution and depthwise
+convolution in \texttt{ConvMixedFloatBridge.lean},
+\texttt{DepthwiseMixedFloatBridge.lean} and
+\texttt{ConvMixedComposeBridge.lean}, with the emitted low-precision
+graphs tied back to the intended algorithm in
+\texttt{Bf16FaithfulPoC.lean} and \texttt{E4M3FaithfulPoC.lean}.
+
+\medskip\noindent So the honest summary is three sentences, not one. The
+theorems are over \(\mathbb{R}\). The budgets are over an arbitrary
+rounding model, so binary32, bf16-mixed and fp8-E4M3 are instances rather
+than separate theories. And the numbers those budgets produce are worth
+having at fp32 accumulate, worth having at a low-precision leaf over an
+fp32 accumulator, and not worth having at pure low precision --- which is
+a fact about the arithmetic, not a gap in the proofs.
 
 \paragraph{The chain.} Four links, each in the three-axiom audit.
 \emph{Forward}: \texttt{mlp\_float\_close\_uniform} budgets the
@@ -14388,10 +14784,17 @@ order. IREE adds them in a balanced tree, which costs
 rather than assume, and the one that finally tames the widest reductions
 (fan-in \(6272\), or \(n = 301056\) in ConvNeXt's LayerNorm). The result is the
 first whole-network float certificate that means something on networks this
-deep: the bound lands \emph{below the logit scale} on every committed render,
-at MNIST-CNN \(0.015\), CIFAR-8 \(2.6\), MobileNetV2 \(0.30\), ResNet-34 \(0.17\),
-ViT-Tiny \(0.57\), EfficientNet-B0 \(0.10\), ConvNeXt-T \(0.80\), against logits
-of order one to five. And it is a statement about the \emph{decision}, not just
+deep: the bound lands \emph{below the logit scale} on eight of the nine
+committed renders, quoted here as budget against that net's own logit scale
+--- MNIST-MLP \(0.8/21\), MNIST-CNN \(0.015/0.64\), CIFAR-8 \(2.6/4.6\),
+MobileNetV2 \(0.30/0.99\), ResNet-34 \(0.17/3.40\), ViT-Tiny \(0.57/4.33\),
+EfficientNet-B0 \(0.096/0.94\), ConvNeXt-T \(0.80/2.94\). The ninth,
+CIFAR-8-BN, is the one that does not close: \(3.4\) against a logit scale of
+\(3.2\), or \(1.1\times\) over. It is quoted rather than dropped because it is
+the honest edge of the method --- a per-example per-channel BatchNorm at
+fan-in \(1024\) is the widest reduction in the set, and the residual is a
+single tail gain of \(1313\) through \texttt{bn1}. Every other net clears by
+between \(3\times\) and \(26\times\). And it is a statement about the \emph{decision}, not just
 the numbers: \texttt{cifar8\_chain\_argmaxSafe} proves that whenever the exact
 network's margin beats twice the budget, binary32 rounding cannot change which
 class it predicts.

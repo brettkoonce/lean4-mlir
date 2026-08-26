@@ -1676,12 +1676,14 @@ lean_exe «mobilenetv2-imagenet-verified» where
   root := `apps.imagenette.MainMobileNetV2Imagenet
   moreLinkArgs := lowererLink
 
-/-- **MobileNetV4-Conv-S on full 1000-class ImageNet** — the sixth scale-tier trainer (2026-08-12).
+/-- **MobileNetV4-Conv-M on full 1000-class ImageNet** — the sixth scale-tier trainer (2026-08-12).
     `nClasses := 1000, B := 64`; four replicas would be global 256. Batch-BN, so it has a
     `_fwd_eval` peer and a running-stat region.
 
-    ⚠⚠ **Conv-S, not the Conv-M the chapter's 75.51% belongs to.** Different network, no published
-    ImageNet target for this block table. A run here is a first measurement.
+    ⭐ **Conv-M as of a 2026-08-26 audit — this docstring said Conv-S, and it was true when
+    written.** `mnv4ImagenetVerified` (`VerifiedNets.lean`) now carries the Conv-M block table and
+    names itself "MobileNetV4-Conv-M (ImageNet-1k)", so the chapter's 75.51% IS this network's
+    target. It is not this network's RESULT: nothing here has been trained to convergence.
 
     ⚠ Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there,
     AdamW @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet
@@ -2814,12 +2816,18 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
 script «mnist-iree» do
   runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified", "mnist-cnn-verified"]
 
-/-- `lake run cifar-iree` — the ch.4 verified cifar8 variants: SGD/momentum/adam ×
-    bn/no-bn, ~1 hr. -/
+/-- `lake run cifar-iree` — the ch.4 six-arm optimizer ablation (SGD/momentum/adam ×
+    bn/no-bn) on the IREE lowerer.
+
+    These are the WIDE-head (`d1 = 512`) nets as of 2026-08-26, because those are
+    what Chapter 4 actually runs and quotes: `cifar8w-bn-ablation` is the binary
+    behind §4.1's listing and `runs/2026-08-12-cifar8w-6arm-xla-cuda/`. It used to
+    be the narrow `d1 = 64` pair, so the demo trained a different net from the one
+    the chapter's tables reported. The narrow nets are still built and still
+    proved — `cifarCnn8_has_vjp_at` is parametric in the head width, so neither
+    needs its own proof — they are just no longer what `lake run cifar` shows. -/
 script «cifar-iree» do
-  runDemoGroup ["cifar8-verified-sgdsched", "cifar8-bn-verified-sgdsched",
-                "cifar8-verified-momentum", "cifar8-bn-verified-momentum",
-                "cifar8-verified-adam", "cifar8-bn-verified-adam"]
+  runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"]
 
 /-- `lake run imagenette-iree` — the Part-I verified Imagenette trainers (the rest of
     the chapters: ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Tiny),
@@ -2873,18 +2881,17 @@ script mnist do
 /-- `lake run cifar` — the six-way Chapter-4 optimizer ablation on XLA
     (SGD / Nesterov-momentum / AdamW × BN / no-BN).
 
-    Now a mirror of `lake run cifar-iree` in the literal sense: the SAME six
-    binaries, differing only in the lowerer `runDemoGroup` selects. It was not
-    before — this group ran the `sgdsched` SGD arm while `cifar-iree` ran the
-    plain-SGD `cifar8-verified` pair, so on that arm a cross-backend difference
-    was NOT attributable to the lowerer, which is exactly what the old docstring
-    promised it was. Both now run `sgdsched`: it puts SGD through the same
-    shuffle/hflip/cosine pipeline as the other five, so the ablation compares
-    optimizers rather than pipelines. -/
+    Still a mirror of `lake run cifar-iree` in the literal sense: the SAME
+    binaries, differing only in the lowerer `runDemoGroup` selects. Both sides
+    moved to the WIDE-head pair on 2026-08-26 so that the demo trains the net
+    Chapter 4 reports on; each ablation binary runs its three optimizers in
+    sequence on one controlled pipeline (shuffle + hflip + cosine-warmup), so the
+    six arms are two binaries rather than six. Wide costs about 1.6x the
+    wall-clock per epoch over the narrow pair it replaced (~6.3s vs ~3.9s on a
+    4060 Ti) and buys no accuracy — §4.3's head-width sweep is exactly that
+    finding — but matching the chapter is worth the minutes. -/
 script cifar do
-  runDemoGroup ["cifar8-verified-sgdsched", "cifar8-bn-verified-sgdsched",
-                "cifar8-verified-momentum", "cifar8-bn-verified-momentum",
-                "cifar8-verified-adam", "cifar8-bn-verified-adam"] (xla := true)
+  runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"] (xla := true)
 
 /-- `lake run imagenette` — the XLA peers of `lake run imagenette-iree`, and **all five as of
     2026-07-30**.
@@ -2923,10 +2930,13 @@ script cifar do
     tied (forward 1.423e-06, gradient 0/147) but the RECIPES are not — the baseline is bs192 /
     warmup 5 against this tier's bs32 / warmup 3. Same net, different recipe. -/
 script imagenette do
-  runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
+  -- Book order (ch.5 -> ch.9, each chapter's side quest right after it), so the
+  -- group narrates in the order a reader met the nets. r50 and mnv4 were appended
+  -- when they joined the tier; 2026-08-26 moved them into place.
+  runDemoGroup ["resnet34-verified-adam", "resnet50-verified-adam",
+                "mobilenetv2-verified-adam", "mobilenetv4-verified-adam",
                 "efficientnet-verified-adam", "convnext-verified-adam",
-                "vit-verified-adam", "mobilenetv4-verified-adam",
-                "resnet50-verified-adam"] (xla := true)
+                "vit-verified-adam"] (xla := true)
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- `lake run download` — fetch the core datasets the verified trainers + the
@@ -3125,7 +3135,21 @@ def benchTable : List BenchItem :=
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
       transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
     { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar",
-      refSecCuda := some 540, probeXla := "cifar8-bn-verified", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+      refSecCuda := some 1514, probeXla := "cifar8w-bn-ablation", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+    -- ⚠⚠ **WIDE-head as of 2026-08-26**, because that is what `lake run cifar` and ch.4 now are
+    -- (both moved off the narrow d1=64 pair the same day). refSecCuda was 540 = 2.25 s/epoch × 240
+    -- on `cifar8-bn-verified`; it is now 6.31 s/epoch × 240 = 1514 on `cifar8w-bn-ablation`, which
+    -- keeps this field's stated meaning ("3 steady-state epochs × their own epoch counts") and
+    -- matches what direct mode computes from the same probe.
+    -- ⭐ The TRUE 6-arm wall, measured end-to-end on one 4060 Ti the same day, is **1131 s**
+    -- (`runs/2026-08-26-cifar8w-6arm-timing/`: 374 s for the 3 no-BN arms at 3.12 s/epoch + 757 s
+    -- for the 3 BN arms at 6.31). So the BN-arm×6 approximation OVERSHOOTS by 34% here — the
+    -- no-BN arms are half the cost, not "cheaper" by a little. The approximation is kept anyway
+    -- because direct mode can only ever read ONE ms/epoch and the IREE/XLA ref columns make the
+    -- same one; a row that mixed a true wall against two extrapolated ones would be the §2j trap.
+    -- ⛔ `refSec` (IREE 2038) and `refSecXla` (888) are STILL the narrow-head 7900 XTX numbers and
+    -- are now mismatched against this row's net. Not scaled here on purpose — inventing a factor is
+    -- exactly what this table exists to avoid. Re-measure on the ROCm box, or read them as narrow.
     { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
       transportSensitive := true, refSecCuda := some 5333, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
     { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
