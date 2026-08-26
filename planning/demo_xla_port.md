@@ -163,6 +163,53 @@ is the highest-leverage stub and should be first.
 
 ---
 
+## 4.5 ⭐ STATUS 2026-08-26 — tiers 1+2 swept, `train_step_adam_seg` ported
+
+Done and on `main` (`bc946fe`):
+
+- **Tiers 1+2 swept.** 18 hardcoded `.vmfb` paths across 16 drivers moved to
+  `NetSpec.graphArtifact`. ⚠ There was a **second** IREE dependency this doc's
+  two-layer model does not name: 8 demos carry their own `compileMlir`/`runIree`
+  that shells out to `iree-compile` unconditionally. `Train.lean:102` already
+  guards that but is `private`, so each demo reimplemented the call without it.
+  Guarded. A driver sweep that only greps for `.vmfb` misses these.
+- **`train_step_adam_seg` is implemented**, which §4.4 correctly called the
+  highest-leverage stub. The blocker was not in either layer this doc models:
+  `iree_ffi_invoke_f32` hardcoded `PJRT_Buffer_Type_F32` for **every** input,
+  and the seg graph takes a real int32 label (`%y_seg: tensor<BxHxWxi32>`).
+  Fixed by splitting an `invoke_typed` core out with a per-input dtype array;
+  `iree_ffi_invoke_f32` is now a wrapper passing NULL, so f32 callers are
+  byte-identical (gated on `score-checkpoint {convnext,vit}`, bit-identical).
+- **`bigram-shakespeare` did not compile**, independent of any of this —
+  verified against the pristine file. Fixed (`return b` → `pure b`).
+
+### ▶▶ NEXT: `unet-brats-train` — the validation that matters
+
+`train_step_adam_seg` is proven on **tinygpt only**, and tinygpt's label is
+`[B, T, 1]` — it never exercises `W > 1`. UNet/BraTS is the real per-pixel case
+and is what should gate the entry point before anything else builds on it.
+
+```
+CUDA_VISIBLE_DEVICES=0 .lake/build/bin/unet-brats-train data/brats 3
+#                                                       ^dataDir  ^epochs (default 3)
+```
+
+Data is prepared (`data/brats/{train,val}.bin`, ~4.2 GB / 0.74 GB). What to
+check, in order:
+
+1. It reaches the training loop at all — i.e. no `not_ported`, which is the
+   thing the port fixed.
+2. Loss decreases. ⚠ Not sufficient on its own: a mis-indexed label tensor
+   descends too. This is exactly why tinygpt was gated on *sampling* rather
+   than on loss.
+3. **mIoU + per-class IoU**, which this trainer already prints every 10 epochs.
+   That is the real gate — the labels are either aligned or the minority class
+   IoU is zero. ⚠ Read `MainUnetBratsTrain.lean:186-195` first: γ=2 is a
+   documented **collapse setting** on this data, so a zero there may be the
+   loss config rather than the port. Compare against the IREE-era numbers
+   before concluding anything about the port.
+4. Then `unet-brats-r34` and `tinystories` come free off the same entry point.
+
 ## 5. ▶ STEP ORDER, by risk
 
 1. **Tiers 1+2 in one pass (13 demos, no shim change).** Mechanical: hardcoded `.vmfb` →
