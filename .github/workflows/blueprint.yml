@@ -30,6 +30,11 @@ on:
       # unrelated push happened to touch a trigger path).
       - 'tests/BlueprintCheckDecls.lean'
   workflow_dispatch:
+    inputs:
+      full_site:
+        description: "Also upload the whole public/ tree as a downloadable artifact (includes the locally-rebuilt Mathlib doc-gen4 output — gigabytes, slow)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.ref }}
@@ -354,6 +359,37 @@ jobs:
             find blueprint -name "*.log" -maxdepth 3 2>/dev/null || true
           } > public/build-logs/filesystem.txt
           ls -la public/ public/build-logs/
+
+      # ⭐ `upload-pages-artifact` above is NOT a normal artifact: it produces the special
+      # `github-pages` tarball that only `deploy-pages` consumes, which is why nothing on a
+      # run page was downloadable. These are plain `upload-artifact` steps so every run
+      # leaves something you can actually fetch.
+      #
+      # `if: always()` is the point of the first one: when the LaTeX or doc-gen4 step fails,
+      # Pages never deploys, so the logs that would explain the failure were exactly the
+      # thing you could not get at. Now they come down with the run.
+      - name: Upload downloadable outputs (PDF + blueprint web + build logs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blueprint-${{ github.sha }}
+          # NOT public/docs — that tree is a locally rebuilt Mathlib doc-gen4 corpus
+          # (see the doc-gen4 step's comment) and is gigabytes. Opt into it below.
+          path: |
+            public/blueprint.pdf
+            public/blueprint/**
+            public/build-logs/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload the FULL public/ tree (manual runs only, opt-in)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_site }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-site-${{ github.sha }}
+          path: public
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
