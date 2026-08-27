@@ -1,6 +1,6 @@
 import LeanMlir.VerifiedNets
 
-/-! # `mnv4-imagenet-verified` — MobileNetV4-Conv-M on full ImageNet-1k, verified → XLA
+/-! # `mobilenetv4-imagenet-verified` — MobileNetV4-Conv-M on full ImageNet-1k, verified → XLA
 
 The sixth scale-tier trainer, and the last of the Imagenette nets to get one. Built the way
 `resnet50-imagenet-verified` was: the Imagenette block table with a 1000-class head
@@ -28,7 +28,7 @@ run time (`ffi/lowerer.h`).
 Run (GPU, single device):
 ```
 PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
-  .lake/build/bin/mnv4-imagenet-verified data
+  .lake/build/bin/mobilenetv4-imagenet-verified data
 ```
 -/
 

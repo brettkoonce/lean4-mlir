@@ -1595,13 +1595,13 @@ lean_exe «vit-imagenet-verified» where
     ⚠ FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
     `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer.
     ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
-lean_exe «vits-imagenet-verified» where
+lean_exe «vit-s-imagenet-verified» where
   root := `apps.imagenette.MainViTSImagenet
   moreLinkArgs := lowererLink
 
 /-- **ViT-Base (DeiT-B) on ImageNet-1k** — 86,567,656 parameters. ⚠ Per-device batch 32 (global
     128, NOT the DeiT 512) because ViT-B OOMs at 4×128 on 16 GB cards. Renders; unmeasured. -/
-lean_exe «vitb-imagenet-verified» where
+lean_exe «vit-b-imagenet-verified» where
   root := `apps.imagenette.MainViTBImagenet
   moreLinkArgs := lowererLink
 
@@ -1632,9 +1632,9 @@ lean_exe «convnext-imagenet-verified» where
     ⚠ Stochastic depth is **0.4**, the paper's S value, not Tiny's 0.1 — the one recipe knob that
     moves with model size. Use `LEAN_MLIR_DROP_RATE_U=200000` on the 80-epoch tier.
     ⚠ Both `adamwxclipdrop` (single device, the default) and `adamdpwxclipdrop` (4 replicas) are
-    rendered, so unlike `vits-imagenet-verified` a plain invocation runs.
+    rendered, so unlike `vit-s-imagenet-verified` a plain invocation runs.
     ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
-lean_exe «convnexts-imagenet-verified» where
+lean_exe «convnext-s-imagenet-verified» where
   root := `apps.imagenette.MainConvNeXtSImagenet
   moreLinkArgs := lowererLink
 
@@ -1649,7 +1649,7 @@ lean_exe «convnexts-imagenet-verified» where
     function did, and every B artifact would have called itself a ConvNeXt-S.
     ⚠ Stochastic depth is 0.5 (paper value for B; S is 0.4, T is 0.1).
     ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
-lean_exe «convnextb-imagenet-verified» where
+lean_exe «convnext-b-imagenet-verified» where
   root := `apps.imagenette.MainConvNeXtBImagenet
   moreLinkArgs := lowererLink
 
@@ -1688,7 +1688,7 @@ lean_exe «mobilenetv2-imagenet-verified» where
     ⚠ Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there,
     AdamW @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet
     — see `planning/chapter_makeover.md`'s MNv4 phase-4 gap list. -/
-lean_exe «mnv4-imagenet-verified» where
+lean_exe «mobilenetv4-imagenet-verified» where
   root := `apps.imagenette.MainMobilenetV4Imagenet
   moreLinkArgs := lowererLink
 

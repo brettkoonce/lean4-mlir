@@ -1,6 +1,6 @@
 import LeanMlir.VerifiedNets
 
-/-! # `convnextb-imagenet-verified` — ConvNeXt-**Base** on full ImageNet-1k, verified → XLA
+/-! # `convnext-b-imagenet-verified` — ConvNeXt-**Base** on full ImageNet-1k, verified → XLA
 
 ConvNeXt-B is ConvNeXt-S's depth (`[3,3,27,3]`) at `[128,256,512,1024]`: same 342 parameter
 tensors, every one of them wider. 88,589,416 scalars against S's 50,222,152 and T's 28,587,592.
@@ -43,7 +43,7 @@ Run (4 GPUs — BOTH replica knobs are required):
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=adamdpwxclipdrop LEAN_MLIR_BATCH=32 \
   PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
-  .lake/build/bin/convnextb-imagenet-verified data
+  .lake/build/bin/convnext-b-imagenet-verified data
 ```
 -/
 

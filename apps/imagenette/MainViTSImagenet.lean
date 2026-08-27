@@ -1,6 +1,6 @@
 import LeanMlir.VerifiedNets
 
-/-! # `vits-imagenet-verified` — ViT-**Small** on full ImageNet-1k, verified → XLA
+/-! # `vit-s-imagenet-verified` — ViT-**Small** on full ImageNet-1k, verified → XLA
 
 The first net in this repo added by WIDENING an existing one rather than by writing a new chain.
 ViT-S is ViT-Ti widened: `D = 384 = 6 heads × 64` against Tiny's `192 = 3 × 64`, MLP 1536 against
@@ -30,7 +30,7 @@ Run (4 GPUs — and BOTH replica knobs are required, see `planning/mnv4_convm_ti
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=adamdp128x4wxclipdrop LEAN_MLIR_BATCH=128 \
   PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
-  .lake/build/bin/vits-imagenet-verified data
+  .lake/build/bin/vit-s-imagenet-verified data
 ```
 -/
 

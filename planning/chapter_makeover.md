@@ -511,7 +511,7 @@ flagged "representative" at `VerifiedNets.lean:720`.
 
 ### ⭐ MNv4 ImageNet phase 4: BUILT AND RUNNING (2026-08-12)
 
-`mnv4-imagenet-verified` exists and trains. Built exactly the way R50's was, in four pieces:
+`mobilenetv4-imagenet-verified` exists and trains. Built exactly the way R50's was, in four pieces:
 
 1. `mnv4ImagenetVerified : VerifiedNetSpec` (slug `mnv4in`, `VerifiedNets.lean`) — Conv-S trunk
    copied from `mobilenetv4Verified`, head `1280×10 → 1280×1000`, params
@@ -520,7 +520,7 @@ flagged "representative" at `VerifiedNets.lean:720`.
    and the `d0 == 3*224*224` row in the cross-net `.imagenet` invariant.
 2. Three `#eval`s in `MobileNetV4RenderB.lean` → `mnv4in_{fwd,fwd_eval,adam64}_train_step.mlir`.
    The renderer already took `slug` and `replicas` as defaulted args, so this was three lines.
-3. `apps/imagenette/MainMobilenetV4Imagenet.lean` + `lean_exe mnv4-imagenet-verified`.
+3. `apps/imagenette/MainMobilenetV4Imagenet.lean` + `lean_exe mobilenetv4-imagenet-verified`.
 4. `gen_shims.sh` row `mobilenet-v4-imagenet:default:generated_mobilenet_v4_imagenet_shim.py`,
    shim generated (23,786 bytes).
 
@@ -1577,7 +1577,7 @@ driver.** Building one is the same three steps R50 just took:
    `resnet50in_{mom256,momdp64}` were two lines in `ResNet50RenderB.lean`.
    ⚠ Emit with `lake build <module>`, NOT `lake env lean` — that file segfaults
    under `lake env lean` at baseline (rc 139), which is pre-existing.
-3. `mnv4-imagenet-verified` exe + driver with the `LEAN_MLIR_EPOCHS` knob.
+3. `mobilenetv4-imagenet-verified` exe + driver with the `LEAN_MLIR_EPOCHS` knob.
 
 ⚠⚠ **The reference is Conv-M, the repo's spec is Conv-S.** The 100-epoch JAX
 reference (75.51%) lives OUTSIDE the repo at `/home/skoonce/mnv4_convm_100ep`, so

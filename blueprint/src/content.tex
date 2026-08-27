@@ -7132,7 +7132,7 @@ def main (argv : List String) : IO Unit :=
 \end{verbatim}
 
 \noindent That is \texttt{apps/imagenette/MainMobilenetV4Imagenet.lean},
-built as \texttt{lake build mnv4-imagenet-verified}. The renders come
+built as \texttt{lake build mobilenetv4-imagenet-verified}. The renders come
 from the same chain and the same block table as the three 10-class
 artifacts, differing only in \texttt{nClasses}, the batch and the slug,
 which is why adding them was three \texttt{\#eval} lines rather than a
@@ -7175,7 +7175,7 @@ an estimate built the other way --- scaling MobileNetV2's measured
 all-reduce cost by Conv-M's $2.77\times$ larger gradients --- missed the
 measured figure by $70\%$.
 
-\medskip\noindent\textbf{[TODO: run \texttt{mnv4-imagenet-verified}.]}
+\medskip\noindent\textbf{[TODO: run \texttt{mobilenetv4-imagenet-verified}.]}
 
 \chapter{EfficientNet}
 \label{chap:se}
@@ -9193,8 +9193,8 @@ verified path, which is the deepening and nothing else.
 
 \medskip\noindent \textbf{Status: rendered, not trained.} Artifacts emit,
 shapes tie to \texttt{VLayer.toSpecs}, param counts are \texttt{\#guard}ed
-and a few steps run under \texttt{convnexts-imagenet-verified} and
-\texttt{convnextb-imagenet-verified}. No accuracy, and the numeric ties
+and a few steps run under \texttt{convnext-s-imagenet-verified} and
+\texttt{convnext-b-imagenet-verified}. No accuracy, and the numeric ties
 against the JAX peers have not been run. On four cards B needs gradient
 accumulation even in bf16.
 
@@ -13917,7 +13917,7 @@ renderer as their Imagenette counterparts, in the chapter order
 \texttt{resnet50-imagenet-verified}     & \texttt{r50-imagenet-4gpu} (a3) \\
 \texttt{resnet50-imagenet-verified}     & \texttt{r50-2018-4gpu} \\
 \texttt{mobilenetv2-imagenet-verified}  & \texttt{mnv2-imagenet-4gpu} \\
-\texttt{mnv4-imagenet-verified}         & \withheld \\
+\texttt{mobilenetv4-imagenet-verified}         & \withheld \\
 \texttt{efficientnet-imagenet-verified} & \texttt{enet-imagenet-4gpu} \\
 \texttt{convnext-imagenet-verified}     & \texttt{cnx-imagenet-4gpu} \\
 \texttt{vit-imagenet-verified}          & \texttt{vit-imagenet-4gpu} \\

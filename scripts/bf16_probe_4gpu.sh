@@ -55,8 +55,8 @@ probe cnx  convnext-imagenet-verified      adamdpwxclipdrop            32
 probe cnx  convnext-imagenet-verified      adamdpwxclipdropbf16        32
 probe enet efficientnet-imagenet-verified  rmsdp64                     64
 probe enet efficientnet-imagenet-verified  rmsdp64bf16                 64
-probe mnv4 mnv4-imagenet-verified          adamdp64                    64
-probe mnv4 mnv4-imagenet-verified          adamdp64bf16                64
+probe mnv4 mobilenetv4-imagenet-verified          adamdp64                    64
+probe mnv4 mobilenetv4-imagenet-verified          adamdp64bf16                64
 probe vit  vit-imagenet-verified           adamdp128x4wxclipdrop      128
 probe vit  vit-imagenet-verified           adamdp128x4wxclipdropbf16  128
 echo "ALL DONE"

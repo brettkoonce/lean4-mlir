@@ -1,6 +1,6 @@
 import LeanMlir.VerifiedNets
 
-/-! # `vitb-imagenet-verified` — ViT-**Base** (DeiT-B) on full ImageNet-1k, verified → XLA
+/-! # `vit-b-imagenet-verified` — ViT-**Base** (DeiT-B) on full ImageNet-1k, verified → XLA
 
 The third width off one renderer, and the widest. ViT-B is ViT-Ti widened twice over:
 `D = 768 = 12 heads × 64` against Small's `384 = 6 × 64` and Tiny's `192 = 3 × 64`, MLP 3072
@@ -39,7 +39,7 @@ Run (4 GPUs — and BOTH replica knobs are required, see `planning/mnv4_convm_ti
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=adamdp32x4wxclipdrop LEAN_MLIR_BATCH=32 \
   PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
-  .lake/build/bin/vitb-imagenet-verified data
+  .lake/build/bin/vit-b-imagenet-verified data
 ```
 -/
 

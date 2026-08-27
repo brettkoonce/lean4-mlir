@@ -1,6 +1,6 @@
 import LeanMlir.VerifiedNets
 
-/-! # `convnexts-imagenet-verified` — ConvNeXt-**Small** on full ImageNet-1k, verified → XLA
+/-! # `convnext-s-imagenet-verified` — ConvNeXt-**Small** on full ImageNet-1k, verified → XLA
 
 The second net here added by RESHAPING an existing renderer rather than by writing a new chain, and
 the cheapest of them so far. ConvNeXt-S is ConvNeXt-T DEEPENED: stage 3 goes 9 → 27 blocks, and the
@@ -51,7 +51,7 @@ Run (4 GPUs — BOTH replica knobs are required, see `planning/mnv4_convm_ties_t
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=adamdpwxclipdrop LEAN_MLIR_BATCH=32 \
   PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
-  .lake/build/bin/convnexts-imagenet-verified data
+  .lake/build/bin/convnext-s-imagenet-verified data
 ```
 -/
 
