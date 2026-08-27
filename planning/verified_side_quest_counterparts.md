@@ -494,10 +494,31 @@ shared correctness gate's would be how a gate stops gating):
 mismatch: the first draft set it against R50's **1.55×**, which is R50's SINGLE-DEVICE figure.
 R50 at four replicas is **1.66×** (336.9 → 203.4 ms). S still leads, by less.
 
-⛔ **ViT-B gets no projected wall clock.** Tiny is the only ViT with a measured trainer step and B
-runs at ¼ its batch, so Tiny's multiplier returns a 1.12× trainer speedup — BELOW B's own 1.40×
-device ratio, which no overhead model may do. An additive model gives 1.37× and a total 100 h
-lower. Two defensible models 100 h apart is not an estimate.
+✅ **ViT-B DOES get a wall clock — by measuring, 2026-08-27.** This section first said it could not
+have one: Tiny's multiplier gave B a 1.12× trainer speedup, below B's own 1.40× device ratio, and
+two defensible models sat 100 h apart. That was true and the answer was to stop modelling. All
+three ViTs were then probed directly on real ImageNet (40 steps, 4 cards, `LEAN_MLIR_SKIP_EVAL=1`):
+
+| net | global | steps/epoch | trainer ms/step | 300 epochs |
+|---|---|---|---|---|
+| ViT-Tiny | 512 | 2,502 | 237 → 168 | 53 → 38 h |
+| ViT-S | 512 | 2,502 | 528 → 325 | 113 → 71 h |
+| **ViT-B** | 128 | 10,009 | **423 → 317** | **356 → 268 h** (14.8 → 11.1 d) |
+
+⚠⚠ **AND IT SHOWED THE ViT-S FIGURE I HAD ALREADY PUBLISHED WAS WRONG BY 19%** — 627 → 415 ms
+derived against 528 → 325 measured. Corrected in `93ec229`'s successor.
+
+⭐⭐ **The finding, and it is why one net's model transfers and another's does not.** ViT's device
+figures are FOUR-REPLICA, so the all-reduce is already inside them and the only thing a trainer
+adds is the data feed — ~65 ms at 128 img/dev for BOTH Tiny and S, i.e. an additive constant.
+ConvNeXt's device figures are SINGLE-DEVICE, so its trainer must also absorb an all-reduce that
+grows with the parameter count, and a multiplier is the right shape. Same box, same two
+quantities, two different laws.
+▶ Checked rather than assumed: a direct probe of ConvNeXt-S returns 368 → 301 ms against the
+366 → 292 derived in §4c, fp32 within 0.5%, so that net's derived row stands.
+⚠ Controls both ways — ViT-Tiny reads 237 → 168 against a committed 232 → 163 (2–3% slow this
+session); ConvNeXt-T reads 231 against 217, which is why §8.6's committed-basis numbers were NOT
+overwritten with this session's.
 
 ---
 

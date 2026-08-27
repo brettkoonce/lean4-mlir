@@ -9226,7 +9226,9 @@ ConvNeXt-B & $534 \to 446$ & $89.1 \to 74.4$ & $449 \to 375$\,h \;($18.7 \to 15.
 \noindent \textbf{T and B are measured; S is derived} --- the trainer costs a
 near-constant multiple of the graph ($1.37\times$/$1.35\times$ fp32,
 $1.519\times$/$1.516\times$ bf16), and applying those reproduces T's and B's
-published totals to within $0.5$\,h. Note how much of bf16 the trainer eats: a
+published totals to within $0.5$\,h. A direct probe of S afterwards returned
+$368 \to 301$\,ms against the $366 \to 292$ derived here, so the model holds on
+this net --- \S\ref{sec:vit_sb} is where it does not, and says why. Note how much of bf16 the trainer eats: a
 $1.39\times$ graph is a $1.25\times$ run, because the shim feed and the
 all-reduce do not get faster. The phase-2 peers, at twice the batch and so half
 the steps, take $71.6$, $108.8$ and $166.5$ hours compute-only --- so the
@@ -11085,28 +11087,37 @@ dimension literals. The batched renderer carries all three;
 \texttt{ViTRender.lean}, the per-example peer, is still pinned at Tiny by roughly
 $154$ of them, which is why there is no ViT-S or ViT-B Imagenette demo.
 
-\medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
-including $37.5$\,s per epoch of evaluation and checkpointing:
+\medskip\noindent \textbf{A full schedule.} Trainer steps, all three measured
+on real ImageNet over $40$ steps at four cards, $300$ epochs, totals including
+$37.5$\,s per epoch of evaluation and checkpointing:
 
 \begin{center}
-\begin{tabular}{@{}l r r r@{}}
+\begin{tabular}{@{}l r r r r@{}}
 \hline
-verified, 4 cards & global & steps/epoch & 300 epochs \\
+verified, 4 cards & global & steps/epoch & ms/step & 300 epochs \\
 \hline
-ViT-Ti & $512$ & $2{,}502$  & $51.5 \to 37.1$\,h \;(measured) \\
-ViT-S  & $512$ & $2{,}502$  & $134 \to 90$\,h \;($5.6 \to 3.7$\,d, derived) \\
-ViT-B  & $128$ & $10{,}009$ & --- \\
+ViT-Ti & $512$ & $2{,}502$  & $237 \to 168$ & $53 \to 38$\,h \;($2.2 \to 1.6$\,d) \\
+ViT-S  & $512$ & $2{,}502$  & $528 \to 325$ & $113 \to 71$\,h \;($4.7 \to 3.0$\,d) \\
+ViT-B  & $128$ & $10{,}009$ & $423 \to 317$ & $356 \to 268$\,h \;($14.8 \to 11.1$\,d) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent \textbf{ViT-B gets no projected total.} Tiny is the only ViT with a
-measured trainer step, and the trainer costs a near-constant multiple of the
-graph --- which is what lets S's row be derived, since S runs at Tiny's batch.
-B does not: at a quarter the batch, Tiny's multiplier returns a $1.12\times$
-trainer speedup, \emph{below} B's own $1.40\times$ device ratio, which no
-overhead model may do. An additive model gives $1.37\times$ and a total a
-hundred hours lower, and two defensible models that far apart is not an estimate.
+\noindent Tiny is the control: it reads $237 \to 168$ here against a previously
+committed $232 \to 163$, so the session runs about $2$--$3\%$ slow and the other
+two rows can be read on the same basis.
+
+\medskip\noindent \textbf{ViT-B's row exists because these were measured rather
+than modelled, and the first attempt to model them was wrong.} Scaling Tiny's
+trainer step by the ratio it bears to its own graph time overestimates ViT-S by
+$19\%$. The reason is worth keeping: because the device figures above are
+already four-replica, the all-reduce is inside them, so the only thing a trainer
+adds is the data feed --- and that is roughly $65$\,ms at $128$ images per
+device for \emph{both} Tiny and S, an additive constant rather than a
+multiplier. \S\ref{sec:convnext_sb}'s figures are single-device, so there the
+trainer must also absorb an all-reduce that grows with the parameter count, and
+a multiplier is the right shape. Same box, same two quantities, two different
+laws --- which is why the numbers above are probes and not arithmetic.
 
 \medskip\noindent \textbf{Status: rendered, not trained}, the same as ConvNeXt's
 pair --- \texttt{vit-s-\allowbreak imagenet-\allowbreak verified} and
@@ -13989,8 +14000,7 @@ XLA-only.
 Several chapters end in a variant that is rendered but is not a Track-4 runner:
 a second recipe, a wider or deeper size, an architecture the book reaches for
 once. They are collected here rather than in the table above because most of
-them cannot be launched, and a job name is exactly what they lack. The status
-column says what each one is missing.
+them cannot be launched. The status column says what each one is missing.
 
 \begin{center}
 \small
