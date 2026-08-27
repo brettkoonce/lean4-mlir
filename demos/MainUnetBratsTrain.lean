@@ -18,9 +18,15 @@ import LeanMlir
       tumour is on the order of 1% of pixels. The pets demo already collapsed
       its thin class (boundary IoU 0.000 at 3 epochs, RESULTS.md) and we
       shrugged, because a trimap boundary is not what the demo was about.
-      Here the thin classes *are* the task, so the collapse becomes
-      unignorable — which is exactly why medical segmentation invented Dice.
-      This demo is the rung where per-pixel CE is expected to break.
+      Here the thin classes *are* the task, so a collapse would be
+      unignorable — which is why medical segmentation invented Dice.
+
+      ⚠ Historical note, because this demo's original thesis was exactly the
+      opposite: it was built to show per-pixel CE breaking here, and for a
+      while it appeared to. That collapse was a data bug (see the loss-arm
+      commentary in `main`). On correct data every arm segments and plain CE
+      is competitive, so the imbalance is real but it is not fatal at this
+      scale.
 
     * **240×240, not 224×224.** Native BraTS in-plane size. 240 = 16*15, so
       the depth-4 UNet's four halvings still divide evenly and nothing needs
@@ -30,34 +36,44 @@ import LeanMlir
     itself is gated behind a Synapse agreement). Volumes are split by patient
     before slicing — see preprocess_brats.py.
 
-    Usage:
-      ./download_brats.sh
-      lake exe unet-brats-train [data/brats] [epochs] [ce|dice|dicece|wce|focal]
+    Usage — turn-key. Once the data is prepared, no arguments are needed:
 
-    The loss arg is the demo's ablation axis (planning/brats_demo.md
-    Workstream B/B'). `ce` and `dicece` both reproduce the collapse — that is
-    the finding, not a misconfiguration. `wce` and `focal` are the two arms
-    that should not, and they fail differently if they fail:
-    `scripts/seg_grad_scorecard.py` measures wce's advantage as a constant
-    ~196× from step 0, and focal's as nil at init rising to ~4e6× once the net
-    is confident — so focal's open question is whether it engages before the
-    collapse is decided (~100 steps).
+      ./download_brats.sh
+      python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats
+      lake exe unet-brats-train
+
+    That trains 3 epochs of `dicece` on data/brats and prints mIoU + per-class
+    IoU + region Dice (WT/TC/ET) every epoch. Expect val mIoU ≈ 0.73,
+    WT Dice ≈ 0.90 at 3 epochs.
+
+    Everything else is optional and order-free — a data dir, an epoch count,
+    and an arm can appear in any order:
+
+      lake exe unet-brats-train ce 10
+      lake exe unet-brats-train data/brats 3 dice
+
+    Arms:      ce | dice | dicece | wce | wcesqrt | wceb b=<pct> | focal g=<n>
+    Modifiers: pb (prior-bias init) · cos (cosine LR) · aug (paired hflip)
+               lr=<n, in units of 1e-4> · tag=<s> (keep two runs of one arm
+               from clobbering each other's checkpoints)
 -/
 
 /-- Inverse-frequency class weights, measured over `data/brats/train.bin` by
     `scripts/brats_class_weights.py` (14,415 slices; background 97.46% / edema
     1.60% / non-enhancing 0.44% / enhancing 0.50% of voxels).
 
-    Why inverse frequency, stated plainly, because it is the demo's argument:
-    it makes every class contribute **exactly 25%** of the loss. That is the
-    goal soft Dice was reaching for — "a ratio per class, so every class carries
-    equal weight no matter how few pixels it owns" — and Dice fails to deliver
-    it, because its gradient carries a `p_i` factor and vanishes on precisely
-    the class that has collapsed. CE's gradient is flat at `p → 0`. So this is
-    Dice's own objective, pursued with a gradient that still exists where it
-    matters. Under plain CE the corresponding shares are 97.46 / 1.60 / 0.44 /
-    0.50 — background owns the loss, and predicting background is the cheapest
-    descent direction available. Which is exactly what the net does.
+    Inverse frequency makes every class contribute **exactly 25%** of the
+    loss; under plain CE the shares are instead 97.46 / 1.60 / 0.44 / 0.50.
+
+    ⚠⚠ The argument this docstring used to make — that Dice cannot deliver the
+    same thing because its gradient carries a `p_i` factor and vanishes on a
+    collapsed class — is RETRACTED (2026-08-26). It was inferred from runs on
+    mismatched image/mask data. Re-measured on correct data, `dice` and
+    `dicece` are the two BEST arms (mIoU 0.736 / 0.734) and this
+    inverse-frequency `wce` is the WORST and the only unstable one (0.640, and
+    it over-paints 1.5–2.4×). Equalizing the loss shares turns out to be an
+    over-correction here, not the fix. Kept as a selectable arm and as the
+    β = 1 endpoint of `unetBratsClassWeightsBeta`; no longer the default.
 
     The stock objection to inverse frequency is that a ~200× dynamic range
     destabilizes training. That objection is about a `/N` reduction, where the
@@ -104,17 +120,17 @@ def unetBratsClassPriors : List Float :=
     unifies every weighted-CE arm into one axis**, which is what the ablation
     turned the discrete arms into:
 
-      β = 0    → all ones = plain CE            (collapse)
-      β = 0.5  → `unetBratsClassWeightsSqrt`    (finds the tumour)
-      β = 1    → `unetBratsClassWeights`        (over-predicts, 29% of brain)
+      β = 0    → all ones = plain CE            (mIoU 0.728)
+      β = 0.5  → `unetBratsClassWeightsSqrt`    (mIoU 0.709)
+      β = 1    → `unetBratsClassWeights`        (mIoU 0.640, over-paints)
 
-    The measured story after wave 2: the arms that did anything both *amplify
-    the rare class's gradient in absolute terms*, and β sets how hard. Focal
-    collapsed at γ=2 **and** γ=8 — suppressing the majority does nothing when
-    the rare-class gradient, the thing that must move the weights, is left at
-    CE's magnitude, which is exactly the magnitude that already collapses. So
-    the live axis is this β, not focal's γ, and the open question is where
-    between 0.5 and 1 the transition from "finds it" to "over-predicts" sits. -/
+    ⚠ Re-measured 2026-08-26 on fixed data, and the axis now runs the other
+    way: β = 0 is the *best* of the three and increasing β monotonically hurts.
+    The previous reading (β = 0 collapses, 0.5 finds the tumour, 1 over-
+    predicts) came from runs on mismatched image/mask pairs. Focal's
+    "collapse at every γ" is likewise retracted — `focal g=2` scores 0.719.
+    The axis is still real and still worth sweeping; its sign is just not what
+    this demo originally reported. -/
 def unetBratsClassWeightsBeta (beta : Float) : List Float :=
   let w0 := Float.exp (-beta * Float.log unetBratsClassPriors.head!)
   unetBratsClassPriors.map (fun p => Float.exp (-beta * Float.log p) / w0)
@@ -155,34 +171,43 @@ def unetBratsConfig : TrainConfig where
   -- a collapse is indistinguishable from progress for seven hours.
   evalEveryNEpochs := 1
 
-/-- Cost of the class prior relative to uniform, as a constant predictor, under
-    a given loss. **The single number that has predicted every arm we have run**,
-    and it is computable from the class balance alone before any training:
+/-- ⛔ RETRACTED 2026-08-26 — this docstring used to carry a "cost of the class
+    prior relative to uniform" table and called it **"the single number that has
+    predicted every arm we have run"**, monotone across all four arms.
 
-    | arm | uniform/prior | measured outcome |
-    |---|---|---|
-    | `ce` (w=1) | 9.79× | total collapse |
-    | `focal` γ=2 | 6.84× | total collapse |
-    | `wcesqrt` | **1.35×** | **segments** — c3 IoU 0.143 @1ep, 0.9% of brain |
-    | `wce` (1/f) | 0.37× | inverted — c3 0.018, 29% of brain |
+    It predicted nothing. Two independent strikes:
 
-    `> 1` means the collapse doorway — predict the prior, i.e. mostly
-    background — is the *cheaper* constant, so descent walks into it. `< 1`
-    means the loss has inverted the landscape and pushes the net out the other
-    side, into over-prediction. **The target is ≈ 1**, and the ordering is
-    monotone across all four arms.
+    1. It was already refuted in July by `focal g=8`, whose ratio (1.30×) is
+       indistinguishable from `wcesqrt`'s (1.35×) while landing on the opposite
+       outcome. `planning/brats_demo.md` recorded that refutation; this comment
+       was never updated, and went on asserting the claim for a month.
+    2. Its four "measured outcomes" are void anyway — all four arms trained on
+       mismatched image/mask pairs. On correct data every arm segments and the
+       ordering the table predicted does not appear.
 
-    This is not the gradient scorecard's story and it beat it. `(C)` ranked
-    `focal_pb` best of any arm (98.98); `focal_pb` then collapsed identically to
-    CE. A gradient *ratio* has no notion of magnitude — focal leaves the rare
-    class's gradient exactly at CE's and only crushes the majority's, so the
-    ratio explodes while the numerator, the one that has to actually move the
-    weights, never changes. CE collapses with precisely that numerator. -/
+    Kept as a marker, because the failure mode is the reusable lesson: a tidy
+    scalar fitted post-hoc to four points, promoted to a predictor, and left
+    in the source after the doc that spawned it had already withdrawn it. -/
 def main (args : List String) : IO Unit := do
-  -- Optional 2nd arg overrides epochs; the default 3 is a smoke test, same
-  -- convention as unet-pets-train. mIoU + per-class IoU print every 10
-  -- epochs and at the end.
-  let epochs := (args[1]?.bind String.toNat?).getD unetBratsConfig.epochs
+  -- Turn-key arg parsing. Options are matched by keyword ANYWHERE in `args`;
+  -- the data dir and epoch count are then taken from whatever is left over, so
+  -- all of these work and none of them need a manual:
+  --   unet-brats-train | … ce | … 5 | … ce 5 | … data/brats 3 ce
+  -- ⚠ Before this the data dir was `args[0]` unconditionally while the arms
+  -- were matched with `args.any`, so the natural `unet-brats-train ce` silently
+  -- looked for slices in a directory literally named "ce" and died there.
+  let optionWords : List String :=
+    ["ce", "dice", "dicece", "focal", "wce", "wcesqrt", "wceb", "pb", "cos", "aug"]
+  let optionPrefixes : List String := ["g=", "b=", "lr=", "tag="]
+  let positionals := args.filter (fun a =>
+    !(optionWords.contains a || optionPrefixes.any (fun q => a.startsWith q)))
+  -- Epoch count: the first bare number. Default 3 is a smoke test, same
+  -- convention as unet-pets-train. mIoU + per-class IoU print EVERY epoch
+  -- (`evalEveryNEpochs := 1` below) and at the end.
+  let epochs := (positionals.findSome? String.toNat?).getD unetBratsConfig.epochs
+  -- Data dir: the first non-numeric leftover.
+  let dataDir := (positionals.find? (fun a => (String.toNat? a).isNone)).getD "data/brats"
+
   -- `g=<n>` sets focal's γ. Default 2 is the RetinaNet paper's, and on this
   -- data that is a **collapse setting**: γ=2 puts the prior/uniform ratio at
   -- 6.84×, barely off CE's 9.79×, and it collapsed exactly like CE. γ is the
@@ -202,18 +227,30 @@ def main (args : List String) : IO Unit := do
   let wceBeta : Float :=
     (((args.filter (·.startsWith "b=")).head?.bind
       (fun a => (a.drop 2).toNat?)).map Nat.toFloat |>.getD 70.0) / 100.0
-  -- 3rd arg picks the loss — the demo's ablation axis.
+  -- The loss arg picks the arm — the demo's ablation axis.
   --
-  --   ce     collapses every tumour class (mIoU 0.243 ≈ the trivial
-  --          background-only predictor, planning/brats_demo.md Workstream A)
-  --   dicece collapses too, identically to four decimals — the Gate B result,
-  --          and the reason `dicece` is no longer the default
-  --   wce    amplify the rare class. Constant ~196× edge, live from step 0.
-  --   focal  defund the easy majority. No edge at init, ~4e6× once confident.
+  -- ⭐ Measured 2026-08-26, 3 epochs each on fixed data, best val mIoU:
   --
-  -- `wce` is the default because it is the arm with no timing risk. The others
-  -- are the pedagogy: run them to watch the collapse, or to find out whether
-  -- focal's feedback is quick enough to prevent it.
+  --   dice 0.736 · dicece 0.734 · ce 0.728 · focal 0.719 · wcesqrt 0.709
+  --   wce 0.640
+  --
+  -- Five of the six land in a tight band; only `wce` (β=1) separates, and it
+  -- is also the only arm with an unstable trajectory (0.640 → 0.494 → 0.611,
+  -- where every other arm is monotone). It over-paints by 1.5–2.4×.
+  --
+  -- ⚠⚠ This REVERSES the pre-2026-07-22 finding that `ce`/`dicece`/`focal`
+  -- collapse to a trivial predictor. Those runs trained on mismatched
+  -- image/mask pairs: `lean_f32_shuffle` permuted images by a full record but
+  -- labels by a hardcoded 4 bytes, and a BraTS label is 240². Fixed in
+  -- `430ba2c`/`ca83835`. Every collapse this demo was built to exhibit was an
+  -- artifact of that bug — see the STOP banner in planning/brats_demo.md and
+  -- planning/post_shuffle_fix.md §1a.
+  --
+  -- `dicece` is the default: joint-best WT Dice (0.903), best endpoint mIoU,
+  -- the most monotone trajectory, and Dice+CE is the standard compound loss in
+  -- medical segmentation. ⚠ `ce` and `dice` are within noise of it — this is a
+  -- single-seed 3-epoch sweep, not a tuned comparison, so treat the ordering
+  -- among the top five as unresolved.
   let lossKind : LossKind :=
     if args.any (· == "ce") then .perPixelCE
     else if args.any (· == "dicece") then .perPixelDiceCE
@@ -221,7 +258,8 @@ def main (args : List String) : IO Unit := do
     else if args.any (· == "focal") then .perPixelFocalCE focalGamma
     else if args.any (· == "wcesqrt") then .perPixelWeightedCE unetBratsClassWeightsSqrt
     else if args.any (· == "wceb") then .perPixelWeightedCE (unetBratsClassWeightsBeta wceBeta)
-    else .perPixelWeightedCE unetBratsClassWeights
+    else if args.any (· == "wce") then .perPixelWeightedCE unetBratsClassWeights
+    else .perPixelDiceCE
   IO.eprintln s!"  loss: {repr lossKind}"
   -- `pb` adds RetinaNet prior-bias init. Orthogonal to the loss on purpose —
   -- it composes with any arm, and `focal pb` is the pairing with an actual
@@ -268,10 +306,11 @@ def main (args : List String) : IO Unit := do
                   else if args.any (· == "focal") then s!"focal_g{focalGamma.toUInt64}"
                   else if args.any (· == "wcesqrt") then "wcesqrt"
                   else if args.any (· == "wceb") then s!"wceb{(wceBeta * 100.0).toUInt64}"
-                  else "wce") ++ (if args.any (· == "pb") then "_pb" else "")
+                  else if args.any (· == "wce") then "wce"
+                  else "dicece") ++ (if args.any (· == "pb") then "_pb" else "")
   let lrTag := if baseLr == 0.001 then "" else s!"_lr{(baseLr * 10000.0).toUInt64}"
   let fullTag := armName ++ (if cosine then "_cos" else "") ++ (if aug then "_aug" else "") ++ lrTag ++ extraTag
   IO.eprintln s!"  arm: {fullTag}  (artifacts: {(unetBrats.withBuildTag fullTag).buildPrefix}_*)"
   (unetBrats.withBuildTag fullTag).train
     { unetBratsConfig with epochs, lossKind, headPriorBias := priorBias, cosineDecay := cosine, augment := aug, learningRate := baseLr }
-    (args.head?.getD "data/brats") .brats
+    dataDir .brats
