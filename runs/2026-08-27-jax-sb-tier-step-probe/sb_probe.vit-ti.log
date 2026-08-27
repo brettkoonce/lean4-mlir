@@ -1,0 +1,13 @@
+gen=generated_vit_tiny_imagenet.py devices=4 micro=512 accum=1 effective=512
+params=5,717,416  fp32 weights=22 MiB  (x4 replicated state = 87 MiB/device)
+  step 0:  28687.6 ms  loss=7.0690
+  step 1:    142.4 ms  loss=6.6212
+  step 2:    124.9 ms  loss=6.0463
+  step 3:    123.7 ms  loss=5.7348
+  step 4:    125.1 ms  loss=5.4421
+  step 5:    122.9 ms  loss=5.1273
+  step 6:    125.1 ms  loss=4.8904
+  step 7:    123.3 ms  loss=4.6378
+  step 8:    123.3 ms  loss=4.4113
+  step 9:    124.5 ms  loss=4.1677
+RESULT generated_vit_tiny_imagenet.py micro=512 accum=1 eff=512 res=224 ms/step=123.7 peak=2.89GiB limit=11.68GiB min/epoch=5.2 hr/80ep=6.9 hr/300ep=25.8

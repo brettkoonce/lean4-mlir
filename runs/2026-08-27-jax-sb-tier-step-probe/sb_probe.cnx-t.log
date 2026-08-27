@@ -1,0 +1,13 @@
+gen=generated_convnext_tiny_imagenet.py devices=4 micro=256 accum=1 effective=256
+params=28,587,592  fp32 weights=109 MiB  (x4 replicated state = 436 MiB/device)
+  step 0:  51385.4 ms  loss=6.9081
+  step 1:  38804.0 ms  loss=6.6691
+  step 2:    187.2 ms  loss=6.4285
+  step 3:    172.4 ms  loss=6.1832
+  step 4:    170.9 ms  loss=5.9341
+  step 5:    167.8 ms  loss=5.6746
+  step 6:    171.6 ms  loss=5.4079
+  step 7:    171.6 ms  loss=5.1177
+  step 8:    171.6 ms  loss=4.8128
+  step 9:    171.6 ms  loss=4.4737
+RESULT generated_convnext_tiny_imagenet.py micro=256 accum=1 eff=256 ms/step=171.6 peak=4.22GiB limit=11.68GiB min/epoch=14.3 hr/80ep=19.1 hr/300ep=71.6

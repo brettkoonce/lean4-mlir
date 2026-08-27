@@ -10,7 +10,7 @@ pipeline, so ms/step is a *compute-only lower bound* on the real run's step time
 
 env: GEN=<path>  BATCH=<effective batch>  ACCUM=<grad accum, default 1>  STEPS=<n>
 """
-import importlib.util, os, sys, time
+import importlib.util, inspect, os, sys, time
 import numpy as np
 import jax, jax.numpy as jnp
 from jax import random
@@ -22,6 +22,21 @@ ACCUM = int(os.environ.get("ACCUM", "1"))
 spec = importlib.util.spec_from_file_location("gen", GEN)
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
+
+# Two things move under this probe and neither is the model. A recipe with
+# `useEMA := false` (RSB-A3) emits NO `ema_update` at all, and the ones that do
+# grew a `step` argument when the EMA warmup ramp landed
+# (d = min(decay, (1+step)/(10+step))) — so older emits take two arguments and
+# newer ones three. Resolve both here rather than dying inside the timed loop.
+_EMA = getattr(m, "ema_update", None)
+_EMA_TAKES_STEP = _EMA is not None and len(inspect.signature(_EMA).parameters) >= 3
+
+
+def ema_update(shadow, live, step):
+    if _EMA is None:
+        return shadow
+    return _EMA(shadow, live, step) if _EMA_TAKES_STEP else _EMA(shadow, live)
+
 
 nd = len(jax.devices())
 micro = int(os.environ["BATCH"])
@@ -45,7 +60,11 @@ ema = jax.device_put(params, m.replicated_sharding)
 print(f"params={nparams:,}  fp32 weights={nparams*4/2**20:.0f} MiB  "
       f"(x4 replicated state = {nparams*4*4/2**20:.0f} MiB/device)")
 
-xh = np.asarray(random.normal(random.PRNGKey(1), (B, 3 * 224 * 224), dtype=jnp.float32))
+# FixRes recipes (RSB-A3) train at a smaller resolution than they evaluate at and
+# emit `_TRAIN_SIZE` for it; the forward infers the side length from the flat
+# vector, so feeding 224² there would time the wrong net.
+RES = int(getattr(m, "_TRAIN_SIZE", 224))
+xh = np.asarray(random.normal(random.PRNGKey(1), (B, 3 * RES * RES), dtype=jnp.float32))
 yh = np.asarray(random.randint(random.PRNGKey(2), (B,), 0, 1000).astype(jnp.int32))
 
 def stats():
@@ -70,10 +89,10 @@ try:
         if HAS_BN:
             params, opt_state, bn, loss = m.train_step(
                 params, opt_state, bn, x, y, jnp.float32(5e-4), dk)
-            ema_bn = m.ema_update(ema_bn, bn)
+            ema_bn = ema_update(ema_bn, bn, step)
         else:
             params, opt_state, loss = m.train_step(params, opt_state, x, y, jnp.float32(5e-4), dk)
-        ema = m.ema_update(ema, params)
+        ema = ema_update(ema, params, step)
         jax.block_until_ready((params, loss))
         dt = (time.time() - t0) * 1e3
         if step >= 3:
@@ -89,5 +108,5 @@ peak, lim = stats()
 med = float(np.median(ts)) if ts else float("nan")
 spe = 1281167 // B
 print(f"RESULT {os.path.basename(GEN)} micro={micro} accum={ACCUM} eff={B} "
-      f"ms/step={med:.1f} peak={peak:.2f}GiB limit={lim:.2f}GiB "
+      f"res={RES} ms/step={med:.1f} peak={peak:.2f}GiB limit={lim:.2f}GiB "
       f"min/epoch={spe*med/1000/60:.1f} hr/80ep={spe*med/1000/3600*80:.1f} hr/300ep={spe*med/1000/3600*300:.1f}")

@@ -1,0 +1,9 @@
+cnx-t|RESULT generated_convnext_tiny_imagenet.py micro=256 accum=1 eff=256 ms/step=171.6 peak=4.22GiB limit=11.68GiB min/epoch=14.3 hr/80ep=19.1 hr/300ep=71.6|compile+run 102s
+cnx-s|RESULT generated_convnext_s_imagenet.py micro=256 accum=1 eff=256 ms/step=260.8 peak=6.78GiB limit=11.68GiB min/epoch=21.8 hr/80ep=29.0 hr/300ep=108.8|compile+run 225s
+cnx-b|RESULT generated_convnext_b_imagenet.py micro=256 accum=1 eff=256 res=224 ms/step=399.3 peak=9.56GiB limit=11.68GiB min/epoch=33.3 hr/80ep=44.4 hr/300ep=166.5|compile+run 349s
+vit-ti|RESULT generated_vit_tiny_imagenet.py micro=512 accum=1 eff=512 res=224 ms/step=123.7 peak=2.89GiB limit=11.68GiB min/epoch=5.2 hr/80ep=6.9 hr/300ep=25.8|compile+run 393s
+vit-s|RESULT generated_vit_s_imagenet.py micro=512 accum=1 eff=512 res=224 ms/step=289.7 peak=7.72GiB limit=11.68GiB min/epoch=12.1 hr/80ep=16.1 hr/300ep=60.4|compile+run 431s
+vit-b|RESULT generated_vit_b_imagenet_accum.py micro=128 accum=4 eff=512 res=224 ms/step=700.8 peak=5.36GiB limit=11.68GiB min/epoch=29.2 hr/80ep=39.0 hr/300ep=146.1|compile+run 473s
+r50-a2|RESULT generated_resnet50_imagenet_a2accum.py micro=512 accum=4 eff=2048 res=224 ms/step=1368.3 peak=7.61GiB limit=11.68GiB min/epoch=14.3 hr/80ep=19.0 hr/300ep=71.3|56s
+r50-a3|RESULT generated_resnet50_imagenet_rsbfaithful.py micro=512 accum=4 eff=2048 res=160 ms/step=715.3 peak=4.30GiB limit=11.68GiB min/epoch=7.5 hr/80ep=9.9 hr/300ep=37.3
+vit-b-1shot|RESULT generated_vit_b_imagenet.py micro=512 accum=1 OOM peak=11.41GiB limit=11.68GiB|OOM control

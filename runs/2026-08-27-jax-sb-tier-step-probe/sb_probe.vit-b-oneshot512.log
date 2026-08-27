@@ -1,0 +1,13 @@
+gen=generated_vit_b_imagenet.py devices=4 micro=512 accum=1 effective=512
+params=86,567,656  fp32 weights=330 MiB  (x4 replicated state = 1321 MiB/device)
+  step 0:  20485.9 ms  loss=7.3369
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+FAIL after 0 timed steps: JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 9.08GiB. [executable_name='jit_train_step'] [tf-allocator-allocation-error='']
+RESULT generated_vit_b_imagenet.py micro=512 accum=1 OOM peak=11.41GiB limit=11.68GiB

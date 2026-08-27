@@ -1,0 +1,14 @@
+gen=generated_resnet50_imagenet_rsbfaithful.py devices=4 micro=512 accum=4 effective=2048
+params=25,557,032  fp32 weights=97 MiB  (x4 replicated state = 390 MiB/device)
+running-BN net: threading bn_state through train_step
+  step 0:  23875.2 ms  loss=0.7098
+  step 1:    713.9 ms  loss=0.7035
+  step 2:    714.5 ms  loss=0.6971
+  step 3:    718.3 ms  loss=0.6908
+  step 4:    711.9 ms  loss=0.6845
+  step 5:    715.6 ms  loss=0.6783
+  step 6:    712.7 ms  loss=0.6721
+  step 7:    707.2 ms  loss=0.6660
+  step 8:    715.3 ms  loss=0.6599
+  step 9:    717.0 ms  loss=0.6538
+RESULT generated_resnet50_imagenet_rsbfaithful.py micro=512 accum=4 eff=2048 res=160 ms/step=715.3 peak=4.30GiB limit=11.68GiB min/epoch=7.5 hr/80ep=9.9 hr/300ep=37.3

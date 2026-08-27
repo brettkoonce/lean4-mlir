@@ -1,0 +1,13 @@
+gen=generated_vit_s_imagenet.py devices=4 micro=512 accum=1 effective=512
+params=22,050,664  fp32 weights=84 MiB  (x4 replicated state = 336 MiB/device)
+  step 0:  22329.4 ms  loss=7.1704
+  step 1:    309.1 ms  loss=6.1823
+  step 2:    288.5 ms  loss=5.0828
+  step 3:    284.7 ms  loss=4.5005
+  step 4:    292.0 ms  loss=3.8604
+  step 5:    289.7 ms  loss=3.3104
+  step 6:    290.1 ms  loss=2.8489
+  step 7:    290.9 ms  loss=2.4143
+  step 8:    286.7 ms  loss=2.0145
+  step 9:    289.0 ms  loss=1.7168
+RESULT generated_vit_s_imagenet.py micro=512 accum=1 eff=512 res=224 ms/step=289.7 peak=7.72GiB limit=11.68GiB min/epoch=12.1 hr/80ep=16.1 hr/300ep=60.4
