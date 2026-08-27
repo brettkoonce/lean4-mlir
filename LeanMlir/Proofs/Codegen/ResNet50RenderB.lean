@@ -1421,6 +1421,145 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
          true true true "0.02" == "lambaccdp8x64wxclipbce"
 
+-- ═══════════════════════════════════════════════════════════════════════════
+-- § RSB-**A2** and RSB-**A1**, at 224² — the other two tiers of `sec:r50_a2_a1_cost`.
+--
+-- ⭐ These are A3's composition at `q := 7` instead of `q := 5`, on the 224 slug. LAMB × BCE ×
+-- accumulation k=8 × wx × clip is unchanged; the resolution and (for A1) the baked decay are the
+-- only knobs that move, which is why this is eight `#eval`s and not a proof chain. The renderer
+-- already took every parameter needed.
+--
+-- ⚠⚠⚠ **AND THEY ARE NOT FAITHFUL A2/A1. READ THIS BEFORE QUOTING A NUMBER OFF THEM.**
+-- `planning/verified_side_quest_counterparts.md` §4a called this "four `#eval` lines … it closes a
+-- whole book section". The `#eval`s were four lines; the section does not close, because A2's
+-- reference carries two regularisers this path cannot express. Checked against
+-- `jax/MainResnet50Imagenet.lean`'s `resnet50ImagenetConfigA2Accum`, field by field:
+--
+--   ⛔ **MODEL EMA (`useEMA := true`, `emaDecay := 0.9999`) — STRUCTURALLY IMPOSSIBLE HERE, not
+--      merely unrendered.** The EMA shadow and the gradient accumulator are THE SAME fourth region
+--      of `[θ|m|v|·]` — see the packed-layout note above `accScalars` in this file — and
+--      `VerifiedTrain.lean:1156` throws on the combination rather than letting one win:
+--      *"variant selects BOTH the EMA shadow and gradient accumulation, and they occupy the same
+--      fourth region … Render one or the other."*
+--      ▶ And accumulation is not optional for A2: the recipe's effective batch is 2048, and at
+--      224² there is no other way to reach it on 16 GB cards (the reference itself uses 4× accum).
+--      So this is a REGION-LAYOUT limitation, and lifting it means a fifth region in the driver's
+--      pack/unpack and in every optimizer's return list — not a flag.
+--      ⚠ A3 did not hit this because A3's own recipe sets `useEMA := false`. A2 and A1 both set it.
+--   ⛔ **STOCHASTIC DEPTH (`dropPath := 0.05`).** `LeanMlir/Proofs/Codegen/DropPath.lean` exists and
+--      EfficientNet and ConvNeXt render `drop` variants off it, but neither `ResNet34RenderB` nor
+--      `ResNet50RenderB` imports it (0 hits in both), and `r34AdamVariant` has no `drop` marker to
+--      ask for it with. That is renderer work on the residual family, not a flag.
+--      ⚠ A3 sets `dropPath := 0.0`, which is again why A3 never needed it.
+--   ⚠ **GHOST-BN GROUP.** These render 8×64, i.e. 64-image ghosts. The reference reaches 2048 as
+--      4 accumulation steps × 512 global (128 per device on four cards), i.e. 128-image ghosts.
+--      Immaterial to a wall clock; a different regime for any accuracy claim.
+--   ✅ Repeated augmentation 3× IS present — it rides the shim (`repeat(3)`), which is shared with
+--      the `default` recipe. ⚠ The shim's own comment calls it a stream-level APPROXIMATION.
+--
+-- ⭐ **What these artifacts ARE good for**: they are A2's graph minus two regularisers, so they
+-- price the tier honestly (the step cost is unaffected by EMA and by sd 0.05) and they are the
+-- thing to extend once the fifth region and the `drop` marker exist. What they are not is an
+-- 79.8%-target run. Quote them the way A3's deltas are quoted, never as "RSB-A2 reproduced".
+--
+-- ⭐⭐ **THE SHIM QUESTION, SETTLED BY MEASUREMENT AND NOT BY READING.** §4a warned to "check the
+-- A2 shim rather than assuming it". Generated and diffed, 2026-08-27:
+--   `generated_resnet50_imagenet_shim.py` (recipe `default`) and
+--   `generated_resnet50_imagenet_a2accum_shim.py` are **byte-identical**, md5 d42c412beb4f…
+-- — because `resnet50ImagenetConfigA2Accum` differs from `default` in `learningRate`,
+-- `gradAccumSteps` and `wdExcludeNormBias`, all three optimizer-side. So **A2 needs no new
+-- `VerifiedNetSpec` and no new shim**: it is `resnet50ImagenetVerified` under a new variant string.
+-- ⚠ A1 is the opposite and it is a ONE-LINE difference: `_MIX_A` 0.100000 → 0.200000. Mixup is
+-- data-side, so A1 gets its own shim and its own spec. See `scripts/gen_shims.sh`.
+
+-- ── RSB-A2 @ 224, fp32. The 4-replica artifact a run would use, and its 1-replica peer. ─────────
+-- ⚠ The 1-replica peer is not optional: `r50-accum-tie` and `r50-accum-shard-tie` both compare a
+-- DP render against a single-device one, so a DP-only render is ungateable — the same reason the
+-- 160 family carries `lambacc8x64wxclipbce` beside `lambaccdp8x64wxclipbce`.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true))
+
+-- ── RSB-A2 @ 224, bf16. `resnet50in_momdp64bf16` already proves the bf16 path renders for this
+-- net at this resolution, so this is a flag rather than an investigation. ─────────────────────
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (bf16 := true))
+
+-- ── RSB-A1 @ 224 — **A DISTINCT ARTIFACT, NOT "the same render as A2"**. ────────────────────────
+-- ⚠⚠ The book's `sec:r50_a2_a1_cost` table said A1's renderer work was "same render as A2". It is
+-- not, and this file already says why: `%wd` is a BAKED `stablehlo.constant`, not a runtime
+-- operand, so A1's 0.01 against A2's 0.02 is a re-render. `wdVariantMark` appends `wd001`, which is
+-- what stops the two from colliding on one path — the collision being unspellable is the point.
+-- ▶ A1's other two deltas: epochs 600 (a driver knob, free) and Mixup α 0.2 (data-side, its shim).
+-- ⭐ Its optimizer arm was gated BEFORE this render existed: `scripts/opt_step_tie.py` carries
+-- `("lambacc8wxclipwd001", "generated_resnet50_imagenet_a1.py", 8, True)`, checked against an
+-- emitted A1 trainer that bakes `WD = 0.010000`. So "the string reaches the constant block" is a
+-- measurement here, not a code-reading claim.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true))
+
+-- ── RSB-A1 @ 224, bf16. Rendered now rather than later for the reason ConvNeXt-S's MISSING bf16
+-- twin is a `planning/verified_side_quest_counterparts.md` §4c item: a size or tier that ships
+-- without its precision peer leaves a gap that reads as a decision and is really an accident of
+-- ordering. Both tiers get the full (precision × replicas) square in one pass. ────────────────
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbcewd001bf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbcewd001bf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (bf16 := true))
+
+-- ⚠ THE FOUR NEW SPELLINGS, pinned on the PRODUCING side like every one above them. Two of these
+-- (`lambaccdp8x64wxclipbce`, `lambacc8x64wxclipbce`) are already guarded further up — they are the
+-- 160 family's names, and the A2 pair reuses them at a DIFFERENT SLUG, which is exactly why the
+-- slug is part of the path and not part of the variant (N2 of the naming scheme).
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" == "lambacc8x64wxclipbcewd001"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "" true == "lambaccdp8x64wxclipbcebf16"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "" true == "lambacc8x64wxclipbcebf16"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" true == "lambaccdp8x64wxclipbcewd001bf16"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" true == "lambacc8x64wxclipbcewd001bf16"
+-- ⚠⚠ `bf16` TRAILS the decay marker, and this is the counterfactual: `…bf16wd001` is what the
+-- wrong order produces and the shim would refuse it with nothing but "entry mismatch" to say why.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" true != "lambaccdp8x64wxclipbcebf16wd001"
+-- ⚠⚠ AND THE DRIVER'S PREDICATES MUST STILL READ THESE. `accOn` is a SUBSTRING test and `accK` is
+-- parsed from AFTER the marker, so the new trailing markers must not disturb either — and none of
+-- the four may accidentally spell `ema` or `do`, which select the EMA shadow and classifier
+-- dropout respectively. `wd001` is the risk: it is the first marker here that ends in a digit run.
+#guard ("lambaccdp8x64wxclipbcewd001bf16".splitOn "acc").length > 1
+#guard ("lambaccdp8x64wxclipbcewd001bf16".startsWith "acc") == false
+#guard ("lambaccdp8x64wxclipbcewd001bf16".startsWith "ema") == false
+#guard ("lambaccdp8x64wxclipbcewd001bf16".splitOn "do").length == 1
+#guard ("lambacc8x64wxclipbcewd001bf16".splitOn "do").length == 1
+-- ▶ `accK` and `nRegions` are the CONSUMING side and live in `LeanMlir/VerifiedTrain.lean`, which
+-- imports this file — so they cannot be guarded from here without a cycle. They are pinned for
+-- these four names in `tests/TestVariantPredicates.lean`, which is where that file's own header
+-- says the consuming half belongs.
+
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdFaithfulV 64 1000 "1.0e-05" "resnet50in160" (q := 5))
 

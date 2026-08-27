@@ -56,6 +56,21 @@ EXES=(
   # This shim is random-resized-crop + bicubic/antialias + hflip and nothing else, which is what
   # `resnet50ImagenetConfig2018` (`useRandAugment := false`, CE+LS) specifies.
   "resnet50-imagenet:2018:generated_resnet50_imagenet_2018_shim.py"
+  # ⭐ RSB-A1's shim, for `resnet50ImagenetA1Verified` (2026-08-27).
+  # ⛔ WHY THIS ROW EXISTS, and it is ONE emitted constant. A1 differs from A2 in epochs (a driver
+  # knob), weight decay (BAKED — hence its own render, `…wxclipbcewd001`) and **Mixup α 0.2 against
+  # A2's 0.1**. Mixup is data-side, so it rides the shim, and this is the row that carries it.
+  # ⭐ MEASURED, not read off the config: this file and the `default` shim were generated and
+  # diffed, and they differ in exactly one line — `_MIX_A` 0.100000 → 0.200000.
+  # ⚠⚠ That line is `float(os.environ.get('SHIM_MIXUP_ALPHA', '0.200000'))`, so A1's α is ALSO an
+  # env override on the default shim. Taking it that way would run, and nothing in a 600-epoch log
+  # would record which α trained — the same shape as the `LEAN_MLIR_RECIPE=2018` omission above.
+  # A named shim the driver refuses to start without is the version that cannot be got wrong.
+  # ⚠ There is deliberately NO `a2-accum` row: A2's shim is BYTE-IDENTICAL to `default`'s
+  # (md5 d42c412beb4f…, verified 2026-08-27), because A2 differs from `default` only in
+  # `learningRate`, `gradAccumSteps` and `wdExcludeNormBias` — all three optimizer-side. Adding one
+  # would be a second writer for the same bytes under a second name.
+  "resnet50-imagenet:a1:generated_resnet50_imagenet_a1_shim.py"
 )
 
 echo "── generating $(( ${#EXES[@]} )) per-net ImageNet shims ──"

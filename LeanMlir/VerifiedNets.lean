@@ -689,6 +689,51 @@ def resnet50Imagenet2018Verified : VerifiedNetSpec :=
 #guard resnet50Imagenet2018Verified.shimScript != resnet50ImagenetVerified.shimScript
 #guard resnet50Imagenet2018Verified.shimScript == "generated_resnet50_imagenet_2018_shim.py"
 
+/-- **ResNet-50 at 224² with RSB-A1's augmentation** — the third `shimScript` on the 224 net, and
+    the one that exists for a SINGLE emitted constant.
+
+    ⛔ **WHY IT EXISTS, and it is a one-line difference that a shared shim would silently erase.**
+    A1 differs from A2 in exactly three fields (`jax/MainResnet50Imagenet.lean`'s
+    `resnet50ImagenetConfigA1`): epochs 300 → 600, weight decay 0.02 → 0.01, and **Mixup α
+    0.1 → 0.2**. The first is a driver knob and free. The second is a BAKED `stablehlo.constant`,
+    so it is a re-render — `resnet50in_lambaccdp8x64wxclipbcewd001_train_step`, which
+    `wdVariantMark` keeps on its own path. The third is DATA-SIDE, and this spec is what carries it.
+
+    ⭐ **Measured, not assumed** (2026-08-27). The two emitted shims were generated and diffed:
+    `generated_resnet50_imagenet_a1_shim.py` differs from the `default`/A2 shim in ONE line —
+    `_MIX_A` `0.100000` → `0.200000`. Everything else is byte-identical.
+    ⚠ And that line reads `float(os.environ.get('SHIM_MIXUP_ALPHA', '0.200000'))`, i.e. the α is
+    also an ENV OVERRIDE on the default shim. Getting A1's mixup that way would "work" and is
+    exactly the failure class this repo has already paid for twice: a knob with no output and no
+    gate is a knob that is silently wrong, and nothing in a 600-epoch run's log would record which
+    α it trained on. A named shim the driver REFUSES to start without is the version that cannot
+    be got wrong.
+
+    ⚠ The shared `slug` is deliberate, for `resnet50Imagenet2018Verified`'s reason: the artifacts
+    an A1 run executes are `resnet50in_*`, and a fresh slug would orphan them. What changes is the
+    data those artifacts are fed, which is precisely what a shim is. -/
+def resnet50ImagenetA1Verified : VerifiedNetSpec :=
+  { resnet50ImagenetVerified with
+      name       := "ResNet-50 (ImageNet-1k, RSB-A1)",
+      shimScript := "generated_resnet50_imagenet_a1_shim.py",
+      blurb      := "ResNet-50 on full 1000-class ImageNet with RSB-A1's augmentation \
+                     (A2's pack at Mixup α 0.2), via the VERIFIED renderer." }
+
+-- ▶ Same net as the 224 spec in every way a render or an artifact can see — A1 changes the DATA
+-- and the baked decay, never the architecture.
+#guard resnet50ImagenetA1Verified.toSpecs == resnet50ImagenetVerified.toSpecs
+#guard resnet50ImagenetA1Verified.d0 == 150528
+#guard resnet50ImagenetA1Verified.slug == resnet50ImagenetVerified.slug
+-- ⭐ AND THE THINGS THAT MUST DIFFER. All three 224 recipes must name three DISTINCT shims, or one
+-- of them is streaming another's augmentation — the §0.9 failure, one level in.
+#guard resnet50ImagenetA1Verified.shimScript == "generated_resnet50_imagenet_a1_shim.py"
+#guard resnet50ImagenetA1Verified.shimScript != resnet50ImagenetVerified.shimScript
+#guard resnet50ImagenetA1Verified.shimScript != resnet50Imagenet2018Verified.shimScript
+-- ⚠ Stated as a 3-element distinctness rather than two inequalities, so a FOURTH recipe cannot be
+-- added by copying one of these and forgetting to change the shim.
+#guard ([resnet50ImagenetVerified.shimScript, resnet50Imagenet2018Verified.shimScript,
+         resnet50ImagenetA1Verified.shimScript].eraseDups).length == 3
+
 -- ▶ The cross-net form of this invariant needs every `.imagenet` spec in scope, so it lives at the
 -- END of this file (search "trainPix := net.d0").
 

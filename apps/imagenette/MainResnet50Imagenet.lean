@@ -87,14 +87,24 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
         match recipe with
         | "default" => pure resnet50ImagenetVerified
         | "2018"    => pure resnet50Imagenet2018Verified
+        -- ⭐ A1 (2026-08-27). ⚠ `default` IS RSB-A2's augmentation and A1's differs from it in
+        -- exactly one emitted constant — Mixup α 0.2 against 0.1 — so this arm exists to make that
+        -- one constant selectable by NAME rather than by an env override nothing records.
+        -- ⚠⚠ A1 also needs its own TRAIN STEP, which this dispatch does not select:
+        -- `LEAN_MLIR_VARIANT=lambaccdp8x64wxclipbcewd001` bakes wd 0.01 where A2's bakes 0.02.
+        -- Picking recipe `a1` with A2's variant trains A1's data on A2's decay and reports a
+        -- number, so the two must be set together. There is deliberately no `a2` arm: A2's shim is
+        -- byte-identical to `default`'s, so `default` IS A2 on the data side.
+        | "a1"      => pure resnet50ImagenetA1Verified
         | r => throw <| IO.userError s!"LEAN_MLIR_RECIPE={r}: at 224² only `default` (RSB-A2's \
-            RandAugment) and `2018` (random-resized-crop + hflip, no RandAugment) have shims. \
-            Naming another needs a row in scripts/gen_shims.sh AND a VerifiedNetSpec carrying it."
+            RandAugment), `2018` (random-resized-crop + hflip, no RandAugment) and `a1` (A2's pack \
+            at Mixup α 0.2) have shims. Naming another needs a row in scripts/gen_shims.sh AND a \
+            VerifiedNetSpec carrying it."
     | some "160" =>
         if recipe == "default" then pure resnet50Imagenet160Verified
         else throw <| IO.userError s!"LEAN_MLIR_RECIPE={recipe} with LEAN_MLIR_RES=160: 160² IS \
-            RSB-A3's train resolution and streams A3's own shim. The 2018 recipe is 224/224, so \
-            these two selectors cannot both be set away from their defaults."
+            RSB-A3's train resolution and streams A3's own shim. Every other 224² recipe (`2018`, \
+            `a1`) is 224/224, so these two selectors cannot both be set away from their defaults."
     | some r     => throw <| IO.userError s!"LEAN_MLIR_RES={r}: only 160 and 224 are rendered. \
         160 is RSB-A3's train resolution (slug resnet50in160, d0 76800); 224 is the default \
         (slug resnet50in, d0 150528). Rendering another needs a new VerifiedNetSpec + artifacts."

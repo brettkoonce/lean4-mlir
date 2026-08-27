@@ -164,6 +164,22 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- the leading ones" is exactly the reasoning defect #4 falsified, so it is RUN.
   , ("lambaccdp8x64wxclipbcewd001", false, false, false)
   , ("lambacc8x64wxclipbcewd001", false, false, false)
+    -- ⚠⚠ **bf16, AND THIS TABLE HAD NONE OF IT UNTIL 2026-08-27.** Every bf16 render in the tree
+    -- goes through these five predicates and not one bf16 spelling was listed here; the guards
+    -- that existed were scattered through the renderer files, one net at a time. A SEVENTH marker
+    -- placement, and the one that lands after everything else including the decay's digits — so
+    -- `…bcewd001bf16` puts a THIRD token after the batch's digits, and `bf16` carries digits too.
+    -- ▶ The specific risks, all run rather than reasoned about: `bf16` must not spell "do" (it
+    -- does not, and neither does `drop` ++ `bf16` — "do" needs d-then-o and `drop` is d-r-o-p),
+    -- must not start "ema", must not contain "rms", and must not disturb the `k` parse, which
+    -- finds "acc"/"accdp" and reads the digits up to the "x".
+  , ("lambaccdp8x64wxclipbcebf16", false, false, false)
+  , ("lambacc8x64wxclipbcebf16", false, false, false)
+  , ("lambaccdp8x64wxclipbcewd001bf16", false, false, false)
+  , ("lambacc8x64wxclipbcewd001bf16", false, false, false)
+    -- ⚠ and a NON-accumulating bf16 render, so the partition below is tested in both directions:
+    -- this is R50's shipped `momdp64bf16`, which must read as 3 regions.
+  , ("momdp64bf16", false, false, false)
     -- ▶ LAMB (`r34AdamVariant .lamb`). ⚠ It needs NO driver predicate — three regions, the same
     -- `[θ|m|v]` signature as `adam`, because the trust ratio is computed inside the graph from θ
     -- and the direction and needs no extra state. So it is here for `wx`/`clip`'s reason: to prove
@@ -253,7 +269,13 @@ private def accumSpellings : List String :=
    -- D1's clipped peers — same 4-region graph, one more trailing marker
    "lambacc8x64wxclipbce", "lambaccdp8x64wxclipbce",
    -- the A1-decay peers — same 4-region graph, one more trailing marker
-   "lambaccdp8x64wxclipbcewd001", "lambacc8x64wxclipbcewd001"]
+   "lambaccdp8x64wxclipbcewd001", "lambacc8x64wxclipbcewd001",
+   -- ⭐ the bf16 peers of both tiers (RSB-A2 and RSB-A1 at 224, 2026-08-27). Same 4-region graph;
+   -- `bf16` is the outermost marker and must not reach the `k` parse. ⚠ `momdp64bf16` is
+   -- deliberately NOT here — it is the other direction of the partition, a bf16 render with no
+   -- accumulation, and listing it would make this check pass for the wrong reason.
+   "lambaccdp8x64wxclipbcebf16", "lambacc8x64wxclipbcebf16",
+   "lambaccdp8x64wxclipbcewd001bf16", "lambacc8x64wxclipbcewd001bf16"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- ⚠ and accumulation must disturb NONE of the other four axes. `acc4x64` contains no "ema" prefix,
@@ -363,6 +385,14 @@ private def accumSpellings : List String :=
 #guard table.all (fun (v, _, _, _) => (nRegions v == 4) == (nScalars v == 5))
 #guard nRegions "lambaccdp8x64bce" == 4    -- the spelling that falsified the prefix test
 #guard nRegions "adamdp128x4wxclipdrop" == 3
+-- ⭐ RSB-A2/A1 at 224 (2026-08-27), the outermost marker placement this table has. `k` must still
+-- come back as 8 through TWO trailing markers carrying digits of their own — `wd001` then `bf16`.
+#guard accK "lambaccdp8x64wxclipbcewd001bf16" == 8
+#guard accK "lambacc8x64wxclipbcewd001bf16" == 8
+#guard accK "lambaccdp8x64wxclipbcebf16" == 8
+#guard nRegions "lambaccdp8x64wxclipbcewd001bf16" == 4
+-- ⚠ and the other direction: bf16 alone must not invent the fourth region.
+#guard nRegions "momdp64bf16" == 3
 
 #eval do
   IO.println "── variant predicates ──"
