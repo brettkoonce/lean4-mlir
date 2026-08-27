@@ -7131,8 +7131,8 @@ def main (argv : List String) : IO Unit :=
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 \end{verbatim}
 
-\noindent That is \texttt{apps/imagenette/MainMobilenetV4Imagenet.lean},
-built as \texttt{lake build mobilenetv4-imagenet-verified}. The renders come
+\noindent That is \texttt{apps/imagenette/MainMobilenetV4Imagenet.lean}.
+It builds as \texttt{mobilenetv4-imagenet-verified}. The renders come
 from the same chain and the same block table as the three 10-class
 artifacts, differing only in \texttt{nClasses}, the batch and the slug,
 which is why adding them was three \texttt{\#eval} lines rather than a
@@ -7163,10 +7163,11 @@ Box & ms/step & min/epoch & Epochs & Total & Val top-1 \\
 over steady-state steps. Both four-replica renders are in the tree ---
 \texttt{mnv4in\_adamdp64\_train\_step} and its \texttt{bf16} arm --- so
 the artifact these numbers were taken on is one the reader can rebuild.
-\textbf{What has not changed is the reason not to train on it}:
-MobileNetV4's collectives have no \texttt{shard-check} peer, so nothing
-ties them. Cost a schedule from this row; do not quote an accuracy off it
-until they are tied.}
+\textbf{And as of 2026-08-27 they are tied}, which is what this row used
+to say was missing: MobileNetV4 now has a \texttt{shard-check} peer and a
+duplicated-batch \texttt{mnv4-dp-check}, both green and both red against a
+sum-not-mean control. So a schedule costed here can now also be run ---
+\texttt{scripts/supervise.sh mnv4-default-4gpu}.}
 
 \medskip\noindent Most of the four-card overhead here is not all-reduce.
 At global 256 the host feeds four times as many images per step, and that
@@ -7175,7 +7176,12 @@ an estimate built the other way --- scaling MobileNetV2's measured
 all-reduce cost by Conv-M's $2.77\times$ larger gradients --- missed the
 measured figure by $70\%$.
 
-\medskip\noindent\textbf{[TODO: run \texttt{mobilenetv4-imagenet-verified}.]}
+\medskip\noindent\textbf{[TODO: run \texttt{mnv4-default-4gpu}.]} The job
+config exists and its prechecks pass. Note that it ships the \emph{fp32}
+arm by default --- $177$ ms/step, $\sim$$25.6$ hr --- where the rows above
+are bf16; one line in the config switches it, and the choice was to move one
+axis at a time rather than pair a first run with a precision change. The
+\texttt{Val top-1} column stays \texttt{TBD} either way.
 
 \chapter{EfficientNet}
 \label{chap:se}
@@ -14000,7 +14006,7 @@ column says what each one is missing.
 \hline \\[-6pt]
 \texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & render owed & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{resnet50-imagenet-verified}    & \texttt{a1}       & render + shim owed & \S\ref{sec:r50_a2_a1_cost} \\
-\texttt{mobilenetv4-imagenet-verified} & Conv-M            & rendered; single-device only & \S\ref{sec:mnv4_side_quest} \\
+\texttt{mobilenetv4-imagenet-verified} & Conv-M            & tied; \texttt{mnv4-default-4gpu}, untrained & \S\ref{sec:mnv4_side_quest} \\
 \texttt{convnext-s-imagenet-verified}  & \withheld         & rendered fp32; bf16 owed & \S\ref{sec:convnext_sb} \\
 \texttt{convnext-b-imagenet-verified}  & \withheld         & rendered fp32 + bf16; unbenchmarked & \S\ref{sec:convnext_sb} \\
 \texttt{vit-s-imagenet-verified}       & \withheld         & rendered fp32; bf16 owed & \S\ref{sec:vit_sb} \\
@@ -14009,11 +14015,13 @@ EfficientNetV2-S                       & \withheld         & no spec & \S\ref{se
 \end{tabular}
 \end{center}
 
-\noindent \textbf{``Single-device only'' is a missing gate, not a missing
-render.} MobileNetV4's data-parallel artifact is on disk and it is deliberately
-not quotable: this book does not report a collective it has not tied against a
-single-device peer, and MNv4 has no \texttt{shard-check} arm. So it trains, on
-one card, at four times the wall clock a job config would cost it.
+\noindent \textbf{MobileNetV4's row shows what a status column is for.} Its
+data-parallel artifact sat on disk for two days deliberately \emph{not} quotable:
+this book does not report a collective it has not tied against a single-device
+peer, and MobileNetV4 had no \texttt{shard-check} arm. Nothing about the artifact
+changed when the gate arrived --- the same bytes became reportable, which is the
+whole point. What the row still says is \emph{untrained}: a job config and a
+verified collective are not a result.
 
 \section*{Choosing a lowerer}
 
