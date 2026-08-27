@@ -27,8 +27,18 @@ existed from the first artifact.
 """
 import glob, sys, time
 
-import jaxlib.mlir.ir as ir
-from jax._src.interpreters import mlir as jmlir
+# ⚠ The MLIR bindings ship with jaxlib, so this gate needs a Python that has JAX. It FAILS rather
+# than skipping when it does not: a gate that quietly does nothing reads exactly like a gate that
+# ran and passed, which is the failure mode `scripts/misplace_drop_sites.py` already refuses.
+# ▶ In CI it lives in jax.yml's `convention` job, which installs `jax[cpu]`; `proofs.yml` has no
+# Python at all and this was put there first by mistake.
+try:
+    import jaxlib.mlir.ir as ir
+    from jax._src.interpreters import mlir as jmlir
+except ModuleNotFoundError as e:
+    sys.exit(f"parse_verified_mlir needs jaxlib.mlir ({e}).\n"
+             "  locally: .venv/bin/python scripts/parse_verified_mlir.py\n"
+             "  in CI   : a job that installs jax[cpu] — see jax.yml's `convention`")
 
 
 def main(argv):

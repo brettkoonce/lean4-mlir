@@ -31,20 +31,6 @@ jobs:
         # drift-guard debt at its baseline so it can shrink but never grow.
         run: python3 scripts/check_render_coverage.py
 
-      - name: Every committed artifact PARSES as StableHLO
-        # ⚠⚠ ADDED 2026-08-27, AFTER EIGHT UNPARSEABLE ARTIFACTS SHIPPED GREEN. The R50 model-EMA
-        # renders named the shadow `{param}e`, so the stem BN gamma `%sg` produced `%sge` — the
-        # hardcoded block-local name inside `select_and_scatter`'s comparator. MLIR's textual name
-        # scope is flat across nested regions, so the files were rejected at parse.
-        #
-        # Every gate above passed on them: byte-identity only asks whether the OLD artifacts moved,
-        # coverage only asks whether a renderer is reachable, `lake build` only writes a String, and
-        # an arity check reads the signature while the collision was 2,000 lines down inside a
-        # region. A render can be well-typed, byte-stable, reachable, correctly shaped and still not
-        # be a program. Nothing between the emitter and a GPU had ever read one.
-        # ⭐ 235 artifacts in 6.5 s, no device, no execution.
-        run: .venv/bin/python scripts/parse_verified_mlir.py || python3 scripts/parse_verified_mlir.py
-
       - name: verified_mlir/ audit suite (writers, pairings, entry names)
         # `scripts/regen_verified_mlir.sh check` writes nothing and needs no Lean, no GPU and no
         # JAX — it reads the committed artifacts. It has existed for a while and CI never ran it,

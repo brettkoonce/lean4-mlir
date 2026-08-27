@@ -325,6 +325,25 @@ jobs:
           done
           [ "$missing" -eq 0 ]
 
+      - name: Every committed artifact PARSES as StableHLO
+        # ⚠⚠ ADDED 2026-08-27, AFTER EIGHT UNPARSEABLE ARTIFACTS SHIPPED GREEN. The R50 model-EMA
+        # renders named the shadow `{param}e`, so the stem BN gamma `%sg` produced `%sge` — the
+        # hardcoded block-local name inside `select_and_scatter`'s comparator. MLIR's textual name
+        # scope is flat across nested regions, so the files were rejected at parse.
+        #
+        # Every other render gate passed on them: byte-identity only asks whether the OLD artifacts
+        # moved, coverage only asks whether a renderer is reachable, `lake build` only writes a
+        # String, and an arity check reads the signature while the collision was 2,000 lines down
+        # inside a region. A render can be well-typed, byte-stable, reachable, correctly shaped and
+        # still not be a program. Nothing between the emitter and a GPU had ever read one.
+        #
+        # ⚠ IT LIVES HERE AND NOT IN `proofs.yml` — where the other render gates are — for one
+        # reason: it needs `jaxlib.mlir`, and the proofs job installs no Python. It was put there
+        # first and CI said `ModuleNotFoundError: No module named 'jaxlib'`. This job already pays
+        # for `jax[cpu]` and already reads the committed `.mlir`, so it is the cheap home.
+        # ⭐ 229 artifacts in ~7 s, no device, no execution.
+        run: python3 scripts/parse_verified_mlir.py
+
       - name: Convention audit (ratchet + selftest)
         run: |
           set -o pipefail
