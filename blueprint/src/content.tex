@@ -5923,21 +5923,57 @@ extra epochs would cost. Every one of these is a one-line
 
 A3 is the cheap tier. The other two exist as recipes --- \texttt{a2-accum}
 and \texttt{a1}, selected positionally (\texttt{resnet50-imagenet a2-accum
-data}) --- smoke-tested rather than trained. What stops them is the renderer:
+data}) --- smoke-tested rather than trained. Both now render on the
+verified path:
 
 \begin{center}
 \begin{tabular}{@{}l c c l l l@{}}
 \hline
-tier & epochs & train res & renderer work & verified wall clock & top-1 \\
+tier & epochs & train res & verified render & verified wall clock & top-1 \\
 \hline
-A3 (\texttt{rsb-faithful}) & 100 & $160$ & --- & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
-A2 (\texttt{a2-accum})     & 300 & $224$ & LAMB\,+\,BCE at $224$, bf16 & \texttt{[todo]} & $79.8\%$ (paper) \\
-A1 (\texttt{a1})           & 600 & $224$ & same render as A2          & \texttt{[todo]} & $80.4\%$ (paper) \\
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
+A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, fp32 + bf16 & \texttt{[todo]} & $79.8\%$ (paper) \\
+A1 (\texttt{a1})           & 600 & $224$ & rendered --- its own decay & \texttt{[todo]} & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Effective batch 2048 as $512\times4$.
+\noindent Effective batch 2048 as $512\times4$ on the reference; as
+$8\times64$ across four replicas on the verified path.
+
+\medskip\noindent \textbf{A1 is not the same render as A2, and the difference
+is one line.} This table said it was. The weight decay is a baked
+\texttt{stablehlo.constant} rather than a runtime operand, so A1's $0.01$
+against A2's $0.02$ is a re-render and not a flag --- the two artifacts
+differ in exactly one line of $18{,}000$, and they are kept on separate paths
+(\texttt{\ldots wxclipbce} against \texttt{\ldots wxclipbcewd001}) precisely so
+that one line cannot be lost. A1's other two deltas are $600$ epochs, which is
+a driver knob, and Mixup $\alpha\,0.2$ against $0.1$, which is data-side and
+rides its own generated shim.
+
+\medskip\noindent \textbf{What these renders are not: faithful A2 and A1.} Two
+of A2's regularisers have no expression on this path, and both are inherited by
+A1:
+
+\begin{itemize}
+  \item \textbf{Model EMA} ($\text{decay}=0.9999$). Not merely unrendered ---
+    unrepresentable, because the EMA shadow and the gradient accumulator are the
+    same fourth region of $[\theta\,|\,m\,|\,v\,|\,\cdot\,]$, and the driver
+    refuses the combination outright rather than letting one win. Accumulation
+    is not optional here: effective batch $2048$ at $224^2$ has no other route
+    on a $16$\,GB card. Lifting this is a fifth region in the pack/unpack and in
+    every optimizer's return list.
+  \item \textbf{Stochastic depth} ($0.05$). The module exists and EfficientNet
+    and ConvNeXt render variants off it; the residual family does not import it,
+    and the variant grammar has no marker to ask for it with.
+\end{itemize}
+
+\noindent A3 met neither obstacle because A3's own recipe switches both
+\emph{off}. So these artifacts are A2's graph minus two regularisers: they price
+the tier honestly, since neither affects the step cost, and they are what a
+fifth region and a \texttt{drop} marker would extend. They are not a run at the
+paper's numbers, and a result off them would be ``the A2 recipe with these
+deltas'' in exactly the sense \S\ref{sec:r50_phase4} uses for A3.
 
 \medskip\noindent \textbf{What the phase-2 peers cost, measured.} The verified
 column has one entry because A3 is the only tier that has been run there. The
@@ -14004,8 +14040,8 @@ column says what each one is missing.
 \begin{tabular}{@{}llll@{}}
 \textbf{Target} & \textbf{Variant} & \textbf{Status} & \textbf{Section} \\[2pt]
 \hline \\[-6pt]
-\texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & render owed & \S\ref{sec:r50_a2_a1_cost} \\
-\texttt{resnet50-imagenet-verified}    & \texttt{a1}       & render + shim owed & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & rendered fp32 + bf16; no EMA/sd & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a1}       & rendered + own shim; no EMA/sd & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{mobilenetv4-imagenet-verified} & Conv-M            & tied; \texttt{mnv4-default-4gpu}, untrained & \S\ref{sec:mnv4_side_quest} \\
 \texttt{convnext-s-imagenet-verified}  & \withheld         & rendered fp32; bf16 owed & \S\ref{sec:convnext_sb} \\
 \texttt{convnext-b-imagenet-verified}  & \withheld         & rendered fp32 + bf16; unbenchmarked & \S\ref{sec:convnext_sb} \\
