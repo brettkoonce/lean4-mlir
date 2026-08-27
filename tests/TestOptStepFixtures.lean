@@ -81,7 +81,10 @@ private def optStepModule (fname : String) (opt : R34Opt)
     (if accOn then fixtureParams.map (fun (n, ds) => s!"%{n}a: {ty ds}") else []) ++
     -- ⚠ `E` AFTER `G`, the `[θ|m|v|G|E]` order the driver packs. A fixture that ordered them the
     -- other way would tie green and leave the real render mis-slicing every parameter.
-    (if ema then fixtureParams.map (fun (n, ds) => s!"%{n}e: {ty ds}") else []) ++
+    -- ⚠ `{n}ema`, matching `optOne` — the suffix moved from `e` after `%sg` + `e` collided with the
+    -- maxpool backward's block-local `%sge` in the real render. A fixture that kept the old spelling
+    -- would tie green against names the shipped artifact no longer uses.
+    (if ema then fixtureParams.map (fun (n, ds) => s!"%{n}ema: {ty ds}") else []) ++
     ["%lr: tensor<f32>", "%bc1: tensor<f32>", "%bc2: tensor<f32>"] ++
     (if accOn then ["%aup: tensor<f32>", "%akeep: tensor<f32>"] else []) ++
     (if ema then ["%emad: tensor<f32>", "%oemad: tensor<f32>"] else []) ++

@@ -397,7 +397,16 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
   -- Hoisting it would need the updated-parameter name before the arm that produces it has run.
   let emaTail : String → StateM Nat (String × Option String) := fun nT =>
     if ema then do
-      let (c, nE) ← pretty B (.adamMNextF s!"%{g.nm}e" "%emad" "%oemad" g.ds 0 z (.operand nT z))
+      -- ⚠⚠ **`ema`, NOT `e`, AND THAT IS A COLLISION ALREADY PAID FOR.** The shadow's SSA name is
+      -- `{parameter}{suffix}`, and at suffix `e` the stem BN gamma `%sg` produced **`%sge`** — which
+      -- is the hardcoded block-local name inside `select_and_scatter`'s comparator, the maxpool
+      -- backward. MLIR's textual name scope is flat across nested regions, so the artifact was
+      -- rejected at parse with *"redefinition of SSA value '%sge'"*. It rendered, it passed
+      -- byte-identity, it passed render coverage, and its arity checked — because NOTHING IN THIS
+      -- REPO PARSED A COMMITTED ARTIFACT until `scripts/parse_verified_mlir.py`.
+      -- ⚠ ViTRender's per-example EMA keeps `%{nm}e` and is fine: ViT has no maxpool, so no
+      -- `select_and_scatter` and no `%s*` block-locals. Same reason this family cannot.
+      let (c, nE) ← pretty B (.adamMNextF s!"%{g.nm}ema" "%emad" "%oemad" g.ds 0 z (.operand nT z))
       pure (c, some nE)
     else pure ("", none)
   match opt with

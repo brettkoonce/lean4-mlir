@@ -975,8 +975,11 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   -- The shadow region `E`, named `<p>e`, present only under `ema`. ⚠ It follows `aSig` and never
   -- precedes it — the `[θ|m|v|G|E]` order the driver packs, and the order that leaves both
   -- single-axis layouts at the index they already occupy.
+  -- ⚠ `{n}ema`, not `{n}e` — see `optOne`'s note: `%sg` + `e` is `%sge`, the maxpool backward's
+  -- own block-local name, and the artifact does not parse. The ARGUMENT and the produced value have
+  -- to move together or the region has no input.
   let eSig := if ema then ", " ++ String.intercalate ", "
-                              (sigList.map (fun (n, t) => s!"{n}e: {t}")) else ""
+                              (sigList.map (fun (n, t) => s!"{n}ema: {t}")) else ""
   let accSSig := (if accOn then ", %aup: tensor<f32>, %akeep: tensor<f32>" else "") ++
                  (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "")
   let statSig := String.intercalate ", " (r50StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
