@@ -57,6 +57,14 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   useAdam        := true
   weightDecay    := 0.05
   wdExcludeNormBias := true  -- timm no_weight_decay: skip norm γ/β, biases, LayerScale γ (1-D params)
+  cnxInit        := true    -- ConvNeXt `_init_weights`: trunc_normal(0.02) on every conv AND the
+                            -- head. The generic Xavier path put the stem at std 0.118 against the
+                            -- paper's 0.02 — 5.9× too wide, the same failure `vitInit` fixes for
+                            -- ViT. ⭐ Set on the BASE config, not behind a separate recipe the way
+                            -- `deit-init` is, because there is nothing to protect: ConvNeXt is
+                            -- C1-blocked (`imagenet_rerun_sweep.md` §1a, `mstd 0.5` ⇒ zero-byte
+                            -- shim), so it has no post-fix number and both recipes have to be
+                            -- re-run regardless. LayerScale 1e-6 and the LNs were already right.
   cosineDecay    := true
   warmupEpochs   := 20      -- ConvNeXt paper warmup (was 5)
   augment        := true

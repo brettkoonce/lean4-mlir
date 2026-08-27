@@ -915,6 +915,35 @@ structure TrainConfig where
       output fan `dim·p·p` rather than the input fan `ic·p·p`).
       See planning/vit_imagenet.md item 0. -/
   vitInit : Bool := false
+  /-- ConvNeXt paper weight init, replacing the generic Xavier-uniform for the
+      ConvNeXt-shaped nets. Off by default; turn it on per-recipe.
+
+      ConvNeXt's reference implementation applies `trunc_normal_(std=.02)` with
+      zero bias to **every `nn.Conv2d` AND `nn.Linear`** (`_init_weights` in
+      `facebookresearch/ConvNeXt`, and timm's `convnext.py` agrees), leaving the
+      LayerNorms at (1, 0) and LayerScale at 1e-6 — both of which the emitter
+      already gets right.
+
+      ⚠ **This is deliberately a SEPARATE flag from `vitInit`, not a shared
+      "timmInit".** The two specs disagree on the conv path: ViT leaves its
+      patch-embed `nn.Conv2d` on PyTorch's default `U(±1/sqrt(fan_in))`, while
+      ConvNeXt trunc-normals its convs like everything else. One boolean cannot
+      express both, and a flag named for the vendor rather than the
+      distribution would invite exactly the misapplication below.
+
+      ⛔ **Do NOT extend either flag to the ResNet/MobileNet/EfficientNet
+      family.** "timm init" is not one thing: those nets use
+      `kaiming_normal_(mode='fan_out', nonlinearity='relu')`, and the emitter's
+      `emitConvBnInit` — uniform `±sqrt(6/(oc·k²))`, i.e. std `sqrt(2/fan_out)`
+      — is ALREADY on that scale, differing only in distribution shape. Giving
+      a ResNet conv `trunc_normal(0.02)` would be a regression, not a fix.
+
+      Why it matters: the generic `emitConvBiasInit` is Xavier over
+      `ic·kh·kw + oc`, so ConvNeXt-T's stem lands at std 0.118 against the
+      paper's 0.02 — **5.9× too wide**, the same failure `vitInit` fixes for
+      ViT and slightly worse. See planning/vit_imagenet.md item 0 for the ViT
+      half of the story. -/
+  cnxInit : Bool := false
   /-- Exponential LR decay (gap B), the EfficientNet/MobileNet schedule: after
       warmup, `lr = LR · rate^((epoch − warmup) / decayEpochs)`. 0 = off (use
       cosine). EfficientNet: rate 0.97, decayEpochs 2.4; MobileNetV2: rate 0.98,

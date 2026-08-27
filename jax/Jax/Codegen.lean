@@ -1326,6 +1326,18 @@ private def emitDenseInit (comment : String) (fanIn fanOut : Nat) : String :=
 -- ConvNeXt sites (init / load / save) all use these so the param order
 -- agrees; forward reads the same order via convnext_block.
 
+-- ConvNeXt's own `_init_weights`: every Conv2d gets trunc_normal_(std=.02),
+-- bias zeroed — same form as `emitDenseInitTimm`, and for the same reason the
+-- truncation is a no-op at this std (the ±2 bounds are absolute, i.e. ±100σ).
+-- ⚠ Selected by `cfg.cnxInit` ONLY. The ResNet/MobileNet/EfficientNet convs go
+-- through `emitConvBnInit`, which is already at timm's `sqrt(2/fan_out)` scale;
+-- routing them here would be a regression. See `TrainConfig.cnxInit`.
+private def emitConvBiasInitTimm (comment : String) (oc ic kh kw : Nat) : String :=
+  "    # " ++ comment ++ "  (ConvNeXt trunc_normal std=0.02)\n" ++
+  "    key, k_ = random.split(key)\n" ++
+  "    params.append((random.normal(k_, (" ++ toString oc ++ ", " ++ toString ic ++ ", " ++
+    toString kh ++ ", " ++ toString kw ++ ")) * 0.02, jnp.zeros(" ++ toString oc ++ ")))\n"
+
 private def emitConvBiasInit (comment : String) (oc ic kh kw : Nat) : String :=
   let fan := ic * kh * kw + oc
   "    # " ++ comment ++ "\n" ++
@@ -1363,12 +1375,21 @@ private def emitLayerScaleToBuf (comment : String) : String :=
   "    f.write(np.asarray(g).astype(np.float32).flatten().tobytes())\n"
 
 private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.run do
+  -- The ConvNeXt conv-with-bias sites, routed once here rather than at each of
+  -- the five call sites below — a per-site `if` is how the three ConvNeXt param
+  -- groups (init / load / save) drifted apart before.
+  let convBiasInit := if cfg.cnxInit then emitConvBiasInitTimm else emitConvBiasInit
   let mut code :=
     "# ═══════════════════════════════════════════════════════════════════════\n" ++
     "#  Model (from Lean spec)\n" ++
     "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
     "def init_params(key):\n" ++
-    "    \"\"\"Xavier/Kaiming uniform init.\"\"\"\n" ++
+    -- ⚠ The `vitInit` branch deliberately keeps the generic docstring: changing
+    -- it would alter the emitted bytes of `generated_vit_tiny_imagenet_deitinit.py`,
+    -- and a 300-epoch run is executing that exact file (md5 357c0e69…). Byte-identity
+    -- on regeneration is the only cheap check that the live trainer is reproducible.
+    (if cfg.cnxInit then "    \"\"\"ConvNeXt paper init: trunc_normal(std=0.02) on every conv/dense.\"\"\"\n"
+     else "    \"\"\"Xavier/Kaiming uniform init.\"\"\"\n") ++
     "    params = []\n"
   for l in spec.layers do
     match l with
@@ -1385,22 +1406,29 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
       code := code ++ emitConvBnInit s!"ConvBN {ic}→{oc}, {k}x{k}" ic oc k
     | .convNextStage c nBlocks _ _ =>
       for bi in [:nBlocks] do
-        code := code ++ emitConvBiasInit s!"ConvNeXt[{bi}] DW 7x7 {c}ch" c 1 7 7
+        code := code ++ convBiasInit s!"ConvNeXt[{bi}] DW 7x7 {c}ch" c 1 7 7
         code := code ++ emitLNInit s!"ConvNeXt[{bi}] LN {c}" c
-        code := code ++ emitConvBiasInit s!"ConvNeXt[{bi}] PW expand {c}→{4*c}" (4*c) c 1 1
-        code := code ++ emitConvBiasInit s!"ConvNeXt[{bi}] PW project {4*c}→{c}" c (4*c) 1 1
+        code := code ++ convBiasInit s!"ConvNeXt[{bi}] PW expand {c}→{4*c}" (4*c) c 1 1
+        code := code ++ convBiasInit s!"ConvNeXt[{bi}] PW project {4*c}→{c}" c (4*c) 1 1
         code := code ++ emitLayerScaleInit s!"ConvNeXt[{bi}] LayerScale {c}" c
     | .convNextDownsample ic oc _ =>
       code := code ++ emitLNInit s!"CNXDown LN {ic}" ic
-      code := code ++ emitConvBiasInit s!"CNXDown conv 2x2 {ic}→{oc}" oc ic 2 2
+      code := code ++ convBiasInit s!"CNXDown conv 2x2 {ic}→{oc}" oc ic 2 2
     | .convNextStem ic oc p =>
-      code := code ++ emitConvBiasInit s!"CNXStem conv {p}x{p} {ic}→{oc}" oc ic p p
+      code := code ++ convBiasInit s!"CNXStem conv {p}x{p} {ic}→{oc}" oc ic p p
       code := code ++ emitLNInit s!"CNXStem LN {oc}" oc
     | .dense fi fo _ =>
       -- Under cfg.vitInit the classifier head is an nn.Linear like any other,
-      -- so timm gives it trunc_normal(0.02) too. Only ViT recipes set the flag,
-      -- so every convnet head keeps the Xavier form.
-      if cfg.vitInit then
+      -- so timm gives it trunc_normal(0.02) too; ConvNeXt's `_init_weights`
+      -- says the same for its head, hence cfg.cnxInit here as well.
+      -- ⚠ The OTHER convnet heads keep the Xavier form, and that is a KNOWN GAP
+      -- rather than a decision: torchvision's `nn.Linear` default is
+      -- U(±1/sqrt(fan_in)), so R50's 2048→1000 head is emitted at 0.0444
+      -- against 0.0221 — 2× too wide, on every ResNet/MobileNet/EfficientNet.
+      -- Fixing it moves the training distribution for nets that have LANDED
+      -- numbers (R50 78.26/77.91/77.07, R34 74.16), so it needs its own A/B
+      -- and its own re-run, not a silent ride-along with this change.
+      if cfg.vitInit || cfg.cnxInit then
         code := code ++ emitDenseInitTimm s!"Dense {fi}→{fo} (head)" fi fo
       else
       code := code ++
