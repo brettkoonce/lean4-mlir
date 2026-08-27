@@ -129,7 +129,14 @@ Two more, both free once the above exists:
 
 Working end to end on XLA/PJRT. `lake exe diffusion-2d [train_steps] [sampler_steps]`
 → `scripts/toy2d_metrics.py`. **Trains in 5.4 s at 3,000 steps / 28 s at 20,000**
-(the plan said "seconds"; it is seconds), 35,586 params.
+(the plan said "seconds"; it is seconds), **18,178 params**.
+
+⚠ Correction to §3 above, and to this section's first commit (`8bc83c7`), which
+reported 35,586: the measured count is **18,178**. §3's "~35 K parameters"
+contradicts §3's own layer list — `10 → 128 → 128 → 2` is
+`1408 + 16512 + 258 = 18,178`; reaching ~35 K needs a *third* hidden layer
+(34,690). The estimate was carried into the write-up instead of the number the
+binary printed, which is the same class of mistake this demo exists to catch.
 
 | phase | state |
 |---|---|
