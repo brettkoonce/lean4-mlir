@@ -1,0 +1,57 @@
+MobileNetV4-Conv-M data-parallel gate — duplicated batch
+  single : verified_mlir/mnv4in_adam64_train_step.mlir   (bs 64)
+  DP     : /tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/40cd2d12-eff7-4bac-8069-f336c48ed35c/scratchpad/mnv4in_adamdp64_SUMNOTMEAN.mlir (4 replicas, global 256 = the same 64 examples 4 times)
+  233 params (9715512 floats), 77 BN layers (67904 stat floats), backend xla
+  running single-device…
+I0827 16:46:04.375887 2741879 service.cc:154] XLA service 0x70dab00312a0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0827 16:46:04.375947 2741879 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:46:04.375969 2741879 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:46:04.375975 2741879 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:46:04.375980 2741879 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:46:04.378715 2741879 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0827 16:46:04.378745 2741879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0827 16:46:04.378786 2741879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0827 16:46:04.378801 2741879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0827 16:46:04.378812 2741879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0827 16:46:04.388868 2741879 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0827 16:46:07.036785 2741934 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 12 bytes spill stores, 12 bytes spill loads
+
+I0827 16:46:07.147217 2741945 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 64 bytes spill stores, 64 bytes spill loads
+
+I0827 16:46:07.349986 2741929 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 128 bytes spill stores, 84 bytes spill loads
+
+E0827 16:46:07.409878 2741944 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:46:07.814097 2741930 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:46:07.925223 2741950 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0827 16:46:08.210298 2741949 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 128 bytes spill stores, 72 bytes spill loads
+
+E0827 16:46:09.112025 2741931 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:46:09.537888 2741935 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:46:09.772904 2741942 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:46:09.875594 2741923 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:46:12.102372 2741939 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:46:13.416507 2741938 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/mnv4in_adam64_train_step.mlir (@mnv4in_adam64_train_step, 856 outputs, 1 replica) in 11284 ms
+  xla/pjrt verified_mlir/mnv4in_adam64_train_step.mlir
+  running data-parallel…
+I0827 16:46:16.146614 2741879 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0827 16:46:16.147188 2741879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0827 16:46:16.147210 2741879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0827 16:46:16.147225 2741879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0827 16:46:16.147240 2741879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled /tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/40cd2d12-eff7-4bac-8069-f336c48ed35c/scratchpad/mnv4in_adamdp64_SUMNOTMEAN.mlir (@mnv4in_adamdp64_train_step, 856 outputs, 4 replicas) in 3912 ms
+I0827 16:46:21.612030 2745002 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0827 16:46:21.615534 2744999 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0827 16:46:21.615668 2744996 cuda_dnn.cc:440] Loaded cuDNN version 92302
+DP CHECK FAILED: gradient (m) norm-rel 2.723283 > 1e-4. On a duplicated batch all_reduce(add)/N is the identity, so the data-parallel step must reproduce the single-device one.
+  xla/pjrt /tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/40cd2d12-eff7-4bac-8069-f336c48ed35c/scratchpad/mnv4in_adamdp64_SUMNOTMEAN.mlir
+  ── per region ──
+    theta: max|a-b| = 0.000231 (231415.033340 e-9), max|a| = 1.373650, norm-rel = 0.000168 (168467.222939 e-9), bit-exact 127649/9715512
+    m: max|a-b| = 0.274594 (274593897.163868 e-9), max|a| = 0.100832, norm-rel = 2.723283 (2723282669.920829 e-9), bit-exact 829/9715512
+    v: max|a-b| = 0.012567 (12566972.523928 e-9), max|a| = 0.079763, norm-rel = 0.157553 (157553124.692336 e-9), bit-exact 4832355/9715512
+    loss/bc: max|a-b| = 0.000000 (0.000000 e-9), max|a| = 7.062754, norm-rel = 0.000000 (0.000000 e-9), bit-exact 3/3
+    bnstat: max|a-b| = 0.000000 (0.000000 e-9), max|a| = 36.958885, norm-rel = 0.000000 (0.000000 e-9), bit-exact 67904/67904

@@ -1,0 +1,57 @@
+MobileNetV4-Conv-M data-parallel gate — duplicated batch
+  single : verified_mlir/mnv4in_adam64_train_step.mlir   (bs 64)
+  DP     : verified_mlir/mnv4in_adamdp64_train_step.mlir (4 replicas, global 256 = the same 64 examples 4 times)
+  233 params (9715512 floats), 77 BN layers (67904 stat floats), backend xla
+  running single-device…
+I0827 16:43:17.069460 2729105 service.cc:154] XLA service 0x7f15900312a0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0827 16:43:17.069506 2729105 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:43:17.069513 2729105 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:43:17.069530 2729105 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:43:17.069534 2729105 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:43:17.072150 2729105 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0827 16:43:17.072179 2729105 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0827 16:43:17.072217 2729105 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0827 16:43:17.072229 2729105 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0827 16:43:17.072240 2729105 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0827 16:43:17.081999 2729105 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0827 16:43:19.690332 2729156 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 12 bytes spill stores, 12 bytes spill loads
+
+I0827 16:43:19.776804 2729149 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 64 bytes spill stores, 64 bytes spill loads
+
+I0827 16:43:19.987819 2729159 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 128 bytes spill stores, 84 bytes spill loads
+
+E0827 16:43:20.049209 2729157 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:43:20.355448 2729176 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:43:20.468769 2729172 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:43:21.593801 2729164 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:43:21.749755 2729162 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:43:22.049513 2729174 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0827 16:43:22.107222 2729170 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 128 bytes spill stores, 72 bytes spill loads
+
+E0827 16:43:22.278121 2729177 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:43:22.387533 2729154 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:43:22.749266 2729148 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/mnv4in_adam64_train_step.mlir (@mnv4in_adam64_train_step, 856 outputs, 1 replica) in 11236 ms
+  xla/pjrt verified_mlir/mnv4in_adam64_train_step.mlir
+  running data-parallel…
+I0827 16:43:28.818166 2729105 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0827 16:43:28.818802 2729105 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0827 16:43:28.818825 2729105 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0827 16:43:28.818840 2729105 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0827 16:43:28.818855 2729105 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/mnv4in_adamdp64_train_step.mlir (@mnv4in_adamdp64_train_step, 856 outputs, 4 replicas) in 4134 ms
+I0827 16:43:34.440039 2732571 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0827 16:43:34.443157 2732565 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0827 16:43:34.443227 2732568 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  xla/pjrt verified_mlir/mnv4in_adamdp64_train_step.mlir
+  ── per region ──
+    theta: max|a-b| = 0.000000 (0.931323 e-9), max|a| = 1.373650, norm-rel = 0.000000 (0.677991 e-9), bit-exact 9715509/9715512
+    m: max|a-b| = 0.000000 (89.406967 e-9), max|a| = 0.105805, norm-rel = 0.000001 (845.016746 e-9), bit-exact 9714720/9715512
+    v: max|a-b| = 0.000000 (7.450581 e-9), max|a| = 0.079763, norm-rel = 0.000000 (93.408516 e-9), bit-exact 9715496/9715512
+    loss/bc: max|a-b| = 0.000000 (0.000000 e-9), max|a| = 7.062486, norm-rel = 0.000000 (0.000000 e-9), bit-exact 3/3
+    bnstat: max|a-b| = 0.000000 (0.000000 e-9), max|a| = 36.958046, norm-rel = 0.000000 (0.000000 e-9), bit-exact 67904/67904
+✓ DP step reproduces the single-device step on a duplicated batch: forward BIT-EXACT (bnstat, 77 BN layers), gradient norm-rel 0.000001 ≤ 1e-4, over all 29214443 returned floats

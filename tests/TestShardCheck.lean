@@ -6,6 +6,11 @@ import LeanMlir.VerifiedNets
     unset HIP_VISIBLE_DEVICES
     PJRT_REPLICAS=2 .lake/build/bin/shard-check <convnext|efficientnet|mobilenetv2> [<dpPath>]
 
+⚠ The 4-replica-only nets need all three knobs and four GPUs, e.g. MNv4:
+
+    PJRT_REPLICAS=4 SHARD_REPLICAS=4 SHARD_VARIANT=adam64 SHARD_VARIANT_DP=adamdp64 \
+      .lake/build/bin/shard-check mnv4in
+
 Generalised from `tests/TestConvNeXtShardCheck.lean` on 2026-07-30 (handoff §5's "still open"
 item). It exists because the `*-dp-check` gates have a hole: the duplicated-batch identity hands
 both replicas the **same** rows, so a shard-offset bug — replica 1 reading `[0,b)` instead of
@@ -68,6 +73,14 @@ private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "convnextin"        => some (convnextImagenetVerified, 32)
   | "efficientnetin"       => some (efficientnetImagenetVerified, 64)
   | "mobilenetv2in"       => some (mobilenetv2ImagenetVerified, 64)
+  -- MNv4, added 2026-08-27. ⚠⚠ ITS ONLY DP RENDERS ARE 4-REPLICA, so this row needs
+  -- `SHARD_REPLICAS=4` and four GPUs — `PJRT_REPLICAS=2` fails at the shim's replica-count guard
+  -- rather than running. The variants are `adam64`/`adamdp64` (`mnv4AdamVariant` appends the
+  -- per-device batch, as EfficientNet's do), so both `SHARD_VARIANT` knobs must be set too.
+  -- ⭐ This row is what makes `mnv4in_adamdp64` quotable. Until it existed the renderer's own
+  -- `#eval` block said the 4-replica pair was for COSTING only — "do not train off these" — on the
+  -- grounds that an untied collective looks exactly as trustworthy as a tied one.
+  | "mnv4in"              => some (mnv4ImagenetVerified, 64)
   | "efficientnet" => some (efficientnetVerified, 32)
   | "mobilenetv2"  => some (mobilenetv2Verified,  32)
   -- ViT, added 2026-08-12. It had `tests/TestViTDpCheck.lean` and nothing else, which is the gate
@@ -81,8 +94,9 @@ private def netOf : String → Option (VerifiedNetSpec × Nat)
 def main (args : List String) : IO Unit := do
   let slug := args.head?.getD ""
   let some (spec, bs) := netOf slug
-    | do IO.eprintln s!"usage: shard-check <convnext|efficientnet|mobilenetv2|vit> [<dpPath>]\n\
-got: '{slug}'"; IO.Process.exit 1
+    | do IO.eprintln s!"usage: shard-check \
+<convnext|efficientnet|mobilenetv2|vit|convnextin|efficientnetin|mobilenetv2in|mnv4in> \
+[<dpPath>]\ngot: '{slug}'"; IO.Process.exit 1
   let net := spec.toNet
   -- $SHARD_REPLICAS generalises the construction: `ds.shard`-style, N shards each with genuinely
   -- different data, checked against the mean of N single-device steps. The identity

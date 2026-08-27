@@ -2073,6 +2073,26 @@ lean_exe «mobilenetv2-dp-check» where
   root := `tests.TestMobilenetV2DpCheck
   moreLinkArgs := lowererLink
 
+/-- The MNv4 peer, and the gate that makes `mnv4in_adamdp64` quotable. Same EXACT duplicated-batch
+    identity: every replica gets the same 64 examples, so their BN groups are identical by
+    construction, `all_reduce(add)/4 = (4·g)/4 = g`, and the DP step must reproduce the
+    single-device one — `bnstat` bit-exact, gradient within 1e-4.
+
+    ⛔ It exists because `MobileNetV4RenderB.lean` rendered MNv4's 4-replica pair for COSTING only
+    and said "do not train off these": nothing had tied its collectives, and an untied collective
+    artifact looks exactly as trustworthy as a tied one. This gate plus the `mnv4in` row in
+    `shard-check` is that tie.
+
+    ⚠⚠ FOUR GPUs, not two, and that is forced — MNv4 renders `adamdp64` at 4 replicas only, with no
+    2-replica peer, so `PJRT_REPLICAS=2` hits the shim's replica-count guard rather than degrading.
+    It is also the 1000-class 224² net: there is no Imagenette-scale MNv4 DP render to gate more
+    cheaply.
+    ⭐ `DP_VARIANT`/`DP_VARIANT_DP` re-run it over the bf16 pair, which was exactly as untied as
+    the f32 one. XLA backend only. -/
+lean_exe «mnv4-dp-check» where
+  root := `tests.TestMnv4DpCheck
+  moreLinkArgs := lowererLink
+
 /-- The ConvNeXt peer, gated by the same EXACT duplicated-batch identity — and the one net that
     needs no BatchNorm caveat to justify it: LayerNorm reduces within an example, never across the
     batch, so nothing couples the replicas at all.
@@ -2099,11 +2119,15 @@ lean_exe «convnext-shard-check» where
   root := `tests.TestConvNeXtShardCheck
   moreLinkArgs := lowererLink
 
-/-- `shard-check <convnext|efficientnet|mobilenetv2|vit> [<dpPath>]` — the asymmetric-batch SHARDING
-    gate for every net with a DP render, generalised from `convnext-shard-check` (handoff §5's
-    "still open" item). The `*-dp-check` gates hand both replicas the SAME rows, so they are
-    structurally blind to a shard-offset bug; this one gives them different data and checks
-    `DP([xA|xB]) == mean(single(xA), single(xB))`. Needs two GPUs and the XLA backend. -/
+/-- `shard-check <convnext|efficientnet|mobilenetv2|vit|…in|mnv4in> [<dpPath>]` — the
+    asymmetric-batch SHARDING gate for every net with a DP render, generalised from
+    `convnext-shard-check` (handoff §5's "still open" item). The `*-dp-check` gates hand both
+    replicas the SAME rows, so they are structurally blind to a shard-offset bug; this one gives
+    them different data and checks `DP([xA|xB]) == mean(single(xA), single(xB))`. Needs two GPUs
+    and the XLA backend.
+
+    ⚠ The 4-replica-only nets need `SHARD_REPLICAS=4`, four GPUs, and both `SHARD_VARIANT` knobs.
+    MNv4 (added 2026-08-27) is one: `SHARD_VARIANT=adam64 SHARD_VARIANT_DP=adamdp64`. -/
 lean_exe «shard-check» where
   root := `tests.TestShardCheck
   moreLinkArgs := lowererLink

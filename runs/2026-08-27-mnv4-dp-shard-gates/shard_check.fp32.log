@@ -1,0 +1,57 @@
+I0827 16:45:16.249931 2737803 service.cc:154] XLA service 0x78e76801e810 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0827 16:45:16.249984 2737803 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:45:16.249990 2737803 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:45:16.249993 2737803 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:45:16.249996 2737803 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0827 16:45:16.252733 2737803 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0827 16:45:16.252763 2737803 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0827 16:45:16.252803 2737803 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0827 16:45:16.252818 2737803 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0827 16:45:16.252829 2737803 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0827 16:45:16.262676 2737803 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0827 16:45:18.879303 2737869 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 12 bytes spill stores, 12 bytes spill loads
+
+I0827 16:45:18.983344 2737852 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 64 bytes spill stores, 64 bytes spill loads
+
+I0827 16:45:19.214300 2737853 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 128 bytes spill stores, 84 bytes spill loads
+
+E0827 16:45:19.595932 2737870 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0827 16:45:19.663294 2737873 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 128 bytes spill stores, 72 bytes spill loads
+
+E0827 16:45:19.717332 2737869 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:45:20.807437 2737852 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:45:20.913008 2737868 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:45:21.351499 2737873 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:45:21.557611 2737862 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:45:23.884963 2737865 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 16:45:24.919159 2737858 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/mnv4in_adam64_train_step.mlir (@mnv4in_adam64_train_step, 856 outputs, 1 replica) in 11234 ms
+MobileNetV4-Conv-M (ImageNet-1k) SHARDING gate — asymmetric batch
+  DP( [x0|..|x3] )  ==  mean of 4 single-device steps   (4 replicas x bs 64)
+  single   : verified_mlir/mnv4in_adam64_train_step.mlir
+  DP render: verified_mlir/mnv4in_adamdp64_train_step.mlir
+  233 params (9715512 floats), 77 BN layers, backend xla
+  xla/pjrt verified_mlir/mnv4in_adam64_train_step.mlir
+  single-device on shard 0…
+  single-device on shard 1…
+  single-device on shard 2…
+  single-device on shard 3…
+  data-parallel on the 4-way shard…
+I0827 16:45:28.625028 2737803 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0827 16:45:28.625449 2737803 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0827 16:45:28.625472 2737803 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0827 16:45:28.625487 2737803 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0827 16:45:28.625501 2737803 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/mnv4in_adamdp64_train_step.mlir (@mnv4in_adamdp64_train_step, 856 outputs, 4 replicas) in 4038 ms
+I0827 16:45:34.204387 2740590 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0827 16:45:34.207915 2740596 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0827 16:45:34.208003 2740593 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  xla/pjrt verified_mlir/mnv4in_adamdp64_train_step.mlir
+  ── gradient proxy m' = 0.1·g, over 9715512 coords ──
+    TEST    |DP − mean of 4| / max|mean| = 0.000001 (1102.521893 e-9)
+    CONTROL |DP − shard0|     / max|mean| = 1.999695  ← a broken shard would land HERE
+✓ sharding CONFIRMED for mnv4in: DP([A|B]) = mean(single(A), single(B)) to 0.000001, while DP vs A alone is 1.999695 — 1813745.859008x apart, so the replicas provably saw DIFFERENT data
