@@ -1743,6 +1743,35 @@ true reason to say so.
 ▶ **What drives ConvNeXt-T's 157 h is the recipe against the hardware**: a 300-epoch schedule at a
 global batch of 128 rather than the paper's 4096, i.e. ~32× the paper's step count.
 
+### 21.5b ✅ ConvNeXt-**S** — the twin that was missing, and it is the FASTEST of the three
+
+`convnextsin` carried the fp32 half of the square and not the bf16 half, where T and B carried
+both. ⚠ **An accident of ordering, not a decision**: B landed after S and brought bf16 with it.
+Rendered 2026-08-27 (`verified_side_quest_counterparts.md` §4c) — two `#eval`s, no new operator,
+because S is T's depth table at T's widths.
+
+Measured with `scripts/bf16_device_step.py`, one session, one 4060 Ti, bs32, `adamwxclipdrop`
+against its bf16 twin:
+
+| model | fp32 | bf16 | speedup |
+|---|---|---|---|
+| ConvNeXt-T | 157.85 ms | 121.12 ms | 1.30× |
+| **ConvNeXt-S** | **268.35 ms** | **192.65 ms** | **1.39×** |
+| ConvNeXt-B | 395.73 ms | 294.25 ms | 1.34× |
+
+⭐⭐ **T AND B REPRODUCE THEIR COMMITTED FIGURES, WHICH IS WHAT LICENSES S's ROW.** §21.6's table
+has T at 157.8 → 121.0 and B at 396.0 → 293.3; this session returns 157.85 → 121.12 and
+395.73 → 294.25. Two independent controls landing on the record to within 0.3% is the difference
+between "S is 1.39×" and "S measured 1.39× once".
+
+⭐ **S is the fastest of the three, which "deeper costs more" does not predict.** Depth adds blocks
+at widths bf16 already suits; B's widening moves every stage. Worth not smoothing over — the plan
+that scheduled this work expected ~1.29× for S, on the reasoning that T's ratio would carry.
+
+⚠ **Two rows of §21.6's shape are NOT measured for S**: peak memory (`bf16_peak_memory.py`) and the
+4×bs32 trainer figure on real ImageNet. The trainer number dilutes the graph's — T reads 1.30×
+here and 1.18× there, B 1.34× and 1.20× — so do not quote 1.39× as a wall-clock saving.
+
 ### 21.6 ⭐⭐ ConvNeXt-**B** — where the memory question is real, and where bf16 buys headroom
 
 ConvNeXt-B (88.59M parameters, 3.1× Tiny) is the first size at which fitting is a question rather

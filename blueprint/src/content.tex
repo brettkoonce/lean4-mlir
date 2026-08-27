@@ -9205,7 +9205,7 @@ model & params & renderer work & verified cost \\
 \hline
 ConvNeXt-T & $28.6$\,M         & ---                     & $167$\,ms/step (fp32) \\
 ConvNeXt-S & $50{,}222{,}152$  & \textbf{none}           & $280$\,ms/step (fp32) \\
-ConvNeXt-B & $88{,}589{,}416$  & ${\sim}27$ literals     & \texttt{[todo: bf16 renderer + benchmarks]} \\
+ConvNeXt-B & $88{,}589{,}416$  & ${\sim}27$ literals     & see the bf16 table below \\
 \hline
 \end{tabular}
 \end{center}
@@ -9225,13 +9225,45 @@ none of it. That is worth stating plainly because it is the boundary of the
 ``one spec, any size'' claim this chapter makes everywhere else --- the spec
 really is free, and the renderer is where a new shape gets paid for.
 
-\medskip\noindent \textbf{The bf16 renders are half-done.}
-\texttt{convnextbin} carries its bf16 twins; \texttt{convnextsin} does not, an
-accident of B landing after S rather than anything about the shape. Closing it
-is a per-net emit and not new operator work --- every bf16 twin these nets need
-already exists --- and T's bf16 render runs $1.29\times$ its fp32 peer, so it is
-worth about a fifth of the wall clock. S costs $1.68\times$ T per step on the
-verified path, which is the deepening and nothing else.
+\medskip\noindent \textbf{The bf16 renders were half-done, and now all three
+sizes carry both.} \texttt{convnextsin} lacked its bf16 twins where T and B had
+theirs --- an accident of B landing after S rather than anything about the
+shape, which is the kind of gap that reads as a decision about the middle size
+and is really about the calendar. Closing it was a per-net emit and not new
+operator work: S is T's depth table at T's widths, so it instantiates the same
+bf16 operators at the same widths, and B is the stronger precedent still,
+because it instantiates them at four widths no committed artifact had used.
+
+\medskip\noindent Measured, one session, one 4060\,Ti, batch 32,
+\texttt{adamwxclipdrop} against its \texttt{bf16} twin:
+
+\begin{center}
+\begin{tabular}{@{}l r r r@{}}
+\hline
+model & fp32 & bf16 & speedup \\
+\hline
+ConvNeXt-T & $157.9$\,ms & $121.1$\,ms & $1.30\times$ \\
+ConvNeXt-S & $268.4$\,ms & $192.7$\,ms & $\mathbf{1.39\times}$ \\
+ConvNeXt-B & $395.7$\,ms & $294.3$\,ms & $1.34\times$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent \textbf{These are the graph's numbers, not a trainer's}, timed on the
+device with nothing around them --- which is the only way to make a statement
+about a \emph{render}. A trainer's step also moves with the shim feed and with
+whether device-resident parameters are switched on, and both dilute the ratio:
+the same two ConvNeXt renders that run $1.30\times$ here read $1.18\times$ inside
+a four-card run on real data.
+
+\medskip\noindent The reason to trust S's row is that the other two reproduce.
+T and B were run as controls in the same session and came back at $157.9$ and
+$395.7$\,ms against previously committed bare-device figures of $157.8$ and
+$396.0$ --- so the tool and the box agree with the record, and S's $1.39\times$
+is a measurement rather than the extrapolation from T that stood here before.
+S is also the \emph{fastest} of the three in bf16, which is not what
+``deeper costs more'' would predict and is worth not smoothing over: depth adds
+blocks at widths bf16 already suits, where B's widening moves every stage.
 
 \medskip\noindent \textbf{Status: rendered, not trained.} Artifacts emit,
 shapes tie to \texttt{VLayer.toSpecs}, param counts are \texttt{\#guard}ed
@@ -14043,8 +14075,8 @@ column says what each one is missing.
 \texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & rendered fp32 + bf16; no EMA/sd & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{resnet50-imagenet-verified}    & \texttt{a1}       & rendered + own shim; no EMA/sd & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{mobilenetv4-imagenet-verified} & Conv-M            & tied; \texttt{mnv4-default-4gpu}, untrained & \S\ref{sec:mnv4_side_quest} \\
-\texttt{convnext-s-imagenet-verified}  & \withheld         & rendered fp32; bf16 owed & \S\ref{sec:convnext_sb} \\
-\texttt{convnext-b-imagenet-verified}  & \withheld         & rendered fp32 + bf16; unbenchmarked & \S\ref{sec:convnext_sb} \\
+\texttt{convnext-s-imagenet-verified}  & \withheld         & rendered fp32 + bf16; untrained & \S\ref{sec:convnext_sb} \\
+\texttt{convnext-b-imagenet-verified}  & \withheld         & rendered fp32 + bf16; untrained & \S\ref{sec:convnext_sb} \\
 \texttt{vit-s-imagenet-verified}       & \withheld         & rendered fp32; bf16 owed & \S\ref{sec:vit_sb} \\
 \texttt{vit-b-imagenet-verified}       & \withheld         & rendered fp32 @ global $128$; bf16 + accum owed & \S\ref{sec:vit_sb} \\
 EfficientNetV2-S                       & \withheld         & no spec & \S\ref{sec:enet_side_quests} \\

@@ -246,6 +246,8 @@ jobs:
               verified_mlir/convnextsin_drop_fwd.mlir \
               verified_mlir/convnextsin_adamwxclipdrop_train_step.mlir \
               verified_mlir/convnextsin_adamdpwxclipdrop_train_step.mlir \
+              verified_mlir/convnextsin_adamwxclipdropbf16_train_step.mlir \
+              verified_mlir/convnextsin_adamdpwxclipdropbf16_train_step.mlir \
               verified_mlir/convnextbin_drop_fwd.mlir \
               verified_mlir/convnextbin_adamwxclipdrop_train_step.mlir \
               verified_mlir/convnextbin_adamdpwxclipdrop_train_step.mlir \

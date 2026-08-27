@@ -765,6 +765,35 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextsin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxSmall))
+
+-- ⭐⭐ **The bf16 peers of S** (`planning/verified_side_quest_counterparts.md` §4c). ConvNeXt-T and
+-- ConvNeXt-B each carry the full (precision × replicas) square and S carried only the fp32 half —
+-- **an accident of ordering, not a decision**: B landed after S and brought bf16 with it, so the
+-- gap read as a choice about the middle size and was really about the calendar. That is the exact
+-- shape §4c exists to close, and it is why this is two lines rather than an investigation.
+--
+-- ⭐ **No new proved operator.** Every bf16 op these need already exists — S is ConvNeXt-T's
+-- depth table at T's dims, so it instantiates the SAME ops at the SAME widths, and `convnextin_*bf16`
+-- has shipped since 2026-08-25. B is the stronger precedent still: it uses four widths no committed
+-- artifact had, and it needed nothing new either.
+--
+-- ⚠ The variant STRINGS are unchanged — `cnxAdamVariant` keys on replicas and flags, never on the
+-- size — so `adamwxclipdropbf16` and `adamdpwxclipdropbf16` are already `#guard`ed below at every
+-- concatenation. S reuses them at a different SLUG, which is the whole of N2: the slug is the net
+-- and the variant is the recipe.
+--
+-- ⚠⚠ **DO NOT ASSUME THIS IS FASTER.** A bf16 op can be SLOWER than its f32 peer with every gate
+-- green — ViT's stem wgrad runs 0.19× — so the render existing says nothing about the wall clock.
+-- Measure with `scripts/bf16_device_step.py`, which times the GRAPH; a trainer's own ms/step is a
+-- system number that also moves with `PJRT_FFI_RESIDENT` (off by default) and the shim feed.
+#eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextsin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/convnextsin_adamdpwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextsin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true))
 -- The SD train step's PREFIX PARTNER — the same reason `convnextin_drop_fwd` exists. It is not the
 -- forward the driver evals through (that is `convnextsin_fwd.mlir`, written by `ConvNeXtRender`);
 -- it is what keeps the `forward ⊂ train-step` structural audit from having nothing to pair the SD
