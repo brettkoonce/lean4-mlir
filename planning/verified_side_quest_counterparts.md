@@ -167,10 +167,14 @@ against its own reference. Rendering it scalar would mean a second drop op, fait
 | **B. Render per-example, record the divergence, leave JAX alone** | the render only | a knowingly-wrong oracle for 26+4 artifacts |
 | **C. Leave sd unrendered; A2/A1 keep the one remaining delta** | nothing | §4a's second ⛔ stands |
 
-⚠ **What A does NOT do**: it does not invalidate a *measured* number. The affected references are
-JAX-side, and no ImageNet result in the book was produced by a JAX run with `dropPath` active —
-`sec:convnext_sb`'s figures are step costs and the verified ConvNeXt runs are the verified path's.
-That should be re-checked before acting on it, not taken from this table.
+⭐⭐ **A INVALIDATES NOTHING MEASURED, and that was CHECKED rather than assumed** (2026-08-27).
+`dropPath > 0` appears in **ImageNet-tier configs only** — ConvNeXt-T/S/B, ENet-B0, ViT-Ti/S/B, R50
+and MNv4's `full`. Every Imagenette config sets none, which is where the completed JAX runs are.
+At ImageNet scale: R50's A3 reference sets `dropPath := 0.0`, and MNv4-Conv-M's 75.51% ran the
+`default` recipe — only `full` sets 0.075, and its own comment says it is *"not yet wired into
+UIB — verify before trusting"*. ▶ **So no quoted number in this repo was produced by a JAX run
+with stochastic depth active.** The defect is entirely latent: it reaches future ImageNet-tier
+reference runs, and it means 26 shipping verified artifacts have no correct oracle today.
 
 ---
 
