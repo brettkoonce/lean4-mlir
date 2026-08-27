@@ -34,10 +34,13 @@ been built. What HAS landed, and why the book now looks the way it does:
   this survey ran, and a month of augmentation work had landed. `lake exe <net>-imagenet <recipe>`
   in `jax/` first, every time.
 
-**The first task, if you want one picked for you:** §6's item 1 — the naming scheme (§2c) and the
-Track 4 split (§3). It is docs and labels only, needs no GPU, and every later item adds a row to
-the tables it creates. Item 2 (§4b, the MNv4 shard gate) is the first one that needs a card, and
-it is the best payoff per hour in the file.
+✅ **§6's ITEM 1 LANDED 2026-08-27**, in five commits: the ViT-B docstring fix, the five exe
+renames, the job renames, the `RECIPE=` precheck, and the Track 4 restructure. §2c, §3 and §6
+below are marked up with what happened — including **three places the survey contradicted this
+plan**, each flagged ⚠⚠ where it bites.
+
+**The next task is §6's item 2** — §4b, the MNv4 shard gate. It is the first one that needs a
+card, and the best payoff per hour in the file.
 
 ⚠ **One correction this doc owes the book.** `sec:r50_a2_a1_cost`'s table says A1's renderer work
 is "same render as A2". §4a shows it is not — `wdStr` is a baked constant, so A1's wd 0.01 is a
@@ -84,13 +87,17 @@ but the artifact now exists, so the caveat has to be restated as "rendered, unga
 
 | namespace | example | who writes it |
 |---|---|---|
-| Lean exe | `resnet50-imagenet-verified`, `mnv4-imagenet-verified`, `vits-imagenet-verified` | `lakefile.lean` |
+| Lean exe | `resnet50-imagenet-verified`, `mobilenetv4-imagenet-verified`, `vit-s-imagenet-verified` | `lakefile.lean` |
 | MLIR slug | `resnet50in`, `resnet50in160`, `convnextsin`, `vitbin` | `VerifiedNets.lean` `slug` |
 | variant | `LEAN_MLIR_VARIANT=lambaccdp8x64wxclipbce` | the renderer's `#eval` names |
 | recipe | `LEAN_MLIR_RECIPE=2018` → `generated_resnet50_imagenet_2018_shim.py` | `scripts/gen_shims.sh` |
 | job | `scripts/jobs/r50-a3-wxclip-4gpu.conf` | one file per run |
 
 ### 2b. The four disagreements, with the bug each one caused or invites
+
+✅ **All four are closed as of 2026-08-27**, by `4ee304a` (1, 2, 4), `d023220` (3) and `796cacf`
+(the check that keeps 1 and 2 closed). Kept as written, because the *reasons* are what a later
+naming decision has to re-read.
 
 1. ⛔ **`-imagenet-` in a job name means "the default recipe", and the default differs per net.**
    `r34-imagenet-4gpu` is 2018 at the 30-epoch short tier; `r50-imagenet-4gpu` is RSB-A3 without
@@ -118,17 +125,50 @@ already runs per-job prechecks; add one that asserts the second dash-field of th
 filename equals the `LEAN_MLIR_RECIPE` in its `ENV_EXTRA`. A convention nothing enforces is how
 namespace 4 drifted from namespace 5 in the first place.
 
-| today | becomes | why |
+✅ **Landed as an ENGINE check, not a per-job one** (`796cacf`), so a new job cannot forget it.
+⚠⚠ **But not against `LEAN_MLIR_RECIPE`, because that rule cannot hold for the jobs it most needs
+to.** `LEAN_MLIR_RECIPE` is read by exactly one driver — `MainResnet50Imagenet.lean:84` — and A3
+is selected there by `LEAN_MLIR_RES=160`; line 93 *throws* on any non-default recipe at 160, since
+2018 is a 224/224 recipe and the two selectors cannot both move. So `r50-a3-4gpu` could never have
+set `LEAN_MLIR_RECIPE=a3` to be checked against, and the four nets whose drivers ignore the
+variable would have carried a load-bearing-looking line that nothing reads.
+
+⭐ **What landed instead: a conf-level `RECIPE=` field.** The engine asserts (a) every `-<n>gpu`
+job sets it, (b) it equals the filename's second dash-field, and (c) any `LEAN_MLIR_RECIPE` in
+`ENV_EXTRA` equals it too. Rule (c) is vacuous for six of nine jobs today and deliberately so —
+the slot gets checked the day those nets gain a second recipe. The *net-specific* half lives in
+the net that has one: both A3 confs now assert `LEAN_MLIR_RES=160` is present **and**
+`LEAN_MLIR_RECIPE` is absent, the second being a refusal to write the config that looks most
+correct and does not start. Six controls, all firing — see `796cacf`.
+
+✅ **What landed** (`4ee304a`). The two `r34` rows are the plan's, corrected:
+
+| today | became | why |
 |---|---|---|
-| `r34-imagenet-90ep-4gpu` | `r34-2018-4gpu` | 90 ep is the paper schedule; unmarked = paper |
-| `r34-imagenet-4gpu` | `r34-2018-30ep-4gpu` | the short tier is the deviation, so it carries the axis |
+| `r34-imagenet-90ep-4gpu` | `r34-default-4gpu` | 90 ep is the paper schedule; unmarked = paper |
+| `r34-imagenet-4gpu` | ⚠⚠ **dropped** — it is `EPOCHS=30` on the above | see below |
 | `r50-imagenet-4gpu` | `r50-a3-4gpu` | it is A3, and only its contents said so |
-| `r50-a3-wxclip-4gpu` | `r50-a3-wxclip-4gpu` | unchanged |
+| `r50-a3-wxclip-4gpu` | unchanged | already the target shape |
 | `r50-2018-4gpu` / `-bf16-` | unchanged | already the target shape |
-| `mnv2-imagenet-4gpu` | `mnv2-default-4gpu` | + set `LEAN_MLIR_RECIPE=default` explicitly |
+| `mnv2-imagenet-4gpu` | `mnv2-default-4gpu` | + `RECIPE=default`, checked by the engine |
 | `enet-imagenet-4gpu` | `enet-default-4gpu` | ditto |
 | `cnx-imagenet-4gpu` | `cnx-default-4gpu` | ditto |
 | `vit-imagenet-4gpu` | `vit-default-4gpu` | ditto |
+
+⚠⚠ **R34's recipe is `default`, not `2018` — this table said `2018` and N1's own rule said
+otherwise.** `jax/MainResnetImagenet.lean:65` registers R34's recipes as `default` (90 ep, the
+paper schedule) and `short` (30 ep). "2018" is R50's recipe name, `resnet50Imagenet2018Verified`,
+and R34 has nothing by it — so `r34-2018-4gpu` would have named a string no registry or driver
+accepts. N1's "a net whose emitter has one recipe still spells it (`default`)" was right and this
+table was the slip. ▶ The book still *calls* R34's recipe "the 2018 recipe" in prose
+(`content.tex:5531`), which is why Track 4's recipe column glosses `default` as such.
+
+⚠ **The 30-epoch R34 job was dropped rather than renamed.** The two confs never differed in
+recipe — same `momdp64` render, same shim, same DEVS, same per-replica batch — and *neither* set
+`LEAN_MLIR_EPOCHS`, so the short tier was always the 90-epoch cosine stopped early. `EPOCHS=30`
+reproduces it exactly. Its provenance moved into `r34-default-4gpu.conf`'s header rather than
+being deleted with it, and its schedule-fusion PRECHECK stayed — folding makes that collision
+*easier* to hit, since one file now writes the checkpoint both tiers resume from.
 
 **N2 — the slug is the NET, the variant is the RECIPE.** `resnet50in160` looks like an exception
 and is not: the driver opens `<slug>_fwd.mlir` and `<slug>_fwd_eval.mlir` **by name**, so anything
@@ -145,8 +185,9 @@ Every committed name already obeys it (`lambaccdp8x64wxclipbce`, `adamdp128x4wxc
 that have to land in the same order to stay sortable.
 
 **N4 — one abbreviation policy for Lean exes: the chapter's spelling, with the size hyphenated.**
+✅ Landed `d023220`.
 
-| today | becomes |
+| today | became |
 |---|---|
 | `mnv4-imagenet-verified` | `mobilenetv4-imagenet-verified` |
 | `vits-imagenet-verified` / `vitb-` | `vit-s-imagenet-verified` / `vit-b-` |
@@ -160,11 +201,26 @@ rename that misses those leaves the book naming a target that no longer builds.
 ⚠ **Do the renames in one commit with no other change**, so `git log --follow` on any target stays
 readable and so a bisect over a later run failure never lands mid-rename.
 
+✅ Done, and split further: exe renames (`d023220`, label-only, no file moves) and job renames
+(`4ee304a`, pure `git mv`) are separate commits, because only the second moves files.
+⚠ **A `lean_exe` rename leaves the OLD binary in `.lake/build/bin/`.** All five were deleted in the
+same pass — a gate that greps for a binary would otherwise keep finding an Aug-14 build of a target
+that no longer exists, which is the `vit-fwd-b-tie` failure mode.
+⭐ **One drive-by the rename forced** (`4f87a64`): `MainViTBImagenet.lean`'s header was copied from
+ViT-S and never retargeted — it claimed `D = 384`, MLP 1536 and 22,050,664 parameters, and
+contradicted its own ⚠⚠ batch paragraph two lines down. Line 3 was a rename target, so half-fixing
+it was not an option.
+
 ---
 
 ## 3. TRACK 4 — the restructure
 
-Appendix B Track 4 (`blueprint/src/content.tex:13966`) currently opens "Seven nets train on full
+✅ **LANDED 2026-08-27, `7c457a3`.** Built and checked: `xelatex print.tex` exits 0 at 171 pages
+with zero undefined references (all five `\S\ref` targets and `chap:residual` resolve), and
+overfull hboxes are 79 before and 79 after, none in the Track 4 region. The side-quest table needed
+`\small` to clear a 40.3 pt overrun.
+
+Appendix B Track 4 (`blueprint/src/content.tex:13966`) opened "Seven nets train on full
 ImageNet-1k" over a table of eight rows that mixes main-line recipes, a second recipe for R50, and
 one side quest with a `\withheld` job.
 
@@ -193,24 +249,37 @@ different question ("what else is rendered?") and putting them first buries the 
 purpose. It also means the status column's `render only` rows never sit next to a job name a reader
 might try to run.
 
-**Main table** — target, recipe, job, in chapter order:
+**Main table** — target, recipe, job, in chapter order. ✅ What landed:
 
 | target | recipe | job |
 |---|---|---|
-| `resnet34-imagenet-verified` | 2018 | `r34-2018-4gpu` |
-| `resnet50-imagenet-verified` | 2018 | `r50-2018-4gpu` |
-| `resnet50-imagenet-verified` | rsb-faithful (A3) | `r50-a3-wxclip-4gpu` |
-| `mobilenetv2-imagenet-verified` | default | `mnv2-default-4gpu` |
-| `efficientnet-imagenet-verified` | default | `enet-default-4gpu` |
-| `convnext-imagenet-verified` | default | `cnx-default-4gpu` |
-| `vit-imagenet-verified` | default (DeiT-Ti) | `vit-default-4gpu` |
+| `resnet34-imagenet-verified` | `default` (the 2018 recipe) | `r34-default-4gpu` |
+| `resnet50-imagenet-verified` | `2018` | `r50-2018-bf16-4gpu` |
+| `resnet50-imagenet-verified` | `a3` (RSB-A3, train@160) | `r50-a3-wxclip-4gpu` |
+| `mobilenetv2-imagenet-verified` | `default` | `mnv2-default-4gpu` |
+| `efficientnet-imagenet-verified` | `default` | `enet-default-4gpu` |
+| `convnext-imagenet-verified` | `default` | `cnx-default-4gpu` |
+| `vit-imagenet-verified` | `default` (DeiT-Ti) | `vit-default-4gpu` |
+
+⚠⚠ **The R50 / 2018 row is the `bf16` job, not `r50-2018-4gpu` as this plan had it.** The rule
+above — "one row per (net, recipe) that a chapter's ImageNet recipe section *reports*" — decides
+it, and this table had named the job that merely exists. §5.4's 77.07% row is 4× 3060 **bf16**,
+and the book's own reproduction verbatim spells `LEAN_MLIR_VARIANT=momdp64bf16`. Same check on the
+other two: §5.4 names the A3 artifact outright as `resnet50in160_lambaccdp8x64wxclipbce_train_step`
+(so `r50-a3-wxclip-4gpu` was right, and `r50-a3-4gpu` carries the earlier `lambaccdp8x64bce`), and
+R34's 74.14% is fp32 / 90 ep, which is `r34-default-4gpu`'s `momdp64`.
+
+▶ **So `scripts/jobs/` holds more jobs than the table has rows**, and one caveat sentence after it
+says so: the unlisted ones are *axis* siblings differing in precision or one optimizer knob, never
+in recipe. Listing them would have put two job names on one (net, recipe) row, which is Rule 1 of
+`blueprint_lowerer_pattern.md` at table scale.
 
 **Side-quest table** — target, variant, status, and the chapter section it belongs to:
 
 | target | variant | status | § |
 |---|---|---|---|
-| `resnet50-imagenet-verified` | a2-accum | render owed | `sec:r50_a2_a1_cost` |
-| `resnet50-imagenet-verified` | a1 | render + shim owed | `sec:r50_a2_a1_cost` |
+| `resnet50-imagenet-verified` | `a2-accum` | render owed | `sec:r50_a2_a1_cost` |
+| `resnet50-imagenet-verified` | `a1` | render + shim owed | `sec:r50_a2_a1_cost` |
 | `mobilenetv4-imagenet-verified` | Conv-M | rendered; **single-device only** (no shard gate) | `sec:mnv4_side_quest` |
 | `convnext-s-imagenet-verified` | — | rendered fp32; bf16 owed | `sec:convnext_sb` |
 | `convnext-b-imagenet-verified` | — | rendered fp32 + bf16; **unbenchmarked** | `sec:convnext_sb` |
@@ -392,9 +461,12 @@ Non-negotiable, and in this order:
 
 ## 6. ORDER
 
-1. **Naming + Track 4 restructure (§2, §3).** Docs and labels only, no GPU, and every later item
-   adds a row to the tables this creates. Two commits: the renames alone, then the Track 4 split.
-2. **MNv4 shard gate (§4b).** Smallest real work, best payoff, and it turns a `\withheld` into a job.
+1. ✅ **Naming + Track 4 restructure (§2, §3) — DONE 2026-08-27.** Five commits, not two: the
+   ViT-B docstring the rename forced (`4f87a64`), the exe renames (`d023220`), the job renames
+   (`4ee304a`), the `RECIPE=` precheck (`796cacf`), and the Track 4 split (`7c457a3`). Splitting
+   exe renames from job renames matters — only the second moves files, so only the second has a
+   `git log --follow` to protect.
+2. ⬅ **NEXT — MNv4 shard gate (§4b).** Smallest real work, best payoff, and it turns a `\withheld` into a job.
 3. **RSB-A2 + A1 (§4a).** Four to six `#eval`s against a renderer that already takes every parameter,
    and it closes `sec:r50_a2_a1_cost`. Fix the "same render as A2" cell in the same pass.
 4. **The three bf16 twins (§4c).** Independent of each other; do ConvNeXt-S first, it has the closest
