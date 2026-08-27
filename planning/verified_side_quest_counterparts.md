@@ -59,8 +59,8 @@ Surveyed 2026-08-27 against the tree at `253fb75`. "Render" means a committed
 | **RSB-A2** | `sec:r50_a2_a1_cost` | ✅ `a2-accum` | ✅ fp32 ×2 + bf16 ×2 | — | ⛔ EMA + sd (§4a) |
 | **RSB-A1** | `sec:r50_a2_a1_cost` | ✅ `a1` | ✅ fp32 ×2 + bf16 ×2 + own shim | — | ⛔ EMA + sd (§4a) |
 | **MNv4-Conv-M** | `sec:mnv4_side_quest` | ✅ | ✅ 4 variants incl. DP + bf16 | ✅ **4-GPU, tied** | ✅ nothing — **run it** (§4b) |
-| **ConvNeXt-S** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 | steps only | the bf16 twin (§4c) |
-| **ConvNeXt-B** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + bf16 ×2 | steps only | nothing — **benchmark it** (§4c) |
+| **ConvNeXt-S** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + **bf16 ×2** | steps only | ✅ nothing — **train it** (§4c) |
+| **ConvNeXt-B** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + bf16 ×2 | ✅ **benchmarked** | ✅ nothing — **train it** (§4c) |
 | **ViT-S** | `sec:vit_sb` | ✅ | ✅ fp32 ×1 | steps only | the bf16 twin (§4c) |
 | **ViT-B** | `sec:vit_sb` | ✅ | ✅ fp32 ×1 @ global 128 | steps only | bf16 **+ an accum render** (§4d) |
 | **EfficientNetV2-S** | `sec:enet_side_quests` | ⚠ Imagenette only | ⛔ nothing | — | spec, peer, shim, render (§4e) |
@@ -450,6 +450,40 @@ on one card to roughly a quarter of that on four.
 
 ### 4c. ConvNeXt-S and ViT-S/B bf16 twins — three per-net emits
 
+✅ **ConvNeXt-S LANDED 2026-08-27** (`e17b61c`). Two `#eval`s, no new operator, and the variant
+strings needed no new `#guard` — `cnxAdamVariant` keys on replicas and flags, never on the size, so
+S reuses `adamwxclipdropbf16` at a different SLUG. That is N2 doing its job.
+
+⭐⭐ **MEASURED, and it beat the estimate. This section predicted ~1.29× for S** on the reasoning
+that T's ratio would carry. One session, one 4060 Ti, bs32, `scripts/bf16_device_step.py`:
+
+| model | fp32 | bf16 | speedup |
+|---|---|---|---|
+| ConvNeXt-T | 157.85 ms | 121.12 ms | 1.30× |
+| **ConvNeXt-S** | **268.35 ms** | **192.65 ms** | **1.39×** |
+| ConvNeXt-B | 395.73 ms | 294.25 ms | 1.34× |
+
+⭐ **T and B reproduce their committed figures to within 0.3%** (§21.6 has 157.8 → 121.0 and
+396.0 → 293.3), which is what licenses S's row rather than S licensing itself. ▶ And it closes
+ConvNeXt-B's "**benchmark it**" item in §1 in the same pass, since B was run as a control.
+
+⭐ **S is the FASTEST of the three**, which "deeper costs more" does not predict: depth adds blocks
+at widths bf16 already suits, where B's widening moves every stage.
+
+⚠ **1.39× is the GRAPH's, not a wall clock.** The trainer dilutes it — T reads 1.30× here and
+1.18× inside a four-card run on real data, B 1.34× and 1.20×. Two rows of §21.6's shape are still
+unmeasured for S: peak memory and the 4×bs32 trainer figure.
+
+⬅ **Still owed by this section: the two ViT twins** (`vitsin_adamdp128x4wxclipdropbf16` and
+`vitbin_adamdp32x4wxclipdropbf16`). ⚠⚠ Do NOT assume they land where ConvNeXt's did — the third
+trap below is a ViT trap: ViT's stem wgrad runs **0.19×**, a 209×209 window with no bf16 cuDNN
+kernel, so ViT is the family where a green gate and a slower graph have actually co-occurred.
+
+---
+
+*The original text follows, since it is what the work was done against.*
+
+
 | owed | pattern already proven by |
 |---|---|
 | `convnextsin_adamwxclipdropbf16`, `convnextsin_adamdpwxclipdropbf16` | `convnextbin_*bf16` (same net family, both variants) |
@@ -558,8 +592,9 @@ Non-negotiable, and in this order:
    cell is fixed. ⚠ It did NOT close `sec:r50_a2_a1_cost`: EMA is unrepresentable alongside
    accumulation (one fourth region, two claimants) and stochastic depth has no importer in the
    residual family. Both are now stated in the book rather than owed. See §4a.
-4. ⬅ **NEXT — the three bf16 twins (§4c).** Independent of each other; do ConvNeXt-S first, it has the closest
-   proven peer.
+4. 🔄 **The three bf16 twins (§4c) — ConvNeXt-S DONE 2026-08-27** (`e17b61c`), measured at
+   **1.39×**, the fastest of the three sizes, and B's benchmark fell out of the same session.
+   ⬅ **NEXT: the two ViT twins**, and they are the risky ones — ViT's stem wgrad is 0.19×.
 5. **ViT-B accumulation (§4d)** — only if ViT-B is actually going to be trained on this box. Check
    the TPU question first.
 6. **EfficientNetV2 (§4e)** — its own project, after the rest.
