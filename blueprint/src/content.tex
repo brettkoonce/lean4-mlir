@@ -5921,10 +5921,9 @@ extra epochs would cost. Every one of these is a one-line
 \section{Side quest: RSB-A2 and RSB-A1}
 \label{sec:r50_a2_a1_cost}
 
-A3 is the cheap tier. The other two exist as recipes --- \texttt{a2-accum}
-and \texttt{a1}, selected positionally (\texttt{resnet50-imagenet a2-accum
-data}) --- smoke-tested rather than trained. Both now render on the
-verified path:
+A3 is the cheap tier. The other two exist as recipes --- \texttt{a2-accum} and
+\texttt{a1}, selected positionally --- and both now render on the verified path
+as well:
 
 \begin{center}
 \begin{tabular}{@{}l c c l l l@{}}
@@ -5933,88 +5932,51 @@ tier & epochs & train res & verified render & verified wall clock & top-1 \\
 \hline
 A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
 A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, fp32 + bf16 & \texttt{[todo]} & $79.8\%$ (paper) \\
-A1 (\texttt{a1})           & 600 & $224$ & rendered --- its own decay & \texttt{[todo]} & $80.4\%$ (paper) \\
+A1 (\texttt{a1})           & 600 & $224$ & rendered --- own decay & \texttt{[todo]} & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Effective batch 2048 as $512\times4$ on the reference; as
-$8\times64$ across four replicas on the verified path.
+\noindent Effective batch 2048, as $512\times4$ on the reference and $8\times64$
+across four replicas here. \textbf{A1 is not ``the same render as A2'', and the
+difference is one line}: the weight decay is a baked constant rather than a
+runtime operand, so A1's $0.01$ against A2's $0.02$ is a re-render, and the two
+artifacts --- identical in $18{,}000$ other lines --- are kept on separate paths
+so that line cannot be lost. A1's other deltas are $600$ epochs, a driver knob,
+and Mixup $\alpha\,0.2$, which rides its own generated shim.
 
-\medskip\noindent \textbf{A1 is not the same render as A2, and the difference
-is one line.} This table said it was. The weight decay is a baked
-\texttt{stablehlo.constant} rather than a runtime operand, so A1's $0.01$
-against A2's $0.02$ is a re-render and not a flag --- the two artifacts
-differ in exactly one line of $18{,}000$, and they are kept on separate paths
-(\texttt{\ldots wxclipbce} against \texttt{\ldots wxclipbcewd001}) precisely so
-that one line cannot be lost. A1's other two deltas are $600$ epochs, which is
-a driver knob, and Mixup $\alpha\,0.2$ against $0.1$, which is data-side and
-rides its own generated shim.
+\medskip\noindent \textbf{These renders are not faithful A2 and A1.} The same
+ledger \S\ref{sec:r50_phase4} keeps for A3, kept here before anything is run:
 
-\medskip\noindent These renders are \emph{not} faithful A2 and A1, and the
-ledger below says how --- the same accounting \S\ref{sec:r50_phase4} keeps for
-A3, kept here before anything is run rather than after.
+\begin{center}
+\begin{tabular}{@{}p{0.45\linewidth} p{0.47\linewidth}@{}}
+\hline
+\emph{In} & \emph{Still out}, worst first \\
+\hline
+\texttt{wdExcludeNormBias}; LAMB's clip at $kC$, after both the all-reduce and the accumulation
+  & \textbf{Model EMA} --- \emph{unrepresentable}. The shadow and the accumulator want the same fourth region of $[\theta|m|v|\cdot]$ and the driver refuses both; accumulation is not optional, so EMA cannot be had at all. A fifth region, not a flag \\[2pt]
+BCE-with-logits over Mixup/CutMix soft labels
+  & \textbf{Stochastic depth} $0.05$ --- the residual renderers neither import the module nor have a marker for it \\[2pt]
+Accumulation $k=8$ to LAMB's design batch of $2048$, which at $224^2$ has no other route on a $16$\,GB card
+  & Ghost-BN group $64$ against the reference's $128$ \\[2pt]
+Repeated augmentation $3\times$; both precisions, both tiers, one and four replicas
+  & Repeated augmentation is stream-level, not per-batch \\[2pt]
+A1's own decay and own shim, which the driver refuses to start without
+  & Nothing trained --- no epoch of either tier has run here \\[2pt]
+Optimizer tied at the update, six variants to ${\sim}10^{-7}$ & \\
+\hline
+\end{tabular}
+\end{center}
 
-\medskip\noindent\emph{In.} What these artifacts carry that a bare A2/A1
-transcription would not:
+\noindent \textbf{A3 met neither of the first two}, its own recipe switching both
+\emph{off} --- which is why none of this was visible from A3 succeeding. These
+are A2's graph minus two regularisers: they price the tier honestly, since
+neither changes the step cost, but a result off them is ``the A2 recipe with
+these deltas'', never ``RSB-A2 reproduced''.
 
-\begin{itemize}
-  \item \texttt{wdExcludeNormBias} and LAMB's gradient clip, both inherited
-    from the A3 work --- the clip after the all-reduce \emph{and} after the
-    accumulation, at threshold $kC$.
-  \item BCE-with-logits over Mixup/CutMix soft labels, which is what makes the
-    recipe's learning rate the rate it is.
-  \item Gradient accumulation $k=8$ to LAMB's design batch of $2048$. This is
-    not a convenience: $2048$ at $224^2$ has no other route on a $16$\,GB card,
-    and a bs512 LAMB is the regime that gave A3 $40.8\%$ instead of $78.1\%$.
-  \item Repeated augmentation $3\times$, which rides the shim.
-  \item Both precisions, fp32 and bf16, for both tiers and at one and four
-    replicas --- so neither tier waits on a precision peer.
-  \item \emph{A1's own everything}: its baked decay $0.01$ on its own artifact
-    path, and its own generated shim at Mixup $\alpha\,0.2$. The driver refuses
-    to start if that shim is absent rather than falling back to A2's.
-  \item \emph{Verification:} the optimizer is tied to the reference at the
-    update, six variants to ${\sim}10^{-7}$ --- including A1's decay against an
-    emitted A1 trainer that bakes $0.01$, so ``the constant reaches the graph''
-    is a measurement and not a reading.
-\end{itemize}
-
-\medskip\noindent\emph{Still out}, in rough order of expected effect:
-
-\begin{itemize}
-  \item \textbf{Model EMA} ($\text{decay}=0.9999$), and it is not merely
-    unrendered but \emph{unrepresentable}: the EMA shadow and the gradient
-    accumulator are the same fourth region of
-    $[\theta\,|\,m\,|\,v\,|\,\cdot\,]$, and the driver refuses the combination
-    outright rather than letting one win. Since accumulation is not optional
-    here, EMA cannot be had at all. Lifting it is a fifth region in the
-    pack/unpack and in every optimizer's return list --- a change to the blob
-    layout, not a flag.
-  \item \textbf{Stochastic depth} ($0.05$). The module exists and EfficientNet
-    and ConvNeXt render variants off it; the residual family does not import
-    it, and the variant grammar has no marker to ask for it with.
-  \item Ghost-BN group $64$ against the reference's $128$ --- immaterial to a
-    wall clock, a different regime for an accuracy claim.
-  \item Repeated augmentation is a stream-level approximation rather than
-    per-batch, which the generated shim says of itself.
-  \item Nothing has been trained. The renders emit and the optimizer ties; no
-    epoch of either tier has run on this path.
-\end{itemize}
-
-\noindent \textbf{A3 met neither of the first two}, because A3's own recipe
-switches EMA and stochastic depth \emph{off} --- which is why none of this was
-visible from A3 succeeding. So these artifacts are A2's graph minus two
-regularisers: they price the tier honestly, since neither changes the step
-cost, and they are what a fifth region and a \texttt{drop} marker would extend.
-A result off them would be ``the A2 recipe with these deltas'', never ``RSB-A2
-reproduced''.
-
-\medskip\noindent \textbf{What the phase-2 peers cost, measured.} The verified
-column has one entry because A3 is the only tier that has been run there. The
-JAX trainers for all three exist, though, and they set the floor.
+\medskip\noindent \textbf{What the phase-2 peers cost, measured.}
 \texttt{jax/scripts/step\_probe.py} on four 4060\,Ti, bf16, effective batch 2048
-as $4\times512$ --- 625 steps per epoch --- with A3 as the control in the same
-session:
+as $4\times512$ --- 625 steps per epoch --- with A3 as the control:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r@{}}
@@ -6028,23 +5990,16 @@ A1 (600 ep) & $224$ & $1{,}368$ & $14.3$ & $142.5$\,h (5.9\,d) \\
 \end{tabular}
 \end{center}
 
-\noindent \textbf{A1 and A2 carry the same step figure because they are the same
-graph}: the emitted trainers differ in exactly three constants ---
-\texttt{EPOCHS}, \texttt{WD} and Mixup's $\alpha$ --- so on this path A1 is A2 at
-twice the schedule and nothing else, to the digit. \textbf{FixRes is also worth the
-$\sim$2$\times$ \S\ref{sec:r50_phase4} claims for it}: A3's $160^2$ step runs
-$1.91\times$ faster than A2's $224^2$ at the same batch, measured rather than
-asserted. Peak is $4.30$\,GiB for A3 and $7.61$\,GiB for A2 against the
-$11.68$\,GiB a 16\,GB card's allocator hands out, so accumulation holds both
-well inside one card.
+\noindent A1 and A2 share a step figure because the emitted trainers differ in
+three constants, so A1 is A2 at twice the schedule, to the digit. FixRes is worth
+its claimed ${\sim}2\times$ --- A3's $160^2$ step runs $1.91\times$ faster at the
+same batch --- and peak is $4.30$ and $7.61$\,GiB against the $11.68$ a 16\,GB
+card offers, so accumulation holds both inside one card.
 
-\medskip\noindent These figures are compute-only --- the probe never starts the
-\texttt{tf.data} pipeline --- so each is a lower bound. Scaling by the one tier
-where both paths have a number (A3 costs $19.2$ minutes per \emph{verified}
-epoch against $7.5$ here, a $2.6\times$ ratio) puts a verified A2 near seven days
-and a verified A1 near fifteen. That is an extrapolation from a single point and
-it is not what the \texttt{[todo]} column is waiting for, but it is the right
-order for a budget decision: on this box A2 is a week and A1 is a fortnight.
+\medskip\noindent Compute-only, so each is a lower bound. Scaling by the one tier
+where both paths have a number ($19.2$ verified minutes per epoch against $7.5$
+here, $2.6\times$) puts a verified A2 near seven days and A1 near fifteen --- an
+extrapolation from a single point, but the right order for a budget decision.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
@@ -9226,106 +9181,60 @@ regularization pay.
 \section{Side quest: ConvNeXt-S and ConvNeXt-B}
 \label{sec:convnext_sb}
 
-Scaling ConvNeXt-T is two moves. \textbf{S} deepens stage 3 from 9 blocks to
-27 and touches nothing else. \textbf{B} does that \emph{and} widens every
-stage, $96/192/384/768 \to 128/256/512/1024$. On the JAX side both are pure
-parameter edits. On the verified side they are not the same job at all, and
-the difference is the useful finding:
+Scaling ConvNeXt-T is two moves. \textbf{S} deepens stage 3 from 9 blocks to 27
+and touches nothing else; \textbf{B} does that \emph{and} widens every stage,
+$96/192/384/768 \to 128/256/512/1024$. On the JAX side both are parameter edits.
+On the verified side they are not the same job at all.
 
 \begin{center}
-\begin{tabular}{@{}l c c l@{}}
+\begin{tabular}{@{}l c c r@{}}
 \hline
-model & params & renderer work & verified cost \\
+model & params & renderer work & one card, bs32: fp32 $\to$ bf16 \\
 \hline
-ConvNeXt-T & $28.6$\,M         & ---                     & $167$\,ms/step (fp32) \\
-ConvNeXt-S & $50{,}222{,}152$  & \textbf{none}           & $280$\,ms/step (fp32) \\
-ConvNeXt-B & $88{,}589{,}416$  & ${\sim}27$ literals     & see the bf16 table below \\
+ConvNeXt-T & $28.6$\,M        & ---                 & $157.9 \to 121.1$\,ms \;($1.30\times$) \\
+ConvNeXt-S & $50{,}222{,}152$ & \textbf{none}       & $268.4 \to 192.7$\,ms \;($\mathbf{1.39\times}$) \\
+ConvNeXt-B & $88{,}589{,}416$ & ${\sim}27$ literals & $395.7 \to 294.3$\,ms \;($1.34\times$) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Both param counts are \texttt{\#guard}ed against the reference's
-$50.22$\,M and $88.59$\,M. The two step figures are the verified renders
-measured on one 4060\,Ti, fp32, batch 32, \texttt{adamwxclipdrop}, with T run
-as the control in the same session; B has no benchmark yet.
+\noindent Counts are \texttt{\#guard}ed against $50.22$\,M and $88.59$\,M.
+\textbf{Renderer cost tracks how many dimensions move, not how many parameters}
+--- depth is already a loop, so S is free, while B's widening costs twenty-seven
+threaded literals. Those step figures are the \emph{graph's}; T and B ran as
+controls and returned their committed $157.8$ and $396.0$\,ms, which is what
+makes S's $1.39\times$ a measurement. S being fastest is not what ``deeper costs
+more'' predicts: depth adds blocks at widths bf16 already suits.
 
-\medskip\noindent S costs \emph{nothing} in the renderer because depth is
-already a loop --- 27 blocks is the same code as 9. B costs about twenty-seven
-threaded dimension literals across two renderers, because those hardcode
-widths where the JAX emitter derives them. So the work is proportional to
-\emph{how many dimensions move}, not to how many parameters: B has $1.8\times$
-S's parameters and nearly all of the cost, while S has $1.8\times$ T's and
-none of it. That is worth stating plainly because it is the boundary of the
-``one spec, any size'' claim this chapter makes everywhere else --- the spec
-really is free, and the renderer is where a new shape gets paid for.
-
-\medskip\noindent \textbf{The bf16 renders were half-done, and now all three
-sizes carry both.} \texttt{convnextsin} lacked its bf16 twins where T and B had
-theirs --- an accident of B landing after S rather than anything about the
-shape, which is the kind of gap that reads as a decision about the middle size
-and is really about the calendar. Closing it was a per-net emit and not new
-operator work: S is T's depth table at T's widths, so it instantiates the same
-bf16 operators at the same widths, and B is the stronger precedent still,
-because it instantiates them at four widths no committed artifact had used.
-
-\medskip\noindent Measured, one session, one 4060\,Ti, batch 32,
-\texttt{adamwxclipdrop} against its \texttt{bf16} twin:
+\medskip\noindent \textbf{A full schedule}, on four cards at global batch $128$
+--- $10{,}009$ steps per epoch, double every other net here, which is what the
+$300$-epoch schedule really pays for. Totals include $37.5$\,s per epoch of
+evaluation and checkpointing.
 
 \begin{center}
 \begin{tabular}{@{}l r r r@{}}
 \hline
-model & fp32 & bf16 & speedup \\
+verified, 4 cards & ms/step & min/epoch & 300 epochs \\
 \hline
-ConvNeXt-T & $157.9$\,ms & $121.1$\,ms & $1.30\times$ \\
-ConvNeXt-S & $268.4$\,ms & $192.7$\,ms & $\mathbf{1.39\times}$ \\
-ConvNeXt-B & $395.7$\,ms & $294.3$\,ms & $1.34\times$ \\
-\hline
-\end{tabular}
-\end{center}
-
-\noindent \textbf{These are the graph's numbers, not a trainer's}, timed on the
-device with nothing around them --- which is the only way to make a statement
-about a \emph{render}. A trainer's step also moves with the shim feed and with
-whether device-resident parameters are switched on, and both dilute the ratio:
-the same two ConvNeXt renders that run $1.30\times$ here read $1.18\times$ inside
-a four-card run on real data.
-
-\medskip\noindent The reason to trust S's row is that the other two reproduce.
-T and B were run as controls in the same session and came back at $157.9$ and
-$395.7$\,ms against previously committed bare-device figures of $157.8$ and
-$396.0$ --- so the tool and the box agree with the record, and S's $1.39\times$
-is a measurement rather than the extrapolation from T that stood here before.
-S is also the \emph{fastest} of the three in bf16, which is not what
-``deeper costs more'' would predict and is worth not smoothing over: depth adds
-blocks at widths bf16 already suits, where B's widening moves every stage.
-
-\medskip\noindent \textbf{Status: rendered, not trained.} Artifacts emit,
-shapes tie to \texttt{VLayer.toSpecs}, param counts are \texttt{\#guard}ed
-and a few steps run under \texttt{convnext-s-imagenet-verified} and
-\texttt{convnext-b-imagenet-verified}. No accuracy, and the numeric ties
-against the JAX peers have not been run. On four cards B needs gradient
-accumulation even in bf16.
-
-\medskip\noindent \textbf{The phase-2 peers price the schedule.}
-\texttt{jax/scripts/step\_probe.py} on four 4060\,Ti, bf16, global batch 256 ---
-5{,}004 steps per epoch --- with T as the control:
-
-\begin{center}
-\begin{tabular}{@{}l r r r r r@{}}
-\hline
-phase-2 net & ms/step & device peak & min/epoch & 80 epochs & 300 epochs \\
-\hline
-ConvNeXt-T & $172$ & $4.22$\,GiB & $14.3$ & $19.1$\,h & $71.6$\,h (3.0\,d) \\
-ConvNeXt-S & $261$ & $6.78$\,GiB & $21.8$ & $29.0$\,h & $108.8$\,h (4.5\,d) \\
-ConvNeXt-B & $399$ & $9.56$\,GiB & $33.3$ & $44.4$\,h & $166.5$\,h (6.9\,d) \\
+ConvNeXt-T & $217 \to 184$ & $36.2 \to 30.7$ & $184 \to 157$\,h \;($7.7 \to 6.5$\,d) \\
+ConvNeXt-S & $366 \to 292$ & $61.0 \to 48.8$ & $308 \to 247$\,h \;($12.8 \to 10.3$\,d) \\
+ConvNeXt-B & $534 \to 446$ & $89.1 \to 74.4$ & $449 \to 375$\,h \;($18.7 \to 15.6$\,d) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Compute-only --- the probe never starts the \texttt{tf.data} pipeline,
-so read the totals as ``at least this long''. \textbf{The renderer's split does
-not reach the clock}: each rung costs the same, $1.52\times$ then $1.53\times$,
-though S cost the renderer nothing and B cost it twenty-seven literals.
+\noindent \textbf{T and B are measured; S is derived} --- the trainer costs a
+near-constant multiple of the graph ($1.37\times$/$1.35\times$ fp32,
+$1.519\times$/$1.516\times$ bf16), and applying those reproduces T's and B's
+published totals to within $0.5$\,h. Note how much of bf16 the trainer eats: a
+$1.39\times$ graph is a $1.25\times$ run, because the shim feed and the
+all-reduce do not get faster. The phase-2 peers, at twice the batch and so half
+the steps, take $71.6$, $108.8$ and $166.5$ hours compute-only --- so the
+${\sim}2\times$ gap is the batch, not the lowerer.
+
+\medskip\noindent \textbf{Status: rendered, not trained.} Artifacts emit, shapes
+tie, counts are guarded, a few steps run under each size. No accuracy, and the
+numeric ties against the JAX peers have not been run.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
