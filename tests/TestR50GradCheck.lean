@@ -194,7 +194,11 @@ def main : IO Unit := do
     else 1
   if accOn && accK < 2 then
     throw <| IO.userError s!"could not read k from accumulating variant '{variant}'"
-  let nRegions := if accOn then 4 else 3
+  -- ⚠ The driver's own, not a copy: the region count became 3, 4 or 5 when EMA and accumulation
+  -- stopped sharing the fourth slot (`VerifiedVariant.nRegions`, RSB-A2/A1, 2026-08-27), and a
+  -- frozen `if accOn then 4 else 3` here would size the blob one region short for an `ema…acc…`
+  -- variant — every parameter after θ misaligned, and nothing throws.
+  let nRegions := VerifiedVariant.nRegions variant
   let gScale := 10.0 * accK.toFloat        -- g = gScale · m'
   let lossOff := nRegions * nP
   -- Micro-units throughout, so a single `Nat` env var reaches 1e-6 without a float parser.
@@ -232,7 +236,7 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
   let z ← F32.const nP.toUSize 0.0
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3
   let shapes := packShapes ((List.replicate nRegions net.paramShapes).foldl (· ++ ·) #[]
-                            ++ Array.replicate (if accOn then 5 else 3) #[] ++ bnStatShapes)
+                            ++ Array.replicate (VerifiedVariant.nScalars variant) #[] ++ bnStatShapes)
   let x ← F32.heInit 555 (bs * net.d0).toUSize 1.0
   let mut y : ByteArray := .empty
   for i in [0:bs] do

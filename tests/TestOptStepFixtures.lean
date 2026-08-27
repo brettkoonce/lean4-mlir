@@ -61,21 +61,34 @@ private def optStepModule (fname : String) (opt : R34Opt)
     -- ⚠ `wdStr` reaches ONLY the constant block: the per-parameter ops name `%wd` as an operand, so
     -- overriding the decay changes one `stablehlo.constant` and nothing else. That is exactly the
     -- property `optWdStr`'s docstring claims, and this fixture is where it gets measured.
-    (wdStr : String := "") : String :=
+    (wdStr : String := "")
+    -- ▶▶ **`ema` — the shadow region, and this fixture is where the composition gets MEASURED**
+    -- (2026-08-27). RSB-A2/A1 want EMA *and* accumulation, which were mutually exclusive until the
+    -- fifth region landed; a five-region render is exactly the thing whose region ORDER a reading
+    -- cannot check. `scripts/opt_step_tie.py` executes the reference's own `ema_update` against the
+    -- `E` slot this emits, so a shadow wired to the incoming θ rather than the updated one — the
+    -- one-step-lag defect — shows up as a number here and nowhere else.
+    (ema : Bool := false) : String :=
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let ps : List PGrad := fixtureParams.map (fun (n, ds) => ⟨n, s!"%d{n}", ds⟩)
-  let (body, thetaN, mN, vN, aN) := (optAllParams opt 1 1 ps wdExclude gradClip clipNorm).run' 0
+  let (body, thetaN, mN, vN, aN, eN) :=
+    (optAllParams opt 1 1 ps wdExclude gradClip clipNorm ema).run' 0
   let tys := fixtureParams.map (fun (_, ds) => ty ds)
   let sig := String.intercalate ", " (
     fixtureParams.map (fun (n, ds) => s!"%{n}: {ty ds}") ++
     fixtureParams.map (fun (n, ds) => s!"%{n}m: {ty ds}") ++
     fixtureParams.map (fun (n, ds) => s!"%{n}v: {ty ds}") ++
     (if accOn then fixtureParams.map (fun (n, ds) => s!"%{n}a: {ty ds}") else []) ++
+    -- ⚠ `E` AFTER `G`, the `[θ|m|v|G|E]` order the driver packs. A fixture that ordered them the
+    -- other way would tie green and leave the real render mis-slicing every parameter.
+    (if ema then fixtureParams.map (fun (n, ds) => s!"%{n}e: {ty ds}") else []) ++
     ["%lr: tensor<f32>", "%bc1: tensor<f32>", "%bc2: tensor<f32>"] ++
     (if accOn then ["%aup: tensor<f32>", "%akeep: tensor<f32>"] else []) ++
+    (if ema then ["%emad: tensor<f32>", "%oemad: tensor<f32>"] else []) ++
     fixtureParams.map (fun (n, ds) => s!"%d{n}: {ty ds}"))
-  let outTys := String.intercalate ", " (tys ++ tys ++ tys ++ (if accOn then tys else []))
-  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ aN)
+  let outTys := String.intercalate ", " (tys ++ tys ++ tys ++ (if accOn then tys else []) ++
+                                         (if ema then tys else []))
+  let retVals := String.intercalate ", " (thetaN ++ mN ++ vN ++ aN ++ eN)
   "module @m {\n" ++
   s!"  func.func @{fname}({sig}) -> ({outTys}) " ++ "{\n" ++
   -- ⚠ Same constant prelude the real render emits, from the same three functions — a hand-written
@@ -107,30 +120,38 @@ private def optStepModule (fname : String) (opt : R34Opt)
     in the tree are EfficientNet's and MNv2's TF-RMSProp recipes at `EPS = 1e-3`/`1.0`. Gating
     `.adamw` here would mean writing the reference by hand, which is the thing this file refuses to
     do. ▶ It wants a config that generates it, not a transcription. -/
-private def variants : List (String × R34Opt × Bool × Bool × String) :=
-  [ -- (slug, optimizer, wdExclude, gradClip, wdStr)
-    ("lambclip",       .lamb,        false, true,  "")   -- trust ratio + clip, NO wx mask
-  , ("lambwxclip",     .lamb,        true,  true,  "")   -- + D2 mask + D1 clip, no accumulation
-  , ("lambacc4wxclip", .lambAccum 4, true,  true,  "")   -- ⭐ D1 × accumulation at the config's k
-  , ("lambacc8wxclip", .lambAccum 8, true,  true,  "")   -- ⭐⭐ RSB-A3's actual composition
+private def variants : List (String × R34Opt × Bool × Bool × String × Bool) :=
+  [ -- (slug, optimizer, wdExclude, gradClip, wdStr, ema)
+    ("lambclip",       .lamb,        false, true,  "", false)   -- trust ratio + clip, NO wx mask
+  , ("lambwxclip",     .lamb,        true,  true,  "", false)   -- + D2 mask + D1 clip, no accumulation
+  , ("lambacc4wxclip", .lambAccum 4, true,  true,  "", false)   -- ⭐ D1 × accumulation at the config's k
+  , ("lambacc8wxclip", .lambAccum 8, true,  true,  "", false)   -- ⭐⭐ RSB-A3's actual composition
     -- ⭐ RSB-**A1**'s decay, 0.01 against A3's 0.02 — the `wdStr` knob, and the row that makes it a
     -- MEASURED knob rather than a threaded string. Its reference is `…_a1.py`, which bakes
     -- `WD = 0.010000`, so a `wdStr` that failed to reach the constant block would show up as a
     -- wrong θ' here and nowhere else. ⚠ The slug carries `wd001` because `wdVariantMark` puts it
     -- there: two renders differing only in a baked constant must not share a path.
-  , ("lambacc8wxclipwd001", .lambAccum 8, true, true, "0.01")
+  , ("lambacc8wxclipwd001", .lambAccum 8, true, true, "0.01", false)
     -- ⭐⭐ **`.adamw`, AND IT IS ONLY EXPRESSIBLE BECAUSE OF THE ROW ABOVE.** The gap this file
     -- recorded was that no generated reference baked R50's AdamW constants. `adam-probe` bakes
     -- `eps = 1e-8` (the render's) and `wd = 0.02` (NOT the render's 1e-4), so before `wdStr` made
     -- the decay a render parameter, closing it would have meant hand-writing a reference — the one
     -- thing this file refuses to do. ▶ A knob paying for a gate two features later.
-  , ("adamwxclipwd002", .adamw, true, true, "0.02") ]
+  , ("adamwxclipwd002", .adamw, true, true, "0.02", false)
+    -- ⭐⭐⭐ **RSB-A2's REAL composition, and the row this whole feature exists for**
+    -- (`verified_side_quest_counterparts.md` §6a). `resnet50ImagenetConfigA2Accum` sets
+    -- `useEMA := true` alongside `gradAccumSteps := 4`, and until the fifth region landed the two
+    -- were mutually exclusive — so every A2/A1 artifact in the tree is A2's graph MINUS the shadow.
+    -- Its reference is `…a2accum.py`, which carries both `ema_update` and `EMA_DECAY = 0.9999`.
+    -- ⚠ It is the `lambacc8wxclip` row with ONE axis added, deliberately: a failure here and not
+    -- there localises to the shadow rather than to the clip or the accumulation.
+  , ("emalambacc8wxclip", .lambAccum 8, true, true, "", true) ]
 
 def main : IO Unit := do
   IO.println "── optimizer-step fixtures (planning/verified_optimizer_parity.md §5) ──"
-  for (slug, opt, wx, clip, wd) in variants do
+  for (slug, opt, wx, clip, wd, ema) in variants do
     let fname := s!"opt_step_{slug}"
-    let m := optStepModule fname opt wx clip 1.0 wd
+    let m := optStepModule fname opt wx clip 1.0 wd ema
     let path := s!".lake/build/{fname}.mlir"
     IO.FS.writeFile path m
     IO.println s!"  wrote {path} ({(m.splitOn "\n").length} lines)"

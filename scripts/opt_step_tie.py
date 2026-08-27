@@ -115,27 +115,33 @@ FIX_DIR = ".lake/build"
 # below (`Proofs.clipFactor_shared` against `Proofs.lambScale_not_shared`).
 SHAPES = [(4, 3, 2, 2), (5,), (6, 4)]
 
-# (fixture slug, reference file, _K). See TestOptStepFixtures.lean's `variants` docstring for why
-# each row maps onto the reference it does.
+# (fixture slug, reference file, _K, accum, ema). See TestOptStepFixtures.lean's `variants`
+# docstring for why each row maps onto the reference it does.
 VARIANTS = [
     # ⚠ Was `lamb`, unclipped, until CI caught that this reference now CLIPS — D1 reached the JAX
     # side as well, so no unclipped LAMB reference exists any more. It is also the only row without
     # the `wx` mask, which is why it earns its place beside `lambwxclip`.
-    ("lambclip",       "generated_resnet50_imagenet.py",          1, False),
-    ("lambwxclip",     "generated_resnet50_imagenet_a2accum.py",  1, False),
-    ("lambacc4wxclip", "generated_resnet50_imagenet_a2accum.py",  4, True),
-    ("lambacc8wxclip", "generated_resnet50_imagenet_a2accum.py",  8, True),
+    ("lambclip",       "generated_resnet50_imagenet.py",          1, False, False),
+    ("lambwxclip",     "generated_resnet50_imagenet_a2accum.py",  1, False, False),
+    ("lambacc4wxclip", "generated_resnet50_imagenet_a2accum.py",  4, True, False),
+    ("lambacc8wxclip", "generated_resnet50_imagenet_a2accum.py",  8, True, False),
     # ⭐ RSB-A1's decay: 0.01 against A3's 0.02, the `wdStr` knob. Its reference is a1.py, which
     # bakes WD = 0.010000 — so this row is what turns "the string reaches the constant block" from
     # a code-reading claim into a measurement. ⚠ Nothing else about the row differs from
     # `lambacc8wxclip`, so a failure here and not there localises to the decay alone.
-    ("lambacc8wxclipwd001", "generated_resnet50_imagenet_a1.py",  8, True),
+    ("lambacc8wxclipwd001", "generated_resnet50_imagenet_a1.py",  8, True, False),
     # ⭐⭐ THE `.adamw` GAP, CLOSED 2026-08-14 — and `wdStr` is what closed it. The obstacle was that
     # no generated reference baked R50's AdamW constants; `adam-probe` bakes eps 1e-8 (matching the
     # render) but wd 0.02 (against the render's 1e-4 default), so before the decay was a render
     # PARAMETER this row could not have existed without hand-writing a reference. Now the fixture
     # renders `.adamw` at wdStr = "0.02" and the two agree by construction rather than by luck.
-    ("adamwxclipwd002", "generated_resnet50_imagenet_adamprobe.py", 1, False),
+    ("adamwxclipwd002", "generated_resnet50_imagenet_adamprobe.py", 1, False, False),
+    # ⭐⭐⭐ RSB-A2's REAL composition — accumulation AND the model-EMA shadow, the five-region
+    # render (`verified_side_quest_counterparts.md` §6a, 2026-08-27). Until the fifth region landed
+    # these two were mutually exclusive, so every A2/A1 artifact was A2's graph MINUS the shadow.
+    # ⚠ The reference side runs `…a2accum.py`'s OWN `ema_update`, not a re-implementation of it —
+    # the same rule the optimizer span follows. See `run_ref_ema`.
+    ("emalambacc8wxclip", "generated_resnet50_imagenet_a2accum.py", 8, True, True),
 ]
 
 # Tolerance. The two sides run the SAME arithmetic in the same f32 order for the most part, but not
@@ -244,6 +250,38 @@ def run_ref(path, K, theta, m, v, gsum, lr, t):
             [np.asarray(a) for a in ns["m"]], [np.asarray(a) for a in ns["v"]])
 
 
+def run_ref_ema(path, ema0, theta_prime, step):
+    """Execute the reference's OWN `ema_update`. Returns (shadow', d).
+
+    ⚠⚠ **THE FORMULA IS NOT TRANSCRIBED HERE, AND THAT IS THE POINT.** `d = min(EMA_DECAY,
+    (1+t)/(10+t))` is TF's warmup-corrected decay, and this repo has already shipped the defect of
+    getting its warmup wrong once — a shadow still holding 12.8% of its init at 3.1 tau, scoring
+    0.00% top-1 while the live weights scored 70.48% (`planning/ema.md`). A copy of the formula in
+    this file would gate a transcription of it, which is `grad_tie.py`'s standing rule inverted.
+
+    ⭐ `d` comes back out of the same function rather than being recomputed: `ema_update` at
+    `(ema := 1, params := 0)` returns `d·1 + (1−d)·0 = d` exactly. That is what the driver has to
+    write into `%emad`/`%oemad`, so deriving it this way ties the SCALARS to the reference too, not
+    only the op that consumes them.
+    """
+    import jax, jax.numpy as jnp
+    src = open(os.path.join(REF_DIR, path)).read().split("\n")
+    j0 = next(i for i, l in enumerate(src) if l.startswith("def ema_update"))
+    j1 = next(i for i in range(j0 + 1, len(src))
+              if src[i] and not src[i].startswith((" ", "\t")))
+    ns = {"jax": jax, "jnp": jnp, "np": np}
+    for l in src:
+        if l.startswith("EMA_DECAY "):
+            ns["EMA_DECAY"] = eval(l.split("=", 1)[1].strip())
+            break
+    assert "EMA_DECAY" in ns, f"{path}: no EMA_DECAY — is this an EMA recipe?"
+    exec("\n".join(src[j0:j1]), ns)
+    f = ns["ema_update"]
+    d = float(np.asarray(f([jnp.float32(1.0)], [jnp.float32(0.0)], step)[0]))
+    out = f([jnp.asarray(a) for a in ema0], [jnp.asarray(a) for a in theta_prime], step)
+    return [np.asarray(a) for a in out], d
+
+
 def run_render(slug, arrays, n_out):
     """Execute the rendered optimizer through XLA — the lowerer the PJRT trainers use.
 
@@ -299,20 +337,30 @@ def main():
     G0 = [f32(*s) * 5.0 for s in SHAPES]
     dg = [f32(*s) * 5.0 for s in SHAPES]
 
-    assert_references_fresh(sorted({ref for _, ref, _, _ in VARIANTS}))
+    assert_references_fresh(sorted({ref for _, ref, _, _, _ in VARIANTS}))
     print("── one-step optimizer tie (planning/verified_optimizer_parity.md §5) ──")
     gnorm = np.sqrt(sum(float(np.sum((a + b) ** 2)) for a, b in zip(G0, dg)))
     print(f"  ‖Gt‖ = {gnorm:.3f}   (clip threshold k·C; the clip is ACTIVE in every clip row)")
     worst, failures = [], 0
 
-    for slug, ref, K, accum in VARIANTS:
+    # The incoming shadow. ⚠ Deliberately NOT `theta`: the reference seeds `ema_params = params` at
+    # step 0, so a shadow that equalled θ here would make `e' = d·θ + (1−d)·θ' ≈ θ'` and the row
+    # would pass with the two operands swapped. A distinct array is what makes the ORDER visible.
+    e0 = [f32(*s) * 0.5 for s in SHAPES]
+
+    for slug, ref, K, accum, ema in VARIANTS:
+        # ⚠ The EMA scalars come from the REFERENCE's own `ema_update`, never from a formula
+        # written here — see `run_ref_ema`. `T` is the driver's `gstep`, and the reference's `step`
+        # is its 0-based `_global_step`, i.e. `T − 1`.
+        ref_e, d = run_ref_ema(ref, e0, theta, T - 1) if ema else (None, 0.0)
         if accum:
             gsum = [a + b for a, b in zip(G0, dg)]          # Gt = akeep·G + g at akeep = 1
-            arrays = ([*theta, *m0, *v0, *G0,
-                       np.float32(LR), bc1, bc2,
-                       np.float32(1.0), np.float32(1.0),    # %aup, %akeep on the APPLY micro-batch
-                       *dg])
-            n_out = 12
+            arrays = ([*theta, *m0, *v0, *G0] + ([*e0] if ema else []) +
+                      [np.float32(LR), bc1, bc2,
+                       np.float32(1.0), np.float32(1.0)] +  # %aup, %akeep on the APPLY micro-batch
+                      ([np.float32(d), np.float32(1.0 - d)] if ema else []) +
+                      [*dg])
+            n_out = 15 if ema else 12
         else:
             gsum = dg
             arrays = [*theta, *m0, *v0, np.float32(LR), bc1, bc2, *dg]
@@ -320,6 +368,12 @@ def main():
 
         outs = run_render(slug, arrays, n_out)
         rt, rm, rv = run_ref(ref, K, theta, m0, v0, gsum, LR, T)
+        # ⚠⚠ **THE SHADOW TRACKS θ′, NOT θ**, and the reference is where that ordering comes from:
+        # `ema_update(ema_params, params, step)` runs AFTER `train_step` returns the new `params`.
+        # Re-run it here on the reference's OWN θ′ rather than on the input θ — a render wired to
+        # the incoming parameter lags by one step, trains, descends, and is not the reference.
+        if ema:
+            ref_e, _ = run_ref_ema(ref, e0, rt, T - 1)
 
         rels = []
         for i in range(3):
@@ -332,6 +386,12 @@ def main():
             # tail consumed. See this file's header.
             for i in range(3):
                 rels.append(cmp(f"{slug}/G'[{i}] (RAW)", outs[9 + i], gsum[i], worst))
+        if ema:
+            # ⭐⭐ THE FIFTH REGION, against the reference's own `ema_update` applied to the
+            # reference's own θ′. ⚠ It sits at offset 12 and not 9 — `G` before `E` — which is the
+            # region ORDER the driver packs. Swap the two and this is the check that goes red.
+            for i in range(3):
+                rels.append(cmp(f"{slug}/E'[{i}] (shadow)", outs[12 + i], ref_e[i], worst))
         bad = max(rels)
         ok = bad <= RTOL
         failures += 0 if ok else 1

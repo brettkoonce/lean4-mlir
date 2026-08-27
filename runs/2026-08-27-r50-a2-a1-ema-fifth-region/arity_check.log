@@ -1,0 +1,27 @@
+── driver blob vs artifact signature (R50, 161 params, 106 BN slots) ──
+    variant                          reg  scal   #in(want)    #out(want)  scalar tail
+  ✓ acc4x64                           4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ accdp4x64                         4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ accdp8x64                         4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ adam64                            3    3    594( 594)    592( 592)  lr,bc1,bc2
+  ✓ adam64bce                         3    3    594( 594)    592( 592)  lr,bc1,bc2
+  ✓ adamdp64                          3    3    594( 594)    592( 592)  lr,bc1,bc2
+  ✓ emalambacc8x64wxclipbce           5    7    920( 920)    918( 918)  lr,bc1,bc2,aup,akeep,emad,oemad
+  ✓ emalambacc8x64wxclipbcewd001      5    7    920( 920)    918( 918)  lr,bc1,bc2,aup,akeep,emad,oemad
+  ✓ emalambaccdp8x64wxclipbce         5    7    920( 920)    918( 918)  lr,bc1,bc2,aup,akeep,emad,oemad
+  ✓ emalambaccdp8x64wxclipbcewd001    5    7    920( 920)    918( 918)  lr,bc1,bc2,aup,akeep,emad,oemad
+  ✓ lamb64                            3    3    594( 594)    592( 592)  lr,bc1,bc2
+  ✓ lamb64bce                         3    3    594( 594)    592( 592)  lr,bc1,bc2
+  ✓ lambacc8x64wxclipbce              4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ lambacc8x64wxclipbcebf16          4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ lambacc8x64wxclipbcewd001         4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ lambacc8x64wxclipbcewd001bf16     4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ lambaccdp8x64wxclipbce            4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ lambaccdp8x64wxclipbcebf16        4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ lambaccdp8x64wxclipbcewd001       4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ lambaccdp8x64wxclipbcewd001bf16   4    5    757( 757)    755( 755)  lr,bc1,bc2,aup,akeep
+  ✓ mom256                            3    3    594( 594)    592( 592)  lr,bc1,bc2
+  ✓ momdp64                           3    3    594( 594)    592( 592)  lr,bc1,bc2
+  ✓ momdp64bf16                       3    3    594( 594)    592( 592)  lr,bc1,bc2
+
+✓ 23/23 artifacts agree with the driver's packed layout

@@ -366,20 +366,48 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- (`_gsum`) is raw, clipped only on the way into the optimizer. Returning the clipped total
     -- here would compound the clip across the k micro-batches of every cycle — a contraction that
     -- trains and descends and is not the recipe.
-    (accIn : Option String := none) :
-    StateM Nat (String × String × String × String × Option String) := do
+    (accIn : Option String := none)
+    -- ▶▶ **`ema` — the MODEL-EMA shadow, a region of its own** (`planning/ema.md`, lifted onto the
+    -- residual family 2026-08-27 for RSB-A2/A1). One extra op per parameter, emitted AFTER the
+    -- optimizer's own tail because the shadow tracks the UPDATED weight: `e' = %emad·e + %oemad·θ'`.
+    --
+    -- ⭐ It needs NO new `SHlo` constructor. `Proofs.adamMNext b ob m g = b·m + ob·g` instantiated
+    -- at `(b := %emad, ob := %oemad, m := e, g := θ')` denotes exactly the exponential moving
+    -- average, which is the same reading `.adamwAccum`'s accumulator takes of `momVNextF`. So the
+    -- faithfulness theorems carry over untouched and this costs none of the ten-site surgery an
+    -- added op does. `ViTRender.vitAdamOne` has emitted the identical line since `ema.md`.
+    --
+    -- ⚠⚠ **IT READS `nT`, THE UPDATED PARAMETER — NOT `%<p>`.** The reference EMAs the weights
+    -- AFTER the optimizer moves them (`ema_params = ema_update(ema_params, params, step)` follows
+    -- the `train_step` call, `jax/Jax/Codegen.lean:3017`). Reading the incoming θ instead gives a
+    -- shadow lagging by one step — a number that trains, descends and is quietly not the
+    -- reference's.
+    --
+    -- ⚠ **The DECAY is a runtime scalar, not a constant**, because it is warmup-corrected:
+    -- `d = min(decay, (1+t)/(10+t))` moves every step and the driver computes it. Baking 0.9999
+    -- here is the EMA-warmup defect this repo has already paid for once.
+    (ema : Bool := false) :
+    StateM Nat (String × String × String × String × Option String × Option String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let replicas := if preAvg then 1 else replicas
   let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
   let gr : SHlo n := .operand gAvg z
+  -- ⚠ Emitted by every arm below rather than once here, because it consumes each arm's OWN `nT`.
+  -- Hoisting it would need the updated-parameter name before the arm that produces it has run.
+  let emaTail : String → StateM Nat (String × Option String) := fun nT =>
+    if ema then do
+      let (c, nE) ← pretty B (.adamMNextF s!"%{g.nm}e" "%emad" "%oemad" g.ds 0 z (.operand nT z))
+      pure (c, some nE)
+    else pure ("", none)
   match opt with
   | .adamw =>
     let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
     let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
     let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                       "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName g.ds 0 0 0 0 0 0 0 z z z gr)
-    pure (arS ++ cM ++ cV ++ cT, nT, nM, nV, none)
+    let (cE, nE) ← emaTail nT
+    pure (arS ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, none, nE)
   | .lamb =>
     -- ⭐⭐ LAMB, in four ops per parameter, TWO of which are new (`planning/rsb_a3_r50_verified.md`
     -- §2.3 estimated "2–3"; measured at 2, because `gradSumSqAccF` was already here for the clip
@@ -417,7 +445,8 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- the moments themselves, unchanged from `.adamw` — LAMB's m and v ARE Adam's.
     let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
     let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
-    pure (arS ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT, nT, nM, nV, none)
+    let (cE, nE) ← emaTail nT
+    pure (arS ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT ++ cE, nT, nM, nV, none, nE)
   | .adamwAccum _ =>
     -- ⭐ **The whole feature, and it adds exactly ONE op per parameter.**
     --
@@ -450,7 +479,8 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gt)
     let (cT, nT) ← pretty B (.adamWParamF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                       "%b2" "%ob2" "%bc1" "%bc2" "%lr" "%eps" wdName g.ds 0 0 0 0 0 0 0 z z z gt)
-    pure (arS ++ cG ++ cM ++ cV ++ cT, nT, nM, nV, some nG)
+    let (cE, nE) ← emaTail nT
+    pure (arS ++ cG ++ cM ++ cV ++ cT ++ cE, nT, nM, nV, some nG, nE)
   | .lambAccum _ =>
     -- ⭐⭐ **RSB-A3's optimizer.** Structurally: `.adamwAccum`'s ① accumulator, then `.lamb`'s tail
     -- reading `Gt` where it read `g`. Nothing else changes, and nothing new is introduced — no new
@@ -486,7 +516,8 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- the moments, from `Gt`, with `%b1`/`%ob1` computed from `%aup` — passthroughs while accumulating.
     let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gt)
     let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gt)
-    pure (arS ++ cG ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT, nT, nM, nV, some nG)
+    let (cE, nE) ← emaTail nT
+    pure (arS ++ cG ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT ++ cE, nT, nM, nV, some nG, nE)
   | .heavyBall =>
     -- ── Three applications of ops that ALREADY EXIST. No new `SHlo` constructor, so none of the
     -- ten-site surgery (and none of the `StableHLOParse` roundtrip risk) an added op costs.
@@ -509,7 +540,8 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nV z))
     -- `m` rides through untouched, so the packed `[θ|m|v]` signature is shared with `.adamw` and
     -- the driver is byte-identical across variants (the `CnnRender.optTail` `.sgd` convention).
-    pure (arS ++ cD ++ cV ++ cT, nT, s!"%{g.nm}m", nV, none)
+    let (cE, nE) ← emaTail nT
+    pure (arS ++ cD ++ cV ++ cT ++ cE, nT, s!"%{g.nm}m", nV, none, nE)
 
 /-- **Does this parameter get weight decay?** timm's `no_weight_decay` rule, and it is the PLAIN
     RANK TEST with no name carve-out — every 1-D parameter is excluded: BN γ, BN β and every bias.
@@ -638,7 +670,9 @@ def wdVariantMark (opt : R34Opt) (wdStr : String := "") : String :=
   if wdStr.isEmpty || wdStr == optWdDefault opt then "" else "wd" ++ wdStr.replace "." ""
 
 /-- **The WHOLE optimizer stage for a net: the hoisted global-norm clip, then `optOne` per
-    parameter.** Returns `(code, θ', m', v', G')`, with `G'` empty unless the optimizer accumulates.
+    parameter.** Returns `(code, θ', m', v', G', E')`, with `G'` empty unless the optimizer
+    accumulates and `E'` empty unless `ema`. The two are INDEPENDENT — see `VerifiedVariant.nRegions`
+    for why they used to be one slot and what that cost RSB-A2/A1.
 
     ⚠⚠ **THIS IS A FUNCTION SO THAT THE ONE-STEP GATE CAN DRIVE THE SHIPPED PATH.** It was inline in
     `ResNet50RenderB.resnet50TrainStepFaithfulB` until 2026-08-14, which meant the only way to
@@ -669,8 +703,14 @@ def wdVariantMark (opt : R34Opt) (wdStr : String := "") : String :=
     ⚠ At `gradClip := false` NOT ONE `pretty` CALL happens in the clip block, so the fresh-name
     counter does not move and every committed artifact re-renders byte-identically. -/
 def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
-    (wdExclude : Bool := false) (gradClip : Bool := false) (clipNorm : Float := 1.0) :
-    StateM Nat (String × List String × List String × List String × List String) := do
+    (wdExclude : Bool := false) (gradClip : Bool := false) (clipNorm : Float := 1.0)
+    -- ▶▶ **`ema` — the model-EMA shadow region**, threaded straight to `optOne` (2026-08-27).
+    -- TRAILING and defaulted, so every committed R50 artifact re-renders byte-identically and the
+    -- one-step gate's existing call is unchanged.
+    -- ⚠ It is INDEPENDENT of the accumulator: `G` and `E` are two regions, not one slot two
+    -- features share, which is the whole point of the change (`VerifiedVariant.nRegions`).
+    (ema : Bool := false) :
+    StateM Nat (String × List String × List String × List String × List String × List String) := do
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let z1 : Vec 1 := fun _ => 0
   let accK := optAccumK opt
@@ -729,6 +769,7 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
   let mut mNames : List String := []
   let mut vNames : List String := []
   let mut aNames : List String := []
+  let mut eNames : List String := []
   for g in ps do
     -- ⚠ The decay operand comes from the SAME `PGrad` that names the site, so the parameter whose
     -- shape decides exclusion is the parameter being updated — §2e's slot rule. Reading the shape
@@ -738,8 +779,8 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     -- cannot collapse into one.
     let gIn : PGrad :=
       if gradClip then { g with grad := (clipped.lookup g.nm).getD g.grad } else g
-    let (c, nT, nM, nV, nA) ← optOne opt B replicas gIn (r34WdName wdExclude g.nm g.ds)
-                                (preAvg := gradClip) (accIn := accRaw.lookup g.nm)
+    let (c, nT, nM, nV, nA, nE) ← optOne opt B replicas gIn (r34WdName wdExclude g.nm g.ds)
+                                (preAvg := gradClip) (accIn := accRaw.lookup g.nm) (ema := ema)
     code := code ++ c
     thetaN := thetaN ++ [nT]
     mNames := mNames ++ [nM]
@@ -748,7 +789,11 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     -- the FOURTH region of the packed blob — the same shape the EMA renders use, so the driver's
     -- `nRegions = 4` path is reused rather than a second one being written.
     match nA with | some a => aNames := aNames ++ [a] | none => pure ()
-  pure (code, thetaN, mNames, vNames, aNames)
+    -- ⭐ The shadow's output name, present only under `ema`. It becomes the FIFTH region — AFTER
+    -- the accumulator, never instead of it. Region order `[θ|m|v|G|E]` is what keeps every blob
+    -- written before the fifth region existed readable at the index it was written at.
+    match nE with | some e => eNames := eNames ++ [e] | none => pure ()
+  pure (code, thetaN, mNames, vNames, aNames, eNames)
 
 /-- The optimizer's baked constants. `.adamw` is byte-for-byte the committed block; `.heavyBall`
     emits only what it reads, so there are no dead constants in the momentum artifact.
@@ -877,7 +922,19 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     -- parameters up, which ConvNeXt shipped wrong twice. And it must not collide with the driver's
     -- variant predicates: `momdp64bf16` contains no "acc", no "ema", and no "do", so `accOn`/
     -- `emaOn`/`cdOn` all stay false and the region/scalar counts are unchanged (checked).
-    (bf16 : Bool := false) : String :=
+    (bf16 : Bool := false)
+    -- ▶▶ **`ema` — the model-EMA shadow, and it is the ONLY marker that LEADS** (2026-08-27).
+    -- ⚠⚠ **PREFIX, NOT SUFFIX, AND THAT IS FORCED BY THE DRIVER**: `VerifiedVariant.emaOn` is
+    -- `startsWith "ema"` while `accOn` is a substring test, so `lambaccdp8x64wxclipbceema` would
+    -- read as accumulation-only — four regions packed into a five-region graph, i.e. every
+    -- parameter misaligned, with no error anywhere. `tests/TestVariantPredicates.lean` pins both
+    -- directions.
+    -- ⚠ It is LAST in this signature and FIRST in the string, which is the one place in this
+    -- function where those two orders disagree. Parameter position is "newest axis appends" (§2m);
+    -- string position is the driver's predicate. Defaulted, so every committed spelling is
+    -- unchanged — `ema` prepends nothing at `false`.
+    (ema : Bool := false) : String :=
+  (if ema then "ema" else "") ++
   (match opt with
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
    | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp"
@@ -1075,10 +1132,10 @@ here first"
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
-      -- ⚠ R34 renders no accumulation variant, so the fifth component (the accumulator's output
-      -- name) is always `none` here. Dropping it rather than threading it is what keeps every
-      -- committed R34 artifact byte-identical across this change.
-      let (c, nT, nM, nV, _) ← optOne opt B replicas g
+      -- ⚠ R34 renders no accumulation variant and no EMA one, so the fifth and sixth components
+      -- (the accumulator's and the shadow's output names) are always `none` here. Dropping them
+      -- rather than threading them is what keeps every committed R34 artifact byte-identical.
+      let (c, nT, nM, nV, _, _) ← optOne opt B replicas g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]

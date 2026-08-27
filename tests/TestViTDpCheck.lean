@@ -147,11 +147,19 @@ def main (args : List String) : IO Unit := do
   -- must BUILD the blob it feeds rather than assume three regions. Wrong is not a tolerance
   -- question: PJRT refuses on the buffer count (§2m's `expected 265 buffers`). Selected from the
   -- SINGLE-device path, which is the one whose bytes name the layout both sides share.
-  -- ⚠ Substring, not `startsWith` — the `emarms` lesson (`planning/ema.md`): a prefix test on a
-  -- name that encodes two axes fails quietly.
-  let emaOn := ((args[1]?.getD "").splitOn "ema").length > 1
-  let nRegions := if emaOn then 4 else 3
-  let nScalars := if emaOn then 5 else 3
+  -- ⚠⚠ **THESE THREE ARE THE DRIVER'S OWN, NOT A TRANSCRIPTION OF THEM (2026-08-27).** They read
+  -- `let emaOn := …; let nRegions := if emaOn then 4 else 3` — this file's private copy of what
+  -- `trainAdamSched` computes, which is precisely the drift `tests/TestVariantPredicates.lean`'s
+  -- header warns about one level up: *a gate on a transcription is not a gate on the thing
+  -- transcribed*. Two things had gone wrong by the time it was noticed:
+  --   ⛔ the copy was a SUBSTRING test where `VerifiedVariant.emaOn` is a PREFIX one, so `adamema…`
+  --      would have made this harness build four regions for a graph the driver feeds three;
+  --   ⛔ the copy is frozen at `4 else 3`, and the region count became **3, 4 or 5** the day EMA and
+  --      gradient accumulation stopped sharing a slot (`VerifiedVariant.nRegions`, RSB-A2/A1).
+  -- Neither is reachable from the variants this gate runs today. Both are one variant string away.
+  let emaOn := VerifiedVariant.emaOn (args[1]?.getD "")
+  let nRegions := VerifiedVariant.nRegions (args[1]?.getD "")
+  let nScalars := VerifiedVariant.nScalars (args[1]?.getD "")
   let dpPath := args[0]?.getD "verified_mlir/vit_adamdp_train_step.mlir"
   let sgPath := args[1]?.getD "verified_mlir/vit_adam_train_step.mlir"
   let bs := (args[2]?.bind (·.toNat?)).getD 32

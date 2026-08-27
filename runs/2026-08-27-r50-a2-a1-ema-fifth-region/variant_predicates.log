@@ -1,0 +1,77 @@
+── variant predicates ──
+  adam — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adamdp — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adam64 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adam128 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adamdp64 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adamdp32x4 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adamdp128x4 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  mom — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  mom256 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  momdp64 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  sgd — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  rms — ema=false rms=true drop=false dropout=false accum=false → 3 blob regions
+  rms64 — ema=false rms=true drop=false dropout=false accum=false → 3 blob regions
+  rmsdp64 — ema=false rms=true drop=false dropout=false accum=false → 3 blob regions
+  ema — ema=true rms=false drop=false dropout=false accum=false → 4 blob regions
+  emadp — ema=true rms=false drop=false dropout=false accum=false → 4 blob regions
+  ema128 — ema=true rms=false drop=false dropout=false accum=false → 4 blob regions
+  emadp128x4 — ema=true rms=false drop=false dropout=false accum=false → 4 blob regions
+  emarms — ema=true rms=true drop=false dropout=false accum=false → 4 blob regions
+  emarms64 — ema=true rms=true drop=false dropout=false accum=false → 4 blob regions
+  emarmsdp64 — ema=true rms=true drop=false dropout=false accum=false → 4 blob regions
+  adamdrop — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  adamdpdrop — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  rmsdpdrop64 — ema=false rms=true drop=true dropout=false accum=false → 3 blob regions
+  emarmsdrop64 — ema=true rms=true drop=true dropout=false accum=false → 4 blob regions
+  adamwx — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adam128wx — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adamdp128x4wx — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  emawx — ema=true rms=false drop=false dropout=false accum=false → 4 blob regions
+  emarmswx — ema=true rms=true drop=false dropout=false accum=false → 4 blob regions
+  adamdropwx — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  emarmsdrop64wx — ema=true rms=true drop=true dropout=false accum=false → 4 blob regions
+  adamclip — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adamwxclip — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adam128wxclip — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adamdp128x4wxclip — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  adamdpwxclip — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  emaclip — ema=true rms=false drop=false dropout=false accum=false → 4 blob regions
+  emarmsclip — ema=true rms=true drop=false dropout=false accum=false → 4 blob regions
+  adamdropclip — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  emarmsdrop64wxclip — ema=true rms=true drop=true dropout=false accum=false → 4 blob regions
+  adamwxclipdrop — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  adamdpwxclipdrop — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  adamdpdrop — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  emawxclipdrop — ema=true rms=false drop=true dropout=false accum=false → 4 blob regions
+  adam128wxclipdrop — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  adamdp128x4drop — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  adam64drop — ema=false rms=false drop=true dropout=false accum=false → 3 blob regions
+  adamdo — ema=false rms=false drop=false dropout=true accum=false → 3 blob regions
+  emarms64dropdo — ema=true rms=true drop=true dropout=true accum=false → 4 blob regions
+  emarms64drop — ema=true rms=true drop=true dropout=false accum=false → 4 blob regions
+  rmsdo64 — ema=false rms=true drop=false dropout=true accum=false → 3 blob regions
+  emalambaccdp8x64wxclipbce — ema=true rms=false drop=false dropout=false accum=true k=8 → 5 blob regions
+  emalambacc8x64wxclipbce — ema=true rms=false drop=false dropout=false accum=true k=8 → 5 blob regions
+  emalambaccdp8x64wxclipbcewd001 — ema=true rms=false drop=false dropout=false accum=true k=8 → 5 blob regions
+  emaaccdp4x64 — ema=true rms=false drop=false dropout=false accum=true k=4 → 5 blob regions
+  emaacc4x64 — ema=true rms=false drop=false dropout=false accum=true k=4 → 5 blob regions
+  acc4x64 — ema=false rms=false drop=false dropout=false accum=true k=4 → 4 blob regions
+  accdp8x64 — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  acc2x128 — ema=false rms=false drop=false dropout=false accum=true k=2 → 4 blob regions
+  lambacc8x64bce — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambaccdp8x64bce — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambacc4x64bce — ema=false rms=false drop=false dropout=false accum=true k=4 → 4 blob regions
+  lambaccdp4x64 — ema=false rms=false drop=false dropout=false accum=true k=4 → 4 blob regions
+  lambacc8x64wxclipbce — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambaccdp8x64wxclipbce — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambaccdp8x64wxclipbcewd001 — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambacc8x64wxclipbcewd001 — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambaccdp8x64wxclipbcebf16 — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambacc8x64wxclipbcebf16 — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambaccdp8x64wxclipbcewd001bf16 — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  lambacc8x64wxclipbcewd001bf16 — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
+  momdp64bf16 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  lamb64 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+  lambdp64 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
+✓ 75 variant spellings, 5 axes, no collision

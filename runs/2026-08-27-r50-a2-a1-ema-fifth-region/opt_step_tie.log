@@ -1,0 +1,12 @@
+── one-step optimizer tie (planning/verified_optimizer_parity.md §5) ──
+  ‖Gt‖ = 68.465   (clip threshold k·C; the clip is ACTIVE in every clip row)
+  ✓ lambclip         K=1  ref=r50.py  worst rel 8.71e-08
+  ✓ lambwxclip       K=1  ref=r50_a2accum.py  worst rel 8.71e-08
+  ✓ lambacc4wxclip   K=4  ref=r50_a2accum.py  worst rel 1.09e-07
+  ✓ lambacc8wxclip   K=8  ref=r50_a2accum.py  worst rel 1.09e-07
+  ✓ lambacc8wxclipwd001 K=8  ref=r50_a1.py  worst rel 1.09e-07
+  ✓ adamwxclipwd002  K=1  ref=r50_adamprobe.py  worst rel 8.71e-08
+  ✓ emalambacc8wxclip K=8  ref=r50_a2accum.py  worst rel 1.20e-07
+
+  worst 3: emalambacc8wxclip/E'[0] (shadow) 1.20e-07, lambacc8wxclipwd001/v'[0] 1.09e-07, lambacc8wxclip/v'[0] 1.09e-07
+✓ 7 variants agree with the shipped reference within rtol 2e-06

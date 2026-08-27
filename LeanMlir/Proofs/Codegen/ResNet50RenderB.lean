@@ -602,7 +602,25 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- NAME is derived from the variant, and a flag that reaches the emission but not the name
     -- writes `…bf16_train_step.mlir` declaring `@…_train_step` inside — the driver then refuses
     -- at load with an entry mismatch. ConvNeXt shipped that twice; R34's bf16 made it three.
-    (bf16 : Bool := false) : String :=
+    (bf16 : Bool := false)
+    -- ▶▶▶ **`ema` — MODEL EMA, THE FIFTH REGION** (`verified_side_quest_counterparts.md` §6a,
+    -- 2026-08-27). The blob becomes `[θ|m|v|G|E]` and the scalar tail `lr,bc₁,bc₂,aup,akeep,emad,oemad`.
+    --
+    -- ⚠⚠ **THIS IS THE PARAMETER RSB-A2 AND RSB-A1 COULD NOT BE RENDERED WITHOUT**, and the reason
+    -- is worth keeping: `resnet50ImagenetConfigA2Accum` sets `useEMA := true` AND
+    -- `gradAccumSteps := 4`, and until this landed the shadow and the accumulator were the SAME
+    -- fourth region — `VerifiedTrain.lean` threw on the pairing rather than letting one win. A3 met
+    -- neither obstacle because A3's own recipe sets `useEMA := false`, which is exactly why the
+    -- limitation was invisible from A3's success.
+    --
+    -- ⭐ It costs ONE op per parameter and no new `SHlo` constructor — see `optOne`'s `ema` note.
+    -- ⚠ `E` comes AFTER `G`, never instead of it: at `acc` alone the accumulator is still region 3
+    -- and at `ema` alone the shadow is still region 3, so no previously-written blob moves.
+    -- ⚠ It MUST reach `r34AdamVariant` — the `wx`/`clip`/`bf16` rule three parameters up, and here
+    -- the stakes are higher than an entry mismatch: the marker is what tells the DRIVER to pack
+    -- five regions, so a flag that stopped at the emission would produce a five-region graph the
+    -- driver feeds four regions to.
+    (ema : Bool := false) : String :=
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
@@ -753,8 +771,8 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- accumulation), and for why it is a function at all: `tests/TestOptStepFixtures.lean` drives
     -- the SAME call for `planning/verified_optimizer_parity.md` §5's one-step update gate, so the
     -- gate exercises this emission rather than a second copy of it. ═══
-    let (adamCode, thetaN, mNames, vNames, aNames) ←
-      optAllParams opt B replicas allPs wdExclude gradClip clipNorm
+    let (adamCode, thetaN, mNames, vNames, aNames, eNames) ←
+      optAllParams opt B replicas allPs wdExclude gradClip clipNorm ema
     let statCode := cSt0 ++ cSt1 ++ cSt2 ++ cSt3 ++ cSt4 ++ cSt5 ++ cSt6 ++ cSt7 ++ cSt8 ++
       cSt9 ++ cSt10 ++ cSt11 ++ cSt12 ++ cSt13 ++ cSt14 ++ cSt15 ++ cSt16
     let statNames := st0.1 :: st0.2 :: (st1 ++ st2 ++ st3 ++ st4 ++ st5 ++ st6 ++ st7 ++ st8 ++
@@ -815,10 +833,21 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- shadow sits (fourth region) and the two accum scalars where EMA's two sit (slots 4 and 5).
     -- `%aup`/`%akeep` ride out as passthroughs so `#out = #in − 2` holds exactly as for `.adamw`.
     let accScalars := if accOn then ["%aup", "%akeep"] else []
-    let accScalarTys := accScalars.map (fun _ => "tensor<f32>")
-    let retVals := thetaN ++ mNames ++ vNames ++ aNames ++
-      ["%loss", "%bc1", "%bc2"] ++ accScalars ++ statNames
+    -- ⭐ The EMA pair rides out as a passthrough exactly as `%aup`/`%akeep` do, so `#out = #in − 2`
+    -- holds at every combination of the two axes rather than only at one of them.
+    -- ⚠⚠ **AND THE DECAY IS A RUNTIME SCALAR, WHICH IS WHAT MAKES THE ACCUMULATE PHASE EXPRESSIBLE
+    -- WITHOUT A SECOND GRAPH.** The reference EMAs once per OPTIMIZER step, not once per
+    -- micro-batch (`ema_update` follows the `train_step` call, and JAX's accumulation is INSIDE
+    -- that call), so on an accumulate micro-batch this graph must leave the shadow exactly alone.
+    -- The driver supplies `%emad = 1, %oemad = 0` there, which is `e' = 1·e + 0·θ' = e` — the same
+    -- arithmetic-not-branching trick `%aup` plays on the moments. Baking the decay would have
+    -- forced either a second artifact or an EMA running k times per optimizer step.
+    let emaScalars := if ema then ["%emad", "%oemad"] else []
+    let accScalarTys := (accScalars ++ emaScalars).map (fun _ => "tensor<f32>")
+    let retVals := thetaN ++ mNames ++ vNames ++ aNames ++ eNames ++
+      ["%loss", "%bc1", "%bc2"] ++ accScalars ++ emaScalars ++ statNames
     let retTys  := pTypes ++ pTypes ++ pTypes ++ (if accOn then pTypes else []) ++
+      (if ema then pTypes else []) ++
       ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accScalarTys ++ statTypes
     pure <|
       (if replicas ≤ 1 then
@@ -839,20 +868,28 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   -- optimizer this is the empty string, so the three committed R50 artifacts re-render byte for byte.
   let aSig := if accOn then ", " ++ String.intercalate ", "
                               (sigList.map (fun (n, t) => s!"{n}a: {t}")) else ""
-  let accSSig := if accOn then ", %aup: tensor<f32>, %akeep: tensor<f32>" else ""
+  -- The shadow region `E`, named `<p>e`, present only under `ema`. ⚠ It follows `aSig` and never
+  -- precedes it — the `[θ|m|v|G|E]` order the driver packs, and the order that leaves both
+  -- single-axis layouts at the index they already occupy.
+  let eSig := if ema then ", " ++ String.intercalate ", "
+                              (sigList.map (fun (n, t) => s!"{n}e: {t}")) else ""
+  let accSSig := (if accOn then ", %aup: tensor<f32>, %akeep: tensor<f32>" else "") ++
+                 (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "")
   let statSig := String.intercalate ", " (r50StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
-  let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++ aSig ++
+  let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
+    aSig ++ eSig ++
     ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++ accSSig ++ ", " ++ statSig ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
-  let accTy := if accOn then ["tensor<f32>", "tensor<f32>"] else []
+  let accTy := (if accOn then ["tensor<f32>", "tensor<f32>"] else []) ++
+               (if ema then ["tensor<f32>", "tensor<f32>"] else [])
   let outSig := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ (if accOn then pTy else []) ++
+    (pTy ++ pTy ++ pTy ++ (if accOn then pTy else []) ++ (if ema then pTy else []) ++
      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accTy ++ (r50StatSigList.map (·.2)))
   let inner : String := go.run' 0
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
-  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip bce wdStr bf16}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip bce wdStr bf16 ema}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1527,6 +1564,86 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (bf16 := true))
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- § RSB-A2 and A1 **WITH THE MODEL-EMA SHADOW** — the five-region renders, 2026-08-27.
+--
+-- ⭐⭐⭐ **THIS IS WHAT THE `⛔ MODEL EMA … STRUCTURALLY IMPOSSIBLE HERE` NOTE ABOVE WAS OWED.**
+-- It read: *"lifting it means a fifth region in the driver's pack/unpack and in every optimizer's
+-- return list — not a flag."* That is exactly what landed. The shadow and the accumulator are now
+-- two regions rather than one slot two features claim, `[θ|m|v|G|E]`, and `emaOn`/`accOn` are
+-- independent axes of `VerifiedVariant.nRegions` (3, 4 or 5).
+--
+-- ⚠⚠ **THE `ema` MARKER LEADS, and that is forced rather than chosen.** `VerifiedVariant.emaOn`
+-- is a PREFIX test while `accOn` is a substring one, so `lambaccdp8x64wxclipbceema` would read as
+-- accumulation-only — the driver would pack four regions into a five-region graph, misaligning
+-- every parameter with no error anywhere. `tests/TestVariantPredicates.lean` pins both directions.
+--
+-- ⭐ **The composition is MEASURED, not merely rendered.** `scripts/opt_step_tie.py`'s
+-- `emalambacc8wxclip` row runs `generated_resnet50_imagenet_a2accum.py`'s OWN `ema_update` against
+-- the `E` slot this emits: **1.20e-07** against rtol 2e-6. Its controls, run the same session
+-- (`runs/2026-08-27-r50-a2-a1-ema-fifth-region/`): a shadow reading the INCOMING θ rather than θ′
+-- reads 1.14e-02, and the swapped region order reads 1.9e+01. Both are the defects a code reading
+-- cannot rule out.
+--
+-- ⚠ **ONE A2 DELTA REMAINS AND IT IS NOT THIS ONE**: stochastic depth `dropPath := 0.05` still has
+-- no importer on the residual family (neither `ResNet34RenderB` nor `ResNet50RenderB` imports
+-- `DropPath.lean`, and `r34AdamVariant` has no `drop` marker). So these are A2's graph minus ONE
+-- regulariser rather than minus two. Ghost-BN group 64-vs-128 is unchanged. Quote them the way
+-- A3's deltas are quoted.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp8x64wxclipbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true))
+-- ⚠ The 1-replica peer, for `r50-accum-tie`/`r50-accum-shard-tie`'s reason: a DP-only render is
+-- ungateable, because both gates compare a DP render against a single-device one.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc8x64wxclipbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true))
+
+-- ── …and RSB-A1's pair, which differs in the BAKED `%wd` alone (0.01 against A2's 0.02). ───────
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp8x64wxclipbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc8x64wxclipbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true))
+
+-- ⚠⚠ **NO bf16 TWINS HERE, AND THAT IS A DECISION RATHER THAN AN OMISSION.** §4c's own complaint
+-- is that a tier shipping without its precision peer "reads as a decision and is really an accident
+-- of ordering", and the A2/A1 fp32×bf16 square above was rendered in one pass for exactly that
+-- reason. The EMA pair is different: the shadow's arithmetic is `e' = d·e + (1−d)·θ′` on MASTER
+-- weights, which stay f32 in every bf16 render in this tree — so a bf16 twin of these would differ
+-- from the fp32 twin in no line of the EMA block at all, while doubling the artifacts a coverage
+-- gate has to carry. ▶ Render them the day a bf16 A2 run is actually scheduled, not before.
+
+-- ⚠ THE FOUR EMA SPELLINGS, pinned on the PRODUCING side like every one below them. The `ema`
+-- prefix is the OUTERMOST marker any name in this file carries, and it goes in FRONT of a string
+-- that already holds five — so it is run rather than reasoned about.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "" false true == "emalambaccdp8x64wxclipbce"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "" false true == "emalambacc8x64wxclipbce"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" false true == "emalambaccdp8x64wxclipbcewd001"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" false true == "emalambacc8x64wxclipbcewd001"
+-- ⚠⚠ **AND THE MARKER MUST LEAD.** This is the counterfactual, and it is the one that is silent:
+-- a trailing `ema` produces a name the driver reads as four regions, so the graph gets a blob one
+-- region short and every parameter after θ is misaligned. Nothing throws.
+#guard "emalambaccdp8x64wxclipbce".startsWith "ema"
+#guard ("lambaccdp8x64wxclipbceema".startsWith "ema") == false
+-- ⚠ and the prefix must disturb none of the four axes it is not: `ema` ++ `lamb` spells `emalamb`,
+-- which contains no "rms", no "drop" and no "do".
+#guard ("emalambaccdp8x64wxclipbce".splitOn "rms").length == 1
+#guard ("emalambaccdp8x64wxclipbce".splitOn "drop").length == 1
+#guard ("emalambaccdp8x64wxclipbce".splitOn "do").length == 1
+#guard ("emalambaccdp8x64wxclipbce".splitOn "acc").length > 1
+-- ▶ `nRegions`/`nScalars`/`emaRegion` are the CONSUMING side and live in `VerifiedTrain.lean`,
+-- which imports this file — pinned for these names in `tests/TestVariantPredicates.lean`.
 
 -- ⚠ THE FOUR NEW SPELLINGS, pinned on the PRODUCING side like every one above them. Two of these
 -- (`lambaccdp8x64wxclipbce`, `lambacc8x64wxclipbce`) are already guarded further up — they are the

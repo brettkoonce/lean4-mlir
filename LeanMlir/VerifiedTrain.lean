@@ -1177,11 +1177,26 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     throw <| IO.userError s!"variant '{variant}' contains 'acc' but no accumulation count could \
 be read from it — the name must spell acc<k>x<B> or accdp<k>x<B> (optionally after an optimizer \
 name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendered for"
-  -- ⚠ Both want the fourth region. Silently letting one win would put the EMA shadow and the
-  -- gradient accumulator in the same slots.
-  if emaOn && accOn then
-    throw <| IO.userError "variant selects BOTH the EMA shadow and gradient accumulation, and they \
-occupy the same fourth region of [θ|m|v|·]. Render one or the other."
+  -- ⭐⭐⭐ **THE REFUSAL IS GONE (2026-08-27), AND IT WAS THE LAST THING LIFTED.**
+  --
+  -- It read: *"variant selects BOTH the EMA shadow and gradient accumulation, and they occupy the
+  -- same fourth region of [θ|m|v|·]. Render one or the other."* True when written, and it is what
+  -- made RSB-A2 and RSB-A1 unrenderable — their recipe sets `useEMA := true` AND
+  -- `gradAccumSteps := 4`, and accumulation is not optional at 224² on 16 GB cards. A3 met neither
+  -- obstacle because A3's own recipe sets `useEMA := false`, which is exactly why the limitation
+  -- was invisible from A3's success (`verified_side_quest_counterparts.md` §4a, §6a).
+  --
+  -- What replaced it: `G` and `E` are two INDEPENDENT regions in the order `[θ|m|v|G|E]`, so
+  -- `nRegions` is 3, 4 or 5 and `nScalars` 3, 5 or 7. `VerifiedVariant.emaRegion` is where the
+  -- shadow's index comes from — never the literal 3, which is what it was under the old layout.
+  --
+  -- ⚠⚠ **THE ORDER THIS WAS LIFTED IN IS LOAD-BEARING, and is recorded because the reverse is
+  -- tempting.** While the throw stood, a wrong render failed LOUDLY at load. The moment it came
+  -- off, an EMA-plus-accumulation graph whose regions are packed wrongly TRAINS and reports a
+  -- number. So the fifth region landed in the renderer, in this driver's pack/unpack, in
+  -- `TestVariantPredicates`' three-way partition and in `opt_step_tie.py`'s `emalambacc8wxclip`
+  -- row — measured at 1.20e-07 against the reference's own `ema_update` — BEFORE this line was
+  -- deleted, not after.
   let nRegions := VerifiedVariant.nRegions variant
   let nScalars := VerifiedVariant.nScalars variant
   -- "…drop" = the STOCHASTIC-DEPTH render (`planning/stochastic_depth.md`): the graph takes one
@@ -1342,13 +1357,18 @@ TF convention — this optimizer is not bias-corrected)"
 (PER-ELEMENT, one Bernoulli per example×feature — not per-example like the drop scales), \
 host-drawn per step at seed+999983, 1/keep folded in. Eval is the identity (drop-free forward)."
   if emaOn then
-    IO.println s!"  ▸ EMA: 4th blob region [θ|m|v|ema], shadow starts AT the weights, decay \
-min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW."
+    -- ⚠ It names the region INDEX, not "the 4th", because under accumulation it is the 5th — and a
+    -- banner that says the wrong slot is worse than none when the failure mode is a mis-sliced blob.
+    IO.println s!"  ▸ EMA: region {(VerifiedVariant.emaRegion variant).getD 3} of {nRegions} \
+[θ|m|v{if accOn then "|G" else ""}|ema], shadow starts AT the weights, decay \
+min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW.\
+{if accOn then " ⚠ It advances on APPLY micro-batches only — once per optimizer step, as the reference does." else ""}"
   if accOn then
     -- ⚠⚠ IT ANNOUNCES ITSELF, and here that is not politeness either: a run with the wrong `k`
     -- prints an entirely normal loss curve at a silently wrong effective batch and learning rate.
     -- §6's rule — "a setting with no output and no gate is a setting that can be silently wrong".
-    IO.println s!"  ▸ GRADIENT ACCUMULATION: k = {accK}, 4th blob region [θ|m|v|G]. Micro-batch \
+    IO.println s!"  ▸ GRADIENT ACCUMULATION: k = {accK}, blob region 3 of {nRegions} \
+[θ|m|v|G{if emaOn then "|ema" else ""}]. Micro-batch \
 {gbs} x {accK} = EFFECTIVE BATCH {gbs * accK}. {nb} micro-batches/epoch = {nb / accK} updates/epoch; \
 the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on \
 micro-batches."
@@ -1386,11 +1406,13 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
     -- split (§5b's defect, the half that made replication type-check).
     ++ (if cdOn then #[#[gbs, doWidth]] else #[])
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
-                                -- the FOURTH region: the EMA shadow, or the gradient accumulator.
+                                -- the FOURTH and FIFTH regions: the gradient accumulator `G` and
+                                -- the EMA shadow `E`, INDEPENDENT and in that order.
                                 -- ⚠ The G4 gated interface counts destinations off THIS list, so
-                                -- omitting it does not mis-walk the blob quietly — the shim refuses
+                                -- omitting one does not mis-walk the blob quietly — the shim refuses
                                 -- ("returns 755 outputs, caller supplied 594 destinations").
-                                ++ (if emaOn || accOn then net.paramShapes else #[])
+                                ++ (if accOn then net.paramShapes else #[])
+                                ++ (if emaOn then net.paramShapes else #[])
                                 ++ Array.replicate nScalars #[]
                                 ++ (if hasBn then bnStatShapes else #[])
                                 ++ dropShapes)
@@ -1461,8 +1483,12 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   -- ACCUMULATOR starts at ZERO — and it would be harmless at any value, because `%akeep = 0` on
   -- the first micro-batch of every cycle discards whatever is there. Zero anyway, so a checkpoint
   -- written mid-cycle resumes from something meaningful rather than from a stale partial sum.
+  -- ⚠⚠ **`if emaOn then … else if accOn then …` UNTIL 2026-08-27, i.e. an EITHER/OR** — which is
+  -- what made RSB-A2/A1 unrenderable, since their recipe wants both. Now two independent regions in
+  -- the order `[θ|m|v|G|E]`, and the order is what keeps every previously-written blob readable:
+  -- at `acc` alone `G` is still region 3, at `ema` alone `E` is still region 3.
   let mut thetamv := F32.concat (#[theta, zeros, msInit] ++
-    (if emaOn then #[theta] else if accOn then #[zeros] else #[]))
+    (if accOn then #[zeros] else #[]) ++ (if emaOn then #[theta] else #[]))
   let mvBytes := nRegions * net.nParams * 4
   let pBytes := net.nParams * 4
   -- Running BN stats (EMA of per-layer batch mean/var; mom 1.0 on the first step to seed,
@@ -1774,9 +1800,23 @@ gate's control, not a configuration.")
       -- `t` is the reference's 0-BASED `_global_step`, i.e. `gstep - 1` here.
       let emaD := min emaDecay ((gstep - 1.0 + 1.0) / (gstep - 1.0 + 10.0))
       if emaOn then
+        -- ⚠⚠ **THE SHADOW MOVES ONCE PER OPTIMIZER STEP, NOT ONCE PER MICRO-BATCH**, and under
+        -- accumulation those differ by a factor of `k`. The reference EMAs after the `train_step`
+        -- call (`jax/Jax/Codegen.lean:3017`) and JAX's accumulation lives INSIDE that call, so one
+        -- `ema_update` covers all k micro-batches. This driver invokes the graph per micro-batch,
+        -- so on an accumulate micro-batch it must hand the graph the IDENTITY: `%emad = 1`,
+        -- `%oemad = 0` gives `e' = 1·e + 0·θ' = e` exactly.
+        -- ▶ Not merely a k× faster filter if got wrong: θ is FROZEN on accumulate micro-batches
+        -- (`%lr = 0`), so k−1 of every k updates would pull the shadow toward a weight that had not
+        -- moved — a different, slower filter that still descends and still prints a curve.
+        -- ⭐ Arithmetic, not a branch, and the same trick `%aup` plays on the moments: one graph,
+        -- one compile, no way for an "accumulate" and an "apply" render to drift.
+        let (ed, oed) := if applyNow then (emaD, 1.0 - emaD) else (1.0, 0.0)
         let emaPair ← F32.const 3 0.0
-        let emaPair ← F32.write3 emaPair 0 emaD (1.0 - emaD) 0.0
-        pbuf ← F32.blit pbuf (nRegions * net.nParams + 3).toUSize emaPair 0 2
+        let emaPair ← F32.write3 emaPair 0 ed oed 0.0
+        -- ⚠ `emaScalarOff`, not the literal 3: behind `%aup`/`%akeep` the pair starts at slot 5.
+        pbuf ← F32.blit pbuf
+                 (nRegions * net.nParams + VerifiedVariant.emaScalarOff variant).toUSize emaPair 0 2
       if hasBn then
         pbuf ← F32.blit pbuf (nRegions * net.nParams + nScalars).toUSize runningBnStats 0 nBnStats.toUSize
       -- ▶ STOCHASTIC DEPTH: draw this step's per-example keep scales and blit them into the
@@ -1964,7 +2004,11 @@ gate's control, not a configuration.")
         -- most recent steps' activations, and the two do not describe the same network.
         -- ⚠ Same `emaD` as the parameter shadow — one definition of the decay per step. `F32.ema`
         -- takes the NEW-value weight, so it is `1 − d`.
-        if emaOn then
+        -- ⚠ GATED ON `applyNow` for the parameter shadow's reason, one line up in the reference:
+        -- `ema_bn = ema_update(ema_bn, bn_state, _global_step)` sits beside `ema_params`' update and
+        -- fires on the same cadence. The running stats themselves DO move per micro-batch — that is
+        -- what `bnMom`'s k-th-root compensation above is for — but their shadow does not.
+        if emaOn && applyNow then
           emaBnStats ← F32.ema emaBnStats runningBnStats (1.0 - emaD)
         bnFirst := false
       pbuf := out   -- no copy: the output buffer becomes the next step's input
@@ -1996,8 +2040,11 @@ gate's control, not a configuration.")
     -- ⚠ Nothing in the `[θ|m|v]` residency gate can see this slice — eval-only state is
     -- structurally invisible to it, exactly as hold-mode is (§2d.3). Its gate is the accuracy
     -- trajectory: the shadow must TRACK THEN EXCEED the live weights, never start near chance.
-    let thetaCur := thetamv.extract (if emaOn then 3 * pBytes else 0)
-                                    (if emaOn then 4 * pBytes else pBytes)
+    -- ⚠⚠ **`emaRegion`, NOT THE LITERAL 3.** Under accumulation the shadow is region FOUR, because
+    -- `G` takes three — and a stale literal here does not fail, it scores the GRADIENT ACCUMULATOR
+    -- as if it were weights and prints a plausible-looking percentage off it.
+    let emaReg := (VerifiedVariant.emaRegion variant).getD 0
+    let thetaCur := thetamv.extract (emaReg * pBytes) ((emaReg + 1) * pBytes)
     -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.
     let evalSess := if useRunning then fwdEvalSess else fwdSess
     let evalFn := if useRunning then s!"m.{net.slug}_fwd_eval" else fwdFn
@@ -2123,15 +2170,20 @@ from the run's own.\n\
   -- The region to score. ⚠ `"ema"` on a variant with no fourth region is a REFUSAL and not a
   -- fallback to live: the request and the artifact disagree, and quietly answering the other
   -- question is how a live-weight number gets quoted as a shadow one.
+  -- ⚠⚠ **`emaRegion`, NOT THE LITERAL 3** (2026-08-27). Under accumulation the gradient
+  -- accumulator takes region 3 and the shadow is region 4, so a hardcoded index here scores `G`
+  -- as if it were weights — a plausible-looking percentage off a running gradient sum, which is the
+  -- exact failure class this function's BN blocker exists to prevent one line down.
   let regIdx ← match region with
-    | "auto" => pure (if emaOn then 3 else 0)
+    | "auto" => pure ((VerifiedVariant.emaRegion variant).getD 0)
     | "live" => pure 0
     | "ema"  =>
-      if !emaOn then
+      match VerifiedVariant.emaRegion variant with
+      | none =>
         throw <| IO.userError s!"region 'ema' asked of variant '{variant}', which has no EMA \
-shadow — its blob is {nRegions} regions [θ|m|v] and there is nothing in slot 4 to score. Use \
+shadow — its blob is {nRegions} regions and there is no shadow slot to score. Use \
 'live', or score a checkpoint written by an ema* variant."
-      else pure 3
+      | some i => pure i
     | r => throw <| IO.userError s!"unknown region '{r}' — one of auto | live | ema"
   -- Forward resolution, IDENTICAL to `trainAdamSched`'s: the per-variant `_fwd` wins when it
   -- exists, `<slug>_fwd.mlir` is the fallback. ⚠ The FUNCTION is `@<slug>_fwd` either way — the
@@ -2162,11 +2214,12 @@ off @{net.slug}_fwd"
   if thetamv.size != mvBytes then
     throw <| IO.userError s!"checkpoint {ckptPath} is {thetamv.size} bytes but variant \
 '{variant}' wants {mvBytes} ({nRegions} regions x {net.nParams} params x 4). It was written by a \
-different blob layout — most likely across the EMA/accumulation boundary, since those variants \
-carry a 4th region."
+different blob layout — most likely across the EMA/accumulation boundary, since accumulation \
+adds a 4th region and the EMA shadow a 5th."
   let theta := thetamv.extract (regIdx * pBytes) ((regIdx + 1) * pBytes)
   IO.println s!"  region {regIdx} of {nRegions} \
-({if regIdx == 3 then "the EMA SHADOW" else "the live weights"}), {net.nParams} params"
+({if VerifiedVariant.emaRegion variant == some regIdx then "the EMA SHADOW" else "the live weights"}), \
+{net.nParams} params"
   (← IO.getStdout).flush
   let sess ← mkSession fwdPath
   -- ⚠ `evalOnly := true` — this tool never touches the train split, and on Imagenette reading it

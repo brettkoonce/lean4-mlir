@@ -69,9 +69,19 @@ def main (args : List String) : IO Unit := do
   let replicas := ((← IO.getEnv "DP_REPLICAS").bind (·.toNat?)).getD 2
   let vSg := (← IO.getEnv "DP_VARIANT").getD "adam"
   let vDp := (← IO.getEnv "DP_VARIANT_DP").getD "adamdp"
-  let emaOn := vSg.startsWith "ema"
-  let nRegions := if emaOn then 4 else 3
-  let nScalars := if emaOn then 5 else 3
+  -- ⚠⚠ **THESE THREE ARE THE DRIVER'S OWN, NOT A TRANSCRIPTION OF THEM (2026-08-27).** They read
+  -- `let emaOn := …; let nRegions := if emaOn then 4 else 3` — this file's private copy of what
+  -- `trainAdamSched` computes, which is precisely the drift `tests/TestVariantPredicates.lean`'s
+  -- header warns about one level up: *a gate on a transcription is not a gate on the thing
+  -- transcribed*. Two things had gone wrong by the time it was noticed:
+  --   ⛔ the copy was a SUBSTRING test where `VerifiedVariant.emaOn` is a PREFIX one, so `adamema…`
+  --      would have made this harness build four regions for a graph the driver feeds three;
+  --   ⛔ the copy is frozen at `4 else 3`, and the region count became **3, 4 or 5** the day EMA and
+  --      gradient accumulation stopped sharing a slot (`VerifiedVariant.nRegions`, RSB-A2/A1).
+  -- Neither is reachable from the variants this gate runs today. Both are one variant string away.
+  let emaOn := VerifiedVariant.emaOn vSg
+  let nRegions := VerifiedVariant.nRegions vSg
+  let nScalars := VerifiedVariant.nScalars vSg
   let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   -- The DP render is overridable so a deliberately-broken one can be fed in. That is not a
   -- convenience: a gate nobody has seen go red is an assertion. §2b-quater's control — the `%arn`

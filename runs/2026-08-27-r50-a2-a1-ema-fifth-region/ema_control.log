@@ -1,0 +1,5 @@
+  rtol gate                                 2e-06
+  TEST     E' vs ema_update(e0, theta')     1.20e-07
+  CONTROL a  E' vs ema_update(e0, theta)    1.14e-02   <- one-step lag
+  CONTROL b  E' read at offset 9 (G's slot) 1.91e+01   <- swapped region order
+  CONTROL c  G' read at offset 12 (E's slot)1.01e+00   <- swapped region order
