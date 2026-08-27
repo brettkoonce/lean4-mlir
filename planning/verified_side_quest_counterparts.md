@@ -1,0 +1,425 @@
+# verified_side_quest_counterparts.md — a verified peer for every side quest, and one naming scheme for all of them
+
+**Opened 2026-08-27.** Three things that are really one thing:
+
+1. **Appendix B Track 4 lists eight rows and the book has six side quests**, none of which appear
+   there. MNv4 is in the main table where it does not belong, and the four S/B variants and the two
+   RSB tiers are nowhere.
+2. **Four namespaces name the same run and none of them agree** — the Lean exe, the MLIR slug +
+   `LEAN_MLIR_VARIANT`, `LEAN_MLIR_RECIPE`, and the job config. `r34-imagenet-4gpu` and
+   `r50-imagenet-4gpu` are the same shape of name for two different recipes.
+3. **Most side quests have no verified counterpart**, and the reasons differ per net — one is four
+   `#eval` lines, one is a renderer feature, one is a whole project.
+
+▶ Sibling docs, read first: `planning/blueprint_lowerer_pattern.md` (the §5.7 chapter shape, and
+why the verified path is the artifact and JAX the oracle) and `planning/chapter_makeover.md` §5
+(the verification discipline). This doc is about the *targets*; those are about the *prose*.
+
+---
+
+## 0. START HERE — the state this doc was written against
+
+Everything below is a survey of the tree at the commit that added this file. Nothing in §4 has
+been built. What HAS landed, and why the book now looks the way it does:
+
+* **Every side quest's phase-2 cost is measured and printed.** `sec:r50_a2_a1_cost`,
+  `sec:convnext_sb` and `sec:vit_sb` each carry a table of ms/step, min/epoch and full-schedule
+  wall clock on four 4060 Ti, bf16. Raw logs, method and the probe's own caveats are in
+  `runs/2026-08-27-jax-sb-tier-step-probe/`. **Do not re-measure these to start** — they reproduce
+  the 2026-07-25 figures to within a few percent on a newer JAX, and the numbers are not what is
+  blocking anything.
+* **`jax/scripts/step_probe.py` was repaired** to run against current emits (EMA signature, absent
+  EMA, FixRes resolution). Any new phase-2 pricing goes through it.
+* ⚠ **Regenerate before probing.** All four S/B `generated_*.py` on disk were a month stale when
+  this survey ran, and a month of augmentation work had landed. `lake exe <net>-imagenet <recipe>`
+  in `jax/` first, every time.
+
+**The first task, if you want one picked for you:** §6's item 1 — the naming scheme (§2c) and the
+Track 4 split (§3). It is docs and labels only, needs no GPU, and every later item adds a row to
+the tables it creates. Item 2 (§4b, the MNv4 shard gate) is the first one that needs a card, and
+it is the best payoff per hour in the file.
+
+⚠ **One correction this doc owes the book.** `sec:r50_a2_a1_cost`'s table says A1's renderer work
+is "same render as A2". §4a shows it is not — `wdStr` is a baked constant, so A1's wd 0.01 is a
+distinct artifact, and its Mixup α 0.2 needs its own shim. Fix that cell in the same pass as §4a,
+not before: it should change when the render that proves it exists.
+
+---
+
+## 1. THE INVENTORY
+
+Surveyed 2026-08-27 against the tree at `253fb75`. "Render" means a committed
+`verified_mlir/*_train_step.mlir`; "run" means an ImageNet-scale verified training result.
+
+| side quest | book § | JAX peer | verified render | verified run | what is actually owed |
+|---|---|---|---|---|---|
+| **RSB-A2** | `sec:r50_a2_a1_cost` | ✅ `a2-accum` | ⛔ none at 224 | — | 4 `#eval` lines (§4a) |
+| **RSB-A1** | `sec:r50_a2_a1_cost` | ✅ `a1` | ⛔ none | — | ⚠ **not** "same render as A2" (§4a) |
+| **MNv4-Conv-M** | `sec:mnv4_side_quest` | ✅ | ✅ 4 variants incl. DP + bf16 | 1-GPU only | a shard gate (§4b) |
+| **ConvNeXt-S** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 | steps only | the bf16 twin (§4c) |
+| **ConvNeXt-B** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + bf16 ×2 | steps only | nothing — **benchmark it** (§4c) |
+| **ViT-S** | `sec:vit_sb` | ✅ | ✅ fp32 ×1 | steps only | the bf16 twin (§4c) |
+| **ViT-B** | `sec:vit_sb` | ✅ | ✅ fp32 ×1 @ global 128 | steps only | bf16 **+ an accum render** (§4d) |
+| **EfficientNetV2-S** | `sec:enet_side_quests` | ⚠ Imagenette only | ⛔ nothing | — | spec, peer, shim, render (§4e) |
+| Noisy Student | `sec:enet_side_quests` | — | — | — | out of scope: needs JFT-300M |
+| EfficientDet | `sec:enet_side_quests` | — | — | — | out of scope: detection, not this book's head |
+
+⭐ **The surprise is how little is missing.** Six of the eight buildable rows already have a
+committed render. The book reads as though the S/B variants are unbuilt because Track 4 does not
+list them and their cost columns say `[todo]` — but `convnextsin`, `convnextbin`, `vitsin` and
+`vitbin` all emit, tie and step today. What is missing is mostly **bf16 twins and one gate**, not
+architecture work.
+
+⚠ **`planning/chapter_makeover.md:556` is stale.** It says MNv4 data parallel is "**not rendered**
+… Deliberately NOT emitted". `verified_mlir/mnv4in_adamdp64_train_step.mlir` and its bf16 peer are
+on disk dated 2026-08-25. The *reason* in that line still holds — MNv4 has no `shard-check` arm —
+but the artifact now exists, so the caveat has to be restated as "rendered, ungated" rather than
+"not rendered". Fix that line when §4b lands.
+
+---
+
+## 2. NAMING — four namespaces, and the rule that ties them
+
+### 2a. Where they are today
+
+| namespace | example | who writes it |
+|---|---|---|
+| Lean exe | `resnet50-imagenet-verified`, `mnv4-imagenet-verified`, `vits-imagenet-verified` | `lakefile.lean` |
+| MLIR slug | `resnet50in`, `resnet50in160`, `convnextsin`, `vitbin` | `VerifiedNets.lean` `slug` |
+| variant | `LEAN_MLIR_VARIANT=lambaccdp8x64wxclipbce` | the renderer's `#eval` names |
+| recipe | `LEAN_MLIR_RECIPE=2018` → `generated_resnet50_imagenet_2018_shim.py` | `scripts/gen_shims.sh` |
+| job | `scripts/jobs/r50-a3-wxclip-4gpu.conf` | one file per run |
+
+### 2b. The four disagreements, with the bug each one caused or invites
+
+1. ⛔ **`-imagenet-` in a job name means "the default recipe", and the default differs per net.**
+   `r34-imagenet-4gpu` is 2018 at the 30-epoch short tier; `r50-imagenet-4gpu` is RSB-A3 without
+   `wx`/`clip`. Two names of identical shape, two unrelated recipes, and neither says so. This is
+   the same failure class as the `LEAN_MLIR_RECIPE=2018` omission that `2859cd7` just fixed in the
+   book's own reproduction command — there, a 2018 run streamed RSB-A2's RandAugment for
+   want of one variable.
+2. **The recipe is in some job names and not others.** `r50-2018-4gpu` names it; `mnv2-imagenet-4gpu`
+   does not, and does not set `LEAN_MLIR_RECIPE` at all — it inherits `default` implicitly.
+3. **Abbreviation is per-target, and MNv4 disagrees with itself**: `mobilenetv4-verified-adam`
+   (Imagenette) beside `mnv4-imagenet-verified` (ImageNet), while MobileNetV2 spells itself out in
+   both. Size variants concatenate where the base does not: `vits-`, `convnextb-`.
+4. **Axes leak into names unevenly**: epochs in `r34-imagenet-90ep-4gpu`, precision in
+   `r50-2018-bf16-4gpu`, an optimizer detail in `r50-a3-wxclip-4gpu`, nothing in the rest.
+
+### 2c. The scheme
+
+⭐ **N1 — a job is `<net>-<recipe>[-<axis>…]-<n>gpu`, and `<recipe>` is EXACTLY the string
+`LEAN_MLIR_RECIPE` takes.** Not "imagenet", not omitted. A net whose emitter has one recipe still
+spells it (`default`), because unnamed is precisely what let `r34-imagenet` and `r50-imagenet` mean
+different things.
+
+▶ **This is mechanically checkable and should be a precheck, not a convention.** `supervise.sh`
+already runs per-job prechecks; add one that asserts the second dash-field of the job's own
+filename equals the `LEAN_MLIR_RECIPE` in its `ENV_EXTRA`. A convention nothing enforces is how
+namespace 4 drifted from namespace 5 in the first place.
+
+| today | becomes | why |
+|---|---|---|
+| `r34-imagenet-90ep-4gpu` | `r34-2018-4gpu` | 90 ep is the paper schedule; unmarked = paper |
+| `r34-imagenet-4gpu` | `r34-2018-30ep-4gpu` | the short tier is the deviation, so it carries the axis |
+| `r50-imagenet-4gpu` | `r50-a3-4gpu` | it is A3, and only its contents said so |
+| `r50-a3-wxclip-4gpu` | `r50-a3-wxclip-4gpu` | unchanged |
+| `r50-2018-4gpu` / `-bf16-` | unchanged | already the target shape |
+| `mnv2-imagenet-4gpu` | `mnv2-default-4gpu` | + set `LEAN_MLIR_RECIPE=default` explicitly |
+| `enet-imagenet-4gpu` | `enet-default-4gpu` | ditto |
+| `cnx-imagenet-4gpu` | `cnx-default-4gpu` | ditto |
+| `vit-imagenet-4gpu` | `vit-default-4gpu` | ditto |
+
+**N2 — the slug is the NET, the variant is the RECIPE.** `resnet50in160` looks like an exception
+and is not: the driver opens `<slug>_fwd.mlir` and `<slug>_fwd_eval.mlir` **by name**, so anything
+the eval forward's shape depends on has to be in the slug. Resolution is; optimizer, accumulation,
+replica count, decay and precision are not.
+
+⭐ This rule *predicts* §4a's answer rather than needing a decision: RSB-A2 trains and evaluates at
+224, so it reuses the existing `resnet50in` slug and its existing `_fwd_eval`, and everything that
+differs goes in the variant. No new slug, no new forward.
+
+**N3 — variant grammar, in this order**: `<opt>[acc][dp]<batch>[x<replicas>][wx][clip][drop][do][bce][wd<d>][bf16]`.
+Every committed name already obeys it (`lambaccdp8x64wxclipbce`, `adamdp128x4wxclipdrop`,
+`emarmsdp64dropdo`, `momdp64bf16`); it has just never been written down, and §4 adds four names
+that have to land in the same order to stay sortable.
+
+**N4 — one abbreviation policy for Lean exes: the chapter's spelling, with the size hyphenated.**
+
+| today | becomes |
+|---|---|
+| `mnv4-imagenet-verified` | `mobilenetv4-imagenet-verified` |
+| `vits-imagenet-verified` / `vitb-` | `vit-s-imagenet-verified` / `vit-b-` |
+| `convnexts-imagenet-verified` / `convnextb-` | `convnext-s-imagenet-verified` / `convnext-b-` |
+
+Five renames, all `lean_exe` labels plus their references in the blueprint, `scripts/jobs/` and the
+planning docs. ⚠ **Grep the blueprint for each old name before renaming** — `vits-imagenet-verified`
+appears in `sec:vit_sb`'s prose and `convnexts-imagenet-verified` in `sec:convnext_sb`'s, and a
+rename that misses those leaves the book naming a target that no longer builds.
+
+⚠ **Do the renames in one commit with no other change**, so `git log --follow` on any target stays
+readable and so a bisect over a later run failure never lands mid-rename.
+
+---
+
+## 3. TRACK 4 — the restructure
+
+Appendix B Track 4 (`blueprint/src/content.tex:13966`) currently opens "Seven nets train on full
+ImageNet-1k" over a table of eight rows that mixes main-line recipes, a second recipe for R50, and
+one side quest with a `\withheld` job.
+
+⚠ **Track 4 has no `\label`** — Track 3 has `sec:getting_started_track3` and Track 4 has nothing, so
+no chapter can point a reader at it. Add `\label{sec:getting_started_track4}` in the same pass; the
+side-quest table below is exactly the thing six chapter sections will want to `\ref`.
+
+**Split it in two.** Main table = one row per (net, recipe) that a chapter's *ImageNet recipe*
+section reports. Side-quest table = one row per side-quest variant, with a **status** column,
+because most are not runnable and `\withheld` cannot say why.
+
+```
+\section*{Track 4: ImageNet-1k runners}
+  <intro: the scale tier, chapter order, and that a row is a (net, recipe) pair>
+  <main table>                       ← 7 rows
+  \prosesection{This tier needs Python}      (unchanged)
+  \prosesection{Running one}                 (unchanged)
+  \prosesection{Running one for a day and a half}   (unchanged)
+  \prosesection{Side quests}         ← NEW, after the running instructions
+  <side-quest table with a status column>
+```
+
+⭐ **The side-quest table goes AFTER the run instructions, not beside the main table.** A reader
+working through Track 4 wants the seven runnable things and the commands; the side quests are a
+different question ("what else is rendered?") and putting them first buries the tier's actual
+purpose. It also means the status column's `render only` rows never sit next to a job name a reader
+might try to run.
+
+**Main table** — target, recipe, job, in chapter order:
+
+| target | recipe | job |
+|---|---|---|
+| `resnet34-imagenet-verified` | 2018 | `r34-2018-4gpu` |
+| `resnet50-imagenet-verified` | 2018 | `r50-2018-4gpu` |
+| `resnet50-imagenet-verified` | rsb-faithful (A3) | `r50-a3-wxclip-4gpu` |
+| `mobilenetv2-imagenet-verified` | default | `mnv2-default-4gpu` |
+| `efficientnet-imagenet-verified` | default | `enet-default-4gpu` |
+| `convnext-imagenet-verified` | default | `cnx-default-4gpu` |
+| `vit-imagenet-verified` | default (DeiT-Ti) | `vit-default-4gpu` |
+
+**Side-quest table** — target, variant, status, and the chapter section it belongs to:
+
+| target | variant | status | § |
+|---|---|---|---|
+| `resnet50-imagenet-verified` | a2-accum | render owed | `sec:r50_a2_a1_cost` |
+| `resnet50-imagenet-verified` | a1 | render + shim owed | `sec:r50_a2_a1_cost` |
+| `mobilenetv4-imagenet-verified` | Conv-M | rendered; **single-device only** (no shard gate) | `sec:mnv4_side_quest` |
+| `convnext-s-imagenet-verified` | — | rendered fp32; bf16 owed | `sec:convnext_sb` |
+| `convnext-b-imagenet-verified` | — | rendered fp32 + bf16; **unbenchmarked** | `sec:convnext_sb` |
+| `vit-s-imagenet-verified` | — | rendered fp32; bf16 owed | `sec:vit_sb` |
+| `vit-b-imagenet-verified` | — | rendered fp32 @ global 128; bf16 + accum owed | `sec:vit_sb` |
+| EfficientNetV2-S | — | no spec | `sec:enet_side_quests` |
+
+⚠ **MNv4's row keeps its reason.** The current table's bare `\withheld` reads as a redaction; the
+status column has to say *single-device only*, because that is a 63.5 h run rather than a missing
+one, and the difference is one gate (§4b).
+
+---
+
+## 4. THE RENDERER WORK, ITEM BY ITEM
+
+### 4a. RSB-A2 at 224 — four `#eval` lines. And A1 is NOT free.
+
+⭐⭐ **The renderer already takes every parameter this needs.**
+`Proofs.StableHLO.resnet50TrainStepFaithfulB` (`LeanMlir/Proofs/Codegen/ResNet50RenderB.lean:521`)
+carries `replicas`, `opt`, `slug`, `bce`, `wdStr`, `q`, `wdExclude`, `gradClip`, `clipNorm` and
+`bf16`, all as trailing defaulted parameters. A2 is the committed A3 call at `q := 7` with the 224
+slug:
+
+```lean
+-- A2: RSB-A3's composition at 224 instead of 160. Same LAMB × BCE × k=8 × 4 replicas ⇒ 2048.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true))
+-- Its 1-replica peer — `r50-accum-tie` and `r50-accum-shard-tie` both compare against one.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true))
+```
+
+plus the same pair at `(bf16 := true)`, which is what the book's `renderer work` cell calls
+"LAMB + BCE at 224, bf16". `resnet50in_momdp64bf16` proves the bf16 path renders for this net at
+this resolution, so the twin is a flag, not an investigation.
+
+⚠⚠ **The book's A1 cell says "same render as A2" and that is wrong.** `wdStr` is a **baked
+`stablehlo.constant`**, not a runtime operand — the renderer's own comment at
+`ResNet50RenderB.lean:534` says so, and says A1's 0.01 against A2's 0.02 "is what makes that a
+re-render rather than a new op". `wdVariantMark` (`ResNet34RenderB.lean:637`) appends `wd001`, so
+A1's artifact is a distinct path. **A1 needs its own render.** Correct that cell when this lands.
+
+⚠ **A1 also needs its own shim.** A1 differs from A2 in three fields: epochs (600, a driver knob —
+free), weight decay (baked — the re-render above), and **Mixup α 0.2 against A2's 0.1**. Mixup is
+data-side and rides the shim, so `generated_resnet50_imagenet_a1_shim.py` has to be added to
+`scripts/gen_shims.sh`'s list, and `resnet50Imagenet…A1Verified` needs its own `shimScript` field.
+That is exactly the `shimScript`-is-per-net mechanism `VerifiedNets.lean:662` was written for.
+
+⭐ **A1's optimizer arm is already tied, against A1's own reference.**
+`scripts/opt_step_tie.py:132` carries `("lambacc8wxclipwd001", "generated_resnet50_imagenet_a1.py",
+8, True)` — the wd-0.01 LAMB the A1 render would bake, checked against the emitted A1 trainer that
+bakes `WD = 0.010000`. So the optimizer stage is gated before the whole-net render exists, and its
+own comment says the row is what turns "the string reaches the constant block" from a code-reading
+claim into a measurement.
+
+⚠ **Check the A2 shim rather than assuming it.** The emitter's `default` R50 recipe *is* RSB-A2, so
+`generated_resnet50_imagenet_shim.py` is plausibly already A2's augmentation and `a2-accum` differs
+from `default` only in optimizer-side fields. Confirm by diffing the two emitted shims before
+wiring — this is the exact trap `2859cd7` hit from the other side, where a 2018 run silently
+streamed A2's RandAugment.
+
+**Cost: small.** Four to six `#eval`s, one shim entry, one `VerifiedNetSpec`, and the existing gates.
+It closes a whole book section.
+
+### 4b. MNv4 — the missing shard gate, not a missing render
+
+`mnv4in_adamdp64` and `mnv4in_adamdp64bf16` exist. What does not exist is MNv4 in
+`shard-check`'s net list — `lakefile.lean:2102` reads `<convnext|efficientnet|mobilenetv2|vit>` —
+and there is no `TestMnv4DpCheck.lean`. The principle the original decision rested on is right and
+should survive: **an untied collective artifact looks exactly as trustworthy as a tied one**, so
+the DP render must not be quotable until the gate exists.
+
+Needed: an MNv4 arm in `tests/TestShardCheck.lean`, a `TestMnv4DpCheck.lean` on the pattern of its
+siblings, and a two-GPU run of both. Then a `mnv4-default-4gpu` job and MNv4's Track-4 status
+changes from *single-device only* to a job name.
+
+**Cost: small**, and it is the highest-leverage item here: it takes MNv4's ImageNet run from 63.5 h
+on one card to roughly a quarter of that on four.
+
+### 4c. ConvNeXt-S and ViT-S/B bf16 twins — three per-net emits
+
+| owed | pattern already proven by |
+|---|---|
+| `convnextsin_adamwxclipdropbf16`, `convnextsin_adamdpwxclipdropbf16` | `convnextbin_*bf16` (same net family, both variants) |
+| `vitsin_adamdp128x4wxclipdropbf16` | `vitin_adamdp128x4wxclipdropbf16` |
+| `vitbin_adamdp32x4wxclipdropbf16` | same |
+
+No new proved operator: every bf16 twin these nets need already exists. ConvNeXt-S lacking one is
+an accident of B landing after S.
+
+⚠⚠ **Three traps this repo has already paid for, all recorded:**
+- A bf16 conv needs a **bf16-typed result plus a convert**. The f32-result shape works for `dot` and
+  is silently folded away on `conv`.
+- A bf16 dot's **result type** is a ~1.2× performance issue, not a correctness one — ViT-Tiny went
+  1.23× → 1.46× on that line alone.
+- ⚠ A bf16 op can be **slower** than its f32 peer with every gate green (ViT's stem wgrad at 0.19×).
+  Profile each new twin standalone with `scripts/bf16_device_step.py` before believing a whole-step
+  number — and never read a trainer's own ms/step for this, because `PJRT_FFI_RESIDENT` is off by
+  default and `BENCH_SYNTH` does not control for it.
+
+**Cost: small.** Expect roughly a fifth of the wall clock back on ConvNeXt-S (T's bf16 render runs
+1.29× its fp32 peer) and about a third on the ViT pair (Ti's runs 1.46×).
+
+### 4d. ViT-B gradient accumulation — the one real feature
+
+This is the only item that is not a flag. **ViT has no accumulation render.** `ViTRenderB`'s ten
+`acc` hits are the *attention* accumulator, a different thing. R50 has the real one
+(`R34Opt.lambAccum`, `adamwAccum`, and `resnet50in_accdp4x64` and peers), so the template exists.
+
+Why it matters beyond speed: without it `vitbin` renders at **global 128**, and DeiT's recipe is
+global 512. That is a recipe deviation, not a hardware footnote — a ViT-B number produced at global
+128 is not comparable to DeiT-B's 81.8% even in principle. The phase-2 side has the same constraint
+and solves it the same way: `sec:vit_sb` now records that one-shot global 512 peaks at 11.41 of the
+allocator's 11.68 GiB and dies `RESOURCE_EXHAUSTED`, and the JAX trainer reaches 512 as 4×128.
+
+Needed: the accumulation loop in `ViTRenderB`, an `adamwAccum`-shaped `R34Opt` arm for ViT's
+optimizer stage, `vitbin_adamaccdp<k>x<b>wxclipdrop` renders at 1 and 4 replicas, and a
+`vit-accum-tie` on the pattern of `r50-accum-tie`.
+
+⚠ **A TPU deletes this item.** v3 is 16 GB/core and v4 is 32, and the FFI is plugin-agnostic —
+`$PJRT_PLUGIN` always wins — so it is closer to an env var than a port. Weigh that before building
+the feature for one box.
+
+**Cost: medium-to-large.** The only item here that should get its own planning doc if it is picked
+up.
+
+### 4e. EfficientNetV2-S — a project, not a task
+
+Nothing exists on the verified side, and the JAX peer (`jax/MainEfficientNetV2.lean`) is
+**Imagenette-scale only** (`runJax … .imagenette`). So the chain is: an ImageNet JAX peer → a shim →
+a `VerifiedNetSpec` → renders → gates. The book is right that no new *primitive* is needed —
+`.fusedMbConvNB` is already in the kit as MobileNetV4's stage 0 — but "no new primitive" is the
+cheapest quarter of this.
+
+⚠⚠ **And one part of the recipe the render shape cannot currently express.** V2's headline second
+idea is **progressive learning**: the image size *rises across training*, with regularization rising
+with it. Batch and resolution are both **baked into the graph** on this path (`q` is a render
+parameter, `LEAN_MLIR_BATCH` must match what the artifact was rendered at). So a faithful V2 needs
+either N renders — one per resolution stage, with the driver switching artifacts mid-run — or an
+explicit, stated deviation to a fixed resolution.
+
+⭐ **That is worth writing down whatever happens to V2**, because it is the first recipe in the book
+whose *schedule* the verified path cannot represent. Every previous deviation has been a missing
+flag; this one is a property of baking shapes into a graph. RSB-A3's train@160 / eval@224 split is
+the nearest existing thing and it works precisely because it is **two** instantiations of one
+renderer, which is the N-renders answer at N = 2.
+
+**Cost: large.** Recommend it stays a bestiary entry until §4a–§4d are done.
+
+---
+
+## 5. GATES — what a new render must pass before it is quotable
+
+Non-negotiable, and in this order:
+
+1. ⭐ **Byte-identity FIRST.** After any parameterisation, `scripts/regen_verified_mlir.sh proofs`
+   must leave `git diff verified_mlir/` **empty** — *before* the new instance is added. That is what
+   separates "the refactor broke something" from "the new size is wrong". ViT-S and ConvNeXt-S both
+   record this as the gate that made their parameterisation safe.
+2. **`#guard` the parameter count** against the JAX emitted count. All six S/B and Tiny probes on
+   2026-08-27 printed back the blueprint's guarded figures exactly
+   (`runs/2026-08-27-jax-sb-tier-step-probe/`); that is what says a render is the net it claims.
+3. **`scripts/check_render_coverage.py`** and **`scripts/render_parity.py`**.
+4. **The tie gates for whatever axis moved**: `scripts/opt_step_tie.py` (six variants) for an
+   optimizer or decay change, `r50-accum-tie` / `r50-accum-shard-tie` for accumulation,
+   `shard-check` and the net's `*-dp-check` for collectives.
+5. ⚠ **`lake build <gate>`, not just the binary.** `vit-fwd-b-tie` printed green from a three-week-old
+   binary while failing to compile. A gate you did not rebuild is not a gate.
+6. ⚠ **`scripts/verify_excerpt.py`** over any chapter before its prose is touched. It has found
+   fabricated log lines in chapters already marked done.
+7. ⚠ **The PJRT shim is not a lake target.** Editing `ffi/pjrt_ffi.c` and running `lake build` reports
+   SUCCESS without rebuilding it. Use the `gcc` one-liner or you get a false green.
+
+---
+
+## 6. ORDER
+
+1. **Naming + Track 4 restructure (§2, §3).** Docs and labels only, no GPU, and every later item
+   adds a row to the tables this creates. Two commits: the renames alone, then the Track 4 split.
+2. **MNv4 shard gate (§4b).** Smallest real work, best payoff, and it turns a `\withheld` into a job.
+3. **RSB-A2 + A1 (§4a).** Four to six `#eval`s against a renderer that already takes every parameter,
+   and it closes `sec:r50_a2_a1_cost`. Fix the "same render as A2" cell in the same pass.
+4. **The three bf16 twins (§4c).** Independent of each other; do ConvNeXt-S first, it has the closest
+   proven peer.
+5. **ViT-B accumulation (§4d)** — only if ViT-B is actually going to be trained on this box. Check
+   the TPU question first.
+6. **EfficientNetV2 (§4e)** — its own project, after the rest.
+
+⚠ **Do not convert a chapter and re-run its net in the same pass.** §5.7's conversion was interleaved
+with a live run and produced three separate stale-number corrections.
+
+---
+
+## 7. WHAT IS DELIBERATELY NOT HERE
+
+* **Imagenette peers for the size variants.** `ViTRender.lean` — the per-example renderer — is still
+  pinned at Tiny by roughly 154 dimension literals, and `ConvNeXtRender`'s per-example half is the
+  same shape of job. Unpinning them buys a *pedagogical demo* for a *side quest*, which is the wrong
+  trade twice over: the Imagenette tier exists to teach a primitive, and the size variants introduce
+  none. `sec:vit_sb` already states this as a limitation and should keep stating it.
+* **A book-wide results table.** Rule 1 of `blueprint_lowerer_pattern.md` applies at book scale: a
+  number with two homes is a number that will disagree with itself.
+* **Promoting the planning docs' verified fp32 figures into the book.** `vit_convnext_sb_scaleup.md`
+  holds ViT-S at 525 ms/step and ViT-B at 432 (2026-08-14, 4× 4060 Ti, fp32). They are real, and they
+  are *not* in `sec:vit_sb`, deliberately — this repo has one commit whose whole subject is quoting a
+  plan instead of a run. Re-measure before they enter the book.
+* **Noisy Student and EfficientDet.** JFT-300M and a detection head respectively; neither is a
+  variant of something already here.
