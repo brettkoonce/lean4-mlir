@@ -5936,12 +5936,12 @@ A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & \texttt{[todo]} 
 \end{tabular}
 \end{center}
 
-\noindent Twenty artifacts: each tier at one and four replicas, in whichever
-precisions fit. Effective batch $2048$ throughout --- $512\times4$ on the
-reference, $8\times64$ or $4\times128$ here. \textbf{A1 is not ``the same render
-as A2'', and the difference is one line}: the decay is baked, so A1's $0.01$
-against A2's $0.02$ is a re-render. The two are identical in $18{,}000$ other
-lines, kept apart so that one cannot be lost.
+\noindent Twenty-four artifacts: each tier at one and four replicas, in both
+precisions, at either factorisation of the effective batch $2048$ ---
+$512\times4$ on the reference, $8\times64$ or $4\times128$ here. \textbf{A1 is not
+``the same render as A2''}: the decay is baked, so A1's $0.01$ against A2's
+$0.02$ is a re-render, and the two are kept apart so that one line among
+$18{,}000$ cannot be lost.
 
 \medskip\noindent \textbf{The two regularisers these renders used to be missing
 are now in them.} The ledger \S\ref{sec:r50_phase4} keeps for A3, before anything
@@ -5972,21 +5972,22 @@ Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 \end{center}
 
 \noindent \textbf{Both were structural, and A3 met neither} --- its recipe
-switches both \emph{off}, which is why neither was visible from A3 succeeding.
-The shadow and the accumulator used to be the \emph{same} fourth region of
-$[\theta|m|v|\cdot]$, and accumulation is not optional at $224^2$ on a $16$\,GB
-card: EMA was unreachable, not merely unrendered.
+switches both \emph{off}. The shadow and the accumulator used to be the
+\emph{same} fourth region of $[\theta|m|v|\cdot]$, and accumulation is not
+optional at $224^2$ on a $16$\,GB card: EMA was unreachable, not unrendered.
 
 \medskip\noindent Stochastic depth's site sits on the residual \emph{branch}, and
 \textbf{no structural check can tell that from a site on the block output}: at an
 all-ones mask $1 \odot (b+x)$ and $1 \odot b + x$ agree bit-for-bit, so a
 misplaced render matches on names, operation count and arity and passes every
 endpoint gate. Moving all sixteen separates them by eight orders of magnitude at
-a real mask, and by exactly zero at an all-ones one.
+a real mask, and by exactly zero at an all-ones one. The reference had the same
+feature wrong the other way round --- a scalar \texttt{bernoulli} for the whole
+batch where timm's is per \emph{sample}, same expectation, which is why it
+survived.
 
-\medskip\noindent \textbf{What each render costs on one card.} XLA's own
-\texttt{peak\_memory\_in\_bytes}, against a $15.11$\,GiB budget --- which is a
-setting and not the hardware, as the paragraph after the table explains:
+\medskip\noindent \textbf{What each render costs on one card}, from XLA's own
+\texttt{peak\_memory\_in\_bytes}:
 
 \begin{center}
 \begin{tabular}{@{}l l c r r r@{}}
@@ -6002,40 +6003,24 @@ $4\times128$ + EMA + sd & fp32 & $128$ & $11.91$\,GiB & over   & $79\%$ \\
 \end{tabular}
 \end{center}
 
-\noindent The fifth region costs $0.19$\,GiB, all of it arguments. Stochastic
-depth costs nothing measurable.
-
-\medskip\noindent \textbf{And the two budget columns are the point.} A PJRT client
-created with no allocator options takes the plugin's default reservation of
-$0.75$, which is where $11.68$ comes from --- leaving four gigabytes of a $16$\,GB
-card unreachable. \texttt{XLA\_PYTHON\_CLIENT\_MEM\_FRACTION} does not change
-that: the plugin never reads it. JAX's Python layer reads it and passes
-\texttt{memory\_fraction} as a \emph{create option}, so the JAX trainers could
-always be told to use the whole card and the verified ones could not. The shim now
-passes the same option, and XLA's own log line is the measurement ---
-\emph{allocating 15.11GiB} against $11.68$ unset. \textbf{The largest render goes
-from not fitting to $79\%$, and nothing about the hardware moved.}
-
-\medskip\noindent \emph{Also worth knowing before quoting a peak}: the fp32
-$4\times128$ figure is $11.52$\,GiB under the default budget and $11.91$ under the
-raised one. XLA rematerialises less when it has room, so a compile-time peak is
-not independent of the allocator it was compiled against.
+\noindent The fifth region costs $0.19$\,GiB, all of it arguments; stochastic
+depth costs nothing measurable. \textbf{And the two budget columns are the point.}
+A PJRT client created with no allocator options takes the plugin's $0.75$ default
+--- which is where $11.68$ comes from, and four gigabytes of a $16$\,GB card with
+it. \texttt{XLA\_PYTHON\_CLIENT\_MEM\_FRACTION} does not change it: the plugin
+never reads that variable, JAX's Python layer does, and passes
+\texttt{memory\_fraction} as a \emph{create option}. The shim now passes it too.
+\textbf{The largest render goes from not fitting to $79\%$, and nothing about the
+hardware moved.}
 
 \medskip\noindent \textbf{Which leaves the batch-norm group, larger than it
 looks.} Nothing here all-reduces activation statistics, so each replica
-normalises over its own $64$; the reference's
-\texttt{jnp.mean(x,\ axis=(0,2,3))} reduces over a \emph{mesh-sharded} axis, so
-XLA inserts one and its group is the full $512$ --- its per-device tensor is
-$128$, and only the group is the statistic. Half the gap is a re-render, $k=4$ at
-$128$ per device; the last $4\times$ needs synchronised batch-norm --- a new
-batched operator, a changed backward, a variance that does not average, and $53$
-collectives a step.
-
-\medskip\noindent \textbf{The reference had the same feature wrong in a different
-way}: four of its five block emitters drew a scalar \texttt{bernoulli} for the
-whole batch where timm's is per \emph{sample}. Same expectation, which is why it
-survived --- at keep $0.95$ the old form dropped all $64$ examples or none, on
-$200$ steps out of $200$.
+normalises over its own $64$; the reference's \texttt{jnp.mean} reduces over a
+\emph{mesh-sharded} axis, so XLA inserts one and its group is the full $512$. Its
+per-device tensor is $128$, and only the group is the statistic. Half the gap is
+a re-render, $k=4$ at $128$ per device; the last $4\times$ needs synchronised
+batch-norm --- a new operator, a changed backward, a variance that does not
+average, and $53$ collectives a step.
 
 \medskip\noindent \textbf{What the phase-2 peers cost, measured.}
 \texttt{jax/scripts/step\_probe.py} on four 4060\,Ti, bf16, with A3 as the
@@ -6054,8 +6039,8 @@ A1 (600 ep) & $224$ & $1{,}368$ & $14.3$ & $142.5$\,h (5.9\,d) \\
 \end{center}
 
 \noindent A1 and A2 share a step figure because the trainers differ in three
-constants. Compute-only, so each is a lower bound: scaling by the one tier where
-both paths have a number ($19.2$ verified minutes per epoch against $7.5$) puts a
+constants. Compute-only, so a lower bound: scaling by the one tier where both
+paths have a number ($19.2$ verified minutes per epoch against $7.5$) puts a
 verified A2 near seven days and A1 near fifteen.
 
 \chapter{MobileNetV2}
