@@ -126,7 +126,7 @@ ENet/ConvNeXt render off it, but neither residual renderer imports it and `r34Ad
 placement gate). **Option A was taken** (brett, 2026-08-27): fix the emitters, then render.
 
 ⭐ **Both of `sec:r50_a2_a1_cost`'s ⛔ rows are now closed.** The only A2 delta left is the ghost-BN
-group — 8×64 here against the reference's 4 × 512-global — which §4a listed as ⚠, not ⛔.
+group — see §6c, which corrects the number this doc had wrong.
 
 ⚠⚠ **THE PLACEMENT IS THE CORRECTNESS QUESTION AND NO STRUCTURAL CHECK SEES IT.**
 `scripts/misplace_drop_sites.py` moves all sixteen sites onto the block output and produces a render
@@ -205,6 +205,66 @@ At ImageNet scale: R50's A3 reference sets `dropPath := 0.0`, and MNv4-Conv-M's 
 UIB — verify before trusting"*. ▶ **So no quoted number in this repo was produced by a JAX run
 with stochastic depth active.** The defect is entirely latent: it reaches future ImageNet-tier
 reference runs, and it means 26 shipping verified artifacts have no correct oracle today.
+
+---
+
+## 6c. GHOST-BN — the gap is 8×, not 2×, and only half of it is reachable on this box
+
+⚠⚠ **THIS DOC AND THE BOOK BOTH HAD THE NUMBER WRONG.** §4a said *"These render 8×64, i.e. 64-image
+ghosts. The reference reaches 2048 as 4 accumulation steps × 512 global (128 per device on four
+cards), i.e. **128-image ghosts**."* The 128 is the per-device **tensor**; the BN **group** is the
+full **512**, because `bm = jnp.mean(x, axis=(0,2,3))` reduces over an axis the reference
+mesh-shards (`P(None,'batch')`), so XLA inserts the collective. `a3_paper_fidelity.md` §2.2 already
+had this right for A3 and said so in the same words; §4a restated it from the wrong side.
+
+▶ **So the gap is 64 → 512, an 8×, recorded as a 2×.** Corrected in the book (`ed8de4e`'s successor)
+and here.
+
+### What landed
+
+✅ **The reference's own factorisation, rendered** — `k = 4` × 128 per device × 4 replicas = 2048,
+which is `GRAD_ACCUM = 4` / `MICRO_BATCH = 512` exactly. Group 64 → **128**. Four artifacts
+(`emalambacc{,dp}4x128wxclipdropbce{,wd001}bf16`).
+
+⚠⚠ **bf16-ONLY, and that is a MEASURED coupling between two axes meant to be independent.**
+`scripts/bf16_peak_memory.py` against the 11.68 GiB BFC budget of a 16 GB 4060 Ti:
+
+| render | peak | of budget |
+|---|---|---|
+| `8×64` fp32 | 6.18 G | 53 % |
+| `8×64` fp32 + EMA + sd | 6.37 G | 55 % |
+| `8×64` bf16 | 4.32 G | 37 % |
+| `4×128` fp32 | 11.33 G | ⛔ **97 %** |
+| `4×128` fp32 + EMA + sd | 11.13 G | ⛔ **95 %** |
+| `4×128` bf16 | 7.91 G | ✅ 68 % |
+| `4×128` bf16 + EMA + sd | **8.09 G** | ✅ **69 %** |
+
+⭐ **There is deliberately NO fp32 twin.** §4c's rule is that a tier shipping without its precision
+peer "reads as a decision and is really an accident of ordering" — here the missing peer *is* the
+decision, and the measurement is why.
+
+⚠ The EMA fifth region costs **0.19 G** and it is all `args` (0.42 → 0.51 G): 25.6 M params × 4 B =
+102 MB, exactly one more region. Temporaries are unchanged at 5.38 G. **Stochastic depth costs
+nothing measurable** — 16 masks of `tensor<64×f32>` is 4 KB.
+
+### What is still owed: SYNC-BN, and it is a feature
+
+Closing the last 4× (128 → 512) means all-reducing the statistics themselves. Scoped, not built:
+
+* ⛔ **A new batched operator.** `bnBatchF` computes its own mean/var internally. There is
+  `bnEval`/`bnPerChannelEvalF` which normalise by GIVEN μ/σ² — but both are per-example; the
+  batched family has no eval-BN peer. `bnBatchMeanB`/`bnBatchVarB` exist and already compute the
+  statistics, but only for the REPORTED running stats, not for the normalisation.
+* ⚠⚠ **VARIANCE DOES NOT AVERAGE.** `Var_global ≠ mean(Var_replica)` unless the replica means
+  agree. The correct combination all-reduces μ and `E[x²]` and forms `Var = E[x²] − μ²`; from what
+  the ops give you that is `all_reduce(var + mean²)`. A render that averaged the variances would
+  train, descend, and be a different normalisation.
+* ⛔ **The BACKWARD changes too.** `bnBatchBack`'s two internal reduction sums are over the local
+  batch; under sync-BN they must be all-reduced. That is not plumbing.
+* ⚠ **53 BN layers × 2 collectives per step**, against a run whose whole throughput story is that
+  the all-reduce term is 56 ms (`a3_paper_fidelity.md` §2.2: *"Measure before adopting"*).
+
+▶ Comparable in size to §4d's ViT accumulation. Its own planning doc if it is picked up.
 
 ---
 

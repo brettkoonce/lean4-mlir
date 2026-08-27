@@ -1,0 +1,7 @@
+  artifact                                                  peak      args      temp   of budget
+  -----------------------------------------------------------------------------------------------
+  resnet50in_lambaccdp8x64wxclipbce_train_step.mlir       6.23 G    0.42 G    5.43 G         53 %
+  resnet50in_lambaccdp8x64wxclipbcebf16_train_step.mlir    4.32 G    0.42 G    3.53 G         37 %
+  resnet50in_emalambaccdp8x64wxclipbce_train_step.mlir    6.42 G    0.51 G    5.43 G         55 %
+  resnet50in_emalambaccdp8x64wxclipdropbce_train_step.mlir    6.42 G    0.51 G    5.43 G         55 %
+  resnet50in_emalambaccdp4x128wxclipdropbcebf16_train_step.mlir    8.09 G    0.55 G    7.07 G         69 %

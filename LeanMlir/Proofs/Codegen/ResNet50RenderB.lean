@@ -1770,6 +1770,62 @@ end Proofs.StableHLO
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
 
+-- ══════════════════════════════════════════════════════════════════════════════
+-- § RSB-A2/A1 at the REFERENCE'S OWN FACTORISATION of 2048 — k = 4 × 128 per device, 2026-08-27.
+--
+-- ⭐ **The ghost-BN group, and this is the axis `a3_paper_fidelity.md` §2.2 opened.** BN normalises
+-- over whatever each replica holds, and nothing in this render all-reduces activation statistics —
+-- all 162 collectives are on parameter-shaped tensors. So `…8x64…` normalises over **64 images**.
+-- The reference reaches 2048 as `GRAD_ACCUM = 4` × `MICRO_BATCH = 512`, and its
+-- `bm = jnp.mean(x, axis=(0,2,3))` reduces over an axis that is MESH-SHARDED
+-- (`P(None,'batch')`), so XLA inserts the collective and its group is the full **512**.
+--
+-- ⚠⚠ **NOT 128 — 512.** `verified_side_quest_counterparts.md` §4a and the book both said "64
+-- against the reference's 128", which is the per-device TENSOR, not the BN GROUP. 128 is what one
+-- card holds; 512 is what the mean is taken over, because the reduction crosses the shard. An 8×
+-- gap recorded as 2×.
+--
+-- ▶ These renders close HALF of it, in the ratio sense: `k = 4` and 128 per device is the
+-- reference's own factorisation, so the group goes 64 → 128 and the remaining 4× needs SYNC-BN.
+--
+-- ⚠⚠⚠ **AND THEY ARE bf16-ONLY, WHICH IS A MEASURED COUPLING BETWEEN TWO AXES THAT WERE MEANT TO
+-- BE INDEPENDENT.** `scripts/bf16_peak_memory.py`, against the 11.68 GiB BFC budget of a 16 GB
+-- 4060 Ti:
+--
+--     8×64   fp32                   6.18 G   53 %      4×128  fp32              11.33 G   97 %  ⛔
+--     8×64   fp32 + EMA + sd        6.37 G   55 %      4×128  fp32 + EMA + sd   11.13 G   95 %  ⛔
+--     8×64   bf16                   4.32 G   37 %      4×128  bf16               7.91 G   68 %  ✅
+--                                                      4×128  bf16 + EMA + sd    8.09 G   69 %  ✅
+--
+-- So the ghost-BN improvement is not available in fp32 on this box at all, and there is no fp32
+-- twin of these on purpose. ▶ That is the opposite of §4c's rule (a tier without its precision peer
+-- reads as an accident); here the missing peer is the finding.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc4x128wxclipdropbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc4x128wxclipdropbcewd001bf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
+
+-- ⚠ `k` is FOUR here and the batch is 128, so the `accK` parse sees `acc4x128` / `accdp4x128` —
+-- a two-digit batch after a one-digit `k`, the reverse of `acc8x64`'s shape.
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         true true true "" true true true == "emalambaccdp4x128wxclipdropbcebf16"
+#guard Proofs.StableHLO.r34AdamVariant 128 1 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         true true true "" true true true == "emalambacc4x128wxclipdropbcebf16"
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         true true true "0.01" true true true == "emalambaccdp4x128wxclipdropbcewd001bf16"
+
 -- ⚠ THE FOUR sd SPELLINGS. `drop` is the SIXTH marker on these names and it goes in the MIDDLE —
 -- between `clip` and `bce`, N3's grammar — so unlike `ema` it has neighbours on both sides.
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)

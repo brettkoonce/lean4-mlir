@@ -17,7 +17,7 @@ It is now a fifth region. `nRegions` is 3, 4 or 5; `nScalars` is 3, 5 or 7; the 
 the residual branch, one per bottleneck. It needed a fix on the *reference* side first: see §6b
 below. So `sec:r50_a2_a1_cost`'s two ⛔ rows are both gone.
 
-⚠ **What is still NOT A2**: the ghost-BN group. These render 8×64, i.e. 64-image ghosts, against
+⚠ **What is still NOT A2**: the ghost-BN group — see `peak_memory.log` below. These render 8×64, i.e. 64-image ghosts, against
 the reference's 4 × 512-global (128 per device on four cards). Immaterial to a wall clock; a
 different regime for any accuracy claim. That is now the only delta, and it is the one §4a listed
 as ⚠ rather than ⛔.
@@ -152,6 +152,37 @@ statistics, difference 0.0); the gradients agree at ~1e-6; θ′ amplifies that 
 per PROCESS, so the TEST figure moved four orders between two invocations (now `crc32`); and the
 `v` region was initialised random-signed, so `sqrt(v)` gave NaN for 50 of 161 parameters beside a
 perfectly finite loss.
+
+---
+
+## `peak_memory.log` — what A1/A2 actually cost, and what ghost-BN costs
+
+`scripts/bf16_peak_memory.py` reads XLA's own `peak_memory_in_bytes` — arguments + outputs +
+temporaries for one execution, i.e. the number that decides whether a batch FITS. ⚠ NOT
+`nvidia-smi`, which reports the BFC allocator's PREALLOCATED pool (~73 % of the card) and makes two
+very different artifacts read the same. Budget: **11.68 GiB** per card on a 16 GB 4060 Ti.
+
+| render | peak | args | temp | of budget |
+|---|---|---|---|---|
+| A2/A1 `8×64` fp32 | 6.23 G | 0.42 | 5.43 | 53 % |
+| A2/A1 `8×64` fp32 + EMA | 6.42 G | 0.51 | 5.43 | 55 % |
+| A2/A1 `8×64` fp32 + EMA + sd | **6.42 G** | 0.51 | 5.43 | **55 %** |
+| A2/A1 `8×64` bf16 | 4.32 G | 0.42 | 3.53 | 37 % |
+| ghost-BN `4×128` bf16 + EMA + sd | 8.09 G | 0.55 | 7.07 | 69 % |
+| ghost-BN `4×128` **fp32** + EMA + sd | 11.13 G | — | — | ⛔ **95 %** |
+| ghost-BN `4×128` **fp32** | 11.33 G | — | — | ⛔ **97 %** |
+
+⭐ **The EMA fifth region costs 0.19 G and it is ALL `args`** (0.42 → 0.51): 25.6 M params × 4 B =
+102 MB, exactly one more region, with temporaries unchanged at 5.43 G. **Stochastic depth costs
+nothing measurable** — 16 masks of `tensor<64×f32>` is 4 KB.
+
+⚠⚠ **The ghost-BN improvement is bf16-ONLY on this box**, and that is a measured coupling between
+two axes meant to be independent. `4×128` in fp32 is 95–97 % of the budget, which leaves nothing
+for the input pipeline. So those four artifacts ship with **no fp32 twin** — the opposite of §4c's
+rule, and here the missing twin is the finding.
+
+▶ Host side, not in the table: the checkpoint blob is `nRegions × 25,557,032 × 4 B` — **409 MB** at
+four regions, **511 MB** at five.
 
 ---
 

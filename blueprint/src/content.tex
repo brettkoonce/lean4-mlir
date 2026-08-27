@@ -5955,7 +5955,7 @@ before anything is run:
 \emph{In} & \emph{Still out}, worst first \\
 \hline
 \texttt{wdExcludeNormBias}; LAMB's clip at $kC$, after both the all-reduce and the accumulation
-  & Ghost-BN group $64$ against the reference's $128$ \\[2pt]
+  & \textbf{Ghost-BN group} $64$ against the reference's $\mathbf{512}$ --- an $8\times$ gap, and only half of it is reachable here \\[2pt]
 BCE-with-logits over Mixup/CutMix soft labels
   & Repeated augmentation is stream-level, not per-batch \\[2pt]
 Accumulation $k=8$ to LAMB's design batch of $2048$, which at $224^2$ has no other route on a $16$\,GB card
@@ -5996,6 +5996,29 @@ same names, the same $18{,}186$ operations and the same arity, and passes every
 endpoint gate. Moving all sixteen sites and running both at a real mask separates
 them by eight orders of magnitude; at an all-ones mask the difference is exactly
 zero, which is the half of that measurement worth keeping.
+
+\medskip\noindent \textbf{The one remaining delta is the batch-norm group, and it is
+larger than it looks.} Nothing in this render all-reduces activation statistics
+--- all $162$ collectives are on parameter-shaped tensors --- so each replica
+normalises over the $64$ images it holds. The reference reaches $2048$ as four
+accumulation steps of a $512$ micro-batch, and its
+\texttt{jnp.mean(x,\ axis=(0,2,3))} reduces over an axis that is
+\emph{mesh-sharded}, so XLA inserts the collective and the group is the full
+$512$. The per-device tensor is $128$; the group is $512$. Those are different
+numbers and only the second one is the batch-norm statistic.
+
+\medskip\noindent Half of that is a re-render rather than a feature: $k=4$ at
+$128$ per device is the reference's own factorisation of $2048$, and it takes the
+group from $64$ to $128$. \textbf{But it only fits in bf16}, and that is measured
+rather than argued --- against the $11.68$\,GiB the allocator offers on a
+$16$\,GB card, the $8\times64$ render peaks at $6.37$\,GiB and the $4\times128$
+one at $11.13$, which is $95\%$ and leaves nothing for the input pipeline. In
+bf16 the same render peaks at $8.09$\,GiB. So the artifact ships with no fp32
+twin, and the missing twin is the finding rather than an oversight. The last
+$4\times$ needs the statistics themselves all-reduced --- synchronised batch-norm,
+which is a new batched operator, a changed backward, and $53$ collectives a step
+against a run whose whole throughput story is that the all-reduce term is
+$56$\,ms.
 
 \medskip\noindent \textbf{And the reference was the side that was wrong.} Four of
 the five block emitters in \texttt{jax/Jax/Codegen.lean} drew

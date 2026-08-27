@@ -162,6 +162,13 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("emalambacc8x64wxclipdropbce", true, false, true)
   , ("emalambaccdp8x64wxclipdropbcewd001", true, false, true)
   , ("emalambacc8x64wxclipdropbcewd001", true, false, true)
+    -- ⭐ …at the REFERENCE's own factorisation of 2048: `k = 4` x 128 per device. ⚠ `k` is one
+    -- digit and the batch is three, the reverse of `acc8x64`'s shape, so the `takeWhile (!= 'x')`
+    -- parse is exercised from the other side.
+  , ("emalambaccdp4x128wxclipdropbcebf16", true, false, true)
+  , ("emalambacc4x128wxclipdropbcebf16", true, false, true)
+  , ("emalambaccdp4x128wxclipdropbcewd001bf16", true, false, true)
+  , ("emalambacc4x128wxclipdropbcewd001bf16", true, false, true)
     -- ▶▶ GRADIENT ACCUMULATION's spellings (`r34AdamVariant .adamwAccum`). ⚠ Both carry `k` and a
     -- batch, so the marker concatenates against DIGITS and an `x` — a shape none of the other four
     -- markers has, and `accdp` puts `dp` INSIDE the prefix rather than after it.
@@ -309,7 +316,10 @@ private def accumSpellings : List String :=
    "emalambaccdp8x64wxclipbcewd001", "emaaccdp4x64", "emaacc4x64",
    -- ⭐ and the same four with stochastic depth — RSB-A2/A1 complete
    "emalambaccdp8x64wxclipdropbce", "emalambacc8x64wxclipdropbce",
-   "emalambaccdp8x64wxclipdropbcewd001", "emalambacc8x64wxclipdropbcewd001"]
+   "emalambaccdp8x64wxclipdropbcewd001", "emalambacc8x64wxclipdropbcewd001",
+   -- ⭐ the ghost-BN-aligned pair, k = 4 x 128 per device
+   "emalambaccdp4x128wxclipdropbcebf16", "emalambacc4x128wxclipdropbcebf16",
+   "emalambaccdp4x128wxclipdropbcewd001bf16", "emalambacc4x128wxclipdropbcewd001bf16"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- ⚠ and accumulation must disturb NONE of the other three axes it does not compose with. `acc4x64`
@@ -431,6 +441,14 @@ private def accumSpellings : List String :=
 #guard cdOn "wxclipdrop" == false
 #guard cdOn "dropbce" == false
 #guard sdOn "wxclipdropbce" == true
+-- ⭐ `k = 4` with a THREE-DIGIT batch — the reverse shape of `acc8x64`, and the case where a parse
+-- reading "the digits" rather than "the digits before the x" returns 4128 or 128 instead of 4.
+#guard accK "emalambaccdp4x128wxclipdropbcebf16" == 4
+#guard accK "emalambacc4x128wxclipdropbcebf16" == 4
+#guard accK "emalambaccdp4x128wxclipdropbcebf16" != 128
+#guard accK "emalambaccdp4x128wxclipdropbcebf16" != 4128
+#guard nRegions "emalambaccdp4x128wxclipdropbcebf16" == 5
+#guard emaRegion "emalambaccdp4x128wxclipdropbcebf16" == some 4
 -- ⚠ the shadow is the LAST region in every spelling, which is what lets `scoreCheckpoint` bound
 -- the slice at `nRegions` without a second index.
 #guard table.all (fun (v, _, _, _) =>
