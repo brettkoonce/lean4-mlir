@@ -1720,15 +1720,112 @@ int iree_ffi_train_step_generic(
   return not_ported("train_step_generic");
 }
 
+// Adam train step for scalar-label classification. Ported 2026-08-26 against
+// the `train_step_adam_seg` template below; the two are the same ride and
+// differ in exactly one input, the label tensor's rank:
+//
+//   seg    %y_seg : tensor<b x H x W x i32>   -- one label per PIXEL
+//   adam   %y     : tensor<b x i32>           -- one label per EXAMPLE
+//
+// Both are int32 and both go up through `invoke_typed` with an explicit S32
+// dtype, for the same reason the seg port needed it: the old all-f32 upload
+// path would reinterpret label bits as floats and train silently against
+// garbage.
+//
+// ⚠ The arity was verified against the emitted graph rather than assumed —
+// `.lake/build/bigram_shakespeare_train_step.mlir` @main is
+// (params…, %x_flat, %y, %lr, %t), i.e. np + 4 inputs. Do NOT infer this from
+// the verified nets' train steps (e.g. resnet50), which have no %t: those
+// reach XLA through the generic `iree_ffi_invoke_f32` and are not clients of
+// this entry point at all.
 int iree_ffi_train_step_adam(
     iree_ffi_session_t* s, const char* f, int b, int np,
     const int32_t* pr, const int64_t* pd, const int64_t* ps, const float* pp,
     int xr, const int64_t* xd, const float* x, const int32_t* y, float lr, float t,
     float* po, float* lo, int nb, const int64_t* bs, float* bo) {
-  (void)s;(void)f;(void)b;(void)np;(void)pr;(void)pd;(void)ps;(void)pp;
-  (void)xr;(void)xd;(void)x;(void)y;(void)lr;(void)t;(void)po;(void)lo;
-  (void)nb;(void)bs;(void)bo;
-  return not_ported("train_step_adam");
+
+  if (np < 0 || xr < 0 || nb < 0) return 1;
+  const int have_bn   = (bo && nb > 0) ? 1 : 0;
+  const int n_inputs  = np + 4;                       // params, x, y, lr, t
+  const int n_outputs = np + 1 + (have_bn ? nb * 2 : 0);
+
+  // Total rank across every input: the params, x, y (rank 1), and two rank-0
+  // scalars which contribute no dims.
+  int64_t n_dims = 0;
+  for (int i = 0; i < np; i++) {
+    if (pr[i] < 0) return 1;
+    n_dims += pr[i];
+  }
+  n_dims += xr + 1;
+
+  int32_t*      ranks = (int32_t*)     malloc((size_t)n_inputs  * sizeof(*ranks));
+  int32_t*      types = (int32_t*)     malloc((size_t)n_inputs  * sizeof(*types));
+  int64_t*      dims  = (int64_t*)     malloc((size_t)(n_dims ? n_dims : 1) * sizeof(*dims));
+  const float** ins   = (const float**)malloc((size_t)n_inputs  * sizeof(*ins));
+  int64_t*      totes = (int64_t*)     malloc((size_t)n_outputs * sizeof(*totes));
+  float**       outs  = (float**)      malloc((size_t)n_outputs * sizeof(*outs));
+  if (!ranks || !types || !dims || !ins || !totes || !outs) {
+    free(ranks); free(types); free(dims); free(ins); free(totes); free(outs);
+    fprintf(stderr, "[pjrt_ffi] train_step_adam: out of memory\n");
+    return 1;
+  }
+
+  // lr and t are passed by value; invoke uploads from the pointers we hand it,
+  // so they need addresses that outlive the call below.
+  float lr_v = lr, t_v = t;
+
+  // ── inputs ──
+  int      di   = 0;   // cursor into `dims`
+  int64_t  poff = 0;   // cursor into the packed param buffer
+  for (int i = 0; i < np; i++) {
+    ranks[i] = pr[i];
+    types[i] = PJRT_Buffer_Type_F32;
+    for (int k = 0; k < pr[i]; k++) dims[di + k] = pd[di + k];
+    ins[i]   = pp + poff;
+    di      += pr[i];
+    poff    += ps[i];
+  }
+  ranks[np] = xr;
+  types[np] = PJRT_Buffer_Type_F32;
+  for (int k = 0; k < xr; k++) dims[di + k] = xd[k];
+  ins[np]   = x;
+  di       += xr;
+
+  // The one int32 input: one class index per example. `ins` is `const float**`
+  // purely because that is the array type the invoke path takes — the bytes are
+  // never read as float, because `types[np+1]` says S32.
+  ranks[np + 1] = 1;
+  types[np + 1] = PJRT_Buffer_Type_S32;
+  dims[di + 0]  = b;
+  ins[np + 1]   = (const float*)y;
+  di           += 1;
+
+  ranks[np + 2] = 0;  types[np + 2] = PJRT_Buffer_Type_F32;  ins[np + 2] = &lr_v;
+  ranks[np + 3] = 0;  types[np + 3] = PJRT_Buffer_Type_F32;  ins[np + 3] = &t_v;
+
+  // ── outputs ── (all f32: updated params, the loss scalar, then BN stats)
+  int64_t ooff = 0;
+  for (int i = 0; i < np; i++) {
+    totes[i] = ps[i];
+    outs[i]  = po + ooff;
+    ooff    += ps[i];
+  }
+  totes[np] = 1;
+  outs[np]  = lo;
+  if (have_bn) {
+    int64_t boff = 0;
+    for (int i = 0; i < nb * 2; i++) {
+      totes[np + 1 + i] = bs[i];
+      outs[np + 1 + i]  = bo + boff;
+      boff             += bs[i];
+    }
+  }
+
+  int rc = invoke_typed(s, f, n_inputs, ranks, dims, ins, types,
+                        n_outputs, totes, outs);
+
+  free(ranks); free(types); free(dims); free(ins); free(totes); free(outs);
+  return rc;
 }
 
 // Adam train step for per-pixel segmentation (and, through the same ride, the
