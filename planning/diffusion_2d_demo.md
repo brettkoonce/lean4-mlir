@@ -174,10 +174,47 @@ energy distance sits at 30× the true-vs-true floor entirely because of it.
 ⚠ That points at η, not at capacity or steps. `ddimStep` is **η = 0, fully
 deterministic**, so which mode a sample lands on is decided by how the learned
 field partitions the noise plane, and an imperfect partition mis-allocates mass
-permanently — extra steps cannot fix it. §4's "report per sampler (DDPM η=1 vs
-DDIM η=0)" is therefore the next experiment and now has a specific hypothesis:
-**η = 1 should even out the per-mode mass while leaving mode recall at 8/8.**
-⛔ `Ddpm.ddimStep` cannot do it — η=1 needs the σ_t noise term added.
+permanently — extra steps cannot fix it.
+
+## 5.6 ⭐⭐ THE η SWEEP — hypothesis REFUTED, and the answer is η ≈ 0.25
+
+§5.5 predicted: *"η = 1 should even out the per-mode mass while leaving mode
+recall at 8/8."* **Both halves are wrong.** Swept on ONE fixed checkpoint (20k
+steps, `reuse` flag — training is not reproducible run-to-run, so a sweep that
+retrained per point would confound η with a different model), 200 sampler steps:
+
+| η | recall | off-manifold | energy | per-mode mass |
+|---|---|---|---|---|
+| 0.00 (DDIM) | 8/8 | 4.98% | 0.0244 | 6.3–18.8% |
+| **0.25** | 8/8 | 6.69% | **0.0104** | **8.1–17.5%** |
+| 0.50 | 8/8 | 9.91% | 0.0326 | 4.9–23.7% |
+| 0.75 | 8/8 | 18.95% | 0.0850 | 1.9–37.8% |
+| 1.00 (DDPM) | **7/8** | 39.40% | 0.1024 | 0.4–24.9% |
+
+▶ η = 1 does not even out the mass — it **loses a mode entirely** (0.4%) and
+*widens* the spread. But the mechanism behind the prediction is real at small η:
+**η = 0.25 more than halves the energy distance** (0.0244 → 0.0104, 30× → 13×
+the floor) and gives the tightest per-mode mass of any arm. A little
+stochasticity repairs the deterministic partition; a lot destroys it.
+
+⚠ **The obvious confound was checked and ruled out.** η = 1 is ancestral
+sampling, designed for the full T = 1000 trajectory, so its failure at 200
+strided steps could have been a step-count artifact. Re-run at 1000 steps, same
+weights: recall recovers to 8/8 and off-manifold falls 39.4% → 8.4%, **but
+energy gets WORSE, 0.1024 → 0.1723** (215× the floor) — the mass split hardens
+into four modes at ~3% and four at 15–24%. η = 1 is intrinsically wrong here.
+
+Best configuration measured: **η = 0.25 at 1000 steps — energy 0.0098, 12× the
+floor**, the closest this demo has come to the true density.
+
+⭐ No new primitive was needed. `ddimStep` computes `a·x + b·e`, so the σ_t term
+is a second call with `(1.0, σ_t, z)`; the generalized coefficients
+(Song et al. eq. 12) are computed host-side in the demo.
+
+⚠ Still single-seed, and off-manifold and energy **disagree** about η's
+direction (off-manifold prefers η = 0, energy prefers η = 0.25). With n = 1 that
+disagreement is not resolved, and it is a reason to keep reporting both rather
+than collapsing to one score.
 
 ### ⚠ Codegen change this required
 

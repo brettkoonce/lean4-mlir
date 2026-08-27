@@ -56,10 +56,18 @@ def main (args : List String) : IO Unit := do
   -- question is how many reverse steps a 2-D manifold actually needs, and
   -- the image demos' 50 is a convention nobody measured. Here it is a sweep.
   let nStepsArg := (args[1]?.bind String.toNat?).getD 50
+  -- eta as a PERCENT (the arg parser has only `toNat?`): 0 = DDIM,
+  -- deterministic; 100 = DDPM, full stochastic. The plan's §4 asks for both.
+  let etaPct := (args[2]?.bind String.toNat?).getD 0
+  -- `reuse` loads the saved checkpoint instead of retraining. Training is
+  -- NOT reproducible run-to-run, so an eta sweep that retrained at each
+  -- point would confound eta with a different model. Sweeps hold weights fixed.
+  let reuse := args.any (· == "reuse")
+  let eta : Float := etaPct.toFloat / 100.0
   let spec   := diff2dDenoiser
   let cfg    := diff2dConfig
   let B      := cfg.batchSize
-  IO.eprintln s!"{spec.name}: {spec.totalParams} params, {steps} steps"
+  IO.eprintln s!"{spec.name}: {spec.totalParams} params, {steps} steps, eta={eta}"
 
   IO.FS.createDirAll ".lake/build"
   let pfx := spec.buildPrefix
@@ -109,30 +117,36 @@ def main (args : List String) : IO Unit := do
   let mut bnRun ← F32.const spec.nBnStats.toUSize 0.0
   let bpE := nPts / B
 
-  IO.eprintln s!"training: {steps} steps, batch={B}, lr={cfg.learningRate}"
-  let t0 ← IO.monoMsNow
-  for gs in [:steps] do
-    let bi := gs % bpE
-    let x0 := F32.slice raw (bi * B * nPer) (B * nPer)
-    let (xt, rest) ← Ddpm.stepInputs x0 alphaBar batch nPer.toUSize gs.toUSize
-    let (eps, tba) := rest
-    -- Time conditioning with H = W = 1: the image encoder applied to a point.
-    let xtc ← Ddpm.prependSinCosT xt tba batch nPer.toUSize 1 1
-                nFreq.toUSize Tmax.toUSize
-    let packed := (p.append m).append v
-    let out ← LowererSession.trainStepAdamF32Ddpm sess spec.trainFnName
-                packed allShapes xtc xSh eps
-                cfg.learningRate (gs+1).toFloat
-                bnShapes batch 2 1 1
-    let loss := F32.extractLoss out nT
-    p := F32.slice out 0 nP
-    m := F32.slice out nP nP
-    v := F32.slice out (2 * nP) nP
-    if gs % 500 == 0 || gs + 1 == steps then
-      IO.eprintln s!"  step {gs}/{steps}: loss={loss}"
-  let t1 ← IO.monoMsNow
-  IO.eprintln s!"trained in {t1-t0}ms"
-  IO.FS.writeBinFile s!"{pfx}_params.bin" p
+  let ckpt := s!"{pfx}_params.bin"
+  let haveCkpt ← System.FilePath.pathExists ckpt
+  if reuse && haveCkpt then
+    p ← IO.FS.readBinFile ckpt
+    IO.eprintln s!"  reusing checkpoint {ckpt} — NOT training"
+  else
+    IO.eprintln s!"training: {steps} steps, batch={B}, lr={cfg.learningRate}"
+    let t0 ← IO.monoMsNow
+    for gs in [:steps] do
+      let bi := gs % bpE
+      let x0 := F32.slice raw (bi * B * nPer) (B * nPer)
+      let (xt, rest) ← Ddpm.stepInputs x0 alphaBar batch nPer.toUSize gs.toUSize
+      let (eps, tba) := rest
+      -- Time conditioning with H = W = 1: the image encoder applied to a point.
+      let xtc ← Ddpm.prependSinCosT xt tba batch nPer.toUSize 1 1
+                  nFreq.toUSize Tmax.toUSize
+      let packed := (p.append m).append v
+      let out ← LowererSession.trainStepAdamF32Ddpm sess spec.trainFnName
+                  packed allShapes xtc xSh eps
+                  cfg.learningRate (gs+1).toFloat
+                  bnShapes batch 2 1 1
+      let loss := F32.extractLoss out nT
+      p := F32.slice out 0 nP
+      m := F32.slice out nP nP
+      v := F32.slice out (2 * nP) nP
+      if gs % 500 == 0 || gs + 1 == steps then
+        IO.eprintln s!"  step {gs}/{steps}: loss={loss}"
+    let t1 ← IO.monoMsNow
+    IO.eprintln s!"trained in {t1-t0}ms"
+    IO.FS.writeBinFile s!"{pfx}_params.bin" p
 
   -- ── sampling: DDIM (η = 0) from pure noise, batched ──
   let nGen : Nat := 2048
@@ -161,11 +175,27 @@ def main (args : List String) : IO Unit := do
       -- rather than a literal 1.0, which would send `a = √ᾱ_prev/√ᾱ_t` sky-high.
       let abP := if tPrev == 0 then 0.9999 else F32.read alphaBar tPrev.toUSize
       let a := Float.sqrt abP / Float.sqrt abT
-      let b := Float.sqrt (1.0 - abP) - a * Float.sqrt (1.0 - abT)
+      -- Generalized DDIM (Song et al. eq. 12):
+      --   x_{t-1} = a·x_t + b'·ε̂ + σ_t·z
+      --   σ_t = η·√((1-ᾱ_prev)/(1-ᾱ_t))·√(1 - ᾱ_t/ᾱ_prev)
+      --   b'  = √(1 - ᾱ_prev - σ_t²) − a·√(1-ᾱ_t)
+      -- η = 0 collapses to the deterministic form (σ = 0, b' = b) and η = 1 is
+      -- ancestral DDPM sampling. ⭐ No new primitive: `ddimStep` computes
+      -- `a·x + b·e`, so the noise term is a second call with (1.0, σ_t, z).
+      -- ᾱ decreases in t and tPrev < tCur, so ᾱ_t/ᾱ_prev < 1 and the inner
+      -- root is real; the outer one is clamped because η→1 can drive
+      -- 1 − ᾱ_prev − σ² marginally negative at the ends of the schedule.
+      let sigma := eta * Float.sqrt ((1.0 - abP) / (1.0 - abT))
+                       * Float.sqrt (1.0 - abT / abP)
+      let inner := 1.0 - abP - sigma * sigma
+      let b := Float.sqrt (max inner 0.0) - a * Float.sqrt (1.0 - abT)
       x ← Ddpm.ddimStep x epsHat a b nPer.toUSize
+      if sigma > 0.0 then
+        let z ← Ddpm.sampleNoise nPer.toUSize (i * 131071 + k * 8191 + 17).toUSize
+        x ← Ddpm.ddimStep x z 1.0 sigma nPer.toUSize
     acc := acc.push x
   let gen := F32.concat acc
-  let outPath := s!".lake/build/diffusion2d_samples_s{steps}_n{nSteps}.bin"
+  let outPath := s!".lake/build/diffusion2d_samples_s{steps}_n{nSteps}_e{etaPct}.bin"
   IO.FS.writeBinFile outPath gen
   IO.FS.writeBinFile ".lake/build/diffusion2d_samples.bin" gen
   IO.eprintln s!"wrote .lake/build/diffusion2d_samples.bin ({F32.size gen / 2} points)"
