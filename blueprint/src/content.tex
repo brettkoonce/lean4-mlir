@@ -5985,27 +5985,41 @@ endpoint gate. Moving all sixteen separates them by eight orders of magnitude at
 a real mask, and by exactly zero at an all-ones one.
 
 \medskip\noindent \textbf{What each render costs on one card.} XLA's own
-\texttt{peak\_memory\_in\_bytes}, against the $11.68$\,GiB the allocator leaves
-usable on a $16$\,GB card:
+\texttt{peak\_memory\_in\_bytes}, against a $15.11$\,GiB budget --- which is a
+setting and not the hardware, as the paragraph after the table explains:
 
 \begin{center}
-\begin{tabular}{@{}l l c r r@{}}
+\begin{tabular}{@{}l l c r r r@{}}
 \hline
-render & precision & BN group & peak & of budget \\
+render & precision & BN group & peak & of $11.68$ & of $15.11$ \\
 \hline
-$8\times64$                  & fp32 & $64$  & $6.23$\,GiB & $53\%$ \\
-$8\times64$                  & bf16 & $64$  & $4.32$\,GiB & $37\%$ \\
-$8\times64$ + EMA + sd       & fp32 & $64$  & $6.42$\,GiB & $55\%$ \\
-$4\times128$ + EMA + sd      & fp32 & $128$ & $11.13$\,GiB & $95\%$ \\
-$4\times128$ + EMA + sd      & bf16 & $128$ & $8.09$\,GiB & $69\%$ \\
+$8\times64$             & fp32 & $64$  & $6.18$\,GiB  & $53\%$ & $41\%$ \\
+$8\times64$             & bf16 & $64$  & $4.32$\,GiB  & $37\%$ & $29\%$ \\
+$8\times64$ + EMA + sd  & fp32 & $64$  & $6.37$\,GiB  & $55\%$ & $42\%$ \\
+$4\times128$ + EMA + sd & bf16 & $128$ & $8.09$\,GiB  & $69\%$ & $54\%$ \\
+$4\times128$ + EMA + sd & fp32 & $128$ & $11.91$\,GiB & over   & $79\%$ \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent The fifth region costs $0.19$\,GiB, all of it arguments. Stochastic
-depth costs nothing measurable. And $4\times128$ in fp32 is $95\%$ of the budget,
-so that pair ships with no fp32 twin --- \emph{the missing twin is the finding},
-since precision and batch-norm group were meant to be independent axes.
+depth costs nothing measurable.
+
+\medskip\noindent \textbf{And the two budget columns are the point.} A PJRT client
+created with no allocator options takes the plugin's default reservation of
+$0.75$, which is where $11.68$ comes from --- leaving four gigabytes of a $16$\,GB
+card unreachable. \texttt{XLA\_PYTHON\_CLIENT\_MEM\_FRACTION} does not change
+that: the plugin never reads it. JAX's Python layer reads it and passes
+\texttt{memory\_fraction} as a \emph{create option}, so the JAX trainers could
+always be told to use the whole card and the verified ones could not. The shim now
+passes the same option, and XLA's own log line is the measurement ---
+\emph{allocating 15.11GiB} against $11.68$ unset. \textbf{The largest render goes
+from not fitting to $79\%$, and nothing about the hardware moved.}
+
+\medskip\noindent \emph{Also worth knowing before quoting a peak}: the fp32
+$4\times128$ figure is $11.52$\,GiB under the default budget and $11.91$ under the
+raised one. XLA rematerialises less when it has room, so a compile-time peak is
+not independent of the allocator it was compiled against.
 
 \medskip\noindent \textbf{Which leaves the batch-norm group, larger than it
 looks.} Nothing here all-reduces activation statistics, so each replica

@@ -178,3 +178,29 @@ Identical to the ROCm path up to the IREE compile step — zero changes to
 Lean code, MLIR codegen, or the training loop. Only the compile flag
 (`--iree-hal-target-backends=cuda`) and the runtime library (CUDA HAL in
 `libiree_ffi.so`) differ. See the diagram at the bottom of [`ROCM.md`](ROCM.md).
+
+## Using the whole card
+
+⚠⚠ **By default the verified path reaches only ~73 % of a GPU, and that is a plugin default rather
+than the hardware.** `PJRT_Client_Create` with no create options takes the CUDA plugin's BFC
+`memory_fraction = 0.75`, so a 16 GB 4060 Ti reserves **11.68 GiB** and leaves ~4.3 GiB unreachable.
+
+⚠ `XLA_PYTHON_CLIENT_MEM_FRACTION` does **not** change this. The plugin never reads that variable —
+JAX's Python layer reads it and passes `memory_fraction` as a create option. The shim passes the
+same option, off its own env vars:
+
+```bash
+LEAN_MLIR_MEM_FRACTION=0.97   # raise the BFC reservation, 0 < f <= 1
+LEAN_MLIR_PREALLOCATE=0       # allocate on demand instead of up front
+```
+
+Both unset leaves the plugin's defaults, so every figure measured before this existed reproduces.
+XLA prints what it took, which is how to confirm it:
+
+```
+XLA backend allocating 15.11GiB (16221470720 bytes) on device 0 for BFCAllocator   # at 0.97
+XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator   # unset
+```
+
+▶ It is what makes the fp32 `resnet50in_emalambaccdp4x128wxclipdrop*` renders runnable: 11.91 GiB
+peak is over the default budget and 79 % of the raised one.

@@ -169,6 +169,11 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("emalambacc4x128wxclipdropbcebf16", true, false, true)
   , ("emalambaccdp4x128wxclipdropbcewd001bf16", true, false, true)
   , ("emalambacc4x128wxclipdropbcewd001bf16", true, false, true)
+    -- and their fp32 peers, which fit once the allocator is told to use the card
+  , ("emalambaccdp4x128wxclipdropbce", true, false, true)
+  , ("emalambacc4x128wxclipdropbce", true, false, true)
+  , ("emalambaccdp4x128wxclipdropbcewd001", true, false, true)
+  , ("emalambacc4x128wxclipdropbcewd001", true, false, true)
     -- ▶▶ GRADIENT ACCUMULATION's spellings (`r34AdamVariant .adamwAccum`). ⚠ Both carry `k` and a
     -- batch, so the marker concatenates against DIGITS and an `x` — a shape none of the other four
     -- markers has, and `accdp` puts `dp` INSIDE the prefix rather than after it.
@@ -319,7 +324,9 @@ private def accumSpellings : List String :=
    "emalambaccdp8x64wxclipdropbcewd001", "emalambacc8x64wxclipdropbcewd001",
    -- ⭐ the ghost-BN-aligned pair, k = 4 x 128 per device
    "emalambaccdp4x128wxclipdropbcebf16", "emalambacc4x128wxclipdropbcebf16",
-   "emalambaccdp4x128wxclipdropbcewd001bf16", "emalambacc4x128wxclipdropbcewd001bf16"]
+   "emalambaccdp4x128wxclipdropbcewd001bf16", "emalambacc4x128wxclipdropbcewd001bf16",
+   "emalambaccdp4x128wxclipdropbce", "emalambacc4x128wxclipdropbce",
+   "emalambaccdp4x128wxclipdropbcewd001", "emalambacc4x128wxclipdropbcewd001"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- ⚠ and accumulation must disturb NONE of the other three axes it does not compose with. `acc4x64`

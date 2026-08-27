@@ -1788,18 +1788,33 @@ end Proofs.StableHLO
 -- ▶ These renders close HALF of it, in the ratio sense: `k = 4` and 128 per device is the
 -- reference's own factorisation, so the group goes 64 → 128 and the remaining 4× needs SYNC-BN.
 --
--- ⚠⚠⚠ **AND THEY ARE bf16-ONLY, WHICH IS A MEASURED COUPLING BETWEEN TWO AXES THAT WERE MEANT TO
--- BE INDEPENDENT.** `scripts/bf16_peak_memory.py`, against the 11.68 GiB BFC budget of a 16 GB
--- 4060 Ti:
+-- ⚠⚠⚠ **THEY NEED MORE OF THE CARD THAN THE PLUGIN HANDS OUT BY DEFAULT, AND THAT DEFAULT WAS
+-- BEING READ AS A HARDWARE LIMIT.** `PJRT_Client_Create` with no create options takes the GPU
+-- plugin's BFC default of `memory_fraction = 0.75`, which on a 16 GB 4060 Ti reserves **11.68 GiB**
+-- and leaves ~4.3 GiB of the card unreachable. Every "% of budget" figure in this tree was taken
+-- against that number. It is a DEFAULT, not the card.
 --
---     8×64   fp32                   6.18 G   53 %      4×128  fp32              11.33 G   97 %  ⛔
---     8×64   fp32 + EMA + sd        6.37 G   55 %      4×128  fp32 + EMA + sd   11.13 G   95 %  ⛔
---     8×64   bf16                   4.32 G   37 %      4×128  bf16               7.91 G   68 %  ✅
---                                                      4×128  bf16 + EMA + sd    8.09 G   69 %  ✅
+-- ⭐ `ffi/pjrt_ffi.c` now passes `memory_fraction` as a create option
+-- (`LEAN_MLIR_MEM_FRACTION`), and XLA's own log line is the measurement:
+-- *"XLA backend allocating 15.11GiB … for BFCAllocator"* at 0.97 against 11.68 unset.
+-- ⚠ `XLA_PYTHON_CLIENT_MEM_FRACTION` never reached here — the plugin does not read it (the string
+-- is absent from `xla_cuda_plugin.so`); JAX's Python layer reads it and passes the same create
+-- option. So the JAX trainers could always be told to use more of the card and these could not.
 --
--- So the ghost-BN improvement is not available in fp32 on this box at all, and there is no fp32
--- twin of these on purpose. ▶ That is the opposite of §4c's rule (a tier without its precision peer
--- reads as an accident); here the missing peer is the finding.
+--     render                        peak      of 11.68 (default)   of 15.11 (at 0.97)
+--     8×64   fp32                   6.18 G      53 %                 41 %
+--     8×64   fp32 + EMA + sd        6.42 G      55 %                 42 %
+--     8×64   bf16                   4.32 G      37 %                 29 %
+--     4×128  fp32                  11.33 G      97 %                 75 %
+--     4×128  fp32 + EMA + sd       11.90 G     ⛔ over                79 %
+--     4×128  bf16 + EMA + sd        8.09 G      69 %                 54 %
+--
+-- ⚠ The fp32 peak MOVES with the budget — 11.52 G measured under the default and 11.90 G under
+-- 0.97 — because XLA remateralises less aggressively when it has room. The compile-time number is
+-- not independent of the allocator, which is worth knowing before quoting one.
+-- ▶ So the full (precision × factorisation) square exists after all, and §4c's rule holds: a tier
+-- ships with its precision peer. Running the `4×128` fp32 pair needs `LEAN_MLIR_MEM_FRACTION=0.97`,
+-- which is a job-config line rather than a missing artifact.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcebf16_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
     (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
@@ -1816,6 +1831,25 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
     (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
+
+-- ── …and the fp32 peers of the same four. ⚠ They need `LEAN_MLIR_MEM_FRACTION=0.97`; at the
+-- plugin's 0.75 default the complete render does not fit. See the table above. ─────────────────
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc4x128wxclipdropbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc4x128wxclipdropbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
 
 -- ⚠ `k` is FOUR here and the batch is 128, so the `accK` parse sees `acc4x128` / `accdp4x128` —
 -- a two-digit batch after a one-digit `k`, the reverse of `acc8x64`'s shape.

@@ -231,22 +231,40 @@ and here.
 which is `GRAD_ACCUM = 4` / `MICRO_BATCH = 512` exactly. Group 64 → **128**. Four artifacts
 (`emalambacc{,dp}4x128wxclipdropbce{,wd001}bf16`).
 
-⚠⚠ **bf16-ONLY, and that is a MEASURED coupling between two axes meant to be independent.**
-`scripts/bf16_peak_memory.py` against the 11.68 GiB BFC budget of a 16 GB 4060 Ti:
+⚠⚠⚠ **"bf16-ONLY" WAS WRONG, AND THE ERROR WAS READING A DEFAULT AS A LIMIT** (brett caught it,
+2026-08-27). `4×128` fp32 was called unusable at 95–97 % of an 11.68 GiB budget. **11.68 GiB is not
+the card** — it is the GPU plugin's BFC default of `memory_fraction = 0.75` on a 16 GB 4060 Ti, and
+it left four gigabytes unreachable.
 
-| render | peak | of budget |
-|---|---|---|
-| `8×64` fp32 | 6.18 G | 53 % |
-| `8×64` fp32 + EMA + sd | 6.37 G | 55 % |
-| `8×64` bf16 | 4.32 G | 37 % |
-| `4×128` fp32 | 11.33 G | ⛔ **97 %** |
-| `4×128` fp32 + EMA + sd | 11.13 G | ⛔ **95 %** |
-| `4×128` bf16 | 7.91 G | ✅ 68 % |
-| `4×128` bf16 + EMA + sd | **8.09 G** | ✅ **69 %** |
+⛔ **And the verified path had no way to raise it.** `ffi/pjrt_ffi.c` called `PJRT_Client_Create`
+with **no create options**. ⚠ `XLA_PYTHON_CLIENT_MEM_FRACTION` does not help: the plugin never
+reads it (checked — the string is absent from `xla_cuda_plugin.so`); JAX's *Python* layer reads it
+and passes `memory_fraction` as a create option. So the JAX trainers could always be told to use
+the whole card and the verified trainers could not, and nothing in the tree said so.
 
-⭐ **There is deliberately NO fp32 twin.** §4c's rule is that a tier shipping without its precision
-peer "reads as a decision and is really an accident of ordering" — here the missing peer *is* the
-decision, and the measurement is why.
+⭐ **Fixed**: the shim passes `memory_fraction` and `preallocate` as create options, off
+`LEAN_MLIR_MEM_FRACTION` / `LEAN_MLIR_PREALLOCATE`. XLA's own log line is the measurement —
+*"XLA backend allocating 15.11GiB (16221470720 bytes) … for BFCAllocator"* against
+*"11.68GiB (12543066112 bytes)"* unset. **+3.43 GiB, 29 %.**
+
+| render | peak | of 11.68 (default) | of 15.11 (at 0.97) |
+|---|---|---|---|
+| `8×64` fp32 | 6.18 G | 53 % | 41 % |
+| `8×64` fp32 + EMA + sd | 6.37 G | 55 % | 42 % |
+| `8×64` bf16 | 4.32 G | 37 % | 29 % |
+| `4×128` bf16 + EMA + sd | 8.09 G | 69 % | 54 % |
+| `4×128` fp32 + EMA + sd | **11.91 G** | ⛔ over | ✅ **79 %** |
+
+✅ **So the fp32 peers ARE rendered** and the full (precision × factorisation) square exists —
+§4c's rule holds after all. Running the `4×128` fp32 pair needs `LEAN_MLIR_MEM_FRACTION=0.97`,
+which is a job-config line rather than a missing artifact.
+
+⚠ **A compile-time peak is not independent of the allocator it was compiled against**: the fp32
+`4×128` reads 11.52 G under the default budget and 11.91 G under the raised one, because XLA
+rematerialises less when it has room. Quote the budget with the peak.
+
+⚠ The shim change is opt-in and was regression-checked: `shard-check convnext` returns
+`77.999521 e-9` / `0.041654` **bit-identically** with the option set and unset.
 
 ⚠ The EMA fifth region costs **0.19 G** and it is all `args` (0.42 → 0.51 G): 25.6 M params × 4 B =
 102 MB, exactly one more region. Temporaries are unchanged at 5.38 G. **Stochastic depth costs

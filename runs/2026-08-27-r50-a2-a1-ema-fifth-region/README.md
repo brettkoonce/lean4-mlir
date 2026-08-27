@@ -162,24 +162,37 @@ temporaries for one execution, i.e. the number that decides whether a batch FITS
 `nvidia-smi`, which reports the BFC allocator's PREALLOCATED pool (~73 % of the card) and makes two
 very different artifacts read the same. Budget: **11.68 GiB** per card on a 16 GB 4060 Ti.
 
-| render | peak | args | temp | of budget |
-|---|---|---|---|---|
-| A2/A1 `8×64` fp32 | 6.23 G | 0.42 | 5.43 | 53 % |
-| A2/A1 `8×64` fp32 + EMA | 6.42 G | 0.51 | 5.43 | 55 % |
-| A2/A1 `8×64` fp32 + EMA + sd | **6.42 G** | 0.51 | 5.43 | **55 %** |
-| A2/A1 `8×64` bf16 | 4.32 G | 0.42 | 3.53 | 37 % |
-| ghost-BN `4×128` bf16 + EMA + sd | 8.09 G | 0.55 | 7.07 | 69 % |
-| ghost-BN `4×128` **fp32** + EMA + sd | 11.13 G | — | — | ⛔ **95 %** |
-| ghost-BN `4×128` **fp32** | 11.33 G | — | — | ⛔ **97 %** |
+| render | peak | of 11.68 (default) | of 15.11 (at 0.97) |
+|---|---|---|---|
+| A2/A1 `8×64` fp32 | 6.18 G | 53 % | 41 % |
+| A2/A1 `8×64` fp32 + EMA + sd | 6.37 G | 55 % | 42 % |
+| A2/A1 `8×64` bf16 | 4.32 G | 37 % | 29 % |
+| ghost-BN `4×128` bf16 + EMA + sd | 8.09 G | 69 % | 54 % |
+| ghost-BN `4×128` fp32 + EMA + sd | **11.91 G** | ⛔ over | ✅ **79 %** |
 
-⭐ **The EMA fifth region costs 0.19 G and it is ALL `args`** (0.42 → 0.51): 25.6 M params × 4 B =
-102 MB, exactly one more region, with temporaries unchanged at 5.43 G. **Stochastic depth costs
-nothing measurable** — 16 masks of `tensor<64×f32>` is 4 KB.
+⭐ **The fifth region costs 0.19 G and it is ALL `args`** (0.42 → 0.51): 25.6 M params × 4 B,
+exactly one more region, temporaries unchanged. **Stochastic depth costs nothing measurable** —
+16 masks of `tensor<64×f32>` is 4 KB.
 
-⚠⚠ **The ghost-BN improvement is bf16-ONLY on this box**, and that is a measured coupling between
-two axes meant to be independent. `4×128` in fp32 is 95–97 % of the budget, which leaves nothing
-for the input pipeline. So those four artifacts ship with **no fp32 twin** — the opposite of §4c's
-rule, and here the missing twin is the finding.
+⚠⚠⚠ **THE TWO BUDGET COLUMNS ARE THE FINDING, and the first draft of this file had only the
+first.** 11.68 GiB is not the card — it is the GPU plugin's BFC default (`memory_fraction = 0.75`)
+taken because `ffi/pjrt_ffi.c` called `PJRT_Client_Create` with **no create options**. Four
+gigabytes of a 16 GB card were unreachable on the verified path, and
+`XLA_PYTHON_CLIENT_MEM_FRACTION` could not reach it: the plugin does not read that variable — JAX's
+Python layer reads it and passes `memory_fraction` as a create option. The shim now does the same.
+XLA's own log line, both ways:
+
+```
+  unset                        : XLA backend allocating 11.68GiB (12543066112 bytes) for BFCAllocator
+  LEAN_MLIR_MEM_FRACTION=0.97  : XLA backend allocating 15.11GiB (16221470720 bytes) for BFCAllocator
+```
+
+⚠ **A compile-time peak is not independent of the allocator it was compiled against** — the fp32
+`4×128` reads 11.52 G under the default and 11.91 G under 0.97, because XLA rematerialises less
+when it has room. Quote the budget alongside the peak.
+
+⚠ Opt-in, and regression-checked: `shard-check convnext` returns `77.999521 e-9` / `0.041654`
+bit-identically with the option set and unset.
 
 ▶ Host side, not in the table: the checkpoint blob is `nRegions × 25,557,032 × 4 B` — **409 MB** at
 four regions, **511 MB** at five.

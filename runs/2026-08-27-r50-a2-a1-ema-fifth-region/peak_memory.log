@@ -1,7 +1,11 @@
   artifact                                                  peak      args      temp   of budget
   -----------------------------------------------------------------------------------------------
-  resnet50in_lambaccdp8x64wxclipbce_train_step.mlir       6.23 G    0.42 G    5.43 G         53 %
-  resnet50in_lambaccdp8x64wxclipbcebf16_train_step.mlir    4.32 G    0.42 G    3.53 G         37 %
-  resnet50in_emalambaccdp8x64wxclipbce_train_step.mlir    6.42 G    0.51 G    5.43 G         55 %
-  resnet50in_emalambaccdp8x64wxclipdropbce_train_step.mlir    6.42 G    0.51 G    5.43 G         55 %
-  resnet50in_emalambaccdp4x128wxclipdropbcebf16_train_step.mlir    8.09 G    0.55 G    7.07 G         69 %
+  resnet50in_lambaccdp8x64wxclipbce_train_step.mlir       6.18 G    0.42 G    5.38 G         41 %
+  resnet50in_lambaccdp8x64wxclipbcebf16_train_step.mlir    4.32 G    0.42 G    3.53 G         29 %
+  resnet50in_emalambaccdp8x64wxclipdropbce_train_step.mlir    6.37 G    0.51 G    5.38 G         42 %
+  resnet50in_emalambaccdp4x128wxclipdropbce_train_step.mlir   11.90 G    0.55 G   10.95 G         79 %
+  resnet50in_emalambaccdp4x128wxclipdropbcebf16_train_step.mlir    8.09 G    0.55 G    7.07 G         54 %
+
+── the budget itself, from XLA's own log line (ffi/pjrt_ffi.c allocator options) ──
+  LEAN_MLIR_MEM_FRACTION unset : XLA backend allocating 11.68GiB (12543066112 bytes) for BFCAllocator
+  LEAN_MLIR_MEM_FRACTION=0.97  : XLA backend allocating 15.11GiB (16221470720 bytes) for BFCAllocator

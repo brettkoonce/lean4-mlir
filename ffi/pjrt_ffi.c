@@ -523,8 +523,69 @@ static int ensure_client(void) {
   }
   g_api = GetPjrtApi();
 
+  // ─── allocator sizing ──────────────────────────────────────────────────────
+  // ⚠⚠ **WITHOUT THIS THE VERIFIED PATH CANNOT USE MOST OF THE CARD, AND NOTHING
+  // SAYS SO.** `PJRT_Client_Create` with no create options takes the GPU
+  // plugin's BFC default — `memory_fraction = 0.75`, which on a 16 GB 4060 Ti
+  // reserves 11.68 GiB and leaves ~4.3 GiB of the card unusable. That 11.68 is
+  // where every "% of budget" figure in `planning/` and the blueprint comes from,
+  // and it is a DEFAULT, not a property of the hardware.
+  //
+  // ⚠ `XLA_PYTHON_CLIENT_MEM_FRACTION` does NOT reach here. The plugin does not
+  // read it (checked: the string does not appear in `xla_cuda_plugin.so`) — JAX's
+  // Python `xla_bridge` reads it and passes `memory_fraction` as a create option,
+  // which is exactly what this block now does. So the JAX trainers could always
+  // be told to use more of the card and the verified trainers never could.
+  //
+  //   LEAN_MLIR_MEM_FRACTION=0.97   raise the BFC reservation (0 < f <= 1)
+  //   LEAN_MLIR_PREALLOCATE=0       allocate on demand instead of up front
+  //
+  // ▶ Unset leaves BOTH options absent, so the plugin's own defaults apply and
+  // every previously-measured figure reproduces. This is opt-in.
+  PJRT_NamedValue copts[2];
+  size_t n_copts = 0;
+  float mem_fraction = 0.0f;
+  {
+    const char* e = getenv("LEAN_MLIR_MEM_FRACTION");
+    if (e && *e) {
+      mem_fraction = (float)atof(e);
+      if (mem_fraction <= 0.0f || mem_fraction > 1.0f) {
+        fprintf(stderr, "[pjrt_ffi] LEAN_MLIR_MEM_FRACTION=%s is not in (0, 1]\n", e);
+        return 1;
+      }
+      PJRT_NamedValue* v = &copts[n_copts++];
+      memset(v, 0, sizeof(*v));
+      v->struct_size = PJRT_NamedValue_STRUCT_SIZE;
+      v->name = "memory_fraction";
+      v->name_size = strlen("memory_fraction");
+      v->type = PJRT_NamedValue_kFloat;
+      v->float_value = mem_fraction;
+    }
+  }
+  {
+    const char* e = getenv("LEAN_MLIR_PREALLOCATE");
+    if (e && *e) {
+      PJRT_NamedValue* v = &copts[n_copts++];
+      memset(v, 0, sizeof(*v));
+      v->struct_size = PJRT_NamedValue_STRUCT_SIZE;
+      v->name = "preallocate";
+      v->name_size = strlen("preallocate");
+      v->type = PJRT_NamedValue_kBool;
+      v->bool_value = (atoi(e) != 0);
+    }
+  }
+
   PJRT_Client_Create_Args ca = {0};
   ca.struct_size = PJRT_Client_Create_Args_STRUCT_SIZE;
+  if (n_copts) {
+    ca.create_options = copts;
+    ca.num_options = n_copts;
+    // ⚠ ANNOUNCED. A silently larger pool is a silently different OOM boundary,
+    // and every "% of budget" number in the tree was taken at the default.
+    fprintf(stderr, "[pjrt_ffi] allocator: %zu create option(s)", n_copts);
+    if (mem_fraction > 0.0f) fprintf(stderr, ", memory_fraction=%.3f", mem_fraction);
+    fprintf(stderr, "\n");
+  }
   if (check(g_api->PJRT_Client_Create(&ca), "Client_Create")) return 1;
   g_client = ca.client;
 
