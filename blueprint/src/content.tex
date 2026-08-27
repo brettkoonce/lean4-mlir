@@ -5931,7 +5931,7 @@ as well:
 tier & epochs & train res & verified render & verified wall clock & top-1 \\
 \hline
 A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
-A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, fp32 + bf16 & \texttt{[todo]} & $79.8\%$ (paper) \\
+A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & \texttt{[todo]} & $79.8\%$ (paper) \\
 A1 (\texttt{a1})           & 600 & $224$ & rendered --- own decay & \texttt{[todo]} & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
@@ -5945,8 +5945,9 @@ artifacts --- identical in $18{,}000$ other lines --- are kept on separate paths
 so that line cannot be lost. A1's other deltas are $600$ epochs, a driver knob,
 and Mixup $\alpha\,0.2$, which rides its own generated shim.
 
-\medskip\noindent \textbf{These renders are not faithful A2 and A1.} The same
-ledger \S\ref{sec:r50_phase4} keeps for A3, kept here before anything is run:
+\medskip\noindent \textbf{The two regularisers these renders used to be missing
+are now in them.} The same ledger \S\ref{sec:r50_phase4} keeps for A3, kept here
+before anything is run:
 
 \begin{center}
 \begin{tabular}{@{}p{0.45\linewidth} p{0.47\linewidth}@{}}
@@ -5954,25 +5955,58 @@ ledger \S\ref{sec:r50_phase4} keeps for A3, kept here before anything is run:
 \emph{In} & \emph{Still out}, worst first \\
 \hline
 \texttt{wdExcludeNormBias}; LAMB's clip at $kC$, after both the all-reduce and the accumulation
-  & \textbf{Model EMA} --- \emph{unrepresentable}. The shadow and the accumulator want the same fourth region of $[\theta|m|v|\cdot]$ and the driver refuses both; accumulation is not optional, so EMA cannot be had at all. A fifth region, not a flag \\[2pt]
-BCE-with-logits over Mixup/CutMix soft labels
-  & \textbf{Stochastic depth} $0.05$ --- the residual renderers neither import the module nor have a marker for it \\[2pt]
-Accumulation $k=8$ to LAMB's design batch of $2048$, which at $224^2$ has no other route on a $16$\,GB card
   & Ghost-BN group $64$ against the reference's $128$ \\[2pt]
-Repeated augmentation $3\times$; both precisions, both tiers, one and four replicas
+BCE-with-logits over Mixup/CutMix soft labels
   & Repeated augmentation is stream-level, not per-batch \\[2pt]
-A1's own decay and own shim, which the driver refuses to start without
+Accumulation $k=8$ to LAMB's design batch of $2048$, which at $224^2$ has no other route on a $16$\,GB card
   & Nothing trained --- no epoch of either tier has run here \\[2pt]
-Optimizer tied at the update, six variants to ${\sim}10^{-7}$ & \\
+\textbf{Model EMA} at decay $0.9999$ --- a \emph{fifth} blob region, $[\theta|m|v|G|E]$
+  & \\[2pt]
+\textbf{Stochastic depth} $0.05$ --- sixteen sites, one per bottleneck, on the residual branch
+  & \\[2pt]
+Repeated augmentation $3\times$; both precisions, both tiers, one and four replicas
+  & \\[2pt]
+A1's own decay and own shim, which the driver refuses to start without
+  & \\[2pt]
+Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent \textbf{A3 met neither of the first two}, its own recipe switching both
-\emph{off} --- which is why none of this was visible from A3 succeeding. These
-are A2's graph minus two regularisers: they price the tier honestly, since
-neither changes the step cost, but a result off them is ``the A2 recipe with
-these deltas'', never ``RSB-A2 reproduced''.
+\noindent \textbf{Both were structural rather than forgotten, and A3 met
+neither} --- its own recipe switches EMA and stochastic depth \emph{off}, which
+is why nothing here was visible from A3 succeeding.
+
+\medskip\noindent The EMA shadow and the gradient accumulator used to be the
+\emph{same} fourth region of $[\theta|m|v|\cdot]$, and the driver refused the
+pairing rather than letting one win. Since accumulation is not optional at
+$224^2$ on a $16$\,GB card, that made EMA unreachable rather than merely
+unrendered. The blob now carries both: three regions, or four, or five, with $G$
+before $E$ so that every checkpoint written under the old layout still reads at
+the index it was written at. \textbf{The refusal came off last} --- while it
+stood a wrong render failed loudly at load, and the moment it was gone a
+five-region graph packed wrongly would train and report a number.
+
+\medskip\noindent Stochastic depth cost less in the renderer and more in the
+reference. Its site sits on the residual \emph{branch}, between the last
+batch-norm and the skip add, and \textbf{no structural check can tell that from a
+site on the block output}: at an all-ones mask $1 \odot (b + x)$ and
+$1 \odot b + x$ are the same function bit-for-bit, so a misplaced render has the
+same names, the same $18{,}186$ operations and the same arity, and passes every
+endpoint gate. Moving all sixteen sites and running both at a real mask separates
+them by eight orders of magnitude; at an all-ones mask the difference is exactly
+zero, which is the half of that measurement worth keeping.
+
+\medskip\noindent \textbf{And the reference was the side that was wrong.} Four of
+the five block emitters in \texttt{jax/Jax/Codegen.lean} drew
+\texttt{bernoulli(key,\,keep)} with no shape argument --- a scalar shared by the
+whole batch, so the branch was dropped for every example or for none. timm's
+\texttt{drop\_path} is per \emph{sample}, and the same file already emitted the
+per-example form for the transformer family. Both draw the same
+\emph{expectation}, which is why it survived: at batch $64$ and keep $0.95$ the
+old form dropped all $64$ or none on $200$ steps out of $200$, and the new one
+drops a mean of $3.2$. Every verified \texttt{drop} render in the tree was
+already right.
 
 \medskip\noindent \textbf{What the phase-2 peers cost, measured.}
 \texttt{jax/scripts/step\_probe.py} on four 4060\,Ti, bf16, effective batch 2048
@@ -14007,8 +14041,8 @@ them cannot be launched. The status column says what each one is missing.
 \begin{tabular}{@{}llll@{}}
 \textbf{Target} & \textbf{Variant} & \textbf{Status} & \textbf{Section} \\[2pt]
 \hline \\[-6pt]
-\texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & rendered fp32 + bf16; no EMA/sd & \S\ref{sec:r50_a2_a1_cost} \\
-\texttt{resnet50-imagenet-verified}    & \texttt{a1}       & rendered + own shim; no EMA/sd & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & rendered, EMA + sd; untrained & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a1}       & rendered + own shim; untrained & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{mobilenetv4-imagenet-verified} & Conv-M            & tied; \texttt{mnv4-default-4gpu}, untrained & \S\ref{sec:mnv4_side_quest} \\
 \texttt{convnext-s-imagenet-verified}  & \withheld         & rendered fp32 + bf16; untrained & \S\ref{sec:convnext_sb} \\
 \texttt{convnext-b-imagenet-verified}  & \withheld         & rendered fp32 + bf16; untrained & \S\ref{sec:convnext_sb} \\

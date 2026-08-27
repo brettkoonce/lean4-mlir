@@ -120,7 +120,37 @@ currently a two-way split and would go green on a graph it had never seen.
 ENet/ConvNeXt render off it, but neither residual renderer imports it and `r34AdamVariant` has no
 `drop` marker. Cheaper than the region work and independent of it.
 
-## 6b. ⛔ STOCHASTIC DEPTH ON THE RESIDUAL FAMILY — blocked on a REFERENCE defect, not on renderer work
+## 6b. ✅ STOCHASTIC DEPTH ON THE RESIDUAL FAMILY — DONE 2026-08-27, after fixing the REFERENCE
+
+✅ **LANDED**, `49ef99a` (the nine JAX emitters) + `5508110` (sixteen sites, four renders, the
+placement gate). **Option A was taken** (brett, 2026-08-27): fix the emitters, then render.
+
+⭐ **Both of `sec:r50_a2_a1_cost`'s ⛔ rows are now closed.** The only A2 delta left is the ghost-BN
+group — 8×64 here against the reference's 4 × 512-global — which §4a listed as ⚠, not ⛔.
+
+⚠⚠ **THE PLACEMENT IS THE CORRECTNESS QUESTION AND NO STRUCTURAL CHECK SEES IT.**
+`scripts/misplace_drop_sites.py` moves all sixteen sites onto the block output and produces a render
+with the same SSA names, order, types, **18,186 ops** and arity. Run at `q = 1` / `B = 2` on CPU:
+TEST at a real mask **2.19e+08**, CONTROL at an all-ones mask **0.00e+00**. The second number is the
+argument — at ones the misplaced render is bit-identical, so every endpoint gate passes on it.
+
+⚠ **The `sd`-vs-no-`sd` identity is exact on the FORWARD and not on θ′**, and that is stated rather
+than rounded: the loss and all 106 BN statistics differ by 0.0, the gradients by 3.29e-06, and θ′
+amplifies that through AdamW's `m̂/(√v̂+ε)`. The extra `multiply` changes XLA's fusion, so the
+161-parameter reduction reassociates. A bit-exactness claim on θ′ would have been false.
+
+⚠ **The phase-2 A2/A1 step figures (1,368 ms/step) predate the drop-path fix** and have not been
+re-measured. The delta is 16 per-example draws against 16 scalar ones per step, which is far below
+the probe's own reproducibility — but it is unmeasured, not measured-and-negligible.
+
+⚠ **Two defects the placement gate itself had**, both found by running it: `hash()` is salted per
+PROCESS, so its headline figure moved four orders between two invocations (now `crc32`); and the
+`v` region was initialised random-signed, so `√v` gave NaN for 50 of 161 parameters beside a
+perfectly finite loss. Recorded because a gate whose number is not reproducible is a demo.
+
+*The original analysis follows, since it is what the decision was made against.*
+
+## 6b (original). ⛔ STOCHASTIC DEPTH — blocked on a REFERENCE defect, not on renderer work
 
 §6a called this *"unrelated work … cheaper than the region work and independent of it"*. The
 renderer half is indeed small. What it ran into is not.
@@ -203,8 +233,8 @@ Surveyed 2026-08-27 against the tree at `253fb75`. "Render" means a committed
 
 | side quest | book § | JAX peer | verified render | verified run | what is actually owed |
 |---|---|---|---|---|---|
-| **RSB-A2** | `sec:r50_a2_a1_cost` | ✅ `a2-accum` | ✅ fp32 ×2 + bf16 ×2 | — | ⛔ EMA + sd (§4a) |
-| **RSB-A1** | `sec:r50_a2_a1_cost` | ✅ `a1` | ✅ fp32 ×2 + bf16 ×2 + own shim | — | ⛔ EMA + sd (§4a) |
+| **RSB-A2** | `sec:r50_a2_a1_cost` | ✅ `a2-accum` | ✅ fp32 ×2 + bf16 ×2 + **EMA + sd ×2** | — | ✅ nothing — **train it** |
+| **RSB-A1** | `sec:r50_a2_a1_cost` | ✅ `a1` | ✅ fp32 ×2 + bf16 ×2 + **EMA + sd ×2** + own shim | — | ✅ nothing — **train it** |
 | **MNv4-Conv-M** | `sec:mnv4_side_quest` | ✅ | ✅ 4 variants incl. DP + bf16 | ✅ **4-GPU, tied** | ✅ nothing — **run it** (§4b) |
 | **ConvNeXt-S** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + **bf16 ×2** | steps only | ✅ nothing — **train it** (§4c) |
 | **ConvNeXt-B** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + bf16 ×2 | ✅ **benchmarked** | ✅ nothing — **train it** (§4c) |
@@ -787,11 +817,16 @@ Non-negotiable, and in this order:
    `799865b` (the renderer, the driver, four renders, the tie row). The fifth region exists and
    `emalambacc8wxclip` ties at 1.20e-07. §6a's estimate held; what it missed is the apply-only EMA
    cadence and four gates carrying private copies of the predicates. See §6a.
-   ⛔ **A2/A1's OTHER delta — stochastic depth — is BLOCKED on a reference defect**, not on
-   renderer work: four JAX block emitters draw a per-block SCALAR bernoulli where timm and the
-   verified renders are per-example. §6b states the fork. It reaches 26 already-shipping ConvNeXt
-   and EfficientNet artifacts, so it is a scoping decision rather than a drive-by fix.
+   ✅ **A2/A1's OTHER delta — stochastic depth — DONE the same day** (`49ef99a` + `5508110`),
+   after option A: nine JAX emitters were drawing a per-block SCALAR bernoulli where timm and every
+   verified render are per-example, so the reference was fixed first and the sixteen sites rendered
+   against it. §6b. ⭐ Both of `sec:r50_a2_a1_cost`'s ⛔ rows are closed and only the ghost-BN group
+   remains.
    ⬅ **ViT-B accumulation (§4d → §6a) is untouched** and its TPU question still stands.
+   ⬅ **Nothing has been TRAINED.** No five-region graph has been loaded by the trainer; every gate
+   in this pass is CPU (XLA-on-CPU, text, `#guard`). The shim's buffer-count refusal is the check
+   that would say so, and `runs/2026-08-27-r50-a2-a1-ema-fifth-region/arity_check.py` reproduces
+   that arithmetic statically — the strongest cheap substitute and not a replacement.
 6. **EfficientNetV2 (§4e)** — its own project, after the rest. ⚠ Its row is OUT of the book's
    Track-4 side-quest table as of `93ec229` (brett, 2026-08-27): a "no spec" row in a table of
    rendered artifacts reads as a commitment rather than a possibility. The ch.7 bestiary entry
