@@ -139,9 +139,14 @@ than rounded: the loss and all 106 BN statistics differ by 0.0, the gradients by
 amplifies that through AdamW's `m̂/(√v̂+ε)`. The extra `multiply` changes XLA's fusion, so the
 161-parameter reduction reassociates. A bit-exactness claim on θ′ would have been false.
 
-⚠ **The phase-2 A2/A1 step figures (1,368 ms/step) predate the drop-path fix** and have not been
-re-measured. The delta is 16 per-example draws against 16 scalar ones per step, which is far below
-the probe's own reproducibility — but it is unmeasured, not measured-and-negligible.
+✅ **THE PHASE-2 CAVEAT IS CLOSED — re-probed, and the CONTROL is what settles it**
+(`runs/2026-08-27-r50-droppath-reprobe/`). The figures were taken against the scalar-mask reference,
+so they were re-run on the fixed one: A2 reads **1368.3 → 1359.7 ms/step (−0.63 %)**, and A3 —
+whose recipe sets `dropPath := 0.0` so its trainer emits **no `dpkeys` at all** — reads
+**715.3 → 711.5 (−0.53 %)**. A net with no stochastic depth moved by the same amount, so A2's move
+is session drift and not the mask shape. ⚠ Checked first that the probe passes a live `drop_key`;
+one passing `None` would early-return and compare nothing. ▶ The book's committed 1,368 and 715
+stand; this session's are NOT promoted, per §8.6's practice.
 
 ⚠ **Two defects the placement gate itself had**, both found by running it: `hash()` is salted per
 PROCESS, so its headline figure moved four orders between two invocations (now `crc32`); and the
