@@ -5921,9 +5921,8 @@ extra epochs would cost. Every one of these is a one-line
 \section{Side quest: RSB-A2 and RSB-A1}
 \label{sec:r50_a2_a1_cost}
 
-A3 is the cheap tier. The other two exist as recipes --- \texttt{a2-accum} and
-\texttt{a1}, selected positionally --- and both now render on the verified path
-as well:
+A3 is the cheap tier. The other two are recipes --- \texttt{a2-accum} and
+\texttt{a1} --- and both now render on the verified path:
 
 \begin{center}
 \begin{tabular}{@{}l c c l l l@{}}
@@ -5932,22 +5931,21 @@ tier & epochs & train res & verified render & verified wall clock & top-1 \\
 \hline
 A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
 A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & \texttt{[todo]} & $79.8\%$ (paper) \\
-A1 (\texttt{a1})           & 600 & $224$ & rendered --- own decay & \texttt{[todo]} & $80.4\%$ (paper) \\
+A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & \texttt{[todo]} & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Effective batch 2048, as $512\times4$ on the reference and $8\times64$
-across four replicas here. \textbf{A1 is not ``the same render as A2'', and the
-difference is one line}: the weight decay is a baked constant rather than a
-runtime operand, so A1's $0.01$ against A2's $0.02$ is a re-render, and the two
-artifacts --- identical in $18{,}000$ other lines --- are kept on separate paths
-so that line cannot be lost. A1's other deltas are $600$ epochs, a driver knob,
-and Mixup $\alpha\,0.2$, which rides its own generated shim.
+\noindent Twenty artifacts: each tier at one and four replicas, in whichever
+precisions fit. Effective batch $2048$ throughout --- $512\times4$ on the
+reference, $8\times64$ or $4\times128$ here. \textbf{A1 is not ``the same render
+as A2'', and the difference is one line}: the decay is baked, so A1's $0.01$
+against A2's $0.02$ is a re-render. The two are identical in $18{,}000$ other
+lines, kept apart so that one cannot be lost.
 
 \medskip\noindent \textbf{The two regularisers these renders used to be missing
-are now in them.} The same ledger \S\ref{sec:r50_phase4} keeps for A3, kept here
-before anything is run:
+are now in them.} The ledger \S\ref{sec:r50_phase4} keeps for A3, before anything
+is run:
 
 \begin{center}
 \begin{tabular}{@{}p{0.45\linewidth} p{0.47\linewidth}@{}}
@@ -5958,14 +5956,14 @@ before anything is run:
   & \textbf{Ghost-BN group} $64$ against the reference's $\mathbf{512}$ --- an $8\times$ gap, and only half of it is reachable here \\[2pt]
 BCE-with-logits over Mixup/CutMix soft labels
   & Repeated augmentation is stream-level, not per-batch \\[2pt]
-Accumulation $k=8$ to LAMB's design batch of $2048$, which at $224^2$ has no other route on a $16$\,GB card
+Accumulation to LAMB's design batch of $2048$, at $k=8$ or at the reference's own $k=4$
   & Nothing trained --- no epoch of either tier has run here \\[2pt]
 \textbf{Model EMA} at decay $0.9999$ --- a \emph{fifth} blob region, $[\theta|m|v|G|E]$
   & \\[2pt]
 \textbf{Stochastic depth} $0.05$ --- sixteen sites, one per bottleneck, on the residual branch
   & \\[2pt]
-Repeated augmentation $3\times$; both precisions, both tiers, one and four replicas
-  & \\[2pt]
+Repeated augmentation $3\times$; both tiers, one and four replicas
+  & \emph{fp32 and bf16 do not both exist for every render} --- see the memory table \\[2pt]
 A1's own decay and own shim, which the driver refuses to start without
   & \\[2pt]
 Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
@@ -5973,67 +5971,61 @@ Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 \end{tabular}
 \end{center}
 
-\noindent \textbf{Both were structural rather than forgotten, and A3 met
-neither} --- its own recipe switches EMA and stochastic depth \emph{off}, which
-is why nothing here was visible from A3 succeeding.
+\noindent \textbf{Both were structural, and A3 met neither} --- its recipe
+switches both \emph{off}, which is why neither was visible from A3 succeeding.
+The shadow and the accumulator used to be the \emph{same} fourth region of
+$[\theta|m|v|\cdot]$, and accumulation is not optional at $224^2$ on a $16$\,GB
+card: EMA was unreachable, not merely unrendered.
 
-\medskip\noindent The EMA shadow and the gradient accumulator used to be the
-\emph{same} fourth region of $[\theta|m|v|\cdot]$, and the driver refused the
-pairing rather than letting one win. Since accumulation is not optional at
-$224^2$ on a $16$\,GB card, that made EMA unreachable rather than merely
-unrendered. The blob now carries both: three regions, or four, or five, with $G$
-before $E$ so that every checkpoint written under the old layout still reads at
-the index it was written at. \textbf{The refusal came off last} --- while it
-stood a wrong render failed loudly at load, and the moment it was gone a
-five-region graph packed wrongly would train and report a number.
+\medskip\noindent Stochastic depth's site sits on the residual \emph{branch}, and
+\textbf{no structural check can tell that from a site on the block output}: at an
+all-ones mask $1 \odot (b+x)$ and $1 \odot b + x$ agree bit-for-bit, so a
+misplaced render matches on names, operation count and arity and passes every
+endpoint gate. Moving all sixteen separates them by eight orders of magnitude at
+a real mask, and by exactly zero at an all-ones one.
 
-\medskip\noindent Stochastic depth cost less in the renderer and more in the
-reference. Its site sits on the residual \emph{branch}, between the last
-batch-norm and the skip add, and \textbf{no structural check can tell that from a
-site on the block output}: at an all-ones mask $1 \odot (b + x)$ and
-$1 \odot b + x$ are the same function bit-for-bit, so a misplaced render has the
-same names, the same $18{,}186$ operations and the same arity, and passes every
-endpoint gate. Moving all sixteen sites and running both at a real mask separates
-them by eight orders of magnitude; at an all-ones mask the difference is exactly
-zero, which is the half of that measurement worth keeping.
+\medskip\noindent \textbf{What each render costs on one card.} XLA's own
+\texttt{peak\_memory\_in\_bytes}, against the $11.68$\,GiB the allocator leaves
+usable on a $16$\,GB card:
 
-\medskip\noindent \textbf{The one remaining delta is the batch-norm group, and it is
-larger than it looks.} Nothing in this render all-reduces activation statistics
---- all $162$ collectives are on parameter-shaped tensors --- so each replica
-normalises over the $64$ images it holds. The reference reaches $2048$ as four
-accumulation steps of a $512$ micro-batch, and its
-\texttt{jnp.mean(x,\ axis=(0,2,3))} reduces over an axis that is
-\emph{mesh-sharded}, so XLA inserts the collective and the group is the full
-$512$. The per-device tensor is $128$; the group is $512$. Those are different
-numbers and only the second one is the batch-norm statistic.
+\begin{center}
+\begin{tabular}{@{}l l c r r@{}}
+\hline
+render & precision & BN group & peak & of budget \\
+\hline
+$8\times64$                  & fp32 & $64$  & $6.23$\,GiB & $53\%$ \\
+$8\times64$                  & bf16 & $64$  & $4.32$\,GiB & $37\%$ \\
+$8\times64$ + EMA + sd       & fp32 & $64$  & $6.42$\,GiB & $55\%$ \\
+$4\times128$ + EMA + sd      & fp32 & $128$ & $11.13$\,GiB & $95\%$ \\
+$4\times128$ + EMA + sd      & bf16 & $128$ & $8.09$\,GiB & $69\%$ \\
+\hline
+\end{tabular}
+\end{center}
 
-\medskip\noindent Half of that is a re-render rather than a feature: $k=4$ at
-$128$ per device is the reference's own factorisation of $2048$, and it takes the
-group from $64$ to $128$. \textbf{But it only fits in bf16}, and that is measured
-rather than argued --- against the $11.68$\,GiB the allocator offers on a
-$16$\,GB card, the $8\times64$ render peaks at $6.37$\,GiB and the $4\times128$
-one at $11.13$, which is $95\%$ and leaves nothing for the input pipeline. In
-bf16 the same render peaks at $8.09$\,GiB. So the artifact ships with no fp32
-twin, and the missing twin is the finding rather than an oversight. The last
-$4\times$ needs the statistics themselves all-reduced --- synchronised batch-norm,
-which is a new batched operator, a changed backward, and $53$ collectives a step
-against a run whose whole throughput story is that the all-reduce term is
-$56$\,ms.
+\noindent The fifth region costs $0.19$\,GiB, all of it arguments. Stochastic
+depth costs nothing measurable. And $4\times128$ in fp32 is $95\%$ of the budget,
+so that pair ships with no fp32 twin --- \emph{the missing twin is the finding},
+since precision and batch-norm group were meant to be independent axes.
 
-\medskip\noindent \textbf{And the reference was the side that was wrong.} Four of
-the five block emitters in \texttt{jax/Jax/Codegen.lean} drew
-\texttt{bernoulli(key,\,keep)} with no shape argument --- a scalar shared by the
-whole batch, so the branch was dropped for every example or for none. timm's
-\texttt{drop\_path} is per \emph{sample}, and the same file already emitted the
-per-example form for the transformer family. Both draw the same
-\emph{expectation}, which is why it survived: at batch $64$ and keep $0.95$ the
-old form dropped all $64$ or none on $200$ steps out of $200$, and the new one
-drops a mean of $3.2$. Every verified \texttt{drop} render in the tree was
-already right.
+\medskip\noindent \textbf{Which leaves the batch-norm group, larger than it
+looks.} Nothing here all-reduces activation statistics, so each replica
+normalises over its own $64$; the reference's
+\texttt{jnp.mean(x,\ axis=(0,2,3))} reduces over a \emph{mesh-sharded} axis, so
+XLA inserts one and its group is the full $512$ --- its per-device tensor is
+$128$, and only the group is the statistic. Half the gap is a re-render, $k=4$ at
+$128$ per device; the last $4\times$ needs synchronised batch-norm --- a new
+batched operator, a changed backward, a variance that does not average, and $53$
+collectives a step.
+
+\medskip\noindent \textbf{The reference had the same feature wrong in a different
+way}: four of its five block emitters drew a scalar \texttt{bernoulli} for the
+whole batch where timm's is per \emph{sample}. Same expectation, which is why it
+survived --- at keep $0.95$ the old form dropped all $64$ examples or none, on
+$200$ steps out of $200$.
 
 \medskip\noindent \textbf{What the phase-2 peers cost, measured.}
-\texttt{jax/scripts/step\_probe.py} on four 4060\,Ti, bf16, effective batch 2048
-as $4\times512$ --- 625 steps per epoch --- with A3 as the control:
+\texttt{jax/scripts/step\_probe.py} on four 4060\,Ti, bf16, with A3 as the
+control:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r@{}}
@@ -6047,16 +6039,10 @@ A1 (600 ep) & $224$ & $1{,}368$ & $14.3$ & $142.5$\,h (5.9\,d) \\
 \end{tabular}
 \end{center}
 
-\noindent A1 and A2 share a step figure because the emitted trainers differ in
-three constants, so A1 is A2 at twice the schedule, to the digit. FixRes is worth
-its claimed ${\sim}2\times$ --- A3's $160^2$ step runs $1.91\times$ faster at the
-same batch --- and peak is $4.30$ and $7.61$\,GiB against the $11.68$ a 16\,GB
-card offers, so accumulation holds both inside one card.
-
-\medskip\noindent Compute-only, so each is a lower bound. Scaling by the one tier
-where both paths have a number ($19.2$ verified minutes per epoch against $7.5$
-here, $2.6\times$) puts a verified A2 near seven days and A1 near fifteen --- an
-extrapolation from a single point, but the right order for a budget decision.
+\noindent A1 and A2 share a step figure because the trainers differ in three
+constants. Compute-only, so each is a lower bound: scaling by the one tier where
+both paths have a number ($19.2$ verified minutes per epoch against $7.5$) puts a
+verified A2 near seven days and A1 near fifteen.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
