@@ -212,7 +212,7 @@ on the assumption that a new render is automatically covered.
 ⭐⭐ And the numeric one, which is the only gate that can see a clip applied in the wrong place — a
 clip on unreduced or unaccumulated gradients still trains, still descends, and is a different
 optimizer. ▶ **This now exists: §5b, `scripts/opt_step_tie.py`.** It ties the rendered optimizer to
-the reference's own at ~1e-7 on four variants, and both of D1's decisions were reverted to confirm
+the reference's own at ~1e-7 on six variants, and both of D1's decisions were reverted to confirm
 it turns red. Run it before believing any change to the optimizer stage.
 
 ⚠ The emitted MLIR was also read directly, and that reading is what the gate was built to replace.
@@ -338,8 +338,10 @@ re-learning:
    render calls. §5's own point one level down: *a gate on a copy is not a gate on the thing copied.*
 2. **The reference is EXECUTED, not re-implemented** — the optimizer lines are extracted from
    `generated_resnet50_imagenet*.py` and `exec`d verbatim, no line edited, added or skipped. The
-   variants were chosen to match references that ship, which is why the list is four rows and not
-   the seven a coverage instinct would have written.
+   variants were chosen to match references that ship, which is why the list is short rather than
+   the exhaustive one a coverage instinct would have written. ⚠ It was four rows when this was
+   written and is **six** now (`lambclip`, `lambwxclip`, `lambacc4wxclip`, `lambacc8wxclip`,
+   `lambacc8wxclipwd001`, `adamwxclipwd002`) — count `VARIANTS` in the script, not this sentence.
 
 ⭐⭐ **And it was shown to fail.** Both of D1's new decisions were reverted and re-run: dropping the
 `k` scaling gives **1.8e-01 / 2.1e-01**, and returning the clipped total as region 4 gives

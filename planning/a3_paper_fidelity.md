@@ -269,6 +269,18 @@ that is the move that turns a gate into a decoration. Re-measure with
 0.30, scale control live at 0.99). Also affects `lamb64bce`. **No evidence at any point that the
 BCE render's backward is wrong** — every failure here is the gate's calibration, not the render's.
 
+▶ **DELIBERATELY NOT IN THE BLUEPRINT (decided 2026-08-27).** §5.8's A3 fidelity ledger used to
+carry this as a "still out" bullet. It is out, and should stay out, because it is not a fidelity
+delta at all: nothing about the trained network differs on account of it. It is a statement about a
+GATE'S CALIBRATION on a loss it was not calibrated for, and putting it in a list of recipe
+deltas invited the reading that the BCE render's backward is suspect — which §3.1 above spends its
+length refuting. The ledger is for what makes the run differ from the paper's; this makes the
+CHECKER differ from itself across losses.
+
+⚠ If it ever does move the number, it earns a line — but that would mean the render is wrong, and
+the evidence runs the other way: residual 7.6e-4 stable to 2% across runs, sitting 42–45× below the
+control population's median, where a genuinely wrong cotangent would sit inside it.
+
 ### 3.2 ✅ CLOSED 2026-08-14 — `tests/r50_dp_render_tie.py` now carries the composed pairs
 
 **What it was:** `lambacc8x64bce` / `lambaccdp8x64bce` existed and were not in the (1-replica,
