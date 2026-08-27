@@ -39,8 +39,53 @@ renames, the job renames, the `RECIPE=` precheck, and the Track 4 restructure. �
 below are marked up with what happened — including **three places the survey contradicted this
 plan**, each flagged ⚠⚠ where it bites.
 
-**The next task is §6's item 2** — §4b, the MNv4 shard gate. It is the first one that needs a
-card, and the best payoff per hour in the file.
+⬅⬅ **NEXT SESSION, decided 2026-08-27: go deeper on A2/A1 (§4a), and scope ViT accumulation
+(§4d).** Items 1–4 of §6 are all closed; what is left is the two features neither of them could
+flag their way past. Read §6a below before either.
+
+## 6a. THE TWO FEATURES — what a next session is actually picking up
+
+Everything landed so far was a parameter that already existed. These two are not, and each has one
+thing worth knowing before any code is written.
+
+### ⭐ A2/A1 deeper — the EMA fifth region, and it is smaller than §4a implied
+
+§4a records that model EMA is *unrepresentable* alongside accumulation because both want the fourth
+region of `[θ|m|v|·]`, and calls lifting it "a change to the blob layout, not a flag". True, but the
+layout was built to move:
+
+* `VerifiedVariant.nRegions` and `nScalars` (`VerifiedTrain.lean:242,246`) are **two one-line
+  functions**, and the driver is written against them rather than against a literal `3` or `4` —
+  **26 reference sites, none of them a hardcoded count.** That was deliberate (§1125's comment says
+  so) and it is what makes five regions an edit rather than a rewrite.
+* ⭐⭐ **The variant spelling already exists and already parses.** `emaOn` is `startsWith "ema"` and
+  `accOn` is a substring test, so `emalambaccdp8x64wxclipbce` fires BOTH today. Nothing needs a new
+  marker; `VerifiedTrain.lean:1156`'s refusal is the only thing standing in the way, and it is four
+  lines.
+* What genuinely has to be built: the renderer emitting shadow AND accumulator as separate regions,
+  the optimizer stage returning a fifth name list beside `aNames`
+  (`ResNet34RenderB.lean:751` returns a 5-tuple today), and the driver's pack/unpack for 5.
+
+⚠ **Order matters here.** Lift the refusal LAST. While it stands, a wrong render fails loudly at
+load; the moment it is gone, an EMA-plus-accumulation graph that packs regions wrongly trains and
+reports a number. ▶ And `TestVariantPredicates` needs the 5-region case in its partition BEFORE the
+driver can produce one — that table's `nRegions v == (if e || accOn v then 4 else 3)` guard is
+currently a two-way split and would go green on a graph it had never seen.
+
+⚠ The other A2/A1 delta, **stochastic depth 0.05**, is unrelated work: `DropPath.lean` exists and
+ENet/ConvNeXt render off it, but neither residual renderer imports it and `r34AdamVariant` has no
+`drop` marker. Cheaper than the region work and independent of it.
+
+### ⚠ ViT accumulation (§4d) — answer the hardware question first
+
+§4d's own warning is the thing to settle before touching `ViTRenderB`: **a TPU deletes this item.**
+v3 is 16 GB/core and v4 is 32, the FFI is plugin-agnostic, and `$PJRT_PLUGIN` always wins — so
+reaching DeiT's global 512 becomes an env var rather than a renderer feature. ▶ Building the
+accumulation loop for one box is a medium-to-large job that a different box makes unnecessary.
+
+⭐ **What changed since §4d was written**: ViT-B now has a MEASURED wall clock — 423 → 317 ms/step,
+**356 → 268 h** at global 128 — so the cost of *not* having accumulation is now a number rather
+than a shrug. Whatever is decided, that is the figure to weigh it against.
 
 ✅ **The correction this doc owed the book is PAID** (`40f63d7`). `sec:r50_a2_a1_cost`'s table said
 A1's renderer work was "same render as A2"; the two artifacts now exist and differ in **exactly one
@@ -636,8 +681,10 @@ Non-negotiable, and in this order:
 4. ✅ **The three bf16 twins (§4c) — ALL DONE 2026-08-27.** ConvNeXt-S (`e17b61c`) at **1.39×**,
    ViT-S and ViT-B (`d78feb6`) at **1.89×** and 1.40×, book in `93ec229`. ConvNeXt-B's and R50's
    benchmarks fell out of the same sessions. §4c is closed.
-5. **ViT-B accumulation (§4d)** — only if ViT-B is actually going to be trained on this box. Check
-   the TPU question first.
+5. ⬅ **NEXT — A2/A1 deeper (§4a → §6a) and ViT-B accumulation (§4d → §6a).** The two features
+   nothing could flag its way past. §6a scopes both; the EMA fifth region is smaller than §4a
+   implied (two one-line functions, 26 call sites written against them, and the variant spelling
+   already parses), and §4d's TPU question should be answered before any renderer work.
 6. **EfficientNetV2 (§4e)** — its own project, after the rest. ⚠ Its row is OUT of the book's
    Track-4 side-quest table as of `93ec229` (brett, 2026-08-27): a "no spec" row in a table of
    rendered artifacts reads as a commitment rather than a possibility. The ch.7 bestiary entry
