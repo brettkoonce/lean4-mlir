@@ -7,7 +7,7 @@ a string test on the name:
 
 | axis | predicate | what it decides |
 |---|---|---|
-| EMA | `variant.startsWith "ema"` | a FOURTH `[θ\|m\|v\|ema]` blob region, 5 scalars not 3 |
+| EMA | `variant.startsWith "ema"` | an EXTRA `[…\|ema]` blob region and two more scalars |
 | RMSProp | `"rms"` substring | the mean-square slot initialises to **1.0**, not 0 |
 | stochastic depth | `"drop"` substring | N extra `tensor<Bxf32>` scale inputs |
 | classifier dropout | `"do"` substring | ONE extra `tensor<Bx1280xf32>` mask input |
@@ -15,6 +15,12 @@ a string test on the name:
 Every one of those is a SILENT wrong answer if it misfires: a 3-region blob fed to a 4-region graph
 misaligns every parameter, a zero-initialised mean-square is a different optimizer, and a spurious
 drop-scale block is an arity error at best.
+
+⚠⚠ **EMA and accumulation are INDEPENDENT as of 2026-08-27, so the region count is 3, 4 or 5** —
+`verified_side_quest_counterparts.md` §6a. The driver used to REFUSE the pairing, and this file's
+region guard was a two-way partition that would have gone green on the composed spelling it had
+never seen. Both are fixed below; the three-way partition is checked for being *populated* as well
+as true, which is the part a count alone does not give you.
 
 **This file exists because the naming has now broken TWICE, and the second time was not visible by
 reading names one at a time. The THIRD collision was caught before it shipped, by this file.**
@@ -135,6 +141,18 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- of names written by hand drifts from the function that derives them.
   , ("adamdo", false, false, false), ("emarms64dropdo", true, true, true)
   , ("emarms64drop", true, true, true), ("rmsdo64", false, true, false)
+    -- ▶▶ **EMA × ACCUMULATION — the FIVE-region spellings** (`verified_side_quest_counterparts.md`
+    -- §6a). These were UNSPELLABLE until 2026-08-27: `trainAdamSched` threw on the pairing because
+    -- both features claimed the fourth region, which is what stopped RSB-A2/A1 from being rendered
+    -- faithfully. They are in this table BEFORE the driver can produce one, deliberately — a
+    -- partition guard that has only ever seen a two-way split goes green on a graph it has never
+    -- seen, and this is the axis where "green" means "every parameter aligned".
+    -- ⚠ The `ema` marker LEADS, because `emaOn` is a PREFIX test and `accOn` is a substring one.
+    -- So `lamb` ++ `acc` stays in the middle and `ema` goes in front of the whole optimizer name.
+  , ("emalambaccdp8x64wxclipbce", true, false, false)
+  , ("emalambacc8x64wxclipbce", true, false, false)
+  , ("emalambaccdp8x64wxclipbcewd001", true, false, false)
+  , ("emaaccdp4x64", true, false, false), ("emaacc4x64", true, false, false)
     -- ▶▶ GRADIENT ACCUMULATION's spellings (`r34AdamVariant .adamwAccum`). ⚠ Both carry `k` and a
     -- batch, so the marker concatenates against DIGITS and an `x` — a shape none of the other four
     -- markers has, and `accdp` puts `dp` INSIDE the prefix rather than after it.
@@ -275,13 +293,27 @@ private def accumSpellings : List String :=
    -- deliberately NOT here — it is the other direction of the partition, a bf16 render with no
    -- accumulation, and listing it would make this check pass for the wrong reason.
    "lambaccdp8x64wxclipbcebf16", "lambacc8x64wxclipbcebf16",
-   "lambaccdp8x64wxclipbcewd001bf16", "lambacc8x64wxclipbcewd001bf16"]
+   "lambaccdp8x64wxclipbcewd001bf16", "lambacc8x64wxclipbcewd001bf16",
+   -- ⭐⭐ the FIVE-region peers (2026-08-27): accumulation composed with the EMA shadow, which is
+   -- RSB-A2/A1's real recipe and was unspellable until the fifth region landed.
+   "emalambaccdp8x64wxclipbce", "emalambacc8x64wxclipbce",
+   "emalambaccdp8x64wxclipbcewd001", "emaaccdp4x64", "emaacc4x64"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
--- ⚠ and accumulation must disturb NONE of the other four axes. `acc4x64` contains no "ema" prefix,
--- no "rms", no "drop"; `accdp8x64` puts `dp` inside the prefix, which is a placement no other
--- marker uses, so it is run rather than reasoned about.
-#guard table.all (fun (v, _, _, _) => !accOn v || (!emaOn v && !rmsOn v && !sdOn v && !cdOn v))
+-- ⚠ and accumulation must disturb NONE of the other three axes it does not compose with. `acc4x64`
+-- contains no "rms" and no "drop"; `accdp8x64` puts `dp` inside the prefix, which is a placement no
+-- other marker uses, so it is run rather than reasoned about.
+-- ⚠⚠ **`emaOn` CAME OUT OF THIS CONJUNCTION on 2026-08-27, and that is a real weakening of the
+-- check, stated rather than quietly dropped.** It used to read `!emaOn v && !rmsOn v && …`, which
+-- was true only because the driver REFUSED the pairing — the guard was recording a limitation as
+-- if it were a naming fact. EMA × accumulation is now a five-region render (RSB-A2/A1), so the
+-- pairing is legal and the ordering rule below is what replaces this half of the check.
+#guard table.all (fun (v, _, _, _) => !accOn v || (!rmsOn v && !sdOn v && !cdOn v))
+-- ⭐ and the replacement, which is stronger than what it replaces: whenever BOTH fire, the `ema`
+-- marker must LEAD. `emaOn` is a prefix test and `accOn` a substring one, so `lambaccema…` would
+-- read as accumulation-only and pack four regions into a five-region graph.
+#guard table.all (fun (v, _, _, _) => !(accOn v && emaOn v) || v.startsWith "ema")
+#guard emaOn "lambaccdp8x64wxclipbceema" == false   -- the trailing spelling: silently 4 regions
 -- ⚠ the reverse direction, which is the load-bearing half: every committed 3-region variant must
 -- NOT read as accumulation, or the driver packs a fourth region into a graph that has three.
 #guard accOn "adamdp64" == false
@@ -336,6 +368,37 @@ private def accumSpellings : List String :=
 -- must not turn RSB-A3's 4-region graph into a 3-region read.
 #guard nRegions "lambaccdp8x64wxclipbce" == 4
 #guard nScalars "lambaccdp8x64wxclipbce" == 5
+-- ⭐⭐ **AND THE SAME NAME WITH THE `ema` PREFIX IS FIVE REGIONS AND SEVEN SCALARS** — RSB-A2's
+-- real composition. ⚠ `ema` must not disturb `k`, the optimizer, or any of the other four axes:
+-- it is prepended to a string that already carries five markers, which is the outermost placement
+-- this table has.
+#guard nRegions "emalambaccdp8x64wxclipbce" == 5
+#guard nScalars "emalambaccdp8x64wxclipbce" == 7
+#guard emaOn "emalambaccdp8x64wxclipbce" == true
+#guard accOn "emalambaccdp8x64wxclipbce" == true
+#guard accK  "emalambaccdp8x64wxclipbce" == 8
+#guard rmsOn "emalambaccdp8x64wxclipbce" == false
+#guard sdOn  "emalambaccdp8x64wxclipbce" == false
+#guard cdOn  "emalambaccdp8x64wxclipbce" == false
+-- ⚠ and with the decay marker too, which is A1's spelling — `wd001` after `bce`, `ema` before all
+-- of it, so `k` is bracketed by markers on BOTH sides for the first time in this table.
+#guard nRegions "emalambaccdp8x64wxclipbcewd001" == 5
+#guard accK "emalambaccdp8x64wxclipbcewd001" == 8
+-- ⭐ THE REGION INDICES, which are what a checkpoint is SLICED at rather than merely sized by.
+-- `G` before `E` is the ordering that keeps every previously-written blob readable: at `acc`
+-- alone the accumulator is region 3, at `ema` alone the shadow is region 3, and only the
+-- composition moves the shadow to 4. A reversed order re-homes every committed `ema*` file.
+#guard emaRegion "emalambaccdp8x64wxclipbce" == some 4
+#guard emaRegion "ema128" == some 3
+#guard emaRegion "emarmsdp64" == some 3
+#guard emaRegion "lambaccdp8x64wxclipbce" == none
+#guard emaRegion "adamdp128x4wxclipdrop" == none
+#guard emaScalarOff "emalambaccdp8x64wxclipbce" == 5
+#guard emaScalarOff "ema128" == 3
+-- ⚠ the shadow is the LAST region in every spelling, which is what lets `scoreCheckpoint` bound
+-- the slice at `nRegions` without a second index.
+#guard table.all (fun (v, _, _, _) =>
+  match emaRegion v with | some i => i + 1 == nRegions v | none => true)
 -- ⚠ and `clip` in this bracketed placement must invent none of the four axes it is not
 -- ⚠⚠ `k` SURVIVES THE DECAY MARKER TOO, and this is the one with digits in it. `wd001` appends a
 -- second numeric run AFTER the batch, so if the parse ever became "the last digits" or "all the
@@ -381,8 +444,21 @@ private def accumSpellings : List String :=
 -- with the two axes that cause it — the derived fact and its causes, rather than the derived fact
 -- alone. ⚠ The 4-region cases are exactly EMA ∪ accumulation, stated as a partition for §0.4
 -- finding 5's reason: a count would not notice a spelling that lands in neither.
-#guard table.all (fun (v, e, _, _) => nRegions v == (if e || accOn v then 4 else 3))
-#guard table.all (fun (v, _, _, _) => (nRegions v == 4) == (nScalars v == 5))
+-- ⚠⚠ **A THREE-WAY PARTITION SINCE 2026-08-27, and it used to be two-way.** The guard read
+-- `nRegions v == (if e || accOn v then 4 else 3)` — true of every spelling that existed, and
+-- SILENTLY TRUE of a five-region one too, because no variant could spell both axes at once. That
+-- is finding 5's shape exactly: a count does not notice a case that lands in neither bucket. The
+-- form below is a SUM over the two independent axes, so a new axis cannot hide inside an `if`.
+#guard table.all (fun (v, e, _, _) =>
+  nRegions v == 3 + (if accOn v then 1 else 0) + (if e then 1 else 0))
+-- and the scalar tail moves in lockstep: two slots per extra region, never one and never three.
+#guard table.all (fun (v, _, _, _) => nScalars v == 3 + 2 * (nRegions v - 3))
+-- ⭐ …and all THREE buckets are actually populated, so the two guards above are not vacuously
+-- true of a table that happens to contain no five-region spelling. That is the check that would
+-- have caught the two-way partition the day the fifth region landed.
+#guard table.any (fun (v, _, _, _) => nRegions v == 3)
+#guard table.any (fun (v, _, _, _) => nRegions v == 4)
+#guard table.any (fun (v, _, _, _) => nRegions v == 5)
 #guard nRegions "lambaccdp8x64bce" == 4    -- the spelling that falsified the prefix test
 #guard nRegions "adamdp128x4wxclipdrop" == 3
 -- ⭐ RSB-A2/A1 at 224 (2026-08-27), the outermost marker placement this table has. `k` must still

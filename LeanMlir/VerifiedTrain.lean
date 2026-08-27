@@ -236,14 +236,40 @@ def accK (v : String) : Nat :=
     ((after.takeWhile (· != 'x')).toNat?).getD 0
   else 1
 
-/-- Blob regions: `[θ|m|v]`, plus a fourth for the EMA shadow or the gradient accumulator.
+/-- Blob regions: `[θ|m|v]`, plus `G` (gradient accumulation) and/or `E` (the EMA shadow) — so
+    **3, 4 or 5**, and the two extras are INDEPENDENT.
     ⚠ A 3-region file loaded by a 4-region driver (or the reverse) misaligns EVERY parameter, so
-    every consumer of a checkpoint sizes off this rather than off a literal. -/
-def nRegions (v : String) : Nat := if emaOn v || accOn v then 4 else 3
+    every consumer of a checkpoint sizes off this rather than off a literal.
 
-/-- Rank-0 scalar slots in the blob tail: `lr,bc₁,bc₂`, plus `%emad,%oemad` (EMA) or
-    `%aup,%akeep` (accumulation). -/
-def nScalars (v : String) : Nat := if emaOn v || accOn v then 5 else 3
+    ⭐⭐ **THIS USED TO BE `if emaOn || accOn then 4 else 3`, and the two features were mutually
+    exclusive because of it** — `trainAdamSched` threw on the pairing, and RSB-A2/A1 could not be
+    rendered faithfully (their recipe sets BOTH `gradAccumSteps := 4` and `useEMA := true`;
+    `planning/verified_side_quest_counterparts.md` §4a). The fifth region is what lifts that.
+
+    ⚠⚠ **`G` COMES BEFORE `E`, and that ordering is not free**: at `acc` alone `G` is region 3 and
+    at `ema` alone `E` is region 3, so every checkpoint written before this change still reads at
+    the index it was written at. The reverse order would have silently re-homed every committed
+    `ema*` blob. -/
+def nRegions (v : String) : Nat :=
+  3 + (if accOn v then 1 else 0) + (if emaOn v then 1 else 0)
+
+/-- Rank-0 scalar slots in the blob tail: `lr,bc₁,bc₂`, then `%aup,%akeep` (accumulation) and then
+    `%emad,%oemad` (EMA) — so **3, 5 or 7**, in that order.
+    ⚠ Same independence and same ordering rule as `nRegions`: the accumulation pair keeps slots
+    3–4 and the EMA pair moves to 5–6 only when both are on, so neither single-axis layout moves. -/
+def nScalars (v : String) : Nat :=
+  3 + (if accOn v then 2 else 0) + (if emaOn v then 2 else 0)
+
+/-- The blob index of the EMA shadow region, or `none` when the variant has no shadow.
+    ⚠ It is **not the literal 3** any more: under accumulation `G` takes region 3 and the shadow is
+    region 4. `scoreCheckpoint` and the per-epoch eval both slice θ out of the blob with this, and
+    a stale literal there does not fail — it scores the gradient accumulator as if it were weights
+    and prints a plausible percentage off it. -/
+def emaRegion (v : String) : Option Nat :=
+  if emaOn v then some (3 + (if accOn v then 1 else 0)) else none
+
+/-- Offset of the `%emad,%oemad` pair inside the scalar tail — 3 alone, 5 behind `%aup,%akeep`. -/
+def emaScalarOff (v : String) : Nat := 3 + (if accOn v then 2 else 0)
 
 end VerifiedVariant
 
