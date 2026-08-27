@@ -5939,6 +5939,43 @@ A1 (\texttt{a1})           & 600 & $224$ & same render as A2          & \texttt{
 
 \noindent Effective batch 2048 as $512\times4$.
 
+\medskip\noindent \textbf{What the phase-2 peers cost, measured.} The verified
+column has one entry because A3 is the only tier that has been run there. The
+JAX trainers for all three exist, though, and they set the floor.
+\texttt{jax/scripts/step\_probe.py} on four 4060\,Ti, bf16, effective batch 2048
+as $4\times512$ --- 625 steps per epoch --- with A3 as the control in the same
+session:
+
+\begin{center}
+\begin{tabular}{@{}l r r r r@{}}
+\hline
+phase-2 tier & train res & ms/step & min/epoch & full schedule \\
+\hline
+A3 (100 ep) & $160$ & $715$     & $7.5$  & $12.4$\,h \\
+A2 (300 ep) & $224$ & $1{,}368$ & $14.3$ & $71.3$\,h (3.0\,d) \\
+A1 (600 ep) & $224$ & $1{,}368$ & $14.3$ & $142.5$\,h (5.9\,d) \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent \textbf{A1 and A2 carry the same step figure because they are the same
+graph}: the emitted trainers differ in exactly three constants ---
+\texttt{EPOCHS}, \texttt{WD} and Mixup's $\alpha$ --- so on this path A1 is A2 at
+twice the schedule and nothing else, to the digit. \textbf{FixRes is also worth the
+$\sim$2$\times$ \S\ref{sec:r50_phase4} claims for it}: A3's $160^2$ step runs
+$1.91\times$ faster than A2's $224^2$ at the same batch, measured rather than
+asserted. Peak is $4.30$\,GiB for A3 and $7.61$\,GiB for A2 against the
+$11.68$\,GiB a 16\,GB card's allocator hands out, so accumulation holds both
+well inside one card.
+
+\medskip\noindent These figures are compute-only --- the probe never starts the
+\texttt{tf.data} pipeline --- so each is a lower bound. Scaling by the one tier
+where both paths have a number (A3 costs $19.2$ minutes per \emph{verified}
+epoch against $7.5$ here, a $2.6\times$ ratio) puts a verified A2 near seven days
+and a verified A1 near fifteen. That is an extrapolation from a single point and
+it is not what the \texttt{[todo]} column is waiting for, but it is the right
+order for a budget decision: on this box A2 is a week and A1 is a fortnight.
+
 \chapter{MobileNetV2}
 \label{chap:depthwise}
 
@@ -7625,9 +7662,9 @@ block itself.
 \S\ref{sec:enet_runit} has the run: 80 epochs at about 30 seconds each,
 forty and a half minutes, $\mathbf{89.96\%}$ top-1 and $\mathbf{98.45\%}$
 top-5, with the loss settling on the same ${\sim}0.50$ label-smoothing
-floor as ResNet-34 and MobileNetV2. The three-chapter comparison, same
-dataset, same recipe, same eighty epochs, and now all three measured on
-the verified XLA path:
+floor as ResNet-34 and MobileNetV2. The three-chapter comparison --- same
+dataset, same recipe, same eighty epochs, and every row now a measurement
+on the verified XLA path, on one RTX 4060 Ti:
 
 \begin{center}
 \begin{tabular}{l r r r r r r}
@@ -7641,13 +7678,9 @@ EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & \textbf{89.96\%
 \end{tabular}
 \end{center}
 
-\noindent \textbf{Provenance.} All three rows are verified-XLA
-measurements on one RTX 4060 Ti, from \S\ref{sec:r34_runit},
-\S\ref{sec:mnv2_runit} and \S\ref{sec:enet_runit}. The render sizes are
-much larger than the phase-3 numbers this table used to carry, because
-they are now \texttt{pretty(provenGraph)} rather than the older
-hand-written emitter's output. Step time is the epoch wall-clock divided
-by the 295 batches in it, so it includes each epoch's validation pass.
+\noindent Step time is the epoch wall-clock divided by 295 batches, so it
+includes each epoch's validation pass. MLIR sizes are the committed
+\texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units.
 
 \begin{itemize}
 \item \textbf{EfficientNet-B0 has the best top-1 in the column}, at
@@ -8109,8 +8142,6 @@ reminder that ``the paper recipe'' includes the optimizer's exact
 semantics, not just its hyperparameters.
 
 \section{Side quests}
-
-\imagenettimmnote
 \label{sec:enet_side_quests}
 
 Three EfficientNet follow-ups extended the family in orthogonal
@@ -8137,19 +8168,11 @@ coordinates, applied at every BiFPN output level.
 
 \textbf{EfficientNetV2}
 (\href{https://arxiv.org/abs/2104.00298}{Tan \& Le 2021}).
-Two changes, one to the block and one to the schedule.
 \emph{Fused MBConv} replaces the early stages' expand-$1\times1$ plus
 depthwise $k\times k$ with a single regular $k\times k$ convolution ---
 more FLOPs, less wall clock, because depthwise convolution is cheap in
 arithmetic and expensive in memory traffic, and at low resolution the
-traffic dominates. That is the same trade Chapter~\ref{chap:depthwise}
-made in the other direction, and it is worth noticing that the answer
-flips with the feature-map size rather than being a property of the
-operator. \emph{Progressive learning} then raises the image size across
-training and raises the regularization with it, on the argument that a
-fixed augmentation strength is wrong for both ends of a resolution ramp;
-the pair trains up to $4\times$ faster than V1 at $6.8\times$ fewer
-parameters, with V2-S at $83.9\%$ top-1. The fused block is already in
+traffic dominates. The fused block is already in
 the kit as \texttt{.fusedMbConvNB} (\S\ref{sec:mnv4_side_quest}) --- it is
 MobileNetV4's stage 0 --- so V2 needs no new primitive, only a spec.
 
@@ -8710,8 +8733,8 @@ those 22 positivities are the only assumptions anywhere in the chain.
 each, one hour and nineteen minutes, $\mathbf{85.07\%}$ top-1 and
 $\mathbf{97.30\%}$ top-5, with the loss settling on the same
 ${\sim}0.50$ label-smoothing floor as the three chapters before it. The
-four-chapter comparison, same dataset, same recipe, same eighty epochs,
-all four measured on the verified XLA path:
+four-chapter comparison --- same dataset, same recipe, same eighty epochs,
+and every row a measurement on the verified XLA path, on one RTX 4060 Ti:
 
 \begin{center}
 \begin{tabular}{l r r r r r r}
@@ -8726,11 +8749,9 @@ ConvNeXt-T       & \textbf{27.83M} & 985\,KB & 196 ms & 1.3 h  & 85.07\% & 97.30
 \end{tabular}
 \end{center}
 
-\noindent \textbf{Provenance.} All four rows are verified-XLA
-measurements on one RTX 4060 Ti, from \S\ref{sec:r34_runit},
-\S\ref{sec:mnv2_runit}, \S\ref{sec:enet_runit} and
-\S\ref{sec:convnext_runit}. Step time is the epoch wall-clock divided by
-the 295 batches in it, so it includes each epoch's validation pass.
+\noindent Step time is the epoch wall-clock divided by 295 batches, so it
+includes each epoch's validation pass. MLIR sizes are the committed
+\texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units.
 
 \begin{itemize}
   \item \textbf{The largest network in the column finishes last}, and by
@@ -9176,6 +9197,27 @@ and a few steps run under \texttt{convnexts-imagenet-verified} and
 \texttt{convnextb-imagenet-verified}. No accuracy, and the numeric ties
 against the JAX peers have not been run. On four cards B needs gradient
 accumulation even in bf16.
+
+\medskip\noindent \textbf{The phase-2 peers price the schedule.}
+\texttt{jax/scripts/step\_probe.py} on four 4060\,Ti, bf16, global batch 256 ---
+5{,}004 steps per epoch --- with T as the control:
+
+\begin{center}
+\begin{tabular}{@{}l r r r r r@{}}
+\hline
+phase-2 net & ms/step & device peak & min/epoch & 80 epochs & 300 epochs \\
+\hline
+ConvNeXt-T & $172$ & $4.22$\,GiB & $14.3$ & $19.1$\,h & $71.6$\,h (3.0\,d) \\
+ConvNeXt-S & $261$ & $6.78$\,GiB & $21.8$ & $29.0$\,h & $108.8$\,h (4.5\,d) \\
+ConvNeXt-B & $399$ & $9.56$\,GiB & $33.3$ & $44.4$\,h & $166.5$\,h (6.9\,d) \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Compute-only --- the probe never starts the \texttt{tf.data} pipeline,
+so read the totals as ``at least this long''. \textbf{The renderer's split does
+not reach the clock}: each rung costs the same, $1.52\times$ then $1.53\times$,
+though S cost the renderer nothing and B cost it twenty-seven literals.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
@@ -11023,16 +11065,40 @@ Part~I, and most of it from one line, the dots' result type
 (\S\ref{sec:precision}) --- and neither S nor B has one. So a third of the
 verified wall clock for both is sitting behind a per-net emit that needs no
 new proved operator, and until it lands there is nothing honest to put in the
-cost column. Of the four variants in this chapter and
+\emph{verified} cost column. Of the four variants in this chapter and
 \S\ref{sec:convnext_sb}, only ConvNeXt-B is ported.
 
 \medskip\noindent \textbf{Status: rendered, not trained}, the same as ConvNeXt's
-pair --- \texttt{vits-imagenet-verified} and \texttt{vitb-imagenet-verified}
-emit, tie and step. The only accuracy calibration that exists is this repo's
+pair --- \texttt{vits-\allowbreak imagenet-\allowbreak verified} and
+\texttt{vitb-\allowbreak imagenet-\allowbreak verified} emit, tie and step. The
+only accuracy calibration that exists is this repo's
 ViT-Ti at $70.28\%$ against DeiT-Ti's $72.2\%$, a $1.9$-point recipe gap
 (\S\ref{sec:vit_imagenet}). DeiT quotes $79.8\%$ for S and $81.8\%$ for B; every
 item missing from that $1.9$ is \emph{regularization} and S has four times
 Tiny's capacity, so the gap plausibly widens rather than holds.
+
+\medskip\noindent \textbf{What the phase-2 peers cost.} The same probe
+\S\ref{sec:convnext_sb} uses, at global batch 512 --- 2{,}502 steps per epoch,
+the DeiT recipe's own figure --- with Tiny as the control:
+
+\begin{center}
+\begin{tabular}{@{}l r r r r r@{}}
+\hline
+phase-2 net & ms/step & device peak & min/epoch & 80 epochs & 300 epochs \\
+\hline
+ViT-Ti & $124$ & $2.89$\,GiB & $5.2$  & $6.9$\,h  & $25.8$\,h (1.1\,d) \\
+ViT-S  & $290$ & $7.72$\,GiB & $12.1$ & $16.1$\,h & $60.4$\,h (2.5\,d) \\
+ViT-B  & $701$ & $5.36$\,GiB & $29.2$ & $39.0$\,h & $146.1$\,h (6.1\,d) \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent \textbf{B is the only row that is not a single forward}: global 512 in
+one shot peaks at $11.41$ of the allocator's $11.68$\,GiB and dies, so it runs as
+$4\times128$ gradient accumulation --- which is why its peak sits \emph{below}
+S's. Compute-only again, and the omitted pipeline costs more here than in
+Chapter~\ref{chap:layernorm}: ViT-Ti's live epoch is the $7.6$ minutes
+\S\ref{sec:vit_imagenet} quotes against this probe's $5.2$.
 
 \chapter{Bestiary of Architectures}
 \label{chap:bestiary}

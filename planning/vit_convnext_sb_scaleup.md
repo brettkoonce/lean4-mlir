@@ -15,6 +15,22 @@ Measured 2026-07-25 on ares (6× RTX 4060 Ti, 16 GB; JAX 0.10.2 CUDA).
 full-val eval tool, R50's missing recipe flags, and `cBS`, which this file's own measurements
 promoted to the top infrastructure item).
 
+## RE-MEASURED 2026-08-27 → `runs/2026-08-27-jax-sb-tier-step-probe/`
+
+The phase-2 tables below are from **2026-07-25 on jax 0.10.2**. They were re-run on
+**jax 0.11.0 with freshly regenerated emits** (the `generated_*.py` on disk for all four
+S/B nets were a month stale) and they hold: ConvNeXt-B 399 vs 395 ms at the same 9.56 GiB,
+ViT-B 701 vs 712, ConvNeXt-S 261 vs 262. ViT-S came in 7% faster (290 vs 313). RSB-A2 and
+A3 were priced the same way for the first time (1368 / 715 ms at effective bs2048) — A1 is
+A2's graph with three constants changed, so one probe covers both.
+
+⚠ `jax/scripts/step_probe.py` needed three fixes to run at all — see that directory's
+README. It had rotted against the emitter silently, which is the same failure mode §3.3 of
+`planning/imagenet_rerun_sweep.md` records for the generated files themselves.
+
+▶ Blueprint `sec:r50_a2_a1_cost`, `sec:convnext_sb` and `sec:vit_sb` now print these
+figures; all three read `[todo: bf16 renderer + benchmarks]` before.
+
 ## STATUS (2026-08-14) — the two sides are at different places
 
 ⚠ **This doc was written about the JAX (phase-2) side and everything below the
