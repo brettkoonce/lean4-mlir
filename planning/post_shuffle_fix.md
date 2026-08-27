@@ -31,9 +31,9 @@ nets, ImageNet, CIFAR, ViT, the width sweeps, every proof-side artifact. Do not 
 | # | arm | `labelBytes` | status |
 |---|---|---|---|
 | — | FPN detector | 740,880 | ✅ fixed + re-run |
-| **1** | **BraTS UNet** (`bratsIO`) | 240² | ❌ every trained result void |
+| **1** | **BraTS UNet** (`bratsIO`) | 240² | ✅ **re-run 2026-08-26 — §1a ANSWERED**, `ce` segments |
 | **2** | **YOLO v2 / mosaic** | 30·gH·gW·4 + … | ❌ void |
-| **3** | **Pets segmentation** (`petsIO`) | 224² | ❌ void |
+| **3** | **Pets segmentation** (`petsIO`) | 224² | ✅ **UNet re-run 2026-08-26** — boundary IoU 0.000 → 0.404; skipless arm still blocked |
 | **4** | anchor YOLO (pre-FPN) | A·15·gH·gW·4 | ❌ void, low value |
 | **5** | YOLOv1 pets detection | 7,200 | ❌ void, low value |
 
@@ -53,6 +53,48 @@ focal no-op-at-init verdict, and the whole ablation series in
 Re-run the ablation arms on the fixed shuffle **before** crediting or dismissing weighted CE.
 If plain `ce` now segments, the entire loss-design thread was chasing a data bug and the demo
 gets much simpler.
+
+#### ✅ ANSWERED 2026-08-26 — it was a data bug. `ce` segments, and wins.
+
+Both arms re-run on fixed data (3 epochs, default config, 484 volumes / 14,415
+train / 2,569 val slices, XLA/PJRT). Surfaced incidentally by the
+`train_step_adam_seg` port validation — see `planning/demo_xla_port.md` §4.5.
+
+| arm | best mIoU | WT ep3 | pre-fix verdict |
+|---|---|---|---|
+| `dice` | **0.736** | 0.896 | collapse |
+| `dicece` | 0.734 | **0.903** | collapse |
+| `ce` | 0.728 | **0.903** | collapse — zero tumour pixels |
+| `focal` γ=2 | 0.719 | 0.898 | collapse at every γ |
+| `wcesqrt` | 0.709 | 0.864 | the recommended arm |
+| **`wce`** β=1 | 0.640 | 0.715 | the shipped default |
+
+Six arms, 3 epochs each. **Every arm previously reported as collapsing,
+segments**; five land in a tight band (0.70–0.74) and only `wce` separates.
+
+`ce` was recorded pre-fix as predicting **zero tumour pixels across all 2,569
+val slices**. It now predicts 3.4M against a 3.9M ground truth at 94.9%
+precision / 85.3% recall — the best *and* best-calibrated arm.
+
+▶ Three consequences, beyond "the numbers were wrong":
+
+1. **Weighted CE is net harmful now.** `wce` over-paints 1.5–2.4× and loses to
+   plain `ce` on every region. The 196× weights were compensating for the bug.
+2. **The instability was the weights, not the task.** `ce` improves monotonically
+   where `wce` oscillates — retiring the "good basin is unstable" conclusion.
+3. **The causal story is void, not just the measurements** — the vanishing-Dice-
+   gradient diagnosis, the β exchange-rate cliff, focal-collapses-at-every-γ, the
+   loss-floor ratio. Each explained an artifact. `planning/brats_demo.md` now
+   carries a STOP banner to that effect and needs a rewrite, not a patch.
+
+⚠ Not comparable to published BraTS: this eval is slice-level over
+tumour-bearing slices only (`min_tumor_px: 1` applies to val), where the
+literature reports per-volume Dice over whole volumes. Ours is the easier number.
+
+⚠ Still open: `dicece`, `dice`, `focal`, and the `wcesqrt`/β sweep have **not**
+been re-run. Item **#3 (Pets segmentation)** is untouched and is now the obvious
+next re-run — it carries the same `boundary-class IoU 0.000` collapse that
+`brats_demo.md` opens by citing, and the same bug applied to it.
 
 ### 1b. YOLO v2 — the "transfer gap" is suspect
 

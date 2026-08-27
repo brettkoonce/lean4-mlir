@@ -1,5 +1,27 @@
 # unet_demo_v2.md — UNet segmentation demo, second pass
 
+> ⛔⛔ **VOID (2026-08-26).** Every trained number in this document predates the
+> 2026-07-22 shuffle fix (`430ba2c`/`ca83835`): `lean_f32_shuffle` permuted
+> images by a full record and labels by a hardcoded 4 bytes, and a Pets trimap
+> label is 224², so every run here trained on mismatched image/mask pairs.
+> `planning/post_shuffle_fix.md` §1 lists Pets as invalidation item #3.
+>
+> **The boundary-class collapse this document is built around is an artifact.**
+> Re-run 2026-08-26, same 3-epoch config: mIoU **0.344 → 0.649**, boundary IoU
+> **0.000 → 0.404**. The metric argument (§"the metric comes first" — that a
+> mean-of-3 hides a thin-class collapse) still stands on its own merits; the
+> collapse it was written to expose does not exist on correct data.
+>
+> ✅ **Gate B PASSES.** Both arms re-run 2026-08-26 (3 ep, matched): UNet
+> **0.649** mIoU / **0.404** boundary vs skipless autoencoder **0.596** / 0.320.
+> Skips win by +0.053 mIoU and +0.084 on the thin class — the same signature as
+> the BraTS skip ablation (+0.105 mIoU, +0.123 on ET). The old "inconclusive"
+> reading was an artifact of both arms being collapsed by the bug.
+> ⚠ `autoencoder-pets-train` was never blocked on `train_step_adam` as
+> `demo_xla_port.md` §4.4 claimed — it is a seg net and rides
+> `train_step_adam_seg`. See `planning/brats_demo.md` §3 for the full account.
+
+
 Goal: finish what v1 started. The UNet demo's *infrastructure* all
 landed — and then the effort pivoted to DDPM (which reused the skip
 codegen the same week) before anyone ran a real training. Today the

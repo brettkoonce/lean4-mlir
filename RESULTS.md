@@ -84,7 +84,28 @@ per-class IoU = TP/(row+col−TP)). These are **3-epoch smoke runs**
 (the mains take an epochs arg for a real 60–80-ep budget); reported
 to validate the harness + the skip-connection ablation direction.
 
-| Model | Params | mIoU | fg IoU | bg IoU | boundary IoU |
+⛔ **VOID (2026-08-26) — both rows below trained on mispaired image/mask
+data.** `lean_f32_shuffle` permuted images by a full record but labels by a
+hardcoded 4 bytes; a Pets trimap label is 224². Fixed 2026-07-22
+(`430ba2c`/`ca83835`); see `planning/post_shuffle_fix.md` §1 ledger item #3.
+Re-run of the UNet arm, same 3-epoch config, on correct data:
+
+| Model | Params | mIoU | boundary IoU |
+|---|---|---|---|
+| UNet (with skips), **re-run 2026-08-26** | 7.85M | **0.649** | **0.404** |
+
+The boundary class does **not** collapse. ✅ **The skip ablation is now RESOLVED** (both arms re-run 2026-08-26, 3 ep,
+matched config) and it reverses the verdict below:
+
+| decoder | mIoU | boundary IoU |
+|---|---|---|
+| Autoencoder (skipless) | 0.596 | 0.320 |
+| **UNet (skips)** | **0.649** | **0.404** |
+
+UNet wins by +0.053 mIoU and +0.084 on the boundary class. Gate B passes. The
+"inconclusive" reading below was an artifact of both arms being collapsed.
+
+| Model (VOID) | Params | mIoU | fg IoU | bg IoU | boundary IoU |
 |---|---|---|---|---|---|
 | Autoencoder (skipless) | 5.5M | 0.360 | 0.425 | 0.655 | **0.000** |
 | UNet (with skips) | 7.85M | 0.344 | 0.386 | 0.646 | **0.000** |

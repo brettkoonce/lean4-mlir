@@ -1,21 +1,285 @@
-# brats_demo.md — brain-tumour segmentation, the seg demo's next rung
+# brats_demo.md — brain-tumour segmentation on BraTS (MSD Task01)
 
-Goal: take the segmentation stack that `unet_demo.md` / `unet_demo_v2.md`
-built for Oxford-IIIT Pets trimaps and push it to a task where the hard
-part is real. Pets was a good scaffold and a weak result: mIoU 0.344 at 3
-epochs with **boundary-class IoU 0.000** (`RESULTS.md:90`) — a class
-collapse we logged and shrugged at, because a trimap boundary is not what
-that demo was about.
+**Rewritten 2026-08-26.** The previous version of this document was a
+loss-design investigation built on corrupted data. Its results and its argument
+are void; both are preserved verbatim in the appendix, clearly marked, because
+this document was cited and anyone who read it needs to know what was withdrawn
+and why. ▶ The short version of the correction is in §3.
 
-BraTS is the rung where that same collapse becomes the whole point.
-Enhancing tumour is ~1% of pixels, and it is the sub-region clinicians
-actually care about. The failure pets tolerated, BraTS cannot — which is
-precisely why medical segmentation invented Dice. That is the through-line
-of this demo: **the thin-class collapse, taken seriously.**
+---
 
-Prerequisite reading: `planning/unet_demo_v2.md` (what the seg stack is and
-what's still open on the pets side). Volumetric follow-on:
-`planning/unet3d.md`.
+## 0. ⭐⭐ THE ONE-PARAGRAPH VERSION
+
+Segmentation of brain-tumour MRI: four co-registered modalities in
+(FLAIR / T1w / T1gd / T2w), four per-pixel classes out (background, edema,
+non-enhancing core, enhancing tumour), 484 patients split **by patient** into
+14,415 train / 2,569 val axial slices. **It works, and it is not fussy.** The
+anchor demo is a ResNet-34 UNet at 24.5M params reaching **mIoU 0.740,
+WT/TC/ET Dice 0.910 / 0.869 / 0.856** on plain per-pixel cross-entropy — no
+class weighting, no focal, no special recipe. Six loss arms were swept and five
+land within 0.03 mIoU of each other; the loss is simply not the interesting
+axis here. ⚠ What makes this demo worth reading is §3: for a month it appeared
+to show the exact opposite — a textbook thin-class collapse that no loss could
+fix — and that phenomenon was manufactured entirely by a data-loader bug.
+
+---
+
+## 1. ▶ RUN IT
+
+```bash
+./download_brats.sh                                   # MSD Task01, openly downloadable
+python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats
+lake exe unet-brats-train                             # 3 ep, dicece, ~10 min on one 4060 Ti
+```
+
+The anchor (ResNet-34 encoder, 224², the numbers in §2.1) needs its own build:
+
+```bash
+python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
+        --size 224 --seed 0                           # SAME split as data/brats
+lake exe unet-brats-r34 data/brats224 10 scratch      # He-init; `r34` = ImageNet-bootstrapped
+lake exe brats-predict net=r34                        # renders GT vs prediction
+```
+
+⚠ `--size 224` **crops**, it does not resize — the safe direction for a label
+mask, since resizing interpolates class indices into meaningless intermediate
+values. Verified: the 224 build has the same 411/73 patient split and the same
+14,415 / 2,569 slice counts as the 240 build.
+
+Every arm and knob is optional and order-free (`unet-brats-train ce 10`,
+`… dice`, `… focal g=8`, `… wcesqrt cos pb aug lr=5`). See the loss-arm block in
+`demos/MainUnetBratsTrain.lean`.
+
+---
+
+## 2. ⭐ THE RESULTS THAT STAND
+
+### 2.1 The anchor — ResNet-34 UNet, plain per-pixel CE
+
+| | mIoU | WT | TC | ET |
+|---|---|---|---|---|
+| 10 epochs (IREE, 2026-07-25) | **0.740** | **0.910** | **0.869** | **0.856** |
+| 3 epochs (XLA/PJRT, 2026-08-26) | 0.730 | 0.908 | 0.856 | 0.844 |
+
+Two backends, two schedules, agreeing inside 0.013 on every region. ⚠ The
+3-epoch row is not "the first 3 of 10" — `cosineDecay` is on, so a 3-epoch run
+completes a *compressed* cosine cycle. Read it as a shorter recipe converging
+slightly lower, not as a partial run.
+
+### 2.2 What the skip connections are worth
+
+Same backbone, data and schedule, decoder skips removed (upsample and convolve,
+never concatenate the encoder feature):
+
+| decoder | mIoU | WT | TC | ET |
+|---|---|---|---|---|
+| upsample only (no skips) | 0.635 | 0.872 | 0.817 | 0.733 |
+| `.unetUp` (skips) | **0.740** | **0.910** | **0.869** | **0.856** |
+
+⭐ ~10 points of mIoU, and the largest single gain is **ET (+0.12)** — the
+thinnest structure, which is exactly what the mechanism predicts: a decoder
+without skips must reconstruct every boundary from a 7×7 bottleneck.
+
+### 2.3 The loss-arm sweep — the loss is not the axis
+
+From-scratch UNet (7.85M params, 240²), 3 epochs each, best val mIoU:
+
+| `dice` | `dicece` | `ce` | `focal` γ=2 | `wcesqrt` | `wce` β=1 |
+|---|---|---|---|---|---|
+| **0.736** | 0.734 | 0.728 | 0.719 | 0.709 | 0.640 |
+
+▶ Five of six inside 0.03. Only `wce` (inverse-frequency weighting, β=1)
+separates, and it is also the only arm with a non-monotone trajectory
+(0.640 → 0.494 → 0.611) and the only one that over-paints (WT pred/gt
+1.56–2.38× against ~0.9× for the rest). **The β axis runs monotonically the
+wrong way**: β=0 (0.728) > β=0.5 (0.709) > β=1 (0.640). Heavier rare-class
+weighting strictly hurts.
+
+⚠ Single seed, 3 epochs. The ordering *among the top five* is noise and should
+not be cited. The separation of `wce` is the result.
+
+`dicece` is the shipped default: joint-best WT, best endpoint mIoU, most
+monotone, and Dice+CE is the standard compound loss in medical segmentation.
+
+### 2.4 ⚠⚠ These numbers are NOT comparable to published BraTS
+
+Published BraTS Dice is computed **per volume, over whole volumes including
+tumour-free slices**. This eval is **slice-level over tumour-bearing slices
+only** (`preprocess_brats.py` keeps slices with ≥1 tumour voxel, so all 2,569
+val slices contain tumour). Ours is the easier measurement by construction.
+
+The literature range for reference is WT ≈ 0.85+, TC ≈ 0.7–0.8, ET ≈ 0.6–0.7.
+We are nominally at or above that and **it does not mean we match published
+models** — it means the metric is not the same metric. Anyone quoting these
+numbers outside this repo has to carry this paragraph with them.
+
+⚠ Also: 484 volumes (MSD Task01), not the 1,251 of BraTS 2021, which is gated
+behind a Synapse agreement. Chosen so a reader can actually download the data.
+
+---
+
+## 3. ⭐⭐⭐ WHAT THIS DEMO IS ACTUALLY ABOUT — a data bug that impersonated a research finding
+
+This is the part worth the reader's time, and it is why the appendix is kept.
+
+### 3.1 The bug
+
+`ffi/f32_helpers.c: lean_f32_shuffle` permuted **images** by a full record and
+**labels** by a hardcoded **4 bytes** — one float, the size of a classification
+scalar. Classification is stride-4, so every classifier in the repo was
+unaffected. BraTS has `labelBytesPerRecord = 240²`. So on every epoch, image *k*
+trained against a **different slice's mask**.
+
+Fixed 2026-07-22 in `430ba2c` (found via the FPN detector: mAP 0.0001 → 0.1167)
+and `ca83835`. Ledger of everything it invalidated: `planning/post_shuffle_fix.md` §1.
+
+### 3.2 ⚠⚠ Why it was so convincing — the failure mode is the lesson
+
+Mispaired image/mask data cannot be learned. The best available strategy is to
+**predict the marginal label distribution**, which on this data is 97.46%
+background. That is *pixel-identical to a thin-class collapse.*
+
+So the bug produced, faithfully and reproducibly:
+
+* `ce` predicting **zero tumour voxels** across all 2,569 val slices
+* `dicece` collapsing **identically to four decimals** — which "confirmed" that
+  Dice's gradient vanishes ∝ p_i and cannot rescue a dead class
+* `focal` collapsing at **every** γ — which "confirmed" that suppressing the
+  majority cannot help when the rare-class gradient is left at CE's magnitude
+* class weighting *appearing* to help, because a weighted loss forces
+  prediction of *something* other than the marginal — an escape from an
+  artifact, mistaken for a solution to imbalance
+* an apparent **exchange-rate cliff** near β=0.5, and genuine instability,
+  because arms were being pushed off an artifact rather than toward a solution
+
+Every one of those observations was real, reproducible, and consistent with a
+well-known phenomenon that has a large literature. **That is exactly what made
+it dangerous.** The prior was strong (BraTS *is* brutally imbalanced; thin-class
+collapse *is* real), the observations matched it, and the theory built to explain
+them made correct predictions about further mispaired runs.
+
+### 3.3 What it cost, and what it should have cost
+
+~135 lines of loss-design theory in the blueprint, a full ablation series, a
+gradient scorecard, a "cost of the prior vs uniform" scalar promoted to a
+predictor, and a `wcesqrt+cos+pb+aug` recipe presented as the fix. All of it
+rationalising a loader bug.
+
+⚠ There *were* warnings, and they were internal to the investigation:
+
+1. The loss-floor ratio was **refuted by its own fifth data point** (`focal g=8`,
+   ratio 1.30× vs `wcesqrt`'s 1.35×, opposite outcomes) and recorded as
+   refuted — while the corresponding docstring in
+   `demos/MainUnetBratsTrain.lean` went on asserting it for another month.
+2. The gradient scorecard ranked `focal_pb` best of any arm; `focal_pb` then
+   collapsed. That was read as a flaw in the scorecard rather than as evidence
+   that the collapse had a cause outside the loss.
+
+▶ Two independent instruments disagreed with the theory and both were
+explained away. **The generalisable lesson is not "check your data loader."
+It is that a theory which keeps needing to explain away its own instruments is
+the symptom** — and the cheap decisive test (does the *simplest* arm work at
+all if something upstream changed?) was available the whole time.
+
+### 3.4 How it was actually caught
+
+Not by suspicion of this demo. `430ba2c` was found from the **detector** side,
+where the same bug produced mAP 0.0001 — a number too absurd to rationalise.
+BraTS's symptom was plausible; the detector's was not. `post_shuffle_fix.md` §1a
+then named the decisive test for BraTS in advance:
+
+> *"If plain `ce` now segments, the entire loss-design thread was chasing a data
+> bug and the demo gets much simpler."*
+
+It does, and it did. Confirmed twice independently: `d565f2c` (2026-07-25,
+retracting the blueprint's loss chapter) measured epoch-1 plain CE at mIoU ~0.69,
+WT/TC/ET 0.875/0.813/0.837; the 2026-08-26 sweep measured 0.689, 0.873/0.805/0.838
+— a month apart, different backends, agreeing to ~0.01.
+
+---
+
+## 4. THE STACK — what the demo actually exercises
+
+Unaffected by any of the above; the bug was in the loader, not the codegen.
+
+| piece | where | status |
+|---|---|---|
+| `.unetDown` / `.unetUp` (bilinear upsample fwd+VJP, channel concat) | `Layer`, blueprint §10.2.3 | ✅ |
+| Per-pixel softmax-CE, fired HW times | the Ch. MLP backward, via `useSeg` | ✅ FD-verified |
+| Every loss arm (`ce`/`dice`/`dicece`/`wce`/`focal`/label-smoothing) | `Types.lean` | ✅ **17 FD checks** |
+| Region Dice (WT/TC/ET) + mIoU + per-class IoU | `DatasetIO.segRegions`, host-only | ✅ |
+| Shape-matched `unetUp` pairing (ResNet encoder as contracting path) | reuses `.fpnDetect`'s C3/C4/C5 tap | ✅ bit-identical params both ways |
+| Patient-level split, ≥1-tumour-voxel slice filter | `preprocess_brats.py` | ✅ |
+| `train_step_adam_seg` on XLA/PJRT | `ffi/pjrt_ffi.c` | ✅ 2026-08-26 |
+
+⭐ The FD checks are the reason the *codegen* claims survived a data bug intact:
+they compare emitted gradients against finite differences and never touch the
+loader. A bug that invalidates every trained result can leave every proof
+obligation untouched — worth knowing which of your instruments has that property.
+
+⚠ `evalEveryNEpochs := 1` here against a framework default of 10, deliberately.
+Per-class IoU is the only instrument that can see a collapsed class; **the loss
+curve provably cannot**, and the 2026-08-26 sweep demonstrated this live —
+`wce`'s training loss fell monotonically 0.402 → 0.329 → 0.308 straight through
+the epoch where its val mIoU cratered to 0.494.
+
+---
+
+## 5. ▶ WHAT IS STILL OPEN
+
+1. **Per-volume evaluation** (§2.4). The single change that would make these
+   numbers comparable to published work. Currently slice-level on
+   tumour-bearing slices only.
+2. ✅ **Pets is done — and it was the same bug.** Re-run 2026-08-26: mIoU
+   0.344 → **0.649**, boundary-class IoU **0.000 → 0.404**. ⭐ This retires the
+   *opening premise* of this document's original version, which cited Pets'
+   boundary collapse as the motivating evidence that thin classes collapse and
+   BraTS would make it unignorable. Both collapses were the same loader bug.
+   ⚠ Still open there: the skipless-autoencoder arm of the skip ablation cannot
+   be re-run until `train_step_adam` is ported, so Gate B in
+   `planning/unet_demo_v2.md` is **unresolved**, not merely inconclusive.
+3. **Multi-seed confirmation** of §2.3. Everything there is n=1.
+4. **The remaining knobs** (`pb`, `cos`, `aug`, the β sweep) were tuned against
+   void baselines. `aug` in particular was credited with doubling WT Dice; that
+   claim is withdrawn and untested on correct data.
+5. **3D / 2.5D** — `planning/unet3d.md`. Cheapest real win is 2.5D (stack 2k+1
+   adjacent slices into channels, `ic = 4*(2k+1)`, loader-only change).
+
+---
+
+## 6. FILE INDEX
+
+* `demos/MainUnetBratsR34.lean` — the anchor (ResNet-34 encoder + UNet decoder).
+* `demos/MainUnetBratsTrain.lean` — the from-scratch UNet and the loss arms.
+* `demos/MainBratsPredict.lean` — `brats-predict`, the renderer.
+* `blueprint/src/content.tex` §10.2.3 — the published write-up. Already correct
+  (retracted 2026-07-25, `d565f2c`); **it is the citable source, not this file's
+  appendix**.
+* `planning/post_shuffle_fix.md` — §1 the invalidation ledger, §1a the decisive
+  test and its answer.
+* `planning/r34_brats_retrain.md` — the post-fix R34 retrain.
+* `planning/demo_xla_port.md` §4.5 — the XLA port and the 2026-08-26 sweep.
+* `planning/unet_demo_v2.md` — the Pets-side seg stack (⚠ void, see §5.2).
+* `planning/unet3d.md` — the volumetric follow-on.
+
+---
+---
+
+# ⛔⛔ APPENDIX — THE RETRACTED INVESTIGATION (2026-07-15 … 2026-07-17)
+
+**DO NOT CITE ANY NUMBER OR CONCLUSION BELOW THIS LINE.**
+
+Everything that follows was measured on mispaired image/mask data (§3.1) and is
+void — not only the measurements but the entire causal argument built on them:
+the vanishing-Dice-gradient diagnosis, the class-weight exchange rate, focal's
+collapse-at-every-γ, the loss-floor ratio, and the gradient scorecard's ranking.
+
+It is retained, unedited, for three reasons: this document was cited and readers
+need to see what was withdrawn; the reasoning is a well-documented worked example
+of a theory outrunning its instruments (§3.3); and the *infrastructure* it
+built — the region-Dice harness, the class-weight histogram, the FD checks — is
+still in use and is still correct.
+
 
 ## FINAL VERDICT (2026-07-17) — the ceiling was data variety, and one flip found it
 

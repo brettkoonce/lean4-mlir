@@ -140,9 +140,17 @@ The neck + heads are what's new.
 VisDrone is a **hard** benchmark. Strong published models land around
 **mAP@0.5 ≈ 0.35–0.55**; a from-scratch demo detector on a modest budget will be
 well under that, and that is fine — the same honesty the BraTS demo carries
-(WT Dice ~0.33, stated as modest, not sold as SOTA). The deliverable is *a
+(WT Dice ~0.33, stated as modest, not sold as SOTA).  ⚠ **That 0.33 is void**
+(2026-08-26): it predates the shuffle fix, and BraTS on fixed data reaches WT
+0.90 — see the STOP banner in `planning/brats_demo.md`. The *honesty* precedent
+stands; the number does not. The deliverable is *a
 working multi-scale detector on real dense-small-object data*, with the figure
 showing why single-scale fails and multi-scale helps — not a leaderboard entry.
+
+⛔ **The BraTS collapse triptych no longer exists** (2026-08-26) — the collapse
+it depicted was a data-pairing bug, and plain `ce` now segments cleanly. This
+paragraph's analogy needs a new anchor; the VisDrone contrast below may still
+hold on its own merits, but it can no longer borrow BraTS's.
 
 The likely money-slide, mirroring BraTS's collapse triptych: **YOLOv1's single
 grid on VisDrone → almost nothing detected** (the grid can't resolve the
