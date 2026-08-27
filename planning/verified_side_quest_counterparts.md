@@ -61,8 +61,8 @@ Surveyed 2026-08-27 against the tree at `253fb75`. "Render" means a committed
 | **MNv4-Conv-M** | `sec:mnv4_side_quest` | ✅ | ✅ 4 variants incl. DP + bf16 | ✅ **4-GPU, tied** | ✅ nothing — **run it** (§4b) |
 | **ConvNeXt-S** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + **bf16 ×2** | steps only | ✅ nothing — **train it** (§4c) |
 | **ConvNeXt-B** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + bf16 ×2 | ✅ **benchmarked** | ✅ nothing — **train it** (§4c) |
-| **ViT-S** | `sec:vit_sb` | ✅ | ✅ fp32 ×1 | steps only | the bf16 twin (§4c) |
-| **ViT-B** | `sec:vit_sb` | ✅ | ✅ fp32 ×1 @ global 128 | steps only | bf16 **+ an accum render** (§4d) |
+| **ViT-S** | `sec:vit_sb` | ✅ | ✅ fp32 + **bf16** | ✅ measured **1.89×** | ✅ nothing — **train it** (§4c) |
+| **ViT-B** | `sec:vit_sb` | ✅ | ✅ fp32 + **bf16** @ global 128 | ✅ measured 1.40× | **an accum render** (§4d) |
 | **EfficientNetV2-S** | `sec:enet_side_quests` | ⚠ Imagenette only | ⛔ nothing | — | spec, peer, shim, render (§4e) |
 | Noisy Student | `sec:enet_side_quests` | — | — | — | out of scope: needs JFT-300M |
 | EfficientDet | `sec:enet_side_quests` | — | — | — | out of scope: detection, not this book's head |
@@ -474,10 +474,30 @@ at widths bf16 already suits, where B's widening moves every stage.
 1.18× inside a four-card run on real data, B 1.34× and 1.20×. Two rows of §21.6's shape are still
 unmeasured for S: peak memory and the 4×bs32 trainer figure.
 
-⬅ **Still owed by this section: the two ViT twins** (`vitsin_adamdp128x4wxclipdropbf16` and
-`vitbin_adamdp32x4wxclipdropbf16`). ⚠⚠ Do NOT assume they land where ConvNeXt's did — the third
-trap below is a ViT trap: ViT's stem wgrad runs **0.19×**, a 209×209 window with no bf16 cuDNN
-kernel, so ViT is the family where a green gate and a slower graph have actually co-occurred.
+✅ **AND THE TWO ViT TWINS LANDED THE SAME DAY** (`d78feb6`). ⚠⚠ The section's trap did NOT bite,
+and the reason is worth keeping: ViT's stem wgrad does run **0.19×**, but `bf16Conv`/`bf16ConvW`
+are already FALSE in Tiny's bf16 render and S and B inherit that, so the one op where bf16 loses on
+this architecture was never in the emit at any size. The renderer had been taught the lesson before
+this section wrote it down.
+
+⭐⭐ **Measured at FOUR replicas — ViT-S and ViT-B have no single-device render at all**, which is
+why `scripts/bf16_device_step.py` grew a `--replicas` flag (a separate compile path; widening the
+shared correctness gate's would be how a gate stops gating):
+
+| model | per-dev bs | fp32 | bf16 | speedup |
+|---|---|---|---|---|
+| ViT-Tiny | 128 | 171.6 ms | 96.4 ms | 1.78× |
+| **ViT-S** | 128 | **464.0 ms** | **245.5 ms** | **1.89×** |
+| ViT-B | 32 | 383.8 ms | 273.7 ms | 1.40× |
+
+⭐ **1.89× is the largest bf16 payoff in the repo.** ⚠⚠ And checking that claim caught a basis
+mismatch: the first draft set it against R50's **1.55×**, which is R50's SINGLE-DEVICE figure.
+R50 at four replicas is **1.66×** (336.9 → 203.4 ms). S still leads, by less.
+
+⛔ **ViT-B gets no projected wall clock.** Tiny is the only ViT with a measured trainer step and B
+runs at ¼ its batch, so Tiny's multiplier returns a 1.12× trainer speedup — BELOW B's own 1.40×
+device ratio, which no overhead model may do. An additive model gives 1.37× and a total 100 h
+lower. Two defensible models 100 h apart is not an estimate.
 
 ---
 
@@ -592,12 +612,16 @@ Non-negotiable, and in this order:
    cell is fixed. ⚠ It did NOT close `sec:r50_a2_a1_cost`: EMA is unrepresentable alongside
    accumulation (one fourth region, two claimants) and stochastic depth has no importer in the
    residual family. Both are now stated in the book rather than owed. See §4a.
-4. 🔄 **The three bf16 twins (§4c) — ConvNeXt-S DONE 2026-08-27** (`e17b61c`), measured at
-   **1.39×**, the fastest of the three sizes, and B's benchmark fell out of the same session.
-   ⬅ **NEXT: the two ViT twins**, and they are the risky ones — ViT's stem wgrad is 0.19×.
+4. ✅ **The three bf16 twins (§4c) — ALL DONE 2026-08-27.** ConvNeXt-S (`e17b61c`) at **1.39×**,
+   ViT-S and ViT-B (`d78feb6`) at **1.89×** and 1.40×, book in `93ec229`. ConvNeXt-B's and R50's
+   benchmarks fell out of the same sessions. §4c is closed.
 5. **ViT-B accumulation (§4d)** — only if ViT-B is actually going to be trained on this box. Check
    the TPU question first.
-6. **EfficientNetV2 (§4e)** — its own project, after the rest.
+6. **EfficientNetV2 (§4e)** — its own project, after the rest. ⚠ Its row is OUT of the book's
+   Track-4 side-quest table as of `93ec229` (brett, 2026-08-27): a "no spec" row in a table of
+   rendered artifacts reads as a commitment rather than a possibility. The ch.7 bestiary entry
+   keeps the idea, and §4e below keeps the analysis — including the progressive-learning finding,
+   which is the part worth not losing.
 
 ⚠ **Do not convert a chapter and re-run its net in the same pass.** §5.7's conversion was interleaved
 with a live run and produced three separate stale-number corrections.
