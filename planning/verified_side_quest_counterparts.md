@@ -255,9 +255,22 @@ the whole card and the verified trainers could not, and nothing in the tree said
 | `4×128` bf16 + EMA + sd | 8.09 G | 69 % | 54 % |
 | `4×128` fp32 + EMA + sd | **11.91 G** | ⛔ over | ✅ **79 %** |
 
-✅ **So the fp32 peers ARE rendered** and the full (precision × factorisation) square exists —
-§4c's rule holds after all. Running the `4×128` fp32 pair needs `LEAN_MLIR_MEM_FRACTION=0.97`,
-which is a job-config line rather than a missing artifact.
+✅ **So the fp32 peers ARE rendered** and the full precision square exists — §4c's rule holds after
+all. Running the fp32 pair needs `LEAN_MLIR_MEM_FRACTION=0.97`, a job-config line rather than a
+missing artifact.
+
+⭐⭐ **AND THE `8×64` FAMILY IS GONE** (brett, 2026-08-27) — sixteen artifacts deleted, leaving
+eight. `4×128` is the reference's own factorisation (`GRAD_ACCUM = 4`, `MICRO_BATCH = 512`), it
+doubles the batch-norm group 64 → 128, and it is **faster**: 30.0 min/epoch against 31.7 in fp32,
+19.0 against 20.6 in bf16, because a bigger per-device batch amortises the per-invoke overhead over
+twice the images. There was no axis on which `8×64` won.
+⚠ Nothing loaded them — `r50-accum-tie` and `r50-accum-shard-tie` both default to `acc4x64`.
+⚠ A3's **160-tier** `8×64` renders are untouched: that is the recipe that produced 77.91%.
+⚠ `resnet50in_accdp8x64` is untouched too — a bare AdamW-accum probe of a different lineage that
+happens to share the shape. It is orphaned (neither tie loads it) and worth a look, separately.
+⭐ `TestVariantPredicates` keeps all the `8×64` spellings, and that is its own rule working: the
+table is grown from the `*AdamVariant` FUNCTIONS, not from the artifacts, because *"an artifact
+that does not exist yet is exactly the one whose name will collide."*
 
 ⚠ **A compile-time peak is not independent of the allocator it was compiled against**: the fp32
 `4×128` reads 11.52 G under the default budget and 11.91 G under the raised one, because XLA

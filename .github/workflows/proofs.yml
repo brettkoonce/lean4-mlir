@@ -390,22 +390,6 @@ jobs:
               verified_mlir/resnet50_fwd_eval.mlir \
               verified_mlir/resnet50_adam_train_step.mlir \
               verified_mlir/resnet50in_momdp64bf16_train_step.mlir \
-              verified_mlir/resnet50in_lambaccdp8x64wxclipbce_train_step.mlir \
-              verified_mlir/resnet50in_lambacc8x64wxclipbce_train_step.mlir \
-              verified_mlir/resnet50in_lambaccdp8x64wxclipbcebf16_train_step.mlir \
-              verified_mlir/resnet50in_lambacc8x64wxclipbcebf16_train_step.mlir \
-              verified_mlir/resnet50in_lambaccdp8x64wxclipbcewd001_train_step.mlir \
-              verified_mlir/resnet50in_lambacc8x64wxclipbcewd001_train_step.mlir \
-              verified_mlir/resnet50in_lambaccdp8x64wxclipbcewd001bf16_train_step.mlir \
-              verified_mlir/resnet50in_lambacc8x64wxclipbcewd001bf16_train_step.mlir \
-              verified_mlir/resnet50in_emalambaccdp8x64wxclipbce_train_step.mlir \
-              verified_mlir/resnet50in_emalambacc8x64wxclipbce_train_step.mlir \
-              verified_mlir/resnet50in_emalambaccdp8x64wxclipbcewd001_train_step.mlir \
-              verified_mlir/resnet50in_emalambacc8x64wxclipbcewd001_train_step.mlir \
-              verified_mlir/resnet50in_emalambaccdp8x64wxclipdropbce_train_step.mlir \
-              verified_mlir/resnet50in_emalambacc8x64wxclipdropbce_train_step.mlir \
-              verified_mlir/resnet50in_emalambaccdp8x64wxclipdropbcewd001_train_step.mlir \
-              verified_mlir/resnet50in_emalambacc8x64wxclipdropbcewd001_train_step.mlir \
               verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcebf16_train_step.mlir \
               verified_mlir/resnet50in_emalambacc4x128wxclipdropbcebf16_train_step.mlir \
               verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir \

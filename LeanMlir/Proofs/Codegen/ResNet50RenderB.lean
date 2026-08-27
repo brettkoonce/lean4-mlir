@@ -1640,25 +1640,9 @@ end Proofs.StableHLO
 -- ⚠ The 1-replica peer is not optional: `r50-accum-tie` and `r50-accum-shard-tie` both compare a
 -- DP render against a single-device one, so a DP-only render is ungateable — the same reason the
 -- 160 family carries `lambacc8x64wxclipbce` beside `lambaccdp8x64wxclipbce`.
-#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
-    (wdExclude := true) (gradClip := true))
-#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
-    (wdExclude := true) (gradClip := true))
 
 -- ── RSB-A2 @ 224, bf16. `resnet50in_momdp64bf16` already proves the bf16 path renders for this
 -- net at this resolution, so this is a flag rather than an investigation. ─────────────────────
-#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbcebf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
-    (wdExclude := true) (gradClip := true) (bf16 := true))
-#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbcebf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
-    (wdExclude := true) (gradClip := true) (bf16 := true))
 
 -- ── RSB-A1 @ 224 — **A DISTINCT ARTIFACT, NOT "the same render as A2"**. ────────────────────────
 -- ⚠⚠ The book's `sec:r50_a2_a1_cost` table said A1's renderer work was "same render as A2". It is
@@ -1670,27 +1654,11 @@ end Proofs.StableHLO
 -- `("lambacc8wxclipwd001", "generated_resnet50_imagenet_a1.py", 8, True)`, checked against an
 -- emitted A1 trainer that bakes `WD = 0.010000`. So "the string reaches the constant block" is a
 -- measurement here, not a code-reading claim.
-#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
-    (wdExclude := true) (gradClip := true))
-#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
-    (wdExclude := true) (gradClip := true))
 
 -- ── RSB-A1 @ 224, bf16. Rendered now rather than later for the reason ConvNeXt-S's MISSING bf16
 -- twin is a `planning/verified_side_quest_counterparts.md` §4c item: a size or tier that ships
 -- without its precision peer leaves a gap that reads as a decision and is really an accident of
 -- ordering. Both tiers get the full (precision × replicas) square in one pass. ────────────────
-#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp8x64wxclipbcewd001bf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
-    (wdExclude := true) (gradClip := true) (bf16 := true))
-#eval IO.FS.writeFile "verified_mlir/resnet50in_lambacc8x64wxclipbcewd001bf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
-    (wdExclude := true) (gradClip := true) (bf16 := true))
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- § RSB-A2 and A1 **WITH THE MODEL-EMA SHADOW** — the five-region renders, 2026-08-27.
@@ -1718,26 +1686,10 @@ end Proofs.StableHLO
 -- `DropPath.lean`, and `r34AdamVariant` has no `drop` marker). So these are A2's graph minus ONE
 -- regulariser rather than minus two. Ghost-BN group 64-vs-128 is unchanged. Quote them the way
 -- A3's deltas are quoted.
-#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp8x64wxclipbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
-    (wdExclude := true) (gradClip := true) (ema := true))
 -- ⚠ The 1-replica peer, for `r50-accum-tie`/`r50-accum-shard-tie`'s reason: a DP-only render is
 -- ungateable, because both gates compare a DP render against a single-device one.
-#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc8x64wxclipbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
-    (wdExclude := true) (gradClip := true) (ema := true))
 
 -- ── …and RSB-A1's pair, which differs in the BAKED `%wd` alone (0.01 against A2's 0.02). ───────
-#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp8x64wxclipbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
-    (wdExclude := true) (gradClip := true) (ema := true))
-#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc8x64wxclipbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
-    (wdExclude := true) (gradClip := true) (ema := true))
 
 -- ⚠⚠ **NO bf16 TWINS HERE, AND THAT IS A DECISION RATHER THAN AN OMISSION.** §4c's own complaint
 -- is that a tier shipping without its precision peer "reads as a decision and is really an accident
@@ -1769,22 +1721,6 @@ end Proofs.StableHLO
 -- reference's 4 × 512-global (128 per device on four cards). Immaterial to a wall clock; a
 -- different regime for any accuracy claim. That is now the ONLY delta, and it is the one §4a
 -- listed as ⚠ rather than ⛔.
-#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp8x64wxclipdropbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
-    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
-#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc8x64wxclipdropbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
-    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
-#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp8x64wxclipdropbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
-    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
-#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc8x64wxclipdropbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
-    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- § RSB-A2/A1 at the REFERENCE'S OWN FACTORISATION of 2048 — k = 4 × 128 per device, 2026-08-27.

@@ -5936,11 +5936,10 @@ A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $\sim$190 hr (bf
 \end{tabular}
 \end{center}
 
-\noindent Twenty-four artifacts: each tier at one and four replicas, in both
-precisions, at either factorisation of the effective batch $2048$ ---
-$512\times4$ on the reference, $8\times64$ or $4\times128$ here. \textbf{A1 is not
-``the same render as A2''}: the decay is baked, so its $0.01$ against A2's $0.02$
-is a re-render, kept apart so one line among $18{,}000$ cannot be lost.
+\noindent Eight artifacts: each tier at one and four replicas, in both precisions,
+all at $4\times128$ for the reason the batch-norm paragraph gives. \textbf{A1 is
+not ``the same render as A2''}: the decay is baked, so its $0.01$ against A2's
+$0.02$ is a re-render, kept apart so one line among $18{,}000$ cannot be lost.
 
 \medskip\noindent \textbf{The two regularisers these renders used to be missing
 are now in them.} The ledger \S\ref{sec:r50_phase4} keeps for A3, before anything
@@ -5992,17 +5991,15 @@ timm's is per \emph{sample}, same expectation, which is why it survived.
 \hline
 render & precision & BN group & peak & of $11.68$ & of $15.11$ \\
 \hline
-$8\times64$             & fp32 & $64$  & $6.18$\,GiB  & $53\%$ & $41\%$ \\
-$8\times64$             & bf16 & $64$  & $4.32$\,GiB  & $37\%$ & $29\%$ \\
-$8\times64$ + EMA + sd  & fp32 & $64$  & $6.37$\,GiB  & $55\%$ & $42\%$ \\
 $4\times128$ + EMA + sd & bf16 & $128$ & $8.09$\,GiB  & $69\%$ & $54\%$ \\
 $4\times128$ + EMA + sd & fp32 & $128$ & $11.91$\,GiB & over   & $79\%$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The fifth region costs $0.19$\,GiB, all of it arguments; stochastic
-depth costs nothing measurable, in memory or in time. \textbf{And the two budget columns are the point.}
+\noindent Neither regulariser is what makes this tight: the fifth region costs
+$0.19$\,GiB, and stochastic depth nothing measurable in memory or in time.
+\textbf{The two budget columns are the point.}
 A PJRT client created with no allocator options takes the plugin's $0.75$ default
 --- which is where $11.68$ comes from, and four gigabytes of a $16$\,GB card with
 it. \texttt{XLA\_PYTHON\_CLIENT\_MEM\_FRACTION} does not change it: the plugin
@@ -6015,9 +6012,9 @@ hardware moved.}
 looks.} Nothing here all-reduces activation statistics, so each replica
 normalises over its own $64$; the reference's \texttt{jnp.mean} reduces over a
 \emph{mesh-sharded} axis, so XLA inserts one and its group is the full $512$ ---
-its per-device tensor is $128$, and only the group is the statistic. Half the gap
-is a re-render, $k=4$ at $128$ per device, which is also the \emph{faster}
-arrangement; the last $4\times$ needs synchronised batch-norm --- a new operator,
+its per-device tensor is $128$, and only the group is the statistic. \textbf{These renders
+take the first half of that gap}: $k=4$ at $128$ per device is the reference's own
+factorisation, and it is the \emph{faster} arrangement besides. The last $4\times$ needs synchronised batch-norm --- a new operator,
 a changed backward, a variance that does not average, and $53$ collectives a
 step.
 
