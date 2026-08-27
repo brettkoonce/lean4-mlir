@@ -2427,6 +2427,10 @@ lean_exe «tinystories» where
   root := `demos.MainTinyStories
   moreLinkArgs := lowererLink
 
+lean_exe «diffusion-2d» where
+  root := `demos.MainDiffusion2d
+  moreLinkArgs := lowererLink
+
 lean_exe «mnist-ddpm-train» where
   root := `demos.MainMnistDdpmTrain
   moreLinkArgs := lowererLink

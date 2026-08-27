@@ -7344,7 +7344,17 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       let outTy := tensorTy curShape
       let nElems := b2 * n2
       code := code ++ "\n    // ================ DDPM MSE (rank-2) ================\n"
-      code := code ++ s!"    %ddpm_diff = stablehlo.subtract {logitsSSA}, %y_ddpm : {outTy}\n"
+      -- ⚠ `%y_ddpm` arrives RANK-4 as [B, N, 1, 1], not rank-2. That is not an
+      -- accident of this branch: `iree_ffi_train_step_adam_ddpm` hardcodes
+      -- `ranks[np+1] = 4` and pushes [b, oC, oH, oW] verbatim, so a rank-2
+      -- target would be a shape mismatch at the PJRT boundary. The FPN path
+      -- solved this the same way (see `emitTrainStepSig`: "rank-4 [B, Ntot, 1,
+      -- 1] so the (untouched) single-target DDPM train-step FFI can push it
+      -- verbatim — reshaped at the head of the loss branch"). Callers pass
+      -- `ddpmOutShape := [B, N, 1, 1]`; we reshape here and the math below is
+      -- then identical to the 4-D case.
+      code := code ++ s!"    %y_ddpm_r2 = stablehlo.reshape %y_ddpm : ({tensorTy [b2, n2, 1, 1]}) -> {outTy}\n"
+      code := code ++ s!"    %ddpm_diff = stablehlo.subtract {logitsSSA}, %y_ddpm_r2 : {outTy}\n"
       code := code ++ s!"    %ddpm_sq = stablehlo.multiply %ddpm_diff, %ddpm_diff : {outTy}\n"
       code := code ++ s!"    %ddpm_sum = stablehlo.reduce(%ddpm_sq init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
       code := code ++ s!"           : ({outTy}, tensor<f32>) -> tensor<f32>\n"

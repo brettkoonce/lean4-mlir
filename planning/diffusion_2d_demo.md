@@ -125,6 +125,70 @@ Two more, both free once the above exists:
 
 ---
 
+## 5.5 ✅ BUILT 2026-08-27 — phases 0-4 and 6 land; the metrics earn their keep
+
+Working end to end on XLA/PJRT. `lake exe diffusion-2d [train_steps] [sampler_steps]`
+→ `scripts/toy2d_metrics.py`. **Trains in 5.4 s at 3,000 steps / 28 s at 20,000**
+(the plan said "seconds"; it is seconds), 35,586 params.
+
+| phase | state |
+|---|---|
+| 0 data samplers | ✅ `preprocess_toy2d.py` — 8-gaussians + spiral, plus an **independent** reference draw (seed 1) so the metric never scores a model against its own training set |
+| 1 NetSpec | ✅ `.dense 10→128→128→2`; no new primitives, as predicted |
+| 2 train | ✅ `Ddpm.stepInputs` + `prependSinCosT` at `H=W=1`, unchanged |
+| 3 sample | ✅ `ddimStep`, η = 0 |
+| 4 metrics | ✅ mode recall, energy distance, off-manifold, PPM scatter |
+| 5 reverse strip | ⛔ not built |
+| 6 CI gate | ✅ `toy2d_metrics.py` exits non-zero on failure |
+
+### The result, and it is the argument for this demo
+
+| train | sampler | mode recall | off-manifold | energy (× floor) |
+|---|---|---|---|---|
+| 3,000 | 50 | 8/8 | 42.3% | 35.7× |
+| 20,000 | 50 | 8/8 | 15.7% | 44.8× |
+| 20,000 | **200** | 8/8 | **5.0%** | **30.4×** |
+| 20,000 | 500 | 8/8 | 7.4% | 27.8× |
+
+⭐⭐ **The metrics caught what a picture would not.** At 3,000/50 the scatter shows
+eight clean blobs and reads as a success; the numbers say **42% of the mass is
+more than 4σ off any mode**. That is the §1 claim ("failure looks like success")
+reproducing on the first run of the demo built to test it.
+
+⭐ **Plan §8, answered: 50 steps is too few, and ~200 is the knee.** Off-manifold
+mass falls 15.7% → 5.0% going 50 → 200, then stops improving (7.4% at 500). The
+image demos' 50 is a convention, and on this target it is measurably wrong.
+
+▶ **The residual is not what was expected.** After 200 steps the samples are ON
+the modes — the failure is *mass allocation between* them: per-mode share runs
+**6.3% to 18.8%** against a true 12.5%. Mode recall is 8/8 and cannot see this;
+energy distance sits at 30× the true-vs-true floor entirely because of it.
+
+⚠ That points at η, not at capacity or steps. `ddimStep` is **η = 0, fully
+deterministic**, so which mode a sample lands on is decided by how the learned
+field partitions the noise plane, and an imperfect partition mis-allocates mass
+permanently — extra steps cannot fix it. §4's "report per sampler (DDPM η=1 vs
+DDIM η=0)" is therefore the next experiment and now has a specific hypothesis:
+**η = 1 should even out the per-mode mass while leaving mode recall at 8/8.**
+⛔ `Ddpm.ddimStep` cannot do it — η=1 needs the σ_t noise term added.
+
+### ⚠ Codegen change this required
+
+The rank-2 DDPM loss branch (`MlirCodegen.lean`) declared `%y_ddpm` rank-2, but
+`iree_ffi_train_step_adam_ddpm` hardcodes `ranks[np+1] = 4`. Callers now pass
+`ddpmOutShape := [B, N, 1, 1]` and the branch reshapes — the same trick the FPN
+detector already used to ride that FFI untouched. No shim change.
+
+### ⚠ Caveats
+
+* Single seed throughout. The energy-distance column moves non-monotonically
+  (44.8× at 50 steps vs 35.7× with 7× less training) and that spread is not
+  resolved at n=1.
+* The 0.05 energy gate is a **regression** bar set from the observed spread, not
+  a quality target. A collapsed model scores an order of magnitude worse.
+* Spiral, two-moons and checkerboard are generated but unused; only 8-gaussians
+  is wired to metrics.
+
 ## 6. PHASES
 
 | # | what | est. | gate |
