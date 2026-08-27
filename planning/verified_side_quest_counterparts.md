@@ -42,10 +42,10 @@ plan**, each flagged ⚠⚠ where it bites.
 **The next task is §6's item 2** — §4b, the MNv4 shard gate. It is the first one that needs a
 card, and the best payoff per hour in the file.
 
-⚠ **One correction this doc owes the book.** `sec:r50_a2_a1_cost`'s table says A1's renderer work
-is "same render as A2". §4a shows it is not — `wdStr` is a baked constant, so A1's wd 0.01 is a
-distinct artifact, and its Mixup α 0.2 needs its own shim. Fix that cell in the same pass as §4a,
-not before: it should change when the render that proves it exists.
+✅ **The correction this doc owed the book is PAID** (`40f63d7`). `sec:r50_a2_a1_cost`'s table said
+A1's renderer work was "same render as A2"; the two artifacts now exist and differ in **exactly one
+line of 18,000** — the baked `%wd`, 0.01 against 0.02. The cell changed when the render that proves
+it existed, which is what this note asked for.
 
 ---
 
@@ -56,8 +56,8 @@ Surveyed 2026-08-27 against the tree at `253fb75`. "Render" means a committed
 
 | side quest | book § | JAX peer | verified render | verified run | what is actually owed |
 |---|---|---|---|---|---|
-| **RSB-A2** | `sec:r50_a2_a1_cost` | ✅ `a2-accum` | ⛔ none at 224 | — | 4 `#eval` lines (§4a) |
-| **RSB-A1** | `sec:r50_a2_a1_cost` | ✅ `a1` | ⛔ none | — | ⚠ **not** "same render as A2" (§4a) |
+| **RSB-A2** | `sec:r50_a2_a1_cost` | ✅ `a2-accum` | ✅ fp32 ×2 + bf16 ×2 | — | ⛔ EMA + sd (§4a) |
+| **RSB-A1** | `sec:r50_a2_a1_cost` | ✅ `a1` | ✅ fp32 ×2 + bf16 ×2 + own shim | — | ⛔ EMA + sd (§4a) |
 | **MNv4-Conv-M** | `sec:mnv4_side_quest` | ✅ | ✅ 4 variants incl. DP + bf16 | ✅ **4-GPU, tied** | ✅ nothing — **run it** (§4b) |
 | **ConvNeXt-S** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 | steps only | the bf16 twin (§4c) |
 | **ConvNeXt-B** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + bf16 ×2 | steps only | nothing — **benchmark it** (§4c) |
@@ -296,7 +296,55 @@ one, and the difference is one gate (§4b).
 
 ## 4. THE RENDERER WORK, ITEM BY ITEM
 
-### 4a. RSB-A2 at 224 — four `#eval` lines. And A1 is NOT free.
+### 4a. RSB-A2 at 224 — four `#eval` lines. And A1 is NOT free. ✅ RENDERED 2026-08-27
+
+✅ **LANDED**, `6f89701` (eight renders + A1's spec, shim and recipe arm) + `40f63d7` (the book).
+
+⚠⚠⚠ **BUT "it closes a whole book section" WAS WRONG, and this is the finding of the item.** The
+`#eval`s were four lines as predicted. The section does not close, because **two of A2's
+regularisers have no expression on this path** — checked field by field against
+`resnet50ImagenetConfigA2Accum`, not assumed:
+
+* ⛔ **Model EMA (`emaDecay := 0.9999`) is UNREPRESENTABLE, not merely unrendered.** The EMA shadow
+  and the gradient accumulator are the **same fourth region** of `[θ|m|v|·]`, and
+  `VerifiedTrain.lean:1156` already throws on the pairing: *"they occupy the same fourth region …
+  Render one or the other."* Accumulation is not optional for A2 — effective batch 2048 at 224² has
+  no other route on a 16 GB card. Lifting it means a **fifth region** in the driver's pack/unpack
+  and in every optimizer's return list. That is its own project, not a flag.
+* ⛔ **Stochastic depth (`dropPath := 0.05`).** `DropPath.lean` exists and ENet/ConvNeXt render
+  `drop` variants off it, but neither `ResNet34RenderB` nor `ResNet50RenderB` imports it (0 hits in
+  both) and `r34AdamVariant` has no `drop` marker.
+* ⚠ Ghost-BN group 64 against the reference's 128.
+
+⭐ **A3 met neither obstacle because A3's own recipe sets `useEMA := false` and `dropPath := 0.0`.**
+That is why this was invisible from A3's success, and it is the reason the item read as cheap.
+
+✅ **Both of the section's guesses about the shims were right, and both were MEASURED.** The
+`a2-accum` shim is **byte-identical** to `default`'s (md5 `d42c412beb4f`), so A2 needed no new spec
+and no new shim; A1's differs in **one line**, `_MIX_A` 0.1 → 0.2, so A1 got
+`resnet50ImagenetA1Verified`, a `gen_shims.sh` row and a `LEAN_MLIR_RECIPE=a1` arm.
+⚠⚠ **And that α is also an env override** — `SHIM_MIXUP_ALPHA` — so A1's mixup could have been had
+from the default shim with one variable and nothing in a 600-epoch log recording which α trained.
+That is the `LEAN_MLIR_RECIPE=2018` failure exactly; a named shim the driver refuses to start
+without is the version that cannot be got wrong.
+
+⭐ **Eight renders, not four**: both tiers got the full (precision × replicas) square in one pass,
+so neither ships without its bf16 twin the way ConvNeXt-S did — §4c's own complaint, avoided.
+
+⭐ **Two gates earned their keep and one gap turned up:**
+* `opt_step_tie.py` **refused on stale references** before running — §0's "regenerate before
+  probing" trap, caught by the gate rather than by me. After regenerating: 6/6 within rtol 2e-6,
+  `lambacc8wxclipwd001` at **1.09e-07** against the emitted A1 trainer that bakes `WD = 0.010000`.
+* `check_render_coverage.py` **refused** until all eight artifacts were added to CI's drift guard.
+* ⚠ `tests/TestVariantPredicates.lean` had **no bf16 spelling at all**, though every bf16 render in
+  the tree goes through its five predicates. Added the four new ones plus `momdp64bf16` as the
+  non-accumulating counter-case. ⚠ It also has **no lake target** despite being cited as *the* gate
+  in ten places — run it with `lake env lean`.
+
+---
+
+*The original text follows, since it is what the work was done against.*
+
 
 ⭐⭐ **The renderer already takes every parameter this needs.**
 `Proofs.StableHLO.resnet50TrainStepFaithfulB` (`LeanMlir/Proofs/Codegen/ResNet50RenderB.lean:521`)
@@ -506,9 +554,11 @@ Non-negotiable, and in this order:
 2. ✅ **MNv4 shard gate (§4b) — DONE 2026-08-27.** Three commits: the gates (`b1208ab`), the job
    and the caveat lift (`fd9981e`), the book (`f8f0943`). It did turn a `\withheld` into a job.
    ⚠ Four GPUs, not two, and the shard half was one row rather than a harness — see §4b.
-3. ⬅ **NEXT — RSB-A2 + A1 (§4a).** Four to six `#eval`s against a renderer that already takes every parameter,
-   and it closes `sec:r50_a2_a1_cost`. Fix the "same render as A2" cell in the same pass.
-4. **The three bf16 twins (§4c).** Independent of each other; do ConvNeXt-S first, it has the closest
+3. ✅ **RSB-A2 + A1 (§4a) — RENDERED 2026-08-27.** `6f89701` + `40f63d7`. The "same render as A2"
+   cell is fixed. ⚠ It did NOT close `sec:r50_a2_a1_cost`: EMA is unrepresentable alongside
+   accumulation (one fourth region, two claimants) and stochastic depth has no importer in the
+   residual family. Both are now stated in the book rather than owed. See §4a.
+4. ⬅ **NEXT — the three bf16 twins (§4c).** Independent of each other; do ConvNeXt-S first, it has the closest
    proven peer.
 5. **ViT-B accumulation (§4d)** — only if ViT-B is actually going to be trained on this box. Check
    the TPU question first.
