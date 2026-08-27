@@ -19,8 +19,22 @@ why the verified path is the artifact and JAX the oracle) and `planning/chapter_
 
 ## 0. START HERE — the state this doc was written against
 
-Everything below is a survey of the tree at the commit that added this file. Nothing in §4 has
-been built. What HAS landed, and why the book now looks the way it does:
+⬅⬅ **2026-08-27, END OF SESSION. Read this, then §6a's ViT block, then stop reading.**
+Everything in §6 items 1–5 is closed. `sec:r50_a2_a1_cost`'s two ⛔ rows are gone: RSB-A2/A1 now
+render with **the model-EMA shadow** (a fifth blob region, `[θ|m|v|G|E]`) and **stochastic depth**
+(sixteen sites on the residual branch), at the reference's own `4×128` factorisation, in both
+precisions, at one and four replicas — eight artifacts. Verified wall clocks are measured:
+**A2 ~95 h, A1 ~190 h, A3 in bf16 ~23 h**. ⛔ **Nothing has been TRAINED.**
+
+Four things this session found that a reader should not have to rediscover:
+* ⛔ **Nine JAX emitters drew a per-BLOCK scalar drop mask** where timm is per-sample (§6b).
+* ⛔ **Eight artifacts shipped that did not PARSE**, and no gate read one — `scripts/parse_verified_mlir.py` now does (6.8 s for 229).
+* ⛔ **The ghost-BN gap is 8×, not 2×** — 64 against 512, not 128 (§6c).
+* ⛔⭐ **11.68 GiB was never the card.** It is the CUDA plugin's `memory_fraction = 0.75` default,
+  taken because the shim passed no create options; `LEAN_MLIR_MEM_FRACTION=0.97` gives 15.11 GiB.
+  ▶ **This is the one with unfinished consequences** — see §6a's ViT block.
+
+*The original §0 follows.*
 
 * **Every side quest's phase-2 cost is measured and printed.** `sec:r50_a2_a1_cost`,
   `sec:convnext_sb` and `sec:vit_sb` each carry a table of ms/step, min/epoch and full-schedule
@@ -44,9 +58,13 @@ gate, `799865b` the renderer, driver and four renders). The fifth region exists,
 are independent, and `emalambaccdp8x64wxclipbce` ties at **1.20e-07** against the reference's own
 `ema_update`. Evidence: `runs/2026-08-27-r50-a2-a1-ema-fifth-region/`.
 
-⬅⬅ **NEXT: the OTHER A2/A1 delta — stochastic depth 0.05 on the residual family — and it opened a
-repo-wide finding that has to be settled before it can be rendered.** See §6b. ViT accumulation
-(§4d) is untouched and its TPU question still stands.
+✅ **AND THE STOCHASTIC-DEPTH HALF LANDED TOO** (§6b), after fixing a per-block-scalar drop mask in
+nine JAX emitters. Both of `sec:r50_a2_a1_cost`'s ⛔ rows are closed; only the ghost-BN group
+remains (§6c), and half of that is closed as well.
+
+⬅⬅ **NEXT SESSION: ViT-B accumulation (§4d → §6a), and read §6a's ViT block first.** The TPU
+question that gated it may already be answered by 2026-08-27's allocator fix — the four-step test
+is written out, and step 1 is four `#eval`s. ⚠ Nothing has been TRAINED on any of this.
 
 ## 6a. THE TWO FEATURES — what a next session is actually picking up
 
@@ -304,16 +322,47 @@ Closing the last 4× (128 → 512) means all-reducing the statistics themselves.
 
 ---
 
-### ⚠ ViT accumulation (§4d) — answer the hardware question first
+### ⬅⬅ ViT accumulation (§4d) — **START HERE NEXT SESSION**, and the first move is 4 `#eval`s
 
-§4d's own warning is the thing to settle before touching `ViTRenderB`: **a TPU deletes this item.**
-v3 is 16 GB/core and v4 is 32, the FFI is plugin-agnostic, and `$PJRT_PLUGIN` always wins — so
-reaching DeiT's global 512 becomes an env var rather than a renderer feature. ▶ Building the
-accumulation loop for one box is a medium-to-large job that a different box makes unnecessary.
+§4d's own warning was: **a TPU deletes this item** — v3 is 16 GB/core, v4 is 32, `$PJRT_PLUGIN`
+always wins, so DeiT's global 512 becomes an env var rather than a renderer feature.
 
-⭐ **What changed since §4d was written**: ViT-B now has a MEASURED wall clock — 423 → 317 ms/step,
-**356 → 268 h** at global 128 — so the cost of *not* having accumulation is now a number rather
-than a shrug. Whatever is decided, that is the figure to weigh it against.
+⭐⭐⭐ **THERE IS NOW A CANDIDATE ANSWER THAT NEEDS NO TPU, AND IT COMES OUT OF 2026-08-27's
+ALLOCATOR FIX.** The whole reason ViT-B cannot do one-shot global 512 is recorded as: *"one-shot
+global 512 peaks at 11.41 of the allocator's 11.68 GiB and dies `RESOURCE_EXHAUSTED`"*
+(`sec:vit_sb`). **That 11.68 is the plugin's `memory_fraction = 0.75` default, not the card** —
+`ffi/pjrt_ffi.c` now passes the option and `LEAN_MLIR_MEM_FRACTION=0.97` gives **15.11 GiB**
+(§6c, and XLA's own log line). **11.41 is 76 % of 15.11.** ▶ If that holds, ViT-B reaches DeiT's
+batch with no accumulation loop at all, and §4d closes without being built.
+
+### The test, in order
+
+1. **Render ViT-B at 128 per device.** ⭐ Cheap and low-risk: `vitsin_adamdp128x4wxclipdrop` and
+   `vitin_adamdp128x4wxclipdrop` ALREADY SHIP, so the 128×4 shape is proven for Tiny and S — ViT-B
+   is the only size pinned at `adamdp32x4`. Mirror `ViTRenderB`'s existing `vitbin` `#eval` at
+   `bs := 128`, both precisions, 1 and 4 replicas.
+2. **`scripts/bf16_peak_memory.py --budget-gib 15.11`.** Compile-only, no run. ⚠ A compile-time peak
+   is NOT independent of the allocator it was compiled against (§6c: R50's fp32 4×128 moved 11.52 →
+   11.91 G), so measure it under `XLA_PYTHON_CLIENT_MEM_FRACTION=0.97`, not at the default.
+3. **Execute it** if it fits — compiling is not fitting. The pattern is
+   `runs/2026-08-27-r50-a2-a1-ema-fifth-region/`'s `fit_test.py`, which found that R50's fp32 4×128
+   DID execute at 97 % of the default budget where the compile figure suggested it would not.
+4. **Only if all three fail**, build the accumulation loop.
+
+⚠⚠ **THREE THINGS THAT COULD SINK IT, and none is checked yet:**
+* **11.41 GiB is the JAX trainer's peak, not the verified render's.** The two paths are not the same
+  graph, and R50's verified peak ran ~1.5× its JAX peer's. If ViT-B's verified render is similarly
+  above its reference, 11.41 → ~17 G and it does not fit at any fraction.
+* **`bf16` may be doing the work**, in which case the fp32 twin still needs accumulation and §4c's
+  rule bites the way it did for R50's 4×128 (§6c).
+* **The all-reduce buffer** is not in a single-device peak. R50's DP renders were measured at 4
+  replicas throughout; do the same here (`--replicas 4`).
+
+⭐ **What is already measured, and what it is worth**: ViT-B at global 128 runs 423 → 317 ms/step,
+**356 → 268 h**. That is the cost of *not* closing this, and it is the figure any decision weighs
+against. ⚠ Note the wall clock does not necessarily improve at global 512 — a bigger batch is about
+FIDELITY here (DeiT-B's 81.8% is not comparable to anything trained at global 128), though R50's
+`4×128` did turn out faster than `8×64` for the per-invoke-overhead reason in §6c, so check.
 
 ✅ **The correction this doc owed the book is PAID** (`40f63d7`). `sec:r50_a2_a1_cost`'s table said
 A1's renderer work was "same render as A2"; the two artifacts now exist and differ in **exactly one
@@ -840,6 +889,12 @@ optimizer stage, `vitbin_adamaccdp<k>x<b>wxclipdrop` renders at 1 and 4 replicas
 `$PJRT_PLUGIN` always wins — so it is closer to an env var than a port. Weigh that before building
 the feature for one box.
 
+⭐⭐ **AND SO, POSSIBLY, DOES THIS BOX** (2026-08-27). The `RESOURCE_EXHAUSTED` above is against
+**11.68 GiB, which is the plugin's `memory_fraction = 0.75` default and not the card**. The shim now
+passes the option; `LEAN_MLIR_MEM_FRACTION=0.97` gives **15.11 GiB**, and the recorded one-shot peak
+is 11.41. ▶ **Read §6a's ViT block before doing anything here** — it has the four-step test, its
+three ways of failing, and the reason step 1 is four `#eval`s rather than a renderer feature.
+
 **Cost: medium-to-large.** The only item here that should get its own planning doc if it is picked
 up.
 
@@ -918,7 +973,10 @@ Non-negotiable, and in this order:
    verified render are per-example, so the reference was fixed first and the sixteen sites rendered
    against it. §6b. ⭐ Both of `sec:r50_a2_a1_cost`'s ⛔ rows are closed and only the ghost-BN group
    remains.
-   ⬅ **ViT-B accumulation (§4d → §6a) is untouched** and its TPU question still stands.
+   ⬅⬅ **NEXT: ViT-B accumulation (§4d → §6a).** ⭐ Its TPU question may already be answered
+   locally — the `RESOURCE_EXHAUSTED` that forces accumulation was against the plugin's 0.75
+   default, and `LEAN_MLIR_MEM_FRACTION=0.97` gives 15.11 GiB against a recorded 11.41 peak. §6a
+   has the four-step test; step 1 is four `#eval`s, and ViT-S already ships the 128×4 shape.
    ⬅ **Nothing has been TRAINED.** No five-region graph has been loaded by the trainer; every gate
    in this pass is CPU (XLA-on-CPU, text, `#guard`). The shim's buffer-count refusal is the check
    that would say so, and `runs/2026-08-27-r50-a2-a1-ema-fifth-region/arity_check.py` reproduces
