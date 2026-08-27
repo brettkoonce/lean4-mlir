@@ -11,10 +11,16 @@ The sixth scale-tier trainer, and the last of the Imagenette nets to get one. Bu
 same network at last, and the reference's 75.48% / 92.37% is this driver's target. 9,715,512
 parameters. ⚠ Target, not result: nothing has been run to convergence on this path.
 
-⚠⚠ **There is no 4× render, and that is what blocks a printable phase-4 row.** `adamdp64` is
-named by `mnv4AdamVariant 64 2` and the renderer would emit it, but MNv4 has no `shard-check` row
-and no dp-check peer, so nothing ties its collectives and it is not rendered. Every other ImageNet
-row in the book was measured at 4×, so a single-card figure here is not comparable to them.
+✅ **THE 4× RENDER EXISTS AND IS TIED, as of 2026-08-27.** This paragraph used to say there was
+none, and that it was what blocked a printable phase-4 row. `mnv4in_adamdp64` and its bf16 peer are
+4-replica renders, and both halves of the collective tie are green — `mnv4-dp-check` (duplicated
+batch: fp32 `bnstat` bit-exact, gradient 8.45e-7; bf16 bit-exact on all 9,715,512 floats) and
+`shard-check mnv4in` (asymmetric batch: TEST 1.10e-6 against a CONTROL of 2.00). Both go red on a
+sum-not-mean render. ▶ `scripts/jobs/mnv4-default-4gpu.conf` is the job;
+`runs/2026-08-27-mnv4-dp-shard-gates/` is the evidence.
+
+⚠ A single-card figure off this driver is still not comparable to the book's other ImageNet rows,
+which were all measured at 4× on this box. Run the job, not the bare binary, for anything printable.
 
 ⚠ Optimizer does NOT match the MNv4 reference: AdamW at 1e-3 here, where the paper is
 AdamW at 0.004 on effective batch 4096 with drop-path, EMA and RandAugment m15. Those live in the
@@ -29,6 +35,11 @@ Run (GPU, single device):
 ```
 PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
   .lake/build/bin/mobilenetv4-imagenet-verified data
+```
+
+Run (4 GPUs — the measured 25.6 h configuration, and the one the book quotes):
+```
+scripts/supervise.sh mnv4-default-4gpu
 ```
 -/
 
@@ -49,9 +60,10 @@ def mnv4ImagenetConfig : VerifiedConfig where
     drivers — a DP default dies at the first step on a replica-count refusal, which reads as a
     broken build rather than a missing flag.
 
-    ⚠ **`adamdp64` is NOT rendered.** `mnv4AdamVariant 64 2` names it and the renderer would emit
-    it, but MNv4 has no `shard-check` row and no dp-check peer, so nothing ties its collectives.
-    Asking for it here fails at load with "artifact not found", which is the honest failure. -/
+    ⭐ **`adamdp64` IS rendered and tied** (2026-08-27), so asking for it works — but it is a
+    4-REPLICA artifact and needs `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`. There is no
+    2-replica peer, so a 2-GPU attempt hits the shim's replica-count guard rather than degrading.
+    `scripts/jobs/mnv4-default-4gpu.conf` sets both. -/
 def runMnv4Imagenet (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam64"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD mnv4ImagenetConfig.batchSize

@@ -1665,11 +1665,15 @@ on **1 replica** (`@<slug>_fwd_eval`, 1 replica in the log), so it does not scal
 the same geometry: `efficientnetin_rmsdp64bf16`, `vitin_adamdp128x4wxclipdropbf16`, and — with a
 caveat — `mnv4in_adamdp64` / `mnv4in_adamdp64bf16`.
 
-⛔⛔ **MNv4's DP pair carries §13.1's caveat and it has NOT been lifted.** That section declined a DP
-render because **nothing has tied MNv4's collectives**, and that is still true. These two exist to
-answer "what would a run cost", which is a question about `all_reduce`'s COST, not its correctness.
-**Do not train off them.** The single-device `adam64`/`adam64bf16` pair remains this net's only
-trainable render. The artifacts say so at their `#eval`.
+✅ **MNv4's DP pair carried §13.1's caveat and it was LIFTED 2026-08-27.** That section declined a
+DP render because *nothing has tied MNv4's collectives*, and named its own release condition. Both
+halves of the tie now exist and are green: `tests/TestMnv4DpCheck.lean` (duplicated batch — fp32
+`bnstat` bit-exact 67,904/67,904 and gradient 8.45e-7; **bf16 bit-exact on all 9,715,512 floats**)
+and the `mnv4in` row in `tests/TestShardCheck.lean` (asymmetric batch — TEST 1.10e-6 against a
+CONTROL of 2.00). Both go red on a sum-not-mean render, the shard TEST landing on exactly
+`3.000000 = |4g − g| / |g|`. ▶ `runs/2026-08-27-mnv4-dp-shard-gates/`.
+⭐ So MNv4's row in the table above is no longer costing-only, and `scripts/jobs/mnv4-default-4gpu.conf`
+trains off it. ⚠ Four GPUs, forced: `adamdp64` is 4-replica only, with no 2-replica peer.
 
 ⚠ A 4-replica ms/step is a **system** result in all seven rows (§13.2) — shim feed and f32
 all-reduce included. The RENDERER numbers are the single-device/bare-device ones in §14, §16 and §20.

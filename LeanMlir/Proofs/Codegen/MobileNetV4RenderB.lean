@@ -1332,11 +1332,10 @@ end Proofs.StableHLO
 -- train batch. Any other batch needs re-rendered forwards or `LEAN_MLIR_SKIP_EVAL=1`, and would
 -- otherwise be a shape error at the first invoke.
 --
--- ⚠⚠ **NO DP VARIANT IS RENDERED.** `mnv4AdamVariant 64 2` would be `"adamdp64"`, and the
--- renderer takes the `replicas` argument that would produce it, but nothing has tied MNv4's
--- collectives — there is no `mnv4` row in `shard-check` and no dp-check peer. Rendering one here
--- would put an untied artifact on disk that looks as trustworthy as the rest. It is listed as a
--- known gap in `planning/chapter_makeover.md` instead.
+-- ✅ **THE DP PAIR IS RENDERED AND TIED**, as of 2026-08-27 — see the block below. This comment
+-- used to say no DP variant was rendered, on the grounds that nothing had tied MNv4's collectives
+-- and an untied artifact looks as trustworthy as the rest. Both halves of that tie now exist: the
+-- `mnv4in` row in `tests/TestShardCheck.lean` and `tests/TestMnv4DpCheck.lean`.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd.mlir"
   (Proofs.StableHLO.mnv4FwdFaithfulV 64 1000 "1.0e-5" "mnv4in")
 
@@ -1350,11 +1349,11 @@ end Proofs.StableHLO
 -- replaced by its bf16 twin: bf16 operands, a **bf16-TYPED** result, then a convert back to f32.
 -- BN, the loss, AdamW and the master weights stay f32.
 --
--- ⚠ SINGLE-DEVICE, deliberately, and for the reason stated above this block: MNv4 renders no DP
--- variant because nothing has tied its collectives. A bf16 DP artifact would inherit exactly that
--- untied status while looking as trustworthy as the rest, so the precision axis does not get to
--- quietly introduce the replica axis. ▶ Its probe is therefore a 1-GPU number and must not be
--- compared to R34/R50/MNv2's 4×bs64 figures without saying so.
+-- ⚠ SINGLE-DEVICE. Its 4-replica peer is `adamdp64bf16` in the block below, and it is tied —
+-- ⭐ the precision axis did NOT inherit the replica axis's tie, it was given its own:
+-- `DP_VARIANT=adam64bf16 DP_VARIANT_DP=adamdp64bf16 mnv4-dp-check` is a separate run, and it
+-- comes back bit-exact on all 9,715,512 floats. ▶ A probe off THIS artifact is still a 1-GPU
+-- number and must not be compared to R34/R50/MNv2's 4×bs64 figures without saying so.
 --
 -- ⭐ MNv4 is the first net to use the SYMMETRIC-pad `depthwiseStrided` family in bf16 (MNv2 used
 -- the XLA-`SAME` one). Its three twins are the only ops this net needed that MobileNetV2 did not
@@ -1362,16 +1361,24 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adam64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in" true)
 
--- ⚠⚠⚠ **THE 4-REPLICA PAIR, AND IT CARRIES A CAVEAT THE OTHER NETS' DP RENDERS DO NOT.**
--- The block above says MNv4 renders no DP variant because **nothing has tied its collectives**.
--- That is still true. These two exist for ONE purpose — to cost this net at the 4×bs64 geometry the
--- other six are scheduled at, i.e. to answer "how long would a run take", which is a question about
--- `all_reduce`'s COST and not about its correctness.
--- ⛔ **Do not train off these.** A trained result from an untied collective is not a verified
--- result, and these artifacts look exactly as trustworthy as the ones that are. The single-device
--- `adam64`/`adam64bf16` pair above remains this net's only trainable render.
--- ▶ What would lift the caveat is the same thing it always was: a DP tie for MNv4's collectives,
--- the way R34/R50/MNv2/ConvNeXt have one.
+-- ✅ **THE 4-REPLICA PAIR, TIED 2026-08-27 — the caveat that stood here is lifted.**
+-- It read: "nothing has tied MNv4's collectives … these exist for ONE purpose, to COST this net at
+-- the 4×bs64 geometry … ⛔ do not train off these … what would lift the caveat is a DP tie for
+-- MNv4's collectives, the way R34/R50/MNv2/ConvNeXt have one." That tie was then built, exactly as
+-- specified, and both halves of it are green:
+--
+--   `mnv4-dp-check`         (duplicated batch, `all_reduce(add)/4 = g`)
+--        fp32 — bnstat BIT-EXACT 67,904/67,904, gradient norm-rel 8.45e-7
+--        bf16 — BIT-EXACT on all 9,715,512 floats in θ, m, v AND bnstat
+--   `shard-check mnv4in`    (asymmetric batch, `DP([x0..x3]) = mean of 4 single steps`)
+--        TEST 1.10e-6 against a CONTROL of 2.00 — 1.8e6× apart
+--
+-- ⭐ And both went RED against a sum-not-mean render (every divisor 4.0 → 1.0): the shard TEST
+-- lands on **3.000000**, which is `|4g − g| / |g|` exactly, so the gate reproduces the arithmetic
+-- its failure mode implies rather than merely returning a big number.
+-- ▶ `runs/2026-08-27-mnv4-dp-shard-gates/` holds the logs, the controls and a `run.sh`.
+-- ⚠ Four GPUs, forced: these are the only DP renders MNv4 has, and there is no 2-replica peer, so
+-- `PJRT_REPLICAS=2` hits the shim's replica-count guard rather than degrading to a 2-way run.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 "mnv4in")
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64bf16_train_step.mlir"

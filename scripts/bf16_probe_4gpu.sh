@@ -17,8 +17,9 @@
 # ⚠⚠ Every number this prints is a SYSTEM result — shim feed and f32 all-reduce included (§13.2).
 #   For a statement about the RENDERER use scripts/bf16_device_step.py instead.
 #
-# ⛔ mnv4's DP pair carries §21.2's caveat: nothing has tied MNv4's collectives. Cost it, don't
-#   train it.
+# ✅ mnv4's DP pair was TIED on 2026-08-27 (`mnv4-dp-check` + `shard-check mnv4in`, both green,
+#   both controls red — runs/2026-08-27-mnv4-dp-shard-gates/). §21.2's "cost it, don't train it"
+#   caveat is lifted; scripts/jobs/mnv4-default-4gpu.conf trains off exactly this artifact.
 cd "$(dirname "$0")/.."
 OUT="${1:?usage: scripts/bf16_probe_4gpu.sh <out.tsv>}"
 : > "$OUT"
