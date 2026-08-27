@@ -13904,25 +13904,34 @@ all seven. The tiers bundle these targets, and any one builds on its own:
 \end{itemize}
 
 \section*{Track 4: ImageNet-1k runners}
+\label{sec:getting_started_track4}
 
-The scale tier. Seven nets train on full ImageNet-1k off the same certified
+The scale tier. Six networks train on full ImageNet-1k off the same certified
 renderer as their Imagenette counterparts, in the chapter order
-\S\ref{sec:getting_started_track3} uses:
+\S\ref{sec:getting_started_track3} uses. A row is a \emph{(network, recipe)}
+pair rather than a network: ResNet-50 appears twice because
+Chapter~\ref{chap:residual} trains it on two recipes, and the recipe is the
+middle field of the job's own name.
 
 \begin{center}
-\begin{tabular}{@{}ll@{}}
-\textbf{Target} & \textbf{Job config} \\[2pt]
+\begin{tabular}{@{}lll@{}}
+\textbf{Target} & \textbf{Recipe} & \textbf{Job config} \\[2pt]
 \hline \\[-6pt]
-\texttt{resnet34-imagenet-verified} (2018) & \texttt{r34-default-4gpu} \\
-\texttt{resnet50-imagenet-verified}     & \texttt{r50-a3-4gpu} (a3) \\
-\texttt{resnet50-imagenet-verified}     & \texttt{r50-2018-4gpu} \\
-\texttt{mobilenetv2-imagenet-verified}  & \texttt{mnv2-default-4gpu} \\
-\texttt{mobilenetv4-imagenet-verified}         & \withheld \\
-\texttt{efficientnet-imagenet-verified} & \texttt{enet-default-4gpu} \\
-\texttt{convnext-imagenet-verified}     & \texttt{cnx-default-4gpu} \\
-\texttt{vit-imagenet-verified}          & \texttt{vit-default-4gpu} \\
+\texttt{resnet34-imagenet-verified}     & \texttt{default} (the 2018 recipe) & \texttt{r34-default-4gpu} \\
+\texttt{resnet50-imagenet-verified}     & \texttt{2018}                      & \texttt{r50-2018-bf16-4gpu} \\
+\texttt{resnet50-imagenet-verified}     & \texttt{a3} (RSB-A3, train@$160$)  & \texttt{r50-a3-wxclip-4gpu} \\
+\texttt{mobilenetv2-imagenet-verified}  & \texttt{default}                   & \texttt{mnv2-default-4gpu} \\
+\texttt{efficientnet-imagenet-verified} & \texttt{default}                   & \texttt{enet-default-4gpu} \\
+\texttt{convnext-imagenet-verified}     & \texttt{default}                   & \texttt{cnx-default-4gpu} \\
+\texttt{vit-imagenet-verified}          & \texttt{default} (DeiT-Ti)         & \texttt{vit-default-4gpu} \\
 \end{tabular}
 \end{center}
+
+\noindent Each job named here is the one that produced its chapter's number.
+\texttt{scripts/jobs/} also carries \emph{axis} siblings that this table does
+not list --- an fp32 peer of the ResNet-50 2018 row, an earlier A3 artifact ---
+which differ from their row in precision or in one optimizer knob, never in the
+recipe. Each config's header says which it is.
 
 \prosesection{This tier needs Python}
 
@@ -13975,6 +13984,36 @@ the Lean driver call the data-parallel invoke. The job configs set
 both. Collectives exist only on the PJRT path, so the data-parallel runs are
 XLA-only, and the IREE shim refuses a DP entry point outright rather than
 silently running single-device.
+
+\prosesection{Side quests}
+
+Several chapters end in a variant that is rendered but is not a Track-4 runner:
+a second recipe, a wider or deeper size, an architecture the book reaches for
+once. They are collected here rather than in the table above because most of
+them cannot be launched, and a job name is exactly what they lack. The status
+column says what each one is missing.
+
+\begin{center}
+\small
+\begin{tabular}{@{}llll@{}}
+\textbf{Target} & \textbf{Variant} & \textbf{Status} & \textbf{Section} \\[2pt]
+\hline \\[-6pt]
+\texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & render owed & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a1}       & render + shim owed & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{mobilenetv4-imagenet-verified} & Conv-M            & rendered; single-device only & \S\ref{sec:mnv4_side_quest} \\
+\texttt{convnext-s-imagenet-verified}  & \withheld         & rendered fp32; bf16 owed & \S\ref{sec:convnext_sb} \\
+\texttt{convnext-b-imagenet-verified}  & \withheld         & rendered fp32 + bf16; unbenchmarked & \S\ref{sec:convnext_sb} \\
+\texttt{vit-s-imagenet-verified}       & \withheld         & rendered fp32; bf16 owed & \S\ref{sec:vit_sb} \\
+\texttt{vit-b-imagenet-verified}       & \withheld         & rendered fp32 @ global $128$; bf16 + accum owed & \S\ref{sec:vit_sb} \\
+EfficientNetV2-S                       & \withheld         & no spec & \S\ref{sec:enet_side_quests} \\
+\end{tabular}
+\end{center}
+
+\noindent \textbf{``Single-device only'' is a missing gate, not a missing
+render.} MobileNetV4's data-parallel artifact is on disk and it is deliberately
+not quotable: this book does not report a collective it has not tied against a
+single-device peer, and MNv4 has no \texttt{shard-check} arm. So it trains, on
+one card, at four times the wall clock a job config would cost it.
 
 \section*{Choosing a lowerer}
 
