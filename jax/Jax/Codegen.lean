@@ -658,6 +658,45 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    return x * gamma.reshape(1, -1, 1, 1) + beta.reshape(1, -1, 1, 1)\n\n"
+  -- ⭐⭐ **`_drop_branch` — ONE DEFINITION OF STOCHASTIC DEPTH FOR THE WHOLE FILE** (2026-08-27).
+  -- It used to live inside the `hasTransformer` block, and every CONVOLUTIONAL block emitter
+  -- inlined its own copy — a copy that drew a **SCALAR** bernoulli shared by the entire batch:
+  --
+  --     keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)   # ⛔ no shape argument
+  --
+  -- ⚠⚠ **THAT IS NOT WHAT STOCHASTIC DEPTH IS, and timm is where the answer comes from.**
+  -- `timm.layers.drop_path` (1.0.28, the pinned spec) is explicit in its own docstring — *"Drop
+  -- paths (Stochastic Depth) **per sample**"* — and takes the mask at
+  -- `shape = (x.shape[0],) + (1,) * (x.ndim - 1)`. A scalar draw drops the branch for the whole
+  -- batch or for none of it: same expectation, a far coarser and lower-variance regulariser, and
+  -- not the function the recipe names.
+  --
+  -- ⚠ It went unnoticed because it is invisible to everything except a run: the graph type-checks,
+  -- the expectation is right, eval is identity either way, and no gate compares two Bernoulli
+  -- streams. `planning/stochastic_depth.md` quotes the per-example form as *the* reference and
+  -- builds `dropPathB` / `F32.dropScales` / the per-example shard rule around it, so **every
+  -- verified `*drop*` render in the tree was already right and it was this side that was wrong** —
+  -- 26 committed `convnext*`/`efficientnet*` artifacts with no correct oracle
+  -- (`planning/verified_side_quest_counterparts.md` §6b).
+  --
+  -- ⭐ Nothing MEASURED changes: `dropPath > 0` appears in ImageNet-tier configs only, every
+  -- Imagenette config sets none, R50's A3 reference sets 0.0, and MNv4-Conv-M's 75.51% ran
+  -- `default`. The defect was entirely latent.
+  --
+  -- ▶ Emitted unconditionally rather than under a `dropPath > 0` guard, because `transformer_block`
+  -- calls it on every path and relies on its `keep_prob >= 1.0` early return to be the identity.
+  code := code ++
+    "def _drop_branch(branch, drop_key, keep_prob):\n" ++
+    "    # Inverted per-SAMPLE stochastic depth (timm DropPath): keep the whole\n" ++
+    "    # sample's residual branch w.p. keep_prob, scale survivors by 1/keep_prob\n" ++
+    "    # so inference (drop_key=None) is the identity. The (B,1,...,1) mask\n" ++
+    "    # broadcasts over every non-batch axis.\n" ++
+    "    # timm.layers.drop_path: shape = (x.shape[0],) + (1,) * (x.ndim - 1)\n" ++
+    "    if drop_key is None or keep_prob >= 1.0:\n" ++
+    "        return branch\n" ++
+    "    shape = (branch.shape[0],) + (1,) * (branch.ndim - 1)\n" ++
+    "    keep = jax.random.bernoulli(drop_key, keep_prob, shape).astype(branch.dtype)\n" ++
+    "    return branch * keep / keep_prob\n\n"
   if spec.hasResidual && cfg.runningBN then
     -- Running-BN variant: blocks call the (out, new) conv_bn and thread bn[bn_start..],
     -- returning (x, new_bn_entries) in conv_bn-call order.
@@ -699,9 +738,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    out, n1 = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2], bn[bn_start+1], training)\n" ++
       "    out = jax.nn.relu(out)\n" ++
       "    out, n2 = conv_bn(out, params[idx+2][0], params[idx+2][1], params[idx+2][2], bn[bn_start+2], training)\n" ++
-      "    if drop_key is not None and keep_prob < 1.0:\n" ++
-      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)\n" ++
-      "        out = out * keep / keep_prob\n" ++
+      "    out = _drop_branch(out, drop_key, keep_prob)\n" ++
       "    return jax.nn.relu(out + x), [n0, n1, n2]\n\n" ++
       "def bottleneck_block_down(params, x, idx, stride, bn, bn_start, training, drop_key=None, keep_prob=1.0):\n" ++
       "    out, n0 = conv_bn(x, params[idx][0], params[idx][1], params[idx][2], bn[bn_start], training)\n" ++
@@ -710,9 +747,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    out = jax.nn.relu(out)\n" ++
       "    out, n2 = conv_bn(out, params[idx+2][0], params[idx+2][1], params[idx+2][2], bn[bn_start+2], training)\n" ++
       "    shortcut, n3 = conv_bn(x, params[idx+3][0], params[idx+3][1], params[idx+3][2], bn[bn_start+3], training, stride=(stride,stride))\n" ++
-      "    if drop_key is not None and keep_prob < 1.0:\n" ++
-      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)\n" ++
-      "        out = out * keep / keep_prob\n" ++
+      "    out = _drop_branch(out, drop_key, keep_prob)\n" ++
       "    return jax.nn.relu(out + shortcut), [n0, n1, n2, n3]\n\n"
   else if spec.hasBottleneck then
     code := code ++
@@ -722,9 +757,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    out = conv_bn(out, params[idx+1][0], params[idx+1][1], params[idx+1][2])\n" ++
       "    out = jax.nn.relu(out)\n" ++
       "    out = conv_bn(out, params[idx+2][0], params[idx+2][1], params[idx+2][2])\n" ++
-      "    if drop_key is not None and keep_prob < 1.0:\n" ++
-      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)\n" ++
-      "        out = out * keep / keep_prob\n" ++
+      "    out = _drop_branch(out, drop_key, keep_prob)\n" ++
       "    return jax.nn.relu(out + x)\n\n" ++
       "def bottleneck_block_down(params, x, idx, stride, drop_key=None, keep_prob=1.0):\n" ++
       "    out = conv_bn(x, params[idx][0], params[idx][1], params[idx][2])\n" ++
@@ -733,9 +766,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    out = jax.nn.relu(out)\n" ++
       "    out = conv_bn(out, params[idx+2][0], params[idx+2][1], params[idx+2][2])\n" ++
       "    shortcut = conv_bn(x, params[idx+3][0], params[idx+3][1], params[idx+3][2], stride=(stride,stride))\n" ++
-      "    if drop_key is not None and keep_prob < 1.0:\n" ++
-      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)\n" ++
-      "        out = out * keep / keep_prob\n" ++
+      "    out = _drop_branch(out, drop_key, keep_prob)\n" ++
       "    return jax.nn.relu(out + shortcut)\n\n"
   if spec.hasSeparable then
     code := code ++
@@ -856,9 +887,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)\n" ++
       "    x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns)\n" ++
       "    if residual.shape == x.shape and stride == 1:\n" ++
-      "        if drop_key is not None and keep_prob < 1.0:\n" ++
-      "            keep = jax.random.bernoulli(drop_key, keep_prob).astype(x.dtype)\n" ++
-      "            x = x * keep / keep_prob\n" ++
+      "        x = _drop_branch(x, drop_key, keep_prob)\n" ++
       "        x = x + residual\n" ++
       "    return x, out\n\n"
   else if spec.hasMbConv then
@@ -910,9 +939,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
       "    if residual.shape == x.shape and stride == 1:\n" ++
       "        # Stochastic depth (inverted) — only on blocks that actually skip.\n" ++
-      "        if drop_key is not None and keep_prob < 1.0:\n" ++
-      "            keep = jax.random.bernoulli(drop_key, keep_prob).astype(x.dtype)\n" ++
-      "            x = x * keep / keep_prob\n" ++
+      "        x = _drop_branch(x, drop_key, keep_prob)\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n" ++
       "def fused_mbconv_block(params, x, idx, stride, expand, ksize, use_se):\n" ++
@@ -1032,9 +1059,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         "        x = jax.nn.relu(x); i += 1\n" ++
         "    x, ns = conv_bn(x, params[i][0], params[i][1], params[i][2], bn[bi], training); out.append(ns)\n" ++
         "    if residual.shape == x.shape:\n" ++
-        "        if drop_key is not None and keep_prob < 1.0:\n" ++
-        "            keep = jax.random.bernoulli(drop_key, keep_prob).astype(x.dtype)\n" ++
-        "            x = x * keep / keep_prob\n" ++
+        "        x = _drop_branch(x, drop_key, keep_prob)\n" ++
         "        x = x + residual\n" ++
         "    return x, out\n\n"
     else
@@ -1075,9 +1100,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    # Project 1x1 (linear)\n" ++
       "    x = conv_bn(x, params[i][0], params[i][1], params[i][2])\n" ++
       "    if residual.shape == x.shape:\n" ++
-      "        if drop_key is not None and keep_prob < 1.0:\n" ++
-      "            keep = jax.random.bernoulli(drop_key, keep_prob).astype(x.dtype)\n" ++
-      "            x = x * keep / keep_prob\n" ++
+      "        x = _drop_branch(x, drop_key, keep_prob)\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n"
   -- Running-BN fused_mbconv_block: the non-running def is emitted inside the
@@ -1141,16 +1164,8 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    attn = jax.nn.softmax(mm(q, k.transpose(0, 1, 3, 2)) / scale, axis=-1)\n" ++
       "    out = mm(attn, v).transpose(0, 2, 1, 3).reshape(B, N, D)\n" ++
       "    return mm(out, wo.T) + bo\n\n" ++
-      "def _drop_branch(branch, drop_key, keep_prob):\n" ++
-      "    # Inverted per-sample stochastic depth (DeiT/timm DropPath): keep the\n" ++
-      "    # whole sample's residual branch w.p. keep_prob, scale survivors by\n" ++
-      "    # 1/keep_prob so inference (drop_key=None) is identity. The (B,1,1)\n" ++
-      "    # mask broadcasts over the token and feature axes.\n" ++
-      "    if drop_key is None or keep_prob >= 1.0:\n" ++
-      "        return branch\n" ++
-      "    shape = (branch.shape[0],) + (1,) * (branch.ndim - 1)\n" ++
-      "    keep = jax.random.bernoulli(drop_key, keep_prob, shape).astype(branch.dtype)\n" ++
-      "    return branch * keep / keep_prob\n\n" ++
+      -- ▶ `_drop_branch` is no longer emitted here: it is ONE definition for the whole file now,
+      -- hoisted above `basic_block` so the convolutional emitters can call it too. See its note.
       "def transformer_block(params, x, idx, n_heads, drop_key=None, keep_prob=1.0):\n" ++
       "    # DeiT stochastic depth: each of the two residual branches (attention,\n" ++
       "    # MLP) drops independently, so split one sub-key per branch.\n" ++
@@ -1200,9 +1215,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    branch = x * ls.reshape(1, -1, 1, 1)\n" ++
       "    # Stochastic depth (inverted): drop the whole branch w.p. 1-keep_prob,\n" ++
       "    # scale survivors by 1/keep_prob so inference (drop_key=None) is drop-free.\n" ++
-      "    if drop_key is not None and keep_prob < 1.0:\n" ++
-      "        keep = jax.random.bernoulli(drop_key, keep_prob).astype(branch.dtype)\n" ++
-      "        branch = branch * keep / keep_prob\n" ++
+      "    branch = _drop_branch(branch, drop_key, keep_prob)\n" ++
       "    return residual + branch\n\n" ++
       "def convnext_downsample(params, x, idx):\n" ++
       "    \"\"\"channel-LN → 2x2 stride-2 conv (no pad).\"\"\"\n" ++

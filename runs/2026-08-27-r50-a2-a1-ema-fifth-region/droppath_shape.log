@@ -1,0 +1,10 @@
+── stochastic-depth mask shape, regenerated reference vs the form it replaced ──
+  batch 64, keep_prob 0.95   (RSB-A2 sd 0.05 at the deepest block)
+  per-example (now)      distinct row-outcome sets over 200 steps: 2
+                           examples dropped per step: min 0, max 9, mean 3.23  (expect ~3.2)
+                           steps where ALL 64 or NONE dropped: 5/200
+  per-block scalar (was) distinct row-outcome sets over 200 steps: 2
+                           examples dropped per step: min 0, max 64, mean 2.88  (expect ~3.2)
+                           steps where ALL 64 or NONE dropped: 200/200
+
+⭐ timm 1.0.28 `drop_path`: shape = (x.shape[0],) + (1,) * (x.ndim - 1) — per sample.
