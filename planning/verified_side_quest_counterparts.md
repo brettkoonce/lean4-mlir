@@ -58,7 +58,7 @@ Surveyed 2026-08-27 against the tree at `253fb75`. "Render" means a committed
 |---|---|---|---|---|---|
 | **RSB-A2** | `sec:r50_a2_a1_cost` | ✅ `a2-accum` | ⛔ none at 224 | — | 4 `#eval` lines (§4a) |
 | **RSB-A1** | `sec:r50_a2_a1_cost` | ✅ `a1` | ⛔ none | — | ⚠ **not** "same render as A2" (§4a) |
-| **MNv4-Conv-M** | `sec:mnv4_side_quest` | ✅ | ✅ 4 variants incl. DP + bf16 | 1-GPU only | a shard gate (§4b) |
+| **MNv4-Conv-M** | `sec:mnv4_side_quest` | ✅ | ✅ 4 variants incl. DP + bf16 | ✅ **4-GPU, tied** | ✅ nothing — **run it** (§4b) |
 | **ConvNeXt-S** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 | steps only | the bf16 twin (§4c) |
 | **ConvNeXt-B** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + bf16 ×2 | steps only | nothing — **benchmark it** (§4c) |
 | **ViT-S** | `sec:vit_sb` | ✅ | ✅ fp32 ×1 | steps only | the bf16 twin (§4c) |
@@ -73,11 +73,12 @@ list them and their cost columns say `[todo]` — but `convnextsin`, `convnextbi
 `vitbin` all emit, tie and step today. What is missing is mostly **bf16 twins and one gate**, not
 architecture work.
 
-⚠ **`planning/chapter_makeover.md:556` is stale.** It says MNv4 data parallel is "**not rendered**
-… Deliberately NOT emitted". `verified_mlir/mnv4in_adamdp64_train_step.mlir` and its bf16 peer are
-on disk dated 2026-08-25. The *reason* in that line still holds — MNv4 has no `shard-check` arm —
-but the artifact now exists, so the caveat has to be restated as "rendered, ungated" rather than
-"not rendered". Fix that line when §4b lands.
+✅ **`planning/chapter_makeover.md`'s DP row was stale and is fixed** (`fd9981e`). It said MNv4
+data parallel was "**not rendered** … Deliberately NOT emitted"; the artifacts had been on disk
+since 2026-08-25, so it went through "rendered, ungated" and straight out the other side — it is
+now rendered AND tied. ⭐ The adjacent **bf16** row in that table was stale the same way ("0 bf16
+artifacts in `verified_mlir/`") and was fixed in the same pass; leaving a known-false claim beside
+one being corrected is worse than fixing both.
 
 ---
 
@@ -348,7 +349,43 @@ streamed A2's RandAugment.
 **Cost: small.** Four to six `#eval`s, one shim entry, one `VerifiedNetSpec`, and the existing gates.
 It closes a whole book section.
 
-### 4b. MNv4 — the missing shard gate, not a missing render
+### 4b. MNv4 — the missing shard gate, not a missing render ✅ DONE 2026-08-27
+
+✅ **LANDED**, `b1208ab` (the gates) + `fd9981e` (the job and the caveat lift) + `f8f0943` (the
+book). Evidence in `runs/2026-08-27-mnv4-dp-shard-gates/`.
+
+| gate | result |
+|---|---|
+| `mnv4-dp-check` fp32 | `bnstat` **bit-exact 67,904/67,904**, gradient norm-rel **8.45e-7** |
+| `mnv4-dp-check` bf16 | **bit-exact on all 9,715,512 floats** — θ, m, v *and* bnstat |
+| `shard-check mnv4in` | TEST **1.10e-6** vs CONTROL **2.00** — 1.8e6× apart |
+
+⭐ **Both go red on a sum-not-mean render, and the shard TEST lands on exactly `3.000000`** — which
+is `|4g − g| / |g|`, the arithmetic the failure mode implies, not merely a big number.
+
+⚠⚠ **FOUR GPUs, not the two this section budgeted.** MNv4's only DP renders are 4-replica and it
+has no 2-replica peer, so `PJRT_REPLICAS=2` hits the shim's replica-count guard rather than
+degrading. It is also the 1000-class 224² net — `mnv4_adam_train_step.mlir` is single-device, so
+there is no Imagenette-scale MNv4 DP render to gate more cheaply.
+
+⭐ **The shard half was ONE ROW, not a harness.** `TestShardCheck.lean` was already generalised to
+N replicas and to non-bare variant names (`SHARD_REPLICAS`, `SHARD_VARIANT{,_DP}`), so MNv4 needed
+a line in `netOf`. This section budgeted "an MNv4 arm" as though it were work.
+
+⭐ **Both precision arms are gated.** `mnv4in_adamdp64bf16` was exactly as untied as its f32 peer;
+the precision axis did not get to inherit a tie it was not given. The `DP_VARIANT` knobs made that
+a re-run rather than a second file.
+
+⚠⚠ **"63.5 h on one card to roughly a quarter of that" below is wrong on both halves.** 63.5 h
+derives from 114 ms/step measured on Conv-**S**, before the Conv-M conversion (4.1M → 9.7M), so it
+never described this network — and no single-card Conv-M figure has ever been measured. The 4×
+number did not need projecting: `bf16_renderer.md` §21.1 already had it measured at **177 ms/step
+→ 25.6 h** f32, **126 ms/step → 18.6 h** bf16. The job ships f32 by default, to keep a first run
+from moving two axes at once.
+
+---
+
+*The original text follows, since it is what the work was done against.*
 
 `mnv4in_adamdp64` and `mnv4in_adamdp64bf16` exist. What does not exist is MNv4 in
 `shard-check`'s net list — `lakefile.lean:2102` reads `<convnext|efficientnet|mobilenetv2|vit>` —
@@ -466,8 +503,10 @@ Non-negotiable, and in this order:
    (`4ee304a`), the `RECIPE=` precheck (`796cacf`), and the Track 4 split (`7c457a3`). Splitting
    exe renames from job renames matters — only the second moves files, so only the second has a
    `git log --follow` to protect.
-2. ⬅ **NEXT — MNv4 shard gate (§4b).** Smallest real work, best payoff, and it turns a `\withheld` into a job.
-3. **RSB-A2 + A1 (§4a).** Four to six `#eval`s against a renderer that already takes every parameter,
+2. ✅ **MNv4 shard gate (§4b) — DONE 2026-08-27.** Three commits: the gates (`b1208ab`), the job
+   and the caveat lift (`fd9981e`), the book (`f8f0943`). It did turn a `\withheld` into a job.
+   ⚠ Four GPUs, not two, and the shard half was one row rather than a harness — see §4b.
+3. ⬅ **NEXT — RSB-A2 + A1 (§4a).** Four to six `#eval`s against a renderer that already takes every parameter,
    and it closes `sec:r50_a2_a1_cost`. Fix the "same render as A2" cell in the same pass.
 4. **The three bf16 twins (§4c).** Independent of each other; do ConvNeXt-S first, it has the closest
    proven peer.
