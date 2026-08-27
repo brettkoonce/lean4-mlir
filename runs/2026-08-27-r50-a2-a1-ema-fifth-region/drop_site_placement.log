@@ -1,0 +1,18 @@
+── R50 stochastic depth: is the site on the BRANCH or on the block OUTPUT? ──
+  q=1 (32x32), B=2, 16 sites, keeps 1.0000..0.9500
+  test mask: 6 of 16 sites dropped (FORCED — see the note)
+
+  ⭐ TEST     at a REAL draw, correct vs misplaced      : 2.19e+08
+             the only check that sees the placement at all
+  CONTROL  at an ALL-ONES mask, correct vs misplaced   : 0.00e+00
+             must be ZERO — same ops, same fusion, `1 * (b+x) == 1*b + x`
+  CONTROL  ones mask, sd vs NO-sd render, FORWARD      : 0.00e+00
+             `dropPath_ones_id`: loss + all 106 BN stats, bit-exact
+  CONTROL  ones mask, sd vs NO-sd render, m' and v'    : 4.84e-06
+             ⚠ NOT bit-exact and correctly so: the extra `multiply` changes XLA's
+             fusion, so the 161-parameter reduction chain reassociates. The gradients
+             are what agree, at ~1e-6 relative; theta' amplifies that through AdamW's
+             m/(sqrt(v)+eps) wherever v is small, exactly as `opt_step_tie.py`'s own
+             rtol note describes. A bit-exactness claim on theta' would be false.
+
+✓ the site is on the RESIDUAL BRANCH, and only a non-ones mask says so

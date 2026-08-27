@@ -13,11 +13,14 @@ expression on the verified path. This run closes the first of the two:
 It is now a fifth region. `nRegions` is 3, 4 or 5; `nScalars` is 3, 5 or 7; the layout is
 `[θ|m|v|G|E]` and the scalar tail is `lr,bc₁,bc₂,aup,akeep,emad,oemad`.
 
-⚠ **The second delta is NOT closed.** Stochastic depth `dropPath := 0.05` still has no importer on
-the residual family — neither `ResNet34RenderB` nor `ResNet50RenderB` imports `DropPath.lean`, and
-`r34AdamVariant` has no `drop` marker. So the four artifacts below are A2's graph minus **one**
-regulariser rather than minus two. Ghost-BN group 64-vs-128 is unchanged. Quote them the way A3's
-deltas are quoted, never as "RSB-A2 reproduced".
+✅ **AND THE SECOND DELTA IS CLOSED TOO** — stochastic depth `dropPath := 0.05`, sixteen sites on
+the residual branch, one per bottleneck. It needed a fix on the *reference* side first: see §6b
+below. So `sec:r50_a2_a1_cost`'s two ⛔ rows are both gone.
+
+⚠ **What is still NOT A2**: the ghost-BN group. These render 8×64, i.e. 64-image ghosts, against
+the reference's 4 × 512-global (128 per device on four cards). Immaterial to a wall clock; a
+different regime for any accuracy claim. That is now the only delta, and it is the one §4a listed
+as ⚠ rather than ⛔.
 
 ---
 
@@ -98,9 +101,63 @@ else 3)` — true of every spelling that existed, and silently true of a five-re
 
 ---
 
+## §6b — the reference defect the sd half ran into
+
+⛔ **Four of the five JAX block emitters drew a per-BLOCK SCALAR bernoulli**, shared by the whole
+batch — nine sites across `bottleneck_block`/`_down`, `convnext_block`, `mbconv_block`,
+`uib_block`, `fused_mbconv_block`. timm 1.0.28's `drop_path` is explicitly *"per sample"*, and the
+same file already emitted the correct `_drop_branch` for the transformer family alone.
+
+⭐ **Verified renders were right; the oracle was wrong**, for 26 committed `convnext*`/
+`efficientnet*` artifacts. `_drop_branch` is now one definition and all nine sites call it.
+
+### `droppath_shape.log` — measured, because the two forms have the SAME EXPECTATION
+
+```
+  per-example (now)      examples dropped/step: min 0, max 9, mean 3.23 (expect 3.2)
+                         steps where ALL 64 or NONE dropped:   5/200
+  per-block scalar (was) examples dropped/step: min 0, max 64, mean 2.88
+                         steps where ALL 64 or NONE dropped: 200/200
+```
+
+⚠ No mean-based check separates them, which is why it survived. The graph type-checks, eval is the
+identity either way, and no gate compares two Bernoulli streams.
+
+⭐ Nothing measured changed — `dropPath > 0` is ImageNet-tier only, R50's A3 reference sets 0.0,
+and MNv4-Conv-M's 75.51% ran `default`.
+
+## `drop_site_placement.log` — is the site on the BRANCH or on the block OUTPUT?
+
+⚠⚠ **NO STRUCTURAL CHECK IN THIS REPO CAN TELL THEM APART.** `scripts/misplace_drop_sites.py` moves
+all 16 sites onto the block output and produces a render with the same SSA names, the same order,
+the same types, the same 18,186 ops and the same arity. Run at `q = 1` / `B = 2` so it fits on CPU:
+
+```
+  ⭐ TEST     at a REAL draw, correct vs misplaced      : 2.19e+08
+  CONTROL  at an ALL-ONES mask, correct vs misplaced   : 0.00e+00
+  CONTROL  ones mask, sd vs NO-sd render, FORWARD      : 0.00e+00
+  CONTROL  ones mask, sd vs NO-sd render, m' and v'    : 3.29e-06
+```
+
+⭐ The first control is the argument: at an all-ones mask the misplaced render is **bit-identical**,
+so every endpoint gate, prefix audit and arity check passes on it. Only a non-ones mask sees the
+placement, and it sees it by eight orders of magnitude.
+
+⚠ The last row is **not** bit-exact and correctly so — the extra `multiply` changes XLA's fusion,
+so the 161-parameter reduction chain reassociates. The FORWARD is exact (loss and all 106 BN
+statistics, difference 0.0); the gradients agree at ~1e-6; θ′ amplifies that through AdamW's
+`m̂/(√v̂+ε)` wherever `v` is small. Claiming bit-exactness on θ′ would have been false.
+
+▶ Two defects this file had, both found by running it rather than reading it: `hash()` is salted
+per PROCESS, so the TEST figure moved four orders between two invocations (now `crc32`); and the
+`v` region was initialised random-signed, so `sqrt(v)` gave NaN for 50 of 161 parameters beside a
+perfectly finite loss.
+
+---
+
 ## What was NOT run here, and why
 
-* **No GPU step.** Every gate above is CPU: XLA-on-CPU for the optimizer tie, text for the arity
+* **No A2/A1 render has been LOADED by the trainer.** Every gate above is CPU: XLA-on-CPU for the optimizer tie, text for the arity
   check, `#guard` for the predicates. A five-region graph has not yet been *loaded* by the trainer,
   and the shim's buffer-count refusal is the check that would say so. `arity_check.py` reproduces
   that arithmetic statically, which is the strongest cheap substitute and not a replacement.

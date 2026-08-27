@@ -153,6 +153,15 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("emalambacc8x64wxclipbce", true, false, false)
   , ("emalambaccdp8x64wxclipbcewd001", true, false, false)
   , ("emaaccdp4x64", true, false, false), ("emaacc4x64", true, false, false)
+    -- ▶▶ **…AND WITH STOCHASTIC DEPTH — RSB-A2/A1 COMPLETE** (2026-08-27). Six markers on one
+    -- name, and `drop` lands in the MIDDLE (N3's `[clip][drop][bce]`), so it has neighbours on both
+    -- sides where `ema` has only one. ⚠ The two new adjacencies are `clip`++`drop` and
+    -- `drop`++`bce`; neither spells `"do"` (`dr`, not `do`), which is the collision class that has
+    -- already fired three times in this naming.
+  , ("emalambaccdp8x64wxclipdropbce", true, false, true)
+  , ("emalambacc8x64wxclipdropbce", true, false, true)
+  , ("emalambaccdp8x64wxclipdropbcewd001", true, false, true)
+  , ("emalambacc8x64wxclipdropbcewd001", true, false, true)
     -- ▶▶ GRADIENT ACCUMULATION's spellings (`r34AdamVariant .adamwAccum`). ⚠ Both carry `k` and a
     -- batch, so the marker concatenates against DIGITS and an `x` — a shape none of the other four
     -- markers has, and `accdp` puts `dp` INSIDE the prefix rather than after it.
@@ -297,7 +306,10 @@ private def accumSpellings : List String :=
    -- ⭐⭐ the FIVE-region peers (2026-08-27): accumulation composed with the EMA shadow, which is
    -- RSB-A2/A1's real recipe and was unspellable until the fifth region landed.
    "emalambaccdp8x64wxclipbce", "emalambacc8x64wxclipbce",
-   "emalambaccdp8x64wxclipbcewd001", "emaaccdp4x64", "emaacc4x64"]
+   "emalambaccdp8x64wxclipbcewd001", "emaaccdp4x64", "emaacc4x64",
+   -- ⭐ and the same four with stochastic depth — RSB-A2/A1 complete
+   "emalambaccdp8x64wxclipdropbce", "emalambacc8x64wxclipdropbce",
+   "emalambaccdp8x64wxclipdropbcewd001", "emalambacc8x64wxclipdropbcewd001"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- ⚠ and accumulation must disturb NONE of the other three axes it does not compose with. `acc4x64`
@@ -308,7 +320,10 @@ private def accumSpellings : List String :=
 -- was true only because the driver REFUSED the pairing — the guard was recording a limitation as
 -- if it were a naming fact. EMA × accumulation is now a five-region render (RSB-A2/A1), so the
 -- pairing is legal and the ordering rule below is what replaces this half of the check.
-#guard table.all (fun (v, _, _, _) => !accOn v || (!rmsOn v && !sdOn v && !cdOn v))
+-- ⚠⚠ **`sdOn` CAME OUT TOO, 2026-08-27, and for the same reason `emaOn` did**: RSB-A2/A1 render
+-- accumulation WITH stochastic depth (`emalambaccdp8x64wxclipdropbce`), so a guard saying they
+-- never co-occur was recording the absence of a render, not a fact about the naming.
+#guard table.all (fun (v, _, _, _) => !accOn v || (!rmsOn v && !cdOn v))
 -- ⭐ and the replacement, which is stronger than what it replaces: whenever BOTH fire, the `ema`
 -- marker must LEAD. `emaOn` is a prefix test and `accOn` a substring one, so `lambaccema…` would
 -- read as accumulation-only and pack four regions into a five-region graph.
@@ -395,6 +410,27 @@ private def accumSpellings : List String :=
 #guard emaRegion "adamdp128x4wxclipdrop" == none
 #guard emaScalarOff "emalambaccdp8x64wxclipbce" == 5
 #guard emaScalarOff "ema128" == 3
+-- ⭐⭐ **RSB-A2 COMPLETE: five regions, seven scalars, AND sixteen drop masks.** `drop` adds graph
+-- INPUTS, never regions or scalars, so it must move neither count — that independence is the check.
+#guard nRegions "emalambaccdp8x64wxclipdropbce" == 5
+#guard nScalars "emalambaccdp8x64wxclipdropbce" == 7
+#guard emaRegion "emalambaccdp8x64wxclipdropbce" == some 4
+#guard sdOn   "emalambaccdp8x64wxclipdropbce" == true
+#guard emaOn  "emalambaccdp8x64wxclipdropbce" == true
+#guard accOn  "emalambaccdp8x64wxclipdropbce" == true
+#guard accK   "emalambaccdp8x64wxclipdropbce" == 8
+#guard cdOn   "emalambaccdp8x64wxclipdropbce" == false   -- ⚠ `dr`, not `do`
+#guard rmsOn  "emalambaccdp8x64wxclipdropbce" == false
+-- ⚠ and `drop` must not disturb `k` — it now sits between the batch and `bce`, so the digits `8`
+-- are followed by `x64wxclipdropbce` rather than `x64wxclipbce`.
+#guard accK "emalambaccdp8x64wxclipdropbcewd001" == 8
+#guard accK "emalambaccdp8x64wxclipdropbcewd001" != 64
+#guard nRegions "emalambaccdp8x64wxclipdropbcewd001" == 5
+-- ⚠⚠ THE COUNTERFACTUAL FOR THE NEW ADJACENCIES, run rather than reasoned about — three collisions
+-- in this naming have all lived in a PAIR of markers meeting, never in the marker alone.
+#guard cdOn "wxclipdrop" == false
+#guard cdOn "dropbce" == false
+#guard sdOn "wxclipdropbce" == true
 -- ⚠ the shadow is the LAST region in every spelling, which is what lets `scoreCheckpoint` bound
 -- the slice at `nRegions` without a second index.
 #guard table.all (fun (v, _, _, _) =>

@@ -933,7 +933,14 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     -- function where those two orders disagree. Parameter position is "newest axis appends" (§2m);
     -- string position is the driver's predicate. Defaulted, so every committed spelling is
     -- unchanged — `ema` prepends nothing at `false`.
-    (ema : Bool := false) : String :=
+    (ema : Bool := false)
+    -- ▶▶ **`drop` — STOCHASTIC DEPTH.** ⚠ It goes BETWEEN `clip` and `bce`, which is `N3`'s grammar
+    -- (`…[wx][clip][drop][do][bce][wd<d>][bf16]`) and `cnxAdamVariant`'s `wxclipdrop` order, rather
+    -- than appended like the newer axes — one rule for both nets, so a reader need not know which
+    -- net a slug came from. ⚠ The marker is `"drop"` and not `"sd"`: `rms` ++ `dp` spells `rmsdp`,
+    -- which CONTAINS "sd" (`planning/stochastic_depth.md`'s defect).
+    -- ⚠ Parameter position is trailing (§2m, so no call site moves); STRING position is N3's.
+    (sd : Bool := false) : String :=
   (if ema then "ema" else "") ++
   (match opt with
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
@@ -965,7 +972,12 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
   -- the RSB-A3 composition reads `lambaccdp8x64wxclipbce`. ⚠ The order is a CHOICE; the `#guard`s
   -- below are what make it a fixed one.
   (if gradClip then "clip" else "") ++
-  -- ▶ `bce` LAST, which is where the hand-passed `vSuffix` put it. See this parameter's note.
+  -- ▶ `drop` TRAILS `clip`, matching `cnxAdamVariant`'s `wxclipdrop` and N3's grammar. ⚠ Check the
+  -- CONCATENATIONS rather than the marker: `clip` ++ `drop` spells `clipdrop` and `drop` ++ `bce`
+  -- spells `dropbce`, and neither contains `"do"` (`dr`, not `do`) — the collision class that has
+  -- already fired three times in this naming. Pinned in `tests/TestVariantPredicates.lean`.
+  (if sd then "drop" else "") ++
+  -- ▶ `bce` after that, which is where the hand-passed `vSuffix` put it. See this parameter's note.
   (if bce then "bce" else "") ++
   -- ▶ …and the decay marker after even that, because it is the newest axis and appending is the
   -- only placement that leaves all four existing spellings untouched. Empty at the default.

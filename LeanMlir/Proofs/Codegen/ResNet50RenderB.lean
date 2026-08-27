@@ -139,10 +139,30 @@ structure BNFwd where
   cp : String        -- projection conv out ("" for identity)
 deriving Inhabited
 
+/-- **R50's stochastic-depth site count** — one per bottleneck block, `[3,4,6,3] = 16`.
+
+    ⚠ It is the count the RAMP's denominator is read against (`totalDrop − 1 = 15`), so it is a
+    definition rather than a literal 16 sprinkled at three sites. -/
+def r50DropTotal : Nat := 16
+
+/-- The `%dp0 … %dp15` mask arguments, `tensor<Bxf32>` each — appended to the train step's
+    signature only under `sd`. Mirrors `cnxDropSig`. -/
+def r50DropSig (B : Nat) (sd : Bool) : String :=
+  if sd then String.join ((List.range r50DropTotal).map (fun i => s!", {dpName i}: {ty [B]}"))
+  else ""
+
+/-- `some i` under `sd`, `none` otherwise — the per-block ramp index handed to the six block
+    emitters. ⚠ **The index is the BLOCK index and the two coincide here**, because every R50
+    bottleneck drops; EfficientNet's do not (its reference advances the ramp counter inside a skip
+    guard), which is why `efficientnetVerified.dropKeeps` is a literal array and this is a range.
+    ⚠ At `sd := false` this is `none` at every site and NOT ONE `pretty` call happens, so every
+    committed R50 artifact re-renders byte-identically. -/
+def dpAt (sd : Bool) (i : Nat) : Option Nat := if sd then some i else none
+
 /-- Identity bottleneck forward: `1×1 → BN → relu → 3×3 → BN → relu → 1×1 → BN → (+x) → relu`,
     all at `hh`, channels `oc → mid → mid → oc`. -/
 private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Nat BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BNFwd := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
   -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
@@ -163,9 +183,15 @@ private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
   let (cR2, nR2) ← pretty B (.batchOp (N := B) (.relu (n := mid*hh*ww)) (.operand nN2 zMid))
   let (cC3, nC3) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}W3" (zb oc) zk3 zo else .conv (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo) (.operand nR2 zMid))
   let (cN3, nN3) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" s!"%{p}bt3" epsStr 0 zo zo (.operand nC3 zOut))
-  let (cA,  nA)  ← pretty B (.addVB (.operand nN3 zOut) (.operand xName zOut))
+  -- ▶ STOCHASTIC DEPTH, on the residual branch and before the add. See this function's docstring
+  -- for why the placement is the correctness question and why an all-ones gate cannot see it.
+  let (cD, nD) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
+                            (.operand nN3 zOut))
+    | none   => pure ("", nN3)
+  let (cA,  nA)  ← pretty B (.addVB (.operand nD zOut) (.operand xName zOut))
   let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
-  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cA ++ cO,
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cD ++ cA ++ cO,
          xin := xName, o := nO, a := nA,
          c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := "" }
 
@@ -173,7 +199,7 @@ private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
     `cin → mid → mid → oc` with the resolution unchanged, so the projection is a plain `1×1`
     conv → BN, NOT the strided one `bnkStridedFwdB` uses. -/
 private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Nat BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BNFwd := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
   -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
@@ -199,9 +225,16 @@ private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
   -- the projection: a STRIDE-1 1×1 conv. `.conv`, not `.convStrided` — the whole point of this form.
   let (cCp, nCp) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := hh) (w := ww) zrnd s!"%{p}Wp" (zb oc) zkp zo else .conv (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo) (.operand xName zIn))
   let (cNp, nNp) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zo zo (.operand nCp zOut))
-  let (cA,  nA)  ← pretty B (.addVB (.operand nN3 zOut) (.operand nNp zOut))
+  -- ▶ STOCHASTIC DEPTH on the residual branch. ⚠⚠ **The PROJECTION is not dropped** — the
+  -- reference scales `out` and leaves `shortcut` alone (`bottleneck_block_down`), so a render that
+  -- dropped the sum would scale the skip too. That is a different function, and it still trains.
+  let (cD, nD) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
+                            (.operand nN3 zOut))
+    | none   => pure ("", nN3)
+  let (cA,  nA)  ← pretty B (.addVB (.operand nD zOut) (.operand nNp zOut))
   let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
-  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO,
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cD ++ cA ++ cO,
          xin := xName, o := nO, a := nA,
          c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := nCp }
 
@@ -211,7 +244,7 @@ private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     ⚠ `conv1`/`bn1`/`relu1` run at the **input** resolution `2hh`; only `conv2` (the 3×3) is
     strided. v1.5. -/
 private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Nat BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BNFwd := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
   -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
@@ -238,9 +271,16 @@ private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
   let (cN3, nN3) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" s!"%{p}bt3" epsStr 0 zo zo (.operand nC3 zOut))
   let (cCp, nCp) ← pretty B (.batchOp (N := B) (if bf16 then .convStridedBf16 (h := hh) (w := ww) zrnd s!"%{p}Wp" (zb oc) zkp zo else .convStrided (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo) (.operand xName zIn))
   let (cNp, nNp) ← pretty B (.bnBatchF (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}gp" s!"%{p}btp" epsStr 0 zo zo (.operand nCp zOut))
-  let (cA,  nA)  ← pretty B (.addVB (.operand nN3 zOut) (.operand nNp zOut))
+  -- ▶ STOCHASTIC DEPTH on the residual branch. ⚠⚠ **The PROJECTION is not dropped** — the
+  -- reference scales `out` and leaves `shortcut` alone (`bottleneck_block_down`), so a render that
+  -- dropped the sum would scale the skip too. That is a different function, and it still trains.
+  let (cD, nD) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
+                            (.operand nN3 zOut))
+    | none   => pure ("", nN3)
+  let (cA,  nA)  ← pretty B (.addVB (.operand nD zOut) (.operand nNp zOut))
   let (cO,  nO)  ← pretty B (.batchOp (N := B) (.relu (n := oc*hh*ww)) (.operand nA zOut))
-  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO,
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cD ++ cA ++ cO,
          xin := xName, o := nO, a := nA,
          c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := nCp }
 
@@ -255,7 +295,7 @@ private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     ⚠ Each BN's γ/β gradient reads the cotangent at that BN's OUTPUT: `da` for bn3, `dr2` for
     bn2, `dr1` for bn1 — off by one and the gradient is silently wrong. -/
 private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (dyName : String)
-    (bf16 : Bool := false) : StateM Nat BBackB := do
+    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BBackB := do
   let xName := f.xin
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
@@ -272,7 +312,22 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
   let zbnO  : Vec (B*(oc*(hh*ww))) := fun _ => 0
   let zbnM  : Vec (B*(mid*(hh*ww))) := fun _ => 0
   let (cDa,  nDa)  ← pretty B (.selectPosB f.a zOut (.operand dyName zOut))
-  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDa zbnO))
+  -- ▶▶ **THE DROP'S BACKWARD IS THE SAME OP AT THE SAME MASK** (`Proofs.dropPath_vjp_is_self`):
+  -- the map is diagonal, so it is its own transpose. What it costs is not an emitter — it is
+  -- knowing WHICH cotangent each consumer takes.
+  --
+  -- ⚠⚠ **THE DROPPED COTANGENT FEEDS THE BRANCH; THE UNDROPPED ONE FEEDS THE SKIP.** The forward is
+  -- `a = drop(n3) + skip`, so `∂a/∂n3` carries the mask and `∂a/∂skip` does not. Everything
+  -- upstream of the last BN takes `nDd` — including bn3's OWN γ/β gradients, which read the
+  -- cotangent at bn3's output; the residual `addVB` and the PROJECTION's whole backward keep `nDa`.
+  -- ▶ Getting it wrong type-checks, trains and descends. It is the defect ConvNeXt's `bwdBlockB`
+  -- records as *18 of 180 gradients wrong by a per-example factor, on the parameter stochastic
+  -- depth is about* — here 3 of 161 per block, 48 across the net.
+  let (cDd, nDd) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
+                            (.operand nDa zOut))
+    | none   => pure ("", nDa)
+  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDd zbnO))
   let (cDc3, nDc3) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}W3" zk3 zo (.operand nDn3 zOut) else .convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
   let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
   let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
@@ -289,9 +344,10 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
   let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
   let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
   let (cW3, nW3) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd f.r2 zo zMid zk3 (.operand nDn3 zOut) else .convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
-  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDa zbnO))
-  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
-  pure { code := cDa ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++ cDx ++
+  -- ⚠ `nDd`, not `nDa` — bn3 is ON the dropped branch, so its own γ/β take the masked cotangent.
+  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDd zbnO))
+  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDd zbnO))
+  pure { code := cDa ++ cDd ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++ cDx ++
                  cW1 ++ cg1 ++ ct1 ++ cW2 ++ cg2 ++ ct2 ++ cW3 ++ cg3 ++ ct3,
          dx := nDx,
          ps := [⟨s!"{p}W1", nW1, [mid,oc,1,1]⟩, ⟨s!"{p}g1", ng1, [mid]⟩, ⟨s!"{p}bt1", nt1, [mid]⟩,
@@ -302,7 +358,7 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
     Identical to the identity backward except the skip branch carries its own `bn→conv` backward
     (`dnp`/`dcp`) and `dx = dc1 + dcp`. -/
 private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
-    (dyName : String) (bf16 : Bool := false) : StateM Nat BBackB := do
+    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BBackB := do
   let xName := f.xin
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
@@ -321,7 +377,22 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
   let zbnO  : Vec (B*(oc*(hh*ww))) := fun _ => 0
   let zbnM  : Vec (B*(mid*(hh*ww))) := fun _ => 0
   let (cDa,  nDa)  ← pretty B (.selectPosB f.a zOut (.operand dyName zOut))
-  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDa zbnO))
+  -- ▶▶ **THE DROP'S BACKWARD IS THE SAME OP AT THE SAME MASK** (`Proofs.dropPath_vjp_is_self`):
+  -- the map is diagonal, so it is its own transpose. What it costs is not an emitter — it is
+  -- knowing WHICH cotangent each consumer takes.
+  --
+  -- ⚠⚠ **THE DROPPED COTANGENT FEEDS THE BRANCH; THE UNDROPPED ONE FEEDS THE SKIP.** The forward is
+  -- `a = drop(n3) + skip`, so `∂a/∂n3` carries the mask and `∂a/∂skip` does not. Everything
+  -- upstream of the last BN takes `nDd` — including bn3's OWN γ/β gradients, which read the
+  -- cotangent at bn3's output; the residual `addVB` and the PROJECTION's whole backward keep `nDa`.
+  -- ▶ Getting it wrong type-checks, trains and descends. It is the defect ConvNeXt's `bwdBlockB`
+  -- records as *18 of 180 gradients wrong by a per-example factor, on the parameter stochastic
+  -- depth is about* — here 3 of 161 per block, 48 across the net.
+  let (cDd, nDd) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
+                            (.operand nDa zOut))
+    | none   => pure ("", nDa)
+  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDd zbnO))
   let (cDc3, nDc3) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}W3" zk3 zo (.operand nDn3 zOut) else .convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
   let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
   let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
@@ -339,12 +410,13 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
   let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
   let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
   let (cW3, nW3) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd f.r2 zo zMid zk3 (.operand nDn3 zOut) else .convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
-  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDa zbnO))
-  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
+  -- ⚠ `nDd`, not `nDa` — bn3 is ON the dropped branch, so its own γ/β take the masked cotangent.
+  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDd zbnO))
+  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDd zbnO))
   let (cWp, nWp) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := cin) (oc := oc) (h := hh) (w := ww) zrnd xName zo zIn zkp (.operand nDnp zOut) else .convWeightGradB (ic := cin) (oc := oc) (h := hh) (w := ww) xName zo zIn zkp (.operand nDnp zOut))
   let (cgp, ngp) ← pretty B (.bnGammaGradB f.cp epsStr 0 zbnO (.operand nDa zbnO))
   let (ctp, ntp) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
-  pure { code := cDa ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++
+  pure { code := cDa ++ cDd ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++
                  cDnp ++ cDcp ++ cDx ++
                  cW1 ++ cg1 ++ ct1 ++ cW2 ++ cg2 ++ ct2 ++ cW3 ++ cg3 ++ ct3 ++ cWp ++ cgp ++ ctp,
          dx := nDx,
@@ -358,7 +430,7 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
     ⚠ `dc2` is the STRIDED conv backward, so it takes the cotangent from `hh` back up to `2hh`;
     everything upstream of it (`dr1`, `dn1`, `dc1`, `W1`'s grad) lives at `2hh`. -/
 private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
-    (dyName : String) (bf16 : Bool := false) : StateM Nat BBackB := do
+    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BBackB := do
   let xName := f.xin
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
@@ -379,7 +451,22 @@ private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f :
   let zbnO    : Vec (B*(oc*(hh*ww))) := fun _ => 0
   let zbnM    : Vec (B*(mid*(hh*ww))) := fun _ => 0
   let (cDa,  nDa)  ← pretty B (.selectPosB f.a zOut (.operand dyName zOut))
-  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDa zbnO))
+  -- ▶▶ **THE DROP'S BACKWARD IS THE SAME OP AT THE SAME MASK** (`Proofs.dropPath_vjp_is_self`):
+  -- the map is diagonal, so it is its own transpose. What it costs is not an emitter — it is
+  -- knowing WHICH cotangent each consumer takes.
+  --
+  -- ⚠⚠ **THE DROPPED COTANGENT FEEDS THE BRANCH; THE UNDROPPED ONE FEEDS THE SKIP.** The forward is
+  -- `a = drop(n3) + skip`, so `∂a/∂n3` carries the mask and `∂a/∂skip` does not. Everything
+  -- upstream of the last BN takes `nDd` — including bn3's OWN γ/β gradients, which read the
+  -- cotangent at bn3's output; the residual `addVB` and the PROJECTION's whole backward keep `nDa`.
+  -- ▶ Getting it wrong type-checks, trains and descends. It is the defect ConvNeXt's `bwdBlockB`
+  -- records as *18 of 180 gradients wrong by a per-example factor, on the parameter stochastic
+  -- depth is about* — here 3 of 161 per block, 48 across the net.
+  let (cDd, nDd) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (n := oc*hh*ww) (dpName i) (fun _ => 0 : Vec B)
+                            (.operand nDa zOut))
+    | none   => pure ("", nDa)
+  let (cDn3, nDn3) ← pretty B (.bnBatchBack (N := B) (oc := oc) (h := hh) (w := ww) s!"%{p}g3" f.c3 epsStr 0 zo zbnO (.operand nDd zbnO))
   let (cDc3, nDc3) ← pretty B (if bf16 then .convBackBatchedBf16 (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}W3" zk3 zo (.operand nDn3 zOut) else .convBackBatched (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" zk3 zo (.operand nDn3 zOut))
   let (cDr2, nDr2) ← pretty B (.selectPosB f.n2 zMid (.operand nDc3 zMid))
   let (cDn2, nDn2) ← pretty B (.bnBatchBack (N := B) (oc := mid) (h := hh) (w := ww) s!"%{p}g2" f.c2 epsStr 0 zm zbnM (.operand nDr2 zbnM))
@@ -398,12 +485,13 @@ private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f :
   let (cg2, ng2) ← pretty B (.bnGammaGradB f.c2 epsStr 0 zbnM (.operand nDr2 zbnM))
   let (ct2, nt2) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := hh) (w := ww) (.operand nDr2 zbnM))
   let (cW3, nW3) ← pretty B (if bf16 then .convWeightGradBBf16 (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd f.r2 zo zMid zk3 (.operand nDn3 zOut) else .convWeightGradB (ic := mid) (oc := oc) (h := hh) (w := ww) f.r2 zo zMid zk3 (.operand nDn3 zOut))
-  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDa zbnO))
-  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
+  -- ⚠ `nDd`, not `nDa` — bn3 is ON the dropped branch, so its own γ/β take the masked cotangent.
+  let (cg3, ng3) ← pretty B (.bnGammaGradB f.c3 epsStr 0 zbnO (.operand nDd zbnO))
+  let (ct3, nt3) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDd zbnO))
   let (cWp, nWp) ← pretty B (if bf16 then .convStridedWeightGradBBf16 (ic := cin) (oc := oc) (h := hh) (w := ww) zrnd xName zo zIn zkp (.operand nDnp zOut) else .convStridedWeightGradB (ic := cin) (oc := oc) (h := hh) (w := ww) xName zo zIn zkp (.operand nDnp zOut))
   let (cgp, ngp) ← pretty B (.bnGammaGradB f.cp epsStr 0 zbnO (.operand nDa zbnO))
   let (ctp, ntp) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := hh) (w := ww) (.operand nDa zbnO))
-  pure { code := cDa ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++
+  pure { code := cDa ++ cDd ++ cDn3 ++ cDc3 ++ cDr2 ++ cDn2 ++ cDc2 ++ cDr1 ++ cDn1 ++ cDc1 ++
                  cDnp ++ cDcp ++ cDx ++
                  cW1 ++ cg1 ++ ct1 ++ cW2 ++ cg2 ++ ct2 ++ cW3 ++ cg3 ++ ct3 ++ cWp ++ cgp ++ ctp,
          dx := nDx,
@@ -449,7 +537,10 @@ set_option maxRecDepth 4000000 in
 def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
     -- ▶ TRAILING and defaulted, so `@resnet50_fwd` and every committed train step that does
     -- not ask for bf16 re-render byte-identical (gate 1).
-    (bf16 : Bool := false) :
+    (bf16 : Bool := false)
+    -- ▶ `sd` = stochastic depth, RSB-A2/A1's `dropPath := 0.05`. TRAILING and defaulted, so the
+    -- committed `@resnet50_fwd` and every drop-free train step re-render byte-identically.
+    (sd : Bool := false) :
     StateM Nat R50FwdRecB := do
   -- The ladder, bottom-up. At q = 7: 5→…  no — at q = 7 these are 7, 14, 28, 56, 112 and the
   -- input is 224; at q = 5 they are 5, 10, 20, 40, 80 and the input is 160.
@@ -476,22 +567,22 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
   let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*q1*q1)) (.operand nStn z112))
   let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := q2) (w := q2)) (.operand nStr z112))
   -- ═══ 16 bottleneck blocks, [3,4,6,3] ═══
-  let f1  ← bnkProjFwdB    B   64  64  256 q2 epsStr "s1b0" nStp bf16   -- ⭐ the stride-1 projection
-  let f2  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b1" f1.o bf16
-  let f3  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b2" f2.o bf16
-  let f4  ← bnkStridedFwdB B  256 128  512 q3 epsStr "s2b0" f3.o bf16
-  let f5  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b1" f4.o bf16
-  let f6  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b2" f5.o bf16
-  let f7  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b3" f6.o bf16
-  let f8  ← bnkStridedFwdB B  512 256 1024 q4 epsStr "s3b0" f7.o bf16
-  let f9  ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b1" f8.o bf16
-  let f10 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b2" f9.o bf16
-  let f11 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b3" f10.o bf16
-  let f12 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b4" f11.o bf16
-  let f13 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b5" f12.o bf16
-  let f14 ← bnkStridedFwdB B 1024 512 2048  q5 epsStr "s4b0" f13.o bf16
-  let f15 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b1" f14.o bf16
-  let f16 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b2" f15.o bf16
+  let f1  ← bnkProjFwdB    B   64  64  256 q2 epsStr "s1b0" nStp bf16 (dpAt sd 0)   -- ⭐ the stride-1 projection
+  let f2  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b1" f1.o bf16 (dpAt sd 1)
+  let f3  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b2" f2.o bf16 (dpAt sd 2)
+  let f4  ← bnkStridedFwdB B  256 128  512 q3 epsStr "s2b0" f3.o bf16 (dpAt sd 3)
+  let f5  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b1" f4.o bf16 (dpAt sd 4)
+  let f6  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b2" f5.o bf16 (dpAt sd 5)
+  let f7  ← bnkIdFwdB      B      128  512 q3 epsStr "s2b3" f6.o bf16 (dpAt sd 6)
+  let f8  ← bnkStridedFwdB B  512 256 1024 q4 epsStr "s3b0" f7.o bf16 (dpAt sd 7)
+  let f9  ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b1" f8.o bf16 (dpAt sd 8)
+  let f10 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b2" f9.o bf16 (dpAt sd 9)
+  let f11 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b3" f10.o bf16 (dpAt sd 10)
+  let f12 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b4" f11.o bf16 (dpAt sd 11)
+  let f13 ← bnkIdFwdB      B      256 1024 q4 epsStr "s3b5" f12.o bf16 (dpAt sd 12)
+  let f14 ← bnkStridedFwdB B 1024 512 2048  q5 epsStr "s4b0" f13.o bf16 (dpAt sd 13)
+  let f15 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b1" f14.o bf16 (dpAt sd 14)
+  let f16 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b2" f15.o bf16 (dpAt sd 15)
   -- ═══ head: GAP(7×7) → dense(2048→nClasses) ═══
   let zL    : Vec (B*(2048*q5*q5)) := fun _ => 0
   let z2048 : Vec (B*2048) := fun _ => 0
@@ -620,7 +711,20 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- the stakes are higher than an entry mismatch: the marker is what tells the DRIVER to pack
     -- five regions, so a flag that stopped at the emission would produce a five-region graph the
     -- driver feeds four regions to.
-    (ema : Bool := false) : String :=
+    (ema : Bool := false)
+    -- ▶▶ **`sd` — STOCHASTIC DEPTH, `dropPath := 0.05`** — RSB-A2/A1's remaining regulariser
+    -- (`verified_side_quest_counterparts.md` §4a's second ⛔, 2026-08-27). Sixteen `tensor<Bxf32>`
+    -- mask inputs, one per bottleneck, drawn on the HOST beside the augmentation seed.
+    --
+    -- ⚠⚠ **THE SITE IS ON THE RESIDUAL BRANCH AND THE OBVIOUS GATE CANNOT SEE THAT** — at an
+    -- all-ones mask a site on the block OUTPUT is bit-identical. `bnkIdFwdB`'s docstring carries
+    -- the argument and `scripts/misplace_drop_sites.py` is the control.
+    -- ⚠ The BACKWARD is where it actually bites: the dropped cotangent feeds the branch and the
+    -- UNDROPPED one feeds the skip. See `bnkIdBackGradB`.
+    -- ⚠ It reaches `r34AdamVariant` — the `wx`/`clip`/`bf16` rule, and here the marker also tells
+    -- the DRIVER to append 16 mask slots, so a flag that stopped at the emission would produce a
+    -- graph the driver feeds none.
+    (sd : Bool := false) : String :=
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
@@ -633,7 +737,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let go : StateM Nat String := do
     -- ═══ forward: THE SHARED CHAIN, not a second copy (see `r50FwdChainB`) ═══
-    let fw ← r50FwdChainB B nClasses epsStr q bf16
+    let fw ← r50FwdChainB B nClasses epsStr q bf16 sd
     let q5 := q
     let q4 := 2 * q5
     let q3 := 2 * q4
@@ -696,22 +800,22 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cbd,  nbd)  ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
     let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 2048) (h := q5) (w := q5) (.operand nDgi z2048))
     -- ═══ 16 block backwards, in reverse ═══
-    let b16 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b2" f16 nDgp bf16
-    let b15 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b1" f15 b16.dx bf16
-    let b14 ← bnkStridedBackGradB B 1024 512 2048  q5 epsStr "s4b0" f14 b15.dx bf16
-    let b13 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b5" f13 b14.dx bf16
-    let b12 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b4" f12 b13.dx bf16
-    let b11 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b3" f11 b12.dx bf16
-    let b10 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b2" f10 b11.dx bf16
-    let b9  ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b1" f9  b10.dx bf16
-    let b8  ← bnkStridedBackGradB B  512 256 1024 q4 epsStr "s3b0" f8  b9.dx bf16
-    let b7  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b3" f7  b8.dx bf16
-    let b6  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b2" f6  b7.dx bf16
-    let b5  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b1" f5  b6.dx bf16
-    let b4  ← bnkStridedBackGradB B  256 128  512 q3 epsStr "s2b0" f4  b5.dx bf16
-    let b3  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b2" f3  b4.dx bf16
-    let b2  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b1" f2  b3.dx bf16
-    let b1  ← bnkProjBackGradB    B   64  64  256 q2 epsStr "s1b0" f1  b2.dx bf16
+    let b16 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b2" f16 nDgp bf16 (dpAt sd 15)
+    let b15 ← bnkIdBackGradB      B      512 2048  q5 epsStr "s4b1" f15 b16.dx bf16 (dpAt sd 14)
+    let b14 ← bnkStridedBackGradB B 1024 512 2048  q5 epsStr "s4b0" f14 b15.dx bf16 (dpAt sd 13)
+    let b13 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b5" f13 b14.dx bf16 (dpAt sd 12)
+    let b12 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b4" f12 b13.dx bf16 (dpAt sd 11)
+    let b11 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b3" f11 b12.dx bf16 (dpAt sd 10)
+    let b10 ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b2" f10 b11.dx bf16 (dpAt sd 9)
+    let b9  ← bnkIdBackGradB      B      256 1024 q4 epsStr "s3b1" f9  b10.dx bf16 (dpAt sd 8)
+    let b8  ← bnkStridedBackGradB B  512 256 1024 q4 epsStr "s3b0" f8  b9.dx bf16 (dpAt sd 7)
+    let b7  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b3" f7  b8.dx bf16 (dpAt sd 6)
+    let b6  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b2" f6  b7.dx bf16 (dpAt sd 5)
+    let b5  ← bnkIdBackGradB      B      128  512 q3 epsStr "s2b1" f5  b6.dx bf16 (dpAt sd 4)
+    let b4  ← bnkStridedBackGradB B  256 128  512 q3 epsStr "s2b0" f4  b5.dx bf16 (dpAt sd 3)
+    let b3  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b2" f3  b4.dx bf16 (dpAt sd 2)
+    let b2  ← bnkIdBackGradB      B       64  256 q2 epsStr "s1b1" f2  b3.dx bf16 (dpAt sd 1)
+    let b1  ← bnkProjBackGradB    B   64  64  256 q2 epsStr "s1b0" f1  b2.dx bf16 (dpAt sd 0)
     -- ═══ stem backward ═══
     let (cDmp, nDmp) ← pretty B (.maxPool3s2BackB (N := B) (c := 64) (h := q2) (w := q2) nStr z112 (.operand b1.dx z56))
     let (cDsr, nDsr) ← pretty B (.selectPosB nStn z112 (.operand nDmp z112))
@@ -876,9 +980,13 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let accSSig := (if accOn then ", %aup: tensor<f32>, %akeep: tensor<f32>" else "") ++
                  (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "")
   let statSig := String.intercalate ", " (r50StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
+  -- ⚠ The 16 drop masks go AFTER the BN stats and BEFORE `%onehot`, which is where the driver
+  -- packs them (`dropSlots` trails `runningBnStats` in `trainAdamSched`'s `pbuf`). The labels ride
+  -- separately, so `%onehot` stays last.
   let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
     aSig ++ eSig ++
     ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++ accSSig ++ ", " ++ statSig ++
+    r50DropSig B sd ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
   let accTy := (if accOn then ["tensor<f32>", "tensor<f32>"] else []) ++
@@ -889,7 +997,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let inner : String := go.run' 0
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
-  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip bce wdStr bf16 ema}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip bce wdStr bf16 ema sd}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1619,6 +1727,68 @@ end Proofs.StableHLO
 -- weights, which stay f32 in every bf16 render in this tree — so a bf16 twin of these would differ
 -- from the fp32 twin in no line of the EMA block at all, while doubling the artifacts a coverage
 -- gate has to carry. ▶ Render them the day a bf16 A2 run is actually scheduled, not before.
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- § RSB-A2 and A1 **COMPLETE** — EMA shadow AND stochastic depth, 2026-08-27.
+--
+-- ⭐⭐⭐ **THESE CLOSE `sec:r50_a2_a1_cost`'s TWO ⛔ ROWS.** §4a found the eight A2/A1 renders it had
+-- just landed were not faithful A2/A1, because two of A2's regularisers had no expression here:
+-- model EMA (the fourth-region collision, now a fifth region) and stochastic depth `dropPath :=
+-- 0.05` (no importer on the residual family, now sixteen sites). Both are in these four.
+--
+-- ⚠⚠ **AND THE sd HALF NEEDED A FIX ON THE *REFERENCE* SIDE FIRST.** `bottleneck_block` drew
+-- `jax.random.bernoulli(drop_key, keep_prob)` with NO shape argument — a SCALAR shared by the whole
+-- batch, so the branch was dropped for every example or for none. timm 1.0.28's `drop_path` is
+-- explicitly *"per sample"*, and this render is too. Nine emitters across `jax/Jax/Codegen.lean`
+-- now call the per-example `_drop_branch` that file already contained for the transformer family.
+-- Measured, because the two forms have the SAME EXPECTATION: at batch 64 and keep 0.95 the old form
+-- dropped all 64 or none on **200/200** steps and the new one drops a mean of 3.23.
+-- See `runs/2026-08-27-r50-a2-a1-ema-fifth-region/droppath_shape.log` and
+-- `planning/verified_side_quest_counterparts.md` §6b.
+--
+-- ⚠ **WHAT IS STILL NOT A2**: ghost-BN group. These render 8×64, i.e. 64-image ghosts, against the
+-- reference's 4 × 512-global (128 per device on four cards). Immaterial to a wall clock; a
+-- different regime for any accuracy claim. That is now the ONLY delta, and it is the one §4a
+-- listed as ⚠ rather than ⛔.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp8x64wxclipdropbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc8x64wxclipdropbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp8x64wxclipdropbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc8x64wxclipdropbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
+
+-- ⚠ THE FOUR sd SPELLINGS. `drop` is the SIXTH marker on these names and it goes in the MIDDLE —
+-- between `clip` and `bce`, N3's grammar — so unlike `ema` it has neighbours on both sides.
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "" false true true == "emalambaccdp8x64wxclipdropbce"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "" false true true == "emalambacc8x64wxclipdropbce"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" false true true == "emalambaccdp8x64wxclipdropbcewd001"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+         true true true "0.01" false true true == "emalambacc8x64wxclipdropbcewd001"
+-- ⚠⚠ **THE CONCATENATIONS, not the marker.** Three collisions have already shipped in this naming
+-- and every one lived in a PAIR of markers meeting, never in the new marker alone. `clip` ++ `drop`
+-- and `drop` ++ `bce` are the two new adjacencies:
+#guard ("emalambaccdp8x64wxclipdropbce".splitOn "do").length == 1   -- `dr`, not `do`
+#guard ("emalambaccdp8x64wxclipdropbce".splitOn "drop").length > 1
+#guard ("emalambaccdp8x64wxclipdropbce".splitOn "rms").length == 1
+#guard ("emalambaccdp8x64wxclipdropbce".splitOn "acc").length > 1
+#guard "emalambaccdp8x64wxclipdropbce".startsWith "ema"
+-- ⚠ and `drop` must not reach the `k` parse, which reads digits between `acc`/`accdp` and the `x`.
+#guard ("emalambaccdp8x64wxclipdropbcewd001".splitOn "acc").length > 1
+-- ▶ `accK`/`nRegions`/`sdOn` are the CONSUMING side and live in `VerifiedTrain.lean`, which imports
+-- this file — pinned for these names in `tests/TestVariantPredicates.lean`.
 
 -- ⚠ THE FOUR EMA SPELLINGS, pinned on the PRODUCING side like every one below them. The `ema`
 -- prefix is the OUTERMOST marker any name in this file carries, and it goes in FRONT of a string

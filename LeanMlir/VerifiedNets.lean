@@ -565,6 +565,22 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
     .dense 2048 1000 ]
   blurb := "ResNet-50 on full 1000-class ImageNet via the VERIFIED renderer. LAYOUT SKELETON: no render, no proof chain, no artifact yet."
   bnChannels := resnet50Verified.bnChannels
+  -- ▶▶ **STOCHASTIC DEPTH, RSB-A2/A1's `dropPath := 0.05`** (2026-08-27). Sixteen sites, one per
+  -- bottleneck block, on the residual branch — `bottleneck_block` drops `out` and leaves the
+  -- shortcut alone.
+  --
+  -- ⭐ **The index IS the block index here, and unlike EfficientNet that is not a trap** —
+  -- `efficientnetVerified.dropKeeps` carries `#[2,4,6,7,9,10,12,13,14]` because its reference
+  -- advances `dbi` on every MBConv while the drop fires only inside a skip guard, so its keeps are
+  -- UNEVENLY spaced over a denominator of 15. R50 has no such guard: every bottleneck block drops,
+  -- `dbi` advances every block, and the ramp is dense. Stated because the two look identical and
+  -- one of them is a `#[…]` literal for a reason.
+  --
+  -- ⚠ The denominator is `totalDrop − 1 = 15`, not 16 — `jax/Jax/Codegen.lean`'s
+  -- `denom := Nat.max 1 (totalDrop - 1)`. So block 0 keeps 1.0 exactly and block 15 keeps 0.95;
+  -- an off-by-one gives sixteen slightly-wrong keeps that train and descend. Checked against the
+  -- regenerated reference's own call sites: `dpkeys[1], 0.996667` and `dpkeys[3], 0.990000`.
+  dropKeeps := (Array.range 16).map (fun i => 1.0 - 0.05 * i.toFloat / 15.0)
 
 -- ▶ §2k's precondition, and it is FREE here: the derived layout must total the reference's own
 -- reported parameter count. `jax/.lake/build/generated_resnet50_imagenet.py` reports 25,557,032,

@@ -56,6 +56,10 @@
   emalambaccdp8x64wxclipbcewd001 — ema=true rms=false drop=false dropout=false accum=true k=8 → 5 blob regions
   emaaccdp4x64 — ema=true rms=false drop=false dropout=false accum=true k=4 → 5 blob regions
   emaacc4x64 — ema=true rms=false drop=false dropout=false accum=true k=4 → 5 blob regions
+  emalambaccdp8x64wxclipdropbce — ema=true rms=false drop=true dropout=false accum=true k=8 → 5 blob regions
+  emalambacc8x64wxclipdropbce — ema=true rms=false drop=true dropout=false accum=true k=8 → 5 blob regions
+  emalambaccdp8x64wxclipdropbcewd001 — ema=true rms=false drop=true dropout=false accum=true k=8 → 5 blob regions
+  emalambacc8x64wxclipdropbcewd001 — ema=true rms=false drop=true dropout=false accum=true k=8 → 5 blob regions
   acc4x64 — ema=false rms=false drop=false dropout=false accum=true k=4 → 4 blob regions
   accdp8x64 — ema=false rms=false drop=false dropout=false accum=true k=8 → 4 blob regions
   acc2x128 — ema=false rms=false drop=false dropout=false accum=true k=2 → 4 blob regions
@@ -74,4 +78,4 @@
   momdp64bf16 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
   lamb64 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
   lambdp64 — ema=false rms=false drop=false dropout=false accum=false → 3 blob regions
-✓ 75 variant spellings, 5 axes, no collision
+✓ 79 variant spellings, 5 axes, no collision
