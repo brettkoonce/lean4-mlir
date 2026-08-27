@@ -1,0 +1,15 @@
+gen=generated_resnet50_imagenet_rsbfaithful.py devices=4 micro=512 accum=4 effective=2048
+params=25,557,032  fp32 weights=97 MiB  (x4 replicated state = 390 MiB/device)
+running-BN net: threading bn_state through train_step
+E0827 20:25:05.960586 2881527 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+  step 0:  23947.0 ms  loss=0.7098
+  step 1:    715.4 ms  loss=0.7035
+  step 2:    713.9 ms  loss=0.6971
+  step 3:    715.3 ms  loss=0.6908
+  step 4:    709.6 ms  loss=0.6845
+  step 5:    713.7 ms  loss=0.6783
+  step 6:    709.2 ms  loss=0.6721
+  step 7:    712.9 ms  loss=0.6660
+  step 8:    711.2 ms  loss=0.6599
+  step 9:    711.5 ms  loss=0.6538
+RESULT generated_resnet50_imagenet_rsbfaithful.py micro=512 accum=4 eff=2048 res=160 ms/step=711.5 peak=4.30GiB limit=11.68GiB min/epoch=7.4 hr/80ep=9.9 hr/300ep=37.1

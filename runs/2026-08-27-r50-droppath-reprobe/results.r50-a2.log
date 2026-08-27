@@ -1,0 +1,17 @@
+gen=generated_resnet50_imagenet_a2accum.py devices=4 micro=512 accum=4 effective=2048
+params=25,557,032  fp32 weights=97 MiB  (x4 replicated state = 390 MiB/device)
+running-BN net: threading bn_state through train_step
+E0827 20:25:53.624781 2883760 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 20:25:54.481183 2883749 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0827 20:25:56.648905 2883749 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+  step 0:  31612.0 ms  loss=0.7088
+  step 1:   1360.3 ms  loss=0.7024
+  step 2:   1357.9 ms  loss=0.6961
+  step 3:   1358.7 ms  loss=0.6898
+  step 4:   1361.6 ms  loss=0.6836
+  step 5:   1360.2 ms  loss=0.6773
+  step 6:   1359.7 ms  loss=0.6712
+  step 7:   1358.5 ms  loss=0.6651
+  step 8:   1355.5 ms  loss=0.6590
+  step 9:   1361.1 ms  loss=0.6529
+RESULT generated_resnet50_imagenet_a2accum.py micro=512 accum=4 eff=2048 res=224 ms/step=1359.7 peak=7.48GiB limit=11.68GiB min/epoch=14.2 hr/80ep=18.9 hr/300ep=70.8

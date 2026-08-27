@@ -1,0 +1,3 @@
+r50-a3|RESULT generated_resnet50_imagenet_rsbfaithful.py micro=512 accum=4 eff=2048 res=160 ms/step=711.5 peak=4.30GiB limit=11.68GiB min/epoch=7.4 hr/80ep=9.9 hr/300ep=37.1|43s
+r50-a2|RESULT generated_resnet50_imagenet_a2accum.py micro=512 accum=4 eff=2048 res=224 ms/step=1359.7 peak=7.48GiB limit=11.68GiB min/epoch=14.2 hr/80ep=18.9 hr/300ep=70.8|56s
+ALL DONE
