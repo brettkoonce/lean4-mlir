@@ -23,6 +23,9 @@
 #                  that genuinely differs between paths, so it is a function:
 #                    verified path -> cat the trainer's <ckpt>.epoch file
 #                    jax path      -> newest <base>_e<N>.state.npz
+#   RECIPE       — the recipe this job trains, and it must EQUAL the second dash-field
+#                  of the job's own filename (see THE NAME IS A CLAIM below). Required
+#                  for the ImageNet runners, i.e. any job whose name ends `-<n>gpu`.
 # OPTIONAL:
 #   ENV_EXTRA    — array of KEY=VAL passed to the run
 #   REST_EPOCHS  — space-separated epochs to rest after (default: none)
@@ -42,10 +45,55 @@ CONF="scripts/jobs/${JOB}.conf"
 
 # ── defaults, then the job overrides them ──────────────────────────────────────
 REST_EPOCHS=""; REST_SECS=1800; TEMP_MAX=0; TEMP_RESUME=""; STALL_SECS=1800
-MAX_ATTEMPTS=60; ENV_EXTRA=(); PRECHECK=""
+MAX_ATTEMPTS=60; ENV_EXTRA=(); PRECHECK=""; RECIPE=""
 # shellcheck disable=SC1090
 . "$CONF"
 : "${TEMP_RESUME:=$(( TEMP_MAX > 12 ? TEMP_MAX - 12 : TEMP_MAX ))}"
+
+# ── THE NAME IS A CLAIM, SO CHECK IT ──────────────────────────────────────────
+# A job is `<net>-<recipe>[-<axis>...]-<n>gpu`, and `<recipe>` is not decorative.
+#
+# ⛔ WHY THIS EXISTS. `-imagenet-` used to stand where the recipe belongs, meaning "this
+# net's default", and the default differed per net — so `r34-imagenet-4gpu` (2018-style,
+# 30 ep) and `r50-imagenet-4gpu` (RSB-A3 without wx/clip) were the same shape of name for
+# two unrelated recipes and nothing anywhere said so. That is the same failure the book's
+# own reproduction command hit from the other side, where a 2018 run streamed RSB-A2's
+# RandAugment for want of one variable (2859cd7).
+#
+# ⭐ A convention nothing enforces is precisely how the job namespace drifted from the
+# recipe namespace in the first place, so this is a refusal and not a comment.
+#
+# ⚠ Scoped to the ImageNet runners by the `-<n>gpu` suffix. `selftest` is not one, and a
+# net whose name contains a dash would break the field split — none does.
+case "$JOB" in
+  *-[0-9]gpu|*-[0-9][0-9]gpu)
+    job_recipe="${JOB#*-}"; job_recipe="${job_recipe%%-*}"
+    if [ -z "$RECIPE" ]; then
+      echo "⛔ $CONF sets no RECIPE."
+      echo "   A job named <net>-<recipe>[-<axis>...]-<n>gpu must declare the recipe it"
+      echo "   trains, so the name can be checked against it. This one's name claims"
+      echo "   \`$job_recipe\`; add \`RECIPE=$job_recipe\` if that is right."
+      exit 1
+    fi
+    if [ "$job_recipe" != "$RECIPE" ]; then
+      echo "⛔ $CONF says RECIPE=$RECIPE but its filename claims \`$job_recipe\`."
+      echo "   The name is what a reader picks a job by, so the two cannot disagree:"
+      echo "   rename the file to <net>-$RECIPE-[...]-<n>gpu, or fix RECIPE."
+      exit 1
+    fi
+    # If the driver takes a recipe selector, it must select the recipe the name claims.
+    # ⚠ Only R50's driver reads LEAN_MLIR_RECIPE today; for every other net this is
+    # vacuous, and deliberately so — the slot is checked the day a second recipe lands.
+    env_recipe="$(printf '%s
+' "${ENV_EXTRA[@]}" | sed -n 's/^LEAN_MLIR_RECIPE=//p')"
+    if [ -n "$env_recipe" ] && [ "$env_recipe" != "$RECIPE" ]; then
+      echo "⛔ $CONF sets LEAN_MLIR_RECIPE=$env_recipe under RECIPE=$RECIPE."
+      echo "   The driver would stream \`$env_recipe\`'s augmentation under a job named"
+      echo "   for \`$RECIPE\`, which is not recoverable from a loss curve."
+      exit 1
+    fi
+    ;;
+esac
 
 RUNDIR="${RUNDIR:-/tmp/supervise_${JOB}}"
 mkdir -p "$RUNDIR"
