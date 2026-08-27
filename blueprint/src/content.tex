@@ -5595,7 +5595,7 @@ the AlphaGo Zero paper
 reinforcement learning with a large residual network of
 convolutions.
 
-\section{Side quest: ResNet-50, RSB-A3 (100 epochs)}
+\section{ResNet-50 on ImageNet: the 2018 recipe and RSB-A3}
 
 \imagenetphasenote
 
@@ -5611,16 +5611,7 @@ top-1 / $\mathbf{93.79\%}$ top-5 at 100 epochs, clearing the paper's
 $78.1\%$ and the $78.05\%$ that \texttt{timm}'s own
 \texttt{resnet50.a3\_in1k} weights score under the same protocol.
 
-\textbf{Compute + the BN-sharding axis.} The run trained on the same
-four usable NVIDIA RTX 4060 Ti (CUDA, bf16 matmul and convolution) as
-the ResNet-34 bf16 run, at effective batch 2048. Four 16\,GB cards
-cannot hold that batch on one device, so it is split $4\times512$ across
-the GPUs and accumulated $4\times$ to reach 2048, which means
-BatchNorm normalizes over each $512$-image micro-batch (``Ghost-BN''),
-not the full $2048$; a single big-memory card would hold the whole batch and
-normalize over all $2048$ at once. Same network, same effective
-batch. That is the BN statistic group, and it is the one axis on which these
-two runs are not directly comparable to \texttt{timm}'s own:
+\prosesection{The JAX lowerer}
 
 \begin{center}
 \begin{tabular}{l l l r r r r r}
@@ -5637,13 +5628,9 @@ GPU & Recipe & BN regime & Per epoch & Ep. & Total & top-1 & top-5 \\
 scored over all $50{,}000$ validation images. A3 accumulates $4\times512$ to
 reach effective batch $2048$, so BatchNorm normalizes per $512$-image
 micro-batch (``Ghost-BN''); the 2018 recipe runs a true global batch of $256$.
-Each wall-clock includes three 30-minute thermal duty-cycle cooldowns --- the
-4060\,Ti box is duty-cycled on long runs --- and the A3 run logged zero
-PCIe/AER interruptions across all 100 epochs.
 
 \medskip\noindent The first row is the \textbf{2018 recipe} on the same
-network; its verified peer remains a \texttt{[TODO]}. It is what makes
-the recipe comparison symmetric: both paths get both recipes, so a difference
+network. It is what makes the recipe comparison symmetric: both paths get both recipes, so a difference
 between two rows is attributable to the one thing that changed between them.
 Here that difference is $\mathbf{+1.31}$ points for A3 ($76.95 \to 78.26$),
 with architecture, box, protocol and denominator all held fixed --- and A3
@@ -5705,7 +5692,7 @@ evaluation are together what moved this section's ResNet-50 onto
 which is why the $78.26\%$ is quotable against \texttt{timm}'s $78.05\%$
 rather than an improvement on it.
 
-\subsection*{Phase 4: RSB-A3 on the verified path}
+\prosesection{The PJRT lowerer}
 \label{sec:r50_phase4}
 
 The same recipe on the \emph{verified} codegen path, which is not a
@@ -5722,45 +5709,41 @@ eval@224.
 \hline
 GPU & Recipe & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (fp32)  & 2018 (90 ep)    & Ghost-BN (64) & \withheld      & \withheld     & \withheld & \withheld \\
+4$\times$ 3060 (bf16)    & 2018 (90 ep)    & Ghost-BN (64) & $\sim$20.5 min & $\sim$30.7 hr & $\mathbf{77.07\%}$ & $\mathbf{93.48\%}$ \\
 4$\times$ 4060 Ti (fp32)  & RSB-A3 (100 ep) & Ghost-BN (64) & $\sim$19.2 min & $\sim$32.1 hr & $\mathbf{77.91\%}$ & $\mathbf{93.84\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The first row is the same network on the \emph{2018} recipe, a
-\texttt{[TODO]}, and it is the row that makes the comparison below a controlled
+\noindent The first row is the same network on the \emph{2018} recipe, and it
+is the row that makes the comparison below a controlled
 one: it is bit-for-bit
 the ResNet-34 configuration of \S\ref{sec:r34_phase4} with the bottleneck
 backbone substituted, so the only difference between it and the A3 row is the
 recipe. It runs with:
 
 \begin{verbatim}
-CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
+CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   SHIM_WORKERS=8 PJRT_FFI_RESIDENT=1 \
-  LEAN_MLIR_VARIANT=momdp64 LEAN_MLIR_BATCH=64 LEAN_MLIR_EPOCHS=90 \
-  LEAN_MLIR_BASE_LR_U=100000 \
+  LEAN_MLIR_VARIANT=momdp64bf16 LEAN_MLIR_BATCH=64 LEAN_MLIR_EPOCHS=90 \
+  LEAN_MLIR_RECIPE=2018 LEAN_MLIR_BASE_LR_U=100000 \
   .lake/build/bin/resnet50-imagenet-verified data
 \end{verbatim}
 
-\noindent Three things bite on that run, all of them silent, all three
-measured on its ResNet-34 twin in 2026 August. \emph{Rebuild the binary
-first} --- an executable older than the timm-protocol change reproduces the
-pre-re-run number with nothing in the log to say so. \emph{Clear any
-checkpoint from a different schedule} --- resuming a shorter run's state
-into the 90-epoch cosine fuses two learning-rate curves.
-And note \texttt{LEAN\_MLIR\_EPOCHS} \emph{sets} the schedule where
-\texttt{LEAN\_MLIR\_MAX\_EPOCHS} only caps it, so the latter cannot reach
-this tier from a shorter default; \texttt{totalSteps} is what the cosine
-anneals over. \texttt{scripts/jobs/r34-imagenet-90ep-4gpu.conf} encodes all
-three as a refusing PRECHECK and is the template to copy.
+\noindent \textbf{\texttt{LEAN\_MLIR\_RECIPE} selects the augmentation.}
+\texttt{shimScript} is a field on the network, not on the recipe, so the
+$224^2$ spec has one shim per recipe and picking the wrong one trains the
+right optimizer on the wrong data. \texttt{scripts/jobs/} encodes that and the
+schedule knobs as refusing prechecks.
 
-\textbf{How to quote this.} It lands $0.35$ points behind the JAX
+\textbf{How to quote these.} The A3 row lands $0.35$ points behind the JAX
 reference above ($78.26\%$ / $93.79\%$) and $0.14$ behind \texttt{timm}'s own
 $78.05\%$, measured over the same $50{,}000$ images under the same protocol.
 The recipe is not yet A3 to the letter --- the ledger below is what is in and
 what is still out --- so it is \emph{the A3 recipe on the verified path, with
-these deltas}, rather than ``RSB-A3 reproduced''.
+these deltas}, rather than ``RSB-A3 reproduced''. The 2018 row needs no such
+hedge: it is the recipe in full, and it lands $0.12$ points \emph{ahead} of its
+own JAX reference.
 
 \begin{center}
 \begin{tikzpicture}
@@ -5836,17 +5819,58 @@ carries that a bare A3 transcription would not:
     touches the batch statistics. The largest known difference between the
     two paths, and \emph{untested}: the $-0.35$ points between them is its
     upper bound only if nothing else contributes.
-  \item fp32, not bf16 --- most of the $2\times$ wall clock, a throughput
-    lever rather than a fidelity one.
+  \item fp32, not bf16. The 2018 row above \emph{is} bf16, but the only bf16
+    ResNet-50 render is that recipe's --- the LAMB\,+\,BCE shape at $160^2$
+    has no bf16 twin to run, the same gap that blocks A2 and A1. Worth a
+    measured $1.54\times$ on this network, so most of the $2.1\times$ wall
+    clock against the JAX row: a throughput lever rather than a fidelity one.
   \item $0.08\%$ of each epoch dropped ($8 \nmid 5004$); structural to $k$.
   \item Mixup $\lambda$ drawn host-side from NumPy, so agreement is
     distributional, never per-step.
-  \item \emph{Verification, not recipe:} tier-1B is undecided under BCE.
-    The cause is a CE-calibrated tolerance, \emph{not} the cancellation
-    residual claimed here previously --- repeated runs refute that
-    (tier-1B is stable to $2\%$, and its separation from the control
-    population holds at $42$--$45\times$). Tier-1A and tier-2 pass.
 \end{itemize}
+
+\prosesection{The two paths, side by side}
+
+Both recipes have now been run on both lowerers, which is what makes this a
+grid rather than a pair of anecdotes.
+
+\begin{center}
+\begin{tabular}{@{}l r r r @{\qquad} r r r@{}}
+\hline
+ & \multicolumn{3}{c}{\textbf{2018} (90 ep)} & \multicolumn{3}{c}{\textbf{RSB-A3} (100 ep)} \\
+ & JAX & PJRT & $\Delta$ & JAX & PJRT & $\Delta$ \\
+\hline
+top-1        & $76.95$ & $\mathbf{77.07}$ & $+0.12$ & $78.26$ & $\mathbf{77.91}$ & $-0.35$ \\
+top-5        & $93.44$ & $\mathbf{93.48}$ & $+0.04$ & $93.79$ & $\mathbf{93.84}$ & $+0.05$ \\
+precision    & bf16 & bf16 & & bf16 & fp32 & \\
+box          & 4060\,Ti & 3060 & & 4060\,Ti & 4060\,Ti & \\
+wall clock   & $24.0$\,h & $30.7$\,h & & $15.1$\,h & $32.1$\,h & \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent \textbf{The two lowerers agree within $0.35$ points of top-1 on both
+recipes}, and both agree to within $0.05$ on top-5. That is the claim the grid
+licenses and the reason the second lowerer exists: with one backend the proofs
+decorate a code generator and nothing checks the generator, while a second
+independent lowering makes the verified path the artifact and JAX the oracle it
+is checked against.
+
+\medskip\noindent \textbf{And the recipe delta replicates.} A3 beats 2018 by
+$+1.31$ points on the JAX lowerer and by $+0.84$ on the verified one. Agreement
+at a single configuration can be a coincidence of that configuration; a
+\emph{difference} that reproduces across two independent implementations is
+harder to arrange by accident, and it is what a one-row comparison cannot show.
+
+\medskip\noindent \textbf{What this is not evidence of.} Each cell is one run
+at one seed, and $0.35$ points is inside what seed variance alone produces on
+ImageNet --- the agreement is consistent with the lowerers matching, not proof
+that they do. The A3 column trains at $160$ and evaluates at $224$ while the
+2018 column does both at $224$, so the recipe delta confounds resolution with
+recipe, by A3's own design. And the PJRT column is not internally uniform: its
+2018 entry is bf16 on the four-3060 box, its A3 entry fp32 on the four-4060\,Ti
+box. Neither difference touches the within-recipe comparison, which is the one
+the table is for, but both would matter to anyone reading down the PJRT column.
 
 \subsection*{What A3 changes from the 2018 recipe}
 \label{sec:r50_a3_vs_2018}
@@ -5894,36 +5918,26 @@ noisier training converge, with FixRes buying back the compute the
 extra epochs would cost. Every one of these is a one-line
 \texttt{TrainConfig} change on the same verified backbone.
 
-\subsection*{What A2 and A1 would cost}
+\section{Side quest: RSB-A2 and RSB-A1}
 \label{sec:r50_a2_a1_cost}
 
 A3 is the cheap tier. The other two exist as recipes --- \texttt{a2-accum}
 and \texttt{a1}, selected positionally (\texttt{resnet50-imagenet a2-accum
-data}) --- smoke-tested rather than trained. What stops them is the budget:
+data}) --- smoke-tested rather than trained. What stops them is the renderer:
 
 \begin{center}
-\begin{tabular}{@{}l c c l l@{}}
+\begin{tabular}{@{}l c c l l l@{}}
 \hline
-tier & epochs & train res & verified wall clock & top-1 \\
+tier & epochs & train res & renderer work & verified wall clock & top-1 \\
 \hline
-A3 (\texttt{rsb-faithful}) & 100 & $160$ & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
-A2 (\texttt{a2-accum})     & 300 & $224$ & \texttt{[todo: bf16 renderer + benchmarks]} & --- \\
-A1 (\texttt{a1})           & 600 & $224$ & \texttt{[todo: bf16 renderer + benchmarks]} & --- \\
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & --- & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
+A2 (\texttt{a2-accum})     & 300 & $224$ & LAMB\,+\,BCE at $224$, bf16 & \texttt{[todo]} & $79.8\%$ (paper) \\
+A1 (\texttt{a1})           & 600 & $224$ & same render as A2          & \texttt{[todo]} & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Four 4060\,Ti, effective batch 2048 as $512\times4$. Only the A3
-row has been run on the verified path --- it is \S\ref{sec:r50_phase4}'s
-fp32 result. A2 and A1 render and step but have no benchmark, and the reason
-is the same one \S\ref{sec:convnext_sb} and \S\ref{sec:vit_sb} hit: the only
-bf16 R50 render is \texttt{resnet50in\_momdp64bf16}, the 2018 recipe's, so the
-LAMB\,+\,BCE tiers have no bf16 twin to time. What is known without running
-them: accumulation is per-epoch free and holds peak at the bs512 figure, so
-both tiers fit a 12\,GB card where the single-forward \texttt{a2-true-2048}
-would want $\sim$160\,GB, and running A2 at bs512 with a scaled LR instead is not a cheap
-A2 but the starved-LAMB regime that gave A3 $40.8\%$ in place of $78.1\%$. The
-papers quote $79.8\%$ and $80.4\%$.
+\noindent Effective batch 2048 as $512\times4$.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
