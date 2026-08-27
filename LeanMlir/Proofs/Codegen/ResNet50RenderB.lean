@@ -1440,6 +1440,22 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true))
+
+-- ── …and A3's bf16 twin, 2026-08-27. ⭐ **THE 160 TIER WAS THE ONLY ONE WITHOUT ONE**, which is
+-- §4c's rule showing up on the recipe that has actually RUN: A2 and A1 got the full precision
+-- square the day they were rendered, and A3 — the tier with a 77.91% result and a 32.1 h wall
+-- clock behind it — did not. An accident of ordering, exactly as that rule predicts.
+-- ⚠ It does NOT restate the committed run: 77.91% is fp32 and stays fp32. This prices the tier's
+-- other precision, and the pricing is what it is for — 191.6 → 121.6 ms/step on four cards,
+-- `runs/2026-08-27-r50-a2-a1-verified-eta/`.
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxclipbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+    (wdExclude := true) (gradClip := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxclipbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+    (wdExclude := true) (gradClip := true) (bf16 := true))
 -- Its single-device peer, for the reason the `wx` pair has one: `r50-accum-tie` and
 -- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only clip would be
 -- ungateable — and the clip is exactly the axis worth gating, because the ONE thing that

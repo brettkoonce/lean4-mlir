@@ -5929,9 +5929,9 @@ A3 is the cheap tier. The other two are recipes --- \texttt{a2-accum} and
 \hline
 tier & epochs & train res & verified render & verified wall clock & top-1 \\
 \hline
-A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $\sim$32.1 hr & $\mathbf{77.91\%}$ \\
-A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & $\sim$171 hr (est) & $79.8\%$ (paper) \\
-A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $\sim$342 hr (est) & $80.4\%$ (paper) \\
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $32.1$ hr, bf16 $\sim$23 & $\mathbf{77.91\%}$ \\
+A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & $\sim$95 hr (bf16) & $79.8\%$ (paper) \\
+A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $\sim$190 hr (bf16) & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
 \end{center}
@@ -5940,8 +5940,7 @@ A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $\sim$342 hr (es
 precisions, at either factorisation of the effective batch $2048$ ---
 $512\times4$ on the reference, $8\times64$ or $4\times128$ here. \textbf{A1 is not
 ``the same render as A2''}: the decay is baked, so its $0.01$ against A2's $0.02$
-is a re-render, kept on its own path so one line among $18{,}000$ cannot be
-lost.
+is a re-render, kept apart so one line among $18{,}000$ cannot be lost.
 
 \medskip\noindent \textbf{The two regularisers these renders used to be missing
 are now in them.} The ledger \S\ref{sec:r50_phase4} keeps for A3, before anything
@@ -5973,8 +5972,8 @@ Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 
 \noindent \textbf{Both were structural, and A3 met neither} --- its recipe
 switches both \emph{off}. The shadow and the accumulator used to be the
-\emph{same} fourth region of $[\theta|m|v|\cdot]$, and accumulation is not
-optional at $224^2$ on a $16$\,GB card: EMA was unreachable, not unrendered.
+\emph{same} fourth region of $[\theta|m|v|\cdot]$, and accumulation is not optional
+at $224^2$: EMA was unreachable, not unrendered.
 
 \medskip\noindent Stochastic depth's site sits on the residual \emph{branch}, and
 \textbf{no structural check can tell that from a site on the block output}: at an
@@ -6022,8 +6021,7 @@ arrangement; the last $4\times$ needs synchronised batch-norm --- a new operator
 a changed backward, a variance that does not average, and $53$ collectives a
 step.
 
-\medskip\noindent \textbf{And what the phase-2 peers cost}, on the same four
-cards with A3 as the control:
+\medskip\noindent \textbf{And what the phase-2 peers cost}, A3 the control:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r@{}}
@@ -6037,12 +6035,13 @@ A1 (600 ep) & $224$ & $1{,}368$ & $14.3$ & $142.5$\,h (5.9\,d) \\
 \end{tabular}
 \end{center}
 
-\noindent A1 and A2 share a step figure because the trainers differ in three
-constants. \textbf{The verified column is measured, not scaled from theirs}: on
-the same four cards A3's graph runs $191.6$\,ms/step and A2's $341.1$, and A3's
-completed run fixes the trainer at $1.20\times$ the bare device step --- $34.2$
-verified minutes an epoch, so $171$ and $342$ hours. In bf16 at $4\times128$ it is
-$18.9$, which puts A2 under four days and A1 under eight.
+\noindent \textbf{And the verified column is measured, not scaled from theirs.}
+A3's graph runs $191.4$\,ms/step on four cards and the complete A2 at $4\times128$
+bf16 runs $376.9$, while A3's finished run fixes what the trainer adds at
+$38.8$\,ms per $256$ images --- \emph{additive}, since the device figures already
+contain the all-reduce and only the host's blob patch sits outside. That is $19.0$
+verified minutes an epoch, and run backwards it puts A3 itself at $23$ hours
+rather than $32.1$.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
