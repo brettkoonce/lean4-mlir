@@ -1772,6 +1772,46 @@ that scheduled this work expected ~1.29× for S, on the reasoning that T's ratio
 4×bs32 trainer figure on real ImageNet. The trainer number dilutes the graph's — T reads 1.30×
 here and 1.18× there, B 1.34× and 1.20× — so do not quote 1.39× as a wall-clock saving.
 
+### 21.5c ✅ ViT-**S** and ViT-**B** — and S is the largest bf16 win in the repo
+
+`vitsin` and `vitbin` carried fp32 only. Rendered 2026-08-27 (§4c) — one `(bf16 := true)` each,
+no new operator, because S and B are Tiny WIDENED and every bf16 op they need is one Tiny already
+instantiates at a narrower shape.
+
+⚠⚠ `bf16Conv`/`bf16ConvW` stay FALSE, inherited from Tiny's bf16 render and load-bearing: §19.1
+measured this net's stem weight gradient at **0.19×** its f32 peer (a 209×209 window with no bf16
+cuDNN kernel), and the width axis does not touch the stem. The one op where bf16 is a LOSS on this
+architecture is out of the emit at every size, which is why a green gate here means what it usually
+means.
+
+⭐⭐ **These are 4-REPLICA measurements**, because ViT-S and ViT-B have no single-device render —
+`scripts/bf16_device_step.py` grew a `--replicas` flag for exactly this (see below). All-reduce
+included, four 4060 Ti:
+
+| model | per-dev bs | global | steps/epoch | fp32 | bf16 | speedup |
+|---|---|---|---|---|---|---|
+| ViT-Tiny | 128 | 512 | 2,502 | 171.6 ms | 96.4 ms | 1.78× |
+| **ViT-S** | 128 | 512 | 2,502 | **464.0 ms** | **245.5 ms** | **1.89×** |
+| ViT-B | 32 | 128 | 10,009 | 383.8 ms | 273.7 ms | 1.40× |
+
+⭐ **ViT-S's 1.89× is the largest bf16 speedup measured anywhere in this repo**, ahead of R50's
+1.55×. The shape of it: Tiny is narrow enough (`D = 192`) that its matmuls underuse the tensor
+cores even in bf16, S's `D = 384` suits them better, and B pays a **346 MB f32 all-reduce** every
+step (86.6M parameters) at only bs32 — a fixed cost in both arms, which is what pulls its ratio
+back down.
+
+⚠ **ViT-T's 4-replica ratio (1.78×) is not its committed 1.42×** and neither is wrong: 1.42× is the
+TRAINER's, at 232 → 163 ms. Trainer/device is 1.352 in fp32 here, against ConvNeXt's 1.362 —
+which is the cross-check that says the new `--replicas` path measures the same thing the old one
+does at a different device count.
+
+⛔ **ViT-B GETS NO PROJECTED WALL CLOCK, deliberately.** T is the only ViT with a measured trainer
+figure, and B runs at ¼ T's per-device batch, so T's overhead multiplier does not transfer:
+applied to B it returns a 1.12× trainer speedup, i.e. BELOW B's own 1.40× device ratio, which no
+overhead model may do. An additive model scaled by images/step gives 1.37× and a total 100 h
+lower. Two defensible models 100 h apart is not an estimate. ▶ ViT-S is at T's batch, so its
+projection stands.
+
 ### 21.6 ⭐⭐ ConvNeXt-**B** — where the memory question is real, and where bf16 buys headroom
 
 ConvNeXt-B (88.59M parameters, 3.1× Tiny) is the first size at which fitting is a question rather

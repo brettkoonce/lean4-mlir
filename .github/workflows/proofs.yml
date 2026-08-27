@@ -269,8 +269,10 @@ jobs:
               verified_mlir/vitsin_drop_fwd.mlir \
               verified_mlir/vitsin_fwd.mlir \
               verified_mlir/vitbin_adamdp32x4wxclipdrop_train_step.mlir \
+              verified_mlir/vitbin_adamdp32x4wxclipdropbf16_train_step.mlir \
               verified_mlir/vitbin_fwd.mlir \
               verified_mlir/vitsin_adamdp128x4wxclipdrop_train_step.mlir \
+              verified_mlir/vitsin_adamdp128x4wxclipdropbf16_train_step.mlir \
               verified_mlir/vitin_adamdp256x2wxclipdrop_train_step.mlir \
               verified_mlir/vitin_adamdp128x2wxclipdrop_train_step.mlir \
               verified_mlir/vitin_adamwxclipdropbf16_train_step.mlir \

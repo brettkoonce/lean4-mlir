@@ -858,6 +858,21 @@ def vitDropFwdBanner : String :=
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims))
 
+-- ⭐ **S's bf16 peer** (`verified_side_quest_counterparts.md` §4c). ViT-Tiny carried one and S did
+-- not, the same accident of ordering ConvNeXt-S had. One `(bf16 := true)`, no new operator: S is
+-- Tiny WIDENED, so every bf16 op it needs is one Tiny already instantiates, at a wider shape.
+-- ⚠⚠ `bf16Conv`/`bf16ConvW` STAY FALSE, inherited from Tiny's bf16 render and load-bearing:
+-- §19.1 measured this net's stem weight gradient at **0.19×** its f32 peer — a 209×209 window
+-- with no bf16 cuDNN kernel — and the width axis does not touch the stem. So the one op where
+-- bf16 is a LOSS on this architecture stays out of the emit at every size, which is why a green
+-- gate here is allowed to mean what it usually means.
+#eval IO.FS.writeFile "verified_mlir/vitsin_adamdp128x4wxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitsin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims) (bf16 := true))
+#guard "vitsin_adamdp128x4wxclipdropbf16_train_step" ==
+  "vitsin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16" ++ "_train_step"
+
 #eval IO.FS.writeFile "verified_mlir/vitsin_drop_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitsin_drop_fwd" 1000 (sd := true) (V := Proofs.StableHLO.vitSDims))
 
@@ -874,6 +889,17 @@ def vitDropFwdBanner : String :=
   (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp32x4wxclipdrop_train_step" "32.0" 4 1000
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 32) (V := Proofs.StableHLO.vitBDims))
+
+-- ⭐ **B's bf16 peer.** Same two lines as S's, and the same `bf16Conv := false` inheritance.
+-- ⚠ The batch marker moves with the render — `32x4`, not `128x4` — so the variant string, the
+-- entry point and `LEAN_MLIR_VARIANT` stay one string derived from one `vbB`. A hand-written
+-- `adamdp128x4…bf16` here would name a graph rendered at 32 and the shim would refuse the call.
+#eval IO.FS.writeFile "verified_mlir/vitbin_adamdp32x4wxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp32x4wxclipdropbf16_train_step" "32.0" 4
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 32) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
+#guard "vitbin_adamdp32x4wxclipdropbf16_train_step" ==
+  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 32 4 false true true true ++ "bf16" ++ "_train_step"
 
 #eval IO.FS.writeFile "verified_mlir/vitbin_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitbin_fwd" 1000 (V := Proofs.StableHLO.vitBDims))
