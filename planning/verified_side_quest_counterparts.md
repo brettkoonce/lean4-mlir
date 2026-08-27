@@ -39,14 +39,58 @@ renames, the job renames, the `RECIPE=` precheck, and the Track 4 restructure. �
 below are marked up with what happened — including **three places the survey contradicted this
 plan**, each flagged ⚠⚠ where it bites.
 
-⬅⬅ **NEXT SESSION, decided 2026-08-27: go deeper on A2/A1 (§4a), and scope ViT accumulation
-(§4d).** Items 1–4 of §6 are all closed; what is left is the two features neither of them could
-flag their way past. Read §6a below before either.
+✅ **§6a's EMA HALF LANDED 2026-08-27**, in two commits (`c4fa680` the region arithmetic + its
+gate, `799865b` the renderer, driver and four renders). The fifth region exists, `emaOn` and `accOn`
+are independent, and `emalambaccdp8x64wxclipbce` ties at **1.20e-07** against the reference's own
+`ema_update`. Evidence: `runs/2026-08-27-r50-a2-a1-ema-fifth-region/`.
+
+⬅⬅ **NEXT: the OTHER A2/A1 delta — stochastic depth 0.05 on the residual family — and it opened a
+repo-wide finding that has to be settled before it can be rendered.** See §6b. ViT accumulation
+(§4d) is untouched and its TPU question still stands.
 
 ## 6a. THE TWO FEATURES — what a next session is actually picking up
 
 Everything landed so far was a parameter that already existed. These two are not, and each has one
 thing worth knowing before any code is written.
+
+### ✅ A2/A1 deeper — the EMA fifth region. DONE 2026-08-27, and §6a's estimate held
+
+**Landed as scoped.** `nRegions` and `nScalars` are sums over two independent axes (3/4/5 and
+3/5/7), the layout is `[θ|m|v|G|E]`, and `trainAdamSched`'s refusal came off LAST. Four renders:
+A2 and A1 × {1, 4} replicas.
+
+⭐ **The three things this section predicted were all true.** `nRegions`/`nScalars` were two
+one-line functions and the 26 call sites were written against them; `emalambaccdp8x64wxclipbce`
+already parsed with no new marker; the refusal was four lines. What it did NOT predict:
+
+* ⚠⚠ **The EMA must advance on APPLY micro-batches ONLY, and nothing in §6a saw it.** The reference
+  EMAs once per OPTIMIZER step — `ema_update` follows the `train_step` call and JAX's accumulation
+  lives *inside* that call — while this driver invokes the graph per micro-batch. So on an
+  accumulate micro-batch the driver hands the graph `%emad = 1, %oemad = 0`, which is `e' = e`
+  exactly. ▶ Got wrong it is not merely a k× faster filter: θ is FROZEN on those micro-batches, so
+  k−1 of every k updates pull the shadow toward a weight that did not move. It trains and descends.
+  ⭐ Costs nothing in the graph — the decay was already a runtime scalar, because it is
+  warmup-corrected. Baking 0.9999 would have forced a second artifact.
+* ⚠⚠ **"26 reference sites, none of them a hardcoded count" was the DRIVER's sites only.** Four
+  gates — `TestViTDpCheck`, `TestConvNeXtDpCheck`, `TestEfficientNetDpCheck`, `TestR50GradCheck` —
+  each carried a PRIVATE COPY of the predicates, and two of them used a SUBSTRING test where the
+  driver uses a prefix one. That is `TestVariantPredicates`' own header one level up: *a gate on a
+  transcription is not a gate on the thing transcribed.* All four now call `VerifiedVariant`.
+* ⚠ **`TestVariantPredicates`' region guard needed more than a new row.** It read `nRegions v ==
+  (if e || accOn v then 4 else 3)` — true of every spelling that existed and silently true of a
+  five-region one. Rewritten as a SUM over the two axes, with a check that all three buckets are
+  POPULATED, so the guards cannot be vacuously true of a table with no five-region row.
+* ⭐ **The tie row was cheap and its controls were not obvious.** `opt_step_tie.py`'s
+  `emalambacc8wxclip` runs `a2accum.py`'s own `ema_update`, and derives `%emad`/`%oemad` from it too
+  (`ema_update(1, 0) = d` exactly) rather than transcribing the warmup formula this repo has already
+  got wrong once. ⚠ Its sharpest control: a shadow reading the INCOMING θ instead of θ′ is off by
+  **1.1%** — four orders above the gate, invisible to a 1e-2 tolerance, and it trains.
+* ⚠ **No bf16 twins, and that is reasoned rather than skipped.** The shadow runs on MASTER weights,
+  which stay f32 in every bf16 render in this tree, so a bf16 twin would differ from its fp32 peer
+  in no line of the EMA block. §4c's "a tier without its precision peer reads as a decision" is why
+  the reason is written down instead of left as a gap.
+
+*The original scoping follows, since it is what the work was done against.*
 
 ### ⭐ A2/A1 deeper — the EMA fifth region, and it is smaller than §4a implied
 
@@ -75,6 +119,60 @@ currently a two-way split and would go green on a graph it had never seen.
 ⚠ The other A2/A1 delta, **stochastic depth 0.05**, is unrelated work: `DropPath.lean` exists and
 ENet/ConvNeXt render off it, but neither residual renderer imports it and `r34AdamVariant` has no
 `drop` marker. Cheaper than the region work and independent of it.
+
+## 6b. ⛔ STOCHASTIC DEPTH ON THE RESIDUAL FAMILY — blocked on a REFERENCE defect, not on renderer work
+
+§6a called this *"unrelated work … cheaper than the region work and independent of it"*. The
+renderer half is indeed small. What it ran into is not.
+
+⚠⚠⚠ **EVERY CONVOLUTIONAL NET'S JAX REFERENCE DRAWS A SCALAR BERNOULLI PER BLOCK PER STEP, SHARED
+BY THE WHOLE BATCH — and the verified renders are per-EXAMPLE.** Read off `jax/Jax/Codegen.lean`,
+not assumed:
+
+| block emitter | line | mask |
+|---|---|---|
+| `bottleneck_block` / `_down` (ResNet-50) | 703, 714, 725, 737 | `bernoulli(key, keep)` — **scalar** |
+| `convnext_block` | 1204 | `bernoulli(key, keep)` — **scalar** |
+| `mbconv_block` (EfficientNet) | 860, 914 | `bernoulli(key, keep)` — **scalar** |
+| `uib_block` (MNv4) | 1036 | `bernoulli(key, keep)` — **scalar** |
+| `_drop_branch` (ViT/DeiT) | 1150 | `bernoulli(key, keep, (B,1,…,1))` — **per-example** ✅ |
+
+⭐ **The verified side is the one that is right, and the pinned spec says so.** timm 1.0.28's
+`drop_path` (read from `.venv-timm`, not from memory):
+
+```python
+shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
+```
+
+`planning/stochastic_depth.md` quotes `_drop_branch` — the per-example one — as *the* reference and
+builds the whole op family (`dropPathB`, `F32.dropScales`, the per-example shard rule) around it.
+So the four conv emitters are the outlier, and the same file already contains the correct
+definition eleven hundred lines away.
+
+⚠ **This is not hypothetical for artifacts that already ship.** 26 committed `convnext*` and
+`efficientnet*` drop renders are per-example against a per-block-scalar oracle. The ViT family's 12
+are fine. Nothing in the tree records the divergence.
+
+▶ **Why it blocks R50 rather than merely annoying it.** A verified render's gate is agreement with
+the JAX oracle. Rendering R50's stochastic depth per-example — the only shape the kit's op and the
+driver's `F32.dropScales` have, and the correct one — produces an artifact that cannot be tied
+against its own reference. Rendering it scalar would mean a second drop op, faithful to a defect.
+
+**The fork, and it is a scoping decision rather than a technical one:**
+
+| | what it costs | what it leaves |
+|---|---|---|
+| **A. Fix the four emitters to call `_drop_branch`, then render** | one definition in one file; regenerate 9 references | every drop render tie-able; ⚠ changes what a future ConvNeXt/ENet JAX run computes |
+| **B. Render per-example, record the divergence, leave JAX alone** | the render only | a knowingly-wrong oracle for 26+4 artifacts |
+| **C. Leave sd unrendered; A2/A1 keep the one remaining delta** | nothing | §4a's second ⛔ stands |
+
+⚠ **What A does NOT do**: it does not invalidate a *measured* number. The affected references are
+JAX-side, and no ImageNet result in the book was produced by a JAX run with `dropPath` active —
+`sec:convnext_sb`'s figures are step costs and the verified ConvNeXt runs are the verified path's.
+That should be re-checked before acting on it, not taken from this table.
+
+---
 
 ### ⚠ ViT accumulation (§4d) — answer the hardware question first
 
@@ -681,10 +779,15 @@ Non-negotiable, and in this order:
 4. ✅ **The three bf16 twins (§4c) — ALL DONE 2026-08-27.** ConvNeXt-S (`e17b61c`) at **1.39×**,
    ViT-S and ViT-B (`d78feb6`) at **1.89×** and 1.40×, book in `93ec229`. ConvNeXt-B's and R50's
    benchmarks fell out of the same sessions. §4c is closed.
-5. ⬅ **NEXT — A2/A1 deeper (§4a → §6a) and ViT-B accumulation (§4d → §6a).** The two features
-   nothing could flag its way past. §6a scopes both; the EMA fifth region is smaller than §4a
-   implied (two one-line functions, 26 call sites written against them, and the variant spelling
-   already parses), and §4d's TPU question should be answered before any renderer work.
+5. ✅ **A2/A1's EMA half — DONE 2026-08-27.** `c4fa680` (the region arithmetic + its gate) and
+   `799865b` (the renderer, the driver, four renders, the tie row). The fifth region exists and
+   `emalambacc8wxclip` ties at 1.20e-07. §6a's estimate held; what it missed is the apply-only EMA
+   cadence and four gates carrying private copies of the predicates. See §6a.
+   ⛔ **A2/A1's OTHER delta — stochastic depth — is BLOCKED on a reference defect**, not on
+   renderer work: four JAX block emitters draw a per-block SCALAR bernoulli where timm and the
+   verified renders are per-example. §6b states the fork. It reaches 26 already-shipping ConvNeXt
+   and EfficientNet artifacts, so it is a scoping decision rather than a drive-by fix.
+   ⬅ **ViT-B accumulation (§4d → §6a) is untouched** and its TPU question still stands.
 6. **EfficientNetV2 (§4e)** — its own project, after the rest. ⚠ Its row is OUT of the book's
    Track-4 side-quest table as of `93ec229` (brett, 2026-08-27): a "no spec" row in a table of
    rendered artifacts reads as a commitment rather than a possibility. The ch.7 bestiary entry
