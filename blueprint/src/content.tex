@@ -11053,69 +11053,74 @@ the same twelve blocks at a wider model dimension: $D = 192/3$ heads,
 $384/6$, $768/12$, with the MLP at $4D$ throughout. Depth never moves.
 
 \begin{center}
-\begin{tabular}{@{}l c c l@{}}
+\begin{tabular}{@{}l c c r r@{}}
 \hline
-model & $D$ / heads & params & verified cost \\
+model & $D$ / heads & params & per-dev bs & 4 cards: fp32 $\to$ bf16 \\
 \hline
-ViT-Ti & $192$ / 3  & $5.7$\,M         & \S\ref{sec:vit_imagenet} \\
-ViT-S  & $384$ / 6  & $22{,}050{,}664$ & \texttt{[todo: bf16 renderer + benchmarks]} \\
-ViT-B  & $768$ / 12 & $86{,}567{,}656$ & \texttt{[todo: bf16 renderer + benchmarks]} \\
+ViT-Ti & $192$ / 3  & $5.7$\,M         & $128$ & $171.6 \to 96.4$\,ms \;($1.78\times$) \\
+ViT-S  & $384$ / 6  & $22{,}050{,}664$ & $128$ & $464.0 \to 245.5$\,ms \;($\mathbf{1.89\times}$) \\
+ViT-B  & $768$ / 12 & $86{,}567{,}656$ & $32$  & $383.8 \to 273.7$\,ms \;($1.40\times$) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The param counts \texttt{\#guard} against DeiT-S's $22.05$\,M and
-DeiT-B's $86.57$\,M. Neither variant has been benchmarked on the verified path,
-and \texttt{vitbin} renders at global batch 128 only --- the one place in
-Part~I where a model's size, not its recipe, dictates how it must be run.
+\noindent Counts \texttt{\#guard} against DeiT-S's $22.05$\,M and DeiT-B's
+$86.57$\,M. These are the graph's times, all-reduce in and no trainer around
+them, at four replicas because S and B have no single-device render at all.
+\texttt{vitbin} runs at global $128$: the one place in Part~I where a model's
+size rather than its recipe dictates how it must be run.
+
+\medskip\noindent \textbf{ViT-S's $1.89\times$ is the largest bf16 payoff in the
+book}, ahead of ResNet-50's $1.66\times$ measured the same way, and the spread
+across one architecture is the interesting part. Tiny is narrow enough that its matmuls underuse the
+tensor cores even in bf16; S's $D = 384$ suits them; B pays a $346$\,MB
+\emph{fp32} all-reduce every step at batch $32$, a fixed cost in both arms.
+The one op where bf16 \emph{loses} here --- the stem weight gradient, at
+$0.19\times$ for want of a bf16 kernel at a $209\times209$ window --- is kept out
+of the emit at every size, which is why all three ratios are above one.
 
 \medskip\noindent Where \S\ref{sec:convnext_sb} found a split between free and
-costly, ViT is uniformly the costly kind: every variant moves $D$, so every
-variant moves dimension literals. The batched renderer is parameterised and
-carries all three; \texttt{ViTRender.lean}, the per-example peer, is still
-pinned at Tiny by roughly $154$ of them, which is why there is no ViT-S or
-ViT-B Imagenette demo to sit beside \S\ref{sec:vit_runit}'s.
+costly, ViT is uniformly costly: every variant moves $D$, so every variant moves
+dimension literals. The batched renderer carries all three;
+\texttt{ViTRender.lean}, the per-example peer, is still pinned at Tiny by roughly
+$154$ of them, which is why there is no ViT-S or ViT-B Imagenette demo.
 
-\medskip\noindent \textbf{Neither has a bf16 render yet.} ViT-Tiny's bf16
-twin runs $1.46\times$ its fp32 peer --- the largest bf16 payoff of any net in
-Part~I, and most of it from one line, the dots' result type
-(\S\ref{sec:precision}) --- and neither S nor B has one. So a third of the
-verified wall clock for both is sitting behind a per-net emit that needs no
-new proved operator, and until it lands there is nothing honest to put in the
-\emph{verified} cost column. Of the four variants in this chapter and
-\S\ref{sec:convnext_sb}, only ConvNeXt-B is ported.
-
-\medskip\noindent \textbf{Status: rendered, not trained}, the same as ConvNeXt's
-pair --- \texttt{vits-\allowbreak imagenet-\allowbreak verified} and
-\texttt{vitb-\allowbreak imagenet-\allowbreak verified} emit, tie and step. The
-only accuracy calibration that exists is this repo's
-ViT-Ti at $70.28\%$ against DeiT-Ti's $72.2\%$, a $1.9$-point recipe gap
-(\S\ref{sec:vit_imagenet}). DeiT quotes $79.8\%$ for S and $81.8\%$ for B; every
-item missing from that $1.9$ is \emph{regularization} and S has four times
-Tiny's capacity, so the gap plausibly widens rather than holds.
-
-\medskip\noindent \textbf{What the phase-2 peers cost.} The same probe
-\S\ref{sec:convnext_sb} uses, at global batch 512 --- 2{,}502 steps per epoch,
-the DeiT recipe's own figure --- with Tiny as the control:
+\medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
+including $37.5$\,s per epoch of evaluation and checkpointing:
 
 \begin{center}
-\begin{tabular}{@{}l r r r r r@{}}
+\begin{tabular}{@{}l r r r@{}}
 \hline
-phase-2 net & ms/step & device peak & min/epoch & 80 epochs & 300 epochs \\
+verified, 4 cards & global & steps/epoch & 300 epochs \\
 \hline
-ViT-Ti & $124$ & $2.89$\,GiB & $5.2$  & $6.9$\,h  & $25.8$\,h (1.1\,d) \\
-ViT-S  & $290$ & $7.72$\,GiB & $12.1$ & $16.1$\,h & $60.4$\,h (2.5\,d) \\
-ViT-B  & $701$ & $5.36$\,GiB & $29.2$ & $39.0$\,h & $146.1$\,h (6.1\,d) \\
+ViT-Ti & $512$ & $2{,}502$  & $51.5 \to 37.1$\,h \;(measured) \\
+ViT-S  & $512$ & $2{,}502$  & $134 \to 90$\,h \;($5.6 \to 3.7$\,d, derived) \\
+ViT-B  & $128$ & $10{,}009$ & --- \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent \textbf{B is the only row that is not a single forward}: global 512 in
-one shot peaks at $11.41$ of the allocator's $11.68$\,GiB and dies, so it runs as
-$4\times128$ gradient accumulation --- which is why its peak sits \emph{below}
-S's. Compute-only again, and the omitted pipeline costs more here than in
-Chapter~\ref{chap:layernorm}: ViT-Ti's live epoch is the $7.6$ minutes
-\S\ref{sec:vit_imagenet} quotes against this probe's $5.2$.
+\noindent \textbf{ViT-B gets no projected total.} Tiny is the only ViT with a
+measured trainer step, and the trainer costs a near-constant multiple of the
+graph --- which is what lets S's row be derived, since S runs at Tiny's batch.
+B does not: at a quarter the batch, Tiny's multiplier returns a $1.12\times$
+trainer speedup, \emph{below} B's own $1.40\times$ device ratio, which no
+overhead model may do. An additive model gives $1.37\times$ and a total a
+hundred hours lower, and two defensible models that far apart is not an estimate.
+
+\medskip\noindent \textbf{Status: rendered, not trained}, the same as ConvNeXt's
+pair --- \texttt{vit-s-\allowbreak imagenet-\allowbreak verified} and
+\texttt{vit-b-\allowbreak imagenet-\allowbreak verified} emit, tie and step. The
+only accuracy calibration that exists is this repo's ViT-Ti at $70.28\%$ against
+DeiT-Ti's $72.2\%$, a $1.9$-point recipe gap (\S\ref{sec:vit_imagenet}). DeiT
+quotes $79.8\%$ for S and $81.8\%$ for B; every item missing from that $1.9$ is
+\emph{regularization} and S has four times Tiny's capacity, so the gap plausibly
+widens rather than holds.
+
+\medskip\noindent The phase-2 peers, same box at global $512$, cost $25.8$,
+$60.4$ and $146.1$ hours over $300$ epochs compute-only. \textbf{B is the only
+one that is not a single forward}: global $512$ in one shot peaks at $11.41$ of
+the allocator's $11.68$\,GiB and dies, so it runs as $4\times128$ accumulation.
 
 \chapter{Bestiary of Architectures}
 \label{chap:bestiary}
@@ -13867,23 +13872,6 @@ lake build resnet34-verified-adam
     pick a card, as with any GPU program.
 \end{enumerate}
 
-\prosesection{Running the same binary on IREE}
-
-Every verified trainer is one executable carrying both trusted lowerers,
-picking between them at run time:
-
-\begin{verbatim}
-.lake/build/bin/resnet34-verified-adam data                   # XLA (default)
-LEAN_MLIR_LOWERER=iree ... resnet34-verified-adam data        # IREE
-\end{verbatim}
-
-The IREE path additionally needs \texttt{iree-compile} on \texttt{\$PATH}
-(\texttt{pip install iree-base-compiler}), the IREE runtime built per
-\texttt{IREE\_BUILD.md}, and \texttt{ffi/libiree\_ffi.so}. It also wants
-\texttt{IREE\_BACKEND} and \texttt{IREE\_CHIP}, for example
-\texttt{IREE\_BACKEND=rocm IREE\_CHIP=gfx1100}, or \texttt{cuda} with
-\texttt{sm\_86} (Ampere), \texttt{sm\_89} (Ada), \texttt{sm\_90} (Hopper).
-
 \section*{Track 3: One-command demo tiers}
 \label{sec:getting_started_track3}
 
@@ -13896,16 +13884,11 @@ lake run cifar        # ch.4 cifar8w: SGD/momentum/Adam x bn/no-bn  (~19 min)
 lake run imagenette   # the Part-I nets at 224^2, 80-epoch AdamW      (~7 h)
 \end{verbatim}
 
-Those are XLA wall-clocks on one 7900 XTX, and they are why the default moved:
-the same three tiers on IREE take $\sim$5~minutes, $\sim$34~minutes and
-$\sim$42~hours. The Imagenette figure covers the five nets with recorded
-timings. MobileNetV4 and ResNet-50 joined the tier more recently and are not in
-that total, so budget somewhat more.
-
-Each has an \texttt{-iree} twin (\texttt{lake run mnist-iree} and so on)
-which runs the same binaries with the IREE lowerer selected ---
-\texttt{imagenette-iree} covers the five nets with recorded IREE timings, not
-all seven. The tiers bundle these targets, and any one builds on its own:
+Those are XLA wall-clocks on one 7900 XTX. The Imagenette figure covers the
+five nets with recorded timings; MobileNetV4 and ResNet-50 joined the tier more
+recently and are not in that total, so budget somewhat more. Each tier also has
+an \texttt{-iree} twin --- see \emph{The second lowerer} at the end.
+The tiers bundle these targets, and any one builds on its own:
 
 \begin{itemize}
   \item \texttt{mnist}: \texttt{mnist-linear-verified},
@@ -13999,8 +13982,7 @@ confusing ``compiled for N replicas'' error. \texttt{PJRT\_REPLICAS} configures
 the shim's client and compile options, and \texttt{LEAN\_MLIR\_REPLICAS} makes
 the Lean driver call the data-parallel invoke. The job configs set
 both. Collectives exist only on the PJRT path, so the data-parallel runs are
-XLA-only, and the IREE shim refuses a DP entry point outright rather than
-silently running single-device.
+XLA-only.
 
 \prosesection{Side quests}
 
@@ -14020,9 +14002,8 @@ column says what each one is missing.
 \texttt{mobilenetv4-imagenet-verified} & Conv-M            & tied; \texttt{mnv4-default-4gpu}, untrained & \S\ref{sec:mnv4_side_quest} \\
 \texttt{convnext-s-imagenet-verified}  & \withheld         & rendered fp32 + bf16; untrained & \S\ref{sec:convnext_sb} \\
 \texttt{convnext-b-imagenet-verified}  & \withheld         & rendered fp32 + bf16; untrained & \S\ref{sec:convnext_sb} \\
-\texttt{vit-s-imagenet-verified}       & \withheld         & rendered fp32; bf16 owed & \S\ref{sec:vit_sb} \\
-\texttt{vit-b-imagenet-verified}       & \withheld         & rendered fp32 @ global $128$; bf16 + accum owed & \S\ref{sec:vit_sb} \\
-EfficientNetV2-S                       & \withheld         & no spec & \S\ref{sec:enet_side_quests} \\
+\texttt{vit-s-imagenet-verified}       & \withheld         & rendered fp32 + bf16; untrained & \S\ref{sec:vit_sb} \\
+\texttt{vit-b-imagenet-verified}       & \withheld         & rendered fp32 + bf16 @ global $128$; accumulation owed & \S\ref{sec:vit_sb} \\
 \end{tabular}
 \end{center}
 
@@ -14034,81 +14015,58 @@ changed when the gate arrived --- the same bytes became reportable, which is the
 whole point. What the row still says is \emph{untrained}: a job config and a
 verified collective are not a result.
 
-\section*{Choosing a lowerer}
-
-Both lowerers consume the same proven StableHLO and are the same trusted tier.
-Neither is verified, and swapping them changes nothing about what is
-proved. They differ in what they are good at:
-
-\begin{itemize}
-  \item \textbf{XLA/PJRT} is faster here, by 2.3$\times$ on the MNIST linear
-    net, 4.3$\times$ on the MLP and 4.9$\times$ on the CNN, because it
-    dispatches convolutions and matmuls to the vendor's hand-tuned kernel
-    libraries. The gap tracks how much work those kernels get.
-  \item \textbf{IREE} generates every kernel itself, which is why it runs where
-    no vendor library exists, including Vulkan, Metal, bare CPU and custom
-    accelerators. That is also why its runtime is 392$\times$ smaller: 1.3\,MB
-    against the XLA plugin's 505\,MB, which bundles MIOpen, rocBLAS and RCCL.
-\end{itemize}
-
-\noindent\textbf{The size gap is not a trust gap.} It is tempting to read
-1.3\,MB against 505\,MB as one lowerer asking you to trust less code, and the
-reading does not survive contact with what the two actually do. Most of the
-XLA plugin is vendor kernel libraries it \emph{calls}, where IREE
-\emph{generates} those kernels instead. Both bodies of code are unverified. Choosing the small
-runtime relocates the trusted base rather than shrinking it, so bytes on disk
-are measuring packaging, not risk.
-
-\medskip\noindent\textbf{You do not need IREE to train.} XLA is the default and
-runs every network in this book. What IREE is needed for is
-\emph{reproducing the verification}: the differential oracles of
-Appendix~\ref{app:verification} run the Lean-side pipeline through IREE and
-compare against a JAX reference running through XLA, and it is the fact that
-those are two independent compilers that makes the comparison worth anything.
-Some oracle binaries are IREE-only for that reason and will refuse to start on
-the XLA backend. So a training run wants one lowerer, and a full verification
-run wants both.
-
 \section*{Common troubleshooting}
 
 \begin{itemize}
-  \item \textbf{\texttt{no lowerer shim could be loaded}.} Neither
-    \texttt{ffi/libpjrt\_ffi.so} nor \texttt{ffi/libiree\_ffi.so} was found.
-    Build the PJRT one with the \texttt{gcc} line in Track 2, which needs
-    nothing but libc.
+  \item \textbf{\texttt{no lowerer shim could be loaded}.} No
+    \texttt{ffi/libpjrt\_ffi.so}. Build it with the \texttt{gcc} line in
+    Track 2, which needs nothing but libc. (The same error names
+    \texttt{libiree\_ffi.so} when you have asked for that lowerer.)
   \item \textbf{\texttt{\$PJRT\_PLUGIN is set but did not load}}, or no plugin
     found. The XLA plugin is missing or is built for a different CUDA/ROCm
     version than the one installed. Installing the plugin wheel into the repo's
     own \texttt{.venv}, as in Track 2, puts it where the shim looks by default.
-  \item \textbf{\texttt{HAL device not found}} on an IREE run. IREE has two
-    knobs and they must agree: \texttt{IREE\_BACKEND} is the
-    \emph{compile} target and \texttt{IREE\_DEVICE} is the \emph{runtime}
-    device. Setting only \texttt{IREE\_BACKEND=llvm-cpu} compiles for CPU and
-    then looks for a GPU to run it on, which reports as this error naming a
-    \texttt{local} target. For CPU you want both:
-    \texttt{IREE\_BACKEND=llvm-cpu IREE\_DEVICE=local-task}. (Failing that, the
-    runtime genuinely lacks that HAL driver and needs rebuilding.)
   \item \textbf{\texttt{lake build} fails with Mathlib cache errors.} Run
     \texttt{lake exe cache get} to populate the local cache. Without it the
     first build compiles all of Mathlib from source ($\sim$45 min), and with it
     oleans download in $\sim$30 seconds.
-  \item \textbf{\texttt{iree-compile failed} on ResNet-50.} Expected.
-    R50's rendered maxpool backward is a
-    \texttt{stablehlo.select\_and\_scatter} that IREE does not compile at this
-    size. R50 is an XLA-only net, so drop \texttt{LEAN\_MLIR\_LOWERER=iree}.
-  \item \textbf{A stale \texttt{ffi/libiree\_ffi.so}} reports as
-    \texttt{not a usable shim}. The loader requires every entry point the Lean
-    side calls, so a shim built before one was added is rejected whole rather
-    than failing at the call. Rebuild it per \texttt{IREE\_BUILD.md}, which is
-    two \texttt{gcc} lines against the runtime archives. The file is a build
-    output and is not tracked, so a fresh clone starts without one.
-  \item \textbf{First IREE compile appears stuck.} It isn't. ResNet-34's
-    full training-step compile takes 10--15 minutes. Watch RAM, and if it is
-    climbing the compile is progressing. The XLA path compiles the same graph
-    in seconds, in process.
   \item \textbf{A run refuses to start over a missing shim} (ImageNet tier).
     Run \texttt{scripts/gen\_shims.sh}.
 \end{itemize}
+
+\section*{The second lowerer}
+
+Everything above runs on XLA, which is the default and needs nothing from this
+section. There is a second trusted lowerer, \textbf{IREE}, and the reason to
+know it exists is not that you might train on it.
+
+\medskip\noindent Both consume the same proven StableHLO and sit in the same
+trusted tier; neither is verified, and swapping them changes nothing about what
+is proved. XLA is faster here --- $2.3\times$ on the MNIST linear net,
+$4.9\times$ on the CNN --- because it dispatches to the vendor's hand-tuned
+kernels, where IREE generates every kernel itself. That is also why IREE's
+runtime is $392\times$ smaller, $1.3$\,MB against the XLA plugin's $505$\,MB.
+\textbf{The size gap is not a trust gap}: most of the plugin is vendor kernel
+libraries it \emph{calls}, where IREE generates the equivalent, and both bodies
+of code are unverified. Choosing the small runtime relocates the trusted base
+rather than shrinking it.
+
+\medskip\noindent \textbf{What IREE is for here is the oracles.} The
+differential checks of \S\ref{sec:jax_pipeline} lower the Lean side through IREE
+and compare against a JAX reference running through XLA, and it is the fact that
+those are two independent compilers --- different code generation, different
+runtime, different kernels --- that makes agreement between them evidence of
+anything. Some oracle binaries are IREE-only for that reason and refuse to start
+on the XLA backend. So a training run wants one lowerer and a full verification
+run wants both, and \S\ref{sec:jax_pipeline} is where the second one earns its
+place, including the asymmetry it leaves behind.
+
+\medskip\noindent Selecting it is \texttt{LEAN\_MLIR\_LOWERER=iree}, and every
+Track 3 tier has an \texttt{-iree} twin that does so (\texttt{lake run
+mnist-iree}, and so on). It additionally needs \texttt{iree-compile} on
+\texttt{\$PATH}, the runtime built per \texttt{IREE\_BUILD.md}, and
+\texttt{ffi/libiree\_ffi.so}. Data-parallel runs are XLA-only --- collectives
+exist only on the PJRT path --- so Track 4 is not available on it.
 
 \chapter{On Verification}
 \label{app:verification}
