@@ -24,6 +24,10 @@ as ⚠ rather than ⛔.
 
 ---
 
+⚠⚠ **THE `8×64` ARTIFACTS ARE GONE** (2026-08-27) — superseded by `4×128`, the reference's own
+factorisation, which doubles the batch-norm group AND runs faster. The measurements below stay
+because they are what licensed the move; the artifacts do not.
+
 ## The artifacts
 
 | artifact | replicas | baked `%wd` | regions |

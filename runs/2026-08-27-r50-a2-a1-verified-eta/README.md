@@ -5,6 +5,10 @@ section closed with an extrapolation: *"scaling by the one tier where both paths
 ($19.2$ verified minutes per epoch against $7.5$) puts a verified A2 near seven days and A1 near
 fifteen."* This replaces that with a measurement.
 
+⚠⚠ **THE `8×64` ROWS ARE SUPERSEDED** — those sixteen artifacts were deleted 2026-08-27. They
+stay in the table because they are what the comparison rests on: `4×128` being faster on both
+precisions is only visible against them.
+
 ## Method
 
 **A3 is the anchor, and it is the only tier that can be.** It is the one recipe with BOTH a
