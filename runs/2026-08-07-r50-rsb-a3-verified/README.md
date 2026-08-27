@@ -8,7 +8,7 @@ about, lowered through `ffi/pjrt_ffi.c`, no Python at run time. Companion to
   BCE-with-logits × gradient accumulation k=8, 4 replicas × per-replica batch 64 =
   effective batch 2048, train@160 / eval@224, mixup α0.1 / cutmix α1.0, RandAugment
   m6-mstd0.5-inc1, lr 0.008, wd 0.02, cosine + 5-epoch warmup.
-- **Job**: `scripts/supervise.sh r50-imagenet-4gpu` on 4× RTX 4060 Ti (CUDA, **fp32**).
+- **Job**: `scripts/supervise.sh r50-imagenet-4gpu` (that config is `r50-a3-4gpu` since the 2026-08-27 naming pass; the name here is what the log recorded) on 4× RTX 4060 Ti (CUDA, **fp32**).
 - **Result: 77.43% top-1 / 93.60% top-5** at ep100 (peak ep99, 77.49%), against the phase-2
   reference's 77.22% / 93.34% and paper RSB-A3's 78.1%.
 

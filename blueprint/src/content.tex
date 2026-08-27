@@ -13913,14 +13913,14 @@ renderer as their Imagenette counterparts, in the chapter order
 \begin{tabular}{@{}ll@{}}
 \textbf{Target} & \textbf{Job config} \\[2pt]
 \hline \\[-6pt]
-\texttt{resnet34-imagenet-verified} (2018) & \texttt{r34-imagenet-4gpu} \\
-\texttt{resnet50-imagenet-verified}     & \texttt{r50-imagenet-4gpu} (a3) \\
+\texttt{resnet34-imagenet-verified} (2018) & \texttt{r34-default-4gpu} \\
+\texttt{resnet50-imagenet-verified}     & \texttt{r50-a3-4gpu} (a3) \\
 \texttt{resnet50-imagenet-verified}     & \texttt{r50-2018-4gpu} \\
-\texttt{mobilenetv2-imagenet-verified}  & \texttt{mnv2-imagenet-4gpu} \\
+\texttt{mobilenetv2-imagenet-verified}  & \texttt{mnv2-default-4gpu} \\
 \texttt{mobilenetv4-imagenet-verified}         & \withheld \\
-\texttt{efficientnet-imagenet-verified} & \texttt{enet-imagenet-4gpu} \\
-\texttt{convnext-imagenet-verified}     & \texttt{cnx-imagenet-4gpu} \\
-\texttt{vit-imagenet-verified}          & \texttt{vit-imagenet-4gpu} \\
+\texttt{efficientnet-imagenet-verified} & \texttt{enet-default-4gpu} \\
+\texttt{convnext-imagenet-verified}     & \texttt{cnx-default-4gpu} \\
+\texttt{vit-imagenet-verified}          & \texttt{vit-default-4gpu} \\
 \end{tabular}
 \end{center}
 
@@ -13964,8 +13964,8 @@ These are multi-day runs, so they go through a supervisor that owns the device
 list, the epoch budget and the restart policy:
 
 \begin{verbatim}
-scripts/supervise.sh r34-imagenet-4gpu
-DRY_RUN=1 scripts/supervise.sh r34-imagenet-4gpu   # print the plan, run nothing
+scripts/supervise.sh r34-default-4gpu
+DRY_RUN=1 scripts/supervise.sh r34-default-4gpu   # print the plan, run nothing
 \end{verbatim}
 
 Data parallelism needs both replica knobs, and setting only one fails with a

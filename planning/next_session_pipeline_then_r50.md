@@ -355,11 +355,11 @@ ImageNet scale before tonight, its number would have been ~4× low and believed.
 
 | net | job config | DP shard gate | regularisers in the DP artifact | throughput | other |
 |---|---|---|---|---|---|
-| **resnet34in** | ✅ `r34-imagenet-4gpu.conf` | ✅ `r34-dp-shard` | ✅ | ✅ **224** ms/step (w=1) | **base camp** |
-| **mobilenetv2in** | ✅ `mnv2-imagenet-4gpu.conf` | ✅ `shard-check mobilenetv2in` | ✅ | ✅ **201** ms/step (w=1; w=4 is WORSE) | ⚠ 80-ep re-run owed since the conv-bias swap |
-| **efficientnetin** | ✅ `enet-imagenet-4gpu.conf` | ✅ `shard-check efficientnetin` | ✅ conf points at `emarmsdp64**dropdo**` | ✅ **203** ms/step (w=8, was 2,061) | |
-| **convnextin** | ✅ `cnx-imagenet-4gpu.conf` | ✅ `shard-check convnextin` | ✅ `convnextin_adamdpwxclipdrop` | ✅ **235** ms/step (w=8, was 895); **batch 32 ⇒ 10,009 steps/epoch, double everyone** | ▶ batch-64 rescope is now the top lever — it is compute-bound at 235 |
-| **vitin** | ✅ `vit-imagenet-4gpu.conf` | ⛔ **still only `vit-dp-check`, duplicated-batch — structurally blind to shard OFFSET** | ✅ conf points at `adamdp128x4wxclip**drop**` | ⚠ **665** ms/step (w=8, was 4,348) against a **250** floor — still data-bound | ⚠ w=16 is SLOWER (710); 32 cores cannot make the ~2,048 img/s it wants |
+| **resnet34in** | ✅ `r34-default-4gpu.conf` | ✅ `r34-dp-shard` | ✅ | ✅ **224** ms/step (w=1) | **base camp** |
+| **mobilenetv2in** | ✅ `mnv2-default-4gpu.conf` | ✅ `shard-check mobilenetv2in` | ✅ | ✅ **201** ms/step (w=1; w=4 is WORSE) | ⚠ 80-ep re-run owed since the conv-bias swap |
+| **efficientnetin** | ✅ `enet-default-4gpu.conf` | ✅ `shard-check efficientnetin` | ✅ conf points at `emarmsdp64**dropdo**` | ✅ **203** ms/step (w=8, was 2,061) | |
+| **convnextin** | ✅ `cnx-default-4gpu.conf` | ✅ `shard-check convnextin` | ✅ `convnextin_adamdpwxclipdrop` | ✅ **235** ms/step (w=8, was 895); **batch 32 ⇒ 10,009 steps/epoch, double everyone** | ▶ batch-64 rescope is now the top lever — it is compute-bound at 235 |
+| **vitin** | ✅ `vit-default-4gpu.conf` | ⛔ **still only `vit-dp-check`, duplicated-batch — structurally blind to shard OFFSET** | ✅ conf points at `adamdp128x4wxclip**drop**` | ⚠ **665** ms/step (w=8, was 4,348) against a **250** floor — still data-bound | ⚠ w=16 is SLOWER (710); 32 cores cannot make the ~2,048 img/s it wants |
 | **resnet50in** | ⛔ none | ⛔ none | ✅ AdamW kit | ⛔ unmeasured | ✅ **the net exists and trains** (§3); ⚠⚠ gradient ungated |
 
 ### 1.1 ✅ DONE — job configs, and the regulariser gap closed by pointing at the right artifact

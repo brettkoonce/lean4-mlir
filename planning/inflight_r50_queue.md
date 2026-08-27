@@ -84,7 +84,7 @@ of the duty cycle was ~22 s of recompilation on the first epoch after each pause
 `rsb-faithful`: LAMB, BCE, lr 0.008, effective batch 2048 (4 accum × 512, itself 4 devices × 128),
 100 epochs, train@160 / eval@224, `wdExcludeNormBias` + `gradClipNorm 1.0`.
 
-⭐ **The BCE trivial-solution gate passed.** `scripts/jobs/r50-imagenet-4gpu.conf` warns that BCE
+⭐ **The BCE trivial-solution gate passed.** `scripts/jobs/r50-a3-4gpu.conf` warns that BCE
 admits a degenerate solution — drive every logit to ≈ −8, mean-BCE settles at ≈ 0.008, top-1 pins
 at chance — and that top-1 must be decisively off 0.1 % by ~epoch 5 or the remaining hours are
 wasted. Measured: **ep 5 = 11.62 %, ep 10 = 35.15 %, ep 12 = 36.58 %.**
@@ -100,7 +100,7 @@ about 2 h faster than the sweep's ~17 h estimate.
 
 ## 4. LEG 2 — what it is, and the two traps around it
 
-`scripts/jobs/r50-a3-wxclip-4gpu.conf` (new, deliberately a SIBLING of `r50-imagenet-4gpu.conf`
+`scripts/jobs/r50-a3-wxclip-4gpu.conf` (new, deliberately a SIBLING of `r50-a3-4gpu.conf`
 rather than an edit — that file documents the completed 77.43 % `lambaccdp8x64bce` run in its own
 comments, and repointing its variant would leave those measurements describing a run nobody could
 reproduce).

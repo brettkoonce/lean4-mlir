@@ -352,7 +352,7 @@ touching either the driver or the generator, leaving the split as the single rem
 
 ⭐ **RandAugment does NOT stall the producer here: 169 ms real vs 166 ms synth, a 1.8% gap.** The
 concern was live — A3's shim adds RandAugment m6 where the 224 shim is RRC+hflip only, which is the
-augmentation `scripts/jobs/enet-imagenet-4gpu.conf` blames for EfficientNet's 10× stall — and it was
+augmentation `scripts/jobs/enet-default-4gpu.conf` blames for EfficientNet's 10× stall — and it was
 worth checking rather than assuming. At 8 producers the read is fully hidden.
 
 ⚠⚠ **BUT THAT IS A 1-GPU RESULT AND IT DOES NOT TRANSFER UNEXAMINED.** 64 img / 0.169 s = **379
@@ -410,7 +410,7 @@ open item since §3.3 is closed; the verdict and its bar are §4.0.2. Three prob
 | 1 replica × bs64 | `resnet50in_adam64_train_step` | **317** |
 | 4 replicas, `LEAN_MLIR_BENCH_SYNTH=1` (no shim at all) | `resnet50in_adamdp64_train_step` | **367** |
 
-⭐ **THE THIRD ROW IS THE ONE THAT LICENSES THE OTHER TWO.** `scripts/jobs/enet-imagenet-4gpu.conf`
+⭐ **THE THIRD ROW IS THE ONE THAT LICENSES THE OTHER TWO.** `scripts/jobs/enet-default-4gpu.conf`
 records EfficientNet at **2,061 ms/step with `SHIM_WORKERS=1` against 203 with 8** — a 10× that was
 entirely the data producer and "read exactly like a correct one". So R50's numbers are worthless
 until the same question is asked of them. Synth 367 vs real 376 is a **2.4% gap**: the pipeline is
@@ -519,7 +519,7 @@ own `evalD0`.
   in `scripts/jobs/`. It carries fixed-schedule rests (`REST_EPOCHS`/`REST_SECS`), **temperature-
   driven rests (`TEMP_MAX`/`TEMP_RESUME`)**, a stall guard, the AER watchdog, and crash-resume off
   the trainer's own `.bin.epoch`. ⚠ There is **no `r50-*.conf` yet** — cnx/enet/mnv2/r34/vit exist.
-  Writing one is the deliverable that makes a 31 h run startable, and `enet-imagenet-4gpu.conf` is
+  Writing one is the deliverable that makes a 31 h run startable, and `enet-default-4gpu.conf` is
   the model to copy (its `PRECHECK` refuses to launch if `PJRT_FFI_RESIDENT`/`SHIM_WORKERS` are
   missing — exactly the two silent-10× knobs).
 * ⚠ **Duty overhead has historically been ZERO on this box** — across every past 4-GPU supervise run

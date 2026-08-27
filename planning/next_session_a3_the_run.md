@@ -58,7 +58,7 @@ CUDA_VISIBLE_DEVICES=0,2,3,4 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
 
 * **the producer question.** 1 GPU at 169 ms/step is **379 img/s**. Four replicas need
   256 img / ~0.225 s = **~1,140 img/s, 3× more**, and A3's shim runs **RandAugment m6** where the 224
-  shim is RRC+hflip only. `scripts/jobs/enet-imagenet-4gpu.conf` records EfficientNet at
+  shim is RRC+hflip only. `scripts/jobs/enet-default-4gpu.conf` records EfficientNet at
   **2,061 ms/step on one producer against 203 on eight** — entirely the data pipeline, and it *"read
   exactly like a correct one"*. ▶ If real ≫ synth, raise `SHIM_WORKERS` before anything else.
 * **the allreduce question.** synth at 4×160 gives the collective term at the right resolution
@@ -72,11 +72,11 @@ does not fit 40 h and the answer is bf16 or fewer epochs — decide there, not a
 
 ---
 
-## 2. THE SUPERVISOR CONFIG — `scripts/jobs/r50-imagenet-4gpu.conf` DOES NOT EXIST
+## 2. THE SUPERVISOR CONFIG — `scripts/jobs/r50-a3-4gpu.conf` DOES NOT EXIST
 
 `scripts/supervise.sh` is the one engine (AER watchdog, thermal duty cycle, stall guard,
 crash-resume off `.bin.epoch`, `PRECHECK`). Configs exist for cnx/enet/mnv2/vit/r34 — **not R50.**
-Copy `enet-imagenet-4gpu.conf`; it is the best-commented one. What this job must carry:
+Copy `enet-default-4gpu.conf`; it is the best-commented one. What this job must carry:
 
 ```bash
 DEVS="0,2,3,4"                       # idx1 (bus 02) and idx5 (bus 62) threw BadTLP
@@ -183,7 +183,7 @@ It is **not** the reference's 78.1%, and the deltas are known in advance. Quote 
 
 1. ⭐ **§1's 4-GPU 160 probe, real AND synth.** Decides the wall-clock and the producer count.
    *~30 min.* Do not skip the synth half.
-2. **Write `scripts/jobs/r50-imagenet-4gpu.conf`** (§2), and `DRY_RUN=1 scripts/supervise.sh` it.
+2. **Write `scripts/jobs/r50-a3-4gpu.conf`** (§2), and `DRY_RUN=1 scripts/supervise.sh` it.
    *~30 min.*
 3. ⭐ **A 30-epoch shakeout at 160** — ~9–10 h, overnight, through the supervisor. It is the same
    validation tier R34/ImageNet ran, so it is directly comparable, and it exercises resume, the
