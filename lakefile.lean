@@ -1593,8 +1593,10 @@ lean_exe «vit-imagenet-verified» where
     proof side needed nothing, since `vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k`
     and global (GELU/softmax/LayerNorm carry no kink).
     ⚠ FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
-    `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer.
-    ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
+    `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer. At 128 per
+    device that is DeiT's global 512, so the recipe's LR is the rate this batch was set for.
+    ⭐ `scripts/supervise.sh vits-default-g512-4gpu` is the job: 528 → 319 ms/step measured,
+    113 → 71 h for 300 epochs. ⚠ Renders, ties and STEPS; NOTHING has been trained on it. -/
 lean_exe «vit-s-imagenet-verified» where
   root := `apps.imagenette.MainViTSImagenet
   moreLinkArgs := lowererLink
