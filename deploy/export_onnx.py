@@ -17,23 +17,40 @@ already keeps a faithful PyTorch replica of this exact detector
 So the shortest correct route is to load the trained Lean weights into the
 replica and export that.
 
-⚠⚠ That makes the replica load-bearing for deployment, and its existing
-validation DOES NOT COVER THIS MODE. `bespoke/diff_lean.py` compares the replica
-to Lean in TRAINING mode with batch statistics — its own `--eval-mode` help says
-to leave eval off in order to compare. Deployment runs eval mode with running
-statistics, which has never been checked against Lean.
+⚠⚠ That makes the replica load-bearing for deployment, so this script is only
+as good as its gate. The first Orin run produced 279 detections and top score
+0.7656 on the reference frame where the Lean stack produces 238 and 0.7109 —
+a different function, shipped under the same name.
 
-That is not hypothetical: the first Orin run produced 279 detections and top
-score 0.7656 on the reference frame where the Lean stack produces 238 and 0.7109,
-with the ONNX matching the PyTorch replica to 2.4e-05. So the disagreement is
-between the replica and Lean, in exactly this untested mode.
+**Root cause, settled 2026-08-28: this script built the replica without
+`pad="lean"`.** Lean's convolutions use `MlirCodegen.samePad`, TF-style
+ASYMMETRIC SAME (the odd pixel goes on the high side); torchvision pads
+symmetrically. Output shapes, parameter counts and `iree-compile` are all
+identical either way, so nothing structural could catch it, but the sampling
+grid shifts half an output pixel at every stride-2 convolution and the shift
+compounds through the 3 / 4 / 5 downsampling stages feeding C3 / C4 / C5. That
+is why the objectness correlation fell 0.90 / 0.80 / 0.62 with tap depth, and
+why the BN/eps/pool/permutation probes that "ruled out" everything else came
+back empty — every one of them built the replica the same wrong way.
 
-**Run `--verify-frame`.** It is self-contained and needs nothing from the
-training box.
+    pool=lean pad=lean          max|Δ| 8.0e-03   obj r 1.0000/1.0000/1.0000
+    pool=lean pad=torchvision   max|Δ| 1.6e+01   obj r 0.9031/0.8022/0.6219
+
+With `pad="lean"` the replica decodes the same 238 detections at top 0.7108
+against the Lean stack's 238 at 0.7109.
+
+**Run `--verify-frame` anyway, every time.** It is self-contained, needs nothing
+from the training box, and is the only thing standing between a plausible-looking
+export and shipping a different model twice.
 
 ## Usage
 
-    # anywhere torch is available (NOT this box — no torch here)
+    # Anywhere torch is available. ⚠ On the training box that means a THROWAWAY
+    # CPU-only venv, never the pinned .venv — installing torch there pulls its own
+    # CUDA wheels over the pinned cuDNN and kills every JAX/XLA convolution:
+    #   python3 -m venv /tmp/venv-torch && /tmp/venv-torch/bin/pip install \
+    #       torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    #   /tmp/venv-torch/bin/pip install onnxruntime pillow
     python3 export_onnx.py \
         --ckpt ../.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__ctrl12_params.bin \
         --bn   ../.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__ctrl12_bn_stats.bin \
@@ -58,14 +75,54 @@ NTOT = 185220
 
 
 
+# Per-scale layout of the flat output, in the codegen's concat order [P3|P4|P5].
+FPN_GRIDS = (56, 28, 14)
+A, SLOTS = 3, 15
+# Correlation floor for the per-scale objectness channels. This is the statistic
+# that separated the two regimes most sharply: the wrong-padding export scored
+# 0.903 / 0.802 / 0.622 while a correct one scores 1.0000 at every scale. It is
+# scale-free, so unlike an absolute tolerance it cannot be defeated by a model
+# that happens to output small numbers.
+MIN_OBJ_R = 0.999
+
+
+def _per_scale_obj_r(a, b):
+    """Objectness-channel correlation at P3 / P4 / P5.
+
+    Objectness because it is what detections rank on, and per-scale because a
+    geometric misalignment compounds with depth — C3/C4/C5 sit behind 3/4/5
+    stride-2 stages, so a padding or resampling difference shows up as a
+    correlation that FALLS from P3 to P5 rather than as uniform noise.
+    """
+    out, off = [], 0
+    for g in FPN_GRIDS:
+        n = A * SLOTS * g * g
+        oa = a[off:off + n].reshape(A, SLOTS, g, g)[:, 4].ravel()
+        ob = b[off:off + n].reshape(A, SLOTS, g, g)[:, 4].ravel()
+        out.append(float(np.corrcoef(oa, ob)[0, 1]))
+        off += n
+    return out
+
+
 def verify_frame(onnx_path, tol):
     """Self-contained gate: testdata/frame.png vs testdata/frame_logits.bin.
 
     Both ship in the repo, so this needs nothing from the training box. The
     logits are the Lean stack's own output for that frame under the eval graph
-    (BN in inference mode, running stats), which is precisely the path the
-    replica has never been validated on — `bespoke/diff_lean.py` compares in
-    TRAINING mode with batch statistics and says so in its own help.
+    (BN in inference mode, running stats) — reproducibly val record 374 of an
+    `infer` dump, byte for byte.
+
+    ⚠ The tolerance is RELATIVE (max abs difference over max abs logit) and it
+    is not a knob. Relative because logit magnitude varies by two orders of
+    magnitude across records — this frame spans +-16, val record 40 spans
+    -976 .. +1287 — so an absolute threshold is either flaky or vacuous
+    depending on which record it was tuned on. Both endpoints are measured: a
+    correct export sits at 5.0e-4 (max abs 8.0e-3; the reference dump runs
+    XLA's TF32 convolutions, and forcing `NVIDIA_TF32_OVERRIDE=0` on the Lean
+    side drops it to 2.6e-3, the Lean graph disagreeing with ITSELF by 7.8e-3
+    across that switch), while the export that shipped a different function sat
+    at ~1.0. There is no marginal case in between, so a failure here means a
+    real structural difference and widening `--tol` only hides it.
     """
     try:
         import onnxruntime as ort
@@ -85,16 +142,30 @@ def verify_frame(onnx_path, tol):
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
     got = sess.run(None, {"image": x})[0].reshape(-1)[:NTOT]
     d = np.abs(got - ref)
-    print(f"  max abs diff {d.max():.3e}  mean {d.mean():.3e}  (tol {tol})")
+    rel = float(d.max() / max(float(np.abs(ref).max()), 1e-6))
+    r3, r4, r5 = _per_scale_obj_r(ref, got)
+    print(f"  max rel diff {rel:.3e}  (max abs {d.max():.3e})  (tol {tol})")
     print(f"  ref  range {ref.min():+.3f} .. {ref.max():+.3f}")
     print(f"  onnx range {got.min():+.3f} .. {got.max():+.3f}")
-    if d.max() > tol:
+    print(f"  objectness r  P3 {r3:.4f}  P4 {r4:.4f}  P5 {r5:.4f}"
+          f"  (floor {MIN_OBJ_R})")
+    worst_r = min(r3, r4, r5)
+    if rel > tol or worst_r < MIN_OBJ_R:
+        falling = r5 < r4 < r3
         raise SystemExit(
             "⛔ THE EXPORT DOES NOT MATCH THE LEAN MODEL.\n"
-            "   Do not deploy. This is the eval-mode path that "
-            "bespoke/diff_lean.py never covered — most likely the replica's BN "
-            "running-stats handling or its conv padding differs from the Lean "
-            "spec. Report the numbers above rather than widening the tolerance.")
+            "   Do not deploy, and do not widen the tolerance — report the "
+            "numbers above.\n"
+            + ("   The correlation FALLS from P3 to P5, which is the signature "
+               "of a geometric\n   misalignment compounding through the "
+               "backbone's stride-2 stages. Check\n   `pad=` (Lean is TF-style "
+               "ASYMMETRIC SAME, torchvision is symmetric) and `pool=`\n"
+               "   (Lean is `.maxPool 2 2`, torchvision is a padded 3x3) before "
+               "anything else.\n"
+               if falling else
+               "   The error is spread evenly across scales, so it is NOT a "
+               "geometric shift.\n   Check the BN running statistics and the "
+               "checkpoint parameter order.\n"))
     print("✅ export matches the Lean model on the reference frame")
 
 
@@ -115,7 +186,14 @@ def main():
     ap.add_argument("--val-bin", default=str(REPO / "data/visdrone_fpn/val.bin"),
                     help="source of the images --verify compares on")
     ap.add_argument("--verify-n", type=int, default=4)
-    ap.add_argument("--tol", type=float, default=2e-3)
+    ap.add_argument("--tol", type=float, default=1e-2,
+                    help="RELATIVE logit tolerance (max abs difference over max "
+                         "abs logit). Both endpoints are measured and they are 3 "
+                         "orders of magnitude apart: a correct export sits at "
+                         "5.0e-4 (XLA runs the reference graph with TF32 convs — "
+                         "turning TF32 off drops it to 1.6e-4), the wrong-padding "
+                         "export sat at ~1.0. Widening this does not buy a "
+                         "marginal case; there isn't one.")
     args = ap.parse_args()
 
     try:
@@ -128,11 +206,19 @@ def main():
     from bespoke.lean_ckpt import load_lean_params
     from bespoke.bn_stats import load_bn_stats
 
-    # These four arguments are NOT defaults — they are what `bespoke/diff_lean.py`
-    # uses to make the replica agree with the Lean spec. `pool="lean"` in
-    # particular matches `.maxPool 2 2` rather than torchvision's padded 3x3 stem.
+    # NONE of these are defaults, and every one is load-bearing.
+    #   pool="lean"  matches `.maxPool 2 2`, not torchvision's padded 3x3 stem.
+    #   pad="lean"   matches `MlirCodegen.samePad`, TF-style ASYMMETRIC SAME, not
+    #                torchvision's symmetric `padding=`. ⚠ THIS ONE was omitted
+    #                here and in every probe that "ruled out" the other suspects,
+    #                and it alone was the 16.5 mismatch: it shifts the sampling
+    #                grid half an output pixel per stride-2 conv, compounding over
+    #                the 3/4/5 downsamples above C3/C4/C5 — which is exactly why
+    #                the objectness correlation fell 0.90/0.80/0.62 with depth.
+    #                With it, the replica reproduces the Lean eval graph to 8e-3
+    #                and decodes the same 238 detections at the same top score.
     model = FpnDetector(backbone="r34", tower=0, norm=None,
-                        pretrained=False, pool="lean")
+                        pretrained=False, pool="lean", pad="lean")
     load_lean_params(model, args.ckpt)
     load_bn_stats(model, args.bn)
     model.eval()
@@ -145,7 +231,35 @@ def main():
         opset_version=args.opset,
         dynamic_axes=None,          # fixed batch: TensorRT prefers a static shape
     )
-    print(f"wrote {args.out}  (batch {args.batch}, opset {args.opset})")
+    # ⚠ `--opset` is a REQUEST, not a guarantee: torch exports at its own opset
+    # and then tries to down-convert, and that conversion can fail silently
+    # (onnx has no Pad adapter down to 17, and the lean asymmetric padding
+    # introduces a Pad before the optimizer folds it into the Conv `pads`
+    # attribute). Read the number back out of the file rather than reprinting
+    # the request — shipping an artifact whose properties differ from the ones
+    # reported is the exact failure this script already made once.
+    written = args.opset
+    try:
+        import onnx
+        m = onnx.load(args.out)
+        written = next((o.version for o in m.opset_import if o.domain == ""),
+                       args.opset)
+        n_asym = sum(1 for n in m.graph.node if n.op_type == "Conv"
+                     for a in n.attribute if a.name == "pads"
+                     and list(a.ints)[:len(a.ints) // 2] != list(a.ints)[len(a.ints) // 2:])
+        print(f"wrote {args.out}  (batch {args.batch}, opset {written}, "
+              f"{n_asym} asymmetric-pad convs)")
+        if n_asym != 4:
+            print(f"⚠ expected 4 asymmetric-pad convs (stem 7x7/s2 + "
+                  f"layer2/3/4[0].conv1 3x3/s2), found {n_asym} — the lean "
+                  f"padding may not have survived the export")
+    except ImportError:
+        print(f"wrote {args.out}  (batch {args.batch}, opset {args.opset} requested; "
+              f"install onnx to read back what was actually written)")
+    if written != args.opset:
+        print(f"⚠ requested opset {args.opset} but the file is opset {written} — "
+              f"torch's down-conversion did not take. Harmless if the consumer "
+              f"accepts {written}; pass --opset {written} to stop being surprised.")
 
     if args.verify_frame:
         verify_frame(args.out, args.tol)

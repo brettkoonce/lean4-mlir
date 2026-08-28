@@ -485,37 +485,59 @@ schedule decision is really an aug decision".
 4. **Then** the backbone (§8). Do not swap on an under-tuned recipe; the schedule
    and aug questions are cheaper and now partly answered.
 
-### ⛔ Deployment is BLOCKED on a correctness gate, not on performance
+### ✅ Deployment: the correctness gate is CLEARED (fixed 2026-08-28)
 
 The Orin path works and is fast — **229 fps** forward under TensorRT fp16 (4.4 ms;
 `trtexec` GPU compute 4.16 ms), fp16 worth 2.15× over fp32 with identical
-detections. **But the exported model is not this one.**
+detections. It shipped the wrong model; that is now fixed and gated.
 
+- ✅ **The mismatch was `pad="lean"`, omitted in `export_onnx.py`.** The replica ran
+  torchvision's SYMMETRIC conv padding against a Lean spec emitting
+  `MlirCodegen.samePad` — TF-style ASYMMETRIC SAME. Shapes, parameter counts and
+  `iree-compile` are identical either way, so nothing structural could catch it,
+  but the sampling grid shifts half an output pixel per stride-2 conv and
+  **compounds through the 3/4/5 downsamples feeding C3/C4/C5** — exactly why the
+  objectness correlation fell 0.90/0.80/**0.62** with tap depth instead of being
+  uniform. With `pad="lean"`: **1.0000 at all three scales**, max relative
+  difference 5.0e-4, and the same **238 detections at top 0.7108** against the Lean
+  stack's 238 / 0.7109. Both of the device's original figures (279 / 0.7656) were
+  reproduced on the training box first, so the diagnosis is confirmed, not fitted.
+- ⚠ **Every "ruled out" was empty for the same reason.** The BN-layout, BN-walk,
+  BN-eps, `pool`, and channel-grouping probes all built the replica without `pad=`,
+  so each compared two wrong models. Note `grad_dump.py`, `validate_oracle.py` and
+  `layout_hunt.py` all take `--pad` and default it to `lean`; the only two places
+  that hardcoded it away were the one that shipped (`export_onnx.py`) and the one
+  cited as the validation (`bespoke/diff_lean.py`).
+- ⚠⚠ **The validation gap was real and is also fixed.** `bespoke/diff_lean.py` never
+  compared elementwise — it printed a scalar loss beside *hardcoded* pre-shuffle-fix
+  Lean numbers. It now takes `--lean-logits <infer dump>` and compares logit for
+  logit, plus `--bn-stats` so `--eval-mode` means something. Verified over 64 val
+  records: 1.4e-3 relative, objectness r = 1.0000. This never invalidated the
+  replica's 0.1532 as an architecture-matched yardstick (independently trained,
+  fair comparison) — only its use as an elementwise stand-in, which export demands.
+- ⚠ **Tolerances are RELATIVE, and this matters.** Logit magnitude varies by two
+  orders of magnitude across records: the reference frame spans ±16, val record 40
+  spans −976 .. +1287. An absolute threshold is flaky or vacuous depending on which
+  record it was tuned on. Relative, the regimes are stable and 3 decades apart —
+  correct 5e-4, broken ~1.0.
+- **The 5e-4 residual is TF32, measured not assumed.** The Lean render carries no
+  `precision_config`, so XLA uses TF32 on Ada. Re-running the identical graph under
+  `NVIDIA_TF32_OVERRIDE=0` moves the residual to 1.6e-4, and the Lean graph
+  disagrees with *itself* by 7.8e-3 absolute across that switch.
 - ⚠ **CPU decode is the real bottleneck: 57 ms, 6× the network.** 43 ms of that is
   pure-Python per-class NMS over 300 boxes. Vectorizing it, or an EfficientNMS
   plugin in the engine, is worth more than any architecture change.
-- ⛔ **The PyTorch replica does not compute the same function as the Lean model.**
-  Same weights, same input: max abs diff **16.5** on logits spanning ±16;
-  objectness correlation 0.90/0.80/**0.62** at P3/P4/P5. Ruled out: BN stats layout
-  (per-layer interleaved confirmed), the BN walk (36/36 layers), BN eps (1e-5 both),
-  `pool=lean|torchvision` (both wrong), and channel grouping (both transposes are
-  worse, so not a permutation).
-- ⚠⚠ **Root cause is the validation.** `bespoke/diff_lean.py` never compares
-  elementwise — it prints a scalar loss beside *hardcoded* Lean numbers, plus
-  objectness mean/std against another hardcoded pair, and those references predate
-  the shuffle fix. Two different architectures pass that trivially. **The replica
-  was never a verified oracle.** This does NOT invalidate its 0.1532 as an
-  architecture-matched yardstick (independently trained, fair comparison) — it
-  invalidates using it as an elementwise stand-in, which export demands.
-- **The fix, bounded because the gate is objective:** a minimal PyTorch module
-  mirroring the Lean spec directly (not torchvision's ResNet), loaded in Lean
-  parameter order, required to match `deploy/testdata/frame_logits.bin` (the Lean
-  eval graph's own output for `frame.png`) before anything is exported.
-  `deploy/export_onnx.py --verify-frame` is that gate and is already wired.
+- ⚠ **Before anyone tries int8:** those ±1287 logits are CLASS channels on
+  background cells. The class head is a softmax masked to positives, so background
+  is never trained and those logits are unconstrained; the decode discards the cells
+  on objectness anyway. Harmless in fp32/fp16 (max 65504), fatal to an int8
+  calibration.
 - ⚠ IREE on the Orin is **0.5 fps** — correct, just slow, because its CUDA backend
   generates its own conv kernels. **Never project throughput across compilers**:
   scaling the 65 fps XLA number by fp32 TFLOPS predicted 16 fps, wrong by 32× under
   IREE and by 14× the other way under TensorRT.
+- **Still open:** the 229 fps was measured on the wrong graph. Padding should not
+  move throughput, but it has not been re-measured on the device.
 
 See `deploy/ORIN_SMOKE_TEST.md` and `runs/2026-08-28-visdrone-fpn-rebuild/`.
 

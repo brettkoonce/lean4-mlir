@@ -1,44 +1,65 @@
 # Orin smoke test — brief for a Claude running on the device
 
-> # ⛔ STOP — the ONNX route ships a DIFFERENT MODEL. Measured 2026-08-28.
+> # ✅ RESOLVED — the export was one missing argument. Fixed 2026-08-28.
 >
-> The 229 fps result is real and worth having. **The detector it measured is not
-> the one this repo trained.**
+> **The ONNX route shipped a different model, and the cause was `pad="lean"`.**
+> `export_onnx.py` built the PyTorch replica without it, so the replica ran
+> torchvision's SYMMETRIC convolution padding against a Lean model that emits
+> `MlirCodegen.samePad` — TF-style ASYMMETRIC SAME, odd pixel on the high side.
 >
-> Run on the training box, replica vs the Lean eval graph on `testdata/frame.png`,
-> identical weights, identical input:
+> | replica setting | max rel diff vs Lean | objectness r, P3/P4/P5 | decoded |
+> |---|---|---|---|
+> | `pool=lean pad=torchvision` (shipped) | **1.00** | 0.903 / 0.802 / 0.622 | 279 dets, top 0.7656 |
+> | `pool=lean pad=lean` (fixed) | **5.0e-4** | 1.0000 / 1.0000 / 1.0000 | **238 dets, top 0.7108** |
 >
-> | | value |
-> |---|---|
-> | max abs difference | **16.5** (logits span ±16) |
-> | correlation, all channels | 0.86 / 0.75 / 0.86 at P3 / P4 / P5 |
-> | correlation, objectness | 0.90 / 0.80 / **0.62** |
-> | objectness mean | −3.577 Lean vs −3.501 replica |
+> The Lean stack's own numbers for that frame are **238 dets, top 0.7109**. Both
+> device-side figures in the original report are reproduced exactly on the
+> training box, which is what confirms the diagnosis rather than merely fitting it.
 >
-> Correlated but not equal: a *similar* model, not the same function. Ruled out —
-> BN stats layout (verified per-layer interleaved, 0 negative variances), the BN
-> walk (36/36 layers, exact channel sequence, none missed), BN epsilon (1e-5 both
-> sides), `pool="lean"` vs `"torchvision"` (both wrong), and channel grouping
-> ([A,15] vs [15,A] transposes are worse, so it is not a permutation).
+> **Why it hid for so long, and why every "ruled out" was empty.** Output shapes,
+> parameter counts, and `iree-compile` are identical under either convention, so
+> nothing structural can catch it. The sampling grid shifts half an output pixel
+> at each stride-2 convolution, and the shift COMPOUNDS through the 3 / 4 / 5
+> downsampling stages feeding C3 / C4 / C5 — which is exactly why correlation
+> fell with tap depth (0.90 → 0.80 → 0.62) instead of being uniform. And the
+> probes that eliminated BN layout, the BN walk, BN eps, `pool`, and channel
+> grouping all constructed the replica the same wrong way, so each one was
+> comparing two wrong models and finding no improvement.
 >
-> **Root cause is the validation, not the export.** `bespoke/diff_lean.py` never
-> compares elementwise. It prints the replica's scalar loss beside *hardcoded*
-> Lean numbers in a string, plus objectness mean/std against another hardcoded
-> pair — and those references date from the pre-shuffle-fix era. Two different
-> architectures with similar loss and similar logit statistics pass that check
-> trivially. The replica was never a verified oracle, and building the deployment
-> path on it was a mistake on the training side, not the device side.
+> ⚠ Note where the omission was: `grad_dump.py`, `validate_oracle.py` and
+> `layout_hunt.py` all take `--pad` and all default it to `lean`. The only two
+> places that hardcoded it away were `export_onnx.py` — which shipped — and
+> `bespoke/diff_lean.py` — which was cited as the validation.
+>
+> **The residual 5.0e-4 is TF32, and that is measured, not assumed.** The
+> reference dump runs XLA convolutions with no `precision_config`, so Ada uses
+> TF32. Re-running the identical Lean graph under `NVIDIA_TF32_OVERRIDE=0` moves
+> it to 1.6e-4, and the Lean graph disagrees with ITSELF by 7.8e-3 absolute
+> across that switch — i.e. essentially the whole remaining gap is the reference
+> side's own fp32 rounding.
+>
+> **Both gates now run and both reject the old model:**
+> - `export_onnx.py --verify-frame` — self-contained, one committed frame.
+> - `bespoke/diff_lean.py --lean-logits <infer dump> --eval-mode` — elementwise
+>   over as many val records as you like. Verified over 64: 1.4e-3 relative,
+>   objectness r = 1.0000 at all three scales.
+>
+> Tolerances are RELATIVE now. Logit magnitude varies by two orders of magnitude
+> across records — the reference frame spans ±16, val record 40 spans −976 ..
+> +1287 — so an absolute threshold is either flaky or vacuous depending on which
+> record it was tuned on.
+>
+> ⚠ **Before anyone tries int8:** those ±1287 values are CLASS logits on
+> background cells, and they are unconstrained by design — the class head is a
+> softmax masked to positives, so it is never trained on background, and the
+> decode discards those cells on objectness anyway. Harmless in fp32 and fp16
+> (max 65504), but that dynamic range will wreck an int8 calibration.
 >
 > **What still stands from the device run:** the TensorRT toolchain, fp16 at
 > 2.15×, the pinned-buffer fix, the three-stage timing split, and the finding that
-> CPU decode at 57 ms is 6× the 4.4 ms network. All of that transfers unchanged to
-> a correct model.
->
-> **Do not** wire up the camera or chase accuracy against this engine. The export
-> needs a source that is gated elementwise first — most likely a minimal PyTorch
-> module mirroring the Lean spec directly rather than torchvision's ResNet, loaded
-> in Lean parameter order and gated against `testdata/frame_logits.bin`. The gate
-> is objective, so the task is bounded.
+> CPU decode at 57 ms is 6× the 4.4 ms network. All of it transfers unchanged —
+> **but the 229 fps was measured on the wrong graph and should be re-measured**,
+> even though the fix only changes padding and should not move throughput.
 
 **Goal: get one real frames-per-second number for this detector on the Orin via
 TensorRT, and confirm the exported model is still the model we measured.**

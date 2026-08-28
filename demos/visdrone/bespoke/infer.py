@@ -22,7 +22,10 @@ import torch
 from bespoke.data import FpnBinDataset
 from bespoke.model import FpnDetector
 
-REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# demos/visdrone/bespoke/ -> repo root is THREE levels up, not two. With two
+# this resolved to demos/, so every `--data` default pointed at a path that
+# has never existed and the documented invocations all needed an explicit one.
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 
 def main():

@@ -22,33 +22,58 @@ The camera capture is a deliberate stub in both — on Orin the IMX path is a
 sensor- and JetPack-specific GStreamer pipeline, and guessing it from here would
 be worse than leaving it marked.
 
-## ⛔ TensorRT route — BLOCKED, see ORIN_SMOKE_TEST.md
+## TensorRT route — unblocked 2026-08-28
 
-The toolchain works and hits 229 fps. But the ONNX comes from
-`demos/visdrone/bespoke/`, and that replica does **not** compute the same
-function as the Lean model: max abs difference 16.5 on logits spanning ±16,
-objectness correlation as low as 0.62. Its only validation compared a scalar
-loss and two summary statistics against hardcoded numbers, which cannot
-distinguish architectures. Fix the source before shipping anything from here.
+The toolchain works and hits 229 fps, but it first shipped a **different model**:
+`export_onnx.py` built the PyTorch replica without `pad="lean"`, so it ran
+torchvision's symmetric convolution padding against a Lean spec that emits
+TF-style asymmetric SAME. Max relative difference 1.00, objectness correlation
+falling 0.90 / 0.80 / 0.62 with tap depth, 279 decoded detections against Lean's
+238. Fixed; with `pad="lean"` the replica reproduces the Lean logits to 5.0e-4
+relative and decodes the same 238 at the same top score. Full account in
+`ORIN_SMOKE_TEST.md`.
+
+⚠ The 229 fps was measured on that wrong graph. The fix changes only padding, so
+throughput should be unaffected, but it has not been re-measured.
 
 ```bash
-# 1. anywhere torch exists (NOT the training box — no torch there)
+# 1. anywhere torch exists. ⚠ On the training box use a THROWAWAY CPU-only venv,
+#    never the pinned .venv — torch drags in its own CUDA wheels over the pinned
+#    cuDNN and kills every JAX/XLA convolution.
 python3 export_onnx.py \
     --ckpt ../.lake/build/..._ctrl12_params.bin \
     --bn   ../.lake/build/..._ctrl12_bn_stats.bin \
     --out  build/detector.onnx \
-    --verify ../runs/fpn_ctrl12_final/logits.bin      # ⚠ do not skip
+    --verify-frame                                    # ⚠ do not skip
 
 # 2. on the device
 trtexec --onnx=detector.onnx --saveEngine=detector.plan --fp16
 python3 orin_detect.py --backend trt --plan detector.plan --image frame.jpg --bench 50
 ```
 
-⚠ **Why `--verify` is not optional.** The ONNX comes from the PyTorch replica in
-`demos/visdrone/bespoke/`, which until now was only a validation oracle. Exporting
-through it makes it load-bearing for deployment, so the export is gated on
-reproducing a Lean logits dump and refuses on disagreement. A silent drift between
-replica and spec would ship a detector that is subtly not the one that was measured.
+⚠ **Why the gate is not optional.** The ONNX comes from the PyTorch replica in
+`demos/visdrone/bespoke/`, which was only ever a validation oracle. Exporting
+through it makes it load-bearing for deployment — and it was wrong. `--verify-frame`
+is self-contained (`testdata/frame.png` + `testdata/frame_logits.bin`, both in git),
+compares **elementwise**, and refuses on disagreement. For a broader check, the same
+comparison over as many val records as you like:
+
+```bash
+FPN_TAG=<tag> ./.lake/build/bin/yolov1-visdrone-fpn infer data/visdrone_fpn runs/<out>
+python3 -m bespoke.diff_lean --ckpt ..._params.bin --bn-stats ..._bn_stats.bin \
+    --data data/visdrone_fpn/val.bin --lean-logits runs/<out>/logits.bin \
+    --eval-mode --n 64
+```
+
+Both tolerances are RELATIVE: logit magnitude varies by two orders of magnitude
+across records (the reference frame spans ±16, val record 40 spans −976 .. +1287),
+so an absolute threshold is either flaky or vacuous depending on where it was tuned.
+A correct export sits at 5e-4, the broken one sat at ~1.0.
+
+⚠ **Before trying int8:** those ±1287 values are class logits on background cells.
+The class head is a softmax masked to positives, so background is never trained and
+those logits are unconstrained; the decode discards those cells on objectness. Fine
+in fp32 and fp16 (max 65504), fatal to an int8 calibration.
 
 ## IREE route (portable, slow)
 
