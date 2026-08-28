@@ -91,11 +91,27 @@ levers don't beat plain training" lesson that applies here too), and
 >   `MlirCodegen.lean`**. Setting it on a spec that trains through the generic walk
 >   does nothing.
 
-A ResNet-34 + FPN anchor detector, trained on VisDrone, **works**: full-GT
-**mAP@0.5 = 0.1386**, recall 0.676, class-agnostic AP 0.376 at 12 epochs. That is
-**90.5% of its faithful PyTorch twin** (0.1532), with recall essentially tied
-(0.676 vs 0.677) — so the ~10% gap is **ranking/classification, not
-localization**. The detector is **undertrained** (e12 loss still descending); the
+A ResNet-34 + FPN anchor detector, trained on VisDrone, **works**. As of
+2026-08-28 the best measured arm is **mAP@0.5 = 0.1731** (recall 0.709,
+class-agnostic AP 0.435) at 30 epochs with `FPN_AUG=1` — up **25%** on the
+0.1386 this thread paused at, and **13% past** the architecture-matched PyTorch
+replica (0.1532) that it used to trail by 10%. **Full results, curves and the
+resume plan are in §12b — read that first; the paragraphs below predate it.**
+
+⚠ The single most important operational finding: **`FPN_AUG=1` is not optional
+on any schedule longer than ~12 epochs.** Without it, 50 epochs scores 0.1243,
+*worse* than 12 epochs' 0.1526. With it, 0.1674 at 50 and 0.1731 at 30. And both
+arms peak then decline, so "run longer" is wrong too — aug moves the optimum from
+~15 to ~30 epochs, it does not remove overfitting.
+
+The historical framing below (that the gap to the twin is ranking, not
+localization) was written at 0.1386 and is now stale: recall has moved 0.676 →
+0.709 and class-agnostic AP 0.376 → 0.435, so localization improved as well. So
+is "the detector is undertrained" — it is now measurably *over*trained past ~30
+epochs without aug.
+
+<!-- historical, pre-2026-08-28 -->
+The detector is **undertrained** (e12 loss still descending); the
 0.1386 arm ran with **no augmentation**, though an online HSV + horizontal-flip
 pack now exists as an opt-in A/B arm (`FPN_AUG=1`, §6.2). The whole stack is self-hosted: the R34 backbone
 was trained *by this stack* on ImageNet (72% top-1), the head trains on VisDrone,
@@ -420,53 +436,89 @@ detector) and devices (Orin, Pi5).
 
 ---
 
-## 12b. In flight / next (2026-08-28)
+## 12b. RESULTS + resume plan (2026-08-28) — READ THIS FIRST
 
-**Three arms running**, one per card, all on the rebuilt `data/visdrone_fpn`, all
-R34, all under distinct `FPN_TAG`s so no two can share a checkpoint prefix:
+### The four arms, all finished and scored
 
-| arm | epochs | aug | what it answers |
-|---|---|---|---|
-| `ctrl12` | 12 | off | matched control vs the 0.1386 baseline — quantifies the backbone confound |
-| `long50` | 50 | off | "does training longer help", which `long30` never actually answered |
-| `aug50` | 50 | on | the `FPN_AUG` A/B committed in `9280a3d` and never run at scale |
+Identical data, seed and spec; only the schedule and `FPN_AUG` differ. Scored
+against all 38,759 uncapped val GT boxes.
 
-⚠ `ctrl12` and `long50` have **different cosine schedules**, so `long50` at its
-epoch 12 is NOT a control for `ctrl12`. Each gets a complete annealed schedule,
-which is the right design, but it means the only valid comparison against 0.1386
-is `ctrl12`'s final. Mid-flight the two legitimately diverge — at e5, `ctrl12`
-scored 0.1286 while `long50` scored 0.1114, purely because `ctrl12` had begun
-annealing and `long50` had not.
+| arm | epochs | aug | train loss | mAP@0.5 | recall | ca-AP |
+|---|---|---|---|---|---|---|
+| baseline on record (pre-pause) | 12 | off | — | 0.1386 | 0.676 | 0.376 |
+| `ctrl12` | 12 | off | 112.7 | 0.1526 | 0.682 | 0.393 |
+| `long50` | 50 | off | 47.9 | 0.1243 | 0.669 | 0.369 |
+| `aug50` final | 50 | on | 88.5 | 0.1674 | 0.703 | 0.429 |
+| **`aug50` @ e30 (best seen)** | 30 | on | — | **0.1731** | **0.709** | **0.435** |
+| PyTorch replica, same architecture | 12 | off | — | 0.1532 | 0.677 | 0.400 |
 
-**First measured result, and the rebuild is sound.** `ctrl12` @ e5 of 12:
-mAP@0.5 **0.1286**, recall 0.655, class-agnostic AP 0.349, against all 38,759
-uncapped GT boxes — i.e. 93% of the old *final* number at under half the schedule.
-Per-class it is car 0.550 carrying the mean, against bicycle 0.006 and
-awning-tricycle 0.025: the headline is a story about nine weak classes, not a
-uniformly mediocre detector.
+### The finding: augmentation moves the optimum, it does not license "longer"
 
-**Scoring is one command**, and it handles the mid-run case. Scoring a live arm's
-checkpoint under its own tag would race the trainer's writes, so the helper copies
-the checkpoint to a `<tag>ev` name and copies the eval graph across with its module
-renamed (the tag appears only in a comment and the module header). Note the eval
-graph is written by *training*, not by `infer` — pointing `infer` at a fresh tag
-fails with "no eval graph; train first".
+| epoch | 5 | 10 | 15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `long50` no aug | 0.1114 | 0.1223 | **0.1320** | 0.1313 | 0.1315 | 0.1283 | 0.1261 | 0.1268 | 0.1244 | 0.1243 |
+| `aug50` +aug | 0.1207 | — | — | 0.1703 | — | **0.1731** | — | 0.1694 | — | 0.1674 |
 
-**Next, in order:**
-1. Score `ctrl12` final against 0.1386. That settles whether the rebuild
-   reproduces, and how much of any delta is the better R34 checkpoint.
-2. Score `long50` at e10/20/30/40/50 for the plateau curve. `long30` plateaued in
-   val mAP at e10 while train loss halved through e30 — this is the re-test.
-3. Score `aug50` against `long50` at matched epochs. Same schedule, same seed,
-   aug the only difference.
-4. R50 with the conv-only bootstrap, 50 epochs, matched to `long50`. It is behind
-   early (epoch-1 666.8 vs R34's 354.7) because BN is reset and must re-learn;
-   whether its stronger features overtake that is the question. Give it the box
-   rather than adding a fifth trainer — the host loader is the bottleneck.
-5. Only then revisit `coco_visdrone_two_stage.md`, whose data (94 GB) is also gone
-   and whose own §10 predicts a tie as the most likely outcome.
+- **Longer WITHOUT aug costs 19%.** 4× the schedule, less than half the train
+  loss, detections 437k→463k while recall falls. Overfitting on 6,471 images.
+- **Aug inverts it**: −19% becomes +10% over the best short run.
+- ⚠ **But both arms peak and then decline.** Aug does not remove overfitting, it
+  delays and softens it: the optimum moves ~15 → ~30 epochs and rises 31%.
+  **Do not run past ~30 with this aug pack.**
+- 8/10 classes improve under aug, hardest where the detector was weakest
+  (bus 0.165→0.227, truck 0.095→0.108). Car 0.573→0.605 no longer carries the mean.
 
----
+Retroactively vindicates two discarded things: §6.1's `long30` "plateaus at e10"
+observation (voided for being measured in the shuffle-bug era — the plateau was
+real), and `coco_visdrone_two_stage.md` §4's untested prediction that "the
+schedule decision is really an aug decision".
+
+### Next, in order
+
+1. ⭐ **30 epochs with aug, annealed AT 30.** The 0.1731 is a *truncated* 50-epoch
+   cosine that never annealed, so it understates. This should beat it and costs
+   40% less than the run that found it. `FPN_EPOCHS=30 FPN_AUG=1 FPN_TAG=aug30`.
+2. **Aug at 12 epochs** — the missing cell of the 2×2, 4× cheaper again.
+3. **Box-aware affine aug** (§6.2) — the current pack is HSV + hflip only. Mosaic
+   stays deferred (4-into-1 halves already-tiny objects) but is worth re-testing
+   now that plain aug is measured as clearly positive.
+4. **Then** the backbone (§8). Do not swap on an under-tuned recipe; the schedule
+   and aug questions are cheaper and now partly answered.
+
+### ⛔ Deployment is BLOCKED on a correctness gate, not on performance
+
+The Orin path works and is fast — **229 fps** forward under TensorRT fp16 (4.4 ms;
+`trtexec` GPU compute 4.16 ms), fp16 worth 2.15× over fp32 with identical
+detections. **But the exported model is not this one.**
+
+- ⚠ **CPU decode is the real bottleneck: 57 ms, 6× the network.** 43 ms of that is
+  pure-Python per-class NMS over 300 boxes. Vectorizing it, or an EfficientNMS
+  plugin in the engine, is worth more than any architecture change.
+- ⛔ **The PyTorch replica does not compute the same function as the Lean model.**
+  Same weights, same input: max abs diff **16.5** on logits spanning ±16;
+  objectness correlation 0.90/0.80/**0.62** at P3/P4/P5. Ruled out: BN stats layout
+  (per-layer interleaved confirmed), the BN walk (36/36 layers), BN eps (1e-5 both),
+  `pool=lean|torchvision` (both wrong), and channel grouping (both transposes are
+  worse, so not a permutation).
+- ⚠⚠ **Root cause is the validation.** `bespoke/diff_lean.py` never compares
+  elementwise — it prints a scalar loss beside *hardcoded* Lean numbers, plus
+  objectness mean/std against another hardcoded pair, and those references predate
+  the shuffle fix. Two different architectures pass that trivially. **The replica
+  was never a verified oracle.** This does NOT invalidate its 0.1532 as an
+  architecture-matched yardstick (independently trained, fair comparison) — it
+  invalidates using it as an elementwise stand-in, which export demands.
+- **The fix, bounded because the gate is objective:** a minimal PyTorch module
+  mirroring the Lean spec directly (not torchvision's ResNet), loaded in Lean
+  parameter order, required to match `deploy/testdata/frame_logits.bin` (the Lean
+  eval graph's own output for `frame.png`) before anything is exported.
+  `deploy/export_onnx.py --verify-frame` is that gate and is already wired.
+- ⚠ IREE on the Orin is **0.5 fps** — correct, just slow, because its CUDA backend
+  generates its own conv kernels. **Never project throughput across compilers**:
+  scaling the 65 fps XLA number by fp32 TFLOPS predicted 16 fps, wrong by 32× under
+  IREE and by 14× the other way under TensorRT.
+
+See `deploy/ORIN_SMOKE_TEST.md` and `runs/2026-08-28-visdrone-fpn-rebuild/`.
+
 
 ## 12. State on pause / resume checklist (2026-07-24) — ⛔ OBSOLETE, see §12b
 
