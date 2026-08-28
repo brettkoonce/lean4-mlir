@@ -13273,9 +13273,9 @@ $\nabla_x \log p_t(x)$. \textbf{That view costs no retraining here}, which is
 the point worth taking away: under the variance-preserving SDE the score is
 $-\hat\varepsilon(x,t)/\sigma_t$, so the $\varepsilon$-predicting network the
 trainer above already produces \emph{is} a score model up to a scale factor.
-Sampling is then whatever you choose to integrate --- the reverse SDE with
-Euler--Maruyama, or its deterministic twin the probability-flow ODE --- and the
-choice is a sampler swap on frozen weights, not a different model.
+Sampling is then whatever you choose to integrate, on frozen weights: the
+reverse SDE, its deterministic twin the probability-flow ODE, or the family
+between them that DDIM's $\eta$ interpolates.
 
 So it can be measured. Energy distance against real MNIST, budget in network
 evaluations:
@@ -13285,25 +13285,31 @@ evaluations:
 \hline
 sampler & NFE $10$ & NFE $20$ & NFE $50$ & NFE $200$ \\
 \hline
-DDIM                          & $\mathbf{0.0874}$ & $\mathbf{0.0437}$ & $\mathbf{0.0237}$ & $\mathbf{0.0188}$ \\
-reverse SDE (Euler--Maruyama) & $1.1837$ & $0.9870$ & $0.3382$ & $0.0211$ \\
-probability-flow ODE (Euler)  & $0.3542$ & $0.2053$ & $0.0910$ & $0.0288$ \\
+DDIM, $\eta = 0$ (deterministic) & $0.0874$ & $0.0437$ & $0.0237$ & $0.0188$ \\
+DDIM, $\eta = 1$ (ancestral)     & $\mathbf{0.0455}$ & $\mathbf{0.0132}$ & $\mathbf{0.0067}$ & $\mathbf{0.0099}$ \\
+reverse SDE (Euler--Maruyama)    & $1.1837$ & $0.9870$ & $0.3382$ & $0.0211$ \\
+probability-flow ODE (Euler)     & $0.3542$ & $0.2053$ & $0.0910$ & $0.0288$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent DDIM wins at every budget, and the reason is structural rather than
-incidental. The reverse process is stiff --- $\beta(t)$ diverges as $t \to 1$
---- and DDIM integrates that linear part \emph{exactly}, where an explicit
-solver has to resolve it numerically and its step size pays for it. The
-Euler--Maruyama arm \emph{diverges} below $200$ evaluations (pixel mean $2.90$
-against the data's $0.13$, two classes of ten covered) while posting the highest
-confidence in this section, which is the previous paragraph's warning arriving
-from a second direction.
+\noindent \textbf{Noise in the reverse process helps, and the effect is
+monotone in $\eta$ at every budget} --- the two intermediate arms, $\eta = 0.25$
+and $\eta = 0.5$, sit in order between the first two rows. Ancestral sampling at
+$50$ evaluations beats the deterministic sampler at $200$ by nearly $3\times$,
+on a quarter of the compute.
 
-That is a statement about this discretisation rather than about stochastic
-sampling: the stable discrete form of the reverse SDE is ancestral sampling,
-DDIM at $\eta = 1$, which is not run here.
+\medskip\noindent Which makes the third row the instructive one. \emph{The
+reverse SDE and ancestral sampling are the same idea} --- integrate the
+stochastic reverse process --- and they land at opposite ends of this table,
+because one of them discretises it well and the other does not. The reverse
+process is stiff, $\beta(t)$ diverging as $t \to 1$, and the Euler--Maruyama arm
+diverges below $200$ evaluations (pixel mean $2.90$ against the data's $0.13$,
+two classes of ten covered) while posting the highest confidence in this
+section --- the previous paragraph's warning arriving from a second direction.
+The probability-flow row lags for the same reason, more mildly. So the choice
+that matters here is not stochastic versus deterministic; it is how the linear
+part gets integrated, and DDIM does it exactly at either $\eta$.
 
 The shape carries all the way up: the bestiary DDPM entry below is the same UNet
 at CIFAR scale, and Stable Diffusion is the same UNet on VAE latents with text
