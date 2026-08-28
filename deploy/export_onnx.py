@@ -61,6 +61,7 @@ export and shipping a different model twice.
     trtexec --onnx=detector.onnx --saveEngine=detector.plan --fp16
 """
 import argparse
+import pathlib
 import sys
 from pathlib import Path
 
@@ -242,6 +243,21 @@ def main():
     try:
         import onnx
         m = onnx.load(args.out)
+        # torch may park the weights in a sibling `<name>.onnx.data` and leave a
+        # 200 KB stub behind. That is a deployment trap: scp'ing "the onnx" to the
+        # device then yields a model with no weights, and the failure surfaces at
+        # trtexec as something unrelated. Fold them back in so the artifact is one
+        # self-contained file — 86 MB is far below the 2 GB protobuf ceiling.
+        sidecar = pathlib.Path(args.out + ".data")
+        if sidecar.exists():
+            onnx.load_external_data_for_model(m, str(sidecar.parent))
+            for init in m.graph.initializer:
+                init.ClearField("data_location")
+                del init.external_data[:]
+            onnx.save(m, args.out, save_as_external_data=False)
+            sidecar.unlink()
+            m = onnx.load(args.out)
+            print(f"  folded {sidecar.name} back into the model (one file to ship)")
         written = next((o.version for o in m.opset_import if o.domain == ""),
                        args.opset)
         n_asym = sum(1 for n in m.graph.node if n.op_type == "Conv"
