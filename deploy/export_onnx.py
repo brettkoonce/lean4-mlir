@@ -13,15 +13,23 @@ overstates it — IREE is simply worse at convolutions.
 
 TensorRT ingests ONNX. StableHLO -> ONNX is not a trodden path, but this repo
 already keeps a faithful PyTorch replica of this exact detector
-(`demos/visdrone/bespoke/`), together with a loader for Lean's flat checkpoints
-and a differ that proves the two agree. So the shortest correct route is to load
-the trained Lean weights into the replica and export that.
+(`demos/visdrone/bespoke/`) together with a loader for Lean's flat checkpoints.
+So the shortest correct route is to load the trained Lean weights into the
+replica and export that.
 
-⚠ That makes the replica load-bearing for deployment, not just for validation.
-`--verify` exists for exactly that reason: it re-scores the exported graph
-against a Lean logits dump and refuses on disagreement. Run it. A silent
-architecture drift between the replica and the Lean spec would ship a detector
-that is subtly not the one that was measured.
+⚠⚠ That makes the replica load-bearing for deployment, and its existing
+validation DOES NOT COVER THIS MODE. `bespoke/diff_lean.py` compares the replica
+to Lean in TRAINING mode with batch statistics — its own `--eval-mode` help says
+to leave eval off in order to compare. Deployment runs eval mode with running
+statistics, which has never been checked against Lean.
+
+That is not hypothetical: the first Orin run produced 279 detections and top
+score 0.7656 on the reference frame where the Lean stack produces 238 and 0.7109,
+with the ONNX matching the PyTorch replica to 2.4e-05. So the disagreement is
+between the replica and Lean, in exactly this untested mode.
+
+**Run `--verify-frame`.** It is self-contained and needs nothing from the
+training box.
 
 ## Usage
 
@@ -30,7 +38,7 @@ that is subtly not the one that was measured.
         --ckpt ../.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__ctrl12_params.bin \
         --bn   ../.lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__ctrl12_bn_stats.bin \
         --out  build/detector.onnx \
-        --verify ../runs/fpn_ctrl12_final/logits.bin
+        --verify-frame
 
     # then on the Orin
     trtexec --onnx=detector.onnx --saveEngine=detector.plan --fp16
@@ -49,6 +57,47 @@ IMG_PX = 448
 NTOT = 185220
 
 
+
+def verify_frame(onnx_path, tol):
+    """Self-contained gate: testdata/frame.png vs testdata/frame_logits.bin.
+
+    Both ship in the repo, so this needs nothing from the training box. The
+    logits are the Lean stack's own output for that frame under the eval graph
+    (BN in inference mode, running stats), which is precisely the path the
+    replica has never been validated on — `bespoke/diff_lean.py` compares in
+    TRAINING mode with batch statistics and says so in its own help.
+    """
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        raise SystemExit("--verify-frame needs onnxruntime")
+    from PIL import Image
+
+    ref = np.fromfile(HERE / "testdata" / "frame_logits.bin", dtype=np.float32)
+    if ref.size != NTOT:
+        raise SystemExit(f"reference logits are {ref.size} floats, want {NTOT}")
+    img = np.asarray(Image.open(HERE / "testdata" / "frame.png").convert("RGB"),
+                     dtype=np.float32).transpose(2, 0, 1) / 255.0
+    mean = np.array([0.485, 0.456, 0.406], np.float32).reshape(3, 1, 1)
+    istd = (1.0 / np.array([0.229, 0.224, 0.225], np.float32)).reshape(3, 1, 1)
+    x = ((img - mean) * istd)[None]
+
+    sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+    got = sess.run(None, {"image": x})[0].reshape(-1)[:NTOT]
+    d = np.abs(got - ref)
+    print(f"  max abs diff {d.max():.3e}  mean {d.mean():.3e}  (tol {tol})")
+    print(f"  ref  range {ref.min():+.3f} .. {ref.max():+.3f}")
+    print(f"  onnx range {got.min():+.3f} .. {got.max():+.3f}")
+    if d.max() > tol:
+        raise SystemExit(
+            "⛔ THE EXPORT DOES NOT MATCH THE LEAN MODEL.\n"
+            "   Do not deploy. This is the eval-mode path that "
+            "bespoke/diff_lean.py never covered — most likely the replica's BN "
+            "running-stats handling or its conv padding differs from the Lean "
+            "spec. Report the numbers above rather than widening the tolerance.")
+    print("✅ export matches the Lean model on the reference frame")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True, help="Lean *_params.bin")
@@ -59,6 +108,10 @@ def main():
                     help="1 for a camera; the training graph is 8")
     ap.add_argument("--verify", default=None,
                     help="Lean logits.bin to check the export against")
+    ap.add_argument("--verify-frame", action="store_true",
+                    help="self-contained gate: compare against testdata/frame.png "
+                         "+ testdata/frame_logits.bin, which ship in the repo. "
+                         "Needs no val.bin and no dump from the training box.")
     ap.add_argument("--val-bin", default=str(REPO / "data/visdrone_fpn/val.bin"),
                     help="source of the images --verify compares on")
     ap.add_argument("--verify-n", type=int, default=4)
@@ -94,9 +147,15 @@ def main():
     )
     print(f"wrote {args.out}  (batch {args.batch}, opset {args.opset})")
 
+    if args.verify_frame:
+        verify_frame(args.out, args.tol)
+        return
+
     if not args.verify:
-        print("⚠ exported WITHOUT --verify. The replica is load-bearing here; "
-              "run with --verify before trusting this on device.")
+        print("⚠ exported WITHOUT a verify gate. The replica is load-bearing "
+              "here and its agreement with Lean has only ever been tested in "
+              "TRAINING mode (batch stats); this exports EVAL mode (running "
+              "stats). Run --verify-frame.")
         return
 
     # ---- the gate: does the exported graph reproduce the Lean logits? ----
