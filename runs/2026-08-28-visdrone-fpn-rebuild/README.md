@@ -34,7 +34,9 @@ rather than on the easy class: bus 0.165→0.227, truck 0.095→0.108,
 awning-tricycle 0.020→0.030. Car improves 0.573→0.605 but no longer carries the
 mean alone. (bicycle and tricycle slip slightly.)
 
-**The recipe is therefore: long schedule + augmentation.** Not one or the other.
+**The recipe is therefore: augmentation, at a MEDIUM schedule.** Not one or the
+other, and not simply "longer" — see the curves below, where both arms decline
+after their peak and the aug optimum sits near 30 epochs, not 50.
 
 ---
 
@@ -165,29 +167,38 @@ Car alone carries the headline. A 38x spread between best and worst class says t
 demo's honest subject is *why aerial detection collapses on small rare classes*,
 which is more instructive than one mediocre mAP.
 
-## The plateau curve
+## The plateau curves — ⚠ BOTH arms peak and then decline
 
-`long50` scored at intermediate epochs (mid-schedule, so NOT annealed — the finals
-above are the comparable numbers):
+| epoch | 5 | 10 | 15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 (final) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `long50` no aug | 0.1114 | 0.1223 | **0.1320** | 0.1313 | 0.1315 | 0.1283 | 0.1261 | 0.1268 | 0.1244 | 0.1243 |
+| `aug50` +aug | 0.1207 | — | — | 0.1703 | — | **0.1731** | — | 0.1694 | — | 0.1674 |
 
-| epoch | 5 | 10 | 15 | 50 (final, annealed) |
-|---|---|---|---|---|
-| mAP@0.5 | 0.1114 | 0.1223 | 0.1320 | **0.1243** |
+⚠ **Augmentation delays and softens overfitting; it does not eliminate it.**
+Without aug the peak is ~e15–25 at 0.132. With aug the peak is **e30 at 0.1731**,
+and by e50 it has given back 3%. So the correct reading is *not* "longer + aug
+wins" — it is **aug moves the optimum from ~15 epochs to ~30 and raises it 31%**.
+Running to 50 overshoots in both arms.
 
-It climbs to ~epoch 15 and the annealed endpoint lands *below* it. Note the
-augmentation arm was already ahead at epoch 5 (0.1207 vs 0.1114) while carrying
+(Intermediate checkpoints are mid-schedule and therefore NOT annealed, which makes
+0.1731 an underestimate of what a properly-annealed 30-epoch run should reach.)
+
+Note the aug arm was already ahead at epoch 5 (0.1207 vs 0.1114) while carrying
 higher train loss — the correct early signature, visible 45 epochs before the
-final confirmed it.
+finals confirmed it.
 
 ⚠ `ctrl12` and `long50` have different cosine schedules, so `long50` at its epoch
 12 is NOT a control for `ctrl12`. Only the finals are comparable.
 
 ## What to run next
 
-1. **Augmentation at 12 epochs.** The 2×2 is missing its fourth cell: aug helps at
+1. ⭐ **A 30-epoch arm with aug, annealed at 30.** The best checkpoint seen is
+   `aug50` @ e30 = **0.1731**, but that is a truncated 50-epoch cosine that never
+   got its annealing. A schedule that actually ends at 30 should beat it, and
+   costs 40% less than the 50-epoch run.
+2. **Augmentation at 12 epochs.** The 2×2 is missing its fourth cell: aug helps at
    50, but nobody has checked whether it helps at 12, which is 4× cheaper.
-2. **Longer than 50, with aug.** `aug50` is the only arm that was still improving
-   when its schedule ran out.
+3. **Do NOT run longer than 50.** Both arms are declining by then.
 3. Mosaic, which the current pack deliberately omits — deferred on the grounds
    that 4-into-1 halves already-tiny objects. Worth re-testing now that plain aug
    is measured as clearly positive.

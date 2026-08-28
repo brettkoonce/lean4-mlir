@@ -12332,7 +12332,13 @@ something together.} Quadrupling the schedule with augmentation off \emph{costs}
 19\%: less than half the training loss, more detections, lower recall --- ordinary
 overfitting on 6{,}471 images. Turning augmentation on at that same 50-epoch
 schedule converts $-19\%$ into $+10\%$ over the best short run. One flag decides
-whether a long schedule pays at all, so reporting either alone would mislead.
+whether a longer schedule pays at all, so reporting either alone would mislead.
+
+\medskip\noindent The epoch sweep sharpens it further: \emph{both} arms peak and
+then decline. Without augmentation the peak is near epoch 15 at $0.132$; with it,
+near epoch 30 at $0.1731$, giving $3\%$ back by epoch 50. Augmentation therefore
+delays and softens overfitting rather than removing it --- it moves the optimum
+from roughly 15 epochs to roughly 30 and raises it by $31\%$.
 
 \medskip\noindent The stack beats the hand-written PyTorch replica of
 \emph{this same architecture} by $9\%$, having trailed it by $10\%$ before this,

@@ -142,10 +142,15 @@ Truth on top, prediction below, on the four densest val frames. **mAP@0.5 =
 0.1674** at 50 epochs with `FPN_AUG=1`, and 65 fps on one RTX 4060 Ti. That
 beats a hand-written PyTorch replica of this same architecture (0.1532) by 9%.
 
-⭐ **Augmentation is what makes the long schedule pay.** At 50 epochs *without*
+⭐ **Augmentation is what makes a longer schedule pay.** At 50 epochs *without*
 it the same arm scores 0.1243 — worse than 12 epochs (0.1526), with half the
 train loss: ordinary overfitting on 6,471 images. One flag turns −19% into +10%.
-Do not run a long schedule here without `FPN_AUG=1`.
+Never run a long schedule here without `FPN_AUG=1`.
+
+⚠ But do not simply run longer either — **both arms peak and then decline**.
+No-aug peaks near epoch 15 (0.1320); with aug the peak is epoch 30 (**0.1731**)
+and 3% is given back by epoch 50. Augmentation moves the optimum from ~15 to ~30
+epochs and raises it 31%; it delays overfitting rather than removing it.
 
 A YOLOv8s at the same budget scores 0.140; its published-style 0.391 comes from
 8× the epochs, higher resolution and full augmentation, so that gap is recipe
