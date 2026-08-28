@@ -2295,7 +2295,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
     | .fpnDetect oc c3 c4 c5 g5 A tower =>
       -- Forward-only FPN detector: neck + per-scale heads → flat [B, Ntot].
       if fpnStages.size < 3 then
-        code := code ++ s!"    // fpnDetect: need ≥3 residualBlock stages, have {fpnStages.size}\n"
+        code := code ++ s!"    // fpnDetect: need ≥3 residualBlock/bottleneckBlock stages, have {fpnStages.size}\n"
       else
         let (c3SSA, _) := fpnStages[fpnStages.size - 3]!
         let (c4SSA, _) := fpnStages[fpnStages.size - 2]!
@@ -2321,6 +2321,10 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       curSSA := newSSA
       curShape := newShape
       pidx := newPidx
+      -- A bottleneck stage is an FPN tap exactly as a residualBlock stage is, so
+      -- a `.fpnDetect` head can sit on an R50-class backbone. Additive: nothing
+      -- but `.fpnDetect` reads `fpnStages`.
+      fpnStages := fpnStages.push (curSSA, curShape)
     | .invertedResidual ic oc expand stride nBlocks =>
       let (snip, newSSA, newShape, newPidx) := emitInvertedResidual pidx curSSA curShape ic oc expand stride nBlocks (fixedBN := fixedBN)
       code := code ++ snip
@@ -5974,6 +5978,11 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           hasRelu := true
           addSkipGrad := if bi == 0 && needsProj then s!"proj:{pidx - 1}" else "identity"
         }
+      -- FPN tap, mirroring the residualBlock case above: the stage output plus
+      -- the index of its last skip-add marker, which is where `fpnTapGrad` joins
+      -- in the backward walk. The marker record pushed above is byte-identical in
+      -- shape to residualBlock's, so the existing marker backward handles it.
+      fpnStages := fpnStages.push (curSSA, curShape, records.size - 1)
 
     | .invertedResidual ic oc expand firstStride nBlocks =>
       for bi in [:nBlocks] do
@@ -6913,7 +6922,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       -- Top-down neck + per-scale 1×1 heads → flat [B, Ntot] concat. Taps the
       -- last 3 residualBlock stages as C3/C4/C5. 6 weight-only params at `base`.
       if fpnStages.size < 3 then
-        code := code ++ s!"    // fpnDetect: need ≥3 residualBlock stages, have {fpnStages.size}\n"
+        code := code ++ s!"    // fpnDetect: need ≥3 residualBlock/bottleneckBlock stages, have {fpnStages.size}\n"
       else
         let (c3SSA, _, c3Idx) := fpnStages[fpnStages.size - 3]!
         let (c4SSA, _, c4Idx) := fpnStages[fpnStages.size - 2]!
