@@ -22,7 +22,14 @@ The camera capture is a deliberate stub in both — on Orin the IMX path is a
 sensor- and JetPack-specific GStreamer pipeline, and guessing it from here would
 be worse than leaving it marked.
 
-## TensorRT route (recommended)
+## ⛔ TensorRT route — BLOCKED, see ORIN_SMOKE_TEST.md
+
+The toolchain works and hits 229 fps. But the ONNX comes from
+`demos/visdrone/bespoke/`, and that replica does **not** compute the same
+function as the Lean model: max abs difference 16.5 on logits spanning ±16,
+objectness correlation as low as 0.62. Its only validation compared a scalar
+loss and two summary statistics against hardcoded numbers, which cannot
+distinguish architectures. Fix the source before shipping anything from here.
 
 ```bash
 # 1. anywhere torch exists (NOT the training box — no torch there)

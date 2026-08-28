@@ -1,5 +1,45 @@
 # Orin smoke test — brief for a Claude running on the device
 
+> # ⛔ STOP — the ONNX route ships a DIFFERENT MODEL. Measured 2026-08-28.
+>
+> The 229 fps result is real and worth having. **The detector it measured is not
+> the one this repo trained.**
+>
+> Run on the training box, replica vs the Lean eval graph on `testdata/frame.png`,
+> identical weights, identical input:
+>
+> | | value |
+> |---|---|
+> | max abs difference | **16.5** (logits span ±16) |
+> | correlation, all channels | 0.86 / 0.75 / 0.86 at P3 / P4 / P5 |
+> | correlation, objectness | 0.90 / 0.80 / **0.62** |
+> | objectness mean | −3.577 Lean vs −3.501 replica |
+>
+> Correlated but not equal: a *similar* model, not the same function. Ruled out —
+> BN stats layout (verified per-layer interleaved, 0 negative variances), the BN
+> walk (36/36 layers, exact channel sequence, none missed), BN epsilon (1e-5 both
+> sides), `pool="lean"` vs `"torchvision"` (both wrong), and channel grouping
+> ([A,15] vs [15,A] transposes are worse, so it is not a permutation).
+>
+> **Root cause is the validation, not the export.** `bespoke/diff_lean.py` never
+> compares elementwise. It prints the replica's scalar loss beside *hardcoded*
+> Lean numbers in a string, plus objectness mean/std against another hardcoded
+> pair — and those references date from the pre-shuffle-fix era. Two different
+> architectures with similar loss and similar logit statistics pass that check
+> trivially. The replica was never a verified oracle, and building the deployment
+> path on it was a mistake on the training side, not the device side.
+>
+> **What still stands from the device run:** the TensorRT toolchain, fp16 at
+> 2.15×, the pinned-buffer fix, the three-stage timing split, and the finding that
+> CPU decode at 57 ms is 6× the 4.4 ms network. All of that transfers unchanged to
+> a correct model.
+>
+> **Do not** wire up the camera or chase accuracy against this engine. The export
+> needs a source that is gated elementwise first — most likely a minimal PyTorch
+> module mirroring the Lean spec directly rather than torchvision's ResNet, loaded
+> in Lean parameter order and gated against `testdata/frame_logits.bin`. The gate
+> is objective, so the task is bounded.
+
 **Goal: get one real frames-per-second number for this detector on the Orin via
 TensorRT, and confirm the exported model is still the model we measured.**
 
