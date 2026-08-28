@@ -4396,7 +4396,7 @@ theorem cnnBackGraph_faithful
           hc hh hw x h1 h2 h_mp h3 h4).backward dy := by
   simp only [cnnBackGraph, den, mnistCnnNoBn_has_vjp_at, convRelu_has_vjp_at,
     denseRelu_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
-    hasVJP3_to_hasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id_eq, Function.comp_apply]
+    hasVJP3_to_hasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id, Function.comp_apply]
   rw [hasVJPAt_backward_det _ (maxPoolFlat_has_vjp_at'
         ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
           ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁) x)) h_mp)]

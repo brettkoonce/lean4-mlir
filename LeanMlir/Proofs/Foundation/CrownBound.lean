@@ -185,7 +185,7 @@ noncomputable def relaxA (l u α s v : ℝ) : ℝ :=
   if u ≤ 0 then 0 else if 0 ≤ l then v else if 0 ≤ v then v * α else v * s
 
 /-- The relaxation constant. Only the unstable/negative branch carries one. -/
-noncomputable def relaxC (l u α s v : ℝ) : ℝ :=
+noncomputable def relaxC (l u _α s v : ℝ) : ℝ :=
   if u ≤ 0 then 0 else if 0 ≤ l then 0 else if 0 ≤ v then 0 else -(v * s * l)
 
 /-- **All four branches in one lemma, uniform in `v`.** The chord condition is

@@ -318,7 +318,7 @@ def mkSession (mlirPath : String) : IO LowererSession := do
     -- reference — see planning/xla_pjrt_ladder.md §8, rung 3.
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     let base := (mlirPath.splitOn "/").getLastD mlirPath
-    let stem := if base.endsWith ".mlir" then base.dropRight 5 else base
+    let stem := if base.endsWith ".mlir" then (base.dropEnd 5).toString else base
     compileVmfb mlirPath s!".lake/build/{stem}_{target}.vmfb"
     LowererSession.create s!".lake/build/{stem}_{target}.vmfb"
 

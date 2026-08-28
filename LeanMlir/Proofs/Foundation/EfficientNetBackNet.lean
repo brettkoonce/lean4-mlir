@@ -253,7 +253,7 @@ theorem mbNoExpBackBatchedGraph_faithful {N ic oc h w kHd kWd r : Nat}
     peer of MNv4's head, and the last stage-level hole in the repo. -/
 noncomputable def headBackBatchedGraph {N c oc h w nC : Nat}
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wfc : Mat oc nC) (bfc : Vec nC)
+    (Wfc : Mat oc nC) (_bfc : Vec nC)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * nC)) : SHlo (N * (c * h * w)) :=
   cbsBackBatchedGraph Wh bh εh γh βh x
     (.gapBackBatched (N := N) (c := oc) (h := h) (w := w)

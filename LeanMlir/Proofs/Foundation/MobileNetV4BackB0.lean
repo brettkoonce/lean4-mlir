@@ -264,7 +264,7 @@ noncomputable def mnv4FamilyFFN (N : Nat) {c mid h w : Nat}
 /-- **MNv4's stride-1 trunk section, as a type-level check on the block table.** Blocks 4–10 all sit
     at `160 → 160`, `h = 14`, and cover every family: ExtraDW (4, 5, 10), ConvNeXt (6, 8), IB (7),
     FFN (9). Chaining them is one `CertLayer.chain`, and its faithfulness is `chain_faithful`. -/
-noncomputable def mnv4Stage14 (N : Nat) {c mid : Nat}
+noncomputable def mnv4Stage14 (N : Nat) {c _mid : Nat}
     (extraDW convNeXt ib ffn : CertLayer (N * (c * 14 * 14)) (N * (c * 14 * 14))) :
     CertLayer (N * (c * 14 * 14)) (N * (c * 14 * 14)) :=
   CertLayer.chain [extraDW, extraDW, convNeXt, ib, convNeXt, ffn, extraDW]

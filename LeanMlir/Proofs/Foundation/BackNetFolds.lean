@@ -224,7 +224,7 @@ noncomputable def mnv2ResidBlockLayer (N : Nat) {c mid h w kHd kWd : Nat}
 /-- ⭐⭐ **A chain of MBConv blocks is certified, at any depth.** Immediate from
     `CertLayer.chain_faithful`; stated per net only to make the payoff visible. The same one-liner
     works for every layer in this file, which is what "the machinery is net-agnostic" means. -/
-theorem enetChain_faithful {N c mid h w kHd kWd r : Nat}
+theorem enetChain_faithful {N c _mid h w _kHd _kWd _r : Nat}
     (Ls : List (CertLayer (N * (c * h * w)) (N * (c * h * w))))
     (x : Vec (N * (c * h * w))) (hx : (CertLayer.chain Ls).ok x)
     (e : SHlo (N * (c * h * w))) :
