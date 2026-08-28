@@ -1442,10 +1442,22 @@ def vitSImagenetVerified : VerifiedNetSpec where
 /-- **ViT-Base (DeiT-B) on full ImageNet-1k.** `D = 768 = 12 heads × 64`, MLP 3072, still depth 12
     and still 16×16 patches. Added by handing the renderer a third `VitDims`; nothing else moved.
 
-    ⚠ **Per-device batch 32, not 128**, and that is a memory fact rather than a recipe choice: the
-    phase-2 JAX probe measured ViT-B OOM at 4×128 on these 16 GB cards in bf16, and this path is
-    fp32. 32×4 = global 128, so this is NOT the DeiT global 512 the S and Ti drivers train at, and
-    the LR would need the linear-scaling adjustment before any run is quotable. -/
+    ⚠⚠ **THE "PER-DEVICE BATCH 32" PIN IS LIFTED** (2026-08-27). This docstring used to call 32 "a
+    memory fact rather than a recipe choice", on a phase-2 JAX probe that found ViT-B OOM at 4×128
+    "on these 16 GB cards". The OOM was against **11.68 GiB** — the CUDA plugin's BFC
+    `memory_fraction = 0.75` default, not the card — and `LEAN_MLIR_MEM_FRACTION=0.97` gives 15.11
+    GiB. Both `vitbin_adamdp128x4wxclipdrop*` renders execute on four cards at global **512**, which
+    IS DeiT's batch: fp32 at 13.99 GiB (93 % of the raised budget, `RESOURCE_EXHAUSTED` at the
+    default) and bf16 at 12.61. Evidence: `runs/2026-08-27-vitb-global512/`.
+
+    ⚠⚠ **AND THE 32×4 PAIR IS DELETED**, not kept as a fallback. It was global 128 where DeiT's
+    recipe is 512, it applied the reference's batch-512 LR to a quarter of the images that rate was
+    set for, and it was SLOWER per epoch — 291 h against 322 in fp32, 178 against 228 in bf16, both
+    measured. Nothing was left for it to win on. ▶ Consequence: this net has no small-batch render,
+    so `LEAN_MLIR_MEM_FRACTION` is not optional and `runViTBImagenet` refuses without it (except on
+    the bf16 twin, which fits the default arena at 10.88 GiB).
+
+    ⚠ Neither precision has been TRAINED. -/
 def vitBImagenetVerified : VerifiedNetSpec where
   name     := "ViT-Base (ImageNet-1k)"
   slug     := "vitbin"

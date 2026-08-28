@@ -132,6 +132,12 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- same three markers, and the reason this table is run rather than reasoned about.
   , ("adam128wxclipdrop", false, false, true), ("adamdp128x4drop", false, false, true)
   , ("adam64drop", false, false, true)
+    -- ⚠⚠ **AND THE FULL CONCATENATION WAS MISSING** (2026-08-27). `adamdp128x4wxclipdrop` is what
+    -- ViT-Tiny, ViT-S and now ViT-B all actually SHIP, and it appeared in this file only as three
+    -- scattered single-predicate `#guard`s — never as a row, so never run through all five. The
+    -- two rows above are each one marker short of it. That is this table's own header rule
+    -- ("run every CONCATENATION") failing against the one spelling three nets emit.
+  , ("adamdp128x4wxclipdrop", false, false, true)
     -- ▶ CLASSIFIER DROPOUT's spellings (`recipe_gaps.md` gap C). ⚠ `emarms64drop*` is EfficientNet's
     -- REAL ordering — the batch suffix precedes the regulariser markers — which this table had
     -- wrong as `emarmsdrop64` until 2026-08-03, when a `#guard` against `enetAdamVariant` caught
@@ -219,6 +225,13 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- ⚠ and a NON-accumulating bf16 render, so the partition below is tested in both directions:
     -- this is R50's shipped `momdp64bf16`, which must read as 3 regions.
   , ("momdp64bf16", false, false, false)
+    -- ⚠ **ViT's bf16 spellings, and they are a DIFFERENT adjacency from R50's.** Above, `bf16`
+    -- lands after `bce`/`wd001`; here it lands directly after `drop`, so this is the concatenation
+    -- the block comment reasons about ("`drop` ++ `bf16` does not spell `do`") actually run. Both
+    -- ship: `vitin`/`vitsin` carry the DP one, and ViT-B's global-512 pair added the 1-replica peer
+    -- (`verified_side_quest_counterparts.md` §4d).
+  , ("adamdp128x4wxclipdropbf16", false, false, true)
+  , ("adam128wxclipdropbf16", false, false, true)
     -- ▶ LAMB (`r34AdamVariant .lamb`). ⚠ It needs NO driver predicate — three regions, the same
     -- `[θ|m|v]` signature as `adam`, because the trust ratio is computed inside the graph from θ
     -- and the direction and needs no extra state. So it is here for `wx`/`clip`'s reason: to prove

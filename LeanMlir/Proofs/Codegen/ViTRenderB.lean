@@ -883,23 +883,96 @@ def vitDropFwdBanner : String :=
 #eval IO.FS.writeFile "verified_mlir/vitsin_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitsin_fwd" 1000 (V := Proofs.StableHLO.vitSDims))
 
--- ViT-Base, same three artifacts. ⚠ Per-device batch 32, not 128: the phase-2 JAX probe measured
--- ViT-B OOM at 4×128 on these 16 GB cards IN bf16, and this path is fp32.
-#eval IO.FS.writeFile "verified_mlir/vitbin_adamdp32x4wxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp32x4wxclipdrop_train_step" "32.0" 4 1000
-    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
-    (sd := true) (vbB := 32) (V := Proofs.StableHLO.vitBDims))
+-- ⚠⚠ **THE `32×4` PAIR IS GONE** (brett, 2026-08-27) — two artifacts deleted, and the reason is
+-- that they had no axis left to win on. They existed because a phase-2 OOM at 4×128 was recorded
+-- as a hardware limit; it was the CUDA plugin's `memory_fraction = 0.75` default, and at 0.97 the
+-- 128×4 pair below both fits and runs. Against it, `32×4` was global 128 where DeiT's recipe is
+-- **512**, it applied the reference's batch-512 LR to a batch four times too small, and it was
+-- **slower** per epoch (322 h against 270 fp32, 228 against 155 bf16, device-only over 300
+-- epochs) because a quarter of the per-device batch pays the per-invoke overhead four times as
+-- often. ▶ This is the ViT half of what `2b2b15b` did to R50's `8×64`.
+-- ⚠ The measurements that licensed the move are kept in `runs/2026-08-27-vitb-global512/`; the
+-- artifacts are not.
 
--- ⭐ **B's bf16 peer.** Same two lines as S's, and the same `bf16Conv := false` inheritance.
--- ⚠ The batch marker moves with the render — `32x4`, not `128x4` — so the variant string, the
--- entry point and `LEAN_MLIR_VARIANT` stay one string derived from one `vbB`. A hand-written
--- `adamdp128x4…bf16` here would name a graph rendered at 32 and the shim would refuse the call.
-#eval IO.FS.writeFile "verified_mlir/vitbin_adamdp32x4wxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp32x4wxclipdropbf16_train_step" "32.0" 4
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- § ▶ ViT-Base at **128 per device** — the probe that asks whether §4d's accumulation loop
+--     is needed at all (`planning/verified_side_quest_counterparts.md` §6a, step 1)
+-- ════════════════════════════════════════════════════════════════════════════════════════
+--
+-- ⭐⭐ **The `32`-per-device pin above is a memory verdict, and the budget it was taken against
+-- was WRONG.** The comment says the phase-2 JAX probe found ViT-B OOM at 4×128 "on these 16 GB
+-- cards"; it did not — it found it OOM against **11.68 GiB**, which is the CUDA plugin's BFC
+-- `memory_fraction = 0.75` DEFAULT and not the card. `ffi/pjrt_ffi.c` now passes the option and
+-- `LEAN_MLIR_MEM_FRACTION=0.97` yields **15.11 GiB** (§6c, and XLA's own log line). So the pin has
+-- to be re-taken against the real budget, and re-taking it needs the artifact to exist.
+--
+-- ▶ **Why this matters beyond a batch size.** DeiT's recipe is global **512**. At 32×4 this net
+-- renders at global 128, which is a RECIPE deviation rather than a hardware footnote — a ViT-B
+-- number produced at global 128 is not comparable to DeiT-B's 81.8% even in principle. 128×4 is
+-- 512 in one shot, and one shot is what removes the need for `ViTRenderB` to grow an accumulation
+-- loop it does not have (§4d, the only "real feature" left on the side-quest list).
+--
+-- ⭐⭐ **IT FITS, AND IT EXECUTED** (2026-08-27, `runs/2026-08-27-vitb-global512/`). Not a compile
+-- figure: four 4060 Ti, ten steps each, `scripts/bf16_device_step.py --replicas 4`.
+--
+--   | render                    | peak    | of 15.11 | device ms/step | at the 11.68 default |
+--   |---------------------------|---------|----------|----------------|----------------------|
+--   | `adamdp128x4wxclipdrop`   | 13.99 G |   93 %   |   1298.92      | ⛔ `RESOURCE_EXHAUSTED` |
+--   | `…dropbf16`               | 12.61 G |   83 %   |    746.25      | ✅ runs (10.88 G there) |
+--
+-- ▶ **The control is the finding.** The fp32 artifact above is ONE ENVIRONMENT VARIABLE from
+-- failing: unset, the same bytes on the same four cards die *"Out of memory while trying to
+-- allocate 11.96GiB"*. So §4d's accumulation loop was never a ViT-B fact, it was an unset
+-- `memory_fraction`.
+--
+-- ⚠ **And the un-rematerialised graph really is 20.39 GiB** — XLA says so in its own words when
+-- compiled against the default budget (*"Can't reduce memory use below 10.16GiB … down from
+-- 20.39GiB originally"*). 13.99 is what rematerialisation buys, which is why a peak must be quoted
+-- with the budget it was taken against: this pair reads 13.97/10.88 at 11.68 and 13.99/12.61 at
+-- 15.11, because XLA rematerialises less when it has room (§6c saw the same on R50).
+--
+-- ⭐ **The all-reduce costs nothing measurable in the peak**, which is what the 1-replica peers
+-- below were rendered to establish — §6a's third way this could fail, priced by DIFFERENCE rather
+-- than assumed absent. A graph with no collective in it at all reads the same 13.99 / 12.61.
+--
+-- ⭐ **The 128×4 shape is not new to this renderer**, which is why this is four `#eval`s and not a
+-- feature: `vitsin_adamdp128x4wxclipdrop` and `vitin_adamdp128x4wxclipdrop` both ship. ViT-B is
+-- the only size that was pinned narrower, and only for the budget reason above.
+#eval IO.FS.writeFile "verified_mlir/vitbin_adamdp128x4wxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp128x4wxclipdrop_train_step" "128.0" 4
     1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
-    (sd := true) (vbB := 32) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
-#guard "vitbin_adamdp32x4wxclipdropbf16_train_step" ==
-  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 32 4 false true true true ++ "bf16" ++ "_train_step"
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims))
+#guard "vitbin_adamdp128x4wxclipdrop_train_step" ==
+  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "_train_step"
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_adamdp128x4wxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
+#guard "vitbin_adamdp128x4wxclipdropbf16_train_step" ==
+  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16" ++ "_train_step"
+
+-- ⚠⚠ **The 1-replica peers are a CONTROL, not a second recipe.** ViT-S and ViT-B have no
+-- single-device render at all today, and that is what made §6a's third failure mode unfalsifiable:
+-- "the all-reduce buffer is not in a single-device peak" cannot be checked without a graph that
+-- has no all-reduce in it. These two are that graph — same net, same batch, same flags, `replicas
+-- := 1` — so the collective's cost is the DIFFERENCE between two measurements rather than a
+-- correction someone estimates.
+-- ⚠ They render at global 128, so they are not a DeiT recipe and must not be quoted as one.
+#eval IO.FS.writeFile "verified_mlir/vitbin_adam128wxclipdrop_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adam128wxclipdrop_train_step" "128.0" 1
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims))
+#guard "vitbin_adam128wxclipdrop_train_step" ==
+  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 1 false true true true ++ "_train_step"
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_adam128wxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adam128wxclipdropbf16_train_step" "128.0" 1
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
+#guard "vitbin_adam128wxclipdropbf16_train_step" ==
+  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 1 false true true true ++ "bf16" ++ "_train_step"
+
 
 #eval IO.FS.writeFile "verified_mlir/vitbin_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitbin_fwd" 1000 (V := Proofs.StableHLO.vitBDims))
