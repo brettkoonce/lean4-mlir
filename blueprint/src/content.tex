@@ -13203,60 +13203,112 @@ def nystromformerBase : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Diffusion}
+\subsection{Diffusion --- demo: DDPM on MNIST}
+\label{sec:bestiary_diffusion}
 
-Generative models that predict the noise added to a clean image,
-with inference iterating the reverse (noise in, image out). The
-architecture is a UNet --- often with cross-attention bolted in for
-text conditioning. The novelty lives in the noise schedule and the
-sampling loop, not in layer design.
+Generative models that predict the noise added to a clean image, with inference
+iterating the reverse (noise in, image out). The architecture is a UNet ---
+often with cross-attention bolted in for text conditioning. The novelty lives in
+the noise schedule and the sampling loop, not in layer design.
 
-\paragraph{DDPM on MNIST, in passing.} The
-\texttt{demos/MainMnistDdpmTrain.lean} trainer (with CIFAR-10,
-sinusoidal-time-embedding, and attention variants alongside it) is a
-working denoising diffusion model: a timestep-conditioned UNet trained to
-predict the Gaussian noise added to an image. The \texttt{mnist-ddpm-sample}
-executable then runs the reverse loop --- a 50-step DDIM schedule
-subsampled from the $T = 1000$ training schedule --- starting from pure
-noise and producing MNIST digits (see \texttt{demos/README.md} for the
-rendered samples). The backbone is \emph{literally} the segmentation UNet
-(\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}) of the subsection above;
-three things change relative to the classifiers, segmentation nets, and
-detectors so far:
+\paragraph{DDPM on MNIST.} The \texttt{demos/MainMnistDdpmTrain.lean} trainer
+(with CIFAR-10, sinusoidal-time and attention variants beside it) is a
+timestep-conditioned UNet trained to predict the Gaussian noise added to an
+image; \texttt{mnist-ddpm-sample} runs the reverse loop and writes a grid. The
+backbone is \emph{literally} the segmentation UNet of
+\S~\ref{sec:bestiary_segmentation}. Three things
+change relative to the classifiers, segmentation nets and detectors so far:
 
 \begin{itemize}
-  \item \textbf{The target is the noise, and it is self-supervised --- there
-    are no labels.} Every model so far compares against a human-provided
-    label: a class, a per-pixel mask, a set of boxes. Diffusion manufactures
-    its own target: sample a random timestep $t$, sample Gaussian noise
-    $\varepsilon$, add it to a clean image per the noise schedule, and train
-    the network to predict $\varepsilon$. The loss is a plain per-pixel MSE
-    between predicted and actual noise (\texttt{lossKind :=
-    .floatTargetMse}) --- the same squared-error backward from Part~2, but
-    against a target generated on the fly rather than read from disk.
-  \item \textbf{The backbone is the segmentation UNet, conditioned on the
-    timestep.} One network has to denoise at \emph{every} level
-    $t \in [0, T)$, so $t$ is fed in: the tiny MNIST demo concatenates it as
-    an extra input channel (hence the leading \texttt{.unetDown 2 16} --- one
-    image channel plus one time channel), and the CIFAR sinusoidal variant
-    embeds it (sinusoidal $\to$ dense $\to$ dense, reusing the
-    \S~\ref{layer:positionalEncoding} primitive NeRF introduced). The
-    encoder-decoder-with-skips shape is exactly the segmentation kit ---
-    diffusion adds \emph{only} the conditioning, not new layers.
-  \item \textbf{Inference is an iterative sampling loop, not one forward
-    pass.} Classifiers, segmentation, and detection each produce their output
-    in a single network call. Diffusion starts from pure Gaussian noise and
-    iterates the reverse process --- predict the noise, step toward a cleaner
-    image, repeat --- here 50 DDIM steps. The \texttt{*-ddpm-sample}
-    executables run that loop on the same vmfb the trainer produced and write
-    a PPM; the novelty is entirely in the schedule and the loop, not in any
-    layer.
+  \item \textbf{The target is the noise, and it is self-supervised.} Every model
+    so far compares against something a human provided --- a class, a mask, a
+    set of boxes. Diffusion manufactures its own: sample a timestep $t$, sample
+    noise $\varepsilon$, add it per the schedule, predict $\varepsilon$, under
+    the same squared-error backward from Part~2
+    (\texttt{lossKind := .floatTargetMse}).
+  \item \textbf{The backbone is the segmentation UNet, conditioned on $t$.} One
+    network must denoise at every level, so $t$ is fed in: this demo
+    concatenates it as an extra channel (hence \texttt{.unetDown 2 16} --- one
+    image channel plus one time channel), and the CIFAR variant embeds it with
+    the positional-encoding primitive NeRF introduced. Diffusion adds
+    \emph{only} the conditioning.
+  \item \textbf{Inference is an iterative loop, not one forward pass.} What that
+    loop costs is the second table below.
 \end{itemize}
 
-The shape carries all the way up: the bestiary DDPM entry below is the same
-UNet at CIFAR scale, and Stable Diffusion is the same UNet run on VAE latents
-with text cross-attention spliced in. Encoder-decoder-with-skips plus a
-sampling loop is the whole generative pipeline.
+\paragraph{Scoring it needs an instrument, not an eye.} Unconditional image
+generation is the only demo in this book whose success criterion is ``does that
+look like a digit to you.'' It does not have to be: Chapter~\ref{chap:cnn}'s
+verified CNN maps an image to ten numbers, and in that space the usual
+statistics work. What matters more than any row is that the scale is
+\emph{bracketed at both ends}, since a metric that only ever reports ``bad'' is
+indistinguishable from a broken one:
+
+\begin{center}
+\begin{tabular}{@{}l c c r c@{}}
+\hline
+& coverage & confidence & energy ($\times$ floor) & pixel mean \\
+\hline
+real MNIST, scored as if generated & 10/10 & $99.40\%$ & $0.0020$ \;($1\times$)  & $0.122$ \\
+the model                          & 10/10 & $90.94\%$ & $0.0237$ \;($15\times$) & $0.138$ \\
+unstructured pixels                &  4/10 & $58.47\%$ & $0.3674$ \;($231\times$)& $0.132$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The instrument scores $98.66\%$ on the real split, which is the check
+that its weights loaded. Its first run caught a broken checkpoint --- pixels
+over $[-4.9, 11.9]$ where the data is $[0,1]$, from a trainer that never centred
+to $[-1,1]$ and defaulted to 3 epochs against a documented 50.
+$\triangleright$ And read the confidence column against the others: noise still
+posts $58\%$, so the usable range is $58$--$99$ rather than $0$--$100$, and on
+its own it is the metric most likely to mislead.
+
+\paragraph{The continuous-time view, and which solver to use.} Everything above
+is discrete: a schedule tabulated at $t = 0 \dots T{-}1$ and a fixed reverse
+recipe. Score-SDE (Song et al.\ 2021) reads the same object as a stochastic
+differential equation in continuous time, $\mathrm{d}x = f(x,t)\,\mathrm{d}t +
+g(t)\,\mathrm{d}w$, whose reverse is driven by the score
+$\nabla_x \log p_t(x)$. \textbf{That view costs no retraining here}, which is
+the point worth taking away: under the variance-preserving SDE the score is
+$-\hat\varepsilon(x,t)/\sigma_t$, so the $\varepsilon$-predicting network the
+trainer above already produces \emph{is} a score model up to a scale factor.
+Sampling is then whatever you choose to integrate --- the reverse SDE with
+Euler--Maruyama, or its deterministic twin the probability-flow ODE --- and the
+choice is a sampler swap on frozen weights, not a different model.
+
+So it can be measured. Energy distance against real MNIST, budget in network
+evaluations:
+
+\begin{center}
+\begin{tabular}{@{}l c c c c@{}}
+\hline
+sampler & NFE $10$ & NFE $20$ & NFE $50$ & NFE $200$ \\
+\hline
+DDIM                          & $\mathbf{0.0874}$ & $\mathbf{0.0437}$ & $\mathbf{0.0237}$ & $\mathbf{0.0188}$ \\
+reverse SDE (Euler--Maruyama) & $1.1837$ & $0.9870$ & $0.3382$ & $0.0211$ \\
+probability-flow ODE (Euler)  & $0.3542$ & $0.2053$ & $0.0910$ & $0.0288$ \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent DDIM wins at every budget, and the reason is structural rather than
+incidental. The reverse process is stiff --- $\beta(t)$ diverges as $t \to 1$
+--- and DDIM integrates that linear part \emph{exactly}, where an explicit
+solver has to resolve it numerically and its step size pays for it. The
+Euler--Maruyama arm \emph{diverges} below $200$ evaluations (pixel mean $2.90$
+against the data's $0.13$, two classes of ten covered) while posting the highest
+confidence in this section, which is the previous paragraph's warning arriving
+from a second direction.
+
+That is a statement about this discretisation rather than about stochastic
+sampling: the stable discrete form of the reverse SDE is ancestral sampling,
+DDIM at $\eta = 1$, which is not run here.
+
+The shape carries all the way up: the bestiary DDPM entry below is the same UNet
+at CIFAR scale, and Stable Diffusion is the same UNet on VAE latents with text
+cross-attention spliced in. Encoder-decoder-with-skips plus a sampling loop is
+the whole generative pipeline.
 
 \subsubsection*{DDPM (\texttt{Bestiary/Diffusion.lean})}
 \emph{Three} new primitives (\S~\ref{layer:unetDown}, \S~\ref{layer:unetUp}, \S~\ref{layer:positionalEncoding}). The denoiser in Ho et al.'s DDPM (2020,
