@@ -15,16 +15,81 @@ levers don't beat plain training" lesson that applies here too), and
 
 ## 0. TL;DR — where it stands
 
-> **⏸ PAUSED 2026-07-24 — pivoting to the R34→BraTS retraining demo (higher ROI).**
-> This thread is parked, not abandoned. Two things landed/broke this session,
-> both captured below — read §6.1 and §12 first on resume:
-> - **Aug pack COMMITTED** (`9280a3d`): online HSV jitter + horizontal flip for
->   the FPN path, opt-in via `FPN_AUG=1`, off by default. Algorithm-verified but
->   **never A/B'd at scale** (§6.2).
-> - **The `long30` run's mAP is VOID.** It completed (07-23), but the eval scored
->   the *wrong* (untagged) checkpoint six times — the classic missing-`FPN_TAG`
->   trap — so "train longer" (§6.1) is **still unanswered**. Script now fixed;
->   a re-score is the first resume step (§12).
+> **▶ RESUMED 2026-08-28. The tree was empty; it has been rebuilt and re-verified.**
+> The code and these docs survived the pause. The data, every checkpoint, the
+> backbone file, and the PyTorch twin's venv did not — they were deleted to free
+> disk. §12's resume checklist is therefore **obsolete**: its step 1 (re-score
+> `long30`) cannot run, because those checkpoints are gone. The `long30` result
+> stays VOID and "train longer" is now being answered by a fresh 50-epoch run
+> rather than a re-score.
+>
+> **What changed while this was parked, all of it load-bearing:**
+> - **The trainer got 9.47× faster** (`planning/detector_pjrt_port.md`, DONE
+>   2026-08-07). A 12-epoch run was 4.5 h and is now ~45 min. Every cost estimate
+>   in this doc and in `coco_visdrone_two_stage.md` predates that.
+> - **The box is now 6× RTX 4060 Ti on CUDA.** Every `IREE_BACKEND=rocm` and
+>   `HIP_VISIBLE_DEVICES` in these runbooks is dead weight; use
+>   `CUDA_VISIBLE_DEVICES`. Arms can run in parallel, one per card — though the
+>   **host data loader is the shared bottleneck**: epochs stretch from 208 s to
+>   ~400 s once five trainers are live.
+> - **Aug pack is confirmed ACTIVE, finally.** `FPN_AUG=1` raises epoch-1 train
+>   loss (356.4 vs 354.5) and epoch time (305 s vs 208 s). "Is it even on" was a
+>   live question; it is on. Still opt-in and still off by default.
+>
+> **Rebuild recipe (verified faithful — reproduce these counts or stop):**
+> `./download_visdrone.sh`, then `preprocess_visdrone.py data/visdrone
+> data/visdrone_fpn --size 448 --grid 14 --fpn data/visdrone`, then the same
+> without `--fpn` into `data/visdrone448` for the scoring sidecar. ⚠ Do **not**
+> regenerate the anchor priors with k-means — write
+> `data/visdrone/anchors_fpn_{p3,p4,p5}.txt` from the values hardcoded in
+> `demos/MainYolov1VisdroneFpn.lean`, so encoder and model cannot disagree.
+>
+> | quantity | historical | rebuilt |
+> |---|---|---|
+> | train GT boxes | 343,204 | 343,204 |
+> | val GT boxes | 38,759 | 38,759 |
+> | val boxes/img | 70.7 | 70.7 |
+> | encodability | 88.2% | 88.2% |
+>
+> **Backbones — the file situation is the trap now.**
+> - `jax_r34_imagenet.bin` was deleted and only a full ImageNet run regenerates
+>   it. But it is exactly the **first 85,138,688 bytes** of the packed
+>   `.lake/build/resnet34in_momdp64_ckpt_xla.bin` (θ is 21,797,672 floats =
+>   21,284,672 body + 513,000 fc). Reconstructed that way it starts at loss 717.7
+>   and reaches epoch-1 354.7 — **better** than the historical 391.1, because it
+>   is the 30-epoch verified checkpoint rather than the older ~72% one. That is a
+>   confound on any comparison to 0.1386, which is why a matched 12-epoch arm runs
+>   alongside.
+> - ⛔ **R50-A3's `ckpt.bin` cannot be bootstrapped raw.** Its conv weights are
+>   perfect (std 0.17, every segment matching `ckpt_e100.state.npz`) but **every
+>   per-channel BN slot runs to 5.2e6**, against R34's γ∈[0,0.60] / β∈[−0.68,0.77].
+>   Loaded as-is the detector starts at loss **5.8e8** where R34 starts at 717.7.
+>   Those values are presumably meaningful to the render that wrote them (it did
+>   score 77.2%) — most likely a scale folded against running statistics kept in
+>   the `.state.npz`, which the generic bootstrap loads as zeros, so nothing
+>   cancels. **Not a codegen bug**: the same spec under `FPN_NOBOOTSTRAP=1` starts
+>   at 8,284.8 and trains normally. Workaround in place — keep the conv weights,
+>   reset BN to γ=1/β=0 (`r50_a3convonly_params.bin`); that starts at 8,567.6 and
+>   is ahead of He init by step 100. Clean fix if full transfer is ever wanted:
+>   re-export A3 through `LEAN_MLIR_PARAMS_OUT`, the path that produced R34's file.
+>
+> **Codegen: two limits found putting `.fpnDetect` on a bottleneck backbone**
+> (both fixed/worked around, see `LeanMlir/MlirCodegen.lean`):
+> - `.fpnDetect` taps `fpnStages`, which only `.residualBlock` populated. On R50
+>   the list was empty, the head emitted a comment instead of a graph, and the
+>   backward then referenced `%d_logits` — a classifier gradient that does not
+>   exist under a detector. Fixed: bottleneck stages now register as taps in both
+>   walks. Additive; nothing but `.fpnDetect` reads that list.
+> - ⚠ **`.maxPool` with size > stride has no correct backward.** The tile-compare-
+>   select routes gradient to the argmax and is valid only for non-overlapping
+>   windows; with overlap one input can be the max of several and its gradient is
+>   a sum the tiling never forms. R50's `.maxPool 3 2` *also* fails to parse first
+>   (forward pads 224→225, backward reads the unpadded `inShape`), so fixing that
+>   type error alone would trade a loud failure for a silent one. Use
+>   `.maxPool 2 2` — pooling is parameter-free, so a pretrained prefix still aligns.
+> - Incidental: `convPadStyle` is declared in `Types.lean` and **read nowhere in
+>   `MlirCodegen.lean`**. Setting it on a spec that trains through the generic walk
+>   does nothing.
 
 A ResNet-34 + FPN anchor detector, trained on VisDrone, **works**: full-GT
 **mAP@0.5 = 0.1386**, recall 0.676, class-agnostic AP 0.376 at 12 epochs. That is
@@ -355,7 +420,58 @@ detector) and devices (Orin, Pi5).
 
 ---
 
-## 12. State on pause / resume checklist (2026-07-24)
+## 12b. In flight / next (2026-08-28)
+
+**Three arms running**, one per card, all on the rebuilt `data/visdrone_fpn`, all
+R34, all under distinct `FPN_TAG`s so no two can share a checkpoint prefix:
+
+| arm | epochs | aug | what it answers |
+|---|---|---|---|
+| `ctrl12` | 12 | off | matched control vs the 0.1386 baseline — quantifies the backbone confound |
+| `long50` | 50 | off | "does training longer help", which `long30` never actually answered |
+| `aug50` | 50 | on | the `FPN_AUG` A/B committed in `9280a3d` and never run at scale |
+
+⚠ `ctrl12` and `long50` have **different cosine schedules**, so `long50` at its
+epoch 12 is NOT a control for `ctrl12`. Each gets a complete annealed schedule,
+which is the right design, but it means the only valid comparison against 0.1386
+is `ctrl12`'s final. Mid-flight the two legitimately diverge — at e5, `ctrl12`
+scored 0.1286 while `long50` scored 0.1114, purely because `ctrl12` had begun
+annealing and `long50` had not.
+
+**First measured result, and the rebuild is sound.** `ctrl12` @ e5 of 12:
+mAP@0.5 **0.1286**, recall 0.655, class-agnostic AP 0.349, against all 38,759
+uncapped GT boxes — i.e. 93% of the old *final* number at under half the schedule.
+Per-class it is car 0.550 carrying the mean, against bicycle 0.006 and
+awning-tricycle 0.025: the headline is a story about nine weak classes, not a
+uniformly mediocre detector.
+
+**Scoring is one command**, and it handles the mid-run case. Scoring a live arm's
+checkpoint under its own tag would race the trainer's writes, so the helper copies
+the checkpoint to a `<tag>ev` name and copies the eval graph across with its module
+renamed (the tag appears only in a comment and the module header). Note the eval
+graph is written by *training*, not by `infer` — pointing `infer` at a fresh tag
+fails with "no eval graph; train first".
+
+**Next, in order:**
+1. Score `ctrl12` final against 0.1386. That settles whether the rebuild
+   reproduces, and how much of any delta is the better R34 checkpoint.
+2. Score `long50` at e10/20/30/40/50 for the plateau curve. `long30` plateaued in
+   val mAP at e10 while train loss halved through e30 — this is the re-test.
+3. Score `aug50` against `long50` at matched epochs. Same schedule, same seed,
+   aug the only difference.
+4. R50 with the conv-only bootstrap, 50 epochs, matched to `long50`. It is behind
+   early (epoch-1 666.8 vs R34's 354.7) because BN is reset and must re-learn;
+   whether its stronger features overtake that is the question. Give it the box
+   rather than adding a fifth trainer — the host loader is the bottleneck.
+5. Only then revisit `coco_visdrone_two_stage.md`, whose data (94 GB) is also gone
+   and whose own §10 predicts a tie as the most likely outcome.
+
+---
+
+## 12. State on pause / resume checklist (2026-07-24) — ⛔ OBSOLETE, see §12b
+
+**Step 1 below cannot run: the `long30` checkpoints were deleted.** Kept for the
+reasoning and the gotchas, which still apply.
 
 Parked to pivot to the R34→BraTS retraining demo. When YOLO resumes, in order:
 

@@ -98,37 +98,56 @@ lake exe unet-brats-train data/brats 10 ce
 
 ---
 
-## YOLOv1 — object detection
+## FPN detector — object detection on VisDrone
 
-Cat-vs-dog head detector on Oxford-IIIT Pets. A ResNet-34 backbone
-(bootstrapped from the ImageNet checkpoint) + a deep convolutional
-detection head over a 7×7 grid, with sigmoid focal-BCE objectness —
-all on the verified `.yolov1Masked` train-step path, no new VJP
-machinery.
+Multi-scale detection on real drone-altitude imagery. A ResNet-34 backbone
+(trained by this stack on ImageNet) feeds an FPN top-down neck into three
+anchor heads at strides 8/16/32, with a DIoU box loss, focal objectness and
+class-weighted CE. 448 px input, 10 VisDrone classes.
 
-`MainYolov1PetsTrainBootstrap.lean`, `MainYolov1PetsInfer.lean`. See
-`planning/yolo_final.md`.
+VisDrone is the point: a median image holds **70 objects** and many are 2–5 px
+after the resize, which is the regime where a single coarse grid structurally
+cannot work and multi-scale detection stops being decoration.
+
+`MainYolov1VisdroneFpn.lean`. See `planning/visdrone_detector.md`.
 
 ```bash
-./download_pets.sh
-python3 preprocess_pets_mosaic.py data/pets data/pets_mosaic_bal
-lake exe yolov1-pets-train-bootstrap data/pets_mosaic_bal
-lake exe yolov1-pets-infer 16 data/pets_mosaic_bal /tmp/pets_det
-python3 scripts/yolo_render.py /tmp/pets_det --sigmoid-conf --max-per-image 4
+./download_visdrone.sh
+# ⚠ write the anchor priors from the values hardcoded in the demo — do NOT
+# re-run k-means, or encoder and model silently disagree
+python3 preprocess_visdrone.py data/visdrone data/visdrone_fpn \
+    --size 448 --grid 14 --fpn data/visdrone
+python3 preprocess_visdrone.py data/visdrone data/visdrone448 --size 448 --grid 14
+
+CUDA_VISIBLE_DEVICES=0 FPN_TAG=run1 lake exe yolov1-visdrone-fpn data/visdrone_fpn
+CUDA_VISIBLE_DEVICES=0 FPN_TAG=run1 lake exe yolov1-visdrone-fpn \
+    infer data/visdrone_fpn runs/fpn_run1
+python3 scripts/yolo_map_visdrone.py runs/fpn_run1/logits.bin \
+    data/visdrone448/val.bin --grid 14 --fpn data/visdrone
+python3 scripts/fpn_render.py runs/fpn_run1/logits.bin data/visdrone_fpn/val.bin \
+    --fpn data/visdrone --gt data/visdrone448/val.full_gt.bin \
+    --out demos/figures/visdrone_fpn.png
 ```
 
-![YOLO Pets detection](figures/yolo_pets.png)
+⚠ `FPN_TAG` must be set on `infer` too. Without it the eval silently loads a
+different arm's weights, and the only tell is an epoch sweep whose rows are
+identical. It cost this thread a full day once.
 
-Boxes on cat/dog faces, labeled (blue = cat, pink = dog). The real
-lesson is in the planning doc: on a coarse 7×7 grid, *centered* objects
-make "predict the average location" a better loss minimum than
-localizing each one — so detection collapses to a fixed center-prior on
-plain (centered) data, and the training loss keeps dropping the whole
-time. Training on 2×2 **mosaics** of four pets scatters the heads and
-breaks that positional marginal (localization 0 → 64/64); a 50/50
-cat/dog sampler breaks the matching class-collapse to the majority
-breed. A weakness of the data distribution, turned into the demo's
-main lesson.
+Knobs: `FPN_BACKBONE` (`r34` / `r50`), `FPN_AUG`, `FPN_EPOCHS`, `FPN_TOWER`,
+`FPN_NOBOOTSTRAP`.
+
+![VisDrone FPN detection](figures/visdrone_fpn.png)
+
+Truth on top, prediction below, on the four densest val frames. **mAP@0.5 =
+0.1526** at 12 epochs — 99.6% of a hand-written PyTorch replica of this same
+architecture (0.1532), and 65 fps on one RTX 4060 Ti. A YOLOv8s at the same
+budget scores 0.140; its published-style 0.391 comes from 8× the epochs, higher
+resolution and full augmentation, so that gap is recipe rather than architecture.
+
+The lesson is in the per-class split rather than the mean: car reaches 0.573
+while bicycle sits at 0.015, a 38× spread. Detection on aerial imagery does not
+degrade uniformly — it collapses on whatever is small *and* rare, and an
+averaged mAP hides exactly that.
 
 ---
 
@@ -291,8 +310,9 @@ demos/
 ├── MainUnetPetsTrain.lean                 # UNet segmentation trainer
 ├── MainAutoencoderPetsTrain.lean          # plain autoencoder baseline (no skips)
 ├── MainPetsPredict.lean                   # render predicted masks from checkpoint
-├── MainYolov1PetsTrainBootstrap.lean      # YOLOv1 cat/dog detector (Pets mosaic)
-├── MainYolov1PetsInfer.lean               # detection inference dump → yolo_render.py
+├── MainYolov1VisdroneFpn.lean             # FPN multi-scale detector (VisDrone) + infer
+├── MainYolov1PetsTrainBootstrap.lean      # ⛔ retired: YOLOv1 Pets, superseded by VisDrone
+├── MainYolov1PetsInfer.lean               # ⛔ retired: Pets detection dump
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST
 ├── MainCifarDdpmTrain.lean  / Sample      # DDPM on CIFAR-10
 ├── MainCifarDdpmAttnTrain.lean / Sample   # bottleneck-attention variant (codegen ✓, recipe ✗)

@@ -1,5 +1,28 @@
 # yolo_fpn.md — the multi-scale FPN neck (detection-infra brick #3)
 
+> # ⛔ EVERY NUMBER BELOW WAS MEASURED ON SCRAMBLED DATA (banner added 2026-08-28)
+>
+> This doc's last content commit is 2026-07-19; the image/target pairing bug was
+> found on **2026-07-22**. So the recall 12.38%, the mAP 0.0001, the
+> T1a/T1b/T2-bias/T2a tables, the positive-vs-ring separation, and the "target
+> assignment is the constraint" conclusion **all describe the bug, not the
+> detector**. On fixed data the same arm scores **mAP@0.5 = 0.1386, recall 0.676**.
+> See `yolo_scoring.md`'s top banner for the mechanism.
+>
+> It carries no such banner of its own and still opens by reporting success, which
+> is why this one was added — it is the easiest doc in the set to read as current.
+> Its closing recommendation (Tier 3 / centre sampling as "the LAST untested
+> hypothesis") is **dead twice over**: refuted on its own terms, and resting on a
+> constraint that was an artifact of the bug.
+>
+> **What is still good here:** the build record for bites 1–8, the emitter
+> structure, and the gotchas. Work from `visdrone_detector.md`.
+>
+> ⚠ Two things this doc's architecture section is now known to be wrong about, both
+> measured 2026-08-28 — `.fpnDetect` taps only `residualBlock` stages (so it could
+> not sit on an R50 until fixed), and `.maxPool` with size > stride has no correct
+> backward. See `visdrone_detector.md` §0.
+
 Handoff doc for the VisDrone detection build. Prereqs: `yolo_drone.md` (the overall
 plan), `yolo-fpn-thread` + `visdrone-fetch-and-wsa` memories (session logs). Written
 2026-07-17 after the anchor detector landed; **updated 2026-07-18: the FPN detector is

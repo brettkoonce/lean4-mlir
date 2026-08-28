@@ -124,7 +124,57 @@ Two honest reads at this 3-epoch budget:
    epochs arg now enables: `unet-pets-train data/pets 70`. See
    `planning/unet_demo_v2.md`.
 
+## VisDrone-DET detection (10 classes, R34+FPN multi-scale, mAP@0.5)
+
+The detection demo. ResNet-34 backbone (trained by this stack on ImageNet) →
+FPN top-down neck → three anchor heads at strides 8/16/32, DIoU box loss,
+focal objectness, class-weighted CE. 448 px squash input, 12 epochs, no
+augmentation. Scored by `scripts/yolo_map_visdrone.py` against the **uncapped**
+GT sidecar — all 38,759 val boxes, not the 56-box-truncated training record,
+which silently drops 34.9% of VisDrone's val GT and is not its protocol.
+
+| arm | mAP@0.5 | recall | class-agnostic AP |
+|---|---|---|---|
+| **R34+FPN, 12 ep, no aug** | **0.1526** | 0.682 | 0.393 |
+| PyTorch twin — same architecture, matched recipe | 0.1532 | 0.677 | 0.400 |
+| YOLOv8s, matched recipe (random init, 448, no aug) | 0.140 | — | — |
+| YOLOv8s, 100 ep, full aug, 640 px, COCO init | 0.391 | 0.400 | — |
+
+**The Lean detector is at 99.6% of its PyTorch twin** on a matched recipe. The
+twin is a hand-written replica of *this same architecture*, not an off-the-shelf
+model — it exists to isolate implementation quality from architecture, which is
+why it, and not YOLOv8, is the yardstick.
+
+Two YOLOv8s rows for context. At a matched budget it scores **0.140**, below this
+detector's 0.1526 — though that arm starts from random weights where this one has
+an ImageNet-pretrained backbone, so read it as "the v8 architecture is not what
+wins at this budget", not as beating YOLOv8. The 0.391 row is ordinary practice:
+8× the epochs, higher resolution, full augmentation, and COCO-pretrained. **The
+gap to 0.391 is recipe, not architecture.**
+
+Throughput: **65 fps** on one RTX 4060 Ti (548 images in 8.34 s), measured
+end-to-end including process start, runtime init, graph load, a 625 MB read and
+a 406 MB write, so the forward alone is faster.
+
+Per-class AP is the real finding — the mean hides a 38× spread:
+
+| car | motor | van | bus | people | pedestrian | truck | tricycle | awning-tri | bicycle |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.573 | 0.155 | 0.166 | 0.165 | 0.133 | 0.132 | 0.095 | 0.072 | 0.020 | 0.015 |
+
+Car alone carries the headline. The honest subject of this demo is why aerial
+detection collapses on small, rare classes at 2–5 px, not the single mAP.
+
+Figure: `demos/figures/visdrone_fpn.png` (truth over prediction, densest val
+frames). Full workings: `runs/2026-08-28-visdrone-fpn-rebuild/README.md`.
+
 ## Oxford-IIIT Pets detection (cat/dog head boxes, YOLOv1, mAP@0.5)
+
+> ⛔ **VOID and superseded.** These numbers were measured before the
+> `lean_f32_shuffle` image/target pairing bug was found (fixed 2026-07-22), so
+> they describe the bug. Pets is also retired as the detection demo — VisDrone
+> above replaces it, on real detection data at drone altitude. Kept only for the
+> harness-design notes below.
 
 R34-ImageNet backbone (21.28M-float bootstrap) + deep conv head →
 7×7×30 YOLOv1 grid, focal-BCE objectness, trained on class-balanced

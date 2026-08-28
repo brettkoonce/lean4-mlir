@@ -5,8 +5,32 @@ FPN detector on MS-COCO, fine-tune on VisDrone. Companion to `planning/visdrone_
 (the single-stage detector, which is the baseline this must beat) and the memories
 `yolo-fpn-thread`, `visdrone-pytorch-twin`, `visdrone-fetch-and-wsa`.
 
-Status: **DATA PREP IS DONE (2026-08-01).** The COCO transfer set is built, checked and on
-disk; everything below the data section is still plan.
+> **⚠ STATUS CORRECTED 2026-08-28 — the built data is GONE, and step 0 is DONE.**
+>
+> - `data/coco_vd/` (94 GB) and `data/coco/` were deleted to free disk, along with
+>   `data/visdrone*`. VisDrone has been rebuilt; **COCO has not**. The "already on
+>   disk" claim below is false — rebuilding costs a 19 GB fetch (~50 min at 12
+>   ranged connections) plus preprocessing, and §5's disk warning still applies.
+>   Note the transfer build reads `data/visdrone` for its anchors, so **VisDrone
+>   must exist first**.
+> - **§4b is satisfied.** "Step 0 is not a training run: port the detector to
+>   XLA/PJRT" was completed 2026-08-07 at **9.47×** (`detector_pjrt_port.md`). The
+>   §9 run order still lists it as a to-do; ignore that line.
+> - The box is now **6× RTX 4060 Ti on CUDA**, so arms run in parallel and the
+>   `IREE_BACKEND=rocm` lines here are dead weight. But the **host data loader is
+>   the shared bottleneck** — epochs stretch from 208 s to ~400 s at five
+>   concurrent trainers, so parallelism is sublinear.
+> - **The control this must beat is being re-measured right now** (see
+>   `visdrone_detector.md` §12b). Do not run stage 2 against the stale 0.1386
+>   until `ctrl12` lands, because the rebuilt R34 backbone is a *different, better*
+>   checkpoint than the one behind that number.
+>
+> **This remains the lowest-priority thread**, on its own evidence: §3's inverted
+> scale distributions, and §10's prediction that arm B ties arm A. The augmentation
+> A/B and the long-schedule question are cheaper and are running first.
+
+Status: ~~**DATA PREP IS DONE (2026-08-01).** The COCO transfer set is built, checked and on
+disk;~~ everything below the data section is still plan.
 
 ```
 data/coco_vd/train.bin   70,082 records   94.12 GB   (--check passed)

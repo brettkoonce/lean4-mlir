@@ -12301,23 +12301,74 @@ Localize and classify. Detection heads are where the linear
 graph, not a list. The bestiary entries show the single-scale view and
 defer the multi-head refactor to the limitations discussion.
 
-\paragraph{The working detector.}
-\texttt{[todo: train yolo on coco + fine tune on visdrone]} --- the
-demo that belongs here. The catalog entry below keeps the paper-exact
-YOLOv1 \emph{shape} ($448$ input, FC head, all 20 classes) for the
-historical record; what it does not yet have beside it is a trained
-detector on a detection dataset. VisDrone (\S\ref{app:data}) is already
-wired and is the harder half: drone-altitude imagery where a median box is
-$20\times25$\,px, which is what forces the multi-scale FPN head of
-Definition~\ref{layer:fpnModule} to be necessary rather than decorative.
+\paragraph{The working detector --- demo: R34+FPN on VisDrone.}
+A ResNet-34 backbone, trained by this stack on ImageNet, feeding an FPN
+top-down neck into three anchor heads at strides $8/16/32$; DIoU box
+loss, focal objectness, class-weighted CE; $448$\,px input, 12 epochs,
+no augmentation. Scored against VisDrone's \emph{uncapped} validation
+ground truth --- all $38{,}759$ boxes, not the 56-box-truncated training
+record, which drops $34.9\%$ of them and is not the benchmark's protocol.
+The catalog entry below keeps the paper-exact YOLOv1 \emph{shape} for the
+historical record; this is the trained detector beside it.
 
-\medskip\noindent One thing that run will have to watch for, and it is a
+\begin{center}
+\small
+\begin{tabular}{l c c c}
+\hline
+ & mAP@0.5 & recall & class-agnostic AP \\
+\hline
+\textbf{R34+FPN (this stack)} & \textbf{0.1526} & 0.682 & 0.393 \\
+PyTorch replica, same architecture & 0.1532 & 0.677 & 0.400 \\
+YOLOv8s, matched budget & 0.140 & --- & --- \\
+YOLOv8s, 100\,ep, 640\,px, full aug & 0.391 & 0.400 & --- \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The stack sits at $99.6\%$ of a hand-written PyTorch replica
+of \emph{this same architecture}, and runs at 65\,fps on one RTX 4060 Ti.
+The replica, not YOLOv8, is the yardstick: it isolates implementation
+quality from architecture, which a comparison against a different model
+would conflate. The two YOLOv8s rows say something more interesting than
+either alone. At a matched budget it scores $0.140$ --- below this
+detector, though from random weights rather than an ImageNet-pretrained
+backbone --- while its ordinary-practice $0.391$ comes from $8\times$ the
+epochs, higher resolution, full augmentation and COCO pretraining.
+\textbf{The distance to the field is recipe, not architecture.}
+
+\medskip\noindent VisDrone is chosen because it is the harder half:
+drone-altitude imagery where a median image holds \emph{seventy} objects
+and many are $2$--$5$\,px after the resize. That is the regime where a
+single coarse grid structurally cannot emit the objects, and it is what
+makes the multi-scale head of Definition~\ref{layer:fpnModule} necessary
+rather than decorative.
+
+\medskip\noindent The result worth reading is not the mean. Per-class AP
+runs from car at $0.573$ down to bicycle at $0.015$ --- a $38\times$
+spread. Detection on aerial imagery does not degrade uniformly; it
+collapses on whatever is simultaneously small \emph{and} rare, and an
+averaged mAP is precisely the statistic that hides it. Workings:
+\texttt{runs/2026-08-28-visdrone-fpn-rebuild/}.
+
+\medskip\noindent One failure this run had to be watched for, and it is a
 property of detection rather than of any dataset. On a coarse grid, when
 objects cluster, the loss has a cheap minimum: predict \emph{where objects
 usually are} instead of localizing each one. The objectness map collapses to
 an image-independent centre prior, \textbf{and the training loss keeps
-dropping the whole time} --- so loss is not a proxy for detector quality. The
-fix is to scatter the objects until that prior is worthless.
+dropping the whole time} --- so loss is not a proxy for detector quality. It
+did not materialise here, and the reason is instructive: at seventy scattered
+objects an image, the positional marginal carries almost no information, so
+the cheap minimum is not cheap. The dataset that makes the task hard is the
+same one that makes this particular collapse unavailable.
+
+\medskip\noindent A sharper version of the same warning did bite. For a full
+chapter this detector was believed to be defeated by its target assignment,
+on the strength of four trained ablations and eight numerical probes. All of
+them were measuring a data-loading bug that paired each image with another
+image's labels, so the only learnable signal was the marginal distribution of
+the targets. The tell was available throughout and was not read: no lever
+moved the metric, at all, ever. \textbf{When every intervention produces the
+same number, the instrument is the thing to suspect, not the model.}
 
 
 \subsubsection*{YOLO v1/v3/v5/v8/v11 (\texttt{Bestiary/YOLO.lean})}

@@ -1,5 +1,21 @@
 # yolo_drone.md — modern multi-scale detection on VisDrone
 
+> **📍 This is the original scoping doc (2026-07-16). It is not the current state.**
+> Work from **`planning/visdrone_detector.md`** — §0 for what is on disk and which
+> backbone files load, §12b for what is running and what comes next.
+>
+> Workstream status against the gate list below: **WS-0 through WS-E are done**
+> (data pinned and rebuilt, single-scale baseline, FPN neck, anchors, DIoU loss,
+> NMS + mAP harness). **WS-G is in progress** — a 12-epoch control plus 50-epoch
+> long and augmented arms. **WS-F, the money-slide figure, was never built**, and
+> its premise needs revisiting: the "YOLOv1 finds almost nothing" half of the
+> contrast was measured before the image/target pairing bug was found, so the
+> collapse it depicted is not trustworthy as drawn.
+>
+> The Pets-retirement sequencing rule below is being honoured by accident rather
+> than by plan — `data/pets/` still exists while `data/visdrone*` had to be
+> refetched this session.
+
 Goal: replace the YOLOv1-on-Pets detection demo (cat-vs-dog head boxes, a
 single 7×7 grid) with a real detector on a real task — **modern multi-scale
 YOLO on VisDrone** — and, once it lands alongside the BraTS segmentation demo,
