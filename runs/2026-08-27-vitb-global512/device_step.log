@@ -1,0 +1,12 @@
+── D. EXECUTION at the raised budget — compiling is not fitting ──
+   1295.61 ms/step (device only, 629 inputs, median of 10)   vitbin_adamdp128x4wxclipdrop_train_step.mlir
+    745.34 ms/step (device only, 629 inputs, median of 10)   vitbin_adamdp128x4wxclipdropbf16_train_step.mlir
+
+  speedup 1.74x  — the GRAPH's, with no trainer around it at 4 replicas (all-reduce included)
+
+── E. BASIS — the shipped 32×4 pair, SAME SESSION, so the wall clock is like-for-like ──
+   Committed figures to reproduce (verified_side_quest_counterparts.md §4c): 383.8 / 273.7
+    386.04 ms/step (device only, 629 inputs, median of 10)   vitbin_adamdp32x4wxclipdrop_train_step.mlir
+    273.79 ms/step (device only, 629 inputs, median of 10)   vitbin_adamdp32x4wxclipdropbf16_train_step.mlir
+
+  speedup 1.41x  — the GRAPH's, with no trainer around it at 4 replicas (all-reduce included)

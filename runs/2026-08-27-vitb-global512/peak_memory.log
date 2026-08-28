@@ -1,0 +1,26 @@
+── A. peak, RAISED budget (XLA_PYTHON_CLIENT_MEM_FRACTION=0.97 → 15.11 GiB), 4 replicas ──
+  budget 15.11 GiB/card · replicas 4 · XLA_PYTHON_CLIENT_MEM_FRACTION=0.97
+  artifact                                                  peak      args      temp   of budget
+  -----------------------------------------------------------------------------------------------
+  vitbin_adamdp128x4wxclipdrop_train_step.mlir           13.99 G    1.04 G   11.98 G         93 %
+  vitbin_adamdp128x4wxclipdropbf16_train_step.mlir       12.61 G    1.04 G   10.61 G         83 %
+
+── B. the SAME two at the DEFAULT budget (fraction unset → 11.68 GiB) ──
+   ⚠ XLA's own rematerialisation line is the interesting output here, not the table.
+W0827 22:38:48.911486 2972565 hlo_rematerialization.cc:3282] Can't reduce memory use below 10.16GiB (10907268083 bytes) by rematerialization; only reduced to 13.36GiB (14341998740 bytes), down from 20.39GiB (21889508632 bytes) originally
+  budget 11.68 GiB/card · replicas 4 · XLA_PYTHON_CLIENT_MEM_FRACTION=unset (plugin default 0.75)
+  artifact                                                  peak      args      temp   of budget
+  -----------------------------------------------------------------------------------------------
+  vitbin_adamdp128x4wxclipdrop_train_step.mlir           13.97 G    1.04 G   11.96 G        120 %
+  vitbin_adamdp128x4wxclipdropbf16_train_step.mlir       10.88 G    1.04 G    8.87 G         93 %
+
+── C. CONTROL — the all-reduce, priced by DIFFERENCE against renders that have none ──
+   The 1-replica artifacts are the same net, batch and flags with no collective in the
+   graph. If the DP peak exceeds them, that excess IS the collective's buffer.
+  budget 15.11 GiB/card · replicas 1 · XLA_PYTHON_CLIENT_MEM_FRACTION=0.97
+  artifact                                                  peak      args      temp   of budget
+  -----------------------------------------------------------------------------------------------
+  vitbin_adamdp128x4wxclipdrop_train_step.mlir           13.99 G    1.04 G   11.98 G         93 %
+  vitbin_adamdp128x4wxclipdropbf16_train_step.mlir       12.61 G    1.04 G   10.61 G         83 %
+  vitbin_adam128wxclipdrop_train_step.mlir               13.99 G    1.04 G   12.06 G         93 %
+  vitbin_adam128wxclipdropbf16_train_step.mlir           12.61 G    1.04 G   10.61 G         83 %

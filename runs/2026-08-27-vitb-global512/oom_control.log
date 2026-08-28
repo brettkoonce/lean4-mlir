@@ -1,0 +1,39 @@
+── F. THE CONTROL THAT MAKES THIS A FINDING — the same bytes, the same four cards, and
+      the ONLY difference is that XLA_PYTHON_CLIENT_MEM_FRACTION is not set. ──
+
+$ .venv/bin/python scripts/bf16_device_step.py --replicas 4 --reps 3 verified_mlir/vitbin_adamdp128x4wxclipdrop_train_step.mlir
+W0827 22:41:38.335433 2978341 hlo_rematerialization.cc:3282] Can't reduce memory use below 10.16GiB (10907268083 bytes) by rematerialization; only reduced to 13.36GiB (14341998740 bytes), down from 20.39GiB (21889508632 bytes) originally
+W0827 22:41:50.563112 2978485 bfc_allocator.cc:590] Allocator (GPU_1_bfc) ran out of memory trying to allocate 11.96GiB (rounded to 12841849856) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W0827 22:41:50.563327 2978482 bfc_allocator.cc:590] Allocator (GPU_0_bfc) ran out of memory trying to allocate 11.96GiB (rounded to 12841849856) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W0827 22:41:50.563434 2978491 bfc_allocator.cc:590] Allocator (GPU_3_bfc) ran out of memory trying to allocate 11.96GiB (rounded to 12841849856) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W0827 22:41:50.563470 2978488 bfc_allocator.cc:590] Allocator (GPU_2_bfc) ran out of memory trying to allocate 11.96GiB (rounded to 12841849856) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+W0827 22:41:50.564226 2978482 bfc_allocator.cc:601] ******************__________________________________________________________________________________
+W0827 22:41:50.564251 2978485 bfc_allocator.cc:601] ******************__________________________________________________________________________________
+W0827 22:41:50.564409 2978488 bfc_allocator.cc:601] ******************__________________________________________________________________________________
+W0827 22:41:50.564508 2978491 bfc_allocator.cc:601] ******************__________________________________________________________________________________
+Traceback (most recent call last):
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/scripts/bf16_device_step.py", line 122, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/scripts/bf16_device_step.py", line 113, in main
+    n, t = time_artifact(p, g2, ctxs, a.reps, a.replicas)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/scripts/bf16_device_step.py", line 96, in time_artifact
+    once()
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/scripts/bf16_device_step.py", line 95, in once
+    exe.execute_sharded(args).disassemble_into_single_device_arrays()[0][0].block_until_ready()
+jax.errors.JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 11.96GiB. [executable_name='m'] [tf-allocator-allocation-error='']
+
+── G. and bf16 at the DEFAULT budget, which is the OTHER half of the answer: it fits there
+      on its own (10.88 of 11.68), so bf16 alone would have bought global 512 in bf16 ONLY.
+      §4c's rule — a tier without its precision peer reads as a decision — needs the fp32
+      twin, and the fp32 twin is what the allocator fix buys. ──
+    760.52 ms/step (device only, 629 inputs, median of 5)   vitbin_adamdp128x4wxclipdropbf16_train_step.mlir

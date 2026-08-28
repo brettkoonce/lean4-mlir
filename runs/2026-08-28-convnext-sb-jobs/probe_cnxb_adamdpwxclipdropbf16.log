@@ -1,0 +1,99 @@
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.970
+I0828 00:21:58.060555 3031851 service.cc:154] XLA service 0x732d280517d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0828 00:21:58.060617 3031851 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0828 00:21:58.060622 3031851 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0828 00:21:58.060625 3031851 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0828 00:21:58.060628 3031851 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0828 00:21:58.063200 3031851 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0828 00:21:58.063232 3031851 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 0 for BFCAllocator.
+I0828 00:21:58.063272 3031851 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 1 for BFCAllocator.
+I0828 00:21:58.063285 3031851 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 2 for BFCAllocator.
+I0828 00:21:58.063299 3031851 gpu_helpers.cc:162] XLA backend allocating 15.11GiB (16221470720 bytes) on device 3 for BFCAllocator.
+I0828 00:21:58.073391 3031851 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+E0828 00:22:09.946096 3031905 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/convnextbin_adamdpwxclipdropbf16_train_step.mlir (@convnextbin_adamdpwxclipdropbf16_train_step, 1065 outputs, 4 replicas) in 22895 ms
+E0828 00:22:21.940460 3031935 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0828 00:22:22.790527 3031926 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/convnextbin_fwd.mlir (@convnextbin_fwd, 1 outputs, 1 replica) in 2161 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876543.531242 3033095 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876545.524897 3033235 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+ConvNeXt-Base on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU (ConvNeXt-S's [3,3,27,3] depth at [128,256,512,1024], 88.6M params)
+  xla/pjrt verified_mlir/convnextbin_adamdpwxclipdropbf16_train_step.mlir
+  xla/pjrt verified_mlir/convnextbin_fwd.mlir
+  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet: draining the val split into RAM (~30 GB, one time)…
+  imagenet: val ready — 50000 images, 28710 MB
+  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)
+  train 1281167, test 50000; bs 32, ConvNeXt-B (ImageNet-1k) adamdpwxclipdropbf16 (cosine+warmup 20ep, baseLR 0.000250), He init
+  ▸ STOCHASTIC DEPTH: 36 drop sites, keeps #[1.000000, 0.986000, 0.971000, 0.957000, 0.943000, 0.929000, 0.914000, 0.900000, 0.886000, 0.871000, 0.857000, 0.843000, 0.829000, 0.814000, 0.800000, 0.786000, 0.771000, 0.757000, 0.743000, 0.729000, 0.714000, 0.700000, 0.686000, 0.671000, 0.657000, 0.643000, 0.629000, 0.614000, 0.600000, 0.586000, 0.571000, 0.557000, 0.543000, 0.529000, 0.514000, 0.500000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+  DATA-PARALLEL: 4 replicas x bs 32 = global batch 128, 10009 steps/epoch
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876593.280693 3033393 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876597.140373 3033533 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876598.805971 3033606 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876602.671081 3033757 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876604.275699 3033830 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876608.187929 3033976 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876609.857253 3034049 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876613.780562 3034217 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876615.431233 3034290 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876619.319641 3034428 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876621.071472 3034502 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876624.905894 3034652 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876626.641138 3034725 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876630.524290 3034864 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787876632.240692 3034937 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1787876636.105260 3035088 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @convnextbin_adamdpwxclipdropbf16_train_step holds 1026 parameter tensors (1013.8 MB) on 4 devices; they stop crossing PCIe from here
+W0828 00:24:00.199052 3031888 cuda_command_buffer.cc:815] Retry CUDA graph instantiation after OOM error
+E0828 00:24:10.259463 3031897 rendezvous.cc:116] [id=2] This thread has been waiting for `thunk initialization completion for device ordinal 2; run_id=0` for 10 seconds and may be stuck. Expected 4 threads to join the rendezvous, but not all of them arrived on time.
+E0828 00:24:10.259469 3031900 rendezvous.cc:116] [id=0] This thread has been waiting for `thunk initialization completion for device ordinal 3; run_id=0` for 10 seconds and may be stuck. Expected 4 threads to join the rendezvous, but not all of them arrived on time.
+E0828 00:24:10.259469 3031894 rendezvous.cc:116] [id=1] This thread has been waiting for `thunk initialization completion for device ordinal 1; run_id=0` for 10 seconds and may be stuck. Expected 4 threads to join the rendezvous, but not all of them arrived on time.
+E0828 00:24:40.259640 3031897 rendezvous.cc:41] All thread stack traces (if supported on this platform):
+E0828 00:24:40.259689 3031897 rendezvous.cc:43] 
+E0828 00:24:40.259640 3031900 rendezvous.cc:41] All thread stack traces (if supported on this platform):
+E0828 00:24:40.259721 3031900 rendezvous.cc:43] 
+F0828 00:24:40.259735 3031900 rendezvous.cc:161] [id=0] Termination timeout for `thunk initialization completion for device ordinal 3; run_id=0` of 30 seconds exceeded. Exiting to ensure a consistent program state. Expected 4 threads to join the rendezvous, but only 3 of them arrived on time.
+E0828 00:24:40.259657 3031894 rendezvous.cc:41] All thread stack traces (if supported on this platform):
+E0828 00:24:40.259774 3031894 rendezvous.cc:43] 
+F0828 00:24:40.259788 3031894 rendezvous.cc:161] [id=1] Termination timeout for `thunk initialization completion for device ordinal 1; run_id=0` of 30 seconds exceeded. Exiting to ensure a consistent program state. Expected 4 threads to join the rendezvous, but only 3 of them arrived on time.
+F0828 00:24:40.259697 3031897 rendezvous.cc:161] [id=2] Termination timeout for `thunk initialization completion for device ordinal 2; run_id=0` of 30 seconds exceeded. Exiting to ensure a consistent program state. Expected 4 threads to join the rendezvous, but only 3 of them arrived on time.
+*** Check failure stack trace: ***
+    @     0x732d27bc4c94  absl::lts_20260526::log_internal::LogMessage::SendToLog()
+    @     0x732d27bc4c16  absl::lts_20260526::log_internal::LogMessage::Flush()
+    @     0x732d25e11287  xla::internal::AwaitAndLogIfStuck()
+    @     0x732d1dd8156d  xla::Rendezvous<>()
+    @     0x732d1dd80321  xla::gpu::RendezvousAfterInitialization()
+    @     0x732d1dd7e1b8  xla::gpu::GpuExecutable::ExecuteThunksImpl()
+    @     0x732d1dd849e7  xla::gpu::GpuExecutable::ExecuteThunks()
+    @     0x732d1c71b136  absl::lts_20260526::functional_internal::InvokeObject<>()
+    @     0x732d1dd99dcb  xla::gpu::GpuExecutableBufferAllocator::ExecutionScope::ExecuteWithBufferAllocations()
+    @     0x732d1c708ae1  xla::StreamExecutorGpuClient::RunAsync()
+    @     0x732d1c73e9d6  xla::PjRtStreamExecutorRawLoadedExecutable::Execute()::$_3::operator()()
+    @     0x732d1c73d67c  xla::PjRtStreamExecutorRawLoadedExecutable::Execute()
+    @     0x732d1c784f54  xla::CommonPjRtLoadedExecutable::ExecuteLaunch()
+    @     0x732d1c79b362  absl::lts_20260526::internal_any_invocable::RemoteInvoker<>()
+    @     0x732d1c76c0b5  xla::WorkerThread::WorkLoop()
+    @     0x732d2789d90f  tsl::(anonymous namespace)::PThread::ThreadFn()
+    @     0x732db4a9cb84  (unknown)
+    @     0x732db4b29d6c  (unknown)
+timeout: the monitored command dumped core
