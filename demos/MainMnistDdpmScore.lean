@@ -81,6 +81,13 @@ def main (args : List String) : IO Unit := do
   let sampler := (args.find? fun a => Ddpm.samplerNfe.any (·.1 == a)).getD "ddim"
   let nfe := (Ddpm.samplerNfe.lookup sampler).getD 1
   let solverSteps := max 1 (nSteps / nfe)
+  -- ⭐ η as a PERCENT (the arg parser has only `toNat?`). η = 0 is deterministic
+  -- DDIM; η = 1 is ANCESTRAL sampling, which is the stable discrete form of the
+  -- reverse SDE. The `sde` arm above integrates that SDE with Euler-Maruyama and
+  -- diverges below NFE 200; this is the arm that says whether that is a fact
+  -- about stochastic sampling or a fact about that discretisation.
+  let etaPct := (nums[2]?).getD 0
+  let eta : Float := etaPct.toFloat / 100.0
   let dataDir := "data"
   let out := ".lake/build"
 
@@ -176,8 +183,19 @@ def main (args : List String) : IO Unit := do
       let abT := F32.read alphaBar t.toUSize
       let abP := if tPrev == 0 then 0.9999 else F32.read alphaBar tPrev.toUSize
       let a := Float.sqrt abP / Float.sqrt abT
-      let b := Float.sqrt (1.0 - abP) - a * Float.sqrt (1.0 - abT)
+      -- Generalized DDIM (Song et al. eq. 12): σ_t = η·√((1-ᾱ_prev)/(1-ᾱ_t))·
+      -- √(1 - ᾱ_t/ᾱ_prev), b' = √(1 - ᾱ_prev - σ_t²) − a·√(1-ᾱ_t). η = 0
+      -- collapses to the deterministic form; η = 1 is ancestral DDPM sampling.
+      -- ⚠ The outer root is clamped because η → 1 can drive 1 − ᾱ_prev − σ²
+      -- marginally negative at the ends of the schedule.
+      let sg := eta * Float.sqrt ((1.0 - abP) / (1.0 - abT))
+                    * Float.sqrt (1.0 - abT / abP)
+      let b := Float.sqrt (max (1.0 - abP - sg * sg) 0.0)
+               - a * Float.sqrt (1.0 - abT)
       x ← Ddpm.ddimStep x eps a b (B * nPix).toUSize
+      if sg > 0.0 then
+        let z ← Ddpm.sampleNoise (B * nPix).toUSize (bi * 131071 + k * 8191 + 17).toUSize
+        x ← Ddpm.ddimStep x z 1.0 sg (B * nPix).toUSize
     acc := acc.push x
     if bi % 8 == 0 || bi + 1 == nBatch then
       IO.eprintln s!"  batch {bi+1}/{nBatch}"

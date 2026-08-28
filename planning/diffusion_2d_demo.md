@@ -465,6 +465,39 @@ spacing.
 **99.08 %** confidence — the highest number in the table — while covering 2 of 10 classes with
 pixels an order of magnitude out of range. A single quality score would rank it first.
 
+### ⛔⛔ 5.8c — ANCESTRAL SAMPLING (η = 1) WINS ON MNIST, and §5.8b's reading was wrong
+
+`runs/2026-08-28-mnist-ddpm-verified-score/eta_sweep_mnist.log`. The missing arm, run: DDIM's η
+knob on the MNIST driver, so the stable discrete form of the reverse SDE could be measured beside
+the Euler–Maruyama one that diverged.
+
+Energy distance against real MNIST, 1024 samples, same 50-epoch checkpoint:
+
+| NFE | η = 0 | η = 0.25 | η = 0.5 | **η = 1 (ancestral)** |
+|---|---|---|---|---|
+| 10 | 0.0874 | 0.0822 | 0.0713 | **0.0455** |
+| 20 | 0.0437 | 0.0383 | 0.0275 | **0.0132** |
+| 50 | 0.0237 | 0.0172 | 0.0137 | **0.0067** |
+| 200 | 0.0188 | 0.0134 | 0.0130 | **0.0099** |
+
+⭐⭐ **Monotone in η at every budget, and ancestral is best by 2–3×.** η = 1 at NFE **50** scores
+0.0067 — nearly 3× better than deterministic DDIM at NFE **200** (0.0188) on a quarter of the
+compute.
+
+⛔⛔ **So §5.8b's Euler–Maruyama divergence was ENTIRELY a discretisation artifact.** Stochastic
+sampling is not worse on MNIST; it is substantially better. The hedge written into the book
+("a statement about this discretisation rather than about stochastic sampling") was the right call
+and is now confirmed rather than merely cautious.
+▶ **`blueprint/src/content.tex` §10.2.7 is now misleading and needs an edit.** Its solver table
+shows η = 0 DDIM, Euler–Maruyama and PF-ODE Euler, and concludes "DDIM wins at every budget". True
+of those three arms, false of the family: the best sampler measured is ancestral.
+
+⛔ **And the toy mis-ranked η too.** §5.6 found η = 0.25 best and η = 1 losing a mode. On MNIST
+η = 1 is the winner outright and η = 0.25 is third of four. That is the second toy conclusion to
+fail transfer, after §5.8b's.
+⚠ Single seed, one checkpoint, one target. η = 1 is also non-monotone in NFE (0.0067 at 50 against
+0.0099 at 200), unexplained and not chased.
+
 ---
 
 ## 6. PHASES

@@ -13,14 +13,16 @@ set -u
 NGEN=${NGEN:-1024}
 NFES=${NFES:-"10 20 50 200"}
 ARMS=${ARMS:-"ddim sde euler"}
-printf "%-8s %6s %8s %9s %10s %8s %8s\n" sampler NFE cover conf energy pxmean pxsd
+# eta as a percent; only ddim reads it. 0 = deterministic, 100 = ancestral.
+ETA=${ETA:-0}
+printf "%-8s %6s %8s %9s %10s %8s %8s   (eta=%s%%)\n" sampler NFE cover conf energy pxmean pxsd "$ETA"
 printf -- "-----------------------------------------------------------------\n"
 for s in $ARMS; do
   for n in $NFES; do
-    lake exe mnist-ddpm-score "$NGEN" "$n" "$s" >/dev/null 2>&1 || {
+    lake exe mnist-ddpm-score "$NGEN" "$n" "$ETA" "$s" >/dev/null 2>&1 || {
       printf "%-8s %6s %8s\n" "$s" "$n" ERR; continue; }
     python3 scripts/mnist_ddpm_score.py 2>&1 \
-      | awk -v s="$s" -v n="$n" '/^  DDPM samples/ {
+      | awk -v s="$s(e$ETA)" -v n="$n" '/^  DDPM samples/ {
           printf "%-8s %6s %8s %9s %10s %8s %8s\n", s, n, $3, $4, $5, $7, $8 }'
   done
 done
