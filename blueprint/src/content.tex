@@ -53,6 +53,16 @@ none of it is reflected below.}
 % the honest statement that nobody has measured this yet under the current rules.
 \newcommand{\withheld}{---}
 
+% Side-quest furniture. A "side quest" is a variant a chapter renders but does
+% not run as a Track-4 job, and the heading says which of the three kinds it is:
+% a RECIPE (§\ref{sec:r50_a2_a1_cost}), a SIZE (§\ref{sec:convnext_sb},
+% §\ref{sec:vit_sb}), or an ARCHITECTURE the book reaches for once
+% (§\ref{sec:mnv4_side_quest}). The two size sections run the same five beats in
+% the same order --- axis, cost table, renderer cost, bf16, schedule --- and then
+% close with these two, so a reader who has read one can skim the other.
+\newcommand{\sqstatus}{\medskip\noindent \textbf{Status: rendered, not trained.}}
+\newcommand{\evalckptnote}{$37.5$\,s per epoch of evaluation and checkpointing}
+
 \chapter*{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 \label{chap:introduction}
@@ -5918,7 +5928,7 @@ noisier training converge, with FixRes buying back the compute the
 extra epochs would cost. Every one of these is a one-line
 \texttt{TrainConfig} change on the same verified backbone.
 
-\section{Side quest: RSB-A2 and RSB-A1}
+\section{Side quest: the A2 and A1 recipes}
 \label{sec:r50_a2_a1_cost}
 
 A3 is the cheap tier. The other two are recipes --- \texttt{a2-accum} and
@@ -8211,7 +8221,7 @@ depth, and averaged weights supplying the regularization. It is also a
 reminder that ``the paper recipe'' includes the optimizer's exact
 semantics, not just its hyperparameters.
 
-\section{Side quests}
+\section{Further reading}
 \label{sec:enet_side_quests}
 
 Three EfficientNet follow-ups extended the family in orthogonal
@@ -9217,55 +9227,55 @@ LAMB (the batch stays moderate), stochastic depth and EMA from the
 ViT toolkit, and a $3\times$ longer schedule to let the
 regularization pay.
 
-\section{Side quest: ConvNeXt-S and ConvNeXt-B}
+\section{Side quest: scaling to ConvNeXt-S and B}
 \label{sec:convnext_sb}
 
-Scaling ConvNeXt-T is two moves. \textbf{S} deepens stage 3 from 9 blocks to 27
-and touches nothing else; \textbf{B} does that \emph{and} widens every stage,
-$96/192/384/768 \to 128/256/512/1024$. On the JAX side both are parameter edits.
-On the verified side they are not the same job at all.
+\textbf{The axis.} Scaling ConvNeXt-T is two moves. \textbf{S} deepens stage 3
+from 9 blocks to 27 and touches nothing else; \textbf{B} does that \emph{and}
+widens every stage, $96/192/384/768 \to 128/256/512/1024$. On the JAX side both
+are parameter edits. On the verified side they are not the same job at all.
 
 \begin{center}
-\begin{tabular}{@{}l c c r@{}}
+\begin{tabular}{@{}l l c r@{}}
 \hline
-model & params & renderer work & one card, bs32: fp32 $\to$ bf16 \\
+model & shape & params & graph, one card bs$32$: fp32 $\to$ bf16 \\
 \hline
-ConvNeXt-T & $28.6$\,M        & ---                 & $157.9 \to 121.1$\,ms \;($1.30\times$) \\
-ConvNeXt-S & $50{,}222{,}152$ & \textbf{none}       & $268.4 \to 192.7$\,ms \;($\mathbf{1.39\times}$) \\
-ConvNeXt-B & $88{,}589{,}416$ & ${\sim}27$ literals & $395.7 \to 294.3$\,ms \;($1.34\times$) \\
+ConvNeXt-T & $9$ blocks, $96$ wide  & $28.6$\,M        & $157.9 \to 121.1$\,ms \;($1.30\times$) \\
+ConvNeXt-S & $27$ blocks, $96$ wide & $50{,}222{,}152$ & $268.4 \to 192.7$\,ms \;($\mathbf{1.39\times}$) \\
+ConvNeXt-B & $27$ blocks, $128$ wide& $88{,}589{,}416$ & $395.7 \to 294.3$\,ms \;($1.34\times$) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Counts are \texttt{\#guard}ed against $50.22$\,M and $88.59$\,M. These
-are the graph's times, one card at batch $32$, and T and B ran as controls and
-returned their committed $157.8$ and $396.0$\,ms --- which is what makes S's
-$1.39\times$ a measurement rather than a claim about itself.
+\noindent Counts are \texttt{\#guard}ed against $50.22$\,M and $88.59$\,M. T and
+B ran as controls and returned their committed $157.8$ and $396.0$\,ms, which is
+what makes S's $1.39\times$ a measurement rather than a claim about itself.
 
-\medskip\noindent \textbf{Renderer cost tracks how many dimensions move, not how
-many parameters.} Depth is already a loop, so S --- twenty-two million
-parameters heavier than T --- came free. B's widening cost twenty-seven threaded
-literals for half as much again. That is the whole of what ``not the same job at
-all'' means here, and it is the opposite of what a parameter count predicts.
+\medskip\noindent \textbf{What it costs to render: how many dimensions move, not
+how many parameters.} Depth is already a loop, so S --- twenty-two million
+parameters heavier than T --- came free, with \emph{no} renderer work at all.
+B's widening cost twenty-seven threaded literals for half as much again. That is
+the whole of what ``not the same job at all'' means here, and it is the opposite
+of what a parameter count predicts. \S\ref{sec:vit_sb} finds no such split.
 
-\medskip\noindent \textbf{S is also the fastest of the three in bf16}, which
-``deeper costs more'' does not predict either: depth adds blocks at widths bf16
+\medskip\noindent \textbf{What bf16 buys: S is the fastest of the three}, which
+``deeper costs more'' does not predict either. Depth adds blocks at widths bf16
 already suits, where B's widening moves every stage. \S\ref{sec:vit_sb} finds
 the same shape on ViT for the same reason. Note how much of it the trainer eats,
 though --- a $1.39\times$ graph is a $1.25\times$ run, because the shim feed and
 the all-reduce do not get faster.
 
-\medskip\noindent \textbf{A full schedule}, on four cards at global batch $128$.
-Totals include $37.5$\,s per epoch of evaluation and checkpointing.
+\medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
+including \evalckptnote:
 
 \begin{center}
-\begin{tabular}{@{}l r r r@{}}
+\begin{tabular}{@{}l r r r r@{}}
 \hline
-verified, 4 cards & ms/step & min/epoch & 300 epochs \\
+verified, 4 cards & global & steps/epoch & ms/step & 300 epochs \\
 \hline
-ConvNeXt-T & $217 \to 184$ & $36.2 \to 30.7$ & $184 \to 157$\,h \;($7.7 \to 6.5$\,d) \\
-ConvNeXt-S & $366 \to 292$ & $61.0 \to 48.8$ & $308 \to 247$\,h \;($12.8 \to 10.3$\,d) \\
-ConvNeXt-B & $534 \to 446$ & $89.1 \to 74.4$ & $449 \to 375$\,h \;($18.7 \to 15.6$\,d) \\
+ConvNeXt-T & $128$ & $10{,}009$ & $217 \to 184$ & $184 \to 157$\,h \;($7.7 \to 6.5$\,d) \\
+ConvNeXt-S & $128$ & $10{,}009$ & $366 \to 292$ & $308 \to 247$\,h \;($12.8 \to 10.3$\,d) \\
+ConvNeXt-B & $128$ & $10{,}009$ & $534 \to 446$ & $449 \to 375$\,h \;($18.7 \to 15.6$\,d) \\
 \hline
 \end{tabular}
 \end{center}
@@ -9278,31 +9288,28 @@ $367 \to 304$\,ms against the $366 \to 292$ derived here, so the model holds on
 this net. \S\ref{sec:vit_sb} is where it does not, and says why.
 
 \medskip\noindent \textbf{The step count is what costs, and a bigger batch does
-not fix it.} At global $128$ this is the only net here running $10{,}009$ steps
-an epoch, double every other, and that is what the $300$-epoch schedule really
-pays for. The obvious remedy fails on measurement rather than on memory: the
-block interior's cost per \emph{image} is flat from batch $8$ to $128$
-($1.03\times$ across that whole range), so doubling the batch halves the step
-count and doubles the step. Memory was never the constraint.
-\S\ref{sec:vit_sb} asks the same question of ViT and gets the opposite answer,
-because there the per-image cost does improve.
+not fix it.} That $10{,}009$ is double every other net in the book, and it is
+what the $300$-epoch schedule really pays for. The obvious remedy fails on
+measurement rather than on memory: the block interior's cost per \emph{image} is
+flat from batch $8$ to $128$ ($1.03\times$ across that whole range), so doubling
+the batch halves the step count and doubles the step. Memory was never the
+constraint. \S\ref{sec:vit_sb} asks the same question of ViT and gets the
+opposite answer, because there the per-image cost does improve.
 
-\medskip\noindent \textbf{Status: rendered, not trained.} Artifacts emit, shapes
-tie, counts are guarded, forty steps run under each size in both precisions. No
-accuracy, and the numeric ties against the JAX peers have not been run.
+\sqstatus{} Artifacts emit, shapes tie, counts are guarded, forty steps run
+under each size in both precisions. No accuracy, and the numeric ties against
+the JAX peers have not been run.
 
-\medskip\noindent \textbf{Both are launchable} ---
+\medskip\noindent \textbf{Launching it.} Both have job configs ---
 \texttt{cnxs-\allowbreak default-\allowbreak 4gpu} and
 \texttt{cnxb-\allowbreak default-\allowbreak 4gpu} --- \textbf{and both refuse
 to start if the allocator fraction is raised.} That setting is what lets ViT-B
 run at all (\S\ref{sec:vit_sb}); here it crashes both bf16 arms where the
 default leaves them fine. The smaller graph failing while the larger one
-survives is the sign that whatever ran out was never the graph, and the configs
-carry the rest.
-
-\medskip\noindent The phase-2 peers, at twice the batch and so half the steps,
-take $71.6$, $108.8$ and $166.5$ hours compute-only --- so the ${\sim}2\times$
-gap to the rows above is the batch, not the lowerer.
+survives is the sign that whatever ran out was never the graph. The phase-2
+peers, at twice the batch and so half the steps, take $71.6$, $108.8$ and
+$166.5$ hours compute-only, so the ${\sim}2\times$ gap to the rows above is the
+batch and not the lowerer.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
@@ -11113,21 +11120,21 @@ modern architecture, a survey of the field expressed in the
 proven kit, with a small library of bundled idioms for the patterns
 that recur.
 
-\section{Side quest: ViT-S and ViT-B}
+\section{Side quest: scaling to ViT-S and B}
 \label{sec:vit_sb}
 
-ViT scales on one axis where ConvNeXt scaled on two. Tiny, Small and Base are
-the same twelve blocks at a wider model dimension: $D = 192/3$ heads,
-$384/6$, $768/12$, with the MLP at $4D$ throughout. Depth never moves.
+\textbf{The axis.} ViT scales on one axis where ConvNeXt scaled on two. Tiny,
+Small and Base are the same twelve blocks at a wider model dimension, with the
+MLP at $4D$ throughout. Depth never moves.
 
 \begin{center}
-\begin{tabular}{@{}l c c r@{}}
+\begin{tabular}{@{}l l c r@{}}
 \hline
-model & $D$ / heads & params & 4 cards, $128$/dev: fp32 $\to$ bf16 \\
+model & shape & params & graph, 4 cards $128$/dev: fp32 $\to$ bf16 \\
 \hline
-ViT-Ti & $192$ / 3  & $5.7$\,M         & $171.6 \to 96.4$\,ms \;($1.78\times$) \\
-ViT-S  & $384$ / 6  & $22{,}050{,}664$ & $464.0 \to 245.5$\,ms \;($\mathbf{1.89\times}$) \\
-ViT-B  & $768$ / 12 & $86{,}567{,}656$ & $1295.6 \to 745.3$\,ms \;($1.74\times$) \\
+ViT-Ti & $12$ blocks, $D{=}192$ / 3 heads  & $5.7$\,M         & $171.6 \to 96.4$\,ms \;($1.78\times$) \\
+ViT-S  & $12$ blocks, $D{=}384$ / 6 heads  & $22{,}050{,}664$ & $464.0 \to 245.5$\,ms \;($\mathbf{1.89\times}$) \\
+ViT-B  & $12$ blocks, $D{=}768$ / 12 heads & $86{,}567{,}656$ & $1295.6 \to 745.3$\,ms \;($1.74\times$) \\
 \hline
 \end{tabular}
 \end{center}
@@ -11136,32 +11143,30 @@ ViT-B  & $768$ / 12 & $86{,}567{,}656$ & $1295.6 \to 745.3$\,ms \;($1.74\times$)
 $86.57$\,M. These are the graph's times, all-reduce in and no trainer around
 them, at four replicas because S and B have no single-device render at all. All
 three run $128$ per device, so four cards is DeiT's own global $512$ and the
-recipe's $5\times10^{-4}$ is the rate that batch was set for.
+recipe's $5\times10^{-4}$ is the rate that batch was set for --- which took four
+\texttt{\#eval} lines rather than a renderer feature, because the batch was
+never the obstacle.
 
-\medskip\noindent \textbf{B is the one net here that will not fit a default
-allocator.} PJRT's CUDA plugin reserves three quarters of a card and B's fp32
-graph wants more; raised to $0.97$ it runs at $93\%$ of what it then gets, and
-left alone it dies on its first step. Everything else in the table fits either
-way. That is the whole of why $128$ per device took four \texttt{\#eval} lines
-rather than a renderer feature: the batch was never the obstacle.
-
-\medskip\noindent \textbf{ViT-S's $1.89\times$ is the largest bf16 payoff in the
-book}, ahead of ResNet-50's $1.66\times$ measured the same way. Tiny's matmuls
-are narrow enough to underuse the tensor cores even in bf16; S's $D = 384$ suits
-them; B pays a $346$\,MB \emph{fp32} all-reduce every step, a fixed cost in both
-arms. The one op where bf16 \emph{loses} --- the stem weight gradient, at
-$0.19\times$ for want of a bf16 kernel at a $209\times209$ window --- is kept
-out of the emit at every size, which is why all three ratios exceed one.
-
-\medskip\noindent Where \S\ref{sec:convnext_sb} found a split between free and
-costly, ViT is uniformly costly: every variant moves $D$, so every variant moves
-dimension literals. \texttt{ViTRender.lean}, the per-example renderer, is still
-pinned at Tiny by roughly $154$ of them, so there is no Imagenette demo at
+\medskip\noindent \textbf{What it costs to render: uniformly costly.} Where
+\S\ref{sec:convnext_sb} found a split between a free variant and a paid one, ViT
+has none to find: every variant moves $D$, so every variant moves dimension
+literals. \texttt{ViTRender.lean}, the per-example renderer, is still pinned at
+Tiny by roughly $154$ of them, so unlike ConvNeXt there is no Imagenette demo at
 either size.
 
-\medskip\noindent \textbf{A full schedule.} Trainer steps, all measured on real
-ImageNet over $40$ steps at four cards, $300$ epochs, totals including
-$37.5$\,s per epoch of evaluation and checkpointing:
+\medskip\noindent \textbf{What bf16 buys: ViT-S's $1.89\times$ is the largest
+payoff in the book}, ahead of ResNet-50's $1.66\times$ measured the same way.
+Tiny's matmuls are narrow enough to underuse the tensor cores even in bf16; S's
+$D = 384$ suits them; B pays a $346$\,MB \emph{fp32} all-reduce every step, a
+fixed cost in both arms. The one op where bf16 \emph{loses} --- the stem weight
+gradient, at $0.19\times$ for want of a bf16 kernel at a $209\times209$ window
+--- is kept out of the emit at every size, which is why all three ratios exceed
+one. \S\ref{sec:convnext_sb} finds the same middle-size peak for the same
+reason.
+
+\medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
+including \evalckptnote. Trainer steps, all measured on real ImageNet over $40$
+steps:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r@{}}
@@ -11183,28 +11188,29 @@ four-replica and a trainer adds only the data feed, an additive constant near
 $65$\,ms at $128$ images per device. \S\ref{sec:convnext_sb}'s are
 single-device, where a multiplier is the right shape instead.
 
-\medskip\noindent \textbf{Status: rendered, not trained.} The only accuracy
-calibration is this repo's ViT-Ti at $70.28\%$ against DeiT-Ti's $72.2\%$, a
-$1.9$-point recipe gap (\S\ref{sec:vit_imagenet}). DeiT quotes $79.8\%$ for S
-and $81.8\%$ for B; everything missing from that $1.9$ is \emph{regularization},
-and S has four times Tiny's capacity, so the gap plausibly widens.
+\sqstatus{} The only accuracy calibration is this repo's ViT-Ti at $70.28\%$
+against DeiT-Ti's $72.2\%$, a $1.9$-point recipe gap
+(\S\ref{sec:vit_imagenet}). DeiT quotes $79.8\%$ for S and $81.8\%$ for B;
+everything missing from that $1.9$ is \emph{regularization}, and S has four
+times Tiny's capacity, so the gap plausibly widens.
 
-\medskip\noindent \textbf{Both are launchable} ---
+\medskip\noindent \textbf{Launching it.} Both have job configs ---
 \texttt{vits-\allowbreak default-\allowbreak g512-\allowbreak 4gpu} and
-\texttt{vitb-\allowbreak default-\allowbreak g512-\allowbreak 4gpu}, the only
-side quests in the book with job configs. They differ in one line: B's raises
-the allocator fraction and its driver will not start without it, since the error
-it prevents reads as a card being too small and B is the net where that reading
-is wrong. S's does not, and an early version did --- it looked like free
-headroom for a graph that already fits, and the same setting turns out to kill
-ConvNeXt's bf16 arms outright (\S\ref{sec:convnext_sb}). Raise it for a graph
-that does not otherwise fit; leave it alone for one that does.
-
-\medskip\noindent The phase-2 peers, same box at global $512$, cost $25.8$,
-$60.4$ and $146.1$ hours compute-only. \textbf{B is the only one that is not a
-single forward}: it peaks at $11.41$ against that same default arena and dies,
-so it runs as $4\times128$ accumulation. Whether it too fits once the arena is
-raised has not been measured.
+\texttt{vitb-\allowbreak default-\allowbreak g512-\allowbreak 4gpu} --- and they
+differ in one line. \textbf{B is the one net in the book that will not fit a
+default allocator}: PJRT's CUDA plugin reserves three quarters of a card, B's
+fp32 graph wants more, and left alone it dies on its first step. Raised to
+$0.97$ it runs at $93\%$ of what it then gets, and its driver refuses to start
+without the setting, since the error it prevents reads as a card being too small
+and B is the net where that reading is wrong. S's config does not raise it, and
+an early version did --- it looked like free headroom for a graph that already
+fits, and the same setting turns out to kill ConvNeXt's bf16 arms outright
+(\S\ref{sec:convnext_sb}). Raise it for a graph that does not otherwise fit;
+leave it alone for one that does. The phase-2 peers, same box at global $512$,
+cost $25.8$, $60.4$ and $146.1$ hours compute-only, and \textbf{B is the only
+one that is not a single forward}: it peaks at $11.41$ against that same default
+arena and dies, so it runs as $4\times128$ accumulation. Whether it too fits
+once the arena is raised has not been measured.
 
 \chapter{Bestiary of Architectures}
 \label{chap:bestiary}
@@ -14128,10 +14134,13 @@ XLA-only.
 
 \prosesection{Side quests}
 
-Several chapters end in a variant that is rendered but is not a Track-4 runner:
-a second recipe, a wider or deeper size, an architecture the book reaches for
-once. They are collected here rather than in the table above because most of
-them cannot be launched. The status column says what each one is missing.
+Several chapters end in a variant that is rendered but is not a Track-4 runner,
+and the section heading says which of three kinds it is: a second recipe, a
+wider or deeper size, or an architecture the book reaches for once. They are
+collected here rather than in the table above because \emph{none of them has
+been trained} --- not because they cannot start. Five of the seven have job
+configs and launch like any Track-4 row; only the two ResNet-50 recipes have
+none. The status column says what each one is missing.
 
 \begin{center}
 \small
