@@ -84,4 +84,55 @@ opaque stepInputs (x0 : @& ByteArray) (alphaBar : @& ByteArray)
     (B : USize) (npixels : USize) (seed : USize)
     : IO (ByteArray × ByteArray × ByteArray)
 
+/-! ### The continuous-time (VP-SDE) view of the same schedule
+
+    `cosineSchedule` tabulates ᾱ at the integers `t = 0 … T-1`. Score-SDE
+    (Song et al. 2021) treats the same schedule as a function of continuous
+    `t ∈ [0,1]`, which is what lets an ODE or SDE solver choose its own steps.
+    ⭐ **No retraining is needed to get there.** Under the VP SDE the score is
+    `∇ log p_t(x) = -ε̂(x,t)/σ_t`, so an ε-predicting network *is* a score model
+    up to that factor. Everything here is sampler-side arithmetic, shared by the
+    2-D and MNIST drivers so the two cannot drift.
+-/
+
+/-- π. Lean core has no `Float.pi`; the C side spells the same digits inline. -/
+def piF : Float := 3.14159265358979323846
+
+/-- Nichol & Dhariwal's `s`, the same 0.008 `cosineSchedule` uses. -/
+def sBias : Float := 0.008
+
+private def theta (t : Float) : Float :=
+  (t + sBias) / (1.0 + sBias) * (piF / 2.0)
+
+/-- ᾱ(t) = cos²θ(t) / cos²θ(0) — the closed form of the tabulated schedule. -/
+def abarC (t : Float) : Float :=
+  let c := Float.cos (theta t)
+  let c0 := Float.cos (theta 0.0)
+  (c * c) / (c0 * c0)
+
+/-- σ(t) = √(1-ᾱ(t)), the noise scale of the marginal at time `t`. -/
+def sigC (t : Float) : Float := Float.sqrt (max (1.0 - abarC t) 0.0)
+
+/-- β(t) = -d/dt log ᾱ(t) = π·tan θ(t)/(1+s), differentiated in closed form
+    rather than differenced — the schedule is analytic, so approximating its
+    derivative would be inventing error. ⚠ β diverges as t → 1. That stiffness
+    is why an explicit solver in `x`-space struggles here and why DDIM, which
+    integrates the linear part exactly, does not. -/
+def betaC (t : Float) : Float :=
+  piF / (1.0 + sBias) * Float.tan (theta t)
+
+/-- Inverse of `abarC`: `t = (2(1+s)/π)·arccos(cos θ₀·√ᾱ) - s`. Lets a solver
+    lay its grid out in ᾱ (or σ, or log-SNR) and land on exact times. -/
+def tOfAbar (ab : Float) : Float :=
+  let c0 := Float.cos (theta 0.0)
+  let arg := min 1.0 (max (-1.0) (c0 * Float.sqrt (max ab 0.0)))
+  Float.acos arg * 2.0 * (1.0 + sBias) / piF - sBias
+
+/-- The samplers the drivers can run, and what one step of each costs in network
+    evaluations. ⚠ Comparisons are made at matched **NFE**, not matched steps:
+    Heun is second-order and pays two evaluations per step, so on a fixed budget
+    it takes half as many. Reporting steps instead would flatter it. -/
+def samplerNfe : List (String × Nat) :=
+  [("ddim", 1), ("euler", 1), ("heun", 2), ("sde", 1)]
+
 end Ddpm
