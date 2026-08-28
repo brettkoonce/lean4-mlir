@@ -182,6 +182,23 @@ def _nms_per_class(dets, nms_iou):
 # result stays reproducible.
 SCORE_MODE = "objcls"
 
+# Emit ONE detection per cell (the class argmax), or one per (cell, class) for
+# the top MULTILABEL_K classes? Default False = argmax only = every previously
+# reported number reproduces unchanged.
+#
+# Why the switch exists. Under argmax, a cell whose GT is `tricycle` but whose
+# argmax is `car` yields a car detection and NO tricycle candidate at all: the
+# tricycle GT becomes an unrecoverable false negative AND a car false positive,
+# and per-class AP is charged twice for one ranking mistake. mAP is an unweighted
+# mean over classes, so that lands entirely on the rare classes. COCO-protocol
+# evaluation does not do this — detectors submit per-class candidates and the
+# metric sorts it out. So argmax-only is the non-standard, self-handicapping
+# choice, and this flag measures how much of the "class head collapse" is the
+# HEAD versus the READOUT.
+MULTILABEL = False
+MULTILABEL_K = 3          # classes emitted per cell, by descending probability
+MULTILABEL_FLOOR = 0.05   # ...and only those above this softmax probability
+
 
 def decode_anchor_raw(pred_block, anchors, grid, conf_thresh):
     """One scale's anchor decode → raw (cid, conf, xyxy) dets, NO NMS (so the FPN
@@ -200,6 +217,7 @@ def decode_anchor_raw(pred_block, anchors, grid, conf_thresh):
     e = np.exp(cls - cls.max(axis=1, keepdims=True))
     clsp = e.max(axis=1) / e.sum(axis=1)                          # prob of argmax
     conf = obj * clsp if SCORE_MODE == "objcls" else obj
+    prob = e / e.sum(axis=1, keepdims=True)                       # [A,10,g,g]
     jj = np.arange(grid).reshape(1, 1, grid)                      # col (W) index
     ii = np.arange(grid).reshape(1, grid, 1)                      # row (H) index
     sx = 1.0 / (1.0 + np.exp(-np.clip(pred[:, 0], -60, 60)))
@@ -211,7 +229,26 @@ def decode_anchor_raw(pred_block, anchors, grid, conf_thresh):
     x0 = (cx - w / 2)[keep]; y0 = (cy - h / 2)[keep]
     x1 = (cx + w / 2)[keep]; y1 = (cy + h / 2)[keep]
     boxes = np.stack([x0, y0, x1, y1], axis=1).tolist()
-    return list(zip(cid[keep].tolist(), conf[keep].tolist(), boxes))
+    if not MULTILABEL:
+        return list(zip(cid[keep].tolist(), conf[keep].tolist(), boxes))
+    # Same boxes, same objectness gate; one detection per surviving class rather
+    # than only the argmax. Score stays obj*p_c, so a runner-up class ranks below
+    # the argmax it lost to and can only ever ADD a candidate low in ITS OWN
+    # class's ranking — it cannot displace anything in the argmax class.
+    pk = prob[:, :, :, :][:, :, :, :]                             # [A,10,g,g]
+    psel = np.stack([pk[:, c][keep] for c in range(pk.shape[1])], axis=1)  # [n,10]
+    objsel = obj[keep]
+    out = []
+    order = np.argsort(-psel, axis=1)[:, :MULTILABEL_K]
+    for r in range(psel.shape[0]):
+        b = boxes[r]
+        for c in order[r]:
+            pc = psel[r, c]
+            if pc < MULTILABEL_FLOOR:
+                break                                  # sorted, so the rest are too
+            sc = objsel[r] * pc if SCORE_MODE == "objcls" else objsel[r]
+            out.append((int(c), float(sc), b))
+    return out
 
 
 def decode_fpn(pred_flat, scales, conf_thresh, nms_iou, topk=1000):
@@ -308,6 +345,21 @@ def main():
     ap.add_argument("--iou", type=float, default=0.5, help="TP IoU threshold (default 0.5)")
     ap.add_argument("--nms-iou", type=float, default=0.5)
     ap.add_argument("--conf-thresh", type=float, default=0.001)
+    ap.add_argument("--multilabel", action="store_true",
+                    help="emit one detection per (cell, class) for the top-K "
+                         "classes instead of the argmax alone. Under argmax a "
+                         "cell whose GT class loses the argmax is charged twice "
+                         "— a false negative for the true class and a false "
+                         "positive for the winner — which falls entirely on the "
+                         "rare classes. COCO protocol does not do this.")
+    ap.add_argument("--ml-k", type=int, default=3,
+                    help="--multilabel: classes per cell (default 3)")
+    ap.add_argument("--ml-floor", type=float, default=0.05,
+                    help="--multilabel: minimum softmax probability (default 0.05)")
+    ap.add_argument("--topk", type=int, default=1000,
+                    help="detections kept before NMS. ⚠ raise it with "
+                         "--multilabel or the extra candidates are cut before "
+                         "they can be scored (VisDrone runs ~790 dets/image).")
     ap.add_argument("--score", choices=["objcls", "obj"], default="objcls",
                     help="detection ranking score: objcls = sigmoid(obj)*max "
                          "softmax(cls) (default, original); obj = objectness "
@@ -331,8 +383,12 @@ def main():
                     help="score against the 56-box-capped raw_boxes tail instead of the "
                          "full-GT sidecar (drops ~34.9%% of val GT; for A/B with old runs only)")
     args = ap.parse_args()
-    global SCORE_MODE
+    global SCORE_MODE, MULTILABEL, MULTILABEL_K, MULTILABEL_FLOOR
     SCORE_MODE = args.score
+    MULTILABEL, MULTILABEL_K, MULTILABEL_FLOOR = args.multilabel, args.ml_k, args.ml_floor
+    if MULTILABEL:
+        print(f"decode: MULTILABEL (top {MULTILABEL_K} classes/cell, "
+              f"p >= {MULTILABEL_FLOOR}, topk {args.topk})")
     set_geometry(args.size if args.size else args.grid * 32, args.grid)
     if SCORE_MODE != "objcls":
         print(f"ranking score: {SCORE_MODE} (non-default)")
@@ -344,7 +400,8 @@ def main():
         pred_w = sum(len(a) * 15 * g * g for (g, a) in scales)
         n_pred = logits_raw.size // pred_w
         logits = logits_raw[: n_pred * pred_w].reshape(n_pred, pred_w)
-        decode_fn = lambda row: decode_fpn(row, scales, args.conf_thresh, args.nms_iou)
+        decode_fn = lambda row: decode_fpn(row, scales, args.conf_thresh, args.nms_iou,
+                                           topk=args.topk)
     elif args.anchors:
         anchor_list = load_anchors_file(args.anchors)
         pred_w = len(anchor_list) * 15 * GRID * GRID

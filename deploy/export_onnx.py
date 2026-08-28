@@ -105,7 +105,7 @@ def _per_scale_obj_r(a, b):
     return out
 
 
-def verify_frame(onnx_path, tol):
+def verify_frame(onnx_path, tol, fold="none"):
     """Self-contained gate: testdata/frame.png vs testdata/frame_logits.bin.
 
     Both ship in the repo, so this needs nothing from the training box. The
@@ -134,11 +134,18 @@ def verify_frame(onnx_path, tol):
     ref = np.fromfile(HERE / "testdata" / "frame_logits.bin", dtype=np.float32)
     if ref.size != NTOT:
         raise SystemExit(f"reference logits are {ref.size} floats, want {NTOT}")
-    img = np.asarray(Image.open(HERE / "testdata" / "frame.png").convert("RGB"),
-                     dtype=np.float32).transpose(2, 0, 1) / 255.0
-    mean = np.array([0.485, 0.456, 0.406], np.float32).reshape(3, 1, 1)
-    istd = (1.0 / np.array([0.229, 0.224, 0.225], np.float32)).reshape(3, 1, 1)
-    x = ((img - mean) * istd)[None]
+    raw = np.asarray(Image.open(HERE / "testdata" / "frame.png").convert("RGB"))
+    if fold == "u8":
+        # exactly the bytes a camera path would hand over — no host arithmetic
+        x = raw.astype(np.uint8)[None]
+    else:
+        img = raw.astype(np.float32).transpose(2, 0, 1) / 255.0
+        if fold == "f32":
+            x = img[None]                      # the graph normalizes
+        else:
+            mean = np.array([0.485, 0.456, 0.406], np.float32).reshape(3, 1, 1)
+            istd = (1.0 / np.array([0.229, 0.224, 0.225], np.float32)).reshape(3, 1, 1)
+            x = ((img - mean) * istd)[None]
 
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
     got = sess.run(None, {"image": x})[0].reshape(-1)[:NTOT]
@@ -170,6 +177,49 @@ def verify_frame(onnx_path, tol):
     print("✅ export matches the Lean model on the reference frame")
 
 
+def _wrap_preprocess(model, mode):
+    """Move the host-side preprocessing INTO the graph.
+
+    Measured on an Orin Nano: preprocess was 11.9 ms against a 6.3 ms forward,
+    and the PIL decode+resize is only 0.5 ms of it. The other 8.5 ms is numpy
+    elementwise work — `transpose`, `/255`, `(x-mean)*istd` — each allocating a
+    fresh 600 K-float array on a CPU that is much worse at this than the GPU
+    already sitting idle behind it.
+
+      mode="f32"  input stays [N,3,448,448] float32 in [0,1]; only the normalize
+                  moves into the graph. Safe everywhere, saves the arithmetic.
+      mode="u8"   input becomes [N,448,448,3] UINT8 — exactly what
+                  `np.asarray(pil_image)` already returns, so the host does no
+                  arithmetic and no transpose at all, and the host-to-device copy
+                  drops 4x (602 KB against 2.4 MB). The permute, the /255 and the
+                  normalize all run on the GPU.
+
+    ⚠ `u8` needs a TensorRT that accepts a UINT8 network input (10.x does; older
+    ones may not). If trtexec rejects it, fall back to `f32`, which still removes
+    the 4.0 ms normalize and needs nothing special from the runtime.
+    """
+    import torch
+    import torch.nn as nn
+
+    mean = torch.tensor([0.485, 0.456, 0.406]).reshape(1, 3, 1, 1)
+    istd = 1.0 / torch.tensor([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1)
+
+    class Wrapped(nn.Module):
+        def __init__(self, inner, mode):
+            super().__init__()
+            self.inner = inner
+            self.mode = mode
+            self.register_buffer("mean", mean)
+            self.register_buffer("istd", istd)
+
+        def forward(self, x):
+            if self.mode == "u8":
+                x = x.permute(0, 3, 1, 2).to(torch.float32) / 255.0
+            return self.inner((x - self.mean) * self.istd)
+
+    return Wrapped(model, mode).eval()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True, help="Lean *_params.bin")
@@ -180,6 +230,13 @@ def main():
                     help="1 for a camera; the training graph is 8")
     ap.add_argument("--verify", default=None,
                     help="Lean logits.bin to check the export against")
+    ap.add_argument("--fold-preprocess", choices=["none", "f32", "u8"],
+                    default="none",
+                    help="move normalization (and for u8, the /255 and the "
+                         "HWC->CHW permute) into the graph. u8 takes a "
+                         "[N,448,448,3] uint8 input — what np.asarray(pil) "
+                         "already returns — so the host does no arithmetic and "
+                         "the H2D copy drops 4x. See _wrap_preprocess.")
     ap.add_argument("--verify-frame", action="store_true",
                     help="self-contained gate: compare against testdata/frame.png "
                          "+ testdata/frame_logits.bin, which ship in the repo. "
@@ -224,7 +281,12 @@ def main():
     load_bn_stats(model, args.bn)
     model.eval()
 
-    dummy = torch.zeros(args.batch, 3, IMG_PX, IMG_PX)
+    if args.fold_preprocess != "none":
+        model = _wrap_preprocess(model, args.fold_preprocess)
+    if args.fold_preprocess == "u8":
+        dummy = torch.zeros(args.batch, IMG_PX, IMG_PX, 3, dtype=torch.uint8)
+    else:
+        dummy = torch.zeros(args.batch, 3, IMG_PX, IMG_PX)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     torch.onnx.export(
         model, dummy, args.out,
@@ -278,7 +340,7 @@ def main():
               f"accepts {written}; pass --opset {written} to stop being surprised.")
 
     if args.verify_frame:
-        verify_frame(args.out, args.tol)
+        verify_frame(args.out, args.tol, args.fold_preprocess)
         return
 
     if not args.verify:

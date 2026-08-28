@@ -53,6 +53,46 @@ def fpnNtot : Nat :=
 def fpnClsWeights : List Float :=
   [0.8058, 1.4377, 2.1196, 0.5579, 1.3407, 1.7916, 2.9778, 3.7281, 2.6187, 1.2694]
 
+/-- Full inverse-frequency class weights, same `Σ f_c·w_c = 1` normalization as
+    `fpnClsWeights` above — a pure redistribution, so the class term's total
+    magnitude (and its balance against box/objectness) is unchanged. Dynamic
+    range 44.7× against sqrt-inverse's 6.7×.
+
+    Motivated by a direct measurement of the head rather than by theory. Probing
+    the class logits at every TARGET-assigned slot on val, with objectness, NMS
+    and box matching all removed, from the mAP peak (e10) to a 30-epoch run:
+
+      top-1 overall  67.58% → 67.32%     top-3 overall  92.88% → 92.78%
+
+    Flat. But per class it is not flat at all — it REDISTRIBUTES toward the
+    priors: car 85.4→87.7, pedestrian 72.1→73.7, while tricycle 47.3→**35.4**,
+    awning-tricycle 28.9→**17.2** (and its top-3 collapses 70.1→47.4, so the
+    whole distribution abandons the class, not just the argmax). Predicted-as
+    counts move the same way: car +328, pedestrian +286, tricycle −246,
+    awning-tricycle −217.
+
+    That is the signature of a classifier minimizing AVERAGE cross-entropy under
+    a 44:1 class imbalance — aggregate accuracy is preserved while the decision
+    boundary migrates toward the prior. mAP is an unweighted mean over classes,
+    so it is charged for exactly what average CE is indifferent to, which is why
+    mAP peaks at e10 while class-agnostic AP keeps rising to e30. The sqrt-inverse
+    weights are already on and do not prevent it; this is the same lever at full
+    strength. -/
+def fpnClsWeightsInv : List Float :=
+  [0.4726, 1.5045, 3.2700, 0.2265, 1.3083, 2.3363, 6.4541, 10.1162, 4.9913, 1.1728]
+
+/-- Class-weighting strength (`FPN_CLSW`): `none` | `sqrt` (default, the measured
+    arm) | `inv`. The weights are baked into the emitted loss, so switching forces
+    a train-step recompile — and MUST run under its own `FPN_TAG`. -/
+def clsWeightsFromEnv : IO (List Float) := do
+  match (← IO.getEnv "FPN_CLSW") with
+  | none => return fpnClsWeights
+  | some v =>
+    match v.trimAscii.toString.toLower with
+    | "none" => return []
+    | "inv"  => return fpnClsWeightsInv
+    | _      => return fpnClsWeights
+
 /-- `tower` = number of 3×3 convs in the RetinaNet head tower per pyramid level
     (T2a). **0 = the minimal 1×1 head**, which is the T2-bias arm currently on the
     board; 4 is the RetinaNet default. Selected at run time by `FPN_TOWER` so the
@@ -389,6 +429,7 @@ def runYolov1VisdroneFpn (args : List String) : IO Unit := do
     let aug ← augFromEnv
     let noBoot ← noBootstrapFromEnv
     let baseCfg := if noBoot then { baseCfg with bootstrapBackbone := none } else baseCfg
+    let clsW ← clsWeightsFromEnv
     let affProb ← affinePctFromEnv "FPN_AFFINE" 0
     let affScale ← affinePctFromEnv "FPN_AFFINE_SCALE" 25
     let affTrans ← affinePctFromEnv "FPN_AFFINE_TRANSLATE" 10
@@ -399,12 +440,15 @@ def runYolov1VisdroneFpn (args : List String) : IO Unit := do
                                       augment := aug,
                                       fpnAffineProb := affProb,
                                       fpnAffineScale := affScale,
-                                      fpnAffineTranslate := affTrans }
+                                      fpnAffineTranslate := affTrans,
+                                      yoloClsWeights := clsW }
     IO.println s!"FPN multi-scale VisDrone (56/28/14, 3 anchors/scale, Ntot={fpnNtot}, head tower={tower}) — data dir: {dataDir}"
     IO.println s!"  spec   : {spec.name}"
     IO.println s!"  epochs : {epochs}"
     IO.println s!"  lr     : {lr}  clip: {clip}"
     IO.println s!"  augment: {aug} (HSV jitter + hflip on the FPN path)"
+    IO.println s!"  clsw   : {if clsW.isEmpty then "none" else toString clsW.length} \
+weights (FPN_CLSW=none|sqrt|inv)"
     if affProb > 0.0 then
       IO.println s!"  affine : p={affProb} scale=±{affScale} translate=±{affTrans} \
 (box-aware, target re-encoded)"
