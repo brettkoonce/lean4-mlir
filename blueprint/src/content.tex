@@ -12317,7 +12317,9 @@ historical record; this is the trained detector beside it.
 \hline
  & mAP@0.5 & recall & class-agnostic AP \\
 \hline
-\textbf{R34+FPN (this stack)} & \textbf{0.1526} & 0.682 & 0.393 \\
+\textbf{R34+FPN, 50\,ep, +aug} & \textbf{0.1674} & \textbf{0.703} & \textbf{0.429} \\
+R34+FPN, 12\,ep, no aug & 0.1526 & 0.682 & 0.393 \\
+R34+FPN, 50\,ep, no aug & 0.1243 & 0.669 & 0.369 \\
 PyTorch replica, same architecture & 0.1532 & 0.677 & 0.400 \\
 YOLOv8s, matched budget & 0.140 & --- & --- \\
 YOLOv8s, 100\,ep, 640\,px, full aug & 0.391 & 0.400 & --- \\
@@ -12325,8 +12327,16 @@ YOLOv8s, 100\,ep, 640\,px, full aug & 0.391 & 0.400 & --- \\
 \end{tabular}
 \end{center}
 
-\noindent The stack sits at $99.6\%$ of a hand-written PyTorch replica
-of \emph{this same architecture}, and runs at 65\,fps on one RTX 4060 Ti.
+\noindent \textbf{The middle two rows are the result, and they only mean
+something together.} Quadrupling the schedule with augmentation off \emph{costs}
+19\%: less than half the training loss, more detections, lower recall --- ordinary
+overfitting on 6{,}471 images. Turning augmentation on at that same 50-epoch
+schedule converts $-19\%$ into $+10\%$ over the best short run. One flag decides
+whether a long schedule pays at all, so reporting either alone would mislead.
+
+\medskip\noindent The stack beats the hand-written PyTorch replica of
+\emph{this same architecture} by $9\%$, having trailed it by $10\%$ before this,
+and runs at 65\,fps on one RTX 4060 Ti.
 The replica, not YOLOv8, is the yardstick: it isolates implementation
 quality from architecture, which a comparison against a different model
 would conflate. The two YOLOv8s rows say something more interesting than
@@ -12344,8 +12354,10 @@ makes the multi-scale head of Definition~\ref{layer:fpnModule} necessary
 rather than decorative.
 
 \medskip\noindent The result worth reading is not the mean. Per-class AP
-runs from car at $0.573$ down to bicycle at $0.015$ --- a $38\times$
-spread. Detection on aerial imagery does not degrade uniformly; it
+runs from car at $0.605$ down to bicycle at $0.014$ --- a $44\times$
+spread. Augmentation lifted 8 of 10 classes and lifted them hardest where the
+detector was weakest (bus $0.165 \to 0.227$), so the mean is no longer one class
+in a trench coat. Detection on aerial imagery does not degrade uniformly; it
 collapses on whatever is simultaneously small \emph{and} rare, and an
 averaged mAP is precisely the statistic that hides it. Workings:
 \texttt{runs/2026-08-28-visdrone-fpn-rebuild/}.

@@ -139,10 +139,17 @@ Knobs: `FPN_BACKBONE` (`r34` / `r50`), `FPN_AUG`, `FPN_EPOCHS`, `FPN_TOWER`,
 ![VisDrone FPN detection](figures/visdrone_fpn.png)
 
 Truth on top, prediction below, on the four densest val frames. **mAP@0.5 =
-0.1526** at 12 epochs — 99.6% of a hand-written PyTorch replica of this same
-architecture (0.1532), and 65 fps on one RTX 4060 Ti. A YOLOv8s at the same
-budget scores 0.140; its published-style 0.391 comes from 8× the epochs, higher
-resolution and full augmentation, so that gap is recipe rather than architecture.
+0.1674** at 50 epochs with `FPN_AUG=1`, and 65 fps on one RTX 4060 Ti. That
+beats a hand-written PyTorch replica of this same architecture (0.1532) by 9%.
+
+⭐ **Augmentation is what makes the long schedule pay.** At 50 epochs *without*
+it the same arm scores 0.1243 — worse than 12 epochs (0.1526), with half the
+train loss: ordinary overfitting on 6,471 images. One flag turns −19% into +10%.
+Do not run a long schedule here without `FPN_AUG=1`.
+
+A YOLOv8s at the same budget scores 0.140; its published-style 0.391 comes from
+8× the epochs, higher resolution and full augmentation, so that gap is recipe
+rather than architecture.
 
 The lesson is in the per-class split rather than the mean: car reaches 0.573
 while bicycle sits at 0.015, a 38× spread. Detection on aerial imagery does not

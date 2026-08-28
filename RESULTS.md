@@ -133,14 +133,23 @@ augmentation. Scored by `scripts/yolo_map_visdrone.py` against the **uncapped**
 GT sidecar — all 38,759 val boxes, not the 56-box-truncated training record,
 which silently drops 34.9% of VisDrone's val GT and is not its protocol.
 
-| arm | mAP@0.5 | recall | class-agnostic AP |
-|---|---|---|---|
-| **R34+FPN, 12 ep, no aug** | **0.1526** | 0.682 | 0.393 |
-| PyTorch twin — same architecture, matched recipe | 0.1532 | 0.677 | 0.400 |
-| YOLOv8s, matched recipe (random init, 448, no aug) | 0.140 | — | — |
-| YOLOv8s, 100 ep, full aug, 640 px, COCO init | 0.391 | 0.400 | — |
+| arm | epochs | aug | mAP@0.5 | recall | class-agnostic AP |
+|---|---|---|---|---|---|
+| **R34+FPN** | **50** | **on** | **0.1674** | **0.703** | **0.429** |
+| R34+FPN | 12 | off | 0.1526 | 0.682 | 0.393 |
+| R34+FPN | 50 | off | 0.1243 | 0.669 | 0.369 |
+| PyTorch twin — same architecture | 12 | off | 0.1532 | 0.677 | 0.400 |
+| YOLOv8s, matched budget (random init, 448) | 12 | off | 0.140 | — | — |
+| YOLOv8s, 640 px, COCO init | 100 | on | 0.391 | 0.400 | — |
 
-**The Lean detector is at 99.6% of its PyTorch twin** on a matched recipe. The
+**The middle three rows are the result.** Training longer *without* augmentation
+costs 19% — 4× the schedule, less than half the train loss, and lower mAP, with
+detections rising while recall falls. Turning augmentation on at the same 50-epoch
+schedule converts that −19% into +10% over the best short run. One flag decides
+whether a long schedule pays at all, which is why they are reported together.
+
+**The Lean detector now beats its PyTorch twin by 9%** (0.1674 vs 0.1532), having
+sat at 90.5% of it when this thread paused. The
 twin is a hand-written replica of *this same architecture*, not an off-the-shelf
 model — it exists to isolate implementation quality from architecture, which is
 why it, and not YOLOv8, is the yardstick.
@@ -154,15 +163,20 @@ gap to 0.391 is recipe, not architecture.**
 
 Throughput: **65 fps** on one RTX 4060 Ti (548 images in 8.34 s), measured
 end-to-end including process start, runtime init, graph load, a 625 MB read and
-a 406 MB write, so the forward alone is faster.
+a 406 MB write, so the forward alone is faster. On a Jetson Orin under TensorRT
+fp16 the forward measures **229 fps**, where the CPU decode (57 ms) is 6× the
+network (4.4 ms) and is the real bottleneck. ⚠ IREE on the same board is 0.5 fps
+— a compiler gap, not a hardware one; do not project throughput across compilers.
 
-Per-class AP is the real finding — the mean hides a 38× spread:
+Per-class AP is the real finding — the mean hides a 44× spread (best arm):
 
-| car | motor | van | bus | people | pedestrian | truck | tricycle | awning-tri | bicycle |
+| car | bus | van | motor | pedestrian | people | truck | tricycle | awning-tri | bicycle |
 |---|---|---|---|---|---|---|---|---|---|
-| 0.573 | 0.155 | 0.166 | 0.165 | 0.133 | 0.132 | 0.095 | 0.072 | 0.020 | 0.015 |
+| 0.605 | 0.227 | 0.173 | 0.168 | 0.150 | 0.138 | 0.108 | 0.062 | 0.030 | 0.014 |
 
-Car alone carries the headline. The honest subject of this demo is why aerial
+Car still leads, but augmentation lifted 8 of 10 classes and lifted them most
+where the detector was weakest (bus 0.165→0.227, truck 0.095→0.108), so it is no
+longer one class carrying the mean. The honest subject of this demo is why aerial
 detection collapses on small, rare classes at 2–5 px, not the single mAP.
 
 Figure: `demos/figures/visdrone_fpn.png` (truth over prediction, densest val

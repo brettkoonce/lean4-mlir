@@ -1,4 +1,44 @@
-# 2026-08-28 — the VisDrone detector is rebuilt from nothing, and it catches its PyTorch twin
+# 2026-08-28 — the VisDrone detector is rebuilt from nothing, and augmentation buys the long schedule
+
+## ⭐ The headline: mAP@0.5 0.1386 → 0.1674, and the lever is one flag
+
+| arm | epochs | aug | train loss | mAP@0.5 | recall | ca-AP |
+|---|---|---|---|---|---|---|
+| baseline on record | 12 | off | — | 0.1386 | 0.676 | 0.376 |
+| `ctrl12` | 12 | off | 112.7 | 0.1526 | 0.682 | 0.393 |
+| `long50` | 50 | off | 47.9 | **0.1243** | 0.669 | 0.369 |
+| **`aug50`** | 50 | **on** | 88.5 | **0.1674** | **0.703** | **0.429** |
+| PyTorch twin (same architecture) | 12 | off | — | 0.1532 | 0.677 | 0.400 |
+
+**Training longer without augmentation actively HURTS** — 4× the schedule, less
+than half the train loss, and 19% *lower* mAP, with detections rising 437k → 463k
+while recall falls. Textbook overfitting on 6,471 images.
+
+**Augmentation inverts that.** Same 50-epoch schedule, same seed, aug the only
+difference: −19% becomes +10% over the best short run. One flag turns a
+regression into the best number this project has produced. It beats the recorded
+baseline by 21% and the architecture-matched PyTorch twin by 9%.
+
+⭐ This vindicates a prediction that was written down and never tested —
+`coco_visdrone_two_stage.md` §4: *"the schedule decision is really an aug
+decision … if a long schedule is wanted, it has to be bought with real
+augmentation first."* Correct.
+
+It also retroactively vindicates the observation the thread VOIDED: the old
+`long30` run was reported as plateauing in val mAP around epoch 10 while train
+loss kept halving. That was discarded because the shuffle bug contaminated the
+era. The plateau was real, and past it the curve turns down.
+
+⚠ 8 of 10 classes improve, and the gains land where the detector was weakest
+rather than on the easy class: bus 0.165→0.227, truck 0.095→0.108,
+awning-tricycle 0.020→0.030. Car improves 0.573→0.605 but no longer carries the
+mean alone. (bicycle and tricycle slip slightly.)
+
+**The recipe is therefore: long schedule + augmentation.** Not one or the other.
+
+---
+
+# The rebuild (how the arms above became possible)
 
 The detector thread paused 2026-07-24. Everything it produced was later deleted to
 free disk: the data, every checkpoint, the ImageNet backbone file, and the PyTorch
@@ -125,11 +165,29 @@ Car alone carries the headline. A 38x spread between best and worst class says t
 demo's honest subject is *why aerial detection collapses on small rare classes*,
 which is more instructive than one mediocre mAP.
 
-## Still running
+## The plateau curve
 
-`long50` (50 ep, no aug) and `aug50` (50 ep, aug) — the "does training longer help"
-question that `long30` never answered, since its eval scored an untagged checkpoint
-six times and those checkpoints are now deleted anyway.
+`long50` scored at intermediate epochs (mid-schedule, so NOT annealed — the finals
+above are the comparable numbers):
 
-⚠ `ctrl12` and `long50` have different cosine schedules, so `long50` at its epoch 12
-is NOT a control for `ctrl12`. Only `ctrl12`'s final is comparable to 0.1386.
+| epoch | 5 | 10 | 15 | 50 (final, annealed) |
+|---|---|---|---|---|
+| mAP@0.5 | 0.1114 | 0.1223 | 0.1320 | **0.1243** |
+
+It climbs to ~epoch 15 and the annealed endpoint lands *below* it. Note the
+augmentation arm was already ahead at epoch 5 (0.1207 vs 0.1114) while carrying
+higher train loss — the correct early signature, visible 45 epochs before the
+final confirmed it.
+
+⚠ `ctrl12` and `long50` have different cosine schedules, so `long50` at its epoch
+12 is NOT a control for `ctrl12`. Only the finals are comparable.
+
+## What to run next
+
+1. **Augmentation at 12 epochs.** The 2×2 is missing its fourth cell: aug helps at
+   50, but nobody has checked whether it helps at 12, which is 4× cheaper.
+2. **Longer than 50, with aug.** `aug50` is the only arm that was still improving
+   when its schedule ran out.
+3. Mosaic, which the current pack deliberately omits — deferred on the grounds
+   that 4-into-1 halves already-tiny objects. Worth re-testing now that plain aug
+   is measured as clearly positive.
