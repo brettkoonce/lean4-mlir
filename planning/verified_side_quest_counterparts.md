@@ -19,6 +19,22 @@ why the verified path is the artifact and JAX the oracle) and `planning/chapter_
 
 ## 0. START HERE — the state this doc was written against
 
+⬅⬅ **2026-08-27, LATER THE SAME DAY: §4d IS CLOSED WITHOUT BEING BUILT.** ViT-B reaches DeiT's
+global **512** in one shot on four cards — `vitbin_adamdp128x4wxclipdrop` at **13.99 GiB, 93 %** of
+the raised budget, and its bf16 peer at 12.61 — so the gradient-accumulation loop §4d called *"the
+one real feature"* is not needed. §6a's four-step test ran and stopped at step 3. The control is
+one environment variable: unset, the same bytes on the same four devices die *"Out of memory while
+trying to allocate 11.96GiB"*. It is also **faster** — measured at 1,381 / 837 trainer ms/step,
+**291 h fp32 and 178 h bf16** for 300 epochs against 322 and 228 at the old batch — and it makes
+the driver's un-rescaled batch-512 LR simply correct. ⛔ **The 32×4 pair is deleted.** It has a
+job config,
+`vitb-default-g512-4gpu`, the first in the tree to set `LEAN_MLIR_MEM_FRACTION`. Evidence:
+`runs/2026-08-27-vitb-global512/`. ⛔ Still nothing TRAINED, and every figure went through JAX's
+Python compile path rather than the C shim the job uses — a 40-step probe is the one thing owed.
+▶ Read §4d, then §6's item 6.
+
+*The previous session's §0 follows.*
+
 ⬅⬅ **2026-08-27, END OF SESSION. Read this, then §6a's ViT block, then stop reading.**
 Everything in §6 items 1–5 is closed. `sec:r50_a2_a1_cost`'s two ⛔ rows are gone: RSB-A2/A1 now
 render with **the model-EMA shadow** (a fifth blob region, `[θ|m|v|G|E]`) and **stochastic depth**
@@ -322,7 +338,38 @@ Closing the last 4× (128 → 512) means all-reducing the statistics themselves.
 
 ---
 
-### ⬅⬅ ViT accumulation (§4d) — **START HERE NEXT SESSION**, and the first move is 4 `#eval`s
+### ✅ ViT accumulation (§4d) — **ANSWERED 2026-08-27: the feature is not needed.** The test below ran
+
+✅ **Steps 1–3 all passed and step 4 never fired.** Four `#eval`s, a peak measurement and an
+execution, in that order, exactly as written below. ViT-B renders and RUNS at 128 per device × 4 =
+global **512**, in both precisions, at 93 % and 83 % of the raised budget.
+`runs/2026-08-27-vitb-global512/` has the logs; §4d carries the result and what it changed.
+
+⭐ **All three "things that could sink it" were checked and none did**, which is the part worth
+keeping since each was a real hypothesis:
+* **"11.41 is the JAX trainer's peak, not the verified render's"** — true, and it did not matter.
+  The verified fp32 render reads **13.99 G**, ~1.23× the 11.41 recorded for its JAX peer, so the
+  concern was correctly identified. 13.99 is still under 15.11.
+* **"bf16 may be doing the work"** — half true, and the half that is true is the interesting one.
+  The bf16 render at 128×4 reads 10.88 G and RUNS at the **default** 11.68 GiB budget, so bf16
+  alone would have bought global 512 in bf16 only. The fp32 twin is what needs the allocator, and
+  §4c's rule (a tier without its precision peer reads as a decision) is why that was not enough.
+* **"the all-reduce buffer is not in a single-device peak"** — checked by DIFFERENCE, not by
+  argument, which is why the two 1-replica renders exist. A graph with no collective in it at all
+  reads the same 13.99 / 12.61. The collective costs nothing measurable here.
+
+⚠⚠ **And the estimate that framed this was wrong by 6.4 GiB in the safe direction.** Scaling the
+32×4 temporaries by the batch gives ~20 G, which is exactly what XLA says the graph costs
+un-rematerialised (*"down from 20.39GiB originally"*). 13.99 is what rematerialisation buys under
+pressure. ▶ A "does not fit" derived by scaling a smaller batch is not a measurement.
+
+⚠ **A compile-time peak still is not independent of its budget, and it moved the OTHER way here.**
+The bf16 render reads 10.88 G at the default and **12.61 G** at 0.97 — more room, less
+rematerialisation. §6c saw the same on R50 (11.52 → 11.91). Quote the budget with the peak.
+
+*The original test follows, since it is what the work was done against.*
+
+### ⬅⬅ ViT accumulation (§4d) — the test as it was written, and the first move is 4 `#eval`s
 
 §4d's own warning was: **a TPU deletes this item** — v3 is 16 GB/core, v4 is 32, `$PJRT_PLUGIN`
 always wins, so DeiT's global 512 becomes an env var rather than a renderer feature.
@@ -383,8 +430,8 @@ Surveyed 2026-08-27 against the tree at `253fb75`. "Render" means a committed
 | **MNv4-Conv-M** | `sec:mnv4_side_quest` | ✅ | ✅ 4 variants incl. DP + bf16 | ✅ **4-GPU, tied** | ✅ nothing — **run it** (§4b) |
 | **ConvNeXt-S** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + **bf16 ×2** | steps only | ✅ nothing — **train it** (§4c) |
 | **ConvNeXt-B** | `sec:convnext_sb` | ✅ | ✅ fp32 ×2 + bf16 ×2 | ✅ **benchmarked** | ✅ nothing — **train it** (§4c) |
-| **ViT-S** | `sec:vit_sb` | ✅ | ✅ fp32 + **bf16** | ✅ measured **1.89×** | ✅ nothing — **train it** (§4c) |
-| **ViT-B** | `sec:vit_sb` | ✅ | ✅ fp32 + **bf16** @ global 128 | ✅ measured 1.40× | **an accum render** (§4d) |
+| **ViT-S** | `sec:vit_sb` | ✅ | ✅ fp32 + **bf16** @ global 512 | ✅ 528 → 319 ms | ✅ nothing — **train it**, `vits-default-g512-4gpu` |
+| **ViT-B** | `sec:vit_sb` | ✅ | ✅ fp32 + bf16 @ 128 **and @ global 512** | ✅ measured 1.74× @ 512 | ✅ nothing — **train it** (§4d) |
 | **EfficientNetV2-S** | `sec:enet_side_quests` | ⚠ Imagenette only | ⛔ nothing | — | spec, peer, shim, render (§4e) |
 | Noisy Student | `sec:enet_side_quests` | — | — | — | out of scope: needs JFT-300M |
 | EfficientDet | `sec:enet_side_quests` | — | — | — | out of scope: detection, not this book's head |
@@ -442,6 +489,16 @@ naming decision has to re-read.
 `LEAN_MLIR_RECIPE` takes.** Not "imagenet", not omitted. A net whose emitter has one recipe still
 spells it (`default`), because unnamed is precisely what let `r34-imagenet` and `r50-imagenet` mean
 different things.
+
+⚠⚠ **N1's field split assumes no net token contains a dash, and N4 made that assumption false**
+(found 2026-08-27 adding ViT-B's job). `supervise.sh` reads the recipe as the filename's second
+dash-field, and its header says *"a net whose name contains a dash would break the field split —
+none does"*. N4 then renamed the exes to hyphenate the size (`vit-b-imagenet-verified`,
+`convnext-s-imagenet-verified`), so a job named after its exe would parse its recipe as `b` or `s`
+and the check would refuse a correct config. ▶ **The two namespaces are separate and stay
+separate**: jobs use the short token every existing job already uses (`vitb`, `cnx`, `r34`), N4
+governs Lean exes only. Written down because the collision is invisible until the first size
+variant gets a job, which is exactly what happened.
 
 ▶ **This is mechanically checkable and should be a precheck, not a convention.** `supervise.sh`
 already runs per-job prechecks; add one that asserts the second dash-field of the job's own
@@ -606,8 +663,8 @@ in recipe. Listing them would have put two job names on one (net, recipe) row, w
 | `mobilenetv4-imagenet-verified` | Conv-M | rendered; **single-device only** (no shard gate) | `sec:mnv4_side_quest` |
 | `convnext-s-imagenet-verified` | — | rendered fp32; bf16 owed | `sec:convnext_sb` |
 | `convnext-b-imagenet-verified` | — | rendered fp32 + bf16; **unbenchmarked** | `sec:convnext_sb` |
-| `vit-s-imagenet-verified` | — | rendered fp32; bf16 owed | `sec:vit_sb` |
-| `vit-b-imagenet-verified` | — | rendered fp32 @ global 128; bf16 + accum owed | `sec:vit_sb` |
+| `vit-s-imagenet-verified` | — | rendered fp32 + bf16 @ global 512; `vits-default-g512-4gpu` | `sec:vit_sb` |
+| `vit-b-imagenet-verified` | — | rendered fp32 + bf16 @ **global 512** (DeiT's batch); job owed | `sec:vit_sb` |
 | EfficientNetV2-S | — | no spec | `sec:enet_side_quests` |
 
 ⚠ **MNv4's row keeps its reason.** The current table's bare `\withheld` reads as a redaction; the
@@ -869,7 +926,78 @@ an accident of B landing after S.
 **Cost: small.** Expect roughly a fifth of the wall clock back on ConvNeXt-S (T's bf16 render runs
 1.29× its fp32 peer) and about a third on the ViT pair (Ti's runs 1.46×).
 
-### 4d. ViT-B gradient accumulation — the one real feature
+### 4d. ViT-B gradient accumulation — ✅ **NOT NEEDED, 2026-08-27.** The batch fits without it
+
+✅ **CLOSED WITHOUT BEING BUILT.** `runs/2026-08-27-vitb-global512/`. This section's premise —
+*"without it `vitbin` renders at global 128, and DeiT's recipe is global 512"* — was true, and the
+obstacle it inferred was not. Four `#eval`s later, ViT-B renders and executes at 128 per device ×
+4 replicas.
+
+| render | peak | at 11.68 GiB | at 15.11 GiB | device ms/step |
+|---|---|---|---|---|
+| `vitbin_adamdp128x4wxclipdrop` | 13.99 G | ⛔ `RESOURCE_EXHAUSTED` | ✅ 93 % | 1295.61 |
+| `vitbin_adamdp128x4wxclipdropbf16` | 12.61 G | ✅ (10.88 G there) | ✅ 83 % | 745.34 |
+
+⭐⭐ **The control is the whole finding, and it is one environment variable.** The same artifact
+bytes on the same four cards: with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.97` it runs; unset, it dies
+*"Out of memory while trying to allocate 11.96GiB"*. So the `RESOURCE_EXHAUSTED` this section built
+its case on was never a fact about ViT-B or about a 16 GB card.
+
+⭐ **It is FASTER as well as more faithful**, which this section's own note asked someone to check
+rather than assume. TRAINER ms/step, 40 steps on real ImageNet, four cards:
+
+| | fp32 | bf16 |
+|---|---|---|
+| ViT-B @ global 512 | **1,381 ms → 291 h** | **837 ms → 178 h** |
+| the deleted 32×4 pair | 322 h | 228 h |
+
+⭐ ViT-Tiny re-probed in the same session reads **241 → 166** against a committed 237 → 168, so the
+row shares a basis with the two above it in the book. ⭐ And the derivation this doc carried first
+(1,361 / 810 ms from device + §4c's ~65 ms feed) was within **1.4 % and 3.2 %** — the
+additive-constant law holds at B's width. It was still right to measure: a table with two probed
+rows and one modelled row is not one table. Same per-invoke amortisation as R50's `4×128` (§6c).
+
+⭐ **And it fixes the recipe, not just the batch.** `baseLR = 5e-4` is DeiT's **batch-512** rate.
+At 32×4 the driver applied it to a batch four times too small and recorded that as a deviation; at
+128×4 there is nothing to rescale. Both halves of *"no ViT-B number here is comparable to DeiT-B's
+81.8%"* are gone.
+
+⚠ **Three docstrings asserted the opposite as a hardware fact** and all three are corrected —
+`MainViTBImagenet.lean`, `VerifiedNets.lean`'s `vitBImagenetVerified`, and `ViTRenderB.lean`. The
+driver's was the most specific and the most wrong: *"11.90 GiB against the 11.68 GiB the BFC
+allocator gets on a 16 GB card"*. The 11.90 reproduces; "gets on a 16 GB card" is the error.
+
+⛔ **The 32×4 pair is DELETED** (brett, 2026-08-27) — the ViT half of `2b2b15b`. Global 128 against
+DeiT's 512, the batch-512 LR on a quarter of the images it was set for, and slower per epoch on
+both arms (322 h against 291 fp32, 228 against 178 bf16). No axis left. ▶ Consequence: this net has
+no small-batch render, so the fraction is not optional and `runViTBImagenet` **refuses** without it
+— the only driver in the tree that does, exempting the bf16 twin, which fits the default arena.
+
+✅ **THE JOB CONFIG LANDED**: `scripts/jobs/vitb-default-g512-4gpu.conf`. It is the first job in
+the tree that sets `LEAN_MLIR_MEM_FRACTION`, and §6c's *"a job-config line rather than a missing
+artifact"* is now an actual line. Two of its prechecks are new and both were run RED before being
+trusted:
+* the fraction missing from `ENV_EXTRA` — because this job does not DEGRADE without it, it dies;
+* `ffi/libpjrt_ffi.so` not containing the string `memory_fraction` — the shim is not a lake
+  target, so a tree can hold the source that reads the variable and run a binary that ignores it,
+  and that failure is indistinguishable from a card being too small.
+
+⚠⚠ **N1's field split breaks on the first net whose token has a dash, and N4 created one.**
+`supervise.sh`'s own header says *"a net whose name contains a dash would break the field split —
+none does"*; `vit-b-imagenet-verified` is N4's hyphenated size, so `vit-b-default-g512-4gpu` would
+have parsed its recipe as **`b`**. The job token is therefore `vitb`, which is what every other job
+already does (`cnx`, `enet`, `mnv2`, `r34`) — the exe namespace and the job namespace are
+different, and N4 governs only the first. ▶ Worth stating in §2c rather than leaving as a trap for
+`convnext-s`/`convnext-b`, which hit it next.
+
+⚠⚠ **Still owed**: a direct 40-step trainer probe. Two things it and only it can settle — whether
+`LEAN_MLIR_MEM_FRACTION` reaching the graph through the C shim behaves as
+`XLA_PYTHON_CLIENT_MEM_FRACTION` did through JAX's Python layer (every measurement above took the
+second path), and whether the conf's compute-bound prediction holds. ⛔ Nothing has been TRAINED.
+
+*The original analysis follows, since it is what the test was written against.*
+
+### 4d (original). ViT-B gradient accumulation — the one real feature
 
 This is the only item that is not a flag. **ViT has no accumulation render.** `ViTRenderB`'s ten
 `acc` hits are the *attention* accumulator, a different thing. R50 has the real one
@@ -973,15 +1101,61 @@ Non-negotiable, and in this order:
    verified render are per-example, so the reference was fixed first and the sixteen sites rendered
    against it. §6b. ⭐ Both of `sec:r50_a2_a1_cost`'s ⛔ rows are closed and only the ghost-BN group
    remains.
-   ⬅⬅ **NEXT: ViT-B accumulation (§4d → §6a).** ⭐ Its TPU question may already be answered
-   locally — the `RESOURCE_EXHAUSTED` that forces accumulation was against the plugin's 0.75
-   default, and `LEAN_MLIR_MEM_FRACTION=0.97` gives 15.11 GiB against a recorded 11.41 peak. §6a
-   has the four-step test; step 1 is four `#eval`s, and ViT-S already ships the 128×4 shape.
    ⬅ **Nothing has been TRAINED.** No five-region graph has been loaded by the trainer; every gate
    in this pass is CPU (XLA-on-CPU, text, `#guard`). The shim's buffer-count refusal is the check
    that would say so, and `runs/2026-08-27-r50-a2-a1-ema-fifth-region/arity_check.py` reproduces
    that arithmetic statically — the strongest cheap substitute and not a replacement.
-6. **EfficientNetV2 (§4e)** — its own project, after the rest. ⚠ Its row is OUT of the book's
+6. ✅ **ViT-B accumulation (§4d) — ANSWERED 2026-08-27, and the answer is that it is not needed.**
+   §6a's four-step test ran and stopped at step 3: four `#eval`s, a peak measurement, an execution.
+   ViT-B reaches DeiT's global **512** in one shot on four cards (fp32 13.99 G at 93 % of the raised
+   budget, bf16 12.61 G at 83 %), so `ViTRenderB` never grows the accumulation loop.
+   ⭐ **It is faster too**, measured rather than derived: 1,381 / 837 trainer ms/step over 40 steps
+   ⇒ **291 h fp32 and 178 h bf16** against 322 and 228 at the old batch, with ViT-Tiny re-probed as
+   the session control (241 → 166 against a committed 237 → 168). The driver's un-rescaled
+   batch-512 LR stops being a deviation, and **the 32×4 pair is deleted** — the ViT half of
+   `2b2b15b`. `runs/2026-08-27-vitb-global512/`.
+   ⚠ **The TPU escape hatch was never needed and the diagnosis generalises**: an unset
+   `memory_fraction` had been read as a hardware limit in three docstrings, one of which named a
+   specific number ("11.90 GiB against the 11.68 GiB the BFC allocator gets on a 16 GB card") that
+   reproduces exactly and is still not what it claims. ▶ Worth re-reading any other "does not fit"
+   in this tree against `LEAN_MLIR_MEM_FRACTION`.
+   ✅ **And the job configs landed**: `vitb-default-g512-4gpu`, the first in the tree to set
+   `LEAN_MLIR_MEM_FRACTION`, with two prechecks that were run RED before being trusted — and
+   `vits-default-g512-4gpu` beside it.
+   ⚠⚠ **ViT-S turned out to have been launchable all along**, which the book had recorded as *"B
+   is launchable and S is not"*. That was true of job configs and of nothing else: S has its
+   driver, spec, shim and both 128×4 renders, defaults to 128 per device, and at **10.27 GiB**
+   fits even the DEFAULT arena.
+
+7. ⛔⛔ **`LEAN_MLIR_MEM_FRACTION` IS NOT FREE HEADROOM — 2026-08-28, and it corrects item 6.**
+   ViT-S's config shipped setting 0.97 purely as headroom (88 % of the arena → 68 %) for a graph
+   that already fits, on an argument that was never tested. ConvNeXt falsified it the next day:
+   at 0.97, ConvNeXt-S and -B's **bf16** arms die `CUDA_ERROR_OUT_OF_MEMORY` in `d2h(res)` — B
+   dumps core — while the identical runs complete at the plugin's default.
+   ⭐ **The direction is the finding.** The bf16 graphs are the SMALLER ones (6.98 / 9.73 GiB
+   against 7.95 / 10.93) and they are the ones that fail, while their larger fp32 peers survive
+   the same setting. Nothing outgrew the pool; the pool crowded out what is not in it — d2h
+   staging for several hundred result buffers, NCCL, workspaces. A 97 % arena leaves under a GiB.
+   ▶ **Rule**: raise the fraction for a graph that does not otherwise fit (ViT-B fp32, 13.99 GiB),
+   and leave it alone for one that does. "There is room, so take it" is what produced the bug.
+   ✅ Removed from `vits-default-g512-4gpu` after probing BOTH ways (528 → 319 with, 531 → 323
+   without — noise). ✅ The two ConvNeXt configs REFUSE if it is set, which is the mirror of
+   ViT-B's driver refusing when it is absent. Evidence: `runs/2026-08-28-convnext-sb-jobs/`.
+   ⚠ **A compile-time `peak_memory_in_bytes` cannot see this.** It says whether the GRAPH fits the
+   pool and nothing about what the process needs beside it, which is not small for a multi-replica
+   run with many outputs. Every "% of budget" figure in this doc is subject to that caveat.
+
+8. ✅ **ConvNeXt-S and -B got job configs the same day** — `cnxs-default-4gpu`,
+   `cnxb-default-4gpu`, measured at 367 → 304 and 547 → 458 ms/step (309 → 257 h, 459 → 385 h).
+   ⛔⛔ **And a bigger batch is NOT their lever, unlike ViT's.** `bf16_renderer.md` §21.5 measured
+   ConvNeXt's per-image cost as FLAT from batch 8 to 128 (1.03×), so doubling the batch halves the
+   step count and doubles the step. Memory was never the constraint (bs64 is 76 % of the default
+   arena). ▶ Same question as §4d asked of ViT-B, same box, opposite answer — and both measured.
+   ⚠ **Still owed**: a 40-step trainer probe. Every figure above went through JAX's Python compile
+   path (`XLA_PYTHON_CLIENT_MEM_FRACTION`); the job goes through the C shim
+   (`LEAN_MLIR_MEM_FRACTION`), and only a run exercises that. ⛔ **Nothing has been TRAINED.**
+
+9. **EfficientNetV2 (§4e)** — its own project, after the rest. ⚠ Its row is OUT of the book's
    Track-4 side-quest table as of `93ec229` (brett, 2026-08-27): a "no spec" row in a table of
    rendered artifacts reads as a commitment rather than a possibility. The ch.7 bestiary entry
    keeps the idea, and §4e below keeps the analysis — including the progressive-learning finding,
