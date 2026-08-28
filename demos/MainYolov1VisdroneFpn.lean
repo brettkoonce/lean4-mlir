@@ -193,7 +193,7 @@ def r50FpnDetConfig : TrainConfig :=
 def backboneFromEnv : IO String := do
   match (← IO.getEnv "FPN_BACKBONE") with
   | none => return "r50"
-  | some v => return if v.trim.isEmpty then "r50" else v.trim.toLower
+  | some v => return if v.trimAscii.toString.isEmpty then "r50" else v.trimAscii.toString.toLower
 
 /-- Drop the pretrained bootstrap (`FPN_NOBOOTSTRAP=1`), leaving a pure He init.
 
@@ -206,7 +206,7 @@ def backboneFromEnv : IO String := do
 def noBootstrapFromEnv : IO Bool := do
   match (← IO.getEnv "FPN_NOBOOTSTRAP") with
   | none => return false
-  | some v => return (v.trim == "1" || v.trim.toLower == "true")
+  | some v => return (v.trimAscii.toString == "1" || v.trimAscii.toString.toLower == "true")
 
 /-- Read the head-tower depth (T2a) from `FPN_TOWER`; 0 = the minimal 1×1 head. -/
 def towerDepthFromEnv : IO Nat := do

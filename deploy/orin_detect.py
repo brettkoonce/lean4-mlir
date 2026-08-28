@@ -161,7 +161,53 @@ def decode(flat, conf_thresh=0.05, nms_iou=0.5, topk=300):
 
 # ------------------------------------------------------------------ runtime
 
+class TrtDetector:
+    """TensorRT backend — the one that actually goes fast on an Orin.
+
+    IREE compiles this graph for sm_87 and runs it at ~0.5 fps, because its CUDA
+    backend generates its own convolution kernels; TensorRT dispatches to cuDNN
+    and tensor cores and does fp16 natively. Weights are baked into the engine at
+    build time, so unlike the IREE path there is nothing to feed but the image.
+
+    ⚠ UNTESTED FROM HERE — there is no Orin on the build box. The API below is
+    the TensorRT 8.x/10 execute_async_v3 shape; if your JetPack ships an older
+    runtime you may need execute_async_v2 with a bindings list instead.
+
+    Build the engine on the device:
+        trtexec --onnx=detector.onnx --saveEngine=detector.plan --fp16
+    """
+
+    def __init__(self, plan):
+        import tensorrt as trt
+        import pycuda.autoinit  # noqa: F401  (creates the CUDA context)
+        import pycuda.driver as cuda
+        self.cuda = cuda
+        logger = trt.Logger(trt.Logger.WARNING)
+        with open(plan, "rb") as f:
+            self.engine = trt.Runtime(logger).deserialize_cuda_engine(f.read())
+        self.ctx = self.engine.create_execution_context()
+        self.stream = cuda.Stream()
+        self.h_out = np.empty(NTOT, dtype=np.float32)
+        self.d_in = cuda.mem_alloc(1 * 3 * IMG_PX * IMG_PX * 4)
+        self.d_out = cuda.mem_alloc(self.h_out.nbytes)
+        self.in_name = self.engine.get_tensor_name(0)
+        self.out_name = self.engine.get_tensor_name(1)
+
+    def __call__(self, img_rgb_hwc):
+        x = preprocess(img_rgb_hwc).reshape(1, 3, IMG_PX, IMG_PX)
+        self.cuda.memcpy_htod_async(self.d_in, np.ascontiguousarray(x), self.stream)
+        self.ctx.set_tensor_address(self.in_name, int(self.d_in))
+        self.ctx.set_tensor_address(self.out_name, int(self.d_out))
+        self.ctx.execute_async_v3(self.stream.handle)
+        self.cuda.memcpy_dtoh_async(self.h_out, self.d_out, self.stream)
+        self.stream.synchronize()
+        return self.h_out
+
+
 class Detector:
+    """IREE backend. Kept because it is portable and needs no engine build, but
+    it is ~0.5 fps on an Orin — use TrtDetector there."""
+
     def __init__(self, vmfb, mlir, params, bn, device="cuda"):
         import iree.runtime as ireert
         self.rt = ireert
@@ -205,6 +251,11 @@ def main():
     ap.add_argument("--params", default="build/params.bin")
     ap.add_argument("--bn", default="build/bn_stats.bin")
     ap.add_argument("--device", default="cuda", help="cuda on Orin, local-task for CPU")
+    ap.add_argument("--backend", default="trt", choices=["trt", "iree"],
+                    help="trt = TensorRT engine (fast on Orin); iree = portable "
+                         "but ~0.5 fps there")
+    ap.add_argument("--plan", default="build/detector.plan",
+                    help="TensorRT engine, built on device by trtexec")
     ap.add_argument("--image", default=None)
     ap.add_argument("--out", default="out.png")
     ap.add_argument("--camera", type=int, default=None, help="camera index (skeleton)")
@@ -212,8 +263,12 @@ def main():
     ap.add_argument("--bench", type=int, default=0, help="time N forward passes")
     args = ap.parse_args()
 
-    det = Detector(args.vmfb, args.mlir, args.params, args.bn, args.device)
-    print(f"loaded {args.vmfb} on {args.device}")
+    if args.backend == "trt":
+        det = TrtDetector(args.plan)
+        print(f"loaded {args.plan} (TensorRT)")
+    else:
+        det = Detector(args.vmfb, args.mlir, args.params, args.bn, args.device)
+        print(f"loaded {args.vmfb} (IREE, {args.device}) — expect ~0.5 fps on Orin")
 
     if args.camera is not None:
         # CAMERA — deliberately a stub. On Orin the IMX path is GStreamer via
