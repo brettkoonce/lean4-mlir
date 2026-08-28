@@ -1,20 +1,25 @@
 import LeanMlir
 
-/-! # `yolov1-visdrone-fpn` — the FPN detector on IREE
-
-only to link it against `ffi/libiree_ffi.so`. See `MainYolov1VisdroneFpnXla.lean`
-for the PJRT/XLA twin.
+/-! # `yolov1-visdrone-fpn` — the multi-scale FPN detector
 
 ```
 lake build yolov1-visdrone-fpn
-IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
-  .lake/build/bin/yolov1-visdrone-fpn data/visdrone_fpn
+CUDA_VISIBLE_DEVICES=0 .lake/build/bin/yolov1-visdrone-fpn data/visdrone_fpn
 ```
 
-⚠ `IREE_BACKEND=rocm` is **required** on this box. It defaults to `cuda`, and the
-`gfx1100` reduction workaround in `ireeCompileArgs` (`LeanMlir/Types.lean`) is
-gated on `rocm` — without it the multi-scale loss's N-D→scalar reductions abort
-with `'func.func' op failed to distribute`.
+Two backbones, selected by `FPN_BACKBONE`: `r50` (default, RSB-A3 77.2% top-1)
+and `r34`. They carry different names, so their checkpoints and compiled graphs
+cannot collide. The other knobs are `FPN_TOWER`, `FPN_TAG`, `FPN_AUG`,
+`FPN_EPOCHS`, `FPN_CKPT_EVERY`, `FPN_LR_MULT` and `FPN_CLIP`.
+
+⚠ `FPN_TAG` selects the checkpoint prefix and must be set on `infer` as well as
+on training. Forgetting it does not fail — it silently evaluates a different
+arm's weights, and the only tell is an epoch sweep whose rows are identical.
+
+⚠ Only on an IREE box: `IREE_BACKEND=rocm` is required on gfx1100, because the
+reduction workaround in `ireeCompileArgs` (`LeanMlir/Types.lean`) is gated on it
+and the multi-scale loss's N-D→scalar reductions otherwise abort with
+`'func.func' op failed to distribute`. Irrelevant under XLA/PJRT.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
@@ -76,6 +81,53 @@ def r34FpnDetT (tower : Nat) : NetSpec where
     byte-identical to the pre-T2a codegen and the in-flight run stays reproducible. -/
 def r34FpnDet : NetSpec := r34FpnDetT 0
 
+/-- ResNet-50 backbone variant. The first six layers are copied VERBATIM from
+    `jax/MainResnet50Imagenet.lean`'s `resnet50Imagenet` — same order, same
+    channels, same `convPadStyle` — because `bootstrapBackbone` is a PREFIX copy:
+    it drops the checkpoint's leading floats onto the init's leading floats and
+    only verifies that the bytes landed, not that they mean the same thing. Any
+    divergence in these six lines silently loads a correct-sized, wrong-layout
+    backbone. The classifier (`.globalAvgPool` + `.dense 2048 1000`) is what we
+    drop, which is why the bootstrap count is 23,508,032 and not the file's full
+    25,557,032 floats.
+
+    At 448 input the stages land on 112 / 56 / 28 / 14, so C3/C4/C5 are 56/28/14
+    — the FPN scales already in `fpnDetScales`, unchanged. Only the tap WIDTHS
+    move (512/1024/2048 vs R34's 128/256/512), and `.fpnDetect` takes those as
+    arguments, so this is a spec change with no new codegen. -/
+def r50FpnDetT (tower : Nat) : NetSpec where
+  name := if tower == 0 then "ResNet-50 + FPN detector 448 wcls pb (VisDrone)"
+          else s!"ResNet-50 + FPN detector 448 wcls pb tower{tower} (VisDrone)"
+  -- torchvision's Conv2d(3,64,7,stride=2,padding=3), matching the ImageNet render
+  -- the A3 checkpoint was trained under. Omitting this mismatches the stem.
+  convPadStyle := .symmetric
+  imageH := 448
+  imageW := 448
+  detStride := 32
+  layers := [
+    .convBn 3 64 7 2 .same,
+    -- ⚠ DELIBERATELY 2×2, where `resnet50Imagenet` has `.maxPool 3 2`.
+    -- The train-step emitter's max-pool backward is a tile-compare-select that
+    -- is correct ONLY for non-overlapping windows (MlirCodegen.lean:7698 says so
+    -- outright), and size 3 > stride 2 overlaps: one input can be the max of
+    -- several windows, so its gradient is a SUM the tiling never forms. It also
+    -- happens to fail loudly first — the forward pads 224→225 but the backward
+    -- reads `inShape` (224) against the padded SSA, so the graph does not even
+    -- parse. Fixing that type error alone would trade a compile failure for a
+    -- silently wrong gradient, which is worse.
+    -- Safe to change because pooling is PARAMETER-FREE: the bootstrap prefix is
+    -- untouched, and both windows take 224→112, so every downstream shape and
+    -- the C3/C4/C5 taps are identical. The cost is a one-layer distribution
+    -- shift — the backbone was pretrained under 3×3 pooling — which fine-tuning
+    -- absorbs. The R34 detector arm above has always done exactly this.
+    .maxPool 2 2,
+    .bottleneckBlock   64  256 3 1,   -- C2: stride 4,  112×112
+    .bottleneckBlock  256  512 4 2,   -- C3: 512ch,      56×56
+    .bottleneckBlock  512 1024 6 2,   -- C4: 1024ch,     28×28
+    .bottleneckBlock 1024 2048 3 2,   -- C5: 2048ch,     14×14
+    .fpnDetect 256 512 1024 2048 14 3 tower
+  ]
+
 def r34FpnDetConfig : TrainConfig where
   learningRate := 4.0e-4                -- below the anchor arm's 7e-4: the 3-scale
                                         -- loss sums ~10× the cells ⇒ larger grads
@@ -99,6 +151,62 @@ def r34FpnDetConfig : TrainConfig where
   -- bias-free 1×1 conv must synthesize the background offset from its weights.
   detPriorPi   := 0.01
   bootstrapBackbone := some (".lake/build/jax_r34_imagenet.bin", 21284672)
+
+/-- The R50 arm's config. Identical to `r34FpnDetConfig` except the backbone, so
+    a same-schedule A/B attributes any delta to the base and nothing else.
+
+    `23508032` = the A3 checkpoint's 25,557,032 floats minus the 1000-way
+    classifier (2048·1000 + 1000). The count is the ONLY thing standing between a
+    real bootstrap and a silent misload, so it is derived, not guessed.
+
+    ⛔ It does NOT load `r50_a3_params.bin` (the A3 checkpoint) directly, because
+    that file's BN slots are not in this emitter's convention. Its conv weights are
+    perfect — std 0.17, every segment matching `ckpt_e100.state.npz` — but its
+    per-channel BN values run to **5.2e6**, against R34's γ∈[0,0.60] / β∈[−0.68,0.77].
+    Bootstrapped raw it starts at loss 5.8e8 where R34 starts at 717.7. Those values
+    are presumably meaningful to the render that wrote them (that run really did
+    score 77.2%), most likely a scale folded against running statistics kept in the
+    `.state.npz` — which the generic bootstrap loads as zeros, so nothing cancels.
+
+    So we transfer what is portable: **conv weights from A3, BN reset to γ=1, β=0**
+    (`r50_a3convonly_params.bin`, built by walking the npz and replacing each conv's
+    two following per-channel tensors). BN re-learns in a few hundred steps; the
+    convolutional features are the bulk of what pretraining buys. Max abs in the
+    resulting body is 1.98.
+
+    Not a codegen bug: the same spec under `FPN_NOBOOTSTRAP=1` starts at 8,284.8 and
+    reaches ~1,018 by step 100, so `.bottleneckBlock` emits fine. The clean fix, if
+    full transfer is ever wanted, is to re-export A3 through the same path that
+    produced R34's working `jax_r34_imagenet.bin` (`LEAN_MLIR_PARAMS_OUT`). -/
+def r50FpnDetConfig : TrainConfig :=
+  { r34FpnDetConfig with
+      bootstrapBackbone := some (".lake/build/r50_a3convonly_params.bin", 23508032) }
+
+/-- Backbone selector (`FPN_BACKBONE`), `r50` (default) or `r34`.
+
+    R50 is the default because it is both the better base — RSB-A3, 77.2% top-1
+    against R34's ~74% — and the only one that still has a loadable checkpoint:
+    `jax_r34_imagenet.bin` was deleted and can only be regenerated by a full
+    ImageNet run, whereas the A3 weights are a plain float32 parameter file.
+    `r34` is kept selectable so the 0.1386 arm can be reproduced if that file
+    ever comes back. -/
+def backboneFromEnv : IO String := do
+  match (← IO.getEnv "FPN_BACKBONE") with
+  | none => return "r50"
+  | some v => return if v.trim.isEmpty then "r50" else v.trim.toLower
+
+/-- Drop the pretrained bootstrap (`FPN_NOBOOTSTRAP=1`), leaving a pure He init.
+
+    This is the control that separates "the checkpoint is being misread" from "the
+    emitted graph is wrong", and it is the first thing to run when an arm's loss
+    scale does not match a known arm's. R50-FPN starts at 5.8e8 where R34-FPN
+    starts at 7.2e2; if He init reproduces the 5.8e8 the weights are innocent and
+    the bottleneck emit is the suspect, and if it lands near R34's He-init range
+    the weights are being interpreted wrongly despite matching in count and order. -/
+def noBootstrapFromEnv : IO Bool := do
+  match (← IO.getEnv "FPN_NOBOOTSTRAP") with
+  | none => return false
+  | some v => return (v.trim == "1" || v.trim.toLower == "true")
 
 /-- Read the head-tower depth (T2a) from `FPN_TOWER`; 0 = the minimal 1×1 head. -/
 def towerDepthFromEnv : IO Nat := do
@@ -219,8 +327,30 @@ def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
 def runYolov1VisdroneFpn (args : List String) : IO Unit := do
   let tower ← towerDepthFromEnv
   let tag ← tagFromEnv
-  let spec := { r34FpnDetT tower with name := (r34FpnDetT tower).name ++ tag }
+  let backbone ← backboneFromEnv
+  -- The backbone selects BOTH the spec and the config, and the name carries it,
+  -- so the two arms can never share a checkpoint prefix or a compiled graph.
+  let baseSpec := if backbone == "r34" then r34FpnDetT tower else r50FpnDetT tower
+  let baseCfg  := if backbone == "r34" then r34FpnDetConfig else r50FpnDetConfig
+  let spec := { baseSpec with name := baseSpec.name ++ tag }
   match args with
+  | "emit-deploy" :: rest =>
+    -- Write a BATCH-1 eval graph for edge deployment. The trained artifacts are
+    -- emitted at the training batch size (8); a camera runs one frame at a time,
+    -- and paying for 8 would divide the frame rate by 8.
+    -- Nothing else changes: same spec, same weights, same 190-argument calling
+    -- convention (image, then 189 weight tensors = 21,548,743 params ++ 17,024
+    -- BN stats, in that order). deploy/orin_detect.py parses that signature out
+    -- of this file rather than being told it, so the two cannot drift.
+    let outDir := rest[0]?.getD "deploy/build"
+    IO.FS.createDirAll outDir
+    let mlir := MlirCodegen.generateEval spec 1
+    let path := s!"{outDir}/detector_fwd_eval_b1.mlir"
+    IO.FS.writeFile path mlir
+    IO.println s!"  spec   : {spec.name}"
+    IO.println s!"  params : {spec.totalParams} floats + {spec.nBnStats} BN stats"
+    IO.println s!"  wrote  : {path} ({mlir.length} chars, batch 1)"
+    IO.println s!"  weights: {spec.buildPrefix}_params.bin / _bn_stats.bin"
   | "infer" :: rest =>
     let dataDir := rest[0]?.getD "data/visdrone_fpn"
     let outDir  := rest[1]?.getD "runs/yolo_fpn"
@@ -228,13 +358,15 @@ def runYolov1VisdroneFpn (args : List String) : IO Unit := do
     inferDump spec dataDir outDir
   | _ =>
     let dataDir := args.head?.getD "data/visdrone_fpn"
-    let epochs ← epochsFromEnv r34FpnDetConfig.epochs
-    let ckptEvery ← ckptEveryFromEnv r34FpnDetConfig.checkpointEveryNEpochs
+    let epochs ← epochsFromEnv baseCfg.epochs
+    let ckptEvery ← ckptEveryFromEnv baseCfg.checkpointEveryNEpochs
     let lrMult ← lrMultFromEnv
-    let lr := r34FpnDetConfig.learningRate * lrMult
-    let clip ← clipFromEnv r34FpnDetConfig.gradClipNorm
+    let lr := baseCfg.learningRate * lrMult
+    let clip ← clipFromEnv baseCfg.gradClipNorm
     let aug ← augFromEnv
-    let cfg := { r34FpnDetConfig with epochs := epochs,
+    let noBoot ← noBootstrapFromEnv
+    let baseCfg := if noBoot then { baseCfg with bootstrapBackbone := none } else baseCfg
+    let cfg := { baseCfg with epochs := epochs,
                                       checkpointEveryNEpochs := ckptEvery,
                                       learningRate := lr,
                                       gradClipNorm := clip,
