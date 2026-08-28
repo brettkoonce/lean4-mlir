@@ -280,13 +280,46 @@ is the confound the twin exists to remove.
      random box sets (`scratchpad/check_fpn_flip.py`) — so no boxes-on-disk are
      needed (the FPN record stores none). Off by default; A/B under its own tag.
 
-   What's still open (the doc's original "then …"): a box-aware **affine**
-   (scale/translate) that re-encodes the target — the real build, and the one that
-   changes object *scale* (the axis VisDrone's 2–5px objects live on). **Mosaic is
-   deliberately deferred**: 4-into-1 halves every object, pushing an already-tiny
-   distribution further into sub-P3 territory — likely counterproductive here
-   (unlike Pets, where it fixed a central-marginal collapse). Worth ~1.7× was the
-   twin study's number for the full pack; measure HSV+flip alone first. No proofs
+   - **Box-aware affine** (scale + translate) — **BUILT 2026-08-28, not yet A/B'd.**
+     `F32.fpnAffine`, `FPN_AFFINE=<percent>` (plus `_SCALE`, `_TRANSLATE`), off by
+     default. Unlike the flip this is not shape-invariant — scaling changes
+     `max(w,h)`, so a GT moves between FPN levels and between anchors — so the
+     target is rebuilt from boxes decoded out of the assigned slots (every slot is
+     an exact encoding of one; `fpn_decode_boxes` inverts `encode_targets_fpn`
+     term for term). Gated by `scripts/check_fpn_affine.py`, which **compiles
+     `ffi/f32_helpers.c` itself** and checks it against
+     `preprocess_visdrone.encode_targets_fpn` **itself** — no re-implementation on
+     either side, which is exactly the mistake that shipped a wrong ONNX. Identity
+     is byte-identical on 12 real records; the re-encode is exact (max|d| = 0.0)
+     over 48 random draws.
+
+     ⚠ **The knob costs are measured, and they invert the obvious prior**
+     (`scripts/fpn_affine_knob_cost.py`, 16 val records, GT surviving the transform):
+
+     | setting | survive | survivors under 2 px |
+     |---|---|---|
+     | control | 100% | 2.8% |
+     | translate ±0.05 | 93.8% | 2.4% |
+     | translate ±0.10 | 92.3% | 2.4% |
+     | translate ±0.20 | 89.6% | 2.3% |
+     | scale ±0.10 | 93.6% | 2.7% |
+     | scale ±0.25 | 90.0% | 3.4% |
+     | **scale ±0.50** (Ultralytics default) | **82.7%** | **5.3%** |
+     | scale ±0.25 + translate ±0.10 (our default) | 89.2% | 3.1% |
+
+     **Translate is the expensive knob, not scale** — ±0.05 alone costs 6% of all
+     GT, and the cost then saturates. That is a property of this data (≈70
+     objects/image, spread to the edges) *and* of augmenting the 448-px RECORD
+     rather than the source image: content that leaves the frame is replaced by
+     the mean fill, so boxes lost at one edge are not repaid at the other.
+     **Scale ±0.50 is confirmed wrong here**: 17% of GT gone and the sub-2px share
+     nearly doubled — the Ultralytics setting really is calibrated for a dataset
+     with the opposite size distribution.
+
+   **Mosaic is deliberately deferred**: 4-into-1 halves every object, pushing an
+   already-tiny distribution further into sub-P3 territory — likely
+   counterproductive here (unlike Pets, where it fixed a central-marginal
+   collapse). Worth ~1.7× was the twin study's number for the full pack. No proofs
    needed — plain host/codegen.
 3. **Re-test the levers, but expect little.** T1b class-weight (on), focal,
    prior-bias, tower were all "refuted" on scrambled data ⇒ untested on valid
@@ -479,9 +512,13 @@ schedule decision is really an aug decision".
    cosine that never annealed, so it understates. This should beat it and costs
    40% less than the run that found it. `FPN_EPOCHS=30 FPN_AUG=1 FPN_TAG=aug30`.
 2. **Aug at 12 epochs** — the missing cell of the 2×2, 4× cheaper again.
-3. **Box-aware affine aug** (§6.2) — the current pack is HSV + hflip only. Mosaic
-   stays deferred (4-into-1 halves already-tiny objects) but is worth re-testing
-   now that plain aug is measured as clearly positive.
+3. **Box-aware affine aug** — ✅ **BUILT and gated** 2026-08-28 (§6.2), needs its
+   A/B: `FPN_AUG=1 FPN_AFFINE=<p>` against an `FPN_AUG=1` control on the same
+   schedule, or it confounds two changes. Start at the measured default
+   (scale ±0.25, translate ±0.10, ~11% GT cost); ⚠ do NOT start at Ultralytics'
+   scale ±0.50, which costs 17% of GT here and nearly doubles the sub-2px share.
+   Mosaic stays deferred (4-into-1 halves already-tiny objects) but is worth
+   re-testing now that plain aug is measured as clearly positive.
 4. **Then** the backbone (§8). Do not swap on an under-tuned recipe; the schedule
    and aug questions are cheaper and now partly answered.
 
