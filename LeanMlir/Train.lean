@@ -592,6 +592,21 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         ba := ba.push (v / 65536 % 256).toUInt8
         ba := ba.push (v / 16777216 % 256).toUInt8
     return ba
+  -- Per-scale anchor priors packed f32-LE as (w,h) pairs, in the SAME scale
+  -- order as fpnScalesFlat, for the box-aware affine's re-encode. Taken from
+  -- cfg.fpnScales rather than re-read from disk so the augmenter's encoder and
+  -- the model's decoder cannot disagree about which prior is anchor 1 of P4.
+  let fpnAnchorsFlat : ByteArray := Id.run do
+    let mut ba : ByteArray := .empty
+    for (_, anchors) in cfg.fpnScales do
+      for (aw, ah) in anchors do
+        for v in [aw, ah] do
+          let bits := v.toFloat32.toBits
+          ba := ba.push (bits % 256).toUInt8
+          ba := ba.push (bits / 256 % 256).toUInt8
+          ba := ba.push (bits / 65536 % 256).toUInt8
+          ba := ba.push (bits / 16777216 % 256).toUInt8
+    return ba
   let nScalesU : USize := cfg.fpnScales.length.toUSize
 
   let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
@@ -880,6 +895,26 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                           0.5 (stepSeed ^^^ (13 : USize))
         xba := xf
         yArg := yf
+      -- Box-aware affine (scale + translate), AFTER the flip. Unlike the flip
+      -- this rebuilds the target from decoded boxes, because scaling moves a GT
+      -- between FPN levels and between anchors. Opt-in and separate from
+      -- cfg.augment: at prob 0 the pipeline is byte-identical to the HSV+hflip
+      -- pack, so the measured arms stay reproducible.
+      if useFpnRun && cfg.fpnAffineProb > 0.0 then
+        let (xa, ya) ← F32.fpnAffine xba yArg batch augC.toUSize
+                          augH.toUSize augW.toUSize fpnScalesFlat nScalesU
+                          fpnAnchorsFlat
+                          cfg.fpnAffineScale cfg.fpnAffineTranslate
+                          -- 24 / 64 px are FPN_T_LO / FPN_T_HI from
+                          -- preprocess_visdrone.py: the max(w,h) thresholds that
+                          -- decide P3 / P4 / P5. They MUST match the file on disk,
+                          -- or a rescaled box lands on a different level than the
+                          -- same box would have if it had been encoded there.
+                          cfg.fpnAffineProb 24.0 64.0
+                          cfg.fpnAffineWhThrPx cfg.fpnAffineAreaThr
+                          (stepSeed ^^^ (17 : USize))
+        xba := xa
+        yArg := ya
       -- DeiT-style aug. RandAugment first (color-only subset), then RE.
       if cfg.useRandAugment then
         let raSeed : USize := stepSeed ^^^ (5 : USize)

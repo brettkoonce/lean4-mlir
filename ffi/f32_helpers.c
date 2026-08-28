@@ -2737,6 +2737,256 @@ LEAN_EXPORT lean_obj_res lean_f32_fpn_hflip(
     return lean_io_result_mk_ok(tup);
 }
 
+
+// ---- Box-aware affine (scale + translate) of an FPN image + its target ------
+//
+// The hflip above needs no re-encode because a mirror is SHAPE-INVARIANT: every
+// GT keeps its size, so it keeps its FPN level and its best-shape anchor, and
+// only grid columns and tx move. An affine breaks all of that — scaling changes
+// max(w,h), which changes which of P3/P4/P5 a box lands on AND which anchor
+// wins the wh-IoU — so the target has to be rebuilt from boxes.
+//
+// The FPN record stores no boxes. It does not need to: every assigned slot is
+// an exact encoding of one, and `fpn_decode_boxes` below inverts
+// `encode_targets_fpn` term for term (cx = (tx + cj)/g, cy = (ty + ci)/g,
+// w = t2, h = t3, class = argmax of the one-hot). What that inverse cannot
+// recover is a box already lost to a same-slot collision on disk — but those
+// are lost to the training target too, so decoding recovers exactly the set the
+// target represents, which is the set that matters.
+//
+// ⚠ Scale is the axis this data lives on. VisDrone objects are 2-5 px after the
+// 448 resize, so scaling DOWN pushes them under P3's stride-8 resolution and
+// destroys them, and the candidate filter below (not the encoder) is what keeps
+// that honest: a box that ends up thinner than `wh_thr_px` pixels, or with less
+// than `area_thr` of its area still inside the frame after clipping, is dropped
+// rather than encoded as a degenerate target.
+//
+// Empty regions are filled with 0.0, which in these ImageNet-normalized images
+// is exactly the dataset mean colour — the neutral fill, not black (black is
+// about -2.1 in this space and would be a strong spurious edge).
+
+#define FPN_AFF_SLOTS 15
+#define FPN_AFF_NCLS 10
+
+// Box coordinates are DOUBLE, not float. Decoding a cell offset and
+// re-encoding it is (t + cj)/g * g - cj, and in float32 that round trip
+// loses ~3e-6 at P3's cj up to 55 — small, but it is pure loss injected
+// on every augmented box, and it puts the transform permanently out of
+// exact agreement with the encoder it is supposed to reproduce.
+typedef struct { double cx, cy, w, h; int cls; } fpn_aff_box;
+
+// Inverse of encode_targets_fpn: every slot with obj > 0.5 is one box.
+static size_t fpn_decode_boxes(const float* tgt, const int32_t* geo,
+                               size_t n_scales, fpn_aff_box* out) {
+    size_t n = 0, off = 0;
+    for (size_t si = 0; si < n_scales; si++) {
+        size_t g = (size_t)geo[2 * si], A = (size_t)geo[2 * si + 1];
+        size_t gg = g * g;
+        const float* blk = tgt + off;
+        for (size_t a = 0; a < A; a++) {
+            const float* base = blk + a * FPN_AFF_SLOTS * gg;
+            const float* obj = base + 4 * gg;
+            for (size_t p = 0; p < gg; p++) {
+                if (!(obj[p] > 0.5f)) continue;
+                size_t ci = p / g, cj = p % g;
+                fpn_aff_box* b = &out[n];
+                b->cx = ((double)base[0 * gg + p] + (double)cj) / (double)g;
+                b->cy = ((double)base[1 * gg + p] + (double)ci) / (double)g;
+                b->w  = (double)base[2 * gg + p];
+                b->h  = (double)base[3 * gg + p];
+                int best = 0; float bv = -1.0f;
+                for (int c = 0; c < FPN_AFF_NCLS; c++) {
+                    float v = base[(5 + c) * gg + p];
+                    if (v > bv) { bv = v; best = c; }
+                }
+                b->cls = best;
+                n++;
+            }
+        }
+        off += A * FPN_AFF_SLOTS * gg;
+    }
+    return n;
+}
+
+// encode_targets_fpn, verbatim: scale by max(w,h) in pixels against two
+// thresholds, cell by centre, anchor by wh-IoU, last write wins on a collision.
+static void fpn_encode_boxes(float* tgt, const int32_t* geo, size_t n_scales,
+                             const float* anchors, const fpn_aff_box* bx,
+                             size_t nb, double input_px,
+                             double t_lo, double t_hi) {
+    size_t ntot = 0;
+    for (size_t si = 0; si < n_scales; si++)
+        ntot += (size_t)geo[2 * si + 1] * FPN_AFF_SLOTS
+                * (size_t)geo[2 * si] * (size_t)geo[2 * si];
+    memset(tgt, 0, ntot * sizeof(float));
+
+    for (size_t i = 0; i < nb; i++) {
+        double w = bx[i].w, h = bx[i].h;
+        double m = (w > h ? w : h) * input_px;
+        size_t si = (m < t_lo) ? 0 : ((m < t_hi) ? 1 : 2);
+        if (si >= n_scales) si = n_scales - 1;
+        size_t g = (size_t)geo[2 * si], A = (size_t)geo[2 * si + 1];
+        size_t gg = g * g;
+        size_t aoff = 0;                       // anchors are packed per scale
+        for (size_t k = 0; k < si; k++) aoff += (size_t)geo[2 * k + 1];
+        size_t toff = 0;
+        for (size_t k = 0; k < si; k++)
+            toff += (size_t)geo[2 * k + 1] * FPN_AFF_SLOTS
+                    * (size_t)geo[2 * k] * (size_t)geo[2 * k];
+
+        int cj = (int)(bx[i].cx * (double)g); if (cj > (int)g - 1) cj = (int)g - 1;
+        int ci = (int)(bx[i].cy * (double)g); if (ci > (int)g - 1) ci = (int)g - 1;
+        if (cj < 0) cj = 0; if (ci < 0) ci = 0;
+
+        int best = 0; double bv = -1.0;
+        for (size_t a = 0; a < A; a++) {
+            double aw = anchors[2 * (aoff + a)], ah = anchors[2 * (aoff + a) + 1];
+            double iw = w < aw ? w : aw, ih = h < ah ? h : ah;
+            double inter = iw * ih;
+            double iou = inter / (w * h + aw * ah - inter + 1e-12);
+            if (iou > bv) { bv = iou; best = (int)a; }
+        }
+
+        float* base = tgt + toff + (size_t)best * FPN_AFF_SLOTS * gg;
+        size_t p = (size_t)ci * g + (size_t)cj;
+        base[0 * gg + p] = (float)(bx[i].cx * (double)g - (double)cj);
+        base[1 * gg + p] = (float)(bx[i].cy * (double)g - (double)ci);
+        base[2 * gg + p] = (float)w;
+        base[3 * gg + p] = (float)h;
+        base[4 * gg + p] = 1.0f;
+        for (int c = 0; c < FPN_AFF_NCLS; c++) base[(5 + c) * gg + p] = 0.0f;
+        base[(5 + bx[i].cls) * gg + p] = 1.0f;
+    }
+}
+
+// One image: warp pixels, transform boxes, re-encode. `scratch` must hold
+// channels*height*width floats; `bxbuf` must hold at least the slot count.
+void fpn_affine_one(float* img, float* tgt, float* scratch, fpn_aff_box* bxbuf,
+                    size_t channels, size_t height, size_t width,
+                    const int32_t* geo, size_t n_scales, const float* anchors,
+                    double s, double tx, double ty,
+                    double t_lo, double t_hi, double wh_thr_px, double area_thr) {
+    size_t plane = height * width;
+
+    // Pixels. Output (r,c) samples the source at the INVERSE map; outside the
+    // source it takes 0.0, the dataset mean in normalized space.
+    for (size_t ch = 0; ch < channels; ch++) {
+        const float* src = img + ch * plane;
+        float* dst = scratch + ch * plane;
+        for (size_t r = 0; r < height; r++) {
+            double v_out = ((double)r + 0.5) / (double)height;
+            double v_in = (v_out - 0.5 - ty) / s + 0.5;
+            double sy = v_in * (double)height - 0.5;
+            int y0 = (int)floor(sy); double fy = sy - (double)y0;
+            for (size_t c = 0; c < width; c++) {
+                double u_out = ((double)c + 0.5) / (double)width;
+                double u_in = (u_out - 0.5 - tx) / s + 0.5;
+                double sx = u_in * (double)width - 0.5;
+                int x0 = (int)floor(sx); double fx = sx - (double)x0;
+                double acc = 0.0;
+                for (int dy = 0; dy < 2; dy++) {
+                    int yy = y0 + dy;
+                    if (yy < 0 || yy >= (int)height) continue;
+                    double wy = dy ? fy : (1.0 - fy);
+                    for (int dx = 0; dx < 2; dx++) {
+                        int xx = x0 + dx;
+                        if (xx < 0 || xx >= (int)width) continue;
+                        double wx = dx ? fx : (1.0 - fx);
+                        acc += wy * wx * (double)src[(size_t)yy * width + (size_t)xx];
+                    }
+                }
+                dst[r * width + c] = (float)acc;
+            }
+        }
+    }
+    memcpy(img, scratch, channels * plane * sizeof(float));
+
+    // Boxes. Same map on centres, sizes scale, then clip to the frame and drop
+    // whatever the clip left too small to be a real target.
+    size_t nb = fpn_decode_boxes(tgt, geo, n_scales, bxbuf);
+    size_t keep = 0;
+    for (size_t i = 0; i < nb; i++) {
+        double cx = (bxbuf[i].cx - 0.5) * s + 0.5 + tx;
+        double cy = (bxbuf[i].cy - 0.5) * s + 0.5 + ty;
+        double w = bxbuf[i].w * s, h = bxbuf[i].h * s;
+        double x1 = cx - w / 2.0, x2 = cx + w / 2.0;
+        double y1 = cy - h / 2.0, y2 = cy + h / 2.0;
+        double cx1 = x1 < 0.0 ? 0.0 : x1, cx2 = x2 > 1.0 ? 1.0 : x2;
+        double cy1 = y1 < 0.0 ? 0.0 : y1, cy2 = y2 > 1.0 ? 1.0 : y2;
+        double nw = cx2 - cx1, nh = cy2 - cy1;
+        if (nw <= 0.0 || nh <= 0.0) continue;
+        if (nw * (double)width < wh_thr_px || nh * (double)height < wh_thr_px) continue;
+        if ((nw * nh) / (w * h + 1e-12) < area_thr) continue;
+        bxbuf[keep].cx = (cx1 + cx2) / 2.0;
+        bxbuf[keep].cy = (cy1 + cy2) / 2.0;
+        bxbuf[keep].w = nw;
+        bxbuf[keep].h = nh;
+        bxbuf[keep].cls = bxbuf[i].cls;
+        keep++;
+    }
+    fpn_encode_boxes(tgt, geo, n_scales, anchors, bxbuf, keep,
+                     (double)width, t_lo, t_hi);
+}
+
+// Lean entry point. One coin per image; the drawn scale and translate are
+// per-image, matching the hflip's convention (and Ultralytics'). `anchors_flat`
+// is f32 (w,h) pairs packed per scale in the SAME order as `scales_flat`, so
+// the encoder here cannot disagree with the one that wrote the file.
+LEAN_EXPORT lean_obj_res lean_f32_fpn_affine(
+    b_lean_obj_arg images, b_lean_obj_arg target,
+    size_t batch, size_t channels, size_t height, size_t width,
+    b_lean_obj_arg scales_flat, size_t n_scales, b_lean_obj_arg anchors_flat,
+    double sgain, double tgain, double prob,
+    double t_lo, double t_hi, double wh_thr_px, double area_thr,
+    size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t plane = height * width;
+    size_t img_px = channels * plane;
+    size_t img_bytes = batch * img_px * 4;
+    const int32_t* geo = (const int32_t*)lean_sarray_cptr(scales_flat);
+    const float* anchors = (const float*)lean_sarray_cptr(anchors_flat);
+    size_t ntot = 0, nslots = 0;
+    for (size_t si = 0; si < n_scales; si++) {
+        size_t g = (size_t)geo[2 * si], A = (size_t)geo[2 * si + 1];
+        ntot += A * FPN_AFF_SLOTS * g * g;
+        nslots += A * g * g;
+    }
+    size_t tgt_bytes = batch * ntot * 4;
+    lean_object* out_img = lean_alloc_sarray(1, img_bytes, img_bytes);
+    lean_object* out_tgt = lean_alloc_sarray(1, tgt_bytes, tgt_bytes);
+    float* oi = (float*)lean_sarray_cptr(out_img);
+    float* ot = (float*)lean_sarray_cptr(out_tgt);
+    memcpy(oi, lean_sarray_cptr(images), img_bytes);
+    memcpy(ot, lean_sarray_cptr(target), tgt_bytes);
+
+    float* scratch = (float*)malloc(img_px * sizeof(float));
+    fpn_aff_box* bxbuf = (fpn_aff_box*)malloc(nslots * sizeof(fpn_aff_box));
+    if (!scratch || !bxbuf) {
+        free(scratch); free(bxbuf);
+        lean_dec(out_img); lean_dec(out_tgt);
+        return lean_io_result_mk_error(lean_mk_io_user_error(
+            lean_mk_string("F32.fpnAffine: out of memory")));
+    }
+    uint64_t s = seed ^ 0x8ebc6af09c88c6e3ULL; if (s == 0) s = 1;
+    for (size_t i = 0; i < batch; i++) {
+        double sc = 1.0 + (2.0 * f32_unif01(&s) - 1.0) * sgain;
+        double tx = (2.0 * f32_unif01(&s) - 1.0) * tgain;
+        double ty = (2.0 * f32_unif01(&s) - 1.0) * tgain;
+        // Draw for every image whether or not it fires, so that turning `prob`
+        // down changes WHICH images are augmented and not the whole stream.
+        if (!(f32_unif01(&s) < prob)) continue;
+        if (sc < 1e-3) sc = 1e-3;
+        fpn_affine_one(oi + i * img_px, ot + i * ntot, scratch, bxbuf,
+                       channels, height, width, geo, n_scales, anchors,
+                       sc, tx, ty, t_lo, t_hi, wh_thr_px, area_thr);
+    }
+    free(scratch); free(bxbuf);
+    lean_object* tup = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(tup, 0, out_img);
+    lean_ctor_set(tup, 1, out_tgt);
+    return lean_io_result_mk_ok(tup);
+}
+
 // ============================================================
 // In-place step-buffer patching (planning/xla_pjrt_ladder.md §8).
 //

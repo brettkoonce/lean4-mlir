@@ -274,6 +274,29 @@ def augFromEnv : IO Bool := do
   | none => return false
   | some v => return (v.trimAscii.toString == "1" || v.trimAscii.toString.toLower == "true")
 
+/-- Box-aware affine augmentation, as three PERCENT knobs (this toolchain has no
+    `String.toFloat?`, same reason `FPN_LR_MULT` is an integer):
+
+      `FPN_AFFINE`           firing probability per image, 0-100. 0 = off = default.
+      `FPN_AFFINE_SCALE`     scale gain, so 25 ⇒ per-image scale in [0.75, 1.25].
+      `FPN_AFFINE_TRANSLATE` translate gain as a % of the frame, so 10 ⇒ ±0.1.
+
+    ⚠ The defaults are deliberately GENTLER than Ultralytics' (scale 0.5,
+    translate 0.1). Halving an image is standard practice on COCO, where objects
+    are large; here the median object is a handful of pixels across, and at
+    scale 0.5 a 4 px car becomes 2 px and falls under P3's stride-8 grid. The
+    honest experiment is a scale LADDER under separate tags, not one setting
+    copied from a dataset with the opposite size distribution.
+
+    Independent of `FPN_AUG`: this stacks ON TOP of the HSV+hflip pack, which is
+    already measured as worth 0.1243 → 0.1674 at 50 epochs. Run it as
+    `FPN_AUG=1 FPN_AFFINE=<p>` against an `FPN_AUG=1` control on the same
+    schedule, or the comparison confounds two changes. -/
+def affinePctFromEnv (name : String) (dflt : Nat) : IO Float := do
+  match (← IO.getEnv name) with
+  | none => return dflt.toFloat / 100.0
+  | some v => return ((v.trimAscii.toNat?).getD dflt).toFloat / 100.0
+
 /-- Infer: dump [N, Ntot] val logits for scripts/yolo_map_visdrone.py --fpn. -/
 def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
   IO.FS.createDirAll outDir
@@ -366,16 +389,27 @@ def runYolov1VisdroneFpn (args : List String) : IO Unit := do
     let aug ← augFromEnv
     let noBoot ← noBootstrapFromEnv
     let baseCfg := if noBoot then { baseCfg with bootstrapBackbone := none } else baseCfg
+    let affProb ← affinePctFromEnv "FPN_AFFINE" 0
+    let affScale ← affinePctFromEnv "FPN_AFFINE_SCALE" 25
+    let affTrans ← affinePctFromEnv "FPN_AFFINE_TRANSLATE" 10
     let cfg := { baseCfg with epochs := epochs,
                                       checkpointEveryNEpochs := ckptEvery,
                                       learningRate := lr,
                                       gradClipNorm := clip,
-                                      augment := aug }
+                                      augment := aug,
+                                      fpnAffineProb := affProb,
+                                      fpnAffineScale := affScale,
+                                      fpnAffineTranslate := affTrans }
     IO.println s!"FPN multi-scale VisDrone (56/28/14, 3 anchors/scale, Ntot={fpnNtot}, head tower={tower}) — data dir: {dataDir}"
     IO.println s!"  spec   : {spec.name}"
     IO.println s!"  epochs : {epochs}"
     IO.println s!"  lr     : {lr}  clip: {clip}"
     IO.println s!"  augment: {aug} (HSV jitter + hflip on the FPN path)"
+    if affProb > 0.0 then
+      IO.println s!"  affine : p={affProb} scale=±{affScale} translate=±{affTrans} \
+(box-aware, target re-encoded)"
+    else
+      IO.println s!"  affine : off (FPN_AFFINE=<percent> to enable)"
     spec.train cfg dataDir DatasetKind.petsDet
 
 def main (args : List String) : IO Unit := runYolov1VisdroneFpn args

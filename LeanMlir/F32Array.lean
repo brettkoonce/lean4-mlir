@@ -433,6 +433,32 @@ opaque fpnHflip (images target : @& ByteArray)
     (scalesFlat : @& ByteArray) (nScales : USize) (prob : Float) (seed : USize)
     : IO (ByteArray × ByteArray)
 
+/-- Box-aware affine (scale + translate) of an FPN image `[B,C,H,W]` + its flat
+    `[P3|P4|P5]` target, one p=`prob` coin per image.
+
+    Unlike `fpnHflip`, this is NOT shape-invariant: scaling changes `max(w,h)`,
+    which changes both the FPN level a box lands on and which anchor wins the
+    wh-IoU. So the target is rebuilt from boxes — decoded out of the assigned
+    slots (every one of which is an exact encoding of one box), transformed,
+    clipped to the frame, filtered, and re-encoded by the same rules
+    `encode_targets_fpn` uses. Boxes already lost to a same-slot collision on
+    disk stay lost, which is correct: they are absent from the training target too.
+
+    ⚠ The scale range is the load-bearing knob on this dataset. VisDrone objects
+    are 2–5 px after the 448 resize, so scaling down pushes them below P3's
+    stride-8 resolution; `whThrPx` and `areaThr` drop what the transform has
+    destroyed rather than encoding a degenerate target for it. Empty regions take
+    0.0, which in these ImageNet-normalized images is the dataset mean colour.
+
+    `scalesFlat` is int32-LE pairs `[g_s, A_s]`; `anchorsFlat` is f32 `(w,h)`
+    pairs packed per scale in the same order. Returns `(image', target')`. -/
+@[extern "lean_f32_fpn_affine"]
+opaque fpnAffine (images target : @& ByteArray)
+    (batch channels height width : USize)
+    (scalesFlat : @& ByteArray) (nScales : USize) (anchorsFlat : @& ByteArray)
+    (sGain tGain prob tLo tHi whThrPx areaThr : Float) (seed : USize)
+    : IO (ByteArray × ByteArray)
+
 /-- Convert a uint8 mask ByteArray (one byte per pixel) into a little-endian
     int32 ByteArray of 4× the size. Pets `loadPets` returns masks as packed
     uint8; `trainStepAdamF32Seg` expects int32 per-pixel class labels. -/

@@ -660,6 +660,28 @@ structure TrainConfig where
       `[B, Ntot]` head concat, and the single target input is a flat
       `[B, Σ A·15·g_s²]` block (sliced per scale in the loss). -/
   fpnScales    : List (Nat × List (Float × Float)) := []
+  /-- Box-aware affine augmentation for the FPN path: per-image scale gain
+      `1 + U(-1,1)·fpnAffineScale` and translate `U(-1,1)·fpnAffineTranslate`
+      (as a fraction of the frame), fired with probability `fpnAffineProb`.
+      `0` scale gain and `0` probability (the defaults) leave the pipeline
+      byte-identical to the HSV+hflip pack, so the existing arms stay reproducible.
+
+      Separate from `augment` on purpose. `augment` is the committed and measured
+      pack (HSV + hflip, worth 0.1243 → 0.1674 at 50 epochs); this is the arm that
+      changes object SCALE, which on VisDrone is the axis the difficulty actually
+      lives on — and therefore the one that can hurt as easily as help, since a
+      2–5 px object scaled down goes under P3's stride-8 resolution entirely.
+      It must be A/B'd under its own tag, on top of `augment`, not instead of it. -/
+  fpnAffineScale     : Float := 0.0
+  fpnAffineTranslate : Float := 0.0
+  fpnAffineProb      : Float := 0.0
+  /-- Drop a transformed box whose clipped side falls under `fpnAffineWhThrPx`
+      pixels, or which keeps less than `fpnAffineAreaThr` of its area inside the
+      frame. Ultralytics uses 2 px and 0.1; the 2 px default is wrong here,
+      because a large share of VisDrone GT is 2–5 px to begin with and that
+      threshold would silently delete the classes the detector is worst at. -/
+  fpnAffineWhThrPx   : Float := 1.0
+  fpnAffineAreaThr   : Float := 0.1
   /-- Per-class weights for the detector's classification term (planning/
       yolo_fpn.md T1b). `weights.length` must equal the detector class count
       (10 for VisDrone). Empty (the default) is the unweighted path and emits
