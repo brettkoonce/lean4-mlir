@@ -276,7 +276,7 @@ private def lnBackSiteB (gN xName cot : String) (c h : Nat) :
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
 /-- The **γ tail** for one LN site — the two-level `veclnGammaGradB`. -/
-private def lnGammaTailB (gN xName cot : String) (c h : Nat) :
+private def lnGammaTailB (_gN xName cot : String) (c h : Nat) :
     StateM Nat (String × String) := do
     let (k1, xT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                   (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))

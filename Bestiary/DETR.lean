@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # DETR — Bestiary entry
 

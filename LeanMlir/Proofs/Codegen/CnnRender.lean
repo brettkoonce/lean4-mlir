@@ -1251,16 +1251,16 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let s2h := 2*s3h; let s2w := 2*s3w
   let s1h := 2*s2h; let s1w := 2*s2w
   let flat := c4*h*w
-  let zS1c1 : Vec (c1*s1h*s1w) := fun _ => 0
-  let zS2c1 : Vec (c1*s2h*s2w) := fun _ => 0
-  let zS2c2 : Vec (c2*s2h*s2w) := fun _ => 0
-  let zS3c2 : Vec (c2*s3h*s3w) := fun _ => 0
-  let zS3c3 : Vec (c3*s3h*s3w) := fun _ => 0
-  let zS4c3 : Vec (c3*s4h*s4w) := fun _ => 0
-  let zS4c4 : Vec (c4*s4h*s4w) := fun _ => 0
-  let zPc4 : Vec (c4*h*w) := fun _ => 0
-  let zD1 : Vec d1 := fun _ => 0
-  let zNC : Vec nClasses := fun _ => 0
+  let _zS1c1 : Vec (c1*s1h*s1w) := fun _ => 0
+  let _zS2c1 : Vec (c1*s2h*s2w) := fun _ => 0
+  let _zS2c2 : Vec (c2*s2h*s2w) := fun _ => 0
+  let _zS3c2 : Vec (c2*s3h*s3w) := fun _ => 0
+  let _zS3c3 : Vec (c3*s3h*s3w) := fun _ => 0
+  let _zS4c3 : Vec (c3*s4h*s4w) := fun _ => 0
+  let _zS4c4 : Vec (c4*s4h*s4w) := fun _ => 0
+  let _zPc4 : Vec (c4*h*w) := fun _ => 0
+  let _zD1 : Vec d1 := fun _ => 0
+  let _zNC : Vec nClasses := fun _ => 0
   -- ── batched peers: every ACTIVATION operand carries the batch in its type here, which is
   -- the whole difference between this render and the `…V` one. Parameters keep their
   -- per-example types (they are not batched), so the optimizer tail below is untouched.
@@ -1280,14 +1280,14 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   -- each `pretty` node is an independent tree, linked to the next only by the SSA name.
   let b1NC  : Vec (B*(1*nClasses)) := fun _ => 0
   let b1D1  : Vec (B*(1*d1)) := fun _ => 0
-  let zTW1 : Tensor3 ic s1h s1w := fun _ _ _ => 0
-  let zTW2 : Tensor3 c1 s1h s1w := fun _ _ _ => 0
-  let zTW3 : Tensor3 c1 s2h s2w := fun _ _ _ => 0
-  let zTW4 : Tensor3 c2 s2h s2w := fun _ _ _ => 0
-  let zTW5 : Tensor3 c2 s3h s3w := fun _ _ _ => 0
-  let zTW6 : Tensor3 c3 s3h s3w := fun _ _ _ => 0
-  let zTW7 : Tensor3 c3 s4h s4w := fun _ _ _ => 0
-  let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
+  let _zTW1 : Tensor3 ic s1h s1w := fun _ _ _ => 0
+  let _zTW2 : Tensor3 c1 s1h s1w := fun _ _ _ => 0
+  let _zTW3 : Tensor3 c1 s2h s2w := fun _ _ _ => 0
+  let _zTW4 : Tensor3 c2 s2h s2w := fun _ _ _ => 0
+  let _zTW5 : Tensor3 c2 s3h s3w := fun _ _ _ => 0
+  let _zTW6 : Tensor3 c3 s3h s3w := fun _ _ _ => 0
+  let _zTW7 : Tensor3 c3 s4h s4w := fun _ _ _ => 0
+  let _zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
   let go : StateM Nat String := do
     -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
     let (cHc1, nHc1) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else if bf16 then .batchOp (N := B) (.convBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else .batchOp (N := B) (.conv (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁) (.operand "%x" x))

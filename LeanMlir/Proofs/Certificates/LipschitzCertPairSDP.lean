@@ -109,7 +109,7 @@ theorem lipsdp_slack_of_cert {h : ℕ} (G Sm L : Fin h → Fin h → ℝ)
     rw [h1 a b]
     by_cases hab : a = b
     · subst hab
-      simp only [if_true]
+      simp only [ite_true]
       ring
     · simp only [if_neg hab]
       ring

@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # Evoformer (AlphaFold 2) — Bestiary entry
 

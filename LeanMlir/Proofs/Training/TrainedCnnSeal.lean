@@ -2114,7 +2114,7 @@ theorem S2r : ∀ m : Fin (2 * (2*3) * (2*3)),
     rw [pdiv_relu _ _ (fun k => flatten_ne_zero c2_ne k), ite_mul, zero_mul]),
     Finset.sum_ite_eq Finset.univ m
       (fun k2 => (if Tensor3.flatten c2V m > 0 then (1:ℝ) else 0) * t2V k2)]
-  simp only [Finset.mem_univ, if_true]
+  simp only [Finset.mem_univ, ite_true]
   fin_cases m
   · show (if c2V (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) > 0 then (1:ℝ) else 0) * t2V (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
         = M2T (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6))
@@ -3731,7 +3731,7 @@ theorem S0r : ∀ m : Fin (2 * (2*3) * (2*3)),
     rw [pdiv_relu _ _ (fun k => flatten_ne_zero c1_ne k), ite_mul, zero_mul]),
     Finset.sum_ite_eq Finset.univ m
       (fun k1 => (if Tensor3.flatten c1V m > 0 then (1:ℝ) else 0) * t1V k1)]
-  simp only [Finset.mem_univ, if_true]
+  simp only [Finset.mem_univ, ite_true]
   fin_cases m
   · show (if c1V (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6)) > 0 then (1:ℝ) else 0) * t1V (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
         = M1T (⟨0, by norm_num⟩ : Fin (2)) (⟨0, by norm_num⟩ : Fin (6)) (⟨0, by norm_num⟩ : Fin (6))

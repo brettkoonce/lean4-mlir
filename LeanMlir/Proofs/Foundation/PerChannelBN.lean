@@ -134,7 +134,7 @@ noncomputable def rowwisePerRow_has_vjp_mat {m n p : Nat} (g : Fin m → (Vec n 
     simp_rw [h]
     rw [Finset.sum_ite_eq Finset.univ i
         (fun k => ∑ l : Fin p, pdiv (g k) (A k) j l * dY k l)]
-    simp only [Finset.mem_univ, if_true]
+    simp only [Finset.mem_univ, ite_true]
     exact (hg i).correct (A i) (dY i) j
 
 /-- **A per-row family flattens to a differentiable `Vec → Vec` map.** The

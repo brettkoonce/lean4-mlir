@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # Inception (v1 / v3 / v4) — Bestiary entry
 

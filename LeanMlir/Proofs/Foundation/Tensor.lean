@@ -593,7 +593,7 @@ noncomputable def identityMat_has_vjp (a b : Nat) :
       by_cases hik : i = k <;> by_cases hjl : j = l <;> simp [hik, hjl]
     simp_rw [this]
     rw [Finset.sum_eq_single i (by intro k _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [if_true]
+    simp only [ite_true]
     rw [Finset.sum_eq_single j (by intro l _ hne; simp [Ne.symm hne]) (by simp)]
     simp
 
@@ -997,7 +997,7 @@ noncomputable def rowwise_has_vjp_mat {m n p : Nat} {g : Vec n → Vec p}
     simp_rw [h]
     rw [Finset.sum_ite_eq Finset.univ i
         (fun k => ∑ l : Fin p, pdiv g (A i) j l * dY k l)]
-    simp only [Finset.mem_univ, if_true]
+    simp only [Finset.mem_univ, ite_true]
     exact hg.correct (A i) (dY i) j
 
 -- ════════════════════════════════════════════════════════════════
@@ -1258,7 +1258,7 @@ noncomputable def colSlabwise_has_vjp_mat {n heads d_in d_out : Nat}
           (fun h_l => ∑ j'' : Fin d_out,
             pdivMat g (fun r' j_in => M r' (finProdFinEquiv (h_l, j_in))) i p_jj.2 k j'' *
             dY k (finProdFinEquiv (h_l, j'')))]
-      simp only [Finset.mem_univ, if_true]
+      simp only [Finset.mem_univ, ite_true]
     simp_rw [h_collapse]
     -- Now the goal is exactly hg.correct on the slab.
     exact hg.correct (fun r' j_in => M r' (finProdFinEquiv (p_jj.1, j_in)))
@@ -1459,7 +1459,7 @@ noncomputable def scalarScale_has_vjp {m n : Nat} (s : ℝ) :
       by_cases hik : i = k <;> by_cases hjl : j = l <;> simp [hik, hjl]
     simp_rw [h]
     rw [Finset.sum_eq_single i (by intro k _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [if_true]
+    simp only [ite_true]
     rw [Finset.sum_eq_single j (by intro l _ hne; simp [Ne.symm hne]) (by simp)]
     simp
 
@@ -1478,7 +1478,7 @@ noncomputable def transpose_has_vjp {m n : Nat} :
       by_cases hjk : j = k <;> by_cases hil : i = l <;> simp [hjk, hil]
     simp_rw [h]
     rw [Finset.sum_eq_single j (by intro k _ hne; simp [Ne.symm hne]) (by simp)]
-    simp only [if_true]
+    simp only [ite_true]
     rw [Finset.sum_eq_single i (by intro l _ hne; simp [Ne.symm hne]) (by simp)]
     simp
 

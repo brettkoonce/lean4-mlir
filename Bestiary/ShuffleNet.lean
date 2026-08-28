@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # ShuffleNet v1 — Bestiary entry
 

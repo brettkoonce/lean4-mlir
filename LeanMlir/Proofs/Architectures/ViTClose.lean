@@ -538,9 +538,9 @@ theorem pdiv_patchEmbed_cls {ic H W P N D : Nat}
       funext cl idx
       unfold patchEmbed_flat
       by_cases h : (finProdFinEquiv.symm idx).1.val = 0
-      · simp only [h, if_true]
+      · simp only [h, ite_true]
         ring
-      · simp only [h, if_false]
+      · simp only [h, ite_false]
         ring]
   exact pdiv_maskGather_add_const _ _ _ cls i j
 
@@ -629,8 +629,8 @@ theorem pdiv_patchEmbed_W {ic H W P N D : Nat}
       unfold patchEmbed_flat patchRead Kernel4.unflatten
       simp only [Fintype.sum_prod_type]
       by_cases h : (finProdFinEquiv.symm o).1.val = 0
-      · simp only [h, if_true, mul_zero, Finset.sum_const_zero, zero_add]
-      · simp only [h, if_false, zero_mul, Finset.sum_const_zero, add_zero]
+      · simp only [h, ite_true, mul_zero, Finset.sum_const_zero, zero_add]
+      · simp only [h, ite_false, zero_mul, Finset.sum_const_zero, add_zero]
         rw [show (∑ c' : Fin ic, ∑ kh' : Fin P, ∑ kw' : Fin P,
               v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
                     ((finProdFinEquiv.symm o).2, c'), kh'), kw')) *
@@ -850,7 +850,7 @@ theorem vit_patchW_grad_bridge {ic H W P N D : Nat}
   rw [Fin.sum_univ_succ]
   unfold patchEmbed_weight_grad
   simp only [Fin.val_zero, reduceIte, zero_mul, zero_add, Fin.val_succ,
-             Nat.succ_ne_zero, if_false, Nat.add_sub_cancel]
+             Nat.succ_ne_zero, ite_false, Nat.add_sub_cancel]
 
 /-- **Patch-kernel output, certified.** `Wpⁿ = Wp − lr·(patch-grid reduce)`
     denotes the certified ∂(patchEmbed)/∂Wp contraction. -/
@@ -885,9 +885,9 @@ theorem pdiv_patchEmbed_b {ic H W P N D : Nat}
       funext b' o
       unfold patchEmbed_flat
       by_cases h : (finProdFinEquiv.symm o).1.val = 0
-      · simp only [h, if_true]
+      · simp only [h, ite_true]
         ring
-      · simp only [h, if_false]
+      · simp only [h, ite_false]
         ring]
   exact pdiv_maskGather_add_const _ _ _ bc i j
 
@@ -922,7 +922,7 @@ theorem vit_patchb_grad_bridge {ic H W P N D : Nat}
   rw [Fin.sum_univ_succ]
   unfold patchEmbed_bias_grad
   simp only [Fin.val_zero, reduceIte, zero_mul, zero_add, Fin.val_succ,
-             Nat.succ_ne_zero, if_false, one_mul]
+             Nat.succ_ne_zero, ite_false, one_mul]
 
 /-- **Patch bias output, certified.** -/
 theorem vit_render_patchb_certified {ic H W P N D : Nat}

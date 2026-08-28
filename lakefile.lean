@@ -1234,7 +1234,6 @@ lean_exe «mnist-linear-pgd» where
 lean_exe «mnist-mlp-pgd» where
   root := `apps.mnist.MainMnistMlpPgd
   moreLinkArgs := lowererLink
-  moreLinkArgs := lowererLink
 
 -- Phase-3 PGD attack on the verified CNN (planning/robustness_ladder.md, the conv rung):
 -- input gradient = the proven conv/maxpool input-VJP; certificate = the conv-aware product.
@@ -3379,23 +3378,26 @@ def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat
       else refSec * aMs / ref.attnRefMs
     else refSec * cMs / ref.convRefMs
 
-/-- **The estimate as a BRACKET**, `(lo, hi)`, for the reason on `BenchItem.transportSensitive`.
+/-- **The estimate**, for the reason on `BenchItem.transportSensitive`.
 
-    A chapter whose bottleneck mix its probe does not share gets both candidate factors — its own
-    family's (compute-leaning) and the dense probe's (transport-leaning) — and the row prints the
-    interval between them. Everything else returns a degenerate `(x, x)` and prints exactly as
-    before.
+    A chapter whose bottleneck mix its probe does not share has two candidate factors — its own
+    family's (compute-leaning) and the dense probe's (transport-leaning). This returns the LOWER
+    of the two; everything else is just `yourSecOf`.
 
-    ⭐ **On the reference card the two factors both read ~1.0, so every bracket collapses and the
-    published column is unchanged.** The bracket only opens on a card whose transport:compute ratio
-    differs from the reference's — which is precisely when a single factor stops being meaningful.
-    Measured on ares 2026-08-04: ch5's bracket is 40m–91m and the real run landed at **89m**. -/
-def yourSecRange (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option (Nat × Nat) :=
+    ⭐ **On the reference card the two factors both read ~1.0, so they coincide and the published
+    column is unchanged.** They separate only on a card whose transport:compute ratio differs from
+    the reference's. ⚠ The low end is optimistic when they do: measured on ares 2026-08-04, ch5's
+    two factors were 40m and 91m, and the real run landed at **89m** — i.e. near the HIGH one.
+
+    ⚠ This returned a `(lo, hi)` BRACKET until 2026-08-28, but nothing ever consumed the `hi`
+    half: `fmtRange` was defined and never called, `yourHiTotal` and `anyBracket` were assigned
+    and never read. The single printed number is deliberate (see the note at the print site), so
+    the bracket machinery was deleted rather than wired up. -/
+def yourSecLo (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat :=
   (yourSecOf ref it dMs cMs aMs).map fun base =>
     if it.transportSensitive then
-      let transport := (it.refFor ref.col).getD 0 * dMs / ref.denseRefMs
-      (Nat.min base transport, Nat.max base transport)
-    else (base, base)
+      Nat.min base ((it.refFor ref.col).getD 0 * dMs / ref.denseRefMs)
+    else base
 
 
 /-- Human duration from whole seconds: `45s` / `12m` / `9.5h`. -/
@@ -3404,9 +3406,6 @@ def fmtDur (sec : Nat) : String :=
   else if sec < 5400 then s!"{(sec + 30) / 60}m"
   else let t := (sec * 10 + 1800) / 3600; s!"{t / 10}.{t % 10}h"
 
-/-- Render a bracket: a single duration when it is degenerate, `lo-hi` when it is not. -/
-def fmtRange (lo hi : Nat) : String :=
-  if lo == hi then fmtDur lo else s!"{fmtDur lo}-{fmtDur hi}"
 
 
 /-- `num/den` as a 2-decimal multiplier string, e.g. `1.24`. -/
@@ -3583,7 +3582,7 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
     --   every XLA checkpoint, measure, restore. Stash rather than delete, because these are
     --   someone's training state.
     let ps ← IO.Process.output { cmd := "bash", args := #["-c", "ps -eo comm | grep -c verified || true"] }
-    if (ps.stdout.trim.toNat?.getD 0) > 0 then
+    if (ps.stdout.trimAscii.toNat?.getD 0) > 0 then
       IO.eprintln "  ⛔ a *-verified* trainer is RUNNING. Direct mode stashes checkpoints and would \
 corrupt it (and contend for the GPU). Stop it first."
       return 1
@@ -3642,24 +3641,19 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
     IO.println s!"  {padR "Chapter" 18}{padR "family" 8}{padR s!"ref({ref.card})" 18}your gpu"
     IO.println rule
     let mut yourLoTotal := 0
-    let mut yourHiTotal := 0
     let mut refTotal := 0
     let mut covered := 0
-    let mut anyBracket := false
     for it in benchTable do
-      match it.refFor ref.col, yourSecRange ref it dMs cMs aMs with
-      | some refSec, some (lo, hi) =>
+      match it.refFor ref.col, yourSecLo ref it dMs cMs aMs with
+      | some refSec, some lo =>
         yourLoTotal := yourLoTotal + lo
-        yourHiTotal := yourHiTotal + hi
         refTotal := refTotal + refSec
         covered := covered + 1
-        if lo != hi then anyBracket := true
         let flag := if it.family == "attn" && aMs == 0 then " *proxy" else ""
         -- ⚠ Single number, deliberately. A bracket wide enough to hold the real cross-vendor
         --   spread (0.585-1.411, measured) would tell a first-time user nothing they could plan
         --   with — and with a per-vendor reference column the on-vendor factors read ~1.00 anyway,
-        --   so the honest number is simply the measured one. `yourSecOf` is the estimate; the
-        --   transport-leaning `hi` is kept only for the off-vendor note below.
+        --   so the honest number is simply the measured one. `yourSecOf` is the estimate.
         IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR (fmtDur refSec) 18}{fmtDur lo}{flag}"
       | _, _ =>
         IO.println s!"  {padR it.chapter 18}{padR it.family 8}{padR "n/a" 18}n/a  (no {ref.lowerer} reference)"
@@ -3672,9 +3666,7 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
                           ("imagenette", "lake run imagenette-iree")] do
       let items := benchTable.filter (·.tier == tier)
       let refS := (items.filterMap (·.refFor ref.col)).foldl (· + ·) 0
-      let rs := items.filterMap (fun it => yourSecRange ref it dMs cMs aMs)
-      let yourLo := (rs.map (·.1)).foldl (· + ·) 0
-      let yourHi := (rs.map (·.2)).foldl (· + ·) 0
+      let yourLo := (items.filterMap (fun it => yourSecLo ref it dMs cMs aMs)).foldl (· + ·) 0
       let miss := items.length - (items.filterMap (·.refFor ref.col)).length
       let note := if miss == 0 then "" else s!"   ({miss} ch. n/a)"
       -- All three demo groups have an `-xla` peer, so name the command the user would

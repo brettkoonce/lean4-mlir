@@ -346,7 +346,7 @@ private lemma qkv_back_fanin (N d : Nat) (Wq Wk Wv : Mat (1 * d) (1 * d))
   simp only [mhsa_qkv_W_eq0, mhsa_qkv_W_eq1, mhsa_qkv_W_eq2,
     show (1 : Fin 3) ≠ (0 : Fin 3) from by decide,
     show (2 : Fin 3) ≠ (0 : Fin 3) from by decide,
-    show (2 : Fin 3) ≠ (1 : Fin 3) from by decide, if_true, if_false]
+    show (2 : Fin 3) ≠ (1 : Fin 3) from by decide, ite_true, ite_false]
   have hr : ∀ (W : Mat (1*d) (1*d)) (g : Mat N d),
       (∑ x : Fin (1*d), W c x * g r (finProdFinEquiv.symm x).2)
         = ∑ j : Fin d, W c (finProdFinEquiv ((0:Fin 1), j)) * g r j := by
@@ -556,7 +556,7 @@ private lemma qkv_back_fanin_MH (N heads d : Nat)
     mhsa_qkv_W_eq0, mhsa_qkv_W_eq1, mhsa_qkv_W_eq2,
     show (1 : Fin 3) ≠ (0 : Fin 3) from by decide,
     show (2 : Fin 3) ≠ (0 : Fin 3) from by decide,
-    show (2 : Fin 3) ≠ (1 : Fin 3) from by decide, if_true, if_false]
+    show (2 : Fin 3) ≠ (1 : Fin 3) from by decide, ite_true, ite_false]
 
 /-- The collapsed general-`heads` MHSA backward: for each head `h`, slice the
     dense Q/K/V projections and the `Wo`-back cotangent to head `h`'s columns,

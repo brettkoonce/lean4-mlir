@@ -237,7 +237,7 @@ unsafe def main (args : List String) : IO UInt32 := do
       -- wrong about most.
       pure <| lines.filterMap fun l =>
         let body := (l.splitOn "#").headD ""
-        let t := body.trim
+        let t := body.trimAscii.toString
         if t.isEmpty then none else some t
     else pure #[]
 

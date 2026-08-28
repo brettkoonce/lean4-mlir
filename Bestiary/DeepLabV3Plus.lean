@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # DeepLab v3+ — Bestiary entry
 

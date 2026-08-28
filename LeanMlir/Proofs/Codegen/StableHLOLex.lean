@@ -112,7 +112,7 @@ theorem toDigitsCore_suffix (f : Nat) :
     simp only [Nat.toDigitsCore]
     by_cases hx : n / 10 = 0
     · simp [hx]
-    · simp only [hx, if_false]
+    · simp only [hx, ite_false]
       rw [ih (n/10) (Nat.digitChar (n % 10) :: l), ih (n/10) [Nat.digitChar (n % 10)]]
       simp
 
@@ -131,14 +131,14 @@ theorem foldl_dstep_toDigitsCore (f : Nat) :
     by_cases hx : n / 10 = 0
     · have hn : n < 10 := by omega
       have hmod : n % 10 = n := Nat.mod_eq_of_lt hn
-      simp only [hx, if_true]
+      simp only [hx, ite_true]
       simp only [List.foldl, List.length]
       rw [hmod, dstep_digitChar acc n hn]
       ring
     · have hlt : n / 10 < 10 ^ f := by
         rw [pow_succ] at h; exact Nat.div_lt_of_lt_mul (by omega)
       have hmodlt : n % 10 < 10 := Nat.mod_lt n (by omega)
-      simp only [hx, if_false]
+      simp only [hx, ite_false]
       rw [toDigitsCore_suffix f (n/10) [Nat.digitChar (n % 10)]]
       rw [List.foldl_append, ih (n/10) acc hlt]
       simp only [List.foldl, List.length_append, List.length]

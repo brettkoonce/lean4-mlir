@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # YOLO (v1 / v3 / v5 / v8 / v11) — Bestiary entry
 

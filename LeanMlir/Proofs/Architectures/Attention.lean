@@ -550,7 +550,7 @@ noncomputable def rowSoftmax_has_vjp_mat {m n : Nat} :
     -- Now: Σ k, if i = k then Σ l, ... * dY k l else 0.  Collapse at k = i.
     rw [Finset.sum_ite_eq Finset.univ i
         (fun k => ∑ l : Fin n, pdiv (softmax n) (A i) j l * dY k l)]
-    simp only [Finset.mem_univ, if_true]
+    simp only [Finset.mem_univ, ite_true]
     -- Goal: (softmax_has_vjp n).backward (A i) (dY i) j =
     --       Σ l, pdiv (softmax n) (A i) j l * dY i l
     exact (softmax_has_vjp n).correct (A i) (dY i) j
@@ -2821,9 +2821,9 @@ lemma patchEmbed_flat_diff
   -- DifferentiableAt in img.
   apply DifferentiableAt.add (differentiableAt_const _)
   by_cases hn : (finProdFinEquiv.symm idx_out).1.val = 0
-  · simp only [hn, if_true]
+  · simp only [hn, ite_true]
     exact differentiableAt_const _
-  · simp only [hn, if_false]
+  · simp only [hn, ite_false]
     apply DifferentiableAt.add (differentiableAt_const _)
     apply DifferentiableAt.fun_sum; intro c _
     apply DifferentiableAt.fun_sum; intro kh _

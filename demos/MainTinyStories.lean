@@ -260,7 +260,7 @@ def runSample (c : StoriesCfg) (nToks : Nat) (temperature : Float) (topK : Nat)
 def loadPromptIds (path : String) : IO (Array Nat) := do
   if !(← System.FilePath.pathExists path) then return #[]
   let raw ← IO.FS.readFile path
-  return (raw.split (fun c => c == ' ' || c == '\n')).toArray.filterMap (·.trim.toNat?)
+  return (raw.split (fun c => c == ' ' || c == '\n')).toArray.filterMap (·.trimAscii.toNat?)
 
 /-- Peel an optional leading model key (`8k` / `8m`) off the args; default base. -/
 def peelCfg (rest : List String) : StoriesCfg × List String :=

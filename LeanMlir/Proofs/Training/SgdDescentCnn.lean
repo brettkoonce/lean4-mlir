@@ -89,8 +89,14 @@ theorem max4_sub_abs_le_sum {a b c d a' b' c' d' : ℝ} :
 -- § Index plumbing: window cells tile the input, flat sums = tensor sums
 -- ════════════════════════════════════════════════════════════════
 
-/-- Flat index of a `Tensor3` coordinate (the suite's row-major layout). -/
-def t3Idx {c h w : Nat} (ci : Fin c) (hi : Fin h) (wi : Fin w) :
+/-- Flat index of a `Tensor3` coordinate (the suite's row-major layout).
+
+    ⚠ `@[reducible]` is load-bearing on Lean ≥ 4.33 (see planning/lean_434_and_cleanup.md):
+    `t3Idx_def` folds the raw encoding into the `ite` CONDITION below, but simp does not rewrite
+    inside the `Decidable` INSTANCE argument, so the goal carries a folded condition over an
+    unfolded instance and every `if_pos`/`if_neg` here fails to match. `basisVec`, which produces
+    that `ite`, is `@[reducible]` for the same reason. -/
+@[reducible] def t3Idx {c h w : Nat} (ci : Fin c) (hi : Fin h) (wi : Fin w) :
     Fin (c * h * w) :=
   finProdFinEquiv (finProdFinEquiv (ci, hi), wi)
 
@@ -1226,7 +1232,7 @@ theorem pool_relu_input_grad {c h w d₃ d₄ nC : Nat}
   simp_rw [pdiv_relu (c * (2*h) * (2*w)) z₂ hz2 (t3Idx ci hi wi), ite_mul,
     zero_mul]
   rw [Finset.sum_ite_eq]
-  simp only [Finset.mem_univ, if_true]
+  simp only [Finset.mem_univ, ite_true]
   congr 1
   -- hop 2: through the pool; the routing collapses to the argmax cell
   rw [pdiv_comp (maxPoolFlat c h w) _ _ hmp_d hHd (t3Idx ci hi wi) 0,
@@ -3882,7 +3888,7 @@ theorem conv2d_input_pdiv3 {ic oc h w kH kW : Nat}
     Finset.sum_eq_single wo
     (fun wo' _ hne => by simp [hne])
     (fun habs => absurd (Finset.mem_univ _) habs)]
-  simp only [and_self, if_true, mul_one]
+  simp only [and_self, ite_true, mul_one]
   rfl
 
 /-- Flat-coordinate form of `conv2d_input_pdiv3` — the shape the chain
@@ -3901,7 +3907,6 @@ theorem conv2d_flat_input_pdiv {ic oc h w kH kW : Nat}
       pdiv3 (conv2d W b) (Tensor3.unflatten y) ci hi wi co ho wo := by
     unfold pdiv3
     rw [Tensor3.flatten_unflatten]
-    rfl
   rw [h1, conv2d_input_pdiv3]
 
 -- ════════════════════════════════════════════════════════════════

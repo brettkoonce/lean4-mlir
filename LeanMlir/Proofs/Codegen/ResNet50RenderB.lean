@@ -556,8 +556,8 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
   let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
   let z64   : Vec 64 := fun _ => 0
   let z112  : Vec (B*(64*q1*q1)) := fun _ => 0
-  let z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
-  let z56   : Vec (B*(64*q2*q2)) := fun _ => 0
+  let _z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
+  let _z56   : Vec (B*(64*q2*q2)) := fun _ => 0
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
   -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
   -- rounding-bearing `den` lives in the tie theorems, not here.
@@ -588,8 +588,8 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
   let z2048 : Vec (B*2048) := fun _ => 0
   let zWd   : Mat 2048 nClasses := fun _ _ => 0
   let zNC   : Vec nClasses := fun _ => 0
-  let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
-  let zNCp  : Vec (B*nClasses) := fun _ => 0
+  let _zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
+  let _zNCp  : Vec (B*nClasses) := fun _ => 0
   let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := q5) (w := q5)) (.operand f16.o zL))
   let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
   pure { code := cStc ++ cStn ++ cStr ++ cStp ++
@@ -749,15 +749,15 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let z112  : Vec (B*(64*q1*q1)) := fun _ => 0
     let z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
     let z56   : Vec (B*(64*q2*q2)) := fun _ => 0
-    let zL    : Vec (B*(2048*q5*q5)) := fun _ => 0
+    let _zL    : Vec (B*(2048*q5*q5)) := fun _ => 0
     let z2048 : Vec (B*2048) := fun _ => 0
     let zWd   : Mat 2048 nClasses := fun _ _ => 0
-    let zNC   : Vec nClasses := fun _ => 0
+    let _zNC   : Vec nClasses := fun _ => 0
     let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
     let zNCp  : Vec (B*nClasses) := fun _ => 0
     -- Placeholder rounding, as the `z*` zeros are placeholders — see `bnkIdFwdB`.
     let zrnd : ℝ → ℝ := fun r => r
-    let nStc := fw.stc; let nStn := fw.stn; let nStr := fw.str; let nStp := fw.stp
+    let nStc := fw.stc; let nStn := fw.stn; let nStr := fw.str; let _nStp := fw.stp
     let nGap := fw.gap; let nLog := fw.logits
     let f1 := fw.b[0]!;  let f2 := fw.b[1]!;  let f3 := fw.b[2]!;  let f4 := fw.b[3]!
     let f5 := fw.b[4]!;  let f6 := fw.b[5]!;  let f7 := fw.b[6]!;  let f8 := fw.b[7]!

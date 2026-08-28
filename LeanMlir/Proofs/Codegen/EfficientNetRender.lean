@@ -385,7 +385,7 @@ private def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName
   let zrnd : ℝ → ℝ := fun r => r
   let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
   let zMid : Vec (B * (mid * hh * ww)) := fun _ => 0
-  let zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
+  let _zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKe  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
   let zKp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel mid kd kd := fun _ _ _ => 0
@@ -438,7 +438,7 @@ private def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xN
   let zIn  : Vec (B * (ic * (2*hh) * (2*ww))) := fun _ => 0
   let zMidH : Vec (B * (mid * (2*hh) * (2*ww))) := fun _ => 0
   let zMid : Vec (B * (mid * hh * ww)) := fun _ => 0
-  let zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
+  let _zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKe  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
   let zKp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel mid kd kd := fun _ _ _ => 0
@@ -469,7 +469,7 @@ private def eFwdNoExp (B ic oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : 
   -- and `skel` erases every ℝ payload before a token is emitted.
   let zrnd : ℝ → ℝ := fun r => r
   let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
-  let zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
+  let _zOut : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKp  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel ic kd kd := fun _ _ _ => 0
   let zVi  : Vec ic := fun _ => 0

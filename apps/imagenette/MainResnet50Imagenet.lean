@@ -81,7 +81,7 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
   -- as a mean −4.90 top-1 gap against the JAX per-epoch curve; that run was killed at epoch 13.
   -- ⚠ REFUSES on any other value, for the same reason the resolution dispatch does: a silent
   -- fallback here is a run that looks correct and trains the wrong augmentation.
-  let recipe := ((← IO.getEnv "LEAN_MLIR_RECIPE").getD "default").trim
+  let recipe := ((← IO.getEnv "LEAN_MLIR_RECIPE").getD "default").trimAscii.toString
   let net ← match (← IO.getEnv "LEAN_MLIR_RES") with
     | none | some "224" =>
         match recipe with

@@ -105,7 +105,7 @@ def main (args : List String) : IO Unit := do
   let idsPath := s!"{dataDir}/ids.txt"
   let testIds ← if ← System.FilePath.pathExists idsPath then do
       let s ← IO.FS.readFile idsPath
-      pure ((s.trim.splitOn "\n").map String.trim |>.filter (· != ""))
+      pure ((s.trimAscii.toString.splitOn "\n").map (·.trimAscii.toString) |>.filter (· != ""))
     else pure []
 
   let nBatches := (n + batch - 1) / batch

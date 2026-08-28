@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # WRN (Wide ResNet) — Bestiary entry
 

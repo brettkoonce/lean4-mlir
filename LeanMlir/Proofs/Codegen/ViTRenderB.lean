@@ -333,7 +333,7 @@ end Proofs.StableHLO
 namespace Proofs.StableHLO
 
 /-- One **vector-LN backward** site, batched. Returns `(code, dxin, dγ, dβ)`. -/
-private def vlnBackB (V : VitDims) (vbB : Nat) (gName btName xin dyOut : String) :
+private def vlnBackB (V : VitDims) (vbB : Nat) (gName _btName xin dyOut : String) :
     StateM Nat (String × String × String × String) := do
   let vbTok := V.tok
   let vbD := V.d

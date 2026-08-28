@@ -34,7 +34,7 @@ def r34FpnDetT (tower : Nat) : NetSpec where
 
 def main (args : List String) : IO Unit := do
   let outDir := args.head?.getD "/tmp"
-  let tower := ((← IO.getEnv "FPN_TOWER").bind (·.trim.toNat?)).getD 0
+  let tower := ((← IO.getEnv "FPN_TOWER").bind (·.trimAscii.toNat?)).getD 0
   let r34FpnDet := r34FpnDetT tower
   let batch := 8
   let train := MlirCodegen.generateTrainStep r34FpnDet batch "jit_fpn_train_step"

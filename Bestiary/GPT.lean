@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # GPT-1 / GPT-2 — Bestiary entry
 

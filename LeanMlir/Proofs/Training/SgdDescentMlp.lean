@@ -222,7 +222,7 @@ theorem ce_head_relu_input_grad {d₂ d₃ : Nat} (W₂ : Mat d₂ d₃)
       pdiv_comp _ _ _ (relu_differentiableAt_of_smooth d₂ z hz) hg]
   simp_rw [pdiv_relu d₂ z hz j, ite_mul, zero_mul]
   rw [Finset.sum_ite_eq]
-  simp only [Finset.mem_univ, if_true]
+  simp only [Finset.mem_univ, ite_true]
   rw [ce_dense_input_grad]
 
 -- ════════════════════════════════════════════════════════════════
@@ -725,7 +725,7 @@ theorem ce_head2_input_grad {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
       pdiv_comp _ _ _ (relu_differentiableAt_of_smooth d₁ z hz0) hg1]
   simp_rw [pdiv_relu d₁ z hz0 j, ite_mul, zero_mul]
   rw [Finset.sum_ite_eq]
-  simp only [Finset.mem_univ, if_true]
+  simp only [Finset.mem_univ, ite_true]
   congr 1
   -- second hop: peel the middle dense, then reuse the one-relu head
   have hH : DifferentiableAt ℝ

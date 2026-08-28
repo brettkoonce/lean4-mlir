@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Spec
 
 /-! # ResNet — Bestiary entry (R-18 / R-50 / R-101 / R-152)
 

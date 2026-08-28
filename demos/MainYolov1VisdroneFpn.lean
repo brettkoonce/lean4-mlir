@@ -104,7 +104,7 @@ def r34FpnDetConfig : TrainConfig where
 def towerDepthFromEnv : IO Nat := do
   match (← IO.getEnv "FPN_TOWER") with
   | none => return 0
-  | some v => return (v.trim.toNat?).getD 0
+  | some v => return (v.trimAscii.toNat?).getD 0
 
 /-- Epoch-count override (`FPN_EPOCHS`), for the overfit probe: point the trainer
     at a 32-image subset and give it enough epochs to fit it. Defaults to the
@@ -112,7 +112,7 @@ def towerDepthFromEnv : IO Nat := do
 def epochsFromEnv (dflt : Nat) : IO Nat := do
   match (← IO.getEnv "FPN_EPOCHS") with
   | none => return dflt
-  | some v => return (v.trim.toNat?).getD dflt
+  | some v => return (v.trimAscii.toNat?).getD dflt
 
 /-- Checkpoint interval override (`FPN_CKPT_EVERY`). The overfit probe runs
     hundreds of epochs and wants the loss trajectory, not 100 × 86 MB of
@@ -120,7 +120,7 @@ def epochsFromEnv (dflt : Nat) : IO Nat := do
 def ckptEveryFromEnv (dflt : Nat) : IO Nat := do
   match (← IO.getEnv "FPN_CKPT_EVERY") with
   | none => return dflt
-  | some v => return (v.trim.toNat?).getD dflt
+  | some v => return (v.trimAscii.toNat?).getD dflt
 
 /-- Learning-rate multiplier (`FPN_LR_MULT`). The overfit probe needs to separate
     "the trainer is THROTTLED" from "the trainer is BROKEN": if 10× the LR fits
@@ -132,7 +132,7 @@ def ckptEveryFromEnv (dflt : Nat) : IO Nat := do
 def lrMultFromEnv : IO Float := do
   match (← IO.getEnv "FPN_LR_MULT") with
   | none => return 1.0
-  | some v => return ((v.trim.toNat?).getD 1).toFloat
+  | some v => return ((v.trimAscii.toNat?).getD 1).toFloat
 
 /-- Global-norm gradient-clip override (`FPN_CLIP`), as a Nat; 0 disables the
     clip entirely. Measuring `%gcnorm` would only say whether the clip is ACTIVE;
@@ -143,7 +143,7 @@ def lrMultFromEnv : IO Float := do
 def clipFromEnv (dflt : Float) : IO Float := do
   match (← IO.getEnv "FPN_CLIP") with
   | none => return dflt
-  | some v => match v.trim.toNat? with
+  | some v => match v.trimAscii.toNat? with
               | none => return dflt
               | some n => return n.toFloat
 
@@ -154,7 +154,7 @@ def clipFromEnv (dflt : Float) : IO Float := do
 def tagFromEnv : IO String := do
   match (← IO.getEnv "FPN_TAG") with
   | none => return ""
-  | some v => return if v.trim.isEmpty then "" else s!" {v.trim}"
+  | some v => return if v.trimAscii.toString.isEmpty then "" else s!" {v.trimAscii.toString}"
 
 /-- Augmentation toggle (`FPN_AUG=1`). Turns on the FPN-path augmentation pack —
     YOLO-style HSV jitter (photometric, image-only) + horizontal flip (geometric,
@@ -164,7 +164,7 @@ def tagFromEnv : IO String := do
 def augFromEnv : IO Bool := do
   match (← IO.getEnv "FPN_AUG") with
   | none => return false
-  | some v => return (v.trim == "1" || v.trim.toLower == "true")
+  | some v => return (v.trimAscii.toString == "1" || v.trimAscii.toString.toLower == "true")
 
 /-- Infer: dump [N, Ntot] val logits for scripts/yolo_map_visdrone.py --fpn. -/
 def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do

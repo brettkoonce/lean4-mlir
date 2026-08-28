@@ -65,7 +65,7 @@ private def entryAndBatch (path : String) : IO (String × Nat) := do
   let s ← IO.FS.readFile path
   let some i := (s.splitOn "func.func @")[1]? | throw (IO.userError s!"{path}: no `func.func @`")
   -- `.toString` on both: `takeWhile`/`trim` yield `String.Slice` in this toolchain.
-  let name := (i.takeWhile (· != '(')).trim.toString
+  let name := (i.takeWhile (· != '(')).trimAscii.toString
   let some rest := (i.splitOn "%x: tensor<")[1]? | throw (IO.userError s!"{path}: no %x operand")
   let bstr := (rest.takeWhile (· != 'x')).toString
   let some b := bstr.toNat? | throw (IO.userError s!"{path}: batch {bstr} is not a number")

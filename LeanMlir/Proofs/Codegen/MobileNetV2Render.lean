@@ -94,7 +94,7 @@ private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName 
   let zxin : Vec (ic*(2*hh)*(2*ww)) := fun _ => 0
   let zeb  : Vec (mid*(2*hh)*(2*ww)) := fun _ => 0
   let zdb  : Vec (mid*hh*ww) := fun _ => 0
-  let zob  : Vec (oc*hh*ww) := fun _ => 0
+  let _zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
   let (cEn, nEn) ← bnSiteP B mid (2*hh) (2*ww) mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
@@ -242,7 +242,7 @@ private def irFwdNoExp (B ic oc hh : Nat) (mode : BnMode) (epsStr p xName : Stri
   let zkp  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
   let zdk  : DepthwiseKernel ic 3 3 := fun _ _ _ => 0
   let zib  : Vec (ic*hh*ww) := fun _ => 0
-  let zob  : Vec (oc*hh*ww) := fun _ => 0
+  let _zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cDc, nDc) ← pretty B (.depthwiseF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" ic) zdk zic (.operand xName zib))
   let (cDn, nDn) ← bnSiteP B ic hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zib))
@@ -302,7 +302,7 @@ private def irFwdNoSkip (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName :
   let zdk  : DepthwiseKernel mid 3 3 := fun _ _ _ => 0
   let zxin : Vec (ic*hh*ww) := fun _ => 0
   let zeb  : Vec (mid*hh*ww) := fun _ => 0
-  let zob  : Vec (oc*hh*ww) := fun _ => 0
+  let _zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
   let (cEn, nEn) ← bnSiteP B mid hh ww mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))

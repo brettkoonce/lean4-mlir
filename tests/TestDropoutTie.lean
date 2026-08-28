@@ -246,7 +246,7 @@ private def slurp (p : String) : IO String := IO.FS.readFile p
 /-- All `%name` operands of the first `dot_general` on `line`, in order. -/
 private def dotOperands (line : String) : List String :=
   ((line.splitOn "stablehlo.dot_general").getD 1 "").splitOn ","
-    |>.map String.trim |>.filter (·.startsWith "%") |>.map (fun s => (s.splitOn " ").getD 0 s)
+    |>.map (·.trimAscii.toString) |>.filter (·.startsWith "%") |>.map (fun s => (s.splitOn " ").getD 0 s)
 
 /-- ⭐⭐ **GATE W.** In a classifier-dropout render, three things must hold about ONE value — the
     dropout site's output — and each is a different way for the render to be wrong:
@@ -279,9 +279,9 @@ scale), found {siteIdx.length}. This render is not the shape this gate assumes �
 than reporting a pass on a render it cannot read."
   let fwdLine := lines[siteIdx[0]!]!
   -- `%D = stablehlo.multiply %do, %G : tensor<...>`
-  let lhs := ((fwdLine.splitOn "=").getD 0 "").trim
+  let lhs := ((fwdLine.splitOn "=").getD 0 "").trimAscii.toString
   let ops := ((fwdLine.splitOn "stablehlo.multiply").getD 1 "").splitOn ":" |>.getD 0 ""
-  let opNames := (ops.splitOn ",").map String.trim |>.filter (·.startsWith "%")
+  let opNames := (ops.splitOn ",").map (·.trimAscii.toString) |>.filter (·.startsWith "%")
   let pooled := (opNames.filter (· != "%do")).getD 0 ""
   if lhs.isEmpty || pooled.isEmpty then die s!"GATE W: cannot parse the dropout site: {fwdLine}"
   if (fwdLine.splitOn "broadcast_in_dim").length > 1 then
@@ -321,10 +321,10 @@ activation.\n\
     ⚠ This render trains and descends, and at a ones mask it is BIT-IDENTICAL to a correct one — \
 so the keep = 1 tie, the prefix audit and `dropout_ones_id` all pass on it. That is why this gate \
 is structural and why it exists.\n\
-    line {wDot[0]! + 1}: {wLine.trim}"
+    line {wDot[0]! + 1}: {wLine.trimAscii.toString}"
   if wOperand != lhs then
     die s!"GATE W FAILED (③): the classifier weight gradient reads {wOperand}, which is neither \
-the dropped value {lhs} nor the pooled one {pooled}. line {wDot[0]! + 1}: {wLine.trim}"
+the dropped value {lhs} nor the pooled one {pooled}. line {wDot[0]! + 1}: {wLine.trimAscii.toString}"
   IO.println s!"  ③ classifier W grad   : reads {lhs} — the DROPPED activation ⭐"
 
   -- ── the bias gradient must be UNTOUCHED, the opposite error ──
@@ -339,7 +339,7 @@ the dropped value {lhs} nor the pooled one {pooled}. line {wDot[0]! + 1}: {wLine
 
   -- ── the cotangent scale, on the way down ──
   let bwdLine := lines[siteIdx[1]!]!
-  IO.println s!"  ⑤ cotangent scale     : {((bwdLine.splitOn "=").getD 0 "").trim} — the same op \
+  IO.println s!"  ⑤ cotangent scale     : {((bwdLine.splitOn "=").getD 0 "").trimAscii.toString} — the same op \
 at the same mask (`Proofs.dropout_vjp_is_self`)"
   IO.println "  ✓ GATE W"
 
