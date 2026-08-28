@@ -24,8 +24,9 @@ Usage:
   lake exe mnist-ddpm-sample [out.ppm]
 -/
 
-def tinyDdpmUnet : NetSpec where
-  name := "tiny DDPM UNet T-cond (MNIST 28x28x1)"
+def tinyDdpmUnet (centred : Bool := true) : NetSpec where
+  name := if centred then "tiny DDPM UNet T-cond centered (MNIST 28x28x1)"
+                     else "tiny DDPM UNet T-cond (MNIST 28x28x1)"
   imageH := 28
   imageW := 28
   layers := [
@@ -56,9 +57,11 @@ private def floatToU8 (v : Float) : UInt8 :=
   (p * 255.0).toUInt8
 
 def main (args : List String) : IO Unit := do
-  let outPath := args.head?.getD "runs/2026-05-07-mnist-ddpm/samples.ppm"
+  -- `raw` renders the uncentred ablation arm; see MainMnistDdpmTrain's note.
+  let raw := args.any (· == "raw")
+  let outPath := (args.filter (· != "raw")).head?.getD "runs/2026-05-07-mnist-ddpm/samples.ppm"
   IO.FS.createDirAll (System.FilePath.mk outPath).parent.get!.toString
-  let spec := tinyDdpmUnet
+  let spec := tinyDdpmUnet (centred := !raw)
   IO.FS.createDirAll ".lake/build"
   let pfx := spec.buildPrefix
 
@@ -134,6 +137,10 @@ def main (args : List String) : IO Unit := do
       IO.eprintln s!"  step {k}/{nSteps} t={t}->{tPrev}  a={a} b={b}"
 
   -- ── Render 4×4 grid ──
+  -- ⚠ Invert the trainer's [-1, 1] centring FIRST. `floatToU8` clamps to
+  -- [0, 1], so without this every negative pixel — half the image — renders
+  -- black and the grid looks like sparse scribbles whatever the model learned.
+  unless raw do x ← F32.scaleShift x 0.5 0.5
   let H := spec.imageH; let W := spec.imageW
   let gridW := 4 * W
   let gridH := 4 * H

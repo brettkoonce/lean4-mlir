@@ -21,8 +21,9 @@ import LeanMlir
 /-- 2-channel input: image + a scalar t/T_max timestep encoding tiled
     to the same spatial dims. The model output stays single-channel
     (predicted ε for the image). -/
-def tinyDdpmUnet : NetSpec where
-  name := "tiny DDPM UNet T-cond (MNIST 28x28x1)"
+def tinyDdpmUnet (centred : Bool := true) : NetSpec where
+  name := if centred then "tiny DDPM UNet T-cond centered (MNIST 28x28x1)"
+                     else "tiny DDPM UNet T-cond (MNIST 28x28x1)"
   imageH := 28
   imageW := 28
   layers := [
@@ -50,7 +51,15 @@ def main (args : List String) : IO Unit := do
   let epochsOverride : Option Nat := match args with
     | _ :: e :: _ => e.toNat?
     | _ => none
-  let spec := tinyDdpmUnet
+  -- ⚠ `raw` trains on UNCENTRED [0,1] data, which is what this driver did before
+  -- 2026-08-28. It exists as an ABLATION ARM, not a fallback: the centring claim
+  -- in `runs/2026-08-28-mnist-ddpm-verified-score/` was established at 3 epochs,
+  -- and `demos/figures/ddpm_mnist.png` — a 50-epoch UNCENTRED run from July —
+  -- shows legible digits, so whether centring still matters at 50 epochs needs
+  -- measuring rather than assuming. The two arms carry different spec names and
+  -- therefore different checkpoint paths, so neither can be read as the other.
+  let raw := args.any (· == "raw")
+  let spec := tinyDdpmUnet (centred := !raw)
   let cfg := { tinyDdpmConfig with
     epochs := epochsOverride.getD tinyDdpmConfig.epochs }
   IO.eprintln s!"{spec.name}: {spec.totalParams} params (epochs={cfg.epochs})"
@@ -89,8 +98,19 @@ def main (args : List String) : IO Unit := do
 
   -- ── Load MNIST (60K × 28×28 f32 in [0, 1]) ──
   IO.eprintln "Loading MNIST..."
-  let (trainImg, nTrain) ← F32.loadIdxImages s!"{dataDir}/train-images-idx3-ubyte"
-  IO.eprintln s!"  train: {nTrain} images"
+  let (trainImgRaw, nTrain) ← F32.loadIdxImages s!"{dataDir}/train-images-idx3-ubyte"
+  -- ⭐ CENTRE TO [-1, 1], as all three CIFAR DDPM trainers already do. The
+  -- reverse process drives toward `N(0, I)`; fitting it against data with mean
+  -- 0.13 on [0, 1] is a distribution mismatch the sampler cannot undo, and it
+  -- is why the uncentred checkpoint emitted pixels over [-4.9, 11.9] and scored
+  -- 119x the real-vs-real floor. Evidence:
+  -- `runs/2026-08-28-mnist-ddpm-verified-score/`.
+  -- ⚠ Every consumer must invert this (`scaleShift x 0.5 0.5`) before rendering
+  -- or classifying. The spec NAME carries `centered` so `buildPrefix` differs
+  -- and an uncentred checkpoint cannot be picked up by mistake — the two are
+  -- shape-identical, so nothing else would have caught it.
+  let trainImg ← if raw then pure trainImgRaw else F32.scaleShift trainImgRaw 2.0 (-1.0)
+  IO.eprintln s!"  train: {nTrain} images, {if raw then "RAW [0, 1]" else "centred to [-1, 1]"}"
 
   -- ── Init params + Adam state ──
   let params ← spec.heInitParams
@@ -133,7 +153,7 @@ def main (args : List String) : IO Unit := do
     let mut epochLoss : Float := 0.0
     for bi in [:bpE] do
       globalStep := globalStep + 1
-      -- x_0 batch (already [0, 1]; not centered to [-1, 1] for MVP)
+      -- x_0 batch, already centred to [-1, 1] at load
       let x0 := F32.sliceImages trainImg (bi * cfg.batchSize) cfg.batchSize nPix
       -- Sample (x_t, eps, t) for this batch
       let stepSeed : USize := (epoch * 1000000 + bi).toUSize

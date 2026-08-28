@@ -2461,6 +2461,14 @@ lean_exe «mnist-ddpm-train» where
   root := `demos.MainMnistDdpmTrain
   moreLinkArgs := lowererLink
 
+-- Scores the unconditional MNIST DDPM with Chapter 3's VERIFIED CNN — the
+-- 2-D demo's metric suite (coverage, per-class mass, energy distance) moved onto
+-- images, using a classifier whose math VJP is proven. See the driver's header
+-- and planning/diffusion_2d_demo.md §7.
+lean_exe «mnist-ddpm-score» where
+  root := `demos.MainMnistDdpmScore
+  moreLinkArgs := lowererLink
+
 lean_exe «mnist-ddpm-sample» where
   root := `demos.MainMnistDdpmSample
   moreLinkArgs := lowererLink
@@ -2589,6 +2597,15 @@ lean_exe «vjp-oracle-uib» where
 -- Hermetic — no data files, no GPU. See planning/post_shuffle_fix.md §3.
 lean_exe «test-shuffle-pairing» where
   root := `tests.TestShufflePairing
+  moreLinkArgs := lowererLink
+
+-- `Ddpm.sampleNoise` seeded its xorshift by XOR alone and read the first
+-- uniform from the TOP of the word, so nearby seeds shared a Box-Muller radius:
+-- the 2-D demo's 2048 starting points sat on a circle instead of filling a
+-- Gaussian. Per-axis mean and variance are correct under the defect, so this
+-- asserts the RADIUS is Rayleigh. Hermetic — no data files, no GPU.
+lean_exe «test-sample-noise-seeding» where
+  root := `tests.TestSampleNoiseSeeding
   moreLinkArgs := lowererLink
 
 -- Checks every DatasetIO's declared `trainPixels` / `labelBytesPerRecord`
