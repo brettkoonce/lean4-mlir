@@ -1,0 +1,12 @@
+target: two-moons   samples: 2048   reference: 8192 (independent draw)
+
+  cell recall        2/2      (true sample: 2/2)
+  energy distance    0.00580  (true-vs-true floor: 0.00176)
+  off-support        4.88%   (true sample: 0.00%, tau=0.200)
+
+  per-cell mass (%):   48.0  52.0
+  true               :   50.2  49.8
+
+  wrote .lake/build/diffusion2d_scatter_two_moons.ppm  (left: generated, right: true)
+  => gate: cell recall 2/2 (need 2) and energy 0.0058 < 0.05  [PASS]
+     (energy is 3x the true-vs-true floor)

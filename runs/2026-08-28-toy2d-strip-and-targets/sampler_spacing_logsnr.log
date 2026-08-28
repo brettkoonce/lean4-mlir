@@ -1,0 +1,24 @@
+sweep script takes EXTRA
+21:# Extra flags passed to every arm, e.g. EXTRA=logsnr to change the grid spacing.
+22:EXTRA=${EXTRA:-}
+24:printf "%-12s %6s %8s %10s %9s   (%s)\n" sampler NFE recall energy off-supp "${EXTRA:-uniform-t}"
+29:    if ! lake exe diffusion-2d "$TARGET" "$STEPS" "$n" "$e" "$NGEN" reuse "$s" $EXTRA \
+sampler         NFE   recall     energy  off-supp   (logsnr)
+----------------------------------------------------------
+euler(e0)        10      8/8   25.12140   100.00%
+euler(e0)        20      8/8   14.64018   100.00%
+euler(e0)        50      8/8    7.26348   100.00%
+euler(e0)       100      8/8    4.26311    99.61%
+euler(e0)       200      8/8    2.43455    99.61%
+heun(e0)         10      8/8    3.37966    97.66%
+heun(e0)         20      8/8    1.57887    94.53%
+heun(e0)         50      8/8    2.39072    99.61%
+heun(e0)        100      8/8    1.76852    99.41%
+heun(e0)        200      ERR        ERR       ERR
+sde(e0)          10      8/8   31.24622    99.61%
+sde(e0)          20      8/8    9.19326    96.88%
+sde(e0)          50      8/8    1.52978    82.42%
+sde(e0)         100      8/8    0.25751    57.62%
+sde(e0)         200      ERR        ERR       ERR
+
+[exited with code 0]

@@ -1,0 +1,224 @@
+########## spiral
+⚠ [2238/2345] Replayed LeanMlir.VerifiedTrain
+warning: LeanMlir/VerifiedTrain.lean:321:51: `String.dropRight` has been deprecated: Use `String.dropEnd` instead
+
+Note: The updated constant has a different type:
+  String → Nat → String.Slice
+instead of
+  String → Nat → String
+⚠ [3213/3215] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:158:10: Variable name `bnRun` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+diffusion 2d denoiser (spiral): 18178 params, 20000 steps, eta=0.250000
+Generating train step MLIR...
+  17936 chars
+  data: 8192 points from data/toy2d/spiral.bin
+
+
+
+
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__spiral__train_step.mlir (@main, 19 outputs, 1 replica) in 1260 ms
+  session loaded
+training: 20000 steps, batch=256, lr=0.001000
+  step 0/20000: loss=2.444116
+  step 500/20000: loss=0.294931
+  step 1000/20000: loss=0.287786
+  step 1500/20000: loss=0.276691
+  step 2000/20000: loss=0.277093
+  step 2500/20000: loss=0.245082
+  step 3000/20000: loss=0.277780
+  step 3500/20000: loss=0.285753
+  step 4000/20000: loss=0.267150
+  step 4500/20000: loss=0.274325
+  step 5000/20000: loss=0.298513
+  step 5500/20000: loss=0.307363
+  step 6000/20000: loss=0.316009
+  step 6500/20000: loss=0.289373
+  step 7000/20000: loss=0.264071
+  step 7500/20000: loss=0.267406
+  step 8000/20000: loss=0.265572
+  step 8500/20000: loss=0.332158
+  step 9000/20000: loss=0.289855
+  step 9500/20000: loss=0.306699
+  step 10000/20000: loss=0.262162
+  step 10500/20000: loss=0.272625
+  step 11000/20000: loss=0.336479
+  step 11500/20000: loss=0.266030
+  step 12000/20000: loss=0.274278
+  step 12500/20000: loss=0.230623
+  step 13000/20000: loss=0.324653
+  step 13500/20000: loss=0.330311
+  step 14000/20000: loss=0.269068
+  step 14500/20000: loss=0.259368
+  step 15000/20000: loss=0.309633
+  step 15500/20000: loss=0.284920
+  step 16000/20000: loss=0.241276
+  step 16500/20000: loss=0.257364
+  step 17000/20000: loss=0.216860
+  step 17500/20000: loss=0.296748
+  step 18000/20000: loss=0.255722
+  step 18500/20000: loss=0.221093
+  step 19000/20000: loss=0.293008
+  step 19500/20000: loss=0.273306
+  step 19999/20000: loss=0.310078
+trained in 28488ms
+sampling 2048 points...
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__spiral__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 434 ms
+wrote .lake/build/diffusion2d_samples_spiral.bin (2048 points)
+wrote 9 strip frames + .lake/build/diffusion2d_strip_spiral.txt
+▶ render it: python3 scripts/toy2d_strip.py spiral
+▶ score it: python3 scripts/toy2d_metrics.py --target=spiral
+########## two_moons
+⚠ [2238/2262] Replayed LeanMlir.VerifiedTrain
+warning: LeanMlir/VerifiedTrain.lean:321:51: `String.dropRight` has been deprecated: Use `String.dropEnd` instead
+
+Note: The updated constant has a different type:
+  String → Nat → String.Slice
+instead of
+  String → Nat → String
+⚠ [3213/3215] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:158:10: Variable name `bnRun` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+diffusion 2d denoiser (two-moons): 18178 params, 20000 steps, eta=0.250000
+Generating train step MLIR...
+  17942 chars
+  data: 8192 points from data/toy2d/two_moons.bin
+
+
+
+
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__two_moons__train_step.mlir (@main, 19 outputs, 1 replica) in 1272 ms
+  session loaded
+training: 20000 steps, batch=256, lr=0.001000
+  step 0/20000: loss=2.425676
+  step 500/20000: loss=0.287302
+  step 1000/20000: loss=0.285279
+  step 1500/20000: loss=0.284499
+  step 2000/20000: loss=0.257838
+  step 2500/20000: loss=0.253688
+  step 3000/20000: loss=0.287558
+  step 3500/20000: loss=0.258379
+  step 4000/20000: loss=0.275152
+  step 4500/20000: loss=0.293556
+  step 5000/20000: loss=0.248048
+  step 5500/20000: loss=0.322134
+  step 6000/20000: loss=0.294301
+  step 6500/20000: loss=0.305996
+  step 7000/20000: loss=0.257927
+  step 7500/20000: loss=0.275929
+  step 8000/20000: loss=0.235698
+  step 8500/20000: loss=0.306849
+  step 9000/20000: loss=0.274687
+  step 9500/20000: loss=0.300619
+  step 10000/20000: loss=0.235356
+  step 10500/20000: loss=0.274396
+  step 11000/20000: loss=0.319806
+  step 11500/20000: loss=0.298108
+  step 12000/20000: loss=0.286586
+  step 12500/20000: loss=0.249692
+  step 13000/20000: loss=0.309193
+  step 13500/20000: loss=0.303728
+  step 14000/20000: loss=0.280647
+  step 14500/20000: loss=0.245360
+  step 15000/20000: loss=0.261242
+  step 15500/20000: loss=0.270554
+  step 16000/20000: loss=0.275846
+  step 16500/20000: loss=0.269794
+  step 17000/20000: loss=0.257761
+  step 17500/20000: loss=0.262617
+  step 18000/20000: loss=0.231263
+  step 18500/20000: loss=0.215845
+  step 19000/20000: loss=0.260985
+  step 19500/20000: loss=0.304119
+  step 19999/20000: loss=0.299801
+trained in 29093ms
+sampling 2048 points...
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__two_moons__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 426 ms
+wrote .lake/build/diffusion2d_samples_two_moons.bin (2048 points)
+wrote 9 strip frames + .lake/build/diffusion2d_strip_two_moons.txt
+▶ render it: python3 scripts/toy2d_strip.py two_moons
+▶ score it: python3 scripts/toy2d_metrics.py --target=two_moons
+########## checkerboard
+⚠ [2238/2393] Replayed LeanMlir.VerifiedTrain
+warning: LeanMlir/VerifiedTrain.lean:321:51: `String.dropRight` has been deprecated: Use `String.dropEnd` instead
+
+Note: The updated constant has a different type:
+  String → Nat → String.Slice
+instead of
+  String → Nat → String
+⚠ [3213/3215] Replayed demos.MainDiffusion2d
+warning: demos/MainDiffusion2d.lean:158:10: Variable name `bnRun` is not explicitly referenced.
+
+The binding can be removed (if unused) or named `_` (if used implicitly).
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+diffusion 2d denoiser (checkerboard): 18178 params, 20000 steps, eta=0.250000
+Generating train step MLIR...
+  17948 chars
+  data: 8192 points from data/toy2d/checkerboard.bin
+
+
+
+
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__checkerboard__train_step.mlir (@main, 19 outputs, 1 replica) in 1280 ms
+  session loaded
+training: 20000 steps, batch=256, lr=0.001000
+  step 0/20000: loss=2.460369
+  step 500/20000: loss=0.353844
+  step 1000/20000: loss=0.345860
+  step 1500/20000: loss=0.342368
+  step 2000/20000: loss=0.339801
+  step 2500/20000: loss=0.303129
+  step 3000/20000: loss=0.350217
+  step 3500/20000: loss=0.312923
+  step 4000/20000: loss=0.332261
+  step 4500/20000: loss=0.359005
+  step 5000/20000: loss=0.339290
+  step 5500/20000: loss=0.399108
+  step 6000/20000: loss=0.356383
+  step 6500/20000: loss=0.365146
+  step 7000/20000: loss=0.296541
+  step 7500/20000: loss=0.344611
+  step 8000/20000: loss=0.315113
+  step 8500/20000: loss=0.378037
+  step 9000/20000: loss=0.339743
+  step 9500/20000: loss=0.352406
+  step 10000/20000: loss=0.309906
+  step 10500/20000: loss=0.342279
+  step 11000/20000: loss=0.395234
+  step 11500/20000: loss=0.401177
+  step 12000/20000: loss=0.343992
+  step 12500/20000: loss=0.337823
+  step 13000/20000: loss=0.379995
+  step 13500/20000: loss=0.389309
+  step 14000/20000: loss=0.378883
+  step 14500/20000: loss=0.281351
+  step 15000/20000: loss=0.340649
+  step 15500/20000: loss=0.348366
+  step 16000/20000: loss=0.344065
+  step 16500/20000: loss=0.301775
+  step 17000/20000: loss=0.323600
+  step 17500/20000: loss=0.333551
+  step 18000/20000: loss=0.310089
+  step 18500/20000: loss=0.260087
+  step 19000/20000: loss=0.300755
+  step 19500/20000: loss=0.376529
+  step 19999/20000: loss=0.368689
+trained in 28940ms
+sampling 2048 points...
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__checkerboard__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 427 ms
+wrote .lake/build/diffusion2d_samples_checkerboard.bin (2048 points)
+wrote 9 strip frames + .lake/build/diffusion2d_strip_checkerboard.txt
+▶ render it: python3 scripts/toy2d_strip.py checkerboard
+▶ score it: python3 scripts/toy2d_metrics.py --target=checkerboard
+
+[exited with code 0]

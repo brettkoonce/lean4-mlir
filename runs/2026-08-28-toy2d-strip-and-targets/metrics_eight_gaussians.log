@@ -1,0 +1,12 @@
+target: 8-gaussians   samples: 2048   reference: 8192 (independent draw)
+
+  cell recall        8/8      (true sample: 8/8)
+  energy distance    0.00545  (true-vs-true floor: 0.00080)
+  off-support        8.59%   (true sample: 0.02%, tau=0.200)
+
+  per-cell mass (%):   14.0  13.5  11.4  11.4  17.1  12.0   9.8  10.7
+  true               :   12.9  12.5  12.2  12.7  12.3  12.0  12.7  12.9
+
+  wrote .lake/build/diffusion2d_scatter_eight_gaussians.ppm  (left: generated, right: true)
+  => gate: cell recall 8/8 (need 8) and energy 0.0054 < 0.05  [PASS]
+     (energy is 7x the true-vs-true floor)

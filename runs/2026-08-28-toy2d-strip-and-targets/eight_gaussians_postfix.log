@@ -1,0 +1,15 @@
+✔ [6419/6419] Built «diffusion-2d»:exe (1.1s)
+
+  session loaded
+  reusing checkpoint .lake/build/diffusion_2d_denoiser__8_gaussians__params.bin — NOT training
+sampling 2048 points...
+wrote .lake/build/diffusion2d_samples_eight_gaussians.bin (2048 points)
+wrote 9 strip frames + .lake/build/diffusion2d_strip_eight_gaussians.txt
+▶ render it: python3 scripts/toy2d_strip.py eight_gaussians
+▶ score it: python3 scripts/toy2d_metrics.py --target=eight_gaussians
+
+real	2m49.179s
+user	4m35.596s
+sys	3m1.505s
+
+[exited with code 0]

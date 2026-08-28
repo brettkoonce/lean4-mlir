@@ -1,0 +1,17 @@
+########## sampler steps = 50
+wrote 1024 samples + logits (1024x10 gen, 10000x10 real)
+  DDPM samples                 10/10   90.94%   0.02365     15x   0.1381  0.3142
+  per-class mass DDPM samples              :   6.2   5.3  12.1  11.9  12.6  11.6   8.5   7.4  16.0   8.4
+  => gate: class coverage 10/10 (need 10)  [PASS]
+########## sampler steps = 200
+wrote 1024 samples + logits (1024x10 gen, 10000x10 real)
+  DDPM samples                 10/10   91.06%   0.01880     12x   0.1323  0.3082
+  per-class mass DDPM samples              :   7.3   6.0  13.3  11.8  11.9  11.8   7.9   8.1  13.8   8.1
+  => gate: class coverage 10/10 (need 10)  [PASS]
+########## sampler steps = 500
+wrote 1024 samples + logits (1024x10 gen, 10000x10 real)
+  DDPM samples                 10/10   91.40%   0.01831     12x   0.1318  0.3076
+  per-class mass DDPM samples              :   8.0   5.9  14.1  12.0  11.5  11.6   8.0   7.9  12.9   8.1
+  => gate: class coverage 10/10 (need 10)  [PASS]
+
+[exited with code 0]

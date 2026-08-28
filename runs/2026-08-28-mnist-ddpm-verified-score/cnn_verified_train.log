@@ -1,0 +1,22 @@
+
+
+[pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir (@cnn_train_step, 11 outputs, 1 replica) in 2662 ms
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 417 ms
+MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cnn_train_step.mlir
+  xla/pjrt verified_mlir/cnn_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats), mean-loss SGD lr=0.100000, He init
+  epoch 1: loss = 0.350197, test_acc = 9397/10000 = 93.970000% (4545ms)
+  epoch 2: loss = 0.095646, test_acc = 9742/10000 = 97.420000% (4859ms)
+  epoch 3: loss = 0.056935, test_acc = 9785/10000 = 97.850000% (4511ms)
+  epoch 4: loss = 0.037883, test_acc = 9830/10000 = 98.300000% (4751ms)
+  epoch 5: loss = 0.026125, test_acc = 9836/10000 = 98.360000% (4754ms)
+  epoch 6: loss = 0.018027, test_acc = 9843/10000 = 98.430000% (4939ms)
+  epoch 7: loss = 0.012460, test_acc = 9849/10000 = 98.490000% (5296ms)
+  epoch 8: loss = 0.017465, test_acc = 9849/10000 = 98.490000% (4871ms)
+  epoch 9: loss = 0.007853, test_acc = 9859/10000 = 98.590000% (4801ms)
+  epoch 10: loss = 0.005364, test_acc = 9866/10000 = 98.660000% (5031ms)
+  wrote final params (13956524 bytes) → .lake/build/cnn_verified_params.bin
+done (trained MNIST-CNN via the proof-rendered StableHLO).
+
+[exited with code 0]

@@ -1,0 +1,5 @@
+Ddpm.sampleNoise seeding — radii must be Rayleigh, not constant
+  consecutive  (i + 7919)      : mean|x|=1.228967 sd|x|=0.651803 E|x|^2=1.935207  [PASS]
+  strided      (i·131071 + 17) : mean|x|=1.257867 sd|x|=0.628540 E|x|^2=1.977293  [PASS]
+  strided      (i·8191 + 17)   : mean|x|=1.278546 sd|x|=0.660954 E|x|^2=2.071541  [PASS]
+PASS

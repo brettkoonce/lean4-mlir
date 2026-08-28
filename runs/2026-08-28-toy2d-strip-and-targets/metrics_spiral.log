@@ -1,0 +1,12 @@
+target: spiral   samples: 2048   reference: 8192 (independent draw)
+
+  cell recall        8/8      (true sample: 8/8)
+  energy distance    0.01161  (true-vs-true floor: 0.00051)
+  off-support        27.83%   (true sample: 0.00%, tau=0.040)
+
+  per-cell mass (%):    7.9  14.7  13.5  11.1  11.4   9.7  12.0  19.8
+  true               :   12.6  12.1  12.4  12.1  13.1  12.3  12.5  12.9
+
+  wrote .lake/build/diffusion2d_scatter_spiral.ppm  (left: generated, right: true)
+  => gate: cell recall 8/8 (need 8) and energy 0.0116 < 0.05  [PASS]
+     (energy is 23x the true-vs-true floor)

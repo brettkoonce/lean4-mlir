@@ -1,0 +1,58 @@
+# The scorer against TRUE data — an upper bound on what any model can score.
+# Train draw (seed 0) scored against the reference draw (seed 1), all four targets.
+
+=== eight_gaussians ===
+target: 8-gaussians   samples: 8192   reference: 8192 (independent draw)
+
+  cell recall        8/8      (true sample: 8/8)
+  energy distance    0.00067  (true-vs-true floor: 0.00080)
+  off-support        0.06%   (true sample: 0.02%, tau=0.200)
+
+  per-cell mass (%):   12.7  12.4  12.5  12.5  12.7  12.1  12.8  12.2
+  true               :   12.9  12.5  12.2  12.7  12.3  12.0  12.7  12.9
+
+  wrote /tmp/diffusion2d_scatter_eight_gaussians.ppm  (left: generated, right: true)
+  => gate: cell recall 8/8 (need 8) and energy 0.0007 < 0.05  [PASS]
+     (energy is 1x the true-vs-true floor)
+
+=== spiral ===
+target: spiral   samples: 8192   reference: 8192 (independent draw)
+
+  cell recall        8/8      (true sample: 8/8)
+  energy distance    0.00028  (true-vs-true floor: 0.00051)
+  off-support        0.01%   (true sample: 0.00%, tau=0.040)
+
+  per-cell mass (%):   12.8  12.7  12.4  12.4  12.2  12.5  13.0  11.9
+  true               :   12.6  12.1  12.4  12.1  13.1  12.3  12.5  12.9
+
+  wrote /tmp/diffusion2d_scatter_spiral.ppm  (left: generated, right: true)
+  => gate: cell recall 8/8 (need 8) and energy 0.0003 < 0.05  [PASS]
+     (energy is 1x the true-vs-true floor)
+
+=== two_moons ===
+target: two-moons   samples: 8192   reference: 8192 (independent draw)
+
+  cell recall        2/2      (true sample: 2/2)
+  energy distance    0.00025  (true-vs-true floor: 0.00176)
+  off-support        0.01%   (true sample: 0.00%, tau=0.200)
+
+  per-cell mass (%):   50.0  50.0
+  true               :   50.2  49.8
+
+  wrote /tmp/diffusion2d_scatter_two_moons.ppm  (left: generated, right: true)
+  => gate: cell recall 2/2 (need 2) and energy 0.0002 < 0.05  [PASS]
+     (energy is 0x the true-vs-true floor)
+
+=== checkerboard ===
+target: checkerboard   samples: 8192   reference: 8192 (independent draw)
+
+  cell recall        8/8      (true sample: 8/8)
+  energy distance    0.00047  (true-vs-true floor: 0.00136)
+  off-support        0.00%   (true sample: 0.00%, exact)
+
+  per-cell mass (%):   12.7  12.4  12.5  12.5  12.7  12.1  12.8  12.2
+  true               :   12.9  12.5  12.2  12.7  12.3  12.0  12.7  12.9
+
+  wrote /tmp/diffusion2d_scatter_checkerboard.ppm  (left: generated, right: true)
+  => gate: cell recall 8/8 (need 8) and energy 0.0005 < 0.05  [PASS]
+     (energy is 0x the true-vs-true floor)

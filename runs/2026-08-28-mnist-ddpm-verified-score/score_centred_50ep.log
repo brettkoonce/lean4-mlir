@@ -1,0 +1,19 @@
+instrument: Chapter-3 cnnVerified on 10000 real test images = 98.66% accuracy
+generated: 1024 samples   reference: 8976 held-out real images
+
+  arm                         cover     conf    energy  xfloor  px mean   px sd
+  -----------------------------------------------------------------------------
+  real (positive control)      10/10   99.40%   0.00196      1x   0.1221  0.2983
+  DDPM samples                 10/10   90.94%   0.02365     15x   0.1381  0.3142
+  noise (negative control)      4/10   58.47%   0.36741    231x   0.1320  0.3106
+  real-vs-real floor                           0.00159      1x   0.1325  0.3105
+
+  per-class mass real (positive control)   :   8.9  12.8  11.6  10.4  10.8   9.0   8.2  10.0   8.7   9.6
+  per-class mass DDPM samples              :   6.2   5.3  12.1  11.9  12.6  11.6   8.5   7.4  16.0   8.4
+  per-class mass noise (negative control)  :   0.4   0.7   7.5  23.2   0.2  55.0   0.3   0.8  11.9   0.0
+  per-class mass real test split           :   9.8  11.3  10.3  10.1   9.8   8.9   9.6  10.3   9.7  10.1
+
+  wrote .lake/build/mnist_ddpm_class_grid.ppm  (row d = samples the classifier calls a d, most confident first)
+  wrote .lake/build/mnist_ddpm_class_grid.png
+
+  => gate: class coverage 10/10 (need 10)  [PASS]
