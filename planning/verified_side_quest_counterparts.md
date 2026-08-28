@@ -29,8 +29,8 @@ trying to allocate 11.96GiB"*. It is also **faster** — measured at 1,381 / 837
 the driver's un-rescaled batch-512 LR simply correct. ⛔ **The 32×4 pair is deleted.** It has a
 job config,
 `vitb-default-g512-4gpu`, the first in the tree to set `LEAN_MLIR_MEM_FRACTION`. Evidence:
-`runs/2026-08-27-vitb-global512/`. ⛔ Still nothing TRAINED, and every figure went through JAX's
-Python compile path rather than the C shim the job uses — a 40-step probe is the one thing owed.
+`runs/2026-08-27-vitb-global512/`. ✅ The 40-step trainer probe has since run, so the C-shim path
+(`LEAN_MLIR_MEM_FRACTION`, not JAX's Python one) is exercised too. ⛔ Still nothing TRAINED.
 ▶ Read §4d, then §6's item 6.
 
 *The previous session's §0 follows.*
@@ -663,9 +663,16 @@ in recipe. Listing them would have put two job names on one (net, recipe) row, w
 | `mobilenetv4-imagenet-verified` | Conv-M | rendered; **single-device only** (no shard gate) | `sec:mnv4_side_quest` |
 | `convnext-s-imagenet-verified` | — | rendered fp32; bf16 owed | `sec:convnext_sb` |
 | `convnext-b-imagenet-verified` | — | rendered fp32 + bf16; **unbenchmarked** | `sec:convnext_sb` |
-| `vit-s-imagenet-verified` | — | rendered fp32 + bf16 @ global 512; `vits-default-g512-4gpu` | `sec:vit_sb` |
-| `vit-b-imagenet-verified` | — | rendered fp32 + bf16 @ **global 512** (DeiT's batch); job owed | `sec:vit_sb` |
+| `vit-s-imagenet-verified` | — | rendered fp32; bf16 owed | `sec:vit_sb` |
+| `vit-b-imagenet-verified` | — | rendered fp32 @ global 128; bf16 + accum owed | `sec:vit_sb` |
 | EfficientNetV2-S | — | no spec | `sec:enet_side_quests` |
+
+⚠⚠ **THIS TABLE IS THE PROPOSAL, NOT THE CURRENT STATE, AND EVERY ROW HAS MOVED SINCE.** It is
+kept as written because it is what the restructure was designed against; two rows were briefly
+edited to current state on 2026-08-28 and reverted, because a half-updated historical table is
+worse than either a stale one or a live one. ▶ **The live status is Track 4's own side-quest table
+in `content.tex`**, which now carries four job names, and §1's inventory above it. As of
+2026-08-28 every row here except EfficientNetV2-S is rendered, gated and launchable.
 
 ⚠ **MNv4's row keeps its reason.** The current table's bare `\withheld` reads as a redaction; the
 status column has to say *single-device only*, because that is a 63.5 h run rather than a missing
@@ -990,10 +997,12 @@ already does (`cnx`, `enet`, `mnv2`, `r34`) — the exe namespace and the job na
 different, and N4 governs only the first. ▶ Worth stating in §2c rather than leaving as a trap for
 `convnext-s`/`convnext-b`, which hit it next.
 
-⚠⚠ **Still owed**: a direct 40-step trainer probe. Two things it and only it can settle — whether
-`LEAN_MLIR_MEM_FRACTION` reaching the graph through the C shim behaves as
-`XLA_PYTHON_CLIENT_MEM_FRACTION` did through JAX's Python layer (every measurement above took the
-second path), and whether the conf's compute-bound prediction holds. ⛔ Nothing has been TRAINED.
+✅ **THE TRAINER PROBE RAN and settled both things it was owed for.** The C shim's
+`LEAN_MLIR_MEM_FRACTION` behaves as JAX's Python `XLA_PYTHON_CLIENT_MEM_FRACTION` did — the run
+announces `[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.970` and then executes 40
+steps at global 512 in both precisions — and the compute-bound prediction held: 1,381 ms/step
+trainer against a 1,295.6 device step, so the feed costs ~85 ms and hides.
+⛔ **Nothing has been TRAINED.**
 
 *The original analysis follows, since it is what the test was written against.*
 
@@ -1151,9 +1160,9 @@ Non-negotiable, and in this order:
    ConvNeXt's per-image cost as FLAT from batch 8 to 128 (1.03×), so doubling the batch halves the
    step count and doubles the step. Memory was never the constraint (bs64 is 76 % of the default
    arena). ▶ Same question as §4d asked of ViT-B, same box, opposite answer — and both measured.
-   ⚠ **Still owed**: a 40-step trainer probe. Every figure above went through JAX's Python compile
-   path (`XLA_PYTHON_CLIENT_MEM_FRACTION`); the job goes through the C shim
-   (`LEAN_MLIR_MEM_FRACTION`), and only a run exercises that. ⛔ **Nothing has been TRAINED.**
+   ⚠ This item's own figures ARE the 40-step trainer probes, so the C-shim path is exercised on
+   all four nets. ⛔ **Nothing has been TRAINED — that is now the ONLY thing outstanding across
+   every side quest but EfficientNetV2 and sync-BN.**
 
 9. **EfficientNetV2 (§4e)** — its own project, after the rest. ⚠ Its row is OUT of the book's
    Track-4 side-quest table as of `93ec229` (brett, 2026-08-27): a "no spec" row in a table of
