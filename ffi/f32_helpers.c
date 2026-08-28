@@ -1306,7 +1306,21 @@ LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_
     size_t nbytes = n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
     float* o = (float*)lean_sarray_cptr(out);
-    uint64_t s = (uint64_t)seed ^ 0xddcc1f7e9c3a4ULL; if (s == 0) s = 1;
+    // ⚠⚠ SplitMix64 the seed before the xorshift stream starts; do NOT seed
+    // the stream by XOR alone. xorshift64 is linear over GF(2): two seeds
+    // differing only in their low bits still differ only in low bits after one
+    // round, and this routine reads u1 from the TOP 53 (`s >> 11`). Seeded the
+    // old way, `sampleNoise 2 (i + 7919)` for i = 0..2047 gave just TWO distinct
+    // radii — every 2-D sample started on a circle of radius 1.913 rather than
+    // from N(0, I). Callers that draw one long vector per call never saw it,
+    // because only the FIRST pair of a call is correlated across seeds; the 2-D
+    // demo draws n = 2 per point and so saw nothing else.
+    // Found by planning/diffusion_2d_demo.md §5's reverse-process strip: the
+    // t = T panel is meant to be an isotropic blob and it was a ring.
+    uint64_t z = (uint64_t)seed + 0x9E3779B97F4A7C15ULL;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    uint64_t s = z ^ (z >> 31); if (s == 0) s = 1;
     for (size_t i = 0; i < n; i += 2) {
         s ^= s << 13; s ^= s >> 7; s ^= s << 17;
         double u1 = (double)(s >> 11) / (double)(1ULL << 53);
