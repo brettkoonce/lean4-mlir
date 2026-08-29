@@ -185,14 +185,14 @@ module @m {
     %v153 = stablehlo.multiply %v150, %v151 : tensor<64x256x40x40xf32>
     %v154 = stablehlo.add %v153, %v152 : tensor<64x256x40x40xf32>
     %v155 = stablehlo.reshape %v154 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
-    %v156 = stablehlo.reshape %v127 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v157 = stablehlo.reshape %v155 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v158 = stablehlo.add %v156, %v157 : tensor<64x64x80x80xf32>
-    %v159 = stablehlo.reshape %v158 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
-    %v160 = stablehlo.reshape %v159 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v161 = stablehlo.constant dense<0.0> : tensor<64x64x80x80xf32>
-    %v162 = stablehlo.maximum %v160, %v161 : tensor<64x64x80x80xf32>
-    %v163 = stablehlo.reshape %v162 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v156 = stablehlo.reshape %v127 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v157 = stablehlo.reshape %v155 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v158 = stablehlo.add %v156, %v157 : tensor<64x256x40x40xf32>
+    %v159 = stablehlo.reshape %v158 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
+    %v160 = stablehlo.reshape %v159 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v161 = stablehlo.constant dense<0.0> : tensor<64x256x40x40xf32>
+    %v162 = stablehlo.maximum %v160, %v161 : tensor<64x256x40x40xf32>
+    %v163 = stablehlo.reshape %v162 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v164 = stablehlo.reshape %v163 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v165 = stablehlo.convert %v164 : (tensor<64x256x40x40xf32>) -> tensor<64x256x40x40xbf16>
     %v166 = stablehlo.convert %s1b1W1 : (tensor<64x256x1x1xf32>) -> tensor<64x256x1x1xbf16>
@@ -294,14 +294,14 @@ module @m {
     %v253 = stablehlo.multiply %v250, %v251 : tensor<64x256x40x40xf32>
     %v254 = stablehlo.add %v253, %v252 : tensor<64x256x40x40xf32>
     %v255 = stablehlo.reshape %v254 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
-    %v256 = stablehlo.reshape %v255 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v257 = stablehlo.reshape %v163 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v258 = stablehlo.add %v256, %v257 : tensor<64x64x80x80xf32>
-    %v259 = stablehlo.reshape %v258 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
-    %v260 = stablehlo.reshape %v259 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v261 = stablehlo.constant dense<0.0> : tensor<64x64x80x80xf32>
-    %v262 = stablehlo.maximum %v260, %v261 : tensor<64x64x80x80xf32>
-    %v263 = stablehlo.reshape %v262 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v256 = stablehlo.reshape %v255 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v257 = stablehlo.reshape %v163 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v258 = stablehlo.add %v256, %v257 : tensor<64x256x40x40xf32>
+    %v259 = stablehlo.reshape %v258 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
+    %v260 = stablehlo.reshape %v259 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v261 = stablehlo.constant dense<0.0> : tensor<64x256x40x40xf32>
+    %v262 = stablehlo.maximum %v260, %v261 : tensor<64x256x40x40xf32>
+    %v263 = stablehlo.reshape %v262 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v264 = stablehlo.reshape %v263 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v265 = stablehlo.convert %v264 : (tensor<64x256x40x40xf32>) -> tensor<64x256x40x40xbf16>
     %v266 = stablehlo.convert %s1b2W1 : (tensor<64x256x1x1xf32>) -> tensor<64x256x1x1xbf16>
@@ -403,14 +403,14 @@ module @m {
     %v353 = stablehlo.multiply %v350, %v351 : tensor<64x256x40x40xf32>
     %v354 = stablehlo.add %v353, %v352 : tensor<64x256x40x40xf32>
     %v355 = stablehlo.reshape %v354 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
-    %v356 = stablehlo.reshape %v355 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v357 = stablehlo.reshape %v263 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v358 = stablehlo.add %v356, %v357 : tensor<64x64x80x80xf32>
-    %v359 = stablehlo.reshape %v358 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
-    %v360 = stablehlo.reshape %v359 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v361 = stablehlo.constant dense<0.0> : tensor<64x64x80x80xf32>
-    %v362 = stablehlo.maximum %v360, %v361 : tensor<64x64x80x80xf32>
-    %v363 = stablehlo.reshape %v362 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v356 = stablehlo.reshape %v355 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v357 = stablehlo.reshape %v263 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v358 = stablehlo.add %v356, %v357 : tensor<64x256x40x40xf32>
+    %v359 = stablehlo.reshape %v358 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
+    %v360 = stablehlo.reshape %v359 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v361 = stablehlo.constant dense<0.0> : tensor<64x256x40x40xf32>
+    %v362 = stablehlo.maximum %v360, %v361 : tensor<64x256x40x40xf32>
+    %v363 = stablehlo.reshape %v362 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v364 = stablehlo.reshape %v363 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v365 = stablehlo.convert %v364 : (tensor<64x256x40x40xf32>) -> tensor<64x256x40x40xbf16>
     %v366 = stablehlo.convert %s2b0W1 : (tensor<128x256x1x1xf32>) -> tensor<128x256x1x1xbf16>
@@ -543,14 +543,14 @@ module @m {
     %v481 = stablehlo.multiply %v478, %v479 : tensor<64x512x20x20xf32>
     %v482 = stablehlo.add %v481, %v480 : tensor<64x512x20x20xf32>
     %v483 = stablehlo.reshape %v482 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
-    %v484 = stablehlo.reshape %v455 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v485 = stablehlo.reshape %v483 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v486 = stablehlo.add %v484, %v485 : tensor<64x128x40x40xf32>
-    %v487 = stablehlo.reshape %v486 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
-    %v488 = stablehlo.reshape %v487 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v489 = stablehlo.constant dense<0.0> : tensor<64x128x40x40xf32>
-    %v490 = stablehlo.maximum %v488, %v489 : tensor<64x128x40x40xf32>
-    %v491 = stablehlo.reshape %v490 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v484 = stablehlo.reshape %v455 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v485 = stablehlo.reshape %v483 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v486 = stablehlo.add %v484, %v485 : tensor<64x512x20x20xf32>
+    %v487 = stablehlo.reshape %v486 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
+    %v488 = stablehlo.reshape %v487 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v489 = stablehlo.constant dense<0.0> : tensor<64x512x20x20xf32>
+    %v490 = stablehlo.maximum %v488, %v489 : tensor<64x512x20x20xf32>
+    %v491 = stablehlo.reshape %v490 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v492 = stablehlo.reshape %v491 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v493 = stablehlo.convert %v492 : (tensor<64x512x20x20xf32>) -> tensor<64x512x20x20xbf16>
     %v494 = stablehlo.convert %s2b1W1 : (tensor<128x512x1x1xf32>) -> tensor<128x512x1x1xbf16>
@@ -652,14 +652,14 @@ module @m {
     %v581 = stablehlo.multiply %v578, %v579 : tensor<64x512x20x20xf32>
     %v582 = stablehlo.add %v581, %v580 : tensor<64x512x20x20xf32>
     %v583 = stablehlo.reshape %v582 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
-    %v584 = stablehlo.reshape %v583 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v585 = stablehlo.reshape %v491 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v586 = stablehlo.add %v584, %v585 : tensor<64x128x40x40xf32>
-    %v587 = stablehlo.reshape %v586 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
-    %v588 = stablehlo.reshape %v587 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v589 = stablehlo.constant dense<0.0> : tensor<64x128x40x40xf32>
-    %v590 = stablehlo.maximum %v588, %v589 : tensor<64x128x40x40xf32>
-    %v591 = stablehlo.reshape %v590 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v584 = stablehlo.reshape %v583 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v585 = stablehlo.reshape %v491 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v586 = stablehlo.add %v584, %v585 : tensor<64x512x20x20xf32>
+    %v587 = stablehlo.reshape %v586 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
+    %v588 = stablehlo.reshape %v587 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v589 = stablehlo.constant dense<0.0> : tensor<64x512x20x20xf32>
+    %v590 = stablehlo.maximum %v588, %v589 : tensor<64x512x20x20xf32>
+    %v591 = stablehlo.reshape %v590 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v592 = stablehlo.reshape %v591 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v593 = stablehlo.convert %v592 : (tensor<64x512x20x20xf32>) -> tensor<64x512x20x20xbf16>
     %v594 = stablehlo.convert %s2b2W1 : (tensor<128x512x1x1xf32>) -> tensor<128x512x1x1xbf16>
@@ -761,14 +761,14 @@ module @m {
     %v681 = stablehlo.multiply %v678, %v679 : tensor<64x512x20x20xf32>
     %v682 = stablehlo.add %v681, %v680 : tensor<64x512x20x20xf32>
     %v683 = stablehlo.reshape %v682 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
-    %v684 = stablehlo.reshape %v683 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v685 = stablehlo.reshape %v591 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v686 = stablehlo.add %v684, %v685 : tensor<64x128x40x40xf32>
-    %v687 = stablehlo.reshape %v686 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
-    %v688 = stablehlo.reshape %v687 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v689 = stablehlo.constant dense<0.0> : tensor<64x128x40x40xf32>
-    %v690 = stablehlo.maximum %v688, %v689 : tensor<64x128x40x40xf32>
-    %v691 = stablehlo.reshape %v690 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v684 = stablehlo.reshape %v683 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v685 = stablehlo.reshape %v591 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v686 = stablehlo.add %v684, %v685 : tensor<64x512x20x20xf32>
+    %v687 = stablehlo.reshape %v686 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
+    %v688 = stablehlo.reshape %v687 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v689 = stablehlo.constant dense<0.0> : tensor<64x512x20x20xf32>
+    %v690 = stablehlo.maximum %v688, %v689 : tensor<64x512x20x20xf32>
+    %v691 = stablehlo.reshape %v690 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v692 = stablehlo.reshape %v691 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v693 = stablehlo.convert %v692 : (tensor<64x512x20x20xf32>) -> tensor<64x512x20x20xbf16>
     %v694 = stablehlo.convert %s2b3W1 : (tensor<128x512x1x1xf32>) -> tensor<128x512x1x1xbf16>
@@ -870,14 +870,14 @@ module @m {
     %v781 = stablehlo.multiply %v778, %v779 : tensor<64x512x20x20xf32>
     %v782 = stablehlo.add %v781, %v780 : tensor<64x512x20x20xf32>
     %v783 = stablehlo.reshape %v782 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
-    %v784 = stablehlo.reshape %v783 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v785 = stablehlo.reshape %v691 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v786 = stablehlo.add %v784, %v785 : tensor<64x128x40x40xf32>
-    %v787 = stablehlo.reshape %v786 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
-    %v788 = stablehlo.reshape %v787 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v789 = stablehlo.constant dense<0.0> : tensor<64x128x40x40xf32>
-    %v790 = stablehlo.maximum %v788, %v789 : tensor<64x128x40x40xf32>
-    %v791 = stablehlo.reshape %v790 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v784 = stablehlo.reshape %v783 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v785 = stablehlo.reshape %v691 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v786 = stablehlo.add %v784, %v785 : tensor<64x512x20x20xf32>
+    %v787 = stablehlo.reshape %v786 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
+    %v788 = stablehlo.reshape %v787 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v789 = stablehlo.constant dense<0.0> : tensor<64x512x20x20xf32>
+    %v790 = stablehlo.maximum %v788, %v789 : tensor<64x512x20x20xf32>
+    %v791 = stablehlo.reshape %v790 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v792 = stablehlo.reshape %v791 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v793 = stablehlo.convert %v792 : (tensor<64x512x20x20xf32>) -> tensor<64x512x20x20xbf16>
     %v794 = stablehlo.convert %s3b0W1 : (tensor<256x512x1x1xf32>) -> tensor<256x512x1x1xbf16>
@@ -909,10 +909,10 @@ module @m {
     %v817 = stablehlo.multiply %v814, %v815 : tensor<64x256x20x20xf32>
     %v818 = stablehlo.add %v817, %v816 : tensor<64x256x20x20xf32>
     %v819 = stablehlo.reshape %v818 : (tensor<64x256x20x20xf32>) -> tensor<64x102400xf32>
-    %v820 = stablehlo.reshape %v819 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v821 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v822 = stablehlo.maximum %v820, %v821 : tensor<64x64x40x40xf32>
-    %v823 = stablehlo.reshape %v822 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v820 = stablehlo.reshape %v819 : (tensor<64x102400xf32>) -> tensor<64x256x20x20xf32>
+    %v821 = stablehlo.constant dense<0.0> : tensor<64x256x20x20xf32>
+    %v822 = stablehlo.maximum %v820, %v821 : tensor<64x256x20x20xf32>
+    %v823 = stablehlo.reshape %v822 : (tensor<64x256x20x20xf32>) -> tensor<64x102400xf32>
     %v824 = stablehlo.reshape %v823 : (tensor<64x102400xf32>) -> tensor<64x256x20x20xf32>
     %v825 = stablehlo.convert %v824 : (tensor<64x256x20x20xf32>) -> tensor<64x256x20x20xbf16>
     %v826 = stablehlo.convert %s3b0W2 : (tensor<256x256x3x3xf32>) -> tensor<256x256x3x3xbf16>
@@ -1010,14 +1010,14 @@ module @m {
     %v909 = stablehlo.multiply %v906, %v907 : tensor<64x1024x10x10xf32>
     %v910 = stablehlo.add %v909, %v908 : tensor<64x1024x10x10xf32>
     %v911 = stablehlo.reshape %v910 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v912 = stablehlo.reshape %v883 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v913 = stablehlo.reshape %v911 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v914 = stablehlo.add %v912, %v913 : tensor<64x64x40x40xf32>
-    %v915 = stablehlo.reshape %v914 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
-    %v916 = stablehlo.reshape %v915 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v917 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v918 = stablehlo.maximum %v916, %v917 : tensor<64x64x40x40xf32>
-    %v919 = stablehlo.reshape %v918 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v912 = stablehlo.reshape %v883 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v913 = stablehlo.reshape %v911 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v914 = stablehlo.add %v912, %v913 : tensor<64x1024x10x10xf32>
+    %v915 = stablehlo.reshape %v914 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
+    %v916 = stablehlo.reshape %v915 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v917 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v918 = stablehlo.maximum %v916, %v917 : tensor<64x1024x10x10xf32>
+    %v919 = stablehlo.reshape %v918 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v920 = stablehlo.reshape %v919 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v921 = stablehlo.convert %v920 : (tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xbf16>
     %v922 = stablehlo.convert %s3b1W1 : (tensor<256x1024x1x1xf32>) -> tensor<256x1024x1x1xbf16>
@@ -1119,14 +1119,14 @@ module @m {
     %v1009 = stablehlo.multiply %v1006, %v1007 : tensor<64x1024x10x10xf32>
     %v1010 = stablehlo.add %v1009, %v1008 : tensor<64x1024x10x10xf32>
     %v1011 = stablehlo.reshape %v1010 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v1012 = stablehlo.reshape %v1011 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1013 = stablehlo.reshape %v919 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1014 = stablehlo.add %v1012, %v1013 : tensor<64x64x40x40xf32>
-    %v1015 = stablehlo.reshape %v1014 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
-    %v1016 = stablehlo.reshape %v1015 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1017 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v1018 = stablehlo.maximum %v1016, %v1017 : tensor<64x64x40x40xf32>
-    %v1019 = stablehlo.reshape %v1018 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v1012 = stablehlo.reshape %v1011 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1013 = stablehlo.reshape %v919 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1014 = stablehlo.add %v1012, %v1013 : tensor<64x1024x10x10xf32>
+    %v1015 = stablehlo.reshape %v1014 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
+    %v1016 = stablehlo.reshape %v1015 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1017 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v1018 = stablehlo.maximum %v1016, %v1017 : tensor<64x1024x10x10xf32>
+    %v1019 = stablehlo.reshape %v1018 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v1020 = stablehlo.reshape %v1019 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v1021 = stablehlo.convert %v1020 : (tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xbf16>
     %v1022 = stablehlo.convert %s3b2W1 : (tensor<256x1024x1x1xf32>) -> tensor<256x1024x1x1xbf16>
@@ -1228,14 +1228,14 @@ module @m {
     %v1109 = stablehlo.multiply %v1106, %v1107 : tensor<64x1024x10x10xf32>
     %v1110 = stablehlo.add %v1109, %v1108 : tensor<64x1024x10x10xf32>
     %v1111 = stablehlo.reshape %v1110 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v1112 = stablehlo.reshape %v1111 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1113 = stablehlo.reshape %v1019 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1114 = stablehlo.add %v1112, %v1113 : tensor<64x64x40x40xf32>
-    %v1115 = stablehlo.reshape %v1114 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
-    %v1116 = stablehlo.reshape %v1115 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1117 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v1118 = stablehlo.maximum %v1116, %v1117 : tensor<64x64x40x40xf32>
-    %v1119 = stablehlo.reshape %v1118 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v1112 = stablehlo.reshape %v1111 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1113 = stablehlo.reshape %v1019 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1114 = stablehlo.add %v1112, %v1113 : tensor<64x1024x10x10xf32>
+    %v1115 = stablehlo.reshape %v1114 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
+    %v1116 = stablehlo.reshape %v1115 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1117 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v1118 = stablehlo.maximum %v1116, %v1117 : tensor<64x1024x10x10xf32>
+    %v1119 = stablehlo.reshape %v1118 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v1120 = stablehlo.reshape %v1119 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v1121 = stablehlo.convert %v1120 : (tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xbf16>
     %v1122 = stablehlo.convert %s3b3W1 : (tensor<256x1024x1x1xf32>) -> tensor<256x1024x1x1xbf16>
@@ -1337,14 +1337,14 @@ module @m {
     %v1209 = stablehlo.multiply %v1206, %v1207 : tensor<64x1024x10x10xf32>
     %v1210 = stablehlo.add %v1209, %v1208 : tensor<64x1024x10x10xf32>
     %v1211 = stablehlo.reshape %v1210 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v1212 = stablehlo.reshape %v1211 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1213 = stablehlo.reshape %v1119 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1214 = stablehlo.add %v1212, %v1213 : tensor<64x64x40x40xf32>
-    %v1215 = stablehlo.reshape %v1214 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
-    %v1216 = stablehlo.reshape %v1215 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1217 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v1218 = stablehlo.maximum %v1216, %v1217 : tensor<64x64x40x40xf32>
-    %v1219 = stablehlo.reshape %v1218 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v1212 = stablehlo.reshape %v1211 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1213 = stablehlo.reshape %v1119 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1214 = stablehlo.add %v1212, %v1213 : tensor<64x1024x10x10xf32>
+    %v1215 = stablehlo.reshape %v1214 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
+    %v1216 = stablehlo.reshape %v1215 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1217 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v1218 = stablehlo.maximum %v1216, %v1217 : tensor<64x1024x10x10xf32>
+    %v1219 = stablehlo.reshape %v1218 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v1220 = stablehlo.reshape %v1219 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v1221 = stablehlo.convert %v1220 : (tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xbf16>
     %v1222 = stablehlo.convert %s3b4W1 : (tensor<256x1024x1x1xf32>) -> tensor<256x1024x1x1xbf16>
@@ -1446,14 +1446,14 @@ module @m {
     %v1309 = stablehlo.multiply %v1306, %v1307 : tensor<64x1024x10x10xf32>
     %v1310 = stablehlo.add %v1309, %v1308 : tensor<64x1024x10x10xf32>
     %v1311 = stablehlo.reshape %v1310 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v1312 = stablehlo.reshape %v1311 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1313 = stablehlo.reshape %v1219 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1314 = stablehlo.add %v1312, %v1313 : tensor<64x64x40x40xf32>
-    %v1315 = stablehlo.reshape %v1314 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
-    %v1316 = stablehlo.reshape %v1315 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1317 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v1318 = stablehlo.maximum %v1316, %v1317 : tensor<64x64x40x40xf32>
-    %v1319 = stablehlo.reshape %v1318 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v1312 = stablehlo.reshape %v1311 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1313 = stablehlo.reshape %v1219 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1314 = stablehlo.add %v1312, %v1313 : tensor<64x1024x10x10xf32>
+    %v1315 = stablehlo.reshape %v1314 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
+    %v1316 = stablehlo.reshape %v1315 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1317 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v1318 = stablehlo.maximum %v1316, %v1317 : tensor<64x1024x10x10xf32>
+    %v1319 = stablehlo.reshape %v1318 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v1320 = stablehlo.reshape %v1319 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v1321 = stablehlo.convert %v1320 : (tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xbf16>
     %v1322 = stablehlo.convert %s3b5W1 : (tensor<256x1024x1x1xf32>) -> tensor<256x1024x1x1xbf16>
@@ -1555,14 +1555,14 @@ module @m {
     %v1409 = stablehlo.multiply %v1406, %v1407 : tensor<64x1024x10x10xf32>
     %v1410 = stablehlo.add %v1409, %v1408 : tensor<64x1024x10x10xf32>
     %v1411 = stablehlo.reshape %v1410 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v1412 = stablehlo.reshape %v1411 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1413 = stablehlo.reshape %v1319 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1414 = stablehlo.add %v1412, %v1413 : tensor<64x64x40x40xf32>
-    %v1415 = stablehlo.reshape %v1414 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
-    %v1416 = stablehlo.reshape %v1415 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v1417 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v1418 = stablehlo.maximum %v1416, %v1417 : tensor<64x64x40x40xf32>
-    %v1419 = stablehlo.reshape %v1418 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v1412 = stablehlo.reshape %v1411 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1413 = stablehlo.reshape %v1319 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1414 = stablehlo.add %v1412, %v1413 : tensor<64x1024x10x10xf32>
+    %v1415 = stablehlo.reshape %v1414 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
+    %v1416 = stablehlo.reshape %v1415 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v1417 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v1418 = stablehlo.maximum %v1416, %v1417 : tensor<64x1024x10x10xf32>
+    %v1419 = stablehlo.reshape %v1418 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v1420 = stablehlo.reshape %v1419 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v1421 = stablehlo.convert %v1420 : (tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xbf16>
     %v1422 = stablehlo.convert %s4b0W1 : (tensor<512x1024x1x1xf32>) -> tensor<512x1024x1x1xbf16>
@@ -1594,10 +1594,10 @@ module @m {
     %v1445 = stablehlo.multiply %v1442, %v1443 : tensor<64x512x10x10xf32>
     %v1446 = stablehlo.add %v1445, %v1444 : tensor<64x512x10x10xf32>
     %v1447 = stablehlo.reshape %v1446 : (tensor<64x512x10x10xf32>) -> tensor<64x51200xf32>
-    %v1448 = stablehlo.reshape %v1447 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1449 = stablehlo.constant dense<0.0> : tensor<64x128x20x20xf32>
-    %v1450 = stablehlo.maximum %v1448, %v1449 : tensor<64x128x20x20xf32>
-    %v1451 = stablehlo.reshape %v1450 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v1448 = stablehlo.reshape %v1447 : (tensor<64x51200xf32>) -> tensor<64x512x10x10xf32>
+    %v1449 = stablehlo.constant dense<0.0> : tensor<64x512x10x10xf32>
+    %v1450 = stablehlo.maximum %v1448, %v1449 : tensor<64x512x10x10xf32>
+    %v1451 = stablehlo.reshape %v1450 : (tensor<64x512x10x10xf32>) -> tensor<64x51200xf32>
     %v1452 = stablehlo.reshape %v1451 : (tensor<64x51200xf32>) -> tensor<64x512x10x10xf32>
     %v1453 = stablehlo.convert %v1452 : (tensor<64x512x10x10xf32>) -> tensor<64x512x10x10xbf16>
     %v1454 = stablehlo.convert %s4b0W2 : (tensor<512x512x3x3xf32>) -> tensor<512x512x3x3xbf16>
@@ -1695,14 +1695,14 @@ module @m {
     %v1537 = stablehlo.multiply %v1534, %v1535 : tensor<64x2048x5x5xf32>
     %v1538 = stablehlo.add %v1537, %v1536 : tensor<64x2048x5x5xf32>
     %v1539 = stablehlo.reshape %v1538 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
-    %v1540 = stablehlo.reshape %v1511 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1541 = stablehlo.reshape %v1539 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1542 = stablehlo.add %v1540, %v1541 : tensor<64x128x20x20xf32>
-    %v1543 = stablehlo.reshape %v1542 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
-    %v1544 = stablehlo.reshape %v1543 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1545 = stablehlo.constant dense<0.0> : tensor<64x128x20x20xf32>
-    %v1546 = stablehlo.maximum %v1544, %v1545 : tensor<64x128x20x20xf32>
-    %v1547 = stablehlo.reshape %v1546 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v1540 = stablehlo.reshape %v1511 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1541 = stablehlo.reshape %v1539 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1542 = stablehlo.add %v1540, %v1541 : tensor<64x2048x5x5xf32>
+    %v1543 = stablehlo.reshape %v1542 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
+    %v1544 = stablehlo.reshape %v1543 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1545 = stablehlo.constant dense<0.0> : tensor<64x2048x5x5xf32>
+    %v1546 = stablehlo.maximum %v1544, %v1545 : tensor<64x2048x5x5xf32>
+    %v1547 = stablehlo.reshape %v1546 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
     %v1548 = stablehlo.reshape %v1547 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v1549 = stablehlo.convert %v1548 : (tensor<64x2048x5x5xf32>) -> tensor<64x2048x5x5xbf16>
     %v1550 = stablehlo.convert %s4b1W1 : (tensor<512x2048x1x1xf32>) -> tensor<512x2048x1x1xbf16>
@@ -1804,14 +1804,14 @@ module @m {
     %v1637 = stablehlo.multiply %v1634, %v1635 : tensor<64x2048x5x5xf32>
     %v1638 = stablehlo.add %v1637, %v1636 : tensor<64x2048x5x5xf32>
     %v1639 = stablehlo.reshape %v1638 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
-    %v1640 = stablehlo.reshape %v1639 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1641 = stablehlo.reshape %v1547 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1642 = stablehlo.add %v1640, %v1641 : tensor<64x128x20x20xf32>
-    %v1643 = stablehlo.reshape %v1642 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
-    %v1644 = stablehlo.reshape %v1643 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1645 = stablehlo.constant dense<0.0> : tensor<64x128x20x20xf32>
-    %v1646 = stablehlo.maximum %v1644, %v1645 : tensor<64x128x20x20xf32>
-    %v1647 = stablehlo.reshape %v1646 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v1640 = stablehlo.reshape %v1639 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1641 = stablehlo.reshape %v1547 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1642 = stablehlo.add %v1640, %v1641 : tensor<64x2048x5x5xf32>
+    %v1643 = stablehlo.reshape %v1642 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
+    %v1644 = stablehlo.reshape %v1643 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1645 = stablehlo.constant dense<0.0> : tensor<64x2048x5x5xf32>
+    %v1646 = stablehlo.maximum %v1644, %v1645 : tensor<64x2048x5x5xf32>
+    %v1647 = stablehlo.reshape %v1646 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
     %v1648 = stablehlo.reshape %v1647 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v1649 = stablehlo.convert %v1648 : (tensor<64x2048x5x5xf32>) -> tensor<64x2048x5x5xbf16>
     %v1650 = stablehlo.convert %s4b2W1 : (tensor<512x2048x1x1xf32>) -> tensor<512x2048x1x1xbf16>
@@ -1913,14 +1913,14 @@ module @m {
     %v1737 = stablehlo.multiply %v1734, %v1735 : tensor<64x2048x5x5xf32>
     %v1738 = stablehlo.add %v1737, %v1736 : tensor<64x2048x5x5xf32>
     %v1739 = stablehlo.reshape %v1738 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
-    %v1740 = stablehlo.reshape %v1739 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1741 = stablehlo.reshape %v1647 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1742 = stablehlo.add %v1740, %v1741 : tensor<64x128x20x20xf32>
-    %v1743 = stablehlo.reshape %v1742 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
-    %v1744 = stablehlo.reshape %v1743 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1745 = stablehlo.constant dense<0.0> : tensor<64x128x20x20xf32>
-    %v1746 = stablehlo.maximum %v1744, %v1745 : tensor<64x128x20x20xf32>
-    %v1747 = stablehlo.reshape %v1746 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v1740 = stablehlo.reshape %v1739 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1741 = stablehlo.reshape %v1647 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1742 = stablehlo.add %v1740, %v1741 : tensor<64x2048x5x5xf32>
+    %v1743 = stablehlo.reshape %v1742 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
+    %v1744 = stablehlo.reshape %v1743 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1745 = stablehlo.constant dense<0.0> : tensor<64x2048x5x5xf32>
+    %v1746 = stablehlo.maximum %v1744, %v1745 : tensor<64x2048x5x5xf32>
+    %v1747 = stablehlo.reshape %v1746 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
     %v1748 = stablehlo.reshape %v1747 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v1749 = stablehlo.constant dense<0.0> : tensor<f32>
     %v1750 = stablehlo.reduce(%v1748 init: %v1749) applies stablehlo.add across dimensions = [2, 3] : (tensor<64x2048x5x5xf32>, tensor<f32>) -> tensor<64x2048xf32>
@@ -1943,12 +1943,12 @@ module @m {
     %v1767 = stablehlo.constant dense<25.0> : tensor<64x2048x5x5xf32>
     %v1768 = stablehlo.divide %v1766, %v1767 : tensor<64x2048x5x5xf32>
     %v1769 = stablehlo.reshape %v1768 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
-    %v1770 = stablehlo.reshape %v1769 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1771 = stablehlo.reshape %v1743 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1772 = stablehlo.constant dense<0.0> : tensor<64x128x20x20xf32>
-    %v1773 = stablehlo.compare GT, %v1771, %v1772 : (tensor<64x128x20x20xf32>, tensor<64x128x20x20xf32>) -> tensor<64x128x20x20xi1>
-    %v1774 = stablehlo.select %v1773, %v1770, %v1772 : tensor<64x128x20x20xi1>, tensor<64x128x20x20xf32>
-    %v1775 = stablehlo.reshape %v1774 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v1770 = stablehlo.reshape %v1769 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1771 = stablehlo.reshape %v1743 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1772 = stablehlo.constant dense<0.0> : tensor<64x2048x5x5xf32>
+    %v1773 = stablehlo.compare GT, %v1771, %v1772 : (tensor<64x2048x5x5xf32>, tensor<64x2048x5x5xf32>) -> tensor<64x2048x5x5xi1>
+    %v1774 = stablehlo.select %v1773, %v1770, %v1772 : tensor<64x2048x5x5xi1>, tensor<64x2048x5x5xf32>
+    %v1775 = stablehlo.reshape %v1774 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
     %v1776 = stablehlo.reshape %v1719 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v1777 = stablehlo.constant dense<0.0> : tensor<f32>
     %v1778 = stablehlo.constant dense<1600.0> : tensor<64x2048x5x5xf32>
@@ -2084,10 +2084,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x512x5x5xbf16>, tensor<2048x512x1x1xbf16>) -> tensor<64x2048x5x5xbf16>
     %v1900 = stablehlo.convert %v1899 : (tensor<64x2048x5x5xbf16>) -> tensor<64x2048x5x5xf32>
     %v1901 = stablehlo.reshape %v1900 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
-    %v1902 = stablehlo.reshape %v1901 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1903 = stablehlo.reshape %v1775 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1904 = stablehlo.add %v1902, %v1903 : tensor<64x128x20x20xf32>
-    %v1905 = stablehlo.reshape %v1904 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v1902 = stablehlo.reshape %v1901 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1903 = stablehlo.reshape %v1775 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1904 = stablehlo.add %v1902, %v1903 : tensor<64x2048x5x5xf32>
+    %v1905 = stablehlo.reshape %v1904 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
     %v1906 = stablehlo.reshape %v1647 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v1907 = stablehlo.reshape %v1893 : (tensor<64x12800xf32>) -> tensor<64x512x5x5xf32>
     %v1908 = stablehlo.transpose %v1906, dims = [1, 0, 2, 3] : (tensor<64x2048x5x5xf32>) -> tensor<2048x64x5x5xf32>
@@ -2187,12 +2187,12 @@ module @m {
     %v1993 = stablehlo.reshape %v1775 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v1994 = stablehlo.constant dense<0.0> : tensor<f32>
     %v1995 = stablehlo.reduce(%v1993 init: %v1994) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x2048x5x5xf32>, tensor<f32>) -> tensor<2048xf32>
-    %v1996 = stablehlo.reshape %v1905 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1997 = stablehlo.reshape %v1643 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v1998 = stablehlo.constant dense<0.0> : tensor<64x128x20x20xf32>
-    %v1999 = stablehlo.compare GT, %v1997, %v1998 : (tensor<64x128x20x20xf32>, tensor<64x128x20x20xf32>) -> tensor<64x128x20x20xi1>
-    %v2000 = stablehlo.select %v1999, %v1996, %v1998 : tensor<64x128x20x20xi1>, tensor<64x128x20x20xf32>
-    %v2001 = stablehlo.reshape %v2000 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v1996 = stablehlo.reshape %v1905 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1997 = stablehlo.reshape %v1643 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v1998 = stablehlo.constant dense<0.0> : tensor<64x2048x5x5xf32>
+    %v1999 = stablehlo.compare GT, %v1997, %v1998 : (tensor<64x2048x5x5xf32>, tensor<64x2048x5x5xf32>) -> tensor<64x2048x5x5xi1>
+    %v2000 = stablehlo.select %v1999, %v1996, %v1998 : tensor<64x2048x5x5xi1>, tensor<64x2048x5x5xf32>
+    %v2001 = stablehlo.reshape %v2000 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
     %v2002 = stablehlo.reshape %v1619 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v2003 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2004 = stablehlo.constant dense<1600.0> : tensor<64x2048x5x5xf32>
@@ -2328,10 +2328,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x512x5x5xbf16>, tensor<2048x512x1x1xbf16>) -> tensor<64x2048x5x5xbf16>
     %v2126 = stablehlo.convert %v2125 : (tensor<64x2048x5x5xbf16>) -> tensor<64x2048x5x5xf32>
     %v2127 = stablehlo.reshape %v2126 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
-    %v2128 = stablehlo.reshape %v2127 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v2129 = stablehlo.reshape %v2001 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v2130 = stablehlo.add %v2128, %v2129 : tensor<64x128x20x20xf32>
-    %v2131 = stablehlo.reshape %v2130 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v2128 = stablehlo.reshape %v2127 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v2129 = stablehlo.reshape %v2001 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v2130 = stablehlo.add %v2128, %v2129 : tensor<64x2048x5x5xf32>
+    %v2131 = stablehlo.reshape %v2130 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
     %v2132 = stablehlo.reshape %v1547 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v2133 = stablehlo.reshape %v2119 : (tensor<64x12800xf32>) -> tensor<64x512x5x5xf32>
     %v2134 = stablehlo.transpose %v2132, dims = [1, 0, 2, 3] : (tensor<64x2048x5x5xf32>) -> tensor<2048x64x5x5xf32>
@@ -2431,12 +2431,12 @@ module @m {
     %v2219 = stablehlo.reshape %v2001 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v2220 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2221 = stablehlo.reduce(%v2219 init: %v2220) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x2048x5x5xf32>, tensor<f32>) -> tensor<2048xf32>
-    %v2222 = stablehlo.reshape %v2131 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v2223 = stablehlo.reshape %v1543 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v2224 = stablehlo.constant dense<0.0> : tensor<64x128x20x20xf32>
-    %v2225 = stablehlo.compare GT, %v2223, %v2224 : (tensor<64x128x20x20xf32>, tensor<64x128x20x20xf32>) -> tensor<64x128x20x20xi1>
-    %v2226 = stablehlo.select %v2225, %v2222, %v2224 : tensor<64x128x20x20xi1>, tensor<64x128x20x20xf32>
-    %v2227 = stablehlo.reshape %v2226 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v2222 = stablehlo.reshape %v2131 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v2223 = stablehlo.reshape %v1543 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
+    %v2224 = stablehlo.constant dense<0.0> : tensor<64x2048x5x5xf32>
+    %v2225 = stablehlo.compare GT, %v2223, %v2224 : (tensor<64x2048x5x5xf32>, tensor<64x2048x5x5xf32>) -> tensor<64x2048x5x5xi1>
+    %v2226 = stablehlo.select %v2225, %v2222, %v2224 : tensor<64x2048x5x5xi1>, tensor<64x2048x5x5xf32>
+    %v2227 = stablehlo.reshape %v2226 : (tensor<64x2048x5x5xf32>) -> tensor<64x51200xf32>
     %v2228 = stablehlo.reshape %v1491 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v2229 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2230 = stablehlo.constant dense<1600.0> : tensor<64x2048x5x5xf32>
@@ -2527,12 +2527,12 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x512x10x10xbf16>, tensor<512x512x3x3xbf16>) -> tensor<64x512x10x10xbf16>
     %v2310 = stablehlo.convert %v2309 : (tensor<64x512x10x10xbf16>) -> tensor<64x512x10x10xf32>
     %v2311 = stablehlo.reshape %v2310 : (tensor<64x512x10x10xf32>) -> tensor<64x51200xf32>
-    %v2312 = stablehlo.reshape %v2311 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v2313 = stablehlo.reshape %v1447 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
-    %v2314 = stablehlo.constant dense<0.0> : tensor<64x128x20x20xf32>
-    %v2315 = stablehlo.compare GT, %v2313, %v2314 : (tensor<64x128x20x20xf32>, tensor<64x128x20x20xf32>) -> tensor<64x128x20x20xi1>
-    %v2316 = stablehlo.select %v2315, %v2312, %v2314 : tensor<64x128x20x20xi1>, tensor<64x128x20x20xf32>
-    %v2317 = stablehlo.reshape %v2316 : (tensor<64x128x20x20xf32>) -> tensor<64x51200xf32>
+    %v2312 = stablehlo.reshape %v2311 : (tensor<64x51200xf32>) -> tensor<64x512x10x10xf32>
+    %v2313 = stablehlo.reshape %v1447 : (tensor<64x51200xf32>) -> tensor<64x512x10x10xf32>
+    %v2314 = stablehlo.constant dense<0.0> : tensor<64x512x10x10xf32>
+    %v2315 = stablehlo.compare GT, %v2313, %v2314 : (tensor<64x512x10x10xf32>, tensor<64x512x10x10xf32>) -> tensor<64x512x10x10xi1>
+    %v2316 = stablehlo.select %v2315, %v2312, %v2314 : tensor<64x512x10x10xi1>, tensor<64x512x10x10xf32>
+    %v2317 = stablehlo.reshape %v2316 : (tensor<64x512x10x10xf32>) -> tensor<64x51200xf32>
     %v2318 = stablehlo.reshape %v1427 : (tensor<64x51200xf32>) -> tensor<64x512x10x10xf32>
     %v2319 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2320 = stablehlo.constant dense<6400.0> : tensor<64x512x10x10xf32>
@@ -2617,10 +2617,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x2048x10x10xbf16>, tensor<1024x2048x1x1xbf16>) -> tensor<64x1024x10x10xbf16>
     %v2394 = stablehlo.convert %v2393 : (tensor<64x1024x10x10xbf16>) -> tensor<64x1024x10x10xf32>
     %v2395 = stablehlo.reshape %v2394 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v2396 = stablehlo.reshape %v2355 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2397 = stablehlo.reshape %v2395 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2398 = stablehlo.add %v2396, %v2397 : tensor<64x64x40x40xf32>
-    %v2399 = stablehlo.reshape %v2398 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v2396 = stablehlo.reshape %v2355 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2397 = stablehlo.reshape %v2395 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2398 = stablehlo.add %v2396, %v2397 : tensor<64x1024x10x10xf32>
+    %v2399 = stablehlo.reshape %v2398 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v2400 = stablehlo.reshape %v1419 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v2401 = stablehlo.reshape %v2347 : (tensor<64x51200xf32>) -> tensor<64x512x10x10xf32>
     %v2402 = stablehlo.transpose %v2400, dims = [1, 0, 2, 3] : (tensor<64x1024x10x10xf32>) -> tensor<1024x64x10x10xf32>
@@ -2757,12 +2757,12 @@ module @m {
     %v2521 = stablehlo.reshape %v2227 : (tensor<64x51200xf32>) -> tensor<64x2048x5x5xf32>
     %v2522 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2523 = stablehlo.reduce(%v2521 init: %v2522) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x2048x5x5xf32>, tensor<f32>) -> tensor<2048xf32>
-    %v2524 = stablehlo.reshape %v2399 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2525 = stablehlo.reshape %v1415 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2526 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v2527 = stablehlo.compare GT, %v2525, %v2526 : (tensor<64x64x40x40xf32>, tensor<64x64x40x40xf32>) -> tensor<64x64x40x40xi1>
-    %v2528 = stablehlo.select %v2527, %v2524, %v2526 : tensor<64x64x40x40xi1>, tensor<64x64x40x40xf32>
-    %v2529 = stablehlo.reshape %v2528 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v2524 = stablehlo.reshape %v2399 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2525 = stablehlo.reshape %v1415 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2526 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v2527 = stablehlo.compare GT, %v2525, %v2526 : (tensor<64x1024x10x10xf32>, tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xi1>
+    %v2528 = stablehlo.select %v2527, %v2524, %v2526 : tensor<64x1024x10x10xi1>, tensor<64x1024x10x10xf32>
+    %v2529 = stablehlo.reshape %v2528 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v2530 = stablehlo.reshape %v1391 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v2531 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2532 = stablehlo.constant dense<6400.0> : tensor<64x1024x10x10xf32>
@@ -2898,10 +2898,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x256x10x10xbf16>, tensor<1024x256x1x1xbf16>) -> tensor<64x1024x10x10xbf16>
     %v2654 = stablehlo.convert %v2653 : (tensor<64x1024x10x10xbf16>) -> tensor<64x1024x10x10xf32>
     %v2655 = stablehlo.reshape %v2654 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v2656 = stablehlo.reshape %v2655 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2657 = stablehlo.reshape %v2529 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2658 = stablehlo.add %v2656, %v2657 : tensor<64x64x40x40xf32>
-    %v2659 = stablehlo.reshape %v2658 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v2656 = stablehlo.reshape %v2655 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2657 = stablehlo.reshape %v2529 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2658 = stablehlo.add %v2656, %v2657 : tensor<64x1024x10x10xf32>
+    %v2659 = stablehlo.reshape %v2658 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v2660 = stablehlo.reshape %v1319 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v2661 = stablehlo.reshape %v2647 : (tensor<64x25600xf32>) -> tensor<64x256x10x10xf32>
     %v2662 = stablehlo.transpose %v2660, dims = [1, 0, 2, 3] : (tensor<64x1024x10x10xf32>) -> tensor<1024x64x10x10xf32>
@@ -3001,12 +3001,12 @@ module @m {
     %v2747 = stablehlo.reshape %v2529 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v2748 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2749 = stablehlo.reduce(%v2747 init: %v2748) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x1024x10x10xf32>, tensor<f32>) -> tensor<1024xf32>
-    %v2750 = stablehlo.reshape %v2659 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2751 = stablehlo.reshape %v1315 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2752 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v2753 = stablehlo.compare GT, %v2751, %v2752 : (tensor<64x64x40x40xf32>, tensor<64x64x40x40xf32>) -> tensor<64x64x40x40xi1>
-    %v2754 = stablehlo.select %v2753, %v2750, %v2752 : tensor<64x64x40x40xi1>, tensor<64x64x40x40xf32>
-    %v2755 = stablehlo.reshape %v2754 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v2750 = stablehlo.reshape %v2659 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2751 = stablehlo.reshape %v1315 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2752 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v2753 = stablehlo.compare GT, %v2751, %v2752 : (tensor<64x1024x10x10xf32>, tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xi1>
+    %v2754 = stablehlo.select %v2753, %v2750, %v2752 : tensor<64x1024x10x10xi1>, tensor<64x1024x10x10xf32>
+    %v2755 = stablehlo.reshape %v2754 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v2756 = stablehlo.reshape %v1291 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v2757 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2758 = stablehlo.constant dense<6400.0> : tensor<64x1024x10x10xf32>
@@ -3142,10 +3142,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x256x10x10xbf16>, tensor<1024x256x1x1xbf16>) -> tensor<64x1024x10x10xbf16>
     %v2880 = stablehlo.convert %v2879 : (tensor<64x1024x10x10xbf16>) -> tensor<64x1024x10x10xf32>
     %v2881 = stablehlo.reshape %v2880 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v2882 = stablehlo.reshape %v2881 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2883 = stablehlo.reshape %v2755 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2884 = stablehlo.add %v2882, %v2883 : tensor<64x64x40x40xf32>
-    %v2885 = stablehlo.reshape %v2884 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v2882 = stablehlo.reshape %v2881 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2883 = stablehlo.reshape %v2755 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2884 = stablehlo.add %v2882, %v2883 : tensor<64x1024x10x10xf32>
+    %v2885 = stablehlo.reshape %v2884 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v2886 = stablehlo.reshape %v1219 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v2887 = stablehlo.reshape %v2873 : (tensor<64x25600xf32>) -> tensor<64x256x10x10xf32>
     %v2888 = stablehlo.transpose %v2886, dims = [1, 0, 2, 3] : (tensor<64x1024x10x10xf32>) -> tensor<1024x64x10x10xf32>
@@ -3245,12 +3245,12 @@ module @m {
     %v2973 = stablehlo.reshape %v2755 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v2974 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2975 = stablehlo.reduce(%v2973 init: %v2974) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x1024x10x10xf32>, tensor<f32>) -> tensor<1024xf32>
-    %v2976 = stablehlo.reshape %v2885 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2977 = stablehlo.reshape %v1215 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v2978 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v2979 = stablehlo.compare GT, %v2977, %v2978 : (tensor<64x64x40x40xf32>, tensor<64x64x40x40xf32>) -> tensor<64x64x40x40xi1>
-    %v2980 = stablehlo.select %v2979, %v2976, %v2978 : tensor<64x64x40x40xi1>, tensor<64x64x40x40xf32>
-    %v2981 = stablehlo.reshape %v2980 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v2976 = stablehlo.reshape %v2885 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2977 = stablehlo.reshape %v1215 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v2978 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v2979 = stablehlo.compare GT, %v2977, %v2978 : (tensor<64x1024x10x10xf32>, tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xi1>
+    %v2980 = stablehlo.select %v2979, %v2976, %v2978 : tensor<64x1024x10x10xi1>, tensor<64x1024x10x10xf32>
+    %v2981 = stablehlo.reshape %v2980 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v2982 = stablehlo.reshape %v1191 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v2983 = stablehlo.constant dense<0.0> : tensor<f32>
     %v2984 = stablehlo.constant dense<6400.0> : tensor<64x1024x10x10xf32>
@@ -3386,10 +3386,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x256x10x10xbf16>, tensor<1024x256x1x1xbf16>) -> tensor<64x1024x10x10xbf16>
     %v3106 = stablehlo.convert %v3105 : (tensor<64x1024x10x10xbf16>) -> tensor<64x1024x10x10xf32>
     %v3107 = stablehlo.reshape %v3106 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v3108 = stablehlo.reshape %v3107 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3109 = stablehlo.reshape %v2981 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3110 = stablehlo.add %v3108, %v3109 : tensor<64x64x40x40xf32>
-    %v3111 = stablehlo.reshape %v3110 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v3108 = stablehlo.reshape %v3107 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3109 = stablehlo.reshape %v2981 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3110 = stablehlo.add %v3108, %v3109 : tensor<64x1024x10x10xf32>
+    %v3111 = stablehlo.reshape %v3110 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v3112 = stablehlo.reshape %v1119 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3113 = stablehlo.reshape %v3099 : (tensor<64x25600xf32>) -> tensor<64x256x10x10xf32>
     %v3114 = stablehlo.transpose %v3112, dims = [1, 0, 2, 3] : (tensor<64x1024x10x10xf32>) -> tensor<1024x64x10x10xf32>
@@ -3489,12 +3489,12 @@ module @m {
     %v3199 = stablehlo.reshape %v2981 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3200 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3201 = stablehlo.reduce(%v3199 init: %v3200) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x1024x10x10xf32>, tensor<f32>) -> tensor<1024xf32>
-    %v3202 = stablehlo.reshape %v3111 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3203 = stablehlo.reshape %v1115 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3204 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v3205 = stablehlo.compare GT, %v3203, %v3204 : (tensor<64x64x40x40xf32>, tensor<64x64x40x40xf32>) -> tensor<64x64x40x40xi1>
-    %v3206 = stablehlo.select %v3205, %v3202, %v3204 : tensor<64x64x40x40xi1>, tensor<64x64x40x40xf32>
-    %v3207 = stablehlo.reshape %v3206 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v3202 = stablehlo.reshape %v3111 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3203 = stablehlo.reshape %v1115 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3204 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v3205 = stablehlo.compare GT, %v3203, %v3204 : (tensor<64x1024x10x10xf32>, tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xi1>
+    %v3206 = stablehlo.select %v3205, %v3202, %v3204 : tensor<64x1024x10x10xi1>, tensor<64x1024x10x10xf32>
+    %v3207 = stablehlo.reshape %v3206 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v3208 = stablehlo.reshape %v1091 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3209 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3210 = stablehlo.constant dense<6400.0> : tensor<64x1024x10x10xf32>
@@ -3630,10 +3630,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x256x10x10xbf16>, tensor<1024x256x1x1xbf16>) -> tensor<64x1024x10x10xbf16>
     %v3332 = stablehlo.convert %v3331 : (tensor<64x1024x10x10xbf16>) -> tensor<64x1024x10x10xf32>
     %v3333 = stablehlo.reshape %v3332 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v3334 = stablehlo.reshape %v3333 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3335 = stablehlo.reshape %v3207 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3336 = stablehlo.add %v3334, %v3335 : tensor<64x64x40x40xf32>
-    %v3337 = stablehlo.reshape %v3336 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v3334 = stablehlo.reshape %v3333 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3335 = stablehlo.reshape %v3207 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3336 = stablehlo.add %v3334, %v3335 : tensor<64x1024x10x10xf32>
+    %v3337 = stablehlo.reshape %v3336 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v3338 = stablehlo.reshape %v1019 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3339 = stablehlo.reshape %v3325 : (tensor<64x25600xf32>) -> tensor<64x256x10x10xf32>
     %v3340 = stablehlo.transpose %v3338, dims = [1, 0, 2, 3] : (tensor<64x1024x10x10xf32>) -> tensor<1024x64x10x10xf32>
@@ -3733,12 +3733,12 @@ module @m {
     %v3425 = stablehlo.reshape %v3207 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3426 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3427 = stablehlo.reduce(%v3425 init: %v3426) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x1024x10x10xf32>, tensor<f32>) -> tensor<1024xf32>
-    %v3428 = stablehlo.reshape %v3337 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3429 = stablehlo.reshape %v1015 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3430 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v3431 = stablehlo.compare GT, %v3429, %v3430 : (tensor<64x64x40x40xf32>, tensor<64x64x40x40xf32>) -> tensor<64x64x40x40xi1>
-    %v3432 = stablehlo.select %v3431, %v3428, %v3430 : tensor<64x64x40x40xi1>, tensor<64x64x40x40xf32>
-    %v3433 = stablehlo.reshape %v3432 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v3428 = stablehlo.reshape %v3337 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3429 = stablehlo.reshape %v1015 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3430 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v3431 = stablehlo.compare GT, %v3429, %v3430 : (tensor<64x1024x10x10xf32>, tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xi1>
+    %v3432 = stablehlo.select %v3431, %v3428, %v3430 : tensor<64x1024x10x10xi1>, tensor<64x1024x10x10xf32>
+    %v3433 = stablehlo.reshape %v3432 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v3434 = stablehlo.reshape %v991 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3435 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3436 = stablehlo.constant dense<6400.0> : tensor<64x1024x10x10xf32>
@@ -3874,10 +3874,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x256x10x10xbf16>, tensor<1024x256x1x1xbf16>) -> tensor<64x1024x10x10xbf16>
     %v3558 = stablehlo.convert %v3557 : (tensor<64x1024x10x10xbf16>) -> tensor<64x1024x10x10xf32>
     %v3559 = stablehlo.reshape %v3558 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
-    %v3560 = stablehlo.reshape %v3559 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3561 = stablehlo.reshape %v3433 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3562 = stablehlo.add %v3560, %v3561 : tensor<64x64x40x40xf32>
-    %v3563 = stablehlo.reshape %v3562 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v3560 = stablehlo.reshape %v3559 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3561 = stablehlo.reshape %v3433 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3562 = stablehlo.add %v3560, %v3561 : tensor<64x1024x10x10xf32>
+    %v3563 = stablehlo.reshape %v3562 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v3564 = stablehlo.reshape %v919 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3565 = stablehlo.reshape %v3551 : (tensor<64x25600xf32>) -> tensor<64x256x10x10xf32>
     %v3566 = stablehlo.transpose %v3564, dims = [1, 0, 2, 3] : (tensor<64x1024x10x10xf32>) -> tensor<1024x64x10x10xf32>
@@ -3977,12 +3977,12 @@ module @m {
     %v3651 = stablehlo.reshape %v3433 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3652 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3653 = stablehlo.reduce(%v3651 init: %v3652) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x1024x10x10xf32>, tensor<f32>) -> tensor<1024xf32>
-    %v3654 = stablehlo.reshape %v3563 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3655 = stablehlo.reshape %v915 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3656 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v3657 = stablehlo.compare GT, %v3655, %v3656 : (tensor<64x64x40x40xf32>, tensor<64x64x40x40xf32>) -> tensor<64x64x40x40xi1>
-    %v3658 = stablehlo.select %v3657, %v3654, %v3656 : tensor<64x64x40x40xi1>, tensor<64x64x40x40xf32>
-    %v3659 = stablehlo.reshape %v3658 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v3654 = stablehlo.reshape %v3563 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3655 = stablehlo.reshape %v915 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
+    %v3656 = stablehlo.constant dense<0.0> : tensor<64x1024x10x10xf32>
+    %v3657 = stablehlo.compare GT, %v3655, %v3656 : (tensor<64x1024x10x10xf32>, tensor<64x1024x10x10xf32>) -> tensor<64x1024x10x10xi1>
+    %v3658 = stablehlo.select %v3657, %v3654, %v3656 : tensor<64x1024x10x10xi1>, tensor<64x1024x10x10xf32>
+    %v3659 = stablehlo.reshape %v3658 : (tensor<64x1024x10x10xf32>) -> tensor<64x102400xf32>
     %v3660 = stablehlo.reshape %v863 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3661 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3662 = stablehlo.constant dense<6400.0> : tensor<64x1024x10x10xf32>
@@ -4073,12 +4073,12 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x256x20x20xbf16>, tensor<256x256x3x3xbf16>) -> tensor<64x256x20x20xbf16>
     %v3742 = stablehlo.convert %v3741 : (tensor<64x256x20x20xbf16>) -> tensor<64x256x20x20xf32>
     %v3743 = stablehlo.reshape %v3742 : (tensor<64x256x20x20xf32>) -> tensor<64x102400xf32>
-    %v3744 = stablehlo.reshape %v3743 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3745 = stablehlo.reshape %v819 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
-    %v3746 = stablehlo.constant dense<0.0> : tensor<64x64x40x40xf32>
-    %v3747 = stablehlo.compare GT, %v3745, %v3746 : (tensor<64x64x40x40xf32>, tensor<64x64x40x40xf32>) -> tensor<64x64x40x40xi1>
-    %v3748 = stablehlo.select %v3747, %v3744, %v3746 : tensor<64x64x40x40xi1>, tensor<64x64x40x40xf32>
-    %v3749 = stablehlo.reshape %v3748 : (tensor<64x64x40x40xf32>) -> tensor<64x102400xf32>
+    %v3744 = stablehlo.reshape %v3743 : (tensor<64x102400xf32>) -> tensor<64x256x20x20xf32>
+    %v3745 = stablehlo.reshape %v819 : (tensor<64x102400xf32>) -> tensor<64x256x20x20xf32>
+    %v3746 = stablehlo.constant dense<0.0> : tensor<64x256x20x20xf32>
+    %v3747 = stablehlo.compare GT, %v3745, %v3746 : (tensor<64x256x20x20xf32>, tensor<64x256x20x20xf32>) -> tensor<64x256x20x20xi1>
+    %v3748 = stablehlo.select %v3747, %v3744, %v3746 : tensor<64x256x20x20xi1>, tensor<64x256x20x20xf32>
+    %v3749 = stablehlo.reshape %v3748 : (tensor<64x256x20x20xf32>) -> tensor<64x102400xf32>
     %v3750 = stablehlo.reshape %v799 : (tensor<64x102400xf32>) -> tensor<64x256x20x20xf32>
     %v3751 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3752 = stablehlo.constant dense<25600.0> : tensor<64x256x20x20xf32>
@@ -4163,10 +4163,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x1024x20x20xbf16>, tensor<512x1024x1x1xbf16>) -> tensor<64x512x20x20xbf16>
     %v3826 = stablehlo.convert %v3825 : (tensor<64x512x20x20xbf16>) -> tensor<64x512x20x20xf32>
     %v3827 = stablehlo.reshape %v3826 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
-    %v3828 = stablehlo.reshape %v3787 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v3829 = stablehlo.reshape %v3827 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v3830 = stablehlo.add %v3828, %v3829 : tensor<64x128x40x40xf32>
-    %v3831 = stablehlo.reshape %v3830 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v3828 = stablehlo.reshape %v3787 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v3829 = stablehlo.reshape %v3827 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v3830 = stablehlo.add %v3828, %v3829 : tensor<64x512x20x20xf32>
+    %v3831 = stablehlo.reshape %v3830 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v3832 = stablehlo.reshape %v791 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v3833 = stablehlo.reshape %v3779 : (tensor<64x102400xf32>) -> tensor<64x256x20x20xf32>
     %v3834 = stablehlo.transpose %v3832, dims = [1, 0, 2, 3] : (tensor<64x512x20x20xf32>) -> tensor<512x64x20x20xf32>
@@ -4303,12 +4303,12 @@ module @m {
     %v3953 = stablehlo.reshape %v3659 : (tensor<64x102400xf32>) -> tensor<64x1024x10x10xf32>
     %v3954 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3955 = stablehlo.reduce(%v3953 init: %v3954) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x1024x10x10xf32>, tensor<f32>) -> tensor<1024xf32>
-    %v3956 = stablehlo.reshape %v3831 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v3957 = stablehlo.reshape %v787 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v3958 = stablehlo.constant dense<0.0> : tensor<64x128x40x40xf32>
-    %v3959 = stablehlo.compare GT, %v3957, %v3958 : (tensor<64x128x40x40xf32>, tensor<64x128x40x40xf32>) -> tensor<64x128x40x40xi1>
-    %v3960 = stablehlo.select %v3959, %v3956, %v3958 : tensor<64x128x40x40xi1>, tensor<64x128x40x40xf32>
-    %v3961 = stablehlo.reshape %v3960 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v3956 = stablehlo.reshape %v3831 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v3957 = stablehlo.reshape %v787 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v3958 = stablehlo.constant dense<0.0> : tensor<64x512x20x20xf32>
+    %v3959 = stablehlo.compare GT, %v3957, %v3958 : (tensor<64x512x20x20xf32>, tensor<64x512x20x20xf32>) -> tensor<64x512x20x20xi1>
+    %v3960 = stablehlo.select %v3959, %v3956, %v3958 : tensor<64x512x20x20xi1>, tensor<64x512x20x20xf32>
+    %v3961 = stablehlo.reshape %v3960 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v3962 = stablehlo.reshape %v763 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v3963 = stablehlo.constant dense<0.0> : tensor<f32>
     %v3964 = stablehlo.constant dense<25600.0> : tensor<64x512x20x20xf32>
@@ -4444,10 +4444,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x128x20x20xbf16>, tensor<512x128x1x1xbf16>) -> tensor<64x512x20x20xbf16>
     %v4086 = stablehlo.convert %v4085 : (tensor<64x512x20x20xbf16>) -> tensor<64x512x20x20xf32>
     %v4087 = stablehlo.reshape %v4086 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
-    %v4088 = stablehlo.reshape %v4087 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4089 = stablehlo.reshape %v3961 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4090 = stablehlo.add %v4088, %v4089 : tensor<64x128x40x40xf32>
-    %v4091 = stablehlo.reshape %v4090 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v4088 = stablehlo.reshape %v4087 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4089 = stablehlo.reshape %v3961 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4090 = stablehlo.add %v4088, %v4089 : tensor<64x512x20x20xf32>
+    %v4091 = stablehlo.reshape %v4090 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v4092 = stablehlo.reshape %v691 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4093 = stablehlo.reshape %v4079 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
     %v4094 = stablehlo.transpose %v4092, dims = [1, 0, 2, 3] : (tensor<64x512x20x20xf32>) -> tensor<512x64x20x20xf32>
@@ -4547,12 +4547,12 @@ module @m {
     %v4179 = stablehlo.reshape %v3961 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4180 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4181 = stablehlo.reduce(%v4179 init: %v4180) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x512x20x20xf32>, tensor<f32>) -> tensor<512xf32>
-    %v4182 = stablehlo.reshape %v4091 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4183 = stablehlo.reshape %v687 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4184 = stablehlo.constant dense<0.0> : tensor<64x128x40x40xf32>
-    %v4185 = stablehlo.compare GT, %v4183, %v4184 : (tensor<64x128x40x40xf32>, tensor<64x128x40x40xf32>) -> tensor<64x128x40x40xi1>
-    %v4186 = stablehlo.select %v4185, %v4182, %v4184 : tensor<64x128x40x40xi1>, tensor<64x128x40x40xf32>
-    %v4187 = stablehlo.reshape %v4186 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v4182 = stablehlo.reshape %v4091 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4183 = stablehlo.reshape %v687 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4184 = stablehlo.constant dense<0.0> : tensor<64x512x20x20xf32>
+    %v4185 = stablehlo.compare GT, %v4183, %v4184 : (tensor<64x512x20x20xf32>, tensor<64x512x20x20xf32>) -> tensor<64x512x20x20xi1>
+    %v4186 = stablehlo.select %v4185, %v4182, %v4184 : tensor<64x512x20x20xi1>, tensor<64x512x20x20xf32>
+    %v4187 = stablehlo.reshape %v4186 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v4188 = stablehlo.reshape %v663 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4189 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4190 = stablehlo.constant dense<25600.0> : tensor<64x512x20x20xf32>
@@ -4688,10 +4688,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x128x20x20xbf16>, tensor<512x128x1x1xbf16>) -> tensor<64x512x20x20xbf16>
     %v4312 = stablehlo.convert %v4311 : (tensor<64x512x20x20xbf16>) -> tensor<64x512x20x20xf32>
     %v4313 = stablehlo.reshape %v4312 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
-    %v4314 = stablehlo.reshape %v4313 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4315 = stablehlo.reshape %v4187 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4316 = stablehlo.add %v4314, %v4315 : tensor<64x128x40x40xf32>
-    %v4317 = stablehlo.reshape %v4316 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v4314 = stablehlo.reshape %v4313 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4315 = stablehlo.reshape %v4187 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4316 = stablehlo.add %v4314, %v4315 : tensor<64x512x20x20xf32>
+    %v4317 = stablehlo.reshape %v4316 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v4318 = stablehlo.reshape %v591 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4319 = stablehlo.reshape %v4305 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
     %v4320 = stablehlo.transpose %v4318, dims = [1, 0, 2, 3] : (tensor<64x512x20x20xf32>) -> tensor<512x64x20x20xf32>
@@ -4791,12 +4791,12 @@ module @m {
     %v4405 = stablehlo.reshape %v4187 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4406 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4407 = stablehlo.reduce(%v4405 init: %v4406) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x512x20x20xf32>, tensor<f32>) -> tensor<512xf32>
-    %v4408 = stablehlo.reshape %v4317 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4409 = stablehlo.reshape %v587 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4410 = stablehlo.constant dense<0.0> : tensor<64x128x40x40xf32>
-    %v4411 = stablehlo.compare GT, %v4409, %v4410 : (tensor<64x128x40x40xf32>, tensor<64x128x40x40xf32>) -> tensor<64x128x40x40xi1>
-    %v4412 = stablehlo.select %v4411, %v4408, %v4410 : tensor<64x128x40x40xi1>, tensor<64x128x40x40xf32>
-    %v4413 = stablehlo.reshape %v4412 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v4408 = stablehlo.reshape %v4317 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4409 = stablehlo.reshape %v587 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4410 = stablehlo.constant dense<0.0> : tensor<64x512x20x20xf32>
+    %v4411 = stablehlo.compare GT, %v4409, %v4410 : (tensor<64x512x20x20xf32>, tensor<64x512x20x20xf32>) -> tensor<64x512x20x20xi1>
+    %v4412 = stablehlo.select %v4411, %v4408, %v4410 : tensor<64x512x20x20xi1>, tensor<64x512x20x20xf32>
+    %v4413 = stablehlo.reshape %v4412 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v4414 = stablehlo.reshape %v563 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4415 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4416 = stablehlo.constant dense<25600.0> : tensor<64x512x20x20xf32>
@@ -4932,10 +4932,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x128x20x20xbf16>, tensor<512x128x1x1xbf16>) -> tensor<64x512x20x20xbf16>
     %v4538 = stablehlo.convert %v4537 : (tensor<64x512x20x20xbf16>) -> tensor<64x512x20x20xf32>
     %v4539 = stablehlo.reshape %v4538 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
-    %v4540 = stablehlo.reshape %v4539 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4541 = stablehlo.reshape %v4413 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4542 = stablehlo.add %v4540, %v4541 : tensor<64x128x40x40xf32>
-    %v4543 = stablehlo.reshape %v4542 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v4540 = stablehlo.reshape %v4539 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4541 = stablehlo.reshape %v4413 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4542 = stablehlo.add %v4540, %v4541 : tensor<64x512x20x20xf32>
+    %v4543 = stablehlo.reshape %v4542 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v4544 = stablehlo.reshape %v491 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4545 = stablehlo.reshape %v4531 : (tensor<64x51200xf32>) -> tensor<64x128x20x20xf32>
     %v4546 = stablehlo.transpose %v4544, dims = [1, 0, 2, 3] : (tensor<64x512x20x20xf32>) -> tensor<512x64x20x20xf32>
@@ -5035,12 +5035,12 @@ module @m {
     %v4631 = stablehlo.reshape %v4413 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4632 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4633 = stablehlo.reduce(%v4631 init: %v4632) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x512x20x20xf32>, tensor<f32>) -> tensor<512xf32>
-    %v4634 = stablehlo.reshape %v4543 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4635 = stablehlo.reshape %v487 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
-    %v4636 = stablehlo.constant dense<0.0> : tensor<64x128x40x40xf32>
-    %v4637 = stablehlo.compare GT, %v4635, %v4636 : (tensor<64x128x40x40xf32>, tensor<64x128x40x40xf32>) -> tensor<64x128x40x40xi1>
-    %v4638 = stablehlo.select %v4637, %v4634, %v4636 : tensor<64x128x40x40xi1>, tensor<64x128x40x40xf32>
-    %v4639 = stablehlo.reshape %v4638 : (tensor<64x128x40x40xf32>) -> tensor<64x204800xf32>
+    %v4634 = stablehlo.reshape %v4543 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4635 = stablehlo.reshape %v487 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
+    %v4636 = stablehlo.constant dense<0.0> : tensor<64x512x20x20xf32>
+    %v4637 = stablehlo.compare GT, %v4635, %v4636 : (tensor<64x512x20x20xf32>, tensor<64x512x20x20xf32>) -> tensor<64x512x20x20xi1>
+    %v4638 = stablehlo.select %v4637, %v4634, %v4636 : tensor<64x512x20x20xi1>, tensor<64x512x20x20xf32>
+    %v4639 = stablehlo.reshape %v4638 : (tensor<64x512x20x20xf32>) -> tensor<64x204800xf32>
     %v4640 = stablehlo.reshape %v435 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4641 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4642 = stablehlo.constant dense<25600.0> : tensor<64x512x20x20xf32>
@@ -5221,10 +5221,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x512x40x40xbf16>, tensor<256x512x1x1xbf16>) -> tensor<64x256x40x40xbf16>
     %v4806 = stablehlo.convert %v4805 : (tensor<64x256x40x40xbf16>) -> tensor<64x256x40x40xf32>
     %v4807 = stablehlo.reshape %v4806 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
-    %v4808 = stablehlo.reshape %v4767 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v4809 = stablehlo.reshape %v4807 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v4810 = stablehlo.add %v4808, %v4809 : tensor<64x64x80x80xf32>
-    %v4811 = stablehlo.reshape %v4810 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v4808 = stablehlo.reshape %v4767 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v4809 = stablehlo.reshape %v4807 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v4810 = stablehlo.add %v4808, %v4809 : tensor<64x256x40x40xf32>
+    %v4811 = stablehlo.reshape %v4810 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v4812 = stablehlo.reshape %v363 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v4813 = stablehlo.reshape %v4759 : (tensor<64x204800xf32>) -> tensor<64x128x40x40xf32>
     %v4814 = stablehlo.transpose %v4812, dims = [1, 0, 2, 3] : (tensor<64x256x40x40xf32>) -> tensor<256x64x40x40xf32>
@@ -5361,12 +5361,12 @@ module @m {
     %v4933 = stablehlo.reshape %v4639 : (tensor<64x204800xf32>) -> tensor<64x512x20x20xf32>
     %v4934 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4935 = stablehlo.reduce(%v4933 init: %v4934) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x512x20x20xf32>, tensor<f32>) -> tensor<512xf32>
-    %v4936 = stablehlo.reshape %v4811 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v4937 = stablehlo.reshape %v359 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v4938 = stablehlo.constant dense<0.0> : tensor<64x64x80x80xf32>
-    %v4939 = stablehlo.compare GT, %v4937, %v4938 : (tensor<64x64x80x80xf32>, tensor<64x64x80x80xf32>) -> tensor<64x64x80x80xi1>
-    %v4940 = stablehlo.select %v4939, %v4936, %v4938 : tensor<64x64x80x80xi1>, tensor<64x64x80x80xf32>
-    %v4941 = stablehlo.reshape %v4940 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v4936 = stablehlo.reshape %v4811 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v4937 = stablehlo.reshape %v359 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v4938 = stablehlo.constant dense<0.0> : tensor<64x256x40x40xf32>
+    %v4939 = stablehlo.compare GT, %v4937, %v4938 : (tensor<64x256x40x40xf32>, tensor<64x256x40x40xf32>) -> tensor<64x256x40x40xi1>
+    %v4940 = stablehlo.select %v4939, %v4936, %v4938 : tensor<64x256x40x40xi1>, tensor<64x256x40x40xf32>
+    %v4941 = stablehlo.reshape %v4940 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v4942 = stablehlo.reshape %v335 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v4943 = stablehlo.constant dense<0.0> : tensor<f32>
     %v4944 = stablehlo.constant dense<102400.0> : tensor<64x256x40x40xf32>
@@ -5502,10 +5502,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x64x40x40xbf16>, tensor<256x64x1x1xbf16>) -> tensor<64x256x40x40xbf16>
     %v5066 = stablehlo.convert %v5065 : (tensor<64x256x40x40xbf16>) -> tensor<64x256x40x40xf32>
     %v5067 = stablehlo.reshape %v5066 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
-    %v5068 = stablehlo.reshape %v5067 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v5069 = stablehlo.reshape %v4941 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v5070 = stablehlo.add %v5068, %v5069 : tensor<64x64x80x80xf32>
-    %v5071 = stablehlo.reshape %v5070 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v5068 = stablehlo.reshape %v5067 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v5069 = stablehlo.reshape %v4941 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v5070 = stablehlo.add %v5068, %v5069 : tensor<64x256x40x40xf32>
+    %v5071 = stablehlo.reshape %v5070 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v5072 = stablehlo.reshape %v263 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v5073 = stablehlo.reshape %v5059 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
     %v5074 = stablehlo.transpose %v5072, dims = [1, 0, 2, 3] : (tensor<64x256x40x40xf32>) -> tensor<256x64x40x40xf32>
@@ -5605,12 +5605,12 @@ module @m {
     %v5159 = stablehlo.reshape %v4941 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v5160 = stablehlo.constant dense<0.0> : tensor<f32>
     %v5161 = stablehlo.reduce(%v5159 init: %v5160) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x256x40x40xf32>, tensor<f32>) -> tensor<256xf32>
-    %v5162 = stablehlo.reshape %v5071 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v5163 = stablehlo.reshape %v259 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v5164 = stablehlo.constant dense<0.0> : tensor<64x64x80x80xf32>
-    %v5165 = stablehlo.compare GT, %v5163, %v5164 : (tensor<64x64x80x80xf32>, tensor<64x64x80x80xf32>) -> tensor<64x64x80x80xi1>
-    %v5166 = stablehlo.select %v5165, %v5162, %v5164 : tensor<64x64x80x80xi1>, tensor<64x64x80x80xf32>
-    %v5167 = stablehlo.reshape %v5166 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v5162 = stablehlo.reshape %v5071 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v5163 = stablehlo.reshape %v259 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v5164 = stablehlo.constant dense<0.0> : tensor<64x256x40x40xf32>
+    %v5165 = stablehlo.compare GT, %v5163, %v5164 : (tensor<64x256x40x40xf32>, tensor<64x256x40x40xf32>) -> tensor<64x256x40x40xi1>
+    %v5166 = stablehlo.select %v5165, %v5162, %v5164 : tensor<64x256x40x40xi1>, tensor<64x256x40x40xf32>
+    %v5167 = stablehlo.reshape %v5166 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v5168 = stablehlo.reshape %v235 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v5169 = stablehlo.constant dense<0.0> : tensor<f32>
     %v5170 = stablehlo.constant dense<102400.0> : tensor<64x256x40x40xf32>
@@ -5746,10 +5746,10 @@ module @m {
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<64x64x40x40xbf16>, tensor<256x64x1x1xbf16>) -> tensor<64x256x40x40xbf16>
     %v5292 = stablehlo.convert %v5291 : (tensor<64x256x40x40xbf16>) -> tensor<64x256x40x40xf32>
     %v5293 = stablehlo.reshape %v5292 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
-    %v5294 = stablehlo.reshape %v5293 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v5295 = stablehlo.reshape %v5167 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v5296 = stablehlo.add %v5294, %v5295 : tensor<64x64x80x80xf32>
-    %v5297 = stablehlo.reshape %v5296 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v5294 = stablehlo.reshape %v5293 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v5295 = stablehlo.reshape %v5167 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v5296 = stablehlo.add %v5294, %v5295 : tensor<64x256x40x40xf32>
+    %v5297 = stablehlo.reshape %v5296 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v5298 = stablehlo.reshape %v163 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v5299 = stablehlo.reshape %v5285 : (tensor<64x102400xf32>) -> tensor<64x64x40x40xf32>
     %v5300 = stablehlo.transpose %v5298, dims = [1, 0, 2, 3] : (tensor<64x256x40x40xf32>) -> tensor<256x64x40x40xf32>
@@ -5849,12 +5849,12 @@ module @m {
     %v5385 = stablehlo.reshape %v5167 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v5386 = stablehlo.constant dense<0.0> : tensor<f32>
     %v5387 = stablehlo.reduce(%v5385 init: %v5386) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<64x256x40x40xf32>, tensor<f32>) -> tensor<256xf32>
-    %v5388 = stablehlo.reshape %v5297 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v5389 = stablehlo.reshape %v159 : (tensor<64x409600xf32>) -> tensor<64x64x80x80xf32>
-    %v5390 = stablehlo.constant dense<0.0> : tensor<64x64x80x80xf32>
-    %v5391 = stablehlo.compare GT, %v5389, %v5390 : (tensor<64x64x80x80xf32>, tensor<64x64x80x80xf32>) -> tensor<64x64x80x80xi1>
-    %v5392 = stablehlo.select %v5391, %v5388, %v5390 : tensor<64x64x80x80xi1>, tensor<64x64x80x80xf32>
-    %v5393 = stablehlo.reshape %v5392 : (tensor<64x64x80x80xf32>) -> tensor<64x409600xf32>
+    %v5388 = stablehlo.reshape %v5297 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v5389 = stablehlo.reshape %v159 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
+    %v5390 = stablehlo.constant dense<0.0> : tensor<64x256x40x40xf32>
+    %v5391 = stablehlo.compare GT, %v5389, %v5390 : (tensor<64x256x40x40xf32>, tensor<64x256x40x40xf32>) -> tensor<64x256x40x40xi1>
+    %v5392 = stablehlo.select %v5391, %v5388, %v5390 : tensor<64x256x40x40xi1>, tensor<64x256x40x40xf32>
+    %v5393 = stablehlo.reshape %v5392 : (tensor<64x256x40x40xf32>) -> tensor<64x409600xf32>
     %v5394 = stablehlo.reshape %v107 : (tensor<64x409600xf32>) -> tensor<64x256x40x40xf32>
     %v5395 = stablehlo.constant dense<0.0> : tensor<f32>
     %v5396 = stablehlo.constant dense<102400.0> : tensor<64x256x40x40xf32>

@@ -440,12 +440,22 @@ fi
 # ── the certified renders (#eval fires during `lake build`) ──
 if [ "$WHAT" = "all" ] || [ "$WHAT" = "proofs" ]; then
   echo "── Proofs/Codegen (pretty(provenGraph)) ──"
+  # ⚠⚠ THE LIST MUST BE EVERY MODULE WITH A LITERAL WRITER, not every module you remember.
+  # `lake build X` elaborates X and its DEPENDENCIES; a sibling renderer is neither. The four
+  # `*RenderB` writers below were missing, so `regen … proofs` returned green having left every
+  # ImageNet ResNet-34/50, MobileNetV2/V4 artifact at the previous renderer's bytes — 65 of the
+  # 113 an emitter change actually touched (found 2026-08-29). Cross-check with:
+  #   grep -rl 'IO.FS.writeFile "verified_mlir/' --include='*.lean' LeanMlir/Proofs/Codegen/
   for m in \
     LeanMlir.Proofs.Codegen.StableHLO \
     LeanMlir.Proofs.Codegen.MlpRender \
     LeanMlir.Proofs.Codegen.CnnRender \
     LeanMlir.Proofs.Codegen.ResNet34Render \
+    LeanMlir.Proofs.Codegen.ResNet34RenderB \
+    LeanMlir.Proofs.Codegen.ResNet50RenderB \
     LeanMlir.Proofs.Codegen.MobileNetV2Render \
+    LeanMlir.Proofs.Codegen.MobileNetV2RenderB \
+    LeanMlir.Proofs.Codegen.MobileNetV4RenderB \
     LeanMlir.Proofs.Codegen.EfficientNetRender \
     LeanMlir.Proofs.Codegen.ConvNeXtRender \
     LeanMlir.Proofs.Codegen.ConvNeXtRenderB \

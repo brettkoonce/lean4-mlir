@@ -9,142 +9,158 @@ module @m {
     %v2 = stablehlo.broadcast_in_dim %b1, dims = [1] : (tensor<16xf32>) -> tensor<128x16x32x32xf32>
     %v3 = stablehlo.add %v1, %v2 : tensor<128x16x32x32xf32>
     %v4 = stablehlo.reshape %v3 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
-    %v5 = stablehlo.constant dense<0.0> : tensor<128x16384xf32>
-    %v6 = stablehlo.maximum %v4, %v5 : tensor<128x16384xf32>
-    %v7 = stablehlo.reshape %v6 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v8 = stablehlo.convolution(%v7, %W2)
+    %v5 = stablehlo.reshape %v4 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v6 = stablehlo.constant dense<0.0> : tensor<128x16x32x32xf32>
+    %v7 = stablehlo.maximum %v5, %v6 : tensor<128x16x32x32xf32>
+    %v8 = stablehlo.reshape %v7 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
+    %v9 = stablehlo.reshape %v8 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v10 = stablehlo.convolution(%v9, %W2)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x16x32x32xf32>, tensor<16x16x3x3xf32>) -> tensor<128x16x32x32xf32>
-    %v9 = stablehlo.broadcast_in_dim %b2, dims = [1] : (tensor<16xf32>) -> tensor<128x16x32x32xf32>
-    %v10 = stablehlo.add %v8, %v9 : tensor<128x16x32x32xf32>
-    %v11 = stablehlo.reshape %v10 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
-    %v12 = stablehlo.constant dense<0.0> : tensor<128x16384xf32>
-    %v13 = stablehlo.maximum %v11, %v12 : tensor<128x16384xf32>
+    %v11 = stablehlo.broadcast_in_dim %b2, dims = [1] : (tensor<16xf32>) -> tensor<128x16x32x32xf32>
+    %v12 = stablehlo.add %v10, %v11 : tensor<128x16x32x32xf32>
+    %v13 = stablehlo.reshape %v12 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
     %v14 = stablehlo.reshape %v13 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v15 = stablehlo.constant dense<0xFF800000> : tensor<f32>
-    %v16 = "stablehlo.reduce_window"(%v14, %v15) ({
+    %v15 = stablehlo.constant dense<0.0> : tensor<128x16x32x32xf32>
+    %v16 = stablehlo.maximum %v14, %v15 : tensor<128x16x32x32xf32>
+    %v17 = stablehlo.reshape %v16 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
+    %v18 = stablehlo.reshape %v17 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v19 = stablehlo.constant dense<0xFF800000> : tensor<f32>
+    %v20 = "stablehlo.reduce_window"(%v18, %v19) ({
       ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):
         %pm = stablehlo.maximum %pa, %pb : tensor<f32>
         stablehlo.return %pm : tensor<f32>
     }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<128x16x32x32xf32>, tensor<f32>) -> tensor<128x16x16x16xf32>
-    %v17 = stablehlo.reshape %v16 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
-    %v18 = stablehlo.reshape %v17 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v19 = stablehlo.convolution(%v18, %W3)
+    %v21 = stablehlo.reshape %v20 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v22 = stablehlo.reshape %v21 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v23 = stablehlo.convolution(%v22, %W3)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x16x16x16xf32>, tensor<16x16x3x3xf32>) -> tensor<128x16x16x16xf32>
-    %v20 = stablehlo.broadcast_in_dim %b3, dims = [1] : (tensor<16xf32>) -> tensor<128x16x16x16xf32>
-    %v21 = stablehlo.add %v19, %v20 : tensor<128x16x16x16xf32>
-    %v22 = stablehlo.reshape %v21 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
-    %v23 = stablehlo.constant dense<0.0> : tensor<128x4096xf32>
-    %v24 = stablehlo.maximum %v22, %v23 : tensor<128x4096xf32>
-    %v25 = stablehlo.reshape %v24 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v26 = stablehlo.convolution(%v25, %W4)
+    %v24 = stablehlo.broadcast_in_dim %b3, dims = [1] : (tensor<16xf32>) -> tensor<128x16x16x16xf32>
+    %v25 = stablehlo.add %v23, %v24 : tensor<128x16x16x16xf32>
+    %v26 = stablehlo.reshape %v25 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v27 = stablehlo.reshape %v26 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v28 = stablehlo.constant dense<0.0> : tensor<128x16x16x16xf32>
+    %v29 = stablehlo.maximum %v27, %v28 : tensor<128x16x16x16xf32>
+    %v30 = stablehlo.reshape %v29 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v31 = stablehlo.reshape %v30 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v32 = stablehlo.convolution(%v31, %W4)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x16x16x16xf32>, tensor<16x16x3x3xf32>) -> tensor<128x16x16x16xf32>
-    %v27 = stablehlo.broadcast_in_dim %b4, dims = [1] : (tensor<16xf32>) -> tensor<128x16x16x16xf32>
-    %v28 = stablehlo.add %v26, %v27 : tensor<128x16x16x16xf32>
-    %v29 = stablehlo.reshape %v28 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
-    %v30 = stablehlo.constant dense<0.0> : tensor<128x4096xf32>
-    %v31 = stablehlo.maximum %v29, %v30 : tensor<128x4096xf32>
-    %v32 = stablehlo.reshape %v31 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v33 = stablehlo.constant dense<0xFF800000> : tensor<f32>
-    %v34 = "stablehlo.reduce_window"(%v32, %v33) ({
+    %v33 = stablehlo.broadcast_in_dim %b4, dims = [1] : (tensor<16xf32>) -> tensor<128x16x16x16xf32>
+    %v34 = stablehlo.add %v32, %v33 : tensor<128x16x16x16xf32>
+    %v35 = stablehlo.reshape %v34 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v36 = stablehlo.reshape %v35 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v37 = stablehlo.constant dense<0.0> : tensor<128x16x16x16xf32>
+    %v38 = stablehlo.maximum %v36, %v37 : tensor<128x16x16x16xf32>
+    %v39 = stablehlo.reshape %v38 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v40 = stablehlo.reshape %v39 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v41 = stablehlo.constant dense<0xFF800000> : tensor<f32>
+    %v42 = "stablehlo.reduce_window"(%v40, %v41) ({
       ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):
         %pm = stablehlo.maximum %pa, %pb : tensor<f32>
         stablehlo.return %pm : tensor<f32>
     }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<128x16x16x16xf32>, tensor<f32>) -> tensor<128x16x8x8xf32>
-    %v35 = stablehlo.reshape %v34 : (tensor<128x16x8x8xf32>) -> tensor<128x1024xf32>
-    %v36 = stablehlo.reshape %v35 : (tensor<128x1024xf32>) -> tensor<128x16x8x8xf32>
-    %v37 = stablehlo.convolution(%v36, %W5)
+    %v43 = stablehlo.reshape %v42 : (tensor<128x16x8x8xf32>) -> tensor<128x1024xf32>
+    %v44 = stablehlo.reshape %v43 : (tensor<128x1024xf32>) -> tensor<128x16x8x8xf32>
+    %v45 = stablehlo.convolution(%v44, %W5)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x16x8x8xf32>, tensor<32x16x3x3xf32>) -> tensor<128x32x8x8xf32>
-    %v38 = stablehlo.broadcast_in_dim %b5, dims = [1] : (tensor<32xf32>) -> tensor<128x32x8x8xf32>
-    %v39 = stablehlo.add %v37, %v38 : tensor<128x32x8x8xf32>
-    %v40 = stablehlo.reshape %v39 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
-    %v41 = stablehlo.constant dense<0.0> : tensor<128x2048xf32>
-    %v42 = stablehlo.maximum %v40, %v41 : tensor<128x2048xf32>
-    %v43 = stablehlo.reshape %v42 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v44 = stablehlo.convolution(%v43, %W6)
+    %v46 = stablehlo.broadcast_in_dim %b5, dims = [1] : (tensor<32xf32>) -> tensor<128x32x8x8xf32>
+    %v47 = stablehlo.add %v45, %v46 : tensor<128x32x8x8xf32>
+    %v48 = stablehlo.reshape %v47 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
+    %v49 = stablehlo.reshape %v48 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v50 = stablehlo.constant dense<0.0> : tensor<128x32x8x8xf32>
+    %v51 = stablehlo.maximum %v49, %v50 : tensor<128x32x8x8xf32>
+    %v52 = stablehlo.reshape %v51 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
+    %v53 = stablehlo.reshape %v52 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v54 = stablehlo.convolution(%v53, %W6)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x8x8xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x8x8xf32>
-    %v45 = stablehlo.broadcast_in_dim %b6, dims = [1] : (tensor<32xf32>) -> tensor<128x32x8x8xf32>
-    %v46 = stablehlo.add %v44, %v45 : tensor<128x32x8x8xf32>
-    %v47 = stablehlo.reshape %v46 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
-    %v48 = stablehlo.constant dense<0.0> : tensor<128x2048xf32>
-    %v49 = stablehlo.maximum %v47, %v48 : tensor<128x2048xf32>
-    %v50 = stablehlo.reshape %v49 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v51 = stablehlo.constant dense<0xFF800000> : tensor<f32>
-    %v52 = "stablehlo.reduce_window"(%v50, %v51) ({
+    %v55 = stablehlo.broadcast_in_dim %b6, dims = [1] : (tensor<32xf32>) -> tensor<128x32x8x8xf32>
+    %v56 = stablehlo.add %v54, %v55 : tensor<128x32x8x8xf32>
+    %v57 = stablehlo.reshape %v56 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
+    %v58 = stablehlo.reshape %v57 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v59 = stablehlo.constant dense<0.0> : tensor<128x32x8x8xf32>
+    %v60 = stablehlo.maximum %v58, %v59 : tensor<128x32x8x8xf32>
+    %v61 = stablehlo.reshape %v60 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
+    %v62 = stablehlo.reshape %v61 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v63 = stablehlo.constant dense<0xFF800000> : tensor<f32>
+    %v64 = "stablehlo.reduce_window"(%v62, %v63) ({
       ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):
         %pm = stablehlo.maximum %pa, %pb : tensor<f32>
         stablehlo.return %pm : tensor<f32>
     }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<128x32x8x8xf32>, tensor<f32>) -> tensor<128x32x4x4xf32>
-    %v53 = stablehlo.reshape %v52 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
-    %v54 = stablehlo.reshape %v53 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v55 = stablehlo.convolution(%v54, %W7)
-      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
-      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
-      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x4x4xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x4x4xf32>
-    %v56 = stablehlo.broadcast_in_dim %b7, dims = [1] : (tensor<32xf32>) -> tensor<128x32x4x4xf32>
-    %v57 = stablehlo.add %v55, %v56 : tensor<128x32x4x4xf32>
-    %v58 = stablehlo.reshape %v57 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
-    %v59 = stablehlo.constant dense<0.0> : tensor<128x512xf32>
-    %v60 = stablehlo.maximum %v58, %v59 : tensor<128x512xf32>
-    %v61 = stablehlo.reshape %v60 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v62 = stablehlo.convolution(%v61, %W8)
-      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
-      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
-      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x4x4xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x4x4xf32>
-    %v63 = stablehlo.broadcast_in_dim %b8, dims = [1] : (tensor<32xf32>) -> tensor<128x32x4x4xf32>
-    %v64 = stablehlo.add %v62, %v63 : tensor<128x32x4x4xf32>
     %v65 = stablehlo.reshape %v64 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
-    %v66 = stablehlo.constant dense<0.0> : tensor<128x512xf32>
-    %v67 = stablehlo.maximum %v65, %v66 : tensor<128x512xf32>
-    %v68 = stablehlo.reshape %v67 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v69 = stablehlo.constant dense<0xFF800000> : tensor<f32>
-    %v70 = "stablehlo.reduce_window"(%v68, %v69) ({
+    %v66 = stablehlo.reshape %v65 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v67 = stablehlo.convolution(%v66, %W7)
+      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
+      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
+      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x4x4xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x4x4xf32>
+    %v68 = stablehlo.broadcast_in_dim %b7, dims = [1] : (tensor<32xf32>) -> tensor<128x32x4x4xf32>
+    %v69 = stablehlo.add %v67, %v68 : tensor<128x32x4x4xf32>
+    %v70 = stablehlo.reshape %v69 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
+    %v71 = stablehlo.reshape %v70 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v72 = stablehlo.constant dense<0.0> : tensor<128x32x4x4xf32>
+    %v73 = stablehlo.maximum %v71, %v72 : tensor<128x32x4x4xf32>
+    %v74 = stablehlo.reshape %v73 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
+    %v75 = stablehlo.reshape %v74 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v76 = stablehlo.convolution(%v75, %W8)
+      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
+      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
+      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x4x4xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x4x4xf32>
+    %v77 = stablehlo.broadcast_in_dim %b8, dims = [1] : (tensor<32xf32>) -> tensor<128x32x4x4xf32>
+    %v78 = stablehlo.add %v76, %v77 : tensor<128x32x4x4xf32>
+    %v79 = stablehlo.reshape %v78 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
+    %v80 = stablehlo.reshape %v79 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v81 = stablehlo.constant dense<0.0> : tensor<128x32x4x4xf32>
+    %v82 = stablehlo.maximum %v80, %v81 : tensor<128x32x4x4xf32>
+    %v83 = stablehlo.reshape %v82 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
+    %v84 = stablehlo.reshape %v83 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v85 = stablehlo.constant dense<0xFF800000> : tensor<f32>
+    %v86 = "stablehlo.reduce_window"(%v84, %v85) ({
       ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):
         %pm = stablehlo.maximum %pa, %pb : tensor<f32>
         stablehlo.return %pm : tensor<f32>
     }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<128x32x4x4xf32>, tensor<f32>) -> tensor<128x32x2x2xf32>
-    %v71 = stablehlo.reshape %v70 : (tensor<128x32x2x2xf32>) -> tensor<128x128xf32>
-    %v72 = stablehlo.dot_general %v71, %W9, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x128xf32>, tensor<128x64xf32>) -> tensor<128x64xf32>
-    %v73 = stablehlo.broadcast_in_dim %b9, dims = [1] : (tensor<64xf32>) -> tensor<128x64xf32>
-    %v74 = stablehlo.add %v72, %v73 : tensor<128x64xf32>
-    %v75 = stablehlo.constant dense<0.0> : tensor<128x64xf32>
-    %v76 = stablehlo.maximum %v74, %v75 : tensor<128x64xf32>
-    %v77 = stablehlo.dot_general %v76, %Wa, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<64x64xf32>) -> tensor<128x64xf32>
-    %v78 = stablehlo.broadcast_in_dim %ba, dims = [1] : (tensor<64xf32>) -> tensor<128x64xf32>
-    %v79 = stablehlo.add %v77, %v78 : tensor<128x64xf32>
-    %v80 = stablehlo.constant dense<0.0> : tensor<128x64xf32>
-    %v81 = stablehlo.maximum %v79, %v80 : tensor<128x64xf32>
-    %v82 = stablehlo.dot_general %v81, %Wb, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<64x10xf32>) -> tensor<128x10xf32>
-    %v83 = stablehlo.broadcast_in_dim %bb, dims = [1] : (tensor<10xf32>) -> tensor<128x10xf32>
-    %v84 = stablehlo.add %v82, %v83 : tensor<128x10xf32>
-    %v85 = stablehlo.exponential %v84 : tensor<128x10xf32>
-    %v86 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v87 = stablehlo.reduce(%v85 init: %v86) applies stablehlo.add across dimensions = [1] : (tensor<128x10xf32>, tensor<f32>) -> tensor<128xf32>
-    %v88 = stablehlo.broadcast_in_dim %v87, dims = [0] : (tensor<128xf32>) -> tensor<128x10xf32>
-    %v89 = stablehlo.divide %v85, %v88 : tensor<128x10xf32>
-    %v90 = stablehlo.subtract %v89, %onehot : tensor<128x10xf32>
-    %v91 = stablehlo.dot_general %v90, %Wb, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : (tensor<128x10xf32>, tensor<64x10xf32>) -> tensor<128x64xf32>
-    %v92 = stablehlo.constant dense<0.0> : tensor<128x64xf32>
-    %v93 = stablehlo.compare GT, %v79, %v92 : (tensor<128x64xf32>, tensor<128x64xf32>) -> tensor<128x64xi1>
-    %v94 = stablehlo.select %v93, %v91, %v92 : tensor<128x64xi1>, tensor<128x64xf32>
-    %v95 = stablehlo.dot_general %v94, %Wa, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<64x64xf32>) -> tensor<128x64xf32>
+    %v87 = stablehlo.reshape %v86 : (tensor<128x32x2x2xf32>) -> tensor<128x128xf32>
+    %v88 = stablehlo.dot_general %v87, %W9, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x128xf32>, tensor<128x64xf32>) -> tensor<128x64xf32>
+    %v89 = stablehlo.broadcast_in_dim %b9, dims = [1] : (tensor<64xf32>) -> tensor<128x64xf32>
+    %v90 = stablehlo.add %v88, %v89 : tensor<128x64xf32>
+    %v91 = stablehlo.constant dense<0.0> : tensor<128x64xf32>
+    %v92 = stablehlo.maximum %v90, %v91 : tensor<128x64xf32>
+    %v93 = stablehlo.dot_general %v92, %Wa, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<64x64xf32>) -> tensor<128x64xf32>
+    %v94 = stablehlo.broadcast_in_dim %ba, dims = [1] : (tensor<64xf32>) -> tensor<128x64xf32>
+    %v95 = stablehlo.add %v93, %v94 : tensor<128x64xf32>
     %v96 = stablehlo.constant dense<0.0> : tensor<128x64xf32>
-    %v97 = stablehlo.compare GT, %v74, %v96 : (tensor<128x64xf32>, tensor<128x64xf32>) -> tensor<128x64xi1>
-    %v98 = stablehlo.select %v97, %v95, %v96 : tensor<128x64xi1>, tensor<128x64xf32>
-    %v99 = stablehlo.dot_general %v98, %W9, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<128x64xf32>) -> tensor<128x128xf32>
-    %v100 = stablehlo.reshape %v67 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v101 = stablehlo.reshape %v99 : (tensor<128x128xf32>) -> tensor<128x32x2x2xf32>
+    %v97 = stablehlo.maximum %v95, %v96 : tensor<128x64xf32>
+    %v98 = stablehlo.dot_general %v97, %Wb, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<64x10xf32>) -> tensor<128x10xf32>
+    %v99 = stablehlo.broadcast_in_dim %bb, dims = [1] : (tensor<10xf32>) -> tensor<128x10xf32>
+    %v100 = stablehlo.add %v98, %v99 : tensor<128x10xf32>
+    %v101 = stablehlo.exponential %v100 : tensor<128x10xf32>
     %v102 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v103 = "stablehlo.select_and_scatter"(%v100, %v101, %v102) ({
+    %v103 = stablehlo.reduce(%v101 init: %v102) applies stablehlo.add across dimensions = [1] : (tensor<128x10xf32>, tensor<f32>) -> tensor<128xf32>
+    %v104 = stablehlo.broadcast_in_dim %v103, dims = [0] : (tensor<128xf32>) -> tensor<128x10xf32>
+    %v105 = stablehlo.divide %v101, %v104 : tensor<128x10xf32>
+    %v106 = stablehlo.subtract %v105, %onehot : tensor<128x10xf32>
+    %v107 = stablehlo.dot_general %v106, %Wb, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : (tensor<128x10xf32>, tensor<64x10xf32>) -> tensor<128x64xf32>
+    %v108 = stablehlo.constant dense<0.0> : tensor<128x64xf32>
+    %v109 = stablehlo.compare GT, %v95, %v108 : (tensor<128x64xf32>, tensor<128x64xf32>) -> tensor<128x64xi1>
+    %v110 = stablehlo.select %v109, %v107, %v108 : tensor<128x64xi1>, tensor<128x64xf32>
+    %v111 = stablehlo.dot_general %v110, %Wa, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<64x64xf32>) -> tensor<128x64xf32>
+    %v112 = stablehlo.constant dense<0.0> : tensor<128x64xf32>
+    %v113 = stablehlo.compare GT, %v90, %v112 : (tensor<128x64xf32>, tensor<128x64xf32>) -> tensor<128x64xi1>
+    %v114 = stablehlo.select %v113, %v111, %v112 : tensor<128x64xi1>, tensor<128x64xf32>
+    %v115 = stablehlo.dot_general %v114, %W9, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<128x64xf32>) -> tensor<128x128xf32>
+    %v116 = stablehlo.reshape %v83 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v117 = stablehlo.reshape %v115 : (tensor<128x128xf32>) -> tensor<128x32x2x2xf32>
+    %v118 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v119 = "stablehlo.select_and_scatter"(%v116, %v117, %v118) ({
       ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):
         %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>
         stablehlo.return %sge : tensor<i1>
@@ -153,33 +169,39 @@ module @m {
         %ss = stablehlo.add %sc, %sd : tensor<f32>
         stablehlo.return %ss : tensor<f32>
     }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<128x32x4x4xf32>, tensor<128x32x2x2xf32>, tensor<f32>) -> tensor<128x32x4x4xf32>
-    %v104 = stablehlo.reshape %v103 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
-    %v105 = stablehlo.constant dense<0.0> : tensor<128x512xf32>
-    %v106 = stablehlo.compare GT, %v65, %v105 : (tensor<128x512xf32>, tensor<128x512xf32>) -> tensor<128x512xi1>
-    %v107 = stablehlo.select %v106, %v104, %v105 : tensor<128x512xi1>, tensor<128x512xf32>
-    %v108 = stablehlo.reshape %v107 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v109 = stablehlo.transpose %W8, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
-    %v110 = stablehlo.reverse %v109, dims = [2, 3] : tensor<32x32x3x3xf32>
-    %v111 = stablehlo.convolution(%v108, %v110)
-      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
-      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
-      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x4x4xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x4x4xf32>
-    %v112 = stablehlo.reshape %v111 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
-    %v113 = stablehlo.constant dense<0.0> : tensor<128x512xf32>
-    %v114 = stablehlo.compare GT, %v58, %v113 : (tensor<128x512xf32>, tensor<128x512xf32>) -> tensor<128x512xi1>
-    %v115 = stablehlo.select %v114, %v112, %v113 : tensor<128x512xi1>, tensor<128x512xf32>
-    %v116 = stablehlo.reshape %v115 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v117 = stablehlo.transpose %W7, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
-    %v118 = stablehlo.reverse %v117, dims = [2, 3] : tensor<32x32x3x3xf32>
-    %v119 = stablehlo.convolution(%v116, %v118)
-      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
-      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
-      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x4x4xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x4x4xf32>
     %v120 = stablehlo.reshape %v119 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
-    %v121 = stablehlo.reshape %v49 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v122 = stablehlo.reshape %v120 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v123 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v124 = "stablehlo.select_and_scatter"(%v121, %v122, %v123) ({
+    %v121 = stablehlo.reshape %v120 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v122 = stablehlo.reshape %v79 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v123 = stablehlo.constant dense<0.0> : tensor<128x32x4x4xf32>
+    %v124 = stablehlo.compare GT, %v122, %v123 : (tensor<128x32x4x4xf32>, tensor<128x32x4x4xf32>) -> tensor<128x32x4x4xi1>
+    %v125 = stablehlo.select %v124, %v121, %v123 : tensor<128x32x4x4xi1>, tensor<128x32x4x4xf32>
+    %v126 = stablehlo.reshape %v125 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
+    %v127 = stablehlo.reshape %v126 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v128 = stablehlo.transpose %W8, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
+    %v129 = stablehlo.reverse %v128, dims = [2, 3] : tensor<32x32x3x3xf32>
+    %v130 = stablehlo.convolution(%v127, %v129)
+      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
+      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
+      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x4x4xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x4x4xf32>
+    %v131 = stablehlo.reshape %v130 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
+    %v132 = stablehlo.reshape %v131 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v133 = stablehlo.reshape %v70 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v134 = stablehlo.constant dense<0.0> : tensor<128x32x4x4xf32>
+    %v135 = stablehlo.compare GT, %v133, %v134 : (tensor<128x32x4x4xf32>, tensor<128x32x4x4xf32>) -> tensor<128x32x4x4xi1>
+    %v136 = stablehlo.select %v135, %v132, %v134 : tensor<128x32x4x4xi1>, tensor<128x32x4x4xf32>
+    %v137 = stablehlo.reshape %v136 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
+    %v138 = stablehlo.reshape %v137 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v139 = stablehlo.transpose %W7, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
+    %v140 = stablehlo.reverse %v139, dims = [2, 3] : tensor<32x32x3x3xf32>
+    %v141 = stablehlo.convolution(%v138, %v140)
+      dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
+      window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
+      {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x4x4xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x4x4xf32>
+    %v142 = stablehlo.reshape %v141 : (tensor<128x32x4x4xf32>) -> tensor<128x512xf32>
+    %v143 = stablehlo.reshape %v61 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v144 = stablehlo.reshape %v142 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v145 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v146 = "stablehlo.select_and_scatter"(%v143, %v144, %v145) ({
       ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):
         %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>
         stablehlo.return %sge : tensor<i1>
@@ -188,33 +210,39 @@ module @m {
         %ss = stablehlo.add %sc, %sd : tensor<f32>
         stablehlo.return %ss : tensor<f32>
     }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<128x32x8x8xf32>, tensor<128x32x4x4xf32>, tensor<f32>) -> tensor<128x32x8x8xf32>
-    %v125 = stablehlo.reshape %v124 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
-    %v126 = stablehlo.constant dense<0.0> : tensor<128x2048xf32>
-    %v127 = stablehlo.compare GT, %v47, %v126 : (tensor<128x2048xf32>, tensor<128x2048xf32>) -> tensor<128x2048xi1>
-    %v128 = stablehlo.select %v127, %v125, %v126 : tensor<128x2048xi1>, tensor<128x2048xf32>
-    %v129 = stablehlo.reshape %v128 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v130 = stablehlo.transpose %W6, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
-    %v131 = stablehlo.reverse %v130, dims = [2, 3] : tensor<32x32x3x3xf32>
-    %v132 = stablehlo.convolution(%v129, %v131)
+    %v147 = stablehlo.reshape %v146 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
+    %v148 = stablehlo.reshape %v147 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v149 = stablehlo.reshape %v57 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v150 = stablehlo.constant dense<0.0> : tensor<128x32x8x8xf32>
+    %v151 = stablehlo.compare GT, %v149, %v150 : (tensor<128x32x8x8xf32>, tensor<128x32x8x8xf32>) -> tensor<128x32x8x8xi1>
+    %v152 = stablehlo.select %v151, %v148, %v150 : tensor<128x32x8x8xi1>, tensor<128x32x8x8xf32>
+    %v153 = stablehlo.reshape %v152 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
+    %v154 = stablehlo.reshape %v153 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v155 = stablehlo.transpose %W6, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
+    %v156 = stablehlo.reverse %v155, dims = [2, 3] : tensor<32x32x3x3xf32>
+    %v157 = stablehlo.convolution(%v154, %v156)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x8x8xf32>, tensor<32x32x3x3xf32>) -> tensor<128x32x8x8xf32>
-    %v133 = stablehlo.reshape %v132 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
-    %v134 = stablehlo.constant dense<0.0> : tensor<128x2048xf32>
-    %v135 = stablehlo.compare GT, %v40, %v134 : (tensor<128x2048xf32>, tensor<128x2048xf32>) -> tensor<128x2048xi1>
-    %v136 = stablehlo.select %v135, %v133, %v134 : tensor<128x2048xi1>, tensor<128x2048xf32>
-    %v137 = stablehlo.reshape %v136 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v138 = stablehlo.transpose %W5, dims = [1, 0, 2, 3] : (tensor<32x16x3x3xf32>) -> tensor<16x32x3x3xf32>
-    %v139 = stablehlo.reverse %v138, dims = [2, 3] : tensor<16x32x3x3xf32>
-    %v140 = stablehlo.convolution(%v137, %v139)
+    %v158 = stablehlo.reshape %v157 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
+    %v159 = stablehlo.reshape %v158 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v160 = stablehlo.reshape %v48 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v161 = stablehlo.constant dense<0.0> : tensor<128x32x8x8xf32>
+    %v162 = stablehlo.compare GT, %v160, %v161 : (tensor<128x32x8x8xf32>, tensor<128x32x8x8xf32>) -> tensor<128x32x8x8xi1>
+    %v163 = stablehlo.select %v162, %v159, %v161 : tensor<128x32x8x8xi1>, tensor<128x32x8x8xf32>
+    %v164 = stablehlo.reshape %v163 : (tensor<128x32x8x8xf32>) -> tensor<128x2048xf32>
+    %v165 = stablehlo.reshape %v164 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v166 = stablehlo.transpose %W5, dims = [1, 0, 2, 3] : (tensor<32x16x3x3xf32>) -> tensor<16x32x3x3xf32>
+    %v167 = stablehlo.reverse %v166, dims = [2, 3] : tensor<16x32x3x3xf32>
+    %v168 = stablehlo.convolution(%v165, %v167)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x32x8x8xf32>, tensor<16x32x3x3xf32>) -> tensor<128x16x8x8xf32>
-    %v141 = stablehlo.reshape %v140 : (tensor<128x16x8x8xf32>) -> tensor<128x1024xf32>
-    %v142 = stablehlo.reshape %v31 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v143 = stablehlo.reshape %v141 : (tensor<128x1024xf32>) -> tensor<128x16x8x8xf32>
-    %v144 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v145 = "stablehlo.select_and_scatter"(%v142, %v143, %v144) ({
+    %v169 = stablehlo.reshape %v168 : (tensor<128x16x8x8xf32>) -> tensor<128x1024xf32>
+    %v170 = stablehlo.reshape %v39 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v171 = stablehlo.reshape %v169 : (tensor<128x1024xf32>) -> tensor<128x16x8x8xf32>
+    %v172 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v173 = "stablehlo.select_and_scatter"(%v170, %v171, %v172) ({
       ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):
         %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>
         stablehlo.return %sge : tensor<i1>
@@ -223,33 +251,39 @@ module @m {
         %ss = stablehlo.add %sc, %sd : tensor<f32>
         stablehlo.return %ss : tensor<f32>
     }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<128x16x16x16xf32>, tensor<128x16x8x8xf32>, tensor<f32>) -> tensor<128x16x16x16xf32>
-    %v146 = stablehlo.reshape %v145 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
-    %v147 = stablehlo.constant dense<0.0> : tensor<128x4096xf32>
-    %v148 = stablehlo.compare GT, %v29, %v147 : (tensor<128x4096xf32>, tensor<128x4096xf32>) -> tensor<128x4096xi1>
-    %v149 = stablehlo.select %v148, %v146, %v147 : tensor<128x4096xi1>, tensor<128x4096xf32>
-    %v150 = stablehlo.reshape %v149 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v151 = stablehlo.transpose %W4, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
-    %v152 = stablehlo.reverse %v151, dims = [2, 3] : tensor<16x16x3x3xf32>
-    %v153 = stablehlo.convolution(%v150, %v152)
+    %v174 = stablehlo.reshape %v173 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v175 = stablehlo.reshape %v174 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v176 = stablehlo.reshape %v35 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v177 = stablehlo.constant dense<0.0> : tensor<128x16x16x16xf32>
+    %v178 = stablehlo.compare GT, %v176, %v177 : (tensor<128x16x16x16xf32>, tensor<128x16x16x16xf32>) -> tensor<128x16x16x16xi1>
+    %v179 = stablehlo.select %v178, %v175, %v177 : tensor<128x16x16x16xi1>, tensor<128x16x16x16xf32>
+    %v180 = stablehlo.reshape %v179 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v181 = stablehlo.reshape %v180 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v182 = stablehlo.transpose %W4, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
+    %v183 = stablehlo.reverse %v182, dims = [2, 3] : tensor<16x16x3x3xf32>
+    %v184 = stablehlo.convolution(%v181, %v183)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x16x16x16xf32>, tensor<16x16x3x3xf32>) -> tensor<128x16x16x16xf32>
-    %v154 = stablehlo.reshape %v153 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
-    %v155 = stablehlo.constant dense<0.0> : tensor<128x4096xf32>
-    %v156 = stablehlo.compare GT, %v22, %v155 : (tensor<128x4096xf32>, tensor<128x4096xf32>) -> tensor<128x4096xi1>
-    %v157 = stablehlo.select %v156, %v154, %v155 : tensor<128x4096xi1>, tensor<128x4096xf32>
-    %v158 = stablehlo.reshape %v157 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v159 = stablehlo.transpose %W3, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
-    %v160 = stablehlo.reverse %v159, dims = [2, 3] : tensor<16x16x3x3xf32>
-    %v161 = stablehlo.convolution(%v158, %v160)
+    %v185 = stablehlo.reshape %v184 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v186 = stablehlo.reshape %v185 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v187 = stablehlo.reshape %v26 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v188 = stablehlo.constant dense<0.0> : tensor<128x16x16x16xf32>
+    %v189 = stablehlo.compare GT, %v187, %v188 : (tensor<128x16x16x16xf32>, tensor<128x16x16x16xf32>) -> tensor<128x16x16x16xi1>
+    %v190 = stablehlo.select %v189, %v186, %v188 : tensor<128x16x16x16xi1>, tensor<128x16x16x16xf32>
+    %v191 = stablehlo.reshape %v190 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v192 = stablehlo.reshape %v191 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v193 = stablehlo.transpose %W3, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
+    %v194 = stablehlo.reverse %v193, dims = [2, 3] : tensor<16x16x3x3xf32>
+    %v195 = stablehlo.convolution(%v192, %v194)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x16x16x16xf32>, tensor<16x16x3x3xf32>) -> tensor<128x16x16x16xf32>
-    %v162 = stablehlo.reshape %v161 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
-    %v163 = stablehlo.reshape %v13 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v164 = stablehlo.reshape %v162 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v165 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v166 = "stablehlo.select_and_scatter"(%v163, %v164, %v165) ({
+    %v196 = stablehlo.reshape %v195 : (tensor<128x16x16x16xf32>) -> tensor<128x4096xf32>
+    %v197 = stablehlo.reshape %v17 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v198 = stablehlo.reshape %v196 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v199 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v200 = "stablehlo.select_and_scatter"(%v197, %v198, %v199) ({
       ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):
         %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>
         stablehlo.return %sge : tensor<i1>
@@ -258,192 +292,198 @@ module @m {
         %ss = stablehlo.add %sc, %sd : tensor<f32>
         stablehlo.return %ss : tensor<f32>
     }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>} : (tensor<128x16x32x32xf32>, tensor<128x16x16x16xf32>, tensor<f32>) -> tensor<128x16x32x32xf32>
-    %v167 = stablehlo.reshape %v166 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
-    %v168 = stablehlo.constant dense<0.0> : tensor<128x16384xf32>
-    %v169 = stablehlo.compare GT, %v11, %v168 : (tensor<128x16384xf32>, tensor<128x16384xf32>) -> tensor<128x16384xi1>
-    %v170 = stablehlo.select %v169, %v167, %v168 : tensor<128x16384xi1>, tensor<128x16384xf32>
-    %v171 = stablehlo.reshape %v170 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v172 = stablehlo.transpose %W2, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
-    %v173 = stablehlo.reverse %v172, dims = [2, 3] : tensor<16x16x3x3xf32>
-    %v174 = stablehlo.convolution(%v171, %v173)
+    %v201 = stablehlo.reshape %v200 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
+    %v202 = stablehlo.reshape %v201 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v203 = stablehlo.reshape %v13 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v204 = stablehlo.constant dense<0.0> : tensor<128x16x32x32xf32>
+    %v205 = stablehlo.compare GT, %v203, %v204 : (tensor<128x16x32x32xf32>, tensor<128x16x32x32xf32>) -> tensor<128x16x32x32xi1>
+    %v206 = stablehlo.select %v205, %v202, %v204 : tensor<128x16x32x32xi1>, tensor<128x16x32x32xf32>
+    %v207 = stablehlo.reshape %v206 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
+    %v208 = stablehlo.reshape %v207 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v209 = stablehlo.transpose %W2, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
+    %v210 = stablehlo.reverse %v209, dims = [2, 3] : tensor<16x16x3x3xf32>
+    %v211 = stablehlo.convolution(%v208, %v210)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<128x16x32x32xf32>, tensor<16x16x3x3xf32>) -> tensor<128x16x32x32xf32>
-    %v175 = stablehlo.reshape %v174 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
-    %v176 = stablehlo.constant dense<0.0> : tensor<128x16384xf32>
-    %v177 = stablehlo.compare GT, %v4, %v176 : (tensor<128x16384xf32>, tensor<128x16384xf32>) -> tensor<128x16384xi1>
-    %v178 = stablehlo.select %v177, %v175, %v176 : tensor<128x16384xi1>, tensor<128x16384xf32>
-    %v179 = stablehlo.reshape %x : (tensor<128x3072xf32>) -> tensor<128x3x32x32xf32>
-    %v180 = stablehlo.reshape %v178 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v181 = stablehlo.transpose %v179, dims = [1, 0, 2, 3] : (tensor<128x3x32x32xf32>) -> tensor<3x128x32x32xf32>
-    %v182 = stablehlo.transpose %v180, dims = [1, 0, 2, 3] : (tensor<128x16x32x32xf32>) -> tensor<16x128x32x32xf32>
-    %v183 = stablehlo.convolution(%v181, %v182)
+    %v212 = stablehlo.reshape %v211 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
+    %v213 = stablehlo.reshape %v212 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v214 = stablehlo.reshape %v4 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v215 = stablehlo.constant dense<0.0> : tensor<128x16x32x32xf32>
+    %v216 = stablehlo.compare GT, %v214, %v215 : (tensor<128x16x32x32xf32>, tensor<128x16x32x32xf32>) -> tensor<128x16x32x32xi1>
+    %v217 = stablehlo.select %v216, %v213, %v215 : tensor<128x16x32x32xi1>, tensor<128x16x32x32xf32>
+    %v218 = stablehlo.reshape %v217 : (tensor<128x16x32x32xf32>) -> tensor<128x16384xf32>
+    %v219 = stablehlo.reshape %x : (tensor<128x3072xf32>) -> tensor<128x3x32x32xf32>
+    %v220 = stablehlo.reshape %v218 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v221 = stablehlo.transpose %v219, dims = [1, 0, 2, 3] : (tensor<128x3x32x32xf32>) -> tensor<3x128x32x32xf32>
+    %v222 = stablehlo.transpose %v220, dims = [1, 0, 2, 3] : (tensor<128x16x32x32xf32>) -> tensor<16x128x32x32xf32>
+    %v223 = stablehlo.convolution(%v221, %v222)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<3x128x32x32xf32>, tensor<16x128x32x32xf32>) -> tensor<3x16x3x3xf32>
-    %v184 = stablehlo.transpose %v183, dims = [1, 0, 2, 3] : (tensor<3x16x3x3xf32>) -> tensor<16x3x3x3xf32>
-    %v185 = stablehlo.constant dense<0.00078125> : tensor<16x3x3x3xf32>
-    %v186 = stablehlo.multiply %v184, %v185 : tensor<16x3x3x3xf32>
-    %v187 = stablehlo.subtract %W1, %v186 : tensor<16x3x3x3xf32>
-    %v188 = stablehlo.reshape %v178 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v189 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v190 = stablehlo.reduce(%v188 init: %v189) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x16x32x32xf32>, tensor<f32>) -> tensor<16xf32>
-    %v191 = stablehlo.constant dense<0.00078125> : tensor<16xf32>
-    %v192 = stablehlo.multiply %v190, %v191 : tensor<16xf32>
-    %v193 = stablehlo.subtract %b1, %v192 : tensor<16xf32>
-    %v194 = stablehlo.reshape %v6 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v195 = stablehlo.reshape %v170 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v196 = stablehlo.transpose %v194, dims = [1, 0, 2, 3] : (tensor<128x16x32x32xf32>) -> tensor<16x128x32x32xf32>
-    %v197 = stablehlo.transpose %v195, dims = [1, 0, 2, 3] : (tensor<128x16x32x32xf32>) -> tensor<16x128x32x32xf32>
-    %v198 = stablehlo.convolution(%v196, %v197)
+    %v224 = stablehlo.transpose %v223, dims = [1, 0, 2, 3] : (tensor<3x16x3x3xf32>) -> tensor<16x3x3x3xf32>
+    %v225 = stablehlo.constant dense<0.00078125> : tensor<16x3x3x3xf32>
+    %v226 = stablehlo.multiply %v224, %v225 : tensor<16x3x3x3xf32>
+    %v227 = stablehlo.subtract %W1, %v226 : tensor<16x3x3x3xf32>
+    %v228 = stablehlo.reshape %v218 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v229 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v230 = stablehlo.reduce(%v228 init: %v229) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x16x32x32xf32>, tensor<f32>) -> tensor<16xf32>
+    %v231 = stablehlo.constant dense<0.00078125> : tensor<16xf32>
+    %v232 = stablehlo.multiply %v230, %v231 : tensor<16xf32>
+    %v233 = stablehlo.subtract %b1, %v232 : tensor<16xf32>
+    %v234 = stablehlo.reshape %v8 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v235 = stablehlo.reshape %v207 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v236 = stablehlo.transpose %v234, dims = [1, 0, 2, 3] : (tensor<128x16x32x32xf32>) -> tensor<16x128x32x32xf32>
+    %v237 = stablehlo.transpose %v235, dims = [1, 0, 2, 3] : (tensor<128x16x32x32xf32>) -> tensor<16x128x32x32xf32>
+    %v238 = stablehlo.convolution(%v236, %v237)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<16x128x32x32xf32>, tensor<16x128x32x32xf32>) -> tensor<16x16x3x3xf32>
-    %v199 = stablehlo.transpose %v198, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
-    %v200 = stablehlo.constant dense<0.00078125> : tensor<16x16x3x3xf32>
-    %v201 = stablehlo.multiply %v199, %v200 : tensor<16x16x3x3xf32>
-    %v202 = stablehlo.subtract %W2, %v201 : tensor<16x16x3x3xf32>
-    %v203 = stablehlo.reshape %v170 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
-    %v204 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v205 = stablehlo.reduce(%v203 init: %v204) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x16x32x32xf32>, tensor<f32>) -> tensor<16xf32>
-    %v206 = stablehlo.constant dense<0.00078125> : tensor<16xf32>
-    %v207 = stablehlo.multiply %v205, %v206 : tensor<16xf32>
-    %v208 = stablehlo.subtract %b2, %v207 : tensor<16xf32>
-    %v209 = stablehlo.reshape %v17 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v210 = stablehlo.reshape %v157 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v211 = stablehlo.transpose %v209, dims = [1, 0, 2, 3] : (tensor<128x16x16x16xf32>) -> tensor<16x128x16x16xf32>
-    %v212 = stablehlo.transpose %v210, dims = [1, 0, 2, 3] : (tensor<128x16x16x16xf32>) -> tensor<16x128x16x16xf32>
-    %v213 = stablehlo.convolution(%v211, %v212)
+    %v239 = stablehlo.transpose %v238, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
+    %v240 = stablehlo.constant dense<0.00078125> : tensor<16x16x3x3xf32>
+    %v241 = stablehlo.multiply %v239, %v240 : tensor<16x16x3x3xf32>
+    %v242 = stablehlo.subtract %W2, %v241 : tensor<16x16x3x3xf32>
+    %v243 = stablehlo.reshape %v207 : (tensor<128x16384xf32>) -> tensor<128x16x32x32xf32>
+    %v244 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v245 = stablehlo.reduce(%v243 init: %v244) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x16x32x32xf32>, tensor<f32>) -> tensor<16xf32>
+    %v246 = stablehlo.constant dense<0.00078125> : tensor<16xf32>
+    %v247 = stablehlo.multiply %v245, %v246 : tensor<16xf32>
+    %v248 = stablehlo.subtract %b2, %v247 : tensor<16xf32>
+    %v249 = stablehlo.reshape %v21 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v250 = stablehlo.reshape %v191 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v251 = stablehlo.transpose %v249, dims = [1, 0, 2, 3] : (tensor<128x16x16x16xf32>) -> tensor<16x128x16x16xf32>
+    %v252 = stablehlo.transpose %v250, dims = [1, 0, 2, 3] : (tensor<128x16x16x16xf32>) -> tensor<16x128x16x16xf32>
+    %v253 = stablehlo.convolution(%v251, %v252)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<16x128x16x16xf32>, tensor<16x128x16x16xf32>) -> tensor<16x16x3x3xf32>
-    %v214 = stablehlo.transpose %v213, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
-    %v215 = stablehlo.constant dense<0.00078125> : tensor<16x16x3x3xf32>
-    %v216 = stablehlo.multiply %v214, %v215 : tensor<16x16x3x3xf32>
-    %v217 = stablehlo.subtract %W3, %v216 : tensor<16x16x3x3xf32>
-    %v218 = stablehlo.reshape %v157 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v219 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v220 = stablehlo.reduce(%v218 init: %v219) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x16x16x16xf32>, tensor<f32>) -> tensor<16xf32>
-    %v221 = stablehlo.constant dense<0.00078125> : tensor<16xf32>
-    %v222 = stablehlo.multiply %v220, %v221 : tensor<16xf32>
-    %v223 = stablehlo.subtract %b3, %v222 : tensor<16xf32>
-    %v224 = stablehlo.reshape %v24 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v225 = stablehlo.reshape %v149 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v226 = stablehlo.transpose %v224, dims = [1, 0, 2, 3] : (tensor<128x16x16x16xf32>) -> tensor<16x128x16x16xf32>
-    %v227 = stablehlo.transpose %v225, dims = [1, 0, 2, 3] : (tensor<128x16x16x16xf32>) -> tensor<16x128x16x16xf32>
-    %v228 = stablehlo.convolution(%v226, %v227)
+    %v254 = stablehlo.transpose %v253, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
+    %v255 = stablehlo.constant dense<0.00078125> : tensor<16x16x3x3xf32>
+    %v256 = stablehlo.multiply %v254, %v255 : tensor<16x16x3x3xf32>
+    %v257 = stablehlo.subtract %W3, %v256 : tensor<16x16x3x3xf32>
+    %v258 = stablehlo.reshape %v191 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v259 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v260 = stablehlo.reduce(%v258 init: %v259) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x16x16x16xf32>, tensor<f32>) -> tensor<16xf32>
+    %v261 = stablehlo.constant dense<0.00078125> : tensor<16xf32>
+    %v262 = stablehlo.multiply %v260, %v261 : tensor<16xf32>
+    %v263 = stablehlo.subtract %b3, %v262 : tensor<16xf32>
+    %v264 = stablehlo.reshape %v30 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v265 = stablehlo.reshape %v180 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v266 = stablehlo.transpose %v264, dims = [1, 0, 2, 3] : (tensor<128x16x16x16xf32>) -> tensor<16x128x16x16xf32>
+    %v267 = stablehlo.transpose %v265, dims = [1, 0, 2, 3] : (tensor<128x16x16x16xf32>) -> tensor<16x128x16x16xf32>
+    %v268 = stablehlo.convolution(%v266, %v267)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<16x128x16x16xf32>, tensor<16x128x16x16xf32>) -> tensor<16x16x3x3xf32>
-    %v229 = stablehlo.transpose %v228, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
-    %v230 = stablehlo.constant dense<0.00078125> : tensor<16x16x3x3xf32>
-    %v231 = stablehlo.multiply %v229, %v230 : tensor<16x16x3x3xf32>
-    %v232 = stablehlo.subtract %W4, %v231 : tensor<16x16x3x3xf32>
-    %v233 = stablehlo.reshape %v149 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
-    %v234 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v235 = stablehlo.reduce(%v233 init: %v234) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x16x16x16xf32>, tensor<f32>) -> tensor<16xf32>
-    %v236 = stablehlo.constant dense<0.00078125> : tensor<16xf32>
-    %v237 = stablehlo.multiply %v235, %v236 : tensor<16xf32>
-    %v238 = stablehlo.subtract %b4, %v237 : tensor<16xf32>
-    %v239 = stablehlo.reshape %v35 : (tensor<128x1024xf32>) -> tensor<128x16x8x8xf32>
-    %v240 = stablehlo.reshape %v136 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v241 = stablehlo.transpose %v239, dims = [1, 0, 2, 3] : (tensor<128x16x8x8xf32>) -> tensor<16x128x8x8xf32>
-    %v242 = stablehlo.transpose %v240, dims = [1, 0, 2, 3] : (tensor<128x32x8x8xf32>) -> tensor<32x128x8x8xf32>
-    %v243 = stablehlo.convolution(%v241, %v242)
+    %v269 = stablehlo.transpose %v268, dims = [1, 0, 2, 3] : (tensor<16x16x3x3xf32>) -> tensor<16x16x3x3xf32>
+    %v270 = stablehlo.constant dense<0.00078125> : tensor<16x16x3x3xf32>
+    %v271 = stablehlo.multiply %v269, %v270 : tensor<16x16x3x3xf32>
+    %v272 = stablehlo.subtract %W4, %v271 : tensor<16x16x3x3xf32>
+    %v273 = stablehlo.reshape %v180 : (tensor<128x4096xf32>) -> tensor<128x16x16x16xf32>
+    %v274 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v275 = stablehlo.reduce(%v273 init: %v274) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x16x16x16xf32>, tensor<f32>) -> tensor<16xf32>
+    %v276 = stablehlo.constant dense<0.00078125> : tensor<16xf32>
+    %v277 = stablehlo.multiply %v275, %v276 : tensor<16xf32>
+    %v278 = stablehlo.subtract %b4, %v277 : tensor<16xf32>
+    %v279 = stablehlo.reshape %v43 : (tensor<128x1024xf32>) -> tensor<128x16x8x8xf32>
+    %v280 = stablehlo.reshape %v164 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v281 = stablehlo.transpose %v279, dims = [1, 0, 2, 3] : (tensor<128x16x8x8xf32>) -> tensor<16x128x8x8xf32>
+    %v282 = stablehlo.transpose %v280, dims = [1, 0, 2, 3] : (tensor<128x32x8x8xf32>) -> tensor<32x128x8x8xf32>
+    %v283 = stablehlo.convolution(%v281, %v282)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<16x128x8x8xf32>, tensor<32x128x8x8xf32>) -> tensor<16x32x3x3xf32>
-    %v244 = stablehlo.transpose %v243, dims = [1, 0, 2, 3] : (tensor<16x32x3x3xf32>) -> tensor<32x16x3x3xf32>
-    %v245 = stablehlo.constant dense<0.00078125> : tensor<32x16x3x3xf32>
-    %v246 = stablehlo.multiply %v244, %v245 : tensor<32x16x3x3xf32>
-    %v247 = stablehlo.subtract %W5, %v246 : tensor<32x16x3x3xf32>
-    %v248 = stablehlo.reshape %v136 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v249 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v250 = stablehlo.reduce(%v248 init: %v249) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x32x8x8xf32>, tensor<f32>) -> tensor<32xf32>
-    %v251 = stablehlo.constant dense<0.00078125> : tensor<32xf32>
-    %v252 = stablehlo.multiply %v250, %v251 : tensor<32xf32>
-    %v253 = stablehlo.subtract %b5, %v252 : tensor<32xf32>
-    %v254 = stablehlo.reshape %v42 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v255 = stablehlo.reshape %v128 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v256 = stablehlo.transpose %v254, dims = [1, 0, 2, 3] : (tensor<128x32x8x8xf32>) -> tensor<32x128x8x8xf32>
-    %v257 = stablehlo.transpose %v255, dims = [1, 0, 2, 3] : (tensor<128x32x8x8xf32>) -> tensor<32x128x8x8xf32>
-    %v258 = stablehlo.convolution(%v256, %v257)
+    %v284 = stablehlo.transpose %v283, dims = [1, 0, 2, 3] : (tensor<16x32x3x3xf32>) -> tensor<32x16x3x3xf32>
+    %v285 = stablehlo.constant dense<0.00078125> : tensor<32x16x3x3xf32>
+    %v286 = stablehlo.multiply %v284, %v285 : tensor<32x16x3x3xf32>
+    %v287 = stablehlo.subtract %W5, %v286 : tensor<32x16x3x3xf32>
+    %v288 = stablehlo.reshape %v164 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v289 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v290 = stablehlo.reduce(%v288 init: %v289) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x32x8x8xf32>, tensor<f32>) -> tensor<32xf32>
+    %v291 = stablehlo.constant dense<0.00078125> : tensor<32xf32>
+    %v292 = stablehlo.multiply %v290, %v291 : tensor<32xf32>
+    %v293 = stablehlo.subtract %b5, %v292 : tensor<32xf32>
+    %v294 = stablehlo.reshape %v52 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v295 = stablehlo.reshape %v153 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v296 = stablehlo.transpose %v294, dims = [1, 0, 2, 3] : (tensor<128x32x8x8xf32>) -> tensor<32x128x8x8xf32>
+    %v297 = stablehlo.transpose %v295, dims = [1, 0, 2, 3] : (tensor<128x32x8x8xf32>) -> tensor<32x128x8x8xf32>
+    %v298 = stablehlo.convolution(%v296, %v297)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<32x128x8x8xf32>, tensor<32x128x8x8xf32>) -> tensor<32x32x3x3xf32>
-    %v259 = stablehlo.transpose %v258, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
-    %v260 = stablehlo.constant dense<0.00078125> : tensor<32x32x3x3xf32>
-    %v261 = stablehlo.multiply %v259, %v260 : tensor<32x32x3x3xf32>
-    %v262 = stablehlo.subtract %W6, %v261 : tensor<32x32x3x3xf32>
-    %v263 = stablehlo.reshape %v128 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
-    %v264 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v265 = stablehlo.reduce(%v263 init: %v264) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x32x8x8xf32>, tensor<f32>) -> tensor<32xf32>
-    %v266 = stablehlo.constant dense<0.00078125> : tensor<32xf32>
-    %v267 = stablehlo.multiply %v265, %v266 : tensor<32xf32>
-    %v268 = stablehlo.subtract %b6, %v267 : tensor<32xf32>
-    %v269 = stablehlo.reshape %v53 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v270 = stablehlo.reshape %v115 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v271 = stablehlo.transpose %v269, dims = [1, 0, 2, 3] : (tensor<128x32x4x4xf32>) -> tensor<32x128x4x4xf32>
-    %v272 = stablehlo.transpose %v270, dims = [1, 0, 2, 3] : (tensor<128x32x4x4xf32>) -> tensor<32x128x4x4xf32>
-    %v273 = stablehlo.convolution(%v271, %v272)
+    %v299 = stablehlo.transpose %v298, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
+    %v300 = stablehlo.constant dense<0.00078125> : tensor<32x32x3x3xf32>
+    %v301 = stablehlo.multiply %v299, %v300 : tensor<32x32x3x3xf32>
+    %v302 = stablehlo.subtract %W6, %v301 : tensor<32x32x3x3xf32>
+    %v303 = stablehlo.reshape %v153 : (tensor<128x2048xf32>) -> tensor<128x32x8x8xf32>
+    %v304 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v305 = stablehlo.reduce(%v303 init: %v304) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x32x8x8xf32>, tensor<f32>) -> tensor<32xf32>
+    %v306 = stablehlo.constant dense<0.00078125> : tensor<32xf32>
+    %v307 = stablehlo.multiply %v305, %v306 : tensor<32xf32>
+    %v308 = stablehlo.subtract %b6, %v307 : tensor<32xf32>
+    %v309 = stablehlo.reshape %v65 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v310 = stablehlo.reshape %v137 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v311 = stablehlo.transpose %v309, dims = [1, 0, 2, 3] : (tensor<128x32x4x4xf32>) -> tensor<32x128x4x4xf32>
+    %v312 = stablehlo.transpose %v310, dims = [1, 0, 2, 3] : (tensor<128x32x4x4xf32>) -> tensor<32x128x4x4xf32>
+    %v313 = stablehlo.convolution(%v311, %v312)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<32x128x4x4xf32>, tensor<32x128x4x4xf32>) -> tensor<32x32x3x3xf32>
-    %v274 = stablehlo.transpose %v273, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
-    %v275 = stablehlo.constant dense<0.00078125> : tensor<32x32x3x3xf32>
-    %v276 = stablehlo.multiply %v274, %v275 : tensor<32x32x3x3xf32>
-    %v277 = stablehlo.subtract %W7, %v276 : tensor<32x32x3x3xf32>
-    %v278 = stablehlo.reshape %v115 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v279 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v280 = stablehlo.reduce(%v278 init: %v279) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x32x4x4xf32>, tensor<f32>) -> tensor<32xf32>
-    %v281 = stablehlo.constant dense<0.00078125> : tensor<32xf32>
-    %v282 = stablehlo.multiply %v280, %v281 : tensor<32xf32>
-    %v283 = stablehlo.subtract %b7, %v282 : tensor<32xf32>
-    %v284 = stablehlo.reshape %v60 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v285 = stablehlo.reshape %v107 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v286 = stablehlo.transpose %v284, dims = [1, 0, 2, 3] : (tensor<128x32x4x4xf32>) -> tensor<32x128x4x4xf32>
-    %v287 = stablehlo.transpose %v285, dims = [1, 0, 2, 3] : (tensor<128x32x4x4xf32>) -> tensor<32x128x4x4xf32>
-    %v288 = stablehlo.convolution(%v286, %v287)
+    %v314 = stablehlo.transpose %v313, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
+    %v315 = stablehlo.constant dense<0.00078125> : tensor<32x32x3x3xf32>
+    %v316 = stablehlo.multiply %v314, %v315 : tensor<32x32x3x3xf32>
+    %v317 = stablehlo.subtract %W7, %v316 : tensor<32x32x3x3xf32>
+    %v318 = stablehlo.reshape %v137 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v319 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v320 = stablehlo.reduce(%v318 init: %v319) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x32x4x4xf32>, tensor<f32>) -> tensor<32xf32>
+    %v321 = stablehlo.constant dense<0.00078125> : tensor<32xf32>
+    %v322 = stablehlo.multiply %v320, %v321 : tensor<32xf32>
+    %v323 = stablehlo.subtract %b7, %v322 : tensor<32xf32>
+    %v324 = stablehlo.reshape %v74 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v325 = stablehlo.reshape %v126 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v326 = stablehlo.transpose %v324, dims = [1, 0, 2, 3] : (tensor<128x32x4x4xf32>) -> tensor<32x128x4x4xf32>
+    %v327 = stablehlo.transpose %v325, dims = [1, 0, 2, 3] : (tensor<128x32x4x4xf32>) -> tensor<32x128x4x4xf32>
+    %v328 = stablehlo.convolution(%v326, %v327)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],
       window = {stride = [1, 1], pad = [[1, 1], [1, 1]], lhs_dilate = [1, 1], rhs_dilate = [1, 1]}
       {batch_group_count = 1 : i64, feature_group_count = 1 : i64} : (tensor<32x128x4x4xf32>, tensor<32x128x4x4xf32>) -> tensor<32x32x3x3xf32>
-    %v289 = stablehlo.transpose %v288, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
-    %v290 = stablehlo.constant dense<0.00078125> : tensor<32x32x3x3xf32>
-    %v291 = stablehlo.multiply %v289, %v290 : tensor<32x32x3x3xf32>
-    %v292 = stablehlo.subtract %W8, %v291 : tensor<32x32x3x3xf32>
-    %v293 = stablehlo.reshape %v107 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
-    %v294 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v295 = stablehlo.reduce(%v293 init: %v294) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x32x4x4xf32>, tensor<f32>) -> tensor<32xf32>
-    %v296 = stablehlo.constant dense<0.00078125> : tensor<32xf32>
-    %v297 = stablehlo.multiply %v295, %v296 : tensor<32xf32>
-    %v298 = stablehlo.subtract %b8, %v297 : tensor<32xf32>
-    %v299 = stablehlo.dot_general %v71, %v98, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x128xf32>, tensor<128x64xf32>) -> tensor<128x64xf32>
-    %v300 = stablehlo.constant dense<0.00078125> : tensor<128x64xf32>
-    %v301 = stablehlo.multiply %v299, %v300 : tensor<128x64xf32>
-    %v302 = stablehlo.subtract %W9, %v301 : tensor<128x64xf32>
-    %v303 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v304 = stablehlo.reduce(%v98 init: %v303) applies stablehlo.add across dimensions = [0] : (tensor<128x64xf32>, tensor<f32>) -> tensor<64xf32>
-    %v305 = stablehlo.constant dense<0.00078125> : tensor<64xf32>
-    %v306 = stablehlo.multiply %v304, %v305 : tensor<64xf32>
-    %v307 = stablehlo.subtract %b9, %v306 : tensor<64xf32>
-    %v308 = stablehlo.dot_general %v76, %v94, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<128x64xf32>) -> tensor<64x64xf32>
-    %v309 = stablehlo.constant dense<0.00078125> : tensor<64x64xf32>
-    %v310 = stablehlo.multiply %v308, %v309 : tensor<64x64xf32>
-    %v311 = stablehlo.subtract %Wa, %v310 : tensor<64x64xf32>
-    %v312 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v313 = stablehlo.reduce(%v94 init: %v312) applies stablehlo.add across dimensions = [0] : (tensor<128x64xf32>, tensor<f32>) -> tensor<64xf32>
-    %v314 = stablehlo.constant dense<0.00078125> : tensor<64xf32>
-    %v315 = stablehlo.multiply %v313, %v314 : tensor<64xf32>
-    %v316 = stablehlo.subtract %ba, %v315 : tensor<64xf32>
-    %v317 = stablehlo.dot_general %v81, %v90, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<128x10xf32>) -> tensor<64x10xf32>
-    %v318 = stablehlo.constant dense<0.00078125> : tensor<64x10xf32>
-    %v319 = stablehlo.multiply %v317, %v318 : tensor<64x10xf32>
-    %v320 = stablehlo.subtract %Wb, %v319 : tensor<64x10xf32>
-    %v321 = stablehlo.constant dense<0.0> : tensor<f32>
-    %v322 = stablehlo.reduce(%v90 init: %v321) applies stablehlo.add across dimensions = [0] : (tensor<128x10xf32>, tensor<f32>) -> tensor<10xf32>
-    %v323 = stablehlo.constant dense<0.00078125> : tensor<10xf32>
-    %v324 = stablehlo.multiply %v322, %v323 : tensor<10xf32>
-    %v325 = stablehlo.subtract %bb, %v324 : tensor<10xf32>
-    return %v187, %v193, %v202, %v208, %v217, %v223, %v232, %v238, %v247, %v253, %v262, %v268, %v277, %v283, %v292, %v298, %v302, %v307, %v311, %v316, %v320, %v325 : tensor<16x3x3x3xf32>, tensor<16xf32>, tensor<16x16x3x3xf32>, tensor<16xf32>, tensor<16x16x3x3xf32>, tensor<16xf32>, tensor<16x16x3x3xf32>, tensor<16xf32>, tensor<32x16x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<128x64xf32>, tensor<64xf32>, tensor<64x64xf32>, tensor<64xf32>, tensor<64x10xf32>, tensor<10xf32>
+    %v329 = stablehlo.transpose %v328, dims = [1, 0, 2, 3] : (tensor<32x32x3x3xf32>) -> tensor<32x32x3x3xf32>
+    %v330 = stablehlo.constant dense<0.00078125> : tensor<32x32x3x3xf32>
+    %v331 = stablehlo.multiply %v329, %v330 : tensor<32x32x3x3xf32>
+    %v332 = stablehlo.subtract %W8, %v331 : tensor<32x32x3x3xf32>
+    %v333 = stablehlo.reshape %v126 : (tensor<128x512xf32>) -> tensor<128x32x4x4xf32>
+    %v334 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v335 = stablehlo.reduce(%v333 init: %v334) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<128x32x4x4xf32>, tensor<f32>) -> tensor<32xf32>
+    %v336 = stablehlo.constant dense<0.00078125> : tensor<32xf32>
+    %v337 = stablehlo.multiply %v335, %v336 : tensor<32xf32>
+    %v338 = stablehlo.subtract %b8, %v337 : tensor<32xf32>
+    %v339 = stablehlo.dot_general %v87, %v114, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x128xf32>, tensor<128x64xf32>) -> tensor<128x64xf32>
+    %v340 = stablehlo.constant dense<0.00078125> : tensor<128x64xf32>
+    %v341 = stablehlo.multiply %v339, %v340 : tensor<128x64xf32>
+    %v342 = stablehlo.subtract %W9, %v341 : tensor<128x64xf32>
+    %v343 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v344 = stablehlo.reduce(%v114 init: %v343) applies stablehlo.add across dimensions = [0] : (tensor<128x64xf32>, tensor<f32>) -> tensor<64xf32>
+    %v345 = stablehlo.constant dense<0.00078125> : tensor<64xf32>
+    %v346 = stablehlo.multiply %v344, %v345 : tensor<64xf32>
+    %v347 = stablehlo.subtract %b9, %v346 : tensor<64xf32>
+    %v348 = stablehlo.dot_general %v92, %v110, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<128x64xf32>) -> tensor<64x64xf32>
+    %v349 = stablehlo.constant dense<0.00078125> : tensor<64x64xf32>
+    %v350 = stablehlo.multiply %v348, %v349 : tensor<64x64xf32>
+    %v351 = stablehlo.subtract %Wa, %v350 : tensor<64x64xf32>
+    %v352 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v353 = stablehlo.reduce(%v110 init: %v352) applies stablehlo.add across dimensions = [0] : (tensor<128x64xf32>, tensor<f32>) -> tensor<64xf32>
+    %v354 = stablehlo.constant dense<0.00078125> : tensor<64xf32>
+    %v355 = stablehlo.multiply %v353, %v354 : tensor<64xf32>
+    %v356 = stablehlo.subtract %ba, %v355 : tensor<64xf32>
+    %v357 = stablehlo.dot_general %v97, %v106, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x64xf32>, tensor<128x10xf32>) -> tensor<64x10xf32>
+    %v358 = stablehlo.constant dense<0.00078125> : tensor<64x10xf32>
+    %v359 = stablehlo.multiply %v357, %v358 : tensor<64x10xf32>
+    %v360 = stablehlo.subtract %Wb, %v359 : tensor<64x10xf32>
+    %v361 = stablehlo.constant dense<0.0> : tensor<f32>
+    %v362 = stablehlo.reduce(%v106 init: %v361) applies stablehlo.add across dimensions = [0] : (tensor<128x10xf32>, tensor<f32>) -> tensor<10xf32>
+    %v363 = stablehlo.constant dense<0.00078125> : tensor<10xf32>
+    %v364 = stablehlo.multiply %v362, %v363 : tensor<10xf32>
+    %v365 = stablehlo.subtract %bb, %v364 : tensor<10xf32>
+    return %v227, %v233, %v242, %v248, %v257, %v263, %v272, %v278, %v287, %v293, %v302, %v308, %v317, %v323, %v332, %v338, %v342, %v347, %v351, %v356, %v360, %v365 : tensor<16x3x3x3xf32>, tensor<16xf32>, tensor<16x16x3x3xf32>, tensor<16xf32>, tensor<16x16x3x3xf32>, tensor<16xf32>, tensor<16x16x3x3xf32>, tensor<16xf32>, tensor<32x16x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<128x64xf32>, tensor<64xf32>, tensor<64x64xf32>, tensor<64xf32>, tensor<64x10xf32>, tensor<10xf32>
   }
 }

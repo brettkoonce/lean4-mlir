@@ -4427,10 +4427,32 @@ def tyBf16 (dims : List Nat) : String :=
 def tyF8 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["f8E4M3FN"]) ++ ">"
 
-/-- Flat width ↦ a `[c,h,w]` some 4-D op in the same render works at. See `liftPointwise`. -/
-abbrev ShapeTbl := List (Nat × Nat × Nat × Nat)
+/-- SSA name ↦ the `[c,h,w]` the value bound to that name really carries. See `liftPointwise`.
 
-/-- Emitter state: the fresh-name counter, plus the width ↦ `[c,h,w]` table.
+    ⚠⚠ **Keyed by NAME, not by flat width — and that is not a refinement, it is the whole
+    correctness of the table.** A width table collides whenever two layers have the same element
+    count, and on the real nets they do: ConvNeXt-T's stage-2 MLP is `1536·14·14 = 301056` and its
+    stage-0 block is `96·56·56 = 301056`; stage 3's `3072·7·7` equals stage 1's `192·28·28`. First
+    writer won, so 24 of ConvNeXt's pointwise blocks unflattened to a shape with the right element
+    count and the wrong layout — which is not a wrong program (the bracket is still an inverse
+    reshape pair) but is exactly the relayout the bracket exists to remove. Measured: 2.434 GB of
+    transposes and 84.45 ms/step keyed by width, **0.122 GB and 68.28 ms** keyed by name.
+
+    Newest entry first, and no dedup: `fresh` never reuses a name, so a lookup for a value the
+    previous token produced hits the head of the list.
+
+    ⚠⚠ The `Bool` is the value's LAYOUT: `true` means this is the map's **row view** `[h·w, c]`
+    rather than the map `[c, h, w]`. It is not bookkeeping — it is what makes ConvNeXt's channel-LN
+    transparent. That chain is `transpose → lnRow → rowScale → rowBias → transpose`, a layout ROUND
+    TRIP whose two ends are the same `[c,h,w]` map; without the flag the closing transpose's result
+    has no entry, the drop-path multiply that consumes it falls back to flat, and every pointwise op
+    after it on the residual chain goes with it — 0.223 GB of relayout against 0.122 (measured,
+    ConvNeXt-T bf16). And `liftPointwise` must NOT fire on a row view: `[h·w, c]` reshaped to
+    `[B,c,h,w]` is a DIFFERENT permutation, not an inverse pair, so that one would be a wrong
+    program rather than a slow one. -/
+abbrev ShapeTbl := List (String × Nat × Nat × Nat × Bool)
+
+/-- Emitter state: the fresh-name counter, plus the name ↦ `[c,h,w]` table.
 
     ⚠ The table lives in the STATE rather than in a `pretty` argument because a net renderer
     calls `pretty` once per graph FRAGMENT — a conv and the activation that consumes it land in
@@ -5362,88 +5384,225 @@ private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
 -- reshape and the chain is 4-D end to end.
 -- ════════════════════════════════════════════════════════════════
 
-/-- The `[c,h,w]` recorded for flat width `n`, if any. -/
-def lookupShape (tbl : ShapeTbl) (n : Nat) : Option (Nat × Nat × Nat) :=
-  match tbl.find? (fun e => e.1 == n) with
-  | some (_, c, h, w) => some (c, h, w)
-  | none              => none
+/-- The full entry — `[c,h,w]` plus the row-view flag — recorded for SSA name `nm`. -/
+def lookupEntry (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat × Bool) :=
+  match tbl.find? (fun e => e.1 == nm) with
+  | some (_, c, h, w, rv) => some (c, h, w, rv)
+  | none                  => none
 
-/-- The `[c,h,w]` shapes a batched op reads and writes. Strided tags carry their **output**
-    spatial dims, so the input side is `2h × 2w`. -/
-private def batchedShapes (tag : String) (info : List Nat) : List (Nat × Nat × Nat) :=
-  match tag, info with
-  | "conv",                   [_, ic, oc, h, w, _, _]
-  | "convBf16",               [_, ic, oc, h, w, _, _]
-  | "convF8",                 [_, ic, oc, h, w, _, _] => [(ic, h, w), (oc, h, w)]
-  | "convStrided",            [_, ic, oc, h, w, _, _]
-  | "convStridedBf16",        [_, ic, oc, h, w, _, _]
-  | "convStridedXla",         [_, ic, oc, h, w, _, _]
-  | "convStridedXlaBf16",     [_, ic, oc, h, w, _, _] => [(ic, 2*h, 2*w), (oc, h, w)]
-  | "depthwise",              [_, c, h, w, _, _]
-  | "depthwiseBf16",          [_, c, h, w, _, _]      => [(c, h, w)]
-  | "depthwiseStrided",       [_, c, h, w, _, _]
-  | "depthwiseStridedBf16",   [_, c, h, w, _, _]
-  | "depthwiseStridedXla",    [_, c, h, w, _, _]
-  | "depthwiseStridedXlaBf16",[_, c, h, w, _, _]      => [(c, 2*h, 2*w), (c, h, w)]
-  | "bnBatch",                [_, oc, h, w]
-  | "bnEval",                 [_, oc, h, w]           => [(oc, h, w)]
-  | "layerScaleChP",          [_, c, h, w]
-  | "gap",                    [_, c, h, w]            => [(c, h, w)]
-  | "maxPool",                [_, c, h, w]            => [(c, 2*h, 2*w), (c, h, w)]
-  | "seBlock",                [_, c, h, w, _]         => [(c, h, w)]
-  | _, _                                              => []
+/-- The `[c,h,w]` `nm` carries **as a map**. A row view answers `none`: it holds the same elements
+    in a different order, so unflattening it to `[B,c,h,w]` would not be an inverse pair. -/
+def lookupShape (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat) :=
+  match lookupEntry tbl nm with
+  | some (c, h, w, false) => some (c, h, w)
+  | _                     => none
 
-/-- Recover the width ↦ `[c,h,w]` table from a token stream.
+/-- The `[c,h,w]` an op's INPUT and OUTPUT activations carry, when it has them. Strided and
+    pooled tags carry their **output** spatial dims, so the input side is `2h × 2w`.
 
-    A width with no entry, or one whose entry came from a different layer that happens to share
-    it, costs only a MISSED optimisation and never a wrong program: `liftPointwise` brackets
-    with an inverse reshape pair, which is the identity at any shape of the same element count. -/
-def shapeTblOf (toks : List Tok) : ShapeTbl :=
-  toks.foldl (init := []) fun acc t =>
-    match t with
-    | .batched tag _ info =>
-        (batchedShapes tag info).foldl (init := acc) fun a s =>
-          if a.any (fun e => e.1 == s.1 * s.2.1 * s.2.2) then a
-          else (s.1 * s.2.1 * s.2.2, s.1, s.2.1, s.2.2) :: a
-    | _ => acc
+    ⚠⚠ Each batched tag and its per-example peer MUST answer IDENTICALLY. The two renders are tied
+    byte for byte (`tests/TestBatchedEmitTie.lean`, `convnext-fwd-b-tie`), so a shape one path
+    knows and the other does not is a `liftPointwise` that fires on one side only — a tie failure
+    with no wrong answer anywhere to point at. Add tags in pairs. -/
+private def tokIO : Tok → Option (Nat × Nat × Nat) × Option (Nat × Nat × Nat)
+  | .batched tag _ info =>
+      match tag, info with
+      | "conv",                   [_, ic, oc, h, w, _, _]
+      | "convBf16",               [_, ic, oc, h, w, _, _]
+      | "convF8",                 [_, ic, oc, h, w, _, _] => (some (ic, h, w), some (oc, h, w))
+      | "convStrided",            [_, ic, oc, h, w, _, _]
+      | "convStridedBf16",        [_, ic, oc, h, w, _, _]
+      | "convStridedXla",         [_, ic, oc, h, w, _, _]
+      | "convStridedXlaBf16",     [_, ic, oc, h, w, _, _] => (some (ic, 2*h, 2*w), some (oc, h, w))
+      | "depthwise",              [_, c, h, w, _, _]
+      | "depthwiseBf16",          [_, c, h, w, _, _]      => (some (c, h, w), some (c, h, w))
+      | "depthwiseStrided",       [_, c, h, w, _, _]
+      | "depthwiseStridedBf16",   [_, c, h, w, _, _]
+      | "depthwiseStridedXla",    [_, c, h, w, _, _]
+      | "depthwiseStridedXlaBf16",[_, c, h, w, _, _]      => (some (c, 2*h, 2*w), some (c, h, w))
+      | "bnBatch",                [_, oc, h, w]
+      | "bnEval",                 [_, oc, h, w]           => (some (oc, h, w), some (oc, h, w))
+      | "layerScaleChP",          [_, c, h, w]            => (some (c, h, w), some (c, h, w))
+      -- ⚠ `gap` CONTRACTS the spatial extent: its result is `[c]`, so it has an input shape and
+      -- no output one. The width table conflated the two and could hand a `[c]` value a `[c,h,w]`.
+      | "gap",                    [_, c, h, w]            => (some (c, h, w), none)
+      | "maxPool",                [_, c, h, w]
+      | "maxPool3s2",             [_, c, h, w]            => (some (c, 2*h, 2*w), some (c, h, w))
+      | "seBlock",                [_, c, h, w, _]         => (some (c, h, w), some (c, h, w))
+      | "convStride4P",           [_, ic, oc, h, w, _, _]
+      | "convStride4PBf16",       [_, ic, oc, h, w, _, _] =>
+          (some (ic, 2*(2*h), 2*(2*w)), some (oc, h, w))
+      -- ── the BACKWARD half. ⚠⚠ Omitting it is not a smaller version of this table, it is a
+      --    BROKEN one: a cotangent chain whose head has no shape drops back to flat at the first
+      --    `addV`, and every pointwise op after it in that chain goes with it. The width table
+      --    covered the backward by accident — one entry served the forward activation and the
+      --    cotangent alike, because they have the same width — and losing that is what took the
+      --    first name-keyed cut to 0.999 GB where the scratch pass reached 0.122.
+      | "convBackBatched",        [_, ic, oc, h, w, _, _]
+      | "convBackBatchedBf16",    [_, ic, oc, h, w, _, _]
+      | "convBackBatchedF8",      [_, ic, oc, h, w, _, _] => (some (oc, h, w), some (ic, h, w))
+      | "convStridedBackBatched", [_, ic, oc, h, w, _, _]
+      | "convStridedBackBatchedBf16", [_, ic, oc, h, w, _, _] =>
+          (some (oc, h, w), some (ic, 2*h, 2*w))
+      | "depthwiseBackBatched",   [_, c, h, w, _, _]
+      | "depthwiseBackBatchedBf16", [_, c, h, w, _, _]    => (some (c, h, w), some (c, h, w))
+      | "depthwiseStridedBackBatched", [_, c, h, w, _, _]
+      | "depthwiseStridedBackBatchedBf16", [_, c, h, w, _, _]
+      | "depthwiseStridedXlaBackBatched", [_, c, h, w, _, _]
+      | "depthwiseStridedXlaBackBatchedBf16", [_, c, h, w, _, _]
+      | "maxPoolBackP",           [_, c, h, w]
+      | "maxPool3s2BackP",        [_, c, h, w]            => (some (c, h, w), some (c, 2*h, 2*w))
+      -- ⚠ the per-example `maxPool3s2BackP` Raw carries THREE nats, not four (`skel` aliases the
+      -- batched tag but not its `N`), so the batched pattern above cannot match it.
+      | "maxPool3s2BackP",        [c, h, w]               => (some (c, h, w), some (c, 2*h, 2*w))
+      | "bnBatchBack",            [_, oc, h, w]
+      | "bnBatchLABack",          [_, oc, h, w]           => (some (oc, h, w), some (oc, h, w))
+      | "seBackBatched",          [_, c, h, w, _]         => (some (c, h, w), some (c, h, w))
+      -- GAP contracts and its adjoint expands, so each has a shape on ONE side only.
+      | "gapBackBatched",         [_, c, h, w]            => (none, some (c, h, w))
+      | _, _                                              => (none, none)
+  -- ── the per-example peers of exactly the tags above ──
+  | .flatConvF _ _ ic oc h w _ _
+  | .flatConvFBf16 _ _ ic oc h w _ _          => (some (ic, h, w), some (oc, h, w))
+  | .flatConvStridedF _ _ ic oc h w _ _
+  | .flatConvStridedXlaF _ _ ic oc h w _ _    => (some (ic, 2*h, 2*w), some (oc, h, w))
+  | .depthwiseF _ _ c h w _ _                 => (some (c, h, w), some (c, h, w))
+  | .depthwiseStridedF _ _ c h w _ _
+  | .depthwiseStridedXlaF _ _ c h w _ _       => (some (c, 2*h, 2*w), some (c, h, w))
+  | .bnPerChannelF _ _ _ oc h w
+  | .bnPerChannelEvalF _ _ _ _ _ oc h w       => (some (oc, h, w), some (oc, h, w))
+  | .layerScaleChF _ c h w                    => (some (c, h, w), some (c, h, w))
+  | .gapF c h w                               => (some (c, h, w), none)
+  | .maxPoolF c h w                           => (some (c, 2*h, 2*w), some (c, h, w))
+  | .flatConvStride4F _ _ ic oc h w _ _       => (some (ic, 2*(2*h), 2*(2*w)), some (oc, h, w))
+  -- ── their backward peers, pair for pair with the batched tags above ──
+  | .convBack _ ic oc h w _ _                 => (some (oc, h, w), some (ic, h, w))
+  | .convStridedBack _ ic oc h w _ _          => (some (oc, h, w), some (ic, 2*h, 2*w))
+  | .depthwiseBack _ c h w _ _                => (some (c, h, w), some (c, h, w))
+  | .depthwiseStridedBack _ c h w _ _
+  | .maxPoolBack _ c h w                      => (some (c, h, w), some (c, 2*h, 2*w))
+  | .bnPerChannelBack _ _ _ oc h w            => (some (oc, h, w), some (oc, h, w))
+  | .gapBack c h w                            => (none, some (c, h, w))
+  | .broadcastBack c h w                      => (some (c, h, w), none)
+  | _                                         => (none, none)
 
-/-- Add a fragment's shapes to the running table; first writer for a width wins. -/
-def noteShapes (ss : ShapeTbl) : StateM EmitS Unit :=
-  modify fun (k, tbl) =>
-    (k, ss.foldl (init := tbl) fun a s => if a.any (fun e => e.1 == s.1) then a else s :: a)
+/-- Record `nm ↦ [c,h,w]` + layout, newest first. `fresh` never reuses a name, so an entry can
+    never be contradicted by a later one; an `.operand` name re-pushed in a later fragment repeats. -/
+def noteEntry (nm : String) : Option (Nat × Nat × Nat × Bool) → StateM EmitS Unit
+  | none               => pure ()
+  | some (c, h, w, rv) => modify fun (k, tbl) => (k, (nm, c, h, w, rv) :: tbl)
 
-/-- The `[c,h,w]` the running table has for flat width `n`. -/
-def lookupShapeM (n : Nat) : StateM EmitS (Option (Nat × Nat × Nat)) := do
+/-- Record `nm` as carrying the `[c,h,w]` MAP (not a row view). -/
+def noteShapeOf (nm : String) : Option (Nat × Nat × Nat) → StateM EmitS Unit
+  | none           => pure ()
+  | some (c, h, w) => noteEntry nm (some (c, h, w, false))
+
+/-- The `[c,h,w]` the running table has for the value bound to `nm`, as a map. -/
+def lookupShapeM (nm : String) : StateM EmitS (Option (Nat × Nat × Nat)) := do
   let (_, tbl) ← get
-  pure (lookupShape tbl n)
+  pure (lookupShape tbl nm)
 
-/-- Render a pointwise block at its 4-D shape when one is known for flat width `n`.
+/-- The full entry the running table has for `nm`. -/
+def lookupEntryM (nm : String) : StateM EmitS (Option (Nat × Nat × Nat × Bool)) := do
+  let (_, tbl) ← get
+  pure (lookupEntry tbl nm)
+
+/-- The ops that keep a value in its `[h·w, c]` ROW VIEW: ConvNeXt's channel-LN chain, which
+    normalises over the transposed layout and hands the result back to the closing transpose. -/
+private def rowViewPass (t : Tok) : Bool :=
+  match t with
+  | .batched tag _ _ =>
+      tag == "lnRowP" || tag == "rowScaleP" || tag == "rowBiasP" || tag == "lnRowBackP"
+  | .lnRowF _ _ _ _ _ | .lnRowBack _ _ _ _ _ | .rowScaleF _ _ _ | .rowBiasF _ _ _ => true
+  | _ => false
+
+/-- The `(m, n)` of a transpose token, batched or per-example. -/
+private def transposeMN (t : Tok) : Option (Nat × Nat) :=
+  match t with
+  | .batched "transposeP" _ [_, m, n] => some (m, n)
+  | .transposeF m n                   => some (m, n)
+  | _                                 => none
+
+/-- Record what one token's operand and result carry, given the operand-name stack before and
+    after it was emitted. Called from `serializeToks`, so no `emitTok` arm has to know about the
+    table — which is what keeps the 94 arms free of it.
+
+    ⭐ Three cases, and the first two exist only for the channel-LN round trip: a transpose FLIPS
+    the layout flag when its `(m,n)` match the operand's `[c,h,w]` (and records nothing when they
+    do not, e.g. ViT's attention transposes, which are not maps at all), and the row ops carry it
+    through unchanged. Everything else reads its shapes off the tag. -/
+def noteTokShapes (t : Tok) (before after : List String) : StateM EmitS Unit := do
+  if rowViewPass t then
+    match before, after with
+    | i :: _, o :: _ => noteEntry o (← lookupEntryM i)
+    | _, _           => pure ()
+  else match transposeMN t with
+  | some (m, n) =>
+      match before, after with
+      | i :: _, o :: _ =>
+          match ← lookupEntryM i with
+          | some (c, h, w, false) =>
+              if c == m && h * w == n then noteEntry o (some (c, h, w, true)) else pure ()
+          | some (c, h, w, true)  =>
+              if h * w == m && c == n then noteEntry o (some (c, h, w, false)) else pure ()
+          | none                  => pure ()
+      | _, _ => pure ()
+  | none => do
+      let (i, o) := tokIO t
+      match before with
+      | r :: _ => noteShapeOf r i
+      | _      => pure ()
+      match after with
+      | r :: _ => noteShapeOf r o
+      | _      => pure ()
+
+/-- Render a pointwise block at its 4-D shape when the OPERAND's producer recorded one.
     `k` receives the (possibly unflattened) input name and the dims to type its ops with, and
-    returns `(text, result name)`. -/
+    returns `(text, result name)`.
+
+    ⚠ The `c*h*w == n` guard is what keeps a mismatched entry from emitting an ill-typed reshape
+    rather than merely a suboptimal one. It cannot fire today — an entry is written by the token
+    that produced the name — and it is the difference between a missed optimisation and a render
+    that does not parse, so it stays.
+
+    ⭐ The block's own RESULT is recorded too, which is what lets a pointwise CHAIN stay 4-D: the
+    value crossing the token boundary keeps its flat type, so without this the second op in a
+    swish→multiply→add chain would find nothing for its operand and drop back to flat. -/
 def liftPointwise (B n : Nat) (r : String)
     (k : String → List Nat → StateM EmitS (String × String)) : StateM EmitS (String × String) := do
-  match ← lookupShapeM n with
+  match ← lookupShapeM r with
+  | some (c, h, w) =>
+      if c * h * w == n then do
+        let xi ← fresh
+        let (body, res) ← k xi [B, c, h, w]
+        let o ← fresh
+        noteShapeOf o (some (c, h, w))
+        pure (s!"    {xi} = stablehlo.reshape {r} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++ body ++
+              s!"    {o} = stablehlo.reshape {res} : ({ty [B,c,h,w]}) -> {ty [B,n]}\n", o)
+      else k r [B, n]
   | none => k r [B, n]
-  | some (c, h, w) => do
-      let xi ← fresh
-      let (body, res) ← k xi [B, c, h, w]
-      let o ← fresh
-      pure (s!"    {xi} = stablehlo.reshape {r} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++ body ++
-            s!"    {o} = stablehlo.reshape {res} : ({ty [B,c,h,w]}) -> {ty [B,n]}\n", o)
 
-/-- Two-tensor-operand peer of `liftPointwise`; both operands carry the same flat width. -/
+/-- Two-tensor-operand peer of `liftPointwise`; both operands carry the same flat width.
+    The shape comes from whichever operand has one — the cotangent first, since it is the stack
+    operand and was produced nearby, then the saved activation. -/
 def liftPointwise2 (B n : Nat) (r s : String)
     (k : String → String → List Nat → StateM EmitS (String × String)) :
     StateM EmitS (String × String) := do
-  match ← lookupShapeM n with
+  let sh ← match ← lookupShapeM r with
+           | some p => pure (some p)
+           | none   => lookupShapeM s
+  match sh with
+  | some (c, h, w) =>
+      if c * h * w == n then do
+        let xi ← fresh; let yi ← fresh
+        let (body, res) ← k xi yi [B, c, h, w]
+        let o ← fresh
+        noteShapeOf o (some (c, h, w))
+        pure (s!"    {xi} = stablehlo.reshape {r} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++
+              s!"    {yi} = stablehlo.reshape {s} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++ body ++
+              s!"    {o} = stablehlo.reshape {res} : ({ty [B,c,h,w]}) -> {ty [B,n]}\n", o)
+      else k r s [B, n]
   | none => k r s [B, n]
-  | some (c, h, w) => do
-      let xi ← fresh; let yi ← fresh
-      let (body, res) ← k xi yi [B, c, h, w]
-      let o ← fresh
-      pure (s!"    {xi} = stablehlo.reshape {r} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++
-            s!"    {yi} = stablehlo.reshape {s} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++ body ++
-            s!"    {o} = stablehlo.reshape {res} : ({ty [B,c,h,w]}) -> {ty [B,n]}\n", o)
 
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
@@ -5473,8 +5632,10 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       pure (s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [n]}) -> {ty [B,n]}\n" ++
             s!"    {o} = stablehlo.add {r}, {bb} : {ty [B,n]}\n", o :: st)
   | .expe n, r :: st => do
-      let o ← fresh
-      pure (s!"    {o} = stablehlo.exponential {r} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise B n r fun r d => do
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.exponential {r} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .softmaxDiv n, r :: st => do
       let z ← fresh; let s ← fresh; let sb ← fresh; let o ← fresh
       pure (s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -5482,8 +5643,10 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
         s!"    {o} = stablehlo.divide {r}, {sb} : {ty [B,n]}\n", o :: st)
   | .sub n, b :: a :: st => do
-      let o ← fresh
-      pure (s!"    {o} = stablehlo.subtract {a}, {b} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise2 B n a b fun a b d => do
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.subtract {a}, {b} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .weightSgd xN wN lrS m n, r :: st => do
       let dW ← fresh; let lW ← fresh; let sW ← fresh; let o ← fresh
       pure (s!"    {dW} = stablehlo.dot_general {xN}, {r}, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,m]}, {ty [B,n]}) -> {ty [m,n]}\n" ++
@@ -5678,52 +5841,60 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {sW} = stablehlo.multiply {dw}, {lW} : {ty [D,ic,P,P]}\n" ++
         s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [D,ic,P,P]}\n", o :: st)
   | .reluF n, r :: st => do
-      let z ← fresh; let o ← fresh
-      pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
-  -- The round node: down to bf16 and straight back. Two converts, not one, because
-  -- `den` is `ℝ → ℝ` — the VALUE stays f32 and only its precision is degraded, which
-  -- is what "round to bf16" means as a function on reals.
-  --
-  -- ⚠⚠ **MEASURED 2026-08-01 ON ares: XLA DELETES THIS PAIR, SO THIS EMIT IS A NO-OP
-  -- ON HARDWARE.** jax 0.10.2 / CUDA 12.9, `.astype(bf16).astype(f32)` under `jit`:
-  -- eager rounds 1.7640524 → 1.765625, but the jitted result is 1.7640524 unchanged and
-  -- the optimized HLO contains no `convert` at all — the algebraic simplifier treats the
-  -- round trip as removable. So a graph carrying this node computes in FULL f32: no
-  -- speedup and, worse, not even the bf16 numerics.
-  --
-  -- The `den` equation is still correct and the ties built on it still hold — what is
-  -- refuted is this EMIT STRATEGY, not the op. To make bf16 real the value has to stay
-  -- bf16 ACROSS an operation, i.e. a `dot_general` whose operands are bf16-typed with
-  -- `preferred_element_type = f32`. That changes the value's type and so cannot be a
-  -- `SHlo n → SHlo n` node; it is the rung-2 emitter change in
-  -- planning/bf16_renderer.md. Keep this node — it is the proof-side round and the
-  -- depth > 1 ingredient — but do NOT read a graph containing it as running bf16.
+      let (txt4, res4) ← liftPointwise B n r fun r d => do
+          let z ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty d}\n" ++
+                s!"    {o} = stablehlo.maximum {r}, {z} : {ty d}\n", o)
+      -- The round node: down to bf16 and straight back. Two converts, not one, because
+      -- `den` is `ℝ → ℝ` — the VALUE stays f32 and only its precision is degraded, which
+      -- is what "round to bf16" means as a function on reals.
+      --
+      -- ⚠⚠ **MEASURED 2026-08-01 ON ares: XLA DELETES THIS PAIR, SO THIS EMIT IS A NO-OP
+      -- ON HARDWARE.** jax 0.10.2 / CUDA 12.9, `.astype(bf16).astype(f32)` under `jit`:
+      -- eager rounds 1.7640524 → 1.765625, but the jitted result is 1.7640524 unchanged and
+      -- the optimized HLO contains no `convert` at all — the algebraic simplifier treats the
+      -- round trip as removable. So a graph carrying this node computes in FULL f32: no
+      -- speedup and, worse, not even the bf16 numerics.
+      --
+      -- The `den` equation is still correct and the ties built on it still hold — what is
+      -- refuted is this EMIT STRATEGY, not the op. To make bf16 real the value has to stay
+      -- bf16 ACROSS an operation, i.e. a `dot_general` whose operands are bf16-typed with
+      -- `preferred_element_type = f32`. That changes the value's type and so cannot be a
+      -- `SHlo n → SHlo n` node; it is the rung-2 emitter change in
+      -- planning/bf16_renderer.md. Keep this node — it is the proof-side round and the
+      -- depth > 1 ingredient — but do NOT read a graph containing it as running bf16.
+      pure (txt4, res4 :: st)
   | .convertF n, r :: st => do
       let b ← fresh; let o ← fresh
       pure (s!"    {b} = stablehlo.convert {r} : ({ty [B,n]}) -> {tyBf16 [B,n]}\n" ++
             s!"    {o} = stablehlo.convert {b} : ({tyBf16 [B,n]}) -> {ty [B,n]}\n", o :: st)
   | .selectPos x n, r :: st => do
-      let z ← fresh; let msk ← fresh; let o ← fresh
-      pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
-        s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
-        s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+          let z ← fresh; let msk ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty d}\n" ++
+            s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty d}, {ty d}) -> {tyI1 d}\n" ++
+            s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 d}, {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .relu6F n, r :: st => do
-      -- ReLU6 forward: clamp to [0,6] as `min(max(x,0),6)` (matches `relu6`'s def).
-      let z ← fresh; let six ← fresh; let mx ← fresh; let o ← fresh
-      pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
-            s!"    {six} = stablehlo.constant dense<6.0> : {ty [B,n]}\n" ++
-            s!"    {mx} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.minimum {mx}, {six} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise B n r fun r d => do
+          -- ReLU6 forward: clamp to [0,6] as `min(max(x,0),6)` (matches `relu6`'s def).
+          let z ← fresh; let six ← fresh; let mx ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty d}\n" ++
+                s!"    {six} = stablehlo.constant dense<6.0> : {ty d}\n" ++
+                s!"    {mx} = stablehlo.maximum {r}, {z} : {ty d}\n" ++
+                s!"    {o} = stablehlo.minimum {mx}, {six} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .selectMid x n, r :: st => do
-      -- ReLU6 backward mask: route dy where `0 < x < 6`, else 0 (the two-sided kink).
-      let z ← fresh; let six ← fresh; let g0 ← fresh; let l6 ← fresh; let msk ← fresh; let o ← fresh
-      pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
-        s!"    {six} = stablehlo.constant dense<6.0> : {ty [B,n]}\n" ++
-        s!"    {g0} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
-        s!"    {l6} = stablehlo.compare LT, {x}, {six} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
-        s!"    {msk} = stablehlo.and {g0}, {l6} : {tyI1 [B,n]}\n" ++
-        s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+          -- ReLU6 backward mask: route dy where `0 < x < 6`, else 0 (the two-sided kink).
+          let z ← fresh; let six ← fresh; let g0 ← fresh; let l6 ← fresh; let msk ← fresh; let o ← fresh
+          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty d}\n" ++
+            s!"    {six} = stablehlo.constant dense<6.0> : {ty d}\n" ++
+            s!"    {g0} = stablehlo.compare GT, {x}, {z} : ({ty d}, {ty d}) -> {tyI1 d}\n" ++
+            s!"    {l6} = stablehlo.compare LT, {x}, {six} : ({ty d}, {ty d}) -> {tyI1 d}\n" ++
+            s!"    {msk} = stablehlo.and {g0}, {l6} : {tyI1 d}\n" ++
+            s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 d}, {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .flatConvF w b ic oc h w' kH kW, r :: st => do
       let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
       let xn ← fresh; let cv ← fresh; let bb ← fresh; let ob ← fresh; let o ← fresh
@@ -5861,9 +6032,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,n]}\n" ++
         s!"    {o} = stablehlo.multiply {sN}, {i2} : {ty [B,n]}\n", o :: st)
   | .addV n, b :: a :: st => do
-      -- residual fan-in: dy of the two operands summed (`F(x) + skip`)
-      let o ← fresh
-      pure (s!"    {o} = stablehlo.add {a}, {b} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise2 B n a b fun a b d => do
+          -- residual fan-in: dy of the two operands summed (`F(x) + skip`)
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.add {a}, {b} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .gapF c h w, r :: st => do
       -- global average pool: reshape to [B,c,h,w], reduce-add over the spatial
       -- axes [2,3], divide by h·w. Denotes `globalAvgPoolFlat` (mean over H×W).
@@ -6513,35 +6686,43 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!" : ({ty [B,c,2*h,2*w']}, {ty [c,1,kH,kW]}) -> {ty [B,c,2*h,2*w']}\n" ++
         s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,2*h,2*w']}) -> {ty [B, c*(2*h)*(2*w')]}\n", o :: st)
   | .swishF n, r :: st => do
-      -- swish forward: y = x · σ(x), σ = logistic (smooth everywhere, no kink/mask).
-      let s ← fresh; let o ← fresh
-      pure (s!"    {s} = stablehlo.logistic {r} : {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.multiply {r}, {s} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise B n r fun r d => do
+          -- swish forward: y = x · σ(x), σ = logistic (smooth everywhere, no kink/mask).
+          let s ← fresh; let o ← fresh
+          pure (s!"    {s} = stablehlo.logistic {r} : {ty d}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {s} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .swishBack x n, r :: st => do
-      -- swish input-VJP: dy ⊙ σ(x)·(1 + x·(1−σ(x))), recomputing σ from the saved
-      -- pre-activation {x} (matches `swishScalarDeriv`'s closed form, IRPrint `swishB`).
-      let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
-      let inr ← fresh; let sp ← fresh; let o ← fresh
-      pure (s!"    {s} = stablehlo.logistic {x} : {ty [B,n]}\n" ++
-            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
-            s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
-            s!"    {xom} = stablehlo.multiply {x}, {om} : {ty [B,n]}\n" ++
-            s!"    {inr} = stablehlo.add {one}, {xom} : {ty [B,n]}\n" ++
-            s!"    {sp} = stablehlo.multiply {s}, {inr} : {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+          -- swish input-VJP: dy ⊙ σ(x)·(1 + x·(1−σ(x))), recomputing σ from the saved
+          -- pre-activation {x} (matches `swishScalarDeriv`'s closed form, IRPrint `swishB`).
+          let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
+          let inr ← fresh; let sp ← fresh; let o ← fresh
+          pure (s!"    {s} = stablehlo.logistic {x} : {ty d}\n" ++
+                s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+                s!"    {om} = stablehlo.subtract {one}, {s} : {ty d}\n" ++
+                s!"    {xom} = stablehlo.multiply {x}, {om} : {ty d}\n" ++
+                s!"    {inr} = stablehlo.add {one}, {xom} : {ty d}\n" ++
+                s!"    {sp} = stablehlo.multiply {s}, {inr} : {ty d}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {sp} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .sigmoidF n, r :: st => do
-      -- sigmoid forward: σ(x) = logistic(x) (smooth, the SE gate's output nonlinearity).
-      let o ← fresh
-      pure (s!"    {o} = stablehlo.logistic {r} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise B n r fun r d => do
+          -- sigmoid forward: σ(x) = logistic(x) (smooth, the SE gate's output nonlinearity).
+          let o ← fresh
+          pure (s!"    {o} = stablehlo.logistic {r} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .sigmoidBack x n, r :: st => do
-      -- sigmoid input-VJP: dy ⊙ σ(x)·(1−σ(x)), recomputing σ from the saved
-      -- pre-activation {x} (matches `sigmoidScalarDeriv`'s closed form, IRPrint `sigmoidBackM`).
-      let s ← fresh; let one ← fresh; let om ← fresh; let sp ← fresh; let o ← fresh
-      pure (s!"    {s} = stablehlo.logistic {x} : {ty [B,n]}\n" ++
-            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
-            s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
-            s!"    {sp} = stablehlo.multiply {s}, {om} : {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+          -- sigmoid input-VJP: dy ⊙ σ(x)·(1−σ(x)), recomputing σ from the saved
+          -- pre-activation {x} (matches `sigmoidScalarDeriv`'s closed form, IRPrint `sigmoidBackM`).
+          let s ← fresh; let one ← fresh; let om ← fresh; let sp ← fresh; let o ← fresh
+          pure (s!"    {s} = stablehlo.logistic {x} : {ty d}\n" ++
+                s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+                s!"    {om} = stablehlo.subtract {one}, {s} : {ty d}\n" ++
+                s!"    {sp} = stablehlo.multiply {s}, {om} : {ty d}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {sp} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .layerScaleF gN n, r :: st => do
       -- per-element layer-scale `γ ⊙ x`: broadcast γ:[n] over the batch, then multiply.
       let gb ← fresh; let o ← fresh
@@ -6556,56 +6737,60 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {m} = stablehlo.multiply {xn}, {gb} : {ty [B,c,h,w']}\n" ++
             s!"    {o} = stablehlo.reshape {m} : ({ty [B,c,h,w']}) -> {ty [B, c*h*w']}\n", o :: st)
   | .geluF n, r :: st => do
-      -- gelu forward (tanh approximation): y = 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³))).
-      -- Smooth everywhere (no kink/mask); `stablehlo.tanh` is the only non-arith op.
-      let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
-      let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
-      let chalf ← fresh; let hx ← fresh; let o ← fresh
-      pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty [B,n]}\n" ++
-            s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty [B,n]}\n" ++
-            s!"    {ck} = stablehlo.constant dense<0.044715> : {ty [B,n]}\n" ++
-            s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty [B,n]}\n" ++
-            s!"    {inn} = stablehlo.add {r}, {kx3} : {ty [B,n]}\n" ++
-            s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty [B,n]}\n" ++
-            s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty [B,n]}\n" ++
-            s!"    {t} = stablehlo.tanh {u} : {ty [B,n]}\n" ++
-            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
-            s!"    {opt} = stablehlo.add {one}, {t} : {ty [B,n]}\n" ++
-            s!"    {chalf} = stablehlo.constant dense<0.5> : {ty [B,n]}\n" ++
-            s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise B n r fun r d => do
+          -- gelu forward (tanh approximation): y = 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³))).
+          -- Smooth everywhere (no kink/mask); `stablehlo.tanh` is the only non-arith op.
+          let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+          let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+          let chalf ← fresh; let hx ← fresh; let o ← fresh
+          pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty d}\n" ++
+                s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty d}\n" ++
+                s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
+                s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
+                s!"    {inn} = stablehlo.add {r}, {kx3} : {ty d}\n" ++
+                s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
+                s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
+                s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
+                s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+                s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
+                s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
+                s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty d}\n" ++
+                s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .geluBack x n, r :: st => do
-      -- gelu input-VJP: dy ⊙ gelu'(x), recomputing tanh(u(x)) from the saved
-      -- pre-activation {x}. gelu'(x) = 0.5·(1+t) + 0.5·x·(1−t²)·√(2/π)·(1+3·0.044715·x²),
-      -- t = tanh(√(2/π)·(x+0.044715·x³)). (Matches IRPrint `renderGeluB`.)
-      let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
-      let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
-      let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
-      let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
-      let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
-      pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty [B,n]}\n" ++
-            s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty [B,n]}\n" ++
-            s!"    {ck} = stablehlo.constant dense<0.044715> : {ty [B,n]}\n" ++
-            s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty [B,n]}\n" ++
-            s!"    {inn} = stablehlo.add {x}, {kx3} : {ty [B,n]}\n" ++
-            s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty [B,n]}\n" ++
-            s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty [B,n]}\n" ++
-            s!"    {t} = stablehlo.tanh {u} : {ty [B,n]}\n" ++
-            s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
-            s!"    {opt} = stablehlo.add {one}, {t} : {ty [B,n]}\n" ++
-            s!"    {chalf} = stablehlo.constant dense<0.5> : {ty [B,n]}\n" ++
-            s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty [B,n]}\n" ++
-            s!"    {t2} = stablehlo.multiply {t}, {t} : {ty [B,n]}\n" ++
-            s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty [B,n]}\n" ++
-            s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty [B,n]}\n" ++
-            s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty [B,n]}\n" ++
-            s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty [B,n]}\n" ++
-            s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty [B,n]}\n" ++
-            s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty [B,n]}\n" ++
-            s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty [B,n]}\n" ++
-            s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty [B,n]}\n" ++
-            s!"    {gp} = stablehlo.add {term1}, {term2} : {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.multiply {r}, {gp} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+          -- gelu input-VJP: dy ⊙ gelu'(x), recomputing tanh(u(x)) from the saved
+          -- pre-activation {x}. gelu'(x) = 0.5·(1+t) + 0.5·x·(1−t²)·√(2/π)·(1+3·0.044715·x²),
+          -- t = tanh(√(2/π)·(x+0.044715·x³)). (Matches IRPrint `renderGeluB`.)
+          let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+          let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+          let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
+          let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
+          let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
+          pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty d}\n" ++
+                s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty d}\n" ++
+                s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
+                s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
+                s!"    {inn} = stablehlo.add {x}, {kx3} : {ty d}\n" ++
+                s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
+                s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
+                s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
+                s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+                s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
+                s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
+                s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty d}\n" ++
+                s!"    {t2} = stablehlo.multiply {t}, {t} : {ty d}\n" ++
+                s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty d}\n" ++
+                s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty d}\n" ++
+                s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty d}\n" ++
+                s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty d}\n" ++
+                s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty d}\n" ++
+                s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty d}\n" ++
+                s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty d}\n" ++
+                s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty d}\n" ++
+                s!"    {gp} = stablehlo.add {term1}, {term2} : {ty d}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {gp} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .softmaxRowF m n, r :: st => do
       -- ROW-softmax: reshape flat `[B,m*n]` → `[B,m,n]`, exp, reduce add over the
       -- LAST axis [2] (per row), broadcast back over dims [0,1], divide, reshape to
@@ -6658,10 +6843,12 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {t} = stablehlo.transpose {xn}, dims = [0, 2, 1] : ({ty [B,m,n]}) -> {ty [B,n,m]}\n" ++
         s!"    {o} = stablehlo.reshape {t} : ({ty [B,n,m]}) -> {ty [B, n*m]}\n", o :: st)
   | .scaleF sStr n, r :: st => do
-      -- scalar multiply s·x against a splat constant (SDPA's 1/√d).
-      let c ← fresh; let o ← fresh
-      pure (s!"    {c} = stablehlo.constant dense<{sStr}> : {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.multiply {r}, {c} : {ty [B,n]}\n", o :: st)
+      let (txt4, res4) ← liftPointwise B n r fun r d => do
+          -- scalar multiply s·x against a splat constant (SDPA's 1/√d).
+          let c ← fresh; let o ← fresh
+          pure (s!"    {c} = stablehlo.constant dense<{sStr}> : {ty d}\n" ++
+                s!"    {o} = stablehlo.multiply {r}, {c} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
   | .lnRowF gN bN epsStr m n, r :: st => do
       -- ROW-wise LayerNorm forward: reshape flat [B,m*n] → [B,m,n], then `bnF`'s
       -- normalize/affine graph at rank 3 — μ/var reduced over the LAST axis [2]
@@ -8818,6 +9005,10 @@ def serializeToks (B : Nat) : List Tok → (String × List String) → StateM Em
   | [], acc           => pure acc
   | t :: ts, (code, st) => do
       let (c, st') ← emitTok B t st
+      -- ⭐ The ONE place the shape table is written. Doing it here rather than in the 94 `emitTok`
+      -- arms is what keeps them free of it — and it is why the table can be keyed by NAME at all:
+      -- only here are the operand stack before and after the token both in hand.
+      noteTokShapes t st st'
       serializeToks B ts (code ++ c, st')
 
 /-- **The conv-bias SSA name** — §2l step B. Every conv in ResNet-34 is immediately followed by
@@ -8979,7 +9170,6 @@ def enetRmsHyper : RmsHyper := { eps := 1.0e-3, wd := 1.0e-5 }
     the very tokens this prints — the printer can't structurally drift. -/
 def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM EmitS (String × String) := do
   let toks := toToks (skel g)
-  noteShapes (shapeTblOf toks)
   let (code, st) ← serializeToks B toks ("", [])
   match st with
   | [r] => pure (code, r)

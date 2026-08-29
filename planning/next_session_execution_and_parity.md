@@ -60,6 +60,11 @@ said. Transpose share predicts which nets pay, with no exceptions:
 The two nets with nothing to remove are unchanged — the control that says the fix acts on the
 mechanism claimed and not on something else.
 
+⭐⭐ **AND THE CONVNEXT ROW WAS NOT DONE.** Its 2.434 GB residue was read as the channel-LN's rank-3
+detour and scoped as a new op (§1.5). It was not: it was a **width collision in the fix's own shape
+table**. Keyed by SSA name instead, ConvNeXt-T reaches **0.122 GB / 1.24×**, and the two sizes
+nobody had censused reach **1.46×** (-S) and **1.51×** (-B). Full account in §1.5.
+
 ---
 
 ## 1. TRACK 1 — CLOSED. The mechanism, the fix, and what the old §1.3 got wrong
@@ -148,9 +153,11 @@ mechanism confirmed from the other side.
   `addV`/`sub`). Every value crossing a token boundary keeps its flat type, so **no other emit arm
   changed** and no type mismatch is possible.
 
-⭐ A width with no table entry — or one whose entry came from a different layer that happens to
-share it — costs a MISSED optimisation and never a wrong program: the bracket is an inverse reshape
-pair, the identity at any shape with the same element count.
+⛔⛔ ~~A width with no table entry — or one whose entry came from a different layer that happens to
+share it — costs a MISSED optimisation and never a wrong program.~~ **CORRECTED (§1.5).** The
+"never a wrong program" half is true and the "missed optimisation" half is not: an entry from a
+different layer emits the SAME relayout the bracket exists to remove, one shape over. It cost
+ConvNeXt-T 1.5 of its 2.4 GB. The table is now keyed by SSA NAME, not by width.
 
 **Measured on the re-rendered artifacts** (59 changed; `scripts/regen_verified_mlir.sh proofs`):
 
@@ -312,7 +319,99 @@ rank-3 detour. That is now scoped as its own next-session item — **see §1.5**
 
 ---
 
-### 1.5 ▶ NEXT SESSION — the channel-LN tweak (ConvNeXt's remaining 2.36 GB)
+### 1.5 ✅ CLOSED — and the patient was NOT the channel-LN. It was §1.2b's own shape table.
+
+⛔⛔ **The `lnChanP` op is CANCELLED, not deferred, and none of it was written.** The section below
+this line is the plan as it stood; keep it for the reasoning, not the conclusion. Its premise —
+"the residue is the rank-3 detour `lnRowP` forces" — was wrong, and the way you can see it is that
+the residue goes away without touching the LN at all. **ConvNeXt-T 2.434 → 0.122 GB.**
+
+**What it actually was.** §1.2b keyed `ShapeTbl` by **flat element count**, and on the real nets two
+layers collide:
+
+| net | collision | width |
+|---|---|---|
+| ConvNeXt-T/S/B | stage-2 MLP `1536·14·14` **=** stage-0 block `96·56·56` | 301 056 |
+| | stage-3 MLP `3072·7·7` **=** stage-1 block `192·28·28` | 150 528 |
+| MNv4, MobileNetV2, R50 | the same shape of collision at their own widths | |
+
+First writer won, so every stage-2/3 MLP block unflattened to a **stage-0/1 shape** — right element
+count, wrong layout — and XLA materialised a relayout either side. §1.2b called this case out and
+priced it as *"a MISSED optimisation and never a wrong program"*. The first half is true; the second
+is the whole cost. It is not a missed optimisation, it is **the same relayout the bracket exists to
+remove, re-emitted one shape over**: 24 mis-lifted brackets on ConvNeXt-T, 60 on -S, 67 on R50.
+
+⭐ The tell was in the artifact all along, two lines apart:
+```mlir
+%v1365 = stablehlo.reshape %v1364 : (tensor<32x1536x14x14xf32>) -> tensor<32x301056xf32>
+%v1366 = stablehlo.reshape %v1365 : (tensor<32x301056xf32>) -> tensor<32x96x56x56xf32>
+```
+
+**The fix.** Key the table by **SSA name**, written centrally in `serializeToks` from the token's
+own descriptor, so no `emitTok` arm has to know about it. Three pieces:
+
+* **`tokIO`** — a tag's input and output `[c,h,w]`, forward AND backward, batched tag and
+  per-example Tok in pairs. ⚠ The backward half is not optional: the width table covered the
+  cotangent chain by accident (one entry served the forward activation and the cotangent alike,
+  because they have the same width), and the first name-keyed cut without it landed at 0.999 GB.
+* **A row-view flag on each entry.** ConvNeXt's channel-LN is `transpose → lnRow → rowScale →
+  rowBias → transpose`: a layout ROUND TRIP whose two ends are the same `[c,h,w]` map. The
+  transpose flips the flag, the row ops carry it through, and the closing transpose restores the
+  map — so the drop-path multiply that consumes it stays 4-D. Without it: 0.223 GB, not 0.122.
+  ⭐ It is also a correctness rail: `liftPointwise` must never fire on a row view, because
+  `[h·w, c]` reshaped to `[B,c,h,w]` is a different permutation, not an inverse pair.
+* **The 14 per-example pointwise arms lifted** (`geluF`, `swishF`, `reluF`, `relu6F`, `sigmoidF`,
+  `expe`, `scaleF`, the five `*Back`/`select*` peers, `addV`, `sub`) — see the ⛔ below.
+
+**Measured**, one 4060 Ti, `scripts/bf16_device_step.py`, 15 interleaved reps:
+
+| net | transposes → | ms/step → | | numeric Δ |
+|---|---|---|---|---|
+| **ConvNeXt-B** | 10.425 → **0.277 GB** | 239.56 → **159.15** | **1.51×** | 8 of 265.8M, 1.1e-07 |
+| **ConvNeXt-S** | 6.638 → **0.164 GB** | 155.63 → **106.71** | **1.46×** | 9 of 150.7M, 1.1e-07 |
+| **ConvNeXt-T** | 2.434 → **0.122 GB** | 84.69 → **68.02** | **1.24×** | 2 of 85.8M, 6.5e-08 |
+| **MNv4-Conv-M** | 0.776 → **0.056 GB** | 47.78 → **42.99** | **1.11×** | 79 of 29.2M, 7.7e-06 |
+| EffNet-B0 | 0.045 → 0.045 | 59.70 → 59.69 | 1.00× | **0** — bit-identical |
+| MobileNetV2 | 0.043 → 0.043 | 58.32 → 58.36 | 1.00× | **0** |
+| R50 A3 | 0.573 → 0.573 | — | 1.00× | **0** |
+| ViT-Ti | 0.035 → 0.035 | — | 1.00× | **0** |
+
+The four nets with no collision are bit-identical and unmoved — the control that says the fix acts
+on the mechanism claimed. ⭐ **ConvNeXt-S and -B had never been censused**; at 6.6 and 10.4 GB they
+were paying far more than -T, and `cnxs-default-4gpu.conf` / `cnxb-default-4gpu.conf` are the two
+jobs that gain most.
+
+⛔ **A red gate was found and fixed, and it had been red since `f4e4172`.** That commit lifted only
+the **batched** pointwise arms, so the batched and per-example ConvNeXt renderers diverged at the
+GELU — and `convnext-fwd-b-tie`, which asserts they emit the same bytes, has been failing ever
+since. Its commit message lists `TestBatchedEmitTie` and the Adam ties; it never claims that gate.
+Fixed by lifting the 14 per-example arms as well, which also extends the 4-D emit to the whole
+Imagenette/CIFAR corpus. ⚠⚠ **I nearly missed it the same way**: I ran the gate binaries while
+`lake build` was still running and read a stale ✅ — [[stale-lean-exe-gates]] warns about exactly
+that, and the warning is only useful if you check the build FINISHED, not that you started one.
+
+⚠ `clip-tie` failed once (13.4 ULPs of factor spread against an 8-ULP bar) and passed four
+consecutive reruns at 1.1–2.2 ULPs. It is **flaky**, not a regression; the bar is close to the
+run-to-run spread of an XLA reduction. Worth widening or seeding, separately.
+
+⛔ **`scripts/regen_verified_mlir.sh proofs` was incomplete** and returned green while doing it:
+its module list was missing all four `*RenderB` writers, so every ImageNet ResNet-34/50,
+MobileNetV2/V4 artifact stayed at the previous renderer's bytes — 65 of the 113 an emitter change
+actually touches. `lake build X` elaborates X and its *dependencies*; a sibling renderer is neither.
+Fixed, with the cross-check in a comment beside the list.
+
+⭐ **The transferable lesson.** §1.2b wrote down the exact failure mode — "an entry from a different
+layer that happens to share the width" — and then priced it as harmless *by an argument about
+correctness*, which was sound, while the change was a *performance* change. The reasoning never
+asked what the wrong shape costs, only whether it computes the wrong answer. ▶ When a fallback is
+declared benign, say benign **for what**.
+
+---
+
+<details><summary>The superseded plan (kept for the reasoning). The channel-LN's rank-3 detour is
+NOT the residue: after the shape fix its `[0,2,1]` transposes do not appear in the optimized HLO at
+all — once the surrounding chain is 4-D, XLA folds them into layout assignment.</summary>
+
 
 **Where it stands.** §1.2b took ConvNeXt 7.704 → 2.434 GB of transposes. The residue is *still*
 relayout, not something new:
@@ -365,6 +464,8 @@ pointwise widths a 4-D partner, which `liftPointwise` would then pick up for fre
 
 **Order.** Do `lnChanP` forward + backward, re-render, census (`hlo_tr.py`), then the runner probe —
 the same loop §1.2b used. ConvNeXt-T is the only patient left; B0 is already at 0.045 GB.
+
+</details>
 
 ---
 
@@ -496,6 +597,13 @@ method (§1.2c); mnv2, ViT and R50 are unaffected and their rows stand:
 
 ⚠ Both post-fix rows need the job conf flipped to the bf16 variant to be real — §6 item 2.
 
+⚠⚠ **The ConvNeXt row is ITSELF now stale, low.** It was taken before §1.5's shape fix, on a graph
+still carrying 2.434 GB of collision relayout. The bare graph improved a further **1.24×** after it
+(84.69 → 68.02 ms), so the runner is due a re-probe; the 144 ms/step and 120.1 h above are an upper
+bound, not the figure. ConvNeXt-S and -B gain more (**1.46×**, **1.51×** on the bare graph) and have
+never had a runner probe at all. ▶ Re-take `cnx-default-4gpu` at `adamdpwxclipdropbf16` before
+quoting any ConvNeXt hour count.
+
 ⚠ **The old §21 table costed the wrong graphs.** It probed mnv2 as `adamdp64` (AdamW, 195 ms) where
 the job runs RMSProp (167), and enet as bare `rmsdp64` (186) where the job runs
 `emarmsdp64dropdo` (**357** — EMA + drop-path + dropout nearly double B0's step). Re-take any number
@@ -509,9 +617,12 @@ quoted from it.
    flat-activation NHWC↔NCHW relayouts, and the renderer now emits pointwise ops 4-D (§1.2b).
    Measured: B0 bf16 bare graph **2.28×**, ConvNeXt runner **180 → 144 ms/step**, f32 unaffected,
    CIFAR-8 bf16 training unregressed at n=3 (§1.2d).
-1. ▶ **The channel-LN tweak (§1.5)** — ConvNeXt's last 2.36 GB of relayout. Projected 144 → ~130
-   ms/step, 120.1 → ~108 h. This is the next session's target. ⚠ It is a NEW OP (`den` arm + tie),
-   not a `liftPointwise` wrap, so cost it accordingly.
+1. ✅ **DONE — and it was not the channel-LN (§1.5).** The residue was a width COLLISION in
+   §1.2b's shape table (`1536·14·14 = 96·56·56`); keyed by SSA name instead, ConvNeXt-T goes
+   2.434 → **0.122 GB** and **1.24×**, -S **1.46×**, -B **1.51×**, MNv4 **1.11×**, with the other
+   four nets bit-identical. `lnChanP` was never written and is not needed. Also fixed: a
+   `convnext-fwd-b-tie` that had been red since `f4e4172`, and `regen_verified_mlir.sh`'s
+   incomplete module list.
 2. **Move the jobs to bf16** — the §1.2b win is **bf16-only** and every `scripts/jobs/*.conf`
    artifact is f32 today, so the running jobs get nothing until their confs flip. enet's twin now
    exists (39.7 → 30.5 h); ConvNeXt's already did (174.3 → 120.1 h). ⚠ Re-probe `SHIM_WORKERS` on
