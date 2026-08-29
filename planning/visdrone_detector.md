@@ -15,26 +15,32 @@ levers don't beat plain training" lesson that applies here too), and
 
 ## 0. TL;DR — where it stands
 
-> **▶ RESUMED 2026-08-28. The tree was empty; it has been rebuilt and re-verified.**
-> The code and these docs survived the pause. The data, every checkpoint, the
-> backbone file, and the PyTorch twin's venv did not — they were deleted to free
-> disk. §12's resume checklist is therefore **obsolete**: its step 1 (re-score
-> `long30`) cannot run, because those checkpoints are gone. The `long30` result
-> stays VOID and "train longer" is now being answered by a fresh 50-epoch run
-> rather than a re-score.
+> **▶ STATE 2026-08-29. Paused here; the next session picks up at §13.**
 >
-> **What changed while this was parked, all of it load-bearing:**
-> - **The trainer got 9.47× faster** (`planning/detector_pjrt_port.md`, DONE
->   2026-08-07). A 12-epoch run was 4.5 h and is now ~45 min. Every cost estimate
->   in this doc and in `coco_visdrone_two_stage.md` predates that.
-> - **The box is now 6× RTX 4060 Ti on CUDA.** Every `IREE_BACKEND=rocm` and
->   `HIP_VISIBLE_DEVICES` in these runbooks is dead weight; use
->   `CUDA_VISIBLE_DEVICES`. Arms can run in parallel, one per card — though the
->   **host data loader is the shared bottleneck**: epochs stretch from 208 s to
->   ~400 s once five trainers are live.
-> - **Aug pack is confirmed ACTIVE, finally.** `FPN_AUG=1` raises epoch-1 train
->   loss (356.4 vs 354.5) and epoch time (305 s vs 208 s). "Is it even on" was a
->   live question; it is on. Still opt-in and still off by default.
+> **mAP@0.5 = 0.1961**, from the **0.1386** this thread resumed at — **+41.5%**,
+> for one 12-epoch run (~47 min on one RTX 4060 Ti). The recipe is
+> `FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12`, scored with
+> `--multilabel`. Argmax-to-argmax against the PyTorch replica's 0.1532 it is
+> **0.1774 (+15.8%)**.
+>
+> **Deployment is unblocked and measured on real hardware**: Jetson Orin Nano
+> 8GB, 25 W, TensorRT fp16 — **35.7 fps end to end**, up from 14.9 (§12b).
+>
+> ⚠ **Four things that were believed at the last pause and are now false.** Each
+> cost a run to disprove and none is obvious from the code:
+> 1. *"Aug moves the optimum to ~30 epochs."* No — **12 epochs wins** (0.1798 at
+>    e10 of a 12-ep cosine vs 0.1782 at the 30-ep arm's best). The annealing was
+>    doing the work, not the length.
+> 2. *"The T1b class weights help class spread."* They are **net harmful**; the
+>    unweighted arm is best and full inverse-frequency costs 23%.
+> 3. *"The class head overfits on longer schedules."* Its aggregate accuracy is
+>    **flat** (top-1 67.58 → 67.32); it *redistributes* toward the priors, and
+>    mAP is charged for what average CE is indifferent to.
+> 4. *"The replica validates the export."* It never did — the ONNX shipped a
+>    **different model** for a day. Root cause was one missing `pad="lean"`.
+>
+> **The tree was rebuilt from nothing on 2026-08-28** — data, checkpoints, the
+> backbone file and the twin's venv had all been deleted for disk. It reproduces:
 >
 > **Rebuild recipe (verified faithful — reproduce these counts or stop):**
 > `./download_visdrone.sh`, then `preprocess_visdrone.py data/visdrone
@@ -96,7 +102,8 @@ A ResNet-34 + FPN anchor detector, trained on VisDrone, **works**. As of
 class-agnostic AP 0.435) at 30 epochs with `FPN_AUG=1` — up **25%** on the
 0.1386 this thread paused at, and **13% past** the architecture-matched PyTorch
 replica (0.1532) that it used to trail by 10%. **Full results, curves and the
-resume plan are in §12b — read that first; the paragraphs below predate it.**
+resume plan are in **§13**, with the workings in §12b. The paragraphs below
+predate all of it and are kept only for the reasoning.**
 
 ⚠ The single most important operational finding: **`FPN_AUG=1` is not optional
 on any schedule longer than ~12 epochs.** Without it, 50 epochs scores 0.1243,
@@ -120,7 +127,8 @@ from free data and **deploys to an edge device** (Orin path already validated).
 Verification/proofs are NOT required here — codegen + FD only.
 
 **One thing gates every external number:** score against the full-GT sidecar
-(§5), not the 56-box-capped tail. `0.1386` is the real number; `0.1167` was the
+(§5), not the 56-box-capped tail. `0.1386` was the real number at the time and
+`0.1167` was the
 capped artifact.
 
 ---
@@ -220,7 +228,7 @@ step or the loss reduce fails to distribute.
 
 ---
 
-## 5. Current results & the twin gap
+## 5. Results as of 2026-07 — ⛔ SUPERSEDED by §12b/§13, kept for the twin analysis
 
 12-epoch arm (`runs/yolo_fpn_shuffix`), full GT unless noted:
 
@@ -469,7 +477,7 @@ detector) and devices (Orin, Pi5).
 
 ---
 
-## 12b. RESULTS + resume plan (2026-08-28) — READ THIS FIRST
+## 12b. Results ledger (2026-08-28 → 29) — the workings behind §0 and §13
 
 ### The four arms, all finished and scored
 
@@ -506,21 +514,11 @@ observation (voided for being measured in the shuffle-bug era — the plateau wa
 real), and `coco_visdrone_two_stage.md` §4's untested prediction that "the
 schedule decision is really an aug decision".
 
-### Next, in order
+### Next, in order — ⛔ SUPERSEDED, see §13
 
-1. ⭐ **30 epochs with aug, annealed AT 30.** The 0.1731 is a *truncated* 50-epoch
-   cosine that never annealed, so it understates. This should beat it and costs
-   40% less than the run that found it. `FPN_EPOCHS=30 FPN_AUG=1 FPN_TAG=aug30`.
-2. **Aug at 12 epochs** — the missing cell of the 2×2, 4× cheaper again.
-3. **Box-aware affine aug** — ✅ **BUILT and gated** 2026-08-28 (§6.2), needs its
-   A/B: `FPN_AUG=1 FPN_AFFINE=<p>` against an `FPN_AUG=1` control on the same
-   schedule, or it confounds two changes. Start at the measured default
-   (scale ±0.25, translate ±0.10, ~11% GT cost); ⚠ do NOT start at Ultralytics'
-   scale ±0.50, which costs 17% of GT here and nearly doubles the sub-2px share.
-   Mosaic stays deferred (4-into-1 halves already-tiny objects) but is worth
-   re-testing now that plain aug is measured as clearly positive.
-4. **Then** the backbone (§8). Do not swap on an under-tuned recipe; the schedule
-   and aug questions are cheaper and now partly answered.
+Items 1 and 2 (30 epochs annealed; aug at 12) were run and **both are answered**:
+12 epochs wins and longer loses. Kept only so the reasoning is legible. The live
+list is §13.
 
 ### ⭐ Class focal (T1c) — helps, but NOT the way it was predicted to (2026-08-29)
 
@@ -716,3 +714,114 @@ can't be identical" or "the loaded checkpoint path must contain the tag." The
 R34→BraTS retraining will have the identical risk surface (is the backbone
 actually loaded? is eval scoring the right checkpoint? is image↔mask paired?).
 **Cheap, fast, CPU-side known-answer guards are worth more than more GPU hours.**
+
+
+---
+
+## 13. NEXT SESSION STARTS HERE (paused 2026-08-29)
+
+### The one-line state
+
+`FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12` → **mAP@0.5 0.1961**
+under `--multilabel`, 0.1774 under argmax. Deployed at 35.7 fps on an Orin Nano.
+
+### The full ladder, every number from this thread
+
+| arm | ep | aug | clsw | γ_cls | decode | mAP | ca-AP | recall |
+|---|---|---|---|---|---|---|---|---|
+| baseline on record | 12 | off | sqrt | 0 | argmax | 0.1386 | 0.376 | 0.676 |
+| PyTorch replica | 12 | off | — | — | argmax | 0.1532 | 0.400 | 0.677 |
+| `ctrl12` | 12 | off | sqrt | 0 | argmax | 0.1526 | 0.393 | 0.682 |
+| `long50` | 50 | off | sqrt | 0 | argmax | 0.1243 | 0.369 | 0.669 |
+| `aug50` | 50 | on | sqrt | 0 | argmax | 0.1674 | 0.429 | 0.703 |
+| `aug30` best (e20) | 30 | on | sqrt | 0 | argmax | 0.1782 | — | — |
+| `aug12` best (e10) | 12 | on | sqrt | 0 | argmax | 0.1798 | 0.415 | 0.699 |
+| `clswinv` | 12 | on | inv | 0 | argmax | 0.1368 | 0.346 | 0.696 |
+| `clswnone` | 12 | on | none | 0 | argmax | 0.1774 | 0.429 | 0.699 |
+| `cfoc2` | 12 | on | none | 2 | argmax | 0.1762 | 0.441 | 0.708 |
+| `clswnone` | 12 | on | none | 0 | **multilabel** | 0.1909 | 0.432 | 0.743 |
+| **`cfoc2`** | 12 | on | none | 2 | **multilabel** | **0.1961** | 0.441 | 0.749 |
+
+⚠ Never mix decodes in a comparison. Everything before 2026-08-29 is argmax.
+
+### ⛔ The wall: rare classes, and it is probably NOT the loss
+
+Three separate levers have now failed to move rare-class discrimination, and the
+head sits at ~13% top-1 on awning-tricycle and ~19% on bicycle under all of them:
+
+| lever | rare-class top-1 | verdict |
+|---|---|---|
+| sqrt-inverse weights | rises (awning-tri 13.4 → 29.9) | but AP falls — FP flood |
+| full-inverse weights | rises more (→ 30.6) | mAP −23%, worse still |
+| class focal γ=2 | **does not move** (13.4 → 13.4) | helps calibration instead |
+
+Static weights raise rare-class *recall* by flooding those classes with false
+positives (tricycle detections 7,419 → **31,322** against 1,045 GT) and AP is
+precision-sensitive. Focal avoids that flood (7,419 → 8,597) but does not improve
+discrimination at all. **Stop treating this as a loss-function problem.** With
+291 and 367 val instances against car's 6,345, the next honest hypothesis is
+data, not objective.
+
+### What to run first, in order
+
+1. ⭐ **The box-aware affine A/B — BUILT, GATED, NEVER RUN.** It is the only
+   untried lever that adds information rather than reweighting what is there, and
+   it is the one that moves object SCALE, which is the axis this dataset lives on.
+   `FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_AFFINE=50 FPN_TAG=aff50` against
+   the same config without `FPN_AFFINE` (which is `cfoc2`, already on the board at
+   0.1961 — so the control is free). Start at the measured default (scale ±0.25,
+   translate ±0.10, ~11% GT cost); ⚠ **not** Ultralytics' ±0.50, which costs 17%
+   of GT here and nearly doubles the sub-2px share
+   (`scripts/fpn_affine_knob_cost.py`).
+2. **Mosaic**, deferred all thread on the grounds that 4-into-1 halves
+   already-tiny objects. Worth re-testing only if (1) shows scale aug helps.
+3. **`--ml-k` / `--ml-floor` sweep.** Multilabel is worth +7.6% at the default
+   top-3 / p≥0.05 and has never been tuned. Free — it is decode-only, no retrain.
+4. **The backbone** (§8), last. Do not swap on a recipe still being tuned.
+
+### Deployment: what is done and what is not
+
+✅ Export correctness gated (`export_onnx.py --verify-frame`, and
+`bespoke/diff_lean.py --lean-logits` for an elementwise check over many records).
+✅ Decode vectorized: 49.1 → 10.0 ms on device, gated against the old
+implementation by `orin_detect.py --gate-decode`.
+✅ Measured: Orin Nano 8GB / 25 W / TensorRT fp16 / JetPack 6.2 / TRT 10.3 —
+preprocess 11.9, forward 6.3, decode 10.0, **total 28.0 ms = 35.7 fps**.
+
+⛔ **Not yet run on device:** `--fold-preprocess u8`. It is built and passes the
+frame gate at an identical 4.959e-04, and should take preprocess from 11.9 ms to
+near zero (input becomes `[1,448,448,3]` UINT8 — what `np.asarray(pil)` already
+returns — so the host does no arithmetic and the H2D copy drops 4×). Needs a
+TensorRT that accepts a UINT8 network input; fall back to `f32` if not. **This is
+the largest remaining easy win on the device: ~28 → ~17 ms, ~59 fps.**
+
+### ⚠ Environment traps that will cost an hour each
+
+- **`scripts/fpn_loss_probe_check.py` needs IREE, which is NOT in the repo
+  `.venv` and must never be** — that venv is the pinned JAX/cuDNN environment and
+  installing into it breaks every bf16 conv. Use a throwaway venv with a MATCHED
+  `iree-base-compiler`/`iree-base-runtime` pair and pass `IREE_COMPILE=`; the
+  recipe is in that script's header.
+- **`deploy/export_onnx.py` needs torch**, likewise never in the pinned `.venv`
+  (torch drags its own CUDA wheels over the pinned cuDNN). Throwaway CPU-only
+  venv; recipe in that script's header.
+- **Scoring a checkpoint from a RUNNING arm** must go through the `<tag>ev`
+  copy-and-rename dance, or the live trainer's `_params.bin` gets clobbered.
+- **`FPN_TAG` is not optional on `infer`.** An untagged eval silently scores a
+  different arm; the only tell is identical rows across an epoch sweep. This
+  voided a full day once.
+
+### Everything added this session
+
+| thing | where |
+|---|---|
+| box-aware affine | `ffi/f32_helpers.c`, `F32.fpnAffine`, `FPN_AFFINE` |
+| its gate | `scripts/check_fpn_affine.py` (compiles the real C, refs the real encoder) |
+| its knob costs | `scripts/fpn_affine_knob_cost.py` |
+| class focal | `emitAnchorYoloLoss`, `yoloClsFocalGamma`, `FPN_CLSFOCAL` |
+| its FD gate | `scripts/fpn_loss_probe_check.py` (2 new arms) |
+| class-weight ladder | `FPN_CLSW=none\|sqrt\|inv` |
+| multilabel decode | `yolo_map_visdrone.py --multilabel --ml-k --ml-floor` |
+| the padding fix | `deploy/export_onnx.py` (`pad="lean"`) |
+| fast decode | `deploy/orin_detect.py` (`decode_reference` is the oracle) |
+| preprocess folding | `export_onnx.py --fold-preprocess {none,f32,u8}` |
