@@ -69,7 +69,7 @@ structure BBackB where
 
 /-- Identity block forward: `conv1→BN1→relu1→conv2→BN2→(+x)→relu`, all at `N := B`. -/
 private def idFwdB (B c hh : Nat) (epsStr p xName : String)
-    (convBias : Bool) (bf16 : Bool := false) : StateM Nat BFwdB := do
+    (convBias : Bool) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS BFwdB := do
   let ww := hh
   let zc  : Vec c := fun _ => 0
   let zk  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
@@ -92,7 +92,7 @@ private def idFwdB (B c hh : Nat) (epsStr p xName : String)
 
 /-- Downsample block forward: strided body + strided projection skip. `cin→c`, `2hh→hh`. -/
 private def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
-    (convBias : Bool) (bf16 : Bool := false) : StateM Nat BFwdB := do
+    (convBias : Bool) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS BFwdB := do
   let ww := hh
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
@@ -125,7 +125,7 @@ private def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
 
 /-- Identity block backward + its 8 parameter gradients. -/
 private def idBackGradB (B c hh : Nat) (epsStr p : String) (f : BFwdB) (dyName : String)
-    (convBias : Bool) (bf16 : Bool := false) : StateM Nat BBackB := do
+    (convBias : Bool) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
   let zc  : Vec c := fun _ => 0
@@ -164,7 +164,7 @@ private def idBackGradB (B c hh : Nat) (epsStr p : String) (f : BFwdB) (dyName :
 
 /-- Downsample block backward + its 12 parameter gradients. -/
 private def downBackGradB (B cin c hh : Nat) (epsStr p : String) (f : BFwdB) (dyName : String)
-    (convBias : Bool) (bf16 : Bool := false) : StateM Nat BBackB := do
+    (convBias : Bool) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
   let zc   : Vec c := fun _ => 0
@@ -387,7 +387,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- `d = min(decay, (1+t)/(10+t))` moves every step and the driver computes it. Baking 0.9999
     -- here is the EMA-warmup defect this repo has already paid for once.
     (ema : Bool := false) :
-    StateM Nat (String × String × String × String × Option String × Option String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × Option String × Option String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let replicas := if preAvg then 1 else replicas
@@ -395,7 +395,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
   let gr : SHlo n := .operand gAvg z
   -- ⚠ Emitted by every arm below rather than once here, because it consumes each arm's OWN `nT`.
   -- Hoisting it would need the updated-parameter name before the arm that produces it has run.
-  let emaTail : String → StateM Nat (String × Option String) := fun nT =>
+  let emaTail : String → StateM Proofs.StableHLO.EmitS (String × Option String) := fun nT =>
     if ema then do
       -- ⚠⚠ **`ema`, NOT `e`, AND THAT IS A COLLISION ALREADY PAID FOR.** The shadow's SSA name is
       -- `{parameter}{suffix}`, and at suffix `e` the stem BN gamma `%sg` produced **`%sge`** — which
@@ -719,7 +719,7 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     -- ⚠ It is INDEPENDENT of the accumulator: `G` and `E` are two regions, not one slot two
     -- features share, which is the whole point of the change (`VerifiedVariant.nRegions`).
     (ema : Bool := false) :
-    StateM Nat (String × List String × List String × List String × List String × List String) := do
+    StateM Proofs.StableHLO.EmitS (String × List String × List String × List String × List String × List String) := do
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let z1 : Vec 1 := fun _ => 0
   let accK := optAccumK opt
@@ -1023,7 +1023,7 @@ here first"
     | .lambAccum k => panic! s!"resnet34TrainStepFaithfulB: .lambAccum {k} needs a fourth \
 parameter region and R34's signature has three — render it from ResNet50RenderB, or add the region \
 here first"
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ stem: 7×7/s2 conv → batch BN → relu → 2×2 maxpool ═══
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
@@ -1108,16 +1108,16 @@ here first"
     let (csg, nsg) ← pretty B (.bnGammaGradB nStc epsStr 0 z112b (.operand nDsr z112b))
     let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 64) (h := 112) (w := 112) (.operand nDsr z112b))
     -- ═══ BN running statistics: batch μ/var per BN layer, from that layer's BN INPUT ═══
-    let bnStat (oc hh : Nat) (xn : String) : StateM Nat (String × String × String) := do
+    let bnStat (oc hh : Nat) (xn : String) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
       let zb : Vec (B*(oc*(hh*hh))) := fun _ => 0
       let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
       let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
       pure (cM ++ cV, nM, nV)
-    let idStats (oc hh : Nat) (f : BFwdB) : StateM Nat (String × List String) := do
+    let idStats (oc hh : Nat) (f : BFwdB) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let (c1, m1, v1) ← bnStat oc hh f.c1
       let (c2, m2, v2) ← bnStat oc hh f.c2
       pure (c1 ++ c2, [m1, v1, m2, v2])
-    let downStats (oc hh : Nat) (f : BFwdB) : StateM Nat (String × List String) := do
+    let downStats (oc hh : Nat) (f : BFwdB) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let (c1, m1, v1) ← bnStat oc hh f.c1
       let (c2, m2, v2) ← bnStat oc hh f.c2
       let (cp, mp, vp) ← bnStat oc hh f.cp
@@ -1230,7 +1230,7 @@ here first"
   let pTy := sigList.map (·.2)
   let outSig := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ (r34StatSigList.map (·.2)))
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch") — which is exactly what it did the first time this was
   -- rendered. `r34AdamVariant` is the single source for the name, the artifact path, and

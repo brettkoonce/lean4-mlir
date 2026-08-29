@@ -78,7 +78,7 @@ private def unassoc {c h : Nat} (e : SHlo (c*(h*h))) : SHlo (c*h*h) := (Nat.mul_
 
 /-- One channel-LN FORWARD site: transpose to `[h·w, c]`, normalise each spatial row over its
     channels at the scalar identities, apply the real `[c]` affine, transpose back. -/
-private def lnFwdSite (gN btN xin : String) (c h : Nat) : StateM Nat (String × String) := do
+private def lnFwdSite (gN btN xin : String) (c h : Nat) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let (k1, t)  ← pretty BS (.transposeF (m := c) (n := h*h) (reassoc (.operand xin (zV : Vec (c*h*h)))))
   let (k2, n)  ← pretty BS (.lnRowF (m := h*h) (n := c) "%one" "%zero" EPS 0 1 0
                               (.operand t (zV : Vec (h*h*c))))
@@ -91,7 +91,7 @@ private def lnFwdSite (gN btN xin : String) (c h : Nat) : StateM Nat (String × 
 
 /-- One channel-LN INPUT-VJP site. `xName` is the saved LN input — `lnRowBack` recomputes
     x̂/istd from it rather than saving them. -/
-private def lnBackSite (gN xName cot : String) (c h : Nat) : StateM Nat (String × String) := do
+private def lnBackSite (gN xName cot : String) (c h : Nat) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let (k1, xT)  ← pretty BS (.transposeF (m := c) (n := h*h) (reassoc (.operand xName (zV : Vec (c*h*h)))))
   let (k2, dT)  ← pretty BS (.transposeF (m := c) (n := h*h) (reassoc (.operand cot (zV : Vec (c*h*h)))))
   let (k3, da)  ← pretty BS (.rowScaleF (m := h*h) (n := c) gN (zV : Vec c)
@@ -103,7 +103,7 @@ private def lnBackSite (gN xName cot : String) (c h : Nat) : StateM Nat (String 
 
 /-- One channel-LN site's γ/β gradients — `veclnGammaGrad` / `rowDenseBiasGrad` under the same
     transposes. PROOF-RENDERED, unlike the scalar LN's hand-emitted x̂ recomputation. -/
-private def lnParamGradCh (dgr dbe xName cot : String) (c h : Nat) : StateM Nat String := do
+private def lnParamGradCh (dgr dbe xName cot : String) (c h : Nat) : StateM Proofs.StableHLO.EmitS String := do
   let (k1, xT) ← pretty BS (.transposeF (m := c) (n := h*h) (reassoc (.operand xName (zV : Vec (c*h*h)))))
   let (k2, dT) ← pretty BS (.transposeF (m := c) (n := h*h) (reassoc (.operand cot (zV : Vec (c*h*h)))))
   let (k3, g)  ← pretty BS (.veclnGammaGrad (N := h*h) (D := c) xT EPS 0 (zV : Vec (h*h*c))
@@ -202,7 +202,7 @@ private structure FNames where  -- all flat SSA names from `pretty`
 
 /-- One ConvNeXt block forward via `pretty` — the `convNextFwdGraphTCh` block tokens
     (`cnxBlockChGraphW`'s shape) at the committed param names. -/
-private def fwdBlock (pfx xin : String) (c e h : Nat) : StateM Nat (String × FNames) := do
+private def fwdBlock (pfx xin : String) (c e h : Nat) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, d) ← pretty BS (.depthwiseF (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (zD : DepthwiseKernel c 7 7) zV (.operand xin zV))
   let (k2, n) ← lnFwdSite s!"%{pfx}ng" s!"%{pfx}nbt" d c h
   let (k3, e') ← pretty BS (.flatConvF (h := h) (w := h) s!"%{pfx}eW" s!"%{pfx}eb" (zK : Kernel4 e c 1 1) zV (.operand n zV))
@@ -217,7 +217,7 @@ private def fwdBlock (pfx xin : String) (c e h : Nat) : StateM Nat (String × FN
     Layer-scale back = `layerScaleChF` on the cotangent (diagonal). Returns
     (code, cot-at-block-input, cot_p, cot_e, cot_n, cot_d). -/
 private def bwdBlock (pfx dy : String) (b : FNames) (c e h : Nat) :
-    StateM Nat (String × String × String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String) := do
   let (k1, cot_p) ← pretty BS (.layerScaleChF (h := h) (w := h) s!"%{pfx}lg" (zV : Vec c) (.operand dy zV))
   let (k2, cot_g) ← pretty BS (.convBack (h := h) (w := h) s!"%{pfx}pW" (zK : Kernel4 c e 1 1) zV zV (.operand cot_p zV))
   let (k3, cot_e) ← pretty BS (.geluBack b.e (zV : Vec (e*h*h)) (.operand cot_g zV))
@@ -230,7 +230,7 @@ private def bwdBlock (pfx dy : String) (b : FNames) (c e h : Nat) :
 /-- block param-grad text, given captured fwd names + cotangents. Monadic because the LN γ/β
     grads are now PROOF-RENDERED (`veclnGammaGrad`/`rowDenseBiasGrad`) rather than hand-emitted. -/
 private def blockParamGrads (pfx : String) (b : FNames)
-    (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) : StateM Nat String := do
+    (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) : StateM Proofs.StableHLO.EmitS String := do
   let ln ← lnParamGradCh s!"%d{pfx}ng" s!"%d{pfx}nbt" b.d cot_n c h
   pure (lsGradCh s!"%d{pfx}lg" b.p dy c h ++
     convWGrad s!"%d{pfx}pW" b.g cot_p e c h ++ biasGrad s!"%d{pfx}pb" cot_p c h ++
@@ -240,7 +240,7 @@ private def blockParamGrads (pfx : String) (b : FNames)
 
 /-- Downsample forward via `pretty`: channel LN → 2×2/s2 widening conv
     (`cnxDownChGraphW`'s tokens). Returns (code, LN-out, out). -/
-private def fwdDown (pfx xin : String) (ci co h2 : Nat) : StateM Nat (String × String × String) := do
+private def fwdDown (pfx xin : String) (ci co h2 : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
   let (k1, n) ← lnFwdSite s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
   let (k2, o) ← pretty BS (.flatConvStridedF (h := h2) (w := h2) s!"%{pfx}W" s!"%{pfx}b" (zK : Kernel4 co ci 2 2) zV (.operand n zV))
   pure (k1 ++ k2, n, o)
@@ -249,7 +249,7 @@ private def fwdDown (pfx xin : String) (ci co h2 : Nat) : StateM Nat (String × 
     even-kernel transpose pad) → channel-LN input-VJP. Returns (code, cot-at-LN-out,
     cot-at-downsample-input). -/
 private def bwdDown (pfx dy xin : String) (ci co h2 : Nat) :
-    StateM Nat (String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String) := do
   let (k1, cot_n) ← pretty BS (.convStridedBack (h := h2) (w := h2) s!"%{pfx}W" (zK : Kernel4 co ci 2 2) zV zV (.operand dy (zV : Vec (co*h2*h2))))
   let (k2, cot_x) ← lnBackSite s!"%{pfx}ng" xin cot_n ci (2*h2)
   pure (k1 ++ k2, cot_n, cot_x)
@@ -281,7 +281,7 @@ private def allParams : List (String × String) := Id.run do
 -- ════════════ whole train step ════════════
 
 private def trainStep : String := Id.run do
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered; the convNextFwdGraphTCh tokens in graph order) ═══
     let (cS, stem) ← pretty BS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
       (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
@@ -353,7 +353,7 @@ private def trainStep : String := Id.run do
     bwd := bwd ++ cSb ++ sln ++
       patchWGrad "%dpsW" cot_stem ++ biasGrad "%dpsb" cot_stem 96 56
     pure (fwd ++ bwd)
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   let upd := String.join (allParams.map (fun (nm, t) => sgd nm t))
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [BS, 3*224*224]) :: allParams.map (fun (nm, t) => s!"%{nm}: {t}") ++ ["%onehot: " ++ ty [BS,10]])

@@ -15,7 +15,7 @@ def veclnGammaSgdSample : String :=
   let op : SHlo 192 :=
     .veclnGammaSgd "%g" "%x" "0.00001" "0.1" (0 : ℝ)
       (zV : Vec (197*192)) (zV : Vec 192) 0 (.operand "%dy" (zV : Vec (197*192)))
-  let (body, res) := (pretty 32 op).run' 0
+  let (body, res) := (pretty 32 op).run' (0, [])
   "module @m {\n" ++
   "  func.func @vecln_gamma_sgd(%x: tensor<32x37824xf32>, %g: tensor<192xf32>, " ++
   "%dy: tensor<32x37824xf32>) -> tensor<192xf32> {\n" ++
@@ -31,7 +31,7 @@ def patchEmbedWeightSgdSample : String :=
     .patchEmbedWeightSgd "%wConv" "%ximg" "0.1"
       (zV : Vec (3*224*224)) (fun _ _ _ _ => 0 : Kernel4 192 3 16 16) 0
       (.operand "%dy" (zV : Vec ((196+1)*192)))
-  let (body, res) := (pretty 32 op).run' 0
+  let (body, res) := (pretty 32 op).run' (0, [])
   "module @m {\n" ++
   "  func.func @patch_w_sgd(%ximg: tensor<32x3x224x224xf32>, %wConv: tensor<192x3x16x16xf32>, " ++
   "%dy: tensor<32x37824xf32>) -> tensor<192x3x16x16xf32> {\n" ++
@@ -45,7 +45,7 @@ def rowDenseWSample : String :=
   let op : SHlo (192*192) :=
     .rowDenseWeightSgd "%a" "%W" "0.1" (zV : Vec (197*192)) (fun _ _ => 0 : Mat 192 192) 0
       (.operand "%dy" (zV : Vec (197*192)))
-  let (body, res) := (pretty 32 op).run' 0
+  let (body, res) := (pretty 32 op).run' (0, [])
   "module @m {\n  func.func @row_w(%a: tensor<32x37824xf32>, %W: tensor<192x192xf32>, " ++
   "%dy: tensor<32x37824xf32>) -> tensor<192x192xf32> {\n" ++
   body ++ s!"    return {res} : tensor<192x192xf32>\n" ++ "  }\n}\n"
@@ -53,7 +53,7 @@ def rowDenseWSample : String :=
 def rowDenseBSample : String :=
   let op : SHlo 192 :=
     .rowDenseBiasSgd "%b" "0.1" (zV : Vec 192) 0 (.operand "%dy" (zV : Vec (197*192)))
-  let (body, res) := (pretty 32 op).run' 0
+  let (body, res) := (pretty 32 op).run' (0, [])
   "module @m {\n  func.func @row_b(%b: tensor<192xf32>, %dy: tensor<32x37824xf32>) -> tensor<192xf32> {\n" ++
   body ++ s!"    return {res} : tensor<192xf32>\n" ++ "  }\n}\n"
 
@@ -65,7 +65,7 @@ def patchBSample : String :=
   let op : SHlo 192 :=
     .patchEmbedBiasSgd (N := 196) (c := 192) "%bConv" "0.1" (zV : Vec 192) 0
       (.operand "%dy" (zV : Vec (197*192)))
-  let (body, res) := (pretty 32 op).run' 0
+  let (body, res) := (pretty 32 op).run' (0, [])
   "module @m {\n  func.func @patch_b(%bConv: tensor<192xf32>, %dy: tensor<32x37824xf32>) -> tensor<192xf32> {\n" ++
   body ++ s!"    return {res} : tensor<192xf32>\n" ++ "  }\n}\n"
 #eval IO.FS.writeFile "/tmp/patch_b.mlir" patchBSample
@@ -76,7 +76,7 @@ def posEmbedSample : String :=
   let op : SHlo (197*192) :=
     .posEmbedSgd (N := 196) (D := 192) "%pos" "0.1" (fun _ _ => 0 : Mat 197 192) 0
       (.operand "%dy" (zV : Vec (197*192)))
-  let (body, res) := (pretty 32 op).run' 0
+  let (body, res) := (pretty 32 op).run' (0, [])
   "module @m {\n  func.func @pos_e(%pos: tensor<197x192xf32>, %dy: tensor<32x37824xf32>) -> tensor<197x192xf32> {\n" ++
   body ++ s!"    return {res} : tensor<197x192xf32>\n" ++ "  }\n}\n"
 #eval IO.FS.writeFile "/tmp/pos_e.mlir" posEmbedSample

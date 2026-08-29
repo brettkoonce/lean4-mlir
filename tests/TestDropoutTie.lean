@@ -107,11 +107,11 @@ private def zOX : Vec (OB * ON) := fun _ => 0
     that is CONSTANT WITHIN each example, i.e. stochastic depth wearing dropout's types — and that
     is control C1 below, which is why the mask is deliberately non-uniform within every example. -/
 private def opModule : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (c, o) ← pretty OB (.dropoutB (N := OB) (n := ON) "%do" (fun _ => 0 : Vec (OB * ON))
                               (.operand "%x" zOX))
     pure (c ++ s!"    return {o} : {ty [OB, ON]}\n")
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @do(%x: {ty [OB, ON]}, %do: {ty [OB, ON]}) -> {ty [OB, ON]} " ++ "{\n" ++
   body ++ "  }\n}\n"

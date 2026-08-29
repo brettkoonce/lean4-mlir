@@ -34,7 +34,7 @@ private def verbs (s : String) : List String :=
         some (String.ofList (rest.toList.takeWhile fun c => c.isAlpha || c == '_'))
     | _ => none
 
-private def render (g : SHlo N) : String := (pretty BS g).run' 0 |>.1
+private def render (g : SHlo N) : String := (pretty BS g).run' (0, []) |>.1
 
 private def gradOperand : SHlo N := .operand "%g" z
 

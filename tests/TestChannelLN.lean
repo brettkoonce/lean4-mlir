@@ -50,7 +50,7 @@ private def zxT : Vec (S*C) := fun _ => 0
 
 /-- **The Route-A chain.** `[C,S]ᵀ → row-LN over C → per-channel affine → transpose back.** -/
 private def chainModule : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (c1, t)  ← pretty BS (.transposeF (m := C) (n := S) (.operand "%x" zx))
     let (c2, n)  ← pretty BS (.lnRowF (m := S) (n := C) "%one" "%zero" EPS 0 1 0
                                 (.operand t zxT))
@@ -58,7 +58,7 @@ private def chainModule : String :=
     let (c4, bi) ← pretty BS (.rowBiasF (m := S) (n := C) "%bt" zc (.operand sc zxT))
     let (c5, o)  ← pretty BS (.transposeF (m := S) (n := C) (.operand bi zxT))
     pure (c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ s!"    return {o} : {ty [BS, C*S]}\n")
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @chln(%x: {ty [BS, C*S]}, %g: {ty [C]}, %bt: {ty [C]}) -> {ty [BS, C*S]} " ++
   "{\n" ++
@@ -69,10 +69,10 @@ private def chainModule : String :=
 /-- **The incumbent**, for the control: scalar-global `bnForward` over the whole `C·S` map. Its
     γ/β are the rank-0 scalars the committed ConvNeXt carries, so it is fed `%g0`/`%bt0`. -/
 private def bnModule : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (c1, o) ← pretty BS (.bnF "%g0" "%bt0" EPS 0 0 0 (.operand "%x" zx))
     pure (c1 ++ s!"    return {o} : {ty [BS, C*S]}\n")
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @bnln(%x: {ty [BS, C*S]}, %g0: {ty []}, %bt0: {ty []}) -> {ty [BS, C*S]} " ++
   "{\n" ++ body ++ "  }\n}\n"
@@ -106,7 +106,7 @@ private def channelLNRef (x g bt : ByteArray) : IO ByteArray := do
     `veclnGammaGrad` (dγ = Σ dy⊙x̂ recomputed from the saved LN input) and `lnRowBack` are all
     generic in their dims, ViT just instantiates them at 197×192. -/
 private def backModule (which : String) : String :=
-  let go : StateM Nat (String × String) := do
+  let go : StateM Proofs.StableHLO.EmitS (String × String) := do
     let (cxT,  xT)  ← pretty BS (.transposeF (m := C) (n := S) (.operand "%x" zx))
     let (cdyT, dyT) ← pretty BS (.transposeF (m := C) (n := S) (.operand "%dy" zx))
     match which with
@@ -123,7 +123,7 @@ private def backModule (which : String) : String :=
                                      (.operand da zxT))
         let (ct, o)   ← pretty BS (.transposeF (m := S) (n := C) (.operand dxT zxT))
         pure (cxT ++ cdyT ++ cs ++ cn ++ ct, o)
-  let (body, res) : String × String := go.run' 0
+  let (body, res) : String × String := go.run' (0, [])
   let retTy := if which == "dx" then ty [BS, C*S] else ty [C]
   let sig := s!"%x: {ty [BS, C*S]}, %g: {ty [C]}, %dy: {ty [BS, C*S]}"
   "module @m {\n" ++
@@ -199,7 +199,7 @@ private def benchModule (C' S' reps : Nat) (routeA : Bool) : String :=
   let zx' : Vec (C'*S') := fun _ => 0
   let zxT' : Vec (S'*C') := fun _ => 0
   let zc' : Vec C' := fun _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let mut code := ""
     let mut cur := "%x"
     for _ in [0:reps] do
@@ -215,7 +215,7 @@ private def benchModule (C' S' reps : Nat) (routeA : Bool) : String :=
         let (c1, o) ← pretty benchBS (.bnF "%g0" "%bt0" EPS 0 0 0 (.operand cur zx'))
         code := code ++ c1; cur := o
     pure (code ++ s!"    return {cur} : {ty [benchBS, C'*S']}\n")
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   let sig := if routeA then s!"%x: {ty [benchBS, C'*S']}, %g: {ty [C']}, %bt: {ty [C']}"
              else s!"%x: {ty [benchBS, C'*S']}, %g0: {ty []}, %bt0: {ty []}"
   "module @m {\n" ++

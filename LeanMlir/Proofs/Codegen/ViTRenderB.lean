@@ -79,7 +79,7 @@ private def vzrnd : ℝ → ℝ := fun r => r
     ⚠ `m := vbTok` is the TOKEN count PER EXAMPLE and `N := vbB` is the batch. Collapsing those two
     into one index is exactly the defect this file exists to remove. -/
 private def vlnFwdB (V : VitDims) (vbB : Nat) (gName btName xin : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let vbTok := V.tok
   let vbD := V.d
   let (c1, a) ← pretty vbB (.batchOp (N := vbB)
@@ -111,7 +111,7 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
     -- transposes, the head slices/pads, the residual adds and the whole AdamW tail stay f32 —
     -- the same carve-out every bf16 render in this repo makes.
     (bf16 : Bool := false) :
-    StateM Nat (String × BSaves) := do
+    StateM Proofs.StableHLO.EmitS (String × BSaves) := do
   let vbTok := V.tok
   let vbD := V.d
   let vbH := V.heads
@@ -243,7 +243,7 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
     -- JAX side's own per-net knob (`TrainConfig.bf16Conv`), which has always been separate from
     -- `bf16` for exactly this class of reason.
     (bf16Conv : Bool := false) :
-    StateM Nat (String × FwdSaves) := do
+    StateM Proofs.StableHLO.EmitS (String × FwdSaves) := do
   let vbTk := V.tk
   let vbTok := V.tok
   let vbD := V.d
@@ -293,7 +293,7 @@ def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10)
     (bf16 : Bool := false) (bf16Conv : Bool := false) : String :=
   let vbTok := V.tok
   let vbD := V.d
-  let (body, sv) := (vitFwd12B V vbB nClasses sd bf16 bf16Conv).run' 0
+  let (body, sv) := (vitFwd12B V vbB nClasses sd bf16 bf16Conv).run' (0, [])
   let res := sv.logits
   -- ⚠ `fun i => blkArgSig i V`, NOT `.map blkArgSig`: the bare form passes only `i` and lets
   -- `V` fall back to its Tiny default, which renders a ViT-S body under a ViT-Tiny block
@@ -334,7 +334,7 @@ namespace Proofs.StableHLO
 
 /-- One **vector-LN backward** site, batched. Returns `(code, dxin, dγ, dβ)`. -/
 private def vlnBackB (V : VitDims) (vbB : Nat) (gName _btName xin dyOut : String) :
-    StateM Nat (String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let vbTok := V.tok
   let vbD := V.d
   let (cb, nb) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
@@ -364,7 +364,7 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
     -- ⚠⚠ And the backward is where the money is — §9.4 measured it at ~60 % of a conv step and the
     -- forward-only arm at 1.09×. A render that flipped only `vBlockFwdB` would look wired and buy
     -- almost nothing.
-    (bf16 : Bool := false) : StateM Nat (String × String × List String) := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String × List String) := do
   let vbTok := V.tok
   let vbD := V.d
   let vbH := V.heads
@@ -560,7 +560,7 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     -- same and lumping them would have hidden which one costs. See the probe numbers in
     -- `planning/bf16_renderer.md` §18.
     (bf16ConvW : Bool := false) :
-    StateM Nat (String × List String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × List String × String) := do
     let vbTk := V.tk
     let vbTok := V.tok
     let vbD := V.d

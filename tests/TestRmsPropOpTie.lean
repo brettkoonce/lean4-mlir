@@ -32,7 +32,7 @@ private def N  : Nat := 16          -- DS.prod
 
 private def z : Vec N := fun _ => 0
 
-private def render (g : SHlo N) : String := (pretty BS g).run' 0 |>.1
+private def render (g : SHlo N) : String := (pretty BS g).run' (0, []) |>.1
 
 private def gradOperand : SHlo N := .operand "%g" z
 

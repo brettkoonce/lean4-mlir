@@ -49,7 +49,7 @@ def convXlaModule : String :=
   let z8 : Vec 8 := fun _ => 0
   let (body, res) := (pretty B (.batchOp (N := B)
     (.convStridedXla (ic := 3) (oc := 8) (h := 8) (w := 8) (kH := 3) (kW := 3) "%W" "%b" zK z8)
-    (.operand "%x" zx))).run' 0
+    (.operand "%x" zx))).run' (0, [])
   wrap "conv_xla" s!"%x: {ty [B, 3*16*16]}, %W: {ty [8,3,3,3]}, %b: {ty [8]}" B (8*8*8) body res
 
 /-- `@dw_xla_k3` — one `depthwiseStridedXla`, c = 6, k=3, 16×16 → 8×8, batch 2. -/
@@ -60,7 +60,7 @@ def dwXlaK3Module : String :=
   let z6 : Vec 6 := fun _ => 0
   let (body, res) := (pretty B (.batchOp (N := B)
     (.depthwiseStridedXla (c := 6) (h := 8) (w := 8) (kH := 3) (kW := 3) "%W" "%b" zK z6)
-    (.operand "%x" zx))).run' 0
+    (.operand "%x" zx))).run' (0, [])
   wrap "dw_xla_k3" s!"%x: {ty [B, 6*16*16]}, %W: {ty [6,1,3,3]}, %b: {ty [6]}" B (6*8*8) body res
 
 /-- `@dw_xla_k5` — the k=5 case, where XLA `SAME` pads `(1,2)`: total 3, which is NOT `2·((k-1)/2)`.
@@ -73,7 +73,7 @@ def dwXlaK5Module : String :=
   let z6 : Vec 6 := fun _ => 0
   let (body, res) := (pretty B (.batchOp (N := B)
     (.depthwiseStridedXla (c := 6) (h := 8) (w := 8) (kH := 5) (kW := 5) "%W" "%b" zK z6)
-    (.operand "%x" zx))).run' 0
+    (.operand "%x" zx))).run' (0, [])
   wrap "dw_xla_k5" s!"%x: {ty [B, 6*16*16]}, %W: {ty [6,1,5,5]}, %b: {ty [6]}" B (6*8*8) body res
 
 /-- The SYMMETRIC control, same shape as `@conv_xla`. If the checker finds this one ALSO matches
@@ -86,7 +86,7 @@ def convSymModule : String :=
   let z8 : Vec 8 := fun _ => 0
   let (body, res) := (pretty B (.batchOp (N := B)
     (.convStrided (ic := 3) (oc := 8) (h := 8) (w := 8) (kH := 3) (kW := 3) "%W" "%b" zK z8)
-    (.operand "%x" zx))).run' 0
+    (.operand "%x" zx))).run' (0, [])
   wrap "conv_sym" s!"%x: {ty [B, 3*16*16]}, %W: {ty [8,3,3,3]}, %b: {ty [8]}" B (8*8*8) body res
 
 -- ══════════════════════════════════════════════════════════════════════════
@@ -106,7 +106,7 @@ def dwXlaBackModule : String :=
   let zK : DepthwiseKernel 6 3 3 := fun _ _ _ => 0
   let z6 : Vec 6 := fun _ => 0
   let (body, res) := (pretty B (.depthwiseStridedXlaBackBatched (N := B) (c := 6) (h := 8) (w := 8)
-    "%W" zK z6 (.operand "%dy" zdy))).run' 0
+    "%W" zK z6 (.operand "%dy" zdy))).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @dw_xla_back(%dy: {ty [B, 6*8*8]}, %W: {ty [6,1,3,3]}) -> {ty [B, 6*16*16]} " ++ "{\n" ++
   body ++ s!"    return {res} : {ty [B, 6*16*16]}\n" ++ "  }\n}\n"
@@ -119,7 +119,7 @@ def convXlaWGradModule : String :=
   let zK : Kernel4 8 3 3 3 := fun _ _ _ _ => 0
   let z8 : Vec 8 := fun _ => 0
   let (body, res) := (pretty B (.convStridedXlaWeightGradB (N := B) (ic := 3) (oc := 8)
-    (h := 8) (w := 8) "%x" z8 zx zK (.operand "%dy" zdy))).run' 0
+    (h := 8) (w := 8) "%x" z8 zx zK (.operand "%dy" zdy))).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @conv_xla_wgrad(%dy: {ty [B, 8*8*8]}, %x: {ty [B, 3*16*16]}) -> {ty [8,3,3,3]} " ++ "{\n" ++
   body ++ s!"    return {res} : {ty [8,3,3,3]}\n" ++ "  }\n}\n"
@@ -132,7 +132,7 @@ def dwXlaWGradModule : String :=
   let zK : DepthwiseKernel 6 3 3 := fun _ _ _ => 0
   let z6 : Vec 6 := fun _ => 0
   let (body, res) := (pretty B (.depthwiseStridedXlaWeightGradB (N := B) (c := 6)
-    (h := 8) (w := 8) "%x" z6 zx zK (.operand "%dy" zdy))).run' 0
+    (h := 8) (w := 8) "%x" z6 zx zK (.operand "%dy" zdy))).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @dw_xla_wgrad(%dy: {ty [B, 6*8*8]}, %x: {ty [B, 6*16*16]}) -> {ty [6,1,3,3]} " ++ "{\n" ++
   body ++ s!"    return {res} : {ty [6,1,3,3]}\n" ++ "  }\n}\n"
@@ -153,7 +153,7 @@ def dwSymBackModule (k : Nat) (zK : DepthwiseKernel 6 k k) : String :=
   let zdy : Vec (B*(6*8*8)) := fun _ => 0
   let z6 : Vec 6 := fun _ => 0
   let (body, res) := (pretty B (.depthwiseStridedBackBatched (N := B) (c := 6) (h := 8) (w := 8)
-    "%W" zK z6 (.operand "%dy" zdy))).run' 0
+    "%W" zK z6 (.operand "%dy" zdy))).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @dw_sym_back_k{k}(%dy: {ty [B, 6*8*8]}, %W: {ty [6,1,k,k]}) -> {ty [B, 6*16*16]} " ++ "{\n" ++
   body ++ s!"    return {res} : {ty [B, 6*16*16]}\n" ++ "  }\n}\n"
@@ -171,7 +171,7 @@ def dwSymWGradK5Module : String :=
   let zK : DepthwiseKernel 6 5 5 := fun _ _ _ => 0
   let z6 : Vec 6 := fun _ => 0
   let (body, res) := (pretty B (.depthwiseStridedWeightGradB (N := B) (c := 6)
-    (h := 8) (w := 8) "%x" z6 zx zK (.operand "%dy" zdy))).run' 0
+    (h := 8) (w := 8) "%x" z6 zx zK (.operand "%dy" zdy))).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @dw_sym_wgrad_k5(%dy: {ty [B, 6*8*8]}, %x: {ty [B, 6*16*16]}) -> {ty [6,1,5,5]} " ++ "{\n" ++
   body ++ s!"    return {res} : {ty [6,1,5,5]}\n" ++ "  }\n}\n"

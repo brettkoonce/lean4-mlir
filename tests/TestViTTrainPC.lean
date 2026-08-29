@@ -129,7 +129,7 @@ private structure FNames where  -- flat SSA names from `pretty`
   bout : String  -- block out
 
 /-- Left-fold `addV` of the per-head pad-scatters (= `headsSumG`'s emission). -/
-private def sumPads (ns : List String) : StateM Nat (String × String) := do
+private def sumPads (ns : List String) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let mut code := ""
   let mut acc := ns.head!
   for pn in ns.tail! do
@@ -141,7 +141,7 @@ private def sumPads (ns : List String) : StateM Nat (String × String) := do
 /-- Per-head SDPA forward: slice Q/K/V, `Q_h·K_hᵀ` → `·1/√d_head` → row-softmax →
     `P_h·V_h`, pad-scatter back; the head concat is the `addV` fold of the pads
     (exactly `vitBlockGraphMHV`'s attention tokens). -/
-private def fwdHeads (q k v : String) : StateM Nat (String × List HNames × String) := do
+private def fwdHeads (q k v : String) : StateM Proofs.StableHLO.EmitS (String × List HNames × String) := do
   let mut code := ""
   let mut hs : List HNames := []
   let mut pads : List String := []
@@ -169,7 +169,7 @@ private def fwdHeads (q k v : String) : StateM Nat (String × List HNames × Str
     `dQ_h = dS_h·K_h`, `dK_h = dS_hᵀ·Q_h`, then `dQ/dK/dV = Σ_h pad_h(·)` — the proven
     `sdpa_back_{Q,K,V}` shapes per head. Returns (code, dQ, dK, dV) at `[NT,D]` flat. -/
 private def bwdHeads (cot_att : String) (hs : List HNames) :
-    StateM Nat (String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let mut code := ""
   let mut dQpads : List String := []
   let mut dKpads : List String := []
@@ -203,7 +203,7 @@ private def bwdHeads (cot_att : String) (hs : List HNames) :
   pure (code ++ csq ++ csk ++ csv, dQ, dK, dV)
 
 /-- One ViT block forward via `pretty` — exactly the `vitBlockGraphMHV` tokens. -/
-private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) := do
+private def fwdBlock (i : Nat) (xin : String) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1a, xh1) ← pretty BS (.lnRowF "%one" "%sc" EPS 0 1 0
     (.operand xin (zV : Vec (NT*DD))))
   let (k1b, sc1) ← pretty BS (.rowScaleF s!"%g1_{i}" (zV : Vec DD)
@@ -240,7 +240,7 @@ private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) :=
     The SDPA backward is the forward `matmulF`/`transposeF` on cotangents.
     Returns (code, cot-at-block-input, dQ, dK, dV, cot_h, cot_ln2, cot_m1, cot_g, cot_ln1). -/
 private def bwdBlock (i : Nat) (dy : String) (b : FNames) :
-    StateM Nat (String × String × String × String × String × String × String ×
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String ×
                 String × String × String) := do
   -- MLP sublayer back: bout = h + fc2(gelu(fc1(LN2 h)))
   let (k1, cot_g) ← pretty BS (.denseRowBack s!"%Wfc2{i}" (zM : Mat MD DD)
@@ -307,7 +307,7 @@ private def blkParams (i : Nat) : List (String × String) :=
    (s!"Wfc2{i}", ty [MD,DD]), (s!"bfc2{i}", ty [DD])]
 
 private def trainStep : String := Id.run do
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered; the vitFwdGraphKMHV tokens in graph order) ═══
     -- the committed signature carries cls as [1,D]; the patchEmbedF broadcast
     -- reads a [D] vector — denotation-trivial reshape glue
@@ -386,7 +386,7 @@ private def trainStep : String := Id.run do
       s!"    %dWcls = stablehlo.dot_general {clsv}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,DD]}, {ty [BS,NC]}) -> {ty [DD,NC]}\n" ++
       s!"    %dbcls = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,NC]}, tensor<f32>) -> {ty [NC]}\n"
     pure (fwd ++ bwd ++ paramG)
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   -- ═══ SGD over all 4 + 16·DEPTH + 4 params (forward order) + signature ═══
   let allParams : List (String × String) :=
     [("Wp", ty [DD,IC,PP,PP]), ("bp", ty [DD]), ("cls", ty [1,DD]), ("pos", ty [NT,DD])]

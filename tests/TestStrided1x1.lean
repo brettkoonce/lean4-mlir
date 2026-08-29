@@ -69,7 +69,7 @@ private def zout : Vec (BS*(OC*HH*HH)) := fun _ => 0
 
 /-- All four ops in one `func.func` — the compile-only shape check, at kernel `K×K`. -/
 private def probeModule (K : Nat) (zk : Kernel4 OC IC K K) : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (cF,  nF)  ← pretty BS (.batchOp (N := BS)
       (.convStrided (h := HH) (w := HH) "%W" "%b" zk zc) (.operand "%x" zinS))
     let (cDx, nDx) ← pretty BS (.convStridedBackBatched (N := BS) (ic := IC) (oc := OC)
@@ -81,7 +81,7 @@ private def probeModule (K : Nat) (zk : Kernel4 OC IC K K) : String :=
                                            ty [OC,IC,K,K], ty [OC]]
     pure (cF ++ cDx ++ cW ++ cB ++
           s!"    return {String.intercalate ", " [nF, nDx, nWg, nBg]} : {retTys}\n")
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   let sig := String.intercalate ", "
     [s!"%x: {ty [BS, IC*HIN*HIN]}", s!"%W: {ty [OC,IC,K,K]}", s!"%b: {ty [OC]}",
      s!"%dy: {ty [BS, OC*HH*HH]}"]
@@ -93,7 +93,7 @@ private def probeModule (K : Nat) (zk : Kernel4 OC IC K K) : String :=
 /-- One op per module, so each can be driven through `forwardF32`'s single-output invoke.
     `x` is whichever buffer is pushed FIRST; the rest ride the packed-params slot. -/
 private def oneOpModule (which : String) : String :=
-  let go : StateM Nat (String × String) := do
+  let go : StateM Proofs.StableHLO.EmitS (String × String) := do
     match which with
     | "fwd" => pretty BS (.batchOp (N := BS)
         (.convStrided (h := HH) (w := HH) "%W" "%b" zk1 zc) (.operand "%x" zinS))
@@ -102,7 +102,7 @@ private def oneOpModule (which : String) : String :=
     | "dw"  => pretty BS (.convStridedWeightGradB "%x" zc zinS zk1 (.operand "%dy" zout))
     | _     => pretty BS (.convStridedBiasGradB (h := HH) (w := HH) zk1 zinS zc
         (.operand "%dy" zout))
-  let (body, res) : String × String := go.run' 0
+  let (body, res) : String × String := go.run' (0, [])
   -- (signature, return type) per op. The FIRST arg is the `x` slot of `forwardF32`.
   let (sig, retTy) :=
     match which with

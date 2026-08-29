@@ -122,11 +122,11 @@ private def zOX : Vec (OB * ON) := fun _ => 0
     one the op's own docstring names: a `BatchableOp` descriptor, which would denote "every example
     shares example 0's mask". That is control C1 below. -/
 private def opModule : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (c, o) ← pretty OB (.dropPathB (N := OB) (n := ON) "%dp" (fun _ => 0 : Vec OB)
                               (.operand "%x" zOX))
     pure (c ++ s!"    return {o} : {ty [OB, ON]}\n")
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @dp(%x: {ty [OB, ON]}, %dp: {ty [OB]}) -> {ty [OB, ON]} " ++ "{\n" ++
   body ++ "  }\n}\n"

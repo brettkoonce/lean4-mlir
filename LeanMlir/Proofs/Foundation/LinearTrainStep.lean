@@ -171,7 +171,7 @@ structure TrainStepModule (B : Nat) where
 /-- **`renderModuleN`** — render a multi-output module: cotangent once (shared
     `%dy`), each output's lines, then a tuple `return`. -/
 def renderModuleN {B : Nat} (M : TrainStepModule B) : String :=
-  let (cotBody, dy) := (pretty B M.cot).run' 0
+  let (cotBody, dy) := (pretty B M.cot).run' (0, [])
   let retSig := String.intercalate ", " (M.outs.map (·.tyStr))
   let tail   := String.join (M.outs.map (fun o => o.emit dy))
   let rets   := String.intercalate ", " (M.outs.map (·.result))

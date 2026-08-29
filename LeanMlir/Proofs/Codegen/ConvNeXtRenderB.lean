@@ -86,7 +86,7 @@ private def bBase  : CnxDims := { depths := #[3, 3, 27, 3], dims := #[128, 256, 
     two into one index is exactly the defect this file exists to remove, and it is why the
     descriptors carry `(m, n)` internally instead of reading the SHlo index. -/
 private def lnFwdSiteB (gN btN xin : String) (c h : Nat) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, t)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                   (reassocB (.operand xin (zVB : Vec (bB*(c*h*h))))))
     let (k2, n)  ← pretty bB (.batchOp (N := bB)
@@ -119,7 +119,7 @@ private def fwdBlockB (pfx xin : String) (c e h : Nat) (drop : Option Nat := non
     -- ⚠ TRAILING and defaulted, the `wx`/`clip`/`sd` idiom: every existing call site re-renders
     -- byte-identically, which is gate 1 for free.
     (bf16 : Bool := false) :
-    StateM Nat (String × FNames) := do
+    StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, d) ← pretty bB (.batchOp (N := bB)
       (if bf16 then .depthwiseBf16 (h := h) (w := h) zrndB s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB
        else .depthwise (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB)
@@ -150,7 +150,7 @@ private def fwdBlockB (pfx xin : String) (c e h : Nat) (drop : Option Nat := non
 
 /-- One **downsample** forward, batched: channel-LN then 2×2/s2 conv. -/
 private def fwdDownB (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool := false) :
-    StateM Nat (String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String) := do
   let (k1, n) ← lnFwdSiteB s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
   -- ⚠ SYMMETRIC pad (`convStrided`, not `convStridedXla`) — ConvNeXt is torchvision-origin. Both
   -- spellings give the same output size at every kernel, so only a forward tie separates them.
@@ -175,7 +175,7 @@ set_option maxRecDepth 8000 in
     identity, and the `forward ⊂ train-step` prefix audit keeps a partner for the SD render instead
     of quietly not covering it. -/
 def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
-    (V : CnxDims := bTiny) (bf16 : Bool := false) : StateM Nat CFwd := do
+    (V : CnxDims := bTiny) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS CFwd := do
   -- ⭐ **The 4×4/s4 patchify stem — one of ConvNeXt's two genuinely new bf16 ops.** Its emit keeps
   -- `convStride4`'s pad-one-less rule (`[[0,0]]` at k=4), which is NOT the symmetric pad every
   -- other forward conv uses; `BatchableOp.convStride4Bf16` carries the note.
@@ -232,7 +232,7 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
     -- is where the payoff is and where §15 scoped the work.
     (bf16 : Bool := false)
     : String := Id.run do
-  let F : CFwd := (convNextFwdChainB nClasses sd V bf16).run' 0
+  let F : CFwd := (convNextFwdChainB nClasses sd V bf16).run' (0, [])
   let body := F.code; let logits := F.logits
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [bB, 3*224*224]) ::
@@ -262,7 +262,7 @@ cannot judge:
 
 /-- One **channel-LN input-VJP** site, batched. -/
 private def lnBackSiteB (gN xName cot : String) (c h : Nat) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                    (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))
     let (k2, dT)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
@@ -277,7 +277,7 @@ private def lnBackSiteB (gN xName cot : String) (c h : Nat) :
 
 /-- The **γ tail** for one LN site — the two-level `veclnGammaGradB`. -/
 private def lnGammaTailB (_gN xName cot : String) (c h : Nat) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                   (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))
     let (k2, dT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
@@ -287,7 +287,7 @@ private def lnGammaTailB (_gN xName cot : String) (c h : Nat) :
     pure (k1 ++ k2 ++ k3, o)
 
 /-- The **β tail** — the two-level `rowDenseBiasGradB`, contracting batch and spatial rows. -/
-private def lnBetaTailB (cot : String) (c h : Nat) : StateM Nat (String × String) := do
+private def lnBetaTailB (cot : String) (c h : Nat) : StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, dT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                   (reassocB (.operand cot (zVB : Vec (bB*(c*h*h))))))
     let (k2, o) ← pretty bB (.rowDenseBiasGradB (N := bB) (R := h*h) (c := c)
@@ -317,7 +317,7 @@ private def lnBetaTailB (cot : String) (c h : Nat) : StateM Nat (String × Strin
     `dy` itself, so nothing moves. -/
 private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Option Nat := none)
     (bf16 : Bool := false) :
-    StateM Nat (String × String × String × String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String) := do
   let (kD, dyd) ← match drop with
     | some i => pretty bB (.dropPathB (N := bB) (n := c*h*h) (dpName i) (fun _ => 0 : Vec bB)
                              (.operand dy (zVB : Vec (bB*(c*h*h)))))
@@ -347,7 +347,7 @@ private def bwdBlockB (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Optio
 
 /-- One **downsample** backward. -/
 private def bwdDownB (pfx dy xin : String) (ci co h2 : Nat) (bf16 : Bool := false) :
-    StateM Nat (String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String) := do
   -- ⚠⚠ **THE 2×2/s2 ASYMMETRIC-PAD TRAP (§15.2 trap 1).** `convStridedBackBatched`'s dgrad pad is
   -- `[[kH-1-pH, pH], …]`, which agrees with the symmetric spelling at every ODD kernel and is
   -- wrong at `k = 2` — and ConvNeXt's downsample is the repo's ONLY even strided kernel, so this
@@ -371,7 +371,7 @@ private def blockParamGradB (pfx : String) (b : FNames)
     -- `Σ_{batch,spatial} dy` is a reduction, not a contraction, so there is nothing for a tensor
     -- core to do. Same for the two LN tails, which are reductions too.
     (bf16 : Bool := false) :
-    StateM Nat (String × List (String × String)) := do
+    StateM Proofs.StableHLO.EmitS (String × List (String × String)) := do
   let (cLg, nLg) ← pretty bB (.layerScaleChGammaGradB (N := bB) (c := c) (h := h) (w := h) b.p
       (zVB : Vec (bB*(c*h*h))) (.operand dy zVB))
   let (cPw, nPw) ← pretty bB (if bf16 then
@@ -414,7 +414,7 @@ private def blockParamGradB (pfx : String) (b : FNames)
 /-- The **parameter gradients of one downsample**. -/
 private def downParamGradB (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat)
     (bf16 : Bool := false) :
-    StateM Nat (String × List (String × String)) := do
+    StateM Proofs.StableHLO.EmitS (String × List (String × String)) := do
   let (cB, nB) ← pretty bB (.convStridedBiasGradB (N := bB) (ic := ci) (oc := co) (h := h2)
       (w := h2) (kH := 2) (kW := 2) (zKB : Kernel4 co ci 2 2)
       (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zVB : Vec co) (.operand dy zVB))
@@ -459,7 +459,7 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     -- carve-out every bf16 render in this repo makes. ⚠ §14 measured that those carve-outs are
     -- NOT a fixed tax: they cost MobileNetV2 nothing and EfficientNet-B0 almost everything.
     (bf16 : Bool := false) :
-    StateM Nat (String × List (String × String) × String) := do
+    StateM Proofs.StableHLO.EmitS (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain the byte-tied `convNextFwdChainB` emits ═══
     let F : CFwd ← convNextFwdChainB nClasses sd V bf16
     let (cSm, nSm) ← pretty bB (.batchOp (N := bB) (.softmaxDiv (n := nClasses))

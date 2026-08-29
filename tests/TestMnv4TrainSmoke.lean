@@ -65,7 +65,7 @@ def main : IO Unit := do
   -- ── ⭐ THE FORWARD-PREFIX GATE (see the module docstring) ──
   -- `mnv4FwdChainB` is called first inside the train step, so its fresh-name counter starts at 0
   -- exactly as the standalone forward's does, and the two code strings must be character-equal.
-  let fwd := (mnv4FwdChainB B nClasses "1.0e-05" .train).run' 0
+  let fwd := (mnv4FwdChainB B nClasses "1.0e-05" .train).run' (0, [])
   if (m.splitOn fwd.code).length > 1 then
     IO.println s!"  ✓ train step contains @mnv4_fwd's body VERBATIM ({fwd.code.splitOn "\n" |>.length} lines)"
   else

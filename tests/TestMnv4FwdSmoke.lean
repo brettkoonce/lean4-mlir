@@ -35,7 +35,7 @@ def expectedDwGroups : List (Nat × Nat) :=
     (1024, 4) ] -- post of b12,b13,b14,b18 (256*4)
 
 def main : IO Unit := do
-  let fwd := (mnv4FwdChainB 2 10 "1.0e-05").run' 0
+  let fwd := (mnv4FwdChainB 2 10 "1.0e-05").run' (0, [])
   let code := fwd.code
   let logits := fwd.logits
   let lines := code.splitOn "\n"

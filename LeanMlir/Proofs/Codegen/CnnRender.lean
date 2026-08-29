@@ -103,7 +103,7 @@ def cnnTrainStepStructured (B ic c h w d1 nClasses kH kW : Nat) (lr : String)
   let zPool : Vec (c*h*w) := fun _ => 0
   let zD1 : Vec d1 := fun _ => 0
   let zNC : Vec nClasses := fun _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*h) (w := 2*w) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zC))
     let (cHc2, nHc2) ← pretty B (.flatConvF (h := 2*h) (w := 2*w) "%W2" "%b2" W₂ b₂ (.operand nAc1 zC))
@@ -148,7 +148,7 @@ def cnnTrainStepStructured (B ic c h w d1 nClasses kH kW : Nat) (lr : String)
       sgd "%W3" "%dW3" (ty [flat,d1]) ++ sgd "%b3" "%db3" (ty [d1]) ++
       sgd "%W4" "%dW4" (ty [d1,d1]) ++ sgd "%b4" "%db4" (ty [d1]) ++
       sgd "%W5" "%dW5" (ty [d1,nClasses]) ++ sgd "%b5" "%db5" (ty [nClasses])
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @cnn_train_step(%x: {ty [B,ic*H*W]}, %W1: {ty [c,ic,kH,kW]}, %b1: {ty [c]}, %W2: {ty [c,c,kH,kW]}, %b2: {ty [c]}, %W3: {ty [flat,d1]}, %b3: {ty [d1]}, %W4: {ty [d1,d1]}, %b4: {ty [d1]}, %W5: {ty [d1,nClasses]}, %b5: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
   body ++
@@ -177,7 +177,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
   let zNC : Vec nClasses := fun _ => 0
   let zT2 : Tensor3 c (2*h) (2*w) := fun _ _ _ => 0      -- conv-2 input (ac1) placeholder
   let zTx : Tensor3 ic (2*h) (2*w) := fun _ _ _ => 0     -- conv-1 input (image) placeholder
-  let act : StateM Nat (String × String × String × String × String × String × String × String × String × String × String × String) := do
+  let act : StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String × String × String × String × String × String) := do
     -- ═══ forward (proof-rendered, flat) ═══
     let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*h) (w := 2*w) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zC))
@@ -215,7 +215,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
             cDy4 ++ cDy3 ++ cDx3 ++ cDac2 ++ cDhc2 ++ cDac1 ++ cDhc1 ++
             cW1g ++ cb1g ++ cW2g ++ cb2g ++ cW3 ++ cb3 ++ cW4 ++ cb4 ++ cW5 ++ cb5,
           nW1g, nb1g, nW2g, nb2g, nW3, nb3, nW4, nb4, nW5, nb5, nLog)
-  let (body, n1W, n1b, n2W, n2b, n3W, n3b, n4W, n4b, n5W, n5b, nLog) := act.run' 0
+  let (body, n1W, n1b, n2W, n2b, n3W, n3b, n4W, n4b, n5W, n5b, nLog) := act.run' (0, [])
   -- ⚠⚠ `%loss` IS REPORT-ONLY — a DECLARED CARVE-OUT, exactly as in `MlpRender` and as
   -- ConvNeXt/EfficientNet/R50 already do. Hand-written text, not `pretty` of a `den`
   -- node. APPENDED, never woven in: it reads only the logits and `%onehot` and adds
@@ -320,7 +320,7 @@ def cifarTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lr : Stri
   let zFlat : Vec (c2*h*w) := fun _ => 0
   let zD1 : Vec d1 := fun _ => 0
   let zNC : Vec nClasses := fun _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zC1full))
     let (cHc2, nHc2) ← pretty B (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W2" "%b2" W₂ b₂ (.operand nAc1 zC1full))
@@ -382,7 +382,7 @@ def cifarTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lr : Stri
       sgd "%W5" "%dW5" (ty [flat,d1]) ++ sgd "%b5" "%db5" (ty [d1]) ++
       sgd "%W6" "%dW6" (ty [d1,d1]) ++ sgd "%b6" "%db6" (ty [d1]) ++
       sgd "%W7" "%dW7" (ty [d1,nClasses]) ++ sgd "%b7" "%db7" (ty [nClasses])
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @cifar_train_step(%x: {ty [B,ic*H*W]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %W5: {ty [flat,d1]}, %b5: {ty [d1]}, %W6: {ty [d1,d1]}, %b6: {ty [d1]}, %W7: {ty [d1,nClasses]}, %b7: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
   body ++
@@ -415,7 +415,7 @@ def cifarTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : St
   let zTc14 : Tensor3 c1 (2*(2*h)) (2*(2*w)) := fun _ _ _ => 0   -- conv2 input (ac1)
   let zTc12 : Tensor3 c1 (2*h) (2*w) := fun _ _ _ => 0           -- conv3 input (pool1)
   let zTc22 : Tensor3 c2 (2*h) (2*w) := fun _ _ _ => 0           -- conv4 input (ac3)
-  let act : StateM Nat (String × String × String × String × String × String × String ×
+  let act : StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String ×
                           String × String × String × String × String × String × String × String) := do
     -- ═══ forward (proof-rendered, flat) ═══
     let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
@@ -469,7 +469,7 @@ def cifarTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : St
             cW1g ++ cb1g ++ cW2g ++ cb2g ++ cW3g ++ cb3g ++ cW4g ++ cb4g ++
             cW5 ++ cb5 ++ cW6 ++ cb6 ++ cW7 ++ cb7,
           nW1g, nb1g, nW2g, nb2g, nW3g, nb3g, nW4g, nb4g, nW5, nb5, nW6, nb6, nW7, nb7)
-  let (body, r1W, r1b, r2W, r2b, r3W, r3b, r4W, r4b, r5W, r5b, r6W, r6b, r7W, r7b) := act.run' 0
+  let (body, r1W, r1b, r2W, r2b, r3W, r3b, r4W, r4b, r5W, r5b, r6W, r6b, r7W, r7b) := act.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @cifar_train_step(%x: {ty [B,ic*(2*(2*h))*(2*(2*w))]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %W5: {ty [flat,d1]}, %b5: {ty [d1]}, %W6: {ty [d1,d1]}, %b6: {ty [d1]}, %W7: {ty [d1,nClasses]}, %b7: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
   "    // ── cifar train step: every line is pretty(verified AST node) ──\n" ++
@@ -577,7 +577,7 @@ def cifarBnTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr 
   let zNC : Vec nClasses := fun _ => 0
   let zVc1 : Vec c1 := fun _ => 0
   let zVc2 : Vec c2 := fun _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered, incl. BN forward) ═══
     let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
     let (cBn1, nBn1) ← pretty B (.bnPerChannelF (oc := c1) (h := 2*(2*h)) (w := 2*(2*w)) "%g1" "%bt1" epsStr 0 zVc1 zVc1 (.operand nHc1 zF1))
@@ -661,7 +661,7 @@ def cifarBnTrainStepStructured (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr 
       sgd "%W5" "%dW5" (ty [flat,d1]) ++ sgd "%b5" "%db5" (ty [d1]) ++
       sgd "%W6" "%dW6" (ty [d1,d1]) ++ sgd "%b6" "%db6" (ty [d1]) ++
       sgd "%W7" "%dW7" (ty [d1,nClasses]) ++ sgd "%b7" "%db7" (ty [nClasses])
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @cifar_bn_train_step(%x: {ty [B,ic*H*W]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %g1: {ty [c1]}, %bt1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %g2: {ty [c1]}, %bt2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %g3: {ty [c2]}, %bt3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %g4: {ty [c2]}, %bt4: {ty [c2]}, %W5: {ty [flat,d1]}, %b5: {ty [d1]}, %W6: {ty [d1,d1]}, %b6: {ty [d1]}, %W7: {ty [d1,nClasses]}, %b7: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
   body ++
@@ -696,7 +696,7 @@ def cifarBnTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr l
   let zTc14 : Tensor3 c1 (2*(2*h)) (2*(2*w)) := fun _ _ _ => 0
   let zTc12 : Tensor3 c1 (2*h) (2*w) := fun _ _ _ => 0
   let zTc22 : Tensor3 c2 (2*h) (2*w) := fun _ _ _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered, incl. BN forward) ═══
     let (cHc1, nHc1) ← pretty B (.flatConvF (h := 2*(2*h)) (w := 2*(2*w)) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
     let (cBn1, nBn1) ← pretty B (.bnPerChannelF (oc := c1) (h := 2*(2*h)) (w := 2*(2*w)) "%g1" "%bt1" epsStr 0 zVc1 zVc1 (.operand nHc1 zF1))
@@ -773,7 +773,7 @@ def cifarBnTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (epsStr l
     pure <|
       "    // ── cifar-bn train step: every line is pretty(verified AST node) ──\n" ++ body ++
       s!"    return {nW1g}, {nb1g}, {ng1}, {nbt1}, {nW2g}, {nb2g}, {ng2}, {nbt2}, {nW3g}, {nb3g}, {ng3}, {nbt3}, {nW4g}, {nb4g}, {ng4}, {nbt4}, {nW5}, {nb5}, {nW6}, {nb6}, {nW7}, {nb7} : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n"
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @cifar_bn_train_step(%x: {ty [B,ic*(2*(2*h))*(2*(2*w))]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %g1: {ty [c1]}, %bt1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %g2: {ty [c1]}, %bt2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %g3: {ty [c2]}, %bt3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %g4: {ty [c2]}, %bt4: {ty [c2]}, %W5: {ty [flat,d1]}, %b5: {ty [d1]}, %W6: {ty [d1,d1]}, %b6: {ty [d1]}, %W7: {ty [d1,nClasses]}, %b7: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c1]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c2]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
   inner ++
@@ -820,7 +820,7 @@ def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrS
   let zTW6 : Tensor3 c3 s3h s3w := fun _ _ _ => 0
   let zTW7 : Tensor3 c3 s4h s4w := fun _ _ _ => 0
   let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered, flat): (conv→relu)×2→pool ×4 → (dense→relu)×2→dense ═══
     let (cHc1, nHc1) ← pretty B (if bf16 then .flatConvFBf16 (h := s1h) (w := s1w) zrnd "%W1" "%b1" W₁ b₁ (.operand "%x" x) else .flatConvF (h := s1h) (w := s1w) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zS1c1))
@@ -911,7 +911,7 @@ def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrS
     pure <|
       "    // ── cifar8 train step: every line is pretty(verified AST node) ──\n" ++ body ++
       s!"    return {nW1g}, {nb1g}, {nW2g}, {nb2g}, {nW3g}, {nb3g}, {nW4g}, {nb4g}, {nW5g}, {nb5g}, {nW6g}, {nb6g}, {nW7g}, {nb7g}, {nW8g}, {nb8g}, {nW9}, {nb9}, {nWa}, {nba}, {nWb}, {nbb} : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c3,c2,kH,kW]}, {ty [c3]}, {ty [c3,c3,kH,kW]}, {ty [c3]}, {ty [c4,c3,kH,kW]}, {ty [c4]}, {ty [c4,c4,kH,kW]}, {ty [c4]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n"
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @cifar8_train_step(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %W5: {ty [c3,c2,kH,kW]}, %b5: {ty [c3]}, %W6: {ty [c3,c3,kH,kW]}, %b6: {ty [c3]}, %W7: {ty [c4,c3,kH,kW]}, %b7: {ty [c4]}, %W8: {ty [c4,c4,kH,kW]}, %b8: {ty [c4]}, %W9: {ty [flat,d1]}, %b9: {ty [d1]}, %Wa: {ty [d1,d1]}, %ba: {ty [d1]}, %Wb: {ty [d1,nClasses]}, %bb: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c3,c2,kH,kW]}, {ty [c3]}, {ty [c3,c3,kH,kW]}, {ty [c3]}, {ty [c4,c3,kH,kW]}, {ty [c4]}, {ty [c4,c4,kH,kW]}, {ty [c4]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
   inner ++
@@ -946,7 +946,7 @@ deriving DecidableEq, Repr
 
     `%mu` is a baked constant and `%lr` a runtime arg, matching the retired emitter exactly. -/
 private def optTail (opt : CifarOpt) (B replicas n : Nat) (pName : String) (ds : List Nat)
-    (gradSSA : String) : StateM Nat (String × String × String × String) := do
+    (gradSSA : String) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let z : Vec n := fun _ => 0
   -- At `replicas > 1`, average the gradient across devices first. Trusted carve-out, same as
   -- ResNet34RenderB's (handoff §2b-quater, §5). cifar8 is where that carve-out gets its EXACT
@@ -1029,7 +1029,7 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let zTW6 : Tensor3 c3 s3h s3w := fun _ _ _ => 0
   let zTW7 : Tensor3 c3 s4h s4w := fun _ _ _ => 0
   let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
     let (cHc1, nHc1) ← pretty B (if bf16 then .flatConvFBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁ (.operand "%x" x) else .flatConvF (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zS1c1))
@@ -1188,7 +1188,7 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     ty [c4,c3,kH,kW], ty [c4], ty [c4,c4,kH,kW], ty [c4],
     ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
   let retTy := String.intercalate ", " (pTy ++ pTy ++ pTy) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention (see ResNet34RenderB:
   -- a mismatch here is refused by the shim as "entry mismatch", not silently mis-run).
   let fname := if replicas ≤ 1 then "cifar8_adam_train_step" else "cifar8_adamdp_train_step"
@@ -1288,7 +1288,7 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let _zTW6 : Tensor3 c3 s3h s3w := fun _ _ _ => 0
   let _zTW7 : Tensor3 c3 s4h s4w := fun _ _ _ => 0
   let _zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
     let (cHc1, nHc1) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else if bf16 then .batchOp (N := B) (.convBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else .batchOp (N := B) (.conv (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.batchOp (N := B) .relu (.operand nHc1 bS1c1))
@@ -1447,7 +1447,7 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     ty [c4,c3,kH,kW], ty [c4], ty [c4,c4,kH,kW], ty [c4],
     ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
   let retTy := String.intercalate ", " (pTy ++ pTy ++ pTy) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention (see ResNet34RenderB:
   -- a mismatch here is refused by the shim as "entry mismatch", not silently mis-run).
   let fname := if replicas ≤ 1 then "cifar8b_adam_train_step" else "cifar8b_adamdp_train_step"
@@ -1549,7 +1549,7 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
   let zTW6 : Tensor3 c3 s3h s3w := fun _ _ _ => 0
   let zTW7 : Tensor3 c3 s4h s4w := fun _ _ _ => 0
   let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered, incl. BN): (conv→BN→relu)×2→pool ×4 → (dense→relu)×2→dense ═══
     let (cHc1, nHc1) ← pretty B (.flatConvF (h := s1h) (w := s1w) "%W1" (cb 1) W₁ b₁ (.operand "%x" x))
     let (cBn1, nBn1) ← pretty B (.bnPerChannelF (oc := c1) (h := s1h) (w := s1w) "%g1" "%bt1" epsStr 0 zVc1 zVc1 (.operand nHc1 zS1c1))
@@ -1825,7 +1825,7 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
     pure <|
       hdr ++ constBlk ++ body ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention, and a mismatch is
   -- refused by the shim as "entry mismatch" rather than silently running the wrong graph.
   let fname := match opt with

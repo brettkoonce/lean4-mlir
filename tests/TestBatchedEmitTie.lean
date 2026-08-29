@@ -46,7 +46,7 @@ private def pi : Nat := 3
 private def pH : Nat := 4
 private def pW : Nat := 4
 
-private def render (g : StateM Nat (String × String)) : String := (g.run' 0).1
+private def render (g : StateM Proofs.StableHLO.EmitS (String × String)) : String := (g.run' (0, [])).1
 
 /-- Per-example peer (SHlo index `n`) vs batched form (SHlo index `BS*n`), same `pretty BS`. -/
 private def cases : List (String × String × String) :=

@@ -137,7 +137,7 @@ def vitDropSig (B : Nat) (sd : Bool) : String :=
 
 /-- One **vector-LN** site (`lnRow(1,0) → rowScale γ → rowBias β`) on the `[197,192]` token matrix,
     with explicit γ/β param names. Returns the LN-output SSA. -/
-private def vlnFwd (bs : Nat) (gName btName xin : String) : StateM Nat (String × String) := do
+private def vlnFwd (bs : Nat) (gName btName xin : String) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let (c1, a) ← pretty bs (.lnRowF "%one" "%zero" vEPS 0 1 0 (.operand xin (zVv : Vec (197*192))))
   let (c2, b) ← pretty bs (.rowScaleF gName (zVv : Vec 192) (.operand a (zVv : Vec (197*192))))
   let (c3, o) ← pretty bs (.rowBiasF btName (zVv : Vec 192) (.operand b (zVv : Vec (197*192))))
@@ -167,7 +167,7 @@ structure BSaves where
 /-- One **transformer block** forward (pre-norm, multi-head vector-LN), prefix `pfx`. Mirrors
     `vitBlockGraphMHV` node-by-node: LN1 → Q/K/V dense → per-head SDPA (slice→QKᵀ→scale→softmax→·V→pad,
     summed) → out dense → +res → LN2 → fc1 → GELU → fc2 → +res. Returns (code, the saved SSA names). -/
-private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Nat (String × BSaves) := do
+private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.EmitS (String × BSaves) := do
   let (c1, ln1) ← vlnFwd bs s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let (cq, q) ← pretty bs (.denseRowF s!"%{pfx}Wq" s!"%{pfx}bq" (zMm : Mat 192 192) zVv (.operand ln1 (zVv : Vec (197*192))))
   let (ck, k) ← pretty bs (.denseRowF s!"%{pfx}Wk" s!"%{pfx}bk" (zMm : Mat 192 192) zVv (.operand ln1 (zVv : Vec (197*192))))
@@ -217,7 +217,7 @@ structure FwdSaves where
   deriving Inhabited
 
 /-- The depth-12 ViT-Tiny **forward**, node-by-node. Returns (body, saves). -/
-private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Nat (String × FwdSaves) := do
+private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Proofs.StableHLO.EmitS (String × FwdSaves) := do
   let (ce, embed) ← pretty bs (.patchEmbedF "%wConv" "%bConv" "%cls" "%pos"
     (zKk : Kernel4 192 3 16 16) zVv zVv (zMm : Mat 197 192) (.operand "%x" (zVv : Vec (3*224*224))))
   let mut code := ce
@@ -249,7 +249,7 @@ def blkArgSig (i : Nat) (V : VitDims := vitTiDims) : String :=
     output is the `[BS,10]` logits. (FORWARD half of the §1 train-step render.) -/
 def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32)
     (nClasses : Nat := 10) : String :=
-  let (body, sv) := (vitFwd12 bs nClasses).run' 0
+  let (body, sv) := (vitFwd12 bs nClasses).run' (0, [])
   let res := sv.logits
   let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
   let argSig := s!"%x: {ty [bs, 3*224*224]}, %wConv: {ty [192,3,16,16]}, %bConv: {ty [192]}, " ++
@@ -270,13 +270,13 @@ def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32)
     `*Sgd` one (`tests/TestBatchedEmitTie.lean`), so this is the only place the two tails differ —
     one backward traversal, two endings, which is what keeps `vit_train_step.mlir` byte-identical
     while `vit_adam_train_step.mlir` gets its gradients. -/
-private def rdB (bs : Nat) (adam : Bool) (c : Nat) (bN lrS dy : String) : StateM Nat (String × String) :=
+private def rdB (bs : Nat) (adam : Bool) (c : Nat) (bN lrS dy : String) : StateM Proofs.StableHLO.EmitS (String × String) :=
   if adam then pretty bs (.rowDenseBiasGrad (N := 197) (c := c) (.operand dy (zVv : Vec (197*c))))
   else pretty bs (.rowDenseBiasSgd (N := 197) (c := c) bN lrS (zVv : Vec c) 0
                     (.operand dy (zVv : Vec (197*c))))
 
 /-- Rowwise-dense **weight** tail, same dispatch. -/
-private def rdW (bs : Nat) (adam : Bool) (a c : Nat) (xSSA wN lrS dy : String) : StateM Nat (String × String) :=
+private def rdW (bs : Nat) (adam : Bool) (a c : Nat) (xSSA wN lrS dy : String) : StateM Proofs.StableHLO.EmitS (String × String) :=
   if adam then pretty bs (.rowDenseWeightGrad (N := 197) (a := a) (c := c) xSSA
                             (zVv : Vec (197*a)) (.operand dy (zVv : Vec (197*c))))
   else pretty bs (.rowDenseWeightSgd (N := 197) (a := a) (c := c) xSSA wN lrS
@@ -289,7 +289,7 @@ private def rdW (bs : Nat) (adam : Bool) (a c : Nat) (xSSA wN lrS dy : String) :
     γ-scale). Returns (code, dxin, ngamma, nbeta) — updates at `adam := false`, gradients at `true`.
     `lr` is the mean-loss-equiv literal, and is unused in adam mode. -/
 private def vlnBack (bs : Nat) (gName btName xin dyOut lrStr : String) (adam : Bool) :
-    StateM Nat (String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let (cb, nb) ← rdB bs adam 192 btName lrStr dyOut
   let (cg, ng) ← if adam then
       pretty bs (.veclnGammaGrad (N := 197) (D := 192) xin vEPS 0
@@ -310,7 +310,7 @@ private def vlnBack (bs : Nat) (gName btName xin dyOut lrStr : String) (adam : B
     Q/K/V-dense-back (summed) → LN1-back → +res₁ fan-in (dxin). Returns (code, dxin, the 16 param
     SGD-update SSAs in `BlockParams` order: g1,bt1, Wq,bq,Wk,bk,Wv,bv,Wo,bo, g2,bt2, Wfc1,bfc1,Wfc2,bfc2). -/
 private def vBlockBack (bs : Nat) (pfx : String) (sv : BSaves) (dyOut lrStr : String) (adam : Bool) :
-    StateM Nat (String × String × List String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × List String) := do
   let p := pfx
   -- ─ MLP sublayer back: bout = addV(hres, f2); df2 = dyOut, dhres ⊇ dyOut ─
   -- fc2: f2 = denseRow(Wfc2,bfc2)(g)  [g:197*768 → f2:197*192]
@@ -404,7 +404,7 @@ private def blkRetTys : List String :=
 -- gradient-LIST check, which is the one a string diff cannot make.
 def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) :
-    StateM Nat (String × List String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × List String × String) := do
     let (fwd, sv) ← vitFwd12 bs nClasses
     -- loss cotangent. The softmax is `pretty`d on its own line rather than nested inside the
     -- `.sub`, so its SSA can also feed the report-only `%loss`; `.operand` is a leaf that emits
@@ -564,7 +564,7 @@ def vitWdCounts (nClasses : Nat := 10) : Nat × Nat :=
 def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String := "0.003125")
     (nClasses : Nat := 10)
     (bs : Nat := 32) : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (code, retNames, _) ← vitBackAll bs nClasses lrStr false
     let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
       ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [10]]
@@ -572,7 +572,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
       "    // ── ViT-Tiny depth-12 train step: every line is pretty(verified AST node) ──\n" ++
       code ++
       s!"    return {String.intercalate ", " retNames} : {String.intercalate ", " retTys}\n"
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
   let argSig := s!"%x: {ty [bs, 3*224*224]}, %wConv: {ty [192,3,16,16]}, %bConv: {ty [192]}, " ++
     s!"%cls: {ty [192]}, %pos: {ty [197,192]}, " ++ blkSigs ++
@@ -597,7 +597,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     `ResNet34RenderB.adamOne`, minus the replica collective (ViT has no DP render yet). -/
 private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : String) (replicas : Nat)
     (ema : Bool := false) (wdName : String := "%wd") (preAvg : Bool := false) :
-    StateM Nat (String × String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   -- ⚠ `preAvg` says the caller has ALREADY averaged (and clipped) this gradient, so the collective
@@ -757,7 +757,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     -- — so a second copy would be the double-writer disease for no gain at all. ConvNeXt's
     -- increment 7 measured exactly this and found the tail was FREE.
     -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument.
-    (traversal : Option (StateM Nat (String × List String × String)) := none)
+    (traversal : Option (StateM Proofs.StableHLO.EmitS (String × List String × String)) := none)
     -- ⚠ TRAILING + defaulted, so the Tiny call sites and their artifacts are untouched.
     (V : VitDims := vitTiDims)
     -- ⚠ STOCHASTIC DEPTH is a signature/variant flag here and a site-placement flag in the
@@ -772,7 +772,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
   -- agree until someone changes K, and then the gradient and the loss disagree silently.
   let alphaStr := fmt6 alpha
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (code, gradNames, nSm) ←
       traversal.getD (vitBackAll bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr)))
     -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/grad_clip.md`, `recipe_gaps.md` v1.4b) — the
@@ -922,7 +922,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
     ++ (if sd then (List.range vitDropSites).map (fun _ => ty [bs]) else [])
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{funcName}({argSig}) -> ({String.intercalate ", " retTys}) " ++ "{\n" ++
   "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++

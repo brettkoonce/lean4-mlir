@@ -87,7 +87,7 @@ structure MBBackB where
 /-- **STRIDED inverted-residual forward**: expand at the input `2hh×2ww`, depthwise downsamples
     `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
 private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat MBFwdB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
   -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
@@ -126,7 +126,7 @@ private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (conv
     `hh×ww`, block output = `addVB (project-BN out) (block input)`. The bottleneck is LINEAR — no
     relu6 after the add. -/
 private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat MBFwdB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
   -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
@@ -163,7 +163,7 @@ private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBia
 /-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): as `irFwdSkipB` but `ic ≠ oc`, so the block
     output is the project-BN output directly. -/
 private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat MBFwdB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
   -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
@@ -200,7 +200,7 @@ private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convB
     → BN → relu6 → project(1×1 `ic→oc`) → BN. No expand conv, no skip. `er` is the depthwise INPUT
     (= the block input), which is what the depthwise weight gradient reads. -/
 private def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat MBFwdB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
   -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
@@ -235,7 +235,7 @@ private def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) (convBias :
     no skip, so the dx handed to the previous block is the expand-conv backward directly. -/
 private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat MBBackB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBBackB := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
   -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
@@ -321,7 +321,7 @@ private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
     level down, §2a-quater). `ic = oc` whenever `skip` is true. -/
 private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat MBBackB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBBackB := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
   -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
@@ -406,7 +406,7 @@ private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xN
     the stem is the depthwise backward directly. -/
 private def irBackNoExpGradB (B ic oc hh : Nat) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat MBBackB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS MBBackB := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER, exactly as the `z*` zero kernels are: the render
   -- produces TEXT and `skel` erases every ℝ payload before a token is emitted. The
@@ -542,7 +542,7 @@ def mnv2StatSigList : List (String × String) :=
     `replicas ≤ 1` this emits nothing and threads the raw gradient, so the single-device render
     stays byte-identical — the cheap self-check that the insertion is inert. -/
 private def adamOneM (B : Nat) (replicas : Nat) (g : PGradM) :
-    StateM Nat (String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
@@ -573,7 +573,7 @@ private def adamOneM (B : Nat) (replicas : Nat) (g : PGradM) :
     momentum buffer and `v` the running mean-square**, the same slot reinterpretation the Nesterov
     render does for its velocity. That is why the driver and the interface do not move. -/
 private def rmsOneM (B : Nat) (replicas : Nat) (g : PGradM) :
-    StateM Nat (String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
@@ -650,7 +650,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   -- to the literals they replace, so the fix is inert on every committed artifact.
   let alphaStr    := fmt6 0.1                 -- α itself ("0.100000")
   let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are — see `irFwdStridedB`.
     let zrnd : ℝ → ℝ := fun r => r
     -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → batch BN → relu6 (NO maxpool) ═══
@@ -773,7 +773,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --     than from an independent 52-entry table — a misaligned stat slot is SILENT, since the
     --     arities still match and the wrong layer's statistics simply flow into the wrong
     --     `@mobilenetv2_fwd_eval` slot (§2e). ═══
-    let bnStat (oc hh : Nat) (xn : String) : StateM Nat (String × String × String) := do
+    let bnStat (oc hh : Nat) (xn : String) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
       let zb : Vec (B*(oc*(hh*hh))) := fun _ => 0
       let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh)
         (.operand xn zb))
@@ -781,12 +781,12 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         (.operand xn zb))
       pure (cM ++ cV, nM, nV)
     -- a STRIDED block's expand BN sits at the INPUT resolution 2hh; everything else at hh
-    let blkStatsS (mid oc hh : Nat) (f : MBFwdB) : StateM Nat (String × List String) := do
+    let blkStatsS (mid oc hh : Nat) (f : MBFwdB) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let (ce, me, ve) ← bnStat mid (2*hh) f.ec
       let (cd, md, vd) ← bnStat mid hh f.dc
       let (cp, mp, vp) ← bnStat oc hh f.pc
       pure (ce ++ cd ++ cp, [me, ve, md, vd, mp, vp])
-    let blkStats1 (mid oc hh : Nat) (f : MBFwdB) : StateM Nat (String × List String) := do
+    let blkStats1 (mid oc hh : Nat) (f : MBFwdB) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let (ce, me, ve) ← bnStat mid hh f.ec
       let (cd, md, vd) ← bnStat mid hh f.dc
       let (cp, mp, vp) ← bnStat oc hh f.pc
@@ -921,7 +921,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let outSig := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
      (mnv2StatSigList.map (·.2)))
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   let fname := s!"{slug}_{mnv2AdamVariant B replicas opt bf16}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++

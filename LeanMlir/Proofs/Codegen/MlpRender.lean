@@ -42,7 +42,7 @@ def mlpTrainStepStructured (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   let z₁ : Vec d₁ := fun _ => 0
   let z₂ : Vec d₂ := fun _ => 0
   let z₃ : Vec d₃ := fun _ => 0
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (cp0, np0) ← pretty B (denseF "%W0" "%b0" W₀ b₀ (.operand "%x" x))
     let (ca0, na0) ← pretty B (.reluF (.operand np0 z₁))
     let (cp1, np1) ← pretty B (denseF "%W1" "%b1" W₁ b₁ (.operand na0 z₁))
@@ -71,7 +71,7 @@ def mlpTrainStepStructured (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
       sgd "%W0" "%dW0" (ty [d₀,d₁]) ++ sgd "%b0" "%db0" (ty [d₁]) ++
       sgd "%W1" "%dW1" (ty [d₁,d₂]) ++ sgd "%b1" "%db1" (ty [d₂]) ++
       sgd "%W2" "%dW2" (ty [d₂,d₃]) ++ sgd "%b2" "%db2" (ty [d₃])
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @mlp_train_step(%x: {ty [B,d₀]}, %W0: {ty [d₀,d₁]}, %b0: {ty [d₁]}, %W1: {ty [d₁,d₂]}, %b1: {ty [d₂]}, %W2: {ty [d₂,d₃]}, %b2: {ty [d₃]}, %onehot: {ty [B,d₃]}) -> ({ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}) " ++ "{\n" ++
   body ++
@@ -93,7 +93,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   let z₁ : Vec d₁ := fun _ => 0
   let z₂ : Vec d₂ := fun _ => 0
   let z₃ : Vec d₃ := fun _ => 0
-  let act : StateM Nat (String × String × String × String × String × String × String × String) := do
+  let act : StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String × String) := do
     let (cp0, np0) ← pretty B (denseF "%W0" "%b0" W₀ b₀ (.operand "%x" x))
     let (ca0, na0) ← pretty B (.reluF (.operand np0 z₁))
     let (cp1, np1) ← pretty B (denseF "%W1" "%b1" W₁ b₁ (.operand na0 z₁))
@@ -111,7 +111,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
     pure (cp0 ++ ca0 ++ cp1 ++ ca1 ++ clog ++ cdy ++ cc1 ++ cc0 ++
             cW2 ++ cb2 ++ cW1 ++ cb1 ++ cW0 ++ cb0,
           nW0, nb0, nW1, nb1, nW2, nb2, nlog)
-  let (body, nW0, nb0, nW1, nb1, nW2, nb2, nlog) := act.run' 0
+  let (body, nW0, nb0, nW1, nb1, nW2, nb2, nlog) := act.run' (0, [])
   -- ⚠⚠ `%loss` IS REPORT-ONLY, AND IT IS A DECLARED CARVE-OUT. Every other line of
   -- this module is `pretty` of a `den`-certified AST node; the block below is
   -- hand-written text, exactly as ConvNeXt/EfficientNet/R50 already emit theirs.

@@ -167,7 +167,7 @@ private def blocks : List (String × Nat × Nat × Nat × Nat × Nat) :=
    ("b17",160, 960, 320, 1, 7)]
 
 /-- One inverted-residual block forward via `pretty`, capturing flat names. -/
-private def fwdBlock (p xin : String) (ic mid oc s Hin : Nat) : StateM Nat (String × FNames) := do
+private def fwdBlock (p xin : String) (ic mid oc s Hin : Nat) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let Hout := Hin / s
   -- expand 1×1 → BN → relu6, SKIPPED when t=1 (mid=ic); then the depthwise reads `er` (= xin when
   -- no-expand), so `ec`/`en`/`er` all alias xin in that case (downstream dwWGrad reads `b.er`).
@@ -198,7 +198,7 @@ private def fwdBlock (p xin : String) (ic mid oc s Hin : Nat) : StateM Nat (Stri
     the cotangents the param grads need. `dy` = flat cotangent at block output. Returns
     (code, cot-at-block-input, [cot_pc, cot_dc, cot_ec, cot_en, cot_dn]). -/
 private def bwdBlock (p dy : String) (b : FNames) (ic mid oc s Hin : Nat) :
-    StateM Nat (String × String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String) := do
   let Hout := Hin / s
   -- project: bn-back (folds dγ/dβ → %{p}dpndg/%{p}dpndb) → conv-back (1×1)
   let k1 := bnBackB s!"{p}dpn" s!"{p}pn" dy oc Hout Hout
@@ -259,7 +259,7 @@ private def blockSgd (p : String) (ic mid oc : Nat) : String :=
     and handed to `cot`, which emits the loss cotangent (and must define `%dy` in scope — plus
     `%loss` for the Adam path). Everything downstream (dense param grads, dense-back) reads `%dy`. -/
 private def renderBody (cot : String → String) : String := Id.run do
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered) ═══
     let (cStemC, stc) ← pretty BS (.flatConvStridedF (h := 112) (w := 112) "%sW" "%sb" (zK : Kernel4 32 3 3 3) zV (.operand "%x" zV))
     let cStemB := bnB "stn" stc "%sg" "%sbt" 32 112 112
@@ -327,7 +327,7 @@ private def renderBody (cot : String → String) : String := Id.run do
       s!"    %dWd = stablehlo.dot_general {gap}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,1280]}, {ty [BS,10]}) -> {ty [1280,10]}\n" ++
       s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
     pure (fwd ++ bwd ++ paramG ++ headG ++ stemG ++ denseG)
-  pure (go.run' 0)
+  pure (go.run' (0, []))
 
 /-- SGD loss cotangent: `%dy = (softmax − onehot)/BS`. -/
 private def sgdCot (sm : String) : String :=

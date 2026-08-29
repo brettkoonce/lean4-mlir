@@ -123,7 +123,7 @@ private structure FNames where  -- all flat SSA names from `pretty`
 
 /-- One ConvNeXt block forward via `pretty` — exactly the `convNextFwdGraph` block tokens
     (`b{i}Body` + `addV` skip), with the graph's own param names. -/
-private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) := do
+private def fwdBlock (i : Nat) (xin : String) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, d) ← pretty BS (.depthwiseF (h := H) (w := H) s!"%Wdw{i}" s!"%bdw{i}" (zD : DepthwiseKernel C 7 7) zV (.operand xin zV))
   let (k2, n) ← pretty BS (.bnF s!"%gn{i}" s!"%btn{i}" EPS 0 0 0 (.operand d (zV : Vec (C*H*H))))
   let (k3, e) ← pretty BS (.flatConvF (h := H) (w := H) s!"%Wex{i}" s!"%bex{i}" (zK : Kernel4 CE C 1 1) zV (.operand n zV))
@@ -138,7 +138,7 @@ private def fwdBlock (i : Nat) (xin : String) : StateM Nat (String × FNames) :=
     backward is `layerScaleF` itself applied to the cotangent (input-VJP `γ ⊙ dy`). Returns
     (code, cot-at-block-input, cot_p, cot_e, cot_n, cot_d) — what the param grads need. -/
 private def bwdBlock (i : Nat) (dy : String) (b : FNames) :
-    StateM Nat (String × String × String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String) := do
   let (k1, cot_p) ← pretty BS (.layerScaleF s!"%gls{i}" (zV : Vec (C*H*H)) (.operand dy zV))
   let (k2, cot_g) ← pretty BS (.convBack (h := H) (w := H) s!"%Wpr{i}" (zK : Kernel4 C CE 1 1) zV zV (.operand cot_p zV))
   let (k3, cot_e) ← pretty BS (.geluBack b.e (zV : Vec (CE*H*H)) (.operand cot_g zV))
@@ -169,7 +169,7 @@ private def blkParams (i : Nat) : List (String × String) :=
    (s!"gls{i}", ty [C*H*H])]
 
 private def trainStep : String := Id.run do
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered; the convNextFwdGraph tokens in graph order) ═══
     let (cP, patch) ← pretty BS (.flatConvF (h := H) (w := H) "%Wst" "%bst" (zK : Kernel4 C IC 1 1) zV (.operand "%x" zV))
     let (cL, stemLn) ← pretty BS (.bnF "%gst" "%btst" EPS 0 0 0 (.operand patch (zV : Vec (C*H*H))))
@@ -209,7 +209,7 @@ private def trainStep : String := Id.run do
       s!"    %dWd = stablehlo.dot_general {hn}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,C]}, {ty [BS,10]}) -> {ty [C,10]}\n" ++
       s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
     pure (fwd ++ bwd ++ paramG)
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   -- ═══ SGD over all 26 params (forward order) + signature ═══
   let allParams : List (String × String) :=
     [("Wst", ty [C,IC,1,1]), ("bst", ty [C]), ("gst", "tensor<f32>"), ("btst", "tensor<f32>")]

@@ -72,7 +72,7 @@ private def optStepModule (fname : String) (opt : R34Opt)
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
   let ps : List PGrad := fixtureParams.map (fun (n, ds) => ⟨n, s!"%d{n}", ds⟩)
   let (body, thetaN, mN, vN, aN, eN) :=
-    (optAllParams opt 1 1 ps wdExclude gradClip clipNorm ema).run' 0
+    (optAllParams opt 1 1 ps wdExclude gradClip clipNorm ema).run' (0, [])
   let tys := fixtureParams.map (fun (_, ds) => ty ds)
   let sig := String.intercalate ", " (
     fixtureParams.map (fun (n, ds) => s!"%{n}: {ty ds}") ++

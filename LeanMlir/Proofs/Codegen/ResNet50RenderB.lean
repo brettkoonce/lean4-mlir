@@ -162,7 +162,7 @@ def dpAt (sd : Bool) (i : Nat) : Option Nat := if sd then some i else none
 /-- Identity bottleneck forward: `1×1 → BN → relu → 3×3 → BN → relu → 1×1 → BN → (+x) → relu`,
     all at `hh`, channels `oc → mid → mid → oc`. -/
 private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
   -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
@@ -199,7 +199,7 @@ private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
     `cin → mid → mid → oc` with the resolution unchanged, so the projection is a plain `1×1`
     conv → BN, NOT the strided one `bnkStridedFwdB` uses. -/
 private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
   -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
@@ -244,7 +244,7 @@ private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     ⚠ `conv1`/`bn1`/`relu1` run at the **input** resolution `2hh`; only `conv2` (the 3×3) is
     strided. v1.5. -/
 private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
-    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BNFwd := do
+    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
   -- produces TEXT, and `skel` erases every ℝ payload before a token is emitted. The
@@ -295,7 +295,7 @@ private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     ⚠ Each BN's γ/β gradient reads the cotangent at that BN's OUTPUT: `da` for bn3, `dr2` for
     bn2, `dr1` for bn1 — off by one and the gradient is silently wrong. -/
 private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (dyName : String)
-    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BBackB := do
+    (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
@@ -358,7 +358,7 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
     Identical to the identity backward except the skip branch carries its own `bn→conv` backward
     (`dnp`/`dcp`) and `dx = dc1 + dcp`. -/
 private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
-    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BBackB := do
+    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
@@ -430,7 +430,7 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
     ⚠ `dc2` is the STRIDED conv backward, so it takes the cotangent from `hh` back up to `2hh`;
     everything upstream of it (`dr1`, `dn1`, `dc1`, `W1`'s grad) lives at `2hh`. -/
 private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
-    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Nat BBackB := do
+    (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none) : StateM Proofs.StableHLO.EmitS BBackB := do
   let xName := f.xin
   let ww := hh
   -- ▶ The rounding is a PLACEHOLDER here, exactly as `zk*`/`zb`/`zOut` are: the render
@@ -541,7 +541,7 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
     -- ▶ `sd` = stochastic depth, RSB-A2/A1's `dropPath := 0.05`. TRAILING and defaulted, so the
     -- committed `@resnet50_fwd` and every drop-free train step re-render byte-identically.
     (sd : Bool := false) :
-    StateM Nat R50FwdRecB := do
+    StateM Proofs.StableHLO.EmitS R50FwdRecB := do
   -- The ladder, bottom-up. At q = 7: 5→…  no — at q = 7 these are 7, 14, 28, 56, 112 and the
   -- input is 224; at q = 5 they are 5, 10, 20, 40, 80 and the input is 160.
   let q5 := q            -- stage 4 / the GAP window
@@ -735,7 +735,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   -- arm — adding a constructor without extending it is a non-exhaustive match, i.e. a build error.
   -- That asymmetry is exactly why the driver needs `TestVariantPredicates` and this line does not.
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward: THE SHARED CHAIN, not a second copy (see `r50FwdChainB`) ═══
     let fw ← r50FwdChainB B nClasses epsStr q bf16 sd
     let q5 := q
@@ -781,7 +781,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       -- ⚠ `zNCp : Vec (B*nClasses)`, not `zNCb : Vec (B*(1*nClasses))`. The two indices are equal
       -- but NOT definitionally so for a variable `nClasses` (`Nat.mul` recurses on its second
       -- argument, so `1 * n` does not reduce), and `sigmoidB`'s `{N n}` unify against the bare
-      -- product. The `if` still typechecks because both branches are `StateM Nat (String × String)`
+      -- product. The `if` still typechecks because both branches are `StateM Proofs.StableHLO.EmitS (String × String)`
       -- — the SHlo index never escapes the branch.
       then pretty B (.sigmoidB (N := B) (n := nClasses) (.operand nLog zNCp))
       else pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
@@ -824,23 +824,23 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (csg, nsg) ← pretty B (.bnGammaGradB nStc epsStr 0 z112b (.operand nDsr z112b))
     let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 64) (h := q1) (w := q1) (.operand nDsr z112b))
     -- ═══ BN running statistics, from each BN layer's INPUT ═══
-    let bnStat (oc hh : Nat) (xn : String) : StateM Nat (String × String × String) := do
+    let bnStat (oc hh : Nat) (xn : String) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
       let zbv : Vec (B*(oc*(hh*hh))) := fun _ => 0
       let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zbv))
       let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zbv))
       pure (cM ++ cV, nM, nV)
     -- identity + stride-1-projection blocks keep every BN at `hh`.
-    let idStats (mid oc hh : Nat) (f : BNFwd) : StateM Nat (String × List String) := do
+    let idStats (mid oc hh : Nat) (f : BNFwd) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let (c1, m1, v1) ← bnStat mid hh f.c1
       let (c2, m2, v2) ← bnStat mid hh f.c2
       let (c3, m3, v3) ← bnStat oc hh f.c3
       pure (c1 ++ c2 ++ c3, [m1, v1, m2, v2, m3, v3])
-    let projStats (mid oc hh : Nat) (f : BNFwd) : StateM Nat (String × List String) := do
+    let projStats (mid oc hh : Nat) (f : BNFwd) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let (cb, ns) ← idStats mid oc hh f
       let (cp, mp, vp) ← bnStat oc hh f.cp
       pure (cb ++ cp, ns ++ [mp, vp])
     -- ⚠ the STRIDED block's bn1 lives at `2*hh`; only bn2/bn3/bnp are at `hh`.
-    let strStats (mid oc hh : Nat) (f : BNFwd) : StateM Nat (String × List String) := do
+    let strStats (mid oc hh : Nat) (f : BNFwd) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let (c1, m1, v1) ← bnStat mid (2*hh) f.c1
       let (c2, m2, v2) ← bnStat mid hh f.c2
       let (c3, m3, v3) ← bnStat oc hh f.c3
@@ -997,7 +997,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let outSig := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ (if accOn then pTy else []) ++ (if ema then pTy else []) ++
      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accTy ++ (r50StatSigList.map (·.2)))
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
   let fname := s!"{slug}_{r34AdamVariant B replicas opt wdExclude gradClip bce wdStr bf16 ema sd}_train_step"
@@ -1026,7 +1026,7 @@ another, logits rel 1.86, silent. -/
 
 /-- Identity bottleneck forward, per-example vocabulary. -/
 private def bnkIdFwdV (B mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let ww := hh
   let zm   : Vec mid := fun _ => 0
   let zo   : Vec oc := fun _ => 0
@@ -1050,7 +1050,7 @@ private def bnkIdFwdV (B mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : Strin
 /-- ⭐ Stride-1 projection bottleneck forward — stage 1 block 0. The projection is `.flatConvF`,
     NOT `.flatConvStridedF`. -/
 private def bnkProjFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let ww := hh
   let zm   : Vec mid := fun _ => 0
   let zo   : Vec oc := fun _ => 0
@@ -1077,7 +1077,7 @@ private def bnkProjFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xName :
 
 /-- Strided projection bottleneck forward. ⚠ `conv1`/`bn1`/`relu1` at `2hh`; only `conv2` strides. -/
 private def bnkStridedFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let ww := hh
   let zm     : Vec mid := fun _ => 0
   let zo     : Vec oc := fun _ => 0
@@ -1111,7 +1111,7 @@ private def r50FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
     -- ⚠ TRAILING, and the SAME ladder the train step uses (`q = 7` is 224, `q = 5` is 160). It has
     -- to be the same derivation, not merely the same numbers: the §2g prefix audit only means
     -- anything if the forward and the train step are one chain at one resolution.
-    (q : Nat := 7) : StateM Nat (String × String) := do
+    (q : Nat := 7) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let q5 := q; let q4 := 2 * q5; let q3 := 2 * q4; let q2 := 2 * q3; let q1 := 2 * q2
   let zx   : Vec (3*(2*q1)*(2*q1)) := fun _ => 0
   let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
@@ -1166,7 +1166,7 @@ def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   let sigList := r50SigList nClasses
   let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let fwr := (r50FwdChainB B nClasses epsStr q).run' 0
+  let fwr := (r50FwdChainB B nClasses epsStr q).run' (0, [])
   let (code, logits) := (fwr.code, fwr.logits)
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
@@ -1184,7 +1184,7 @@ def resnet50FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   let sigList := r50SigList nClasses ++ r50StatSigList
   let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let (code, logits) := (r50FwdChain B nClasses .eval epsStr q).run' 0
+  let (code, logits) := (r50FwdChain B nClasses .eval epsStr q).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-50 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++

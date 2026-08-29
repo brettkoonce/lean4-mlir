@@ -74,7 +74,7 @@ deriving DecidableEq, Repr
 -- SAME train/eval BN switch. A second copy there would let R50's eval forward drift from its
 -- train forward — §2g's `mobilenetv2_fwd` defect exactly. Visibility changes no emitted bytes.
 def bnSite (B oc hh : Nat) (mode : R34Bn) (epsStr gName btName statP xin : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let zc  : Vec oc := fun _ => 0
   let zin : Vec (oc*hh*hh) := fun _ => 0
   match mode with
@@ -86,7 +86,7 @@ def bnSite (B oc hh : Nat) (mode : R34Bn) (epsStr gName btName statP xin : Strin
 
 /-- Identity block forward: `conv1→BN1→relu1→conv2→BN2→(+x)→relu`. `c` channels, `hh×ww` spatial. -/
 private def idFwd (B c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
-    (convBias : Bool) : StateM Nat BFwd := do
+    (convBias : Bool) : StateM Proofs.StableHLO.EmitS BFwd := do
   let ww := hh
   let zc  : Vec c := fun _ => 0
   let zk  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
@@ -104,7 +104,7 @@ private def idFwd (B c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
 /-- Downsample block forward: strided `conv1→BN1→relu1→conv2→BN2` body + strided projection
     `convp→BNp` skip, `add`, `relu`. `cin→c` channels, input `2hh×2ww`, output `hh×ww`. -/
 private def downFwd (B cin c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
-    (convBias : Bool) : StateM Nat BFwd := do
+    (convBias : Bool) : StateM Proofs.StableHLO.EmitS BFwd := do
   let ww := hh
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
@@ -133,7 +133,7 @@ private def downFwd (B cin c hh : Nat) (mode : R34Bn) (epsStr p xName : String)
 /-- Identity block backward + 8 param SGD ops. `dyName` = cotangent of the block output; the block
     input comes from `f.xin`. The skip is identity, so the merged dx sums (body dx) + (masked cot). -/
 private def idBackSgd (B c hh : Nat) (epsStr lrStr p : String) (f : BFwd) (dyName : String)
-    (convBias : Bool) : StateM Nat BBack := do
+    (convBias : Bool) : StateM Proofs.StableHLO.EmitS BBack := do
   let xName := f.xin
   let ww := hh
   let zc  : Vec c := fun _ => 0
@@ -166,7 +166,7 @@ private def idBackSgd (B c hh : Nat) (epsStr lrStr p : String) (f : BFwd) (dyNam
 /-- Downsample block backward + 12 param SGD ops. The skip is a strided projection conv+BN, so
     the merged dx (at the `2hh×2ww` input) sums (strided body dx) + (strided projection dx). -/
 private def downBackSgd (B cin c hh : Nat) (epsStr lrStr p : String) (f : BFwd) (dyName : String)
-    (convBias : Bool) : StateM Nat BBack := do
+    (convBias : Bool) : StateM Proofs.StableHLO.EmitS BBack := do
   let xName := f.xin
   let ww := hh
   let zc   : Vec c := fun _ => 0
@@ -280,7 +280,7 @@ set_option maxRecDepth 1000000 in
     of a verified `SHlo` node. BN is the **batch-statistic** `bnPerChannelF` — this is the training
     forward; the running-stats eval forward is a separate render. -/
 private def r34FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
-    (convBias : Bool) : StateM Nat R34Fwd := do
+    (convBias : Bool) : StateM Proofs.StableHLO.EmitS R34Fwd := do
   -- ═══ stem: 7×7/s2 conv → BN → relu → maxpool ═══
   let zx   : Vec (3*224*224) := fun _ => 0
   let zSk  : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
@@ -340,7 +340,7 @@ def resnet34FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   let sigList := r34SigList nClasses convBias
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let F : R34Fwd := (r34FwdChain B nClasses .train epsStr convBias).run' 0
+  let F : R34Fwd := (r34FwdChain B nClasses .train epsStr convBias).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-34 forward: every line is pretty(verified AST node) ──\n" ++
@@ -364,7 +364,7 @@ def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   let sigList := r34SigList nClasses convBias ++ r34StatSigList
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let F : R34Fwd := (r34FwdChain B nClasses .eval epsStr convBias).run' 0
+  let F : R34Fwd := (r34FwdChain B nClasses .eval epsStr convBias).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-34 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
@@ -383,7 +383,7 @@ set_option maxRecDepth 1000000 in
     certified. Stem 7×7/s2 (3→64, 224→112), maxpool→56, stages 64/128/256/512 at 56/28/14/7. -/
 def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     (convBias : Bool := false) : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward: stem → 16 blocks → GAP → dense (the SAME chain `resnet34FwdFaithfulV` emits) ═══
     let F ← r34FwdChain B nClasses .train epsStr convBias
     let blk := F.blocks
@@ -452,7 +452,7 @@ def resnet34TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}")) ++
     s!", %onehot: {ty [B, nClasses]}"
   let outSig := String.intercalate ", " (sigList.map (·.2))
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @resnet34_train_step({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++

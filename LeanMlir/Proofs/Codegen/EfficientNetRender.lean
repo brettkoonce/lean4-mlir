@@ -122,7 +122,7 @@ erases them, so the render is value-independent. -/
 
 /-- BN γ. -/
 private def bnG (adam : Bool) (B oc hh ww : Nat) (gName vName epsStr lrStr dy : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let zc : Vec oc := fun _ => 0
   let zb : Vec (B * (oc * (hh * ww))) := fun _ => 0
   if adam then
@@ -134,7 +134,7 @@ private def bnG (adam : Bool) (B oc hh ww : Nat) (gName vName epsStr lrStr dy : 
 /-- BN β — and, because `Σ_{batch,spatial} dy` is exactly a conv bias gradient, also every conv
     bias in this net (`%eb`, `%db`, `%pb`, `%sb`). That reuse is why EfficientNet needed no
     depthwise BIAS gradient op: its depthwise convs are followed by BN, so the bias is folded. -/
-private def bnBt (adam : Bool) (B oc hh ww : Nat) (bName lrStr dy : String) : StateM Nat (String × String) := do
+private def bnBt (adam : Bool) (B oc hh ww : Nat) (bName lrStr dy : String) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let zc : Vec oc := fun _ => 0
   let zb : Vec (B * (oc * (hh * ww))) := fun _ => 0
   if adam then
@@ -146,7 +146,7 @@ private def bnBt (adam : Bool) (B oc hh ww : Nat) (bName lrStr dy : String) : St
 private def convW1 (adam : Bool) (B ic oc hh ww : Nat) (xName wName lrStr dy : String)
     -- ⚠ bf16 reaches ONLY the `adam` branch's un-fused `*GradB`. The `else` branch is the
     -- fused plain-SGD tail (`*SgdB`), which no bf16 artifact renders — it stays f32.
-    (bf16 : Bool := false) : StateM Nat (String × String) := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String) := do
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
   let zrnd : ℝ → ℝ := fun r => r
@@ -166,7 +166,7 @@ private def convW1 (adam : Bool) (B ic oc hh ww : Nat) (xName wName lrStr dy : S
 private def dwW (adam : Bool) (B c hh ww kd : Nat) (xName wName lrStr dy : String)
     -- ⚠ bf16 reaches ONLY the `adam` branch's un-fused `*GradB`. The `else` branch is the
     -- fused plain-SGD tail (`*SgdB`), which no bf16 artifact renders — it stays f32.
-    (bf16 : Bool := false) : StateM Nat (String × String) := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String) := do
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
   let zrnd : ℝ → ℝ := fun r => r
@@ -186,7 +186,7 @@ private def dwW (adam : Bool) (B c hh ww kd : Nat) (xName wName lrStr dy : Strin
 private def dwWS (adam : Bool) (B c hh ww kd : Nat) (xName wName lrStr dy : String)
     -- ⚠ bf16 reaches ONLY the `adam` branch's un-fused `*GradB`. The `else` branch is the
     -- fused plain-SGD tail (`*SgdB`), which no bf16 artifact renders — it stays f32.
-    (bf16 : Bool := false) : StateM Nat (String × String) := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String) := do
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
   let zrnd : ℝ → ℝ := fun r => r
@@ -203,7 +203,7 @@ private def dwWS (adam : Bool) (B c hh ww kd : Nat) (xName wName lrStr dy : Stri
                 zb zx zk 0 (.operand dy zd))
 
 /-- Dense weight (the two SE gate matrices and the classifier head). -/
-private def dnW (adam : Bool) (B a c : Nat) (xName wName lrStr dy : String) : StateM Nat (String × String) := do
+private def dnW (adam : Bool) (B a c : Nat) (xName wName lrStr dy : String) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let zx : Vec (B * a) := fun _ => 0
   let zW : Mat a c := fun _ _ => 0
   let zd : Vec (B * c) := fun _ => 0
@@ -213,7 +213,7 @@ private def dnW (adam : Bool) (B a c : Nat) (xName wName lrStr dy : String) : St
     pretty B (.denseWeightSgdB (N := B) (a := a) (c := c) xName wName lrStr zx zW 0 (.operand dy zd))
 
 /-- Dense bias. -/
-private def dnB (adam : Bool) (B c : Nat) (bName lrStr dy : String) : StateM Nat (String × String) := do
+private def dnB (adam : Bool) (B c : Nat) (bName lrStr dy : String) : StateM Proofs.StableHLO.EmitS (String × String) := do
   let zb : Vec c := fun _ => 0
   let zd : Vec (B * c) := fun _ => 0
   if adam then
@@ -229,7 +229,7 @@ private def dnB (adam : Bool) (B c : Nat) (bName lrStr dy : String) : StateM Nat
     reduce dense (`W₁`), swish, excite dense (`W₂`) to expose `s/e1/z/e2`, AND the fused `seBlock`
     for the actual SE output `seOut`. Returns `(code, s, e1, z, e2, seOut)`. -/
 private def seFwd (B c hh r : Nat) (p drName : String) :
-    StateM Nat (String × String × String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String) := do
   let ww := hh
   let zChw : Vec (B * (c * hh * ww)) := fun _ => 0
   let zCc  : Vec (B * c) := fun _ => 0
@@ -252,7 +252,7 @@ private def seFwd (B c hh r : Nat) (p drName : String) :
     Returns `(code, dx, [zW1, zb1, zW2, zb2 updated names])`. -/
 private def seBack (adam : Bool) (B c hh r : Nat)
     (lrStr p drName sName e1Name zName e2Name seCot : String) :
-    StateM Nat (String × String × List String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × List String) := do
   let ww := hh
   let zChw : Vec (B * (c * hh * ww)) := fun _ => 0
   let zCc  : Vec (B * c) := fun _ => 0
@@ -364,7 +364,7 @@ def enetDropoutSig (B : Nat) (cd : Bool) : String :=
     and `@efficientnet_fwd_eval` come from one traversal, so they cannot be the same net with
     different normalisation the way `resnet34_fwd` and `resnet34_train_step` were (§2a). -/
 private def bnSiteB (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName statP xin : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let zc  : Vec oc := fun _ => 0
   let zin : Vec (B * (oc*hh*ww)) := fun _ => 0
   match mode with
@@ -378,7 +378,7 @@ private def bnSiteB (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName stat
     depthwise(kd) conv-bn-swish → SE → project 1×1 conv-bn. Returns the EFwd WITHOUT the final
     residual (caller adds the `addV` for residual blocks). -/
 private def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat EFwd := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -407,7 +407,7 @@ private def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName
 
 /-- **Residual stride-1 MBConv forward** (ic = oc): body + `addV` skip. -/
 private def eFwd (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String)
-    (convBias : Bool) (drop : Option Nat := none) (bf16 : Bool := false) : StateM Nat EFwd := do
+    (convBias : Bool) (drop : Option Nat := none) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let f ← eFwdBody B ic mid oc hh kd r mode epsStr p xName convBias bf16
   let zOut : Vec (B * (oc * hh * hh)) := fun _ => 0
   -- ▶ THE DROP SITE — on the RESIDUAL BRANCH, before the skip add, which is where the reference
@@ -424,13 +424,13 @@ private def eFwd (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : S
 
 /-- **No-skip stride-1 MBConv forward** (ic ≠ oc, b9/b16): body, output = project-BN out. -/
 private def eFwdNoSkip (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat EFwd :=
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd :=
   eFwdBody B ic mid oc hh kd r mode epsStr p xName convBias bf16
 
 /-- **Strided MBConv forward** (b2/b4/b6/b12): expand at the input `2hh×2ww`, depthwise downsamples
     `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
 private def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat EFwd := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -463,7 +463,7 @@ private def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xN
 /-- **No-expand MBConv forward** (b1, t=1): depthwise(kd, on `ic` channels)-bn-swish → SE → project
     1×1 (ic→oc)-bn. NO expand, NO skip. `ec/en` unused; `er` = block input (= depthwise input). -/
 private def eFwdNoExp (B ic oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat EFwd := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -494,7 +494,7 @@ private def eFwdNoExp (B ic oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : 
     = the expand-conv-back cotangent (caller adds the residual `+ dyOut` for residual blocks). -/
 private def eBackBody (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat EBack := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   let ww := hh
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -543,7 +543,7 @@ private def eBackBody (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p 
 /-- **Residual stride-1 MBConv backward** (ic = oc): body + skip fan-in `+ dyOut`. -/
 private def eBack (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) (convBias : Bool) (drop : Option Nat := none)
-    (bf16 : Bool := false) : StateM Nat EBack := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   -- ▶ THE DROP'S BACKWARD IS THE SAME OP AT THE SAME SCALE (`Proofs.dropPath_vjp_is_self`) — a
   -- diagonal linear map is its own transpose, so there is no `*Grad` peer to keep in step.
   -- ⚠ IT APPLIES TO THE BRANCH ONLY. `eBackBody` consumes this cotangent for the whole branch
@@ -561,14 +561,14 @@ private def eBack (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xNam
 
 /-- **No-skip stride-1 MBConv backward** (ic ≠ oc, b9/b16): body, dx = expand-conv-back directly. -/
 private def eBackNoSkip (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
-    (f : EFwd) (dyName : String) (convBias : Bool) (bf16 : Bool := false) : StateM Nat EBack :=
+    (f : EFwd) (dyName : String) (convBias : Bool) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EBack :=
   eBackBody adam B ic mid oc hh kd r epsStr lrStr p xName f dyName convBias bf16
 
 /-- **Strided MBConv backward** (b2/b4/b6/b12): depthwise-back upsamples `hh×ww → 2hh×2ww`; the
     expand stage backward runs at `2hh×2ww`. NO skip. -/
 private def eBackStrided (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat EBack := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   let ww := hh
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -620,7 +620,7 @@ private def eBackStrided (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr
     8 params (Wd bd gd btd zW1 zb1 zW2 zb2 ... wait, 4 dw + 4 SE + 4 proj = 12). -/
 private def eBackNoExp (adam : Bool) (B ic oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) (convBias : Bool)
-    (bf16 : Bool := false) : StateM Nat EBack := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   let ww := hh
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -760,7 +760,7 @@ set_option maxRecDepth 4000000 in
 private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
     (sd : Bool := false) (cd : Bool := false)
     -- ▶ TRAILING and defaulted, so every committed forward re-renders byte-identical.
-    (bf16 : Bool := false) : StateM Nat ENetFwd := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS ENetFwd := do
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
   let zrnd : ℝ → ℝ := fun r => r
@@ -835,7 +835,7 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     the eval forward's slots cannot drift out of the order the driver packs `runningBnStats` in. -/
 private def enetFwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
     (sd : Bool := false) (cd : Bool := false) : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses mode epsStr convBias sd cd).run' 0
+  let F : ENetFwd := (enetFwdChain B nClasses mode epsStr convBias sd cd).run' (0, [])
   let params := (enetSig nClasses convBias).map (fun (nm, d) => s!"%{nm}: {ty d}")
   let stats := if mode == .train then [] else
     F.bns.flatMap (fun (_, sp, c, _) => [s!"%{sp}mu: {ty [c]}", s!"%{sp}var: {ty [c]}"])
@@ -854,7 +854,7 @@ set_option maxRecDepth 4000000 in
     where the loss begins. Replaces the hand-written emitter in `tests/TestEfficientNetFwd.lean`. -/
 def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "efficientnet") (sd : Bool := false) (cd : Bool := false) : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias sd cd).run' 0
+  let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias sd cd).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd({enetFwdSig B nClasses .train epsStr convBias sd cd}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 forward: every line is pretty(verified AST node) ──\n" ++
@@ -874,7 +874,7 @@ set_option maxRecDepth 4000000 in
     `bns` list rather than two independently-written ones. -/
 def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "efficientnet") (sd : Bool := false) (cd : Bool := false) : String :=
-  let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias sd cd).run' 0
+  let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias sd cd).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias sd cd}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
@@ -916,7 +916,7 @@ set_option maxRecDepth 4000000 in
 private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) (convBias : Bool := false)
     (sd : Bool := false) (cd : Bool := false) (bf16 : Bool := false) :
-    StateM Nat (String × List String × String × List (String × String × Nat × Nat)) := do
+    StateM Proofs.StableHLO.EmitS (String × List String × String × List (String × String × Nat × Nat)) := do
     -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are — see `eFwdBody`.
     let zrnd : ℝ → ℝ := fun r => r
     let F : ENetFwd ← enetFwdChain B nClasses .train epsStr convBias sd cd bf16
@@ -1055,7 +1055,7 @@ set_option maxRecDepth 4000000 in
     README's 87.58%); the AdamW render below spells the mean explicitly instead. -/
 def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     (funcName : String := "efficientnet_train_step") (convBias : Bool := false) : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     let (code, outNames, _, _) ← enetBackAll B nClasses epsStr lrStr false none convBias
     let outTypes : List String := (enetSig nClasses convBias).map (fun p => ty p.2)
     pure <|
@@ -1067,7 +1067,7 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}: {ty ds}")) ++
     s!", %onehot: {ty [B, nClasses]}"
   let outSig := String.intercalate ", " (sigList.map (fun p => ty p.2))
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{funcName}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1095,7 +1095,7 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
 
     Mirrors `ResNet34RenderB.adamOne` and `ViTRender.vitAdamOne`. -/
 private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
-    (replicas : Nat) : StateM Nat (String × String × String × String) := do
+    (replicas : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
@@ -1127,7 +1127,7 @@ private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : Strin
     is byte-identical to the AdamW render's apart from the entry name and `%bc1`/`%bc2` ride
     through unread. -/
 private def enetRmsOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
-    (replicas : Nat) : StateM Nat (String × String × String × String) := do
+    (replicas : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) := ViTRender.emitGradAllReduce gradSSA ds nm replicas
@@ -1270,7 +1270,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- from the SAME list the traversal walked. Deriving the 49 slots independently would be a second
   -- source for the stat layout — and a misaligned stat slot is silent: the arities still match and
   -- the wrong layer's statistics simply flow into the wrong `@efficientnet_fwd_eval` slot.
-  let go : StateM Nat (String × List Nat) := do
+  let go : StateM Proofs.StableHLO.EmitS (String × List Nat) := do
     let (code, gradNames, nSm, bnList) ←
       enetBackAll B nClasses epsStr "0.0" true (some (alphaStr, negAlphaKStr, bStr)) convBias sd cd bf16
     -- ═══ BN running statistics: batch μ/var per BN layer, from that layer's BN INPUT. `den` is the
@@ -1392,7 +1392,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
       adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n",
       bnList.map (fun t => t.2.2.1))
-  let (inner, bnOc) := go.run' 0
+  let (inner, bnOc) := go.run' (0, [])
   -- The 49 BN layers each get a dummy `[oc]` input slot, unused by the graph — they exist so the
   -- driver's argument buffer keeps the shape the generic FFI hands it, and the hand-written render
   -- has the same unused slots. It names them after its BN-layer prefixes; `pretty`'s intermediates

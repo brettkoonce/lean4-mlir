@@ -117,7 +117,7 @@ private def blocks : List (String × Bool × Nat × Nat × Nat) :=
    ("d4", true, 256, 512, 7), ("s4b0", false, 512, 512, 7), ("s4b1", false, 512, 512, 7)]
 
 /-- One basic block forward via `pretty`, capturing flat names. -/
-private def fwdBlock (p xin : String) (isDown : Bool) (ic c Hh : Nat) : StateM Nat (String × FNames) := do
+private def fwdBlock (p xin : String) (isDown : Bool) (ic c Hh : Nat) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, c1) ←
     if isDown then pretty BS (.flatConvStridedF (h := Hh) (w := Hh) s!"%{p}W1" s!"%{p}b1" (zK : Kernel4 c ic 3 3) zV (.operand xin zV))
     else pretty BS (.flatConvF (h := Hh) (w := Hh) s!"%{p}W1" s!"%{p}b1" (zK : Kernel4 c ic 3 3) zV (.operand xin zV))
@@ -140,7 +140,7 @@ private def fwdBlock (p xin : String) (isDown : Bool) (ic c Hh : Nat) : StateM N
 /-- One basic block backward cotangent chain via `pretty` (flat tokens). `dy` = cot at block output.
     Returns (code, cot-at-block-input, cot_a, cot_c1, cot_n1, cot_c2, cot_cp). -/
 private def bwdBlock (p dy : String) (b : FNames) (isDown : Bool) (ic c Hh : Nat) :
-    StateM Nat (String × String × String × String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String) := do
   let (k1, cot_a) ← pretty BS (.selectPos b.a (zV : Vec (c*Hh*Hh)) (.operand dy zV))
   -- main path: bn2 → conv2 → relu1 → bn1 → conv1
   let (k2, cot_c2) ← pretty BS (.bnPerChannelBack (oc := c) (h := Hh) (w := Hh) s!"%{p}g2" b.c2 EPS 0 zV zV (.operand cot_a zV))
@@ -189,7 +189,7 @@ private def blockSgd (p : String) (isDown : Bool) (ic c : Nat) : String :=
    else "")
 
 private def trainStep : String := Id.run do
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward ═══ stem 7×7-s2 → bn → relu → maxpool
     let (cSc, stc) ← pretty BS (.flatConvStridedF (h := 112) (w := 112) "%sW" "%sb" (zK : Kernel4 64 3 7 7) zV (.operand "%x" zV))
     let (cSn, stn) ← pretty BS (.bnPerChannelF (oc := 64) (h := 112) (w := 112) "%sg" "%sbt" EPS 0 zV zV (.operand stc zV))
@@ -239,7 +239,7 @@ private def trainStep : String := Id.run do
       s!"    %dWd = stablehlo.dot_general {gap}, %dy, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [BS,512]}, {ty [BS,10]}) -> {ty [512,10]}\n" ++
       s!"    %dbd = stablehlo.reduce(%dy init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [BS,10]}, tensor<f32>) -> {ty [10]}\n"
     pure (fwd ++ bwd ++ paramG ++ stemG ++ denseG)
-  let body : String := go.run' 0
+  let body : String := go.run' (0, [])
   -- ═══ SGD over all 146 params + signature ═══
   let stemSgd := sgd "%sW" "%dsW" (ty [64,3,7,7]) ++ sgd "%sb" "%dsb" (ty [64]) ++ sgd "%sg" "%dsg" (ty [64]) ++ sgd "%sbt" "%dsbt" (ty [64])
   let blkSgd := String.join (blocks.map (fun (p, isDown, ic, c, _) => blockSgd p isDown ic c))

@@ -4427,9 +4427,19 @@ def tyBf16 (dims : List Nat) : String :=
 def tyF8 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["f8E4M3FN"]) ++ ">"
 
+/-- Flat width ↦ a `[c,h,w]` some 4-D op in the same render works at. See `liftPointwise`. -/
+abbrev ShapeTbl := List (Nat × Nat × Nat × Nat)
+
+/-- Emitter state: the fresh-name counter, plus the width ↦ `[c,h,w]` table.
+
+    ⚠ The table lives in the STATE rather than in a `pretty` argument because a net renderer
+    calls `pretty` once per graph FRAGMENT — a conv and the activation that consumes it land in
+    different calls — and only the state is threaded across them. -/
+abbrev EmitS := Nat × ShapeTbl
+
 /-- Fresh SSA name `%v{k}`. -/
-def fresh : StateM Nat String := do
-  let k ← get; set (k + 1); pure s!"%v{k}"
+def fresh : StateM EmitS String := do
+  let (k, tbl) ← get; set (k + 1, tbl); pure s!"%v{k}"
 
 /-- **The 3×3/s2 pool's emitted forward text**, given already-freshened names.
 
@@ -5329,11 +5339,117 @@ private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
   let p := (k - 1) / 2
   if k % 2 == 1 then (1, 2 * s, p, p) else (0, 2 * s - 1, p, k - 2 - p)
 
+-- ════════════════════════════════════════════════════════════════
+-- § Pointwise ops at their 4-D shape — the NHWC↔NCHW relayout fix
+--
+-- ⚠⚠ WHY THIS EXISTS, and why it is worth 2.3× on EfficientNet-B0.
+--
+-- The proof IR carries activations as flat `[B, c*h*w]` vectors, so every 4-D op brackets
+-- itself with `reshape` glue and every pointwise op is emitted at the flat type. A flatten is
+-- a free bitcast ONLY in NCHW layout — and XLA runs bf16 convolutions in **NHWC**, for the
+-- tensor cores. So a pointwise op emitted flat pins its tensor to NCHW between two NHWC convs
+-- and XLA materialises a physical relayout going in and coming out.
+--
+-- Measured 2026-08-29, one 4060 Ti, node-granularity nsys: B0 bf16 @64 spent **72.61 ms/step,
+-- 54.6% of all GPU time**, in those relayouts (10.486 GB) against its JAX reference's 0.75 ms.
+-- ConvNeXt-T 53.2%. MobileNetV2 and ViT, which end up with no relayouts, are FASTER than their
+-- references. ⚠ f32 is immune: XLA keeps f32 convs in NCHW, so the effect cannot appear there
+-- and an f32 A/B reads as a clean null — which is exactly how it stayed hidden.
+--
+-- The fix is to emit the pointwise ops at the 4-D shape. `liftPointwise` brackets a block with
+-- an inverse reshape pair, so the value crossing the token boundary keeps its flat type and no
+-- other `emitTok` arm changes; XLA then folds each pair against the neighbouring conv's own
+-- reshape and the chain is 4-D end to end.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The `[c,h,w]` recorded for flat width `n`, if any. -/
+def lookupShape (tbl : ShapeTbl) (n : Nat) : Option (Nat × Nat × Nat) :=
+  match tbl.find? (fun e => e.1 == n) with
+  | some (_, c, h, w) => some (c, h, w)
+  | none              => none
+
+/-- The `[c,h,w]` shapes a batched op reads and writes. Strided tags carry their **output**
+    spatial dims, so the input side is `2h × 2w`. -/
+private def batchedShapes (tag : String) (info : List Nat) : List (Nat × Nat × Nat) :=
+  match tag, info with
+  | "conv",                   [_, ic, oc, h, w, _, _]
+  | "convBf16",               [_, ic, oc, h, w, _, _]
+  | "convF8",                 [_, ic, oc, h, w, _, _] => [(ic, h, w), (oc, h, w)]
+  | "convStrided",            [_, ic, oc, h, w, _, _]
+  | "convStridedBf16",        [_, ic, oc, h, w, _, _]
+  | "convStridedXla",         [_, ic, oc, h, w, _, _]
+  | "convStridedXlaBf16",     [_, ic, oc, h, w, _, _] => [(ic, 2*h, 2*w), (oc, h, w)]
+  | "depthwise",              [_, c, h, w, _, _]
+  | "depthwiseBf16",          [_, c, h, w, _, _]      => [(c, h, w)]
+  | "depthwiseStrided",       [_, c, h, w, _, _]
+  | "depthwiseStridedBf16",   [_, c, h, w, _, _]
+  | "depthwiseStridedXla",    [_, c, h, w, _, _]
+  | "depthwiseStridedXlaBf16",[_, c, h, w, _, _]      => [(c, 2*h, 2*w), (c, h, w)]
+  | "bnBatch",                [_, oc, h, w]
+  | "bnEval",                 [_, oc, h, w]           => [(oc, h, w)]
+  | "layerScaleChP",          [_, c, h, w]
+  | "gap",                    [_, c, h, w]            => [(c, h, w)]
+  | "maxPool",                [_, c, h, w]            => [(c, 2*h, 2*w), (c, h, w)]
+  | "seBlock",                [_, c, h, w, _]         => [(c, h, w)]
+  | _, _                                              => []
+
+/-- Recover the width ↦ `[c,h,w]` table from a token stream.
+
+    A width with no entry, or one whose entry came from a different layer that happens to share
+    it, costs only a MISSED optimisation and never a wrong program: `liftPointwise` brackets
+    with an inverse reshape pair, which is the identity at any shape of the same element count. -/
+def shapeTblOf (toks : List Tok) : ShapeTbl :=
+  toks.foldl (init := []) fun acc t =>
+    match t with
+    | .batched tag _ info =>
+        (batchedShapes tag info).foldl (init := acc) fun a s =>
+          if a.any (fun e => e.1 == s.1 * s.2.1 * s.2.2) then a
+          else (s.1 * s.2.1 * s.2.2, s.1, s.2.1, s.2.2) :: a
+    | _ => acc
+
+/-- Add a fragment's shapes to the running table; first writer for a width wins. -/
+def noteShapes (ss : ShapeTbl) : StateM EmitS Unit :=
+  modify fun (k, tbl) =>
+    (k, ss.foldl (init := tbl) fun a s => if a.any (fun e => e.1 == s.1) then a else s :: a)
+
+/-- The `[c,h,w]` the running table has for flat width `n`. -/
+def lookupShapeM (n : Nat) : StateM EmitS (Option (Nat × Nat × Nat)) := do
+  let (_, tbl) ← get
+  pure (lookupShape tbl n)
+
+/-- Render a pointwise block at its 4-D shape when one is known for flat width `n`.
+    `k` receives the (possibly unflattened) input name and the dims to type its ops with, and
+    returns `(text, result name)`. -/
+def liftPointwise (B n : Nat) (r : String)
+    (k : String → List Nat → StateM EmitS (String × String)) : StateM EmitS (String × String) := do
+  match ← lookupShapeM n with
+  | none => k r [B, n]
+  | some (c, h, w) => do
+      let xi ← fresh
+      let (body, res) ← k xi [B, c, h, w]
+      let o ← fresh
+      pure (s!"    {xi} = stablehlo.reshape {r} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++ body ++
+            s!"    {o} = stablehlo.reshape {res} : ({ty [B,c,h,w]}) -> {ty [B,n]}\n", o)
+
+/-- Two-tensor-operand peer of `liftPointwise`; both operands carry the same flat width. -/
+def liftPointwise2 (B n : Nat) (r s : String)
+    (k : String → String → List Nat → StateM EmitS (String × String)) :
+    StateM EmitS (String × String) := do
+  match ← lookupShapeM n with
+  | none => k r s [B, n]
+  | some (c, h, w) => do
+      let xi ← fresh; let yi ← fresh
+      let (body, res) ← k xi yi [B, c, h, w]
+      let o ← fresh
+      pure (s!"    {xi} = stablehlo.reshape {r} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++
+            s!"    {yi} = stablehlo.reshape {s} : ({ty [B,n]}) -> {ty [B,c,h,w]}\n" ++ body ++
+            s!"    {o} = stablehlo.reshape {res} : ({ty [B,c,h,w]}) -> {ty [B,n]}\n", o)
+
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
     here is the audited lexical boundary (validated by `iree-compile` + GPU run);
     the *structure* it consumes is the proven-faithful token stream. -/
-def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List String)
+def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List String)
   | .operand nm _, st => pure ("", nm :: st)
   | .dotIn w m n, r :: st => do
       let o ← fresh
@@ -6983,18 +7099,22 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {se} = stablehlo.multiply {xr}, {gb} : {ty [B,c,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {se} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
       | "swish", [], [_N, n] => do
-          -- Pointwise swish at the BATCHED index: byte-for-byte the `.swishF` emit,
-          -- except the width comes from the descriptor's per-example `n` rather than
-          -- from the SHlo index (which here is `N·n`). `_N` is discarded for the same
-          -- reason every batched tag discards it — the runtime batch is `B`.
-          let s ← fresh; let o ← fresh
-          pure (s!"    {s} = stablehlo.logistic {r} : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.multiply {r}, {s} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            -- Pointwise swish at the BATCHED index: byte-for-byte the `.swishF` emit,
+            -- except the width comes from the descriptor's per-example `n` rather than
+            -- from the SHlo index (which here is `N·n`). `_N` is discarded for the same
+            -- reason every batched tag discards it — the runtime batch is `B`.
+            let s ← fresh; let o ← fresh
+            pure (s!"    {s} = stablehlo.logistic {r} : {ty d}\n" ++
+                  s!"    {o} = stablehlo.multiply {r}, {s} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "relu", [], [_N, n] => do
-          -- byte-for-byte `.reluF`'s emit, width from the descriptor's `n`.
-          let z ← fresh; let o ← fresh
-          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            -- byte-for-byte `.reluF`'s emit, width from the descriptor's `n`.
+            let z ← fresh; let o ← fresh
+            pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty d}\n" ++
+                  s!"    {o} = stablehlo.maximum {r}, {z} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "bnEval", [gN, bN, muN, varN, es], [_N, oc, h, w] => do
           -- byte-for-byte `.bnPerChannelEvalF`'s emit, dims from the descriptor rather than off
           -- the SHlo index (§2b). INFERENCE BN: reshape to [B,oc,h,w], then the affine map
@@ -7019,12 +7139,14 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
       | "relu6", [], [_N, n] => do
-          -- byte-for-byte `.relu6F`'s emit, width from the descriptor's `n`.
-          let z ← fresh; let six ← fresh; let mx ← fresh; let o ← fresh
-          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
-                s!"    {six} = stablehlo.constant dense<6.0> : {ty [B,n]}\n" ++
-                s!"    {mx} = stablehlo.maximum {r}, {z} : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.minimum {mx}, {six} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            -- byte-for-byte `.relu6F`'s emit, width from the descriptor's `n`.
+            let z ← fresh; let six ← fresh; let mx ← fresh; let o ← fresh
+            pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty d}\n" ++
+                  s!"    {six} = stablehlo.constant dense<6.0> : {ty d}\n" ++
+                  s!"    {mx} = stablehlo.maximum {r}, {z} : {ty d}\n" ++
+                  s!"    {o} = stablehlo.minimum {mx}, {six} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "maxPool", [], [_N, c, h, w] => do
           -- byte-for-byte `.maxPoolF`'s emit; dims from the descriptor, batch from `B`.
           let xn ← fresh; let ninf ← fresh; let pp ← fresh; let o ← fresh
@@ -7084,79 +7206,93 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {sB} = stablehlo.multiply {g}, {lB} : {ty [oc]}\n" ++
             s!"    {o} = stablehlo.subtract {bN}, {sB} : {ty [oc]}\n", o :: st)
       | "selectPosP", [x], [_N, n] => do
-          -- byte-for-byte `.selectPos`'s emit, width from the descriptor's `n`.
-          let z ← fresh; let msk ← fresh; let o ← fresh
-          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
-            s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
-            s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+            -- byte-for-byte `.selectPos`'s emit, width from the descriptor's `n`.
+            let z ← fresh; let msk ← fresh; let o ← fresh
+            pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty d}\n" ++
+              s!"    {msk} = stablehlo.compare GT, {x}, {z} : ({ty d}, {ty d}) -> {tyI1 d}\n" ++
+              s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 d}, {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "selectMidP", [x], [_N, n] => do
-          -- byte-for-byte `.selectMid`'s emit, width from the ctor's `n`. Two-sided kink, so
-          -- two compares AND-ed — unlike `selectPosP`'s single GT.
-          let z ← fresh; let six ← fresh; let g0 ← fresh; let l6 ← fresh
-          let msk ← fresh; let o ← fresh
-          pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty [B,n]}\n" ++
-            s!"    {six} = stablehlo.constant dense<6.0> : {ty [B,n]}\n" ++
-            s!"    {g0} = stablehlo.compare GT, {x}, {z} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
-            s!"    {l6} = stablehlo.compare LT, {x}, {six} : ({ty [B,n]}, {ty [B,n]}) -> {tyI1 [B,n]}\n" ++
-            s!"    {msk} = stablehlo.and {g0}, {l6} : {tyI1 [B,n]}\n" ++
-            s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 [B,n]}, {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+            -- byte-for-byte `.selectMid`'s emit, width from the ctor's `n`. Two-sided kink, so
+            -- two compares AND-ed — unlike `selectPosP`'s single GT.
+            let z ← fresh; let six ← fresh; let g0 ← fresh; let l6 ← fresh
+            let msk ← fresh; let o ← fresh
+            pure (s!"    {z} = stablehlo.constant dense<0.0> : {ty d}\n" ++
+              s!"    {six} = stablehlo.constant dense<6.0> : {ty d}\n" ++
+              s!"    {g0} = stablehlo.compare GT, {x}, {z} : ({ty d}, {ty d}) -> {tyI1 d}\n" ++
+              s!"    {l6} = stablehlo.compare LT, {x}, {six} : ({ty d}, {ty d}) -> {tyI1 d}\n" ++
+              s!"    {msk} = stablehlo.and {g0}, {l6} : {tyI1 d}\n" ++
+              s!"    {o} = stablehlo.select {msk}, {r}, {z} : {tyI1 d}, {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "dropPathP", [mN], [_N, n] => do
-          -- ▶ STOCHASTIC DEPTH: the per-SAMPLE residual-branch scale
-          -- (`planning/stochastic_depth.md`). `mN` is a graph INPUT of type `tensor<Bxf32>` — one
-          -- value per EXAMPLE, computed on the host — and `dims = [0]` is what makes it the
-          -- reference's `(B, 1, …, 1)` mask: every position within an example is scaled
-          -- identically, every example independently. Emitting a `tensor<B×n>` scale instead
-          -- typechecks, compiles and trains, and is per-ELEMENT dropout — a different regulariser.
-          -- ⚠ NO BAKED `1/keep`. The driver folds the inversion into the supplied value
-          -- (`bernoulli(keep_i)/keep_i` at train, `1.0` at eval), which is what makes the ones-scale
-          -- forward the EXACT identity and lets this op be emitted in the forward too — keeping the
-          -- `forward ⊂ train-step` prefix audit alive. See `Proofs.dropPath`'s note on why a baked
-          -- constant and that audit cannot both hold.
-          let mb ← fresh; let o ← fresh
-          pure (s!"    {mb} = stablehlo.broadcast_in_dim {mN}, dims = [0] : ({ty [B]}) -> {ty [B,n]}\n" ++
-            s!"    {o} = stablehlo.multiply {mb}, {r} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            -- ▶ STOCHASTIC DEPTH: the per-SAMPLE residual-branch scale
+            -- (`planning/stochastic_depth.md`). `mN` is a graph INPUT of type `tensor<Bxf32>` — one
+            -- value per EXAMPLE, computed on the host — and `dims = [0]` is what makes it the
+            -- reference's `(B, 1, …, 1)` mask: every position within an example is scaled
+            -- identically, every example independently. Emitting a `tensor<B×n>` scale instead
+            -- typechecks, compiles and trains, and is per-ELEMENT dropout — a different regulariser.
+            -- ⚠ NO BAKED `1/keep`. The driver folds the inversion into the supplied value
+            -- (`bernoulli(keep_i)/keep_i` at train, `1.0` at eval), which is what makes the ones-scale
+            -- forward the EXACT identity and lets this op be emitted in the forward too — keeping the
+            -- `forward ⊂ train-step` prefix audit alive. See `Proofs.dropPath`'s note on why a baked
+            -- constant and that audit cannot both hold.
+            let mb ← fresh; let o ← fresh
+            pure (s!"    {mb} = stablehlo.broadcast_in_dim {mN}, dims = [0] : ({ty [B]}) -> {ty d}\n" ++
+              s!"    {o} = stablehlo.multiply {mb}, {r} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "sigmoidP", [], [_N, n] => do
-          -- σ(z) at the batched shape, for BCE-with-logits' cotangent `(σ(z) − t)/(B·K)`.
-          -- ⚠ ONE op, and `stablehlo.logistic` is the same primitive `sigmoidF` emits — the
-          -- difference is only the shape it is emitted at.
-          let o ← fresh
-          pure (s!"    {o} = stablehlo.logistic {r} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            -- σ(z) at the batched shape, for BCE-with-logits' cotangent `(σ(z) − t)/(B·K)`.
+            -- ⚠ ONE op, and `stablehlo.logistic` is the same primitive `sigmoidF` emits — the
+            -- difference is only the shape it is emitted at.
+            let o ← fresh
+            pure (s!"    {o} = stablehlo.logistic {r} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "dropoutP", [mN], [_N, n] => do
-          -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask, applied
-          -- immediately before the classifier dense. `mN` is a graph INPUT of type
-          -- `tensor<B×n×f32>` — one value per (example, feature), computed on the host.
-          --
-          -- ⚠⚠ **NO `broadcast_in_dim`, AND THAT ABSENCE IS THE WHOLE CLAIM.** The mask already
-          -- has the value's shape, because the reference draws `bernoulli(key, keep, x.shape)`
-          -- (`jax/Jax/Codegen.lean:1971`) rather than the `(B, 1, …, 1)` shape stochastic depth
-          -- uses. A `dims = [0]` broadcast off a `tensor<B>` input here typechecks, compiles, runs,
-          -- descends — and is stochastic depth on the classifier, a different regulariser. That is
-          -- `dropPathP`'s warning read backwards, and `tests/TestBatchedEmitTie.lean` pins both
-          -- directions: that one asserts the broadcast is PRESENT, this one that it is ABSENT.
-          -- ⚠ NO BAKED `1/keep`, for `dropPathP`'s reason exactly: the driver folds the inversion
-          -- into the supplied mask, so the ones-mask forward is the exact identity and this op can
-          -- be emitted in the forward artifact without rescaling eval.
-          let o ← fresh
-          pure (s!"    {o} = stablehlo.multiply {mN}, {r} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask, applied
+            -- immediately before the classifier dense. `mN` is a graph INPUT of type
+            -- `tensor<B×n×f32>` — one value per (example, feature), computed on the host.
+            --
+            -- ⚠⚠ **NO `broadcast_in_dim`, AND THAT ABSENCE IS THE WHOLE CLAIM.** The mask already
+            -- has the value's shape, because the reference draws `bernoulli(key, keep, x.shape)`
+            -- (`jax/Jax/Codegen.lean:1971`) rather than the `(B, 1, …, 1)` shape stochastic depth
+            -- uses. A `dims = [0]` broadcast off a `tensor<B>` input here typechecks, compiles, runs,
+            -- descends — and is stochastic depth on the classifier, a different regulariser. That is
+            -- `dropPathP`'s warning read backwards, and `tests/TestBatchedEmitTie.lean` pins both
+            -- directions: that one asserts the broadcast is PRESENT, this one that it is ABSENT.
+            -- ⚠ NO BAKED `1/keep`, for `dropPathP`'s reason exactly: the driver folds the inversion
+            -- into the supplied mask, so the ones-mask forward is the exact identity and this op can
+            -- be emitted in the forward artifact without rescaling eval.
+            let o ← fresh
+            pure (s!"    {o} = stablehlo.multiply {mN}, {r} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "swishBackP", [x], [_N, n] => do
-          -- byte-for-byte `.swishBack`'s emit, width from the descriptor's `n`.
-          let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
-          let inr ← fresh; let sp ← fresh; let o ← fresh
-          pure (s!"    {s} = stablehlo.logistic {x} : {ty [B,n]}\n" ++
-                s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
-                s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
-                s!"    {xom} = stablehlo.multiply {x}, {om} : {ty [B,n]}\n" ++
-                s!"    {inr} = stablehlo.add {one}, {xom} : {ty [B,n]}\n" ++
-                s!"    {sp} = stablehlo.multiply {s}, {inr} : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+            -- byte-for-byte `.swishBack`'s emit, width from the descriptor's `n`.
+            let s ← fresh; let one ← fresh; let om ← fresh; let xom ← fresh
+            let inr ← fresh; let sp ← fresh; let o ← fresh
+            pure (s!"    {s} = stablehlo.logistic {x} : {ty d}\n" ++
+                  s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+                  s!"    {om} = stablehlo.subtract {one}, {s} : {ty d}\n" ++
+                  s!"    {xom} = stablehlo.multiply {x}, {om} : {ty d}\n" ++
+                  s!"    {inr} = stablehlo.add {one}, {xom} : {ty d}\n" ++
+                  s!"    {sp} = stablehlo.multiply {s}, {inr} : {ty d}\n" ++
+                  s!"    {o} = stablehlo.multiply {r}, {sp} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "sigmoidBackP", [x], [_N, n] => do
-          -- byte-for-byte `.sigmoidBack`'s emit, width from the descriptor's `n`.
-          let s ← fresh; let one ← fresh; let om ← fresh; let sp ← fresh; let o ← fresh
-          pure (s!"    {s} = stablehlo.logistic {x} : {ty [B,n]}\n" ++
-                s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
-                s!"    {om} = stablehlo.subtract {one}, {s} : {ty [B,n]}\n" ++
-                s!"    {sp} = stablehlo.multiply {s}, {om} : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.multiply {r}, {sp} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+            -- byte-for-byte `.sigmoidBack`'s emit, width from the descriptor's `n`.
+            let s ← fresh; let one ← fresh; let om ← fresh; let sp ← fresh; let o ← fresh
+            pure (s!"    {s} = stablehlo.logistic {x} : {ty d}\n" ++
+                  s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+                  s!"    {om} = stablehlo.subtract {one}, {s} : {ty d}\n" ++
+                  s!"    {sp} = stablehlo.multiply {s}, {om} : {ty d}\n" ++
+                  s!"    {o} = stablehlo.multiply {r}, {sp} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "softmaxRow", [], [_N, m, n] => do
           -- byte-for-byte `.softmaxRowF`'s emit. `m` is rows PER EXAMPLE (it always
           -- was); the batch is `_N` on the proof side and `B` in the emit.
@@ -7175,35 +7311,37 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       --    the emit side. `tests/TestBatchedEmitTie.lean` ties each pair, so "byte-for-byte" is
       --    checked rather than intended.
       | "geluBackP", [x], [_N, n] => do
-          -- byte-for-byte `.geluBack`'s emit, width from the descriptor's `n`.
-          let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
-          let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
-          let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
-          let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
-          let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
-          pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty [B,n]}\n" ++
-                s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty [B,n]}\n" ++
-                s!"    {ck} = stablehlo.constant dense<0.044715> : {ty [B,n]}\n" ++
-                s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty [B,n]}\n" ++
-                s!"    {inn} = stablehlo.add {x}, {kx3} : {ty [B,n]}\n" ++
-                s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty [B,n]}\n" ++
-                s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty [B,n]}\n" ++
-                s!"    {t} = stablehlo.tanh {u} : {ty [B,n]}\n" ++
-                s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
-                s!"    {opt} = stablehlo.add {one}, {t} : {ty [B,n]}\n" ++
-                s!"    {chalf} = stablehlo.constant dense<0.5> : {ty [B,n]}\n" ++
-                s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty [B,n]}\n" ++
-                s!"    {t2} = stablehlo.multiply {t}, {t} : {ty [B,n]}\n" ++
-                s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty [B,n]}\n" ++
-                s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty [B,n]}\n" ++
-                s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty [B,n]}\n" ++
-                s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty [B,n]}\n" ++
-                s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty [B,n]}\n" ++
-                s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty [B,n]}\n" ++
-                s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty [B,n]}\n" ++
-                s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty [B,n]}\n" ++
-                s!"    {gp} = stablehlo.add {term1}, {term2} : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.multiply {r}, {gp} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
+            -- byte-for-byte `.geluBack`'s emit, width from the descriptor's `n`.
+            let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+            let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+            let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
+            let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
+            let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
+            pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty d}\n" ++
+                  s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty d}\n" ++
+                  s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
+                  s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
+                  s!"    {inn} = stablehlo.add {x}, {kx3} : {ty d}\n" ++
+                  s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
+                  s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
+                  s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
+                  s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+                  s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
+                  s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
+                  s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty d}\n" ++
+                  s!"    {t2} = stablehlo.multiply {t}, {t} : {ty d}\n" ++
+                  s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty d}\n" ++
+                  s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty d}\n" ++
+                  s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty d}\n" ++
+                  s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty d}\n" ++
+                  s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty d}\n" ++
+                  s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty d}\n" ++
+                  s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty d}\n" ++
+                  s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty d}\n" ++
+                  s!"    {gp} = stablehlo.add {term1}, {term2} : {ty d}\n" ++
+                  s!"    {o} = stablehlo.multiply {r}, {gp} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "lnRowBackP", [gN, xN, epsStr], [_N, m, n] => do
           -- byte-for-byte `.lnRowBack`'s emit; `m` is rows PER EXAMPLE.
           let dn ← fresh; let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
@@ -7248,8 +7386,10 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
           pure (s!"    {o} = stablehlo.dot_general {r}, {w}, contracting_dims = [1] x [1], " ++
                 s!"precision = [DEFAULT, DEFAULT] : ({ty [B,n]}, {ty [m,n]}) -> {ty [B,m]}\n", o :: st)
       | "expeP", [], [_N, n] => do
-          let o ← fresh
-          pure (s!"    {o} = stablehlo.exponential {r} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            let o ← fresh
+            pure (s!"    {o} = stablehlo.exponential {r} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "softmaxDivP", [], [_N, n] => do
           -- byte-for-byte `.softmaxDiv`'s emit — which already reduced over `dimensions = [1]`,
           -- i.e. per example. It is the DEN that this descriptor fixes.
@@ -7304,22 +7444,24 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {ob} = stablehlo.add {cf}, {bb} : {ty [B,oc,h,w']}\n" ++
             s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
       | "gelu", [], [_N, n] => do
-          let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
-          let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
-          let chalf ← fresh; let hx ← fresh; let o ← fresh
-          pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty [B,n]}\n" ++
-                s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty [B,n]}\n" ++
-                s!"    {ck} = stablehlo.constant dense<0.044715> : {ty [B,n]}\n" ++
-                s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty [B,n]}\n" ++
-                s!"    {inn} = stablehlo.add {r}, {kx3} : {ty [B,n]}\n" ++
-                s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty [B,n]}\n" ++
-                s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty [B,n]}\n" ++
-                s!"    {t} = stablehlo.tanh {u} : {ty [B,n]}\n" ++
-                s!"    {one} = stablehlo.constant dense<1.0> : {ty [B,n]}\n" ++
-                s!"    {opt} = stablehlo.add {one}, {t} : {ty [B,n]}\n" ++
-                s!"    {chalf} = stablehlo.constant dense<0.5> : {ty [B,n]}\n" ++
-                s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+            let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+            let chalf ← fresh; let hx ← fresh; let o ← fresh
+            pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty d}\n" ++
+                  s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty d}\n" ++
+                  s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
+                  s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
+                  s!"    {inn} = stablehlo.add {r}, {kx3} : {ty d}\n" ++
+                  s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
+                  s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
+                  s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
+                  s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+                  s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
+                  s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
+                  s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty d}\n" ++
+                  s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "transposeP", [], [_N, m, n] => do
           let xn ← fresh; let t ← fresh; let o ← fresh
           pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
@@ -7729,17 +7871,23 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
             s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
             s!"    {o} = stablehlo.reduce({r} init: {z}) applies stablehlo.add across dimensions = [0] : ({ty [B,c]}, tensor<f32>) -> {ty [c]}\n", o :: st)
       | "scale", [sS], [_N, n] => do
-          let c ← fresh; let o ← fresh
-          pure (s!"    {c} = stablehlo.constant dense<{sS}> : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.multiply {r}, {c} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            let c ← fresh; let o ← fresh
+            pure (s!"    {c} = stablehlo.constant dense<{sS}> : {ty d}\n" ++
+                  s!"    {o} = stablehlo.multiply {r}, {c} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "shift", [sS], [_N, n] => do
-          let c ← fresh; let o ← fresh
-          pure (s!"    {c} = stablehlo.constant dense<{sS}> : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.add {r}, {c} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            let c ← fresh; let o ← fresh
+            pure (s!"    {c} = stablehlo.constant dense<{sS}> : {ty d}\n" ++
+                  s!"    {o} = stablehlo.add {r}, {c} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "divConst", [sS], [_N, n] => do
-          let c ← fresh; let o ← fresh
-          pure (s!"    {c} = stablehlo.constant dense<{sS}> : {ty [B,n]}\n" ++
-                s!"    {o} = stablehlo.divide {r}, {c} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise B n r fun r d => do
+            let c ← fresh; let o ← fresh
+            pure (s!"    {c} = stablehlo.constant dense<{sS}> : {ty d}\n" ++
+                  s!"    {o} = stablehlo.divide {r}, {c} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "bnBatchMean", [], [_N, oc, h, w] => do
           -- μ_c = reduce[0,2,3](x) / (B·h·w). Numerically the `%{p}bnmu` the hand-written
           -- emitter divides out of its own BN fragment's `smr`.
@@ -8637,11 +8785,15 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
       -- emits; the width is `info`'s per-example `n`, not the SHlo index `N·n`.
       match tag, info with
       | "addV", [_N, n] => do
-          let o ← fresh
-          pure (s!"    {o} = stablehlo.add {a}, {b} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise2 B n a b fun a b d => do
+            let o ← fresh
+            pure (s!"    {o} = stablehlo.add {a}, {b} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       | "sub", [_N, n] => do
-          let o ← fresh
-          pure (s!"    {o} = stablehlo.subtract {a}, {b} : {ty [B,n]}\n", o :: st)
+          let (txt4, res4) ← liftPointwise2 B n a b fun a b d => do
+            let o ← fresh
+            pure (s!"    {o} = stablehlo.subtract {a}, {b} : {ty d}\n", o)
+          pure (txt4, res4 :: st)
       -- ⭐⭐ **The only NON-pointwise `batched2`, and the only ACTIVATION × ACTIVATION bf16 op in
       -- the kit** — SDPA's `QKᵀ` and `P·V`, plus the four backward matmuls. It rides this binary
       -- skeleton rather than aliasing `.matmulF` because its text differs; `info` is `[m, k, n]`
@@ -8662,7 +8814,7 @@ def emitTok (B : Nat) : Tok → List String → StateM Nat (String × List Strin
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
-def serializeToks (B : Nat) : List Tok → (String × List String) → StateM Nat (String × List String)
+def serializeToks (B : Nat) : List Tok → (String × List String) → StateM EmitS (String × List String)
   | [], acc           => pure acc
   | t :: ts, (code, st) => do
       let (c, st') ← emitTok B t st
@@ -8825,15 +8977,17 @@ def enetRmsHyper : RmsHyper := { eps := 1.0e-3, wd := 1.0e-5 }
     tokens. The emitter shares ONE structured form with the parser, so the
     round-trip `parse (toToks (skel a)) = skel a` (StableHLOParse.lean) is about
     the very tokens this prints — the printer can't structurally drift. -/
-def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM Nat (String × String) := do
-  let (code, st) ← serializeToks B (toToks (skel g)) ("", [])
+def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM EmitS (String × String) := do
+  let toks := toToks (skel g)
+  noteShapes (shapeTblOf toks)
+  let (code, st) ← serializeToks B toks ("", [])
   match st with
   | [r] => pure (code, r)
   | _   => pure (code, "%MALFORMED")
 
 /-- Wrap a rendered single-result graph as a `func.func` module. -/
 def renderModule (name argSig : String) (B retLen : Nat) (g : SHlo retLen) : String :=
-  let (body, res) := (pretty B g).run' 0
+  let (body, res) := (pretty B g).run' (0, [])
   "module @m {\n" ++ s!"  func.func @{name}({argSig}) -> {ty [B, retLen]} " ++ "{\n" ++
   body ++ s!"    return {res} : {ty [B, retLen]}\n" ++ "  }\n}\n"
 
@@ -8854,7 +9008,7 @@ def linearBackModuleV (B d₀ d₁ : Nat) (W : Mat d₀ d₁) (dy : Vec d₁) : 
     The verified-AST peer of `IRPrint.linearTrainStepModule`. -/
 def linearTrainStepModuleV (B d₀ d₁ : Nat) (lr : String)
     (W : Mat d₀ d₁) (b : Vec d₁) (x : Vec d₀) : String :=
-  let (body, dy) := (pretty B (lossCotGraph W b x (fun _ => 0))).run' 0
+  let (body, dy) := (pretty B (lossCotGraph W b x (fun _ => 0))).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @linear_train_step(%x: {ty [B,d₀]}, %W0: {ty [d₀,d₁]}, %b0: {ty [d₁]}, " ++
   s!"%onehot: {ty [B,d₁]}) -> ({ty [d₀,d₁]}, {ty [d₁]}) " ++ "{\n" ++
@@ -8890,11 +9044,11 @@ def linTrainStepFaithfulV (B m n : Nat) (lrStr : String)
   -- name-pinned `.operand %dy <placeholder>`), so `den(output) = certified` is one composed
   -- theorem with the forward = the proven `fwdGraph` (nested inside `lossCotGraph`) — no
   -- SSA-name pin. The shared cotangent is rendered once per output (2× here); iree CSEs it.
-  let act : StateM Nat (String × String × String) := do
+  let act : StateM EmitS (String × String × String) := do
     let (wBody, wRes) ← pretty B (SHlo.weightSgd "%x" "%W0" lrStr x W 0 (lossCotGraph W b x (fun _ => 0)))
     let (bBody, bRes) ← pretty B (SHlo.biasSgd "%b0" lrStr b 0 (lossCotGraph W b x (fun _ => 0)))
     pure (wBody ++ bBody, wRes, bRes)
-  let (body, wRes, bRes) := act.run' 0
+  let (body, wRes, bRes) := act.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @linear_train_step(%x: {ty [B,m]}, %W0: {ty [m,n]}, %b0: {ty [n]}, " ++
   s!"%onehot: {ty [B,n]}) -> ({ty [m,n]}, {ty [n]}) " ++ "{\n" ++

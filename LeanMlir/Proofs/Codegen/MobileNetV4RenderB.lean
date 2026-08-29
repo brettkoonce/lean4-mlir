@@ -210,7 +210,7 @@ def mnv4StatSigList : List (String × String) :=
     anyway because it only ever pairs a forward with the SGD step. One traversal, one switch, per
     the `ResNet50RenderB` rule — the divergence has nowhere to live. -/
 private def mnv4Bn (B oc h : Nat) (mode : BnMode) (epsStr gName btName statP xin : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let zc  : Vec oc := fun _ => 0
   let zin : Vec (B * (oc*h*h)) := fun _ => 0
   match mode with
@@ -244,7 +244,7 @@ deriving Inhabited
     bottleneck is LINEAR, no activation after the add. -/
 private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Nat UibFwdB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := c * expand
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -299,7 +299,7 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
     `h×h`. No skip — `ic ≠ oc`. -/
 private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Nat UibFwdB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := ic * expand
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -349,7 +349,7 @@ private def uibFwdPreStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : Bn
     downsamples to `h×h`. No skip — `ic ≠ oc`. -/
 private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Nat UibFwdB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := ic * expand
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -400,7 +400,7 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
     the difference is real, not a copy-paste slip. -/
 private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) : StateM Nat UibFwdB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := if expand == 1 then oc else ic * expand
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -432,7 +432,7 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     on which depthwise carries the stride, because that decides the spatial size the expand runs at.
     The three cannot be one function — `.depthwise` and `.depthwiseStrided` differ in INPUT type. -/
 private def uibFwdDispatch (B : Nat) (b : UibSpec) (mode : BnMode) (epsStr xName : String)
-    (bf16 : Bool := false) : StateM Nat UibFwdB :=
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibFwdB :=
   if b.stride2 then
     if b.preDWk > 0 then
       uibFwdPreStridedB B b.ic b.oc b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName bf16
@@ -489,7 +489,7 @@ deriving Inhabited
     train step — is the two-readings defect this file exists to avoid. -/
 def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     -- ▶ TRAILING and defaulted, so `@mnv4_fwd` / `@mnv4_fwd_eval` re-render byte-identical.
-    (bf16 : Bool := false) : StateM Nat Mnv4FwdRec := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
   let zrnd : ℝ → ℝ := fun r => r
@@ -580,7 +580,7 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   let sigList := mnv4SigList nClasses
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let r := (mnv4FwdChainB B nClasses epsStr .train).run' 0
+  let r := (mnv4FwdChainB B nClasses epsStr .train).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── MobileNetV4-Conv-M forward: every line is pretty(verified AST node) ──\n" ++
@@ -599,7 +599,7 @@ def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   let sigList := mnv4SigList nClasses ++ mnv4StatSigList
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let r := (mnv4FwdChainB B nClasses epsStr .eval).run' 0
+  let r := (mnv4FwdChainB B nClasses epsStr .eval).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── MobileNetV4-Conv-M eval forward (running-stats BN): every line is pretty(AST node) ──\n" ++
@@ -652,7 +652,7 @@ private def zipPs (sig : List (String × List Nat)) (grads : List String) : List
     positions exist (`f.qn`/`f.dn` are `""` when absent) rather than re-deriving it. -/
 private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) : StateM Nat UibBackB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := c * expand
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -749,7 +749,7 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     lands at `2h×2h` and everything upstream of the expand runs at `h×h`. No skip (`ic ≠ oc`). -/
 private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) : StateM Nat UibBackB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := ic * expand
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -840,7 +840,7 @@ private def uibBackPreStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     contracts against `%x` at `2h` while the project's runs at `h`. No skip (`ic ≠ oc`). -/
 private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) : StateM Nat UibBackB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := ic * expand
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -911,7 +911,7 @@ private def uibBackPostStridedGradB (B ic oc expand postDWk h : Nat)
     it is the same silent-wrong-gradient class as the pre/post-DW swap, in the activation. -/
 private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) : StateM Nat UibBackB := do
+    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB := do
   let mid := if expand == 1 then oc else ic * expand
   -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are: the render produces TEXT
   -- and `skel` erases every ℝ payload before a token is emitted.
@@ -962,7 +962,7 @@ private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     gradient of a net nobody built. With one table and one row per call there is no second place
     for the dispatch to be written down differently. -/
 private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
-    (f : UibFwdB) (dyName : String) (bf16 : Bool := false) : StateM Nat UibBackB :=
+    (f : UibFwdB) (dyName : String) (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB :=
   if b.stride2 then
     if b.preDWk > 0 then
       uibBackPreStridedGradB B b.ic b.oc b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16
@@ -986,7 +986,7 @@ private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
     `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
     `replicas ≤ 1` it emits nothing and the single-device render stays byte-identical. -/
 private def adamOne4 (B : Nat) (replicas : Nat) (g : PGradV4) :
-    StateM Nat (String × String × String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) := ViTRender.emitGradAllReduce g.grad g.ds g.nm replicas
@@ -1048,7 +1048,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (bf16 : Bool := false) : String :=
   let alphaStr := fmt6 0.1
   let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ▶ Placeholder rounding, exactly as the `z*` zero kernels are — see `uibFwdSkipB`.
     let zrnd : ℝ → ℝ := fun r => r
     -- ═══ forward: THE SHARED CHAIN, not a second copy ═══
@@ -1148,7 +1148,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --     rather than from an independent 52-entry table — a misaligned stat slot is SILENT, since
     --     the arities still match and the wrong layer's statistics flow into the wrong
     --     `@mnv4_fwd_eval` slot. ═══
-    let bnStat (oc hh : Nat) (xn : String) : StateM Nat (String × List String) := do
+    let bnStat (oc hh : Nat) (xn : String) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let zb : Vec (B*(oc*(hh*hh))) := fun _ => 0
       let (cM, nM) ← pretty B (.bnBatchMeanB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
       let (cV, nV) ← pretty B (.bnBatchVarB (N := B) (oc := oc) (h := hh) (w := hh) (.operand xn zb))
@@ -1156,7 +1156,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- One UIB block's stats in `uibStatSig` order. ⚠ `eh` is the EXPAND BN's spatial size, which
     -- is `2h` for the post-strided family alone (its expand runs before the downsample) and `h`
     -- everywhere else — the one place the three block shapes are not interchangeable here.
-    let uibStats (b : UibSpec) (f : UibFwdB) : StateM Nat (String × List String) := do
+    let uibStats (b : UibSpec) (f : UibFwdB) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let mid := b.ic * b.expand
       -- the expand BN sits at the INPUT resolution `2h` for the post-strided family alone (its
       -- expand runs before the downsample); every other site is at the block's own `h`
@@ -1259,7 +1259,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let outSig := String.intercalate ", "
     (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
      (mnv4StatSigList.map (·.2)))
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   let fname := s!"{slug}_{mnv4AdamVariant B replicas bf16}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++

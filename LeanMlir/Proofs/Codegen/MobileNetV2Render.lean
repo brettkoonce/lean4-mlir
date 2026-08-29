@@ -72,7 +72,7 @@ structure MBBack where
     `mobilenetv2_train_step.mlir` it partners normalises **per example** (reduce `[2,3]`,
     n = H·W) — so `mobilenetv2-verified` trained one function and scored another. -/
 private def bnSiteP (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName statP xin : String) :
-    StateM Nat (String × String) := do
+    StateM Proofs.StableHLO.EmitS (String × String) := do
   let zc  : Vec oc := fun _ => 0
   let zin : Vec (oc*hh*ww) := fun _ => 0
   match mode with
@@ -84,7 +84,7 @@ private def bnSiteP (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName stat
 
 /-- **STRIDED inverted-residual forward** (b1/b3/b5/b6): expand at the input `2hh×2ww`, depthwise
     downsamples `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) (xlaPad : Bool := false) : StateM Nat MBFwd := do
+private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) (xlaPad : Bool := false) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -114,7 +114,7 @@ private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName 
 
 /-- **STRIDE-1 inverted-residual forward** (b2/b4): everything at `hh×ww`, with an `addV` skip on the
     block input (ic = oc). -/
-private def irFwd (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Nat MBFwd := do
+private def irFwd (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -144,7 +144,7 @@ private def irFwd (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : Strin
 /-- **STRIDED inverted-residual backward + 12 param SGD ops.** depthwise input grad at `2hh×2ww`;
     NO skip — the dx to the previous block is the body dx (at the `2hh×2ww` grid). -/
 private def irBackStrided (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
-    (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Nat MBBack := do
+    (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBBack := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -188,7 +188,7 @@ private def irBackStrided (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
 /-- **STRIDE-1 inverted-residual backward + 12 param SGD ops.** Everything at `hh×ww`; the skip sums
     (body dx) + dyOut at the block input. -/
 private def irBack (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
-    (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Nat MBBack := do
+    (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBBack := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -235,7 +235,7 @@ private def irBack (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
 /-- **NO-EXPAND inverted-residual forward** (b1): depthwise(stride-1, on `ic` channels)→BN→relu6
     → project(1×1 ic→oc)→BN. NO expand, NO skip. `f.er` = the depthwise INPUT (= block input
     `xName`), `f.dr` = the project input. (`ec`/`en` are unused for this block kind.) -/
-private def irFwdNoExp (B ic oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Nat MBFwd := do
+private def irFwdNoExp (B ic oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -257,7 +257,7 @@ private def irFwdNoExp (B ic oc hh : Nat) (mode : BnMode) (epsStr p xName : Stri
     → depthwise relu6 mask → depthwise-BN-back → depthwise-back → dx (= block input grad, `ic` ch).
     No skip fan-in. -/
 private def irBackNoExp (B ic oc hh : Nat) (epsStr lrStr p xName : String)
-    (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Nat MBBack := do
+    (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBBack := do
   let ww := hh
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -293,7 +293,7 @@ private def irBackNoExp (B ic oc hh : Nat) (epsStr lrStr p xName : String)
 
 /-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6
     → project(1×1)→BN. Everything at `hh×ww`; `ic ≠ oc` so NO skip (block output = project-BN out). -/
-private def irFwdNoSkip (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Nat MBFwd := do
+private def irFwdNoSkip (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -318,7 +318,7 @@ private def irFwdNoSkip (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName :
 /-- **EXPAND-NO-SKIP stride-1 backward + 12 param SGD.** == `irBack` but NO skip fan-in: the dx to
     the previous block is the expand-conv-back directly (no `addV` with dyOut). -/
 private def irBackNoSkip (B ic mid oc hh : Nat) (epsStr lrStr p xName : String)
-    (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Nat MBBack := do
+    (f : MBFwd) (dyName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBBack := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -423,7 +423,7 @@ set_option maxRecDepth 1000000 in
     `SHlo` node. Strided stem 3×3/s2 (3→16, 224→112, NO maxpool), 6 inverted-residual blocks
     (b1/b3/b5/b6 stride-2 downsample, b2/b4 stride-1 skip), 1×1 conv-bn-relu6 head → GAP → dense. -/
 def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias : Bool := false) : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ stem: 3×3/s2 conv (3→16, 224→112) → BN → relu6 (NO maxpool) ═══
     let zx   : Vec (3*224*224) := fun _ => 0
     let zSk  : Kernel4 16 3 3 3 := fun _ _ _ _ => 0
@@ -502,7 +502,7 @@ def mnv2TrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String) (convBias 
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}")) ++
     s!", %onehot: {ty [B, nClasses]}"
   let outSig := String.intercalate ", " (sigList.map (·.2))
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @mobilenetv2_train_step({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -541,7 +541,7 @@ set_option maxRecDepth 4000000 in
     hand-written BATCH-BN render while this train step normalises PER EXAMPLE, so
     `mobilenetv2-verified` trained one function and evaluated another. -/
 private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
-    (xlaPad : Bool := false) : StateM Nat MNV2Fwd := do
+    (xlaPad : Bool := false) : StateM Proofs.StableHLO.EmitS MNV2Fwd := do
     -- stem: 3x3/s2 conv (3->32, 224->112) -> BN -> relu6 (NO maxpool)
     let zx   : Vec (3*224*224) := fun _ => 0
     let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
@@ -598,7 +598,7 @@ private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
 /-- The `@mobilenetv2_fwd` / `@mobilenetv2_fwd_eval` argument signature. The 104 stat slots come off
     the SAME `bns` the traversal built — never a parallel 52-entry table (§2e). -/
 private def mnv2FwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool) : String :=
-  let F : MNV2Fwd := (mnv2FwdChain B nClasses mode epsStr convBias).run' 0
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses mode epsStr convBias).run' (0, [])
   let params := (paperSig nClasses convBias).map (fun (nm, t) => s!"{nm}: {t}")
   let stats := if mode == .train then [] else
     F.bns.flatMap (fun (sp, c, _) => [s!"%{sp}mu: {ty [c]}", s!"%{sp}var: {ty [c]}"])
@@ -618,7 +618,7 @@ set_option maxRecDepth 4000000 in
     wrong forward and needs re-running. -/
 def mnv2FwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "mobilenetv2") : String :=
-  let F : MNV2Fwd := (mnv2FwdChain B nClasses .train epsStr convBias).run' 0
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses .train epsStr convBias).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd({mnv2FwdSig B nClasses .train epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // -- MobileNetV2 (17-block paper) forward: every line is pretty(verified AST node) --\n" ++
@@ -647,7 +647,7 @@ def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool :
   -- `LEAN_MLIR_EVAL_BATCHSTATS=1` scores through `@mobilenetv2_fwd`, so under an Adam run that
   -- diagnostic now measures the wrong architecture. It was already labelled non-reportable
   -- (transductive); it is now also cross-net. Do not read it as an upper bound on these weights.
-  let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias (xlaPad := true)).run' 0
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias (xlaPad := true)).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval({mnv2FwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // -- MobileNetV2 eval forward (running-stats BN): every line is pretty(verified AST node) --\n" ++
@@ -664,7 +664,7 @@ set_option maxRecDepth 4000000 in
     Per-block prefixes are the block index (`1`..`17`), matching `irSig`/`irSigNoExp`. -/
 def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
     (funcName : String := "mobilenetv2_paper_train_step") (convBias : Bool := false) : String :=
-  let go : StateM Nat String := do
+  let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — the SAME chain `@mobilenetv2_fwd` renders, so the forward this differentiates
     --     and the forward the driver evals with are one graph by construction (§2a) ═══
     let F : MNV2Fwd ← mnv2FwdChain B nClasses .train epsStr convBias
@@ -753,7 +753,7 @@ def mnv2TrainStepFaithfulVPaper (B nClasses : Nat) (epsStr lrStr : String)
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}")) ++
     s!", %onehot: {ty [B, nClasses]}"
   let outSig := String.intercalate ", " (sigList.map (·.2))
-  let inner : String := go.run' 0
+  let inner : String := go.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{funcName}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
