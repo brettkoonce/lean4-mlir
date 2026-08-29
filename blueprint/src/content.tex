@@ -10741,7 +10741,7 @@ when trained on ImageNet-21K (14M images) or JFT-300M (300M images). At
 Imagenette scale the ConvNets' inductive bias, locality and translation
 equivariance, actively helps, and the ViT has to learn those properties
 from data it doesn't have. \S\ref{sec:vit_imagenet} is the control:
-the same architecture on 1.28M images reaches $70.28\%$ over a
+the same architecture on 1.28M images reaches $72.31\%$ over a
 \emph{thousand} classes, which is the regime the design was for.
 
 \medskip\noindent\textbf{It reproduces exactly.} Chapter~\ref{chap:cnn}'s
@@ -10822,8 +10822,6 @@ same three pieces: denoted IR, bridge theorem, printer.
 \end{itemize}
 
 \section{ImageNet recipe}
-
-\imagenettimmnote
 \label{sec:vit_imagenet}
 
 \imagenetphasenote
@@ -10870,81 +10868,69 @@ def vitTinyImagenetConfig : TrainConfig where
   valEveryEpochs    := 5             -- ImageNet val is data-loading-bound
   repeatedAug       := 3             -- DeiT Repeated Augmentation (see below)
 
--- 3. The phase-2 reference driver. The verified path's entry point is
+-- 3. Weight init. Xavier-uniform is the emitter's generic path, and at
+--    ViT-Ti's d=192 it is 3.6x wider than timm's fixed 0.02. vitInit
+--    selects trunc_normal(0.02) for every transformer Linear and leaves
+--    the patch-embed conv on PyTorch's Conv2d default. The run reported
+--    below used THIS recipe, not the bare config above.
+def vitTinyImagenetConfigDeitInit : TrainConfig :=
+  { vitTinyImagenetConfig with vitInit := true }
+
+-- 4. Two named recipes, chosen by a positional CLI arg. This is the
+--    phase-2 reference driver; the verified path's entry point is
 --    trainAdamSched, in the phase-4 subsection at the end of this chapter.
+def vitTinyImagenetRecipes : List Recipe := [
+  { name := "default",   cfg := vitTinyImagenetConfig,         ... },
+  { name := "deit-init", cfg := vitTinyImagenetConfigDeitInit, ... }
+]
+
 def main (args : List String) : IO Unit :=
-  vitTinyImagenet.train vitTinyImagenetConfig
-    (args.head?.getD "data/imagenet") .imagenet
+  runRecipeMain "vit-tiny-imagenet" vitTinyImagenet .imagenet
+    vitTinyImagenetRecipes args
 \end{verbatim}
 
-As with the ResNet-34 ImageNet run (Ch~\ref{chap:residual}), that
-driver wires \texttt{.imagenet} through tfds streaming. The verified
-path reads the same 1.28M-image stream through a generated shim of
-its own, and it has a trainer built and running at this scale.
-\S\ref{sec:vit_phase4} is that side of it. The numbers in this
-section are the reference implementation's.
+\noindent The two recipes differ in exactly one field, and the trainers
+they generate differ in exactly one function: \texttt{init\_params}, 59
+initialization sites, with the schedule, augmentation, EMA and
+evaluation identical byte-for-byte.
 
-\textbf{The stability knob.} ViT-Tiny is where the recipe stops
-being optional. At the proper DeiT learning rate (peak $5\times
-10^{-4}$ for batch 512) the model \emph{collapses to chance} the
-moment warmup ramps the LR past ${\sim}1.6\times 10^{-4}$, with train
-loss pinned at $\ln(1000)\approx 6.9$ and never recovering. This is the
-well-known no-grad-clip transformer instability, sharpened here by
-the 1000-class softmax and bf16 gradient noise. The fix is one
-field: \texttt{gradClipNorm := 1.0}, global-norm gradient clipping,
-the DeiT default. With it, the very LR that collapsed without it
-trains cleanly through warmup and on to convergence.
+That driver wires \texttt{.imagenet} through tfds streaming.
+\S\ref{sec:vit_phase4} is the verified path's side of it.
 
-\textbf{bf16 and the run.} ViT is matmul-bound, because the patch
-embed, the attention QKV/scores/output, the MLP and the head are all
-dense matrix multiplies, with no convolution to speak of. So unlike the
-ResNet case, the relevant precision flag is \texttt{bf16} alone
-(matmul compute in bfloat16, fp32 master weights, fp32
-LayerNorm/softmax/GELU), and there is no \texttt{bf16Conv} to set.
-bf16 matmul runs through the same NVIDIA tensor cores. Measured on
-the same four RTX 4060 Ti (CUDA) at batch 512, bf16 is
-$\mathbf{1.48\times}$ faster per step than fp32 ($176$ vs $260$\,ms
-steady-state), a smaller multiple than the convnet's
-$1.6\times$, since ViT-Tiny's matmuls are narrow (embed $192$) and
-spend proportionally more time in the fp32 LayerNorm/softmax that
-bf16 leaves untouched. On the ROCm box the effect is
-\emph{larger}, not smaller: RDNA3's matmul units (WMMA) give bf16 a
-$\mathbf{2.75\times}$ compute speedup on the full ViT-Tiny step
-($428 \to 156$\,ms for forward + backward + AdamW at batch
-$256$/GPU), diluting to ${\sim}2\times$ end-to-end once the fp32
-LayerNorm/softmax and the tfds pipeline fold back in. The convnets
-see no such lift on gfx1100, because MIOpen's bf16 convolution is no
-faster than fp32 there, but ViT is all matmul, so the win is
-real. The runs:
+\textbf{Gradient clipping is load-bearing.} At the DeiT learning rate
+(peak $5\times 10^{-4}$ for batch 512) the model collapses to chance the
+moment warmup ramps past ${\sim}1.6\times 10^{-4}$, train loss pinned at
+$\ln(1000)\approx 6.9$ and never recovering. \texttt{gradClipNorm := 1.0}
+is the whole fix; the same LR then trains through warmup to convergence.
+
+\textbf{bf16.} ViT is matmul-bound --- patch embed, QKV, scores, output,
+MLP and head are all dense matmuls, no convolution --- so \texttt{bf16}
+is the only precision flag that applies and there is no
+\texttt{bf16Conv} to set. It buys $\mathbf{1.47\times}$: $205.1 \to
+139.2$\,ms/step, $624 \to 919$\,img/s, measured on one RTX 3060 at batch
+128 (\texttt{jax/scripts/jax\_vit\_bench.py tiny 128}, synthetic). The
+multiple is below the convnets' because ViT-Ti's matmuls are narrow
+($d{=}192$) and proportionally more time goes to the fp32
+LayerNorm/softmax that bf16 leaves alone. The run:
 
 \begin{center}
 \begin{tabular}{l l r r r r r}
 \hline
 GPU & Precision & Per epoch & Epochs & Wall-clock & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 300 & $\sim$41 hr & --- & --- \\
-2$\times$ 7900 XTX (ROCm) & bf16 & $\sim$10 min & 300 & $\sim$50 hr & $\mathbf{70.28\%}$ & $\mathbf{90.05\%}$ \\
+4$\times$ 4060 Ti (CUDA) & bf16 & $\sim$7.6 min & 300 & $\sim$41 hr & \withheld & \withheld \\
+4$\times$ 3060 (CUDA) & bf16 & 6.8 min & 300 & 34.2 hr & $\mathbf{72.31\%}$ & $\mathbf{91.12\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The CUDA row is the measured per-epoch rate carried out to the
-full schedule rather than a completed run, which is why it reports no
-accuracy. The result below is the ROCm one.
-
-The full 300-epoch DeiT-Ti recipe reached $\mathbf{70.28\%}$ top-1 /
-$\mathbf{90.05\%}$ top-5 on the full 50{,}000-image validation split.
-That lands within ${\sim}2$ points of the ${\sim}72\%$ ViT-Tiny is
-capable of. The candidates for the remaining gap are the one recipe knob
-that run did not have (repeated augmentation) plus two minor deviations
-(strict Mixup/CutMix alternation instead of a random switch, and
-Random-Erase to zero rather than to noise) --- candidates rather than an
-accounting, since this section's numbers predate the resampler change. The headline is a \emph{300-epoch} DeiT
-result with the full distillation-free recipe, and the point here is
-the pipeline (proven attention backward $\to$ DeiT recipe $\to$ stable
-bf16 training to a sensible ImageNet number), not a SOTA chase. The
-validation curve shows the familiar shape, a fast climb through warmup,
-a long middle, and a final lift as the cosine schedule anneals to zero:
+\noindent The 4060 Ti row is a per-epoch rate carried out to the full
+schedule, not a completed run, hence no accuracy. The 3060 row is the
+completed run: \textbf{72.31\% top-1 / 91.12\% top-5} over all 50{,}000
+validation images, 300 epochs in 34.2 hours, one attempt, no restarts,
+no thermal pauses. DeiT-Ti without distillation publishes \textbf{72.2\%
+/ 91.1\%}, so this is $+0.11$ and $+0.02$ --- on the paper, not past it
+in any meaningful sense. Per-epoch validation:
 
 \begin{center}
 \begin{tikzpicture}
@@ -10962,11 +10948,11 @@ a long middle, and a final lift as the cosine schedule anneals to zero:
     every axis plot/.append style={line width=1pt, mark size=0.8pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(5,1.40) (10,6.82) (15,15.02) (20,24.81) (25,33.47) (30,40.08) (35,45.02) (40,48.33) (45,50.57) (50,52.47) (55,53.99) (60,55.23) (65,56.29) (70,57.00) (75,57.59) (80,58.27) (85,58.88) (90,59.32) (95,59.77) (100,60.26) (105,60.63) (110,61.07) (115,61.56) (120,61.95) (125,62.51) (130,62.86) (135,63.18) (140,63.59) (145,63.81) (150,64.08) (155,64.39) (160,64.77) (165,65.15) (170,65.43) (175,65.74) (180,66.00) (185,66.30) (190,66.60) (195,66.81) (200,67.03) (205,67.32) (210,67.55) (215,67.80) (220,68.02) (225,68.25) (230,68.51) (235,68.80) (240,68.97) (245,69.15) (250,69.36) (255,69.53) (260,69.62) (265,69.75) (270,69.86) (275,69.98) (280,70.11) (285,70.24) (290,70.26) (295,70.29) (300,70.28)
+(5,14.07) (10,30.64) (15,39.38) (20,44.78) (25,48.44) (30,51.03) (35,53.13) (40,54.89) (45,56.20) (50,57.36) (55,58.29) (60,59.14) (65,59.94) (70,60.61) (75,61.18) (80,61.85) (85,62.30) (90,62.82) (95,63.20) (100,63.62) (105,63.95) (110,64.41) (115,64.80) (120,65.20) (125,65.42) (130,65.74) (135,66.10) (140,66.44) (145,66.77) (150,66.99) (155,67.11) (160,67.49) (165,67.78) (170,68.08) (175,68.31) (180,68.57) (185,68.85) (190,69.04) (195,69.21) (200,69.40) (205,69.59) (210,69.88) (215,70.08) (220,70.30) (225,70.56) (230,70.78) (235,70.98) (240,71.19) (245,71.46) (250,71.57) (255,71.66) (260,71.78) (265,71.91) (270,71.99) (275,72.05) (280,72.12) (285,72.23) (290,72.29) (295,72.29) (300,72.31)
 };
 \addlegendentry{top-1}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(5,5.08) (10,18.23) (15,33.13) (20,47.34) (25,58.43) (30,65.54) (35,70.40) (40,73.52) (45,75.76) (50,77.35) (55,78.42) (60,79.38) (65,80.16) (70,81.00) (75,81.57) (80,81.98) (85,82.37) (90,82.78) (95,83.21) (100,83.48) (105,83.89) (110,84.20) (115,84.62) (120,84.95) (125,85.22) (130,85.39) (135,85.71) (140,85.99) (145,86.20) (150,86.39) (155,86.57) (160,86.79) (165,87.01) (170,87.17) (175,87.33) (180,87.53) (185,87.69) (190,87.84) (195,87.96) (200,88.15) (205,88.34) (210,88.49) (215,88.71) (220,88.87) (225,88.97) (230,89.05) (235,89.19) (240,89.28) (245,89.44) (250,89.51) (255,89.63) (260,89.67) (265,89.75) (270,89.77) (275,89.85) (280,89.88) (285,89.96) (290,90.00) (295,89.98) (300,90.05)
+(5,32.08) (10,54.58) (15,64.70) (20,70.06) (25,73.53) (30,75.88) (35,77.68) (40,79.02) (45,80.11) (50,81.05) (55,81.86) (60,82.46) (65,83.03) (70,83.57) (75,84.01) (80,84.39) (85,84.80) (90,85.13) (95,85.46) (100,85.79) (105,86.11) (110,86.45) (115,86.66) (120,86.93) (125,87.09) (130,87.36) (135,87.54) (140,87.70) (145,87.96) (150,88.10) (155,88.27) (160,88.45) (165,88.60) (170,88.76) (175,88.88) (180,89.01) (185,89.15) (190,89.30) (195,89.46) (200,89.50) (205,89.67) (210,89.73) (215,89.86) (220,90.05) (225,90.17) (230,90.36) (235,90.43) (240,90.52) (245,90.57) (250,90.69) (255,90.81) (260,90.88) (265,90.91) (270,90.94) (275,90.99) (280,91.03) (285,91.07) (290,91.09) (295,91.09) (300,91.12)
 };
 \addlegendentry{top-5}
 \end{axis}
@@ -10974,38 +10960,67 @@ a long middle, and a final lift as the cosine schedule anneals to zero:
 \end{center}
 
 \noindent ViT-Tiny / ImageNet-1k validation accuracy per epoch (bf16,
-2$\times$ RX 7900 XTX, ROCm, sampled every 5 epochs across the 300-epoch
-run).
+4$\times$ RTX 3060, CUDA), sampled every 5 epochs across the 300-epoch
+run and scored over all 50{,}000 validation images.
 
-\textbf{Distance to the paper.} DeiT-Ti reaches $72.2\%$ without
-distillation. Our $70.28\%$ is ${\sim}2$ points short, and the
-accounting is mundane. The largest single item is \emph{repeated
-augmentation}, where DeiT samples each image in a batch three times
-under different augmentations, which disproportionately helps the
-data-hungry tiny models. The run that produced $70.28\%$ did not have
-it. The recipe does now, as the \texttt{repeatedAug := 3} in the
-listing above, and it landed after that run had already finished. So
-repeated augmentation is the obvious next lever, and the accurate
-statement about it is that it is untested here rather than missing.
-The rest is augmentation-fidelity drift, since RandomResizedCrop and
-Random-Erasing are a from-scratch \texttt{tf.data} reimplementation
-rather than timm's exact code (our RandAugment now matches timm's
-\texttt{rand-m9-mstd0.5-inc1} op-set literally), plus a few small
-knobs (batch $512$ vs.\ $1024$, the gradient clipping we add for
-stability, Random-Erase to zero rather than to noise). None of it is
-a bug: the loss curve is textbook DeiT. The further $+2.3$ points to
-DeiT-Ti's $74.5\%$ headline are a different thing entirely, the
-\emph{distillation} variant (a second ``distillation token'' trained
-against a strong CNN teacher), which we do not implement.
+\textbf{Where this still differs from the paper.} The number matches.
+The recipe does not yet match exactly, and the honest list is short but
+not empty.
 
-\textbf{[TODO: re-run on the current config.]}
-\texttt{vit-tiny-imagenet}, \textbf{300 epochs}, a re-run of the
-$70.28\%$ above. \emph{Changed since that number:} RandAugment is now
-timm-literal (\texttt{rand-m9-mstd0.5-inc1}: SolarizeAdd$+$Invert
-op-set, per-op apply prob $0.5$, bilinear geometric interpolation,
-relative translate), and repeated augmentation is now in the recipe at
-$3\times$. Re-running with both is the path to close the $\sim$2 points
-to DeiT-Ti's $72.2\%$.
+\emph{What matches.} Architecture (patch16, $d{=}192$, 12 blocks, 3
+heads, 5{,}717{,}416 parameters); schedule (300 epochs, 5-epoch warmup,
+cosine to zero); optimizer (AdamW, weight decay $0.05$, no decay on
+norms, biases, CLS or positional embedding); loss (cross-entropy with
+label smoothing $0.1$); the augmentation stack (Mixup $0.8$, CutMix
+$1.0$, \texttt{rand-m9-mstd0.5-inc1} with the SolarizeAdd$+$Invert
+op-set and per-op apply probability $0.5$, Random-Erase $p{=}0.25$,
+repeated augmentation $3\times$); stochastic depth $0.1$; and model EMA
+at $0.99996$. Weight initialization now matches as well --- every
+transformer \texttt{Linear} gets $\mathrm{trunc\_normal}(\sigma{=}0.02)$
+and the patch-embed convolution PyTorch's \texttt{Conv2d} default ---
+which is what \texttt{vitInit} in the listing above selects. It is worth
+saying why that one mattered: Xavier-uniform scales as $1/\sqrt{d}$
+against timm's \emph{fixed} $0.02$, so the generic path was
+$1.8\times$ too wide at ViT-B, $2.6\times$ at ViT-S and $3.6\times$ at
+ViT-Ti, while the patch embed came out ${\sim}6\times$ too \emph{narrow}
+(it divided by the output fan $d\cdot p^2$ rather than the input fan
+$c\cdot p^2$). The smallest model was the worst case.
+
+\emph{What does not match.} Four things, in rough order of how much
+they could matter:
+
+\begin{enumerate}
+\item \textbf{Batch $512$, not DeiT's $1024$.} The learning rate is
+  scaled consistently for it ($5\times 10^{-4}$ at $512$ is DeiT's own
+  $\mathrm{lr} = 5\times10^{-4}\cdot B/512$), so this is a
+  smaller-batch run of the same recipe rather than a mis-tuned one ---
+  but it is not the paper's batch, and repeated augmentation interacts
+  with batch size by construction.
+\item \textbf{Gradient clipping at global norm $1.0$ is ours.} It is
+  load-bearing: without it the model collapses to chance the moment
+  warmup ramps past ${\sim}1.6\times 10^{-4}$. Whether DeiT itself
+  clips is \emph{not verified in this repo}. The config comment calls
+  it ``the DeiT default'' and that claim has never been checked against
+  DeiT's \texttt{main.py}; until someone reads the reference
+  implementation, treat it as an addition of ours.
+\item \textbf{RandomResizedCrop and Random-Erasing are a from-scratch
+  \texttt{tf.data} reimplementation}, not timm's code, so they agree by
+  specification rather than bit-for-bit. Random-Erase fills with zero
+  where timm fills with noise.
+\item \textbf{Geometric RandAugment interpolates bilinearly}, where
+  timm resolves bicubic from the model's data config;
+  appendix~\ref{app:data} carries the measurement and the decision to
+  leave it.
+\end{enumerate}
+
+\noindent None of these is a bug, and the loss curve is textbook DeiT.
+But ``matches the paper's number'' and ``matches the paper'' are
+different claims, and only the first is established here.
+
+The further $+2.3$ points to DeiT-Ti's $74.5\%$ headline are a different
+thing entirely, the \emph{distillation} variant (a second
+``distillation token'' trained against a strong CNN teacher), which we
+do not implement.
 
 \subsection*{Phase 4: the verified trainer}
 \label{sec:vit_phase4}
@@ -11188,11 +11203,15 @@ four-replica and a trainer adds only the data feed, an additive constant near
 $65$\,ms at $128$ images per device. \S\ref{sec:convnext_sb}'s are
 single-device, where a multiplier is the right shape instead.
 
-\sqstatus{} The only accuracy calibration is this repo's ViT-Ti at $70.28\%$
-against DeiT-Ti's $72.2\%$, a $1.9$-point recipe gap
-(\S\ref{sec:vit_imagenet}). DeiT quotes $79.8\%$ for S and $81.8\%$ for B;
-everything missing from that $1.9$ is \emph{regularization}, and S has four
-times Tiny's capacity, so the gap plausibly widens.
+\sqstatus{} The only accuracy calibration is this repo's ViT-Ti, and it is
+now $72.31\%$ against DeiT-Ti's $72.2\%$ --- the $1.9$-point recipe gap
+that used to sit here has closed (\S\ref{sec:vit_imagenet}). DeiT quotes
+$79.8\%$ for S and $81.8\%$ for B. Do not read a closed gap at Tiny as a
+closed gap at S and B: the largest single item behind it was a weight-init
+mismatch that scales as $1/\sqrt{d}$ and is therefore \emph{worst} at Tiny
+--- $3.6\times$ there against $2.6\times$ at S and $1.8\times$ at B. The
+same fix is wired for all three (\texttt{vitInit}), but it has the least
+room to help on the two that have not run.
 
 \medskip\noindent \textbf{Launching it.} Both have job configs ---
 \texttt{vits-\allowbreak default-\allowbreak g512-\allowbreak 4gpu} and
