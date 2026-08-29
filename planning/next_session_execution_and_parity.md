@@ -234,16 +234,43 @@ Overlapping distributions, 0.75 pt apart against a ~2 pt within-arm spread — *
 regression**. (Both sit below the f32 73.98%: that is the pre-existing CIFAR bf16 stability gap,
 see [[bf16-useless-at-cifar-shapes]], not this change.)
 
-⛔ **The Imagenette EfficientNet path is BROKEN, and it is NOT this change.** `efficientnet-verified`
-(variants `adam` and `adambf16`) sits at exactly `387/3925 = 9.859873%` — chance, one class, byte
-for byte identical every epoch for 10 epochs, both arms. **The pre-change artifact from `HEAD~1`
-does exactly the same**, and the old-vs-new numeric diff on that artifact is 6 differing words of
-12,103,093 at max |Δ| = 9.3e-10. So the graph is unchanged and the failure predates the commit.
-▶ Prime suspect is the eval, not the training: `VerifiedNets.lean:937` warns this net "needs a
-`_fwd_eval` artifact (frozen running stats — batch-BN eval is degenerate on a sorted validation
-split)", and a constant 1-in-10 on a sorted 10-class val split is exactly that signature. Worth an
-hour on its own — `RESULTS.md` still quotes 87.58% for this net, and that number cannot currently
-be reproduced.
+⛔⛔ **CORRECTION (2026-08-29, same session): the "Imagenette EfficientNet is broken" claim above
+was MY ERROR and is withdrawn.** I ran `efficientnet-verified`, which trains
+`efficientnet_train_step.mlir` through the plain `VerifiedNet.train` driver. The net behind
+`RESULTS.md`'s 87.58% is `efficientnet-verified-**adam**` —
+`efficientnet_adam_train_step.mlir` through `trainAdamSched`. Different binary, different artifact.
+⚠ The tell I should have caught at the time: my "f32" and "bf16" arms returned **byte-identical**
+accuracy *and* identical 30.2 s/epoch. `LEAN_MLIR_VARIANT` never reaches that binary — both arms
+ran the same f32 graph, so that Imagenette bf16 comparison **tested nothing** and is withdrawn too.
+
+⭐ **`lake run imagenette` — the actual state, all 7 nets, 2026-08-29.** One trainer per GPU (XLA
+preallocates ~75% of a card, so two per GPU will not fit); every net exits 0.
+
+| net | ckpt | status |
+|---|---|---|
+| resnet34-verified-adam | 80 | ✅ **complete** — schedule finished |
+| mobilenetv2-verified-adam | 80 | ✅ **complete** |
+| convnext-verified-adam | 80 | ✅ **complete** |
+| vit-verified-adam | 80 | ✅ **complete** |
+| efficientnet-verified-adam | 3 → 4 | ✅ **training** — epoch 4 **63.69%**, top5 93.63% |
+| resnet50-verified-adam | 3 → 4 | ✅ **training** — epoch 4 **45.53%**, top5 75.39% |
+| mobilenetv4-verified-adam | 3 → 4 | ✅ **training** — epoch 4 **44.66%**, top5 82.85% |
+
+**Nothing is broken.** EfficientNet at 63.69% by epoch 4 settles it.
+
+⚠ Two traps worth knowing before running this sweep again:
+1. **`LEAN_MLIR_MAX_EPOCHS` is `min n cfg.epochs`** — it can only *lower* the schedule. A net whose
+   checkpoint is already at `cfg.epochs` resumes, prints `done`, and exits **without an epoch line**.
+   That is completion, not failure, and it makes a capped `lake run imagenette` a silent no-op on
+   every finished net.
+2. **`efficientnet-verified` ≠ `efficientnet-verified-adam`**, and the plain one ignores
+   `LEAN_MLIR_VARIANT`. Quote the `-adam` binary; it is the one every recorded number comes from.
+
+⛔ **Damage I did: the `efficientnet_adam` Imagenette checkpoint is gone.** Chasing the phantom bug
+I ran `rm -f .lake/build/efficientnet_adam_ckpt_xla.bin*` and retrained from scratch, so what was
+almost certainly the completed epoch-80 state (`RESULTS.md` 87.58%) is now epoch 4 at 63.69%. It is
+rebuildable — ~80 epochs at ~30 s — but it is not what it was. Every other checkpoint was backed up
+before this sweep and is untouched.
 
 ### 1.3 The old "⛔ DEAD" list, corrected
 
@@ -492,6 +519,6 @@ quoted from it.
 3. **Track 3's cheap wins** — run the ViT EMA/bf16 job (artifacts ready, one conf to write); fix
    mnv2's baked label smoothing (a literal, and it is on the gradient path); compose ConvNeXt's EMA.
 4. **Track 2's two real items** — ConvNeXt's final LN + the mixup/ls fix, then mnv2's 350-epoch run.
-5. **The Imagenette EfficientNet eval bug** (§1.2d) — chance accuracy, pre-existing, and it means
-   `RESULTS.md`'s 87.58% for that net is currently unreproducible.
+5. **Rebuild the `efficientnet_adam` Imagenette checkpoint** — I deleted it chasing a phantom bug
+   (§1.2d); it is at epoch 4 instead of 80. ~40 min. Nothing else on the tier was touched.
 6. **Optional:** mnv2's `rmsdp64bf16` render, and settle why mnv2 escapes the relayout (§1.4).
