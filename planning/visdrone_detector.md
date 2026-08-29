@@ -522,6 +522,63 @@ schedule decision is really an aug decision".
 4. **Then** the backbone (§8). Do not swap on an under-tuned recipe; the schedule
    and aug questions are cheaper and now partly answered.
 
+### ⛔ The class weights are NET HARMFUL — turn them off (2026-08-29)
+
+`fpnClsWeights` (T1b, sqrt-inverse frequency) has been on since the arm was
+built, justified by "better class spread". A three-rung ladder at 12 epochs with
+aug, everything else identical (`FPN_CLSW=none|sqrt|inv`):
+
+| weights | range | mAP (argmax) | mAP (multilabel) | head top-1 |
+|---|---|---|---|---|
+| **none** | — | **0.1774** | **0.1909** | **70.50%** |
+| sqrt (current default) | 6.7× | 0.1771 | 0.1869 | 67.58% |
+| inv | 44.7× | 0.1368 | 0.1469 | 58.60% |
+
+**Monotonic, and in the wrong direction.** More weighting ⇒ worse head accuracy
+⇒ worse mAP. The current default buys nothing on the argmax decode (0.1771 vs
+0.1774) and costs 2% on the better one. Full inverse frequency costs 23%.
+
+⚠ **And the weights DO work as designed — that is what makes this instructive.**
+Rare-class top-1 rises monotonically with weighting: tricycle 32.2 → 44.8 →
+52.5, awning-tricycle 13.4 → 29.9 → 30.6, van 22.5 → 43.6. It is *AP* that does
+not follow, because the weighted models also hand rare labels to a flood of cells
+that are not that class: tricycle detections 7,419 → 17,225 → **31,322** against
+1,045 GT. Weighting buys recall by spending precision, and AP is precision-
+sensitive. **Accuracy on positives is the wrong proxy for AP** — that is the
+whole lesson, and it is why the "better class spread" justification survived
+this long without being wrong exactly, just irrelevant.
+
+Retroactively this is the BraTS result again (`brats_demo.md`: on fixed data
+plain CE beat every weighted arm). Two datasets, same answer: **the loss-weighting
+lever does not beat plain training.** §7's "expect little from the levers" was
+right and can now be closed rather than re-litigated.
+
+**Default NOT changed here** — the spec name embeds `wcls` and every existing
+checkpoint prefix depends on it, so flipping it silently would orphan the whole
+checkpoint set. `FPN_CLSW=none` is one flag. Renaming the arm is a deliberate
+call, not a side effect.
+
+### ⭐ Multilabel decode is worth +7.6% for free (2026-08-29)
+
+`scripts/yolo_map_visdrone.py --multilabel` emits one detection per (cell, class)
+for the top-3 classes instead of the argmax alone. Under argmax a cell whose GT
+class loses the argmax is charged **twice** — a false negative for the true class
+and a false positive for the winner — and per-class AP is an unweighted mean, so
+that lands on the rare classes. COCO protocol does not evaluate this way; argmax-
+only was the non-standard, self-handicapping choice.
+
+Unweighted arm: **0.1774 → 0.1909**, recall 0.699 → 0.743. No retraining.
+
+⚠ **Do not mix decodes in a comparison.** The PyTorch replica's 0.1532 and every
+number recorded before today are argmax. Replica-to-Lean, like for like, is
+0.1532 vs **0.1774 = +15.8%**.
+
+### The current best arm
+
+**aug, 12 epochs, `FPN_CLSW=none`, multilabel decode = mAP@0.5 0.1909.**
++37.7% on the 0.1386 this thread resumed at. Argmax-to-argmax it is 0.1774,
++28.0%. Cost is one 12-epoch run (~47 min on one 4060 Ti).
+
 ### ✅ Deployment: the correctness gate is CLEARED (fixed 2026-08-28)
 
 The Orin path works and is fast — **229 fps** forward under TensorRT fp16 (4.4 ms;
