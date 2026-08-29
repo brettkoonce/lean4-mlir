@@ -51,7 +51,7 @@ def cls_weight_map(ct, clsw):
     return ((ct > 0.5) * w).sum(1, keepdims=True)
 
 
-def np_forward(pred, tgt, mask, gH, gW, anchors, clsw=None):
+def np_forward(pred, tgt, mask, gH, gW, anchors, clsw=None, clsgamma=0.0):
     B = pred.shape[0]
     total = 0.0
     for a, (aw, ah) in enumerate(anchors):
@@ -70,12 +70,19 @@ def np_forward(pred, tgt, mask, gH, gW, anchors, clsw=None):
         objloss = float(np.sum(alpha * w * bce))
         cshift = cp - cp.max(1, keepdims=True)
         lsm = cshift - np.log(np.exp(cshift).sum(1, keepdims=True))
-        clsloss = float(np.sum(-(ct * lsm) * m4 * cls_weight_map(ct, clsw)))
+        # T1c class focal: FL = -w*(1-p_t)^g*log p_t, p_t = softmax prob of the
+        # true class. g=0 gives (1-p_t)^0 = 1, i.e. exactly the weighted CE above.
+        cfac = 1.0
+        if clsgamma > 0.0:
+            sm_f = np.exp(lsm)
+            p_t = (ct * sm_f).sum(1, keepdims=True)
+            cfac = np.maximum(1.0 - p_t, 1e-6) ** clsgamma
+        clsloss = float(np.sum(-(ct * lsm) * m4 * cls_weight_map(ct, clsw) * cfac))
         total += boxloss + objloss + clsloss
     return total / B
 
 
-def np_grad(pred, tgt, mask, gH, gW, anchors, clsw=None):
+def np_grad(pred, tgt, mask, gH, gW, anchors, clsw=None, clsgamma=0.0):
     B = pred.shape[0]
     grad = np.zeros_like(pred)
     for a, (aw, ah) in enumerate(anchors):
@@ -93,7 +100,15 @@ def np_grad(pred, tgt, mask, gH, gW, anchors, clsw=None):
         grad[:, base + 4:base + 5] = alpha * w * (p - t) / B
         cshift = cp - cp.max(1, keepdims=True)
         ex = np.exp(cshift); sm = ex / ex.sum(1, keepdims=True)
-        grad[:, base + 5:base + 15] = (sm - ct) * m4 * cls_weight_map(ct, clsw) / B
+        # dFL/dz = w * F * (softmax - onehot), F = u^g - g*p_t*u^(g-1)*log p_t
+        F = 1.0
+        if clsgamma > 0.0:
+            p_t = (ct * sm).sum(1, keepdims=True)
+            lpt = (ct * (cshift - np.log(np.exp(cshift).sum(1, keepdims=True)))).sum(1, keepdims=True)
+            u = np.maximum(1.0 - p_t, 1e-6)
+            ug = u ** clsgamma
+            F = ug - clsgamma * p_t * (ug / u) * lpt
+        grad[:, base + 5:base + 15] = (sm - ct) * m4 * cls_weight_map(ct, clsw) * F / B
     return grad
 
 

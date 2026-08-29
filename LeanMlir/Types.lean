@@ -699,6 +699,21 @@ structure TrainConfig where
       distribution) to keep this a pure redistribution — otherwise it silently
       rescales the class term against the box and objectness terms too. -/
   yoloClsWeights : List Float := []
+  /-- Focal γ on the CLASS term (T1c). `0` = plain (weighted) softmax-CE and
+      emits byte-identical MLIR. 2.0 is the RetinaNet value.
+
+      FL = −w·(1−p_t)^γ·log p_t on assigned cells, p_t the softmax probability of
+      the true class. Distinct from `focalGamma`, which is the OBJECTNESS focal
+      and applies to every cell.
+
+      Why this lever rather than more class weighting: the FPN_CLSW ladder
+      measured static per-class weights as net harmful (mAP none 0.1774 / sqrt
+      0.1771 / inv 0.1368) because a fixed constant raises rare-class recall by
+      flooding those classes with false positives, and AP is precision-sensitive
+      — tricycle detections went 7,419 → 31,322 against 1,045 GT. Focal
+      down-weights EASY examples whatever their class, and the weight tracks p_t
+      as it moves, so it cannot buy recall with a permanent precision tax. -/
+  yoloClsFocalGamma : Float := 0.0
   /-- RetinaNet prior-bias init: initialize the **head's bias** to `log π_c`
       instead of zero, so the net starts predicting the class prior rather than
       a uniform distribution. Empty (the default) leaves the head at zero bias

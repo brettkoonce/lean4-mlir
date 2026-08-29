@@ -245,6 +245,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (yoloAnchors := cfg.anchors)
     (fpnScales := cfg.fpnScales)
     (yoloClsWeights := cfg.yoloClsWeights)
+    (yoloClsFocalGamma := cfg.yoloClsFocalGamma)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 

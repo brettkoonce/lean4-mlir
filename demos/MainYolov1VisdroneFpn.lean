@@ -314,6 +314,26 @@ def augFromEnv : IO Bool := do
   | none => return false
   | some v => return (v.trimAscii.toString == "1" || v.trimAscii.toString.toLower == "true")
 
+/-- Focal γ on the CLASS term (`FPN_CLSFOCAL`, an integer; 0 = off = plain
+    weighted CE and byte-identical MLIR). 2 is the RetinaNet value.
+
+    FL = −w·(1−p_t)^γ·log p_t on assigned cells. Distinct from the OBJECTNESS
+    focal (`focalGamma`, always 2.0), which applies to every cell.
+
+    This is the lever the `FPN_CLSW` ladder did not rule out. Static per-class
+    weights measured net harmful — mAP none 0.1774 / sqrt 0.1771 / inv 0.1368 —
+    because a fixed constant raises rare-class recall by flooding those classes
+    with false positives (tricycle detections 7,419 → 31,322 against 1,045 GT)
+    and AP is precision-sensitive. Focal down-weights EASY examples whatever
+    their class, and its weight tracks p_t as p_t moves, so it cannot buy recall
+    with a permanent precision tax. FD-verified in
+    `scripts/fpn_loss_probe_check.py` (two new arms, with and without the class
+    weights, since both fold into the same per-cell scalar). -/
+def clsFocalFromEnv : IO Float := do
+  match (← IO.getEnv "FPN_CLSFOCAL") with
+  | none => return 0.0
+  | some v => return ((v.trimAscii.toNat?).getD 0).toFloat
+
 /-- Box-aware affine augmentation, as three PERCENT knobs (this toolchain has no
     `String.toFloat?`, same reason `FPN_LR_MULT` is an integer):
 
@@ -430,6 +450,7 @@ def runYolov1VisdroneFpn (args : List String) : IO Unit := do
     let noBoot ← noBootstrapFromEnv
     let baseCfg := if noBoot then { baseCfg with bootstrapBackbone := none } else baseCfg
     let clsW ← clsWeightsFromEnv
+    let clsGam ← clsFocalFromEnv
     let affProb ← affinePctFromEnv "FPN_AFFINE" 0
     let affScale ← affinePctFromEnv "FPN_AFFINE_SCALE" 25
     let affTrans ← affinePctFromEnv "FPN_AFFINE_TRANSLATE" 10
@@ -441,14 +462,15 @@ def runYolov1VisdroneFpn (args : List String) : IO Unit := do
                                       fpnAffineProb := affProb,
                                       fpnAffineScale := affScale,
                                       fpnAffineTranslate := affTrans,
-                                      yoloClsWeights := clsW }
+                                      yoloClsWeights := clsW,
+                                      yoloClsFocalGamma := clsGam }
     IO.println s!"FPN multi-scale VisDrone (56/28/14, 3 anchors/scale, Ntot={fpnNtot}, head tower={tower}) — data dir: {dataDir}"
     IO.println s!"  spec   : {spec.name}"
     IO.println s!"  epochs : {epochs}"
     IO.println s!"  lr     : {lr}  clip: {clip}"
     IO.println s!"  augment: {aug} (HSV jitter + hflip on the FPN path)"
     IO.println s!"  clsw   : {if clsW.isEmpty then "none" else toString clsW.length} \
-weights (FPN_CLSW=none|sqrt|inv)"
+weights (FPN_CLSW=none|sqrt|inv), class focal γ={clsGam}"
     if affProb > 0.0 then
       IO.println s!"  affine : p={affProb} scale=±{affScale} translate=±{affTrans} \
 (box-aware, target re-encoded)"

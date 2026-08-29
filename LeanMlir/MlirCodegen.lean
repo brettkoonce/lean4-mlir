@@ -5415,7 +5415,7 @@ private def emitDiouBackward (B gH gW : Nat) (gradOut : String := "%dio_dpred") 
 private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     (predSSA tgtSSA : String) (focalGamma : Float) (lambdaBox : Float)
     (lossOut gradOut : String) (tag : String := "")
-    (clsWeights : List Float := []) : String := Id.run do
+    (clsWeights : List Float := []) (clsFocalGamma : Float := 0.0) : String := Id.run do
   -- `tag` disambiguates the loss-level SSAs (%ay{tag}_*) and the per-anchor
   -- prefix so this block can be emitted multiple times in one module (the FPN
   -- multi-scale loss calls it once per scale). tag="" keeps single-scale callers
@@ -5426,6 +5426,9 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
   -- `clsWeights = []` is the unweighted path and emits byte-identical MLIR to
   -- before this parameter existed.
   let wOn := !clsWeights.isEmpty
+  -- `clsFocalGamma = 0` is the plain-CE path and emits byte-identical MLIR to
+  -- before this parameter existed (F ≡ 1 below, so every focal SSA is skipped).
+  let cfOn := clsFocalGamma > 0.0
   let c1 := tensorTy [B, 1, gH, gW]
   let box4 := tensorTy [B, 4, gH, gW]
   let clsT := tensorTy [B, NC, gH, gW]
@@ -5512,6 +5515,47 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     s := s ++ s!"    %{pa}_cls_maskb = stablehlo.broadcast_in_dim %{pa}_m4, dims = [0, 1, 2, 3] : ({c1}) -> {clsT}\n"
     s := s ++ s!"    %{pa}_cls_nll = stablehlo.multiply %{pa}_ct, %{pa}_cls_lsm : {clsT}\n"
     s := s ++ s!"    %{pa}_cls_nllm = stablehlo.multiply %{pa}_cls_nll, %{pa}_cls_maskb : {clsT}\n"
+    -- ── (T1c) focal factor on the CLASS term, γ_c = clsFocalGamma ──────────
+    -- FL = -w·(1-p_t)^γ·log p_t, with p_t the softmax probability of the TRUE
+    -- class. Its gradient collapses to the plain-CE gradient times one per-cell
+    -- scalar, which is why this costs a handful of ops rather than a new
+    -- backward: with u = 1-p_t,
+    --     dFL/dz_j = w · F · (p_j - y_j),   F = u^γ - γ·p_t·u^(γ-1)·log p_t
+    -- and at γ=0, F ≡ 1, recovering weighted CE exactly.
+    --
+    -- Why this and not more class weighting: the FPN_CLSW ladder measured static
+    -- per-class weights as net harmful (none 0.1774 / sqrt 0.1771 / inv 0.1368
+    -- mAP), because a fixed constant raises rare-class RECALL by flooding those
+    -- classes with false positives, and AP is precision-sensitive. Focal is the
+    -- lever that ladder does not rule out: it down-weights EASY examples —
+    -- whatever their class — and the weight moves as p_t moves, so it cannot
+    -- pay for rare-class recall with a permanent precision tax.
+    --
+    -- p_t and log p_t come out as 0 on unassigned cells (the one-hot `ct` is
+    -- zero there), giving u=1 and F=1, and the mask zeroes those anyway.
+    if cfOn then
+      s := s ++ s!"    %{pa}_cf_seb = stablehlo.broadcast_in_dim %{pa}_cls_se, dims = [0, 2, 3] : ({clsRed}) -> {clsT}\n"
+      s := s ++ s!"    %{pa}_cf_smx = stablehlo.divide %{pa}_cls_ex, %{pa}_cf_seb : {clsT}\n"
+      s := s ++ s!"    %{pa}_cf_ptn = stablehlo.multiply %{pa}_ct, %{pa}_cf_smx : {clsT}\n"
+      s := s ++ s!"    %{pa}_cf_pt = stablehlo.reduce(%{pa}_cf_ptn init: %zf) applies stablehlo.add across dimensions = [1]\n"
+      s := s ++ s!"           : ({clsT}, tensor<f32>) -> {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_lpt = stablehlo.reduce(%{pa}_cls_nll init: %zf) applies stablehlo.add across dimensions = [1]\n"
+      s := s ++ s!"           : ({clsT}, tensor<f32>) -> {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_one = stablehlo.constant dense<1.0> : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_u0 = stablehlo.subtract %{pa}_cf_one, %{pa}_cf_pt : {clsRed}\n"
+      -- u is clamped away from 0 so log/divide stay finite at p_t = 1, which a
+      -- confident head reaches in f32. At u = eps the factor is ~0 anyway.
+      s := s ++ s!"    %{pa}_cf_eps = stablehlo.constant dense<1.0e-6> : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_u = stablehlo.maximum %{pa}_cf_u0, %{pa}_cf_eps : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_lu = stablehlo.log %{pa}_cf_u : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_gam = stablehlo.constant dense<{clsFocalGamma}> : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_glu = stablehlo.multiply %{pa}_cf_gam, %{pa}_cf_lu : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_ug = stablehlo.exponential %{pa}_cf_glu : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_ug1 = stablehlo.divide %{pa}_cf_ug, %{pa}_cf_u : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_t1 = stablehlo.multiply %{pa}_cf_pt, %{pa}_cf_ug1 : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_t2 = stablehlo.multiply %{pa}_cf_t1, %{pa}_cf_lpt : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_t3 = stablehlo.multiply %{pa}_cf_gam, %{pa}_cf_t2 : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cf_F = stablehlo.subtract %{pa}_cf_ug, %{pa}_cf_t3 : {clsRed}\n"
     -- ── (T1b) per-cell class weight w_{c(cell)} = Σ_c onehot_c·weights[c] ──
     -- VisDrone is ~44% car / ~21% pedestrian, and the unweighted head collapses
     -- its argmax onto exactly those two (measured: 5/10 classes never predicted,
@@ -5541,9 +5585,14 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     -- any reduce's operand tree (see the miscompile note above).
     s := s ++ s!"    %{pa}_cls_ch = stablehlo.reduce(%{pa}_cls_nllm init: %zf) applies stablehlo.add across dimensions = [1]\n"
     s := s ++ s!"           : ({clsT}, tensor<f32>) -> {clsRed}\n"
-    let chSrc := if wOn then s!"%{pa}_cls_chw" else s!"%{pa}_cls_ch"
+    -- focal scales the per-cell CE by u^γ; it lands BEFORE the class weight so
+    -- the two compose as w·u^γ·log p_t, matching the gradient assembled below.
+    if cfOn then
+      s := s ++ s!"    %{pa}_cls_chf = stablehlo.multiply %{pa}_cls_ch, %{pa}_cf_ug : {clsRed}\n"
+    let chBase := if cfOn then s!"%{pa}_cls_chf" else s!"%{pa}_cls_ch"
+    let chSrc := if wOn then s!"%{pa}_cls_chw" else chBase
     if wOn then
-      s := s ++ s!"    %{pa}_cls_chw = stablehlo.multiply %{pa}_cls_ch, %{pa}_clsw_map : {clsRed}\n"
+      s := s ++ s!"    %{pa}_cls_chw = stablehlo.multiply {chBase}, %{pa}_clsw_map : {clsRed}\n"
     s := s ++ s!"    %{pa}_cls_ce = stablehlo.reduce({chSrc} init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
     s := s ++ s!"           : ({clsRed}, tensor<f32>) -> tensor<f32>\n"
     s := s ++ s!"    %{pa}_clsloss = stablehlo.negate %{pa}_cls_ce : tensor<f32>\n"
@@ -5553,10 +5602,15 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     s := s ++ s!"    %{pa}_cls_dm = stablehlo.multiply %{pa}_cls_d, %{pa}_cls_maskb : {clsT}\n"
     -- same per-cell weight on the gradient (∂/∂logits of w·CE is w·(softmax−t));
     -- broadcasting here is safe — unlike the forward, this value feeds no reduce.
-    let dmSrc := if wOn then s!"%{pa}_cls_dmw" else s!"%{pa}_cls_dm"
+    -- dFL/dz = w · F · (softmax − onehot) · mask, F from the block above.
+    if cfOn then
+      s := s ++ s!"    %{pa}_cf_Fb = stablehlo.broadcast_in_dim %{pa}_cf_F, dims = [0, 2, 3] : ({clsRed}) -> {clsT}\n"
+      s := s ++ s!"    %{pa}_cls_dmf = stablehlo.multiply %{pa}_cls_dm, %{pa}_cf_Fb : {clsT}\n"
+    let dmBase := if cfOn then s!"%{pa}_cls_dmf" else s!"%{pa}_cls_dm"
+    let dmSrc := if wOn then s!"%{pa}_cls_dmw" else dmBase
     if wOn then
       s := s ++ s!"    %{pa}_clsw_mapb = stablehlo.broadcast_in_dim %{pa}_clsw_map, dims = [0, 2, 3] : ({clsRed}) -> {clsT}\n"
-      s := s ++ s!"    %{pa}_cls_dmw = stablehlo.multiply %{pa}_cls_dm, %{pa}_clsw_mapb : {clsT}\n"
+      s := s ++ s!"    %{pa}_cls_dmw = stablehlo.multiply {dmBase}, %{pa}_clsw_mapb : {clsT}\n"
     s := s ++ s!"    %{pa}_BfC = stablehlo.broadcast_in_dim %ay{tag}_Bf, dims = [] : (tensor<f32>) -> {clsT}\n"
     s := s ++ s!"    %{pa}_cg = stablehlo.divide {dmSrc}, %{pa}_BfC : {clsT}\n"
     -- ── assemble anchor a's [B,15,gH,gW] gradient slab: box(4) ++ obj(1) ++ cls(10) ──
@@ -5595,7 +5649,8 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
 private def emitMultiScaleYoloLoss (B : Nat)
     (scales : List (Nat × List (Float × Float))) (tgtSSAs : List String)
     (logitsSSA : String) (focalGamma lambdaBox : Float)
-    (lossOut gradOut : String) (clsWeights : List Float := []) : String := Id.run do
+    (lossOut gradOut : String) (clsWeights : List Float := [])
+    (clsFocalGamma : Float := 0.0) : String := Id.run do
   let P := 15
   let lens := scales.map (fun sc => sc.2.length * P * sc.1 * sc.1)
   let Ntot := lens.foldl (·+·) 0
@@ -5614,7 +5669,7 @@ private def emitMultiScaleYoloLoss (B : Nat)
     -- split the concat back to this scale's [B, A·15, g, g] head output
     s := s ++ s!"    %ms_slab{i} = \"stablehlo.slice\"({logitsSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, {off}>, limit_indices = array<i64: {B}, {off + len}>, strides = array<i64: 1, 1>" ++ "} : " ++ s!"({concatTy}) -> {slabTy}\n"
     s := s ++ s!"    %ms_pred{i} = stablehlo.reshape %ms_slab{i} : ({slabTy}) -> {predTy}\n"
-    s := s ++ emitAnchorYoloLoss B g g anchors s!"%ms_pred{i}" tgt focalGamma lambdaBox s!"%ms_loss{i}" s!"%ms_grad{i}" s!"s{i}" clsWeights
+    s := s ++ emitAnchorYoloLoss B g g anchors s!"%ms_pred{i}" tgt focalGamma lambdaBox s!"%ms_loss{i}" s!"%ms_grad{i}" s!"s{i}" clsWeights clsFocalGamma
     s := s ++ s!"    %ms_gflat{i} = stablehlo.reshape %ms_grad{i} : ({predTy}) -> {slabTy}\n"
     lossParts := lossParts ++ [s!"%ms_loss{i}"]
     gradFlatParts := gradFlatParts ++ [s!"%ms_gflat{i}"]
@@ -5654,6 +5709,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
     (yoloAnchors : List (Float × Float) := [])
     (fpnScales : List (Nat × List (Float × Float)) := [])
     (yoloClsWeights : List Float := [])
+    (yoloClsFocalGamma : Float := 0.0)
     : String := Id.run do
   let B := batchSize
   let nClasses := spec.numClasses
@@ -6998,7 +7054,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"    %fpn_tg{i} = stablehlo.reshape %fpn_tgs{i} : ({tensorTy [B, len]}) -> {tensorTy [B, A * P, g, g]}\n"
           tgts := tgts ++ [s!"%fpn_tg{i}"]
           off := off + len
-        code := code ++ emitMultiScaleYoloLoss B fpnScales tgts logitsSSA focalGamma 5.0 "%loss" "%fpn_grad" yoloClsWeights
+        code := code ++ emitMultiScaleYoloLoss B fpnScales tgts logitsSSA focalGamma 5.0 "%loss" "%fpn_grad" yoloClsWeights yoloClsFocalGamma
         gradSSA := "%fpn_grad"
         gradShape := curShape
     | _ =>
@@ -10039,6 +10095,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     (yoloAnchors : List (Float × Float) := [])
     (fpnScales : List (Nat × List (Float × Float)) := [])
     (yoloClsWeights : List Float := [])
+    (yoloClsFocalGamma : Float := 0.0)
     : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
   s!"// Batch size: {batchSize}, optimizer: {if useShampoo then "Shampoo (square 2D) + AdamW (rest)" else if useMuon then "Muon (2D) + AdamW (rest)" else if useAdam then "Adam" else "SGD+momentum"}\n" ++
@@ -10051,7 +10108,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
   emitTrainStepSig spec batchSize useSoftLabels useSeg useDdpm ddpmOutShape
     useYolov1 yoloGridH yoloGridW (if yoloAnchors.isEmpty then yoloNumBoxes * 5 + yoloNumClasses else yoloAnchors.length * 15) fpnScales ++ " {\n" ++
   emitTrainStepBody spec batchSize moduleName labelSmoothing weightDecay useAdam useSoftLabels useFocal focalGamma useSeg useDdpm
-    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon useShampoo segLoss useDiouBox yoloAnchors fpnScales yoloClsWeights ++
+    useYolov1 yoloGridH yoloGridW yoloNumBoxes yoloNumClasses gradClipNorm headLrMult useMuon useShampoo segLoss useDiouBox yoloAnchors fpnScales yoloClsWeights yoloClsFocalGamma ++
   "  }\n" ++
   "}\n"
 
@@ -10156,7 +10213,7 @@ def fpnNeckProbeModule (B oc c3 c4 c5 g5 : Nat) : String := Id.run do
     convBn, validated separately on ROCm). Deterministic per-scale anchors
     (w=0.02+0.03·i, h=0.03+0.04·i), matching scripts/fpn_loss_probe_check.py. -/
 def fpnLossProbeModule (B : Nat) (scaleGrids : List Nat) (A : Nat)
-    (clsWeights : List Float := []) : String := Id.run do
+    (clsWeights : List Float := []) (clsFocalGamma : Float := 0.0) : String := Id.run do
   let P := 15
   let anchors : List (Float × Float) := (List.range A).map (fun i =>
     (0.02 + 0.03 * i.toFloat, 0.03 + 0.04 * i.toFloat))
@@ -10173,7 +10230,7 @@ def fpnLossProbeModule (B : Nat) (scaleGrids : List Nat) (A : Nat)
   s := s ++ s!"  func.func @main({argList}) -> (tensor<f32>, {concatTy}) " ++ "{\n"
   s := s ++ "    %zf = stablehlo.constant dense<0.0> : tensor<f32>\n"
   s := s ++ "    %neginf = stablehlo.constant dense<0xFF800000> : tensor<f32>\n"
-  s := s ++ emitMultiScaleYoloLoss B scales tgtSSAs "%logits" 2.0 5.0 "%fl_loss" "%fl_grad" clsWeights
+  s := s ++ emitMultiScaleYoloLoss B scales tgtSSAs "%logits" 2.0 5.0 "%fl_loss" "%fl_grad" clsWeights clsFocalGamma
   s := s ++ s!"    return %fl_loss, %fl_grad : tensor<f32>, {concatTy}\n"
   s := s ++ "  }\n}\n"
   return s

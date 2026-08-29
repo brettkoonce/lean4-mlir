@@ -35,15 +35,26 @@ from anchor_loss_probe_check import np_forward, np_grad, make_data, anchors_for,
 CLSW = [0.5 + 0.25 * c for c in range(10)]
 
 PROBE = ".lake/build/bin/fpn-loss-probe"
-IREE_COMPILE = ".venv/bin/iree-compile"
+# The repo .venv is the PINNED JAX/cuDNN environment and must not gain an IREE
+# runtime — installing into it is what breaks every bf16 conv (see the pinned-env
+# note in the planning docs). Point IREE_COMPILE and the interpreter at a
+# throwaway venv holding a MATCHED iree-base-compiler/runtime pair:
+#   python3 -m venv /tmp/venv-iree && /tmp/venv-iree/bin/pip install numpy \
+#       iree-base-compiler==<v> iree-base-runtime==<v> \
+#       --find-links https://iree.dev/pip-release-links.html
+#   IREE_COMPILE=/tmp/venv-iree/bin/iree-compile /tmp/venv-iree/bin/python \
+#       scripts/fpn_loss_probe_check.py
+IREE_COMPILE = os.environ.get("IREE_COMPILE", ".venv/bin/iree-compile")
 
 
-def make_runner(B, A, grids, clsw=False):
+def make_runner(B, A, grids, clsw=False, clsfocal=False):
     td = tempfile.mkdtemp()
     mlir = os.path.join(td, "fpn_loss_gen.mlir")
     cmd = [PROBE, str(B), str(A), *[str(g) for g in grids], mlir]
     if clsw:
         cmd.append("--clsw")
+    if clsfocal:
+        cmd.append("--clsfocal")
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print(r.stdout, r.stderr); sys.exit("probe emit failed")
@@ -63,7 +74,7 @@ def make_runner(B, A, grids, clsw=False):
     return run
 
 
-def ms_forward_from_logits(logits, tgts, masks, grids, anchors, B, clsw=None):
+def ms_forward_from_logits(logits, tgts, masks, grids, anchors, B, clsw=None, clsgamma=0.0):
     """Split [B,Ntot] back per scale and sum the anchor losses — the exact numpy
     mirror of emitMultiScaleYoloLoss's forward."""
     A = len(anchors)
@@ -72,19 +83,19 @@ def ms_forward_from_logits(logits, tgts, masks, grids, anchors, B, clsw=None):
     for s, g in enumerate(grids):
         ln = A * P * g * g
         pred = logits[:, off:off + ln].reshape(B, A * P, g, g)
-        total += np_forward(pred, tgts[s], masks[s], g, g, anchors, clsw)
+        total += np_forward(pred, tgts[s], masks[s], g, g, anchors, clsw, clsgamma)
         off += ln
     return total
 
 
-def ms_grad_concat(preds, tgts, masks, grids, anchors, B, clsw=None):
+def ms_grad_concat(preds, tgts, masks, grids, anchors, B, clsw=None, clsgamma=0.0):
     parts = []
     for s, g in enumerate(grids):
-        parts.append(np_grad(preds[s], tgts[s], masks[s], g, g, anchors, clsw).reshape(B, -1))
+        parts.append(np_grad(preds[s], tgts[s], masks[s], g, g, anchors, clsw, clsgamma).reshape(B, -1))
     return np.concatenate(parts, axis=1)
 
 
-def check(B=2, A=3, grids=(8, 4, 2), seed=0, fd_samples=400, clsw=None):
+def check(B=2, A=3, grids=(8, 4, 2), seed=0, fd_samples=400, clsw=None, clsgamma=0.0):
     anchors = anchors_for(A)
     preds, tgts, masks = [], [], []
     for s, g in enumerate(grids):
@@ -93,12 +104,12 @@ def check(B=2, A=3, grids=(8, 4, 2), seed=0, fd_samples=400, clsw=None):
     logits = np.concatenate([preds[s].reshape(B, -1) for s in range(len(grids))], axis=1)
     Ntot = logits.shape[1]
 
-    run = make_runner(B, A, list(grids), clsw=clsw is not None)
+    run = make_runner(B, A, list(grids), clsw=clsw is not None, clsfocal=clsgamma > 0.0)
     loss, grad = run(logits, tgts)
 
-    ref = ms_forward_from_logits(logits, tgts, masks, grids, anchors, B, clsw)
+    ref = ms_forward_from_logits(logits, tgts, masks, grids, anchors, B, clsw, clsgamma)
     frel = abs(loss - ref) / max(abs(ref), 1e-9)
-    npg = ms_grad_concat(preds, tgts, masks, grids, anchors, B, clsw)
+    npg = ms_grad_concat(preds, tgts, masks, grids, anchors, B, clsw, clsgamma)
     gmax = np.abs(grad - npg).max()
 
     # (c) FD through the concat on box+cls positions (skip obj channel base+4).
@@ -122,12 +133,12 @@ def check(B=2, A=3, grids=(8, 4, 2), seed=0, fd_samples=400, clsw=None):
     for (b, p) in sample:
         lp = logits.copy(); lp[b, p] += hf
         lm = logits.copy(); lm[b, p] -= hf
-        fdv = (ms_forward_from_logits(lp, tgts, masks, grids, anchors, B, clsw)
-               - ms_forward_from_logits(lm, tgts, masks, grids, anchors, B, clsw)) / (2 * hf)
+        fdv = (ms_forward_from_logits(lp, tgts, masks, grids, anchors, B, clsw, clsgamma)
+               - ms_forward_from_logits(lm, tgts, masks, grids, anchors, B, clsw, clsgamma)) / (2 * hf)
         fd_err = max(fd_err, abs(grad[b, p] - fdv))
 
     ok = frel < 1e-4 and gmax < 1e-3 and fd_err < 1e-3
-    tagw = " clsw=ON" if clsw is not None else ""
+    tagw = (" clsw=ON" if clsw is not None else "") + (f" clsfocal=g{clsgamma:g}" if clsgamma > 0 else "")
     print(f"fpn-loss probe  B={B} A={A} grids={tuple(grids)} Ntot={Ntot} seed={seed}{tagw}")
     print(f"  emitted forward  vs numpy Σ-loss     : rel={frel:.2e}  {'PASS' if frel<1e-4 else 'FAIL'}")
     print(f"  emitted grad     vs numpy concat-grad: max={gmax:.2e}  {'PASS' if gmax<1e-3 else 'FAIL'}")
@@ -145,6 +156,11 @@ def main():
     for seed in (0, 3):
         ok &= check(B=2, A=3, grids=(8, 4, 2), seed=seed, clsw=CLSW)
     ok &= check(B=1, A=6, grids=(6, 4, 2), seed=4, clsw=CLSW)
+    # T1c: the class-focal path, both with and without the class weights, since
+    # the two multiply into the same per-cell scalar and a sign error in either
+    # would cancel in the product if only the combined arm were checked.
+    ok &= check(B=2, A=3, grids=(8, 4, 2), seed=7, clsw=None, clsgamma=2.0)
+    ok &= check(B=2, A=3, grids=(8, 4, 2), seed=8, clsw=CLSW, clsgamma=2.0)
     print("ALL PASS" if ok else "SOME FAILED")
     sys.exit(0 if ok else 1)
 

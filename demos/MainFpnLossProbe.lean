@@ -20,6 +20,8 @@ def main (args : List String) : IO Unit := do
   -- vector; scripts/fpn_loss_probe_check.py mirrors it in CLSW.
   let clsw : List Float :=
     if args.contains "--clsw" then (List.range 10).map (fun c => 0.5 + 0.25 * c.toFloat) else []
-  let mlir := MlirCodegen.fpnLossProbeModule B [g3, g4, g5] A clsw
+  -- `--clsfocal` turns on the T1c class focal at the RetinaNet γ=2.0.
+  let clsGamma : Float := if args.contains "--clsfocal" then 2.0 else 0.0
+  let mlir := MlirCodegen.fpnLossProbeModule B [g3, g4, g5] A clsw clsGamma
   IO.FS.writeFile outPath mlir
-  IO.eprintln s!"wrote {outPath}  (FPN loss probe B={B} A={A} grids=[{g3},{g4},{g5}]{if clsw.isEmpty then "" else " clsw=ON"}, {mlir.length} chars)"
+  IO.eprintln s!"wrote {outPath}  (FPN loss probe B={B} A={A} grids=[{g3},{g4},{g5}]{if clsw.isEmpty then "" else " clsw=ON"}{if clsGamma > 0.0 then " clsfocal=ON" else ""}, {mlir.length} chars)"
