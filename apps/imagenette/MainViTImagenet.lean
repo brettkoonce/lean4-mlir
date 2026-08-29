@@ -38,6 +38,11 @@ gone from the target name because it no longer distinguishes anything.
 def vitImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 128
+  -- ⭐ timm/DeiT init, matching the phase-2 reference run's `deit-init` recipe (blueprint §9.6).
+  -- Without it every transformer Linear is Glorot, which at ViT-Ti's d=192 is 3.6× wider than
+  -- timm's fixed 0.02, and the CLS token is 5× wider — the one axis §9.6 credits for reaching
+  -- the paper's number. Init is host-side, so this needs no re-render.
+  vitInit   := true
 
 /-- Entry point. Defaults to the **single-device** `adam128` variant rather than the four-replica
     one, matching `runResnet34Imagenet`: a DP default would make a plain invocation fail at the
@@ -58,8 +63,14 @@ def runViTImagenet (argv : List String) : IO Unit := do
   -- schedules; resuming across them fuses two LR curves silently. Without this knob a 300-epoch
   -- commitment makes the net unprobeable, which is what it was before 2026-08-12.
   let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD vitImagenetConfig.epochs
+  -- ⚠⚠ `emaDecay` IS NAMED, and it has to be. `trainAdamSched`'s default is **0.9999**, while
+  -- `vitTinyImagenetConfig.emaDecay` — the DeiT default the reference run used — is **0.99996**.
+  -- Positional args stop at `variant`, so an EMA variant launched without this line trains against
+  -- a shadow that averages ~4× faster than its reference's and reports it as the pair.
+  -- ⚠ Inert unless the variant selects EMA (`VerifiedVariant.emaOn`, i.e. a name starting "ema"),
+  -- so it costs the non-EMA renders nothing.
   vitImagenetVerified.toNet.trainAdamSched
     { vitImagenetConfig with batchSize := bs, epochs := epochs }
-    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant (emaDecay := 0.99996)
 
 def main (argv : List String) : IO Unit := runViTImagenet argv

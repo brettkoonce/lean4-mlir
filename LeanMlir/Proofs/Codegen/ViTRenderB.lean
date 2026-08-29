@@ -810,6 +810,35 @@ def vitDropFwdBanner : String :=
     (sd := true) (vbB := 128) (bf16 := true))
 #guard "vitin_adamdp128x4wxclipdropbf16_train_step" ==
   "vitin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16" ++ "_train_step"
+
+-- ── ⭐ THE FULL-RECIPE PAIR RENDER: EMA **AND** wx + clip + drop, bf16 ────────────────────────
+-- ⚠⚠ **THE MISSING COMBINATION, AND IT WAS MISSING RATHER THAN UNBUILDABLE.** EMA was rendered
+-- for this net back at v1.2c (`vitin_emadp128x4`, `ViTRender.lean`), at this exact 128×4 geometry
+-- and for this exact reason — but with ONLY `(ema := true)`, so `wdExclude`, `clip` and `sd` all
+-- fell to their `false` defaults. Picking that artifact to get EMA therefore silently gives up
+-- **gradient clipping**, which blueprint §9.6 measures as load-bearing for this net: without it
+-- ViT-Ti collapses to chance the moment warmup ramps past ~1.6e-4 and never recovers. Nobody
+-- would trade that for EMA knowingly, so the pair had no runnable artifact at all.
+--
+-- ⚠ It is one call, not new machinery: `vitAdamTrainStepFaithfulB` already takes all four flags,
+-- and `vitAdamVariant` already composes the name from all four (`ema` REPLACES the `adam` prefix,
+-- then `wx` ++ `clip` ++ `drop` append). The driver predicate already routes it —
+-- `VerifiedVariant.emaOn` is `startsWith "ema"`, and `emadp128x4wxclipdrop` does.
+--
+-- ⚠⚠ **EMA + dropPath had never been rendered together before this line.** EMA adds a FOURTH blob
+-- region and takes the scalar tail 3 → 5; dropPath adds 24 mask operands (12 blocks × 2 branches).
+-- Each is exercised alone. `tests/TestVitEmaDropRender.lean` is where that composition gets gated —
+-- a wrongly-packed region TRAINS and REPORTS A LOSS, which is `planning/ema.md`'s own defect.
+--
+-- ⭐ bf16 because the phase-2 reference run this pairs against is bf16 (§9.6): an f32 verified run
+-- would differ from it in PRECISION as well as in lowerer, and the comparison is about the lowerer.
+-- Same argument as the R50-2018 pair.
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4wxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
+    1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (bf16 := true))
+#guard "vitin_emadp128x4wxclipdropbf16_train_step" ==
+  "vitin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++ "bf16" ++ "_train_step"
 #guard ((Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").splitOn "do").length == 1
 #guard ((Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").splitOn "drop").length == 2
 

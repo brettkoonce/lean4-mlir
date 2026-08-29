@@ -1736,6 +1736,20 @@ lean_exe «fwd-tie» where
 lean_exe «convnext-fwd-b-tie» where
   root := `tests.TestConvNeXtFwdBTie
 
+/-- **EMA and stochastic depth in one ViT render: the artifact's arity is the driver's arity.**
+
+    `vitin_emadp128x4wxclipdropbf16` is the first render carrying both axes at once, and it exists
+    because the ImageNet ViT pair needs both (blueprint §9.6). `tests/TestVariantPredicates.lean`
+    pins the axis predicates against the variant NAME; this pins the committed artifact against
+    what those predicates make the driver pack — regions, scalar tail, drop-mask count, and the
+    arity identity that closes only if every region is a full `nP` wide.
+
+    ⚠ The failure it exists for is silent: `planning/ema.md` records that a wrongly-packed region
+    **trains and reports a loss**. No crash, no NaN — just a run optimising a misaligned view of
+    its own parameters. No GPU; a parse and three counts. -/
+lean_exe «vit-ema-drop-render» where
+  root := `tests.TestVitEmaDropRender
+
 /-- **ViT's batched-index forward, byte-tied against the committed artifact** (handoff §0.2 ▶3).
 
     The peer of `convnext-fwd-b-tie`, and the bar is STRICTER: ConvNeXt's batched chain differs from

@@ -170,6 +170,12 @@ structure VerifiedConfig where
   /-- Learning rate. DISPLAY ONLY — baked into `<slug>_train_step.mlir`; changing it
       here does not change training (re-render the MLIR to change lr). -/
   lr        : Float := 0.1
+  /-- timm/DeiT ViT weight init — the verified peer of `TrainConfig.vitInit`, i.e. of the
+      `deit-init` recipe the phase-2 reference run used (blueprint §9.6). Every weight at
+      σ = 0.02 except the patch-embed conv on PyTorch's `U(±1/√fan_in)`. Unlike `lr`, this is
+      NOT display-only: init is host-side, so the flag genuinely changes training and no
+      re-render is needed. Off by default — every other net keeps its seed reproducibility. -/
+  vitInit   : Bool := false
 
 namespace VerifiedNet
 
@@ -346,15 +352,36 @@ def mkSession (mlirPath : String) : IO LowererSession := do
     uniforms (Bates-3, ≈ normal) where JAX draws one uniform. **Variance is matched; shape is
     not.** torchvision itself uses a normal here, so neither side is canonical on that axis, and
     changing the sampler would move every net for a second-order reason. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
+private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
+    (vitInit : Bool := false) : IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
   | 1 => F32.const n.toUSize 1.0
   | 2 => F32.const n.toUSize 0.0
   | _ =>
-    -- `heInit`'s output variance is exactly `scale²` (three uniforms on [-½,½], summed, ×2·scale).
+    -- ⭐ **`vitInit` = timm/DeiT ViT init, the verified peer of `TrainConfig.vitInit`** on the JAX
+    -- side (`jax/MainVitImagenet.lean`'s `deit-init` recipe). Off by default, so every non-ViT net
+    -- is byte-identical and every recorded accuracy still reproduces from its seed.
+    --
+    -- The rule is uniform because timm's is: `init_weights_vit_timm` gives EVERY `nn.Linear`
+    -- `trunc_normal_(std=0.02)`, and the CLS token and positional embedding are already 0.02 on the
+    -- JAX side. So every weight lands at σ = 0.02 except the patch-embed `nn.Conv2d`, which timm
+    -- leaves on PyTorch's default `U(±1/√fan_in)` with `fan_in = ic·kh·kw` — σ = 1/√(3·fan_in) =
+    -- **0.02083** at ViT-Ti, 4% off the Linears rather than equal to them. Emitted exactly, not
+    -- rounded to 0.02, because the whole point of the flag is to stop approximating this.
+    --
+    -- ⚠ Why it matters: the default branch below is Glorot for rank-2, which scales as 1/√d against
+    -- timm's FIXED 0.02 and is therefore **3.6× too wide at ViT-Ti's d=192** (0.0722 vs 0.02), while
+    -- rank-1 (CLS) comes out at 0.102 — 5× wide. Blueprint §9.6 carries the measurement.
+    --
+    -- ⚠ DISTRIBUTION, as ever, is matched in variance only: `F32.heInit` sums three uniforms
+    -- (Bates-3, ≈normal) where the JAX side draws `random.normal`. Same σ, different shape — the
+    -- same deliberate gap the 2026-08-04 note below records for every other net.
     let variance :=
-      if dims.size == 4 then 2.0 / (dims[0]! * dims[2]! * dims[3]!).toFloat   -- He, fan-OUT
+      if vitInit then
+        if dims.size == 4 then 1.0 / (3.0 * (dims[1]! * dims[2]! * dims[3]!).toFloat)  -- Conv2d dflt
+        else 0.0004                                                                     -- 0.02²
+      else if dims.size == 4 then 2.0 / (dims[0]! * dims[2]! * dims[3]!).toFloat   -- He, fan-OUT
       else if dims.size == 2 then 2.0 / (dims[0]! + dims[1]!).toFloat         -- Glorot
       else 2.0 / (dims[0]!).toFloat                                           -- rank-1: unchanged
     F32.heInit seed.toUSize n.toUSize (Float.sqrt variance)
@@ -1441,8 +1468,10 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut parts : Array ByteArray := #[]
   let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
+  if cfg.vitInit then
+    IO.println "  ▸ INIT: timm/DeiT (σ=0.02 weights, patch-embed on PyTorch Conv2d default)"
   for spec in net.specs do
-    parts := parts.push (← mkParam seed spec.1 spec.2)
+    parts := parts.push (← mkParam seed spec.1 spec.2 cfg.vitInit)
     seed := seed + 1
   -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit
   -- vector of exact L2 norm r, before any training. This is the CONDITIONING

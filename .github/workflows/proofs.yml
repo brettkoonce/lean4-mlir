@@ -275,6 +275,7 @@ jobs:
               verified_mlir/vitin_adamdp128x2wxclipdrop_train_step.mlir \
               verified_mlir/vitin_adamwxclipdropbf16_train_step.mlir \
               verified_mlir/vitin_adamdp128x4wxclipdropbf16_train_step.mlir \
+              verified_mlir/vitin_emadp128x4wxclipdropbf16_train_step.mlir \
               verified_mlir/vitbin_adamdp128x4wxclipdrop_train_step.mlir \
               verified_mlir/vitbin_adamdp128x4wxclipdropbf16_train_step.mlir \
               verified_mlir/vitbin_adam128wxclipdrop_train_step.mlir \
