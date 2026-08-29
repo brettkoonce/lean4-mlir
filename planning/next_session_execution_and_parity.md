@@ -191,6 +191,60 @@ f32 XLA keeps convs in NCHW and there are no relayouts to remove.
 caught the artifact), `kbreak.py` (per-kernel breakdown), `hlo_tr.py` (transpose bytes by
 permutation), `gaps.py` (gap attribution).
 
+### 1.2c What it costs on this box, measured
+
+All four rows are 40-step steady-state probes (`LEAN_MLIR_MAX_STEPS`) in the real job env — 4× 4060
+Ti, `DEVS=0,2,3,4`, `PJRT_FFI_RESIDENT=1`, `SHIM_WORKERS=8`, `LEAN_MLIR_SKIP_EVAL=1`.
+
+| net | arm | ms/step | min/ep | total | |
+|---|---|---|---|---|---|
+| **EffNet-B0**<br>5,004 × 80 ep | f32 — today's job | 357 | 29.8 | **39.7 h** | |
+| | **bf16 + fix** | **274** | 22.9 | **30.5 h** | 1.30× |
+| **ConvNeXt-T**<br>10,009 × 300 ep | f32 — today's job | 209 | 34.9 | **174.3 h** | |
+| | bf16, pre-fix | 180 | 30.0 | 150.1 h | 1.16× |
+| | **bf16 + fix** | **144** | 24.0 | **120.1 h** | **1.45×** |
+| | + LN tweak *(projected, §1.5)* | ~130 | ~21.7 | ~108 h | ~1.61× |
+
+⛔ **This refutes `bf16_4gpu_end_to_end`'s "ConvNeXt is 157 h and NEITHER bf16 nor a bigger batch
+helps it."** Measured: f32 174.3 h → bf16+fix 120.1 h, a 54 h saving on one net.
+
+⚠ **B0's system gain (1.30×) is far below its bare-graph 2.50×** — suspect the producer. That job's
+shim runs AutoAugment + RandAugment per image on CPU and `enet-default-4gpu.conf` records a ~196 ms
+compute-only floor at `SHIM_WORKERS=8`; at 274 ms/step the graph may no longer be the binding
+constraint. Re-probe `SHIM_WORKERS` before quoting 30.5 h as the floor.
+
+▶ Two renders were added to get these numbers, both 3-line additions since `bf16` was already a
+parameter of `efficientnetAdamTrainStepFaithful`:
+`efficientnetin_emarmsdp64dropdobf16` (§4's missing production twin) and `efficientnet_adambf16`
+(the Imagenette peer).
+
+### 1.2d End-to-end training verification
+
+The numeric checks in §1.2 say the graph computes the same function; these say a net still *learns*.
+
+⭐ **CIFAR-8 bf16** (`cifar8-bf16-verified`, 40 epochs, an artifact this change really did alter —
+2,332 lines) — ⚠ the trainer is **NOT deterministic**, so one run per arm proves nothing. n = 3:
+
+| arm | epoch-40 test acc | mean |
+|---|---|---|
+| pre-change (`HEAD~1`) | 66.46 / 64.66 / 64.49 | 65.20 |
+| post-change | 63.76 / 65.02 / 64.58 | 64.45 |
+
+Overlapping distributions, 0.75 pt apart against a ~2 pt within-arm spread — **no detectable
+regression**. (Both sit below the f32 73.98%: that is the pre-existing CIFAR bf16 stability gap,
+see [[bf16-useless-at-cifar-shapes]], not this change.)
+
+⛔ **The Imagenette EfficientNet path is BROKEN, and it is NOT this change.** `efficientnet-verified`
+(variants `adam` and `adambf16`) sits at exactly `387/3925 = 9.859873%` — chance, one class, byte
+for byte identical every epoch for 10 epochs, both arms. **The pre-change artifact from `HEAD~1`
+does exactly the same**, and the old-vs-new numeric diff on that artifact is 6 differing words of
+12,103,093 at max |Δ| = 9.3e-10. So the graph is unchanged and the failure predates the commit.
+▶ Prime suspect is the eval, not the training: `VerifiedNets.lean:937` warns this net "needs a
+`_fwd_eval` artifact (frozen running stats — batch-BN eval is degenerate on a sorted validation
+split)", and a constant 1-in-10 on a sorted 10-class val split is exactly that signature. Worth an
+hour on its own — `RESULTS.md` still quotes 87.58% for this net, and that number cannot currently
+be reproduced.
+
 ### 1.3 The old "⛔ DEAD" list, corrected
 
 The list was right that the *wgrad transpose trick* is not the cost. It was wrong to conclude the
@@ -226,9 +280,64 @@ convs XLA also puts in NHWC (`b01f_o01i->b01f`, all 155), and it pays 0.043 GB. 
 and fan-out of the flattened value (mnv2 73% multi-use vs B0 77%). Unexplained. It does not block
 the fix — the fix is inert on mnv2 — but whatever it is may be the cheaper lever.
 
-**ConvNeXt is only partly fixed** (7.704 → 3.301 GB, 1.36×). Three of its seven flat shapes are
-still bracketed, blocked by channel-LN reshaping the flat tensor to rank-3 `[32,384,196]` rather
-than back to 4-D. Closing those should take it toward JAX's 63.94 ms.
+**ConvNeXt is only partly fixed** (7.704 → 2.434 GB, runner 1.25×), blocked by the channel-LN's
+rank-3 detour. That is now scoped as its own next-session item — **see §1.5**.
+
+---
+
+### 1.5 ▶ NEXT SESSION — the channel-LN tweak (ConvNeXt's remaining 2.36 GB)
+
+**Where it stands.** §1.2b took ConvNeXt 7.704 → 2.434 GB of transposes. The residue is *still*
+relayout, not something new:
+
+| permutation | bytes | what |
+|---|---|---|
+| `{0,3,1,2}` NHWC→NCHW | 1.724 GB | relayout |
+| `{0,2,3,1}` NCHW→NHWC | 0.638 GB | relayout |
+| `{3,1,2,0}` + others | 0.072 GB | the wgrad weight trick — leave it |
+
+`liftPointwise` cannot reach it because the channel-LN works at **rank-3**, not on the flat vector,
+so the widths either side of it never get a 4-D partner and stay NCHW-pinned.
+
+**What the renderer emits today** (`lnRowP`, plus 8 `.transposeF` in `ConvNeXtRender`):
+
+```
+flat [B, C*H*W] → reshape [B,C,HW] → transpose [0,2,1] → [B,HW,C]
+                → lnRow over the last dim → transpose [0,2,1] back → reshape → flat
+```
+
+134 of those `[0,2,1]` on the big activations — 60 at `32x384x196`, 30 at `32x96x3136`, 24 at
+`32x192x784`, 20 back. JAX does `jnp.mean(x, axis=1)` straight on NCHW: no transpose, one layout
+throughout. This is `MEASUREMENTS.md`'s **emit cause #2**, still open.
+
+**The change.** Add a batched tag — call it `lnChanP` — that normalises over the channel axis of the
+4-D tensor directly, and its backward peer:
+
+```
+%xn  = reshape %r : (ty [B, c*h*w]) -> ty [B,c,h,w]        -- folds once the neighbours are 4-D
+%smr = reduce(%xn) add across dimensions = [1] : -> ty [B,h,w]
+%sm  = broadcast_in_dim %smr, dims = [0,2,3] : (ty [B,h,w]) -> ty [B,c,h,w]
+   … mean / centre / variance the same way, reduce [1], broadcast [0,2,3] …
+%o   = reshape %xhat : (ty [B,c,h,w]) -> ty [B, c*h*w]
+```
+
+then switch `ConvNeXtRender` off the `reshape + transposeF + lnRowF + transposeF` composition.
+
+⚠ **This is a NEW OP, not a `liftPointwise` wrap** — that is the whole difference in cost. The 18
+pointwise arms needed no `den` arm and no tie, because retyping a pointwise block cannot change
+what it computes. `lnChanP` needs a constructor, a `den` arm, the `emitTok` case, and a tie test.
+The maths is unchanged (LN over the C values at each `(b,h,w)`); only the emitted axis order moves,
+so the existing `lnRow` VJP argument carries over through the reindex.
+
+**Projected payoff.** The two ConvNeXt points give **6.0 ms per GB** of transpose (7.704 GB → 120.58
+ms, 2.434 GB → 88.94 ms); the 288 GB/s model predicts 6.94. So 2.36 GB ≈ **14–16 ms** off the bare
+graph, 88.9 → ~75, and the runner delta has tracked the graph delta closely (36 ms vs 32 ms last
+time) ⇒ ~130 ms/step, **~108 h** for the 300-epoch run.
+⭐ That is the floor, not the ceiling: removing the rank-3 detour should also give the *adjacent*
+pointwise widths a 4-D partner, which `liftPointwise` would then pick up for free. Re-census after.
+
+**Order.** Do `lnChanP` forward + backward, re-render, census (`hlo_tr.py`), then the runner probe —
+the same loop §1.2b used. ConvNeXt-T is the only patient left; B0 is already at 0.045 GB.
 
 ---
 
@@ -313,7 +422,10 @@ wherever the transpose share is large.
 | ViT | `adamdp128x4wxclipdrop` | `…dropbf16`, `emadp128x4wxclipdropbf16` | ✅ exists |
 | R50 A3 | `lambaccdp8x64bce` | `lambaccdp8x64wxclipbcebf16` | ✅ exists |
 | **mnv2** | `rmsdp64` | ⛔ **none** — the bf16 renders are the **AdamW** family | render `rmsdp64bf16` |
-| **enet** | `emarmsdp64dropdo` | ⛔ **none** — `rmsdp64bf16` carries no EMA/drop/dropout | render `emarmsdp64dropdobf16` |
+| **enet** | `emarmsdp64dropdo` | ✅ `emarmsdp64dropdobf16` — **rendered 2026-08-29** | measured: 357 → **274 ms/step**, 39.7 → **30.5 h** (§1.2c) |
+
+⭐ Also added: `efficientnet_adambf16`, the Imagenette peer, as the cheap end-to-end check (§1.2d).
+mnv2's `rmsdp64bf16` is the one render still missing — the same 3-line addition.
 
 ⭐ **B0's long-open "bf16 is only 1.03–1.10×" is SOLVED** — and it *was* a render defect. The
 flat-activation relayouts are f32 and sit before the cast, so bf16 could not touch them. Unflattened,
@@ -346,9 +458,16 @@ B0's bf16 ratio is **2.50×** (§1.2).
 that box is producer-starved and `SHIM_WORKERS` is worth probing there (ares' "16 is worse than 8"
 was measured on a box that was not starved and does not transfer).
 
-⛔ **This whole table is PRE-FIX.** The enet and ConvNeXt rows cost graphs carrying the
-flat-activation relayouts §1.2 removes; on the bare graph B0 goes 135.53 → 59.07 ms and ConvNeXt
-120.58 → 88.94. Re-take both rows after the renderer change. mnv2, ViT and R50 are unaffected.
+⛔ **The enet and ConvNeXt rows above are PRE-FIX** — both cost graphs carrying the
+flat-activation relayouts §1.2b removes. Re-measured on this box after the landing, same probe
+method (§1.2c); mnv2, ViT and R50 are unaffected and their rows stand:
+
+| net | pre-fix | **post-fix** | min/ep | **total** |
+|---|---|---|---|---|
+| **enet** | 357 f32 @g256 | **274 bf16** @g256 | 22.9 | **30.5 h** (80 ep, was 39.7) |
+| **cnx** | 209 f32 / 180 bf16 @g128 | **144 bf16** @g128 | 24.0 | **120.1 h** (300 ep, was 174.3) |
+
+⚠ Both post-fix rows need the job conf flipped to the bf16 variant to be real — §6 item 2.
 
 ⚠ **The old §21 table costed the wrong graphs.** It probed mnv2 as `adamdp64` (AdamW, 195 ms) where
 the job runs RMSProp (167), and enet as bare `rmsdp64` (186) where the job runs
@@ -359,16 +478,20 @@ quoted from it.
 
 ## 6. Order of work
 
-0. ✅ **Track 1 — DONE** (2026-08-29). No idle existed; the cost was the flat-activation relayouts,
-   and a scratch pass removes them (§1.2). Nothing further is needed to *understand* it.
-1. **Land the unflatten in the renderer** — emit pointwise activations on the 4-D type (§1.2). This
-   is now the single largest item in the plan: **2.29× on B0, 1.36× on ConvNeXt**, inert on the
-   other three, and it is worth more than every bf16 item in §4 combined. Re-render, re-run the
-   verified-vs-JAX gates, then re-take §5's throughput table — the enet and ConvNeXt rows there are
-   pre-fix and will be badly wrong.
-2. **Track 3's cheap wins** — run the ViT EMA/bf16 job (artifacts ready, one conf to write); fix
+0. ✅ **Track 1 — DONE and LANDED** (2026-08-29). There was no idle; the cost was the
+   flat-activation NHWC↔NCHW relayouts, and the renderer now emits pointwise ops 4-D (§1.2b).
+   Measured: B0 bf16 bare graph **2.28×**, ConvNeXt runner **180 → 144 ms/step**, f32 unaffected,
+   CIFAR-8 bf16 training unregressed at n=3 (§1.2d).
+1. ▶ **The channel-LN tweak (§1.5)** — ConvNeXt's last 2.36 GB of relayout. Projected 144 → ~130
+   ms/step, 120.1 → ~108 h. This is the next session's target. ⚠ It is a NEW OP (`den` arm + tie),
+   not a `liftPointwise` wrap, so cost it accordingly.
+2. **Move the jobs to bf16** — the §1.2b win is **bf16-only** and every `scripts/jobs/*.conf`
+   artifact is f32 today, so the running jobs get nothing until their confs flip. enet's twin now
+   exists (39.7 → 30.5 h); ConvNeXt's already did (174.3 → 120.1 h). ⚠ Re-probe `SHIM_WORKERS` on
+   enet first — at 274 ms/step it may be producer-bound (§1.2c).
+3. **Track 3's cheap wins** — run the ViT EMA/bf16 job (artifacts ready, one conf to write); fix
    mnv2's baked label smoothing (a literal, and it is on the gradient path); compose ConvNeXt's EMA.
-3. **Track 2's two real items** — ConvNeXt's final LN + the mixup/ls fix, then mnv2's 350-epoch run.
-4. **bf16 gaps** (§4), re-measured on unflattened graphs — the stock ratios understate them.
-5. **Optional, cheap:** finish ConvNeXt's remaining three flat shapes, and settle why mnv2 escapes
-   (§1.4).
+4. **Track 2's two real items** — ConvNeXt's final LN + the mixup/ls fix, then mnv2's 350-epoch run.
+5. **The Imagenette EfficientNet eval bug** (§1.2d) — chance accuracy, pre-existing, and it means
+   `RESULTS.md`'s 87.58% for that net is currently unreproducible.
+6. **Optional:** mnv2's `rmsdp64bf16` render, and settle why mnv2 escapes the relayout (§1.4).

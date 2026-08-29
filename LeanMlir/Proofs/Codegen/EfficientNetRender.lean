@@ -1475,6 +1475,15 @@ end Proofs.StableHLO
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0")
 
+-- ⭐ The **Imagenette bf16 twin** of the row above — same 32/10/α/−α÷K literals, only the cast
+-- differs. It exists as the cheap END-TO-END sanity check on the bf16 + 4-D-pointwise path:
+-- Imagenette trains to a known 87.58% in 80 epochs (`RESULTS.md`), with a per-epoch trajectory to
+-- compare against, where an ImageNet run costs days.
+#eval IO.FS.writeFile "verified_mlir/efficientnet_adambf16_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+    "0.100000" "-0.010000" "32.0" (bf16 := true))
+#guard Proofs.StableHLO.enetAdamVariant 32 1 .adamw false false false true == "adambf16"
+
 -- The **DATA-PARALLEL** render (handoff §2e-bis), selected at run time by
 -- `LEAN_MLIR_VARIANT=adamdp`. Same graph, plus one `all_reduce(add)/N` per parameter gradient
 -- between the certified gradient and the certified AdamW triple: *certified gradient → trusted
@@ -1840,6 +1849,19 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64dropdo_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
+
+-- ⭐ The **bf16 twin of the production job's artifact** (`scripts/jobs/enet-default-4gpu.conf`),
+-- which `planning/next_session_execution_and_parity.md` §4 listed as the missing render. Same
+-- geometry and the same three regularisers as the f32 row above — only the cast differs — so the
+-- two are a like-for-like pair the job can be flipped between.
+-- ⚠ Worth far more than the ladder assumed: B0's bf16 ratio was 1.10× while the flat-activation
+-- NHWC↔NCHW relayouts were in the graph, because that traffic is f32 and sits BEFORE the cast.
+-- With the pointwise ops emitted 4-D (`liftPointwise`) the cast finally pays.
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64dropdobf16_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+    "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true)
+    (bf16 := true))
+#guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop true true true true == "emarmsdp64dropdobf16"
 
 -- The **2-GPU** peer: 2 replicas × batch 128 = the same global 256 =
 -- `efficientNetB0ImagenetConfig.batchSize`, so it keeps the geometry the 4×64 render above has and
