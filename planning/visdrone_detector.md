@@ -522,6 +522,44 @@ schedule decision is really an aug decision".
 4. **Then** the backbone (§8). Do not swap on an under-tuned recipe; the schedule
    and aug questions are cheaper and now partly answered.
 
+### ⭐ Class focal (T1c) — helps, but NOT the way it was predicted to (2026-08-29)
+
+`FPN_CLSFOCAL=γ` on top of the best config (aug, 12 ep, `FPN_CLSW=none`):
+
+| γ | decode | mAP@0.5 | ca-AP | recall |
+|---|---|---|---|---|
+| 0 | argmax | **0.1774** | 0.4285 | 0.6993 |
+| 1 | argmax | 0.1767 | 0.4322 | 0.7045 |
+| 2 | argmax | 0.1762 | 0.4409 | 0.7075 |
+| 0 | multilabel | 0.1909 | 0.4317 | 0.7430 |
+| 1 | multilabel | 0.1952 | 0.4349 | 0.7489 |
+| **2** | **multilabel** | **0.1961** | **0.4414** | 0.7485 |
+
+⚠ **The prediction was wrong and the measurement is worth more than the win.**
+Focal was chosen to recover rare-class AP where static weights failed. It does
+not do that: awning-tricycle top-1 is 13.4% at γ=0 and 13.4% at γ=2, tricycle
+32.2 → 33.8, and per-class mAP under the argmax decode is FLAT to slightly down
+(0.1774 → 0.1762). The class head's discrimination is unchanged — top-1
+70.50 → 70.07, top-3 93.74 → 93.77.
+
+**What actually improved is score CALIBRATION.** Class-agnostic AP rises
+monotonically with γ (0.4285 → 0.4322 → 0.4409) and so does recall
+(0.6993 → 0.7075), while class accuracy sits still. Down-weighting easy examples
+stops the model driving p_t to 1 on the cells it already has, which compresses
+the confident end of `obj·p_c` and spreads the uncertain end — a better RANKING
+of the same decisions.
+
+**That is why focal and multilabel are complementary rather than redundant.**
+Focal improves the probabilities; multilabel is the decode that reads all of them
+instead of only the argmax. Neither alone gets there — focal alone under argmax
+is flat (0.1762), multilabel alone is 0.1909, together 0.1961.
+
+✅ **Focal does avoid the failure that killed static weighting.** Detection counts
+stay sane: tricycle 7,419 → 8,597 across the γ ladder, against the static-weight
+ladder's 7,419 → **31,322**. The predicted mechanism — a dynamic weight that
+tracks p_t cannot buy recall with a permanent precision tax — held exactly. It
+just does not buy rare-class AP either.
+
 ### ⛔ The class weights are NET HARMFUL — turn them off (2026-08-29)
 
 `fpnClsWeights` (T1b, sqrt-inverse frequency) has been on since the arm was
@@ -575,9 +613,10 @@ number recorded before today are argmax. Replica-to-Lean, like for like, is
 
 ### The current best arm
 
-**aug, 12 epochs, `FPN_CLSW=none`, multilabel decode = mAP@0.5 0.1909.**
-+37.7% on the 0.1386 this thread resumed at. Argmax-to-argmax it is 0.1774,
-+28.0%. Cost is one 12-epoch run (~47 min on one 4060 Ti).
+**aug, 12 epochs, `FPN_CLSW=none`, `FPN_CLSFOCAL=2`, multilabel decode
+= mAP@0.5 0.1961.** +41.5% on the 0.1386 this thread resumed at. Argmax-to-argmax
+against the PyTorch replica's 0.1532 it is 0.1774, +15.8%. Cost is one 12-epoch
+run (~47 min on one 4060 Ti).
 
 ### ✅ Deployment: the correctness gate is CLEARED (fixed 2026-08-28)
 
