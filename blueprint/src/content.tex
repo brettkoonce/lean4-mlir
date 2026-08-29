@@ -9146,23 +9146,11 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 184 & 30.7 & $\sim$156.6 h (6.5 d) & TBD \\
-4$\times$ 3060 (CUDA)     & 161 & 26.9 & $\sim$137.4 h (5.7 d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & 131 & 21.9 & $\sim$112.4 h (4.7 d) & TBD \\
+4$\times$ 3060 (CUDA)     & 161 & 26.9 & --- & TBD \\
 \hline
 \end{tabular}
 \end{center}
-
-\noindent That is 10,009 steps per epoch, against the reference's 5,004.
-\textbf{One thing differs between this row and the phase-2 rows, and it is
-not the network}: the verified render's batch is 32 per device, so four
-replicas give a global 128 against phase 2's 256. Both still see the same
-1.28M images per epoch, which is why the minutes-per-epoch column compares
-even though the step counts do not. The batch is 32 because \texttt{cBS}
-is still a private constant in the renderer while \texttt{nClasses} became
-a parameter, which is a refactor rather than a limit. Precision no longer
-differs --- the verified renders gained a bf16 arm and the row above is
-measured on it --- so the remaining gap, about $2\times$ per epoch, is the
-lowerer.
 
 \noindent\textbf{[TODO: run \texttt{convnext-imagenet-verified}.]}
 
@@ -9240,16 +9228,16 @@ are parameter edits. On the verified side they are not the same job at all.
 \hline
 model & shape & params & graph, one card bs$32$: fp32 $\to$ bf16 \\
 \hline
-ConvNeXt-T & $9$ blocks, $96$ wide  & $28.6$\,M        & $157.9 \to 121.1$\,ms \;($1.30\times$) \\
-ConvNeXt-S & $27$ blocks, $96$ wide & $50{,}222{,}152$ & $268.4 \to 192.7$\,ms \;($\mathbf{1.39\times}$) \\
-ConvNeXt-B & $27$ blocks, $128$ wide& $88{,}589{,}416$ & $395.7 \to 294.3$\,ms \;($1.34\times$) \\
+ConvNeXt-T & $9$ blocks, $96$ wide  & $28.6$\,M        & $150.6 \to 68.5$\,ms \;($2.20\times$) \\
+ConvNeXt-S & $27$ blocks, $96$ wide & $50{,}222{,}152$ & $255.2 \to 105.3$\,ms \;($\mathbf{2.42\times}$) \\
+ConvNeXt-B & $27$ blocks, $128$ wide& $88{,}589{,}416$ & $378.6 \to 158.0$\,ms \;($2.40\times$) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Counts are \texttt{\#guard}ed against $50.22$\,M and $88.59$\,M. T and
-B ran as controls and returned their committed $157.8$ and $396.0$\,ms, which is
-what makes S's $1.39\times$ a measurement rather than a claim about itself.
+\noindent Every number in this section was measured in one session on
+4$\times$ RTX 4060 Ti (16\,GB, CUDA 12.9). Counts are \texttt{\#guard}ed against
+$50.22$\,M and $88.59$\,M.
 
 \medskip\noindent \textbf{What it costs to render: how many dimensions move, not
 how many parameters.} Depth is already a loop, so S --- twenty-two million
@@ -9258,12 +9246,13 @@ B's widening cost twenty-seven threaded literals for half as much again. That is
 the whole of what ``not the same job at all'' means here, and it is the opposite
 of what a parameter count predicts. \S\ref{sec:vit_sb} finds no such split.
 
-\medskip\noindent \textbf{What bf16 buys: S is the fastest of the three}, which
-``deeper costs more'' does not predict either. Depth adds blocks at widths bf16
-already suits, where B's widening moves every stage. \S\ref{sec:vit_sb} finds
-the same shape on ViT for the same reason. Note how much of it the trainer eats,
-though --- a $1.39\times$ graph is a $1.25\times$ run, because the shim feed and
-the all-reduce do not get faster.
+\medskip\noindent \textbf{What bf16 buys: the two large sizes convert better
+than the small one}, $2.42\times$ and $2.40\times$ against $2.20\times$, and
+depth versus width does not separate them --- S leads B by $0.02\times$, which is
+inside what the measurement resolves. \S\ref{sec:vit_sb} finds a real split on
+ViT; this net does not. Note how much of it the trainer eats: a $2.42\times$
+graph is a $1.80\times$ run, because the shim feed and the all-reduce do not get
+faster.
 
 \medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
 including \evalckptnote:
@@ -9273,19 +9262,18 @@ including \evalckptnote:
 \hline
 verified, 4 cards & global & steps/epoch & ms/step & 300 epochs \\
 \hline
-ConvNeXt-T & $128$ & $10{,}009$ & $217 \to 184$ & $184 \to 157$\,h \;($7.7 \to 6.5$\,d) \\
-ConvNeXt-S & $128$ & $10{,}009$ & $366 \to 292$ & $308 \to 247$\,h \;($12.8 \to 10.3$\,d) \\
-ConvNeXt-B & $128$ & $10{,}009$ & $534 \to 446$ & $449 \to 375$\,h \;($18.7 \to 15.6$\,d) \\
+ConvNeXt-T & $128$ & $10{,}009$ & $206 \to 131$ & $175 \to 112$\,h \;($7.3 \to 4.7$\,d) \\
+ConvNeXt-S & $128$ & $10{,}009$ & $345 \to 192$ & $291 \to 163$\,h \;($12.1 \to 6.8$\,d) \\
+ConvNeXt-B & $128$ & $10{,}009$ & $521 \to 301$ & $438 \to 254$\,h \;($18.2 \to 10.6$\,d) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent T and B are measured and S is derived, from a trainer cost that is a
-near-constant multiple of the graph ($1.37\times$/$1.35\times$ fp32,
-$1.519\times$/$1.516\times$ bf16) and reproduces T's and B's published totals to
-within $0.5$\,h. Two direct probes of S have since returned $368 \to 301$ and
-$367 \to 304$\,ms against the $366 \to 292$ derived here, so the model holds on
-this net. \S\ref{sec:vit_sb} is where it does not, and says why.
+\noindent All six are direct $40$-step probes against real ImageNet, through the
+job configs the runs would actually use. \textbf{Take the bf16 column as the cost
+of these runs} --- the configs still name the fp32 artifact, so flipping
+\texttt{LEAN\_MLIR\_VARIANT} to the bf16 twin is worth $63$, $128$ and $184$
+hours respectively, and every twin is already rendered.
 
 \medskip\noindent \textbf{The step count is what costs, and a bigger batch does
 not fix it.} That $10{,}009$ is double every other net in the book, and it is
@@ -9308,8 +9296,8 @@ run at all (\S\ref{sec:vit_sb}); here it crashes both bf16 arms where the
 default leaves them fine. The smaller graph failing while the larger one
 survives is the sign that whatever ran out was never the graph. The phase-2
 peers, at twice the batch and so half the steps, take $71.6$, $108.8$ and
-$166.5$ hours compute-only, so the ${\sim}2\times$ gap to the rows above is the
-batch and not the lowerer.
+$166.5$ hours compute-only, so the ${\sim}1.5\times$ gap to the bf16 rows above
+is the batch and not the lowerer.
 
 \chapter{Vision Transformer}
 \label{chap:attention}

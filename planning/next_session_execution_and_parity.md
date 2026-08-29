@@ -597,12 +597,29 @@ method (§1.2c); mnv2, ViT and R50 are unaffected and their rows stand:
 
 ⚠ Both post-fix rows need the job conf flipped to the bf16 variant to be real — §6 item 2.
 
-⚠⚠ **The ConvNeXt row is ITSELF now stale, low.** It was taken before §1.5's shape fix, on a graph
-still carrying 2.434 GB of collision relayout. The bare graph improved a further **1.24×** after it
-(84.69 → 68.02 ms), so the runner is due a re-probe; the 144 ms/step and 120.1 h above are an upper
-bound, not the figure. ConvNeXt-S and -B gain more (**1.46×**, **1.51×** on the bare graph) and have
-never had a runner probe at all. ▶ Re-take `cnx-default-4gpu` at `adamdpwxclipdropbf16` before
-quoting any ConvNeXt hour count.
+⭐⭐ **RE-PROBED 2026-08-29 after the shape fix — all three ConvNeXt sizes, both precisions, one
+session, 4× 4060 Ti, 40-step probes through the real job env.** The 144 ms/step row above is
+superseded. Hours are `ms × 10,009 × 300 / 3.6e6` (this doc's convention, eval+ckpt EXCLUDED; the
+job-conf headers include the extra ~3.1 h):
+
+| net | f32 (what the conf names) | bf16 pre-fix | **bf16 now** | flip is worth |
+|---|---|---|---|---|
+| **ConvNeXt-T** | 206 ms — 171.8 h | 144 ms — 120.1 h | **131 ms — 109.3 h** | 63 h |
+| **ConvNeXt-S** | 345 ms — 287.8 h | 243 ms — 202.7 h | **192 ms — 160.1 h** | 128 h |
+| **ConvNeXt-B** | 521 ms — 434.7 h | 379 ms — 316.1 h | **301 ms — 251.1 h** | 184 h |
+
+⭐ **The f32 arm is INERT and that was A/B'd, not assumed** — ConvNeXt-T 207 → 206, ConvNeXt-B
+528 → 521, same swap discipline as the bf16 pair. f32 keeps its convs in NCHW, so there is no
+layout to convert.
+
+⭐ **ConvNeXt-S and -B gain more than -T, in ratio AND in hours** (1.27× / 1.26× vs 1.10× on the
+runner), because the graph is a larger share of a bigger step. ⚠ The runner ratios are below the
+bare graph's (1.46× / 1.51× / 1.24×) — ~55 ms/step of -T's step is not the graph at all, and as the
+graph shrinks the shim feed and all-reduce become a larger fraction: the trainer step was ~1.52× the
+graph when §8.6 was written and is ~1.85× now.
+
+▶ Losses tracked step for step: -S bit-identical over the first three, -T and -B differing in the
+last bits (bf16 fusion order). ▶ `blueprint/src/content.tex` §8.5 and §8.6 carry these numbers now.
 
 ⚠ **The old §21 table costed the wrong graphs.** It probed mnv2 as `adamdp64` (AdamW, 195 ms) where
 the job runs RMSProp (167), and enet as bare `rmsdp64` (186) where the job runs
