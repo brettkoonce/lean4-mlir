@@ -9226,23 +9226,9 @@ ConvNeXt-B & $27$ blocks, $128$ wide& $88{,}589{,}416$ & $378.6 \to 158.0$\,ms \
 4$\times$ RTX 4060 Ti (16\,GB, CUDA 12.9). Counts are \texttt{\#guard}ed against
 $50.22$\,M and $88.59$\,M.
 
-\medskip\noindent \textbf{What it costs to render: how many dimensions move, not
-how many parameters.} Depth is already a loop, so S --- twenty-two million
-parameters heavier than T --- came free, with \emph{no} renderer work at all.
-B's widening cost twenty-seven threaded literals for half as much again. That is
-the whole of what ``not the same job at all'' means here, and it is the opposite
-of what a parameter count predicts. \S\ref{sec:vit_sb} finds no such split.
-
-\medskip\noindent \textbf{What bf16 buys: the two large sizes convert better
-than the small one}, $2.42\times$ and $2.40\times$ against $2.20\times$, and
-depth versus width does not separate them --- S leads B by $0.02\times$, which is
-inside what the measurement resolves. \S\ref{sec:vit_sb} finds a real split on
-ViT; this net does not. Note how much of it the trainer eats: a $2.42\times$
-graph is a $1.80\times$ run, because the shim feed and the all-reduce do not get
-faster.
-
 \medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
-including \evalckptnote:
+including \evalckptnote. Trainer steps, all measured on real ImageNet over $40$
+steps:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r@{}}
@@ -9255,36 +9241,6 @@ ConvNeXt-B & $128$ & $10{,}009$ & $521 \to 301$ & $438 \to 254$\,h \;($18.2 \to 
 \hline
 \end{tabular}
 \end{center}
-
-\noindent All six are direct $40$-step probes against real ImageNet, through the
-job configs the runs would actually use. \textbf{Take the bf16 column as the cost
-of these runs} --- the configs still name the fp32 artifact, so flipping
-\texttt{LEAN\_MLIR\_VARIANT} to the bf16 twin is worth $63$, $128$ and $184$
-hours respectively, and every twin is already rendered.
-
-\medskip\noindent \textbf{The step count is what costs, and a bigger batch does
-not fix it.} That $10{,}009$ is double every other net in the book, and it is
-what the $300$-epoch schedule really pays for. The obvious remedy fails on
-measurement rather than on memory: the block interior's cost per \emph{image} is
-flat from batch $8$ to $128$ ($1.03\times$ across that whole range), so doubling
-the batch halves the step count and doubles the step. Memory was never the
-constraint. \S\ref{sec:vit_sb} asks the same question of ViT and gets the
-opposite answer, because there the per-image cost does improve.
-
-\sqstatus{} Artifacts emit, shapes tie, counts are guarded, forty steps run
-under each size in both precisions. No accuracy, and the numeric ties against
-the JAX peers have not been run.
-
-\medskip\noindent \textbf{Launching it.} Both have job configs ---
-\texttt{cnxs-\allowbreak default-\allowbreak 4gpu} and
-\texttt{cnxb-\allowbreak default-\allowbreak 4gpu} --- \textbf{and both refuse
-to start if the allocator fraction is raised.} That setting is what lets ViT-B
-run at all (\S\ref{sec:vit_sb}); here it crashes both bf16 arms where the
-default leaves them fine. The smaller graph failing while the larger one
-survives is the sign that whatever ran out was never the graph. The phase-2
-peers, at twice the batch and so half the steps, take $71.6$, $108.8$ and
-$166.5$ hours compute-only, so the ${\sim}1.5\times$ gap to the bf16 rows above
-is the batch and not the lowerer.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
@@ -11063,23 +11019,18 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 163 &  6.8 & $\sim$37.1 h (1.5 d) & TBD \\
-4$\times$ 3060 (CUDA)     & 159 &  6.6 & $\sim$36.3 h (1.5 d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & $224 \to 153$ & $9.3 \to 6.4$ & $\sim$50 $\to$ $\sim$35 h \;($2.1 \to 1.5$ d) & TBD \\
+4$\times$ 3060 (CUDA)     & ---           & ---           & ---                                          & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent At global batch 512 that is 2,502 steps per epoch, which is
-the reference's own figure. \textbf{Nothing confounds this
-comparison.} The batch does \emph{not} differ, unlike Chapter~\ref{chap:layernorm}'s
-phase-4 row, where the render's smaller per-device batch confounded it a
-second way; and precision no longer differs either, since the verified
-renders gained a bf16 arm and the row above is measured on it. What that
-leaves is the one place in Part 1 where the verified row is the
-\emph{faster} of the two, at 6.8 minutes per epoch against phase 2's 7.6.
-It is also the fastest phase-4 epoch in Part 1, ahead of MobileNetV2's
-10.8 and ResNet-34's 18.6, though the 300-epoch schedule still makes it a longer
-run in total than Chapter~\ref{chap:residual}'s ninety.
+\noindent The columns are the two arms of \texttt{adamdp128x4wxclipdrop} at
+$128$ per device, so four cards give DeiT's own global $512$ and $2{,}502$ steps
+per epoch --- the reference's own figure. fp32 is the default; the run will be
+bf16, so read the right-hand column, and it will also carry EMA, which
+\texttt{vit-\allowbreak default-\allowbreak emabf16-\allowbreak 4gpu} names and
+which measures $151$\,ms --- one under the arm above, so the shadow is free.
 
 \noindent\textbf{[TODO: run \texttt{vit-imagenet-verified}.]}
 
@@ -11137,23 +11088,6 @@ recipe's $5\times10^{-4}$ is the rate that batch was set for --- which took four
 \texttt{\#eval} lines rather than a renderer feature, because the batch was
 never the obstacle.
 
-\medskip\noindent \textbf{What it costs to render: uniformly costly.} Where
-\S\ref{sec:convnext_sb} found a split between a free variant and a paid one, ViT
-has none to find: every variant moves $D$, so every variant moves dimension
-literals. \texttt{ViTRender.lean}, the per-example renderer, is still pinned at
-Tiny by roughly $154$ of them, so unlike ConvNeXt there is no Imagenette demo at
-either size.
-
-\medskip\noindent \textbf{What bf16 buys: ViT-S's $1.89\times$ is the largest
-payoff in the book}, ahead of ResNet-50's $1.66\times$ measured the same way.
-Tiny's matmuls are narrow enough to underuse the tensor cores even in bf16; S's
-$D = 384$ suits them; B pays a $346$\,MB \emph{fp32} all-reduce every step, a
-fixed cost in both arms. The one op where bf16 \emph{loses} --- the stem weight
-gradient, at $0.19\times$ for want of a bf16 kernel at a $209\times209$ window
---- is kept out of the emit at every size, which is why all three ratios exceed
-one. \S\ref{sec:convnext_sb} finds the same middle-size peak for the same
-reason.
-
 \medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
 including \evalckptnote. Trainer steps, all measured on real ImageNet over $40$
 steps:
@@ -11163,48 +11097,12 @@ steps:
 \hline
 verified, 4 cards & global & steps/epoch & ms/step & 300 epochs \\
 \hline
-ViT-Ti & $512$ & $2{,}502$ & $237 \to 168$   & $53 \to 38$\,h \;($2.2 \to 1.6$\,d) \\
-ViT-S  & $512$ & $2{,}502$ & $528 \to 325$   & $113 \to 71$\,h \;($4.7 \to 3.0$\,d) \\
-ViT-B  & $512$ & $2{,}502$ & $1381 \to 837$  & $291 \to 178$\,h \;($12.1 \to 7.4$\,d) \\
+ViT-Ti & $512$ & $2{,}502$ & $224 \to 153$   & $50 \to 35$\,h \;($2.1 \to 1.5$\,d) \\
+ViT-S  & $512$ & $2{,}502$ & $507 \to 296$   & $109 \to 65$\,h \;($4.5 \to 2.7$\,d) \\
+ViT-B  & $512$ & $2{,}502$ & $1369 \to 799$  & $289 \to 170$\,h \;($12.0 \to 7.1$\,d) \\
 \hline
 \end{tabular}
 \end{center}
-
-\noindent Re-probing Tiny and S alongside B gives $241 \to 166$ and $528 \to
-319$ against the committed rows, so all three sit on one basis. These are probes
-and not arithmetic: scaling Tiny's trainer step by the ratio it bears to its own
-graph time overestimates S by $19\%$, because the device figures are already
-four-replica and a trainer adds only the data feed, an additive constant near
-$65$\,ms at $128$ images per device. \S\ref{sec:convnext_sb}'s are
-single-device, where a multiplier is the right shape instead.
-
-\sqstatus{} The only accuracy calibration is this repo's ViT-Ti, and it is
-now $72.31\%$ against DeiT-Ti's $72.2\%$ --- the $1.9$-point recipe gap
-that used to sit here has closed (\S\ref{sec:vit_imagenet}). DeiT quotes
-$79.8\%$ for S and $81.8\%$ for B. Do not read a closed gap at Tiny as a
-closed gap at S and B: the largest single item behind it was a weight-init
-mismatch that scales as $1/\sqrt{d}$ and is therefore \emph{worst} at Tiny
---- $3.6\times$ there against $2.6\times$ at S and $1.8\times$ at B. The
-same fix is wired for all three (\texttt{vitInit}), but it has the least
-room to help on the two that have not run.
-
-\medskip\noindent \textbf{Launching it.} Both have job configs ---
-\texttt{vits-\allowbreak default-\allowbreak g512-\allowbreak 4gpu} and
-\texttt{vitb-\allowbreak default-\allowbreak g512-\allowbreak 4gpu} --- and they
-differ in one line. \textbf{B is the one net in the book that will not fit a
-default allocator}: PJRT's CUDA plugin reserves three quarters of a card, B's
-fp32 graph wants more, and left alone it dies on its first step. Raised to
-$0.97$ it runs at $93\%$ of what it then gets, and its driver refuses to start
-without the setting, since the error it prevents reads as a card being too small
-and B is the net where that reading is wrong. S's config does not raise it, and
-an early version did --- it looked like free headroom for a graph that already
-fits, and the same setting turns out to kill ConvNeXt's bf16 arms outright
-(\S\ref{sec:convnext_sb}). Raise it for a graph that does not otherwise fit;
-leave it alone for one that does. The phase-2 peers, same box at global $512$,
-cost $25.8$, $60.4$ and $146.1$ hours compute-only, and \textbf{B is the only
-one that is not a single forward}: it peaks at $11.41$ against that same default
-arena and dies, so it runs as $4\times128$ accumulation. Whether it too fits
-once the arena is raised has not been measured.
 
 \chapter{Bestiary of Architectures}
 \label{chap:bestiary}
