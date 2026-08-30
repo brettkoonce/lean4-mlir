@@ -186,6 +186,24 @@ jobs:
             echo "✅ emitter + $(echo $EXES | wc -w) exes built on \`$(cat lean-toolchain)\`"
           } >> $GITHUB_STEP_SUMMARY
 
+      - name: jax/generated/ drift guard (committed artifacts == what the source emits)
+        # The JAX half of what the proofs workflow does for verified_mlir/. That directory commits
+        # 233 rendered artifacts and diffs them against their renderer; the JAX path emitted the
+        # same class of object — the file that actually trains — into gitignored .lake/build, where
+        # nothing checked it and a warm cache served whatever was emitted last.
+        #
+        # ⛔ That gap ate a published number. generated_mobilenet_v2_imagenet_full.py sat dated
+        # Jun 22 while its source was fixed 2026-07-07 (ae0f40bb, labelSmoothing 0.1 -> 0.0); the
+        # blueprint's paper-faithful 350-epoch MNv2 result (71.44/90.34, 4c1cb1eb) was trained off
+        # the stale file. On its first run this guard found 33 of 78 artifacts behind three LANDED
+        # source fixes (4b765be7 mixup label smoothing, 1cd65734 BN decay, 4d79b49a convBnAct) —
+        # fixes that existed only in Lean and had reached no emitted file anywhere.
+        #
+        # ⚠ A STEP HERE, NOT ITS OWN JOB: this job already builds every exe with the right cache,
+        # and the guard needs exactly those binaries. It first landed as a separate job in
+        # proofs.yml, which duplicated this whole cold build for nothing.
+        run: scripts/regen_jax_generated.sh check
+
       - name: Per-net ImageNet shim wiring (handoff §0.9)
         # Every .imagenet net must stream the shim generated from ITS OWN reference recipe. This
         # was hardcoded to ResNet-34's for every net until 2026-08-02, and nothing failed — the
