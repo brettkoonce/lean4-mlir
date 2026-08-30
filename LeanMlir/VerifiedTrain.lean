@@ -188,6 +188,39 @@ structure VerifiedConfig where
       to `bnMomentum^(1/k)` per micro-batch, matching the reference's generated `_bn`. -/
   bnMomentum : Float := 0.99
 
+/-- **The 95% Wilson score interval on an accuracy**, as `lo–hi` in percentage points.
+
+    ⭐ Added 2026-08-30 because the eval line printed `3339/3925 = 85.070064%` — six significant
+    figures on a quantity a 3,925-image validation set resolves to about **one**. At p ≈ 0.85 and
+    n = 3925 the 95% half-width is ±1.11 pt, so all but the leading three digits were decoration,
+    and the ~1.3 pt epoch-to-epoch swings that get read as "the model moved" are inside it.
+
+    ⚠ **Wilson, not the normal approximation `p ± z·√(p(1−p)/n)`.** The normal form collapses to
+    **±0** at `correct = 0` or `correct = n` — it would print a *perfectly certain* 0.000000% on a
+    run that scored nothing, which is exactly the `LEAN_MLIR_SKIP_EVAL` failure the line below this
+    one already had to be taught to say out loud. Wilson stays finite there.
+
+    ⚠ It is the MEASUREMENT error only — how well 3,925 images pin this model's accuracy. It says
+    nothing about seed-to-seed training variance, which needs n runs, and it is the WRONG test for
+    comparing two models scored on the SAME set: that comparison is paired, so it wants McNemar
+    over `LEAN_MLIR_DUMP_CORRECT`'s per-example bitmaps, which is far more powerful. -/
+def wilson95 (correct nEval : Nat) : String :=
+  if nEval == 0 then "n/a" else
+  let n := nEval.toFloat
+  let p := correct.toFloat / n
+  let z := 1.959964
+  let d := 1.0 + z * z / n
+  let c := (p + z * z / (2.0 * n)) / d
+  let h := (z / d) * Float.sqrt (p * (1.0 - p) / n + z * z / (4.0 * n * n))
+  -- ⚠ Formatted from INTEGER hundredths, not `toString` on a Float: Lean prints a Float at six
+  -- decimals, so `s!"{(x*10000.0).round/100.0}"` would emit `83.920000–86.150000` — the very
+  -- false precision this function exists to remove, reintroduced by the printer.
+  let pct := fun (x : Float) =>
+    let y := if x < 0.0 then 0.0 else if x > 1.0 then 1.0 else x
+    let r := (y * 10000.0).round.toUInt64.toNat
+    s!"{r / 100}.{if r % 100 < 10 then "0" else ""}{r % 100}"
+  s!"{pct (c - h)}–{pct (c + h)}"
+
 /-- The weight `F32.ema` puts on the NEW batch, i.e. `1 − decay`, given the accumulation
     factor: `some k` on an `acc` variant (the EMA fires once per MICRO-batch, so the decay is
     k-th-rooted for k chained updates to compose to one `bnMomentum`/optimizer-step update),
@@ -2141,6 +2174,23 @@ gate's control, not a configuration.")
     let evalResident := (net.paramShapes.size + (if useRunning then 2 * net.bnChannels.size else 0)).toUSize
     let mut correct := 0
     let mut correct5 := 0
+    -- ▶ `LEAN_MLIR_DUMP_CORRECT=<prefix>` writes one byte per validation image, 1 = top-1 correct,
+    -- in eval order, to `<prefix>_e{N}.bin`. Unset ⇒ not accumulated and not written, so the
+    -- default path is byte-identical.
+    --
+    -- ⭐⭐ **WHY A BITMAP AND NOT JUST THE SCALAR.** Two models scored on the SAME fixed validation
+    -- set are a PAIRED comparison, and independent confidence intervals throw away almost all of
+    -- the information in it. `wilson95` puts ±1.11 pt on a single Imagenette number, which makes
+    -- most interesting gaps look like noise; McNemar's test over these bitmaps looks only at the
+    -- images where the two models DISAGREE, and resolves the same gap comfortably. Worked example:
+    -- R50-A3's headline 77.43 vs the reference's 77.22 is 0.21 pt — **0.79σ** as an unpaired
+    -- comparison, i.e. not significant as stated — but it is 105 net label flips out of 50,000,
+    -- which McNemar calls significant as long as the two models agree on ≳94% of images. The
+    -- scalar cannot answer that question and the bitmap can, at 50 KB per eval.
+    -- ⚠ It is a measurement about these two TRAINED MODELS, not about the recipe: "does this
+    -- architecture change help" is a statement about the seed distribution and still needs n runs.
+    let dumpCorrect := (← IO.getEnv "LEAN_MLIR_DUMP_CORRECT")
+    let mut correctBits : ByteArray := ByteArray.empty
     for bi in [0:(if skipEval then 0 else nbt)] do
       -- ⚠ `evalD0`, not `d0`: `evalImg` was drained at the EVAL width, so slicing it at the TRAIN
       -- width would stride through the buffer wrongly from the second row on (RSB-A3: 224² val
@@ -2157,6 +2207,8 @@ gate's control, not a configuration.")
         let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
         let lbl  := F32.readLabel evalLbl (bi * evalBs + j)
         if pred == lbl then correct := correct + 1
+        if dumpCorrect.isSome then
+          correctBits := correctBits.push (if pred == lbl then 1 else 0)
         -- top-5 by the label's RANK, matching the reference's `sum(logits > true_logit) < 5`.
         -- Free: it reads the same logits row already on the host, and it is the metric the
         -- reference's headline is quoted by (72.02% top-1 / 90.62% top-5), which this side could
@@ -2173,7 +2225,14 @@ gate's control, not a configuration.")
     if skipEval then
       IO.println s!"  epoch {ep + 1}: eval SKIPPED (LEAN_MLIR_SKIP_EVAL) — no accuracy was measured"
     else
-      IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%"
+      -- ⚠ The CI is APPENDED, never woven into the existing fields: `blueprint/src/content.tex`
+      -- quotes these lines verbatim and every `runs/*/` log is read by eye against that format.
+      IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%  [95% CI {wilson95 correct nEval}]"
+      match dumpCorrect with
+      | some pfx =>
+          IO.FS.writeBinFile s!"{pfx}_e{ep + 1}.bin" correctBits
+          IO.println s!"    per-example top-1 bitmap -> {pfx}_e{ep + 1}.bin ({correctBits.size} bytes)"
+      | none => pure ()
     (← IO.getStdout).flush
     IO.FS.writeBinFile ckptPath thetamv
     IO.FS.writeFile epPath (toString (ep + 1))
@@ -2309,6 +2368,12 @@ adds a 4th region and the EMA shadow a 5th."
   let fwdShapes := net.shapesBA
   let mut correct := 0
   let mut correct5 := 0
+  -- ▶ `LEAN_MLIR_DUMP_CORRECT=<prefix>` -> `<prefix>.bin`, one byte per val image (1 = top-1
+  -- correct), in eval order. ⭐ THIS is the site McNemar wants: score two committed checkpoints,
+  -- then compare their bitmaps. θ never changes here, so the bitmap is a pure function of the
+  -- checkpoint and the val set — re-scoring gives the identical file.
+  let dumpCorrect := (← IO.getEnv "LEAN_MLIR_DUMP_CORRECT")
+  let mut correctBits : ByteArray := ByteArray.empty
   for bi in [0:nbt] do
     let xb := F32.sliceImagesPad evalImg (bi * evalBs) evalBs evalD0 nEval
     -- Hold the parameters on device across every batch — one push, not `nbt` of them. `gen` is a
@@ -2320,13 +2385,20 @@ adds a 4th region and the EMA shadow a 5th."
       let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
       let lbl  := F32.readLabel evalLbl (bi * evalBs + j)
       if pred == lbl then correct := correct + 1
+      if dumpCorrect.isSome then
+        correctBits := correctBits.push (if pred == lbl then 1 else 0)
       if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
         correct5 := correct5 + 1
   let acc := correct.toFloat / nEval.toFloat * 100.0
   let acc5 := correct5.toFloat / nEval.toFloat * 100.0
   -- ⭐ Printed in the SAME shape as the in-training line, so the equality gate is a literal
   -- comparison of two strings rather than an arithmetic one.
-  IO.println s!"  checkpoint: acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%"
+  IO.println s!"  checkpoint: acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%  [95% CI {wilson95 correct nEval}]"
+  match dumpCorrect with
+  | some pfx =>
+      IO.FS.writeBinFile s!"{pfx}.bin" correctBits
+      IO.println s!"    per-example top-1 bitmap -> {pfx}.bin ({correctBits.size} bytes) — pair two of these with scripts/mcnemar.py"
+  | none => pure ()
   if nEval != 50000 && net.data == .imagenet then
     IO.println s!"  ⚠ val is {nEval} of ImageNet's 50,000 — this is NOT over timm's denominator"
   (← IO.getStdout).flush
