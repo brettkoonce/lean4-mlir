@@ -8099,45 +8099,26 @@ which takes the count from 4,020,358 to \textbf{5,288,548}. That second
 number is B0's canonical $5.29$M, the count the correctly-sized squeeze
 restores.
 
-\medskip\noindent\textbf{This is the first chapter whose phase-4 row could
-be measured rather than estimated.} The full paper recipe is already
-rendered, and it is rendered data-parallel:
-\texttt{efficientnetin\_emarmsdp64dropdo\_train\_step.mlir} carries EMA,
-RMSProp, the four-way gradient all-reduce, stochastic depth and
-classifier dropout in one graph. Unlike the MobileNetV4 case
-Chapter~\ref{chap:depthwise} closes on, this net's collectives are gated
-rather than trusted, and by two gates rather than one.
-\texttt{tests/TestEfficientNetDpCheck.lean} pins the data-parallel
-forward bit-exactly against its single-device peer. That gate hands both
-replicas the same rows, so it is structurally blind to a shard-offset
-bug, and the \texttt{shard-check} row for \texttt{efficientnet} closes
-exactly that hole: it gives the replicas genuinely different data and
-checks $\mathrm{DP}([x_A|x_B])$ against the mean of two single-device
-steps.
+\medskip\noindent\textbf{Where this differs from the paper.} The recipe is
+RMSProp $\rho\,0.9$ / $\mu\,0.9$ / $\varepsilon\,10^{-3}$, lr $0.256$ at batch
+$4096$ (so $0.016$ at $256$), weight decay $10^{-5}$, exponential decay
+$\times 0.97$ every $2.4$ epochs after a five-epoch warmup, dropout $0.2$,
+drop-connect $0.2$, AutoAugment, label smoothing $0.1$, EMA $0.9999$, BN momentum
+$0.99$, 350 epochs. All of it is carried, in both phases, including the two
+places the TensorFlow original differs from a naive port: $\varepsilon$ goes
+\emph{inside} the square root ($g/\sqrt{s+\varepsilon}$, not
+$g/(\sqrt{s}+\varepsilon)$), and the mean-square accumulator starts at $1.0$
+rather than $0$. Drop-connect is a linear ramp over blocks, as the official
+implementation does it, and the EMA shadows the BN buffers as well as the
+weights.
 
-\medskip\noindent\textbf{The variant name is two independent axes, and
-that has bitten once.} The optimizer axis and the EMA axis are spelled
-separately, so RMSProp-with-EMA is \texttt{emarms}, which does not
-\emph{begin} with \texttt{rms}. A driver that tested the variant with a
-prefix rather than a substring classified all six \texttt{emarms}
-artifacts as non-RMSProp and handed them AdamW's $10^{-3}$ and a cosine
-schedule, while the shared trainer's own test, which is a substring,
-correctly initialized the RMSProp mean-square to $1.0$. The result was a
-run with RMSProp's state, AdamW's learning rate and the wrong schedule,
-which descends and prints an entirely normal-looking log.
-\texttt{tests/TestVariantPredicates.lean} is the table of these
-collisions and this was its first entry.
-
-\medskip\noindent\textbf{The schedule is 350 epochs because the run it
-has to match is.} The phase-2 result this net is measured against is the
-paper-faithful 350-epoch tier at $76.80\%$, and \texttt{totalSteps} is
-what the schedule anneals over, so 80 against 350 is a different
-learning-rate curve end to end rather than a shorter version of the same
-one. There is a second reason here that MobileNetV2 did not have: no
-momentum render exists for \texttt{efficientnetin} at all. The committed
-variants are the AdamW family and the RMSProp family, so the 350-epoch
-RMSProp tier above is the only phase-2 number these artifacts can be
-pointed at.
+\medskip\noindent\textbf{One difference is known and open: batch-norm
+$\varepsilon$ is $10^{-5}$ here against the TF reference's $10^{-3}$.}
+\texttt{\_bn(..., eps=1e-5)} in the emitted phase-2 code, and $147$ splat
+constants of \texttt{1.0e-5} in the phase-4 render --- so the two phases agree
+with each other and both differ from the paper. It is unquantified: nobody has
+run the $10^{-3}$ arm. Phase 2 scores $76.80\%$ / $93.26\%$ against the paper's
+$77.1$ / $93.3$, and that $-0.3$ is left unattributed rather than pinned on this.
 
 \medskip\noindent\textbf{What it has not done is run.} No phase-4
 ImageNet result exists for this network, which is why every accuracy
@@ -8149,19 +8130,19 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 181 & 15.1 & $\sim$91.7 h (3.8 d) & TBD \\
-4$\times$ 3060 (CUDA)     & 151 & 12.6 & $\sim$77.1 h (3.2 d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & 280 & 23.4 & $\sim$139.9 h (5.8 d) & TBD \\
+4$\times$ 3060 (CUDA)     & --- & --- & --- & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Set that against the $\sim$8.6 minutes per epoch the phase-2
-350-epoch row reports on the same four cards. \textbf{The precision
-difference that used to explain this gap is gone}: the verified renders
-now carry a bf16 arm, and the row above is measured on it, so both
-columns are bf16 over the same architecture. Roughly $1.8\times$ per
-epoch survives that change. What is left is the lowerer, not the cast
-and not the network.
+\noindent That row is \texttt{emarmsdp64dropdo} in bf16 --- EMA, stochastic
+depth and classifier dropout --- which is the artifact
+\texttt{enet-\allowbreak default-\allowbreak 4gpu} names and therefore the graph
+this run would actually train. Set it against the $\sim$8.6 minutes per epoch the
+phase-2 350-epoch row reports on the same four cards: both are bf16 over the same
+architecture, so the ${\sim}2.7\times$ per epoch that remains is the lowerer, not
+the cast and not the network.
 
 \noindent\textbf{[TODO: run \texttt{efficientnet-imagenet-verified}.]}
 
