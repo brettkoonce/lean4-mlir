@@ -512,10 +512,55 @@ config. Ranked by (likely points) ÷ (cost).
 | net | paper | ours | gap | what is left |
 |---|---|---|---|---|
 | **ViT-Ti** | 72.2 / 91.1 | **72.31 / 91.12** | **+0.1 ✅** | `default` recipe still Xavier — collapse it into `deit-init` so nobody quotes the wrong arm |
-| **EffNet-B0** | 77.1 / 93.3 | 76.80 / 93.26 | −0.3 | BN eps 1e-5 vs the TF reference's 1e-3 `[unverified — one grep of timm]` |
+| **EffNet-B0** | 77.1 / 93.3 | 76.80 / 93.26 | −0.3 | ⭐⭐ **the JAX stem and head ran ReLU where the net is swish** — ✅ fixed 2026-08-30, so this cell is stale. Plus BN eps 1e-5 vs the TF reference's 1e-3 `[unverified — one grep of timm]` |
 | **ConvNeXt-T** | 82.1 | 81.10 / 95.37 | −1.0 | **no final LayerNorm between GAP and head** (paper is `GAP → LN → Linear`; re-confirmed in the emitted Python). Plus the ls=0 defect above. ~0.8 pt is unattributed after antialias/test-crop were spent |
 | **R50 A3** | 78.1 | 77.22 | −0.9 | Ghost-BN (accum micro-steps normalise over 512, not 2048; `true-2048` needs ~80 GB, unrun); BN momentum 0.99 vs 0.9; BCE target thresholding `[check timm's bce_target_thresh default]` |
-| **mnv2** | 72.0 | 68.77 @ 90ep | −3.23 | **the schedule** — `full` (350 ep) exists and has never run; LR 0.045 unscaled at bs256. The published number also used an offline post-hoc EMA the trainer does not do, and predates the ls→0 fix |
+| **mnv2** | 72.0 | 68.77 @ 90ep | −3.23 | ⭐⭐ **the JAX stem and head ran ReLU where the net is ReLU6** — ✅ fixed 2026-08-30, so this cell is stale. Plus **the schedule** — `full` (350 ep) exists and has never run; LR 0.045 unscaled at bs256. The published number also used an offline post-hoc EMA the trainer does not do, and predates the ls→0 fix |
+
+⭐⭐ **✅ FIXED 2026-08-30 — TWO JAX references ran the wrong activation on their stem and head
+convs, and the second one was found by auditing for the first.** `Types.lean:378` defaults `NetSpec.convBnAct := .relu`; `jax/MainEfficientNet.lean:14`
+(the **Imagenette** B0) sets `.swish`, and `jax/MainEfficientNetImagenet.lean:14` — the ImageNet one,
+which is the phase-2 reference behind **76.80 / 93.26** — never got the same line. Verified in the
+emitted Python: `generated_efficientnet_b0.py` has `swish` at both sites, and
+`generated_efficientnet_b0_imagenet.py` has `jax.nn.relu` (lines 1595 and 1630).
+▶ **Three consequences.** (1) The fix is one line, and `Codegen.lean:2107`'s own comment says this
+emitter *"was an unconditional `jax.nn.relu(x)` … EfficientNet's was ReLU where the net is swish"* —
+so the fix was made and applied to one of the two specs. (2) It is a plausible share of the −0.3.
+(3) ⚠⚠ **B0's phase-2 ↔ phase-4 comparison is not like-for-like**: the VERIFIED render is swish
+throughout (194 `stablehlo.logistic`, **zero** `stablehlo.maximum`), i.e. the port is more
+paper-faithful than the reference it is scored against.
+⛔ **`scripts/enet_forward_tie.py` cannot catch this** — it ties the verified render against
+`generated_efficientnet_b0.py`, the Imagenette file, which is the one that is already correct.
+A tie that green-lights the net whose twin has the defect is testing the wrong pair.
+
+⭐⭐ **AND THE SAME OMISSION HIT MobileNetV2.** Auditing `convBnAct` across all 25 `NetSpec`s: only
+two specs in the repo set it at all, and in **both** cases the Imagenette twin has the line and the
+ImageNet one does not.
+
+| spec | should be | was emitting | twin that had it right |
+|---|---|---|---|
+| `efficientNetB0Imagenet` | `.swish` | `jax.nn.relu` | `efficientNetB0` |
+| `mobilenetV2Imagenet` | `.relu6` | `jax.nn.relu` | `mobilenetV2` |
+
+Both verified renders were already correct — B0 is 194 `stablehlo.logistic` / **zero**
+`stablehlo.maximum`; MNv2 is 35 `maximum` paired with 35 `minimum`, the ReLU6 clamp, at the
+32×112×112 stem included. ⚠ **MobileNetV2 is the net with the largest paper gap in the fleet**
+(−3.23, 68.77 @ 90 ep vs 72.0) and the schedule was the only suspect on the list.
+
+**✅ Both fixed**, one line each; regenerated and diffed to exactly two lines per file (the stem and
+the 1×1 head), shims **byte-identical** (`generateShim` emits the data pipeline, which `convBnAct`
+cannot reach), both trainers parse and run a forward pass.
+
+▶ **Also added: `--emit`** (`jax/Jax/Runner.lean`), the counterpart of the existing `--shim`.
+`runJax` writes the trainer and then immediately spawns python on it, so before this the only way
+to refresh a `generated_*.py` after a spec change was to start a real ImageNet run and race a
+timeout against it.
+
+⚠⚠ **BOTH PHASE-2 NUMBERS ARE NOW REFERENCES FOR A NET THE CODE NO LONGER EMITS.** EfficientNet's
+**76.80 / 93.26** and MobileNetV2's **68.77** were trained with ReLU stems and heads. They are not
+wrong as history, but they no longer describe what `lake exe … ` will train, and the phase-4 rows
+they are compared against never had the defect. ▶ Re-running them is the only way to know what the
+fix is worth; until then treat both phase-2 cells as **stale, direction unknown**.
 
 ▶ **Highest value here is mnv2's 350-epoch run and ConvNeXt's final LN + ls fix.** Everything else
 is sub-0.5 pt or already closed.
@@ -563,7 +608,7 @@ wherever the transpose share is large.
 | ViT | `adamdp128x4wxclipdrop` | `…dropbf16`, `emadp128x4wxclipdropbf16` | ✅ exists |
 | R50 A3 | `lambaccdp8x64bce` | `lambaccdp8x64wxclipbcebf16` | ✅ exists |
 | **mnv2** | `rmsdp64` | ⛔ **none** — the bf16 renders are the **AdamW** family | render `rmsdp64bf16` |
-| **enet** | `emarmsdp64dropdo` | ✅ `emarmsdp64dropdobf16` — **rendered 2026-08-29** | measured: 357 → **274 ms/step**, 39.7 → **30.5 h** (§1.2c) |
+| **enet** | `emarmsdp64dropdo` | ✅ `emarmsdp64dropdobf16` — **rendered 2026-08-29** | measured 2026-08-30 post-fix: **188 → 107 ms/step**, 91.5 → **52.1 h** over 350 ep (§6.1) |
 
 ⭐ Also added: `efficientnet_adambf16`, the Imagenette peer, as the cheap end-to-end check (§1.2d).
 mnv2's `rmsdp64bf16` is the one render still missing — the same 3-line addition.
@@ -581,8 +626,12 @@ B0's bf16 ratio is **2.50×** (§1.2).
 | **R50 RSB-A3** | 78.1 | 77.22 ✅ | **77.43 ✅ done** — ahead of the reference |
 | **ViT-Ti / DeiT-Ti** | 72.2 / 91.1 | **72.31 / 91.12 ✅** | ◀ next run, artifacts ready |
 | **ConvNeXt-T** | 82.1 | 81.10 / 95.37 | TBD |
-| **EfficientNet-B0** | 77.1 / 93.3 | 76.80 / 93.26 | TBD |
-| **MobileNetV2** | 72.0 | 68.77 @ 90ep (350ep unrun) | TBD |
+| **EfficientNet-B0** | 77.1 / 93.3 | 76.80 / 93.26 ⚠ stale | TBD |
+| **MobileNetV2** | 72.0 | 68.77 @ 90ep ⚠ stale (350ep unrun) | TBD |
+
+⚠⚠ **The two ⚠ stale phase-2 cells were trained with ReLU stems and heads** where the nets are
+swish / ReLU6 — a JAX-side spec omission fixed 2026-08-30 (§2.1). Both need re-running before they
+describe what the code now emits; the phase-4 column never had the defect.
 
 **Throughput, measured on this box 2026-08-29** (4× 4060 Ti, AER-clean four, real ImageNet,
 600-step steady state, job-accurate variants):
@@ -609,6 +658,14 @@ method (§1.2c); mnv2, ViT and R50 are unaffected and their rows stand:
 | **cnx** | 209 f32 / 180 bf16 @g128 | **144 bf16** @g128 | 24.0 | **120.1 h** (300 ep, was 174.3) |
 
 ⚠ Both post-fix rows need the job conf flipped to the bf16 variant to be real — §6 item 2.
+
+⛔⛔ **THE ENET ROW IS SUPERSEDED TWICE OVER — see §6.1b for the live numbers.** Its 274/22.9/30.5 h
+costed the wrong variant (bare `rmsdp64bf16`, not the job's `emarmsdp64dropdobf16`) *and* the wrong
+epoch count (80, not 350); the job-accurate figure was **281 ms**, and after the `dropoutMask` fix
+(§6.1) it is **107 ms — 8.92 min/ep, 52.1 h over 350 epochs, 1.00× its JAX reference**. Every enet
+throughput number written before 2026-08-30 afternoon is void.
+⚠ The **cnx** row's 144 ms is likewise superseded by §1.5's 131 and then by §6.1b's 142 — take
+§6.1b's, which was measured in the same session as everything it is compared against.
 
 ⭐⭐ **RE-PROBED 2026-08-29 after the shape fix — all three ConvNeXt sizes, both precisions, one
 session, 4× 4060 Ti, 40-step probes through the real job env.** The 144 ms/step row above is
@@ -643,23 +700,230 @@ quoted from it.
 
 ## 6. Order of work
 
-0. ✅ **Track 1 — DONE and LANDED** (2026-08-29). There was no idle; the cost was the
-   flat-activation NHWC↔NCHW relayouts, and the renderer now emits pointwise ops 4-D (§1.2b).
-   Measured: B0 bf16 bare graph **2.28×**, ConvNeXt runner **180 → 144 ms/step**, f32 unaffected,
-   CIFAR-8 bf16 training unregressed at n=3 (§1.2d).
-1. ✅ **DONE — and it was not the channel-LN (§1.5).** The residue was a width COLLISION in
-   §1.2b's shape table (`1536·14·14 = 96·56·56`); keyed by SSA name instead, ConvNeXt-T goes
-   2.434 → **0.122 GB** and **1.24×**, -S **1.46×**, -B **1.51×**, MNv4 **1.11×**, with the other
-   four nets bit-identical. `lnChanP` was never written and is not needed. Also fixed: a
-   `convnext-fwd-b-tie` that had been red since `f4e4172`, and `regen_verified_mlir.sh`'s
-   incomplete module list.
-2. **Move the jobs to bf16** — the §1.2b win is **bf16-only** and every `scripts/jobs/*.conf`
-   artifact is f32 today, so the running jobs get nothing until their confs flip. enet's twin now
-   exists (39.7 → 30.5 h); ConvNeXt's already did (174.3 → 120.1 h). ⚠ Re-probe `SHIM_WORKERS` on
-   enet first — at 274 ms/step it may be producer-bound (§1.2c).
-3. **Track 3's cheap wins** — run the ViT EMA/bf16 job (artifacts ready, one conf to write); fix
-   mnv2's baked label smoothing (a literal, and it is on the gradient path); compose ConvNeXt's EMA.
-4. **Track 2's two real items** — ConvNeXt's final LN + the mixup/ls fix, then mnv2's 350-epoch run.
-5. **Rebuild the `efficientnet_adam` Imagenette checkpoint** — I deleted it chasing a phantom bug
-   (§1.2d); it is at epoch 4 instead of 80. ~40 min. Nothing else on the tier was touched.
-6. **Optional:** mnv2's `rmsdp64bf16` render, and settle why mnv2 escapes the relayout (§1.4).
+⭐ **Everything below §6.0 was closed on 2026-08-29/30 and pushed to `main` at `c4272d5`** (five CI
+workflows green). ⭐ §6.1 and §6.2 were then CLOSED on 2026-08-30 afternoon — EfficientNet's
+2.63× turned out to be a 150 ms/step host-side RNG loop and is now 1.00×. The live queue is
+**§6.3 (the JAX denominators, still unaudited) and §6.4**; the rest is the record.
+
+### 6.1 ✅ CLOSED — EfficientNet's 2.63× was a host-side RNG loop, and it is gone
+
+⭐⭐ **B0 is now at parity with its JAX reference: 281 → 107 ms/step, 2.63×.** The gap was never
+the lowerer and never the producer. It was `F32.dropoutMask`, a pure-Lean Bernoulli loop the
+trainer ran once per step, costing **150 ms** — more than twice B0's whole 71.6 ms graph.
+
+**The measurement §6.1 asked for, taken first** (`bf16_device_step.py --replicas 4`, the job's own
+`emarmsdp64dropdo` pair). The graph was never the problem — 71.6 ms puts it alongside ConvNeXt-T's
+68.0 and MNv2's 68.4, and bf16 pays a clean 2.23× on it:
+
+| B0, 4 replicas | bare graph | trainer step | **not the graph** |
+|---|---|---|---|
+| f32 (`emarmsdp64dropdo`) | 159.94 ms | 357 | 197 ms (55%) |
+| bf16 (`…dropdobf16`) | **71.60 ms** | 281 | **208 ms (74%)** |
+
+⭐ The overhead is the SAME ~200 ms in both arms — a fixed cost, not a scaling one. That is the
+tell: it cannot be anything the graph does.
+
+**Then the split that named it.** `LEAN_MLIR_BENCH_SYNTH=1` removes the shim read and nothing else:
+
+| bf16 term | ms/step |
+|---|---|
+| bare graph @ 4 replicas | 71.6 |
+| **host-side, not the graph** | **173.4** |
+| shim read not hidden by the depth-8 prefetch | 36 |
+| trainer step | 281 |
+
+⛔ **This retires the `SHIM_WORKERS=16` argument, which was true but not evidence.** "16 measures
+293 against 8's 280, so B0 is not producer-bound" happens to reach the right conclusion from a
+premise that does not support it — 16 being worse is equally consistent with CPU oversubscription
+on top of a starved feed. Deleting the producer outright is the measurement, and it recovers 36 ms.
+
+**The cost, timed against the compiled objects:**
+
+| per step | ms |
+|---|---|
+| **`F32.dropoutMask`, enet job shape (256×1280)** | **150.07** |
+| the same at 32×1280 — the shape its docstring costed | 18.74 |
+| `F32.dropScales` (9 sites × 256) | 1.83 |
+| `F32.const`, same 327,680 floats, `@[extern]` C | **0.073** |
+
+It pushed 327,680 boxed Floats into an `Array Float` and tiled them out through ~109k `write3`
+calls, in a file whose own header says *"Heavy-lift operations … are `@[extern]` to C for speed —
+avoids millions of Lean-level push calls."* Its docstring priced it at *"~2 ULP of a ~310 ms step"*
+from a **40,960**-draw shape; the job runs global batch 256, so it draws **8× that**.
+
+⭐ **B0 is the only net that pays it.** `dropoutKeep` is set on the two EfficientNet specs
+(`VerifiedNets.lean:930,990`) and nowhere else, and no other job variant carries `do` in its name.
+That is the whole reason B0 read as an outlier while ViT, ConvNeXt and MNv2 sat near parity.
+⭐ **JAX never paid it**: it draws the same mask with `jax.random.bernoulli` *inside* the jitted
+`train_step`, on device. The host-side draw here is deliberate and stays — `stablehlo.rng` would
+make every bit-exactness gate contingent on seeding an XLA RNG identically across two lowerers —
+so the fix was to make the host draw fast, not to move it.
+
+**The control, before touching anything** (f32, synth, 4 replicas):
+
+| variant | bare graph | synth step | host term |
+|---|---|---|---|
+| `emarmsdp64dropdo` (drop + do) | 159.94 | 346 | **186.1 ms** |
+| `emarmsdp64` (neither) | 161.59 | 176 | **14.4 ms** |
+
+The two graphs cost the same to within noise (the drop/do graph is 1.65 ms *cheaper*), so all
+171.7 ms of the step difference is host-side — and 281 − 171.7 = 109 predicted the post-fix step
+to within 2 ms.
+
+### ✅ LANDED — `dropoutFill`, the loop in C
+
+`lean_f32_dropout_fill` in `ffi/f32_helpers.c`, called from a `dropoutMask` that keeps every guard
+it had (`keep ≥ 1`, `n == 0`, `n < 3` still throws). **150.07 → 1.21 ms/call.**
+
+**Byte-identical**, checked against the pre-change Lean loop transcribed verbatim: six shapes
+(including the job's 256×1280 and the `n % 3 = 1` case), both guard paths, survivor fractions
+tracking `keep` (261,759/327,680 = 0.799) so the agreement is not a degenerate all-ones one.
+`dropout-tie` green, its per-example control C1 red as designed.
+
+| B0, 4 replicas, 40-step probes | before | **after** | |
+|---|---|---|---|
+| **bf16 real** | 281 | **107 ms/step** | **2.63×** |
+| bf16 synth | 245 | 98 | |
+| **f32 real** (what the conf names today) | 357 | **188 ms/step** | **1.90×** |
+| host term (synth − graph) | 173.4 | **26.4** | |
+| shim read (real − synth) | 36 | **9** | |
+
+⭐ The producer did **not** become the binding constraint at the shorter step — the unhidden read
+*fell*, 36 → 9 ms. Over 5,004 × 350 steps: bf16 **136.7 → 52.1 h**, f32 173.7 → 91.5 h.
+
+| net | JAX min/ep | verified min/ep | ratio |
+|---|---|---|---|
+| **EfficientNet-B0** | 8.88 | ~~23.44~~ **8.92** | ~~2.63×~~ **1.00×** |
+
+⚠⚠ **THE LESSON, and it is not "the estimate was stale".** The estimate was taken **at a shape no
+production job runs**. A host-side per-step cost is a function of the BATCH, and this one was
+costed at B=32 while every ImageNet job runs global 256. ▶ When you write down what a host-side
+helper costs, write down the batch you costed it at — and re-cost it when a job's batch changes.
+⚠ A second one: `lake build LeanMlir.F32Array` regenerates the **`.c`** but not the `.c.o.export`,
+which is only built under an executable target. The first byte-identity run linked an object from
+the day before and compared the old loop against itself — a green that proved nothing, and the
+timing line (unchanged at 150 ms) was the only thing that gave it away. [[stale-lean-exe-gates]]
+again, one layer down.
+
+### 6.1b ▶ The same measurement on every other net — and two corrections
+
+Job-accurate bf16 variants, 4× 4060 Ti, `DEVS=0,2,3,4`, `PJRT_FFI_RESIDENT=1`, `SHIM_WORKERS=8`,
+40-step probes, **all taken in one session** (§6.3's method), with the bare graph at 4 replicas:
+
+| net | bare graph | synth | real | **host** | **read** | min/ep | JAX | ratio |
+|---|---|---|---|---|---|---|---|---|
+| **EfficientNet-B0** | 71.60 | 98 | 107 | 26.4 | 9 | **8.92** | 8.88 | **1.00×** |
+| **ViT-Ti** | 97.45 | 144 | 158 | **46.5** | 14 | 6.59 | 6.63 | **0.99×** |
+| MobileNetV2 | 69.62 | 86 | 132 | 16.4 | **46** | 11.01 | 7.09 | 1.55× |
+| ConvNeXt-T | 106.66 | 119 | 142 | 12.3 | 23 | 23.69 | 14.93 | 1.59× |
+| MNv4-Conv-M | 61.08 | 83 | 122 | 21.9 | **39** | 10.17 | — | — |
+
+`host` = synth − graph (blob patching, host draws, the Lean loop); `read` = real − synth (the shim
+feed the depth-8 prefetch did not hide). **Two of five nets are now at or past their JAX reference.**
+
+⛔⛔ **CORRECTION — §6.1's old "bare graph (4-rep)" column mixed replica counts.** ConvNeXt-T's
+68.0 ms was §1.5's **single-device** number (that table says "one 4060 Ti"); at 4 replicas, with the
+all-reduce, its graph is **106.66 ms**. So the "48% of ConvNeXt's step is not the graph" reading
+was wrong in the direction that matters — it is **25%**, and ConvNeXt is the net where the graph
+really is the cost. Corrected shares: B0 33%, ViT 38%, MNv2 47%, ConvNeXt-T **25%**.
+⚠ The ViT and MNv2 rows were fine (97.4 and 68.4 reproduce here at 97.45 and 69.62); only the
+ConvNeXt row imported a 1-replica number into a 4-replica column.
+
+⚠ ConvNeXt-T's runner reads **142 ms** here against §1.2c's 131 — 8%, which is exactly the
+cross-day drift §6.3 warns about, and is why this table was taken in one sitting. Prefer these.
+
+▶ **Where the remaining two gaps live, and they are different problems:**
+* **MobileNetV2 (1.55×) and MNv4 are PRODUCER-bound** — 46 and 39 ms of unhidden read against a
+  16 and 22 ms host term. Their graphs are the smallest on the box, so the feed is what is left.
+* **ConvNeXt-T (1.59×) is GRAPH-bound** — 75% of its step is the graph, and its host and read terms
+  are the smallest of the five. Nothing in the trainer will fix that one.
+* ⭐ **ViT-Ti now carries the largest host term on the box (46.5 ms of a 158 ms step)** and is
+  still 0.99× its reference. It is the only remaining net where the B0 lever — a host-side cost
+  bigger than it looks — is even plausible. Worth one `bf16_device_step` + synth pass before
+  assuming it is blob patching.
+
+---
+
+### 6.2 ◐ MNv4 — the runner numbers now exist; the phase-2 side does not
+
+MNv4-Conv-M gained **1.11×** from the shape fix (0.776 → **0.056 GB**, 47.78 → 42.99 ms bare graph)
+and had never been re-costed at the runner level. Done, 2026-08-30, in §6.1b's sweep, on the
+variant `scripts/jobs/mnv4-default-4gpu.conf` actually names (`adamdp64` → its bf16 twin):
+
+| MNv4-Conv-M, bf16, 4 replicas | ms/step |
+|---|---|
+| bare graph (`mnv4in_adamdp64bf16`) | **61.08** |
+| trainer, synth | 83 |
+| **trainer, real** | **122** — 10.17 min/ep, 100 ep ⇒ **17.0 h** |
+
+⭐ It is **producer-bound**: 39 ms of unhidden shim read against a 22 ms host term. That is the
+same shape as MobileNetV2's, and unlike ConvNeXt's, so `SHIM_WORKERS` is the knob to try first.
+⚠ Its artifact is `mnv4in_*`, **not** `mobilenetv4in_*` — the exe is `mobilenetv4-imagenet-verified`
+but the render prefix is `mnv4in`, and a probe naming the exe's prefix silently finds no file.
+
+⛔ **What is still missing is the DENOMINATOR.** There is no JAX ms/step for MNv4 in this doc, so
+the `ratio` cell in §6.1b is blank rather than flattering — the one thing §6.3 asks for. Its
+`EPOCHS=100` does match `mnv4ImagenetConfig.epochs` (audited 2026-08-30, see below).
+
+⚠ Its phase-2 reference is the 100-epoch JAX run at **75.51%**, and it lives **outside the repo** at
+`/home/skoonce/mnv4_convm_100ep` — a repo search will not find it.
+
+### 6.3 ▶ The JAX end-to-end reference run
+
+⛔⛔ **Only the numerator of every ratio in §6.1 has been audited.** Three times on 2026-08-29/30 the
+*verified* side turned out to be costing a graph its job does not run — B0's book row was a variant
+without EMA/drop-path/dropout (181 ms against the real 280), mnv2's was AdamW where the job is
+RMSProp, ConvNeXt's was pre-fix. **Nobody has put the JAX rows through the same check.** If a JAX
+reference row costs a lighter recipe than its own job runs, these ratios are wrong in the flattering
+direction and for the wrong reason.
+
+▶ Method that paid off: for each net, confirm the JAX config bakes the same recipe as the verified
+artifact **before** quoting the ratio, and take both sides in ONE session on this box rather than
+comparing across days. Cross-day drift on this hardware measured 1–9% today, which is the same size
+as several of the effects being chased.
+
+### 6.4 The rest of the queue
+
+* **Move the jobs to bf16.** Every `scripts/jobs/*.conf` still names its f32 artifact by default, and
+  every bf16 twin now exists (mnv2's `rmsdp64bf16` was the last gap, rendered 2026-08-30). Worth
+  ~39 h on enet (91.5 → 52.1, re-measured post-`dropoutMask` — §6.1), ~25 h on mnv2,
+  63/128/184 h on ConvNeXt-T/S/B. The confs carry the numbers.
+* **Track 3's cheap wins** — run the ViT EMA/bf16 job (`vit-default-emabf16-4gpu`, artifacts ready,
+  and its EMA arm measures 151 ms, one *under* the plain bf16 arm, so the shadow is free); fix mnv2's
+  baked label smoothing (a literal at `MobileNetV2RenderB.lean:652`, and it is on the **gradient**
+  path); compose ConvNeXt's EMA.
+* **Track 2's two real items** — ConvNeXt's missing final LN + the mixup/label-smoothing fix, then
+  mnv2's 350-epoch run.
+* **Rebuild the `efficientnet_adam` Imagenette checkpoint** — deleted chasing a phantom bug (§1.2d);
+  at epoch 4 instead of 80. ~40 min.
+* **Optional:** settle why mnv2 escapes the relayout (§1.4) — still unexplained, and it is the one
+  net whose emit was clean before either fix.
+
+### 6.5 Closed 2026-08-29/30 — the record
+
+0. ✅ **Track 1.** No idle; the cost was the flat-activation NHWC↔NCHW relayouts, and the renderer
+   emits pointwise ops 4-D (§1.2b). B0 bare graph **2.28×**, f32 unaffected, CIFAR-8 bf16 training
+   unregressed at n=3 (§1.2d).
+1. ✅ **The residue was NOT the channel-LN (§1.5)** — a width COLLISION in §1.2b's own shape table
+   (`1536·14·14 = 96·56·56`). Keyed by SSA name: ConvNeXt-T 2.434 → **0.122 GB** and **1.24×**,
+   -S **1.46×**, -B **1.51×**, MNv4 **1.11×**, four nets bit-identical. `lnChanP` never written.
+2. ✅ **`convnext-fwd-b-tie` was RED since `f4e4172`** and nobody knew — that commit lifted only the
+   batched pointwise arms, so the two ConvNeXt renderers diverged at the GELU. Fixed by lifting the
+   14 per-example arms too, which also extends the 4-D emit to the Imagenette/CIFAR corpus.
+3. ✅ **Three artifacts were landing outside the CI drift guard** (two since `f4e4172`).
+   ⚠ `scripts/check_render_coverage.py` is the ONLY thing that catches this and no local build runs
+   it — `regen_verified_mlir.sh check` passes, because it audits writers and entry names, not CI.
+4. ✅ **`regen_verified_mlir.sh proofs` was skipping four writers and exiting 0** — the `*RenderB`
+   modules were missing from its hardcoded list, leaving 65 of 113 artifacts stale.
+5. ✅ **Two job confs would have truncated their own LR schedules.** `EPOCHS` is supervise.sh's STOP
+   condition, and enet had 80 / mnv2 had 300 against constants of 350 — the run would have been
+   killed a quarter (resp. a seventh) of the way through its own curve and reported ✅ COMPLETE.
+   ▶ **Every other conf audited 2026-08-30 and clean**: cnx/cnxs/cnxb/mnv4/vit/vits/vitb all match
+   their constants; r34 and the four r50 confs use `${EPOCHS:-N}` and cite no constant.
+6. ✅ **`mobilenetv2in_rmsdp64bf16` rendered** — that net's only bf16 artifacts were the AdamW family,
+   so the job that trains it had no bf16 arm at all. 187 → **136 ms/step**, ~95 → **~70 h**.
+7. ✅ **`scripts/bf16_device_step.py` reworked** — interleaved reps, shared input buffers, min and
+   p10–p90 printed, a flag inside ±5%. It had reported **0.92× on MobileNetV2** — an 8% regression —
+   for a bit-identical graph, because six compiles were running at once and a bare median hid it.
+8. ✅ **Five book sections re-costed** (§5.9, §6.5, §7.5, §8.5, §8.6, §9.6, §9.7) and cut to configs
+   and numbers. All throughput tables are fp32 → bf16 pairs; the 3060 rows are blanked.

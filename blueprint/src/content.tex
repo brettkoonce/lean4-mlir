@@ -6933,16 +6933,6 @@ carry different values. At \texttt{adam64} it is AdamW at $10^{-3}$
 instead, which is the default because it matches the other four
 ImageNet drivers.
 
-\medskip\noindent\textbf{The schedule is 350 epochs because the run it
-has to match is.} The point of a phase-4 run is not to train this network
-once, it is to reproduce the phase-2 result on the verified path, and the
-phase-2 result above is the paper-faithful 350-epoch exponential-decay
-tier at $71.44\%$. A 300-epoch phase-4 run would not answer that
-question. \texttt{totalSteps} is what the schedule anneals over, so 300
-against 350 is a different learning-rate curve end to end rather than a
-shorter version of the same one, and the two numbers would not be
-comparable.
-
 \medskip\noindent\textbf{What it has not done is run.} No phase-4
 ImageNet result exists for this network, which is why every accuracy
 above comes from phase 2. What is measured is the throughput, and the
@@ -6953,7 +6943,7 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & $187 \to 136$ & $15.6 \to 11.3$ & $\sim$95 $\to$ $\sim$70 h \;($3.9 \to 2.9$ d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & $166 \to 140$ & $13.8 \to 11.7$ & $\sim$84 $\to$ $\sim$72 h \;($3.5 \to 3.0$ d) & TBD \\
 4$\times$ 3060 (CUDA)     & ---           & ---             & ---                                          & TBD \\
 \hline
 \end{tabular}
@@ -6961,10 +6951,12 @@ Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
 
 \noindent The columns are the two arms of \texttt{rmsdp64} --- RMSProp with exponential
 decay, the recipe \texttt{mnv2-\allowbreak default-\allowbreak 4gpu} names. fp32 is the
-default; the run will be bf16, so read the right-hand column. Both are at
-\texttt{SHIM\_WORKERS=8}, which is worth $216 \to 187$\,ms on the fp32 arm; $16$ is
-\emph{worse} than $8$ on both, and on the bf16 arm worse than fp32 at $8$ --- half of that
-$136$\,ms step is no longer the graph, so this net is now as much data pipeline as compute.
+default; the run will be bf16, so read the right-hand column. Exactly half of that
+$140$\,ms step is no longer the graph, which times as $69.6$\,ms on its own, so this net
+is now as much data pipeline as compute --- and that is also why the fp32 arm is the
+least repeatable number in this book, spanning
+$159$--$196$\,ms across three consecutive runs on an idle box where the bf16 arm held
+$140 \pm 1$. A step that is half producer inherits the producer's variance.
 
 \medskip\noindent\textbf{[TODO: run \texttt{mobilenetv2-imagenet-verified}.]}
 
@@ -8101,6 +8093,14 @@ with each other and both differ from the paper. It is unquantified: nobody has
 run the $10^{-3}$ arm. Phase 2 scores $76.80\%$ / $93.26\%$ against the paper's
 $77.1$ / $93.3$, and that $-0.3$ is left unattributed rather than pinned on this.
 
+\medskip\noindent\textbf{A second difference was found after that run and is now
+fixed, so the curve above predates it.} B0 is SiLU/swish throughout, stem and
+head included, and the phase-4 render always was --- $194$ \texttt{stablehlo.logistic}
+and not one \texttt{stablehlo.maximum}. The phase-2 spec, though, never set
+\texttt{convBnAct}, which defaults to \texttt{.relu}, so the two \texttt{.convBn}
+layers that bracket the MBConv stack --- the stem and the $1\times1$ head --- trained
+with ReLU while every block interior used swish.
+
 \medskip\noindent\textbf{What it has not done is run.} No phase-4
 ImageNet result exists for this network, which is why every accuracy
 above comes from phase 2. What is measured is the throughput, and the
@@ -8111,7 +8111,7 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & $357 \to 280$ & $29.8 \to 23.4$ & $\sim$177 $\to$ $\sim$140 h \;($7.4 \to 5.8$ d) & TBD \\
+4$\times$ 4060 Ti (CUDA)  & $188 \to 107$ & $15.7 \to 8.9$  & $\sim$95 $\to$ $\sim$56 h \;($4.0 \to 2.3$ d)  & TBD \\
 4$\times$ 3060 (CUDA)     & ---           & ---             & ---                                           & TBD \\
 \hline
 \end{tabular}
@@ -8122,8 +8122,7 @@ stochastic depth and classifier dropout --- the recipe
 \texttt{enet-\allowbreak default-\allowbreak 4gpu} names. fp32 is the default; the run
 will be bf16, so read the right-hand column. Set that against the $\sim$8.6 minutes per
 epoch the phase-2 350-epoch row reports on the same four cards: both are bf16 over the
-same architecture, so the ${\sim}2.7\times$ per epoch that remains is the lowerer, not
-the cast and not the network.
+same architecture, and the two agree to within $4\%$.
 
 \noindent\textbf{[TODO: run \texttt{efficientnet-imagenet-verified}.]}
 
