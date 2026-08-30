@@ -33,12 +33,19 @@ open scoped Real
 
     This is what makes `convnextCh_floatBridges` a statement about the committed net rather than
     about a look-alike skeleton. Through `convNextForwardTCh_eq_chain` (the kernel-safe `∘`-form)
-    and then `rfl`, with `id ∘ GAP` collapsing definitionally. §2n deleted its scalar-LN
-    predecessor (`convNextForwardT_eq_skeleton`) along with the chain it tied. -/
+    and then `rfl`. §2n deleted its scalar-LN predecessor (`convNextForwardT_eq_skeleton`) along
+    with the chain it tied.
+
+    ⚠⚠ **The `lnHead` slot took `id` until 2026-08-30 and now takes the real head LN.** The
+    skeleton always had the slot — §2m filled it with `id` when it deleted the head LayerNorm, and
+    the docstring here recorded that as *"`id ∘ GAP` collapsing definitionally"*, which read like a
+    simplification and was actually the missing layer (planning §7.1). Restoring it is one
+    argument; leaving `id` there against the restored chain does not fail cleanly, it blows
+    `maxRecDepth` while `rfl` grinds. -/
 theorem convNextForwardTCh_eq_skeleton (w : CnxTWeightsCh) :
     convNextForwardTCh w = convnextForward w.sW w.sb w.Wd w.bd
       (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ)
-      id
+      (rowLNVecFlat 1 768 w.hε w.hγ w.hβ)
       (convNextStageChK 3 w.s1) (cnxDownChW 28 28 w.d1)
       (convNextStageChK 3 w.s2) (cnxDownChW 14 14 w.d2)
       (convNextStageChK 9 w.s3) (cnxDownChW 7 7 w.d3)
