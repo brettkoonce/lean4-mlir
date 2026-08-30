@@ -4,8 +4,9 @@ import LeanMlir.VerifiedNets
 
 The second net here added by RESHAPING an existing renderer rather than by writing a new chain, and
 the cheapest of them so far. ConvNeXt-S is ConvNeXt-T DEEPENED: stage 3 goes 9 → 27 blocks, and the
-dims do not move — still `[96,192,384,768]`, still 7×7 depthwise, still the same block. 342
-parameter tensors and 50,222,152 scalars against T's 180 / 28,587,592.
+dims do not move — still `[96,192,384,768]`, still 7×7 depthwise, still the same block. 344
+parameter tensors and 50,223,688 scalars against T's 182 / 28,589,128 — both timm's figures
+exactly, since the head LN was restored 2026-08-30 (planning §7.1).
 
 ⭐ **What it cost.** One `Array Nat` threaded as a trailing defaulted parameter through both
 renderers. ViT-S needed six width constants turned into a `VitDims` record because ViT widens;

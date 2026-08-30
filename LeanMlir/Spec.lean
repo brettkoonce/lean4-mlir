@@ -27,6 +27,7 @@ def fpnDetectParamShapes (oc c3 c4 c5 A tower : Nat) : List (List Nat) := Id.run
 def Layer.nParams : Layer → Nat
   | .conv2d ic oc k _ _     => oc * ic * k * k + oc
   | .convBn ic oc k _ _     => oc * ic * k * k + 2 * oc
+  | .layerNorm d            => 2 * d      -- γ, β
   | .dense fi fo _           => fi * fo + fo
   | .residualBlock ic oc n fs =>
       let needsProj := !(ic == oc && fs == 1)
@@ -401,6 +402,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .convBn ic oc k st _      => s!"Conv({ic}→{oc},{k}x{k}/{st})+BN"
     | .maxPool sz _              => s!"Pool({sz}x{sz})"
     | .globalAvgPool             => "GAP"
+    | .layerNorm d               => s!"LN({d})"
     | .flatten                   => "Flatten"
     | .dense fi fo act           =>
       let a := match act with
@@ -471,6 +473,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
 def Layer.outChannels : Layer → Nat
   | .conv2d _ oc _ _ _              => oc
   | .convBn _ oc _ _ _              => oc
+  | .layerNorm d                    => d      -- shape-preserving
   | .dense _ fo _                   => fo
   | .residualBlock _ oc _ _         => oc
   | .bottleneckBlock _ oc _ _       => oc
@@ -520,6 +523,7 @@ def Layer.outChannels : Layer → Nat
 def Layer.inChannels : Layer → Nat
   | .conv2d ic _ _ _ _              => ic
   | .convBn ic _ _ _ _              => ic
+  | .layerNorm d                    => d
   | .dense fi _ _                   => fi
   | .residualBlock ic _ _ _         => ic
   | .bottleneckBlock ic _ _ _       => ic

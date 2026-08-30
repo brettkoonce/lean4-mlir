@@ -20,8 +20,11 @@ path from the net slug.
 
 ⚠ **Re-measured 2026-08-12: the float count here read 83,434,629 and the verdict read "bit-exact",
 and both were stale.** 83,434,629 is 3 × 27,811,543, the retired SCALAR-LN net; the channel-LN net
-returns 3 × 27,826,282 + 3 = 83,478,849. And it is not bit-exact: θ comes back 27,826,272/27,826,282
-and `m` 27,814,988/27,826,282, at gradient norm-rel 3.7e-9 against a 1e-4 threshold. The gate's own
+returns 3 × 27,827,818 + 3 = 83,483,457. ⚠⚠ **The bit-exactness figures that used to be quoted here
+are STALE** — they were taken at 27,826,282 params, i.e. before the head LN was restored
+(2026-08-30, planning §7.1), and describe a net this driver no longer trains. Re-run
+`convnext-adam-tie` to replace them; on 2026-08-30 it reported 0 of 182 params disagreeing at
+gradient norm-rel 0.000000 against a 1e-4 threshold. The gate's own
 note is why that is fine rather than a regression — the two renders agree BETTER than this render
 agrees with ITSELF under a semantics-preserving batch reversal, so the residual is ConvNeXt's
 conditioning (layer-scale γ is a cancelling reduce, §2f) and not a difference between emitters.

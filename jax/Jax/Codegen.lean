@@ -1167,6 +1167,20 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     code := code ++
       "def global_avg_pool(x):\n" ++
       "    return jnp.mean(x, axis=(2, 3))\n\n"
+  -- ▶ The BARE `[B, D]` LayerNorm (2026-08-30, §7.1) — ConvNeXt's `GAP → LN → Linear` head.
+  -- ⚠⚠ eps is **1e-6, not 1e-5**, and the two are different nets. 1e-6 is `channel_layer_norm`'s
+  -- value above, `ConvNeXtRender.cEPS`, and the paper's (`nn.LayerNorm(dims[-1], eps=1e-6)`);
+  -- 1e-5 is what `layer_norm` below uses for the transformer nets. Reusing `layer_norm` here
+  -- would have compiled, trained and descended at the wrong epsilon on one of the two paths —
+  -- and only on one, since the render is pinned at 1e-6.
+  if spec.layers.any (fun | .layerNorm _ => true | _ => false) then
+    code := code ++
+      "def head_layer_norm(x, gamma, beta):\n" ++
+      "    # LN over the feature axis of a [B, D] vector (eps 1e-6, matching channel_layer_norm\n" ++
+      "    # and the verified render — NOT layer_norm's transformer 1e-5).\n" ++
+      "    mean = jnp.mean(x, axis=-1, keepdims=True)\n" ++
+      "    var = jnp.var(x, axis=-1, keepdims=True)\n" ++
+      "    return (x - mean) / jnp.sqrt(var + 1e-6) * gamma + beta\n\n"
   if spec.hasTransformer then
     code := code ++
       "def layer_norm(x, gamma, beta):\n" ++
@@ -1449,6 +1463,8 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
     | .convNextStem ic oc p =>
       code := code ++ convBiasInit s!"CNXStem conv {p}x{p} {ic}→{oc}" oc ic p p
       code := code ++ emitLNInit s!"CNXStem LN {oc}" oc
+    | .layerNorm d =>
+      code := code ++ emitLNInit s!"head LN {d}" d
     | .dense fi fo _ =>
       -- Under cfg.vitInit the classifier head is an nn.Linear like any other,
       -- so timm gives it trunc_normal(0.02) too; ConvNeXt's `_init_weights`
@@ -1891,6 +1907,8 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
         code := code ++ emitTransDenseFromBuf s!"trans[{bi}] fc2 {mlpDim}→{dim}" mlpDim dim
       -- Final LayerNorm after all blocks.
       code := code ++ emitLNFromBuf "trans final LN" dim
+    | .layerNorm d =>
+      code := code ++ emitLNFromBuf s!"head LN {d}" d
     | .maxPool _ _ | .globalAvgPool | .flatten =>
       pure ()  -- no params
     | _ =>
@@ -2039,6 +2057,8 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
         code := code ++ emitTransDenseToBuf s!"trans[{bi}] fc1"
         code := code ++ emitTransDenseToBuf s!"trans[{bi}] fc2"
       code := code ++ emitLNToBuf "trans final LN"
+    | .layerNorm _ =>
+      code := code ++ emitLNToBuf "head LN"
     | .maxPool _ _ | .globalAvgPool | .flatten =>
       pure ()
     | _ =>
@@ -2154,6 +2174,10 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       code := code ++ "    x = max_pool2d(x, " ++ toString size ++ ", " ++ toString stride ++ ")\n"
     | .globalAvgPool =>
       code := code ++ "    x = global_avg_pool(x)\n"
+    | .layerNorm _ =>
+      code := code ++ "    x = head_layer_norm(x, params[" ++ toString pidx ++ "][0], params[" ++
+        toString pidx ++ "][1])\n"
+      pidx := pidx + 1
     | .flatten =>
       code := code ++ "    x = x.reshape(x.shape[0], -1)\n"
     | .dense _ _ act =>

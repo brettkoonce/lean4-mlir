@@ -281,6 +281,55 @@ private def lnFwdSite (gN btN xin : String) (c h : Nat) :
     let (k5, o)  ← pretty cBS (.transposeF (m := h*h) (n := c) (.operand bi (zV : Vec (h*h*c))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
+/-- **The HEAD LN forward site** — the paper's `norm(x.mean([-2,-1]))`, restored 2026-08-30.
+
+    ⭐ It is `lnFwdSite` with the two transposes DELETED, and that is the whole difference: after
+    GAP the tensor is a single `[d]` row, so "normalise each spatial row over its channels" and
+    "normalise the feature vector" are the same function at `m = 1`. Mirrors
+    `Proofs.StableHLO.headLNGraph` op for op — that is what makes rung E close.
+
+    ⚠ Every operand is annotated `Vec (1 * d)`, never `Vec d`. `1 * d` does NOT reduce for a
+    VARIABLE `d` (`Nat.mul` recurses on its second argument), and `d` here is `V.dims[3]!`, which
+    moves with the ConvNeXt size. It is the same annotation `convNextBackAll`'s smoothing chain
+    already carries, for the same reason, and it bites the moment the render stops being pinned. -/
+private def headLnFwdSite (gN btN xin : String) (d : Nat) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+    let (k1, n)  ← pretty cBS (.lnRowF (m := 1) (n := d) "%one" "%zero" cEPS 0 1 0
+                                  (.operand xin (zV : Vec (1*d))))
+    let (k2, sc) ← pretty cBS (.rowScaleF (m := 1) (n := d) gN (zV : Vec d)
+                                  (.operand n (zV : Vec (1*d))))
+    let (k3, o)  ← pretty cBS (.rowBiasF (m := 1) (n := d) btN (zV : Vec d)
+                                  (.operand sc (zV : Vec (1*d))))
+    pure (k1 ++ k2 ++ k3, o)
+
+/-- The head LN's **input-VJP**: `dx = lnRowBack γ=1 (rowScale γ dy)`. `xName` is the saved LN
+    input — the GAP output — which `lnRowBack` re-normalises from rather than saving x̂/istd. -/
+private def headLnBackSite (gN xName cot : String) (d : Nat) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+    let (k1, da) ← pretty cBS (.rowScaleF (m := 1) (n := d) gN (zV : Vec d)
+                                  (.operand cot (zV : Vec (1*d))))
+    let (k2, o)  ← pretty cBS (.lnRowBack (m := 1) (n := d) "%one" xName cEPS 0 1 (zV : Vec (1*d))
+                                  (.operand da (zV : Vec (1*d))))
+    pure (k1 ++ k2, o)
+
+/-- The head LN's **γ tail** — `veclnGamma{Grad,Sgd}` at `N = 1`. -/
+private def headLnGammaTail (adam : Bool) (gN xName cot : String) (d : Nat) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+    if adam then
+      pretty cBS (.veclnGammaGrad (N := 1) (D := d) xName cEPS 0 (zV : Vec (1*d))
+                     (.operand cot (zV : Vec (1*d))))
+    else pretty cBS (.veclnGammaSgd (N := 1) (D := d) gN xName cEPS cLR 0 (zV : Vec (1*d))
+                        (zV : Vec d) 0 (.operand cot (zV : Vec (1*d))))
+
+/-- The head LN's **β tail** — `rowDenseBias{Grad,Sgd}` at `N = 1`, reducing `dims = [0,1]`, i.e.
+    contracting the batch (and the single row) as a shared `[d]` parameter needs. -/
+private def headLnBetaTail (adam : Bool) (btN cot : String) (d : Nat) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+    if adam then
+      pretty cBS (.rowDenseBiasGrad (N := 1) (c := d) (.operand cot (zV : Vec (1*d))))
+    else pretty cBS (.rowDenseBiasSgd (N := 1) (c := d) btN cLR (zV : Vec d) 0
+                        (.operand cot (zV : Vec (1*d))))
+
 /-- One **LayerNorm input-VJP** site: `dx = transposeᵀ (lnRowBack γ=1 (rowScale γ dyᵀ))`. `xName`
     is the saved LN INPUT — `lnRowBack` recomputes x̂/istd from it rather than saving them. -/
 private def lnBackSite (gN xName cot : String) (c h : Nat) :
@@ -471,7 +520,11 @@ private def allParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
     if si < 3 then
       ps := ps ++ [(s!"d{si}ng", [c]), (s!"d{si}nbt", [c]),
                    (s!"d{si}W", [V.dims[si+1]!, c, 2, 2]), (s!"d{si}b", [V.dims[si+1]!])]
-  ps := ps ++ [("Wd", [V.dims[3]!,nClasses]), ("bd", [nClasses])]
+  -- ▶ HEAD LN (2026-08-30) — the paper's `GAP → LN → Linear`. It sits BEFORE `Wd`/`bd` because
+  -- that is its order in `VerifiedNetSpec.layers`, and the blob is laid out in that order: get it
+  -- backwards and every parameter after the GAP is misaligned, silently.
+  ps := ps ++ [("hng", [V.dims[3]!]), ("hnbt", [V.dims[3]!]),
+               ("Wd", [V.dims[3]!,nClasses]), ("bd", [nClasses])]
   return ps
 
 -- ── ▶ `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ────────────────
@@ -499,17 +552,20 @@ def cnxWdCounts (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : Nat × Nat :=
   (d, (allParams nClasses V).length - d)
 
 -- ⭐ The reference's OWN `_wd_mask` over its OWN `init_params` for
--- `generated_convnext_tiny_imagenet.py` reports **180 tensors: 59 decayed, 121 excluded**, every
+-- `generated_convnext_tiny_imagenet.py` reports **182 tensors: 59 decayed, 123 excluded**, every
 -- mask leaf uniform. Two independent routes, and the count is the cheapest thing that can
 -- disagree — §2m's `toSpecs == Layout.specs` move applied to a recipe knob.
-#guard cnxWdCounts 10 == (59, 121)
-#guard cnxWdCounts 1000 == (59, 121)
+-- ⚠ Was 180/59/121 before 2026-08-30. The head LN (§7.1 / B1) adds γ and β, both `[768]`, both
+-- 1-D and therefore both EXCLUDED — the decayed count cannot move, which is itself a check: a
+-- head LN that landed in the decayed column would be getting weight decay the recipe excludes.
+#guard cnxWdCounts 10 == (59, 123)
+#guard cnxWdCounts 1000 == (59, 123)
 -- ▶ ConvNeXt-S: 18 more blocks × (3 decayed / 6 excluded) on top of T's split. The RULE is
 -- untouched — it is a plain rank test and depth cannot reach it — so this guard is checking that
 -- the depth parameter reaches `allParams` at all, which is the thing that would silently not.
-#guard cnxWdCounts 1000 cnxSmall == (113, 229)
+#guard cnxWdCounts 1000 cnxSmall == (113, 231)
 -- 18 blocks × (dW, eW, pW decayed; db, ng, nbt, eb, pb, lg excluded) = 54/108, + stem 1/3,
--- + 3 downsamples 1/3 each, + head 1/1.
+-- + 3 downsamples 1/3 each, + head LN 0/2, + head dense 1/1.
 #guard cnxWdDecays "s0b0dW" [96,1,7,7] == true    -- depthwise 7×7
 #guard cnxWdDecays "s0b0lg" [96] == false         -- LayerScale γ — 1-D, so excluded
 #guard cnxWdDecays "psng" [96] == false           -- stem LN γ
@@ -536,7 +592,7 @@ structure CFwd where
   downIn  : Array String            -- the 3 downsample inputs (the LN's input)
   gap     : String                  -- global-average-pool output
   stemC   : String                  -- stem conv output (= the §2m stem LN's input)
-  hn      : String                  -- dense input: `gap` itself (the reference has no head LN)
+  hn      : String                  -- dense input: the head LN's output (2026-08-30; was `gap`)
   logits  : String                  -- dense output
   deriving Inhabited
 
@@ -574,9 +630,12 @@ private def convNextFwdChain (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
       let (code, n, o) ← fwdDown s!"d{si}" cur c V.dims[si+1]! cSpats[si+1]!
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty cBS (.gapF (c := V.dims[3]!) (h := 7) (w := 7) (.operand cur zV))
-  -- §2m: the reference goes GAP → dense with no norm between — the head LN is GONE
-  -- (its 2×768 params move to the stem, at 2×96).
-  let (cHn, hn) := ("", gap)
+  -- ⭐⭐ **THE HEAD LN, RESTORED 2026-08-30.** §2m deleted it to match
+  -- `jax/MainConvNeXtImagenet.lean`, which was itself missing it; the paper and timm both do
+  -- `GAP → LN → Linear` (`facebookresearch/ConvNeXt`: `self.norm(x.mean([-2,-1]))`; timm:
+  -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`). The parameter count
+  -- was the tell all along — 28,587,592 against timm's 28,589,128 is short by exactly 2×768.
+  let (cHn, hn) ← headLnFwdSite "%hng" "%hnbt" gap V.dims[3]!
   let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat (V.dims[3]!) nClasses) zV (.operand hn zV))
   pure { code := fwd ++ cG ++ cHn ++ cLog,
          blksAll := blksAll, downLn := downLn, downIn := downIn,
@@ -655,17 +714,22 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ backward: head cotangent chain + param-SGD ═══
     let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat (V.dims[3]!) nClasses) (.operand dyName zV))
-    let (cHnB, cot_gap) := ("", cot_hn)
+    -- ▶ back through the HEAD LN before GAP's own backward sees the cotangent. Its γ/β tails go
+    -- into `updMap` below, beside Wd/bd.
+    let (cHnB, cot_gap) ← headLnBackSite "%hng" F.gap cot_hn V.dims[3]!
     let (cWd, nWd) ← if adam then
         pretty cBS (.weightGrad (m := V.dims[3]!) (n := nClasses) hn (zV : Vec (V.dims[3]!)) (.operand dyName (zV : Vec nClasses)))
       else pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec (V.dims[3]!)) (zM : Mat (V.dims[3]!) nClasses) 0 (.operand dyName zV))
     let (cBd, nBd) ← if adam then
         pretty cBS (.biasGrad (n := nClasses) (.operand dyName (zV : Vec nClasses)))
       else pretty cBS (.biasSgd "%bd" cLR (zV : Vec nClasses) 0 (.operand dyName zV))
-    let mut updMap : List (String × String) := [("Wd", nWd), ("bd", nBd)]
+    let (cHg, nHg) ← headLnGammaTail adam "%hng" F.gap cot_hn V.dims[3]!
+    let (cHb, nHb) ← headLnBetaTail adam "%hnbt" cot_hn V.dims[3]!
+    let mut updMap : List (String × String) :=
+      [("hng", nHg), ("hnbt", nHb), ("Wd", nWd), ("bd", nBd)]
     let cD := V.dims[3]!
     let mut bwd := cDyC ++ cDd ++ cHnB ++
-      cWd ++ cBd ++
+      cWd ++ cBd ++ cHg ++ cHb ++
       -- ⚠ HAND-WRITTEN TEXT (a declared §5 carve-out), so the width here is threaded by hand and
       -- nothing type-checks it. `cD` is the head width; the `7`s and the `49.0` are SPATIAL and
       -- correctly stay literals at every size (224 / patchify-4 / three /2 downsamples = 7×7).

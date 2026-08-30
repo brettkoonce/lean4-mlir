@@ -27,6 +27,11 @@ def convNeXtBImagenet : NetSpec where
     .convNextDownsample 512 1024,              -- 14→7
     .convNextStage 1024 3 .ln .gelu,           -- stage 4: 3 blocks @ 1024
     .globalAvgPool,
+    -- ▶ head LayerNorm (2026-08-30, §7.1). The paper is `GAP → LN → Linear`
+    -- (`self.norm(x.mean([-2,-1]))`, eps 1e-6) and timm's head is
+    -- `NormMlpClassifierHead(global_pool → LayerNorm2d(1024) → flatten → fc)`; BOTH phases
+    -- were missing it and the parameter count was short by exactly 2×1024.
+    .layerNorm 1024,
     .dense 1024 1000 .identity                 -- 1000-class head
   ]
 

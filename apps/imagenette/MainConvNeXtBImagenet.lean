@@ -2,8 +2,9 @@ import LeanMlir.VerifiedNets
 
 /-! # `convnext-b-imagenet-verified` — ConvNeXt-**Base** on full ImageNet-1k, verified → XLA
 
-ConvNeXt-B is ConvNeXt-S's depth (`[3,3,27,3]`) at `[128,256,512,1024]`: same 342 parameter
-tensors, every one of them wider. 88,589,416 scalars against S's 50,222,152 and T's 28,587,592.
+ConvNeXt-B is ConvNeXt-S's depth (`[3,3,27,3]`) at `[128,256,512,1024]`: same 344 parameter
+tensors, every one of them wider. 88,591,464 scalars against S's 50,223,688 and T's 28,589,128 — all three timm's figures exactly
+(the head LN came back 2026-08-30; each size was short by 2×dim before).
 
 ⚠⚠ **B is the size that made the DIMENSIONS a renderer parameter.** S was pure depth and never
 touched a dimension literal, so it was served by threading one `Array Nat`. B moves the stem

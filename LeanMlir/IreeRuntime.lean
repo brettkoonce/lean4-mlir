@@ -483,7 +483,7 @@ namespace ConvNeXtLayout
     GAP → LN(768) → dense {W,b}. ConvNeXt block (9 params): depthwise 7×7 {W=`[c,1,7,7]`,b}
     → **LN** (global per-example scalar γ/β, rank-0 `#[]`) → 1×1 expand {W=`[4c,c,1,1]`,b}
     → GELU → 1×1 project {W=`[c,4c,1,1]`,b} → **layerScale** (per-channel γ=`[c]`). Each
-    downsample (4 params): LN scalar {γ,β} + 2×2 conv {W=`[2c,c,2,2]`,b}. 180 params. The
+    downsample (4 params): LN scalar {γ,β} + 2×2 conv {W=`[2c,c,2,2]`,b}. 182 params. The
     `(dims, initKind)` order MUST match `@convnext_train_step`'s signature — both from the
     same [3,3,9,3] generator (tests/TestConvNeXt*.lean). `initKind`: 0 = He(fan-in)
     (depthwise 49, expand c, project 4c, patchify 48, downsample 4c, dense 768), 1 = ones
@@ -499,14 +499,18 @@ private def downSpec (ci co : Nat) : Array (Array Nat × Nat) :=
   #[(#[ci],1),(#[ci],2),(#[co,ci,2,2],0),(#[co],2)]  -- LN γ,β at the PRE-conv width ; conv W,b
 /-- `(dims, initKind)` for every param, in func-arg order.
 
-    ⚠ §2m moved three things at once, and they are the whole difference from the retired
-    180-param list: every LN affine went rank-0 `#[]` → per-channel `#[c]`, the **stem LN**
-    appeared, and the **head LN** went away (the reference's `forward` is
-    `patchify → channel_layer_norm → stages → GAP → dense`). The last two nearly cancel
-    — `+2·768 − 2·96 = +1,344` of 28.6M — so a matching parameter count is a decomposition
-    test, not an architecture check. The stem/head LN swap one-for-one, so this is still
-    **180 param tensors**; the floats go 27,826,282 at K = 10, i.e. **28,587,592 at K = 1000**,
-    which is the JAX reference's own reported count exactly. -/
+    ⚠ §2m moved three things at once: every LN affine went rank-0 `#[]` → per-channel `#[c]`,
+    the **stem LN** appeared, and the **head LN** went away. The first two were right; the third
+    was not, and the note that used to sit here — *"the last two nearly cancel … so a matching
+    parameter count is a decomposition test, not an architecture check"* — was the correct
+    warning drawn at the wrong conclusion. The residue is not noise, it IS the missing layer:
+    28,587,592 against `timm.create_model('convnext_tiny')`'s **28,589,128** is short by exactly
+    `2×768 = 1,536`.
+
+    ⭐ **The head LN is back (2026-08-30, §7.1)**, so the head is `GAP → LN(768) → dense` as in
+    both the paper (`self.norm(x.mean([-2,-1]))`, `nn.LayerNorm(dims[-1], eps=1e-6)`) and timm
+    (`NormMlpClassifierHead`). **182 param tensors**; the floats are 27,827,818 at K = 10,
+    i.e. **28,589,128 at K = 1000** — timm's count exactly. -/
 def specs : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) :=
     #[(#[96,3,4,4],0),(#[96],2),(#[96],1),(#[96],2)]   -- patchify stem + stem LN γ,β
@@ -515,7 +519,9 @@ def specs : Array (Array Nat × Nat) := Id.run do
     let e := 4 * c
     for _ in [0:depths[si]!] do a := a ++ blockSpec c e
     if si < 3 then a := a ++ downSpec c dims[si+1]!
-  a := a ++ #[(#[768,10],0),(#[10],2)]   -- head: dense W,b (NO head LN — §2m)
+  -- head: LN γ,β then dense W,b. ⚠ The LN comes FIRST — that is its order in the layer list and
+  -- in `@convnext_train_step`'s signature, and the blob is read positionally.
+  a := a ++ #[(#[768],1),(#[768],2),(#[768,10],0),(#[10],2)]
   return a
 def paramShapes : Array (Array Nat) := specs.map (·.1)
 def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0

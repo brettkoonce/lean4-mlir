@@ -30,6 +30,12 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
       shapes := shapes.push #[oc, ic, k, k] |>.push #[oc] |>.push #[oc]
     | .dense fi fo _ =>
       shapes := shapes.push #[fi, fo] |>.push #[fo]
+    | .layerNorm d =>
+      -- ⚠ BOTH this and `heInitLayer`'s arm are required, and forgetting the second is silent:
+      -- `heInitLayer` ends in a `| _ =>` that returns NO params for "layers with no trainable
+      -- params", so a shape declared here without an init there yields a blob shorter than the
+      -- signature — every parameter after the head misaligned, with nothing to say so.
+      shapes := shapes.push #[d] |>.push #[d]
     | .fpnDetect oc c3 c4 c5 _ A tower =>
       -- Single source of truth for the ordering (Spec.lean) — shared with the
       -- codegen so a mismatch is impossible rather than merely unlikely.
@@ -451,6 +457,10 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
       parts := parts.push lsGamma
       s := s3
     return (parts, s)
+  | .layerNorm d =>
+    -- γ = ones, β = zeros — `heLN`'s convention, shared with every other LN site here.
+    let (gLN, bLN) ← heLN d
+    return (#[gLN, bLN], seed)
   | .convNextDownsample ic oc _norm =>
     -- LN (γ, β) on `ic` channels + 2×2 stride-2 conv (W, b).
     let (gLN, bLN) ← heLN ic

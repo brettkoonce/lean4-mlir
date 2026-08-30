@@ -804,10 +804,15 @@ theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Wei
 
 -- ── ConvNeXt-T (FULL): the committed 27-entry spec ↔ convNextForwardTCh ──
 
-/-- Math denotation of the committed ConvNeXt-T spec: the 28-entry `[3,3,9,3]` layer list
-    denotes to `convNextForwardTCh` — the **channel**-LayerNorm net (§2m), whose 22 LN sites
-    are 1 stem + 18 block + 3 downsample, each reducing over the `c` channels at one spatial
-    position with a per-channel `[c]` affine.
+/-- Math denotation of the committed ConvNeXt-T spec: the 29-entry `[3,3,9,3]` layer list
+    denotes to `convNextForwardTCh` — the **channel**-LayerNorm net (§2m), whose 23 LN sites
+    are 1 stem + 18 block + 3 downsample + 1 **head**, the first 22 reducing over the `c` channels
+    at one spatial position with a per-channel `[c]` affine and the head one over the `[768]` GAP
+    output (which is the same function at one spatial position — `rowLNVecFlat 1 768`).
+
+    ⚠ The head LN was RESTORED 2026-08-30 (`planning/next_session_execution_and_parity.md` §7.1).
+    §2m/§2n had deleted it to match the JAX reference, which was itself missing it against both
+    the paper and timm; the parameter count was short by exactly 2×768.
 
     ⚠ This used to match a `.convNextBlock`/`.bn` list and denote the SCALAR-LN net: one mean and
     one variance over the whole `c·h·w` map, two scalars, and no stem LN but a head LN. §2n
@@ -828,11 +833,11 @@ noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh) :
      .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
      .layerNorm 384, .conv 384 768 2 2,
      .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
-     .globalAvgPool, .dense 768 10] => convNextForwardTCh w
+     .globalAvgPool, .layerNorm 768, .dense 768 10] => convNextForwardTCh w
   | _ => fun _ => 0
 
 /-- **Spec ≡ the full proven net.** `convnextVerified`'s denotation is exactly
-    `convNextForwardTCh` ([3,3,9,3] @ [96,192,384,768], channel LN, 28,587,592 params at
+    `convNextForwardTCh` ([3,3,9,3] @ [96,192,384,768], channel LN + head LN, 28,589,128 params at
     K = 1000 — the JAX reference's own count) — by `rfl`. -/
 theorem convnextVerified_denote_eq (w : CnxTWeightsCh) :
     denoteConvnextT convnextVerified.layers w = convNextForwardTCh w := rfl

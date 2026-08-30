@@ -100,6 +100,46 @@ private def lnFwdSiteB (gN btN xin : String) (c h : Nat) :
                                   (.operand bi (zVB : Vec (bB*(h*h*c)))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
+/-- **The HEAD LN, batched-index peer** (2026-08-30, §7.1) — `lnFwdSiteB` with the transposes
+    deleted, at `m = 1`: after GAP the tensor is one `[d]` row per example. Must stay op-for-op
+    with `ConvNeXtRender.headLnFwdSite`, because `convnext-fwd-b-tie` asserts the two renderers
+    emit the same bytes — the gate that went red for three commits when `f4e4172` lifted only the
+    batched pointwise arms. -/
+private def headLnFwdSiteB (gN btN xin : String) (d : Nat) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+    let (k1, n)  ← pretty bB (.batchOp (N := bB)
+                                (.lnRow (m := 1) (n := d) "%one" "%zero" bEPS 0 1 0)
+                                (.operand xin (zVB : Vec (bB*(1*d)))))
+    let (k2, sc) ← pretty bB (.batchOp (N := bB) (.rowScale (m := 1) (n := d) gN (zVB : Vec d))
+                                (.operand n (zVB : Vec (bB*(1*d)))))
+    let (k3, o)  ← pretty bB (.batchOp (N := bB) (.rowBias (m := 1) (n := d) btN (zVB : Vec d))
+                                (.operand sc (zVB : Vec (bB*(1*d)))))
+    pure (k1 ++ k2 ++ k3, o)
+
+/-- The head LN's **input-VJP**, batched peer. -/
+private def headLnBackSiteB (gN xName cot : String) (d : Nat) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+    let (k1, da) ← pretty bB (.batchOp (N := bB) (.rowScale (m := 1) (n := d) gN (zVB : Vec d))
+                                 (.operand cot (zVB : Vec (bB*(1*d)))))
+    let (k2, o)  ← pretty bB (.lnRowBackB (N := bB) (m := 1) (n := d) "%one" xName bEPS 0 1 zVB
+                                 (.operand da (zVB : Vec (bB*(1*d)))))
+    pure (k1 ++ k2, o)
+
+/-- The head LN's **γ / β tails**, batched peers — both contract the batch. -/
+-- ⚠ `_gN` is unused and that is correct rather than an oversight: the ADAM γ tail is a pure
+-- GRADIENT (`veclnGammaGradB`), which does not read the current γ — only the SGD peer does, and
+-- this batched renderer has no SGD arm. Named `_` so the linter says so instead of the reader
+-- having to work it out.
+private def headLnGammaTailB (_gN xName cot : String) (d : Nat) :
+    StateM Proofs.StableHLO.EmitS (String × String) :=
+  pretty bB (.veclnGammaGradB (N := bB) (R := 1) (D := d) xName bEPS 0
+                (zVB : Vec (bB*(1*d))) (.operand cot (zVB : Vec (bB*(1*d)))))
+
+private def headLnBetaTailB (cot : String) (d : Nat) :
+    StateM Proofs.StableHLO.EmitS (String × String) :=
+  pretty bB (.rowDenseBiasGradB (N := bB) (R := 1) (c := d)
+                (.operand cot (zVB : Vec (bB*(1*d)))))
+
 /-- One **ConvNeXt block** forward, batched: depthwise 7×7 → channel-LN → 1×1 expand → GELU →
     1×1 project → LayerScale → [drop] → `+ skip`. The residual add is `addVB`, the binary batched
     form.
@@ -209,10 +249,12 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := V.dims[3]!) (h := 7) (w := 7))
       (.operand cur zVB))
+  -- ⭐ head LN (2026-08-30, §7.1) — the per-example peer of `ConvNeXtRender`'s.
+  let (cHn, hn) ← headLnFwdSiteB "%hng" "%hnbt" gap V.dims[3]!
   let (cLog, logits) ← pretty bB (.batchOp (N := bB)
-      (.dense "%Wd" "%bd" (zMB : Mat (V.dims[3]!) nClasses) zVB) (.operand gap zVB))
-  pure { code := fwd ++ cG ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,
-         gap := gap, stemC := stemC, hn := gap, logits := logits }
+      (.dense "%Wd" "%bd" (zMB : Mat (V.dims[3]!) nClasses) zVB) (.operand hn zVB))
+  pure { code := fwd ++ cG ++ cHn ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,
+         gap := gap, stemC := stemC, hn := hn, logits := logits }
 
 set_option maxRecDepth 8000 in
 /-- **`@convnext_fwd_b`** — the batched-index peer of `convNextFwdFaithfulV`, same 180-parameter
@@ -486,15 +528,25 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
               (.operand n3 (zVB : Vec (bB*nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ head ═══
-    let (cDd, cot_gap) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (zMB : Mat (V.dims[3]!) nClasses))
+    let (cDd, cot_hn) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (zMB : Mat (V.dims[3]!) nClasses))
         (.operand dyName zVB))
+    let (cHnB, cot_gap) ← headLnBackSiteB "%hng" F.gap cot_hn V.dims[3]!
     let (cWd, nWd) ← pretty bB (.weightGradB (N := bB) (m := V.dims[3]!) (n := nClasses) F.hn
         (zVB : Vec (bB*V.dims[3]!)) (.operand dyName (zVB : Vec (bB*nClasses))))
     let (cBd, nBd) ← pretty bB (.biasGradB (N := bB) (n := nClasses)
         (.operand dyName (zVB : Vec (bB*nClasses))))
-    let mut updMap : List (String × String) := [("Wd", nWd), ("bd", nBd)]
+    -- ⚠⚠ THE CALL ORDER IS THE EMIT ORDER, and it must match `ConvNeXtRender`'s exactly —
+    -- `pretty` allocates fresh SSA names from the state monad as it is CALLED, so a renderer that
+    -- calls the γ/β tails before `Wd`/`bd` numbers the same graph differently and
+    -- `convnext-fwd-b-tie` goes red on 24 lines that are otherwise character-for-character equal.
+    -- (It also puts the names out of order against the concatenation below, i.e. use-before-def.)
+    -- Order here: dotOut → LN input-VJP → Wd → bd → LN γ → LN β.
+    let (cHg, nHg) ← headLnGammaTailB "%hng" F.gap cot_hn V.dims[3]!
+    let (cHb, nHb) ← headLnBetaTailB cot_hn V.dims[3]!
+    let mut updMap : List (String × String) :=
+      [("hng", nHg), ("hnbt", nHb), ("Wd", nWd), ("bd", nBd)]
     let bD := V.dims[3]!
-    let mut bwd := cDyC ++ cDd ++ cWd ++ cBd ++
+    let mut bwd := cDyC ++ cDd ++ cHnB ++ cWd ++ cBd ++ cHg ++ cHb ++
       -- ⚠ HAND-WRITTEN TEXT (the §5 carve-out this docstring declares), so `bD` is threaded by
       -- hand and nothing type-checks it. The `7`s and the `49.0` are SPATIAL and stay literals at
       -- every size; only the channel width moves.

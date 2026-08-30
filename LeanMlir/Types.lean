@@ -56,6 +56,14 @@ inductive Layer where
   | maxPool (size stride : Nat)
   | globalAvgPool
   | flatten
+  -- Bare LayerNorm over a `[B, dim]` feature vector: normalize over `dim`, then the
+  -- per-feature affine `γ ⊙ x̂ + β` (2·dim params). ⚠ NOT the channels-first LN inside
+  -- `convNextStage`/`convNextDownsample` — this is the rank-2 head-side one, the piece that
+  -- has to sit BETWEEN two layers and so cannot be a `norm :=` field on either of them.
+  -- ▶ Added 2026-08-30 for ConvNeXt's `GAP → LN → Linear` head (§7.1): the paper and timm both
+  -- have it, both of our phases were missing it, and the parameter count was short by exactly
+  -- 2·dim. ViT already had its final LN because `transformerEncoder` emits one internally.
+  | layerNorm (dim : Nat)
   | dense   (fanIn fanOut : Nat) (act : Activation)
   | residualBlock (ic oc nBlocks firstStride : Nat)
   | bottleneckBlock (ic oc nBlocks firstStride : Nat)

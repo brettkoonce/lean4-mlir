@@ -782,7 +782,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
     .convBnNB 320 1280 1 1,         -- head (no conv bias — §2m)
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
+  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 52 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN,
   -- but b1 is t=1 → NO expand, so only depthwise-BN/project-BN; head) — running-stats layout for
   -- trainAdamSched + @mobilenetv2_fwd_eval. Matches TestMobilenetV2TrainPC.bnLayers. True batch-norm
@@ -892,7 +892,7 @@ def efficientnetVerified : VerifiedNetSpec where
     .convBnNB 320 1280 1 1,         -- head 1×1 (320→1280)
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
+  blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 49 BN layers in forward order (stem; per MBConv: expand-BN [t≠1 only], depthwise-BN, project-BN;
   -- head) — running-stats layout for trainAdamSched + @efficientnet_fwd_eval. Printed by
   -- TestEfficientNetTrain.bnChannelsList; true batch-norm makes batch-BN eval degenerate on sorted val.
@@ -1004,7 +1004,7 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
 /-- ch9 **ConvNeXt-T** on Imagenette 224²: 4×4-s4 patchify → [3,3,9,3] ConvNeXt blocks @
     [96,192,384,768] (depthwise 7×7 → channel-LN → 1×1 expand → GELU → 1×1 project → layerScale)
     with 3 between-stage (LN + 2×2-s2) downsamples (56→28→14→7) → GAP → dense.
-    **180 param tensors, 27,826,282 scalars** (28,587,592 at K = 1000, the JAX reference's count).
+    **182 param tensors, 27,827,818 scalars** (28,589,128 at K = 1000 — `timm.create_model('convnext_tiny')`'s count exactly, since the head LN was restored 2026-08-30; it was 180/27,826,282/28,587,592 before, short by 2×768).
     Tied at the FULL spec in `Proofs/SpecVJP.lean` (`convnextVerified_denote_eq` →
     `convNextForwardTCh`, the committed channel-LN config, + rung E
     `convnextVerified_fwd_faithful`); the full-depth REAL VJP is
@@ -1035,8 +1035,8 @@ def convnextVerified : VerifiedNetSpec where
     .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
     .layerNorm 384, .conv 384 768 2 2,                                 -- downsample 384→768 14→7
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,  -- stage 4 (3) @7
-    .globalAvgPool, .dense 768 10 ]                                    -- head: GAP → dense
-  blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 sites (§2m); the count matches the JAX reference at 28,587,592 for K=1000"
+    .globalAvgPool, .layerNorm 768, .dense 768 10 ]                    -- head: GAP → LN → dense
+  blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 of those sites (§2m), plus a 23rd over the [768] GAP output — the paper's head LN, restored 2026-08-30; the count matches timm at 28,589,128 for K=1000"
   -- ▶ STOCHASTIC DEPTH (`planning/stochastic_depth.md`), used only by the `*drop` variants.
   -- `keep_i = 1 − 0.1·i/(18−1)` at EVERY block — ConvNeXt has one site per block and every block
   -- carries a residual, so unlike EfficientNet there is no skip guard and the site list is
@@ -1057,7 +1057,7 @@ def convnextVerified : VerifiedNetSpec where
 
 /-- **ConvNeXt-T on full 1000-class ImageNet** — the ConvNeXt peer of `resnet34ImagenetVerified`
     and `vitImagenetVerified` (handoff §2p). Identical architecture to `convnextVerified`; only the
-    head moves (768→1000), which is what takes the count to the JAX reference's 28,587,592.
+    head moves (768→1000), which is what takes the count to timm's 28,589,128.
 
     Data comes from the generated tfds shim, so this side does no augmentation at all.
 
@@ -1108,7 +1108,7 @@ def convnextImagenetVerified : VerifiedNetSpec where
     .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
     .layerNorm 384, .conv 384 768 2 2,
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
-    .globalAvgPool, .dense 768 1000 ]
+    .globalAvgPool, .layerNorm 768, .dense 768 1000 ]
   blurb := "ConvNeXt-T on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   -- The ImageNet peer of `convnextVerified.dropKeeps`. IDENTICAL, and that is the content: the ramp
   -- is a property of the ARCHITECTURE (18 blocks, one site each) and of `dropPath := 0.1`, neither
@@ -1173,7 +1173,7 @@ def convnextSImagenetVerified : VerifiedNetSpec where
     List.replicate 27 (VLayer.convNextBlockCh 384) ++
   [ .layerNorm 384, .conv 384 768 2 2,
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
-    .globalAvgPool, .dense 768 1000 ]
+    .globalAvgPool, .layerNorm 768, .dense 768 1000 ]
   blurb := "ConvNeXt-Small on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (ConvNeXt-T deepened: stage 3 goes 9 → 27 blocks, dims unchanged at [96,192,384,768], 50.2M params)"
   -- ▶ 36 sites, denominator 35, and **rate 0.4** — the ConvNeXt paper's S value at 300 epochs,
   -- against T's 0.1. ⚠ This is the first `dropKeeps` in the repo that is not its Tiny peer's: the
@@ -1182,14 +1182,14 @@ def convnextSImagenetVerified : VerifiedNetSpec where
   -- trains and descends, at a regularisation strength the reference does not use for this size.
   dropKeeps := (Array.range 36).map (fun i => 1.0 - 0.4 * i.toFloat / 35.0)
 
--- 342 parameter tensors and 50,222,152 scalars: ConvNeXt-T's 180/28,587,592 plus 18 stage-3 blocks
+-- 344 parameter tensors and 50,223,688 scalars: ConvNeXt-T's 182/28,589,128 plus 18 stage-3 blocks
 -- at 9 tensors and 1,201,920 scalars each. S DEEPENS — it is the first net here added by adding
 -- tensors rather than widening the ones that were there, which is the arithmetic ViT-S's
 -- "same 200 tensors" claim is the mirror image of.
-#guard convnextSImagenetVerified.toSpecs.size == 342
+#guard convnextSImagenetVerified.toSpecs.size == 344
 #guard convnextSImagenetVerified.toSpecs.size == convnextImagenetVerified.toSpecs.size + 18 * 9
 #guard (convnextSImagenetVerified.toSpecs.foldl
-          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 50222152
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 50223688
 -- ⚠ The guards that tie this spec to the RENDERER's own depth table — that `cnxAllParams` at
 -- `cnxSmall` is these same 342 tensors, and that `dropKeeps` has one entry per rendered site —
 -- live in `tests/TestDropPathRamp.lean`, beside ConvNeXt-T's. They cannot live here: this module
@@ -1244,18 +1244,18 @@ def convnextBImagenetVerified : VerifiedNetSpec where
     List.replicate 27 (VLayer.convNextBlockCh 512) ++
   [ .layerNorm 512, .conv 512 1024 2 2,
     .convNextBlockCh 1024, .convNextBlockCh 1024, .convNextBlockCh 1024,
-    .globalAvgPool, .dense 1024 1000 ]
+    .globalAvgPool, .layerNorm 1024, .dense 1024 1000 ]
   blurb := "ConvNeXt-Base on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (ConvNeXt-S's [3,3,27,3] depth at [128,256,512,1024], 88.6M params)"
   -- 36 sites, denominator 35, rate **0.5** — the paper's B value. ⚠ Same ramp SHAPE as S, different
   -- rate: the shape is architectural, the rate is per-size recipe. Three sizes, three rates.
   dropKeeps := (Array.range 36).map (fun i => 1.0 - 0.5 * i.toFloat / 35.0)
 
--- Same 342 tensors as S — B widens every one and adds none, which is the width-generic claim
--- stated as arithmetic. 88,589,416 scalars against S's 50,222,152.
+-- Same 344 tensors as S — B widens every one and adds none, which is the width-generic claim
+-- stated as arithmetic. 88,591,464 scalars against S's 50,223,688.
 #guard convnextBImagenetVerified.toSpecs.size == convnextSImagenetVerified.toSpecs.size
-#guard convnextBImagenetVerified.toSpecs.size == 342
+#guard convnextBImagenetVerified.toSpecs.size == 344
 #guard (convnextBImagenetVerified.toSpecs.foldl
-          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 88589416
+          (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 88591464
 -- ⚠ And every shape must actually MOVE. S and B have identical tensor counts and identical drop
 -- ramps in shape, so a spec that accidentally copied S's widths would pass both guards above.
 #guard convnextBImagenetVerified.toSpecs != convnextSImagenetVerified.toSpecs
@@ -1269,7 +1269,7 @@ def convnextBImagenetVerified : VerifiedNetSpec where
 #guard convnextImagenetVerified.toSpecs.pop.pop == convnextVerified.toSpecs.pop.pop
 #guard convnextImagenetVerified.toSpecs.back! == (#[1000], 2)
 
--- Derived layout (180 params) == the audited hand-list ConvNeXtLayout.specs.
+-- Derived layout (182 params, head LN included since 2026-08-30) == the audited hand-list.
 #guard convnextVerified.toSpecs == ConvNeXtLayout.specs
 
 /-- ch10 **ViT-Tiny** on Imagenette 224² (patch-16): 16×16-s16 conv patch embed (3→192,
@@ -1562,7 +1562,7 @@ def mobilenetv4Verified : VerifiedNetSpec where
     .convBnNB 960 1280 1 1,             -- head conv 2 (`conv_head`, num_features)
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → two head convs 256→960→1280 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
+  blurb := "MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → two head convs 256→960→1280 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 52 BN layers in forward order: stem; the fused stage's k×k-BN and project-BN; then per UIB
   -- block pre-DW-BN (if preDWk≠0) / expand-BN / post-DW-BN (if postDWk≠0) / project-BN; head.
   -- ⚠ The `if`s are the `k = 0` family dispatch, so this list's LENGTH varies per block (2, 3 or 4)
