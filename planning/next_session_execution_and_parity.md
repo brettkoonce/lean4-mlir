@@ -814,12 +814,18 @@ Job-accurate bf16 variants, 4× 4060 Ti, `DEVS=0,2,3,4`, `PJRT_FFI_RESIDENT=1`, 
 |---|---|---|---|---|---|---|---|---|
 | **EfficientNet-B0** | 71.60 | 98 | 107 | 26.4 | 9 | **8.92** | 8.88 | **1.00×** |
 | **ViT-Ti** | 97.45 | 144 | 158 | **46.5** | 14 | 6.59 | 6.63 | **0.99×** |
-| MobileNetV2 | 69.62 | 86 | 132 | 16.4 | **46** | 11.01 | 7.09 | 1.55× |
+| MobileNetV2 | 69.62 | 86 | 140 | 16.4 | **54** | 11.68 | 7.09 | 1.65× |
 | ConvNeXt-T | 106.66 | 119 | 142 | 12.3 | 23 | 23.69 | 14.93 | 1.59× |
-| MNv4-Conv-M | 61.08 | 83 | 122 | 21.9 | **39** | 10.17 | — | — |
+| MNv4-Conv-M | 61.08 | 83 | 122 | 21.9 | **39** | 10.17 | 9.03 ⚠ | 1.13× ⚠ |
 
 `host` = synth − graph (blob patching, host draws, the Lean loop); `read` = real − synth (the shim
 feed the depth-8 prefetch did not hide). **Two of five nets are now at or past their JAX reference.**
+
+⚠ **The MNv4 row's JAX cell is not like-for-like** — that reference runs effective batch **4096**
+with EMA where the verified job runs 256 without, so its 1.13× is two recipes compared, not two
+lowerers. Full account in §6.2. ⚠ MobileNetV2's `real` is a median of three (140/141/142); an
+earlier single sample read 132, and its fp32 arm spans 159–196 across three runs, so treat any
+single mnv2 probe as ±15%.
 
 ⛔⛔ **CORRECTION — §6.1's old "bare graph (4-rep)" column mixed replica counts.** ConvNeXt-T's
 68.0 ms was §1.5's **single-device** number (that table says "one 4060 Ti"); at 4 replicas, with the
@@ -844,29 +850,54 @@ cross-day drift §6.3 warns about, and is why this table was taken in one sittin
 
 ---
 
-### 6.2 ◐ MNv4 — the runner numbers now exist; the phase-2 side does not
+### 6.2 ✅ CLOSED — MNv4 re-costed, and the shape fix never reached the runner
 
-MNv4-Conv-M gained **1.11×** from the shape fix (0.776 → **0.056 GB**, 47.78 → 42.99 ms bare graph)
-and had never been re-costed at the runner level. Done, 2026-08-30, in §6.1b's sweep, on the
-variant `scripts/jobs/mnv4-default-4gpu.conf` actually names (`adamdp64` → its bf16 twin):
+Job-accurate, 4× 4060 Ti, `SHIM_WORKERS=8`, 40-step probes, medians of three, one session:
 
-| MNv4-Conv-M, bf16, 4 replicas | ms/step |
-|---|---|
-| bare graph (`mnv4in_adamdp64bf16`) | **61.08** |
-| trainer, synth | 83 |
-| **trainer, real** | **122** — 10.17 min/ep, 100 ep ⇒ **17.0 h** |
+| MNv4-Conv-M | bare graph @4rep | synth | **real** | host | feed |
+|---|---|---|---|---|---|
+| **f32 `adamdp64`** — what the conf names | 122.03 | 143 | **176** (176/180/176) | 21 | 33 |
+| **bf16 `adamdp64bf16`** | 61.08 | 83 | **122** (125/122/120) | 22 | 39 |
 
-⭐ It is **producer-bound**: 39 ms of unhidden shim read against a 22 ms host term. That is the
-same shape as MobileNetV2's, and unlike ConvNeXt's, so `SHIM_WORKERS` is the knob to try first.
-⚠ Its artifact is `mnv4in_*`, **not** `mobilenetv4in_*` — the exe is `mobilenetv4-imagenet-verified`
-but the render prefix is `mnv4in`, and a probe naming the exe's prefix silently finds no file.
+⛔ **The headline is a NULL, and it is the answer §6.2 was opened to get.** MNv4 gained **1.11×**
+on the bare graph from the shape fix (0.776 → 0.056 GB), and the conf's pre-fix numbers were
+177 / 126. Post-fix they are **176 / 122** — statistically identical. The graph win did not reach
+the runner because **exactly half the step is not the graph**: 61.1 ms of the 122 ms bf16 step is
+the graph (all-reduce included, these are 4-replica compiles), 39 ms is unhidden feed, 22 ms host.
+▶ bf16 is worth **2.00×** on the graph and **1.44×** on the whole step. Nothing here needs redoing;
+the numbers the conf and the book carried were right.
 
-⛔ **What is still missing is the DENOMINATOR.** There is no JAX ms/step for MNv4 in this doc, so
-the `ratio` cell in §6.1b is blank rather than flattering — the one thing §6.3 asks for. Its
-`EPOCHS=100` does match `mnv4ImagenetConfig.epochs` (audited 2026-08-30, see below).
+⚠ Its artifact prefix is `mnv4in_`, **not** `mobilenetv4in_` — the exe is
+`mobilenetv4-imagenet-verified` but the render slug is `mnv4in`, and a probe naming the exe's
+prefix silently finds no file rather than erroring.
 
-⚠ Its phase-2 reference is the 100-epoch JAX run at **75.51%**, and it lives **outside the repo** at
-`/home/skoonce/mnv4_convm_100ep` — a repo search will not find it.
+### ⛔⛔ The denominator exists — and it is not a like-for-like one
+
+`/home/skoonce/mnv4_convm_100ep` (outside the repo) records **541.8 s train per epoch** at
+steady state, i.e. **9.03 min/ep**, against the verified path's 10.17. That is **1.13×** — but do
+not quote it as a lowerer result, because the two sides are not running the same job:
+
+| | JAX reference | verified `adamdp64` |
+|---|---|---|
+| effective batch | **4096** (512 micro × `GRAD_ACCUM = 8`) | **256** (4 × 64) |
+| optimizer | AdamW @ **0.004** | AdamW @ **1e-3** |
+| EMA | ✅ `ema_params` **and** `ema_bn`, every step | ⛔ none (`emaOn` needs an `ema` prefix) |
+| RandAugment m9, drop-path | ✅ | ✅ (same shim) |
+
+⚠ **The batch difference runs in our favour and the EMA runs against it.** JAX does 312 optimizer
+steps/epoch against 5004, and each of its forward/backward passes is 2× wider per device, so it
+pays the per-invoke overhead half as often at better occupancy; against that it does two full
+`tree_map`s over 9.7M parameters per step that the verified path does not. Neither effect has been
+separated, so 1.13× is a **throughput comparison of two different recipes**, not a statement about
+the lowerer. ▶ The conf already says the optimizer does not match; this quantifies what that costs
+the comparison. A clean number needs the JAX side re-run at global 256 without EMA, or the verified
+side brought up to the reference recipe — the latter is the real goal and is `chapter_makeover.md`'s
+open MNv4 gap list.
+
+⚠ Its phase-2 accuracy reference is the 100-epoch JAX run at **75.51%**, in that same out-of-repo
+directory. `EPOCHS=100` matches `mnv4ImagenetConfig.epochs` (audited 2026-08-30).
+⭐ `convBnAct` is `.relu` on **both** MNv4 specs, which agree — so MNv4 escaped the stem/head
+defect that hit B0 and MNv2 (§2.1). Verified render: 54 `stablehlo.maximum`, 0 `minimum`.
 
 ### 6.3 ▶ The JAX end-to-end reference run
 

@@ -7194,39 +7194,24 @@ anything, and they are the whole of what has been measured about its
 accuracy so far.
 
 \begin{center}
-\begin{tabular}{l r r l r r}
+\begin{tabular}{l r r r r r}
 \hline
-Box & ms/step & min/epoch & Epochs & Total & Val top-1 \\
+Box & ms/step & min/epoch & 100 ep & 500 ep & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA), global 256 & 126 & 10.5 & 100 (reduced-reg) & 18.6 h (0.8 d) & TBD \\
-4$\times$ 4060 Ti (CUDA), global 256 & 126 & 10.5 & 500 (paper)       & 92.8 h (3.9 d) & TBD \\
-4$\times$ 3060 (CUDA), global 256    & 109 &  9.1 & 100 (reduced-reg) & 16.2 h (0.7 d) & TBD \\
-4$\times$ 3060 (CUDA), global 256    & 109 &  9.1 & 500 (paper)       & 81.0 h (3.4 d) & TBD \\
+4$\times$ 4060 Ti, global 256 & $176 \to 122$ & $14.7 \to 10.2$ & $25.5 \to 18.0$ h & $127.5 \to 90.0$ h & TBD \\
+4$\times$ 3060, global 256    & ---           & ---             & ---               & ---                & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent {\small Measured bf16 with the four-replica probe, as a median
-over steady-state steps. Both four-replica renders are in the tree ---
-\texttt{mnv4in\_adamdp64\_train\_step} and its \texttt{bf16} arm --- so
-the artifact these numbers were taken on is one the reader can rebuild.
-\textbf{And as of 2026-08-27 they are tied}, which is what this row used
-to say was missing: MobileNetV4 now has a \texttt{shard-check} peer and a
-duplicated-batch \texttt{mnv4-dp-check}, both green and both red against a
-sum-not-mean control. So a schedule costed here can now also be run ---
-\texttt{scripts/supervise.sh mnv4-default-4gpu}.}
-
-\medskip\noindent Most of the four-card overhead here is not all-reduce.
-At global 256 the host feeds four times as many images per step, and that
-cost grows with the batch rather than with the model. The evidence is that
-an estimate built the other way --- scaling MobileNetV2's measured
-all-reduce cost by Conv-M's $2.77\times$ larger gradients --- missed the
-measured figure by $70\%$.
+\noindent {\small The columns are the two arms of \texttt{adamdp64}; fp32 is what
+\texttt{mnv4-\allowbreak default-\allowbreak 4gpu} names today. $100$ epochs is the
+reduced-regularization tier, $500$ the paper's.}
 
 \medskip\noindent\textbf{[TODO: run \texttt{mnv4-default-4gpu}.]} The job
 config exists and its prechecks pass. Note that it ships the \emph{fp32}
-arm by default --- $177$ ms/step, $\sim$$25.6$ hr --- where the rows above
-are bf16; one line in the config switches it, and the choice was to move one
+arm by default --- the left-hand column above, $176$ ms/step and
+$\sim$$25.5$ hr; one line in the config switches it, and the choice was to move one
 axis at a time rather than pair a first run with a precision change. The
 \texttt{Val top-1} column stays \texttt{TBD} either way.
 
