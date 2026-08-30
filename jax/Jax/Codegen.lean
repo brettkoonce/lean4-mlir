@@ -2665,13 +2665,45 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    d = jnp.minimum(EMA_DECAY, (1.0 + step) / (10.0 + step))\n" ++
     "    return jax.tree.map(lambda e, p: d * e + (1.0 - d) * p, ema, params)\n\n"
    else "") ++
+  -- ⭐⭐ LABEL SMOOTHING BELONGS ON THE ONE-HOT, and it lives here in ONE place because both
+  --    `_mixup` and `_cutmix` need it and a second copy is how they drift apart.
+  --
+  -- ⛔ It used to be missing entirely, and the shape of the defect is worth keeping. timm's
+  --    `Mixup(label_smoothing=s)` builds its one-hot with `on = 1−s+s/K, off = s/K` and mixes
+  --    the SMOOTHED rows; we built a raw one-hot, mixed that, and then `loss_fn` smoothed only
+  --    its `y.ndim == 1` branch — the mixed target is rank-2 and fell to `tgt = y`, a
+  --    pass-through. Mixup or CutMix fires EVERY step for ViT-Ti/S/B and ConvNeXt-T/S/B, so all
+  --    six trained at an effective **ls = 0.0** while config, banner and ledger said 0.1.
+  --
+  -- ⚠ THE FIX IS HERE AND NOT IN `loss_fn`. The soft-target branch must stay a pass-through:
+  --    the verified path's shim hands the graph a rank-2 target too, and smoothing both here
+  --    and there would double-smooth. Smoothing and mixing COMMUTE — both are convex
+  --    combinations of rows summing to 1 — so `(λ·oh₁+(1−λ)·oh₂)(1−s)+s/K` either way; this is
+  --    simply where timm puts it.
+  --
+  -- ⚠ At `labelSmoothing = 0` this is the bare `one_hot` character for character, so RSB-A2/A1
+  --    (BCE over soft labels, `labelSmoothing := 0.0` by recipe) regenerate byte-identically.
+  --    The spelling deliberately mirrors `loss_fn`'s hard-label branch above.
+  let softOneHot :=
+    let oh := "jax.nn.one_hot(y, " ++ toString nClasses ++ ")"
+    if cfg.labelSmoothing > 0.0 then
+      "(" ++ oh ++ " * (1.0 - " ++ toString cfg.labelSmoothing ++ ") + " ++
+        toString cfg.labelSmoothing ++ " / " ++ toString nClasses ++ ")"
+    else oh
+  let softOneHotNote :=
+    if cfg.labelSmoothing > 0.0 then
+      "    # timm folds label smoothing INTO the mixed target (Mixup(label_smoothing=" ++
+        toString cfg.labelSmoothing ++ "): on=1-s+s/K, off=s/K), so it goes on the one-hot\n" ++
+      "    # BEFORE mixing, not in loss_fn — whose soft-label branch is a pass-through.\n"
+    else ""
   -- Mixup (on-device, soft labels). Partner = batch-reverse (jnp.flip) to avoid
   -- a cross-shard gather under multi-GPU sharding. λ ~ Beta(α,α) per step.
   (if cfg.useMixup then
     "@jit\n" ++
     "def _mixup(x, y, key):\n" ++
     "    lam = jax.random.beta(key, " ++ toString cfg.mixupAlpha ++ ", " ++ toString cfg.mixupAlpha ++ ")\n" ++
-    "    y1 = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
+    softOneHotNote ++
+    "    y1 = " ++ softOneHot ++ "\n" ++
     "    xm = lam * x + (1.0 - lam) * jnp.flip(x, 0)\n" ++
     "    ym = lam * y1 + (1.0 - lam) * jnp.flip(y1, 0)\n" ++
     "    return xm, ym\n\n"
@@ -2696,7 +2728,8 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    mask = (my[:, None] & mx[None, :]).astype(x.dtype)\n" ++
     "    x4m = x4 * (1.0 - mask) + jnp.flip(x4, 0) * mask\n" ++
     "    lam_adj = 1.0 - jnp.sum(mask) / (" ++ H ++ " * " ++ W ++ ")\n" ++
-    "    y1h = jax.nn.one_hot(y, " ++ toString nClasses ++ ")\n" ++
+    softOneHotNote ++
+    "    y1h = " ++ softOneHot ++ "\n" ++
     "    ym = lam_adj * y1h + (1.0 - lam_adj) * jnp.flip(y1h, 0)\n" ++
     "    return x4m.reshape(B, -1), ym\n\n"
    else "") ++
