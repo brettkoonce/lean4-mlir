@@ -1060,6 +1060,20 @@ end Proofs.StableHLO
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in" .rmsprop)
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in" .rmsprop)
+-- ⭐⭐ **The bf16 twin of the line above, and the arm `mnv2-default-4gpu` should run.** Until now
+-- this net's ONLY committed bf16 renders were the AdamW family, so the one job that trains it had
+-- no bf16 arm at all and paid f32 for the whole 350-epoch schedule — the gap was in the render
+-- matrix rather than in anything measured, which is the kind that survives longest because every
+-- gate on the existing artifacts stays green while it does.
+-- ⚠ RMSProp is the axis that matters here, not the precision: `.rmsprop` keeps ε INSIDE the root
+-- and the mean-square initialised to 1.0 (TF's form), and the bf16 flag is orthogonal to both.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp64bf16_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in"
+    Proofs.StableHLO.OptKind.rmsprop true)
+-- The entry name is derived from the variant, so this guard is what stops the artifact declaring
+-- `@mobilenetv2in_rmsdp64_train_step` inside a file named `…rmsdp64bf16…` — the load-time entry
+-- mismatch three other nets have each shipped once.
+#guard Proofs.StableHLO.mnv2AdamVariant 64 4 Proofs.StableHLO.OptKind.rmsprop true == "rmsdp64bf16"
 -- The **2-GPU** peer of the line above: `B := 128` per replica, so the global batch is still
 -- 128×2 = 256 and the recipe, the steps/epoch and the LR all stay exactly what the 4×64 config
 -- runs. That is what makes a 2-card wall-clock comparable to the 4-card one rather than a new

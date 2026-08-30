@@ -203,22 +203,35 @@ permutation), `gaps.py` (gap attribution).
 All four rows are 40-step steady-state probes (`LEAN_MLIR_MAX_STEPS`) in the real job env — 4× 4060
 Ti, `DEVS=0,2,3,4`, `PJRT_FFI_RESIDENT=1`, `SHIM_WORKERS=8`, `LEAN_MLIR_SKIP_EVAL=1`.
 
+⛔⛔ **THE EFFNET ROWS BELOW COSTED THE WRONG SCHEDULE.** They divide by **80 epochs**;
+`efficientnetImagenetConfig.epochs` is **350** (`MainEfficientNetImagenet.lean:35`), and the trainer
+anneals over the constant, not over the job conf. ⚠ Worse, `enet-default-4gpu.conf` *set* `EPOCHS=80`
+— and that is supervise.sh's **STOP** condition (`last_epoch >= EPOCHS` ⇒ ✅ COMPLETE), so the run
+would have been killed a quarter of the way through its own LR curve and reported success. Fixed in
+the conf 2026-08-30. The ConvNeXt rows are fine: 300 is that net's real schedule.
+
 | net | arm | ms/step | min/ep | total | |
 |---|---|---|---|---|---|
-| **EffNet-B0**<br>5,004 × 80 ep | f32 — today's job | 357 | 29.8 | **39.7 h** | |
-| | **bf16 + fix** | **274** | 22.9 | **30.5 h** | 1.30× |
+| **EffNet-B0**<br>5,004 × ~~80~~ **350 ep** | f32 — today's job | 357 | 29.8 | ~~39.7~~ **173.7 h** | |
+| | **bf16 + fix** | **280** | 23.4 | ~~30.5~~ **136.2 h** | 1.28× |
 | **ConvNeXt-T**<br>10,009 × 300 ep | f32 — today's job | 209 | 34.9 | **174.3 h** | |
 | | bf16, pre-fix | 180 | 30.0 | 150.1 h | 1.16× |
-| | **bf16 + fix** | **144** | 24.0 | **120.1 h** | **1.45×** |
-| | + LN tweak *(projected, §1.5)* | ~130 | ~21.7 | ~108 h | ~1.61× |
+| | bf16 + pointwise fix | 144 | 24.0 | 120.1 h | 1.45× |
+| | **bf16 + shape fix (§1.5)** | **131** | 21.9 | **109.3 h** | **1.60×** |
+
+⭐ The last ConvNeXt row was the *projection* "~130 ms, ~108 h, ~1.61×" for the channel-LN op. The op
+was never written — a different fix landed (§1.5) — and it arrived within 1 ms of the projection.
+Re-probed 2026-08-30 alongside -S (**192 ms**, 160.1 h) and -B (**301 ms**, 251.1 h).
 
 ⛔ **This refutes `bf16_4gpu_end_to_end`'s "ConvNeXt is 157 h and NEITHER bf16 nor a bigger batch
 helps it."** Measured: f32 174.3 h → bf16+fix 120.1 h, a 54 h saving on one net.
 
-⚠ **B0's system gain (1.30×) is far below its bare-graph 2.50×** — suspect the producer. That job's
-shim runs AutoAugment + RandAugment per image on CPU and `enet-default-4gpu.conf` records a ~196 ms
-compute-only floor at `SHIM_WORKERS=8`; at 274 ms/step the graph may no longer be the binding
-constraint. Re-probe `SHIM_WORKERS` before quoting 30.5 h as the floor.
+⚠ **B0's system gain (1.28×) is far below its bare-graph 2.50×** — the suspicion was the producer,
+since that job's shim runs AutoAugment + RandAugment per image on CPU and `enet-default-4gpu.conf`
+records a ~196 ms compute-only floor at `SHIM_WORKERS=8`.
+✅ **ANSWERED 2026-08-30: it is not the producer.** `SHIM_WORKERS=16` measures **293 ms/step against
+8's 280** — worse, not better — so 8 is not starving this net and the remaining gap is elsewhere.
+`SHIM_WORKERS=8` stands and 136.2 h is the floor as measured.
 
 ▶ Two renders were added to get these numbers, both 3-line additions since `bf16` was already a
 parameter of `efficientnetAdamTrainStepFaithful`:

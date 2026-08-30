@@ -6978,14 +6978,20 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 129 & 10.8 & $\sim$66.4 h (2.8 d) & TBD \\
-4$\times$ 3060 (CUDA)     &  99 &  8.3 & $\sim$51.8 h (2.2 d) & TBD \\
-2$\times$ 7900 XTX (ROCm) & --- & ---  & ---                  & TBD \\
+4$\times$ 4060 Ti (CUDA)  & $187 \to 136$ & $15.6 \to 11.3$ & $\sim$95 $\to$ $\sim$70 h \;($3.9 \to 2.9$ d) & TBD \\
+4$\times$ 3060 (CUDA)     & ---           & ---             & ---                                          & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent\textbf{[TODO: run \texttt{mobilenetv2-imagenet-verified}.]}
+\noindent The columns are the two arms of \texttt{rmsdp64} --- RMSProp with exponential
+decay, the recipe \texttt{mnv2-\allowbreak default-\allowbreak 4gpu} names. fp32 is the
+default; the run will be bf16, so read the right-hand column. Both are at
+\texttt{SHIM\_WORKERS=8}, which is worth $216 \to 187$\,ms on the fp32 arm; $16$ is
+\emph{worse} than $8$ on both, and on the bf16 arm worse than fp32 at $8$ --- half of that
+$136$\,ms step is no longer the graph, so this net is now as much data pipeline as compute.
+
+\medskip\noindent\textbf{[TODO: run \texttt{mobilenetv2-imagenet-verified}.]}
 
 \subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
 
@@ -8130,18 +8136,18 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 350 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 280 & 23.4 & $\sim$139.9 h (5.8 d) & TBD \\
-4$\times$ 3060 (CUDA)     & --- & --- & --- & TBD \\
+4$\times$ 4060 Ti (CUDA)  & $357 \to 280$ & $29.8 \to 23.4$ & $\sim$177 $\to$ $\sim$140 h \;($7.4 \to 5.8$ d) & TBD \\
+4$\times$ 3060 (CUDA)     & ---           & ---             & ---                                           & TBD \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent That row is \texttt{emarmsdp64dropdo} in bf16 --- EMA, stochastic
-depth and classifier dropout --- which is the artifact
-\texttt{enet-\allowbreak default-\allowbreak 4gpu} names and therefore the graph
-this run would actually train. Set it against the $\sim$8.6 minutes per epoch the
-phase-2 350-epoch row reports on the same four cards: both are bf16 over the same
-architecture, so the ${\sim}2.7\times$ per epoch that remains is the lowerer, not
+\noindent The columns are the two arms of \texttt{emarmsdp64dropdo} --- EMA,
+stochastic depth and classifier dropout --- the recipe
+\texttt{enet-\allowbreak default-\allowbreak 4gpu} names. fp32 is the default; the run
+will be bf16, so read the right-hand column. Set that against the $\sim$8.6 minutes per
+epoch the phase-2 350-epoch row reports on the same four cards: both are bf16 over the
+same architecture, so the ${\sim}2.7\times$ per epoch that remains is the lowerer, not
 the cast and not the network.
 
 \noindent\textbf{[TODO: run \texttt{efficientnet-imagenet-verified}.]}
@@ -9127,8 +9133,8 @@ schedule follows from it:
 \hline
 Box & ms/step & min/epoch & 300 epochs & Val top-1 \\
 \hline
-4$\times$ 4060 Ti (CUDA)  & 131 & 21.9 & $\sim$112.4 h (4.7 d) & TBD \\
-4$\times$ 3060 (CUDA)     & 161 & 26.9 & --- & TBD \\
+4$\times$ 4060 Ti (CUDA)  & $206 \to 131$ & $34.4 \to 21.9$ & $\sim$175 $\to$ $\sim$112 h \;($7.3 \to 4.7$ d) & TBD \\
+4$\times$ 3060 (CUDA)     & ---           & ---             & ---                                           & TBD \\
 \hline
 \end{tabular}
 \end{center}
