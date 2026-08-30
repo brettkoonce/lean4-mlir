@@ -5971,7 +5971,7 @@ Accumulation to LAMB's design batch of $2048$, at $k=8$ or at the reference's ow
 \textbf{Stochastic depth} $0.05$ --- sixteen sites, one per bottleneck, on the residual branch
   & \\[2pt]
 Repeated augmentation $3\times$; both tiers, one and four replicas
-  & \emph{fp32 and bf16 do not both exist for every render} --- see the memory table \\[2pt]
+  & \\[2pt]
 A1's own decay and own shim, which the driver refuses to start without
   & \\[2pt]
 Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
@@ -5992,31 +5992,6 @@ endpoint gate. Moving all sixteen separates them by eight orders of magnitude at
 a real mask, and by exactly zero at an all-ones one. The reference had it wrong
 the other way round --- a scalar \texttt{bernoulli} for the whole batch where
 timm's is per \emph{sample}, same expectation, which is why it survived.
-
-\medskip\noindent \textbf{What each render costs on one card}, from XLA's own
-\texttt{peak\_memory\_in\_bytes}:
-
-\begin{center}
-\begin{tabular}{@{}l l c r r r@{}}
-\hline
-render & precision & BN group & peak & of $11.68$ & of $15.11$ \\
-\hline
-$4\times128$ + EMA + sd & bf16 & $128$ & $8.09$\,GiB  & $69\%$ & $54\%$ \\
-$4\times128$ + EMA + sd & fp32 & $128$ & $11.91$\,GiB & over   & $79\%$ \\
-\hline
-\end{tabular}
-\end{center}
-
-\noindent Neither regulariser is what makes this tight: the fifth region costs
-$0.19$\,GiB, and stochastic depth nothing measurable in memory or in time.
-\textbf{The two budget columns are the point.}
-A PJRT client created with no allocator options takes the plugin's $0.75$ default
---- which is where $11.68$ comes from, and four gigabytes of a $16$\,GB card with
-it. \texttt{XLA\_PYTHON\_CLIENT\_MEM\_FRACTION} does not change it: the plugin
-never reads that variable, JAX's Python layer does, and passes
-\texttt{memory\_fraction} as a \emph{create option}. The shim now passes it too.
-\textbf{The largest render goes from not fitting to $79\%$, and nothing about the
-hardware moved.}
 
 \medskip\noindent \textbf{Which leaves the batch-norm group, larger than it
 looks.} Nothing here all-reduces activation statistics, so each replica
