@@ -489,17 +489,16 @@ config. Ranked by (likely points) ÷ (cost).
 
 ### 2.1 Cross-cutting
 
-* ⭐⭐ **NEW — label smoothing is silently dropped on every mixed step.** `_mixup`/`_cutmix` build
-  their target from a raw `jax.nn.one_hot`, and `loss_fn` smooths only the hard-label branch
-  (`y.ndim == 1`). timm's `Mixup(label_smoothing=0.1)` folds smoothing INTO the mixed target
-  (`on = 1−s+s/K`, `off = s/K`). Mixup or CutMix fires **every** step for ConvNeXt-T, ViT-Ti and
-  RSB-A2/A1, so those runs trained at an effective **ls = 0.0** while config, banner and ledger all
-  say 0.1. RSB-A3 is unaffected (ls 0 by recipe).
-  ▶ Fix in `Jax/Codegen.lean` where `_mixup`/`_cutmix` emit the one-hot — **not** in `loss_fn`: the
-  soft-target branch must stay a pass-through or the shim's wire-v2 targets get double-smoothed.
-* **BN momentum is hard-coded 0.99.** Correct for EfficientNet (TF's value). **Wrong by 10× for
-  R50** — timm's PyTorch default is momentum 0.1 ⇒ decay 0.9, a 100-step window against our 1000.
-  MobileNetV2's TF-slim reference is 0.997 `[unverified]`.
+* ✅ **Label smoothing was silently dropped on every mixed step — CLOSED 2026-08-30, see §7.2.**
+  `_mixup`/`_cutmix` now emit timm's smoothed one-hot (`on = 1−s+s/K`, `off = s/K`) through one
+  shared `softOneHot` binding; `loss_fn`'s soft branch stays a pass-through. ⚠ Two corrections to
+  this bullet as it stood: it was **phase 2 only** (the verified cotangent already smooths whatever
+  `%onehot` carries), and **RSB-A2/A1 were never affected** — they set `labelSmoothing := 0.0` by
+  recipe. The nets that were: ViT-Ti/S/B and ConvNeXt-T/S/B, all six.
+* ✅ **BN momentum was hard-coded 0.99 — CLOSED 2026-08-30, see §7.3.** It is now
+  `TrainConfig.bnMomentum` / `VerifiedConfig.bnMomentum`, default 0.99, and **R50 is set to 0.9**
+  on both paths. ⚠ The timm audit there corrects this bullet: timm 1.0.28 runs decay 0.9 on
+  *every* BN net including `tf_efficientnet_b0`, which changes only `bn_eps`.
 * **Mixup/CutMix switching is deterministic** (`step % 2`) vs timm's `switch_prob=0.5`. Same
   expectation, zero variance.
 * **`jax.nn.gelu` defaults to the tanh approximation**; timm's `nn.GELU()` is exact erf. ConvNeXt
@@ -511,10 +510,10 @@ config. Ranked by (likely points) ÷ (cost).
 
 | net | paper | ours | gap | what is left |
 |---|---|---|---|---|
-| **ViT-Ti** | 72.2 / 91.1 | **72.31 / 91.12** | **+0.1 ✅** | `default` recipe still Xavier — collapse it into `deit-init` so nobody quotes the wrong arm |
-| **EffNet-B0** | 77.1 / 93.3 | 76.80 / 93.26 | −0.3 | ⭐⭐ **the JAX stem and head ran ReLU where the net is swish** — ✅ fixed 2026-08-30, so this cell is stale. Plus BN eps 1e-5 vs the TF reference's 1e-3 `[unverified — one grep of timm]` |
-| **ConvNeXt-T** | 82.1 | 81.10 / 95.37 | −1.0 | **no final LayerNorm between GAP and head** (paper is `GAP → LN → Linear`; re-confirmed in the emitted Python). Plus the ls=0 defect above. ~0.8 pt is unattributed after antialias/test-crop were spent |
-| **R50 A3** | 78.1 | 77.22 | −0.9 | Ghost-BN (accum micro-steps normalise over 512, not 2048; `true-2048` needs ~80 GB, unrun); BN momentum 0.99 vs 0.9; BCE target thresholding `[check timm's bce_target_thresh default]` |
+| **ViT-Ti** | 72.2 / 91.1 | ~~**72.31 / 91.12**~~ ⚠ stale | ~~+0.1~~ | ⭐⭐ **mixup dropped label smoothing** — ✅ fixed 2026-08-30 (§7.2), so this cell describes a net the code no longer emits and the **+0.1 no longer stands**. Plus: `default` recipe still Xavier — collapse it into `deit-init` so nobody quotes the wrong arm |
+| **EffNet-B0** | 77.1 / 93.3 | 76.80 / 93.26 | −0.3 | ⭐⭐ **the JAX stem and head ran ReLU where the net is swish** — ✅ fixed 2026-08-30, so this cell is stale. Plus BN eps 1e-5 vs the TF reference's 1e-3 — ✅ **now verified**, and it is the one axis on which timm agrees with the paper; see §2.3 |
+| **ConvNeXt-T** | 82.1 | ~~81.10 / 95.37~~ ⚠ stale | −1.0 | ✅ **both items fixed 2026-08-30** — the missing head LN (§7.1, which also brought all three sizes onto timm's parameter count exactly) and the ls=0 defect (§7.2). Nothing here is open; the cell is stale and the −1.0 is unattributed until a re-run. ~0.8 pt was unattributed after antialias/test-crop even before these |
+| **R50 A3** | 78.1 | 77.22 | −0.9 | Ghost-BN (accum micro-steps normalise over 512, not 2048; `true-2048` needs ~80 GB, unrun); ~~BN momentum 0.99 vs 0.9~~ ✅ fixed 2026-08-30, §7.3 — **so this cell is stale, unrun**; BCE target thresholding `[check timm's bce_target_thresh default]` |
 | **mnv2** | 72.0 | 68.77 @ 90ep | −3.23 | ⭐⭐ **the JAX stem and head ran ReLU where the net is ReLU6** — ✅ fixed 2026-08-30, so this cell is stale. Plus **the schedule** — `full` (350 ep) exists and has never run; LR 0.045 unscaled at bs256. The published number also used an offline post-hoc EMA the trainer does not do, and predates the ls→0 fix |
 
 ⭐⭐ **✅ FIXED 2026-08-30 — TWO JAX references ran the wrong activation on their stem and head
@@ -562,8 +561,87 @@ wrong as history, but they no longer describe what `lake exe … ` will train, a
 they are compared against never had the defect. ▶ Re-running them is the only way to know what the
 fix is worth; until then treat both phase-2 cells as **stale, direction unknown**.
 
-▶ **Highest value here is mnv2's 350-epoch run and ConvNeXt's final LN + ls fix.** Everything else
-is sub-0.5 pt or already closed.
+▶ **Highest value here is mnv2's 350-epoch run and ConvNeXt's final LN.** Everything else
+is sub-0.5 pt or already closed. (The ls fix landed 2026-08-30, §7.2.)
+
+---
+
+### 2.3 ⚠ EfficientNet-B0 is the one net chasing a reference timm does NOT implement
+
+Written down 2026-08-30 because B3 (§7.3) kept tripping over it, and because every future
+"just check timm" on this net will trip over it the same way. **B0's target, 77.1 / 93.3, is Tan &
+Le's TensorFlow number.** timm has no weights trained to that recipe — its `efficientnet_b0` tags
+are `ra_in1k` and `ra4_e3600_r224_in1k`, both timm's own recipes, and the `tf_efficientnet_b0` tags
+are *ported* TF weights, not a reproduction. So for this net timm is a **transcription of the
+architecture, not of the recipe**, and reading a hyperparameter off it can silently move us AWAY
+from the number we are scored against.
+
+**Measured against the pinned timm 1.0.28 in `.venv-timm`** (`create_model(name).modules()` and
+`get_pretrained_cfg`), beside the TF paper and beside what we emit:
+
+| | TF paper (our target) | timm `efficientnet_b0` | timm `tf_efficientnet_b0` | **we emit** |
+|---|---|---|---|---|
+| BN **momentum** (decay) | 0.99 | 0.1 → **0.9** | 0.1 → **0.9** | **0.99** ✅ paper |
+| BN **eps** | 1e-3 | 1e-5 | **1e-3** | **1e-5** ⛔ |
+| crop_pct | 0.875 | 0.875 | 0.875 | 0.875 ✅ |
+| interpolation | bicubic | bicubic | bicubic | bicubic ✅ |
+
+⛔⛔ **`tf_efficientnet_b0` does NOT carry TF's BN momentum, and this is a live trap.**
+`BN_MOMENTUM_TF_DEFAULT = 1 - 0.99` sits in `timm/models/_efficientnet_builder.py:36` next to
+`BN_EPS_TF_DEFAULT = 1e-3`, and reads exactly like the pair a `tf_*` model would install. It is
+not: its only consumer `get_bn_args_tf()` **has no caller in 1.0.28**, and every `tf_*` constructor
+does `kwargs.setdefault('bn_eps', BN_EPS_TF_DEFAULT)` and nothing else. So the port kept TF's eps
+and silently took PyTorch's momentum. ▶ A grep that finds the constant and stops there concludes
+the opposite of the truth.
+
+▶ **Consequences, and they cut both ways:**
+1. **B0 stays at `bnMomentum := 0.99`** (§7.3 left it there) and that is now a recorded decision,
+   not an untouched default. It tracks the paper. Flipping it to timm's 0.9 would be tracking a
+   recipe we are not being scored against.
+2. **BN eps is the one axis where timm and the paper AGREE and we differ.** We emit `eps=1e-5`
+   because `Jax/Codegen.lean`'s `_bn` still hard-codes it — the exact shape B3 just fixed for
+   momentum, one field over. ▶ `TrainConfig.bnEps` is the same one-line addition; it would change
+   B0's emitted graph, so it is a decision rather than a cleanup, and it is UNRUN either way.
+   ⚠ It is not obviously small: 1e-3 vs 1e-5 is 100× the variance floor, and B0's depthwise
+   activations are exactly where a variance floor bites.
+3. ⚠ **Do not "fix" B0 toward timm on any axis without saying which reference the run is claiming.**
+   The same question decides `rmspropEps` (we use 1e-3, EfficientNet's value, not PyTorch's 1e-8),
+   the `×0.97 / 2.4 ep` exponential LR, and AutoAugment-vs-RandAugment.
+
+⚠ **The epoch axis is the same question again, and it is unsettled.** `efficientNetB0ImagenetConfig`
+runs **80** epochs; the paper's schedule is **350**, and the `full` recipe (`epochs := 350`) exists
+and has never run. The 76.80 / 93.26 that sits 0.3 under a 350-epoch paper number was produced by
+the 80-epoch tier — which is either a very good result or a sign the comparison is not what it
+looks like. ▶ Worth resolving before attributing that −0.3 to anything.
+⭐ For contrast, **R50 is the opposite case**: its target IS timm's (RSB, `arXiv:2110.00476`, and
+`resnet50.a1_in1k` even carries the paper id), which is why reading BN momentum off timm was the
+right move there and would be the wrong one here.
+
+### ⭐⭐ The general rule, and it is predictable rather than case-by-case
+
+`tf_efficientnet_b0` differs from `efficientnet_b0` in **exactly two** things — 5 `Conv2dSame`
+(TF's asymmetric SAME on the strided convs) and `bn_eps = 1e-3`. Same SiLU, same channel rounding,
+same BN **momentum**. That is not an oversight; it is the port's scope showing through:
+
+> **timm's `tf_*` models port what changes the FUNCTION, not what changes the OPTIMIZATION** —
+> they exist to load TF *weights*, and BN momentum has no effect at inference.
+
+| ported into a `tf_*` model | left at PyTorch defaults |
+|---|---|
+| padding (`Conv2dSame`), BN eps, activation, channel rounding | **BN momentum**, optimizer, LR schedule, EMA, augmentation |
+
+⚠⚠ **That split lands exactly on our fault line, because we TRAIN FROM SCRATCH.** A `tf_*` model is
+a good reference for the forward pass and a bad one for the recipe, and nothing in timm marks which
+half you are reading. ▶ Applies to every TF-origin net here: MobileNetV2/V3, EfficientNet-B0/V2,
+MNv4.
+
+⭐ **The near-miss that proves it is already in this repo, and we got it right by other means.**
+Plain `mobilenetv2_100` has **0** `Conv2dSame` — timm's MobileNetV2 is not the TF MobileNetV2
+either, differing on every strided conv. We emit TF `SAME` there deliberately; `Jax/Codegen.lean`'s
+`conv2d` comment says so: *"Scoped to the ResNet-family helpers ON PURPOSE: MobileNetV2/
+EfficientNet emit their own `conv_general_dilated` with 'SAME' and are TF-origin ports, where
+asymmetric 'SAME' IS the reference. Do not 'fix' those."* Anyone "checking against timm" would have
+concluded the opposite — the same way `BN_MOMENTUM_TF_DEFAULT` reads.
 
 ---
 
@@ -624,14 +702,26 @@ B0's bf16 ratio is **2.50×** (§1.2).
 | net | paper | JAX (phase 2) | PJRT (phase 4) |
 |---|---|---|---|
 | **R50 RSB-A3** | 78.1 | 77.22 ✅ | **77.43 ✅ done** — ahead of the reference |
-| **ViT-Ti / DeiT-Ti** | 72.2 / 91.1 | **72.31 / 91.12 ✅** | ◀ next run, artifacts ready |
-| **ConvNeXt-T** | 82.1 | 81.10 / 95.37 | TBD |
+| **ViT-Ti / DeiT-Ti** | 72.2 / 91.1 | 72.31 / 91.12 ⚠ stale | ◀ next run, artifacts ready |
+| **ConvNeXt-T** | 82.1 | 81.10 / 95.37 ⚠ stale | TBD |
 | **EfficientNet-B0** | 77.1 / 93.3 | 76.80 / 93.26 ⚠ stale | TBD |
 | **MobileNetV2** | 72.0 | 68.77 @ 90ep ⚠ stale (350ep unrun) | TBD |
 
-⚠⚠ **The two ⚠ stale phase-2 cells were trained with ReLU stems and heads** where the nets are
-swish / ReLU6 — a JAX-side spec omission fixed 2026-08-30 (§2.1). Both need re-running before they
-describe what the code now emits; the phase-4 column never had the defect.
+⚠⚠ **EVERY cell in this table is now stale, and R50's is stale on the OTHER side.** B0 and mnv2
+ran ReLU stems and heads where the nets are swish / ReLU6 (§2.1); ViT-Ti and ConvNeXt-T trained at
+an effective ls = 0.0 because mixup dropped the smoothing (§7.2); **ConvNeXt-T additionally had no
+head LayerNorm on EITHER path** (§7.1); and R50's verified BN decay moved 0.99 → 0.9 (§7.3). All
+fixed 2026-08-30, none of it measured. §7.6 has the run list.
+
+⚠⚠ **None of these phase-2 ↔ phase-4 comparisons is like-for-like until the references re-run.**
+⭐ **The pattern held three times and then broke on the fourth, and the exception is the
+interesting one.** For `convBnAct`, mixup-smoothing and BN momentum the verified renderer was the
+more faithful side — hand-written per net and audited op by op, against a JAX emitter whose
+defaults are shared across 25 `NetSpec`s where a missing line is silent. **B1 is the opposite**:
+the port was made wrong ON PURPOSE, in §2m, to agree with the reference. ▶ So "the port is usually
+right" is not the lesson. The lesson is that agreement between our two phases is worth nothing as
+evidence — both were wrong together on B1 and on B3 — and the only thing that settled it was an
+external number, timm's parameter count.
 
 **Throughput, measured on this box 2026-08-29** (4× 4060 Ti, AER-clean four, real ImageNet,
 600-step steady state, job-accurate variants):
@@ -967,80 +1057,286 @@ as several of the effects being chased.
 
 Everything in §1–§6 is closed or measured. **This section is self-contained**: it is the whole
 brief for a session that has read nothing else. Three defects, all found by audit rather than by a
-failing gate, none of them yet fixed.
+failing gate. **ALL THREE ARE CLOSED (2026-08-30, §7.1 / §7.2 / §7.3).** What is open is
+downstream of them: nothing is measurable until the affected nets re-run — see §7.6.
 
-⭐⭐ **The headline you need before touching anything: TWO OF THE THREE ARE IN BOTH PHASES.**
-2026-08-30's `convBnAct` fix (§2.1) was a *port divergence* — phase-2 was wrong, the verified
-render was right, and the fix was one line in one spec. **B1 and B2 are not that.** JAX and the
-verified path agree with each other and both differ from the paper, so each needs fixing on BOTH
-sides and the verified artifacts must be re-rendered. Budget accordingly.
+⛔⛔ **THE OLD HEADLINE — "TWO OF THE THREE ARE IN BOTH PHASES" — WAS WRONG ON BOTH COUNTS, AND
+IT WAS WRONG IN OPPOSITE DIRECTIONS.** It was written from an audit of the phase-2 emitter, and
+which phase a defect lives in turned out not to be predictable from that. Settled 2026-08-30:
 
-### 7.1 B1 — ConvNeXt has no final LayerNorm between GAP and the head
-
-Paper is `GAP → LN → Linear`. We do `GAP → Linear`. **Verified in both phases 2026-08-30:**
-
-```
-phase 2   generated_convnext_tiny_imagenet.py:1472    x = global_avg_pool(x)
-                                              :1473    x = mm(x, params[98][0].T) + params[98][1]
-phase 4   convnextin_adamdpwxclipdrop_train_step.mlir:1526  reduce add over dims [2,3]
-                                                     :1528  divide by 49.0
-                                                     :1529  dot_general -> 32x1000
-```
-
-Nothing between the pool and the classifier on either side.
-
-⭐ **The op already exists and is proven — this is plumbing, not a new VJP.** `SHlo.lnRowF` and
-its backward `lnRowBack` normalise over the last dim of a rank-2 tensor, which is exactly what a
-head LN on `[B, 768]` needs, and both are already carrying ViT and ConvNeXt's block interiors.
-⛔ **What is missing is a LAYER-LEVEL constructor.** `LeanMlir/Types.lean` has `globalAvgPool`
-(:57) and `dense` (:59), and `convNextStage`/`convNextDownsample`/`convNextStem` each take
-`norm := .ln` (:173–185) — but there is no bare LN layer to place BETWEEN two layers. Adding one
-is the actual work, on both the JAX emitter and the verified renderer.
-
-⚠ **Blast radius is wide.** It adds `2C` parameters (ConvNeXt-T: `768×2 = 1,536`), so every
-ConvNeXt checkpoint becomes incompatible, all three sizes re-render, and the DP/shard gates want
-re-running. ⚠ It changes the `#guard`ed parameter counts.
-▶ Worth: part of ConvNeXt-T's **−1.0** (82.1 paper vs 81.10). Not separable from B2, which hits
-the same net.
-
-### 7.2 B2 — mixup and cutmix throw away label smoothing, in both phases
-
-timm's `Mixup(label_smoothing=0.1)` folds smoothing INTO the mixed target (`on = 1−s+s/K`,
-`off = s/K`). We build a raw one-hot, mix that, and then never smooth it. **Verified 2026-08-30:**
-
-| where | site | what it does |
+| | where it actually lived | how it was found |
 |---|---|---|
-| phase-2 emitter | `jax/Jax/Codegen.lean:2655` (`_mixup`) | `y1 = jax.nn.one_hot(y, nc)` — raw |
-| | `jax/Jax/Codegen.lean:2680` (`_cutmix`) | `y1h = jax.nn.one_hot(y, nc)` — raw |
-| phase-2 loss | `generated_*.py:1481–1485` | smooths **only** the `y.ndim == 1` branch; the mixed target is rank-2 and falls to `tgt = y`, a pass-through |
-| **phase-4 shim** | `generated_*_shim.py:397–399` (`_targets`) | `t = np.zeros(...); t[..., yi] = 1.0` — raw one-hot, then mixed at :424–425 |
+| **B3** — BN momentum | **BOTH** — the item called it phase-2 | grep for the literal on the verified side |
+| **B2** — mixup drops ls | **phase 2 ONLY** — the item called it both | reading the artifact's cotangent chain |
+| **B1** — ConvNeXt head LN | **BOTH** — and the port was made wrong ON PURPOSE, to match the reference (§2m) | the timm parameter count |
 
-So ConvNeXt-T, ViT-Ti and RSB-A2/A1 trained at an effective **ls = 0.0** on both paths, while
-every config, banner and ledger says 0.1. Mixup or CutMix fires **every** step for those nets.
-⭐ **Unaffected:** RSB-A3 (ls 0 by recipe), and B0 / mnv2 / R50-2018 / MNv4 (no mixing at all).
+⭐ **And B1 is the one that should change how the next audit starts.** It was found by an
+architecture read, but the thing that would have found it in seconds was
+`sum(p.numel() for p in timm.create_model('convnext_tiny').parameters())` — 28,589,128 against our
+28,587,592. ▶ **Check the parameter count against timm before checking anything else**, and treat
+"the counts nearly cancel" as a reason to look harder rather than a reason to stop.
 
-⛔ **Fix at the one-hot sites, NOT in `loss_fn`.** The soft-target branch must stay a
-pass-through: the shim already hands the graph a rank-2 target, so smoothing in `loss_fn` would
-double-smooth it. Three writers to change and they must agree — `_mixup`, `_cutmix`, and the
-shim's `_targets`.
-⚠ ViT-Ti is at **+0.1 over paper** (72.31 vs 72.2) *with* this defect, so do not assume the sign.
+⭐⭐ **RUN ACROSS THE WHOLE FLEET, 2026-08-30 — every ImageNet net now matches timm EXACTLY**,
+`VerifiedNetSpec.toSpecs` against `timm.create_model(name, num_classes=1000)`:
 
-### 7.3 B3 — BN momentum is a hard-coded 0.99
+| net | timm model | params | |
+|---|---|---|---|
+| R34 / R50 | `resnet34` / `resnet50` | 21,797,672 / 25,557,032 | ✅ |
+| MobileNetV2 / MNv4-Conv-M | `mobilenetv2_100` / `mobilenetv4_conv_medium` | 3,504,872 / 9,715,512 | ✅ |
+| EfficientNet-B0 | `efficientnet_b0` | 5,288,548 | ✅ |
+| ViT-Ti | `deit_tiny_patch16_224` | 5,717,416 | ✅ |
+| **ConvNeXt-T / -S / -B** | `convnext_{tiny,small,base}` | 28,589,128 / 50,223,688 / 88,591,464 | ✅ **after B1** |
 
-`jax/Jax/Codegen.lean:614–615` emits the literal `"0.99"` (with a grad-accum compensation branch
-at K>1). Correct for EfficientNet, which is TF's value. **Wrong by 10× for R50** — timm's PyTorch
-default is momentum 0.1, i.e. decay **0.9**, a 100-step averaging window against our 1000.
-MobileNetV2's TF-slim reference is 0.997 `[unverified]`.
-▶ Needs a per-net knob on `TrainConfig` rather than a literal. Cheapest of the three by far.
-▶ Worth: part of R50-A3's **−0.9**, alongside Ghost-BN.
+⚠ ConvNeXt was the ONLY family that did not, and all three sizes were wrong the same way. ▶ This
+is now the cheapest standing check on the fleet — one `create_model` call per net, no GPU, no data.
+⛔ It is a check on the **shape**, not on the recipe: §2.3's point is that B0 matches timm's
+architecture while deliberately not matching timm's hyperparameters.
+
+⭐ **The transferable rule, and B2 is the expensive case.** The old §7.2 named the shim's
+`_targets` as one of three writers to change; the verified graph smooths downstream, so doing that
+would have DOUBLE-SMOOTHED every ConvNeXt and ViT run — a plausible-looking edit, made on a
+plausible-looking instruction, that trains a wrong objective and reports a number. ▶ **Read the
+artifact before believing a claim about the verified side.** The evidence is 8 lines of MLIR and it
+took minutes; the claim it overturned had been written down twice.
+
+### 7.1 ✅ CLOSED 2026-08-30 — B1, ConvNeXt's missing head LayerNorm
+
+Paper is `GAP → LN → Linear`; we did `GAP → Linear`, in **both** phases. Now fixed in both.
+
+⭐⭐ **THE PARAMETER COUNT WAS THE TELL, AND IT HAD BEEN WRITTEN DOWN AS A REASON NOT TO LOOK.**
+`ConvNeXtLayout.specs`' own docstring said, of the §2m stem-LN/head-LN swap: *"the last two nearly
+cancel — `+2·768 − 2·96 = +1,344` of 28.6M — so a matching parameter count is a decomposition
+test, not an architecture check."* Right that they nearly cancel; wrong that the residue was
+noise. **The residue IS the missing layer, exactly:**
+
+| | ours (before) | timm 1.0.28 | short by |
+|---|---|---|---|
+| ConvNeXt-T | 28,587,592 | **28,589,128** | 1,536 = 2×768 |
+| ConvNeXt-S | 50,222,152 | **50,223,688** | 1,536 = 2×768 |
+| ConvNeXt-B | 88,589,416 | **88,591,464** | 2,048 = 2×1024 |
+
+All three now match `timm.create_model(...)` **exactly**. ▶ That is the cheapest possible check on
+an architecture claim and it was available the whole time.
+
+⛔⛔ **THE HISTORY IS THE POINT: §2m/§2n DELETED THIS LAYER ON PURPOSE.** The pre-§2m render had a
+head LN and no stem LN. §2m added the stem LN — correct — and removed the head LN to agree with
+`jax/MainConvNeXtImagenet.lean`, which was itself missing it. Both references have **both**:
+`facebookresearch/ConvNeXt` does `self.norm(x.mean([-2,-1]))` with `nn.LayerNorm(dims[-1],
+eps=1e-6)`, and timm's head is `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten →
+fc)`. ▶ This is §7.2's lesson with the sign flipped: there the port was right and the reference
+wrong; here **the port was made wrong in order to match the reference**. Converging the two phases
+is not the same as being correct, and nothing in this repo can tell the difference — which is why
+the timm parameter count matters more than any internal tie.
+
+⛔ **The renderer is SHARED between the Imagenette and ImageNet ConvNeXts, so this necessarily
+pulled the proof chain** — §7.1 as written did not say that. `denoteConvnextT` pattern-matches the
+exact layer list and ties it to `convNextForwardTCh` by `rfl`, so the layer could not be added on
+one side only.
+
+**What it took, and it was smaller than the blast-radius note suggested:**
+
+| piece | change |
+|---|---|
+| `ConvNeXtFullT.lean` | `CnxTWeightsCh` gains `hε/hγ/hβ`; one composition step; **one** `vjp_comp` link + one `0 < hε` |
+| rung E | `headLNGraph` + `headLNGraph_faithful` (3 ops, one `rw`); one more rewrite in the apex |
+| `ConvNeXtRender.lean` | `headLn{Fwd,Back}Site` + γ/β tails; `allParams`; fwd + bwd wiring |
+| `ConvNeXtRenderB.lean` | the same four, batched |
+| `Types.lean` / `Spec.lean` / `SpecHelpers.lean` | a bare `.layerNorm dim` layer + shapes + He-init |
+| `Jax/Codegen.lean` | `head_layer_norm` helper + arms in forward / init / from-file / to-file |
+| 3 JAX specs, 4 verified specs, `ConvNeXtLayout` | one line each |
+
+⭐ **No new mathematics.** The head LN is `rowLNVecFlat 1 768` — ViT's per-token LN at one row —
+whose `_diff`, `_has_vjp` and graph bridge (`rowLN_affine_eq`) were all already proven. And in the
+render it is `lnFwdSite` with the two transposes deleted, since at one spatial position "normalise
+each row over its channels" and "normalise the feature vector" are the same function.
+
+**Evidence, all taken 2026-08-30:**
+* ⭐ **Two independent routes agree on the weight-decay split** — the renderer's `allParams` gives
+  **59 decayed / 123 excluded**, and running the regenerated reference's OWN `_wd_mask` over its
+  OWN `init_params` gives 59 / 123. (Was 59 / 121; the head γ/β are 1-D, so they must land in the
+  EXCLUDED column — a head LN that showed up in the decayed one would be getting weight decay the
+  recipe excludes.)
+* `convnext-fwd-b-tie` ✅ — forward **byte-identical**, backward `gradMap IDENTICAL — 182
+  parameters, same names, same SSA, same order`.
+* `convnext-adam-tie` ✅ — 0 of 182 params disagree, gradient norm-rel 0.000000.
+* `convnext-dp-check` ✅ (2 replicas) and `convnext-shard-check` ✅ (TEST 8.1e-8 vs CONTROL 0.075,
+  9.1e5× apart).
+* `regen_verified_mlir.sh proofs` + `check` ✅ (36 artifacts rewritten, prefix/silent-emit/empty-slot/
+  prelude audits clean); `check_render_coverage.py` ✅ 227 files.
+* The regenerated phase-2 trainer runs: `init_params` → **182 tensors / 28,589,128**, head LN at
+  γ=1 β=0, `forward` returns `(2, 1000)`.
+* **Cross-phase numeric check** (there is no ConvNeXt tie script, so this was done by hand): the
+  emitted `head_layer_norm` against a numpy transcription of the artifact's ops agrees to
+  **4.8e-07**, against 8.6 for the no-LN control.
+
+⚠⚠ **THE ε CONTROL IS WEAK, AND THAT IS WORTH KNOWING.** eps 1e-5 instead of 1e-6 moves the same
+comparison by only **2.4e-06** — at realistic activation scales the variance dwarfs both, so a
+wrong ε here is numerically invisible. It was matched by READING (`ConvNeXtRender.cEPS`,
+`channel_layer_norm`'s 1e-6, the paper's `eps=1e-6`), not by testing, and the JAX emitter now has
+a `head_layer_norm` separate from the transformer nets' `layer_norm` precisely so the two epsilons
+cannot be confused. ▶ Do not treat the cross-phase number above as evidence about ε.
+
+⛔ **Every ConvNeXt checkpoint is now incompatible** (182 tensors, not 180). `trainAdamSched`'s
+checkpoint size guard refuses loudly rather than misaligning, which is the good failure — but the
+Imagenette `convnext-verified-adam` epoch-80 state and any ConvNeXt ImageNet checkpoint must be
+retrained, not resumed.
+
+⚠ **ConvNeXt has NO phase-2 ↔ phase-4 forward tie script** — `scripts/` has `enet_forward_tie.py`,
+`mnv2_forward_tie.py` and `mnv4_forward_tie.py` and no ConvNeXt peer. That is a real part of why
+this survived §2m: nothing compares the two ConvNeXt phases numerically, so a layer could leave one
+side and the other would follow it by hand. ▶ Worth writing; it is the gate that would have caught
+B1 and would catch the next one.
+
+▶ **Worth: part of ConvNeXt-T's −1.0 (82.1 paper vs 81.10), unquantified until a re-run.** B1 and
+B2 both hit this net, both are now in, and §7.4's advice stands — run ConvNeXt-T once with both
+rather than twice to split a gap that may not decompose.
+
+### 7.2 ✅ CLOSED 2026-08-30 — B2, mixup and cutmix threw away label smoothing (phase 2 ONLY)
+
+⛔⛔ **THE HEADLINE OF THE OLD §7.2 IS WRONG, AND ACTING ON ITS INSTRUCTIONS WOULD HAVE INTRODUCED
+A BUG.** It said the defect was in both phases and named three writers to change — `_mixup`,
+`_cutmix`, **and the shim's `_targets`**. The shim is *right as it stands*: the verified graph
+smooths downstream, so smoothing the shim's target too would **double-smooth** every ConvNeXt and
+ViT run on the phase-4 path. Only the two phase-2 writers were touched.
+
+**Why phase 4 was already correct.** The verified renderers fold the smoothing into the COTANGENT
+rather than into the target, and they apply it to whatever `%onehot` carries — one-hot or mixed.
+`convnextin_adamdpwxclipdrop_train_step.mlir:1728–1735` (and `vitin_adamdp128x4wxclipdrop`:2537):
+
+```mlir
+%v1537 = subtract %v1536, %onehot            // softmax − t
+%v1538 = constant dense<0.100000>            // α
+%v1539 = multiply %onehot, %v1538            // α·t
+%v1540 = add %v1537, %v1539
+%v1541 = constant dense<-0.000100>           // −α/K, K = 1000
+%v1542 = add %v1540, %v1541
+%v1544 = divide %v1542, dense<32.0>          // ÷B
+```
+
+That is `(p − ((1−α)·t + α/K))/B` — the gradient of CE against the SMOOTHED target — and it holds
+for any `t` with `Σt = 1`, which a mixup or cutmix target is. ⭐ **Checked numerically, not just
+algebraically**: feeding the shim's raw mixed target through the transcribed chain reproduces
+`timm.data.mixup.mixup_target(y, K, lam, smoothing=0.1)`'s CE gradient to **6.1e-09**, where an
+unsmoothed target is off by 0.013.
+
+▶ So B2 is the same SHAPE as the `convBnAct` fix (§2.1): a **port divergence** where the verified
+render was already the paper-faithful one and phase 2 was the side that was wrong.
+
+**The fix**, one Lean-level binding (`softOneHot` in `emitLossAndTraining`) consumed by both
+`_mixup` and `_cutmix`, so the two cannot disagree:
+
+```python
+y1 = (jax.nn.one_hot(y, 1000) * (1.0 - 0.100000) + 0.100000 / 1000)
+```
+
+deliberately spelled the same way as `loss_fn`'s hard-label branch. Smoothing and mixing COMMUTE —
+both are convex combinations of rows summing to 1 — so smoothing the one-hot before mixing equals
+smoothing the mixed target; this is simply where timm puts it. Verified against timm 1.0.28's
+`mixup_target` at **2.5e-08** (float32 vs float64), and the emitted `_mixup`/`_cutmix` were then
+executed under the pinned jax: rows sum to 1, off-value exactly `s/K` = 1e-4.
+
+**Blast radius, from the regenerated files** — the two one-hot lines and nothing else:
+
+| net | recipes changed | |
+|---|---|---|
+| **ViT-Ti / -S / -B** | every one | ls 0.1 + mixup + cutmix |
+| **ConvNeXt-T / -S / -B** | every one | ls 0.1 + mixup + cutmix |
+| R50 (all nine, incl. A1/A2/2018) | **none — byte-identical** | `labelSmoothing := 0.0` by recipe, so the emit is the bare one-hot character for character |
+| R34 / MNv2 / B0 / MNv4 | none | no mixing |
+
+⛔ **The old §7.2's "RSB-A2/A1 trained at ls = 0.0" was also wrong, and harmlessly so** —
+`resnet50ImagenetConfig` sets `labelSmoothing := 0.0` deliberately (*"BCE over mixup/cutmix soft
+labels subsumes it"*), and every RSB tier inherits it. There was nothing to drop.
+
+⚠ **SIX phase-2 accuracies are now stale**, not one: ConvNeXt-T's **81.10 / 95.37** and ViT-Ti's
+**72.31 / 91.12** describe nets the code no longer emits, and the four larger sizes never ran.
+⚠ ViT-Ti was at **+0.1 over paper** *with* the defect, so do not assume the sign.
+⚠⚠ **And the phase-4 column never had it**, so ConvNeXt's and ViT's phase-2 ↔ phase-4 comparisons
+were not like-for-like either — the same trap `convBnAct` set for B0 (§2.1).
+
+### 7.3 ✅ CLOSED 2026-08-30 — B3, BN momentum was a hard-coded 0.99
+
+**It was hard-coded in BOTH phases, not just the emitter**, which the item did not say:
+`jax/Jax/Codegen.lean:614` emitted the literal `"0.99"` into `_bn`, and `VerifiedTrain.lean`'s
+host-side `F32.ema` weight was a matching literal `0.01` in two drivers (`trainAdamSched` and the
+fp8 twin). They agreed with each other, so nothing could ever have caught it.
+
+⭐ **Cheap for the reason the item guessed, but a different reason than it gave.** It needs no
+re-render on either side — the graph emits raw per-layer BATCH stats and the HOST does the EMA, so
+the decay never enters the MLIR at all. Nothing in `verified_mlir/` moved.
+
+**The knob.** `TrainConfig.bnMomentum` (shared with the JAX emitter) and its peer
+`VerifiedConfig.bnMomentum`, both defaulting to **0.99**, so every net that does not set one is
+unchanged. On the verified side the two branches live in ONE place, `VerifiedConfig.bnEmaWeight`,
+consumed by the training loop, the fp8 trainer, and a new startup banner line — the file's own
+`VerifiedVariant` docstring is the record of what a second copy costs.
+
+⚠ **The default arm returns the historic `0.01` DOUBLE, not `1.0 - 0.99`** (= 0.010000000000000009,
+different bits). Below every gate's bar, but it is what makes "the other four nets are unchanged" a
+statement about bytes. Verified by `#eval` on the real configs: R34 / MNv2 / B0 / MNv4 all report
+`bnEmaWeight none == 0.01` **true**.
+
+⚠ **The sense is TF's, and it is the RECIPROCAL of PyTorch's.** `bnMomentum` weights the OLD
+estimate; `torch.nn.BatchNorm2d(momentum=m)` weights the NEW batch. timm's default `momentum = 0.1`
+is `bnMomentum = 0.9`. (The old §7.3 said "a 100-step averaging window against our 1000" — the
+windows are **10 against 100**, `1/(1−d)`.)
+
+⭐⭐ **AND THE AUDIT SAYS THE ITEM'S PER-NET REASONING WAS RIGHT BUT ITS TIMM CLAIM IS NOT.**
+Read off the pinned timm 1.0.28 in `.venv-timm`, `create_model(name).modules()`:
+
+| timm model | BN momentum | ⇒ decay | eps |
+|---|---|---|---|
+| `resnet50`, `resnet34` | 0.1 | 0.9 | 1e-5 |
+| `mobilenetv2_100` | 0.1 | 0.9 | 1e-5 |
+| `efficientnet_b0` | 0.1 | 0.9 | 1e-5 |
+| **`tf_efficientnet_b0`** | **0.1** | **0.9** | **1e-3** |
+| `mobilenetv4_conv_medium` | 0.1 | 0.9 | 1e-5 |
+
+⛔ **timm runs 0.9 on EVERY one of them, `tf_efficientnet_b0` included.** `BN_MOMENTUM_TF_DEFAULT
+= 1 - 0.99` exists in `models/_efficientnet_builder.py:36`, but its only consumer `get_bn_args_tf()`
+**has no caller in 1.0.28** — the `tf_*` ports `kwargs.setdefault('bn_eps', BN_EPS_TF_DEFAULT)` and
+nothing else, so they inherit PyTorch's momentum and change only eps. So "0.99 is correct for
+EfficientNet, which is TF's value" is true **of the original TF codebase and false of timm**.
+
+▶ **What was changed: R50 only, both phases.** `jax/MainResnet50Imagenet.lean` and
+`apps/imagenette/MainResnet50Imagenet.lean` set `0.9`. All nine JAX R50 recipes inherit it —
+verified by parsing `_bn`'s default out of every regenerated trainer: the six unaccumulated
+recipes read `momentum=0.9`, the three K=4 ones `0.974004` = 0.9^(1/4), and **no other net's file
+moved a byte**. At A3's k=8 the verified driver now compensates to `1 − 0.9^(1/8)` = **0.013084**
+against the old 0.001256.
+
+▶ **Left deliberately at 0.99, because each chases a different reference — this is the user's call,
+not an oversight:**
+* **EfficientNet-B0** — its target is the TF paper's 77.1/93.3, and TF's decay there really is
+  0.99. ⚠ timm is NOT the reference for this net and reading hyperparameters off it moves us away
+  from the number we are scored against — written up as **§2.3**, which this decision produced.
+* **MobileNetV2** — target is the TF-slim paper's 72.0; that reference's 0.997 is still
+  `[unverified]` (no offline TF-slim source here). ⚠ Do not move it while the 350-epoch run on the
+  other box is in flight.
+* **MNv4** — its denominator is our own 100-ep JAX run, not a paper (§6.2).
+* ⚠ **R34 is the live question.** Same family, same timm reference, same argument as R50 — but
+  flipping it stales the landed **74.16%**. One line if wanted.
+
+⚠ **EVAL-ONLY, on no gradient path.** The completed A3 **77.43%** is not invalidated as history; it
+is simply no longer what this config trains. ▶ Direction unknown: a longer window is lower-variance
+and higher-bias against statistics that are still moving.
+
+⚠ This supersedes the PREMISE of `a3_paper_fidelity.md` §2.3, which compensated the per-micro EMA so
+k updates compose to one 0.99/step update, treating 0.99 as the reference throughout. The
+compensation was right and stands — it now composes to one 0.9/step update.
+
+▶ Worth: part of R50-A3's **−0.9**, alongside Ghost-BN. Unquantified until a re-run.
 
 ### 7.4 Order, and what to do first
 
-1. **B3** — smallest, independent, and it unblocks a clean R50 re-run.
-2. **B2** — three writers, no new op, no re-render of the *network* (targets are data, not graph).
-   ⚠ Do check whether the verified artifacts bake a smoothing constant anywhere before assuming.
-3. **B1** — the layer constructor, both emitters, re-render all three ConvNeXt sizes, re-run the
-   DP/shard gates, accept checkpoint incompatibility.
+1. ✅ **B3 — DONE 2026-08-30** (§7.3). The R50 re-run it unblocks is now the open half: nothing
+   about the change is measurable until R50 trains again on both paths.
+2. ✅ **B2 — DONE 2026-08-30** (§7.2). ⭐ Its own warning — *"do check whether the verified
+   artifacts bake a smoothing constant anywhere before assuming"* — is what saved it: they do, and
+   following the rest of the item would have double-smoothed the verified path.
+3. ✅ **B1 — DONE 2026-08-30** (§7.1). ⚠ It pulled the proof chain, which the item did not say:
+   the renderer is shared with the Imagenette net and `denoteConvnextT` ties the exact layer list
+   by `rfl`. Smaller than feared all the same — no new mathematics, one `vjp_comp` link.
 
 ▶ **Then re-run ConvNeXt-T once with B1+B2 together.** They hit the same net and the same −1.0;
 running them separately costs two 300-epoch runs (~112 h each at the bf16 arm) to split a gap
@@ -1048,11 +1344,41 @@ that may not decompose.
 
 ### 7.5 State of play a clean session should know
 
-* ⚠ **Two phase-2 accuracies are stale** — B0's 76.80/93.26 and mnv2's 68.77 were trained before
-  the `convBnAct` fix (§2.1) and describe a net the code no longer emits. Direction unknown.
+* ⚠⚠ **FOUR phase-2 accuracies are stale, not two** — B0's 76.80/93.26 and mnv2's 68.77 predate
+  the `convBnAct` fix (§2.1); ViT-Ti's 72.31/91.12 and ConvNeXt-T's 81.10/95.37 predate the mixup
+  label-smoothing fix (§7.2). All four describe nets the code no longer emits, all four had the
+  port as the MORE faithful side, and in every case the direction is unknown. R50's 77.22 is the
+  only phase-2 cell still describing what would train — and even it is now stale on the verified
+  side, where R50's BN decay moved to 0.9 (§7.3).
+* ⚠ **B0 is scored against a reference timm does not implement** — §2.3. Do not read a
+  hyperparameter off timm for that net without deciding which reference the run is claiming.
 * ⚠ **An mnv2 350-epoch run is in flight on another box and does NOT carry that fix**, so its
   result will need the same caveat when it lands.
 * ⛔ **`scripts/enet_forward_tie.py` cannot catch a spec divergence of this family** — it ties the
   verified render against the *Imagenette* generated file, which is the twin that was already
   correct. A tie that green-lights the wrong pair.
+* ⛔ **Every ConvNeXt checkpoint is incompatible** since B1 (182 param tensors, not 180). The
+  size guard refuses loudly; the Imagenette `convnext-verified-adam` epoch-80 state needs
+  retraining, not resuming.
+* ⚠ **ConvNeXt has no phase-2 ↔ phase-4 forward tie script.** enet, mnv2 and mnv4 have one; that
+  gap is part of why B1 survived §2m.
 * ▶ Throughput is settled and lives in §6.1b; do not re-measure it to start this work.
+
+### 7.6 ▶▶ WHAT IS ACTUALLY OPEN NOW — all of it is runs, none of it is code
+
+Every paper diff on the list is fixed and every gate is green. Nothing about any of it is
+*measured*, because all three changes alter what gets trained and none of them can be seen in a
+loss curve.
+
+| run | why | rough cost |
+|---|---|---|
+| **ConvNeXt-T, B1 + B2 together** | the −1.0 both were aimed at; running them apart costs two 300-epoch runs to split a gap that may not decompose | ~109 h at the bf16 arm (§1.2c) |
+| **R50 A3, B3** | BN decay 0.9; part of the −0.9, alongside Ghost-BN | its own 100-ep schedule |
+| **B0 and mnv2, `convBnAct`** | §2.1's fix; both phase-2 cells are stale until then | 52.1 h / ~70 h at bf16 |
+| **ViT-Ti, B2** | its +0.1 over paper was measured WITH the defect, so the sign is unknown | artifacts ready |
+
+⚠ **Six phase-2 accuracies are stale** (§7.5), and in every case the port was the more faithful
+side — so no phase-2 ↔ phase-4 ratio in this document is like-for-like until the references are
+re-run. ▶ That, not more auditing, is the next thing worth the box's time.
+⭐ The one piece of *code* worth doing first is cheap and would have caught B1: a ConvNeXt
+phase-2 ↔ phase-4 forward tie, the peer of `scripts/enet_forward_tie.py`.

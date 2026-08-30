@@ -8738,19 +8738,20 @@ stem is likewise a \texttt{.conv} followed by a \texttt{.layerNorm}. The
 spec's job is the \emph{parameter layout}, not the block vocabulary, so
 it names weights rather than concepts.
 
-\textbf{180 parameter tensors, 27,826,282 scalars.}
+\textbf{182 parameter tensors, 27,827,818 scalars.}
 \texttt{convnextVerified.toSpecs} is kernel-\texttt{\#guard}ed against
 \texttt{ConvNeXtLayout.specs}, an independently audited hand-list, and
 the ImageNet spec of \S\ref{sec:convnext_imagenet} is pinned to this one
-at everything but its head. At 1000 classes the count is 28,587,592,
-which is the JAX reference's own figure exactly. So the listing above is
-not a description of the network that got trained, it is the object the
-renderer consumed.
+at everything but its head. At 1000 classes the count is 28,589,128,
+which is \texttt{timm}'s figure for \texttt{convnext\_tiny} exactly. So the
+listing above is not a description of the network that got trained, it is
+the object the renderer consumed.
 
-\textbf{Twenty-two LayerNorms are the entire hypothesis budget.} One in
-the stem, one per block, one per downsample, and no head LN.
+\textbf{Twenty-three LayerNorms are the entire hypothesis budget.} One in
+the stem, one per block, one per downsample, and one on the head between
+the pool and the classifier.
 Theorem~\ref{thm:layerNorm_has_vjp} wants $\varepsilon > 0$ at each, and
-those 22 positivities are the only assumptions anywhere in the chain.
+those 23 positivities are the only assumptions anywhere in the chain.
 
 \subsection*{Results}
 \label{sec:convnext_results}
@@ -9055,7 +9056,7 @@ def convnextImagenetConfig : VerifiedConfig where
 
 \noindent The head is the only parameter shape that moves, from
 $768 \times 10$ to $768 \times 1000$, which takes the count from
-27,826,282 to \textbf{28,587,592}. Three kernel \texttt{\#guard}s hold
+27,827,818 to \textbf{28,589,128}. Three kernel \texttt{\#guard}s hold
 the two specs together at everything else: equal
 \texttt{toSpecs.size}, equal \texttt{toSpecs.pop.pop}, and a
 \texttt{back!} of \texttt{(\#[1000], 2)}.
