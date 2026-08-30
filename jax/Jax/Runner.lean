@@ -20,18 +20,6 @@ def runJax (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir scri
   IO.FS.createDirAll ".lake/build"
   IO.FS.writeFile scriptPath code
   IO.println s!"Generated: {scriptPath} ({code.length} chars)"
-
-  -- ⭐ `LEAN_MLIR_EMIT_ONLY=1` stops here, before spawning python. Emitting and TRAINING were
-  -- one indivisible action, which meant the only way to ask "is the committed artifact still
-  -- what this source emits?" was to start a training run — so nobody asked, and
-  -- `generated_mobilenet_v2_imagenet_full.py` sat three weeks behind its own source with
-  -- labelSmoothing 0.1 after the source said 0.0. That artifact is what a 45 h published run
-  -- trained on. Checked here rather than in `runRecipeMain` so EVERY caller gets it, including
-  -- the mains that call `runJax` directly. See scripts/regen_jax_generated.sh.
-  if (← IO.getEnv "LEAN_MLIR_EMIT_ONLY").isSome then
-    IO.println s!"[emit-only] wrote {scriptPath}; NOT training."
-    return
-
   IO.println "Running JAX training...\n"
 
   let python ← findPython

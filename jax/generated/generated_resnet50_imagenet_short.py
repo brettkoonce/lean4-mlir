@@ -360,7 +360,7 @@ def max_pool2d(x, size=2, stride=2):
              (1, 1, size, size), (1, 1, stride, stride),
              ((0, 0), (0, 0), (p, p), (p, p)))
 
-def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.99):
+def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.9):
     rm, rv = prev
     if training:
         bm = jnp.mean(x, axis=(0, 2, 3)); bv = jnp.var(x, axis=(0, 2, 3))

@@ -361,9 +361,9 @@ def max_pool2d(x, size=2, stride=2):
              ((0, 0), (0, 0), (p, p), (p, p)))
 
 # BN momentum compensated for gradient accumulation (K=4): _bn runs K× per
-# optimizer step, so per-micro momentum = 0.99**(1/K) = 0.997491 → K updates
-# compose to ~one 0.99/step update (true single-forward bs2048). Norm stats stay per-micro.
-def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.997491):
+# optimizer step, so per-micro momentum = 0.9**(1/K) = 0.974004 → K updates
+# compose to ~one 0.9/step update (true single-forward bs2048). Norm stats stay per-micro.
+def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.974004):
     rm, rv = prev
     if training:
         bm = jnp.mean(x, axis=(0, 2, 3)); bv = jnp.var(x, axis=(0, 2, 3))

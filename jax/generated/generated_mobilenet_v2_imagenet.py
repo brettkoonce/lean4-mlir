@@ -1049,7 +1049,7 @@ def forward(params, x, bn, training, drop_key=None):
     x = x.reshape(-1, 3, 224, 224)
     x, _ns = conv_bn(x, params[0][0], params[0][1], params[0][2], bn[bn_i], training, stride=(2,2), padding='SAME')
     bn_out.append(_ns); bn_i += 1
-    x = jax.nn.relu(x)
+    x = jnp.minimum(jax.nn.relu(x), 6.0)
     x, _ne = invres_block(params, x, 1, 1, 1, False, bn, bn_i, training)
     bn_out.extend(_ne); bn_i += len(_ne)
     x, _ne = invres_block(params, x, 3, 2, 6, False, bn, bn_i, training)
@@ -1086,7 +1086,7 @@ def forward(params, x, bn, training, drop_key=None):
     bn_out.extend(_ne); bn_i += len(_ne)
     x, _ns = conv_bn(x, params[51][0], params[51][1], params[51][2], bn[bn_i], training, padding='SAME')
     bn_out.append(_ns); bn_i += 1
-    x = jax.nn.relu(x)
+    x = jnp.minimum(jax.nn.relu(x), 6.0)
     x = global_avg_pool(x)
     if drop_key is not None:
         x = x * jax.random.bernoulli(jax.random.fold_in(drop_key, 999983), 0.800000, x.shape).astype(x.dtype) / 0.800000

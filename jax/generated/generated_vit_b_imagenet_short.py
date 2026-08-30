@@ -1700,7 +1700,9 @@ def ema_update(ema, params, step):
 @jit
 def _mixup(x, y, key):
     lam = jax.random.beta(key, 0.800000, 0.800000)
-    y1 = jax.nn.one_hot(y, 1000)
+    # timm folds label smoothing INTO the mixed target (Mixup(label_smoothing=0.100000): on=1-s+s/K, off=s/K), so it goes on the one-hot
+    # BEFORE mixing, not in loss_fn — whose soft-label branch is a pass-through.
+    y1 = (jax.nn.one_hot(y, 1000) * (1.0 - 0.100000) + 0.100000 / 1000)
     xm = lam * x + (1.0 - lam) * jnp.flip(x, 0)
     ym = lam * y1 + (1.0 - lam) * jnp.flip(y1, 0)
     return xm, ym
@@ -1721,7 +1723,9 @@ def _cutmix(x, y, key):
     mask = (my[:, None] & mx[None, :]).astype(x.dtype)
     x4m = x4 * (1.0 - mask) + jnp.flip(x4, 0) * mask
     lam_adj = 1.0 - jnp.sum(mask) / (224 * 224)
-    y1h = jax.nn.one_hot(y, 1000)
+    # timm folds label smoothing INTO the mixed target (Mixup(label_smoothing=0.100000): on=1-s+s/K, off=s/K), so it goes on the one-hot
+    # BEFORE mixing, not in loss_fn — whose soft-label branch is a pass-through.
+    y1h = (jax.nn.one_hot(y, 1000) * (1.0 - 0.100000) + 0.100000 / 1000)
     ym = lam_adj * y1h + (1.0 - lam_adj) * jnp.flip(y1h, 0)
     return x4m.reshape(B, -1), ym
 

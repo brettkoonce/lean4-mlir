@@ -29,10 +29,12 @@
 # ImageNet number. NOT the Imagenette/MNIST demos or the vjp-oracles, which back no ImageNet
 # result. A guard that silently claimed to cover them would be its own version of this bug.
 #
-# ⚠ EMIT-ONLY IS LOAD-BEARING. `runJax` writes the trainer and then SPAWNS TRAINING; without
-# `LEAN_MLIR_EMIT_ONLY=1` (Jax/Runner.lean) every mode here would start 30+ training runs. The
-# emitters write CWD-relative, so `check` runs them in a scratch CWD and never touches
-# `.lake/build` — safe while a run is in flight.
+# ⚠ `--emit` IS LOAD-BEARING. `runJax` writes the trainer and then SPAWNS TRAINING, so without
+# it every mode here would start 30+ training runs. That flag is `runRecipeMain`'s (added upstream
+# in the same week and for the same reason — regenerating an artifact used to mean racing a timeout
+# against a real ImageNet run); this script uses it rather than adding a second way to do one job.
+# The emitters write CWD-relative, so `check` runs them in a scratch CWD and never touches
+# `.lake/build` — safe while a run is in flight, and it was, repeatedly.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 MODE="${1:-write}"
@@ -94,8 +96,8 @@ for e in $EXES; do
   recipes="$("$BIN/$e" --help 2>/dev/null | awk '/^recipes/{f=1;next} /^data_dir/{f=0} f && NF{print $1}')"
   [ -n "$recipes" ] || recipes="default"
   for r in $recipes; do
-    for extra in "" "--shim"; do
-      ( cd "$TMP" && LEAN_MLIR_EMIT_ONLY=1 timeout 300 "$BIN/$e" "$r" $extra >/dev/null 2>&1 )
+    for extra in "--emit" "--shim"; do
+      ( cd "$TMP" && timeout 300 "$BIN/$e" "$r" $extra >/dev/null 2>&1 )
     done
     emitted=$((emitted+1))
   done

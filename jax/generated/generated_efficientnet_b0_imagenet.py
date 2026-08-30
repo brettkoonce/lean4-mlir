@@ -1592,7 +1592,7 @@ def forward(params, x, bn, training, drop_key=None):
     dpkeys = (jax.random.split(drop_key, 16) if drop_key is not None else [None] * 16)
     x, _ns = conv_bn(x, params[0][0], params[0][1], params[0][2], bn[bn_i], training, stride=(2,2), padding='SAME')
     bn_out.append(_ns); bn_i += 1
-    x = jax.nn.relu(x)
+    x = swish(x)
     x, _ne = mbconv_block(params, x, 1, 1, 1, 3, True, bn, bn_i, training, dpkeys[0], 1.000000)
     bn_out.extend(_ne); bn_i += len(_ne)
     x, _ne = mbconv_block(params, x, 5, 2, 6, 3, True, bn, bn_i, training, dpkeys[1], 0.986667)
@@ -1627,7 +1627,7 @@ def forward(params, x, bn, training, drop_key=None):
     bn_out.extend(_ne); bn_i += len(_ne)
     x, _ns = conv_bn(x, params[80][0], params[80][1], params[80][2], bn[bn_i], training, padding='SAME')
     bn_out.append(_ns); bn_i += 1
-    x = jax.nn.relu(x)
+    x = swish(x)
     x = global_avg_pool(x)
     if drop_key is not None:
         x = x * jax.random.bernoulli(jax.random.fold_in(drop_key, 999983), 0.800000, x.shape).astype(x.dtype) / 0.800000
