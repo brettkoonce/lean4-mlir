@@ -68,16 +68,44 @@ MAX_ATTEMPTS=200
 [ -f "$PY" ] || { echo "[sup] MISSING $PY — run: .lake/build/bin/mobilenet-v2-imagenet full"; exit 1; }
 [ -x "$PY_BIN" ] || { echo "[sup] PY_BIN not executable: $PY_BIN"; exit 1; }
 [ -d "$TFDS_DIR/imagenet2012" ] || { echo "[sup] no imagenet2012 under $TFDS_DIR"; exit 1; }
+# ⛔ THE CHECK THIS RUN NEEDED AND DID NOT HAVE. $PY lives in gitignored .lake/build; a warm
+# cache serves whatever was emitted last, and the published 71.44 was trained on a Jun-22
+# artifact carrying labelSmoothing 0.1 that the source had dropped on 2026-07-07. A diff
+# against the committed jax/generated/ copies — no Lean, no GPU, instant.
+if ! ../scripts/regen_jax_generated.sh box >/dev/null 2>&1; then
+  echo "[sup] ⛔ STALE GENERATED ARTIFACTS on this box:" | tee -a "$MASTER"
+  ../scripts/regen_jax_generated.sh box 2>&1 | grep -E "STALE|not built" | sed "s/^/[sup]    /" | tee -a "$MASTER"
+  echo "[sup]    Re-emit first: scripts/regen_jax_generated.sh" | tee -a "$MASTER"
+  exit 1
+fi
 if ! CUDA_VISIBLE_DEVICES=$DEVS "$PY_BIN" -c "
 import sys, jax, tensorflow_datasets
 g = [d for d in jax.devices() if d.platform == 'gpu']
 print('[preflight] jax', jax.__version__, len(g), 'gpu devices; tfds', tensorflow_datasets.__version__)
 if not g:
     print('[preflight] no GPU devices'); sys.exit(1)
-# Version gate: the lock pins jax 0.10.x. An older stack silently changes bf16 conv
-# kernel selection — jax 0.4.26/cuDNN 8.9.7 crashes outright on this net.
-if not jax.__version__.startswith('0.10.'):
-    print('[preflight] WRONG JAX: got', jax.__version__, '- expected 0.10.x per requirements-cuda-lock.txt')
+# Version gate: the lock pins jax 0.10.x. An OLDER stack silently changes bf16 conv
+# kernel selection -- jax 0.4.26/cuDNN 8.9.7 crashes outright on this net, in the
+# bf16 1x1 cudnn convBackwardFilter of the inverted-residual blocks.
+#
+# 0.11.x ADMITTED 2026-08-29, on evidence rather than convenience. The 4x RTX 3060
+# box has no pinned .venv at all (../.venv/bin/python does not exist there) and its
+# only CUDA stack is .venv-cuda: jax 0.11.1, CUDA 13.3, driver 610.57.04. Before
+# widening this gate, jax/scripts/smoke_mnv2_runningbn_gpu.py was run there on all
+# four cards under 0.11.1 -- i.e. THIS net's bf16 convs, forward and backward:
+#     [ok] running-BN trains on GPU: loss 6.930 -> 2.021
+#     [ok] 52 BN buffers EMA-updated + finite
+# No CUDNN_STATUS_EXECUTION_FAILED, no algorithm-mismatch warning, loss descends.
+# That smoke then dies in an UNRELATED TypeError: it calls eval_batch(params, bn, x, y)
+# but the emitted trainer's signature has since gained a 'take' argument. Test rot,
+# not a stack fault; the two [ok] lines above are what this gate rests on.
+# The floor stays: anything below 0.10 is still refused, which is the crash this gate
+# was built for. A future 0.12 wants its own smoke before being added here.
+#
+# NOTE: this comment lives inside the double-quoted python -c string. No backticks and
+# no dollar signs here -- bash expands both, and doing so broke this script once.
+if not (jax.__version__.startswith('0.10.') or jax.__version__.startswith('0.11.')):
+    print('[preflight] WRONG JAX: got', jax.__version__, '- expected 0.10.x or 0.11.x')
     sys.exit(1)
 sys.exit(0)
 "; then

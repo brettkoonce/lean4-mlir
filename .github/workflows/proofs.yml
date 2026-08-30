@@ -7,6 +7,53 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ── The JAX half of the artifact drift guard ────────────────────────────────
+  # `verified_mlir/` commits 233 rendered artifacts and the check-proofs job diffs them
+  # against their renderer. The JAX path emits the SAME class of object — the file that
+  # actually trains — into jax/.lake/build/, which is gitignored and was checked by nothing.
+  #
+  # ⛔ That gap ate a published number. generated_mobilenet_v2_imagenet_full.py sat dated
+  # Jun 22 while its source was fixed 2026-07-07 (ae0f40bb, labelSmoothing 0.1 -> 0.0); the
+  # blueprint's paper-faithful 350-epoch MNv2 result (71.44/90.34, 4c1cb1eb) was trained on
+  # the stale file. A re-emit on 2026-08-30 moved 175 lines including the RMSProp epsilon.
+  #
+  # ⚠ Its OWN job, not a step in check-proofs: jax/ is a separate Lake project that job never
+  # builds, so folding this in would put a cold jax build on the critical path of every push.
+  jax-artifact-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache jax/.lake
+        uses: actions/cache@v4
+        with:
+          path: jax/.lake/build
+          # Own `lake-jax-` namespace, no bare `lake-` fallback — restoring a Proofs or Certs
+          # cache here would rebuild the wrong corpus cold, per the note in check-proofs.
+          key: lake-jax-${{ hashFiles('jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-jax-${{ hashFiles('jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
+            lake-jax-
+
+      - name: Build the ImageNet emitters
+        working-directory: jax
+        run: |
+          lake build resnet34-imagenet resnet50-imagenet vit-tiny-imagenet vit-s-imagenet \
+                     vit-b-imagenet mobilenet-v2-imagenet mobilenet-v4-imagenet \
+                     efficientnet-b0-imagenet convnext-tiny-imagenet convnext-s-imagenet \
+                     convnext-b-imagenet
+
+      - name: jax/generated/ drift guard (committed artifacts == what the source emits)
+        # Re-emits every ImageNet trainer + shim in a scratch CWD (LEAN_MLIR_EMIT_ONLY=1 stops
+        # runJax before it spawns training) and diffs against the committed copies.
+        run: scripts/regen_jax_generated.sh check
+
   check-proofs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
