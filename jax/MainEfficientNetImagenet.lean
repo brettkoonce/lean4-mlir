@@ -15,6 +15,20 @@ def efficientNetB0Imagenet : NetSpec where
   name := "EfficientNet-B0 (ImageNet, bf16)"
   imageH := 224
   imageW := 224
+  -- ⚠⚠ ADDED 2026-08-30, AND ITS ABSENCE WAS SILENT FOR THE WHOLE 76.80% RUN. `NetSpec.convBnAct`
+  -- defaults to `.relu` (`LeanMlir/Types.lean:378`), so without this line the two `.convBn` layers
+  -- below — the stem and the 1×1 head — emitted `jax.nn.relu` while every MBConv interior emitted
+  -- `swish`. EfficientNet-B0 is SiLU/swish THROUGHOUT, stem and head included.
+  -- ▶ The Imagenette twin has carried this line since `planning/mnv4_verified.md` §3f measured the
+  -- deviation at 51% of logit range — five times the padding deviation — and this spec, written as
+  -- "same MBConv body as MainEfficientNet.lean", never received it. The fix was made once and
+  -- applied to one of the two files.
+  -- ⚠ The VERIFIED render was always swish (194 `stablehlo.logistic`, zero `stablehlo.maximum`), so
+  -- until this line the port was MORE paper-faithful than the reference it was scored against, and
+  -- B0's phase-2 ↔ phase-4 accuracy comparison was not like-for-like.
+  -- ⛔ `scripts/enet_forward_tie.py` cannot catch this: it ties the render against
+  -- `generated_efficientnet_b0.py`, the Imagenette file, which is the one that was already right.
+  convBnAct := .swish
   layers := [
     .convBn 3 32 3 2 .same,                          -- 224→112
     .mbConv  32  16 1 3 1 1 true,                     -- 112

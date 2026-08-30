@@ -16,6 +16,18 @@ def mobilenetV2Imagenet : NetSpec where
   name := "MobileNetV2 (ImageNet, bf16)"
   imageH := 224
   imageW := 224
+  -- ⚠⚠ ADDED 2026-08-30, the SAME omission as EfficientNet-B0's (`MainEfficientNetImagenet.lean`),
+  -- found by the same audit. `NetSpec.convBnAct` defaults to `.relu`
+  -- (`LeanMlir/Types.lean:378`), so without this line the two `.convBn` layers below — the stem and
+  -- the 1×1 head — emitted `jax.nn.relu` while every inverted-residual interior emitted ReLU6.
+  -- MobileNetV2 is ReLU6 throughout; the Imagenette twin (`MainMobilenetV2.lean`) has always said so.
+  -- ⚠ The VERIFIED render was always ReLU6 (35 `stablehlo.maximum` paired with 35
+  -- `stablehlo.minimum`, including at the 32×112×112 stem), so this was a phase-2-only defect and
+  -- the port was the faithful side.
+  -- ▶ This net is −3.23 from paper (68.77 @ 90 ep vs 72.0), the largest gap in the fleet, and the
+  -- schedule was the only suspect on the list. Two clamped activations are not 3 points on their
+  -- own, but the gap was never decomposed against a reference that had them.
+  convBnAct := .relu6
   layers := [
     .convBn 3 32 3 2 .same,                    -- 224→112
     .invertedResidual  32  16 1 1 1,            -- 112, t=1
