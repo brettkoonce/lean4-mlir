@@ -75,6 +75,24 @@ def resnet50ImagenetConfig : TrainConfig where
   bf16           := true
   bf16Conv       := true     -- CUDA/cuDNN: bf16 conv ~1.6× faster (R50 is conv-bound, ares is its home); slower-but-correct on ROCm
   runningBN      := true     -- paper-faithful eval (gap A) + bottleneck running-BN
+  -- ⚠⚠ **0.9, NOT the emitter's 0.99 default — added 2026-08-30, and it is a WHOLE-FAMILY fix.**
+  -- `Jax/Codegen.lean`'s `_bn` hard-coded 0.99 for every net. That is TF's EfficientNet value; the
+  -- reference this net is scored against is timm, whose BN is `torch.nn.BatchNorm2d` at its default
+  -- `momentum = 0.1`, and PyTorch's momentum weights the NEW batch — so the decay is **0.9**.
+  -- ⚠ READ off timm rather than assumed: `timm.create_model('resnet50').modules()` reports
+  -- `momentum = 0.1, eps = 1e-5` on all 53 `BatchNorm2d` (timm 1.0.28, `.venv-timm`, 2026-08-30).
+  -- Every RSB tier and the 2018 torchvision recipe share that default, so INHERITING this is right
+  -- and no derived recipe below overrides it.
+  -- ⚠ We averaged ~1000 steps where the reference averages ~100. It is EVAL-ONLY — no gradient path
+  -- — so nothing about a loss curve moves and the completed A3 run's 77.43% is not invalidated; what
+  -- it changes is how stale the stats the eval normalises with are, worst early in a run.
+  -- ▶ Direction unknown. A longer window is not automatically worse: it is lower-variance and
+  -- higher-bias against a distribution that is still moving.
+  -- ▶ This closes `next_session_execution_and_parity.md` §7.3 (B3). ⚠ It also supersedes the
+  -- PREMISE of `a3_paper_fidelity.md` §2.3: that section compensated our per-micro EMA so k
+  -- updates compose to one 0.99/step update, treating 0.99 as the reference value throughout.
+  -- The compensation was right and stands — it now composes to one 0.9/step update instead.
+  bnMomentum     := 0.9
   -- ⚠⚠ **0.95, NOT the emitter's 0.875 default — added 2026-08-14, and it is an A2/A1 RECIPE FIX.**
   -- Unset, `Jax/Codegen.lean` falls back to `_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING)` = 0.875, so every
   -- recipe built on this config — the bs512 A2 `default`, `a2-true-2048`, `a2-accum` and (through

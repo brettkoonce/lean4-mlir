@@ -51,6 +51,19 @@ backend is a run-time choice about transport, not a different program.
 def resnet50ImagenetConfig : VerifiedConfig where
   epochs    := 100
   batchSize := 64
+  -- ⚠⚠ **0.9, NOT the driver's 0.99 default — 2026-08-30, and it MATCHES the phase-2 side.**
+  -- `trainAdamSched`'s host-side BN EMA hard-coded a decay of 0.99 to track the JAX reference's
+  -- `_bn`, which hard-coded the same. Both were TF's EfficientNet value; R50's reference is timm,
+  -- whose `BatchNorm2d` default `momentum = 0.1` is a decay of **0.9** (PyTorch's momentum weights
+  -- the NEW batch). Read off `timm.create_model('resnet50')`, timm 1.0.28, 2026-08-30 —
+  -- `momentum = 0.1, eps = 1e-5` on all 53 BN layers. `jax/MainResnet50Imagenet.lean` sets the
+  -- same value, and the two must move together or the phase-2 ↔ phase-4 comparison acquires a
+  -- variable that no loss curve can show.
+  -- ⚠ At A3's `acc` k = 8 the driver compensates to `1 − 0.9^(1/8)` = 0.013084 per micro-batch,
+  -- against the old `1 − 0.99^(1/8)` = 0.001256 — a 10× shorter window, as intended.
+  -- ⚠ EVAL-ONLY. The completed 77.43% A3 result stands as history; it is simply no longer what
+  -- this config would train, and the direction of the change is not known in advance.
+  bnMomentum := 0.9
 
 /-- Entry point. Defaults to the 4-replica `adamdp64` artifact, since ImageNet-scale R50 on this
     box is a data-parallel job; `LEAN_MLIR_VARIANT=adam64` selects the single-device render. -/

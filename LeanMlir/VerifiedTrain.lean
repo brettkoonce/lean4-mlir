@@ -176,6 +176,39 @@ structure VerifiedConfig where
       NOT display-only: init is host-side, so the flag genuinely changes training and no
       re-render is needed. Off by default — every other net keeps its seed reproducibility. -/
   vitInit   : Bool := false
+  /-- BatchNorm running-statistic **decay** — the verified peer of `TrainConfig.bnMomentum`,
+      and the same TF sense: the weight on the OLD estimate, so timm's PyTorch
+      `momentum = 0.1` is `0.9` here. That field's docstring carries the per-net table and
+      the timm audit; keep the two in step, since a phase-2 ↔ phase-4 gap here is invisible
+      in every loss curve.
+
+      Like `vitInit` and unlike `lr`, this is NOT display-only and needs no re-render: the
+      graph emits raw per-layer BATCH stats and the host EMAs them (`F32.ema` below), so
+      the decay never enters the MLIR. Under gradient accumulation the driver compensates
+      to `bnMomentum^(1/k)` per micro-batch, matching the reference's generated `_bn`. -/
+  bnMomentum : Float := 0.99
+
+/-- The weight `F32.ema` puts on the NEW batch, i.e. `1 − decay`, given the accumulation
+    factor: `some k` on an `acc` variant (the EMA fires once per MICRO-batch, so the decay is
+    k-th-rooted for k chained updates to compose to one `bnMomentum`/optimizer-step update),
+    `none` otherwise.
+
+    ⭐ **ONE definition, because it has three consumers** — `trainAdamSched`'s loop, its startup
+    banner, and the fp8 trainer — and this file's own `VerifiedVariant` docstring is the record
+    of what happens when a driver and its gate each keep a copy: an edit to the real expression
+    cannot turn the copy red.
+
+    ⚠ The `== 0.99` arm returns the historic `0.01` DOUBLE rather than `1.0 - 0.99`
+    (= 0.010000000000000009 — different bits, 9e-16 relative), so every net that leaves
+    `bnMomentum` at its default is bit-identical across the knob's introduction.
+    ⚠ `some 0` is reachable — `VerifiedVariant.accK` returns 0 when it cannot parse a k out of
+    the variant name — and lands on `1/0 = inf`, `pow → 0`, weight 1.0, i.e. the running stats
+    become the latest batch. That is the pre-knob behaviour, preserved deliberately rather than
+    quietly repaired: a variant name whose k does not parse is already training at a wrong
+    effective LR (see `accK`), and this should not be the thing that hides it. -/
+def VerifiedConfig.bnEmaWeight (cfg : VerifiedConfig) : Option Nat → Float
+  | some k => 1.0 - Float.pow cfg.bnMomentum (1.0 / k.toFloat)
+  | none   => if cfg.bnMomentum == 0.99 then 0.01 else 1.0 - cfg.bnMomentum
 
 namespace VerifiedNet
 
@@ -1411,7 +1444,17 @@ Cap the steps to a multiple of {accK} (LEAN_MLIR_G2_STEPS) or render a different
   if evalBs != bs then
     IO.println s!"  eval batch {evalBs} (the batch @{net.slug}_fwd{if hasBn then "_eval" else ""} \
 was RENDERED at) != train batch {bs} — sound because eval is class-batch-independent"
-  if hasBn then IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
+  if hasBn then
+    -- ▶ The decay is announced because it is otherwise INVISIBLE: it is eval-only, so a wrong
+    -- value moves no loss curve and shows up only as a quietly depressed top-1. It was a hidden
+    -- literal 0.99 until 2026-08-30 and disagreed with timm by 10× on R50 the whole time.
+    -- ⚠ Prints the per-micro weight actually passed to `F32.ema` — the same `bnEmaWeight` call
+    -- the loop makes, not a transcription — so an accumulation run says what it is really doing
+    -- rather than what it was configured with.
+    let bnMomShown := cfg.bnEmaWeight (if accOn then some accK else none)
+    IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
+    IO.println s!"     decay {cfg.bnMomentum} (TF sense; = PyTorch/timm momentum {1.0 - cfg.bnMomentum}), \
+new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{accK}), compensated for grad-accum" else ""}"
   if replicas > 1 then
     IO.println s!"  DATA-PARALLEL: {replicas} replicas x bs {bs} = global batch {gbs}, {nb} steps/epoch"
   (← IO.getStdout).flush
@@ -2024,7 +2067,13 @@ gate's control, not a configuration.")
         -- discontinuity that belongs to the metric rather than to the model.
         -- ▶ Direction: this delta plausibly made our reported top-1 UNDERSTATED, which matters
         -- because the A3 result (77.43%) is quoted as beating its JAX reference.
-        let bnMom := if accOn then 1.0 - Float.pow 0.99 (1.0 / accK.toFloat) else 0.01
+        --
+        -- ⚠⚠ **AND THE DECAY IS NOW `cfg.bnMomentum`, NOT A LITERAL 0.99** (2026-08-30). 0.99 is
+        -- TF's EfficientNet value; timm's PyTorch BN default gives R50/R34 a decay of 0.9, a
+        -- 10-step averaging window against this 100-step one. Per-net table + the timm audit are
+        -- in `TrainConfig.bnMomentum`'s docstring; `VerifiedConfig.bnMomentum` is the peer field,
+        -- and `bnEmaWeight` — shared with the startup banner — is where both branches live.
+        let bnMom := cfg.bnEmaWeight (if accOn then some accK else none)
         runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else bnMom)
         -- ▶ `ema_bn` — the BN running buffers get their OWN shadow, and on a batch-BN net this is
         -- not optional decoration. The reference's own words: eval pairs EMA weights with
@@ -4475,9 +4524,13 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
         -- bit hardest early, when the activation statistics are still moving fast.
         -- ⚠ NO accumulation compensation here, and that is correct rather than an omission:
         -- this fp8 trainer has no `accK` — it does not implement gradient accumulation at all —
-        -- so k = 1 and the compensated form `1 − 0.99^(1/k)` is exactly this 0.01. If an
+        -- so k = 1 and the compensated form `1 − d^(1/k)` is exactly `1 − d`. If an
         -- accumulation path is ever added here, copy `bnMom` from `trainAdamSched`.
-        runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else 0.01)
+        -- ⚠ The decay is `cfg.bnMomentum` (2026-08-30), not a literal 0.99, and `none` is what
+        -- "no accumulation here" is spelled as — `bnEmaWeight`'s `none` arm keeps the historic
+        -- `0.01` double exactly.
+        runningBnStats ← F32.ema runningBnStats batchBn
+                           (if bnFirst then 1.0 else cfg.bnEmaWeight none)
         bnFirst := false
     IO.println s!"Epoch {ep + 1}/{nEpochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
     let thetaCur := thetamv.extract 0 pBytes

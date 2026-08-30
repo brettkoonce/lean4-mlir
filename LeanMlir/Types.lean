@@ -887,7 +887,7 @@ structure TrainConfig where
   bf16Conv : Bool := false
   /-- Running batch-norm statistics (gap A). When true, the JAX imagenet
       trainer tracks per-BN-layer running mean/var (EMA of batch stats,
-      momentum 0.99) threaded through `forward` as `has_aux`, and EVAL
+      momentum `bnMomentum`) threaded through `forward` as `has_aux`, and EVAL
       normalizes with the running stats instead of the eval batch's own —
       the paper-faithful behaviour. Off (default) keeps the current
       batch-stats-at-eval path, so every existing net is byte-identical.
@@ -895,6 +895,38 @@ structure TrainConfig where
       extend the BN-threading to mbconv/basic/bottleneck blocks for the other
       convnets. See planning/jax_imagenet_sweep.md "Gap A". -/
   runningBN : Bool := false
+  /-- BatchNorm running-statistic **decay**, i.e. the weight on the OLD estimate:
+      `running = bnMomentum·running + (1−bnMomentum)·batch`. Only consulted when
+      `runningBN` is on (it is an eval-time statistic and touches no gradient).
+
+      ⚠⚠ **This is the TensorFlow convention, and it is the reciprocal of PyTorch's.**
+      `torch.nn.BatchNorm2d(momentum=m)` weights the NEW batch by `m`, so timm's
+      PyTorch default `momentum = 0.1` is `bnMomentum = 0.9` here — a 10-step-vs-100-step
+      averaging window, not a 10× smaller one. Getting the sense backwards silently
+      makes the running stats 10× noisier, and it is eval-only, so no loss curve moves.
+
+      Per-net, because the nets chase different references (audited 2026-08-30
+      against the pinned timm 1.0.28 in `.venv-timm`, `create_model(...).modules()`):
+
+      | net | reference | value |
+      |---|---|---|
+      | R50 / R34 | timm (RSB) — `momentum=0.1` | **0.9** |
+      | EfficientNet-B0 | the TF paper (77.1/93.3) — TF's `decay=0.99` | 0.99 |
+      | MobileNetV2 | the TF-slim paper (72.0) — `decay=0.997` `[unverified]` | 0.99 today |
+      | MNv4 | our own 100-ep JAX run, not a paper | 0.99 today |
+
+      ⚠ timm itself runs **0.9 on every one of those nets**, `tf_efficientnet_b0`
+      included: `BN_MOMENTUM_TF_DEFAULT` exists in `_efficientnet_builder.py` but
+      `get_bn_args_tf()` has no caller in 1.0.28, so the `tf_*` ports inherit only
+      `bn_eps = 1e-3`. So "0.99 is right for EfficientNet" is a statement about the
+      original TF codebase, NOT about timm — flip a net to 0.9 only along with the
+      reference it is being scored against.
+
+      The default 0.99 keeps every net that does not set it byte-identical, on both
+      the JAX emitter (`Jax/Codegen.lean`'s `_bn`) and the verified host-side EMA
+      (`VerifiedTrain.lean`'s `bnMom`). Under gradient accumulation both sides
+      compensate to `bnMomentum^(1/K)` per micro-batch. -/
+  bnMomentum : Float := 0.99
   /-- timm/DeiT ViT weight init, replacing the generic Xavier-uniform for
       transformer-shaped nets. Off by default so every existing run is
       byte-identical; turn it on per-recipe.
