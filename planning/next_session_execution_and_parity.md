@@ -702,8 +702,11 @@ quoted from it.
 
 ⭐ **Everything below §6.0 was closed on 2026-08-29/30 and pushed to `main` at `c4272d5`** (five CI
 workflows green). ⭐ §6.1 and §6.2 were then CLOSED on 2026-08-30 afternoon — EfficientNet's
-2.63× turned out to be a 150 ms/step host-side RNG loop and is now 1.00×. The live queue is
-**§6.3 (the JAX denominators, still unaudited) and §6.4**; the rest is the record.
+2.63× turned out to be a 150 ms/step host-side RNG loop and is now 1.00×.
+
+▶▶ **THE LIVE QUEUE IS NOW §7**, a self-contained brief for the three open paper diffs
+(ConvNeXt's missing final LN, mixup dropping label smoothing, BN momentum). Throughput work is
+done; §6.3/§6.4 are the leftovers and the rest of §6 is the record.
 
 ### 6.1 ✅ CLOSED — EfficientNet's 2.63× was a host-side RNG loop, and it is gone
 
@@ -923,8 +926,8 @@ as several of the effects being chased.
   and its EMA arm measures 151 ms, one *under* the plain bf16 arm, so the shadow is free); fix mnv2's
   baked label smoothing (a literal at `MobileNetV2RenderB.lean:652`, and it is on the **gradient**
   path); compose ConvNeXt's EMA.
-* **Track 2's two real items** — ConvNeXt's missing final LN + the mixup/label-smoothing fix, then
-  mnv2's 350-epoch run.
+* **Track 2's real items — now written up as §7**, with the sites, the blast radius and the
+  ordering. ⭐ Two of the three are in BOTH phases, not phase-2 only like `convBnAct` was.
 * **Rebuild the `efficientnet_adam` Imagenette checkpoint** — deleted chasing a phantom bug (§1.2d);
   at epoch 4 instead of 80. ~40 min.
 * **Optional:** settle why mnv2 escapes the relayout (§1.4) — still unexplained, and it is the one
@@ -958,3 +961,98 @@ as several of the effects being chased.
    for a bit-identical graph, because six compiles were running at once and a bare median hid it.
 8. ✅ **Five book sections re-costed** (§5.9, §6.5, §7.5, §8.5, §8.6, §9.6, §9.7) and cut to configs
    and numbers. All throughput tables are fp32 → bf16 pairs; the 3060 rows are blanked.
+---
+
+## 7. ▶▶ NEXT SESSION (clean start) — the three open paper diffs
+
+Everything in §1–§6 is closed or measured. **This section is self-contained**: it is the whole
+brief for a session that has read nothing else. Three defects, all found by audit rather than by a
+failing gate, none of them yet fixed.
+
+⭐⭐ **The headline you need before touching anything: TWO OF THE THREE ARE IN BOTH PHASES.**
+2026-08-30's `convBnAct` fix (§2.1) was a *port divergence* — phase-2 was wrong, the verified
+render was right, and the fix was one line in one spec. **B1 and B2 are not that.** JAX and the
+verified path agree with each other and both differ from the paper, so each needs fixing on BOTH
+sides and the verified artifacts must be re-rendered. Budget accordingly.
+
+### 7.1 B1 — ConvNeXt has no final LayerNorm between GAP and the head
+
+Paper is `GAP → LN → Linear`. We do `GAP → Linear`. **Verified in both phases 2026-08-30:**
+
+```
+phase 2   generated_convnext_tiny_imagenet.py:1472    x = global_avg_pool(x)
+                                              :1473    x = mm(x, params[98][0].T) + params[98][1]
+phase 4   convnextin_adamdpwxclipdrop_train_step.mlir:1526  reduce add over dims [2,3]
+                                                     :1528  divide by 49.0
+                                                     :1529  dot_general -> 32x1000
+```
+
+Nothing between the pool and the classifier on either side.
+
+⭐ **The op already exists and is proven — this is plumbing, not a new VJP.** `SHlo.lnRowF` and
+its backward `lnRowBack` normalise over the last dim of a rank-2 tensor, which is exactly what a
+head LN on `[B, 768]` needs, and both are already carrying ViT and ConvNeXt's block interiors.
+⛔ **What is missing is a LAYER-LEVEL constructor.** `LeanMlir/Types.lean` has `globalAvgPool`
+(:57) and `dense` (:59), and `convNextStage`/`convNextDownsample`/`convNextStem` each take
+`norm := .ln` (:173–185) — but there is no bare LN layer to place BETWEEN two layers. Adding one
+is the actual work, on both the JAX emitter and the verified renderer.
+
+⚠ **Blast radius is wide.** It adds `2C` parameters (ConvNeXt-T: `768×2 = 1,536`), so every
+ConvNeXt checkpoint becomes incompatible, all three sizes re-render, and the DP/shard gates want
+re-running. ⚠ It changes the `#guard`ed parameter counts.
+▶ Worth: part of ConvNeXt-T's **−1.0** (82.1 paper vs 81.10). Not separable from B2, which hits
+the same net.
+
+### 7.2 B2 — mixup and cutmix throw away label smoothing, in both phases
+
+timm's `Mixup(label_smoothing=0.1)` folds smoothing INTO the mixed target (`on = 1−s+s/K`,
+`off = s/K`). We build a raw one-hot, mix that, and then never smooth it. **Verified 2026-08-30:**
+
+| where | site | what it does |
+|---|---|---|
+| phase-2 emitter | `jax/Jax/Codegen.lean:2655` (`_mixup`) | `y1 = jax.nn.one_hot(y, nc)` — raw |
+| | `jax/Jax/Codegen.lean:2680` (`_cutmix`) | `y1h = jax.nn.one_hot(y, nc)` — raw |
+| phase-2 loss | `generated_*.py:1481–1485` | smooths **only** the `y.ndim == 1` branch; the mixed target is rank-2 and falls to `tgt = y`, a pass-through |
+| **phase-4 shim** | `generated_*_shim.py:397–399` (`_targets`) | `t = np.zeros(...); t[..., yi] = 1.0` — raw one-hot, then mixed at :424–425 |
+
+So ConvNeXt-T, ViT-Ti and RSB-A2/A1 trained at an effective **ls = 0.0** on both paths, while
+every config, banner and ledger says 0.1. Mixup or CutMix fires **every** step for those nets.
+⭐ **Unaffected:** RSB-A3 (ls 0 by recipe), and B0 / mnv2 / R50-2018 / MNv4 (no mixing at all).
+
+⛔ **Fix at the one-hot sites, NOT in `loss_fn`.** The soft-target branch must stay a
+pass-through: the shim already hands the graph a rank-2 target, so smoothing in `loss_fn` would
+double-smooth it. Three writers to change and they must agree — `_mixup`, `_cutmix`, and the
+shim's `_targets`.
+⚠ ViT-Ti is at **+0.1 over paper** (72.31 vs 72.2) *with* this defect, so do not assume the sign.
+
+### 7.3 B3 — BN momentum is a hard-coded 0.99
+
+`jax/Jax/Codegen.lean:614–615` emits the literal `"0.99"` (with a grad-accum compensation branch
+at K>1). Correct for EfficientNet, which is TF's value. **Wrong by 10× for R50** — timm's PyTorch
+default is momentum 0.1, i.e. decay **0.9**, a 100-step averaging window against our 1000.
+MobileNetV2's TF-slim reference is 0.997 `[unverified]`.
+▶ Needs a per-net knob on `TrainConfig` rather than a literal. Cheapest of the three by far.
+▶ Worth: part of R50-A3's **−0.9**, alongside Ghost-BN.
+
+### 7.4 Order, and what to do first
+
+1. **B3** — smallest, independent, and it unblocks a clean R50 re-run.
+2. **B2** — three writers, no new op, no re-render of the *network* (targets are data, not graph).
+   ⚠ Do check whether the verified artifacts bake a smoothing constant anywhere before assuming.
+3. **B1** — the layer constructor, both emitters, re-render all three ConvNeXt sizes, re-run the
+   DP/shard gates, accept checkpoint incompatibility.
+
+▶ **Then re-run ConvNeXt-T once with B1+B2 together.** They hit the same net and the same −1.0;
+running them separately costs two 300-epoch runs (~112 h each at the bf16 arm) to split a gap
+that may not decompose.
+
+### 7.5 State of play a clean session should know
+
+* ⚠ **Two phase-2 accuracies are stale** — B0's 76.80/93.26 and mnv2's 68.77 were trained before
+  the `convBnAct` fix (§2.1) and describe a net the code no longer emits. Direction unknown.
+* ⚠ **An mnv2 350-epoch run is in flight on another box and does NOT carry that fix**, so its
+  result will need the same caveat when it lands.
+* ⛔ **`scripts/enet_forward_tie.py` cannot catch a spec divergence of this family** — it ties the
+  verified render against the *Imagenette* generated file, which is the twin that was already
+  correct. A tie that green-lights the wrong pair.
+* ▶ Throughput is settled and lives in §6.1b; do not re-measure it to start this work.
