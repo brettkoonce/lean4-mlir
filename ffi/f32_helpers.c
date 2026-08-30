@@ -44,6 +44,38 @@ LEAN_EXPORT lean_obj_res lean_f32_he_init(size_t seed, size_t n, double scale, l
     return lean_io_result_mk_ok(ba);
 }
 
+// ---- Classifier-dropout mask: `n` independent Bernoulli(keep) draws, survivors scaled 1/keep ----
+//
+// ⚠⚠ THIS IS A TRANSCRIPTION OF `F32.dropoutMask`'s LEAN LOOP, NOT A REIMPLEMENTATION. Every
+// line below has a counterpart there and the two are byte-identical by construction:
+// the same xorshift64* state seeded the same way, the same top-24-bit uniform, the same
+// `u < keep` comparison in DOUBLE (not float — narrowing `u` first moves draws across the
+// threshold), and the same `1/keep` folded in so a `keep ≥ 1` mask is the exact identity.
+// `tests/TestDropoutTie.lean` gates the values this produces; the caller keeps the `keep ≥ 1`,
+// `n == 0` and `n < 3` guards, so this function is only ever entered on the hot path.
+//
+// ⭐ WHY IT IS HERE AT ALL. The Lean version pushed `n` boxed Floats into an `Array Float` and
+// then tiled them out through `n/3` `write3` calls. At the shape EfficientNet-B0's ImageNet job
+// actually runs — global batch 256 × 1280 features = 327,680 draws, EVERY STEP — that measured
+// **150.07 ms/step** against 0.073 ms for the extern-C fill of the same buffer, and it was 62%
+// of that net's 281 ms step. Its docstring had priced it at "~2 ULP of a ~310 ms step" from a
+// 40,960-draw shape that no production job runs.
+LEAN_EXPORT lean_obj_res lean_f32_dropout_fill(double keep, size_t n, size_t seed, lean_obj_arg w) {
+    (void)w;
+    size_t nbytes = n * 4;
+    lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
+    float* p = (float*)lean_sarray_cptr(ba);
+    uint64_t st = ((uint64_t)seed * 2654435761ULL) | 1ULL;
+    float inv = (float)(1.0 / keep);
+    for (size_t i = 0; i < n; i++) {
+        st ^= st << 13; st ^= st >> 7; st ^= st << 17;
+        // u ∈ [0,1) from the top 24 bits — float32's mantissa width, as in `dropScales`.
+        double u = (double)(st >> 40) / 16777216.0;
+        p[i] = (u < keep) ? inv : 0.0f;
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
 // ---- Argmax over `n` float32 values at element offset ----
 //
 // ⚠ This REPLACED `lean_f32_argmax10`, whose window was the literal 10. That was correct

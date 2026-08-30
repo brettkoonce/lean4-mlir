@@ -48,6 +48,16 @@ opaque perturbUnit (base : @& ByteArray) (off d0 : USize) (r : Float) (seed : US
 @[extern "lean_f32_write3"]
 opaque write3 (ba : ByteArray) (idx : USize) (a b c : Float) : IO ByteArray
 
+/-- `n` independent Bernoulli(`keep`) draws, survivors scaled `1/keep`, as `n` float32 —
+    the hot loop of `F32.dropoutMask`, and nothing else. The guards (`keep ≥ 1`, `n = 0`,
+    `n < 3`) stay with the caller; entering here always means a real draw.
+
+    ⚠ It is `@[extern]` for the reason this file's header gives — "avoids millions of
+    Lean-level push calls" — and that reason turned out to be quantitative rather than
+    stylistic: see `dropoutMask` below and `ffi/f32_helpers.c`. -/
+@[extern "lean_f32_dropout_fill"]
+opaque dropoutFill (keep : Float) (n : USize) (seed : USize) : IO ByteArray
+
 /-- Copy `count` f32 values from `src[srcOff..]` into `dst[dstOff..]`, **in place**
     when `dst` is unshared. Used to patch the BN running-stat region of the Adam
     step buffer. -/
@@ -144,42 +154,48 @@ def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray :=
     ⚠ Same `1/keep` folding as `dropScales`, for the same reason: the graph bakes no constant, so a
     ones mask (`keep ≥ 1`, or eval) is the EXACT identity rather than a rescale.
 
-    Pure Lean for `dropScales`' reasons — `stablehlo.rng` would make every bit-exactness gate in the
-    repo contingent on seeding an XLA RNG identically across two lowerers. ⚠ It is bigger than
-    `dropScales` (40,960 floats at B=32×1280, against 288) but still ~2 ULP of a ~310 ms step, and
-    keeping the draw here keeps the randomness readable and seeded where it can be audited. -/
+    Drawn on the HOST, not in the graph, for `dropScales`' reasons — `stablehlo.rng` would make
+    every bit-exactness gate in the repo contingent on seeding an XLA RNG identically across two
+    lowerers. That stays true and is not what changed here.
+
+    ⛔⛔ **WHAT CHANGED, AND WHAT THE OLD NOTE GOT WRONG.** This used to push `n` boxed Floats into
+    an `Array Float` and tile them out through `n/3` `write3` calls, under the note *"it is bigger
+    than `dropScales` (40,960 floats at B=32×1280, against 288) but still ~2 ULP of a ~310 ms
+    step"*. Both halves were wrong at the shape that matters. EfficientNet-B0's ImageNet job runs
+    **global batch 256**, so `n = 256 × 1280 = 327,680` — 8× the shape that estimate was written
+    for — and measured against the compiled objects it cost **150.07 ms PER STEP**:
+
+    | per step, measured 2026-08-30 | ms |
+    |---|---|
+    | this function, enet job shape (256×1280) | **150.07** |
+    | this function at 32×1280, the costed shape | 18.74 |
+    | `dropScales` (9 sites × 256) | 1.83 |
+    | `F32.const`, same 327,680 floats, `@[extern]` C | **0.073** |
+
+    It was **62% of B0's 281 ms step** — more than twice its 71.6 ms graph — and B0 is the only
+    net that pays it (`dropoutKeep` is set on the two EfficientNet specs and nowhere else), which
+    is exactly why that net read as 2.63× its JAX reference when the others sit near parity.
+    ▶ The loop now lives in `dropoutFill`/`ffi/f32_helpers.c`, byte-identical; the guards and the
+    seeding argument stay here, where they can be audited.
+
+    ⭐ The transferable lesson: the estimate was not merely stale, it was **taken at a shape no
+    production job runs**. A host-side cost is a function of the batch, so cost it at the batch. -/
 def dropoutMask (keep : Float) (n : Nat) (seed : USize) : IO ByteArray := do
-  let mut out ← const n.toUSize 1.0
   if keep ≥ 1.0 || n == 0 then
-    return out
-  -- ⚠ REFUSE below 3 rather than return the all-ones buffer. `write3` is the only in-place float
-  -- writer, so it cannot tile 1 or 2 elements, and the overlap-backwards tail below would index
-  -- past the start. The failure mode if this were silent is the bad one: `out` is already filled
-  -- with 1.0, so a too-small mask would come back as the exact IDENTITY — dropout switched off,
-  -- with the render, the arity and every shape still correct. Real call sites are `B * width`
-  -- (≥ 1280 here), so this only fires on a mis-sized caller, which is precisely when it should.
+    return ← const n.toUSize 1.0
+  -- ⚠ REFUSE below 3 rather than return the all-ones buffer. ▶ The MECHANICAL reason is gone —
+  -- `write3` no longer writes this and `dropoutFill` tiles any `n` — but the reason that made the
+  -- guard worth having does not: a too-small mask is a MIS-SIZED CALLER, and the old failure mode
+  -- was the bad kind (an all-ones buffer is the exact IDENTITY, i.e. dropout switched off, with
+  -- the render, the arity and every shape still correct). Real call sites are `B * width`
+  -- (≥ 1280 here), so this only fires when something upstream is wrong, which is when it should.
+  -- Kept at 3 rather than relaxed to 1, so the extern change moves speed and nothing else.
   if n < 3 then
-    throw (IO.userError s!"dropoutMask: n = {n} < 3 cannot be written by write3; a silent \
+    throw (IO.userError s!"dropoutMask: n = {n} < 3 is below the smallest real call site; a silent \
 all-ones return would be the identity, i.e. dropout switched off")
-  -- xorshift64*, the same family `dropScales` and `heInit` use.
-  let mut st : UInt64 := (seed.toUInt64 * 2654435761) ||| 1
-  let inv := 1.0 / keep
-  let mut buf : Array Float := #[]
-  for _ in [0:n] do
-    st := st ^^^ (st <<< 13); st := st ^^^ (st >>> 7); st := st ^^^ (st <<< 17)
-    -- u ∈ [0,1) from the top 24 bits — float32's mantissa width, as in `dropScales`.
-    let u := (st >>> 40).toNat.toFloat / 16777216.0
-    buf := buf.push (if u < keep then inv else 0.0)
-  -- `write3` is the only in-place float writer, so tile in threes and finish the tail by
-  -- overlapping backwards from the end (`dropScales`' idiom — every element is written, and the
-  -- overlap rewrites already-correct values rather than skipping any).
-  let mut i := 0
-  while i + 3 ≤ buf.size do
-    out ← write3 out i.toUSize buf[i]! buf[i+1]! buf[i+2]!
-    i := i + 3
-  for j in [i:buf.size] do
-    out ← write3 out (j - 2).toUSize buf[j-2]! buf[j-1]! buf[j]!
-  pure out
+  -- xorshift64*, the same family `dropScales` and `heInit` use — transcribed into
+  -- `lean_f32_dropout_fill`, which is where the 150 ms above went.
+  dropoutFill keep n.toUSize seed
 
 /-- Concatenate multiple ByteArrays. Fast (memcpy per chunk). -/
 def concat (arrays : Array ByteArray) : ByteArray := Id.run do
