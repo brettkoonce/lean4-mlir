@@ -943,6 +943,64 @@ cross-day drift §6.3 warns about, and is why this table was taken in one sittin
 
 ---
 
+### 6.1c ✅ CLOSED — `SHIM_WORKERS=8` was over-provisioned on six of seven nets (2026-08-31)
+
+⭐⭐ **Every job conf shipped `SHIM_WORKERS=8`. On six nets 4 is measurably better, worth ~89 h
+across the fleet.** All bf16, 4× 4060 Ti `0,2,3,4`, `PJRT_FFI_RESIDENT=1`, 120-step probes,
+every row replicated with non-overlapping bands.
+
+| net | w8 | **w4** | floor | job | w8 h | **w4 h** | saved |
+|---|---|---|---|---|---|---|---|
+| ConvNeXt-B | 324 | **300** | 294 | 300 ep | 270.2 | **250.2** | **20.0 h** |
+| ConvNeXt-S | 212.5 | **191** | 190 | 300 ep | 177.2 | **159.3** | **17.9 h** |
+| ConvNeXt-T | 145.5 | **126** | 118 | 300 ep | 121.4 | **105.1** | **16.3 h** |
+| MobileNetV2 | 131 | 114 / **109** @w3 | 86 | 350 ep | 63.7 | **~55** | **~9 h** |
+| MNv4-Conv-M | 126.5 | **85** | 82 | 100 ep | 17.6 | **11.8** | **5.8 h** |
+| R50 / RSB-A3 | 166.5 | **147** | 141 | 100 ep | 23.6 | **20.9** | **2.7 h** |
+| ViT-Ti | 154.5 | **143** | — | 300 ep | 32.2 | **29.8** | **2.4 h** |
+
+▶ **The mechanism is CONTENTION, not capacity**, and two hypotheses were killed getting there:
+
+* ⛔ **Not the payload.** The shim streams f32 CHW — 154 MB/step for MNv2 — so serialization looked
+  like the obvious cost. `SHIM_HASH` (computes batches, streams nothing) runs *slower* than
+  streaming, 190 vs 172 ms/batch. The pipe is free. Sending uint8 would buy nothing.
+* ⛔ **Not producer capacity.** Standalone, MNv2's producers saturate at ~15 batch/s between 4 and 8
+  workers (1→4 buys 2.3×, 4→8 buys 8%) — faster than the 86 ms compute floor. And
+  `SHIM_DETERMINISM=0`, which this repo records as making producers 5.3× faster, moved the step
+  **0%** (137 vs 131, 115 vs 114) — the same signature §6.1b's ViT precedent left.
+* ✅ **It is the trainer's own host thread losing cores.** Producers past ~4 add no throughput and
+  take CPU from blob patching / host draws / the Lean loop. ⭐ The saving is near-CONSTANT in
+  absolute terms across the ConvNeXt family — 19.5, 21.5, 24 ms/step as the model triples in cost —
+  which is what a fixed contention cost looks like and not what a compute-proportional one does.
+
+⛔⛔ **NOT a fleet-wide constant. Three nets keep 8**, and the reasoning differs:
+
+* **EfficientNet-B0 — INCONCLUSIVE, and this is the cautionary row.** A first pass read
+  w6 **103** / w4 145 / w8 169 and looked like the biggest win on the board. Replication reversed
+  it: w6 = 103/180/155, w8 = 169/111. **±30% spread, bands fully overlapping.** B0's probe cannot
+  resolve a worker effect at all, so it stays at 8. ⚠ Its conf's old "w4 346 vs w8 203" is
+  pre-`dropoutMask`-fix and should not be quoted either.
+* **R34, R50-2018, ViT-S/B (g512)** — simply unmeasured. Do not change on the strength of this table;
+  ViT-S/B run global batch 512 at a different shape.
+
+⚠⚠ **`vit-default-4gpu.conf`'s 665 ms/step was STALE BY 4.3×.** Measured 154.5 today at the same
+4×128 shape, which vindicates §6.1b's 158 and retires the conf's ~138.7 h projection: the real
+300-epoch ViT-Ti job is **~32 h**. ▶ Any conf timing not re-measured this session is suspect the
+same way; `cnxs`/`cnxb`'s bf16 figures turn out to be *bare-graph* numbers, so those jobs were
+budgeted at their floor and ran 8–11% over it at w8.
+
+⚠⚠ **THREE ConvNeXt ImageNet jobs would not have STARTED**, and nothing in the precheck said so.
+`convnext{,-s,-b}-imagenet-verified` were built 08-29 23:22 against renders regenerated 08-30 20:08
+(the head-LN fix added 2 param tensors ⇒ 6 outputs). Launching any of them died on
+`G4 VIOLATION: … returns 567 outputs, caller supplied 561`. All three rebuilt.
+▶ The confs' prechecks verify the RENDER exists but never that the BINARY matches it — a gate
+worth adding, and [[stale-lean-exe-gates]] for the fourth time.
+
+**Landed:** `SHIM_WORKERS=4` in `cnx`, `cnxs`, `cnxb`, `mnv2`, `mnv4`, `vit`, `vit-emabf16`,
+`r50-a3`, `r50-a3-wxclip`, each with its measurement in a comment, and the five prechecks that
+*required* 8 now require 4. MNv4's carries an explicit floor: **w3 measured 276 ms/step** — its
+heavy shim starves below 4, so 4 is a floor and not a midpoint.
+
 ### 6.2 ✅ CLOSED — MNv4 re-costed, and the shape fix never reached the runner
 
 Job-accurate, 4× 4060 Ti, `SHIM_WORKERS=8`, 40-step probes, medians of three, one session:
