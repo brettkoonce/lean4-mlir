@@ -1,0 +1,747 @@
+I0831 05:39:32.817007  589214 service.cc:154] XLA service 0x715e9c0517d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0831 05:39:32.817053  589214 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0831 05:39:32.818496  589214 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0831 05:39:32.818525  589214 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0831 05:39:32.826723  589214 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+E0831 05:39:35.862970  589241 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 05:39:37.536700  589232 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 05:39:37.702979  589253 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 05:39:37.848426  589257 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 05:39:38.522865  589250 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 05:39:38.618010  589239 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 05:39:38.733534  589248 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 05:39:39.091837  589243 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/mnv4_adam_train_step.mlir (@mnv4_adam_train_step, 856 outputs, 1 replica) in 9279 ms
+[pjrt_ffi] compiled verified_mlir/mnv4_fwd.mlir (@mnv4_fwd, 1 outputs, 1 replica) in 715 ms
+[pjrt_ffi] compiled verified_mlir/mnv4_fwd_eval.mlir (@mnv4_fwd_eval, 1 outputs, 1 replica) in 366 ms
+MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → two head convs 256→960→1280 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mnv4_adam_train_step.mlir
+  xla/pjrt verified_mlir/mnv4_fwd.mlir
+  xla/pjrt verified_mlir/mnv4_fwd_eval.mlir
+  train 9469, val 3925; bs 32, MobileNetV4-Conv-M adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 77 layers, 67904 stat floats → eval via @mnv4_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @mnv4_adam_train_step holds 699 parameter tensors (96.7 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=2.574720
+  step 1/295: loss=2.486836
+  step 2/295: loss=2.300157
+  step 100/295: loss=2.245070
+  step 200/295: loss=2.091173
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.171422 lr=0.000333
+  epoch 1: val_acc = 651/3925 = 16.585987%  top5 = 2361/3925 = 60.152866%  [95% CI 15.46–17.78]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e1.bin (3925 bytes)
+  step 0/295: loss=2.117765
+  step 1/295: loss=1.941644
+  step 2/295: loss=1.966543
+  step 100/295: loss=1.740711
+  step 200/295: loss=1.577469
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.935494 lr=0.000667
+  epoch 2: val_acc = 1149/3925 = 29.273885%  top5 = 2691/3925 = 68.560510%  [95% CI 27.87–30.72]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e2.bin (3925 bytes)
+  step 0/295: loss=1.805605
+  step 1/295: loss=2.399736
+  step 2/295: loss=1.747287
+  step 100/295: loss=1.680032
+  step 200/295: loss=1.585757
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.710479 lr=0.001000
+  epoch 3: val_acc = 1350/3925 = 34.394904%  top5 = 3101/3925 = 79.006369%  [95% CI 32.92–35.90]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e3.bin (3925 bytes)
+  step 0/295: loss=1.629104
+  step 1/295: loss=1.331312
+  step 2/295: loss=1.646710
+  step 100/295: loss=1.639732
+  step 200/295: loss=1.491328
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.545385 lr=0.001000
+  epoch 4: val_acc = 2033/3925 = 51.796178%  top5 = 3488/3925 = 88.866242%  [95% CI 50.23–53.36]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e4.bin (3925 bytes)
+  step 0/295: loss=1.316513
+  step 1/295: loss=1.507038
+  step 2/295: loss=1.249186
+  step 100/295: loss=1.598829
+  step 200/295: loss=1.358978
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.409866 lr=0.000998
+  epoch 5: val_acc = 1950/3925 = 49.681529%  top5 = 3513/3925 = 89.503185%  [95% CI 48.12–51.25]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e5.bin (3925 bytes)
+  step 0/295: loss=1.310308
+  step 1/295: loss=1.240208
+  step 2/295: loss=1.472335
+  step 100/295: loss=1.351160
+  step 200/295: loss=1.646616
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.299085 lr=0.000996
+  epoch 6: val_acc = 2164/3925 = 55.133758%  top5 = 3546/3925 = 90.343949%  [95% CI 53.57–56.68]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e6.bin (3925 bytes)
+  step 0/295: loss=1.163187
+  step 1/295: loss=1.362607
+  step 2/295: loss=1.300097
+  step 100/295: loss=1.379236
+  step 200/295: loss=1.296042
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.241146 lr=0.000993
+  epoch 7: val_acc = 2201/3925 = 56.076433%  top5 = 3484/3925 = 88.764331%  [95% CI 54.52–57.62]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e7.bin (3925 bytes)
+  step 0/295: loss=0.980252
+  step 1/295: loss=1.317345
+  step 2/295: loss=1.551909
+  step 100/295: loss=1.243955
+  step 200/295: loss=1.068204
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.184884 lr=0.000990
+  epoch 8: val_acc = 2326/3925 = 59.261146%  top5 = 3644/3925 = 92.840764%  [95% CI 57.72–60.79]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e8.bin (3925 bytes)
+  step 0/295: loss=1.030493
+  step 1/295: loss=1.031309
+  step 2/295: loss=1.071202
+  step 100/295: loss=0.977907
+  step 200/295: loss=1.234486
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=1.138083 lr=0.000985
+  epoch 9: val_acc = 2655/3925 = 67.643312%  top5 = 3704/3925 = 94.369427%  [95% CI 66.16–69.09]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e9.bin (3925 bytes)
+  step 0/295: loss=1.119901
+  step 1/295: loss=0.945253
+  step 2/295: loss=0.991425
+  step 100/295: loss=1.157906
+  step 200/295: loss=1.053291
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=1.117841 lr=0.000980
+  epoch 10: val_acc = 2635/3925 = 67.133758%  top5 = 3723/3925 = 94.853503%  [95% CI 65.65–68.59]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e10.bin (3925 bytes)
+  step 0/295: loss=1.115897
+  step 1/295: loss=0.845579
+  step 2/295: loss=0.930897
+  step 100/295: loss=1.311866
+  step 200/295: loss=0.999877
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=1.076018 lr=0.000974
+  epoch 11: val_acc = 2762/3925 = 70.369427%  top5 = 3710/3925 = 94.522293%  [95% CI 68.92–71.78]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e11.bin (3925 bytes)
+  step 0/295: loss=0.927833
+  step 1/295: loss=0.853746
+  step 2/295: loss=0.940475
+  step 100/295: loss=0.983393
+  step 200/295: loss=0.935234
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=1.035668 lr=0.000967
+  epoch 12: val_acc = 2846/3925 = 72.509554%  top5 = 3767/3925 = 95.974522%  [95% CI 71.09–73.88]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e12.bin (3925 bytes)
+  step 0/295: loss=1.189805
+  step 1/295: loss=1.128745
+  step 2/295: loss=1.179440
+  step 100/295: loss=1.076297
+  step 200/295: loss=1.080579
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=1.010727 lr=0.000959
+  epoch 13: val_acc = 2938/3925 = 74.853503%  top5 = 3772/3925 = 96.101911%  [95% CI 73.47–76.19]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e13.bin (3925 bytes)
+  step 0/295: loss=0.881847
+  step 1/295: loss=0.981741
+  step 2/295: loss=0.793015
+  step 100/295: loss=0.813109
+  step 200/295: loss=1.054008
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.983479 lr=0.000950
+  epoch 14: val_acc = 2847/3925 = 72.535032%  top5 = 3756/3925 = 95.694268%  [95% CI 71.12–73.91]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e14.bin (3925 bytes)
+  step 0/295: loss=1.095606
+  step 1/295: loss=1.032376
+  step 2/295: loss=0.813117
+  step 100/295: loss=0.992958
+  step 200/295: loss=0.825315
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.954540 lr=0.000941
+  epoch 15: val_acc = 2854/3925 = 72.713376%  top5 = 3754/3925 = 95.643312%  [95% CI 71.30–74.08]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e15.bin (3925 bytes)
+  step 0/295: loss=1.205457
+  step 1/295: loss=1.039924
+  step 2/295: loss=0.766172
+  step 100/295: loss=0.882118
+  step 200/295: loss=0.769677
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.932136 lr=0.000931
+  epoch 16: val_acc = 2337/3925 = 59.541401%  top5 = 3574/3925 = 91.057325%  [95% CI 58.00–61.07]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e16.bin (3925 bytes)
+  step 0/295: loss=0.863465
+  step 1/295: loss=1.073692
+  step 2/295: loss=0.707116
+  step 100/295: loss=0.683548
+  step 200/295: loss=0.847827
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.923000 lr=0.000921
+  epoch 17: val_acc = 2995/3925 = 76.305732%  top5 = 3794/3925 = 96.662420%  [95% CI 74.95–77.61]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e17.bin (3925 bytes)
+  step 0/295: loss=0.905053
+  step 1/295: loss=0.653980
+  step 2/295: loss=0.937903
+  step 100/295: loss=0.761932
+  step 200/295: loss=0.851250
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.887294 lr=0.000909
+  epoch 18: val_acc = 2984/3925 = 76.025478%  top5 = 3793/3925 = 96.636943%  [95% CI 74.66–77.34]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e18.bin (3925 bytes)
+  step 0/295: loss=0.899239
+  step 1/295: loss=0.688209
+  step 2/295: loss=0.756393
+  step 100/295: loss=0.729434
+  step 200/295: loss=0.978979
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.872052 lr=0.000897
+  epoch 19: val_acc = 2970/3925 = 75.668790%  top5 = 3768/3925 = 96.000000%  [95% CI 74.30–76.99]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e19.bin (3925 bytes)
+  step 0/295: loss=0.729744
+  step 1/295: loss=0.929445
+  step 2/295: loss=1.054065
+  step 100/295: loss=0.894581
+  step 200/295: loss=0.754536
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.852845 lr=0.000884
+  epoch 20: val_acc = 2688/3925 = 68.484076%  top5 = 3738/3925 = 95.235669%  [95% CI 67.01–69.92]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e20.bin (3925 bytes)
+  step 0/295: loss=0.911547
+  step 1/295: loss=0.688830
+  step 2/295: loss=0.747934
+  step 100/295: loss=0.675540
+  step 200/295: loss=0.782150
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.828635 lr=0.000871
+  epoch 21: val_acc = 2756/3925 = 70.216561%  top5 = 3722/3925 = 94.828025%  [95% CI 68.77–71.63]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e21.bin (3925 bytes)
+  step 0/295: loss=0.750807
+  step 1/295: loss=0.870052
+  step 2/295: loss=0.776799
+  step 100/295: loss=0.984800
+  step 200/295: loss=0.803121
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.810334 lr=0.000857
+  epoch 22: val_acc = 2956/3925 = 75.312102%  top5 = 3778/3925 = 96.254777%  [95% CI 73.94–76.64]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e22.bin (3925 bytes)
+  step 0/295: loss=0.844491
+  step 1/295: loss=0.689412
+  step 2/295: loss=0.629542
+  step 100/295: loss=0.893587
+  step 200/295: loss=0.945125
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.793791 lr=0.000843
+  epoch 23: val_acc = 3104/3925 = 79.082803%  top5 = 3781/3925 = 96.331210%  [95% CI 77.78–80.33]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e23.bin (3925 bytes)
+  step 0/295: loss=0.815196
+  step 1/295: loss=0.886972
+  step 2/295: loss=0.780940
+  step 100/295: loss=0.956804
+  step 200/295: loss=0.905327
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.785091 lr=0.000827
+  epoch 24: val_acc = 3105/3925 = 79.108280%  top5 = 3805/3925 = 96.942675%  [95% CI 77.81–80.35]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e24.bin (3925 bytes)
+  step 0/295: loss=0.741310
+  step 1/295: loss=0.841918
+  step 2/295: loss=0.669370
+  step 100/295: loss=0.792289
+  step 200/295: loss=0.707968
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.759613 lr=0.000812
+  epoch 25: val_acc = 3055/3925 = 77.834395%  top5 = 3800/3925 = 96.815287%  [95% CI 76.51–79.11]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e25.bin (3925 bytes)
+  step 0/295: loss=0.679400
+  step 1/295: loss=0.717931
+  step 2/295: loss=0.721507
+  step 100/295: loss=0.674274
+  step 200/295: loss=0.941269
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.738225 lr=0.000796
+  epoch 26: val_acc = 3156/3925 = 80.407643%  top5 = 3809/3925 = 97.044586%  [95% CI 79.14–81.62]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e26.bin (3925 bytes)
+  step 0/295: loss=0.780305
+  step 1/295: loss=0.777633
+  step 2/295: loss=0.659170
+  step 100/295: loss=0.591708
+  step 200/295: loss=0.788823
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.730313 lr=0.000779
+  epoch 27: val_acc = 2906/3925 = 74.038217%  top5 = 3726/3925 = 94.929936%  [95% CI 72.64–75.39]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e27.bin (3925 bytes)
+  step 0/295: loss=0.733819
+  step 1/295: loss=0.706964
+  step 2/295: loss=0.819789
+  step 100/295: loss=0.646240
+  step 200/295: loss=0.810021
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.708908 lr=0.000762
+  epoch 28: val_acc = 3014/3925 = 76.789809%  top5 = 3776/3925 = 96.203822%  [95% CI 75.44–78.08]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e28.bin (3925 bytes)
+  step 0/295: loss=0.652712
+  step 1/295: loss=0.640323
+  step 2/295: loss=0.560445
+  step 100/295: loss=0.706052
+  step 200/295: loss=0.619431
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.696935 lr=0.000744
+  epoch 29: val_acc = 3081/3925 = 78.496815%  top5 = 3784/3925 = 96.407643%  [95% CI 77.18–79.75]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e29.bin (3925 bytes)
+  step 0/295: loss=0.725415
+  step 1/295: loss=0.662337
+  step 2/295: loss=0.744095
+  step 100/295: loss=0.634266
+  step 200/295: loss=0.818007
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.690589 lr=0.000726
+  epoch 30: val_acc = 3091/3925 = 78.751592%  top5 = 3791/3925 = 96.585987%  [95% CI 77.44–80.00]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e30.bin (3925 bytes)
+  step 0/295: loss=0.746295
+  step 1/295: loss=0.638742
+  step 2/295: loss=0.702851
+  step 100/295: loss=0.675463
+  step 200/295: loss=0.661212
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.655779 lr=0.000708
+  epoch 31: val_acc = 3022/3925 = 76.993631%  top5 = 3787/3925 = 96.484076%  [95% CI 75.65–78.28]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e31.bin (3925 bytes)
+  step 0/295: loss=0.557013
+  step 1/295: loss=0.711369
+  step 2/295: loss=0.745133
+  step 100/295: loss=0.592850
+  step 200/295: loss=0.668844
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.651400 lr=0.000689
+  epoch 32: val_acc = 3125/3925 = 79.617834%  top5 = 3805/3925 = 96.942675%  [95% CI 78.33–80.85]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e32.bin (3925 bytes)
+  step 0/295: loss=0.612987
+  step 1/295: loss=0.761483
+  step 2/295: loss=0.696949
+  step 100/295: loss=0.760209
+  step 200/295: loss=0.685329
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.644933 lr=0.000670
+  epoch 33: val_acc = 3113/3925 = 79.312102%  top5 = 3793/3925 = 96.636943%  [95% CI 78.02–80.55]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e33.bin (3925 bytes)
+  step 0/295: loss=0.653900
+  step 1/295: loss=0.725834
+  step 2/295: loss=0.572058
+  step 100/295: loss=0.623276
+  step 200/295: loss=0.594504
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.625265 lr=0.000651
+  epoch 34: val_acc = 3171/3925 = 80.789809%  top5 = 3799/3925 = 96.789809%  [95% CI 79.53–81.99]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e34.bin (3925 bytes)
+  step 0/295: loss=0.582276
+  step 1/295: loss=0.691434
+  step 2/295: loss=0.536934
+  step 100/295: loss=0.607585
+  step 200/295: loss=0.612284
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.622420 lr=0.000631
+  epoch 35: val_acc = 3116/3925 = 79.388535%  top5 = 3786/3925 = 96.458599%  [95% CI 78.09–80.63]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e35.bin (3925 bytes)
+  step 0/295: loss=0.604410
+  step 1/295: loss=0.586770
+  step 2/295: loss=0.628563
+  step 100/295: loss=0.730924
+  step 200/295: loss=0.601067
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.616695 lr=0.000611
+  epoch 36: val_acc = 3190/3925 = 81.273885%  top5 = 3811/3925 = 97.095541%  [95% CI 80.02–82.46]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e36.bin (3925 bytes)
+  step 0/295: loss=0.528907
+  step 1/295: loss=0.628332
+  step 2/295: loss=0.537165
+  step 100/295: loss=0.528960
+  step 200/295: loss=0.535919
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.602352 lr=0.000591
+  epoch 37: val_acc = 3184/3925 = 81.121019%  top5 = 3792/3925 = 96.611465%  [95% CI 79.87–82.31]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e37.bin (3925 bytes)
+  step 0/295: loss=0.571371
+  step 1/295: loss=0.528661
+  step 2/295: loss=0.525168
+  step 100/295: loss=0.565692
+  step 200/295: loss=0.559508
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.599944 lr=0.000571
+  epoch 38: val_acc = 3276/3925 = 83.464968%  top5 = 3821/3925 = 97.350318%  [95% CI 82.27–84.59]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e38.bin (3925 bytes)
+  step 0/295: loss=0.519153
+  step 1/295: loss=0.682505
+  step 2/295: loss=0.564108
+  step 100/295: loss=0.521846
+  step 200/295: loss=0.681530
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.598512 lr=0.000551
+  epoch 39: val_acc = 3244/3925 = 82.649682%  top5 = 3796/3925 = 96.713376%  [95% CI 81.43–83.80]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e39.bin (3925 bytes)
+  step 0/295: loss=0.677739
+  step 1/295: loss=0.590692
+  step 2/295: loss=0.606376
+  step 100/295: loss=0.520132
+  step 200/295: loss=0.512926
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.575123 lr=0.000531
+  epoch 40: val_acc = 3290/3925 = 83.821656%  top5 = 3807/3925 = 96.993631%  [95% CI 82.64–84.94]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e40.bin (3925 bytes)
+  step 0/295: loss=0.582471
+  step 1/295: loss=0.544012
+  step 2/295: loss=0.532286
+  step 100/295: loss=0.598490
+  step 200/295: loss=0.561028
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.566538 lr=0.000510
+  epoch 41: val_acc = 3298/3925 = 84.025478%  top5 = 3832/3925 = 97.630573%  [95% CI 82.85–85.14]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e41.bin (3925 bytes)
+  step 0/295: loss=0.594255
+  step 1/295: loss=0.526756
+  step 2/295: loss=0.514302
+  step 100/295: loss=0.607367
+  step 200/295: loss=0.570039
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.561365 lr=0.000490
+  epoch 42: val_acc = 3201/3925 = 81.554140%  top5 = 3811/3925 = 97.095541%  [95% CI 80.31–82.74]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e42.bin (3925 bytes)
+  step 0/295: loss=0.522714
+  step 1/295: loss=0.586658
+  step 2/295: loss=0.520450
+  step 100/295: loss=0.510558
+  step 200/295: loss=0.577594
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.563114 lr=0.000469
+  epoch 43: val_acc = 3240/3925 = 82.547771%  top5 = 3789/3925 = 96.535032%  [95% CI 81.33–83.70]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e43.bin (3925 bytes)
+  step 0/295: loss=0.545818
+  step 1/295: loss=0.532604
+  step 2/295: loss=0.509239
+  step 100/295: loss=0.530000
+  step 200/295: loss=0.507577
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.555917 lr=0.000449
+  epoch 44: val_acc = 3224/3925 = 82.140127%  top5 = 3815/3925 = 97.197452%  [95% CI 80.91–83.31]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e44.bin (3925 bytes)
+  step 0/295: loss=0.510878
+  step 1/295: loss=0.511491
+  step 2/295: loss=0.552473
+  step 100/295: loss=0.555658
+  step 200/295: loss=0.514463
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.550174 lr=0.000429
+  epoch 45: val_acc = 3260/3925 = 83.057325%  top5 = 3795/3925 = 96.687898%  [95% CI 81.85–84.20]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e45.bin (3925 bytes)
+  step 0/295: loss=0.560700
+  step 1/295: loss=0.629043
+  step 2/295: loss=0.569093
+  step 100/295: loss=0.594455
+  step 200/295: loss=0.548654
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.552054 lr=0.000409
+  epoch 46: val_acc = 3267/3925 = 83.235669%  top5 = 3799/3925 = 96.789809%  [95% CI 82.03–84.37]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e46.bin (3925 bytes)
+  step 0/295: loss=0.552135
+  step 1/295: loss=0.513700
+  step 2/295: loss=0.565725
+  step 100/295: loss=0.524334
+  step 200/295: loss=0.505824
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.538301 lr=0.000389
+  epoch 47: val_acc = 3311/3925 = 84.356688%  top5 = 3820/3925 = 97.324841%  [95% CI 83.19–85.46]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e47.bin (3925 bytes)
+  step 0/295: loss=0.541659
+  step 1/295: loss=0.510541
+  step 2/295: loss=0.508673
+  step 100/295: loss=0.506861
+  step 200/295: loss=0.619054
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.542083 lr=0.000369
+  epoch 48: val_acc = 3316/3925 = 84.484076%  top5 = 3817/3925 = 97.248408%  [95% CI 83.32–85.58]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e48.bin (3925 bytes)
+  step 0/295: loss=0.529753
+  step 1/295: loss=0.507691
+  step 2/295: loss=0.534401
+  step 100/295: loss=0.606425
+  step 200/295: loss=0.512786
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.539739 lr=0.000349
+  epoch 49: val_acc = 3273/3925 = 83.388535%  top5 = 3819/3925 = 97.299363%  [95% CI 82.19–84.52]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e49.bin (3925 bytes)
+  step 0/295: loss=0.519685
+  step 1/295: loss=0.515812
+  step 2/295: loss=0.515119
+  step 100/295: loss=0.506675
+  step 200/295: loss=0.549679
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.536352 lr=0.000330
+  epoch 50: val_acc = 3337/3925 = 85.019108%  top5 = 3818/3925 = 97.273885%  [95% CI 83.87–86.10]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e50.bin (3925 bytes)
+  step 0/295: loss=0.517739
+  step 1/295: loss=0.507284
+  step 2/295: loss=0.511592
+  step 100/295: loss=0.537343
+  step 200/295: loss=0.559023
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.526881 lr=0.000311
+  epoch 51: val_acc = 3242/3925 = 82.598726%  top5 = 3797/3925 = 96.738854%  [95% CI 81.38–83.75]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e51.bin (3925 bytes)
+  step 0/295: loss=0.522534
+  step 1/295: loss=0.536768
+  step 2/295: loss=0.511911
+  step 100/295: loss=0.560222
+  step 200/295: loss=0.511465
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.524875 lr=0.000292
+  epoch 52: val_acc = 3298/3925 = 84.025478%  top5 = 3820/3925 = 97.324841%  [95% CI 82.85–85.14]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e52.bin (3925 bytes)
+  step 0/295: loss=0.509973
+  step 1/295: loss=0.516723
+  step 2/295: loss=0.506687
+  step 100/295: loss=0.548313
+  step 200/295: loss=0.551277
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.523070 lr=0.000274
+  epoch 53: val_acc = 3340/3925 = 85.095541%  top5 = 3815/3925 = 97.197452%  [95% CI 83.95–86.18]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e53.bin (3925 bytes)
+  step 0/295: loss=0.508150
+  step 1/295: loss=0.534555
+  step 2/295: loss=0.506125
+  step 100/295: loss=0.504166
+  step 200/295: loss=0.515312
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.517177 lr=0.000256
+  epoch 54: val_acc = 3303/3925 = 84.152866%  top5 = 3807/3925 = 96.993631%  [95% CI 82.98–85.26]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e54.bin (3925 bytes)
+  step 0/295: loss=0.504863
+  step 1/295: loss=0.527255
+  step 2/295: loss=0.503307
+  step 100/295: loss=0.520141
+  step 200/295: loss=0.505344
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.515307 lr=0.000238
+  epoch 55: val_acc = 3335/3925 = 84.968153%  top5 = 3799/3925 = 96.789809%  [95% CI 83.82–86.05]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e55.bin (3925 bytes)
+  step 0/295: loss=0.505095
+  step 1/295: loss=0.521190
+  step 2/295: loss=0.502995
+  step 100/295: loss=0.503099
+  step 200/295: loss=0.619501
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.518410 lr=0.000221
+  epoch 56: val_acc = 3333/3925 = 84.917197%  top5 = 3814/3925 = 97.171975%  [95% CI 83.76–86.00]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e56.bin (3925 bytes)
+  step 0/295: loss=0.503632
+  step 1/295: loss=0.505696
+  step 2/295: loss=0.508885
+  step 100/295: loss=0.566272
+  step 200/295: loss=0.502889
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.516428 lr=0.000204
+  epoch 57: val_acc = 3342/3925 = 85.146497%  top5 = 3817/3925 = 97.248408%  [95% CI 84.00–86.22]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e57.bin (3925 bytes)
+  step 0/295: loss=0.556410
+  step 1/295: loss=0.503394
+  step 2/295: loss=0.503516
+  step 100/295: loss=0.537585
+  step 200/295: loss=0.503175
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.515035 lr=0.000188
+  epoch 58: val_acc = 3336/3925 = 84.993631%  top5 = 3815/3925 = 97.197452%  [95% CI 83.84–86.08]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e58.bin (3925 bytes)
+  step 0/295: loss=0.502218
+  step 1/295: loss=0.525768
+  step 2/295: loss=0.503000
+  step 100/295: loss=0.512443
+  step 200/295: loss=0.502597
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.510841 lr=0.000173
+  epoch 59: val_acc = 3328/3925 = 84.789809%  top5 = 3819/3925 = 97.299363%  [95% CI 83.63–85.88]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e59.bin (3925 bytes)
+  step 0/295: loss=0.502588
+  step 1/295: loss=0.509030
+  step 2/295: loss=0.508808
+  step 100/295: loss=0.505481
+  step 200/295: loss=0.517832
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.512537 lr=0.000157
+  epoch 60: val_acc = 3356/3925 = 85.503185%  top5 = 3810/3925 = 97.070064%  [95% CI 84.37–86.57]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e60.bin (3925 bytes)
+  step 0/295: loss=0.521968
+  step 1/295: loss=0.501944
+  step 2/295: loss=0.501895
+  step 100/295: loss=0.597780
+  step 200/295: loss=0.509719
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.510040 lr=0.000143
+  epoch 61: val_acc = 3342/3925 = 85.146497%  top5 = 3811/3925 = 97.095541%  [95% CI 84.00–86.22]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e61.bin (3925 bytes)
+  step 0/295: loss=0.505944
+  step 1/295: loss=0.504640
+  step 2/295: loss=0.503358
+  step 100/295: loss=0.504046
+  step 200/295: loss=0.506667
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.508918 lr=0.000129
+  epoch 62: val_acc = 3356/3925 = 85.503185%  top5 = 3828/3925 = 97.528662%  [95% CI 84.37–86.57]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e62.bin (3925 bytes)
+  step 0/295: loss=0.502352
+  step 1/295: loss=0.502731
+  step 2/295: loss=0.502573
+  step 100/295: loss=0.512466
+  step 200/295: loss=0.501926
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.508703 lr=0.000116
+  epoch 63: val_acc = 3334/3925 = 84.942675%  top5 = 3808/3925 = 97.019108%  [95% CI 83.79–86.03]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e63.bin (3925 bytes)
+  step 0/295: loss=0.512041
+  step 1/295: loss=0.508323
+  step 2/295: loss=0.502646
+  step 100/295: loss=0.504596
+  step 200/295: loss=0.503292
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.508299 lr=0.000103
+  epoch 64: val_acc = 3344/3925 = 85.197452%  top5 = 3809/3925 = 97.044586%  [95% CI 84.05–86.27]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e64.bin (3925 bytes)
+  step 0/295: loss=0.505883
+  step 1/295: loss=0.503798
+  step 2/295: loss=0.501975
+  step 100/295: loss=0.502407
+  step 200/295: loss=0.503926
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.507124 lr=0.000091
+  epoch 65: val_acc = 3374/3925 = 85.961783%  top5 = 3819/3925 = 97.299363%  [95% CI 84.84–87.01]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e65.bin (3925 bytes)
+  step 0/295: loss=0.501622
+  step 1/295: loss=0.502086
+  step 2/295: loss=0.501740
+  step 100/295: loss=0.504026
+  step 200/295: loss=0.502062
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.507686 lr=0.000079
+  epoch 66: val_acc = 3355/3925 = 85.477707%  top5 = 3811/3925 = 97.095541%  [95% CI 84.34–86.55]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e66.bin (3925 bytes)
+  step 0/295: loss=0.505832
+  step 1/295: loss=0.502327
+  step 2/295: loss=0.501686
+  step 100/295: loss=0.503858
+  step 200/295: loss=0.502304
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.505074 lr=0.000069
+  epoch 67: val_acc = 3367/3925 = 85.783439%  top5 = 3821/3925 = 97.350318%  [95% CI 84.66–86.84]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e67.bin (3925 bytes)
+  step 0/295: loss=0.502022
+  step 1/295: loss=0.501795
+  step 2/295: loss=0.503078
+  step 100/295: loss=0.502762
+  step 200/295: loss=0.504653
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.505872 lr=0.000059
+  epoch 68: val_acc = 3370/3925 = 85.859873%  top5 = 3819/3925 = 97.299363%  [95% CI 84.73–86.91]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e68.bin (3925 bytes)
+  step 0/295: loss=0.502090
+  step 1/295: loss=0.504219
+  step 2/295: loss=0.502211
+  step 100/295: loss=0.501258
+  step 200/295: loss=0.501872
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.505200 lr=0.000050
+  epoch 69: val_acc = 3363/3925 = 85.681529%  top5 = 3822/3925 = 97.375796%  [95% CI 84.55–86.74]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e69.bin (3925 bytes)
+  step 0/295: loss=0.501575
+  step 1/295: loss=0.501563
+  step 2/295: loss=0.503245
+  step 100/295: loss=0.521526
+  step 200/295: loss=0.501396
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.503500 lr=0.000041
+  epoch 70: val_acc = 3371/3925 = 85.885350%  top5 = 3827/3925 = 97.503185%  [95% CI 84.76–86.94]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e70.bin (3925 bytes)
+  step 0/295: loss=0.502443
+  step 1/295: loss=0.501281
+  step 2/295: loss=0.501558
+  step 100/295: loss=0.504202
+  step 200/295: loss=0.501561
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.504442 lr=0.000033
+  epoch 71: val_acc = 3369/3925 = 85.834395%  top5 = 3832/3925 = 97.630573%  [95% CI 84.71–86.89]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e71.bin (3925 bytes)
+  step 0/295: loss=0.501550
+  step 1/295: loss=0.504112
+  step 2/295: loss=0.501889
+  step 100/295: loss=0.501544
+  step 200/295: loss=0.505397
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.504064 lr=0.000026
+  epoch 72: val_acc = 3388/3925 = 86.318471%  top5 = 3834/3925 = 97.681529%  [95% CI 85.21–87.36]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e72.bin (3925 bytes)
+  step 0/295: loss=0.513529
+  step 1/295: loss=0.507729
+  step 2/295: loss=0.501646
+  step 100/295: loss=0.502016
+  step 200/295: loss=0.501216
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.502717 lr=0.000020
+  epoch 73: val_acc = 3381/3925 = 86.140127%  top5 = 3826/3925 = 97.477707%  [95% CI 85.02–87.19]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e73.bin (3925 bytes)
+  step 0/295: loss=0.502830
+  step 1/295: loss=0.503722
+  step 2/295: loss=0.501090
+  step 100/295: loss=0.509991
+  step 200/295: loss=0.501616
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.503040 lr=0.000015
+  epoch 74: val_acc = 3380/3925 = 86.114650%  top5 = 3824/3925 = 97.426752%  [95% CI 85.00–87.16]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e74.bin (3925 bytes)
+  step 0/295: loss=0.501952
+  step 1/295: loss=0.501060
+  step 2/295: loss=0.501225
+  step 100/295: loss=0.500931
+  step 200/295: loss=0.501545
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.503642 lr=0.000010
+  epoch 75: val_acc = 3377/3925 = 86.038217%  top5 = 3827/3925 = 97.503185%  [95% CI 84.92–87.09]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e75.bin (3925 bytes)
+  step 0/295: loss=0.501065
+  step 1/295: loss=0.501606
+  step 2/295: loss=0.501396
+  step 100/295: loss=0.503698
+  step 200/295: loss=0.501060
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.503071 lr=0.000007
+  epoch 76: val_acc = 3387/3925 = 86.292994%  top5 = 3828/3925 = 97.528662%  [95% CI 85.18–87.33]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e76.bin (3925 bytes)
+  step 0/295: loss=0.501080
+  step 1/295: loss=0.501526
+  step 2/295: loss=0.501896
+  step 100/295: loss=0.501867
+  step 200/295: loss=0.501749
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.503436 lr=0.000004
+  epoch 77: val_acc = 3388/3925 = 86.318471%  top5 = 3824/3925 = 97.426752%  [95% CI 85.21–87.36]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e77.bin (3925 bytes)
+  step 0/295: loss=0.502833
+  step 1/295: loss=0.501634
+  step 2/295: loss=0.501511
+  step 100/295: loss=0.501068
+  step 200/295: loss=0.501826
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.502886 lr=0.000002
+  epoch 78: val_acc = 3387/3925 = 86.292994%  top5 = 3826/3925 = 97.477707%  [95% CI 85.18–87.33]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e78.bin (3925 bytes)
+  step 0/295: loss=0.501623
+  step 1/295: loss=0.501513
+  step 2/295: loss=0.501316
+  step 100/295: loss=0.501171
+  step 200/295: loss=0.501330
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.502258 lr=0.000000
+  epoch 79: val_acc = 3390/3925 = 86.369427%  top5 = 3826/3925 = 97.477707%  [95% CI 85.26–87.41]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e79.bin (3925 bytes)
+  step 0/295: loss=0.501543
+  step 1/295: loss=0.501196
+  step 2/295: loss=0.501527
+  step 100/295: loss=0.501449
+  step 200/295: loss=0.501822
+[pjrt_ffi] RESIDENT: @mnv4_fwd_eval holds 387 parameter tensors (32.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.503082 lr=0.000000
+  epoch 80: val_acc = 3391/3925 = 86.394904%  top5 = 3830/3925 = 97.579618%  [95% CI 85.29–87.43]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/mobilenetv4_s1_e80.bin (3925 bytes)
+done (trained MobileNetV4-Conv-M adam + cosine/warmup via packed threading).

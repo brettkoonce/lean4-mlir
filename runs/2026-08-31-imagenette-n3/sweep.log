@@ -1,0 +1,72 @@
+[03:46:33] sweep start: 21 jobs, GPUs 0,1,2,3,4,5, seeds [1 2 3] -> runs/2026-08-31-imagenette-n3
+[03:46:33] gpu0  resnet34_s1  start  (resnet34-verified-adam)
+[03:46:33] gpu1  resnet34_s2  start  (resnet34-verified-adam)
+[03:46:33] gpu2  resnet34_s3  start  (resnet34-verified-adam)
+[03:46:33] gpu3  resnet50_s1  start  (resnet50-verified-adam)
+[03:46:33] gpu5  resnet50_s2  start  (resnet50-verified-adam)
+[03:46:33] gpu4  resnet50_s3  start  (resnet50-verified-adam)
+[04:30:53] gpu2  resnet34_s3  OK   44m20s  val_acc = 3534/3925 = 90.038217%  top5 = 3861/3925 = 98.369427%  [95% CI 89.06–90.94]
+[04:30:53] gpu2  convnext_s1  start  (convnext-verified-adam)
+[04:31:18] gpu1  resnet34_s2  OK   44m45s  val_acc = 3547/3925 = 90.369427%  top5 = 3866/3925 = 98.496815%  [95% CI 89.41–91.25]
+[04:31:18] gpu1  convnext_s2  start  (convnext-verified-adam)
+[04:31:37] gpu0  resnet34_s1  OK   45m4s  val_acc = 3539/3925 = 90.165605%  top5 = 3872/3925 = 98.649682%  [95% CI 89.19–91.06]
+[04:31:37] gpu0  convnext_s3  start  (convnext-verified-adam)
+[05:00:14] gpu4  resnet50_s3  OK   73m41s  val_acc = 3522/3925 = 89.732484%  top5 = 3880/3925 = 98.853503%  [95% CI 88.74–90.64]
+[05:00:14] gpu4  efficientnet_s1  start  (efficientnet-verified-adam)
+[05:00:51] gpu3  resnet50_s1  OK   74m18s  val_acc = 3520/3925 = 89.681529%  top5 = 3880/3925 = 98.853503%  [95% CI 88.69–90.59]
+[05:00:51] gpu3  efficientnet_s2  start  (efficientnet-verified-adam)
+[05:00:53] gpu5  resnet50_s2  OK   74m20s  val_acc = 3531/3925 = 89.961783%  top5 = 3871/3925 = 98.624204%  [95% CI 88.98–90.86]
+[05:00:53] gpu5  efficientnet_s3  start  (efficientnet-verified-adam)
+[05:39:32] gpu4  efficientnet_s1  OK   39m18s  val_acc = 3535/3925 = 90.063694%  top5 = 3856/3925 = 98.242038%  [95% CI 89.09–90.96]
+[05:39:32] gpu4  mobilenetv4_s1  start  (mobilenetv4-verified-adam)
+[05:40:21] gpu3  efficientnet_s2  OK   39m30s  val_acc = 3513/3925 = 89.503185%  top5 = 3868/3925 = 98.547771%  [95% CI 88.51–90.42]
+[05:40:21] gpu3  mobilenetv4_s2  start  (mobilenetv4-verified-adam)
+[05:40:26] gpu5  efficientnet_s3  OK   39m33s  val_acc = 3552/3925 = 90.496815%  top5 = 3869/3925 = 98.573248%  [95% CI 89.54–91.38]
+[05:40:26] gpu5  mobilenetv4_s3  start  (mobilenetv4-verified-adam)
+[05:44:57] gpu2  convnext_s1  OK   74m4s  val_acc = 3352/3925 = 85.401274%  top5 = 3809/3925 = 97.044586%  [95% CI 84.26–86.47]
+[05:44:57] gpu2  mobilenetv2_s1  start  (mobilenetv2-verified-adam)
+[05:46:16] gpu1  convnext_s2  OK   74m58s  val_acc = 3362/3925 = 85.656051%  top5 = 3818/3925 = 97.273885%  [95% CI 84.52–86.72]
+[05:46:16] gpu1  mobilenetv2_s2  start  (mobilenetv2-verified-adam)
+[05:47:17] gpu0  convnext_s3  OK   75m40s  val_acc = 3351/3925 = 85.375796%  top5 = 3819/3925 = 97.299363%  [95% CI 84.24–86.45]
+[05:47:17] gpu0  mobilenetv2_s3  start  (mobilenetv2-verified-adam)
+[06:11:45] gpu4  mobilenetv4_s1  OK   32m13s  val_acc = 3391/3925 = 86.394904%  top5 = 3830/3925 = 97.579618%  [95% CI 85.29–87.43]
+[06:11:45] gpu4  vit_s1  start  (vit-verified-adam)
+[06:12:57] gpu3  mobilenetv4_s2  OK   32m36s  val_acc = 3342/3925 = 85.146497%  top5 = 3824/3925 = 97.426752%  [95% CI 84.00–86.22]
+[06:12:57] gpu3  vit_s2  start  (vit-verified-adam)
+[06:13:13] gpu5  mobilenetv4_s3  OK   32m47s  val_acc = 3411/3925 = 86.904459%  top5 = 3836/3925 = 97.732484%  [95% CI 85.81–87.92]
+[06:13:13] gpu5  vit_s3  start  (vit-verified-adam)
+[06:21:14] gpu2  mobilenetv2_s1  OK   36m17s  val_acc = 3484/3925 = 88.764331%  top5 = 3868/3925 = 98.547771%  [95% CI 87.74–89.71]
+[06:22:53] gpu1  mobilenetv2_s2  OK   36m37s  val_acc = 3483/3925 = 88.738854%  top5 = 3876/3925 = 98.751592%  [95% CI 87.71–89.69]
+[06:23:46] gpu0  mobilenetv2_s3  OK   36m29s  val_acc = 3506/3925 = 89.324841%  top5 = 3874/3925 = 98.700637%  [95% CI 88.32–90.25]
+[06:35:25] gpu4  vit_s1  OK   23m40s  val_acc = 2703/3925 = 68.866242%  top5 = 3544/3925 = 90.292994%  [95% CI 67.40–70.30]
+[06:36:45] gpu3  vit_s2  OK   23m48s  val_acc = 2715/3925 = 69.171975%  top5 = 3538/3925 = 90.140127%  [95% CI 67.71–70.60]
+[06:37:14] gpu5  vit_s3  OK   24m1s  val_acc = 2690/3925 = 68.535032%  top5 = 3524/3925 = 89.783439%  [95% CI 67.06–69.97]
+[12:37:05] sweep start: 14 jobs, GPUs 0,1,2,3,4,5, seeds [4 5] -> runs/2026-08-31-imagenette-n3
+[12:37:05] gpu0  resnet34_s4  start  (resnet34-verified-adam)
+[12:37:05] gpu1  resnet34_s5  start  (resnet34-verified-adam)
+[12:37:05] gpu3  resnet50_s4  start  (resnet50-verified-adam)
+[12:37:05] gpu4  resnet50_s5  start  (resnet50-verified-adam)
+[12:37:05] gpu2  convnext_s4  start  (convnext-verified-adam)
+[12:37:05] gpu5  convnext_s5  start  (convnext-verified-adam)
+[13:23:42] gpu1  resnet34_s5  OK   46m37s  val_acc = 3520/3925 = 89.681529%  top5 = 3863/3925 = 98.420382%  [95% CI 88.69–90.59]
+[13:23:42] gpu1  efficientnet_s4  start  (efficientnet-verified-adam)
+[13:24:15] gpu0  resnet34_s4  OK   47m10s  val_acc = 3538/3925 = 90.140127%  top5 = 3867/3925 = 98.522293%  [95% CI 89.17–91.03]
+[13:24:15] gpu0  efficientnet_s5  start  (efficientnet-verified-adam)
+[13:52:29] gpu4  resnet50_s5  OK   75m24s  val_acc = 3521/3925 = 89.707006%  top5 = 3867/3925 = 98.522293%  [95% CI 88.72–90.62]
+[13:52:29] gpu4  mobilenetv4_s4  start  (mobilenetv4-verified-adam)
+[13:53:04] gpu2  convnext_s4  OK   75m59s  val_acc = 3350/3925 = 85.350318%  top5 = 3829/3925 = 97.554140%  [95% CI 84.21–86.42]
+[13:53:04] gpu2  mobilenetv4_s5  start  (mobilenetv4-verified-adam)
+[13:53:24] gpu3  resnet50_s4  OK   76m19s  val_acc = 3516/3925 = 89.579618%  top5 = 3871/3925 = 98.624204%  [95% CI 88.58–90.50]
+[13:53:24] gpu3  mobilenetv2_s4  start  (mobilenetv2-verified-adam)
+[13:54:22] gpu5  convnext_s5  OK   77m17s  val_acc = 3367/3925 = 85.783439%  top5 = 3809/3925 = 97.044586%  [95% CI 84.66–86.84]
+[13:54:22] gpu5  mobilenetv2_s5  start  (mobilenetv2-verified-adam)
+[14:03:10] gpu1  efficientnet_s4  OK   39m28s  val_acc = 3511/3925 = 89.452229%  top5 = 3848/3925 = 98.038217%  [95% CI 88.45–90.37]
+[14:03:10] gpu1  vit_s4  start  (vit-verified-adam)
+[14:04:06] gpu0  efficientnet_s5  OK   39m51s  val_acc = 3529/3925 = 89.910828%  top5 = 3863/3925 = 98.420382%  [95% CI 88.93–90.81]
+[14:04:06] gpu0  vit_s5  start  (vit-verified-adam)
+[14:29:21] gpu4  mobilenetv4_s4  OK   36m52s  val_acc = 3385/3925 = 86.242038%  top5 = 3835/3925 = 97.707006%  [95% CI 85.13–87.28]
+[14:29:38] gpu2  mobilenetv4_s5  OK   36m34s  val_acc = 3379/3925 = 86.089172%  top5 = 3828/3925 = 97.528662%  [95% CI 84.97–87.14]
+[14:30:23] gpu1  vit_s4  OK   27m13s  val_acc = 2714/3925 = 69.146497%  top5 = 3549/3925 = 90.420382%  [95% CI 67.68–70.57]
+[14:31:32] gpu0  vit_s5  OK   27m26s  val_acc = 2662/3925 = 67.821656%  top5 = 3533/3925 = 90.012739%  [95% CI 66.34–69.27]
+[14:33:27] gpu3  mobilenetv2_s4  OK   40m3s  val_acc = 3506/3925 = 89.324841%  top5 = 3857/3925 = 98.267516%  [95% CI 88.32–90.25]
+[14:34:19] gpu5  mobilenetv2_s5  OK   39m57s  val_acc = 3496/3925 = 89.070064%  top5 = 3864/3925 = 98.445860%  [95% CI 88.06–90.01]

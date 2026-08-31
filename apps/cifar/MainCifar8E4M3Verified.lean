@@ -8,7 +8,7 @@ fp32 accumulate, fp32 master (`VerifiedNet.trainE4M3`). fp8 weights+input, fp32
 intermediates. Run: `IREE_BACKEND=rocm .lake/build/bin/cifar8-e4m3-verified data` -/
 
 def cifar8E4M3Config : VerifiedConfig where
-  epochs    := 20
+  epochs    := 40
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=

@@ -1,0 +1,749 @@
+I0831 13:23:42.408073  656384 service.cc:154] XLA service 0x746f900517d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0831 13:23:42.408174  656384 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0831 13:23:42.409735  656384 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0831 13:23:42.409775  656384 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0831 13:23:42.416580  656384 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+E0831 13:23:45.389087  656399 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0831 13:23:45.966386  656408 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_347', 12 bytes spill stores, 12 bytes spill loads
+
+E0831 13:23:46.551964  656403 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0831 13:23:47.025910  656410 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_319', 12 bytes spill stores, 12 bytes spill loads
+
+E0831 13:23:47.486390  656403 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 13:23:48.607094  656412 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 13:23:48.903876  656407 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E0831 13:23:51.439389  656399 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/efficientnet_adam_train_step.mlir (@efficientnet_adam_train_step, 740 outputs, 1 replica) in 11067 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd.mlir (@efficientnet_fwd, 1 outputs, 1 replica) in 820 ms
+[pjrt_ffi] compiled verified_mlir/efficientnet_fwd_eval.mlir (@efficientnet_fwd_eval, 1 outputs, 1 replica) in 514 ms
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/efficientnet_adam_train_step.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd.mlir
+  xla/pjrt verified_mlir/efficientnet_fwd_eval.mlir
+  train 9469, val 3925; bs 32, EfficientNet-B0 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnet_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @efficientnet_adam_train_step holds 639 parameter tensors (46.0 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=2.386086
+  step 1/295: loss=2.434618
+  step 2/295: loss=2.362876
+  step 100/295: loss=2.260932
+  step 200/295: loss=2.063217
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.065568 lr=0.000333
+  epoch 1: val_acc = 1082/3925 = 27.566879%  top5 = 2982/3925 = 75.974522%  [95% CI 26.19–28.99]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e1.bin (3925 bytes)
+  step 0/295: loss=1.845327
+  step 1/295: loss=1.563459
+  step 2/295: loss=1.474000
+  step 100/295: loss=1.462991
+  step 200/295: loss=1.496640
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.658598 lr=0.000667
+  epoch 2: val_acc = 1489/3925 = 37.936306%  top5 = 3280/3925 = 83.566879%  [95% CI 36.43–39.47]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e2.bin (3925 bytes)
+  step 0/295: loss=1.658662
+  step 1/295: loss=1.852907
+  step 2/295: loss=1.467030
+  step 100/295: loss=1.306146
+  step 200/295: loss=1.138650
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.446328 lr=0.001000
+  epoch 3: val_acc = 1784/3925 = 45.452229%  top5 = 3344/3925 = 85.197452%  [95% CI 43.90–47.01]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e3.bin (3925 bytes)
+  step 0/295: loss=1.368395
+  step 1/295: loss=1.028286
+  step 2/295: loss=1.406401
+  step 100/295: loss=1.440063
+  step 200/295: loss=1.239003
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.303180 lr=0.001000
+  epoch 4: val_acc = 2472/3925 = 62.980892%  top5 = 3653/3925 = 93.070064%  [95% CI 61.46–64.48]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e4.bin (3925 bytes)
+  step 0/295: loss=1.211931
+  step 1/295: loss=1.222751
+  step 2/295: loss=1.172469
+  step 100/295: loss=1.243919
+  step 200/295: loss=1.316524
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.192676 lr=0.000998
+  epoch 5: val_acc = 2429/3925 = 61.885350%  top5 = 3612/3925 = 92.025478%  [95% CI 60.36–63.39]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e5.bin (3925 bytes)
+  step 0/295: loss=1.160974
+  step 1/295: loss=0.815942
+  step 2/295: loss=1.126839
+  step 100/295: loss=1.245524
+  step 200/295: loss=1.191303
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.105130 lr=0.000996
+  epoch 6: val_acc = 2624/3925 = 66.853503%  top5 = 3697/3925 = 94.191083%  [95% CI 65.36–68.31]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e6.bin (3925 bytes)
+  step 0/295: loss=1.067339
+  step 1/295: loss=1.117304
+  step 2/295: loss=1.090667
+  step 100/295: loss=1.145728
+  step 200/295: loss=1.169747
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.065666 lr=0.000993
+  epoch 7: val_acc = 2626/3925 = 66.904459%  top5 = 3702/3925 = 94.318471%  [95% CI 65.42–68.36]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e7.bin (3925 bytes)
+  step 0/295: loss=1.041303
+  step 1/295: loss=1.050139
+  step 2/295: loss=1.257386
+  step 100/295: loss=1.029341
+  step 200/295: loss=1.178428
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.012796 lr=0.000990
+  epoch 8: val_acc = 2705/3925 = 68.917197%  top5 = 3695/3925 = 94.140127%  [95% CI 67.45–70.35]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e8.bin (3925 bytes)
+  step 0/295: loss=1.001165
+  step 1/295: loss=0.837622
+  step 2/295: loss=0.910045
+  step 100/295: loss=0.912507
+  step 200/295: loss=1.008884
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=0.987027 lr=0.000985
+  epoch 9: val_acc = 2912/3925 = 74.191083%  top5 = 3810/3925 = 97.070064%  [95% CI 72.80–75.54]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e9.bin (3925 bytes)
+  step 0/295: loss=1.076050
+  step 1/295: loss=0.918041
+  step 2/295: loss=0.753378
+  step 100/295: loss=1.016755
+  step 200/295: loss=0.788817
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=0.950766 lr=0.000980
+  epoch 10: val_acc = 2936/3925 = 74.802548%  top5 = 3764/3925 = 95.898089%  [95% CI 73.42–76.14]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e10.bin (3925 bytes)
+  step 0/295: loss=0.976190
+  step 1/295: loss=0.824040
+  step 2/295: loss=0.827206
+  step 100/295: loss=1.163811
+  step 200/295: loss=0.761216
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=0.913660 lr=0.000974
+  epoch 11: val_acc = 2954/3925 = 75.261146%  top5 = 3788/3925 = 96.509554%  [95% CI 73.89–76.59]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e11.bin (3925 bytes)
+  step 0/295: loss=0.847572
+  step 1/295: loss=0.781136
+  step 2/295: loss=0.782038
+  step 100/295: loss=0.803533
+  step 200/295: loss=0.749346
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=0.882688 lr=0.000967
+  epoch 12: val_acc = 3008/3925 = 76.636943%  top5 = 3805/3925 = 96.942675%  [95% CI 75.29–77.93]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e12.bin (3925 bytes)
+  step 0/295: loss=1.008866
+  step 1/295: loss=0.877390
+  step 2/295: loss=0.944193
+  step 100/295: loss=0.765325
+  step 200/295: loss=0.843805
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=0.862071 lr=0.000959
+  epoch 13: val_acc = 3147/3925 = 80.178344%  top5 = 3797/3925 = 96.738854%  [95% CI 78.90–81.40]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e13.bin (3925 bytes)
+  step 0/295: loss=0.729933
+  step 1/295: loss=0.778312
+  step 2/295: loss=0.847620
+  step 100/295: loss=0.756230
+  step 200/295: loss=1.006953
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.845562 lr=0.000950
+  epoch 14: val_acc = 3125/3925 = 79.617834%  top5 = 3802/3925 = 96.866242%  [95% CI 78.33–80.85]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e14.bin (3925 bytes)
+  step 0/295: loss=0.965252
+  step 1/295: loss=0.822600
+  step 2/295: loss=0.675979
+  step 100/295: loss=0.783376
+  step 200/295: loss=0.697213
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.821144 lr=0.000941
+  epoch 15: val_acc = 3222/3925 = 82.089172%  top5 = 3839/3925 = 97.808917%  [95% CI 80.86–83.26]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e15.bin (3925 bytes)
+  step 0/295: loss=1.091645
+  step 1/295: loss=0.804474
+  step 2/295: loss=0.628856
+  step 100/295: loss=0.810820
+  step 200/295: loss=0.672634
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.803777 lr=0.000931
+  epoch 16: val_acc = 3154/3925 = 80.356688%  top5 = 3816/3925 = 97.222930%  [95% CI 79.08–81.57]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e16.bin (3925 bytes)
+  step 0/295: loss=0.761535
+  step 1/295: loss=0.868772
+  step 2/295: loss=0.998020
+  step 100/295: loss=0.618149
+  step 200/295: loss=0.774041
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.789357 lr=0.000921
+  epoch 17: val_acc = 3080/3925 = 78.471338%  top5 = 3796/3925 = 96.713376%  [95% CI 77.16–79.73]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e17.bin (3925 bytes)
+  step 0/295: loss=0.754911
+  step 1/295: loss=0.677118
+  step 2/295: loss=0.746753
+  step 100/295: loss=0.652862
+  step 200/295: loss=0.718756
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.762623 lr=0.000909
+  epoch 18: val_acc = 3298/3925 = 84.025478%  top5 = 3819/3925 = 97.299363%  [95% CI 82.85–85.14]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e18.bin (3925 bytes)
+  step 0/295: loss=0.658195
+  step 1/295: loss=0.614024
+  step 2/295: loss=0.635420
+  step 100/295: loss=0.615450
+  step 200/295: loss=0.825984
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.746687 lr=0.000897
+  epoch 19: val_acc = 3208/3925 = 81.732484%  top5 = 3815/3925 = 97.197452%  [95% CI 80.49–82.91]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e19.bin (3925 bytes)
+  step 0/295: loss=0.783907
+  step 1/295: loss=0.748478
+  step 2/295: loss=0.821463
+  step 100/295: loss=0.726247
+  step 200/295: loss=0.641348
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.725116 lr=0.000884
+  epoch 20: val_acc = 3204/3925 = 81.630573%  top5 = 3795/3925 = 96.687898%  [95% CI 80.39–82.81]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e20.bin (3925 bytes)
+  step 0/295: loss=0.732133
+  step 1/295: loss=0.562075
+  step 2/295: loss=0.565126
+  step 100/295: loss=0.627325
+  step 200/295: loss=0.682425
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.716243 lr=0.000871
+  epoch 21: val_acc = 3243/3925 = 82.624204%  top5 = 3841/3925 = 97.859873%  [95% CI 81.41–83.78]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e21.bin (3925 bytes)
+  step 0/295: loss=0.676610
+  step 1/295: loss=0.659284
+  step 2/295: loss=0.714806
+  step 100/295: loss=0.863657
+  step 200/295: loss=0.780430
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.707627 lr=0.000857
+  epoch 22: val_acc = 3204/3925 = 81.630573%  top5 = 3835/3925 = 97.707006%  [95% CI 80.39–82.81]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e22.bin (3925 bytes)
+  step 0/295: loss=0.686320
+  step 1/295: loss=0.553848
+  step 2/295: loss=0.599616
+  step 100/295: loss=0.766218
+  step 200/295: loss=0.786170
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.688489 lr=0.000843
+  epoch 23: val_acc = 3295/3925 = 83.949045%  top5 = 3839/3925 = 97.808917%  [95% CI 82.77–85.06]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e23.bin (3925 bytes)
+  step 0/295: loss=0.710148
+  step 1/295: loss=0.632960
+  step 2/295: loss=0.650396
+  step 100/295: loss=0.680079
+  step 200/295: loss=0.705528
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.682246 lr=0.000827
+  epoch 24: val_acc = 3260/3925 = 83.057325%  top5 = 3815/3925 = 97.197452%  [95% CI 81.85–84.20]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e24.bin (3925 bytes)
+  step 0/295: loss=0.672135
+  step 1/295: loss=0.709864
+  step 2/295: loss=0.764845
+  step 100/295: loss=0.751174
+  step 200/295: loss=0.596992
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.658750 lr=0.000812
+  epoch 25: val_acc = 3228/3925 = 82.242038%  top5 = 3822/3925 = 97.375796%  [95% CI 81.02–83.41]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e25.bin (3925 bytes)
+  step 0/295: loss=0.817693
+  step 1/295: loss=0.548766
+  step 2/295: loss=0.653107
+  step 100/295: loss=0.608475
+  step 200/295: loss=0.858367
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.645968 lr=0.000796
+  epoch 26: val_acc = 3258/3925 = 83.006369%  top5 = 3814/3925 = 97.171975%  [95% CI 81.80–84.15]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e26.bin (3925 bytes)
+  step 0/295: loss=0.625661
+  step 1/295: loss=0.592360
+  step 2/295: loss=0.650842
+  step 100/295: loss=0.593780
+  step 200/295: loss=0.601533
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.648114 lr=0.000779
+  epoch 27: val_acc = 3325/3925 = 84.713376%  top5 = 3837/3925 = 97.757962%  [95% CI 83.55–85.81]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e27.bin (3925 bytes)
+  step 0/295: loss=0.626371
+  step 1/295: loss=0.642584
+  step 2/295: loss=0.698263
+  step 100/295: loss=0.726540
+  step 200/295: loss=0.629468
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.623270 lr=0.000762
+  epoch 28: val_acc = 3368/3925 = 85.808917%  top5 = 3843/3925 = 97.910828%  [95% CI 84.68–86.87]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e28.bin (3925 bytes)
+  step 0/295: loss=0.557124
+  step 1/295: loss=0.540545
+  step 2/295: loss=0.648665
+  step 100/295: loss=0.629725
+  step 200/295: loss=0.570680
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.614621 lr=0.000744
+  epoch 29: val_acc = 3277/3925 = 83.490446%  top5 = 3829/3925 = 97.554140%  [95% CI 82.30–84.62]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e29.bin (3925 bytes)
+  step 0/295: loss=0.571213
+  step 1/295: loss=0.625352
+  step 2/295: loss=0.689409
+  step 100/295: loss=0.628963
+  step 200/295: loss=0.596854
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.619529 lr=0.000726
+  epoch 30: val_acc = 3360/3925 = 85.605096%  top5 = 3846/3925 = 97.987261%  [95% CI 84.47–86.67]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e30.bin (3925 bytes)
+  step 0/295: loss=0.586937
+  step 1/295: loss=0.598002
+  step 2/295: loss=0.560025
+  step 100/295: loss=0.611665
+  step 200/295: loss=0.607472
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.605606 lr=0.000708
+  epoch 31: val_acc = 3382/3925 = 86.165605%  top5 = 3841/3925 = 97.859873%  [95% CI 85.05–87.21]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e31.bin (3925 bytes)
+  step 0/295: loss=0.529275
+  step 1/295: loss=0.581127
+  step 2/295: loss=0.560051
+  step 100/295: loss=0.596467
+  step 200/295: loss=0.519493
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.597663 lr=0.000689
+  epoch 32: val_acc = 3316/3925 = 84.484076%  top5 = 3826/3925 = 97.477707%  [95% CI 83.32–85.58]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e32.bin (3925 bytes)
+  step 0/295: loss=0.577638
+  step 1/295: loss=0.665205
+  step 2/295: loss=0.529441
+  step 100/295: loss=0.578858
+  step 200/295: loss=0.619690
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.595810 lr=0.000670
+  epoch 33: val_acc = 3305/3925 = 84.203822%  top5 = 3825/3925 = 97.452229%  [95% CI 83.03–85.31]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e33.bin (3925 bytes)
+  step 0/295: loss=0.549300
+  step 1/295: loss=0.696648
+  step 2/295: loss=0.584727
+  step 100/295: loss=0.613498
+  step 200/295: loss=0.568128
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.578886 lr=0.000651
+  epoch 34: val_acc = 3360/3925 = 85.605096%  top5 = 3830/3925 = 97.579618%  [95% CI 84.47–86.67]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e34.bin (3925 bytes)
+  step 0/295: loss=0.591172
+  step 1/295: loss=0.633447
+  step 2/295: loss=0.551810
+  step 100/295: loss=0.563397
+  step 200/295: loss=0.536546
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.586251 lr=0.000631
+  epoch 35: val_acc = 3385/3925 = 86.242038%  top5 = 3838/3925 = 97.783439%  [95% CI 85.13–87.28]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e35.bin (3925 bytes)
+  step 0/295: loss=0.572627
+  step 1/295: loss=0.579323
+  step 2/295: loss=0.590398
+  step 100/295: loss=0.515973
+  step 200/295: loss=0.544271
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.567132 lr=0.000611
+  epoch 36: val_acc = 3376/3925 = 86.012739%  top5 = 3831/3925 = 97.605096%  [95% CI 84.89–87.06]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e36.bin (3925 bytes)
+  step 0/295: loss=0.529161
+  step 1/295: loss=0.585810
+  step 2/295: loss=0.522412
+  step 100/295: loss=0.621817
+  step 200/295: loss=0.523570
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.565581 lr=0.000591
+  epoch 37: val_acc = 3417/3925 = 87.057325%  top5 = 3846/3925 = 97.987261%  [95% CI 85.97–88.07]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e37.bin (3925 bytes)
+  step 0/295: loss=0.517112
+  step 1/295: loss=0.517079
+  step 2/295: loss=0.511196
+  step 100/295: loss=0.568969
+  step 200/295: loss=0.653177
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.568808 lr=0.000571
+  epoch 38: val_acc = 3310/3925 = 84.331210%  top5 = 3816/3925 = 97.222930%  [95% CI 83.16–85.43]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e38.bin (3925 bytes)
+  step 0/295: loss=0.562717
+  step 1/295: loss=0.525950
+  step 2/295: loss=0.536825
+  step 100/295: loss=0.595980
+  step 200/295: loss=0.640562
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.559827 lr=0.000551
+  epoch 39: val_acc = 3422/3925 = 87.184713%  top5 = 3834/3925 = 97.681529%  [95% CI 86.10–88.19]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e39.bin (3925 bytes)
+  step 0/295: loss=0.519607
+  step 1/295: loss=0.531723
+  step 2/295: loss=0.557853
+  step 100/295: loss=0.620580
+  step 200/295: loss=0.528303
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.547317 lr=0.000531
+  epoch 40: val_acc = 3421/3925 = 87.159236%  top5 = 3854/3925 = 98.191083%  [95% CI 86.08–88.17]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e40.bin (3925 bytes)
+  step 0/295: loss=0.524488
+  step 1/295: loss=0.511757
+  step 2/295: loss=0.564353
+  step 100/295: loss=0.534365
+  step 200/295: loss=0.535379
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.545005 lr=0.000510
+  epoch 41: val_acc = 3316/3925 = 84.484076%  top5 = 3828/3925 = 97.528662%  [95% CI 83.32–85.58]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e41.bin (3925 bytes)
+  step 0/295: loss=0.531095
+  step 1/295: loss=0.535813
+  step 2/295: loss=0.578709
+  step 100/295: loss=0.529495
+  step 200/295: loss=0.517160
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.548252 lr=0.000490
+  epoch 42: val_acc = 3420/3925 = 87.133758%  top5 = 3847/3925 = 98.012739%  [95% CI 86.05–88.15]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e42.bin (3925 bytes)
+  step 0/295: loss=0.515210
+  step 1/295: loss=0.520531
+  step 2/295: loss=0.509681
+  step 100/295: loss=0.512733
+  step 200/295: loss=0.528152
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.549254 lr=0.000469
+  epoch 43: val_acc = 3378/3925 = 86.063694%  top5 = 3821/3925 = 97.350318%  [95% CI 84.94–87.11]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e43.bin (3925 bytes)
+  step 0/295: loss=0.658484
+  step 1/295: loss=0.537625
+  step 2/295: loss=0.529186
+  step 100/295: loss=0.513807
+  step 200/295: loss=0.540949
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.535002 lr=0.000449
+  epoch 44: val_acc = 3467/3925 = 88.331210%  top5 = 3845/3925 = 97.961783%  [95% CI 87.29–89.30]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e44.bin (3925 bytes)
+  step 0/295: loss=0.507508
+  step 1/295: loss=0.506749
+  step 2/295: loss=0.516502
+  step 100/295: loss=0.560212
+  step 200/295: loss=0.520989
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.535666 lr=0.000429
+  epoch 45: val_acc = 3438/3925 = 87.592357%  top5 = 3854/3925 = 98.191083%  [95% CI 86.52–88.59]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e45.bin (3925 bytes)
+  step 0/295: loss=0.520043
+  step 1/295: loss=0.523425
+  step 2/295: loss=0.532194
+  step 100/295: loss=0.546520
+  step 200/295: loss=0.531471
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.539085 lr=0.000409
+  epoch 46: val_acc = 3432/3925 = 87.439490%  top5 = 3851/3925 = 98.114650%  [95% CI 86.37–88.44]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e46.bin (3925 bytes)
+  step 0/295: loss=0.505476
+  step 1/295: loss=0.511891
+  step 2/295: loss=0.517254
+  step 100/295: loss=0.509462
+  step 200/295: loss=0.508015
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.525417 lr=0.000389
+  epoch 47: val_acc = 3440/3925 = 87.643312%  top5 = 3845/3925 = 97.961783%  [95% CI 86.58–88.64]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e47.bin (3925 bytes)
+  step 0/295: loss=0.533503
+  step 1/295: loss=0.512628
+  step 2/295: loss=0.551313
+  step 100/295: loss=0.507522
+  step 200/295: loss=0.563336
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.524699 lr=0.000369
+  epoch 48: val_acc = 3468/3925 = 88.356688%  top5 = 3851/3925 = 98.114650%  [95% CI 87.32–89.32]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e48.bin (3925 bytes)
+  step 0/295: loss=0.509362
+  step 1/295: loss=0.507085
+  step 2/295: loss=0.506650
+  step 100/295: loss=0.515595
+  step 200/295: loss=0.505864
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.523559 lr=0.000349
+  epoch 49: val_acc = 3404/3925 = 86.726115%  top5 = 3846/3925 = 97.987261%  [95% CI 85.63–87.75]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e49.bin (3925 bytes)
+  step 0/295: loss=0.515805
+  step 1/295: loss=0.508515
+  step 2/295: loss=0.602255
+  step 100/295: loss=0.622132
+  step 200/295: loss=0.576342
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.526401 lr=0.000330
+  epoch 50: val_acc = 3461/3925 = 88.178344%  top5 = 3828/3925 = 97.528662%  [95% CI 87.13–89.15]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e50.bin (3925 bytes)
+  step 0/295: loss=0.544153
+  step 1/295: loss=0.510206
+  step 2/295: loss=0.515591
+  step 100/295: loss=0.509944
+  step 200/295: loss=0.629942
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.525558 lr=0.000311
+  epoch 51: val_acc = 3440/3925 = 87.643312%  top5 = 3832/3925 = 97.630573%  [95% CI 86.58–88.64]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e51.bin (3925 bytes)
+  step 0/295: loss=0.526023
+  step 1/295: loss=0.518138
+  step 2/295: loss=0.584191
+  step 100/295: loss=0.507760
+  step 200/295: loss=0.506876
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.522816 lr=0.000292
+  epoch 52: val_acc = 3472/3925 = 88.458599%  top5 = 3837/3925 = 97.757962%  [95% CI 87.42–89.42]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e52.bin (3925 bytes)
+  step 0/295: loss=0.506510
+  step 1/295: loss=0.555020
+  step 2/295: loss=0.505167
+  step 100/295: loss=0.520293
+  step 200/295: loss=0.585194
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.521531 lr=0.000274
+  epoch 53: val_acc = 3453/3925 = 87.974522%  top5 = 3835/3925 = 97.707006%  [95% CI 86.92–88.96]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e53.bin (3925 bytes)
+  step 0/295: loss=0.520794
+  step 1/295: loss=0.513825
+  step 2/295: loss=0.584938
+  step 100/295: loss=0.506598
+  step 200/295: loss=0.506763
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.515829 lr=0.000256
+  epoch 54: val_acc = 3484/3925 = 88.764331%  top5 = 3846/3925 = 97.987261%  [95% CI 87.74–89.71]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e54.bin (3925 bytes)
+  step 0/295: loss=0.507431
+  step 1/295: loss=0.588744
+  step 2/295: loss=0.506439
+  step 100/295: loss=0.506597
+  step 200/295: loss=0.506401
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.517694 lr=0.000238
+  epoch 55: val_acc = 3472/3925 = 88.458599%  top5 = 3844/3925 = 97.936306%  [95% CI 87.42–89.42]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e55.bin (3925 bytes)
+  step 0/295: loss=0.506100
+  step 1/295: loss=0.571537
+  step 2/295: loss=0.505200
+  step 100/295: loss=0.504764
+  step 200/295: loss=0.543442
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.514789 lr=0.000221
+  epoch 56: val_acc = 3464/3925 = 88.254777%  top5 = 3853/3925 = 98.165605%  [95% CI 87.21–89.22]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e56.bin (3925 bytes)
+  step 0/295: loss=0.505233
+  step 1/295: loss=0.511204
+  step 2/295: loss=0.505373
+  step 100/295: loss=0.516453
+  step 200/295: loss=0.505839
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.512637 lr=0.000204
+  epoch 57: val_acc = 3497/3925 = 89.095541%  top5 = 3856/3925 = 98.242038%  [95% CI 88.08–90.03]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e57.bin (3925 bytes)
+  step 0/295: loss=0.508563
+  step 1/295: loss=0.506173
+  step 2/295: loss=0.505383
+  step 100/295: loss=0.506847
+  step 200/295: loss=0.502865
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.510648 lr=0.000188
+  epoch 58: val_acc = 3484/3925 = 88.764331%  top5 = 3852/3925 = 98.140127%  [95% CI 87.74–89.71]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e58.bin (3925 bytes)
+  step 0/295: loss=0.503436
+  step 1/295: loss=0.511702
+  step 2/295: loss=0.506387
+  step 100/295: loss=0.506008
+  step 200/295: loss=0.510905
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.514490 lr=0.000173
+  epoch 59: val_acc = 3463/3925 = 88.229299%  top5 = 3837/3925 = 97.757962%  [95% CI 87.18–89.20]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e59.bin (3925 bytes)
+  step 0/295: loss=0.506851
+  step 1/295: loss=0.513452
+  step 2/295: loss=0.527728
+  step 100/295: loss=0.506082
+  step 200/295: loss=0.529031
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.509524 lr=0.000157
+  epoch 60: val_acc = 3482/3925 = 88.713376%  top5 = 3837/3925 = 97.757962%  [95% CI 87.69–89.67]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e60.bin (3925 bytes)
+  step 0/295: loss=0.522959
+  step 1/295: loss=0.506004
+  step 2/295: loss=0.510110
+  step 100/295: loss=0.504233
+  step 200/295: loss=0.508208
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.509516 lr=0.000143
+  epoch 61: val_acc = 3482/3925 = 88.713376%  top5 = 3835/3925 = 97.707006%  [95% CI 87.69–89.67]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e61.bin (3925 bytes)
+  step 0/295: loss=0.505510
+  step 1/295: loss=0.516852
+  step 2/295: loss=0.506741
+  step 100/295: loss=0.504197
+  step 200/295: loss=0.509053
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.507297 lr=0.000129
+  epoch 62: val_acc = 3490/3925 = 88.917197%  top5 = 3847/3925 = 98.012739%  [95% CI 87.90–89.86]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e62.bin (3925 bytes)
+  step 0/295: loss=0.504017
+  step 1/295: loss=0.506208
+  step 2/295: loss=0.504431
+  step 100/295: loss=0.506367
+  step 200/295: loss=0.504968
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.507970 lr=0.000116
+  epoch 63: val_acc = 3494/3925 = 89.019108%  top5 = 3852/3925 = 98.140127%  [95% CI 88.00–89.96]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e63.bin (3925 bytes)
+  step 0/295: loss=0.506512
+  step 1/295: loss=0.509510
+  step 2/295: loss=0.505101
+  step 100/295: loss=0.507934
+  step 200/295: loss=0.504145
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.507442 lr=0.000103
+  epoch 64: val_acc = 3481/3925 = 88.687898%  top5 = 3844/3925 = 97.936306%  [95% CI 87.66–89.64]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e64.bin (3925 bytes)
+  step 0/295: loss=0.503992
+  step 1/295: loss=0.508707
+  step 2/295: loss=0.503331
+  step 100/295: loss=0.504306
+  step 200/295: loss=0.503051
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.507130 lr=0.000091
+  epoch 65: val_acc = 3483/3925 = 88.738854%  top5 = 3845/3925 = 97.961783%  [95% CI 87.71–89.69]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e65.bin (3925 bytes)
+  step 0/295: loss=0.502717
+  step 1/295: loss=0.505701
+  step 2/295: loss=0.502209
+  step 100/295: loss=0.507093
+  step 200/295: loss=0.503460
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.506957 lr=0.000079
+  epoch 66: val_acc = 3483/3925 = 88.738854%  top5 = 3843/3925 = 97.910828%  [95% CI 87.71–89.69]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e66.bin (3925 bytes)
+  step 0/295: loss=0.504545
+  step 1/295: loss=0.510157
+  step 2/295: loss=0.504908
+  step 100/295: loss=0.510276
+  step 200/295: loss=0.510087
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.506316 lr=0.000069
+  epoch 67: val_acc = 3502/3925 = 89.222930%  top5 = 3851/3925 = 98.114650%  [95% CI 88.21–90.15]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e67.bin (3925 bytes)
+  step 0/295: loss=0.504458
+  step 1/295: loss=0.504234
+  step 2/295: loss=0.504240
+  step 100/295: loss=0.504618
+  step 200/295: loss=0.504063
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.506246 lr=0.000059
+  epoch 68: val_acc = 3488/3925 = 88.866242%  top5 = 3847/3925 = 98.012739%  [95% CI 87.84–89.81]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e68.bin (3925 bytes)
+  step 0/295: loss=0.504613
+  step 1/295: loss=0.505900
+  step 2/295: loss=0.504230
+  step 100/295: loss=0.513131
+  step 200/295: loss=0.503762
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.504866 lr=0.000050
+  epoch 69: val_acc = 3498/3925 = 89.121019%  top5 = 3844/3925 = 97.936306%  [95% CI 88.11–90.06]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e69.bin (3925 bytes)
+  step 0/295: loss=0.504224
+  step 1/295: loss=0.502143
+  step 2/295: loss=0.503343
+  step 100/295: loss=0.503683
+  step 200/295: loss=0.505491
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.505987 lr=0.000041
+  epoch 70: val_acc = 3497/3925 = 89.095541%  top5 = 3850/3925 = 98.089172%  [95% CI 88.08–90.03]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e70.bin (3925 bytes)
+  step 0/295: loss=0.502980
+  step 1/295: loss=0.502766
+  step 2/295: loss=0.504017
+  step 100/295: loss=0.505671
+  step 200/295: loss=0.503944
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.505778 lr=0.000033
+  epoch 71: val_acc = 3502/3925 = 89.222930%  top5 = 3848/3925 = 98.038217%  [95% CI 88.21–90.15]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e71.bin (3925 bytes)
+  step 0/295: loss=0.503269
+  step 1/295: loss=0.504755
+  step 2/295: loss=0.506368
+  step 100/295: loss=0.505928
+  step 200/295: loss=0.504619
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.505097 lr=0.000026
+  epoch 72: val_acc = 3514/3925 = 89.528662%  top5 = 3845/3925 = 97.961783%  [95% CI 88.53–90.45]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e72.bin (3925 bytes)
+  step 0/295: loss=0.505461
+  step 1/295: loss=0.503491
+  step 2/295: loss=0.504758
+  step 100/295: loss=0.503152
+  step 200/295: loss=0.502224
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.504691 lr=0.000020
+  epoch 73: val_acc = 3504/3925 = 89.273885%  top5 = 3849/3925 = 98.063694%  [95% CI 88.27–90.20]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e73.bin (3925 bytes)
+  step 0/295: loss=0.505877
+  step 1/295: loss=0.502517
+  step 2/295: loss=0.501933
+  step 100/295: loss=0.505115
+  step 200/295: loss=0.503585
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.505472 lr=0.000015
+  epoch 74: val_acc = 3511/3925 = 89.452229%  top5 = 3847/3925 = 98.012739%  [95% CI 88.45–90.37]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e74.bin (3925 bytes)
+  step 0/295: loss=0.502953
+  step 1/295: loss=0.503100
+  step 2/295: loss=0.502154
+  step 100/295: loss=0.502368
+  step 200/295: loss=0.504041
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.505570 lr=0.000010
+  epoch 75: val_acc = 3509/3925 = 89.401274%  top5 = 3847/3925 = 98.012739%  [95% CI 88.40–90.33]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e75.bin (3925 bytes)
+  step 0/295: loss=0.502227
+  step 1/295: loss=0.512710
+  step 2/295: loss=0.502126
+  step 100/295: loss=0.528217
+  step 200/295: loss=0.501570
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.504230 lr=0.000007
+  epoch 76: val_acc = 3517/3925 = 89.605096%  top5 = 3850/3925 = 98.089172%  [95% CI 88.61–90.52]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e76.bin (3925 bytes)
+  step 0/295: loss=0.502733
+  step 1/295: loss=0.503628
+  step 2/295: loss=0.503096
+  step 100/295: loss=0.504317
+  step 200/295: loss=0.503904
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.504181 lr=0.000004
+  epoch 77: val_acc = 3514/3925 = 89.528662%  top5 = 3850/3925 = 98.089172%  [95% CI 88.53–90.45]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e77.bin (3925 bytes)
+  step 0/295: loss=0.502552
+  step 1/295: loss=0.504460
+  step 2/295: loss=0.503881
+  step 100/295: loss=0.502202
+  step 200/295: loss=0.502840
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.504375 lr=0.000002
+  epoch 78: val_acc = 3518/3925 = 89.630573%  top5 = 3847/3925 = 98.012739%  [95% CI 88.64–90.55]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e78.bin (3925 bytes)
+  step 0/295: loss=0.502079
+  step 1/295: loss=0.503745
+  step 2/295: loss=0.503376
+  step 100/295: loss=0.501954
+  step 200/295: loss=0.503379
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.504237 lr=0.000000
+  epoch 79: val_acc = 3516/3925 = 89.579618%  top5 = 3850/3925 = 98.089172%  [95% CI 88.58–90.50]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e79.bin (3925 bytes)
+  step 0/295: loss=0.505143
+  step 1/295: loss=0.503099
+  step 2/295: loss=0.514945
+  step 100/295: loss=0.503390
+  step 200/295: loss=0.504958
+[pjrt_ffi] RESIDENT: @efficientnet_fwd_eval holds 311 parameter tensors (15.5 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.504834 lr=0.000000
+  epoch 80: val_acc = 3511/3925 = 89.452229%  top5 = 3848/3925 = 98.038217%  [95% CI 88.45–90.37]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/efficientnet_s4_e80.bin (3925 bytes)
+done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).

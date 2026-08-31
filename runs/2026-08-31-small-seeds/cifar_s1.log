@@ -1,0 +1,143 @@
+I0831 19:21:12.984590  786079 service.cc:154] XLA service 0x795e040092e0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0831 19:21:12.984642  786079 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0831 19:21:12.986734  786079 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0831 19:21:12.987304  786079 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0831 19:21:12.999787  786079 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0831 19:21:13.784683  786165 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 56 bytes spill stores, 56 bytes spill loads
+
+I0831 19:21:15.705426  786162 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 8232 bytes spill stores, 8320 bytes spill loads
+
+I0831 19:21:15.956543  786145 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 72 bytes spill stores, 72 bytes spill loads
+
+I0831 19:21:17.073398  786150 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 296 bytes spill stores, 296 bytes spill loads
+
+I0831 19:21:17.851786  786151 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 208 bytes spill stores, 208 bytes spill loads
+
+I0831 19:21:17.924412  786162 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+I0831 19:21:17.965275  786154 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 240 bytes spill stores, 240 bytes spill loads
+
+I0831 19:21:18.026879  786163 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 712 bytes spill stores, 712 bytes spill loads
+
+I0831 19:21:18.140411  786143 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 360 bytes spill stores, 360 bytes spill loads
+
+I0831 19:21:18.144835  786149 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 264 bytes spill stores, 264 bytes spill loads
+
+I0831 19:21:18.237828  786155 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 224 bytes spill stores, 224 bytes spill loads
+
+I0831 19:21:18.329417  786167 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 224 bytes spill stores, 224 bytes spill loads
+
+I0831 19:21:18.461390  786166 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 412 bytes spill stores, 412 bytes spill loads
+
+I0831 19:21:18.686415  786150 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 224 bytes spill stores, 224 bytes spill loads
+
+I0831 19:21:18.996387  786155 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 32 bytes spill stores, 32 bytes spill loads
+
+I0831 19:21:20.282455  786146 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 40 bytes spill stores, 40 bytes spill loads
+
+I0831 19:21:22.219459  786163 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 8528 bytes spill stores, 8520 bytes spill loads
+
+I0831 19:21:22.219598  786165 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 444 bytes spill stores, 444 bytes spill loads
+
+I0831 19:21:22.468413  786157 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 72 bytes spill stores, 72 bytes spill loads
+
+I0831 19:21:22.474388  786155 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 396 bytes spill stores, 396 bytes spill loads
+
+I0831 19:21:22.514146  786140 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 328 bytes spill stores, 328 bytes spill loads
+
+I0831 19:21:22.950210  786156 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 424 bytes spill stores, 424 bytes spill loads
+
+I0831 19:21:23.193607  786153 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 416 bytes spill stores, 416 bytes spill loads
+
+I0831 19:21:23.713439  786152 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 32 bytes spill stores, 32 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/cifar_train_step.mlir (@cifar_train_step, 14 outputs, 1 replica) in 11334 ms
+[pjrt_ffi] compiled verified_mlir/cifar_fwd.mlir (@cifar_fwd, 1 outputs, 1 replica) in 820 ms
+CIFAR-10 CNN via the VERIFIED renderer (3→32→32→pool→32→64→64→pool→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar_train_step.mlir
+  xla/pjrt verified_mlir/cifar_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN (14 params, 2431018 floats), mean-loss SGD lr=0.100000, He init
+[pjrt_ffi] RESIDENT: @cifar_train_step holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: test_acc = 4020/10000 = 40.200000% (1528ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: test_acc = 4963/10000 = 49.630000% (1531ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: test_acc = 5539/10000 = 55.390000% (1532ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: test_acc = 6261/10000 = 62.610000% (1523ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: test_acc = 6497/10000 = 64.970000% (1539ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: test_acc = 6372/10000 = 63.720000% (1543ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: test_acc = 6418/10000 = 64.180000% (1536ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: test_acc = 6245/10000 = 62.450000% (1531ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: test_acc = 6424/10000 = 64.240000% (1531ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: test_acc = 6468/10000 = 64.680000% (1531ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: test_acc = 6563/10000 = 65.630000% (1516ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: test_acc = 6506/10000 = 65.060000% (1511ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 13: test_acc = 6564/10000 = 65.640000% (1509ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 14: test_acc = 1000/10000 = 10.000000% (1506ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 15: test_acc = 1000/10000 = 10.000000% (1488ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 16: test_acc = 1000/10000 = 10.000000% (1494ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 17: test_acc = 1000/10000 = 10.000000% (1486ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 18: test_acc = 1000/10000 = 10.000000% (1492ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 19: test_acc = 1000/10000 = 10.000000% (1504ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 20: test_acc = 1000/10000 = 10.000000% (1493ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 21: test_acc = 1000/10000 = 10.000000% (1488ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 22: test_acc = 1000/10000 = 10.000000% (1500ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 23: test_acc = 1000/10000 = 10.000000% (1489ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 24: test_acc = 1000/10000 = 10.000000% (1500ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 25: test_acc = 1000/10000 = 10.000000% (1494ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 26: test_acc = 1000/10000 = 10.000000% (1495ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 27: test_acc = 1000/10000 = 10.000000% (1496ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 28: test_acc = 1000/10000 = 10.000000% (1487ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 29: test_acc = 1000/10000 = 10.000000% (1501ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 30: test_acc = 1000/10000 = 10.000000% (1492ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 31: test_acc = 1000/10000 = 10.000000% (1503ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 32: test_acc = 1000/10000 = 10.000000% (1507ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 33: test_acc = 1000/10000 = 10.000000% (1509ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 34: test_acc = 1000/10000 = 10.000000% (1493ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 35: test_acc = 1000/10000 = 10.000000% (1498ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 36: test_acc = 1000/10000 = 10.000000% (1503ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 37: test_acc = 1000/10000 = 10.000000% (1495ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 38: test_acc = 1000/10000 = 10.000000% (1497ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 39: test_acc = 1000/10000 = 10.000000% (1494ms)
+[pjrt_ffi] RESIDENT: @cifar_fwd holds 14 parameter tensors (9.3 MB) on 1 device; they stop crossing PCIe from here
+  epoch 40: test_acc = 1000/10000 = 10.000000% (1493ms)
+done (trained CIFAR-CNN via the proof-rendered StableHLO).

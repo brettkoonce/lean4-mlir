@@ -43,7 +43,7 @@ See `planning/xla_pjrt_ladder.md` (the conv rung, G2).
     (unlike the zero-init linear net); the tie tests, not a trajectory match, are
     what establish the two backends agree. -/
 def cnnConfig : VerifiedConfig where
-  epochs    := 10
+  epochs    := 12
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=

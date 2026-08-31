@@ -1,0 +1,13 @@
+[20:05:56] sweep start: SUITE=imagenette, 7 jobs, GPUs 0,1,2,3,4,5, seeds [1] -> runs/2026-08-31-imagenette-seeds
+[20:05:56] gpu0  resnet34_s1  start  (resnet34-verified-adam)
+[20:05:56] gpu2  resnet50_s1  start  (resnet50-verified-adam)
+[20:05:56] gpu1  convnext_s1  start  (convnext-verified-adam)
+[20:05:56] gpu3  efficientnet_s1  start  (efficientnet-verified-adam)
+[20:05:56] gpu5  mobilenetv4_s1  start  (mobilenetv4-verified-adam)
+[20:05:56] gpu4  mobilenetv2_s1  start  (mobilenetv2-verified-adam)
+[20:38:42] gpu5  mobilenetv4_s1  OK   32m46s  val_acc = 3399/3925 = 86.598726%  top5 = 3836/3925 = 97.732484%  [95% CI 85.50–87.63]
+[20:38:42] gpu5  vit_s1  start  (vit-verified-adam)
+[20:41:45] gpu4  mobilenetv2_s1  OK   35m49s  val_acc = 3479/3925 = 88.636943%  top5 = 3871/3925 = 98.624204%  [95% CI 87.61–89.59]
+[20:46:03] gpu3  efficientnet_s1  OK   40m7s  val_acc = 3528/3925 = 89.885350%  top5 = 3865/3925 = 98.471338%  [95% CI 88.90–90.79]
+[20:51:21] gpu0  resnet34_s1  OK   45m25s  val_acc = 3534/3925 = 90.038217%  top5 = 3862/3925 = 98.394904%  [95% CI 89.06–90.94]
+[21:00:51] gpu5  vit_s1  OK   22m9s  val_acc = 2692/3925 = 68.585987%  top5 = 3528/3925 = 89.885350%  [95% CI 67.12–70.02]

@@ -20,7 +20,7 @@ Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-cnn-e4m3-verified data`
 -/
 
 def cnnE4M3Config : VerifiedConfig where
-  epochs    := 10
+  epochs    := 12
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=

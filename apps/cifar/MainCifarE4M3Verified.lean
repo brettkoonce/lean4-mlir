@@ -23,7 +23,7 @@ Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/cifar-e4m3-verified data`
 -/
 
 def cifarE4M3Config : VerifiedConfig where
-  epochs    := 10
+  epochs    := 40
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=

@@ -65,3 +65,11 @@ runs/**/*.epoch
 # genuinely project-level `.claude/settings.json` or `.claude/skills/` can still be tracked.
 .claude/projects/
 .claude/worktrees/
+
+# seed_sweep.sh runner state, not results. ⛔ The done-markers especially: they are what
+# makes a crashed sweep resumable, so committing them would make a fresh clone skip every
+# job and report "25/25 done" without training anything.
+runs/**/done/
+runs/**/.idx
+runs/**/.lock
+runs/**/.abort

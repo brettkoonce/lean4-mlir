@@ -1,0 +1,87 @@
+[19:21:11] sweep start: SUITE=small, 25 jobs, GPUs 0,1,2,3,4,5, seeds [1 2 3 4 5] -> runs/2026-08-31-small-seeds
+[19:21:11] gpu0  cifar_bn_s1  start  (cifar-bn-verified)
+[19:21:11] gpu2  cifar_bn_s2  start  (cifar-bn-verified)
+[19:21:11] gpu1  cifar_bn_s3  start  (cifar-bn-verified)
+[19:21:11] gpu3  cifar_bn_s4  start  (cifar-bn-verified)
+[19:21:11] gpu5  cifar_bn_s5  start  (cifar-bn-verified)
+[19:21:11] gpu4  cifar_s1  start  (cifar-verified)
+[19:22:26] gpu4  cifar_s1  OK   1m15s  test_acc = 1000/10000 = 10.000000% (1493ms)
+[19:22:26] gpu4  cifar_s2  start  (cifar-verified)
+[19:22:36] gpu2  cifar_bn_s2  OK   1m25s  test_acc = 7598/10000 = 75.980000% (1750ms)
+[19:22:36] gpu2  cifar_s3  start  (cifar-verified)
+[19:22:36] gpu1  cifar_bn_s3  OK   1m25s  test_acc = 7590/10000 = 75.900000% (1748ms)
+[19:22:37] gpu1  cifar_s4  start  (cifar-verified)
+[19:22:37] gpu5  cifar_bn_s5  OK   1m26s  test_acc = 7513/10000 = 75.130000% (1759ms)
+[19:22:37] gpu5  cifar_s5  start  (cifar-verified)
+[19:22:37] gpu0  cifar_bn_s1  OK   1m26s  test_acc = 7456/10000 = 74.560000% (1859ms)
+[19:22:37] gpu0  mnist_cnn_s1  start  (mnist-cnn-verified)
+[19:22:38] gpu3  cifar_bn_s4  OK   1m27s  test_acc = 7485/10000 = 74.850000% (1823ms)
+[19:22:38] gpu3  mnist_cnn_s2  start  (mnist-cnn-verified)
+[19:23:01] gpu0  mnist_cnn_s1  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_cnn_s1.log
+[19:23:01] gpu0  mnist_cnn_s3  start  (mnist-cnn-verified)
+[19:23:01] gpu3  mnist_cnn_s2  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_cnn_s2.log
+[19:23:01] gpu3  mnist_cnn_s4  start  (mnist-cnn-verified)
+[19:23:21] gpu0  mnist_cnn_s3  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_cnn_s3.log
+[19:23:21] gpu0  mnist_cnn_s5  start  (mnist-cnn-verified)
+[19:23:21] gpu3  mnist_cnn_s4  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_cnn_s4.log
+[19:23:21] gpu3  mnist_mlp_s1  start  (mnist-mlp-verified)
+[19:23:29] gpu3  mnist_mlp_s1  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_mlp_s1.log
+[19:23:29] gpu3  mnist_mlp_s2  start  (mnist-mlp-verified)
+[19:23:32] gpu4  cifar_s2  OK   1m6s  test_acc = 1000/10000 = 10.000000% (1477ms)
+[19:23:32] gpu4  mnist_mlp_s3  start  (mnist-mlp-verified)
+[19:23:36] gpu3  mnist_mlp_s2  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_mlp_s2.log
+[19:23:36] gpu3  mnist_mlp_s4  start  (mnist-mlp-verified)
+[19:23:39] gpu4  mnist_mlp_s3  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_mlp_s3.log
+[19:23:39] gpu4  mnist_mlp_s5  start  (mnist-mlp-verified)
+[19:23:42] gpu0  mnist_cnn_s5  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_cnn_s5.log
+[19:23:42] gpu0  mnist_linear_s1  start  (mnist-linear-verified)
+[19:23:42] gpu3  mnist_mlp_s4  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_mlp_s4.log
+[19:23:42] gpu3  mnist_linear_s2  start  (mnist-linear-verified)
+[19:23:44] gpu4  mnist_mlp_s5  FAIL rc=0 after 0m — see runs/2026-08-31-small-seeds/mnist_mlp_s5.log
+[19:23:44] gpu4  mnist_linear_s3  start  (mnist-linear-verified)
+[19:23:45] gpu0  mnist_linear_s1  OK   0m3s  test_acc = 9210/10000 = 92.100000% (78ms)
+[19:23:45] gpu0  mnist_linear_s4  start  (mnist-linear-verified)
+[19:23:45] gpu3  mnist_linear_s2  OK   0m3s  test_acc = 9210/10000 = 92.100000% (72ms)
+[19:23:45] gpu3  mnist_linear_s5  start  (mnist-linear-verified)
+[19:23:47] gpu4  mnist_linear_s3  OK   0m3s  test_acc = 9210/10000 = 92.100000% (73ms)
+[19:23:48] gpu2  cifar_s3  OK   1m12s  test_acc = 1000/10000 = 10.000000% (1484ms)
+[19:23:48] gpu0  mnist_linear_s4  OK   0m3s  test_acc = 9210/10000 = 92.100000% (71ms)
+[19:23:48] gpu3  mnist_linear_s5  OK   0m3s  test_acc = 9210/10000 = 92.100000% (70ms)
+[19:23:49] gpu5  cifar_s5  OK   1m12s  test_acc = 1000/10000 = 10.000000% (1500ms)
+[19:23:49] gpu1  cifar_s4  OK   1m12s  test_acc = 1000/10000 = 10.000000% (1504ms)
+[19:52:44] sweep start: SUITE=small, 25 jobs, GPUs 0,1,2,3,4,5, seeds [1 2 3 4 5] -> runs/2026-08-31-small-seeds
+[19:52:44] gpu0  cifar_bn_s1  already done, skipping
+[19:52:44] gpu2  cifar_bn_s2  already done, skipping
+[19:52:44] gpu1  cifar_bn_s3  already done, skipping
+[19:52:44] gpu3  cifar_bn_s4  already done, skipping
+[19:52:44] gpu5  cifar_bn_s5  already done, skipping
+[19:52:44] gpu4  cifar_s1  already done, skipping
+[19:52:44] gpu0  cifar_s2  already done, skipping
+[19:52:44] gpu2  cifar_s3  already done, skipping
+[19:52:44] gpu1  cifar_s4  already done, skipping
+[19:52:44] gpu3  cifar_s5  already done, skipping
+[19:52:44] gpu5  mnist_cnn_s1  start  (mnist-cnn-verified)
+[19:52:44] gpu4  mnist_cnn_s2  start  (mnist-cnn-verified)
+[19:52:44] gpu0  mnist_cnn_s3  start  (mnist-cnn-verified)
+[19:52:44] gpu2  mnist_cnn_s4  start  (mnist-cnn-verified)
+[19:52:44] gpu1  mnist_cnn_s5  start  (mnist-cnn-verified)
+[19:52:44] gpu3  mnist_mlp_s1  start  (mnist-mlp-verified)
+[19:52:59] gpu3  mnist_mlp_s1  OK   0m15s  test_acc = 9781/10000 = 97.810000% (177ms)
+[19:52:59] gpu3  mnist_mlp_s2  start  (mnist-mlp-verified)
+[19:53:05] gpu3  mnist_mlp_s2  OK   0m6s  test_acc = 9772/10000 = 97.720000% (254ms)
+[19:53:05] gpu3  mnist_mlp_s3  start  (mnist-mlp-verified)
+[19:53:11] gpu3  mnist_mlp_s3  OK   0m6s  test_acc = 9775/10000 = 97.750000% (275ms)
+[19:53:11] gpu3  mnist_mlp_s4  start  (mnist-mlp-verified)
+[19:53:11] gpu1  mnist_cnn_s5  OK   0m27s  test_acc = 9865/10000 = 98.650000% (1116ms)
+[19:53:11] gpu1  mnist_mlp_s5  start  (mnist-mlp-verified)
+[19:53:11] gpu5  mnist_cnn_s1  OK   0m27s  test_acc = 9835/10000 = 98.350000% (1091ms)
+[19:53:11] gpu5  mnist_linear_s1  already done, skipping
+[19:53:11] gpu5  mnist_linear_s2  already done, skipping
+[19:53:11] gpu5  mnist_linear_s3  already done, skipping
+[19:53:11] gpu5  mnist_linear_s4  already done, skipping
+[19:53:11] gpu5  mnist_linear_s5  already done, skipping
+[19:53:12] gpu4  mnist_cnn_s2  OK   0m28s  test_acc = 9886/10000 = 98.860000% (1076ms)
+[19:53:12] gpu2  mnist_cnn_s4  OK   0m28s  test_acc = 9873/10000 = 98.730000% (1113ms)
+[19:53:12] gpu0  mnist_cnn_s3  OK   0m28s  test_acc = 9866/10000 = 98.660000% (1111ms)
+[19:53:18] gpu3  mnist_mlp_s4  OK   0m7s  test_acc = 9780/10000 = 97.800000% (227ms)
+[19:53:19] gpu1  mnist_mlp_s5  OK   0m8s  test_acc = 9765/10000 = 97.650000% (206ms)

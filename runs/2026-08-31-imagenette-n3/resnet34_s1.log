@@ -1,0 +1,747 @@
+I0831 03:46:34.429210  552319 service.cc:154] XLA service 0x7d0bb40517d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0831 03:46:34.429258  552319 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0831 03:46:34.431302  552319 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0831 03:46:34.431679  552319 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0831 03:46:34.448929  552319 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0831 03:46:37.029419  552556 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 8 bytes spill stores, 8 bytes spill loads
+
+I0831 03:46:37.560590  552547 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34_adam_train_step.mlir (@resnet34_adam_train_step, 405 outputs, 1 replica) in 7640 ms
+I0831 03:46:42.502243  552556 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 8 bytes spill stores, 8 bytes spill loads
+
+I0831 03:46:42.570385  552545 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir (@resnet34_fwd, 1 outputs, 1 replica) in 777 ms
+[pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir (@resnet34_fwd_eval, 1 outputs, 1 replica) in 245 ms
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/resnet34_adam_train_step.mlir
+  xla/pjrt verified_mlir/resnet34_fwd.mlir
+  xla/pjrt verified_mlir/resnet34_fwd_eval.mlir
+  train 9469, val 3925; bs 32, ResNet-34 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @resnet34_adam_train_step holds 330 parameter tensors (243.6 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=3.614325
+  step 1/295: loss=3.722850
+  step 2/295: loss=3.374784
+  step 100/295: loss=2.093318
+  step 200/295: loss=1.681396
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.058665 lr=0.000333
+  epoch 1: val_acc = 1348/3925 = 34.343949%  top5 = 2666/3925 = 67.923567%  [95% CI 32.87–35.84]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e1.bin (3925 bytes)
+  step 0/295: loss=1.613234
+  step 1/295: loss=1.661975
+  step 2/295: loss=1.326781
+  step 100/295: loss=1.552798
+  step 200/295: loss=1.322373
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.539122 lr=0.000667
+  epoch 2: val_acc = 1114/3925 = 28.382166%  top5 = 2705/3925 = 68.917197%  [95% CI 26.99–29.81]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e2.bin (3925 bytes)
+  step 0/295: loss=1.493029
+  step 1/295: loss=1.680339
+  step 2/295: loss=1.606364
+  step 100/295: loss=1.540460
+  step 200/295: loss=1.191383
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.387443 lr=0.001000
+  epoch 3: val_acc = 2323/3925 = 59.184713%  top5 = 3547/3925 = 90.369427%  [95% CI 57.64–60.71]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e3.bin (3925 bytes)
+  step 0/295: loss=1.234880
+  step 1/295: loss=0.975748
+  step 2/295: loss=1.171971
+  step 100/295: loss=1.315963
+  step 200/295: loss=1.264895
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.303544 lr=0.001000
+  epoch 4: val_acc = 1874/3925 = 47.745223%  top5 = 3529/3925 = 89.910828%  [95% CI 46.19–49.31]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e4.bin (3925 bytes)
+  step 0/295: loss=1.238545
+  step 1/295: loss=1.325506
+  step 2/295: loss=1.238462
+  step 100/295: loss=1.464188
+  step 200/295: loss=1.254000
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.191507 lr=0.000998
+  epoch 5: val_acc = 2234/3925 = 56.917197%  top5 = 3562/3925 = 90.751592%  [95% CI 55.36–58.46]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e5.bin (3925 bytes)
+  step 0/295: loss=1.174816
+  step 1/295: loss=0.933253
+  step 2/295: loss=1.004972
+  step 100/295: loss=1.191056
+  step 200/295: loss=1.214275
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.127839 lr=0.000996
+  epoch 6: val_acc = 2447/3925 = 62.343949%  top5 = 3523/3925 = 89.757962%  [95% CI 60.82–63.85]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e6.bin (3925 bytes)
+  step 0/295: loss=0.991589
+  step 1/295: loss=1.092411
+  step 2/295: loss=1.087074
+  step 100/295: loss=1.222480
+  step 200/295: loss=1.061845
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.096939 lr=0.000993
+  epoch 7: val_acc = 1952/3925 = 49.732484%  top5 = 3457/3925 = 88.076433%  [95% CI 48.17–51.30]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e7.bin (3925 bytes)
+  step 0/295: loss=1.119454
+  step 1/295: loss=1.198657
+  step 2/295: loss=1.320896
+  step 100/295: loss=1.128047
+  step 200/295: loss=1.132336
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.066077 lr=0.000990
+  epoch 8: val_acc = 2663/3925 = 67.847134%  top5 = 3685/3925 = 93.885350%  [95% CI 66.37–69.29]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e8.bin (3925 bytes)
+  step 0/295: loss=1.021307
+  step 1/295: loss=0.974534
+  step 2/295: loss=1.200586
+  step 100/295: loss=0.791310
+  step 200/295: loss=1.076242
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=1.027843 lr=0.000985
+  epoch 9: val_acc = 2827/3925 = 72.025478%  top5 = 3753/3925 = 95.617834%  [95% CI 70.60–73.41]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e9.bin (3925 bytes)
+  step 0/295: loss=0.987262
+  step 1/295: loss=0.878917
+  step 2/295: loss=0.827290
+  step 100/295: loss=1.106548
+  step 200/295: loss=0.889703
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=1.006395 lr=0.000980
+  epoch 10: val_acc = 2468/3925 = 62.878981%  top5 = 3525/3925 = 89.808917%  [95% CI 61.36–64.38]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e10.bin (3925 bytes)
+  step 0/295: loss=0.888517
+  step 1/295: loss=0.977984
+  step 2/295: loss=0.840993
+  step 100/295: loss=1.317362
+  step 200/295: loss=0.848079
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=0.978321 lr=0.000974
+  epoch 11: val_acc = 2244/3925 = 57.171975%  top5 = 3712/3925 = 94.573248%  [95% CI 55.62–58.71]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e11.bin (3925 bytes)
+  step 0/295: loss=0.928602
+  step 1/295: loss=0.808613
+  step 2/295: loss=1.008887
+  step 100/295: loss=0.882271
+  step 200/295: loss=0.880066
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=0.946841 lr=0.000967
+  epoch 12: val_acc = 2837/3925 = 72.280255%  top5 = 3777/3925 = 96.229299%  [95% CI 70.86–73.66]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e12.bin (3925 bytes)
+  step 0/295: loss=1.196938
+  step 1/295: loss=1.024119
+  step 2/295: loss=0.976080
+  step 100/295: loss=0.900390
+  step 200/295: loss=1.018417
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=0.924689 lr=0.000959
+  epoch 13: val_acc = 2819/3925 = 71.821656%  top5 = 3738/3925 = 95.235669%  [95% CI 70.39–73.21]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e13.bin (3925 bytes)
+  step 0/295: loss=0.724571
+  step 1/295: loss=0.832353
+  step 2/295: loss=0.941331
+  step 100/295: loss=0.769390
+  step 200/295: loss=0.903410
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.914331 lr=0.000950
+  epoch 14: val_acc = 2935/3925 = 74.777070%  top5 = 3775/3925 = 96.178344%  [95% CI 73.39–76.11]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e14.bin (3925 bytes)
+  step 0/295: loss=0.955582
+  step 1/295: loss=0.921815
+  step 2/295: loss=0.801776
+  step 100/295: loss=0.964322
+  step 200/295: loss=0.773512
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.885828 lr=0.000941
+  epoch 15: val_acc = 3132/3925 = 79.796178%  top5 = 3802/3925 = 96.866242%  [95% CI 78.51–81.02]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e15.bin (3925 bytes)
+  step 0/295: loss=1.082048
+  step 1/295: loss=0.837590
+  step 2/295: loss=0.736419
+  step 100/295: loss=0.683914
+  step 200/295: loss=0.715774
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.865747 lr=0.000931
+  epoch 16: val_acc = 2364/3925 = 60.229299%  top5 = 3681/3925 = 93.783439%  [95% CI 58.69–61.75]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e16.bin (3925 bytes)
+  step 0/295: loss=0.801289
+  step 1/295: loss=1.053464
+  step 2/295: loss=0.840509
+  step 100/295: loss=0.761875
+  step 200/295: loss=1.047426
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.863679 lr=0.000921
+  epoch 17: val_acc = 2957/3925 = 75.337580%  top5 = 3823/3925 = 97.401274%  [95% CI 73.96–76.66]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e17.bin (3925 bytes)
+  step 0/295: loss=0.749379
+  step 1/295: loss=0.662308
+  step 2/295: loss=0.946602
+  step 100/295: loss=0.820017
+  step 200/295: loss=0.802282
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.832045 lr=0.000909
+  epoch 18: val_acc = 3011/3925 = 76.713376%  top5 = 3799/3925 = 96.789809%  [95% CI 75.37–78.01]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e18.bin (3925 bytes)
+  step 0/295: loss=0.757465
+  step 1/295: loss=0.652557
+  step 2/295: loss=0.843103
+  step 100/295: loss=0.644650
+  step 200/295: loss=0.875125
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.812906 lr=0.000897
+  epoch 19: val_acc = 2941/3925 = 74.929936%  top5 = 3779/3925 = 96.280255%  [95% CI 73.55–76.26]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e19.bin (3925 bytes)
+  step 0/295: loss=0.849223
+  step 1/295: loss=0.800488
+  step 2/295: loss=0.861449
+  step 100/295: loss=0.814138
+  step 200/295: loss=0.765713
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.803251 lr=0.000884
+  epoch 20: val_acc = 3083/3925 = 78.547771%  top5 = 3811/3925 = 97.095541%  [95% CI 77.24–79.80]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e20.bin (3925 bytes)
+  step 0/295: loss=0.822352
+  step 1/295: loss=0.670694
+  step 2/295: loss=0.708074
+  step 100/295: loss=0.677706
+  step 200/295: loss=0.719883
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.779145 lr=0.000871
+  epoch 21: val_acc = 2770/3925 = 70.573248%  top5 = 3793/3925 = 96.636943%  [95% CI 69.13–71.98]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e21.bin (3925 bytes)
+  step 0/295: loss=0.742684
+  step 1/295: loss=0.845060
+  step 2/295: loss=0.715683
+  step 100/295: loss=0.846589
+  step 200/295: loss=0.877979
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.766027 lr=0.000857
+  epoch 22: val_acc = 2847/3925 = 72.535032%  top5 = 3774/3925 = 96.152866%  [95% CI 71.12–73.91]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e22.bin (3925 bytes)
+  step 0/295: loss=0.864134
+  step 1/295: loss=0.699144
+  step 2/295: loss=0.764446
+  step 100/295: loss=0.859957
+  step 200/295: loss=0.784971
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.748195 lr=0.000843
+  epoch 23: val_acc = 2981/3925 = 75.949045%  top5 = 3831/3925 = 97.605096%  [95% CI 74.59–77.26]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e23.bin (3925 bytes)
+  step 0/295: loss=0.887905
+  step 1/295: loss=0.736291
+  step 2/295: loss=0.746860
+  step 100/295: loss=0.683184
+  step 200/295: loss=0.812760
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.738878 lr=0.000827
+  epoch 24: val_acc = 3282/3925 = 83.617834%  top5 = 3846/3925 = 97.987261%  [95% CI 82.43–84.74]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e24.bin (3925 bytes)
+  step 0/295: loss=0.677022
+  step 1/295: loss=0.717588
+  step 2/295: loss=0.650649
+  step 100/295: loss=0.672590
+  step 200/295: loss=0.852010
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.717328 lr=0.000812
+  epoch 25: val_acc = 2870/3925 = 73.121019%  top5 = 3812/3925 = 97.121019%  [95% CI 71.71–74.48]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e25.bin (3925 bytes)
+  step 0/295: loss=0.714188
+  step 1/295: loss=0.644945
+  step 2/295: loss=0.706466
+  step 100/295: loss=0.653577
+  step 200/295: loss=0.755795
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.707200 lr=0.000796
+  epoch 26: val_acc = 3128/3925 = 79.694268%  top5 = 3796/3925 = 96.713376%  [95% CI 78.41–80.92]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e26.bin (3925 bytes)
+  step 0/295: loss=0.688327
+  step 1/295: loss=0.671234
+  step 2/295: loss=0.588587
+  step 100/295: loss=0.599430
+  step 200/295: loss=0.670047
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.698612 lr=0.000779
+  epoch 27: val_acc = 2784/3925 = 70.929936%  top5 = 3709/3925 = 94.496815%  [95% CI 69.49–72.33]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e27.bin (3925 bytes)
+  step 0/295: loss=0.565685
+  step 1/295: loss=0.681996
+  step 2/295: loss=0.759508
+  step 100/295: loss=0.667742
+  step 200/295: loss=0.721667
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.671976 lr=0.000762
+  epoch 28: val_acc = 3073/3925 = 78.292994%  top5 = 3811/3925 = 97.095541%  [95% CI 76.98–79.55]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e28.bin (3925 bytes)
+  step 0/295: loss=0.590146
+  step 1/295: loss=0.567089
+  step 2/295: loss=0.556384
+  step 100/295: loss=0.572443
+  step 200/295: loss=0.565854
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.667443 lr=0.000744
+  epoch 29: val_acc = 3063/3925 = 78.038217%  top5 = 3822/3925 = 97.375796%  [95% CI 76.72–79.31]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e29.bin (3925 bytes)
+  step 0/295: loss=0.708553
+  step 1/295: loss=0.667986
+  step 2/295: loss=0.691096
+  step 100/295: loss=0.649451
+  step 200/295: loss=0.615262
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.654968 lr=0.000726
+  epoch 30: val_acc = 3238/3925 = 82.496815%  top5 = 3845/3925 = 97.961783%  [95% CI 81.28–83.65]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e30.bin (3925 bytes)
+  step 0/295: loss=0.659406
+  step 1/295: loss=0.737193
+  step 2/295: loss=0.628756
+  step 100/295: loss=0.801410
+  step 200/295: loss=0.725398
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.636963 lr=0.000708
+  epoch 31: val_acc = 3259/3925 = 83.031847%  top5 = 3851/3925 = 98.114650%  [95% CI 81.83–84.17]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e31.bin (3925 bytes)
+  step 0/295: loss=0.617084
+  step 1/295: loss=0.627731
+  step 2/295: loss=0.656391
+  step 100/295: loss=0.573703
+  step 200/295: loss=0.585980
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.632133 lr=0.000689
+  epoch 32: val_acc = 3256/3925 = 82.955414%  top5 = 3849/3925 = 98.063694%  [95% CI 81.75–84.10]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e32.bin (3925 bytes)
+  step 0/295: loss=0.552079
+  step 1/295: loss=0.679836
+  step 2/295: loss=0.590798
+  step 100/295: loss=0.633465
+  step 200/295: loss=0.667511
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.615103 lr=0.000670
+  epoch 33: val_acc = 3205/3925 = 81.656051%  top5 = 3802/3925 = 96.866242%  [95% CI 80.41–82.84]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e33.bin (3925 bytes)
+  step 0/295: loss=0.569794
+  step 1/295: loss=0.582969
+  step 2/295: loss=0.573975
+  step 100/295: loss=0.562037
+  step 200/295: loss=0.618780
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.610815 lr=0.000651
+  epoch 34: val_acc = 3381/3925 = 86.140127%  top5 = 3839/3925 = 97.808917%  [95% CI 85.02–87.19]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e34.bin (3925 bytes)
+  step 0/295: loss=0.558289
+  step 1/295: loss=0.618291
+  step 2/295: loss=0.546826
+  step 100/295: loss=0.649139
+  step 200/295: loss=0.556047
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.599348 lr=0.000631
+  epoch 35: val_acc = 3351/3925 = 85.375796%  top5 = 3836/3925 = 97.732484%  [95% CI 84.24–86.45]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e35.bin (3925 bytes)
+  step 0/295: loss=0.552113
+  step 1/295: loss=0.570763
+  step 2/295: loss=0.553087
+  step 100/295: loss=0.537256
+  step 200/295: loss=0.602391
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.585411 lr=0.000611
+  epoch 36: val_acc = 3342/3925 = 85.146497%  top5 = 3834/3925 = 97.681529%  [95% CI 84.00–86.22]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e36.bin (3925 bytes)
+  step 0/295: loss=0.571328
+  step 1/295: loss=0.584547
+  step 2/295: loss=0.571915
+  step 100/295: loss=0.605690
+  step 200/295: loss=0.644420
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.581918 lr=0.000591
+  epoch 37: val_acc = 3249/3925 = 82.777070%  top5 = 3847/3925 = 98.012739%  [95% CI 81.56–83.93]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e37.bin (3925 bytes)
+  step 0/295: loss=0.575441
+  step 1/295: loss=0.567662
+  step 2/295: loss=0.586937
+  step 100/295: loss=0.572976
+  step 200/295: loss=0.537102
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.579060 lr=0.000571
+  epoch 38: val_acc = 3348/3925 = 85.299363%  top5 = 3844/3925 = 97.936306%  [95% CI 84.16–86.37]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e38.bin (3925 bytes)
+  step 0/295: loss=0.546958
+  step 1/295: loss=0.599161
+  step 2/295: loss=0.559947
+  step 100/295: loss=0.545444
+  step 200/295: loss=0.611727
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.570498 lr=0.000551
+  epoch 39: val_acc = 3364/3925 = 85.707006%  top5 = 3840/3925 = 97.834395%  [95% CI 84.58–86.77]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e39.bin (3925 bytes)
+  step 0/295: loss=0.539545
+  step 1/295: loss=0.540998
+  step 2/295: loss=0.579903
+  step 100/295: loss=0.551454
+  step 200/295: loss=0.557246
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.562571 lr=0.000531
+  epoch 40: val_acc = 3263/3925 = 83.133758%  top5 = 3806/3925 = 96.968153%  [95% CI 81.93–84.27]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e40.bin (3925 bytes)
+  step 0/295: loss=0.538187
+  step 1/295: loss=0.554536
+  step 2/295: loss=0.521885
+  step 100/295: loss=0.513875
+  step 200/295: loss=0.534887
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.547543 lr=0.000510
+  epoch 41: val_acc = 3402/3925 = 86.675159%  top5 = 3843/3925 = 97.910828%  [95% CI 85.58–87.70]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e41.bin (3925 bytes)
+  step 0/295: loss=0.527082
+  step 1/295: loss=0.529121
+  step 2/295: loss=0.525887
+  step 100/295: loss=0.523467
+  step 200/295: loss=0.543570
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.549655 lr=0.000490
+  epoch 42: val_acc = 3295/3925 = 83.949045%  top5 = 3821/3925 = 97.350318%  [95% CI 82.77–85.06]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e42.bin (3925 bytes)
+  step 0/295: loss=0.538950
+  step 1/295: loss=0.541529
+  step 2/295: loss=0.528498
+  step 100/295: loss=0.516566
+  step 200/295: loss=0.519183
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.544762 lr=0.000469
+  epoch 43: val_acc = 3384/3925 = 86.216561%  top5 = 3846/3925 = 97.987261%  [95% CI 85.10–87.26]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e43.bin (3925 bytes)
+  step 0/295: loss=0.541844
+  step 1/295: loss=0.527213
+  step 2/295: loss=0.540693
+  step 100/295: loss=0.521765
+  step 200/295: loss=0.531851
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.536432 lr=0.000449
+  epoch 44: val_acc = 3410/3925 = 86.878981%  top5 = 3859/3925 = 98.318471%  [95% CI 85.79–87.90]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e44.bin (3925 bytes)
+  step 0/295: loss=0.537973
+  step 1/295: loss=0.523213
+  step 2/295: loss=0.521002
+  step 100/295: loss=0.532621
+  step 200/295: loss=0.533184
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.540460 lr=0.000429
+  epoch 45: val_acc = 3297/3925 = 84.000000%  top5 = 3816/3925 = 97.222930%  [95% CI 82.82–85.11]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e45.bin (3925 bytes)
+  step 0/295: loss=0.550368
+  step 1/295: loss=0.519135
+  step 2/295: loss=0.518605
+  step 100/295: loss=0.524444
+  step 200/295: loss=0.538438
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.538803 lr=0.000409
+  epoch 46: val_acc = 3390/3925 = 86.369427%  top5 = 3840/3925 = 97.834395%  [95% CI 85.26–87.41]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e46.bin (3925 bytes)
+  step 0/295: loss=0.526637
+  step 1/295: loss=0.517972
+  step 2/295: loss=0.569357
+  step 100/295: loss=0.509621
+  step 200/295: loss=0.517042
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.527612 lr=0.000389
+  epoch 47: val_acc = 3362/3925 = 85.656051%  top5 = 3824/3925 = 97.426752%  [95% CI 84.52–86.72]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e47.bin (3925 bytes)
+  step 0/295: loss=0.556012
+  step 1/295: loss=0.537809
+  step 2/295: loss=0.530194
+  step 100/295: loss=0.519320
+  step 200/295: loss=0.610676
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.524213 lr=0.000369
+  epoch 48: val_acc = 3467/3925 = 88.331210%  top5 = 3863/3925 = 98.420382%  [95% CI 87.29–89.30]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e48.bin (3925 bytes)
+  step 0/295: loss=0.540467
+  step 1/295: loss=0.511205
+  step 2/295: loss=0.525564
+  step 100/295: loss=0.521103
+  step 200/295: loss=0.512099
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.529954 lr=0.000349
+  epoch 49: val_acc = 3392/3925 = 86.420382%  top5 = 3832/3925 = 97.630573%  [95% CI 85.31–87.46]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e49.bin (3925 bytes)
+  step 0/295: loss=0.548912
+  step 1/295: loss=0.512977
+  step 2/295: loss=0.511420
+  step 100/295: loss=0.514632
+  step 200/295: loss=0.510093
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.525210 lr=0.000330
+  epoch 50: val_acc = 3476/3925 = 88.560510%  top5 = 3869/3925 = 98.573248%  [95% CI 87.53–89.52]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e50.bin (3925 bytes)
+  step 0/295: loss=0.519849
+  step 1/295: loss=0.521307
+  step 2/295: loss=0.511887
+  step 100/295: loss=0.521655
+  step 200/295: loss=0.559944
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.522734 lr=0.000311
+  epoch 51: val_acc = 3372/3925 = 85.910828%  top5 = 3824/3925 = 97.426752%  [95% CI 84.79–86.96]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e51.bin (3925 bytes)
+  step 0/295: loss=0.545022
+  step 1/295: loss=0.555655
+  step 2/295: loss=0.519001
+  step 100/295: loss=0.523755
+  step 200/295: loss=0.511033
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.517983 lr=0.000292
+  epoch 52: val_acc = 3412/3925 = 86.929936%  top5 = 3854/3925 = 98.191083%  [95% CI 85.84–87.95]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e52.bin (3925 bytes)
+  step 0/295: loss=0.507866
+  step 1/295: loss=0.539739
+  step 2/295: loss=0.510976
+  step 100/295: loss=0.509319
+  step 200/295: loss=0.508831
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.514158 lr=0.000274
+  epoch 53: val_acc = 3451/3925 = 87.923567%  top5 = 3865/3925 = 98.471338%  [95% CI 86.87–88.91]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e53.bin (3925 bytes)
+  step 0/295: loss=0.510702
+  step 1/295: loss=0.509880
+  step 2/295: loss=0.511174
+  step 100/295: loss=0.509559
+  step 200/295: loss=0.525128
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.514682 lr=0.000256
+  epoch 54: val_acc = 3416/3925 = 87.031847%  top5 = 3851/3925 = 98.114650%  [95% CI 85.94–88.05]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e54.bin (3925 bytes)
+  step 0/295: loss=0.510209
+  step 1/295: loss=0.518083
+  step 2/295: loss=0.526678
+  step 100/295: loss=0.514181
+  step 200/295: loss=0.505740
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.511690 lr=0.000238
+  epoch 55: val_acc = 3485/3925 = 88.789809%  top5 = 3858/3925 = 98.292994%  [95% CI 87.76–89.74]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e55.bin (3925 bytes)
+  step 0/295: loss=0.527114
+  step 1/295: loss=0.530222
+  step 2/295: loss=0.504857
+  step 100/295: loss=0.511920
+  step 200/295: loss=0.506533
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.510515 lr=0.000221
+  epoch 56: val_acc = 3484/3925 = 88.764331%  top5 = 3857/3925 = 98.267516%  [95% CI 87.74–89.71]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e56.bin (3925 bytes)
+  step 0/295: loss=0.504112
+  step 1/295: loss=0.507732
+  step 2/295: loss=0.506554
+  step 100/295: loss=0.520891
+  step 200/295: loss=0.508340
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.511634 lr=0.000204
+  epoch 57: val_acc = 3491/3925 = 88.942675%  top5 = 3852/3925 = 98.140127%  [95% CI 87.92–89.89]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e57.bin (3925 bytes)
+  step 0/295: loss=0.517337
+  step 1/295: loss=0.505577
+  step 2/295: loss=0.506782
+  step 100/295: loss=0.506493
+  step 200/295: loss=0.506280
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.509560 lr=0.000188
+  epoch 58: val_acc = 3476/3925 = 88.560510%  top5 = 3865/3925 = 98.471338%  [95% CI 87.53–89.52]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e58.bin (3925 bytes)
+  step 0/295: loss=0.504619
+  step 1/295: loss=0.506474
+  step 2/295: loss=0.509841
+  step 100/295: loss=0.520053
+  step 200/295: loss=0.509614
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.510478 lr=0.000173
+  epoch 59: val_acc = 3474/3925 = 88.509554%  top5 = 3858/3925 = 98.292994%  [95% CI 87.47–89.47]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e59.bin (3925 bytes)
+  step 0/295: loss=0.506347
+  step 1/295: loss=0.506114
+  step 2/295: loss=0.509317
+  step 100/295: loss=0.505257
+  step 200/295: loss=0.516945
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.507689 lr=0.000157
+  epoch 60: val_acc = 3514/3925 = 89.528662%  top5 = 3862/3925 = 98.394904%  [95% CI 88.53–90.45]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e60.bin (3925 bytes)
+  step 0/295: loss=0.503409
+  step 1/295: loss=0.513592
+  step 2/295: loss=0.503786
+  step 100/295: loss=0.503998
+  step 200/295: loss=0.523041
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.506423 lr=0.000143
+  epoch 61: val_acc = 3497/3925 = 89.095541%  top5 = 3872/3925 = 98.649682%  [95% CI 88.08–90.03]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e61.bin (3925 bytes)
+  step 0/295: loss=0.503798
+  step 1/295: loss=0.502927
+  step 2/295: loss=0.506368
+  step 100/295: loss=0.502804
+  step 200/295: loss=0.511436
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.505632 lr=0.000129
+  epoch 62: val_acc = 3503/3925 = 89.248408%  top5 = 3869/3925 = 98.573248%  [95% CI 88.24–90.18]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e62.bin (3925 bytes)
+  step 0/295: loss=0.503973
+  step 1/295: loss=0.502531
+  step 2/295: loss=0.502618
+  step 100/295: loss=0.506812
+  step 200/295: loss=0.502387
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.505183 lr=0.000116
+  epoch 63: val_acc = 3515/3925 = 89.554140%  top5 = 3870/3925 = 98.598726%  [95% CI 88.56–90.47]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e63.bin (3925 bytes)
+  step 0/295: loss=0.503277
+  step 1/295: loss=0.505608
+  step 2/295: loss=0.504832
+  step 100/295: loss=0.504521
+  step 200/295: loss=0.502854
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.504153 lr=0.000103
+  epoch 64: val_acc = 3508/3925 = 89.375796%  top5 = 3864/3925 = 98.445860%  [95% CI 88.37–90.30]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e64.bin (3925 bytes)
+  step 0/295: loss=0.503272
+  step 1/295: loss=0.504506
+  step 2/295: loss=0.501742
+  step 100/295: loss=0.503810
+  step 200/295: loss=0.505510
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.504815 lr=0.000091
+  epoch 65: val_acc = 3510/3925 = 89.426752%  top5 = 3870/3925 = 98.598726%  [95% CI 88.43–90.35]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e65.bin (3925 bytes)
+  step 0/295: loss=0.502759
+  step 1/295: loss=0.503372
+  step 2/295: loss=0.502254
+  step 100/295: loss=0.503745
+  step 200/295: loss=0.502378
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.504294 lr=0.000079
+  epoch 66: val_acc = 3516/3925 = 89.579618%  top5 = 3869/3925 = 98.573248%  [95% CI 88.58–90.50]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e66.bin (3925 bytes)
+  step 0/295: loss=0.502305
+  step 1/295: loss=0.503623
+  step 2/295: loss=0.502913
+  step 100/295: loss=0.503999
+  step 200/295: loss=0.502927
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.503657 lr=0.000069
+  epoch 67: val_acc = 3524/3925 = 89.783439%  top5 = 3874/3925 = 98.700637%  [95% CI 88.80–90.69]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e67.bin (3925 bytes)
+  step 0/295: loss=0.503186
+  step 1/295: loss=0.503273
+  step 2/295: loss=0.502780
+  step 100/295: loss=0.507904
+  step 200/295: loss=0.502658
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.503312 lr=0.000059
+  epoch 68: val_acc = 3533/3925 = 90.012739%  top5 = 3873/3925 = 98.675159%  [95% CI 89.04–90.91]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e68.bin (3925 bytes)
+  step 0/295: loss=0.504333
+  step 1/295: loss=0.504918
+  step 2/295: loss=0.503115
+  step 100/295: loss=0.501664
+  step 200/295: loss=0.502153
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.503228 lr=0.000050
+  epoch 69: val_acc = 3537/3925 = 90.114650%  top5 = 3876/3925 = 98.751592%  [95% CI 89.14–91.01]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e69.bin (3925 bytes)
+  step 0/295: loss=0.502839
+  step 1/295: loss=0.502241
+  step 2/295: loss=0.501979
+  step 100/295: loss=0.503381
+  step 200/295: loss=0.502967
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.502831 lr=0.000041
+  epoch 70: val_acc = 3532/3925 = 89.987261%  top5 = 3872/3925 = 98.649682%  [95% CI 89.01–90.89]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e70.bin (3925 bytes)
+  step 0/295: loss=0.501602
+  step 1/295: loss=0.501792
+  step 2/295: loss=0.504615
+  step 100/295: loss=0.502980
+  step 200/295: loss=0.502840
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.502886 lr=0.000033
+  epoch 71: val_acc = 3541/3925 = 90.216561%  top5 = 3873/3925 = 98.675159%  [95% CI 89.25–91.11]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e71.bin (3925 bytes)
+  step 0/295: loss=0.501644
+  step 1/295: loss=0.503906
+  step 2/295: loss=0.512711
+  step 100/295: loss=0.502603
+  step 200/295: loss=0.506709
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.503032 lr=0.000026
+  epoch 72: val_acc = 3530/3925 = 89.936306%  top5 = 3875/3925 = 98.726115%  [95% CI 88.96–90.84]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e72.bin (3925 bytes)
+  step 0/295: loss=0.502414
+  step 1/295: loss=0.502094
+  step 2/295: loss=0.505843
+  step 100/295: loss=0.502484
+  step 200/295: loss=0.502741
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.502709 lr=0.000020
+  epoch 73: val_acc = 3526/3925 = 89.834395%  top5 = 3868/3925 = 98.547771%  [95% CI 88.85–90.74]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e73.bin (3925 bytes)
+  step 0/295: loss=0.502985
+  step 1/295: loss=0.501787
+  step 2/295: loss=0.501561
+  step 100/295: loss=0.502303
+  step 200/295: loss=0.502874
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.502649 lr=0.000015
+  epoch 74: val_acc = 3535/3925 = 90.063694%  top5 = 3874/3925 = 98.700637%  [95% CI 89.09–90.96]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e74.bin (3925 bytes)
+  step 0/295: loss=0.501736
+  step 1/295: loss=0.501696
+  step 2/295: loss=0.501398
+  step 100/295: loss=0.501855
+  step 200/295: loss=0.502245
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.502707 lr=0.000010
+  epoch 75: val_acc = 3532/3925 = 89.987261%  top5 = 3871/3925 = 98.624204%  [95% CI 89.01–90.89]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e75.bin (3925 bytes)
+  step 0/295: loss=0.502169
+  step 1/295: loss=0.502558
+  step 2/295: loss=0.501868
+  step 100/295: loss=0.514066
+  step 200/295: loss=0.502124
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.502385 lr=0.000007
+  epoch 76: val_acc = 3531/3925 = 89.961783%  top5 = 3872/3925 = 98.649682%  [95% CI 88.98–90.86]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e76.bin (3925 bytes)
+  step 0/295: loss=0.501495
+  step 1/295: loss=0.501876
+  step 2/295: loss=0.501791
+  step 100/295: loss=0.502303
+  step 200/295: loss=0.501813
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.502440 lr=0.000004
+  epoch 77: val_acc = 3536/3925 = 90.089172%  top5 = 3872/3925 = 98.649682%  [95% CI 89.11–90.99]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e77.bin (3925 bytes)
+  step 0/295: loss=0.502049
+  step 1/295: loss=0.502681
+  step 2/295: loss=0.503250
+  step 100/295: loss=0.501441
+  step 200/295: loss=0.502372
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.502433 lr=0.000002
+  epoch 78: val_acc = 3535/3925 = 90.063694%  top5 = 3871/3925 = 98.624204%  [95% CI 89.09–90.96]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e78.bin (3925 bytes)
+  step 0/295: loss=0.501331
+  step 1/295: loss=0.502932
+  step 2/295: loss=0.501421
+  step 100/295: loss=0.501693
+  step 200/295: loss=0.501972
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.502540 lr=0.000000
+  epoch 79: val_acc = 3537/3925 = 90.114650%  top5 = 3871/3925 = 98.624204%  [95% CI 89.14–91.01]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e79.bin (3925 bytes)
+  step 0/295: loss=0.501769
+  step 1/295: loss=0.501689
+  step 2/295: loss=0.502580
+  step 100/295: loss=0.501835
+  step 200/295: loss=0.503112
+[pjrt_ffi] RESIDENT: @resnet34_fwd_eval holds 182 parameter tensors (81.3 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.502505 lr=0.000000
+  epoch 80: val_acc = 3539/3925 = 90.165605%  top5 = 3872/3925 = 98.649682%  [95% CI 89.19–91.06]
+    per-example top-1 bitmap -> runs/2026-08-31-imagenette-n3/bitmaps/resnet34_s1_e80.bin (3925 bytes)
+done (trained ResNet-34 adam + cosine/warmup via packed threading).

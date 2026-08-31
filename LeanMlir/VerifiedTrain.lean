@@ -1075,7 +1075,12 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     -- `loss = 0.000000` for the others would put a fabricated number in a captured log, so
     -- the field is omitted instead. See `VerifiedNet.lossSlot`.
     let lossField := if net.lossSlot then s!"loss = {epochLossSum / nb.toFloat}, " else ""
-    IO.println s!"  epoch {ep + 1}: {lossField}{evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
+    -- ▶ `wilson95` here too, not just in `trainAdamSched` (§2230): chapters 1-4 run through
+    -- `VerifiedNet.train` and were the only tier printing a bare accuracy with no interval, so
+    -- the book's MNIST/CIFAR rows could not be quoted the way its Imagenette rows are.
+    -- ⚠ Placed after the percentage rather than at end-of-line because this print (unlike
+    -- `trainAdamSched`'s) carries a trailing `(Nms)`; the statistic and its interval stay adjacent.
+    IO.println s!"  epoch {ep + 1}: {lossField}{evalName}_acc = {correct}/{nEval} = {acc}%  [95% CI {wilson95 correct nEval}] ({epMs}ms)"
     (← IO.getStdout).flush
   -- Gate G2 (`planning/xla_pjrt_ladder.md` §3): dump the packed params so the IREE
   -- and XLA builds can be diffed tensor-for-tensor. He init runs in Lean from a
@@ -2228,10 +2233,18 @@ gate's control, not a configuration.")
       -- ⚠ The CI is APPENDED, never woven into the existing fields: `blueprint/src/content.tex`
       -- quotes these lines verbatim and every `runs/*/` log is read by eye against that format.
       IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%  [95% CI {wilson95 correct nEval}]"
+      -- ⚠⚠ `{variant}` is in the name, not just `{pfx}_e{N}`. `cifar8w-bn-ablation` and
+      -- `cifar8w-ablation` each run THREE optimizer arms in one process (sgd/mom/adam), so a
+      -- variant-less name has arm 2 overwrite arm 1 and arm 3 overwrite arm 2 — two thirds of
+      -- the bitmaps silently lost, with the surviving file labelled as if it were the run.
+      -- The checkpoint path has carried `variant` all along (`<slug>_<variant>_ckpt_xla.bin`);
+      -- this brings the bitmap into line. ▶ Single-arm trainers pass "adam", so their files
+      -- move `<pfx>_e80.bin` -> `<pfx>_adam_e80.bin`; `scripts/mcnemar.py` takes explicit
+      -- paths and does not care, but bitmaps written before 2026-08-31 use the old name.
       match dumpCorrect with
       | some pfx =>
-          IO.FS.writeBinFile s!"{pfx}_e{ep + 1}.bin" correctBits
-          IO.println s!"    per-example top-1 bitmap -> {pfx}_e{ep + 1}.bin ({correctBits.size} bytes)"
+          IO.FS.writeBinFile s!"{pfx}_{variant}_e{ep + 1}.bin" correctBits
+          IO.println s!"    per-example top-1 bitmap -> {pfx}_{variant}_e{ep + 1}.bin ({correctBits.size} bytes)"
       | none => pure ()
     (← IO.getStdout).flush
     IO.FS.writeBinFile ckptPath thetamv
@@ -2483,7 +2496,12 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% ({epMs}ms)"
+    -- ▶ `wilson95` here too. ⚠ Chapter 1's linear model is the ONE book trainer that does not
+    -- route through `VerifiedNet.train` — it keeps this bespoke entry point for the 2-argument
+    -- `linearTrainStepV` FFI — so adding the interval there missed it, and ch.1 was the only
+    -- chapter still printing a bare accuracy. Same placement rule as `VerifiedNet.train`: after
+    -- the percentage, because this print carries a trailing `(Nms)`.
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  [95% CI {wilson95 correct nEval}] ({epMs}ms)"
     (← IO.getStdout).flush
   -- Gate G2 (`planning/xla_pjrt_ladder.md` §3): dump the final parameters so the
   -- IREE and XLA builds can be diffed tensor-for-tensor. Equal accuracy is a
