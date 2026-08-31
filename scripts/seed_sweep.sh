@@ -174,6 +174,15 @@ worker() {
 }
 
 say "sweep start: SUITE=$SUITE, ${#JOBS[@]} jobs, GPUs $GPUS, seeds [$SEEDS] -> $LOGDIR"
-for g in ${GPUS//,/ }; do worker "$g" & done
-wait
+WORKERS=()
+for g in ${GPUS//,/ }; do worker "$g" & WORKERS+=("$!"); done
+
+# ⚠⚠ `wait "${WORKERS[@]}"`, NEVER a bare `wait`. The AER watchdog above is also a background
+# job, and it loops until $ABORT exists — which only the EXIT trap creates. A bare `wait` therefore
+# blocks on a subshell that is itself waiting for this shell to exit: a deadlock reached AFTER the
+# last job finishes, so every result is safely on disk and the sweep merely LOOKS hung with nothing
+# left to do. ⛔ Silently true for three sweeps (2026-08-31: imagenette n=5 and both small suites);
+# none of them ever printed `sweep complete`, and the only way out was Ctrl-C or touching .abort.
+wait "${WORKERS[@]}"
+touch "$ABORT"; kill "$WATCHDOG" 2>/dev/null; wait "$WATCHDOG" 2>/dev/null
 say "sweep complete: $(ls "$LOGDIR/done" | wc -l)/${#JOBS[@]} jobs done"

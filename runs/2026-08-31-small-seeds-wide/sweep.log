@@ -1,0 +1,52 @@
+[21:52:57] sweep start: SUITE=small, 25 jobs, GPUs 0,1,2,3,4,5, seeds [1 2 3 4 5] -> runs/2026-08-31-small-seeds-wide
+[21:52:57] gpu0  cifar8w_bn_s1  start  (cifar8w-bn-ablation)
+[21:52:57] gpu1  cifar8w_bn_s2  start  (cifar8w-bn-ablation)
+[21:52:57] gpu2  cifar8w_bn_s3  start  (cifar8w-bn-ablation)
+[21:52:57] gpu3  cifar8w_bn_s4  start  (cifar8w-bn-ablation)
+[21:52:57] gpu5  cifar8w_bn_s5  start  (cifar8w-bn-ablation)
+[21:52:57] gpu4  cifar8w_s1  start  (cifar8w-ablation)
+[21:55:38] gpu4  cifar8w_s1  OK   2m41s  71.760000% / 10.000000% / 72.680000%
+[21:55:38] gpu4  cifar8w_s2  start  (cifar8w-ablation)
+[21:55:56] gpu2  cifar8w_bn_s3  OK   2m59s  75.100000% / 77.830000% / 74.080000%
+[21:55:56] gpu2  cifar8w_s3  start  (cifar8w-ablation)
+[21:55:57] gpu5  cifar8w_bn_s5  OK   3m0s  75.270000% / 77.700000% / 74.360000%
+[21:55:57] gpu5  cifar8w_s4  start  (cifar8w-ablation)
+[21:55:57] gpu1  cifar8w_bn_s2  OK   3m0s  75.100000% / 77.370000% / 74.170000%
+[21:55:57] gpu1  cifar8w_s5  start  (cifar8w-ablation)
+[21:56:05] gpu3  cifar8w_bn_s4  OK   3m8s  74.660000% / 76.670000% / 74.020000%
+[21:56:05] gpu3  mnist_cnn_s1  start  (mnist-cnn-verified)
+[21:56:05] gpu0  cifar8w_bn_s1  OK   3m8s  75.170000% / 77.510000% / 73.760000%
+[21:56:05] gpu0  mnist_cnn_s2  start  (mnist-cnn-verified)
+[21:56:23] gpu3  mnist_cnn_s1  OK   0m18s  98.660000%
+[21:56:23] gpu3  mnist_cnn_s3  start  (mnist-cnn-verified)
+[21:56:24] gpu0  mnist_cnn_s2  OK   0m19s  98.880000%
+[21:56:24] gpu0  mnist_cnn_s4  start  (mnist-cnn-verified)
+[21:56:42] gpu3  mnist_cnn_s3  OK   0m19s  98.710000%
+[21:56:42] gpu3  mnist_cnn_s5  start  (mnist-cnn-verified)
+[21:56:43] gpu0  mnist_cnn_s4  OK   0m19s  98.700000%
+[21:56:43] gpu0  mnist_mlp_s1  start  (mnist-mlp-verified)
+[21:56:49] gpu0  mnist_mlp_s1  OK   0m6s  97.800000%
+[21:56:49] gpu0  mnist_mlp_s2  start  (mnist-mlp-verified)
+[21:56:55] gpu0  mnist_mlp_s2  OK   0m6s  97.690000%
+[21:56:55] gpu0  mnist_mlp_s3  start  (mnist-mlp-verified)
+[21:57:02] gpu3  mnist_cnn_s5  OK   0m20s  98.710000%
+[21:57:02] gpu3  mnist_mlp_s4  start  (mnist-mlp-verified)
+[21:57:02] gpu0  mnist_mlp_s3  OK   0m7s  97.700000%
+[21:57:02] gpu0  mnist_mlp_s5  start  (mnist-mlp-verified)
+[21:57:09] gpu0  mnist_mlp_s5  OK   0m7s  97.670000%
+[21:57:09] gpu0  mnist_linear_s1  start  (mnist-linear-verified)
+[21:57:09] gpu3  mnist_mlp_s4  OK   0m7s  97.800000%
+[21:57:09] gpu3  mnist_linear_s2  start  (mnist-linear-verified)
+[21:57:12] gpu0  mnist_linear_s1  OK   0m3s  92.100000%
+[21:57:12] gpu0  mnist_linear_s3  start  (mnist-linear-verified)
+[21:57:12] gpu3  mnist_linear_s2  OK   0m3s  92.100000%
+[21:57:12] gpu3  mnist_linear_s4  start  (mnist-linear-verified)
+[21:57:15] gpu0  mnist_linear_s3  OK   0m3s  92.100000%
+[21:57:15] gpu0  mnist_linear_s5  start  (mnist-linear-verified)
+[21:57:15] gpu3  mnist_linear_s4  OK   0m3s  92.100000%
+[21:57:18] gpu0  mnist_linear_s5  OK   0m3s  92.100000%
+[21:58:21] gpu4  cifar8w_s2  OK   2m43s  72.730000% / 10.000000% / 74.860000%
+[21:58:34] gpu2  cifar8w_s3  OK   2m38s  70.560000% / 76.170000% / 73.870000%
+[21:58:37] gpu1  cifar8w_s5  OK   2m40s  73.330000% / 76.250000% / 75.210000%
+[21:58:39] gpu5  cifar8w_s4  OK   2m42s  72.330000% / 75.700000% / 74.460000%
+[22:35:58] sweep complete: 25/25 jobs done
