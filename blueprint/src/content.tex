@@ -697,63 +697,57 @@ lake build mnist-linear-verified
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-08-26-linear-verified-xla-cuda/}. XLA's startup banner is
+\texttt{runs/2026-09-01-linear-verified-xla-cuda/}. XLA's startup banner is
 removed and two long lines are wrapped:
 
 \begin{verbatim}
 [pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/linear_train_step.mlir
-             (@linear_train_step, 2 outputs, 1 replica) in 714 ms
+             (@linear_train_step, 2 outputs, 1 replica) in 604 ms
 [pjrt_ffi] compiled verified_mlir/linear_fwd.mlir
-             (@linear_fwd, 1 outputs, 1 replica) in 97 ms
+             (@linear_fwd, 1 outputs, 1 replica) in 116 ms
 MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
   xla/pjrt verified_mlir/linear_train_step.mlir
   xla/pjrt verified_mlir/linear_fwd.mlir
   train 60000, test 10000; dense 784->10, bs 128, SGD
-  epoch 1: test_acc = 8977/10000 = 89.770000% (166ms)
-  epoch 2: test_acc = 9081/10000 = 90.810000% (196ms)
-  epoch 3: test_acc = 9124/10000 = 91.240000% (232ms)
-  epoch 4: test_acc = 9157/10000 = 91.570000% (224ms)
-  epoch 5: test_acc = 9167/10000 = 91.670000% (198ms)
-  epoch 6: test_acc = 9176/10000 = 91.760000% (215ms)
-  epoch 7: test_acc = 9186/10000 = 91.860000% (249ms)
-  epoch 8: test_acc = 9194/10000 = 91.940000% (264ms)
-  epoch 9: test_acc = 9198/10000 = 91.980000% (268ms)
-  epoch 10: test_acc = 9198/10000 = 91.980000% (265ms)
-  epoch 11: test_acc = 9203/10000 = 92.030000% (269ms)
-  epoch 12: test_acc = 9210/10000 = 92.100000% (276ms)
+  epoch 1: test_acc = 8977/10000 = 89.770000%  [95% CI 89.16–90.35] (173ms)
+  epoch 2: test_acc = 9081/10000 = 90.810000%  [95% CI 90.23–91.36] (175ms)
+  epoch 3: test_acc = 9123/10000 = 91.230000%  [95% CI 90.66–91.77] (217ms)
+  epoch 4: test_acc = 9157/10000 = 91.570000%  [95% CI 91.01–92.10] (242ms)
+  epoch 5: test_acc = 9167/10000 = 91.670000%  [95% CI 91.11–92.20] (219ms)
+  epoch 6: test_acc = 9176/10000 = 91.760000%  [95% CI 91.20–92.28] (239ms)
+  epoch 7: test_acc = 9186/10000 = 91.860000%  [95% CI 91.31–92.38] (239ms)
+  epoch 8: test_acc = 9194/10000 = 91.940000%  [95% CI 91.39–92.46] (239ms)
+  epoch 9: test_acc = 9199/10000 = 91.990000%  [95% CI 91.44–92.51] (243ms)
+  epoch 10: test_acc = 9198/10000 = 91.980000%  [95% CI 91.43–92.50] (246ms)
+  epoch 11: test_acc = 9203/10000 = 92.030000%  [95% CI 91.48–92.54] (247ms)
+  epoch 12: test_acc = 9210/10000 = 92.100000%  [95% CI 91.56–92.61] (205ms)
 done (trained MNIST-Linear via the proof-rendered StableHLO).
 \end{verbatim}
 
-Twelve epochs at about 235\,ms each, and 92.10\% on the full
+Twelve epochs at about 224\,ms each, and 92.10\% on the full
 10,000-image test set. That is the going rate for a linear classifier on
 MNIST, and LeCun's original 1998 benchmark put a comparable model at
 around 92\%.
 
-That run did not execute a
-reimplementation of the network this chapter describes. It executed
-\texttt{verified\_mlir/linear\_train\_step.mlir}, which is the text
-\texttt{Proofs.StableHLO.linTrainStepFaithfulV} emits. Every line of that
-file is \texttt{pretty} of a proven graph node, and
-\texttt{LinearFaithfulPoC} proves that the two outputs denote the
-certified loss-descent step derived from the Mathlib \(\fderiv\) math. The
-forward pass, the softmax cross-entropy cotangent, the parameter
-gradients, and the SGD update are all proof-backed operations. Every
-theorem in the rest of this chapter is about the graph that just
-trained.
+The bracketed interval is worth reading once, because every accuracy in
+this book carries one. 92.10\% is 9,210 images out of 10,000, and a
+different 10,000 handwritten digits would not have given exactly that
+number; the 95\% Wilson interval says the rate underneath it lies
+plausibly anywhere between 91.56 and 92.61\%. The six decimal places the
+trainer prints are formatting rather than precision --- only the first
+three digits are real, and on a test set this size a gap of less than
+about half a point is not yet a result.
 
-The two compile lines are worth a second look. XLA took the StableHLO
-and compiled it in process in under a second, with no separate compiler
-invocation and nothing left on disk.
-
-To run all three MNIST chapters at once:
-
-\begin{verbatim}
-lake run mnist
-\end{verbatim}
-
-That builds and trains this linear model, Chapter~\ref{chap:mlp}'s MLP,
-and Chapter~\ref{chap:cnn}'s CNN, in about a minute.
+This chapter's accuracy is also the one that does not move. Trained five
+times over, the linear model finishes at 92.10\% every time. It is
+zero-initialized rather than randomly, so there is no seed for the
+initializer to spend, and the only variation left is the order in which
+the GPU accumulates its sums --- worth a single image at epochs 3 and 9,
+and nothing at all by epoch 12. Every later chapter has a real spread
+across seeds and reports it. This one has none to report, which makes it
+the cleanest baseline in the book to start from.
 
 \section{How it works}
 
@@ -1539,7 +1533,7 @@ Walking through the numbered sections:
 
 \textbf{1. Sessions.} \texttt{mkSession} takes the path to a committed
 \texttt{.mlir}, hands it to the shim, and gets back something callable.
-XLA compiles the StableHLO in process, which is the 714\,ms the run
+XLA compiles the StableHLO in process, which is the 604\,ms the run
 reported.
 
 \textbf{2. Data and initialisation.} \texttt{loadData} mmaps the on-disk
@@ -1561,9 +1555,9 @@ It returns the new parameters packed as \texttt{[W0|b0]}.
 This one line is where the whole pipeline pays off. There is no Python.
 There is no per-step graph construction. There is no autograd
 interpreter walking a tape. The training step was compiled once at
-startup, in 714\,ms, and every batch after that is a single dispatched
+startup, in 604\,ms, and every batch after that is a single dispatched
 call. Chapter~1's run does 468 of those per epoch and finishes an epoch
-in about 235\,ms including a full pass over the 10,000 test images.
+in about 224\,ms including a full pass over the 10,000 test images.
 
 \textbf{5. Validation.} Every epoch, not every tenth, because a forward
 pass over the test set is cheap next to the training epoch. Two details

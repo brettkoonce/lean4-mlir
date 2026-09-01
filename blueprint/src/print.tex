@@ -12,6 +12,12 @@
 
 \documentclass[a4paper]{report}
 
+\usepackage{fontspec}
+% Latin Modern Mono has no U+2218, box-drawing, lowercase Greek or superscripts,
+% so verbatim transcripts lost characters silently (pretty∘emit rendered as
+% pretty?emit). DejaVu Sans Mono covers all of them. Scaled to match the
+% surrounding Latin Modern x-height, which DejaVu overshoots at nominal size.
+\setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase]
 \usepackage{geometry}
 \geometry{margin=0.9in}
 
