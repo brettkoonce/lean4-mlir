@@ -51,7 +51,7 @@ weight-grad `dot_general` (contract the batch axis → outer product), the bias-
 `subtract`. That is precisely why `mlpTrainStepText`/`linearTrainStepModuleV`
 write that tail as hand-assembled `s!"…"` strings (StableHLO.lean:1896, :1954): it
 lives in a batched, multi-output regime `den` does not model. The corresponding
-math theorems (`wGrad_isWeightJacobian`, `sgdW_descends_certified_grad`, …) are
+math theorems (`wGrad_isWeightJacobian`, `sgdW_isCertifiedGradStep`, …) are
 stated directly over `Mat`/`Vec` under a "per-example shortcut," not as `den` of a
 graph.
 
@@ -68,7 +68,7 @@ def renderModuleN (name argSig : String) (B : Nat)
 -- the existing op theorems:
 --   batchedWeightGrad : den = certified dW   (wGrad_isWeightJacobian, per layer)
 --   batchedBiasGrad   : den = certified db   (bGrad_isBiasJacobian)
---   axpyConst lr      : den = θ − lr·g       (sgd*_descends_certified_grad)
+--   axpyConst lr      : den = θ − lr·g       (sgd*_isCertifiedGradStep)
 ```
 
 Because `den` and `render` would then act on the *same* `SHlo` value, `text =

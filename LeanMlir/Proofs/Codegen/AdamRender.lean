@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Codegen.AdamStep
 
 /-! # AdamW render-close for the linear net — Phase 3b den-level faithfulness
 
-The Adam analogue of `StableHLO.sgdW_descends_certified_grad`
+The Adam analogue of `StableHLO.sgdW_isCertifiedGradStep`
 (`LeanMlir/Proofs/Codegen/StableHLO.lean`). The SGD close defines the emitted update as a
 *math function of the certified gradient* — `sgdW = W − lr·wGrad x (den cotGraph)`
 — and proves it equals `θ − lr·(certified ∂/∂θ Jacobian · denoted softmax-CE
@@ -14,7 +14,7 @@ cotangent)`. This file does the same with the optimizer map swapped for AdamW
 proven `den (lossCotGraph …)`; only the per-entry update law changes.
 
 **Faithfulness only, no descent** — Adam is not monotone (AMSGrad
-counterexample), so unlike `sgdW_descends_certified_grad` there is *no* attached
+counterexample), so unlike `sgdW_isCertifiedGradStep` there is *no* attached
 loss-decrease claim; the theorem certifies that the emitted update is exactly
 `adamWScalar` of the certified gradient. `wGrad`/`bGrad` are layer-agnostic, so
 (as for SGD) the same close lifts verbatim to the MLP/CNN param grads. -/
@@ -41,7 +41,7 @@ noncomputable def adamB (β₁ β₂ ε lr wd bc₁ bc₂ : ℝ) (mB vB : Vec n)
 /-- **AdamW weight-step faithfulness.** The emitted update is `adamWScalar` of the
     *certified* ∂/∂W Jacobian contracted with the proven softmax-CE cotangent —
     AdamW promoted from trusted to proven, exactly as
-    `sgdW_descends_certified_grad` does for plain SGD (the update map is now Adam,
+    `sgdW_isCertifiedGradStep` does for plain SGD (the update map is now Adam,
     not `θ−lr·g`). -/
 theorem adamW_certified_grad (β₁ β₂ ε lr wd bc₁ bc₂ : ℝ) (mW vW : Mat m n)
     (label : Fin n) (i : Fin m) (j : Fin n) :

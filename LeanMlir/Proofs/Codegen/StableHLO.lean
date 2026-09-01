@@ -2786,7 +2786,7 @@ noncomputable def sgdB (lr : ℝ) (label : Fin n) : Vec n :=
 /-- **SGD weight-step faithfulness.** The emitted update subtracts `lr` times
     the *certified* ∂/∂W Jacobian contracted with the proven loss cotangent —
     plain-SGD optimizer promoted from trusted to proven. -/
-theorem sgdW_descends_certified_grad (lr : ℝ) (label : Fin n) (i : Fin m) (j : Fin n) :
+theorem sgdW_isCertifiedGradStep (lr : ℝ) (label : Fin n) (i : Fin m) (j : Fin n) :
     sgdW W b x lr label i j
       = W i j - lr * ∑ k : Fin n,
           pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
@@ -2796,7 +2796,7 @@ theorem sgdW_descends_certified_grad (lr : ℝ) (label : Fin n) (i : Fin m) (j :
   rw [wGrad_isWeightJacobian W b x (den (lossCotGraph W b x (oneHot n label))) i j]
 
 /-- **SGD bias-step faithfulness.** Likewise for `b`. -/
-theorem sgdB_descends_certified_grad (lr : ℝ) (label : Fin n) (j : Fin n) :
+theorem sgdB_isCertifiedGradStep (lr : ℝ) (label : Fin n) (j : Fin n) :
     sgdB W b x lr label j
       = b j - lr * ∑ i : Fin n,
           pdiv (fun b' : Vec n => dense W b' x) b j i
@@ -9209,7 +9209,7 @@ def linearTrainStepModuleV (B d₀ d₁ : Nat) (lr : String)
   "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
   s!"    %dW0 = stablehlo.dot_general %x, {dy}, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,d₀]}, {ty [B,d₁]}) -> {ty [d₀,d₁]}\n" ++
   s!"    %db0 = stablehlo.reduce({dy} init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [B,d₁]}, tensor<f32>) -> {ty [d₁]}\n" ++
-  "    // ── SGD update θ' = θ − lr·∇ (sgdW/sgdB_descends_certified_grad) ──\n" ++
+  "    // ── SGD update θ' = θ − lr·∇ (sgdW/sgdB_isCertifiedGradStep) ──\n" ++
   s!"    %lW0 = stablehlo.constant dense<{lr}> : {ty [d₀,d₁]}\n" ++
   s!"    %sW0 = stablehlo.multiply %dW0, %lW0 : {ty [d₀,d₁]}\n" ++
   s!"    %W0n = stablehlo.subtract %W0, %sW0 : {ty [d₀,d₁]}\n" ++
@@ -9280,7 +9280,7 @@ def cifarFwdModuleV (B ic c1 c2 h w d1 nClasses kH kW : Nat)
     masks reading `%h0,%h1`); param grads + SGD as in the linear step. Each piece
     is proven faithful above (`mlpFwdGraph_faithful`, `mlpBackGraph_faithful`,
     `reluF_faithful`, `selectPos_faithful`, `wGrad/bGrad_is*Jacobian`,
-    `lossCotGraph_isCEgrad`, `sgd*_descends_certified_grad`); the assembly/naming
+    `lossCotGraph_isCEgrad`, `sgd*_isCertifiedGradStep`); the assembly/naming
     is the renderer (validated by `iree-compile` + the GPU run). -/
 def mlpTrainStepText (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   let dg (o a w cA cB tA tB tO : String) : String :=
@@ -9350,7 +9350,7 @@ def mlpTrainStepText (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
       the SAME `stablehlo.convolution` with the batch axis as the contraction
       feature; rendered here, validated by the GPU run (a `convWGrad_faithful`
       theorem is optional polish, see §B2 of the handoff);
-    * SGD `θ' = θ − lr·∇` — `sgd*_descends_certified_grad`.
+    * SGD `θ' = θ − lr·∇` — `sgd*_isCertifiedGradStep`.
     The op text mirrors the GPU-validated emitter (`emitTok`) byte-for-byte for
     conv/maxpool/convBack/select_and_scatter; assembly + SSA naming is the
     renderer. `lr = 0.1/B` (grads sum over the batch). -/

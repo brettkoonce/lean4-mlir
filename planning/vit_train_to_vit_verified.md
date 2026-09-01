@@ -88,7 +88,7 @@ warmup + no aug.** So `vit-verified` as-is (after the loader fix) gives a
 *legitimately verified* training curve that lands well below the target, and the
 entire gap is recipe. The **load-bearing missing piece is a verified Adam step** —
 and Adam is also the one item the existing SGD descent suite
-(`sgdW_descends_certified_grad`, `linear_sgd_descends`, the CNN rungs) does *not*
+(`sgdW_isCertifiedGradStep`, `linear_sgd_descends`, the CNN rungs) does *not*
 cover. This doc is mostly the plan for rendering and proving it.
 
 ---
@@ -183,7 +183,7 @@ well-defined; `sqrt(v'/bc2)+ε > 0`). **No descent lemma** (see boundary note).
 renderer (mirror `MlirCodegen.emitAdamUpdate` at `MlirCodegen.lean:3546`, which
 already does weight decay + grad-clip + runtime-lr — the reference, but it lives
 on the *unverified* path). Prove the analogue of
-`StableHLO.sgdW_descends_certified_grad` / the `vit_render_*_chain_certified`
+`StableHLO.sgdW_isCertifiedGradStep` / the `vit_render_*_chain_certified`
 family: the rendered `θ'` (and `m'`, `v'`) outputs **denote** `adamStep` applied
 to the *certified chain gradient* `vit_render_*_chain_certified`. Name suggestion:
 `StableHLO.adamUpdate_faithful` + per-param `vit_render_*_adam_certified`. Add
@@ -293,7 +293,7 @@ striking distance of the unverified runner; the delta (if any) attributed.
 | reference Adam emitter (unverified) | `LeanMlir/MlirCodegen.lean:3546` `emitAdamUpdate` |
 | unverified recipe / target knobs | `MainVitTrain.lean` `vitTinyConfig`; `LeanMlir/Train.lean` Adam loop |
 | certified ViT gradient (done) | `vit_render_*_chain_certified`, `vitFwdGraphKMHV_faithful` |
-| SGD-step certification (the pattern to mirror) | `StableHLO.sgdW_descends_certified_grad` |
+| SGD-step certification (the pattern to mirror) | `StableHLO.sgdW_isCertifiedGradStep` |
 | CE head proof to generalize | `lossCot_eq_softmax_sub_onehot`, `softmaxCE_grad` |
 | axiom audit (add new theorems here) | `tests/AuditAxioms.lean` |
 | loader-free GPU parity check | `scripts/render_parity.py` |

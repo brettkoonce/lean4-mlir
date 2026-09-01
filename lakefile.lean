@@ -524,7 +524,7 @@ lean_lib «Certs» where
              -- faithfulness, NOT descent — nothing here claims Nesterov descends.
              `LeanMlir.Proofs.Codegen.SgdMomentumStep,
              -- Phase 3b: the AdamW render-close — emitted weight/bias update =
-             -- adamWScalar of the certified gradient (sgdW_descends_certified_grad
+             -- adamWScalar of the certified gradient (sgdW_isCertifiedGradStep
              -- analogue, optimizer swapped for AdamW).
              `LeanMlir.Proofs.Codegen.AdamRender,
              -- Stage 2 of the live ResNet-34 (Item A2): the channel-order invariant

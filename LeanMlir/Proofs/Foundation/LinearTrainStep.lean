@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 `StableHLO.lean` proves the Chapter-1 linear train step piecewise: the forward
 graph (`fwdGraph_faithful`), the loss cotangent (`lossCotGraph_isCEgrad`), the
 per-parameter Jacobians (`wGrad/bGrad_isWeightJacobian`), and the plain-SGD update
-(`sgdW/sgdB_descends_certified_grad`). Each of those, however, still mentions the
+(`sgdW/sgdB_isCertifiedGradStep`). Each of those, however, still mentions the
 emitted cotangent as `den (lossCotGraph …)` — a denotation of an emitted graph,
 not yet a named closed form.
 
@@ -55,7 +55,7 @@ theorem sgdW_descends_softmaxCE_grad (lr : ℝ) (label : Fin n) (i : Fin m) (j :
           pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
                (Mat.flatten W) (finProdFinEquiv (i, j)) k
             * (softmax n (mnistLinear W b x) k - oneHot n label k) := by
-  rw [sgdW_descends_certified_grad W b x lr label i j]
+  rw [sgdW_isCertifiedGradStep W b x lr label i j]
   simp_rw [lossCot_eq_softmax_sub_onehot W b x label]
 
 /-- **M1 (bias).** The emitted linear SGD bias update subtracts `lr` times the
@@ -66,7 +66,7 @@ theorem sgdB_descends_softmaxCE_grad (lr : ℝ) (label : Fin n) (j : Fin n) :
       = b j - lr * ∑ i : Fin n,
           pdiv (fun b' : Vec n => dense W b' x) b j i
             * (softmax n (mnistLinear W b x) i - oneHot n label i) := by
-  rw [sgdB_descends_certified_grad W b x lr label j]
+  rw [sgdB_isCertifiedGradStep W b x lr label j]
   simp_rw [lossCot_eq_softmax_sub_onehot W b x label]
 
 -- ════════════════════════════════════════════════════════════════

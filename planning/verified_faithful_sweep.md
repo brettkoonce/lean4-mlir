@@ -919,7 +919,7 @@ on the same footing the tail ops must become `SHlo` nodes printed by that same
    *result* SSA name is the coordination the repo hand-writes the tail to avoid —
    it needs late-binding the `%dy` name into each output graph. This is the real
    work, not the op cases.
-3. Then `den(module) = certified` (reuse `sgd*_descends_certified_grad`), switch
+3. Then `den(module) = certified` (reuse `sgd*_isCertifiedGradStep`), switch
    the `#eval` writer + drift guard to the denoted module, iree-compile to confirm
    identical/valid bytes.
 

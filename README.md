@@ -164,7 +164,7 @@ that boundary, the verification is tiered by dataset / backend:
 forward and backward are proven faithful to the Mathlib `fderiv` math as rendered
 StableHLO graphs (`mlpFwdGraph_faithful`, `mlpBackGraph_faithful`,
 `cnnFwdGraph_faithful`, `cnnBackGraph_faithful`; for linear also the param-grad
-Jacobians `wGrad/bGrad_is*Jacobian` and `sgdW/sgdB_descends_certified_grad`).
+Jacobians `wGrad/bGrad_is*Jacobian` and `sgdW/sgdB_isCertifiedGradStep`).
 All audited to the 3-axiom closure. The whole train-step module is now
 `render(provenGraph)`: `linTrainStepFaithfulV` (the fully-tied renderer in
 `StableHLO.lean` that generates `verified_mlir/linear_train_step.mlir`) renders

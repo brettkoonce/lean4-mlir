@@ -436,8 +436,8 @@ open Proofs
 #print axioms StableHLO.wGrad_isWeightJacobian
 #print axioms StableHLO.bGrad_isBiasJacobian
 -- SGD update proven (not trusted) for plain SGD on the linear net.
-#print axioms StableHLO.sgdW_descends_certified_grad
-#print axioms StableHLO.sgdB_descends_certified_grad
+#print axioms StableHLO.sgdW_isCertifiedGradStep
+#print axioms StableHLO.sgdB_isCertifiedGradStep
 -- M1: the linear SGD step bundled to the certified closed-form softmax-CE
 -- gradient (softmax − onehot) contracted with the certified ∂logits/∂θ Jacobian.
 #print axioms StableHLO.lossCot_eq_softmax_sub_onehot
@@ -2927,7 +2927,7 @@ open Proofs
 #print axioms adamWParam_wd_zero
 -- Phase 3b: AdamW render-close (den-level faithfulness) — the emitted weight/bias
 -- update = adamWScalar of the certified ∂/∂θ Jacobian · denoted softmax-CE cotangent
--- (the sgdW_descends_certified_grad analogue, optimizer = AdamW). Faithfulness only.
+-- (the sgdW_isCertifiedGradStep analogue, optimizer = AdamW). Faithfulness only.
 #print axioms Proofs.adamWParam_eq_scalar
 #print axioms StableHLO.adamW_certified_grad
 #print axioms StableHLO.adamB_certified_grad
