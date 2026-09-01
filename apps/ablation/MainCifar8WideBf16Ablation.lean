@@ -19,8 +19,8 @@ def cfg : VerifiedConfig where
 def main (argv : List String) : IO Unit := do
   let d := argv.head?.getD "data"
   IO.println "════════ cifar8wb bf16 — SGD (lr 0.1) ════════"
-  cifar8wbVerified.toNet.trainAdamSched cfg d 0.1 0.9 0.999 3 "bf16sgd"
+  cifar8wbVerified.toNet.trainAdamSched cfg d 0.1 0.9 0.999 0 "bf16sgd" 1.0 1.0
   IO.println "════════ cifar8wb bf16 — Nesterov momentum (μ.9, lr 0.02) ════════"
-  cifar8wbVerified.toNet.trainAdamSched cfg d 0.02 0.9 0.999 3 "bf16mom"
+  cifar8wbVerified.toNet.trainAdamSched cfg d 0.02 0.9 0.999 0 "bf16mom" 1.0 1.0
   IO.println "════════ cifar8wb bf16 — AdamW (lr 1e-3) ════════"
-  cifar8wbVerified.toNet.trainAdamSched cfg d 0.001 0.9 0.999 3 "bf16adam"
+  cifar8wbVerified.toNet.trainAdamSched cfg d 0.001 0.9 0.999 0 "bf16adam" 1.0 1.0

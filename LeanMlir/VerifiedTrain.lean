@@ -1439,8 +1439,19 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- a cosine one are different experiments and the log has to say which it was. Spelled so the
   -- string is UNCHANGED at the default (`expDecayRate = 0`), i.e. every existing log line still reads
   -- "(cosine+warmup Nep, baseLR L)".
-  let schedName := if expDecayRate > 0.0 then s!"exp x{expDecayRate}/{expDecayEpochs}ep" else "cosine"
-  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} ({schedName}+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  -- ⭐ `expDecayRate = 1.0` is an exactly CONSTANT rate: the decay branch computes
+  -- `baseLR * exp(k * log 1.0) = baseLR * exp 0 = baseLR` at every step, and `warmupEpochs = 0`
+  -- makes `warmSteps = 0 < gstep`, so the warmup branch never fires either. No new code path —
+  -- but it needs its own NAME in the log, because "exp x1.000000/1.000000ep+warmup 0ep" is a
+  -- true and unreadable description of a flat line. Chapter 4's optimizer levers run this way
+  -- deliberately: comparing three update rules under a schedule compares four things.
+  -- ⚠ The cosine and exp spellings are byte-identical to what they were, because every
+  -- Imagenette and ImageNet transcript in the book quotes this line.
+  let schedName := if expDecayRate == 1.0 then "constant lr"
+    else if expDecayRate > 0.0 then s!"exp x{expDecayRate}/{expDecayEpochs}ep" else "cosine"
+  let schedDesc := if expDecayRate == 1.0 then s!"constant lr {baseLR}"
+    else s!"{schedName}+warmup {warmupEpochs}ep, baseLR {baseLR}"
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} ({schedDesc}), He init"
   if rmsprop then
     IO.println s!"  ▸ RMSPROP: m = momentum buffer (init 0), v = running MEAN-SQUARE (init 1.0, \
 TF convention — this optimizer is not bias-corrected)"
@@ -2257,7 +2268,11 @@ gate's control, not a configuration.")
       IO.FS.writeBinFile path thetamv
       IO.println s!"  wrote final [θ|m|v] ({thetamv.size} bytes) → {path}"
   | none => pure ()
-  IO.println s!"done (trained {net.name} {variant} + {schedName}/warmup via packed threading)."
+  -- ⚠ "cosine/warmup" is quoted verbatim by every Imagenette and ImageNet transcript in the
+  -- book; only the constant case gets a new spelling, and it drops the "/warmup" that would
+  -- otherwise describe a warmup this configuration does not have.
+  let doneSched := if expDecayRate == 1.0 then "constant lr" else s!"{schedName}/warmup"
+  IO.println s!"done (trained {net.name} {variant} + {doneSched} via packed threading)."
 
 /-- **Score a checkpoint, standalone** — the eval half of `trainAdamSched` with no training in
     front of it (`planning/next_session_verified_trainer_code.md` §2).
@@ -4495,7 +4510,8 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
     fp32 run); honors `LEAN_MLIR_MAX_EPOCHS`. Same scope as `trainE4M3`: fp8
     weights + input, fp32 intermediates / moments. -/
 def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
-    (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam") : IO Unit := do
+    (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam")
+    (expDecayRate : Float := 0.0) : IO Unit := do
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses
@@ -4521,7 +4537,9 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
     | some n => min n cfg.epochs
     | none   => cfg.epochs
-  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} fp8 (cosine+warmup {warmupEpochs}ep, baseLR {baseLR}), He init"
+  let schedDesc := if expDecayRate == 1.0 then s!"constant lr {baseLR}"
+    else s!"cosine+warmup {warmupEpochs}ep, baseLR {baseLR}"
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} fp8 ({schedDesc}), He init"
   (← IO.getStdout).flush
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes ++ #[#[], #[], #[]]
                                 ++ (if hasBn then bnStatShapes else #[]))
@@ -4571,7 +4589,11 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
     curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
       let gstep := (ep * nb + bi + 1).toFloat
-      let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
+      -- `expDecayRate = 1.0` ⇒ exactly constant, as in `trainAdamSched`: chapter 4's levers
+      -- compare optimizers and precisions under ONE flat rate, because a schedule is a fourth
+      -- variable and this driver's peer had been supplying one silently.
+      let lrt := if expDecayRate == 1.0 then baseLR
+                 else if gstep ≤ warmSteps then baseLR * gstep / warmSteps
                  else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
       let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
       let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
