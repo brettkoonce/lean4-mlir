@@ -409,6 +409,20 @@ def cifar8wBnVerified : VerifiedNetSpec where
     (#[32, 32, 3, 3], 0), (#[32], 2), (#[32], 1), (#[32], 2),
     (#[128, 512], 0), (#[512], 2), (#[512, 512], 0), (#[512], 2), (#[512, 10], 0), (#[10], 2)]
 
+/-- `cifar8wBnVerified` on the **BATCHED** op family. Slug `cifar8wb_bn`.
+
+    Same net, same 38 parameters, same spec — the layer list is inherited verbatim, which is the
+    point: only the op family the train step is rendered from moves. That is what makes bf16
+    reachable on the normalized net (the 27 bf16 ops are batched-only), and what keeps the
+    f32-vs-bf16 comparison a controlled one. BatchNorm stays per-example and f32 in both arms,
+    so the eval forward is shared with `cifar8w_bn` unchanged. -/
+def cifar8wbBnVerified : VerifiedNetSpec :=
+  { cifar8wBnVerified with
+    name  := "CIFAR-CNN8-wide-BN-batched"
+    slug  := "cifar8wb_bn"
+    blurb := "Wide-head CIFAR-10 CNN + per-channel BatchNorm (8 convs, BATCHED op family, d1=512) via the VERIFIED renderer → %LOWERER% → GPU" }
+#guard cifar8wbBnVerified.toSpecs == cifar8wBnVerified.toSpecs
+
 /-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →
     [3,4,6,3] basic-block stages (per-channel BN, strided downsample at the first block of
     stages 2–4) → GAP → dense. **110 params** (§2l step B: no conv biases). Tied at the FULL spec in `Proofs/SpecVJP.lean`

@@ -1845,6 +1845,331 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
   inner ++
   "  }\n}\n"
 
+set_option maxRecDepth 8000 in
+/-- **`cifar8BnTrainStepFaithfulB` — the batched peer of `cifar8BnTrainStepFaithfulV`.**
+
+    Same net, same three optimizers, same packed `[θ|m|v]` 38-parameter signature. What moves is
+    the op FAMILY for the convolutions and the dense head: this render carries the batch **in the
+    Lean type** (`SHlo (B*(c*h*w))`) and uses the batched constructors, where the `…V` render is
+    per-example with `pretty B` broadcasting. It is `cifar8AdamTrainStepFaithfulB` with BatchNorm
+    spliced in, and it exists for one reason: **bf16 on the NORMALIZED net.**
+
+    ⭐⭐ **Why the migration is what unlocks bf16.** The 27 bf16 ops were built for ImageNet, which
+    is entirely batched, so bf16 twins exist for `convBackBatched`/`convWeightGradB` and do NOT
+    exist for the per-example `convBack`/`dotOut` the `…V` render uses. Chapter 4's precision lever
+    could therefore only measure bf16 on the *un-normalized* net — the one that NaNs under AdamW at
+    fp32 — which is the hardest case and the wrong one for licensing Chapter 5. This render puts
+    bf16 on the net that actually has BatchNorm, with **zero new verified ops**.
+
+    ⭐ **BatchNorm stays PER-EXAMPLE, and that is deliberate.** `bnPerChannelF`/`bnPerChannelBack`
+    reduce over `[2,3]`, not `[0,2,3]`: each example is normalized by its own statistics. Three
+    consequences, all of them the point:
+
+    * **It is the same net as `…V`.** Swapping to the batch-coupled `bnBatchF` would change the
+      FUNCTION, not just the emit, and the f32-vs-bf16 comparison would be confounded by a
+      BatchNorm semantics change. The op family is the only variable here.
+    * **The eval forward is unchanged.** Per-example BN needs no running statistics — train and
+      eval normalize identically — so `cifar8w_bn_fwd.mlir` is reused verbatim and cannot drift
+      from what the f32 arm evaluates against. Batch BN would need μ/var returned from the step,
+      a host-side EMA, and a frozen-stat eval render; the packed protocol has nowhere to put them.
+    * **It matches mixed precision as everyone practises it.** Every bf16 net in this repo —
+      R34, R50, MNv2, MNv4, EfficientNet — keeps BN in f32 and rounds only the convolutions and
+      the dense layers (`ResNet34RenderB.lean:141` is the pattern: the conv backward branches on
+      `bf16`, the `bnBatchBack` above it does not). A bf16 BatchNorm would measure a recipe
+      Chapter 5 does not use.
+
+    ⚠ The BN nodes are per-example `SHlo` trees inside a `pretty B` render, exactly as the head's
+    `rows := 1` ops are in `cifar8AdamTrainStepFaithfulB`: each `pretty` node is an independent
+    tree, linked to the next only by the SSA name, so a per-example BN node and a batched conv
+    node compose in the emitted text without composing in the Lean types. The emitted BN fragment
+    is byte-identical to the one `…V` emits.
+
+    ⚠ Faithful by CONSTRUCTION, like every render here: the AST is built only from verified
+    constructors, so `pretty(provenGraph)` needs no new proof. Nothing is hand-written MLIR except
+    the report-only `%loss` and the `%bc1`/`%bc2` passthroughs, exactly as in both peers.
+
+    ⚠ Parameters are NOT batched — only activations are — so the optimizer tail (`optTail`) is
+    untouched and shared verbatim with both peers. Conv biases are `%cb1…%cb8`: `%b1` is β₁. -/
+def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
+    (bnEpsStr invBStr b1Str ob1Str b2Str ob2Str aEpsStr wdStr : String)
+    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
+    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
+    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
+    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
+    (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
+    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
+    (x : Vec (B*(ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))))
+    -- Trailing + defaulted so every existing positional call site is unchanged.
+    (replicas : Nat := 1) (opt : CifarOpt := .adamw) (bf16 : Bool := false) : String :=
+  let zrnd : ℝ → ℝ := fun r => r   -- identity, as the ImageNet renderers pass it
+  let s4h := 2*h; let s4w := 2*w
+  let s3h := 2*s4h; let s3w := 2*s4w
+  let s2h := 2*s3h; let s2w := 2*s3w
+  let s1h := 2*s2h; let s1w := 2*s2w
+  let flat := c4*h*w
+  -- ONE source for the 38 params' ORDER and SHAPES — the arg signature, the packed `m`/`v`
+  -- blocks and the return types all read it, so they cannot drift. Order is
+  -- `cifar8BnVerified.toSpecs`: (conv W, conv b, BN γ, BN β) ×8, then the 3 dense (W, b).
+  let bnSig : List (String × List Nat) :=
+    [("W1",[c1,ic,kH,kW]), ("cb1",[c1]), ("g1",[c1]), ("bt1",[c1]),
+     ("W2",[c1,c1,kH,kW]), ("cb2",[c1]), ("g2",[c1]), ("bt2",[c1]),
+     ("W3",[c2,c1,kH,kW]), ("cb3",[c2]), ("g3",[c2]), ("bt3",[c2]),
+     ("W4",[c2,c2,kH,kW]), ("cb4",[c2]), ("g4",[c2]), ("bt4",[c2]),
+     ("W5",[c3,c2,kH,kW]), ("cb5",[c3]), ("g5",[c3]), ("bt5",[c3]),
+     ("W6",[c3,c3,kH,kW]), ("cb6",[c3]), ("g6",[c3]), ("bt6",[c3]),
+     ("W7",[c4,c3,kH,kW]), ("cb7",[c4]), ("g7",[c4]), ("bt7",[c4]),
+     ("W8",[c4,c4,kH,kW]), ("cb8",[c4]), ("g8",[c4]), ("bt8",[c4]),
+     ("W9",[flat,d1]), ("b9",[d1]), ("Wa",[d1,d1]), ("ba",[d1]),
+     ("Wb",[d1,nClasses]), ("bb",[nClasses])]
+  let pTys : List String := bnSig.map (fun (_, ds) => ty ds)
+  let argBlk : String → String := fun s =>
+    String.intercalate ", " (bnSig.map (fun (nm, ds) => s!"%{nm}{s}: {ty ds}"))
+  -- ── PER-EXAMPLE operand types: the BN nodes only. Each is an independent `pretty` tree.
+  let zS1c1 : Vec (c1*s1h*s1w) := fun _ => 0
+  let zS2c2 : Vec (c2*s2h*s2w) := fun _ => 0
+  let zS3c3 : Vec (c3*s3h*s3w) := fun _ => 0
+  let zS4c4 : Vec (c4*s4h*s4w) := fun _ => 0
+  let zVc1 : Vec c1 := fun _ => 0
+  let zVc2 : Vec c2 := fun _ => 0
+  let zVc3 : Vec c3 := fun _ => 0
+  let zVc4 : Vec c4 := fun _ => 0
+  -- ── batched peers: every CONVOLUTION and DENSE operand carries the batch in its type here,
+  -- which is what lets the bf16 twins apply. Parameters keep their per-example types.
+  let bX    : Vec (B*(ic*s1h*s1w)) := fun _ => 0
+  let bS1c1 : Vec (B*(c1*s1h*s1w)) := fun _ => 0
+  let bS2c1 : Vec (B*(c1*s2h*s2w)) := fun _ => 0
+  let bS2c2 : Vec (B*(c2*s2h*s2w)) := fun _ => 0
+  let bS3c2 : Vec (B*(c2*s3h*s3w)) := fun _ => 0
+  let bS3c3 : Vec (B*(c3*s3h*s3w)) := fun _ => 0
+  let bS4c3 : Vec (B*(c3*s4h*s4w)) := fun _ => 0
+  let bS4c4 : Vec (B*(c4*s4h*s4w)) := fun _ => 0
+  let bPc4  : Vec (B*(c4*h*w)) := fun _ => 0
+  let bD1   : Vec (B*d1) := fun _ => 0
+  let bNC   : Vec (B*nClasses) := fun _ => 0
+  -- ⚠ `1 * n` is NOT defeq to `n` in Lean, so the `rows := 1` head ops (`softmaxRow`,
+  -- `denseRowBack`) need operands declared at exactly their type. Confined to the head.
+  let b1NC  : Vec (B*(1*nClasses)) := fun _ => 0
+  let b1D1  : Vec (B*(1*d1)) := fun _ => 0
+  let go : StateM Proofs.StableHLO.EmitS String := do
+    -- ═══ forward: (conv→BN→relu)×2→pool ×4 → (dense→relu)×2→dense ═══
+    let (cHc1, nHc1) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁ else .conv (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
+    let (cBn1, nBn1) ← pretty B (.bnPerChannelF (oc := c1) (h := s1h) (w := s1w) "%g1" "%bt1" bnEpsStr 0 zVc1 zVc1 (.operand nHc1 zS1c1))
+    let (cAc1, nAc1) ← pretty B (.batchOp (N := B) .relu (.operand nBn1 bS1c1))
+    let (cHc2, nHc2) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂ else .conv (h := s1h) (w := s1w) "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1))
+    let (cBn2, nBn2) ← pretty B (.bnPerChannelF (oc := c1) (h := s1h) (w := s1w) "%g2" "%bt2" bnEpsStr 0 zVc1 zVc1 (.operand nHc2 zS1c1))
+    let (cAc2, nAc2) ← pretty B (.batchOp (N := B) .relu (.operand nBn2 bS1c1))
+    let (cP1, nPool1) ← pretty B (.batchOp (N := B) (.maxPool (c := c1) (h := s2h) (w := s2w)) (.operand nAc2 bS1c1))
+    let (cHc3, nHc3) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃ else .conv (h := s2h) (w := s2w) "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1))
+    let (cBn3, nBn3) ← pretty B (.bnPerChannelF (oc := c2) (h := s2h) (w := s2w) "%g3" "%bt3" bnEpsStr 0 zVc2 zVc2 (.operand nHc3 zS2c2))
+    let (cAc3, nAc3) ← pretty B (.batchOp (N := B) .relu (.operand nBn3 bS2c2))
+    let (cHc4, nHc4) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄ else .conv (h := s2h) (w := s2w) "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2))
+    let (cBn4, nBn4) ← pretty B (.bnPerChannelF (oc := c2) (h := s2h) (w := s2w) "%g4" "%bt4" bnEpsStr 0 zVc2 zVc2 (.operand nHc4 zS2c2))
+    let (cAc4, nAc4) ← pretty B (.batchOp (N := B) .relu (.operand nBn4 bS2c2))
+    let (cP2, nPool2) ← pretty B (.batchOp (N := B) (.maxPool (c := c2) (h := s3h) (w := s3w)) (.operand nAc4 bS2c2))
+    let (cHc5, nHc5) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅ else .conv (h := s3h) (w := s3w) "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2))
+    let (cBn5, nBn5) ← pretty B (.bnPerChannelF (oc := c3) (h := s3h) (w := s3w) "%g5" "%bt5" bnEpsStr 0 zVc3 zVc3 (.operand nHc5 zS3c3))
+    let (cAc5, nAc5) ← pretty B (.batchOp (N := B) .relu (.operand nBn5 bS3c3))
+    let (cHc6, nHc6) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆ else .conv (h := s3h) (w := s3w) "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3))
+    let (cBn6, nBn6) ← pretty B (.bnPerChannelF (oc := c3) (h := s3h) (w := s3w) "%g6" "%bt6" bnEpsStr 0 zVc3 zVc3 (.operand nHc6 zS3c3))
+    let (cAc6, nAc6) ← pretty B (.batchOp (N := B) .relu (.operand nBn6 bS3c3))
+    let (cP3, nPool3) ← pretty B (.batchOp (N := B) (.maxPool (c := c3) (h := s4h) (w := s4w)) (.operand nAc6 bS3c3))
+    let (cHc7, nHc7) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇ else .conv (h := s4h) (w := s4w) "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3))
+    let (cBn7, nBn7) ← pretty B (.bnPerChannelF (oc := c4) (h := s4h) (w := s4w) "%g7" "%bt7" bnEpsStr 0 zVc4 zVc4 (.operand nHc7 zS4c4))
+    let (cAc7, nAc7) ← pretty B (.batchOp (N := B) .relu (.operand nBn7 bS4c4))
+    let (cHc8, nHc8) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈ else .conv (h := s4h) (w := s4w) "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4))
+    let (cBn8, nBn8) ← pretty B (.bnPerChannelF (oc := c4) (h := s4h) (w := s4w) "%g8" "%bt8" bnEpsStr 0 zVc4 zVc4 (.operand nHc8 zS4c4))
+    let (cAc8, nAc8) ← pretty B (.batchOp (N := B) .relu (.operand nBn8 bS4c4))
+    let (cP4, nPool4) ← pretty B (.batchOp (N := B) (.maxPool (c := c4) (h := h) (w := w)) (.operand nAc8 bS4c4))
+    let (cH9, nH9) ← pretty B (.batchOp (N := B) (.dense "%W9" "%b9" W₉ b₉) (.operand nPool4 bPc4))
+    let (cA9, nA9) ← pretty B (.batchOp (N := B) .relu (.operand nH9 bD1))
+    let (cHa, nHa) ← pretty B (.batchOp (N := B) (.dense "%Wa" "%ba" Wa ba) (.operand nA9 bD1))
+    let (cAa, nAa) ← pretty B (.batchOp (N := B) .relu (.operand nHa bD1))
+    let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wb" "%bb" Wb bb) (.operand nAa bD1))
+    -- ═══ MEAN-loss cotangent: softmax split out so the report-only %loss can read it ═══
+    let (cSm, nSm) ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog b1NC))
+    let (cD0, nD0) ← pretty B (.subB (.operand nSm bNC) (.operand "%onehot" bNC))
+    let (cDy, nDy) ← pretty B (.scaleB invBStr 0 (.operand nD0 bNC))
+    -- ═══ backward: dense head → (scatter → relu-back → BN-back → conv-back) per block ═══
+    let (cDyA, nDyA) ← pretty B (.selectPosB nHa b1D1 (.batchOp (N := B) (.denseRowBack (rows := 1) "%Wb" Wb) (.operand nDy b1NC)))
+    let (cDy9, nDy9) ← pretty B (.selectPosB nH9 b1D1 (.batchOp (N := B) (.denseRowBack (rows := 1) "%Wa" Wa) (.operand nDyA b1D1)))
+    let (cDx9, nDx9) ← pretty B (.batchOp (N := B) (.denseRowBack (rows := 1) "%W9" W₉) (.operand nDy9 b1D1))
+    -- stage 4
+    let (cDac8, nDac8) ← pretty B (.maxPoolBackB (N := B) (c := c4) (h := h) (w := w) nAc8 bS4c4 (.operand nDx9 bPc4))
+    let (cDbn8, nDbn8) ← pretty B (.selectPosB nBn8 bS4c4 (.operand nDac8 bS4c4))
+    let (cDhc8, nDhc8) ← pretty B (.bnPerChannelBack (oc := c4) (h := s4h) (w := s4w) "%g8" nHc8 bnEpsStr 0 zVc4 zS4c4 (.operand nDbn8 zS4c4))
+    let (cDac7, nDac7) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s4h) (w := s4w) zrnd "%W8" W₈ b₈ else SHlo.convBackBatched (N := B) (h := s4h) (w := s4w) "%W8" W₈ b₈) (.operand nDhc8 bS4c4))
+    let (cDbn7, nDbn7) ← pretty B (.selectPosB nBn7 bS4c4 (.operand nDac7 bS4c4))
+    let (cDhc7, nDhc7) ← pretty B (.bnPerChannelBack (oc := c4) (h := s4h) (w := s4w) "%g7" nHc7 bnEpsStr 0 zVc4 zS4c4 (.operand nDbn7 zS4c4))
+    let (cDpl3, nDpool3) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s4h) (w := s4w) zrnd "%W7" W₇ b₇ else SHlo.convBackBatched (N := B) (h := s4h) (w := s4w) "%W7" W₇ b₇) (.operand nDhc7 bS4c4))
+    -- stage 3
+    let (cDac6, nDac6) ← pretty B (.maxPoolBackB (N := B) (c := c3) (h := s4h) (w := s4w) nAc6 bS3c3 (.operand nDpool3 bS4c3))
+    let (cDbn6, nDbn6) ← pretty B (.selectPosB nBn6 bS3c3 (.operand nDac6 bS3c3))
+    let (cDhc6, nDhc6) ← pretty B (.bnPerChannelBack (oc := c3) (h := s3h) (w := s3w) "%g6" nHc6 bnEpsStr 0 zVc3 zS3c3 (.operand nDbn6 zS3c3))
+    let (cDac5, nDac5) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s3h) (w := s3w) zrnd "%W6" W₆ b₆ else SHlo.convBackBatched (N := B) (h := s3h) (w := s3w) "%W6" W₆ b₆) (.operand nDhc6 bS3c3))
+    let (cDbn5, nDbn5) ← pretty B (.selectPosB nBn5 bS3c3 (.operand nDac5 bS3c3))
+    let (cDhc5, nDhc5) ← pretty B (.bnPerChannelBack (oc := c3) (h := s3h) (w := s3w) "%g5" nHc5 bnEpsStr 0 zVc3 zS3c3 (.operand nDbn5 zS3c3))
+    let (cDpl2, nDpool2) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s3h) (w := s3w) zrnd "%W5" W₅ b₅ else SHlo.convBackBatched (N := B) (h := s3h) (w := s3w) "%W5" W₅ b₅) (.operand nDhc5 bS3c3))
+    -- stage 2
+    let (cDac4, nDac4) ← pretty B (.maxPoolBackB (N := B) (c := c2) (h := s3h) (w := s3w) nAc4 bS2c2 (.operand nDpool2 bS3c2))
+    let (cDbn4, nDbn4) ← pretty B (.selectPosB nBn4 bS2c2 (.operand nDac4 bS2c2))
+    let (cDhc4, nDhc4) ← pretty B (.bnPerChannelBack (oc := c2) (h := s2h) (w := s2w) "%g4" nHc4 bnEpsStr 0 zVc2 zS2c2 (.operand nDbn4 zS2c2))
+    let (cDac3, nDac3) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s2h) (w := s2w) zrnd "%W4" W₄ b₄ else SHlo.convBackBatched (N := B) (h := s2h) (w := s2w) "%W4" W₄ b₄) (.operand nDhc4 bS2c2))
+    let (cDbn3, nDbn3) ← pretty B (.selectPosB nBn3 bS2c2 (.operand nDac3 bS2c2))
+    let (cDhc3, nDhc3) ← pretty B (.bnPerChannelBack (oc := c2) (h := s2h) (w := s2w) "%g3" nHc3 bnEpsStr 0 zVc2 zS2c2 (.operand nDbn3 zS2c2))
+    let (cDpl1, nDpool1) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s2h) (w := s2w) zrnd "%W3" W₃ b₃ else SHlo.convBackBatched (N := B) (h := s2h) (w := s2w) "%W3" W₃ b₃) (.operand nDhc3 bS2c2))
+    -- stage 1
+    let (cDac2, nDac2) ← pretty B (.maxPoolBackB (N := B) (c := c1) (h := s2h) (w := s2w) nAc2 bS1c1 (.operand nDpool1 bS2c1))
+    let (cDbn2, nDbn2) ← pretty B (.selectPosB nBn2 bS1c1 (.operand nDac2 bS1c1))
+    let (cDhc2, nDhc2) ← pretty B (.bnPerChannelBack (oc := c1) (h := s1h) (w := s1w) "%g2" nHc2 bnEpsStr 0 zVc1 zS1c1 (.operand nDbn2 zS1c1))
+    let (cDac1, nDac1) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s1h) (w := s1w) zrnd "%W2" W₂ b₂ else SHlo.convBackBatched (N := B) (h := s1h) (w := s1w) "%W2" W₂ b₂) (.operand nDhc2 bS1c1))
+    let (cDbn1, nDbn1) ← pretty B (.selectPosB nBn1 bS1c1 (.operand nDac1 bS1c1))
+    let (cDhc1, nDhc1) ← pretty B (.bnPerChannelBack (oc := c1) (h := s1h) (w := s1w) "%g1" nHc1 bnEpsStr 0 zVc1 zS1c1 (.operand nDbn1 zS1c1))
+    -- ═══ per param: un-fused gradient, then the optimizer outputs. Order is `bnSig`'s. ═══
+    -- ⚠ The conv/dense gradients are BATCHED ops (so the bf16 twins apply); the BN γ/β gradients
+    -- are the per-example ones, whose emit already reduces over `[0,2,3]` to a `Vec oc`.
+    let (gW1, sW1) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd "%x" b₁ bX W₁ else SHlo.convWeightGradB (N := B) "%x" b₁ bX W₁) (.operand nDhc1 bS1c1))
+    let (aW1, tW1, mW1, vW1) ← optTail opt B replicas (c1*ic*kH*kW) "%W1" [c1,ic,kH,kW] sW1
+    let (gb1, sb1) ← pretty B (.convBiasGradB (N := B) W₁ bX b₁ (.operand nDhc1 bS1c1))
+    let (ab1, tb1, mb1, vb1) ← optTail opt B replicas c1 "%cb1" [c1] sb1
+    let (gg1, sg1) ← pretty B (SHlo.bnGammaGrad nHc1 bnEpsStr 0 zS1c1 (.operand nDbn1 zS1c1))
+    let (ag1, tg1, mg1, vg1) ← optTail opt B replicas c1 "%g1" [c1] sg1
+    let (gt1, st1) ← pretty B (SHlo.bnBetaGrad (.operand nDbn1 zS1c1))
+    let (at1, tt1, mt1, vt1) ← optTail opt B replicas c1 "%bt1" [c1] st1
+    let (gW2, sW2) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc1 b₂ bS1c1 W₂ else SHlo.convWeightGradB (N := B) nAc1 b₂ bS1c1 W₂) (.operand nDhc2 bS1c1))
+    let (aW2, tW2, mW2, vW2) ← optTail opt B replicas (c1*c1*kH*kW) "%W2" [c1,c1,kH,kW] sW2
+    let (gb2, sb2) ← pretty B (.convBiasGradB (N := B) W₂ bS1c1 b₂ (.operand nDhc2 bS1c1))
+    let (ab2, tb2, mb2, vb2) ← optTail opt B replicas c1 "%cb2" [c1] sb2
+    let (gg2, sg2) ← pretty B (SHlo.bnGammaGrad nHc2 bnEpsStr 0 zS1c1 (.operand nDbn2 zS1c1))
+    let (ag2, tg2, mg2, vg2) ← optTail opt B replicas c1 "%g2" [c1] sg2
+    let (gt2, st2) ← pretty B (SHlo.bnBetaGrad (.operand nDbn2 zS1c1))
+    let (at2, tt2, mt2, vt2) ← optTail opt B replicas c1 "%bt2" [c1] st2
+    let (gW3, sW3) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool1 b₃ bS2c1 W₃ else SHlo.convWeightGradB (N := B) nPool1 b₃ bS2c1 W₃) (.operand nDhc3 bS2c2))
+    let (aW3, tW3, mW3, vW3) ← optTail opt B replicas (c2*c1*kH*kW) "%W3" [c2,c1,kH,kW] sW3
+    let (gb3, sb3) ← pretty B (.convBiasGradB (N := B) W₃ bS2c1 b₃ (.operand nDhc3 bS2c2))
+    let (ab3, tb3, mb3, vb3) ← optTail opt B replicas c2 "%cb3" [c2] sb3
+    let (gg3, sg3) ← pretty B (SHlo.bnGammaGrad nHc3 bnEpsStr 0 zS2c2 (.operand nDbn3 zS2c2))
+    let (ag3, tg3, mg3, vg3) ← optTail opt B replicas c2 "%g3" [c2] sg3
+    let (gt3, st3) ← pretty B (SHlo.bnBetaGrad (.operand nDbn3 zS2c2))
+    let (at3, tt3, mt3, vt3) ← optTail opt B replicas c2 "%bt3" [c2] st3
+    let (gW4, sW4) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc3 b₄ bS2c2 W₄ else SHlo.convWeightGradB (N := B) nAc3 b₄ bS2c2 W₄) (.operand nDhc4 bS2c2))
+    let (aW4, tW4, mW4, vW4) ← optTail opt B replicas (c2*c2*kH*kW) "%W4" [c2,c2,kH,kW] sW4
+    let (gb4, sb4) ← pretty B (.convBiasGradB (N := B) W₄ bS2c2 b₄ (.operand nDhc4 bS2c2))
+    let (ab4, tb4, mb4, vb4) ← optTail opt B replicas c2 "%cb4" [c2] sb4
+    let (gg4, sg4) ← pretty B (SHlo.bnGammaGrad nHc4 bnEpsStr 0 zS2c2 (.operand nDbn4 zS2c2))
+    let (ag4, tg4, mg4, vg4) ← optTail opt B replicas c2 "%g4" [c2] sg4
+    let (gt4, st4) ← pretty B (SHlo.bnBetaGrad (.operand nDbn4 zS2c2))
+    let (at4, tt4, mt4, vt4) ← optTail opt B replicas c2 "%bt4" [c2] st4
+    let (gW5, sW5) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool2 b₅ bS3c2 W₅ else SHlo.convWeightGradB (N := B) nPool2 b₅ bS3c2 W₅) (.operand nDhc5 bS3c3))
+    let (aW5, tW5, mW5, vW5) ← optTail opt B replicas (c3*c2*kH*kW) "%W5" [c3,c2,kH,kW] sW5
+    let (gb5, sb5) ← pretty B (.convBiasGradB (N := B) W₅ bS3c2 b₅ (.operand nDhc5 bS3c3))
+    let (ab5, tb5, mb5, vb5) ← optTail opt B replicas c3 "%cb5" [c3] sb5
+    let (gg5, sg5) ← pretty B (SHlo.bnGammaGrad nHc5 bnEpsStr 0 zS3c3 (.operand nDbn5 zS3c3))
+    let (ag5, tg5, mg5, vg5) ← optTail opt B replicas c3 "%g5" [c3] sg5
+    let (gt5, st5) ← pretty B (SHlo.bnBetaGrad (.operand nDbn5 zS3c3))
+    let (at5, tt5, mt5, vt5) ← optTail opt B replicas c3 "%bt5" [c3] st5
+    let (gW6, sW6) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc5 b₆ bS3c3 W₆ else SHlo.convWeightGradB (N := B) nAc5 b₆ bS3c3 W₆) (.operand nDhc6 bS3c3))
+    let (aW6, tW6, mW6, vW6) ← optTail opt B replicas (c3*c3*kH*kW) "%W6" [c3,c3,kH,kW] sW6
+    let (gb6, sb6) ← pretty B (.convBiasGradB (N := B) W₆ bS3c3 b₆ (.operand nDhc6 bS3c3))
+    let (ab6, tb6, mb6, vb6) ← optTail opt B replicas c3 "%cb6" [c3] sb6
+    let (gg6, sg6) ← pretty B (SHlo.bnGammaGrad nHc6 bnEpsStr 0 zS3c3 (.operand nDbn6 zS3c3))
+    let (ag6, tg6, mg6, vg6) ← optTail opt B replicas c3 "%g6" [c3] sg6
+    let (gt6, st6) ← pretty B (SHlo.bnBetaGrad (.operand nDbn6 zS3c3))
+    let (at6, tt6, mt6, vt6) ← optTail opt B replicas c3 "%bt6" [c3] st6
+    let (gW7, sW7) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool3 b₇ bS4c3 W₇ else SHlo.convWeightGradB (N := B) nPool3 b₇ bS4c3 W₇) (.operand nDhc7 bS4c4))
+    let (aW7, tW7, mW7, vW7) ← optTail opt B replicas (c4*c3*kH*kW) "%W7" [c4,c3,kH,kW] sW7
+    let (gb7, sb7) ← pretty B (.convBiasGradB (N := B) W₇ bS4c3 b₇ (.operand nDhc7 bS4c4))
+    let (ab7, tb7, mb7, vb7) ← optTail opt B replicas c4 "%cb7" [c4] sb7
+    let (gg7, sg7) ← pretty B (SHlo.bnGammaGrad nHc7 bnEpsStr 0 zS4c4 (.operand nDbn7 zS4c4))
+    let (ag7, tg7, mg7, vg7) ← optTail opt B replicas c4 "%g7" [c4] sg7
+    let (gt7, st7) ← pretty B (SHlo.bnBetaGrad (.operand nDbn7 zS4c4))
+    let (at7, tt7, mt7, vt7) ← optTail opt B replicas c4 "%bt7" [c4] st7
+    let (gW8, sW8) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc7 b₈ bS4c4 W₈ else SHlo.convWeightGradB (N := B) nAc7 b₈ bS4c4 W₈) (.operand nDhc8 bS4c4))
+    let (aW8, tW8, mW8, vW8) ← optTail opt B replicas (c4*c4*kH*kW) "%W8" [c4,c4,kH,kW] sW8
+    let (gb8, sb8) ← pretty B (.convBiasGradB (N := B) W₈ bS4c4 b₈ (.operand nDhc8 bS4c4))
+    let (ab8, tb8, mb8, vb8) ← optTail opt B replicas c4 "%cb8" [c4] sb8
+    let (gg8, sg8) ← pretty B (SHlo.bnGammaGrad nHc8 bnEpsStr 0 zS4c4 (.operand nDbn8 zS4c4))
+    let (ag8, tg8, mg8, vg8) ← optTail opt B replicas c4 "%g8" [c4] sg8
+    let (gt8, st8) ← pretty B (SHlo.bnBetaGrad (.operand nDbn8 zS4c4))
+    let (at8, tt8, mt8, vt8) ← optTail opt B replicas c4 "%bt8" [c4] st8
+    let (gW9, sW9) ← pretty B (.denseWeightGradB (N := B) nPool4 bPc4 (.operand nDy9 bD1))
+    let (aW9, tW9, mW9, vW9) ← optTail opt B replicas (flat*d1) "%W9" [flat,d1] sW9
+    let (gb9, sb9) ← pretty B (.denseBiasGradB (N := B) (.operand nDy9 bD1))
+    let (ab9, tb9, mb9, vb9) ← optTail opt B replicas d1 "%b9" [d1] sb9
+    let (gWa, sWa) ← pretty B (.denseWeightGradB (N := B) nA9 bD1 (.operand nDyA bD1))
+    let (aWa, tWa, mWa, vWa) ← optTail opt B replicas (d1*d1) "%Wa" [d1,d1] sWa
+    let (gba, sba) ← pretty B (.denseBiasGradB (N := B) (.operand nDyA bD1))
+    let (aba, tba, mba, vba) ← optTail opt B replicas d1 "%ba" [d1] sba
+    let (gWb, sWb) ← pretty B (.denseWeightGradB (N := B) nAa bD1 (.operand nDy bNC))
+    let (aWb, tWb, mWb, vWb) ← optTail opt B replicas (d1*nClasses) "%Wb" [d1,nClasses] sWb
+    let (gbb, sbb) ← pretty B (.denseBiasGradB (N := B) (.operand nDy bNC))
+    let (abb, tbb, mbb, vbb) ← optTail opt B replicas nClasses "%bb" [nClasses] sbb
+    -- ═══ report-only scalar loss — OUTSIDE the proven surface, does not feed the update ═══
+    let lossCode :=
+      "    // ── report-only scalar loss (NOT pretty(AST): the kit has no rank-0 loss op; it\n" ++
+      "    //    feeds no parameter, only the driver's progress line) ──\n" ++
+      s!"    %llog = stablehlo.log {nSm} : {ty [B,nClasses]}\n" ++
+      s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
+      s!"    %csum = stablehlo.reduce(%ohll init: %lzero) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
+      s!"    %cneg = stablehlo.negate %csum : tensor<f32>\n" ++
+      s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+      s!"    %loss = stablehlo.divide %cneg, %lbf : tensor<f32>\n"
+    let body := cHc1 ++ cBn1 ++ cAc1 ++ cHc2 ++ cBn2 ++ cAc2 ++ cP1 ++
+      cHc3 ++ cBn3 ++ cAc3 ++ cHc4 ++ cBn4 ++ cAc4 ++ cP2 ++
+      cHc5 ++ cBn5 ++ cAc5 ++ cHc6 ++ cBn6 ++ cAc6 ++ cP3 ++
+      cHc7 ++ cBn7 ++ cAc7 ++ cHc8 ++ cBn8 ++ cAc8 ++ cP4 ++
+      cH9 ++ cA9 ++ cHa ++ cAa ++ cLog ++ cSm ++ cD0 ++ cDy ++ lossCode ++
+      cDyA ++ cDy9 ++ cDx9 ++
+      cDac8 ++ cDbn8 ++ cDhc8 ++ cDac7 ++ cDbn7 ++ cDhc7 ++ cDpl3 ++
+      cDac6 ++ cDbn6 ++ cDhc6 ++ cDac5 ++ cDbn5 ++ cDhc5 ++ cDpl2 ++
+      cDac4 ++ cDbn4 ++ cDhc4 ++ cDac3 ++ cDbn3 ++ cDhc3 ++ cDpl1 ++
+      cDac2 ++ cDbn2 ++ cDhc2 ++ cDac1 ++ cDbn1 ++ cDhc1 ++
+      gW1 ++ aW1 ++ gb1 ++ ab1 ++ gg1 ++ ag1 ++ gt1 ++ at1 ++
+      gW2 ++ aW2 ++ gb2 ++ ab2 ++ gg2 ++ ag2 ++ gt2 ++ at2 ++
+      gW3 ++ aW3 ++ gb3 ++ ab3 ++ gg3 ++ ag3 ++ gt3 ++ at3 ++
+      gW4 ++ aW4 ++ gb4 ++ ab4 ++ gg4 ++ ag4 ++ gt4 ++ at4 ++
+      gW5 ++ aW5 ++ gb5 ++ ab5 ++ gg5 ++ ag5 ++ gt5 ++ at5 ++
+      gW6 ++ aW6 ++ gb6 ++ ab6 ++ gg6 ++ ag6 ++ gt6 ++ at6 ++
+      gW7 ++ aW7 ++ gb7 ++ ab7 ++ gg7 ++ ag7 ++ gt7 ++ at7 ++
+      gW8 ++ aW8 ++ gb8 ++ ab8 ++ gg8 ++ ag8 ++ gt8 ++ at8 ++
+      gW9 ++ aW9 ++ gb9 ++ ab9 ++ gWa ++ aWa ++ gba ++ aba ++ gWb ++ aWb ++ gbb ++ abb
+    let ths := [tW1, tb1, tg1, tt1, tW2, tb2, tg2, tt2, tW3, tb3, tg3, tt3, tW4, tb4, tg4, tt4,
+                tW5, tb5, tg5, tt5, tW6, tb6, tg6, tt6, tW7, tb7, tg7, tt7, tW8, tb8, tg8, tt8,
+                tW9, tb9, tWa, tba, tWb, tbb]
+    let mns := [mW1, mb1, mg1, mt1, mW2, mb2, mg2, mt2, mW3, mb3, mg3, mt3, mW4, mb4, mg4, mt4,
+                mW5, mb5, mg5, mt5, mW6, mb6, mg6, mt6, mW7, mb7, mg7, mt7, mW8, mb8, mg8, mt8,
+                mW9, mb9, mWa, mba, mWb, mbb]
+    let vns := [vW1, vb1, vg1, vt1, vW2, vb2, vg2, vt2, vW3, vb3, vg3, vt3, vW4, vb4, vg4, vt4,
+                vW5, vb5, vg5, vt5, vW6, vb6, vg6, vt6, vW7, vb7, vg7, vt7, vW8, vb8, vg8, vt8,
+                vW9, vb9, vWa, vba, vWb, vbb]
+    pure <|
+      "    // ── cifar8-BN train step, BATCHED op family: every line is pretty(verified AST\n" ++
+      "    //    node), except the marked report-only loss + the %bc passthroughs ──\n" ++
+      -- NB `%sc`/`%sa`/`%sb`/`%sd` are RESERVED: maxPoolBack's select_and_scatter emitter
+      -- hardcodes them as region block arguments. Hence `%lzero`.
+      "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+      s!"    %b1 = stablehlo.constant dense<{b1Str}> : tensor<f32>\n" ++
+      s!"    %ob1 = stablehlo.constant dense<{ob1Str}> : tensor<f32>\n" ++
+      s!"    %b2 = stablehlo.constant dense<{b2Str}> : tensor<f32>\n" ++
+      s!"    %ob2 = stablehlo.constant dense<{ob2Str}> : tensor<f32>\n" ++
+      s!"    %eps = stablehlo.constant dense<{aEpsStr}> : tensor<f32>\n" ++
+      s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
+      -- Emitted ONLY for Nesterov, so the AdamW render re-renders byte-identical after this
+      -- threading — the gate that the generalisation is inert.
+      (if opt == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "") ++
+      body ++
+      s!"    return {String.intercalate ", " (ths ++ mns ++ vns)}, %loss, %bc1, %bc2 : " ++
+      s!"{String.intercalate ", " (pTys ++ pTys ++ pTys)}, tensor<f32>, tensor<f32>, tensor<f32>\n"
+  let retTy := String.intercalate ", " (pTys ++ pTys ++ pTys) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
+  let inner : String := go.run' (0, [])
+  -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention (a mismatch here is
+  -- refused by the shim as "entry mismatch", not silently mis-run).
+  let fname := if replicas ≤ 1 then "cifar8b_bn_adam_train_step" else "cifar8b_bn_adamdp_train_step"
+  let argSig := argBlk "" ++ ", " ++ argBlk "m" ++ ", " ++ argBlk "v" ++
+                s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,nClasses]}"
+  "module @m {\n" ++
+  s!"  func.func @{fname}(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {argSig}) -> ({retTy}) " ++ "{\n" ++
+  inner ++
+  "  }\n}\n"
 /-- The §2i **plain-SGD** cifar8 render: `cifar8AdamTrainStepFaithfulV` with `opt := .sgd`, so the
     forward, backward and all 22 un-fused gradients are shared verbatim with the AdamW render and
     only the tail differs. Entry `@cifar8_sgd_train_step`, 71 in / 69 out. -/
@@ -2218,3 +2543,49 @@ private def c8wBnPacked (opt : Proofs.StableHLO.CifarOpt) (from_ entry : String)
   (c8wBnPacked .nesterov "cifar8_bn_mom_train_step" "cifar8w_bn_mom_train_step")
 #eval IO.FS.writeFile "verified_mlir/cifar8w_bn_sgd_train_step.mlir"
   (c8wBnPacked .sgd "cifar8_bn_sgd_train_step" "cifar8w_bn_sgd_train_step")
+
+-- ── the cifar8-WIDE BN family on the BATCHED op family, with the bf16 switch ────────────────
+-- The peer of `c8wbPacked` for the NORMALIZED net, and what Chapter 4's precision lever
+-- (planning/bf16_batchnorm.md) trains on. Six artifacts from ONE renderer: three optimizers ×
+-- {f32, bf16}, so precision is the only thing that moves inside a pair and the comparison is
+-- controlled by construction rather than by two nets agreeing to be similar.
+--
+-- ⭐ bf16 reaches all 23 convolutions here — forward, dgrad AND wgrad — because the batched family
+-- is the one the 27 bf16 ops were built for. The `…V` BN render could reach none of them.
+-- ⚠ BatchNorm stays f32 and PER-EXAMPLE in both arms, which is the point rather than an omission:
+-- it keeps the net identical to `cifar8w_bn_*`, it lets `cifar8w_bn_fwd.mlir` be reused verbatim
+-- (per-example BN needs no running statistics), and it is what every bf16 net in this repo does.
+-- See the `cifar8BnTrainStepFaithfulB` docstring.
+-- ⚠ The entry symbol MUST match the file stem: `regen_verified_mlir.sh check` fails any artifact
+-- whose declared `@name` differs from its path, because the driver resolves the entry as
+-- `m.{slug}_{variant}_train_step` and so could never load it.
+private def c8wbBnPacked (opt : Proofs.StableHLO.CifarOpt) (bf16 : Bool) (entry : String) : String :=
+  (Proofs.StableHLO.cifar8BnTrainStepFaithfulB 128 3 16 16 32 32 2 2 512 10 3 3
+    "1.0e-05" "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) 1 opt (bf16 := bf16)).replace "@cifar8b_bn_adam_train_step" s!"@{entry}"
+
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bn_adam_train_step.mlir"
+  (c8wbBnPacked .adamw    false "cifar8wb_bn_adam_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bn_mom_train_step.mlir"
+  (c8wbBnPacked .nesterov false "cifar8wb_bn_mom_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bn_sgd_train_step.mlir"
+  (c8wbBnPacked .sgd      false "cifar8wb_bn_sgd_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bn_bf16adam_train_step.mlir"
+  (c8wbBnPacked .adamw    true  "cifar8wb_bn_bf16adam_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bn_bf16mom_train_step.mlir"
+  (c8wbBnPacked .nesterov true  "cifar8wb_bn_bf16mom_train_step")
+#eval IO.FS.writeFile "verified_mlir/cifar8wb_bn_bf16sgd_train_step.mlir"
+  (c8wbBnPacked .sgd      true  "cifar8wb_bn_bf16sgd_train_step")
+
+-- Eval forward for the batched wide BN slug: the `cifar8w_bn_fwd` renamed. Per-example BN means
+-- train and eval normalize identically, so there is nothing to freeze and nothing to re-render —
+-- and copying rather than re-rendering means it cannot drift from what the f32 arm evaluates
+-- against, which is exactly what makes the f32-vs-bf16 comparison a controlled one.
+#eval do
+  let fwd ← IO.FS.readFile "verified_mlir/cifar8w_bn_fwd.mlir"
+  IO.FS.writeFile "verified_mlir/cifar8wb_bn_fwd.mlir" (fwd.replace "@cifar8w_bn_fwd" "@cifar8wb_bn_fwd")

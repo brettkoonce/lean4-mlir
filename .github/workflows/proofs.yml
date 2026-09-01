@@ -128,9 +128,16 @@ jobs:
               verified_mlir/cifar8wb_bf16sgd_train_step.mlir \
               verified_mlir/cifar8wb_bf16mom_train_step.mlir \
               verified_mlir/cifar8wb_bf16adam_train_step.mlir \
+              verified_mlir/cifar8wb_bn_sgd_train_step.mlir \
+              verified_mlir/cifar8wb_bn_mom_train_step.mlir \
+              verified_mlir/cifar8wb_bn_adam_train_step.mlir \
+              verified_mlir/cifar8wb_bn_bf16sgd_train_step.mlir \
+              verified_mlir/cifar8wb_bn_bf16mom_train_step.mlir \
+              verified_mlir/cifar8wb_bn_bf16adam_train_step.mlir \
               verified_mlir/cifar8_bf16_fwd.mlir \
               verified_mlir/cifar8b_fwd.mlir \
               verified_mlir/cifar8wb_fwd.mlir \
+              verified_mlir/cifar8wb_bn_fwd.mlir \
             || { echo "::error::committed verified_mlir/{cnn,cifar,cifar_bn,cifar8,cifar8_bn,cifar8_bf16*,cifar8b*,cifar8wb*}_train_step.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/CnnRender.lean)"; exit 1; }
           # ⭐ The two forwards come from THIS module, not RenderB, and were baselined while the
           # train step beside them was guarded — so `resnet34_fwd` could drift away from the graph

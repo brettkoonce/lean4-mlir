@@ -10,6 +10,8 @@
 # SUITE=imagenette (default) — the seven 80-epoch Imagenette trainers.
 # SUITE=small — the book's chapter 1-4 trainers: MNIST at 12 epochs, CIFAR at 40 (the ladder
 #   12 -> 40 -> 80 standardised 2026-08-31).
+# SUITE=bnprec — Chapter 4's Lever 3 on the normalized net: `cifar8wb-bn-ablation`, six arms
+#   (SGD/Nesterov/AdamW x f32/bf16) at 40 epochs. planning/bf16_batchnorm.md.
 #
 # ⭐ CIFAR is the WIDE head (`cifar8w-{,bn-}ablation`, d1=512), not the narrow `cifar-{,bn-}verified`
 #   this suite first pointed at. Chapter 4 quotes the wide net — §4.1's 77.48% and §4.2's
@@ -80,7 +82,15 @@ case "$SUITE" in
           [mnist_cnn]=mnist-cnn-verified
           [mnist_mlp]=mnist-mlp-verified [mnist_linear]=mnist-linear-verified )
     EPOCHS=( [cifar8w_bn]=40 [cifar8w]=40 [mnist_cnn]=12 [mnist_mlp]=12 [mnist_linear]=12 ) ;;
-  *) echo "⛔ unknown SUITE=$SUITE (imagenette|small)"; exit 1 ;;
+  bnprec)
+    # Chapter 4's Lever 3 on the NORMALIZED net (planning/bf16_batchnorm.md). ONE binary, SIX arms:
+    # three optimizers x {f32, bf16} on the BN net rendered from the batched op family, so
+    # precision is the only thing that moves inside a pair. ~20 min/seed (6 arms x 40 ep).
+    # ⚠ Six final-epoch lines per log, not three — the OK line's awk already collects all of them.
+    NETS=(cifar8wb_bn)
+    EXE=( [cifar8wb_bn]=cifar8wb-bn-ablation )
+    EPOCHS=( [cifar8wb_bn]=40 ) ;;
+  *) echo "⛔ unknown SUITE=$SUITE (imagenette|small|bnprec)"; exit 1 ;;
 esac
 
 JOBS=()

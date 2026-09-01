@@ -1492,6 +1492,12 @@ lean_exe «cifar8w-bn-ablation» where
   root := `apps.ablation.MainCifar8WideBnAblation
   moreLinkArgs := lowererLink
 
+/-- Chapter 4 Lever 3 on the NORMALIZED net: the BN net on the batched op family, f32 and bf16,
+    three optimizers each. See planning/bf16_batchnorm.md. -/
+lean_exe «cifar8wb-bn-ablation» where
+  root := `apps.ablation.MainCifar8WideBnBf16Ablation
+  moreLinkArgs := lowererLink
+
 -- ch6 B9: real ResNet-34 ([3,4,6,3], per-channel BN, strided downsamples) trained on
 -- VERIFIED-rendered StableHLO; 146 params. Train step AND eval forward both come from
 -- LeanMlir/Proofs/Codegen/ResNet34Render.lean (pretty(provenGraph)); regenerate with
