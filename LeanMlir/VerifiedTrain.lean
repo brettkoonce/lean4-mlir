@@ -298,6 +298,16 @@ def cdOn (v : String) : Bool := (v.splitOn "do").length > 1
     `acc` puts the marker in the MIDDLE. -/
 def accOn (v : String) : Bool := (v.splitOn "acc").length > 1
 
+/-- LAMB — the per-tensor trust ratio (`R34Opt.lambAccum`), RSB-A3's optimizer.
+    ⚠ SUBSTRING, not prefix, for `accOn`'s reason one spelling over: the EMA form is `emalamb…`,
+    which does not start with "lamb". -/
+def lambOn (v : String) : Bool := (v.splitOn "lamb").length > 1
+
+/-- BCE-with-logits (timm `BinaryCrossEntropy`), RSB's loss — not softmax CE.
+    ⚠ SUBSTRING: the marker TRAILS the shape and is itself often trailed, by `wd001` or `bf16`
+    (`lambaccdp8x64wxclipbcebf16`), so neither a prefix nor a suffix test finds it. -/
+def bceOn (v : String) : Bool := (v.splitOn "bce").length > 1
+
 /-- `k`, read back out of the name. The graph has `1/k` BAKED in and the driver decides the apply
     cadence; a disagreement does not fail, it trains at a silently wrong effective learning rate.
     Parsed from AFTER the marker, not from a fixed offset — see `accOn`. -/
@@ -1481,8 +1491,20 @@ min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE
 {gbs} x {accK} = EFFECTIVE BATCH {gbs * accK}. {nb} micro-batches/epoch = {nb / accK} updates/epoch; \
 the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on \
 micro-batches."
-    IO.println s!"     ⚠ This is AdamW at that batch, NOT rsb-faithful — LAMB and BCE-with-logits \
-are still absent (planning/rsb_a3_r50_verified.md §2.3)."
+    -- ⚠⚠ CONDITIONAL, AND IT WAS NOT. This line fired on EVERY accumulation run, naming two
+    -- absences unconditionally — including for `lambaccdp8x64wxclipbcebf16`, which ResNet50RenderB
+    -- renders as `R34Opt.lambAccum 8` with `bce := true`. So on RSB-A3, the one recipe it exists to
+    -- warn about, it asserted the exact opposite of the graph that was loaded. A warning that is
+    -- always printed carries no information; one that is always printed AND sometimes false is
+    -- worse, because the run log then reads as evidence for the wrong recipe.
+    let missing := (if VerifiedVariant.lambOn variant then [] else ["LAMB"])
+                ++ (if VerifiedVariant.bceOn  variant then [] else ["BCE-with-logits"])
+    if missing.isEmpty then
+      IO.println s!"     ▸ LAMB (per-tensor trust ratio) + BCE-with-logits: RSB-faithful optimizer \
+and loss at this batch."
+    else
+      IO.println s!"     ⚠ This is AdamW at that batch, NOT rsb-faithful — \
+{String.intercalate " and " missing} still absent (planning/rsb_a3_r50_verified.md §2.3)."
     -- ⚠⚠ A cycle that straddles the epoch boundary applies with fewer than `k` micro-batches while
     -- the graph still divides by `k`, i.e. a short step at a wrong scale — once per epoch, invisible
     -- in the loss curve. Refuse rather than round.
@@ -1750,7 +1772,15 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- cost scales very differently from conv across GPUs and can't borrow the conv
   -- factor. A full ViT epoch is too slow to probe, so we time a step window.
   let probeSteps := (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?)
-  let probeWarm := 8
+  -- LEAN_MLIR_PROBE_WARM: the step the probe clock STARTS at. Default 8 preserves every
+  -- committed number. ⛔ 8 IS TOO EARLY TO BE A PRODUCTION RATE. `SHIM PREFETCH` keeps one
+  -- read in flight PER HANDLE (depth = SHIM_WORKERS = 8), and the producers fill those while
+  -- the graph compiles and while the ~90 s val drain runs — so the first ~8-16 steps are served
+  -- from a queue nobody had to wait for. They measure BURST rate, not production rate. A window
+  -- starting at 8 with `LEAN_MLIR_MAX_STEPS=40` is 32 samples of which ~16 are burst, which puts
+  -- the median exactly on the boundary: that is how §9.6's ViT row got 159 ms/step where the
+  -- steady state is 375 (2.4×). Benchmarks want PROBE_WARM=200 with MAX_STEPS=600.
+  let probeWarm := ((← IO.getEnv "LEAN_MLIR_PROBE_WARM").bind (·.toNat?)).getD 8
   let mut probePrev := 0
   let mut probeTimes : Array Nat := #[]
   -- LEAN_MLIR_MAX_EPOCHS: same opt-in cap as `VerifiedNet.train` (absent → full run).
@@ -2149,7 +2179,17 @@ gate's control, not a configuration.")
           if bi == ps then
             -- robust: median per-step time (drops the cold-cache / GC-blip outliers)
             let sorted := probeTimes.qsort Nat.blt
-            IO.println s!"  PROBE: {sorted[sorted.size / 2]!} ms/step (median of {sorted.size} steps {probeWarm+1}..{ps}, {net.name})"
+            -- ⭐ The SPREAD is the diagnostic, not the median. A compute-bound step is tight
+            -- (min ≈ median); a SHIM-STARVED one is not — the min is what the step costs when the
+            -- batch happened to be ready, so `median - min` is the wait. Print both, plus p90, so
+            -- a slow kernel and a slow producer are distinguishable from ONE run instead of
+            -- needing the synthetic arm to tell them apart.
+            let pmin := sorted[0]!
+            let pmed := sorted[sorted.size / 2]!
+            let p90  := sorted[(sorted.size * 9) / 10]!
+            let psum := probeTimes.foldl (· + ·) 0
+            IO.println s!"  PROBE: {pmed} ms/step (median of {sorted.size} steps {probeWarm+1}..{ps}, {net.name})"
+            IO.println s!"  PROBE-SPREAD: min={pmin} med={pmed} p90={p90} mean={psum / sorted.size} ms/step (starvation wait = med-min = {pmed - pmin} ms)"
             (← IO.getStdout).flush
             return ()
       | none => pure ()
