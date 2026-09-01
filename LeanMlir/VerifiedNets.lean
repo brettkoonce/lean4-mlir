@@ -106,6 +106,12 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
   data     := .mnist
   layers   := [.dense 784 d₁, .relu, .dense d₁ d₂, .relu, .dense d₂ 10]
   blurb    := s!"MNIST-MLP-{d₁}x{d₂} via the VERIFIED renderer (784→{d₁}→{d₂}→10) → %LOWERER% → GPU"
+  -- ⚠ Same carve-out as `mlpVerified`: this renders through `mlpTrainStepFaithfulV`, which
+  -- emits a trailing report-only `%loss`. Missing here from ff1ef3d (2026-08-12) until
+  -- 2026-09-01, so every `mnist-mlp-grid` invocation died on `G4 VIOLATION: returns 7
+  -- outputs, caller supplied 6` — the width sweep behind §2.5 has not been runnable since
+  -- the day after its data was taken. The gate refused loudly; nothing else noticed.
+  lossSlot := true
 
 -- `mlpG 512 512` is exactly the canonical `mlpVerified` architecture.
 #guard (mlpG 512 512).toSpecs == mlpVerified.toSpecs
@@ -159,6 +165,10 @@ def cnnG (d : Nat) : VerifiedNetSpec where
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 6272 d, .relu, .dense d d, .relu, .dense d 10]
   blurb    := s!"MNIST-CNN-fc{d} via the VERIFIED renderer (conv32→conv32→pool→{d}→{d}→10) → %LOWERER% → GPU"
+  -- ⚠ As `mlpG` above and `cnnVerified`: this render carries a trailing report-only `%loss`.
+  -- Missing since ff1ef3d, so `mnist-cnn-grid` died on `G4 VIOLATION: returns 11 outputs,
+  -- caller supplied 10`. Both grid drivers broke in the same commit and neither was run again.
+  lossSlot := true
 
 -- `cnnG 512` is exactly the canonical `cnnVerified` architecture.
 #guard (cnnG 512).toSpecs == cnnVerified.toSpecs
