@@ -58,6 +58,53 @@ independent misses on one net point at the published row coming from an **older 
 ▶ **Next step is `git log` on the R34 Imagenette path, not more seeds.** Settle this before
 rewriting §5.4's numbers, because the answer decides whether they are stale or wrong.
 
+### 1.2-bis ✅ §1.2 IS SOLVED — it is `f4e4172`, and it is "stale", not "wrong"
+
+Do not spend the `git log` hour §1.2 asks for; it was spent 2026-09-01. The answer:
+
+* The published **89.71** came from `runs/2026-08-12-r34-imagenette-xla-cuda/`, which loaded
+  `verified_mlir/resnet34_adam_train_step.mlir` — the **same** artifact the n=5 seeds use. So it is
+  not a two-renderer mixup. (⚠ Worth knowing anyway: R34 has TWO renderers with DIFFERENT BN
+  semantics — `resnet34_train_step.mlir` is per-example, 289 × `reduce[2,3]`, and
+  `resnet34_adam_train_step.mlir` is batch, 468 × `reduce[0,2,3]`. The MobileNetV2 two-worlds
+  divergence, live on R34. It is not the cause here, but it is a live trap.)
+* That artifact **changed** on 2026-08-29 in **`f4e4172`** *"perf(render): pointwise ops at their
+  4-D shape"*. Diff against the pre-publication blob: **+261 reshapes (585 → 846) and NOTHING
+  else** — every reduction axis identical, every other op count identical.
+* Same seed, before and after: **89.707 → 90.038**, a **+0.33** shift. Seed variation is ±0.25, so
+  the graph change is detectable above it.
+
+⭐ **So the published row is a single run on a superseded graph.** Reshapes are numerically inert
+in exact arithmetic; what moved is XLA's fusion and therefore the rounding, compounded over 80
+epochs. The net is the same net. ▶ Reprint from the current-graph measurement; do not hunt a bug.
+
+⚠ **This is not R34-only.** `f4e4172` touched **124 artifacts**, and ALL SIX `runs/2026-08-12-*`
+transcripts the book prints predate it — r34, convnext, enet, mnv2, vit and cifar8w. Every
+Imagenette chapter transcript is graph-stale, not just format-stale. Chapters 6-9 inherit this.
+
+### 1.2-ter ⚠ Before tagging: which numbers predate `f4e4172`?
+
+The release intends to declare MNIST / CIFAR / Imagenette / ImageNet-with-ResNet **stable**.
+
+| set | graph state | action |
+|---|---|---|
+| MNIST, CIFAR | `runs/2026-09-01-*`, **post**-fix | ✅ nothing to do |
+| Imagenette Ch5 | 2026-08-12 transcript is **pre**-fix | the fresh §5.1 run (§1.1, ~45 min) fixes format AND graph in one go — do it |
+| Imagenette n=5 | `2026-08-31-*`, **post**-fix | ✅ already current; reprint §5.4 from these |
+| **R50 ImageNet** (76.95 / 77.07 / 78.26 / 77.91) | **pre**-fix (runs are 2026-08-07…08-24) | ▶ see below |
+
+▶ **Recommendation: do NOT re-run the R50 ImageNet cells.** A 100-epoch ImageNet cell is ~24 h, and
+the expected shift is smaller than the number's own measurement noise: the Imagenette shift was
++0.33, while the 95% binomial interval on ImageNet's 50k val at 77% is **±0.37**. You would be
+buying a change you cannot distinguish from the interval already printed beside it.
+
+⭐⭐ **And the measurement is free anyway.** The A3-RSB run just finished on the other box. If it
+used current artifacts (check: does its log's `resnet50in*_train_step.mlir` match the working tree,
+or did that box pull after 2026-08-29?), then **A3-new vs the published 77.91 IS the measurement of
+`f4e4172`'s ImageNet impact.** If it lands inside ±0.37, the pre-fix ImageNet rows need no re-run
+and you can say so in one sentence. If it moves more than that, re-running becomes a real question.
+▶ Do that comparison before deciding to spend 24 h.
+
 ### 1.3 Cosine annealing is now Chapter 5's to introduce
 
 Chapter 4 was converted to a **constant** learning rate this session (see
@@ -69,6 +116,29 @@ Chapter 4 was converted to a **constant** learning rate this session (see
 prose explaining the schedule or what it is worth. ▶ Write that. The measurement is in hand:
 removing cosine cost the CIFAR BN momentum arm **0.66 points** (77.14 → 76.48 median, n=5 each) and
 cost SGD and AdamW essentially nothing — so the schedule flatters the arm that already wins.
+
+### 1.3-bis Chapter 5 must now pay off Lever 3, exactly as it pays off cosine
+
+Chapter 4's §4.5 was rewritten 2026-09-01 (`planning/bf16_batchnorm.md`) and now ends:
+
+> *"Thirty arm-runs, no NaN, nothing collapsed to chance. That is the result
+> Chapter~\ref{chap:residual} was going to assume, and it no longer has to."*
+
+▶ Chapter 5 should collect that: bf16 on the normalized CIFAR net costs +0.31 / −0.02 / −0.33 with
+every delta inside its own fp32 row's spread, which is the licence for training the ImageNet jobs
+in bf16. One or two sentences where the precision choice is first made.
+
+⚠⚠ **And be precise about which runs are bf16, because Chapter 4 now is.** The old §4.5 said *"every
+network from Chapter 5 onward is trained that way"*, which is false: the **Imagenette** runs behind
+Chapters 5-10 all load **f32** artifacts (`{net}_adam_train_step.mlir`, zero bf16 in any of them);
+the bf16 rows are the **full-ImageNet** jobs. §4.5 was corrected to say so. Chapter 5 is the chapter
+that has to be consistent with it — and §5.8 already carries the symptom, the caveat that *"the PJRT
+column is not internally uniform: its 2018 entry is bf16, its A3 entry fp32."*
+
+⭐ Chapter 4 also now warns that the **op family** is a lever invisible to the proofs: it moves the
+un-normalized CIFAR net by +2.0 / +1.7 and the normalized one by ~0.2. §1.2-bis is the same class
+of finding on R34 — the rendering path moved a published number by 0.33 with no proof disturbed.
+The two belong together if Chapter 5 says anything about what the certificates do not cover.
 
 ### 1.4 Phase-N vocabulary
 
@@ -123,8 +193,13 @@ chapters will `\ref` into them.
 ## 3. Suggested order
 
 1. Listings audit (§1.5 of the four-chapter pattern) — cheap, high yield.
-2. `git log` on R34 Imagenette to settle §1.2 before touching numbers.
+2. ~~`git log` on R34 Imagenette to settle §1.2~~ — ✅ DONE, see §1.2-bis: it is `f4e4172`,
+   the numbers are stale rather than wrong, and §5.4 reprints from the 2026-08-31 seeds.
 3. Fresh §5.1 run without residency; splice with the wrapped-CI shape.
 4. Write the cosine payoff §4.1 now promises.
 5. Rename the phase-N labels.
-6. Fold in the A3 bf16 result when the other machine reports.
+6. Fold in the A3 bf16 result when the other machine reports — and use it for §1.2-ter's
+   free measurement of `f4e4172`'s ImageNet impact before deciding on any 24 h re-run.
+7. Before tagging: `lake build Certs` (3923 jobs — plain `lake build` skips the corpus),
+   `python3 scripts/check_render_coverage.py`, and re-elaborate the renderers to confirm every
+   artifact regenerates byte-identically.
