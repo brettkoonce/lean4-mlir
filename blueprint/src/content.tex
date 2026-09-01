@@ -4076,9 +4076,11 @@ stated up front so the graphs are no surprise:
   more than anything else here. AdamW sits between the two, and its
   per-coordinate adaptivity earns less than momentum does.
 \item \textbf{The arithmetic does not move the ranking.} Recomputing the
-  whole ladder in bf16 and in fp8 leaves the optimizer ordering exactly
-  where it was, with medians agreeing to within half a point --- less than
-  the spread between repeated runs of a single configuration. The
+  normalized ladder in bf16 leaves the optimizer ordering exactly where it
+  was, with medians moving by $+0.31$, $-0.02$ and $-0.33$ --- every one of
+  them smaller than the spread between repeated runs of a single
+  configuration. Drop the normalization and bf16 starts to show: the
+  medians move by up to $1.4$ points and one seed collapses. The
   eight-layer stack is fragile, and the same runs show it, but it is
   fragile in fp32 too. What breaks the network is depth without
   normalization, not the number format.
@@ -4419,19 +4421,30 @@ not have to be \texttt{float32}: \textbf{bfloat16} keeps float32's
 exponent range and throws away sixteen bits of mantissa, so it holds
 roughly three significant decimal digits instead of seven while
 overflowing at the same place. Modern GPUs multiply it about twice as
-fast and store it in half the memory, which is why every network from
-Chapter~\ref{chap:residual} onward is trained that way. The question this
-chapter would like to answer is whether that costs any accuracy.
+fast and store it in half the memory, which is why the ImageNet-scale runs
+from Chapter~\ref{chap:residual} onward are trained that way. (The
+Imagenette runs those chapters lead with stay in \texttt{float32}; bf16 is
+what the full-ImageNet jobs need, and the tables there say so per row.) The
+question this chapter would like to answer is whether that costs any
+accuracy.
 
-\medskip\noindent It cannot answer it, and the reason is worth one
-paragraph. The renderer has two convolution op families --- the
-per-example one these MNIST and CIFAR chapters use, and the batched one
-the ImageNet chapters use --- and bf16 twins exist only for the batched
-family. BatchNorm has no bf16 twin in either. So bf16 here can only be
-measured on the \emph{un-normalized} net, and against a baseline in a
-different op family than the fp8 arm. Here is the one comparison
-that is clean --- same net, same batched family, same constant rate, five
-seeds, fp32 against bf16:
+\medskip\noindent It can, on the net that matters, and getting there
+took one change worth a paragraph. The renderer has two convolution op
+families --- the per-example one these MNIST and CIFAR chapters use, and
+the batched one the ImageNet chapters use --- and the bf16 twins were
+built for the batched family only. The normalized net was rendered
+per-example, so until it moved across there was no bf16 arm to run on it.
+Moving it needed no new arithmetic: BatchNorm itself stays
+\texttt{float32}, which is not a shortcut but the recipe every ImageNet
+network in this book uses --- low precision through the convolutions and
+the dense layers, full precision through the normalization.
+
+\medskip\noindent So: the eight-convolution net \emph{with} BatchNorm,
+one renderer, one constant rate, forty epochs, five seeds, and precision
+the only thing that differs between a pair of rows. All twenty-three
+convolutions are bf16 in the low-precision arms --- forward, input
+gradient and weight gradient alike. Six arms, five seeds each, from
+\texttt{runs/2026-09-01-bnprec-seeds/}:
 
 \begin{center}
 \small
@@ -4439,40 +4452,46 @@ seeds, fp32 against bf16:
 \hline
  & & \multicolumn{5}{c}{final test accuracy, per seed} & median \\
 \hline
-SGD (lr 0.1)   & fp32 & 71.31 & 70.74 & 70.04 & 71.13 & 69.02 & 70.74 \\
-               & bf16 & 69.14 & 68.89 & 70.09 & 69.34 & 70.72 & 69.34 \\[2pt]
-momentum       & fp32 & 71.14 & 73.45 & 74.25 & 74.21 & 73.85 & 73.85 \\
-               & bf16 & \emph{10.0} & 73.29 & 72.14 & 74.47 & 74.41 & 73.29 \\[2pt]
-AdamW          & fp32 & 71.56 & 74.23 & 72.76 & 73.53 & 73.70 & 73.53 \\
-               & bf16 & 73.44 & 74.00 & 72.23 & 72.99 & 73.90 & 73.44 \\
+SGD (lr 0.1)   & fp32 & 74.63 & 75.00 & 73.11 & 73.76 & 74.39 & 74.39 \\
+               & bf16 & 74.84 & 74.65 & 75.30 & 73.55 & 74.70 & 74.70 \\[2pt]
+momentum       & fp32 & 76.72 & 76.46 & 77.14 & 76.39 & 76.78 & 76.72 \\
+               & bf16 & 77.32 & 76.91 & 76.28 & 76.29 & 76.70 & 76.70 \\[2pt]
+AdamW          & fp32 & 74.75 & 75.08 & 73.90 & 73.98 & 74.48 & 74.48 \\
+               & bf16 & 74.53 & 73.76 & 74.23 & 74.15 & 73.95 & 74.15 \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Medians differ by $-1.40$, $-0.56$ and
-$-0.09$, and every one of those is smaller than the spread
-\emph{within} the corresponding fp32 row. One bf16 momentum seed
-collapsed to chance; no fp32 seed did, and one run in five is not enough
-to say whether that is bf16 or the un-normalized net, which the previous
-section showed is the fragile part.
+\noindent Medians move by $+0.31$, $-0.02$ and $-0.33$. Each of those is
+smaller than the spread \emph{within} the corresponding fp32 row --- $1.89$,
+$0.75$ and $1.18$ --- so on this net, at this scale, the number format is
+not measurable against the noise of rerunning the same configuration.
+Thirty arm-runs, no \texttt{NaN}, nothing collapsed to chance. That is the
+result Chapter~\ref{chap:residual} was going to assume, and it no longer
+has to.
 
-\medskip\noindent For scale, changing the op family at fixed fp32 ---
-per-example to batched, the same arithmetic throughout --- moves the
-answer by $+2.0$ on SGD and $+1.7$ on momentum. The lever we did not mean
-to pull is bigger than the one we did.
+\medskip\noindent The un-normalized net answers differently, and the
+difference is the interesting part. Run the same comparison there and the
+medians move by $-1.40$, $-0.56$ and $-0.09$, and one bf16 momentum seed
+collapses to chance where no fp32 seed does. Normalization is doing more
+than accelerating training: it is absorbing the perturbation. A net that
+was already fragile in fp32 --- the three \texttt{NaN} losses under a
+correct AdamW step from the previous section --- is the one where
+sixteen fewer mantissa bits show up at all.
 
-\medskip\noindent What that licenses is narrow but real: bf16 introduces
-no failure this net does not already have in fp32 --- the \texttt{NaN}
-losses of the previous section appear in both, and in the same column ---
-and where the comparison is clean at all it costs between nothing and a
-point and a half, on cells whose own run-to-run range is wider than that.
-It does not license the
-claim Chapter~\ref{chap:residual} actually needs --- that a
-\emph{normalized} net trains the same in bf16 --- and that measurement
-waits on a bf16 BatchNorm render, which is where the next chapter starts.
-An fp8 (E4M3) arm exists in the repository and is left out here for the
-same reason: its render is a lowering probe with forward convolutions
-only, not a trainable arm.
+\medskip\noindent The same pattern holds for a lever we did not mean to
+pull. Changing the op family at fixed fp32 --- per-example to batched, the
+same arithmetic throughout --- moves the un-normalized net by $+2.0$ on
+SGD and $+1.7$ on momentum, which is larger than anything precision does
+to it. On the normalized net the identical change is worth $-0.11$,
+$+0.37$ and $+0.19$. The rendering path is a lever, it is invisible to the
+proofs, and normalization damps it too.
+
+\medskip\noindent An fp8 (E4M3) arm exists in the repository and is left
+out of this table on purpose: its render rounds the forward convolutions
+only and leaves the backward in \texttt{float32}, so it is a lowering
+probe rather than a trainable arm, and reporting it beside bf16 would
+imply a comparison that was never run.
 
 \subsection*{Does the head width matter?}
 
@@ -4507,7 +4526,7 @@ gfx1100s, the whole curve is one short run:
     xlabel={Dense-head width $d$ (both head layers; backbone fixed)},
     ylabel={CIFAR-10 test accuracy (\%)},
     xmode=log, log basis x=2,
-    xmin=6.5, xmax=5000, ymin=65.5, ymax=73,
+    xmin=6.5, xmax=5000, ymin=65.3, ymax=73.4,
     xtick={8,16,32,64,128,256,512,1024,2048,4096},
     xticklabels={8,16,32,64,128,256,512,1024,2048,4096},
     ytick={66,68,70,72},
@@ -4516,8 +4535,12 @@ gfx1100s, the whole curve is one short run:
     label style={font=\small},
     every axis plot/.append style={line width=1pt, mark size=1.5pt},
 ]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(8,66.78) (16,71.10) (32,71.70) (64,71.07) (128,71.43) (256,71.49) (512,71.55) (1024,72.17) (2048,71.60) (4096,71.73)
+\addplot[blue, mark=*, mark options={fill=blue},
+  error bars/.cd, y dir=both, y explicit,
+  error bar style={blue!55!white, line width=0.6pt},
+  error mark options={rotate=90, mark size=2.5pt, blue!55!white, line width=0.6pt}]
+coordinates {
+(8,66.78) +- (0,0.92) (16,71.10) +- (0,0.89) (32,71.70) +- (0,0.88) (64,71.07) +- (0,0.89) (128,71.43) +- (0,0.89) (256,71.49) +- (0,0.89) (512,71.55) +- (0,0.88) (1024,72.17) +- (0,0.88) (2048,71.60) +- (0,0.88) (4096,71.73) +- (0,0.88)
 };
 \addplot[only marks, mark=o, mark size=4pt, red, line width=1pt, forget plot] coordinates {(64,71.07)};
 \node[anchor=west, font=\footnotesize, red!70!black] at (axis cs:74,69.4)
@@ -4528,13 +4551,19 @@ gfx1100s, the whole curve is one short run:
 
 \noindent Dense-head width sweep for the 8-conv cifar8 net with per-channel
 BatchNorm, AdamW, 25 epochs, conv backbone held at $[16,16,32,32]$
-(\texttt{runs/cifar8bn\_grid\_results.tsv}). Past a 16-wide head the curve is
-essentially flat, and everything from $d{=}16$ to $d{=}4096$ lands inside a
-single point ($71.1$ to $72.2\%$), and the $256\times$ wider head buys
-nothing, while its $17$M-parameter classifier just overfits (train loss
-$0.03$, test unmoved). The only real drop is at $d{=}8$ ($66.8\%$), where the
-$128{\to}8$ first layer throttles the 128-dim feature map the convolutions
-produce. The canonical $d{=}64$ (circled) sits squarely on the plateau: the
+(\texttt{runs/cifar8bn\_grid\_results.tsv}). Each point is one run, so the
+whiskers are the 95\% Wilson interval for that accuracy on the $9{,}984$
+evaluated test images --- about $\pm 0.9$ here --- and not a spread over
+repeats. Read that way the curve makes a sharper claim than ``essentially
+flat'': every width from $d{=}16$ to $d{=}4096$ spans only $71.1$ to
+$72.2\%$, which is narrower than a single point's own interval, so the nine
+plateau intervals all overlap and \emph{none} of the differences between
+them is resolvable from this experiment. The $256\times$ wider head buys
+nothing measurable, while its $17$M-parameter classifier just overfits
+(train loss $0.03$, test unmoved). The one difference that does survive is
+$d{=}8$ ($66.8\%$, interval $65.9$--$67.7$), which clears the lowest plateau
+bound of $70.2$ by more than two points: there the $128{\to}8$ first layer
+throttles the 128-dim feature map the convolutions produce. The canonical $d{=}64$ (circled) sits squarely on the plateau: the
 head width genuinely does not matter here, which is the whole reason the net
 could borrow MNIST's classifier untouched. (Absolute accuracy is a couple of
 points below the 40-epoch board above, because this is a 25-epoch

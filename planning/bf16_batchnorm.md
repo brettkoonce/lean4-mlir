@@ -5,6 +5,38 @@ rate and found that its precision lever cannot answer the question it asks.
 
 **This is self-contained.** A session that has read nothing else can execute it.
 
+---
+
+## ✅ STATUS 2026-09-01: §3 steps 1-4 DONE, and **step 1 was not needed**
+
+⭐⭐ **The BN bf16 twin does not have to exist, and should not.** Every bf16 net in this repo —
+R34, R50, MNv2, MNv4, EfficientNet — keeps BatchNorm in **f32** and rounds only the convolutions
+and the dense layers. `ResNet34RenderB.lean:141` is the pattern: the conv backward branches on
+`bf16`, the `bnBatchBack` one line above it does not. Repo-wide there is no `*Bf16` BN op and no
+call site that wants one. Chapter 5 trains mixed-precision, so a bf16 BatchNorm would measure a
+recipe **Chapter 5 does not use**. §3 step 1 — the three-term backward this document said to
+budget the session on — is deleted.
+
+What the chapter's claim actually needs is the BN net on the **batched op family** with bf16
+convs and f32 BN, and that needs **zero new verified ops**.
+
+**Built instead** (all gates green, see §8):
+
+* `cifar8BnTrainStepFaithfulB` — `CnnRender.lean:1893`, trailing `(bf16 : Bool := false)`.
+* Seven artifacts, `verified_mlir/cifar8wb_bn_{sgd,mom,adam}` × {f32, bf16} + the forward.
+* `cifar8wbBnVerified`, the `cifar8wb-bn-ablation` binary (six arms), `SUITE=bnprec` in
+  `scripts/seed_sweep.sh`.
+
+⚠ **BatchNorm also stays PER-EXAMPLE**, which §2 did not anticipate. The committed BN step
+reduces over `[2,3]`, not `[0,2,3]`, and returns no running statistics — train and eval normalize
+identically. Switching to the batch-coupled `bnBatchF` would change the FUNCTION (confounding the
+precision comparison), break `cifar8w_bn_fwd.mlir`, and need μ/var outputs the packed 119/117
+protocol has nowhere to put. So the BN nodes stay per-example `SHlo` trees inside a `pretty B`
+render — legitimate because each `pretty` node is an independent tree linked to the next only by
+the SSA name, exactly as the head's `rows := 1` ops already are.
+
+---
+
 ▶ **This document is one session's work, and it ends in the blueprint.** Build the BN bf16 twin
 (§3 steps 1-5), then use it to finish Chapter 4 (§3 step 6 and §7). The op work is not the
 deliverable; the chapter is. If the twin turns out to be a week rather than a day, §7 says what
@@ -53,6 +85,12 @@ Its signature has **no** `bf16`/`fp8` flags. Compare `cifar8AdamTrainStepFaithfu
 
 ⭐ So exactly **one op pair** is missing, and it is BatchNorm's.
 
+⛔ **WITHDRAWN 2026-09-01 — this table asks the wrong question.** It is true that BN has no bf16
+twin, and false that the chapter needs one: no net in this repo rounds BN, and Chapter 5 does not
+either. The real gap was that the BN net was rendered on the PER-EXAMPLE family, where the conv
+bf16 twins do not exist. Moving it to the batched family closes it with no new ops. See the
+STATUS block at the top.
+
 ---
 
 ## 2. Two routes; take (b)
@@ -68,7 +106,11 @@ ImageNet chapter is batched.
 
 ## 3. The work, in order
 
-1. **`bnPerChannelFBf16` / `bnPerChannelBackBf16`** as `SHlo` constructors.
+1. ⛔ **CANCELLED — `bnPerChannelFBf16` / `bnPerChannelBackBf16` are not needed.** Kept below only
+   so a reader knows why the session did not build them; see the STATUS block. The rest of the
+   step-1 text is the original plan.
+
+   **`bnPerChannelFBf16` / `bnPerChannelBackBf16`** as `SHlo` constructors.
    ▶ Model them on `convBackBatchedBf16` (`StableHLO.lean:1019`, `den` case at `:2234`). Its
    comment states the discipline: *"dgrad is itself a convolution, so it takes the same emit shape
    and the same `den` discipline as the forward."*
@@ -160,3 +202,75 @@ ResNet session on the other machine (`planning/resnet_chapter_pass.md`).
   contradicted by numbers printed two paragraphs above them, and both were caught by reading the
   rendered PDF rather than the source.
 
+
+---
+
+## 8. Gates that passed, 2026-09-01
+
+Everything below was run; none of it is an estimate.
+
+| gate | result |
+|---|---|
+| `lake build LeanMlir.Proofs.Codegen.CnnRender` | green, 2230 jobs |
+| op histogram, new f32 arm vs committed `cifar8w_bn_adam_train_step` | identical **except 8 extra `reshape`** — the BN splice points. Same net. |
+| interface | **119 in / 117 out**, byte-compatible with the existing BN driver protocol |
+| BN reduction axes | 64 × `[2,3]` (per-example BN) + 24 × `[0,2,3]` (γ/β/conv-bias param grads) — matches the committed step exactly |
+| bf16 emit shape | all **23/23** convolutions: bf16-typed result **plus** convert back. The [[bf16-conv-emit-shape]] trap is avoided; forward, dgrad and wgrad all covered |
+| `scripts/check_render_coverage.py` | green, and its **negative control fires** — deleting one artifact from `proofs.yml` fails it, so the seven really are guarded |
+| re-elaboration | artifacts regenerate **byte-identically** |
+| smoke, all six arms | compile, load, train. f32 step-0 loss `2.412844`, bf16 `2.413753` — bf16 is active and moves only the 4th decimal |
+
+⚠ The head's softmax reduce is `[2]` here where the `…V` render has `[1]` (`softmaxRow (m := 1)`
+on `[B,1,nClasses]` vs `softmaxDiv` on `[B,nClasses]`). Same function, and the SAME difference is
+already present in the committed no-BN `cifar8w_adam` vs `cifar8wb_adam` pair — it is the batched
+idiom, not a defect introduced here.
+
+### 8.1 The measurement — ✅ DONE, and bf16 is LICENSED
+
+`runs/2026-09-01-bnprec-seeds/`, five seeds × six arms, 40 epochs, constant lr, 5m/seed on four
+cards.
+
+| arm | s1 | s2 | s3 | s4 | s5 | median | bf16 − fp32 | fp32 row spread |
+|---|---|---|---|---|---|---|---|---|
+| SGD fp32 | 74.63 | 75.00 | 73.11 | 73.76 | 74.39 | **74.39** | | 1.89 |
+| SGD bf16 | 74.84 | 74.65 | 75.30 | 73.55 | 74.70 | **74.70** | **+0.31** | |
+| mom fp32 | 76.72 | 76.46 | 77.14 | 76.39 | 76.78 | **76.72** | | 0.75 |
+| mom bf16 | 77.32 | 76.91 | 76.28 | 76.29 | 76.70 | **76.70** | **−0.02** | |
+| AdamW fp32 | 74.75 | 75.08 | 73.90 | 73.98 | 74.48 | **74.48** | | 1.18 |
+| AdamW bf16 | 74.53 | 73.76 | 74.23 | 74.15 | 73.95 | **74.15** | **−0.33** | |
+
+⭐ **Every delta is inside the corresponding fp32 row's own spread**, and **0/30 arm-runs** hit
+NaN or collapsed to chance. §4's success criterion is met: Chapter 5's use of bf16 is licensed by
+measurement, not assumption.
+
+⭐ **Secondary result, and it is the better story.** The un-normalized net moves by −1.40 / −0.56
+/ −0.09 with one bf16 momentum seed at chance; the normalized net moves by +0.31 / −0.02 / −0.33
+with none. The same asymmetry holds for the op-family lever: +2.0 / +1.7 un-normalized against
+−0.11 / +0.37 / +0.19 normalized (batched f32 vs the per-example `bn_s*` baseline). **Normalization
+absorbs both perturbations.** That is what §4.5 now says, and it is a stronger claim than "bf16 is
+free" on its own.
+
+### 8.2 Chapter 4, written
+
+§4.5's Lever 3 is rewritten around the table above and Chapter 4 is **done**. Also fixed in the
+same pass, both found while checking the fp8 framing:
+
+* ⛔ The chapter summary bullet claimed *"recomputing the whole ladder in bf16 and in fp8 …
+  medians agreeing to within half a point."* Wrong twice: the fp8 render is forward-convs-only, and
+  "half a point" described the fp8 arm (+0.50 / −0.43 / −0.50) while bf16's worst was **−1.40**.
+* ⛔ *"every network from Chapter 5 onward is trained that way [bf16]"* — the Imagenette runs
+  behind Chapters 5-10 all load **f32** artifacts (`{net}_adam_train_step.mlir`, zero bf16). The
+  bf16 rows in Chapter 5 are the full-ImageNet jobs. Corrected to say so.
+
+▶ **Deferred, agreed with the user:** Appendix C's fp8-E4M3 framing. E4M3 stays — it is the coarse
+second instance that makes the parametric-budget argument bite (the wall at *n* ≈ 1/*u*, and
+`dotMixed`'s flat leaf term holding at *u* = 2⁻⁴) — but the prose gives it equal billing with bf16
+and should name one as the production path and the other as the stress instance.
+
+### 8.3 The original plan's success criterion
+
+`SUITE=bnprec scripts/seed_sweep.sh 0,2,3,4 "1 2 3 4 5"` → `runs/2026-09-01-bnprec-seeds/`.
+Five seeds × six arms, 40 epochs, constant lr. The controlled comparison is **f32 vs bf16 inside
+one binary and one renderer**; the `runs/2026-09-01-cifar8w-6arm-constlr/bn_s*.log` medians
+(SGD 74.50, mom 76.35, AdamW 74.29) are the PER-EXAMPLE-family baseline and are a cross-check on
+the op-family move, not the precision result.
