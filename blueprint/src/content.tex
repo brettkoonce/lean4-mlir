@@ -1808,7 +1808,7 @@ output jiggle?}
 \section{Run it first}
 \label{sec:mlp_runit}
 
-Before any of the math, train the thing. Four commands and about ten
+Before any of the math, train the thing. Four commands and about twelve
 seconds of GPU time:
 
 \begin{verbatim}
@@ -1819,60 +1819,49 @@ lake build mnist-mlp-verified
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-08-11-mlp-verified-xla-cuda/}. XLA's startup banner is
+\texttt{runs/2026-09-01-mlp-verified-xla-cuda/}. XLA's startup banner is
 removed and two long lines are wrapped:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir
-             (@mlp_train_step, 7 outputs, 1 replica) in 2103 ms
+             (@mlp_train_step, 7 outputs, 1 replica) in 2123 ms
 [pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir
-             (@mlp_fwd, 1 outputs, 1 replica) in 118 ms
+             (@mlp_fwd, 1 outputs, 1 replica) in 157 ms
 MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
   xla/pjrt verified_mlir/mlp_train_step.mlir
   xla/pjrt verified_mlir/mlp_fwd.mlir
   train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats),
     mean-loss SGD lr=0.100000, He init
-  epoch 1: loss = 0.413492, test_acc = 9199/10000 = 91.990000% (849ms)
-  epoch 2: loss = 0.191197, test_acc = 9525/10000 = 95.250000% (901ms)
-  epoch 3: loss = 0.139092, test_acc = 9635/10000 = 96.350000% (902ms)
-  epoch 4: loss = 0.109095, test_acc = 9690/10000 = 96.900000% (938ms)
-  epoch 5: loss = 0.088633, test_acc = 9714/10000 = 97.140000% (903ms)
-  epoch 6: loss = 0.073492, test_acc = 9733/10000 = 97.330000% (904ms)
-  epoch 7: loss = 0.061921, test_acc = 9749/10000 = 97.490000% (931ms)
-  epoch 8: loss = 0.052623, test_acc = 9765/10000 = 97.650000% (943ms)
-  epoch 9: loss = 0.045073, test_acc = 9764/10000 = 97.640000% (903ms)
-  epoch 10: loss = 0.038765, test_acc = 9775/10000 = 97.750000% (919ms)
-  epoch 11: loss = 0.033494, test_acc = 9774/10000 = 97.740000% (946ms)
-  epoch 12: loss = 0.028984, test_acc = 9783/10000 = 97.830000% (942ms)
+  epoch 1: loss = 0.413496, test_acc = 9199/10000 = 91.990000%  [95% CI 91.44–92.51] (870ms)
+  epoch 2: loss = 0.191186, test_acc = 9526/10000 = 95.260000%  [95% CI 94.83–95.66] (879ms)
+  epoch 3: loss = 0.139057, test_acc = 9636/10000 = 96.360000%  [95% CI 95.97–96.71] (888ms)
+  epoch 4: loss = 0.109009, test_acc = 9690/10000 = 96.900000%  [95% CI 96.54–97.22] (842ms)
+  epoch 5: loss = 0.088619, test_acc = 9716/10000 = 97.160000%  [95% CI 96.82–97.47] (847ms)
+  epoch 6: loss = 0.073548, test_acc = 9732/10000 = 97.320000%  [95% CI 96.98–97.62] (864ms)
+  epoch 7: loss = 0.061923, test_acc = 9746/10000 = 97.460000%  [95% CI 97.13–97.75] (802ms)
+  epoch 8: loss = 0.052682, test_acc = 9762/10000 = 97.620000%  [95% CI 97.30–97.90] (818ms)
+  epoch 9: loss = 0.045157, test_acc = 9767/10000 = 97.670000%  [95% CI 97.36–97.95] (841ms)
+  epoch 10: loss = 0.038872, test_acc = 9771/10000 = 97.710000%  [95% CI 97.40–97.99] (831ms)
+  epoch 11: loss = 0.033574, test_acc = 9778/10000 = 97.780000%  [95% CI 97.47–98.05] (847ms)
+  epoch 12: loss = 0.029061, test_acc = 9781/10000 = 97.810000%  [95% CI 97.50–98.08] (850ms)
 done (trained MNIST-MLP via the proof-rendered StableHLO).
 \end{verbatim}
 
-Twelve epochs at about 900\,ms each, and 97.83\% on the full
+Twelve epochs at about 850\,ms each, and 97.81\% on the full
 10,000-image test set. Adding two hidden layers to
 Chapter~\ref{chap:tensor}'s linear model buys 5.7 points of accuracy at
-about three times the wall clock per epoch.
+close to four times the wall clock per epoch.
 
-The same claim, now with two hidden layers under it. That run did not
-execute a
-reimplementation of the network this chapter describes. It executed
-\texttt{verified\_mlir/mlp\_train\_step.mlir}, which is the text
-\texttt{Proofs.StableHLO.mlpTrainStepFaithfulV} emits. Every line of
-that file is \texttt{pretty} of a proven graph node, with one marked
-exception, and \texttt{MlpFaithfulPoC} proves that each of the six
-parameter outputs denotes the certified gradient-descent step derived from
-the Mathlib \(\fderiv\) math. The exception is the trailing
-\texttt{\%loss} scalar, which the module labels \texttt{REPORT-ONLY} in a
-comment of its own. It exists so the trainer can print the loss you see
-above, it is read by nothing else, and no theorem depends on it. The two hidden layers, their ReLUs, the softmax cross-entropy
-cotangent, the six parameter gradients, and the SGD update are all
-proof-backed operations.
-
-The two compile lines are worth a second look. XLA took the StableHLO
-and compiled it in process in about two and a half seconds, with no
-separate compiler invocation and nothing left on disk. The larger of the
-two numbers belongs to the training step, which is the graph carrying
-all six parameter gradients.
+Chapter~\ref{chap:tensor}'s accuracy did not move across seeds, because
+that model starts at zero and has no seed to spend. This one does. Run at
+five seeds it averages $97.73\%$ with a spread of $0.06$ either side, and
+every one of those five sits inside the interval printed above --- which
+is $\pm 0.29$ points on its own. Worth noticing once, because it holds
+for the rest of the book: changing the seed moves these numbers less than
+a single run can pin them down. The interval is the wider of the two, and
+it is the one to check a claimed improvement against.
 
 \prosesection{The Jacobian as multidimensional ``how does it jiggle?''}
 
@@ -2373,14 +2362,28 @@ def mlpVerified : VerifiedNetSpec where
   layers   := [.dense 784 512, .relu,
                .dense 512 512, .relu,
                .dense 512 10]
+  blurb    := "MNIST-MLP via the VERIFIED renderer
+                (784→512→512→10) → %LOWERER% → GPU"
+  lossSlot := true
 \end{verbatim}
 
 Five entries where Chapter~\ref{chap:tensor} had one, and nothing else
-about the type changes. The \texttt{slug} binds the spec to
+about the type changes. (\texttt{layers} and \texttt{blurb} are each one
+line in the source, wrapped here.) The \texttt{slug} binds the spec to
 \texttt{verified\_mlir/mlp\_train\_step.mlir} and
 \texttt{verified\_mlir/mlp\_fwd.mlir}, and
-\texttt{Proofs.MlpRender.mlpTrainStepFaithfulV} is what emits the train
-step.
+\texttt{Proofs.StableHLO.mlpTrainStepFaithfulV} is what emits the train
+step. \texttt{lossSlot} is the field behind the loss column in
+\S\ref{sec:mlp_runit}'s transcript, which Chapter~\ref{chap:tensor}'s does
+not have: it tells the driver this render returns a trailing scalar to
+print. That scalar is also the one line of
+\texttt{verified\_mlir/mlp\_train\_step.mlir} that is \emph{not}
+\texttt{pretty} of a proven graph node, and the render says so itself, in
+a comment of its own: \texttt{\%loss below is REPORT-ONLY (logging), NOT
+pretty(AST node)}. Nothing reads it but the printer and no theorem
+depends on it. The six \emph{parameter} outputs are the proved ones ---
+\texttt{MlpFaithfulPoC} shows each denotes the certified gradient-descent
+step derived from the Mathlib \(\fderiv\) math.
 
 \paragraph{What \texttt{.relu} contributes.} Nothing:
 
@@ -2424,10 +2427,10 @@ place of \texttt{.trainLinear}, because the MLP carries six parameter
 tensors packed together rather than a separate \texttt{W0} and
 \texttt{b0}.
 
-XLA compiles that train step in about 5.4 seconds and the forward in
-about 40 milliseconds. The train step takes roughly seven times as long
-to compile as Chapter~\ref{chap:tensor}'s, which is the cost of six
-parameter tensors and two ReLU subgradients rather than one dense layer.
+The two compile lines in \S\ref{sec:mlp_runit} are where that shows up:
+the train step takes about three and a half times as long to compile as
+Chapter~\ref{chap:tensor}'s, which is the cost of six parameter tensors
+and two ReLU subgradients rather than one dense layer.
 
 \subsection*{Results}
 
@@ -2448,7 +2451,7 @@ loss, on a log scale:
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,0.413492) (2,0.191197) (3,0.139092) (4,0.109095) (5,0.088633) (6,0.073492) (7,0.061921) (8,0.052623) (9,0.045073) (10,0.038765) (11,0.033494) (12,0.028984)
+(1,0.413496) (2,0.191186) (3,0.139057) (4,0.109009) (5,0.088619) (6,0.073548) (7,0.061923) (8,0.052682) (9,0.045157) (10,0.038872) (11,0.033574) (12,0.029061)
 };
 \end{axis}
 \end{tikzpicture}
@@ -2456,8 +2459,8 @@ loss, on a log scale:
 
 \noindent MNIST MLP ($784{\to}512{\to}512{\to}10$), SGD~0.1, 12 epochs,
 log-scale mean training loss per epoch
-(\texttt{runs/2026-08-11-mlp-verified-xla-cuda/}). The loss falls
-$14\times$ across the run, and test accuracy ends at 97.83\%.
+(\texttt{runs/2026-09-01-mlp-verified-xla-cuda/}). The loss falls
+$14\times$ across the run, and test accuracy ends at 97.81\%.
 
 Both numbers come off the same binary this chapter's theorems describe.
 An earlier edition reported 98.57\% here, measured with an unverified
@@ -2468,11 +2471,11 @@ program is gone.
 
 \section{Return on width}
 
-The $512{\to}512$ hidden size is a convention, not a measurement. Because
-the verified renderer is parametric in the layer dimensions, so the same
-\texttt{mlp\_has\_vjp} theorem covers every width, being polymorphic in
-$d_0,d_1,d_2,d_3$ carry through, we can sweep the hidden width and train each point on
-its own proof-rendered StableHLO. The \texttt{mnist-mlp-grid} driver does
+The $512{\to}512$ hidden size is a convention, not a measurement. The
+verified renderer is parametric in the layer dimensions and
+\texttt{mlp\_has\_vjp} is polymorphic in $d_0,d_1,d_2,d_3$, so one theorem
+covers every width and we can sweep the hidden size, training each point
+on its own proof-rendered StableHLO. The \texttt{mnist-mlp-grid} driver does
 exactly this: it renders $784{\to}d{\to}d{\to}10$ from the faithful emitter
 and trains it end to end. Sweeping $d$ over the powers of two from 8 to 4096
 (each 12-epoch SGD, on the GPU) gives the accuracy-vs-width curve below.
@@ -2493,8 +2496,12 @@ and trains it end to end. Sweeping $d$ over the powers of two from 8 to 4096
     label style={font=\small},
     every axis plot/.append style={line width=1pt, mark size=1.5pt},
 ]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(8,91.99) (16,94.01) (32,96.76) (64,97.02) (128,97.25) (256,97.67) (512,97.83) (1024,97.89) (2048,98.00) (4096,98.01)
+\addplot[blue, mark=*, mark options={fill=blue},
+  error bars/.cd, y dir=both, y explicit,
+  error bar style={blue!55!white, line width=0.6pt},
+  error mark options={rotate=90, mark size=2.5pt, blue!55!white, line width=0.6pt}]
+coordinates {
+(8,91.99) +- (0,0.53) (16,94.01) +- (0,0.47) (32,96.76) +- (0,0.35) (64,97.02) +- (0,0.33) (128,97.25) +- (0,0.32) (256,97.67) +- (0,0.30) (512,97.83) +- (0,0.29) (1024,97.89) +- (0,0.28) (2048,98.0) +- (0,0.27) (4096,98.01) +- (0,0.27)
 };
 \addplot[only marks, mark=o, mark size=4pt, red, line width=1pt, forget plot] coordinates {(64,97.02)};
 \node[anchor=west, font=\footnotesize, red!70!black] at (axis cs:74,95.5)
@@ -2506,18 +2513,39 @@ and trains it end to end. Sweeping $d$ over the powers of two from 8 to 4096
 \noindent Return on width for the verified MNIST MLP
 ($784{\to}d{\to}d{\to}10$): test accuracy versus hidden width $d$ (log
 scale), 12-epoch SGD on the proof-rendered StableHLO
-(\texttt{runs/mlp\_grid\_results\_xla.tsv}). The curve flattens hard after
-$\sim$64 neurons: widening $8{\to}64$ buys $+5.0$ points, but $64{\to}4096$
-at $64\times$ the width and $364\times$ the parameters, buys only $+1.0$.
-A $32{\to}32$ MLP already reaches 96.8\% at 27K parameters, $755\times$
-smaller than the $4096{\to}4096$ net (98.0\%). The canonical
-$512{\to}512$ sits comfortably on the plateau, and anything past it is paying
-for the third decimal place. Off the diagonal the story is capacity
-rather than failure. A $784{\to}8{\to}4096{\to}10$ net reaches 93.1\%,
-and at three initialization seeds it lands between 93.1\% and 93.7\%.
-That is only about a point above what the $8{\to}8$ net manages on its
-own (92.0\%). The 8-unit layer is a bottleneck, and width behind it
-cannot recover signal that the narrow layer already discarded.
+(\texttt{runs/mlp\_grid\_results\_xla.tsv}). Bars are the 95\% Wilson
+interval on 10,000 test images --- the same interval the transcripts
+print, and about $\pm 0.3$ points once accuracy is in the nineties.
+
+\medskip\noindent The curve flattens hard after $\sim$64 neurons: widening
+$8{\to}64$ buys $+5.0$ points, but $64{\to}4096$, at $64\times$ the width
+and $364\times$ the parameters, buys only $+1.0$. A $32{\to}32$ MLP already
+reaches 96.8\% at 27K parameters, $755\times$ smaller than the
+$4096{\to}4096$ net (98.0\%).
+
+\medskip\noindent The bars are what make that plateau concrete rather than
+merely visible. Every point from $d = 256$ rightward has an interval
+overlapping every other, so a $16\times$ increase in width and $74\times$
+in parameters buys nothing this test set can resolve. The climb up to the
+knee is real --- $d = 64$ and $d = 4096$ do not overlap --- and the plateau
+past it is not. The canonical $512{\to}512$ sits comfortably on that
+plateau, and anything past it is paying for the third decimal place.
+
+\medskip\noindent Off the diagonal the story is capacity rather than
+failure. A $784{\to}8{\to}4096{\to}10$ net averages 93.70\%
+over five seeds, with a spread of $0.56$ --- about a point and a half
+above what the $8{\to}8$ net manages on its own (92.0\%). The 8-unit
+layer is a bottleneck, and width behind it cannot recover signal that the
+narrow layer already discarded.
+
+That point is also the one place in this sweep where three runs would
+have been misleading, which is worth seeing once. The first three seeds
+land between 93.14 and 93.70\%, a tight and plausible-looking range; the
+fourth comes in at 94.53\%, most of a point above the top of it. Three
+observations of a quantity with this much spread will happily agree with
+each other and still be wrong about where the next one falls. The
+diagonal points plotted above are one run each, and are best read with
+half a point of give.
 
 \section{MLIR: Dense}
 

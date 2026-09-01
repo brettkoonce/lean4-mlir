@@ -1,0 +1,26 @@
+I0901 01:52:39.943551  889691 service.cc:154] XLA service 0x7257c402ed50 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0901 01:52:39.943607  889691 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0901 01:52:39.945419  889691 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0901 01:52:39.945456  889691 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0901 01:52:39.952435  889691 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/mlp_8x4096_train_step.mlir (@mlp_8x4096_train_step, 7 outputs, 1 replica) in 1056 ms
+[pjrt_ffi] compiled .lake/build/mlp_8x4096_fwd.mlir (@mlp_8x4096_fwd, 1 outputs, 1 replica) in 370 ms
+MNIST-MLP-8x4096 via the VERIFIED renderer (784→8→4096→10) → XLA/PJRT → GPU
+  xla/pjrt .lake/build/mlp_8x4096_train_step.mlir
+  xla/pjrt .lake/build/mlp_8x4096_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-MLP-8x4096 (6 params, 84114 floats), mean-loss SGD lr=0.100000, He init
+  epoch 1: loss = 0.681103, test_acc = 8879/10000 = 88.790000%  [95% CI 88.16–89.39] (297ms)
+  epoch 2: loss = 0.313991, test_acc = 9093/10000 = 90.930000%  [95% CI 90.35–91.48] (387ms)
+  epoch 3: loss = 0.269397, test_acc = 9195/10000 = 91.950000%  [95% CI 91.40–92.47] (403ms)
+  epoch 4: loss = 0.241734, test_acc = 9275/10000 = 92.750000%  [95% CI 92.23–93.24] (499ms)
+  epoch 5: loss = 0.221873, test_acc = 9326/10000 = 93.260000%  [95% CI 92.75–93.73] (491ms)
+  epoch 6: loss = 0.207000, test_acc = 9344/10000 = 93.440000%  [95% CI 92.94–93.91] (417ms)
+  epoch 7: loss = 0.195587, test_acc = 9368/10000 = 93.680000%  [95% CI 93.19–94.14] (493ms)
+  epoch 8: loss = 0.186592, test_acc = 9395/10000 = 93.950000%  [95% CI 93.47–94.40] (492ms)
+  epoch 9: loss = 0.179354, test_acc = 9423/10000 = 94.230000%  [95% CI 93.76–94.67] (486ms)
+  epoch 10: loss = 0.173437, test_acc = 9438/10000 = 94.380000%  [95% CI 93.91–94.81] (489ms)
+  epoch 11: loss = 0.168468, test_acc = 9447/10000 = 94.470000%  [95% CI 94.00–94.90] (494ms)
+  epoch 12: loss = 0.164199, test_acc = 9453/10000 = 94.530000%  [95% CI 94.07–94.96] (495ms)
+done (trained MNIST-MLP-8x4096 via the proof-rendered StableHLO).
