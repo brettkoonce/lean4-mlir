@@ -1231,6 +1231,8 @@ def linearVerified : VerifiedNetSpec where
   nClasses := 10
   data     := .mnist
   layers   := [.dense 784 10]
+  blurb    := "MNIST-Linear via the VERIFIED renderer
+                (pretty∘emit) → %LOWERER% → GPU"
 \end{verbatim}
 
 The layer emits raw logits \(z = W x + b\). Softmax and cross-entropy
@@ -1238,7 +1240,9 @@ are added by the training driver, because this is a classification
 task. The \texttt{slug} names the committed render, so this spec is
 bound to \texttt{verified\_mlir/linear\_train\_step.mlir} and
 \texttt{linear\_fwd.mlir}, which are the two files the run at the top of
-the chapter compiled.
+the chapter compiled. The \texttt{blurb} is the banner the run prints
+before its first epoch, \texttt{\%LOWERER\%} filled in with whichever
+lowerer was selected; it is one line in the source and wrapped here.
 
 \paragraph{What \texttt{.dense 784 10} contributes.} Layers are
 constructors of a \texttt{VLayer} inductive, and one function,
@@ -1252,12 +1256,19 @@ def toSpecs : VLayer -> Array (Array Nat × Nat)
   | ...
 \end{verbatim}
 
-\noindent Two tensors: a $784 \times 10$ weight matrix initialised
-He(fan-in), and a length-10 bias initialised to zero. That is this
-network's entire parameter list, and \texttt{d0}, the input width the
-render needs, is derived from the same list rather than declared
-separately. Every chapter after this one adds an arm to that match.
-None of them changes this one, so this is the last time you will see it.
+\noindent Two tensors: a $784 \times 10$ weight matrix and a length-10
+bias. That is this network's entire parameter list, and \texttt{d0}, the
+input width the render needs, is derived from the same list rather than
+declared separately. Every chapter after this one adds an arm to that
+match. None of them changes this one, so this is the last time you will
+see it.
+
+The init codes are the shared driver's defaults, and this chapter is the
+one place they do not apply. \texttt{trainLinear} sets both tensors to
+zero outright rather than reading them off \texttt{toSpecs}, which is why
+the run at the top of the chapter lands on the same accuracy whatever the
+seed. From Chapter~\ref{chap:mlp} onward the He(fan-in) in code
+\texttt{0} is what actually runs.
 
 That binding is why the type exists. The spec lives in
 \texttt{LeanMlir/VerifiedNets.lean} rather than beside the trainer,
@@ -1276,7 +1287,7 @@ reads to build its graph. Copy the layer list into a second definition
 and the proof would be about a different network than the one that runs.
 
 \paragraph{The whole program.}
-The trainer is 53 lines including its docstring, so here it is entire,
+The trainer is 54 lines including its docstring, so here it is entire,
 with the comments stripped:
 
 \begin{verbatim}
@@ -1474,9 +1485,14 @@ time. Moving the arithmetic into the graph moves it inside the reach of
 the proofs.
 
 \paragraph{The same loop, in Lean.}
-Here is the real thing, \texttt{VerifiedNet.trainLinear}, in full. Only
-the per-epoch timing and two environment-variable overrides are dropped;
-every line that computes the answer is here:
+Here is \texttt{VerifiedNet.trainLinear}, the driver that produced the
+run at the top of this chapter. Three things are left out: the
+\texttt{IO.getStdout} flushes, two environment-variable overrides
+(\texttt{LEAN\_MLIR\_PERTURB\_R}, which displaces the initialisation for
+a residency check, and \texttt{LEAN\_MLIR\_MAX\_EPOCHS}, which caps the
+epoch count), and everything after the loop, which dumps the final
+parameters so the two lowerers can be diffed tensor by tensor. Two long
+lines are wrapped; every line that computes the answer is here:
 
 \begin{verbatim}
 def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
@@ -1484,18 +1500,25 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
+  net.printBlurb
 
-  -- 1. One session per committed render
+  -- 1. One session per committed render, and the entry point in each
   let tsSess  <- mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess <- mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
+  let tsFn    := s!"m.{net.slug}_train_step"
+  let fwdFn   := s!"m.{net.slug}_fwd"
 
   -- 2. Data, then zero-initialised parameters
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) <-
     loadData net dataDir
+  let evalName := match net.data with | .imagenette => "val" | _ => "test"
+  IO.println s!"  train {nTrain}, {evalName} {nEval};
+                  dense {d0}->{d1}, bs {bs}, SGD"
   let mut W0 <- F32.const (d0 * d1).toUSize 0.0
   let mut b0 <- F32.const d1.toUSize 0.0
   let nb     := nTrain / bs
   let nbt    := (nEval + bs - 1) / bs   -- ceil: last eval batch is zero-padded
+  let nResident : USize := 2            -- W0 and b0 stay on the device
   let pBytes := (d0 * d1 + d1) * 4
   let shapes := net.shapesBA            -- packed [W0|b0] layout for the forward
   let xShape := net.xShape bs
@@ -1503,6 +1526,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
 
   -- 3. Epoch loop
   for ep in [0:cfg.epochs] do
+    let tEp0 <- IO.monoMsNow
 
     -- 4. Batch loop: forward, loss, backward, SGD -- one call
     for bi in [0:nb] do
@@ -1515,7 +1539,10 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
       b0 := out.extract (d0 * d1 * 4) pBytes
 
     -- 5. Evaluate on the full test set, every epoch
-    let params <- LowererSession.readParams tsSess packed pBytes.toUSize
+    packed <- LowererSession.readParams tsSess packed pBytes.toUSize
+    W0 := packed.extract 0 (d0 * d1 * 4)
+    b0 := packed.extract (d0 * d1 * 4) pBytes
+    let params := packed
     let mut correct := 0
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -1526,7 +1553,9 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
         if pred == F32.readLabel evalLbl (bi * bs + j) then
           correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
-    IO.println s!"  epoch {ep+1}: test_acc = {correct}/{nEval} = {acc}%"
+    let epMs := (<- IO.monoMsNow) - tEp0
+    IO.println s!"  epoch {ep+1}: {evalName}_acc = {correct}/{nEval} = {acc}%
+                    [95% CI {wilson95 correct nEval}] ({epMs}ms)"
 \end{verbatim}
 
 Walking through the numbered sections:
@@ -1596,9 +1625,11 @@ dispatched StableHLO graph does the forward pass, the loss, the backward
 pass, and the optimizer update, with no tape and no per-step graph
 construction. The ``MLIR: Linear'' section
 above rendered a single operator's backward in isolation. Here is the
-whole thing the linear classifier compiles to. It is short enough to show
-essentially in full, with only the default \texttt{precision} attributes
-dropped and the long type signatures wrapped for the page:
+whole thing the linear classifier compiles to. This is
+\texttt{verified\_mlir/linear\_train\_step.mlir} as committed, with the
+default \texttt{precision} attributes dropped and the long type
+signatures wrapped for the page. Nothing else is removed, including one
+band that repeats:
 
 \begin{verbatim}
 func.func @linear_train_step(
@@ -1610,7 +1641,7 @@ func.func @linear_train_step(
           : (tensor<128x784xf32>, tensor<784x10xf32>) -> tensor<128x10xf32>
   %v1 = stablehlo.broadcast_in_dim %b0, dims = [1]
           : (tensor<10xf32>) -> tensor<128x10xf32>
-  %v2 = stablehlo.add %v0, %v1 : tensor<128x10xf32>          // logits
+  %v2 = stablehlo.add %v0, %v1 : tensor<128x10xf32>
   %v3 = stablehlo.exponential %v2 : tensor<128x10xf32>
   %v4 = stablehlo.constant dense<0.0> : tensor<f32>
   %v5 = stablehlo.reduce(%v3 init: %v4)
@@ -1618,23 +1649,38 @@ func.func @linear_train_step(
           : (tensor<128x10xf32>, tensor<f32>) -> tensor<128xf32>
   %v6 = stablehlo.broadcast_in_dim %v5, dims = [0]
           : (tensor<128xf32>) -> tensor<128x10xf32>
-  %v7 = stablehlo.divide %v3, %v6 : tensor<128x10xf32>       // softmax
-  %v8 = stablehlo.subtract %v7, %onehot : tensor<128x10xf32> // dy
-  // -- param grads:  dW0 = x^T . dy,  db0 = sum_batch dy --
-  %sc  = stablehlo.constant dense<0.0> : tensor<f32>
-  %dW0 = stablehlo.dot_general %x, %v8, contracting_dims = [0] x [0]
-           : (tensor<128x784xf32>, tensor<128x10xf32>) -> tensor<784x10xf32>
-  %db0 = stablehlo.reduce(%v8 init: %sc)
-           applies stablehlo.add across dimensions = [0]
-           : (tensor<128x10xf32>, tensor<f32>) -> tensor<10xf32>
-  // -- SGD update:  theta' = theta - lr*grad  (0.00078125 = 0.1 / 128) --
-  %lW0 = stablehlo.constant dense<0.00078125> : tensor<784x10xf32>
-  %sW0 = stablehlo.multiply %dW0, %lW0 : tensor<784x10xf32>
-  %W0n = stablehlo.subtract %W0, %sW0 : tensor<784x10xf32>
-  %lb0 = stablehlo.constant dense<0.00078125> : tensor<10xf32>
-  %sb0 = stablehlo.multiply %db0, %lb0 : tensor<10xf32>
-  %b0n = stablehlo.subtract %b0, %sb0 : tensor<10xf32>
-  return %W0n, %b0n : tensor<784x10xf32>, tensor<10xf32>
+  %v7 = stablehlo.divide %v3, %v6 : tensor<128x10xf32>   // softmax
+  %v8 = stablehlo.subtract %v7, %onehot : tensor<128x10xf32>   // dy
+  // -- W0:  dW0 = x^T . dy,  then theta' = theta - lr*dW0 --
+  %v9 = stablehlo.dot_general %x, %v8, contracting_dims = [0] x [0]
+          : (tensor<128x784xf32>, tensor<128x10xf32>) -> tensor<784x10xf32>
+  %v10 = stablehlo.constant dense<0.00078125> : tensor<784x10xf32>
+  %v11 = stablehlo.multiply %v9, %v10 : tensor<784x10xf32>
+  %v12 = stablehlo.subtract %W0, %v11 : tensor<784x10xf32>
+  // -- v13-v21: v0-v8 emitted a SECOND time, verbatim --
+  %v13 = stablehlo.dot_general %x, %W0, contracting_dims = [1] x [0]
+          : (tensor<128x784xf32>, tensor<784x10xf32>) -> tensor<128x10xf32>
+  %v14 = stablehlo.broadcast_in_dim %b0, dims = [1]
+          : (tensor<10xf32>) -> tensor<128x10xf32>
+  %v15 = stablehlo.add %v13, %v14 : tensor<128x10xf32>
+  %v16 = stablehlo.exponential %v15 : tensor<128x10xf32>
+  %v17 = stablehlo.constant dense<0.0> : tensor<f32>
+  %v18 = stablehlo.reduce(%v16 init: %v17)
+          applies stablehlo.add across dimensions = [1]
+          : (tensor<128x10xf32>, tensor<f32>) -> tensor<128xf32>
+  %v19 = stablehlo.broadcast_in_dim %v18, dims = [0]
+          : (tensor<128xf32>) -> tensor<128x10xf32>
+  %v20 = stablehlo.divide %v16, %v19 : tensor<128x10xf32>   // softmax again
+  %v21 = stablehlo.subtract %v20, %onehot : tensor<128x10xf32>   // dy again
+  // -- b0:  db0 = sum_batch dy,  then the same three-op update --
+  %v22 = stablehlo.constant dense<0.0> : tensor<f32>
+  %v23 = stablehlo.reduce(%v21 init: %v22)
+          applies stablehlo.add across dimensions = [0]
+          : (tensor<128x10xf32>, tensor<f32>) -> tensor<10xf32>
+  %v24 = stablehlo.constant dense<0.00078125> : tensor<10xf32>
+  %v25 = stablehlo.multiply %v23, %v24 : tensor<10xf32>
+  %v26 = stablehlo.subtract %b0, %v25 : tensor<10xf32>
+  return %v12, %v26 : tensor<784x10xf32>, tensor<10xf32>
 }
 \end{verbatim}
 
@@ -1648,30 +1694,48 @@ loss cotangent, so it holds \texttt{dot\_general} for the logits, the
 $dy = \partial\mathrm{CE}/\partial\text{logits}$. That whole band is the
 rendering of a single verified graph, \texttt{lossCotGraph}, certified
 equal to the softmax--cross-entropy gradient by
-\texttt{lossCotGraph\_isCEgrad}. The second band is the backward pass.
-Its \texttt{dot\_general \%x, \%v8} is exactly the move from the ``MLIR:
-Linear'' section, $x^{\!\top} dy$, now serving as the weight gradient,
-and the \texttt{reduce} sums $dy$ over the batch for the bias gradient.
-The third band is the optimizer: scale each gradient by the learning rate
-and subtract. There is no fourth band, no copy-back, and no separate
-update kernel. Forward, loss,
-backward, and step are one compiled function, which is exactly why
-\S~\ref{sec:mlp_inside_train}'s loop can treat a training step as a single
-dispatch.
+\texttt{lossCotGraph\_isCEgrad}. The second (\texttt{\%v9}--\texttt{\%v12})
+is the weight half: \texttt{dot\_general \%x, \%v8} is exactly the move
+from the ``MLIR: Linear'' section, $x^{\!\top} dy$, now serving as the
+weight gradient, and the three operations after it scale by the learning
+rate and subtract.
+
+The third band (\texttt{\%v13}--\texttt{\%v21}) is the first band over
+again, operation for operation. The printer emits one cotangent chain per
+parameter rather than computing $dy$ once and using it twice, so the
+forward pass and the softmax appear a second time before the fourth band
+(\texttt{\%v22}--\texttt{\%v26}) sums $dy$ over the batch for the bias
+gradient and applies the same three-operation update. Whether the copy
+survives to the GPU is the compiler's business --- common-subexpression
+elimination is a standard pass --- but the certified artifact contains
+both, and what this section shows is the artifact. Nothing is gained by
+pretending otherwise, and the duplication is a fair picture of what naive
+rendering costs: 27 operations where 19 would do.
+
+There is no fifth band, no copy-back, and no separate update kernel.
+Forward, loss, backward, and step are one compiled function, which is
+exactly why \S~\ref{sec:mlp_inside_train}'s loop can treat a training
+step as a single dispatch.
 
 \medskip\noindent \textbf{Why SGD here.} \texttt{linearVerified} trains
 with plain $\theta' = \theta - \alpha\nabla$ at a constant learning rate,
-which is three operations per tensor and is exactly what
-\texttt{sgdW\_descends\_certified\_grad} and its bias twin prove. Adam is
-available in this framework and the deeper chapters use it, but it costs
-about three times the graph. The CIFAR network of
-Chapter~\ref{chap:bn}, rendered both ways, goes from 365 StableHLO
-operations under SGD to 1,113 under Adam, because the first- and
-second-moment buffers enter and leave the signature and an
-\texttt{rsqrt} appears. None of that extra machinery is proved in this
-chapter. Starting with the optimizer whose proof you have just read is
-the reason to start here.
-\textbf{The learning rate is folded in.} The weight-gradient
+which is three operations per tensor --- the listing's last band is the
+entire optimizer. Adam is available here and the deeper chapters use it,
+but it costs roughly 2.3 times the graph: Chapter~\ref{chap:bn}'s CIFAR
+network, rendered both ways, goes from 1,001 StableHLO operations under
+SGD to 2,293 under AdamW, because the first- and second-moment buffers
+enter and leave the signature and an \texttt{rsqrt} appears. Size is not
+the deciding reason, though. Both optimizers are proved \emph{faithful},
+each emitted update certified to be its own update law applied to the
+same proven gradient. Only SGD also gets a \emph{descent} theorem, that
+the step decreases the loss --- and Adam cannot have one, because it is
+not monotone. That is a fact about Adam, the AMSGrad counterexample, and
+not a gap in the formalization. SGD is the optimizer here where both
+halves close, which is why it is the one to read first.
+Appendix~\ref{app:verification} carries both certificates, and how far up
+the depth the descent half actually reaches.
+
+\medskip\noindent \textbf{The learning rate is folded in.} The weight-gradient
 \texttt{dot\_general} contracts the batch axis, so $dW_0$ is a batch sum
 rather than a mean. The constant \texttt{0.00078125} is
 $\alpha/N = 0.1/128$, the per-sample rate that turns that sum back into
@@ -1679,19 +1743,18 @@ the mean update. Everything else in the listing is, line for line, the rendering
 a theorem proved earlier in this chapter.
 
 \medskip\noindent That one function is the only heavy thing in the loop that
-drives it. Stripped of logging, the shuffle, and the schedule, the whole of
-\S~\ref{sec:mlp_inside_train}'s \texttt{runTraining} is six lines:
+drives it. Stripped of its logging and its session setup,
+\S~\ref{sec:mlp_inside_train}'s driver is five lines:
 
 \begin{verbatim}
-p := heInit(spec)                      // params (+ zeroed Adam buffers)
+(W, b) := 0                            // zero-initialised, no Adam buffers
 for epoch in 0..E:
-  for batch in shuffle(data):
-        p := train_step(p, batch)         // <- the function above
-    eval(p)                             // the forward-only render
-save(p)
+  for batch in batches(data):
+    (W, b) := train_step(W, b, batch)  // <- the function above
+  eval(W, b)                           // the forward-only render
 \end{verbatim}
 
-\noindent Six lines of host control flow around one compiled dispatch. The
+\noindent Five lines of host control flow around one compiled dispatch. The
 loop counts epochs and slices batches. It never computes a gradient or
 touches a tensor. The lone \texttt{train\_step} call is the function
 above, and it is the only place arithmetic happens.
