@@ -1,0 +1,81 @@
+I0901 02:57:09.130557  916560 service.cc:154] XLA service 0x73afa072d480 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0901 02:57:09.130603  916560 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0901 02:57:09.132275  916560 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0901 02:57:09.132317  916560 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12536774656 bytes) on device 0 for BFCAllocator.
+I0901 02:57:09.141405  916560 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0901 02:57:09.769148  916603 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 364 bytes spill stores, 364 bytes spill loads
+
+I0901 02:57:09.883427  916611 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 272 bytes spill stores, 272 bytes spill loads
+
+I0901 02:57:09.891630  916618 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 72 bytes spill stores, 72 bytes spill loads
+
+I0901 02:57:09.961905  916625 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 712 bytes spill stores, 712 bytes spill loads
+
+I0901 02:57:10.197106  916607 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 296 bytes spill stores, 296 bytes spill loads
+
+I0901 02:57:10.204127  916620 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 224 bytes spill stores, 224 bytes spill loads
+
+I0901 02:57:10.218008  916608 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 468 bytes spill stores, 468 bytes spill loads
+
+I0901 02:57:10.301772  916619 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 240 bytes spill stores, 240 bytes spill loads
+
+I0901 02:57:10.305435  916612 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 428 bytes spill stores, 428 bytes spill loads
+
+I0901 02:57:10.313560  916618 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 360 bytes spill stores, 360 bytes spill loads
+
+I0901 02:57:10.336375  916615 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 32 bytes spill stores, 32 bytes spill loads
+
+I0901 02:57:10.392414  916614 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+I0901 02:57:10.408247  916602 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 224 bytes spill stores, 224 bytes spill loads
+
+I0901 02:57:10.484883  916627 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 464 bytes spill stores, 464 bytes spill loads
+
+I0901 02:57:10.490266  916611 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 224 bytes spill stores, 224 bytes spill loads
+
+I0901 02:57:10.611760  916621 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 60 bytes spill stores, 60 bytes spill loads
+
+I0901 02:57:10.725738  916625 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 208 bytes spill stores, 208 bytes spill loads
+
+I0901 02:57:10.735925  916617 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 492 bytes spill stores, 492 bytes spill loads
+
+I0901 02:57:10.819012  916608 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 448 bytes spill stores, 448 bytes spill loads
+
+I0901 02:57:11.162503  916628 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 44 bytes spill stores, 44 bytes spill loads
+
+I0901 02:57:11.266417  916623 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 72 bytes spill stores, 72 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 2558 ms
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 180 ms
+MNIST-MLP via the VERIFIED renderer (784→512→512→10) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mlp_train_step.mlir
+  xla/pjrt verified_mlir/mlp_fwd.mlir
+  train 60000, test 10000; bs 128, MNIST-MLP (6 params, 669706 floats), mean-loss SGD lr=0.100000, He init
+[pjrt_ffi] RESIDENT: @mlp_train_step holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: loss = 0.404611, test_acc = 9213/10000 = 92.130000%  [95% CI 91.59–92.64] (181ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: loss = 0.191145, test_acc = 9493/10000 = 94.930000%  [95% CI 94.48–95.34] (172ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: loss = 0.138765, test_acc = 9608/10000 = 96.080000%  [95% CI 95.68–96.44] (178ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: loss = 0.108874, test_acc = 9659/10000 = 96.590000%  [95% CI 96.22–96.93] (168ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: loss = 0.088812, test_acc = 9694/10000 = 96.940000%  [95% CI 96.58–97.26] (169ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: loss = 0.073968, test_acc = 9713/10000 = 97.130000%  [95% CI 96.78–97.44] (168ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: loss = 0.062552, test_acc = 9737/10000 = 97.370000%  [95% CI 97.04–97.67] (167ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: loss = 0.053424, test_acc = 9753/10000 = 97.530000%  [95% CI 97.21–97.82] (173ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: loss = 0.045917, test_acc = 9754/10000 = 97.540000%  [95% CI 97.22–97.83] (160ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: loss = 0.039651, test_acc = 9767/10000 = 97.670000%  [95% CI 97.36–97.95] (157ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: loss = 0.034336, test_acc = 9768/10000 = 97.680000%  [95% CI 97.37–97.96] (495ms)
+[pjrt_ffi] RESIDENT: @mlp_fwd holds 6 parameter tensors (2.6 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: loss = 0.029747, test_acc = 9772/10000 = 97.720000%  [95% CI 97.41–97.99] (638ms)
+done (trained MNIST-MLP via the proof-rendered StableHLO).

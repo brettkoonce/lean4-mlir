@@ -1,0 +1,39 @@
+I0901 02:57:00.378988  915247 service.cc:154] XLA service 0x78b1f0008bd0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0901 02:57:00.379071  915247 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0901 02:57:00.380564  915247 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0901 02:57:00.380596  915247 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0901 02:57:00.387931  915247 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/linear_train_step.mlir (@linear_train_step, 2 outputs, 1 replica) in 604 ms
+[pjrt_ffi] compiled verified_mlir/linear_fwd.mlir (@linear_fwd, 1 outputs, 1 replica) in 144 ms
+MNIST-Linear via the VERIFIED renderer (pretty∘emit) → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/linear_train_step.mlir
+  xla/pjrt verified_mlir/linear_fwd.mlir
+  train 60000, test 10000; dense 784->10, bs 128, SGD
+[pjrt_ffi] RESIDENT: @linear_train_step holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 1: test_acc = 8977/10000 = 89.770000%  [95% CI 89.16–90.35] (240ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 2: test_acc = 9081/10000 = 90.810000%  [95% CI 90.23–91.36] (174ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 3: test_acc = 9123/10000 = 91.230000%  [95% CI 90.66–91.77] (281ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 4: test_acc = 9157/10000 = 91.570000%  [95% CI 91.01–92.10] (158ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 5: test_acc = 9167/10000 = 91.670000%  [95% CI 91.11–92.20] (158ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 6: test_acc = 9176/10000 = 91.760000%  [95% CI 91.20–92.28] (211ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 7: test_acc = 9186/10000 = 91.860000%  [95% CI 91.31–92.38] (188ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 8: test_acc = 9194/10000 = 91.940000%  [95% CI 91.39–92.46] (110ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 9: test_acc = 9199/10000 = 91.990000%  [95% CI 91.44–92.51] (93ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 10: test_acc = 9198/10000 = 91.980000%  [95% CI 91.43–92.50] (80ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 11: test_acc = 9203/10000 = 92.030000%  [95% CI 91.48–92.54] (75ms)
+[pjrt_ffi] RESIDENT: @linear_fwd holds 2 parameter tensors (0.0 MB) on 1 device; they stop crossing PCIe from here
+  epoch 12: test_acc = 9210/10000 = 92.100000%  [95% CI 91.56–92.61] (93ms)
+done (trained MNIST-Linear via the proof-rendered StableHLO).

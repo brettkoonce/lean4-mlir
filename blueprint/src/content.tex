@@ -2463,11 +2463,6 @@ log-scale mean training loss per epoch
 $14\times$ across the run, and test accuracy ends at 97.81\%.
 
 Both numbers come off the same binary this chapter's theorems describe.
-An earlier edition reported 98.57\% here, measured with an unverified
-ablation runner that shared the architecture but not the proof-rendered
-graph, and that runner was kept because it was the only thing that
-printed a loss. The verified train step now returns one, so the second
-program is gone.
 
 \section{Return on width}
 
@@ -2674,49 +2669,94 @@ lake build mnist-cnn-verified
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-08-11-cnn-verified-xla-cuda/}. XLA's startup banner is
+\texttt{runs/2026-09-01-cnn-verified-xla-cuda/}. XLA's startup banner is
 removed and one long line is wrapped:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/cnn_train_step.mlir
-             (@cnn_train_step, 11 outputs, 1 replica) in 2490 ms
+             (@cnn_train_step, 11 outputs, 1 replica) in 2566 ms
 [pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir
-             (@cnn_fwd, 1 outputs, 1 replica) in 383 ms
+             (@cnn_fwd, 1 outputs, 1 replica) in 210 ms
 MNIST-CNN via the VERIFIED renderer (conv→conv→pool→512→512→10) → XLA/PJRT → GPU
   xla/pjrt verified_mlir/cnn_train_step.mlir
   xla/pjrt verified_mlir/cnn_fwd.mlir
   train 60000, test 10000; bs 128, MNIST-CNN (10 params, 3489130 floats),
     mean-loss SGD lr=0.100000, He init
-  epoch 1: loss = 0.348858, test_acc = 9465/10000 = 94.650000% (5922ms)
-  epoch 2: loss = 0.094931, test_acc = 9740/10000 = 97.400000% (6063ms)
-  epoch 3: loss = 0.056737, test_acc = 9807/10000 = 98.070000% (5795ms)
-  epoch 4: loss = 0.038233, test_acc = 9829/10000 = 98.290000% (4608ms)
-  epoch 5: loss = 0.026337, test_acc = 9844/10000 = 98.440000% (5533ms)
-  epoch 6: loss = 0.017761, test_acc = 9834/10000 = 98.340000% (5663ms)
-  epoch 7: loss = 0.015211, test_acc = 9830/10000 = 98.300000% (4770ms)
-  epoch 8: loss = 0.009691, test_acc = 9869/10000 = 98.690000% (4957ms)
-  epoch 9: loss = 0.035910, test_acc = 9836/10000 = 98.360000% (4486ms)
-  epoch 10: loss = 0.014582, test_acc = 9875/10000 = 98.750000% (4618ms)
+  epoch 1: loss = 0.352314, test_acc = 9295/10000 = 92.950000%  [95% CI 92.43–93.44] (5219ms)
+  epoch 2: loss = 0.094411, test_acc = 9749/10000 = 97.490000%  [95% CI 97.16–97.78] (5072ms)
+  epoch 3: loss = 0.056773, test_acc = 9800/10000 = 98.000000%  [95% CI 97.71–98.26] (4888ms)
+  epoch 4: loss = 0.038316, test_acc = 9819/10000 = 98.190000%  [95% CI 97.91–98.43] (4672ms)
+  epoch 5: loss = 0.026202, test_acc = 9838/10000 = 98.380000%  [95% CI 98.11–98.61] (4357ms)
+  epoch 6: loss = 0.018312, test_acc = 9853/10000 = 98.530000%  [95% CI 98.27–98.75] (5069ms)
+  epoch 7: loss = 0.022045, test_acc = 9857/10000 = 98.570000%  [95% CI 98.32–98.78] (5537ms)
+  epoch 8: loss = 0.011130, test_acc = 9859/10000 = 98.590000%  [95% CI 98.34–98.80] (5390ms)
+  epoch 9: loss = 0.006994, test_acc = 9869/10000 = 98.690000%  [95% CI 98.45–98.89] (4808ms)
+  epoch 10: loss = 0.006176, test_acc = 9861/10000 = 98.610000%  [95% CI 98.36–98.82] (4351ms)
+  epoch 11: loss = 0.004395, test_acc = 9867/10000 = 98.670000%  [95% CI 98.43–98.88] (4647ms)
+  epoch 12: loss = 0.033374, test_acc = 9877/10000 = 98.770000%  [95% CI 98.53–98.97] (4981ms)
 done (trained MNIST-CNN via the proof-rendered StableHLO).
 \end{verbatim}
 
-Ten epochs at about 5 seconds each, and 98.75\% on the full
+Twelve epochs at about 4.9 seconds each, and 98.77\% on the full
 10,000-image test set. Two convolutions in front of
-Chapter~\ref{chap:mlp}'s classifier buy 0.9 points over the MLP's
-97.83\%, and they do it with 3.5M parameters against the MLP's 670K.
+Chapter~\ref{chap:mlp}'s classifier buy about a point over the MLP's
+97.81\%, and they do it with 3.5M parameters against the MLP's 670K.
 
-The claim survives convolution. That run did not execute a
-reimplementation of the network this chapter describes. It executed
-\texttt{verified\_mlir/cnn\_train\_step.mlir}, which is the text
-\texttt{Proofs.StableHLO.cnnTrainStepFaithfulV} emits, and
-\texttt{CnnFaithfulPoC} proves that each of the ten parameter updates
-denotes the certified softmax cross-entropy loss-descent step derived
-from the Mathlib \(\fderiv\) math. The module carries one line that is
-not \texttt{pretty} of a proven node, the trailing \texttt{\%loss} scalar,
-and it says so in its own comment. It feeds the printed loss above and
-nothing else. Both convolutions, the max pool, the
-three dense layers, and the SGD update are all proof-backed operations.
+This is the noisiest of the three MNIST runs, and the transcript shows it.
+Epoch~1 landed at 92.95\% here; repeated, the same twelve epochs from the
+same seed put it anywhere between 92.5 and 94.8\%, because a convolution's
+weight gradient accumulates in an order the GPU is free to vary. By
+epoch~12 that has largely washed out --- but not in the shape the usual
+summary assumes, and this is the chapter to say what that means.
+
+\medskip\noindent Run this net thirty times and twenty-nine of them land
+between 98.48 and 98.94\%. The thirtieth lands at 97.39\%.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.92\linewidth, height=3.4cm,
+    xlabel={Final test accuracy (\%), 30 runs each},
+    xmin=97.2, xmax=99.05, ymin=-0.6, ymax=1.6,
+    ytick={0,1}, yticklabels={CNN, MLP},
+    xtick={97.25,97.5,97.75,98,98.25,98.5,98.75,99},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small}, label style={font=\small},
+]
+\addplot[only marks, mark=*, mark size=1.4pt, orange, opacity=0.75]
+coordinates {(97.39,0) (98.48,0) (98.59,0) (98.60,0) (98.67,0) (98.67,0) (98.71,0) (98.72,0) (98.72,0) (98.73,0) (98.74,0) (98.75,0) (98.76,0) (98.78,0) (98.78,0) (98.79,0) (98.81,0) (98.81,0) (98.81,0) (98.84,0) (98.85,0) (98.85,0) (98.85,0) (98.85,0) (98.87,0) (98.87,0) (98.88,0) (98.90,0) (98.91,0) (98.94,0)};
+\addplot[only marks, mark=*, mark size=1.4pt, blue, opacity=0.75]
+coordinates {(97.49,1) (97.55,1) (97.63,1) (97.63,1) (97.64,1) (97.65,1) (97.65,1) (97.69,1) (97.70,1) (97.72,1) (97.75,1) (97.76,1) (97.76,1) (97.76,1) (97.77,1) (97.78,1) (97.78,1) (97.79,1) (97.79,1) (97.80,1) (97.81,1) (97.83,1) (97.84,1) (97.85,1) (97.86,1) (97.86,1) (97.87,1) (97.90,1) (97.92,1) (97.93,1)};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent Thirty seeds of each net, one dot per run
+(\texttt{runs/2026-09-01-mnist-n30/}). The MLP's runs sit in a band; the
+CNN's do too, apart from one.
+
+\medskip\noindent Summarised as a mean and a standard deviation the CNN is
+$98.73 \pm 0.27$. Summarised as a median and quartiles it is $98.78$, with
+the middle half between $98.72$ and $98.85$. The second describes the
+picture above; the first does not, and the whole difference is that one
+run --- trim the three highest and three lowest and the standard
+deviation falls from $0.27$ to $0.07$. A standard deviation assumes the
+spread is symmetric about the middle, and this one is not: the
+distribution fails a normality test outright ($p < 10^{-4}$), with a long
+left tail and nothing answering it on the right.
+
+\medskip\noindent The cost is that a handful of runs cannot see this.
+Draw five of those thirty, build the ordinary 95\% interval on their mean,
+and ask whether it contains the mean of the twenty-five you did not
+draw: it does 79\% of the time, not 95\%, because five draws usually miss
+the tail and report a spread as small as $0.05$ against the true $0.27$.
+Chapter~\ref{chap:mlp}'s MLP, whose thirty runs are unremarkable, gets
+92\% from the same procedure. How many runs a claim needs is a property
+of the network, and a convolution's is higher than a dense stack's. The
+early epochs of a conv net are not a measurement; the last one is, and
+even then not from a single run.
 
 \prosesection{Three properties baked into a convolution}
 
@@ -3076,7 +3116,7 @@ the spatial structure: pixel (5,5) and pixel (5,6) are neighbors,
 but the MLP sees no more relationship between them than it does
 between pixel (5,5) and pixel (23,14). Convolutions fix that. This
 chapter does MNIST again, the same way the Swift for TensorFlow
-book's Chapter 1 did it: two plain $3 \times 3$ convs to pull out
+book's Chapter 2 did it: two plain $3 \times 3$ convs to pull out
 local features, a max-pool to collapse the spatial grid, then the
 same dense head you already know.
 
@@ -3125,7 +3165,7 @@ This is the spec \S\ref{sec:cnn_runit} actually ran.
 
 \begin{verbatim}
 -- 1
-import LeanMlir
+import LeanMlir.VerifiedNets
 
 -- 2
 def cnnVerified : VerifiedNetSpec where
@@ -3139,10 +3179,13 @@ def cnnVerified : VerifiedNetSpec where
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
                .flatten,
                .dense 6272 512, .relu, .dense 512 512, .relu, .dense 512 10]
+  blurb    := "MNIST-CNN via the VERIFIED renderer
+                (conv→conv→pool→512→512→10) → %LOWERER% → GPU"
+  lossSlot := true
 
 -- 3
 def cnnConfig : VerifiedConfig where
-  epochs    := 10
+  epochs    := 12
   batchSize := 128
 
 -- 4
@@ -3173,7 +3216,19 @@ Chapter~\ref{chap:mlp} (\S~\ref{thm:dense_has_vjp}). Adding
 convolution to the model introduces no new training-loop code, only
 new layer types, which the framework already knows how to compose.
 
-\textbf{3. The training hyperparameters.} Ten epochs at batch 128,
+\noindent Two fields carry over from Chapter~\ref{chap:mlp} and do the same
+jobs: \texttt{blurb} is the banner the run prints, and \texttt{lossSlot}
+declares that this render returns a trailing report-only \texttt{\%loss},
+which is the one line of \texttt{verified\_mlir/cnn\_train\_step.mlir} that
+is not \texttt{pretty} of a proven graph node --- the render labels it as
+such in a comment of its own. Everything else in the file is:
+\texttt{Proofs.StableHLO.cnnTrainStepFaithfulV} emits it, and
+\texttt{CnnFaithfulPoC} proves that each of the ten parameter updates
+denotes the certified softmax cross-entropy loss-descent step derived from
+the Mathlib \(\fderiv\) math. Both convolutions, the max pool, the three
+dense layers and the SGD update are proof-backed operations.
+
+\textbf{3. The training hyperparameters.} Twelve epochs at batch 128,
 SGD, no regularization and no augmentation. Note what a
 \texttt{VerifiedConfig} does \emph{not} carry: the learning rate. It is
 baked into \texttt{verified\_mlir/cnn\_train\_step.mlir}, which is
@@ -3218,7 +3273,7 @@ loss, against Chapter~\ref{chap:mlp}'s MLP on the same recipe:
     width=0.92\linewidth, height=6.5cm,
     xlabel={Epoch}, ylabel={Training loss},
     ymode=log,
-    xmin=0, xmax=13, ymin=0.008, ymax=0.5,
+    xmin=0, xmax=13, ymin=0.003, ymax=0.5,
     xtick={0,2,4,6,8,10,12},
     legend pos=north east,
     legend cell align={left},
@@ -3228,30 +3283,34 @@ loss, against Chapter~\ref{chap:mlp}'s MLP on the same recipe:
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,0.413492) (2,0.191197) (3,0.139092) (4,0.109095) (5,0.088633) (6,0.073492) (7,0.061921) (8,0.052623) (9,0.045073) (10,0.038765) (11,0.033494) (12,0.028984)
+(1,0.413496) (2,0.191186) (3,0.139057) (4,0.109009) (5,0.088619) (6,0.073548) (7,0.061923) (8,0.052682) (9,0.045157) (10,0.038872) (11,0.033574) (12,0.029061)
 };
 \addlegendentry{MLP (12 epochs)}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,0.348858) (2,0.094931) (3,0.056737) (4,0.038233) (5,0.026337) (6,0.017761) (7,0.015211) (8,0.009691) (9,0.035910) (10,0.014582)
+(1,0.352314) (2,0.094411) (3,0.056773) (4,0.038316) (5,0.026202) (6,0.018312) (7,0.022045) (8,0.011130) (9,0.006994) (10,0.006176) (11,0.004395) (12,0.033374)
 };
-\addlegendentry{CNN (10 epochs)}
+\addlegendentry{CNN (12 epochs)}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
 \noindent MNIST, SGD~0.1, log-scale mean training loss per epoch
-(\texttt{runs/2026-08-11-\{mlp,cnn\}-verified-xla-cuda/}). The CNN is
-below the MLP from the second epoch onward and reaches in 10 epochs a
-loss the MLP does not reach in 12. Test accuracy is 98.75\% against the
-MLP's 97.83\%. The bump at the CNN's ninth epoch is ordinary SGD at
-$\text{lr}=0.1$ rather than a measurement artifact, and the accuracy
-trace in \S\ref{sec:cnn_runit} dips at the same epoch.
+(\texttt{runs/2026-09-01-\{mlp,cnn\}-verified-xla-cuda/}), both nets now on
+the same twelve. The CNN sits below the MLP through epoch~11 and reaches
+by epoch~5 a loss the MLP has not reached by twelve. Test accuracy is
+98.77\% against the MLP's 97.81\%.
 
-Both curves come off the binaries these chapters' theorems describe. An
-earlier edition plotted an unverified ablation runner here, which shared
-the architectures but not the proof-rendered graphs, and reported 98.98\%
-against 98.57\%. It was kept because it was the only thing that printed a
-loss. The verified train steps now return one.
+\medskip\noindent The exception is the last point, and it is the
+interesting one. The CNN's training loss bumps at epoch~7 and then jumps
+almost eightfold at epoch~12, from $0.0044$ to $0.0334$ --- far enough to
+cross back above the MLP's $0.0291$. That is ordinary SGD at
+$\text{lr}=0.1$ rather than a measurement artifact. And the run's test
+accuracy is at its \emph{highest} on that same epoch, 98.77\%. Training
+loss and held-out accuracy are different measurements, and a figure where
+the two disagree this loudly is the one to remember when a later chapter
+asks you to read a loss curve.
+
+Both curves come off the binaries these chapters' theorems describe.
 
 \subsection*{Why this network is still 99\% dense-head}
 
@@ -3266,16 +3325,13 @@ entire conv+maxPool backbone is 9{,}568 parameters, which is 0.27\%
 of the total.
 
 This is the same ``fat FC head'' pattern you'll see in AlexNet, VGG,
-and YOLOv1: a compact convolutional backbone feeding a massive
-fully-connected classifier. Historically it drove practitioners
-crazy, because the conv layers were the interesting new machinery but
-all the weight budget lived in the part nobody had done anything
-new with. Every post-2015 vision architecture responded by
-replacing the dense head with \texttt{globalAvgPool} followed by a
-single small dense, which is why ResNet-18 has $\sim$11M parameters
-for 1000-class ImageNet but Chapter~\ref{chap:cnn}'s 10-class MNIST
-CNN has 3.5M. We'll see the switch firsthand starting with ResNet
-in Chapter~\ref{chap:residual}.
+and YOLOv1: a compact convolutional backbone spending its parameter
+budget on a large fully-connected classifier. ResNet
+(Chapter~\ref{chap:residual}) is the first architecture in this book
+without one: its head is a \texttt{globalAvgPool} followed by a single
+small dense layer, which is why ResNet-18 (a smaller version of
+ResNet-34) has $\sim$11M parameters for 1000-class ImageNet but
+Chapter~\ref{chap:cnn}'s 10-class MNIST CNN has 3.5M.
 
 The MLIR character count also tells a story: the CNN emits 21{,}884
 chars vs the MLP's 10{,}375, about 2.1$\times$ bigger. Adding
@@ -3312,8 +3368,12 @@ the head needs once good convolutional features exist:
     label style={font=\small},
     every axis plot/.append style={line width=1pt, mark size=1.5pt},
 ]
-\addplot[green!55!black, mark=*, mark options={fill=green!55!black}] coordinates {
-(8,98.17) (16,98.49) (32,98.46) (64,98.47) (128,98.65) (256,98.77) (512,98.49) (1024,98.76) (2048,98.71) (4096,98.75)
+\addplot[green!55!black, mark=*, mark options={fill=green!55!black},
+  error bars/.cd, y dir=both, y explicit,
+  error bar style={green!45!black, line width=0.6pt},
+  error mark options={rotate=90, mark size=2.5pt, green!45!black, line width=0.6pt}]
+coordinates {
+(8,98.17) += (0,0.03) -= (0,0.18) (16,98.49) += (0,0.14) -= (0,0.02) (32,98.46) += (0,0.28) -= (0,0.09) (64,98.47) += (0,0.16) -= (0,0.15) (128,98.65) += (0,0.08) -= (0,0.05) (256,98.77) += (0,0.04) -= (0,0.15) (512,98.49) += (0,0.17) -= (0,1.83) (1024,98.76) += (0,0.08) -= (0,0.04) (2048,98.71) += (0,0.08) -= (0,0.06) (4096,98.75) += (0,0.06) -= (0,5.23)
 };
 \addlegendentry{CNN (conv@32 fixed, head $d{\to}d$)}
 \addplot[blue, mark=square*, mark options={fill=blue}] coordinates {
@@ -3328,22 +3388,28 @@ the head needs once good convolutional features exist:
 backbone held at 32 channels), overlaid on the MLP width sweep of
 Chapter~\ref{chap:mlp} (\texttt{runs/cnn\_grid\_rep\{1..5\}.tsv} and
 \texttt{runs/mlp\_grid\_results\_xla.tsv}). Each CNN point is the median of
-five runs, because two of the widths are bimodal: $d=512$ and $d=4096$ each
-produced one run about 2 and 5 points below their other four, while the
-other eight widths repeat to within 0.4. The MLP points are single runs,
-which is enough because that graph is dense-only and reproduces exactly.
-The whole CNN curve sits about a point above the MLP's, and it is flat
+five runs and its whiskers are the observed range across those five ---
+not an interval, just the highest and lowest the configuration actually
+produced. Eight of the ten widths repeat to within 0.4 and their whiskers
+are barely visible. The other two do not: $d=512$ dropped one run to
+96.66\% and $d=4096$ one to 93.52\%, which is what the two long tails are.
+
+\medskip\noindent Those tails are the reason this curve is a median of
+five and Chapter~\ref{chap:mlp}'s is not. A symmetric error bar would have
+been the wrong shape for them --- four runs cluster and one falls away, so
+there is no spread to put a $\pm$ on --- and the 95\% interval on the test
+set, $\pm 0.22$ at this accuracy, would have hidden a five-point failure
+behind a rounding error. The MLP points are single runs, and
+Chapter~\ref{chap:mlp} gives them half a point of give for the same reason
+the CNN's needed five.
+
+\medskip\noindent The whole CNN curve sits about a point above the MLP's, and it is flat
 across the entire range: an 8-wide head already reaches 98.2\% at 60K
 parameters, beating the widest 4096-wide MLP. So the 3.2M-parameter
 $6272{\to}512$ layer is not buying accuracy, because shrinking the head
 to $\ldots{\to}8{\to}8{\to}10$ keeps essentially all of it. The head is fat
 because the flatten hands it a 6272-vector and nobody trimmed it, not
-because the task needs the width. There is no knee to find here, and the
-convolutional backbone has already done the work the head is being paid
-for. (On this GPU the wall-clock is convolution-bound, so
-the shrink is a parameter win rather than a speed win, which is exactly why
-the post-2015 fix was \texttt{globalAvgPool}, replacing the flatten rather
-than narrowing it.)
+because the task needs the width.
 
 \section{MLIR: Convolution}
 
