@@ -3598,64 +3598,61 @@ epochs 8 through 34 are elided:
 \begin{verbatim}
 [pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
 [pjrt_ffi] compiled verified_mlir/cifar8w_bn_mom_train_step.mlir
-             (@cifar8w_bn_mom_train_step, 117 outputs, 1 replica) in 1215 ms
+             (@cifar8w_bn_mom_train_step, 117 outputs, 1 replica) in 1061 ms
 [pjrt_ffi] compiled verified_mlir/cifar8w_bn_fwd.mlir
-             (@cifar8w_bn_fwd, 1 outputs, 1 replica) in 261 ms
+             (@cifar8w_bn_fwd, 1 outputs, 1 replica) in 234 ms
 ════════ cifar8w-BN (wide head) — Nesterov momentum (μ.9, lr 0.02) ════════
 Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style wide head
   (8× conv→BN→relu → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
   xla/pjrt verified_mlir/cifar8w_bn_mom_train_step.mlir
   xla/pjrt verified_mlir/cifar8w_bn_fwd.mlir
   train 50000, test 10000; bs 128, CIFAR-CNN8-wide-BN mom
-    (cosine+warmup 3ep, baseLR 0.020000), He init
-Epoch 1/40: loss=1.958118 lr=0.006667
-  epoch 1: test_acc = 4209/10000 = 42.090000%  top5 = 8952/10000 = 89.520000%
-Epoch 2/40: loss=1.418591 lr=0.013333
-  epoch 2: test_acc = 5474/10000 = 54.740000%  top5 = 9449/10000 = 94.490000%
-Epoch 3/40: loss=1.167188 lr=0.020000
-  epoch 3: test_acc = 6022/10000 = 60.220000%  top5 = 9523/10000 = 95.230000%
-Epoch 4/40: loss=0.992680 lr=0.019964
-  epoch 4: test_acc = 6499/10000 = 64.990000%  top5 = 9694/10000 = 96.940000%
-Epoch 5/40: loss=0.882675 lr=0.019856
-  epoch 5: test_acc = 6876/10000 = 68.760000%  top5 = 9726/10000 = 97.260000%
-Epoch 6/40: loss=0.811264 lr=0.019677
-  epoch 6: test_acc = 6997/10000 = 69.970000%  top5 = 9771/10000 = 97.710000%
-Epoch 7/40: loss=0.756665 lr=0.019429
-  epoch 7: test_acc = 7208/10000 = 72.080000%  top5 = 9784/10000 = 97.840000%
-Epoch 35/40: loss=0.258739 lr=0.000888
-  epoch 35: test_acc = 7759/10000 = 77.590000%  top5 = 9836/10000 = 98.360000%
-Epoch 36/40: loss=0.251148 lr=0.000571
-  epoch 36: test_acc = 7738/10000 = 77.380000%  top5 = 9832/10000 = 98.320000%
-Epoch 37/40: loss=0.247924 lr=0.000323
-  epoch 37: test_acc = 7750/10000 = 77.500000%  top5 = 9840/10000 = 98.400000%
-Epoch 38/40: loss=0.246187 lr=0.000144
-  epoch 38: test_acc = 7753/10000 = 77.530000%  top5 = 9839/10000 = 98.390000%
-Epoch 39/40: loss=0.241790 lr=0.000036
-  epoch 39: test_acc = 7751/10000 = 77.510000%  top5 = 9841/10000 = 98.410000%
-Epoch 40/40: loss=0.243040 lr=0.000000
-  epoch 40: test_acc = 7748/10000 = 77.480000%  top5 = 9840/10000 = 98.400000%
-done (trained CIFAR-CNN8-wide-BN mom + cosine/warmup via packed threading).
+    (constant lr 0.020000), He init
+Epoch 1/40: loss=1.611771 lr=0.020000
+  epoch 1: test_acc = 4927/10000 = 49.270000%  top5 = 9074/10000 = 90.740000%
+             [95% CI 48.29–50.25]
+Epoch 2/40: loss=1.207551 lr=0.020000
+  epoch 2: test_acc = 6135/10000 = 61.350000%  top5 = 9543/10000 = 95.430000%
+             [95% CI 60.39–62.30]
+Epoch 3/40: loss=1.027676 lr=0.020000
+  epoch 3: test_acc = 6469/10000 = 64.690000%  top5 = 9660/10000 = 96.600000%
+             [95% CI 63.75–65.62]
+Epoch 4/40: loss=0.916538 lr=0.020000
+  epoch 4: test_acc = 6653/10000 = 66.530000%  top5 = 9682/10000 = 96.820000%
+             [95% CI 65.60–67.45]
+Epoch 5/40: loss=0.849334 lr=0.020000
+  epoch 5: test_acc = 6868/10000 = 68.680000%  top5 = 9731/10000 = 97.310000%
+             [95% CI 67.76–69.58]
+Epoch 37/40: loss=0.373874 lr=0.020000
+  epoch 37: test_acc = 7550/10000 = 75.500000%  top5 = 9792/10000 = 97.920000%
+             [95% CI 74.65–76.33]
+Epoch 38/40: loss=0.365542 lr=0.020000
+  epoch 38: test_acc = 7565/10000 = 75.650000%  top5 = 9812/10000 = 98.120000%
+             [95% CI 74.80–76.48]
+Epoch 39/40: loss=0.354800 lr=0.020000
+  epoch 39: test_acc = 7585/10000 = 75.850000%  top5 = 9808/10000 = 98.080000%
+             [95% CI 75.00–76.68]
+Epoch 40/40: loss=0.349538 lr=0.020000
+  epoch 40: test_acc = 7594/10000 = 75.940000%  top5 = 9817/10000 = 98.170000%
+             [95% CI 75.09–76.77]
+done (trained CIFAR-CNN8-wide-BN mom + constant lr via packed threading).
 \end{verbatim}
 
-Forty epochs at about six seconds each, and 77.48\% on the full
-10,000-image CIFAR-10 test set, 98.40\% inside the top five. CIFAR-10
+Forty epochs at about six seconds each, and 75.94\% on the full
+10,000-image CIFAR-10 test set, 98.17\% inside the top five. CIFAR-10
 is a much harder problem than MNIST, so this is the first chapter where
-the headline accuracy drops out of the nineties.
+the headline accuracy drops out of the nineties. BatchNorm's backward is
+also the first in this book you can't read off by inspection.
 
-BatchNorm's backward is the first in this book you can't read off by
-inspection. That run did not execute a
-reimplementation of the network this chapter describes. It executed
-\texttt{verified\_mlir/cifar8w\_bn\_mom\_train\_step.mlir}, which is the
-text \texttt{Proofs.StableHLO} emits for this net, and
-\texttt{Proofs/Cifar8Close.lean} proves that each of its parameter
-updates denotes the certified softmax cross-entropy loss-descent step
-derived from the Mathlib \(\fderiv\) math. Every BatchNorm in it computes
-the three-term backward this chapter proves.
-
-The two compile lines carry the whole in-process story. The train step
-and the eval forward are handed to XLA once, as text, and compiled in
-about 1.5 seconds together, after which all forty epochs run without
-leaving the process.
+\medskip\noindent The learning rate is constant here --- no warmup, no
+decay --- which is not what a CIFAR recipe would normally do and is
+deliberate: \S\ref{sec:bn_cifar_example} spends the rest of the chapter
+changing one thing at a time, and a schedule is one more thing changing.
+Chapter~\ref{chap:residual} adds cosine annealing back and shows what it
+buys. Run five times at this setting the net lands between
+$75.8$ and $76.7\%$, so the number above is an ordinary
+draw rather than a best one, and the tables later in the chapter report
+medians over five for the same reason.
 
 \S\ref{sec:bn_cifar_example} runs this same binary and its no-BN peer
 across all three optimizers, which is where the chapter's measurements
@@ -4191,12 +4188,19 @@ def cifar8wVerified : VerifiedNetSpec where
   imageW   := 32
   nClasses := 10
   data     := .cifar
-  layers   := [.conv 3 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
-               .conv 16 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
-               .conv 16 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
-               .conv 32 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
+  layers   := [.conv 3 16 3 1, .relu,
+               .conv 16 16 3 1, .relu, .maxPool 2 2,
+               .conv 16 16 3 1, .relu,
+               .conv 16 16 3 1, .relu, .maxPool 2 2,
+               .conv 16 32 3 1, .relu,
+               .conv 32 32 3 1, .relu, .maxPool 2 2,
+               .conv 32 32 3 1, .relu,
+               .conv 32 32 3 1, .relu, .maxPool 2 2,
                .flatten,
                .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
+  blurb    := "Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs,
+                [16,16,32,32], 4 pools 32→2 → 128→512→512→10)
+                via the VERIFIED renderer → %LOWERER% → GPU"
 \end{verbatim}
 
 With BN:
@@ -4220,9 +4224,15 @@ def cifar8wBnVerified : VerifiedNetSpec where
                .conv 32 32 3 1, .bnPerChannel 32, .relu, .maxPool 2 2,
                .flatten,
                .dense 128 512, .relu, .dense 512 512, .relu, .dense 512 10]
+  blurb    := "Deeper CIFAR-10 CNN + per-channel BatchNorm, MNIST-style
+                wide head (8× conv→BN→relu → 128→512→512→10)
+                via the VERIFIED renderer → %LOWERER% → GPU"
 \end{verbatim}
 
-The diff is eight \texttt{.bnPerChannel} entries, one inserted between
+Each \texttt{layers} list and each \texttt{blurb} is one line in the
+source, wrapped here; the second \texttt{blurb} is the banner
+\S\ref{sec:bn_runit}'s transcript opens with. The diff is eight
+\texttt{.bnPerChannel} entries, one inserted between
 each convolution and its ReLU. The dense head, the max-pools, and the
 training config are all identical.
 
@@ -4267,18 +4277,19 @@ XLA/PJRT path on the GPU.
 \subsection*{Lever 1: normalization}
 
 Fix the optimizer at plain SGD and toggle BN. Both nets train for 40
-epochs on the shared pipeline. Per-epoch test accuracy, the median of
-five runs each, from the verified runs in
-\texttt{runs/2026-08-12-cifar8w-6arm-xla-cuda/}:
+epochs on the shared pipeline at a \emph{constant} learning rate --- no
+warmup, no decay --- because a schedule is a fourth thing changing and
+this section is about the third. Per-epoch test accuracy, the median of
+five runs each, from \texttt{runs/2026-09-01-cifar8w-6arm-constlr/}:
 
 \begin{center}
 \begin{tikzpicture}
 \begin{axis}[
     width=0.92\linewidth, height=6.5cm,
     xlabel={Epoch}, ylabel={Test accuracy (\%)},
-    xmin=0, xmax=41, ymin=20, ymax=78,
+    xmin=0, xmax=41, ymin=10, ymax=78,
     xtick={0,5,10,15,20,25,30,35,40},
-    ytick={20,30,40,50,60,70},
+    ytick={10,20,30,40,50,60,70},
     legend pos=south east,
     legend cell align={left},
     grid=major, grid style={gray!18},
@@ -4287,42 +4298,42 @@ five runs each, from the verified runs in
     every axis plot/.append style={line width=1pt, mark size=1pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,34.04) (2,45.34) (3,49.90) (4,53.53) (5,61.36) (6,63.69) (7,66.54) (8,68.53) (9,66.08) (10,70.15) (11,70.67) (12,71.10) (13,72.08) (14,71.85) (15,72.67) (16,73.51) (17,73.89) (18,73.69) (19,73.34) (20,74.25) (21,74.21) (22,74.66) (23,74.86) (24,74.57) (25,74.58) (26,74.68) (27,75.12) (28,74.77) (29,74.98) (30,75.00) (31,74.84) (32,75.09) (33,75.02) (34,75.00) (35,74.92) (36,74.94) (37,74.98) (38,75.09) (39,74.99) (40,75.00)
+(1,41.19) (2,52.47) (3,55.65) (4,59.07) (5,64.14) (6,65.53) (7,66.81) (8,68.33) (9,66.86) (10,70.38) (11,71.04) (12,72.00) (13,71.77) (14,71.47) (15,72.30) (16,73.05) (17,72.70) (18,72.85) (19,73.04) (20,73.69) (21,73.64) (22,73.81) (23,74.62) (24,72.84) (25,73.95) (26,73.99) (27,74.04) (28,73.90) (29,74.25) (30,74.75) (31,74.50) (32,75.29) (33,74.77) (34,74.73) (35,74.27) (36,74.04) (37,74.48) (38,74.76) (39,74.78) (40,74.50)
 };
 \addlegendentry{with BN}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,24.01) (2,30.24) (3,29.12) (4,43.11) (5,46.74) (6,51.55) (7,55.02) (8,56.59) (9,56.09) (10,60.52) (11,61.88) (12,61.81) (13,64.33) (14,64.89) (15,65.68) (16,64.54) (17,67.67) (18,67.97) (19,68.97) (20,69.50) (21,69.81) (22,69.56) (23,70.67) (24,70.49) (25,70.89) (26,71.91) (27,71.67) (28,71.86) (29,72.27) (30,72.29) (31,72.40) (32,72.26) (33,72.57) (34,72.43) (35,72.43) (36,72.53) (37,72.61) (38,72.75) (39,72.66) (40,72.64)
+(1,13.43) (2,34.55) (3,40.84) (4,43.54) (5,49.04) (6,48.40) (7,53.08) (8,53.52) (9,52.90) (10,58.18) (11,58.84) (12,58.73) (13,60.17) (14,59.54) (15,60.90) (16,64.71) (17,63.81) (18,63.73) (19,65.63) (20,67.15) (21,65.10) (22,65.79) (23,67.21) (24,66.78) (25,66.26) (26,68.24) (27,67.75) (28,68.92) (29,67.95) (30,68.60) (31,69.62) (32,69.24) (33,68.86) (34,69.08) (35,68.34) (36,68.86) (37,68.39) (38,69.48) (39,70.15) (40,68.75)
 };
 \addlegendentry{no BN}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent CIFAR-10, wide 8-conv net, plain SGD (lr~0.1,
-cosine${+}$warmup) on the shared pipeline, 40 epochs, BN vs no-BN,
-through the verified renderer. Median of $n{=}5$ runs per curve. The
-final points span $74.5$ to $75.6$ with BN and $71.6$ to $73.4$
-without (\texttt{runs/2026-08-12-cifar8w-6arm-xla-cuda/}, the SGD phase).
+\noindent CIFAR-10, wide 8-conv net, plain SGD at a constant lr~0.1 on the
+shared pipeline, 40 epochs, BN vs no-BN, through the verified renderer.
+Median of $n{=}5$ runs per curve. The final points span 74.1 to 75.2 with BN
+and 68.0 to 70.7 without.
 
-\noindent BN leads from the first epoch, 34\% to the bare net's
-24\%, and keeps the lead the whole way, finishing about two and a half
-points up (75.0\% vs 72.6\%). The un-normalized net traces the same arc
-roughly ten epochs behind. Most of that is \emph{speed}, since the curves
-are the same shape shifted left, but at this depth on plain SGD it is
-also a real convergence margin, and it is larger than the run-to-run
-spread on either curve. The conditioning that the three-term
-backward (\S\ref{thm:bnNormalize_has_vjp}) buys is worth more the deeper
-the stack, exactly the trend that makes BN standard equipment by
-ResNet's thirty-four layers. Under momentum and AdamW, next, the
-un-normalized net trains fast enough to close most of the accuracy gap,
-and pays for it in a way plain SGD never exposed.
+\medskip\noindent BN leads from the first epoch --- 41\% against the bare net\'s 13\% ---
+and never gives the lead back, finishing 5.8 points up
+(74.5\% vs 68.8\%). The un-normalized net traces the same
+arc roughly ten epochs behind, and the gap never closes: it is still
+losing at epoch 40 by more than the spread of either set of runs.
+
+\medskip\noindent That first epoch is worth a second look. Thirteen per
+cent is barely above chance on ten classes, and the un-normalized net
+spends four epochs getting to where the normalized one starts. The
+conditioning the three-term backward
+(\S\ref{thm:bnNormalize_has_vjp}) buys is what that is, and it is worth
+more the deeper the stack --- exactly the trend that makes BN standard
+equipment by ResNet's thirty-four layers.
 
 \subsection*{Lever 2: the optimizer}
 
 Now hold the architecture fixed and change only the update rule. Three
 optimizers, each at its own tuned learning rate, all on the identical
-pipeline and the same 40 epochs. Median final accuracy, with the
-observed range across runs:
+pipeline, the same 40 epochs and the same constant rate. Median final
+accuracy, with the observed range across five runs:
 
 \begin{center}
 \begin{tabular}{l c c c}
@@ -4330,134 +4341,38 @@ observed range across runs:
        & SGD & momentum & AdamW \\
        & (lr 0.1) & ($\mu$ 0.9, lr 0.02) & (lr $10^{-3}$) \\
 \hline
-no BN  & 72.6 {\footnotesize (1.8)} & \emph{diverged} & 73.7 {\footnotesize (1.0)} \\
-BN     & 75.0 {\footnotesize (1.1)} & \textbf{77.1} {\footnotesize (0.8)} & 74.4 {\footnotesize (0.8)} \\
+no BN  & 68.8 {\footnotesize (2.7)} & 72.2 {\footnotesize (3.3)} & 72.8 {\footnotesize (2.8)} \\
+BN     & 74.5 {\footnotesize (1.1)} & \textbf{76.3 {\footnotesize (1.0)}} & 74.3 {\footnotesize (0.2)} \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent $n=5$ per cell, $n=4$ for the AdamW column. Parenthesised
-figures are the range from lowest run to highest.
+\noindent $n=5$ per cell. Parenthesised figures are the range from lowest
+run to highest.
 
-\noindent Momentum with BN is the best result on the board at 77.1\%,
-about two points over plain SGD and two and a half over AdamW, and every
-one of those gaps is wider than the spread within a cell. AdamW lands
-between the two: its per-coordinate second-moment scaling is worth
-something over plain SGD, but less than momentum is, even with the wide
-head's extra parameters to exploit. Reading \emph{down} the columns
-recovers Lever~1, and BN is ahead in all three ($+2.4$ under SGD,
-$+0.7$ under AdamW, and under momentum the comparison does not finish).
+\medskip\noindent Momentum with BN is the best result on the board at
+76.3\%, about two points over plain SGD and two over AdamW,
+and that gap is wider than the spread within any cell. AdamW lands
+level with SGD rather than between the two: its per-coordinate
+second-moment scaling is worth something on the un-normalized net and
+nothing once BN is doing the conditioning.
 
-\medskip\noindent\textbf{The empty cell is the finding.} Un-normalized
-plus momentum did not fail to reach a good accuracy. It reached one and
-then destroyed it. In all five runs the training loss fell normally to
-about $0.27$ and then went to \texttt{NaN} between epochs 29 and 34, at a
-learning rate the cosine schedule had already decayed to roughly
-$0.002$. Three of the five collapsed to 10\% by epoch 40, which is chance
-on ten classes. The other two happened to be evaluated before the damage
-propagated and still reported about 76\%. There is no honest single
-number for that cell, so the table does not print one. The same thing
-happened once in four AdamW runs without BN. Across all fourteen
-un-normalized runs the loss went to \texttt{NaN} six times, and across
-all fourteen normalized ones it never did.
+\medskip\noindent\textbf{Reading down the columns recovers Lever~1, and
+this time it recovers it everywhere.} BN is ahead in all three ---
+$+5.8$ under SGD, $+4.2$ under momentum,
+$+1.5$ under AdamW. The benefit shrinks as the optimizer gets
+stronger, which is the familiar reading: a better update rule can
+partly substitute for better conditioning, and never entirely.
 
-\noindent That is the sharper version of Lever~1. On plain SGD, BN buys
-speed and a couple of points. Give the net a stronger optimizer and BN
-stops looking like an accelerator and starts looking like the thing
-holding the net together, which is what deep normalization is actually
-for. It is the same instability an eight-layer stack without
-normalization has always been prone to, and it is why the next chapter's
-thirty-four layers do not attempt it.
-
-\medskip\noindent The Lever-1 graph drew this for the SGD column, with
-the optimizer fixed and BN toggled. The same per-epoch picture for the
-other two columns, on the same axes, is what reading \emph{down} the
-table looks like drawn out:
-
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    title={Nesterov momentum ($\mu$ 0.9, lr 0.02)},
-    title style={font=\small},
-    xlabel={Epoch}, ylabel={Test accuracy (\%)},
-    xmin=0, xmax=41, ymin=28, ymax=78,
-    xtick={0,5,10,15,20,25,30,35,40},
-    ytick={30,40,50,60,70},
-    legend pos=south east,
-    legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small},
-    label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,42.09) (2,54.19) (3,60.19) (4,64.99) (5,68.44) (6,69.97) (7,71.09) (8,72.64) (9,72.64) (10,73.18) (11,74.39) (12,73.94) (13,74.88) (14,75.28) (15,75.29) (16,75.71) (17,75.93) (18,76.14) (19,76.33) (20,76.46) (21,76.52) (22,76.81) (23,76.55) (24,76.93) (25,76.73) (26,76.97) (27,76.53) (28,77.03) (29,76.84) (30,77.06) (31,77.12) (32,77.15) (33,77.12) (34,77.28) (35,77.04) (36,77.14) (37,77.17) (38,77.19) (39,77.16) (40,77.14)
-};
-\addlegendentry{with BN}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,35.54) (2,44.58) (3,49.30) (4,55.05) (5,59.42) (6,61.24) (7,63.40) (8,66.31) (9,66.93) (10,68.08) (11,70.46) (12,70.07) (13,70.98) (14,70.05) (15,71.74) (16,72.92) (17,73.62) (18,73.00) (19,73.75) (20,73.70) (21,74.04) (22,74.74) (23,74.51) (24,74.86) (25,75.06) (26,75.39) (27,75.50) (28,75.76)
-};
-\addlegendentry{no BN (diverges)}
-\addplot[red!70!black, dashed, line width=0.8pt, forget plot, mark=none]
-  coordinates {(29,28) (29,78)};
-\node[anchor=south west, font=\footnotesize, red!70!black, align=left]
-  at (axis cs:29.4,30) {loss $\to$ \texttt{NaN}\\epochs 29--34, 5/5};
-\end{axis}
-\end{tikzpicture}
-\end{center}
-
-\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    title={AdamW (lr $10^{-3}$)},
-    title style={font=\small},
-    xlabel={Epoch}, ylabel={Test accuracy (\%)},
-    xmin=0, xmax=41, ymin=28, ymax=78,
-    xtick={0,5,10,15,20,25,30,35,40},
-    ytick={30,40,50,60,70},
-    legend pos=south east,
-    legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small},
-    label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark size=1pt},
-]
-\addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,37.47) (2,48.90) (3,54.76) (4,60.14) (5,63.52) (6,65.25) (7,66.35) (8,67.81) (9,68.91) (10,69.78) (11,70.69) (12,70.52) (13,71.40) (14,71.78) (15,72.38) (16,72.56) (17,72.81) (18,72.97) (19,73.48) (20,73.34) (21,73.56) (22,74.03) (23,74.00) (24,74.11) (25,73.67) (26,74.18) (27,74.09) (28,74.16) (29,73.94) (30,74.26) (31,74.22) (32,74.39) (33,74.34) (34,74.25) (35,74.37) (36,74.35) (37,74.33) (38,74.37) (39,74.37) (40,74.36)
-};
-\addlegendentry{with BN}
-\addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,39.45) (2,47.36) (3,53.02) (4,55.78) (5,58.40) (6,62.29) (7,62.87) (8,64.10) (9,66.28) (10,66.87) (11,68.08) (12,67.87) (13,68.86) (14,69.89) (15,70.46) (16,70.68) (17,71.20) (18,71.15) (19,71.95) (20,71.79) (21,71.89) (22,72.13) (23,72.29) (24,72.62) (25,72.87) (26,73.14) (27,73.49) (28,73.12) (29,73.17) (30,73.21) (31,73.42) (32,73.47) (33,73.31) (34,73.44) (35,73.60) (36,73.61) (37,73.68) (38,73.55) (39,73.68) (40,73.71)
-};
-\addlegendentry{no BN}
-\end{axis}
-\end{tikzpicture}
-\end{center}
-
-\noindent Same wide 8-conv net, same shared pipeline, same 40 epochs, and
-only the optimizer changes from the SGD panel above
-(\texttt{runs/2026-08-12-cifar8w-6arm-xla-cuda/}, the momentum and AdamW
-phases). Medians as before, over the runs that finished.
-
-\noindent Under \textbf{momentum} BN takes the early lead, 42\% to
-36\% at epoch~1, and the un-normalized net spends the next twenty-five
-epochs closing it, reaching $75.8$ against BN's $77.0$ by epoch~28. Then
-it stops. The orange curve ends where it does because the training loss
-went to \texttt{NaN} in every one of the five runs between epochs 29 and
-34, and there is nothing after that worth plotting. Under \textbf{AdamW}
-both nets run the full forty epochs, BN ahead by about seven tenths the
-whole way ($74.4$ vs $73.7$), which is inside the run-to-run spread and
-is not a gap the text ranks. One of the four un-normalized AdamW runs
-also went to \texttt{NaN}.
-
-\noindent Read top-to-bottom, SGD then momentum then AdamW, the accuracy
-gap between the curves does narrow panel by panel, exactly the old
-``BN helps most under a weak optimizer'' reading. The momentum panel is
-where that reading breaks. The gap narrows right up to the point the
-un-normalized net destroys itself, which means the two curves converging
-was never evidence that BN had stopped mattering.
+\medskip\noindent\textbf{Where the failure actually is.} Not in the
+accuracies, which all look reasonable, but in the losses behind them.
+Three of the five un-normalized AdamW runs sent their training loss to
+\texttt{NaN} and still reported 72.8\% at epoch 40 --- a number that
+would have gone in the table unremarked if we had only scored accuracy.
+None of the SGD or momentum runs did it, with or without BN. The
+un-normalized net is not unstable in general; it is unstable under the
+optimizer with the most internal state to corrupt, and only the loss
+says so.
 
 The reason we can make this comparison \emph{and trust it} is that the
 optimizer is one swappable rendered tail. The forward pass, the
@@ -4481,94 +4396,83 @@ SGD, that the binary32 step actually decreases the loss is itself a
 proved theorem.
 
 \noindent It is worth being precise about what that does and does not
-cover, because the momentum column just exercised the gap. The proofs
-say the emitted graph computes the gradient this chapter derives, and
-they say it in exact real arithmetic. They say nothing about whether
-forty epochs of binary32 updates stay in range. A verified gradient is
-not a guarantee of numerical stability, and the un-normalized momentum
-run is what that distinction looks like when it bites.
+cover, because the AdamW column just exercised the gap. The proofs say
+the emitted graph computes the gradient this chapter derives, and they
+say it in exact real arithmetic. They say nothing about whether forty
+epochs of binary32 updates stay in range. A verified gradient is not a
+guarantee of numerical stability, and three \texttt{NaN} losses under a
+correct AdamW step are what that distinction looks like when it bites.
 
-\medskip\noindent\textbf{One honest note on the comparison.} The first
-time we ran this, the optimizers looked far more separated, with momentum
-and Adam beating SGD by some ten points. That gap was mostly an artifact:
-the momentum and Adam runs happened to go through a data pipeline with
-shuffling and flip augmentation that the plain-SGD baseline lacked.
-Holding the pipeline genuinely fixed, as the table above does, collapsed
-the difference to the few points that are really about the
-optimizer. It is exactly the kind of mistake a verified gradient does
-\emph{not} catch. The math was correct in every run, and the experiment
-design was what needed fixing. An ablation measures the thing you varied
-only if everything else is held constant, and ``everything else''
-includes the parts that live outside the network.
+\medskip\noindent\textbf{One caution about what this table measures.} An
+ablation measures the thing you varied only if everything else is held
+constant, and ``everything else'' includes the data pipeline, the
+learning-rate schedule and the op family the graph is rendered through.
+All three live outside the network, none of them is visible to the
+proofs, and each of them is capable of moving these numbers by more than
+the lever does. The gradients being machine-checked does not make the
+experiment design correct.
 
 \subsection*{Lever 3: the arithmetic}
 
-Levers 1 and 2 changed the \emph{network} and the \emph{update rule}. This one
-changes neither. It holds both fixed and changes only the number format the
-convolutions are computed in, which is the sharpest version of the chapter's
-question: if the optimizer ranking is a fact about optimization, it should
-survive being computed in a different arithmetic.
+The obvious third lever is the number format. Weights and activations do
+not have to be \texttt{float32}: \textbf{bfloat16} keeps float32's
+exponent range and throws away sixteen bits of mantissa, so it holds
+roughly three significant decimal digits instead of seven while
+overflowing at the same place. Modern GPUs multiply it about twice as
+fast and store it in half the memory, which is why every network from
+Chapter~\ref{chap:residual} onward is trained that way. The question this
+chapter would like to answer is whether that costs any accuracy.
 
-Three precisions, the same three optimizers, the same 40 epochs and the same
-pipeline. Median of five runs, with the observed range:
+\medskip\noindent It cannot answer it, and the reason is worth one
+paragraph. The renderer has two convolution op families --- the
+per-example one these MNIST and CIFAR chapters use, and the batched one
+the ImageNet chapters use --- and bf16 twins exist only for the batched
+family. BatchNorm has no bf16 twin in either. So bf16 here can only be
+measured on the \emph{un-normalized} net, and against a baseline in a
+different op family than the fp8 arm. Here is the one comparison
+that is clean --- same net, same batched family, same constant rate, five
+seeds, fp32 against bf16:
 
 \begin{center}
-\begin{tabular}{l c c c}
+\small
+\begin{tabular}{l l r r r r r c}
 \hline
-          & fp32 & bf16 & fp8 (E4M3) \\
+ & & \multicolumn{5}{c}{final test accuracy, per seed} & median \\
 \hline
-SGD (lr 0.1)          & 72.6 {\footnotesize (1.2)} & 72.5 {\footnotesize (2.6)} & 72.2 {\footnotesize (3.3)} \\
-AdamW (lr $10^{-3}$)  & 74.3 {\footnotesize (2.3)} & 73.9 {\footnotesize (2.1)} & 74.3 {\footnotesize (1.5)} \\
-momentum ($\mu$ 0.9)  & \emph{diverged} & \emph{diverged} & \emph{diverged} \\
+SGD (lr 0.1)   & fp32 & 71.31 & 70.74 & 70.04 & 71.13 & 69.02 & 70.74 \\
+               & bf16 & 69.14 & 68.89 & 70.09 & 69.34 & 70.72 & 69.34 \\[2pt]
+momentum       & fp32 & 71.14 & 73.45 & 74.25 & 74.21 & 73.85 & 73.85 \\
+               & bf16 & \emph{10.0} & 73.29 & 72.14 & 74.47 & 74.41 & 73.29 \\[2pt]
+AdamW          & fp32 & 71.56 & 74.23 & 72.76 & 73.53 & 73.70 & 73.53 \\
+               & bf16 & 73.44 & 74.00 & 72.23 & 72.99 & 73.90 & 73.44 \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent $n=5$ per cell. Reading \emph{down} each column recovers Lever~2, and
-it recovers it three times: SGD is last, AdamW is second, momentum is first, in
-every arithmetic. \textbf{The ranking is invariant.} Reading \emph{across} the
-rows, the medians agree to within half a point --- 72.6/72.5/72.2 and
-74.3/73.9/74.3 --- which is well inside the spread \emph{within} a single cell.
-Sixteen-bit and eight-bit arithmetic land on the same curve as fp32.
+\noindent Medians differ by $-1.40$, $-0.56$ and
+$-0.09$, and every one of those is smaller than the spread
+\emph{within} the corresponding fp32 row. One bf16 momentum seed
+collapsed to chance; no fp32 seed did, and one run in five is not enough
+to say whether that is bf16 or the un-normalized net, which the previous
+section showed is the fragile part.
 
-\medskip\noindent\textbf{The whole momentum row is Lever~1 again, and the
-accuracies are what mislead.} In \emph{all three} arithmetics, every one of the
-five momentum runs sent its training loss to \texttt{NaN} --- fifteen runs out of
-fifteen. Only two of them had visibly collapsed to 10\% by the time epoch~40 was
-evaluated; the other thirteen still reported something around 76\%, which is
-precisely the trap Lever~2 warns about, and precisely why the loss and not the
-accuracy is the thing to read. Had we scored this row on test accuracy alone, we
-would have printed a best-in-table 76.0 for bf16 and called it a win.
+\medskip\noindent For scale, changing the op family at fixed fp32 ---
+per-example to batched, the same arithmetic throughout --- moves the
+answer by $+2.0$ on SGD and $+1.7$ on momentum. The lever we did not mean
+to pull is bigger than the one we did.
 
-\noindent That the failure is identical across fp32, bf16 and fp8 is the point.
-The un-normalized eight-layer stack with momentum is unstable as a
-\emph{network}; the number format neither causes it nor cures it. Reduced
-precision is being blamed for nothing here, and credited with nothing either.
-
-\noindent AdamW is a milder version of the same story: two of five fp32 runs and
-one of five in each low-precision column touch \texttt{NaN} without ever
-collapsing, matching the ``once in four'' Lever~2 saw. Plain SGD is clean in all
-fifteen runs. So the ordering the table reports rests on the two rows that
-finish healthy, and the third row is reported as diverged rather than scored.
-
-\medskip\noindent\textbf{What the two low-precision columns actually are}, since
-they are not the same kind of object. The bf16 arm is genuine reduced precision
-\emph{in the graph}: all twenty-three convolutions of the training step --- the
-forward, the input gradient and the weight gradient --- carry bf16 operands and a
-bf16-typed result, and only the parameter updates stay in fp32. The fp8 arm is
-\emph{emulated}: weights and inputs are projected onto the E4M3 grid, but the
-graph itself is fp32 and accumulation is fp32. It is the right arithmetic and
-the wrong hardware path, which is enough for a statement about numerics and not
-enough for one about speed.
-
-\medskip\noindent\textbf{And there is no speed claim here.} At this network's
-size the convolutions are launch-bound --- sixteen to thirty-two channels on
-grids from $32^2$ down to $4^2$ --- so the tensor cores that make bf16 and fp8
-worth having on ImageNet-scale models sit idle. Measured directly, bf16 runs at
-$0.87\times$ fp32 across this conv stack: slightly \emph{slower}. The payoff for
-low precision is a story about ResNet-34 and beyond (Ch~\ref{chap:residual});
-what CIFAR can show is that the mathematics survives the trip, and that is what
-this lever is for.
+\medskip\noindent What that licenses is narrow but real: bf16 introduces
+no failure this net does not already have in fp32 --- the \texttt{NaN}
+losses of the previous section appear in both, and in the same column ---
+and where the comparison is clean at all it costs between nothing and a
+point and a half, on cells whose own run-to-run range is wider than that.
+It does not license the
+claim Chapter~\ref{chap:residual} actually needs --- that a
+\emph{normalized} net trains the same in bf16 --- and that measurement
+waits on a bf16 BatchNorm render, which is where the next chapter starts.
+An fp8 (E4M3) arm exists in the repository and is left out here for the
+same reason: its render is a lowering probe with forward convolutions
+only, not a trainable arm.
 
 \subsection*{Does the head width matter?}
 

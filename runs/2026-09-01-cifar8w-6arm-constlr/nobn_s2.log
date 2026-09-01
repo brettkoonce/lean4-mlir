@@ -1,0 +1,1174 @@
+I0901 13:50:14.057444  992054 service.cc:154] XLA service 0x7f0c38009390 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0901 13:50:14.057477  992054 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0901 13:50:14.058851  992054 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0901 13:50:14.058879  992054 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0901 13:50:14.067024  992054 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0901 13:50:15.997439  992227 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 320 bytes spill stores, 320 bytes spill loads
+
+I0901 13:50:16.315385  992241 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 256 bytes spill stores, 256 bytes spill loads
+
+I0901 13:50:16.538413  992238 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 320 bytes spill stores, 320 bytes spill loads
+
+I0901 13:50:16.992493  992235 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 424 bytes spill stores, 424 bytes spill loads
+
+I0901 13:50:17.021456  992243 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 208 bytes spill stores, 208 bytes spill loads
+
+I0901 13:50:17.029436  992228 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 192 bytes spill stores, 192 bytes spill loads
+
+I0901 13:50:17.328425  992249 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 428 bytes spill stores, 428 bytes spill loads
+
+I0901 13:50:17.445058  992240 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 444 bytes spill stores, 444 bytes spill loads
+
+I0901 13:50:17.455550  992229 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 416 bytes spill stores, 416 bytes spill loads
+
+I0901 13:50:17.641560  992233 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 412 bytes spill stores, 412 bytes spill loads
+
+I0901 13:50:18.226615  992247 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 256 bytes spill stores, 256 bytes spill loads
+
+I0901 13:50:18.335019  992246 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 176 bytes spill stores, 176 bytes spill loads
+
+I0901 13:50:18.988172  992222 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 32 bytes spill stores, 32 bytes spill loads
+
+I0901 13:50:19.109581  992243 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 192 bytes spill stores, 192 bytes spill loads
+
+I0901 13:50:19.595471  992245 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 40 bytes spill stores, 40 bytes spill loads
+
+I0901 13:50:19.710078  992246 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 192 bytes spill stores, 192 bytes spill loads
+
+I0901 13:50:20.734393  992236 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 44 bytes spill stores, 44 bytes spill loads
+
+I0901 13:50:21.044237  992250 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 6392 bytes spill stores, 7388 bytes spill loads
+
+I0901 13:50:21.709409  992221 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_16', 44 bytes spill stores, 44 bytes spill loads
+
+I0901 13:50:21.909738  992251 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 712 bytes spill stores, 712 bytes spill loads
+
+I0901 13:50:22.508386  992234 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 36 bytes spill stores, 36 bytes spill loads
+
+I0901 13:50:24.399115  992245 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 544 bytes spill stores, 544 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/cifar8w_sgd_train_step.mlir (@cifar8w_sgd_train_step, 69 outputs, 1 replica) in 10930 ms
+I0901 13:50:26.040068  992226 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 40 bytes spill stores, 40 bytes spill loads
+
+I0901 13:50:27.396648  992237 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 40 bytes spill stores, 40 bytes spill loads
+
+I0901 13:50:27.407450  992249 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 812 bytes spill stores, 812 bytes spill loads
+
+I0901 13:50:27.725434  992224 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 6668 bytes spill stores, 8424 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/cifar8w_fwd.mlir (@cifar8w_fwd, 1 outputs, 1 replica) in 3229 ms
+════════ cifar8w (wide head) — SGD (lr 0.1) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_sgd_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide sgd (constant lr 0.100000), He init
+[pjrt_ffi] RESIDENT: @cifar8w_sgd_train_step holds 66 parameter tensors (4.3 MB) on 1 device; they stop crossing PCIe from here
+  step 0/390: loss=2.325001
+  step 1/390: loss=2.305904
+  step 2/390: loss=2.318779
+  step 100/390: loss=2.297309
+  step 200/390: loss=2.303831
+  step 300/390: loss=2.297077
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/40: loss=2.296339 lr=0.100000
+  epoch 1: test_acc = 1000/10000 = 10.000000%  top5 = 5001/10000 = 50.010000%  [95% CI 9.43–10.60]
+  step 0/390: loss=2.305803
+  step 1/390: loss=2.308891
+  step 2/390: loss=2.303051
+  step 100/390: loss=2.308346
+  step 200/390: loss=2.304555
+  step 300/390: loss=2.297849
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/40: loss=2.298552 lr=0.100000
+  epoch 2: test_acc = 1880/10000 = 18.800000%  top5 = 7089/10000 = 70.890000%  [95% CI 18.05–19.58]
+  step 0/390: loss=2.273429
+  step 1/390: loss=2.277258
+  step 2/390: loss=2.265661
+  step 100/390: loss=2.330023
+  step 200/390: loss=2.313053
+  step 300/390: loss=1.944193
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/40: loss=2.173492 lr=0.100000
+  epoch 3: test_acc = 2926/10000 = 29.260000%  top5 = 8124/10000 = 81.240000%  [95% CI 28.38–30.16]
+  step 0/390: loss=1.978673
+  step 1/390: loss=2.131743
+  step 2/390: loss=2.392585
+  step 100/390: loss=1.759535
+  step 200/390: loss=1.892458
+  step 300/390: loss=1.747578
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/40: loss=1.851220 lr=0.100000
+  epoch 4: test_acc = 2875/10000 = 28.750000%  top5 = 7894/10000 = 78.940000%  [95% CI 27.87–29.65]
+  step 0/390: loss=1.844162
+  step 1/390: loss=1.832872
+  step 2/390: loss=1.821609
+  step 100/390: loss=1.651258
+  step 200/390: loss=1.604743
+  step 300/390: loss=1.822526
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/40: loss=1.675446 lr=0.100000
+  epoch 5: test_acc = 3860/10000 = 38.600000%  top5 = 8734/10000 = 87.340000%  [95% CI 37.65–39.56]
+  step 0/390: loss=1.773450
+  step 1/390: loss=1.619892
+  step 2/390: loss=1.626433
+  step 100/390: loss=1.344130
+  step 200/390: loss=1.533361
+  step 300/390: loss=1.424181
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/40: loss=1.550969 lr=0.100000
+  epoch 6: test_acc = 4702/10000 = 47.020000%  top5 = 9175/10000 = 91.750000%  [95% CI 46.04–48.00]
+  step 0/390: loss=1.355567
+  step 1/390: loss=1.375866
+  step 2/390: loss=1.549174
+  step 100/390: loss=1.499363
+  step 200/390: loss=1.527589
+  step 300/390: loss=1.678035
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/40: loss=1.461873 lr=0.100000
+  epoch 7: test_acc = 4924/10000 = 49.240000%  top5 = 9261/10000 = 92.610000%  [95% CI 48.26–50.22]
+  step 0/390: loss=1.380443
+  step 1/390: loss=1.503731
+  step 2/390: loss=1.277217
+  step 100/390: loss=1.419667
+  step 200/390: loss=1.343575
+  step 300/390: loss=1.383519
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/40: loss=1.382615 lr=0.100000
+  epoch 8: test_acc = 4994/10000 = 49.940000%  top5 = 9318/10000 = 93.180000%  [95% CI 48.96–50.92]
+  step 0/390: loss=1.308206
+  step 1/390: loss=1.226714
+  step 2/390: loss=1.142676
+  step 100/390: loss=1.214856
+  step 200/390: loss=1.350910
+  step 300/390: loss=1.368402
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/40: loss=1.324362 lr=0.100000
+  epoch 9: test_acc = 4927/10000 = 49.270000%  top5 = 9126/10000 = 91.260000%  [95% CI 48.29–50.25]
+  step 0/390: loss=1.353094
+  step 1/390: loss=1.371883
+  step 2/390: loss=1.165965
+  step 100/390: loss=1.249948
+  step 200/390: loss=1.432786
+  step 300/390: loss=1.235826
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/40: loss=1.273988 lr=0.100000
+  epoch 10: test_acc = 5428/10000 = 54.280000%  top5 = 9438/10000 = 94.380000%  [95% CI 53.30–55.25]
+  step 0/390: loss=1.168484
+  step 1/390: loss=1.079520
+  step 2/390: loss=1.368727
+  step 100/390: loss=1.138797
+  step 200/390: loss=1.116580
+  step 300/390: loss=1.120383
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/40: loss=1.220710 lr=0.100000
+  epoch 11: test_acc = 5664/10000 = 56.640000%  top5 = 9508/10000 = 95.080000%  [95% CI 55.67–57.61]
+  step 0/390: loss=1.037595
+  step 1/390: loss=1.149619
+  step 2/390: loss=1.302132
+  step 100/390: loss=1.143071
+  step 200/390: loss=1.261037
+  step 300/390: loss=1.339280
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/40: loss=1.184830 lr=0.100000
+  epoch 12: test_acc = 5840/10000 = 58.400000%  top5 = 9494/10000 = 94.940000%  [95% CI 57.43–59.36]
+  step 0/390: loss=1.124974
+  step 1/390: loss=1.166560
+  step 2/390: loss=1.145297
+  step 100/390: loss=1.270951
+  step 200/390: loss=1.032977
+  step 300/390: loss=1.252438
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/40: loss=1.132135 lr=0.100000
+  epoch 13: test_acc = 5834/10000 = 58.340000%  top5 = 9453/10000 = 94.530000%  [95% CI 57.37–59.30]
+  step 0/390: loss=1.127284
+  step 1/390: loss=1.175101
+  step 2/390: loss=1.138152
+  step 100/390: loss=1.083045
+  step 200/390: loss=0.970001
+  step 300/390: loss=0.992165
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/40: loss=1.099587 lr=0.100000
+  epoch 14: test_acc = 5941/10000 = 59.410000%  top5 = 9536/10000 = 95.360000%  [95% CI 58.44–60.37]
+  step 0/390: loss=1.001660
+  step 1/390: loss=1.038621
+  step 2/390: loss=1.162619
+  step 100/390: loss=1.045086
+  step 200/390: loss=0.964099
+  step 300/390: loss=0.901458
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/40: loss=1.061423 lr=0.100000
+  epoch 15: test_acc = 5741/10000 = 57.410000%  top5 = 9364/10000 = 93.640000%  [95% CI 56.44–58.38]
+  step 0/390: loss=0.976055
+  step 1/390: loss=0.989919
+  step 2/390: loss=1.072414
+  step 100/390: loss=1.172627
+  step 200/390: loss=1.105166
+  step 300/390: loss=0.994458
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/40: loss=1.034307 lr=0.100000
+  epoch 16: test_acc = 6211/10000 = 62.110000%  top5 = 9576/10000 = 95.760000%  [95% CI 61.15–63.06]
+  step 0/390: loss=0.983273
+  step 1/390: loss=0.934272
+  step 2/390: loss=1.187794
+  step 100/390: loss=1.190725
+  step 200/390: loss=0.995441
+  step 300/390: loss=1.072638
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/40: loss=1.004124 lr=0.100000
+  epoch 17: test_acc = 6301/10000 = 63.010000%  top5 = 9605/10000 = 96.050000%  [95% CI 62.06–63.95]
+  step 0/390: loss=1.074599
+  step 1/390: loss=1.037752
+  step 2/390: loss=0.904523
+  step 100/390: loss=0.948868
+  step 200/390: loss=0.885781
+  step 300/390: loss=0.968669
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/40: loss=0.979232 lr=0.100000
+  epoch 18: test_acc = 6052/10000 = 60.520000%  top5 = 9556/10000 = 95.560000%  [95% CI 59.56–61.47]
+  step 0/390: loss=1.034775
+  step 1/390: loss=0.929979
+  step 2/390: loss=0.788124
+  step 100/390: loss=0.990172
+  step 200/390: loss=0.990740
+  step 300/390: loss=1.074048
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/40: loss=0.950011 lr=0.100000
+  epoch 19: test_acc = 6386/10000 = 63.860000%  top5 = 9642/10000 = 96.420000%  [95% CI 62.91–64.80]
+  step 0/390: loss=1.133807
+  step 1/390: loss=0.988376
+  step 2/390: loss=0.909935
+  step 100/390: loss=0.915771
+  step 200/390: loss=0.978724
+  step 300/390: loss=0.982598
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/40: loss=0.935803 lr=0.100000
+  epoch 20: test_acc = 6440/10000 = 64.400000%  top5 = 9629/10000 = 96.290000%  [95% CI 63.46–65.33]
+  step 0/390: loss=1.015327
+  step 1/390: loss=0.972174
+  step 2/390: loss=0.875924
+  step 100/390: loss=0.887678
+  step 200/390: loss=0.883610
+  step 300/390: loss=0.811318
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/40: loss=0.913095 lr=0.100000
+  epoch 21: test_acc = 6510/10000 = 65.100000%  top5 = 9669/10000 = 96.690000%  [95% CI 64.16–66.03]
+  step 0/390: loss=0.751795
+  step 1/390: loss=0.898797
+  step 2/390: loss=0.860635
+  step 100/390: loss=0.925334
+  step 200/390: loss=0.860023
+  step 300/390: loss=0.789780
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/40: loss=0.893027 lr=0.100000
+  epoch 22: test_acc = 6638/10000 = 66.380000%  top5 = 9678/10000 = 96.780000%  [95% CI 65.45–67.30]
+  step 0/390: loss=0.675468
+  step 1/390: loss=0.930942
+  step 2/390: loss=0.759633
+  step 100/390: loss=0.782379
+  step 200/390: loss=0.897255
+  step 300/390: loss=0.932372
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/40: loss=0.872757 lr=0.100000
+  epoch 23: test_acc = 6536/10000 = 65.360000%  top5 = 9659/10000 = 96.590000%  [95% CI 64.42–66.29]
+  step 0/390: loss=0.777868
+  step 1/390: loss=0.880147
+  step 2/390: loss=0.824557
+  step 100/390: loss=0.771757
+  step 200/390: loss=0.938649
+  step 300/390: loss=1.010583
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/40: loss=0.854627 lr=0.100000
+  epoch 24: test_acc = 6605/10000 = 66.050000%  top5 = 9659/10000 = 96.590000%  [95% CI 65.12–66.97]
+  step 0/390: loss=0.697514
+  step 1/390: loss=0.945201
+  step 2/390: loss=0.768400
+  step 100/390: loss=0.858336
+  step 200/390: loss=0.777274
+  step 300/390: loss=0.796085
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/40: loss=0.833382 lr=0.100000
+  epoch 25: test_acc = 6440/10000 = 64.400000%  top5 = 9524/10000 = 95.240000%  [95% CI 63.46–65.33]
+  step 0/390: loss=0.819460
+  step 1/390: loss=0.923642
+  step 2/390: loss=0.896802
+  step 100/390: loss=0.830607
+  step 200/390: loss=0.775468
+  step 300/390: loss=0.756570
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/40: loss=0.822294 lr=0.100000
+  epoch 26: test_acc = 6735/10000 = 67.350000%  top5 = 9669/10000 = 96.690000%  [95% CI 66.42–68.26]
+  step 0/390: loss=0.682865
+  step 1/390: loss=0.637253
+  step 2/390: loss=0.919321
+  step 100/390: loss=0.766612
+  step 200/390: loss=0.955985
+  step 300/390: loss=0.779647
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/40: loss=0.812321 lr=0.100000
+  epoch 27: test_acc = 6775/10000 = 67.750000%  top5 = 9715/10000 = 97.150000%  [95% CI 66.83–68.66]
+  step 0/390: loss=0.711318
+  step 1/390: loss=0.664889
+  step 2/390: loss=0.778519
+  step 100/390: loss=0.773251
+  step 200/390: loss=0.740674
+  step 300/390: loss=0.832899
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/40: loss=0.797298 lr=0.100000
+  epoch 28: test_acc = 6235/10000 = 62.350000%  top5 = 9587/10000 = 95.870000%  [95% CI 61.40–63.29]
+  step 0/390: loss=0.967959
+  step 1/390: loss=0.805398
+  step 2/390: loss=0.757761
+  step 100/390: loss=0.788761
+  step 200/390: loss=0.686707
+  step 300/390: loss=0.728991
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/40: loss=0.781109 lr=0.100000
+  epoch 29: test_acc = 6688/10000 = 66.880000%  top5 = 9666/10000 = 96.660000%  [95% CI 65.95–67.80]
+  step 0/390: loss=0.730960
+  step 1/390: loss=0.871539
+  step 2/390: loss=0.764048
+  step 100/390: loss=0.577299
+  step 200/390: loss=0.818850
+  step 300/390: loss=0.860933
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/40: loss=0.764635 lr=0.100000
+  epoch 30: test_acc = 6860/10000 = 68.600000%  top5 = 9691/10000 = 96.910000%  [95% CI 67.68–69.50]
+  step 0/390: loss=0.716550
+  step 1/390: loss=0.761315
+  step 2/390: loss=0.732822
+  step 100/390: loss=0.750111
+  step 200/390: loss=0.895566
+  step 300/390: loss=0.839244
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/40: loss=0.751029 lr=0.100000
+  epoch 31: test_acc = 6659/10000 = 66.590000%  top5 = 9647/10000 = 96.470000%  [95% CI 65.66–67.51]
+  step 0/390: loss=0.921288
+  step 1/390: loss=0.678180
+  step 2/390: loss=0.817830
+  step 100/390: loss=0.637646
+  step 200/390: loss=0.830343
+  step 300/390: loss=0.697228
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/40: loss=0.741961 lr=0.100000
+  epoch 32: test_acc = 6751/10000 = 67.510000%  top5 = 9641/10000 = 96.410000%  [95% CI 66.59–68.42]
+  step 0/390: loss=0.651451
+  step 1/390: loss=0.755403
+  step 2/390: loss=0.768480
+  step 100/390: loss=0.667193
+  step 200/390: loss=0.697856
+  step 300/390: loss=0.772606
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/40: loss=0.735336 lr=0.100000
+  epoch 33: test_acc = 6821/10000 = 68.210000%  top5 = 9694/10000 = 96.940000%  [95% CI 67.29–69.12]
+  step 0/390: loss=0.660894
+  step 1/390: loss=0.608589
+  step 2/390: loss=0.696574
+  step 100/390: loss=0.815593
+  step 200/390: loss=0.669249
+  step 300/390: loss=0.705961
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/40: loss=0.726944 lr=0.100000
+  epoch 34: test_acc = 6820/10000 = 68.200000%  top5 = 9702/10000 = 97.020000%  [95% CI 67.28–69.11]
+  step 0/390: loss=0.854651
+  step 1/390: loss=0.825139
+  step 2/390: loss=0.700801
+  step 100/390: loss=0.720594
+  step 200/390: loss=0.685265
+  step 300/390: loss=0.902216
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/40: loss=0.719297 lr=0.100000
+  epoch 35: test_acc = 6767/10000 = 67.670000%  top5 = 9673/10000 = 96.730000%  [95% CI 66.75–68.58]
+  step 0/390: loss=0.673968
+  step 1/390: loss=0.724365
+  step 2/390: loss=0.717846
+  step 100/390: loss=0.663877
+  step 200/390: loss=0.624570
+  step 300/390: loss=0.744899
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/40: loss=0.698459 lr=0.100000
+  epoch 36: test_acc = 6484/10000 = 64.840000%  top5 = 9560/10000 = 95.600000%  [95% CI 63.90–65.77]
+  step 0/390: loss=0.839664
+  step 1/390: loss=0.661301
+  step 2/390: loss=0.644374
+  step 100/390: loss=0.924660
+  step 200/390: loss=0.744367
+  step 300/390: loss=0.690010
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/40: loss=0.699605 lr=0.100000
+  epoch 37: test_acc = 6839/10000 = 68.390000%  top5 = 9677/10000 = 96.770000%  [95% CI 67.47–69.29]
+  step 0/390: loss=0.613528
+  step 1/390: loss=0.702602
+  step 2/390: loss=0.543365
+  step 100/390: loss=0.829366
+  step 200/390: loss=0.681207
+  step 300/390: loss=0.698695
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/40: loss=0.694993 lr=0.100000
+  epoch 38: test_acc = 6887/10000 = 68.870000%  top5 = 9703/10000 = 97.030000%  [95% CI 67.96–69.77]
+  step 0/390: loss=0.494124
+  step 1/390: loss=0.726012
+  step 2/390: loss=0.621239
+  step 100/390: loss=0.467947
+  step 200/390: loss=0.576096
+  step 300/390: loss=0.851883
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/40: loss=0.679288 lr=0.100000
+  epoch 39: test_acc = 6682/10000 = 66.820000%  top5 = 9659/10000 = 96.590000%  [95% CI 65.89–67.74]
+  step 0/390: loss=0.662048
+  step 1/390: loss=0.789473
+  step 2/390: loss=0.798771
+  step 100/390: loss=0.684167
+  step 200/390: loss=0.617428
+  step 300/390: loss=0.725147
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/40: loss=0.680056 lr=0.100000
+  epoch 40: test_acc = 6803/10000 = 68.030000%  top5 = 9694/10000 = 96.940000%  [95% CI 67.11–68.94]
+I0901 13:51:14.965469  992054 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0901 13:51:14.965681  992054 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/cifar8w_mom_train_step.mlir (@cifar8w_mom_train_step, 69 outputs, 1 replica) in 1286 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_fwd.mlir (@cifar8w_fwd, 1 outputs, 1 replica) in 218 ms
+done (trained CIFAR-CNN8-wide sgd + constant lr via packed threading).
+════════ cifar8w (wide head) — Nesterov momentum (μ.9, lr 0.02) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_mom_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide mom (constant lr 0.020000), He init
+[pjrt_ffi] RESIDENT: @cifar8w_mom_train_step holds 66 parameter tensors (4.3 MB) on 1 device; they stop crossing PCIe from here
+  step 0/390: loss=2.325001
+  step 1/390: loss=2.305928
+  step 2/390: loss=2.325245
+  step 100/390: loss=2.167760
+  step 200/390: loss=2.067946
+  step 300/390: loss=1.958375
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/40: loss=2.076042 lr=0.020000
+  epoch 1: test_acc = 3447/10000 = 34.470000%  top5 = 8539/10000 = 85.390000%  [95% CI 33.54–35.41]
+  step 0/390: loss=1.822390
+  step 1/390: loss=1.825958
+  step 2/390: loss=1.722160
+  step 100/390: loss=1.612963
+  step 200/390: loss=1.500074
+  step 300/390: loss=1.550873
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/40: loss=1.601536 lr=0.020000
+  epoch 2: test_acc = 4622/10000 = 46.220000%  top5 = 9182/10000 = 91.820000%  [95% CI 45.24–47.20]
+  step 0/390: loss=1.494829
+  step 1/390: loss=1.493545
+  step 2/390: loss=1.427346
+  step 100/390: loss=1.331388
+  step 200/390: loss=1.523271
+  step 300/390: loss=1.358343
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/40: loss=1.408264 lr=0.020000
+  epoch 3: test_acc = 4977/10000 = 49.770000%  top5 = 9329/10000 = 93.290000%  [95% CI 48.79–50.75]
+  step 0/390: loss=1.414263
+  step 1/390: loss=1.257350
+  step 2/390: loss=1.278191
+  step 100/390: loss=1.249118
+  step 200/390: loss=1.311641
+  step 300/390: loss=1.157082
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/40: loss=1.295677 lr=0.020000
+  epoch 4: test_acc = 5189/10000 = 51.890000%  top5 = 9391/10000 = 93.910000%  [95% CI 50.91–52.87]
+  step 0/390: loss=1.235845
+  step 1/390: loss=1.498053
+  step 2/390: loss=1.487954
+  step 100/390: loss=1.168752
+  step 200/390: loss=1.175178
+  step 300/390: loss=1.077746
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/40: loss=1.207203 lr=0.020000
+  epoch 5: test_acc = 5866/10000 = 58.660000%  top5 = 9562/10000 = 95.620000%  [95% CI 57.69–59.62]
+  step 0/390: loss=1.124017
+  step 1/390: loss=1.099487
+  step 2/390: loss=1.106333
+  step 100/390: loss=1.013020
+  step 200/390: loss=1.285934
+  step 300/390: loss=1.077810
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/40: loss=1.126865 lr=0.020000
+  epoch 6: test_acc = 6057/10000 = 60.570000%  top5 = 9627/10000 = 96.270000%  [95% CI 59.61–61.52]
+  step 0/390: loss=1.029584
+  step 1/390: loss=1.091841
+  step 2/390: loss=0.991881
+  step 100/390: loss=0.974057
+  step 200/390: loss=1.020071
+  step 300/390: loss=1.047371
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/40: loss=1.044732 lr=0.020000
+  epoch 7: test_acc = 6267/10000 = 62.670000%  top5 = 9649/10000 = 96.490000%  [95% CI 61.72–63.61]
+  step 0/390: loss=1.161044
+  step 1/390: loss=0.872543
+  step 2/390: loss=0.898951
+  step 100/390: loss=0.902554
+  step 200/390: loss=0.923383
+  step 300/390: loss=1.078034
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/40: loss=0.984803 lr=0.020000
+  epoch 8: test_acc = 6279/10000 = 62.790000%  top5 = 9638/10000 = 96.380000%  [95% CI 61.84–63.73]
+  step 0/390: loss=0.947545
+  step 1/390: loss=0.894327
+  step 2/390: loss=0.818628
+  step 100/390: loss=0.790456
+  step 200/390: loss=0.849661
+  step 300/390: loss=0.940433
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/40: loss=0.929746 lr=0.020000
+  epoch 9: test_acc = 6498/10000 = 64.980000%  top5 = 9681/10000 = 96.810000%  [95% CI 64.04–65.91]
+  step 0/390: loss=0.922075
+  step 1/390: loss=0.940227
+  step 2/390: loss=0.790060
+  step 100/390: loss=0.826870
+  step 200/390: loss=1.202171
+  step 300/390: loss=0.763383
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/40: loss=0.884141 lr=0.020000
+  epoch 10: test_acc = 6721/10000 = 67.210000%  top5 = 9720/10000 = 97.200000%  [95% CI 66.28–68.12]
+  step 0/390: loss=0.772013
+  step 1/390: loss=0.800738
+  step 2/390: loss=0.924262
+  step 100/390: loss=0.794590
+  step 200/390: loss=0.761403
+  step 300/390: loss=0.771170
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/40: loss=0.854256 lr=0.020000
+  epoch 11: test_acc = 6864/10000 = 68.640000%  top5 = 9706/10000 = 97.060000%  [95% CI 67.72–69.54]
+  step 0/390: loss=0.740123
+  step 1/390: loss=0.794049
+  step 2/390: loss=0.741724
+  step 100/390: loss=0.766995
+  step 200/390: loss=0.818635
+  step 300/390: loss=0.943569
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/40: loss=0.828192 lr=0.020000
+  epoch 12: test_acc = 6742/10000 = 67.420000%  top5 = 9705/10000 = 97.050000%  [95% CI 66.49–68.33]
+  step 0/390: loss=0.994126
+  step 1/390: loss=1.025846
+  step 2/390: loss=0.749181
+  step 100/390: loss=0.915022
+  step 200/390: loss=0.788217
+  step 300/390: loss=0.847137
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/40: loss=0.804191 lr=0.020000
+  epoch 13: test_acc = 6939/10000 = 69.390000%  top5 = 9742/10000 = 97.420000%  [95% CI 68.48–70.29]
+  step 0/390: loss=0.810566
+  step 1/390: loss=0.678099
+  step 2/390: loss=0.899772
+  step 100/390: loss=0.683101
+  step 200/390: loss=0.754267
+  step 300/390: loss=0.755770
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/40: loss=0.779748 lr=0.020000
+  epoch 14: test_acc = 6987/10000 = 69.870000%  top5 = 9743/10000 = 97.430000%  [95% CI 68.96–70.76]
+  step 0/390: loss=0.722097
+  step 1/390: loss=0.771788
+  step 2/390: loss=0.947365
+  step 100/390: loss=0.837245
+  step 200/390: loss=0.758694
+  step 300/390: loss=0.625608
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/40: loss=0.756719 lr=0.020000
+  epoch 15: test_acc = 6894/10000 = 68.940000%  top5 = 9720/10000 = 97.200000%  [95% CI 68.03–69.84]
+  step 0/390: loss=0.644316
+  step 1/390: loss=0.599102
+  step 2/390: loss=0.672045
+  step 100/390: loss=0.569294
+  step 200/390: loss=0.716033
+  step 300/390: loss=0.706206
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/40: loss=0.744002 lr=0.020000
+  epoch 16: test_acc = 7122/10000 = 71.220000%  top5 = 9769/10000 = 97.690000%  [95% CI 70.32–72.10]
+  step 0/390: loss=0.724813
+  step 1/390: loss=0.631538
+  step 2/390: loss=0.812878
+  step 100/390: loss=0.754057
+  step 200/390: loss=0.951612
+  step 300/390: loss=0.744100
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/40: loss=0.732198 lr=0.020000
+  epoch 17: test_acc = 7050/10000 = 70.500000%  top5 = 9723/10000 = 97.230000%  [95% CI 69.60–71.39]
+  step 0/390: loss=0.781901
+  step 1/390: loss=0.697184
+  step 2/390: loss=0.699751
+  step 100/390: loss=0.693586
+  step 200/390: loss=0.848042
+  step 300/390: loss=0.645580
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/40: loss=0.713147 lr=0.020000
+  epoch 18: test_acc = 7261/10000 = 72.610000%  top5 = 9772/10000 = 97.720000%  [95% CI 71.73–73.48]
+  step 0/390: loss=0.693958
+  step 1/390: loss=0.764636
+  step 2/390: loss=0.571416
+  step 100/390: loss=0.677862
+  step 200/390: loss=0.540864
+  step 300/390: loss=0.888620
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/40: loss=0.704780 lr=0.020000
+  epoch 19: test_acc = 7083/10000 = 70.830000%  top5 = 9780/10000 = 97.800000%  [95% CI 69.93–71.71]
+  step 0/390: loss=1.023245
+  step 1/390: loss=0.742798
+  step 2/390: loss=0.560829
+  step 100/390: loss=0.668276
+  step 200/390: loss=0.642172
+  step 300/390: loss=0.578686
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/40: loss=0.693886 lr=0.020000
+  epoch 20: test_acc = 7178/10000 = 71.780000%  top5 = 9792/10000 = 97.920000%  [95% CI 70.89–72.65]
+  step 0/390: loss=0.733413
+  step 1/390: loss=0.736773
+  step 2/390: loss=0.657500
+  step 100/390: loss=0.695350
+  step 200/390: loss=0.607467
+  step 300/390: loss=0.626741
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/40: loss=0.684337 lr=0.020000
+  epoch 21: test_acc = 7276/10000 = 72.760000%  top5 = 9765/10000 = 97.650000%  [95% CI 71.88–73.62]
+  step 0/390: loss=0.541229
+  step 1/390: loss=0.646639
+  step 2/390: loss=0.631517
+  step 100/390: loss=0.762328
+  step 200/390: loss=0.568710
+  step 300/390: loss=0.746966
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/40: loss=0.683843 lr=0.020000
+  epoch 22: test_acc = 7223/10000 = 72.230000%  top5 = 9762/10000 = 97.620000%  [95% CI 71.34–73.10]
+  step 0/390: loss=0.557790
+  step 1/390: loss=0.817730
+  step 2/390: loss=0.557280
+  step 100/390: loss=0.612464
+  step 200/390: loss=0.709201
+  step 300/390: loss=0.672832
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/40: loss=0.673271 lr=0.020000
+  epoch 23: test_acc = 7184/10000 = 71.840000%  top5 = 9772/10000 = 97.720000%  [95% CI 70.95–72.71]
+  step 0/390: loss=0.572471
+  step 1/390: loss=0.590326
+  step 2/390: loss=0.746200
+  step 100/390: loss=0.577924
+  step 200/390: loss=0.609874
+  step 300/390: loss=0.740345
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/40: loss=0.666339 lr=0.020000
+  epoch 24: test_acc = 7251/10000 = 72.510000%  top5 = 9748/10000 = 97.480000%  [95% CI 71.63–73.38]
+  step 0/390: loss=0.583091
+  step 1/390: loss=0.817463
+  step 2/390: loss=0.597860
+  step 100/390: loss=0.699129
+  step 200/390: loss=0.546884
+  step 300/390: loss=0.655210
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/40: loss=0.654515 lr=0.020000
+  epoch 25: test_acc = 7267/10000 = 72.670000%  top5 = 9767/10000 = 97.670000%  [95% CI 71.79–73.53]
+  step 0/390: loss=0.738904
+  step 1/390: loss=0.671995
+  step 2/390: loss=0.707198
+  step 100/390: loss=0.640849
+  step 200/390: loss=0.679891
+  step 300/390: loss=0.669368
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/40: loss=0.649652 lr=0.020000
+  epoch 26: test_acc = 7310/10000 = 73.100000%  top5 = 9773/10000 = 97.730000%  [95% CI 72.22–73.96]
+  step 0/390: loss=0.574687
+  step 1/390: loss=0.598197
+  step 2/390: loss=0.626091
+  step 100/390: loss=0.750801
+  step 200/390: loss=0.662493
+  step 300/390: loss=0.439682
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/40: loss=0.636927 lr=0.020000
+  epoch 27: test_acc = 7289/10000 = 72.890000%  top5 = 9771/10000 = 97.710000%  [95% CI 72.01–73.75]
+  step 0/390: loss=0.556926
+  step 1/390: loss=0.596023
+  step 2/390: loss=0.651746
+  step 100/390: loss=0.661701
+  step 200/390: loss=0.568843
+  step 300/390: loss=0.689625
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/40: loss=0.640868 lr=0.020000
+  epoch 28: test_acc = 7218/10000 = 72.180000%  top5 = 9767/10000 = 97.670000%  [95% CI 71.29–73.05]
+  step 0/390: loss=0.732698
+  step 1/390: loss=0.760173
+  step 2/390: loss=0.579678
+  step 100/390: loss=0.599685
+  step 200/390: loss=0.515380
+  step 300/390: loss=0.556998
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/40: loss=0.638984 lr=0.020000
+  epoch 29: test_acc = 7365/10000 = 73.650000%  top5 = 9772/10000 = 97.720000%  [95% CI 72.78–74.50]
+  step 0/390: loss=0.694038
+  step 1/390: loss=0.702100
+  step 2/390: loss=0.680041
+  step 100/390: loss=0.559378
+  step 200/390: loss=0.692528
+  step 300/390: loss=0.695239
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/40: loss=0.637877 lr=0.020000
+  epoch 30: test_acc = 7261/10000 = 72.610000%  top5 = 9758/10000 = 97.580000%  [95% CI 71.73–73.48]
+  step 0/390: loss=0.639567
+  step 1/390: loss=0.686426
+  step 2/390: loss=0.560763
+  step 100/390: loss=0.702640
+  step 200/390: loss=0.810585
+  step 300/390: loss=0.583356
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/40: loss=0.629054 lr=0.020000
+  epoch 31: test_acc = 7221/10000 = 72.210000%  top5 = 9754/10000 = 97.540000%  [95% CI 71.32–73.08]
+  step 0/390: loss=0.629272
+  step 1/390: loss=0.665070
+  step 2/390: loss=0.554096
+  step 100/390: loss=0.502428
+  step 200/390: loss=0.671554
+  step 300/390: loss=0.525690
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/40: loss=0.627893 lr=0.020000
+  epoch 32: test_acc = 7276/10000 = 72.760000%  top5 = 9770/10000 = 97.700000%  [95% CI 71.88–73.62]
+  step 0/390: loss=0.577487
+  step 1/390: loss=0.560811
+  step 2/390: loss=0.584657
+  step 100/390: loss=0.779763
+  step 200/390: loss=0.595260
+  step 300/390: loss=0.548402
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/40: loss=0.621847 lr=0.020000
+  epoch 33: test_acc = 7305/10000 = 73.050000%  top5 = 9775/10000 = 97.750000%  [95% CI 72.17–73.91]
+  step 0/390: loss=0.509589
+  step 1/390: loss=0.508790
+  step 2/390: loss=0.560088
+  step 100/390: loss=0.512228
+  step 200/390: loss=0.652681
+  step 300/390: loss=0.604210
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/40: loss=0.612159 lr=0.020000
+  epoch 34: test_acc = 7254/10000 = 72.540000%  top5 = 9755/10000 = 97.550000%  [95% CI 71.66–73.41]
+  step 0/390: loss=0.589262
+  step 1/390: loss=0.654219
+  step 2/390: loss=0.594753
+  step 100/390: loss=0.470215
+  step 200/390: loss=0.469882
+  step 300/390: loss=0.731624
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/40: loss=0.618467 lr=0.020000
+  epoch 35: test_acc = 7382/10000 = 73.820000%  top5 = 9773/10000 = 97.730000%  [95% CI 72.95–74.67]
+  step 0/390: loss=0.541156
+  step 1/390: loss=0.607516
+  step 2/390: loss=0.627190
+  step 100/390: loss=0.612808
+  step 200/390: loss=0.645279
+  step 300/390: loss=0.696837
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/40: loss=0.608851 lr=0.020000
+  epoch 36: test_acc = 7097/10000 = 70.970000%  top5 = 9690/10000 = 96.900000%  [95% CI 70.07–71.85]
+  step 0/390: loss=0.699667
+  step 1/390: loss=0.594613
+  step 2/390: loss=0.595958
+  step 100/390: loss=0.698944
+  step 200/390: loss=0.712885
+  step 300/390: loss=0.635855
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/40: loss=0.611772 lr=0.020000
+  epoch 37: test_acc = 7271/10000 = 72.710000%  top5 = 9775/10000 = 97.750000%  [95% CI 71.83–73.57]
+  step 0/390: loss=0.570394
+  step 1/390: loss=0.703716
+  step 2/390: loss=0.593586
+  step 100/390: loss=0.631547
+  step 200/390: loss=0.664570
+  step 300/390: loss=0.666672
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/40: loss=0.605660 lr=0.020000
+  epoch 38: test_acc = 7366/10000 = 73.660000%  top5 = 9779/10000 = 97.790000%  [95% CI 72.79–74.51]
+  step 0/390: loss=0.369492
+  step 1/390: loss=0.621884
+  step 2/390: loss=0.625852
+  step 100/390: loss=0.487776
+  step 200/390: loss=0.491562
+  step 300/390: loss=0.671680
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/40: loss=0.603463 lr=0.020000
+  epoch 39: test_acc = 7350/10000 = 73.500000%  top5 = 9770/10000 = 97.700000%  [95% CI 72.63–74.36]
+  step 0/390: loss=0.521313
+  step 1/390: loss=0.515643
+  step 2/390: loss=0.583114
+  step 100/390: loss=0.582868
+  step 200/390: loss=0.506619
+  step 300/390: loss=0.612880
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/40: loss=0.601833 lr=0.020000
+  epoch 40: test_acc = 7219/10000 = 72.190000%  top5 = 9751/10000 = 97.510000%  [95% CI 71.30–73.06]
+I0901 13:52:04.674250  992054 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0901 13:52:04.674800  992054 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/cifar8w_adam_train_step.mlir (@cifar8w_adam_train_step, 69 outputs, 1 replica) in 432 ms
+[pjrt_ffi] compiled verified_mlir/cifar8w_fwd.mlir (@cifar8w_fwd, 1 outputs, 1 replica) in 241 ms
+done (trained CIFAR-CNN8-wide mom + constant lr via packed threading).
+════════ cifar8w (wide head) — AdamW (lr 1e-3) ════════
+Deeper CIFAR-10 CNN, MNIST-style wide head (8 convs, [16,16,32,32], 4 pools 32→2 → 128→512→512→10) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/cifar8w_adam_train_step.mlir
+  xla/pjrt verified_mlir/cifar8w_fwd.mlir
+  train 50000, test 10000; bs 128, CIFAR-CNN8-wide adam (constant lr 0.001000), He init
+[pjrt_ffi] RESIDENT: @cifar8w_adam_train_step holds 66 parameter tensors (4.3 MB) on 1 device; they stop crossing PCIe from here
+  step 0/390: loss=2.325001
+  step 1/390: loss=2.316223
+  step 2/390: loss=2.301070
+  step 100/390: loss=1.787981
+  step 200/390: loss=1.560049
+  step 300/390: loss=1.568862
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/40: loss=1.659205 lr=0.001000
+  epoch 1: test_acc = 4901/10000 = 49.010000%  top5 = 9305/10000 = 93.050000%  [95% CI 48.03–49.99]
+  step 0/390: loss=1.288764
+  step 1/390: loss=1.375316
+  step 2/390: loss=1.399628
+  step 100/390: loss=1.351221
+  step 200/390: loss=1.238787
+  step 300/390: loss=1.325600
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/40: loss=1.316922 lr=0.001000
+  epoch 2: test_acc = 5628/10000 = 56.280000%  top5 = 9501/10000 = 95.010000%  [95% CI 55.31–57.25]
+  step 0/390: loss=1.128904
+  step 1/390: loss=1.282243
+  step 2/390: loss=1.121697
+  step 100/390: loss=1.128073
+  step 200/390: loss=1.150010
+  step 300/390: loss=1.156380
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/40: loss=1.174921 lr=0.001000
+  epoch 3: test_acc = 5697/10000 = 56.970000%  top5 = 9556/10000 = 95.560000%  [95% CI 56.00–57.94]
+  step 0/390: loss=1.288165
+  step 1/390: loss=1.125816
+  step 2/390: loss=0.906757
+  step 100/390: loss=1.028587
+  step 200/390: loss=1.135988
+  step 300/390: loss=1.060867
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/40: loss=1.088442 lr=0.001000
+  epoch 4: test_acc = 6088/10000 = 60.880000%  top5 = 9595/10000 = 95.950000%  [95% CI 59.92–61.83]
+  step 0/390: loss=1.027917
+  step 1/390: loss=1.113309
+  step 2/390: loss=1.009488
+  step 100/390: loss=0.857022
+  step 200/390: loss=1.048991
+  step 300/390: loss=0.861327
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/40: loss=1.015911 lr=0.001000
+  epoch 5: test_acc = 6165/10000 = 61.650000%  top5 = 9627/10000 = 96.270000%  [95% CI 60.69–62.60]
+  step 0/390: loss=1.173369
+  step 1/390: loss=0.880237
+  step 2/390: loss=0.974950
+  step 100/390: loss=0.900144
+  step 200/390: loss=1.094792
+  step 300/390: loss=0.918254
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/40: loss=0.951475 lr=0.001000
+  epoch 6: test_acc = 6479/10000 = 64.790000%  top5 = 9691/10000 = 96.910000%  [95% CI 63.85–65.72]
+  step 0/390: loss=0.867141
+  step 1/390: loss=0.888825
+  step 2/390: loss=0.974820
+  step 100/390: loss=0.930935
+  step 200/390: loss=0.752377
+  step 300/390: loss=0.911147
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/40: loss=0.903850 lr=0.001000
+  epoch 7: test_acc = 6304/10000 = 63.040000%  top5 = 9655/10000 = 96.550000%  [95% CI 62.09–63.98]
+  step 0/390: loss=1.076444
+  step 1/390: loss=0.750150
+  step 2/390: loss=0.740144
+  step 100/390: loss=0.809498
+  step 200/390: loss=0.740337
+  step 300/390: loss=0.903615
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/40: loss=0.868208 lr=0.001000
+  epoch 8: test_acc = 6796/10000 = 67.960000%  top5 = 9722/10000 = 97.220000%  [95% CI 67.04–68.87]
+  step 0/390: loss=0.834339
+  step 1/390: loss=0.818198
+  step 2/390: loss=0.786930
+  step 100/390: loss=0.846343
+  step 200/390: loss=0.785524
+  step 300/390: loss=0.953360
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/40: loss=0.825966 lr=0.001000
+  epoch 9: test_acc = 6692/10000 = 66.920000%  top5 = 9702/10000 = 97.020000%  [95% CI 65.99–67.84]
+  step 0/390: loss=0.849492
+  step 1/390: loss=0.878265
+  step 2/390: loss=0.706747
+  step 100/390: loss=0.782587
+  step 200/390: loss=0.981988
+  step 300/390: loss=0.690538
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/40: loss=0.801653 lr=0.001000
+  epoch 10: test_acc = 7042/10000 = 70.420000%  top5 = 9762/10000 = 97.620000%  [95% CI 69.52–71.31]
+  step 0/390: loss=0.684138
+  step 1/390: loss=0.671790
+  step 2/390: loss=0.848914
+  step 100/390: loss=0.716177
+  step 200/390: loss=0.633794
+  step 300/390: loss=0.808180
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/40: loss=0.764731 lr=0.001000
+  epoch 11: test_acc = 7027/10000 = 70.270000%  top5 = 9746/10000 = 97.460000%  [95% CI 69.37–71.16]
+  step 0/390: loss=0.681037
+  step 1/390: loss=0.658795
+  step 2/390: loss=0.715435
+  step 100/390: loss=0.703988
+  step 200/390: loss=0.765146
+  step 300/390: loss=0.747253
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/40: loss=0.753483 lr=0.001000
+  epoch 12: test_acc = 7086/10000 = 70.860000%  top5 = 9763/10000 = 97.630000%  [95% CI 69.96–71.74]
+  step 0/390: loss=0.693708
+  step 1/390: loss=0.738134
+  step 2/390: loss=0.602271
+  step 100/390: loss=0.775563
+  step 200/390: loss=0.742519
+  step 300/390: loss=0.716235
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/40: loss=0.720574 lr=0.001000
+  epoch 13: test_acc = 7042/10000 = 70.420000%  top5 = 9780/10000 = 97.800000%  [95% CI 69.52–71.31]
+  step 0/390: loss=0.739301
+  step 1/390: loss=0.697350
+  step 2/390: loss=0.802486
+  step 100/390: loss=0.665613
+  step 200/390: loss=0.527970
+  step 300/390: loss=0.730344
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/40: loss=0.690214 lr=0.001000
+  epoch 14: test_acc = 7141/10000 = 71.410000%  top5 = 9753/10000 = 97.530000%  [95% CI 70.52–72.29]
+  step 0/390: loss=0.703696
+  step 1/390: loss=0.590116
+  step 2/390: loss=0.774758
+  step 100/390: loss=0.760330
+  step 200/390: loss=0.811793
+  step 300/390: loss=0.605460
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/40: loss=0.677000 lr=0.001000
+  epoch 15: test_acc = 7252/10000 = 72.520000%  top5 = 9772/10000 = 97.720000%  [95% CI 71.64–73.39]
+  step 0/390: loss=0.551721
+  step 1/390: loss=0.521645
+  step 2/390: loss=0.605678
+  step 100/390: loss=0.526941
+  step 200/390: loss=0.683754
+  step 300/390: loss=0.633731
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/40: loss=0.658486 lr=0.001000
+  epoch 16: test_acc = 7304/10000 = 73.040000%  top5 = 9785/10000 = 97.850000%  [95% CI 72.16–73.90]
+  step 0/390: loss=0.604032
+  step 1/390: loss=0.560205
+  step 2/390: loss=0.755253
+  step 100/390: loss=0.596752
+  step 200/390: loss=0.771689
+  step 300/390: loss=0.701477
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/40: loss=0.645776 lr=0.001000
+  epoch 17: test_acc = 7325/10000 = 73.250000%  top5 = 9839/10000 = 98.390000%  [95% CI 72.37–74.11]
+  step 0/390: loss=0.695061
+  step 1/390: loss=0.562833
+  step 2/390: loss=0.628167
+  step 100/390: loss=0.598727
+  step 200/390: loss=0.589164
+  step 300/390: loss=0.503277
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/40: loss=0.624473 lr=0.001000
+  epoch 18: test_acc = 7312/10000 = 73.120000%  top5 = 9794/10000 = 97.940000%  [95% CI 72.24–73.98]
+  step 0/390: loss=0.601800
+  step 1/390: loss=0.604625
+  step 2/390: loss=0.634565
+  step 100/390: loss=0.623512
+  step 200/390: loss=0.433218
+  step 300/390: loss=0.773372
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/40: loss=0.601982 lr=0.001000
+  epoch 19: test_acc = 7432/10000 = 74.320000%  top5 = 9806/10000 = 98.060000%  [95% CI 73.45–75.17]
+  step 0/390: loss=0.715990
+  step 1/390: loss=0.484855
+  step 2/390: loss=0.463784
+  step 100/390: loss=0.527594
+  step 200/390: loss=0.622973
+  step 300/390: loss=0.708697
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/40: loss=0.591328 lr=0.001000
+  epoch 20: test_acc = 7357/10000 = 73.570000%  top5 = 9811/10000 = 98.110000%  [95% CI 72.70–74.43]
+  step 0/390: loss=0.564751
+  step 1/390: loss=0.558913
+  step 2/390: loss=0.523807
+  step 100/390: loss=0.507515
+  step 200/390: loss=0.533081
+  step 300/390: loss=0.512432
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/40: loss=0.578546 lr=0.001000
+  epoch 21: test_acc = 7391/10000 = 73.910000%  top5 = 9799/10000 = 97.990000%  [95% CI 73.04–74.76]
+  step 0/390: loss=0.456334
+  step 1/390: loss=0.526902
+  step 2/390: loss=0.631215
+  step 100/390: loss=0.608922
+  step 200/390: loss=0.587272
+  step 300/390: loss=0.480516
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/40: loss=0.562165 lr=0.001000
+  epoch 22: test_acc = 7372/10000 = 73.720000%  top5 = 9825/10000 = 98.250000%  [95% CI 72.85–74.57]
+  step 0/390: loss=0.469454
+  step 1/390: loss=0.659369
+  step 2/390: loss=0.525723
+  step 100/390: loss=0.424618
+  step 200/390: loss=0.581909
+  step 300/390: loss=0.469754
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/40: loss=0.556215 lr=0.001000
+  epoch 23: test_acc = 7227/10000 = 72.270000%  top5 = 9769/10000 = 97.690000%  [95% CI 71.38–73.14]
+  step 0/390: loss=0.601836
+  step 1/390: loss=0.482466
+  step 2/390: loss=0.529440
+  step 100/390: loss=0.586737
+  step 200/390: loss=0.417140
+  step 300/390: loss=0.687922
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/40: loss=0.532355 lr=0.001000
+  epoch 24: test_acc = 7343/10000 = 73.430000%  top5 = 9795/10000 = 97.950000%  [95% CI 72.56–74.29]
+  step 0/390: loss=0.509755
+  step 1/390: loss=0.599377
+  step 2/390: loss=0.507820
+  step 100/390: loss=0.627304
+  step 200/390: loss=0.550440
+  step 300/390: loss=0.501257
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/40: loss=0.520513 lr=0.001000
+  epoch 25: test_acc = 7378/10000 = 73.780000%  top5 = 9781/10000 = 97.810000%  [95% CI 72.91–74.63]
+  step 0/390: loss=0.466358
+  step 1/390: loss=0.511792
+  step 2/390: loss=0.577595
+  step 100/390: loss=0.485434
+  step 200/390: loss=0.410466
+  step 300/390: loss=0.665319
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/40: loss=0.510453 lr=0.001000
+  epoch 26: test_acc = 7359/10000 = 73.590000%  top5 = 9788/10000 = 97.880000%  [95% CI 72.72–74.44]
+  step 0/390: loss=0.509962
+  step 1/390: loss=0.389889
+  step 2/390: loss=0.526404
+  step 100/390: loss=0.594279
+  step 200/390: loss=0.615210
+  step 300/390: loss=0.386353
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/40: loss=0.492657 lr=0.001000
+  epoch 27: test_acc = 7294/10000 = 72.940000%  top5 = 9798/10000 = 97.980000%  [95% CI 72.06–73.80]
+  step 0/390: loss=0.611144
+  step 1/390: loss=0.590204
+  step 2/390: loss=0.462571
+  step 100/390: loss=0.455391
+  step 200/390: loss=0.462213
+  step 300/390: loss=0.574469
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/40: loss=0.488607 lr=0.001000
+  epoch 28: test_acc = 7285/10000 = 72.850000%  top5 = 9781/10000 = 97.810000%  [95% CI 71.97–73.71]
+  step 0/390: loss=0.649978
+  step 1/390: loss=0.571744
+  step 2/390: loss=0.383719
+  step 100/390: loss=0.396303
+  step 200/390: loss=0.528120
+  step 300/390: loss=0.398601
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/40: loss=0.461140 lr=0.001000
+  epoch 29: test_acc = 7325/10000 = 73.250000%  top5 = 9798/10000 = 97.980000%  [95% CI 72.37–74.11]
+  step 0/390: loss=0.434343
+  step 1/390: loss=0.538136
+  step 2/390: loss=0.582882
+  step 100/390: loss=0.351883
+  step 200/390: loss=0.437441
+  step 300/390: loss=0.503761
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/40: loss=0.459291 lr=0.001000
+  epoch 30: test_acc = 7452/10000 = 74.520000%  top5 = 9800/10000 = 98.000000%  [95% CI 73.66–75.36]
+  step 0/390: loss=0.534123
+  step 1/390: loss=0.566572
+  step 2/390: loss=0.345994
+  step 100/390: loss=0.538563
+  step 200/390: loss=0.426369
+  step 300/390: loss=0.492855
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/40: loss=0.446203 lr=0.001000
+  epoch 31: test_acc = 7339/10000 = 73.390000%  top5 = 9795/10000 = 97.950000%  [95% CI 72.51–74.25]
+  step 0/390: loss=0.516077
+  step 1/390: loss=0.433703
+  step 2/390: loss=0.389926
+  step 100/390: loss=0.297497
+  step 200/390: loss=0.445678
+  step 300/390: loss=0.486206
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/40: loss=0.437725 lr=0.001000
+  epoch 32: test_acc = 7440/10000 = 74.400000%  top5 = 9763/10000 = 97.630000%  [95% CI 73.54–75.25]
+  step 0/390: loss=0.334172
+  step 1/390: loss=0.450292
+  step 2/390: loss=0.438395
+  step 100/390: loss=0.454884
+  step 200/390: loss=0.379936
+  step 300/390: loss=0.487005
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/40: loss=0.421926 lr=0.001000
+  epoch 33: test_acc = 7447/10000 = 74.470000%  top5 = 9811/10000 = 98.110000%  [95% CI 73.61–75.32]
+  step 0/390: loss=0.343046
+  step 1/390: loss=0.370863
+  step 2/390: loss=0.296328
+  step 100/390: loss=0.425085
+  step 200/390: loss=0.628176
+  step 300/390: loss=0.447791
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/40: loss=0.412162 lr=0.001000
+  epoch 34: test_acc = 7432/10000 = 74.320000%  top5 = 9800/10000 = 98.000000%  [95% CI 73.45–75.17]
+  step 0/390: loss=0.415640
+  step 1/390: loss=0.359160
+  step 2/390: loss=0.484027
+  step 100/390: loss=0.327467
+  step 200/390: loss=0.340925
+  step 300/390: loss=0.493086
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/40: loss=0.395685 lr=0.001000
+  epoch 35: test_acc = 7487/10000 = 74.870000%  top5 = 9821/10000 = 98.210000%  [95% CI 74.01–75.71]
+  step 0/390: loss=0.326206
+  step 1/390: loss=0.357854
+  step 2/390: loss=0.384494
+  step 100/390: loss=0.334086
+  step 200/390: loss=0.374810
+  step 300/390: loss=0.434749
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/40: loss=0.394515 lr=0.001000
+  epoch 36: test_acc = 7400/10000 = 74.000000%  top5 = 9792/10000 = 97.920000%  [95% CI 73.13–74.85]
+  step 0/390: loss=0.374564
+  step 1/390: loss=0.313418
+  step 2/390: loss=0.360588
+  step 100/390: loss=0.443444
+  step 200/390: loss=0.410519
+  step 300/390: loss=0.363641
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/40: loss=NaN lr=0.001000
+  epoch 37: test_acc = 7334/10000 = 73.340000%  top5 = 9790/10000 = 97.900000%  [95% CI 72.46–74.20]
+  step 0/390: loss=0.322607
+  step 1/390: loss=0.373555
+  step 2/390: loss=0.395682
+  step 100/390: loss=0.617003
+  step 200/390: loss=0.268093
+  step 300/390: loss=0.381486
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/40: loss=0.375585 lr=0.001000
+  epoch 38: test_acc = 7403/10000 = 74.030000%  top5 = 9763/10000 = 97.630000%  [95% CI 73.16–74.88]
+  step 0/390: loss=0.337421
+  step 1/390: loss=0.488757
+  step 2/390: loss=0.276774
+  step 100/390: loss=0.313931
+  step 200/390: loss=0.309822
+  step 300/390: loss=0.459211
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/40: loss=0.363052 lr=0.001000
+  epoch 39: test_acc = 7483/10000 = 74.830000%  top5 = 9795/10000 = 97.950000%  [95% CI 73.97–75.67]
+  step 0/390: loss=0.325446
+  step 1/390: loss=0.346507
+  step 2/390: loss=0.362177
+  step 100/390: loss=0.335888
+  step 200/390: loss=0.426334
+  step 300/390: loss=0.393535
+[pjrt_ffi] RESIDENT: @cifar8w_fwd holds 22 parameter tensors (1.4 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/40: loss=0.356371 lr=0.001000
+  epoch 40: test_acc = 7382/10000 = 73.820000%  top5 = 9796/10000 = 97.960000%  [95% CI 72.95–74.67]
+done (trained CIFAR-CNN8-wide adam + constant lr via packed threading).
