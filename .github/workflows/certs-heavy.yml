@@ -138,7 +138,20 @@ jobs:
       - name: Three-axiom closure check (heavy corpus)
         run: |
           set -e
-          out=$(lake env lean tests/AuditAxiomsHeavy.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g')
+          # ⚠⚠ `pipefail` is LOAD-BEARING, and its absence was a silent false green.
+          # `lake env lean` exits 1 when a `#print axioms` names a constant that does not
+          # exist, but a pipeline reports only the LAST command's status — `sed`'s, always
+          # 0 — so the failure was swallowed whole. The counting below could not see it
+          # either: an elaboration error emits no "depends on axioms:" line, so the decl
+          # simply vanished from the audit and `total` still equalled `ok`.
+          # `Proofs.dw_sum_pair` was audited against a constant that never existed from
+          # 2026-08-24 and this workflow reported success for eight days.
+          set -o pipefail
+          if ! out=$(lake env lean tests/AuditAxiomsHeavy.lean 2>&1 | sed ':a;N;$!ba;s/,\n /, /g'); then
+            echo "::error::tests/AuditAxiomsHeavy.lean failed to elaborate — a #print axioms almost certainly names a constant that does not exist:"
+            echo "$out" | grep -iE "error|unknown" | head -20
+            exit 1
+          fi
           # Subset of the three, any order — see certs.yml (Lean 4.32 shrank some lists).
           AX3='(propext|Classical\.choice|Quot\.sound)'
           OK_RE="depends on axioms: \[$AX3(, $AX3)*\]\$"
@@ -147,6 +160,22 @@ jobs:
 
           echo "Total #print axioms lines:        $total"
           echo "Lines matching {propext, Classical.choice, Quot.sound}: $ok"
+
+          # Second belt, independent of the exit code: every `#print axioms` directive must
+          # produce a verdict. Self-maintaining — the expected count is read from the file,
+          # so adding a theorem needs no edit here, while a directive that elaborates to
+          # nothing is caught even if Lean somehow exits 0.
+          # ⚠ Count BOTH verdicts. Lean prints "does not depend on any axioms" for a decl
+          # that is axiom-FREE — a stronger result than the three, and two decls in this
+          # corpus are — and that line does not contain "depends on axioms:". Counting only
+          # the latter makes this gate fail on the good case.
+          emitted=$(echo "$out" | grep -cE "^'.*' (depends on axioms:|does not depend on any axioms)" || true)
+          expected=$(grep -c '^#print axioms' tests/AuditAxiomsHeavy.lean)
+          if [ "$emitted" -ne "$expected" ]; then
+            echo "::error::tests/AuditAxiomsHeavy.lean has $expected #print axioms directives but only $emitted produced a verdict — some elaborated to nothing:"
+            echo "$out" | grep -iE "error|unknown" | head -20
+            exit 1
+          fi
 
           if [ "$total" -eq 0 ]; then
             echo "::error::tests/AuditAxiomsHeavy.lean produced no #print axioms output"

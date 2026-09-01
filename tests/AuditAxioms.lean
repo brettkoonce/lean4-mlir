@@ -4006,6 +4006,9 @@ open Proofs
 -- ⚠ The fan-in drops 461× against R50's widest conv and `dwBr` moves 3.5% (0.0078 vs 0.0081) —
 -- because the fan-in rides the ACCUMULATE precision while the flat leaf term is what costs. A
 -- depthwise layer is not meaningfully more accurate in bf16; it is the same 0.8%.
+-- ⚠ `Proofs.dw_sum_pair` was audited here from 2026-08-24 (48bb443) and never existed:
+-- that commit's own note says the fix was to REUSE an existing helper rather than define
+-- one, and the reused sum lemma is Mathlib's `Finset.sum_pair`, which needs no audit.
+-- `DepthwiseMixedFloatBridge.lean` has exactly the two theorems below and both are here.
 #print axioms Proofs.depthwiseConv2d_eq_dw_dot
-#print axioms Proofs.dw_sum_pair
 #print axioms Proofs.FloatModel.depthwise_close_mixed
