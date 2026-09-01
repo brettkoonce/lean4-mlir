@@ -20,8 +20,10 @@ levers don't beat plain training" lesson that applies here too), and
 > **mAP@0.5 = 0.1961**, from the **0.1386** this thread resumed at — **+41.5%**,
 > for one 12-epoch run (~47 min on one RTX 4060 Ti). The recipe is
 > `FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12`, scored with
-> `--multilabel`. Argmax-to-argmax against the PyTorch replica's 0.1532 it is
-> **0.1774 (+15.8%)**.
+> `--multilabel --topk 3000 --ml-k 3 --ml-floor 0.05` (⚠ **`--topk 3000` is not
+> the script default and is load-bearing** — at the default 1000 this same
+> checkpoint scores 0.1919; see §13b). Argmax-to-argmax against the PyTorch
+> replica's 0.1532 it is **0.1774 (+15.8%)**.
 >
 > **Deployment is unblocked and measured on real hardware**: Jetson Orin Nano
 > 8GB, 25 W, TensorRT fp16 — **35.7 fps end to end**, up from 14.9 (§12b).
@@ -723,7 +725,8 @@ actually loaded? is eval scoring the right checkpoint? is image↔mask paired?).
 ### The one-line state
 
 `FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12` → **mAP@0.5 0.1961**
-under `--multilabel`, 0.1774 under argmax. Deployed at 35.7 fps on an Orin Nano.
+under `--multilabel --topk 3000 --ml-k 3 --ml-floor 0.05`, 0.1774 under argmax.
+Deployed at 35.7 fps on an Orin Nano. ⚠ `--topk 3000` is not the default; §13b.
 
 ### The full ladder, every number from this thread
 
@@ -743,6 +746,9 @@ under `--multilabel`, 0.1774 under argmax. Deployed at 35.7 fps on an Orin Nano.
 | **`cfoc2`** | 12 | on | none | 2 | **multilabel** | **0.1961** | 0.441 | 0.749 |
 
 ⚠ Never mix decodes in a comparison. Everything before 2026-08-29 is argmax.
+⚠ Every `multilabel` row above was scored at `--topk 3000`, which is **not** the
+script default — reproduce them with the full command in §13b, not `--multilabel`
+alone.
 
 ### ⛔ The wall: rare classes, and it is probably NOT the loss
 
@@ -764,6 +770,10 @@ data, not objective.
 
 ### What to run first, in order
 
+▶ **Items 1 and 3 were run on 2026-09-01. Both are resolved below (§13a, §13b);
+this list is kept for the reasoning.** Item 1 is resolved only at 12 epochs — two
+follow-on arms were running when this was written.
+
 1. ⭐ **The box-aware affine A/B — BUILT, GATED, NEVER RUN.** It is the only
    untried lever that adds information rather than reweighting what is there, and
    it is the one that moves object SCALE, which is the axis this dataset lives on.
@@ -772,12 +782,111 @@ data, not objective.
    0.1961 — so the control is free). Start at the measured default (scale ±0.25,
    translate ±0.10, ~11% GT cost); ⚠ **not** Ultralytics' ±0.50, which costs 17%
    of GT here and nearly doubles the sub-2px share
-   (`scripts/fpn_affine_knob_cost.py`).
+   (`scripts/fpn_affine_knob_cost.py`). → **RAN, §13a.**
 2. **Mosaic**, deferred all thread on the grounds that 4-into-1 halves
    already-tiny objects. Worth re-testing only if (1) shows scale aug helps.
 3. **`--ml-k` / `--ml-floor` sweep.** Multilabel is worth +7.6% at the default
    top-3 / p≥0.05 and has never been tuned. Free — it is decode-only, no retrain.
+   → **RAN, §13b — closed at +0.7%, and it found a recipe error.**
 4. **The backbone** (§8), last. Do not swap on a recipe still being tuned.
+
+### §13b. ⚠⚠ The recipe on record does not reproduce the number on record — `--topk`
+
+**`--topk 3000` is part of the recipe and this doc never said so.** Every
+multilabel number in §13 was scored with it; the recipe line says only
+"`--multilabel`" and "the default top-3 / p≥0.05". `yolo_map_visdrone.py`
+defaults `--topk` to **1000**, and at that default the published arm scores
+**0.1919, not 0.1961**.
+
+The script's own help already warns about this — *"⚠ raise it with `--multilabel`
+or the extra candidates are cut before they can be scored (VisDrone runs ~790
+dets/image)"* — and at `--ml-k 3` that is up to ~2,400 candidates hard-cut at
+1,000. The cut costs **recall**, which is the tell: 0.7485 → 0.7115 while
+class-agnostic AP barely moves (0.4414 → 0.4390). Same ranking, fewer survivors.
+
+▶ **The full scoring command, which does reproduce §13's table:**
+```
+python3 scripts/yolo_map_visdrone.py runs/<out>/logits.bin data/visdrone448/val.bin \
+  --fpn data/visdrone --grid 14 --multilabel --topk 3000 --ml-k 3 --ml-floor 0.05
+```
+⚠ The default was deliberately **not** changed. Raising it to 3000 would move
+every historical argmax row too (0.1762 → 0.1779), silently restating numbers
+that were correctly measured under the old default.
+
+### §13b-bis. The decode is already tuned — the lever is CLOSED
+
+60 points, `--topk` × `--ml-k` × `--ml-floor`, on one `cfoc2` logits dump
+(`runs/2026-09-01-cfoc2-rescore/`). ✅ Faithfulness first: `--topk 3000 --ml-k 3
+--ml-floor 0.05` reproduces §13's row **exactly** (0.1961 / 0.4414 / 0.7485), and
+`--ml-k 1` reproduces its argmax row (0.1762). The dump is sound.
+
+| knob | result |
+|---|---|
+| `--topk` | 1000 → 3000 is worth **+2.2%**; 3000 → 8000 buys **+0.03%** for 2.8× the detections |
+| `--ml-k` | 1 → 0.1779, 2 → 0.1944, **3 → 0.1961**, 5 → 0.1966, 10 → 0.1966 (a plateau: 5 and 10 are k=3 plus candidates the floor cuts) |
+| `--ml-floor` | **inert** — 0.0 / 0.01 / 0.05 identical to four decimals, 0.15 marginally worse |
+
+Best of all 60 is **0.1974** (topk 8000, ml-k 5 or 10) — **+0.7%** over 0.1961 for
+**3.56M detections against 1.27M**. Not worth taking. ⛔ **Keep `--topk 3000
+--ml-k 3 --ml-floor 0.05` and stop tuning the decode.**
+
+⭐ The prediction was wrong in an instructive way. "Multilabel has never been
+tuned" was true; "so there is a free win in tuning it" did not follow. The +7.6%
+on record was **multilabel versus argmax** — a readout change — and the knobs on
+top of that readout were already at their optimum by inspection.
+
+### §13a. Box-aware affine: LOSES at 12 epochs, and has NOT peaked
+
+`FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_AFFINE=50 FPN_EPOCHS=12
+FPN_TAG=aff50`, 49 min on one 4060 Ti, against `cfoc2` under the identical decode.
+Config confirmed in-log: `p=0.500000 scale=±0.250000 translate=±0.100000`.
+
+| arm | mAP@0.5 | ca-AP | recall |
+|---|---|---|---|
+| `aff50` e8 | 0.1473 | 0.3858 | 0.7342 |
+| `aff50` e10 | 0.1609 | 0.3904 | 0.7479 |
+| `aff50` e12 | **0.1763** | 0.4154 | 0.7498 |
+| **`cfoc2` e12 (control)** | **0.1961** | 0.4414 | 0.7485 |
+
+⚠ **−10% at the matched budget — but read the curve, not the endpoint.** `aff50`
+is rising monotonically at e12 (+0.0136, +0.0154 over the last two checkpoints)
+where the control peaks there. That is **underfitting, not a failed lever**, and
+it is why the epoch curve was scored rather than only the final checkpoint.
+
+⚠⚠ **§0's finding #1 does not transfer.** *"12 epochs wins; the annealing was
+doing the work, not the length"* was measured on the **HSV+hflip** pack. Scale
+jitter is a far stronger regularizer and the curve says the conclusion does not
+carry to it. Do not reuse a schedule finding across augmentation packs.
+
+**Per class, the mechanism is exactly the predicted one — scale jitter trades
+large-object precision for small-object recall:**
+
+| class (val GT) | `cfoc2` | `aff50` e12 | Δ |
+|---|---|---|---|
+| bus (251) | 0.2248 | 0.1277 | **−43%** |
+| truck (750) | 0.1325 | 0.0816 | **−38%** |
+| van (1,975) | 0.2146 | 0.1964 | −8% |
+| car (14,064) | 0.6428 | 0.6188 | −4% |
+| awning-tri (532) | 0.0392 | **0.0455** | **+16%** |
+| motor (4,886) | 0.2114 | **0.2149** | +2% |
+
+Every large-vehicle class loses; the only gainers are small-object classes —
+including **awning-tricycle, which three separate loss levers failed to move**
+(§13's wall table). Recall is flat (0.7485 → 0.7498) while ca-AP falls, so it
+finds the same objects and ranks them worse. ⭐ That is the first evidence in this
+thread that the rare-class wall has a **data/scale** answer rather than a loss one,
+which is what §13 concluded the next hypothesis should be.
+
+**▶ Running when this was written (2026-09-01), both from the `cfoc2` config:**
+- `FPN_TAG=aff30 FPN_AFFINE=50 FPN_EPOCHS=30` — does the rising curve cross
+  0.1961? Fresh 30-epoch cosine, **not** a resume: the 12-epoch cosine has already
+  annealed to ~0, so resuming would measure a schedule nobody would ship.
+- `FPN_TAG=aff25 FPN_AFFINE=25 FPN_EPOCHS=12` — half the firing rate at the
+  matched budget. If the problem is regularizer strength against schedule length,
+  this lands between `aff50` and `cfoc2`.
+
+⚠ Checkpoint resume is **opt-in** (`LEAN_MLIR_INIT_LOAD` + `LEAN_MLIR_START_STEP`);
+a fresh `FPN_TAG` never picks up a previous arm's weights.
 
 ### Deployment: what is done and what is not
 
