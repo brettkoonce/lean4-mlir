@@ -4,10 +4,13 @@ import LeanMlir.Proofs.Codegen.AdjointChainBridgeHet
 /-!
 # P5 — the whole-net float certificate as a Lean theorem (CIFAR-8 capstone)
 
-The numerical probe (`scripts/adjoint_chain_probe.py` §3) certifies the committed
-CIFAR-8 net: the float-evaluated logits sit within adjoint chainBudget ≈ 2.6 of
-the real logits, below the logit magnitude ≈ 4.6 — argmax-safe. This file
-assembles that certificate as a Lean THEOREM: `chain_adjointClose`
+The numerical probe (`scripts/adjoint_chain_probe.py` §3) evaluates the adjoint
+chain's formula `Σᵢ Hᵢ·bᵢ` on the committed CIFAR-8 net at MEASURED per-stage
+magnitudes and MEASURED tail gains and gets ≈ 2.6 against a logit magnitude ≈ 4.6.
+⚠ That number is not the value of any theorem in this file ("Magnitude" below):
+the theorems' `bᵢ` sit at worst-case propagated windows, and at He-init
+magnitudes their budget is ≥ 1.8e13. This file assembles the certificate's SHAPE
+as a Lean THEOREM: `chain_adjointClose`
 (`AdjointChainBridge.lean`) instantiated at the CIFAR-8 layer chain, with
 
 - **fresh budgets from the PROVEN per-op modulus** — each stage is a
@@ -61,6 +64,21 @@ The tail gains remain a measured hypothesis in BOTH versions, not a proven one
 the whole window, which a measured Jacobian underestimates). That is the
 remaining quarantine, and it is unaffected by the window fix.
 
+⚠⚠ **Magnitude — the certificate does not bite at the committed weights.** Every
+stage's fresh budget is `layerBudget M.u m w' β Ain 0` at the PROPAGATED window
+`Ain` (`windowFold`), the worst case over the whole input box. At the He profile
+(`w' = 0.39`, `β = 0.01`, `A = 1`) the windows run 1 → 10.5 → 592 → … → 4.6e18 and
+the last stage's `b₁₁` alone is 1.8e13; `TailGainsH` forces `H₁₁ ≥ 1` (it is
+`LipOnWindow` of `id` on a positive window), so `chainBudgetH ≥ 1.8e13` against
+logits ≈ 10 and `hmargin` asks for a margin above 3.6e13. The probe's ≈ 2.6 uses
+`bᵢ` at the MEASURED activation magnitude, which no instantiation of `LayerCertH`
+can supply (`window` must hold at every box point). `scripts/adjoint_chain_ibp_probe.py`
+shows the looseness is `layerBudget` at worst-case windows, not the tail gains:
+even an exact `H` leaves the propagated budget ~1.2e6× above the true drift. The
+theorems are non-vacuous at `u = 0` or for contracting weights (`m·w' ≲ 1`); what
+v2 adds over v1 is the committed shape and the `rfl` tie, not a budget that
+reaches the logit scale at He weights (`formalization.yaml` §4c "NOT BITING").
+
 Everything here reuses proven bridges + the quarantine pattern; 3-axiom clean.
 -/
 
@@ -105,12 +123,11 @@ theorem cifar8_chain_cert (M : FloatModel) {m : Nat} {w' β A : ℝ}
       ≤ chainBudget (reluDenseTower M hw' hβ hA hm hfit layers) Hs :=
   chain_adjointClose _ Hs hH x hx j
 
-/-- **The decision guarantee: rounding cannot flip the CIFAR-8 prediction.**
-    If the exact net's logit at `j₀` beats every other by more than twice the
-    adjoint chainBudget, the float-evaluated CIFAR-8 net has the SAME argmax —
-    the certificate turns the measured margin (§3: logits ≈ 4.6 vs budget ≈ 2.6,
-    so a per-class margin > 2·2.6 is what §3 checks) into a proof that binary32
-    rounding preserves the prediction. -/
+/-- **The decision guarantee: rounding cannot flip the prediction** (v1,
+    depth-generic). If the exact net's logit at `j₀` beats every other by more than
+    twice the adjoint chainBudget, the float-evaluated net has the SAME argmax.
+    ⚠ `chainBudget` here is the theorem's own (`bᵢ` at the uniform window `A`), not
+    the probe's ≈ 2.6 (header); and this v1 form has no CIFAR-8 instance (`hfit`). -/
 theorem cifar8_chain_argmaxSafe (M : FloatModel) {m : Nat} {w' β A : ℝ}
     (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hm : 0 < m)
     (hfit : layerAct m w' β A + layerBudget M.u m w' β A 0 ≤ A)
@@ -251,19 +268,20 @@ noncomputable def cifar8ChainH (M : FloatModel) {w' β A : ℝ}
     side condition.** The v2 peer of `cifar8_chain_cert`. The layer list of
     `cifar8ChainH` is `cifar8Verified.layers` op for op (8 convs `[16,16,32,32]`
     with SAME 3×3 kernels, relu after each, a max-pool after every second conv
-    taking 32→16→8→4→2, flatten to 128, dense 64/64/10), so this is a statement
-    about the committed net rather than a look-alike tower.
+    taking 32→16→8→4→2, flatten to 128, dense 64/64/10), and
+    `cifar8ChainH_chainRH_eq` below ties its real side to `cifarCnn8Forward` by
+    `rfl`, so this is a statement about the committed net rather than a look-alike
+    tower.
 
     What is still assumed, unchanged from v1: the tail gains `Hs` arrive as a named
-    `TailGainsH` hypothesis with its provenance in `scripts/adjoint_chain_probe.py`
-    §3, and `LipOnWindow` asks for the gain over the whole window while a measured
-    Jacobian underestimates that supremum. What is no longer assumed: anything
-    about `w'`, `β` or `A` — the windows propagate instead of having to be
-    forward-invariant.
+    `TailGainsH` hypothesis (no proven discharge exists in v2), and `LipOnWindow`
+    asks for the gain over the whole window while a measured Jacobian underestimates
+    that supremum. What is no longer assumed: anything about `w'`, `β` or `A` — the
+    windows propagate instead of having to be forward-invariant.
 
-    ⚠ Not yet proved: that `chainRH (cifar8ChainH …)` is *definitionally* the
-    committed `cifar8Verified` render. It is that net's ops in that order; the
-    `rfl`-style tie is the peer of `WholeNetForwardTies` and is the next step. -/
+    ⚠ What that buys, and what it does not: the chain BUILDS at He magnitudes, but
+    its budget there is ≥ 1.8e13 (header, "Magnitude") — the certificate is
+    non-vacuous at `u = 0` or for contracting weights, not at the committed weights. -/
 theorem cifar8_chain_certH (M : FloatModel) {w' β A : ℝ}
     (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (W : Cifar8Weights w' β)
     (Hs : List ℝ) (hH : TailGainsH (cifar8ChainH M hw' hβ hA W) Hs)
@@ -273,11 +291,13 @@ theorem cifar8_chain_certH (M : FloatModel) {w' β A : ℝ}
       ≤ chainBudgetH (cifar8ChainH M hw' hβ hA W) Hs :=
   chain_adjointCloseH _ Hs hH x hx j
 
-/-- **Rounding cannot flip the committed CIFAR-8 net's prediction.** The v2 peer of
-    `cifar8_chain_argmaxSafe`, and — unlike it — instantiable: `cifar8ChainH` builds
-    at any nonnegative `w'`, `β`, `A`, so He-init magnitudes are admissible. Once the
-    exact net's logit margin at `j₀` exceeds twice the adjoint-chain budget, the
-    float-evaluated net has the same argmax. -/
+/-- **Rounding cannot flip the committed CIFAR-8 net's prediction — when the margin
+    clears the budget.** The v2 peer of `cifar8_chain_argmaxSafe`; `cifar8ChainH`
+    builds at any nonnegative `w'`, `β`, `A`. Once the exact net's logit margin at
+    `j₀` exceeds twice the adjoint-chain budget, the float-evaluated net has the same
+    argmax. ⚠ At He-init magnitudes that budget is ≥ 1.8e13 against logits ≈ 10
+    (header, "Magnitude"), so `hmargin` is satisfiable there only at `u = 0`; the
+    guarantee bites for contracting weights, not for the committed ones. -/
 theorem cifar8_chain_argmaxSafeH (M : FloatModel) {w' β A : ℝ}
     (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (W : Cifar8Weights w' β)
     (Hs : List ℝ) (hH : TailGainsH (cifar8ChainH M hw' hβ hA W) Hs)

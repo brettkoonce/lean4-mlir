@@ -15019,10 +15019,14 @@ CIFAR-8-BN, is the one that does not close: \(3.4\) against a logit scale of
 the honest edge of the method --- a per-example per-channel BatchNorm at
 fan-in \(1024\) is the widest reduction in the set, and the residual is a
 single tail gain of \(1313\) through \texttt{bn1}. Every other net clears by
-between \(3\times\) and \(26\times\). And it is a statement about the \emph{decision}, not just
-the numbers: \texttt{cifar8\_chain\_argmaxSafe} proves that whenever the exact
-network's margin beats twice the budget, binary32 rounding cannot change which
-class it predicts.
+between \(3\times\) and \(26\times\). These are the theorem's formula evaluated
+at the \emph{measured} per-stage magnitudes and tail gains; the theorem's own
+budget takes every stage at its worst-case propagated window, which at He-init
+magnitudes exceeds \(10^{13}\) on CIFAR-8, so the numbers are a-posteriori
+measurements rather than values the kernel has checked. The decision statement
+is still a theorem: \texttt{cifar8\_chain\_argmaxSafeH}, at the committed CIFAR-8
+shape, proves that whenever the exact network's margin beats twice the budget,
+binary32 rounding cannot change which class it predicts.
 
 \paragraph{Measured against proven.}
 The numeric capstones are instantiated at the \emph{trained} magnitudes

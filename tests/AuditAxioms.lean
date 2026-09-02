@@ -1500,7 +1500,10 @@ open Proofs
 #print axioms chain_argmaxSafeH
 -- ✅ and the v2 chain DOES have the committed instance: cifar8ChainH is
 -- cifar8Verified.layers op for op (8 convs [16,16,32,32], 4 pools 32→2, dense
--- 64/64/10), buildable at any 0 ≤ w'/β/A — so He magnitudes are admissible.
+-- 64/64/10), buildable at any 0 ≤ w'/β/A. ⚠ Buildable is not biting: at He
+-- magnitudes its budget is ≥ 1.8e13 against logits ≈ 10 (the bᵢ sit at worst-case
+-- propagated windows), so hmargin is satisfiable there only at u = 0 —
+-- formalization.yaml §4c "NOT BITING".
 #print axioms cifar8_chain_certH
 #print axioms cifar8_chain_argmaxSafeH
 -- §1c (planning/floatbridge_quantization.md): the two-roundoff generalization
@@ -1947,13 +1950,15 @@ open Proofs
 #print axioms Proofs.r34_floatBridges
 -- ⚠ FloatBridges existentially binds the FLOAT MAP, so the line above constrains
 -- no float implementation (formalization.yaml §4d). r34_floatBridgesTo is the same
--- fold with the float net named — that is the statement carrying the docstring's
--- "the deployed float forward is within an explicit budget" claim.
+-- fold with the float net named. ⚠⚠ It still binds the MODULUS existentially, and
+-- the triangle inequality discharges that from boundedness alone (L := 2B), so
+-- neither statement carries the docstring's "explicit budget" claim — §4d, second
+-- entry. The proof terms fold the real per-op moduli; the statements drop them.
 #print axioms Proofs.FloatBridgesTo.comp
 #print axioms Proofs.r34_floatBridgesTo
--- The rest of the migration: 9 of the 11 whole-net bridges now name their float
--- net. Remaining on the weak FloatBridges: the EfficientNet FORWARD (its 11 layered
--- block bridges are the deep cone) and the convnextCh_* instantiated pair.
+-- The rest of the migration — every whole-net bridge names its float net (the
+-- EfficientNet forward and the convnextCh_* pair follow below). Same caveat as
+-- r34_floatBridgesTo: the float map is named, the modulus is not.
 #print axioms Proofs.r34_grad_floatBridgesTo
 #print axioms Proofs.mnv2Forward_floatBridgesTo
 #print axioms Proofs.mnv2_grad_floatBridgesTo

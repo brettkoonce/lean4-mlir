@@ -113,7 +113,13 @@ noncomputable def chainFH : {m₀ m₁ : Nat} → {A₀ A₁ : ℝ} →
   | _, _, _, _, .cons l ls => chainFH ls ∘ l.fF
 
 /-- Tail-gain hypotheses: `Hᵢ` bounds the windowed gain of the REAL suffix after
-    layer `i`, on that suffix's OWN input window. -/
+    layer `i`, on that suffix's OWN input window.
+
+    ⚠ No proven discharge exists for this predicate: v1's `tailGains_suffixProd` has
+    no heterogeneous-dimension peer (`LipOnWindow.comp` is stated at a single
+    dimension), so every `TailGainsH` hypothesis in the repo is supplied by
+    measurement, and a measured Jacobian underestimates the window supremum
+    (`AdjointChainBridge.lean` §"Honest scope"). -/
 def TailGainsH : {m₀ m₁ : Nat} → {A₀ A₁ : ℝ} →
     LayerChain m₀ A₀ m₁ A₁ → List ℝ → Prop
   | _, _, _, _, .nil, [] => True

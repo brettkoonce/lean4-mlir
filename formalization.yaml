@@ -70,15 +70,20 @@ status:
     committed-spec ties for all 5 ImageNet-scale nets (SpecVJP); (2) FLOAT
     ERROR — a binary32 rounding model constructed from scratch (rndP, standard
     model PROVED, no hardware axioms), whole-net forward+backward float-error
-    bridges for all nets (⚠ stated as FloatBridges, which does not name the float
-    map -- see fidelity.divergences 4d; ALL TWELVE whole-net bridges now have a
-    FloatBridgesTo peer, which does), depth-linear adjoint-chain composition bounds
-    certified for every net, an fp8-E4M3 argmax-preservation theorem, and a
-    whole-net float certificate at the committed CIFAR-8 shape (cifar8_chain_argmaxSafeH: given
-    measured tail gains, binary32 rounding cannot flip the prediction; its layer
-    chain is cifar8Verified.layers op for op, and it builds at He-init magnitudes.
-    Its v1 predecessor cifar8_chain_argmaxSafe is depth-generic only -- see
-    fidelity.divergences 4c) plus SGD-descent theorems at trained weights; (3) ROBUSTNESS
+    bridges for all nets (⚠ stated as FloatBridges / FloatBridgesTo, neither of
+    which carries a budget: both close the error modulus existentially, and an
+    existential modulus is discharged by the triangle inequality from boundedness
+    alone -- see fidelity.divergences 4d), depth-linear adjoint-chain composition
+    bounds certified for every net, an fp8-E4M3 argmax-preservation theorem, and a
+    whole-net float certificate at the committed CIFAR-8 shape
+    (cifar8_chain_argmaxSafeH: given measured tail gains, binary32 rounding cannot
+    flip the prediction; its layer chain is cifar8Verified.layers op for op, tied by
+    rfl to cifarCnn8Forward. ⚠ Its budget takes every stage at its WORST-CASE
+    propagated window, which at He-init magnitudes is >= 1.8e13 against logits of
+    ~10, so the margin hypothesis is satisfiable there only at u = 0 or for
+    contracting weights -- fidelity.divergences 4c "NOT BITING". Its v1 predecessor
+    cifar8_chain_argmaxSafe is depth-generic only) plus SGD-descent theorems at
+    trained weights; (3) ROBUSTNESS
     CERTIFICATES as theorems — the Tsuzuku Lipschitz-margin radius, per-class-
     pair LipSDP with exact-rational LDL^T PSD witnesses (mechanized 100-image
     scorecards at trained weights, 69/100 certified vs a 72/100 PGD bracket),
@@ -180,7 +185,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "cifar8_chain_argmaxSafeH"   # float capstone at the COMMITTED CIFAR-8 shape: given measured tail gains, binary32 rounding cannot flip the prediction. Chain = cifar8Verified.layers op for op; no window side condition. (v1 cifar8_chain_argmaxSafe is depth-generic only -- fidelity.divergences 4c)
+    - declaration: "cifar8_chain_argmaxSafeH"   # float capstone at the COMMITTED CIFAR-8 shape: given measured tail gains, binary32 rounding cannot flip the prediction. Chain = cifar8Verified.layers op for op; no window side condition. ⚠ budget >= 1.8e13 at He magnitudes (bᵢ at worst-case propagated windows), so hmargin holds there only at u = 0 -- fidelity.divergences 4c "NOT BITING". (v1 cifar8_chain_argmaxSafe is depth-generic only)
       file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -360,6 +365,29 @@ fidelity:
        .dense 64 10`. The `op for op` claim was asserted, not checked, until the tie
        made it checkable. Fixed in the same change.
 
+       ⚠⚠ NOT BITING (2026-09-02, audit): the v2 certificate is correct but its
+       budget does not reach the logit scale at the committed magnitudes. Each
+       stage's fresh budget `b_i = layerBudget M.u m w' beta Ain 0` is taken at the
+       PROPAGATED window `Ain = windowFold ...` -- the worst case over the whole
+       input box -- which at the He profile (`w' = 0.39`, `beta = 0.01`, `A = 1`)
+       grows 1 -> 10.5 -> 592 -> ... -> 4.6e18. The last stage alone gives
+       `b_11 = 1.8e13`, and `TailGainsH` forces `H_11 >= 1` (it is `LipOnWindow` of
+       `id` on a positive window), so `chainBudgetH >= 1.8e13` against logits ~10:
+       `hmargin` asks for a logit margin above 3.6e13. The "chainBudget ~ 2.6" of
+       `scripts/adjoint_chain_probe.py` §3 is a DIFFERENT quantity -- the same
+       formula with `b_i` at the MEASURED per-stage activation magnitude, which no
+       instantiation of the theorem can supply (`LayerCertH.window` has to hold at
+       every point of the box). `scripts/adjoint_chain_ibp_probe.py` measured the
+       sound routes: even an exact tail gain leaves the propagated budget ~1.2e6x
+       above the true drift, so the looseness is `layerBudget` at worst-case
+       windows, not the tail gains. The theorems are non-vacuous at `u = 0` (exact
+       arithmetic) or for contracting weights `m*w' <~ 1` -- the regime v1 could
+       already express. What v2 adds is the committed SHAPE and the `rfl` tie, not
+       a certificate that bites at He weights. Also: `TailGainsH` has NO proven
+       discharge in v2 (`tailGains_suffixProd` has no heterogeneous-dimension peer;
+       `LipOnWindow.comp` is uniform-dim), so every v2 `hH` in the repo is supplied
+       by measurement.
+
     4d. WHOLE-NET FLOAT BRIDGES DO NOT NAME THEIR FLOAT MAP (disclosed
        2026-09-02, audit). `FloatBridges f := forall A, 0 <= A -> exists B L fF,
        0 <= B /\ FloatClose A B f fF L` existentially binds `fF` -- the float
@@ -395,9 +423,31 @@ fidelity:
        `floatClose_seBlockFull` conclude `exists B L gF, FloatClose A B f gF L`,
        hiding the float map rather than only the B/L bookkeeping. Those are the only
        two (`FloatComposeBridge`'s two `exists B L` lemmas write their float map out
-       explicitly and are fine). Both now have named peers -- `floatClose_seGateF` /
+       explicitly, which was taken to be enough -- it is not, see the next entry).
+       Both now have named peers -- `floatClose_seGateF` /
        `floatClose_seBlockFullF` over `seGateF` / `seBlockFullF` -- which is what
        unblocked the EfficientNet forward.
+
+       ⚠⚠ THE SAME DEFECT SURVIVES ONE BINDER OVER (2026-09-02, audit).
+       `FloatBridgesTo f fF := forall A, 0 <= A -> exists B L, 0 <= B /\
+       FloatClose A B f fF L` names the map but still closes the MODULUS `L`
+       existentially, and an unconstrained modulus is discharged by the triangle
+       inequality from the magnitude clause alone: take `L := fun _ => 2*B`, then
+       `|fF vt i - f va i| <= |fF vt i| + |f va i| <= 2*B`. So `FloatBridgesTo f fF`
+       holds for ANY pair bounded on boxes -- `FloatBridgesTo (relu n) (fun _ _ => 0)`
+       and `FloatBridgesTo (dense W b) (fun _ _ => 0)` are theorems, 3-axiom clean,
+       with no FloatModel in sight; it is falsified only by an UNBOUNDED float map.
+       Every `*_floatBridgesTo` conclusion listed above, and every `FloatBridgesTo`
+       hypothesis the whole-net theorems take, is therefore a boundedness statement,
+       and the "explicit budget" sentence in their docstrings is not carried by the
+       statement (the proof terms do fold real per-op moduli, but a theorem is its
+       statement). The `exists B L, FloatClose` lemmas (`floatClose_seGateF` /
+       `floatClose_seBlockFullF`, and the older `floatClose_cifarStage` /
+       `floatClose_resBlock`) have the same hole at fixed `A`. The fix is not a
+       predicate that rejects degenerate maps -- `2B` is always a valid modulus --
+       but one whose modulus is VISIBLE, so that its value is a claim: a Type-valued
+       bridge carrying `mag`/`mod` fields, the whole-net bridges as defs, and the
+       budget stated as a bound on `.mod`.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
