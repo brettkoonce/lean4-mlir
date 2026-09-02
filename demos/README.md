@@ -165,16 +165,14 @@ gap is recipe rather than architecture — and scale augmentation alone has clos
 
 ## DDPM — diffusion generative models
 
-Denoising diffusion on MNIST and CIFAR-10. A tiny UNet predicts the noise
+Denoising diffusion on MNIST. A tiny UNet predicts the noise
 ε(x_t, t) that was added to an image; sampling runs that prediction backwards.
 Cosine ᾱ schedule, DDIM (η=0) with 50 steps subsampled from T=1000, time
 conditioning via a tiled `t/T_max` channel — which needs no new codegen
 primitive, the UNet just sees one extra input channel.
 
-`MainMnistDdpmTrain.lean` + `Sample`, `MainCifarDdpmTrain.lean` + `Sample`.
+`MainMnistDdpmTrain.lean` + `Sample`. Tiny UNet, base 16, 50 epochs.
 See `planning/ddpm_demo.md`.
-
-### MNIST (tiny UNet, base 16, 50 epochs)
 
 ```bash
 lake exe mnist-ddpm-train data 50
@@ -214,25 +212,6 @@ labels.
 ⚠ Most of the visible change happens in the last few columns. That is the cosine
 schedule, not a rendering artifact — ᾱ stays low across most of the trajectory
 and the image resolves late.
-
-### CIFAR-10 (base 80, 70 epochs)
-
-```bash
-lake exe cifar-ddpm-train data 70
-lake exe cifar-ddpm-sample runs/cifar_samples.ppm
-```
-
-![DDPM CIFAR-10 samples](figures/ddpm_cifar.png)
-
-16 images sampled from noise. Recognizable cars, birds, animals and some scenes
-— soft and CIFAR-resolution-blurry, but the categories are visible. ~7 hours of
-training on rocm gfx1100.
-
-A bottleneck-attention variant (`cifar-ddpm-attn-train`) and a sincos-time-
-embedding variant (`cifar-ddpm-sincos-train`) ship the codegen primitives but did
-not improve sample quality at this budget — see "Phase 3 partial" in
-`planning/ddpm_demo.md`. Each has a matching sampler (`cifar-ddpm-attn-sample`,
-`cifar-ddpm-sincos-sample`) taking the same optional output-path argument.
 
 ---
 
