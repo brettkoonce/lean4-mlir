@@ -67,37 +67,6 @@ byte-equal to the checkpoint and the stem must be untouched, or it throws.
 
 ---
 
-## UNet — earlier segmentation demos
-
-`MainUnetPetsTrain.lean` / `MainPetsPredict.lean` — encoder-decoder UNet on
-Oxford-IIIT Pets, 224×224 RGB → 3-class trimap, 7.76M params. This is where
-the two seg primitives came from: bilinear upsample (forward + VJP) and channel
-concat, exposed as `.unetDown` / `.unetUp`.
-
-`MainUnetBratsTrain.lean` — a from-scratch UNet on BraTS at native 240×240.
-
-```bash
-lake exe unet-pets-train && lake exe pets-predict
-lake exe unet-brats-train data/brats 10 ce
-```
-
-![UNet pets segmentation](figures/unet_pets.png)
-
-> **Correction.** This section used to carry a long loss-design ablation —
-> CE collapsing onto background, Dice failing to rescue it, weighted-CE
-> over-predicting, and a wcesqrt+cos+pb+aug "fix". **That analysis was void.**
-> The collapse it was built on was a *data* bug, not a property of the loss:
-> the shuffle permuted images by record and labels by 4 bytes, so image *k* was
-> trained against another slice's mask (fixed in `ca83835`). Post-fix, plain
-> per-pixel CE segments at epoch 1 — mIoU ~0.69, WT/TC/ET 0.875/0.813/0.837,
-> every tumour class off the floor. The figures `brats_ce_vs_wce.png` and
-> `brats_aug_result.png` are kept only as a record of the wrong turn. The
-> lesson worth keeping is the one that generalizes: a silent data-pairing bug
-> is indistinguishable from a hard learning problem, and we spent a chapter
-> theorizing about the latter.
-
----
-
 ## FPN detector — object detection on VisDrone
 
 Multi-scale detection on real drone-altitude imagery, and the best demo in this
