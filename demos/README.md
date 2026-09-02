@@ -268,55 +268,6 @@ data pipeline + sampler work end-to-end without the transformer.
 
 ---
 
-## GradCAM — explainability
-
-Class Activation Maps via Zhou-2016's closed form for any spec
-ending in `globalAvgPool → dense`. No backward pass needed —
-the per-channel weight is just `dense_W[c, k]`. Compiles a
-`forward_cam` vmfb that returns the pre-GAP feature map flat
-(via the `stopAtGAP` flag in the codegen), then computes the
-heatmap in C: `heat[i,j] = ReLU(Σ_k W[k, tgt] · A[k, i, j])`,
-bilinear-upsamples to image resolution, and overlays.
-
-`MainGradCAM.lean`. See `planning/gradcam.md`.
-
-```bash
-lake exe gradcam convnext 16   # 16 imagenette val images via ConvNeXt-T
-lake exe gradcam r34 16        # same images via ResNet-34
-```
-
-ConvNeXt-T attention (input | overlay | heatmap, 4 images):
-
-![GradCAM ConvNeXt-T](figures/gradcam_convnext_t.png)
-
-ResNet-34 attention on the same 4 images:
-
-![GradCAM ResNet-34](figures/gradcam_resnet34.png)
-
-The contrast is the story: ConvNeXt-T's attention is diffuse —
-it lights up on the fish *and* the angler; ResNet-34's is sharply
-focal and locks onto the fish body. Same input, different "what
-each network sees" — a real architectural difference rendered
-visible.
-
----
-
-## Inspect — checkpoint diagnostics
-
-`MainInspectConvNeXt.lean` runs the eval forward over the full
-Imagenette val set against a trained ConvNeXt-T checkpoint and
-prints per-class accuracy, prediction histogram, and first-batch
-logit stats. Useful when a training run "looks fine in MSE" but
-you want to confirm the model isn't degenerate (always-one-class,
-saturated logits, etc.) — built when one of our ConvNeXt runs
-collapsed and we needed to dig in.
-
-```bash
-lake exe inspect-convnext
-```
-
----
-
 ## Layout
 
 ```
