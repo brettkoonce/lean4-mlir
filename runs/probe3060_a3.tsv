@@ -1,0 +1,7 @@
+net	variant	prec	arm	bs	workers	med_ms	min_ms	p90_ms	mean_ms	wait_ms	steps_ep	elapsed_s	note
+r50a3	lambaccdp8x64wxclipbcebf16	bf16	fed	64	4	142	138	262	170	4	5000	220	
+r50a3	lambaccdp8x64wxclipbcebf16	bf16	synth	64	4	138	135	138	137	3	5000	143	
+r50a3	lambaccdp8x64wxclipbcebf16	bf16	fed	64	8	146	143	148	146	3	5000	226	
+r50a3	lambaccdp8x64wxclipbcebf16	bf16	fed	64	14	150	145	153	150	5	5000	261	
+r50a3	lambaccdp8x64wxclipbce	f32	fed	64	8	207	204	208	206	3	5000	243	
+r50a3	lambaccdp8x64wxclipbce	f32	synth	64	8	205	203	206	205	2	5000	165	

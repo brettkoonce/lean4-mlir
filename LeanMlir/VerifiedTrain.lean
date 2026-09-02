@@ -1771,6 +1771,13 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- the benchmark's `attn` anchor — ViT is matmul/attention-bound, so its per-step
   -- cost scales very differently from conv across GPUs and can't borrow the conv
   -- factor. A full ViT epoch is too slow to probe, so we time a step window.
+  -- ⚠ ANNOUNCED, for the reason every other silent throughput/recipe flag here is: an ablation
+  -- arm that trains without augmentation and says nothing is indistinguishable in the log from
+  -- the full recipe, and the two differ by 7 points.
+  let noAug := (← IO.getEnv "LEAN_MLIR_NO_AUG").isSome
+  if noAug then
+    IO.println "  ▸ NO AUGMENTATION (LEAN_MLIR_NO_AUG): centre crop, no random crop, no hflip \
+— the ablation arm. The rendered train step is unchanged."
   let probeSteps := (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?)
   -- LEAN_MLIR_PROBE_WARM: the step the probe clock STARTS at. Default 8 preserves every
   -- committed number. ⛔ 8 IS TOO EARLY TO BE A PRODUCTION RATE. `SHIM PREFETCH` keeps one
@@ -2086,12 +2093,24 @@ gate's control, not a configuration.")
         -- lives in the data pipeline, not the network): Imagenette = random crop
         -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
         -- MNIST = none.
+        -- ⭐ LEAN_MLIR_NO_AUG: the augmentation ABLATION arm, and the reason it is a flag rather
+        -- than a second net is that augmentation lives in the data pipeline, not the graph —
+        -- turning it off must leave the rendered train step byte-identical, or the arm would be
+        -- measuring two things. It substitutes the DETERMINISTIC centre crop for the random one
+        -- and drops the flip, which is exactly the eval-time pipeline; the images stay 224² so
+        -- every downstream shape is unchanged.
+        -- ⚠ Read ONCE per run, not per step: `IO.getEnv` in the batch loop would be a syscall
+        -- 295 times an epoch, and the answer cannot change mid-run.
         let x ← match net.data with
           | .imagenette =>
-              let c ← if crop then F32.randomCrop xbRaw gbs.toUSize 3 256 256 224 224 augSeed
-                      else pure xbRaw
-              F32.randomHFlip c gbs.toUSize 3 224 224 (augSeed + 7777)
-          | .cifar => F32.randomHFlip xbRaw gbs.toUSize 3 32 32 augSeed
+              if noAug then
+                if crop then F32.centerCrop xbRaw gbs.toUSize 3 256 256 224 224 else pure xbRaw
+              else do
+                let c ← if crop then F32.randomCrop xbRaw gbs.toUSize 3 256 256 224 224 augSeed
+                        else pure xbRaw
+                F32.randomHFlip c gbs.toUSize 3 224 224 (augSeed + 7777)
+          | .cifar => if noAug then pure xbRaw
+                      else F32.randomHFlip xbRaw gbs.toUSize 3 32 32 augSeed
           | _ => pure xbRaw
         xb := x; yb := if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs
       let out ← if replicas > 1

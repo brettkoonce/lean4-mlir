@@ -164,6 +164,16 @@ jobs:
               verified_mlir/resnet34_adamdp_train_step.mlir \
               verified_mlir/resnet34_adamdp128_train_step.mlir \
               verified_mlir/resnet34_mom_train_step.mlir \
+              verified_mlir/resnet34_adamwd00_train_step.mlir \
+              verified_mlir/resnet34_adamls0_train_step.mlir \
+              verified_mlir/resnet34_adambf16_train_step.mlir \
+              verified_mlir/resnet34_mombf16_train_step.mlir \
+              verified_mlir/resnet34_adamwd00bf16_train_step.mlir \
+              verified_mlir/resnet34_adamls0bf16_train_step.mlir \
+              verified_mlir/resnet34_sgd_train_step.mlir \
+              verified_mlir/resnet34_sgdbf16_train_step.mlir \
+              verified_mlir/resnet34_momwd00_train_step.mlir \
+              verified_mlir/resnet34_momls0_train_step.mlir \
               verified_mlir/resnet34in_fwd.mlir \
               verified_mlir/resnet34in_fwd_eval.mlir \
               verified_mlir/resnet34in_mom256_train_step.mlir \

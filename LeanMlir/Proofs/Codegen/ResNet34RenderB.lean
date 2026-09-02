@@ -233,6 +233,16 @@ inductive R34Opt
   | adamw
   /-- `g ← g + wd·θ`, `v' = μ·v + g`, `θ' = θ − lr·v'`; velocity in the `v` slot, `m` untouched. -/
   | heavyBall
+  /-- ⭐ **PLAIN SGD** with coupled L2: `g ← g + wd·θ`, `θ' = θ − lr·g`. No velocity, so BOTH the
+      `m` and `v` slots ride through untouched and the packed `[θ|m|v]` signature is unchanged —
+      the same convention `.heavyBall` uses for `m` alone.
+
+      ▶ It exists for §5.6's optimizer ablation. Removing AdamW and putting `.heavyBall` in its
+      place measures *AdamW against momentum*, not against nothing, and momentum is most of what an
+      adaptive optimizer buys at this depth — so that arm routes around the thing it is supposed to
+      remove. This case is the honest bottom of the ladder.
+      ⚠ It is `.heavyBall` MINUS step ②, which is why it needs no new `SHlo` op either. -/
+  | sgd
   /-- ⭐⭐ **LAMB** (You et al. 2019) — RSB-A3's optimizer, `planning/rsb_a3_r50_verified.md` §2.3's
       one ESTIMATED line, now measured at **two new ops**. Adam moments give a direction
       `r = m̂/(√v̂+ε) + wd·θ`, then a PER-PARAMETER-TENSOR trust ratio `‖θ‖/‖r‖` rescales the step.
@@ -551,6 +561,19 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- the driver is byte-identical across variants (the `CnnRender.optTail` `.sgd` convention).
     let (cE, nE) ← emaTail nT
     pure (arS ++ cD ++ cV ++ cT ++ cE, nT, s!"%{g.nm}m", nV, none, nE)
+  -- ⭐ PLAIN SGD: `.heavyBall` with step ② deleted. Two ops, both already here.
+  | .sgd =>
+    -- ① COUPLED L2 decay, `g ← g + wd·θ` — identical to `.heavyBall`'s ①, `momVNextF` read at
+    -- `(μ := wd, v := θ)`. Kept, so the ONLY difference between the two arms is the velocity.
+    let (cD, nD) ← pretty B (.momVNextF s!"%{g.nm}" wdName g.ds 0 z gr)
+    -- ② the step, `θ' = θ − lr·g`, applied to the DECAYED GRADIENT rather than to a velocity.
+    -- ⚠ Same `sgdParamF` the heavy-ball arm ends with; only its operand differs. That is the
+    -- whole of "no momentum", and it is worth seeing that it is one operand and not one flag.
+    let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nD z))
+    let (cE, nE) ← emaTail nT
+    -- ⚠ BOTH `m` and `v` ride through untouched — `.heavyBall` passes `m` and writes `v`; this
+    -- passes both. The packed `[θ|m|v]` arity is unchanged, so the driver needs no predicate.
+    pure (arS ++ cD ++ cT ++ cE, nT, s!"%{g.nm}m", s!"%{g.nm}v", none, nE)
 
 /-- **Does this parameter get weight decay?** timm's `no_weight_decay` rule, and it is the PLAIN
     RANK TEST with no name carve-out — every 1-D parameter is excluded: BN γ, BN β and every bias.
@@ -647,7 +670,7 @@ def clipZeroConst (gradClip : Bool) : String :=
     caller restating a number that is already decided by the constructor — the two-writers shape
     `bce`/`vSuffix` was just removed for (`a3_paper_fidelity.md` §3.3). -/
 def optWdDefault : R34Opt → String
-  | .adamw | .heavyBall | .adamwAccum _ => "0.0001"
+  | .adamw | .heavyBall | .sgd | .adamwAccum _ => "0.0001"
   | .lamb  | .lambAccum _              => "0.02"
 
 /-- **The decay actually baked**: the caller's override, or `optWdDefault`. Empty means default.
@@ -677,6 +700,19 @@ def optWdStr (opt : R34Opt) (wdStr : String := "") : String :=
     so every committed artifact keeps its name and its bytes. -/
 def wdVariantMark (opt : R34Opt) (wdStr : String := "") : String :=
   if wdStr.isEmpty || wdStr == optWdDefault opt then "" else "wd" ++ wdStr.replace "." ""
+
+/-- **The label-smoothing marker**, `wdVariantMark`'s peer and there for the identical reason: α is
+    BAKED into the smoothed-CE cotangent, so two renders differing only in it would collide on one
+    artifact path. Empty at the default 0.1, so every committed spelling is unchanged.
+    ⚠ `ls0`, not `ls0000000`: `fmt6 0.0` is `"0.000000"` and stripping its point leaves seven
+    zeros, so OFF gets the short spelling it deserves and any other α keeps the general one. The
+    `#guard`s below caught exactly that on the first render.
+    ⚠ It must reach `r34AdamVariant` and not merely the renderer — the rule `wx`, `clip` and `bf16`
+    each state above, which ConvNeXt shipped wrong twice and this net shipped wrong once: an
+    artifact whose declared entry disagrees with its own path is refused by the shim outright. -/
+def lsVariantMark (alpha : Float := 0.1) : String :=
+  if alpha == 0.1 then "" else if alpha == 0.0 then "ls0"
+  else "ls" ++ (fmt6 alpha).replace "." ""
 
 /-- **The WHOLE optimizer stage for a net: the hoisted global-norm clip, then `optOne` per
     parameter.** Returns `(code, θ', m', v', G', E')`, with `G'` empty unless the optimizer
@@ -824,6 +860,10 @@ def optConstsB (opt : R34Opt) (wdStr : String := "") : String :=
   | .heavyBall =>
     "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
     s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
+  -- ⚠ NO `%mu`. Emitting one would be harmless MLIR (an unused constant) and exactly the kind of
+  -- decoration that makes a reader think the velocity is in there somewhere.
+  | .sgd =>
+    s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
   | .lamb =>
     -- ⚠ **`%eps` is 1e-6, NOT AdamW's 1e-8**, and `%wd` is 0.02, NOT 1e-4. Both come off timm's a3
     -- arg string (`lamb-cosine-lr0.008-wd0.02-…`), which `jax/MainResnet50Imagenet.lean` decodes in
@@ -949,11 +989,16 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
     -- net a slug came from. ⚠ The marker is `"drop"` and not `"sd"`: `rms` ++ `dp` spells `rmsdp`,
     -- which CONTAINS "sd" (`planning/stochastic_depth.md`'s defect).
     -- ⚠ Parameter position is trailing (§2m, so no call site moves); STRING position is N3's.
-    (sd : Bool := false) : String :=
+    (sd : Bool := false)
+    -- ▶▶ **`ls<α>` — LABEL SMOOTHING**, §5.6's ablation axis. Same rule as `wd<d>` one marker over:
+    -- α is baked, so it must reach the NAME or two renders collide on one path. Defaulted to the
+    -- recipe's 0.1, so every committed spelling is unchanged.
+    (alpha : Float := 0.1) : String :=
   (if ema then "ema" else "") ++
   (match opt with
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
    | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp"
+   | .sgd       => if replicas ≤ 1 then "sgd"  else "sgddp"
    -- ⭐ `k` is IN THE NAME — `acc4x64`, `accdp4x64` — because the driver has to know it (to decide
    -- which micro-batch applies) and the graph has it baked (in `%ob1`/`%ob2`). Two places, and a
    -- disagreement between them is silent: the run would apply on a cadence the `1/k` does not
@@ -990,6 +1035,7 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
   (if bce then "bce" else "") ++
   -- ▶ …and the decay marker after even that, because it is the newest axis and appending is the
   -- only placement that leaves all four existing spellings untouched. Empty at the default.
+  lsVariantMark alpha ++
   wdVariantMark opt wdStr ++
   (if bf16 then "bf16" else "")
 
@@ -1004,10 +1050,18 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet34")
     (convBias : Bool := false)
     -- ▶ TRAILING and defaulted, so every existing render is byte-identical (gate 1).
-    (bf16 : Bool := false) : String :=
+    (bf16 : Bool := false)
+    -- ▶ The two ABLATION knobs (§5.6). Both are baked constants, which is why each needs its own
+    -- render rather than a runtime flag: `wdStr := "0.0"` is the no-weight-decay arm and
+    -- `alpha := 0.0` the no-label-smoothing one. Defaulted, so the committed renders do not move.
+    -- ⚠ `alpha := 0.0` does NOT change the graph's SHAPE -- the smoothing ops stay, at 1.0/0.0 --
+    -- so the arm differs from the full recipe in constants only, which is what makes it an
+    -- ablation of the recipe rather than of the network.
+    (wdStr : String := "") (alpha : Float := 0.1) : String :=
   let optLabel : String := match opt with
     | .adamw     => "AdamW"
     | .heavyBall => "heavy-ball momentum + coupled L2"
+    | .sgd       => "plain SGD + coupled L2 (no momentum)"
     -- ⚠ R34 renders no accumulation artifact — `resnet34TrainStepFaithfulB` has no fourth region in
     -- its signature, so passing `.adamwAccum` here would emit an optimizer that reads `%<p>a` inputs
     -- the function does not declare. The renderer REFUSES rather than emitting invalid MLIR that
@@ -1071,9 +1125,9 @@ here first"
     --     the hand-written render fuses this into one [B,K] block, so the two graphs differ. ═══
     let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
     let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
-    let (cLsa, nLsa) ← pretty B (.scaleB "0.100000" 0 (.operand "%onehot" zNCb))
+    let (cLsa, nLsa) ← pretty B (.scaleB (fmt6 alpha) 0 (.operand "%onehot" zNCb))
     let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
-    let (cD2,  nD2)  ← pretty B (.shiftB s!"-{alphaOverK nClasses}" 0 (.operand nD1 zNCb))
+    let (cD2,  nD2)  ← pretty B (.shiftB s!"-{alphaOverK nClasses alpha}" 0 (.operand nD1 zNCb))
     let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
     -- ═══ head backward + dense grads ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B) (.denseRowBack (rows := 1) (a := 512) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
@@ -1183,8 +1237,8 @@ here first"
       s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
       s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
       s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses}> : {ty [B]}\n" ++
+      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha alpha}> : {ty [B]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses alpha}> : {ty [B]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
       s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
       s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
@@ -1217,7 +1271,7 @@ here first"
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. NOTE this does NOT equal a single-device step at the\n" ++
         "    // global batch — BN normalises per replica, so N×b != 1×(N·b) by design (§10.3b).\n") ++
-      zeroBiasPrelude convBias [64, 128, 256, 512] ++ body ++ optConstsB opt ++ adamCode ++ lossCode ++
+      zeroBiasPrelude convBias [64, 128, 256, 512] ++ body ++ optConstsB opt wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r34SigList nClasses convBias
   let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
@@ -1242,7 +1296,7 @@ here first"
   -- ("entry mismatch: session holds @…_momdp64_train_step, caller asked …_momdp64bf16_…").
   -- ConvNeXt shipped that defect twice; bf16 reproduced it a third time on its first run, which
   -- is what this comment exists to stop happening a fourth.
-  let fname := s!"{slug}_{r34AdamVariant B replicas opt (bf16 := bf16)}_train_step"
+  let fname := s!"{slug}_{r34AdamVariant B replicas opt (bf16 := bf16) (wdStr := wdStr) (alpha := alpha)}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1267,6 +1321,84 @@ end Proofs.StableHLO
 -- `git show <rev>:verified_mlir/resnet34_adam_train_step.mlir` and pass it as the first argument.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adam_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05")
+
+-- ── §5.6's two ABLATION renders. ────────────────────────────────────────────────────────────────
+-- Weight decay and label smoothing are BAKED constants (`optConstsB`'s `%wd`, and the α/K pair in
+-- the smoothed-CE cotangent), so unlike warmup, the schedule and augmentation they cannot be
+-- ablated by a runtime flag. Each arm is its own artifact, named for what it removes.
+-- ⚠ They differ from `resnet34_adam_train_step.mlir` in CONSTANTS ONLY -- same ops, same shapes,
+-- same arity -- which is the property that makes the ablation measure the recipe and not the net.
+-- ⚠ The PATHS are `r34AdamVariant`'s output, not hand-spelled: `wd00` and `ls0000` are what the
+-- markers produce, and the entry name inside each file is built from the same call. Spelling the
+-- path by hand is precisely the defect this net shipped once and ConvNeXt twice.
+#eval IO.FS.writeFile "verified_mlir/resnet34_adamwd00_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (wdStr := "0.0"))
+
+#eval IO.FS.writeFile "verified_mlir/resnet34_adamls0_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (alpha := 0.0))
+
+-- ── The bf16 half of §5.6, so every arm has a precision peer. ──────────────────────────────────
+-- ⭐ The point is NOT that bf16 is faster here — at batch 32 on Imagenette it is barely that. It is
+-- that the recipe deltas should be the SAME SIZE in both precisions: an ablation that only holds in
+-- fp32 is measuring the arithmetic, not the recipe. Chapter 4's Lever 3 makes the same argument on
+-- the normalized CIFAR net, and this is its ResNet-scale peer.
+-- ⚠ `bf16` is LAST in the spelling, after even the decay and smoothing marks, which is what keeps
+-- every fp32 name above unchanged.
+#eval IO.FS.writeFile "verified_mlir/resnet34_adambf16_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/resnet34_mombf16_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05"
+    (opt := Proofs.StableHLO.R34Opt.heavyBall) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/resnet34_adamwd00bf16_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (wdStr := "0.0") (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/resnet34_adamls0bf16_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (alpha := 0.0) (bf16 := true))
+
+-- ── §5.6's optimizer ladder needs a bottom rung. ──────────────────────────────────────────────
+-- ⚠ `.heavyBall` is NOT "AdamW removed" — momentum is most of what an adaptive optimizer buys at
+-- this depth, so an arm that swaps one for the other measures the gap between two good optimizers
+-- and calls it the optimizer's contribution. `.sgd` is the honest bottom: coupled decay and a step,
+-- no velocity, no moments.
+#eval IO.FS.writeFile "verified_mlir/resnet34_sgd_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05"
+    (opt := Proofs.StableHLO.R34Opt.sgd))
+
+#eval IO.FS.writeFile "verified_mlir/resnet34_sgdbf16_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05"
+    (opt := Proofs.StableHLO.R34Opt.sgd) (bf16 := true))
+
+-- ── The momentum-BASE ablation (§5.6). ────────────────────────────────────────────────────────
+-- ⭐ Same two baked knobs as the AdamW arms, on the heavy-ball render. The point of re-running the
+-- recipe under a NON-adaptive base is that AdamW's per-parameter normalisation absorbs exactly the
+-- tuning the other ingredients supply, so an ablation rooted at AdamW may understate every one of
+-- them. Rooted at momentum there is nothing absorbing it.
+#eval IO.FS.writeFile "verified_mlir/resnet34_momwd00_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05"
+    (opt := Proofs.StableHLO.R34Opt.heavyBall) (wdStr := "0.0"))
+
+#eval IO.FS.writeFile "verified_mlir/resnet34_momls0_train_step.mlir"
+  (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05"
+    (opt := Proofs.StableHLO.R34Opt.heavyBall) (alpha := 0.0))
+
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .heavyBall (wdStr := "0.0") == "momwd00"
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .heavyBall (alpha := 0.0) == "momls0"
+
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .sgd == "sgd"
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .sgd (bf16 := true) == "sgdbf16"
+
+-- The spellings, pinned the way every other marker here is.
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (wdStr := "0.0") == "adamwd00"
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (alpha := 0.0) == "adamls0"
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw == "adam"
+-- ⚠ bf16 COMPOSES with the two ablation marks and trails both. Pinned, because the composition is
+-- exactly what a hand-spelled path would get wrong.
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (bf16 := true) == "adambf16"
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .heavyBall (bf16 := true) == "mombf16"
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (wdStr := "0.0") (bf16 := true) == "adamwd00bf16"
+#guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (alpha := 0.0) (bf16 := true) == "adamls0bf16"
 
 -- The DATA-PARALLEL render (handoff §2b-quater), selected at run time by `LEAN_MLIR_VARIANT=adamdp`.
 -- Same graph, plus one `all_reduce(add)/N` per parameter gradient before its AdamW triple. This

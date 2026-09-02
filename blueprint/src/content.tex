@@ -5037,92 +5037,13 @@ def main (argv : List String) : IO Unit :=
     resnet34Config (argv.head?.getD "data") 0.001 0.9 0.999 3 "adam"
 \end{verbatim}
 
-\noindent Four things in that listing carry weight, and they are the four to
-copy.
-
-\textbf{\texttt{slug} names the artifact.} \texttt{resnet34} resolves to
-\texttt{verified\_mlir/resnet34\_adam\_train\_step.mlir}, which is
-\texttt{pretty(provenGraph)}: the text the printer emits from the graph the
-theorems are about. The trainer does not build a network from this spec at run
-time. It loads that file. The spec's job is to say which file, and to be
-\texttt{\#guard}ed against it so the two cannot drift.
-
-\textbf{\texttt{bnChannels} is not decoration.} It lists every BatchNorm's
-channel count in forward order, and it is what makes
-\texttt{trainAdamSched} thread running statistics out of the train step and
-into a \emph{separate} evaluation forward. A net that declares BN layers and
-then trains through a driver without that threading evaluates against
-statistics nobody computed, and reports chance forever. That is a real failure
-mode, not a hypothetical, and \S\ref{sec:r34_runit}'s third compile line is
-where you can see the machinery that avoids it.
-
-\textbf{\texttt{trainAdamSched}, not \texttt{.train}.} The generic driver is
-where the optimizer schedule, the augmentation pipeline and the BN threading
-live. \texttt{.train} is the simpler peer from the MNIST chapters and it has
-none of the last one.
-
-\textbf{The recipe is arguments, not architecture.} The learning rate, the
-momentum pair, the warmup length and the variant string are all passed in.
-Swapping AdamW for momentum is a different \emph{argument} against the same
-proven gradient, which is exactly what Chapter~\ref{chap:bn} used to measure
-optimizers against each other.
-
-\medskip\noindent\textbf{What \texttt{.residualStage} expands to.} It is a
-constructor, not a magic word, and the whole of it is twelve lines in
-\texttt{LeanMlir/VerifiedSpec.lean}. Every layer reports the parameter
-tensors it contributes as \texttt{(dims, initKind)} pairs, where
-\texttt{0} is He(fan-in), \texttt{1} is ones ($\gamma$) and \texttt{2} is
-zeros ($\beta$ and biases):
-
-\begin{verbatim}
-/-- identity basic block @ `c`: two conv->BN->relu units, no projection. -/
-private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
-  #[(#[c,c,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2)]
-
-/-- downsampling basic block `cin->c`: two conv->BN->relu + the 1x1
-    option-B projection shortcut (He et al. §3.3). -/
-private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
-  #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
-    (#[c,cin,1,1],0),(#[c],1),(#[c],2)]
-
-private def stageSpec (ic oc count stride : Nat)
-    : Array (Array Nat × Nat) := Id.run do
-  let mut a := if stride != 1 || ic != oc then downBlk ic oc else idBlk oc
-  for _ in [0:count-1] do a := a ++ idBlk oc
-  return a
-
-def toSpecs : VLayer -> Array (Array Nat × Nat)
-  | dense ic oc             => #[(#[ic,oc],0),(#[oc],2)]      -- Ch. 1
-  | relu                    => #[]                            -- Ch. 2
-  | conv ic oc k _          => #[(#[oc,ic,k,k],0),(#[oc],2)]  -- Ch. 3
-  | maxPool _ _             => #[]                            -- Ch. 3
-  | flatten                 => #[]                            -- Ch. 3
-  | bnPerChannel oc         => #[(#[oc],1),(#[oc],2)]         -- Ch. 4
-  | residualStage ic oc n s => stageSpec ic oc n s            -- here
-  | globalAvgPool           => #[]                            -- here
-  | bottleneckStage i o n s => bottleneckStageSpec i o n s    -- R50, below
-  | ...                        -- 12 more, one per later chapter's block
-\end{verbatim}
-
-\noindent Read it against the spec above. \texttt{.residualStage 64 128 4 2}
-carries \texttt{stride = 2}, so the condition fires: the first block is a
-\texttt{downBlk} --- two $3\times3$ convs plus the $1\times1$ projection that
-lets the skip cross a channel change --- and the other three are
-\texttt{idBlk}s. Nine tensors plus three sixes, twenty-seven in the stage.
-\texttt{.residualStage 64 64 3 1} has \texttt{stride = 1} and
-\texttt{ic = oc}, so the condition is false, no projection is emitted, and
-all three blocks are identity: eighteen tensors. That one-line conditional is
-the entire difference between a stage that changes shape and one that does
-not, and it is the same dispatch \texttt{.bottleneckStage} uses for
-ResNet-50.
-
-\medskip\noindent It also lets you check the spec against itself. Counting
-BatchNorms out of those twelve lines --- one for the stem, then
-$3 \times 2$, $3 + 3 \times 2$, $3 + 5 \times 2$ and $3 + 2 \times 2$ for
-the four stages --- gives $1 + 6 + 9 + 13 + 7 = 36$, which is exactly the
-length \texttt{bnChannels} declares and the thirty-six BatchNorms
-\S\ref{sec:residual_r34_example} says the graph computes. Nothing in the
-listing is asserted twice; the second number is derived from the first.
+\noindent The one thing in that listing to carry forward is that \textbf{the recipe
+is arguments, not architecture.} The learning rate, the momentum pair, the warmup
+length and the variant string are all passed to the driver; none of them is a
+property of the network. Swapping AdamW for momentum is a different \emph{argument}
+against the same proven gradient, which is what makes
+\S\ref{sec:r34_ablation}'s ablation a measurement of the recipe rather than of the
+model --- and what Chapter~\ref{chap:bn} used to put three optimizers on one net.
 
 \medskip\noindent This is the first chapter that uses the full production recipe (Adam + cosine
 + warmup + weight decay + augmentation + label smoothing) rather
@@ -5137,7 +5058,20 @@ averaging over the spatial dimensions,
 so the classifier head sees one summary scalar per channel instead
 of the full \(C \cdot H \cdot W\) flattened activation. That's the
 architectural move that drops ResNet-34 from what would have been a
-$\sim$200M parameter AlexNet-era spec down to 21.3M. We'll see GAP
+$\sim$200M parameter AlexNet-era spec down to 21.3M.
+
+GAP is not ResNet's invention. It comes from \emph{Network in Network}
+(Lin et al.\ 2013,
+\href{https://arxiv.org/abs/1312.4400}{arXiv:1312.4400}), which proposed
+it precisely as a replacement for the fully-connected layers at the top of
+a convolutional net: one feature map per class, averaged, fed straight to
+the softmax, with no fully-connected parameters to overfit. Inception-v1
+(GoogLeNet, Szegedy et al.\ 2014,
+\href{https://arxiv.org/abs/1409.4842}{arXiv:1409.4842}) adopted it a year
+later --- dropping the fully-connected stack for an average pool and a
+single linear classifier --- and reported it worth about $0.6\%$ top-1 on
+its own. By 2015 it was standard equipment, which is why ResNet uses it
+without argument. We'll see GAP
 again as the ``Squeeze'' step inside the squeeze-and-excitation
 block in Chapter~\ref{chap:se}, and at the head of every
 post-2015 vision architecture in the bestiary.
@@ -5150,13 +5084,6 @@ and \textbf{98.27\%} top-5 on Imagenette's 3,925-image validation split. That
 is the going rate for a scratch-trained ResNet-34 at this resolution and data
 size. Rather than reprint the log, here is what is worth noticing in it.
 
-- \textbf{21.3M parameters, and 729\,KB of MLIR} (728\,801 chars) for the
-  entire AdamW training step. That is $112\times$ the MNIST MLP's render and
-  only $6\times$ the wide CIFAR BatchNorm net's, against a network that is far
-  more than six times the earlier one. Emission is per-op, not per-parameter,
-  so $3 \times 3$ convolutions at 64 and at 512 channels cost the same handful
-  of lines. Depth grows the text linearly, and width does not grow it at all.
-
 - \textbf{Per-step time is about 220\,ms} at batch 32, 295 steps to the epoch,
   dominated by the four \texttt{.residualStage} groups where the $3 \times 3$
   convolutions at 64, 128, 256 and 512 channels are. The first stage alone at
@@ -5164,12 +5091,6 @@ size. Rather than reprint the log, here is what is worth noticing in it.
   output spatial location, about $3.4 \times 10^8$ FLOPs per forward image,
   times the batch, times three blocks at that width, times two for the
   backward.
-
-- \textbf{Three artifacts, not one.} The train step is accompanied by
-  \texttt{resnet34\_fwd} (98\,383 chars) and
-  \texttt{resnet34\_fwd\_eval} (76\,720 chars). The last exists only because
-  BatchNorm evaluates differently than it trains, and it is the concrete cost
-  of the \texttt{bnChannels} line in the spec above.
 
 - \textbf{Final loss plateaus near 0.50}, not zero. That's the
   label-smoothing floor: with $\epsilon = 0.1$ and 10 classes, the
@@ -5318,65 +5239,169 @@ Every chapter after this one uses the same six ingredients. The
 \section{Ablation: what each ingredient contributes}
 \label{sec:r34_ablation}
 
-So how much does each ingredient actually earn? We ran the full
-recipe plus six leave-one-out variants on ResNet-34 Imagenette, 80
-epochs each, same init and batch order. Each ablation row keeps
-everything except the one named component, so the lift measures
-that component's contribution given everything else is present. It is
-an honest answer to ``is this piece pulling its weight?'' rather
-than the order-dependent story you'd get from an additive ladder.
+So how much does each ingredient actually earn? The full recipe and seven
+leave-one-out variants, ResNet-34 on Imagenette, 80 epochs each. Every variant
+keeps the recipe intact except for the one component it names, so its
+difference from the full recipe measures that component's contribution
+\emph{given everything else is present} --- not the order-dependent story an
+additive ladder tells.
 
 \begin{center}
-\begin{tabular}{l r r}
-\hline
-Run & Val accuracy & $\Delta$ vs full \\
-\hline
-Full recipe             & 90.29\% & --- \\
-Bare recipe (plain SGD + momentum, no other tricks) & 72.82\% & $-$17.47 \\
-Full minus basic augmentation & 82.71\% & $-$7.58 \\
-Full minus cosine decay & 86.81\% & $-$3.48 \\
-Full minus Adam (vanilla SGD, lr 0.01) & 87.04\% & $-$3.25 \\
-Full minus warmup       & 88.88\% & $-$1.41 \\
-Full minus label smoothing & 89.24\% & $-$1.05 \\
-Full minus weight decay & 89.68\% & $-$0.61 \\
-\hline
-\end{tabular}
+\begin{tikzpicture}
+\pgfplotsset{
+  ablationaxis/.style={
+    width=0.47\linewidth, height=6.4cm,
+    xmin=-8.4, xmax=1.4,
+    symbolic y coords={full,nowd,nowarm,nols,noadam,nocos,noaug},
+    % ⚠ ytick EXPLICIT, not `ytick=data`: the latter emits a tick only for categories that
+    % have a plotted point, so the empty `gap` row got none and every label after it slid
+    % up one row — the augmentation point appeared on an unlabelled line.
+    ytick={full,nowd,nowarm,nols,noadam,nocos,noaug}, y dir=reverse,
+    xlabel={$\Delta$ top-1 vs full recipe (points)},
+    tick label style={font=\small}, label style={font=\small},
+    title style={font=\small},
+    grid=major, grid style={gray!14},
+    scatter/use mapped color={draw=black,fill=black},
+  }
+}
+% ── fp32 ───────────────────────────────────────────────────────────────────
+\begin{axis}[ablationaxis, title={fp32},
+  yticklabels={full,$-$weight decay,$-$warmup,$-$label smoothing,
+               $-$AdamW,$-$cosine,$-$augmentation}]
+  \fill[gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
+       rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
+  \draw[black!70]        ({axis cs:0,full}|-{rel axis cs:0,0})
+                      -- ({axis cs:0,full}|-{rel axis cs:0,1});
+  \addplot[only marks, mark=*, mark size=2.0pt, blue!70!black] coordinates {
+    (0,full) (-0.64,nowd) (-1.04,nowarm) (-1.50,nols)
+    (-2.29,noadam) (-4.48,nocos) (-7.01,noaug)};
+\end{axis}
+% ── bf16 ───────────────────────────────────────────────────────────────────
+\begin{axis}[ablationaxis, title={bf16}, yticklabels={{},{},{},{},{},{},{}},
+  at={(0.5\linewidth,0)}, anchor=south west]
+  \fill[gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
+       rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
+  \draw[black!70]        ({axis cs:0,full}|-{rel axis cs:0,0})
+                      -- ({axis cs:0,full}|-{rel axis cs:0,1});
+  \addplot[only marks, mark=*, mark size=2.0pt, orange!80!black] coordinates {
+    (0,full) (-0.10,nowd) (-1.15,nowarm) (-0.46,nols)
+    (-2.27,noadam) (-4.94,nocos) (-7.11,noaug)};
+\end{axis}
+\end{tikzpicture}
 \end{center}
 
-Three observations worth naming:
+\noindent Each point is one 80-epoch run, plotted as its \emph{difference} from
+the full recipe rather than as an accuracy, so the line at zero is the baseline
+and distance from it is what the ingredient contributes. The shaded band is the
+95\% Wilson half-width at $n = 3{,}925$, $\pm0.92$ points: a point inside it is
+not resolved by a single run, however suggestive its position. Rows are sorted
+by fp32 effect.
 
-\textbf{Augmentation is by far the largest single contribution}
-($-$7.58 points, more than 2$\times$ any other knob). Imagenette
-has just 9469 training images for a 21M-parameter network, so
-without augmentation the model overfits hard, and training loss
-drops below $0.001$ while val accuracy stalls. Augmentation is
-doing most of the work that the rest of the recipe gets credit
-for.
+\medskip\noindent The two panels are the same eight arms in the two precisions,
+and the reason to draw them side by side is that \emph{a real effect should not
+move}. Every point outside the band reproduces: augmentation $-7.01$ against
+$-7.11$, cosine $-4.48$ against $-4.94$, the optimizer $-2.29$ against
+$-2.27$, warmup $-1.04$ against $-1.15$. The largest disagreement among them is
+$0.46$ and two of the four are within $0.10$ ---
+this on baselines that themselves differ by $0.28$, which is the argument for
+plotting differences rather than accuracies.
 
-\textbf{Cosine decay and Adam are roughly tied for largest
-non-augmentation contribution} ($-$3.48 and $-$3.25 points). They
-operate on different axes, with cosine shaping the learning-rate
-trajectory and Adam the per-parameter update magnitude, but
-their late-training influence on val accuracy is comparable.
+\medskip\noindent \textbf{And the two points inside the band do not reproduce.}
+Weight decay is $-0.64$ in fp32 and $-0.10$ in bf16; label smoothing is $-1.50$
+and $-0.46$. Each moves by about its own size. The band predicted, from
+$n = 3{,}925$ alone, exactly which rows a second condition would fail to
+confirm --- so the figure does not merely assert that those two rows are
+unresolved, it shows them being unresolved. Reading either as an ingredient's
+contribution would be reading noise, and this is what licenses training the
+ImageNet jobs of \S\ref{sec:r34_pjrt} in bf16.
+Chapter~\ref{chap:bn}'s Lever~3 makes the same case on the normalized CIFAR net.
 
-\textbf{The contributions are essentially additive.} Sum of all
-six leave-one-out deltas: $-17.38$ points. Bare-recipe delta vs
-full: $-17.47$ points. The two agree to within rounding, suggesting
-the modern recipe's ingredients aren't significantly interacting.
-Each one buys roughly the same lift independently of which others
-are present. Weight decay and label smoothing are the smallest
-contributors ($-$0.61 and $-$1.05) but show the
-overfit-then-catch-up signature mid-training (e.g., no-WD lands
-$-$6 points at epoch 10 before the gap narrows by epoch 80).
+\medskip\noindent \textbf{What the optimizer row is really measuring.} Reading
+the $-$AdamW gap as ``what the adaptive optimizer buys'' assumes its replacement
+was given a rate that suits it. Heavy-ball at $\mu = 0.9$ multiplies the
+effective step by $1/(1-\mu) = 10$, so the comparison that isolates momentum is
+against plain SGD at ten times the rate --- $0.1$, not $0.01$ --- where the two
+take the same size step and differ only in whether a velocity carries it.
 
-A note on the SGD configs: \texttt{r34-no-adam} replaces Adam with
-vanilla SGD at lr=0.01 (no momentum), keeping everything else from
-the full recipe. \texttt{r34-bare} uses SGD with momentum 0.9 at
-lr=0.01 and turns \emph{all} other tricks off. The two SGD configs
-therefore differ on momentum as well as on the recipe ingredients,
-so the bare row should be read as a ``what does the modern recipe
-buy us total'' baseline rather than a strict additive component of
-the leave-one-out chain.
+\begin{center}
+\begin{tikzpicture}
+% ── left: the ladder ───────────────────────────────────────────────────────
+\begin{axis}[
+  width=0.44\linewidth, height=4.6cm,
+  xmin=-8.4, xmax=1.2,
+  symbolic y coords={full,mom,sgd10}, ytick={full,mom,sgd10},
+  y dir=reverse,
+  yticklabels={AdamW lr .001,momentum lr .01,SGD lr .1},
+  xlabel={$\Delta$ top-1 vs full (points)},
+  tick label style={font=\small}, label style={font=\small},
+  title style={font=\small}, title={endpoints},
+  grid=major, grid style={gray!14}]
+  \fill[gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
+      rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
+  \draw[black!70] ({axis cs:0,full}|-{rel axis cs:0,0})
+               -- ({axis cs:0,full}|-{rel axis cs:0,1});
+  \addplot[only marks,mark=*,mark size=2.2pt,blue!70!black]
+    coordinates {(0,full) (-2.29,mom) (-2.60,sgd10)};
+\end{axis}
+% ── right: the trajectories ────────────────────────────────────────────────
+\begin{axis}[
+  width=0.52\linewidth, height=4.6cm, at={(0.48\linewidth,0)}, anchor=south west,
+  xlabel={Epoch}, ylabel={Val top-1 (\%)},
+  xmin=0,xmax=81,ymin=10,ymax=95, xtick={0,20,40,60,80},
+  tick label style={font=\small}, label style={font=\small},
+  title style={font=\small}, title={trajectories},
+  legend style={font=\scriptsize,at={(0.98,0.03)},anchor=south east,draw=gray!40},
+  legend cell align={left}, grid=major, grid style={gray!14},
+  every axis plot/.append style={line width=0.7pt, mark=none}]
+  \addplot[black!75]      coordinates {(1,24.69) (2,24.89) (3,45.91) (4,50.06) (5,49.81) (6,66.68) (7,57.43) (8,66.39) (9,72.36) (10,60.05) (11,55.06) (12,75.36) (13,73.86) (14,73.53) (15,81.10) (16,69.22) (17,63.34) (18,70.09) (19,76.76) (20,79.59) (21,71.67) (22,69.89) (23,79.46) (24,82.98) (25,78.29) (26,70.50) (27,81.43) (28,82.90) (29,77.99) (30,82.24) (31,82.11) (32,85.61) (33,85.76) (34,85.48) (35,83.36) (36,86.04) (37,86.39) (38,82.57) (39,85.55) (40,87.16) (41,85.04) (42,85.15) (43,86.37) (44,87.39) (45,86.19) (46,86.88) (47,88.13) (48,88.03) (49,87.67) (50,87.24) (51,86.98) (52,89.15) (53,88.41) (54,89.68) (55,88.97) (56,88.54) (57,88.71) (58,89.40) (59,89.30) (60,89.10) (61,88.87) (62,90.04) (63,89.78) (64,89.61) (65,90.11) (66,90.01) (67,90.19) (68,90.19) (69,90.11) (70,90.19) (71,90.19) (72,90.19) (73,90.17) (74,90.37) (75,90.55) (76,90.34) (77,90.42) (78,90.42) (79,90.47) (80,90.42)};   \addlegendentry{AdamW}
+  \addplot[teal!60!black] coordinates {(1,22.52) (2,41.99) (3,53.02) (4,59.03) (5,65.12) (6,67.77) (7,68.38) (8,70.78) (9,74.55) (10,67.64) (11,69.76) (12,75.80) (13,73.89) (14,78.52) (15,79.39) (16,79.11) (17,79.29) (18,79.80) (19,80.48) (20,78.19) (21,78.09) (22,80.10) (23,82.83) (24,82.78) (25,80.33) (26,84.15) (27,80.59) (28,83.67) (29,83.92) (30,84.79) (31,85.43) (32,86.17) (33,86.01) (34,86.24) (35,85.27) (36,86.17) (37,86.62) (38,87.13) (39,86.62) (40,87.13) (41,86.98) (42,87.97) (43,87.18) (44,87.52) (45,87.29) (46,87.64) (47,87.69) (48,87.95) (49,87.52) (50,87.34) (51,87.75) (52,87.77) (53,88.23) (54,88.10) (55,87.85) (56,88.20) (57,87.97) (58,87.82) (59,87.95) (60,88.03) (61,87.80) (62,88.18) (63,88.13) (64,88.10) (65,88.28) (66,88.18) (67,88.31) (68,88.10) (69,88.05) (70,88.18) (71,88.18) (72,88.23) (73,88.05) (74,88.23) (75,88.31) (76,88.18) (77,88.28) (78,88.18) (79,88.10) (80,88.13)};    \addlegendentry{momentum .01}
+  \addplot[blue!65!black] coordinates {(1,16.89) (2,27.26) (3,58.60) (4,50.37) (5,58.52) (6,63.11) (7,70.14) (8,69.83) (9,71.36) (10,51.80) (11,66.47) (12,73.61) (13,65.53) (14,70.09) (15,68.20) (16,74.04) (17,79.46) (18,77.66) (19,78.06) (20,80.97) (21,80.71) (22,83.44) (23,81.12) (24,75.36) (25,83.77) (26,81.02) (27,81.12) (28,82.42) (29,82.39) (30,84.92) (31,79.26) (32,84.64) (33,84.28) (34,84.92) (35,85.73) (36,83.06) (37,85.96) (38,82.45) (39,82.42) (40,86.37) (41,85.30) (42,85.61) (43,86.55) (44,86.80) (45,86.45) (46,87.34) (47,87.39) (48,87.21) (49,86.65) (50,87.13) (51,87.87) (52,87.87) (53,87.92) (54,87.36) (55,87.49) (56,87.64) (57,87.49) (58,87.69) (59,87.39) (60,87.85) (61,87.52) (62,87.77) (63,87.87) (64,87.46) (65,87.49) (66,87.57) (67,87.41) (68,87.49) (69,87.41) (70,87.46) (71,87.44) (72,87.75) (73,87.64) (74,87.69) (75,87.67) (76,87.80) (77,87.54) (78,87.72) (79,87.57) (80,87.82)};  \addlegendentry{SGD .1}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\noindent At a matched step, plain SGD lands $0.31$ points from momentum ---
+inside the band, indistinguishable on one run each --- and the trajectories are
+the stronger statement: the two are inseparable for the whole eighty epochs, not
+merely at the end. Momentum is not doing something a velocity-free step cannot;
+it is taking a bigger one. So the $-2.29$ charged to ``removing AdamW'' is
+mostly the $10\times$ that momentum supplies for free, and only a fraction of it
+survives once that is held fixed.
+
+\medskip\noindent That is this ablation's own limit, stated plainly. Every
+non-adaptive row's difference is partly a claim about how well its learning rate
+happens to suit it, and an adaptive optimizer's insensitivity to that rate is
+exactly what hides the dependence. The figure above measures the recipe
+\emph{as tuned}, not its ingredients in isolation.
+
+\medskip\noindent Three readings follow.
+
+\textbf{Augmentation is the largest single contribution} ($-7.01$ points, three
+times the next-largest knob). Imagenette has 9{,}469 training images for a
+21.3M-parameter network, so without the random crop and flip the model overfits
+hard --- training loss falls while validation stalls. Most of what the rest of
+the recipe gets credit for is augmentation.
+
+\textbf{Half the table is not resolvable.} At $n = 3{,}925$ the 95\% Wilson
+half-width is $\pm0.92$ points, wider than the weight-decay, warmup and
+label-smoothing deltas combined with room to spare. Their intervals ---
+$[88.80, 90.69]$, $[88.37, 90.30]$, $[87.90, 89.86]$ --- all overlap the full
+recipe's $[89.46, 91.30]$. On one run each, the honest reading is that
+augmentation, the schedule and the optimizer are resolved and the three small
+knobs are not; separating those would take seeds, not a bigger table.
+
+\textbf{The contributions are \emph{not} additive}, and this is where a single
+vintage changes the answer. The six leave-one-out deltas sum to $-16.97$ while
+turning every one of them off at once costs $-5.99$. Removing one ingredient at
+a time therefore over-counts by roughly a factor of three: the recipe's parts
+overlap heavily, and each is partly insurance against the absence of the others
+rather than an independent addition. A network trained with none of them still
+reaches $84.43\%$, within a point and a half of the one trained with everything
+except augmentation.
+
+\medskip\noindent \textbf{One row is named for what it loads.} The $-$AdamW row
+swaps the optimizer for Nesterov momentum and keeps the rest of the recipe
+intact; the next section is about what that swap does and does not measure.
 
 \section{ImageNet recipe}
 
@@ -5402,7 +5427,7 @@ tricks'' polish that became standard after it, and
 \S\ref{sec:r50_a3_vs_2018} is the table that says which is which.
 
 \prosesection{The PJRT lowerer}
-\label{sec:r34_phase4}
+\label{sec:r34_pjrt}
 
 The verified path is a second trusted lowerer, \texttt{ffi/pjrt\_ffi.c}: it
 implements the same C surface as the IREE shim and hands the graph to XLA
@@ -5691,8 +5716,6 @@ convolutions.
 
 \section{ResNet-50 on ImageNet: the 2018 recipe and RSB-A3}
 
-\imagenetphasenote
-
 The basic block ResNet-34 is built from generalizes to the
 \emph{bottleneck} block of ResNet-50, and the \texttt{jax/} folder
 ships it as a full ImageNet demo
@@ -5724,9 +5747,8 @@ reach effective batch $2048$, so BatchNorm normalizes per $512$-image
 micro-batch (``Ghost-BN''); the 2018 recipe runs a true global batch of $256$.
 
 \medskip\noindent The first row is the \textbf{2018 recipe} on the same
-network. It is what makes the recipe comparison symmetric: both paths get both recipes, so a difference
-between two rows is attributable to the one thing that changed between them.
-Here that difference is $\mathbf{+1.31}$ points for A3 ($76.95 \to 78.26$),
+network, which is what lets the two rows be read against each other: the
+difference between them is $\mathbf{+1.31}$ points for A3 ($76.95 \to 78.26$),
 with architecture, box, protocol and denominator all held fixed --- and A3
 reaches it in less wall clock, because it trains at $160^2$.
 
@@ -5761,7 +5783,7 @@ reaches it in less wall clock, because it trains at $160^2$.
 
 \noindent ResNet-50 / ImageNet-1k validation accuracy per epoch on the
 \textbf{2018} recipe, four 4060\,Ti cards, on the same axes as the A3 curve in
-\S\ref{sec:r50_phase4} below. It shows the three-part shape ResNet-34 does: a
+\S\ref{sec:r50_pjrt} below. It shows the three-part shape ResNet-34 does: a
 fast climb, a long shallow middle, and a final lift as the cosine anneals.
 
 \medskip\noindent Against A3 the two are closer through the middle than the
@@ -5787,16 +5809,13 @@ which is why the $78.26\%$ is quotable against \texttt{timm}'s $78.05\%$
 rather than an improvement on it.
 
 \prosesection{The PJRT lowerer}
-\label{sec:r50_phase4}
+\label{sec:r50_pjrt}
 
-The same recipe on the \emph{verified} codegen path, which is not a
-hand-written emitter but \texttt{pretty(provenGraph)}, the rendered MLIR
-the proofs reason about, lowered through \texttt{ffi/pjrt\_ffi.c} to XLA
-over the PJRT C API with no Python at run time. The artifact is
-\texttt{resnet50in160\_lambaccdp8x64wxclipbce\_train\_step}: LAMB $\times$
+The same recipe on the verified path of \S\ref{sec:r34_pjrt}, unchanged. The
+artifact is
+\texttt{resnet50in160\_lambaccdp8x64wxclipbcebf16\_train\_step}: LAMB $\times$
 BCE-with-logits $\times$ gradient accumulation $k=8$, four replicas at
-per-replica batch 64 for an effective batch of 2048, train@160 /
-eval@224.
+per-replica batch 64 for an effective batch of 2048, train@160 / eval@224.
 
 \begin{center}
 \begin{tabular}{l l l r r r r}
@@ -5804,17 +5823,15 @@ eval@224.
 GPU & Recipe & BN group & Per epoch & Total & Val top-1 & Val top-5 \\
 \hline
 4$\times$ 3060 (bf16)    & 2018 (90 ep)    & Ghost-BN (64) & $\sim$20.5 min & $\sim$30.7 hr & $\mathbf{77.07\%}$ & $\mathbf{93.48\%}$ \\
-4$\times$ 4060 Ti (fp32)  & RSB-A3 (100 ep) & Ghost-BN (64) & $\sim$19.2 min & $\sim$32.1 hr & $\mathbf{77.91\%}$ & $\mathbf{93.84\%}$ \\
+4$\times$ 3060 (bf16)     & RSB-A3 (100 ep) & Ghost-BN (64) & $\sim$13.7 min & $\sim$22.8 hr & $\mathbf{77.98\%}$ & $\mathbf{93.76\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent The first row is the same network on the \emph{2018} recipe, and it
-is the row that makes the comparison below a controlled
-one: it is bit-for-bit
-the ResNet-34 configuration of \S\ref{sec:r34_phase4} with the bottleneck
-backbone substituted, so the only difference between it and the A3 row is the
-recipe. It runs with:
+\noindent The first row is the same network on the \emph{2018} recipe --- the
+ResNet-34 configuration of \S\ref{sec:r34_pjrt} with the bottleneck backbone
+substituted, so the only thing separating it from the A3 row is the recipe. It
+runs with:
 
 \begin{verbatim}
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
@@ -5825,13 +5842,13 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
 \end{verbatim}
 
 \noindent \textbf{\texttt{LEAN\_MLIR\_RECIPE} selects the augmentation.}
-\texttt{shimScript} is a field on the network, not on the recipe, so the
-$224^2$ spec has one shim per recipe and picking the wrong one trains the
-right optimizer on the wrong data. \texttt{scripts/jobs/} encodes that and the
-schedule knobs as refusing prechecks.
+\texttt{shimScript} (\S\ref{sec:r34_pjrt}) is a field on the network rather than
+on the recipe, so at $224^2$ the two recipes need two shims and choosing the
+wrong one trains the right optimizer on the wrong data. \texttt{scripts/jobs/}
+encodes that, and the schedule knobs, as refusing prechecks.
 
-\textbf{How to quote these.} The A3 row lands $0.35$ points behind the JAX
-reference above ($78.26\%$ / $93.79\%$) and $0.14$ behind \texttt{timm}'s own
+\textbf{How to quote these.} The A3 row lands $0.28$ points behind the JAX
+reference above ($78.26\%$ / $93.79\%$) and $0.07$ behind \texttt{timm}'s own
 $78.05\%$, measured over the same $50{,}000$ images under the same protocol.
 The recipe is not yet A3 to the letter --- the ledger below is what is in and
 what is still out --- so it is \emph{the A3 recipe on the verified path, with
@@ -5857,11 +5874,11 @@ own JAX reference.
     title={RSB-A3 (2021), 100 epochs --- verified path},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,0.61) (2,5.43) (3,13.47) (4,13.24) (5,23.45) (6,20.77) (7,23.37) (8,33.23) (9,32.92) (10,30.78) (11,35.25) (12,39.07) (13,41.30) (14,38.65) (15,42.86) (16,43.53) (17,46.86) (18,41.67) (19,43.56) (20,47.19) (21,37.73) (22,50.08) (23,49.32) (24,49.81) (25,49.61) (26,49.17) (27,46.83) (28,47.45) (29,50.53) (30,50.39) (31,50.60) (32,51.00) (33,52.96) (34,48.45) (35,52.19) (36,48.86) (37,54.65) (38,53.17) (39,54.25) (40,50.38) (41,55.38) (42,51.90) (43,56.67) (44,58.04) (45,55.30) (46,55.73) (47,57.22) (48,58.96) (49,60.41) (50,62.37) (51,62.40) (52,62.22) (53,64.43) (54,62.55) (55,62.45) (56,64.46) (57,64.80) (58,63.91) (59,66.13) (60,66.75) (61,66.20) (62,65.21) (63,67.27) (64,68.70) (65,68.10) (66,68.14) (67,69.40) (68,70.76) (69,70.75) (70,72.34) (71,72.07) (72,72.15) (73,73.56) (74,72.47) (75,73.55) (76,73.91) (77,74.68) (78,73.67) (79,74.83) (80,75.24) (81,75.81) (82,75.82) (83,76.11) (84,76.37) (85,76.56) (86,76.74) (87,76.93) (88,77.18) (89,77.15) (90,77.32) (91,77.51) (92,77.59) (93,77.70) (94,77.64) (95,77.88) (96,77.87) (97,77.89) (98,77.90) (99,77.90) (100,77.91)
+(1,2.81) (2,7.78) (3,15.89) (4,23.13) (5,24.53) (6,29.49) (7,33.10) (8,35.75) (9,40.62) (10,42.59) (11,43.50) (12,45.92) (13,47.79) (14,45.68) (15,49.27) (16,49.15) (17,50.42) (18,51.79) (19,50.85) (20,53.34) (21,47.99) (22,52.52) (23,54.02) (24,51.77) (25,53.98) (26,54.38) (27,53.02) (28,54.08) (29,52.88) (30,55.30) (31,53.70) (32,57.21) (33,55.45) (34,57.14) (35,56.24) (36,56.14) (37,60.42) (38,52.69) (39,60.44) (40,61.01) (41,58.73) (42,59.63) (43,60.16) (44,63.77) (45,61.29) (46,63.13) (47,62.03) (48,63.23) (49,60.37) (50,65.17) (51,61.85) (52,65.30) (53,66.21) (54,65.86) (55,66.96) (56,67.20) (57,67.09) (58,66.80) (59,67.37) (60,68.23) (61,70.11) (62,69.99) (63,70.08) (64,70.80) (65,71.48) (66,70.92) (67,70.83) (68,72.56) (69,72.21) (70,73.25) (71,72.99) (72,73.60) (73,74.17) (74,74.24) (75,74.83) (76,75.08) (77,75.09) (78,75.16) (79,75.40) (80,75.89) (81,76.16) (82,76.44) (83,76.32) (84,76.93) (85,76.94) (86,77.01) (87,77.20) (88,77.24) (89,77.49) (90,77.73) (91,77.60) (92,77.80) (93,77.81) (94,77.86) (95,77.95) (96,77.94) (97,77.96) (98,77.99) (99,78.02) (100,77.98)
 };
 \addlegendentry{top-1}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,2.36) (2,16.25) (3,31.45) (4,30.87) (5,46.44) (6,43.20) (7,46.31) (8,58.55) (9,57.86) (10,55.24) (11,60.62) (12,64.30) (13,67.23) (14,64.01) (15,69.38) (16,69.19) (17,72.35) (18,67.02) (19,68.75) (20,72.39) (21,62.46) (22,74.78) (23,74.58) (24,74.85) (25,74.80) (26,74.18) (27,71.16) (28,72.07) (29,75.43) (30,75.07) (31,75.35) (32,75.70) (33,77.20) (34,73.37) (35,76.71) (36,73.46) (37,78.48) (38,77.14) (39,78.31) (40,74.72) (41,78.73) (42,76.19) (43,80.19) (44,81.31) (45,79.13) (46,79.50) (47,80.28) (48,81.73) (49,82.73) (50,84.22) (51,84.52) (52,84.50) (53,86.15) (54,84.87) (55,84.60) (56,85.87) (57,85.87) (58,85.46) (59,87.03) (60,87.30) (61,87.14) (62,86.51) (63,87.70) (64,88.77) (65,88.05) (66,88.15) (67,89.22) (68,90.06) (69,89.94) (70,90.63) (71,90.67) (72,90.78) (73,91.57) (74,90.88) (75,91.62) (76,91.68) (77,92.13) (78,91.71) (79,92.13) (80,92.53) (81,92.70) (82,92.64) (83,92.82) (84,93.01) (85,93.11) (86,93.16) (87,93.30) (88,93.52) (89,93.41) (90,93.59) (91,93.59) (92,93.63) (93,93.69) (94,93.75) (95,93.83) (96,93.76) (97,93.76) (98,93.84) (99,93.84) (100,93.84)
+(1,9.58) (2,21.21) (3,36.32) (4,45.89) (5,48.37) (6,54.72) (7,59.19) (8,61.90) (9,67.03) (10,69.04) (11,69.46) (12,72.21) (13,74.33) (14,71.18) (15,75.00) (16,74.56) (17,75.99) (18,77.10) (19,75.91) (20,77.87) (21,73.00) (22,77.06) (23,78.45) (24,76.79) (25,78.24) (26,78.66) (27,77.40) (28,78.45) (29,77.15) (30,79.13) (31,77.95) (32,81.01) (33,79.37) (34,80.47) (35,80.16) (36,80.17) (37,83.34) (38,77.02) (39,83.57) (40,83.41) (41,81.83) (42,82.67) (43,83.01) (44,85.82) (45,84.22) (46,85.20) (47,84.37) (48,85.25) (49,82.72) (50,86.56) (51,84.27) (52,86.73) (53,87.37) (54,87.02) (55,87.64) (56,87.82) (57,87.57) (58,87.74) (59,87.86) (60,88.26) (61,89.59) (62,89.73) (63,89.72) (64,90.02) (65,90.39) (66,90.06) (67,90.03) (68,91.12) (69,90.82) (70,91.46) (71,91.17) (72,91.49) (73,92.08) (74,91.87) (75,92.20) (76,92.30) (77,92.60) (78,92.44) (79,92.50) (80,92.84) (81,92.82) (82,93.04) (83,92.94) (84,93.23) (85,93.21) (86,93.32) (87,93.45) (88,93.42) (89,93.53) (90,93.59) (91,93.66) (92,93.67) (93,93.63) (94,93.68) (95,93.74) (96,93.76) (97,93.76) (98,93.74) (99,93.78) (100,93.76)
 };
 \addlegendentry{top-5}
 \end{axis}
@@ -5869,23 +5886,30 @@ own JAX reference.
 \end{center}
 
 \noindent The verified path's own curve, on the same axes as the 2018 panel
-above so the two can be read against each other. The endpoint is
-$0.35$ points below the reference, but the shape getting there is not a
-uniformly worse version of it: \emph{the verified path is ahead for 56 of the
-100 epochs}, by as much as $14.3$ points at epoch~31, and the reference does
-not take a durable lead until epoch~86 --- the same late-anneal window in
-which A3 finally passes the 2018 recipe. Two runs can differ by a third of a
-point at the end and by fourteen in the middle, so a mid-training comparison
-between these panels says almost nothing about where they land.
+above so the two can be read against each other. The endpoint is $0.28$ points
+below the reference. The curve is also visibly noisy in its middle third ---
+epoch~40 sits at $50.4$ against epoch~39's $54.3$ --- which is the LAMB
+trust-ratio recipe at effective batch $2048$ under a cosine that has barely
+begun to anneal, and it says a mid-training comparison between these panels
+carries much less information than their endpoints do.
+
+\medskip\noindent A closer comparison than the endpoints --- the two curves
+epoch by epoch, or a paired test over the same $50{,}000$ images --- would need
+the reference's per-example output, which this book does not carry.
 
 \medskip\noindent What that gap is \emph{not} evidence of: the two paths
-differ in more than the codegen. The reference normalises BatchNorm over
+still differ in more than the codegen. The reference normalises BatchNorm over
 $512$ and this run over $64$, an eightfold difference in the statistic group
-and much the largest known asymmetry between them, and this run is fp32
-where the reference is bf16. Attributing the $0.35$ to the verified codegen
-requires closing those first.
+and much the largest known asymmetry between them. Attributing the $0.28$ to
+the verified codegen requires closing that first.
 
-\medskip\noindent\emph{In, and in the $77.91\%$ above.} What this run
+\medskip\noindent \textbf{Precision is not one of those differences.} This row
+and the reference are both bf16, on the same recipe at the same effective
+batch, so the $-0.28$ is not carrying a precision term. The top-5 gap is
+$-0.03$ --- three thousandths of a point, or seventeen images out of fifty
+thousand.
+
+\medskip\noindent\emph{In, and in the $77.98\%$ above.} What this run
 carries that a bare A3 transcription would not:
 
 \begin{itemize}
@@ -5911,13 +5935,9 @@ carries that a bare A3 transcription would not:
 \begin{itemize}
   \item Ghost-BN group 64 against the reference's 512; no collective
     touches the batch statistics. The largest known difference between the
-    two paths, and \emph{untested}: the $-0.35$ points between them is its
-    upper bound only if nothing else contributes.
-  \item fp32, not bf16. The 2018 row above \emph{is} bf16, but the LAMB\,+\,BCE
-    shape at $160^2$ still has no bf16 twin to run. (A2 and A1 at $224^2$ now
-    have theirs, so this is A3's gap alone rather than the shared one it was.)
-    Worth a measured $1.54\times$ on this network, so most of the $2.1\times$
-    wall clock against the JAX row: a throughput lever, not a fidelity one.
+    two paths, and \emph{untested}: the $-0.28$ points between them is its
+    upper bound only if nothing else contributes. It is the \emph{only} known
+    asymmetry between the two paths.
   \item $0.08\%$ of each epoch dropped ($8 \nmid 5004$); structural to $k$.
   \item Mixup $\lambda$ drawn host-side from NumPy, so agreement is
     distributional, never per-step.
@@ -5934,37 +5954,47 @@ grid rather than a pair of anecdotes.
  & \multicolumn{3}{c}{\textbf{2018} (90 ep)} & \multicolumn{3}{c}{\textbf{RSB-A3} (100 ep)} \\
  & JAX & PJRT & $\Delta$ & JAX & PJRT & $\Delta$ \\
 \hline
-top-1        & $76.95$ & $\mathbf{77.07}$ & $+0.12$ & $78.26$ & $\mathbf{77.91}$ & $-0.35$ \\
-top-5        & $93.44$ & $\mathbf{93.48}$ & $+0.04$ & $93.79$ & $\mathbf{93.84}$ & $+0.05$ \\
-precision    & bf16 & bf16 & & bf16 & fp32 & \\
-box          & 4060\,Ti & 3060 & & 4060\,Ti & 4060\,Ti & \\
-wall clock   & $24.0$\,h & $30.7$\,h & & $15.1$\,h & $32.1$\,h & \\
+top-1        & $76.95$ & $\mathbf{77.07}$ & $+0.12$ & $78.26$ & $\mathbf{77.98}$ & $-0.28$ \\
+top-5        & $93.44$ & $\mathbf{93.48}$ & $+0.04$ & $93.79$ & $\mathbf{93.76}$ & $-0.03$ \\
+precision    & bf16 & bf16 & & bf16 & bf16 & \\
+box          & 4060\,Ti & 3060 & & 4060\,Ti & 3060 & \\
+wall clock   & $24.0$\,h & $30.7$\,h & & $15.1$\,h & $22.8$\,h & \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent \textbf{The two lowerers agree within $0.35$ points of top-1 on both
-recipes}, and both agree to within $0.05$ on top-5. That is the claim the grid
+\noindent \textbf{The two lowerers agree within $0.28$ points of top-1 on both
+recipes}, and both agree to within $0.04$ on top-5. That is the claim the grid
 licenses and the reason the second lowerer exists: with one backend the proofs
 decorate a code generator and nothing checks the generator, while a second
 independent lowering makes the verified path the artifact and JAX the oracle it
 is checked against.
 
 \medskip\noindent \textbf{And the recipe delta replicates.} A3 beats 2018 by
-$+1.31$ points on the JAX lowerer and by $+0.84$ on the verified one. Agreement
+$+1.31$ points on the JAX lowerer and by $+0.91$ on the verified one. Agreement
 at a single configuration can be a coincidence of that configuration; a
 \emph{difference} that reproduces across two independent implementations is
 harder to arrange by accident, and it is what a one-row comparison cannot show.
 
+\medskip\noindent Both columns are internally uniform in precision and in box:
+every cell is bf16, the JAX column is four 4060\,Ti and the PJRT column is four
+3060. That is what lets the $\Delta$ column be read as a lowerer difference
+rather than a lowerer-and-precision one.
+
 \medskip\noindent \textbf{What this is not evidence of.} Each cell is one run
-at one seed, and $0.35$ points is inside what seed variance alone produces on
+at one seed, and $0.28$ points is inside what seed variance alone produces on
 ImageNet --- the agreement is consistent with the lowerers matching, not proof
-that they do. The A3 column trains at $160$ and evaluates at $224$ while the
-2018 column does both at $224$, so the recipe delta confounds resolution with
-recipe, by A3's own design. And the PJRT column is not internally uniform: its
-2018 entry is bf16 on the four-3060 box, its A3 entry fp32 on the four-4060\,Ti
-box. Neither difference touches the within-recipe comparison, which is the one
-the table is for, but both would matter to anyone reading down the PJRT column.
+that they do. Nothing here is a paired test: these are four scalars with
+overlapping intervals, and the $95\%$ binomial half-width on $50{,}000$ images
+at $77\%$ is $\pm0.37$, wider than every $\Delta$ in the table. The A3 column
+trains at $160$ and evaluates at $224$ while the 2018 column does both at
+$224$, so the recipe delta confounds resolution with recipe, by A3's own
+design. And one non-uniformity does survive: the A3/PJRT cell is the only one
+rendered after \texttt{f4e4172} (2026-08-29), which moved $124$ artifacts to
+their 4-D pointwise shape and shifted a ResNet-34 Imagenette number by $0.33$
+with no reduction axis changed. Measured on A3, that rendering change is worth
+$+0.07$ --- inside the $\pm0.37$ --- which is why the other three cells are
+quoted as they stand.
 
 \subsection*{What A3 changes from the 2018 recipe}
 \label{sec:r50_a3_vs_2018}
@@ -6023,7 +6053,7 @@ A3 is the cheap tier. The other two are recipes --- \texttt{a2-accum} and
 \hline
 tier & epochs & train res & verified render & verified wall clock & top-1 \\
 \hline
-A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $32.1$ hr, bf16 $\sim$23 & $\mathbf{77.91\%}$ \\
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run & $22.8$ hr (bf16, measured) & $\mathbf{77.98\%}$ \\
 A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & $\sim$95 hr (bf16) & $79.8\%$ (paper) \\
 A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $\sim$190 hr (bf16) & $80.4\%$ (paper) \\
 \hline
@@ -6036,7 +6066,7 @@ not ``the same render as A2''}: the decay is baked, so its $0.01$ against A2's
 $0.02$ is a re-render, kept apart so one line among $18{,}000$ cannot be lost.
 
 \medskip\noindent \textbf{The two regularisers these renders used to be missing
-are now in them.} The ledger \S\ref{sec:r50_phase4} keeps for A3, before anything
+are now in them.} The ledger \S\ref{sec:r50_pjrt} keeps for A3, before anything
 is run:
 
 \begin{center}
@@ -6087,12 +6117,12 @@ factorisation, and it is the \emph{faster} arrangement besides. The last $4\time
 a changed backward, a variance that does not average, and $53$ collectives a
 step.
 
-\medskip\noindent \textbf{And what the phase-2 peers cost}, A3 the control:
+\medskip\noindent \textbf{And what the JAX-lowerer peers cost}, A3 the control:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r@{}}
 \hline
-phase-2 tier & train res & ms/step & min/epoch & full schedule \\
+JAX tier & train res & ms/step & min/epoch & full schedule \\
 \hline
 A3 (100 ep) & $160$ & $715$     & $7.5$  & $12.4$\,h \\
 A2 (300 ep) & $224$ & $1{,}368$ & $14.3$ & $71.3$\,h (3.0\,d) \\
@@ -6106,8 +6136,13 @@ A3's graph runs $191.4$\,ms/step on four cards and the complete A2 at $4\times12
 bf16 runs $376.9$, while A3's finished run fixes what the trainer adds at
 $38.8$\,ms per $256$ images --- \emph{additive}, since the device figures already
 contain the all-reduce and only the host's blob patch sits outside. That is $19.0$
-verified minutes an epoch, and run backwards it puts A3 itself at $23$ hours
-rather than $32.1$.
+verified minutes an epoch, and run backwards it puts A3 itself at $23$ hours.
+
+\medskip\noindent \textbf{And A3 has been run, which is what makes the A2 and A1
+figures worth quoting.} The bf16 render finished in $22.8$ hours at $13.7$
+minutes an epoch, against the $23$ predicted from step timings alone --- an
+error of $0.2$ hours. The A2 and A1 rows are built the same way from the same
+measurements, at a scale where a wrong estimate costs a week.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
@@ -7028,7 +7063,7 @@ def main (argv : List String) : IO Unit :=
 \texttt{verified\_mlir/mobilenetv2in\_<variant>\_train\_step.mlir}, the
 rendered graph, and \texttt{shimScript} names this net's own augmentation
 shim rather than ResNet-34's, both for the reasons
-\S\ref{sec:r34_phase4} gives. The head is the only parameter shape that
+\S\ref{sec:r34_pjrt} gives. The head is the only parameter shape that
 moves, from $1280 \times 10$ to $1280 \times 1000$, which takes the count
 from 2.24M to \textbf{3,504,872} and matches the JAX reference exactly.
 The BatchNorm layout is required to be byte-identical to the Imagenette

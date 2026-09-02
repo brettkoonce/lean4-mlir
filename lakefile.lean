@@ -1492,6 +1492,13 @@ lean_exe «cifar8w-bn-ablation» where
   root := `apps.ablation.MainCifar8WideBnAblation
   moreLinkArgs := lowererLink
 
+/-- Chapter 5 §5.6's recipe ablation on ResNet-34 / Imagenette, ONE ARM PER INVOCATION
+    (`resnet34-ablation data <arm>`) so the eight arms can run across four cards in under
+    three hours instead of ten in series. Arms: full nowarm nocos noaug nowd nols noadam bare. -/
+lean_exe «resnet34-ablation» where
+  root := `apps.ablation.MainResnet34Ablation
+  moreLinkArgs := lowererLink
+
 /-- Chapter 4 Lever 3 on the NORMALIZED net: the BN net on the batched op family, f32 and bf16,
     three optimizers each. See planning/bf16_batchnorm.md. -/
 lean_exe «cifar8wb-bn-ablation» where

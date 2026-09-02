@@ -728,6 +728,10 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let optLabel : String := match opt with
     | .adamw          => "AdamW"
     | .heavyBall      => "heavy-ball momentum + coupled L2"
+    -- ⚠ R50 renders no `.sgd` artifact — the case exists for ResNet-34's §5.6 optimizer ablation.
+    -- The label is here because the match is exhaustive by type (see the note below), not because
+    -- an R50 SGD render is expected; if one is ever wanted it needs its own `#eval`, not this line.
+    | .sgd            => "plain SGD + coupled L2 (no momentum)"
     | .lamb           => "LAMB (per-tensor trust ratio)"
     | .adamwAccum k   => s!"AdamW over {k} ACCUMULATED micro-batches"
     | .lambAccum k    => s!"LAMB (per-tensor trust ratio) over {k} ACCUMULATED micro-batches"

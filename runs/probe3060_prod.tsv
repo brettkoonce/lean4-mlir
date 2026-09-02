@@ -1,0 +1,10 @@
+net	variant	prec	arm	bs	workers	med_ms	min_ms	p90_ms	mean_ms	wait_ms	steps_ep	elapsed_s	note
+vitema	emadp128x4wxclipdropbf16	bf16	fed	128	8	158	154	1193	350	4	2502	320	
+vitema	emadp128x4wxclipdropbf16	bf16	synth	128	8	152	150	154	152	2	2502	114	
+enetema	emarmsdp64dropdo	f32	fed	64	8	170	167	312	190	3	5004	235	
+enetema	emarmsdp64dropdobf16	bf16	fed	64	8	103	100	788	192	3	5004	261	
+enetema	emarmsdp64dropdo	f32	synth	64	8	164	162	165	163	2	5004	131	
+enetema	emarmsdp64dropdobf16	bf16	synth	64	8	97	95	98	96	2	5004	119	
+vitema	emadp128x4wxclipdropbf16	bf16	fed	128	14	174	162	368	285	12	2502	315	
+enetema	emarmsdp64dropdobf16	bf16	fed	64	14	119	109	134	163	10	5004	279	
+enetema	emarmsdp64dropdo	f32	fed	64	14	175	170	178	175	5	5004	263	
