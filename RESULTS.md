@@ -128,38 +128,59 @@ Two honest reads at this 3-epoch budget:
 
 The detection demo. ResNet-34 backbone (trained by this stack on ImageNet) →
 FPN top-down neck → three anchor heads at strides 8/16/32, DIoU box loss,
-focal objectness, class-weighted CE. 448 px squash input, 12 epochs, no
-augmentation. Scored by `scripts/yolo_map_visdrone.py` against the **uncapped**
-GT sidecar — all 38,759 val boxes, not the 56-box-truncated training record,
-which silently drops 34.9% of VisDrone's val GT and is not its protocol.
+focal objectness and focal class CE. 448 px squash input. Scored by
+`scripts/yolo_map_visdrone.py` against the **uncapped** GT sidecar — all 38,759
+val boxes, not the 56-box-truncated training record, which silently drops 34.9%
+of VisDrone's val GT and is not its protocol.
+
+⚠ Scoring needs `--multilabel --topk 3000 --ml-k 3 --ml-floor 0.05`. `--topk`
+defaults to 1000, which truncates the multilabel candidate list and costs 2.2%.
 
 | arm | epochs | aug | mAP@0.5 | recall | class-agnostic AP |
 |---|---|---|---|---|---|
-| **R34+FPN** | **50** | **on** | **0.1674** | **0.703** | **0.429** |
+| **R34+FPN, + scale aug** | **30** | **on+affine** | **0.2363** | **0.769** | **0.487** |
+| R34+FPN | 12 | on | 0.1961 | 0.749 | 0.441 |
+| R34+FPN | 50 | on | 0.1674 | 0.703 | 0.429 |
 | R34+FPN | 12 | off | 0.1526 | 0.682 | 0.393 |
 | R34+FPN | 50 | off | 0.1243 | 0.669 | 0.369 |
 | PyTorch twin — same architecture | 12 | off | 0.1532 | 0.677 | 0.400 |
 | YOLOv8s, matched budget (random init, 448) | 12 | off | 0.140 | — | — |
 | YOLOv8s, 640 px, COCO init | 100 | on | 0.391 | 0.400 | — |
 
-**The middle three rows are the result.** Training longer *without* augmentation
-costs 19% — 4× the schedule, less than half the train loss, and lower mAP, with
-detections rising while recall falls. Turning augmentation on at the same 50-epoch
-schedule converts that −19% into +10% over the best short run. One flag decides
-whether a long schedule pays at all, which is why they are reported together.
+**Augmentation and schedule length are one decision, not two.** Training longer
+*without* augmentation costs 19% (rows 5 vs 4: 4× the schedule, less than half the
+train loss, lower mAP). With the photometric pack on, 50 epochs recovers to 0.1674
+but 12 still wins at 0.1961. Add **box-aware scale augmentation** and the ordering
+inverts again — 30 epochs beats 12 by 44% (0.2363 vs 0.1641 on that same run) —
+because a stronger augmentation needs a longer schedule to absorb. ⚠ The optimum
+epoch count is a property of the augmentation pack; it does not transfer between
+packs, which cost this project two wrong conclusions.
 
-**The Lean detector now beats its PyTorch twin by 9%** (0.1674 vs 0.1532), having
-sat at 90.5% of it when this thread paused. The
-twin is a hand-written replica of *this same architecture*, not an off-the-shelf
-model — it exists to isolate implementation quality from architecture, which is
-why it, and not YOLOv8, is the yardstick.
+**Scale augmentation is also what broke the rare-class wall.** Three loss-side
+levers (sqrt-inverse class weights, full-inverse, class focal) all failed to move
+the rare classes, and two of them hurt. Scale jitter moves exactly those: awning-
+tricycle +58.9%, bicycle +40.7%, tricycle +40.3% — and unlike static class
+weighting it does so with precision *and* recall rising together (ca-AP
+0.441 → 0.487, recall 0.749 → 0.769) rather than buying recall with a
+false-positive flood.
+
+**The Lean detector beats its PyTorch twin by 54%** (0.2363 vs 0.1532), having sat
+at 90.5% of it when this thread resumed. The twin is a hand-written replica of
+*this same architecture*, not an off-the-shelf model — it exists to isolate
+implementation quality from architecture, which is why it, and not YOLOv8, is the
+yardstick.
+
+⚠ Every row is **n=1**. The training path is fully deterministic and has no seed
+env var, so no error bar exists for any of these numbers; differences under ~0.02
+should not be read as real.
 
 Two YOLOv8s rows for context. At a matched budget it scores **0.140**, below this
 detector's 0.1526 — though that arm starts from random weights where this one has
 an ImageNet-pretrained backbone, so read it as "the v8 architecture is not what
 wins at this budget", not as beating YOLOv8. The 0.391 row is ordinary practice:
 8× the epochs, higher resolution, full augmentation, and COCO-pretrained. **The
-gap to 0.391 is recipe, not architecture.**
+gap to 0.391 is recipe, not architecture** — and scale augmentation, one item of
+that recipe, has since closed 40% of it (0.1674 → 0.2363).
 
 Throughput: **65 fps** on one RTX 4060 Ti (548 images in 8.34 s), measured
 end-to-end including process start, runtime init, graph load, a 625 MB read and
@@ -170,17 +191,23 @@ network (4.4 ms) and is the real bottleneck. ⚠ IREE on the same board is 0.5 f
 
 Per-class AP is the real finding — the mean hides a 44× spread (best arm):
 
-| car | bus | van | motor | pedestrian | people | truck | tricycle | awning-tri | bicycle |
-|---|---|---|---|---|---|---|---|---|---|
-| 0.605 | 0.227 | 0.173 | 0.168 | 0.150 | 0.138 | 0.108 | 0.062 | 0.030 | 0.014 |
+Per class, at the best arm (`aff30` e28), against the previous best:
 
-Car still leads, but augmentation lifted 8 of 10 classes and lifted them most
-where the detector was weakest (bus 0.165→0.227, truck 0.095→0.108), so it is no
-longer one class carrying the mean. The honest subject of this demo is why aerial
-detection collapses on small, rare classes at 2–5 px, not the single mAP.
+| | car | van | motor | bus | pedestrian | people | truck | tricycle | awning-tri | bicycle |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 12 ep, no affine | 0.643 | 0.215 | 0.211 | 0.225 | 0.175 | 0.193 | 0.133 | 0.103 | 0.039 | 0.025 |
+| **30 ep, + affine** | **0.685** | **0.290** | **0.266** | **0.265** | **0.226** | **0.220** | **0.171** | **0.144** | **0.062** | **0.036** |
+
+**All 10 classes improve, and the rare ones improve most** — awning-tricycle
++58.9%, bicycle +40.7%, tricycle +40.3% against car's +6.6%. That ordering is the
+result, not the mean: it is the first lever in this thread to move the classes the
+detector is worst at, after three loss-side attempts failed. The honest subject of
+this demo remains why aerial detection collapses on small, rare classes at 2–5 px
+— but the answer now looks like object scale rather than the objective.
 
 Figure: `demos/figures/visdrone_fpn.png` (truth over prediction, densest val
-frames). Full workings: `runs/2026-08-28-visdrone-fpn-rebuild/README.md`.
+frames). Full workings: `runs/2026-08-28-visdrone-fpn-rebuild/README.md` and
+`runs/2026-09-01-visdrone-decode-sweep/README.md`.
 
 ## Oxford-IIIT Pets detection (cat/dog head boxes, YOLOv1, mAP@0.5)
 

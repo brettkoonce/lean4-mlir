@@ -17,8 +17,15 @@ levers don't beat plain training" lesson that applies here too), and
 
 > **▶ STATE 2026-08-29. Paused here; the next session picks up at §13.**
 >
-> **mAP@0.5 = 0.1961**, from the **0.1386** this thread resumed at — **+41.5%**,
-> for one 12-epoch run (~47 min on one RTX 4060 Ti). The recipe is
+> **mAP@0.5 = 0.2363** (2026-09-01), from the **0.1386** this thread resumed at —
+> **+70.5%**. The recipe is `FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_AFFINE=50
+> FPN_EPOCHS=30` (~2 h on one RTX 4060 Ti), best at e28 and converged (e30 reads
+> 0.2362). ⭐ Box-aware scale augmentation plus a schedule long enough to absorb it
+> **breaks the rare-class wall** — awning-tricycle +58.9%, bicycle +40.7% — and does
+> it with precision AND recall both up. §13a-bis.
+>
+> ▶ The previous best, kept because most of this doc is written against it:
+> **0.1961** for one 12-epoch run. Its recipe is
 > `FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12`, scored with
 > `--multilabel --topk 3000 --ml-k 3 --ml-floor 0.05` (⚠ **`--topk 3000` is not
 > the script default and is load-bearing** — at the default 1000 this same
@@ -33,6 +40,9 @@ levers don't beat plain training" lesson that applies here too), and
 > 1. *"Aug moves the optimum to ~30 epochs."* No — **12 epochs wins** (0.1798 at
 >    e10 of a 12-ep cosine vs 0.1782 at the 30-ep arm's best). The annealing was
 >    doing the work, not the length.
+>    ⛔ **RETRACTED 2026-09-01 — true for HSV+hflip, FALSE with scale jitter**, where
+>    30 epochs beats 12 by 44% on the same run (0.2363 vs 0.1641). A schedule finding
+>    is a property of the augmentation PACK, not of the dataset. §13a-bis.
 > 2. *"The T1b class weights help class spread."* They are **net harmful**; the
 >    unweighted arm is best and full inverse-frequency costs 23%.
 > 3. *"The class head overfits on longer schedules."* Its aggregate accuracy is
@@ -724,9 +734,11 @@ actually loaded? is eval scoring the right checkpoint? is image↔mask paired?).
 
 ### The one-line state
 
-`FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12` → **mAP@0.5 0.1961**
-under `--multilabel --topk 3000 --ml-k 3 --ml-floor 0.05`, 0.1774 under argmax.
-Deployed at 35.7 fps on an Orin Nano. ⚠ `--topk 3000` is not the default; §13b.
+`FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_AFFINE=50 FPN_EPOCHS=30` → **mAP@0.5
+0.2363** at e28, under `--multilabel --topk 3000 --ml-k 3 --ml-floor 0.05`
+(§13a-bis). The previous best was 0.1961 at `FPN_EPOCHS=12` with no affine, 0.1774
+under argmax. Deployment is unchanged — same architecture, so the Orin's 35.7 fps
+holds and only the weights differ. ⚠ `--topk 3000` is not the default; §13b.
 
 ### The full ladder, every number from this thread
 
@@ -744,6 +756,13 @@ Deployed at 35.7 fps on an Orin Nano. ⚠ `--topk 3000` is not the default; §13
 | `cfoc2` | 12 | on | none | 2 | argmax | 0.1762 | 0.441 | 0.708 |
 | `clswnone` | 12 | on | none | 0 | **multilabel** | 0.1909 | 0.432 | 0.743 |
 | **`cfoc2`** | 12 | on | none | 2 | **multilabel** | **0.1961** | 0.441 | 0.749 |
+| `aff25` (p=.25) | 12 | on | none | 2 | multilabel | 0.1429 | 0.337 | 0.749 |
+| `aff50` (p=.50) | 12 | on | none | 2 | multilabel | 0.1763 | 0.415 | 0.750 |
+| **`aff30` (p=.50) e28** | **30** | on | none | 2 | **multilabel** | **0.2363** | **0.487** | **0.769** |
+
+⛔ The three `aff*` 12-epoch rows are **non-monotonic in p and measure nothing** —
+no affine arm is near converged at 12 epochs. Kept only so nobody re-runs them.
+See §13a-ter before citing any of them.
 
 ⚠ Never mix decodes in a comparison. Everything before 2026-08-29 is argmax.
 ⚠ Every `multilabel` row above was scored at `--topk 3000`, which is **not** the
@@ -877,16 +896,89 @@ finds the same objects and ranks them worse. ⭐ That is the first evidence in t
 thread that the rare-class wall has a **data/scale** answer rather than a loss one,
 which is what §13 concluded the next hypothesis should be.
 
-**▶ Running when this was written (2026-09-01), both from the `cfoc2` config:**
-- `FPN_TAG=aff30 FPN_AFFINE=50 FPN_EPOCHS=30` — does the rising curve cross
-  0.1961? Fresh 30-epoch cosine, **not** a resume: the 12-epoch cosine has already
-  annealed to ~0, so resuming would measure a schedule nobody would ship.
-- `FPN_TAG=aff25 FPN_AFFINE=25 FPN_EPOCHS=12` — half the firing rate at the
-  matched budget. If the problem is regularizer strength against schedule length,
-  this lands between `aff50` and `cfoc2`.
+### §13a-bis. ✅ RESOLVED — affine + 30 epochs is the new best, **0.2363** (+20.5%)
+
+`FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_AFFINE=50 FPN_EPOCHS=30 FPN_TAG=aff30`,
+~2 h on one 4060 Ti. Fresh 30-epoch cosine, **not** a resume — the 12-epoch cosine
+had already annealed to ~0, so resuming would measure a schedule nobody would ship.
+
+| epoch | mAP@0.5 | ca-AP | recall |
+|---|---|---|---|
+| e12 | 0.1641 | 0.3817 | 0.7430 |
+| e16 | 0.2113 | 0.4604 | 0.7529 |
+| e20 | 0.2254 | 0.4751 | 0.7632 |
+| e24 | 0.2338 | 0.4834 | 0.7660 |
+| **e28** | **0.2363** | **0.4872** | **0.7688** |
+| e30 | 0.2362 | 0.4890 | 0.7685 |
+| `cfoc2` e12 (previous best) | 0.1961 | 0.4414 | 0.7485 |
+
+✅ **Converged, not truncated** — e28 0.2363 against e30 0.2362. This is a settled
+measurement, unlike every 12-epoch affine number, and it is why the curve was
+scored rather than the endpoint.
+
+⭐⭐ **IT BREAKS THE RARE-CLASS WALL.** Every class improves and the rare ones
+improve most — the exact axis three loss levers failed to move (§13's wall table):
+
+| class (val GT) | `cfoc2` | `aff30` e28 | Δ |
+|---|---|---|---|
+| awning-tri (532) | 0.0392 | 0.0623 | **+58.9%** |
+| bicycle (1,287) | 0.0253 | 0.0356 | **+40.7%** |
+| tricycle (1,045) | 0.1025 | 0.1438 | **+40.3%** |
+| van (1,975) | 0.2146 | 0.2900 | +35.1% |
+| truck (750) | 0.1325 | 0.1707 | +28.8% |
+| pedestrian (8,844) | 0.1753 | 0.2255 | +28.6% |
+| motor (4,886) | 0.2114 | 0.2658 | +25.7% |
+| bus (251) | 0.2248 | 0.2645 | +17.7% |
+| people (5,125) | 0.1929 | 0.2202 | +14.2% |
+| car (14,064) | 0.6428 | 0.6851 | +6.6% |
+
+⭐ **And it does it without the false-positive flood that killed static class
+weighting.** ca-AP rises 0.4414 → 0.4872 and recall 0.7485 → 0.7688 together, so
+precision improved alongside recall — where the T1b weights bought rare-class
+recall by flooding (tricycle 7,419 → 31,322 detections). §13's conclusion that the
+wall is **data, not objective**, was right; scale augmentation is the data answer.
+
+⛔ **§0's finding #1 is now FALSE for this pack.** *"12 epochs wins; the annealing
+was doing the work, not the length"* held for HSV+hflip. With scale jitter, 30
+epochs beats 12 by **44%** (0.2363 vs 0.1641 on the same run). ⚠ **A schedule
+finding is a property of the augmentation pack, not of the dataset.** Do not carry
+one across packs — that is the second time this thread has been caught by it.
+
+### §13a-ter. ⚠ The 12-epoch affine arms measured nothing — do not cite them
+
+| arm | affine p | e12 mAP |
+|---|---|---|
+| `cfoc2` (control) | 0.00 | 0.1961 |
+| `aff50` | 0.50 | 0.1763 |
+| `aff25` | 0.25 | 0.1429 |
+| `aff30` (same p as `aff50`, 30-ep cosine) | 0.50 | 0.1641 |
+
+That ladder is **non-monotonic in p** (0 → 0.1961, 0.25 → 0.1429, 0.50 → 0.1763),
+which no dose-response story explains. Ruled out at the time: BN running stats are
+comparable across all three arms, and `_params.bin` is byte-identical to
+`_params_e12.bin` for each. ▶ The explanation is `aff30`: **at 12 epochs no affine
+arm is near converged** (`aff30` itself reads 0.1641 at e12 against its own
+eventual 0.2363), so those rows compare positions on unconverged trajectories, not
+doses. ⛔ **Do not read the p ladder as a dose-response and do not tune p on
+12-epoch runs.** Whether p=0.25 or p=0.50 is better is still **unmeasured** — it
+needs both at 30 epochs.
+
+⚠ **This setup has no error bar and cannot easily get one.** The pipeline is fully
+deterministic — fixed init, fixed data order, augmentation seeded `epoch*10000 + bi`
+— and `Train.lean` has **no seed env var** (`LEAN_MLIR_SEED` is `VerifiedTrain.lean`,
+a different path). So two arms at different `p` share an init but diverge completely
+from the first coin flip: dose and realization are confounded by construction, and
+a seed replicate is not runnable today. Every number in this doc is n=1. Adding a
+seed knob is the prerequisite for any claim resting on a <0.02 difference.
 
 ⚠ Checkpoint resume is **opt-in** (`LEAN_MLIR_INIT_LOAD` + `LEAN_MLIR_START_STEP`);
 a fresh `FPN_TAG` never picks up a previous arm's weights.
+
+▶ **Next, in order:** (1) p=0.25 vs p=0.50 **both at 30 epochs** — the dose question,
+now that the budget confound is removed; (2) 40–50 epochs at p=0.50, since e28/e30
+is a plateau and not obviously the ceiling; (3) **mosaic** — §13 deferred it pending
+evidence that scale aug helps, and that evidence now exists; (4) a seed env var on
+`Train.lean` and two `cfoc2` replicates, before any small-delta claim is made again.
 
 ### Deployment: what is done and what is not
 
