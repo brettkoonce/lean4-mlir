@@ -231,11 +231,12 @@ noncomputable def cifar8ChainH (M : FloatModel) {w' β A : ℝ}
           (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
               32 * 3 * 3, 32 * 3 * 3] hA) (by norm_num) W.hcW8 W.hcb8)
   (.cons (layerCertH_maxPool 32 2 2 _)
-  -- the dense head
-  (.cons (layerCertH_dense M W.dW1 W.db1 hw' hβ
+  -- the dense head: relu after the first two, bare dense for the logits
+  -- (cifar8Verified.layers: `.dense 128 64, .relu, .dense 64 64, .relu, .dense 64 10`)
+  (.cons (layerCertH_reluDense M W.dW1 W.db1 hw' hβ
           (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
               32 * 3 * 3, 32 * 3 * 3, 32 * 3 * 3] hA) (by norm_num) W.hdW1 W.hdb1)
-  (.cons (layerCertH_dense M W.dW2 W.db2 hw' hβ
+  (.cons (layerCertH_reluDense M W.dW2 W.db2 hw' hβ
           (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
               32 * 3 * 3, 32 * 3 * 3, 32 * 3 * 3, 128] hA) (by norm_num)
           W.hdW2 W.hdb2)
@@ -296,5 +297,44 @@ theorem cifar8_chain_argmaxSafeH (M : FloatModel) {w' β A : ℝ}
 noncomputable example (M : FloatModel) (W : Cifar8Weights (1/2) 1) :
     LayerChain (3 * 32 * 32) 1 10 (windowFold M (1/2) 1 cifar8FanIns 1) :=
   cifar8ChainH M (by norm_num) (by norm_num) (by norm_num) W
+
+
+/-- ⭐ **The tie: the chain's real side IS the committed CIFAR-8 forward.** `chainRH`
+    of `cifar8ChainH` is definitionally `cifarCnn8Forward` at the committed config
+    (`ic=3, c1=c2=16, c3=c4=32, h=w=2, d1=64, nClasses=10, 3×3` kernels) — the same
+    def `StableHLO.cifar8FwdGraph_faithful` certifies the emitted forward graph
+    denotes. So `cifar8_chain_certH` / `cifar8_chain_argmaxSafeH` are statements
+    about the committed net, not about a look-alike tower: the peer of
+    `WholeNetForwardTies` for the adjoint-chain tier.
+
+    ⚠ Writing this tie is what caught the chain's dense head being three BARE denses
+    when `cifar8Verified.layers` has `.dense 128 64, .relu, .dense 64 64, .relu,
+    .dense 64 10`. A chain that merely type-checks does not have to be the net; this
+    `rfl` is the thing that makes "op for op" checkable rather than asserted. -/
+theorem cifar8ChainH_chainRH_eq (M : FloatModel) {w' β A : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (W : Cifar8Weights w' β) :
+    chainRH (cifar8ChainH M hw' hβ hA W)
+      = cifarCnn8Forward (ic := 3) (c1 := 16) (c2 := 16) (c3 := 32) (c4 := 32)
+          (h := 2) (w := 2) (d1 := 64) (nClasses := 10) (kH := 3) (kW := 3)
+          W.cW1 W.cb1 W.cW2 W.cb2 W.cW3 W.cb3 W.cW4 W.cb4
+          W.cW5 W.cb5 W.cW6 W.cb6 W.cW7 W.cb7 W.cW8 W.cb8
+          W.dW1 W.db1 W.dW2 W.db2 W.dW3 W.db3 := rfl
+
+/-- **The certificate, restated on the committed forward.** `cifar8_chain_certH` with
+    `chainRH` rewritten to `cifarCnn8Forward` — the float chain is within the
+    adjoint-chain budget of the CIFAR-8 net the repo actually trains and emits. -/
+theorem cifar8_chain_cert_committed (M : FloatModel) {w' β A : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (W : Cifar8Weights w' β)
+    (Hs : List ℝ) (hH : TailGainsH (cifar8ChainH M hw' hβ hA W) Hs)
+    (x : Vec (3 * 32 * 32)) (hx : ∀ k, |x k| ≤ A) (j : Fin 10) :
+    |chainFH (cifar8ChainH M hw' hβ hA W) x j
+        - cifarCnn8Forward (ic := 3) (c1 := 16) (c2 := 16) (c3 := 32) (c4 := 32)
+            (h := 2) (w := 2) (d1 := 64) (nClasses := 10) (kH := 3) (kW := 3)
+            W.cW1 W.cb1 W.cW2 W.cb2 W.cW3 W.cb3 W.cW4 W.cb4
+            W.cW5 W.cb5 W.cW6 W.cb6 W.cW7 W.cb7 W.cW8 W.cb8
+            W.dW1 W.db1 W.dW2 W.db2 W.dW3 W.db3 x j|
+      ≤ chainBudgetH (cifar8ChainH M hw' hβ hA W) Hs := by
+  rw [← cifar8ChainH_chainRH_eq M hw' hβ hA W]
+  exact cifar8_chain_certH M hw' hβ hA W Hs hH x hx j
 
 end Proofs

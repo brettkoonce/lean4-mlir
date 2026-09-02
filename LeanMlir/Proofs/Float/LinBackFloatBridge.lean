@@ -133,6 +133,14 @@ theorem floatBridges_diagBack {n : Nat} (M : FloatModel) (s fs : Vec n) {Sd es :
   ⟨_, _, _, (floatClose_diagBack M s fs hs hfs (A := A)).cod_nonneg hA hn,
     floatClose_diagBack M s fs hs hfs⟩
 
+/-- The diagonal scale float-bridges TO the model's rounded diagonal scale at the
+    STORED (possibly perturbed) scale vector `fs`. -/
+theorem floatBridgesTo_diagBack {n : Nat} (M : FloatModel) (s fs : Vec n) {Sd es : ℝ}
+    (hn : 0 < n) (hs : ∀ i, |s i| ≤ Sd) (hfs : ∀ i, |fs i - s i| ≤ es) :
+    FloatBridgesTo (diagBack s) (M.diagBackF fs) := fun A hA =>
+  ⟨_, _, (floatClose_diagBack M s fs hs hfs (A := A)).cod_nonneg hA hn,
+    floatClose_diagBack M s fs hs hfs⟩
+
 -- ════════════════════════════════════════════════════════════════
 -- § Linear input-VJP: `dx = Wᵀ·dy` = bias-free dense over the transpose
 -- ════════════════════════════════════════════════════════════════

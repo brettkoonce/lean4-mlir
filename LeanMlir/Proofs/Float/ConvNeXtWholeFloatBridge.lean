@@ -460,4 +460,197 @@ theorem convnext_floatBridgesTo (M : FloatModel)
   have hHead := hGAP.comp hlnHead
   exact hHead.comp (floatBridgesTo_dense M Wd bd hwd hbdβ (by norm_num) hWd hbd)
 
+
+-- ── the ConvNeXt block / stage / downsample cone, float maps named ───────────
+
+/-- Layer scale float-bridges TO the model's rounded diagonal scale. -/
+theorem floatBridgesTo_layerScale {n : Nat} (M : FloatModel) (γ : Vec n) {Sd : ℝ}
+    (hn : 0 < n) (hγ : ∀ i, |γ i| ≤ Sd) :
+    FloatBridgesTo (layerScale γ) (M.diagBackF γ) :=
+  floatBridgesTo_diagBack (es := 0) M γ γ hn hγ (fun _ => by simp)
+
+/-- The float ConvNeXt block body: depthwise → supplied float LN → expand conv →
+    deployed GELU → project conv → layer scale, each rounded. -/
+noncomputable def cnxBodyWithF {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
+    (LNF : Vec (c * h * w) → Vec (c * h * w))
+    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
+    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
+    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c) (γls : Vec (c * h * w)) :
+    Vec (c * h * w) → Vec (c * h * w) :=
+  M.diagBackF γls
+  ∘ M.flatConvF (h := h) (w := w) Wpr bpr
+  ∘ (fun v i => fgelu (v i))
+  ∘ M.flatConvF (h := h) (w := w) Wex bex
+  ∘ LNF
+  ∘ M.depthwiseFlatF (h := h) (w := w) Wdw bdw
+
+theorem floatBridgesTo_cnxBodyWith {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
+    (LN LNF : Vec (c * h * w) → Vec (c * h * w))
+    (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
+    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
+    (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c) (γls : Vec (c * h * w))
+    {w' bb egelu : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hc : 0 < c * h * w) (hcExp : 0 < cExp * h * w)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (hWdw : ∀ ch kh kw, |Wdw ch kh kw| ≤ w') (hbdw : ∀ ch, |bdw ch| ≤ bb)
+    (hWex : ∀ o cc kh kw, |Wex o cc kh kw| ≤ w') (hbex : ∀ o, |bex o| ≤ bb)
+    (hWpr : ∀ o cc kh kw, |Wpr o cc kh kw| ≤ w') (hbpr : ∀ o, |bpr o| ≤ bb)
+    (hγls : ∀ i, |γls i| ≤ w')
+    (hln : FloatBridgesTo LN LNF) :
+    FloatBridgesTo (cnxBodyWith LN Wdw bdw Wex bex Wpr bpr γls)
+      (cnxBodyWithF M fgelu LNF Wdw bdw Wex bex Wpr bpr γls) := by
+  unfold cnxBodyWith cnxBodyWithF
+  have hD := floatBridgesTo_depthwise (h := h) (w := w) M Wdw bdw hw' hbb hc hWdw hbdw
+  have hEX := floatBridgesTo_flatConv (h := h) (w := w) M Wex bex hw' hbb hc hWex hbex
+  have hGE := floatBridgesTo_gelu (n := cExp * h * w) fgelu hegelu hg
+  have hPR := floatBridgesTo_flatConv (h := h) (w := w) M Wpr bpr hw' hbb hcExp hWpr hbpr
+  have hLS := floatBridgesTo_layerScale M γls hc hγls
+  exact ((((hD.comp hln).comp hEX).comp hGE).comp hPR).comp hLS
+
+/-- The float channel-LN ConvNeXt block: the residual skip over the float body. -/
+noncomputable def cnxBlockChWF {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
+    (p : CnxBlockParamsCh c cExp h w kH kW) (lnF : Vec c → Vec c) :
+    Vec (c * h * w) → Vec (c * h * w) :=
+  fun v j => M.add
+    (cnxBodyWithF M fgelu (chanLNTensor3F M p.γn p.βn lnF)
+      p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) v j) (v j)
+
+theorem floatBridgesTo_cnxBlockChW {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
+    (p : CnxBlockParamsCh c cExp h w kH kW) (lnF : Vec c → Vec c)
+    {w' bb egelu : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hcc : 0 < c) (hc : 0 < c * h * w) (hcExp : 0 < cExp * h * w)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (hb : CnxBlockChBounded p w' bb)
+    (hln : FloatBridgesTo (layerNormForward c p.εn 1 0) lnF) :
+    FloatBridgesTo (cnxBlockChW p) (cnxBlockChWF M fgelu p lnF) := by
+  obtain ⟨hWdw, hbdw, hWex, hbex, hWpr, hbpr, hγls, hγn, hβn⟩ := hb
+  unfold cnxBlockChW cnxBlockChWF
+  exact FloatBridgesTo.residual M
+    (floatBridgesTo_cnxBodyWith M fgelu (chanLNTensor3 c h w p.εn p.γn p.βn)
+      (chanLNTensor3F M p.γn p.βn lnF)
+      p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) hw' hbb hegelu hc hcExp hg
+      hWdw hbdw hWex hbex hWpr hbpr (fun i => hγls (StableHLO.chanIdx c h w i))
+      (floatBridgesTo_chanLNTensor3 M p.γn p.βn lnF hcc hγn hβn hln))
+
+/-- The float depth-`k` channel-LN stage: the same head-recursive fold at the float block. -/
+noncomputable def convNextStageChKF {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ) :
+    (k : Nat) → (Fin k → CnxBlockParamsCh c cExp h w kH kW) → (Fin k → (Vec c → Vec c)) →
+      (Vec (c * h * w) → Vec (c * h * w))
+  | 0, _, _ => id
+  | _ + 1, ps, lnFs =>
+      convNextStageChKF M fgelu _ (fun i => ps i.succ) (fun i => lnFs i.succ)
+        ∘ cnxBlockChWF M fgelu (ps 0) (lnFs 0)
+
+theorem floatBridgesTo_convNextStageChK {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
+    {w' bb egelu : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hcc : 0 < c) (hc : 0 < c * h * w) (hcExp : 0 < cExp * h * w)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu) :
+    ∀ (k : Nat) (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW)
+      (lnFs : Fin k → (Vec c → Vec c)),
+      (∀ i, CnxBlockChBounded (ps i) w' bb) →
+      (∀ i, FloatBridgesTo (layerNormForward c (ps i).εn 1 0) (lnFs i)) →
+      FloatBridgesTo (convNextStageChK k ps) (convNextStageChKF M fgelu k ps lnFs)
+  | 0, _, _, _, _ => floatBridgesTo_idVec
+  | _ + 1, ps, lnFs, hb, hln =>
+      (floatBridgesTo_cnxBlockChW M fgelu (ps 0) (lnFs 0) hw' hbb hegelu hcc hc hcExp hg
+          (hb 0) (hln 0)).comp
+        (floatBridgesTo_convNextStageChK M fgelu hw' hbb hegelu hcc hc hcExp hg _
+          (fun i => ps i.succ) (fun i => lnFs i.succ)
+          (fun i => hb i.succ) (fun i => hln i.succ))
+
+/-- The float channel-LN downsample: float channel LN then the rounded stride-2 conv. -/
+noncomputable def cnxDownChWF {cin cout : Nat} (h w : Nat) (M : FloatModel)
+    (p : CnxDownParamsCh cin cout) (lnF : Vec cin → Vec cin) :
+    Vec (cin * (2 * h) * (2 * w)) → Vec (cout * h * w) :=
+  M.flatConvStride2F (h := h) (w := w) p.W p.b ∘ chanLNTensor3F M p.γ p.β lnF
+
+theorem floatBridgesTo_cnxDownChW {cin cout : Nat} (h w : Nat) (M : FloatModel)
+    (p : CnxDownParamsCh cin cout) (lnF : Vec cin → Vec cin)
+    {w' bb : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hcin : 0 < cin)
+    (hn : 0 < cin * (2 * h) * (2 * w))
+    (hbd : CnxDownChBounded p w' bb)
+    (hln : FloatBridgesTo (layerNormForward cin p.ε 1 0) lnF) :
+    FloatBridgesTo (cnxDownChW h w p) (cnxDownChWF h w M p lnF) := by
+  obtain ⟨hW, hb, hγ, hβ⟩ := hbd
+  unfold cnxDownChW cnxDownChWF
+  exact (floatBridgesTo_chanLNTensor3 M p.γ p.β lnF hcin hγ hβ hln).comp
+    (floatBridgesTo_flatConvStride2 (h := h) (w := w) M p.W p.b hw' hbb hn hW hb)
+
+
+set_option maxRecDepth 100000 in
+/-- **THE SHIPPED ConvNeXt-T FORWARD float-bridges TO its float skeleton** — the last
+    of the eleven whole-net bridges to name its float map. `convnext_floatBridgesTo`
+    instantiated at ConvNeXt's REAL channel LayerNorm with the whole [3,3,9,3] schedule
+    plugged in, and every concrete slot replaced by the float peer built above
+    (`chanLNTensor3F`, `convNextStageChKF`, `cnxDownChWF`). The 22 pure-normalise LN
+    bridges stay supplied, each now paired with its float map.
+
+    The tie from this skeleton to the committed `convNextForwardTCh` is
+    `WholeNetForwardTies.convNextForwardTCh_eq_skeleton`; the head slot is `id` because
+    the reference's 22 LN sites are 1 stem + 18 block + 3 downsample. -/
+theorem convnextCh_floatBridgesTo (M : FloatModel) (fgelu : ℝ → ℝ) (wts : CnxTWeightsCh)
+    (lnSF : Vec 96 → Vec 96) (ln1F : Fin 3 → (Vec 96 → Vec 96)) (lnd1F : Vec 96 → Vec 96)
+    (ln2F : Fin 3 → (Vec 192 → Vec 192)) (lnd2F : Vec 192 → Vec 192)
+    (ln3F : Fin 9 → (Vec 384 → Vec 384)) (lnd3F : Vec 384 → Vec 384)
+    (ln4F : Fin 3 → (Vec 768 → Vec 768))
+    {w' bb egelu : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (hsW : ∀ o c kh kw, |wts.sW o c kh kw| ≤ w') (hsb : ∀ o, |wts.sb o| ≤ bb)
+    (hsγ : ∀ i, |wts.sγ i| ≤ w') (hsβ : ∀ i, |wts.sβ i| ≤ bb)
+    (hWd : ∀ i j, |wts.Wd i j| ≤ w') (hbd : ∀ j, |wts.bd j| ≤ bb)
+    (hb1 : ∀ i, CnxBlockChBounded (wts.s1 i) w' bb)
+    (hb2 : ∀ i, CnxBlockChBounded (wts.s2 i) w' bb)
+    (hb3 : ∀ i, CnxBlockChBounded (wts.s3 i) w' bb)
+    (hb4 : ∀ i, CnxBlockChBounded (wts.s4 i) w' bb)
+    (hbd1 : CnxDownChBounded wts.d1 w' bb) (hbd2 : CnxDownChBounded wts.d2 w' bb)
+    (hbd3 : CnxDownChBounded wts.d3 w' bb)
+    (hlnS : FloatBridgesTo (layerNormForward 96 wts.sε 1 0) lnSF)
+    (hln1 : ∀ i, FloatBridgesTo (layerNormForward 96 (wts.s1 i).εn 1 0) (ln1F i))
+    (hlnd1 : FloatBridgesTo (layerNormForward 96 wts.d1.ε 1 0) lnd1F)
+    (hln2 : ∀ i, FloatBridgesTo (layerNormForward 192 (wts.s2 i).εn 1 0) (ln2F i))
+    (hlnd2 : FloatBridgesTo (layerNormForward 192 wts.d2.ε 1 0) lnd2F)
+    (hln3 : ∀ i, FloatBridgesTo (layerNormForward 384 (wts.s3 i).εn 1 0) (ln3F i))
+    (hlnd3 : FloatBridgesTo (layerNormForward 384 wts.d3.ε 1 0) lnd3F)
+    (hln4 : ∀ i, FloatBridgesTo (layerNormForward 768 (wts.s4 i).εn 1 0) (ln4F i)) :
+    FloatBridgesTo
+      (convnextForward wts.sW wts.sb wts.Wd wts.bd
+        (chanLNTensor3 96 56 56 wts.sε wts.sγ wts.sβ) id
+        (convNextStageChK 3 wts.s1) (cnxDownChW 28 28 wts.d1)
+        (convNextStageChK 3 wts.s2) (cnxDownChW 14 14 wts.d2)
+        (convNextStageChK 9 wts.s3) (cnxDownChW 7 7 wts.d3)
+        (convNextStageChK 3 wts.s4))
+      (convnextForwardF M wts.sW wts.sb wts.Wd wts.bd
+        (chanLNTensor3F M wts.sγ wts.sβ lnSF) id
+        (convNextStageChKF M fgelu 3 wts.s1 ln1F) (cnxDownChWF 28 28 M wts.d1 lnd1F)
+        (convNextStageChKF M fgelu 3 wts.s2 ln2F) (cnxDownChWF 14 14 M wts.d2 lnd2F)
+        (convNextStageChKF M fgelu 9 wts.s3 ln3F) (cnxDownChWF 7 7 M wts.d3 lnd3F)
+        (convNextStageChKF M fgelu 3 wts.s4 ln4F)) :=
+  convnext_floatBridgesTo M wts.sW wts.sb wts.Wd wts.bd
+    (chanLNTensor3 96 56 56 wts.sε wts.sγ wts.sβ) (chanLNTensor3F M wts.sγ wts.sβ lnSF)
+    id id
+    (convNextStageChK 3 wts.s1) (convNextStageChKF M fgelu 3 wts.s1 ln1F)
+    (cnxDownChW 28 28 wts.d1) (cnxDownChWF 28 28 M wts.d1 lnd1F)
+    (convNextStageChK 3 wts.s2) (convNextStageChKF M fgelu 3 wts.s2 ln2F)
+    (cnxDownChW 14 14 wts.d2) (cnxDownChWF 14 14 M wts.d2 lnd2F)
+    (convNextStageChK 9 wts.s3) (convNextStageChKF M fgelu 9 wts.s3 ln3F)
+    (cnxDownChW 7 7 wts.d3) (cnxDownChWF 7 7 M wts.d3 lnd3F)
+    (convNextStageChK 3 wts.s4) (convNextStageChKF M fgelu 3 wts.s4 ln4F)
+    hw' hbb hw' hbb hsW hsb hWd hbd
+    (floatBridgesTo_chanLNTensor3 M wts.sγ wts.sβ lnSF (by norm_num) hsγ hsβ hlnS)
+    floatBridgesTo_idVec
+    (floatBridgesTo_convNextStageChK M fgelu hw' hbb hegelu (by norm_num) (by norm_num)
+      (by norm_num) hg 3 wts.s1 ln1F hb1 hln1)
+    (floatBridgesTo_cnxDownChW 28 28 M wts.d1 lnd1F hw' hbb (by norm_num) (by norm_num)
+      hbd1 hlnd1)
+    (floatBridgesTo_convNextStageChK M fgelu hw' hbb hegelu (by norm_num) (by norm_num)
+      (by norm_num) hg 3 wts.s2 ln2F hb2 hln2)
+    (floatBridgesTo_cnxDownChW 14 14 M wts.d2 lnd2F hw' hbb (by norm_num) (by norm_num)
+      hbd2 hlnd2)
+    (floatBridgesTo_convNextStageChK M fgelu hw' hbb hegelu (by norm_num) (by norm_num)
+      (by norm_num) hg 9 wts.s3 ln3F hb3 hln3)
+    (floatBridgesTo_cnxDownChW 7 7 M wts.d3 lnd3F hw' hbb (by norm_num) (by norm_num)
+      hbd3 hlnd3)
+    (floatBridgesTo_convNextStageChK M fgelu hw' hbb hegelu (by norm_num) (by norm_num)
+      (by norm_num) hg 3 wts.s4 ln4F hb4 hln4)
+
 end Proofs

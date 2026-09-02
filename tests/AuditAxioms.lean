@@ -1970,6 +1970,19 @@ open Proofs
 #print axioms Proofs.floatBridgesTo_seBlockFull
 #print axioms Proofs.floatBridgesTo_mbResidFwdB
 #print axioms Proofs.efficientnetForwardB_floatBridgesTo
+-- The last pair: the SHIPPED ConvNeXt-T at its real channel LayerNorm, forward and
+-- backward. With these, all TWELVE whole-net float bridges name the float net they
+-- certify. Their cone (chanLNTensor3F / layerNormVecF / cnxBodyWithF / cnxBlockChWF /
+-- convNextStageChKF / cnxDownChWF, and the backward chanLNTensor3BackF) is migrated too.
+#print axioms Proofs.floatBridgesTo_chanLNTensor3
+#print axioms Proofs.floatBridgesTo_chanLNTensor3Back
+#print axioms Proofs.convnextCh_floatBridgesTo
+#print axioms Proofs.convnextCh_grad_floatBridgesTo
+-- ⭐ The CIFAR-8 chain tie: chainRH of cifar8ChainH IS cifarCnn8Forward at the
+-- committed config, by rfl. Writing it caught the chain's dense head being three
+-- BARE denses where cifar8Verified.layers has relu after the first two.
+#print axioms Proofs.cifar8ChainH_chainRH_eq
+#print axioms Proofs.cifar8_chain_cert_committed
 -- The named per-block FORWARD bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack), so the
 -- whole-net fold's block hypotheses are discharged by name exactly as the backward's are:
 -- floatBridges_r34IdBlock (rblkPC = relu∘residual(body); FloatBridges.residual skip) +

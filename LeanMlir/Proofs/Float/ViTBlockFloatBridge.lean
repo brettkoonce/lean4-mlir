@@ -647,6 +647,11 @@ theorem floatClose_gather {p q : Nat} (e : Fin p ≃ Fin q) (A : ℝ) :
 theorem floatBridges_gather {p q : Nat} (e : Fin p ≃ Fin q) : FloatBridges (gather e) :=
   fun A hA => ⟨A, _, _, hA, floatClose_gather e A⟩
 
+/-- A reindex gather float-bridges to itself (a permutation rounds nothing). -/
+theorem floatBridgesTo_gather {p q : Nat} (e : Fin p ≃ Fin q) :
+    FloatBridgesTo (gather e) (gather e) :=
+  fun A hA => ⟨A, _, hA, floatClose_gather e A⟩
+
 /-- **The head-split reshape** `Vec (h·(n·dh)) ↔ Vec (n·(h·dh))` — the `(h,n,dh)` head-major
     order vs the `(n,h,dh)` token-major order (swap the head and token axes). Built from
     `finProdFinEquiv` + `prodAssoc`/`prodComm`; its exact coordinate action is irrelevant to

@@ -292,4 +292,45 @@ theorem convnext_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Ke
   have hS1 := hD1.comp hs1B
   exact hS1.comp hstem
 
+
+set_option maxRecDepth 100000 in
+/-- **THE SHIPPED ConvNeXt-T BACKWARD float-bridges TO its float skeleton** —
+    `convnext_grad_floatBridgesTo` at the channel LayerNorm, with the stem LN backward
+    replaced by its named float peer (`chanLNTensor3BackF`) and the head slot `id`.
+    The four stage backwards and three downsample backwards stay supplied, each paired
+    with its float map (`formalization.yaml` fidelity §4d). -/
+theorem convnextCh_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+    {εs : ℝ} (γs fγs : Vec 96) (xstem : Vec (96 * 56 * 56))
+    (fst : Fin (56 * 56) → ℝ) (fxh : Fin (56 * 56) → Vec 96)
+    (s1B s1BF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (d1B d1BF : Vec (192 * 28 * 28) → Vec (96 * 56 * 56))
+    (s2B s2BF : Vec (192 * 28 * 28) → Vec (192 * 28 * 28))
+    (d2B d2BF : Vec (384 * 14 * 14) → Vec (192 * 28 * 28))
+    (s3B s3BF : Vec (384 * 14 * 14) → Vec (384 * 14 * 14))
+    (d3B d3BF : Vec (768 * 7 * 7) → Vec (384 * 14 * 14))
+    (s4B s4BF : Vec (768 * 7 * 7) → Vec (768 * 7 * 7))
+    {wd ws Gd egam S Xh es exh : ℝ} (hwd : 0 ≤ wd) (hWd : ∀ i j, |Wd i j| ≤ wd)
+    (hws : 0 ≤ ws) (hsW : ∀ o c kh kw, |sW o c kh kw| ≤ ws)
+    (hγs : ∀ i, |γs i| ≤ Gd) (hfγs : ∀ i, |fγs i - γs i| ≤ egam)
+    (hst : ∀ r, |fst r - bnIstd 96 (Mat.unflatten (chanLNRows 96 56 56 xstem) r) εs| ≤ es)
+    (hSabs : ∀ r, |bnIstd 96 (Mat.unflatten (chanLNRows 96 56 56 xstem) r) εs| ≤ S)
+    (hxh : ∀ r i, |bnXhat 96 εs (Mat.unflatten (chanLNRows 96 56 56 xstem) r) i| ≤ Xh)
+    (hfxh : ∀ r i, |fxh r i - bnXhat 96 εs (Mat.unflatten (chanLNRows 96 56 56 xstem) r) i| ≤ exh)
+    (hs1B : FloatBridgesTo s1B s1BF) (hd1B : FloatBridgesTo d1B d1BF)
+    (hs2B : FloatBridgesTo s2B s2BF) (hd2B : FloatBridgesTo d2B d2BF)
+    (hs3B : FloatBridgesTo s3B s3BF) (hd3B : FloatBridgesTo d3B d3BF)
+    (hs4B : FloatBridgesTo s4B s4BF) :
+    FloatBridgesTo
+      (convnextInputGrad Wd sW (chanLNTensor3Back 96 56 56 εs γs xstem) id
+        s1B d1B s2B d2B s3B d3B s4B)
+      (convnextInputGradF M Wd sW (chanLNTensor3BackF M fγs fst fxh) id
+        s1BF d1BF s2BF d2BF s3BF d3BF s4BF) :=
+  convnext_grad_floatBridgesTo M Wd sW
+    (chanLNTensor3Back 96 56 56 εs γs xstem) (chanLNTensor3BackF M fγs fst fxh) id id
+    s1B s1BF d1B d1BF s2B s2BF d2B d2BF s3B s3BF d3B d3BF s4B s4BF hwd hWd hws hsW
+    (floatBridgesTo_chanLNTensor3Back M γs fγs xstem fst fxh (by norm_num) (by norm_num)
+      hγs hfγs hst hSabs hxh hfxh)
+    floatBridgesTo_idVec
+    hs1B hd1B hs2B hd2B hs3B hd3B hs4B
+
 end Proofs

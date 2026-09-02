@@ -179,6 +179,13 @@ theorem floatBridges_gelu {n : Nat} (fgelu : ℝ → ℝ) {egelu : ℝ}
   intro A hA
   exact ⟨_, _, _, by linarith, floatClose_gelu fgelu hegelu hA hg⟩
 
+/-- GELU float-bridges TO the deployed `fgelu` applied coordinatewise. -/
+theorem floatBridgesTo_gelu {n : Nat} (fgelu : ℝ → ℝ) {egelu : ℝ}
+    (hegelu : 0 ≤ egelu) (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu) :
+    FloatBridgesTo (gelu n) (fun v i => fgelu (v i)) := by
+  intro A hA
+  exact ⟨_, _, by linarith, floatClose_gelu fgelu hegelu hA hg⟩
+
 -- ════════════════════════════════════════════════════════════════
 -- § 2d. The ViT MLP residual sub-block (per-token, Vec-space)
 -- ════════════════════════════════════════════════════════════════
