@@ -180,7 +180,7 @@ an ImageNet-pretrained backbone, so read it as "the v8 architecture is not what
 wins at this budget", not as beating YOLOv8. The 0.391 row is ordinary practice:
 8× the epochs, higher resolution, full augmentation, and COCO-pretrained. **The
 gap to 0.391 is recipe, not architecture** — and scale augmentation, one item of
-that recipe, has since closed 40% of it (0.1674 → 0.2363).
+that recipe, has since closed 31% of it (0.1674 → 0.2363).
 
 Throughput: **65 fps** on one RTX 4060 Ti (548 images in 8.34 s), measured
 end-to-end including process start, runtime init, graph load, a 625 MB read and

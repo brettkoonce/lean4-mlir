@@ -12303,13 +12303,18 @@ defer the multi-head refactor to the limitations discussion.
 
 \paragraph{The working detector --- demo: R34+FPN on VisDrone.}
 A ResNet-34 backbone, trained by this stack on ImageNet, feeding an FPN
-top-down neck into three anchor heads at strides $8/16/32$; DIoU box
-loss, focal objectness, class-weighted CE; $448$\,px input, 12 epochs,
-no augmentation. Scored against VisDrone's \emph{uncapped} validation
-ground truth --- all $38{,}759$ boxes, not the 56-box-truncated training
-record, which drops $34.9\%$ of them and is not the benchmark's protocol.
-The catalog entry below keeps the paper-exact YOLOv1 \emph{shape} for the
-historical record; this is the trained detector beside it.
+top-down neck into three anchor heads at strides $8/16/32$; DIoU box loss,
+focal objectness, focal class CE; $448$\,px input, 30 epochs, photometric
+and box-aware scale augmentation. VisDrone is the harder half of detection:
+drone-altitude imagery where a median image holds \emph{seventy} objects and
+many are $2$--$5$\,px after the resize --- the regime where a single coarse
+grid structurally cannot emit the objects, and what makes the multi-scale head
+of Definition~\ref{layer:fpnModule} necessary rather than decorative. Scored
+against VisDrone's \emph{uncapped} validation ground truth --- all $38{,}759$
+boxes, not the 56-box-truncated training record, which drops $34.9\%$ of them
+and is not the benchmark's protocol. The catalog entry below keeps the
+paper-exact YOLOv1 \emph{shape} for the historical record; this is the trained
+detector beside it.
 
 \begin{center}
 \small
@@ -12317,7 +12322,9 @@ historical record; this is the trained detector beside it.
 \hline
  & mAP@0.5 & recall & class-agnostic AP \\
 \hline
-\textbf{R34+FPN, 50\,ep, +aug} & \textbf{0.1674} & \textbf{0.703} & \textbf{0.429} \\
+\textbf{R34+FPN, 30\,ep, +scale aug} & \textbf{0.2363} & \textbf{0.769} & \textbf{0.487} \\
+R34+FPN, 12\,ep, +photometric aug & 0.1961 & 0.749 & 0.441 \\
+R34+FPN, 50\,ep, +photometric aug & 0.1674 & 0.703 & 0.429 \\
 R34+FPN, 12\,ep, no aug & 0.1526 & 0.682 & 0.393 \\
 R34+FPN, 50\,ep, no aug & 0.1243 & 0.669 & 0.369 \\
 PyTorch replica, same architecture & 0.1532 & 0.677 & 0.400 \\
@@ -12327,67 +12334,40 @@ YOLOv8s, 100\,ep, 640\,px, full aug & 0.391 & 0.400 & --- \\
 \end{tabular}
 \end{center}
 
-\noindent \textbf{The middle two rows are the result, and they only mean
-something together.} Quadrupling the schedule with augmentation off \emph{costs}
-19\%: less than half the training loss, more detections, lower recall --- ordinary
-overfitting on 6{,}471 images. Turning augmentation on at that same 50-epoch
-schedule converts $-19\%$ into $+10\%$ over the best short run. One flag decides
-whether a longer schedule pays at all, so reporting either alone would mislead.
+\noindent \textbf{Augmentation and schedule length are one decision, not two,
+and the top five rows only mean something together.} Quadrupling the schedule
+with augmentation off \emph{costs} $19\%$ --- ordinary overfitting on $6{,}471$
+images. Photometric augmentation recovers it, but at that strength 12 epochs
+still beats 50. Augmentation that changes object \emph{scale} inverts the
+ordering again: it makes 30 epochs worth $44\%$ more than 12. A stronger
+augmentation needs a longer schedule to absorb, so \textbf{the optimum epoch
+count is a property of the augmentation pack} --- there is no schedule that can
+be tuned once and carried across packs.
 
-\medskip\noindent The epoch sweep sharpens it further: \emph{both} arms peak and
-then decline. Without augmentation the peak is near epoch 15 at $0.132$; with it,
-near epoch 30 at $0.1731$, giving $3\%$ back by epoch 50. Augmentation therefore
-delays and softens overfitting rather than removing it --- it moves the optimum
-from roughly 15 epochs to roughly 30 and raises it by $31\%$.
+\medskip\noindent \textbf{The result worth reading is not the mean.} Per-class
+AP runs from car down to bicycle, a spread of $19\times$, and scale augmentation
+narrowed it from $43\times$ by lifting exactly the classes that were worst:
+awning-tricycle by $59\%$, bicycle by $41\%$, tricycle by $40\%$, against car's
+$7\%$. That the fix was data rather than objective is the substantive point.
+Reweighting a loss toward rare classes buys their recall at the expense of
+precision, and average precision charges for the trade; supplying the scales the
+rare classes are missing raises both at once, which is what the recall and
+class-agnostic AP columns move together to show. Detection on aerial imagery does
+not degrade uniformly --- it collapses on whatever is simultaneously small
+\emph{and} rare, and an averaged mAP is precisely the statistic that hides it.
 
 \medskip\noindent The stack beats the hand-written PyTorch replica of
-\emph{this same architecture} by $9\%$, having trailed it by $10\%$ before this,
-and runs at 65\,fps on one RTX 4060 Ti.
-The replica, not YOLOv8, is the yardstick: it isolates implementation
-quality from architecture, which a comparison against a different model
-would conflate. The two YOLOv8s rows say something more interesting than
-either alone. At a matched budget it scores $0.140$ --- below this
-detector, though from random weights rather than an ImageNet-pretrained
-backbone --- while its ordinary-practice $0.391$ comes from $8\times$ the
-epochs, higher resolution, full augmentation and COCO pretraining.
-\textbf{The distance to the field is recipe, not architecture.}
-
-\medskip\noindent VisDrone is chosen because it is the harder half:
-drone-altitude imagery where a median image holds \emph{seventy} objects
-and many are $2$--$5$\,px after the resize. That is the regime where a
-single coarse grid structurally cannot emit the objects, and it is what
-makes the multi-scale head of Definition~\ref{layer:fpnModule} necessary
-rather than decorative.
-
-\medskip\noindent The result worth reading is not the mean. Per-class AP
-runs from car at $0.605$ down to bicycle at $0.014$ --- a $44\times$
-spread. Augmentation lifted 8 of 10 classes and lifted them hardest where the
-detector was weakest (bus $0.165 \to 0.227$), so the mean is no longer one class
-in a trench coat. Detection on aerial imagery does not degrade uniformly; it
-collapses on whatever is simultaneously small \emph{and} rare, and an
-averaged mAP is precisely the statistic that hides it. Workings:
-\texttt{runs/2026-08-28-visdrone-fpn-rebuild/}.
-
-\medskip\noindent One failure this run had to be watched for, and it is a
-property of detection rather than of any dataset. On a coarse grid, when
-objects cluster, the loss has a cheap minimum: predict \emph{where objects
-usually are} instead of localizing each one. The objectness map collapses to
-an image-independent centre prior, \textbf{and the training loss keeps
-dropping the whole time} --- so loss is not a proxy for detector quality. It
-did not materialise here, and the reason is instructive: at seventy scattered
-objects an image, the positional marginal carries almost no information, so
-the cheap minimum is not cheap. The dataset that makes the task hard is the
-same one that makes this particular collapse unavailable.
-
-\medskip\noindent A sharper version of the same warning did bite. For a full
-chapter this detector was believed to be defeated by its target assignment,
-on the strength of four trained ablations and eight numerical probes. All of
-them were measuring a data-loading bug that paired each image with another
-image's labels, so the only learnable signal was the marginal distribution of
-the targets. The tell was available throughout and was not read: no lever
-moved the metric, at all, ever. \textbf{When every intervention produces the
-same number, the instrument is the thing to suspect, not the model.}
-
+\emph{this same architecture} by $54\%$, and runs at 65\,fps on one RTX 4060 Ti
+--- or $35.7$\,fps on a 25\,W Jetson Orin Nano under TensorRT, which is the
+deployment this dataset implies. The replica, not YOLOv8, is the yardstick: it
+isolates implementation quality from architecture, which a comparison against a
+different model would conflate. The two YOLOv8s rows say something more
+interesting than either alone. At a matched budget it scores $0.140$ --- below
+this detector, though from random weights rather than an ImageNet-pretrained
+backbone --- while its ordinary-practice $0.391$ comes from $8\times$ the epochs,
+higher resolution, full augmentation and COCO pretraining. \textbf{The distance
+to the field is recipe, not architecture}, and one item of that recipe closes
+$31\%$ of it.
 
 \subsubsection*{YOLO v1/v3/v5/v8/v11 (\texttt{Bestiary/YOLO.lean})}
 v1 (Redmon et al.\ 2016,
