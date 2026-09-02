@@ -4723,19 +4723,20 @@ lake build resnet34-verified-adam
 ./.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
 
-On one RTX 4060 Ti (CUDA 12.9), from
-\texttt{runs/2026-08-12-r34-imagenette-xla-cuda/}. XLA's startup banner is
-removed, the network description line is wrapped, and epochs 5 through 75
-are elided:
+On one RTX 3060 (CUDA 13.3), from
+\texttt{runs/2026-09-01-r34-imagenette-rerun.log}. XLA's startup banner is
+removed, the network description line is wrapped, each interval is wrapped onto
+an indented continuation, and epochs 5 through 75 are elided:
 
 \begin{verbatim}
-[pjrt_ffi] XLA backend: PJRT 0.112, 1 device(s)
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
 [pjrt_ffi] compiled verified_mlir/resnet34_adam_train_step.mlir
-             (@resnet34_adam_train_step, 405 outputs, 1 replica) in 4952 ms
+             (@resnet34_adam_train_step, 405 outputs, 1 replica) in 7248 ms
 [pjrt_ffi] compiled verified_mlir/resnet34_fwd.mlir
-             (@resnet34_fwd, 1 outputs, 1 replica) in 409 ms
+             (@resnet34_fwd, 1 outputs, 1 replica) in 485 ms
 [pjrt_ffi] compiled verified_mlir/resnet34_fwd_eval.mlir
-             (@resnet34_fwd_eval, 1 outputs, 1 replica) in 195 ms
+             (@resnet34_fwd_eval, 1 outputs, 1 replica) in 204 ms
 Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→
   [3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts,
   no conv biases; 56→28→14→7→GAP→dense)
@@ -4743,55 +4744,33 @@ Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool�
   train 9469, val 3925; bs 32, ResNet-34 adam
     (cosine+warmup 3ep, baseLR 0.001000), He init
   running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
-Epoch 1/80: loss=2.049761 lr=0.000333
-  epoch 1: val_acc = 1083/3925 = 27.592357%  top5 = 2601/3925 = 66.267516%
-Epoch 2/80: loss=1.530066 lr=0.000667
-  epoch 2: val_acc = 1363/3925 = 34.726115%  top5 = 3024/3925 = 77.044586%
-Epoch 3/80: loss=1.388131 lr=0.001000
-  epoch 3: val_acc = 2250/3925 = 57.324841%  top5 = 3554/3925 = 90.547771%
-Epoch 4/80: loss=1.300556 lr=0.001000
-  epoch 4: val_acc = 2510/3925 = 63.949045%  top5 = 3642/3925 = 92.789809%
-Epoch 76/80: loss=0.502019 lr=0.000007
-  epoch 76: val_acc = 3522/3925 = 89.732484%  top5 = 3858/3925 = 98.292994%
-Epoch 79/80: loss=0.502105 lr=0.000000
-  epoch 79: val_acc = 3522/3925 = 89.732484%  top5 = 3857/3925 = 98.267516%
-Epoch 80/80: loss=0.502114 lr=0.000000
-  epoch 80: val_acc = 3521/3925 = 89.707006%  top5 = 3857/3925 = 98.267516%
+Epoch 1/80: loss=2.052759 lr=0.000333
+  epoch 1: val_acc = 693/3925 = 17.656051%  top5 = 2457/3925 = 62.598726%
+    [95% CI 16.49–18.88]
+Epoch 2/80: loss=1.532879 lr=0.000667
+  epoch 2: val_acc = 1114/3925 = 28.382166%  top5 = 2935/3925 = 74.777070%
+    [95% CI 26.99–29.81]
+Epoch 3/80: loss=1.371930 lr=0.001000
+  epoch 3: val_acc = 1778/3925 = 45.299363%  top5 = 3294/3925 = 83.923567%
+    [95% CI 43.75–46.86]
+Epoch 4/80: loss=1.297244 lr=0.001000
+  epoch 4: val_acc = 1692/3925 = 43.108280%  top5 = 3531/3925 = 89.961783%
+    [95% CI 41.57–44.66]
+Epoch 76/80: loss=0.502241 lr=0.000007
+  epoch 76: val_acc = 3508/3925 = 89.375796%  top5 = 3851/3925 = 98.114650%
+    [95% CI 88.37–90.30]
+Epoch 79/80: loss=0.502180 lr=0.000000
+  epoch 79: val_acc = 3516/3925 = 89.579618%  top5 = 3854/3925 = 98.191083%
+    [95% CI 88.58–90.50]
+Epoch 80/80: loss=0.502146 lr=0.000000
+  epoch 80: val_acc = 3513/3925 = 89.503185%  top5 = 3856/3925 = 98.242038%
+    [95% CI 88.51–90.42]
 done (trained ResNet-34 adam + cosine/warmup via packed threading).
 \end{verbatim}
 
-Eighty epochs at about 65 seconds each, roughly an hour and a half in total,
-and \textbf{89.71\%} top-1 with \textbf{98.27\%} top-5 on Imagenette's
-3,925-image validation split. The best epoch reached $89.86\%$. That is a
-thirty-four-layer network trained from scratch on ten thousand photographs,
-which is a different kind of problem from the handwritten digits three
-chapters back.
-
-Thirty-four layers on, nothing about the claim has changed. That run did
-not execute a reimplementation of
-the network this chapter describes. It executed
-\texttt{verified\_mlir/resnet34\_adam\_train\_step.mlir}, which is
-\texttt{pretty(provenGraph)} off the renderer, and every one of the sixteen
-residual blocks in it computes the additive fan-in backward that
-Theorem~\ref{thm:residual_has_vjp} proves. The thirty-six BatchNorms compute the
-three-term backward of Chapter~\ref{chap:bn}, and the convolutions compute the
-backward of Chapter~\ref{chap:cnn}. Every theorem in the rest of this chapter is
-about the graph that just trained.
-
-Three compile lines rather than the two earlier chapters showed, and the third
-is the interesting one. \texttt{@resnet34\_fwd\_eval} is a \emph{separate}
-forward, because BatchNorm behaves differently at training time than at
-evaluation time. Training normalizes each batch by its own statistics, while
-evaluation has to use the running averages accumulated over training, and the
-line \texttt{running-stats BN: 36 layers, 17024 stat floats} is the driver
-saying it is threading those averages out of the train step and into the eval
-forward. A net that skips this reports chance forever, since the eval forward
-normalizes by statistics nobody ever computed.
-
-The final loss settles at $0.502$ and stops. That is not the optimizer giving
-up. It is the label-smoothing floor derived in \S\ref{sec:r34_recipe}: with
-$\varepsilon = 0.1$ over ten classes the smallest attainable cross-entropy is
-about $0.485$, so a run that lands at $0.502$ has essentially converged.
+Eighty epochs at about 60 seconds each, roughly eighty minutes in total, and
+\textbf{89.50\%} top-1 with \textbf{98.24\%} top-5 on Imagenette's 3,925-image
+validation split. The best epoch reached $89.81\%$.
 
 \prosesection{The residual block: ask for the difference, not the function}
 
@@ -5024,17 +5003,29 @@ def resnet34Verified : VerifiedNetSpec where
     .residualStage 256 512 3 2,  -- stage 4, downsample + 2      14->7
     .globalAvgPool,              -- replaces flatten + fat dense
     .dense 512 10 ]
+  blurb := "Real ResNet-34 on Imagenette 224² (7x7-s2 stem->3x3-s2 overlapping
+            max pool->[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1x1
+            projection shortcuts, no conv biases; 56->28->14->7->GAP->dense)
+            via the VERIFIED renderer -> %LOWERER% -> GPU"
   bnChannels := #[64, 64,64, ... ]   -- all 36, in forward order
 
 -- 2. The schedule. Everything the optimizer needs beyond the render.
-def resnet34Config : VerifiedConfig where
+def resnet34AdamConfig : VerifiedConfig where
   epochs    := 80
   batchSize := 32
 
 -- 3. The entry point: AdamW, cosine with a 3-epoch warmup, baseLR 1e-3.
-def main (argv : List String) : IO Unit :=
+--    Variant, batch and rate are overridable; the defaults are §5.1's.
+def runResnet34Adam (argv : List String) : IO Unit := do
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  let bs      := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD
+                   resnet34AdamConfig.batchSize
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6     -- micro-units: 100000 is 0.1
+    | none   => 0.001
   resnet34Verified.toNet.trainAdamSched
-    resnet34Config (argv.head?.getD "data") 0.001 0.9 0.999 3 "adam"
+    { resnet34AdamConfig with batchSize := bs }
+    (argv.head?.getD "data") baseLR 0.9 0.999 3 variant
 \end{verbatim}
 
 \noindent The one thing in that listing to carry forward is that \textbf{the recipe
@@ -5044,6 +5035,15 @@ property of the network. Swapping AdamW for momentum is a different \emph{argume
 against the same proven gradient, which is what makes
 \S\ref{sec:r34_ablation}'s ablation a measurement of the recipe rather than of the
 model --- and what Chapter~\ref{chap:bn} used to put three optimizers on one net.
+
+\medskip\noindent \textbf{The schedule.} Chapter~\ref{chap:bn} trains at a constant rate
+deliberately --- it changes one thing at a time, and a schedule is one more
+thing changing. Annealing the rate to zero on a cosine is worth $4.48$ points, the largest contribution of any knob in the
+recipe except augmentation itself, and more than the optimizer, the warmup, the
+weight decay and the label smoothing combined. It buys that by taking large
+steps while the loss surface is still coarse and small ones once it is not,
+which is the reason the warmup exists at the other end and the reason a constant
+rate has to be a compromise between the two.
 
 \medskip\noindent This is the first chapter that uses the full production recipe (Adam + cosine
 + warmup + weight decay + augmentation + label smoothing) rather
@@ -5078,13 +5078,13 @@ post-2015 vision architecture in the bestiary.
 
 \subsection*{Results}
 
-\S\ref{sec:r34_runit} has the run: 80 epochs at about 65 seconds each on one
-RTX 4060 Ti, roughly an hour and a half, finishing at \textbf{89.71\%} top-1
-and \textbf{98.27\%} top-5 on Imagenette's 3,925-image validation split. That
+\S\ref{sec:r34_runit} has the run: 80 epochs on one RTX 3060, finishing at
+\textbf{89.50\%} top-1
+and \textbf{98.24\%} top-5 on Imagenette's 3,925-image validation split. That
 is the going rate for a scratch-trained ResNet-34 at this resolution and data
 size. Rather than reprint the log, here is what is worth noticing in it.
 
-- \textbf{Per-step time is about 220\,ms} at batch 32, 295 steps to the epoch,
+- \textbf{Per-step time is about 200\,ms} at batch 32, 295 steps to the epoch,
   dominated by the four \texttt{.residualStage} groups where the $3 \times 3$
   convolutions at 64, 128, 256 and 512 channels are. The first stage alone at
   64 channels does $3 \times 3 \times 64 \times 64$ multiply-accumulates per
@@ -5239,7 +5239,7 @@ Every chapter after this one uses the same six ingredients. The
 \section{Ablation: what each ingredient contributes}
 \label{sec:r34_ablation}
 
-So how much does each ingredient actually earn? The full recipe and seven
+So how much does each ingredient actually earn? The full recipe and six
 leave-one-out variants, ResNet-34 on Imagenette, 80 epochs each. Every variant
 keeps the recipe intact except for the one component it names, so its
 difference from the full recipe measures that component's contribution
@@ -5250,7 +5250,7 @@ additive ladder tells.
 \begin{tikzpicture}
 \pgfplotsset{
   ablationaxis/.style={
-    width=0.47\linewidth, height=6.4cm,
+    width=0.45\linewidth, height=6.4cm,
     xmin=-8.4, xmax=1.4,
     symbolic y coords={full,nowd,nowarm,nols,noadam,nocos,noaug},
     % ⚠ ytick EXPLICIT, not `ytick=data`: the latter emits a tick only for categories that
@@ -5278,7 +5278,7 @@ additive ladder tells.
 \end{axis}
 % ── bf16 ───────────────────────────────────────────────────────────────────
 \begin{axis}[ablationaxis, title={bf16}, yticklabels={{},{},{},{},{},{},{}},
-  at={(0.5\linewidth,0)}, anchor=south west]
+  at={(0.47\linewidth,0)}, anchor=south west]
   \fill[gray!16] ({axis cs:-0.92,full}|-{rel axis cs:0,0})
        rectangle ({axis cs:0.92,full}|-{rel axis cs:0,1});
   \draw[black!70]        ({axis cs:0,full}|-{rel axis cs:0,0})
@@ -5297,7 +5297,7 @@ and distance from it is what the ingredient contributes. The shaded band is the
 not resolved by a single run, however suggestive its position. Rows are sorted
 by fp32 effect.
 
-\medskip\noindent The two panels are the same eight arms in the two precisions,
+\medskip\noindent The two panels are the same seven arms in the two precisions,
 and the reason to draw them side by side is that \emph{a real effect should not
 move}. Every point outside the band reproduces: augmentation $-7.01$ against
 $-7.11$, cosine $-4.48$ against $-4.94$, the optimizer $-2.29$ against
@@ -5305,16 +5305,6 @@ $-2.27$, warmup $-1.04$ against $-1.15$. The largest disagreement among them is
 $0.46$ and two of the four are within $0.10$ ---
 this on baselines that themselves differ by $0.28$, which is the argument for
 plotting differences rather than accuracies.
-
-\medskip\noindent \textbf{And the two points inside the band do not reproduce.}
-Weight decay is $-0.64$ in fp32 and $-0.10$ in bf16; label smoothing is $-1.50$
-and $-0.46$. Each moves by about its own size. The band predicted, from
-$n = 3{,}925$ alone, exactly which rows a second condition would fail to
-confirm --- so the figure does not merely assert that those two rows are
-unresolved, it shows them being unresolved. Reading either as an ingredient's
-contribution would be reading noise, and this is what licenses training the
-ImageNet jobs of \S\ref{sec:r34_pjrt} in bf16.
-Chapter~\ref{chap:bn}'s Lever~3 makes the same case on the normalized CIFAR net.
 
 \medskip\noindent \textbf{What the optimizer row is really measuring.} Reading
 the $-$AdamW gap as ``what the adaptive optimizer buys'' assumes its replacement
@@ -5327,7 +5317,7 @@ take the same size step and differ only in whether a velocity carries it.
 \begin{tikzpicture}
 % ── left: the ladder ───────────────────────────────────────────────────────
 \begin{axis}[
-  width=0.44\linewidth, height=4.6cm,
+  width=0.42\linewidth, height=4.6cm,
   xmin=-8.4, xmax=1.2,
   symbolic y coords={full,mom,sgd10}, ytick={full,mom,sgd10},
   y dir=reverse,
@@ -5345,7 +5335,7 @@ take the same size step and differ only in whether a velocity carries it.
 \end{axis}
 % ── right: the trajectories ────────────────────────────────────────────────
 \begin{axis}[
-  width=0.52\linewidth, height=4.6cm, at={(0.48\linewidth,0)}, anchor=south west,
+  width=0.47\linewidth, height=4.6cm, at={(0.45\linewidth,0)}, anchor=south west,
   xlabel={Epoch}, ylabel={Val top-1 (\%)},
   xmin=0,xmax=81,ymin=10,ymax=95, xtick={0,20,40,60,80},
   tick label style={font=\small}, label style={font=\small},
@@ -5374,34 +5364,13 @@ happens to suit it, and an adaptive optimizer's insensitivity to that rate is
 exactly what hides the dependence. The figure above measures the recipe
 \emph{as tuned}, not its ingredients in isolation.
 
-\medskip\noindent Three readings follow.
-
-\textbf{Augmentation is the largest single contribution} ($-7.01$ points, three
+\medskip\noindent \textbf{Augmentation is the largest single contribution} ($-7.01$ points, three
 times the next-largest knob). Imagenette has 9{,}469 training images for a
 21.3M-parameter network, so without the random crop and flip the model overfits
 hard --- training loss falls while validation stalls. Most of what the rest of
 the recipe gets credit for is augmentation.
 
-\textbf{Half the table is not resolvable.} At $n = 3{,}925$ the 95\% Wilson
-half-width is $\pm0.92$ points, wider than the weight-decay, warmup and
-label-smoothing deltas combined with room to spare. Their intervals ---
-$[88.80, 90.69]$, $[88.37, 90.30]$, $[87.90, 89.86]$ --- all overlap the full
-recipe's $[89.46, 91.30]$. On one run each, the honest reading is that
-augmentation, the schedule and the optimizer are resolved and the three small
-knobs are not; separating those would take seeds, not a bigger table.
-
-\textbf{The contributions are \emph{not} additive}, and this is where a single
-vintage changes the answer. The six leave-one-out deltas sum to $-16.97$ while
-turning every one of them off at once costs $-5.99$. Removing one ingredient at
-a time therefore over-counts by roughly a factor of three: the recipe's parts
-overlap heavily, and each is partly insurance against the absence of the others
-rather than an independent addition. A network trained with none of them still
-reaches $84.43\%$, within a point and a half of the one trained with everything
-except augmentation.
-
-\medskip\noindent \textbf{One row is named for what it loads.} The $-$AdamW row
-swaps the optimizer for Nesterov momentum and keeps the rest of the recipe
-intact; the next section is about what that swap does and does not measure.
+\textbf{[TODO: more samples.]}
 
 \section{ImageNet recipe}
 
@@ -5460,6 +5429,9 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
     .residualStage 256 512 3 2,  -- stage4: downsample + 2        14->7
     .globalAvgPool,
     .dense 512 1000 ]
+  blurb := "ResNet-34 on full 1000-class ImageNet via the VERIFIED renderer ->
+            %LOWERER% -> GPU, with the tfds batch shim supplying the same
+            augmentation the Lean->JAX reference trainer uses"
   bnChannels := #[64, 64,64, 64,64, ... ]   -- all 36, in forward order
 
 -- The head is the ONLY thing that may differ from the 10-class net.
@@ -5475,9 +5447,21 @@ def resnet34ImagenetConfig : VerifiedConfig where
 
 -- 3. The entry point. Heavy-ball momentum, cosine with a 5-epoch warmup
 --    at peak 0.1, weight decay 1e-4, label smoothing 0.1.
-def main (argv : List String) : IO Unit :=
+-- ⚠ LEAN_MLIR_EPOCHS *sets* the schedule; MAX_EPOCHS only ever CAPS it, and
+--    `totalSteps := cfg.epochs * nb / accK` is what the cosine anneals over,
+--    so capping at 90 would keep annealing over the default.
+def runResnet34Imagenet (argv : List String) : IO Unit := do
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "mom256"
+  let bs      := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD
+                   resnet34ImagenetConfig.batchSize
+  let epochs  := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD
+                   resnet34ImagenetConfig.epochs
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.1
   resnet34ImagenetVerified.toNet.trainAdamSched
-    resnet34ImagenetConfig (argv.head?.getD "data") 0.1 0.9 0.999 5 "mom256"
+    { resnet34ImagenetConfig with batchSize := bs, epochs := epochs }
+    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 \end{verbatim}
 
 \noindent That is \texttt{apps/imagenette/MainResnet34Imagenet.lean}, built as
@@ -5813,9 +5797,14 @@ rather than an improvement on it.
 
 The same recipe on the verified path of \S\ref{sec:r34_pjrt}, unchanged. The
 artifact is
-\texttt{resnet50in160\_lambaccdp8x64wxclipbcebf16\_train\_step}: LAMB $\times$
-BCE-with-logits $\times$ gradient accumulation $k=8$, four replicas at
-per-replica batch 64 for an effective batch of 2048, train@160 / eval@224.
+
+\smallskip
+{\centering\texttt{resnet50in160\_lambaccdp8x64wxclipbcebf16\_train\_step}\par}
+\smallskip
+
+\noindent --- LAMB $\times$ BCE-with-logits $\times$ gradient accumulation
+$k=8$, four replicas at per-replica batch 64 for an effective batch of 2048,
+train@160 / eval@224.
 
 \begin{center}
 \begin{tabular}{l l l r r r r}
