@@ -299,6 +299,10 @@ lean_lib «Certs» where
              -- pre-folded affine BnEvalFloatBridge models. Affine in x, so its modulus is
              -- LINEAR where training-mode BN's is quadratic in the window.
              `LeanMlir.Proofs.Float.BnEvalRuntimeFloatBridge,
+             -- The INFERENCE forward graph + whole-net faithfulness (the eval twin of
+             -- resnet34FwdGraphFullPC_faithful): den (graph) = resnet34Forward_full_pc_eval,
+             -- the tie the ImageNet-scale float number was missing.
+             `LeanMlir.Proofs.Codegen.ResNet34RenderPCEval,
              `LeanMlir.Proofs.Float.FloatBudgetEnv,
              `LeanMlir.Proofs.Float.Cifar8FloatBudget,
              -- ⭐ The first ImageNet-scale whole-net float budget stated as a NUMBER: the

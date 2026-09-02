@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Float.FloatBudgetEnv
+import LeanMlir.Proofs.Codegen.ResNet34RenderPCEval
 
 /-! # A NUMBER for ResNet-34: the deployed inference forward at the measured profile
 
@@ -34,15 +35,19 @@ the point where `norm_num` will evaluate the numeral at all. Inference BN has no
 modulus is linear (`BnEvalRuntimeFloatBridge.lean`). So the choice of BN is not a detail of
 tightness; it decides whether a whole-net number for a 34-layer net exists.
 
-⚠ **Two hypotheses this number rests on, both named.** (i) The deployed inverse-stddev is a
-device `rsqrt` with no IEEE specification, so it is *modelled*: `DeviceRsqrt ε es` supplies it
-with an accuracy `es`, exactly as EfficientNet's sigmoid carries `esig` and ViT's `exp` carries
-`eexp`. (ii) The real side is `r34Forward` with `bnPerChannelEvalTensor3` at every BN site —
-the op `SHlo.bnPerChannelEvalF` denotes (`bnPerChannelEvalF_faithful`), hence the ℝ semantics
-of every BN line of the committed eval render — but the whole-graph faithfulness theorem for
-the eval chain (the twin of `resnet34FwdGraphFullPC_faithful`) does not exist yet, so this ties
-to the skeleton at the eval BN, not through a proved render tie. The training-mode net has that
-tie (`resnet34Forward_full_pc_eq_skeleton`) and, per the paragraph above, no statable number.
+⚠ **The one hypothesis this number rests on, named.** The deployed inverse-stddev is a device
+`rsqrt` with no IEEE specification, so it is *modelled*: `DeviceRsqrt ε es` supplies it with an
+accuracy `es`, exactly as EfficientNet's sigmoid carries `esig` and ViT's `exp` carries `eexp`.
+Everything else is proved.
+
+**The tie is closed at the graph.** `r34EvalForward_eq_full_pc_eval` is a `rfl` onto
+`resnet34Forward_full_pc_eval` — the committed inference net (`ResNet34RenderPCEval.lean`) —
+and `r34EvalGraph_faithful` carries `resnet34FwdGraphFullPCEval_faithful` the rest of the way:
+the typed `SHlo` graph every line of `@resnet34_fwd_eval` renders **denotes** the forward this
+file bounds. `r34_float_logits_le_committed` states the number with that net on the real side.
+The training-mode net has the same standing structurally
+(`resnet34Forward_full_pc_eq_skeleton`, `resnet34FwdGraphFullPC_faithful`) and, per the
+paragraph above, no statable number.
 
 Provenance for the 180 numerals: `scripts/float_budget_envelope.py`, which folds the envelope
 in exactly these lemmas' semantics with exact rationals, rounds every stage UP to four
@@ -614,5 +619,92 @@ theorem r34_float_logits_le (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ} (hε
     (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
     |r34EvalForwardF M R W x j - r34EvalForward W ε x j| ≤ 1548 * 10 ^ 206 :=
   (r34EvalBridge_maps M hMu hε5 R W).budget_le (by norm_num) le_rfl x hx j
+
+-- ════════════════════════════════════════════════════════════════
+-- § The tie: this IS the committed inference forward, and the graph denotes it
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The record-bundled forward IS the committed inference net.** `r34EvalForward` unfolds to
+    `resnet34Forward_full_pc_eval` at the record's projections — the eval twin of
+    `resnet34Forward_full_pc_eq_skeleton`, and a `rfl` for the same reason: the skeleton's block
+    slots take exactly the maps the record builds. -/
+theorem r34EvalForward_eq_full_pc_eval (W : R34Weights w' β' G Bb Mb) (ε : ℝ) :
+    r34EvalForward W ε = resnet34Forward_full_pc_eval ε
+    W.stem.W W.stem.b W.bns.γ W.bns.β W.bns.μ W.bns.v
+    W.a0.cv1.W W.a0.cv1.b W.a0.bn1.γ W.a0.bn1.β W.a0.bn1.μ W.a0.bn1.v W.a0.cv2.W W.a0.cv2.b W.a0.bn2.γ W.a0.bn2.β W.a0.bn2.μ W.a0.bn2.v
+    W.a1.cv1.W W.a1.cv1.b W.a1.bn1.γ W.a1.bn1.β W.a1.bn1.μ W.a1.bn1.v W.a1.cv2.W W.a1.cv2.b W.a1.bn2.γ W.a1.bn2.β W.a1.bn2.μ W.a1.bn2.v
+    W.a2.cv1.W W.a2.cv1.b W.a2.bn1.γ W.a2.bn1.β W.a2.bn1.μ W.a2.bn1.v W.a2.cv2.W W.a2.cv2.b W.a2.bn2.γ W.a2.bn2.β W.a2.bn2.μ W.a2.bn2.v
+    W.d2.cv1.W W.d2.cv1.b W.d2.bn1.γ W.d2.bn1.β W.d2.bn1.μ W.d2.bn1.v W.d2.cv2.W W.d2.cv2.b W.d2.bn2.γ W.d2.bn2.β W.d2.bn2.μ W.d2.bn2.v W.d2.cvp.W W.d2.cvp.b W.d2.bnp.γ W.d2.bnp.β W.d2.bnp.μ W.d2.bnp.v
+    W.b0.cv1.W W.b0.cv1.b W.b0.bn1.γ W.b0.bn1.β W.b0.bn1.μ W.b0.bn1.v W.b0.cv2.W W.b0.cv2.b W.b0.bn2.γ W.b0.bn2.β W.b0.bn2.μ W.b0.bn2.v
+    W.b1.cv1.W W.b1.cv1.b W.b1.bn1.γ W.b1.bn1.β W.b1.bn1.μ W.b1.bn1.v W.b1.cv2.W W.b1.cv2.b W.b1.bn2.γ W.b1.bn2.β W.b1.bn2.μ W.b1.bn2.v
+    W.b2.cv1.W W.b2.cv1.b W.b2.bn1.γ W.b2.bn1.β W.b2.bn1.μ W.b2.bn1.v W.b2.cv2.W W.b2.cv2.b W.b2.bn2.γ W.b2.bn2.β W.b2.bn2.μ W.b2.bn2.v
+    W.d3.cv1.W W.d3.cv1.b W.d3.bn1.γ W.d3.bn1.β W.d3.bn1.μ W.d3.bn1.v W.d3.cv2.W W.d3.cv2.b W.d3.bn2.γ W.d3.bn2.β W.d3.bn2.μ W.d3.bn2.v W.d3.cvp.W W.d3.cvp.b W.d3.bnp.γ W.d3.bnp.β W.d3.bnp.μ W.d3.bnp.v
+    W.c0.cv1.W W.c0.cv1.b W.c0.bn1.γ W.c0.bn1.β W.c0.bn1.μ W.c0.bn1.v W.c0.cv2.W W.c0.cv2.b W.c0.bn2.γ W.c0.bn2.β W.c0.bn2.μ W.c0.bn2.v
+    W.c1.cv1.W W.c1.cv1.b W.c1.bn1.γ W.c1.bn1.β W.c1.bn1.μ W.c1.bn1.v W.c1.cv2.W W.c1.cv2.b W.c1.bn2.γ W.c1.bn2.β W.c1.bn2.μ W.c1.bn2.v
+    W.c2.cv1.W W.c2.cv1.b W.c2.bn1.γ W.c2.bn1.β W.c2.bn1.μ W.c2.bn1.v W.c2.cv2.W W.c2.cv2.b W.c2.bn2.γ W.c2.bn2.β W.c2.bn2.μ W.c2.bn2.v
+    W.c3.cv1.W W.c3.cv1.b W.c3.bn1.γ W.c3.bn1.β W.c3.bn1.μ W.c3.bn1.v W.c3.cv2.W W.c3.cv2.b W.c3.bn2.γ W.c3.bn2.β W.c3.bn2.μ W.c3.bn2.v
+    W.c4.cv1.W W.c4.cv1.b W.c4.bn1.γ W.c4.bn1.β W.c4.bn1.μ W.c4.bn1.v W.c4.cv2.W W.c4.cv2.b W.c4.bn2.γ W.c4.bn2.β W.c4.bn2.μ W.c4.bn2.v
+    W.d4.cv1.W W.d4.cv1.b W.d4.bn1.γ W.d4.bn1.β W.d4.bn1.μ W.d4.bn1.v W.d4.cv2.W W.d4.cv2.b W.d4.bn2.γ W.d4.bn2.β W.d4.bn2.μ W.d4.bn2.v W.d4.cvp.W W.d4.cvp.b W.d4.bnp.γ W.d4.bnp.β W.d4.bnp.μ W.d4.bnp.v
+    W.e0.cv1.W W.e0.cv1.b W.e0.bn1.γ W.e0.bn1.β W.e0.bn1.μ W.e0.bn1.v W.e0.cv2.W W.e0.cv2.b W.e0.bn2.γ W.e0.bn2.β W.e0.bn2.μ W.e0.bn2.v
+    W.e1.cv1.W W.e1.cv1.b W.e1.bn1.γ W.e1.bn1.β W.e1.bn1.μ W.e1.bn1.v W.e1.cv2.W W.e1.cv2.b W.e1.bn2.γ W.e1.bn2.β W.e1.bn2.μ W.e1.bn2.v
+    W.head.W W.head.b := rfl
+
+/-- ⭐ **The whole loop closes.** The typed `SHlo` inference graph — every line of which
+    `@resnet34_fwd_eval` renders — denotes exactly the forward this file states its number
+    about. `resnet34FwdGraphFullPCEval_faithful` (the eval twin of
+    `resnet34FwdGraphFullPC_faithful`) carried through the record tie. -/
+theorem r34EvalGraph_faithful (epsStr : String) (ε : ℝ) (W : R34Weights w' β' G Bb Mb)
+    (x : Vec (3 * 224 * 224)) :
+    StableHLO.den (StableHLO.resnet34FwdGraphFullPCEval epsStr ε
+        W.stem.W W.stem.b W.bns.γ W.bns.β W.bns.μ W.bns.v
+    W.a0.cv1.W W.a0.cv1.b W.a0.bn1.γ W.a0.bn1.β W.a0.bn1.μ W.a0.bn1.v W.a0.cv2.W W.a0.cv2.b W.a0.bn2.γ W.a0.bn2.β W.a0.bn2.μ W.a0.bn2.v
+    W.a1.cv1.W W.a1.cv1.b W.a1.bn1.γ W.a1.bn1.β W.a1.bn1.μ W.a1.bn1.v W.a1.cv2.W W.a1.cv2.b W.a1.bn2.γ W.a1.bn2.β W.a1.bn2.μ W.a1.bn2.v
+    W.a2.cv1.W W.a2.cv1.b W.a2.bn1.γ W.a2.bn1.β W.a2.bn1.μ W.a2.bn1.v W.a2.cv2.W W.a2.cv2.b W.a2.bn2.γ W.a2.bn2.β W.a2.bn2.μ W.a2.bn2.v
+    W.d2.cv1.W W.d2.cv1.b W.d2.bn1.γ W.d2.bn1.β W.d2.bn1.μ W.d2.bn1.v W.d2.cv2.W W.d2.cv2.b W.d2.bn2.γ W.d2.bn2.β W.d2.bn2.μ W.d2.bn2.v W.d2.cvp.W W.d2.cvp.b W.d2.bnp.γ W.d2.bnp.β W.d2.bnp.μ W.d2.bnp.v
+    W.b0.cv1.W W.b0.cv1.b W.b0.bn1.γ W.b0.bn1.β W.b0.bn1.μ W.b0.bn1.v W.b0.cv2.W W.b0.cv2.b W.b0.bn2.γ W.b0.bn2.β W.b0.bn2.μ W.b0.bn2.v
+    W.b1.cv1.W W.b1.cv1.b W.b1.bn1.γ W.b1.bn1.β W.b1.bn1.μ W.b1.bn1.v W.b1.cv2.W W.b1.cv2.b W.b1.bn2.γ W.b1.bn2.β W.b1.bn2.μ W.b1.bn2.v
+    W.b2.cv1.W W.b2.cv1.b W.b2.bn1.γ W.b2.bn1.β W.b2.bn1.μ W.b2.bn1.v W.b2.cv2.W W.b2.cv2.b W.b2.bn2.γ W.b2.bn2.β W.b2.bn2.μ W.b2.bn2.v
+    W.d3.cv1.W W.d3.cv1.b W.d3.bn1.γ W.d3.bn1.β W.d3.bn1.μ W.d3.bn1.v W.d3.cv2.W W.d3.cv2.b W.d3.bn2.γ W.d3.bn2.β W.d3.bn2.μ W.d3.bn2.v W.d3.cvp.W W.d3.cvp.b W.d3.bnp.γ W.d3.bnp.β W.d3.bnp.μ W.d3.bnp.v
+    W.c0.cv1.W W.c0.cv1.b W.c0.bn1.γ W.c0.bn1.β W.c0.bn1.μ W.c0.bn1.v W.c0.cv2.W W.c0.cv2.b W.c0.bn2.γ W.c0.bn2.β W.c0.bn2.μ W.c0.bn2.v
+    W.c1.cv1.W W.c1.cv1.b W.c1.bn1.γ W.c1.bn1.β W.c1.bn1.μ W.c1.bn1.v W.c1.cv2.W W.c1.cv2.b W.c1.bn2.γ W.c1.bn2.β W.c1.bn2.μ W.c1.bn2.v
+    W.c2.cv1.W W.c2.cv1.b W.c2.bn1.γ W.c2.bn1.β W.c2.bn1.μ W.c2.bn1.v W.c2.cv2.W W.c2.cv2.b W.c2.bn2.γ W.c2.bn2.β W.c2.bn2.μ W.c2.bn2.v
+    W.c3.cv1.W W.c3.cv1.b W.c3.bn1.γ W.c3.bn1.β W.c3.bn1.μ W.c3.bn1.v W.c3.cv2.W W.c3.cv2.b W.c3.bn2.γ W.c3.bn2.β W.c3.bn2.μ W.c3.bn2.v
+    W.c4.cv1.W W.c4.cv1.b W.c4.bn1.γ W.c4.bn1.β W.c4.bn1.μ W.c4.bn1.v W.c4.cv2.W W.c4.cv2.b W.c4.bn2.γ W.c4.bn2.β W.c4.bn2.μ W.c4.bn2.v
+    W.d4.cv1.W W.d4.cv1.b W.d4.bn1.γ W.d4.bn1.β W.d4.bn1.μ W.d4.bn1.v W.d4.cv2.W W.d4.cv2.b W.d4.bn2.γ W.d4.bn2.β W.d4.bn2.μ W.d4.bn2.v W.d4.cvp.W W.d4.cvp.b W.d4.bnp.γ W.d4.bnp.β W.d4.bnp.μ W.d4.bnp.v
+    W.e0.cv1.W W.e0.cv1.b W.e0.bn1.γ W.e0.bn1.β W.e0.bn1.μ W.e0.bn1.v W.e0.cv2.W W.e0.cv2.b W.e0.bn2.γ W.e0.bn2.β W.e0.bn2.μ W.e0.bn2.v
+    W.e1.cv1.W W.e1.cv1.b W.e1.bn1.γ W.e1.bn1.β W.e1.bn1.μ W.e1.bn1.v W.e1.cv2.W W.e1.cv2.b W.e1.bn2.γ W.e1.bn2.β W.e1.bn2.μ W.e1.bn2.v
+    W.head.W W.head.b x)
+      = r34EvalForward W ε x :=
+  (StableHLO.resnet34FwdGraphFullPCEval_faithful epsStr ε W.stem.W W.stem.b W.bns.γ W.bns.β W.bns.μ W.bns.v W.a0.cv1.W W.a0.cv1.b W.a0.bn1.γ W.a0.bn1.β W.a0.bn1.μ W.a0.bn1.v W.a0.cv2.W W.a0.cv2.b W.a0.bn2.γ W.a0.bn2.β W.a0.bn2.μ W.a0.bn2.v W.a1.cv1.W W.a1.cv1.b W.a1.bn1.γ W.a1.bn1.β W.a1.bn1.μ W.a1.bn1.v W.a1.cv2.W W.a1.cv2.b W.a1.bn2.γ W.a1.bn2.β W.a1.bn2.μ W.a1.bn2.v W.a2.cv1.W W.a2.cv1.b W.a2.bn1.γ W.a2.bn1.β W.a2.bn1.μ W.a2.bn1.v W.a2.cv2.W W.a2.cv2.b W.a2.bn2.γ W.a2.bn2.β W.a2.bn2.μ W.a2.bn2.v W.d2.cv1.W W.d2.cv1.b W.d2.bn1.γ W.d2.bn1.β W.d2.bn1.μ W.d2.bn1.v W.d2.cv2.W W.d2.cv2.b W.d2.bn2.γ W.d2.bn2.β W.d2.bn2.μ W.d2.bn2.v W.d2.cvp.W W.d2.cvp.b W.d2.bnp.γ W.d2.bnp.β W.d2.bnp.μ W.d2.bnp.v W.b0.cv1.W W.b0.cv1.b W.b0.bn1.γ W.b0.bn1.β W.b0.bn1.μ W.b0.bn1.v W.b0.cv2.W W.b0.cv2.b W.b0.bn2.γ W.b0.bn2.β W.b0.bn2.μ W.b0.bn2.v W.b1.cv1.W W.b1.cv1.b W.b1.bn1.γ W.b1.bn1.β W.b1.bn1.μ W.b1.bn1.v W.b1.cv2.W W.b1.cv2.b W.b1.bn2.γ W.b1.bn2.β W.b1.bn2.μ W.b1.bn2.v W.b2.cv1.W W.b2.cv1.b W.b2.bn1.γ W.b2.bn1.β W.b2.bn1.μ W.b2.bn1.v W.b2.cv2.W W.b2.cv2.b W.b2.bn2.γ W.b2.bn2.β W.b2.bn2.μ W.b2.bn2.v W.d3.cv1.W W.d3.cv1.b W.d3.bn1.γ W.d3.bn1.β W.d3.bn1.μ W.d3.bn1.v W.d3.cv2.W W.d3.cv2.b W.d3.bn2.γ W.d3.bn2.β W.d3.bn2.μ W.d3.bn2.v W.d3.cvp.W W.d3.cvp.b W.d3.bnp.γ W.d3.bnp.β W.d3.bnp.μ W.d3.bnp.v W.c0.cv1.W W.c0.cv1.b W.c0.bn1.γ W.c0.bn1.β W.c0.bn1.μ W.c0.bn1.v W.c0.cv2.W W.c0.cv2.b W.c0.bn2.γ W.c0.bn2.β W.c0.bn2.μ W.c0.bn2.v W.c1.cv1.W W.c1.cv1.b W.c1.bn1.γ W.c1.bn1.β W.c1.bn1.μ W.c1.bn1.v W.c1.cv2.W W.c1.cv2.b W.c1.bn2.γ W.c1.bn2.β W.c1.bn2.μ W.c1.bn2.v W.c2.cv1.W W.c2.cv1.b W.c2.bn1.γ W.c2.bn1.β W.c2.bn1.μ W.c2.bn1.v W.c2.cv2.W W.c2.cv2.b W.c2.bn2.γ W.c2.bn2.β W.c2.bn2.μ W.c2.bn2.v W.c3.cv1.W W.c3.cv1.b W.c3.bn1.γ W.c3.bn1.β W.c3.bn1.μ W.c3.bn1.v W.c3.cv2.W W.c3.cv2.b W.c3.bn2.γ W.c3.bn2.β W.c3.bn2.μ W.c3.bn2.v W.c4.cv1.W W.c4.cv1.b W.c4.bn1.γ W.c4.bn1.β W.c4.bn1.μ W.c4.bn1.v W.c4.cv2.W W.c4.cv2.b W.c4.bn2.γ W.c4.bn2.β W.c4.bn2.μ W.c4.bn2.v W.d4.cv1.W W.d4.cv1.b W.d4.bn1.γ W.d4.bn1.β W.d4.bn1.μ W.d4.bn1.v W.d4.cv2.W W.d4.cv2.b W.d4.bn2.γ W.d4.bn2.β W.d4.bn2.μ W.d4.bn2.v W.d4.cvp.W W.d4.cvp.b W.d4.bnp.γ W.d4.bnp.β W.d4.bnp.μ W.d4.bnp.v W.e0.cv1.W W.e0.cv1.b W.e0.bn1.γ W.e0.bn1.β W.e0.bn1.μ W.e0.bn1.v W.e0.cv2.W W.e0.cv2.b W.e0.bn2.γ W.e0.bn2.β W.e0.bn2.μ W.e0.bn2.v W.e1.cv1.W W.e1.cv1.b W.e1.bn1.γ W.e1.bn1.β W.e1.bn1.μ W.e1.bn1.v W.e1.cv2.W W.e1.cv2.b W.e1.bn2.γ W.e1.bn2.β W.e1.bn2.μ W.e1.bn2.v W.head.W W.head.b x).trans
+    (congrFun (r34EvalForward_eq_full_pc_eval W ε).symm x)
+
+/-- ⭐⭐ **The number, stated about the committed inference forward.** `r34_float_logits_le`
+    with `resnet34Forward_full_pc_eval` on the real side instead of the record-bundled
+    `r34EvalForward` — so the budget is a claim about the net `@resnet34_fwd_eval` renders,
+    tied through `r34EvalGraph_faithful` rather than by inspection. -/
+theorem r34_float_logits_le_committed (M : FloatModel) (hMu : M.u ≤ u32) {ε : ℝ}
+    (hε5 : 1 / 100000 ≤ ε) (R : DeviceRsqrt ε (1/100))
+    (W : R34Weights (21/10) (21/10) (21/10) (21/10) (21/10))
+    (x : Vec (3 * 224 * 224)) (hx : ∀ k, |x k| ≤ 1) (j : Fin 10) :
+    |r34EvalForwardF M R W x j - resnet34Forward_full_pc_eval ε
+        W.stem.W W.stem.b W.bns.γ W.bns.β W.bns.μ W.bns.v
+    W.a0.cv1.W W.a0.cv1.b W.a0.bn1.γ W.a0.bn1.β W.a0.bn1.μ W.a0.bn1.v W.a0.cv2.W W.a0.cv2.b W.a0.bn2.γ W.a0.bn2.β W.a0.bn2.μ W.a0.bn2.v
+    W.a1.cv1.W W.a1.cv1.b W.a1.bn1.γ W.a1.bn1.β W.a1.bn1.μ W.a1.bn1.v W.a1.cv2.W W.a1.cv2.b W.a1.bn2.γ W.a1.bn2.β W.a1.bn2.μ W.a1.bn2.v
+    W.a2.cv1.W W.a2.cv1.b W.a2.bn1.γ W.a2.bn1.β W.a2.bn1.μ W.a2.bn1.v W.a2.cv2.W W.a2.cv2.b W.a2.bn2.γ W.a2.bn2.β W.a2.bn2.μ W.a2.bn2.v
+    W.d2.cv1.W W.d2.cv1.b W.d2.bn1.γ W.d2.bn1.β W.d2.bn1.μ W.d2.bn1.v W.d2.cv2.W W.d2.cv2.b W.d2.bn2.γ W.d2.bn2.β W.d2.bn2.μ W.d2.bn2.v W.d2.cvp.W W.d2.cvp.b W.d2.bnp.γ W.d2.bnp.β W.d2.bnp.μ W.d2.bnp.v
+    W.b0.cv1.W W.b0.cv1.b W.b0.bn1.γ W.b0.bn1.β W.b0.bn1.μ W.b0.bn1.v W.b0.cv2.W W.b0.cv2.b W.b0.bn2.γ W.b0.bn2.β W.b0.bn2.μ W.b0.bn2.v
+    W.b1.cv1.W W.b1.cv1.b W.b1.bn1.γ W.b1.bn1.β W.b1.bn1.μ W.b1.bn1.v W.b1.cv2.W W.b1.cv2.b W.b1.bn2.γ W.b1.bn2.β W.b1.bn2.μ W.b1.bn2.v
+    W.b2.cv1.W W.b2.cv1.b W.b2.bn1.γ W.b2.bn1.β W.b2.bn1.μ W.b2.bn1.v W.b2.cv2.W W.b2.cv2.b W.b2.bn2.γ W.b2.bn2.β W.b2.bn2.μ W.b2.bn2.v
+    W.d3.cv1.W W.d3.cv1.b W.d3.bn1.γ W.d3.bn1.β W.d3.bn1.μ W.d3.bn1.v W.d3.cv2.W W.d3.cv2.b W.d3.bn2.γ W.d3.bn2.β W.d3.bn2.μ W.d3.bn2.v W.d3.cvp.W W.d3.cvp.b W.d3.bnp.γ W.d3.bnp.β W.d3.bnp.μ W.d3.bnp.v
+    W.c0.cv1.W W.c0.cv1.b W.c0.bn1.γ W.c0.bn1.β W.c0.bn1.μ W.c0.bn1.v W.c0.cv2.W W.c0.cv2.b W.c0.bn2.γ W.c0.bn2.β W.c0.bn2.μ W.c0.bn2.v
+    W.c1.cv1.W W.c1.cv1.b W.c1.bn1.γ W.c1.bn1.β W.c1.bn1.μ W.c1.bn1.v W.c1.cv2.W W.c1.cv2.b W.c1.bn2.γ W.c1.bn2.β W.c1.bn2.μ W.c1.bn2.v
+    W.c2.cv1.W W.c2.cv1.b W.c2.bn1.γ W.c2.bn1.β W.c2.bn1.μ W.c2.bn1.v W.c2.cv2.W W.c2.cv2.b W.c2.bn2.γ W.c2.bn2.β W.c2.bn2.μ W.c2.bn2.v
+    W.c3.cv1.W W.c3.cv1.b W.c3.bn1.γ W.c3.bn1.β W.c3.bn1.μ W.c3.bn1.v W.c3.cv2.W W.c3.cv2.b W.c3.bn2.γ W.c3.bn2.β W.c3.bn2.μ W.c3.bn2.v
+    W.c4.cv1.W W.c4.cv1.b W.c4.bn1.γ W.c4.bn1.β W.c4.bn1.μ W.c4.bn1.v W.c4.cv2.W W.c4.cv2.b W.c4.bn2.γ W.c4.bn2.β W.c4.bn2.μ W.c4.bn2.v
+    W.d4.cv1.W W.d4.cv1.b W.d4.bn1.γ W.d4.bn1.β W.d4.bn1.μ W.d4.bn1.v W.d4.cv2.W W.d4.cv2.b W.d4.bn2.γ W.d4.bn2.β W.d4.bn2.μ W.d4.bn2.v W.d4.cvp.W W.d4.cvp.b W.d4.bnp.γ W.d4.bnp.β W.d4.bnp.μ W.d4.bnp.v
+    W.e0.cv1.W W.e0.cv1.b W.e0.bn1.γ W.e0.bn1.β W.e0.bn1.μ W.e0.bn1.v W.e0.cv2.W W.e0.cv2.b W.e0.bn2.γ W.e0.bn2.β W.e0.bn2.μ W.e0.bn2.v
+    W.e1.cv1.W W.e1.cv1.b W.e1.bn1.γ W.e1.bn1.β W.e1.bn1.μ W.e1.bn1.v W.e1.cv2.W W.e1.cv2.b W.e1.bn2.γ W.e1.bn2.β W.e1.bn2.μ W.e1.bn2.v
+    W.head.W W.head.b x j| ≤ 1548 * 10 ^ 206 :=
+  r34_float_logits_le M hMu hε5 R W x hx j
 
 end Proofs

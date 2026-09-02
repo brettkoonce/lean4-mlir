@@ -93,6 +93,7 @@ import LeanMlir.Proofs.Float.ViTAttentionFloatBridge
 import LeanMlir.Proofs.Float.ViTBlockFloatBridge
 import LeanMlir.Proofs.Float.Cifar8FloatBridge
 import LeanMlir.Proofs.Float.Cifar8FloatBudget
+import LeanMlir.Proofs.Codegen.ResNet34RenderPCEval
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
@@ -2035,6 +2036,19 @@ open Proofs
 #print axioms Proofs.r34EvalBridge_mag_le
 #print axioms Proofs.r34EvalBridge_fresh_le
 #print axioms Proofs.r34_float_logits_le
+-- ⭐ The eval twin of resnet34FwdGraphFullPC_faithful, and the tie it closes. The typed SHlo
+-- inference graph (every line of which @resnet34_fwd_eval renders) DENOTES the R forward the
+-- number above bounds: resnet34FwdGraphFullPCEval_faithful is the whole-net half,
+-- r34EvalForward_eq_full_pc_eval the rfl from the record-bundled forward onto the committed
+-- resnet34Forward_full_pc_eval, r34EvalGraph_faithful their composite, and
+-- r34_float_logits_le_committed the number restated with that net on the real side. Before
+-- this the eval forward was rendered from the verified AST but tied to no R def.
+#print axioms Proofs.StableHLO.idBlockGraphPCEval_faithful
+#print axioms Proofs.StableHLO.downBlockGraphPCEval_faithful
+#print axioms Proofs.StableHLO.resnet34FwdGraphFullPCEval_faithful
+#print axioms Proofs.r34EvalForward_eq_full_pc_eval
+#print axioms Proofs.r34EvalGraph_faithful
+#print axioms Proofs.r34_float_logits_le_committed
 -- The block bridges are now generic in the NORMALISATION (rblkGen / rblkStridedGen), so one
 -- pair serves the training-mode net (rblkPC_eq_gen / rblkPStridedPC_eq_gen, both rfl) and the
 -- inference net the number is stated for.

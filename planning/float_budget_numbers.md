@@ -122,7 +122,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 
 | net | state | what closing needs |
 |---|---|---|
-| **ResNet-34 fwd** | ✅ **DONE** (inference BN) — `r34_float_logits_le`, 1.548·10²⁰⁹ | the eval-graph faithfulness tie (§3.1) |
+| **ResNet-34 fwd** | ✅ **DONE** (inference BN) — `r34_float_logits_le`, 1.548·10²⁰⁹, tied to the graph | — |
 | MobileNetV2 fwd | open: `hbnS hbnH` + `b1..b6` | port the blocks to `To`-defs at the INFERENCE BN, then the r34 recipe verbatim |
 | EfficientNet-B0 fwd | open: 10 batched `bnBatchLA` bridges | an inference-BN leaf at the batched index (`batchMap` of the per-example eval BN — `FloatBridgesTo.batchMap` handles the lift) |
 | ConvNeXt-T Ch fwd | open: 22 pure-normalise LN bridges | ⛔ blocked on §0.1 — the LN modulus is quadratic and LN has no eval mode |
@@ -130,14 +130,20 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
-`r34EvalBridge` is the `r34Forward` skeleton with `bnPerChannelEvalTensor3` at all 33 BN sites.
-That op is what `SHlo.bnPerChannelEvalF` denotes (`bnPerChannelEvalF_faithful`, `rfl`), so it is
-the ℝ semantics of every BN line of the committed `@resnet34_fwd_eval` render — but the
-**whole-graph** faithfulness theorem for the eval chain does not exist. The training chain has
-one (`resnet34FwdGraphFullPC_faithful`, `ResNet34RenderPC.lean`). Building the eval twin is the
-remaining tie work: `idBlockGraphPCEval` / `downBlockGraphPCEval` + `_faithful`, then
-`resnet34FwdGraphFullPCEval` + `_faithful`, mirroring the training pair one for one. Until then
-the disclosure in `formalization.yaml` §4d states the tie honestly as skeleton-level.
+`r34EvalBridge` is the `r34Forward` skeleton with `bnPerChannelEvalTensor3` at all 33 BN sites,
+and the tie is now closed at the graph. `ResNet34RenderPCEval.lean` mirrors
+`ResNet34RenderPC.lean`'s part 2 one rung for one — `idBlockGraphPCEval` /
+`downBlockGraphPCEval` + `_faithful`, then `resnet34FwdGraphFullPCEval` + `_faithful` against
+`resnet34Forward_full_pc_eval` — and in the budget file `r34EvalForward_eq_full_pc_eval`
+(`rfl`) + `r34EvalGraph_faithful` compose them, with `r34_float_logits_le_committed` restating
+the number on the committed net. The eval forward now has exactly the standing the training
+forward has, and the only remaining modelled input is `DeviceRsqrt`'s accuracy, which is
+irreducible (a device `rsqrt` has no IEEE spec).
+
+⚠ The eval graph needs 219 arguments where the training one needs 146 — each BN site carries
+its frozen mean and variance as well as γ/β. Generate that signature, do not type it. The SSA
+names follow `ResNet34Render.lean`'s `bnSite` convention (`%{p}n1mu`/`%{p}n1var`, `stn` for the
+stem) so the typed graph and the emitted text name the same inputs; names never enter `den`.
 
 ⚠ **`BnEvalFloatBridge.lean`'s premise is wrong and is now corrected in place.** It models
 deployed BN as a pre-folded affine `a·x + b` and says *"there is no batch reduction and no
@@ -147,15 +153,73 @@ runtime `rsqrt`"*. The first half is the point; the second is not what this repo
 kernel we ship; `floatClose_bnEval`'s affine remains true and remains about a program we do not
 run. Do not build the other nets' numbers on the affine.
 
-### 3.2 MobileNetV2 — next, and it should be quick
+### 3.2 MobileNetV2 — NEXT. Everything it needs already exists; read this before starting.
 
-Same recipe. The legacy per-block chain exists (`floatBridges_ivExpandPC` →
-`_ivDepthwiseStridedPC` → `_ivProjectPC`); port each to a `To`-def generic in the normalisation
-the way `rblkGen` is, plug in `floatBridgesTo_bnPerChannelEvalTensor3`, and add
-`Maps.comp_depthwise` / `Maps.comp_relu6` / `Maps.residual` (the last already exists). Tie:
-`mobilenetv2Forward_full_pc_eq_skeleton` is the training tie, so the same eval caveat applies.
-⚠ The blueprint's `2.7·10⁶⁰` for this net is the probe's EVAL-BN adjoint-chain figure, not the
-interval fold — expect the fold to land far above it, as r34's did.
+**Status: nothing is missing, it is assembly.** Every `To`-leaf is built
+(`floatBridgesTo_flatConv`, `_flatConvStride2`, `_depthwise`, `_depthwiseStride2Flat`,
+`_relu6`, `_gap`, `_dense`, `_bnPerChannelEvalTensor3`), the skeleton takes its blocks
+abstractly (`mnv2Forward`'s `bnS bnH b1..b6` — so eval BN plugs straight into the slots, no
+new net def needed), the training tie exists (`mobilenetv2Forward_full_pc_eq_skeleton`) and so
+does the training graph + faithfulness (`mobilenetv2FwdGraphFullPC_faithful`,
+`MobileNetV2RenderPC.lean`) to mirror. The r34 recipe transfers step for step.
+
+**⭐ Do this first: teach `relu6` its clamp. One line, and it is worth ~97 orders on the
+window.** `relu6 n x i = min (max (x i) 0) 6` is bounded by `6` *whatever its input*, but
+`floatClose_relu6` states `FloatClose A A` — the window passes straight through. Strengthen it
+to `FloatClose A (min A 6)` (the magnitude clause is `relu6_abs_le` against `6` instead of
+against `hv i`; the error clause is untouched), add the `Maps.relu6` peer, and every
+expand/depthwise stage RESETS the window. Measured with `mnv2_eval_chain` in the generator:
+
+| | output window | fresh budget |
+|---|---|---|
+| `relu6` as pass-through (today's leaf) | 10¹⁰⁰ | 10⁹⁷ |
+| `relu6` clamped at 6 | **10³** | 10⁹⁶ |
+
+So MobileNetV2's certified window comes out *essentially tight* — 10³ against logits of a few
+— where ResNet-34's is 10²¹¹. ResNet-34 cannot have this: plain `relu` has no upper clamp.
+
+**⚠ The budget barely moves, and that is the real lesson.** The window collapses; the budget
+goes 10⁹⁷ → 10⁹⁶. Error gain per stage is unaffected by how small the window is — it is
+`G·S` per BN site, and `S = 1/√ε ≤ 317` at the ε-floor. Sweeping `S` (same fold):
+
+| `S` | 317 (ε-floor at 1e-5) | 32 | 4 | 1 (σ² ≈ 1) |
+|---|---|---|---|---|
+| budget | 10⁹⁶ | 10⁷⁷ | 10⁶⁰ | 10⁴⁸ |
+
+~19 orders per decade of `S` across the 20 BN sites. So the operating-point variance floor
+(§0.1 item 2) is worth ~48 orders here and nothing else is. Note the probe's adjoint-chain
+figure for this net is `2.7·10⁶⁰`, so the fold at the ε-floor sits only ~36 orders above it —
+much closer than ResNet-34's 157, because the clamped window removes the window looseness and
+leaves only the gain looseness.
+
+**The steps, in order.**
+1. `floatClose_relu6` clamp + `Maps.relu6` (above). Cheap, self-contained, commit-able alone.
+2. `Maps.comp_depthwise` / `Maps.comp_depthwiseStride2Flat` — `floatBridgesTo_depthwise`'s
+   `mag`/`mod` are `layerAct`/`layerBudget` at fan-in `kH*kW`, so both are `Maps.flatConv`'s
+   proof verbatim with `m := kH*kW`. Ten lines each.
+3. Make the block defs generic in the normalisation, the `rblkGen` way: `ivExpandGen`,
+   `ivDepthwiseGen`, `ivDepthwiseStridedGen`, `ivProjectGen`, then `invresBodyGen` /
+   `invresBodyStridedGen`, each with its `_eq_gen` `rfl` onto the existing `*PC` def. Then ONE
+   set of block bridges serves training and inference, as `floatBridgesTo_r34IdBlock` does.
+4. `MobileNetV2RenderPCEval.lean` — the eval graph twin, mirroring `MobileNetV2RenderPC.lean`
+   rung for rung (`ivExpandGraphEval`… → `mobilenetv2FwdGraphFullPCEval` + `_faithful` against
+   a new `mobilenetv2Forward_full_pc_eval`). Generate the signature; each BN site adds its
+   frozen mean and variance, so it grows the same way r34's did (146 → 219).
+5. `MobileNetV2FloatBudget.lean` — records (`MnvConv`, `MnvBn`, `MnvBlock`, `MnvWeights`,
+   `R34Profile`'s peer), per-block `Maps` lemma, the whole-net chain, the number, and the tie
+   theorems (`_eq_full_pc_eval` `rfl` + `_faithful` composite + `_committed`).
+6. Extend `scripts/float_budget_envelope.py`: promote `mnv2_eval_chain` from a sizing estimate
+   to the emitting fold, and **write its `verify_mnv2` re-assertion pass** — `mnv2_eval_chain`
+   currently has none, and on r34 that pass is what caught the rounded-γ bug.
+
+**Profile.** Measured on `/home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin` (3.5M f32):
+global max `|·| = 2.7157`, 99.99th percentile `1.53`, 2 entries above 2. Use a uniform
+`|·| ≤ 28/10`, the r34 pattern.
+
+⛔ The plan's earlier claim that "the blueprint's `2.7·10⁶⁰` is the proven-H budget for this
+net — the fold should land in that order" was wrong on both counts: that figure is the probe's
+EVAL-BN *adjoint-chain* budget, not an interval fold, and the fold lands ~36 orders above it.
+
 
 ### 3.3–3.5 ConvNeXt-T, EfficientNet-B0, ViT-Tiny
 
@@ -178,7 +242,10 @@ BN-back modulus inherits the same reduction structure. Start only after the forw
 
 ## 5. The `Maps` kit still to add
 
-`comp_flatConvStride4`, `comp_depthwise`, `comp_depthwiseStride2Flat`, `comp_relu6`,
+⭐ `relu6` first, and not as a copy of `Maps.relu`: it CLAMPS at 6 (§3.2), so its window
+step is `min Ā 6`, not `Ā`. Then
+
+`comp_flatConvStride4`, `comp_depthwise`, `comp_depthwiseStride2Flat`,
 `comp_gelu` (rational slack for `√(2/π)`), `comp_swish`, `comp_sigmoid`, `comp_biasAdd`,
 `comp_diagBack`, `comp_layerNormVec`, identity steps for `gather`/`transposeFlat`/`reassoc*`/
 `broadcast`/`clsSlice`, and `seScale` / `perRow` / `batchMap` / `iterate k`. Each is ten lines

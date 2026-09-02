@@ -267,3 +267,52 @@ def verify_r34(rows) -> int:
     ck("gap.E", st[0] * (q * (1 + g50) + g50) + st[1], r["gap"][1])
     conv_ck("dense", 512, r["gap"], r["dense"])   # dense: same shape at fan-in 512
     return n
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# MobileNetV2 @224², INFERENCE BatchNorm — PREDICTED fold (no Lean chain yet)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# ⚠ Unlike `r34_eval_chain` this has no `verify_*` peer and no Lean chain to assert
+# against: it is the sizing estimate `planning/float_budget_numbers.md` §3.2 quotes, and
+# the next session must re-derive the stage list from `MobileNetV2RenderPC.lean` before
+# emitting numerals from it. Profile measured on
+# /home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin: global max |·| = 2.7157.
+
+MNV2_W = F(28, 10)      # every stored parameter, uniformly
+
+
+def mnv2_eval_chain(S=F(317), relu6_clamp=True, w=MNV2_W, es=F(1, 100), q=U32):
+    """Fold the MobileNetV2 inference forward. `relu6_clamp` models the ONE-LINE
+    `floatClose_relu6` strengthening `FloatClose A A` -> `FloatClose A (min A 6)`:
+    `relu6 x i = min (max (x i) 0) 6` is bounded by 6 whatever its input, so every
+    expand/depthwise stage RESETS the window. Without it the window compounds to 1e100;
+    with it the window is ~1e3. The BUDGET is nearly unmoved either way — it is driven by
+    the per-site error gain `G*S`, i.e. by the eps-floor `S = 1/sqrt(eps)`."""
+    G = Bb = Mb = w
+
+    def bnE(st):
+        A, E = st
+        nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
+        return (G * ((A + Mb) * S) + Bb + nb, nb + G * S * E)
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    def r6(st):
+        return (min(st[0], F(6)) if relu6_clamp else st[0], st[1])
+
+    st = (F(1), F(0))
+    st = R(conv(st, 3 * 3 * 3, w, w)); st = R(bnE(st)); st = r6(st)       # stem 3x3/s2
+    # (skip?, expand fan-in = ic, project fan-in = mid); depthwise fan-in is kH*kW = 9
+    for skip, fe, fp in [(False, 16, 64), (True, 24, 96), (False, 24, 96),
+                         (True, 32, 128), (False, 32, 128), (False, 64, 256)]:
+        blkin = st
+        s = R(conv(st, fe, w, w)); s = R(bnE(s)); s = r6(s)               # expand 1x1
+        s = R(conv(s, 9, w, w));   s = R(bnE(s)); s = r6(s)               # depthwise 3x3
+        s = R(conv(s, fp, w, w));  s = R(bnE(s))                          # project 1x1, no relu6
+        st = R(residual(blkin, s)) if skip else s
+    st = R(conv(st, 64, w, w)); st = R(bnE(st)); st = r6(st)              # head 1x1
+    st = R(gap(st, 49))
+    st = R(dense(st, 128, w, w))
+    return st

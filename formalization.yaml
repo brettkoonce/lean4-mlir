@@ -528,13 +528,17 @@ fidelity:
        157 orders between them are the documented gaps, the uniform `m*w'*A` face of
        `layerBudget` and worst-case rather than measured windows.
 
-       Two hypotheses carry it, both named. (i) The deployed inverse-stddev is a
-       device `rsqrt` with no IEEE specification, so `DeviceRsqrt eps es` supplies it
-       with an accuracy (`es = 1e-2` at the headline) exactly as EfficientNet's
-       sigmoid carries `esig`. (ii) The tie is to the skeleton at the inference BN,
-       not through a proved render tie: the whole-graph faithfulness theorem for the
-       eval chain (the twin of `resnet34FwdGraphFullPC_faithful`) does not exist yet.
-       The TRAINING-mode net has that tie (`resnet34Forward_full_pc_eq_skeleton`) and
+       ONE hypothesis carries it, named: the deployed inverse-stddev is a device
+       `rsqrt` with no IEEE specification, so `DeviceRsqrt eps es` supplies it with an
+       accuracy (`es = 1e-2` at the headline) exactly as EfficientNet's sigmoid
+       carries `esig`. The TIE is closed at the graph -- `ResNet34RenderPCEval.lean`
+       adds the eval twin of `resnet34FwdGraphFullPC_faithful`, so
+       `den (resnet34FwdGraphFullPCEval ...) = resnet34Forward_full_pc_eval ...`;
+       `r34EvalForward_eq_full_pc_eval` is a rfl onto that net and
+       `r34EvalGraph_faithful` composes the two, so the typed graph every line of
+       `@resnet34_fwd_eval` renders denotes the forward the number bounds
+       (`r34_float_logits_le_committed` states it with that net on the real side).
+       The TRAINING-mode net has the same standing structurally and
        cannot have a number: `bnReluBudget` carries the mean-and-variance shift
        `G*2A*(8A*e/(2*eps*sqrt eps))`, QUADRATIC in the window, so the same fold
        squares at each of the 33 BN sites and lands at ~1e7417 -- past the point where
