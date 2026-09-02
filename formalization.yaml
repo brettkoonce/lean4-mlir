@@ -71,9 +71,9 @@ status:
     ERROR — a binary32 rounding model constructed from scratch (rndP, standard
     model PROVED, no hardware axioms), whole-net forward+backward float-error
     bridges for all nets (⚠ stated as FloatBridges, which does not name the float
-    map -- see fidelity.divergences 4d; 9 of the 11 whole-net bridges are migrated
-    to FloatBridgesTo, which does; the EfficientNet FORWARD and the convnextCh_*
-    pair are not yet), depth-linear adjoint-chain composition bounds
+    map -- see fidelity.divergences 4d; 10 of the 11 whole-net bridges are migrated
+    to FloatBridgesTo, which does; only the convnextCh_* instantiated pair is not
+    yet), depth-linear adjoint-chain composition bounds
     certified for every net, an fp8-E4M3 argmax-preservation theorem, and a
     whole-net float certificate at the committed CIFAR-8 shape (cifar8_chain_argmaxSafeH: given
     measured tail gains, binary32 rounding cannot flip the prediction; its layer
@@ -371,11 +371,21 @@ fidelity:
        skeleton -- r34ForwardF / r34InputGradF / mnv2ForwardF / mnv2InputGradF /
        convnextForwardF / convnextInputGradF / vitForwardFlatF / vitGradFlatF /
        efficientnetInputGradBF): both r34, both mnv2, both convnext (skeleton),
-       both vit, and the EfficientNet backward. NOT YET: the EfficientNet FORWARD
-       (efficientnetForwardB_floatBridges -- unlike every other whole-net theorem it
-       derives its 5 block bridges from leaf data rather than taking them as
-       hypotheses, so its 11 layered block bridges must migrate first) and the
-       convnextCh_* instantiated pair (same reason: they plug concrete stages).
+       both vit, both efficientnet (its FORWARD needed the whole 11-bridge layered
+       cone migrated first -- stemBF / cbsBF / dwbsBF / dwbsSBF / seBF / projBF and
+       the four block peers -- because unlike every other whole-net theorem it
+       derives its block bridges from leaf data rather than taking them as
+       hypotheses). NOT YET: the convnextCh_* instantiated pair, which plugs
+       concrete stages and so needs convNextStageChK / cnxDownChW migrated first.
+
+       ⚠ The same existential-float-map defect was ALSO found one tier down, in the
+       `floatClose_*` layer this entry had called clean: `floatClose_seGate` and
+       `floatClose_seBlockFull` conclude `exists B L gF, FloatClose A B f gF L`,
+       hiding the float map rather than only the B/L bookkeeping. Those are the only
+       two (`FloatComposeBridge`'s two `exists B L` lemmas write their float map out
+       explicitly and are fine). Both now have named peers -- `floatClose_seGateF` /
+       `floatClose_seBlockFullF` over `seGateF` / `seBlockFullF` -- which is what
+       unblocked the EfficientNet forward.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

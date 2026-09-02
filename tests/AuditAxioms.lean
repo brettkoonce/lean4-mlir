@@ -1962,6 +1962,14 @@ open Proofs
 #print axioms Proofs.vit_floatBridgesTo
 #print axioms Proofs.vit_grad_floatBridgesTo
 #print axioms Proofs.efficientnet_grad_floatBridgesTo
+-- The EfficientNet FORWARD cone, migrated: its 11 layered stage/block bridges each
+-- name their float peer, so the capstone can too. Reaching it also required naming
+-- the float map inside floatClose_seGate / floatClose_seBlockFull, which bound it
+-- existentially exactly like FloatBridges did (formalization.yaml 4d).
+#print axioms Proofs.floatClose_seGateF
+#print axioms Proofs.floatBridgesTo_seBlockFull
+#print axioms Proofs.floatBridgesTo_mbResidFwdB
+#print axioms Proofs.efficientnetForwardB_floatBridgesTo
 -- The named per-block FORWARD bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack), so the
 -- whole-net fold's block hypotheses are discharged by name exactly as the backward's are:
 -- floatBridges_r34IdBlock (rblkPC = relu∘residual(body); FloatBridges.residual skip) +

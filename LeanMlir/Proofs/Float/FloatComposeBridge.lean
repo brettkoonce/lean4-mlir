@@ -640,4 +640,15 @@ theorem FloatBridges.residual {m : Nat} (M : FloatModel) {f : Vec m → Vec m}
   have hBA : 0 ≤ B + A := add_nonneg hB hA
   have := M.u_nonneg; nlinarith [mul_nonneg this hBA]
 
+/-- **`FloatBridgesTo.residual`** — the additive skip with the float map named:
+    `fun v j => M.add (fF v j) (v j)`, the rounded add of the rounded body. -/
+theorem FloatBridgesTo.residual {m : Nat} (M : FloatModel) {f fF : Vec m → Vec m}
+    (hf : FloatBridgesTo f fF) :
+    FloatBridgesTo (Proofs.residual f) (fun v j => M.add (fF v j) (v j)) := by
+  intro A hA
+  obtain ⟨B, L, hB, hfc⟩ := hf A hA
+  refine ⟨B + A + M.u * (B + A), _, ?_, floatClose_residual M hfc⟩
+  have hBA : 0 ≤ B + A := add_nonneg hB hA
+  have := M.u_nonneg; nlinarith [mul_nonneg this hBA]
+
 end Proofs
