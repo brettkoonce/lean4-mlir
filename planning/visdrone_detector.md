@@ -809,6 +809,11 @@ follow-on arms were running when this was written.
    → **RAN, §13b — closed at +0.7%, and it found a recipe error.**
 4. **The backbone** (§8), last. Do not swap on a recipe still being tuned.
 
+▶ **2026-09-02: the next architecture step is scoped in `planning/yolo_v5_recipe.md`**
+— v5's *recipe* (assignment, mosaic, class readout) on this same R34+FPN body, not a
+backbone port. Its lead item attacks the 88.2% encodability ceiling above, costs **no
+new VJPs**, and is gated by a seconds-long coverage re-run before any GPU time.
+
 ### §13b. ⚠⚠ The recipe on record does not reproduce the number on record — `--topk`
 
 **`--topk 3000` is part of the recipe and this doc never said so.** Every
