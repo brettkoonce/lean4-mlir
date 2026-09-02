@@ -205,9 +205,25 @@ detector is worst at, after three loss-side attempts failed. The honest subject 
 this demo remains why aerial detection collapses on small, rare classes at 2–5 px
 — but the answer now looks like object scale rather than the objective.
 
-Figure: `demos/figures/visdrone_fpn.png` (truth over prediction, densest val
-frames). Full workings: `runs/2026-08-28-visdrone-fpn-rebuild/README.md` and
-`runs/2026-09-01-visdrone-decode-sweep/README.md`.
+Figures, all from `scripts/fpn_render.py`, which imports the decode from
+`yolo_map_visdrone.py` so the boxes drawn are by construction the boxes scored:
+
+- `demos/figures/visdrone_fpn.png` — truth over prediction, four val frames.
+- `demos/figures/visdrone_fpn_before_after.png` — truth | after | before, by class.
+- `demos/figures/visdrone_fpn_match.png` — the same pair coloured by **correctness**
+  (green hit / red false positive / yellow missed), which is the only view that shows
+  what a before/after changed. ⚠ Read the per-frame counts, not the overall look: on
+  these four dense frames the gain is a few boxes each (47 vs 44 hits, 28 vs 24). Most
+  of the +20.5% is rare-class ranking spread over all 548 val images, and no single
+  frame displays that.
+
+⚠ Frames are chosen with `--diverse`. Picking the *densest* frames — the previous
+default — selects consecutive frames of one VisDrone sequence, so the figure shows
+one street corner four times and reads as a duplicate.
+
+Full workings: `runs/2026-08-28-visdrone-fpn-rebuild/README.md`,
+`runs/2026-09-01-visdrone-decode-sweep/README.md` and
+`runs/2026-09-01-visdrone-affine/README.md`.
 
 ## Oxford-IIIT Pets detection (cat/dog head boxes, YOLOv1, mAP@0.5)
 
