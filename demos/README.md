@@ -100,10 +100,11 @@ lake exe unet-brats-train data/brats 10 ce
 
 ## FPN detector — object detection on VisDrone
 
-Multi-scale detection on real drone-altitude imagery. A ResNet-34 backbone
-(trained by this stack on ImageNet) feeds an FPN top-down neck into three
-anchor heads at strides 8/16/32, with a DIoU box loss, focal objectness and
-class-weighted CE. 448 px input, 10 VisDrone classes.
+Multi-scale detection on real drone-altitude imagery, and the best demo in this
+repo for showing what the stack does end to end: a ResNet-34 backbone **trained
+by this stack on ImageNet** feeds an FPN top-down neck into three anchor heads at
+strides 8/16/32, with a DIoU box loss, focal objectness and focal class CE.
+448 px input, 10 VisDrone classes.
 
 VisDrone is the point: a median image holds **70 objects** and many are 2–5 px
 after the resize, which is the regime where a single coarse grid structurally
@@ -119,47 +120,77 @@ python3 preprocess_visdrone.py data/visdrone data/visdrone_fpn \
     --size 448 --grid 14 --fpn data/visdrone
 python3 preprocess_visdrone.py data/visdrone data/visdrone448 --size 448 --grid 14
 
-CUDA_VISIBLE_DEVICES=0 FPN_TAG=run1 lake exe yolov1-visdrone-fpn data/visdrone_fpn
-CUDA_VISIBLE_DEVICES=0 FPN_TAG=run1 lake exe yolov1-visdrone-fpn \
-    infer data/visdrone_fpn runs/fpn_run1
+# the current best recipe — ~2 h on one RTX 4060 Ti
+CUDA_VISIBLE_DEVICES=0 FPN_BACKBONE=r34 FPN_TAG=run1 \
+  FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_AFFINE=50 FPN_EPOCHS=30 \
+  lake exe yolov1-visdrone-fpn data/visdrone_fpn
+
+CUDA_VISIBLE_DEVICES=0 FPN_BACKBONE=r34 FPN_TAG=run1 \
+  lake exe yolov1-visdrone-fpn infer data/visdrone_fpn runs/fpn_run1
+
 python3 scripts/yolo_map_visdrone.py runs/fpn_run1/logits.bin \
-    data/visdrone448/val.bin --grid 14 --fpn data/visdrone
+    data/visdrone448/val.bin --fpn data/visdrone --grid 14 \
+    --multilabel --topk 3000 --ml-k 3 --ml-floor 0.05
+
 python3 scripts/fpn_render.py runs/fpn_run1/logits.bin data/visdrone_fpn/val.bin \
-    --fpn data/visdrone --gt data/visdrone448/val.full_gt.bin \
-    --out demos/figures/visdrone_fpn.png
+    --gt data/visdrone448/val.full_gt.bin --diverse --scale 2 --topk-per-gt \
+    --layout cols --n 4 --out demos/figures/visdrone_fpn.png
 ```
 
-⚠ `FPN_TAG` must be set on `infer` too. Without it the eval silently loads a
-different arm's weights, and the only tell is an epoch sweep whose rows are
-identical. It cost this thread a full day once.
+⚠ Three flags that fail *silently* rather than loudly:
+- **`FPN_TAG` must be set on `infer` too.** Without it the eval loads a different
+  arm's weights, and the only tell is an epoch sweep whose rows are identical.
+- **`FPN_BACKBONE` defaults to `r50`, not `r34`** — omit it and you train a
+  different arm than the one these numbers come from.
+- **`--topk` defaults to 1000**, which truncates the multilabel candidate list.
+  The same checkpoint reads 0.1919 instead of 0.1961 at the default.
 
-Knobs: `FPN_BACKBONE` (`r34` / `r50`), `FPN_AUG`, `FPN_EPOCHS`, `FPN_TOWER`,
-`FPN_NOBOOTSTRAP`.
+Knobs: `FPN_BACKBONE` (`r34`/`r50`), `FPN_AUG`, `FPN_AFFINE` (percent probability
+of the box-aware scale/translate transform), `FPN_CLSW`, `FPN_CLSFOCAL`,
+`FPN_EPOCHS`, `FPN_TOWER`, `FPN_NOBOOTSTRAP`.
 
 ![VisDrone FPN detection](figures/visdrone_fpn.png)
 
-Truth on top, prediction below, on the four densest val frames. **mAP@0.5 =
-0.1674** at 50 epochs with `FPN_AUG=1`, and 65 fps on one RTX 4060 Ti. That
-beats a hand-written PyTorch replica of this same architecture (0.1532) by 9%.
+Truth on top, prediction below, on four val frames. **mAP@0.5 = 0.2363**
+(recall 0.769, class-agnostic AP 0.487) at 30 epochs, and 65 fps on one RTX
+4060 Ti — or **35.7 fps on a 25 W Jetson Orin Nano** under TensorRT fp16, which
+is the deployment this dataset implies. That beats a hand-written PyTorch replica
+of this same architecture (0.1532) by **54%**.
 
-⭐ **Augmentation is what makes a longer schedule pay.** At 50 epochs *without*
-it the same arm scores 0.1243 — worse than 12 epochs (0.1526), with half the
-train loss: ordinary overfitting on 6,471 images. One flag turns −19% into +10%.
-Never run a long schedule here without `FPN_AUG=1`.
+⚠ Frames are picked with `--diverse`. Picking the *densest* frames selects
+consecutive frames of one VisDrone sequence — val records are video — so the
+figure ends up showing a single street corner four times.
 
-⚠ But do not simply run longer either — **both arms peak and then decline**.
-No-aug peaks near epoch 15 (0.1320); with aug the peak is epoch 30 (**0.1731**)
-and 3% is given back by epoch 50. Augmentation moves the optimum from ~15 to ~30
-epochs and raises it 31%; it delays overfitting rather than removing it.
+⭐ **Augmentation and schedule length are one decision, not two.** At 50 epochs
+*without* augmentation the same arm scores 0.1243 — worse than 12 epochs
+(0.1526), with half the train loss: ordinary overfitting on 6,471 images.
+Photometric augmentation recovers it, but at that strength 12 epochs still beats
+50 (0.1961 vs 0.1674). Augmentation that changes object **scale** inverts the
+ordering again, making 30 epochs worth 44% more than 12. A stronger augmentation
+needs a longer schedule to absorb it, so the optimum epoch count is a property of
+the augmentation pack — there is no schedule to tune once and carry across packs.
+
+⭐ **The result is in the per-class split, not the mean.** Per-class AP runs from
+car (0.685) to bicycle (0.036), and scale augmentation narrowed that spread from
+43× to 19× by lifting exactly the classes that were worst: awning-tricycle +59%,
+bicycle +41%, tricycle +40%, against car's +7%. Reweighting the loss toward rare
+classes buys their recall at the expense of precision, and average precision
+charges for the trade; supplying the scales those classes are missing raises both
+at once. Detection on aerial imagery does not degrade uniformly — it collapses on
+whatever is small *and* rare, and an averaged mAP hides exactly that.
+
+![VisDrone predictions coloured by correctness](figures/visdrone_fpn_match.png)
+
+The same frames coloured by **correctness** rather than class — green hit, red
+false positive, yellow missed ground truth — with the 30-epoch arm on the left
+and the 12-epoch one on the right. Read the per-frame counts in the labels: the
+gain on any single dense frame is a few boxes, because most of the improvement is
+rare-class ranking spread across all 548 val images and no one frame displays it.
 
 A YOLOv8s at the same budget scores 0.140; its published-style 0.391 comes from
-8× the epochs, higher resolution and full augmentation, so that gap is recipe
-rather than architecture.
-
-The lesson is in the per-class split rather than the mean: car reaches 0.573
-while bicycle sits at 0.015, a 38× spread. Detection on aerial imagery does not
-degrade uniformly — it collapses on whatever is small *and* rare, and an
-averaged mAP hides exactly that.
+8× the epochs, higher resolution, full augmentation and COCO pretraining, so that
+gap is recipe rather than architecture — and scale augmentation alone has closed
+31% of it.
 
 ---
 
