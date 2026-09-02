@@ -340,4 +340,135 @@ theorem floatBridges_r34DownBlock {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : N
   have hG := (floatBridges_flatConv (h := h) (w := w) M W₂ b₂ hw' hβ' hn hW₂ hb₂).comp hbn2
   exact (FloatBridges.biPathSum M hproj (hH.comp hG)).comp (floatBridges_relu (n := oc * h * w))
 
+-- ════════════════════════════════════════════════════════════════
+-- § The two-branch fan-in, and the two blocks, with the float map NAMED
+-- ════════════════════════════════════════════════════════════════
+
+/-- **`FloatBridgesTo.biPathSum`** — the general two-branch rounded sum `f(x) + g(x)` with the
+    float map and the budget composed. The `g ≠ id` cousin of `FloatBridgesTo.residual`
+    (`floatClose_biPathSum`'s bookkeeping as data); the downsample block's projection fan-in. -/
+noncomputable def FloatBridgesTo.biPathSum {m n : Nat} (M : FloatModel)
+    {f fF g gF : Vec m → Vec n} (hf : FloatBridgesTo f fF) (hg : FloatBridgesTo g gF) :
+    FloatBridgesTo (fun v j => f v j + g v j) (fun v j => M.add (fF v j) (gF v j)) where
+  mag := fun A => hf.mag A + hg.mag A + M.u * (hf.mag A + hg.mag A)
+  mod := fun A e => M.u * (hf.mag A + hf.mod A e + hg.mag A + hg.mod A e)
+                      + (hf.mod A e + hg.mod A e)
+  close := fun A hA =>
+    have h12 : 0 ≤ hf.mag A + hg.mag A := add_nonneg (hf.mag_nonneg hA) (hg.mag_nonneg hA)
+    have hu := M.u_nonneg
+    ⟨by nlinarith [mul_nonneg hu h12],
+     floatClose_biPathSum M (hf.floatClose hA) (hg.floatClose hA)⟩
+
+/-- **The ResNet-34 basic block with its NORMALISATION abstract.** `rblkPC` is this at
+    `bn = bnPerChannelTensor3` (training-mode, batch statistics) and the deployed inference
+    block is this at `bn = bnPerChannelEvalTensor3` (frozen running statistics) — both are
+    `rfl`, so ONE block bridge serves both modes and the choice of BN becomes an argument
+    rather than a second proof. -/
+@[reducible] noncomputable def rblkGen {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (bn1 : Vec (c * h * w) → Vec (c * h * w))
+    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (bn2 : Vec (c * h * w) → Vec (c * h * w)) :
+    Vec (c * h * w) → Vec (c * h * w) :=
+  relu (c * h * w) ∘ residual
+    ((bn2 ∘ flatConv W₂ b₂) ∘ (relu (c * h * w) ∘ bn1 ∘ flatConv W₁ b₁))
+
+/-- `rblkPC` IS `rblkGen` at the training-mode per-channel BN. -/
+theorem rblkPC_eq_gen {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (γ₁ β₁ : Vec c)
+    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (γ₂ β₂ : Vec c) :
+    rblkPC (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂
+      = rblkGen (h := h) (w := w) W₁ b₁ (bnPerChannelTensor3 c h w ε₁ γ₁ β₁)
+          W₂ b₂ (bnPerChannelTensor3 c h w ε₂ γ₂ β₂) := rfl
+
+/-- **The float ResNet-34 basic block** — `rblkGen` with the two convs rounded, the two
+    normalisations replaced by their float maps, the skip-add rounded, and `relu` unchanged
+    (exact in float). -/
+noncomputable def rblkGenF {c h w kH₁ kW₁ kH₂ kW₂ : Nat} (M : FloatModel)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (bn1F : Vec (c * h * w) → Vec (c * h * w))
+    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (bn2F : Vec (c * h * w) → Vec (c * h * w)) :
+    Vec (c * h * w) → Vec (c * h * w) :=
+  relu (c * h * w) ∘ (fun v j =>
+    M.add (((bn2F ∘ M.flatConvF (h := h) (w := w) W₂ b₂) ∘
+             (relu (c * h * w) ∘ bn1F ∘ M.flatConvF (h := h) (w := w) W₁ b₁)) v j) (v j))
+
+/-- **The r34 basic block float-bridges TO its float block** — the `FloatBridgesTo` peer of
+    `floatBridges_r34IdBlock`, generic in the normalisation. Every hypothesis names the float
+    map of its BN and the conclusion names the float block, so the budget `.mod` is a closed
+    term over the two conv `layerBudget`s, the two BN moduli and the rounded skip-add. The
+    dominant r34 block (13 of 16). -/
+noncomputable def floatBridgesTo_r34IdBlock {c h w kH₁ kW₁ kH₂ kW₂ : Nat} (M : FloatModel)
+    (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c)
+    (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
+    (bn1 bn1F bn2 bn2F : Vec (c * h * w) → Vec (c * h * w))
+    {w' β' : ℝ} (hw' : 0 ≤ w') (hβ' : 0 ≤ β') (hn : 0 < c * h * w)
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β')
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β')
+    (hbn1 : FloatBridgesTo bn1 bn1F) (hbn2 : FloatBridgesTo bn2 bn2F) :
+    FloatBridgesTo (rblkGen (h := h) (w := w) W₁ b₁ bn1 W₂ b₂ bn2)
+      (rblkGenF M W₁ b₁ bn1F W₂ b₂ bn2F) :=
+  (FloatBridgesTo.residual M
+      ((((floatBridgesTo_flatConv (h := h) (w := w) M W₁ b₁ hw' hβ' hn hW₁ hb₁).comp hbn1).comp
+          (floatBridgesTo_relu (n := c * h * w))).comp
+        ((floatBridgesTo_flatConv (h := h) (w := w) M W₂ b₂ hw' hβ' hn hW₂ hb₂).comp hbn2))).comp
+    (floatBridgesTo_relu (n := c * h * w))
+
+/-- **The ResNet-34 downsample basic block with its normalisation abstract** — the
+    `rblkGen` peer for the three-BN, 1×1-projection block. -/
+@[reducible] noncomputable def rblkStridedGen {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (bn1 : Vec (oc * h * w) → Vec (oc * h * w))
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (bn2 : Vec (oc * h * w) → Vec (oc * h * w))
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (bnp : Vec (oc * h * w) → Vec (oc * h * w)) :
+    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+  relu (oc * h * w) ∘ residualProj (bnp ∘ flatConvStride2 Wp bp)
+    ((bn2 ∘ flatConv W₂ b₂) ∘ (relu (oc * h * w) ∘ bn1 ∘ flatConvStride2 W₁ b₁))
+
+/-- `rblkPStridedPC` IS `rblkStridedGen` at the training-mode per-channel BN. -/
+theorem rblkPStridedPC_eq_gen {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) :
+    rblkPStridedPC (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp
+      = rblkStridedGen (h := h) (w := w) W₁ b₁ (bnPerChannelTensor3 oc h w ε₁ γ₁ β₁)
+          W₂ b₂ (bnPerChannelTensor3 oc h w ε₂ γ₂ β₂)
+          Wp bp (bnPerChannelTensor3 oc h w εp γp βp) := rfl
+
+/-- **The float ResNet-34 downsample basic block** — three rounded convs (two strided body
+    convs and the 1×1 stride-2 option-B projection), three float normalisations, and the
+    two-branch fan-in rounded. -/
+noncomputable def rblkStridedGenF {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat} (M : FloatModel)
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (bn1F : Vec (oc * h * w) → Vec (oc * h * w))
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (bn2F : Vec (oc * h * w) → Vec (oc * h * w))
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (bnpF : Vec (oc * h * w) → Vec (oc * h * w)) :
+    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+  relu (oc * h * w) ∘ (fun v j =>
+    M.add ((bnpF ∘ M.flatConvStride2F (h := h) (w := w) Wp bp) v j)
+      (((bn2F ∘ M.flatConvF (h := h) (w := w) W₂ b₂) ∘
+         (relu (oc * h * w) ∘ bn1F ∘ M.flatConvStride2F (h := h) (w := w) W₁ b₁)) v j))
+
+/-- **The r34 downsample basic block float-bridges TO its float block** — the projection
+    branch and the body branch each bridge, and `FloatBridgesTo.biPathSum` folds the rounded
+    fan-in; the trailing `relu` composes on top. Generic in the normalisation, like its
+    identity peer. -/
+noncomputable def floatBridgesTo_r34DownBlock {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+    (M : FloatModel)
+    (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
+    (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
+    (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc)
+    (bn1 bn1F bn2 bn2F bnp bnpF : Vec (oc * h * w) → Vec (oc * h * w))
+    {w' β' : ℝ} (hw' : 0 ≤ w') (hβ' : 0 ≤ β')
+    (hn : 0 < oc * h * w) (hni : 0 < ic * (2 * h) * (2 * w))
+    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w') (hb₁ : ∀ o, |b₁ o| ≤ β')
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w') (hb₂ : ∀ o, |b₂ o| ≤ β')
+    (hWp : ∀ o cc kh kw, |Wp o cc kh kw| ≤ w') (hbp : ∀ o, |bp o| ≤ β')
+    (hbn1 : FloatBridgesTo bn1 bn1F) (hbn2 : FloatBridgesTo bn2 bn2F)
+    (hbnp : FloatBridgesTo bnp bnpF) :
+    FloatBridgesTo
+      (rblkStridedGen (h := h) (w := w) W₁ b₁ bn1 W₂ b₂ bn2 Wp bp bnp)
+      (rblkStridedGenF M W₁ b₁ bn1F W₂ b₂ bn2F Wp bp bnpF) :=
+  (FloatBridgesTo.biPathSum M
+      ((floatBridgesTo_flatConvStride2 (h := h) (w := w) M Wp bp hw' hβ' hni hWp hbp).comp hbnp)
+      ((((floatBridgesTo_flatConvStride2 (h := h) (w := w) M W₁ b₁ hw' hβ' hni hW₁ hb₁).comp
+            hbn1).comp (floatBridgesTo_relu (n := oc * h * w))).comp
+        ((floatBridgesTo_flatConv (h := h) (w := w) M W₂ b₂ hw' hβ' hn hW₂ hb₂).comp hbn2))).comp
+    (floatBridgesTo_relu (n := oc * h * w))
+
 end Proofs

@@ -126,4 +126,134 @@ theorem floatBridges_bnPerChannelTensor3 {oc h w : Nat} (M : FloatModel) {ε : �
   exact ((floatBridges_gather (reassocEquiv oc h w)).comp hpc).comp
     (floatBridges_gather (reassocEquiv oc h w).symm)
 
+-- ════════════════════════════════════════════════════════════════
+-- § The same three rungs with the float map AND the budget NAMED
+--   (`FloatBridgesTo` migration — the leaf the whole-net NUMBERS consume)
+-- ════════════════════════════════════════════════════════════════
+
+/-! The `FloatBridges` rungs above name neither the float map nor the modulus, so a
+whole-net fold built on them cannot state a number (`formalization.yaml` fidelity §4d).
+These are their `FloatBridgesTo` peers: `mag`/`mod` written out, so
+`FloatBridgesTo.Env` can push a numeric envelope through a BatchNorm the way it pushes
+one through a conv.
+
+**The two magnitude constants.** `floatClose_bn` is parameterised by the centered bound
+`D` (`|xⱼ − μ| ≤ D`) and the inverse-stddev bound `S` (`|istd| ≤ S`). `D := 2A` is
+generic and tight (`bn_centered_le`). `S` is the one place a BN budget can be loose or
+conditional, so it stays an ARGUMENT here:
+
+* `S := 1/√ε` — the `ε`-floor, discharged unconditionally by `bnIstd_abs_le`
+  (`floatBridgesTo_bnPerChannelTensor3_eps`). Closed, no operating-point hypothesis, and
+  the window it propagates is `≈ 2·G·A/√ε` per BN — at `ε = 10⁻⁵` a factor of ~632 per
+  site, which is where the whole-net interval fold's size comes from.
+* `S := 1/√V` at a variance floor `V ≤ σ²+ε` — the operating-point form
+  (`bnIstd_close_at`'s floor, `FloatComposeBridge.lean`'s header). Tighter by
+  `(σ²/ε)^{1/2}` per site, at the cost of a named hypothesis about activations that
+  nothing in the repo closes. Passing `S` rather than fixing it means that variant is one
+  argument away, not a re-proof.
+
+The float mean/inv-stddev stay SUPPLIED (`fμ`/`fistdv` with accuracy moduli
+`emean`/`eistd`) for the reason `BnFloatBridge.lean`'s header gives: a GPU `rsqrt` has no
+IEEE spec, so the float statistics are modelled, exactly as `fexp`/`fsig` are. -/
+
+/-- The float per-example BN as a MAP: the supplied float mean/inv-stddev evaluated at the
+    layer's own input, then `bnForwardF`'s rounded normalize chain. The float peer of
+    `bnForward` that `floatClose_bn` certifies. -/
+noncomputable def bnForwardFV {m : Nat} (M : FloatModel) (γ β : ℝ) (fμ fistdv : Vec m → ℝ) :
+    Vec m → Vec m :=
+  fun v => M.bnForwardF γ β (fμ v) (fistdv v) v
+
+/-- The BN leaf's output window at input window `A`: the real `|γ·x̂ + β| ≤ G·(2A·S) + Bbnd`
+    plus the normalize chain's rounding (`bnNormBudget`). -/
+noncomputable def bnLeafMag (u S G Bbnd : ℝ) (emean eistd : ℝ → ℝ) (A : ℝ) : ℝ :=
+  G * (2 * A * S) + Bbnd + bnNormBudget u (2 * A) S G Bbnd (emean A) (eistd A)
+
+/-- The BN leaf's error modulus at input window `A`: `bnReluBudget` — the rounding
+    (`bnNormBudget`) plus the real BN's input-sensitivity at inherited error `e`. -/
+noncomputable def bnLeafMod (u ε S G Bbnd : ℝ) (emean eistd : ℝ → ℝ) (A e : ℝ) : ℝ :=
+  bnReluBudget u (2 * A) S G Bbnd (emean A) (eistd A) A e ε
+
+/-- **Flat/global BatchNorm float-bridges TO its float map** — rung 1 with `mag`/`mod`
+    written out. `floatBridges_bn` with the existential opened. -/
+noncomputable def floatBridgesTo_bn {m : Nat} (M : FloatModel) {ε γ β : ℝ}
+    (fμ fistdv : Vec m → ℝ) (emean eistd : ℝ → ℝ) {G Bbnd S : ℝ}
+    (hm : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)
+    (hmean : ∀ A, 0 ≤ A → ∀ v : Vec m, (∀ k, |v k| ≤ A) → |fμ v - bnMean m v| ≤ emean A)
+    (histd : ∀ A, 0 ≤ A → ∀ v : Vec m, (∀ k, |v k| ≤ A) → |fistdv v - bnIstd m v ε| ≤ eistd A)
+    (hS : ∀ v : Vec m, |bnIstd m v ε| ≤ S) :
+    FloatBridgesTo (bnForward m ε γ β) (bnForwardFV M γ β fμ fistdv) :=
+  ⟨bnLeafMag M.u S G Bbnd emean eistd, bnLeafMod M.u ε S G Bbnd emean eistd,
+   fun A hA =>
+     have hfc := floatClose_bn M fμ fistdv hm hε hγ hβ
+       (fun v hv => hmean A hA v hv) (fun v hv => histd A hA v hv)
+       (fun v hv j => bn_centered_le hm v hv j) (fun v _ => hS v)
+     ⟨hfc.cod_nonneg hA hm, hfc⟩⟩
+
+/-- The float per-channel BN (Mat-split flat layout): channel `c` runs the float BN with its
+    own `(γ c, β c)` and its own supplied statistics. The float peer of `bnPerChannelFlat`. -/
+noncomputable def bnPerChannelFlatFV {oc m : Nat} (M : FloatModel) (γ β : Vec oc)
+    (fμ fistdv : Fin oc → Vec m → ℝ) : Vec (oc * m) → Vec (oc * m) :=
+  perRowIdxFlat oc m (fun c => bnForwardFV M (γ c) (β c) (fμ c) (fistdv c))
+
+/-- **Per-channel BatchNorm float-bridges TO its float map** (Mat-split layout) — rung 2 with
+    `mag`/`mod` written out. The block-diagonal `FloatClose.perRowIdx` lift of the per-channel
+    `floatClose_bn`, at the uniform budget the shared `G`/`Bbnd`/`emean`/`eistd`/`S` give. -/
+noncomputable def floatBridgesTo_bnPerChannelFlat {oc m : Nat} (M : FloatModel) {ε : ℝ}
+    (γ β : Vec oc) (fμ fistdv : Fin oc → Vec m → ℝ) (emean eistd : ℝ → ℝ) {G Bbnd S : ℝ}
+    (hoc : 0 < oc) (hm : 0 < m) (hε : 0 < ε)
+    (hγ : ∀ c, |γ c| ≤ G) (hβ : ∀ c, |β c| ≤ Bbnd)
+    (hmean : ∀ c A, 0 ≤ A → ∀ v : Vec m, (∀ k, |v k| ≤ A) → |fμ c v - bnMean m v| ≤ emean A)
+    (histd : ∀ c A, 0 ≤ A → ∀ v : Vec m, (∀ k, |v k| ≤ A) → |fistdv c v - bnIstd m v ε| ≤ eistd A)
+    (hS : ∀ v : Vec m, |bnIstd m v ε| ≤ S) :
+    FloatBridgesTo (bnPerChannelFlat oc m ε γ β) (bnPerChannelFlatFV M γ β fμ fistdv) :=
+  ⟨bnLeafMag M.u S G Bbnd emean eistd, bnLeafMod M.u ε S G Bbnd emean eistd,
+   fun A hA =>
+     have hg := fun c : Fin oc => floatClose_bn M (fμ c) (fistdv c) hm hε (hγ c) (hβ c)
+       (fun v hv => hmean c A hA v hv) (fun v hv => histd c A hA v hv)
+       (fun v hv j => bn_centered_le hm v hv j) (fun v _ => hS v)
+     have hpr := FloatClose.perRowIdx (d := m) oc hg
+     ⟨hpr.cod_nonneg hA (Nat.mul_pos hoc hm), hpr⟩⟩
+
+/-- The float per-channel BN in the network Tensor3 layout — the same `reassoc` conjugation
+    as the real op, with the two layout permutations exact in float. -/
+noncomputable def bnPerChannelTensor3FV {oc h w : Nat} (M : FloatModel) (γ β : Vec oc)
+    (fμ fistdv : Fin oc → Vec (h * w) → ℝ) : Vec (oc * h * w) → Vec (oc * h * w) :=
+  reassocBack oc h w ∘ bnPerChannelFlatFV M γ β fμ fistdv ∘ reassocFwd oc h w
+
+/-- ⭐ **Per-channel BatchNorm (network Tensor3 layout) float-bridges TO its float map** —
+    rung 3 with `mag`/`mod` written out, and the leaf every ResNet-34 / MobileNetV2 /
+    EfficientNet whole-net NUMBER goes through. `floatBridges_bnPerChannelTensor3`'s
+    conjugation, repackaged so the composite's `mag`/`mod` are the BN's own (the two gathers
+    are magnitude-stable with modulus `id`, so the composition collapses definitionally). -/
+noncomputable def floatBridgesTo_bnPerChannelTensor3 {oc h w : Nat} (M : FloatModel) {ε : ℝ}
+    (γ β : Vec oc) (fμ fistdv : Fin oc → Vec (h * w) → ℝ) (emean eistd : ℝ → ℝ) {G Bbnd S : ℝ}
+    (hoc : 0 < oc) (hhw : 0 < h * w) (hε : 0 < ε)
+    (hγ : ∀ c, |γ c| ≤ G) (hβ : ∀ c, |β c| ≤ Bbnd)
+    (hmean : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fμ c v - bnMean (h * w) v| ≤ emean A)
+    (histd : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fistdv c v - bnIstd (h * w) v ε| ≤ eistd A)
+    (hS : ∀ v : Vec (h * w), |bnIstd (h * w) v ε| ≤ S) :
+    FloatBridgesTo (bnPerChannelTensor3 oc h w ε γ β) (bnPerChannelTensor3FV M γ β fμ fistdv) :=
+  ⟨bnLeafMag M.u S G Bbnd emean eistd, bnLeafMod M.u ε S G Bbnd emean eistd,
+   ((floatBridgesTo_gather (reassocEquiv oc h w)).comp
+      (floatBridgesTo_bnPerChannelFlat M γ β fμ fistdv emean eistd hoc hhw hε hγ hβ
+        hmean histd hS)).comp
+     (floatBridgesTo_gather (reassocEquiv oc h w).symm) |>.close⟩
+
+/-- **The `ε`-floor instantiation** — the BN leaf with `S := 1/√ε`, closed unconditionally
+    (`bnIstd_abs_le`). The form the whole-net numbers use: no operating-point hypothesis, at
+    the cost of a per-site window factor `2G/√ε`. -/
+noncomputable def floatBridgesTo_bnPerChannelTensor3_eps {oc h w : Nat} (M : FloatModel) {ε : ℝ}
+    (γ β : Vec oc) (fμ fistdv : Fin oc → Vec (h * w) → ℝ) (emean eistd : ℝ → ℝ) {G Bbnd : ℝ}
+    (hoc : 0 < oc) (hhw : 0 < h * w) (hε : 0 < ε)
+    (hγ : ∀ c, |γ c| ≤ G) (hβ : ∀ c, |β c| ≤ Bbnd)
+    (hmean : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fμ c v - bnMean (h * w) v| ≤ emean A)
+    (histd : ∀ c A, 0 ≤ A → ∀ v : Vec (h * w), (∀ k, |v k| ≤ A) →
+        |fistdv c v - bnIstd (h * w) v ε| ≤ eistd A) :
+    FloatBridgesTo (bnPerChannelTensor3 oc h w ε γ β) (bnPerChannelTensor3FV M γ β fμ fistdv) :=
+  floatBridgesTo_bnPerChannelTensor3 M γ β fμ fistdv emean eistd hoc hhw hε hγ hβ
+    hmean histd (fun v => bnIstd_abs_le v hε)
+
 end Proofs

@@ -292,7 +292,19 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Float.Cifar8FloatBridge,
              -- a NUMBER for a whole-net `.mod`: the committed CIFAR-8 forward's fresh budget
              -- ≤ 6.37e14 at the He profile, kernel-checked stage by stage (formalization.yaml §4d)
+             -- Numeric envelopes for FloatBridgesTo (`Maps`): the composable kit whole-net
+             -- budgets become NUMBERS in. Generic `.comp`/`residual`/`biPathSum` steps plus a
+             -- monotone lemma per leaf; the CIFAR-8 `Env` is its straight-chain predecessor.
+             -- Inference BN as the RENDER emits it (six runtime ops incl. rsqrt), not as the
+             -- pre-folded affine BnEvalFloatBridge models. Affine in x, so its modulus is
+             -- LINEAR where training-mode BN's is quadratic in the window.
+             `LeanMlir.Proofs.Float.BnEvalRuntimeFloatBridge,
+             `LeanMlir.Proofs.Float.FloatBudgetEnv,
              `LeanMlir.Proofs.Float.Cifar8FloatBudget,
+             -- ⭐ The first ImageNet-scale whole-net float budget stated as a NUMBER: the
+             -- deployed ResNet-34 inference forward, window 3.152e211 / budget 1.547e209 at
+             -- the measured checkpoint profile, over a CLOSED FloatBridgesTo (no BN hyps).
+             `LeanMlir.Proofs.Float.Resnet34FloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

@@ -194,6 +194,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "r34_float_logits_le"   # the same at ImageNet scale: the DEPLOYED ResNet-34 inference forward's float logits are within 1.548e209 of the real ones on |x| <= 1, at the measured 79-epoch checkpoint profile (|param| <= 21/10), eps >= 1e-5, a device rsqrt accurate to 1e-2, u <= 2^-24 -- 4.9e-3 of the certified window, kernel-checked across 90 stages (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/Resnet34FloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "cifar8_chain_argmaxSafeH"   # float capstone at the COMMITTED CIFAR-8 shape: given measured tail gains, binary32 rounding cannot flip the prediction. Chain = cifar8Verified.layers op for op; no window side condition. ⚠ budget >= 1.8e13 at He magnitudes (bᵢ at worst-case propagated windows), so hmargin holds there only at u = 0 -- fidelity.divergences 4c "NOT BITING". (v1 cifar8_chain_argmaxSafe is depth-generic only)
       file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       sorry_count: 0
@@ -500,6 +506,45 @@ fidelity:
        misread fan-in fails here. The twelve ImageNet-scale whole-net bridges take
        their block bridges as hypotheses, so their `.mod` is a function of the
        blocks' budgets; a number for them needs the block cones closed the same way.
+
+       ⭐⭐ AN IMAGENET-SCALE NUMBER (2026-09-02): `Resnet34FloatBudget.lean` closes
+       the first of those cones. `r34EvalBridge` is the DEPLOYED ResNet-34 inference
+       forward -- the `r34Forward` skeleton with `bnPerChannelEvalTensor3` at all 33
+       BN sites, the op `SHlo.bnPerChannelEvalF` denotes and hence the R semantics of
+       every BN line of the committed `@resnet34_fwd_eval` render -- as a CLOSED
+       bridge with no `FloatBridgesTo` hypotheses left. `r34EvalBridge_maps` pushes a
+       numeric envelope through its 90 numeric stages (180 rational inequalities,
+       generated and re-asserted by `scripts/float_budget_envelope.py`, whose CIFAR-8
+       regression case reproduces the fold above), so at the profile measured on the
+       79-epoch ImageNet checkpoint (every stored parameter `|.| <= 21/10`; global max
+       2.0741), `eps >= 1e-5`, unit input window and `u <= 2^-24`:
+           output window  <= 3.152e211     (r34EvalBridge_mag_le)
+           fresh budget   <= 1.548e209     (r34EvalBridge_fresh_le)
+       and per logit `|float - real| <= 1.548e209` (`r34_float_logits_le`). That is
+       4.9e-3 of the certified window -- the CIFAR-8 relative scale at 34 layers --
+       and vacuous against logits of ~3.6 by 209 orders. The adjoint chain's proven-H
+       budget for this net is 6.5e51 (`scripts/adjoint_chain_probe.py` §5, exact
+       data-dependent `dot_close` coefficients at the measured operating profile); the
+       157 orders between them are the documented gaps, the uniform `m*w'*A` face of
+       `layerBudget` and worst-case rather than measured windows.
+
+       Two hypotheses carry it, both named. (i) The deployed inverse-stddev is a
+       device `rsqrt` with no IEEE specification, so `DeviceRsqrt eps es` supplies it
+       with an accuracy (`es = 1e-2` at the headline) exactly as EfficientNet's
+       sigmoid carries `esig`. (ii) The tie is to the skeleton at the inference BN,
+       not through a proved render tie: the whole-graph faithfulness theorem for the
+       eval chain (the twin of `resnet34FwdGraphFullPC_faithful`) does not exist yet.
+       The TRAINING-mode net has that tie (`resnet34Forward_full_pc_eq_skeleton`) and
+       cannot have a number: `bnReluBudget` carries the mean-and-variance shift
+       `G*2A*(8A*e/(2*eps*sqrt eps))`, QUADRATIC in the window, so the same fold
+       squares at each of the 33 BN sites and lands at ~1e7417 -- past the point where
+       `norm_num` will evaluate the numeral at all. Inference BN has no reduction, is
+       affine in `x`, and its modulus is linear. So the BN mode is not a choice about
+       tightness; it decides whether a whole-net number for a 34-layer net exists.
+       (`BnEvalRuntimeFloatBridge.lean` also corrects `BnEvalFloatBridge.lean`'s
+       premise: the renderer does NOT pre-fold the affine, it emits six runtime ops
+       including `stablehlo.rsqrt`, so the pre-folded affine models a kernel we do not
+       ship.)
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

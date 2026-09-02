@@ -93,6 +93,7 @@ import LeanMlir.Proofs.Float.ViTAttentionFloatBridge
 import LeanMlir.Proofs.Float.ViTBlockFloatBridge
 import LeanMlir.Proofs.Float.Cifar8FloatBridge
 import LeanMlir.Proofs.Float.Cifar8FloatBudget
+import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2011,6 +2012,37 @@ open Proofs
 #print axioms Proofs.cifar8Bridge_env
 #print axioms Proofs.cifar8Bridge_fresh_le
 #print axioms Proofs.cifar8_float_logits_le
+-- ⭐⭐ The same, at ImageNet scale: the DEPLOYED ResNet-34 inference forward (frozen
+-- running statistics — the forward @resnet34_fwd_eval renders) as a CLOSED FloatBridgesTo
+-- with no BN hypotheses left (r34EvalBridge), its envelope pushed through 90 numeric stages
+-- at block granularity (r34EvalBridge_maps, 180 rational inequalities), and the headline:
+-- |float − real| ≤ 1.548e209 per logit on |x| ≤ 1 at the measured checkpoint profile
+-- (r34_float_logits_le). 4.9e-3 of the certified window — the CIFAR-8 relative scale, at 34
+-- layers. ⚠ The TRAINING-mode net has no such statement and cannot: bnReluBudget's
+-- mean-and-variance shift is quadratic in the window, so the fold squares at each of the 33
+-- BN sites and lands at ~1e7417, past what norm_num will evaluate. That is why the eval leaf
+-- (BnEvalRuntimeFloatBridge, the six runtime ops the emitter actually writes — NOT
+-- BnEvalFloatBridge's pre-folded affine) is the one the number goes through.
+#print axioms Proofs.floatClose_bnEvalRt
+#print axioms Proofs.floatBridgesTo_bnPerChannelEvalTensor3
+#print axioms Proofs.FloatBridgesTo.Maps.comp
+#print axioms Proofs.FloatBridgesTo.Maps.residual
+#print axioms Proofs.FloatBridgesTo.Maps.bnEvalPC
+#print axioms Proofs.R34IdBlk.maps
+#print axioms Proofs.R34DownBlk.maps
+#print axioms Proofs.r34EvalBridge
+#print axioms Proofs.r34EvalBridge_maps
+#print axioms Proofs.r34EvalBridge_mag_le
+#print axioms Proofs.r34EvalBridge_fresh_le
+#print axioms Proofs.r34_float_logits_le
+-- The block bridges are now generic in the NORMALISATION (rblkGen / rblkStridedGen), so one
+-- pair serves the training-mode net (rblkPC_eq_gen / rblkPStridedPC_eq_gen, both rfl) and the
+-- inference net the number is stated for.
+#print axioms Proofs.rblkPC_eq_gen
+#print axioms Proofs.rblkPStridedPC_eq_gen
+#print axioms Proofs.floatBridgesTo_r34IdBlock
+#print axioms Proofs.floatBridgesTo_r34DownBlock
+#print axioms Proofs.FloatBridgesTo.biPathSum
 -- The named per-block FORWARD bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack), so the
 -- whole-net fold's block hypotheses are discharged by name exactly as the backward's are:
 -- floatBridges_r34IdBlock (rblkPC = relu∘residual(body); FloatBridges.residual skip) +
