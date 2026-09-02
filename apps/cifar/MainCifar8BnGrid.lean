@@ -5,8 +5,10 @@ import LeanMlir.VerifiedNets
 The CIFAR peer of `mnist-cnn-grid`: the conv feature extractor is held fixed
 (8× conv→BN→relu, channels `[16,16,32,32]`, 4 pools) and only the dense classifier head is
 swept — `flatten(128) → dense 128→d → relu → dense d→d → relu → dense d→10`. Reads the head
-width `d` from argv and trains `cifar8BnG d` on the width-slugged verified renders
-`verified_mlir/cifar8_bn_{d}_{adam_train_step,fwd}.mlir` (rendered offline by
+width `d` from argv and trains `cifar8BnG d` on the width-slugged renders
+`.lake/build/cifar8_bn_{d}_{adam_train_step,fwd}.mlir` (⚠ `.lake/build`, not `verified_mlir/`:
+they are BUILD PRODUCTS, regenerated every invocation — `cifar8BnG.mlirDir` moved them out of the
+committed corpus on 2026-08-03 and this line had not followed; rendered offline by
 `tests/TestCifar8AdamTrain.lean`, whose `D1` is parametric — the width-slugged grid artifacts
 are the ONE thing that file still writes; the canonical `cifar8_bn_*` are `Proofs/`-rendered
 since §2i), via the packed-`[θ|m|v]`

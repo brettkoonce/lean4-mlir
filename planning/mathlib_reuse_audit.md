@@ -251,14 +251,33 @@ stated remaining purpose is "the tie reference", but no gate mechanically consum
 
 ⚠ **An earlier draft of this section called them unreferenced and floated deleting them. That was
 wrong** — it checked lake targets, `.olean`s and Lean imports, and not shell scripts.
-`scripts/regen_verified_mlir.sh:489-490` runs both under `WHAT=all|tests`, and the script says why:
+`scripts/regen_verified_mlir.sh:489-490` runs both under `WHAT=all|tests` — the only executable
+reference to either, confirmed by grepping every file type, not just `.lean` — and the script says
+why:
 these are `iree-compile` smokes over the committed bytes, "the one step `lake build` cannot do (it
 needs the compiler on PATH) and they throw if an artifact is missing". They are a live gate that
 happens not to be a build target. Do not delete them.
 
-What stands is the narrower point: 573 of the Wide file's 659 lines are copied, and deduplicating
-them needs a shared module that is itself a build target (an unbuilt module cannot be imported),
-i.e. a lakefile change. Worth doing, but it is a build-graph change, not a dedup commit.
+⚠⚠ **And `TestCifar8AdamTrain.lean` is load-bearing a second time, for a published result.** Its
+`main` writes `.lake/build/cifar8_bn_{d}_{adam_train_step,fwd}.mlir` for `d ∈ 8..4096` and is the
+ONLY writer of them (its own comment says so: *"the width-slugged grid artifacts are the ONE thing
+that file still writes"*). Those are what the `cifar8-bn-grid` driver
+(`apps/cifar/MainCifar8BnGrid.lean`) trains on, and that sweep **is the chapter-4 figure** —
+blueprint `content.tex`, "CIFAR with BatchNorm" → *Does the head width matter?*, the ten-point
+width curve `(8,66.78) … (4096,71.73)` with Wilson intervals, backed by
+`runs/cifar8bn_grid_results.tsv`. Deleting the file would have removed the generator of a figure
+the book already prints.
+
+The name collision is most of why its reference list looks alarming: `cifar8AdamTrainStepFaithfulV`
+/ `…B` in `Proofs/Codegen/CnnRender.lean` is a **different** symbol — the live writer of the
+canonical renders — and has nothing to do with this file's retired hand-written emitter of a
+similar name.
+
+What stands is the narrower point, and it applies to the *other* file. `TestCifar8WideTrain.lean` is
+the weak half of the pair: every render marked "NOT written", no sweep, so it contributes only the
+`iree-compile` smokes. Its 573 copied lines are the real finding-4 content, and deduplicating them
+needs a shared module that is itself a build target (an unbuilt module cannot be imported), i.e. a
+lakefile change. Worth doing, but it is a build-graph change, not a dedup commit.
 
 ### Finding 5 is proof surgery, not a lift
 
