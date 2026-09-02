@@ -19,7 +19,18 @@ Both renders come from `LeanMlir/Proofs/Codegen/CnnRender.lean`, i.e. the same
 
     unset HIP_VISIBLE_DEVICES
     lake build cifar8-dp-check
-    PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check
+    scripts/det_shim.sh /tmp/detshim
+    LD_LIBRARY_PATH=/tmp/detshim PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check
+
+⚠⚠ **`det_shim.sh` is REQUIRED here, and the gate cannot tell you so.** This compares two
+DIFFERENT HLO programs (1×256 against 2×128), so XLA autotuning is free to pick different
+reduction kernels for each, and it does: without the shim the gated `m` region lands anywhere in
+0.0007–0.0034 across identical invocations — 7× to 34× over the 1e-4 threshold, and *red every
+time*, for a reason that has nothing to do with the collective. Under
+`--xla_gpu_autotune_level=0 --xla_gpu_deterministic_ops=true` it is a reproducible **0.000003**.
+The same requirement is documented on `tests/TestDropPathTie.lean`, whose gate B compares two
+different programs for the same reason; it was simply never written down here. Measured
+2026-09-02.
 
 Needs **two** GPUs and the XLA/PJRT backend (`mlpTrainStepVDP` is XLA-only; the IREE build raises
 rather than silently running single-device).

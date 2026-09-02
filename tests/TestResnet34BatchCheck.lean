@@ -33,9 +33,25 @@ one-batch check can. The structural comparison against the bs32 artifact (op cou
 identical) is what covers the rest, and it is cheap to re-run.
 
     lake build resnet34-batch-check
-    HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet34-batch-check
+    scripts/det_shim.sh /tmp/detshim
+    LD_LIBRARY_PATH=/tmp/detshim CUDA_VISIBLE_DEVICES=0 LEAN_MLIR_MEM_FRACTION=0.97 \
+      .lake/build/bin/resnet34-batch-check
 
 `TIE_SKIP_AA=1` skips the determinism-floor run.
+
+⚠⚠ **Both extra knobs are REQUIRED, and each fails in its own misleading way.**
+
+* `LEAN_MLIR_MEM_FRACTION=0.97` — the bs256 step wants one 11.50 GiB allocation and the plugin's
+  default BFC pool is 11.68 GiB, already part-consumed by the two bs32 runs, so the gate dies with
+  a bare `mlp train step failed` before reaching any comparison. 0.97 gives a 15.11 GiB pool and it
+  fits. (Do NOT adopt 0.97 as a default — it crashes ConvNeXt's bf16 arms; it is for graphs that do
+  not otherwise fit.)
+* `det_shim.sh` — this compares two DIFFERENT HLO programs (bs32 against bs256), so XLA autotuning
+  picks different kernels for each. Without the shim the run reports
+  `BATCH CHECK FAILED: the FORWARD differs at norm-rel 0.000233 > 1e-4` and blames "a defect in the
+  bs256 render". It is not: under the shim the bs32-vs-bs32 floor goes **bit-exact
+  63886433/63886433** and the forward ties at **0.000001**. Both measured 2026-09-02, on two
+  different parameter initialisations.
 -/
 
 private def nPOf (net : VerifiedNet) : Nat := net.nParams
