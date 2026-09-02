@@ -59,7 +59,24 @@ private def floatToU8 (v : Float) : UInt8 :=
 def main (args : List String) : IO Unit := do
   -- `raw` renders the uncentred ablation arm; see MainMnistDdpmTrain's note.
   let raw := args.any (· == "raw")
-  let outPath := (args.filter (· != "raw")).head?.getD "runs/2026-05-07-mnist-ddpm/samples.ppm"
+  -- `trajectory` renders the two-strip figure instead of the 4x4 grid: the
+  -- FORWARD process (a real MNIST digit corrupted to noise) over the REVERSE
+  -- process (this sampler's own intermediates, noise to digit). Both strips come
+  -- from the same alphaBar table and the same DDIM loop as an ordinary sample
+  -- run, so the picture cannot drift from the sampler it illustrates.
+  let traj := args.any (· == "trajectory")
+  -- `trajectory` extras: where MNIST lives, and which training image the forward
+  -- strip corrupts. Index is a knob because most MNIST digits are visually dull
+  -- at 28x28 under heavy noise and it is worth being able to pick a legible one.
+  let dataDir := (args.filter (fun a => a.startsWith "data=")).head?.map
+                   (fun a => (a.drop 5).toString) |>.getD "data"
+  let fwdIdx : Nat := ((args.filter (fun a => a.startsWith "img=")).head?.bind
+                   (fun a => (a.drop 4).toString.toNat?)).getD 7
+  let outPath := (args.filter (fun a =>
+                     a != "raw" && a != "trajectory"
+                     && !a.startsWith "data=" && !a.startsWith "img=")).head?.getD
+                   (if traj then "runs/2026-09-02-mnist-ddpm/trajectory.ppm"
+                    else "runs/2026-05-07-mnist-ddpm/samples.ppm")
   IO.FS.createDirAll (System.FilePath.mk outPath).parent.get!.toString
   let spec := tinyDdpmUnet (centred := !raw)
   IO.FS.createDirAll ".lake/build"
@@ -112,6 +129,15 @@ def main (args : List String) : IO Unit := do
   -- ── Sampling loop ──
   let sess ← LowererSession.create evalVmfb
   IO.eprintln s!"  sampling: {nSteps} DDIM steps, batch {B}"
+  -- Every reverse state, with the timestep it sits at. ⚠ Keep ALL of them and
+  -- select later by NOISE LEVEL: indexing the strip by sampler step would make
+  -- column c mean a different ᾱ in each row, and the two rows are only worth
+  -- putting one above the other if they are comparable column by column.
+  let nFrames : Nat := 9
+  let mut revAll : Array ByteArray := #[]
+  let mut revTs  : Array Nat := #[]
+  if traj then
+    revAll := revAll.push x; revTs := revTs.push (T - 1)   -- x_T, pure noise
   for k in [:nSteps] do
     let t := stepTs[k]!
     let tPrev : Nat := if k + 1 < nSteps then stepTs[k + 1]! else 0
@@ -133,8 +159,68 @@ def main (args : List String) : IO Unit := do
     let a := sqAP / sqAT
     let b := sqOmAP - a * sqOmAT
     x ← Ddpm.ddimStep x eps a b nTotal
+    if traj then
+      revAll := revAll.push x; revTs := revTs.push tPrev
     if k % 10 == 0 || k == nSteps - 1 then
       IO.eprintln s!"  step {k}/{nSteps} t={t}->{tPrev}  a={a} b={b}"
+
+  -- ── Trajectory figure: forward strip over reverse strip ──
+  if traj then
+    let H := spec.imageH; let W := spec.imageW
+    -- FORWARD: x_t = √ᾱ_t · x_0 + √(1-ᾱ_t) · ε on ONE real MNIST digit.
+    -- `ddimStep` is exactly `a·x + b·eps`, so the same primitive the reverse loop
+    -- uses builds the forward strip — no second implementation of the schedule.
+    let (imgs, nImgs) ← F32.loadIdxImages s!"{dataDir}/train-images-idx3-ubyte"
+    IO.eprintln s!"  forward strip: {nImgs} MNIST images available, using #{fwdIdx}"
+    let x0raw := F32.sliceImages imgs fwdIdx 1 nPix
+    -- The trainer centres to [-1,1]; the strip must live in the same space as the
+    -- reverse frames or the two rows are not comparable.
+    let x0 ← F32.scaleShift x0raw 2.0 (-1.0)
+    let fwdNoise ← Ddpm.sampleNoise nPix.toUSize 0x5eed
+    let mut fwdFrames : Array ByteArray := #[]
+    for f in [:nFrames] do
+      -- t spread over the full schedule, clean (t=0) first, pure noise last.
+      let tf : Nat := f * (T - 1) / (nFrames - 1)
+      let ab := alphaBarF tf
+      fwdFrames := fwdFrames.push
+        (← Ddpm.ddimStep x0 fwdNoise (Float.sqrt ab) (Float.sqrt (1.0 - ab)) nPix.toUSize)
+    -- Reverse row, selected to match the forward row's noise levels: column c of
+    -- both rows is the same ᾱ, so the figure reads as one process and its inverse
+    -- rather than two unrelated strips.
+    let mut revFrames : Array ByteArray := #[]
+    for f in [:nFrames] do
+      let tf : Nat := f * (T - 1) / (nFrames - 1)
+      let mut bestI : Nat := 0
+      let mut bestD : Nat := T
+      for i in [:revTs.size] do
+        let d := if revTs[i]! > tf then revTs[i]! - tf else tf - revTs[i]!
+        if d < bestD then bestD := d; bestI := i
+      revFrames := revFrames.push revAll[bestI]!
+    -- Undo the centring for display, both rows identically.
+    let unc := fun (b : ByteArray) => F32.scaleShift b 0.5 0.5
+    let rows := #[fwdFrames, revFrames]
+    let gap : Nat := 4
+    let stripW := nFrames * W + (nFrames - 1) * gap
+    let stripH := 2 * H + gap
+    let mut ppm : ByteArray := ByteArray.empty
+    ppm := ppm.append s!"P6\n{stripW} {stripH}\n255\n".toUTF8
+    for r in [:2] do
+      let frames := rows[r]!
+      let shown ← frames.mapM unc
+      for h in [:H] do
+        for c in [:nFrames] do
+          let fr := shown[min c (shown.size - 1)]!
+          for w in [:W] do
+            let u := floatToU8 (F32.read fr (h * W + w).toUSize)
+            ppm := ppm.push u |>.push u |>.push u
+          if c + 1 < nFrames then
+            for _ in [:gap] do ppm := ppm.push 24 |>.push 24 |>.push 28
+      if r == 0 then
+        for _ in [:gap] do
+          for _ in [:stripW] do ppm := ppm.push 24 |>.push 24 |>.push 28
+    IO.FS.writeBinFile outPath ppm
+    IO.eprintln s!"  wrote {outPath} ({stripW}x{stripH}, {fwdFrames.size} forward + {revFrames.size} reverse frames)"
+    return
 
   -- ── Render 4×4 grid ──
   -- ⚠ Invert the trainer's [-1, 1] centring FIRST. `floatToU8` clamps to

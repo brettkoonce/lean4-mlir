@@ -165,25 +165,55 @@ gap is recipe rather than architecture — and scale augmentation alone has clos
 
 ## DDPM — diffusion generative models
 
-Denoising Diffusion Probabilistic Models on MNIST and CIFAR-10.
-Tiny UNets predict ε(x_t, t); reverse process via DDIM (η=0).
-Cosine α schedule, time conditioning via tiled `t/T_max` channel.
+Denoising diffusion on MNIST and CIFAR-10. A tiny UNet predicts the noise
+ε(x_t, t) that was added to an image; sampling runs that prediction backwards.
+Cosine ᾱ schedule, DDIM (η=0) with 50 steps subsampled from T=1000, time
+conditioning via a tiled `t/T_max` channel — which needs no new codegen
+primitive, the UNet just sees one extra input channel.
 
-`MainMnistDdpmTrain.lean` + `Sample`, `MainCifarDdpmTrain.lean` +
-`Sample`. See `planning/ddpm_demo.md`.
+`MainMnistDdpmTrain.lean` + `Sample`, `MainCifarDdpmTrain.lean` + `Sample`.
+See `planning/ddpm_demo.md`.
 
 ### MNIST (tiny UNet, base 16, 50 epochs)
 
 ```bash
 lake exe mnist-ddpm-train data 50
-lake exe mnist-ddpm-sample runs/mnist_samples.ppm
+lake exe mnist-ddpm-sample runs/mnist_samples.ppm          # 4x4 grid of samples
+
+# the two-row trajectory figure below
+lake exe mnist-ddpm-sample trajectory data=data img=7
+python3 scripts/ddpm_trajectory_figure.py \
+    runs/2026-09-02-mnist-ddpm/trajectory.ppm \
+    --out demos/figures/ddpm_mnist_trajectory.png
 ```
 
-![DDPM MNIST samples](figures/ddpm_mnist.png)
+![DDPM forward and reverse trajectories on MNIST](figures/ddpm_mnist_trajectory.png)
 
-64 digits sampled from N(0, I) noise. Recognizable 0–9 digits
-emerge after ~50 epochs of training; the tile-channel time
-conditioning is enough for legibility on this dataset.
+**Top: the forward process.** A real MNIST training digit at nine points along
+the schedule, x_t = √ᾱ_t·x₀ + √(1−ᾱ_t)·ε. Nothing is learned here — it is the
+fixed corruption the model is trained to invert, and by the right-hand end the
+digit is gone.
+
+**Bottom: the reverse process**, read right to left. Sampling starts from fresh
+N(0, I) noise and walks back down the same schedule, and a **different** digit
+condenses out of it. That is the point of the row: it is not a reconstruction of
+the 3 above it. The model never sees that image during sampling — it has learned
+what MNIST digits look like at every noise level, and any noise seed lands
+somewhere on that manifold.
+
+⭐ **The two rows are aligned by noise level, not by step index.** Column *c* of
+both rows sits at the same ᾱ, so reading down a column compares "a real digit
+this corrupted" against "what the model can still recover from that much noise."
+Indexing the bottom row by sampler step instead would have made the columns
+incomparable and the figure decorative. Both rows are emitted by the sampler
+itself (`mnist-ddpm-sample trajectory`), using the same ᾱ table and the same
+`ddimStep` primitive as an ordinary run, so the picture cannot drift from the
+process it illustrates; `scripts/ddpm_trajectory_figure.py` only upscales and
+labels.
+
+⚠ Most of the visible change happens in the last few columns. That is the cosine
+schedule, not a rendering artifact — ᾱ stays low across most of the trajectory
+and the image resolves late.
 
 ### CIFAR-10 (base 80, 70 epochs)
 
@@ -194,20 +224,15 @@ lake exe cifar-ddpm-sample runs/cifar_samples.ppm
 
 ![DDPM CIFAR-10 samples](figures/ddpm_cifar.png)
 
-16 images sampled from noise. Recognizable cars, birds, animals,
-some scenes — soft and CIFAR-resolution-blurry, but the
-categories are visible. ~7 hours of training on rocm gfx1100.
+16 images sampled from noise. Recognizable cars, birds, animals and some scenes
+— soft and CIFAR-resolution-blurry, but the categories are visible. ~7 hours of
+training on rocm gfx1100.
 
-A bottleneck-attention variant (`cifar-ddpm-attn-train`) and a
-sincos-time-embedding variant (`cifar-ddpm-sincos-train`) ship
-the codegen primitives but did not improve sample quality at
-this training budget — see "Phase 3 partial" in
-`planning/ddpm_demo.md` for the full negative-result writeup.
-Each has a matching sampler — `cifar-ddpm-attn-sample` and
-`cifar-ddpm-sincos-sample` — taking the same optional output-path
-argument as `cifar-ddpm-sample` (default
-`runs/2026-05-07-cifar-ddpm/samples.ppm`), if you want to see the
-negative result rather than read about it.
+A bottleneck-attention variant (`cifar-ddpm-attn-train`) and a sincos-time-
+embedding variant (`cifar-ddpm-sincos-train`) ship the codegen primitives but did
+not improve sample quality at this budget — see "Phase 3 partial" in
+`planning/ddpm_demo.md`. Each has a matching sampler (`cifar-ddpm-attn-sample`,
+`cifar-ddpm-sincos-sample`) taking the same optional output-path argument.
 
 ---
 
