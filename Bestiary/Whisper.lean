@@ -169,17 +169,6 @@ def tinyWhisper : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  context     : {spec.imageH} tokens"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -188,13 +177,13 @@ def main : IO Unit := do
   IO.println "  Encoder-decoder transformer over log-mel spectrograms."
   IO.println "  Multitask via token-prefix; 680,000 hours of weak supervision."
 
-  summarize whisperTiny
-  summarize whisperBase
-  summarize whisperSmall
-  summarize whisperMedium
-  summarize whisperLarge
-  summarize whisperSmallDecoder
-  summarize tinyWhisper
+  whisperTiny.summarize (size := .tokens)
+  whisperBase.summarize (size := .tokens)
+  whisperSmall.summarize (size := .tokens)
+  whisperMedium.summarize (size := .tokens)
+  whisperLarge.summarize (size := .tokens)
+  whisperSmallDecoder.summarize (size := .tokens)
+  tinyWhisper.summarize (size := .tokens)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

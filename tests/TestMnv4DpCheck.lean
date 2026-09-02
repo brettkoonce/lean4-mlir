@@ -57,15 +57,6 @@ Needs FOUR GPUs and the XLA backend (collectives do not exist on the IREE path �
 refuses a DP entry point outright rather than silently running single-device).
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0          -- BN γ
-  | 2 => F32.const n.toUSize 0.0          -- BN β / biases
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 def main (args : List String) : IO Unit := do
   -- Env-selected the way `TestMobilenetV2DpCheck` and `TestShardCheck` are, defaulting to EXACTLY
   -- the configuration the committed result was measured at — so it reproduces with no arguments.
@@ -95,7 +86,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind)
+    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 net.nParams.toUSize 0.02

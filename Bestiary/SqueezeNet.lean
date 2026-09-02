@@ -166,17 +166,6 @@ def tinySqueezeNet : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000}K)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -185,9 +174,9 @@ def main : IO Unit := do
   IO.println "  AlexNet accuracy at 1.25M parameters (50× smaller) via the"
   IO.println "  fire module: squeeze-then-parallel-expand with mostly 1×1 convs."
 
-  summarize squeezeNet1_0
-  summarize squeezeNet1_1
-  summarize tinySqueezeNet
+  squeezeNet1_0.summarize (unit := .thousands)
+  squeezeNet1_1.summarize (unit := .thousands)
+  tinySqueezeNet.summarize (unit := .thousands)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

@@ -126,17 +126,6 @@ def tinyWrn : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams}"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK (channel dims chain cleanly)"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -146,10 +135,10 @@ def main : IO Unit := do
   IO.println "  widened. Wider-not-deeper turns out to be the more"
   IO.println "  efficient ResNet scaling axis."
 
-  summarize wrn28_10
-  summarize wrn40_2
-  summarize wrn22_8
-  summarize tinyWrn
+  wrn28_10.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  wrn40_2.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  wrn22_8.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  tinyWrn.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

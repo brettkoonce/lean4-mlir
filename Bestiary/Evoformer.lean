@@ -140,17 +140,6 @@ def tinyEvoformer : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  max residues : {spec.imageH}"
-  IO.println s!"  layers       : {spec.layers.length}"
-  IO.println s!"  params       : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture :"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate     : OK"
-  | some err => IO.println s!"  validate     : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -160,9 +149,9 @@ def main : IO Unit := do
   IO.println "  via triangle multiplicative + triangle attention primitives."
   IO.println "  The part of AlphaFold 2 that actually made structure work."
 
-  summarize alphaFold2
-  summarize alphaFold2Mini
-  summarize tinyEvoformer
+  alphaFold2.summarize (size := .residues)
+  alphaFold2Mini.summarize (size := .residues)
+  tinyEvoformer.summarize (size := .residues)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

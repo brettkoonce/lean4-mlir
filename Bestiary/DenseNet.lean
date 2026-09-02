@@ -161,17 +161,6 @@ def tinyDenseNet : NetSpec where
 -- § Main: print-only summary of every Bestiary entry in this file.
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams}"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK (channel dims chain cleanly)"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -181,10 +170,10 @@ def main : IO Unit := do
   IO.println "  preceding layers within a block. Bundled as `denseBlock`"
   IO.println "  (concat connectivity escapes a linear NetSpec)."
 
-  summarize denseNet121
-  summarize denseNet169
-  summarize denseNet201
-  summarize tinyDenseNet
+  denseNet121.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  denseNet169.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  denseNet201.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  tinyDenseNet.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

@@ -76,20 +76,6 @@ Knobs: `R50_ACC_VARIANT` (default `acc4x64`), `R50_ACC_PEER` (default `adam64`),
 `R50_ACC_RES` (`224` default / `160`), `R50_ACC_TOL_U` (micro-units, default 10 = 1e-5).
 -/
 
-/-- The driver's own init (`VerifiedTrain.mkParam`, private): He fan-out conv, Glorot dense, γ = 1,
-    β = 0. Faithful here — unlike the gradcheck, nothing in this file is degenerate at β = 0. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let variance :=
-      if dims.size == 4 then 2.0 / (dims[0]! * dims[2]! * dims[3]!).toFloat
-      else if dims.size == 2 then 2.0 / (dims[0]! + dims[1]!).toFloat
-      else 2.0 / (dims[0]!).toFloat
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt variance)
-
 /-- Max |a−b| and max |a| over a float range of two blobs, plus the bit-exact count. -/
 private def cmp (a b : ByteArray) (offA offB n : Nat) : Float × Float × Nat := Id.run do
   let mut d := 0.0; let mut m := 0.0; let mut ex := 0

@@ -187,17 +187,6 @@ def tinyMuZeroDynamics : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -209,20 +198,20 @@ def main : IO Unit := do
 
   IO.println ""
   IO.println "──────────── Go MuZero (three networks) ────────────"
-  summarize muZeroGoRepresentation
-  summarize muZeroGoDynamics
-  summarize muZeroGoDynamicsReward
-  summarize muZeroGoPredictionPolicy
-  summarize muZeroGoPredictionValue
+  muZeroGoRepresentation.summarize
+  muZeroGoDynamics.summarize
+  muZeroGoDynamicsReward.summarize
+  muZeroGoPredictionPolicy.summarize
+  muZeroGoPredictionValue.summarize
 
   IO.println ""
   IO.println "──────────── Atari MuZero (representation only) ────────────"
-  summarize muZeroAtariRepresentation
+  muZeroAtariRepresentation.summarize
 
   IO.println ""
   IO.println "──────────── tiny MuZero (fixture) ────────────"
-  summarize tinyMuZeroRepresentation
-  summarize tinyMuZeroDynamics
+  tinyMuZeroRepresentation.summarize
+  tinyMuZeroDynamics.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

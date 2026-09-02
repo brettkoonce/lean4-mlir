@@ -78,16 +78,6 @@ private def backModule : String :=
   renderModule "softmax_row_back" s!"%dy: {ty [BS, M*Nn]}, %xs: {ty [BS, M*Nn]}"
     BS (M*Nn) (.softmaxRowBack (m := M) (n := Nn) "%xs" xv (.operand "%dy" dyv))
 
-private def compileCheck (name body : String) : IO Unit := do
-  IO.FS.createDirAll ".lake/build"
-  let path := s!".lake/build/{name}.mlir"
-  IO.FS.writeFile path body
-  let cargs ← ireeCompileArgs path s!".lake/build/{name}.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[{name}] iree-compile FAILED:\n{r.stderr.take 2000}"
-  else
-    IO.println s!"[{name}] iree-compile OK → .lake/build/{name}.vmfb"
 
 def main : IO Unit := do
   IO.println "── @softmax_row_fwd ──"

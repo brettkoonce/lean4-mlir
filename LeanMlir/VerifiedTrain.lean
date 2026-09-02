@@ -428,7 +428,7 @@ def mkSession (mlirPath : String) : IO LowererSession := do
     uniforms (Bates-3, ≈ normal) where JAX draws one uniform. **Variance is matched; shape is
     not.** torchvision itself uses a normal here, so neither side is canonical on that axis, and
     changing the sampler would move every net for a second-order reason. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
+def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     (vitInit : Bool := false) : IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
@@ -461,6 +461,33 @@ private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
       else if dims.size == 2 then 2.0 / (dims[0]! + dims[1]!).toFloat         -- Glorot
       else 2.0 / (dims[0]!).toFloat                                           -- rank-1: unchanged
     F32.heInit seed.toUSize n.toUSize (Float.sqrt variance)
+
+/-- **The He fan-IN variant the render/tie gates use** — same `kind` protocol as `mkParam`, but the
+    rank-4 variance is He **fan-IN** `2/(ic·kh·kw)` and every lower rank falls through to `2/d₀`,
+    where `mkParam` uses He fan-OUT for rank-4 and Glorot for rank-2.
+
+    ⚠ **This is not the driver's initialisation**, and never was — 25 gates had hand-copied this
+    body while `mkParam` above evolved. A tie gate feeds the same θ to both sides, so the
+    distribution is irrelevant to what those gates actually assert; anything meaning to reproduce
+    *trainer* numerics wants `mkParam`. Naming the difference is the point: it used to be invisible,
+    spread across 25 copies, one of which (`tests/TestSgdRenderTie.lean`) documented itself as
+    "identical to the driver's `VerifiedTrain.mkParam`" while differing from it.
+
+    `biasSigma`: `none` (default) zeroes the `kind = 2` slots, as the trainer does; `some s` draws
+    them at scale `s` instead — the weight-decay and grad-clip ties need a non-zero bias or their
+    update is vacuous. -/
+def mkParamHeFanIn (seed : Nat) (dims : Array Nat) (kind : Nat)
+    (biasSigma : Option Float := none) : IO ByteArray := do
+  let n := dims.foldl (· * ·) 1
+  match kind with
+  | 1 => F32.const n.toUSize 1.0
+  | 2 =>
+    match biasSigma with
+    | none   => F32.const n.toUSize 0.0
+    | some s => F32.heInit seed.toUSize n.toUSize s
+  | _ =>
+    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
+    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
 
 /-- Load CIFAR-10 `.bin` records (3073 bytes: 1 label byte + 3072 image bytes).
     Returns f32 images `[n×3072]` (normalized) and int32-LE labels `[n×4]`. -/

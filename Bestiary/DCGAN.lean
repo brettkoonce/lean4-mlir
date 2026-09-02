@@ -162,17 +162,6 @@ def tinyDCGAN_D : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -181,11 +170,11 @@ def main : IO Unit := do
   IO.println "  Deep Convolutional GAN (Radford 2015). The eight guidelines"
   IO.println "  that made GANs trainable. Canonical GAN reference."
 
-  summarize dcganProjector
-  summarize dcganGenerator
-  summarize dcganDiscriminator
-  summarize tinyDCGAN_G
-  summarize tinyDCGAN_D
+  dcganProjector.summarize
+  dcganGenerator.summarize
+  dcganDiscriminator.summarize
+  tinyDCGAN_G.summarize
+  tinyDCGAN_D.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

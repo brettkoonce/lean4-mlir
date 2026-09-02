@@ -52,18 +52,6 @@ harness sums in f64, so the two norms differ in their last few bits and the trus
     lake build r50-lamb-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-lamb-tie
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let variance :=
-      if dims.size == 4 then 2.0 / (dims[0]! * dims[2]! * dims[3]!).toFloat
-      else if dims.size == 2 then 2.0 / (dims[0]! + dims[1]!).toFloat
-      else 2.0 / (dims[0]!).toFloat
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt variance)
-
 def main : IO Unit := do
   let net  := resnet50ImagenetVerified.toNet
   let bs   := 64

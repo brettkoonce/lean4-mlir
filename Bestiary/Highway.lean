@@ -127,17 +127,6 @@ def tinyHighwayGate : NetSpec where
 -- § Main: print-only summary of every Bestiary entry in this file.
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams}"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK (channel dims chain cleanly)"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -147,12 +136,12 @@ def main : IO Unit := do
   IO.println "  Combined as y = T·H + (1−T)·x — product rule + additive fan-in,"
   IO.println "  both already in Ch 1's VJP toolkit. ResNet (Ch 5) is T ≡ 1."
 
-  summarize highway50Main
-  summarize highway50Gate
-  summarize highway100Main
-  summarize highway100Gate
-  summarize tinyHighwayMain
-  summarize tinyHighwayGate
+  highway50Main.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  highway50Gate.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  highway100Main.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  highway100Gate.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  tinyHighwayMain.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  tinyHighwayGate.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

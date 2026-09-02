@@ -154,17 +154,6 @@ def tinyWaveNet : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  samples     : {spec.imageH}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -173,10 +162,10 @@ def main : IO Unit := do
   IO.println "  Dilated causal convs for raw waveform modelling."
   IO.println "  Exponential receptive field, linear parameter growth."
 
-  summarize waveNet
-  summarize waveNet3Stack
-  summarize waveNetMusic
-  summarize tinyWaveNet
+  waveNet.summarize (size := .samples)
+  waveNet3Stack.summarize (size := .samples)
+  waveNetMusic.summarize (size := .samples)
+  tinyWaveNet.summarize (size := .samples)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

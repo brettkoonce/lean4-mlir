@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
+import LeanMlir.GradcheckHelpers
 
 /-! # ch10 V3 — multi-head self-attention renderer (fwd + full backward)
 
@@ -25,6 +26,7 @@ Run (rocm):
 -/
 
 open Proofs Proofs.StableHLO
+open ViTGradcheck
 
 private def Bb : Nat := 2     -- batch
 private def Nn : Nat := 3     -- tokens
@@ -128,85 +130,10 @@ private def backModule : String :=
   mhsaBack "a" "%x" "%Wq" "%Wk" "%Wv" "%Wo" "%dO" Bb Nn Dd Hh Dh scaleStr ++
   s!"    return %adx, %adWQ, %adbQ, %adWK, %adbK, %adWV, %adbV, %adWo, %adbo : {retTy}\n" ++ "  }\n}\n"
 
-private def compileCheck (name body : String) : IO Bool := do
-  IO.FS.createDirAll ".lake/build"
-  let path := s!".lake/build/{name}.mlir"
-  IO.FS.writeFile path body
-  let cargs ← ireeCompileArgs path s!".lake/build/{name}.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[{name}] iree-compile FAILED:\n{r.stderr.take 3000}"; return false
-  else
-    IO.println s!"[{name}] iree-compile OK → .lake/build/{name}.vmfb"; return true
 
 -- ════════════════════════════════════════════════════════════════
--- § Lean4 gradcheck helpers (generalized over heterogeneous input shapes)
+-- § Lean4 gradcheck helpers — shared, from `LeanMlir.GradcheckHelpers`
 -- ════════════════════════════════════════════════════════════════
-
-private def pow10 (k : Int) : Float :=
-  if k ≥ 0 then (List.range k.toNat).foldl (fun a _ => a * 10.0) 1.0
-  else (List.range (-k).toNat).foldl (fun a _ => a / 10.0) 1.0
-
-private def digitsToNat (cs : List Char) : Nat :=
-  cs.foldl (fun acc c => acc * 10 + (c.toNat - '0'.toNat)) 0
-
-private def splitAtChar (c : Char) (xs : List Char) : (List Char × Option (List Char)) :=
-  match xs.span (· != c) with
-  | (pre, [])        => (pre, none)
-  | (pre, _ :: post) => (pre, some post)
-
-private def parseFloat (tok : String) : Float := Id.run do
-  let cs0 := (tok.toList).map (fun c => if c == 'E' then 'e' else c)
-  let (neg, cs) := match cs0 with
-    | '-' :: rest => (true, rest)
-    | '+' :: rest => (false, rest)
-    | _           => (false, cs0)
-  let (mantCs, expCsOpt) := splitAtChar 'e' cs
-  let expVal : Int := match expCsOpt with
-    | none              => 0
-    | some ('-' :: ds)  => -(Int.ofNat (digitsToNat ds))
-    | some ('+' :: ds)  => Int.ofNat (digitsToNat ds)
-    | some ds           => Int.ofNat (digitsToNat ds)
-  let (intCs, fracCsOpt) := splitAtChar '.' mantCs
-  let ip := Float.ofNat (digitsToNat intCs)
-  let mant := match fracCsOpt with
-    | none        => ip
-    | some fracCs => ip + Float.ofNat (digitsToNat fracCs) * pow10 (-(fracCs.length : Int))
-  let v := mant * pow10 expVal
-  return (if neg then -v else v)
-
-private def parseResults (out : String) : Array (Array Float) := Id.run do
-  let mut res : Array (Array Float) := #[]
-  for line in out.splitOn "\n" do
-    if let some idx := (line.splitOn "f32=")[1]? then
-      let cleaned := idx.map (fun c => if c == '[' || c == ']' then ' ' else c)
-      let toks := (cleaned.splitOn " ").filter (fun t => !t.isEmpty)
-      res := res.push ((toks.map parseFloat).toArray)
-  return res
-
-/-- Run a compiled `.vmfb` function; `inputs` are `(shapeStr, flatValues)`. -/
-private def runFn (vmfb fn : String) (inputs : List (String × Array Float)) : IO (Array (Array Float)) := do
-  let inArgs := inputs.map (fun (sh, xs) =>
-    s!"--input={sh}=" ++ String.intercalate " " (xs.toList.map toString))
-  let args := #[s!"--module={vmfb}", "--device=hip", s!"--function={fn}"] ++ inArgs.toArray
-  let r ← IO.Process.output { cmd := "iree-run-module", args := args }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[run {fn}] FAILED:\n{r.stderr.take 1500}"; return #[]
-  return parseResults r.stdout
-
-private def randVec (seed n : Nat) : Array Float := Id.run do
-  let mut s : Nat := seed * 2654435761 + 12345
-  let mut out : Array Float := #[]
-  for _ in [0:n] do
-    s := (s * 1103515245 + 12345) % 2147483648
-    out := out.push (2.0 * (Float.ofNat s / 2147483648.0) - 1.0)
-  return out
-
-private def dot (a b : Array Float) : Float :=
-  (a.zip b).foldl (fun acc (x, y) => acc + x * y) 0.0
-
-private def axpy (a : Float) (x y : Array Float) : Array Float :=  -- y + a·x
-  (y.zip x).map (fun (yi, xi) => yi + a * xi)
 
 /-- Adjoint/finite-difference gradcheck of the full MHSA over every input. -/
 private def gradcheck : IO Unit := do
@@ -248,8 +175,8 @@ private def gradcheck : IO Unit := do
 def main : IO Unit := do
   IO.println "── @mhsa_fwd ──"
   IO.println fwdModule
-  let okF ← compileCheck "mhsa_fwd" fwdModule
-  let okB ← compileCheck "mhsa_back" backModule
+  let okF ← compileCheckB "mhsa_fwd" fwdModule
+  let okB ← compileCheckB "mhsa_back" backModule
   if okF && okB then gradcheck
 
 #eval main

@@ -123,17 +123,6 @@ def tinyDETR : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -142,9 +131,9 @@ def main : IO Unit := do
   IO.println "  Object detection as set prediction. No anchors, no NMS."
   IO.println "  Killed a decade of hand-engineered detection heads in one paper."
 
-  summarize detrR50
-  summarize detrR101
-  summarize tinyDETR
+  detrR50.summarize
+  detrR101.summarize
+  tinyDETR.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

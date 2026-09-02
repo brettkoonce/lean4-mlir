@@ -66,15 +66,6 @@ hazard here despite `mkSession` taking a path: on the XLA branch it compiles in-
 writes one.
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 /-- Entry symbol of a render, read out of the artifact's own `func.func @…` line. Derived rather
     than hardcoded so the harness can gate any (single, DP) pair — the bs32 one and the bs64 one —
     without a second copy of itself.
@@ -173,7 +164,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind)
+    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 net.nParams.toUSize 0.02

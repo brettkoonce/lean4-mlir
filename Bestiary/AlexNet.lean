@@ -118,17 +118,6 @@ def tinyAlexNet : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -137,8 +126,8 @@ def main : IO Unit := do
   IO.println "  The 2012 ImageNet winner. Restarted modern deep learning."
   IO.println "  60M params, two GPUs, a decade of compounding since."
 
-  summarize alexNet
-  summarize tinyAlexNet
+  alexNet.summarize
+  tinyAlexNet.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

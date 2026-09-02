@@ -152,17 +152,6 @@ def tinyResNet : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams}"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK (channel dims chain cleanly)"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -171,11 +160,11 @@ def main : IO Unit := do
   IO.println "  Basic-block (R-18) and bottleneck (R-50/101/152) residual"
   IO.println "  variants. ResNet-34 lives in Chapter 5 of the book."
 
-  summarize resNet18
-  summarize resNet50
-  summarize resNet101
-  summarize resNet152
-  summarize tinyResNet
+  resNet18.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  resNet50.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  resNet101.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  resNet152.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  tinyResNet.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

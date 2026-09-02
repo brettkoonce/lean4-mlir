@@ -361,16 +361,6 @@ private def trainStep : String := Id.run do
     body ++ stemSgd ++ blkSgd ++ headSgd ++ denseSgd ++
     s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 
-/-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH. For the SGD render
-    the write already happened; for AdamW the artifact is the COMMITTED one, checked to exist by
-    `main` before this is called. -/
-private def tryCompile (src dst label : String) : IO Unit := do
-  try
-    let cargs ← ireeCompileArgs src dst
-    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 5000}"
-    else IO.println s!"{label} iree-compile OK → {src}"
-  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
 
 def main : IO Unit := do
   IO.FS.createDirAll "/tmp/mnv2pc"

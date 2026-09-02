@@ -50,15 +50,6 @@ reuses the first one's binary — which is exactly what comparing a staged rende
 looks like). `cifar8-adam-tie` still has that hazard; prefer this harness.
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 def main (args : List String) : IO Unit := do
   let (slug, rest) := match args with
     | s :: r => (s, r)
@@ -92,7 +83,7 @@ adam | sgd | mom (e.g. adam, bn_mom, w_sgd, w_bn_adam)"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind)
+    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 nP.toUSize 0.02

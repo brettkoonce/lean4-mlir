@@ -187,17 +187,6 @@ def tinyQANet : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  context     : {spec.imageH} tokens"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000} K)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -207,9 +196,9 @@ def main : IO Unit := do
   IO.println "  the BiLSTM. Conv + attention hybrid, pre-dates MobileViT by"
   IO.println "  four years."
 
-  summarize qanetEncoderBlock
-  summarize qanetModelEncoderStack
-  summarize tinyQANet
+  qanetEncoderBlock.summarize (size := .tokens) (unit := .thousands)
+  qanetModelEncoderStack.summarize (size := .tokens) (unit := .thousands)
+  tinyQANet.summarize (size := .tokens) (unit := .thousands)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

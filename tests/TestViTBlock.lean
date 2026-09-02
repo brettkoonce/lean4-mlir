@@ -77,21 +77,11 @@ private def backModule : String :=
   blockBack "blk" "%dOut" bp Bb Nn Dd Mm Hh Dh scaleStr ++
   s!"    return {String.intercalate ", " gradNames} : {retTy}\n" ++ "  }\n}\n"
 
-private def compileCheck (name body : String) : IO Bool := do
-  IO.FS.createDirAll ".lake/build"
-  let path := s!".lake/build/{name}.mlir"
-  IO.FS.writeFile path body
-  let cargs ← ireeCompileArgs path s!".lake/build/{name}.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[{name}] iree-compile FAILED:\n{r.stderr.take 3000}"; return false
-  else
-    IO.println s!"[{name}] iree-compile OK → .lake/build/{name}.vmfb"; return true
 
 def main : IO Unit := do
   IO.FS.writeFile ".lake/build/block_fwd_dump.mlir" fwdModule
-  let okF ← compileCheck "block_fwd" fwdModule
-  let okB ← compileCheck "block_back" backModule
+  let okF ← compileCheckB "block_fwd" fwdModule
+  let okB ← compileCheckB "block_back" backModule
   if okF && okB then
     let _ ← adjointGradcheck "vit-block" ".lake/build/block_fwd.vmfb" "block_fwd"
       ".lake/build/block_back.vmfb" "block_back"

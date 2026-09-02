@@ -127,7 +127,7 @@ default 300 = 3e-4), `R50_GC_VARIANT` (default `adam64`, the single-device rende
     `β = 0` is a DEGENERATE point for identity B — `⟨g_β, β⟩` is then 0 whatever the render
     computes, so half of that check would be satisfied by construction rather than by being right.
     A non-degenerate base point is worth more to a gradcheck than a faithful one. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
+private def mkParamBiasSeeded (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
   | 1 => F32.const n.toUSize 1.0
@@ -231,7 +231,7 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind); sd := sd + 1
+    θparts := θparts.push (← mkParamBiasSeeded sd dims kind); sd := sd + 1
   let θ := F32.concat θparts
   let z ← F32.const nP.toUSize 0.0
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3

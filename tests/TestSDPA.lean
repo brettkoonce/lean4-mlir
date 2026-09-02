@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Types
+import LeanMlir.GradcheckHelpers
 
 /-! # ch10 V2 — single-head scaled-dot-product-attention renderer (fwd + 3-path back)
 
@@ -33,6 +34,7 @@ Run (rocm):
 -/
 
 open Proofs Proofs.StableHLO
+open ViTGradcheck
 
 private def Nn : Nat := 5    -- tokens (the N of attention)
 private def Dd : Nat := 4    -- head dim
@@ -91,68 +93,10 @@ private def backModule : String :=
   sdpaBack "a" "%Q" "%K" "%V" "%dOut" Nn Dd scaleStr ++
   s!"    return %adQ, %adK, %adV : {retTy}\n" ++ "  }\n}\n"
 
-private def compileCheck (name body : String) : IO Unit := do
-  IO.FS.createDirAll ".lake/build"
-  let path := s!".lake/build/{name}.mlir"
-  IO.FS.writeFile path body
-  let cargs ← ireeCompileArgs path s!".lake/build/{name}.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[{name}] iree-compile FAILED:\n{r.stderr.take 3000}"
-  else
-    IO.println s!"[{name}] iree-compile OK → .lake/build/{name}.vmfb"
 
 -- ════════════════════════════════════════════════════════════════
 -- § Numerical gradcheck (all in Lean4; shells out to iree-run-module)
 -- ════════════════════════════════════════════════════════════════
-
-/-- `10^k` as a `Float` (k may be negative). -/
-private def pow10 (k : Int) : Float :=
-  if k ≥ 0 then (List.range k.toNat).foldl (fun a _ => a * 10.0) 1.0
-  else (List.range (-k).toNat).foldl (fun a _ => a / 10.0) 1.0
-
-private def digitsToNat (cs : List Char) : Nat :=
-  cs.foldl (fun acc c => acc * 10 + (c.toNat - '0'.toNat)) 0
-
-/-- Split a `List Char` at the first occurrence of `c` (the separator dropped). -/
-private def splitAtChar (c : Char) (xs : List Char) : (List Char × Option (List Char)) :=
-  match xs.span (· != c) with
-  | (pre, [])        => (pre, none)
-  | (pre, _ :: post) => (pre, some post)
-
-/-- Parse one iree-printed float token (`-0.00623606`, `1.3e-05`, `42`), entirely
-    over `List Char` (robust to the String/Slice API). -/
-private def parseFloat (tok : String) : Float := Id.run do
-  let cs0 := (tok.toList).map (fun c => if c == 'E' then 'e' else c)
-  let (neg, cs) := match cs0 with
-    | '-' :: rest => (true, rest)
-    | '+' :: rest => (false, rest)
-    | _           => (false, cs0)
-  let (mantCs, expCsOpt) := splitAtChar 'e' cs
-  let expVal : Int := match expCsOpt with
-    | none              => 0
-    | some ('-' :: ds)  => -(Int.ofNat (digitsToNat ds))
-    | some ('+' :: ds)  => Int.ofNat (digitsToNat ds)
-    | some ds           => Int.ofNat (digitsToNat ds)
-  let (intCs, fracCsOpt) := splitAtChar '.' mantCs
-  let ip := Float.ofNat (digitsToNat intCs)
-  let mant := match fracCsOpt with
-    | none      => ip
-    | some fracCs => ip + Float.ofNat (digitsToNat fracCs) * pow10 (-(fracCs.length : Int))
-  let v := mant * pow10 expVal
-  return (if neg then -v else v)
-
-/-- Extract the parsed result buffers (in `result[i]` order) from an
-    iree-run-module stdout: each value line is `…xf32=[a b][c d]…`. -/
-private def parseResults (out : String) : Array (Array Float) := Id.run do
-  let mut res : Array (Array Float) := #[]
-  for line in out.splitOn "\n" do
-    if let some idx := (line.splitOn "f32=")[1]? then
-      -- strip brackets → whitespace, split, parse
-      let cleaned := idx.map (fun c => if c == '[' || c == ']' then ' ' else c)
-      let toks := (cleaned.splitOn " ").filter (fun t => !t.isEmpty)
-      res := res.push ((toks.map parseFloat).toArray)
-  return res
 
 /-- Format a flat `Array Float` as an iree-run-module `--input=shape=v1 v2 …`. -/
 private def fmtInput (shape : String) (xs : Array Float) : String :=
@@ -167,21 +111,6 @@ private def runFn (vmfb fn : String) (inputs : Array (Array Float)) : IO (Array 
     IO.eprintln s!"[run {fn}] FAILED:\n{r.stderr.take 1500}"
     return #[]
   return parseResults r.stdout
-
-/-- Deterministic LCG pseudo-random `Array Float` in `[-1,1]`, length `n`. -/
-private def randVec (seed n : Nat) : Array Float := Id.run do
-  let mut s : Nat := seed * 2654435761 + 12345
-  let mut out : Array Float := #[]
-  for _ in [0:n] do
-    s := (s * 1103515245 + 12345) % 2147483648
-    out := out.push (2.0 * (Float.ofNat s / 2147483648.0) - 1.0)
-  return out
-
-private def dot (a b : Array Float) : Float :=
-  (a.zip b).foldl (fun acc (x, y) => acc + x * y) 0.0
-
-private def axpy (a : Float) (x y : Array Float) : Array Float :=  -- y + a·x
-  (y.zip x).map (fun (yi, xi) => yi + a * xi)
 
 /-- The adjoint/finite-difference gradcheck of the compiled SDPA fwd/back. -/
 private def gradcheck : IO Unit := do

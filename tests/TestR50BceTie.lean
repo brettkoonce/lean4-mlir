@@ -39,18 +39,6 @@ and a run with it descends perfectly well at 1/1000 of the intended learning rat
     lake build r50-bce-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-bce-tie
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let variance :=
-      if dims.size == 4 then 2.0 / (dims[0]! * dims[2]! * dims[3]!).toFloat
-      else if dims.size == 2 then 2.0 / (dims[0]! + dims[1]!).toFloat
-      else 2.0 / (dims[0]!).toFloat
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt variance)
-
 /-- `softplus(x) = max(x,0) + log(1 + exp(−|x|))`, the same stable form the render emits. -/
 private def softplus (x : Float) : Float := max x 0.0 + Float.log (1.0 + Float.exp (-(x.abs)))
 private def sigmoidF (x : Float) : Float := 1.0 / (1.0 + Float.exp (-x))

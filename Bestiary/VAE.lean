@@ -144,17 +144,6 @@ def tinyVAEDecoder : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000} K)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -163,12 +152,12 @@ def main : IO Unit := do
   IO.println "  Variational autoencoder. Encoder outputs (μ, log σ²); sample"
   IO.println "  z = μ + σ·ε; decoder reconstructs. KL regularizer in the loss."
 
-  summarize mnistVAEEncoder
-  summarize mnistVAEDecoder
-  summarize cifarVAEEncoder
-  summarize cifarVAEDecoder
-  summarize tinyVAEEncoder
-  summarize tinyVAEDecoder
+  mnistVAEEncoder.summarize (unit := .thousands)
+  mnistVAEDecoder.summarize (unit := .thousands)
+  cifarVAEEncoder.summarize (unit := .thousands)
+  cifarVAEDecoder.summarize (unit := .thousands)
+  tinyVAEEncoder.summarize (unit := .thousands)
+  tinyVAEDecoder.summarize (unit := .thousands)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

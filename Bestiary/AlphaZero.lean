@@ -153,17 +153,6 @@ def tinyAlphaZeroValue : NetSpec where
 -- § Main: print-only summary of every Bestiary entry in this file.
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams}"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK (channel dims chain cleanly)"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -172,12 +161,12 @@ def main : IO Unit := do
   IO.println "  Two-headed network: shared residual body + policy / value heads."
   IO.println "  Not trained here — just the architecture, as NetSpec values."
 
-  summarize alphaGoZeroPolicy
-  summarize alphaGoZeroValue
-  summarize alphaZeroChessPolicy
-  summarize alphaZeroChessValue
-  summarize tinyAlphaZeroPolicy
-  summarize tinyAlphaZeroValue
+  alphaGoZeroPolicy.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  alphaGoZeroValue.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  alphaZeroChessPolicy.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  alphaZeroChessValue.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  tinyAlphaZeroPolicy.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  tinyAlphaZeroValue.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

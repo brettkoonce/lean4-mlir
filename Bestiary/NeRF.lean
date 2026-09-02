@@ -128,16 +128,6 @@ def tinyNeRF : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000}K)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -147,9 +137,9 @@ def main : IO Unit := do
   IO.println "  photos. The whole network fits in a page. The magic is in"
   IO.println "  positional encoding + volumetric rendering, not the architecture."
 
-  summarize nerf
-  summarize nerfFast
-  summarize tinyNeRF
+  nerf.summarize (size := .omitted) (unit := .thousands)
+  nerfFast.summarize (size := .omitted) (unit := .thousands)
+  tinyNeRF.summarize (size := .omitted) (unit := .thousands)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

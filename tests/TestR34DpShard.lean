@@ -46,7 +46,7 @@ Compared on the **`m` region** `[nP, 2nP)`: the momentum buffer is seeded to 0, 
 gradient, with no optimizer state to launder it.
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
+private def mkParamFanOutFlat (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
   | 1 => F32.const n.toUSize 1.0          -- γ = 1
@@ -81,7 +81,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind); sd := sd + 1
+    θparts := θparts.push (← mkParamFanOutFlat sd dims kind); sd := sd + 1
   let θ := F32.concat θparts
   -- m = 0 is LOAD-BEARING: it makes m' = g + wd·θ exactly linear in the gradient.
   let m ← F32.const net.nParams.toUSize 0.0

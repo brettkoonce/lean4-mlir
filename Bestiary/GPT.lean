@@ -141,17 +141,6 @@ def tinyGPT : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  context     : {spec.imageH} tokens"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -160,12 +149,12 @@ def main : IO Unit := do
   IO.println "  Decoder-only transformer family. BERT with a causal mask and"
   IO.println "  no pooler. Karpathy's nanoGPT is the 300-line reference."
 
-  summarize gpt1
-  summarize gpt2Small
-  summarize gpt2Medium
-  summarize gpt2Large
-  summarize gpt2XL
-  summarize tinyGPT
+  gpt1.summarize (size := .tokens)
+  gpt2Small.summarize (size := .tokens)
+  gpt2Medium.summarize (size := .tokens)
+  gpt2Large.summarize (size := .tokens)
+  gpt2XL.summarize (size := .tokens)
+  tinyGPT.summarize (size := .tokens)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

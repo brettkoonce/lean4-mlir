@@ -578,13 +578,6 @@ private def cifar8BnSgdTrainStep : String :=
   "module @m {\n" ++ s!"  func.func @cifar8w_bn_sgd_train_step({argSig}) -> ({retTy}) " ++ "{\n" ++
     cifar8BnAdamBody ++ upd ++ s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
-private def tryCompile (src dst label : String) : IO Unit := do
-  try
-    let cargs ← ireeCompileArgs src dst
-    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 4000}"
-    else IO.println s!"{label} iree-compile OK → {src}"
-  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
 
 def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"

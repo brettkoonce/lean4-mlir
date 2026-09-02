@@ -44,15 +44,6 @@ Recover the retired emitter from `git show b94e8e9:tests/TestConvNeXtTrain.lean`
 Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestConvNeXtTrain.lean
 -/
 
-/-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH (the render +
-    write already happened, so the artifact exists regardless). -/
-private def tryCompile (src dst label : String) : IO Unit := do
-  try
-    let cargs ← ireeCompileArgs src dst
-    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 3000}"
-    else IO.println s!"{label} iree-compile OK → {src}"
-  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
 
 /-- Compile a COMMITTED artifact. Throws if it is missing: this file is not its writer, and
     recreating it here is exactly the double-writer race that shipped two different functions. -/

@@ -40,15 +40,6 @@ count what survived:
     XLA_FLAGS="--xla_dump_to=/tmp/hlo --xla_dump_hlo_pass_re=.*" .lake/build/bin/resnet34-adam-bench
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0          -- BN γ
-  | 2 => F32.const n.toUSize 0.0          -- BN β / biases
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 /-- Emitted `stablehlo.*` op count of a render. Counted from the file rather than hardcoded so the
     verdict stays correct when the artifacts change — or when the two paths are passed in the other
     order, which is the control run for compile-order effects. -/
@@ -108,7 +99,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind)
+    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 net.nParams.toUSize 0.02

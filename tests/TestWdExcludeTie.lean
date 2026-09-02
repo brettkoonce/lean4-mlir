@@ -74,27 +74,10 @@ private def netBySlug (s : String) : IO WdNet :=
                          spec := convnextVerified }
   | _ => throw (IO.userError s!"unknown net '{s}' — expected vit | convnext")
 
-/-- The driver's init (`VerifiedTrain.mkParam`, private) with **exactly one deliberate change**.
-
-    ⚠ **`kind = 2` params are ZERO under the driver, and a zero θ makes ② VACUOUS** — the predicted
-    offset `lr·wd·θ` collapses to 0, which is indistinguishable from "decayed". ViT's kind-2 params
-    are the biases, β and the CLS token: precisely a large part of the 126 the mask excludes, so
-    the driver's own init would have made this gate blind on the half it exists to test. They get
-    small centred noise here instead.
-
-    ⚠ **And the first attempt at "non-degenerate" broke the net**: giving every param a value
-    centred at 0.6 (weights included) made the ViT forward overflow, and the harness reported
-    `%loss NaN` with `0/5,526,346` bit-exact and `max abs 0.000000` — a contradiction that is the
-    tell, since NaN ≠ NaN makes every coordinate "differ" while every comparison against `>` stays
-    false. **Keep the driver's He scaling for the weights**; only the zeros may move. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0                                   -- γ: already non-zero
-  | 2 => F32.heInit seed.toUSize n.toUSize 0.02                    -- was 0.0 — see above
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
+/-- `mkParamHeFanIn` with non-zero biases (σ = 0.02): a zeroed bias makes this gate's
+    update vacuous — see the note at the comparison below. -/
+private def mkParamB (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray :=
+  mkParamHeFanIn seed dims kind (biasSigma := some 0.02)
 
 private def cmpAt (a b : ByteArray) (off n : Nat) : Float × Float × Nat := Id.run do
   let mut d := 0.0; let mut m := 0.0; let mut e := 0
@@ -144,7 +127,7 @@ the signature list says {ds}")
   let mut sd := 4242
   for i in [0:sig.length] do
     let (dims, kind) := net.specs[i]!
-    parts := parts.push (← mkParam sd dims kind); sd := sd + 1
+    parts := parts.push (← mkParamB sd dims kind); sd := sd + 1
   let θ := F32.concat parts
   let z ← F32.const net.nParams.toUSize 0.0
   -- `%lr`, then the bias-correction denominators at t = 1: 1−β₁¹ = 0.1, 1−β₂¹ = 0.001.
@@ -230,7 +213,7 @@ the signature list says {ds}")
     let bitExact := e == n
     if bitExact then nExactSeen := nExactSeen + 1 else nOffsetSeen := nOffsetSeen + 1
     -- ⚠ a param whose predicted offset is ~0 cannot be classified at all — say so rather than
-    -- counting it as agreement. (It does not arise at this init, which is why `mkParam` above
+    -- counting it as agreement. (It does not arise at this init, which is why `mkParamB` above
     -- deliberately does not use the driver's zeros for the 1-D params.)
     if predMax < 1e-12 then degenerate := degenerate ++ [nm]
     let empiricalDecayed := bitExact

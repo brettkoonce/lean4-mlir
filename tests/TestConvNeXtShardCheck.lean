@@ -37,15 +37,6 @@ needs no BN.
 Needs TWO GPUs and the XLA backend.
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 /-- Labels for one shard: class `(i + off) % nClasses`, packed as the driver's 4-byte records. -/
 private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
   let mut y : ByteArray := .empty
@@ -66,7 +57,7 @@ def main (args : List String) : IO Unit := do
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind)
+    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   -- m = 0 is LOAD-BEARING: it makes m' = (1-β₁)·g exactly linear in the gradient, which is the

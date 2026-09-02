@@ -60,18 +60,6 @@ Knobs: `R50_ACC_VARIANT` (default `acc4x64`; k is read from the name and must eq
 count), `R50_ACC_TOL_U` (micro-units, default 200 = 2e-4).
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let variance :=
-      if dims.size == 4 then 2.0 / (dims[0]! * dims[2]! * dims[3]!).toFloat
-      else if dims.size == 2 then 2.0 / (dims[0]! + dims[1]!).toFloat
-      else 2.0 / (dims[0]!).toFloat
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt variance)
-
 /-- Labels for one micro-batch: class `(i + off) % nClasses`, the driver's 4-byte records. The
     offset makes the shards differ in their LABELS as well as their pixels, so a run that read the
     wrong rows cannot coincidentally agree. -/

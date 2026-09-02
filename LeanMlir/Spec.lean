@@ -635,3 +635,44 @@ def NetSpec.validate! (s : NetSpec) : IO Unit := do
   match s.validate with
   | none     => pure ()
   | some err => throw (IO.userError s!"{s.name}: {err}")
+
+/-- Which quantity the summary's first line reports. Bestiary entries cover images, token
+    streams, residue chains and raw audio, and a few (NeRF) have no meaningful input extent. -/
+inductive SummarySize where
+  | image | tokens | residues | samples | omitted
+  deriving Repr, DecidableEq
+
+/-- How `params` is abbreviated after the exact count. `bare` prints the count alone. -/
+inductive ParamUnit where
+  | millions | thousands | bare
+  deriving Repr, DecidableEq
+
+/-- **The shared Bestiary summary block.** Every `Bestiary/*.lean` entry printed its own
+    `private def summarize`; all 41 were the same ten lines varying only in the first line's
+    label, the `params` abbreviation and an optional parenthetical on the `validate : OK` line.
+
+    ⚠ The `── {name} ──` and `params<pad>: {n}` lines are **load-bearing**, not decoration:
+    `tests/test_bestiary_params.py` parses exactly those two shapes out of each binary's stdout
+    to pin all 189 variants against `tests/bestiary_params.yml` (the CI drift guard in
+    `.github/workflows/certs.yml`). Keep both shapes if you touch this. -/
+def NetSpec.summarize (s : NetSpec) (size : SummarySize := .image)
+    (unit : ParamUnit := .millions) (okNote : String := "") : IO Unit := do
+  IO.println ""
+  IO.println s!"  ── {s.name} ──"
+  match size with
+  | .image    => IO.println s!"  input       : {s.imageH} × {s.imageW}"
+  | .tokens   => IO.println s!"  context     : {s.imageH} tokens"
+  | .residues => IO.println s!"  max residues: {s.imageH}"
+  | .samples  => IO.println s!"  samples     : {s.imageH}"
+  | .omitted  => pure ()
+  IO.println s!"  layers      : {s.layers.length}"
+  let sizeTag := match unit with
+    | .millions  => s!" (~{s.totalParams / 1000000}M)"
+    | .thousands => s!" (~{s.totalParams / 1000}K)"
+    | .bare      => ""
+  IO.println s!"  params      : {s.totalParams}{sizeTag}"
+  IO.println s!"  architecture:"
+  IO.println s!"    {s.archStr}"
+  match s.validate with
+  | none     => IO.println s!"  validate    : OK{okNote}"
+  | some err => IO.println s!"  validate    : FAIL — {err}"

@@ -41,15 +41,6 @@ belt-and-braces, dump `[θ|m|v]` from a real run and read the same slots.
     #   optional argv[1]: a candidate render to measure instead of the committed one
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0          -- BN γ
-  | 2 => F32.const n.toUSize 0.0          -- BN β / biases
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 /-- Classify param `i` by the R34 layout: 36 groups of `[W, b, γ, β]` (indices 0-143), then the
     dense head `[W, b]` (144, 145). The conv biases are the `≡ 1 (mod 4)` slots below 144; the
     dense bias is 145 and is deliberately NOT one of them. -/
@@ -223,7 +214,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
   let mut sd := 1234
   for i in [0:nS] do
     let (dims, kind) := net.specs[i]!
-    let p ← mkParam sd dims kind
+    let p ← mkParamHeFanIn sd dims kind
     sd := sd + 1
     θA := θA.push p; shA := shA.push dims
     if cls[i]! != .convB then θB := θB.push p; shB := shB.push dims
@@ -339,7 +330,7 @@ BN running stats {eS}/{nS'} bit-exact (max {dS * sc}e-9)"
     feeds the candidate forward the SAME bias-free parameter blob the driver will build, so an
     arity or ordering skew is a hard failure here rather than a run-time one later.
 
-    **The claim is BIT-EXACT, and the scope is deliberate.** `mkParam` gives every conv bias its
+    **The claim is BIT-EXACT, and the scope is deliberate.** `mkParamHeFanIn` gives every conv bias its
     real init — kind 2, i.e. **zeros** — so A and B differ only in whether those zeros arrive as
     arguments or as `stablehlo.constant dense<0.0>`, and `x + 0.0` is exact in IEEE. Anything other
     than bit-exact means the candidate is reading its parameters differently, which is exactly the
@@ -368,7 +359,7 @@ private def fwdMode (net : VerifiedNet) (candidate : String) (isEval : Bool) : I
   let mut sd := 1234
   for i in [0:nS] do
     let (dims, kind) := net.specs[i]!
-    let p ← mkParam sd dims kind
+    let p ← mkParamHeFanIn sd dims kind
     sd := sd + 1
     θA := θA.push p; shA := shA.push dims
     if cls[i]! != .convB then θB := θB.push p; shB := shB.push dims
@@ -457,7 +448,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind)
+    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let m ← F32.const net.nParams.toUSize 0.0

@@ -376,17 +376,6 @@ def yoloV11m : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -398,28 +387,28 @@ def main : IO Unit := do
 
   IO.println ""
   IO.println "──────────── v1 (2016) ────────────"
-  summarize yolo
-  summarize fastYolo
-  summarize tinyYolo
+  yolo.summarize
+  fastYolo.summarize
+  tinyYolo.summarize
 
   IO.println ""
   IO.println "──────────── v3 (2018) — Darknet-53 + multi-scale ────────────"
-  summarize yoloV3
+  yoloV3.summarize
 
   IO.println ""
   IO.println "──────────── v5 (2020) — CSPDarknet, anchor-based ────────────"
-  summarize yoloV5s
-  summarize yoloV5m
+  yoloV5s.summarize
+  yoloV5m.summarize
 
   IO.println ""
   IO.println "──────────── v8 (2023) — anchor-free, C2f ────────────"
-  summarize yoloV8n
-  summarize yoloV8s
+  yoloV8n.summarize
+  yoloV8s.summarize
 
   IO.println ""
   IO.println "──────────── v11 (2024) — C3k2 + C2PSA ────────────"
-  summarize yoloV11n
-  summarize yoloV11m
+  yoloV11n.summarize
+  yoloV11m.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

@@ -43,18 +43,6 @@ different and weaker claim. The two halves are independent and both are needed �
 
 open Proofs Proofs.StableHLO
 
-/-- The driver's own init (`VerifiedTrain.mkParam`, which is private): He(fan-in) weights, γ = 1,
-    β/bias = 0. A constant-splat parameter set makes BN see zero variance, and two wrong renders
-    would then agree on the resulting garbage. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 /-- A float32 buffer from explicit values. Used for masks, which are tiny and must be exact. -/
 private def mkVec (vals : Array Float) : IO ByteArray := do
   let mut cells : Array ByteArray := #[]
@@ -354,7 +342,7 @@ backend {← LowererSession.backendName}"
   let mut parts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    parts := parts.push (← mkParam sd dims kind)
+    parts := parts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let mut params := F32.concat parts
   let mut shapeList := net.paramShapes

@@ -68,20 +68,10 @@ private def backModule : String :=
   vitBack "vit" "%dlog" "%x" "%wConv" "%Wc" "%gF" blocks cfg ++
   s!"    return {String.intercalate ", " (vitGradNames "vit" blocks)} : {retTy}\n" ++ "  }\n}\n"
 
-private def compileCheck (name body : String) : IO Bool := do
-  IO.FS.createDirAll ".lake/build"
-  let path := s!".lake/build/{name}.mlir"
-  IO.FS.writeFile path body
-  let cargs ← ireeCompileArgs path s!".lake/build/{name}.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[{name}] iree-compile FAILED:\n{r.stderr.take 3000}"; return false
-  else
-    IO.println s!"[{name}] iree-compile OK → .lake/build/{name}.vmfb"; return true
 
 def main : IO Unit := do
-  let okF ← compileCheck "vit_fwd" fwdModule
-  let okB ← compileCheck "vit_back" backModule
+  let okF ← compileCheckB "vit_fwd" fwdModule
+  let okB ← compileCheckB "vit_back" backModule
   if okF && okB then
     let xVals := randVec 999 (prod imgDims)
     let _ ← adjointGradcheckFixed "vit-tiny" ".lake/build/vit_fwd.vmfb" "vit_fwd"

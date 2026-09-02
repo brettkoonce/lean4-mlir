@@ -127,17 +127,6 @@ def tinyMamba : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  context     : {spec.imageH} tokens"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK (dim chains cleanly)"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -147,10 +136,10 @@ def main : IO Unit := do
   IO.println "  attention for language modeling. Not trained here — just"
   IO.println "  the architecture, as NetSpec values."
 
-  summarize mamba130M
-  summarize mamba370M
-  summarize mamba790M
-  summarize tinyMamba
+  mamba130M.summarize (size := .tokens) (okNote := " (dim chains cleanly)")
+  mamba370M.summarize (size := .tokens) (okNote := " (dim chains cleanly)")
+  mamba790M.summarize (size := .tokens) (okNote := " (dim chains cleanly)")
+  tinyMamba.summarize (size := .tokens) (okNote := " (dim chains cleanly)")
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

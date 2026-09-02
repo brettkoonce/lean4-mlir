@@ -105,23 +105,10 @@ private def netBySlug (s : String) : IO ClipNet :=
   | "convnext" => pure { slug := "convnext", sig := cnxAllParams 10, spec := convnextVerified }
   | _ => throw (IO.userError s!"unknown net '{s}' — expected vit | convnext")
 
-/-- The driver's init with `wdx-tie`'s one deliberate change: kind-2 params get small centred noise
-    instead of zero. Here the reason is different and weaker than there — a zero θ does not make
-    this gate vacuous — but a net whose 1-D params are all zero has a smaller gradient norm, and ⓪
-    needs the norm ABOVE the threshold. Same function, so the two harnesses stay comparable.
-
-    ⚠ Keep the He scaling on the weights. `wdx-tie` measured what happens otherwise: every param
-    centred at 0.6 overflowed the ViT forward, and the harness reported `%loss NaN` with
-    `0/5,526,346` bit-exact and `max abs 0.000000` — the tell being that NaN ≠ NaN makes every
-    coordinate "differ" while every `>` comparison stays false. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.heInit seed.toUSize n.toUSize 0.02
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
+/-- `mkParamHeFanIn` with non-zero biases (σ = 0.02): a zeroed bias makes this gate's
+    update vacuous — see the note at the comparison below. -/
+private def mkParamB (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray :=
+  mkParamHeFanIn seed dims kind (biasSigma := some 0.02)
 
 def main (argv : List String) : IO Unit := do
   let optArg (flag : String) : Option String :=
@@ -161,7 +148,7 @@ the signature list says {ds}")
   let mut sd := 4242
   for i in [0:sig.length] do
     let (dims, kind) := net.specs[i]!
-    parts := parts.push (← mkParam sd dims kind); sd := sd + 1
+    parts := parts.push (← mkParamB sd dims kind); sd := sd + 1
   let θ := F32.concat parts
   let z ← F32.const P.toUSize 0.0
   let lrF : Float := 1.0

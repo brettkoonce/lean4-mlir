@@ -167,17 +167,6 @@ def tinySegFormer : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -186,11 +175,11 @@ def main : IO Unit := do
   IO.println "  Hierarchical transformer encoder + lightweight MLP decoder."
   IO.println "  Transformer feature pyramid made segmentation-via-CNN obsolete."
 
-  summarize segformerB0
-  summarize segformerB2
-  summarize segformerB5
-  summarize segformerDecoder
-  summarize tinySegFormer
+  segformerB0.summarize
+  segformerB2.summarize
+  segformerB5.summarize
+  segformerDecoder.summarize
+  tinySegFormer.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

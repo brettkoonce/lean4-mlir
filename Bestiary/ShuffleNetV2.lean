@@ -175,17 +175,6 @@ def tinyShuffleV2 : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -194,11 +183,11 @@ def main : IO Unit := do
   IO.println "  The efficient-CNN paper that called out FLOPs as a bad proxy"
   IO.println "  for latency. Four guidelines (G1–G4), channel split, no groups."
 
-  summarize shuffleV2_0_5
-  summarize shuffleV2_1_0
-  summarize shuffleV2_1_5
-  summarize shuffleV2_2_0
-  summarize tinyShuffleV2
+  shuffleV2_0_5.summarize
+  shuffleV2_1_0.summarize
+  shuffleV2_1_5.summarize
+  shuffleV2_2_0.summarize
+  tinyShuffleV2.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

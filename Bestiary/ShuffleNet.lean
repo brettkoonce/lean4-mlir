@@ -142,17 +142,6 @@ def tinyShuffle : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -161,10 +150,10 @@ def main : IO Unit := do
   IO.println "  Mobile-optimized CNN. Grouped 1×1 convs for cheap bottlenecks"
   IO.println "  + channel shuffle to restore cross-group information flow."
 
-  summarize shuffleNet0_5x
-  summarize shuffleNet1x
-  summarize shuffleNet2x
-  summarize tinyShuffle
+  shuffleNet0_5x.summarize
+  shuffleNet1x.summarize
+  shuffleNet2x.summarize
+  tinyShuffle.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

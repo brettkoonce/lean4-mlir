@@ -1111,3 +1111,37 @@ def ireeCompileArgs (mlirPath outPath : String) : IO (Array String) := do
   let userArgs ← (IO.getEnv "IREE_EXTRA_FLAGS").map fun s =>
     ((s.getD "").splitOn " ").filter (· ≠ "") |>.toArray
   return baseArgs ++ chipArgs ++ extraArgs ++ userArgs ++ #["-o", outPath]
+
+/-- **Compile one MLIR module and report.** Writes `body` to `.lake/build/{name}.mlir`, runs
+    `iree-compile` on it, prints the verdict, and returns `true` on success.
+
+    Lifted here from thirteen gates that each carried a byte-identical `private` copy. They
+    differed only in how much of `iree-compile`'s stderr they echoed (2000 / 3000 chars) —
+    `stderrTake` keeps that adjustable, but no caller overrides it any more. -/
+def compileCheckB (name body : String) (stderrTake : Nat := 3000) : IO Bool := do
+  IO.FS.createDirAll ".lake/build"
+  let path := s!".lake/build/{name}.mlir"
+  IO.FS.writeFile path body
+  let cargs ← ireeCompileArgs path s!".lake/build/{name}.vmfb"
+  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+  if r.exitCode != 0 then
+    IO.eprintln s!"[{name}] iree-compile FAILED:\n{r.stderr.take stderrTake}"; return false
+  else
+    IO.println s!"[{name}] iree-compile OK → .lake/build/{name}.vmfb"; return true
+
+/-- `compileCheckB` with the verdict discarded — the shape most gates want. -/
+def compileCheck (name body : String) (stderrTake : Nat := 3000) : IO Unit :=
+  discard <| compileCheckB name body stderrTake
+
+/-- **Compile `src` → `dst`, tolerating an absent compiler.** Unlike `compileCheck` this takes an
+    MLIR file that already exists and never throws: a missing `iree-compile` is reported and
+    stepped over, so a smoke gate still runs on a machine without IREE installed. -/
+def tryCompile (src dst label : String) (stderrTake : Nat := 3000) : IO Unit := do
+  try
+    let cargs ← ireeCompileArgs src dst
+    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+    if r.exitCode != 0 then
+      IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take stderrTake}"
+    else IO.println s!"{label} iree-compile OK → {src}"
+  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
+

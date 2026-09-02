@@ -55,14 +55,6 @@ slots from the same forward traversal that computes them.
 Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestEfficientNetTrain.lean
 -/
 
-/-- iree-compile smoke that degrades gracefully when the compiler isn't on PATH. -/
-private def tryCompile (src dst label : String) : IO Unit := do
-  try
-    let cargs ← ireeCompileArgs src dst
-    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-    if r.exitCode != 0 then IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take 3000}"
-    else IO.println s!"{label} iree-compile OK → {src}"
-  catch e => IO.eprintln s!"iree-compile ({label}) skipped (compiler unavailable): {e}"
 
 /-- Compile a COMMITTED artifact. Throws if it is missing: this file is not its writer, and
     recreating it here is exactly the double-writer race that shipped two different functions. -/

@@ -44,18 +44,6 @@ A-against-itself run, which is the determinism floor: without it "the difference
 assertion rather than a measurement (handoff §4).
 -/
 
-/-- Parameter init in func-arg order, identical to the driver's (`VerifiedTrain.mkParam`):
-    He(fan-in) weights, γ = 1, β/bias = 0. Using the driver's init rather than a synthetic one keeps
-    the comparison on the operating point the trainer actually visits. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 private def netBySlug (slug : String) : IO VerifiedNetSpec :=
   match slug with
   | "convnext"     => pure convnextVerified
@@ -102,7 +90,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind)
+    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let shapes := packShapes net.paramShapes

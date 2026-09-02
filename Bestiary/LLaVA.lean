@@ -181,17 +181,6 @@ def tinyLlava : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -200,12 +189,12 @@ def main : IO Unit := do
   IO.println "  Frozen CLIP ViT + tiny MLP projector + (mostly) frozen LLaMA."
   IO.println "  Every modern open-source VLM demo is a LLaVA descendant."
 
-  summarize llavaVisionEncoder
-  summarize llava1Projector
-  summarize llava15Projector
-  summarize llavaLLM7B
-  summarize llavaLLM13B
-  summarize tinyLlava
+  llavaVisionEncoder.summarize
+  llava1Projector.summarize
+  llava15Projector.summarize
+  llavaLLM7B.summarize
+  llavaLLM13B.summarize
+  tinyLlava.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

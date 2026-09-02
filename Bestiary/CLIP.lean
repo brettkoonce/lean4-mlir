@@ -210,17 +210,6 @@ def tinyCLIPTextEncoder : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -231,23 +220,23 @@ def main : IO Unit := do
 
   IO.println ""
   IO.println "──────────── CLIP-RN50 ────────────"
-  summarize clipRN50ImageEncoder
-  summarize clipRN50TextEncoder
+  clipRN50ImageEncoder.summarize
+  clipRN50TextEncoder.summarize
 
   IO.println ""
   IO.println "──────────── CLIP-ViT-B/32 ────────────"
-  summarize clipViTB32ImageEncoder
-  summarize clipTextEncoder
+  clipViTB32ImageEncoder.summarize
+  clipTextEncoder.summarize
 
   IO.println ""
   IO.println "──────────── CLIP-ViT-L/14 ────────────"
-  summarize clipViTL14ImageEncoder
-  summarize clipViTL14TextEncoder
+  clipViTL14ImageEncoder.summarize
+  clipViTL14TextEncoder.summarize
 
   IO.println ""
   IO.println "──────────── tiny-CLIP ────────────"
-  summarize tinyCLIPImageEncoder
-  summarize tinyCLIPTextEncoder
+  tinyCLIPImageEncoder.summarize
+  tinyCLIPTextEncoder.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

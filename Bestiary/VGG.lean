@@ -194,17 +194,6 @@ def tinyVgg : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams}"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK (channel dims chain cleanly)"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -213,11 +202,11 @@ def main : IO Unit := do
   IO.println "  Deep stacks of 3×3 convs + max pool + heavy FC head."
   IO.println "  The dense-head era; the FC layers hold ~80% of params."
 
-  summarize vgg11
-  summarize vgg13
-  summarize vgg16
-  summarize vgg19
-  summarize tinyVgg
+  vgg11.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  vgg13.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  vgg16.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  vgg19.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
+  tinyVgg.summarize (unit := .bare) (okNote := " (channel dims chain cleanly)")
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

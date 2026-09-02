@@ -120,16 +120,6 @@ private def backModule : String :=
   s!"    return %sedds, %sedWs1, %sedbs1, %sedWs2, %sedbs2 : {retTy}\n" ++
   "  }\n}\n"
 
-private def compileCheck (name body : String) : IO Unit := do
-  IO.FS.createDirAll ".lake/build"
-  let path := s!".lake/build/{name}.mlir"
-  IO.FS.writeFile path body
-  let cargs ← ireeCompileArgs path s!".lake/build/{name}.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[{name}] iree-compile FAILED:\n{r.stderr.take 3000}"
-  else
-    IO.println s!"[{name}] iree-compile OK → .lake/build/{name}.vmfb"
 
 def main : IO Unit := do
   IO.println "── @se_fwd ──"

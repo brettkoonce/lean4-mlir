@@ -38,18 +38,6 @@ Two things it does that the R34-specific version did not:
   3e-8 prints as `0.000000`, which reads as bit-exact when it is not (§2e-bis).
 -/
 
-/-- The driver's own init (`VerifiedTrain.mkParam`, which is private): He(fan-in) weights,
-    γ = 1, β/bias = 0. Using the real init matters — a constant-splat parameter set makes BN see
-    zero variance, and two wrong renders would agree on the resulting garbage. -/
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 private def netBySlug (slug : String) : IO VerifiedNetSpec :=
   match slug with
   | "convnext"     => pure convnextVerified
@@ -100,7 +88,7 @@ def main (args : List String) : IO Unit := do
   let mut parts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    parts := parts.push (← mkParam sd dims kind)
+    parts := parts.push (← mkParamHeFanIn sd dims kind)
     sd := sd + 1
   let mut params := F32.concat parts
   -- eval BN consumes frozen per-channel stats, appended after the params in `bnChannels` order,

@@ -51,15 +51,6 @@ from**, so the gate cannot drift from the render it gates.
     CUDA_VISIBLE_DEVICES=0 .lake/build/bin/rms-tie efficientnet
 -/
 
-private def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0
-  | 2 => F32.const n.toUSize 0.0
-  | _ =>
-    let fanIn := if dims.size == 4 then dims[1]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanIn.toFloat))
-
 def main (argv : List String) : IO Unit := do
   let slug := argv.headD "mobilenetv2"
   -- The hyperparameters come from the SAME records `rmsConstsBlock` emits from, never a second
@@ -86,7 +77,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParam sd dims kind); sd := sd + 1
+    θparts := θparts.push (← mkParamHeFanIn sd dims kind); sd := sd + 1
   let θ := F32.concat θparts
   let z ← F32.const nP.toUSize 0.0
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3

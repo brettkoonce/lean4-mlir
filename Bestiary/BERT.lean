@@ -145,17 +145,6 @@ def tinyBERT : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  context     : {spec.imageH} tokens"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -165,11 +154,11 @@ def main : IO Unit := do
   IO.println "  BERT and RoBERTa — the delta was better pretraining, not"
   IO.println "  better layers."
 
-  summarize bertBase
-  summarize bertLarge
-  summarize robertaBase
-  summarize robertaLarge
-  summarize tinyBERT
+  bertBase.summarize (size := .tokens)
+  bertLarge.summarize (size := .tokens)
+  robertaBase.summarize (size := .tokens)
+  robertaLarge.summarize (size := .tokens)
+  tinyBERT.summarize (size := .tokens)
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"

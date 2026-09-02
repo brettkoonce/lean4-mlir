@@ -166,17 +166,6 @@ def tinyAlphaGo : NetSpec where
 -- § Main: print-only summary
 -- ════════════════════════════════════════════════════════════════
 
-private def summarize (spec : NetSpec) : IO Unit := do
-  IO.println s!""
-  IO.println s!"  ── {spec.name} ──"
-  IO.println s!"  input       : {spec.imageH} × {spec.imageW}"
-  IO.println s!"  layers      : {spec.layers.length}"
-  IO.println s!"  params      : {spec.totalParams} (~{spec.totalParams / 1000000}M)"
-  IO.println s!"  architecture:"
-  IO.println s!"    {spec.archStr}"
-  match spec.validate with
-  | none     => IO.println s!"  validate    : OK"
-  | some err => IO.println s!"  validate    : FAIL — {err}"
 
 def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
@@ -185,10 +174,10 @@ def main : IO Unit := do
   IO.println "  The 2016 Lee Sedol match. Three networks (policy + value +"
   IO.println "  rollout), 48 hand-crafted feature planes, MCTS outer loop."
 
-  summarize alphaGoPolicyNet
-  summarize alphaGoValueNet
-  summarize alphaGoRollout
-  summarize tinyAlphaGo
+  alphaGoPolicyNet.summarize
+  alphaGoValueNet.summarize
+  alphaGoRollout.summarize
+  tinyAlphaGo.summarize
 
   IO.println ""
   IO.println "────────────────────────────────────────────────────────────────"
