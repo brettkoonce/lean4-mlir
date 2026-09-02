@@ -88,7 +88,7 @@ def main (args : List String) : IO Unit := do
   let mut parts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    parts := parts.push (← mkParamHeFanIn sd dims kind)
+    parts := parts.push (← mkParam sd dims kind)
     sd := sd + 1
   let mut params := F32.concat parts
   -- eval BN consumes frozen per-channel stats, appended after the params in `bnChannels` order,

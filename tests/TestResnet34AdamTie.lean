@@ -58,7 +58,7 @@ migration check. Pass the retired render as the first argument for that."
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
+    θparts := θparts.push (← mkParam sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 net.nParams.toUSize 0.02

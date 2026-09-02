@@ -46,14 +46,6 @@ Compared on the **`m` region** `[nP, 2nP)`: the momentum buffer is seeded to 0, 
 gradient, with no optimizer state to launder it.
 -/
 
-private def mkParamFanOutFlat (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
-  let n := dims.foldl (· * ·) 1
-  match kind with
-  | 1 => F32.const n.toUSize 1.0          -- γ = 1
-  | 2 => F32.const n.toUSize 0.0          -- β / bias = 0
-  | _ =>
-    let fanOut := if dims.size == 4 then dims[0]! * dims[2]! * dims[3]! else dims[0]!
-    F32.heInit seed.toUSize n.toUSize (Float.sqrt (2.0 / fanOut.toFloat))
 
 /-- Labels for one shard: class `(i + off) % nClasses`, in the driver's 4-byte records. -/
 private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
@@ -81,7 +73,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParamFanOutFlat sd dims kind); sd := sd + 1
+    θparts := θparts.push (← mkParam sd dims kind); sd := sd + 1
   let θ := F32.concat θparts
   -- m = 0 is LOAD-BEARING: it makes m' = g + wd·θ exactly linear in the gradient.
   let m ← F32.const net.nParams.toUSize 0.0

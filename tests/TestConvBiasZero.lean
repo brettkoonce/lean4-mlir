@@ -214,7 +214,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
   let mut sd := 1234
   for i in [0:nS] do
     let (dims, kind) := net.specs[i]!
-    let p ← mkParamHeFanIn sd dims kind
+    let p ← mkParam sd dims kind
     sd := sd + 1
     θA := θA.push p; shA := shA.push dims
     if cls[i]! != .convB then θB := θB.push p; shB := shB.push dims
@@ -330,7 +330,7 @@ BN running stats {eS}/{nS'} bit-exact (max {dS * sc}e-9)"
     feeds the candidate forward the SAME bias-free parameter blob the driver will build, so an
     arity or ordering skew is a hard failure here rather than a run-time one later.
 
-    **The claim is BIT-EXACT, and the scope is deliberate.** `mkParamHeFanIn` gives every conv bias its
+    **The claim is BIT-EXACT, and the scope is deliberate.** `mkParam` gives every conv bias its
     real init — kind 2, i.e. **zeros** — so A and B differ only in whether those zeros arrive as
     arguments or as `stablehlo.constant dense<0.0>`, and `x + 0.0` is exact in IEEE. Anything other
     than bit-exact means the candidate is reading its parameters differently, which is exactly the
@@ -359,7 +359,7 @@ private def fwdMode (net : VerifiedNet) (candidate : String) (isEval : Bool) : I
   let mut sd := 1234
   for i in [0:nS] do
     let (dims, kind) := net.specs[i]!
-    let p ← mkParamHeFanIn sd dims kind
+    let p ← mkParam sd dims kind
     sd := sd + 1
     θA := θA.push p; shA := shA.push dims
     if cls[i]! != .convB then θB := θB.push p; shB := shB.push dims
@@ -448,7 +448,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
+    θparts := θparts.push (← mkParam sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let m ← F32.const net.nParams.toUSize 0.0

@@ -181,7 +181,7 @@ rebuilt and the Bestiary golden guard re-run (189 variants, PASS).
 |---|---|---|
 | 1 · gradcheck harness | ✅ done (−124) | `LeanMlir/GradcheckHelpers.lean` (already existed) |
 | 2 · Bestiary `summarize` | ✅ done (41 files) | `NetSpec.summarize` in `LeanMlir/Spec.lean` |
-| 3 · `mkParam` | ✅ done (33 files, −314) | `LeanMlir/VerifiedTrain.lean` |
+| 3 · `mkParam` | ✅ done (33 files, −314), unified 2026-09-02 | `LeanMlir/VerifiedTrain.lean` |
 | 6 · `compileCheck`/`tryCompile` | ✅ done (21 files, −195) | `LeanMlir/Types.lean` |
 | 4 · Cifar8Wide | ⚠ superseded — see below | |
 | 5 · MnistCNN `Mini`/`Spatial` | ⏳ not mechanical — see below | |
@@ -208,11 +208,40 @@ Unifying the formula would change the initial θ of 25 gates, so it is **not** w
 `TestR50GradCheck` keep local copies, now named `mkParamFanOutFlat` / `mkParamBiasSeeded` for
 what they actually are. The false docstring is gone with the copy it sat on.
 
-**Open decision for a human:** should those 25 gates move to the driver's init? That is a
-behaviour change to 25 gates, not a refactor, and it wants a deliberate re-run rather than a
-dedup commit.
+**Resolved 2026-09-02: they did move.** `mkParamHeFanIn` is gone; every gate now calls `mkParam`.
+All 24 runnable gates were run before and after on this box (2 GPUs for the seven `*-dp-check` /
+`shard-check`, 4 for `mnv4-dp-check` / `vit-dp-check`). Result: **23 of 24 verdicts unchanged**, and
+the two `spread N/M` figures the docs quote — `spread 0/22`, `spread 0/158` — are identical, so the
+139 doc citations of `spread`/`BIT-EXACT` needed no re-baselining. They are the bit-exact clauses,
+and bit-exactness is invariant under the init by construction: every one of these gates feeds the
+same θ to both sides.
 
-### Finding 4 is superseded by something worse
+Four gates were **already red** before the change and are red in exactly the same way after —
+`cifar8-dp-check` (0.001368 > 1e-4; it actually *improved* to 0.000684), `resnet34-batch-check`
+(OOM on the bs256 render at the 11.68 GiB BFC limit), `sgd-render-tie` and `vit-dp-check`
+(`iree_ffi_session_create failed` on 4 replicas). None are related to the init; they are standing
+failures on this box.
+
+**One gate genuinely regressed, and it caught itself.** `rms-tie` threw:
+
+> CONTROL DEAD: dropping `wd·θ` fits as well as keeping it (0.000002 vs 0.000000) — the coupled-L2
+> term is not being tested (wd = 0.000040 may be too small against |g| = 4.936951 to be separable
+> at f32)
+
+The driver's init makes MobileNetV2's gradients 5.8× larger (|g|max 0.85 → 4.94) while `wd = 4e-5`
+is **baked into the committed `mobilenetv2_rms_train_step.mlir`** (the gate reads its hyperparameters
+off the render, deliberately, rather than from a copy). So the fix is not available at the gate:
+raising `wd` means re-rendering a proven artifact. `mkParam` therefore keeps one documented
+`heFanIn := true` escape hatch, used by exactly that one call site, with the reason stated at the
+definition. That is a 23:1 unification with a stated physical exception, rather than 25 silent
+disagreements.
+
+`TestMomTie`'s docstring was the one calibrated claim that went stale and is re-baselined: its
+no-decay control was "~3e-4 of `g` … four orders above the f32 floor" and is now ~7e-5 and three
+orders, its margin falling from ~480× the tie to ~87×. It is now the tightest margin in the
+harness, and the docstring says so.
+
+### Finding 4 — the files are unbuilt but NOT unused (corrected)
 
 `tests/TestCifar8AdamTrain.lean` and `tests/TestCifar8WideTrain.lean` are **not build targets** —
 neither is a `lean_exe` root, neither has ever produced an `.olean`, and nothing imports them.
@@ -220,10 +249,16 @@ They still compile under `lake env lean`, and every render in both is marked
 *"RETIRED 2026-07-30 (§2i) … NOT written"*, superseded by `Proofs/Codegen/CnnRender.lean`. Their
 stated remaining purpose is "the tie reference", but no gate mechanically consumes them.
 
-So the 573 duplicated lines are the smaller problem: **1,359 lines of unbuilt, unreferenced Lean**
-is the finding. Deduplicating them would also need a shared module that is itself a build target
-(an unbuilt module cannot be imported), i.e. a lakefile change in service of dead reference
-material. Retiring or properly wiring them is a call for a human, not a dedup commit.
+⚠ **An earlier draft of this section called them unreferenced and floated deleting them. That was
+wrong** — it checked lake targets, `.olean`s and Lean imports, and not shell scripts.
+`scripts/regen_verified_mlir.sh:489-490` runs both under `WHAT=all|tests`, and the script says why:
+these are `iree-compile` smokes over the committed bytes, "the one step `lake build` cannot do (it
+needs the compiler on PATH) and they throw if an artifact is missing". They are a live gate that
+happens not to be a build target. Do not delete them.
+
+What stands is the narrower point: 573 of the Wide file's 659 lines are copied, and deduplicating
+them needs a shared module that is itself a build target (an unbuilt module cannot be imported),
+i.e. a lakefile change. Worth doing, but it is a build-graph change, not a dedup commit.
 
 ### Finding 5 is proof surgery, not a lift
 

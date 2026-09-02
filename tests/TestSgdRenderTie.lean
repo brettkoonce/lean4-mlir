@@ -90,7 +90,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParamHeFanIn sd dims kind)
+    θparts := θparts.push (← mkParam sd dims kind)
     sd := sd + 1
   let θ := F32.concat θparts
   let shapes := packShapes net.paramShapes

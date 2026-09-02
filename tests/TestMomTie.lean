@@ -30,9 +30,12 @@ obviously means. At `v = 0` that is `θ − lr·(1+μ)·v'`, i.e. **1.9×** the 
 harness computes BOTH predictions and requires that heavy-ball matches while Nesterov does *not*.
 A gate that only checked ② against the render it was derived from would pass either optimizer.
 
-Second control: ① is re-checked against `v' = g` with the decay dropped. `wd·θ` is ~3e-4 of `g`
-here — small, but four orders above the f32 floor, so a missing coupled-L2 term is detectable and
-is shown to be.
+Second control: ① is re-checked against `v' = g` with the decay dropped. `wd·θ` is ~7e-5 of `g`
+here — small, but three orders above the f32 floor, so a missing coupled-L2 term is detectable and
+is shown to be. ⚠ It was ~3e-4 (and four orders) until 2026-09-02, when the gate moved off its
+hand-copied He fan-IN init onto the driver's `mkParam`; that makes R34's gradients 4.6× larger
+against a fixed `wd`, so this control's margin fell from ~480× the tie to ~87×. Still decisive,
+but it is now the tightest margin in the harness — see `LeanMlir/VerifiedTrain.lean`'s `heFanIn`.
 
     lake build r34-mom-tie && HIP_VISIBLE_DEVICES=0 .lake/build/bin/r34-mom-tie
 -/
@@ -54,7 +57,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParamHeFanIn sd dims kind); sd := sd + 1
+    θparts := θparts.push (← mkParam sd dims kind); sd := sd + 1
   let θ := F32.concat θparts
   let z ← F32.const nP.toUSize 0.0
   -- `m` for the momentum run is deliberately NON-zero and distinctive: it must ride through

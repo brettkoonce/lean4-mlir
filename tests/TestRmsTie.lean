@@ -77,7 +77,7 @@ backend {← LowererSession.backendName}"
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParamHeFanIn sd dims kind); sd := sd + 1
+    θparts := θparts.push (← mkParam sd dims kind (heFanIn := true)); sd := sd + 1
   let θ := F32.concat θparts
   let z ← F32.const nP.toUSize 0.0
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3

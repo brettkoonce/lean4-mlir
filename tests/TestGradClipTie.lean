@@ -105,10 +105,10 @@ private def netBySlug (s : String) : IO ClipNet :=
   | "convnext" => pure { slug := "convnext", sig := cnxAllParams 10, spec := convnextVerified }
   | _ => throw (IO.userError s!"unknown net '{s}' — expected vit | convnext")
 
-/-- `mkParamHeFanIn` with non-zero biases (σ = 0.02): a zeroed bias makes this gate's
+/-- `mkParam` with non-zero biases (σ = 0.02): a zeroed bias makes this gate's
     update vacuous — see the note at the comparison below. -/
 private def mkParamB (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray :=
-  mkParamHeFanIn seed dims kind (biasSigma := some 0.02)
+  mkParam seed dims kind (biasSigma := some 0.02)
 
 def main (argv : List String) : IO Unit := do
   let optArg (flag : String) : Option String :=

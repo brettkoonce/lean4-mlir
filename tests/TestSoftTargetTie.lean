@@ -105,7 +105,7 @@ def main (args : List String) : IO Unit := do
   let mut θparts : Array ByteArray := #[]
   let mut sd := 1234
   for (dims, kind) in net.specs do
-    θparts := θparts.push (← mkParamHeFanIn sd dims kind); sd := sd + 1
+    θparts := θparts.push (← mkParam sd dims kind); sd := sd + 1
   let θ := F32.concat θparts
   let m ← F32.const net.nParams.toUSize 0.0
   let v ← F32.const net.nParams.toUSize 0.0
