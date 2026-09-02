@@ -237,4 +237,83 @@ theorem mnv2Forward_floatBridges (M : FloatModel)
   have hGAP := hH.comp (floatBridges_gap (c := 128) (h := 7) (w := 7) M (by norm_num) (by norm_num))
   exact hGAP.comp (floatBridges_dense M Wfc bfc hwfc hbfcβ (by norm_num) hWfc hbfc)
 
+
+-- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- ReLU6 float-bridges to itself (clamp-and-select rounds nothing). -/
+theorem floatBridgesTo_relu6 {n : Nat} : FloatBridgesTo (relu6 n) (relu6 n) :=
+  fun A hA => ⟨A, _, hA, floatClose_relu6 A⟩
+
+/-- **The float MobileNetV2 forward skeleton** — `mnv2Forward` with each concrete
+    slot replaced by the model's rounded peer and each supplied slot by that
+    block's float map. `relu6` is exact in float and is unchanged. -/
+noncomputable def mnv2ForwardF (M : FloatModel)
+    (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (Wh : Kernel4 128 64 1 1)
+    (bh : Vec 128) (Wfc : Mat 128 10) (bfc : Vec 10)
+    (bnSF : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))
+    (bnHF : Vec (128 * 7 * 7) → Vec (128 * 7 * 7))
+    (b1F : Vec (16 * 112 * 112) → Vec (24 * 56 * 56))
+    (b2F : Vec (24 * 56 * 56) → Vec (24 * 56 * 56))
+    (b3F : Vec (24 * 56 * 56) → Vec (32 * 28 * 28))
+    (b4F : Vec (32 * 28 * 28) → Vec (32 * 28 * 28))
+    (b5F : Vec (32 * 28 * 28) → Vec (64 * 14 * 14))
+    (b6F : Vec (64 * 14 * 14) → Vec (64 * 7 * 7)) :
+    Vec (3 * 224 * 224) → Vec 10 :=
+  M.dense Wfc bfc
+  ∘ M.gapFlatF
+  ∘ (relu6 (128 * 7 * 7) ∘ bnHF ∘ M.flatConvF (h := 7) (w := 7) Wh bh)
+  ∘ b6F ∘ b5F ∘ b4F ∘ b3F ∘ b2F ∘ b1F
+  ∘ (relu6 (16 * 112 * 112) ∘ bnSF ∘ M.flatConvStride2F (h := 112) (w := 112) Ws bs)
+
+set_option maxRecDepth 100000 in
+/-- **The whole MobileNetV2 forward float-bridges TO its float skeleton.** Same
+    `.comp` chain as `mnv2Forward_floatBridges`, with every float map named — so
+    this is the statement that carries "the deployed float forward of the whole net
+    is within an explicit budget of the certified `ℝ` forward"
+    (`formalization.yaml` fidelity §4d). -/
+theorem mnv2Forward_floatBridgesTo (M : FloatModel)
+    (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (Wh : Kernel4 128 64 1 1) (bh : Vec 128)
+    (Wfc : Mat 128 10) (bfc : Vec 10)
+    (bnS bnSF : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))
+    (bnH bnHF : Vec (128 * 7 * 7) → Vec (128 * 7 * 7))
+    (b1 b1F : Vec (16 * 112 * 112) → Vec (24 * 56 * 56))
+    (b2 b2F : Vec (24 * 56 * 56) → Vec (24 * 56 * 56))
+    (b3 b3F : Vec (24 * 56 * 56) → Vec (32 * 28 * 28))
+    (b4 b4F : Vec (32 * 28 * 28) → Vec (32 * 28 * 28))
+    (b5 b5F : Vec (32 * 28 * 28) → Vec (64 * 14 * 14))
+    (b6 b6F : Vec (64 * 14 * 14) → Vec (64 * 7 * 7))
+    {ws bsβ wh bhβ wfc bfcβ : ℝ} (hws : 0 ≤ ws) (hbsβ : 0 ≤ bsβ) (hwh : 0 ≤ wh) (hbhβ : 0 ≤ bhβ)
+    (hwfc : 0 ≤ wfc) (hbfcβ : 0 ≤ bfcβ)
+    (hWs : ∀ o c kh kw, |Ws o c kh kw| ≤ ws) (hbs : ∀ o, |bs o| ≤ bsβ)
+    (hWh : ∀ o c kh kw, |Wh o c kh kw| ≤ wh) (hbh : ∀ o, |bh o| ≤ bhβ)
+    (hWfc : ∀ i j, |Wfc i j| ≤ wfc) (hbfc : ∀ j, |bfc j| ≤ bfcβ)
+    (hbnS : FloatBridgesTo bnS bnSF) (hbnH : FloatBridgesTo bnH bnHF)
+    (hb1 : FloatBridgesTo b1 b1F) (hb2 : FloatBridgesTo b2 b2F)
+    (hb3 : FloatBridgesTo b3 b3F) (hb4 : FloatBridgesTo b4 b4F)
+    (hb5 : FloatBridgesTo b5 b5F) (hb6 : FloatBridgesTo b6 b6F) :
+    FloatBridgesTo (mnv2Forward Ws bs Wh bh Wfc bfc bnS bnH b1 b2 b3 b4 b5 b6)
+      (mnv2ForwardF M Ws bs Wh bh Wfc bfc bnSF bnHF b1F b2F b3F b4F b5F b6F) := by
+  unfold mnv2Forward mnv2ForwardF
+  have hstem : FloatBridgesTo
+      (relu6 (16 * 112 * 112) ∘ bnS ∘ flatConvStride2 (h := 112) (w := 112) Ws bs)
+      (relu6 (16 * 112 * 112) ∘ bnSF ∘ M.flatConvStride2F (h := 112) (w := 112) Ws bs) :=
+    ((floatBridgesTo_flatConvStride2 (h := 112) (w := 112) M Ws bs hws hbsβ (by norm_num)
+      hWs hbs).comp hbnS).comp floatBridgesTo_relu6
+  have h1 := hstem.comp hb1
+  have h2 := h1.comp hb2
+  have h3 := h2.comp hb3
+  have h4 := h3.comp hb4
+  have h5 := h4.comp hb5
+  have h6 := h5.comp hb6
+  have hhead : FloatBridgesTo
+      (relu6 (128 * 7 * 7) ∘ bnH ∘ flatConv (h := 7) (w := 7) Wh bh)
+      (relu6 (128 * 7 * 7) ∘ bnHF ∘ M.flatConvF (h := 7) (w := 7) Wh bh) :=
+    ((floatBridgesTo_flatConv (h := 7) (w := 7) M Wh bh hwh hbhβ (by norm_num)
+      hWh hbh).comp hbnH).comp floatBridgesTo_relu6
+  have hH := h6.comp hhead
+  have hGAP := hH.comp (floatBridgesTo_gap (c := 128) (h := 7) (w := 7) M (by norm_num) (by norm_num))
+  exact hGAP.comp (floatBridgesTo_dense M Wfc bfc hwfc hbfcβ (by norm_num) hWfc hbfc)
+
 end Proofs

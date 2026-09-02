@@ -381,4 +381,83 @@ theorem convnextCh_floatBridges (M : FloatModel) (fgelu : ℝ → ℝ) (wts : Cn
     (floatBridges_convNextStageChK M fgelu hw' hbb hegelu (by norm_num) (by norm_num)
       (by norm_num) hg 3 wts.s4 hb4 hln4)
 
+
+-- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Stride-4 conv float-bridges TO the model's rounded stride-4 conv. -/
+theorem floatBridgesTo_flatConvStride4 {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' bb : ℝ}
+    (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hn : 0 < ic * (2 * (2 * h)) * (2 * (2 * w)))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ bb) :
+    FloatBridgesTo (flatConvStride4 (h := h) (w := w) W b)
+      (M.flatConvStride4F (h := h) (w := w) W b) :=
+  fun _A hA => ⟨_, _,
+    add_nonneg (layerAct_nonneg hw' hbb hA) (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
+    floatClose_flatConvStride4 M W b hw' hbb hA hn hW hb⟩
+
+/-- **The float ConvNeXt-T forward skeleton** — `convnextForward` with the concrete
+    stem conv, GAP and head dense replaced by their rounded peers and every supplied
+    slot by its float map. -/
+noncomputable def convnextForwardF (M : FloatModel)
+    (sW : Kernel4 96 3 4 4) (sb : Vec 96) (Wd : Mat 768 10) (bd : Vec 10)
+    (lnStemF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (lnHeadF : Vec 768 → Vec 768)
+    (s1F : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (d1F : Vec (96 * 56 * 56) → Vec (192 * 28 * 28))
+    (s2F : Vec (192 * 28 * 28) → Vec (192 * 28 * 28))
+    (d2F : Vec (192 * 28 * 28) → Vec (384 * 14 * 14))
+    (s3F : Vec (384 * 14 * 14) → Vec (384 * 14 * 14))
+    (d3F : Vec (384 * 14 * 14) → Vec (768 * 7 * 7))
+    (s4F : Vec (768 * 7 * 7) → Vec (768 * 7 * 7)) :
+    Vec (3 * 224 * 224) → Vec 10 :=
+  M.dense Wd bd
+  ∘ lnHeadF
+  ∘ M.gapFlatF
+  ∘ s4F ∘ d3F ∘ s3F ∘ d2F ∘ s2F ∘ d1F ∘ s1F
+  ∘ (lnStemF ∘ M.flatConvStride4F (h := 56) (w := 56) sW sb)
+
+set_option maxRecDepth 100000 in
+/-- **The whole ConvNeXt-T forward float-bridges TO its float skeleton.** Same `.comp`
+    chain as `convnext_floatBridges`, with every float map named — the statement that
+    carries "the deployed float forward of the whole [3,3,9,3] net is within an
+    explicit budget of the certified `ℝ` forward" (`formalization.yaml` §4d). -/
+theorem convnext_floatBridgesTo (M : FloatModel)
+    (sW : Kernel4 96 3 4 4) (sb : Vec 96) (Wd : Mat 768 10) (bd : Vec 10)
+    (lnStem lnStemF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (lnHead lnHeadF : Vec 768 → Vec 768)
+    (s1 s1F : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (d1 d1F : Vec (96 * 56 * 56) → Vec (192 * 28 * 28))
+    (s2 s2F : Vec (192 * 28 * 28) → Vec (192 * 28 * 28))
+    (d2 d2F : Vec (192 * 28 * 28) → Vec (384 * 14 * 14))
+    (s3 s3F : Vec (384 * 14 * 14) → Vec (384 * 14 * 14))
+    (d3 d3F : Vec (384 * 14 * 14) → Vec (768 * 7 * 7))
+    (s4 s4F : Vec (768 * 7 * 7) → Vec (768 * 7 * 7))
+    {ws bsβ wd bdβ : ℝ} (hws : 0 ≤ ws) (hbsβ : 0 ≤ bsβ) (hwd : 0 ≤ wd) (hbdβ : 0 ≤ bdβ)
+    (hsW : ∀ o c kh kw, |sW o c kh kw| ≤ ws) (hsb : ∀ o, |sb o| ≤ bsβ)
+    (hWd : ∀ i j, |Wd i j| ≤ wd) (hbd : ∀ j, |bd j| ≤ bdβ)
+    (hlnStem : FloatBridgesTo lnStem lnStemF) (hlnHead : FloatBridgesTo lnHead lnHeadF)
+    (hs1 : FloatBridgesTo s1 s1F) (hd1 : FloatBridgesTo d1 d1F)
+    (hs2 : FloatBridgesTo s2 s2F) (hd2 : FloatBridgesTo d2 d2F)
+    (hs3 : FloatBridgesTo s3 s3F) (hd3 : FloatBridgesTo d3 d3F)
+    (hs4 : FloatBridgesTo s4 s4F) :
+    FloatBridgesTo (convnextForward sW sb Wd bd lnStem lnHead s1 d1 s2 d2 s3 d3 s4)
+      (convnextForwardF M sW sb Wd bd lnStemF lnHeadF s1F d1F s2F d2F s3F d3F s4F) := by
+  unfold convnextForward convnextForwardF
+  have hstem : FloatBridgesTo (lnStem ∘ flatConvStride4 (h := 56) (w := 56) sW sb)
+      (lnStemF ∘ M.flatConvStride4F (h := 56) (w := 56) sW sb) :=
+    (floatBridgesTo_flatConvStride4 (h := 56) (w := 56) M sW sb hws hbsβ (by norm_num)
+      hsW hsb).comp hlnStem
+  have h1 := hstem.comp hs1
+  have hD1 := h1.comp hd1
+  have h2 := hD1.comp hs2
+  have hD2 := h2.comp hd2
+  have h3 := hD2.comp hs3
+  have hD3 := h3.comp hd3
+  have h4 := hD3.comp hs4
+  have hGAP := h4.comp (floatBridgesTo_gap (c := 768) (h := 7) (w := 7) M (by norm_num) (by norm_num))
+  have hHead := hGAP.comp hlnHead
+  exact hHead.comp (floatBridgesTo_dense M Wd bd hwd hbdβ (by norm_num) hWd hbd)
+
 end Proofs

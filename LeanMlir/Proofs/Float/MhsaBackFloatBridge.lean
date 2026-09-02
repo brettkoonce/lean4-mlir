@@ -507,6 +507,20 @@ theorem floatBridges_towerBack {m : Nat} (l : List (Vec m → Vec m))
       exact FloatBridges.comp (hl f (List.mem_cons.mpr (Or.inl rfl)))
         (ih (fun g hg => hl g (List.mem_cons.mpr (Or.inr hg))))
 
+/-- Identity float-bridges to itself. -/
+theorem floatBridgesTo_id {m : Nat} : FloatBridgesTo (id : Vec m → Vec m) id :=
+  fun A hA => ⟨A, _, hA, ⟨fun _v hv i => ⟨hv i, hv i⟩, fun _ _ _ _ _ hd i => hd i⟩⟩
+
+/-- **The tower fold, with the float tower named.** The blocks and their float peers
+    are paired by `Forall₂`, so the conclusion is about `towerBack` of the float
+    block list — not about some existentially chosen tower. -/
+theorem floatBridgesTo_towerBack {m : Nat} :
+    ∀ (l lF : List (Vec m → Vec m)), List.Forall₂ FloatBridgesTo l lF →
+      FloatBridgesTo (towerBack l) (towerBack lF)
+  | [], [], _ => floatBridgesTo_id
+  | _ :: _, _ :: _, .cons hf hfs =>
+      FloatBridgesTo.comp hf (floatBridgesTo_towerBack _ _ hfs)
+
 -- ════════════════════════════════════════════════════════════════
 -- § The endpoints — cls-slice scatter + classifier head + the whole-net fold
 -- ════════════════════════════════════════════════════════════════
@@ -575,6 +589,51 @@ theorem vit_grad_floatBridges {N D nClasses imgDim : Nat} (M : FloatModel) (Wcls
         (FloatBridges.comp (floatBridges_linBack M Wcls hw' hnc hWcls) (floatBridges_clsScatter N D))
         (FloatBridges.perRow (N + 1) hFinalLN))
       (floatBridges_towerBack blockBacks hblocks))
+    hPatch
+
+
+-- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- The CLS-slice backward float-bridges to itself (a structural scatter). -/
+theorem floatBridgesTo_clsScatter (N D : Nat) :
+    FloatBridgesTo (clsScatter N D) (clsScatter N D) :=
+  fun A hA => ⟨A, _, hA, floatClose_clsScatter N D hA⟩
+
+/-- **The float ViT input-gradient skeleton** — `vitGradFlat` with the concrete head
+    dense replaced by its rounded peer and each supplied slot by its float map.
+    `clsScatter` is a structural scatter, exact in float. -/
+noncomputable def vitGradFlatF {N D nClasses imgDim : Nat} (M : FloatModel)
+    (Wcls : Mat D nClasses) (finalLNBackF : Vec D → Vec D)
+    (blockBacksF : List (Vec ((N + 1) * D) → Vec ((N + 1) * D)))
+    (patchEmbedBackF : Vec ((N + 1) * D) → Vec imgDim) : Vec nClasses → Vec imgDim :=
+  patchEmbedBackF ∘ towerBack blockBacksF ∘ perRowFlat (N + 1) D finalLNBackF
+    ∘ clsScatter N D ∘ M.dense (Mat.transpose Wcls) (0 : Vec D)
+
+/-- **THE WHOLE-NET ViT BACKWARD FLOAT-BRIDGES TO ITS FLOAT SKELETON.** Same `.comp`
+    thread as `vit_grad_floatBridges`, with the block backwards paired to their float
+    peers by `Forall₂` — so the conclusion names the float backward rather than
+    existentially discarding it (`formalization.yaml` fidelity §4d). -/
+theorem vit_grad_floatBridgesTo {N D nClasses imgDim : Nat} (M : FloatModel)
+    (Wcls : Mat D nClasses)
+    (finalLNBack finalLNBackF : Vec D → Vec D)
+    (blockBacks blockBacksF : List (Vec ((N + 1) * D) → Vec ((N + 1) * D)))
+    (patchEmbedBack patchEmbedBackF : Vec ((N + 1) * D) → Vec imgDim)
+    {w' : ℝ} (hw' : 0 ≤ w') (hnc : 0 < nClasses) (hWcls : ∀ i j, |Wcls i j| ≤ w')
+    (hFinalLN : FloatBridgesTo finalLNBack finalLNBackF)
+    (hblocks : List.Forall₂ FloatBridgesTo blockBacks blockBacksF)
+    (hPatch : FloatBridgesTo patchEmbedBack patchEmbedBackF) :
+    FloatBridgesTo (vitGradFlat Wcls finalLNBack blockBacks patchEmbedBack)
+      (vitGradFlatF M Wcls finalLNBackF blockBacksF patchEmbedBackF) := by
+  unfold vitGradFlat vitGradFlatF
+  exact FloatBridgesTo.comp
+    (FloatBridgesTo.comp
+      (FloatBridgesTo.comp
+        (FloatBridgesTo.comp (floatBridgesTo_linBack M Wcls hw' hnc hWcls)
+          (floatBridgesTo_clsScatter N D))
+        (FloatBridgesTo.perRow (N + 1) hFinalLN))
+      (floatBridgesTo_towerBack blockBacks blockBacksF hblocks))
     hPatch
 
 end Proofs

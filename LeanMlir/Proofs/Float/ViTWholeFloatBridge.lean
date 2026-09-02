@@ -217,4 +217,56 @@ theorem vit_full_eq_vitForwardFlat
   unfold vit_full vitForwardFlat
   rw [hmid, Function.comp_assoc]
 
+
+-- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- The cls-slice gather float-bridges to itself (a structural select). -/
+theorem floatBridgesTo_clsSlice (N D : Nat) :
+    FloatBridgesTo (cls_slice_flat N D) (cls_slice_flat N D) :=
+  fun A hA => ⟨A, _, hA, floatClose_clsSlice N D⟩
+
+/-- The ViT classifier head float-bridges to `M.dense ∘ cls-slice`. -/
+theorem floatBridgesTo_vitHead {N D nClasses : Nat} (M : FloatModel)
+    (Wcls : Mat D nClasses) (bcls : Vec nClasses)
+    {w' β : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hD : 0 < D)
+    (hWcls : ∀ i j, |Wcls i j| ≤ w') (hbcls : ∀ j, |bcls j| ≤ β) :
+    FloatBridgesTo (classifier_flat N D nClasses Wcls bcls)
+      (M.dense Wcls bcls ∘ cls_slice_flat N D) := by
+  unfold classifier_flat
+  exact (floatBridgesTo_clsSlice N D).comp
+    (floatBridgesTo_dense M Wcls bcls hw' hβ hD hWcls hbcls)
+
+/-- **The float ViT forward skeleton** — `vitForwardFlat` with the concrete classifier
+    head replaced by its rounded peer and every supplied slot by its float map. -/
+noncomputable def vitForwardFlatF {N D nClasses imgDim : Nat} (M : FloatModel)
+    (Wcls : Mat D nClasses) (bcls : Vec nClasses) (finalLNF : Vec D → Vec D)
+    (blocksF : List (Vec ((N + 1) * D) → Vec ((N + 1) * D)))
+    (patchEmbedF : Vec imgDim → Vec ((N + 1) * D)) : Vec imgDim → Vec nClasses :=
+  (M.dense Wcls bcls ∘ cls_slice_flat N D)
+    ∘ perRowFlat (N + 1) D finalLNF
+    ∘ towerBack blocksF
+    ∘ patchEmbedF
+
+/-- **THE WHOLE-NET ViT FORWARD FLOAT-BRIDGES TO ITS FLOAT SKELETON.** Same `.comp`
+    thread as `vit_floatBridges`, with the encoder tower's blocks paired to their float
+    peers by `Forall₂` — so the conclusion names the float transformer rather than
+    existentially discarding it (`formalization.yaml` fidelity §4d). -/
+theorem vit_floatBridgesTo {N D nClasses imgDim : Nat} (M : FloatModel)
+    (Wcls : Mat D nClasses) (bcls : Vec nClasses) (finalLN finalLNF : Vec D → Vec D)
+    (blocks blocksF : List (Vec ((N + 1) * D) → Vec ((N + 1) * D)))
+    (patchEmbed patchEmbedF : Vec imgDim → Vec ((N + 1) * D))
+    {w' β : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hD : 0 < D)
+    (hWcls : ∀ i j, |Wcls i j| ≤ w') (hbcls : ∀ j, |bcls j| ≤ β)
+    (hFinalLN : FloatBridgesTo finalLN finalLNF)
+    (hblocks : List.Forall₂ FloatBridgesTo blocks blocksF)
+    (hPatch : FloatBridgesTo patchEmbed patchEmbedF) :
+    FloatBridgesTo (vitForwardFlat Wcls bcls finalLN blocks patchEmbed)
+      (vitForwardFlatF M Wcls bcls finalLNF blocksF patchEmbedF) := by
+  unfold vitForwardFlat vitForwardFlatF
+  exact (((hPatch.comp (floatBridgesTo_towerBack blocks blocksF hblocks)).comp
+    (FloatBridgesTo.perRow (N + 1) hFinalLN)).comp
+    (floatBridgesTo_vitHead M Wcls bcls hw' hβ hD hWcls hbcls))
+
 end Proofs

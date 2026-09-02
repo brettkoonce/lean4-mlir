@@ -64,6 +64,11 @@ theorem floatBridges_reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePr
     FloatBridges (reluMaskBack cond) :=
   fun A hA => ⟨A, _, _, hA, floatClose_reluMaskBack cond A⟩
 
+/-- The ReLU mask backward float-bridges to itself (a structural select). -/
+theorem floatBridgesTo_reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePred cond] :
+    FloatBridgesTo (reluMaskBack cond) (reluMaskBack cond) :=
+  fun A hA => ⟨A, _, hA, floatClose_reluMaskBack cond A⟩
+
 -- ════════════════════════════════════════════════════════════════
 -- § Smooth-activation backward: the diagonal `dy ⊙ act'(saved)` scale
 -- ════════════════════════════════════════════════════════════════
@@ -139,6 +144,13 @@ theorem floatBridges_linBack {m n : Nat} (M : FloatModel) (W : Mat m n) {w' : �
     (hw' : 0 ≤ w') (hn : 0 < n) (hW : ∀ i j, |W i j| ≤ w') :
     FloatBridges (dense (Mat.transpose W) (0 : Vec m)) :=
   floatBridges_dense M (Mat.transpose W) 0 hw' le_rfl hn (fun i j => hW j i) (fun j => by simp)
+
+/-- The dense input-VJP float-bridges to the model's rounded transposed dense. -/
+theorem floatBridgesTo_linBack {m n : Nat} (M : FloatModel) (W : Mat m n) {w' : ℝ}
+    (hw' : 0 ≤ w') (hn : 0 < n) (hW : ∀ i j, |W i j| ≤ w') :
+    FloatBridgesTo (dense (Mat.transpose W) (0 : Vec m))
+      (M.dense (Mat.transpose W) (0 : Vec m)) :=
+  floatBridgesTo_dense M (Mat.transpose W) 0 hw' le_rfl hn (fun i j => hW j i) (fun j => by simp)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net fold: a 3-layer MLP input-gradient VJP

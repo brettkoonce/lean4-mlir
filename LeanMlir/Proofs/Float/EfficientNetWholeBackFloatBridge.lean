@@ -160,4 +160,67 @@ theorem floatBridges_mbStridedBodyBack {cin cmid cout h w kHe kWe kHd kWd kHp kW
     ((hswBe.comp hbnBe).comp (floatBridges_convBack (h := 2 * h) (w := 2 * w) M We hwe
       (by positivity) hWe)))
 
+
+-- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The float EfficientNet-B0 input-gradient skeleton** — `efficientnetInputGradB`
+    with each concrete `batchMap`-lifted slot replaced by the model's rounded peer and
+    each supplied BN/swish/block backward by its float map. -/
+noncomputable def efficientnetInputGradBF (N : Nat) (M : FloatModel)
+    (Ws : Kernel4 32 3 3 3) (Wh : Kernel4 1280 24 1 1) (Wfc : Mat 1280 10)
+    (bnBsF swBsF : Vec (N * (32 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
+    (bnBhF swBhF : Vec (N * (1280 * 56 * 56)) → Vec (N * (1280 * 56 * 56)))
+    (b1BF : Vec (N * (16 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
+    (b2BF : Vec (N * (24 * 56 * 56)) → Vec (N * (16 * 112 * 112)))
+    (b3BF : Vec (N * (24 * 56 * 56)) → Vec (N * (24 * 56 * 56))) :
+    Vec (N * 10) → Vec (N * (3 * 224 * 224)) :=
+  (StableHLO.batchMap N
+      (M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
+        ∘ decimateBack 32 112 112) ∘ bnBsF ∘ swBsF)
+  ∘ b1BF ∘ b2BF ∘ b3BF
+  ∘ (StableHLO.batchMap N
+      (M.flatConvF (h := 56) (w := 56) (IR.reverseSwap Wh) (fun _ => 0)) ∘ bnBhF ∘ swBhF)
+  ∘ StableHLO.batchMap N (gapBackF M 1280 56 56)
+  ∘ StableHLO.batchMap N (M.dense (Mat.transpose Wfc) (0 : Vec 1280))
+
+set_option maxRecDepth 100000 in
+/-- **THE WHOLE-NET EfficientNet BACKWARD FLOAT-BRIDGES TO ITS FLOAT SKELETON.** Same
+    `.comp` thread as `efficientnet_grad_floatBridges`, with every float map named
+    (`formalization.yaml` fidelity §4d). -/
+theorem efficientnet_grad_floatBridgesTo (N : Nat) (M : FloatModel)
+    (Ws : Kernel4 32 3 3 3) (Wh : Kernel4 1280 24 1 1) (Wfc : Mat 1280 10)
+    (bnBs swBs bnBsF swBsF : Vec (N * (32 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
+    (bnBh swBh bnBhF swBhF : Vec (N * (1280 * 56 * 56)) → Vec (N * (1280 * 56 * 56)))
+    (b1B b1BF : Vec (N * (16 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
+    (b2B b2BF : Vec (N * (24 * 56 * 56)) → Vec (N * (16 * 112 * 112)))
+    (b3B b3BF : Vec (N * (24 * 56 * 56)) → Vec (N * (24 * 56 * 56)))
+    {ws wh wfc : ℝ} (hws : 0 ≤ ws) (hwh : 0 ≤ wh) (hwfc : 0 ≤ wfc)
+    (hWs : ∀ o c kh kw, |Ws o c kh kw| ≤ ws) (hWh : ∀ o c kh kw, |Wh o c kh kw| ≤ wh)
+    (hWfc : ∀ i j, |Wfc i j| ≤ wfc)
+    (hbnBs : FloatBridgesTo bnBs bnBsF) (hswBs : FloatBridgesTo swBs swBsF)
+    (hbnBh : FloatBridgesTo bnBh bnBhF) (hswBh : FloatBridgesTo swBh swBhF)
+    (hb1B : FloatBridgesTo b1B b1BF) (hb2B : FloatBridgesTo b2B b2BF)
+    (hb3B : FloatBridgesTo b3B b3BF) :
+    FloatBridgesTo
+      (efficientnetInputGradB N Ws Wh Wfc bnBs swBs bnBh swBh b1B b2B b3B)
+      (efficientnetInputGradBF N M Ws Wh Wfc bnBsF swBsF bnBhF swBhF b1BF b2BF b3BF) := by
+  unfold efficientnetInputGradB efficientnetInputGradBF
+  have hstem := (hswBs.comp hbnBs).comp
+    (FloatBridgesTo.batchMap N
+      (floatBridgesTo_flatConvStride2Back (h := 112) (w := 112) M Ws hws (by positivity) hWs))
+  have hhead := (hswBh.comp hbnBh).comp
+    (FloatBridgesTo.batchMap N
+      (floatBridgesTo_convBack (h := 56) (w := 56) M Wh hwh (by positivity) hWh))
+  have h0 := (FloatBridgesTo.batchMap N
+      (floatBridgesTo_linBack M Wfc hwfc (by norm_num) hWfc)).comp
+    (FloatBridgesTo.batchMap N
+      (floatBridgesTo_gapBack M 1280 56 56 (by norm_num) (by norm_num) (by norm_num)))
+  have hH := h0.comp hhead
+  have hB3 := hH.comp hb3B
+  have hB2 := hB3.comp hb2B
+  have hB1 := hB2.comp hb1B
+  exact hB1.comp hstem
+
 end Proofs

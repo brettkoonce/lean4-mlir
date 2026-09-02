@@ -183,4 +183,102 @@ theorem r34_grad_floatBridges (M : FloatModel)
   have hMP := hA.comp (floatBridges_maxPoolBack xmp)
   exact hMP.comp hstem
 
+
+-- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- GAP-backward float-bridges TO the model's rounded GAP backward. -/
+theorem floatBridgesTo_gapBack (M : FloatModel) (c h w : Nat)
+    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    FloatBridgesTo (gapBack c h w) (gapBackF M c h w) :=
+  fun _A hA => ⟨_, _, (floatClose_gapBack M c h w hh hw _).cod_nonneg hA (by positivity),
+    floatClose_gapBack M c h w hh hw _⟩
+
+/-- **The float ResNet-34 input-gradient skeleton** — `r34InputGrad` with each
+    concrete slot replaced by the model's rounded peer and each supplied block
+    backward by its float map. `reluMaskBack`, `maxPoolFlatBack` and `decimateBack`
+    are structural selects/scatters, exact in float, so they are unchanged. -/
+noncomputable def r34InputGradF (M : FloatModel)
+    (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
+    (bnBsF : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
+    (e1BF e0BF : Vec (512 * 7 * 7) → Vec (512 * 7 * 7))
+    (d4BF : Vec (512 * 7 * 7) → Vec (256 * 14 * 14))
+    (c4BF c3BF c2BF c1BF c0BF : Vec (256 * 14 * 14) → Vec (256 * 14 * 14))
+    (d3BF : Vec (256 * 14 * 14) → Vec (128 * 28 * 28))
+    (b2BF b1BF b0BF : Vec (128 * 28 * 28) → Vec (128 * 28 * 28))
+    (d2BF : Vec (128 * 28 * 28) → Vec (64 * 56 * 56))
+    (a2BF a1BF a0BF : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))
+    (xmp : Tensor3 64 112 112)
+    (m_stem : Fin (64 * 112 * 112) → Prop) [DecidablePred m_stem] :
+    Vec 10 → Vec (3 * 224 * 224) :=
+  (M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
+      ∘ decimateBack 64 112 112)
+  ∘ bnBsF ∘ reluMaskBack m_stem
+  ∘ maxPoolFlatBack xmp
+  ∘ a0BF ∘ a1BF ∘ a2BF
+  ∘ d2BF
+  ∘ b0BF ∘ b1BF ∘ b2BF
+  ∘ d3BF
+  ∘ c0BF ∘ c1BF ∘ c2BF ∘ c3BF ∘ c4BF
+  ∘ d4BF
+  ∘ e0BF ∘ e1BF
+  ∘ gapBackF M 512 7 7
+  ∘ M.dense (Mat.transpose Wd) (0 : Vec 512)
+
+set_option maxRecDepth 100000 in
+/-- **The whole ResNet-34 input-gradient VJP float-bridges TO its float skeleton.**
+    Same `.comp` chain as `r34_grad_floatBridges`, with every float map named — the
+    statement that carries "the deployed float backward of the whole 34-layer net is
+    within an explicit budget of the certified `ℝ` backward"
+    (`formalization.yaml` fidelity §4d). -/
+theorem r34_grad_floatBridgesTo (M : FloatModel)
+    (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
+    (bnBs bnBsF : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
+    (e1B e0B e1BF e0BF : Vec (512 * 7 * 7) → Vec (512 * 7 * 7))
+    (d4B d4BF : Vec (512 * 7 * 7) → Vec (256 * 14 * 14))
+    (c4B c3B c2B c1B c0B c4BF c3BF c2BF c1BF c0BF :
+      Vec (256 * 14 * 14) → Vec (256 * 14 * 14))
+    (d3B d3BF : Vec (256 * 14 * 14) → Vec (128 * 28 * 28))
+    (b2B b1B b0B b2BF b1BF b0BF : Vec (128 * 28 * 28) → Vec (128 * 28 * 28))
+    (d2B d2BF : Vec (128 * 28 * 28) → Vec (64 * 56 * 56))
+    (a2B a1B a0B a2BF a1BF a0BF : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))
+    (xmp : Tensor3 64 112 112)
+    (m_stem : Fin (64 * 112 * 112) → Prop) [DecidablePred m_stem]
+    {ws wd : ℝ} (hws : 0 ≤ ws) (hwd : 0 ≤ wd)
+    (hWs : ∀ o c kh kw, |Ws o c kh kw| ≤ ws) (hWd : ∀ i j, |Wd i j| ≤ wd)
+    (hbnBs : FloatBridgesTo bnBs bnBsF)
+    (he1B : FloatBridgesTo e1B e1BF) (he0B : FloatBridgesTo e0B e0BF)
+    (hd4B : FloatBridgesTo d4B d4BF)
+    (hc4B : FloatBridgesTo c4B c4BF) (hc3B : FloatBridgesTo c3B c3BF)
+    (hc2B : FloatBridgesTo c2B c2BF) (hc1B : FloatBridgesTo c1B c1BF)
+    (hc0B : FloatBridgesTo c0B c0BF) (hd3B : FloatBridgesTo d3B d3BF)
+    (hb2B : FloatBridgesTo b2B b2BF) (hb1B : FloatBridgesTo b1B b1BF)
+    (hb0B : FloatBridgesTo b0B b0BF) (hd2B : FloatBridgesTo d2B d2BF)
+    (ha2B : FloatBridgesTo a2B a2BF) (ha1B : FloatBridgesTo a1B a1BF)
+    (ha0B : FloatBridgesTo a0B a0BF) :
+    FloatBridgesTo
+      (r34InputGrad Ws Wd bnBs e1B e0B d4B c4B c3B c2B c1B c0B d3B
+        b2B b1B b0B d2B a2B a1B a0B xmp m_stem)
+      (r34InputGradF M Ws Wd bnBsF e1BF e0BF d4BF c4BF c3BF c2BF c1BF c0BF d3BF
+        b2BF b1BF b0BF d2BF a2BF a1BF a0BF xmp m_stem) := by
+  unfold r34InputGrad r34InputGradF
+  have hstem : FloatBridgesTo
+      (flatConvStride2Back (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
+      ((M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
+          ∘ decimateBack 64 112 112) ∘ bnBsF ∘ reluMaskBack m_stem) :=
+    ((floatBridgesTo_reluMaskBack m_stem).comp hbnBs).comp
+      (floatBridgesTo_flatConvStride2Back (h := 112) (w := 112) M Ws hws (by norm_num) hWs)
+  have h0 := (floatBridgesTo_linBack M Wd hwd (by norm_num) hWd).comp
+    (floatBridgesTo_gapBack M 512 7 7 (by norm_num) (by norm_num) (by norm_num))
+  have hE := (h0.comp he1B).comp he0B
+  have hD4 := hE.comp hd4B
+  have hC := ((((hD4.comp hc4B).comp hc3B).comp hc2B).comp hc1B).comp hc0B
+  have hD3 := hC.comp hd3B
+  have hB := ((hD3.comp hb2B).comp hb1B).comp hb0B
+  have hD2 := hB.comp hd2B
+  have hA := ((hD2.comp ha2B).comp ha1B).comp ha0B
+  have hMP := hA.comp (floatBridgesTo_maxPoolBack xmp)
+  exact hMP.comp hstem
+
 end Proofs

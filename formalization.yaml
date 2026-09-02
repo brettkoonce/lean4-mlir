@@ -71,8 +71,9 @@ status:
     ERROR — a binary32 rounding model constructed from scratch (rndP, standard
     model PROVED, no hardware axioms), whole-net forward+backward float-error
     bridges for all nets (⚠ stated as FloatBridges, which does not name the float
-    map -- see fidelity.divergences 4d; r34 is migrated to FloatBridgesTo, the
-    other four nets are not yet), depth-linear adjoint-chain composition bounds
+    map -- see fidelity.divergences 4d; 9 of the 11 whole-net bridges are migrated
+    to FloatBridgesTo, which does; the EfficientNet FORWARD and the convnextCh_*
+    pair are not yet), depth-linear adjoint-chain composition bounds
     certified for every net, an fp8-E4M3 argmax-preservation theorem, and a
     whole-net float certificate at the committed CIFAR-8 shape (cifar8_chain_argmaxSafeH: given
     measured tail gains, binary32 rounding cannot flip the prediction; its layer
@@ -364,8 +365,17 @@ fidelity:
        mnv2Forward_floatBridges, convnext{,Ch}_floatBridges, vit_floatBridges,
        r34_grad_floatBridges), state strictly less than their docstrings claim
        ("the deployed float forward ... within an explicit budget"): neither the
-       deployed map nor any budget survives the existential. Migration to a
-       two-argument `FloatBridgesTo f fF` is in progress.
+       deployed map nor any budget survives the existential. `FloatBridgesTo f fF`
+       keeps the map and composes it; `toFloatBridges` weakens back, so migration is
+       incremental. MIGRATED (9 of 11 whole-net bridges, each with a named float
+       skeleton -- r34ForwardF / r34InputGradF / mnv2ForwardF / mnv2InputGradF /
+       convnextForwardF / convnextInputGradF / vitForwardFlatF / vitGradFlatF /
+       efficientnetInputGradBF): both r34, both mnv2, both convnext (skeleton),
+       both vit, and the EfficientNet backward. NOT YET: the EfficientNet FORWARD
+       (efficientnetForwardB_floatBridges -- unlike every other whole-net theorem it
+       derives its 5 block bridges from leaf data rather than taking them as
+       hypotheses, so its 11 layered block bridges must migrate first) and the
+       convnextCh_* instantiated pair (same reason: they plug concrete stages).
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

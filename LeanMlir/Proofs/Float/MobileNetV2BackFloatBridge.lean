@@ -183,4 +183,86 @@ theorem mnv2_grad_floatBridges (M : FloatModel)
   have hB1 := hB2.comp hb1B
   exact hB1.comp hstem
 
+
+-- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The float MobileNetV2 input-gradient skeleton** — `mnv2InputGrad` with each
+    concrete slot replaced by the model's rounded peer and each supplied block
+    backward by its float map. `reluMaskBack`/`decimateBack` are exact in float. -/
+noncomputable def mnv2InputGradF (M : FloatModel)
+    (Ws : Kernel4 16 3 3 3) (Wh : Kernel4 128 64 1 1) (Wfc : Mat 128 10)
+    (bnBsF : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))
+    (bnBhF : Vec (128 * 7 * 7) → Vec (128 * 7 * 7))
+    (b1BF : Vec (24 * 56 * 56) → Vec (16 * 112 * 112))
+    (b2BF : Vec (24 * 56 * 56) → Vec (24 * 56 * 56))
+    (b3BF : Vec (32 * 28 * 28) → Vec (24 * 56 * 56))
+    (b4BF : Vec (32 * 28 * 28) → Vec (32 * 28 * 28))
+    (b5BF : Vec (64 * 14 * 14) → Vec (32 * 28 * 28))
+    (b6BF : Vec (64 * 7 * 7) → Vec (64 * 14 * 14))
+    (m_stem : Fin (16 * 112 * 112) → Prop) [DecidablePred m_stem]
+    (m_head : Fin (128 * 7 * 7) → Prop) [DecidablePred m_head] :
+    Vec 10 → Vec (3 * 224 * 224) :=
+  (M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
+      ∘ decimateBack 16 112 112)
+  ∘ bnBsF ∘ reluMaskBack m_stem
+  ∘ b1BF ∘ b2BF ∘ b3BF ∘ b4BF ∘ b5BF ∘ b6BF
+  ∘ (M.flatConvF (h := 7) (w := 7) (IR.reverseSwap Wh) (fun _ => 0))
+  ∘ bnBhF ∘ reluMaskBack m_head
+  ∘ gapBackF M 128 7 7
+  ∘ M.dense (Mat.transpose Wfc) (0 : Vec 128)
+
+set_option maxRecDepth 100000 in
+/-- **The whole MobileNetV2 input-gradient VJP float-bridges TO its float skeleton.**
+    Same `.comp` chain as `mnv2_grad_floatBridges`, with every float map named — the
+    statement that carries "the deployed float backward of the whole net is within an
+    explicit budget of the certified `ℝ` backward" (`formalization.yaml` §4d). -/
+theorem mnv2_grad_floatBridgesTo (M : FloatModel)
+    (Ws : Kernel4 16 3 3 3) (Wh : Kernel4 128 64 1 1) (Wfc : Mat 128 10)
+    (bnBs bnBsF : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))
+    (bnBh bnBhF : Vec (128 * 7 * 7) → Vec (128 * 7 * 7))
+    (b1B b1BF : Vec (24 * 56 * 56) → Vec (16 * 112 * 112))
+    (b2B b2BF : Vec (24 * 56 * 56) → Vec (24 * 56 * 56))
+    (b3B b3BF : Vec (32 * 28 * 28) → Vec (24 * 56 * 56))
+    (b4B b4BF : Vec (32 * 28 * 28) → Vec (32 * 28 * 28))
+    (b5B b5BF : Vec (64 * 14 * 14) → Vec (32 * 28 * 28))
+    (b6B b6BF : Vec (64 * 7 * 7) → Vec (64 * 14 * 14))
+    (m_stem : Fin (16 * 112 * 112) → Prop) [DecidablePred m_stem]
+    (m_head : Fin (128 * 7 * 7) → Prop) [DecidablePred m_head]
+    {ws wh wfc : ℝ} (hws : 0 ≤ ws) (hwh : 0 ≤ wh) (hwfc : 0 ≤ wfc)
+    (hWs : ∀ o c kh kw, |Ws o c kh kw| ≤ ws) (hWh : ∀ o c kh kw, |Wh o c kh kw| ≤ wh)
+    (hWfc : ∀ i j, |Wfc i j| ≤ wfc)
+    (hbnBs : FloatBridgesTo bnBs bnBsF) (hbnBh : FloatBridgesTo bnBh bnBhF)
+    (hb1B : FloatBridgesTo b1B b1BF) (hb2B : FloatBridgesTo b2B b2BF)
+    (hb3B : FloatBridgesTo b3B b3BF) (hb4B : FloatBridgesTo b4B b4BF)
+    (hb5B : FloatBridgesTo b5B b5BF) (hb6B : FloatBridgesTo b6B b6BF) :
+    FloatBridgesTo
+      (mnv2InputGrad Ws Wh Wfc bnBs bnBh b1B b2B b3B b4B b5B b6B m_stem m_head)
+      (mnv2InputGradF M Ws Wh Wfc bnBsF bnBhF b1BF b2BF b3BF b4BF b5BF b6BF
+        m_stem m_head) := by
+  unfold mnv2InputGrad mnv2InputGradF
+  have hstem : FloatBridgesTo
+      (flatConvStride2Back (h := 112) (w := 112) Ws ∘ bnBs ∘ reluMaskBack m_stem)
+      ((M.flatConvF (h := 2 * 112) (w := 2 * 112) (IR.reverseSwap Ws) (fun _ => 0)
+          ∘ decimateBack 16 112 112) ∘ bnBsF ∘ reluMaskBack m_stem) :=
+    ((floatBridgesTo_reluMaskBack m_stem).comp hbnBs).comp
+      (floatBridgesTo_flatConvStride2Back (h := 112) (w := 112) M Ws hws (by norm_num) hWs)
+  have hhead : FloatBridgesTo
+      (convFlatBack (h := 7) (w := 7) Wh ∘ bnBh ∘ reluMaskBack m_head)
+      ((M.flatConvF (h := 7) (w := 7) (IR.reverseSwap Wh) (fun _ => 0))
+        ∘ bnBhF ∘ reluMaskBack m_head) :=
+    ((floatBridgesTo_reluMaskBack m_head).comp hbnBh).comp
+      (floatBridgesTo_convBack (h := 7) (w := 7) M Wh hwh (by norm_num) hWh)
+  have h0 := (floatBridgesTo_linBack M Wfc hwfc (by norm_num) hWfc).comp
+    (floatBridgesTo_gapBack M 128 7 7 (by norm_num) (by norm_num) (by norm_num))
+  have hH := h0.comp hhead
+  have hB6 := hH.comp hb6B
+  have hB5 := hB6.comp hb5B
+  have hB4 := hB5.comp hb4B
+  have hB3 := hB4.comp hb3B
+  have hB2 := hB3.comp hb2B
+  have hB1 := hB2.comp hb1B
+  exact hB1.comp hstem
+
 end Proofs

@@ -82,6 +82,14 @@ theorem FloatBridges.perRow (n : Nat) {d : Nat} {f : Vec d → Vec d} (hf : Floa
   obtain ⟨B, L, fF, hB, hfc⟩ := hf A hA
   exact ⟨B, L, perRowFlat n d fF, hB, hfc.perRow n⟩
 
+/-- **`FloatBridgesTo.perRow`** — the seam with the float map named: the per-row lift
+    of `fF` is the float peer of the per-row lift of `f`. -/
+theorem FloatBridgesTo.perRow (n : Nat) {d : Nat} {f fF : Vec d → Vec d}
+    (hf : FloatBridgesTo f fF) : FloatBridgesTo (perRowFlat n d f) (perRowFlat n d fF) := by
+  intro A hA
+  obtain ⟨B, L, hB, hfc⟩ := hf A hA
+  exact ⟨B, L, hB, hfc.perRow n⟩
+
 -- ════════════════════════════════════════════════════════════════
 -- § The per-token-input-aware seam (the BACKWARD peer of `perRowFlat`)
 -- ════════════════════════════════════════════════════════════════

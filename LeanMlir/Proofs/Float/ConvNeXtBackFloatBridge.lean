@@ -222,4 +222,74 @@ theorem convnextCh_grad_floatBridges (M : FloatModel) (Wd : Mat 768 10) (sW : Ke
     floatBridges_idVec
     hs1B hd1B hs2B hd2B hs3B hd3B hs4B
 
+
+-- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The float ConvNeXt-T input-gradient skeleton** — `convnextInputGrad` with each
+    concrete slot replaced by the model's rounded peer and each supplied stage /
+    downsample backward by its float map. -/
+noncomputable def convnextInputGradF (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+    (lnBstemF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (lnBheadF : Vec 768 → Vec 768)
+    (s1BF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (d1BF : Vec (192 * 28 * 28) → Vec (96 * 56 * 56))
+    (s2BF : Vec (192 * 28 * 28) → Vec (192 * 28 * 28))
+    (d2BF : Vec (384 * 14 * 14) → Vec (192 * 28 * 28))
+    (s3BF : Vec (384 * 14 * 14) → Vec (384 * 14 * 14))
+    (d3BF : Vec (768 * 7 * 7) → Vec (384 * 14 * 14))
+    (s4BF : Vec (768 * 7 * 7) → Vec (768 * 7 * 7)) :
+    Vec 10 → Vec (3 * 224 * 224) :=
+  (M.flatConvF (h := 2 * (2 * 56)) (w := 2 * (2 * 56)) (IR.reverseSwap sW) (fun _ => 0)
+      ∘ decimateOddBack 96 (2 * 56) (2 * 56) ∘ decimateBack 96 56 56)
+  ∘ lnBstemF
+  ∘ s1BF ∘ d1BF ∘ s2BF ∘ d2BF ∘ s3BF ∘ d3BF ∘ s4BF
+  ∘ gapBackF M 768 7 7
+  ∘ lnBheadF
+  ∘ M.dense (Mat.transpose Wd) (0 : Vec 768)
+
+set_option maxRecDepth 100000 in
+/-- **The whole ConvNeXt-T input-gradient VJP float-bridges TO its float skeleton.**
+    Same `.comp` chain as `convnext_grad_floatBridges`, with every float map named —
+    the statement that carries "the deployed float backward of the whole net is within
+    an explicit budget of the certified `ℝ` backward" (`formalization.yaml` §4d). -/
+theorem convnext_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+    (lnBstem lnBstemF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (lnBhead lnBheadF : Vec 768 → Vec 768)
+    (s1B s1BF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
+    (d1B d1BF : Vec (192 * 28 * 28) → Vec (96 * 56 * 56))
+    (s2B s2BF : Vec (192 * 28 * 28) → Vec (192 * 28 * 28))
+    (d2B d2BF : Vec (384 * 14 * 14) → Vec (192 * 28 * 28))
+    (s3B s3BF : Vec (384 * 14 * 14) → Vec (384 * 14 * 14))
+    (d3B d3BF : Vec (768 * 7 * 7) → Vec (384 * 14 * 14))
+    (s4B s4BF : Vec (768 * 7 * 7) → Vec (768 * 7 * 7))
+    {wd ws : ℝ} (hwd : 0 ≤ wd) (hWd : ∀ i j, |Wd i j| ≤ wd)
+    (hws : 0 ≤ ws) (hsW : ∀ o c kh kw, |sW o c kh kw| ≤ ws)
+    (hlnBstem : FloatBridgesTo lnBstem lnBstemF)
+    (hlnBhead : FloatBridgesTo lnBhead lnBheadF)
+    (hs1B : FloatBridgesTo s1B s1BF) (hd1B : FloatBridgesTo d1B d1BF)
+    (hs2B : FloatBridgesTo s2B s2BF) (hd2B : FloatBridgesTo d2B d2BF)
+    (hs3B : FloatBridgesTo s3B s3BF) (hd3B : FloatBridgesTo d3B d3BF)
+    (hs4B : FloatBridgesTo s4B s4BF) :
+    FloatBridgesTo
+      (convnextInputGrad Wd sW lnBstem lnBhead s1B d1B s2B d2B s3B d3B s4B)
+      (convnextInputGradF M Wd sW lnBstemF lnBheadF s1BF d1BF s2BF d2BF s3BF d3BF s4BF) := by
+  unfold convnextInputGrad convnextInputGradF
+  have hstem : FloatBridgesTo (flatConvStride4Back (h := 56) (w := 56) sW ∘ lnBstem)
+      ((M.flatConvF (h := 2 * (2 * 56)) (w := 2 * (2 * 56)) (IR.reverseSwap sW) (fun _ => 0)
+          ∘ decimateOddBack 96 (2 * 56) (2 * 56) ∘ decimateBack 96 56 56) ∘ lnBstemF) :=
+    hlnBstem.comp
+      (floatBridgesTo_flatConvStride4Back (h := 56) (w := 56) M sW hws (by norm_num) hsW)
+  have h0 := ((floatBridgesTo_linBack M Wd hwd (by norm_num) hWd).comp hlnBhead).comp
+    (floatBridgesTo_gapBack M 768 7 7 (by norm_num) (by norm_num) (by norm_num))
+  have hS4 := h0.comp hs4B
+  have hD3 := hS4.comp hd3B
+  have hS3 := hD3.comp hs3B
+  have hD2 := hS3.comp hd2B
+  have hS2 := hD2.comp hs2B
+  have hD1 := hS2.comp hd1B
+  have hS1 := hD1.comp hs1B
+  exact hS1.comp hstem
+
 end Proofs

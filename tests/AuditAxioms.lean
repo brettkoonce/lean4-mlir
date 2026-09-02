@@ -1951,6 +1951,17 @@ open Proofs
 -- "the deployed float forward is within an explicit budget" claim.
 #print axioms Proofs.FloatBridgesTo.comp
 #print axioms Proofs.r34_floatBridgesTo
+-- The rest of the migration: 9 of the 11 whole-net bridges now name their float
+-- net. Remaining on the weak FloatBridges: the EfficientNet FORWARD (its 11 layered
+-- block bridges are the deep cone) and the convnextCh_* instantiated pair.
+#print axioms Proofs.r34_grad_floatBridgesTo
+#print axioms Proofs.mnv2Forward_floatBridgesTo
+#print axioms Proofs.mnv2_grad_floatBridgesTo
+#print axioms Proofs.convnext_floatBridgesTo
+#print axioms Proofs.convnext_grad_floatBridgesTo
+#print axioms Proofs.vit_floatBridgesTo
+#print axioms Proofs.vit_grad_floatBridgesTo
+#print axioms Proofs.efficientnet_grad_floatBridgesTo
 -- The named per-block FORWARD bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack), so the
 -- whole-net fold's block hypotheses are discharged by name exactly as the backward's are:
 -- floatBridges_r34IdBlock (rblkPC = relu∘residual(body); FloatBridges.residual skip) +
