@@ -12294,14 +12294,14 @@ def swinT : NetSpec where
   ]
 \end{verbatim}
 
-\subsection{Object detection}
+\subsection{Object detection --- demo: R34+FPN on VisDrone}
 
 Localize and classify. Detection heads are where the linear
 \texttt{NetSpec} shape starts to creak: multi-scale FPN outputs need a
 graph, not a list. The bestiary entries show the single-scale view and
 defer the multi-head refactor to the limitations discussion.
 
-\paragraph{The working detector --- demo: R34+FPN on VisDrone.}
+\paragraph{The working detector.}
 A ResNet-34 backbone, trained by this stack on ImageNet, feeding an FPN
 top-down neck into three anchor heads at strides $8/16/32$; DIoU box loss,
 focal objectness, focal class CE; $448$\,px input, 30 epochs, photometric
