@@ -158,6 +158,135 @@ theorem r34_floatBridges (M : FloatModel)
   exact hGAP.comp (floatBridges_dense M Wd bd hwd hbdβ (by norm_num) hWd hbd)
 
 -- ════════════════════════════════════════════════════════════════
+-- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
+-- ════════════════════════════════════════════════════════════════
+
+/-- Stride-2 conv float-bridges TO the model's rounded stride-2 conv. -/
+theorem floatBridgesTo_flatConvStride2 {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * (2 * h) * (2 * w))
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
+    FloatBridgesTo (flatConvStride2 (h := h) (w := w) W b)
+      (M.flatConvStride2F (h := h) (w := w) W b) :=
+  fun _A hA => ⟨_, _,
+    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
+    floatClose_flatConvStride2 M W b hw' hβ hA hn hW hb⟩
+
+/-- GAP float-bridges TO the model's rounded GAP. -/
+theorem floatBridgesTo_gap {c h w : Nat} (M : FloatModel) (hc : 0 < c) (hhw : 0 < h * w) :
+    FloatBridgesTo (globalAvgPoolFlat c h w) M.gapFlatF :=
+  fun _A hA => ⟨_, _, (floatClose_gap M hA hhw).cod_nonneg hA hc, floatClose_gap M hA hhw⟩
+
+/-- **The float ResNet-34 forward skeleton** — `r34Forward` with every concrete slot
+    replaced by the model's rounded peer (`M.flatConvStride2F` / `M.gapFlatF` /
+    `M.dense`; `relu` and the 3×3/s2 max-pool are exact in float, so they are
+    unchanged) and every supplied slot replaced by that block's float map. This is
+    the map `r34_floatBridgesTo` certifies — the thing `r34_floatBridges` could only
+    claim in its docstring. -/
+noncomputable def r34ForwardF (M : FloatModel)
+    (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (Wd : Mat 512 10) (bd : Vec 10)
+    (bnSF : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
+    (a0F a1F a2F : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))
+    (d2F : Vec (64 * 56 * 56) → Vec (128 * 28 * 28))
+    (b0F b1F b2F : Vec (128 * 28 * 28) → Vec (128 * 28 * 28))
+    (d3F : Vec (128 * 28 * 28) → Vec (256 * 14 * 14))
+    (c0F c1F c2F c3F c4F : Vec (256 * 14 * 14) → Vec (256 * 14 * 14))
+    (d4F : Vec (256 * 14 * 14) → Vec (512 * 7 * 7))
+    (e0F e1F : Vec (512 * 7 * 7) → Vec (512 * 7 * 7)) :
+    Vec (3 * 224 * 224) → Vec 10 :=
+  M.dense Wd bd
+  ∘ M.gapFlatF
+  ∘ e1F ∘ e0F
+  ∘ d4F
+  ∘ c4F ∘ c3F ∘ c2F ∘ c1F ∘ c0F
+  ∘ d3F
+  ∘ b2F ∘ b1F ∘ b0F
+  ∘ d2F
+  ∘ a2F ∘ a1F ∘ a0F
+  ∘ maxPool3s2Flat 64 56 56
+  ∘ (relu (64 * 112 * 112) ∘ bnSF ∘ M.flatConvStride2F (h := 112) (w := 112) Ws bs)
+
+set_option maxRecDepth 100000 in
+/-- **The whole ResNet-34 forward float-bridges TO its float skeleton.** Same
+    `.comp` chain as `r34_floatBridges`, but every hypothesis names the float map of
+    its block and the conclusion names the float net — so this statement actually
+    says "the deployed float forward of the whole 34-layer net is within a
+    `FloatClose` budget of the certified `ℝ` forward", which the `FloatBridges`
+    version could not (`formalization.yaml` fidelity §4d). Closes under
+    `[propext, Classical.choice, Quot.sound]`. -/
+theorem r34_floatBridgesTo (M : FloatModel)
+    (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (Wd : Mat 512 10) (bd : Vec 10)
+    (bnS bnSF : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
+    (a0 a1 a2 a0F a1F a2F : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))
+    (d2 d2F : Vec (64 * 56 * 56) → Vec (128 * 28 * 28))
+    (b0 b1 b2 b0F b1F b2F : Vec (128 * 28 * 28) → Vec (128 * 28 * 28))
+    (d3 d3F : Vec (128 * 28 * 28) → Vec (256 * 14 * 14))
+    (c0 c1 c2 c3 c4 c0F c1F c2F c3F c4F : Vec (256 * 14 * 14) → Vec (256 * 14 * 14))
+    (d4 d4F : Vec (256 * 14 * 14) → Vec (512 * 7 * 7))
+    (e0 e1 e0F e1F : Vec (512 * 7 * 7) → Vec (512 * 7 * 7))
+    {ws bsβ wd bdβ : ℝ} (hws : 0 ≤ ws) (hbsβ : 0 ≤ bsβ) (hwd : 0 ≤ wd) (hbdβ : 0 ≤ bdβ)
+    (hWs : ∀ o c kh kw, |Ws o c kh kw| ≤ ws) (hbs : ∀ o, |bs o| ≤ bsβ)
+    (hWd : ∀ i j, |Wd i j| ≤ wd) (hbd : ∀ j, |bd j| ≤ bdβ)
+    (hbnS : FloatBridgesTo bnS bnSF)
+    (ha0 : FloatBridgesTo a0 a0F) (ha1 : FloatBridgesTo a1 a1F) (ha2 : FloatBridgesTo a2 a2F)
+    (hd2 : FloatBridgesTo d2 d2F)
+    (hb0 : FloatBridgesTo b0 b0F) (hb1 : FloatBridgesTo b1 b1F) (hb2 : FloatBridgesTo b2 b2F)
+    (hd3 : FloatBridgesTo d3 d3F)
+    (hc0 : FloatBridgesTo c0 c0F) (hc1 : FloatBridgesTo c1 c1F) (hc2 : FloatBridgesTo c2 c2F)
+    (hc3 : FloatBridgesTo c3 c3F) (hc4 : FloatBridgesTo c4 c4F)
+    (hd4 : FloatBridgesTo d4 d4F)
+    (he0 : FloatBridgesTo e0 e0F) (he1 : FloatBridgesTo e1 e1F) :
+    FloatBridgesTo
+      (r34Forward Ws bs Wd bd bnS a0 a1 a2 d2 b0 b1 b2 d3 c0 c1 c2 c3 c4 d4 e0 e1)
+      (r34ForwardF M Ws bs Wd bd bnSF a0F a1F a2F d2F b0F b1F b2F d3F
+        c0F c1F c2F c3F c4F d4F e0F e1F) := by
+  unfold r34Forward r34ForwardF
+  have hstem : FloatBridgesTo
+      (relu (64 * 112 * 112) ∘ bnS ∘ flatConvStride2 (h := 112) (w := 112) Ws bs)
+      (relu (64 * 112 * 112) ∘ bnSF ∘ M.flatConvStride2F (h := 112) (w := 112) Ws bs) :=
+    ((floatBridgesTo_flatConvStride2 (h := 112) (w := 112) M Ws bs hws hbsβ (by norm_num)
+      hWs hbs).comp hbnS).comp floatBridgesTo_relu
+  have hMP := hstem.comp (floatBridgesTo_maxPool3s2 (c := 64) (h := 56) (w := 56))
+  have hA := ((hMP.comp ha0).comp ha1).comp ha2
+  have hD2 := hA.comp hd2
+  have hB := ((hD2.comp hb0).comp hb1).comp hb2
+  have hD3 := hB.comp hd3
+  have hC := ((((hD3.comp hc0).comp hc1).comp hc2).comp hc3).comp hc4
+  have hD4 := hC.comp hd4
+  have hE := (hD4.comp he0).comp he1
+  have hGAP := hE.comp (floatBridgesTo_gap (c := 512) (h := 7) (w := 7) M (by norm_num) (by norm_num))
+  exact hGAP.comp (floatBridgesTo_dense M Wd bd hwd hbdβ (by norm_num) hWd hbd)
+
+/-- The legacy `FloatBridges` form is now a corollary — nothing downstream breaks. -/
+theorem r34_floatBridges_of_to (M : FloatModel)
+    (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (Wd : Mat 512 10) (bd : Vec 10)
+    (bnS bnSF : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
+    (a0 a1 a2 a0F a1F a2F : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))
+    (d2 d2F : Vec (64 * 56 * 56) → Vec (128 * 28 * 28))
+    (b0 b1 b2 b0F b1F b2F : Vec (128 * 28 * 28) → Vec (128 * 28 * 28))
+    (d3 d3F : Vec (128 * 28 * 28) → Vec (256 * 14 * 14))
+    (c0 c1 c2 c3 c4 c0F c1F c2F c3F c4F : Vec (256 * 14 * 14) → Vec (256 * 14 * 14))
+    (d4 d4F : Vec (256 * 14 * 14) → Vec (512 * 7 * 7))
+    (e0 e1 e0F e1F : Vec (512 * 7 * 7) → Vec (512 * 7 * 7))
+    {ws bsβ wd bdβ : ℝ} (hws : 0 ≤ ws) (hbsβ : 0 ≤ bsβ) (hwd : 0 ≤ wd) (hbdβ : 0 ≤ bdβ)
+    (hWs : ∀ o c kh kw, |Ws o c kh kw| ≤ ws) (hbs : ∀ o, |bs o| ≤ bsβ)
+    (hWd : ∀ i j, |Wd i j| ≤ wd) (hbd : ∀ j, |bd j| ≤ bdβ)
+    (hbnS : FloatBridgesTo bnS bnSF)
+    (ha0 : FloatBridgesTo a0 a0F) (ha1 : FloatBridgesTo a1 a1F) (ha2 : FloatBridgesTo a2 a2F)
+    (hd2 : FloatBridgesTo d2 d2F)
+    (hb0 : FloatBridgesTo b0 b0F) (hb1 : FloatBridgesTo b1 b1F) (hb2 : FloatBridgesTo b2 b2F)
+    (hd3 : FloatBridgesTo d3 d3F)
+    (hc0 : FloatBridgesTo c0 c0F) (hc1 : FloatBridgesTo c1 c1F) (hc2 : FloatBridgesTo c2 c2F)
+    (hc3 : FloatBridgesTo c3 c3F) (hc4 : FloatBridgesTo c4 c4F)
+    (hd4 : FloatBridgesTo d4 d4F)
+    (he0 : FloatBridgesTo e0 e0F) (he1 : FloatBridgesTo e1 e1F) :
+    FloatBridges (r34Forward Ws bs Wd bd bnS a0 a1 a2 d2 b0 b1 b2 d3 c0 c1 c2 c3 c4 d4 e0 e1) :=
+  (r34_floatBridgesTo M Ws bs Wd bd bnS bnSF a0 a1 a2 a0F a1F a2F d2 d2F
+    b0 b1 b2 b0F b1F b2F d3 d3F c0 c1 c2 c3 c4 c0F c1F c2F c3F c4F d4 d4F
+    e0 e1 e0F e1F hws hbsβ hwd hbdβ hWs hbs hWd hbd hbnS ha0 ha1 ha2 hd2
+    hb0 hb1 hb2 hd3 hc0 hc1 hc2 hc3 hc4 hd4 he0 he1).toFloatBridges
+
+-- ════════════════════════════════════════════════════════════════
 -- § The named per-block forward bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack)
 -- ════════════════════════════════════════════════════════════════
 

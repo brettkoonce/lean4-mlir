@@ -36,8 +36,10 @@ carry `hpre*`/`margin*`/`certified*` THEOREMS, and `scorecard` states only
 those. Every `img<i>` of the measured set is kept regardless — the 34 image
 definitions are cheap and other tiers reference them.
 
-Each emitted image gets a margin lemma (exact rational, in-kernel) and a
-`∀ δ, ‖δ‖ < ε → argmax fixed` theorem via `certified_at_eps`; the aggregate
+Each of the 8 EMITTED images gets a margin lemma (exact rational, in-kernel)
+and a `∀ δ, ‖δ‖ < ε → argmax fixed` theorem via `certified_at_eps`. Every OTHER
+certified image appears only as a `-- certMargin*` comment line: a measurement,
+carrying no lemma of any kind. The aggregate
 count is the honest direction only ("at least K of 100") — an upper-bound L
 cannot prove an image UNcertifiable. Empirical bracket (not proof): L2-PGD
 (100 steps, 4 restarts) leaves uncon 69/100, capped 72/100

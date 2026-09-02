@@ -70,10 +70,15 @@ status:
     committed-spec ties for all 5 ImageNet-scale nets (SpecVJP); (2) FLOAT
     ERROR — a binary32 rounding model constructed from scratch (rndP, standard
     model PROVED, no hardware axioms), whole-net forward+backward float-error
-    bridges for all nets, depth-linear adjoint-chain composition bounds
-    certified for every net, an fp8-E4M3 argmax-preservation theorem, and an
-    end-to-end capstone (cifar8_chain_argmaxSafe: binary32 rounding cannot flip
-    the prediction) plus SGD-descent theorems at trained weights; (3) ROBUSTNESS
+    bridges for all nets (⚠ stated as FloatBridges, which does not name the float
+    map -- see fidelity.divergences 4d; r34 is migrated to FloatBridgesTo, the
+    other four nets are not yet), depth-linear adjoint-chain composition bounds
+    certified for every net, an fp8-E4M3 argmax-preservation theorem, and a
+    whole-net float certificate at the committed CIFAR-8 shape (cifar8_chain_argmaxSafeH: given
+    measured tail gains, binary32 rounding cannot flip the prediction; its layer
+    chain is cifar8Verified.layers op for op, and it builds at He-init magnitudes.
+    Its v1 predecessor cifar8_chain_argmaxSafe is depth-generic only -- see
+    fidelity.divergences 4c) plus SGD-descent theorems at trained weights; (3) ROBUSTNESS
     CERTIFICATES as theorems — the Tsuzuku Lipschitz-margin radius, per-class-
     pair LipSDP with exact-rational LDL^T PSD witnesses (mechanized 100-image
     scorecards at trained weights, 69/100 certified vs a 72/100 PGD bracket),
@@ -175,7 +180,7 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
-    - declaration: "cifar8_chain_argmaxSafe"   # float capstone: binary32 rounding cannot flip the prediction
+    - declaration: "cifar8_chain_argmaxSafeH"   # float capstone at the COMMITTED CIFAR-8 shape: given measured tail gains, binary32 rounding cannot flip the prediction. Chain = cifar8Verified.layers op for op; no window side condition. (v1 cifar8_chain_argmaxSafe is depth-generic only -- fidelity.divergences 4c)
       file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
@@ -314,6 +319,53 @@ fidelity:
        reduction refinement carries an explicit (quarantined) order-balanced
        hypothesis. The LipSDP scorecards certify a FIXED 100-image subset at a
        FIXED epsilon — an honest lower bound, not a dataset-wide claim.
+
+    4c. THE ADJOINT-CHAIN TIER IS NOT INSTANTIATED (disclosed 2026-09-02, audit).
+       `chain_adjointClose` / `chain_argmaxSafe` (AdjointChainBridge.lean) are
+       correct depth-generic theorems, but nothing in the repo applies them to a
+       committed net. Two hypotheses block it. (i) `LayerCert m A` carries ONE
+       window that every layer must map into ITSELF, so `reluDenseTower`'s
+       `hfit : layerAct + layerBudget(0) <= A` unfolds to
+       `(m*w'*A + beta)*(1+u)^(m+2) <= A`, which forces `m*w' <= 1` whenever
+       `A > 0` (and `A = 0` makes the margin hypothesis unsatisfiable). At the
+       committed cifar8Verified profile `m*w'` runs 24..114, so `hfit` is
+       violated by 1-2 orders of magnitude and `cifar8_chain_argmaxSafe` has no
+       CIFAR-8 instance -- it is generic in `(m, w', beta, A, layers)` and the
+       "cifar8" in its name has no referent. `hfit` appears only as a binder, 4
+       times, and is discharged nowhere. (ii) the tail gains arrive as a named
+       `TailGains` hypothesis measured off `scripts/adjoint_chain_probe.py`;
+       the PROVEN discharge (`tailGains_suffixProd`) gives worst-case gain
+       PRODUCTS (~59^11 on that net), which is why measurement is used instead,
+       and `LipOnWindow` wants the gain over the whole window while a measured
+       Jacobian underestimates that supremum (AdjointChainBridge.lean:40).
+       FIXED for (i): `AdjointChainBridgeHet.lean` indexes the chain by
+       (dimension, window) per layer, so `Aout :=` the propagated bound discharges
+       the obligation by construction and the dimension gap closes in the same
+       move. `Cifar8ChainCert.cifar8ChainH` is now the committed cifar8Verified
+       layer list op for op (8 convs [16,16,32,32] SAME 3x3, relu each, a pool
+       after every second conv 32->16->8->4->2, flatten 128, dense 64/64/10),
+       buildable at ANY `0 <= w'/beta/A`, with `cifar8_chain_certH` and
+       `cifar8_chain_argmaxSafeH` over it. The v1 theorems are retained as the
+       depth-generic statements they are. STILL OPEN: (ii) the measured tail
+       gains, unaffected by the window fix; and a `rfl`-style tie from
+       `chainRH (cifar8ChainH ...)` to the committed render (the peer of
+       WholeNetForwardTies).
+
+    4d. WHOLE-NET FLOAT BRIDGES DO NOT NAME THEIR FLOAT MAP (disclosed
+       2026-09-02, audit). `FloatBridges f := forall A, 0 <= A -> exists B L fF,
+       0 <= B /\ FloatClose A B f fF L` existentially binds `fF` -- the float
+       implementation -- not just the `B`/`L` bookkeeping its docstring says it
+       drops. So `FloatBridges f` is provable for ANY `f` bounded on input boxes
+       by taking `fF := f` and the constant modulus `2B`: no FloatModel, no unit
+       roundoff, 3-axiom clean. The leaf lemmas (`floatClose_flatConv`,
+       `dense_close_mixed`, ...) are honest -- they conclude in `FloatClose`
+       with an explicit `fF` -- but the ~134 `FloatBridges` conclusions,
+       including every whole-net capstone (r34_floatBridges,
+       mnv2Forward_floatBridges, convnext{,Ch}_floatBridges, vit_floatBridges,
+       r34_grad_floatBridges), state strictly less than their docstrings claim
+       ("the deployed float forward ... within an explicit budget"): neither the
+       deployed map nor any budget survives the existential. Migration to a
+       two-argument `FloatBridgesTo f fF` is in progress.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

@@ -938,6 +938,11 @@ lean_lib «Certs» where
              -- quarantined order-balanced hypothesis). Audit-leaf modules; roots
              -- so `lake build Proofs` builds their oleans for the axiom gate.
              `LeanMlir.Proofs.Codegen.AdjointChainBridge,
+             -- v2 of the same chain: windows and dimensions indexed per layer, so
+             -- the `hfit` forward-invariance side condition (which no real net can
+             -- satisfy — see `hfit_forces_tiny_weights`) does not arise. Root for
+             -- the same reason as its v1 above.
+             `LeanMlir.Proofs.Codegen.AdjointChainBridgeHet,
              `LeanMlir.Proofs.Architectures.AdjointChainResidual,
              `LeanMlir.Proofs.Certificates.GeluLipschitz,
              `LeanMlir.Proofs.Codegen.TreeReduceBridge,

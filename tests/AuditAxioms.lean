@@ -82,6 +82,7 @@ import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
 import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
 import LeanMlir.Proofs.Codegen.AdjointChainBridge
+import LeanMlir.Proofs.Codegen.AdjointChainBridgeHet
 import LeanMlir.Proofs.Architectures.AdjointChainResidual
 import LeanMlir.Proofs.Certificates.GeluLipschitz
 import LeanMlir.Proofs.Float.BnEvalFloatBridge
@@ -1487,6 +1488,21 @@ open Proofs
 #print axioms chain_argmaxSafe
 #print axioms cifar8_chain_cert
 #print axioms cifar8_chain_argmaxSafe
+-- ⚠ Both cifar8_* above are DEPTH-GENERIC, not CIFAR-8 instances: their `hfit`
+-- (the uniform window's forward-invariance) forces m·w' ≤ 1, while the committed
+-- net runs m·w' at 24…114. hfit_forces_tiny_weights states that obstruction and
+-- cifar8_stage_defeats_hfit derives False from it at the widest committed stage.
+-- The v2 chain (chain_adjointCloseH / chain_argmaxSafeH) indexes the window and
+-- dimension per layer, so no such condition exists. formalization.yaml §4c.
+#print axioms hfit_forces_tiny_weights
+#print axioms cifar8_stage_defeats_hfit
+#print axioms chain_adjointCloseH
+#print axioms chain_argmaxSafeH
+-- ✅ and the v2 chain DOES have the committed instance: cifar8ChainH is
+-- cifar8Verified.layers op for op (8 convs [16,16,32,32], 4 pools 32→2, dense
+-- 64/64/10), buildable at any 0 ≤ w'/β/A — so He magnitudes are admissible.
+#print axioms cifar8_chain_certH
+#print axioms cifar8_chain_argmaxSafeH
 -- §1c (planning/floatbridge_quantization.md): the two-roundoff generalization
 -- of the dot budget — a leaf precision u_leaf (FloatModel L, e.g. bf16 2⁻⁸ /
 -- fp8-E4M3 2⁻⁴ on the matmul inputs) and an accumulate precision u_acc (M.u,
@@ -1929,6 +1945,12 @@ open Proofs
 #print axioms Proofs.floatBridges_flatConvStride2
 #print axioms Proofs.floatBridges_gap
 #print axioms Proofs.r34_floatBridges
+-- ⚠ FloatBridges existentially binds the FLOAT MAP, so the line above constrains
+-- no float implementation (formalization.yaml §4d). r34_floatBridgesTo is the same
+-- fold with the float net named — that is the statement carrying the docstring's
+-- "the deployed float forward is within an explicit budget" claim.
+#print axioms Proofs.FloatBridgesTo.comp
+#print axioms Proofs.r34_floatBridgesTo
 -- The named per-block FORWARD bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack), so the
 -- whole-net fold's block hypotheses are discharged by name exactly as the backward's are:
 -- floatBridges_r34IdBlock (rblkPC = relu∘residual(body); FloatBridges.residual skip) +

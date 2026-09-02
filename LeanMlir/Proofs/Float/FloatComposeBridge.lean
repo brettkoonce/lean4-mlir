@@ -484,12 +484,20 @@ theorem floatClose_r34_stages {m : Nat} {A : ℝ} {blk blkF : Vec m → Vec m} {
 -- ════════════════════════════════════════════════════════════════
 
 /-- **`f` float-bridges** — for *any* nonnegative input magnitude there is a
-    nonnegative output magnitude and a `FloatClose` certificate. This is the
-    existential closure of `FloatClose` over the magnitude domain: it drops the
-    bookkeeping of the exact `B`/`L` so that whole-net assembly composes in one line
-    (no manual `set B0 … B7` threading). Every op that is `FloatClose A (φ A) …` with
-    `0 ≤ φ A` float-bridges; `FloatBridges.comp` chains them. The form `floatClose_bn`
-    delivers (with its operating-point data) and §1d's whole-net fold consumes. -/
+    nonnegative output magnitude and a `FloatClose` certificate.
+
+    ⚠⚠ **DEPRECATED — this says nothing about floating point.** The intent was to
+    existentially close the *bookkeeping* (`B`, `L`) so whole-net assembly composes
+    in one line. But the existential also binds **`fF`, the float implementation**,
+    and once that is quantified away the predicate is satisfied by ANY `f` bounded on
+    input boxes — take `fF := f` and the constant modulus `2·B`. No `FloatModel`, no
+    unit roundoff, 3-axiom clean. So `FloatBridges f` does not constrain the deployed
+    float map, and a whole-net `FloatBridges` conclusion cannot carry the sentence its
+    docstring wants ("the deployed float forward is within an explicit budget").
+
+    Use `FloatBridgesTo f fF` below, which keeps `fF` in the statement and is
+    otherwise identical. `FloatBridgesTo.toFloatBridges` weakens to this one, so
+    migration is incremental (see `formalization.yaml` fidelity §4d). -/
 def FloatBridges {m n : Nat} (f : Vec m → Vec n) : Prop :=
   ∀ A, 0 ≤ A → ∃ B L fF, 0 ≤ B ∧ FloatClose A B f fF L
 
@@ -546,6 +554,68 @@ theorem floatBridges_dense {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n
     (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β) :
     FloatBridges (Proofs.dense W b) :=
   fun _A hA => ⟨_, _, _,
+    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
+    floatClose_dense M W b hw' hβ hA hm hW hb⟩
+
+-- ════════════════════════════════════════════════════════════════
+-- § `FloatBridgesTo`: the same assembly, with the float map NAMED
+-- ════════════════════════════════════════════════════════════════
+
+/-- **`f` float-bridges TO `fF`.** `FloatBridges` with the float implementation kept
+    in the statement: only the magnitude/modulus bookkeeping (`B`, `L`) is
+    existentially closed, which is what the assembly actually needed. Unlike
+    `FloatBridges`, this is falsifiable — it pins a specific float map — and
+    `FloatBridgesTo.comp` *composes those maps*, so a whole-net conclusion names the
+    float net it certifies. -/
+def FloatBridgesTo {m n : Nat} (f fF : Vec m → Vec n) : Prop :=
+  ∀ A, 0 ≤ A → ∃ B L, 0 ≤ B ∧ FloatClose A B f fF L
+
+/-- **Float-bridging composes, and so do the float maps** — the real content that
+    `FloatBridges.comp` discarded. -/
+theorem FloatBridgesTo.comp {m n p : Nat} {f fF : Vec m → Vec n} {g gF : Vec n → Vec p}
+    (hf : FloatBridgesTo f fF) (hg : FloatBridgesTo g gF) :
+    FloatBridgesTo (g ∘ f) (gF ∘ fF) := by
+  intro A hA
+  obtain ⟨B, L, hB, hfc⟩ := hf A hA
+  obtain ⟨C, Lg, hC, hgc⟩ := hg B hB
+  exact ⟨C, Lg ∘ L, hC, hfc.comp hgc⟩
+
+/-- Forget the float map — the migration bridge, so a `FloatBridgesTo` fact still
+    discharges a legacy `FloatBridges` hypothesis. -/
+theorem FloatBridgesTo.toFloatBridges {m n : Nat} {f fF : Vec m → Vec n}
+    (h : FloatBridgesTo f fF) : FloatBridges f :=
+  fun A hA => let ⟨B, L, hB, hc⟩ := h A hA; ⟨B, L, fF, hB, hc⟩
+
+/-- ReLU float-bridges to itself (exact in float). -/
+theorem floatBridgesTo_relu {n : Nat} : FloatBridgesTo (relu n) (relu n) :=
+  fun A hA => ⟨A, _, hA, floatClose_relu A⟩
+
+/-- MaxPool float-bridges to itself (exact in float). -/
+theorem floatBridgesTo_maxPool {c h w : Nat} :
+    FloatBridgesTo (maxPoolFlat c h w) (maxPoolFlat c h w) :=
+  fun A hA => ⟨A, _, hA, floatClose_maxPool A⟩
+
+/-- The 3×3/s2 stem pool float-bridges to itself (exact in float). -/
+theorem floatBridgesTo_maxPool3s2 {c h w : Nat} :
+    FloatBridgesTo (maxPool3s2Flat c h w) (maxPool3s2Flat c h w) :=
+  fun A hA => ⟨A, _, hA, floatClose_maxPool3s2 A⟩
+
+/-- Convolution float-bridges to the model's rounded convolution. -/
+theorem floatBridgesTo_flatConv {ic oc h w kH kW : Nat} (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * h * w)
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
+    FloatBridgesTo (flatConv (h := h) (w := w) W b) (M.flatConvF (h := h) (w := w) W b) :=
+  fun _A hA => ⟨_, _,
+    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
+    floatClose_flatConv M W b hw' hβ hA hn hW hb⟩
+
+/-- Dense float-bridges to the model's rounded dense layer. -/
+theorem floatBridgesTo_dense {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n)
+    {w' β : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hm : 0 < m)
+    (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β) :
+    FloatBridgesTo (Proofs.dense W b) (M.dense W b) :=
+  fun _A hA => ⟨_, _,
     add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
     floatClose_dense M W b hw' hβ hA hm hW hb⟩
 

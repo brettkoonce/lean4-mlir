@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Codegen.AdjointChainBridge
+import LeanMlir.Proofs.Codegen.AdjointChainBridgeHet
 
 /-!
 # P5 — the whole-net float certificate as a Lean theorem (CIFAR-8 capstone)
@@ -19,12 +20,47 @@ assembles that certificate as a Lean THEOREM: `chain_adjointClose`
 - **the decision guarantee** `chain_argmaxSafe`: once the real margin exceeds
   `2·chainBudget`, the float net makes the SAME prediction as the exact net.
 
-Scope (honest): `chain_adjointClose` is uniform-width (the `towerBack`-shape
-dim-preserving fold), so this capstone is CIFAR-8 in its uniform relu∘dense
-form (depth-generic over its stages via `reluDenseTower`). The committed net's
-conv trunk changes spatial/channel dims between stages; a fully dim-heterogeneous
-chain (sigma-typed layers) is the noted `AdjointChainBridge` v2 generalization,
-and the heterogeneous stems/heads compose at the ends via `FloatClose.comp`.
+⚠⚠ **Scope — the v1 theorems below (`cifar8_chain_cert`,
+`cifar8_chain_argmaxSafe`) have NO CIFAR-8 instance and cannot have one as
+stated.** They are generic in `(m, w', β, A, layers)`; nothing in them is CIFAR-8
+but the name. Two separate gaps, and the second is the binding one:
+
+1. *Dimension.* `chain_adjointClose` is uniform-width (the `towerBack`-shape
+   dim-preserving fold), so this is the uniform relu∘dense form. The committed
+   net's conv trunk changes spatial/channel dims between stages; a fully
+   dim-heterogeneous chain (sigma-typed layers) is the noted `AdjointChainBridge`
+   v2 generalization, and heterogeneous stems/heads compose at the ends via
+   `FloatClose.comp`.
+
+2. ⛔ *Window (the one that actually bites).* `LayerCert m A` carries ONE window
+   that every layer must map into ITSELF, so `hfit` unfolds to
+   `(m·w'·A + β)·(1+u)^(m+2) ≤ A`, which forces **`m·w' ≤ 1`** whenever `A > 0`
+   — and `A = 0` collapses the window to `{0}`, making the `hmargin` hypothesis
+   (`2·chainBudget < 0`) unsatisfiable. At the committed `cifar8Verified`
+   profile (`scripts/adjoint_chain_probe.py` §3: conv 3→16,16,16,16,32,32,32,32
+   + dense 128/64/64/10, He init) `m·w'` runs **24 … 114**. So `hfit` is
+   violated by one to two orders of magnitude at EVERY stage, and no amount of
+   dimension generalisation repairs that. `hfit` is discharged nowhere in the
+   repo — it appears only as a binder.
+
+   The fix is not to satisfy `hfit` but to delete it: a heterogeneous-window
+   `LayerCert m Ain Aout` with `Aout :=` the propagated bound discharges the
+   obligation by construction, exactly as `FloatClose.comp` already threads
+   `A → B → C`. That is `AdjointChainBridgeHet.lean`, and BOTH gaps close with it
+   — indexing the chain by `(dim, window)` handles (1) in the same move, since
+   `FloatClose` was always dimension-heterogeneous.
+
+**✅ The v2 section at the bottom of this file carries the instance.**
+`cifar8ChainH` is the committed `cifar8Verified` layer list op for op, built at
+any `0 ≤ w'`, `0 ≤ β`, `0 ≤ A`, and `cifar8_chain_certH` /
+`cifar8_chain_argmaxSafeH` are the certificate and the decision guarantee over
+it. The v1 theorems are kept as the depth-generic statements they are.
+
+The tail gains remain a measured hypothesis in BOTH versions, not a proven one
+(`AdjointChainBridge.lean` §"Honest scope": `LipOnWindow` wants the gain over
+the whole window, which a measured Jacobian underestimates). That is the
+remaining quarantine, and it is unaffected by the window fix.
+
 Everything here reuses proven bridges + the quarantine pattern; 3-axiom clean.
 -/
 
@@ -89,5 +125,176 @@ theorem cifar8_chain_argmaxSafe (M : FloatModel) {m : Nat} {w' β A : ℝ}
       chainF (reluDenseTower M hw' hβ hA hm hfit layers) x j
         < chainF (reluDenseTower M hw' hβ hA hm hfit layers) x j₀ :=
   chain_argmaxSafe _ Hs hH x hx j₀ hmargin
+
+-- ════════════════════════════════════════════════════════════════
+-- § v2 — the SAME certificate at the committed CIFAR-8 shape
+-- ════════════════════════════════════════════════════════════════
+
+/-! Everything above is the v1 chain, whose `hfit` no real net satisfies (§2 of the
+header). What follows is the same certificate over `AdjointChainBridgeHet`'s
+per-layer windows and dimensions, at the **actual committed `cifar8Verified`
+shape** — conv 3→16,16,16,16,32,32,32,32 (3×3 SAME) with a max-pool after every
+second conv (32→16→8→4→2), flatten 128, dense 64/64/10 — with no window side
+condition anywhere. The tail gains remain a named hypothesis, as in v1. -/
+
+/-- The committed CIFAR-8 net's weights, carrying their magnitude bounds. He init
+    at these fan-ins gives `|W| ≈ 0.3…0.5`; nothing here constrains `w'` further,
+    which is the point (v1 needed `m·w' ≤ 1`). -/
+structure Cifar8Weights (w' β : ℝ) where
+  cW1 : Kernel4 16 3 3 3
+  cb1 : Vec 16
+  cW2 : Kernel4 16 16 3 3
+  cb2 : Vec 16
+  cW3 : Kernel4 16 16 3 3
+  cb3 : Vec 16
+  cW4 : Kernel4 16 16 3 3
+  cb4 : Vec 16
+  cW5 : Kernel4 32 16 3 3
+  cb5 : Vec 32
+  cW6 : Kernel4 32 32 3 3
+  cb6 : Vec 32
+  cW7 : Kernel4 32 32 3 3
+  cb7 : Vec 32
+  cW8 : Kernel4 32 32 3 3
+  cb8 : Vec 32
+  dW1 : Mat 128 64
+  db1 : Vec 64
+  dW2 : Mat 64 64
+  db2 : Vec 64
+  dW3 : Mat 64 10
+  db3 : Vec 10
+  hcW1 : ∀ o c kh kw, |cW1 o c kh kw| ≤ w'
+  hcb1 : ∀ o, |cb1 o| ≤ β
+  hcW2 : ∀ o c kh kw, |cW2 o c kh kw| ≤ w'
+  hcb2 : ∀ o, |cb2 o| ≤ β
+  hcW3 : ∀ o c kh kw, |cW3 o c kh kw| ≤ w'
+  hcb3 : ∀ o, |cb3 o| ≤ β
+  hcW4 : ∀ o c kh kw, |cW4 o c kh kw| ≤ w'
+  hcb4 : ∀ o, |cb4 o| ≤ β
+  hcW5 : ∀ o c kh kw, |cW5 o c kh kw| ≤ w'
+  hcb5 : ∀ o, |cb5 o| ≤ β
+  hcW6 : ∀ o c kh kw, |cW6 o c kh kw| ≤ w'
+  hcb6 : ∀ o, |cb6 o| ≤ β
+  hcW7 : ∀ o c kh kw, |cW7 o c kh kw| ≤ w'
+  hcb7 : ∀ o, |cb7 o| ≤ β
+  hcW8 : ∀ o c kh kw, |cW8 o c kh kw| ≤ w'
+  hcb8 : ∀ o, |cb8 o| ≤ β
+  hdW1 : ∀ i j, |dW1 i j| ≤ w'
+  hdb1 : ∀ j, |db1 j| ≤ β
+  hdW2 : ∀ i j, |dW2 i j| ≤ w'
+  hdb2 : ∀ j, |db2 j| ≤ β
+  hdW3 : ∀ i j, |dW3 i j| ≤ w'
+  hdb3 : ∀ j, |db3 j| ≤ β
+
+/-- The per-stage fan-ins of the committed net, in chain order (max-pools carry the
+    window unchanged and contribute no entry): eight receptive fields `ic·kH·kW`
+    then the three dense input widths. -/
+def cifar8FanIns : List Nat :=
+  [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
+   16 * 3 * 3, 32 * 3 * 3, 32 * 3 * 3, 32 * 3 * 3,
+   128, 64, 64]
+
+/-- **The committed CIFAR-8 net as a `LayerChain`** — 11 certified stages and 4
+    max-pools, input `Vec (3·32·32)`, output `Vec 10`, windows propagating along
+    `cifar8FanIns`. Builds for ANY `0 ≤ w'`, `0 ≤ β`, `0 ≤ A`: there is no `hfit`,
+    and `cifar8_stage_defeats_hfit` shows v1 could not have accepted even one of
+    these stages at He magnitudes. -/
+noncomputable def cifar8ChainH (M : FloatModel) {w' β A : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (W : Cifar8Weights w' β) :
+    LayerChain (3 * 32 * 32) A 10 (windowFold M w' β cifar8FanIns A) :=
+  let n := windowFold_nonneg M hw' hβ
+  -- stage 1-2 @ 32×32, then pool to 16×16
+  .cons (layerCertH_reluConv (h := 32) (w := 32) M W.cW1 W.cb1 hw' hβ
+          (n [] hA) (by norm_num) W.hcW1 W.hcb1)
+  (.cons (layerCertH_reluConv (h := 32) (w := 32) M W.cW2 W.cb2 hw' hβ
+          (n [3 * 3 * 3] hA) (by norm_num) W.hcW2 W.hcb2)
+  (.cons (layerCertH_maxPool 16 16 16 _)
+  -- stage 3-4 @ 16×16, then pool to 8×8
+  (.cons (layerCertH_reluConv (h := 16) (w := 16) M W.cW3 W.cb3 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3] hA) (by norm_num) W.hcW3 W.hcb3)
+  (.cons (layerCertH_reluConv (h := 16) (w := 16) M W.cW4 W.cb4 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3] hA) (by norm_num) W.hcW4 W.hcb4)
+  (.cons (layerCertH_maxPool 16 8 8 _)
+  -- stage 5-6 @ 8×8, then pool to 4×4
+  (.cons (layerCertH_reluConv (h := 8) (w := 8) M W.cW5 W.cb5 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3] hA) (by norm_num)
+          W.hcW5 W.hcb5)
+  (.cons (layerCertH_reluConv (h := 8) (w := 8) M W.cW6 W.cb6 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3] hA)
+          (by norm_num) W.hcW6 W.hcb6)
+  (.cons (layerCertH_maxPool 32 4 4 _)
+  -- stage 7-8 @ 4×4, then pool to 2×2 (flatten 32·2·2 = 128)
+  (.cons (layerCertH_reluConv (h := 4) (w := 4) M W.cW7 W.cb7 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
+              32 * 3 * 3] hA) (by norm_num) W.hcW7 W.hcb7)
+  (.cons (layerCertH_reluConv (h := 4) (w := 4) M W.cW8 W.cb8 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
+              32 * 3 * 3, 32 * 3 * 3] hA) (by norm_num) W.hcW8 W.hcb8)
+  (.cons (layerCertH_maxPool 32 2 2 _)
+  -- the dense head
+  (.cons (layerCertH_dense M W.dW1 W.db1 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
+              32 * 3 * 3, 32 * 3 * 3, 32 * 3 * 3] hA) (by norm_num) W.hdW1 W.hdb1)
+  (.cons (layerCertH_dense M W.dW2 W.db2 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
+              32 * 3 * 3, 32 * 3 * 3, 32 * 3 * 3, 128] hA) (by norm_num)
+          W.hdW2 W.hdb2)
+  (.cons (layerCertH_dense M W.dW3 W.db3 hw' hβ
+          (n [3 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3, 16 * 3 * 3,
+              32 * 3 * 3, 32 * 3 * 3, 32 * 3 * 3, 128, 64] hA) (by norm_num)
+          W.hdW3 W.hdb3)
+    .nil))))))))))))))
+
+
+/-- **The CIFAR-8 whole-net float certificate — at the committed shape, no window
+    side condition.** The v2 peer of `cifar8_chain_cert`. The layer list of
+    `cifar8ChainH` is `cifar8Verified.layers` op for op (8 convs `[16,16,32,32]`
+    with SAME 3×3 kernels, relu after each, a max-pool after every second conv
+    taking 32→16→8→4→2, flatten to 128, dense 64/64/10), so this is a statement
+    about the committed net rather than a look-alike tower.
+
+    What is still assumed, unchanged from v1: the tail gains `Hs` arrive as a named
+    `TailGainsH` hypothesis with its provenance in `scripts/adjoint_chain_probe.py`
+    §3, and `LipOnWindow` asks for the gain over the whole window while a measured
+    Jacobian underestimates that supremum. What is no longer assumed: anything
+    about `w'`, `β` or `A` — the windows propagate instead of having to be
+    forward-invariant.
+
+    ⚠ Not yet proved: that `chainRH (cifar8ChainH …)` is *definitionally* the
+    committed `cifar8Verified` render. It is that net's ops in that order; the
+    `rfl`-style tie is the peer of `WholeNetForwardTies` and is the next step. -/
+theorem cifar8_chain_certH (M : FloatModel) {w' β A : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (W : Cifar8Weights w' β)
+    (Hs : List ℝ) (hH : TailGainsH (cifar8ChainH M hw' hβ hA W) Hs)
+    (x : Vec (3 * 32 * 32)) (hx : ∀ k, |x k| ≤ A) (j : Fin 10) :
+    |chainFH (cifar8ChainH M hw' hβ hA W) x j
+        - chainRH (cifar8ChainH M hw' hβ hA W) x j|
+      ≤ chainBudgetH (cifar8ChainH M hw' hβ hA W) Hs :=
+  chain_adjointCloseH _ Hs hH x hx j
+
+/-- **Rounding cannot flip the committed CIFAR-8 net's prediction.** The v2 peer of
+    `cifar8_chain_argmaxSafe`, and — unlike it — instantiable: `cifar8ChainH` builds
+    at any nonnegative `w'`, `β`, `A`, so He-init magnitudes are admissible. Once the
+    exact net's logit margin at `j₀` exceeds twice the adjoint-chain budget, the
+    float-evaluated net has the same argmax. -/
+theorem cifar8_chain_argmaxSafeH (M : FloatModel) {w' β A : ℝ}
+    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (W : Cifar8Weights w' β)
+    (Hs : List ℝ) (hH : TailGainsH (cifar8ChainH M hw' hβ hA W) Hs)
+    (x : Vec (3 * 32 * 32)) (hx : ∀ k, |x k| ≤ A) (j₀ : Fin 10)
+    (hmargin : ∀ j, j ≠ j₀ →
+      2 * chainBudgetH (cifar8ChainH M hw' hβ hA W) Hs
+        < chainRH (cifar8ChainH M hw' hβ hA W) x j₀
+          - chainRH (cifar8ChainH M hw' hβ hA W) x j) :
+    ∀ j, j ≠ j₀ →
+      chainFH (cifar8ChainH M hw' hβ hA W) x j
+        < chainFH (cifar8ChainH M hw' hβ hA W) x j₀ :=
+  chain_argmaxSafeH _ Hs hH x hx j₀ hmargin
+
+/-- **The instance v1 could not have.** At the widest committed stage's magnitudes
+    (fan-in 288, `|W| ≤ 1/2`) the v1 tower is contradictory for every positive window
+    (`cifar8_stage_defeats_hfit`); the v2 chain builds at exactly those numbers. -/
+noncomputable example (M : FloatModel) (W : Cifar8Weights (1/2) 1) :
+    LayerChain (3 * 32 * 32) 1 10 (windowFold M (1/2) 1 cifar8FanIns 1) :=
+  cifar8ChainH M (by norm_num) (by norm_num) (by norm_num) W
 
 end Proofs
