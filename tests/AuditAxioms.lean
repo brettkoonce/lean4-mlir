@@ -92,6 +92,7 @@ import LeanMlir.Proofs.Float.ViTFloatBridge
 import LeanMlir.Proofs.Float.ViTAttentionFloatBridge
 import LeanMlir.Proofs.Float.ViTBlockFloatBridge
 import LeanMlir.Proofs.Float.Cifar8FloatBridge
+import LeanMlir.Proofs.Float.Cifar8FloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -1498,6 +1499,7 @@ open Proofs
 #print axioms cifar8_stage_defeats_hfit
 #print axioms chain_adjointCloseH
 #print axioms chain_argmaxSafeH
+#print axioms lipOnWindow_id_ge_one
 -- ✅ and the v2 chain DOES have the committed instance: cifar8ChainH is
 -- cifar8Verified.layers op for op (8 convs [16,16,32,32], 4 pools 32→2, dense
 -- 64/64/10), buildable at any 0 ≤ w'/β/A. ⚠ Buildable is not biting: at He
@@ -1998,6 +2000,17 @@ open Proofs
 -- BARE denses where cifar8Verified.layers has relu after the first two.
 #print axioms Proofs.cifar8ChainH_chainRH_eq
 #print axioms Proofs.cifar8_chain_cert_committed
+-- ⭐ A NUMBER for a whole-net `.mod`: the committed CIFAR-8 forward as a closed
+-- FloatBridgesTo (floatBridgesTo_cifar8, all leaves, no block hypotheses), its envelope
+-- at the He profile pushed through eleven stages by norm_num (cifar8Bridge_env), and the
+-- headline: |float − real| ≤ 6.37e14 per logit on |x| ≤ 1 (cifar8_float_logits_le). The
+-- size of that number is the interval fold at He magnitudes — vacuous as a certificate,
+-- and now kernel-checked rather than asserted (Cifar8FloatBudget.lean header).
+#print axioms Proofs.floatBridgesTo_cifar8
+#print axioms Proofs.FloatBridgesTo.Env.comp_flatConv
+#print axioms Proofs.cifar8Bridge_env
+#print axioms Proofs.cifar8Bridge_fresh_le
+#print axioms Proofs.cifar8_float_logits_le
 -- The named per-block FORWARD bridges (peers of floatBridges_r34IdBlockBack/DownBlockBack), so the
 -- whole-net fold's block hypotheses are discharged by name exactly as the backward's are:
 -- floatBridges_r34IdBlock (rblkPC = relu∘residual(body); FloatBridges.residual skip) +

@@ -127,6 +127,19 @@ def TailGainsH : {m₀ m₁ : Nat} → {A₀ A₁ : ℝ} →
       LipOnWindow A₁ H (chainRH ls) ∧ TailGainsH ls Hs
   | _, _, _, _, _, _ => False
 
+/-- **The last tail gain is at least 1** whenever its window is positive: the empty tail is
+    `id`, and `LipOnWindow A H id` at two window points `A·1` and `0` forces `H·A ≥ A`. So
+    `chainBudgetH ≥ b_last` for every `TailGainsH`-satisfying gain list — the floor
+    `Cifar8ChainCert.lean` §"Magnitude" and `formalization.yaml` §4c quote (1.8e13 at the
+    He profile) is not an estimate about the measured `Hᵢ` but a consequence of the
+    hypothesis itself. -/
+theorem lipOnWindow_id_ge_one {m : Nat} {A H : ℝ} (hA : 0 < A) (hm : 0 < m)
+    (h : LipOnWindow A H (id : Vec m → Vec m)) : 1 ≤ H := by
+  have := h (fun _ => A) (fun _ => 0) A hA.le (fun _ => by simp [abs_of_pos hA])
+    (fun _ => by simp [hA.le]) (fun _ => by simp [abs_of_pos hA]) ⟨0, hm⟩
+  simp [abs_of_pos hA] at this
+  nlinarith
+
 /-- The adjoint-chain certificate value `Σᵢ Hᵢ·bᵢ` — depth-LINEAR, as in v1. -/
 noncomputable def chainBudgetH : {m₀ m₁ : Nat} → {A₀ A₁ : ℝ} →
     LayerChain m₀ A₀ m₁ A₁ → List ℝ → ℝ

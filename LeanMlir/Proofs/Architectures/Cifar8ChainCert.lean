@@ -78,6 +78,10 @@ even an exact `H` leaves the propagated budget ~1.2e6× above the true drift. Th
 theorems are non-vacuous at `u = 0` or for contracting weights (`m·w' ≲ 1`); what
 v2 adds over v1 is the committed shape and the `rfl` tie, not a budget that
 reaches the logit scale at He weights (`formalization.yaml` §4c "NOT BITING").
+The interval-fold peer of this budget IS now a kernel-checked number:
+`cifar8_float_logits_le` (`Cifar8FloatBudget.lean`) gives `6.37e14` per logit on
+the same net at the same profile — the three figures (chain floor `1.8e13`, fold
+`6.4e14`, probe `3.8e14`) agree in order, which is the consistency check.
 
 Everything here reuses proven bridges + the quarantine pattern; 3-axiom clean.
 -/

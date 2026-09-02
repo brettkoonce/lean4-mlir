@@ -290,6 +290,9 @@ lean_lib «Certs» where
              -- A1 forward float-bridge capstones (planning/tier23…): the deeper 8-conv
              -- no-BN CIFAR via the FloatBridges.comp existential path (cifar8_floatBridges).
              `LeanMlir.Proofs.Float.Cifar8FloatBridge,
+             -- a NUMBER for a whole-net `.mod`: the committed CIFAR-8 forward's fresh budget
+             -- ≤ 6.37e14 at the He profile, kernel-checked stage by stage (formalization.yaml §4d)
+             `LeanMlir.Proofs.Float.Cifar8FloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

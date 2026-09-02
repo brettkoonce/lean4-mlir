@@ -73,8 +73,10 @@ status:
     bridges for all nets (⚠ the legacy FloatBridges statements carry no budget --
     they close the error modulus existentially, which the triangle inequality
     discharges from boundedness alone, fidelity.divergences 4d; their FloatBridgesTo
-    peers are Type-valued bridges whose `.mod` IS the budget, as data, though no
-    numeric bound on a whole-net `.mod` is stated yet), depth-linear adjoint-chain composition
+    peers are Type-valued bridges whose `.mod` IS the budget, as data -- and for the
+    committed CIFAR-8 forward that budget is a kernel-checked NUMBER, 6.37e14 per
+    logit at He magnitudes, cifar8_float_logits_le: the interval fold, honest and
+    vacuous, see 4d), depth-linear adjoint-chain composition
     bounds certified for every net, an fp8-E4M3 argmax-preservation theorem, and a
     whole-net float certificate at the committed CIFAR-8 shape
     (cifar8_chain_argmaxSafeH: given measured tail gains, binary32 rounding cannot
@@ -182,6 +184,12 @@ status:
       literature_dependencies: []
     - declaration: "Proofs.ViTTiePoC.vit_net_tied_certified"   # train-step tie: all 200 ViT params fed the REAL backward cotangent
       file: "LeanMlir/Proofs/Architectures/ViTTiePoC.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
+    - declaration: "cifar8_float_logits_le"   # a NUMBER for a whole-net float budget: the committed CIFAR-8 forward's float logits are within 6.37e14 of the real ones on |x| <= 1 at |W| <= 2/5, |b| <= 1/100, u <= 2^-24 -- the interval fold at He magnitudes, kernel-checked stage by stage (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/Cifar8FloatBudget.lean"
       sorry_count: 0
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
@@ -373,7 +381,7 @@ fidelity:
        input box -- which at the He profile (`w' = 0.39`, `beta = 0.01`, `A = 1`)
        grows 1 -> 10.5 -> 592 -> ... -> 4.6e18. The last stage alone gives
        `b_11 = 1.8e13`, and `TailGainsH` forces `H_11 >= 1` (it is `LipOnWindow` of
-       `id` on a positive window), so `chainBudgetH >= 1.8e13` against logits ~10:
+       `id` on a positive window: `lipOnWindow_id_ge_one`), so `chainBudgetH >= 1.8e13` against logits ~10:
        `hmargin` asks for a logit margin above 3.6e13. The "chainBudget ~ 2.6" of
        `scripts/adjoint_chain_probe.py` §3 is a DIFFERENT quantity -- the same
        formula with `b_i` at the MEASURED per-stage activation magnitude, which no
@@ -470,9 +478,28 @@ fidelity:
        older `floatClose_cifarStage` / `floatClose_resBlock` gained bridge peers
        `floatBridgesTo_cifarStage` / `floatBridgesTo_resBlock`.
        `FloatBridgesTo.toFloatBridges` still weakens to the legacy Prop, so nothing
-       downstream broke. NOT YET DONE: stating and checking a NUMBER for any
-       whole-net `.mod` at a committed weight profile -- the bridges carry the
-       budget; no theorem yet bounds it.
+       downstream broke.
+
+       ⭐ A NUMBER (2026-09-02): `Cifar8FloatBudget.lean` bounds a whole-net `.mod`
+       for the first time. `floatBridgesTo_cifar8` is the committed 8-conv CIFAR-10
+       forward as a CLOSED bridge (all leaves, no block hypotheses) to its float
+       skeleton `cifarCnn8ForwardF`; `cifar8Bridge` instantiates it at the committed
+       shape over `Cifar8Weights w' beta`; and `cifar8Bridge_env` pushes a numeric
+       envelope (`FloatBridgesTo.Env`: output window and fresh budget, both as
+       rationals) through the eleven conv/dense stages with `norm_num`, the gamma-term
+       through `gamma_num`, so at `|W| <= 2/5`, `|b| <= 1/100`, unit input window and
+       `u <= 2^-24`:
+           output window  <= 6.121e18      (cifar8Bridge_mag_le)
+           fresh budget   <= 6.37e14       (cifar8Bridge_fresh_le)
+       and per logit `|float - real| <= 6.37e14` on `|x| <= 1`
+       (`cifar8_float_logits_le`). The size is the interval fold at He magnitudes
+       -- vacuous as a certificate, and consistent with 4c's chain floor (1.8e13)
+       and the probe's worst-case-products figure (3.79e14); relative to the
+       certified window it is ~1e-4, the same as `mnist_mlp_float_budget`. What is
+       new is that the kernel checks it: a wrong `layerBudget`, a dropped stage or a
+       misread fan-in fails here. The twelve ImageNet-scale whole-net bridges take
+       their block bridges as hypotheses, so their `.mod` is a function of the
+       blocks' budgets; a number for them needs the block cones closed the same way.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own
