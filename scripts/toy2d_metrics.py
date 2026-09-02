@@ -54,7 +54,7 @@ cel = np.fromfile(f"{DATA}/{TARGET}_cells.bin", dtype=np.int32)
 #
 # ⚠ These are NOT tightened to sit just above those numbers, and the reason is
 # that nobody has measured retrain variance: training is not reproducible run to
-# run (see the `reuse` flag in demos/MainDiffusion2d.lean), so one sample per
+# run (see the `reuse` flag in demos/archive/MainDiffusion2d.lean), so one sample per
 # target is a value, not a spread. A gate set from one point would be flaky in
 # the direction that costs the most — failing on an honest run. Collapse scores
 # an order of magnitude worse (0.17 for the eta = 1 arm that lost a mode), so

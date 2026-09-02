@@ -270,24 +270,53 @@ data pipeline + sampler work end-to-end without the transformer.
 
 ## Layout
 
+The four demos above are the maintained set. Everything else lives in one of two
+subfolders — moving a file does **not** change its executable name, so every
+`lake exe <name>` in this repo, in `scripts/` and in CI still works unchanged.
+
 ```
 demos/
 ├── README.md                              # this file
 ├── figures/                               # rendered outputs for the README
-├── MainUnetPetsTrain.lean                 # UNet segmentation trainer
-├── MainAutoencoderPetsTrain.lean          # plain autoencoder baseline (no skips)
-├── MainPetsPredict.lean                   # render predicted masks from checkpoint
-├── MainYolov1VisdroneFpn.lean             # FPN multi-scale detector (VisDrone) + infer
-├── MainYolov1PetsTrainBootstrap.lean      # ⛔ retired: YOLOv1 Pets, superseded by VisDrone
-├── MainYolov1PetsInfer.lean               # ⛔ retired: Pets detection dump
-├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST
-├── MainCifarDdpmTrain.lean  / Sample      # DDPM on CIFAR-10
-├── MainCifarDdpmAttnTrain.lean / Sample   # bottleneck-attention variant (codegen ✓, recipe ✗)
-├── MainCifarDdpmSincosTrain.lean / Sample # sincos t-embed variant (small negative)
+│
+│   # ── the four demos ──
+├── MainUnetBratsR34.lean                  # R34-UNet on BraTS (segmentation)
+├── MainUnetBratsTrain.lean                # from-scratch UNet on BraTS
+├── MainBratsPredict.lean                  # render predicted masks from a checkpoint
+├── MainYolov1VisdroneFpn.lean             # R34+FPN detector on VisDrone, train + infer
+├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
+│                                          #   two-row trajectory figure)
 ├── MainTinyGptShakespeare.lean            # char-level transformer
-├── MainBigramShakespeare.lean             # bigram baseline (validates data pipeline)
-├── MainGradCAM.lean                       # closed-form CAM for GAP+dense networks
-└── MainInspectConvNeXt.lean               # checkpoint diagnostics
+├── MainBigramShakespeare.lean             # bigram baseline (validates the data pipeline)
+├── MainTinyStories.lean                   # the same transformer at a larger corpus
+│
+├── probes/                                # gates and tools, not demos — these RUN IN CI
+│   ├── MainFpnLossProbe.lean              #   finite-difference gate on the detector loss
+│   ├── MainFpnNeckProbe.lean              #   FPN neck shapes
+│   ├── MainFpnDetectProbe.lean            #   detector head
+│   ├── MainFpnTrainEmit.lean              #   emit the detector train step
+│   ├── MainAnchorLossProbe.lean           #   anchor loss
+│   ├── MainDiouLossProbe.lean             #   DIoU box loss
+│   ├── MainSegLossProbe.lean              #   segmentation losses
+│   ├── MainGradFdProbe.lean               #   generic finite-difference gradient check
+│   ├── MainFlashProbe.lean                #   flash-attention
+│   ├── MainMnistDdpmScore.lean            #   DDPM sample scoring
+│   ├── MainGradCAM.lean                   #   closed-form CAM for GAP+dense nets
+│   └── MainInspectConvNeXt.lean           #   checkpoint diagnostics
+│
+└── archive/                               # superseded; kept building, not maintained
+    ├── MainUnetPetsTrain.lean             #   UNet on Pets, superseded by BraTS
+    ├── MainAutoencoderPetsTrain.lean      #   autoencoder baseline (no skips)
+    ├── MainPetsPredict.lean               #   Pets mask rendering
+    ├── MainYolov1PetsTrainBootstrap.lean  #   YOLOv1 on Pets, superseded by VisDrone
+    ├── MainYolov1PetsInfer.lean           #   Pets detection dump
+    ├── MainYolov1VisDrone448.lean         #   single-scale VisDrone arms, superseded
+    ├── MainYolov1VisDrone448S16.lean      #     by the FPN detector
+    ├── MainYolov1VisDroneAnchor.lean      #
+    ├── MainCifarDdpmTrain.lean / Sample   #   DDPM on CIFAR-10
+    ├── MainCifarDdpmAttnTrain.lean / …    #   bottleneck-attention variant (codegen ✓, recipe ✗)
+    ├── MainCifarDdpmSincosTrain.lean / …  #   sincos t-embed variant (small negative)
+    └── MainDiffusion2d.lean               #   2-D toy diffusion
 ```
 
 Per-demo planning docs live in `planning/` at the repo root.

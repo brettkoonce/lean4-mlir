@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from anchor_loss_probe_check import np_forward, np_grad, make_data, anchors_for, P  # noqa: E402
 
 
-# T1b probe weights: deterministic, must match demos/MainFpnLossProbe.lean --clsw
+# T1b probe weights: deterministic, must match demos/probes/MainFpnLossProbe.lean --clsw
 CLSW = [0.5 + 0.25 * c for c in range(10)]
 
 PROBE = ".lake/build/bin/fpn-loss-probe"

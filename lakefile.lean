@@ -2386,11 +2386,11 @@ lean_exe «cifar-cnn-train» where
   moreLinkArgs := lowererLink
 
 lean_exe «autoencoder-pets-train» where
-  root := `demos.MainAutoencoderPetsTrain
+  root := `demos.archive.MainAutoencoderPetsTrain
   moreLinkArgs := lowererLink
 
 lean_exe «unet-pets-train» where
-  root := `demos.MainUnetPetsTrain
+  root := `demos.archive.MainUnetPetsTrain
   moreLinkArgs := lowererLink
 
 lean_exe «unet-brats-train» where
@@ -2402,11 +2402,11 @@ lean_exe «unet-brats-r34» where
   moreLinkArgs := lowererLink
 
 lean_exe «grad-fd-probe» where
-  root := `demos.MainGradFdProbe
+  root := `demos.probes.MainGradFdProbe
   moreLinkArgs := lowererLink
 
 lean_exe «pets-predict» where
-  root := `demos.MainPetsPredict
+  root := `demos.archive.MainPetsPredict
   moreLinkArgs := lowererLink
 
 lean_exe «brats-predict» where
@@ -2414,7 +2414,7 @@ lean_exe «brats-predict» where
   moreLinkArgs := lowererLink
 
 lean_exe «gradcam» where
-  root := `demos.MainGradCAM
+  root := `demos.probes.MainGradCAM
   moreLinkArgs := lowererLink
 
 lean_exe «bigram-shakespeare» where
@@ -2422,47 +2422,47 @@ lean_exe «bigram-shakespeare» where
   moreLinkArgs := lowererLink
 
 lean_exe «flash-probe» where
-  root := `demos.MainFlashProbe
+  root := `demos.probes.MainFlashProbe
   moreLinkArgs := lowererLink
 
 lean_exe «seg-loss-probe» where
-  root := `demos.MainSegLossProbe
+  root := `demos.probes.MainSegLossProbe
   moreLinkArgs := lowererLink
 
 -- DIoU box-loss forward probe (detection infra brick #1); FD-checked by
 -- scripts/diou_probe_check.py against scripts/diou_grad_check.py.
 lean_exe «diou-loss-probe» where
-  root := `demos.MainDiouLossProbe
+  root := `demos.probes.MainDiouLossProbe
   moreLinkArgs := lowererLink
 
 -- Anchor-YOLO-loss probe (brick #2, A anchors); FD-checked by
 -- scripts/anchor_loss_probe_check.py.
 lean_exe «anchor-loss-probe» where
-  root := `demos.MainAnchorLossProbe
+  root := `demos.probes.MainAnchorLossProbe
   moreLinkArgs := lowererLink
 
 -- FPN-neck (top-down multi-scale merge) probe (brick #3); FD-checked by
 -- scripts/fpn_neck_probe_check.py against scripts/fpn_neck_check.py's oracle.
 lean_exe «fpn-neck-probe» where
-  root := `demos.MainFpnNeckProbe
+  root := `demos.probes.MainFpnNeckProbe
   moreLinkArgs := lowererLink
 
 -- FPN multi-scale-loss probe (brick #3, bites 4+6); FD-checked by
 -- scripts/fpn_loss_probe_check.py against a numpy Σ-of-per-scale-anchor-loss ref.
 lean_exe «fpn-loss-probe» where
-  root := `demos.MainFpnLossProbe
+  root := `demos.probes.MainFpnLossProbe
   moreLinkArgs := lowererLink
 
 -- Whole-FPN-detector probe (bite 7 de-risk): neck+heads+concat+loss+DAG backward,
 -- γ=0 so every grad is FD-checkable; validated by scripts/fpn_detect_probe_check.py.
 lean_exe «fpn-detect-probe» where
-  root := `demos.MainFpnDetectProbe
+  root := `demos.probes.MainFpnDetectProbe
   moreLinkArgs := lowererLink
 
 -- Emit-only: dump the r34FpnDet train-step MLIR for eyeball / iree-compile
 -- --compile-to=input parse check (planning/yolo_fpn.md bite 7 wiring).
 lean_exe «fpn-train-emit» where
-  root := `demos.MainFpnTrainEmit
+  root := `demos.probes.MainFpnTrainEmit
   moreLinkArgs := lowererLink
 
 
@@ -2480,7 +2480,7 @@ lean_exe «tinystories» where
   moreLinkArgs := lowererLink
 
 lean_exe «diffusion-2d» where
-  root := `demos.MainDiffusion2d
+  root := `demos.archive.MainDiffusion2d
   moreLinkArgs := lowererLink
 
 lean_exe «mnist-ddpm-train» where
@@ -2492,7 +2492,7 @@ lean_exe «mnist-ddpm-train» where
 -- images, using a classifier whose math VJP is proven. See the driver's header
 -- and planning/diffusion_2d_demo.md §7.
 lean_exe «mnist-ddpm-score» where
-  root := `demos.MainMnistDdpmScore
+  root := `demos.probes.MainMnistDdpmScore
   moreLinkArgs := lowererLink
 
 lean_exe «mnist-ddpm-sample» where
@@ -2500,54 +2500,54 @@ lean_exe «mnist-ddpm-sample» where
   moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-train» where
-  root := `demos.MainCifarDdpmTrain
+  root := `demos.archive.MainCifarDdpmTrain
   moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-sample» where
-  root := `demos.MainCifarDdpmSample
+  root := `demos.archive.MainCifarDdpmSample
   moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-attn-train» where
-  root := `demos.MainCifarDdpmAttnTrain
+  root := `demos.archive.MainCifarDdpmAttnTrain
   moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-attn-sample» where
-  root := `demos.MainCifarDdpmAttnSample
+  root := `demos.archive.MainCifarDdpmAttnSample
   moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-sincos-train» where
-  root := `demos.MainCifarDdpmSincosTrain
+  root := `demos.archive.MainCifarDdpmSincosTrain
   moreLinkArgs := lowererLink
 
 lean_exe «cifar-ddpm-sincos-sample» where
-  root := `demos.MainCifarDdpmSincosSample
+  root := `demos.archive.MainCifarDdpmSincosSample
   moreLinkArgs := lowererLink
 
 -- YOLOv1 cat/dog head detector on Oxford-IIIT Pets (2×2 mosaic, R34 backbone
 -- bootstrap, focal objectness). See planning/yolo_final.md.
 lean_exe «yolov1-pets-train-bootstrap» where
-  root := `demos.MainYolov1PetsTrainBootstrap
+  root := `demos.archive.MainYolov1PetsTrainBootstrap
   moreLinkArgs := lowererLink
 
 -- Inference dump (logits + images + IDs) for scripts/yolo_render.py.
 lean_exe «yolov1-pets-infer» where
-  root := `demos.MainYolov1PetsInfer
+  root := `demos.archive.MainYolov1PetsInfer
   moreLinkArgs := lowererLink
 
 -- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).
 -- The resolution rung above the 224/7×7 WS-A baseline; planning/yolo_drone.md.
 lean_exe «yolov1-visdrone448» where
-  root := `demos.MainYolov1VisDrone448
+  root := `demos.archive.MainYolov1VisDrone448
   moreLinkArgs := lowererLink
 
 -- Stride-16 "finer grid" variant: 448 input / 28×28 grid (the different-head hedge).
 lean_exe «yolov1-visdrone448s16» where
-  root := `demos.MainYolov1VisDrone448S16
+  root := `demos.archive.MainYolov1VisDrone448S16
   moreLinkArgs := lowererLink
 
 -- Anchor-based detector: 448 / 14×14 grid, A=6 anchors (brick #2, emitAnchorYoloLoss).
 lean_exe «yolov1-visdrone-anchor» where
-  root := `demos.MainYolov1VisDroneAnchor
+  root := `demos.archive.MainYolov1VisDroneAnchor
   moreLinkArgs := lowererLink
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -2650,7 +2650,7 @@ lean_exe «test-yolov1-mutex» where
   moreLinkArgs := lowererLink
 
 lean_exe «inspect-convnext» where
-  root := `demos.MainInspectConvNeXt
+  root := `demos.probes.MainInspectConvNeXt
   moreLinkArgs := lowererLink
 
 lean_exe «test-resnet-residual» where

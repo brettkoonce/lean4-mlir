@@ -67,7 +67,7 @@ private def check (label : String) (n : Nat) (f : Nat → Nat) : IO Bool := do
 
 def main : IO UInt32 := do
   IO.println "Ddpm.sampleNoise seeding — radii must be Rayleigh, not constant"
-  -- The two seed patterns `demos/MainDiffusion2d.lean` actually uses: nearly
+  -- The two seed patterns `demos/archive/MainDiffusion2d.lean` actually uses: nearly
   -- consecutive seeds for `x_T`, and a strided pattern for the eta > 0 noise.
   -- The second was biased rather than degenerate (its differences reach higher
   -- bits), which is why it needs its own row instead of being assumed covered.
