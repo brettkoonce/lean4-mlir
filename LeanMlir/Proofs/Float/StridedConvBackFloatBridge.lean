@@ -108,9 +108,9 @@ theorem floatBridges_decimateBack (oc h w : Nat) : FloatBridges (decimateBack oc
   fun A hA => ⟨A, _, _, hA, floatClose_decimateBack oc h w A⟩
 
 /-- The decimation backward float-bridges to itself (a structural scatter). -/
-theorem floatBridgesTo_decimateBack (oc h w : Nat) :
+noncomputable def floatBridgesTo_decimateBack (oc h w : Nat) :
     FloatBridgesTo (decimateBack oc h w) (decimateBack oc h w) :=
-  fun A hA => ⟨A, _, hA, floatClose_decimateBack oc h w A⟩
+  ⟨fun A => A, fun _ => id, fun A hA => ⟨hA, floatClose_decimateBack oc h w A⟩⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The strided-conv backward: `convFlatBack ∘ decimateBack`
@@ -137,7 +137,7 @@ theorem floatBridges_flatConvStride2Back {ic oc h w kH kW : Nat} (M : FloatModel
 
 /-- The stride-2 conv input-VJP float-bridges to the rounded reversed-kernel conv
     after the (exact) decimation scatter. -/
-theorem floatBridgesTo_flatConvStride2Back {ic oc h w kH kW : Nat} (M : FloatModel)
+noncomputable def floatBridgesTo_flatConvStride2Back {ic oc h w kH kW : Nat} (M : FloatModel)
     (W : Kernel4 oc ic kH kW) {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < oc * (2 * h) * (2 * w))
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') :
     FloatBridgesTo (flatConvStride2Back (h := h) (w := w) W)
@@ -247,9 +247,9 @@ theorem floatBridges_decimateOddBack (oc h w : Nat) : FloatBridges (decimateOddB
   fun A hA => ⟨A, _, _, hA, floatClose_decimateOddBack oc h w A⟩
 
 /-- The odd-decimation backward float-bridges to itself (a structural scatter). -/
-theorem floatBridgesTo_decimateOddBack (oc h w : Nat) :
+noncomputable def floatBridgesTo_decimateOddBack (oc h w : Nat) :
     FloatBridgesTo (decimateOddBack oc h w) (decimateOddBack oc h w) :=
-  fun A hA => ⟨A, _, hA, floatClose_decimateOddBack oc h w A⟩
+  ⟨fun A => A, fun _ => id, fun A hA => ⟨hA, floatClose_decimateOddBack oc h w A⟩⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The stride-4 (patchify) conv backward: `convFlatBack ∘ decimateOddBack ∘ decimateBack`
@@ -280,7 +280,7 @@ theorem floatBridges_flatConvStride4Back {ic oc h w kH kW : Nat} (M : FloatModel
 
 /-- The stride-4 conv input-VJP float-bridges to the rounded reversed-kernel conv
     after the two (exact) decimation scatters. -/
-theorem floatBridgesTo_flatConvStride4Back {ic oc h w kH kW : Nat} (M : FloatModel)
+noncomputable def floatBridgesTo_flatConvStride4Back {ic oc h w kH kW : Nat} (M : FloatModel)
     (W : Kernel4 oc ic kH kW) {w' : ℝ} (hw' : 0 ≤ w')
     (hn : 0 < oc * (2 * (2 * h)) * (2 * (2 * w))) (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') :
     FloatBridgesTo (flatConvStride4Back (h := h) (w := w) W)

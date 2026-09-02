@@ -253,8 +253,8 @@ set_option maxRecDepth 100000 in
 /-- **The whole ConvNeXt-T input-gradient VJP float-bridges TO its float skeleton.**
     Same `.comp` chain as `convnext_grad_floatBridges`, with every float map named —
     the statement that carries "the deployed float backward of the whole net is within
-    an explicit budget of the certified `ℝ` backward" (`formalization.yaml` §4d). -/
-theorem convnext_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+    the bridge's `.mod` budget of the certified `ℝ` backward" (`formalization.yaml` §4d). -/
+noncomputable def convnext_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
     (lnBstem lnBstemF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
     (lnBhead lnBheadF : Vec 768 → Vec 768)
     (s1B s1BF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
@@ -299,7 +299,7 @@ set_option maxRecDepth 100000 in
     replaced by its named float peer (`chanLNTensor3BackF`) and the head slot `id`.
     The four stage backwards and three downsample backwards stay supplied, each paired
     with its float map (`formalization.yaml` fidelity §4d). -/
-theorem convnextCh_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
+noncomputable def convnextCh_grad_floatBridgesTo (M : FloatModel) (Wd : Mat 768 10) (sW : Kernel4 96 3 4 4)
     {εs : ℝ} (γs fγs : Vec 96) (xstem : Vec (96 * 56 * 56))
     (fst : Fin (56 * 56) → ℝ) (fxh : Fin (56 * 56) → Vec 96)
     (s1B s1BF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))

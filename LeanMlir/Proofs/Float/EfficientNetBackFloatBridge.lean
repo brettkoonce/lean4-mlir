@@ -150,12 +150,10 @@ theorem FloatBridges.batchMap {a b : Nat} (N : Nat) {f : Vec a → Vec b} (hf : 
 
 /-- **`FloatBridgesTo.batchMap`** — the batched lift with the float map named: the
     batch of `fF` is the float peer of the batch of `f`. -/
-theorem FloatBridgesTo.batchMap {a b : Nat} (N : Nat) {f fF : Vec a → Vec b}
+noncomputable def FloatBridgesTo.batchMap {a b : Nat} (N : Nat) {f fF : Vec a → Vec b}
     (hf : FloatBridgesTo f fF) :
-    FloatBridgesTo (StableHLO.batchMap N f) (StableHLO.batchMap N fF) := by
-  intro A hA
-  obtain ⟨B, L, hB, hfc⟩ := hf A hA
-  exact ⟨B, L, hB, hfc.batchMap N⟩
+    FloatBridgesTo (StableHLO.batchMap N f) (StableHLO.batchMap N fF) :=
+  ⟨hf.mag, hf.mod, fun A hA => ⟨(hf.close A hA).1, (hf.close A hA).2.batchMap N⟩⟩
 
 /-- **The BATCHED MBConv body backward float-bridges** — `batchMap N` of the per-example
     `mbconvBodyBack`. The repeating unit of the batched whole-net backward; closes the forward's

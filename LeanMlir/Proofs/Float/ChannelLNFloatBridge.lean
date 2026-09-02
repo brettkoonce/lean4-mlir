@@ -272,28 +272,31 @@ theorem floatBridges_chanLNTensor3Back {c h w : Nat} (M : FloatModel) {ε : ℝ}
 -- ════════════════════════════════════════════════════════════════
 
 /-- Identity float-bridges to itself. -/
-theorem floatBridgesTo_idVec {m : Nat} : FloatBridgesTo (id : Vec m → Vec m) id :=
-  fun A hA => ⟨A, _, hA, ⟨fun _v hv i => ⟨hv i, hv i⟩, fun _ _ _ _ _ hd i => hd i⟩⟩
+noncomputable def floatBridgesTo_idVec {m : Nat} : FloatBridgesTo (id : Vec m → Vec m) id :=
+  ⟨fun A => A, fun _ e => e,
+   fun _A hA => ⟨hA, ⟨fun _v hv i => ⟨hv i, hv i⟩, fun _ _ _ _ _ hd i => hd i⟩⟩⟩
 
 /-- The flat transpose float-bridges to itself (a permutation). -/
-theorem floatBridgesTo_transposeFlat (m n : Nat) :
+noncomputable def floatBridgesTo_transposeFlat (m n : Nat) :
     FloatBridgesTo (transposeFlat m n) (transposeFlat m n) := by
   rw [transposeFlat_eq_gather]
   exact floatBridgesTo_gather (transposeEquiv m n)
 
-theorem floatBridgesTo_reassocFwd (oc h w : Nat) :
+noncomputable def floatBridgesTo_reassocFwd (oc h w : Nat) :
     FloatBridgesTo (reassocFwd oc h w) (reassocFwd oc h w) :=
   floatBridgesTo_gather (reassocEquiv oc h w)
 
-theorem floatBridgesTo_reassocBack (oc h w : Nat) :
+noncomputable def floatBridgesTo_reassocBack (oc h w : Nat) :
     FloatBridgesTo (reassocBack oc h w) (reassocBack oc h w) :=
   floatBridgesTo_gather (reassocEquiv oc h w).symm
 
 /-- The bias translation float-bridges TO the model's rounded bias add. -/
-theorem floatBridgesTo_biasAdd {n : Nat} (M : FloatModel) (β : Vec n) {Bb : ℝ}
+noncomputable def floatBridgesTo_biasAdd {n : Nat} (M : FloatModel) (β : Vec n) {Bb : ℝ}
     (hn : 0 < n) (hβ : ∀ k, |β k| ≤ Bb) :
-    FloatBridgesTo (fun (z : Vec n) k => z k + β k) (M.biasAddF β) := fun A hA =>
-  ⟨_, _, (floatClose_biasAdd M β hβ (A := A)).cod_nonneg hA hn, floatClose_biasAdd M β hβ⟩
+    FloatBridgesTo (fun (z : Vec n) k => z k + β k) (M.biasAddF β) :=
+  ⟨fun A => A + Bb + M.u * (A + Bb), fun A e => M.u * (A + Bb) + e,
+   fun A hA => ⟨(floatClose_biasAdd M β hβ (A := A)).cod_nonneg hA hn,
+     floatClose_biasAdd M β hβ⟩⟩
 
 /-- The float vector-LN: the supplied float pure-normalise, then the rounded γ scale,
     then the rounded `+β` — the three tokens the render emits. -/
@@ -301,7 +304,7 @@ noncomputable def layerNormVecF {D : Nat} (M : FloatModel) (γ β : Vec D)
     (lnF : Vec D → Vec D) : Vec D → Vec D :=
   M.biasAddF β ∘ M.diagBackF γ ∘ lnF
 
-theorem floatBridgesTo_layerNormVec {D : Nat} (M : FloatModel) {ε : ℝ} (γ β : Vec D)
+noncomputable def floatBridgesTo_layerNormVec {D : Nat} (M : FloatModel) {ε : ℝ} (γ β : Vec D)
     (lnF : Vec D → Vec D) {Gd Bb : ℝ} (hD : 0 < D)
     (hγ : ∀ i, |γ i| ≤ Gd) (hβ : ∀ i, |β i| ≤ Bb)
     (hln : FloatBridgesTo (layerNormForward D ε 1 0) lnF) :
@@ -317,7 +320,7 @@ noncomputable def rowLNVecFlatF {s c : Nat} (M : FloatModel) (γ β : Vec c)
     (lnF : Vec c → Vec c) : Vec (s * c) → Vec (s * c) :=
   perRowFlat s c (layerNormVecF M γ β lnF)
 
-theorem floatBridgesTo_rowLNVecFlat {s c : Nat} (M : FloatModel) {ε : ℝ} (γ β : Vec c)
+noncomputable def floatBridgesTo_rowLNVecFlat {s c : Nat} (M : FloatModel) {ε : ℝ} (γ β : Vec c)
     (lnF : Vec c → Vec c) {Gd Bb : ℝ} (hc : 0 < c)
     (hγ : ∀ i, |γ i| ≤ Gd) (hβ : ∀ i, |β i| ≤ Bb)
     (hln : FloatBridgesTo (layerNormForward c ε 1 0) lnF) :
@@ -334,7 +337,7 @@ noncomputable def chanLNTensor3F {c h w : Nat} (M : FloatModel) (γ β : Vec c)
     ∘ rowLNVecFlatF (s := h * w) M γ β lnF
     ∘ transposeFlat c (h * w) ∘ reassocFwd c h w
 
-theorem floatBridgesTo_chanLNTensor3 {c h w : Nat} (M : FloatModel) {ε : ℝ} (γ β : Vec c)
+noncomputable def floatBridgesTo_chanLNTensor3 {c h w : Nat} (M : FloatModel) {ε : ℝ} (γ β : Vec c)
     (lnF : Vec c → Vec c) {Gd Bb : ℝ} (hc : 0 < c)
     (hγ : ∀ i, |γ i| ≤ Gd) (hβ : ∀ i, |β i| ≤ Bb)
     (hln : FloatBridgesTo (layerNormForward c ε 1 0) lnF) :
@@ -356,7 +359,7 @@ noncomputable def rowLNVecFlatBackF {s c : Nat} (M : FloatModel) (fγ : Vec c)
   perRowIdxFlat s c (fun r =>
     (fun dy i => M.bnGradInputF (1 : ℝ) (fs r) (fxh r) dy i) ∘ M.diagBackF fγ)
 
-theorem floatBridgesTo_rowLNVecFlatBack {s c : Nat} (M : FloatModel) {ε : ℝ} (γ fγ : Vec c)
+noncomputable def floatBridgesTo_rowLNVecFlatBack {s c : Nat} (M : FloatModel) {ε : ℝ} (γ fγ : Vec c)
     (X : Vec (s * c)) (fs : Fin s → ℝ) (fxh : Fin s → Vec c)
     {Gd egam S Xh es exh : ℝ} (hs0 : 0 < s) (hc : 0 < c)
     (hγ : ∀ i, |γ i| ≤ Gd) (hfγ : ∀ i, |fγ i - γ i| ≤ egam)
@@ -364,14 +367,20 @@ theorem floatBridgesTo_rowLNVecFlatBack {s c : Nat} (M : FloatModel) {ε : ℝ} 
     (hSabs : ∀ r, |bnIstd c (Mat.unflatten X r) ε| ≤ S)
     (hxh : ∀ r i, |bnXhat c ε (Mat.unflatten X r) i| ≤ Xh)
     (hfxh : ∀ r i, |fxh r i - bnXhat c ε (Mat.unflatten X r) i| ≤ exh) :
-    FloatBridgesTo (rowLNVecFlatBack s c ε γ X) (rowLNVecFlatBackF M fγ fs fxh) := by
-  intro A hA
-  have hrow := fun r : Fin s =>
-    (floatClose_diagBack M γ fγ hγ hfγ (A := A)).comp
-      (floatClose_bnBack M (Mat.unflatten X r) (fxh r) (fs r) hc (le_refl |(1 : ℝ)|)
-        (hst r) (hSabs r) (hxh r) (hfxh r))
-  have hpr := FloatClose.perRowIdx (d := c) s hrow
-  exact ⟨_, _, hpr.cod_nonneg hA (Nat.mul_pos hs0 hc), hpr⟩
+    FloatBridgesTo (rowLNVecFlatBack s c ε γ X) (rowLNVecFlatBackF M fγ fs fxh) :=
+  -- per row: `diagBack γ` (magnitude `Gd·A + mulErr`) then the BN-input gradient at that
+  -- magnitude; the row index never enters the bookkeeping, so one `mag`/`mod` serves all rows
+  ⟨fun A => bnGradInputReMag c |(1 : ℝ)| (Gd * A + FloatModel.mulErr M.u Gd A egam 0) S Xh
+      + M.bnGradInputBudget c |(1 : ℝ)| (Gd * A + FloatModel.mulErr M.u Gd A egam 0) S Xh es exh,
+   fun A e => M.bnGradInputBudget c |(1 : ℝ)| (Gd * A + FloatModel.mulErr M.u Gd A egam 0) S Xh es exh
+      + bnGradInputReMag c |(1 : ℝ)| (FloatModel.mulErr M.u Gd A egam 0 + Gd * e) S Xh,
+   fun A hA =>
+     have hrow := fun r : Fin s =>
+       (floatClose_diagBack M γ fγ hγ hfγ (A := A)).comp
+         (floatClose_bnBack M (Mat.unflatten X r) (fxh r) (fs r) hc (le_refl |(1 : ℝ)|)
+           (hst r) (hSabs r) (hxh r) (hfxh r))
+     have hpr := FloatClose.perRowIdx (d := c) s hrow
+     ⟨hpr.cod_nonneg hA (Nat.mul_pos hs0 hc), hpr⟩⟩
 
 /-- The float channel-LN backward — the same conjugation, the float row backward inside. -/
 noncomputable def chanLNTensor3BackF {c h w : Nat} (M : FloatModel) (fγ : Vec c)
@@ -381,7 +390,7 @@ noncomputable def chanLNTensor3BackF {c h w : Nat} (M : FloatModel) (fγ : Vec c
     ∘ rowLNVecFlatBackF (s := h * w) M fγ fs fxh
     ∘ transposeFlat c (h * w) ∘ reassocFwd c h w
 
-theorem floatBridgesTo_chanLNTensor3Back {c h w : Nat} (M : FloatModel) {ε : ℝ} (γ fγ : Vec c)
+noncomputable def floatBridgesTo_chanLNTensor3Back {c h w : Nat} (M : FloatModel) {ε : ℝ} (γ fγ : Vec c)
     (x : Vec (c * h * w)) (fs : Fin (h * w) → ℝ) (fxh : Fin (h * w) → Vec c)
     {Gd egam S Xh es exh : ℝ} (hhw : 0 < h * w) (hc : 0 < c)
     (hγ : ∀ i, |γ i| ≤ Gd) (hfγ : ∀ i, |fγ i - γ i| ≤ egam)

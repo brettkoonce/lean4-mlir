@@ -290,8 +290,58 @@ noncomputable def seGateF {c h w r : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
   ∘ M.dense W₁ b₁
   ∘ M.gapFlatF
 
-/-- **`floatClose_seGate` with the float map NAMED.** Same six-instance `.comp` fold;
-    only the bookkeeping `B`/`L` stays existential. -/
+/-- Sigmoid float-bridges TO the deployed `fsig` applied coordinatewise: magnitude
+    `1 + esig` whatever the input, modulus `esig + e/4`. -/
+noncomputable def floatBridgesTo_sigmoid {n : Nat} (fsig : ℝ → ℝ) {esig : ℝ}
+    (hesig : 0 ≤ esig) (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig) :
+    FloatBridgesTo (sigmoid n) (fun v i => fsig (v i)) :=
+  ⟨fun _ => 1 + esig, fun _ e => esig + (1/4) * e,
+   fun _A _hA => ⟨by linarith, floatClose_sigmoid fsig hesig hsig⟩⟩
+
+/-- The channel broadcast float-bridges to itself (a structural gather). -/
+noncomputable def floatBridgesTo_broadcast {c h w : Nat} :
+    FloatBridgesTo (broadcastFlat c h w) (broadcastFlat c h w) :=
+  ⟨fun A => A, fun _ e => e, fun A hA => ⟨hA, floatClose_broadcast A⟩⟩
+
+/-- Swish float-bridges TO the deployed `x * fsig x` (the rounded product of the
+    activation with the deployed sigmoid approximation): magnitude `A + mulErr`,
+    modulus `mulErr + (1 + A/4)·e`. -/
+noncomputable def floatBridgesTo_swish {n : Nat} (M : FloatModel) (fsig : ℝ → ℝ) {esig : ℝ}
+    (hesig : 0 ≤ esig) (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig) :
+    FloatBridgesTo (swish n) (fun v i => M.mul (v i) (fsig (v i))) :=
+  ⟨fun A => A + FloatModel.mulErr M.u A 1 0 esig,
+   fun A e => FloatModel.mulErr M.u A 1 0 esig + (1 + A/4) * e,
+   fun A hA => ⟨by
+      have hu := M.u_nonneg
+      have : 0 ≤ FloatModel.mulErr M.u A 1 0 esig := by
+        unfold FloatModel.mulErr; nlinarith [mul_nonneg hA hesig]
+      linarith, floatClose_swish M fsig hesig hA hsig⟩⟩
+
+/-- **The SE gate float-bridges TO `seGateF`, budget visible** — the six per-op bridges
+    (`gap`, `dense`, `swish`, `dense`, `sigmoid`, `broadcast`) composed, so `.mag`/`.mod`
+    are the threaded magnitudes and moduli of `floatClose_seGate`'s fold, now as data.
+    `floatClose_seGateF` below is its `∃ B L` shadow. -/
+noncomputable def floatBridgesTo_seGate {c h w r : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
+    (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
+    {w' β esig : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hesig : 0 ≤ esig)
+    (hhw : 0 < h * w) (hc : 0 < c) (hr : 0 < r)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β) :
+    FloatBridgesTo (seGate (h := h) (w := w) W₁ b₁ W₂ b₂)
+      (seGateF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂) := by
+  unfold seGate seGateF
+  exact (((((floatBridgesTo_gap (c := c) (h := h) (w := w) M hc hhw).comp
+      (floatBridgesTo_dense M W₁ b₁ hw' hβ hc hW₁ hb₁)).comp
+      (floatBridgesTo_swish (n := r) M fsig hesig hsig)).comp
+      (floatBridgesTo_dense M W₂ b₂ hw' hβ hr hW₂ hb₂)).comp
+      (floatBridgesTo_sigmoid (n := c) fsig hesig hsig)).comp
+      (floatBridgesTo_broadcast (c := c) (h := h) (w := w))
+
+/-- **`floatClose_seGate` with the float map NAMED** — the `∃ B L` shadow of
+    `floatBridgesTo_seGate`. ⚠ On its own an existential modulus says only that both
+    maps are bounded on the box (`formalization.yaml` fidelity §4d); the budget lives
+    in the bridge's `.mod`. Kept for callers and the axiom gate. -/
 theorem floatClose_seGateF {c h w r : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
     {w' β A esig : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hesig : 0 ≤ esig)
@@ -300,35 +350,9 @@ theorem floatClose_seGateF {c h w r : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
     (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
     (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β) :
     ∃ B L, FloatClose A B (seGate (h := h) (w := w) W₁ b₁ W₂ b₂)
-      (seGateF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂) L := by
-  have hu := M.u_nonneg
-  have g0 := floatClose_gap (c := c) (h := h) (w := w) M hA hhw
-  set B0 := A + (M.u * ((1 + M.u) ^ (h * w + 1) * A) + ((1 + M.u) ^ (h * w + 1) - 1) * A)
-    with hB0def
-  have hB0 : 0 ≤ B0 := by
-    rw [hB0def]
-    have hpow : (1:ℝ) ≤ (1 + M.u) ^ (h * w + 1) := one_le_pow₀ (by linarith)
-    have h1 : 0 ≤ M.u * ((1 + M.u) ^ (h * w + 1) * A) := by positivity
-    have h2 : 0 ≤ ((1 + M.u) ^ (h * w + 1) - 1) * A := mul_nonneg (by linarith) hA
-    linarith
-  have g1 := floatClose_dense M W₁ b₁ hw' hβ hB0 hc hW₁ hb₁
-  set B1 := FloatModel.layerAct c w' β B0 + FloatModel.layerBudget M.u c w' β B0 0 with hB1def
-  have hB1 : 0 ≤ B1 := by
-    rw [hB1def]
-    exact add_nonneg (FloatModel.layerAct_nonneg hw' hβ hB0)
-      (FloatModel.layerBudget_nonneg M.u_nonneg hw' hβ hB0 le_rfl)
-  have g2 := floatClose_swish (n := r) M fsig hesig hB1 hsig
-  set B2 := B1 + FloatModel.mulErr M.u B1 1 0 esig with hB2def
-  have hB2 : 0 ≤ B2 := by
-    rw [hB2def]
-    have : 0 ≤ FloatModel.mulErr M.u B1 1 0 esig := by
-      unfold FloatModel.mulErr; nlinarith [mul_nonneg hB1 hesig]
-    linarith
-  have g3 := floatClose_dense M W₂ b₂ hw' hβ hB2 hr hW₂ hb₂
-  set B3 := FloatModel.layerAct r w' β B2 + FloatModel.layerBudget M.u r w' β B2 0 with hB3def
-  have g4 := floatClose_sigmoid (n := c) (A := B3) fsig hesig hsig
-  have g5 := floatClose_broadcast (c := c) (h := h) (w := w) (1 + esig)
-  exact ⟨_, _, ((((g0.comp g1).comp g2).comp g3).comp g4).comp g5⟩
+      (seGateF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂) L :=
+  ⟨_, _, (floatBridgesTo_seGate M fsig W₁ b₁ W₂ b₂ hw' hβ hesig hhw hc hr hsig
+    hW₁ hb₁ hW₂ hb₂).floatClose hA⟩
 
 /-- **The float full SE block** — `x ⊙ gate(x)` with both the product and the gate
     rounded: the deployed `seBlockFull`. -/
@@ -337,7 +361,33 @@ noncomputable def seBlockFullF {c h w r : Nat} (M : FloatModel) (fsig : ℝ → 
     Vec (c * h * w) → Vec (c * h * w) :=
   fun x i => M.mul (x i) (seGateF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂ x i)
 
-/-- **`floatClose_seBlockFull` with the float map NAMED.** -/
+/-- **The SE rescale `x ⊙ g(x)` in bridge form**: given a bridge for the gate, the
+    rescaled block bridges with magnitude `A·mag + mulErr` and modulus
+    `mulErr M.u A (mag A) e (mod A e)` — `floatClose_seScale` with the bookkeeping kept. -/
+noncomputable def FloatBridgesTo.seScale {m : Nat} (M : FloatModel) {g gF : Vec m → Vec m}
+    (hg : FloatBridgesTo g gF) (hm : 0 < m) :
+    FloatBridgesTo (fun x i => x i * g x i) (fun x i => M.mul (x i) (gF x i)) where
+  mag := fun A => A * hg.mag A + FloatModel.mulErr M.u A (hg.mag A) 0 (hg.mod A 0)
+  mod := fun A e => FloatModel.mulErr M.u A (hg.mag A) e (hg.mod A e)
+  close := fun _A hA =>
+    have h := floatClose_seScale M (hg.floatClose hA)
+    ⟨h.cod_nonneg hA hm, h⟩
+
+/-- **The SE block float-bridges TO its named float peer, budget visible.** -/
+noncomputable def floatBridgesTo_seBlockFull {c h w r : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
+    (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
+    {w' β esig : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hesig : 0 ≤ esig)
+    (hhw : 0 < h * w) (hc : 0 < c) (hr : 0 < r) (hn : 0 < c * h * w)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
+    (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β) :
+    FloatBridgesTo (seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂)
+      (seBlockFullF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂) :=
+  FloatBridgesTo.seScale M
+    (floatBridgesTo_seGate M fsig W₁ b₁ W₂ b₂ hw' hβ hesig hhw hc hr hsig hW₁ hb₁ hW₂ hb₂) hn
+
+/-- **`floatClose_seBlockFull` with the float map NAMED** — the `∃ B L` shadow of
+    `floatBridgesTo_seBlockFull` (same caveat as `floatClose_seGateF`). -/
 theorem floatClose_seBlockFullF {c h w r : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
     {w' β A esig : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hA : 0 ≤ A) (hesig : 0 ≤ esig)
@@ -346,25 +396,10 @@ theorem floatClose_seBlockFullF {c h w r : Nat} (M : FloatModel) (fsig : ℝ →
     (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
     (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β) :
     ∃ B L, FloatClose A B (seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂)
-      (seBlockFullF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂) L := by
-  obtain ⟨Bg, Lg, hgate⟩ :=
-    floatClose_seGateF M fsig W₁ b₁ W₂ b₂ hw' hβ hA hesig hhw hc hr hsig hW₁ hb₁ hW₂ hb₂
-  exact ⟨_, _, floatClose_seScale M hgate⟩
-
-/-- **The SE block float-bridges TO its named float peer.** -/
-theorem floatBridgesTo_seBlockFull {c h w r : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
-    (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
-    {w' β esig : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hesig : 0 ≤ esig)
-    (hhw : 0 < h * w) (hc : 0 < c) (hr : 0 < r) (hn : 0 < c * h * w)
-    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
-    (hW₁ : ∀ i j, |W₁ i j| ≤ w') (hb₁ : ∀ j, |b₁ j| ≤ β)
-    (hW₂ : ∀ i j, |W₂ i j| ≤ w') (hb₂ : ∀ j, |b₂ j| ≤ β) :
-    FloatBridgesTo (seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂)
-      (seBlockFullF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂) := by
-  intro A hA
-  obtain ⟨B, L, hc'⟩ :=
-    floatClose_seBlockFullF M fsig W₁ b₁ W₂ b₂ hw' hβ hA hesig hhw hc hr hsig hW₁ hb₁ hW₂ hb₂
-  exact ⟨B, L, hc'.cod_nonneg hA hn, hc'⟩
+      (seBlockFullF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂) L :=
+  have hn : 0 < c * h * w := by rw [Nat.mul_assoc]; exact Nat.mul_pos hc hhw
+  ⟨_, _, (floatBridgesTo_seBlockFull M fsig W₁ b₁ W₂ b₂ hw' hβ hesig hhw hc hr hn hsig
+    hW₁ hb₁ hW₂ hb₂).floatClose hA⟩
 
 /-- **THE FULL SQUEEZE-EXCITE BLOCK `x ⊙ gate(x)` IS `FloatClose`** — `floatClose_seScale`
     fed the composed gate certificate `floatClose_seGate`. The architecturally-distinctive
@@ -430,18 +465,6 @@ theorem floatBridges_swish {n : Nat} (M : FloatModel) (fsig : ℝ → ℝ) {esig
     FloatBridges (swish n) := by
   intro A hA
   refine ⟨_, _, _, ?_, floatClose_swish M fsig hesig hA hsig⟩
-  have hu := M.u_nonneg
-  have : 0 ≤ FloatModel.mulErr M.u A 1 0 esig := by
-    unfold FloatModel.mulErr; nlinarith [mul_nonneg hA hesig]
-  linarith
-
-/-- Swish float-bridges TO the deployed `x * fsig x` (the rounded product of the
-    activation with the deployed sigmoid approximation). -/
-theorem floatBridgesTo_swish {n : Nat} (M : FloatModel) (fsig : ℝ → ℝ) {esig : ℝ}
-    (hesig : 0 ≤ esig) (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig) :
-    FloatBridgesTo (swish n) (fun v i => M.mul (v i) (fsig (v i))) := by
-  intro A hA
-  refine ⟨_, _, ?_, floatClose_swish M fsig hesig hA hsig⟩
   have hu := M.u_nonneg
   have : 0 ≤ FloatModel.mulErr M.u A 1 0 esig := by
     unfold FloatModel.mulErr; nlinarith [mul_nonneg hA hesig]

@@ -270,7 +270,8 @@ set_option maxRecDepth 100000 in
     per-block batched bridges; every conv/depthwise/SE/GAP/dense enters `batchMap`-lifted, swish is
     block-diagonal at the batched index, and the ten true-batch-norms are supplied as `FloatBridges`
     facts (the one batch-coupled op, deferred exactly as r34 defers its stem BN). The deployed float
-    forward of the whole net is within an explicit budget of the certified ℝ forward.
+    forward of the whole net is within a budget of the certified ℝ forward (⚠ one `FloatBridges` does
+    not name — §4d; `efficientnetForwardB_floatBridgesTo` carries it as `.mod`).
 
     Stated on the `∘`-composition of the blocks — which **IS** `efficientnetForwardB` (its nested-
     application spelling is definitionally this composition; `FloatBridges.comp` builds exactly this
@@ -357,15 +358,17 @@ layered cone has to name its float maps before the capstone can. The float BNs s
 supplied (the one batch-coupled op), exactly as in the `FloatBridges` version. -/
 
 /-- Stride-2 depthwise float-bridges TO the model's rounded stride-2 depthwise. -/
-theorem floatBridgesTo_depthwiseStride2Flat {c h w kH kW : Nat} (M : FloatModel)
+noncomputable def floatBridgesTo_depthwiseStride2Flat {c h w kH kW : Nat} (M : FloatModel)
     (W : DepthwiseKernel c kH kW) (b : Vec c) {w' bb : ℝ}
     (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hn : 0 < c * (2 * h) * (2 * w))
     (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ bb) :
     FloatBridgesTo (depthwiseStride2Flat (h := h) (w := w) W b)
       (M.depthwiseStride2FlatF (h := h) (w := w) W b) :=
-  fun _A hA => ⟨_, _,
-    add_nonneg (layerAct_nonneg hw' hbb hA) (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
-    floatClose_depthwiseStride2Flat M W b hw' hbb hA hn hW hb⟩
+  ⟨fun A => layerAct (kH * kW) w' bb A + layerBudget M.u (kH * kW) w' bb A 0,
+   fun A e => layerBudget M.u (kH * kW) w' bb A e,
+   fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hbb hA)
+      (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
+    floatClose_depthwiseStride2Flat M W b hw' hbb hA hn hW hb⟩⟩
 
 /-- The deployed batched swish: the rounded product with the deployed sigmoid. -/
 noncomputable def swishF (M : FloatModel) (fsig : ℝ → ℝ) (n : Nat) : Vec n → Vec n :=
@@ -379,7 +382,7 @@ noncomputable def cbsBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel) (fsig
   swishF M fsig (N * (oc * h * w)) ∘ bnF
     ∘ StableHLO.batchMap N (M.flatConvF (h := h) (w := w) W b)
 
-theorem floatBridgesTo_cbsB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+noncomputable def floatBridgesTo_cbsB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
     {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig) (hn : 0 < ic * h * w)
@@ -401,7 +404,7 @@ noncomputable def stemBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel) (fsi
   swishF M fsig (N * (oc * h * w)) ∘ bnF
     ∘ StableHLO.batchMap N (M.flatConvStride2F (h := h) (w := w) W b)
 
-theorem floatBridgesTo_stemB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+noncomputable def floatBridgesTo_stemB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
     {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
@@ -424,7 +427,7 @@ noncomputable def dwbsBF (N : Nat) {c h w kH kW : Nat} (M : FloatModel) (fsig : 
   swishF M fsig (N * (c * h * w)) ∘ bnF
     ∘ StableHLO.batchMap N (M.depthwiseFlatF (h := h) (w := w) W b)
 
-theorem floatBridgesTo_dwbsB {c h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+noncomputable def floatBridgesTo_dwbsB {c h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
     (bnF : Vec (N * (c * h * w)) → Vec (N * (c * h * w)))
     {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig) (hn : 0 < c * h * w)
@@ -446,7 +449,7 @@ noncomputable def dwbsSBF (N : Nat) {c h w kH kW : Nat} (M : FloatModel) (fsig :
   swishF M fsig (N * (c * h * w)) ∘ bnF
     ∘ StableHLO.batchMap N (M.depthwiseStride2FlatF (h := h) (w := w) W b)
 
-theorem floatBridgesTo_dwbsSB {c h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+noncomputable def floatBridgesTo_dwbsSB {c h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
     (bnF : Vec (N * (c * h * w)) → Vec (N * (c * h * w)))
     {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
@@ -467,7 +470,7 @@ noncomputable def seBF (N : Nat) {c h w r : Nat} (M : FloatModel) (fsig : ℝ �
     Vec (N * (c * h * w)) → Vec (N * (c * h * w)) :=
   StableHLO.batchMap N (seBlockFullF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂)
 
-theorem floatBridgesTo_seB {c h w r : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+noncomputable def floatBridgesTo_seB {c h w r : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
     {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
     (hhw : 0 < h * w) (hc : 0 < c) (hr : 0 < r) (hn : 0 < c * h * w)
@@ -488,7 +491,7 @@ noncomputable def projBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel)
     Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
   bnF ∘ StableHLO.batchMap N (M.flatConvF (h := h) (w := w) W b)
 
-theorem floatBridgesTo_projB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel)
+noncomputable def floatBridgesTo_projB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
     {w' bb : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hn : 0 < ic * h * w)
@@ -513,7 +516,7 @@ noncomputable def mbNoExpFwdBF (N : Nat) {ic oc h w kHd kWd r : Nat} (M : FloatM
   projBF N (h := h) (w := w) M Wp bp bnPF ∘ seBF N (h := h) (w := w) M fsig Wz₁ bz₁ Wz₂ bz₂
     ∘ dwbsBF N (h := h) (w := w) M fsig Wd bd bnDF
 
-theorem floatBridgesTo_mbNoExpFwdB {ic oc h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
+noncomputable def floatBridgesTo_mbNoExpFwdB {ic oc h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
     (fsig : ℝ → ℝ) (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic) (εd : ℝ) (γd βd : Vec ic)
     (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
     (Wp : Kernel4 oc ic 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
@@ -551,7 +554,7 @@ noncomputable def mbStridedFwdBF (N : Nat) {ic mid oc h w kHd kWd r : Nat} (M : 
     ∘ dwbsSBF N (h := h) (w := w) M fsig Wd bd bnDF
     ∘ cbsBF N (h := 2 * h) (w := 2 * w) M fsig We be bnEF
 
-theorem floatBridgesTo_mbStridedFwdB {ic mid oc h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
+noncomputable def floatBridgesTo_mbStridedFwdB {ic mid oc h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
     (fsig : ℝ → ℝ)
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
@@ -600,7 +603,7 @@ noncomputable def mbResidFwdBF (N : Nat) {c mid h w kHd kWd r : Nat} (M : FloatM
       ∘ dwbsBF N (h := h) (w := w) M fsig Wd bd bnDF
       ∘ cbsBF N (h := h) (w := w) M fsig We be bnEF) v j) (v j)
 
-theorem floatBridgesTo_mbResidFwdB {c mid h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
+noncomputable def floatBridgesTo_mbResidFwdB {c mid h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
     (fsig : ℝ → ℝ)
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
@@ -642,7 +645,7 @@ noncomputable def headFwdBF (N : Nat) {c oc h w nC : Nat} (M : FloatModel) (fsig
   StableHLO.batchMap N (M.dense Wfc bfc) ∘ StableHLO.batchMap N M.gapFlatF
     ∘ cbsBF N (h := h) (w := w) M fsig Wh bh bnHF
 
-theorem floatBridgesTo_headFwdB {c oc h w nC : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+noncomputable def floatBridgesTo_headFwdB {c oc h w nC : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
     (Wfc : Mat oc nC) (bfc : Vec nC)
     (bnHF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
@@ -671,9 +674,9 @@ set_option maxRecDepth 100000 in
     sigmoid. The ten true-batch-norms stay supplied, paired with their float maps.
 
     This is the statement that carries "the deployed float forward of the whole net is
-    within an explicit budget of the certified `ℝ` forward" (`formalization.yaml`
+    within the bridge's `.mod` budget of the certified `ℝ` forward" (`formalization.yaml`
     fidelity §4d); the `FloatBridges` version could not. -/
-theorem efficientnetForwardB_floatBridgesTo (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+noncomputable def efficientnetForwardB_floatBridgesTo (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (γs βs : Vec 32)
     (Wd1 : DepthwiseKernel 32 3 3) (bd1 : Vec 32) (εd1 : ℝ) (γd1 βd1 : Vec 32)
     (Wz1a : Mat 32 8) (bz1a : Vec 8) (Wz1b : Mat 8 32) (bz1b : Vec 32)

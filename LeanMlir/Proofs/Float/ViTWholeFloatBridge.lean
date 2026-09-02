@@ -223,12 +223,12 @@ theorem vit_full_eq_vitForwardFlat
 -- ════════════════════════════════════════════════════════════════
 
 /-- The cls-slice gather float-bridges to itself (a structural select). -/
-theorem floatBridgesTo_clsSlice (N D : Nat) :
+noncomputable def floatBridgesTo_clsSlice (N D : Nat) :
     FloatBridgesTo (cls_slice_flat N D) (cls_slice_flat N D) :=
-  fun A hA => ⟨A, _, hA, floatClose_clsSlice N D⟩
+  ⟨fun A => A, fun _ e => e, fun _A hA => ⟨hA, floatClose_clsSlice N D⟩⟩
 
 /-- The ViT classifier head float-bridges to `M.dense ∘ cls-slice`. -/
-theorem floatBridgesTo_vitHead {N D nClasses : Nat} (M : FloatModel)
+noncomputable def floatBridgesTo_vitHead {N D nClasses : Nat} (M : FloatModel)
     (Wcls : Mat D nClasses) (bcls : Vec nClasses)
     {w' β : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hD : 0 < D)
     (hWcls : ∀ i j, |Wcls i j| ≤ w') (hbcls : ∀ j, |bcls j| ≤ β) :
@@ -251,16 +251,16 @@ noncomputable def vitForwardFlatF {N D nClasses imgDim : Nat} (M : FloatModel)
 
 /-- **THE WHOLE-NET ViT FORWARD FLOAT-BRIDGES TO ITS FLOAT SKELETON.** Same `.comp`
     thread as `vit_floatBridges`, with the encoder tower's blocks paired to their float
-    peers by `Forall₂` — so the conclusion names the float transformer rather than
+    peers by `FloatBridgesToList` — so the conclusion names the float transformer rather than
     existentially discarding it (`formalization.yaml` fidelity §4d). -/
-theorem vit_floatBridgesTo {N D nClasses imgDim : Nat} (M : FloatModel)
+noncomputable def vit_floatBridgesTo {N D nClasses imgDim : Nat} (M : FloatModel)
     (Wcls : Mat D nClasses) (bcls : Vec nClasses) (finalLN finalLNF : Vec D → Vec D)
     (blocks blocksF : List (Vec ((N + 1) * D) → Vec ((N + 1) * D)))
     (patchEmbed patchEmbedF : Vec imgDim → Vec ((N + 1) * D))
     {w' β : ℝ} (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hD : 0 < D)
     (hWcls : ∀ i j, |Wcls i j| ≤ w') (hbcls : ∀ j, |bcls j| ≤ β)
     (hFinalLN : FloatBridgesTo finalLN finalLNF)
-    (hblocks : List.Forall₂ FloatBridgesTo blocks blocksF)
+    (hblocks : FloatBridgesToList blocks blocksF)
     (hPatch : FloatBridgesTo patchEmbed patchEmbedF) :
     FloatBridgesTo (vitForwardFlat Wcls bcls finalLN blocks patchEmbed)
       (vitForwardFlatF M Wcls bcls finalLNF blocksF patchEmbedF) := by

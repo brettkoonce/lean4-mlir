@@ -508,16 +508,26 @@ theorem floatBridges_towerBack {m : Nat} (l : List (Vec m → Vec m))
         (ih (fun g hg => hl g (List.mem_cons.mpr (Or.inr hg))))
 
 /-- Identity float-bridges to itself. -/
-theorem floatBridgesTo_id {m : Nat} : FloatBridgesTo (id : Vec m → Vec m) id :=
-  fun A hA => ⟨A, _, hA, ⟨fun _v hv i => ⟨hv i, hv i⟩, fun _ _ _ _ _ hd i => hd i⟩⟩
+noncomputable def floatBridgesTo_id {m : Nat} : FloatBridgesTo (id : Vec m → Vec m) id :=
+  ⟨fun A => A, fun _ e => e,
+   fun _A hA => ⟨hA, ⟨fun _v hv i => ⟨hv i, hv i⟩, fun _ _ _ _ _ hd i => hd i⟩⟩⟩
 
-/-- **The tower fold, with the float tower named.** The blocks and their float peers
-    are paired by `Forall₂`, so the conclusion is about `towerBack` of the float
-    block list — not about some existentially chosen tower. -/
-theorem floatBridgesTo_towerBack {m : Nat} :
-    ∀ (l lF : List (Vec m → Vec m)), List.Forall₂ FloatBridgesTo l lF →
+/-- Bridges for a list of blocks, paired positionwise with their float peers — the
+    Type-valued `List.Forall₂ FloatBridgesTo`, so a tower's budget is data too. -/
+inductive FloatBridgesToList {m : Nat} : List (Vec m → Vec m) → List (Vec m → Vec m) → Type
+  | nil : FloatBridgesToList [] []
+  | cons {f fF : Vec m → Vec m} {l lF : List (Vec m → Vec m)}
+      (hf : FloatBridgesTo f fF) (hfs : FloatBridgesToList l lF) :
+      FloatBridgesToList (f :: l) (fF :: lF)
+
+/-- **The tower fold, with the float tower named and its budget composed.** The blocks
+    and their float peers are paired by `FloatBridgesToList`, so the conclusion is about
+    `towerBack` of the float block list — not about some existentially chosen tower —
+    and its `.mod` is the blocks' moduli composed in order. -/
+noncomputable def floatBridgesTo_towerBack {m : Nat} :
+    ∀ (l lF : List (Vec m → Vec m)), FloatBridgesToList l lF →
       FloatBridgesTo (towerBack l) (towerBack lF)
-  | [], [], _ => floatBridgesTo_id
+  | [], [], .nil => floatBridgesTo_id
   | _ :: _, _ :: _, .cons hf hfs =>
       FloatBridgesTo.comp hf (floatBridgesTo_towerBack _ _ hfs)
 
@@ -597,9 +607,9 @@ theorem vit_grad_floatBridges {N D nClasses imgDim : Nat} (M : FloatModel) (Wcls
 -- ════════════════════════════════════════════════════════════════
 
 /-- The CLS-slice backward float-bridges to itself (a structural scatter). -/
-theorem floatBridgesTo_clsScatter (N D : Nat) :
+noncomputable def floatBridgesTo_clsScatter (N D : Nat) :
     FloatBridgesTo (clsScatter N D) (clsScatter N D) :=
-  fun A hA => ⟨A, _, hA, floatClose_clsScatter N D hA⟩
+  ⟨fun A => A, fun _ e => e, fun _A hA => ⟨hA, floatClose_clsScatter N D hA⟩⟩
 
 /-- **The float ViT input-gradient skeleton** — `vitGradFlat` with the concrete head
     dense replaced by its rounded peer and each supplied slot by its float map.
@@ -613,16 +623,16 @@ noncomputable def vitGradFlatF {N D nClasses imgDim : Nat} (M : FloatModel)
 
 /-- **THE WHOLE-NET ViT BACKWARD FLOAT-BRIDGES TO ITS FLOAT SKELETON.** Same `.comp`
     thread as `vit_grad_floatBridges`, with the block backwards paired to their float
-    peers by `Forall₂` — so the conclusion names the float backward rather than
+    peers by `FloatBridgesToList` — so the conclusion names the float backward rather than
     existentially discarding it (`formalization.yaml` fidelity §4d). -/
-theorem vit_grad_floatBridgesTo {N D nClasses imgDim : Nat} (M : FloatModel)
+noncomputable def vit_grad_floatBridgesTo {N D nClasses imgDim : Nat} (M : FloatModel)
     (Wcls : Mat D nClasses)
     (finalLNBack finalLNBackF : Vec D → Vec D)
     (blockBacks blockBacksF : List (Vec ((N + 1) * D) → Vec ((N + 1) * D)))
     (patchEmbedBack patchEmbedBackF : Vec ((N + 1) * D) → Vec imgDim)
     {w' : ℝ} (hw' : 0 ≤ w') (hnc : 0 < nClasses) (hWcls : ∀ i j, |Wcls i j| ≤ w')
     (hFinalLN : FloatBridgesTo finalLNBack finalLNBackF)
-    (hblocks : List.Forall₂ FloatBridgesTo blockBacks blockBacksF)
+    (hblocks : FloatBridgesToList blockBacks blockBacksF)
     (hPatch : FloatBridgesTo patchEmbedBack patchEmbedBackF) :
     FloatBridgesTo (vitGradFlat Wcls finalLNBack blockBacks patchEmbedBack)
       (vitGradFlatF M Wcls finalLNBackF blockBacksF patchEmbedBackF) := by

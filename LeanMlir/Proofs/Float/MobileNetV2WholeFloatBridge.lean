@@ -197,7 +197,8 @@ set_option maxRecDepth 100000 in
     One `.comp` chain over the per-op forward bridges: the concrete stem (`relu6 ∘ bn ∘
     flatConvStride2`), the 6 supplied inverted-residual blocks, the concrete head (`relu6 ∘ bn ∘
     flatConv`), `globalAvgPoolFlat`, and `dense`. The deployed float forward of the whole net is
-    within an explicit budget of the certified `ℝ` forward. Closes under `[propext, Classical.choice,
+    within a budget of the certified `ℝ` forward (⚠ one `FloatBridges` does not name — §4d;
+    `mnv2Forward_floatBridgesTo` carries it as `.mod`). Closes under `[propext, Classical.choice,
     Quot.sound]`. -/
 theorem mnv2Forward_floatBridges (M : FloatModel)
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (Wh : Kernel4 128 64 1 1) (bh : Vec 128)
@@ -243,8 +244,8 @@ theorem mnv2Forward_floatBridges (M : FloatModel)
 -- ════════════════════════════════════════════════════════════════
 
 /-- ReLU6 float-bridges to itself (clamp-and-select rounds nothing). -/
-theorem floatBridgesTo_relu6 {n : Nat} : FloatBridgesTo (relu6 n) (relu6 n) :=
-  fun A hA => ⟨A, _, hA, floatClose_relu6 A⟩
+noncomputable def floatBridgesTo_relu6 {n : Nat} : FloatBridgesTo (relu6 n) (relu6 n) :=
+  ⟨fun A => A, fun _ e => e, fun A hA => ⟨hA, floatClose_relu6 A⟩⟩
 
 /-- **The float MobileNetV2 forward skeleton** — `mnv2Forward` with each concrete
     slot replaced by the model's rounded peer and each supplied slot by that
@@ -271,9 +272,9 @@ set_option maxRecDepth 100000 in
 /-- **The whole MobileNetV2 forward float-bridges TO its float skeleton.** Same
     `.comp` chain as `mnv2Forward_floatBridges`, with every float map named — so
     this is the statement that carries "the deployed float forward of the whole net
-    is within an explicit budget of the certified `ℝ` forward"
+    is within the bridge's `.mod` budget of the certified `ℝ` forward"
     (`formalization.yaml` fidelity §4d). -/
-theorem mnv2Forward_floatBridgesTo (M : FloatModel)
+noncomputable def mnv2Forward_floatBridgesTo (M : FloatModel)
     (Ws : Kernel4 16 3 3 3) (bs : Vec 16) (Wh : Kernel4 128 64 1 1) (bh : Vec 128)
     (Wfc : Mat 128 10) (bfc : Vec 10)
     (bnS bnSF : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))

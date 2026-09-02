@@ -70,10 +70,11 @@ status:
     committed-spec ties for all 5 ImageNet-scale nets (SpecVJP); (2) FLOAT
     ERROR — a binary32 rounding model constructed from scratch (rndP, standard
     model PROVED, no hardware axioms), whole-net forward+backward float-error
-    bridges for all nets (⚠ stated as FloatBridges / FloatBridgesTo, neither of
-    which carries a budget: both close the error modulus existentially, and an
-    existential modulus is discharged by the triangle inequality from boundedness
-    alone -- see fidelity.divergences 4d), depth-linear adjoint-chain composition
+    bridges for all nets (⚠ the legacy FloatBridges statements carry no budget --
+    they close the error modulus existentially, which the triangle inequality
+    discharges from boundedness alone, fidelity.divergences 4d; their FloatBridgesTo
+    peers are Type-valued bridges whose `.mod` IS the budget, as data, though no
+    numeric bound on a whole-net `.mod` is stated yet), depth-linear adjoint-chain composition
     bounds certified for every net, an fp8-E4M3 argmax-preservation theorem, and a
     whole-net float certificate at the committed CIFAR-8 shape
     (cifar8_chain_argmaxSafeH: given measured tail gains, binary32 rounding cannot
@@ -448,6 +449,30 @@ fidelity:
        but one whose modulus is VISIBLE, so that its value is a claim: a Type-valued
        bridge carrying `mag`/`mod` fields, the whole-net bridges as defs, and the
        budget stated as a bound on `.mod`.
+
+       ✅ FIXED (2026-09-02): `FloatBridgesTo f fF` is now a Type-valued STRUCTURE
+       with `mag : R -> R` (input window -> output window), `mod : R -> R -> R`
+       (input window -> error modulus) and
+       `close : forall A, 0 <= A -> 0 <= mag A /\ FloatClose A (mag A) f fF (mod A)`.
+       Every combinator composes the bookkeeping explicitly (`comp`: `mag_g ∘ mag_f`
+       and `mod_g (mag_f A) ∘ mod_f A`; `residual`, `reluResidual`, `seScale`,
+       `perRow`, `batchMap`, and the `FloatBridgesToList` tower fold), every leaf
+       writes its `mag`/`mod` out (`floatBridgesTo_flatConv`: `layerAct +
+       layerBudget(0)` / `layerBudget` at the receptive-field fan-in, ...), and the
+       twelve whole-net bridges are `noncomputable def`s whose `.mod A e` is a closed
+       term over the per-op budgets. `FloatBridgesTo.fresh_le` states the fresh
+       budget as a bound on the deployed map: `|fF v i - f v i| <= b.fresh A` on the
+       window. The `2B` witness is still constructible -- nothing can prevent that --
+       but its `.mod` is visibly `2B`, and a numeric bound on a whole-net `.mod` is
+       now a statement the kernel checks rather than one the proof term hides. The
+       `exists B L` lemmas (`floatClose_seGateF` / `floatClose_seBlockFullF`) are kept
+       as shadows of `floatBridgesTo_seGate` / `floatBridgesTo_seBlockFull`, and the
+       older `floatClose_cifarStage` / `floatClose_resBlock` gained bridge peers
+       `floatBridgesTo_cifarStage` / `floatBridgesTo_resBlock`.
+       `FloatBridgesTo.toFloatBridges` still weakens to the legacy Prop, so nothing
+       downstream broke. NOT YET DONE: stating and checking a NUMBER for any
+       whole-net `.mod` at a committed weight profile -- the bridges carry the
+       budget; no theorem yet bounds it.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

@@ -141,7 +141,8 @@ set_option maxRecDepth 100000 in
     consume the §1e depthwise input-VJP. One `.comp` chain over the per-op backward bridges: `linBack`
     (dense), `gapBack`, the head `convFlatBack ∘ bnBh ∘ reluMaskBack`, the 6 supplied inverted-residual
     block backwards, and the stem `flatConvStride2Back ∘ bnBs ∘ reluMaskBack`. The deployed float
-    backward of the whole net is within an explicit budget of the certified `ℝ` backward — the
+    backward of the whole net is within a budget of the certified `ℝ` backward (⚠ one `FloatBridges`
+    does not name — §4d; `mnv2_grad_floatBridgesTo` carries it as `.mod`) — the
     backward peer of `mobilenetv2Forward_full_pc`. Closes under `[propext, Classical.choice,
     Quot.sound]`. -/
 theorem mnv2_grad_floatBridges (M : FloatModel)
@@ -216,9 +217,9 @@ noncomputable def mnv2InputGradF (M : FloatModel)
 set_option maxRecDepth 100000 in
 /-- **The whole MobileNetV2 input-gradient VJP float-bridges TO its float skeleton.**
     Same `.comp` chain as `mnv2_grad_floatBridges`, with every float map named — the
-    statement that carries "the deployed float backward of the whole net is within an
-    explicit budget of the certified `ℝ` backward" (`formalization.yaml` §4d). -/
-theorem mnv2_grad_floatBridgesTo (M : FloatModel)
+    statement that carries "the deployed float backward of the whole net is within the bridge's
+    `.mod` budget of the certified `ℝ` backward" (`formalization.yaml` §4d). -/
+noncomputable def mnv2_grad_floatBridgesTo (M : FloatModel)
     (Ws : Kernel4 16 3 3 3) (Wh : Kernel4 128 64 1 1) (Wfc : Mat 128 10)
     (bnBs bnBsF : Vec (16 * 112 * 112) → Vec (16 * 112 * 112))
     (bnBh bnBhF : Vec (128 * 7 * 7) → Vec (128 * 7 * 7))

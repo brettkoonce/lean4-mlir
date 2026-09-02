@@ -65,9 +65,9 @@ theorem floatBridges_reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePr
   fun A hA => ⟨A, _, _, hA, floatClose_reluMaskBack cond A⟩
 
 /-- The ReLU mask backward float-bridges to itself (a structural select). -/
-theorem floatBridgesTo_reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePred cond] :
+noncomputable def floatBridgesTo_reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePred cond] :
     FloatBridgesTo (reluMaskBack cond) (reluMaskBack cond) :=
-  fun A hA => ⟨A, _, hA, floatClose_reluMaskBack cond A⟩
+  ⟨fun A => A, fun _ e => e, fun A hA => ⟨hA, floatClose_reluMaskBack cond A⟩⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § Smooth-activation backward: the diagonal `dy ⊙ act'(saved)` scale
@@ -135,11 +135,13 @@ theorem floatBridges_diagBack {n : Nat} (M : FloatModel) (s fs : Vec n) {Sd es :
 
 /-- The diagonal scale float-bridges TO the model's rounded diagonal scale at the
     STORED (possibly perturbed) scale vector `fs`. -/
-theorem floatBridgesTo_diagBack {n : Nat} (M : FloatModel) (s fs : Vec n) {Sd es : ℝ}
+noncomputable def floatBridgesTo_diagBack {n : Nat} (M : FloatModel) (s fs : Vec n) {Sd es : ℝ}
     (hn : 0 < n) (hs : ∀ i, |s i| ≤ Sd) (hfs : ∀ i, |fs i - s i| ≤ es) :
-    FloatBridgesTo (diagBack s) (M.diagBackF fs) := fun A hA =>
-  ⟨_, _, (floatClose_diagBack M s fs hs hfs (A := A)).cod_nonneg hA hn,
-    floatClose_diagBack M s fs hs hfs⟩
+    FloatBridgesTo (diagBack s) (M.diagBackF fs) :=
+  ⟨fun A => Sd * A + FloatModel.mulErr M.u Sd A es 0,
+   fun A e => FloatModel.mulErr M.u Sd A es 0 + Sd * e,
+   fun A hA => ⟨(floatClose_diagBack M s fs hs hfs (A := A)).cod_nonneg hA hn,
+     floatClose_diagBack M s fs hs hfs⟩⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § Linear input-VJP: `dx = Wᵀ·dy` = bias-free dense over the transpose
@@ -154,7 +156,7 @@ theorem floatBridges_linBack {m n : Nat} (M : FloatModel) (W : Mat m n) {w' : �
   floatBridges_dense M (Mat.transpose W) 0 hw' le_rfl hn (fun i j => hW j i) (fun j => by simp)
 
 /-- The dense input-VJP float-bridges to the model's rounded transposed dense. -/
-theorem floatBridgesTo_linBack {m n : Nat} (M : FloatModel) (W : Mat m n) {w' : ℝ}
+noncomputable def floatBridgesTo_linBack {m n : Nat} (M : FloatModel) (W : Mat m n) {w' : ℝ}
     (hw' : 0 ≤ w') (hn : 0 < n) (hW : ∀ i j, |W i j| ≤ w') :
     FloatBridgesTo (dense (Mat.transpose W) (0 : Vec m))
       (M.dense (Mat.transpose W) (0 : Vec m)) :=

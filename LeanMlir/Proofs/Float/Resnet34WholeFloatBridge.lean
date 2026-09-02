@@ -162,20 +162,19 @@ theorem r34_floatBridges (M : FloatModel)
 -- ════════════════════════════════════════════════════════════════
 
 /-- Stride-2 conv float-bridges TO the model's rounded stride-2 conv. -/
-theorem floatBridgesTo_flatConvStride2 {ic oc h w kH kW : Nat} (M : FloatModel)
+noncomputable def floatBridgesTo_flatConvStride2 {ic oc h w kH kW : Nat} (M : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β : ℝ}
     (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < ic * (2 * h) * (2 * w))
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
     FloatBridgesTo (flatConvStride2 (h := h) (w := w) W b)
       (M.flatConvStride2F (h := h) (w := w) W b) :=
-  fun _A hA => ⟨_, _,
-    add_nonneg (layerAct_nonneg hw' hβ hA) (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
-    floatClose_flatConvStride2 M W b hw' hβ hA hn hW hb⟩
+  ⟨fun A => layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0,
+   fun A e => layerBudget M.u (ic * kH * kW) w' β A e,
+   fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hβ hA)
+      (layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
+    floatClose_flatConvStride2 M W b hw' hβ hA hn hW hb⟩⟩
 
-/-- GAP float-bridges TO the model's rounded GAP. -/
-theorem floatBridgesTo_gap {c h w : Nat} (M : FloatModel) (hc : 0 < c) (hhw : 0 < h * w) :
-    FloatBridgesTo (globalAvgPoolFlat c h w) M.gapFlatF :=
-  fun _A hA => ⟨_, _, (floatClose_gap M hA hhw).cod_nonneg hA hc, floatClose_gap M hA hhw⟩
+-- `floatBridgesTo_gap` lives in `FloatComposeBridge.lean` (the SE gate needs it too).
 
 /-- **The float ResNet-34 forward skeleton** — `r34Forward` with every concrete slot
     replaced by the model's rounded peer (`M.flatConvStride2F` / `M.gapFlatF` /
@@ -210,11 +209,11 @@ set_option maxRecDepth 100000 in
 /-- **The whole ResNet-34 forward float-bridges TO its float skeleton.** Same
     `.comp` chain as `r34_floatBridges`, but every hypothesis names the float map of
     its block and the conclusion names the float net — so this statement actually
-    says "the deployed float forward of the whole 34-layer net is within a
-    `FloatClose` budget of the certified `ℝ` forward", which the `FloatBridges`
+    says "the deployed float forward of the whole 34-layer net is within the bridge's
+    `.mod` budget of the certified `ℝ` forward", which the `FloatBridges`
     version could not (`formalization.yaml` fidelity §4d). Closes under
     `[propext, Classical.choice, Quot.sound]`. -/
-theorem r34_floatBridgesTo (M : FloatModel)
+noncomputable def r34_floatBridgesTo (M : FloatModel)
     (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (Wd : Mat 512 10) (bd : Vec 10)
     (bnS bnSF : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
     (a0 a1 a2 a0F a1F a2F : Vec (64 * 56 * 56) → Vec (64 * 56 * 56))

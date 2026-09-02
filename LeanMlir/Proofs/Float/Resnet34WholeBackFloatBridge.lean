@@ -189,11 +189,13 @@ theorem r34_grad_floatBridges (M : FloatModel)
 -- ════════════════════════════════════════════════════════════════
 
 /-- GAP-backward float-bridges TO the model's rounded GAP backward. -/
-theorem floatBridgesTo_gapBack (M : FloatModel) (c h w : Nat)
+noncomputable def floatBridgesTo_gapBack (M : FloatModel) (c h w : Nat)
     (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
     FloatBridgesTo (gapBack c h w) (gapBackF M c h w) :=
-  fun _A hA => ⟨_, _, (floatClose_gapBack M c h w hh hw _).cod_nonneg hA (by positivity),
-    floatClose_gapBack M c h w hh hw _⟩
+  ⟨fun A => 1 / ((h : ℝ) * (w : ℝ)) * A + FloatModel.mulErr M.u (1 / ((h : ℝ) * (w : ℝ))) A 0 0,
+   fun A e => FloatModel.mulErr M.u (1 / ((h : ℝ) * (w : ℝ))) A 0 0 + 1 / ((h : ℝ) * (w : ℝ)) * e,
+   fun A hA => ⟨(floatClose_gapBack M c h w hh hw A).cod_nonneg hA (by positivity),
+     floatClose_gapBack M c h w hh hw A⟩⟩
 
 /-- **The float ResNet-34 input-gradient skeleton** — `r34InputGrad` with each
     concrete slot replaced by the model's rounded peer and each supplied block
@@ -230,9 +232,9 @@ set_option maxRecDepth 100000 in
 /-- **The whole ResNet-34 input-gradient VJP float-bridges TO its float skeleton.**
     Same `.comp` chain as `r34_grad_floatBridges`, with every float map named — the
     statement that carries "the deployed float backward of the whole 34-layer net is
-    within an explicit budget of the certified `ℝ` backward"
+    within the bridge's `.mod` budget of the certified `ℝ` backward"
     (`formalization.yaml` fidelity §4d). -/
-theorem r34_grad_floatBridgesTo (M : FloatModel)
+noncomputable def r34_grad_floatBridgesTo (M : FloatModel)
     (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 10)
     (bnBs bnBsF : Vec (64 * 112 * 112) → Vec (64 * 112 * 112))
     (e1B e0B e1BF e0BF : Vec (512 * 7 * 7) → Vec (512 * 7 * 7))

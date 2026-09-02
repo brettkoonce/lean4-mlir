@@ -210,15 +210,16 @@ theorem floatBridges_depthwise {c h w kH kW : Nat} (M : FloatModel)
     floatClose_depthwise M W b hw' hβ hA hn hW hb⟩
 
 /-- Depthwise conv float-bridges TO the model's rounded depthwise conv. -/
-theorem floatBridgesTo_depthwise {c h w kH kW : Nat} (M : FloatModel)
+noncomputable def floatBridgesTo_depthwise {c h w kH kW : Nat} (M : FloatModel)
     (W : DepthwiseKernel c kH kW) (b : Vec c) {w' β : ℝ}
     (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < c * h * w)
     (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ β) :
     FloatBridgesTo (depthwiseFlat (h := h) (w := w) W b)
       (M.depthwiseFlatF (h := h) (w := w) W b) :=
-  fun _A hA => ⟨_, _,
-    add_nonneg (FloatModel.layerAct_nonneg hw' hβ hA)
+  ⟨fun A => FloatModel.layerAct (kH * kW) w' β A + FloatModel.layerBudget M.u (kH * kW) w' β A 0,
+   fun A e => FloatModel.layerBudget M.u (kH * kW) w' β A e,
+   fun _A hA => ⟨add_nonneg (FloatModel.layerAct_nonneg hw' hβ hA)
       (FloatModel.layerBudget_nonneg M.u_nonneg hw' hβ hA le_rfl),
-    floatClose_depthwise M W b hw' hβ hA hn hW hb⟩
+    floatClose_depthwise M W b hw' hβ hA hn hW hb⟩⟩
 
 end Proofs

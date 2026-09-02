@@ -189,7 +189,7 @@ set_option maxRecDepth 100000 in
 /-- **THE WHOLE-NET EfficientNet BACKWARD FLOAT-BRIDGES TO ITS FLOAT SKELETON.** Same
     `.comp` thread as `efficientnet_grad_floatBridges`, with every float map named
     (`formalization.yaml` fidelity §4d). -/
-theorem efficientnet_grad_floatBridgesTo (N : Nat) (M : FloatModel)
+noncomputable def efficientnet_grad_floatBridgesTo (N : Nat) (M : FloatModel)
     (Ws : Kernel4 32 3 3 3) (Wh : Kernel4 1280 24 1 1) (Wfc : Mat 1280 10)
     (bnBs swBs bnBsF swBsF : Vec (N * (32 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
     (bnBh swBh bnBhF swBhF : Vec (N * (1280 * 56 * 56)) → Vec (N * (1280 * 56 * 56)))

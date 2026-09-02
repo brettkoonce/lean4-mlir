@@ -84,11 +84,9 @@ theorem FloatBridges.perRow (n : Nat) {d : Nat} {f : Vec d → Vec d} (hf : Floa
 
 /-- **`FloatBridgesTo.perRow`** — the seam with the float map named: the per-row lift
     of `fF` is the float peer of the per-row lift of `f`. -/
-theorem FloatBridgesTo.perRow (n : Nat) {d : Nat} {f fF : Vec d → Vec d}
-    (hf : FloatBridgesTo f fF) : FloatBridgesTo (perRowFlat n d f) (perRowFlat n d fF) := by
-  intro A hA
-  obtain ⟨B, L, hB, hfc⟩ := hf A hA
-  exact ⟨B, L, hB, hfc.perRow n⟩
+noncomputable def FloatBridgesTo.perRow (n : Nat) {d : Nat} {f fF : Vec d → Vec d}
+    (hf : FloatBridgesTo f fF) : FloatBridgesTo (perRowFlat n d f) (perRowFlat n d fF) :=
+  ⟨hf.mag, hf.mod, fun A hA => ⟨(hf.close A hA).1, (hf.close A hA).2.perRow n⟩⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The per-token-input-aware seam (the BACKWARD peer of `perRowFlat`)
@@ -648,9 +646,9 @@ theorem floatBridges_gather {p q : Nat} (e : Fin p ≃ Fin q) : FloatBridges (ga
   fun A hA => ⟨A, _, _, hA, floatClose_gather e A⟩
 
 /-- A reindex gather float-bridges to itself (a permutation rounds nothing). -/
-theorem floatBridgesTo_gather {p q : Nat} (e : Fin p ≃ Fin q) :
+noncomputable def floatBridgesTo_gather {p q : Nat} (e : Fin p ≃ Fin q) :
     FloatBridgesTo (gather e) (gather e) :=
-  fun A hA => ⟨A, _, hA, floatClose_gather e A⟩
+  ⟨fun A => A, fun _ => id, fun A hA => ⟨hA, floatClose_gather e A⟩⟩
 
 /-- **The head-split reshape** `Vec (h·(n·dh)) ↔ Vec (n·(h·dh))` — the `(h,n,dh)` head-major
     order vs the `(n,h,dh)` token-major order (swap the head and token axes). Built from

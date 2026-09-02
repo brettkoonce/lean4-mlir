@@ -1950,15 +1950,21 @@ open Proofs
 #print axioms Proofs.r34_floatBridges
 -- ⚠ FloatBridges existentially binds the FLOAT MAP, so the line above constrains
 -- no float implementation (formalization.yaml §4d). r34_floatBridgesTo is the same
--- fold with the float net named. ⚠⚠ It still binds the MODULUS existentially, and
--- the triangle inequality discharges that from boundedness alone (L := 2B), so
--- neither statement carries the docstring's "explicit budget" claim — §4d, second
--- entry. The proof terms fold the real per-op moduli; the statements drop them.
+-- fold with the float net named AND the budget carried as data: FloatBridgesTo is a
+-- Type-valued structure (mag / mod / close), so its `.mod A e` is a closed term over
+-- the per-op budgets and FloatBridgesTo.fresh_le states it as a bound on the deployed
+-- map. (Its first form bound the modulus existentially, which the triangle inequality
+-- discharges from boundedness alone — §4d, second entry, now FIXED.) The whole-net
+-- bridges are therefore noncomputable defs; #print axioms reports their bodies.
 #print axioms Proofs.FloatBridgesTo.comp
+#print axioms Proofs.FloatBridgesTo.fresh_le
+#print axioms Proofs.FloatBridgesTo.residual
+#print axioms Proofs.floatBridgesTo_towerBack
+#print axioms Proofs.floatBridgesTo_cifarStage
+#print axioms Proofs.floatBridgesTo_resBlock
 #print axioms Proofs.r34_floatBridgesTo
--- The rest of the migration — every whole-net bridge names its float net (the
--- EfficientNet forward and the convnextCh_* pair follow below). Same caveat as
--- r34_floatBridgesTo: the float map is named, the modulus is not.
+-- The rest of the migration — every whole-net bridge names its float net and carries
+-- its budget (the EfficientNet forward and the convnextCh_* pair follow below).
 #print axioms Proofs.r34_grad_floatBridgesTo
 #print axioms Proofs.mnv2Forward_floatBridgesTo
 #print axioms Proofs.mnv2_grad_floatBridgesTo
@@ -1970,7 +1976,11 @@ open Proofs
 -- The EfficientNet FORWARD cone, migrated: its 11 layered stage/block bridges each
 -- name their float peer, so the capstone can too. Reaching it also required naming
 -- the float map inside floatClose_seGate / floatClose_seBlockFull, which bound it
--- existentially exactly like FloatBridges did (formalization.yaml 4d).
+-- existentially exactly like FloatBridges did (formalization.yaml 4d). The SE gate is
+-- now built compositionally as a bridge (floatBridgesTo_seGate, then the seScale
+-- combinator); floatClose_seGateF is its ∃ B L shadow.
+#print axioms Proofs.floatBridgesTo_seGate
+#print axioms Proofs.FloatBridgesTo.seScale
 #print axioms Proofs.floatClose_seGateF
 #print axioms Proofs.floatBridgesTo_seBlockFull
 #print axioms Proofs.floatBridgesTo_mbResidFwdB

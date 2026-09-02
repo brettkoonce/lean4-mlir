@@ -89,9 +89,9 @@ theorem floatBridges_maxPoolBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
   fun A hA => ⟨A, _, _, hA, floatClose_maxPoolFlatBack x A⟩
 
 /-- The max-pool backward float-bridges to itself (a structural scatter). -/
-theorem floatBridgesTo_maxPoolBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
+noncomputable def floatBridgesTo_maxPoolBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
     FloatBridgesTo (maxPoolFlatBack x) (maxPoolFlatBack x) :=
-  fun A hA => ⟨A, _, hA, floatClose_maxPoolFlatBack x A⟩
+  ⟨fun A => A, fun _ e => e, fun A hA => ⟨hA, floatClose_maxPoolFlatBack x A⟩⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1b. Conv input-VJP: a reversed-kernel forward conv = `flatConv (reverseSwap W) 0`
@@ -118,7 +118,7 @@ theorem floatBridges_convBack {ic oc h w kH kW : Nat} (M : FloatModel)
     hw' le_rfl hn (fun o c kh kw => hW c o (kRev kh) (kRev kw)) (fun _ => by simp)
 
 /-- The conv input-VJP float-bridges to the model's rounded reversed-kernel conv. -/
-theorem floatBridgesTo_convBack {ic oc h w kH kW : Nat} (M : FloatModel)
+noncomputable def floatBridgesTo_convBack {ic oc h w kH kW : Nat} (M : FloatModel)
     (W : Kernel4 oc ic kH kW) {w' : ℝ} (hw' : 0 ≤ w') (hn : 0 < oc * h * w)
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') :
     FloatBridgesTo (convFlatBack (h := h) (w := w) W)

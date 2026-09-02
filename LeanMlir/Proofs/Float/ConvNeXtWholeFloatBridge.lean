@@ -284,7 +284,8 @@ set_option maxRecDepth 100000 in
 /-- **The whole ConvNeXt-T forward float-bridges** — the forward peer of `convnext_grad_floatBridges`.
     One `.comp` chain over the per-op forward bridges: the concrete stem (`lnStem ∘ flatConvStride4`),
     the 4 stages, the 3 downsamples, `globalAvgPoolFlat`, the head LayerNorm, and `dense`. The deployed
-    float forward of the whole [3,3,9,3] net is within an explicit budget of the certified `ℝ` forward.
+    float forward of the whole [3,3,9,3] net is within a budget of the certified `ℝ` forward (⚠ one
+    `FloatBridges` does not name — §4d; `convnext_floatBridgesTo` carries it as `.mod`).
     Closes under `[propext, Classical.choice, Quot.sound]`. -/
 theorem convnext_floatBridges (M : FloatModel)
     (sW : Kernel4 96 3 4 4) (sb : Vec 96) (Wd : Mat 768 10) (bd : Vec 10)
@@ -387,15 +388,17 @@ theorem convnextCh_floatBridges (M : FloatModel) (fgelu : ℝ → ℝ) (wts : Cn
 -- ════════════════════════════════════════════════════════════════
 
 /-- Stride-4 conv float-bridges TO the model's rounded stride-4 conv. -/
-theorem floatBridgesTo_flatConvStride4 {ic oc h w kH kW : Nat} (M : FloatModel)
+noncomputable def floatBridgesTo_flatConvStride4 {ic oc h w kH kW : Nat} (M : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' bb : ℝ}
     (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hn : 0 < ic * (2 * (2 * h)) * (2 * (2 * w)))
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ bb) :
     FloatBridgesTo (flatConvStride4 (h := h) (w := w) W b)
       (M.flatConvStride4F (h := h) (w := w) W b) :=
-  fun _A hA => ⟨_, _,
-    add_nonneg (layerAct_nonneg hw' hbb hA) (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
-    floatClose_flatConvStride4 M W b hw' hbb hA hn hW hb⟩
+  ⟨fun A => layerAct (ic * kH * kW) w' bb A + layerBudget M.u (ic * kH * kW) w' bb A 0,
+   fun A e => layerBudget M.u (ic * kH * kW) w' bb A e,
+   fun _A hA => ⟨add_nonneg (layerAct_nonneg hw' hbb hA)
+      (layerBudget_nonneg M.u_nonneg hw' hbb hA le_rfl),
+    floatClose_flatConvStride4 M W b hw' hbb hA hn hW hb⟩⟩
 
 /-- **The float ConvNeXt-T forward skeleton** — `convnextForward` with the concrete
     stem conv, GAP and head dense replaced by their rounded peers and every supplied
@@ -421,9 +424,9 @@ noncomputable def convnextForwardF (M : FloatModel)
 set_option maxRecDepth 100000 in
 /-- **The whole ConvNeXt-T forward float-bridges TO its float skeleton.** Same `.comp`
     chain as `convnext_floatBridges`, with every float map named — the statement that
-    carries "the deployed float forward of the whole [3,3,9,3] net is within an
-    explicit budget of the certified `ℝ` forward" (`formalization.yaml` §4d). -/
-theorem convnext_floatBridgesTo (M : FloatModel)
+    carries "the deployed float forward of the whole [3,3,9,3] net is within the bridge's
+    `.mod` budget of the certified `ℝ` forward" (`formalization.yaml` §4d). -/
+noncomputable def convnext_floatBridgesTo (M : FloatModel)
     (sW : Kernel4 96 3 4 4) (sb : Vec 96) (Wd : Mat 768 10) (bd : Vec 10)
     (lnStem lnStemF : Vec (96 * 56 * 56) → Vec (96 * 56 * 56))
     (lnHead lnHeadF : Vec 768 → Vec 768)
@@ -464,7 +467,7 @@ theorem convnext_floatBridgesTo (M : FloatModel)
 -- ── the ConvNeXt block / stage / downsample cone, float maps named ───────────
 
 /-- Layer scale float-bridges TO the model's rounded diagonal scale. -/
-theorem floatBridgesTo_layerScale {n : Nat} (M : FloatModel) (γ : Vec n) {Sd : ℝ}
+noncomputable def floatBridgesTo_layerScale {n : Nat} (M : FloatModel) (γ : Vec n) {Sd : ℝ}
     (hn : 0 < n) (hγ : ∀ i, |γ i| ≤ Sd) :
     FloatBridgesTo (layerScale γ) (M.diagBackF γ) :=
   floatBridgesTo_diagBack (es := 0) M γ γ hn hγ (fun _ => by simp)
@@ -484,7 +487,7 @@ noncomputable def cnxBodyWithF {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu 
   ∘ LNF
   ∘ M.depthwiseFlatF (h := h) (w := w) Wdw bdw
 
-theorem floatBridgesTo_cnxBodyWith {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
+noncomputable def floatBridgesTo_cnxBodyWith {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
     (LN LNF : Vec (c * h * w) → Vec (c * h * w))
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
@@ -515,7 +518,7 @@ noncomputable def cnxBlockChWF {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu 
     (cnxBodyWithF M fgelu (chanLNTensor3F M p.γn p.βn lnF)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) v j) (v j)
 
-theorem floatBridgesTo_cnxBlockChW {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
+noncomputable def floatBridgesTo_cnxBlockChW {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
     (p : CnxBlockParamsCh c cExp h w kH kW) (lnF : Vec c → Vec c)
     {w' bb egelu : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
     (hcc : 0 < c) (hc : 0 < c * h * w) (hcExp : 0 < cExp * h * w)
@@ -541,7 +544,7 @@ noncomputable def convNextStageChKF {c cExp h w kH kW : Nat} (M : FloatModel) (f
       convNextStageChKF M fgelu _ (fun i => ps i.succ) (fun i => lnFs i.succ)
         ∘ cnxBlockChWF M fgelu (ps 0) (lnFs 0)
 
-theorem floatBridgesTo_convNextStageChK {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
+noncomputable def floatBridgesTo_convNextStageChK {c cExp h w kH kW : Nat} (M : FloatModel) (fgelu : ℝ → ℝ)
     {w' bb egelu : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
     (hcc : 0 < c) (hc : 0 < c * h * w) (hcExp : 0 < cExp * h * w)
     (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu) :
@@ -564,7 +567,7 @@ noncomputable def cnxDownChWF {cin cout : Nat} (h w : Nat) (M : FloatModel)
     Vec (cin * (2 * h) * (2 * w)) → Vec (cout * h * w) :=
   M.flatConvStride2F (h := h) (w := w) p.W p.b ∘ chanLNTensor3F M p.γ p.β lnF
 
-theorem floatBridgesTo_cnxDownChW {cin cout : Nat} (h w : Nat) (M : FloatModel)
+noncomputable def floatBridgesTo_cnxDownChW {cin cout : Nat} (h w : Nat) (M : FloatModel)
     (p : CnxDownParamsCh cin cout) (lnF : Vec cin → Vec cin)
     {w' bb : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hcin : 0 < cin)
     (hn : 0 < cin * (2 * h) * (2 * w))
@@ -588,7 +591,7 @@ set_option maxRecDepth 100000 in
     The tie from this skeleton to the committed `convNextForwardTCh` is
     `WholeNetForwardTies.convNextForwardTCh_eq_skeleton`; the head slot is `id` because
     the reference's 22 LN sites are 1 stem + 18 block + 3 downsample. -/
-theorem convnextCh_floatBridgesTo (M : FloatModel) (fgelu : ℝ → ℝ) (wts : CnxTWeightsCh)
+noncomputable def convnextCh_floatBridgesTo (M : FloatModel) (fgelu : ℝ → ℝ) (wts : CnxTWeightsCh)
     (lnSF : Vec 96 → Vec 96) (ln1F : Fin 3 → (Vec 96 → Vec 96)) (lnd1F : Vec 96 → Vec 96)
     (ln2F : Fin 3 → (Vec 192 → Vec 192)) (lnd2F : Vec 192 → Vec 192)
     (ln3F : Fin 9 → (Vec 384 → Vec 384)) (lnd3F : Vec 384 → Vec 384)
