@@ -320,6 +320,13 @@ lean_lib «Certs» where
              -- budget moves one order, because error gain per BN site is G*S and only the
              -- eps-floor S = 1/sqrt(eps) touches it. Window and budget are separate levers.
              `LeanMlir.Proofs.Float.MobileNetV2FloatBudget,
+             -- The B0 INFERENCE forward graph + whole-net faithfulness (the eval twin of
+             -- efficientnetFwdGraphB_faithful). bnBatchLA is the ONE op in the B0 render that is
+             -- not batchMap N of a per-example op — it reduces across examples; at frozen stats
+             -- the `bnEval` descriptor denotes batchMap N (bnPerChannelEvalTensor3 …) by rfl, so
+             -- the eval forward is per-example throughout. The BN mode a whole-net B0 float
+             -- number can be stated at (the training one's modulus is quadratic in the window).
+             `LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

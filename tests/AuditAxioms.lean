@@ -97,6 +97,7 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderPCEval
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
+import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2109,6 +2110,22 @@ open Proofs
 -- rblkGen pattern, transferred.
 #print axioms Proofs.invresBodyPC_eq_gen
 #print axioms Proofs.invresBodyStridedPC_eq_gen
+-- The EfficientNet-B0 INFERENCE forward and its graph — the eval twin of
+-- efficientnetFwdGraphB_faithful, and the BN mode a whole-net B0 float number can be stated at
+-- (the training one's modulus is quadratic in the window, so its fold squares at each of the ten
+-- BN sites). ⭐ bnBatchLA is the ONE op in this net that is not batchMap N of a per-example op —
+-- it reduces mu/var ACROSS examples, which is why it has its own constructor rather than being a
+-- BatchableOp descriptor. At frozen statistics there is no reduction, `bnEval` IS a descriptor,
+-- and den_batchOp_bnEval proves it denotes batchMap N (bnPerChannelEvalTensor3 …) by rfl. So every
+-- stage of the eval forward is batchMap-of-a-per-example-op or pointwise, and every leaf the float
+-- budget needs is a per-example leaf the repo already has.
+#print axioms Proofs.efficientnetForwardBEval
+#print axioms Proofs.StableHLO.stemGraphBEval_faithful
+#print axioms Proofs.StableHLO.mbNoExpGraphBEval_faithful
+#print axioms Proofs.StableHLO.mbStridedGraphBEval_faithful
+#print axioms Proofs.StableHLO.mbResidGraphBEval_faithful
+#print axioms Proofs.StableHLO.headGraphBEval_faithful
+#print axioms Proofs.StableHLO.efficientnetFwdGraphBEval_faithful
 #print axioms Proofs.floatBridgesTo_invresBodyGen
 #print axioms Proofs.floatBridgesTo_invresBodyStridedGen
 #print axioms Proofs.floatBridgesTo_r34IdBlock
