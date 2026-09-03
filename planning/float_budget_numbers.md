@@ -11,15 +11,16 @@ anything; §3 is the work list; §7 is the checklist you run before every commit
 `mag`/`mod` explicitly, every leaf writes them out. (Why it had to be data and not `∃ L`:
 `formalization.yaml` fidelity §4d — the `∃`-modulus was discharged by `L := 2B`.)
 
-Three whole nets now carry kernel-checked numbers:
+Four whole nets now carry kernel-checked numbers:
 
 | net | window | budget | budget/window | over the chain | file |
 |---|---|---|---|---|---|
 | CIFAR-8 (8 conv, no BN) | 6.121·10¹⁸ | 6.37·10¹⁴ | 1·10⁻⁴ | — | `Cifar8FloatBudget.lean` |
 | ResNet-34 @224², **inference BN** | 3.152·10²¹¹ | 1.548·10²⁰⁹ | 4.9·10⁻³ | ~10¹⁵⁷ | `Resnet34FloatBudget.lean` |
 | MobileNetV2 @224², **inference BN** | **2.154·10³** | 1.444·10⁹⁶ | — | ~10³⁶ | `MobileNetV2FloatBudget.lean` |
+| EfficientNet-B0 @224², **inference BN**, batched | 2.580·10⁵⁵ | 8.408·10²¹⁰ | — | — | `EfficientNetFloatBudget.lean` |
 
-All three are the interval fold and all three are vacuous as *budgets*; the point is that the
+All four are the interval fold and all four are vacuous as *budgets*; the point is that the
 kernel checks them. The r34 number sits 157 orders above the adjoint chain's proven-H figure for
 the same net (6.5·10⁵¹, `scripts/adjoint_chain_probe.py` §5), and the two documented reasons are
 `layerBudget`'s uniform `m·w'·A` face (§5 of the probe measures 257× per stage) and worst-case
@@ -58,6 +59,17 @@ The machinery built for r34 and reusable for the rest:
   variance: 102 arguments → 123.
 * `EnetFloatBridge.lean` — `floatClose_swish`'s modulus and `floatClose_seScale`'s window
   both tightened (§3.4); without either, EfficientNet-B0's fold is past `norm_num`'s ceiling.
+* `EfficientNetWholeFloatBridge.lean` — the B0 stage/block bridges made generic in the
+  normalisation (`cbsBGen` … `headFwdBGen`), with `*_eq_gen` `rfl` onto the training net and
+  `*Eval_eq_gen` `rfl` onto the inference net. ⭐ Only the REAL side needed it — the float peers
+  always took the float BN abstractly, since it was always a supplied hypothesis.
+* `FloatBudgetEnvMBConv.lean` — the `Maps` leaves the inverted-bottleneck family needs on top of
+  `FloatBudgetEnv`'s: `relu6`, `depthwise`, `depthwiseStride2Flat`, `swish`, `sigmoid`,
+  `broadcast`, `seScale`, `batchMap`. They live here and not in `FloatBudgetEnv.lean` because a
+  `Maps` lemma names its bridge and none of these bridges is on that file's import path; putting
+  them there would make the ResNet-34 budget depend on the whole MobileNet/EfficientNet cone.
+  ⚠ It also carries a worked B0 b1 squeeze-excite site as a compiled `example` — a `Maps` leaf
+  nothing composes is a leaf nobody has checked composes.
 * `scripts/float_budget_envelope.py` — the exact-rational fold in the lemmas' semantics, the
   4-significant-figure round-up, the re-assertion passes (`verify_r34`, 180 inequalities;
   `verify_mnv2`, 116; `verify_b0`, 96) and the numerals. Its CIFAR-8 regression case reproduces `Cifar8FloatBudget.lean` stage for stage.
@@ -154,7 +166,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 |---|---|---|
 | **ResNet-34 fwd** | ✅ **DONE** (inference BN) — `r34_float_logits_le`, 1.548·10²⁰⁹, tied to the graph | — |
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
-| EfficientNet-B0 fwd | ⭐ **UNBLOCKED** (§3.4) — the fold is statable, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰ at the measured profile; open: the eval net + graph + budget file | the eval-BN B0 forward (`batchOp .bnEval` already denotes `batchMap N bnPerChannelEvalTensor3`, `rfl`), the `Maps` leaves of §5, then the r34 recipe |
+| **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
 | ConvNeXt-T Ch fwd | open: 22 pure-normalise LN bridges | ⛔ blocked on §0.1 — the LN modulus is quadratic and LN has no eval mode |
 | ViT-Tiny fwd | open: `hFinalLN`, `hblocks`, `hPatch` | ⛔ blocked on §0.1, and additionally the softmax modulus carries `Real.exp` |
 
@@ -240,8 +252,16 @@ EVAL-BN *adjoint-chain* budget, not an interval fold, and the fold lands ~36 ord
 
 ### 3.4 EfficientNet-B0 — ⭐ UNBLOCKED (2026-09-03). Two leaf bounds were the wall.
 
-**Status: the fold is statable and the leaves are fixed; the net/graph/budget files are not
-written.** At the profile measured on `/home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.bin`
+**✅ DONE (2026-09-03).** `b0_float_logits_le` / `b0_float_logits_le_committed`: window
+**2.580·10⁵⁵**, budget **8.408·10²¹⁰**, **for any batch size `N > 0`**. Files:
+`EfficientNetFloatBudget.lean` (794 lines, ~20 s), plus `EfficientNetRenderPCEval.lean`, the
+`Maps` leaves in `FloatBudgetEnvMBConv.lean`, the `*BGen` layer in
+`EfficientNetWholeFloatBridge.lean`, and the two tightened leaves in `EnetFloatBridge.lean`.
+
+⭐ **Any batch size** is new: at inference every stage is `batchMap N` of a per-example op, and
+`Maps.batchMap` carries an envelope through the lift unchanged, so `N` never enters a numeral.
+The other two nets' numbers are per-example by construction; this one is genuinely batched and
+the bound does not degrade with `N`. At the profile measured on `/home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.bin`
 (5,288,548 f32, global max `|·| = 4.0545`, 99.99th pct 1.3949, 100 entries above 2 — so
 `|·| ≤ 41/10`), `ε ≥ 10⁻⁵`, `es = esig = 10⁻²`:
 
@@ -282,15 +302,51 @@ modulus is quadratic in the window**, exactly like training-mode BN and LayerNor
 only because it has three SE sites; twenty would end it the way §0.1's 33 BN sites end r34's
 training-mode fold. Add SE to §0.1's list of reducing sites.
 
-**What is left.** (i) `Maps` leaves: `swish`, `sigmoid`, `broadcast`, `seScale`, `batchMap`
-(`FloatBridgesTo.batchMap`'s `mag`/`mod` are the per-example ones verbatim, so `Maps.batchMap` is
-the identity); `depthwise` already exists in `MobileNetV2FloatBudget.lean` and needs moving or
-re-importing. (ii) An eval-BN B0 forward — `efficientnetForwardB` hard-wires `bnBatchLA`
-(training-mode, and batch-COUPLING); the eval twin is `batchMap N (bnPerChannelEvalTensor3 …)` at
-each of the 10 sites, ⭐ and `den_batchOp_bnEval` already proves the `bnEval` descriptor denotes
-exactly that, `rfl`. (iii) The eval graph twin + faithfulness. (iv)
-`EfficientNetFloatBudget.lean` on the r34 recipe. (v) The numerals are already generated and
-re-asserted (`b0_eval_chain` / `verify_b0`).
+**What is left.** ✅ (ii)+(iii) landed 2026-09-03: `EfficientNetRenderPCEval.lean` is the eval
+forward + graph + `efficientnetFwdGraphBEval_faithful`, mirroring `EfficientNetRenderPC.lean` rung
+for rung with `.bnBatchF` replaced by the batched `.bnEval` DESCRIPTOR. ⭐ `bnBatchLA` is the ONE
+op in this net that is not `batchMap N` of a per-example op — it reduces μ/var across examples,
+which is why it has its own constructor instead of being a `BatchableOp`; at frozen statistics
+there is no reduction, so `bnEval` IS a descriptor and `den_batchOp_bnEval` already proved it
+denotes `batchMap N (bnPerChannelEvalTensor3 …)`, `rfl`. Every stage of the eval forward is
+therefore `batchMap`-of-a-per-example-op or pointwise, and every leaf the budget needs is a
+per-example leaf the repo already has. ✅ (v) The numerals are generated and re-asserted
+(`b0_eval_chain` / `verify_b0`, 96 inequalities).
+
+✅ **(i)** landed the same day: `FloatBudgetEnvMBConv.lean` holds `swish`, `sigmoid`,
+`broadcast`, `seScale` and `batchMap`, and `relu6` / `depthwise` / `depthwiseStride2Flat` moved
+there out of `MobileNetV2FloatBudget.lean` (B0 is the third net, which is the condition §5 set for
+moving them). B0's b1 SE site is closed there as a compiled `example` at the generated numerals,
+so nothing in the kit is unexercised.
+
+✅ **The budget file landed.** `EfficientNetFloatBudget.lean` on the r34 recipe: records
+(`EnetConv`/`EnetDw`/`EnetSE`/`EnetBn`/`EnetNoExpBlk`/`EnetMBBlk`/`EnetWeights`/`EnetProfile`), a
+`DeviceSigmoid` alongside `DeviceRsqrt`, per-site `EnetBn.maps` and `EnetSE.maps`, the three block
+envelopes, the whole-net chain and the ties.
+
+⚠ **The one thing that did not transfer: the tie is NOT one `rfl`.** At these concrete dims the
+kernel times out comparing `b0EvalForward` with `efficientnetForwardBEval` — r34's and mnv2's
+whole-net ties are single `rfl`s and this one cannot be. It rewrites with the nine per-stage
+`*Eval_eq_gen` lemmas first, which leaves nothing to compare; that is why the `*BGen` layer's eval
+ties are stated per stage rather than only whole-net, and it is the same reason
+`efficientnetFwdGraphB_faithful` is `rw`-based. Budget for this on the next batched net.
+
+✅ **The `*BGen` layer** landed too. `cbsB`/`stemB`/`dwbsB`/`dwbsSB`/`projB` and the four blocks
+each have a `*Gen` peer abstract in the normalisation, a `*_eq_gen` `rfl` onto the TRAINING net
+(`bnBatchLA`) and a `*Eval_eq_gen` `rfl` onto the INFERENCE net
+(`batchMap N (bnPerChannelEvalTensor3 …)`), and all nine bridges are stated on the `Gen` defs with
+the nine originals delegating — so one set of bridges serves both modes and there is no second
+proof. ⭐ **Only the REAL side needed generalising**: `cbsBF` and its peers already took the float
+BN abstractly, because the float BN was always a supplied hypothesis (the one batch-coupled op).
+The file closes B0's b1 block at the eval BN as a compiled `example` with NO `FloatBridgesTo`
+hypothesis left — the exact shape the budget file needs at all ten sites.
+
+Nothing is open for B0.
+
+⚠ **Not stated, and worth stating:** `efficientnetForwardBEval N = batchMap N (per-example
+forward)` — the whole-net form of "at inference the batch decouples". Only the per-SITE claim is
+proved (`den_batchOp_bnEval`). It needs a `batchMap N f ∘ batchMap N g = batchMap N (f ∘ g)` lemma
+(the repo has `batchMap_pointwise` but not this) plus a per-example B0 def to be the witness.
 
 ⛔ **An earlier note in this file said "B0's activation is swish, which is unbounded above, so
 §3.2's clamp does not apply and the window will compound the way ResNet-34's does." The
@@ -319,14 +375,21 @@ BN-back modulus inherits the same reduction structure. Start only after the forw
 
 ## 5. The `Maps` kit still to add
 
-✅ `relu6` (window `min Ā 6`, NOT a copy of `Maps.relu` — §3.2), `depthwise` and
-`depthwiseStride2Flat` all landed with MobileNetV2 and live in `MobileNetV2FloatBudget.lean`
-(`FloatBudgetEnv.lean` cannot see their leaves — `floatBridgesTo_depthwise` is in
-`DepthwiseFloatBridge.lean` and `floatBridgesTo_relu6` in `MobileNetV2WholeFloatBridge.lean`, and
-neither is on `FloatBudgetEnv`'s import path. Move them down only if a third net needs them).
-Still to add — ⭐ `swish`, `sigmoid`, `broadcast`, `seScale` and `batchMap` first, since B0
-needs exactly those five and nothing else (§3.4); `batchMap` is the identity on the envelope.
-Then
+✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
+(window `min Ā 6`, NOT a copy of `Maps.relu` — §3.2), `depthwise`, `depthwiseStride2Flat`,
+`swish` (⭐ modulus = the `min` of a multiplicative and an additive sensitivity — §3.4),
+`sigmoid` (window `1 + esig` at any input), `broadcast`, `seScale` (⭐ window = the gate's
+MAGNITUDE, not mag + error) and `batchMap` (the identity on the envelope, which is the
+envelope-level statement that the op does not couple the batch). They are in their own file
+rather than `FloatBudgetEnv.lean` because a `Maps` lemma names its bridge and none of these
+bridges is on that file's import path.
+
+⭐ The file closes B0's b1 squeeze-excite site as a compiled `example` at the numerals
+`b0_eval_chain` emits — five leaves in one chain, and simultaneously the check that the
+generator's arithmetic IS these lemmas'. Do that for every new leaf: an unexercised `Maps` leaf
+is the `stale lean_exe gates` failure mode in proof form.
+
+Still to add:
 
 `comp_flatConvStride4`,
 `comp_gelu` (rational slack for `√(2/π)`), `comp_biasAdd`,

@@ -334,6 +334,15 @@ lean_lib «Certs» where
              -- the eval forward is per-example throughout. The BN mode a whole-net B0 float
              -- number can be stated at (the training one's modulus is quadratic in the window).
              `LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval,
+             -- ⭐ The third ImageNet-scale whole-net float NUMBER, and the first for a BATCHED
+             -- net with squeeze-excite: the deployed EfficientNet-B0 inference forward, window
+             -- 2.580e55 / budget 8.408e210. ⛔ It did not exist until two leaf bounds were
+             -- tightened (EnetFloatBridge.lean): swish's modulus multiplied the inherited error
+             -- by the WINDOW at each of nine sites (1e1737), and seScale's window charged the
+             -- GATE'S error to the magnitude (1e417). Both were bounds proved one lemma down and
+             -- discarded by the generic combinator — the relu6 pattern. ⚠ SE is quadratic in the
+             -- window like training BN/LN: each site roughly DOUBLES the budget's exponent.
+             `LeanMlir.Proofs.Float.EfficientNetFloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

@@ -200,6 +200,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "b0_float_logits_le"   # the third ImageNet-scale number, and the first for a BATCHED net with squeeze-excite: the DEPLOYED EfficientNet-B0 inference forward's float logits are within 8.408e210 of the real ones on |x| <= 1, at the measured 350-epoch profile (|param| <= 41/10), eps >= 1e-5, device rsqrt and sigmoid accurate to 1e-2, u <= 2^-24, for ANY batch size N > 0. ⛔ Did not exist until two loose leaf bounds were tightened -- swish's modulus and seScale's window (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/EfficientNetFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "mnv2_float_logits_le"   # the second ImageNet-scale number: the DEPLOYED MobileNetV2 inference forward's float logits are within 1.444e96 of the real ones on |x| <= 1, at the measured 350-epoch profile (|param| <= 28/10), eps >= 1e-5, a device rsqrt accurate to 1e-2, u <= 2^-24. ⭐ Its certified WINDOW is 2154, not vacuous: relu6 clamps at 6 whatever its input, so every relu6 site resets the window (fidelity.divergences 4d)
       file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean"
       sorry_count: 0
@@ -594,6 +600,51 @@ fidelity:
        sits ~36 orders above it rather than r34's 157 -- the clamped window removes the
        window looseness and leaves only the gain looseness. The number is still the
        interval fold and still vacuous as a certificate; the window half of it is not.
+
+       ⭐⭐ A THIRD, AND THE FIRST WHERE THE BLOCKER WAS NOT THE ARCHITECTURE (2026-09-03):
+       `EfficientNetFloatBudget.lean`. `b0EvalBridge` is the deployed batched EfficientNet-B0
+       inference forward -- stem, MBConv1(no-expand, SE), MBConv6(stride-2, SE),
+       MBConv6(5x5, SE, residual), head -- closed, with `b0EvalBridge_maps` pushing the envelope
+       through 96 rational inequalities (generated AND re-asserted by
+       `scripts/float_budget_envelope.py`'s `b0_eval_chain` / `verify_b0`). At the profile
+       measured on the 350-epoch checkpoint (every stored parameter `|.| <= 41/10`; global max
+       4.0545 over 5,288,548 f32), `eps >= 1e-5`, `u <= 2^-24`:
+           output window  <= 2.580e55       (b0EvalBridge_mag_le)
+           fresh budget   <= 8.408e210      (b0EvalBridge_fresh_le)
+       and per logit `|float - real| <= 8.408e210` (`b0_float_logits_le`) -- for ANY batch size
+       N > 0, because at inference every stage of this net is `batchMap N` of a per-example op
+       (`bnBatchLA` is the only op that reduces across examples, and frozen statistics do not
+       reduce; `den_batchOp_bnEval`). Tied to the committed net through
+       `EfficientNetRenderPCEval.lean`'s `efficientnetFwdGraphBEval_faithful` +
+       `b0EvalForward_eq_forwardBEval` + `b0EvalGraph_faithful`, and restated on it by
+       `b0_float_logits_le_committed`. Two modelled hypotheses, both named: `DeviceRsqrt` (shared
+       with the r34 file) and `DeviceSigmoid` -- neither kernel has an IEEE specification.
+
+       ⛔ WHAT IS DIFFERENT ABOUT THIS ONE: the first honest fold came out at window 1e1717 and
+       budget 1e4179, past what `norm_num` will evaluate, and the cause was NOT the BN mode (the
+       fold was already at inference BN) nor the architecture. Two LEAF bounds did it, and both
+       were bounds proved one lemma down and discarded by a generic combinator -- the same shape
+       as MobileNetV2's unused relu6 clamp:
+         (a) `floatClose_swish`'s modulus was `mulErr + (1 + A/4)*e`, multiplying the inherited
+             error by the WINDOW at each of nine swish sites. Bounding |sigma a - sigma b| by the
+             gate's own range (<= 1) instead of by (1/4)|a-b| gives `A + |a-b|`, additive in the
+             window (`swishScalar_lipschitz_abs'`); the modulus is now the min of the two.
+         (b) `floatClose_seScale`'s window was derived as |float - real| + |real|, charging
+             `A * Lg 0` -- the block window times the GATE'S error -- to the magnitude.
+             `FloatClose`'s magnitude clause bounds the float gate too, so it is `A*Bg*(1+u)`.
+       Ablated at the measured profile: both as they stood 1e1717/1e4179 (not statable), swish
+       fixed only 1e211/1e212, seScale fixed only 1e55/1e799 (not statable), both fixed
+       1e55/1e211. The lesson generalises past this net: when a whole-net fold overshoots, ablate
+       the LEAVES in the generator before concluding anything about the architecture.
+
+       ⚠ AND A THIRD QUADRATIC SITE. Squeeze-excite's modulus `mulErr q A Cg E Eg` carries
+       `A * Eg` -- the block window times the gate error -- and the gate grows that error out of
+       the same window through the squeeze's `GAP -> dense`. So SE is quadratic in the window for
+       the same structural reason training-mode BatchNorm and LayerNorm are, and each of B0's
+       three SE sites roughly DOUBLES the budget's exponent (1e25 -> 1e83 -> 1e199). B0 survives
+       three; twenty would end it the way r34's 33 training-BN sites end its training-mode fold.
+       The question to ask of a new architecture is therefore not "does it normalise" but "does
+       any op consume a reduction of its own input and then multiply by that input".
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

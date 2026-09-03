@@ -99,6 +99,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
+import LeanMlir.Proofs.Float.EfficientNetFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2179,6 +2180,38 @@ open Proofs
 #print axioms Proofs.floatBridgesTo_mbStridedFwdBGen
 #print axioms Proofs.floatBridgesTo_mbResidFwdBGen
 #print axioms Proofs.floatBridgesTo_headFwdBGen
+-- ⭐⭐ The THIRD ImageNet-scale whole-net float number, and the first for a BATCHED net with
+-- squeeze-excite: the deployed EfficientNet-B0 inference forward as a CLOSED FloatBridgesTo
+-- (b0EvalBridge), window 2.580e55 (b0EvalBridge_mag_le) and |float − real| ≤ 8.408e210 per logit
+-- on |x| ≤ 1 at the measured 350-epoch profile (b0_float_logits_le) — for ANY batch size N > 0,
+-- since at inference every stage is batchMap of a per-example op. 96 rational inequalities,
+-- generated and re-asserted by scripts/float_budget_envelope.py's verify_b0 before emission.
+-- ⛔ This number did not exist until two LEAF bounds were tightened, and neither had anything to
+-- do with the BN mode (the fold was already at inference BN): floatClose_swish's modulus
+-- multiplied the inherited error by the WINDOW at each of nine swish sites (1e1737) and
+-- floatClose_seScale's window charged the GATE'S error to the magnitude (1e417). Both were
+-- bounds proved one lemma down and discarded by the generic combinator — the relu6 pattern.
+-- ⚠ What SE still costs: each of the three sites roughly DOUBLES the budget's exponent
+-- (1e25 → 1e83 → 1e199), because seScale's modulus carries Ā·Eg and the gate grows Eg out of
+-- that same window through the squeeze. SE is quadratic in the window for the same structural
+-- reason training BatchNorm and LayerNorm are — an op that consumes a reduction of its own input
+-- and then multiplies by that input. That, not "does it normalise", is the rule for a new net.
+#print axioms Proofs.EnetSE.maps
+#print axioms Proofs.EnetNoExpBlk.maps
+#print axioms Proofs.EnetMBBlk.stridedMaps
+#print axioms Proofs.EnetMBBlk.residMaps
+#print axioms Proofs.b0EvalBridge
+#print axioms Proofs.b0EvalBridge_maps
+#print axioms Proofs.b0EvalBridge_mag_le
+#print axioms Proofs.b0EvalBridge_fresh_le
+#print axioms Proofs.b0_float_logits_le
+-- The tie: the typed SHlo inference graph DENOTES the R forward the number bounds.
+-- ⚠ b0EvalForward_eq_forwardBEval is NOT one rfl — at these concrete dims the kernel times out
+-- comparing the two whole nets. It rewrites with the nine per-stage *Eval_eq_gen lemmas first,
+-- which leaves nothing to compare (the same reason efficientnetFwdGraphB_faithful is rw-based).
+#print axioms Proofs.b0EvalForward_eq_forwardBEval
+#print axioms Proofs.b0EvalGraph_faithful
+#print axioms Proofs.b0_float_logits_le_committed
 #print axioms Proofs.floatBridgesTo_invresBodyGen
 #print axioms Proofs.floatBridgesTo_invresBodyStridedGen
 #print axioms Proofs.floatBridgesTo_r34IdBlock
