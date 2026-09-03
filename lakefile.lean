@@ -309,6 +309,17 @@ lean_lib «Certs» where
              -- deployed ResNet-34 inference forward, window 3.152e211 / budget 1.547e209 at
              -- the measured checkpoint profile, over a CLOSED FloatBridgesTo (no BN hyps).
              `LeanMlir.Proofs.Float.Resnet34FloatBudget,
+             -- The mnv2 INFERENCE forward graph + whole-net faithfulness (the eval twin of
+             -- mobilenetv2FwdGraphFullPC_faithful): den (graph) = mobilenetv2Forward_full_pc_eval,
+             -- one shared eps, each BN site carrying its frozen mean/variance (102 args -> 123).
+             `LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval,
+             -- ⭐ The second ImageNet-scale whole-net float NUMBER, and the first with a
+             -- non-vacuous WINDOW: the deployed MobileNetV2 inference forward, window 2154 /
+             -- budget 1.444e96. The window is 97 orders below r34's because relu6 CLAMPS at 6
+             -- (floatClose_relu6 : FloatClose A (min A 6)) and every relu6 site resets it; the
+             -- budget moves one order, because error gain per BN site is G*S and only the
+             -- eps-floor S = 1/sqrt(eps) touches it. Window and budget are separate levers.
+             `LeanMlir.Proofs.Float.MobileNetV2FloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

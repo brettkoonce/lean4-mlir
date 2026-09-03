@@ -95,6 +95,8 @@ import LeanMlir.Proofs.Float.Cifar8FloatBridge
 import LeanMlir.Proofs.Float.Cifar8FloatBudget
 import LeanMlir.Proofs.Codegen.ResNet34RenderPCEval
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
+import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
+import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2054,6 +2056,46 @@ open Proofs
 -- inference net the number is stated for.
 #print axioms Proofs.rblkPC_eq_gen
 #print axioms Proofs.rblkPStridedPC_eq_gen
+-- ⭐⭐ The SECOND ImageNet-scale whole-net float number, and the first whose certified WINDOW
+-- is not vacuous: the deployed MobileNetV2 inference forward as a CLOSED FloatBridgesTo
+-- (mnv2EvalBridge), its envelope pushed through 60 numeric stages at block granularity
+-- (mnv2EvalBridge_maps, 116 rational inequalities re-asserted by verify_mnv2 before emission),
+-- window 2154 (mnv2EvalBridge_mag_le) and |float − real| ≤ 1.444e96 per logit on |x| ≤ 1 at the
+-- measured 350-epoch profile (mnv2_float_logits_le). ⭐ The window is 97 orders below ResNet-34's
+-- 3.152e211 for ONE reason: relu6 clamps at 6 whatever its input (relu6_le_six), so
+-- floatClose_relu6 states FloatClose A (min A 6) and Maps.relu6 RESETS the window at each of the
+-- 13 relu6 sites — where floatClose_relu's FloatClose A A is the best plain relu can do. ⚠ The
+-- BUDGET moves one order (3.072e97 -> 1.444e96): error gain per BN site is G*S and does not care
+-- how small the window is, so window and budget are separate levers and only the eps-floor
+-- S = 1/sqrt(eps) touches the budget.
+#print axioms Proofs.relu6_le_six
+#print axioms Proofs.floatClose_relu6
+#print axioms Proofs.FloatBridgesTo.Maps.relu6
+#print axioms Proofs.FloatBridgesTo.Maps.depthwise
+#print axioms Proofs.FloatBridgesTo.Maps.depthwiseStride2Flat
+#print axioms Proofs.MnvBlock.bodyMaps
+#print axioms Proofs.MnvBlock.stridedMaps
+#print axioms Proofs.MnvBlock.resMaps
+#print axioms Proofs.mnv2EvalBridge
+#print axioms Proofs.mnv2EvalBridge_maps
+#print axioms Proofs.mnv2EvalBridge_mag_le
+#print axioms Proofs.mnv2EvalBridge_fresh_le
+#print axioms Proofs.mnv2_float_logits_le
+-- The mnv2 eval twin of mobilenetv2FwdGraphFullPC_faithful, and the tie it closes: the typed
+-- SHlo inference graph DENOTES the R forward the number above bounds, so the budget is a claim
+-- about the net the render emits rather than about a hand-assembled skeleton.
+#print axioms Proofs.StableHLO.mobilenetv2FwdGraphFullPCEval_faithful
+#print axioms Proofs.mnv2EvalForward_eq_full_pc_eval
+#print axioms Proofs.mnv2EvalGraph_faithful
+#print axioms Proofs.mnv2_float_logits_le_committed
+-- The mnv2 block bridges are generic in the NORMALISATION too (invresBodyGen /
+-- invresBodyStridedGen, with invresBodyPC_eq_gen / invresBodyStridedPC_eq_gen both rfl), so one
+-- pair serves the training-mode net and the inference net the number is stated for — the
+-- rblkGen pattern, transferred.
+#print axioms Proofs.invresBodyPC_eq_gen
+#print axioms Proofs.invresBodyStridedPC_eq_gen
+#print axioms Proofs.floatBridgesTo_invresBodyGen
+#print axioms Proofs.floatBridgesTo_invresBodyStridedGen
 #print axioms Proofs.floatBridgesTo_r34IdBlock
 #print axioms Proofs.floatBridgesTo_r34DownBlock
 #print axioms Proofs.FloatBridgesTo.biPathSum

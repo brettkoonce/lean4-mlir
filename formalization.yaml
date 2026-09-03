@@ -200,6 +200,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "mnv2_float_logits_le"   # the second ImageNet-scale number: the DEPLOYED MobileNetV2 inference forward's float logits are within 1.444e96 of the real ones on |x| <= 1, at the measured 350-epoch profile (|param| <= 28/10), eps >= 1e-5, a device rsqrt accurate to 1e-2, u <= 2^-24. ⭐ Its certified WINDOW is 2154, not vacuous: relu6 clamps at 6 whatever its input, so every relu6 site resets the window (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/MobileNetV2FloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "cifar8_chain_argmaxSafeH"   # float capstone at the COMMITTED CIFAR-8 shape: given measured tail gains, binary32 rounding cannot flip the prediction. Chain = cifar8Verified.layers op for op; no window side condition. ⚠ budget >= 1.8e13 at He magnitudes (bᵢ at worst-case propagated windows), so hmargin holds there only at u = 0 -- fidelity.divergences 4c "NOT BITING". (v1 cifar8_chain_argmaxSafe is depth-generic only)
       file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       sorry_count: 0
@@ -549,6 +555,45 @@ fidelity:
        premise: the renderer does NOT pre-fold the affine, it emits six runtime ops
        including `stablehlo.rsqrt`, so the pre-folded affine models a kernel we do not
        ship.)
+
+       ⭐⭐ A SECOND ONE, AND A NON-VACUOUS WINDOW (2026-09-03):
+       `MobileNetV2FloatBudget.lean` closes the mnv2 cone the same way.
+       `mnv2EvalBridge` is the deployed 6-block inverted-residual forward with
+       `bnPerChannelEvalTensor3` at all 20 BN sites, closed (no `FloatBridgesTo`
+       hypotheses), and `mnv2EvalBridge_maps` pushes the envelope through its 60
+       numeric stages (116 rational inequalities, generated AND re-asserted by
+       `scripts/float_budget_envelope.py`'s `mnv2_eval_chain` / `verify_mnv2` before
+       emission). At the profile measured on the 350-epoch checkpoint (every stored
+       parameter `|.| <= 28/10`; global max 2.7157), `eps >= 1e-5`, unit input window
+       and `u <= 2^-24`:
+           output window  <= 2.154e3       (mnv2EvalBridge_mag_le)
+           fresh budget   <= 1.444e96      (mnv2EvalBridge_fresh_le)
+       and per logit `|float - real| <= 1.444e96` (`mnv2_float_logits_le`), tied to
+       the committed net through `MobileNetV2RenderPCEval.lean`'s
+       `mobilenetv2FwdGraphFullPCEval_faithful` +
+       `mnv2EvalForward_eq_full_pc_eval` (rfl) + `mnv2EvalGraph_faithful`, and
+       restated on it by `mnv2_float_logits_le_committed`. Same one modelled
+       hypothesis (`DeviceRsqrt`, shared with the r34 file -- the same device kernel,
+       so not a second assumption), same 3-axiom closure.
+
+       WHAT IS NEW is the WINDOW. ResNet-34's is 3.152e211 against logits of a few;
+       this one is 2154. The whole difference is one lemma: `relu6 x i =
+       min (max (x i) 0) 6` is bounded by 6 WHATEVER its input, so `floatClose_relu6`
+       states `FloatClose A (min A 6)` (it previously stated `FloatClose A A`, throwing
+       the clamp away) and `Maps.relu6` resets the certified magnitude at each of the
+       net's 13 relu6 sites. Folded without the clamp this net's window is 4.309e100
+       (`mnv2_eval_chain(relu6_clamp := False)`). ResNet-34 cannot have this -- plain
+       `relu` has no upper clamp and `FloatClose A A` is the best it can do. ⚠ AND THE
+       BUDGET BARELY MOVES: 3.072e97 -> 1.444e96, one order. Error gain per stage does
+       not care how small the window is; it is `G*S` per BN site with `S = 1/sqrt eps
+       <= 317` at the eps-floor, and sweeping S over the same fold gives
+       1e96/1e77/1e60/1e48 at S = 317/32/4/1, ~19 orders per decade across the 20 BN
+       sites. So WINDOW AND BUDGET ARE SEPARATE LEVERS: the clamp is worth 97 orders of
+       window and one of budget, and only an operating-point variance floor moves the
+       budget. The adjoint chain's proven-H figure for this net is 2.7e60, so this fold
+       sits ~36 orders above it rather than r34's 157 -- the clamped window removes the
+       window looseness and leaves only the gain looseness. The number is still the
+       interval fold and still vacuous as a certificate; the window half of it is not.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

@@ -1,6 +1,6 @@
-# Whole-net float budgets as NUMBERS: ResNet-34 landed, and the wall the rest hit
+# Whole-net float budgets as NUMBERS: ResNet-34 and MobileNetV2 landed, and the wall the rest hit
 
-Written 2026-09-02 (revised the same day, after ResNet-34). Read §0 and §0.1 before touching
+Written 2026-09-02; revised 2026-09-03 after MobileNetV2. Read §0 and §0.1 before touching
 anything; §3 is the work list; §7 is the checklist you run before every commit.
 
 ## 0. Where we are
@@ -11,18 +11,29 @@ anything; §3 is the work list; §7 is the checklist you run before every commit
 `mag`/`mod` explicitly, every leaf writes them out. (Why it had to be data and not `∃ L`:
 `formalization.yaml` fidelity §4d — the `∃`-modulus was discharged by `L := 2B`.)
 
-Two whole nets now carry kernel-checked numbers:
+Three whole nets now carry kernel-checked numbers:
 
-| net | window | budget | budget/window | file |
-|---|---|---|---|---|
-| CIFAR-8 (8 conv, no BN) | 6.121·10¹⁸ | 6.37·10¹⁴ | 1·10⁻⁴ | `Cifar8FloatBudget.lean` |
-| ResNet-34 @224², **inference BN** | 3.152·10²¹¹ | 1.548·10²⁰⁹ | 4.9·10⁻³ | `Resnet34FloatBudget.lean` |
+| net | window | budget | budget/window | over the chain | file |
+|---|---|---|---|---|---|
+| CIFAR-8 (8 conv, no BN) | 6.121·10¹⁸ | 6.37·10¹⁴ | 1·10⁻⁴ | — | `Cifar8FloatBudget.lean` |
+| ResNet-34 @224², **inference BN** | 3.152·10²¹¹ | 1.548·10²⁰⁹ | 4.9·10⁻³ | ~10¹⁵⁷ | `Resnet34FloatBudget.lean` |
+| MobileNetV2 @224², **inference BN** | **2.154·10³** | 1.444·10⁹⁶ | — | ~10³⁶ | `MobileNetV2FloatBudget.lean` |
 
-Both are the interval fold and both are vacuous as certificates; the point is that the kernel
-checks them. The r34 number sits 157 orders above the adjoint chain's proven-H figure for the
-same net (6.5·10⁵¹, `scripts/adjoint_chain_probe.py` §5), and the two documented reasons are
+All three are the interval fold and all three are vacuous as *budgets*; the point is that the
+kernel checks them. The r34 number sits 157 orders above the adjoint chain's proven-H figure for
+the same net (6.5·10⁵¹, `scripts/adjoint_chain_probe.py` §5), and the two documented reasons are
 `layerBudget`'s uniform `m·w'·A` face (§5 of the probe measures 257× per stage) and worst-case
 rather than measured windows.
+
+⭐⭐ **MobileNetV2's WINDOW is not vacuous, and that is the result of the second net.** 2154,
+against logits of a few — where ResNet-34's is 10²¹¹. One lemma does all of it: `relu6` is
+bounded by 6 whatever its input, so `floatClose_relu6` now states `FloatClose A (min A 6)` and
+every one of the net's 13 relu6 sites RESETS the certified magnitude. Without the clamp the same
+fold gives 4.309·10¹⁰⁰ (`mnv2_eval_chain(relu6_clamp := False)`). ResNet-34 cannot have this;
+plain `relu` has no upper clamp. ⚠ **And the budget moved one order, 3.072·10⁹⁷ → 1.444·10⁹⁶.**
+Window and budget are separate levers (§3.2), and only `S = 1/√ε` moves the budget. MobileNetV2
+also sits only ~36 orders above its chain figure (2.7·10⁶⁰) rather than r34's 157, because the
+clamped window removes the window looseness and leaves only the gain looseness.
 
 The machinery built for r34 and reusable for the rest:
 
@@ -32,14 +43,22 @@ The machinery built for r34 and reusable for the rest:
   `Maps.comp` / `Maps.residual` / `Maps.biPathSum` **generic** — the CIFAR-8 `Env` needed one
   `comp_*` lemma per operation and could not express a skip at all. Leaves so far: `relu`,
   `maxPool`, `maxPool3s2`, `flatConv`, `flatConvStride2`, `dense`, `gap`,
-  `bnPerChannelTensor3` (training), `bnEvalPC` (inference).
+  `bnPerChannelTensor3` (training), `bnEvalPC` (inference), `relu6` (⭐ window `min Ā 6`),
+  `depthwise`, `depthwiseStride2Flat` (the last three in `MobileNetV2FloatBudget.lean`, which is
+  where the files that define their leaves first meet the kit).
 * `BnEvalRuntimeFloatBridge.lean` — inference BN as the render actually emits it.
 * `Resnet34WholeFloatBridge.lean` — the block bridges are now generic in the normalisation
   (`rblkGen` / `rblkStridedGen`, with `rblkPC_eq_gen` / `rblkPStridedPC_eq_gen` both `rfl`), so
   one pair of block bridges serves the training net and the inference net.
+* `MobileNetV2WholeFloatBridge.lean` — the same treatment for mnv2 (`invresBodyGen` /
+  `invresBodyStridedGen`, `invresBodyPC_eq_gen` / `invresBodyStridedPC_eq_gen` both `rfl`), and
+  `floatClose_relu6` strengthened to carry its clamp.
+* `MobileNetV2RenderPCEval.lean` — the eval graph twin, mirroring `MobileNetV2RenderPC.lean` rung
+  for rung. One shared ε (as the render emits), each BN site carrying its frozen mean and
+  variance: 102 arguments → 123.
 * `scripts/float_budget_envelope.py` — the exact-rational fold in the lemmas' semantics, the
-  4-significant-figure round-up, the re-assertion pass (`verify_r34`, 180 inequalities) and the
-  numerals. Its CIFAR-8 regression case reproduces `Cifar8FloatBudget.lean` stage for stage.
+  4-significant-figure round-up, the re-assertion passes (`verify_r34`, 180 inequalities;
+  `verify_mnv2`, 116) and the numerals. Its CIFAR-8 regression case reproduces `Cifar8FloatBudget.lean` stage for stage.
   ⚠ It must fold with the **rounded** γ (`r4(gamma_q k)`), not the exact `(1+u)^k − 1` — the
   Lean chain passes the rounded one, and folding with the exact value silently emits stage
   numerals a hair too small, which the kernel then rejects. That is what the re-assertion pass
@@ -123,7 +142,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | net | state | what closing needs |
 |---|---|---|
 | **ResNet-34 fwd** | ✅ **DONE** (inference BN) — `r34_float_logits_le`, 1.548·10²⁰⁹, tied to the graph | — |
-| MobileNetV2 fwd | open: `hbnS hbnH` + `b1..b6` | port the blocks to `To`-defs at the INFERENCE BN, then the r34 recipe verbatim |
+| **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | EfficientNet-B0 fwd | open: 10 batched `bnBatchLA` bridges | an inference-BN leaf at the batched index (`batchMap` of the per-example eval BN — `FloatBridgesTo.batchMap` handles the lift) |
 | ConvNeXt-T Ch fwd | open: 22 pure-normalise LN bridges | ⛔ blocked on §0.1 — the LN modulus is quadratic and LN has no eval mode |
 | ViT-Tiny fwd | open: `hFinalLN`, `hblocks`, `hPatch` | ⛔ blocked on §0.1, and additionally the softmax modulus carries `Real.exp` |
@@ -153,79 +172,70 @@ runtime `rsqrt`"*. The first half is the point; the second is not what this repo
 kernel we ship; `floatClose_bnEval`'s affine remains true and remains about a program we do not
 run. Do not build the other nets' numbers on the affine.
 
-### 3.2 MobileNetV2 — NEXT. Everything it needs already exists; read this before starting.
+### 3.2 MobileNetV2 — ✅ DONE (2026-09-03). What landed, and the one lesson to carry forward.
 
-**Status: nothing is missing, it is assembly.** Every `To`-leaf is built
-(`floatBridgesTo_flatConv`, `_flatConvStride2`, `_depthwise`, `_depthwiseStride2Flat`,
-`_relu6`, `_gap`, `_dense`, `_bnPerChannelEvalTensor3`), the skeleton takes its blocks
-abstractly (`mnv2Forward`'s `bnS bnH b1..b6` — so eval BN plugs straight into the slots, no
-new net def needed), the training tie exists (`mobilenetv2Forward_full_pc_eq_skeleton`) and so
-does the training graph + faithfulness (`mobilenetv2FwdGraphFullPC_faithful`,
-`MobileNetV2RenderPC.lean`) to mirror. The r34 recipe transfers step for step.
+`mnv2_float_logits_le` / `mnv2_float_logits_le_committed`: window **2154**, budget
+**1.444·10⁹⁶**, at `|param| ≤ 28/10` (global max 2.7157 on
+`/home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin`), `ε ≥ 10⁻⁵`, `es = 10⁻²`, `u ≤ 2⁻²⁴`.
+Files: `MobileNetV2FloatBudget.lean` (725 lines, ~26 s to elaborate), plus
+`MobileNetV2RenderPCEval.lean` and the `invresBody*Gen` layer in
+`MobileNetV2WholeFloatBridge.lean`. The r34 recipe transferred step for step; nothing in §2 or §7
+needed changing.
 
-**⭐ Do this first: teach `relu6` its clamp. One line, and it is worth ~97 orders on the
-window.** `relu6 n x i = min (max (x i) 0) 6` is bounded by `6` *whatever its input*, but
-`floatClose_relu6` states `FloatClose A A` — the window passes straight through. Strengthen it
-to `FloatClose A (min A 6)` (the magnitude clause is `relu6_abs_le` against `6` instead of
-against `hv i`; the error clause is untouched), add the `Maps.relu6` peer, and every
-expand/depthwise stage RESETS the window. Measured with `mnv2_eval_chain` in the generator:
+**⭐⭐ The finding, and it is the reason to have done a second net: WINDOW AND BUDGET ARE
+SEPARATE LEVERS.** `floatClose_relu6` stated `FloatClose A A` — magnitude passed straight
+through — even though `relu6 n x i = min (max (x i) 0) 6` is bounded by `6` *whatever its input*.
+Strengthening it to `FloatClose A (min A 6)` (`relu6_le_six` for the magnitude clause; the error
+clause is untouched) plus a `Maps.relu6` peer is ~15 lines, and:
 
 | | output window | fresh budget |
 |---|---|---|
-| `relu6` as pass-through (today's leaf) | 10¹⁰⁰ | 10⁹⁷ |
-| `relu6` clamped at 6 | **10³** | 10⁹⁶ |
+| `relu6` as pass-through (the old leaf) | 4.309·10¹⁰⁰ | 3.072·10⁹⁷ |
+| `relu6` clamped at 6 | **2.154·10³** | 1.444·10⁹⁶ |
 
-So MobileNetV2's certified window comes out *essentially tight* — 10³ against logits of a few
-— where ResNet-34's is 10²¹¹. ResNet-34 cannot have this: plain `relu` has no upper clamp.
-
-**⚠ The budget barely moves, and that is the real lesson.** The window collapses; the budget
-goes 10⁹⁷ → 10⁹⁶. Error gain per stage is unaffected by how small the window is — it is
-`G·S` per BN site, and `S = 1/√ε ≤ 317` at the ε-floor. Sweeping `S` (same fold):
+97 orders of window; one order of budget. Error gain per stage does not care how small the
+window is — it is `G·S` per BN site, and `S = 1/√ε ≤ 317` at the ε-floor. Sweeping `S` over the
+same fold:
 
 | `S` | 317 (ε-floor at 1e-5) | 32 | 4 | 1 (σ² ≈ 1) |
 |---|---|---|---|---|
 | budget | 10⁹⁶ | 10⁷⁷ | 10⁶⁰ | 10⁴⁸ |
 
 ~19 orders per decade of `S` across the 20 BN sites. So the operating-point variance floor
-(§0.1 item 2) is worth ~48 orders here and nothing else is. Note the probe's adjoint-chain
-figure for this net is `2.7·10⁶⁰`, so the fold at the ε-floor sits only ~36 orders above it —
-much closer than ResNet-34's 157, because the clamped window removes the window looseness and
-leaves only the gain looseness.
+(§0.1 item 2) is worth ~48 orders here and **nothing else is**. ⭐ Carry this into every
+remaining net: an activation with an upper clamp buys window and only window, and the budget
+only ever moves when `S` does.
 
-**The steps, in order.**
-1. `floatClose_relu6` clamp + `Maps.relu6` (above). Cheap, self-contained, commit-able alone.
-2. `Maps.comp_depthwise` / `Maps.comp_depthwiseStride2Flat` — `floatBridgesTo_depthwise`'s
-   `mag`/`mod` are `layerAct`/`layerBudget` at fan-in `kH*kW`, so both are `Maps.flatConv`'s
-   proof verbatim with `m := kH*kW`. Ten lines each.
-3. Make the block defs generic in the normalisation, the `rblkGen` way: `ivExpandGen`,
-   `ivDepthwiseGen`, `ivDepthwiseStridedGen`, `ivProjectGen`, then `invresBodyGen` /
-   `invresBodyStridedGen`, each with its `_eq_gen` `rfl` onto the existing `*PC` def. Then ONE
-   set of block bridges serves training and inference, as `floatBridgesTo_r34IdBlock` does.
-4. `MobileNetV2RenderPCEval.lean` — the eval graph twin, mirroring `MobileNetV2RenderPC.lean`
-   rung for rung (`ivExpandGraphEval`… → `mobilenetv2FwdGraphFullPCEval` + `_faithful` against
-   a new `mobilenetv2Forward_full_pc_eval`). Generate the signature; each BN site adds its
-   frozen mean and variance, so it grows the same way r34's did (146 → 219).
-5. `MobileNetV2FloatBudget.lean` — records (`MnvConv`, `MnvBn`, `MnvBlock`, `MnvWeights`,
-   `R34Profile`'s peer), per-block `Maps` lemma, the whole-net chain, the number, and the tie
-   theorems (`_eq_full_pc_eval` `rfl` + `_faithful` composite + `_committed`).
-6. Extend `scripts/float_budget_envelope.py`: promote `mnv2_eval_chain` from a sizing estimate
-   to the emitting fold, and **write its `verify_mnv2` re-assertion pass** — `mnv2_eval_chain`
-   currently has none, and on r34 that pass is what caught the rounded-γ bug.
+**What this bought.** MobileNetV2's certified window is `2154` against logits of a few — the
+first ImageNet-scale window in the repo that is not vacuous by hundreds of orders — and the fold
+sits only ~36 orders above the probe's adjoint-chain figure for this net (2.7·10⁶⁰), against
+r34's 157, because the clamped window removes the window looseness and leaves only the gain
+looseness.
 
-**Profile.** Measured on `/home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin` (3.5M f32):
-global max `|·| = 2.7157`, 99.99th percentile `1.53`, 2 entries above 2. Use a uniform
-`|·| ≤ 28/10`, the r34 pattern.
+**Two things that cost time, for the next net.**
+1. **Associate the block envelope the way the block BRIDGE composes.**
+   `floatBridgesTo_invresBodyGen` groups the project stage as one unit
+   (`prefix.comp (conv_p.comp bnp)`), so `MnvBlock.bodyMaps` has to build `pj` separately and
+   finish `s6.comp hnm pj`. Chaining eight flat `.comp`s instead gives an intermediate-dimension
+   mismatch on the closing `exact` (`0 < oc*h*w` where `0 < mid*h*w` is wanted) — the error
+   points at the `hn` argument, not at the association.
+2. **The rounded skip fan-in needs `norm_num [… u32]`,** like every BN goal — `Maps.residual`'s
+   `rA`/`rE` carry `q := u32`. Plain `norm_num` leaves them open.
 
-⛔ The plan's earlier claim that "the blueprint's `2.7·10⁶⁰` is the proven-H budget for this
-net — the fold should land in that order" was wrong on both counts: that figure is the probe's
+⛔ The plan's earlier claim that "the blueprint's `2.7·10⁶⁰` is the proven-H budget for this net
+— the fold should land in that order" was wrong on both counts: that figure is the probe's
 EVAL-BN *adjoint-chain* budget, not an interval fold, and the fold lands ~36 orders above it.
 
 
 ### 3.3–3.5 ConvNeXt-T, EfficientNet-B0, ViT-Tiny
 
-B0 needs a batched inference-BN leaf and is otherwise the r34 recipe. ConvNeXt-T and ViT-Tiny
-are blocked on §0.1; if one of the three escapes there works, ConvNeXt is the cheapest (one LN
-leaf closes 22 hypotheses) and ViT is still gated on `Real.exp` in the softmax modulus.
+**B0 is NEXT.** It needs a batched inference-BN leaf (`batchMap` of the per-example eval BN) and
+is otherwise the r34 recipe. ⚠ Do not expect mnv2's tight window there: B0's activation is
+swish, which is unbounded above, so §3.2's clamp does not apply and the window will compound the
+way ResNet-34's does. The budget will look like the others (`G·S` per BN site). ConvNeXt-T and
+ViT-Tiny are blocked on §0.1; if one of the three escapes there works, ConvNeXt is the cheapest
+(one LN leaf closes 22 hypotheses) and ViT is still gated on `Real.exp` in the softmax
+modulus.
 
 ### 3.6 Common sub-steps for every net
 
@@ -242,10 +252,14 @@ BN-back modulus inherits the same reduction structure. Start only after the forw
 
 ## 5. The `Maps` kit still to add
 
-⭐ `relu6` first, and not as a copy of `Maps.relu`: it CLAMPS at 6 (§3.2), so its window
-step is `min Ā 6`, not `Ā`. Then
+✅ `relu6` (window `min Ā 6`, NOT a copy of `Maps.relu` — §3.2), `depthwise` and
+`depthwiseStride2Flat` all landed with MobileNetV2 and live in `MobileNetV2FloatBudget.lean`
+(`FloatBudgetEnv.lean` cannot see their leaves — `floatBridgesTo_depthwise` is in
+`DepthwiseFloatBridge.lean` and `floatBridgesTo_relu6` in `MobileNetV2WholeFloatBridge.lean`, and
+neither is on `FloatBudgetEnv`'s import path. Move them down only if a third net needs them).
+Still to add:
 
-`comp_flatConvStride4`, `comp_depthwise`, `comp_depthwiseStride2Flat`,
+`comp_flatConvStride4`,
 `comp_gelu` (rational slack for `√(2/π)`), `comp_swish`, `comp_sigmoid`, `comp_biasAdd`,
 `comp_diagBack`, `comp_layerNormVec`, identity steps for `gather`/`transposeFlat`/`reassoc*`/
 `broadcast`/`clsSlice`, and `seScale` / `perRow` / `batchMap` / `iterate k`. Each is ten lines
@@ -288,7 +302,11 @@ anyway, not as its own commit.
 
 ## 9. What to say about the numbers
 
-Per net: the number is the interval fold at the stated magnitudes; it is vacuous as a
+⭐ Say the WINDOW and the BUDGET separately — after MobileNetV2 they are not the same story.
+A clamped-activation net can have a tight window and a vacuous budget at the same time, and
+collapsing them into "the number" loses the only half that is currently believable.
+
+Per net: the budget is the interval fold at the stated magnitudes; it is vacuous as a
 certificate; it agrees in order with nothing tighter than itself and sits far above the adjoint
 chain's figure for the same net, for two documented reasons; relative to the certified output
 window it is ≈ Σ(mᵢ+2)·u. What is new is that a wrong `layerBudget`, a dropped stage, a misread

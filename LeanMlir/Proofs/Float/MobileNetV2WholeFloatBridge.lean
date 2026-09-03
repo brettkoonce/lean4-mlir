@@ -56,16 +56,32 @@ theorem relu6_close {n : Nat} (xt xa : Vec n) (e : ℝ)
     _ ≤ |xt i - xa i| := abs_max_sub_max_le_abs _ _ _
     _ ≤ e := hx i
 
-/-- **relu6 is `FloatClose`** — exact in float (no rounding) and 1-Lipschitz, so magnitude `A` is
-    preserved and the modulus is the identity. The relu6 peer of `floatClose_relu`. -/
+/-- ⭐ **relu6 is bounded by 6 whatever its input.** `min (max (v i) 0) 6 ∈ [0, 6]` — the half of
+    the clamp `relu` does not have, and the reason a MobileNetV2 window does not grow: every
+    relu6 site RESETS the certified magnitude to `6` rather than passing the incoming one
+    through. Measured with `scripts/float_budget_envelope.py`'s `mnv2_eval_chain`, that is the
+    difference between a certified output window of `10¹⁰⁰` and one of `10³`. -/
+theorem relu6_le_six {n : Nat} (v : Vec n) (i : Fin n) : |relu6 n v i| ≤ 6 := by
+  simp only [relu6]
+  rw [abs_of_nonneg (le_min (le_max_right _ _) (by norm_num))]
+  exact min_le_right _ _
+
+/-- **relu6 is `FloatClose`** — exact in float (no rounding) and 1-Lipschitz, so the modulus is
+    the identity; the output magnitude is `min A 6`, since relu6 is both magnitude-nonincreasing
+    (`relu6_abs_le`) and clamped at `6` (`relu6_le_six`). The relu6 peer of `floatClose_relu`,
+    ⚠ with the clamp — `floatClose_relu`'s `FloatClose A A` is the best `relu` can do, and
+    stating `FloatClose A A` here would throw the clamp away. -/
 theorem floatClose_relu6 {n : Nat} (A : ℝ) :
-    FloatClose A A (relu6 n) (relu6 n) (fun e => e) :=
-  ⟨fun v hv i => ⟨(relu6_abs_le v i).trans (hv i), (relu6_abs_le v i).trans (hv i)⟩,
+    FloatClose A (min A 6) (relu6 n) (relu6 n) (fun e => e) :=
+  ⟨fun v hv i =>
+     have h : |relu6 n v i| ≤ min A 6 :=
+       le_min ((relu6_abs_le v i).trans (hv i)) (relu6_le_six v i)
+     ⟨h, h⟩,
    fun vt va e _ _ hd i => relu6_close vt va e hd i⟩
 
-/-- **relu6 float-bridges** (magnitude-preserving, modulus id). -/
+/-- **relu6 float-bridges** (magnitude `A ↦ min A 6`, modulus id). -/
 theorem floatBridges_relu6 {n : Nat} : FloatBridges (relu6 n) :=
-  fun A hA => ⟨A, _, _, hA, floatClose_relu6 A⟩
+  fun A hA => ⟨min A 6, _, _, le_min hA (by norm_num), floatClose_relu6 A⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The inverted-residual stage bridges (per-channel BN supplied)
@@ -243,9 +259,177 @@ theorem mnv2Forward_floatBridges (M : FloatModel)
 -- § The same fold, with the float net NAMED (`FloatBridgesTo` migration)
 -- ════════════════════════════════════════════════════════════════
 
-/-- ReLU6 float-bridges to itself (clamp-and-select rounds nothing). -/
+/-- ReLU6 float-bridges to itself (clamp-and-select rounds nothing), with the clamp kept:
+    `mag A = min A 6`, `mod = id`. -/
 noncomputable def floatBridgesTo_relu6 {n : Nat} : FloatBridgesTo (relu6 n) (relu6 n) :=
-  ⟨fun A => A, fun _ e => e, fun A hA => ⟨hA, floatClose_relu6 A⟩⟩
+  ⟨fun A => min A 6, fun _ e => e, fun A hA => ⟨le_min hA (by norm_num), floatClose_relu6 A⟩⟩
+
+-- ════════════════════════════════════════════════════════════════
+-- § The inverted-residual body with its NORMALISATION abstract
+--   (the `rblkGen` pattern: ONE set of block bridges for training AND inference)
+-- ════════════════════════════════════════════════════════════════
+
+/-! `ivExpandPC`/`ivDepthwisePC`/`ivDepthwiseStridedPC`/`ivProjectPC` hard-wire
+`bnPerChannelTensor3` — training-mode BatchNorm, whose modulus is quadratic in the window
+(`planning/float_budget_numbers.md` §0.1). The deployed inference net is the same skeleton at
+`bnPerChannelEvalTensor3`. Rather than a second copy of every stage, bridge and envelope, the
+stages below take the normalisation as an argument, exactly as `rblkGen` does for ResNet-34:
+`*PC_eq_gen` is `rfl` in each direction, so one set of block bridges serves both modes and the
+choice of BN becomes an argument rather than a second proof. -/
+
+/-- Expand stage with its normalisation abstract: `relu6 ∘ bn ∘ conv(1×1)`. -/
+@[reducible] noncomputable def ivExpandGen {ic mid h w kHe kWe : Nat}
+    (We : Kernel4 mid ic kHe kWe) (be : Vec mid)
+    (bne : Vec (mid * h * w) → Vec (mid * h * w)) :
+    Vec (ic * h * w) → Vec (mid * h * w) :=
+  relu6 (mid * h * w) ∘ bne ∘ flatConv We be
+
+/-- Depthwise stage (stride-1) with its normalisation abstract. -/
+@[reducible] noncomputable def ivDepthwiseGen {mid h w kHd kWd : Nat}
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bnd : Vec (mid * h * w) → Vec (mid * h * w)) :
+    Vec (mid * h * w) → Vec (mid * h * w) :=
+  relu6 (mid * h * w) ∘ bnd ∘ depthwiseFlat Wd bd
+
+/-- Depthwise stage (stride-2 downsample) with its normalisation abstract. -/
+@[reducible] noncomputable def ivDepthwiseStridedGen {mid h w kHd kWd : Nat}
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bnd : Vec (mid * h * w) → Vec (mid * h * w)) :
+    Vec (mid * (2 * h) * (2 * w)) → Vec (mid * h * w) :=
+  relu6 (mid * h * w) ∘ bnd ∘ depthwiseStride2Flat Wd bd
+
+/-- Project (linear bottleneck) stage with its normalisation abstract — no relu6, so this is
+    the one stage of the block that does NOT reset the window. -/
+@[reducible] noncomputable def ivProjectGen {mid oc h w kHp kWp : Nat}
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc)
+    (bnp : Vec (oc * h * w) → Vec (oc * h * w)) :
+    Vec (mid * h * w) → Vec (oc * h * w) :=
+  bnp ∘ flatConv Wp bp
+
+/-- **The stride-1 inverted-residual body with its normalisations abstract.** -/
+@[reducible] noncomputable def invresBodyGen {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+    (We : Kernel4 mid ic kHe kWe) (be : Vec mid)
+    (bne : Vec (mid * h * w) → Vec (mid * h * w))
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bnd : Vec (mid * h * w) → Vec (mid * h * w))
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc)
+    (bnp : Vec (oc * h * w) → Vec (oc * h * w)) :
+    Vec (ic * h * w) → Vec (oc * h * w) :=
+  ivProjectGen (h := h) (w := w) Wp bp bnp ∘
+    (ivDepthwiseGen (h := h) (w := w) Wd bd bnd ∘ ivExpandGen (h := h) (w := w) We be bne)
+
+/-- **The stride-2 inverted-residual body with its normalisations abstract** — the expand runs
+    at `2h×2w`, the depthwise decimates. -/
+@[reducible] noncomputable def invresBodyStridedGen {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+    (We : Kernel4 mid ic kHe kWe) (be : Vec mid)
+    (bne : Vec (mid * (2 * h) * (2 * w)) → Vec (mid * (2 * h) * (2 * w)))
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bnd : Vec (mid * h * w) → Vec (mid * h * w))
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc)
+    (bnp : Vec (oc * h * w) → Vec (oc * h * w)) :
+    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+  ivProjectGen (h := h) (w := w) Wp bp bnp ∘
+    (ivDepthwiseStridedGen (h := h) (w := w) Wd bd bnd ∘
+      ivExpandGen (h := 2 * h) (w := 2 * w) We be bne)
+
+/-- `invresBodyPC` IS `invresBodyGen` at the training-mode per-channel BN. -/
+theorem invresBodyPC_eq_gen {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+    (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) :
+    invresBodyPC (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp
+      = invresBodyGen (h := h) (w := w) We be (bnPerChannelTensor3 mid h w εe γe βe)
+          Wd bd (bnPerChannelTensor3 mid h w εd γd βd)
+          Wp bp (bnPerChannelTensor3 oc h w εp γp βp) := rfl
+
+/-- `invresBodyStridedPC` IS `invresBodyStridedGen` at the training-mode per-channel BN. -/
+theorem invresBodyStridedPC_eq_gen {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+    (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) :
+    invresBodyStridedPC (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp
+      = invresBodyStridedGen (h := h) (w := w) We be
+          (bnPerChannelTensor3 mid (2 * h) (2 * w) εe γe βe)
+          Wd bd (bnPerChannelTensor3 mid h w εd γd βd)
+          Wp bp (bnPerChannelTensor3 oc h w εp γp βp) := rfl
+
+/-- **The float stride-1 inverted-residual body** — three rounded convolutions, three supplied
+    float normalisations, `relu6` unchanged (exact in float). -/
+noncomputable def invresBodyGenF {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat} (M : FloatModel)
+    (We : Kernel4 mid ic kHe kWe) (be : Vec mid)
+    (bneF : Vec (mid * h * w) → Vec (mid * h * w))
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bndF : Vec (mid * h * w) → Vec (mid * h * w))
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc)
+    (bnpF : Vec (oc * h * w) → Vec (oc * h * w)) :
+    Vec (ic * h * w) → Vec (oc * h * w) :=
+  (bnpF ∘ M.flatConvF (h := h) (w := w) Wp bp) ∘
+    ((relu6 (mid * h * w) ∘ bndF ∘ M.depthwiseFlatF (h := h) (w := w) Wd bd) ∘
+      (relu6 (mid * h * w) ∘ bneF ∘ M.flatConvF (h := h) (w := w) We be))
+
+/-- **The float stride-2 inverted-residual body.** -/
+noncomputable def invresBodyStridedGenF {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+    (M : FloatModel) (We : Kernel4 mid ic kHe kWe) (be : Vec mid)
+    (bneF : Vec (mid * (2 * h) * (2 * w)) → Vec (mid * (2 * h) * (2 * w)))
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bndF : Vec (mid * h * w) → Vec (mid * h * w))
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc)
+    (bnpF : Vec (oc * h * w) → Vec (oc * h * w)) :
+    Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=
+  (bnpF ∘ M.flatConvF (h := h) (w := w) Wp bp) ∘
+    ((relu6 (mid * h * w) ∘ bndF ∘ M.depthwiseStride2FlatF (h := h) (w := w) Wd bd) ∘
+      (relu6 (mid * (2 * h) * (2 * w)) ∘ bneF ∘ M.flatConvF (h := 2 * h) (w := 2 * w) We be))
+
+/-- **The stride-1 inverted-residual body float-bridges TO its float body**, generic in the
+    three normalisations — the mnv2 peer of `floatBridgesTo_r34IdBlock`. Eight `.comp` steps:
+    conv, BN, relu6, depthwise, BN, relu6, conv, BN. -/
+noncomputable def floatBridgesTo_invresBodyGen {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+    (M : FloatModel) (We : Kernel4 mid ic kHe kWe) (be : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc)
+    (bne bneF bnd bndF : Vec (mid * h * w) → Vec (mid * h * w))
+    (bnp bnpF : Vec (oc * h * w) → Vec (oc * h * w))
+    {w' β' : ℝ} (hw' : 0 ≤ w') (hβ' : 0 ≤ β')
+    (hni : 0 < ic * h * w) (hnm : 0 < mid * h * w)
+    (hWe : ∀ o c kh kw, |We o c kh kw| ≤ w') (hbe : ∀ o, |be o| ≤ β')
+    (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ w') (hbd : ∀ ch, |bd ch| ≤ β')
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ w') (hbp : ∀ o, |bp o| ≤ β')
+    (hbne : FloatBridgesTo bne bneF) (hbnd : FloatBridgesTo bnd bndF)
+    (hbnp : FloatBridgesTo bnp bnpF) :
+    FloatBridgesTo (invresBodyGen (h := h) (w := w) We be bne Wd bd bnd Wp bp bnp)
+      (invresBodyGenF M We be bneF Wd bd bndF Wp bp bnpF) :=
+  ((((((floatBridgesTo_flatConv (h := h) (w := w) M We be hw' hβ' hni hWe hbe).comp hbne).comp
+        floatBridgesTo_relu6).comp
+      (floatBridgesTo_depthwise (h := h) (w := w) M Wd bd hw' hβ' hnm hWd hbd)).comp hbnd).comp
+    floatBridgesTo_relu6).comp
+    ((floatBridgesTo_flatConv (h := h) (w := w) M Wp bp hw' hβ' hnm hWp hbp).comp hbnp)
+
+/-- **The stride-2 inverted-residual body float-bridges TO its float body**, generic in the
+    three normalisations. Same eight steps with the expand at `2h×2w` and the strided
+    depthwise. -/
+noncomputable def floatBridgesTo_invresBodyStridedGen
+    {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+    (M : FloatModel) (We : Kernel4 mid ic kHe kWe) (be : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc)
+    (bne bneF : Vec (mid * (2 * h) * (2 * w)) → Vec (mid * (2 * h) * (2 * w)))
+    (bnd bndF : Vec (mid * h * w) → Vec (mid * h * w))
+    (bnp bnpF : Vec (oc * h * w) → Vec (oc * h * w))
+    {w' β' : ℝ} (hw' : 0 ≤ w') (hβ' : 0 ≤ β')
+    (hni : 0 < ic * (2 * h) * (2 * w)) (hnm2 : 0 < mid * (2 * h) * (2 * w))
+    (hnm : 0 < mid * h * w)
+    (hWe : ∀ o c kh kw, |We o c kh kw| ≤ w') (hbe : ∀ o, |be o| ≤ β')
+    (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ w') (hbd : ∀ ch, |bd ch| ≤ β')
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ w') (hbp : ∀ o, |bp o| ≤ β')
+    (hbne : FloatBridgesTo bne bneF) (hbnd : FloatBridgesTo bnd bndF)
+    (hbnp : FloatBridgesTo bnp bnpF) :
+    FloatBridgesTo (invresBodyStridedGen (h := h) (w := w) We be bne Wd bd bnd Wp bp bnp)
+      (invresBodyStridedGenF M We be bneF Wd bd bndF Wp bp bnpF) :=
+  ((((((floatBridgesTo_flatConv (h := 2 * h) (w := 2 * w) M We be hw' hβ' hni hWe hbe).comp
+          hbne).comp floatBridgesTo_relu6).comp
+      (floatBridgesTo_depthwiseStride2Flat (h := h) (w := w) M Wd bd hw' hβ' hnm2
+        hWd hbd)).comp hbnd).comp floatBridgesTo_relu6).comp
+    ((floatBridgesTo_flatConv (h := h) (w := w) M Wp bp hw' hβ' hnm hWp hbp).comp hbnp)
 
 /-- **The float MobileNetV2 forward skeleton** — `mnv2Forward` with each concrete
     slot replaced by the model's rounded peer and each supplied slot by that

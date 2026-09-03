@@ -190,6 +190,8 @@ def lean_num(x: F) -> str:
     """A 4-significant-figure rational as a Lean literal."""
     if x == 0:
         return "0"
+    if x.denominator == 1 and x < 10000:
+        return str(x.numerator)          # the relu6 clamp's window is exactly `6`
     e = ilog10(x) - 3
     m = x / (F(10) ** e)
     assert m.denominator == 1 and 1000 <= m <= 9999, (m, e)
@@ -270,49 +272,151 @@ def verify_r34(rows) -> int:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# MobileNetV2 @224², INFERENCE BatchNorm — PREDICTED fold (no Lean chain yet)
+# MobileNetV2 @224², INFERENCE BatchNorm (the deployed eval forward)
 # ════════════════════════════════════════════════════════════════════════════
 #
-# ⚠ Unlike `r34_eval_chain` this has no `verify_*` peer and no Lean chain to assert
-# against: it is the sizing estimate `planning/float_budget_numbers.md` §3.2 quotes, and
-# the next session must re-derive the stage list from `MobileNetV2RenderPC.lean` before
-# emitting numerals from it. Profile measured on
-# /home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin: global max |·| = 2.7157.
+# Profile measured on /home/skoonce/mnv2_350ep/mobilenet_v2_imagenet.bin (3.5M f32):
+# global max |·| = 2.7157, 99.99th percentile 1.53, two entries above 2 — so a uniform
+# |·| ≤ 28/10 covers every stored parameter with room, the r34 pattern. ε ≥ 10⁻⁵ ⇒
+# 1/√ε ≤ 317; `es` is the SUPPLIED device-rsqrt accuracy (no IEEE spec, so modelled).
+#
+# ⭐ The one structural difference from r34: `relu6 x i = min (max (x i) 0) 6` is bounded
+# by 6 WHATEVER its input, so `floatClose_relu6`'s `FloatClose A (min A 6)` RESETS the
+# window at every expand/depthwise site. Every BN in this net outputs a window far above
+# 6, so every relu6 stage emits exactly `6` and the fold is periodic in the window. The
+# BUDGET is unmoved by that — it is driven by the per-site error gain `G·S`, i.e. by the
+# ε-floor `S = 1/√ε`. Window and budget are separate levers; only `S` moves the budget.
 
 MNV2_W = F(28, 10)      # every stored parameter, uniformly
+MNV2_S = F(317)         # 1/√ε at ε ≥ 1e-5
+MNV2_ES = F(1, 100)     # device rsqrt accuracy
+
+# (tag, kind, expand fan-in = ic, project fan-in = mid); depthwise fan-in is kH·kW = 9.
+# Read off `mobilenetv2Forward_full_pc` (MobileNetV2RenderPC.lean): b1/b3/b5/b6 are
+# `invresBodyStridedPC` (no skip — channels and/or spatial change), b2/b4 are
+# `residual (invresBodyPC …)`.
+MNV2_PLAN = [("b1", "strided", 16, 64), ("b2", "skip", 24, 96),
+             ("b3", "strided", 24, 96), ("b4", "skip", 32, 128),
+             ("b5", "strided", 32, 128), ("b6", "strided", 64, 256)]
 
 
-def mnv2_eval_chain(S=F(317), relu6_clamp=True, w=MNV2_W, es=F(1, 100), q=U32):
-    """Fold the MobileNetV2 inference forward. `relu6_clamp` models the ONE-LINE
-    `floatClose_relu6` strengthening `FloatClose A A` -> `FloatClose A (min A 6)`:
-    `relu6 x i = min (max (x i) 0) 6` is bounded by 6 whatever its input, so every
-    expand/depthwise stage RESETS the window. Without it the window compounds to 1e100;
-    with it the window is ~1e3. The BUDGET is nearly unmoved either way — it is driven by
-    the per-site error gain `G*S`, i.e. by the eps-floor `S = 1/sqrt(eps)`."""
+def bn_eval_mnv2(st, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32):
     G = Bb = Mb = w
+    A, E = st
+    nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
+    return (G * ((A + Mb) * S) + Bb + nb, nb + G * S * E)
 
-    def bnE(st):
-        A, E = st
-        nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
-        return (G * ((A + Mb) * S) + Bb + nb, nb + G * S * E)
 
+def relu6(st):
+    """`Maps.relu6`: window `min Ā 6` (the clamp), error unchanged (relu6 is exact in
+    float and 1-Lipschitz). The half of the clamp `Maps.relu` does not have."""
+    return (min(st[0], F(6)), st[1])
+
+
+def mnv2_eval_chain(S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32, relu6_clamp=True):
+    """Every stage of the deployed MobileNetV2 eval forward, at block granularity.
+
+    Yields (tag, (window, budget)) after each numeric step, in exactly the order the Lean
+    `Maps` chain composes them. `relu6_clamp=False` reverts to the pre-2026-09-03 leaf
+    (`FloatClose A A`, the clamp thrown away) and is kept only to reproduce the "window
+    compounds to 10¹⁰⁰ instead of 10³" comparison in planning/float_budget_numbers.md."""
     def R(st):
         return (r4(st[0]), r4(st[1]))
 
     def r6(st):
-        return (min(st[0], F(6)) if relu6_clamp else st[0], st[1])
+        return R(relu6(st)) if relu6_clamp else st
 
+    def bnE(st):
+        return R(bn_eval_mnv2(st, S, w, es, q))
+
+    def cv(st, m):
+        return R(conv(st, m, w, w))
+
+    out = []
     st = (F(1), F(0))
-    st = R(conv(st, 3 * 3 * 3, w, w)); st = R(bnE(st)); st = r6(st)       # stem 3x3/s2
-    # (skip?, expand fan-in = ic, project fan-in = mid); depthwise fan-in is kH*kW = 9
-    for skip, fe, fp in [(False, 16, 64), (True, 24, 96), (False, 24, 96),
-                         (True, 32, 128), (False, 32, 128), (False, 64, 256)]:
+    st = cv(st, 3 * 3 * 3);  out.append(("stem.conv", st))    # 3×3/s2 stem
+    st = bnE(st);            out.append(("stem.bn", st))
+    st = r6(st);             out.append(("stem.r6", st))
+    for tag, kind, fe, fp in MNV2_PLAN:
         blkin = st
-        s = R(conv(st, fe, w, w)); s = R(bnE(s)); s = r6(s)               # expand 1x1
-        s = R(conv(s, 9, w, w));   s = R(bnE(s)); s = r6(s)               # depthwise 3x3
-        s = R(conv(s, fp, w, w));  s = R(bnE(s))                          # project 1x1, no relu6
-        st = R(residual(blkin, s)) if skip else s
-    st = R(conv(st, 64, w, w)); st = R(bnE(st)); st = r6(st)              # head 1x1
-    st = R(gap(st, 49))
-    st = R(dense(st, 128, w, w))
-    return st
+        s = cv(blkin, fe);   out.append((f"{tag}.econv", s))  # expand 1×1
+        s = bnE(s);          out.append((f"{tag}.ebn", s))
+        s = r6(s);           out.append((f"{tag}.er6", s))
+        s = cv(s, 9);        out.append((f"{tag}.dw", s))     # depthwise 3×3 (fan-in 9)
+        s = bnE(s);          out.append((f"{tag}.dbn", s))
+        s = r6(s);           out.append((f"{tag}.dr6", s))
+        s = cv(s, fp);       out.append((f"{tag}.pconv", s))  # project 1×1 (no relu6)
+        s = bnE(s);          out.append((f"{tag}.pbn", s))
+        if kind == "skip":
+            s = R(residual(blkin, s, q)); out.append((f"{tag}.out", s))
+        st = s
+    st = cv(st, 64);         out.append(("head.conv", st))    # head 1×1, 64 → 128
+    st = bnE(st);            out.append(("head.bn", st))
+    st = r6(st);             out.append(("head.r6", st))
+    st = R(gap(st, 49, q));  out.append(("gap", st))
+    st = R(dense(st, 128, w, w)); out.append(("dense", st))
+    return out
+
+
+def verify_mnv2(rows, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32) -> int:
+    """Re-assert EVERY rounded inequality the Lean chain closes, exactly.
+
+    The peer of `verify_r34`, and the pass §3.2 step 6 called for: each stage's emitted
+    numeral must still dominate the exact value computed from the PREVIOUS stage's emitted
+    numerals, which is exactly what the kernel checks. On r34 this pass is what caught the
+    rounded-γ bug. Returns the count checked; raises on the first failure."""
+    G = Bb = Mb = w
+    r = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: {float(lhs)} > {float(rhs)}"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2))
+        ck(tag + ".A", (1 + g) * (m * w * A + w), dst[0])
+        ck(tag + ".E", g * (m * w * (A + E) + w) + m * w * E, dst[1])
+
+    def bn_ck(tag, src, dst):
+        A, E = src
+        nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
+        ck(tag + ".A", G * ((A + Mb) * S) + Bb + nb, dst[0])
+        ck(tag + ".E", nb + G * S * E, dst[1])
+
+    def r6_ck(tag, src, dst):
+        ck(tag + ".A", min(src[0], F(6)), dst[0])
+        ck(tag + ".E", src[1], dst[1])
+
+    conv_ck("stem.conv", 3 * 3 * 3, (F(1), F(0)), r["stem.conv"])
+    bn_ck("stem.bn", r["stem.conv"], r["stem.bn"])
+    r6_ck("stem.r6", r["stem.bn"], r["stem.r6"])
+    st = r["stem.r6"]
+    for tag, kind, fe, fp in MNV2_PLAN:
+        blkin = st
+        conv_ck(f"{tag}.econv", fe, blkin, r[f"{tag}.econv"])
+        bn_ck(f"{tag}.ebn", r[f"{tag}.econv"], r[f"{tag}.ebn"])
+        r6_ck(f"{tag}.er6", r[f"{tag}.ebn"], r[f"{tag}.er6"])
+        conv_ck(f"{tag}.dw", 9, r[f"{tag}.er6"], r[f"{tag}.dw"])
+        bn_ck(f"{tag}.dbn", r[f"{tag}.dw"], r[f"{tag}.dbn"])
+        r6_ck(f"{tag}.dr6", r[f"{tag}.dbn"], r[f"{tag}.dr6"])
+        conv_ck(f"{tag}.pconv", fp, r[f"{tag}.dr6"], r[f"{tag}.pconv"])
+        bn_ck(f"{tag}.pbn", r[f"{tag}.pconv"], r[f"{tag}.pbn"])
+        st = r[f"{tag}.pbn"]
+        if kind == "skip":
+            A4, E4 = st
+            ck(f"{tag}.resA", A4 + blkin[0] + q * (A4 + blkin[0]), r[f"{tag}.out"][0])
+            ck(f"{tag}.resE", q * (A4 + E4 + blkin[0] + blkin[1]) + (E4 + blkin[1]),
+               r[f"{tag}.out"][1])
+            st = r[f"{tag}.out"]
+    conv_ck("head.conv", 64, st, r["head.conv"])
+    bn_ck("head.bn", r["head.conv"], r["head.bn"])
+    r6_ck("head.r6", r["head.bn"], r["head.r6"])
+    g50 = r4(gamma_q(49 + 1))
+    A, E = r["head.r6"]
+    ck("gap.A", A * ((1 + g50) * (1 + q)), r["gap"][0])
+    ck("gap.E", A * (q * (1 + g50) + g50) + E, r["gap"][1])
+    conv_ck("dense", 128, r["gap"], r["dense"])
+    return n
