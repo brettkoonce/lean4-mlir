@@ -104,6 +104,7 @@ import LeanMlir.Proofs.Float.FloatBudgetEnvLN
 import LeanMlir.Proofs.Float.FloatBudgetEnvAttn
 import LeanMlir.Proofs.Float.ViTBlockVFloatBridge
 import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
+import LeanMlir.Proofs.Float.ViTFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2389,6 +2390,30 @@ open Proofs
 -- The tie: the bridged skeleton IS the committed convNextForwardTCh, head LayerNorm included.
 #print axioms Proofs.cnxForward_eq_committed
 #print axioms Proofs.cnx_float_logits_le_committed
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- ViT-Tiny's NUMBER (ViTFloatBudget.lean) — the fifth ImageNet-scale whole-net float statement,
+-- window 3.612e218 / budget 7.222e218 on the committed depth-12 vector-LN vitForwardKV @ 224².
+-- ⛔ The CAP, not the fold, and more thoroughly than ConvNeXt: all 25 LayerNorm sites AND all 12
+-- attention sites go through FloatBridgesTo.capped, so no stage inside a block is a fold. The
+-- patch embed is the one honest stage (it does not reduce). budget/window = 2.00 is the tell.
+-- ⭐ DeviceLN/DeviceGelu moved to the kit and DeviceExp joined them — its spec is RELATIVE,
+-- because softmaxF_close divides one exponential sum by another and only a relative error
+-- survives the quotient.
+#print axioms Proofs.DeviceLN.bridgeAt
+#print axioms Proofs.DeviceLN.mapsAt
+#print axioms Proofs.vitScale64
+#print axioms Proofs.vit_smRho_lt_one
+#print axioms Proofs.vit_smCap_le
+#print axioms Proofs.vitProfile_committed
+#print axioms Proofs.vitForwardTinyF
+#print axioms Proofs.vitBridge
+#print axioms Proofs.vitBridge_maps
+#print axioms Proofs.vitBridge_mag_le
+#print axioms Proofs.vitBridge_fresh_le
+#print axioms Proofs.vit_float_logits_le
+-- The tie: the committed spec's denotation (vitVerified_denote_eq, rfl) — the same function
+-- vitVerified_fwd_faithful says the emitted depth-12 multi-head vector-LN graph denotes.
+#print axioms Proofs.vit_float_logits_le_committed
 -- ⭐ GELU is globally 3/2-Lipschitz (Architectures/GeluSaturation.lean), and floatClose_gelu now
 -- states the min of that and its magnitude polynomial. The polynomial is CUBIC in the window and
 -- reaches ~400 at ConvNeXt's magnitudes against a true constant of ≈1.13; the saturation bound was

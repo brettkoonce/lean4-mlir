@@ -218,6 +218,12 @@ status:
       axioms: ["propext", "Quot.sound", "Classical.choice"]
       comparator_config: ""
       literature_dependencies: []
+    - declaration: "vit_float_logits_le"   # ⛔ the fifth ImageNet-scale statement, ConvNeXt's KIND not r34's: the committed depth-12 vector-LN ViT-Tiny forward's float logits are within 7.222e218 of the real ones on |x| <= 1, at the per-kind measured profile (attention kernels <= 7/10, MLP <= 8/10, patch conv <= 3/10, head <= 4/10, biases <= 9/10, LN-gamma <= 17/10, LN-beta <= 6/10), eps >= 1e-5, device LN statistics / GELU / exp accurate to 1e-2, u <= 2^-24. budget/window = 2.00 because all 25 LayerNorm sites AND all 12 attention sites go through FloatBridgesTo.capped -- the TRIANGLE INEQUALITY, not the fold; the patch embed is the one honest stage. ⚠ Also carries the softmax side condition smRho u eexp 197 < 1 (fidelity.divergences 4d)
+      file: "LeanMlir/Proofs/Float/ViTFloatBudget.lean"
+      sorry_count: 0
+      axioms: ["propext", "Quot.sound", "Classical.choice"]
+      comparator_config: ""
+      literature_dependencies: []
     - declaration: "cifar8_chain_argmaxSafeH"   # float capstone at the COMMITTED CIFAR-8 shape: given measured tail gains, binary32 rounding cannot flip the prediction. Chain = cifar8Verified.layers op for op; no window side condition. ⚠ budget >= 1.8e13 at He magnitudes (bᵢ at worst-case propagated windows), so hmargin holds there only at u = 0 -- fidelity.divergences 4c "NOT BITING". (v1 cifar8_chain_argmaxSafe is depth-generic only)
       file: "LeanMlir/Proofs/Architectures/Cifar8ChainCert.lean"
       sorry_count: 0
@@ -711,6 +717,65 @@ fidelity:
        ConvNeXt's magnitudes -- and the global saturation constant `(3/2)*e`, which was already
        proved in this repo for the adjoint chain and sat one import ABOVE the float bridge that
        needed it. Same shape as swish's fix, and the same lesson: the bound was already there.
+
+       ⛔⛔ A FIFTH, AND THE CAP AGAIN -- MORE THOROUGHLY (2026-09-03): `ViTFloatBudget.lean`.
+       `vitBridge` is the committed depth-12 vector-LN `vitForwardKV` at 224² -- 16x16/s16 patch
+       embed with CLS token and learned positions, twelve pre-norm blocks of
+       LN / 3-head attention / skip / LN / fc1 / GELU / fc2 / skip, a final per-token LayerNorm,
+       the CLS slice and the classifier -- as a CLOSED bridge, and `vitBridge_maps` pushes the
+       envelope through its 162 numeric stages (324 rational inequalities, generated AND
+       re-asserted by `scripts/float_budget_envelope.py`'s `vit_chain` / `verify_vit`). At the
+       profile measured per parameter KIND on the trained checkpoint, `eps >= 1e-5`, unit input
+       window and `u <= 2^-24`:
+           output window  <= 3.612e218      (vitBridge_mag_le)
+           fresh budget   <= 7.222e218      (vitBridge_fresh_le)
+       and per logit `|float - real| <= 7.222e218` (`vit_float_logits_le`), restated on the
+       committed spec's denotation by `vit_float_logits_le_committed` (`vitVerified_denote_eq`
+       is `rfl`; `vitVerified_fwd_faithful` says the emitted depth-12 multi-head vector-LN graph
+       denotes the same function). FOUR modelled hypotheses, all named: `DeviceLN` (`emr`
+       relative, `ei` absolute), `DeviceGelu` (`egelu`), `DeviceExp` (`eexp` -- ⚠ RELATIVE,
+       because `softmaxF_close` divides one exponential sum by another and only a relative error
+       survives the quotient), all at 1e-2, plus the softmax side condition
+       `smRho u eexp 197 < 1` (= 0.010012, `vit_smRho_lt_one`).
+
+       ⛔ IT IS NOT A FOLD EITHER, and less of one than ConvNeXt-T. `budget / window = 2.00`
+       again, and here BOTH families of site are capped: all 25 LayerNorm sites and all 12
+       attention sites, so there is no stage inside a ViT block at which the fold survives and
+       the two skips per block carry that forward. The ONE honest stage is the patch embed
+       (window 232.3 from a unit image, rounding 5.633e-4): it does not reduce, its modulus is
+       linear in the inherited error, and at the net's input that error is 0.
+
+       ⭐⭐ AND THE SECOND CAP IS A DIFFERENT KIND OF NECESSITY -- REPRESENTABILITY, NOT SIZE.
+       LayerNorm uncapped is the ConvNeXt story at 1e3239 (a magnitude failure). Attention is
+       not: `floatBridges_mhProjAttnFull`'s WINDOW is derived as `|real| + |float - real|`, so it
+       carries `smErr`'s `Real.exp (2*delta)` at `delta ≈ 3.6e10` by block 0 -- an argument with
+       no rational bound -- and 36 stage numerals CANNOT BE WRITTEN AT ALL, at a magnitude
+       SMALLER than the shipped one (8.257e190 vs 3.612e218). Capping does not reach it, because
+       `capped` replaces the modulus and never the window. `floatClose_mhProjAttnFullCap` does:
+       `FloatClose`'s magnitude clause bounds the FLOAT output directly, and the float output is
+       a rounded dot of float softmax weights (<= 1 + smCap, exp-free) against float V. That is
+       `floatClose_seScale`'s fix one net later, and the same sentence closes both: the error
+       never needed to enter the window. ⚠ A Python fold HIDES this failure mode -- `math.expm1`
+       overflows to a finite float and the chain sails on -- so `vit_chain` returns an
+       `exp_tainted` tag list and "statable" means small enough AND writable.
+
+       ⭐ ATTENTION IS ONE LEAF, AND SO IS THE PATCH EMBED. `FloatBridgesTo` composes
+       single-input maps; attention fans out (X -> Q,K,V) before it rejoins, and
+       `patchEmbed_flat` is a single definition with an `if n.val = 0` branch selecting the CLS
+       token. Neither is the composition the emitted GRAPH spells, and an earlier probe that
+       decomposed both at graph granularity produced a number (1.065e191) for a chain that
+       cannot be written. The graph says what the kernel does; the definition says what the
+       theorem is about, and only the second constrains a `Maps` chain.
+
+       ⚠ THREE THINGS THE PLAN BUDGETED FOR TURNED OUT NOT TO BE LOAD-BEARING, and they are the
+       inverse of ConvNeXt's lessons. (a) The per-kind profile split buys 18 vacuous orders here,
+       not statability: ViT-Tiny's kinds are 2.5x apart where ConvNeXt's are 14x, because
+       ConvNeXt's outlier is the LAYER SCALE (inside every block) and ViT's is the FINAL
+       LayerNorm gamma (after everything, multiplying only the head) -- the uniform bound is
+       statable at 1e237. (b) GELU's saturation constant gives an IDENTICAL number, because the
+       next capped LN resets the error anyway; `Maps.gelu` stays on the 3/2 branch for a
+       RATIONALITY reason (the polynomial carries sqrt(2/pi)), not a size one. (c) The convex
+       attention-times-V bound would buy 27 orders and is NOT proved and NOT needed.
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R`
        (definitionally Mathlib's `Matrix (Fin m) (Fin n) R`) with its own

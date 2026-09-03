@@ -381,6 +381,17 @@ lean_lib «Certs» where
              -- one uniform 8.4 is 14x loose on the entries the conv fan-in multiplies and puts
              -- the fold at 1e301, past what norm_num will evaluate.
              `LeanMlir.Proofs.Float.ConvNeXtFloatBudget,
+             -- ViT-Tiny's NUMBER: the committed depth-12 vector-LN vitForwardKV at 224²,
+             -- window 3.612e218 / budget 7.222e218 at the per-kind measured profile, eps >= 1e-5,
+             -- device LN statistics / GELU / exp accurate to 1e-2. ⛔ The CAP again, and more
+             -- thoroughly than ConvNeXt: all 25 LayerNorm sites AND all 12 attention sites are
+             -- capped, so no stage inside a block is a fold — the patch embed is the one that
+             -- is. ⭐ Attention is ONE leaf (FloatBridgesTo composes single-input maps and
+             -- attention fans out), at an EXP-FREE window: floatBridges_mhProjAttnFull's window
+             -- is |real| + |float-real| and carries Real.exp at δ ≈ 3.6e10, so 36 stage numerals
+             -- could not be written at all — a representability failure at a SMALLER magnitude,
+             -- which capping cannot fix (capped replaces the modulus, never the window).
+             `LeanMlir.Proofs.Float.ViTFloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network

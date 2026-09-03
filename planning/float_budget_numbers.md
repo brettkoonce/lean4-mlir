@@ -1,20 +1,37 @@
-# Whole-net float budgets as NUMBERS: five nets landed; ViT-Tiny is PROBED and reachable
+# Whole-net float budgets as NUMBERS: six nets landed, and ViT-Tiny is DONE
 
 Written 2026-09-02; revised 2026-09-03 after ResNet-34, MobileNetV2, EfficientNet-B0 and
-ConvNeXt-T, and again the same day after ViT-Tiny's sizing probe.
+ConvNeXt-T, again the same day after ViT-Tiny's probe and its four Lean chunks, and finally
+after **`ViTFloatBudget.lean`** — the number itself.
 
-**Picking this up cold?** Read §0.1 (the one structural finding) and §9 (⛔ what the ConvNeXt
-number is and is not), then §3.5 (ViT-Tiny — probed 2026-09-03, reachable at 10¹⁹¹, no Lean
-written yet) and §3.5.2 (the order of work, which starts with a tier migration nobody had
-costed). §7 is the checklist you run before every commit — including the "stage, then STOP and
-ask" rule.
+**Picking this up cold?** ⭐⭐ **Every forward in §0's table now carries a kernel-checked
+number, ViT-Tiny included** — `vit_float_logits_le` / `vit_float_logits_le_committed`, window
+**3.612·10²¹⁸** / budget **7.222·10²¹⁸**, tied to the committed spec's denotation. Nothing in §3
+is open. What is left is phase 2, the backwards (§3.7).
 
-⭐ The single most useful habit from the five nets that landed: **when a fold overshoots, ablate
+Read in this order: §0.1 (the one structural finding, with two failure modes not one), §9
+(⛔ what a capped number is and is not — ViT's and ConvNeXt's are entirely of that kind), then
+§3.5 for the transformer-specific work. §7 is the checklist you run before every commit —
+including the "stage, then STOP and ask" rule.
+
+⭐⭐ **The habit ViT added, and it cost three separate corrections: check that the granularity
+you are folding at is EXPRESSIBLE before you trust the number.** `FloatBridgesTo` composes
+single-input maps, so any op that fans out (attention: `X ↦ Q,K,V`) or that is defined as one
+piece with a branch (the patch embed's `if n.val = 0`) must be ONE leaf — and the first probe had
+decomposed both, at the granularity the emitted GRAPH spells. **The graph says what the kernel
+does; the definition says what the theorem is about, and only the second constrains a `Maps`
+chain.** Read the committed definition before planning a decomposition (§3.5, §3.5.2 item 4).
+
+⭐ The single most useful habit from the five folds that landed: **when a fold overshoots, ablate
 before concluding anything about the architecture.** Four times running the blocker was
 something already true that the statement threw away — relu6's clamp, swish's modulus, seScale's
 window, and then ConvNeXt's **profile** (a uniform parameter bound where the checkpoint has four
 scales 14× apart). Each diagnosis was a Python probe, not a Lean session, and the last of them
 was not a leaf lemma at all — which is the refinement to carry: **ablate the inputs too.**
+⭐ ViT made it five, and the fifth is a repeat of the third: attention's window was derived as
+`|real| + |float − real|` when a direct bound on the FLOAT side was available — `floatClose_seScale`'s
+bug, one net later, and this time it was not merely loose but *unstatable* (§3.5). **When a
+window contains an error term, ask why.**
 
 ## 0. Where we are
 
@@ -24,8 +41,6 @@ was not a leaf lemma at all — which is the refinement to carry: **ablate the i
 `mag`/`mod` explicitly, every leaf writes them out. (Why it had to be data and not `∃ L`:
 `formalization.yaml` fidelity §4d — the `∃`-modulus was discharged by `L := 2B`.)
 
-Five whole nets now carry kernel-checked numbers — ⛔ **but not all five are the same claim.**
-
 | net | window | budget | budget/window | kind | file |
 |---|---|---|---|---|---|
 | CIFAR-8 (8 conv, no BN) | 6.121·10¹⁸ | 6.37·10¹⁴ | 1·10⁻⁴ | fold | `Cifar8FloatBudget.lean` |
@@ -33,13 +48,17 @@ Five whole nets now carry kernel-checked numbers — ⛔ **but not all five are 
 | MobileNetV2 @224², **inference BN** | **2.154·10³** | 1.444·10⁹⁶ | — | fold | `MobileNetV2FloatBudget.lean` |
 | EfficientNet-B0 @224², **inference BN**, batched | 2.580·10⁵⁵ | 8.408·10²¹⁰ | — | fold | `EfficientNetFloatBudget.lean` |
 | ConvNeXt-T @224², channel LN | 4.858·10²²⁷ | 9.706·10²²⁷ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
+| ViT-Tiny @224², depth 12, vector LN | 3.612·10²¹⁸ | 7.222·10²¹⁸ | **2.00** | ⛔ **cap** | `ViTFloatBudget.lean` |
 
-The first four are the interval fold and all four are vacuous as *budgets*; the point is that the
-kernel checks them. **ConvNeXt-T's is the triangle inequality** — its 23 LayerNorm sites all go
-through `FloatBridgesTo.capped`, so it says "the float and the real forward both land in the
-certified window" and not "the rounding error folds to this". `budget/window = 2.00` is the tell,
-and §9 is the rule for saying so. There is no version of ConvNeXt for which the fold exists
-(§0.1), so this is not a weaker choice; it is the only statement available.
+Six nets now carry kernel-checked numbers — ⛔ **but not all six are the same claim.** The first
+four are the interval fold and all four are vacuous as *budgets*; the point is that the kernel
+checks them. **ConvNeXt-T's and ViT-Tiny's are the triangle inequality** — ConvNeXt's 23
+LayerNorm sites and ViT's 25 LayerNorm *and* 12 attention sites all go through
+`FloatBridgesTo.capped`, so they say "the float and the real forward both land in the certified
+window" and not "the rounding error folds to this". `budget/window = 2.00` is the tell, and §9 is
+the rule for saying so. There is no version of either net for which the fold exists (§0.1), so
+this is not a weaker choice; it is the only statement available. ⭐ ViT's ONE honest stage is the
+patch embed — it does not reduce.
 
 The r34 number sits 157 orders above the adjoint chain's proven-H figure for
 the same net (6.5·10⁵¹, `scripts/adjoint_chain_probe.py` §5), and the two documented reasons are
@@ -90,7 +109,13 @@ The machinery built for r34 and reusable for the rest:
   them there would make the ResNet-34 budget depend on the whole MobileNet/EfficientNet cone.
   ⚠ It also carries a worked B0 b1 squeeze-excite site as a compiled `example` — a `Maps` leaf
   nothing composes is a leaf nobody has checked composes.
-* `FloatBudgetEnvLN.lean` — the `Maps` kit a LayerNorm net needs: the capped pure-normalise LN
+* `FloatBudgetEnvLN.lean` — the three **modelled device kernels** (`DeviceLN`, `DeviceGelu`,
+  ⭐ `DeviceExp` — the last added for ViT, and ⚠ its spec is RELATIVE where the other two are
+  absolute, because `softmaxF_close` divides one exponential sum by another and only a relative
+  error survives the quotient), with the capped LN site's bridge `DeviceLN.bridgeAt` and
+  envelope `DeviceLN.mapsAt` built on them; ⚠ they were `ConvNeXtFloatBudget.lean`'s until ViT
+  needed the same three, and that file's `DeviceLN.bridge`/`.maps` are now one-line delegations
+  at its own profile. Plus the `Maps` kit a LayerNorm net needs: the capped pure-normalise LN
   (`Maps.bnCapped`), the two halves of its affine (`diagBack`/`biasAdd`), the gathers and the
   per-row lift they are conjugated by, `gelu` (through the `3/2` branch), `flatConvStride4`, and
   the three composites the whole-net chain walks (`Maps.chanLNTensor3` / `.cnxBlockChW` /
@@ -98,12 +123,29 @@ The machinery built for r34 and reusable for the rest:
 * `Architectures/GeluSaturation.lean` — `geluScalarDeriv_abs_le` / `geluScalar_lipschitz`, moved
   down out of `Certificates/GeluLipschitz.lean` so `floatClose_gelu` can state the `min` of its
   magnitude polynomial and the global `3/2` (§3.3.0(b)).
+* `FloatBudgetEnvAttn.lean` — the `Maps` kit a TRANSFORMER needs on top of the LayerNorm one:
+  `Maps.softmaxRow` (⭐ window `1 + smCap`, CONSTANT in the input — a softmax RESETS the fold),
+  `Maps.mhProjAttnFullCap` (⭐⭐ attention as ONE leaf at an exp-free window) and
+  `Maps.patchEmbed` (⛔ also one leaf — `patchEmbed_flat` is a single definition with an
+  `if n.val = 0` branch, not a composition). Plus the numeral plumbing every ViT stage needs:
+  `smRho_le_of`, `smCap_le`, and `peRoundErrQ` / `patchEmbedRoundErr_le` for the one budget in
+  the repo that is not already stated through a `gamma_num` rational.
+* `ViTBlockVFloatBridge.lean` — the ViT assembly: the four structural ties, the vector-LN block
+  (`floatBridgesTo_blockVFlat` / `Maps.blockVFlat`, 13 stages and 26 inequalities), the depth-`k`
+  fold (`Maps.vitBodyKVFlat`, an envelope fold ConvNeXt does not have), and the whole net
+  (`floatBridgesTo_vitForwardKV` / `Maps.vitForwardKV`). ⭐ Also `FloatBridgesTo.ofEq`, the
+  transport of a bridge along a tie that keeps `mag`/`mod` DEFINITIONAL — `▸` does not, and a
+  bridge whose `.mag` will not reduce cannot carry a `Maps`.
+* `ViTFloatBudget.lean` — the number (731 lines, ⭐ **30 s** to elaborate against ConvNeXt's
+  ~2 min at the same order of inequalities, because `Maps.vitBodyKVFlat` is an envelope fold:
+  the whole-net proof is three `have`s, two `refine`s and twelve block applications, where
+  ConvNeXt's spells all 183 stages out).
 * `scripts/float_budget_envelope.py` — the exact-rational fold in the lemmas' semantics, the
   4-significant-figure round-up, the re-assertion passes (`verify_r34`, 180 inequalities;
   `verify_mnv2`, 116; `verify_b0`, 96; `verify_cnx`, 366) and the numerals. Its CIFAR-8
   regression case reproduces `Cifar8FloatBudget.lean` stage for stage, and `cnx_eval_chain`'s
   three flags (`ln_cap`, `gelu_sat`, `head_ln`) reproduce §3.3's ablation table.
-  ⭐ `vit_chain` (added 2026-09-03) is the ViT-Tiny sizing fold — 236 stages, five flags, and
+  ⭐ `vit_chain` (added 2026-09-03) is the ViT-Tiny sizing fold — 162 stages, five flags, and
   unlike the others it returns `(rows, exp_tainted)`: the tag list of stage numerals that would
   contain a `Real.exp` with no rational bound. "Statable" for a net with a transcendental leaf is
   `max(exponent) < 300` **and** no taint, and §3.5's table is the case where those two disagree.
@@ -122,6 +164,16 @@ The machinery built for r34 and reusable for the rest:
 ## 0.1 ⭐⭐ The finding: the modulus is QUADRATIC in the window wherever a normalisation reduces
 
 This is the thing that changes the plan, so it goes first.
+
+⭐ **And after ViT there are TWO ways a net fails to have a number, not one.** A *magnitude*
+failure is this section: the fold squares at every reducing site and runs past `norm_num`'s
+~10³⁰⁰ ceiling. A *representability* failure is ViT's: the numeral would be perfectly small, but
+some stage carries a `Real.exp` at an argument with no rational bound, so **there is no numeral
+at all**. §3.5's ablation table has a row where the magnitude is *identical* to the shipped one
+and 36 stages are still unwritable. ⚠ A Python fold hides the second kind — `math.expm1`
+overflows to a finite float and the chain sails on — which is why `vit_chain` returns an
+`exp_tainted` tag list and "statable" means small enough AND untainted. Build that instrument
+into any probe of a net with a transcendental leaf.
 
 Training-mode BatchNorm reduces its statistics out of its own input, so perturbing the input
 moves the mean AND the variance. `FloatModel.bnReluBudget` therefore carries
@@ -195,7 +247,8 @@ itself a result: it is why the adjoint chain exists.
 ## 1. Goal, non-goals, success
 
 **Goal.** For each committed ImageNet-scale forward, a closed `FloatBridgesTo` over the real
-leaves and a theorem `<net>_float_logits_le` stating a number. Backwards are phase 2 (§3.7).
+leaves and a theorem `<net>_float_logits_le` stating a number. ✅ **Met, six for six, 2026-09-03.**
+Backwards are phase 2 (§3.7).
 
 **Non-goals.** Making the numbers small. They are the interval fold and that is the honest
 content. Do not chase the adjoint chain here.
@@ -232,7 +285,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
 | **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
-| ViT-Tiny fwd (`vitForwardKV`) | ⭐⭐ **CONE CLOSED 2026-09-03** — leaves, block, depth-`k` fold and whole net all bridged at real weights, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸ (§3.5), the cap. Only the device LN / `exp` / `gelu` accuracies are supplied. | just the numerals: `ViTFloatBudget.lean` on the r34 recipe (§3.5.2 step 6) |
+| **ViT-Tiny fwd** (`vitForwardKV`) | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `vit_float_logits_le`, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸, tied to the committed spec's denotation | — |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -551,14 +604,23 @@ been relying on layer order.
    metavariable; the block/downsample sites were fine only because their other arguments pinned
    it. Passing the input window explicitly costs nothing and removes the order dependence.
 
-### 3.5 ViT-Tiny — ⭐ PROBED and the leaves LANDED 2026-09-03: 3.612·10²¹⁸ / 7.222·10²¹⁸
+### 3.5 ViT-Tiny — ⛔ DONE 2026-09-03: 3.612·10²¹⁸ / 7.222·10²¹⁸, and it is the CAP
 
-**The probe says yes, and chunk 1 of the Lean is in** (`FloatBudgetEnvAttn.lean`). `vit_chain`
-(`scripts/float_budget_envelope.py`) folds all 164 stages of `vitForwardKV` at ViT-Tiny's shapes
+`vit_float_logits_le` / `vit_float_logits_le_committed`: window **3.612·10²¹⁸**, budget
+**7.222·10²¹⁸**, at the per-kind measured profile, `ε ≥ 10⁻⁵`, device LayerNorm statistics,
+device GELU and device `exp` accurate to `10⁻²`, `u ≤ 2⁻²⁴`. Files: `ViTFloatBudget.lean`
+(731 lines, ⭐ **30 s** — 162 numeric stages, 324 inequalities), plus the device kernels' move
+into `FloatBudgetEnvLN.lean` and `DeviceExp` beside them.
+
+**The probe said yes and the Lean followed: the whole ViT forward bridges at real weights**
+(`floatBridgesTo_vitForwardKV` / `Maps.vitForwardKV`), with nothing supplied but the device
+LayerNorm's statistics and the device `exp`/`gelu` accuracies — the standing `DeviceRsqrt` has on
+the other four nets. `vit_chain`
+(`scripts/float_budget_envelope.py`) folds all 162 stages of `vitForwardKV` at ViT-Tiny's shapes
 and lands at
 
     window ≤ 3.612·10²¹⁸      budget ≤ 7.222·10²¹⁸      budget/window = 1.999
-    328 re-assertions (`verify_vit`)
+    324 re-assertions (`verify_vit`)
 
 — under `norm_num`'s ~10³⁰⁰ ceiling with 80 orders to spare, and ⛔ **it is the CAP, not the
 fold** (the 1.999 is the same tell ConvNeXt's 2.00 is; §9 applies verbatim).
@@ -699,7 +761,7 @@ So chunk 2 wrote **no new leaves at all** — only the assembly and the ties. �
 sharpened: **grep the whole cone, not the files named after your net.** A leaf written for one
 architecture is named after that architecture and will not be found by searching for yours.
 
-### 3.5.2 The order of work — ✅ steps 1–2 LANDED 2026-09-03 (`FloatBudgetEnvAttn.lean`)
+### 3.5.2 The order of work — ✅ ALL SIX STEPS LANDED 2026-09-03
 
 1. ✅ **`FloatBridgesTo` peers for the attention leaves.** `floatBridgesTo_softmaxRow` (window
    `1 + smCap`, `smCap = u(1+smKappa) + smKappa`) and `floatBridgesTo_mhProjAttnFullCap` (window
@@ -766,8 +828,8 @@ architecture is named after that architecture and will not be found by searching
    `floatBridgesTo_vitBodyKVFlat`, `Maps.vitBodyKVFlat`, `vitForwardKV_eq` (`rfl`),
    `floatBridgesTo_vitForwardKV` and `Maps.vitForwardKV`. ⛔ **The ViT cone is now CLOSED at real
    weights** — no `FloatBridgesTo` hypothesis is left except the device LayerNorm, whose
-   statistics have no IEEE specification, and the device `exp`/`gelu` accuracies. All that
-   remains is the numerals.
+   statistics have no IEEE specification, and the device `exp`/`gelu` accuracies. The numerals
+   followed in step 6.
    ⚠ **The recursion is HEAD-FIRST** — `vitBodyKVFlat (k+1) ps = body k (ps ∘ succ) ∘ blockVFlat
    (ps 0)` — so block 0 is applied FIRST and `.comp` puts it on the left, the OPPOSITE
    association from `floatBridgesTo_convNextStageChK`. §3.3's lesson 2 said to check; the answer
@@ -782,15 +844,47 @@ architecture is named after that architecture and will not be found by searching
    ⭐ `Maps.vitBodyKVFlat` is an ENVELOPE fold, which ConvNeXt does not have — its budget file
    spells every stage out. At depth 12 that would be twelve nested `.comp`s written by hand;
    here the caller passes window/error SEQUENCES and one `Maps` per block.
-6. **`ViTFloatBudget.lean`** on the r34 recipe: records (`ViTProfile`/`ViTWeights`), a
-   `DeviceExp` alongside `DeviceLN`/`DeviceGelu`, the 164-stage chain, the tie through
-   `vitFwdGraphKMHV_faithful`, `vit_float_logits_le` + `_committed`.
-   ⚠ `DeviceLN` and `DeviceGelu` currently live in `ConvNeXtFloatBudget.lean`, a BUDGET file —
-   so `ViTBlockVFloatBridge.lean` takes its LN envelopes as hypotheses rather than importing a
-   sibling net's budget. Moving those two structures down into the kit is the right call when
-   the ViT budget file lands; it touches ConvNeXt's committed number, so do it deliberately.
-7. ✅ **`verify_vit`** — the re-assertion pass, landed with the probe (328 inequalities). Run it
+6. ✅ **`ViTFloatBudget.lean` LANDED — and it compiled on the first try, in 30 s.** What
+   actually happened, against the plan above:
+   1. ✅ **The device kernels moved** — `DeviceLN` and `DeviceGelu` out of
+      `ConvNeXtFloatBudget.lean` into `FloatBudgetEnvLN.lean`, with a `DeviceExp` beside them
+      (⚠ RELATIVE spec, as predicted, because that is the shape `softmaxF_close` needs). ⭐ The
+      move is cleaner than a copy: the capped LN site's bridge and envelope generalised to
+      `DeviceLN.bridgeAt` / `DeviceLN.mapsAt` (taking `0 ≤ emr`, `0 < ε`, `1/√ε ≤ S`, `0 ≤ S`,
+      `M.u ≤ q` directly instead of a net's profile record), and ConvNeXt's `DeviceLN.bridge` /
+      `.maps` are now one-line delegations that read those five off `CnxProfile`. ⚠ ConvNeXt's
+      number re-checked unchanged (128 s) — do that check, it is the whole reason this is its
+      own commit.
+   2. ✅ **`ViTProfile` / `ViTBounded`** on the `CnxProfile` / `CnxBounded` pattern — eight
+      magnitude bounds, `ε > 0` with `1/√ε ≤ S = 317`, `M.u ≤ q = u32`. ⭐ **`ViTBounded` is
+      stated over the COMMITTED `ViTTinyWeights`** (`Proofs/Foundation/SpecVJP.lean`), not over
+      a fresh record, which is what makes the tie free.
+   3. ✅ **The chain is four steps**, exactly as promised: `mPatch` (the worked
+      `FloatBudgetEnvAttn` example, transplanted), `mBody` (`Maps.vitBodyKVFlat` over twelve
+      `Maps.blockVFlatC`), `mLN` (`Maps.rowLNVecFlat` at the head) and `mHead` (`Maps.vitHead`).
+      ⭐⭐ **The envelope fold is why this file is a third of ConvNeXt's elaboration time at the
+      same order of inequalities** — 30 s against ~2 min. The k = 2 fallback was not needed.
+   4. ✅ **Every numeral came from `vit_chain`**, emitted by a generator that runs `verify_vit`
+      (324 inequalities) *before* it writes a line of Lean.
+   5. ✅ **The tie is stronger than ConvNeXt's.** `vit_float_logits_le_committed` is stated
+      against `denoteVitTiny vitVerified.layers` — the committed SPEC's denotation — via
+      `vitVerified_denote_eq` (`rfl`); `vitVerified_fwd_faithful` already says the emitted
+      depth-12 multi-head vector-LN graph denotes the same function. No `*RenderPCEval` twin
+      exists or is possible.
+   ⚠ **Two shape notes for the next transformer.** (a) The whole-net envelope cannot be built
+   with `have m := … ?_` — a `have` will not carry a synthetic hole — so the proof is
+   `have mPatch/mLN/mHead`, then `refine Maps.vitForwardKV … mPatch ?_ mLN mHead`, then
+   `refine Maps.vitBodyKVFlat … ?_`, then `intro i; fin_cases i`. The head and final-LN
+   envelopes do not depend on the body, so they can be built first and the body left as the
+   single hole. (b) ⚠ The committed spec's head is 10-way (imagenette) while the checkpoint the
+   profile is measured on is 1000-way; `nClasses` enters no numeral, because the head dense's
+   fan-in is `D = 192`. ConvNeXt-T has the same split and does not say so.
+
+7. ✅ **`verify_vit`** — the re-assertion pass, landed with the probe (324 inequalities). Run it
    before any numeral is emitted (§0's ⚠: fold with the ROUNDED γ; the pass is what catches it).
+   ⚠ It has already earned itself once: it rejected the attention stage because the chain rounded
+   `mag` and `2·mag` up INDEPENDENTLY, and `2·r4(x)` can exceed `r4(2·x)`, breaking
+   `Maps.capped`'s own `2·Ā' ≤ Ē'`. Any capped leaf has that trap.
 
 ⚠ Two facts the whole-net statement must carry and disclose, like `DeviceRsqrt`/`DeviceSigmoid`:
 the device `exp` accuracy `eexp` (taken at 10⁻², as `es`/`esig`/`egelu` are), and the softmax side
@@ -816,7 +910,7 @@ pinned on every leaf whose input window the elaborator has not yet unified.
 Same pattern on the `_grad_floatBridgesTo` peers. ⚠ §0.1 applies with more force: a backward's
 BN-back modulus inherits the same reduction structure. Start only after the forwards.
 
-## 5. The `Maps` kit still to add
+## 5. The `Maps` kit — ✅ complete for all six nets
 
 ✅ **All eight the MBConv family needs now live in `FloatBudgetEnvMBConv.lean`**: `relu6`
 (window `min Ā 6`, NOT a copy of `Maps.relu` — §3.2), `depthwise`, `depthwiseStride2Flat`,
@@ -853,8 +947,10 @@ rational bound at all.
 `Maps.flatConvStride16`: `patchEmbed_flat` is a single definition with an `if n.val = 0` branch,
 so that decomposition describes a function the repo does not contain (§3.5.2 item 4).
 
-Nothing is left in the kit for ViT. What remains is the depth-`k` fold and the budget file.
-Then, if a net needs them, identity steps for `clsSlice` and `iterate k`.
+✅ **Nothing is left in the kit, and nothing is left in §3.** `Maps.clsSlice` and
+`Maps.vitHead` landed with the whole net (`ViTBlockVFloatBridge.lean`), and
+`ViTFloatBudget.lean` closed the last number on 2026-09-03. The next leaf is written when
+phase 2 (§3.7) needs one.
 Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
 lemma, `linarith`. Write one only when a net in §3 needs it.
 
@@ -888,6 +984,9 @@ anyway, not as its own commit.
 * Lean identifiers: `Ā` and `Ē` are single codepoints and legal; `B̄` and `P̄` are a letter plus
   a COMBINING macron and are not. Use `Bd`, `Pd`.
 * Lint: an unused bound `A` in `fun A hA => …` warns; write `_A`.
+* A `have` cannot carry a `?_`. A whole-net envelope whose middle stage is the open goal has to
+  be two `refine`s (build the stages that do NOT depend on it first — ViT's head and final LN
+  do not depend on its body).
 * `layerBudget_le_of` in `FloatBridge.lean` is `private`; `layerBudget_le_num'` in
   `FloatBudgetEnv.lean` is the public monotone form — do not touch `FloatBridge.lean`
   (2000-module rebuild).
@@ -904,6 +1003,17 @@ r34/mnv2/B0's without the label — the §0 table carries a `kind` column for ex
 of its own input, BatchNorm escapes that by freezing them, and LayerNorm has nothing to freeze.
 The cap is not a shortcut past a fold that exists; it is what makes a statement possible where no
 fold does.
+⛔ **ViT-Tiny IS the same kind of number, and more thoroughly so than ConvNeXt (landed
+2026-09-03).** Every one of its 25 LayerNorm sites is capped, and so is every one of its 12
+attention sites — so there is no stage in a ViT block at which the fold survives, and the two
+skips per block carry that forward. ⭐ Its ONE honest stage is the patch embed, which does not
+reduce. Say that: "the float and the real forward both land in the certified window", never "the
+rounding error folds to this"; `budget / window = 2.00` is the tell, and it came out at 2.00.
+⭐⭐ And say WHY ITS SECOND CAP IS THERE, because it is not ConvNeXt's reason: LayerNorm is
+capped for SIZE (uncapped, 10³²³⁹), attention for REPRESENTABILITY — its uncapped window carries
+a `Real.exp` at an argument with no rational bound, so 36 stage numerals cannot be written at
+all, at a magnitude *smaller* than the shipped one. "Too big" and "not writable" are different
+failures and the second is invisible to a Python fold.
 
 ⭐ Say the WINDOW and the BUDGET separately — after MobileNetV2 they are not the same story.
 A clamped-activation net can have a tight window and a vacuous budget at the same time, and
