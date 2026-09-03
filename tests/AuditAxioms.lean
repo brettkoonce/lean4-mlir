@@ -2142,6 +2142,43 @@ open Proofs
 #print axioms Proofs.StableHLO.mbResidGraphBEval_faithful
 #print axioms Proofs.StableHLO.headGraphBEval_faithful
 #print axioms Proofs.StableHLO.efficientnetFwdGraphBEval_faithful
+-- ⭐ The B0 stage and block bridges are now generic in the NORMALISATION (`*BGen`), the
+-- rblkGen / invresBodyGen treatment transferred: cbsB/stemB/dwbsB/dwbsSB/projB and the four
+-- blocks each have a `*_eq_gen` rfl onto the TRAINING net (bnBatchLA) and a `*Eval_eq_gen` rfl
+-- onto the INFERENCE net (batchMap N (bnPerChannelEvalTensor3 …)), so ONE set of bridges serves
+-- both modes. ⚠ That direction is the one that matters: a whole-net float NUMBER exists only at
+-- inference BN, so without the eval ties these would be bridges for the one mode that cannot
+-- carry a number. ⭐ Only the REAL side needed generalising — the float peers (cbsBF and friends)
+-- always took the float BN abstractly, because it was always a supplied hypothesis.
+-- EfficientNetWholeFloatBridge.lean also carries a CLOSED b1 eval-BN block bridge as a compiled
+-- `example` — no FloatBridgesTo hypothesis left — which is the shape the budget file needs.
+#print axioms Proofs.cbsB_eq_gen
+#print axioms Proofs.stemB_eq_gen
+#print axioms Proofs.dwbsB_eq_gen
+#print axioms Proofs.dwbsSB_eq_gen
+#print axioms Proofs.projB_eq_gen
+#print axioms Proofs.mbNoExpFwdB_eq_gen
+#print axioms Proofs.mbStridedFwdB_eq_gen
+#print axioms Proofs.mbResidFwdB_eq_gen
+#print axioms Proofs.headFwdB_eq_gen
+#print axioms Proofs.cbsBEval_eq_gen
+#print axioms Proofs.stemBEval_eq_gen
+#print axioms Proofs.dwbsBEval_eq_gen
+#print axioms Proofs.dwbsSBEval_eq_gen
+#print axioms Proofs.projBEval_eq_gen
+#print axioms Proofs.mbNoExpFwdBEval_eq_gen
+#print axioms Proofs.mbStridedFwdBEval_eq_gen
+#print axioms Proofs.mbResidFwdBEval_eq_gen
+#print axioms Proofs.headFwdBEval_eq_gen
+#print axioms Proofs.floatBridgesTo_cbsBGen
+#print axioms Proofs.floatBridgesTo_stemBGen
+#print axioms Proofs.floatBridgesTo_dwbsBGen
+#print axioms Proofs.floatBridgesTo_dwbsSBGen
+#print axioms Proofs.floatBridgesTo_projBGen
+#print axioms Proofs.floatBridgesTo_mbNoExpFwdBGen
+#print axioms Proofs.floatBridgesTo_mbStridedFwdBGen
+#print axioms Proofs.floatBridgesTo_mbResidFwdBGen
+#print axioms Proofs.floatBridgesTo_headFwdBGen
 #print axioms Proofs.floatBridgesTo_invresBodyGen
 #print axioms Proofs.floatBridgesTo_invresBodyStridedGen
 #print axioms Proofs.floatBridgesTo_r34IdBlock

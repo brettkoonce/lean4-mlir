@@ -1,7 +1,9 @@
 import LeanMlir.Proofs.Float.EnetFloatBridge
 import LeanMlir.Proofs.Float.Resnet34WholeFloatBridge
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
+import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.EfficientNetBackFloatBridge
+import LeanMlir.Proofs.Float.BnEvalRuntimeFloatBridge
 
 /-! # ℝ→Float32 bridge: the WHOLE batched EfficientNet-B0 FORWARD
 
@@ -382,6 +384,102 @@ noncomputable def cbsBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel) (fsig
   swishF M fsig (N * (oc * h * w)) ∘ bnF
     ∘ StableHLO.batchMap N (M.flatConvF (h := h) (w := w) W b)
 
+/-! ## The stage bridges, generic in the NORMALISATION
+
+⚠ `cbsB`/`stemB`/`dwbsB`/`dwbsSB`/`projB` hard-wire `StableHLO.bnBatchLA` — TRUE batch-norm,
+which reduces μ/var across the batch and whose error modulus is quadratic in the window
+(`planning/float_budget_numbers.md` §0.1). The deployed inference net is the same skeleton at
+`StableHLO.batchMap N (bnPerChannelEvalTensor3 …)` (`EfficientNetRenderPCEval.lean`), and a
+whole-net float NUMBER exists only there.
+
+So the stages below take the normalisation as an argument, exactly as `rblkGen` does for
+ResNet-34 and `invresBodyGen` for MobileNetV2: `*_eq_gen` is `rfl`, so ONE set of bridges serves
+both modes and the choice of BN becomes an argument rather than a second proof.
+
+⭐ Only the REAL side needed generalising — `cbsBF` and its four peers already take the float BN
+abstractly, because the float BN was always a supplied hypothesis (the one batch-coupled op). -/
+
+/-- Batched conv → normalisation → swish, with the normalisation abstract. -/
+@[reducible] noncomputable def cbsBGen (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (bn : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w))) :
+    Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
+  swish (N * (oc * h * w)) ∘ bn ∘ StableHLO.batchMap N (flatConv W b)
+
+/-- `cbsB` IS `cbsBGen` at true batch-norm. -/
+theorem cbsB_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (γ β : Vec oc) :
+    cbsB N (h := h) (w := w) (ic := ic) W b ε γ β
+      = cbsBGen N (h := h) (w := w) W b (StableHLO.bnBatchLA N oc h w ε γ β) := rfl
+
+/-- Batched strided stem conv → normalisation → swish, with the normalisation abstract. -/
+@[reducible] noncomputable def stemBGen (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (bn : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w))) :
+    Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
+  swish (N * (oc * h * w)) ∘ bn ∘ StableHLO.batchMap N (flatConvStride2 W b)
+
+/-- `stemB` IS `stemBGen` at true batch-norm. -/
+theorem stemB_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (γ β : Vec oc) :
+    stemB N (h := h) (w := w) (ic := ic) W b ε γ β
+      = stemBGen N (h := h) (w := w) W b (StableHLO.bnBatchLA N oc h w ε γ β) := rfl
+
+/-- Batched depthwise (stride-1) → normalisation → swish, with the normalisation abstract. -/
+@[reducible] noncomputable def dwbsBGen (N : Nat) {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (bn : Vec (N * (c * h * w)) → Vec (N * (c * h * w))) :
+    Vec (N * (c * h * w)) → Vec (N * (c * h * w)) :=
+  swish (N * (c * h * w)) ∘ bn ∘ StableHLO.batchMap N (depthwiseFlat W b)
+
+/-- `dwbsB` IS `dwbsBGen` at true batch-norm. -/
+theorem dwbsB_eq_gen (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (ε : ℝ) (γ β : Vec c) :
+    dwbsB N (h := h) (w := w) W b ε γ β
+      = dwbsBGen N (h := h) (w := w) W b (StableHLO.bnBatchLA N c h w ε γ β) := rfl
+
+/-- Batched depthwise (stride-2) → normalisation → swish, with the normalisation abstract. -/
+@[reducible] noncomputable def dwbsSBGen (N : Nat) {c h w kH kW : Nat}
+    (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (bn : Vec (N * (c * h * w)) → Vec (N * (c * h * w))) :
+    Vec (N * (c * (2 * h) * (2 * w))) → Vec (N * (c * h * w)) :=
+  swish (N * (c * h * w)) ∘ bn ∘ StableHLO.batchMap N (depthwiseStride2Flat W b)
+
+/-- `dwbsSB` IS `dwbsSBGen` at true batch-norm. -/
+theorem dwbsSB_eq_gen (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (ε : ℝ) (γ β : Vec c) :
+    dwbsSB N (h := h) (w := w) W b ε γ β
+      = dwbsSBGen N (h := h) (w := w) W b (StableHLO.bnBatchLA N c h w ε γ β) := rfl
+
+/-- Batched project (1×1 conv → normalisation, no swish), with the normalisation abstract. -/
+@[reducible] noncomputable def projBGen (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (bn : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w))) :
+    Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
+  bn ∘ StableHLO.batchMap N (flatConv W b)
+
+/-- `projB` IS `projBGen` at true batch-norm. -/
+theorem projB_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (γ β : Vec oc) :
+    projB N (h := h) (w := w) (ic := ic) W b ε γ β
+      = projBGen N (h := h) (w := w) W b (StableHLO.bnBatchLA N oc h w ε γ β) := rfl
+
+/-- The conv-bn-swish stage float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_cbsBGen {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel)
+    (fsig : ℝ → ℝ) (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (bn bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig) (hn : 0 < ic * h * w)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ bb)
+    (hbn : FloatBridgesTo bn bnF) :
+    FloatBridgesTo (cbsBGen N (h := h) (w := w) W b bn)
+      (cbsBF N (h := h) (w := w) M fsig W b bnF) :=
+  ((FloatBridgesTo.batchMap N
+      (floatBridgesTo_flatConv (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
+    (floatBridgesTo_swish M fsig hesig hsig)
+
+/-- The conv-bn-swish stage at TRUE batch-norm — `floatBridgesTo_cbsBGen` at
+    `bn := bnBatchLA` (`cbsB_eq_gen`). -/
 noncomputable def floatBridgesTo_cbsB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
@@ -390,11 +488,8 @@ noncomputable def floatBridgesTo_cbsB {ic oc h w kH kW : Nat} (N : Nat) (M : Flo
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ bb)
     (hbn : FloatBridgesTo (StableHLO.bnBatchLA N oc h w ε γ β) bnF) :
     FloatBridgesTo (cbsB N (h := h) (w := w) W b ε γ β)
-      (cbsBF N (h := h) (w := w) M fsig W b bnF) := by
-  unfold cbsB cbsBF
-  exact ((FloatBridgesTo.batchMap N
-      (floatBridgesTo_flatConv (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
-    (floatBridgesTo_swish M fsig hesig hsig)
+      (cbsBF N (h := h) (w := w) M fsig W b bnF) :=
+  floatBridgesTo_cbsBGen N M fsig W b _ bnF hw' hbb hesig hn hsig hW hb hbn
 
 /-- Float peer of `stemB`. -/
 noncomputable def stemBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
@@ -404,6 +499,23 @@ noncomputable def stemBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel) (fsi
   swishF M fsig (N * (oc * h * w)) ∘ bnF
     ∘ StableHLO.batchMap N (M.flatConvStride2F (h := h) (w := w) W b)
 
+/-- The strided stem stage float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_stemBGen {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (bn bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
+    (hn : 0 < ic * (2 * h) * (2 * w))
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ bb)
+    (hbn : FloatBridgesTo bn bnF) :
+    FloatBridgesTo (stemBGen N (h := h) (w := w) W b bn)
+      (stemBF N (h := h) (w := w) M fsig W b bnF) :=
+  ((FloatBridgesTo.batchMap N
+      (floatBridgesTo_flatConvStride2 (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
+    (floatBridgesTo_swish M fsig hesig hsig)
+
+/-- The strided stem stage at TRUE batch-norm — `floatBridgesTo_stemBGen` at
+    `bn := bnBatchLA` (`stemB_eq_gen`). -/
 noncomputable def floatBridgesTo_stemB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
@@ -413,11 +525,8 @@ noncomputable def floatBridgesTo_stemB {ic oc h w kH kW : Nat} (N : Nat) (M : Fl
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ bb)
     (hbn : FloatBridgesTo (StableHLO.bnBatchLA N oc h w ε γ β) bnF) :
     FloatBridgesTo (stemB N (h := h) (w := w) W b ε γ β)
-      (stemBF N (h := h) (w := w) M fsig W b bnF) := by
-  unfold stemB stemBF
-  exact ((FloatBridgesTo.batchMap N
-      (floatBridgesTo_flatConvStride2 (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
-    (floatBridgesTo_swish M fsig hesig hsig)
+      (stemBF N (h := h) (w := w) M fsig W b bnF) :=
+  floatBridgesTo_stemBGen N M fsig W b _ bnF hw' hbb hesig hn hsig hW hb hbn
 
 /-- Float peer of `dwbsB`. -/
 noncomputable def dwbsBF (N : Nat) {c h w kH kW : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
@@ -427,6 +536,22 @@ noncomputable def dwbsBF (N : Nat) {c h w kH kW : Nat} (M : FloatModel) (fsig : 
   swishF M fsig (N * (c * h * w)) ∘ bnF
     ∘ StableHLO.batchMap N (M.depthwiseFlatF (h := h) (w := w) W b)
 
+/-- The stride-1 depthwise stage float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_dwbsBGen {c h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+    (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (bn bnF : Vec (N * (c * h * w)) → Vec (N * (c * h * w)))
+    {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig) (hn : 0 < c * h * w)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ bb)
+    (hbn : FloatBridgesTo bn bnF) :
+    FloatBridgesTo (dwbsBGen N (h := h) (w := w) W b bn)
+      (dwbsBF N (h := h) (w := w) M fsig W b bnF) :=
+  ((FloatBridgesTo.batchMap N
+      (floatBridgesTo_depthwise (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
+    (floatBridgesTo_swish M fsig hesig hsig)
+
+/-- The stride-1 depthwise stage at TRUE batch-norm — `floatBridgesTo_dwbsBGen` at
+    `bn := bnBatchLA` (`dwbsB_eq_gen`). -/
 noncomputable def floatBridgesTo_dwbsB {c h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
     (bnF : Vec (N * (c * h * w)) → Vec (N * (c * h * w)))
@@ -435,11 +560,8 @@ noncomputable def floatBridgesTo_dwbsB {c h w kH kW : Nat} (N : Nat) (M : FloatM
     (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ bb)
     (hbn : FloatBridgesTo (StableHLO.bnBatchLA N c h w ε γ β) bnF) :
     FloatBridgesTo (dwbsB N (h := h) (w := w) W b ε γ β)
-      (dwbsBF N (h := h) (w := w) M fsig W b bnF) := by
-  unfold dwbsB dwbsBF
-  exact ((FloatBridgesTo.batchMap N
-      (floatBridgesTo_depthwise (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
-    (floatBridgesTo_swish M fsig hesig hsig)
+      (dwbsBF N (h := h) (w := w) M fsig W b bnF) :=
+  floatBridgesTo_dwbsBGen N M fsig W b _ bnF hw' hbb hesig hn hsig hW hb hbn
 
 /-- Float peer of `dwbsSB`. -/
 noncomputable def dwbsSBF (N : Nat) {c h w kH kW : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
@@ -449,6 +571,23 @@ noncomputable def dwbsSBF (N : Nat) {c h w kH kW : Nat} (M : FloatModel) (fsig :
   swishF M fsig (N * (c * h * w)) ∘ bnF
     ∘ StableHLO.batchMap N (M.depthwiseStride2FlatF (h := h) (w := w) W b)
 
+/-- The stride-2 depthwise stage float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_dwbsSBGen {c h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
+    (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (bn bnF : Vec (N * (c * h * w)) → Vec (N * (c * h * w)))
+    {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
+    (hn : 0 < c * (2 * h) * (2 * w))
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ bb)
+    (hbn : FloatBridgesTo bn bnF) :
+    FloatBridgesTo (dwbsSBGen N (h := h) (w := w) W b bn)
+      (dwbsSBF N (h := h) (w := w) M fsig W b bnF) :=
+  ((FloatBridgesTo.batchMap N
+      (floatBridgesTo_depthwiseStride2Flat (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
+    (floatBridgesTo_swish M fsig hesig hsig)
+
+/-- The stride-2 depthwise stage at TRUE batch-norm — `floatBridgesTo_dwbsSBGen` at
+    `bn := bnBatchLA` (`dwbsSB_eq_gen`). -/
 noncomputable def floatBridgesTo_dwbsSB {c h w kH kW : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
     (bnF : Vec (N * (c * h * w)) → Vec (N * (c * h * w)))
@@ -458,11 +597,8 @@ noncomputable def floatBridgesTo_dwbsSB {c h w kH kW : Nat} (N : Nat) (M : Float
     (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ bb)
     (hbn : FloatBridgesTo (StableHLO.bnBatchLA N c h w ε γ β) bnF) :
     FloatBridgesTo (dwbsSB N (h := h) (w := w) W b ε γ β)
-      (dwbsSBF N (h := h) (w := w) M fsig W b bnF) := by
-  unfold dwbsSB dwbsSBF
-  exact ((FloatBridgesTo.batchMap N
-      (floatBridgesTo_depthwiseStride2Flat (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn).comp
-    (floatBridgesTo_swish M fsig hesig hsig)
+      (dwbsSBF N (h := h) (w := w) M fsig W b bnF) :=
+  floatBridgesTo_dwbsSBGen N M fsig W b _ bnF hw' hbb hesig hn hsig hW hb hbn
 
 /-- Float peer of `seB`. -/
 noncomputable def seBF (N : Nat) {c h w r : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
@@ -491,6 +627,20 @@ noncomputable def projBF (N : Nat) {ic oc h w kH kW : Nat} (M : FloatModel)
     Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
   bnF ∘ StableHLO.batchMap N (M.flatConvF (h := h) (w := w) W b)
 
+/-- The project (linear bottleneck) stage float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_projBGen {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (bn bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    {w' bb : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hn : 0 < ic * h * w)
+    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ bb)
+    (hbn : FloatBridgesTo bn bnF) :
+    FloatBridgesTo (projBGen N (h := h) (w := w) W b bn)
+      (projBF N (h := h) (w := w) M W b bnF) :=
+  (FloatBridgesTo.batchMap N
+    (floatBridgesTo_flatConv (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn
+
+/-- The project (linear bottleneck) stage at TRUE batch-norm — `floatBridgesTo_projBGen` at
+    `bn := bnBatchLA` (`projB_eq_gen`). -/
 noncomputable def floatBridgesTo_projB {ic oc h w kH kW : Nat} (N : Nat) (M : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (bnF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
@@ -498,11 +648,103 @@ noncomputable def floatBridgesTo_projB {ic oc h w kH kW : Nat} (N : Nat) (M : Fl
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ bb)
     (hbn : FloatBridgesTo (StableHLO.bnBatchLA N oc h w ε γ β) bnF) :
     FloatBridgesTo (projB N (h := h) (w := w) W b ε γ β)
-      (projBF N (h := h) (w := w) M W b bnF) := by
-  unfold projB projBF
-  exact (FloatBridgesTo.batchMap N
-    (floatBridgesTo_flatConv (h := h) (w := w) M W b hw' hbb hn hW hb)).comp hbn
+      (projBF N (h := h) (w := w) M W b bnF) :=
+  floatBridgesTo_projBGen N M W b _ bnF hw' hbb hn hW hb hbn
 
+
+-- ── the four blocks, generic in the NORMALISATION ────────────────
+
+/-! Same treatment one level up. The float peers (`mbNoExpFwdBF` and friends) already take
+their BNs abstractly, so again only the real side needed it; `seB` is untouched — squeeze-excite
+has no normalisation. `*_eq_gen` is `rfl` in each case. -/
+
+/-- MBConv1 (no expand) with its normalisations abstract. -/
+@[reducible] noncomputable def mbNoExpFwdBGen (N : Nat) {ic oc h w kHd kWd r : Nat}
+    (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic)
+    (bnd : Vec (N * (ic * h * w)) → Vec (N * (ic * h * w)))
+    (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
+    (Wp : Kernel4 oc ic 1 1) (bp : Vec oc)
+    (bnp : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w))) :
+    Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
+  projBGen N (h := h) (w := w) Wp bp bnp ∘ seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘
+    dwbsBGen N (h := h) (w := w) Wd bd bnd
+
+/-- `mbNoExpFwdB` IS `mbNoExpFwdBGen` at true batch-norm. -/
+theorem mbNoExpFwdB_eq_gen (N : Nat) {ic oc h w kHd kWd r : Nat}
+    (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic) (εd : ℝ) (γd βd : Vec ic)
+    (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
+    (Wp : Kernel4 oc ic 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) :
+    mbNoExpFwdB N (h := h) (w := w) Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp
+      = mbNoExpFwdBGen N (h := h) (w := w) Wd bd (StableHLO.bnBatchLA N ic h w εd γd βd)
+          Wz₁ bz₁ Wz₂ bz₂ Wp bp (StableHLO.bnBatchLA N oc h w εp γp βp) := rfl
+
+/-- MBConv6 stride-2 with its normalisations abstract. -/
+@[reducible] noncomputable def mbStridedFwdBGen (N : Nat) {ic mid oc h w kHd kWd r : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid)
+    (bne : Vec (N * (mid * (2 * h) * (2 * w))) → Vec (N * (mid * (2 * h) * (2 * w))))
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bnd : Vec (N * (mid * h * w)) → Vec (N * (mid * h * w)))
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc)
+    (bnp : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w))) :
+    Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
+  projBGen N (h := h) (w := w) Wp bp bnp ∘ seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘
+    dwbsSBGen N (h := h) (w := w) Wd bd bnd ∘ cbsBGen N (h := 2 * h) (w := 2 * w) We be bne
+
+/-- `mbStridedFwdB` IS `mbStridedFwdBGen` at true batch-norm. -/
+theorem mbStridedFwdB_eq_gen (N : Nat) {ic mid oc h w kHd kWd r : Nat}
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) :
+    mbStridedFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂
+        Wp bp εp γp βp
+      = mbStridedFwdBGen N (h := h) (w := w) We be
+          (StableHLO.bnBatchLA N mid (2 * h) (2 * w) εe γe βe)
+          Wd bd (StableHLO.bnBatchLA N mid h w εd γd βd) Wz₁ bz₁ Wz₂ bz₂
+          Wp bp (StableHLO.bnBatchLA N oc h w εp γp βp) := rfl
+
+/-- MBConv6 with an identity residual skip, normalisations abstract. -/
+@[reducible] noncomputable def mbResidFwdBGen (N : Nat) {c mid h w kHd kWd r : Nat}
+    (We : Kernel4 mid c 1 1) (be : Vec mid)
+    (bne : Vec (N * (mid * h * w)) → Vec (N * (mid * h * w)))
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bnd : Vec (N * (mid * h * w)) → Vec (N * (mid * h * w)))
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c)
+    (bnp : Vec (N * (c * h * w)) → Vec (N * (c * h * w))) :
+    Vec (N * (c * h * w)) → Vec (N * (c * h * w)) :=
+  residual (projBGen N (h := h) (w := w) Wp bp bnp ∘
+    seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘
+    dwbsBGen N (h := h) (w := w) Wd bd bnd ∘ cbsBGen N (h := h) (w := w) We be bne)
+
+/-- `mbResidFwdB` IS `mbResidFwdBGen` at true batch-norm. -/
+theorem mbResidFwdB_eq_gen (N : Nat) {c mid h w kHd kWd r : Nat}
+    (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c) :
+    mbResidFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp
+      = mbResidFwdBGen N (h := h) (w := w) We be (StableHLO.bnBatchLA N mid h w εe γe βe)
+          Wd bd (StableHLO.bnBatchLA N mid h w εd γd βd) Wz₁ bz₁ Wz₂ bz₂
+          Wp bp (StableHLO.bnBatchLA N c h w εp γp βp) := rfl
+
+/-- The head with its normalisation abstract. -/
+@[reducible] noncomputable def headFwdBGen (N : Nat) {c oc h w nC : Nat}
+    (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
+    (bnh : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    (Wfc : Mat oc nC) (bfc : Vec nC) :
+    Vec (N * (c * h * w)) → Vec (N * nC) :=
+  StableHLO.batchMap N (dense Wfc bfc) ∘ StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘
+    cbsBGen N (h := h) (w := w) Wh bh bnh
+
+/-- `headFwdB` IS `headFwdBGen` at true batch-norm. -/
+theorem headFwdB_eq_gen (N : Nat) {c oc h w nC : Nat}
+    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wfc : Mat oc nC) (bfc : Vec nC) :
+    headFwdB N (h := h) (w := w) (c := c) Wh bh εh γh βh Wfc bfc
+      = headFwdBGen N (h := h) (w := w) (c := c) Wh bh
+          (StableHLO.bnBatchLA N oc h w εh γh βh) Wfc bfc := rfl
 
 -- ── the four block float peers ───────────────────────────────────
 
@@ -516,7 +758,36 @@ noncomputable def mbNoExpFwdBF (N : Nat) {ic oc h w kHd kWd r : Nat} (M : FloatM
   projBF N (h := h) (w := w) M Wp bp bnPF ∘ seBF N (h := h) (w := w) M fsig Wz₁ bz₁ Wz₂ bz₂
     ∘ dwbsBF N (h := h) (w := w) M fsig Wd bd bnDF
 
-noncomputable def floatBridgesTo_mbNoExpFwdB {ic oc h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
+/-- MBConv1 (no expand) float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_mbNoExpFwdBGen {ic oc h w kHd kWd r : Nat} (N : Nat)
+    (M : FloatModel)
+    (fsig : ℝ → ℝ) (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic)
+    (bnD : Vec (N * (ic * h * w)) → Vec (N * (ic * h * w)))
+    (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
+    (Wp : Kernel4 oc ic 1 1) (bp : Vec oc)
+    (bnP : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    (bnDF : Vec (N * (ic * h * w)) → Vec (N * (ic * h * w)))
+    (bnPF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
+    (hhw : 0 < h * w) (hic : 0 < ic) (hr : 0 < r) (hn : 0 < ic * h * w)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ w') (hbd : ∀ ch, |bd ch| ≤ bb)
+    (hWz₁ : ∀ i j, |Wz₁ i j| ≤ w') (hbz₁ : ∀ j, |bz₁ j| ≤ bb)
+    (hWz₂ : ∀ i j, |Wz₂ i j| ≤ w') (hbz₂ : ∀ j, |bz₂ j| ≤ bb)
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ w') (hbp : ∀ o, |bp o| ≤ bb)
+    (hbnD : FloatBridgesTo bnD bnDF) (hbnP : FloatBridgesTo bnP bnPF) :
+    FloatBridgesTo
+      (mbNoExpFwdBGen N (h := h) (w := w) Wd bd bnD Wz₁ bz₁ Wz₂ bz₂ Wp bp bnP)
+      (mbNoExpFwdBF N (h := h) (w := w) M fsig Wd bd Wz₁ bz₁ Wz₂ bz₂ Wp bp bnDF bnPF) :=
+  ((floatBridgesTo_dwbsBGen N M fsig Wd bd bnD bnDF hw' hbb hesig hn hsig hWd hbd hbnD).comp
+    (floatBridgesTo_seB N M fsig Wz₁ bz₁ Wz₂ bz₂ hw' hbb hesig hhw hic hr hn hsig
+      hWz₁ hbz₁ hWz₂ hbz₂)).comp
+    (floatBridgesTo_projBGen N M Wp bp bnP bnPF hw' hbb hn hWp hbp hbnP)
+
+/-- MBConv1 (no expand) at TRUE batch-norm — `floatBridgesTo_mbNoExpFwdBGen` at
+    `bn := bnBatchLA` (`mbNoExpFwdB_eq_gen`). -/
+noncomputable def floatBridgesTo_mbNoExpFwdB {ic oc h w kHd kWd r : Nat} (N : Nat)
+    (M : FloatModel)
     (fsig : ℝ → ℝ) (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic) (εd : ℝ) (γd βd : Vec ic)
     (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
     (Wp : Kernel4 oc ic 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
@@ -533,13 +804,9 @@ noncomputable def floatBridgesTo_mbNoExpFwdB {ic oc h w kHd kWd r : Nat} (N : Na
     (hbnP : FloatBridgesTo (StableHLO.bnBatchLA N oc h w εp γp βp) bnPF) :
     FloatBridgesTo
       (mbNoExpFwdB N (h := h) (w := w) Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp)
-      (mbNoExpFwdBF N (h := h) (w := w) M fsig Wd bd Wz₁ bz₁ Wz₂ bz₂ Wp bp bnDF bnPF) := by
-  unfold mbNoExpFwdB mbNoExpFwdBF
-  exact ((floatBridgesTo_dwbsB N M fsig Wd bd εd γd βd bnDF hw' hbb hesig hn hsig
-      hWd hbd hbnD).comp
-    (floatBridgesTo_seB N M fsig Wz₁ bz₁ Wz₂ bz₂ hw' hbb hesig hhw hic hr hn hsig
-      hWz₁ hbz₁ hWz₂ hbz₂)).comp
-    (floatBridgesTo_projB N M Wp bp εp γp βp bnPF hw' hbb hn hWp hbp hbnP)
+      (mbNoExpFwdBF N (h := h) (w := w) M fsig Wd bd Wz₁ bz₁ Wz₂ bz₂ Wp bp bnDF bnPF) :=
+  floatBridgesTo_mbNoExpFwdBGen N M fsig Wd bd _ Wz₁ bz₁ Wz₂ bz₂ Wp bp _ bnDF bnPF
+    hw' hbb hesig hhw hic hr hn hsig hWd hbd hWz₁ hbz₁ hWz₂ hbz₂ hWp hbp hbnD hbnP
 
 noncomputable def mbStridedFwdBF (N : Nat) {ic mid oc h w kHd kWd r : Nat} (M : FloatModel)
     (fsig : ℝ → ℝ) (We : Kernel4 mid ic 1 1) (be : Vec mid)
@@ -554,8 +821,45 @@ noncomputable def mbStridedFwdBF (N : Nat) {ic mid oc h w kHd kWd r : Nat} (M : 
     ∘ dwbsSBF N (h := h) (w := w) M fsig Wd bd bnDF
     ∘ cbsBF N (h := 2 * h) (w := 2 * w) M fsig We be bnEF
 
-noncomputable def floatBridgesTo_mbStridedFwdB {ic mid oc h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
-    (fsig : ℝ → ℝ)
+/-- MBConv6 stride-2 float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_mbStridedFwdBGen {ic mid oc h w kHd kWd r : Nat} (N : Nat)
+    (M : FloatModel) (fsig : ℝ → ℝ)
+    (We : Kernel4 mid ic 1 1) (be : Vec mid)
+    (bnE : Vec (N * (mid * (2 * h) * (2 * w))) → Vec (N * (mid * (2 * h) * (2 * w))))
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bnD : Vec (N * (mid * h * w)) → Vec (N * (mid * h * w)))
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc)
+    (bnP : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    (bnEF : Vec (N * (mid * (2 * h) * (2 * w))) → Vec (N * (mid * (2 * h) * (2 * w))))
+    (bnDF : Vec (N * (mid * h * w)) → Vec (N * (mid * h * w)))
+    (bnPF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
+    (hhw : 0 < h * w) (hmid : 0 < mid) (hr : 0 < r)
+    (hnE : 0 < ic * (2 * h) * (2 * w)) (hnD : 0 < mid * (2 * h) * (2 * w)) (hn : 0 < mid * h * w)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hWe : ∀ o c kh kw, |We o c kh kw| ≤ w') (hbe : ∀ o, |be o| ≤ bb)
+    (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ w') (hbd : ∀ ch, |bd ch| ≤ bb)
+    (hWz₁ : ∀ i j, |Wz₁ i j| ≤ w') (hbz₁ : ∀ j, |bz₁ j| ≤ bb)
+    (hWz₂ : ∀ i j, |Wz₂ i j| ≤ w') (hbz₂ : ∀ j, |bz₂ j| ≤ bb)
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ w') (hbp : ∀ o, |bp o| ≤ bb)
+    (hbnE : FloatBridgesTo bnE bnEF) (hbnD : FloatBridgesTo bnD bnDF)
+    (hbnP : FloatBridgesTo bnP bnPF) :
+    FloatBridgesTo
+      (mbStridedFwdBGen N (h := h) (w := w) We be bnE Wd bd bnD Wz₁ bz₁ Wz₂ bz₂ Wp bp bnP)
+      (mbStridedFwdBF N (h := h) (w := w) M fsig We be Wd bd Wz₁ bz₁ Wz₂ bz₂ Wp bp
+        bnEF bnDF bnPF) :=
+  (((floatBridgesTo_cbsBGen N M fsig We be bnE bnEF hw' hbb hesig hnE hsig hWe hbe hbnE).comp
+    (floatBridgesTo_dwbsSBGen N M fsig Wd bd bnD bnDF hw' hbb hesig hnD hsig
+      hWd hbd hbnD)).comp
+    (floatBridgesTo_seB N M fsig Wz₁ bz₁ Wz₂ bz₂ hw' hbb hesig hhw hmid hr hn hsig
+      hWz₁ hbz₁ hWz₂ hbz₂)).comp
+    (floatBridgesTo_projBGen N M Wp bp bnP bnPF hw' hbb hn hWp hbp hbnP)
+
+/-- MBConv6 stride-2 at TRUE batch-norm — `floatBridgesTo_mbStridedFwdBGen` at
+    `bn := bnBatchLA` (`mbStridedFwdB_eq_gen`). -/
+noncomputable def floatBridgesTo_mbStridedFwdB {ic mid oc h w kHd kWd r : Nat} (N : Nat)
+    (M : FloatModel) (fsig : ℝ → ℝ)
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
@@ -579,15 +883,10 @@ noncomputable def floatBridgesTo_mbStridedFwdB {ic mid oc h w kHd kWd r : Nat} (
       (mbStridedFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd
         Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp)
       (mbStridedFwdBF N (h := h) (w := w) M fsig We be Wd bd Wz₁ bz₁ Wz₂ bz₂ Wp bp
-        bnEF bnDF bnPF) := by
-  unfold mbStridedFwdB mbStridedFwdBF
-  exact (((floatBridgesTo_cbsB N M fsig We be εe γe βe bnEF hw' hbb hesig hnE hsig
-      hWe hbe hbnE).comp
-    (floatBridgesTo_dwbsSB N M fsig Wd bd εd γd βd bnDF hw' hbb hesig hnD hsig
-      hWd hbd hbnD)).comp
-    (floatBridgesTo_seB N M fsig Wz₁ bz₁ Wz₂ bz₂ hw' hbb hesig hhw hmid hr hn hsig
-      hWz₁ hbz₁ hWz₂ hbz₂)).comp
-    (floatBridgesTo_projB N M Wp bp εp γp βp bnPF hw' hbb hn hWp hbp hbnP)
+        bnEF bnDF bnPF) :=
+  floatBridgesTo_mbStridedFwdBGen N M fsig We be _ Wd bd _ Wz₁ bz₁ Wz₂ bz₂ Wp bp _
+    bnEF bnDF bnPF hw' hbb hesig hhw hmid hr hnE hnD hn hsig hWe hbe hWd hbd
+    hWz₁ hbz₁ hWz₂ hbz₂ hWp hbp hbnE hbnD hbnP
 
 noncomputable def mbResidFwdBF (N : Nat) {c mid h w kHd kWd r : Nat} (M : FloatModel)
     (fsig : ℝ → ℝ) (We : Kernel4 mid c 1 1) (be : Vec mid)
@@ -603,8 +902,46 @@ noncomputable def mbResidFwdBF (N : Nat) {c mid h w kHd kWd r : Nat} (M : FloatM
       ∘ dwbsBF N (h := h) (w := w) M fsig Wd bd bnDF
       ∘ cbsBF N (h := h) (w := w) M fsig We be bnEF) v j) (v j)
 
-noncomputable def floatBridgesTo_mbResidFwdB {c mid h w kHd kWd r : Nat} (N : Nat) (M : FloatModel)
-    (fsig : ℝ → ℝ)
+/-- MBConv6 with an identity residual float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_mbResidFwdBGen {c mid h w kHd kWd r : Nat} (N : Nat)
+    (M : FloatModel) (fsig : ℝ → ℝ)
+    (We : Kernel4 mid c 1 1) (be : Vec mid)
+    (bnE : Vec (N * (mid * h * w)) → Vec (N * (mid * h * w)))
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid)
+    (bnD : Vec (N * (mid * h * w)) → Vec (N * (mid * h * w)))
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c)
+    (bnP : Vec (N * (c * h * w)) → Vec (N * (c * h * w)))
+    (bnEF bnDF : Vec (N * (mid * h * w)) → Vec (N * (mid * h * w)))
+    (bnPF : Vec (N * (c * h * w)) → Vec (N * (c * h * w)))
+    {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
+    (hhw : 0 < h * w) (_hc : 0 < c) (hmid : 0 < mid) (hr : 0 < r)
+    (hnC : 0 < c * h * w) (hn : 0 < mid * h * w)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hWe : ∀ o c kh kw, |We o c kh kw| ≤ w') (hbe : ∀ o, |be o| ≤ bb)
+    (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ w') (hbd : ∀ ch, |bd ch| ≤ bb)
+    (hWz₁ : ∀ i j, |Wz₁ i j| ≤ w') (hbz₁ : ∀ j, |bz₁ j| ≤ bb)
+    (hWz₂ : ∀ i j, |Wz₂ i j| ≤ w') (hbz₂ : ∀ j, |bz₂ j| ≤ bb)
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ w') (hbp : ∀ o, |bp o| ≤ bb)
+    (hbnE : FloatBridgesTo bnE bnEF) (hbnD : FloatBridgesTo bnD bnDF)
+    (hbnP : FloatBridgesTo bnP bnPF) :
+    FloatBridgesTo
+      (mbResidFwdBGen N (h := h) (w := w) We be bnE Wd bd bnD Wz₁ bz₁ Wz₂ bz₂ Wp bp bnP)
+      (mbResidFwdBF N (h := h) (w := w) M fsig We be Wd bd Wz₁ bz₁ Wz₂ bz₂ Wp bp
+        bnEF bnDF bnPF) :=
+  FloatBridgesTo.residual M
+    ((((floatBridgesTo_cbsBGen N M fsig We be bnE bnEF hw' hbb hesig hnC hsig
+        hWe hbe hbnE).comp
+      (floatBridgesTo_dwbsBGen N M fsig Wd bd bnD bnDF hw' hbb hesig hn hsig
+        hWd hbd hbnD)).comp
+      (floatBridgesTo_seB N M fsig Wz₁ bz₁ Wz₂ bz₂ hw' hbb hesig hhw hmid hr hn hsig
+        hWz₁ hbz₁ hWz₂ hbz₂)).comp
+      (floatBridgesTo_projBGen N M Wp bp bnP bnPF hw' hbb hn hWp hbp hbnP))
+
+/-- MBConv6 with an identity residual at TRUE batch-norm — `floatBridgesTo_mbResidFwdBGen` at
+    `bn := bnBatchLA` (`mbResidFwdB_eq_gen`). -/
+noncomputable def floatBridgesTo_mbResidFwdB {c mid h w kHd kWd r : Nat} (N : Nat)
+    (M : FloatModel) (fsig : ℝ → ℝ)
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
@@ -627,16 +964,10 @@ noncomputable def floatBridgesTo_mbResidFwdB {c mid h w kHd kWd r : Nat} (N : Na
       (mbResidFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd
         Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp)
       (mbResidFwdBF N (h := h) (w := w) M fsig We be Wd bd Wz₁ bz₁ Wz₂ bz₂ Wp bp
-        bnEF bnDF bnPF) := by
-  unfold mbResidFwdB mbResidFwdBF
-  exact FloatBridgesTo.residual M
-    ((((floatBridgesTo_cbsB N M fsig We be εe γe βe bnEF hw' hbb hesig hnC hsig
-        hWe hbe hbnE).comp
-      (floatBridgesTo_dwbsB N M fsig Wd bd εd γd βd bnDF hw' hbb hesig hn hsig
-        hWd hbd hbnD)).comp
-      (floatBridgesTo_seB N M fsig Wz₁ bz₁ Wz₂ bz₂ hw' hbb hesig hhw hmid hr hn hsig
-        hWz₁ hbz₁ hWz₂ hbz₂)).comp
-      (floatBridgesTo_projB N M Wp bp εp γp βp bnPF hw' hbb hn hWp hbp hbnP))
+        bnEF bnDF bnPF) :=
+  floatBridgesTo_mbResidFwdBGen N M fsig We be _ Wd bd _ Wz₁ bz₁ Wz₂ bz₂ Wp bp _
+    bnEF bnDF bnPF hw' hbb hesig hhw _hc hmid hr hnC hn hsig hWe hbe hWd hbd
+    hWz₁ hbz₁ hWz₂ hbz₂ hWp hbp hbnE hbnD hbnP
 
 noncomputable def headFwdBF (N : Nat) {c oc h w nC : Nat} (M : FloatModel) (fsig : ℝ → ℝ)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC)
@@ -645,8 +976,29 @@ noncomputable def headFwdBF (N : Nat) {c oc h w nC : Nat} (M : FloatModel) (fsig
   StableHLO.batchMap N (M.dense Wfc bfc) ∘ StableHLO.batchMap N M.gapFlatF
     ∘ cbsBF N (h := h) (w := w) M fsig Wh bh bnHF
 
-noncomputable def floatBridgesTo_headFwdB {c oc h w nC : Nat} (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ)
-    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+/-- The head float-bridges, generic in the normalisation. -/
+noncomputable def floatBridgesTo_headFwdBGen {c oc h w nC : Nat} (N : Nat) (M : FloatModel)
+    (fsig : ℝ → ℝ) (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
+    (bnH : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    (Wfc : Mat oc nC) (bfc : Vec nC)
+    (bnHF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
+    {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
+    (hhw : 0 < h * w) (hoc : 0 < oc) (hnC : 0 < c * h * w)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hWh : ∀ o c kh kw, |Wh o c kh kw| ≤ w') (hbh : ∀ o, |bh o| ≤ bb)
+    (hWfc : ∀ i j, |Wfc i j| ≤ w') (hbfc : ∀ j, |bfc j| ≤ bb)
+    (hbnH : FloatBridgesTo bnH bnHF) :
+    FloatBridgesTo (headFwdBGen N (h := h) (w := w) Wh bh bnH Wfc bfc)
+      (headFwdBF N (h := h) (w := w) M fsig Wh bh Wfc bfc bnHF) :=
+  ((floatBridgesTo_cbsBGen N M fsig Wh bh bnH bnHF hw' hbb hesig hnC hsig
+      hWh hbh hbnH).comp
+    (FloatBridgesTo.batchMap N (floatBridgesTo_gap (c := oc) (h := h) (w := w) M hoc hhw))).comp
+    (FloatBridgesTo.batchMap N (floatBridgesTo_dense M Wfc bfc hw' hbb hoc hWfc hbfc))
+
+/-- The head at TRUE batch-norm — `floatBridgesTo_headFwdBGen` at `bn := bnBatchLA`
+    (`headFwdB_eq_gen`). -/
+noncomputable def floatBridgesTo_headFwdB {c oc h w nC : Nat} (N : Nat) (M : FloatModel)
+    (fsig : ℝ → ℝ) (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
     (Wfc : Mat oc nC) (bfc : Vec nC)
     (bnHF : Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)))
     {w' bb esig : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
@@ -656,13 +1008,136 @@ noncomputable def floatBridgesTo_headFwdB {c oc h w nC : Nat} (N : Nat) (M : Flo
     (hWfc : ∀ i j, |Wfc i j| ≤ w') (hbfc : ∀ j, |bfc j| ≤ bb)
     (hbnH : FloatBridgesTo (StableHLO.bnBatchLA N oc h w εh γh βh) bnHF) :
     FloatBridgesTo (headFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc)
-      (headFwdBF N (h := h) (w := w) M fsig Wh bh Wfc bfc bnHF) := by
-  unfold headFwdB headFwdBF
-  exact ((floatBridgesTo_cbsB N M fsig Wh bh εh γh βh bnHF hw' hbb hesig hnC hsig
-      hWh hbh hbnH).comp
-    (FloatBridgesTo.batchMap N (floatBridgesTo_gap (c := oc) (h := h) (w := w) M hoc hhw))).comp
-    (FloatBridgesTo.batchMap N (floatBridgesTo_dense M Wfc bfc hw' hbb hoc hWfc hbfc))
+      (headFwdBF N (h := h) (w := w) M fsig Wh bh Wfc bfc bnHF) :=
+  floatBridgesTo_headFwdBGen N M fsig Wh bh _ Wfc bfc bnHF hw' hbb hesig hhw hoc hnC
+    hsig hWh hbh hWfc hbfc hbnH
 
+
+-- ════════════════════════════════════════════════════════════════
+-- § The payoff: the SAME skeleton at INFERENCE BatchNorm
+-- ════════════════════════════════════════════════════════════════
+
+/-! The nine bridges above are stated on the `*Gen` defs, so they serve the inference net with no
+second proof: `EfficientNetRenderPCEval.lean`'s stages and blocks are those same defs at
+`StableHLO.batchMap N (bnPerChannelEvalTensor3 …)`, and every tie below is `rfl`.
+
+⚠ This is the direction that matters. A whole-net float NUMBER exists only at inference BN — the
+training modulus is quadratic in the window and squares at each of this net's ten BN sites
+(`planning/float_budget_numbers.md` §0.1) — so without these ties the nine bridges would be
+bridges for the one mode that cannot carry a number. -/
+
+theorem cbsBEval_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (γ β μ v : Vec oc) :
+    cbsBEval N (h := h) (w := w) (ic := ic) W b ε γ β μ v
+      = cbsBGen N (h := h) (w := w) W b
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)) := rfl
+
+theorem stemBEval_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (γ β μ v : Vec oc) :
+    stemBEval N (h := h) (w := w) (ic := ic) W b ε γ β μ v
+      = stemBGen N (h := h) (w := w) W b
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)) := rfl
+
+theorem dwbsBEval_eq_gen (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (ε : ℝ) (γ β μ v : Vec c) :
+    dwbsBEval N (h := h) (w := w) W b ε γ β μ v
+      = dwbsBGen N (h := h) (w := w) W b
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 c h w ε γ β μ v)) := rfl
+
+theorem dwbsSBEval_eq_gen (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (ε : ℝ) (γ β μ v : Vec c) :
+    dwbsSBEval N (h := h) (w := w) W b ε γ β μ v
+      = dwbsSBGen N (h := h) (w := w) W b
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 c h w ε γ β μ v)) := rfl
+
+theorem projBEval_eq_gen (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (γ β μ v : Vec oc) :
+    projBEval N (h := h) (w := w) (ic := ic) W b ε γ β μ v
+      = projBGen N (h := h) (w := w) W b
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)) := rfl
+
+theorem mbNoExpFwdBEval_eq_gen (N : Nat) {ic oc h w kHd kWd r : Nat} (ε : ℝ)
+    (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic) (γd βd μd vd : Vec ic)
+    (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
+    (Wp : Kernel4 oc ic 1 1) (bp : Vec oc) (γp βp μp vp : Vec oc) :
+    mbNoExpFwdBEval N (h := h) (w := w) ε Wd bd γd βd μd vd Wz₁ bz₁ Wz₂ bz₂
+        Wp bp γp βp μp vp
+      = mbNoExpFwdBGen N (h := h) (w := w) Wd bd
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 ic h w ε γd βd μd vd))
+          Wz₁ bz₁ Wz₂ bz₂ Wp bp
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γp βp μp vp)) := rfl
+
+theorem mbStridedFwdBEval_eq_gen (N : Nat) {ic mid oc h w kHd kWd r : Nat} (ε : ℝ)
+    (We : Kernel4 mid ic 1 1) (be : Vec mid) (γe βe μe ve : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (γd βd μd vd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (γp βp μp vp : Vec oc) :
+    mbStridedFwdBEval N (h := h) (w := w) ε We be γe βe μe ve Wd bd γd βd μd vd
+        Wz₁ bz₁ Wz₂ bz₂ Wp bp γp βp μp vp
+      = mbStridedFwdBGen N (h := h) (w := w) We be
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 mid (2 * h) (2 * w) ε γe βe μe ve))
+          Wd bd (StableHLO.batchMap N (bnPerChannelEvalTensor3 mid h w ε γd βd μd vd))
+          Wz₁ bz₁ Wz₂ bz₂ Wp bp
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γp βp μp vp)) := rfl
+
+theorem mbResidFwdBEval_eq_gen (N : Nat) {c mid h w kHd kWd r : Nat} (ε : ℝ)
+    (We : Kernel4 mid c 1 1) (be : Vec mid) (γe βe μe ve : Vec mid)
+    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (γd βd μd vd : Vec mid)
+    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (γp βp μp vp : Vec c) :
+    mbResidFwdBEval N (h := h) (w := w) ε We be γe βe μe ve Wd bd γd βd μd vd
+        Wz₁ bz₁ Wz₂ bz₂ Wp bp γp βp μp vp
+      = mbResidFwdBGen N (h := h) (w := w) We be
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 mid h w ε γe βe μe ve))
+          Wd bd (StableHLO.batchMap N (bnPerChannelEvalTensor3 mid h w ε γd βd μd vd))
+          Wz₁ bz₁ Wz₂ bz₂ Wp bp
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 c h w ε γp βp μp vp)) := rfl
+
+theorem headFwdBEval_eq_gen (N : Nat) {c oc h w nC : Nat} (ε : ℝ)
+    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (γh βh μh vh : Vec oc)
+    (Wfc : Mat oc nC) (bfc : Vec nC) :
+    headFwdBEval N (h := h) (w := w) (c := c) ε Wh bh γh βh μh vh Wfc bfc
+      = headFwdBGen N (h := h) (w := w) (c := c) Wh bh
+          (StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γh βh μh vh))
+          Wfc bfc := rfl
+
+/-! ⭐ **And it closes.** The point of the treatment is that a block bridge built from the `*Gen`
+layer, fed the eval BN, has NO `FloatBridgesTo` hypothesis left — which is what
+`EfficientNetFloatBudget.lean` will need at every one of B0's ten BN sites. This is that, for
+b1, against the block `EfficientNetRenderPCEval.lean` actually defines. The device `rsqrt` is
+supplied as a bare accuracy hypothesis rather than through `DeviceRsqrt` so this file does not
+have to reach into the budget layer for it. -/
+noncomputable example (N : Nat) (M : FloatModel) (fsig : ℝ → ℝ) {ε es : ℝ} (hε : 0 < ε)
+    (rsq : ℝ → ℝ)
+    (hrsq : ∀ t, 0 ≤ t → |rsq (t + ε) - 1 / Real.sqrt (t + ε)| ≤ es)
+    (Wd : DepthwiseKernel 32 3 3) (bd : Vec 32) (γd βd μd vd : Vec 32)
+    (Wz₁ : Mat 32 8) (bz₁ : Vec 8) (Wz₂ : Mat 8 32) (bz₂ : Vec 32)
+    (Wp : Kernel4 16 32 1 1) (bp : Vec 16) (γp βp μp vp : Vec 16)
+    {w' bb esig G Bb Mb S : ℝ} (hw' : 0 ≤ w') (hbb : 0 ≤ bb) (hesig : 0 ≤ esig)
+    (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig)
+    (hWd : ∀ ch kh kw, |Wd ch kh kw| ≤ w') (hbd : ∀ ch, |bd ch| ≤ bb)
+    (hWz₁ : ∀ i j, |Wz₁ i j| ≤ w') (hbz₁ : ∀ j, |bz₁ j| ≤ bb)
+    (hWz₂ : ∀ i j, |Wz₂ i j| ≤ w') (hbz₂ : ∀ j, |bz₂ j| ≤ bb)
+    (hWp : ∀ o c kh kw, |Wp o c kh kw| ≤ w') (hbp : ∀ o, |bp o| ≤ bb)
+    (hvd : ∀ c, 0 ≤ vd c) (hγd : ∀ c, |γd c| ≤ G) (hβd : ∀ c, |βd c| ≤ Bb)
+    (hμd : ∀ c, |μd c| ≤ Mb) (hvp : ∀ c, 0 ≤ vp c) (hγp : ∀ c, |γp c| ≤ G)
+    (hβp : ∀ c, |βp c| ≤ Bb) (hμp : ∀ c, |μp c| ≤ Mb) (hS : 1 / Real.sqrt ε ≤ S) :
+    FloatBridgesTo
+      (mbNoExpFwdBEval N (h := 112) (w := 112) ε Wd bd γd βd μd vd Wz₁ bz₁ Wz₂ bz₂
+        Wp bp γp βp μp vp)
+      (mbNoExpFwdBF N (h := 112) (w := 112) M fsig Wd bd Wz₁ bz₁ Wz₂ bz₂ Wp bp
+        (StableHLO.batchMap N (bnPerChannelEvalTensor3FV M γd βd μd (fun o => rsq (vd o + ε))))
+        (StableHLO.batchMap N
+          (bnPerChannelEvalTensor3FV M γp βp μp (fun o => rsq (vp o + ε))))) :=
+  floatBridgesTo_mbNoExpFwdBGen N M fsig Wd bd _ Wz₁ bz₁ Wz₂ bz₂ Wp bp _ _ _
+    hw' hbb hesig (by norm_num) (by norm_num) (by norm_num) (by norm_num) hsig
+    hWd hbd hWz₁ hbz₁ hWz₂ hbz₂ hWp hbp
+    (FloatBridgesTo.batchMap N (floatBridgesTo_bnPerChannelEvalTensor3 (h := 112) (w := 112)
+      M γd βd μd vd _ (by norm_num) (by norm_num) hε hvd hγd hβd hμd
+      (fun o => hrsq (vd o) (hvd o)) hS))
+    (FloatBridgesTo.batchMap N (floatBridgesTo_bnPerChannelEvalTensor3 (h := 112) (w := 112)
+      M γp βp μp vp _ (by norm_num) (by norm_num) hε hvp hγp hβp hμp
+      (fun o => hrsq (vp o) (hvp o)) hS))
 
 set_option maxRecDepth 100000 in
 /-- **THE WHOLE BATCHED EfficientNet-B0 FORWARD FLOAT-BRIDGES TO ITS FLOAT SKELETON.**
