@@ -119,6 +119,39 @@ theorem swishScalar_lipschitz_abs {a b A : ℝ} (ha : |a| ≤ A) (_hb : |b| ≤ 
       ≤ A * ((1/4) * |a - b|) + |a - b| * 1 := add_le_add h1 h2
     _ = (1 + A/4) * |a - b| := by ring
 
+/-- **Two sigmoid values differ by less than 1** — both lie in `(0,1)`. The fact
+    `swishScalar_lipschitz_abs'` needs, and the one `sigmoidScalar_lipschitz_abs` cannot give
+    (its `¼|a−b|` is unbounded in the separation). -/
+theorem sigmoidScalar_sub_abs_le_one (a b : ℝ) : |sigmoidScalar a - sigmoidScalar b| ≤ 1 :=
+  abs_le.mpr ⟨by linarith [sigmoidScalar_pos a, sigmoidScalar_lt_one b],
+              by linarith [sigmoidScalar_pos b, sigmoidScalar_lt_one a]⟩
+
+/-- ⭐ **Swish input-sensitivity, the ADDITIVE bound.** `|swish(a) − swish(b)| ≤ A + |a−b|` on
+    `|a| ≤ A` — the same split as `swishScalar_lipschitz_abs`, but bounding `|σa − σb|` by `1`
+    (the gate's own range) instead of by `¼|a−b|`. The two are incomparable and the `min` of them
+    is what `floatClose_swish` now states: the multiplicative form wins at small separation, this
+    one at large `A`.
+
+    ⚠ Why it matters, measured: `(1 + A/4)·e` multiplies the inherited error by the WINDOW at
+    every swish site, so an EfficientNet-B0 fold at `|param| ≤ 21/10` reaches `10¹⁷³⁷` — past
+    what `norm_num` will evaluate — where the additive form lands at `10¹⁸⁶`
+    (`planning/float_budget_numbers.md` §3.4). The true global Lipschitz constant of `x·σ(x)` is
+    ≈ 1.1, so `1 + A/4` is enormously loose for large `A`; proving that needs the decay of `σ'`
+    and hence calculus, and this bound is what makes the fold statable without it. -/
+theorem swishScalar_lipschitz_abs' {a b A : ℝ} (ha : |a| ≤ A) :
+    |swishScalar a - swishScalar b| ≤ A + |a - b| := by
+  rw [swishScalar_eq, swishScalar_eq]
+  have hsplit : a * sigmoidScalar a - b * sigmoidScalar b
+      = a * (sigmoidScalar a - sigmoidScalar b) + (a - b) * sigmoidScalar b := by ring
+  rw [hsplit]
+  refine (abs_add_le _ _).trans ?_
+  rw [abs_mul, abs_mul]
+  have h1 : |a| * |sigmoidScalar a - sigmoidScalar b| ≤ A * 1 :=
+    mul_le_mul ha (sigmoidScalar_sub_abs_le_one a b) (abs_nonneg _) ((abs_nonneg _).trans ha)
+  have h2 : |a - b| * |sigmoidScalar b| ≤ |a - b| * 1 :=
+    mul_le_mul_of_nonneg_left (sigmoidScalar_abs_le_one b) (abs_nonneg _)
+  linarith
+
 /-- **Swish is `FloatClose`** — the enet smooth activation as a composable instance.
     Rounding from `swish_close` (the `mulErr` of `xᵢ·fsig(xᵢ)`), input-shift from
     `swishScalar_lipschitz_abs`. The smooth-world analogue of `floatClose_relu`. With
@@ -128,7 +161,7 @@ theorem floatClose_swish {n : Nat} (M : FloatModel) (fsig : ℝ → ℝ) {esig A
     (hesig : 0 ≤ esig) (hA : 0 ≤ A) (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig) :
     FloatClose A (A + FloatModel.mulErr M.u A 1 0 esig)
       (swish n) (fun v i => M.mul (v i) (fsig (v i)))
-      (fun e => FloatModel.mulErr M.u A 1 0 esig + (1 + A/4) * e) := by
+      (fun e => FloatModel.mulErr M.u A 1 0 esig + min ((1 + A/4) * e) (A + e)) := by
   have hme0 : 0 ≤ FloatModel.mulErr M.u A 1 0 esig := by
     have := M.u_nonneg; unfold FloatModel.mulErr; nlinarith [mul_nonneg hA hesig]
   refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i => ?_⟩
@@ -147,14 +180,20 @@ theorem floatClose_swish {n : Nat} (M : FloatModel) (fsig : ℝ → ℝ) {esig A
       _ ≤ FloatModel.mulErr M.u A 1 0 esig + A := add_le_add hround hreal
       _ = A + FloatModel.mulErr M.u A 1 0 esig := by ring
   · have hround := swish_close M fsig vt hsig hvt i
-    have hshift : |swish n vt i - swish n va i| ≤ (1 + A/4) * e := by
+    -- both sensitivity bounds hold, so their `min` does: the multiplicative one wins at small
+    -- separation, the additive one at large window (`swishScalar_lipschitz_abs'`)
+    have hmul : |swish n vt i - swish n va i| ≤ (1 + A/4) * e := by
       unfold swish
       exact (swishScalar_lipschitz_abs (hvt i) (hva i)).trans
         (mul_le_mul_of_nonneg_left (hd i) (by positivity))
+    have hadd : |swish n vt i - swish n va i| ≤ A + e := by
+      unfold swish
+      exact (swishScalar_lipschitz_abs' (hvt i)).trans (by linarith [hd i])
     calc |M.mul (vt i) (fsig (vt i)) - swish n va i|
         ≤ |M.mul (vt i) (fsig (vt i)) - swish n vt i| + |swish n vt i - swish n va i| :=
           abs_sub_le _ _ _
-      _ ≤ FloatModel.mulErr M.u A 1 0 esig + (1 + A/4) * e := add_le_add hround hshift
+      _ ≤ FloatModel.mulErr M.u A 1 0 esig + min ((1 + A/4) * e) (A + e) :=
+          add_le_add hround (le_min hmul hadd)
 
 /-- **Sigmoid is `FloatClose`** — the SE gate's nonlinearity as a composable instance.
     The GPU `fsig` (within `esig` of `σ`) at any input is within `esig` of the certified
@@ -206,7 +245,7 @@ theorem floatClose_broadcast {c h w : Nat} (A : ℝ) :
     feeding `g` here. -/
 theorem floatClose_seScale {m : Nat} (M : FloatModel) {A Bg : ℝ}
     {g gF : Vec m → Vec m} {Lg : ℝ → ℝ} (hg : FloatClose A Bg g gF Lg) :
-    FloatClose A (A * Bg + FloatModel.mulErr M.u A Bg 0 (Lg 0))
+    FloatClose A (A * Bg + M.u * (A * Bg))
       (fun x i => x i * g x i)
       (fun x i => M.mul (x i) (gF x i))
       (fun e => FloatModel.mulErr M.u A Bg e (Lg e)) := by
@@ -214,18 +253,31 @@ theorem floatClose_seScale {m : Nat} (M : FloatModel) {A Bg : ℝ}
   refine ⟨fun v hv i => ?_, fun vt va e hva hvt hd i =>
     M.mul_close (hd i) (hge vt va e hva hvt hd i) (hva i) (hgm va hva i).1⟩
   have hgv : |g v i| ≤ Bg := (hgm v hv i).1
+  have hgFv : |gF v i| ≤ Bg := (hgm v hv i).2
   have hvi : |v i| ≤ A := hv i
+  have hA0 : 0 ≤ A := (abs_nonneg _).trans hvi
+  have hB0 : 0 ≤ Bg := (abs_nonneg _).trans hgv
+  have hu := M.u_nonneg
   have hreal : |v i * g v i| ≤ A * Bg := by
-    rw [abs_mul]; exact mul_le_mul hvi hgv (abs_nonneg _) ((abs_nonneg _).trans hvi)
-  have hround : |M.mul (v i) (gF v i) - v i * g v i| ≤ FloatModel.mulErr M.u A Bg 0 (Lg 0) :=
-    M.mul_close (by simp) (hge v v 0 hv hv (fun k => by simp) i) hvi hgv
-  have hme0 : 0 ≤ FloatModel.mulErr M.u A Bg 0 (Lg 0) := (abs_nonneg _).trans hround
-  refine ⟨hreal.trans (le_add_of_nonneg_right hme0), ?_⟩
+    rw [abs_mul]; exact mul_le_mul hvi hgv (abs_nonneg _) hA0
+  -- ⭐ the FLOAT gate is bounded by `Bg` too — `FloatClose`'s magnitude clause bounds BOTH maps
+  -- — so the float product is one rounding above `A·Bg`, and the gate's ERROR never enters the
+  -- window. Deriving it instead as `|float − real| + |real|` (which is what this proof used to
+  -- do) charges `A · Lg 0` to the magnitude; on EfficientNet-B0 that is a factor of 10¹⁸ per SE
+  -- site and takes the whole-net window from 10⁴⁹ to 10⁴¹⁷.
+  have hfl : |v i * gF v i| ≤ A * Bg := by
+    rw [abs_mul]; exact mul_le_mul hvi hgFv (abs_nonneg _) hA0
+  have hround0 : |M.mul (v i) (gF v i) - v i * gF v i| ≤ FloatModel.mulErr M.u A Bg 0 0 :=
+    M.mul_close (by simp) (by simp) hvi hgFv
+  have hme : FloatModel.mulErr M.u A Bg 0 0 = M.u * (A * Bg) := by
+    unfold FloatModel.mulErr; ring
+  refine ⟨hreal.trans (le_add_of_nonneg_right
+    (mul_nonneg hu (mul_nonneg hA0 hB0))), ?_⟩
   calc |M.mul (v i) (gF v i)|
-      ≤ |M.mul (v i) (gF v i) - v i * g v i| + |v i * g v i| := by
-        simpa using abs_sub_le (M.mul (v i) (gF v i)) (v i * g v i) 0
-    _ ≤ FloatModel.mulErr M.u A Bg 0 (Lg 0) + A * Bg := add_le_add hround hreal
-    _ = A * Bg + FloatModel.mulErr M.u A Bg 0 (Lg 0) := by ring
+      ≤ |M.mul (v i) (gF v i) - v i * gF v i| + |v i * gF v i| := by
+        simpa using abs_sub_le (M.mul (v i) (gF v i)) (v i * gF v i) 0
+    _ ≤ M.u * (A * Bg) + A * Bg := add_le_add (hme ▸ hround0) hfl
+    _ = A * Bg + M.u * (A * Bg) := by ring
 
 /-- **THE SE GATE NET IS `FloatClose`** — `broadcast ∘ sigmoid ∘ dense ∘ swish ∘ dense ∘ GAP`
     folded entirely through `.comp` from the six per-op instances (`floatClose_gap`,
@@ -305,12 +357,16 @@ noncomputable def floatBridgesTo_broadcast {c h w : Nat} :
 
 /-- Swish float-bridges TO the deployed `x * fsig x` (the rounded product of the
     activation with the deployed sigmoid approximation): magnitude `A + mulErr`,
-    modulus `mulErr + (1 + A/4)·e`. -/
+    modulus `mulErr + min ((1 + A/4)·e) (A + e)` — the better of swish's two input
+    sensitivities at each window (`swishScalar_lipschitz_abs` /
+    `swishScalar_lipschitz_abs'`). ⚠ The multiplicative branch alone multiplies the
+    inherited error by the window at every swish site; see `swishScalar_lipschitz_abs'`
+    for what that costs a whole-net fold. -/
 noncomputable def floatBridgesTo_swish {n : Nat} (M : FloatModel) (fsig : ℝ → ℝ) {esig : ℝ}
     (hesig : 0 ≤ esig) (hsig : ∀ t, |fsig t - sigmoidScalar t| ≤ esig) :
     FloatBridgesTo (swish n) (fun v i => M.mul (v i) (fsig (v i))) :=
   ⟨fun A => A + FloatModel.mulErr M.u A 1 0 esig,
-   fun A e => FloatModel.mulErr M.u A 1 0 esig + (1 + A/4) * e,
+   fun A e => FloatModel.mulErr M.u A 1 0 esig + min ((1 + A/4) * e) (A + e),
    fun A hA => ⟨by
       have hu := M.u_nonneg
       have : 0 ≤ FloatModel.mulErr M.u A 1 0 esig := by
@@ -362,12 +418,15 @@ noncomputable def seBlockFullF {c h w r : Nat} (M : FloatModel) (fsig : ℝ → 
   fun x i => M.mul (x i) (seGateF (h := h) (w := w) M fsig W₁ b₁ W₂ b₂ x i)
 
 /-- **The SE rescale `x ⊙ g(x)` in bridge form**: given a bridge for the gate, the
-    rescaled block bridges with magnitude `A·mag + mulErr` and modulus
-    `mulErr M.u A (mag A) e (mod A e)` — `floatClose_seScale` with the bookkeeping kept. -/
+    rescaled block bridges with magnitude `A·mag·(1+u)` and modulus
+    `mulErr M.u A (mag A) e (mod A e)` — `floatClose_seScale` with the bookkeeping kept.
+    ⭐ The window is the gate's certified MAGNITUDE times the input window plus one
+    rounding; the gate's ERROR does not enter it, because `FloatClose`'s magnitude clause
+    bounds the float gate as well as the real one. -/
 noncomputable def FloatBridgesTo.seScale {m : Nat} (M : FloatModel) {g gF : Vec m → Vec m}
     (hg : FloatBridgesTo g gF) (hm : 0 < m) :
     FloatBridgesTo (fun x i => x i * g x i) (fun x i => M.mul (x i) (gF x i)) where
-  mag := fun A => A * hg.mag A + FloatModel.mulErr M.u A (hg.mag A) 0 (hg.mod A 0)
+  mag := fun A => A * hg.mag A + M.u * (A * hg.mag A)
   mod := fun A e => FloatModel.mulErr M.u A (hg.mag A) e (hg.mod A e)
   close := fun _A hA =>
     have h := floatClose_seScale M (hg.floatClose hA)

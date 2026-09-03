@@ -420,3 +420,186 @@ def verify_mnv2(rows, S=MNV2_S, w=MNV2_W, es=MNV2_ES, q=U32) -> int:
     ck("gap.E", A * (q * (1 + g50) + g50) + E, r["gap"][1])
     conv_ck("dense", 128, r["gap"], r["dense"])
     return n
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# EfficientNet-B0 (the representative B0), INFERENCE BatchNorm
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Profile measured on /home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.bin
+# (5,288,548 f32): global max |·| = 4.0545, 99.99th percentile 1.3949, 100 entries
+# above 2 and 2 above 4 — so a uniform |·| ≤ 41/10 covers every stored parameter.
+# ε ≥ 10⁻⁵ ⇒ 1/√ε ≤ 317. `es` is the supplied device-rsqrt accuracy and `esig` the
+# supplied sigmoid accuracy — both modelled, no IEEE spec for either.
+#
+# ⭐ Two of this net's leaves had to be TIGHTENED before the fold was statable at all
+# (2026-09-03, `EnetFloatBridge.lean`); the numbers below are at the tightened ones.
+#   * `floatClose_swish`'s modulus was `mulErr + (1 + A/4)·e` — the inherited error
+#     multiplied by the WINDOW at every swish site. It is now the `min` of that and
+#     `mulErr + (A + e)` (`swishScalar_lipschitz_abs'`, bounding |σa − σb| by the gate's
+#     own range instead of by ¼|a−b|). Multiplicative-only: budget 1e1737.
+#   * `floatClose_seScale`'s window was derived as |float − real| + |real|, charging the
+#     GATE'S ERROR (A · Lg 0) to the magnitude. `FloatClose`'s magnitude clause already
+#     bounds the float gate, so the window is A·Bg·(1+u). Untightened: window 1e417.
+# Both fixes are the relu6 pattern — a bound proved one lemma down and discarded by the
+# generic combinator. `norm_num` refuses numerals past ~1e300, so each was a hard block.
+
+B0_W = F(41, 10)        # every stored parameter, uniformly
+B0_S = F(317)           # 1/√ε at ε ≥ 1e-5
+B0_ES = F(1, 100)       # device rsqrt accuracy
+B0_ESIG = F(1, 100)     # deployed sigmoid accuracy
+
+# (tag, kind, expand fan-in, depthwise fan-in kH·kW, SE channels c, SE reduction r,
+#  SE spatial h·w, project fan-in), read off `efficientnetForwardB`
+# (EfficientNetRenderPC.lean). `expand = None` is the MBConv1 no-expand block.
+B0_PLAN = [("b1", "noexp",   None, 9,  32,  8, 112 * 112, 32),
+           ("b2", "strided", 16,   9,  96,  4, 56 * 56,   96),
+           ("b3", "resid",   24,   25, 144, 6, 56 * 56,   144)]
+
+
+def b0_eval_chain(w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32,
+                  swish_min=True, se_tight=True):
+    """Every stage of the deployed EfficientNet-B0 eval forward, at block granularity.
+
+    Yields (tag, (window, budget)) in exactly the order the Lean `Maps` chain composes
+    them. `swish_min=False` / `se_tight=False` revert to the pre-2026-09-03 leaves and are
+    kept only to reproduce the "not statable" comparison in
+    planning/float_budget_numbers.md §3.4 — do not emit numerals from them."""
+    G = Bb = Mb = w
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    def bnE(st):
+        A, E = st
+        nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
+        return R((G * ((A + Mb) * S) + Bb + nb, nb + G * S * E))
+
+    def cv(st, m):
+        return R(conv(st, m, w, w))
+
+    def swish(st):
+        A, E = st
+        me = mulErr(q, A, F(1), F(0), esig)
+        tail = min((1 + A / 4) * E, A + E) if swish_min else (1 + A / 4) * E
+        return R((A + me, me + tail))
+
+    def sigmoid(st):
+        return R((1 + esig, esig + st[1] / 4))
+
+    out = []
+    st = (F(1), F(0))
+    st = cv(st, 3 * 3 * 3);  out.append(("stem.conv", st))     # 3×3/s2 stem
+    st = bnE(st);            out.append(("stem.bn", st))
+    st = swish(st);          out.append(("stem.swish", st))
+    for tag, kind, fe, fd, c, r, hw, fp in B0_PLAN:
+        blkin = st
+        if fe is not None:                                     # expand 1×1 (b2/b3)
+            st = cv(st, fe);   out.append((f"{tag}.econv", st))
+            st = bnE(st);      out.append((f"{tag}.ebn", st))
+            st = swish(st);    out.append((f"{tag}.eswish", st))
+        st = cv(st, fd);       out.append((f"{tag}.dw", st))    # depthwise (3×3 or 5×5)
+        st = bnE(st);          out.append((f"{tag}.dbn", st))
+        st = swish(st);        out.append((f"{tag}.dswish", st))
+        # squeeze-excite: gate = broadcast ∘ sigmoid ∘ dense(r) ∘ swish ∘ dense(c) ∘ gap,
+        # then the rescale x ⊙ gate(x). `broadcast` carries the envelope through unchanged.
+        A, E = st
+        g = R(gap(st, hw, q)); out.append((f"{tag}.sq", g))
+        g = cv(g, c);          out.append((f"{tag}.sd1", g))
+        g = swish(g);          out.append((f"{tag}.ssw", g))
+        g = cv(g, r);          out.append((f"{tag}.sd2", g))
+        g = sigmoid(g);        out.append((f"{tag}.ssig", g))
+        Cg, Eg = g
+        st = R((A * Cg + q * (A * Cg), mulErr(q, A, Cg, E, Eg)) if se_tight
+               else (A * Cg + mulErr(q, A, Cg, F(0), Eg), mulErr(q, A, Cg, E, Eg)))
+        out.append((f"{tag}.se", st))
+        st = cv(st, fp);       out.append((f"{tag}.pconv", st))  # project 1×1, no swish
+        st = bnE(st);          out.append((f"{tag}.pbn", st))
+        if kind == "resid":
+            st = R(residual(blkin, st, q)); out.append((f"{tag}.out", st))
+    st = cv(st, 24);           out.append(("head.conv", st))     # head 1×1, 24 → 1280
+    st = bnE(st);              out.append(("head.bn", st))
+    st = swish(st);            out.append(("head.swish", st))
+    st = R(gap(st, 56 * 56, q)); out.append(("gap", st))
+    st = R(dense(st, 1280, w, w)); out.append(("dense", st))
+    return out
+
+
+def verify_b0(rows, w=B0_W, S=B0_S, es=B0_ES, esig=B0_ESIG, q=U32) -> int:
+    """Re-assert EVERY rounded inequality the Lean chain closes, exactly.
+
+    The peer of `verify_r34` / `verify_mnv2`. Returns the count checked; raises on the
+    first failure."""
+    G = Bb = Mb = w
+    r_ = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: {float(lhs)} > {float(rhs)}"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2))
+        ck(tag + ".A", (1 + g) * (m * w * A + w), dst[0])
+        ck(tag + ".E", g * (m * w * (A + E) + w) + m * w * E, dst[1])
+
+    def bn_ck(tag, src, dst):
+        A, E = src
+        nb = bnNormBudget(q, A + Mb, S, G, Bb, F(0), es)
+        ck(tag + ".A", G * ((A + Mb) * S) + Bb + nb, dst[0])
+        ck(tag + ".E", nb + G * S * E, dst[1])
+
+    def swish_ck(tag, src, dst):
+        A, E = src
+        me = mulErr(q, A, F(1), F(0), esig)
+        ck(tag + ".A", A + me, dst[0])
+        ck(tag + ".E", me + min((1 + A / 4) * E, A + E), dst[1])
+
+    def gap_ck(tag, hw, src, dst):
+        A, E = src
+        g = r4(gamma_q(hw + 1))
+        ck(tag + ".A", A * ((1 + g) * (1 + q)), dst[0])
+        ck(tag + ".E", A * (q * (1 + g) + g) + E, dst[1])
+
+    conv_ck("stem.conv", 3 * 3 * 3, (F(1), F(0)), r_["stem.conv"])
+    bn_ck("stem.bn", r_["stem.conv"], r_["stem.bn"])
+    swish_ck("stem.swish", r_["stem.bn"], r_["stem.swish"])
+    st = r_["stem.swish"]
+    for tag, kind, fe, fd, c, r, hw, fp in B0_PLAN:
+        blkin = st
+        if fe is not None:
+            conv_ck(f"{tag}.econv", fe, st, r_[f"{tag}.econv"])
+            bn_ck(f"{tag}.ebn", r_[f"{tag}.econv"], r_[f"{tag}.ebn"])
+            swish_ck(f"{tag}.eswish", r_[f"{tag}.ebn"], r_[f"{tag}.eswish"])
+            st = r_[f"{tag}.eswish"]
+        conv_ck(f"{tag}.dw", fd, st, r_[f"{tag}.dw"])
+        bn_ck(f"{tag}.dbn", r_[f"{tag}.dw"], r_[f"{tag}.dbn"])
+        swish_ck(f"{tag}.dswish", r_[f"{tag}.dbn"], r_[f"{tag}.dswish"])
+        A, E = r_[f"{tag}.dswish"]
+        gap_ck(f"{tag}.sq", hw, (A, E), r_[f"{tag}.sq"])
+        conv_ck(f"{tag}.sd1", c, r_[f"{tag}.sq"], r_[f"{tag}.sd1"])
+        swish_ck(f"{tag}.ssw", r_[f"{tag}.sd1"], r_[f"{tag}.ssw"])
+        conv_ck(f"{tag}.sd2", r, r_[f"{tag}.ssw"], r_[f"{tag}.sd2"])
+        Ain, Ein = r_[f"{tag}.sd2"]
+        ck(f"{tag}.ssig.A", 1 + esig, r_[f"{tag}.ssig"][0])
+        ck(f"{tag}.ssig.E", esig + Ein / 4, r_[f"{tag}.ssig"][1])
+        Cg, Eg = r_[f"{tag}.ssig"]
+        ck(f"{tag}.se.A", A * Cg + q * (A * Cg), r_[f"{tag}.se"][0])
+        ck(f"{tag}.se.E", mulErr(q, A, Cg, E, Eg), r_[f"{tag}.se"][1])
+        conv_ck(f"{tag}.pconv", fp, r_[f"{tag}.se"], r_[f"{tag}.pconv"])
+        bn_ck(f"{tag}.pbn", r_[f"{tag}.pconv"], r_[f"{tag}.pbn"])
+        st = r_[f"{tag}.pbn"]
+        if kind == "resid":
+            Bd, Ed = st
+            ck(f"{tag}.resA", Bd + blkin[0] + q * (Bd + blkin[0]), r_[f"{tag}.out"][0])
+            ck(f"{tag}.resE", q * (Bd + Ed + blkin[0] + blkin[1]) + (Ed + blkin[1]),
+               r_[f"{tag}.out"][1])
+            st = r_[f"{tag}.out"]
+    conv_ck("head.conv", 24, st, r_["head.conv"])
+    bn_ck("head.bn", r_["head.conv"], r_["head.bn"])
+    swish_ck("head.swish", r_["head.bn"], r_["head.swish"])
+    gap_ck("gap", 56 * 56, r_["head.swish"], r_["gap"])
+    conv_ck("dense", 1280, r_["gap"], r_["dense"])
+    return n

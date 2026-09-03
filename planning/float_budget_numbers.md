@@ -56,9 +56,11 @@ The machinery built for r34 and reusable for the rest:
 * `MobileNetV2RenderPCEval.lean` — the eval graph twin, mirroring `MobileNetV2RenderPC.lean` rung
   for rung. One shared ε (as the render emits), each BN site carrying its frozen mean and
   variance: 102 arguments → 123.
+* `EnetFloatBridge.lean` — `floatClose_swish`'s modulus and `floatClose_seScale`'s window
+  both tightened (§3.4); without either, EfficientNet-B0's fold is past `norm_num`'s ceiling.
 * `scripts/float_budget_envelope.py` — the exact-rational fold in the lemmas' semantics, the
   4-significant-figure round-up, the re-assertion passes (`verify_r34`, 180 inequalities;
-  `verify_mnv2`, 116) and the numerals. Its CIFAR-8 regression case reproduces `Cifar8FloatBudget.lean` stage for stage.
+  `verify_mnv2`, 116; `verify_b0`, 96) and the numerals. Its CIFAR-8 regression case reproduces `Cifar8FloatBudget.lean` stage for stage.
   ⚠ It must fold with the **rounded** γ (`r4(gamma_q k)`), not the exact `(1+u)^k − 1` — the
   Lean chain passes the rounded one, and folding with the exact value silently emits stage
   numerals a hair too small, which the kernel then rejects. That is what the re-assertion pass
@@ -103,6 +105,15 @@ one of the following is done:
 3. **Accept a per-site cap on `eistd`.** `|istd| ≤ 1/√ε` bounds the inverse-stddev, so
    `eistd ≤ 2/√ε` always; that removes the `eistd` growth but not the `D²` growth.
 
+**⭐ Squeeze-excite is a third reducing site (added 2026-09-03, §3.4).** `seScale`'s modulus
+`mulErr q A Cg E Eg` carries `A · Eg` — the block window times the gate's error — and the gate
+grows that error out of the same window through the squeeze's `GAP → dense`. So SE is quadratic
+in the window for the same structural reason BN and LN are: **a reduction feeds back
+multiplicatively against the thing it reduced.** EfficientNet-B0 survives it (each SE site
+doubles the budget's exponent, and there are three); a net with twenty would not. When looking at
+a new architecture, the question to ask is not "does it normalise" but "does any op consume a
+reduction of its own input and then multiply by that input".
+
 Recording the size of the training-mode number (10⁷⁴¹⁷, script-computed, not kernel-checked) is
 itself a result: it is why the adjoint chain exists.
 
@@ -143,7 +154,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 |---|---|---|
 | **ResNet-34 fwd** | ✅ **DONE** (inference BN) — `r34_float_logits_le`, 1.548·10²⁰⁹, tied to the graph | — |
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
-| EfficientNet-B0 fwd | open: 10 batched `bnBatchLA` bridges | an inference-BN leaf at the batched index (`batchMap` of the per-example eval BN — `FloatBridgesTo.batchMap` handles the lift) |
+| EfficientNet-B0 fwd | ⭐ **UNBLOCKED** (§3.4) — the fold is statable, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰ at the measured profile; open: the eval net + graph + budget file | the eval-BN B0 forward (`batchOp .bnEval` already denotes `batchMap N bnPerChannelEvalTensor3`, `rfl`), the `Maps` leaves of §5, then the r34 recipe |
 | ConvNeXt-T Ch fwd | open: 22 pure-normalise LN bridges | ⛔ blocked on §0.1 — the LN modulus is quadratic and LN has no eval mode |
 | ViT-Tiny fwd | open: `hFinalLN`, `hblocks`, `hPatch` | ⛔ blocked on §0.1, and additionally the softmax modulus carries `Real.exp` |
 
@@ -227,15 +238,71 @@ looseness.
 EVAL-BN *adjoint-chain* budget, not an interval fold, and the fold lands ~36 orders above it.
 
 
-### 3.3–3.5 ConvNeXt-T, EfficientNet-B0, ViT-Tiny
+### 3.4 EfficientNet-B0 — ⭐ UNBLOCKED (2026-09-03). Two leaf bounds were the wall.
 
-**B0 is NEXT.** It needs a batched inference-BN leaf (`batchMap` of the per-example eval BN) and
-is otherwise the r34 recipe. ⚠ Do not expect mnv2's tight window there: B0's activation is
-swish, which is unbounded above, so §3.2's clamp does not apply and the window will compound the
-way ResNet-34's does. The budget will look like the others (`G·S` per BN site). ConvNeXt-T and
-ViT-Tiny are blocked on §0.1; if one of the three escapes there works, ConvNeXt is the cheapest
-(one LN leaf closes 22 hypotheses) and ViT is still gated on `Real.exp` in the softmax
-modulus.
+**Status: the fold is statable and the leaves are fixed; the net/graph/budget files are not
+written.** At the profile measured on `/home/skoonce/enet_b0_350_4gpu/efficientnet_b0_imagenet.bin`
+(5,288,548 f32, global max `|·| = 4.0545`, 99.99th pct 1.3949, 100 entries above 2 — so
+`|·| ≤ 41/10`), `ε ≥ 10⁻⁵`, `es = esig = 10⁻²`:
+
+    output window  ≤ 2.580·10⁵⁵      budget ≤ 8.408·10²¹⁰      (`b0_eval_chain`, `verify_b0`, 96 ineqs)
+
+**⛔ It did not start there.** The first honest fold came out at window `10¹⁷¹⁷`, budget `10⁴¹⁷⁹` —
+`norm_num` refuses numerals past ~10³⁰⁰, so there was no theorem to state, and unlike §0.1 this had
+nothing to do with the BN mode (the fold was already at inference BN). Two leaf bounds did it, and
+**both were the relu6 pattern: a bound proved one lemma down and thrown away by the generic
+combinator.** Ablated at the measured profile:
+
+| | window | budget | statable |
+|---|---|---|---|
+| both leaves as they stood | 10¹⁷¹⁷ | 10⁴¹⁷⁹ | no |
+| swish fixed only | 10²¹¹ | 10²¹² | yes |
+| seScale fixed only | 10⁵⁵ | 10⁷⁹⁹ | no |
+| **both fixed** | **10⁵⁵** | **10²¹¹** | **yes** |
+
+1. **`floatClose_swish`'s modulus was `mulErr + (1 + A/4)·e`** — it multiplies the inherited error
+   by the WINDOW at every swish site, and B0 has nine of them. `swishScalar_lipschitz_abs` proves
+   that constant from `|σa − σb| ≤ ¼|a−b|`; bounding the same factor by the gate's own *range*
+   instead (`|σa − σb| ≤ 1`, `sigmoidScalar_sub_abs_le_one`) gives `A + |a−b|` —
+   **additive in the window rather than multiplicative** (`swishScalar_lipschitz_abs'`). The two
+   are incomparable, so `floatClose_swish` now states their `min`. ⚠ The true global Lipschitz
+   constant of `x·σ(x)` is ≈ 1.1 (`σ' → 0` at both ends); getting *that* needs the decay of `σ'`,
+   i.e. calculus, and the additive bound is what avoids needing it.
+2. **`floatClose_seScale`'s window was derived as `|float − real| + |real|`** — which charges
+   `A · Lg 0`, the block window times the GATE'S ERROR, to the magnitude. But `FloatClose`'s
+   magnitude clause bounds the *float* gate as well as the real one, so the float product is one
+   rounding above `A·Bg` and the gate's error never needed to enter the window at all. The window
+   is now `A·Bg·(1+u)`. Worth 10¹⁸ per SE site.
+
+**⭐ What SE still costs, and it is §0.1's shape again.** Each SE site roughly DOUBLES the budget's
+exponent (`10²³ → 10⁸⁰ → 10¹⁹⁶` across b1/b2/b3): `seScale`'s modulus is
+`mulErr q A Cg E Eg`, whose `A · Eg` term multiplies the block window by the gate error — and the
+gate error is itself grown from that same window by the squeeze's `dense`. **The SE block's
+modulus is quadratic in the window**, exactly like training-mode BN and LayerNorm. B0 survives it
+only because it has three SE sites; twenty would end it the way §0.1's 33 BN sites end r34's
+training-mode fold. Add SE to §0.1's list of reducing sites.
+
+**What is left.** (i) `Maps` leaves: `swish`, `sigmoid`, `broadcast`, `seScale`, `batchMap`
+(`FloatBridgesTo.batchMap`'s `mag`/`mod` are the per-example ones verbatim, so `Maps.batchMap` is
+the identity); `depthwise` already exists in `MobileNetV2FloatBudget.lean` and needs moving or
+re-importing. (ii) An eval-BN B0 forward — `efficientnetForwardB` hard-wires `bnBatchLA`
+(training-mode, and batch-COUPLING); the eval twin is `batchMap N (bnPerChannelEvalTensor3 …)` at
+each of the 10 sites, ⭐ and `den_batchOp_bnEval` already proves the `bnEval` descriptor denotes
+exactly that, `rfl`. (iii) The eval graph twin + faithfulness. (iv)
+`EfficientNetFloatBudget.lean` on the r34 recipe. (v) The numerals are already generated and
+re-asserted (`b0_eval_chain` / `verify_b0`).
+
+⛔ **An earlier note in this file said "B0's activation is swish, which is unbounded above, so
+§3.2's clamp does not apply and the window will compound the way ResNet-34's does." The
+conclusion was right and the reason was wrong.** `|x·σ(x)| ≤ |x|`, so swish is
+magnitude-NON-increasing — its `mag` is `A + mulErr`, like relu's. It does not amplify the window;
+it simply does not RESET it, which is the relu case, not an unboundedness case. What actually
+threatened B0 was swish's *modulus* and SE's *window*, neither of which that note mentions.
+
+### 3.3, 3.5 ConvNeXt-T and ViT-Tiny
+
+Both blocked on §0.1; if one of the escapes there works, ConvNeXt is the cheapest (one LN leaf
+closes 22 hypotheses) and ViT is still gated on `Real.exp` in the softmax modulus.
 
 ### 3.6 Common sub-steps for every net
 
@@ -257,10 +324,12 @@ BN-back modulus inherits the same reduction structure. Start only after the forw
 (`FloatBudgetEnv.lean` cannot see their leaves — `floatBridgesTo_depthwise` is in
 `DepthwiseFloatBridge.lean` and `floatBridgesTo_relu6` in `MobileNetV2WholeFloatBridge.lean`, and
 neither is on `FloatBudgetEnv`'s import path. Move them down only if a third net needs them).
-Still to add:
+Still to add — ⭐ `swish`, `sigmoid`, `broadcast`, `seScale` and `batchMap` first, since B0
+needs exactly those five and nothing else (§3.4); `batchMap` is the identity on the envelope.
+Then
 
 `comp_flatConvStride4`,
-`comp_gelu` (rational slack for `√(2/π)`), `comp_swish`, `comp_sigmoid`, `comp_biasAdd`,
+`comp_gelu` (rational slack for `√(2/π)`), `comp_biasAdd`,
 `comp_diagBack`, `comp_layerNormVec`, identity steps for `gather`/`transposeFlat`/`reassoc*`/
 `broadcast`/`clsSlice`, and `seScale` / `perRow` / `batchMap` / `iterate k`. Each is ten lines
 in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone lemma, `linarith`.

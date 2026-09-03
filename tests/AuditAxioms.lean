@@ -1761,12 +1761,27 @@ open Proofs
 -- floatClose_relu — so enet's conv→BN→Swish backbone folds through .comp. (SE block
 -- + depthwise conv are the remaining MBConv-specific FloatClose wraps.)
 #print axioms swishScalar_lipschitz_abs
+-- ⭐ …and its ADDITIVE partner. (1+A/4)·e multiplies the inherited error by the WINDOW at
+-- every swish site; swishScalar_lipschitz_abs' bounds |σa−σb| by the gate's own range (1)
+-- instead of by ¼|a−b| and gives A + |a−b|. The two are incomparable, floatClose_swish now
+-- states their min, and that is what makes an EfficientNet-B0 whole-net fold statable at all:
+-- 1e1737 (multiplicative only) vs 1e186 (with the min) — norm_num refuses past ~1e300.
+-- The true global Lipschitz constant of x·σ(x) is ≈1.1; getting THAT needs σ' decay, i.e.
+-- calculus, and this bound is what avoids needing it.
+#print axioms sigmoidScalar_sub_abs_le_one
+#print axioms swishScalar_lipschitz_abs'
 #print axioms floatClose_swish
 -- SE block (the architecturally-distinctive enet op): floatClose_seScale — the
 -- multiplicative-branch combinator x ⊙ gate(x) (residual's cousin), FloatClose via
 -- mul_close given the gate is FloatClose (Bg=1 for a sigmoid gate). The squeeze→excite
 -- gate net (GAP→dense→swish→dense→sigmoid, broadcast) is the .comp feeding it;
 -- depthwise conv is the remaining standard-but-new conv-family wrap.
+-- ⭐ Its window is now A·Bg·(1+u) — the gate's certified MAGNITUDE, one rounding above the
+-- real product. It used to be derived as |float − real| + |real|, which charges the gate's
+-- ERROR (A · Lg 0) to the window; on B0 that is 1e18 per SE site and takes the whole-net
+-- window from 1e49 to 1e417. FloatClose's magnitude clause bounds the FLOAT gate as well as
+-- the real one, so the error never needed to enter — the same shape as relu6's discarded
+-- clamp (planning/float_budget_numbers.md §3.4).
 #print axioms floatClose_seScale
 -- ── planning/floatbridge_enet_vit.md §1a–§1d (EfficientNet float bridge finished) ──
 -- §1a: the additive MBConv/transformer skip (no trailing activation) and a closed
