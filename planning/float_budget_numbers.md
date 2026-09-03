@@ -963,14 +963,31 @@ whole-net skeleton exists at the `FloatBridgesTo` tier (`r34_grad_floatBridgesTo
 `Resnet34WholeBackFloatBridge.lean`) but **its 16 block backwards are hypotheses**, and the
 blocks themselves are only at the `∃`-tier. In order:
 
-1. **`Maps` leaves for the backward.** `convBack` / `linBack` / `gapBack` reuse the forward's
-   arithmetic (`Maps.flatConv`, `Maps.dense` at bias 0 — `linBack` IS `floatBridgesTo_dense` at
-   the transpose). `reluMaskBack` / `maxPoolBack` / `decimateBack` are envelope-preserving. The
-   only real one is **`Maps.bnBack`**, and ⚠ it needs a `peRoundErrQ`-style rational restatement:
-   `bnGradInputBudget` is stated on the exact `(1+M.u)^(n+1) − 1` at `n` up to 12544, which no
-   `norm_num` will evaluate. `bnGradInputBudgetQ` in the probe IS that restatement.
-2. **`FloatBridgesTo` + `Maps` for the per-channel BN backward** — `floatBridges_bnPerChannelBack`
-   migrated, and `bnXhat_sq_le` wired in so `Xh` is `√(h·w)` and not a supplied constant.
+1. ✅ **`Maps` leaves for the backward — LANDED 2026-09-03 (`FloatBudgetEnvBack.lean`).**
+   `Maps.convBack` / `.linBack` / `.gapBack` reuse the forward's arithmetic (`Maps.flatConv` /
+   `Maps.dense` at bias 0 — `linBack` IS `floatBridgesTo_dense` at the transpose, and
+   `convFlatBack W` IS `flatConv (reverseSwap W) 0` with the channel roles swapped, so the
+   fan-in is the COTANGENT's channel count). `Maps.reluMaskBack` / `.maxPoolBack` /
+   `.decimateBack` are envelope-preserving; `Maps.flatConvStride2Back` is the last two composed.
+   ⭐ **The real one was `bnGradInputBudget`'s numerals**, and the fix is `peRoundErrQ`'s pattern
+   one tier up: `bnGradInputBudgetG` takes the rounding unit AND the reduction's
+   `(1+u)^(n+1) − 1` as PARAMETERS, `bnGradInputBudget_eq_G` is `rfl`, and
+   `bnGradInputBudget_le` replaces both by rationals once. ⚠ Its monotonicity is the one real
+   proof in the file, and the shape that made it tractable is **naming every intermediate**: the
+   budget is a fifteen-step `let` chain, and respelling it as thirteen small defs (`bgED`,
+   `bgESD`, … `bgEP`) turns each monotonicity step into a three-line lemma instead of a
+   hundred-line literal. A single `nlinarith` over the zeta-reduced chain does not close.
+2. ✅ **`FloatBridgesTo` + `Maps` for the per-channel BN backward — LANDED with it.**
+   `floatBridgesTo_bnBack` / `_bnPerChannelFlatBack` / `_bnPerChannelBack` mirror the forward's
+   three rungs (`FloatClose.perRowIdx` then the `reassoc` gather conjugation), and
+   ⭐ `bnXhat_abs_le_num` turns `bnXhat_sq_le`'s `x̂² ≤ n` into a RATIONAL `Xh` wherever
+   `n ≤ X²` — exact for the square feature maps a conv net has (`h·w = 7² ⇒ X = 7`). ⚠ `√n`
+   itself is irrational and `norm_num` cannot see it; that step is not optional.
+   ⭐ The file closes the HEAD of r34's chain as a compiled `example` at `r34_back_chain`'s
+   numerals — cotangent `(1, 0)` → classifier input-gradient → GAP backward → block `e1`'s
+   second BN backward, out `(8348, 2.317·10⁻²)`. ⭐ Note the SHAPE that example makes visible:
+   the head's fan-in is `10` and the GAP backward divides by `49`, so a backward chain's first
+   two stages SHRINK and the growth only starts at the first normalisation.
 3. **The two block backwards at real weights** — `floatBridgesTo_r34IdBlockBack` /
    `_r34DownBlockBack` and their `Maps` peers. ⭐ Both reuse forward combinators: the identity
    block's skip is `FloatBridgesTo.residual` and the downsample's is `biPathSum`, so no new

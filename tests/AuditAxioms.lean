@@ -105,6 +105,7 @@ import LeanMlir.Proofs.Float.FloatBudgetEnvAttn
 import LeanMlir.Proofs.Float.ViTBlockVFloatBridge
 import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
 import LeanMlir.Proofs.Float.ViTFloatBudget
+import LeanMlir.Proofs.Float.FloatBudgetEnvBack
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2414,6 +2415,40 @@ open Proofs
 -- The tie: the committed spec's denotation (vitVerified_denote_eq, rfl) — the same function
 -- vitVerified_fwd_faithful says the emitted depth-12 multi-head vector-LN graph denotes.
 #print axioms Proofs.vit_float_logits_le_committed
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- PHASE 2 (FloatBudgetEnvBack.lean) — the `Maps` kit for a whole-net INPUT-GRADIENT VJP.
+-- ⭐⭐ The backward is a FOLD at TRAINING-mode BatchNorm, the mode the forward has no number for
+-- (1e7417): a VJP reads its statistics off the SAVED activations, which the cotangent does not
+-- perturb, so floatClose_bnBack's modulus is budget(A) + ReMag(e) with ReMag LINEAR in e. The
+-- probe (scripts/float_budget_envelope.py, r34_back_chain / verify_r34_back, 90 stages / 180
+-- inequalities) puts the r34 input-gradient at window 1.345e288 / budget 6.473e286, ratio 0.048.
+-- ⛔ Conditional on `es`/`exh` = 1e-2 — SUPPLIED float-activation accuracies the forward's own
+-- training-mode fold does not discharge (planning/float_budget_numbers.md §3.7).
+#print axioms Proofs.bnGradInputBudgetG
+#print axioms Proofs.bnGradInputBudget_eq_G
+#print axioms Proofs.bnGradInputBudgetG_mono
+#print axioms Proofs.bnGradInputBudget_le
+#print axioms Proofs.bnGradInputReMag_mono
+-- ⭐ The standardisation bound as a NUMERAL: |x̂| ≤ X wherever n ≤ X², off bnXhat_sq_le. It is
+-- what makes a whole-net backward number exist (Xh enters the fold as Xh²), and it was already
+-- in the repo — Foundation/ResNet34.lean, written for the realistic-seal work.
+#print axioms Proofs.bnXhat_abs_le_num
+#print axioms Proofs.floatBridgesTo_bnBack
+#print axioms Proofs.floatBridgesTo_bnPerChannelFlatBack
+#print axioms Proofs.floatBridgesTo_bnPerChannelBack
+#print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelBack
+#print axioms Proofs.FloatBridgesTo.Maps.reluMaskBack
+#print axioms Proofs.FloatBridgesTo.Maps.maxPoolBack
+#print axioms Proofs.FloatBridgesTo.Maps.decimateBack
+#print axioms Proofs.FloatBridgesTo.Maps.gapBack
+#print axioms Proofs.FloatBridgesTo.Maps.convBack
+#print axioms Proofs.FloatBridgesTo.Maps.linBack
+#print axioms Proofs.FloatBridgesTo.Maps.flatConvStride2Back
+-- ⭐ FloatBudgetEnvBack.lean closes the HEAD of r34's input-gradient chain as a compiled
+-- `example` at r34_back_chain's numerals: loss cotangent (1, 0) -> classifier input-gradient ->
+-- GAP backward -> block e1's second BN backward at 512x7x7, out (8348, 2.317e-2). Note the shape
+-- of a backward chain: fan-in 10 at the head and a division by 49 at the GAP, so the first two
+-- stages SHRINK and the growth only starts at the first normalisation.
 -- ⭐ GELU is globally 3/2-Lipschitz (Architectures/GeluSaturation.lean), and floatClose_gelu now
 -- states the min of that and its magnitude polynomial. The polynomial is CUBIC in the window and
 -- reaches ~400 at ConvNeXt's magnitudes against a true constant of ≈1.13; the saturation bound was

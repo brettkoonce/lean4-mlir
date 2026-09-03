@@ -392,6 +392,18 @@ lean_lib «Certs» where
              -- could not be written at all — a representability failure at a SMALLER magnitude,
              -- which capping cannot fix (capped replaces the modulus, never the window).
              `LeanMlir.Proofs.Float.ViTFloatBudget,
+             -- PHASE 2 (the backwards): the `Maps` kit for a whole-net INPUT-GRADIENT VJP.
+             -- ⭐⭐ The backward is a FOLD at TRAINING-mode BatchNorm — the mode the forward has
+             -- no number for at all (1e7417) — because a VJP reads its statistics off the SAVED
+             -- activations, which the cotangent does not perturb: floatClose_bnBack's modulus is
+             -- budget(A) + ReMag(e) with ReMag LINEAR in e. No cap, ratio 0.048 not 2.00.
+             -- ⛔ The wall relocates rather than vanishing: the saved float activations enter as
+             -- SUPPLIED accuracies (es on the inverse-stddev, exh on the normalised activation),
+             -- which the forward's own training-mode fold does not discharge.
+             -- ⭐ bnXhat_abs_le_num turns bnXhat_sq_le (|x̂| ≤ √n, already in the repo, written
+             -- for the realistic-seal work) into a rational numeral — Xh enters as Xh², and
+             -- deriving it from the forward's window instead is 1e7271 against 1e288.
+             `LeanMlir.Proofs.Float.FloatBudgetEnvBack,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network
