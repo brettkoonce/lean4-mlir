@@ -2342,6 +2342,37 @@ open Proofs
 #print axioms Proofs.blockVFlatF
 #print axioms Proofs.floatBridgesTo_blockVFlat
 #print axioms Proofs.FloatBridgesTo.Maps.blockVFlat
+-- THE DEPTH-k FOLD AND THE WHOLE NET (same file).
+-- ⚠ The recursion is HEAD-FIRST — vitBodyKVFlat (k+1) ps = body k (ps . succ) . blockVFlat (ps 0),
+-- so block 0 is applied FIRST and the .comp puts it on the left. That is the opposite association
+-- from floatBridgesTo_convNextStageChK, which §3.3's lesson 2 records; the DEFINITION decides, so
+-- read it before writing the chain.
+-- ⭐ FloatBridgesTo.ofEq transports a bridge along an equation of the REAL map while keeping
+-- mag/mod DEFINITIONALLY equal. A `blockVFlat_eq ▸ b` would not: the Eq.mpr blocks .mag from
+-- reducing, and a bridge whose .mag does not reduce cannot carry a Maps (§2's unifier trap). That
+-- is why Maps.ofEq is ⟨hM.mag_le, hM.mod_le⟩ and not a re-proof.
+-- ⭐ Maps.vitBodyKVFlat is the ENVELOPE fold, which ConvNeXt does not have — its budget file
+-- spells every stage out. At ViT's depth 12 that would be 12 nested .comps written by hand; here
+-- the caller passes window/error SEQUENCES W/Er and one Maps per block.
+-- ⛔ floatBridgesTo_vitForwardKV is the whole net at REAL weights with no FloatBridgesTo
+-- hypothesis left except the device LayerNorm (whose statistics have no IEEE spec) and the device
+-- exp/gelu accuracies. It is vitForwardKV — depth-k, DISTINCT per-block parameters, vector-[D] LN
+-- affines, multi-head — and NOT vit_full, which shares one parameter tuple across all blocks and
+-- carries SCALAR affines. The trained checkpoint has per-block weights and vector affines, so
+-- vit_full is a different function; vitFwdGraphKMHV_faithful denotes this one.
+#print axioms Proofs.FloatBridgesTo.ofEq
+#print axioms Proofs.FloatBridgesTo.Maps.ofEq
+#print axioms Proofs.floatBridgesTo_blockVFlatC
+#print axioms Proofs.FloatBridgesTo.Maps.blockVFlatC
+#print axioms Proofs.vitBodyKVFlatF
+#print axioms Proofs.floatBridgesTo_vitBodyKVFlat
+#print axioms Proofs.FloatBridgesTo.Maps.vitBodyKVFlat
+#print axioms Proofs.vitForwardKV_eq
+#print axioms Proofs.vitForwardKVF
+#print axioms Proofs.floatBridgesTo_vitForwardKV
+#print axioms Proofs.FloatBridgesTo.Maps.clsSlice
+#print axioms Proofs.FloatBridgesTo.Maps.vitHead
+#print axioms Proofs.FloatBridgesTo.Maps.vitForwardKV
 -- ⭐ ViTBlockVFloatBridge.lean closes ViT-Tiny's BLOCK 0 as a compiled `example` at the numerals
 -- vit_chain emits: thirteen stages, two skips, twenty-six inequalities, in (23.23, 1.064e-2) ->
 -- out (9.365e19, 2.811e20). One block costs ~1e18 of window; twelve put the net at 1e218.

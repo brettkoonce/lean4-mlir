@@ -232,7 +232,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
 | **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
-| ViT-Tiny fwd (`vitForwardKV`) | ⭐ **PROBE + ALL THREE LEAF GROUPS + BLOCK landed 2026-09-03**, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸ (§3.5), the cap again. Attention, softmax, patch embed and the whole block close at the emitted numerals. | the depth-`k` fold over `vitBodyKVFlat`, then `ViTFloatBudget.lean` (§3.5.2 steps 4–5) |
+| ViT-Tiny fwd (`vitForwardKV`) | ⭐⭐ **CONE CLOSED 2026-09-03** — leaves, block, depth-`k` fold and whole net all bridged at real weights, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸ (§3.5), the cap. Only the device LN / `exp` / `gelu` accuracies are supplied. | just the numerals: `ViTFloatBudget.lean` on the r34 recipe (§3.5.2 step 6) |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -762,16 +762,34 @@ architecture is named after that architecture and will not be found by searching
    ⛔ And it is the ONE stage of ViT's chain that is NOT capped — the patch embed does not reduce,
    its modulus is linear in the inherited error, and at the net's input that error is `0`. It is
    the only honest fold ViT has.
-   ⚠ Still to write: the depth-`k` fold over `vitBodyKVFlat` (head-first recursion — check the
-   association before writing the chain, §3.3's lesson 2).
-5. **`ViTFloatBudget.lean`** on the r34 recipe: records (`ViTProfile`/`ViTWeights`), a
+5. ✅ **The DEPTH-`k` FOLD AND THE WHOLE NET landed 2026-09-03** (`ViTBlockVFloatBridge.lean`):
+   `floatBridgesTo_vitBodyKVFlat`, `Maps.vitBodyKVFlat`, `vitForwardKV_eq` (`rfl`),
+   `floatBridgesTo_vitForwardKV` and `Maps.vitForwardKV`. ⛔ **The ViT cone is now CLOSED at real
+   weights** — no `FloatBridgesTo` hypothesis is left except the device LayerNorm, whose
+   statistics have no IEEE specification, and the device `exp`/`gelu` accuracies. All that
+   remains is the numerals.
+   ⚠ **The recursion is HEAD-FIRST** — `vitBodyKVFlat (k+1) ps = body k (ps ∘ succ) ∘ blockVFlat
+   (ps 0)` — so block 0 is applied FIRST and `.comp` puts it on the left, the OPPOSITE
+   association from `floatBridgesTo_convNextStageChK`. §3.3's lesson 2 said to check; the answer
+   differs per net, and it is the DEFINITION that decides, never the analogy.
+   ⭐⭐ **`FloatBridgesTo.ofEq` is the reusable piece.** The block bridge is stated on
+   `blockVFlat_eq`'s right-hand side and the fold needs it on the committed `blockVFlat`;
+   `blockVFlat_eq ▸ b` does NOT work, because the `Eq.mpr` blocks `.mag` from reducing and a
+   bridge whose `.mag` does not reduce cannot carry a `Maps` (§2's unifier trap, in a new
+   disguise). Rebuilding the structure field-by-field keeps `mag`/`mod` definitionally the
+   originals, which is why `Maps.ofEq` is `⟨hM.mag_le, hM.mod_le⟩` and not a re-proof. **Any
+   transport of a bridge along a tie needs this shape.**
+   ⭐ `Maps.vitBodyKVFlat` is an ENVELOPE fold, which ConvNeXt does not have — its budget file
+   spells every stage out. At depth 12 that would be twelve nested `.comp`s written by hand;
+   here the caller passes window/error SEQUENCES and one `Maps` per block.
+6. **`ViTFloatBudget.lean`** on the r34 recipe: records (`ViTProfile`/`ViTWeights`), a
    `DeviceExp` alongside `DeviceLN`/`DeviceGelu`, the 164-stage chain, the tie through
    `vitFwdGraphKMHV_faithful`, `vit_float_logits_le` + `_committed`.
    ⚠ `DeviceLN` and `DeviceGelu` currently live in `ConvNeXtFloatBudget.lean`, a BUDGET file —
    so `ViTBlockVFloatBridge.lean` takes its LN envelopes as hypotheses rather than importing a
    sibling net's budget. Moving those two structures down into the kit is the right call when
    the ViT budget file lands; it touches ConvNeXt's committed number, so do it deliberately.
-6. ✅ **`verify_vit`** — the re-assertion pass, landed with the probe (328 inequalities). Run it
+7. ✅ **`verify_vit`** — the re-assertion pass, landed with the probe (328 inequalities). Run it
    before any numeral is emitted (§0's ⚠: fold with the ROUNDED γ; the pass is what catches it).
 
 ⚠ Two facts the whole-net statement must carry and disclose, like `DeviceRsqrt`/`DeviceSigmoid`:

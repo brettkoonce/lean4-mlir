@@ -313,7 +313,286 @@ theorem Maps.blockVFlat {Np1 heads d_head mlpDim : Nat} (M : FloatModel)
 end FloatBridgesTo
 
 -- ════════════════════════════════════════════════════════════════
--- § 4. ViT-Tiny's block 0, closed at the emitted numerals
+-- § 5. The depth-`k` fold
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Transport a bridge along an equation of the REAL map, keeping `mag`/`mod` definitionally.**
+    ⚠ Not `blockVFlat_eq ▸ b`: a `▸` inserts an `Eq.mpr` that blocks `.mag` from reducing, and a
+    bridge whose `.mag` does not reduce cannot have a `Maps` attached (§2 — the unifier unfolds
+    the whole chain and times out). Rebuilding the structure field-by-field keeps `.mag` and
+    `.mod` literally `b`'s, which is why `Maps.ofEq` below is the identity. -/
+noncomputable def FloatBridgesTo.ofEq {m n : Nat} {f f' fF : Vec m → Vec n}
+    (h : f = f') (b : FloatBridgesTo f' fF) : FloatBridgesTo f fF where
+  mag := b.mag
+  mod := b.mod
+  close := h ▸ b.close
+
+/-- The envelope survives the transport unchanged — `mag`/`mod` are the same terms. -/
+theorem FloatBridgesTo.Maps.ofEq {m n : Nat} {f f' fF : Vec m → Vec n} (h : f = f')
+    {b : FloatBridgesTo f' fF} {Ā Ē Ā' Ē' : ℝ} (hM : b.Maps Ā Ē Ā' Ē') :
+    (FloatBridgesTo.ofEq h b).Maps Ā Ē Ā' Ē' := ⟨hM.mag_le, hM.mod_le⟩
+
+/-- **The block bridge, on the COMMITTED `blockVFlat`.** `floatBridgesTo_blockVFlat` is stated on
+    `blockVFlat_eq`'s right-hand side; this is the same data at the definition `vitBodyKVFlat`
+    actually folds. -/
+noncomputable def floatBridgesTo_blockVFlatC {Np1 heads d_head mlpDim : Nat} (M : FloatModel)
+    (fgelu fexp : ℝ → ℝ) (ε : ℝ) (p : BlockParamsV (heads * d_head) mlpDim)
+    (lnF : Vec (heads * d_head) → Vec (heads * d_head))
+    {wa wm bb gl bl egelu scaleA eexp : ℝ}
+    (hn : 0 < Np1) (hd : 0 < heads * d_head) (hdff : 0 < mlpDim)
+    (hwa : 0 ≤ wa) (hwm : 0 ≤ wm) (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d_head : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp Np1 < 1)
+    (hb : BlockVBounded p wa wm bb gl bl)
+    (hln : FloatBridgesTo (layerNormForward (heads * d_head) ε 1 0) lnF) :
+    FloatBridgesTo (blockVFlat Np1 heads d_head mlpDim ε p) (blockVFlatF M fgelu fexp p lnF) :=
+  FloatBridgesTo.ofEq (blockVFlat_eq Np1 heads d_head mlpDim ε p)
+    (floatBridgesTo_blockVFlat M fgelu fexp ε p lnF hn hd hdff hwa hwm hbb hegelu hg
+      heexp0 heexp1 hfexp hscaleA hρ1 hb hln)
+
+/-- The float depth-`k` body — the same head-first recursion as `vitBodyKVFlat`, so it is exactly
+    what `.comp` produces at each step. -/
+noncomputable def vitBodyKVFlatF {Np1 heads d_head mlpDim : Nat} (M : FloatModel)
+    (fgelu fexp : ℝ → ℝ) (lnF : Vec (heads * d_head) → Vec (heads * d_head)) :
+    (k : Nat) → (Fin k → BlockParamsV (heads * d_head) mlpDim) →
+      (Vec (Np1 * (heads * d_head)) → Vec (Np1 * (heads * d_head)))
+  | 0, _ => id
+  | _ + 1, ps =>
+      vitBodyKVFlatF (Np1 := Np1) M fgelu fexp lnF _ (fun i => ps i.succ)
+        ∘ blockVFlatF (Np1 := Np1) M fgelu fexp (ps 0) lnF
+
+/-- **The depth-`k` encoder body float-bridges**, by the same head-first recursion the definition
+    uses — block `0` applied FIRST, so the `.comp` puts it on the left of the composition.
+    ⚠ That association is the opposite of `floatBridgesTo_convNextStageChK`'s reading in §3.3's
+    lesson 2, and it is the definition that decides: check it before writing the chain. -/
+noncomputable def floatBridgesTo_vitBodyKVFlat {Np1 heads d_head mlpDim : Nat} (M : FloatModel)
+    (fgelu fexp : ℝ → ℝ) (ε : ℝ) (lnF : Vec (heads * d_head) → Vec (heads * d_head))
+    {wa wm bb gl bl egelu scaleA eexp : ℝ}
+    (hn : 0 < Np1) (hd : 0 < heads * d_head) (hdff : 0 < mlpDim)
+    (hwa : 0 ≤ wa) (hwm : 0 ≤ wm) (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d_head : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp Np1 < 1)
+    (hln : FloatBridgesTo (layerNormForward (heads * d_head) ε 1 0) lnF) :
+    ∀ (k : Nat) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim),
+      (∀ i, BlockVBounded (ps i) wa wm bb gl bl) →
+      FloatBridgesTo (vitBodyKVFlat Np1 heads d_head mlpDim ε k ps)
+        (vitBodyKVFlatF (Np1 := Np1) M fgelu fexp lnF k ps)
+  | 0, _, _ => floatBridgesTo_idVec
+  | _ + 1, ps, hb =>
+      (floatBridgesTo_blockVFlatC M fgelu fexp ε (ps 0) lnF hn hd hdff hwa hwm hbb hegelu hg
+          heexp0 heexp1 hfexp hscaleA hρ1 (hb 0) hln).comp
+        (floatBridgesTo_vitBodyKVFlat M fgelu fexp ε lnF hn hd hdff hwa hwm hbb hegelu hg
+          heexp0 heexp1 hfexp hscaleA hρ1 hln _ (fun i => ps i.succ) (fun i => hb i.succ))
+
+namespace FloatBridgesTo
+
+/-- `Maps.blockVFlat` transported to the committed `blockVFlat` — the form the depth-`k` fold
+    consumes. One wrapper rather than a second 26-argument statement. -/
+theorem Maps.blockVFlatC {Np1 heads d_head mlpDim : Nat} {M : FloatModel}
+    {fgelu fexp : ℝ → ℝ} {ε : ℝ} {p : BlockParamsV (heads * d_head) mlpDim}
+    {lnF : Vec (heads * d_head) → Vec (heads * d_head)}
+    {wa wm bb gl bl egelu scaleA eexp : ℝ}
+    {hn : 0 < Np1} {hd : 0 < heads * d_head} {hdff : 0 < mlpDim}
+    {hwa : 0 ≤ wa} {hwm : 0 ≤ wm} {hbb : 0 ≤ bb} {hegelu : 0 ≤ egelu}
+    {hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu}
+    {heexp0 : 0 ≤ eexp} {heexp1 : eexp ≤ 1}
+    {hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t}
+    {hscaleA : |(1 : ℝ) / Real.sqrt (d_head : ℝ)| ≤ scaleA}
+    {hρ1 : smRho M.u eexp Np1 < 1}
+    {hb : BlockVBounded p wa wm bb gl bl}
+    {hln : FloatBridgesTo (layerNormForward (heads * d_head) ε 1 0) lnF}
+    {Ā Ē Ā' Ē' : ℝ}
+    (hM : (floatBridgesTo_blockVFlat M fgelu fexp ε p lnF hn hd hdff hwa hwm hbb hegelu hg
+            heexp0 heexp1 hfexp hscaleA hρ1 hb hln).Maps Ā Ē Ā' Ē') :
+    (floatBridgesTo_blockVFlatC M fgelu fexp ε p lnF hn hd hdff hwa hwm hbb hegelu hg
+      heexp0 heexp1 hfexp hscaleA hρ1 hb hln).Maps Ā Ē Ā' Ē' :=
+  Maps.ofEq _ hM
+
+/-- ⭐ **An envelope through the depth-`k` body**, from a per-block one. The caller supplies the
+    window/error SEQUENCES `W`/`Er` — `W j` is the certified window after `j` blocks — and one
+    `Maps` per block; the fold threads them. ⭐ ConvNeXt has the bridge fold but no envelope fold,
+    so its budget file spells every stage out; at ViT's depth 12 that is 12 nested `.comp`s by
+    hand, and this replaces them with one application. -/
+theorem Maps.vitBodyKVFlat {Np1 heads d_head mlpDim : Nat} (M : FloatModel)
+    (fgelu fexp : ℝ → ℝ) (ε : ℝ) (lnF : Vec (heads * d_head) → Vec (heads * d_head))
+    {wa wm bb gl bl egelu scaleA eexp : ℝ}
+    (hn : 0 < Np1) (hd : 0 < heads * d_head) (hdff : 0 < mlpDim)
+    (hnd : 0 < Np1 * (heads * d_head))
+    (hwa : 0 ≤ wa) (hwm : 0 ≤ wm) (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d_head : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp Np1 < 1)
+    (hln : FloatBridgesTo (layerNormForward (heads * d_head) ε 1 0) lnF) :
+    ∀ (k : Nat) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
+      (hb : ∀ i, BlockVBounded (ps i) wa wm bb gl bl) (W Er : Nat → ℝ),
+      (∀ i : Fin k,
+        (floatBridgesTo_blockVFlatC M fgelu fexp ε (ps i) lnF hn hd hdff hwa hwm hbb hegelu hg
+          heexp0 heexp1 hfexp hscaleA hρ1 (hb i) hln).Maps
+          (W i.val) (Er i.val) (W (i.val + 1)) (Er (i.val + 1))) →
+      (floatBridgesTo_vitBodyKVFlat M fgelu fexp ε lnF hn hd hdff hwa hwm hbb hegelu hg
+        heexp0 heexp1 hfexp hscaleA hρ1 hln k ps hb).Maps (W 0) (Er 0) (W k) (Er k)
+  | 0, _, _, _, _, _ => ⟨fun _A _h0 hle => hle, fun _A _E _h0 _hE0 _hle hEle => hEle⟩
+  | k + 1, ps, hb, W, Er, hstep =>
+      Maps.comp hnd (hstep 0)
+        (Maps.vitBodyKVFlat M fgelu fexp ε lnF hn hd hdff hnd hwa hwm hbb hegelu hg
+          heexp0 heexp1 hfexp hscaleA hρ1 hln k (fun i => ps i.succ) (fun i => hb i.succ)
+          (fun j => W (j + 1)) (fun j => Er (j + 1)) (fun i => hstep i.succ))
+
+end FloatBridgesTo
+
+-- ════════════════════════════════════════════════════════════════
+-- § 7. The whole net
+-- ════════════════════════════════════════════════════════════════
+
+/-- **`vitForwardKV` is the four-stage skeleton** the bridges below cover: patch embed → depth-`k`
+    body → per-token final LayerNorm → CLS-slice + classifier. `rfl` — the final LN slot is
+    `flat_perTokenLN_eq`'s left-hand side at `N + 1` rows. -/
+theorem vitForwardKV_eq (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head)) (ε : ℝ)
+    (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
+    (γF βF : Vec (heads * d_head))
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
+    vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+        W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls
+      = classifier_flat N (heads * d_head) nClasses Wcls bcls
+        ∘ rowLNVecFlat (N + 1) (heads * d_head) ε γF βF
+        ∘ vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps
+        ∘ patchEmbed_flat ic H W patchSize N (heads * d_head)
+            W_conv b_conv cls_token pos_embed := rfl
+
+/-- The float whole net — every stage the float map its bridge names. -/
+noncomputable def vitForwardKVF {ic H W patchSize N mlpDim heads d_head nClasses k : Nat}
+    (M : FloatModel) (fgelu fexp : ℝ → ℝ)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
+    (γF βF : Vec (heads * d_head)) (lnF : Vec (heads * d_head) → Vec (heads * d_head))
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
+    Vec (ic * H * W) → Vec nClasses :=
+  (M.dense Wcls bcls ∘ cls_slice_flat N (heads * d_head))
+    ∘ rowLNVecFlatF (s := N + 1) M γF βF lnF
+    ∘ vitBodyKVFlatF (Np1 := N + 1) M fgelu fexp lnF k ps
+    ∘ M.patchEmbedF ic H W patchSize N (heads * d_head) W_conv b_conv cls_token pos_embed
+
+/-- ⭐⭐ **THE WHOLE ViT FORWARD FLOAT-BRIDGES, AT REAL WEIGHTS.** Four `.comp`s over the patch
+    embed, the depth-`k` body, the final per-token LayerNorm and the classifier head — no
+    `FloatBridgesTo` hypothesis left except the device LayerNorm `hln`, whose statistics have no
+    IEEE specification (the standing of `DeviceRsqrt`/`DeviceSigmoid` on the other nets), and the
+    device `exp`/`gelu` accuracies behind `hfexp`/`hg`.
+
+    ⛔ This is `vitForwardKV` — depth-`k`, **distinct per-block parameters, vector-[D] LayerNorm
+    affines, multi-head** — and NOT `vit_full`, which shares one parameter tuple across all
+    blocks and carries scalar affines. The trained checkpoint has per-block weights and vector
+    affines, so `vit_full` is a different function (`planning/float_budget_numbers.md` §3.5.1).
+    `vitFwdGraphKMHV_faithful` denotes this one. -/
+noncomputable def floatBridgesTo_vitForwardKV {ic H W patchSize N mlpDim heads d_head nClasses
+    k : Nat} (M : FloatModel) (fgelu fexp : ℝ → ℝ) (ε : ℝ)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
+    (γF βF : Vec (heads * d_head)) (lnF : Vec (heads * d_head) → Vec (heads * d_head))
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
+    {wa wm bb gl bl egelu scaleA eexp wc pb wh bh : ℝ}
+    (hn : 0 < N + 1) (hd : 0 < heads * d_head) (hdff : 0 < mlpDim)
+    (hnd : 0 < (N + 1) * (heads * d_head)) (himg : 0 < ic * H * W)
+    (hwa : 0 ≤ wa) (hwm : 0 ≤ wm) (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hwc0 : 0 ≤ wc) (hpb0 : 0 ≤ pb) (hwh : 0 ≤ wh) (hbh : 0 ≤ bh)
+    (hgl : ∀ i, |γF i| ≤ gl) (hbl : ∀ i, |βF i| ≤ bl)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt (d_head : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp (N + 1) < 1)
+    (hwc : ∀ d c kh kw, |W_conv d c kh kw| ≤ wc) (hpos : ∀ n d, |pos_embed n d| ≤ pb)
+    (hcls : ∀ d, |cls_token d| ≤ pb) (hbc : ∀ d, |b_conv d| ≤ pb)
+    (hWcls : ∀ i j, |Wcls i j| ≤ wh) (hbcls : ∀ j, |bcls j| ≤ bh)
+    (hb : ∀ i, BlockVBounded (ps i) wa wm bb gl bl)
+    (hln : FloatBridgesTo (layerNormForward (heads * d_head) ε 1 0) lnF) :
+    FloatBridgesTo
+      (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+        W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
+      (vitForwardKVF M fgelu fexp W_conv b_conv cls_token pos_embed ps γF βF lnF Wcls bcls) :=
+  FloatBridgesTo.ofEq
+    (vitForwardKV_eq ic H W patchSize N mlpDim heads d_head nClasses k
+      W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
+    ((((floatBridgesTo_patchEmbed M ic H W patchSize N (heads * d_head)
+            W_conv b_conv cls_token pos_embed hwc0 hpb0 hnd himg hwc hpos hcls hbc).comp
+        (floatBridgesTo_vitBodyKVFlat M fgelu fexp ε lnF hn hd hdff hwa hwm hbb hegelu hg
+          heexp0 heexp1 hfexp hscaleA hρ1 hln k ps hb)).comp
+        (floatBridgesTo_rowLNVecFlat (s := N + 1) M γF βF lnF hd hgl hbl hln)).comp
+        (floatBridgesTo_vitHead M Wcls bcls hwh hbh hd hWcls hbcls))
+
+namespace FloatBridgesTo
+
+/-- The CLS-slice gather passes an envelope through unchanged (it reads one row; no rounding). -/
+theorem Maps.clsSlice (N D : Nat) {Ā Ē : ℝ} :
+    (floatBridgesTo_clsSlice N D).Maps Ā Ē Ā Ē :=
+  ⟨fun _A _h0 hle => hle, fun _A _E _h0 _hE0 _hle hEle => hEle⟩
+
+/-- An envelope through the classifier head — the CLS gather, then the dense. -/
+theorem Maps.vitHead (N : Nat) {D nClasses : Nat} (M : FloatModel) (Wcls : Mat D nClasses)
+    (bcls : Vec nClasses) {wh bh : ℝ} (hwh : 0 ≤ wh) (hbh : 0 ≤ bh) (hD : 0 < D)
+    (hWcls : ∀ i j, |Wcls i j| ≤ wh) (hbcls : ∀ j, |bcls j| ≤ bh)
+    {g Ā Ē Ā' Ē' : ℝ}
+    (hg : (1 + M.u) ^ (D + 2) - 1 ≤ g)
+    (hĀ' : (1 + g) * ((D : ℝ) * wh * Ā + bh) ≤ Ā')
+    (hĒ' : g * ((D : ℝ) * wh * (Ā + Ē) + bh) + (D : ℝ) * wh * Ē ≤ Ē') :
+    (floatBridgesTo_vitHead (N := N) M Wcls bcls hwh hbh hD hWcls hbcls).Maps Ā Ē Ā' Ē' :=
+  (Maps.clsSlice N D).comp hD (Maps.dense M Wcls bcls hwh hbh hD hWcls hbcls hg hĀ' hĒ')
+
+/-- ⭐⭐ **THE WHOLE-NET ENVELOPE.** Four stages: patch embed → depth-`k` body → final per-token
+    LayerNorm → classifier head. Everything numeric is in the four supplied `Maps`, so a budget
+    file supplies numerals and nothing else. -/
+theorem Maps.vitForwardKV {ic H W patchSize N mlpDim heads d_head nClasses k : Nat}
+    (M : FloatModel) (fgelu fexp : ℝ → ℝ) (ε : ℝ)
+    (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
+    (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
+    (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
+    (γF βF : Vec (heads * d_head)) (lnF : Vec (heads * d_head) → Vec (heads * d_head))
+    (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
+    {wa wm bb gl bl egelu scaleA eexp wc pb wh bh : ℝ}
+    {hn : 0 < N + 1} {hd : 0 < heads * d_head} {hdff : 0 < mlpDim}
+    (hnd : 0 < (N + 1) * (heads * d_head)) {himg : 0 < ic * H * W}
+    {hwa : 0 ≤ wa} {hwm : 0 ≤ wm} {hbb : 0 ≤ bb} {hegelu : 0 ≤ egelu}
+    {hwc0 : 0 ≤ wc} {hpb0 : 0 ≤ pb} {hwh : 0 ≤ wh} {hbh : 0 ≤ bh}
+    {hgl : ∀ i, |γF i| ≤ gl} {hbl : ∀ i, |βF i| ≤ bl}
+    {hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu}
+    {heexp0 : 0 ≤ eexp} {heexp1 : eexp ≤ 1}
+    {hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t}
+    {hscaleA : |(1 : ℝ) / Real.sqrt (d_head : ℝ)| ≤ scaleA}
+    {hρ1 : smRho M.u eexp (N + 1) < 1}
+    {hwc : ∀ d c kh kw, |W_conv d c kh kw| ≤ wc} {hpos : ∀ n d, |pos_embed n d| ≤ pb}
+    {hcls : ∀ d, |cls_token d| ≤ pb} {hbc : ∀ d, |b_conv d| ≤ pb}
+    {hWcls : ∀ i j, |Wcls i j| ≤ wh} {hbcls : ∀ j, |bcls j| ≤ bh}
+    {hb : ∀ i, BlockVBounded (ps i) wa wm bb gl bl}
+    {hln : FloatBridgesTo (layerNormForward (heads * d_head) ε 1 0) lnF}
+    {Ā Ē A1 E1 A2 E2 A3 E3 Ā' Ē' : ℝ}
+    (mPatch : (floatBridgesTo_patchEmbed M ic H W patchSize N (heads * d_head)
+        W_conv b_conv cls_token pos_embed hwc0 hpb0 hnd himg hwc hpos hcls hbc).Maps Ā Ē A1 E1)
+    (mBody : (floatBridgesTo_vitBodyKVFlat M fgelu fexp ε lnF hn hd hdff hwa hwm hbb hegelu hg
+        heexp0 heexp1 hfexp hscaleA hρ1 hln k ps hb).Maps A1 E1 A2 E2)
+    (mLN : (floatBridgesTo_rowLNVecFlat (s := N + 1) M γF βF lnF hd hgl hbl hln).Maps
+        A2 E2 A3 E3)
+    (mHead : (floatBridgesTo_vitHead (N := N) M Wcls bcls hwh hbh hd hWcls hbcls).Maps
+        A3 E3 Ā' Ē') :
+    (floatBridgesTo_vitForwardKV M fgelu fexp ε W_conv b_conv cls_token pos_embed ps γF βF lnF
+      Wcls bcls hn hd hdff hnd himg hwa hwm hbb hegelu hwc0 hpb0 hwh hbh hgl hbl hg
+      heexp0 heexp1 hfexp hscaleA hρ1 hwc hpos hcls hbc hWcls hbcls hb hln).Maps Ā Ē Ā' Ē' :=
+  Maps.ofEq _ (((mPatch.comp hnd mBody).comp hnd mLN).comp hnd mHead)
+
+end FloatBridgesTo
+
+-- ════════════════════════════════════════════════════════════════
+-- § 8. ViT-Tiny's block 0, closed at the emitted numerals
 -- ════════════════════════════════════════════════════════════════
 
 set_option maxHeartbeats 2000000 in
@@ -382,5 +661,39 @@ example (M : FloatModel) (hMu : M.u ≤ u32) (fgelu fexp : ℝ → ℝ)
     (M.gamma_num (k := 768 + 2) (q := 4590 / 10 ^ 8) hMu (by norm_num [u32]) (by norm_num [u32]))
     (by norm_num) (by norm_num)
     (by norm_num [u32]) (by norm_num [u32])
+
+/-- ⭐ **The depth-`k` fold's sequence threading, exercised at `k = 2`.** The two per-block
+    envelopes are hypotheses (block 0's arithmetic is closed above; what is under test here is
+    that the fold hands block `i`'s OUTPUT window to block `i+1` as its input and comes out at
+    `W k`). ⚠ The recursion is head-first, so `ps 0` is applied FIRST — the opposite association
+    from `floatBridgesTo_convNextStageChK`, and the definition is what decides. -/
+example (M : FloatModel) (fgelu fexp : ℝ → ℝ) (ε : ℝ)
+    (lnF : Vec (3 * 64) → Vec (3 * 64))
+    (wa wm bb gl bl egelu scaleA eexp : ℝ)
+    (hn : 0 < 197) (hd : 0 < 3 * 64) (hdff : 0 < 768) (hnd : 0 < 197 * (3 * 64))
+    (hwa : 0 ≤ wa) (hwm : 0 ≤ wm) (hbb : 0 ≤ bb) (hegelu : 0 ≤ egelu)
+    (hg : ∀ t, |fgelu t - geluScalar t| ≤ egelu)
+    (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
+    (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
+    (hscaleA : |(1 : ℝ) / Real.sqrt ((64 : Nat) : ℝ)| ≤ scaleA)
+    (hρ1 : smRho M.u eexp 197 < 1)
+    (hln : FloatBridgesTo (layerNormForward (3 * 64) ε 1 0) lnF)
+    (ps : Fin 2 → BlockParamsV (3 * 64) 768)
+    (hb : ∀ i, BlockVBounded (ps i) wa wm bb gl bl)
+    (A0 E0 A1 E1 A2 E2 : ℝ)
+    (h0 : (floatBridgesTo_blockVFlatC (Np1 := 197) M fgelu fexp ε (ps 0) lnF hn hd hdff
+            hwa hwm hbb hegelu hg heexp0 heexp1 hfexp hscaleA hρ1 (hb 0) hln).Maps A0 E0 A1 E1)
+    (h1 : (floatBridgesTo_blockVFlatC (Np1 := 197) M fgelu fexp ε (ps 1) lnF hn hd hdff
+            hwa hwm hbb hegelu hg heexp0 heexp1 hfexp hscaleA hρ1 (hb 1) hln).Maps A1 E1 A2 E2) :
+    (floatBridgesTo_vitBodyKVFlat (Np1 := 197) M fgelu fexp ε lnF hn hd hdff hwa hwm hbb hegelu
+      hg heexp0 heexp1 hfexp hscaleA hρ1 hln 2 ps hb).Maps A0 E0 A2 E2 := by
+  refine FloatBridgesTo.Maps.vitBodyKVFlat M fgelu fexp ε lnF hn hd hdff hnd hwa hwm hbb hegelu
+    hg heexp0 heexp1 hfexp hscaleA hρ1 hln 2 ps hb
+    (fun j => match j with | 0 => A0 | 1 => A1 | _ => A2)
+    (fun j => match j with | 0 => E0 | 1 => E1 | _ => E2) ?_
+  intro i
+  fin_cases i
+  · exact h0
+  · exact h1
 
 end Proofs
