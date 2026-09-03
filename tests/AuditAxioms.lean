@@ -102,6 +102,7 @@ import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.EfficientNetFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvLN
 import LeanMlir.Proofs.Float.FloatBudgetEnvAttn
+import LeanMlir.Proofs.Float.ViTBlockVFloatBridge
 import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
@@ -2283,6 +2284,38 @@ open Proofs
 -- as compiled `example`s at the numerals vit_chain emits — §5's rule (an unexercised Maps leaf is
 -- the stale-gates failure mode in proof form), and simultaneously the check that the generator's
 -- arithmetic IS these lemmas'.
+-- ════════════════════════════════════════════════════════════════
+-- THE VECTOR-LN TRANSFORMER BLOCK (ViTBlockVFloatBridge.lean) — chunk 2 of the ViT-Tiny number.
+-- ⛔ blockVFlat is a DIFFERENT block from the one the float tier already carried:
+-- floatBridges_vitBlockMHFull is stated about transformerBlock's SCALAR LayerNorm affines
+-- (γ β : ℝ), while vitForwardKV composes transformerBlockV, whose affines are VECTORS — and the
+-- trained checkpoint has vectors. Same imagenet_specs_drift_from_twins shape as ConvNeXt's stale
+-- head-LN slot; what forced the two statements to unify was needing the tie for a number.
+-- ⭐ Most of the "tier migration" §3.5.1 costed was already done: floatBridgesTo_rowLNVecFlat and
+-- Maps.rowLNVecFlat exist (ChannelLNFloatBridge / FloatBudgetEnvLN, written for ConvNeXt's head
+-- LayerNorm), and rowLNVecFlat N D ε γ β IS ViT's per-token vector LN — rfl. Likewise
+-- floatBridgesTo_gelu and floatBridgesTo_dense. This file is the ASSEMBLY, not the leaves.
+-- ⚠ Of the three structural ties only flat_mhsaLayer_eq needed a proof: mhProjAttnFullFlat ends
+-- in Mat.flatten where perRowFlat opens with Mat.unflatten, so the roundtrip needs rewriting. The
+-- LN and MLP ties are rfl.
+-- ⚠ biPathMat (fun X => X) G puts the IDENTITY first (M r s + G M r s) where Proofs.residual puts
+-- the BODY first (f v i + v i). Equal by add_comm, not rfl — flat_biPathMat_id discharges it, and
+-- it matters because FloatBridgesTo.residual names the float map body-first.
+-- ⛔ Every stage of this block is capped (attention by Maps.mhProjAttnFullCap, both LayerNorms by
+-- Maps.rowLNVecFlat's bnCapped), so there is no stage at which the fold survives, and the two
+-- skips carry that forward: every ViT number downstream is the triangle inequality (§9).
+#print axioms Proofs.flat_biPathMat_id
+#print axioms Proofs.flat_comp_mat
+#print axioms Proofs.flat_perTokenLN_eq
+#print axioms Proofs.flat_transformerMlp_eq
+#print axioms Proofs.flat_mhsaLayer_eq
+#print axioms Proofs.blockVFlat_eq
+#print axioms Proofs.blockVFlatF
+#print axioms Proofs.floatBridgesTo_blockVFlat
+#print axioms Proofs.FloatBridgesTo.Maps.blockVFlat
+-- ⭐ ViTBlockVFloatBridge.lean closes ViT-Tiny's BLOCK 0 as a compiled `example` at the numerals
+-- vit_chain emits: thirteen stages, two skips, twenty-six inequalities, in (23.23, 1.064e-2) ->
+-- out (9.365e19, 2.811e20). One block costs ~1e18 of window; twelve put the net at 1e218.
 #print axioms Proofs.FloatBridgesTo.Maps.chanLNTensor3
 #print axioms Proofs.FloatBridgesTo.Maps.cnxBlockChW
 #print axioms Proofs.FloatBridgesTo.Maps.cnxDownChW

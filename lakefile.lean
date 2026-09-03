@@ -360,6 +360,15 @@ lean_lib «Certs» where
              -- `mhpBCap` bounds the float output directly instead (floatClose_seScale's fix, one
              -- net later — the error never needed to enter the window).
              `LeanMlir.Proofs.Float.FloatBudgetEnvAttn,
+             -- ⛔ The vector-LN transformer block — a DIFFERENT block from the one the float
+             -- tier already had. floatBridges_vitBlockMHFull is about transformerBlock's SCALAR
+             -- LN affines; vitForwardKV uses transformerBlockV, whose affines are VECTORS, and
+             -- the trained checkpoint has vectors. The imagenet_specs_drift_from_twins shape,
+             -- and what forced the two statements to unify was needing the tie for a number.
+             -- ⭐ Most of the migration was already done: floatBridgesTo_rowLNVecFlat and
+             -- Maps.rowLNVecFlat exist (written for ConvNeXt's head LN) and rowLNVecFlat IS
+             -- ViT's per-token vector LN — rfl. This file is the ASSEMBLY, not the leaves.
+             `LeanMlir.Proofs.Float.ViTBlockVFloatBridge,
              -- ⛔ The fourth ImageNet-scale whole-net float statement, and NOT the same kind of
              -- statement as the three above: the ConvNeXt-T forward, window 4.858e227 / budget
              -- 9.706e227, and `budget / window = 2.00` is the tell that every one of the 23

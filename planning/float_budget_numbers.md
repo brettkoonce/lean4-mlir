@@ -232,7 +232,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
 | **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
-| ViT-Tiny fwd (`vitForwardKV`) | ⭐ **PROBED + LEAVES LANDED 2026-09-03**, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸ (§3.5), the cap again. `FloatBudgetEnvAttn.lean` closes the attention leaves; the whole net is not written. | ⛔ the `FloatBridgesTo` TIER MIGRATION for the LN / MLP / patch-embed cone — still all `FloatBridges`, so `vit_floatBridgesTo`'s hypotheses stay undischargeable (§3.5.1); then `Maps.concatCls` / `flatConvStride16` and `ViTFloatBudget.lean` (§3.5.2) |
+| ViT-Tiny fwd (`vitForwardKV`) | ⭐ **PROBE + ATTENTION LEAVES + BLOCK landed 2026-09-03**, window 3.612·10²¹⁸ / budget 7.222·10²¹⁸ (§3.5), the cap again. `Maps.blockVFlat` closes block 0 at the emitted numerals. | the patch embed (`Maps.concatCls` / `flatConvStride16` + a `FloatBridgesTo` peer for `patchEmbed_flat`), the depth-`k` fold, then `ViTFloatBudget.lean` (§3.5.2 steps 4–5) |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -672,7 +672,7 @@ checkpoint has neither. ⚠ `vit_full_eq_vitForwardFlat` remains true and remain
 not train; §3.1's `BnEvalFloatBridge` warning, one tier up.
 
 **2. THE CONE IS OPEN WIDER THAN §3.5 SAID — it is not the EfficientNet job, it is a TIER
-MIGRATION.** §3.5 read the gap as "the patch embed, the attention block and the MLP block each
+MIGRATION. ⚠ AND THAT COSTING WAS HALF WRONG; see the correction at the end of this item.** §3.5 read the gap as "the patch embed, the attention block and the MLP block each
 need a closed `FloatBridgesTo` at real weights". The actual state is that **the ViT float cone is
 `FloatBridges` (the ∃-existential tier) essentially everywhere**: `ViTBlockFloatBridge.lean`
 (1116 lines), `ViTAttentionFloatBridge.lean` (439) and `ViTFloatBridge.lean` (233) contain
@@ -682,6 +682,22 @@ need a closed `FloatBridgesTo` at real weights". The actual state is that **the 
 ⚠ That is the `floatbridgesto_existential_L_vacuous` migration, unfinished on this net, and it is
 the bulk of the remaining work. Budget for it explicitly; it is not visible from the whole-net
 file, which looks finished.
+
+⭐⭐ **CORRECTION (chunk 2, 2026-09-03): that count was right about the ATTENTION half and wrong
+about everything else, and the whole migration was a fraction of the estimate.** The grep above
+searched `ViT*FloatBridge.lean`, and the LayerNorm half of ViT's cone does not live there — it
+lives in ConvNeXt's, written for the head LayerNorm:
+
+* `floatBridgesTo_rowLNVecFlat` (`ChannelLNFloatBridge.lean`) and `Maps.rowLNVecFlat`
+  (`FloatBudgetEnvLN.lean`) already exist, and ⭐ **`rowLNVecFlat N D ε γ β` IS ViT's per-token
+  vector LayerNorm — `rfl`.** All 25 of ViT's LN sites are served by ConvNeXt's leaf unchanged.
+* `floatBridgesTo_gelu` (`ViTFloatBridge.lean`) and `floatBridgesTo_dense` were already migrated
+  too, as were `Maps.gelu` / `Maps.dense` / `Maps.perRow` / `Maps.residual`.
+
+So chunk 2 wrote **no new leaves at all** — only the assembly and the ties. ⭐ This is
+§3.3.0(b)'s lesson for the third time (*before writing a bound, grep the repo for it*), now
+sharpened: **grep the whole cone, not the files named after your net.** A leaf written for one
+architecture is named after that architecture and will not be found by searching for yours.
 
 ### 3.5.2 The order of work — ✅ steps 1–2 LANDED 2026-09-03 (`FloatBudgetEnvAttn.lean`)
 
@@ -705,15 +721,37 @@ file, which looks finished.
    breaks `Maps.capped`'s own `2·Ā' ≤ Ē'`. Round the window first, then double the rounded value
    (`cnx_eval_chain`'s `lnsite` already did; the ViT leaf did not). Any capped leaf has this
    trap.
-3. **The `*Gen` layer** for `blockV`/`vitBodyKVFlat`, if the eval/training split needs it — ⭐ ViT
-   needs NO eval twin and none is possible (LN has no running statistics), so unlike r34/mnv2/B0
-   there is no second render and no `*RenderPCEval.lean`. That made ConvNeXt cheaper and it makes
-   ViT cheaper the same way.
-4. **`ViTFloatBudget.lean`** on the r34 recipe: records (`ViTBlockW`/`ViTProfile`/…), a
-   `DeviceExp` alongside `DeviceRsqrt`, per-block `Maps` lemma, the 236-stage chain, the tie
-   through `vitFwdGraphKMHV_faithful`, `vit_float_logits_le` + `_committed`.
-5. **`verify_vit`** — the re-assertion pass, before any numeral is emitted (§0's ⚠: fold with the
-   ROUNDED γ; the pass is what catches it).
+3. ✅ **The BLOCK landed 2026-09-03 (`ViTBlockVFloatBridge.lean`)** — `floatBridgesTo_blockVFlat`
+   (closed at real weights, float net named as `blockVFlatF`), `Maps.blockVFlat` (13 stages, two
+   skips, 26 inequalities), and `blockVFlat_eq`, the structural tie to the committed definition.
+   ⛔ **And it is a DIFFERENT block from the one the float tier already had.**
+   `floatBridges_vitBlockMHFull` is stated about `transformerBlock`'s SCALAR LayerNorm affines
+   (`γ β : ℝ`); `vitForwardKV` composes `transformerBlockV`, whose affines are VECTORS — and the
+   checkpoint has vectors. ⚠ `imagenet_specs_drift_from_twins` for the third time in this file
+   (§3.3(b) was the second): the two statements look interchangeable until something forces them
+   to unify, and what forces it is needing the tie for a number.
+   ⚠ Of the three structural ties only `flat_mhsaLayer_eq` needed a proof — `mhProjAttnFullFlat`
+   ends in `Mat.flatten` where `perRowFlat` opens with `Mat.unflatten`, so the roundtrip needs
+   rewriting; the LN and MLP ties are `rfl`. And ⚠ `biPathMat (fun X => X) G` puts the IDENTITY
+   first where `Proofs.residual` puts the BODY first — equal by `add_comm`, and it matters because
+   `FloatBridgesTo.residual` names its float map body-first, so the other association is a
+   different term.
+   ⭐ ViT needs NO eval twin and none is possible (LN has no running statistics), so unlike
+   r34/mnv2/B0 there is no second render and no `*RenderPCEval.lean` — the same saving ConvNeXt
+   had.
+4. **Still to write: the patch embed** (`Maps.concatCls`, `Maps.flatConvStride16`, and the
+   `FloatBridgesTo` peer for `patchEmbed_flat`, which is still `FloatBridges`-only), and the
+   depth-`k` fold over `vitBodyKVFlat` (head-first recursion — ⚠ check the association before
+   writing the chain, §3.3's lesson 2).
+5. **`ViTFloatBudget.lean`** on the r34 recipe: records (`ViTProfile`/`ViTWeights`), a
+   `DeviceExp` alongside `DeviceLN`/`DeviceGelu`, the 164-stage chain, the tie through
+   `vitFwdGraphKMHV_faithful`, `vit_float_logits_le` + `_committed`.
+   ⚠ `DeviceLN` and `DeviceGelu` currently live in `ConvNeXtFloatBudget.lean`, a BUDGET file —
+   so `ViTBlockVFloatBridge.lean` takes its LN envelopes as hypotheses rather than importing a
+   sibling net's budget. Moving those two structures down into the kit is the right call when
+   the ViT budget file lands; it touches ConvNeXt's committed number, so do it deliberately.
+6. ✅ **`verify_vit`** — the re-assertion pass, landed with the probe (328 inequalities). Run it
+   before any numeral is emitted (§0's ⚠: fold with the ROUNDED γ; the pass is what catches it).
 
 ⚠ Two facts the whole-net statement must carry and disclose, like `DeviceRsqrt`/`DeviceSigmoid`:
 the device `exp` accuracy `eexp` (taken at 10⁻², as `es`/`esig`/`egelu` are), and the softmax side
