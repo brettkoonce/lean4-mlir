@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
-import LeanMlir.Proofs.Float.MobileNetV2WholeFloatBridge
+import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 
 /-! # A NUMBER for MobileNetV2: the deployed inference forward, and a TIGHT window
@@ -65,69 +65,9 @@ namespace Proofs
 
 open FloatModel
 
--- ════════════════════════════════════════════════════════════════
--- § The three `Maps` leaves this net needs and ResNet-34 did not
--- ════════════════════════════════════════════════════════════════
-
-namespace FloatBridgesTo
-
-/-- ⭐ **An envelope through `relu6` — and it CLAMPS.** Unlike `Maps.relu`, whose window step is
-    the identity, relu6's output window is `min Ā 6`: `relu6` is both magnitude-nonincreasing and
-    bounded by `6` whatever its input (`relu6_le_six`), so a relu6 site resets the certified
-    magnitude instead of inheriting it. Exact in float, so the modulus is still the identity and
-    the error passes through untouched — the clamp buys window, not budget. -/
-theorem Maps.relu6 {n : Nat} {Ā Ē Ā' Ē' : ℝ} (hĀ' : min Ā 6 ≤ Ā') (hĒ' : Ē ≤ Ē') :
-    (floatBridgesTo_relu6 (n := n)).Maps Ā Ē Ā' Ē' where
-  mag_le := fun _A _h0 hle => (min_le_min hle le_rfl).trans hĀ'
-  mod_le := fun _A _E _h0 _hE0 _hle hEle => hEle.trans hĒ'
-
-/-- **An envelope through a depthwise convolution** — `Maps.flatConv` at fan-in `kH·kW`: a
-    depthwise kernel touches one input channel, so its receptive field is the window alone and
-    the `ic` factor drops out. Same two rational inequalities. -/
-theorem Maps.depthwise {c h w kH kW : Nat} (M : FloatModel)
-    (W : DepthwiseKernel c kH kW) (bb : Vec c) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < c * h * w)
-    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |bb ch| ≤ β)
-    {g Ā Ē Ā' Ē' : ℝ} (hg : (1 + M.u) ^ (kH * kW + 2) - 1 ≤ g)
-    (hĀ' : (1 + g) * (((kH * kW : ℕ) : ℝ) * w' * Ā + β) ≤ Ā')
-    (hĒ' : g * (((kH * kW : ℕ) : ℝ) * w' * (Ā + Ē) + β)
-            + ((kH * kW : ℕ) : ℝ) * w' * Ē ≤ Ē') :
-    (floatBridgesTo_depthwise (h := h) (w := w) M W bb hw' hβ hn hW hb).Maps Ā Ē Ā' Ē' where
-  mag_le := fun A h0 hle => by
-    show layerAct (kH * kW) w' β A + layerBudget M.u (kH * kW) w' β A 0 ≤ Ā'
-    have h1 := layerAct_le_num' (m := kH * kW) (β := β) hw' hle
-    have h2 := layerBudget_le_num' (m := kH * kW) M.u_nonneg hw' hβ h0 hle
-      (le_refl (0:ℝ)) (le_refl (0:ℝ)) hg
-    simp only [add_zero, mul_zero] at h2
-    nlinarith
-  mod_le := fun A E h0 hE0 hle hEle => by
-    show layerBudget M.u (kH * kW) w' β A E ≤ Ē'
-    exact (layerBudget_le_num' M.u_nonneg hw' hβ h0 hle hE0 hEle hg).trans hĒ'
-
-/-- **An envelope through a stride-2 depthwise convolution** — `Maps.depthwise` verbatim:
-    decimating the output picks coordinates, so the fan-in and hence the budget are unchanged. -/
-theorem Maps.depthwiseStride2Flat {c h w kH kW : Nat} (M : FloatModel)
-    (W : DepthwiseKernel c kH kW) (bb : Vec c) {w' β : ℝ}
-    (hw' : 0 ≤ w') (hβ : 0 ≤ β) (hn : 0 < c * (2 * h) * (2 * w))
-    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |bb ch| ≤ β)
-    {g Ā Ē Ā' Ē' : ℝ} (hg : (1 + M.u) ^ (kH * kW + 2) - 1 ≤ g)
-    (hĀ' : (1 + g) * (((kH * kW : ℕ) : ℝ) * w' * Ā + β) ≤ Ā')
-    (hĒ' : g * (((kH * kW : ℕ) : ℝ) * w' * (Ā + Ē) + β)
-            + ((kH * kW : ℕ) : ℝ) * w' * Ē ≤ Ē') :
-    (floatBridgesTo_depthwiseStride2Flat (h := h) (w := w) M W bb hw' hβ hn hW hb).Maps
-      Ā Ē Ā' Ē' where
-  mag_le := fun A h0 hle => by
-    show layerAct (kH * kW) w' β A + layerBudget M.u (kH * kW) w' β A 0 ≤ Ā'
-    have h1 := layerAct_le_num' (m := kH * kW) (β := β) hw' hle
-    have h2 := layerBudget_le_num' (m := kH * kW) M.u_nonneg hw' hβ h0 hle
-      (le_refl (0:ℝ)) (le_refl (0:ℝ)) hg
-    simp only [add_zero, mul_zero] at h2
-    nlinarith
-  mod_le := fun A E h0 hE0 hle hEle => by
-    show layerBudget M.u (kH * kW) w' β A E ≤ Ē'
-    exact (layerBudget_le_num' M.u_nonneg hw' hβ h0 hle hE0 hEle hg).trans hĒ'
-
-end FloatBridgesTo
+/-! The three `Maps` leaves this net needs and ResNet-34 did not — `relu6` (⭐ it CLAMPS, so its
+window step is `min Ā 6`), `depthwise` and `depthwiseStride2Flat` — live in
+`FloatBudgetEnvMBConv.lean`, shared with EfficientNet-B0. -/
 
 -- ════════════════════════════════════════════════════════════════
 -- § The parameter records

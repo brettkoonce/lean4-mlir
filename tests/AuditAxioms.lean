@@ -97,6 +97,7 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderPCEval
 import LeanMlir.Proofs.Float.Resnet34FloatBudget
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
 import LeanMlir.Proofs.Float.MobileNetV2FloatBudget
+import LeanMlir.Proofs.Float.FloatBudgetEnvMBConv
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
@@ -2089,6 +2090,21 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.Maps.relu6
 #print axioms Proofs.FloatBridgesTo.Maps.depthwise
 #print axioms Proofs.FloatBridgesTo.Maps.depthwiseStride2Flat
+-- …and the rest of the MBConv-family Maps kit (FloatBudgetEnvMBConv.lean), which EfficientNet-B0
+-- needs: swish (⭐ its modulus is the MIN of a multiplicative and an additive input sensitivity —
+-- the multiplicative branch alone multiplies the inherited error by the window at every swish
+-- site and puts B0's whole-net budget at 1e1737), sigmoid (window 1 + esig at ANY input, so the
+-- SE branch cannot blow up), broadcast, seScale (⭐ window = the input window times the gate's
+-- certified MAGNITUDE plus one rounding; the gate's ERROR does not enter it — deriving it as
+-- |float − real| + |real| costs 1e18 per SE site), and batchMap (mag/mod ARE the per-example
+-- bridge's, i.e. the envelope-level statement that the op does not couple the batch).
+-- ⚠ FloatBudgetEnvMBConv.lean also carries a worked b1 squeeze-excite site as a compiled
+-- `example`, so none of these leaves is unexercised before the B0 budget file lands.
+#print axioms Proofs.FloatBridgesTo.Maps.broadcast
+#print axioms Proofs.FloatBridgesTo.Maps.batchMap
+#print axioms Proofs.FloatBridgesTo.Maps.sigmoid
+#print axioms Proofs.FloatBridgesTo.Maps.swish
+#print axioms Proofs.FloatBridgesTo.Maps.seScale
 #print axioms Proofs.MnvBlock.bodyMaps
 #print axioms Proofs.MnvBlock.stridedMaps
 #print axioms Proofs.MnvBlock.resMaps

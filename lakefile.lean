@@ -312,6 +312,13 @@ lean_lib «Certs» where
              -- The mnv2 INFERENCE forward graph + whole-net faithfulness (the eval twin of
              -- mobilenetv2FwdGraphFullPC_faithful): den (graph) = mobilenetv2Forward_full_pc_eval,
              -- one shared eps, each BN site carrying its frozen mean/variance (102 args -> 123).
+             -- The `Maps` leaves the MBConv family needs on top of FloatBudgetEnv's: relu6
+             -- (⭐ it CLAMPS — window step min Ā 6), the two depthwise convs, and enet's swish
+             -- (⭐ modulus = min of a multiplicative and an ADDITIVE sensitivity) / sigmoid /
+             -- broadcast / seScale (⭐ window = the gate's MAGNITUDE, not mag + error) /
+             -- batchMap. Here rather than in FloatBudgetEnv because a Maps lemma names its
+             -- bridge, and none of these bridges is on FloatBudgetEnv's import path.
+             `LeanMlir.Proofs.Float.FloatBudgetEnvMBConv,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval,
              -- ⭐ The second ImageNet-scale whole-net float NUMBER, and the first with a
              -- non-vacuous WINDOW: the deployed MobileNetV2 inference forward, window 2154 /
