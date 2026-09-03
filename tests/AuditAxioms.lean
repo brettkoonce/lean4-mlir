@@ -106,6 +106,7 @@ import LeanMlir.Proofs.Float.ViTBlockVFloatBridge
 import LeanMlir.Proofs.Float.ConvNeXtFloatBudget
 import LeanMlir.Proofs.Float.ViTFloatBudget
 import LeanMlir.Proofs.Float.FloatBudgetEnvBack
+import LeanMlir.Proofs.Float.Resnet34BackFloatBudget
 import LeanMlir.Proofs.Float.BnPerChannelFloatBridge
 import LeanMlir.Proofs.Float.CifarBnFloatBridge
 import LeanMlir.Proofs.Float.BnBackFloatBridge
@@ -2466,6 +2467,30 @@ open Proofs
 #print axioms Proofs.FloatBridgesTo.bnGradInputReMag_nonneg
 #print axioms Proofs.FloatBridgesTo.bnGradInputBudgetG_nonneg
 #print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelBackGain
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- THE r34 BACKWARD'S NUMBER (Resnet34BackFloatBudget.lean) — the whole-net INPUT-GRADIENT VJP,
+-- window 2.188e245 / budget 1.458e244 on loss cotangents of magnitude <= 1 (|p − y| <= 1 for
+-- softmax cross-entropy). ⭐ budget/window = 0.067: the interval FOLD, not the cap ConvNeXt-T's
+-- and ViT-Tiny's 2.00 are — and at TRAINING-mode BatchNorm, where the FORWARD of this same net
+-- has no statable number at all (1e7417). A VJP reads its statistics off the SAVED activations,
+-- which the cotangent does not perturb.
+-- ⛔ THREE HYPOTHESES CARRY THE CAVEAT: `es`/`exh` (the saved float activations' accuracies,
+-- 1e-2 — quantities the forward's own training-mode fold cannot discharge) and the OPERATING
+-- POINT |istd| <= 16 (sigma >= 1/16), §0.1's escape 2, worth ~43 orders across 33 BN sites and
+-- needed because norm_num's ceiling is ~1e253, not the 1e300 the plan had recorded.
+-- ⭐ Every per-op backward here is already tied to its certified VJP by
+-- Resnet34BackCertifiedTie.lean; only the whole-net FOLD of those ties is open there.
+#print axioms Proofs.R34BnBack.bridge
+#print axioms Proofs.R34IdBlkBack.bridge
+#print axioms Proofs.R34DownBlkBack.bridge
+#print axioms Proofs.r34BackProfile_committed
+#print axioms Proofs.r34GradR
+#print axioms Proofs.r34GradF
+#print axioms Proofs.r34GradBridge
+#print axioms Proofs.r34GradBridge_maps
+#print axioms Proofs.r34GradBridge_mag_le
+#print axioms Proofs.r34GradBridge_fresh_le
+#print axioms Proofs.r34_grad_float_le
 -- ⭐ Block `e1` (identity, 512x7x7) is closed as a compiled `example` at r34_back_chain's
 -- numerals with BOTH BatchNorm sites the real floatBridgesTo_bnPerChannelBack (Xh := 7 from
 -- bnXhat_abs_le_num): in (2.452e-4, 1.898e-10), out (8.702e12, 5.299e10). One block costs ~1e16

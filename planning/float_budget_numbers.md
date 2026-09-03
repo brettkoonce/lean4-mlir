@@ -49,6 +49,7 @@ window contains an error term, ask why.**
 | EfficientNet-B0 @224², **inference BN**, batched | 2.580·10⁵⁵ | 8.408·10²¹⁰ | — | fold | `EfficientNetFloatBudget.lean` |
 | ConvNeXt-T @224², channel LN | 4.858·10²²⁷ | 9.706·10²²⁷ | **2.00** | ⛔ **cap** | `ConvNeXtFloatBudget.lean` |
 | ViT-Tiny @224², depth 12, vector LN | 3.612·10²¹⁸ | 7.222·10²¹⁸ | **2.00** | ⛔ **cap** | `ViTFloatBudget.lean` |
+| **ResNet-34 BACKWARD** @224², **training BN** | 2.188·10²⁴⁵ | 1.458·10²⁴⁴ | 6.7·10⁻² | ⭐ fold | `Resnet34BackFloatBudget.lean` |
 
 Six nets now carry kernel-checked numbers — ⛔ **but not all six are the same claim.** The first
 four are the interval fold and all four are vacuous as *budgets*; the point is that the kernel
@@ -905,14 +906,17 @@ pinned on every leaf whose input window the elaborator has not yet unified.
   re-assertion pass. Never hand-type a numeral.
 * Cross-check the number against the probe BEFORE writing the docstring.
 
-### 3.7 Phase 2 — the backwards. ⭐⭐ PROBED 2026-09-03, and §3.7's own premise was WRONG
+### 3.7 Phase 2 — the backwards. ⭐⭐ ResNet-34's INPUT-GRADIENT NUMBER LANDED 2026-09-03
 
-**The probe says the ResNet-34 whole-net input-gradient VJP is statable AND it is a FOLD, at
-TRAINING-mode BatchNorm** — the mode the forward has no number for at all (§0.1's 10⁷⁴¹⁷).
-`r34_back_chain` / `verify_r34_back` (`scripts/float_budget_envelope.py`, 90 stages, 180
-re-assertions):
+✅ **`r34_grad_float_le` (`Resnet34BackFloatBudget.lean`): the ResNet-34 whole-net
+input-gradient VJP has a kernel-checked number, and it is a FOLD, at TRAINING-mode BatchNorm** —
+the mode this same net's forward has no number for at all (§0.1's 10⁷⁴¹⁷). `r34_back_chain` /
+`verify_r34_back` (`scripts/float_budget_envelope.py`, 90 stages, 252 re-assertions):
 
-    window ≤ 1.345·10²⁸⁸      budget ≤ 6.473·10²⁸⁶      budget/window = 0.048
+    window ≤ 2.188·10²⁴⁵      budget ≤ 1.458·10²⁴⁴      budget/window = 0.067
+
+⚠ at the operating point `|istd| ≤ 16`; at the unconditional `ε`-floor (`|istd| ≤ 317`) the same
+fold is 1.359·10²⁸⁸ and is past `norm_num`'s real ceiling — see step 4(a)/(b) below.
 
 ⛔ **The old text here said "§0.1 applies with more force: a backward's BN-back modulus inherits
 the same reduction structure." It does not.** §0.1's quadratic came from the statistics MOVING
@@ -1004,86 +1008,81 @@ blocks themselves are only at the `∃`-tier. In order:
    `Resnet34WholeBackFloatBridge`'s import path (the whole-net file takes its blocks abstractly,
    so it never needed them), and `x.residual M` inside a `.comp` chain parses as
    `(A.comp x.residual) M` — write `FloatBridgesTo.residual M x` explicitly.
-4. ⛔ **`Resnet34BackFloatBudget.lean` — ATTEMPTED 2026-09-03 AND NOT LANDED.** The file is
-   written (1120 lines: `R34KerB`/`R34HeadB`/`R34BnBack`/`R34IdBlkBack`/`R34DownBlkBack`/
-   `R34BackWeights`, the profile, the closed bridge, and the 90-stage chain) and every one of its
-   180 inequalities is re-asserted exactly by `verify_r34_back` — but **the single
-   `r34GradBridge_maps` theorem does not elaborate: 39 minutes of CPU and 41 GB RSS, killed.**
-   Four things came out of the attempt, and three of them are corrections to this file.
+4. ✅ **`Resnet34BackFloatBudget.lean` — LANDED 2026-09-03.** `r34_grad_float_le`: the deployed
+   ResNet-34 input-gradient is within **1.458·10²⁴⁴** of the certified one, per input pixel, on
+   loss cotangents of magnitude `≤ 1` (`|p − y| ≤ 1` for softmax cross-entropy), certified window
+   **2.188·10²⁴⁵**. ⭐ `budget / window = 0.067` — **the interval FOLD**, where ConvNeXt-T's and
+   ViT-Tiny's forward numbers are `2.00` caps — **and at TRAINING-mode BatchNorm, the mode this
+   same net's FORWARD has no statable number for at all** (§0.1's `10⁷⁴¹⁷`). 1026 lines, 90
+   stages, 252 inequalities, ~80 s / 3.8 GB.
+
+   ⛔ **Three hypotheses carry the caveat**, and they must be quoted with the number: `es` and
+   `exh` (the saved float activations' inverse-stddev and normalised-activation accuracies, at
+   `10⁻²` — quantities the forward's own training-mode fold cannot discharge), and the
+   **operating point** `|istd| ≤ 16` i.e. `σ ≥ 1/16`, which is §0.1's escape 2 finally used.
+
+   **Four things this cost, and three of them are corrections to earlier guesses in this file.**
 
    **(a) ⛔⛔ `norm_num`'s ceiling is ~10²⁵³ and SHAPE-DEPENDENT, not the `10³⁰⁰` §0.1 records.**
-   Bisected on the leaf shape itself:
 
    | goal | closes |
    |---|---|
-   | `21/10 * 10⁵⁰⁰ ≤ 3 * 10⁵⁰⁰` | ✅ |
-   | `4271 * 10⁴⁰⁰ ≤ 4272 * 10⁴⁰⁰` | ✅ |
    | `21/10 * (4271 * 10²⁵⁰) ≤ 8971 * 10²⁵⁰` | ✅ |
    | `21/10 * (4271 * 10²⁶⁰) ≤ 8971 * 10²⁶⁰` | ⛔ |
-   | `317/12544 * (12544 * (21/10 * (4271 * 10²⁵⁰))) ≤ 3571 * 10²⁵⁷` | ⛔ **same VALUE as row 3** |
+   | `317/12544 * (12544 * (21/10 * (4271 * 10²⁵⁰))) ≤ 3571 * 10²⁵⁷` | ⛔ **same VALUE as row 1** |
+   | `4271 * 10⁴⁰⁰ ≤ 4272 * 10⁴⁰⁰` | ✅ ⚠ **not evidence** — `a*c ≤ b*c` cancels via simp |
 
-   So it is neither a magnitude nor a digit ceiling — it depends on the operation TREE. Raising
-   `maxHeartbeats` or `maxRecDepth` does not move it, and neither `ring_nf`, `nlinarith`, nor
-   `simp only` + `norm_num` closes what `norm_num` alone will not. ⚠ ConvNeXt-T's `10²²⁷` and
-   ViT-Tiny's `10²¹⁸` sit under it, which is why five nets landed without anyone meeting it.
-   **Re-read §0.1's "it refuses around 10³⁰⁰; verified" as an upper bound on a friendlier shape.**
+   Raising `maxHeartbeats`/`maxRecDepth` does not move it, and neither `ring_nf`, `nlinarith`,
+   nor `simp only` + `norm_num` closes what `norm_num` alone will not. ⚠ ConvNeXt-T's `10²²⁷` and
+   ViT-Tiny's `10²¹⁸` sit under it, which is why five nets landed without meeting it.
 
-   **(b) ⭐ The operating-point `S` is a REAL lever, and it is §0.1's escape 2 finally used.**
-   `R34BnBack.hS` — `|istd| ≤ S` at the saved activations — is a HYPOTHESIS, not a consequence of
-   the `ε`-floor, so `S` is free to choose. `S` multiplies at all 33 BatchNorm sites, so
-   `317 → 16` (i.e. `σ ≥ 1/16`) is worth ~43 orders: **1.345·10²⁸⁸ → 2.176·10²⁴⁵ / 1.451·10²⁴⁴**,
-   ratio 0.067, which is under (a)'s wall. ⚠ `hSε` then has no business in the profile and was
-   dropped — at `S = 16` it is false at `ε = 10⁻⁵`, and nothing in the backward uses it.
+   **(b) ⭐ The operating-point `S` is what buys the room.** `R34BnBack.hS` — `|istd| ≤ S` at the
+   saved activations — is a HYPOTHESIS, not a consequence of the `ε`-floor, so `S` is free to
+   choose; it multiplies at all 33 BatchNorm sites, so `317 → 16` is worth ~43 orders:
+   `1.359·10²⁸⁸ → 2.188·10²⁴⁵`. ⚠ `hSε` then has no business in the profile and was dropped — at
+   `S = 16` it is false at `ε = 10⁻⁵`, and nothing in the backward uses it.
 
    **(c) ⚠ PIN ALL FOUR NUMERALS ON EVERY LEAF** — `(Ā := …) (Ē := …) (Ā' := …) (Ē' := …)`.
    §3.3's lesson 3 says to pin the input window; that is not enough. Every `by norm_num` inside a
    `have` runs before `Maps.comp` unifies anything, so an unpinned OUTPUT window is a
    metavariable too — and it fails as `⊢ <huge numeral> ≤ ?m.2125`, which reads like arithmetic
-   and is not. Three separate rounds of this: the detached `hstem` group, then each block's
-   input, then each block's output.
+   and is not.
 
-   **(d) ⚠ The whole-net bridge must REUSE `r34_grad_floatBridgesTo`, not be rebuilt.** Written
-   as one 22-stage `.comp` term it makes the elaborator compare the composition against
-   `r34InputGrad` with every block CONCRETE, and that `whnf` does not terminate in 4 000 000
-   heartbeats. The committed bridge takes its blocks as hypotheses, so the same comparison
-   happens between opaque variables and costs nothing. §2's "never one big `exact`" at whole-net
-   granularity. ⭐ And a `Maps` chain must then be grouped the way THAT bridge is grouped (stem's
-   three stages together, then the trunk) — `.comp` is not associative as a bridge.
+   **(d) ⭐⭐ THE BLOCKER WAS ONE IMPLICIT ARGUMENT, and every structural theory about it was
+   wrong.** `floatBridgesTo_maxPoolBack` is declared over `x : Tensor3 c (2*h) (2*w)`, so putting
+   it in a composition asks the elaborator to solve **`2 * ?h = 112`** — higher-order, and it
+   cannot. What that looks like from outside is a whole-net `isDefEq` that runs 25 minutes to
+   41 GB without terminating, which is indistinguishable from a dozen other causes. ⛔ In
+   sequence I blamed, and each cost a 2–25 minute compile: the number of blocks; the `∘`
+   association (flat vs `r34InputGrad`'s grouped stem); `r34_grad_floatBridgesTo` being a
+   tactic-proof term that must be `whnf`'d through; and the downsample dimension indices
+   (`ic * (2*h) * (2*w)` against `ic * h' * w'`). **All four were wrong.** The fix is
+   `(c := 64) (h := 56) (w := 56)` — and with it a term-mode 22-stage chain typed at the
+   committed maps elaborates in 80 s.
 
-   ✅ **THE HOMOGENEITY FIX LANDED (`FloatBudgetEnvBack.lean`), AND IT MOVED THE COST — BUT THE
-   BLOCKER TURNED OUT TO BE SOMEWHERE ELSE.** With `Maps.bnPerChannelBackGain` the whole 90-stage
-   chain — all 16 blocks, all 252 inequalities — elaborates in **84 s / 3.8 GB** (per-block: 8
-   blocks 48 s → 31 s, 11 blocks >120 s → 55 s). ⛔ **What does not finish is the single
-   `isDefEq` that matches the chain's bridge against the whole-net type**, at 2 000 000
-   heartbeats. ⚠ Every truncation I timed ended in `sorry` and therefore never touched that
-   check — which is why it looked like a per-block problem for three rounds. **Time the closing
-   step separately from the chain; they are different costs with different fixes.**
-   Two shapes were tried and both time out: delegating to `r34_grad_floatBridgesTo` (whose term
-   is a tactic proof with `unfold` + ten `have`s to whnf through), and a term-mode `.comp` chain
-   grouped exactly as `r34InputGrad` groups it. ⭐ `FloatBridgesTo.comp` IS stated with `g ∘ f`,
-   so the association hypothesis was sound and is not the remaining cost; the next suspect is the
-   dimension indices (`ic * (2*h) * (2*w)` against `ic * h' * w'` at every downsample) rather
-   than the composition tree.
+   ⭐ **The method that found it, and the one to use next time: probe compositions of GROWING
+   DEPTH with explicit type ascriptions, from both ends.** 2 blocks including a downsample: 2.3 s.
+   Depths 4/8/12/16: 2.6 s for all four. Head alone, stem group alone: instant. `lin + gap + all
+   16 blocks` (18 stages): fine. **+ maxPool (19 stages): fails.** That is a five-minute bisect
+   and it lands on the exact argument. ⚠ It only works because each probe carries a type
+   ascription — see the next lesson.
 
-   ⭐⭐ **THE HOMOGENEITY ITSELF IS THE KEEPER, and it is the same linearity the whole section
-   rests on: `bnGradInputBudgetG` is HOMOGENEOUS OF DEGREE 1 in the cotangent window.** Every term carries
-   exactly one factor of `Cdy` (`bgEP` is the only `Cdy`-free piece, and it enters as a `mulErr`
-   `ea`, which is multiplied by a degree-1 `C`). So `budget q gn n G Cdy S Xh es exh
-   = Cdy * budget q gn n G 1 S Xh es exh`, and each site's inequality collapses from a 40-node
-   tree at 250-digit numerals to `Ā·K₁ + Ā·K₂ ≤ Ā'` against ONE constant per feature-map size —
-   **five constants instead of 68 giant `norm_num`s** — `bnGradInputBudgetG_homog` /
-   `bnGradInputReMag_homog` and the `Maps.bnPerChannelBackGain` leaf, all landed and 3-axiom
-   clean. `bn_back_gain` in the script folds at the ROUNDED gains, as the Lean chain passes them.
-   ⭐ Ask the same question of any future backward: a VJP is linear at a fixed point, so its
-   budget is homogeneous, so its numerals factor.
-   ⚠ The same question should be asked of `layerBudget` for the FORWARD budgets: they are not
-   homogeneous (biases break it), which is exactly why the forward numbers needed no such trick
-   and why this one does.
+   ⚠ **And time a whole-net `Maps` chain SEPARATELY from its closing step.** Every truncation
+   timed here ended in `sorry`, which never performs the final unification, so a blowup in one
+   `isDefEq` looked like a per-block cost for three iterations of the wrong fix. The chain alone
+   is 84 s; the closing step was everything.
 
-⚠ And one framing decision to make before step 4: the cotangent's input window is `1`, which is
-`|p − y| ≤ 1` for softmax cross-entropy. `LossHeadCotFloatBridge.lean` exists; deciding whether
-the number is stated from the loss head or from a unit cotangent is a statement question, not a
-numeric one — the numerals are identical.
+   ⭐⭐ **THE HOMOGENEITY IS THE REUSABLE PIECE: `bnGradInputBudgetG` is HOMOGENEOUS OF DEGREE 1
+   in the cotangent window.** Every term carries exactly one factor of `Cdy` (`bgEP` is the only
+   `Cdy`-free piece, and it enters as a `mulErr` *ea*, multiplied by a degree-1 *C*). So
+   `budget(Cdy) = Cdy · budget(1)`, and a site's envelope is `A ↦ A·(Kr+Kb)`,
+   `(A,E) ↦ A·Kb + E·Kr` — `Maps.bnPerChannelBackGain`. Stated directly, each site is a forty-node
+   tree at the chain's magnitude; factored, the expensive evaluation happens once per feature-map
+   SIZE — **five constants instead of sixty-eight.** Measured: 8 blocks 48 s → 31 s, 11 blocks
+   >120 s → 55 s, the full chain 39 min/41 GB (not finishing) → 84 s/3.8 GB. ⭐ Ask the same of
+   any future backward: a VJP is linear at a fixed point, so its budget is homogeneous, so its
+   numerals factor. ⚠ The FORWARD budgets are NOT homogeneous — a bias breaks it — which is
+   exactly why five forward nets never needed this.
 
 ## 5. The `Maps` kit — ✅ complete for all six nets
 
@@ -1165,8 +1164,12 @@ anyway, not as its own commit.
 * Pin ALL FOUR numerals on every `Maps` leaf, not just the input window: a `by norm_num` inside a
   `have` runs before `Maps.comp` unifies, so an unpinned output window is a metavariable and the
   error reads like arithmetic (§3.7(c)).
-* A whole-net bridge with CONCRETE blocks does not close by defeq against the committed net —
-  neither by reusing the committed bridge nor as a term-mode chain grouped the same way (§3.7).
+* ⭐⭐ An op declared over a COMPUTED dimension — `maxPoolFlatBack`'s `x : Tensor3 c (2*h) (2*w)`
+  — makes any composition containing it a higher-order unification (`2 * ?h = 112`), which
+  presents as a non-terminating whole-net `isDefEq`, not as a missing argument. Pin those
+  implicits: `(c := 64) (h := 56) (w := 56)` (§3.7(d)).
+* Diagnose a non-terminating whole-net `isDefEq` by probing compositions of GROWING DEPTH with
+  explicit type ascriptions, from both ends — it takes minutes and lands on the exact argument.
 * Time a whole-net `Maps` chain SEPARATELY from its closing step. A truncation that ends in
   `sorry` never performs the final unification, so a blowup there looks like a per-block cost.
 * A `have` cannot carry a `?_`. A whole-net envelope whose middle stage is the open goal has to

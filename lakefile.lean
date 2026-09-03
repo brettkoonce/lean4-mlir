@@ -404,6 +404,16 @@ lean_lib «Certs» where
              -- for the realistic-seal work) into a rational numeral — Xh enters as Xh², and
              -- deriving it from the forward's window instead is 1e7271 against 1e288.
              `LeanMlir.Proofs.Float.FloatBudgetEnvBack,
+             -- ⭐⭐ The r34 BACKWARD's NUMBER: the whole-net input-gradient VJP at 224²,
+             -- window 2.188e245 / budget 1.458e244, ratio 0.067 — the interval FOLD, not a cap,
+             -- and at TRAINING-mode BatchNorm, the mode the forward has no number for at all
+             -- (1e7417). A VJP reads its statistics off the SAVED activations, which the
+             -- cotangent does not perturb, so the modulus is linear in the inherited error.
+             -- ⛔ Three hypotheses carry the caveat: es/exh (the saved float activations'
+             -- accuracies, which the forward's own training-mode fold cannot discharge) and the
+             -- OPERATING POINT |istd| <= 16 (sigma >= 1/16), which is §0.1's escape 2 — worth
+             -- ~43 orders across 33 BN sites, and needed because norm_num's ceiling is ~1e253.
+             `LeanMlir.Proofs.Float.Resnet34BackFloatBudget,
              -- The BatchNorm FloatBridges keystone: flat/global BN (floatBridges_bn,
              -- discharges the EfficientNet MBConv hbnE/D/P) + the per-channel block-diagonal
              -- lift via FloatClose.perRowIdx (floatBridges_bnPerChannelFlat) + the network
