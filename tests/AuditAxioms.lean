@@ -2455,6 +2455,17 @@ open Proofs
 #print axioms Proofs.r34DownBlockBackF
 #print axioms Proofs.floatBridgesTo_r34DownBlockBack
 #print axioms Proofs.FloatBridgesTo.Maps.r34DownBlockBack
+-- ⭐⭐ The BatchNorm backward's budget is HOMOGENEOUS of degree 1 in the cotangent window — the
+-- same linearity that makes a backward fold exist at all. Stated directly, a site's inequality is
+-- a forty-node tree at the chain's full magnitude; factored as `Cdy * budget(1)` it is
+-- `Ā * (Kr+Kb) ≤ Ā'` against ONE constant per feature-map size, so the expensive evaluation
+-- happens five times for a ResNet-34 instead of sixty-eight. ⚠ The FORWARD budgets have no such
+-- form: a bias makes their leaves affine rather than linear.
+#print axioms Proofs.bnGradInputBudgetG_homog
+#print axioms Proofs.bnGradInputReMag_homog
+#print axioms Proofs.FloatBridgesTo.bnGradInputReMag_nonneg
+#print axioms Proofs.FloatBridgesTo.bnGradInputBudgetG_nonneg
+#print axioms Proofs.FloatBridgesTo.Maps.bnPerChannelBackGain
 -- ⭐ Block `e1` (identity, 512x7x7) is closed as a compiled `example` at r34_back_chain's
 -- numerals with BOTH BatchNorm sites the real floatBridgesTo_bnPerChannelBack (Xh := 7 from
 -- bnXhat_abs_le_num): in (2.452e-4, 1.898e-10), out (8.702e12, 5.299e10). One block costs ~1e16

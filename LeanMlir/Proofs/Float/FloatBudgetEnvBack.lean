@@ -363,6 +363,84 @@ theorem bnGradInputBudgetG_mono (hu : 0 ≤ u) (huu : u ≤ u') (hgn : 0 ≤ gn)
 
 end Mono
 
+-- ════════════════════════════════════════════════════════════════
+-- § ⭐⭐ The budget is HOMOGENEOUS in the cotangent window
+-- ════════════════════════════════════════════════════════════════
+
+/-! Every term of `bnGradInputBudgetG` carries exactly one factor of the cotangent bound — the
+same linearity that makes a backward fold exist at all (§3.7). `bgEP` is the one `Cdy`-free
+piece, and it enters as a `mulErr` *ea*, which is multiplied by a degree-1 *C*.
+
+⭐ **This is not a curiosity, it is what makes the numerals checkable.** Stated directly, a
+site's inequality is a forty-node tree at 250-digit numerals and `norm_num` needs seconds per
+site; factored as `Cdy · budget(1)`, it is `Ā * K ≤ Ā'` against ONE constant per feature-map
+size, and the expensive evaluation happens five times instead of sixty-eight. ⚠ The FORWARD
+budgets are NOT homogeneous — a bias breaks it — which is why they never needed this. -/
+
+section Homog
+
+variable (u gn : ℝ) (n : Nat) (G Cdy S Xh es exh : ℝ)
+
+theorem bgED_homog : bgED u G Cdy = Cdy * bgED u G 1 := by
+  unfold bgED FloatModel.mulErr; ring
+
+theorem bgESD_homog : bgESD u gn n G Cdy = Cdy * bgESD u gn n G 1 := by
+  unfold bgESD; rw [bgED_homog u G Cdy]; ring
+
+theorem bgMSD_homog : bgMSD u gn n G Cdy = Cdy * bgMSD u gn n G 1 := by
+  unfold bgMSD; rw [bgESD_homog u gn n G Cdy]; ring
+
+theorem bgEXD_homog : bgEXD u G Cdy Xh exh = Cdy * bgEXD u G 1 Xh exh := by
+  unfold bgEXD FloatModel.mulErr; rw [bgED_homog u G Cdy]; ring
+
+theorem bgESXD_homog : bgESXD u gn n G Cdy Xh exh = Cdy * bgESXD u gn n G 1 Xh exh := by
+  unfold bgESXD; rw [bgEXD_homog u G Cdy Xh exh]; ring
+
+theorem bgEND_homog : bgEND u n G Cdy = Cdy * bgEND u n G 1 := by
+  unfold bgEND FloatModel.mulErr; rw [bgED_homog u G Cdy]; ring
+
+theorem bgMND_homog : bgMND u n G Cdy = Cdy * bgMND u n G 1 := by
+  unfold bgMND; rw [bgEND_homog u n G Cdy]; ring
+
+theorem bgE1_homog : bgE1 u gn n G Cdy = Cdy * bgE1 u gn n G 1 := by
+  unfold bgE1
+  rw [bgMND_homog u n G Cdy, bgMSD_homog u gn n G Cdy, bgEND_homog u n G Cdy,
+    bgESD_homog u gn n G Cdy]
+  ring
+
+theorem bgM1_homog : bgM1 u gn n G Cdy = Cdy * bgM1 u gn n G 1 := by
+  unfold bgM1; rw [bgMND_homog u n G Cdy, bgMSD_homog u gn n G Cdy]; ring
+
+theorem bgEXS_homog : bgEXS u gn n G Cdy Xh exh = Cdy * bgEXS u gn n G 1 Xh exh := by
+  unfold bgEXS FloatModel.mulErr; rw [bgESXD_homog u gn n G Cdy Xh exh]; ring
+
+theorem bgMXSf_homog : bgMXSf u gn n G Cdy Xh exh = Cdy * bgMXSf u gn n G 1 Xh exh := by
+  unfold bgMXSf; rw [bgEXS_homog u gn n G Cdy Xh exh]; ring
+
+theorem bgE2_homog : bgE2 u gn n G Cdy Xh exh = Cdy * bgE2 u gn n G 1 Xh exh := by
+  unfold bgE2
+  rw [bgM1_homog u gn n G Cdy, bgMXSf_homog u gn n G Cdy Xh exh, bgE1_homog u gn n G Cdy,
+    bgEXS_homog u gn n G Cdy Xh exh]
+  ring
+
+theorem bgMTr_homog : bgMTr n G Cdy Xh = Cdy * bgMTr n G 1 Xh := by
+  unfold bgMTr; ring
+
+/-- ⭐⭐ **The BatchNorm backward's budget is LINEAR in the cotangent window.** -/
+theorem bnGradInputBudgetG_homog :
+    bnGradInputBudgetG u gn n G Cdy S Xh es exh
+      = Cdy * bnGradInputBudgetG u gn n G 1 S Xh es exh := by
+  unfold bnGradInputBudgetG FloatModel.mulErr
+  rw [bgMTr_homog n G Cdy Xh, bgE2_homog u gn n G Cdy Xh exh]
+  ring
+
+/-- ⭐ And so is the real BatchNorm backward's magnitude — it IS a Lipschitz constant. -/
+theorem bnGradInputReMag_homog :
+    bnGradInputReMag n G Cdy S Xh = Cdy * bnGradInputReMag n G 1 S Xh := by
+  unfold bnGradInputReMag; ring
+
+end Homog
+
 /-- ⭐ **The one bridge from the model to the numerals**: at `M.u ≤ q` and a `gamma_num`-style
     rational bound on the reduction's power, the model's BN-backward budget at any window
     `Cdy ≤ Cd` is under the rational budget at `Cd`. The `patchEmbedRoundErr_le` of the
@@ -525,6 +603,77 @@ theorem Maps.bnPerChannelBack {oc h w : Nat} (M : FloatModel) {ε : ℝ}
     have h1 := bnGradInputReMag_mono (h * w) (G := G) (S := S) (Xh := Xh) hE0 hEle hG0 hS0 hXh0
     have h2 := bnGradInputBudget_le M (h * w) (G := G) (S := S) (Xh := Xh) (es := es)
       (exh := exh) hq hgn h0 hle hG0 hS0 hXh0 hes0 hexh0
+    linarith
+
+/-- The real BatchNorm backward's magnitude is nonnegative. -/
+theorem bnGradInputReMag_nonneg (n : Nat) {G Cdy S Xh : ℝ} (hG : 0 ≤ G) (hC : 0 ≤ Cdy)
+    (hS : 0 ≤ S) (hXh : 0 ≤ Xh) : 0 ≤ bnGradInputReMag n G Cdy S Xh := by
+  have hn0 : (0 : ℝ) ≤ (n : ℝ) := Nat.cast_nonneg n
+  unfold bnGradInputReMag
+  positivity
+
+/-- The rational BatchNorm-backward budget is nonnegative. -/
+theorem bnGradInputBudgetG_nonneg (n : Nat) {u gn G Cdy S Xh es exh : ℝ}
+    (hu : 0 ≤ u) (hgn : 0 ≤ gn) (hG : 0 ≤ G) (hC : 0 ≤ Cdy) (hS : 0 ≤ S) (hXh : 0 ≤ Xh)
+    (hes : 0 ≤ es) (hexh : 0 ≤ exh) : 0 ≤ bnGradInputBudgetG u gn n G Cdy S Xh es exh := by
+  have hn0 : (0 : ℝ) ≤ (n : ℝ) := Nat.cast_nonneg n
+  unfold bnGradInputBudgetG bgEP
+  exact mulErr_nonneg hu (by positivity) (bgMTr_nonneg hG hC hXh)
+    (mulErr_nonneg hu (by positivity) hS le_rfl hes) (bgE2_nonneg hu hgn hG hC hXh hexh)
+
+/-- ⭐⭐ **An envelope through a BatchNorm BACKWARD site, stated at the PER-UNIT GAIN.** The same
+    claim as `Maps.bnPerChannelBack`, with the site's two constants — the real map's Lipschitz
+    constant `Kr` and the rounding budget `Kb`, both at cotangent window `1` — factored out by
+    `bnGradInputReMag_homog` / `bnGradInputBudgetG_homog`.
+
+    ⭐ **This is the form a whole-net chain must use.** Stated directly, each site's two closing
+    inequalities are a forty-node tree at the chain's full magnitude; here they are `Ā * (Kr+Kb)`
+    and `Ā * Kb + Ē * Kr`, and the expensive evaluation moves into `hKr`/`hKb`, which depend only
+    on the feature-map size — five of them for a ResNet-34, not sixty-eight. ⚠ The forward
+    budgets have no such form: a bias makes their leaves affine rather than linear. -/
+theorem Maps.bnPerChannelBackGain {oc h w : Nat} (M : FloatModel) {ε : ℝ}
+    (γ : Vec oc) (x : Vec (oc * h * w)) (fs : Fin oc → ℝ) (fxh : Fin oc → Vec (h * w))
+    {G S Xh es exh : ℝ} (hoc : 0 < oc) (hhw : 0 < h * w)
+    (hγ : ∀ c, |γ c| ≤ G)
+    (hs : ∀ c, |fs c - bnIstd (h * w) (Mat.unflatten (reassocFwd oc h w x) c) ε| ≤ es)
+    (hSabs : ∀ c, |bnIstd (h * w) (Mat.unflatten (reassocFwd oc h w x) c) ε| ≤ S)
+    (hxh : ∀ c i, |bnXhat (h * w) ε (Mat.unflatten (reassocFwd oc h w x) c) i| ≤ Xh)
+    (hfxh : ∀ c i,
+      |fxh c i - bnXhat (h * w) ε (Mat.unflatten (reassocFwd oc h w x) c) i| ≤ exh)
+    {q gn Kr Kb Ā Ē Ā' Ē' : ℝ} (hq : M.u ≤ q)
+    (hgn : (1 + M.u) ^ (h * w + 1) - 1 ≤ gn)
+    (hG0 : 0 ≤ G) (hS0 : 0 ≤ S) (hXh0 : 0 ≤ Xh) (hes0 : 0 ≤ es) (hexh0 : 0 ≤ exh)
+    (hKr : bnGradInputReMag (h * w) G 1 S Xh ≤ Kr)
+    (hKb : bnGradInputBudgetG q gn (h * w) G 1 S Xh es exh ≤ Kb)
+    (hĀ0 : 0 ≤ Ā) (hĒ0 : 0 ≤ Ē)
+    (hĀ' : Ā * (Kr + Kb) ≤ Ā') (hĒ' : Ā * Kb + Ē * Kr ≤ Ē') :
+    (floatBridgesTo_bnPerChannelBack M γ x fs fxh hoc hhw hγ hs hSabs hxh hfxh).Maps
+      Ā Ē Ā' Ē' where
+  mag_le := fun A h0 hle => by
+    show bnGradInputReMag (h * w) G A S Xh + M.bnGradInputBudget (h * w) G A S Xh es exh ≤ Ā'
+    have hr1 : 0 ≤ bnGradInputReMag (h * w) G 1 S Xh :=
+      bnGradInputReMag_nonneg (h * w) hG0 zero_le_one hS0 hXh0
+    have hr : bnGradInputReMag (h * w) G A S Xh ≤ Ā * Kr := by
+      rw [bnGradInputReMag_homog]
+      exact le_trans (mul_le_mul_of_nonneg_right hle hr1)
+        (mul_le_mul_of_nonneg_left hKr hĀ0)
+    have hb := bnGradInputBudget_le M (h * w) (Cd := Ā) hq hgn h0 hle hG0 hS0 hXh0 hes0 hexh0
+    rw [bnGradInputBudgetG_homog] at hb
+    have hb2 : Ā * bnGradInputBudgetG q gn (h * w) G 1 S Xh es exh ≤ Ā * Kb :=
+      mul_le_mul_of_nonneg_left hKb hĀ0
+    nlinarith
+  mod_le := fun A E h0 hE0 hle hEle => by
+    show M.bnGradInputBudget (h * w) G A S Xh es exh + bnGradInputReMag (h * w) G E S Xh ≤ Ē'
+    have hr1 : 0 ≤ bnGradInputReMag (h * w) G 1 S Xh :=
+      bnGradInputReMag_nonneg (h * w) hG0 zero_le_one hS0 hXh0
+    have hr : bnGradInputReMag (h * w) G E S Xh ≤ Ē * Kr := by
+      rw [bnGradInputReMag_homog]
+      exact le_trans (mul_le_mul_of_nonneg_right hEle hr1)
+        (mul_le_mul_of_nonneg_left hKr hĒ0)
+    have hb := bnGradInputBudget_le M (h * w) (Cd := Ā) hq hgn h0 hle hG0 hS0 hXh0 hes0 hexh0
+    rw [bnGradInputBudgetG_homog] at hb
+    have hb2 : Ā * bnGradInputBudgetG q gn (h * w) G 1 S Xh es exh ≤ Ā * Kb :=
+      mul_le_mul_of_nonneg_left hKb hĀ0
     linarith
 
 -- ════════════════════════════════════════════════════════════════

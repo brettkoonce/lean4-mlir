@@ -1227,12 +1227,26 @@ def bnGradInputBudgetQ(n, G, Cdy, S, Xh, es, exh, q=U32):
     return mulErr(u, (F(1) / N) * S, MTr, eP, e2)
 
 
+def bn_back_gain(n, Xh, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH, q=U32):
+    """⭐⭐ The site's two PER-UNIT constants, rounded up: the real map's Lipschitz constant and
+    the rounding budget, both at cotangent window 1 (`Maps.bnPerChannelBackGain`'s `Kr`/`Kb`).
+
+    Both `bnGradInputReMag` and `bnGradInputBudgetQ` are HOMOGENEOUS OF DEGREE 1 in the cotangent
+    bound — the same linearity that makes a backward fold exist at all — so a site's whole
+    envelope is `A ↦ A·(Kr+Kb)` and `(A,E) ↦ A·Kb + E·Kr`. ⭐ That is what makes the numerals
+    checkable: stated directly, each site is a forty-node tree at the chain's full magnitude and
+    `norm_num` needs seconds per site; factored, the expensive evaluation happens once per
+    feature-map SIZE — five times for a ResNet-34, not sixty-eight."""
+    return (r4(bnGradInputReMag(n, G, F(1), S, Xh)),
+            r4(bnGradInputBudgetQ(n, G, F(1), S, Xh, es, exh, q)))
+
+
 def bn_back(st, n, Xh, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH, q=U32):
-    """One per-channel BatchNorm BACKWARD site (`floatClose_bnBack`), over the cotangent."""
+    """One per-channel BatchNorm BACKWARD site (`floatClose_bnBack`), over the cotangent.
+    ⚠ Folded at the ROUNDED per-unit gains, because that is what the Lean chain passes (§0)."""
     A, E = st
-    bud = bnGradInputBudgetQ(n, G, A, S, Xh, es, exh, q)
-    return (bnGradInputReMag(n, G, A, S, Xh) + bud,
-            bud + bnGradInputReMag(n, G, E, S, Xh))
+    Kr, Kb = bn_back_gain(n, Xh, G, S, es, exh, q)
+    return (A * (Kr + Kb), A * Kb + E * Kr)
 
 
 def conv_back(st, m, w=R34_WK, q=U32):
@@ -1322,9 +1336,12 @@ def verify_r34_back(rows, wk=R34_WK, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH,
     def bn_ck(tag, hw, src, dst):
         A, E = src
         Xh = F(isqrt_exact(hw))
-        bud = bnGradInputBudgetQ(hw, G, A, S, Xh, es, exh, q)
-        ck(tag + '.A', bnGradInputReMag(hw, G, A, S, Xh) + bud, dst[0])
-        ck(tag + '.E', bud + bnGradInputReMag(hw, G, E, S, Xh), dst[1])
+        Kr, Kb = bn_back_gain(hw, Xh, G, S, es, exh, q)
+        # the two side conditions the gain form carries, at cotangent window 1
+        ck(tag + '.Kr', bnGradInputReMag(hw, G, F(1), S, Xh), Kr)
+        ck(tag + '.Kb', bnGradInputBudgetQ(hw, G, F(1), S, Xh, es, exh, q), Kb)
+        ck(tag + '.A', A * (Kr + Kb), dst[0])
+        ck(tag + '.E', A * Kb + E * Kr, dst[1])
 
     conv_ck('linBack', 10, (F(1), F(0)), r['linBack'])
     A, E = r['linBack']
