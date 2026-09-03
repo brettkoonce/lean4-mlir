@@ -1,11 +1,13 @@
-# Whole-net float budgets as NUMBERS: five nets landed; ViT-Tiny is what is left
+# Whole-net float budgets as NUMBERS: five nets landed; ViT-Tiny is PROBED and reachable
 
 Written 2026-09-02; revised 2026-09-03 after ResNet-34, MobileNetV2, EfficientNet-B0 and
-ConvNeXt-T.
+ConvNeXt-T, and again the same day after ViT-Tiny's sizing probe.
 
 **Picking this up cold?** Read §0.1 (the one structural finding) and §9 (⛔ what the ConvNeXt
-number is and is not), then §3.5 (ViT-Tiny, the only net left). §7 is the checklist you run
-before every commit — including the "stage, then STOP and ask" rule.
+number is and is not), then §3.5 (ViT-Tiny — probed 2026-09-03, reachable at 10¹⁹¹, no Lean
+written yet) and §3.5.2 (the order of work, which starts with a tier migration nobody had
+costed). §7 is the checklist you run before every commit — including the "stage, then STOP and
+ask" rule.
 
 ⭐ The single most useful habit from the five nets that landed: **when a fold overshoots, ablate
 before concluding anything about the architecture.** Four times running the blocker was
@@ -101,10 +103,21 @@ The machinery built for r34 and reusable for the rest:
   `verify_mnv2`, 116; `verify_b0`, 96; `verify_cnx`, 366) and the numerals. Its CIFAR-8
   regression case reproduces `Cifar8FloatBudget.lean` stage for stage, and `cnx_eval_chain`'s
   three flags (`ln_cap`, `gelu_sat`, `head_ln`) reproduce §3.3's ablation table.
+  ⭐ `vit_chain` (added 2026-09-03) is the ViT-Tiny sizing fold — 236 stages, five flags, and
+  unlike the others it returns `(rows, exp_tainted)`: the tag list of stage numerals that would
+  contain a `Real.exp` with no rational bound. "Statable" for a net with a transcendental leaf is
+  `max(exponent) < 300` **and** no taint, and §3.5's table is the case where those two disagree.
   ⚠ It must fold with the **rounded** γ (`r4(gamma_q k)`), not the exact `(1+u)^k − 1` — the
   Lean chain passes the rounded one, and folding with the exact value silently emits stage
   numerals a hair too small, which the kernel then rejects. That is what the re-assertion pass
   is for; it caught exactly this.
+  ⚠ **`ilog10`'s seed was `len(str(·))`, and CPython caps int→str at 4300 digits (3.10.7+)** — so
+  every ablation past ~10⁴³⁰⁰ raised `ValueError` instead of a number, which silently included
+  ConvNeXt's own §3.3 rows. Fixed 2026-09-03 to a `bit_length` seed (exact, unguarded; the two
+  correction loops absorb its ±1). ⚠ With it running again, §3.3's ablation table reproduces its
+  SHAPE but not its digits (the script now says 4.858·10²²⁷ / 10¹¹³⁴³ where that table says
+  10²³³ / 10¹¹⁶³¹); §0's committed numbers and all four `verify_*` passes reproduce EXACTLY, so
+  the script is in sync with the Lean files and the §3.3 ablation digits are the stale ones.
 
 ## 0.1 ⭐⭐ The finding: the modulus is QUADRATIC in the window wherever a normalisation reduces
 
@@ -165,6 +178,17 @@ doubles the budget's exponent, and there are three); a net with twenty would not
 a new architecture, the question to ask is not "does it normalise" but "does any op consume a
 reduction of its own input and then multiply by that input".
 
+**⭐⭐ Attention is a FOURTH site and it is not quadratic — it is EXPONENTIAL-of-quadratic
+(added 2026-09-03, §3.5).** `attnOutInErr`'s second term is
+`vA·(Real.exp (2·scaleA·attnScoreInErr d qA kA e) − 1)` with `attnScoreInErr = d·((qA+e)·e + kA·e)`:
+the inherited error appears quadratically *inside an exponential*. Same structural cause as the
+other three — softmax reduces over the tokens and the result is multiplied back against V — one
+rung further up. So the question to ask a new architecture, refined once more: not "does it
+normalise", not "does an op consume a reduction of its own input and multiply by that input", but
+**how does the inherited error enter — linearly, quadratically, or under a transcendental?** The
+third case is qualitatively different, because it fails by REPRESENTABILITY rather than by size
+(§3.5's table: identical magnitude, 48 numerals that cannot be written).
+
 Recording the size of the training-mode number (10⁷⁴¹⁷, script-computed, not kernel-checked) is
 itself a result: it is why the adjoint chain exists.
 
@@ -208,7 +232,7 @@ Read `Resnet34FloatBudget.lean` top to bottom (620 lines). The pieces:
 | **MobileNetV2 fwd** | ✅ **DONE** (inference BN) — `mnv2_float_logits_le`, window **2154** / budget 1.444·10⁹⁶, tied to the graph | — |
 | **EfficientNet-B0 fwd** | ✅ **DONE** (inference BN, any batch size) — `b0_float_logits_le`, window 2.580·10⁵⁵ / budget 8.408·10²¹⁰, tied to the graph | — |
 | **ConvNeXt-T Ch fwd** | ⛔ **DONE (2026-09-03), and it is the CAP not the fold** — `cnx_float_logits_le`, window 4.858·10²²⁷ / budget 9.706·10²²⁷, tied to the committed net | — |
-| ViT-Tiny fwd | ⭐ **NEXT** (§3.5) — ConvNeXt's cap now exists and is exactly what softmax wants; `smErr`'s `Real.exp (2δ)` is the last unknown | probe the softmax cap first — softmax outputs are in `(0,1)` (`softmax_abs_le_one`), so `capped` gives modulus `2` UNCONDITIONALLY and deletes `Real.exp` rather than bounding it. Then `mhProjAttnFull` (§3.5) |
+| ViT-Tiny fwd (`vitForwardKV`) | ⭐ **PROBED 2026-09-03 — REACHABLE**, window 1.065·10¹⁹¹ / budget 2.129·10¹⁹¹ (§3.5), the cap again. No Lean written. | ⛔ a `FloatBridgesTo` TIER MIGRATION first — the ViT float cone is all `FloatBridges`, so none of `vit_floatBridgesTo`'s hypotheses can be discharged (§3.5.1); then the `Maps` leaves and `ViTFloatBudget.lean` (§3.5.2) |
 
 ### 3.1 ResNet-34 — what landed, and the one thing left
 
@@ -527,44 +551,146 @@ been relying on layer order.
    metavariable; the block/downsample sites were fine only because their other arguments pinned
    it. Passing the input window explicitly costs nothing and removes the order dependence.
 
-### 3.5 ViT-Tiny — the `exp` is the real gate, and the cap is CHEAPEST exactly there
+### 3.5 ViT-Tiny — ⭐ PROBED 2026-09-03, and it is REACHABLE: 1.065·10¹⁹¹ / 2.129·10¹⁹¹
 
-⭐ **ViT is now the only net left, and both of ConvNeXt's problems are already solved for it**:
-`FloatBridgesTo.capped` exists and `floatClose_gelu` already carries the `3/2` saturation branch,
-so `Maps.gelu` and `Maps.bnCapped` apply to ViT's LN and MLP sites unchanged. What is left is
-one problem of ViT's own, and it is worse than either: `FloatModel.smErr` (`FloatBridge.lean`) is
+**The probe says yes.** `vit_chain` (`scripts/float_budget_envelope.py`) folds all 236 stages of
+`vitForwardKV` at ViT-Tiny's shapes and lands at
 
-    smErr u eexp δ n = u·(1 + smKappa) + smKappa + (Real.exp (2δ) − 1)
+    window ≤ 1.065·10¹⁹¹      budget ≤ 2.129·10¹⁹¹      budget/window = 1.999
 
-— **exponential in the inherited error `δ`**, where `δ` is the perturbation reaching the
-attention logits. After two blocks that is already past anything `norm_num` can evaluate, and
-unlike a big rational there is no numeral at all: `Real.exp` of a large argument has no cheap
-rational bound the kernel will check.
+— under `norm_num`'s ~10³⁰⁰ ceiling with 100 orders to spare, and ⛔ **it is the CAP, not the
+fold** (the 1.999 is the same tell ConvNeXt's 2.00 is; §9 applies verbatim). Nothing has been
+opened in Lean yet; §3.5.1 is the order of work.
 
-⭐ **But the softmax is the one place where the cap costs nothing.** A softmax output is a
-probability vector — every entry is in `(0,1)`, and `softmax_abs_le_one` is already proved
-(`FloatBridge.lean`, used by `SdpaBackFloatBridge.lean`). So the softmax leaf's window is `1`
-and §3.3.0(a)'s cap bounds its modulus by `2` **unconditionally**, which deletes
-`Real.exp (2δ)` from the fold entirely rather than bounding it. Elsewhere the cap is a
-concession; here it is simply the right bound. ⭐ **Test this first** — it is the cheapest way to
-find out whether ViT is reachable at all, and it is a probe script, not Lean.
+**⭐⭐ The finding, and it is a new category: there are TWO kinds of unstatable.** ConvNeXt's
+ablations only ever failed one way — the numeral got too big. ViT fails both ways, and the two
+escapes are load-bearing for *different* reasons:
 
-⚠ Two more things to check before committing to ViT:
-* `smErr` carries a side condition `smRho u eexp n < 1` where
-  `smRho u eexp n = ((1+u)^(n+1) − 1)(1 + eexp) + eexp`. At ViT-Tiny's `n = 197` tokens that is
-  `≈ 198u + eexp ≈ 1.2·10⁻⁵ + eexp`, so it is satisfiable for any sane `eexp` — but it is a
-  hypothesis the whole-net statement must carry and disclose, like `DeviceRsqrt`/`DeviceSigmoid`.
-* The attention block is `mhProjAttnFull` with its own `mhpB`/`mhpL` magnitude and modulus
-  (`ViTBlockFloatBridge.lean`, ~1100 lines). Read those two definitions before folding — the
-  `n · (1 + attnWeightErr) · vA` shape suggests the same "reduction fed back multiplicatively"
-  structure §0.1 warns about, in which case attention is a fourth quadratic site.
+| variant | window | budget | unwritable stages | statable |
+|---|---|---|---|---|
+| **shipped shape** | **1.065·10¹⁹¹** | **2.129·10¹⁹¹** | 0 | **yes** |
+| uniform param bound | 3.248·10²⁰⁹ | 6.503·10²⁰⁹ | 0 | yes |
+| generic `n`-fan-in attn·V | 3.634·10²¹⁸ | 7.266·10²¹⁸ | 0 | yes |
+| cubic GELU (no saturation) | 1.065·10¹⁹¹ | 2.129·10¹⁹¹ | 0 | yes |
+| **softmax UNCAPPED** | 1.065·10¹⁹¹ | 2.129·10¹⁹¹ | **48** | **NO** |
+| **LN UNCAPPED** | 1.065·10¹⁹¹ | **6.616·10⁵⁰⁶²** | 0 | **NO** |
+| depth 2 (`vitForward2V`) | 8.126·10³⁷ | 1.625·10³⁸ | 0 | yes |
+| depth 6 | 1.435·10⁹⁹ | 2.869·10⁹⁹ | 0 | yes |
 
-**ConvNeXt is done, so ViT is a probe away from a decision.** Order: (i) extend
-`cnx_eval_chain`'s pattern to a `vit_chain` sizing fold with the softmax capped and `smErr`
-deleted, and see whether the number is under `10³⁰⁰`; (ii) if it is, read `mhProjAttnFull`'s
-`mhpB`/`mhpL` and decide whether attention is a fourth quadratic site; (iii) only then open Lean.
-⚠ And carry §3.3's three mechanical lessons: bound bundles by projection not `obtain`, the
-recursion's association, and `(Ā := …)` on every leaf.
+* **LN uncapped is a MAGNITUDE failure** — 10⁵⁰⁶², the §0.1 quadratic, exactly ConvNeXt's story.
+* **Softmax uncapped is a REPRESENTABILITY failure, and the magnitude is IDENTICAL.** `smErr`'s
+  `Real.exp (2δ)` sits at δ ≈ 10¹⁶ by block 0, and `Real.exp` at that argument has no rational
+  bound the kernel will check. The fold's *number* does not move — the next capped LN resets the
+  error two stages later regardless — but 48 stage numerals (4 per block × 12) **cannot be
+  written down at all**. ⚠ A Python fold hides this: `math.expm1` overflows to a finite float and
+  the chain sails on. `vit_chain` therefore returns an `exp_tainted` tag list alongside the rows,
+  and "statable" is `max(exponent) < 300 AND no taint`. Carry that instrument to any net with a
+  transcendental leaf; magnitude alone is the wrong test.
+
+**⭐ Three things the plan budgeted for are NOT load-bearing, and the Lean work can skip them.**
+1. **The per-kind profile split.** §3.3(a)'s ConvNeXt lesson does not transfer: ViT-Tiny's kinds
+   are 2.5× apart, not 14×, so the uniform bound is *statable* (10²⁰⁹). Splitting buys 18 vacuous
+   orders. ⭐ The reason is structural — ConvNeXt's outlier was **layer scale**, which multiplies
+   inside every block; ViT's outlier is the **final** LayerNorm γ (1.6645), which sits after
+   everything and multiplies only the head. Measure the profile, but expect to spend the split on
+   tidiness rather than on statability.
+2. **The convex attention·V bound.** Using `sdpa_abs_le`'s convex-combination window (the softmax
+   row is a probability vector, so the output is bounded by `vA` with no factor of `n`) buys 27
+   orders — and the generic `n = 197` fan-in bound is statable without it. ⛔ So do **not** prove
+   the float-side peer (rounded weights nonnegative and summing to `≤ 1+κ`); it is not currently
+   proved, it is not needed, and §1 says the numbers are not the point.
+3. **GELU's saturation constant.** Identical number with the cubic polynomial, for the same
+   reason it was not load-bearing on ConvNeXt: the next capped LN resets the error anyway. Keep
+   `Maps.gelu` on the `3/2` branch because the polynomial carries `√(2/π)` and cannot be
+   `norm_num`'d — but that is a *rationality* reason, not a size one.
+
+**⭐ Where the size actually comes from.** Per block the window multiplies by ~10¹⁵·³, and the
+LayerNorm sites are the whole story: each contributes `2S = 634` (`|x−μ| ≤ 2A` over
+`istd ≤ 1/√ε`), and there are 25 of them. The dense fan-ins (192·0.7, 768·0.8) are second order.
+So §0.1 item 2 — an operating-point variance floor — is worth ~10⁶⁸ here and nothing else is,
+the same conclusion §3.2 reached on MobileNetV2.
+
+**⛔⛔ Do NOT build the number on `floatBridges_mhProjAttnFull`.** §3.5's earlier note asked
+whether attention is "a fourth quadratic site". It is not — **it is worse, and it is the reason
+the decomposition matters.** Reading the two definitions (`ViTBlockFloatBridge.lean` :851/:858):
+
+* `mhpL`'s second term is `attnOutInErr n dh … (layerBudget u (h·dh) w' β A e)`, and
+  `attnOutInErr n d qA kA vA scaleA e = n·(e + vA·(Real.exp (2·scaleA·attnScoreInErr d qA kA e) − 1))`
+  with `attnScoreInErr d qA kA e = d·((qA+e)·e + kA·e)` — **quadratic in the inherited error,
+  inside an exponential.** Not a quadratic site; an exponential-of-quadratic one.
+* Worse for the fold, `mhpB` — the **window** — also contains `Real.exp`, through
+  `attnOutErr`'s `attnWeightErr = smErr u eexp (attnScaledErr …) n`. Its δ is rounding-only, so it
+  *is* boundable (`Real.exp x ≤ 1/(1−x)` for `x < 1`, off `Real.add_one_le_exp`) — but that is a
+  lemma to write, and capping the monolithic leaf does **not** avoid it, because `capped` bounds
+  the modulus by `2·mag` and the `Real.exp` is in `mag`.
+
+Decomposed to the granularity the render actually emits, none of that arises: Q·Kᵀ feeds the
+softmax, whose window is `1` whatever arrives, so the quadratic never compounds and the `exp`
+never enters a numeral. **The graph is the right granularity and the monolithic bridge is a
+trap.** `vitFwdGraphKMHV` already spells `softmaxRowF` as its own token, so this is also the
+faithful choice.
+
+### 3.5.1 ⛔ The two questions §3.5 said to settle — both settled, and the second reverses
+
+**1. WHICH NET: `vitForwardKV`, not `vit_full`. The plan's dichotomy is stale — the
+generalisation already landed.** §3.5 said to choose between stating the number on the
+weight-shared `vit_full` or "generalising the committed def to per-block params first (the
+`CnxBlockParamsCh` treatment)". That work exists: `Architectures/ViTDepthK.lean` has
+`BlockParamsV` (the 16-field per-block record), `vitBodyKVFlat` (the depth-`k` fold),
+`vitForwardKV` (whole net, **vector-[D] LN, multi-head, distinct per-block params**),
+`vitForwardKV_has_vjp` — and `vitFwdGraphKMHV_faithful` ties the depth-`k` graph to it.
+`VerifiedNets.lean`'s ViT-S docstring already calls `vitForwardKV_has_vjp` the theorem that
+covers Tiny *and* Small. So the number's target is `vitForwardKV` at
+`ic=3, H=W=224, patchSize=16, N=196, mlpDim=768, heads=3, d_head=64, nClasses=1000, k=12`, and
+⛔ `vit_full` / `vitForwardFlat` / `vit_floatBridgesTo` are the **wrong tier for this** —
+`vit_full` shares one parameter tuple across all 12 blocks and carries SCALAR LN affines, and the
+checkpoint has neither. ⚠ `vit_full_eq_vitForwardFlat` remains true and remains about a net we do
+not train; §3.1's `BnEvalFloatBridge` warning, one tier up.
+
+**2. THE CONE IS OPEN WIDER THAN §3.5 SAID — it is not the EfficientNet job, it is a TIER
+MIGRATION.** §3.5 read the gap as "the patch embed, the attention block and the MLP block each
+need a closed `FloatBridgesTo` at real weights". The actual state is that **the ViT float cone is
+`FloatBridges` (the ∃-existential tier) essentially everywhere**: `ViTBlockFloatBridge.lean`
+(1116 lines), `ViTAttentionFloatBridge.lean` (439) and `ViTFloatBridge.lean` (233) contain
+**zero** `FloatBridgesTo` definitions between them apart from `FloatBridgesTo.perRow` and
+`floatBridgesTo_gather`. Only `ViTWholeFloatBridge.lean`'s top-level skeleton was migrated — so
+`vit_floatBridgesTo` exists and **not one of its hypotheses can currently be discharged**.
+⚠ That is the `floatbridgesto_existential_L_vacuous` migration, unfinished on this net, and it is
+the bulk of the remaining work. Budget for it explicitly; it is not visible from the whole-net
+file, which looks finished.
+
+### 3.5.2 The order of work
+
+1. **`FloatBridgesTo` peers for the ViT leaves**, in the `EnetFloatBridge` mould — each existing
+   `floatClose_*` already carries the magnitude and modulus, so this is naming the float net, not
+   re-proving: softmax (⭐ window `1 + κ'`, `κ' = u(1+smKappa) + smKappa`, `smKappa` from
+   `smRho`), the two activation×activation matmuls, `layerNormVec` (= `Maps.bnCapped` + `diagBack`
+   + `biasAdd`, all three already in `FloatBudgetEnvLN.lean`), GELU, the row-wise dense, and the
+   patch embed (strided conv at fan-in 768 + CLS concat + pos add).
+2. **`Maps` leaves** — new: `Maps.softmax` (capped), `Maps.matmul2`, `Maps.concatCls`,
+   `Maps.flatConvStride16`. ⭐ Reused unchanged from `FloatBudgetEnvLN.lean`: `bnCapped`,
+   `diagBack`, `biasAdd`, `gelu`, `gather`, `perRow`, `idVec`. Close one worked attention site as
+   a compiled `example` at the emitted numerals (§5's rule).
+3. **The `*Gen` layer** for `blockV`/`vitBodyKVFlat`, if the eval/training split needs it — ⭐ ViT
+   needs NO eval twin and none is possible (LN has no running statistics), so unlike r34/mnv2/B0
+   there is no second render and no `*RenderPCEval.lean`. That made ConvNeXt cheaper and it makes
+   ViT cheaper the same way.
+4. **`ViTFloatBudget.lean`** on the r34 recipe: records (`ViTBlockW`/`ViTProfile`/…), a
+   `DeviceExp` alongside `DeviceRsqrt`, per-block `Maps` lemma, the 236-stage chain, the tie
+   through `vitFwdGraphKMHV_faithful`, `vit_float_logits_le` + `_committed`.
+5. **`verify_vit`** — the re-assertion pass, before any numeral is emitted (§0's ⚠: fold with the
+   ROUNDED γ; the pass is what catches it).
+
+⚠ Two facts the whole-net statement must carry and disclose, like `DeviceRsqrt`/`DeviceSigmoid`:
+the device `exp` accuracy `eexp` (taken at 10⁻², as `es`/`esig`/`egelu` are), and the softmax side
+condition **`smRho u eexp n < 1`** — at `n = 197` and `eexp = 10⁻²` it is `0.010012 < 1`, with
+room, but it is a hypothesis and not a footnote.
+
+⚠ And carry §3.3's three mechanical lessons: bound bundles by projection, not `obtain`
+(`And.casesOn` is stuck on a variable and the bridge will not reduce); check which way the
+recursion associates before writing the chain (`vitBodyKVFlat` recurses HEAD-first — block 0
+applied first — where `floatBridgesTo_convNextStageChK` associates to the right); and `(Ā := …)`
+pinned on every leaf whose input window the elaborator has not yet unified.
 
 ### 3.6 Common sub-steps for every net
 
@@ -603,9 +729,13 @@ bridge transformer, §3.3.0(a)), `Maps.bnCapped` (the capped pure-normalise LN),
 could not be `norm_num`'d), and `Maps.flatConvStride4`. Plus the three composites the chain
 actually walks: `Maps.chanLNTensor3`, `Maps.cnxBlockChW`, `Maps.cnxDownChW`.
 
-Still to add — ⭐ only ViT's, and only after §3.5's probe says ViT is reachable: `softmax`
-(⭐ window `1`, so `capped` gives modulus `2` and the `exp` disappears rather than being bounded)
-and `mhProjAttnFull`. Then, if a net needs them, identity steps for `clsSlice` and `iterate k`.
+Still to add — ⭐ only ViT's, and ✅ §3.5's probe has now said ViT is reachable: `softmax`
+(⭐ window `1 + κ'`, so `capped` gives modulus `2(1+κ')` and the `exp` disappears rather than
+being bounded), `matmul2` (the activation×activation matmul, at `d_head` for Q·Kᵀ and at `n` for
+attn·V), `concatCls` and `flatConvStride16`. ⛔ **NOT `mhProjAttnFull`** — §3.5 explains why the
+monolithic attention leaf is a trap: its `Real.exp` is in the *window*, so the cap cannot remove
+it. Decompose to the graph's own tokens instead. Then, if a net needs them, identity steps for
+`clsSlice` and `iterate k`.
 Each is ten lines in the `Maps.flatConv` mould: `show` the unfolded `mag`/`mod`, one monotone
 lemma, `linarith`. Write one only when a net in §3 needs it.
 

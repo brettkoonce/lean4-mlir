@@ -24,8 +24,14 @@ def gamma_q(k: int, u=U32) -> F:
 
 def ilog10(x: F) -> int:
     """floor(log10 x) for a positive rational, in exact integer arithmetic (the whole-net
-    windows overflow binary floating point long before the fold ends)."""
-    e = len(str(x.numerator)) - len(str(x.denominator))
+    windows overflow binary floating point long before the fold ends).
+
+    ⚠ The seed is a BIT-LENGTH estimate, not `len(str(·))`: CPython caps int→str at 4300
+    digits (3.10.7+), and the uncapped-LayerNorm ablations run to 10¹¹⁶³¹ (ConvNeXt) and
+    beyond — so the string form raised `ValueError` on exactly the folds §0.1 is about.
+    `bit_length` is exact and unguarded; 30103/100000 is log10(2), and the two correction
+    loops below make the seed's ±1 error irrelevant."""
+    e = ((x.numerator.bit_length() - x.denominator.bit_length()) * 30103) // 100000
     while F(10) ** (e + 1) <= x:
         e += 1
     while F(10) ** e > x:
@@ -800,3 +806,271 @@ def verify_cnx(rows, w=CNX_W, bb=CNX_BB, gl=CNX_GL, sl=CNX_SL, S=CNX_S,
     st = ln_ck('head', r['gap'])
     conv_ck('dense', 768, st, r['dense'])
     return n
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ViT-Tiny @224², the depth-12 distinct-per-block net (`Proofs.vitForwardKV`)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ The net is `vitForwardKV` (`Architectures/ViTDepthK.lean`), NOT `vit_full`.
+# `vit_full` shares ONE parameter tuple across all 12 blocks and carries SCALAR LayerNorm
+# affines; the trained checkpoint has per-block weights and vector-[D] affines. They are
+# different functions, and only the first is what `vitFwdGraphKMHV_faithful` denotes.
+#
+# Profile, measured per parameter KIND on /home/skoonce/vit/vit_tiny_imagenet_bf16.bin
+# (5,717,416 f32, the layout of `vitImagenetVerified.toSpecs`):
+#
+#     kind                count      max|·|     bound
+#     patch conv kernel   147,456    0.2522     3/10
+#     attention kernels   1,769,472  0.6594     7/10      Wq/Wk/Wv/Wo
+#     MLP kernels         3,538,944  0.7960     8/10      Wfc1/Wfc2
+#     head kernel         192,000    0.3408     4/10
+#     biases              21,928     0.8624     9/10
+#     LayerNorm γ         4,800      1.6645     17/10
+#     LayerNorm β         4,800      0.5609     6/10
+#     CLS token           192        0.5454     6/10
+#     positional embed    37,824     0.7229     8/10
+#
+# ⭐ Unlike ConvNeXt-T (whose kinds are 14× apart, and whose uniform bound is UNSTATABLE at
+# 10³⁰¹), ViT-Tiny's spread is only 2.5× and the single outlier — the FINAL LayerNorm γ at
+# 1.6645 — sits after everything, multiplying only the head. So splitting the profile buys
+# ~18 orders here and is NOT load-bearing; see `vit_chain(uniform=True)`.
+
+D_VIT, MLP_VIT, HEADS_VIT, DH_VIT, K_VIT = 192, 768, 3, 64, 12
+NTOK_VIT = 197                    # 196 patches + CLS
+PATCH_FANIN = 3 * 16 * 16         # 768, the 16×16/s16 patchify
+
+VIT_WA = F(7, 10)       # attention kernels  Wq/Wk/Wv/Wo
+VIT_WM = F(8, 10)       # MLP kernels        Wfc1/Wfc2
+VIT_WP = F(3, 10)       # patch-embed conv kernel
+VIT_WH = F(4, 10)       # classifier head kernel
+VIT_BB = F(9, 10)       # every bias
+VIT_GL = F(17, 10)      # LayerNorm γ
+VIT_BL = F(6, 10)       # LayerNorm β
+VIT_CLS = F(6, 10)      # CLS token
+VIT_POS = F(8, 10)      # positional embedding
+VIT_UNI = F(17, 10)     # the single uniform bound, for the ablation
+
+VIT_S = F(317)          # 1/√ε at ε ≥ 1e-5 (ViTRender.lean: ε=1e-5)
+VIT_EMR = F(1, 100)     # deployed LN mean accuracy, RELATIVE to the window
+VIT_EI = F(1, 100)      # deployed LN inverse-stddev accuracy, absolute
+VIT_EG = F(1, 100)      # deployed GELU accuracy
+VIT_EEXP = F(1, 100)    # deployed exp accuracy (softmax), RELATIVE
+
+
+def sm_rho(u, eexp, n):
+    """`FloatBridge.lean`'s `smRho`: ((1+u)^(n+1) − 1)(1 + eexp) + eexp. The softmax leaf's
+    side condition is `smRho < 1`, which the whole-net statement must carry and disclose."""
+    return gamma_q(n + 1, u) * (1 + eexp) + eexp
+
+
+def sm_kappa(u, eexp, n):
+    """`FloatBridge.lean`'s `smKappa`: (eexp + smRho)/(1 − smRho)."""
+    rho = sm_rho(u, eexp, n)
+    return (eexp + rho) / (1 - rho)
+
+
+def vit_softmax(st, n=NTOK_VIT, eexp=VIT_EEXP, q=U32, cap=True):
+    """**The row softmax, and the one place the cap costs nothing.**
+
+    WINDOW: `softmax_abs_le_one` puts the real row in (0,1), and `softmaxF_close` puts the
+    float row within `u(1+κ) + κ` of it — so the window is `1 + κ'`, a RATIONAL with no
+    `Real.exp` in it, at ANY input window.  MODULUS under the cap: `2·window`, likewise
+    exp-free.
+
+    ⭐ That is the whole trick.  `smErr u eexp δ n = u(1+κ) + κ + (Real.exp (2δ) − 1)` is
+    EXPONENTIAL in the inherited error δ, and δ reaching the logits is ~10¹⁶ by block 0.
+    The problem is not that the resulting number is large — it is that `Real.exp` at that
+    argument has NO rational bound the kernel will check, so there is no stage numeral to
+    write at all.  Capping deletes the `Real.exp` rather than bounding it.
+
+    `cap=False` reverts to `smErr` at the inherited perturbation, for the ablation; it
+    returns an `exp_tainted` marker because the honest answer there is "unwritable", not a
+    number (Python's `expm1` overflowing to a finite float would hide exactly that)."""
+    A, E = st
+    kap = sm_kappa(q, eexp, n)
+    mag = 1 + (q * (1 + kap) + kap)
+    if cap:
+        return (mag, 2 * mag, False)
+    return (mag, q * (1 + kap) + kap, True)      # the `Real.exp(2δ)` term is unwritable
+
+
+def matmul2(st_a, st_b, m, q=U32):
+    """A matmul of two ACTIVATIONS over fan-in `m` (Q·Kᵀ at `m = d_head`, attn·V at `m = n`)
+    — the leaf with no weight bound to lean on, so its window is the PRODUCT of two windows.
+    Quadratic in the window, which is why it may only ever feed something that RESETS: here
+    Q·Kᵀ feeds the softmax, whose window is 1 whatever arrives, so the quadratic never
+    compounds across blocks."""
+    A, Ea = st_a
+    B, Eb = st_b
+    g = r4(gamma_q(m + 1, q))
+    return ((1 + g) * (m * A * B),
+            g * (m * (A + Ea) * (B + Eb)) + m * (A * Eb + B * Ea + Ea * Eb))
+
+
+def attn_v(st_w, st_v, n=NTOK_VIT, q=U32, convex=True):
+    """The attention-weights × V matmul.
+
+    `convex=True` uses what `sdpa_abs_le` already proves: the softmax row is a probability
+    vector, so the output is a CONVEX COMBINATION of V's rows and the window is `vA` — no
+    factor of `n`.  ⚠ On the FLOAT side this needs the peer fact (rounded weights are still
+    nonnegative and sum to ≤ 1+κ), which is NOT currently proved.
+    `convex=False` is the generic `matmul2` fan-in bound, which needs no new lemma and
+    charges `n = 197` per attention site — 27 orders across the net, and still statable.
+    That is a real choice and the ablation prices it."""
+    if not convex:
+        return matmul2(st_w, st_v, n, q)
+    Aw, Ew = st_w
+    Av, Ev = st_v
+    g = r4(gamma_q(n + 1, q))
+    return ((1 + g) * (Aw * Av),
+            g * (Aw + Ew) * (Av + Ev) + (Aw * Ev + Av * Ew + Ew * Ev))
+
+
+def vit_ln_leaf(A, S=VIT_S, emr=VIT_EMR, ei=VIT_EI, q=U32):
+    """`Maps.bnCapped` at the pure-normalise LayerNorm (γ=1, β=0) — identical to ConvNeXt's
+    `cnx_ln_leaf`. LayerNorm is LayerNorm, and §0.1 applies unchanged: no eval mode exists,
+    so the cap is the only statement available."""
+    return 2 * A * S + bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
+
+
+def concat_cls(st, cls_b):
+    """Prepending the CLS token: the window is the MAX of the patch rows' and the CLS
+    token's, and the CLS row is a stored parameter carrying no inherited error."""
+    A, E = st
+    return (max(A, cls_b), E)
+
+
+def vit_chain(wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
+              gl=VIT_GL, bl=VIT_BL, cls=VIT_CLS, pos=VIT_POS,
+              S=VIT_S, emr=VIT_EMR, ei=VIT_EI, eg=VIT_EG, eexp=VIT_EEXP, q=U32,
+              k=K_VIT, ln_cap=True, sm_cap=True, gelu_sat=True, convex_av=True,
+              uniform=False):
+    """Every stage of `vitForwardKV` at ViT-Tiny's shapes, at the granularity a Lean `Maps`
+    chain composes them.  Returns (rows, exp_tainted_tags) — the second is the list of stage
+    numerals that would contain a `Real.exp` and therefore CANNOT BE WRITTEN, which is the
+    softmax cap's actual justification (not the magnitude of the result).
+
+    `uniform=True` reproduces ConvNeXt's mistake — one bound for every parameter kind."""
+    if uniform:
+        wa = wm = wp = wh = bb = gl = bl = cls = pos = VIT_UNI
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    out, tainted = [], []
+    taint = False        # once a Real.exp enters, every later numeral carries it …
+
+    def emit(tag, st):
+        out.append((tag, st))
+        if taint:
+            tainted.append(tag)
+
+    def lnsite(st, tag, g_b, b_b):
+        """… until a capped LN site, whose modulus is `2·mag` and depends only on the input
+        WINDOW, resets it. That is why the taint is per-segment and not terminal."""
+        nonlocal taint
+        A, E = st
+        mag = r4(vit_ln_leaf(A, S, emr, ei, q))
+        if ln_cap:
+            err = r4(2 * mag)
+            taint = False                     # the cap discards the inherited error entirely
+        else:
+            nb = bnNormBudget(q, 2 * A, S, F(1), F(0), emr * A, ei)
+            err = r4(nb + ((E + E) * S + 2 * A * (8 * A * E * F(158500000))))
+        st = (mag, err); emit(tag + '.ln', st)
+        st = R(cnx_diag(st, g_b, q)); emit(tag + '.lng', st)
+        st = R(cnx_bias(st, b_b, q)); emit(tag + '.lnb', st)
+        return st
+
+    # ── patch embed: 16×16/s16 conv → 196 tokens, prepend CLS, add pos ──
+    st = (F(1), F(0))
+    st = R(conv(st, PATCH_FANIN, wp, bb)); emit('pe.conv', st)
+    st = R(concat_cls(st, cls));           emit('pe.cls', st)
+    st = R(cnx_bias(st, pos, q));          emit('pe.pos', st)
+
+    # ── k transformer blocks, pre-norm, two residual sublayers each ──
+    for i in range(k):
+        t = f'b{i}'
+        # attention sublayer:  X + Wo·concat_h sdpa_h(LN(X)Wq, ·Wk, ·Wv)
+        skip = st
+        s = lnsite(st, t + '.a', gl, bl)
+        qp = R(dense(s, D_VIT, wa, bb)); emit(t + '.q', qp)
+        kp = R(dense(s, D_VIT, wa, bb)); emit(t + '.k', kp)
+        vp = R(dense(s, D_VIT, wa, bb)); emit(t + '.v', vp)
+        sc = R(matmul2(qp, kp, DH_VIT, q)); emit(t + '.qk', sc)
+        sc = R(cnx_diag(sc, F(1, 8), q));   emit(t + '.sc', sc)   # the 1/√d_head scale
+        smag, smod, sm_taint = vit_softmax(sc, NTOK_VIT, eexp, q, sm_cap)
+        if sm_taint:
+            taint = True
+        sm = R((smag, smod)); emit(t + '.sm', sm)
+        av = R(attn_v(sm, vp, NTOK_VIT, q, convex_av)); emit(t + '.av', av)
+        s = R(dense(av, D_VIT, wa, bb));  emit(t + '.o', s)
+        st = R(residual(skip, s, q));     emit(t + '.ares', st)
+        # mlp sublayer:  X + fc2(gelu(fc1(LN(X))))
+        skip = st
+        s = lnsite(st, t + '.m', gl, bl)
+        s = R(dense(s, D_VIT, wm, bb));   emit(t + '.fc1', s)
+        s = R(cnx_gelu(s, eg, gelu_sat)); emit(t + '.ge', s)
+        s = R(dense(s, MLP_VIT, wm, bb)); emit(t + '.fc2', s)
+        st = R(residual(skip, s, q));     emit(t + '.mres', st)
+
+    # ── final LayerNorm, CLS slice (exact, envelope-preserving), classifier ──
+    st = lnsite(st, 'headln', gl, bl)
+    emit('cls', st)
+    st = R(dense(st, D_VIT, wh, bb)); emit('logits', st)
+    return out, tainted
+
+
+def sci(x: F) -> str:
+    """4-significant-figure scientific form for a rational the size of a whole-net window."""
+    if x == 0:
+        return "0"
+    e = ilog10(x)
+    return f"{float(x / F(10) ** e):.3f}e{e}"
+
+
+if __name__ == "__main__":
+    print("\n── ViT-Tiny sizing probe (planning/float_budget_numbers.md §3.5) ──")
+    kap = sm_kappa(U32, VIT_EEXP, NTOK_VIT)
+    rho = sm_rho(U32, VIT_EEXP, NTOK_VIT)
+    print(f"  softmax side condition smRho = {float(rho):.6f} < 1  ✓  (n = {NTOK_VIT} tokens)")
+    print(f"  smKappa = {float(kap):.6f} → capped softmax window {float(1 + U32*(1+kap) + kap):.6f}, "
+          f"modulus {float(2*(1 + U32*(1+kap) + kap)):.6f} — both RATIONAL, no Real.exp")
+
+    rows, tainted = vit_chain()
+    A, E = rows[-1][1]
+    print(f"\n  SHIPPED SHAPE: {len(rows)} stages")
+    print(f"    window        {sci(A)}")
+    print(f"    budget        {sci(E)}")
+    print(f"    budget/window {float(E / A):.3f}   ⛔ the CAP, not the fold (§9)")
+    print(f"    statable      {'YES' if max(ilog10(A), ilog10(E)) < 300 else 'NO'}"
+          f"   (norm_num ceiling ≈ 1e300)")
+
+    print(f"\n  {'variant':<42} {'window':>12} {'budget':>12} {'unwritable':>11}  statable")
+    print("  " + "-" * 84)
+    for name, kw in [
+        ("shipped shape", {}),
+        ("uniform param bound (ConvNeXt's mistake)", dict(uniform=True)),
+        ("generic n-fan-in attn·V (no convex bnd)", dict(convex_av=False)),
+        ("cubic GELU (no saturation constant)", dict(gelu_sat=False)),
+        ("softmax UNCAPPED (smErr's Real.exp)", dict(sm_cap=False)),
+        ("LN UNCAPPED (the §0.1 quadratic)", dict(ln_cap=False)),
+        ("depth 2 (the vitForward2V shape)", dict(k=2)),
+        ("depth 6", dict(k=6)),
+    ]:
+        try:
+            r, tt = vit_chain(**kw)
+            a, e = r[-1][1]
+            ok = 'yes' if max(ilog10(a), ilog10(e)) < 300 and not tt else 'NO'
+            print(f"  {name:<42} {sci(a):>12} {sci(e):>12} {len(tt):>11}  {ok}")
+        except Exception as ex:
+            print(f"  {name:<42} {'—':>12} {'—':>12} {'—':>11}  raised {type(ex).__name__}")
+
+    print("\n  ⭐ 'unwritable' counts stage numerals carrying a `Real.exp` at an argument with no")
+    print("     rational bound — the softmax cap's real justification. The uncapped column is not")
+    print("     'a bigger number', it is NO NUMBER: those stages cannot be written down at all.")
+
+    print("\n  window growth through block 0 (the per-block multiplier that sets the answer):")
+    for tag, (a, e) in rows[3:25]:
+        print(f"    {tag:<12} {sci(a):>12} {sci(e):>12}")
