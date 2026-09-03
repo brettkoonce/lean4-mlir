@@ -18,6 +18,12 @@ MBConv family uses, and duplicating its envelope under a second name to avoid th
 be worse than the coupling — but note the coupling is real, and a ConvNeXt budget therefore
 rebuilds when the MobileNetV2 / EfficientNet kit changes.
 
+⭐ It also holds the three **modelled device kernels** the LayerNorm and transformer families
+run on — `DeviceLN` (the run-time mean and inverse-stddev), `DeviceGelu` and `DeviceExp` — with
+the capped LN site's bridge (`DeviceLN.bridgeAt`) and envelope (`DeviceLN.mapsAt`) built on
+them. They were `ConvNeXtFloatBudget.lean`'s until ViT-Tiny needed the same three: a budget
+file should not own a structure a sibling budget file imports.
+
 Two of these leaves are the point of the file:
 
 * ⛔ `Maps.bnCapped` is the **capped** LayerNorm — `FloatBridgesTo.capped` applied to the
@@ -330,5 +336,95 @@ theorem Maps.cnxDownChW {cin cout : Nat} (h w : Nat) (M : FloatModel)
     (Maps.flatConvStride2 (h := h) (w := w) M p.W p.b hw' hbb hn hbd.1 hbd.2.1 hgc cA cE)
 
 end FloatBridgesTo
+
+-- ════════════════════════════════════════════════════════════════
+-- § The modelled device kernels
+-- ════════════════════════════════════════════════════════════════
+
+/-! Three kernels a LayerNorm/transformer net runs on device that have **no IEEE
+specification**, so their accuracy is supplied rather than derived — the standing
+`DeviceRsqrt` has in `Resnet34FloatBudget.lean` and `DeviceSigmoid` in
+`EfficientNetFloatBudget.lean`. ⚠ They live here rather than in a budget file because two
+nets now need them (ConvNeXt-T and ViT-Tiny) and a budget file should not own a structure a
+sibling budget file imports. -/
+
+/-- **The deployed LayerNorm statistics.** LayerNorm computes its mean and its inverse
+    standard deviation at run time — there is nothing to freeze — so both are supplied with an
+    accuracy: the mean's error RELATIVE to the window (a mean of values within `A` cannot be
+    wrong by more than `O(A)`), the inverse-stddev's ABSOLUTE (the device `rsqrt`). -/
+structure DeviceLN (emr ei : ℝ) where
+  /-- The device mean, at any reduction width. -/
+  fmu : (c : Nat) → Vec c → ℝ
+  /-- The device inverse-stddev, at any reduction width and any `ε`. -/
+  fistd : (c : Nat) → ℝ → Vec c → ℝ
+  /-- The mean's accuracy, relative to the input window. -/
+  specMu : ∀ (c : Nat) (A : ℝ), 0 ≤ A → ∀ v : Vec c, (∀ k, |v k| ≤ A) →
+    |fmu c v - bnMean c v| ≤ emr * A
+  /-- The inverse-stddev's absolute accuracy, at every positive `ε`. -/
+  specIstd : ∀ (c : Nat) (e : ℝ), 0 < e → ∀ (A : ℝ), 0 ≤ A → ∀ v : Vec c, (∀ k, |v k| ≤ A) →
+    |fistd c e v - bnIstd c v e| ≤ ei
+
+/-- **The deployed GELU.** `stablehlo.tanh` has no IEEE specification either; `egelu` is its
+    absolute accuracy against the certified `geluScalar`. -/
+structure DeviceGelu (egelu : ℝ) where
+  /-- The device kernel. -/
+  g : ℝ → ℝ
+  /-- Its accuracy at every input. -/
+  spec : ∀ t, |g t - geluScalar t| ≤ egelu
+
+/-- **The deployed `exp`** — `stablehlo.exponential`, the kernel a softmax row is built out of.
+    ⚠ Its spec is **RELATIVE** where `DeviceGelu`'s and the device `rsqrt`'s are absolute, and
+    that is forced rather than chosen: `softmaxF_close` divides one exponential sum by another,
+    so only a relative error survives the quotient. An absolute `eexp` would say nothing about
+    a row whose logits are large and negative. -/
+structure DeviceExp (eexp : ℝ) where
+  /-- The device kernel. -/
+  e : ℝ → ℝ
+  /-- Its accuracy at every input, relative to the true exponential. -/
+  spec : ∀ t, |e t - Real.exp t| ≤ eexp * Real.exp t
+
+/-- `1/√·` is antitone, so an `ε`-FLOOR's inverse-stddev bound serves every site at or above
+    it — which is why one `S` covers all of a net's LayerNorm sites. -/
+theorem invSqrt_le_of_floor {ε e S : ℝ} (hε : 0 < ε) (he : ε ≤ e) (hS : 1 / Real.sqrt ε ≤ S) :
+    1 / Real.sqrt e ≤ S :=
+  le_trans (one_div_le_one_div_of_le (Real.sqrt_pos.mpr hε) (Real.sqrt_le_sqrt he)) hS
+
+/-- The deployed float pure-normalise LayerNorm at reduction width `c` and site `e`: the device
+    mean and inverse-stddev at that width, then `bnForwardFV`'s rounded normalise chain at
+    `γ = 1`, `β = 0` (the affine rides outside, in `floatBridgesTo_rowLNVecFlat` and
+    `floatBridgesTo_chanLNTensor3`). -/
+noncomputable def DeviceLN.lnF {emr ei : ℝ} (R : DeviceLN emr ei) (M : FloatModel) (c : Nat)
+    (e : ℝ) : Vec c → Vec c := bnForwardFV M 1 0 (R.fmu c) (R.fistd c e)
+
+/-- ⛔ **One LayerNorm site's bridge, CAPPED.** `layerNormForward c e 1 0 = bnForward c e 1 0`
+    definitionally, so the leaf is `floatBridgesTo_bn` — whose modulus is quadratic in the
+    window (§0.1). `.capped` replaces it by `min(that, 2·window)`. -/
+noncomputable def DeviceLN.bridgeAt {emr ei : ℝ} (R : DeviceLN emr ei) (M : FloatModel)
+    {ε S : ℝ} (hε : 0 < ε) (hSε : 1 / Real.sqrt ε ≤ S) (c : Nat) (hc : 0 < c) (e : ℝ)
+    (he : ε ≤ e) : FloatBridgesTo (layerNormForward c e 1 0) (R.lnF M c e) :=
+  (floatBridgesTo_bn (G := 1) (Bbnd := 0) (S := S) M (R.fmu c) (R.fistd c e)
+    (fun A => emr * A) (fun _ => ei) hc (lt_of_lt_of_le hε he) (by norm_num) (by norm_num)
+    (fun A hA v hv => R.specMu c A hA v hv)
+    (fun A hA v hv => R.specIstd c e (lt_of_lt_of_le hε he) A hA v hv)
+    (fun v => (bnIstd_abs_le v (lt_of_lt_of_le hε he)).trans
+      (invSqrt_le_of_floor hε he hSε))).capped
+
+/-- ⛔ **One LayerNorm site's envelope — one honest inequality and one cap.** `nA` is the real
+    window `2Ā·S + bnNormBudget`, which is the fold; `nE` is `2·Ā'`, which is not (§9). -/
+theorem DeviceLN.mapsAt {emr ei : ℝ} (R : DeviceLN emr ei) (M : FloatModel)
+    {ε S q : ℝ} (hemr : 0 ≤ emr) (hε : 0 < ε) (hSε : 1 / Real.sqrt ε ≤ S) (hS0 : 0 ≤ S)
+    (hq : M.u ≤ q) (c : Nat) (hc : 0 < c) (e : ℝ) (he : ε ≤ e) {Ā Ē Ā' Ē' : ℝ}
+    (nA : 1 * (2 * Ā * S) + 0 + bnNormBudget q (2 * Ā) S 1 0 (emr * Ā) ei ≤ Ā')
+    (nE : 2 * Ā' ≤ Ē') :
+    (R.bridgeAt M hε hSε c hc e he).Maps Ā Ē Ā' Ē' :=
+  FloatBridgesTo.Maps.bnCapped (G := 1) (Bbnd := 0) (S := S) (em := emr * Ā) (ei := ei) M
+    (R.fmu c) (R.fistd c e) (fun A => emr * A) (fun _ => ei)
+    hc (lt_of_lt_of_le hε he) (by norm_num) (by norm_num)
+    (fun A hA v hv => R.specMu c A hA v hv)
+    (fun A hA v hv => R.specIstd c e (lt_of_lt_of_le hε he) A hA v hv)
+    (fun v => (bnIstd_abs_le v (lt_of_lt_of_le hε he)).trans
+      (invSqrt_le_of_floor hε he hSε))
+    hq (by norm_num) (by norm_num) hS0
+    (fun A h0 hle => mul_le_mul_of_nonneg_left hle hemr) (fun _ _ _ => le_rfl) nA nE
 
 end Proofs

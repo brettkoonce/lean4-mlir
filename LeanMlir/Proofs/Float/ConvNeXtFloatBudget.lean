@@ -46,7 +46,8 @@ inverse-stddev are a device reduction and a device `rsqrt` with no IEEE specific
 are *modelled*: `DeviceLN` supplies them with a relative mean accuracy `emr` and an absolute
 inverse-stddev accuracy `ei`, exactly as ResNet-34's `DeviceRsqrt` supplies `es` and
 EfficientNet's sigmoid supplies `esig`. The deployed GELU carries `egelu` the same way
-(`DeviceGelu`). Everything else is proved.
+(`DeviceGelu`). Everything else is proved. ⚠ All three structures — and the capped LN site's
+bridge and envelope — moved to `FloatBudgetEnvLN.lean` when ViT-Tiny needed the same ones.
 
 **The tie.** `cnxForward_eq_committed` is `WholeNetForwardTies.convNextForwardTCh_eq_skeleton`
 read backwards: the bridged skeleton IS the committed `convNextForwardTCh`, head LayerNorm
@@ -69,34 +70,8 @@ open FloatModel
 open FloatBridgesTo
 
 -- ════════════════════════════════════════════════════════════════
--- § The two modelled device kernels, and the numeric profile
+-- § The numeric profile (the device kernels live in `FloatBudgetEnvLN.lean`)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The deployed LayerNorm statistics.** ConvNeXt's LayerNorm computes its mean and its
-    inverse standard deviation at run time — there is nothing to freeze — so both are supplied
-    with an accuracy rather than derived: the mean's error is taken RELATIVE to the window
-    (a mean of values within `A` cannot be wrong by more than `O(A)`), the inverse-stddev's
-    absolute (the device `rsqrt`, which has no IEEE specification). The peer of
-    `Resnet34FloatBudget.lean`'s `DeviceRsqrt`, at the one op that cannot avoid a reduction. -/
-structure DeviceLN (emr ei : ℝ) where
-  /-- The device mean, at any reduction width. -/
-  fmu : (c : Nat) → Vec c → ℝ
-  /-- The device inverse-stddev, at any reduction width and any `ε`. -/
-  fistd : (c : Nat) → ℝ → Vec c → ℝ
-  /-- The mean's accuracy, relative to the input window. -/
-  specMu : ∀ (c : Nat) (A : ℝ), 0 ≤ A → ∀ v : Vec c, (∀ k, |v k| ≤ A) →
-    |fmu c v - bnMean c v| ≤ emr * A
-  /-- The inverse-stddev's absolute accuracy, at every positive `ε`. -/
-  specIstd : ∀ (c : Nat) (e : ℝ), 0 < e → ∀ (A : ℝ), 0 ≤ A → ∀ v : Vec c, (∀ k, |v k| ≤ A) →
-    |fistd c e v - bnIstd c v e| ≤ ei
-
-/-- **The deployed GELU.** `stablehlo.tanh` has no IEEE specification either; `egelu` is its
-    absolute accuracy against the certified `geluScalar`. -/
-structure DeviceGelu (egelu : ℝ) where
-  /-- The device kernel. -/
-  g : ℝ → ℝ
-  /-- Its accuracy at every input. -/
-  spec : ∀ t, |g t - geluScalar t| ≤ egelu
 
 /-- The numeric profile the fold runs at. Four magnitude bounds because the measured checkpoint
     has four scales (see the file header), `ε` positive with its inverse square root under a
@@ -158,47 +133,22 @@ structure CnxEps (wts : CnxTWeightsCh) (ε : ℝ) : Prop where
 
 variable {M : FloatModel} {ε w' bb gl sl egelu emr ei S q : ℝ}
 
-/-- `1/√·` is antitone, so the `ε`-floor's inverse-stddev bound serves every site above it. -/
-theorem invSqrt_le_of_floor {ε e S : ℝ} (hε : 0 < ε) (he : ε ≤ e) (hS : 1 / Real.sqrt ε ≤ S) :
-    1 / Real.sqrt e ≤ S :=
-  le_trans (one_div_le_one_div_of_le (Real.sqrt_pos.mpr hε) (Real.sqrt_le_sqrt he)) hS
-
-/-- The deployed float pure-normalise LayerNorm at reduction width `c` and site `e`: the device
-    mean and inverse-stddev at that width, then `bnForwardF`'s rounded normalise chain at
-    `γ = 1`, `β = 0` (the affine rides outside, in `floatBridgesTo_layerNormVec`). -/
-noncomputable def DeviceLN.lnF (R : DeviceLN emr ei) (M : FloatModel) (c : Nat) (e : ℝ) :
-    Vec c → Vec c := bnForwardFV M 1 0 (R.fmu c) (R.fistd c e)
-
-/-- ⛔ **One LayerNorm site's bridge, CAPPED.** `layerNormForward c e 1 0 = bnForward c e 1 0`
-    definitionally, so the leaf is `floatBridgesTo_bn` — whose modulus is quadratic in the
-    window. `.capped` replaces it by `min(that, 2·window)`; see `FloatBridgesTo.capped`. -/
+/-- **One LayerNorm site's bridge at this net's profile** — `DeviceLN.bridgeAt`
+    (`FloatBudgetEnvLN.lean`) with the two numeric hypotheses read off `CnxProfile`. -/
 noncomputable def DeviceLN.bridge (R : DeviceLN emr ei) (M : FloatModel)
     (P : CnxProfile M ε w' bb gl sl egelu emr ei S q) (c : Nat) (hc : 0 < c) (e : ℝ)
     (he : ε ≤ e) : FloatBridgesTo (layerNormForward c e 1 0) (R.lnF M c e) :=
-  (floatBridgesTo_bn (G := 1) (Bbnd := 0) (S := S) M (R.fmu c) (R.fistd c e)
-    (fun A => emr * A) (fun _ => ei) hc (lt_of_lt_of_le P.hε he) (by norm_num) (by norm_num)
-    (fun A hA v hv => R.specMu c A hA v hv)
-    (fun A hA v hv => R.specIstd c e (lt_of_lt_of_le P.hε he) A hA v hv)
-    (fun v => (bnIstd_abs_le v (lt_of_lt_of_le P.hε he)).trans
-      (invSqrt_le_of_floor P.hε he P.hSε))).capped
+  R.bridgeAt M P.hε P.hSε c hc e he
 
-/-- ⛔ **One LayerNorm site's envelope — one honest inequality and one cap.** `nA` is the real
-    window `2Ā·S + bnNormBudget`, which is the fold; `nE` is `2·Ā'`, which is not. -/
+/-- ⛔ **One LayerNorm site's envelope at this net's profile** — `DeviceLN.mapsAt`. `nA` is the
+    real window `2Ā·S + bnNormBudget`, which is the fold; `nE` is `2·Ā'`, which is not. -/
 theorem DeviceLN.maps (R : DeviceLN emr ei) (M : FloatModel)
     (P : CnxProfile M ε w' bb gl sl egelu emr ei S q) (c : Nat) (hc : 0 < c) (e : ℝ)
     (he : ε ≤ e) {Ā Ē Ā' Ē' : ℝ}
     (nA : 1 * (2 * Ā * S) + 0 + bnNormBudget q (2 * Ā) S 1 0 (emr * Ā) ei ≤ Ā')
     (nE : 2 * Ā' ≤ Ē') :
     (R.bridge M P c hc e he).Maps Ā Ē Ā' Ē' :=
-  Maps.bnCapped (G := 1) (Bbnd := 0) (S := S) (em := emr * Ā) (ei := ei) M
-    (R.fmu c) (R.fistd c e) (fun A => emr * A) (fun _ => ei)
-    hc (lt_of_lt_of_le P.hε he) (by norm_num) (by norm_num)
-    (fun A hA v hv => R.specMu c A hA v hv)
-    (fun A hA v hv => R.specIstd c e (lt_of_lt_of_le P.hε he) A hA v hv)
-    (fun v => (bnIstd_abs_le v (lt_of_lt_of_le P.hε he)).trans
-      (invSqrt_le_of_floor P.hε he P.hSε))
-    P.hq (by norm_num) (by norm_num) P.hS0
-    (fun A h0 hle => mul_le_mul_of_nonneg_left hle P.hemr) (fun _ _ _ => le_rfl) nA nE
+  R.mapsAt M P.hemr P.hε P.hSε P.hS0 P.hq c hc e he nA nE
 
 /-- **A channel-LayerNorm site's envelope**: the capped normalise, then γ, then β. -/
 theorem cnxChanLNMaps {c h w : Nat} (M : FloatModel) (R : DeviceLN emr ei)
