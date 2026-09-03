@@ -905,10 +905,82 @@ pinned on every leaf whose input window the elaborator has not yet unified.
   re-assertion pass. Never hand-type a numeral.
 * Cross-check the number against the probe BEFORE writing the docstring.
 
-### 3.7 Phase 2 — backwards
+### 3.7 Phase 2 — the backwards. ⭐⭐ PROBED 2026-09-03, and §3.7's own premise was WRONG
 
-Same pattern on the `_grad_floatBridgesTo` peers. ⚠ §0.1 applies with more force: a backward's
-BN-back modulus inherits the same reduction structure. Start only after the forwards.
+**The probe says the ResNet-34 whole-net input-gradient VJP is statable AND it is a FOLD, at
+TRAINING-mode BatchNorm** — the mode the forward has no number for at all (§0.1's 10⁷⁴¹⁷).
+`r34_back_chain` / `verify_r34_back` (`scripts/float_budget_envelope.py`, 90 stages, 180
+re-assertions):
+
+    window ≤ 1.345·10²⁸⁸      budget ≤ 6.473·10²⁸⁶      budget/window = 0.048
+
+⛔ **The old text here said "§0.1 applies with more force: a backward's BN-back modulus inherits
+the same reduction structure." It does not.** §0.1's quadratic came from the statistics MOVING
+with the input; a VJP reads its statistics off the SAVED ACTIVATIONS, which the cotangent does
+not perturb. So `floatClose_bnBack`'s modulus is `bnGradInputBudget(A) + bnGradInputReMag(e)`
+with `bnGradInputReMag n G e S Xh = S·G·e·(2 + Xh²)` — **linear in `e`**, because a VJP at a
+fixed point is a linear map and this is its Lipschitz constant. No cap, no squaring, ratio 0.048.
+
+⛔⛔ **BUT THE WALL DOES NOT VANISH — IT RELOCATES, and that is the honest headline.** The saved
+float activations enter the BN backward as two SUPPLIED accuracies: `es` on the inverse-stddev
+and `exh` on the normalised activation `x̂`, both taken at `10⁻²` like every other device-kernel
+accuracy in this file. ⚠ Unlike `DeviceRsqrt`'s, those are quantities the repo's forward fold
+DOES speak about — and at training-mode BatchNorm it says `10⁷⁴¹⁷`, not `10⁻²`. So the backward
+number is an honest fold *given a forward-accuracy hypothesis its own forward cannot discharge*.
+Say it that way (§9). ⭐ The interesting consequence: §0.1's wall is not a fact about backwards,
+it is a fact about *composing* a backward with the forward that feeds it.
+
+⭐⭐ **The load-bearing lemma is `bnXhat_sq_le` — `|x̂| ≤ √n` — AND IT WAS ALREADY IN THE REPO.**
+It sits in `Foundation/ResNet34.lean` (and again in `Training/MobileNetV2SealRealistic.lean`),
+proved for the *realistic-seal* work, named after neither the float tier nor the backward. The
+ablation is decisive:
+
+| variant | window | budget | statable |
+|---|---|---|---|
+| **shipped: per-kind profile, `x̂ ≤ √n`** | **1.345·10²⁸⁸** | **6.473·10²⁸⁶** | **yes** |
+| uniform `21/10` (the forward's profile) | 2.463·10²⁹⁶ | 1.185·10²⁹⁵ | yes |
+| **`x̂` from the FORWARD window (`2·A·S`)** | 6.858·10⁷²⁷¹ | 5.285·10⁷²⁶⁹ | **NO** |
+| variance floor `10⁻³` (`S = 32`) | 1.854·10²⁵⁵ | 1.053·10²⁵⁴ | yes |
+| variance floor `10⁻¹` (`S = 4`) | 3.135·10²²⁵ | 3.849·10²²⁴ | yes |
+| `σ² ≈ 1` (`S = 1`) | 5.451·10²⁰⁵ | 1.713·10²⁰⁵ | yes |
+
+That is §3.3.0(b)'s lesson for the FOURTH time — *before writing a bound, grep the whole repo for
+it, not the files named after your net.* Every place the activations enter the input-gradient
+they enter **normalised** (`x̂`) or through `istd` (≤ `1/√ε`), so the backward's fold **does not
+inherit the forward's window at all**. `Xh` enters as `Xh²`, and `Xh² = h·w` at that site.
+
+⭐ **The per-kind profile split is worth 8 orders, and here it buys HEADROOM, not statability.**
+Measured on `/home/skoonce/resnet/r34_imagenet_bf16_e79.bin` (21,797,672 f32): conv and dense
+kernels max at **1.1007** over 21.78 M entries, BN γ at 2.0741, BN β at 0.8118, the dense bias at
+0.0475. ⚠ The forward's uniform `21/10` is a BN **γ**, and it is 1.9× loose on exactly the
+entries every conv fan-in multiplies. Uniform gives `10²⁹⁶` — four orders under `norm_num`'s
+ceiling, which is too close to be comfortable; split gives `10²⁸⁸` and twelve. ⚠ Note the
+backward has **no bias anywhere** (`convFlatBack` and `linBack` both carry bias `0`), so β and
+the dense bias do not enter a single numeral.
+
+**Where the Lean work is.** The cone is in the same state ViT's was before its four chunks: the
+whole-net skeleton exists at the `FloatBridgesTo` tier (`r34_grad_floatBridgesTo`,
+`Resnet34WholeBackFloatBridge.lean`) but **its 16 block backwards are hypotheses**, and the
+blocks themselves are only at the `∃`-tier. In order:
+
+1. **`Maps` leaves for the backward.** `convBack` / `linBack` / `gapBack` reuse the forward's
+   arithmetic (`Maps.flatConv`, `Maps.dense` at bias 0 — `linBack` IS `floatBridgesTo_dense` at
+   the transpose). `reluMaskBack` / `maxPoolBack` / `decimateBack` are envelope-preserving. The
+   only real one is **`Maps.bnBack`**, and ⚠ it needs a `peRoundErrQ`-style rational restatement:
+   `bnGradInputBudget` is stated on the exact `(1+M.u)^(n+1) − 1` at `n` up to 12544, which no
+   `norm_num` will evaluate. `bnGradInputBudgetQ` in the probe IS that restatement.
+2. **`FloatBridgesTo` + `Maps` for the per-channel BN backward** — `floatBridges_bnPerChannelBack`
+   migrated, and `bnXhat_sq_le` wired in so `Xh` is `√(h·w)` and not a supplied constant.
+3. **The two block backwards at real weights** — `floatBridgesTo_r34IdBlockBack` /
+   `_r34DownBlockBack` and their `Maps` peers. ⭐ Both reuse forward combinators: the identity
+   block's skip is `FloatBridgesTo.residual` and the downsample's is `biPathSum`, so no new
+   combinator is needed.
+4. **`Resnet34BackFloatBudget.lean`** — the numerals, on the r34 forward recipe.
+
+⚠ And one framing decision to make before step 4: the cotangent's input window is `1`, which is
+`|p − y| ≤ 1` for softmax cross-entropy. `LossHeadCotFloatBridge.lean` exists; deciding whether
+the number is stated from the loss head or from a unit cotangent is a statement question, not a
+numeric one — the numerals are identical.
 
 ## 5. The `Maps` kit — ✅ complete for all six nets
 

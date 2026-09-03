@@ -1130,6 +1130,237 @@ def verify_vit(rows, wa=VIT_WA, wm=VIT_WM, wp=VIT_WP, wh=VIT_WH, bb=VIT_BB,
     return n
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# ResNet-34 @224², the whole-net INPUT-GRADIENT VJP (`Proofs.r34InputGrad`)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# ⭐⭐ Phase 2, and the finding that reverses the plan's §3.7: **the backward is a FOLD, at
+# TRAINING-mode BatchNorm — the mode the forward has no number for at all (1e7417).** As a map
+# on the COTANGENT the BN backward is LINEAR: `floatClose_bnBack`'s modulus is
+# `bnGradInputBudget(A) + bnGradInputReMag(e)` and `bnGradInputReMag` is linear in `e`. §0.1's
+# quadratic came from the statistics MOVING with the input; a VJP's statistics are read off the
+# saved activations, which the cotangent does not perturb. So no cap is needed and
+# `budget / window` is 0.048, not 2.00.
+#
+# ⛔ THE WALL DOES NOT VANISH — IT RELOCATES. The saved float activations enter as SUPPLIED
+# accuracies (`es` on the inverse-stddev, `exh` on the normalised activation), taken at 1e-2 like
+# every other device-kernel accuracy. Unlike `DeviceRsqrt`'s, those are quantities the repo's
+# forward fold does speak about, and at training-mode BN it says 1e7417, not 1e-2. So this number
+# is an honest fold GIVEN a forward-accuracy hypothesis its own forward cannot discharge, and it
+# must be said that way (planning/float_budget_numbers.md §3.7, §9).
+#
+# ⭐⭐ The load-bearing lemma is `bnXhat_sq_le` — `|x̂| ≤ √n`, the standardisation bound — and it
+# was ALREADY IN THE REPO, proved for the "realistic seal" work in `Foundation/ResNet34.lean` and
+# named after neither the float tier nor the backward. With it the fold is 1e288; deriving `Xh`
+# from the FORWARD's certified window instead (`2·A·S`) gives 1e7271, unstatable. That is
+# §3.3.0(b)'s lesson for the fourth time: before writing a bound, grep the whole repo for it.
+#
+# Profile, measured per parameter KIND on /home/skoonce/resnet/r34_imagenet_bf16_e79.bin
+# (21,797,672 f32, the layout `init_params_from_file` spells):
+#
+#     kind                 count       max|·|    bound
+#     conv/dense kernels   21,779,648  1.1007    12/10
+#     BN γ                 8,512       2.0741    21/10
+#     BN β                 8,512       0.8118    —      (the backward has no bias anywhere)
+#     dense bias           1,000       0.0475    —
+#
+# ⚠ The forward's uniform 21/10 is a BN γ, and it is 1.9× loose on the 21.78 M entries every
+# conv fan-in multiplies. Splitting buys 8 orders here (1e296 -> 1e288). Unlike ConvNeXt's split
+# it is not the difference between statable and not — it is the difference between 4 orders of
+# headroom under `norm_num`'s ceiling and 12.
+
+R34_WK = F(12, 10)      # conv / dense kernels          measured 1.1007
+R34_GL = F(21, 10)      # BN γ                          measured 2.0741
+R34_ESB = F(1, 100)     # supplied float inverse-stddev accuracy
+R34_EXH = F(1, 100)     # supplied float normalised-activation accuracy   ⛔ see the note above
+
+# The r34 backward's shape plan, cotangent-first (`r34InputGradF` reads right to left).
+R34_BACK_PLAN = [
+    ("id", 512, 512, 49, "e1"), ("id", 512, 512, 49, "e0"), ("down", 256, 512, 49, "d4"),
+    ("id", 256, 256, 196, "c4"), ("id", 256, 256, 196, "c3"), ("id", 256, 256, 196, "c2"),
+    ("id", 256, 256, 196, "c1"), ("id", 256, 256, 196, "c0"), ("down", 128, 256, 196, "d3"),
+    ("id", 128, 128, 784, "b2"), ("id", 128, 128, 784, "b1"), ("id", 128, 128, 784, "b0"),
+    ("down", 64, 128, 784, "d2"),
+    ("id", 64, 64, 3136, "a2"), ("id", 64, 64, 3136, "a1"), ("id", 64, 64, 3136, "a0"),
+]
+
+
+def isqrt_exact(n: int) -> int:
+    """`√n` for the perfect squares the plan uses (h·w with h = w)."""
+    import math
+    r = math.isqrt(n)
+    assert r * r == n, n
+    return r
+
+
+def bnGradInputReMag(n, G, Cdy, S, Xh):
+    """`bnGradInputReMag` (`Codegen/BnBackComposeBridge.lean`) — the REAL BN input-gradient's
+    magnitude at cotangent bound `Cdy`. ⭐ LINEAR in `Cdy`, which is the whole reason a backward
+    fold exists where the forward's does not: it is the Lipschitz constant of a linear map."""
+    N = F(n)
+    return F(1) / N * S * (N * (G * Cdy) + N * (G * Cdy) + Xh * (N * (Xh * (G * Cdy))))
+
+
+def bnGradInputBudgetQ(n, G, Cdy, S, Xh, es, exh, q=U32):
+    """`FloatModel.bnGradInputBudget` with the exact `(1+u)^(n+1) − 1` replaced by the ROUNDED
+    `gamma_num` bound the Lean chain passes (§0's ⚠). Reductions here run to n = 12544, so the
+    Lean leaf will need a `peRoundErrQ`-style rational restatement — this is that restatement."""
+    u = q
+    gn = r4(gamma_q(n + 1, q))
+    N = F(n)
+    MD = G * Cdy
+    eD = mulErr(u, G, Cdy, F(0), F(0))
+    eSD = gn * (N * (MD + eD)) + N * eD
+    MSD = N * MD + eSD
+    MXD = Xh * MD
+    eXD = mulErr(u, Xh, MD, exh, eD)
+    eSXD = gn * (N * (MXD + eXD)) + N * eXD
+    enD = mulErr(u, N, MD, F(0), eD)
+    MnD = N * MD + enD
+    e1 = u * (MnD + MSD) + (enD + eSD)
+    M1 = (1 + u) * (MnD + MSD)
+    eXS = mulErr(u, Xh, N * MXD, exh, eSXD)
+    MXSf = Xh * (N * MXD) + eXS
+    e2 = u * (M1 + MXSf) + (e1 + eXS)
+    MTr = N * MD + N * MD + Xh * (N * MXD)
+    eP = mulErr(u, F(1) / N, S, F(0), es)
+    return mulErr(u, (F(1) / N) * S, MTr, eP, e2)
+
+
+def bn_back(st, n, Xh, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH, q=U32):
+    """One per-channel BatchNorm BACKWARD site (`floatClose_bnBack`), over the cotangent."""
+    A, E = st
+    bud = bnGradInputBudgetQ(n, G, A, S, Xh, es, exh, q)
+    return (bnGradInputReMag(n, G, A, S, Xh) + bud,
+            bud + bnGradInputReMag(n, G, E, S, Xh))
+
+
+def conv_back(st, m, w=R34_WK, q=U32):
+    """`convFlatBack W = flatConv (reverseSwap W) 0` — the forward conv leaf at zero bias,
+    fan-in `m` = (the cotangent's channel count)·kH·kW."""
+    return conv(st, m, w, F(0), q)
+
+
+def gap_back(st, hw, q=U32):
+    """`gapBack c h w` — broadcast ÷ (h·w). One rounded multiply; magnitude-NONincreasing."""
+    A, E = st
+    inv = F(1) / F(hw)
+    me = mulErr(q, inv, A, F(0), F(0))
+    return (inv * A + me, me + inv * E)
+
+
+def r34_back_chain(wk=R34_WK, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH, q=U32,
+                   xhat='sqrt'):
+    """Every stage of `r34InputGrad` at r34's shapes, at the granularity a Lean `Maps` chain
+    composes them, folded over the LOSS COTANGENT (`|p − y| ≤ 1` for softmax cross-entropy).
+
+    `reluMaskBack`, `maxPoolFlatBack` and `decimateBack` are structural selects/scatters, exact
+    in float, and produce no entry — the envelope passes through them unchanged.
+
+    `xhat='sqrt'`   : `|x̂| ≤ √(h·w)`, the standardisation bound (`bnXhat_sq_le`).
+    `xhat='window'` : `|x̂| ≤ 2·A·S` from the FORWARD's certified window — the ablation that
+                      shows which of the two is load-bearing."""
+    fwd = dict(r34_eval_chain())
+
+    def Xh(hw, fwd_tag):
+        return F(isqrt_exact(hw)) if xhat == 'sqrt' else 2 * fwd[fwd_tag][0] * S
+
+    def R(st):
+        return (r4(st[0]), r4(st[1]))
+
+    out = []
+    st = (F(1), F(0))
+    st = R(conv_back(st, 10, wk, q));          out.append(("linBack", st))
+    st = R(gap_back(st, 49, q));               out.append(("gapBack", st))
+    for kind, ic, oc, hw, tag in R34_BACK_PLAN:
+        blkin = st                              # reluMaskBack m_out: exact
+        if kind == "id":
+            s = R(bn_back(blkin, hw, Xh(hw, tag + ".bn2"), G, S, es, exh, q))
+            out.append((tag + ".bnB2", s))
+            s = R(conv_back(s, oc * 9, wk, q)); out.append((tag + ".cB2", s))
+            s = R(bn_back(s, hw, Xh(hw, tag + ".bn1"), G, S, es, exh, q))
+            out.append((tag + ".bnB1", s))
+            s = R(conv_back(s, oc * 9, wk, q)); out.append((tag + ".cB1", s))
+            st = R(residual(blkin, s, q));      out.append((tag + ".out", st))
+        else:
+            p = R(bn_back(blkin, hw, Xh(hw, tag + ".projbn"), G, S, es, exh, q))
+            out.append((tag + ".bnBp", p))
+            p = R(conv_back(p, oc, wk, q));     out.append((tag + ".cBp", p))
+            s = R(bn_back(blkin, hw, Xh(hw, tag + ".bn2"), G, S, es, exh, q))
+            out.append((tag + ".bnB2", s))
+            s = R(conv_back(s, oc * 9, wk, q)); out.append((tag + ".cB2", s))
+            s = R(bn_back(s, hw, Xh(hw, tag + ".bn1"), G, S, es, exh, q))
+            out.append((tag + ".bnB1", s))
+            s = R(conv_back(s, oc * 9, wk, q)); out.append((tag + ".cB1", s))
+            st = R(bipath(p, s, q));            out.append((tag + ".out", st))
+    # maxPoolFlatBack (exact), then the stem: reluMaskBack (exact) -> bnB -> flatConvStride2Back
+    st = R(bn_back(st, 12544, Xh(12544, "stem.bn"), G, S, es, exh, q))
+    out.append(("stem.bnB", st))
+    st = R(conv_back(st, 64 * 49, wk, q));      out.append(("stem.cB", st))
+    return out
+
+
+def verify_r34_back(rows, wk=R34_WK, G=R34_GL, S=R34_S, es=R34_ESB, exh=R34_EXH,
+                    q=U32) -> int:
+    """Re-assert EVERY rounded inequality a `Resnet34BackFloatBudget.lean` would close, exactly:
+    each stage's emitted numeral must still dominate the exact value computed from the PREVIOUS
+    stage's emitted numerals. Returns the count checked; raises on the first failure."""
+    r = dict(rows)
+    n = 0
+
+    def ck(tag, lhs, rhs):
+        nonlocal n
+        assert lhs <= rhs, f"{tag}: left > right"
+        n += 1
+
+    def conv_ck(tag, m, src, dst):
+        A, E = src
+        g = r4(gamma_q(m + 2, q))
+        ck(tag + '.A', (1 + g) * (m * wk * A + 0), dst[0])
+        ck(tag + '.E', g * (m * wk * (A + E) + 0) + m * wk * E, dst[1])
+
+    def bn_ck(tag, hw, src, dst):
+        A, E = src
+        Xh = F(isqrt_exact(hw))
+        bud = bnGradInputBudgetQ(hw, G, A, S, Xh, es, exh, q)
+        ck(tag + '.A', bnGradInputReMag(hw, G, A, S, Xh) + bud, dst[0])
+        ck(tag + '.E', bud + bnGradInputReMag(hw, G, E, S, Xh), dst[1])
+
+    conv_ck('linBack', 10, (F(1), F(0)), r['linBack'])
+    A, E = r['linBack']
+    inv = F(1) / F(49)
+    me = mulErr(q, inv, A, F(0), F(0))
+    ck('gapBack.A', inv * A + me, r['gapBack'][0])
+    ck('gapBack.E', me + inv * E, r['gapBack'][1])
+    st = r['gapBack']
+    for kind, ic, oc, hw, tag in R34_BACK_PLAN:
+        skip = st
+        if kind == "id":
+            bn_ck(tag + '.bnB2', hw, skip, r[tag + '.bnB2'])
+            conv_ck(tag + '.cB2', oc * 9, r[tag + '.bnB2'], r[tag + '.cB2'])
+            bn_ck(tag + '.bnB1', hw, r[tag + '.cB2'], r[tag + '.bnB1'])
+            conv_ck(tag + '.cB1', oc * 9, r[tag + '.bnB1'], r[tag + '.cB1'])
+            Bd, Ed = r[tag + '.cB1']
+            ck(tag + '.out.A', Bd + skip[0] + q * (Bd + skip[0]), r[tag + '.out'][0])
+            ck(tag + '.out.E', q * (Bd + Ed + skip[0] + skip[1]) + (Ed + skip[1]),
+               r[tag + '.out'][1])
+        else:
+            bn_ck(tag + '.bnBp', hw, skip, r[tag + '.bnBp'])
+            conv_ck(tag + '.cBp', oc, r[tag + '.bnBp'], r[tag + '.cBp'])
+            bn_ck(tag + '.bnB2', hw, skip, r[tag + '.bnB2'])
+            conv_ck(tag + '.cB2', oc * 9, r[tag + '.bnB2'], r[tag + '.cB2'])
+            bn_ck(tag + '.bnB1', hw, r[tag + '.cB2'], r[tag + '.bnB1'])
+            conv_ck(tag + '.cB1', oc * 9, r[tag + '.bnB1'], r[tag + '.cB1'])
+            Pd, Ep = r[tag + '.cBp']
+            Bd, Ed = r[tag + '.cB1']
+            ck(tag + '.out.A', Pd + Bd + q * (Pd + Bd), r[tag + '.out'][0])
+            ck(tag + '.out.E', q * (Pd + Ep + Bd + Ed) + (Ep + Ed), r[tag + '.out'][1])
+        st = r[tag + '.out']
+    bn_ck('stem.bnB', 12544, st, r['stem.bnB'])
+    conv_ck('stem.cB', 64 * 49, r['stem.bnB'], r['stem.cB'])
+    return n
+
+
 def sci(x: F) -> str:
     """4-significant-figure scientific form for a rational the size of a whole-net window."""
     if x == 0:
@@ -1179,6 +1410,36 @@ if __name__ == "__main__":
     print("\n  ⭐ 'unwritable' counts stage numerals carrying a `Real.exp` at an argument with no")
     print("     rational bound — the softmax cap's real justification. The uncapped column is not")
     print("     'a bigger number', it is NO NUMBER: those stages cannot be written down at all.")
+
+    print("\n── ResNet-34 BACKWARD sizing probe (planning/float_budget_numbers.md §3.7) ──")
+    brows = r34_back_chain()
+    bA, bE = brows[-1][1]
+    print(f"  SHIPPED SHAPE: {len(brows)} stages, TRAINING-mode BatchNorm")
+    print(f"    window        {sci(bA)}")
+    print(f"    budget        {sci(bE)}")
+    print(f"    budget/window {float(bE / bA):.4f}   ⭐ a FOLD — the backward is LINEAR in the "
+          f"cotangent")
+    print(f"    re-assertions {verify_r34_back(brows)} — every rounded inequality re-checked "
+          f"exactly")
+    print(f"    statable      {'YES' if max(ilog10(bA), ilog10(bE)) < 300 else 'NO'}")
+    print(f"\n  {'variant':<44} {'window':>12} {'budget':>12}  statable")
+    print("  " + "-" * 76)
+    for name, kw in [
+        ("shipped (per-kind profile, x̂ ≤ √n)", {}),
+        ("uniform 21/10 (the FORWARD's profile)", dict(wk=F(21, 10))),
+        ("x̂ from the forward WINDOW (2·A·S)", dict(xhat='window')),
+        ("variance floor 1e-3 (S = 32)", dict(S=F(32))),
+        ("variance floor 1e-1 (S = 4)", dict(S=F(4))),
+        ("σ² ≈ 1 (S = 1)", dict(S=F(1))),
+    ]:
+        rr = r34_back_chain(**kw)
+        a, e = rr[-1][1]
+        ok = 'yes' if max(ilog10(a), ilog10(e)) < 300 else 'NO'
+        print(f"  {name:<44} {sci(a):>12} {sci(e):>12}  {ok}")
+    print("\n  ⛔ `x̂ from the forward WINDOW` is the row that matters: `bnXhat_sq_le`'s |x̂| ≤ √n")
+    print("     is what makes this number exist, and it was already in the repo.")
+    print("  ⛔ And the fold is conditional on `es`/`exh` = 1e-2 — SUPPLIED float-activation")
+    print("     accuracies the forward's own training-mode fold does not discharge (§3.7).")
 
     print("\n  window growth through block 0 (the per-block multiplier that sets the answer):")
     for tag, (a, e) in rows[3:25]:
